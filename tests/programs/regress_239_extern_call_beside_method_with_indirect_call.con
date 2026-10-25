@@ -1,0 +1,23 @@
+// Bug 239 (FIXED), Codex review r6, the reverse direction in the verifier and reports: `user`
+// calls its foreign binding `P_get` (`abs`) beside the imported `P`'s method `get(f: fn() -> i32)`,
+// definition name `P_get`, whose body makes an indirect call. Before the fix `--interp` ran the
+// method ("'f' is not a function pointer"), the SSA verifier checked the call against the
+// method's signature, and `--report caps` read `run` as reaching the method's indirect call
+// ("effects unknown"). A free call bound to a foreign declaration is that declaration everywhere.
+// Expected: 42 (`abs(-42)`), natively and --interp; `run : (no declared capability)` in
+// `--report caps`.
+mod defs {
+    pub struct Copy P { pub v: i32 }
+    impl P {
+        pub fn get(f: fn() -> i32) -> i32 { return f(); }
+    }
+}
+mod user {
+    import defs.{P};
+    #[link_name = "abs"]
+    trusted extern fn P_get(x: i32) with() -> i32;
+    pub fn run() -> i32 { return P_get(-42); }
+}
+fn main() -> Int {
+    return user::run() as Int;
+}

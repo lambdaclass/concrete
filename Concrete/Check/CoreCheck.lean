@@ -42,6 +42,10 @@ structure CoreCheckEnv where
       A method call (`CallSpace.method`) is decided against these first, never against a free
       function or extern of the same spelling, which `fnSigs` lists before them. -/
   methodCaps : List (String × CapSet) := []
+  /-- The same methods' signatures and whether each is `trusted` (Codex review r6): a method
+      call's arguments are checked against the method, and it is a trusted-call edge only when
+      the method is trusted, whatever a free function or extern of its spelling is. -/
+  methodSigs : List (String × List (String × Ty) × Ty × Bool) := []
   structDefs : List CStructDef
   enumDefs : List CEnumDef
   newtypes : List NewtypeDef := []
@@ -686,7 +690,10 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
     let envE ← getEnv
     -- T-RAWDUP: `read_owned` (the compiler intrinsic, not a program function of that spelling) is
     -- a raw-memory operation like `*p`: a trust edge, and trusted or `Unsafe` code only (E0521).
-    if envE.trustedNames.contains fn then addTrustEdge .callsTrusted fn
+    let methodSig? := if space == .method then envE.methodSigs.find? (·.1 == fn) else none
+    match methodSig? with
+    | some (_, _, _, trusted) => if trusted then addTrustEdge .callsTrusted fn
+    | none => if envE.trustedNames.contains fn then addTrustEdge .callsTrusted fn
     -- A method call never reaches an extern of its spelling (bugs 238 – 239).
     if space == .free && envE.externNames.contains fn then addTrustEdge .callsFFI fn
     -- Check capability discipline: a method call against the method table first.
@@ -725,8 +732,11 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
       if !capD.satisfied then
         addCCError (.insufficientCapabilities fn (capSetToString capD.required) (capSetToString capD.callerHas))
     | none => pure ()  -- builtin/extern: no recorded capability set
-    -- Check argument types
-    match ← lookupFnSig fn with
+    -- Check argument types: a method call against the method's own signature.
+    let sig? ← match methodSig? with
+      | some (_, ps, r, _) => pure (some (ps, r))
+      | none => lookupFnSig fn
+    match sig? with
     | some (params, _retTy) =>
       if args.length != params.length then
         addCCError (.argCountMismatch fn params.length args.length)
@@ -1493,10 +1503,11 @@ private partial def collectTrustNames (m : CModule) : List String × List String
     let (subT, subE) := collectTrustNames sub
     (accT ++ subT, accE ++ subE)) (hereT, here.2)
 
-/-- Every impl method of a module tree with its capabilities (bugs 238 – 239). -/
-private partial def collectAllMethodCaps (m : CModule) : List (String × CapSet) :=
-  (m.functions.filter (·.isMethod)).map (fun f => (f.name, f.capSet))
-  ++ m.submodules.flatMap collectAllMethodCaps
+/-- Every impl method of a module tree: capabilities, signature, trust (bugs 238 – 239). -/
+private partial def collectAllMethods (m : CModule)
+    : List (String × CapSet × List (String × Ty) × Ty × Bool) :=
+  (m.functions.filter (·.isMethod)).map (fun f => (f.name, f.capSet, f.params, f.retTy, f.isTrusted))
+  ++ m.submodules.flatMap collectAllMethods
 
 private def collectAllFnSigs (m : CModule)
     : List (String × CapSet × List (String × Ty) × Ty) :=
@@ -1509,7 +1520,7 @@ partial def ccCheckModule (m : CModule)
     -- exact defect being fixed, left as a footgun for the next caller. Omitting
     -- it is a compile error instead.
     (allFnSigs : List (String × CapSet × List (String × Ty) × Ty))
-    (allMethodCaps : List (String × CapSet))
+    (allMethods : List (String × CapSet × List (String × Ty) × Ty × Bool))
     : Diagnostics × List TrustEdge × List TrustFnAttr :=
   let declErrors := ccCheckModuleDecls m allStructs allEnums
   let trustNames := collectTrustNames m
@@ -1524,7 +1535,8 @@ partial def ccCheckModule (m : CModule)
     -- something elsewhere in the tree; the tree entries only ever add a
     -- requirement where there was none, never replace a nearer one.
     fnSigs := fnSigs ++ externSigs ++ allFnSigs
-    methodCaps := allMethodCaps
+    methodCaps := allMethods.map fun (n, cs, _, _, _) => (n, cs)
+    methodSigs := allMethods.map fun (n, _, ps, r, t) => (n, ps, r, t)
     structDefs := m.structs
     enumDefs := m.enums
     newtypes := m.newtypes
@@ -1546,7 +1558,7 @@ partial def ccCheckModule (m : CModule)
     env'
   ) initEnv
   let (subErrors, subEdges, subAttrs) := m.submodules.foldl (fun (accD, accE, accA) sub =>
-    let (subD, subE, subA) := ccCheckModule sub allStructs allEnums allNewtypes allFnSigs allMethodCaps
+    let (subD, subE, subA) := ccCheckModule sub allStructs allEnums allNewtypes allFnSigs allMethods
     (accD ++ Diagnostics.stampFile (subD.map fun d =>
        { d with message := s!"[{sub.name}] {d.message}" }) sub.sourceFile,
      accE ++ subE, accA ++ subA)
@@ -1561,9 +1573,9 @@ def coreCheckProgram (modules : List CModule) : Except Diagnostics Unit :=
   let allEnums := modules.foldl (fun acc m => acc ++ collectAllEnums m) []
   let allNewtypes := modules.foldl (fun acc m => acc ++ collectAllNewtypes m) []
   let allFnSigs := modules.foldl (fun acc m => acc ++ collectAllFnSigs m) []
-  let allMethodCaps := modules.flatMap collectAllMethodCaps
+  let allMethods := modules.flatMap collectAllMethods
   let allErrors := modules.foldl (fun acc m =>
-    acc ++ (ccCheckModule m allStructs allEnums allNewtypes allFnSigs allMethodCaps).1.map fun d => { d with message := s!"[{m.name}] {d.message}" }
+    acc ++ (ccCheckModule m allStructs allEnums allNewtypes allFnSigs allMethods).1.map fun d => { d with message := s!"[{m.name}] {d.message}" }
   ) ([] : Diagnostics)
   if allErrors.isEmpty then .ok ()
   else .error allErrors
@@ -1576,8 +1588,8 @@ def coreTrustEdges (modules : List CModule) : List TrustEdge × List TrustFnAttr
   let allEnums := modules.foldl (fun acc m => acc ++ collectAllEnums m) []
   let allNewtypes := modules.foldl (fun acc m => acc ++ collectAllNewtypes m) []
   let allFnSigs := modules.foldl (fun acc m => acc ++ collectAllFnSigs m) []
-  let allMethodCaps := modules.flatMap collectAllMethodCaps
-  let results := modules.map (fun m => ccCheckModule m allStructs allEnums allNewtypes allFnSigs allMethodCaps)
+  let allMethods := modules.flatMap collectAllMethods
+  let results := modules.map (fun m => ccCheckModule m allStructs allEnums allNewtypes allFnSigs allMethods)
   (TrustEdge.canonical (results.foldl (fun acc r => acc ++ r.2.1) []),
    results.foldl (fun acc r => acc ++ r.2.2) [])
 

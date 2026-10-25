@@ -203,6 +203,9 @@ private structure Node where
   trusted : Bool
   typeParams : List String
   isMethod : Bool := false
+  /-- Spellings this function binds to a foreign declaration (`foreignCalls`): a free call of
+      one reaches that binding, never a program definition of the spelling. -/
+  foreign : List String := []
   deriving Inhabited
 
 private structure Binding where
@@ -252,6 +255,7 @@ private partial def collect (packageOf : String → Option (String × String))
         | .direct n .method => some n
         | _ => none).eraseDups.map norm
       isMethod := f.isMethod
+      foreign := (f.foreignCalls.filter fun (_, d) => !d.startsWith "_C$rt.").map (·.1)
       values := (collectFnValueRefsStmts f.body).eraseDups.map norm
       indirect := (collectIndirectCallsStmts f.body).eraseDups
       trusted := f.isTrusted, typeParams := f.typeParams : Node }
@@ -364,6 +368,7 @@ def build (modules : List CModule)
           let all := (fnIdx.getD name #[]).filter fun j => nodes[j]!.isMethod
           let local_ := all.filter fun j => nodes[j]!.module == nd.module
           if local_.isEmpty then all else local_
+        else if !isValue && nd.foreign.contains name then #[]
         else resolve nodes fnIdx (·.module) nd.module name
       -- A name that resolves to no loaded definition, binding or intrinsic is an UNRESOLVED edge,
       -- not an empty one: what it reaches is unknown.

@@ -110,6 +110,8 @@ structure SFnDef where
   exportName : Option String := none
   /-- `CFnDef.foreignCalls`: call spellings bound to a foreign declaration. -/
   foreignCalls : List (String × String) := []
+  /-- `CFnDef.isMethod` (bugs 238 – 239): a method call's signature is a method's. -/
+  isMethod : Bool := false
 
 structure SModule where
   name : String

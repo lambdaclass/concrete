@@ -8626,6 +8626,22 @@ check_report_multi "$TESTDIR/regress_239_static_method_beside_free_fn_report.con
     "bug 239: --report caps resolves a method call to the method, not a free function of its spelling" \
     "bug 239: --report caps read the method call as the free function P_get (effects unknown)" \
     "pub run : (no external authority)"
+run_ok "$TESTDIR/regress_239_method_call_beside_extern_of_other_arity.con" 42
+run_ok "$TESTDIR/regress_239_extern_call_beside_method_with_indirect_call.con" 42
+check_report_multi "$TESTDIR/regress_239_extern_call_beside_method_with_indirect_call.con" caps \
+    "bug 239: --report caps reads a free call bound to an extern as that extern, not a method of its spelling" \
+    "bug 239: --report caps followed an extern call into a method of its spelling (effects unknown)" \
+    "pub run : (no declared capability)"
+run_ok "$TESTDIR/regress_239_method_call_beside_trusted_extern.con" 42
+r239_edges=$(cached_output "$TESTDIR/regress_239_method_call_beside_trusted_extern.con" "--report trust-edges")
+if grep -q "^# totals:" <<<"$r239_edges" && ! grep -qE "^user[[:space:]]+run[[:space:]]" <<<"$r239_edges"; then
+    echo "  ok  bug 239: a method call is no trust edge of a foreign binding of its spelling"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 239: --report trust-edges records a trust edge for user.run (a method call), or printed no report:"
+    printf '%s\n' "$r239_edges" | awk 'NR<=6'
+    FAIL=$((FAIL + 1))
+fi
 run_ok "$TESTDIR/regress_239_extern_call_beside_generic_method.con" 99
 run_ok "$TESTDIR/regress_239_extern_call_beside_capable_method.con" 99
 for r239 in regress_239_extern_call_beside_generic_method regress_239_extern_call_beside_capable_method; do
@@ -8651,7 +8667,8 @@ for r238 in regress_238_free_fn_spelled_like_method_call regress_238_other_modul
             regress_238_extern_takes_method_spelling regress_238_imported_extern_alias_takes_method_spelling \
             regress_238_method_definition_name_taken_by_extern regress_238_method_value_spelled_like_extern \
             regress_238_method_value_beside_unrelated_extern regress_239_method_call_beside_untrusted_extern \
-            regress_239_static_method_beside_free_fn_report; do
+            regress_239_static_method_beside_free_fn_report regress_239_method_call_beside_extern_of_other_arity \
+            regress_239_extern_call_beside_method_with_indirect_call regress_239_method_call_beside_trusted_extern; do
     r238_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/$r238.con" --interp 2>&1 || true)
     if [ "$r238_interp" = "42" ]; then
         echo "  ok  bugs 238-241: $r238 — interp == binary (42)"

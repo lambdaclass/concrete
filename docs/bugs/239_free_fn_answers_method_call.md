@@ -68,6 +68,15 @@ the declaration-collision check compared only free functions, externs and consta
   call of the module's free function of that spelling (a false "effects unknown" in
   `--report caps`; `regress_239_static_method_beside_free_fn_report.con`, whose `P::get()` was
   E0262 before the fix).
+- CoreCheck checks a method call's arguments against the method's signature and records a
+  trusted-call edge only for a trusted method; the SSA verifier checks a call against a signature
+  of its namespace; the proof call graph and the assumption summary read a free call bound to a
+  foreign declaration as that declaration (Codex review r6:
+  `regress_239_method_call_beside_extern_of_other_arity.con`, E0262/E0522 before;
+  `regress_239_extern_call_beside_method_with_indirect_call.con`, a false "effects unknown" and
+  `--interp` running the method before; `regress_239_method_call_beside_trusted_extern.con`, the
+  native binary calling `abs` (99) while `--interp` ran the method (42), and false
+  calls-ffi/calls-trusted edges, before).
 - `declarationCollisions` counts a module's impl method definition names, so a free function or
   extern spelled like one is E0299 (MOD-3); two methods of one name on one type stay TRAIT-5's.
 

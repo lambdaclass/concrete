@@ -2412,6 +2412,7 @@ def lowerFn (f : CFnDef) (structDefs : List CStructDef) (enumDefs : List CEnumDe
       declSpan := f.declSpan
       exportName := f.exportName
       foreignCalls := f.foreignCalls
+      isMethod := f.isMethod
     }, finalState.stringLits)
   | ((.error e), _) => .error e
 

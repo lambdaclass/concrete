@@ -259,7 +259,13 @@ private partial def buildCallGraphModule (qualNameMap : List (String × String))
     -- name and never resolved against the program (a module's own `print_string` is another
     -- node); the capability chains of `--report authority` end at it as before.
     let callees := (collectCalleesStmts f.body).filterMap fun c => match c with
-      | .direct n _ => some (resolveCallee n)
+      -- A free call the function binds to a foreign declaration is that declaration, not a
+      -- program definition sharing its spelling (bugs 238 – 239, Codex review r6).
+      | .direct n .free =>
+        match f.foreignCalls.lookup n with
+        | some decl => if decl.startsWith "_C$rt." then some (resolveCallee n) else some decl
+        | none => some (resolveCallee n)
+      | .direct n .method => some (resolveCallee n)
       | .runtime h => some h
       | .indirect _ => none
     (qualName, callees.eraseDups)

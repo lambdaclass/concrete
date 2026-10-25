@@ -1,0 +1,21 @@
+// Bug 239 (FIXED), Codex review r6: `user` calls the imported `P`'s static method `P::get()`
+// beside its own foreign binding `P_get(x: i32)` of another arity. Before the fix Check bound the
+// static call to the extern (E0262, "expects 1 arguments, got 0"), and CoreCheck checked the
+// method call's arguments against the extern's signature (E0522); a method call is checked
+// against the method.
+// Expected: 42 (the method's 42, then `abs(-99) - 99`), natively and --interp.
+mod defs {
+    pub struct Copy P { pub v: i32 }
+    impl P {
+        pub fn get() -> i32 { return 42; }
+    }
+}
+mod user {
+    import defs.{P};
+    #[link_name = "abs"]
+    trusted extern fn P_get(x: i32) with() -> i32;
+    pub fn run() -> i32 { return P::get() + P_get(-99) - 99; }
+}
+fn main() -> Int {
+    return user::run() as Int;
+}
