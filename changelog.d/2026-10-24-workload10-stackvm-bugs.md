@@ -7,7 +7,8 @@ verifier, and disassembler (`asm`, `dis`, `run`, `exec`, `check`; 13t exit codes
 bytes, listing, program output, stderr diagnostic, exit code) byte for byte with an independent
 Python implementation (`scripts/tests/lib/stackvm_ref.py`) on the test programs, 120 generated
 programs, a mutation of each, 120 token-edge programs and 120 corrupted bytecode files; ten `@run` cases agree natively and
-under `--interp`. The workload found bugs 222, 223 (open), 224, 225 and 228 and no miscompile.
+under `--interp`. The workload found bugs 222, 223, 224, 225 and 228 and no miscompile; 223 stayed open until
+R-0492 slice 6 fixed it on 2026-10-25.
 `examples/stackvm/FRICTION.md` maps its friction to the open language decisions.
 
 ### An Imported Enum Brings Its Impls (bug 222, 2026-10-24)
