@@ -3494,9 +3494,15 @@ partial def elabModule (m : Module) (summary : FileSummary)
           -- whatever this module's own `Result` is (bug 227, Codex review r2: an imported struct's
           -- builtin `Result` field took the importer's user enum).
           | none =>
+            -- a TYPE of that spelling, declared or imported (an imported function or constant
+            -- named `Result` is in the value namespace and withholds nothing, MOD-3)
+            let importedType := match resolveImports d.imports summaryTable (fun _ => "")
+                (fun _ _ => "") (pass := "elab") with
+              | .ok r => r.structs.any (·.name == n) || r.enums.any (·.name == n)
+                  || r.newtypes.any (·.name == n) || r.typeAliases.any (·.1 == n)
+              | .error _ => true
             let userResultInScope := d.enums.any (·.name == n) || d.structs.any (·.name == n)
-              || d.newtypes.any (·.name == n) || d.typeAliases.any (·.name == n)
-              || d.imports.any (·.symbols.any (·.effectiveName == n))
+              || d.newtypes.any (·.name == n) || d.typeAliases.any (·.name == n) || importedType
             if n == resultEnumName && !userResultInScope then n else rn.tyName n }
   let importedStructSrc := imports.structs.filter fun sd => !(localStructNames.contains sd.name)
   let cStructs := if !respell then cStructs ++ cImportedStructs else

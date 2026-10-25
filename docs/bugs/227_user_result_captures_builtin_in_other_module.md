@@ -64,7 +64,9 @@ keeps its name); a spelling the module binds itself is no longer inherited
 declaration's copy, renamed with its defining module's bindings, fell back to the importer's
 binding when the definer binds no user `Result`, so a builtin `Result` field of an imported struct
 became the importer's enum and the copies disagreed (E0299); a definer with no user `Result` in
-scope (declared or imported) now means the builtin (`regress_227_imported_field_builtin_result.con`).
+scope (declared or imported) now means the builtin (`regress_227_imported_field_builtin_result.con`);
+only an imported TYPE counts, since a function imported as `Result` is in the value namespace
+(round 3, `regress_227_value_import_named_result.con`).
 That review also found two silent wrong-code cases in the method spellings TypeSpelling makes, both
 present on main before this fix and not specific to `Result` (open questions in this slice's
 report): a free function spelled like a respelled method's Core name (`outer_a_P_get`) captures
@@ -76,7 +78,9 @@ Regression legs in `run_tests.sh`: `regress_227_nested_builtin_result.con`,
 (a user `Result` with a method used in its module beside the builtin in a nested and another
 top-level module) and `regress_227_child_result_beside_builtin.con` (a child's `Result` in its
 signature beside the builtin in the parent) and `regress_227_imported_field_builtin_result.con`
-(an imported struct's builtin `Result` field beside the importer's own generic `Result`), each `run_ok … 42` and `--interp` = 42. Bug 217's witness
+(an imported struct's builtin `Result` field beside the importer's own generic `Result`) and
+`regress_227_value_import_named_result.con` (the same with a function imported as `Result` in the
+defining module), each `run_ok … 42` and `--interp` = 42. Bug 217's witness
 `regress_217_enclosing_type_not_in_scope.con` now builds natively: its `run_tests.sh` leg runs the
 binary, and `check_enum_union_layout.sh` no longer lists it in `OPEN_BUG_REJECTED`.
 

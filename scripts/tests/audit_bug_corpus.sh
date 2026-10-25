@@ -156,7 +156,7 @@ declare -A BUG_TEST_MAP=(
   [231]="error_231_unknown_bound_trait.con error_231_enclosing_trait_bound.con error_231_trait_param_bound.con error_231_union_param_bound.con error_231_bodiless_decl_bound.con regress_231_bounds_name_module_traits.con"
   # Bug 227: a user enum Result in one module captured the builtin in another (Lower's and Resolve's
   # spelled-name lookups); run_tests.sh compares --interp with the binary.
-  [227]="regress_227_nested_builtin_result.con regress_227_toplevel_builtin_result.con regress_227_user_result_methods_beside_builtin.con regress_227_child_result_beside_builtin.con regress_227_imported_field_builtin_result.con"
+  [227]="regress_227_nested_builtin_result.con regress_227_toplevel_builtin_result.con regress_227_user_result_methods_beside_builtin.con regress_227_child_result_beside_builtin.con regress_227_imported_field_builtin_result.con regress_227_value_import_named_result.con"
   # Bug 230: a top-level module's known types were program-wide (E0108 now); the positive control
   # keeps imported aliases, the import closure, own types and children's newtypes.
   [230]="error_230_toplevel_foreign_alias_cast.con error_230_parent_names_child_alias.con regress_230_toplevel_type_environment.con"
