@@ -1,0 +1,17 @@
+// Bug 240 (FIXED), positive control: a trait still names a bound and an impl, and a type
+// parameter spelled like the trait shadows it in type positions.
+// Expected: 42, natively and --interp.
+trait Marker {
+    fn tag(&self) -> i32;
+}
+struct Copy S { v: i32 }
+impl Marker for S {
+    fn tag(&self) -> i32 { return self.v; }
+}
+fn tagged<T: Marker>(t: &T) -> i32 { return t.tag(); }
+fn same<Marker>(m: Marker) -> Marker { return m; }
+fn main() -> Int {
+    let s: S = S { v: 40 };
+    let t: S = same::<S>(s);
+    return (tagged(&t) + same::<i32>(2)) as Int;
+}

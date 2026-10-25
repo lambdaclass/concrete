@@ -4131,7 +4131,7 @@ def spellMethodCallsApart (cms : List CModule) : Except Diagnostics (List CModul
     .error (bad.map fun (n, ts) =>
       { severity := .error, pass := "elab", span := none, code := "E0299"
         message := s!"the method call spelled '{n}' is also the Core name of a free function, and the method it names cannot be identified ({ts.length} method definitions reached); Core cannot tell them apart (bug 238)"
-        hint := some "rename the free function. Tracking: docs/bugs/238_free_fn_spelled_like_respelled_method_captures_call.md" })
+        hint := some "rename the free function. Tracking: docs/bugs/238_method_call_captured_by_free_fn_of_its_spelling.md" })
   else
   let respelt := resolved.filterMap fun (n, ts) => ts.head?.map (n, ·)
   let rn : CoreRename := { tyName := id, fnName := id, methodName := fun n => (respelt.lookup n).getD n }

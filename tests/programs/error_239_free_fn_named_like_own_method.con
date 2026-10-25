@@ -1,0 +1,15 @@
+// Bug 239 (FIXED), the one-module shape: a free function `P_get` beside `impl P { fn get }`.
+// The method's definition name `P_get` is in the module's callable namespace (bug 082: a
+// free-spelled `P_get` names the method), so the module binds `P_get` twice (MOD-3). It was not
+// refused: Core gave both definitions one name, the native build failed on a redefined symbol and
+// `--interp` refused the call. Now E0299 at Check.
+struct Copy P { v: i32 }
+impl P {
+    pub fn get(&self) -> i32 { return self.v; }
+}
+fn P_get(p: P) -> i32 { return 99; }
+
+fn main() -> Int {
+    let p: P = P { v: 42 };
+    return p.get() as Int;
+}

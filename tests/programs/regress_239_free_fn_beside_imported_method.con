@@ -1,0 +1,26 @@
+// Bug 239 (FIXED): `user` imports `P`, whose method `get` its defining module declares, and also
+// defines a free function `P_get`. Check and Elab looked a method up by its definition name
+// `P_get` in one table that held the module's free functions first, so `p.get()` was checked and
+// compiled as a call of the free function (by value: no receiver borrow): 99 + 99 - 99 = 99,
+// natively and under `--interp`. A receiver call now resolves in the method table alone, and the
+// renaming that respells the colliding free function (`user_P_get`, bug 097) leaves the method
+// call alone.
+// Expected: 42 (the method's 42, then the free function's 99, minus 99), natively and --interp.
+mod defs {
+    pub struct Copy P { pub v: i32 }
+    impl P {
+        pub fn get(&self) -> i32 { return self.v; }
+    }
+    pub fn mk() -> P { return P { v: 42 }; }
+}
+mod user {
+    import defs.{P, mk};
+    fn P_get(p: P) -> i32 { return 99; }
+    pub fn run() -> i32 {
+        let p: P = mk();
+        return p.get() + P_get(p) - 99;
+    }
+}
+fn main() -> Int {
+    return user::run() as Int;
+}

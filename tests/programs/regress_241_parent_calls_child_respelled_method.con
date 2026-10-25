@@ -1,0 +1,29 @@
+// Bug 241 (FIXED): `outer` imports its submodule `a`'s `P`, which `outer.b` also declares, so Core
+// respells it `outer_a_P` and defines its method as `a_outer_a_P_get`. The parent's prefix
+// renaming rewrote the call `P_get` to `a_P_get` before the type respelling could give it
+// `outer_a_P_get` (which `a`'s linker alias bridges), so it named a function nothing defines: the
+// native build failed on an undefined symbol and `--interp` stopped with "undefined function
+// 'a_P_get'". A respelled type's method call keeps the caller's spelling there now.
+// Expected: 42, natively and --interp.
+mod outer {
+    mod a {
+        pub struct Copy P { pub v: i32 }
+        impl P {
+            pub fn get(&self) -> i32 { return self.v; }
+        }
+        pub fn mk() -> P { return P { v: 35 }; }
+    }
+    mod b {
+        pub struct Copy P { pub w: i32 }
+        pub fn mk() -> P { return P { w: 7 }; }
+        pub fn seven() -> i32 { let p: P = mk(); return p.w; }
+    }
+    import outer.a.{P, mk};
+    pub fn run() -> i32 {
+        let p: P = mk();
+        return p.get() + b::seven();
+    }
+}
+fn main() -> Int {
+    return outer::run() as Int;
+}

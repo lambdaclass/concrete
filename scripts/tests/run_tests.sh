@@ -8592,6 +8592,36 @@ run_err "$TESTDIR/error_231_enclosing_trait_bound.con" "(E0125)"
 run_err "$TESTDIR/error_231_trait_param_bound.con" "bounds on a trait's type parameters are not supported"
 run_err "$TESTDIR/error_231_union_param_bound.con" "bounds on a union's type parameters are not supported"
 run_err "$TESTDIR/error_231_bodiless_decl_bound.con" "a bodiless declaration cannot bound its type parameters"
+# Bugs 238 – 241: free functions and impl methods shared one spelled namespace. A method call is
+# resolved in the method table (Check, Elab) and carries its namespace in Core (`CallSpace`), so a
+# free function spelled like a method's definition name or call spelling no longer answers it
+# (238, 239: silent wrong code, 99 for 42); a free function beside its module's own method of that
+# definition name is MOD-3's E0299 (239); a trait in a type position is E0108 (240: an EmitSSA
+# panic); a parent's call of its child's respelled type's method keeps a spelling the child defines
+# (241: an undefined symbol).
+run_ok "$TESTDIR/regress_238_free_fn_spelled_like_method_call.con" 42
+run_ok "$TESTDIR/regress_238_other_module_free_fn_takes_method_spelling.con" 42
+run_ok "$TESTDIR/regress_238_parent_free_fn_takes_method_spelling.con" 42
+run_ok "$TESTDIR/regress_239_free_fn_beside_imported_method.con" 42
+run_err "$TESTDIR/error_239_method_call_answered_by_free_fn.con" "error[check]: (E0264) no method 'get' on type 'P'"
+run_err "$TESTDIR/error_239_free_fn_named_like_own_method.con" "error[check]: (E0299) a function named 'P_get' is also declared in this module as an impl method"
+run_err "$TESTDIR/error_240_trait_cast_target.con" "error[resolve]: (E0108) 'Marker' is a trait, not a type"
+run_err "$TESTDIR/error_240_trait_in_type_positions.con" "error[resolve]: (E0108) 'Marker' is a trait, not a type"
+run_ok "$TESTDIR/regress_240_trait_bounds_and_type_param_shadow.con" 42
+run_ok "$TESTDIR/regress_241_parent_calls_child_respelled_method.con" 42
+# bounded_run, not GNU `timeout` (absent on macOS runners); a timeout is INCOMPLETE, not a pass.
+for r238 in regress_238_free_fn_spelled_like_method_call regress_238_other_module_free_fn_takes_method_spelling \
+            regress_238_parent_free_fn_takes_method_spelling regress_239_free_fn_beside_imported_method \
+            regress_240_trait_bounds_and_type_param_shadow regress_241_parent_calls_child_respelled_method; do
+    r238_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/$r238.con" --interp 2>&1 || true)
+    if [ "$r238_interp" = "42" ]; then
+        echo "  ok  bugs 238-241: $r238 — interp == binary (42)"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  bugs 238-241: $r238 --interp gave '$r238_interp', want 42"
+        FAIL=$((FAIL + 1))
+    fi
+done
 # Bug 233: an import of a public constant or trait, which no import binds, was refused as "not
 # public"; it is refused with the reason (E0126 at Resolve, E0323 for a nested submodule at Check).
 run_err "$TESTDIR/error_233_import_constant.con" "(E0126)"

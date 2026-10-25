@@ -1,0 +1,27 @@
+// Bug 238 (FIXED), the enclosing-module shape: `outer` imports its child's respelled `P` and
+// defines a free function spelled like the method call, `outer_a_P_get`. Before the fix the build
+// failed (the call was spelled `a_P_get`, bug 241); fixed, the method call names the method and
+// the free function its own body.
+// Expected: 42, natively and --interp.
+mod outer {
+    mod a {
+        pub struct Copy P { pub v: i32 }
+        impl P {
+            pub fn get(&self) -> i32 { return self.v; }
+        }
+        pub fn mk() -> P { return P { v: 41 }; }
+    }
+    mod b {
+        pub struct Copy P { pub w: i32 }
+        pub fn mk() -> P { return P { w: 7 }; }
+    }
+    import outer.a.{P, mk};
+    fn outer_a_P_get(p: &P) -> i32 { return 1; }
+    pub fn run() -> i32 {
+        let p: P = mk();
+        return p.get() + outer_a_P_get(&p);
+    }
+}
+fn main() -> Int {
+    return outer::run() as Int;
+}
