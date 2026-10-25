@@ -454,8 +454,9 @@ mention is not an invocation"), and now keyed array values.
 
 **Structural fix.** Judge a name by its shell context: a word in command position or under an
 interpreter is a run, an argument of a file reader is a read, a data value the script only
-prints or compares is nothing, and every context the tool does not know is a run. Every context treated as text has a positive and a negative control, and a misjudgment falls
-to over-selection (a dependency kept), never to a dropped one.
+prints or compares is nothing, and every context the tool does not know is a run. The contexts
+treated as text are a whitelist, each pinned by a control beside a counterpart that stays a use;
+a context the reader does not model keeps the dependency.
 
 **Owner.** R-0513 (impact gate selection); the controls are the "text is not a call" legs of
 `check_gate_selection.sh`.

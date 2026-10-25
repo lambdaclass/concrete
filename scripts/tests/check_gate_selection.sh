@@ -220,7 +220,7 @@ bash "$g" --plan
 EOF
 leg cmdpos run "a map value in command position, behind a wrapper's options, is a call" <<'EOF'
 declare -A GATE_FOR=( [plan]="scripts/tests/run_ci_gates_local.sh" [x]=other )
-for k in plan; do timeout -k 5 60 "${GATE_FOR[$k]}" --plan; done
+for k in plan; do nice -n 5 "${GATE_FOR[$k]}" --plan; done
 EOF
 leg chain run "a map value copied into another map that is run is a call" <<'EOF'
 declare -A A=( [k]="scripts/tests/run_ci_gates_local.sh" )
@@ -244,6 +244,30 @@ leg ansi run "an ANSI-C quoted value does not swallow the invocation after it" <
 declare -A M=( [k]=$'it\'s' )
 bash scripts/tests/run_ci_gates_local.sh --plan
 echo ' ) '
+EOF
+leg quote run "a quote inside \${...} does not swallow the invocation after it" <<'EOF'
+declare -A M=( [k]=${UNSET:-'}'} )
+bash scripts/tests/run_ci_gates_local.sh --plan
+echo ' ) '
+EOF
+leg printfv read "a value moved by printf -v and then read is a read" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+printf -v path '%s' "${M[k]}"
+wc -l "$path"
+EOF
+leg piped run "a value printed into a consumer the reader cannot see is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+printf '%s\n' "${M[k]}" |
+  while read -r cmd; do "$cmd" --plan; done
+EOF
+leg nameref run "an array reached through a nameref is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+declare -n alias=M
+"${alias[k]}" --plan
+EOF
+leg awk run "a value handed to awk, which can run commands, is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+awk -v cmd="${M[k]}" 'BEGIN { system(cmd " --plan") }'
 EOF
 
 echo "=== wiring: run_ci_gates_local.sh --impact-files resolves to exactly the selector's list ==="

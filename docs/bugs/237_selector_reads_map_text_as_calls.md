@@ -28,32 +28,46 @@ gate its `SKIP` map exempts, through the map key.
 ## Fix
 
 A new module, `scripts/tests/lib/shell_text.py`, reads enough bash to tell text from use: shell
-words (quotes, ANSI-C `$'...'`, escapes, `$(...)`, `${...}`, backquotes), simple commands and the
-role of each word (command, argument, prefix assignment, redirection, here-string), and keyed
-array literals. The selector judges each keyed array's values, and separately its keys, by the
-highest use any expansion of them reaches, directly or through a variable or another array
-assigned from them (to a fixed point): RUN for a command word, an argument of any command not
-known to only read or print (a function, a wrapper, an interpreter), a prefix assignment, or a
-line naming an interpreter, `source`, `eval` or `xargs`; READ for an argument of a file reader
-(`cat`, `grep`, a `[[ -f ]]` test) or a redirection target; TEXT for `echo`/`printf` and the gate
-message helpers, string tests, `case` subjects, `for` lists. A TEXT value names nothing; a READ
-value is a read and never a run; a RUN value is code, the old rule. A key is at least a read. An
-element holding a command substitution runs at assignment and is always code. Every unknown
-context is RUN, so a misjudgment over-selects. A literal with no keyed element (a list of gates to
-run) is judged line by line as before.
+words (quotes, ANSI-C `$'...'`, escapes, `$(...)`, `${...}`, backquotes), simple commands with
+their pipes and the role of each word (command, argument, prefix assignment, file redirection,
+descriptor duplication, here-string), and keyed array literals. The selector judges each keyed
+array's values, and separately its keys, by the highest use any expansion of them reaches,
+directly or through a variable or another array assigned from them (`v=`, `local v=`,
+`printf -v v`, `for v in`, `read v <<<`, to a fixed point). The rule is a whitelist:
+
+- TEXT: an argument of `echo`/`printf` or a gate message helper whose output is shown, captured
+  by a substitution, or piped only through pure filters (`grep`, `cut`, `tr`, `sort`, ..., and
+  `awk` with no `system`, `getline`, pipe or redirection in its program), not written to a file;
+  a string test (`[[ -n ]]`, `==`); a `case` subject; `return`/`exit`/`unset`.
+- READ: an argument of a command that reads files and cannot run one (`cat`, `grep`, `diff`,
+  `wc`, ...; not `awk` or `sed`), a file test (`[[ -f ]]`), a redirection target.
+- RUN, the old rule, for everything else: a command word, an argument of a function, wrapper or
+  interpreter, a prefix assignment, `export`, an output piped into any other consumer, a line
+  naming an interpreter, `source` or `xargs`; and every array of a script that uses a nameref,
+  an indirect expansion `${!var}` or `eval` anywhere, since those reach an array without
+  spelling it.
+
+A TEXT value names nothing; a READ value is a read and never a run; a RUN value is code. A key is
+at least a read. An element holding a command substitution, or spanning lines, is always code,
+and a literal whose closing parenthesis does not end the statement is left to the line rule, so
+a quote the reader misreads cannot turn the code after it into text. A literal with no keyed
+element (a list of gates to run) is judged line by line as before. The reader is not a complete
+shell parser: what it models is pinned by the controls below, and the contexts it does not model
+are RUN by construction.
 
 Effect, measured over the whole gate inventory (272 commands) on this branch's tree, old selector
 against new: no closure gained an edge or changed its compiler/Lean flag; the 16 commands that
 reach the corpus audit lost the false edges (seven tracked files no longer select them, among them
 `scripts/review/*`, `.gitignore` and two docs); the selection for each of the seven fixtures in
 `tests/fixtures/gate_selection/` is unchanged. `check_gate_registration.sh`'s exemption keys stay
-calls (they reach a function the reader does not know). Regression legs in
-`check_gate_selection.sh` ("text is not a call"): a note naming a gate is neither a run nor a read,
-nor is the directory it mentions; a genuine invocation of that gate in the same file is a call; a
-value run through a variable, in command position behind a wrapper's options, or copied into
-another array that is run, is a call; a value read as a file is a read; a key naming a gate is a
-read; a command substitution in a key is a call; an ANSI-C quoted value does not swallow the
-invocation after it. The note and key legs fail against the previous selector.
+calls (they reach a function). Regression legs in `check_gate_selection.sh` ("text is not a
+call"): a note naming a gate is neither a run nor a read, nor is the directory it mentions; a
+genuine invocation of that gate in the same file is a call; a value run through a variable, in
+command position behind a wrapper's options, copied into another array that is run, printed into
+an unseen consumer, reached through a nameref, or handed to `awk`, is a call; a value read as a
+file, directly or after `printf -v`, is a read; a key naming a gate is a read; a command
+substitution in a key is a call; an ANSI-C quoted value and a quote inside `${...}` do not
+swallow the invocation after them. The note and key legs fail against the previous selector.
 
 ## Structural cause
 
@@ -68,5 +82,5 @@ walk ("a mention is not an invocation").
 
 R-0513 (impact gate selection): the selector judges each name by its shell context (a command
 word, an argument, a data value; `shell_text.py`), with every context it treats as text pinned by
-a control in `check_gate_selection.sh` and every misjudgment falling to over-selection. Keyed
+a control in `check_gate_selection.sh` and every unmodeled context falling to a run. Keyed
 array values are the first context judged this way; plain lines still use the line rule.

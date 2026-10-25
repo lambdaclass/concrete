@@ -80,8 +80,9 @@ INERT_RE = re.compile(r"(^|/)[^/]*\.md$|^(docs|research|paper|site|editor|bench)
 # used only as text, a value names nothing; used as a file to read, it is a read and never a run;
 # anything else, including every context the reader does not know, makes it code as before. A key
 # is at least a read (a lookup string matched against paths the script enumerates). An element
-# holding a command substitution runs at assignment and is always code. A literal with no keyed
-# element (a list of gates to run) is judged line by line as before.
+# holding a command substitution, or spanning lines, is always code. A literal with no keyed
+# element (a list of gates to run), or one whose end the reader cannot place, is judged line by
+# line as before.
 ARRAY_START_RE = re.compile(
     r"\s*(?:(?:declare|local|typeset|readonly)\s+(?:-[A-Za-z]+\s+)*)?([A-Za-z_][A-Za-z0-9_]*)\+?=\(")
 ELEM_ASSIGN_RE = re.compile(r"\s*([A-Za-z_][A-Za-z0-9_]*)\[([^\]\n]*)\]\+?=(\S.*)$")
@@ -94,8 +95,11 @@ def _array_elements(name, elems):
             out.append((value, "code"))
             continue
         for part, text in (("key", key), ("value", value)):
-            runs_now = "$(" in text or "`" in text  # a substitution runs at assignment
-            out.append((text, "code" if runs_now else (part, name)))
+            # A substitution runs at assignment. A value over several lines is code too: the
+            # corpus notes are one line each, and a quote misread across lines must not turn the
+            # code it swallowed into text.
+            code = "$(" in text or "`" in text or "\n" in text
+            out.append((text, "code" if code else (part, name)))
     return out
 
 

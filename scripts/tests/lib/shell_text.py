@@ -2,7 +2,7 @@
 
 The selector derives a gate's dependencies from the paths its scripts spell. A path spelled in a
 note, a reason or a message is not a dependency: bug 237 was a corpus note naming the docs-drift
-gate, read as a call, which made the corpus runners "read" docs/. This module reads enough bash
+gate, read as a call, which made the corpus runners appear to read the documentation tree. This module reads enough bash
 to tell the contexts apart: shell words (quotes, `$'...'`, escapes, `$(...)`, `${...}`,
 backquotes), simple commands and the role of each word in one, keyed array literals, and how the
 values of a keyed array are used.
@@ -31,14 +31,24 @@ KEYWORDS = {"then", "do", "else", "elif", "if", "while", "until", "!", "{", "}",
 # Commands that run their operands as a command: the next word is still in command position.
 WRAPPERS = {"exec", "command", "builtin", "nohup", "env", "timeout", "sudo", "nice", "xargs",
             "stdbuf", "setsid"}
-# Commands whose arguments are only printed. The gate helpers (ok, no, fail, ...) are the same
-# words DATA_RE in select_gates.py treats as print-only.
-TEXT_CMDS = {"echo", "printf", "ok", "no", "fail", "die", "note", "warn", ":", "return", "exit",
-             "shift", "case", "read", "unset", "true", "false"}
-READ_CMDS = {"cat", "grep", "egrep", "fgrep", "rg", "sed", "awk", "diff", "cmp", "wc", "head",
-             "tail", "sort", "uniq", "cut", "tr", "ls", "stat", "basename", "dirname", "realpath",
-             "readlink", "sha256sum", "md5sum", "file", "jq"}
-DECLARE_CMDS = {"local", "declare", "typeset", "export", "readonly"}
+# Commands whose arguments are only printed (to the terminal, or captured by a substitution). The
+# gate helpers (ok, no, fail, ...) are the words DATA_RE in select_gates.py treats as print-only.
+PRINT_CMDS = {"echo", "printf", "ok", "no", "fail", "die", "note", "warn", ":"}
+INERT_CMDS = {"return", "exit", "shift", "true", "false", "unset", "case"}
+# Commands that read the files their arguments name and cannot run a command. awk and sed can
+# (`system()`, `s///e`) and are not here.
+READ_CMDS = {"cat", "grep", "egrep", "fgrep", "rg", "diff", "cmp", "wc", "head", "tail", "sort",
+             "uniq", "cut", "tr", "ls", "stat", "basename", "dirname", "realpath", "readlink",
+             "sha256sum", "md5sum", "file", "jq"}
+# Filters a printed value may be piped through and stay text (the pipeline's output is the
+# value's text, captured or shown).
+PURE_FILTERS = {"grep", "egrep", "fgrep", "cut", "tr", "sort", "uniq", "head", "tail", "wc", "rev",
+                "fold", "paste", "column"}
+AWK_UNSAFE_RE = re.compile(r"system|getline|\||>|ENVIRON")
+DECLARE_CMDS = {"local", "declare", "typeset", "readonly"}
+# Anywhere in a script these reach an array without spelling `$NAME`: a nameref, an indirect
+# expansion `${!var}`, eval. A script that uses one has every keyed array judged RUN.
+INDIRECT_RE = re.compile(r"\b(declare|local|typeset)\s+(-\w+\s+)*-\w*n|\$\{![A-Za-z_]\w*[}:#%/^,-]|\beval\b")
 TEST_CMDS = {"[[", "[", "test"}
 FILE_TESTS = {"-a", "-b", "-c", "-d", "-e", "-f", "-g", "-h", "-k", "-p", "-r", "-s", "-t", "-u",
               "-w", "-x", "-G", "-L", "-N", "-O", "-S", "-nt", "-ot", "-ef"}
@@ -100,7 +110,7 @@ def subst_end(s, i):
             j += 2
         elif c == "$" and s[j + 1:j + 2] == "'":
             j = _ansi_end(s, j)
-        elif c == "'" and opener == "(":
+        elif c == "'":
             j = _sq_end(s, j)
         elif c == '"':
             j = _dq_end(s, j)
@@ -173,8 +183,10 @@ def substitutions(w):
 
 def simple_commands(s):
     """-> the simple commands of s, each a list of (word, role); role is "cmd" (a command word or a
-    wrapper), "arg", "assign" (NAME=value before the command), "redir" (a redirection target) or
-    "here" (a here-string). The commands of substitutions are listed too, after their host."""
+    wrapper), "arg", "assign" (NAME=value before the command), "redir" (a file redirection
+    target), "fd" (a descriptor duplication, `>&2`) or "here" (a here-string). A command whose
+    output is piped carries a last pseudo-word ("|", "pipe"). The commands of substitutions are
+    listed too, after their host."""
     cmds, cur, i, n = [], [], 0, len(s)
     at_cmd, wrapped, redirect, in_test = True, False, None, False
     nested = []
@@ -188,6 +200,8 @@ def simple_commands(s):
             if c == "&" and s[i + 1:i + 2] == ">":
                 redirect, i = "redir", i + 2
                 continue
+            if c == "|" and s[i + 1:i + 2] != "|" and (i == 0 or s[i - 1] != "|"):
+                cur.append(("|", "pipe"))
             if cur:
                 cmds.append(cur)
             cur, at_cmd, wrapped, redirect, in_test = [], True, False, None, False
@@ -197,8 +211,10 @@ def simple_commands(s):
                 redirect, i = "here", i + 3
             else:
                 redirect, i = "redir", i + 1
-                while i < n and s[i] in "<>&":
+                while i < n and s[i] in "<>":
                     i += 1
+                if i < n and s[i] == "&":
+                    redirect, i = "fd", i + 1
         else:
             j = word_end(s, i)
             j = n if j is None else max(j, i + 1)
@@ -267,7 +283,10 @@ def array_literal(body):
             j = body.find("\n", i)
             i = n if j < 0 else j
         elif c == ")":
-            return elems, body[i + 1:]
+            rest = body[i + 1:]
+            if not re.match(r"[ \t]*($|[;#\n]|&&|\|\|)", rest):
+                return None  # not where a literal ends: a misread quote; leave it to the line rule
+            return elems, rest
         else:
             key = None
             if c == "[":
@@ -306,14 +325,37 @@ def _command_name(cmd):
     return names[-1] if names else None
 
 
+def _pure(cmd):
+    name = _command_name(cmd)
+    if name in PURE_FILTERS:
+        return True
+    return name == "awk" and not any(AWK_UNSAFE_RE.search(w) for w, r in cmd if r == "arg")
+
+
+def _printed_only(cmds, k):
+    """cmds[k] prints: is its output only shown, captured, or piped through pure filters?"""
+    while cmds[k] and cmds[k][-1] == ("|", "pipe"):
+        k += 1
+        if k >= len(cmds) or not _pure(cmds[k]):
+            return False
+    return True
+
+
 def use_level(seeds, code_lines, elements, exec_re):
-    """The highest use level of anything matching a seed pattern.
+    """The highest use level of anything matching a seed pattern (see USE LEVELS).
 
     code_lines: the script's code lines; elements: [(NAME, "key"|"value", text)] for every keyed
-    element. Taint flows into a variable assigned from it (`v=...`, `local v=...`, `for v in ...`,
-    `read v <<< ...`) and into a keyed array whose element holds it."""
+    element. Taint flows into a variable assigned from it (`v=...`, `local v=...`, `printf -v v`,
+    `for v in ...`, `read v <<< ...`) and into a keyed array whose element holds it. Only the
+    contexts below are TEXT or READ; everything else is RUN."""
+    if any(INDIRECT_RE.search(line) for line in code_lines):
+        return RUN
     pats, level, grew = set(seeds), TEXT, True
     parsed = [(line, simple_commands(line)) for line in code_lines]
+
+    def ident(v):
+        return re.match(r"[A-Za-z_]\w*$", v) is not None
+
     while grew:
         grew = False
         rx = [re.compile(p) for p in pats]
@@ -321,8 +363,9 @@ def use_level(seeds, code_lines, elements, exec_re):
         def hit(w):
             return any(r.search(w) for r in rx)
 
-        def taint(p):
+        def taint(v):
             nonlocal grew
+            p = _value_pat(v) if ident(v) else v
             if p not in pats:
                 pats.add(p)
                 grew = True
@@ -333,43 +376,50 @@ def use_level(seeds, code_lines, elements, exec_re):
         for line, cmds in parsed:
             if not hit(line):
                 continue
-            if exec_re.search(line) or re.search(r"\b(eval|xargs)\b", line):
+            if exec_re.search(line) or re.search(r"\bxargs\b", line):
                 return RUN
-            for cmd in cmds:
+            for k, cmd in enumerate(cmds):
                 if not any(hit(w) for w, _ in cmd):
                     continue
                 name = _command_name(cmd)
-                words = [w for w, _ in cmd]
+                words = [w for w, r in cmd if r != "pipe"]
+                files = [w for w, r in cmd if r == "redir"]
                 for w, role in cmd:
                     if not hit(w):
                         continue
-                    if role == "cmd":
-                        return RUN
                     if role == "assign":
                         if name is not None:
                             return RUN  # an environment value the command it prefixes reads
-                        taint(_value_pat(ASSIGN_RE.match(w).group(1)))
+                        taint(ASSIGN_RE.match(w).group(1))
                     elif role == "redir":
                         level = max(level, READ)
                     elif role == "here":
-                        if name == "read":
-                            for v in words[1:]:
-                                if re.match(r"[A-Za-z_]\w*$", v):
-                                    taint(_value_pat(v))
-                        elif name in READ_CMDS or name in TEXT_CMDS:
-                            level = max(level, READ if name in READ_CMDS else TEXT)
-                        else:
+                        if name != "read":
                             return RUN
-                    elif name in TEXT_CMDS:
+                        for v in words[1:]:
+                            if ident(v):
+                                taint(v)
+                    elif role != "arg":
+                        return RUN  # a command word, or anything this reader has no rule for
+                    elif name in PRINT_CMDS:
+                        if name == "printf" and "-v" in words:
+                            i = words.index("-v")
+                            if i + 1 >= len(words) or not ident(words[i + 1]):
+                                return RUN
+                            taint(words[i + 1])
+                        elif files or not _printed_only(cmds, k):
+                            return RUN  # printed into a file or a consumer this reader cannot see
+                    elif name in INERT_CMDS:
                         pass
                     elif name in DECLARE_CMDS:
                         m = ASSIGN_RE.match(w)
                         if not m:
                             return RUN
-                        taint(_value_pat(m.group(1)))
+                        taint(m.group(1))
                     elif name in ("for", "select"):
-                        if len(words) > 1 and re.match(r"[A-Za-z_]\w*$", words[1]):
-                            taint(_value_pat(words[1]))
+                        if len(words) < 2 or not ident(words[1]):
+                            return RUN
+                        taint(words[1])
                     elif name in TEST_CMDS:
                         if any(x in FILE_TESTS for x in words):
                             level = max(level, READ)
