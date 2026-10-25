@@ -27,22 +27,33 @@ gate its `SKIP` map exempts, through the map key.
 
 ## Fix
 
-The selector parses array literals and `NAME[key]=value` assignments with a quote-aware shell word
-scanner. The value of a keyed element is text and names nothing; a key is a lookup string, read
-but never run. Both revert to code (the old rule) when the script executes the map: when the map,
-or a variable assigned from it (followed through assignments, `for` and `read` to a fixed point),
-is expanded in command position or on a line naming an interpreter, `source`, `eval` or `xargs`.
-A value holding a command substitution runs at assignment and stays code. A literal with no keyed
-element (a list of gates to run) is unaffected.
+A new module, `scripts/tests/lib/shell_text.py`, reads enough bash to tell text from use: shell
+words (quotes, ANSI-C `$'...'`, escapes, `$(...)`, `${...}`, backquotes), simple commands and the
+role of each word (command, argument, prefix assignment, redirection, here-string), and keyed
+array literals. The selector judges each keyed array's values, and separately its keys, by the
+highest use any expansion of them reaches, directly or through a variable or another array
+assigned from them (to a fixed point): RUN for a command word, an argument of any command not
+known to only read or print (a function, a wrapper, an interpreter), a prefix assignment, or a
+line naming an interpreter, `source`, `eval` or `xargs`; READ for an argument of a file reader
+(`cat`, `grep`, a `[[ -f ]]` test) or a redirection target; TEXT for `echo`/`printf` and the gate
+message helpers, string tests, `case` subjects, `for` lists. A TEXT value names nothing; a READ
+value is a read and never a run; a RUN value is code, the old rule. A key is at least a read. An
+element holding a command substitution runs at assignment and is always code. Every unknown
+context is RUN, so a misjudgment over-selects. A literal with no keyed element (a list of gates to
+run) is judged line by line as before.
 
-Effect, measured over the whole gate inventory (272 commands) at `70bcdeb6`: no closure gained an
-edge or changed its compiler/Lean flag; the 17 commands that reach the corpus audit lost the false
-edges; the selection for each of the seven fixtures in `tests/fixtures/gate_selection/` is
-unchanged. Regression legs in `check_gate_selection.sh` ("text is not a call"): a note naming a
-gate is neither a run nor a read, nor is the directory it mentions; a genuine invocation of that
-gate in the same file still is a run; a map executed through a variable, and one expanded in command
-position, keep their values as calls; a key naming a gate is a read and not a run. The first and
-last legs fail against the previous selector.
+Effect, measured over the whole gate inventory (272 commands) on this branch's tree, old selector
+against new: no closure gained an edge or changed its compiler/Lean flag; the 16 commands that
+reach the corpus audit lost the false edges (seven tracked files no longer select them, among them
+`scripts/review/*`, `.gitignore` and two docs); the selection for each of the seven fixtures in
+`tests/fixtures/gate_selection/` is unchanged. `check_gate_registration.sh`'s exemption keys stay
+calls (they reach a function the reader does not know). Regression legs in
+`check_gate_selection.sh` ("text is not a call"): a note naming a gate is neither a run nor a read,
+nor is the directory it mentions; a genuine invocation of that gate in the same file is a call; a
+value run through a variable, in command position behind a wrapper's options, or copied into
+another array that is run, is a call; a value read as a file is a read; a key naming a gate is a
+read; a command substitution in a key is a call; an ANSI-C quoted value does not swallow the
+invocation after it. The note and key legs fail against the previous selector.
 
 ## Structural cause
 
@@ -56,5 +67,6 @@ walk ("a mention is not an invocation").
 ## Structural owner
 
 R-0513 (impact gate selection): the selector judges each name by its shell context (a command
-word, an argument, a data value), with every context it treats as text pinned by a control in
-`check_gate_selection.sh` and every misjudgment falling to over-selection.
+word, an argument, a data value; `shell_text.py`), with every context it treats as text pinned by
+a control in `check_gate_selection.sh` and every misjudgment falling to over-selection. Keyed
+array values are the first context judged this way; plain lines still use the line rule.

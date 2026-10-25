@@ -162,9 +162,10 @@ fi
 
 echo "=== text is not a call: names in keyed-array values (bug 237) ==="
 # A corpus note naming a gate script made run_tests.sh, which runs the corpus audit, look as if it ran
-# that gate and read docs/: the docs-only control selected 19 commands in train 16. The value of a
-# `[key]=value` element is text unless the script executes the map. The gate named in the fixtures is
-# the runner, which this gate already runs, so spelling it here adds no edge to this gate.
+# that gate and read docs/: the docs-only control selected 19 commands in train 16. A keyed array's
+# values are text only when every use of them is (shell_text.py); a value the script reads is a read,
+# one it may run is a call. The gate named in the fixtures is the runner, which this gate already
+# runs, so spelling it here adds no edge to this gate.
 NAMED="scripts/tests/run_ci_gates_local.sh"
 # script_edges FILE -> "run PATH" / "read PATH" lines: the selector's own reading of FILE
 script_edges() {
@@ -179,10 +180,19 @@ for f in sorted(files | dirs):
     print("read", f)
 PY
 }
-edges() {  # NAME FILE: edges into $TMPD/NAME.edges; a selector failure is a FAIL
-  if ! script_edges "$2" > "$TMPD/$1.edges" 2>"$TMPD/$1.edges.err"; then
-    no "$1: the selector could not read the fixture: $(head -c 300 "$TMPD/$1.edges.err")"; return 1
+# leg NAME EXPECT DESCRIPTION < FIXTURE. EXPECT: none (no edge to the runner nor to a docs path),
+# read (a read and no run) or run.
+leg() {
+  local name="$1" want="$2" what="$3" got
+  cat > "$TMPD/$name.fixture"
+  if ! script_edges "$TMPD/$name.fixture" > "$TMPD/$name.edges" 2>"$TMPD/$name.edges.err"; then
+    no "$what: the selector could not read the fixture: $(head -c 300 "$TMPD/$name.edges.err")"; return
   fi
+  if grep -qx "run $NAMED" "$TMPD/$name.edges"; then got=run
+  elif grep -qx "read $NAMED" "$TMPD/$name.edges" || grep -q "^read docs" "$TMPD/$name.edges"; then got=read
+  else got=none; fi
+  if [ "$got" = "$want" ]; then ok "$what ($got)"
+  else no "$what: expected $want, got $got: $(tr '\n' ' ' < "$TMPD/$name.edges")"; fi
 }
 cat > "$TMPD/map_notes" <<'EOF'
 declare -A NOTES=(
@@ -193,52 +203,48 @@ declare -A NOTES=(
 NOTES[903]="FIXED -- pinned by run_ci_gates_local.sh"
 for n in "${!NOTES[@]}"; do
   entry="${NOTES[$n]}"
-  echo "  skip $n (${NOTES[$n]})"
-  [ -n "$entry" ] && printf '%s\n' "$entry"
+  [[ -n "${NOTES[$n]:-}" && "$entry" != x ]] && echo "  skip $n (${NOTES[$n]})"
+  word="$(printf '%s' "$entry" | awk '{print $1}')"
+  case "$word" in FIXED*) : ;; esac
 done
 EOF
-if edges notes "$TMPD/map_notes"; then
-  if ! grep -q "run_ci_gates_local\.sh" "$TMPD/notes.edges" && ! grep -q "^read docs" "$TMPD/notes.edges"; then
-    ok "a gate named in a map's note text is neither run nor read (nor is the directory it mentions)"
-  else
-    no "a gate named in a map's note text became a dependency: $(tr '\n' ' ' < "$TMPD/notes.edges")"
-  fi
-fi
-{ cat "$TMPD/map_notes"; echo 'bash "$ROOT_DIR/scripts/tests/run_ci_gates_local.sh" --plan'; } > "$TMPD/map_and_call"
-if edges call "$TMPD/map_and_call"; then
-  if grep -qx "run $NAMED" "$TMPD/call.edges"; then ok "a genuine invocation of the same gate in the same file is still a run"
-  else no "a genuine invocation beside the map is not a run: $(tr '\n' ' ' < "$TMPD/call.edges")"; fi
-fi
-cat > "$TMPD/map_exec" <<'EOF'
+leg notes none "a gate named in a map's note text is neither run nor read, nor is the directory it mentions" < "$TMPD/map_notes"
+{ cat "$TMPD/map_notes"; echo 'bash "$ROOT_DIR/scripts/tests/run_ci_gates_local.sh" --plan'; } \
+  | leg call run "a genuine invocation of the same gate in the same file is still a call"
+leg exec run "a map value run through a variable is a call" <<'EOF'
 declare -A GATE_FOR=(
   [plan]="scripts/tests/run_ci_gates_local.sh"
 )
 g="${GATE_FOR[plan]}"
 bash "$g" --plan
 EOF
-if edges exec "$TMPD/map_exec"; then
-  if grep -qx "run $NAMED" "$TMPD/exec.edges"; then ok "a map whose value is executed (through a variable) keeps its values as calls"
-  else no "an executed map's value is not a run: $(tr '\n' ' ' < "$TMPD/exec.edges")"; fi
-fi
-cat > "$TMPD/map_cmdpos" <<'EOF'
+leg cmdpos run "a map value in command position, behind a wrapper's options, is a call" <<'EOF'
 declare -A GATE_FOR=( [plan]="scripts/tests/run_ci_gates_local.sh" [x]=other )
-for k in plan; do "${GATE_FOR[$k]}" --plan; done
+for k in plan; do timeout -k 5 60 "${GATE_FOR[$k]}" --plan; done
 EOF
-if edges cmdpos "$TMPD/map_cmdpos"; then
-  if grep -qx "run $NAMED" "$TMPD/cmdpos.edges"; then ok "a map expanded in command position keeps its values as calls"
-  else no "a map expanded in command position is not a run: $(tr '\n' ' ' < "$TMPD/cmdpos.edges")"; fi
-fi
-cat > "$TMPD/map_key" <<'EOF'
+leg chain run "a map value copied into another map that is run is a call" <<'EOF'
+declare -A A=( [k]="scripts/tests/run_ci_gates_local.sh" )
+declare -A B=( [k]="${A[k]}" )
+run_gate "${B[k]}"
+EOF
+leg readval read "a map value the script reads as a file is a read, not a call" <<'EOF'
+declare -A SRC=( [k]="scripts/tests/run_ci_gates_local.sh" )
+grep -c . "${SRC[k]}"
+EOF
+leg key read "a map key naming a gate is a read, not a call" <<'EOF'
 declare -A SKIP=(
   ["scripts/tests/run_ci_gates_local.sh"]="a reason that names nothing"
 )
 for f in scripts/tests/*.sh; do [ -n "${SKIP[$f]:-}" ] && echo "skip $f"; done
 EOF
-if edges key "$TMPD/map_key"; then
-  if grep -qx "read $NAMED" "$TMPD/key.edges" && ! grep -qx "run $NAMED" "$TMPD/key.edges"; then
-    ok "a map key naming a gate is a read, not a run"
-  else no "a map key naming a gate: expected a read and no run: $(tr '\n' ' ' < "$TMPD/key.edges")"; fi
-fi
+leg keysub run "a command substitution in a key runs at assignment" <<'EOF'
+declare -A M=( [$(bash scripts/tests/run_ci_gates_local.sh --plan | head -1)]=note )
+EOF
+leg ansi run "an ANSI-C quoted value does not swallow the invocation after it" <<'EOF'
+declare -A M=( [k]=$'it\'s' )
+bash scripts/tests/run_ci_gates_local.sh --plan
+echo ' ) '
+EOF
 
 echo "=== wiring: run_ci_gates_local.sh --impact-files resolves to exactly the selector's list ==="
 grep -v '^#' "$FIX/stack_budget_leg_26c409f8.paths" > "$TMPD/wire.paths"
