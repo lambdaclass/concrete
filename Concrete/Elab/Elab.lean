@@ -1,5 +1,5 @@
+import Std.Data.TreeMap
 import Concrete.Frontend.AST
-import Concrete.Proof.BodyScope
 import Concrete.Proof.EvidenceTree
 import Concrete.Proof.EvidenceBuild
 -- for `flatUsesOf`: the flat identity-use view is DERIVED from the structural body here,
@@ -34,6 +34,18 @@ No linearity checking, no borrow checking, no capability validation.
 -- Elaboration environment
 -- ============================================================
 
+/-- The shape of the lexical binder frame stack: the number of binders in each frame, innermost
+    first, and the number of frames. A binder's evidence position is its frame and its index in
+    that frame, so the shape is all a position needs. Since R-0492 step 2 no reference is
+    resolved by spelling (the local walk decides which binding a use denotes), so the frames keep
+    no spellings: recording them appended each binder to its frame and retired a block's binders
+    by rebuilding every frame, which made a function of n bindings O(n^2) to elaborate (bug
+    MMM-E). -/
+structure FrameShape where
+  sizes : List Nat := []
+  depth : Nat := 0
+  deriving Inhabited
+
 /-- One local binding as Elab has elaborated it (R-0492 step 2): its Core name, type, whether
     it is a `ghost let`, and the lexical frame position its binder took (absolute frame index,
     outermost first, and index in that frame), which is what evidence binder references are
@@ -50,7 +62,9 @@ structure ElabEnv where
   -- bindings elaborated so far, keyed by identity. A use of a local name is resolved through
   -- the table at its position, never by searching for the spelling.
   locals : LocalTable := LocalTable.unresolved
-  bound : List (LocalId × BoundLocal) := []
+  -- A persistent map keyed by the identity's index, not a list searched per use (bug MMM-E):
+  -- a scope restore hands back an earlier map, so it must share structure, not copy.
+  bound : Std.TreeMap Nat BoundLocal compare := {}
   structs : List StructDef
   enums : List EnumDef
   fnSigs : List (String × FnSummary)
@@ -68,7 +82,7 @@ structure ElabEnv where
   -- branches and loops push and pop, so a position read off it is not a stable
   -- lexical identity. `restoreScope` restores this from the saved env, which gives
   -- frame POP for free and matches the language's own scoping.
-  bodyScope : Proof.BodyScope := {}
+  bodyScope : FrameShape := {}
   -- The declaration's own proof path, needed to MINT identities inside expression
   -- elaboration. `thisProofPath` is computed in elabModule, so without threading it
   -- here a constant or function reference has no defining module and cannot become a
@@ -422,7 +436,7 @@ private partial def resolveTypeE (ty : Ty) : ElabM Ty := do
 private def useLocal? (sp : Span) (name : String) : ElabM (Option (LocalId × BoundLocal)) := do
   let env ← getEnv
   match env.locals.useAt? sp name with
-  | some id => return (env.bound.lookup id).map (id, ·)
+  | some id => return (env.bound.get? id.idx).map (id, ·)
   | none => return none
 
 private def lookupVar (sp : Span) (name : String) : ElabM (Option Ty) := do
@@ -467,24 +481,23 @@ private def lookupEnum (name : String) : ElabM (Option EnumDef) := do
   let env ← getEnv
   return env.enums.find? fun ed => ed.name == name
 
-/-- Record `name` as a binder. `pending` means a scope was entered and its frame has
-    not been materialized: open it now, with this binder first. Otherwise extend the
-    innermost live frame in source order. -/
-private def extendFrame (sc : Proof.BodyScope) (pending : Bool) (name : String)
-    : Proof.BodyScope :=
-  if pending then sc.push [name]
-  else match sc.frames with
-    | []      => sc.push [name]
-    | f :: fs => { frames := (f.concat name) :: fs }
+/-- Record a binder. `pending` means a scope was entered and its frame has not been
+    materialized: open it now, with this binder first. Otherwise extend the innermost live
+    frame in source order. -/
+private def extendFrame (sc : FrameShape) (pending : Bool) : FrameShape :=
+  if pending then { sizes := 1 :: sc.sizes, depth := sc.depth + 1 }
+  else match sc.sizes with
+    | []      => { sizes := [1], depth := sc.depth + 1 }
+    | n :: ns => { sc with sizes := (n + 1) :: ns }
 
-/-- Record `name` in the lexical frame stack and return the position it took: the absolute
+/-- Record a binder in the lexical frame stack and return the position it took: the absolute
     frame index (outermost first) and the index in that frame. -/
-private def addBinder (name : String) : ElabM (Nat × Nat) := do
+private def addBinder : ElabM (Nat × Nat) := do
   let env ← getEnv
-  let sc := extendFrame env.bodyScope env.pendingFrame name
+  let sc := extendFrame env.bodyScope env.pendingFrame
   setEnv { env with bodyScope := sc, pendingFrame := false }
-  let frame := sc.frames.length - 1
-  let idx := ((sc.frames.head?.map (·.length)).getD 1) - 1
+  let frame := sc.depth - 1
+  let idx := (sc.sizes.head?.getD 1) - 1
   return (frame, idx)
 
 /-- Mark a scope as entered. Idempotent, and cheap: nothing is allocated until a
@@ -500,10 +513,10 @@ private def binderId (key : BinderKey) (name : String) (span : Option Span) : El
   | none => throwElab (.binderTableMissing s!"the binder '{name}' has no identity in the local table (R-0492)") span
 
 /-- Register a binding: its frame position, Core name and type. -/
-private def registerBound (id : LocalId) (name core : String) (ty : Ty) : ElabM CLocal := do
-  let pos ← addBinder name
+private def registerBound (id : LocalId) (core : String) (ty : Ty) : ElabM CLocal := do
+  let pos ← addBinder
   let c : CLocal := { name := core, id := some id }
-  modify fun env => { env with bound := (id, { core := c, ty, pos := some pos }) :: env.bound }
+  modify fun env => { env with bound := env.bound.insert id.idx { core := c, ty, pos := some pos } }
   return c
 
 /-- Bug 045: bind a match-arm payload/pattern variable under a FRESH Core name (`value` →
@@ -514,7 +527,7 @@ private def bindArmVar (key : BinderKey) (binding : String) (ty : Ty) (span : Op
   let env ← getEnv
   let fresh := s!"{binding}.b{env.freshBinder}"
   setEnv { env with freshBinder := env.freshBinder + 1 }
-  registerBound id binding fresh ty
+  registerBound id fresh ty
 
 /-- Evaluation-order temporaries (bugs 136, 137). Core has no expression-level `let` yet (R-0496
     owns one); `match value { t => body }` with a single unguarded binder arm is exactly
@@ -566,12 +579,12 @@ private def bindLocal (key : BinderKey) (name : String) (ty : Ty) (span : Option
   let shadows := env.locals.shadowsAt id
   let core := if shadows then s!"{name}.b{env.freshBinder}" else name
   setEnv { env with freshBinder := if shadows then env.freshBinder + 1 else env.freshBinder }
-  registerBound id name core ty
+  registerBound id core ty
 
 /-- The evidence reference for a use of a binding: its frame position, made relative to the
     current frame stack. A binding with no position (a ghost) is a gap. -/
 private def binderRefEv (b : BoundLocal) : ElabM Proof.EvidenceExprV2 := do
-  let depth := (← getEnv).bodyScope.frames.length
+  let depth := (← getEnv).bodyScope.depth
   match b.pos with
   | some (frame, idx) =>
     if frame < depth then return Proof.evBinderRefAt (depth - 1 - frame) idx
@@ -585,36 +598,17 @@ private def binderRefEv (b : BoundLocal) : ElabM Proof.EvidenceExprV2 := do
     in the enclosing frame, in source order, and every shipped proof
     fingerprint is over that encoding. Opening a frame here would move the
     digest of every body with a `let` inside a branch without changing what any
-    reference resolves to. Scoping is instead enforced at `exitBlock`. -/
+    reference resolves to. Which binding a use denotes is the local walk's
+    answer (`Resolve/Locals.lean`), so the block's own scope is enforced there. -/
 -- spec: SCOPE-3 (docs/spec/scope.md; this declaration enforces the rule)
 private def enterBlock : ElabM ElabEnv := getEnv
 
-/-- Bug 087: the binder frames after a block closes. Binders the block added
-    keep their POSITION (so later positions — and digests — are unchanged) but
-    become unresolvable: the name is replaced by a tombstone no surface
-    identifier can equal (identifiers cannot contain '.'). Without this, a read
-    of an outer `x` after `if c { let x = .. }` resolved to the inner binder,
-    because within one frame the last same-named binder wins. Frames are
-    innermost-first; a frame materialized inside the block (a pending match-arm
-    frame) is tombstoned whole. -/
-private def tombstoneBlock (saved cur : Proof.BodyScope) : Proof.BodyScope :=
-  let dead := ".out-of-scope"
-  let curOuterFirst := cur.frames.reverse
-  let savedOuterFirst := saved.frames.reverse
-  let fixed := curOuterFirst.zipIdx.map fun (f, i) =>
-    match savedOuterFirst[i]? with
-    | some sf => f.zipIdx.map fun (n, j) => if j < sf.length then n else dead
-    | none    => f.map fun _ => dead
-  { frames := fixed.reverse }
-
-/-- Bug 087: leave a lexical block — retire the block's binders from the frame stack (their
-    positions stay, their spellings are tombstoned). Everything else the block produced (fresh
-    counter, coverage, bound locals) is kept. Since R-0492 step 2 no reference resolves by
-    spelling: which binding a use denotes is the local walk's answer, so a block's bindings
-    cannot answer for a later use whatever this keeps. -/
-private def exitBlock (saved : ElabEnv) : ElabM Unit := do
-  let cur ← getEnv
-  setEnv { cur with bodyScope := tombstoneBlock saved.bodyScope cur.bodyScope }
+/-- Bug 087: leave a lexical block. The block's binders keep their positions (so later positions,
+    and digests, are unchanged), and nothing can name them afterwards: since R-0492 step 2 no
+    reference resolves by spelling, so a block's bindings cannot answer for a later use. The frame
+    stack therefore needs no change here. (It used to keep spellings and retire the block's by
+    rebuilding every frame with tombstones, O(bindings) per block: bug MMM-E.) -/
+private def exitBlock (_saved : ElabEnv) : ElabM Unit := pure ()
 
 /-- Scope restore that keeps `freshBinder` MONOTONE: sibling and
     sequential arms must never mint the same Core name (Lower's slot table
@@ -632,7 +626,7 @@ private def restoreScope (saved : ElabEnv) : ElabM Unit := do
     reported as a ghost leak. -/
 private def addGhostVar (key : BinderKey) (name : String) (ty : Ty) (span : Option Span) : ElabM Unit := do
   let id ← binderId key name span
-  modify fun env => { env with bound := (id, { core := { name, id := some id }, ty, ghost := true }) :: env.bound }
+  modify fun env => { env with bound := env.bound.insert id.idx { core := { name, id := some id }, ty, ghost := true } }
 
 
 
@@ -2372,7 +2366,7 @@ def elabFn (f : FnDef) (implTy : Option Ty := none)
   -- R-0492 step 2: this function's binding identities; no binding of another function is bound.
   if !f.locals.resolved then
     throwElab (.binderTableMissing s!"function '{f.name}' reached elaboration without a local binder table (R-0492)") (some f.span)
-  setEnv { env with bodyScope := {}, pendingFrame := false, locals := f.locals, bound := [] }
+  setEnv { env with bodyScope := {}, pendingFrame := false, locals := f.locals, bound := {} }
   let env ← getEnv
   -- Set up type params and return type
   let allTypeParams := f.typeParams
@@ -3064,7 +3058,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
   -- would also leave a transient window where callee identity silently resolves to
   -- none, so every path running in it would emit gaps for a reason that is not real.
   let initEnv : ElabEnv := {
-    bound := []
+    bound := {}
     proofPath := thisProofPath
     resolveCallee := resolveContractCall
     callSpellings := callSpellings
