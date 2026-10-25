@@ -1,0 +1,23 @@
+// Bug 227 (Codex review of the fix): a child module's `enum Result`, named in its own function's
+// signature, beside the builtin `Result<i32, i32>` in the parent. With the user `Result` respelled
+// (`outer_child_Result`), the parent took that spelling from the child's signature as an inherited
+// binding, because its own binding of `Result` (the builtin, which keeps its name) was not counted,
+// and its builtin literal and patterns became the child's enum (E0534). A spelling the module binds
+// itself is never inherited. Expected: 42, natively and --interp.
+mod outer {
+    mod child {
+        pub enum Copy Result { A }
+        pub fn make() -> Result { return Result::A; }
+    }
+    pub fn run() -> Int {
+        let r: Result<i32, i32> = Result::<i32, i32>::Ok { value: 42 };
+        match r {
+            Result::Ok { value } => { return value as Int; },
+            Result::Err { error } => { return error as Int; },
+        }
+    }
+}
+
+fn main() -> Int {
+    return outer::run();
+}

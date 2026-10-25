@@ -1,0 +1,24 @@
+// Bug 227 (FIXED), the Resolve side: with `a` and `b` top-level modules (`main` written last), `b`'s
+// type scope fell back to the program-wide first-wins scope, which holds `a`'s non-generic
+// `enum Result`, so `Result<i32, i32>` in `b` was refused: E0113 "'Result' takes 0 type
+// arguments, but 2 were given". `b` declares and imports no `Result`; the builtin is meant. A
+// top-level module's type namespace is now its own environment (R-0492 slice 6, the change that
+// fixed bug 230). Expected: 42, natively and --interp.
+mod a {
+    enum Copy Result { A }
+    pub fn z() -> Int { return 0; }
+}
+
+mod b {
+    pub fn h(r: Result<i32, i32>) -> Int {
+        match r {
+            Result::Ok { value } => { return value as Int; },
+            Result::Err { error } => { return error as Int; },
+        }
+    }
+    pub fn k() -> Int { return h(Result::<i32, i32>::Ok { value: 42 }); }
+}
+
+fn main() -> Int {
+    return b::k();
+}

@@ -148,10 +148,9 @@ tests/programs/regress_094_shadowing_binders.con
 tests/programs/report_interface_check.con"
 # Valid programs the compiler still refuses because of an OPEN bug, each named beside it. They are
 # not rejected by design: pinned the same way, so the fix of the bug fails this leg until the entry
-# is removed (and the program is probed like any other).
-#   regress_217_enclosing_type_not_in_scope  bug 227: Lower looks `Result::Ok` up by spelling and
-#     meets the enclosing module's `enum Result` (E0602); the front end and --interp accept it.
-OPEN_BUG_REJECTED="tests/programs/regress_217_enclosing_type_not_in_scope.con"
+# is removed (and the program is probed like any other). None at present (bug 227's
+# regress_217_enclosing_type_not_in_scope left with its fix, 2026-10-25).
+OPEN_BUG_REJECTED=""
 # Annotated layouts the probe must reach (their report headers carry #[repr(C)] / #[packed]).
 MUST_PROBE="tests/programs/regress_bug121_enum_field_layout.con
 tests/programs/repr_packed.con
@@ -172,7 +171,7 @@ else
   gone=$(comm -13 "$TMP/mis.txt" "$TMP/known.txt")
   failed=$(grep '^PROBE-FAILED' "$TMP/probe.out" || true)
   grep '^REJECTED ' "$TMP/probe.out" | awk '{print $2}' | sort -u > "$TMP/rej.txt"
-  printf '%s\n' "$KNOWN_REJECTED" "$OPEN_BUG_REJECTED" | sort -u > "$TMP/known_rej.txt"
+  printf '%s\n' "$KNOWN_REJECTED" "$OPEN_BUG_REJECTED" | sed '/^$/d' | sort -u > "$TMP/known_rej.txt"
   rej_diff=$(diff "$TMP/known_rej.txt" "$TMP/rej.txt" || true)
   unprobed=""
   while IFS= read -r f; do

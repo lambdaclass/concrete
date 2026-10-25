@@ -133,6 +133,15 @@ def Scope.ofSymbols (symbols : List (String × SymKind)) : Scope :=
     typeKinds := symbols.foldl (fun m (n, k) =>
       if !k.isType then m else m.insert n ((m.getD n #[]).push k)) ∅ }
 
+/-- A scope whose type namespace is `typeSymbols` alone, while values are looked up in `symbols`
+    (R-0492 slice 6). A top-level module's type namespace is its own environment
+    (`moduleTypeEnvironment` and its imports); its value namespace still falls back to the
+    program-wide scope, which holds the other top-level modules' functions that Check also injects. -/
+def Scope.ofSymbolsTyped (symbols typeSymbols : List (String × SymKind)) : Scope :=
+  { (Scope.ofSymbols symbols) with
+    typeKinds := typeSymbols.foldl (fun m (n, k) =>
+      if !k.isType then m else m.insert n ((m.getD n #[]).push k)) ∅ }
+
 structure ResolvedModule where
   module : Module
   globalScope : Scope
@@ -173,6 +182,11 @@ structure ShallowResult where
       variant was refused (E0103) when another module's `Shape`, registered
       first, had none. -/
   moduleScopes : List (String × List (String × SymKind)) := []
+  /-- R-0492 slice 6: each top-level module's type environment, the type declarations and the
+      type names it may write: its imports' and its own (`moduleTypeEnvironment`), nothing of
+      another module. Check gives a top-level module no other module's types (only their
+      functions), so neither does Resolve (bugs 227, 230). -/
+  moduleTypeEnvs : List (String × List (String × SymKind) × List String) := []
   /-- The program's summary table, against which a nested submodule's imports are resolved in
       the body phase (bug 217). -/
   summaryTable : List (String × FileSummary) := []
@@ -617,6 +631,20 @@ private def buildGlobalScopeFromSummary (s : FileSummary) : Scope × List String
   ) []
   (Scope.ofSymbols symbols, types)
 
+/-- R-0492 slice 6: the type declarations a module may write by its own spelling, as Check's
+    environment for it holds them (`checkModule`: `summary.structs`/`enums`, its aliases, and
+    `allNewtypes`, which includes its children's newtypes): its own types, without its children's
+    other types, plus the builtins (`builtinTypeNames`). Imports and, for a nested submodule, its
+    siblings' types are added by the caller. One definition for top-level and nested modules:
+    a top-level module used the program-wide list, so a type name of another module passed
+    Resolve and reached the backend (bug 230), and another module's `enum Result` hid the
+    builtin (bug 227). -/
+private def moduleTypeEnvironment (s : FileSummary) : List (String × SymKind) × List String :=
+  let (declScope, declTypes) := buildGlobalScopeFromSummary { s with submoduleSummaries := [] }
+  let childNewtypes : List (String × SymKind) := s.submoduleSummaries.foldl
+    (fun acc (_, c) => acc ++ c.newtypes.map (fun nt => (nt.name, SymKind.newtype nt))) []
+  (declScope.symbols.filter (·.2.isType) ++ childNewtypes, declTypes ++ childNewtypes.map (·.1))
+
 -- ============================================================
 -- Resolve a module
 -- ============================================================
@@ -823,9 +851,9 @@ private def resolveModule (m : Module) (globalScope : Scope) (knownTypes : List 
     later passes admit. `none` when the imports do not resolve: Check reports that refusal for a
     submodule (`checkSubmodules`, E0284/E0285) and does not descend past it, and Resolve, whose
     scope for the submodule would be incomplete, leaves it to Check the same way. -/
-private def submoduleImportScope (summaryTable : List (String × FileSummary)) (sub : Module)
+private def importScope (summaryTable : List (String × FileSummary)) (imports : List ImportDecl)
     : Option (List (String × SymKind) × List String) :=
-  match resolveImports sub.imports summaryTable (fun _ => "") (fun _ _ => "") with
+  match resolveImports imports summaryTable (fun _ => "") (fun _ _ => "") with
   | .error _ => none
   | .ok ri =>
     let syms : List (String × SymKind) :=
@@ -846,7 +874,7 @@ private def submoduleImportScope (summaryTable : List (String × FileSummary)) (
     cast target there reached the backend.
 
     A submodule's symbol scope is the environment Check's `checkSubmodules`/`checkModule` give it,
-    in the same precedence: its imports (`submoduleImportScope`); its own declarations, with its
+    in the same precedence: its imports (`importScope`); its own declarations, with its
     children's functions and foreign bindings by qualified name (`leaf_two`) and its children's
     newtypes but not their other types or constants; then the structs, enums and public methods of the modules
     declared beside it (which Check and Elab inject). Nothing of an enclosing module is in it:
@@ -867,16 +895,15 @@ private partial def resolveModuleTreeErrors (summaryTable : List (String × File
   let siblingTypes : List String := summary.submoduleSummaries.foldl (fun acc (_, s) =>
     acc ++ s.structs.map (·.name) ++ s.enums.map (·.name)) []
   m.submodules.foldl (fun acc sub =>
-    match submoduleImportScope summaryTable sub with
+    match importScope summaryTable sub.imports with
     | none => acc
     | some (impSyms, impTys) =>
       let subSummary := match summary.submoduleSummaries.find? fun (n, _) => n == sub.name with
         | some (_, s) => s
         | none => buildFileSummary sub
       -- Its own declarations without its children's (Check's `summary.structs`/`enums`/...).
-      let (declScope, declTypes) := buildGlobalScopeFromSummary { subSummary with submoduleSummaries := [] }
-      let childNewtypes : List String := subSummary.submoduleSummaries.foldl
-        (fun acc (_, c) => acc ++ c.newtypes.map (·.name)) []
+      let (declScope, _) := buildGlobalScopeFromSummary { subSummary with submoduleSummaries := [] }
+      let (_, ownTypes) := moduleTypeEnvironment subSummary
       -- Its children's functions and foreign bindings by qualified name (Check's `submoduleNames`).
       let childFns : List (String × SymKind) := subSummary.submoduleSummaries.foldl
         (fun acc (childName, c) => acc
@@ -891,7 +918,7 @@ private partial def resolveModuleTreeErrors (summaryTable : List (String × File
       -- newtypes, its imports' and its siblings' (Codex review r4: inheriting the enclosing
       -- module's let `outer`'s `type Nope` pass in `inner`, where Check cannot expand it, and the
       -- cast reached the backend again).
-      let subTypes := declTypes ++ childNewtypes ++ impTys ++ siblingTypes
+      let subTypes := ownTypes ++ impTys ++ siblingTypes
       let sErrs := resolveModuleTreeErrors summaryTable sub subSummary (Scope.ofSymbols subSyms)
         subTypes traitMethods traitImpls_
       acc ++ sErrs.stampFile sub.sourceFile) errs
@@ -902,7 +929,7 @@ private partial def resolveModuleTreeErrors (summaryTable : List (String × File
 
 /-- One module's imports, validated against the summary table (E0110 unknown module, E0111
     not public), with the symbols and type names they bring into its scope. For each
-    top-level module; a nested submodule's imports go through `submoduleImportScope`. -/
+    top-level module; a nested submodule's imports go through `importScope`. -/
 private def summaryImports (summaryTable : List (String × FileSummary)) (s : FileSummary)
     : Diagnostics × List (String × SymKind) × List String :=
   let fullExportTable := summaryTable.map fun (n, s) => (n, s.publicNames)
@@ -1014,6 +1041,14 @@ def resolveShallow (moduleSummaries : List FileSummary)
   let importedTypes := perModule.flatMap fun (_, (_, _, tys)) => tys
   let moduleScopes := perModule.map fun (s, (_, syms, _)) =>
     (s.name, syms ++ (buildGlobalScopeFromSummary s).1.symbols)
+  -- The imported types are what import resolution transports, as Check's `resolveImports`
+  -- gives them: the named types and the types their signatures and fields reach (the import
+  -- closure, bug 096). When an import fails, `summaryImports` has reported it; its own bindings
+  -- stand in so the module's other diagnostics are still produced.
+  let moduleTypeEnvs := perModule.map fun (s, (_, syms, tys)) =>
+    let (ownSyms, ownTys) := moduleTypeEnvironment s
+    let (impSyms, impTys) := (importScope summaryTable s.imports).getD (syms, tys)
+    (s.name, impSyms.filter (·.2.isType) ++ ownSyms, impTys ++ ownTys)
   let combinedScope := Scope.ofSymbols (combinedScope.symbols ++ importedSymbols)
   let combinedTypes := combinedTypes ++ importedTypes
   { globalScope := combinedScope
@@ -1022,6 +1057,7 @@ def resolveShallow (moduleSummaries : List FileSummary)
   , traitImpls := traitImpls_
   , errors := importErrors
   , moduleScopes := moduleScopes
+  , moduleTypeEnvs := moduleTypeEnvs
   , summaryTable := summaryTable }
 
 -- ============================================================
@@ -1100,13 +1136,21 @@ def linkNameConflicts (modules : List Module) : Diagnostics :=
     (ROADMAP Phase 4 #12a.) -/
 def resolveBodiesPartial (modules : List Module) (shallow : ShallowResult) : (List ResolvedModule × Diagnostics) :=
   let (resolved, bodyErrors) := modules.foldl (fun (acc, errs) m =>
-    let scope := match shallow.moduleScopes.lookup m.name with
-      | some own => Scope.ofSymbols (own ++ shallow.globalScope.symbols)
-      | none => shallow.globalScope
+    -- Values: the module's own and imported symbols, then the program-wide scope. Types: the
+    -- module's own type environment only (R-0492 slice 6).
+    let typeEnv := shallow.moduleTypeEnvs.lookup m.name
+    let scope := match shallow.moduleScopes.lookup m.name, typeEnv with
+      | some own, some (typeSyms, _) =>
+        Scope.ofSymbolsTyped (own ++ shallow.globalScope.symbols) typeSyms
+      | some own, none => Scope.ofSymbols (own ++ shallow.globalScope.symbols)
+      | none, _ => shallow.globalScope
+    let knownTypes := match typeEnv with
+      | some (_, tys) => tys
+      | none => shallow.knownTypes
     let summary := match shallow.summaryTable.lookup m.name with
       | some s => s
       | none => buildFileSummary m
-    let mErrs := resolveModuleTreeErrors shallow.summaryTable m summary scope shallow.knownTypes
+    let mErrs := resolveModuleTreeErrors shallow.summaryTable m summary scope knownTypes
       shallow.traitMethods shallow.traitImpls
     let rm : ResolvedModule := { module := m, globalScope := scope }
     (acc ++ [rm], errs ++ mErrs)

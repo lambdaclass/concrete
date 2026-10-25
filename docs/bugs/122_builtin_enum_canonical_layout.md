@@ -39,7 +39,13 @@ show the size/alignment disagreement without an observed failure. Bug 229's
 `enum Copy Option { A }` (and `{ B }` in a submodule) beside uses of the builtin `Option<i32>`: the
 report sizes the user enums 16/8 and `%enum.Option` is the canonical 8/4 union. Every `Option` the
 program writes is the builtin (Check never withholds it), so the user enums are never built and
-nothing runs wrong; the two entries are pinned with the others.
+nothing runs wrong; the two entries are pinned with the others. Bug 227's top-level fixture
+`tests/programs/regress_227_toplevel_builtin_result.con` (2026-10-25) declares `enum Copy Result { A }`
+in one top-level module and uses the builtin `Result<i32, i32>` in another: the report sizes the user
+enum 4 and `%enum.Result` was the canonical 8-byte union; the user enum is never built, and the entry
+was pinned with the others until bug 227's fix (the same day) spelled the user enum `a_Result` in
+Core, which gives it its own LLVM type. A user `Result` in a program whose every module declares
+one keeps the name `Result`, so the single-module entries above remain.
 
 ## Expected
 

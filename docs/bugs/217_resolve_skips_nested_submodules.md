@@ -93,7 +93,7 @@ constant, a sibling's type and an import: 42 natively and under `--interp`),
 `regress_217_sibling_type_precedence.con` (the r1 and r2 witnesses: a sibling's `E` over the
 enclosing module's and a child's; 42 on both), `regress_217_enclosing_type_not_in_scope.con` (the r2
 `Result` witness: the front end accepts it, `--emit-core` succeeds, and `--interp` returns 42; the
-native build meets bug 227 in Lower and is pinned there); and a project build of
+native build met bug 227 in Lower and was pinned there until that bug's fix, 2026-10-25, after which `run_tests.sh` also runs the binary); and a project build of
 `tests/regressions/bug217_resolve_skips_nested_submodules/project`, whose `src/util.con` must be
 refused with resolve E0108 at `src/util.con:5:13`. Every std module now goes through Resolve in every
 project build and the whole suite is the control that the walk refuses nothing it accepted.

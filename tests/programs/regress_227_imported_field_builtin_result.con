@@ -1,0 +1,38 @@
+// Bug 227 (Codex review r2 of the fix): `lib`'s struct has a field of the builtin `Result<i32, i32>`;
+// `consumer` imports it and declares its own generic `enum Result<T, E>`. The imported copy of `Box`
+// is renamed with its defining module's bindings, and `lib` binds no user `Result`; the rename fell
+// back to the importer's binding and made the field `consumer_Result<i32, i32>`, so the two copies
+// of `Box` disagreed (E0299). A defining module with no user `Result` in scope means the builtin.
+// Expected: 42, natively and --interp.
+mod lib {
+    pub struct Copy Box {
+        pub r: Result<i32, i32>,
+    }
+    pub fn mk() -> Box { return Box { r: Result::<i32, i32>::Ok { value: 42 } }; }
+    pub fn get(b: Box) -> i32 {
+        match b.r {
+            Result::Ok { value } => { return value; },
+            Result::Err { error } => { return error; },
+        }
+    }
+}
+
+mod consumer {
+    import lib.{Box, mk, get};
+    enum Copy Result<T, E> {
+        A { value: T },
+        B { error: E },
+    }
+    pub fn run() -> Int {
+        let b: Box = mk();
+        let own: Result<i32, i32> = Result::<i32, i32>::B { error: 0 };
+        match own {
+            Result::A { value } => { return (get(b) + value) as Int; },
+            Result::B { error } => { return (get(b) + error) as Int; },
+        }
+    }
+}
+
+fn main() -> Int {
+    return consumer::run();
+}

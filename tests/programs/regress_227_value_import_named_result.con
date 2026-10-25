@@ -1,0 +1,43 @@
+// Bug 227 (Codex review r3 of the fix): `lib` imports a FUNCTION under the name `Result`, which is
+// in the value namespace (MOD-3) and does not withhold the builtin type, so `lib`'s `Box.r` is the
+// builtin `Result<i32, i32>`. The first version of the r2 repair counted every imported symbol of
+// that spelling, so the imported copy of `Box` in `consumer` took `consumer`'s own `enum Result`
+// and the copies disagreed (E0299). Only an imported type counts. Expected: 42, natively and
+// --interp.
+mod helper {
+    pub fn token() -> i32 { return 0; }
+}
+
+mod lib {
+    import helper.{token as Result};
+    pub struct Copy Box {
+        pub r: Result<i32, i32>,
+    }
+    pub fn mk() -> Box { return Box { r: Result::<i32, i32>::Ok { value: 42 } }; }
+    pub fn get(b: Box) -> i32 {
+        match b.r {
+            Result::Ok { value } => { return value + Result(); },
+            Result::Err { error } => { return error; },
+        }
+    }
+}
+
+mod consumer {
+    import lib.{Box, mk, get};
+    enum Copy Result<T, E> {
+        A { value: T },
+        B { error: E },
+    }
+    pub fn run() -> Int {
+        let b: Box = mk();
+        let own: Result<i32, i32> = Result::<i32, i32>::B { error: 0 };
+        match own {
+            Result::A { value } => { return (get(b) + value) as Int; },
+            Result::B { error } => { return (get(b) + error) as Int; },
+        }
+    }
+}
+
+fn main() -> Int {
+    return consumer::run();
+}

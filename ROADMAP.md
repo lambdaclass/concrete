@@ -100,21 +100,21 @@ a link failure, an interpreter refusal or an unrejected leak.
 
 <!-- BEGIN GENERATED: bug dashboard (scripts/gen/bug_dashboard.py; edit docs/bugs records and docs/bugs/discovery.tsv) -->
 
-**Open bugs: 14** (1 silent, 7 loud, 6 filed before the discovery record) of 209 bug records.
+**Open bugs: 12** (1 silent, 5 loud, 6 filed before the discovery record) of 209 bug records.
 
 | open bugs by primary structural class | open | silent | bugs |
 |---|---|---|---|
-| 1. Declaration identity by spelled name, not a resolved `DefId` | 6 | 1 | 054, 077, 114, 122, 223, 227 |
+| 1. Declaration identity by spelled name, not a resolved `DefId` | 5 | 1 | 054, 077, 114, 122, 223 |
 | 5. Borrow tracking by syntax instead of normalized places | 1 | 0 | 216 |
 | 11. Absence read as a fact (fail-open defaults) | 2 | 0 | 049, 058 |
-| 12. One fact kept in two places | 4 | 0 | 064, 226, 230, 233 |
+| 12. One fact kept in two places | 3 | 0 | 064, 226, 233 |
 | 17. Pass state in association lists and per-query recomputation (superlinear compile time) | 1 | 0 | 027 |
 
 | open bugs by Phase 1 exit | open | silent | bugs |
 |---|---|---|---|
 | exit 0b | 1 | 1 | 122 |
 | exit 2c | 1 | 0 | 114 |
-| no exit names it | 12 | 0 | 027, 049, 054, 058, 064, 077, 216, 223, 226, 227, 230, 233 |
+| no exit names it | 10 | 0 | 027, 049, 054, 058, 064, 077, 216, 223, 226, 233 |
 
 | discovery rate: counting probe batch | date | effort | found | silent | loud | signal |
 |---|---|---|---|---|---|---|
@@ -3281,6 +3281,11 @@ environment is keyed by `LocalId`, and E0301 is rendered from the same walk. Che
 `check_local_identity.sh`, plus mutation family 98. The slice found bug 202: project builds
 skipped desugaring. Remaining: Elab, Core, SSA and `PExpr` binders; `DefId`, `FieldIdx` and
 `VariantIdx`; contract expressions; `ElabVerify`.
+**Slice 6 (2026-10-25, branch `wip/r0492-decl-identity`):** declaration identity for module-level
+types and constants, design in [DECLARATION_IDENTITY.md](docs/compiler/DECLARATION_IDENTITY.md).
+Steps 1 – 2 landed: one type environment per module in Resolve (bug 230 fixed) and Core spells a
+user `Result` apart from the builtin (bug 227 fixed). Steps 3 (`TypeId` in Check, bug 223) and 4
+(`ConstId` through imports, bug 233) remain.
 
 `LocalId` for every binder, allocated at
 Resolve so the source checker and Elab both consume it; `DefId` as a compilation-scoped declaration

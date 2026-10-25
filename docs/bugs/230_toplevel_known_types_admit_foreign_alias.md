@@ -1,13 +1,14 @@
 # Bug 230 — another top-level module's alias passes Resolve in a cast and crashes the backend
 
-**Status:** OPEN
+**Status:** FIXED (2026-10-25, R-0492 slice 6)
 **Found:** 2026-10-24, by the Codex review (round 4) of bug 217's fix: the same shape inside a
 nested submodule was closed there; between top-level modules it remains.
 **Severity:** a crash. The backend panics (`EmitSSA.tyToLLVMTy: unknown named type 'Nope'`).
 
 ## Reproducer
 
-`tests/regressions/bug230_toplevel_known_types_admit_foreign_alias/repro.con`: top-level modules `a`
+`tests/programs/error_230_toplevel_foreign_alias_cast.con` (the former
+`tests/regressions/bug230_toplevel_known_types_admit_foreign_alias/repro.con`): top-level modules `a`
 (declaring `pub type Nope = i32`) and `b`, with `main` written last; `b` casts to `Nope` without
 importing it. Observed on main `408880cb` and on `wip/bughunt-216-217`: the native build panics in
 `EmitSSA.tyToLLVMTy`. Expected: E0108 (`b` neither declares nor imports `Nope`).
@@ -21,6 +22,29 @@ expand is kept as written in a cast target (bug 215's `resolvedOr`), CoreCheck r
 and the backend meets an undeclared named type. A `let` annotation with the same type is refused by
 Check, so only the cast path crashes.
 
+The parent shape is the same defect: a top-level module's known types also held its children's
+structs, enums, aliases and traits (`buildGlobalScopeFromSummary`), which Check's environment for it
+does not, so `(x as Al)` with `Al` a child's alias passed Resolve and panicked in the backend too
+(`tests/programs/error_230_parent_names_child_alias.con`).
+
+## Fix
+
+R-0492 slice 6 ([DECLARATION_IDENTITY.md](../compiler/DECLARATION_IDENTITY.md)). One function,
+`Resolve.moduleTypeEnvironment`, gives a module's own type environment as Check holds it (its own
+declarations, its children's newtypes, the builtins), and every module, top-level or nested, gets
+its type namespace and known type names from it plus its imports as import resolution transports
+them (`importScope`, the import closure Check's `resolveImports` gives) and, for a nested
+submodule, its siblings' types. `ShallowResult.moduleTypeEnvs` holds the top-level modules'; the
+type namespace of their `Scope` is built from it alone (`Scope.ofSymbolsTyped`), while values still
+fall back to the program-wide scope, which holds the other top-level modules' functions that Check
+injects. Both reproducers are refused with E0108. The same change fixed the top-level half of bug
+227.
+
+Regression legs in `run_tests.sh`: `error_230_toplevel_foreign_alias_cast.con` and
+`error_230_parent_names_child_alias.con` (`run_err` on E0108), and the positive control
+`regress_230_toplevel_type_environment.con` (an imported alias, a type reached only through an
+imported signature, an own struct and a child's newtype: `run_ok … 42` and `--interp` = 42).
+
 ## Structural cause
 
 Class 12 ("one fact kept in two places"): which type names a module may write is computed by
@@ -30,4 +54,6 @@ top-level modules' functions, and narrowing it needs the per-module type environ
 
 ## Structural owner
 
-R-0492/R-0514 (one resolver: one environment per module, consumed by Check and Elab).
+R-0492/R-0514 (one resolver: one environment per module, consumed by Check and Elab). Slice 6 makes
+Resolve's copy one definition shared by every module; Check still builds its own, and the
+remaining step is for Check and Elab to consume Resolve's environment instead of rebuilding it.
