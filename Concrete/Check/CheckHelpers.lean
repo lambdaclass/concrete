@@ -345,7 +345,7 @@ def addVar (r : LocalRef) (ty : Ty) (mutable : Bool := true) (declSpan : Option 
   let env ← getEnv
   let info : VarInfo := { ty, state := .unconsumed, isCopy := copy, loopDepth := env.loopDepth, mutable, declSpan,
                           uid := r.id }
-  setEnv { env with vars := (r, info) :: env.vars.filter (fun (k, _) => k != r) }
+  setEnv { env with vars := env.vars.push r info }
 
 /- H16 (E0292, `.shadowsLiveLinear`) used to search the environment for a live binding of the
    new binder's spelling. SCOPE-1@1 (E0301), computed by the local walk, refuses every binder that
@@ -354,12 +354,12 @@ def addVar (r : LocalRef) (ty : Ty) (mutable : Bool := true) (declSpan : Option 
    a false refusal of the bug-176 kind. The constructor stays as a definition only. -/
 
 /-- The entry for binding `uid` (bugs 093/094: identity, not name). -/
-def lookupByUid (vars : List (LocalRef × VarInfo)) (uid : LocalId) : Option VarInfo :=
-  (vars.find? fun (_, vi) => vi.uid == uid).map Prod.snd
+def lookupByUid (vars : VarEnv) (uid : LocalId) : Option VarInfo :=
+  vars.lookupUid uid
 
 /-- Is binding `uid` present in `vars`? -/
-def hasUid (vars : List (LocalRef × VarInfo)) (uid : LocalId) : Bool :=
-  vars.any fun (_, vi) => vi.uid == uid
+def hasUid (vars : VarEnv) (uid : LocalId) : Bool :=
+  vars.contains uid
 
 def activeBorrowRefs (env : TypeEnv) (var : LocalRef) : List VarInfo :=
   env.vars.foldl (fun acc (_, info) =>
@@ -507,12 +507,10 @@ def useVar (r : LocalRef) (span : Option Span := none) : CheckM Unit := do
     if info.isCopy then return ()
     if info.state == .unconsumed || info.state == .reserved then
       -- Only the innermost binding (`info`), by identity (bug 094).
-      let vars' := env.vars.map fun (n, vi) =>
-        if vi.uid == info.uid then
-          (n, { vi with
+      let vars' := env.vars.modifyUid info.uid fun vi =>
+        { vi with
             state := if info.state == .reserved then .reserved else .used,
-            movedAt := if vi.movedAt.isSome then vi.movedAt else span })
-        else (n, vi)
+            movedAt := if vi.movedAt.isSome then vi.movedAt else span }
       setEnv { env with vars := vars' }
 
 /-- Consume a linear variable (mark it as consumed).
@@ -560,9 +558,7 @@ def consumeVar (r : LocalRef) (span : Option Span := none) (breakDepthExempt : N
       -- Mark ONLY the binding the name resolves to (the innermost), by
       -- identity. Marking every same-named entry consumed a shadowed outer
       -- binding too (bug 094): an arm binder `value` consumed the outer `value`.
-      let vars' := env.vars.map fun (n, vi) =>
-        if vi.uid == info.uid then (n, { vi with state := .consumed, movedAt := span })
-        else (n, vi)
+      let vars' := env.vars.modifyUid info.uid fun vi => { vi with state := .consumed, movedAt := span }
       setEnv { env with vars := vars' }
 
 /-- Consume a variable if it exists. Skips function names (not in var scope). -/
@@ -582,7 +578,7 @@ def consumeUseIfLocal (sp : Span) (name : String) (span : Option Span := none) (
     Each binding is looked up by IDENTITY (bug 093): a shadowed entry is
     checked as itself, not through the innermost binding sharing its name. -/
 -- spec: OWN-2 (docs/spec/ownership.md; this declaration enforces the rule)
-def checkScopeExit (entries : List (LocalRef × VarInfo)) (span : Option Span := none) : CheckM Unit := do
+def checkScopeExit (entries : VarEnv) (span : Option Span := none) : CheckM Unit := do
   let env ← getEnv
   for (r, entry) in entries do
     let name := r.name
@@ -963,7 +959,7 @@ def exemptExitBranch (stmts : List Stmt) : Bool :=
     MERGE: the exemption is about agreement at the merge point, not about the
     exit itself. -/
 -- spec: OWN-2 (docs/spec/ownership.md; this declaration enforces the rule)
-def checkReturnPathConsumed (before after : List (LocalRef × VarInfo))
+def checkReturnPathConsumed (before after : VarEnv)
     (span : Option Span := none) : CheckM Unit := do
   for (nameR, infoBefore) in before do
     let name := nameR.name
@@ -991,8 +987,8 @@ def checkReturnPathConsumed (before after : List (LocalRef × VarInfo))
     there happens on a path where a later arm can move the same value again.
     The guard is an expression: it adds no bindings, so the two lists hold the
     same entries in the same order and are compared position by position. -/
-def guardMovedName? (before after : List (LocalRef × VarInfo)) : Option String :=
-  (before.zip after).findSome? fun ((n, vb), (_, va)) =>
+def guardMovedName? (before after : VarEnv) : Option String :=
+  (before.toList.zip after.toList).findSome? fun ((n, vb), (_, va)) =>
     if !vb.isCopy && vb.state != .consumed && vb.state != .reserved
         && (va.state == .consumed || va.state == .reserved) then some n.name else none
 
@@ -1003,7 +999,7 @@ def guardMovedName? (before after : List (LocalRef × VarInfo)) : Option String 
     matched payload bindings, which are dropped at the branch/arm merge. -/
 -- spec: OWN-2 (docs/spec/ownership.md; this declaration enforces the rule)
 def checkBlockLocalsConsumed
-    (before after : List (LocalRef × VarInfo))
+    (before after : VarEnv)
     (diverges : Bool)
     (span : Option Span := none) : CheckM Unit := do
   if diverges then return ()
@@ -1026,7 +1022,7 @@ def checkBlockLocalsConsumed
     block left them in (a consume inside the block is not undone). Every block
     construct closes through here: `if`/`else` branches (statement and value),
     loop bodies, `for` headers and borrow blocks. -/
-def closeBlockScope (outer : List (LocalRef × VarInfo)) : CheckM Unit := do
+def closeBlockScope (outer : VarEnv) : CheckM Unit := do
   let env ← getEnv
   setEnv { env with vars := env.vars.filter fun (_, vi) => hasUid outer vi.uid }
 

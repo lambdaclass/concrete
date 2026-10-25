@@ -1,3 +1,4 @@
+import Std.Data.TreeMap
 import Concrete.Frontend.AST
 import Concrete.Resolve.BuiltinSigs
 import Concrete.Report.Diagnostic
@@ -90,10 +91,83 @@ structure VarInfo where
   frozenFrom : Option VarState := none
   deriving Repr
 
+/-- The checker's bindings, in the order the old association list held them: NEWEST first (a
+    binding registered again moves to the front). Iteration (`for`, `toList`) visits that order,
+    so every check that walks the bindings, and the first refusal it reports, is what it was.
+    A lookup, a registration and an update of one binding are logarithmic: the list was searched
+    per use and copied per binding, so a function of n bindings was O(n^2) to check (bug MMM-C).
+    Persistent maps, because the checker snapshots the environment at every branch and restores
+    it. Keyed by the identity the binding is stored under (`VarInfo.uid`, equal to the key's id). -/
+structure VarEnv where
+  private mk ::
+  /-- each binding under its registration number; newest first is descending order -/
+  private bySeq : Std.TreeMap Nat (LocalRef × VarInfo) compare
+  /-- the registration number of each binding, keyed by its identity's index -/
+  private seqOf : Std.TreeMap Nat Nat compare
+  private next : Nat
+
+namespace VarEnv
+
+def empty : VarEnv := ⟨{}, {}, 0⟩
+
+instance : EmptyCollection VarEnv := ⟨empty⟩
+instance : Inhabited VarEnv := ⟨empty⟩
+
+/-- The binding of identity `uid`. -/
+def lookupUid (e : VarEnv) (uid : LocalId) : Option VarInfo :=
+  (e.seqOf.get? uid.idx).bind fun s => (e.bySeq.get? s).map (·.2)
+
+/-- The binding stored under `r`. -/
+def lookup (e : VarEnv) (r : LocalRef) : Option VarInfo := e.lookupUid r.id
+
+/-- The number of bindings. -/
+def size (e : VarEnv) : Nat := e.seqOf.size
+
+/-- Is a binding of identity `uid` present? -/
+def contains (e : VarEnv) (uid : LocalId) : Bool := e.seqOf.contains uid.idx
+
+/-- Register `r` as the newest binding, replacing an earlier registration of it (the list's
+    `(r, info) :: vars.filter (·.1 != r)`). -/
+def push (e : VarEnv) (r : LocalRef) (info : VarInfo) : VarEnv :=
+  let bySeq := match e.seqOf.get? r.id.idx with
+    | some s => e.bySeq.erase s
+    | none => e.bySeq
+  ⟨bySeq.insert e.next (r, info), e.seqOf.insert r.id.idx e.next, e.next + 1⟩
+
+/-- Update the binding of identity `uid` in place (its position is kept); absent, no change. -/
+def modifyUid (e : VarEnv) (uid : LocalId) (f : VarInfo → VarInfo) : VarEnv :=
+  match e.seqOf.get? uid.idx with
+  | some s => { e with bySeq := e.bySeq.modify s fun (r, i) => (r, f i) }
+  | none => e
+
+/-- Update every binding (its key and position are kept). -/
+def map (e : VarEnv) (f : LocalRef × VarInfo → LocalRef × VarInfo) : VarEnv :=
+  { e with bySeq := e.bySeq.map fun _ (r, i) => (r, (f (r, i)).2) }
+
+/-- Keep the bindings satisfying `p`, in their order. -/
+def filter (e : VarEnv) (p : LocalRef × VarInfo → Bool) : VarEnv :=
+  let bySeq := e.bySeq.filter fun _ ri => p ri
+  ⟨bySeq, e.seqOf.filter fun _ s => bySeq.contains s, e.next⟩
+
+/-- The bindings, newest first. -/
+def toList (e : VarEnv) : List (LocalRef × VarInfo) :=
+  e.bySeq.foldl (fun acc _ ri => ri :: acc) []
+
+instance [Monad m] : ForIn m VarEnv (LocalRef × VarInfo) where
+  forIn e b f := forIn e.toList b f
+
+instance : Repr VarEnv := ⟨fun e n => reprPrec e.toList n⟩
+
+def filterMap (e : VarEnv) (f : LocalRef × VarInfo → Option β) : List β := e.toList.filterMap f
+
+def foldl (e : VarEnv) (f : β → LocalRef × VarInfo → β) (init : β) : β := e.toList.foldl f init
+
+end VarEnv
+
 structure TypeEnv where
   -- R-0492: keyed by binding identity. A use finds its binding through the local table
-  -- (`localAt`), never by searching this list for a spelling.
-  vars : List (LocalRef × VarInfo)
+  -- (`localAt`), never by searching it for a spelling.
+  vars : VarEnv
   -- The local table of the function being checked (`FnDef.locals`).
   locals : LocalTable := LocalTable.unresolved
   structs : List StructDef
