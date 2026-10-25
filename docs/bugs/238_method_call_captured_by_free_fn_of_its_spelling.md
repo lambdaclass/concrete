@@ -65,9 +65,11 @@ interpreter's call path), so no foreign binding answers a method call. A functio
 carries no namespace, so a method value whose spelling a foreign binding takes in its scope (its
 function's `foreignCalls`, its module's externs) is respelled by `spellMethodCallsApart` too; an
 unrelated module's extern takes nothing from it
-(`regress_238_method_value_beside_unrelated_extern.con`).
+(`regress_238_method_value_beside_unrelated_extern.con`). A function value carries its namespace
+into SSA (`SVal.fnRef`), so a method value devirtualized at its call is still a method call
+(`regress_238_method_value_beside_extern_of_other_arity.con`, Codex review r7).
 
-Regression legs in `run_tests.sh`: the ten fixtures above, `run_ok … 42` and `--interp` = 42.
+Regression legs in `run_tests.sh`: the fixtures above, `run_ok … 42` and `--interp` = 42.
 
 ## Structural cause
 

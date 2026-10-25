@@ -392,7 +392,8 @@ def trustBoundaryAnalysis (externNames : List String) (f : CFnDef)
   -- Check for raw pointer operations in body
   let ops := if hasRawPtrOpsStmts f.body then ops ++ ["pointer dereference"] else ops
   -- Check for calls to extern functions
-  let externCalls := callees.filter fun c => externNames.contains c
+  -- Only a free call can reach a foreign binding (bugs 238 – 239).
+  let externCalls := (collectFreeCallsStmts f.body).eraseDups.filter fun c => externNames.contains c
   let ops := if externCalls.isEmpty then ops
     else ops ++ externCalls.map fun c =>
       if intrinsicNames.contains c then s!"compiler intrinsic {c}" else s!"extern {c}"

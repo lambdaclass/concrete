@@ -46,6 +46,9 @@ structure CoreCheckEnv where
       call's arguments are checked against the method, and it is a trusted-call edge only when
       the method is trusted, whatever a free function or extern of its spelling is. -/
   methodSigs : List (String × List (String × Ty) × Ty × Bool) := []
+  /-- Every linker alias of the program (Codex review r7): a method call spelled by its caller
+      (`P_get` for a nested module's `inner_P_get`) reaches its method through one. -/
+  aliases : List (String × String) := []
   structDefs : List CStructDef
   enumDefs : List CEnumDef
   newtypes : List NewtypeDef := []
@@ -690,17 +693,30 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
     let envE ← getEnv
     -- T-RAWDUP: `read_owned` (the compiler intrinsic, not a program function of that spelling) is
     -- a raw-memory operation like `*p`: a trust edge, and trusted or `Unsafe` code only (E0521).
-    let methodSig? := if space == .method then envE.methodSigs.find? (·.1 == fn) else none
+    -- A method call names a method (bugs 238 – 239): its definition by its spelling, else the one
+    -- method definition its linker aliases reach (a caller-side spelling, Codex review r7).
+    let methodName? : Option String := if space != .method then none else
+      if envE.methodSigs.any (·.1 == fn) then some fn else
+      let hop1 := (envE.aliases.filter (·.1 == fn)).map (·.2)
+      let hop2 := hop1.flatMap fun t => (envE.aliases.filter (·.1 == t)).map (·.2)
+      match ((hop1 ++ hop2).filter fun t => envE.methodSigs.any (·.1 == t)).eraseDups with
+      | [t] => some t
+      | _ => none
+    let methodSig? := methodName?.bind fun n => envE.methodSigs.find? (·.1 == n)
+    -- A method call never reaches an extern of its spelling.
+    let externHere := envE.externNames.contains fn
     match methodSig? with
     | some (_, _, _, trusted) => if trusted then addTrustEdge .callsTrusted fn
-    | none => if envE.trustedNames.contains fn then addTrustEdge .callsTrusted fn
-    -- A method call never reaches an extern of its spelling (bugs 238 – 239).
-    if space == .free && envE.externNames.contains fn then addTrustEdge .callsFFI fn
-    -- Check capability discipline: a method call against the method table first.
-    -- A method of another package is in the imported requirements, keyed by the call's spelling.
-    let calleeCaps? ← match space, envE.methodCaps.lookup fn, envE.importedCaps.lookup fn with
+    | none =>
+      if envE.trustedNames.contains fn && !(space == .method && externHere) then
+        addTrustEdge .callsTrusted fn
+    if space == .free && externHere then addTrustEdge .callsFFI fn
+    -- Check capability discipline: a method call against the method table first; a method of
+    -- another package is in the imported requirements, keyed by the call's spelling.
+    let calleeCaps? ← match space, methodName?.bind (fun n => envE.methodCaps.lookup n), envE.importedCaps.lookup fn with
       | .method, some caps, _ => pure (some caps)
       | .method, none, some caps => pure (some caps)
+      | .method, none, none => if externHere then pure none else lookupFnCaps fn
       | _, _, _ => lookupFnCaps fn
     match calleeCaps? with
     | some calleeCaps =>
@@ -735,7 +751,7 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
     -- Check argument types: a method call against the method's own signature.
     let sig? ← match methodSig? with
       | some (_, ps, r, _) => pure (some (ps, r))
-      | none => lookupFnSig fn
+      | none => if space == .method && externHere then pure none else lookupFnSig fn
     match sig? with
     | some (params, _retTy) =>
       if args.length != params.length then
@@ -1503,6 +1519,10 @@ private partial def collectTrustNames (m : CModule) : List String × List String
     let (subT, subE) := collectTrustNames sub
     (accT ++ subT, accE ++ subE)) (hereT, here.2)
 
+/-- Every linker alias of a module tree. -/
+private partial def collectAllAliases (m : CModule) : List (String × String) :=
+  m.linkerAliases ++ m.submodules.flatMap collectAllAliases
+
 /-- Every impl method of a module tree: capabilities, signature, trust (bugs 238 – 239). -/
 private partial def collectAllMethods (m : CModule)
     : List (String × CapSet × List (String × Ty) × Ty × Bool) :=
@@ -1521,6 +1541,7 @@ partial def ccCheckModule (m : CModule)
     -- it is a compile error instead.
     (allFnSigs : List (String × CapSet × List (String × Ty) × Ty))
     (allMethods : List (String × CapSet × List (String × Ty) × Ty × Bool))
+    (allAliases : List (String × String))
     : Diagnostics × List TrustEdge × List TrustFnAttr :=
   let declErrors := ccCheckModuleDecls m allStructs allEnums
   let trustNames := collectTrustNames m
@@ -1537,6 +1558,7 @@ partial def ccCheckModule (m : CModule)
     fnSigs := fnSigs ++ externSigs ++ allFnSigs
     methodCaps := allMethods.map fun (n, cs, _, _, _) => (n, cs)
     methodSigs := allMethods.map fun (n, _, ps, r, t) => (n, ps, r, t)
+    aliases := allAliases
     structDefs := m.structs
     enumDefs := m.enums
     newtypes := m.newtypes
@@ -1558,7 +1580,7 @@ partial def ccCheckModule (m : CModule)
     env'
   ) initEnv
   let (subErrors, subEdges, subAttrs) := m.submodules.foldl (fun (accD, accE, accA) sub =>
-    let (subD, subE, subA) := ccCheckModule sub allStructs allEnums allNewtypes allFnSigs allMethods
+    let (subD, subE, subA) := ccCheckModule sub allStructs allEnums allNewtypes allFnSigs allMethods allAliases
     (accD ++ Diagnostics.stampFile (subD.map fun d =>
        { d with message := s!"[{sub.name}] {d.message}" }) sub.sourceFile,
      accE ++ subE, accA ++ subA)
@@ -1574,8 +1596,9 @@ def coreCheckProgram (modules : List CModule) : Except Diagnostics Unit :=
   let allNewtypes := modules.foldl (fun acc m => acc ++ collectAllNewtypes m) []
   let allFnSigs := modules.foldl (fun acc m => acc ++ collectAllFnSigs m) []
   let allMethods := modules.flatMap collectAllMethods
+  let allAliases := modules.flatMap collectAllAliases
   let allErrors := modules.foldl (fun acc m =>
-    acc ++ (ccCheckModule m allStructs allEnums allNewtypes allFnSigs allMethods).1.map fun d => { d with message := s!"[{m.name}] {d.message}" }
+    acc ++ (ccCheckModule m allStructs allEnums allNewtypes allFnSigs allMethods allAliases).1.map fun d => { d with message := s!"[{m.name}] {d.message}" }
   ) ([] : Diagnostics)
   if allErrors.isEmpty then .ok ()
   else .error allErrors
@@ -1589,7 +1612,8 @@ def coreTrustEdges (modules : List CModule) : List TrustEdge × List TrustFnAttr
   let allNewtypes := modules.foldl (fun acc m => acc ++ collectAllNewtypes m) []
   let allFnSigs := modules.foldl (fun acc m => acc ++ collectAllFnSigs m) []
   let allMethods := modules.flatMap collectAllMethods
-  let results := modules.map (fun m => ccCheckModule m allStructs allEnums allNewtypes allFnSigs allMethods)
+  let allAliases := modules.flatMap collectAllAliases
+  let results := modules.map (fun m => ccCheckModule m allStructs allEnums allNewtypes allFnSigs allMethods allAliases)
   (TrustEdge.canonical (results.foldl (fun acc r => acc ++ r.2.1) []),
    results.foldl (fun acc r => acc ++ r.2.2) [])
 

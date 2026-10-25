@@ -23,7 +23,9 @@ inductive SVal where
   -- while the interpreter, which never saw the encoding, ran the program fine.
   -- As its own constructor it simply is not a register use, so no pass needs an
   -- exemption to avoid mistaking it for one.
-  | fnRef (name : String) (ty : Ty)
+  /-- A function used as a value, in the namespace its Core reference resolved in (`CallSpace`,
+      bugs 238 – 239): a method value is never bound to a foreign spelling. -/
+  | fnRef (name : String) (ty : Ty) (space : CallSpace)
   | intConst (val : Int) (ty : Ty)
   | floatConst (val : Float) (ty : Ty)
   | boolConst (val : Bool)
@@ -134,7 +136,7 @@ structure SModule where
 
 def SVal.ty : SVal → Ty
   | .reg _ t => t
-  | .fnRef _ t => t
+  | .fnRef _ t _ => t
   | .intConst _ t => t
   | .floatConst _ t => t
   | .boolConst _ => .bool
@@ -179,7 +181,7 @@ private def ppSVal : SVal → String
   | .reg n _ => s!"%{n}"
   -- `@name`, like any other global — the sigil says "not a register", which is
   -- the whole point of the constructor.
-  | .fnRef n _ => s!"@{n}"
+  | .fnRef n _ _ => s!"@{n}"
   | .intConst v _ => toString v
   | .floatConst v _ => floatLiteralString v  -- exact (bug 135), not `toString`'s six decimals
   | .boolConst b => if b then "1" else "0"

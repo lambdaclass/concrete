@@ -214,6 +214,9 @@ partial def tyHasTypeVar : Ty → Bool
 structure TyAgreeCtx where
   /-- A global function by Core name (linker aliases resolved). -/
   fns : String → Option CFnDef
+  /-- An impl method by the spelling a method call uses (linker aliases resolved; bugs 238 – 239):
+      a method call's signature is a method's, never a free function's or extern's. -/
+  methods : String → Option CFnDef := fun _ => none
   /-- This module's copy of a struct / enum. -/
   structOf : String → Option CStructDef
   enumOf : String → Option CEnumDef

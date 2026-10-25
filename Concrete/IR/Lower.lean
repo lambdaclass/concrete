@@ -866,7 +866,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       | none =>
         -- If it's a function type and not a local var, treat as global function reference
         match ty with
-        | .fn_ _ _ _ => return .fnRef name.name ty
+        | .fn_ _ _ _ => return .fnRef name.name ty name.space
         | _ => return .reg name.name ty
 
   | .binOp op lhs rhs ty =>
@@ -1058,7 +1058,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
         -- Devirtualization: the binding holds a statically-known function, so
         -- this becomes a direct call. It is now a decision about a VALUE's
         -- constructor, not a string prefix a later pass has to re-parse.
-        | some (.fnRef fnName (.fn_ _ _ _)) => pure (.direct fnName .free)
+        | some (.fnRef fnName (.fn_ _ _ _) sp) => pure (.direct fnName sp)
         | some (v@(.reg _ (.fn_ _ _ _))) => pure (.indirect v)
         | _ =>
           -- The call form says this callee is a fn-typed binding, so failing to
@@ -1605,7 +1605,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     return .reg dst targetTy
 
   | .fnRef name ty =>
-    return .fnRef name ty
+    return .fnRef name ty .free
 
   | .allocCall inner _allocExpr _ty =>
     lowerExpr inner

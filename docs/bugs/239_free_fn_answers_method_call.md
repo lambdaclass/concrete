@@ -77,6 +77,14 @@ the declaration-collision check compared only free functions, externs and consta
   `--interp` running the method before; `regress_239_method_call_beside_trusted_extern.con`, the
   native binary calling `abs` (99) while `--interp` ran the method (42), and false
   calls-ffi/calls-trusted edges, before).
+- Codex review r7: a method call spelled by its caller (`P_get` for a nested module's
+  `inner_P_get`) is found in CoreCheck's method table through the linker aliases, so it is not
+  checked against an extern of the spelling (E0522; `regress_239_nested_method_beside_extern.con`,
+  E0262 before the fix); the type-agreement backstop compares a method call with the method
+  (`regress_239_respelled_method_beside_extern_types.con`, E0299 before); and the proof-eligibility,
+  exclusion and trust-boundary reports read only free calls as extern calls
+  (`regress_239_method_call_not_an_extern_call_report.con`: `--report proof` excluded `run` as
+  "calls extern: P_get").
 - `declarationCollisions` counts a module's impl method definition names, so a free function or
   extern spelled like one is E0299 (MOD-3); two methods of one name on one type stay TRAIT-5's.
 

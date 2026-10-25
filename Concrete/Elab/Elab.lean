@@ -3952,8 +3952,8 @@ partial def tyAgreeExpr (c : TyAgreeCtx) : CExpr → List TyAgreePair
   | .call callee _ args t =>
     let inner := args.flatMap (tyAgreeExpr c)
     match callee with
-    | .direct n _ =>
-      match c.fns n with
+    | .direct n sp =>
+      match (if sp == .method then c.methods n else c.fns n) with
       | some f =>
         if f.params.length != args.length then inner else
         (f.retTy, t, s!"the result of '{n}'", f.typeParams) ::
@@ -4255,6 +4255,19 @@ def checkCoreTypeAgreement (family : List String) (cms : List CModule) :
           (fun t => match allFns.filter (·.name == t) with | [f] => some f | _ => none) with
       | [f] => some f
       | _ => none
+  -- a method call's callee among the methods alone (bugs 238 – 239, Codex review r7)
+  let methodDefs := allFns.filter (·.isMethod)
+  let methods : String → Option CFnDef := fun n =>
+    match methodDefs.filter (·.name == n) with
+    | [f] => some f
+    | _ :: _ :: _ => none
+    | [] =>
+      let hop1 := (aliases.filter (·.1 == n)).map (·.2)
+      let hop2 := hop1.flatMap fun t => (aliases.filter (·.1 == t)).map (·.2)
+      match (hop1 ++ hop2).eraseDups.filterMap
+          (fun t => match methodDefs.filter (·.name == t) with | [f] => some f | _ => none) with
+      | [f] => some f
+      | _ => none
   let diag := fun (msg : String) =>
     ({ severity := .error, pass := "elab", span := none, code := "E0299"
        message := msg
@@ -4262,6 +4275,7 @@ def checkCoreTypeAgreement (family : List String) (cms : List CModule) :
   let callDiags : Diagnostics := (cms.flatMap coreFnsWithTypesDeep).flatMap fun ((sds, eds, nts), f) =>
     let ctx : TyAgreeCtx := {
       fns := fns
+      methods := methods
       structOf := fun n => sds.find? (·.name == n)
       enumOf := fun n => eds.find? (·.name == n)
       newtypeOf := fun n => nts.find? (·.name == n)
@@ -4276,6 +4290,7 @@ def checkCoreTypeAgreement (family : List String) (cms : List CModule) :
   let constDiags : Diagnostics := (cms.flatMap coreConstsWithTypesDeep).flatMap fun ((sds, eds, nts), (n, t, e)) =>
     let ctx : TyAgreeCtx := {
       fns := fns
+      methods := methods
       structOf := fun n => sds.find? (·.name == n)
       enumOf := fun n => eds.find? (·.name == n)
       newtypeOf := fun n => nts.find? (·.name == n)

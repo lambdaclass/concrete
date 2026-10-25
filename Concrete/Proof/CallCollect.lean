@@ -76,6 +76,13 @@ end
 def collectCallsExpr (e : CExpr) : List String := (collectCalleesExpr e).filterMap (·.directName?)
 def collectCallsStmts (ss : List CStmt) : List String := (collectCalleesStmts ss).filterMap (·.directName?)
 
+/-- The FREE direct calls of a body (`CallSpace.free`, bugs 238 – 239): the only calls a foreign
+    binding of the spelling can answer, so the ones an "is this an extern call?" test reads. -/
+def collectFreeCallsStmts (ss : List CStmt) : List String :=
+  (collectCalleesStmts ss).filterMap fun c => match c with
+    | .direct n .free => some n
+    | _ => none
+
 /-! ### Indirect calls
 
 The calls `collectCalls*` deliberately drops: a call through a fn-typed binding has no
@@ -108,6 +115,10 @@ mutual
 partial def collectFnValueRefsExpr (e : CExpr) : List String :=
   match e with
   | .fnRef name _ => [name]
+  -- A global function used as a value is a function-typed `.ident` with no binding identity
+  -- (Elab's form for `let f = g;`), which this walk missed (Codex review r7 of bugs 238 – 239: a
+  -- returned method value reached no foreign assumption, and neither did a free one).
+  | .ident n (.fn_ ..) => if n.id.isNone then [n.name] else []
   | .call _ _ args _ => args.foldl (fun acc a => acc ++ collectFnValueRefsExpr a) []
   | .binOp _ l r _ => collectFnValueRefsExpr l ++ collectFnValueRefsExpr r
   | .unaryOp _ e _ => collectFnValueRefsExpr e

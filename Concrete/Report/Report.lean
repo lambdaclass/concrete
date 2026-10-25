@@ -338,7 +338,8 @@ private def proofExclusionReasons (externNames : List String) (f : CFnDef) : Lis
   -- 2. Is trusted
   let reasons := if f.isTrusted then reasons ++ ["trusted boundary"] else reasons
   -- 3. Calls extern functions
-  let callees := collectCallsStmts f.body |>.eraseDups
+  -- Only a free call can reach a foreign binding (bugs 238 – 239).
+  let callees := collectFreeCallsStmts f.body |>.eraseDups
   let externCalls := callees.filter fun c => externNames.contains c
   let reasons := if !externCalls.isEmpty then
     reasons ++ [s!"calls extern: {", ".intercalate externCalls}"]

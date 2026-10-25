@@ -1,0 +1,18 @@
+// Bug 238 (FIXED), Codex review r7: a method value `P_get` (`P::get`, no parameters) beside an
+// unrelated module's extern `P_get(x: i32)`. The value is devirtualized at its call; the
+// devirtualized call had lost the method namespace, so the SSA verifier checked it against the
+// extern's signature (E0711, "has 0 args but function expects 1") once the signature tables were
+// split by namespace. A function value carries its namespace into SSA (`SVal.fnRef`).
+// Expected: 42, natively and --interp.
+struct Copy P { v: i32 }
+impl P {
+    pub fn get() -> i32 { return 42; }
+}
+mod ffi {
+    #[link_name = "abs"]
+    pub trusted extern fn P_get(x: i32) with() -> i32;
+}
+fn main() -> Int {
+    let f: fn() -> i32 = P_get;
+    return f() as Int;
+}

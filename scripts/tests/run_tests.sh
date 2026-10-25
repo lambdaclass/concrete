@@ -8642,6 +8642,24 @@ else
     printf '%s\n' "$r239_edges" | awk 'NR<=6'
     FAIL=$((FAIL + 1))
 fi
+run_ok "$TESTDIR/regress_238_method_value_beside_extern_of_other_arity.con" 42
+run_ok "$TESTDIR/regress_239_nested_method_beside_extern.con" 42
+run_ok "$TESTDIR/regress_239_respelled_method_beside_extern_types.con" 42
+run_ok "$TESTDIR/regress_239_method_call_not_an_extern_call_report.con" 42
+r239_proof=$(cached_output "$TESTDIR/regress_239_method_call_not_an_extern_call_report.con" "--report proof")
+if grep -q "module ffi" <<<"$r239_proof" && ! grep -q "calls extern: P_get" <<<"$r239_proof"; then
+    echo "  ok  bug 239: --report proof does not read a method call as an extern call"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 239: --report proof reads the method call P_get() as an extern call (or printed no report)"
+    FAIL=$((FAIL + 1))
+fi
+# Bug 247: a function value written as an identifier reaches what it names in the assumption summary.
+run_ok "$TESTDIR/regress_247_function_value_reaches_foreign.con" 42
+check_report_multi "$TESTDIR/regress_247_function_value_reaches_foreign.con" caps \
+    "bug 247: --report caps follows a function value to the foreign binding it reaches" \
+    "bug 247: --report caps reports a function returning a value that reaches abs as having no assumption" \
+    "also assumes main.abs honest"
 run_ok "$TESTDIR/regress_239_extern_call_beside_generic_method.con" 99
 run_ok "$TESTDIR/regress_239_extern_call_beside_capable_method.con" 99
 for r239 in regress_239_extern_call_beside_generic_method regress_239_extern_call_beside_capable_method; do
@@ -8668,7 +8686,10 @@ for r238 in regress_238_free_fn_spelled_like_method_call regress_238_other_modul
             regress_238_method_definition_name_taken_by_extern regress_238_method_value_spelled_like_extern \
             regress_238_method_value_beside_unrelated_extern regress_239_method_call_beside_untrusted_extern \
             regress_239_static_method_beside_free_fn_report regress_239_method_call_beside_extern_of_other_arity \
-            regress_239_extern_call_beside_method_with_indirect_call regress_239_method_call_beside_trusted_extern; do
+            regress_239_extern_call_beside_method_with_indirect_call regress_239_method_call_beside_trusted_extern \
+            regress_238_method_value_beside_extern_of_other_arity regress_239_nested_method_beside_extern \
+            regress_239_respelled_method_beside_extern_types regress_239_method_call_not_an_extern_call_report \
+            regress_247_function_value_reaches_foreign; do
     r238_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/$r238.con" --interp 2>&1 || true)
     if [ "$r238_interp" = "42" ]; then
         echo "  ok  bugs 238-241: $r238 — interp == binary (42)"

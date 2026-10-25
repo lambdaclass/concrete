@@ -1,0 +1,23 @@
+// Bug 239 (FIXED), Codex review r7: the method `P::get` of a type from a nested module
+// (`defs.inner`, definition `inner_P_get`) called as `P::get()` beside `user`'s own extern
+// `P_get(x: i32)`. Before the fix Check bound the static call to the extern (E0262); with the
+// method table, CoreCheck found no method under the caller spelling `P_get` and checked the call
+// against the extern (E0522). CoreCheck follows the linker aliases to the method.
+// Expected: 42, natively and --interp.
+mod defs {
+    mod inner {
+        pub struct Copy P { pub v: i32 }
+        impl P {
+            pub fn get() -> i32 { return 42; }
+        }
+    }
+}
+mod user {
+    import defs.inner.{P};
+    #[link_name = "abs"]
+    trusted extern fn P_get(x: i32) with() -> i32;
+    pub fn run() -> i32 { return P::get(); }
+}
+fn main() -> Int {
+    return user::run() as Int;
+}

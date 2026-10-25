@@ -408,9 +408,9 @@ private def directSymbol (s : EmitSSAState) (fn : String) (space : CallSpace := 
 private def svalToOperand (s : EmitSSAState) (v : SVal) : LLVMOperand :=
   match v with
   | .reg name _ => .reg name
-  | .fnRef bareName _ =>
+  | .fnRef bareName _ sp =>
     -- A function-pointer reference names the same symbol a direct call would.
-    .global (directSymbol s bareName).1
+    .global (directSymbol s bareName sp).1
   | .intConst val _ => .intLit val
   -- An f32 constant is rounded to f32 here, before it is printed as a double (bug 109).
   | .floatConst val ty => .floatLit (if ty == .float32 then val.toFloat32.toFloat else val)

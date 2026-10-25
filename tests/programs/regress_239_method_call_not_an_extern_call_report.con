@@ -1,0 +1,18 @@
+// Bug 239 (FIXED), Codex review r7: `run` calls the method `P::get` by its definition name
+// `P_get()` while an unrelated module declares an extern `P_get`. The proof-eligibility and
+// exclusion reports compared every call spelling with the program's extern names, so
+// `--report proof` excluded `run` as "calls extern: P_get"; only a free call can reach a foreign
+// binding.
+// Expected: 42, natively and --interp; no "calls extern" for `run` in `--report proof`.
+struct Copy P { v: i32 }
+impl P {
+    pub fn get() -> i32 { return 42; }
+}
+mod ffi {
+    #[link_name = "abs"]
+    pub trusted extern fn P_get(x: i32) with() -> i32;
+}
+fn run() -> i32 { return P_get(); }
+fn main() -> Int {
+    return run() as Int;
+}
