@@ -1,0 +1,29 @@
+// Bug 257 regression: the resolver's visible bindings (Resolve's local scopes, and the local
+// walk that mints binding identities) were lists searched by spelling per binder and per use,
+// so a function of n bindings read far from their declarations took time n² to resolve. This
+// fixture pins the visibility the maps must keep: sibling blocks reusing a spelling, a binding
+// read far below its declaration, an outer binding read again after an inner block closes, and
+// a `for` header binder scoped to its loop. error_257_* pin the refusals (a read after the
+// block closed; a binder reusing a visible spelling). run_tests.sh also resolves generated
+// functions of 40000 bindings within a time bound.
+fn main() -> Int {
+    let base: i64 = 30;
+    let mut acc: i64 = 0;
+    if base > 0 {
+        let step: i64 = 2;
+        acc = acc + step;
+    }
+    if base > 1 {
+        let step: i64 = 3;
+        acc = acc + step;
+    }
+    for (let mut i: i64 = 0; i < 2; i = i + 1) {
+        let step: i64 = 1;
+        acc = acc + step + i;
+    }
+    let a1: i64 = 1;
+    let a2: i64 = a1 + 1;
+    let a3: i64 = a2 + 1;
+    // 30 + (2 + 3) + (1 + 0 + 1 + 1) + 3 + 1 = 42
+    return (base + acc + a3 + a1) as Int;
+}

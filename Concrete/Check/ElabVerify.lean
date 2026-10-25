@@ -1,3 +1,4 @@
+import Std.Data.TreeMap
 import Concrete.Elab.Core
 
 namespace Concrete
@@ -29,37 +30,53 @@ private structure VB where
   name : String
   id : Option LocalId
 
+/-- The visible binders, as the two questions the checks ask of them: the NEWEST visible binder
+    carrying an identity, and the newest visible binder of a Core name. Persistent maps, because
+    sibling scopes extend one chain independently; a list searched per binder and per reference
+    made a function of n bindings O(n^2) to verify (bug 260). -/
+private structure Vis where
+  byId : Std.TreeMap Nat VB compare := {}
+  byName : Std.TreeMap String VB compare := {}
+
+private def Vis.push (vis : Vis) (b : VB) : Vis :=
+  { byId := match b.id with | some i => vis.byId.insert i.idx b | none => vis.byId
+    byName := vis.byName.insert b.name b }
+
+private def Vis.findId? (vis : Vis) (i : LocalId) : Option VB := vis.byId.get? i.idx
+
+private def Vis.findName? (vis : Vis) (n : String) : Option VB := vis.byName.get? n
+
 private abbrev VM := StateM (List String)
 
 private def flag (msg : String) : VM Unit := modify (· ++ [msg])
 
-private def introduce (fn : String) (vis : List VB) (b : CLocal) : VM (List VB) := do
+private def introduce (fn : String) (vis : Vis) (b : CLocal) : VM Vis := do
   if let some i := b.id then
-    if vis.any (·.id == some i) then
+    if (vis.findId? i).isSome then
       flag s!"B1 in '{fn}': the binding identity of '{b.name}' is introduced twice in one scope"
-  return { name := b.name, id := b.id } :: vis
+  return vis.push { name := b.name, id := b.id }
 
-private def use (fn : String) (vis : List VB) (r : CLocal) : VM Unit := do
+private def use (fn : String) (vis : Vis) (r : CLocal) : VM Unit := do
   match r.id with
   | some i =>
-    match vis.find? (·.id == some i) with
+    match vis.findId? i with
     | some v =>
       if v.name != r.name then
         flag s!"U1 in '{fn}': a reference spelled '{r.name}' carries the identity of the binding named '{v.name}'"
       -- and the binding a NAME-keyed consumer would resolve the spelling to (the nearest visible
       -- binder of that Core name) is this one: two visible binders of one Core name would make
       -- the backends read the newer one (Codex review of step 3)
-      else if let some n := vis.find? (·.name == r.name) then
+      else if let some n := vis.findName? r.name then
         if n.id != some i then
           flag s!"U1 in '{fn}': the reference to '{r.name}' names an outer binding that a newer binder of the same Core name hides"
     | none => flag s!"U1 in '{fn}': a reference to '{r.name}' carries an identity no visible binding has"
   | none =>
-    if let some v := vis.find? (·.name == r.name) then
+    if let some v := vis.findName? r.name then
       if v.id.isSome then
         flag s!"U2 in '{fn}': a reference spelled '{r.name}' has no identity, but a visible source binding has that Core name"
 
 mutual
-private partial def vExpr (fn : String) (vis : List VB) : CExpr → VM Unit
+private partial def vExpr (fn : String) (vis : Vis) : CExpr → VM Unit
   | .ident r _ => use fn vis r
   | .binOp _ l r _ | .arrayIndex l r _ | .allocCall l r _ => do vExpr fn vis l; vExpr fn vis r
   | .unaryOp _ x _ | .fieldAccess x _ _ | .borrow x _ | .borrowMut x _ | .deref x _ | .cast x _ =>
@@ -74,7 +91,7 @@ private partial def vExpr (fn : String) (vis : List VB) : CExpr → VM Unit
   | .ifExpr c t e _ => do vExpr fn vis c; vBlock fn vis t; vBlock fn vis e
   | .intLit _ _ | .floatLit _ _ | .boolLit _ | .strLit _ | .charLit _ | .fnRef _ _ => pure ()
 
-private partial def vArm (fn : String) (vis : List VB) : CMatchArm → VM Unit
+private partial def vArm (fn : String) (vis : Vis) : CMatchArm → VM Unit
   | .enumArm _ _ bs g body => do
     let mut v := vis
     for (b, _) in bs do
@@ -87,12 +104,12 @@ private partial def vArm (fn : String) (vis : List VB) : CMatchArm → VM Unit
   | .rangeArm lo hi _ g body => do
     vExpr fn vis lo; vExpr fn vis hi; g.forM (vExpr fn vis); vBlock fn vis body
 
-private partial def vBlock (fn : String) (vis : List VB) (stmts : List CStmt) : VM Unit := do
+private partial def vBlock (fn : String) (vis : Vis) (stmts : List CStmt) : VM Unit := do
   let mut v := vis
   for s in stmts do
     v ← vStmt fn v s
 
-private partial def vStmt (fn : String) (vis : List VB) : CStmt → VM (List VB)
+private partial def vStmt (fn : String) (vis : Vis) : CStmt → VM Vis
   | .letDecl b _ _ val => do vExpr fn vis val; introduce fn vis b
   | .assign r val => do vExpr fn vis val; use fn vis r; pure vis
   | .return_ v _ | .break_ v _ => do v.forM (vExpr fn vis); pure vis
@@ -119,7 +136,7 @@ def elabVerifyFn (f : CFnDef) : List String :=
       flag s!"P0 in '{f.name}': {f.paramIds.length} parameter identities for {f.params.length} parameters"
     let ids : List (Option LocalId) :=
       if f.paramIds.length == f.params.length then f.paramIds.map some else f.params.map fun _ => none
-    let mut vis : List VB := []
+    let mut vis : Vis := {}
     for ((n, _), i) in f.params.zip ids do
       vis ← introduce f.name vis { name := n, id := i }
     vBlock f.name vis f.body
