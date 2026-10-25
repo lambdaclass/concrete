@@ -905,14 +905,13 @@ partial def checkPredictableModule
     -- 4. FFI — point at the extern call
     -- Only a free call can reach a foreign binding (bugs 238 – 239).
     let directExtern := externCallsIn externNames f
-    -- Transitively through a method call (Codex review r9): the closure holds this function.
-    let methodCalls := ((collectCalleesStmts f.body).filterMap fun c => match c with
-      | .direct n .method => some n
-      | _ => none).eraseDups
+    -- Transitively through any call, free or method (Codex reviews r9, r22): the closure over the
+    -- namespace-aware call graph holds this function; the callees named in the closure are cited.
+    let directCalls := collectCallsStmts f.body |>.eraseDups
     let externCalls := if !directExtern.isEmpty then directExtern
       else if externNames.contains qualName then
-        (let named := methodCalls.filter externNames.contains
-         if named.isEmpty then methodCalls else named)
+        (let named := directCalls.filter externNames.contains
+         if named.isEmpty then directCalls else named)
       else []
     let ffiSpan := findCallSpan externCalls astBody
     let ffiViolLoc := mkViolLoc ffiSpan

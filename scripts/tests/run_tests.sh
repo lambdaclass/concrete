@@ -8778,6 +8778,16 @@ else
 fi
 run_ok "$TESTDIR/regress_239_extern_alias_assumption_not_method.con" 42
 run_ok "$TESTDIR/regress_239_free_call_not_extern_report.con" 42
+run_ok "$TESTDIR/regress_239_free_call_reaches_ffi_predictable.con" 42
+r239_pred4=$(cached_output "$TESTDIR/regress_239_free_call_reaches_ffi_predictable.con" "--check predictable")
+if grep -q "main — calls extern" <<<"$r239_pred4" && grep -q "run — calls extern" <<<"$r239_pred4"; then
+    echo "  ok  bug 239: the predictable profile refuses FFI reached through a free call"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 239: --check predictable missed FFI reached through a free call:"
+    printf '%s\n' "$r239_pred4" | awk 'NR<=6'
+    FAIL=$((FAIL + 1))
+fi
 check_report_multi "$TESTDIR/regress_239_free_call_not_extern_report.con" effects \
     "bug 239: --report effects does not read a free call of a program function as an extern call" \
     "bug 239: --report effects reads a free call as crossing FFI because an unrelated extern shares its name" \
@@ -8879,6 +8889,7 @@ for r238 in regress_238_free_fn_spelled_like_method_call regress_238_other_modul
             regress_239_imported_trusted_extern_beside_trusted_method \
             regress_247_free_call_beside_unrelated_extern \
             regress_239_free_call_not_extern_report \
+            regress_239_free_call_reaches_ffi_predictable \
             regress_239_imported_extern_alias_beside_method_arity regress_239_extern_alias_assumption_not_method \
             regress_239_extern_call_not_trusted_by_method regress_247_free_value_beside_unrelated_extern; do
     r238_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/$r238.con" --interp 2>&1 || true)

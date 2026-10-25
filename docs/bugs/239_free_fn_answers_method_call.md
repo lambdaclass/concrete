@@ -139,6 +139,10 @@ the declaration-collision check compared only free functions, externs and consta
   trust-boundary and unsafe reports, is a free call its function's resolver bound to a foreign
   declaration (`foreignBoundCalls`), not any call spelled like some extern of the program
   (`regress_239_free_call_not_extern_report.con`; pre-existing).
+- Codex review r22: the predictable profile cites FFI reached through any call when the
+  call-graph closure holds the function, a free call as well as a method call
+  (`regress_239_free_call_reaches_ffi_predictable.con`; pre-existing: `main` passed while `run`
+  failed).
 - `declarationCollisions` counts a module's impl method definition names, so a free function or
   extern spelled like one is E0299 (MOD-3); two methods of one name on one type stay TRAIT-5's.
 
