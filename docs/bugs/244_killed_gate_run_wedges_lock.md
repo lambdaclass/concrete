@@ -51,22 +51,29 @@ A run is one process group, and the group is what a signal kills and what the lo
   a session leader (`start_new_session`, i.e. setsid(2)) that exports
   `CONCRETE_GATE_SESSION=<pgid>` and runs the runner in that group. A SIGINT, SIGTERM or SIGHUP to the
   front becomes SIGTERM to the whole group. SIGTERM is used because backgrounded bash children ignore
-  SIGINT. Once the leader exits, the front sweeps the group: SIGTERM, a grace period
-  (`CONCRETE_GATE_SESSION_GRACE`, default 10 s), then SIGKILL, until `killpg(pgid, 0)` reports no
-  member. It then asks `fresh.sh` to reclaim the lock. If the front itself dies, the leader sees its
-  pipe from the front reach EOF and terminates the group. Uses only setsid(2), killpg(2) and
+  SIGINT. A signalled run gets a grace period (`CONCRETE_GATE_SESSION_GRACE`, default 10 s) from the
+  first signal and is then killed with SIGKILL, whether or not the runner has exited: a runner that
+  ignores SIGTERM cannot hold off the escalation. Once the leader exits, the front sweeps the group in
+  the same way until `killpg(pgid, 0)` reports no member, and then asks `fresh.sh` to reclaim the
+  lock. If the front itself dies, the leader sees its pipe from the front reach EOF and runs the same
+  escalation itself. A signal that reaches the leader before the runner exists is remembered, so the
+  runner is not started unsignalled. Uses only setsid(2), killpg(2) and
   `ps -A -o pid=,pgid=`, all present on Linux and macOS: no setsid(1), flock or /proc.
 - `run_ci_gates_local.sh`: every run except `--plan` enters a session unless it is already inside
   one, so a runner that a gate starts stays inside the enclosing session. The session owner (its
   parent is the session leader and its pgid is the session) signals its group from the trap. No new
   gate starts after an interruption. A foreground gate now runs in the background and is waited for,
-  so the trap fires at once.
+  so the trap fires at once. The session owner does not release the lock even after a normal run:
+  a gate may have left a process behind, so the release is the launcher's reclaim after its sweep.
 - `fresh.sh`: the owner record gains `pgid=` when the kernel confirms that the acquirer is in the
   group `CONCRETE_GATE_SESSION` names (an inherited or forged value records nothing).
   `_gate_lock_lease_state` reports `gone` only when ps produced a snapshot that contains the asker
   and in it no process is in the recorded group (or, where ps reports session ids, in the session)
   or in any group registered under `groups/`, no launch is pending, and the creator pid is dead.
-  Every other state is `alive` or `unprovable`, and both refuse. `_gate_lock_reclaim_stale` makes the
+  Every other state is `alive` or `unprovable`, and both refuse. The registrations are read before
+  and after the ps snapshot and must agree. Every launcher that registers is itself a member of the
+  lease and registers before its child starts, so once a snapshot shows the lease empty, no
+  registration can follow it. `_gate_lock_reclaim_stale` makes the
   judgment and the removal under a second `mkdir` mutex (`.gate.lock.reclaim`), so two reclaimers
   cannot each judge one lock stale and then delete the lock the other has just taken. A lock with no
   recorded group (one taken outside a gate session) still needs manual recovery, as before.
@@ -83,8 +90,10 @@ mutex each refuse. The campaign launcher registers its group and then removes it
 runner in a sandbox: SIGTERM and SIGINT each make the runner exit within seconds and end every
 descendant, including one that ignores SIGTERM; the run leaves no lock, and the next run runs. With
 the front, the leader and the runner stopped and then killed, the surviving gate keeps the next run
-refused, and once it is gone the next run reclaims the lock by itself. On main 593dc100 eleven of
-these legs fail.
+refused, and once it is gone the next run reclaims the lock by itself. After a normal run whose gate
+left a process behind, the lock stays held until the sweep has removed that process. The launcher
+ends a run that ignores SIGTERM when it is signalled, when it is killed outright, and when the signal
+arrives as the session starts. With the launcher added to main 593dc100 and nothing else changed, 19 of these legs fail.
 
 ## Structural cause
 

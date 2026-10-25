@@ -23,7 +23,11 @@ THE STRUCTURE. The run gets a process group, and the group is the unit of owners
     whose gates left processes behind did not finish.
   * The front then asks fresh.sh to reclaim the lock, which it does only if the lock's recorded
     session has no live member (see `_gate_lock_lease_state` there). So a killed run leaves neither
-    processes nor a lock, and a run whose children are still alive is never handed over.
+    processes nor a lock, and a run whose children are still alive is never handed over. This is
+    also the release of a NORMAL run: the session-owning runner leaves its lock in place, because a
+    process its gates left behind is still working the tree until the sweep has removed it.
+  * A signalled run gets the grace period from the first signal, then SIGKILL, even while the runner
+    is still alive: waiting for a runner that ignores SIGTERM would never reach the escalation.
   * If the front itself dies (SIGKILL, or the caller's whole group is killed), the leader sees its
     pipe from the front reach EOF and terminates the group itself. The front stays in the caller's
     group precisely so that terminal Ctrl-C and a caller's group kill reach it.
@@ -144,15 +148,26 @@ def exit_status(raw: int) -> int:
     return 128 - raw if raw < 0 else raw
 
 
-def leader(fd: int, cmd: list) -> int:
+def leader(fd: int, cmd: list, grace: float) -> int:
     pgid = os.getpgrp()
+    me = os.getpid()
     os.environ["CONCRETE_GATE_SESSION"] = str(pgid)
     # HANDLED, NOT IGNORED. The runner must be able to trap these, and bash cannot trap a signal that
     # was ignored when it started; a Python handler resets to the default at exec, SIG_IGN would not.
-    # The leader survives the group-wide SIGTERM it is part of, so it can report the runner's status.
+    # The leader survives the group-wide SIGTERM it is part of, so it can report the runner's status —
+    # but it REMEMBERS the signal: one that reached the group before the runner joined it would
+    # otherwise be absorbed here, and the runner would start unsignalled with nobody waiting to stop it.
+    cancelled = threading.Event()
     for s in FORWARDED:
-        signal.signal(s, lambda *_: None)
+        signal.signal(s, lambda *_: cancelled.set())
+    if cancelled.is_set():
+        return 128 + signal.SIGTERM
     child = subprocess.Popen(cmd)
+    if cancelled.is_set():
+        try:
+            os.kill(child.pid, signal.SIGTERM)
+        except OSError:
+            pass
     front_gone = threading.Event()
 
     def watch_front():
@@ -163,18 +178,17 @@ def leader(fd: int, cmd: list) -> int:
             pass
         front_gone.set()
         if child.poll() is None:
+            # THE ESCALATION RUNS HERE, not after the runner exits: a runner that ignores SIGTERM would
+            # otherwise keep the main thread in wait() forever, with nobody left to send SIGKILL.
             note("the session's front process is gone; terminating the run")
-            try:
-                os.killpg(pgid, signal.SIGTERM)
-            except OSError:
-                pass
+            sweep(pgid, grace, exclude={me})
 
     threading.Thread(target=watch_front, daemon=True).start()
     rc = child.wait()
     # Normally the front sweeps. If the front is gone, nobody else will, so the leader does it before
     # leaving — excluding itself, which is a member of the group being swept.
     if front_gone.wait(0.2):
-        sweep(pgid, 5.0, exclude={os.getpid()})
+        sweep(pgid, grace, exclude={me})
     return exit_status(rc)
 
 
@@ -184,7 +198,7 @@ def front(cmd: list, grace: float) -> int:
     proc = None
 
     def on_signal(signum, _frame):
-        caught.append(signum)
+        caught.append((signum, time.monotonic()))
         if proc is not None:
             try:
                 os.killpg(proc.pid, signal.SIGTERM)
@@ -193,25 +207,45 @@ def front(cmd: list, grace: float) -> int:
 
     for s in FORWARDED:
         signal.signal(s, on_signal)
-    proc = subprocess.Popen([sys.executable, os.path.abspath(__file__), "--leader", str(r), "--", *cmd],
+    proc = subprocess.Popen([sys.executable, os.path.abspath(__file__), "--grace", str(grace),
+                             "--leader", str(r), "--", *cmd],
                             start_new_session=True, pass_fds=(r,))
     os.close(r)
     if caught:
-        on_signal(caught[0], None)
-    raw = proc.wait()
+        on_signal(caught[0][0], None)
+    # A SIGNALLED RUN GETS THE GRACE PERIOD, then SIGKILL — measured from the first signal, and while
+    # the leader is still running. Waiting for the leader first would wait for a runner that ignores
+    # SIGTERM, and the escalation would never start.
+    killed = False
+    while True:
+        try:
+            raw = proc.wait(timeout=0.2)
+            break
+        except subprocess.TimeoutExpired:
+            if caught and not killed and time.monotonic() - caught[0][1] > grace:
+                note(f"the run did not stop within {grace:g} s of the signal; killing it")
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except OSError:
+                    pass
+                killed = True
     found = sweep(proc.pid, grace)
     if found and not caught and raw == 0:
         note(f"{found} process(es) of the run outlived the runner and were terminated")
     os.close(w)
     # THE LOCK IS RECLAIMED BY THE SAME RULE ANY LATER RUN APPLIES, never released by fiat: the front
-    # did not create it, and the rule refuses unless the recorded session is provably empty.
+    # did not create it, and the rule refuses unless the recorded session is provably empty. This is
+    # also how a session-owned runner's lock is released after a NORMAL run: the runner leaves it, so
+    # the tree is not handed over while a process the run left behind is still being swept.
     if os.path.isfile(FRESH_SH):
-        subprocess.run(["bash", "-c", '. "$1" && _gate_lock_reclaim_stale', "gate_session", FRESH_SH],
+        quiet = "quiet" if (not caught and raw == 0) else ""
+        subprocess.run(["bash", "-c", '. "$1" && _gate_lock_reclaim_stale $2', "gate_session", FRESH_SH, quiet],
                        stdin=subprocess.DEVNULL, check=False)
     if caught:
-        signal.signal(caught[0], signal.SIG_DFL)
-        os.kill(os.getpid(), caught[0])
-        return 128 + caught[0]
+        sig = caught[0][0]
+        signal.signal(sig, signal.SIG_DFL)
+        os.kill(os.getpid(), sig)
+        return 128 + sig
     return exit_status(raw)
 
 
@@ -230,7 +264,7 @@ def main(argv: list) -> int:
         return 2
     cmd = argv[1:]
     if fd is not None:
-        return leader(fd, cmd)
+        return leader(fd, cmd, grace)
     return front(cmd, grace)
 
 

@@ -88,16 +88,14 @@ _gate_lock_lease_state() {
   case "$pid" in ''|*[!0-9]*) echo "unprovable:no-creator-pid"; return 0 ;; esac
   case "$pg" in ''|*[!0-9]*) echo "unprovable:no-session-recorded"; return 0 ;; esac
   [ "$pg" -gt 1 ] || { echo "unprovable:bad-session($pg)"; return 0; }
-  if [ -d "$dir/groups" ]; then
-    for g in "$dir"/groups/*; do
-      [ -e "$g" ] || continue
-      case "${g##*/}" in
-        pending.*) echo "unprovable:escaper-launch-unrecorded(${g##*/})"; return 0 ;;
-        *[!0-9]*) echo "unprovable:bad-group-entry(${g##*/})"; return 0 ;;
-      esac
-      groups="$groups ${g##*/}"
-    done
-  fi
+  # REGISTRATIONS ARE READ ON BOTH SIDES OF THE SNAPSHOT, and must agree. A registration is written by
+  # a launcher that is itself a member of the lease (the session, or a group registered earlier) and
+  # before its child starts. So once one snapshot shows every lease group empty, no registration can
+  # be written afterwards — and one written between the first read and the snapshot, by a launcher
+  # that has since died, appears in the second read. Equal reads around an all-empty snapshot are
+  # therefore the complete lease; unequal reads are refused, and a later attempt judges again.
+  groups="$(_gate_lock_registered "$dir")"
+  case "$groups" in unprovable:*) echo "$groups"; return 0 ;; esac
   ps_out="$(ps -A -o pid=,pgid=,sid= 2>/dev/null)" || ps_out="$(ps -A -o pid=,pgid= 2>/dev/null)" \
     || { echo "unprovable:ps-failed"; return 0; }
   printf '%s\n' "$ps_out" | awk -v me="$$" '$1 == me { f = 1 } END { exit f ? 0 : 1 }' \
@@ -107,7 +105,25 @@ _gate_lock_lease_state() {
     [ "$n" = "0" ] || live="$live group $g has $n live member(s);"
   done
   kill -0 "$pid" 2>/dev/null && live="$live creator $pid is alive;"
+  [ -n "$live" ] || [ "$(_gate_lock_registered "$dir")" = "$groups" ] \
+    || { echo "unprovable:registrations-changed-during-the-check"; return 0; }
   if [ -n "$live" ]; then echo "alive:${live# }"; else echo "gone"; fi
+}
+
+# The groups registered under <lock>/groups by launchers that leave the session, as a sorted
+# space-separated list, or `unprovable:<why>` for a pending launch or a malformed entry.
+_gate_lock_registered() {
+  local g out=""
+  [ -d "$1/groups" ] || return 0
+  for g in "$1"/groups/*; do
+    [ -e "$g" ] || continue
+    case "${g##*/}" in
+      pending.*) echo "unprovable:escaper-launch-unrecorded(${g##*/})"; return 0 ;;
+      *[!0-9]*) echo "unprovable:bad-group-entry(${g##*/})"; return 0 ;;
+    esac
+    out="$out ${g##*/}"
+  done
+  printf '%s' "${out# }"
 }
 
 # RECLAIM A LOCK WHOSE RUN IS PROVABLY OVER (bug 244), and nothing else. The judgment and the removal
@@ -115,7 +131,7 @@ _gate_lock_lease_state() {
 # the later one would delete the fresh lock the earlier one had just taken. A mutex stranded by a kill
 # inside this function (no children, a few milliseconds) makes reclaim refuse, with its path in the
 # message; it never makes reclaim proceed.
-_gate_lock_reclaim_stale() {
+_gate_lock_reclaim_stale() { # [quiet]
   local mutex="$_GATE_LOCK_DIR.reclaim" desc
   _GATE_LOCK_LEASE=""
   [ -d "$_GATE_LOCK_DIR" ] || return 1
@@ -136,7 +152,7 @@ _gate_lock_reclaim_stale() {
     return 1
   fi
   rmdir "$mutex" 2>/dev/null
-  echo "note: reclaimed the repository lock of a finished run (${desc% }): no process of its session remains" >&2
+  [ "${1:-}" = "quiet" ] || echo "note: reclaimed the repository lock of a finished run (${desc% }): no process of its session remains" >&2
   return 0
 }
 

@@ -1065,6 +1065,11 @@ if [ "${RUN_INTERRUPTED:-0}" = "1" ]; then
   else
     echo "  Verify nothing is working the tree, then: rm -rf $ROOT_DIR/.gate.lock" >&2
   fi
+elif [ "$CI_SESSION_OWNER" = "1" ]; then
+  # NOT RELEASED HERE EITHER, inside a gate session. A gate may have left a process behind, and the
+  # lock is the only thing keeping a new run off the tree until the session launcher has swept it.
+  # The launcher reclaims the lock once the kernel reports the session empty (gate_session.py).
+  :
 else
   _gate_lock_release
 fi

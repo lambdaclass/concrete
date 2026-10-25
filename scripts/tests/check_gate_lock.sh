@@ -679,7 +679,14 @@ rm -rf "$SB/.gate.lock.reclaim"; _clear
 # --- the escaping launcher registers its group, then removes it ---
 mkdir -p "$SB/.gate.lock"; printf 'pid=%s\ncmd=holder\n' "$$" > "$SB/.gate.lock/owner"
 CONCRETE_GATE_LOCK="$$:$SB/.gate.lock" python3 "$ROOT_DIR/scripts/tests/lib/run_campaign_child.py" \
-  --report "$TMP/launch.rep" --run-id "GL-$$" -- sh -c 'ls "$1"' _ "$SB/.gate.lock/groups" > "$TMP/launch.ls" 2>/dev/null
+  --report "$TMP/launch.rep" --run-id "GL-$$" -- sh -c '
+    # The child may run before the launcher records its group (the pending entry covers that
+    # interval), so it waits, bounded, for the settled state before reporting it.
+    i=0; while [ $i -lt 50 ]; do
+      l="$(ls "$1")"
+      printf "%s\n" "$l" | grep -qE "^[0-9]+$" && ! printf "%s\n" "$l" | grep -q "^pending" && break
+      i=$((i+1)); sleep 0.1
+    done; ls "$1"' _ "$SB/.gate.lock/groups" > "$TMP/launch.ls" 2>/dev/null
 if grep -qE '^[0-9]+$' "$TMP/launch.ls" && ! grep -q '^pending' "$TMP/launch.ls"; then
   ok "run_campaign_child.py registers the group it creates in the lock before the child works"
 else
@@ -757,6 +764,74 @@ for SIG in TERM INT; do
   fi
 done
 
+# --- a NORMAL run keeps its lock until what its gates left behind is gone ---
+# The session-owning runner does not release: the launcher sweeps the group and then reclaims. A gate
+# that returns leaving a process behind (here one that ignores SIGTERM, so the sweep needs its grace
+# period) must not have the tree handed over while that process lives.
+cat > "$RSB/scripts/tests/check_dummy_leaves.sh" <<'DUMMY'
+bash -c 'trap "" TERM; sleep 60' >/dev/null 2>&1 & echo $! > "$DUMMY_MARK/stubborn.pid"
+echo left-behind
+DUMMY
+( cd "$RSB" && git add -A && git -c user.email=gate@local -c user.name=gate commit -qm leaves ) >/dev/null 2>&1
+_reset_marks
+( cd "$RSB" && exec env -u CONCRETE_GATE_LOCK -u CONCRETE_GATE_SESSION PATH="$TMP/bin:$PATH" \
+    CONCRETE_GATE_SESSION_GRACE=4 DUMMY_MARK="$MARK" JOBS=1 \
+    bash scripts/tests/run_ci_gates_local.sh --first "bash scripts/tests/check_dummy_leaves.sh" >"$TMP/run.leaves" 2>&1 ) &
+RPID=$!; LIVE_PIDS="$LIVE_PIDS $RPID"
+_held_while_left=unknown
+for _ in $(seq 1 150); do
+  if grep -q 'summary written' "$TMP/run.leaves" 2>/dev/null; then
+    if _alive_any "$MARK/stubborn.pid"; then
+      [ -d "$RSB/.gate.lock" ] && _held_while_left=held || _held_while_left=released
+    fi
+    break
+  fi
+  sleep 0.1
+done
+wait "$RPID" 2>/dev/null
+case "$_held_while_left" in
+  held)     ok "a normal run's lock stays held while a process its gate left behind is alive" ;;
+  released) no "a normal run released its lock while a process its gate left behind was still alive" ;;
+  *)        no "the left-behind control did not reach its state (runner finished with the process alive)" ;;
+esac
+if ! _alive_any "$MARK/stubborn.pid" && [ ! -d "$RSB/.gate.lock" ]; then
+  ok "...and once the launcher has swept it, the lock is gone with no manual step"
+else
+  no "after a normal run the left-behind process survived or the lock stayed ($(tr '\n' ' ' < "$RSB/.gate.lock/owner" 2>/dev/null))"
+fi
+
+# --- the launcher itself, against a run that ignores SIGTERM ---
+# Escalation must not wait for the run to exit: a runner that ignores SIGTERM would hold the main
+# wait forever. Both directions: the front signalled, and the front killed outright (the leader is then
+# the only one left to escalate). And a signal arriving as the session starts must still end it.
+for _how in TERM KILL START; do
+  rm -f "$TMP/stub.pid"
+  ( exec env -u CONCRETE_GATE_SESSION CONCRETE_GATE_SESSION_GRACE=2 python3 "$GS" -- \
+      bash -c 'echo $$ > "$1"; trap "" TERM; sleep 60' _ "$TMP/stub.pid" >/dev/null 2>&1 ) &
+  _fp=$!; LIVE_PIDS="$LIVE_PIDS $_fp"
+  if [ "$_how" = "START" ]; then
+    kill -TERM "$_fp" 2>/dev/null
+  else
+    _wait_file "$TMP/stub.pid"; kill -"$_how" "$_fp" 2>/dev/null
+  fi
+  # BOUNDED, or a launcher that waits out the 60 s sleep would pass by outliving it.
+  for _ in $(seq 1 60); do kill -0 "$_fp" 2>/dev/null || break; sleep 0.2; done
+  if kill -0 "$_fp" 2>/dev/null; then
+    no "launcher $_how: still running 12 s after the signal (grace 2 s) — the escalation never started"
+    kill -KILL "$_fp" 2>/dev/null
+  fi
+  wait "$_fp" 2>/dev/null
+  sleep 0.3
+  if [ "$_how" = "START" ] && [ ! -s "$TMP/stub.pid" ]; then
+    ok "a signal at session start ends the run before it does anything"
+  elif _wait_dead "$TMP/stub.pid"; then
+    ok "launcher $_how: a run that ignores SIGTERM is still ended (escalation does not wait on it)"
+  else
+    no "launcher $_how: a run that ignores SIGTERM survived — the escalation never started"
+    kill -KILL "$(cat "$TMP/stub.pid" 2>/dev/null)" 2>/dev/null
+  fi
+done
+
 # --- the safety property, on the real runner: inherited children alive => refuse ---
 # Stopping the launcher, the session leader and the runner before killing them removes everyone who
 # would clean up — the state a `kill -9` of the whole parent chain leaves: the creator is dead and the
@@ -774,7 +849,7 @@ if _wait_file "$MARK/ready"; then
     if [ "$R" = "REFUSED" ] && grep -q 'still alive' "$TMP/err"; then
       ok "creator SIGKILLed with its gate still running: the next run is REFUSED"
     else
-      no "creator dead but its gate alive, and the next run was $R — the tree was handed over while worked"
+      no "creator dead but its gate alive: the next run was $R, not refused for the live session — a reclaim here hands over a worked tree"
     fi
     kill -KILL -- "-$RPG" 2>/dev/null
     # shellcheck disable=SC2046
