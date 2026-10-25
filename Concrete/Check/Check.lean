@@ -1428,7 +1428,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
               -- argument is only peeked here; it is checked, once, below.
               if (tyCapNames pTy).any sig.capParams.contains then
                 let argTy ← peekExprType arg
-                for (k, v) in inferCapBindings sig.capParams pTy argTy do
+                for (k, v) in inferCapBindings sig.capParams pTy argTy (sameTypeName (← getEnv).typeIdOf) do
                   if !(capBindings.any (·.1 == k)) then capBindings := (k, v.allNames) :: capBindings
           -- Resolve the cap-poly signature against the bindings (shared with the
           -- method-call path: Capabilities.resolveCaps). Error carries the cap
@@ -1506,9 +1506,10 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       -- Each field expression is checked exactly once — the ones used for inference
       -- here, the rest below — so linearity is never counted twice.
       let capParams := sd.capParams
+      let envH ← getEnv
       let hintCaps : Option (List CapSet) := match hint with
         | some (.generic hn _ hc) =>
-          if hn == name && !capParams.isEmpty && hc.length == capParams.length then some hc else none
+          if sameTypeName envH.typeIdOf hn name && !capParams.isEmpty && hc.length == capParams.length then some hc else none
         | _ => none
       let mut capMap : List (String × CapSet) := []
       let mut prechecked : List (String × Ty) := []
@@ -1523,7 +1524,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
                 let exprTy ← checkExpr fexpr none
                 prechecked := (sf.name, exprTy) :: prechecked
                 let raw ← resolveType (substTy mapping sf.ty)
-                for (k, v) in inferCapBindings capParams raw exprTy do
+                for (k, v) in inferCapBindings capParams raw exprTy (sameTypeName (← getEnv).typeIdOf) do
                   if !(capMap.any (·.1 == k)) then capMap := (k, v) :: capMap
               | none => pure ()
           for c in capParams do
@@ -2261,7 +2262,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           return retTy
       | _ => throwCheck .methodCallOnNonNamedType (some e.getSpan)
     else
-    match ← lookupMethod typeName methodName with
+    match ← lookupMethod typeName methodName (some e.getSpan) with
     | some (_, sig) =>
       -- E0293: the auto-borrowed receiver counts as a borrow of the receiver
       -- PLACE — `m.with_value_mut(&k, &mut m, f)` and `c.scoped(&mut c.i, f)`
@@ -2311,7 +2312,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     let parts ← argBorrowParts args
     checkCallBorrowConflicts parts (some e.getSpan)
     checkCallRootReads (← argMutLoanRoots args) args (some e.getSpan)
-    match ← lookupMethod typeName methodName with
+    match ← lookupMethod typeName methodName (some e.getSpan) with
     | some (mangledName, sig) =>
       checkDirectDestroyImplUse mangledName (some e.getSpan)
       let mapping := sig.typeParams.zip typeArgs
@@ -3588,7 +3589,19 @@ def importBindingCollisions (m : Module) (imports : ResolvedImports) : Diagnosti
   let syms : List (String × String × String × Span) := m.imports.flatMap fun imp =>
     imp.symbols.map fun sym => (sym.effectiveName, imp.moduleName, sym.name, imp.span)
   let fnSyms := syms.filter fun (local_, _, _, _) => importedFnNames.contains local_
-  let vsLocal : Diagnostics := fnSyms.filterMap fun (local_, modName, orig, sp) =>
+  -- R-0492 step 4 (bug 233): an imported constant beside a constant of this module of the same
+  -- spelling would bind one name twice in the value namespace.
+  let importedConstNames := imports.constants.map (·.localName)
+  let localConstNames := m.constants.map (·.name)
+  let vsLocalConst : Diagnostics := (syms.filter fun (local_, _, _, _) =>
+      importedConstNames.contains local_).filterMap fun (local_, modName, orig, sp) =>
+    if localConstNames.contains local_ then
+      let e := CheckError.importBindingCollision local_
+        s!"is also a constant defined in this module (import of '{modName}.{orig}')"
+      some { severity := .error, message := e.message, pass := "check", span := some sp,
+             hint := e.hint, code := e.code }
+    else none
+  let vsLocal : Diagnostics := vsLocalConst ++ fnSyms.filterMap fun (local_, modName, orig, sp) =>
     if localFnNames.contains local_ then
       let what := if methodNames.contains local_ then "an impl method defined in this module"
         else "a function defined in this module"
@@ -3819,7 +3832,9 @@ def checkModule (m : Module) (summary : FileSummary)
   -- Transitively close so chains (`type B = A; type A = i32`) resolve in one lookup.
   let typeAliasMap : List (String × Ty) := closeAliasMap (imports.typeAliases ++ localTypeAliases)
   -- Build constants map
-  let constantsMap : List (String × Ty) := m.constants.map fun c => (c.name, c.ty)
+  let constantsMap : List (String × Ty) := m.constants.map (fun c => (c.name, c.ty))
+    -- R-0492 step 4 (bug 233): imported constants, under the importer's spelling
+    ++ imports.constants.map fun c => (c.localName, c.ty)
   -- Build trait impl pairs for bound checking
   let traitImplPairs : List (String × String) := allTraitImpls.map fun tb => (tb.typeName, tb.traitName)
   -- Collect newtypes from module, submodules, and imports.

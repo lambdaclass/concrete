@@ -1,0 +1,18 @@
+// Bug 233 (R-0492 step 4): an imported constant's initializer is the defining module's code. It
+// names that module's private constant (`HIDDEN`); two modules' public constants of one spelling
+// are imported apart (`BASE` and `BASE as OB`); an array constant is indexed. Returns 42.
+mod cfg {
+    const HIDDEN: i32 = 30;
+    pub const BASE: i32 = HIDDEN + 2;
+    pub const ARR: [i64; 3] = [1, 2, 3];
+}
+mod other {
+    pub const BASE: i32 = 1000;
+}
+import cfg.{BASE, ARR};
+import other.{BASE as OB};
+const LOCAL: i32 = 500;
+fn main() -> Int {
+    let a: i64 = ARR[2];
+    return (BASE as Int) + a + (OB as Int) - 1000 + (LOCAL as Int) - 493;
+}

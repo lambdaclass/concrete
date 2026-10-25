@@ -432,11 +432,22 @@ def TypeEnv.hasTraitImpl (env : TypeEnv) (typeName traitName : String) : Bool :=
     signature. A type with a declaration identity finds it by that identity
     (`methodByIdentity`), so an import alias `Q` of `P` finds `P_mk` (bug 223); a method no
     stamped impl declares (an impl on a builtin or an imported type) is found by its spelling. -/
-def lookupMethod (typeName methodName : String) : CheckM (Option (String × FnSummary)) := do
+def lookupMethod (typeName methodName : String) (span : Option Span := none) :
+    CheckM (Option (String × FnSummary)) := do
   let env ← getEnv
   if let some owner := env.typeIdOf typeName then
-    if let some r := methodByIdentity env.allFnSummarys { owner, method := methodName } then
-      return some r
+    if let some (mangled, sig) := methodByIdentity env.allFnSummarys { owner, method := methodName } then
+      -- Core calls the method by its mangled spelling, and every consumer below resolves that
+      -- spelling in this module's callable namespace. Where the spelling names another callable
+      -- (a free function `P_mk` beside `P::mk`), the call would reach it: refused (MOD-3, E0299).
+      match ← lookupFn mangled with
+      | some other =>
+        if other.methodOf != sig.methodOf then
+          throwCheck (.declarationCollision mangled
+            s!"method '{typeName}::{methodName}' is called by its Core name; a callable"
+            "another callable" 0) span
+      | none => pure ()
+      return some (mangled, sig)
   let mangled := mangledMethodName typeName methodName
   return (← lookupFn mangled).map (mangled, ·)
 
@@ -1044,6 +1055,7 @@ def checkPeekCtx : PeekCtx CheckM where
   constant name := do return (← getEnv).constants.lookup name
   fnSig name := lookupFn name
   method t m := do return (← lookupMethod t m).map (·.2)
+  typeIdOf := do return (← getEnv).typeIdOf
   fnRefSig name := do return (← getEnv).allFnSummarys.lookup name
   struct name := lookupStruct name
   newtype name := lookupNewtype name
@@ -1258,7 +1270,7 @@ partial def inferMethodParamAndRetTys
     match sig.params.head? with
     | some (_, selfTy) =>
       let selfInner := match selfTy with | .ref t | .refMut t => t | t => t
-      for (k, v) in inferCapBindings sig.capParams selfInner recvTy do
+      for (k, v) in inferCapBindings sig.capParams selfInner recvTy (sameTypeName (← getEnv).typeIdOf) do
         if !(capBindings.any (·.1 == k)) then capBindings := (k, v.allNames) :: capBindings
     | none => pure ()
     for (arg, (_, pTy)) in args.zip methodParamTys do
@@ -1301,7 +1313,7 @@ partial def inferMethodParamAndRetTys
         -- A capability parameter carried by a capability argument (`s: &Sink<C>`).
         if (tyCapNames pTy).any sig.capParams.contains then
           let argTy ← peekExprType arg
-          for (k, v) in inferCapBindings sig.capParams pTy argTy do
+          for (k, v) in inferCapBindings sig.capParams pTy argTy (sameTypeName (← getEnv).typeIdOf) do
             if !(capBindings.any (·.1 == k)) then capBindings := (k, v.allNames) :: capBindings
   -- 3. Resolve the method's declared capset against the inferred bindings, and
   --    check the caller holds the result.

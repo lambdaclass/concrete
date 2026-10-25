@@ -882,6 +882,7 @@ private def importScope (summaryTable : List (String × FileSummary)) (imports :
       ++ ri.enums.map (fun ed => (ed.name, SymKind.enum ed))
       ++ ri.typeAliases.map (fun (n, ty) => (n, SymKind.typeAlias ty))
       ++ ri.newtypes.map (fun nt => (nt.name, SymKind.newtype nt))
+      ++ ri.constants.map (fun c => (c.localName, SymKind.const c.ty))
       ++ implSigsToSymbols ri.implMethodSigs
     let tys := ri.structs.map (·.name) ++ ri.enums.map (·.name) ++ ri.typeAliases.map (·.1)
       ++ ri.newtypes.map (·.name)
@@ -968,7 +969,7 @@ private def summaryImports (summaryTable : List (String × FileSummary)) (s : Fi
         -- Look up the full module summary to get type info for imported symbols
         let modSummary := summaryTable.find? fun (n, _) => n == imp.moduleName
         imp.symbols.foldl (fun (errs, syms, tys) sym =>
-          -- Bug 233: a public trait or constant is in `pubNames` but no import binds it; it was
+          -- Bug 233: a public trait is in `pubNames` but no import binds it; it was
           -- admitted here, bound nothing, and Check refused it as "not public".
           let unimportable := modSummary.bind fun (_, ms) => unimportableKind ms sym.name
           if pubNames.contains sym.name && unimportable.isNone then
@@ -1011,6 +1012,10 @@ private def summaryImports (summaryTable : List (String × FileSummary)) (s : Fi
               match ms.typeAliases.find? fun ta => ta.isPublic && ta.name == sym.name with
               | some ta =>
                 (errs, (localName, SymKind.typeAlias ta.targetTy) :: syms, localName :: tys)
+              | none =>
+              -- R-0492 step 4 (bug 233): a public constant, as `resolveImports` binds it.
+              match ms.constants.find? fun c => c.isPublic && c.name == sym.name with
+              | some c => (errs, (localName, SymKind.const c.ty) :: syms, tys)
               | none => (errs, syms, tys)
             | none => (errs, syms, tys)
           else

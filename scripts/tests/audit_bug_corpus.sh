@@ -162,9 +162,10 @@ declare -A BUG_TEST_MAP=(
   [230]="error_230_toplevel_foreign_alias_cast.con error_230_parent_names_child_alias.con regress_230_toplevel_type_environment.con"
   # Bug 223: an import alias of a type names the declaration (methods, trait impls, values of the
   # defining module); run_tests.sh compares --interp with the binary.
-  [223]="regress_223_aliased_struct_methods.con regress_223_aliased_enum.con regress_223_aliased_generic_and_bound.con regress_223_aliased_destroy_impl.con"
-  # Bug 233 (OPEN, contained): an import of a public constant or trait is refused with its reason.
-  [233]="error_233_import_constant.con error_233_import_trait.con error_233_nested_import_constant.con regress_233_shared_spelling_import.con"
+  [223]="regress_223_aliased_struct_methods.con regress_223_aliased_enum.con regress_223_aliased_generic_and_bound.con regress_223_aliased_destroy_impl.con regress_223_aliased_self_result.con regress_223_aliased_cap_params.con error_223_method_core_name_taken.con"
+  # Bug 233: a public constant is imported by its identity (a trait import is refused with its
+  # reason); run_tests.sh compares --interp with the binary and builds the project fixture.
+  [233]="regress_233_import_constant.con regress_233_nested_import_constant.con regress_233_import_constant_scope.con regress_233_nested_alias_constant.con error_233_import_constant_collides_local.con error_233_import_trait.con regress_233_shared_spelling_import.con"
   # Bug 229: Resolve's module scope refused names Check admits (type/value namespaces, builtin
   # Option, child newtypes).
   [229]="regress_229_value_does_not_hide_type.con regress_229_user_option_does_not_hide_builtin.con regress_229_child_newtype_known.con regress_229_option_named_alias_or_struct.con regress_229_alias_and_enum_literal_precedence.con"

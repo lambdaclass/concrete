@@ -87,6 +87,9 @@ structure ElabEnv where
   -- name; see `importCallSpellingsFor`. Every Core consumer below resolves a direct
   -- callee by spelling, so the alias must not survive into Core.
   callSpellings : List (String × String) := []
+  -- R-0492 step 4 (bug 233): each imported constant's local spelling, its identity and the Core
+  -- spelling a reference to it carries (`ConstId.coreName`).
+  importedConsts : List (String × ConstId) := []
   -- Enclosing loops, INNERMOST FIRST, each with its optional label. `break`/`continue`
   -- evidence carries a RELATIVE target (0 = innermost), never a label string: renaming
   -- a label must not move a digest. Restored by restoreScope with the rest of the
@@ -439,6 +442,13 @@ private def lookupStruct (name : String) : ElabM (Option StructDef) := do
   let env ← getEnv
   return env.structs.find? fun sd => sd.name == name
 
+/-- R-0492 step 3: the declaration a type spelling denotes in this module (Check's
+    `TypeEnv.typeIdOf`); a type parameter denotes none. -/
+private def typeIdOfE : ElabM (String → Option TypeId) := do
+  let env ← getEnv
+  return fun n => if env.currentTypeParams.contains n then none
+    else typeIdOfSpelling env.structs env.enums env.newtypes n
+
 /-- R-0492 step 3: the method `methodName` of the type spelled `typeName`, as its mangled name
     and signature, selected as Check selects it (`lookupMethod`): by the type's declaration
     identity where it has one, so `Q` of `import m.{P as Q}` reaches `P_mk` and Core calls the
@@ -636,6 +646,7 @@ private def elabPeekCtx : PeekCtx ElabM where
   constant name := do return (← getEnv).constants.lookup name
   fnSig name := lookupFnSig name
   method t m := do return (← lookupMethodE t m).map (·.2)
+  typeIdOf := typeIdOfE
   fnRefSig name := do return (← getEnv).allFnSigPairs.lookup name
   struct name := lookupStruct name
   newtype name := do return (← getEnv).newtypes.find? fun nt => nt.name == name
@@ -714,7 +725,13 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
       return ElaboratedExprV2.mk (CExpr.ident b.core b.ty) (← binderRefEv b)
     | none =>
       match env.constants.lookup name with
-      | some ty => return ElaboratedExprV2.mk (CExpr.ident (CLocal.ofName name) ty) (Proof.evConstRef env.proofPath name)
+      | some ty =>
+        match env.importedConsts.lookup name with
+        -- R-0492 step 4 (bug 233): an imported constant is referenced by its identity
+        | some id =>
+          return ElaboratedExprV2.mk (CExpr.ident (CLocal.ofName id.coreName) ty)
+            (Proof.evConstRef id.defModule id.declName)
+        | none => return ElaboratedExprV2.mk (CExpr.ident (CLocal.ofName name) ty) (Proof.evConstRef env.proofPath name)
       | none =>
       match ← lookupFnSig name with
       | some sig =>
@@ -821,9 +838,10 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
       let mapping := sd.typeParams.zip typeArgs
       -- Capability arguments (R-0484), by the same rule as Check: from the expected type
       -- when it names this struct, otherwise read off the elaborated field values below.
+      let idOfH ← typeIdOfE
       let hintCapMap : Option (List (String × CapSet)) := match hint with
         | some (.generic hn _ hc) =>
-          if hn == name && !sd.capParams.isEmpty && hc.length == sd.capParams.length
+          if sameTypeName idOfH hn name && !sd.capParams.isEmpty && hc.length == sd.capParams.length
           then some (sd.capParams.zip hc) else none
         | _ => none
       let provisionalCaps := sd.capParams.map fun c =>
@@ -868,7 +886,7 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
         | none => sd.fields.foldl (fun acc sf =>
             match cFields.lookup sf.name with
             | some ce =>
-              let found := inferCapBindings sd.capParams (substTy mapping sf.ty) ce.ty
+              let found := inferCapBindings sd.capParams (substTy mapping sf.ty) ce.ty (sameTypeName idOfH)
               acc ++ found.filter fun (k, _) => !(acc.any (·.1 == k))
             | none => acc) []
       let capArgs := sd.capParams.map fun c => ((capMap.lookup c).getD .empty).canonArg
@@ -985,10 +1003,7 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
     match ← lookupEnum enumName with
     | some ed =>
       let typeArgs ← typeArgs.mapM resolveTypeE
-      let envT ← getEnv
-      let idOf : String → Option TypeId := fun n =>
-        if envT.currentTypeParams.contains n then none
-        else typeIdOfSpelling envT.structs envT.enums envT.newtypes n
+      let idOf ← typeIdOfE
       let effectiveTypeArgs := if typeArgs.isEmpty && !ed.typeParams.isEmpty then
         match hint with
         | some (.generic n args _) => if sameTypeName idOf n enumName then args else []
@@ -2825,8 +2840,10 @@ partial def elabModule (m : Module) (summary : FileSummary)
   -- Transitively close alias chains (see closeAliasMap); cycles rejected upstream.
   let typeAliasMap := closeAliasMap (imports.typeAliases ++ localTypeAliases)
   -- a constant's type with aliases expanded, as its initializer's type is (bug 096)
-  let constantsMap := m.constants.map fun c =>
-    (c.name, expandAliasDeep typeAliasMap (typeAliasMap.length + 64) c.ty)
+  let constantsMap := m.constants.map (fun c =>
+    (c.name, expandAliasDeep typeAliasMap (typeAliasMap.length + 64) c.ty))
+    -- R-0492 step 4 (bug 233): imported constants, typed as their defining module expands them
+    ++ imports.constants.map fun c => (c.localName, c.ty)
   let builtinDestroyTrait : TraitDef := {
     name := destroyTraitName
     methods := [{ name := destroyMethodName, params := [], retTy := .unit, selfKind := some .ref }]
@@ -3051,6 +3068,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
     proofPath := thisProofPath
     resolveCallee := resolveContractCall
     callSpellings := callSpellings
+    importedConsts := imports.constants.map fun c => (c.localName, c.id)
     structs := allStructs
     enums := allEnums
     fnSigs := allSigs

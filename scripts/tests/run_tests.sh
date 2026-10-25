@@ -8600,8 +8600,12 @@ run_ok "$TESTDIR/regress_223_aliased_struct_methods.con" 42
 run_ok "$TESTDIR/regress_223_aliased_enum.con" 42
 run_ok "$TESTDIR/regress_223_aliased_generic_and_bound.con" 42
 run_ok "$TESTDIR/regress_223_aliased_destroy_impl.con" 42
+run_ok "$TESTDIR/regress_223_aliased_self_result.con" 42
+run_ok "$TESTDIR/regress_223_aliased_cap_params.con" 42
+run_err "$TESTDIR/error_223_method_core_name_taken.con" "(E0299)"
 for r223 in regress_223_aliased_struct_methods regress_223_aliased_enum \
-            regress_223_aliased_generic_and_bound regress_223_aliased_destroy_impl; do
+            regress_223_aliased_generic_and_bound regress_223_aliased_destroy_impl \
+            regress_223_aliased_self_result regress_223_aliased_cap_params; do
     # bounded_run, not GNU `timeout`; a timeout is INCOMPLETE, not a pass.
     r223_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/$r223.con" --interp 2>&1 || true)
     if [ "$r223_interp" = "42" ]; then
@@ -8612,29 +8616,43 @@ for r223 in regress_223_aliased_struct_methods regress_223_aliased_enum \
         FAIL=$((FAIL + 1))
     fi
 done
-# Bug 233: an import of a public constant or trait, which no import binds, was refused as "not
-# public"; it is refused with the reason (E0126 at Resolve, E0323 for a nested submodule at Check).
-run_err "$TESTDIR/error_233_import_constant.con" "(E0126)"
+# Bug 233: an import of a public trait, which no import binds, was refused as "not public"; it is
+# refused with the reason (E0126). R-0492 step 4: a public constant is imported by its identity
+# (`ConstId`): Core references it by its defining module, and Lower and the interpreter inline its
+# initializer in that module's scope. Binary and --interp agree.
 run_err "$TESTDIR/error_233_import_trait.con" "(E0126)"
-run_err "$TESTDIR/error_233_nested_import_constant.con" "(E0323)"
+run_err "$TESTDIR/error_233_import_constant_collides_local.con" "(E0299)"
 run_ok "$TESTDIR/regress_233_shared_spelling_import.con" 42
-r233_interp=$($COMPILER "$TESTDIR/regress_233_shared_spelling_import.con" --interp 2>&1 || true)
-if [ "$r233_interp" = "42" ]; then
-    echo "  ok  bug 233: a function sharing a constant's or trait's spelling is still imported — interp == binary (42)"
-    PASS=$((PASS + 1))
-else
-    echo "FAIL  bug 233: regress_233_shared_spelling_import --interp gave '$r233_interp', want 42"
-    FAIL=$((FAIL + 1))
-fi
+run_ok "$TESTDIR/regress_233_import_constant.con" 42
+run_ok "$TESTDIR/regress_233_nested_import_constant.con" 42
+run_ok "$TESTDIR/regress_233_import_constant_scope.con" 42
+run_ok "$TESTDIR/regress_233_nested_alias_constant.con" 42
+for r233 in regress_233_shared_spelling_import regress_233_import_constant \
+            regress_233_nested_import_constant regress_233_import_constant_scope \
+            regress_233_nested_alias_constant; do
+    # bounded_run, not GNU `timeout`; a timeout is INCOMPLETE, not a pass.
+    r233_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/$r233.con" --interp 2>&1 || true)
+    if [ "$r233_interp" = "42" ]; then
+        echo "  ok  bug 233: $r233 — interp == binary (42)"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  bug 233: $r233 --interp gave '$r233_interp', want 42"
+        FAIL=$((FAIL + 1))
+    fi
+done
 r233_dir=$(mktemp -d)
 cp -R tests/regressions/bug233_import_public_constant_refused/project/. "$r233_dir/"
 r233_out=$(cd "$r233_dir" && "$ROOT_DIR/$COMPILER" build 2>&1) && r233_rc=0 || r233_rc=$?
+r233_run_rc=none
+if [ "$r233_rc" = 0 ] && [ -x "$r233_dir/bug233" ]; then
+    bounded_run 20 -- "$r233_dir/bug233" >/dev/null 2>&1 && r233_run_rc=0 || r233_run_rc=$?
+fi
 rm -rf "$r233_dir"
-if [ "$r233_rc" != 0 ] && grep -qF "src/user.con:3:1: error[check]: (E0323) 'BASE' is a constant of module 'cfg'" <<<"$r233_out"; then
-    echo "  ok  bug 233: a project's \`mod user;\` file importing a sibling file's constant is refused with the reason (E0323)"
+if [ "$r233_run_rc" = 42 ]; then
+    echo "  ok  bug 233: a project's \`mod user;\` file imports a sibling file's constant (exit 42)"
     PASS=$((PASS + 1))
 else
-    echo "FAIL  bug 233: project build of tests/regressions/bug233_import_public_constant_refused/project (rc $r233_rc) did not refuse src/user.con with check E0323:"
+    echo "FAIL  bug 233: project build of tests/regressions/bug233_import_public_constant_refused/project (build rc $r233_rc, run rc $r233_run_rc), want exit 42:"
     printf '%s\n' "$r233_out" | awk 'NR<=3'
     FAIL=$((FAIL + 1))
 fi

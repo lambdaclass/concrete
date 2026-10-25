@@ -4,6 +4,7 @@ import Concrete.Semantics.IntArith
 import Concrete.Resolve.Shared
 import Concrete.Check.Layout
 import Std.Data.HashMap
+import Concrete.Resolve.TypeId
 
 namespace Concrete.Interp
 
@@ -431,6 +432,10 @@ structure Ctx where
   argv0 : String := "a.out"
   /-- Every module's constants, by name (a name defined twice is refused at its use). -/
   consts : List (String × CExpr) := []
+  /-- R-0492 step 4 (bug 233): every constant by its imported Core spelling (`ConstId.coreName`,
+      `cfg::BASE`), with the constants of its defining top-level tree, the scope its initializer
+      is evaluated in, as Lower lowers it. -/
+  importedConsts : List (String × CExpr × List (String × CExpr)) := []
   /-- Every user function with the index of the top-level module whose tree defines it: the
       unit within which the backend resolves a call spelling (bug 118). Empty for a report
       harness's context, which then resolves by `fns` alone. -/
@@ -909,6 +914,13 @@ partial def collectLinkerAliases : List CModule → List (String × String)
 partial def collectConsts : List CModule → List (String × CExpr)
   | [] => []
   | m :: ms => m.constants.map (fun (n, _, e) => (n, e)) ++ collectConsts m.submodules ++ collectConsts ms
+
+/-- R-0492 step 4: the constants of the tree `m` at `path` by imported Core spelling (Lower's
+    `importedConstantsOf`), each with `scope`. -/
+partial def collectImportedConsts (scope : List (String × CExpr)) (path : String) (m : CModule)
+    : List (String × CExpr × List (String × CExpr)) :=
+  m.constants.map (fun (n, _, e) => (ConstId.coreNameAt path n, e, scope))
+    ++ m.submodules.flatMap fun sub => collectImportedConsts scope (path ++ "." ++ sub.name) sub
 
 def findFn (fns : List CFnDef) (name : String) : Option CFnDef :=
   fns.find? (fun f => f.name == name)
@@ -2169,6 +2181,13 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
       | _ :: _ :: _ =>
         fail s!"interp: module constant '{name}' is defined by more than one module, and Core cannot tell which one this use names (bug 132)"
       | [] =>
+      -- R-0492 step 4 (bug 233): an imported constant, evaluated in its defining tree's scope.
+      match cx.importedConsts.find? (·.1 == name.name) with
+      | some (_, init, scope) =>
+        let outerLen := env.length
+        let (env', v) ← evalExprVal { cx with consts := scope } (envEnterFrame env) init
+        return (env'.drop (env'.length - outerLen), .val v)
+      | none =>
       -- A bare function name in value position is a function pointer, to the definition the
       -- spelling reaches from here (resolved now, so a later call cannot re-resolve it elsewhere).
       -- A function value (Lower intercepts intrinsics only at direct calls).
@@ -3422,6 +3441,7 @@ def mkCtx (modules : List CModule) (loopFuel : Nat := defaultLoopFuel) : Ctx :=
     externs := (collectExterns modules).eraseDups,
     externLinks := collectExternLinks modules,
     consts := collectConsts modules, loopFuel, defs,
+    importedConsts := modules.flatMap fun m => collectImportedConsts (collectConsts [m]) m.name m,
     scopes := (tops.map fun (m, _) => collectLinkerAliases [m]).toArray,
     topNames := (modules.map (·.name)).toArray,
     -- A key two impls produce is ambiguous (`implMethodFns` marks it); it gets no scope.

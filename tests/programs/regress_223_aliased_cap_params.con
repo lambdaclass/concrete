@@ -1,0 +1,13 @@
+// Bug 223 (R-0492 step 3, Codex review): capability parameters are read off an aliased
+// generic's arguments: `&S<{}>` against `apply<cap C>(s: &Sink<C>)` and the receiver of an
+// impl<cap C> method, comparing the heads by identity. Returns 42.
+mod a {
+    pub struct Copy Sink<cap C> { pub n: i64 }
+    pub fn apply<cap C>(s: &Sink<C>) with(C) -> i64 { return s.n; }
+    impl<cap C> Sink<C> { pub fn get(&self) with(C) -> i64 { return self.n; } }
+}
+import a.{Sink as S, apply};
+fn main() -> Int {
+    let s: S<{}> = S { n: 21 };
+    return apply(&s) + s.get();
+}

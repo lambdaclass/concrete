@@ -65,6 +65,16 @@ def ConstId.render (c : ConstId) : String :=
   "v1:const:" ++ "module" ++ toString c.defModule.length ++ ":" ++ c.defModule
     ++ "decl" ++ toString c.declName.length ++ ":" ++ c.declName
 
+/-- R-0492 step 4 (bug 233): the Core spelling of a reference to an IMPORTED constant: its defining
+    module path and its name joined by `::` (`cfg::BASE`, `m::a::X`). A module's own constants keep
+    their bare spelling. `::` is no identifier character, so no declaration or local of any module
+    can share this spelling, and Lower and the interpreter find the definition by it in the
+    program's table of constants (`ConstId.coreNameAt`), never in the importer's own tree. -/
+def ConstId.coreNameAt (defModule declName : String) : String :=
+  "::".intercalate (defModule.splitOn ".") ++ "::" ++ declName
+
+def ConstId.coreName (c : ConstId) : String := ConstId.coreNameAt c.defModule c.declName
+
 /-- A field is identified relative to the declaration that owns it. -/
 structure FieldId where
   owner : TypeId

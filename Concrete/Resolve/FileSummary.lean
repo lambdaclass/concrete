@@ -40,6 +40,19 @@ structure ConstSummary where
   name : String
   ty : Ty
   isPublic : Bool := false
+  /-- R-0492 step 4: the defining module's path, stamped by `buildFileSummary` as a type's
+      `definedIn` is; with `name`, the constant's `ConstId`. -/
+  definedIn : String := ""
+
+/-- R-0492 step 4: the identity of a summarized constant. -/
+def ConstSummary.constId (c : ConstSummary) : ConstId := { defModule := c.definedIn, declName := c.name }
+
+/-- R-0492 step 4: a constant an import binds: the importer's spelling, the constant's identity and
+    its type (aliases of the defining module expanded). -/
+structure ImportedConst where
+  localName : String
+  id : ConstId
+  ty : Ty
 
 structure FnSummary where
   params : List (String × Ty)
@@ -94,6 +107,8 @@ structure ResolvedImports where
   newtypes       : List NewtypeDef := []
   /-- Maps local alias name → original linker symbol for aliased imports. -/
   linkerAliases  : List (String × String) := []
+  /-- R-0492 step 4 (bug 233): imported constants, by identity. -/
+  constants      : List ImportedConst := []
 
 private def fnDefToSummary (f : FnDef) : String × FnSummary :=
   (f.name, { params := f.params.map fun p => (p.name, p.ty)
@@ -265,7 +280,8 @@ partial def buildFileSummary (m : Module) (definitionPath : String := "") : File
     traitImpls := traitImpls
     publicNames := publicNames
     traits := m.traits
-    constants := m.constants.map fun c => { name := c.name, ty := c.ty, isPublic := c.isPublic }
+    constants := m.constants.map fun c =>
+      { name := c.name, ty := c.ty, isPublic := c.isPublic, definedIn := thisDefinitionPath }
     typeAliases := m.typeAliases
     newtypes := m.newtypes.map (fun nt => { nt with definedIn := thisDefinitionPath })
     externFns := m.externFns
@@ -317,31 +333,27 @@ def importCode (pass : String) (unknownModule : Bool) : String :=
   | "elab", true => "E0418" | "elab", false => "E0419"
   | _, true => "E0110" | _, false => "E0111"
 
-/-- Bug 233: the kind of a public declaration of `summary` that no import binds, a trait or a
-    constant, if `name` is one. Every pass's public-name list (`publicNames`) holds them, so the
-    import rule fell through to "not public", which they are not. Traits are module-local and cannot
-    be imported (TRAIT spec); a constant cannot be imported yet, because Core names a constant by its
-    bare spelling (bug 132) and an imported one could not be told from the importer's own.
+/-- Bug 233: the kind of a public declaration of `summary` that no import binds, if `name` is one:
+    a trait. Every pass's public-name list (`publicNames`) holds it, so the import rule fell
+    through to "not public", which it is not; traits are module-local and cannot be imported
+    (TRAIT spec). A public constant is imported by its identity (R-0492 step 4).
     `none` whenever the name also names a declaration the import rule binds (`resolveImports`:
-    a function, a foreign binding, a struct, an enum, a public alias or newtype): callables,
-    constants and types are separate namespaces (MOD-3), so `pub const F` beside `pub fn F` leaves
-    `import m.{F}` the function's import (Codex review). -/
+    a function, a foreign binding, a struct, an enum, a public alias, newtype or constant):
+    callables, constants and types are separate namespaces (MOD-3), so `pub trait G` beside
+    `pub fn G` leaves `import m.{G}` the function's import (Codex review). -/
 def unimportableKind (summary : FileSummary) (name : String) : Option String :=
   let bindable := (summary.functions ++ summary.externFnSigs).any (fun (n, _) => n == name)
     || summary.structs.any (·.name == name) || summary.enums.any (·.name == name)
     || summary.typeAliases.any (fun ta => ta.isPublic && ta.name == name)
     || summary.newtypes.any (fun nt => nt.isPublic && nt.name == name)
+    || summary.constants.any (fun c => c.isPublic && c.name == name)
   if bindable then none
   else if summary.traits.any (fun t => t.isPublic && t.name == name) then some "trait"
-  else if summary.constants.any (fun c => c.isPublic && c.name == name) then some "constant"
   else none
 
-/-- Bug 233: the refusal of an import naming a public trait or constant (`unimportableKind`). -/
+/-- Bug 233: the refusal of an import naming a public trait (`unimportableKind`). -/
 def unimportableMsg (kind symbol moduleName : String) : String :=
-  if kind == "trait" then
-    s!"'{symbol}' is a trait of module '{moduleName}', and a trait cannot be imported: traits are module-local"
-  else
-    s!"'{symbol}' is a constant of module '{moduleName}', and a constant cannot be imported yet: Core names a constant by its spelling, so an imported one could not be told from a constant of the same name in the importer (bug 233)"
+  s!"'{symbol}' is a {kind} of module '{moduleName}', and a {kind} cannot be imported: traits are module-local"
 
 /-- Bug 233: the code of that refusal, by the pass that reports it (as `importCode`). -/
 def unimportableCode (pass : String) : String :=
@@ -435,6 +447,14 @@ def resolveImports (imports : List ImportDecl)
                                  traitImpls := acc.traitImpls ++ newtypeTraitImpls,
                                  implMethodSigs := acc.implMethodSigs ++ matchingSigs }
                 | none =>
+                  -- R-0492 step 4 (bug 233): a public constant binds its identity under the
+                  -- importer's spelling. Reached only when the name binds no callable or type,
+                  -- so `pub fn F` beside `pub const F` stays the function's import (MOD-3).
+                  match summary.constants.find? fun c => c.isPublic && c.name == origName with
+                  | some c =>
+                    .ok { acc with constants := acc.constants ++
+                      [{ localName, id := c.constId, ty := resolveAliasesInTy aliasMap c.ty }] }
+                  | none =>
                   match unimportableKind summary origName with
                   | some kind => .error [{ severity := .error, message := unimportableMsg kind origName imp.moduleName, pass := pass, span := some imp.span, hint := none, code := unimportableCode pass }]
                   | none => .error [{ severity := .error, message := notPublicMsg origName imp.moduleName, pass := pass, span := some imp.span, hint := none, code := importCode pass false }]
@@ -473,12 +493,20 @@ def resolveImports (imports : List ImportDecl)
       let referenced :=
         acc.functions.flatMap (fun (_, sig) =>
           sig.params.flatMap (fun (_, t) => tyHeadNames t) ++ tyHeadNames sig.retTy)
+        -- An impl method's `Self` is its target, which `resolveImplMethodSigs` spells as the
+        -- defining module does (`P`): the closure binds that spelling too, so an alias `Q`
+        -- and a `-> Self` result meet by identity (bug 223, Codex review).
         ++ acc.implMethodSigs.flatMap (fun (_, sig) =>
-          sig.params.flatMap (fun (_, t) => tyHeadNames t) ++ tyHeadNames sig.retTy)
+          let selfName := match sig.methodOf.map (·.owner) with
+            | some (.user _ declName) => declName
+            | _ => selfTypeName
+          (sig.params.flatMap (fun (_, t) => tyHeadNames t) ++ tyHeadNames sig.retTy).map
+            fun n => if n == selfTypeName then selfName else n)
         ++ acc.structs.flatMap (fun sd => sd.fields.flatMap (fun f => tyHeadNames f.ty))
         ++ acc.enums.flatMap (fun ed =>
           ed.variants.flatMap (fun v => v.fields.flatMap (fun f => tyHeadNames f.ty)))
         ++ acc.newtypes.flatMap (fun nt => tyHeadNames nt.innerTy)
+        ++ acc.constants.flatMap (fun c => tyHeadNames c.ty)
       let present := acc.structs.map (·.name) ++ acc.enums.map (·.name)
         ++ acc.newtypes.map (·.name) ++ acc.typeAliases.map (·.1)
       let missing := (referenced.filter fun n => !present.contains n).eraseDups

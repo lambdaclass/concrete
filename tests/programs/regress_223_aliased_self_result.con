@@ -1,0 +1,14 @@
+// Bug 223 (R-0492 step 3, Codex review): a method of an aliased type whose result is written
+// `Self` returns the definition's spelling `P`; the import closure binds it, so it is the alias
+// `Q` by identity. Returns 42.
+mod a {
+    pub struct Copy P { pub v: i64 }
+    impl P {
+        pub fn mk() -> Self { return P { v: 42 }; }
+    }
+}
+import a.{P as Q};
+fn main() -> Int {
+    let q: Q = Q::mk();
+    return q.v;
+}

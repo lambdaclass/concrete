@@ -1,7 +1,7 @@
 # Bug 233 — a public constant cannot be imported, and the refusal says it is not public
 
-**Status:** OPEN (contained 2026-10-24 on `wip/diffhunt-1025`: the import is refused with its
-reason; importing constants waits for constant identity, R-0492)
+**Status:** FIXED (2026-10-25, R-0492 step 4, branch `wip/r0492-steps34`; contained 2026-10-24 on
+`wip/diffhunt-1025`)
 **Found:** 2026-10-24, by the differential hunt on main `9622f7e0` (module constants across
 modules): `mod cfg { pub const BASE: i32 = 7; } import cfg.{BASE};` is refused by both the binary
 and `--interp` with `(E0285) 'BASE' is not public in module 'cfg'`.
@@ -9,15 +9,16 @@ and `--interp` with `(E0285) 'BASE' is not public in module 'cfg'`.
 
 ## Reproducer
 
-- `tests/programs/error_233_import_constant.con`: the program above. On main: Check's E0285 "not
-  public". Now: `(E0126) 'BASE' is a constant of module 'cfg', and a constant cannot be imported
+- `tests/programs/regress_233_import_constant.con` (formerly `error_233_import_constant.con`): the
+  program above. On main: Check's E0285 "not public". While contained: `(E0126) 'BASE' is a constant of module 'cfg', and a constant cannot be imported
   yet: …`.
 - `tests/programs/error_233_import_trait.con`: `import a.{Show}` of a `pub trait`. On main: E0285
   "not public"; traits are module-local and cannot be imported (TRAIT spec), but they are public.
   Now: E0126, "'Show' is a trait of module 'a', and a trait cannot be imported: traits are
   module-local".
-- `tests/programs/error_233_nested_import_constant.con`: the constant import in a nested
-  submodule, whose imports Check validates. Now E0323 with the same reason.
+- `tests/programs/regress_233_nested_import_constant.con` (formerly
+  `error_233_nested_import_constant.con`): the constant import in a nested submodule, whose imports
+  Check validates. While contained: E0323 with the same reason.
 
 Expected by MOD-2@1 ("another module uses [a `pub` declaration] only by importing it"): the
 constant import is accepted and `main` returns 7. A qualified use, `cfg::BASE`, is refused too
@@ -49,6 +50,38 @@ one spelling: `run_ok … 42` and `--interp` = 42) and the project
 `tests/regressions/bug233_import_public_constant_refused/project` (a `mod user;` file importing a
 `mod cfg;` file's constant: E0323 attributed to `src/user.con`).
 
+## Fix
+
+R-0492 step 4 ([DECLARATION_IDENTITY.md](../compiler/DECLARATION_IDENTITY.md)). A public constant
+is imported by its identity, as MOD-2@1 states; nothing about mutable state changes (a constant is
+immutable and inlined at each use):
+
+- `buildFileSummary` stamps each constant's defining module (`ConstSummary.definedIn`, with its
+  name the `ConstId`). The import rule Check and Elab share (`FileSummary.resolveImports`) binds a
+  public constant under the importer's spelling as an `ImportedConst` (local name, `ConstId`, type),
+  only when the name binds no callable or type, so `pub fn F` beside `pub const F` is still the
+  function's import (MOD-3; `regress_233_shared_spelling_import.con`). Resolve binds it in both of
+  its import paths (`summaryImports`, `importScope`). Only a public trait is still unimportable
+  (E0126 / E0323 / E0423).
+- Check types the reference from the import; an imported constant beside a local constant of one
+  spelling is E0299, as for functions.
+- Elab references an imported constant by its identity's Core spelling, `ConstId.coreName`
+  (`cfg::BASE`; `::` is no identifier character, so no declaration of the importer can take it),
+  with evidence naming the defining module.
+- Lower and the interpreter look that spelling up in a program-wide table
+  (`importedConstantsOf`, `collectImportedConsts`) and inline the initializer with the DEFINING
+  tree's constants in scope, so a private constant it names is the defining module's. Bug 132's
+  refusal of two same-spelled constants stays for bare spellings within one tree; an imported
+  constant is never one.
+
+Regression legs in `run_tests.sh`: `regress_233_import_constant.con`,
+`regress_233_nested_import_constant.con`, `regress_233_import_constant_scope.con` (an initializer
+reading the defining module's private constant; two modules' `BASE`, one aliased; an array
+constant) and `regress_233_nested_alias_constant.con`, each `run_ok … 42` and `--interp` = 42;
+`error_233_import_constant_collides_local.con` (E0299); `error_233_import_trait.con` (E0126); and
+the project `tests/regressions/bug233_import_public_constant_refused/project`, which now builds and
+exits 42.
+
 ## Structural cause
 
 Class 12 ("one fact kept in two places"): which declarations an import may name is stated twice,
@@ -59,5 +92,6 @@ in Core is its spelling, so there is nothing an import could bind.
 ## Structural owner
 
 R-0492/R-0514 (one resolver with `DefId`s: an import binds a declaration identity, which a constant
-reference then carries through Elab and Lower). Importing a constant is accepted when that lands;
-until then the refusal states the reason.
+reference then carries through Elab and Lower). Step 4 of the design note does this for constants;
+the import rule is still stated twice (Resolve's `summaryImports` and `resolveImports`), which
+R-0514's one resolver removes.

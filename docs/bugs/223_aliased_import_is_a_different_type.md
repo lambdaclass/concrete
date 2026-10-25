@@ -70,16 +70,24 @@ passes compare and look up by it:
   Check's method and static calls (and the shared argument-type peek, `PeekCtx.method`) and Elab's
   method elaboration ask it first, then the mangled spelling (an impl on a builtin or on an
   imported type carries no key). `Q::mk` therefore reaches `P_mk`, and Core calls the definition's
-  method exactly as it does without the alias.
+  method exactly as it does without the alias. Core calls a method by that mangled spelling, so
+  where it names another callable of the module (a free function `P_mk`), Check refuses the call
+  (E0299) instead of selecting one declaration while the backends call the other (Codex review).
 - Check compares types with `Ty.sameByIdentity` (assignment and argument agreement, `if` and
   `match` branch agreement, break values, a variant pattern's enum, an enum literal's type-argument
-  hint), and a trait bound is satisfied through `traitImplIds`, the trait impls by target identity.
+  hint, a struct literal's capability hint), capability parameters are read off generic heads
+  that name one declaration (`inferCapBindings`'s `sameHead`), and a trait bound is satisfied
+  through `traitImplIds`, the trait impls by target identity.
+- The import closure binds the definition spelling an impl method's `Self` stands for, so a
+  `-> Self` result (`P` after `resolveImplMethodSigs`) and the alias meet by identity.
 
 Regression legs in `run_tests.sh`: `regress_223_aliased_struct_methods.con` (the reproducer),
 `regress_223_aliased_enum.con` (an aliased enum: literals, patterns, a method, branch agreement),
 `regress_223_aliased_generic_and_bound.con` (an aliased generic struct and a top-level module, a
 trait bound satisfied through the alias) and `regress_223_aliased_destroy_impl.con` (an aliased
-linear type's `Destroy` bound and method), each `run_ok … 42` and `--interp` = 42.
+linear type's `Destroy` bound and method), `regress_223_aliased_self_result.con` and
+`regress_223_aliased_cap_params.con`, each `run_ok … 42` and `--interp` = 42, and
+`error_223_method_core_name_taken.con` (E0299).
 
 Not in this fix: an imported signature still names a type by its definition's spelling, which the
 importer reads in its own environment, so an importer declaring its own type of that spelling

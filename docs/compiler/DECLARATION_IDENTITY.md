@@ -1,7 +1,7 @@
 # Declaration identity for module-level types and constants (R-0492 slice 6)
 
 Status: design note, 2026-10-25; steps 1 and 2 landed on `wip/r0492-decl-identity` (bugs 230 and
-227 fixed); step 3 landed on `wip/r0492-steps34` (bug 223 fixed); step 4 open. Owner: R-0492 (S5 identities in
+227 fixed); steps 3 and 4 landed on `wip/r0492-steps34` (bugs 223 and 233 fixed). Owner: R-0492 (S5 identities in
 [VERIFIED_PIPELINE.md](VERIFIED_PIPELINE.md)), applied to the shared front end by R-0514. Slices
 1 – 5 gave every local binder a `LocalId` (S5 slice contracts 2 – 5). This slice starts the `DefId`
 half for the declarations a module names by spelling: structs, enums, newtypes, aliases and
@@ -87,6 +87,15 @@ intended behaviour.
    imported constant, as for types); Lower inlines by that name instead of searching the module's
    own tree. Bug 132's refusal of two modules' constants of one spelling then becomes unnecessary
    for imported ones.
+   *Landed:* `ConstSummary.definedIn` gives a summarized constant its `ConstId`; `resolveImports`
+   binds a public constant as an `ImportedConst` (local name, `ConstId`, type) when the name binds
+   no callable or type (MOD-3), and Resolve's two import paths bind it too. Check types the
+   reference from it (E0299 beside a local constant of that spelling). Elab spells the reference
+   `ConstId.coreName` (`cfg::BASE`, not an identifier, so nothing of the importer can share it).
+   Lower and the interpreter find it in a program-wide table and inline the initializer with the
+   defining tree's constants in scope. The initializer is the defining module's Core, elaborated
+   there, so it is not re-elaborated in the importer. Bug 132's refusal remains for two bare
+   spellings within one tree.
 
 Steps 1 and 2 land in this slice. Steps 3 and 4 change the checker's type equality and Core's
 constant references; each is its own slice with its own byte-identity accounting.
