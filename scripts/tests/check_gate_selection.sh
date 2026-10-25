@@ -289,6 +289,16 @@ declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
 } > "$tmp"
 run_it "$tmp"
 EOF
+leg inlinegroup run "a value printed inside an inline group whose output goes to a file is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+{ printf '%s\n' "${M[k]}"; } > "$tmp"
+run_it "$tmp"
+EOF
+leg procsub run "a value printed into a process substitution is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+mapfile -t gates < <(printf '%s\n' "${M[@]}" | sort)
+for gate in "${gates[@]}"; do "$gate" --plan; done
+EOF
 leg rg run "a value handed to rg, which can run a preprocessor, is a call" <<'EOF'
 declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
 rg --pre "${M[k]}" pattern README.md

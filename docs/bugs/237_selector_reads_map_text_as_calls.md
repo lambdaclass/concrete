@@ -44,7 +44,7 @@ directly or through a variable or another array assigned from them (`v=`, `local
   `wc`, ...; not `awk`, `sed`, `rg` or `sort`), a file test (`[[ -f ]]`), a redirection target.
 - RUN, the old rule, for everything else: a command word, an argument of a function, wrapper or
   interpreter, a prefix assignment, `export`, an output piped into any other consumer, a line
-  naming an interpreter, `source` or `xargs`; and every array of a script that uses a nameref,
+  naming an interpreter, `source`, `xargs` or a process substitution; and every array of a script that uses a nameref,
   an indirect expansion `${!var}` or `eval` anywhere (array elements included), since those
   reach an array without spelling it.
 
@@ -57,19 +57,20 @@ shell parser: what it models is pinned by the controls below, and the contexts i
 are RUN by construction.
 
 Effect, measured over the whole gate inventory (272 commands) on this branch's tree, old selector
-against new: no closure gained an edge or changed its compiler/Lean flag; the 16 commands that
-reach the corpus audit lost the false edges (seven tracked files no longer select them, among them
+against new: no closure gained an edge or changed its compiler/Lean flag; the 16 commands that reach
+the corpus audit lost the false edges (seven tracked files no longer select them, among them
 `scripts/review/*`, `.gitignore` and two docs); the selection for each of the seven fixtures in
 `tests/fixtures/gate_selection/` is unchanged. `check_gate_registration.sh`'s exemption keys stay
-calls (they reach a function). Regression legs in `check_gate_selection.sh` ("text is not a
-call"): a note naming a gate is neither a run nor a read, nor is the directory it mentions; a
-genuine invocation of that gate in the same file is a call; a value run through a variable, in
-command position behind a wrapper's options, copied into another array that is run, printed into
-an unseen consumer or through a filter or a group into a file, reached through a nameref or an
-indirect expansion, moved by an attached `printf -vNAME`, or handed to `awk` or `rg`, is a call;
-a value read as a file, directly or after `printf -v`, is a read; a key naming a gate is a
-read; a command substitution in a key is a call; an ANSI-C quoted value and a quote inside
-`${...}` do not swallow the invocation after them. The note and key legs fail against the previous selector.
+calls (they reach a function). Regression legs in `check_gate_selection.sh` ("text is not a call"):
+a note naming a gate is neither a run nor a read, nor is the directory it mentions; a genuine
+invocation of that gate in the same file is a call; a value run through a variable, in command
+position behind a wrapper's options, copied into another array that is run, printed into an unseen
+consumer, a process substitution, or through a filter or a group (inline or not) into a file,
+reached through a nameref or an indirect expansion, moved by an attached `printf -vNAME`, or handed
+to `awk` or `rg`, is a call; a value read as a file, directly or after `printf -v`, is a read; a key
+naming a gate is a read; a command substitution in a key is a call; an ANSI-C quoted value and a
+quote inside `${...}` do not swallow the invocation after them. The note and key legs fail against
+the previous selector.
 
 ## Structural cause
 

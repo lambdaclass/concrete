@@ -46,7 +46,7 @@ PURE_FILTERS = {"grep", "egrep", "fgrep", "cut", "tr", "sort", "uniq", "head", "
 # Output of a whole compound command (a group, a loop, a function call) or of the rest of the
 # script (`exec >file`) sent to a file or a pipe: a print inside it is not known to reach only the
 # terminal, so no print in such a script is TEXT.
-COMPOUND_OUT_RE = re.compile(r"^\s*(\}|done|fi|esac|\))\s*([0-9]*>(?!&)|&>|\|(?!\|))"
+COMPOUND_OUT_RE = re.compile(r"(^|[;&|\s])(\}|done|fi|esac|\))\s*([0-9]*>(?!&)|&>|\|(?!\|))"
                              r"|\bexec\s+[0-9]*>(?!&)")
 FUNC_DEF_RE = re.compile(r"^\s*(?:function\s+)?([A-Za-z_][\w-]*)\s*\(\)")
 AWK_UNSAFE_RE = re.compile(r"system|getline|\||>|ENVIRON")
@@ -387,8 +387,8 @@ def use_level(seeds, code_lines, elements, exec_re):
         for line, cmds in parsed:
             if not hit(line):
                 continue
-            if exec_re.search(line) or re.search(r"\bxargs\b", line):
-                return RUN
+            if exec_re.search(line) or re.search(r"\bxargs\b|[<>]\(", line):
+                return RUN  # an interpreter, or a process substitution: a consumer not modeled
             for k, cmd in enumerate(cmds):
                 if not any(hit(w) for w, _ in cmd):
                     continue
