@@ -8786,11 +8786,17 @@ run_ok "$TESTDIR/regress_251_generic_constant_absent_in_instantiating_tree.con" 
 run_ok "$TESTDIR/regress_251_nested_generic_constants.con" 42
 run_ok "$TESTDIR/regress_251_generic_calls_shadowed_intrinsic.con" 40
 run_ok "$TESTDIR/regress_251_generic_constant_calls_shadowed_intrinsic.con" 40
+run_ok "$TESTDIR/regress_251_generic_call_beside_destination_extern.con" 40
+run_ok "$TESTDIR/regress_251_generic_calls_source_extern.con" 40
+run_ok "$TESTDIR/regress_251_generic_calls_source_import_alias.con" 40
 for r251 in regress_251_generic_reads_defining_tree_constant:40 \
             regress_251_generic_constant_absent_in_instantiating_tree:40 \
             regress_251_nested_generic_constants:42 \
             regress_251_generic_calls_shadowed_intrinsic:40 \
-            regress_251_generic_constant_calls_shadowed_intrinsic:40; do
+            regress_251_generic_constant_calls_shadowed_intrinsic:40 \
+            regress_251_generic_call_beside_destination_extern:40 \
+            regress_251_generic_calls_source_extern:40 \
+            regress_251_generic_calls_source_import_alias:40; do
     r251_f=${r251%%:*}; r251_want=${r251##*:}
     # bounded_run, not GNU `timeout`; a timeout is INCOMPLETE, not a pass.
     r251_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/$r251_f.con" --interp 2>&1 || true)

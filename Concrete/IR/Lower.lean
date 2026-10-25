@@ -2685,7 +2685,8 @@ def lowerModule (m : CModule) (program : List CModule := []) : Except Diagnostic
   let results ← concreteFns.foldlM (init := []) fun acc (f, path) =>
     let (fnConstants, fnDefinedNames) := contextOf f
     match lowerFn f allStructs allEnums fnConstants allNewtypes fnDefinedNames importedConstants with
-    | .ok (sfn, lits) => .ok (acc ++ [({ sfn with modulePath := path }, lits)])
+    | .ok (sfn, lits) =>
+      .ok (acc ++ [({ sfn with modulePath := path, sourceTree := f.sourceTree.filter (· != m.name) }, lits)])
     | .error ds => .error (ds.map (·.addContext s!"while lowering function '{f.name}'"))
   -- Build deduplicated globals list (by string value)
   -- Prefix with module name to avoid collisions across modules

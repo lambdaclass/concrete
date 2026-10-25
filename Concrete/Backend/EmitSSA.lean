@@ -82,6 +82,9 @@ structure EmitSSAState where
       spelled with one of these binds the foreign symbol even when another module defines a
       Concrete function of the same name (that function has a different, mangled symbol). -/
   moduleExterns : List String := []
+  /-- Bug 251: every module of the program, so a function Mono moved out of its defining tree
+      (`SFnDef.sourceTree`) is emitted in that tree's call context (`moduleCallContext`). -/
+  programModules : List SModule := []
   /-- `extern fn` name → C symbol, for `#[link_name]` bindings. Program-wide and unambiguous:
       Resolve refuses two bindings of one name to different symbols (E0118). -/
   externLinks : List (String × String) := []
@@ -1517,6 +1520,47 @@ private def collectSInstTys (inst : SInst) : List Ty :=
 -- Entry point: emit full SSA program as LLVM IR
 -- ============================================================
 
+/-- The call context of module `m`'s bodies: the local aliases a call spelling is resolved
+    through, and the module's own `extern` bindings, which bind their foreign symbols at its call
+    sites. One definition, used for the module's own functions and (bug 251) for a function Mono
+    moved here from `m`. -/
+private def moduleCallContext (s : EmitSSAState) (m : SModule) :
+    List (String × String) × List String :=
+  -- Build per-module local aliases for colliding function names:
+  -- For each function in this module whose bare name collides across modules,
+  -- map bareName → modulePath_bareName so internal calls resolve correctly.
+  -- Also resolve colliding names through existing linker aliases (for imports).
+  let selfQualAliases := m.functions.foldl (fun acc f =>
+    if s.collidingNames.contains f.name && !f.modulePath.isEmpty then
+      let qualName := f.modulePath.replace "." "_" ++ "_" ++ f.name
+      acc ++ [(f.name, qualName)]
+    else acc
+  ) ([] : List (String × String))
+  -- For imported functions (via linker aliases), resolve bare → qualified
+  -- e.g., if linker alias says Alpha_compute → compute and compute collides,
+  -- reverse to: compute → Alpha_compute (the qualified def name)
+  let importQualAliases := m.linkerAliases.foldl (fun acc (qualCall, bareDef) =>
+    if s.collidingNames.contains bareDef then
+      -- qualCall is e.g. "Alpha_compute", bareDef is "compute"
+      -- The definition will be "Alpha_compute" after qualification
+      acc ++ [(bareDef, qualCall)]
+    else acc
+  ) ([] : List (String × String))
+  -- Bug 039: this module's OWN bare→qualified import aliases must shadow the
+  -- accumulated program-wide pool. s.linkerAliases is a flat first-match list
+  -- over ALL modules, so once std.cli contributed ("get","args_get"), a later
+  -- module's `import std.env.{get}` also resolved to args_get (String pointer
+  -- passed as argv index → segfault). Which definition a bare name means is a
+  -- fact of the CALLING module's imports, not of program order.
+  let ownImportAliases := m.linkerAliases.filter fun (_, target) =>
+    s.definedFnNames.contains target
+  -- Local aliases: import aliases take priority (they specify which module was imported)
+  -- This module's own externs bind their foreign symbols at its call sites, ahead of
+  -- another module's same-spelled definition; a name the module itself defines stays its own.
+  let ownDefs := m.functions.map (·.name)
+  (ownImportAliases ++ importQualAliases ++ selfQualAliases,
+   (m.externFns.map (·.1)).filter (!ownDefs.contains ·))
+
 def emitSModule (s : EmitSSAState) (m : SModule) (testMode : Bool := false) : EmitSSAState :=
   let s := { s with structDefs := s.structDefs ++ m.structs, enumDefs := s.enumDefs ++ m.enums,
                      newtypes := s.newtypes ++ m.newtypes,
@@ -1581,43 +1625,18 @@ def emitSModule (s : EmitSSAState) (m : SModule) (testMode : Bool := false) : Em
     { s with stringLengths := s.stringLengths ++ [(name, val.utf8ByteSize)] }
   ) s
   -- Functions
-  -- Build per-module local aliases for colliding function names:
-  -- For each function in this module whose bare name collides across modules,
-  -- map bareName → modulePath_bareName so internal calls resolve correctly.
-  -- Also resolve colliding names through existing linker aliases (for imports).
-  let selfQualAliases := m.functions.foldl (fun acc f =>
-    if s.collidingNames.contains f.name && !f.modulePath.isEmpty then
-      let qualName := f.modulePath.replace "." "_" ++ "_" ++ f.name
-      acc ++ [(f.name, qualName)]
-    else acc
-  ) ([] : List (String × String))
-  -- For imported functions (via linker aliases), resolve bare → qualified
-  -- e.g., if linker alias says Alpha_compute → compute and compute collides,
-  -- reverse to: compute → Alpha_compute (the qualified def name)
-  let importQualAliases := m.linkerAliases.foldl (fun acc (qualCall, bareDef) =>
-    if s.collidingNames.contains bareDef then
-      -- qualCall is e.g. "Alpha_compute", bareDef is "compute"
-      -- The definition will be "Alpha_compute" after qualification
-      acc ++ [(bareDef, qualCall)]
-    else acc
-  ) ([] : List (String × String))
-  -- Bug 039: this module's OWN bare→qualified import aliases must shadow the
-  -- accumulated program-wide pool. s.linkerAliases is a flat first-match list
-  -- over ALL modules, so once std.cli contributed ("get","args_get"), a later
-  -- module's `import std.env.{get}` also resolved to args_get (String pointer
-  -- passed as argv index → segfault). Which definition a bare name means is a
-  -- fact of the CALLING module's imports, not of program order.
-  let ownImportAliases := m.linkerAliases.filter fun (_, target) =>
-    s.definedFnNames.contains target
-  -- Local aliases: import aliases take priority (they specify which module was imported)
-  let s := { s with localAliases := ownImportAliases ++ importQualAliases ++ selfQualAliases }
-  -- This module's own externs bind their foreign symbols at its call sites, ahead of
-  -- another module's same-spelled definition; a name the module itself defines stays its own.
-  let ownDefs := m.functions.map (·.name)
-  let s := { s with moduleExterns := (m.externFns.map (·.1)).filter (!ownDefs.contains ·)
+  let (aliases, externs) := moduleCallContext s m
+  let s := { s with localAliases := aliases, moduleExterns := externs
                     externLinks := m.externLinkNames ++ s.externLinks }
   let hasMain := m.functions.any fun f => f.isEntryPoint
-  let s := m.functions.foldl (fun s f => emitSFnDef s f) s
+  let s := m.functions.foldl (fun s f =>
+    -- Bug 251: a specialization moved here from another tree calls by that tree's spellings.
+    match f.sourceTree.bind fun t => s.programModules.find? (·.name == t) with
+    | some src =>
+      let (srcAliases, srcExterns) := moduleCallContext s src
+      let s' := emitSFnDef { s with localAliases := srcAliases, moduleExterns := srcExterns } f
+      { s' with localAliases := aliases, moduleExterns := externs }
+    | none => emitSFnDef s f) s
   -- Main wrapper (skip in test mode — the test runner provides `main` and the
   -- argc/argv stubs, emitted ONCE at program level. Emitting the stubs here, per
   -- module, duplicated `@__concrete_argc` in any multi-module build, e.g. a
@@ -1936,6 +1955,7 @@ def emitSSAProgram (modules : List SModule) (testMode : Bool := false) (moduleFi
     if pairs.any (fun (p, q) => p == pre && q != sym) then acc else acc.insert pre sym) {}
   let s := { s with fnSymbols := fnSymbols }
   -- Emit each module
+  let s := { s with programModules := modules }
   let s := modules.foldl (fun s m => emitSModule s m testMode) s
   -- In test mode, emit the test runner instead of the normal main wrapper
   let s := if testMode then emitTestRunner s modules moduleFilter else s

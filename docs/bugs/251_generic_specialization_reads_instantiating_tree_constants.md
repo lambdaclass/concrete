@@ -17,7 +17,10 @@ constant two modules define). Without main's `K`
 get_for_Int: block 'entry': use of undefined register %K`. Expected: 40. The same holds for the
 tree's functions (Codex review): a generic of `a` calling `a`'s own `fn sizeof`, directly or
 through a constant's initializer, called the `sizeof` intrinsic in the binary (8, expected 40;
-`regress_251_generic_calls_shadowed_intrinsic.con`).
+`regress_251_generic_calls_shadowed_intrinsic.con`), and for its module's call context in the
+emitted code: beside an `extern fn abs` of the instantiating module, the generic's call to its own
+module's `fn abs` called C's `abs` (5, expected 40;
+`regress_251_generic_call_beside_destination_extern.con`).
 
 ## Cause
 
@@ -27,7 +30,8 @@ generic function's specialization into the module whose body first instantiates 
 (`monoModule` drains the queue into the module being processed), so `get_for_Int` was lowered as
 a function of main's tree and its `K` was main's. Likewise Lower decides that a call spelling is an
 intrinsic when the tree it lowers defines no function of that name (`definedFnNames`), and main's
-tree defines no `sizeof`. The interpreter evaluates the generic itself, in
+tree defines no `sizeof`; and EmitSSA binds a call spelling through the emitting module's import
+aliases and own `extern` bindings (`localAliases`, `moduleExterns`), main's. The interpreter evaluates the generic itself, in
 its defining tree.
 
 ## Fix
@@ -36,19 +40,24 @@ A function records the tree its spellings were written against when Mono moves i
 `CFnDef.sourceTree`, the defining top-level module. `monoProgram` stamps it on every generic
 template, both specialization constructors copy it, and Lower lowers a function whose `sourceTree`
 names another tree in that tree's context: its constants (`CModule.treeConstants`, bug 245's one
-definition of the scope) and its defined function names. A function Mono does not move keeps
-`none` and its own tree, so nothing else changes.
+definition of the scope) and its defined function names. Lower passes the tree on to SSA
+(`SFnDef.sourceTree`, set only when it is not the emitting module), and EmitSSA emits such a
+function in that module's call context (`moduleCallContext`, the one definition of a module's
+import aliases and own extern bindings, now also used for the module's own functions). A function
+Mono does not move keeps `none` and its own tree, so nothing else changes.
 
 Regression legs in `run_tests.sh`: `regress_251_generic_reads_defining_tree_constant.con` (40),
 `regress_251_generic_constant_absent_in_instantiating_tree.con` (40) and
 `regress_251_nested_generic_constants.con` (a generic of one tree calling a generic of another, each
 reading its own constant: 42), `regress_251_generic_calls_shadowed_intrinsic.con` and
-`regress_251_generic_constant_calls_shadowed_intrinsic.con` (40), native and `--interp`.
+`regress_251_generic_constant_calls_shadowed_intrinsic.con`,
+`regress_251_generic_call_beside_destination_extern.con`, `regress_251_generic_calls_source_extern.con`
+and `regress_251_generic_calls_source_import_alias.con` (40), native and `--interp`.
 
 ## Structural cause
 
-Class 1 ("declaration identity by spelled name"): a constant reference, and whether a call names a
-user function or an intrinsic, are spellings resolved in whichever tree a pass places the body in;
+Class 1 ("declaration identity by spelled name"): a constant reference, and which function or
+foreign symbol a call names, are spellings resolved in whichever tree a pass places the body in;
 Mono moves bodies between trees, so their meaning moved with it.
 
 ## Structural owner
