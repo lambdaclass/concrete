@@ -1577,16 +1577,21 @@ def emitSModule (s : EmitSSAState) (m : SModule) (testMode : Bool := false) : Em
       b.insts.foldl (fun acc inst => collectSInstTys inst ++ acc) acc
     ) (retTys ++ paramTys ++ acc)
   ) ([] : List Ty)
+  -- The first type arguments of each generic name in `moduleTys`, collected once:
+  -- a search of the whole list for every generic struct and enum was 13% of a
+  -- project build's CPU (leanprof sample on examples/lox). Same first match.
+  let hasGeneric := m.structs.any (·.typeParams.length > 0) || m.enums.any (·.typeParams.length > 0)
+  let genericArgs : Std.HashMap String (List Ty) := if !hasGeneric then {} else
+    moduleTys.foldl (fun acc t =>
+      match t with
+      | .generic n args _ => if acc.contains n then acc else acc.insert n args
+      | _ => acc) {}
   -- User types (dedup across modules, substitute type args for generic definitions)
   let s := m.structs.foldl (fun s sd =>
     if s.emittedTypes.contains sd.name then s
     else if sd.typeParams.length > 0 then
       -- Generic struct: find concrete type args from function types
-      match moduleTys.findSome? fun t =>
-        match t with
-        | .generic n args _ => if n == sd.name then some args else none
-        | _ => none
-      with
+      match genericArgs[sd.name]? with
       | some args =>
         let sd := Layout.substStructTypeArgs sd args
         let s := { s with emittedTypes := sd.name :: s.emittedTypes }
@@ -1601,11 +1606,7 @@ def emitSModule (s : EmitSSAState) (m : SModule) (testMode : Bool := false) : Em
     if s.emittedTypes.contains ed.name then s
     else if ed.typeParams.length > 0 then
       -- Generic enum: find concrete type args from function types
-      match moduleTys.findSome? fun t =>
-        match t with
-        | .generic n args _ => if n == ed.name then some args else none
-        | _ => none
-      with
+      match genericArgs[ed.name]? with
       | some args =>
         let s := { s with emittedTypes := ed.name :: s.emittedTypes }
         (Layout.enumTypeDefs ctx ed args).foldl (fun s line => emitTypeDef s line) s
