@@ -37,15 +37,16 @@ directly or through a variable or another array assigned from them (`v=`, `local
 
 - TEXT: an argument of `echo`/`printf` or a gate message helper whose output is shown, captured
   by a substitution, or piped only through pure filters (`grep`, `cut`, `tr`, `sort`, ..., and
-  `awk` with no `system`, `getline`, pipe or redirection in its program), not written to a file;
+  `awk` with no `system`, `getline`, pipe or redirection in its program), not written to a file,
+  in a script that sends no compound command, function call or `exec` output to a file or pipe;
   a string test (`[[ -n ]]`, `==`); a `case` subject; `return`/`exit`/`unset`.
 - READ: an argument of a command that reads files and cannot run one (`cat`, `grep`, `diff`,
-  `wc`, ...; not `awk` or `sed`), a file test (`[[ -f ]]`), a redirection target.
+  `wc`, ...; not `awk`, `sed`, `rg` or `sort`), a file test (`[[ -f ]]`), a redirection target.
 - RUN, the old rule, for everything else: a command word, an argument of a function, wrapper or
   interpreter, a prefix assignment, `export`, an output piped into any other consumer, a line
   naming an interpreter, `source` or `xargs`; and every array of a script that uses a nameref,
-  an indirect expansion `${!var}` or `eval` anywhere, since those reach an array without
-  spelling it.
+  an indirect expansion `${!var}` or `eval` anywhere (array elements included), since those
+  reach an array without spelling it.
 
 A TEXT value names nothing; a READ value is a read and never a run; a RUN value is code. A key is
 at least a read. An element holding a command substitution, or spanning lines, is always code,
@@ -64,10 +65,11 @@ calls (they reach a function). Regression legs in `check_gate_selection.sh` ("te
 call"): a note naming a gate is neither a run nor a read, nor is the directory it mentions; a
 genuine invocation of that gate in the same file is a call; a value run through a variable, in
 command position behind a wrapper's options, copied into another array that is run, printed into
-an unseen consumer, reached through a nameref, or handed to `awk`, is a call; a value read as a
-file, directly or after `printf -v`, is a read; a key naming a gate is a read; a command
-substitution in a key is a call; an ANSI-C quoted value and a quote inside `${...}` do not
-swallow the invocation after them. The note and key legs fail against the previous selector.
+an unseen consumer or through a filter or a group into a file, reached through a nameref or an
+indirect expansion, moved by an attached `printf -vNAME`, or handed to `awk` or `rg`, is a call;
+a value read as a file, directly or after `printf -v`, is a read; a key naming a gate is a
+read; a command substitution in a key is a call; an ANSI-C quoted value and a quote inside
+`${...}` do not swallow the invocation after them. The note and key legs fail against the previous selector.
 
 ## Structural cause
 

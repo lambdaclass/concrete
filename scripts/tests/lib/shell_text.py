@@ -35,15 +35,20 @@ WRAPPERS = {"exec", "command", "builtin", "nohup", "env", "timeout", "sudo", "ni
 # gate helpers (ok, no, fail, ...) are the words DATA_RE in select_gates.py treats as print-only.
 PRINT_CMDS = {"echo", "printf", "ok", "no", "fail", "die", "note", "warn", ":"}
 INERT_CMDS = {"return", "exit", "shift", "true", "false", "unset", "case"}
-# Commands that read the files their arguments name and cannot run a command. awk and sed can
-# (`system()`, `s///e`) and are not here.
-READ_CMDS = {"cat", "grep", "egrep", "fgrep", "rg", "diff", "cmp", "wc", "head", "tail", "sort",
-             "uniq", "cut", "tr", "ls", "stat", "basename", "dirname", "realpath", "readlink",
+# Commands that read the files their arguments name and cannot run a command. awk, sed, rg and
+# sort can (`system()`, `s///e`, `--pre`, `--compress-program`) and are not here.
+READ_CMDS = {"cat", "grep", "egrep", "fgrep", "diff", "cmp", "wc", "head", "tail", "uniq", "cut", "tr", "ls", "stat", "basename", "dirname", "realpath", "readlink",
              "sha256sum", "md5sum", "file", "jq"}
 # Filters a printed value may be piped through and stay text (the pipeline's output is the
 # value's text, captured or shown).
 PURE_FILTERS = {"grep", "egrep", "fgrep", "cut", "tr", "sort", "uniq", "head", "tail", "wc", "rev",
                 "fold", "paste", "column"}
+# Output of a whole compound command (a group, a loop, a function call) or of the rest of the
+# script (`exec >file`) sent to a file or a pipe: a print inside it is not known to reach only the
+# terminal, so no print in such a script is TEXT.
+COMPOUND_OUT_RE = re.compile(r"^\s*(\}|done|fi|esac|\))\s*([0-9]*>(?!&)|&>|\|(?!\|))"
+                             r"|\bexec\s+[0-9]*>(?!&)")
+FUNC_DEF_RE = re.compile(r"^\s*(?:function\s+)?([A-Za-z_][\w-]*)\s*\(\)")
 AWK_UNSAFE_RE = re.compile(r"system|getline|\||>|ENVIRON")
 DECLARE_CMDS = {"local", "declare", "typeset", "readonly"}
 # Anywhere in a script these reach an array without spelling `$NAME`: a nameref, an indirect
@@ -326,6 +331,8 @@ def _command_name(cmd):
 
 
 def _pure(cmd):
+    if any(r == "redir" for _, r in cmd):
+        return False  # the filtered text goes to a file
     name = _command_name(cmd)
     if name in PURE_FILTERS:
         return True
@@ -348,10 +355,14 @@ def use_level(seeds, code_lines, elements, exec_re):
     element. Taint flows into a variable assigned from it (`v=...`, `local v=...`, `printf -v v`,
     `for v in ...`, `read v <<< ...`) and into a keyed array whose element holds it. Only the
     contexts below are TEXT or READ; everything else is RUN."""
-    if any(INDIRECT_RE.search(line) for line in code_lines):
+    if any(INDIRECT_RE.search(t) for t in list(code_lines) + [t for _, _, t in elements]):
         return RUN
     pats, level, grew = set(seeds), TEXT, True
     parsed = [(line, simple_commands(line)) for line in code_lines]
+    funcs = {m.group(1) for line in code_lines for m in [FUNC_DEF_RE.match(line)] if m}
+    prints_escape = any(COMPOUND_OUT_RE.search(line) for line in code_lines) or any(
+        _command_name(cmd) in funcs and (cmd[-1] == ("|", "pipe") or any(r == "redir" for _, r in cmd))
+        for _, cmds in parsed for cmd in cmds)
 
     def ident(v):
         return re.match(r"[A-Za-z_]\w*$", v) is not None
@@ -402,12 +413,14 @@ def use_level(seeds, code_lines, elements, exec_re):
                     elif role != "arg":
                         return RUN  # a command word, or anything this reader has no rule for
                     elif name in PRINT_CMDS:
-                        if name == "printf" and "-v" in words:
-                            i = words.index("-v")
-                            if i + 1 >= len(words) or not ident(words[i + 1]):
+                        opt = [i for i, x in enumerate(words) if x.startswith("-v")]
+                        if name == "printf" and opt:
+                            i = opt[0]
+                            var = words[i][2:] or (words[i + 1] if i + 1 < len(words) else "")
+                            if not ident(var.split("[")[0]):
                                 return RUN
-                            taint(words[i + 1])
-                        elif files or not _printed_only(cmds, k):
+                            taint(var.split("[")[0])
+                        elif files or prints_escape or not _printed_only(cmds, k):
                             return RUN  # printed into a file or a consumer this reader cannot see
                     elif name in INERT_CMDS:
                         pass

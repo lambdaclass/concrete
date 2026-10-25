@@ -209,8 +209,9 @@ for n in "${!NOTES[@]}"; do
 done
 EOF
 leg notes none "a gate named in a map's note text is neither run nor read, nor is the directory it mentions" < "$TMPD/map_notes"
-{ cat "$TMPD/map_notes"; echo 'bash "$ROOT_DIR/scripts/tests/run_ci_gates_local.sh" --plan'; } \
-  | leg call run "a genuine invocation of the same gate in the same file is still a call"
+# Through a file, not a pipe: a leg in a pipeline would count its result in a subshell.
+{ cat "$TMPD/map_notes"; echo 'bash "$ROOT_DIR/scripts/tests/run_ci_gates_local.sh" --plan'; } > "$TMPD/map_and_call"
+leg call run "a genuine invocation of the same gate in the same file is still a call" < "$TMPD/map_and_call"
 leg exec run "a map value run through a variable is a call" <<'EOF'
 declare -A GATE_FOR=(
   [plan]="scripts/tests/run_ci_gates_local.sh"
@@ -264,6 +265,33 @@ leg nameref run "an array reached through a nameref is a call" <<'EOF'
 declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
 declare -n alias=M
 "${alias[k]}" --plan
+EOF
+leg printfv2 run "a value moved by an attached printf -vNAME and then run is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+printf -vpath '%s' "${M[k]}"
+"$path" --plan
+EOF
+leg indirect run "an indirect expansion inside another array's element makes every array a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+ref='M[k]'
+declare -A N=( [k]="${!ref}" )
+"${N[k]}" --plan
+EOF
+leg filtered run "a value printed through a filter into a file is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+printf '%s\n' "${M[k]}" | sort > "$tmp"
+. "$tmp"
+EOF
+leg group run "a value printed inside a group whose output goes to a file is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+{
+  printf '%s\n' "${M[k]}"
+} > "$tmp"
+run_it "$tmp"
+EOF
+leg rg run "a value handed to rg, which can run a preprocessor, is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+rg --pre "${M[k]}" pattern README.md
 EOF
 leg awk run "a value handed to awk, which can run commands, is a call" <<'EOF'
 declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
