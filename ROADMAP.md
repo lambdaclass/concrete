@@ -148,9 +148,9 @@ a link failure, an interpreter refusal or an unrejected leak.
 | 17. Pass state in association lists and per-query recomputation (superlinear compile time) | 0 | no |
 | 18. Pipeline artifacts not bound to their payload | 8 | yes |
 | 19. A mention read as a use (tool facts inferred from where a name is spelled) | 8 | yes |
-| no class yet | 0 | no |
+| no class yet | 8 | yes |
 
-Discovery signal (exit 2m): 15 of 20 classes have 3 consecutive eligible quiet counting batches (for a class: no silent bug of that class, at most one loud, effort at least 4 hours or 10 programs); the exit needs every class. 16 counting batches recorded. 44 attribution-only batches (reviews, follow-ons, CI, controls, development) found 60 further bugs.
+Discovery signal (exit 2m): 16 of 20 classes have 3 consecutive eligible quiet counting batches (for a class: no silent bug of that class, at most one loud, effort at least 4 hours or 10 programs); the exit needs every class. 16 counting batches recorded. 44 attribution-only batches (reviews, follow-ons, CI, controls, development) found 60 further bugs.
 
 <!-- END GENERATED: bug dashboard -->
 
@@ -497,7 +497,7 @@ V1a, V1b and V1c.
 |---|---|---|---|---|
 | OD1 | References: the Austral model. A reference is formed by borrowing a variable or projecting through a reference; `&s.f` is sugar; a temporary is never a root; loans are keyed by the root variable; a raw-pointer dereference needs a trusted validity premise | D2 and §4.5; implemented in landing train 6 (REF-5, REF-11) | exit 2i (G12), so every deliverable; bug 182's repair (exit 0b); V2 (row 6) | proposed |
 | OD2 | `&mut` arguments: an implicit reborrow; overlapping exclusive arguments refused; a deferred call keeps its loan until it runs; one defined order for cleanup, loan end and write-back | D1 and §4.5; the reborrow implemented in landing train 6 (REF-10); the defer and exit-order rules not yet | exit 2i (G9, B1, B2), so every deliverable; R-0496 (Core reborrow form) | proposed |
-| OD3 | Pattern binders through a borrowed scrutinee: the binder is always `&T`; its mode is stored in Core; the root cannot be reassigned while a binder's loan lives (this reopens G17's Copy case) | D3 and §4.5; implemented in landing train 6 (REF-9); G17's Copy case open | exits 2i (G17) and 2k (explicit match binders), so every deliverable; bug 181's repair (exit 0b); R-0496 | proposed |
+| OD3 | Pattern binders through a borrowed scrutinee: the binder is always `&T`; its mode is stored in Core; the root cannot be reassigned while a binder's loan lives (the rule that reopened G17's Copy case) | D3 and §4.5; implemented in landing train 6 (REF-9), and with it the refusal of G17's Copy case (closed 2026-10-23 in the references chapter of the specification) | exits 2i (G17) and 2k (explicit match binders), so every deliverable; bug 181's repair (exit 0b); R-0496 | proposed |
 | OD4 | Foreign function values: all refused now; typed `extern "C" fn` types later | D4; the refusal implemented in landing train 6 (FFI-1); the typed form not built | bug 166's repair (exit 0b), so every deliverable; R-0285's callback companion example; R-0283, R-0287 | proposed |
 | OD5 | Generics: a bare `<T>` means Any; `T: Copy` is explicit; Copy for a generic struct is declared and checked, never derived | D5 (today's behaviour, made normative) and D6 with its refinement (a), under which a generic declared `Copy` is Copy when every argument is; D6 implemented 2026-10-23 (OWN-D1, TYPE-14) | R-0499 and R-0510 (the Core checker and checked specialization, row 4); V5 (row 6) | proposed |
 | OD6 | Traits are coherent: one impl per (trait, type), the orphan rule, an ambiguous method call must be qualified, resolution by typed identity | D7; implemented by bug 186's repair (TRAIT-1 – TRAIT-9) | bug 186's repair (exit 0b), so every deliverable; R-0548, R-0549; V5 | proposed |
@@ -12393,8 +12393,9 @@ A scheduled job on the CI server (concrete-ci-2) runs leanprof on fixed compiler
 commit that lands on main: `examples/lox --emit-llvm`, R-0550's scaling corpus and the full std
 build. It publishes the top hot spots and the time per compiler stage, compares them with the
 previous landed commit, and opens a tracked finding when a hot spot grows, or a new one appears,
-above a recorded threshold. It complements the instruction-count history and its alarm of about 1.5%
-on the same server ([PERF_TRACKING.md](docs/project/PERF_TRACKING.md)) and does not replace it: the
+above a recorded threshold. It complements the instruction-count tracker and its alarm of about 1.5%
+([PERF_TRACKING.md](docs/project/PERF_TRACKING.md); first measured on concrete-ci-1, retired 2026-10-23, and
+kept on concrete-ci-2 since) and does not replace it: the
 alarm says that a commit got slower, and the profile says where. Server provisioning lives in the
 owner's private dotfiles (`servers/`); this repository holds only the portable scripts.
 **Exit:** for ten consecutive landed commits the job has published a profile and a comparison at

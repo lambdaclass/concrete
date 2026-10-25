@@ -299,6 +299,20 @@ printf '2099-01-01\tfuzz\tclass 2: control probes of a migration\t8 hours\t998,9
 if regen && has "2." "0" && has "no class yet" "$((SN + 1))" && has "1." "$((S1 + 1))"; then
   ok "control: two loud bugs in a class-2 batch end class 2's streak and no other"
 else no "control: a class-2 batch's loud bugs were not counted against class 2 alone"; fi
+# An untagged batch counts only each class's own bugs: two loud class-1 bugs end class 1's streak,
+# and the unclassified bucket still gains the batch.
+bug_copy; add_control_bugs
+python3 -I - "$BTMP/docs/bugs/STRUCTURAL_CLASSES.md" <<'PY'
+import re, sys
+p = sys.argv[1]; s = open(p, encoding='utf-8').read()
+s, n = re.subn(r'^(\| 1\. [^|]+\| )', lambda m: m.group(1) + '998, 999, ', s, count=1, flags=re.M); assert n == 1
+open(p, 'w', encoding='utf-8').write(s)
+PY
+printf '2099-01-01\tfuzz\tcontrol campaign\t8 hours\t-\t-\n' >> "$BTMP/docs/bugs/discovery.tsv"
+printf '2099-01-01\tfuzz\tcontrol campaign\t8 hours\t998,999\t-\n' >> "$BTMP/docs/bugs/discovery.tsv"
+if regen && has "1." "0" && has "no class yet" "$((SN + 2))" && has "2." "$((S2 + 2))"; then
+  ok "control: an untagged batch's class-1 bugs end class 1's streak and no other class's"
+else no "control: an untagged batch's bugs were counted against a class they are not in"; fi
 # A silent bug always counts against its own class, whichever batch found it.
 bug_copy; add_control_bugs 999
 # (a quiet batch first, so the streak this control ends is not already 0)
@@ -311,6 +325,7 @@ bug_neg tag_names_no_class "s=s.rstrip('\n')+'\n2099-01-01\tfuzz\tclass 99: cont
 bug_neg tag_on_attribution_row "s=s.rstrip('\n')+'\n2099-01-01\treview\tclass 2: control\tunrecorded\t-\t-\n'" docs/bugs/discovery.tsv 2
 # Exit 0b's bug list is generated too: a hand edit, a missing marker, and a new silent bug.
 bug_neg exit_0b_list_hand_edited "import re; s,n=re.subn(r'(BEGIN GENERATED: 0b list[^>]*-->)', r'\g<1>099, ', s); assert n==1" ROADMAP.md 1
+bug_neg exit_0b_list_moved_out_of_cell "import re; m=re.search(r'<!-- BEGIN GENERATED: 0b list.*?<!-- END GENERATED: 0b list -->', s); assert m; s=s[:m.start()]+s[m.end():]+chr(10)+m.group(0)+chr(10)" ROADMAP.md 2
 bug_neg exit_0b_list_markers_missing "old='<!-- END GENERATED: 0b list -->'; assert s.count(old)==1; s=s.replace(old,'')" ROADMAP.md 2
 bug_copy; add_control_bugs
 printf '2099-01-01\tfuzz\tcontrol campaign\t8 hours\t998,999\t999\n' >> "$BTMP/docs/bugs/discovery.tsv"

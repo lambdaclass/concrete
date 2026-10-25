@@ -323,7 +323,8 @@ def render(recs, disc, classes, exits):
                 if any(primary.get(b) == k for b in r["silent"]):
                     break  # a silent bug ends its own class's streak, whichever batch found it
                 continue
-            mine = r["bugs"] if r["tag"] == k else [b for b in r["bugs"] if primary.get(b) == k]
+            tagged_k = r["tag"] is not None and r["tag"] == k
+            mine = r["bugs"] if tagged_k else [b for b in r["bugs"] if primary.get(b) == k]
             sil = [b for b in mine if b in r["silent"]]
             if sil or len(mine) - len(sil) > 1:
                 break
@@ -390,6 +391,10 @@ def main():
         die(f"{roadmap} must hold exactly one BEGIN/END generated bug-dashboard marker pair")
     if road.count(BEGIN_0B) != 1 or road.count(END_0B) != 1 or len(SPAN_0B.findall(road)) != 1:
         die(f"{roadmap} must hold exactly one BEGIN/END generated exit 0b list marker pair, in exit 0b's cell")
+    at = SPAN_0B.search(road).start()
+    row = road[road.rfind("\n", 0, at) + 1:at]
+    if not row.startswith("| 0b |") or row.count("|") != 3:
+        die(f"{roadmap}: exit 0b's generated list must sit in exit 0b's 'closes when' cell")
     i, j = road.index(BEGIN), road.index(END) + len(END)
     new = road[:i] + table + road[j:]
     new = SPAN_0B.sub(lambda _m: span, new)
