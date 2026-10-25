@@ -2185,7 +2185,12 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
       -- R-0492 step 4 (bug 233): an imported constant, evaluated in its defining tree's scope.
       match cx.importedConsts.find? (·.1 == name.name) with
       | some (_, init, scope) =>
-        if mentionsCallableExpr init then
+        -- the initializer and every constant it reaches, in the scope it is evaluated in
+        let lookup : String → Option CExpr := fun n =>
+          match scope.find? (·.1 == n) with
+          | some (_, e) => some e
+          | none => (cx.importedConsts.find? (·.1 == n)).map (·.2.1)
+        if initReachesCallable lookup (scope.length + cx.importedConsts.length + 1) init then
           fail s!"interp: imported constant '{name}' cannot be inlined outside its module: its initializer calls or names a function, which Core names by a spelling the using function would resolve in its own context (bug 233; callables get identities in a later R-0492 step)"
         let outerLen := env.length
         let (env', v) ← evalExprVal { cx with consts := scope } (envEnterFrame env) init

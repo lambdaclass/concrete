@@ -8631,9 +8631,12 @@ run_ok "$TESTDIR/regress_233_constant_type_alias.con" 42
 run_ok "$TESTDIR/regress_233_constant_type_imported_alias.con" 42
 # Bug 246: an imported alias's target is expanded through its exporter's aliases.
 run_ok "$TESTDIR/regress_246_imported_alias_chain.con" 42
+run_ok "$TESTDIR/regress_246_imported_alias_chain_across_imports.con" 42
 run_err "$TESTDIR/error_233_imported_initializer_calls_function.con" "cannot be inlined outside its module"
 run_err "$TESTDIR/error_233_imported_initializer_extern.con" "cannot be inlined outside its module"
-for r233e in error_233_imported_initializer_calls_function error_233_imported_initializer_extern; do
+run_err "$TESTDIR/error_233_imported_initializer_via_constant.con" "cannot be inlined outside its module"
+for r233e in error_233_imported_initializer_calls_function error_233_imported_initializer_extern \
+             error_233_imported_initializer_via_constant; do
     r233e_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/$r233e.con" --interp 2>&1 || true)
     if grep -qF "cannot be inlined outside its module" <<<"$r233e_interp"; then
         echo "  ok  bug 233: $r233e — --interp refuses the imported initializer's call as the binary does"
@@ -8646,7 +8649,8 @@ done
 for r233 in regress_233_shared_spelling_import regress_233_import_constant \
             regress_233_nested_import_constant regress_233_import_constant_scope \
             regress_233_nested_alias_constant regress_233_constant_type_alias \
-            regress_233_constant_type_imported_alias regress_246_imported_alias_chain; do
+            regress_233_constant_type_imported_alias regress_246_imported_alias_chain \
+            regress_246_imported_alias_chain_across_imports; do
     # bounded_run, not GNU `timeout`; a timeout is INCOMPLETE, not a pass.
     r233_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/$r233.con" --interp 2>&1 || true)
     if [ "$r233_interp" = "42" ]; then

@@ -377,22 +377,27 @@ private def typeImplsOf (summary : FileSummary) (name : String) :
   let sigs := summary.implMethodSigs.filter fun (n, _) => mangled.contains n
   (impls, traitImpls, sigs)
 
-/-- R-0492 step 4 (bug 233, Codex review): the type aliases a module may write, as targets: its own
-    and the public aliases it imports, each expanded through its exporter's own aliases. One level
-    of imports, not their closure (an imported alias whose exporter imported it is left as it is,
-    as an imported signature's alias is). -/
-private def writableAliases (summary : FileSummary) (summaryTable : List (String × FileSummary)) :
-    List (String × Ty) :=
-  let own := summary.typeAliases.map fun ta => (ta.name, ta.targetTy)
-  let imported := summary.imports.flatMap fun imp =>
-    match summaryTable.lookup imp.moduleName with
-    | none => []
-    | some ex =>
-      let exAliases := ex.typeAliases.map fun ta => (ta.name, ta.targetTy)
-      imp.symbols.filterMap fun sym =>
-        (ex.typeAliases.find? fun ta => ta.isPublic && ta.name == sym.name).map fun ta =>
-          (sym.effectiveName, expandAliasDeep exAliases (exAliases.length + 64) ta.targetTy)
-  own ++ imported
+/-- R-0492 step 4 (bugs 233 and 246, Codex review): the type aliases a module may write, each with
+    its target expanded as far as the module can see: its own aliases, and the public aliases it
+    imports with their targets expanded the same way in their exporter (`fuel` bounds the depth of
+    that walk over the import graph, and so an import cycle). A type crossing an import is expanded
+    through these, so the importer never meets an alias spelling it cannot read. -/
+private def writableAliases (summaryTable : List (String × FileSummary)) :
+    Nat → FileSummary → List (String × Ty)
+  | 0, summary => summary.typeAliases.map fun ta => (ta.name, ta.targetTy)
+  | fuel + 1, summary =>
+    let imported := summary.imports.flatMap fun imp =>
+      match summaryTable.lookup imp.moduleName with
+      | none => []
+      | some ex =>
+        imp.symbols.filterMap fun sym =>
+          (ex.typeAliases.find? fun ta => ta.isPublic && ta.name == sym.name).map fun ta =>
+            let exAliases := writableAliases summaryTable fuel ex
+            (sym.effectiveName, expandAliasDeep exAliases (exAliases.length + 64) ta.targetTy)
+    summary.typeAliases.map (fun ta => (ta.name, ta.targetTy)) ++ imported
+
+/-- The import depth `writableAliases` follows. -/
+private def aliasImportDepth : Nat := 8
 
 def resolveImports (imports : List ImportDecl)
     (summaryTable : List (String × FileSummary))
@@ -451,10 +456,13 @@ def resolveImports (imports : List ImportDecl)
                              implMethodSigs := acc.implMethodSigs ++ enumSigs }
             | none =>
               match summary.typeAliases.find? fun ta => ta.isPublic && ta.name == origName with
-              -- Bug 246: the target as the exporter reads it, through its own aliases (`pub type
-              -- N = M` with a private `type M = i32` is `i32`); the importer cannot read `M`.
-              | some ta => .ok { acc with typeAliases := acc.typeAliases ++
-                  [(localName, expandAliasDeep aliasMap (aliasMap.length + 64) ta.targetTy)] }
+              -- Bug 246: the target as the exporter reads it, through its own and its imported
+              -- aliases (`pub type N = M` with a private `type M = i32` is `i32`); the importer
+              -- cannot read `M`.
+              | some ta =>
+                let exAliases := writableAliases summaryTable aliasImportDepth summary
+                .ok { acc with typeAliases := acc.typeAliases ++
+                  [(localName, expandAliasDeep exAliases (exAliases.length + 64) ta.targetTy)] }
               | none =>
                 match summary.newtypes.find? fun nt => nt.isPublic && nt.name == origName with
                 | some nt =>
@@ -474,7 +482,7 @@ def resolveImports (imports : List ImportDecl)
                   | some c =>
                     -- Its type with the defining module's aliases (its own and those it imports)
                     -- expanded throughout: the importer cannot read the definer's alias names.
-                    let defAliases := writableAliases summary summaryTable
+                    let defAliases := writableAliases summaryTable aliasImportDepth summary
                     .ok { acc with constants := acc.constants ++
                       [{ localName, id := c.constId,
                          ty := expandAliasDeep defAliases (defAliases.length + 64) c.ty }] }

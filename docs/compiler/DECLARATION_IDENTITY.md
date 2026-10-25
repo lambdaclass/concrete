@@ -96,7 +96,8 @@ intended behaviour.
    defining tree's constants in scope. The initializer is the defining module's Core, elaborated
    there, so it is not re-elaborated in the importer. Bug 132's refusal remains for two bare
    spellings within one tree. An initializer that calls or names a function is not inlined
-   across modules (`mentionsCallableExpr`): its callees are spellings the using function would
+   across modules, directly or through a constant it names (`initReachesCallable`): its callees
+   are spellings the using function would
    resolve; that waits for callable `DefId`s.
 
 Steps 1 and 2 land in this slice. Steps 3 and 4 change the checker's type equality and Core's

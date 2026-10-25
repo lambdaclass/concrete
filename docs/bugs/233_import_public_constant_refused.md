@@ -59,8 +59,8 @@ immutable and inlined at each use):
 - `buildFileSummary` stamps each constant's defining module (`ConstSummary.definedIn`, with its
   name the `ConstId`). The import rule Check and Elab share (`FileSummary.resolveImports`) binds a
   public constant under the importer's spelling as an `ImportedConst` (local name, `ConstId`, and
-  its type with the defining module's aliases, its own and those it imports, expanded
-  throughout),
+  its type with the aliases its defining module can see, its own and those it imports, expanded
+  throughout, to an import depth of 8: `writableAliases`),
   only when the name binds no callable or type, so `pub fn F` beside `pub const F` is still the
   function's import (MOD-3; `regress_233_shared_spelling_import.con`). Resolve binds it in both of
   its import paths (`summaryImports`, `importScope`). Only a public trait is still unimportable
@@ -75,8 +75,8 @@ immutable and inlined at each use):
   tree's constants in scope, so a private constant it names is the defining module's. Bug 132's
   refusal of two same-spelled constants stays for bare spellings within one tree (and the
   interpreter's program-wide form of it, bug 245); an imported constant is never one.
-- Not inlined across modules: an initializer that calls or names a function
-  (`mentionsCallableExpr`). Core names a callee by a spelling, which the using function would
+- Not inlined across modules: an initializer that calls or names a function, itself or through a
+  constant it names (`initReachesCallable`). Core names a callee by a spelling, which the using function would
   resolve in its own context (its foreign bindings, its call aliases: an initializer's extern
   `abs` would reach the importer's `fn abs`, Codex review). Lower and the interpreter refuse it
   with that reason until callables carry `DefId`s (a later R-0492 step).
@@ -87,7 +87,8 @@ reading the defining module's private constant; two modules' `BASE`, one aliased
 constant), `regress_233_nested_alias_constant.con`, `regress_233_constant_type_alias.con` and
 `regress_233_constant_type_imported_alias.con`, each
 `run_ok … 42` and `--interp` = 42; `error_233_imported_initializer_calls_function.con` and
-`error_233_imported_initializer_extern.con` (the inlining refusal, native and `--interp`);
+`error_233_imported_initializer_extern.con` and `error_233_imported_initializer_via_constant.con`
+(the inlining refusal, native and `--interp`);
 `error_233_import_constant_collides_local.con` (E0299); `error_233_import_trait.con` (E0126); and
 the project `tests/regressions/bug233_import_public_constant_refused/project`, which now builds and
 exits 42.

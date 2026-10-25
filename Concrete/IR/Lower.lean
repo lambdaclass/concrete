@@ -876,7 +876,12 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
         -- constants in scope (a constant it names is that module's), and hygienic as above.
         match s.importedConstants.find? fun (n, _, _) => n == name.name with
         | some (_, constExpr, scope) =>
-          if mentionsCallableExpr constExpr then
+          -- the initializer and every constant it reaches, in the scope it is inlined in
+          let lookup : String → Option CExpr := fun n =>
+            match scope.find? (·.1 == n) with
+            | some (_, _, e) => some e
+            | none => (s.importedConstants.find? (·.1 == n)).map (·.2.1)
+          if initReachesCallable lookup (scope.length + s.importedConstants.length + 1) constExpr then
             throwLower s!"imported constant '{name}' cannot be inlined outside its module: its initializer calls or names a function, which Core names by a spelling the using function would resolve in its own context (bug 233; callables get identities in a later R-0492 step)"
           let saved ← getState
           set { saved with vars := [], promotedAllocas := [], inConstInit := true, constants := scope }
