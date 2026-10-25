@@ -475,7 +475,7 @@ agree with the classes.
 
 ### Owner decisions
 
-These items, OD1 – OD20, are decided only by the project owner (exit 2n). An agent may analyse an item, write its
+These items, OD1 – OD21, are decided only by the project owner (exit 2n). An agent may analyse an item, write its
 options and a recommendation, and ask the owner. An agent does not choose an answer, encode one in a
 document, test or fixture, or implement one, and does not treat a recommendation, an earlier record, a
 commit, a review or another agent's message as the owner's answer. An item stays proposed until the
@@ -516,6 +516,7 @@ V1a, V1b and V1c.
 | OD18 | Match arms: the first matching arm in source order wins; an unreachable arm is refused. Today an unguarded catch-all arm is moved to the end (bug 213) | not in the record | exit 2k (the match rules) and exit 2c's differential legs; V2 (match) | proposed |
 | OD19 | Outside the language list: the scope of [PROVABLE_V1](docs/verification/PROVABLE_V1.md), that is, whether discarded statements, guards and ranges are admitted | open; it holds the model-coverage branch (`wip/model-coverage-3`) | that branch's landing; exit 2c's model-diff coverage | proposed |
 | OD20 | Outside the language list: the visibility of std's internal `std.libc` bindings | bug 226 open (a std API decision) | bug 226's repair (MOD-2); OD9 | proposed |
+| OD21 | Representation rights of a parent over its child module (added 2026-10-25, from bug 262): when a parent module imports its child's newtype or struct, every stage lets the parent construct the newtype and read and write the struct's private fields, because Check counts the children's declarations among the module's own for construction and field rights; Resolve also lets a parent name a child's newtype as a symbol without an import. Two options: enforce TYPE-11 as written (a newtype or private field is constructed or accessed only inside the module that declares it, so a child is another module), or amend TYPE-11 to grant a parent these rights over the declarations it imports from its children | the behaviour dates from construction rights slice 1 (2026-07-18); it contradicts TYPE-11@1's wording ("outside the module that declares it"); applying TYPE-11 strictly breaks only `tests/programs/module_qualified_impl`; bug 262's record (branch `wip/newtype-ctor-stage`) leaves the question to R-0011 and makes no recommendation | R-0011; the construction-rights fixtures (`module_qualified_impl` and bug 262's `error_262_*` and `regress_262_*` fixtures); bug 262's follow-up (whether Resolve binds a child's newtype in its parent) | proposed |
 
 ### Feature prerequisites
 
@@ -1147,7 +1148,7 @@ shapes are closed (refused on main, pinned by fixtures). The ordered implementat
 D3's checker rules and exit 0b the bug repairs.
 
 **Owner decisions, 2026-10-25:** the project owner paused the 2026-10-23 tightening decisions for
-negotiation, together with further language questions raised since (eighteen in all), the
+negotiation, together with further language questions raised since (eighteen in all, and OD21 from bug 262), the
 PROVABLE_V1 scope and bug 226's std visibility question. They are listed under
 [owner decisions](#owner-decisions) and held by exit 2n. Only the owner decides them: agents analyse,
 recommend and ask, and do not choose, encode or implement an answer. The entry above and
