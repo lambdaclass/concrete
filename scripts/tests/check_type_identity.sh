@@ -292,6 +292,15 @@ if LEAN_OUT="$(lake env lean "$TMP_DIR/type_identity.lean" 2>&1)"; then
 else
   rc=$?
   printf '%s\n' "$LEAN_OUT" >&2
+  # An assertion that failed (`assertTypeIdentity` throws "FAILED: <label>") is this gate's verdict,
+  # reported as one: the identity property is broken. Anything else is the probe not elaborating,
+  # which is no verdict about the property.
+  if FAILED_LABEL="$(printf '%s\n' "$LEAN_OUT" | grep -o 'FAILED: .*' | awk 'NR==1')" && [ -n "$FAILED_LABEL" ]; then
+    echo "  FAIL ${FAILED_LABEL#FAILED: }"
+    echo ""
+    echo "TYPE-IDENTITY: PASS=$(printf '%s\n' "$LEAN_OUT" | grep -c '^  ok   ' || true) FAIL=1"
+    exit 1
+  fi
   echo "FATAL: semantic TypeId probe did not elaborate" >&2
   exit "$rc"
 fi
