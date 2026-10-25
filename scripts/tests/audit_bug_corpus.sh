@@ -177,6 +177,8 @@ declare -A BUG_TEST_MAP=(
   [242]="regress_242_imported_signature_type.con regress_242_toplevel_signature_type.con regress_242_imported_enum_beside_own_enum.con regress_242_imported_field_type.con regress_242_aliased_self_result.con regress_242_imported_constant_type.con regress_242_imported_alias_target.con regress_242_generic_argument.con regress_242_newtype_beside_other_import.con regress_242_struct_beside_other_import.con regress_242_two_modules_signatures.con regress_242_alias_target_closure.con regress_242_child_newtype_from_child_function.con error_242_two_imported_methods_one_core_name.con"
   # Bug 254: --interp constructs and unwraps a newtype over an aggregate.
   [254]="regress_254_newtype_over_struct.con regress_254_newtype_over_enum.con"
+  # Bug 262: a child's newtype constructor is bound in its parent only by an import.
+  [262]="error_262_parent_constructs_child_newtype.con error_262_sibling_constructs_newtype.con error_262_child_constructs_parent_newtype.con regress_262_own_rights_beside_child.con regress_262_imported_fn_beside_child_newtype.con"
   # Bug 253: construction and field rights by declaration identity (decoy child types).
   [253]="error_253_child_newtype_decoy.con error_253_aliased_newtype_decoy.con error_253_child_struct_decoy_literal.con error_253_child_struct_decoy_field_read.con error_253_child_struct_decoy_field_write.con regress_253_local_rights_beside_imports.con"
   # Bug 251: a generic's specialization reads its defining tree's constants (native and --interp).

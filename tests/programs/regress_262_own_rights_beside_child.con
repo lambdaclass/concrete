@@ -1,0 +1,21 @@
+// Bug 262 (fixed): the positive control. A module with a child constructs its own newtype and
+// struct and reads their private field, writes the child's newtype as a type without importing
+// it, and gets one of its values only through the child's constructor function; the child
+// constructs its own newtype. Binary and --interp return 42.
+mod outer {
+    mod kids {
+        pub newtype K = i64;
+        pub struct Copy S { v: i64 }
+        pub fn mk(n: i64) -> K { return K(n); }
+        pub fn get(k: K) -> i64 { let s: S = S { v: k.0 }; return s.v; }
+    }
+    import kids.{mk, get};
+    newtype N = i64;
+    struct Copy R { w: i64 }
+    pub fn main() -> i64 {
+        let n: N = N(30);
+        let r: R = R { w: 2 };
+        let k: K = mk(10);
+        return n.0 + r.w + get(k);
+    }
+}

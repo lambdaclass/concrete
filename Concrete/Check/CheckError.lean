@@ -156,6 +156,10 @@ structure TypeEnv where
   -- public constructor fn (e.g. try_new). Everything in `newtypes` but not
   -- here is imported → direct construction is rejected.
   localNewtypeNames : List String := []
+  /-- Bug 262: the newtypes whose constructor this module calls by its spelling
+      (`newtypeConstructorsInScope`, the list Elab binds): its own and its imports', not the
+      children's that `newtypes` also holds. -/
+  newtypeConstructors : List NewtypeDef := []
   -- 0b slice 2: structs DEFINED in the module being checked. Fields are
   -- private-by-default (`pub` opts in); a struct LITERAL or field
   -- read/write on a NON-local struct is rejected unless the touched field(s)

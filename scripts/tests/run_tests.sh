@@ -8890,6 +8890,34 @@ else
     echo "FAIL  bug 253: regress_253_local_rights_beside_imports --interp gave '$r253_interp', want 42"
     FAIL=$((FAIL + 1))
 fi
+# Bug 262: a child's newtype constructor is bound in its parent only by an import (Check and Elab
+# by one definition), and a sibling's or the parent's newtype is not constructed outside it.
+# Refused at Check, so the native build and --interp refuse them alike.
+for r262 in "error_262_parent_constructs_child_newtype.con:E0263" \
+            "error_262_sibling_constructs_newtype.con:E0296" \
+            "error_262_child_constructs_parent_newtype.con:E0296"; do
+    r262_f="${r262%%:*}"; r262_c="${r262##*:}"
+    run_err "$TESTDIR/$r262_f" "($r262_c)"
+    r262_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/$r262_f" --interp 2>&1 || true)
+    if printf '%s' "$r262_interp" | grep -qF "($r262_c)"; then
+        echo "  ok  bug 262: $r262_f --interp refused ($r262_c)"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  bug 262: $r262_f --interp did not refuse with $r262_c: $r262_interp"
+        FAIL=$((FAIL + 1))
+    fi
+done
+for r262_f in regress_262_own_rights_beside_child.con regress_262_imported_fn_beside_child_newtype.con; do
+    run_ok "$TESTDIR/$r262_f" 42
+    r262_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/$r262_f" --interp 2>&1 || true)
+    if [ "$r262_interp" = "42" ]; then
+        echo "  ok  bug 262: $r262_f — interp == binary (42)"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  bug 262: $r262_f --interp gave '$r262_interp', want 42"
+        FAIL=$((FAIL + 1))
+    fi
+done
 # Bug 231: each of the seven bound positions in the fixture is refused, not only the first.
 r231_n=$($COMPILER "$TESTDIR/error_231_unknown_bound_trait.con" --emit-core 2>&1 | grep -cF '(E0125)' || true)
 if [ "$r231_n" = "7" ]; then

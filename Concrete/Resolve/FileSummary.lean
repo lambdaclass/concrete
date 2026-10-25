@@ -110,6 +110,16 @@ structure ResolvedImports where
   /-- R-0492 step 4 (bug 233): imported constants, by identity. -/
   constants      : List ImportedConst := []
 
+/-- MOD-2 (bug 262): the newtypes whose constructor `N(v)` a module calls by its own spelling:
+    its own and its imports' (an aliased import under its alias, bug 243), and not its children's.
+    A child is another module, so its newtype is constructed by name only where it is imported;
+    the children's newtypes Check and Resolve add to a module's environment (bug 229) are types it
+    may write, not constructors it may call. Elab binds exactly these, and Check refuses a call of
+    any other newtype's constructor, so the two stages decide `N(v)`'s binding by one definition. -/
+def newtypeConstructorsInScope (own : List NewtypeDef) (imports : ResolvedImports) :
+    List NewtypeDef :=
+  own ++ imports.newtypes
+
 private def fnDefToSummary (f : FnDef) : String × FnSummary :=
   (f.name, { params := f.params.map fun p => (p.name, p.ty)
              retTy := f.retTy

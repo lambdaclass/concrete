@@ -959,7 +959,10 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     checkCallRootReads (← argMutLoanRoots args) args (some e.getSpan)
     checkDirectDestroyImplUse fnName (some e.getSpan)
     -- Intercept newtype wrapping: NewtypeName(expr)
-    match ← lookupNewtype fnName with
+    -- MOD-2 (bug 262): the constructors bound here are the module's own newtypes and its imports'
+    -- (`newtypeConstructorsInScope`, the list Elab looks a constructor up in). A child's newtype is
+    -- a type this module may write, but its spelling in call position is not its constructor.
+    match (← getEnv).newtypeConstructors.find? (·.name == fnName) with
     | some nt =>
       -- 0b construction rights: a newtype's direct constructor is private
       -- to its defining module. External callers use its public
@@ -3870,6 +3873,7 @@ def checkModule (m : Module) (summary : FileSummary)
       traitImpls := traitImplPairs, traitImplIds := traitImplIds,
       allFnSummarys := fnSigPairs, newtypes := allNewtypes,
       userFnNames := userFnNamesList, localNewtypeNames := localNewtypeNamesList,
+      newtypeConstructors := newtypeConstructorsInScope m.newtypes imports,
       localStructNames := localStructNamesList,
       localNewtypeIds := localNewtypeIdList, localStructIds := localStructIdList }
   -- Module-level declaration checks (Copy/Destroy, repr, FFI, traits) moved to CoreCheck.lean.

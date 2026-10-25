@@ -3088,7 +3088,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
     constants := constantsMap
     traits := allTraits
     allFnSigPairs := fnSigPairs
-    newtypes := m.newtypes ++ imports.newtypes
+    newtypes := newtypeConstructorsInScope m.newtypes imports
   }
   -- Elaborate only LOCAL functions (imported impl bodies are already elaborated in their module)
   let (fnResults, fnErrors, _) := allFnPairs.foldl (fun (acc, errs, env) (f, implTy) =>
