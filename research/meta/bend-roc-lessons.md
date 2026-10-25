@@ -464,7 +464,7 @@ means evidence needed to decide whether to adopt an idea, not a new release gate
 | C03 | Fixed-spec agent repair workflow | Unauthorized specification/assumption changes are rejected | [Proof Synthesis](../../docs/verification/PROOF_SYNTHESIS.md) |
 | C04 | Rejected-bug demo | Existing protocol flagship shows failure, repair, and independent replay | [current queue](../../ROADMAP.md#the-current-execution-queue) |
 | C05 | Graded proof and repair corpus | Hidden solutions, refusal tasks, conservation/undo/protocol cases | [Proof Patterns](../../examples/proof_patterns/README.md) |
-| C06 | Bounded synthesis/repair harness | Attempts, costs, failures, exact tasks, independent replay | [Phase 9](../../ROADMAP.md#phase-9-proof-authoring-and-automation) |
+| C06 | Bounded synthesis/repair harness | Attempts, costs, failures, exact tasks, independent replay | [Proof Authoring And Automation](../../ROADMAP.md#area-proof-authoring-and-automation) |
 | C07 | Complete independent-check accounting | Every claim classified, including timeout and infrastructure failure | [R-0353](../../ROADMAP.md#task-r-0353) |
 | C08 | Compiler/checker/replay phase budgets | Cold/warm/incremental measurements; explicit proof terms versus tactic costs | [pipeline fixtures](../../tests/perf/compiler_pipeline/README.md) |
 | C09 | Small explicit generated obligations and reusable proof patterns | Lower authoring/replay cost with identical statements and trust | [ProofKit](../../Concrete/ProofKit.lean) |
@@ -481,8 +481,8 @@ means evidence needed to decide whether to adopt an idea, not a new release gate
 | C20 | Proof-preserving optimization experiment | Fixed spec, replay, differential tests, runtime and memory measurements | [AI-assisted optimization](ai-assisted-optimization.md), [R-0482](../../ROADMAP.md#task-r-0482) |
 | C21 | Emitted-code validation | Distinguish host compiler safety from native behavior | [R-0299](../../ROADMAP.md#task-r-0299), [R-0300](../../ROADMAP.md#task-r-0300) |
 | C22 | Compact indexed data and validated caches | Profile first; owner/bounds/schema/target/corruption controls | [compiler research](../compiler/COMPILER_PIPELINE_RESEARCH.md) |
-| C23 | Explicit allocator/arena experiments | Workload-specific lifetime and peak-memory benefit, no hidden policy | [R-0404](../../ROADMAP.md#task-r-0404) |
-| C24 | Restricted GPU feasibility experiment | One array workload, explicit buffers/transfers, synchronous completion | [Execution Model](../../docs/language/EXECUTION_MODEL.md), [R-0399](../../ROADMAP.md#task-r-0399) |
+| C23 | Explicit allocator/arena experiments | Workload-specific lifetime and peak-memory benefit, no hidden policy | [R-0404](../../docs/project/ROADMAP_BACKLOG.md#task-r-0404) |
+| C24 | Restricted GPU feasibility experiment | One array workload, explicit buffers/transfers, synchronous completion | [Execution Model](../../docs/language/EXECUTION_MODEL.md), [R-0399](../../docs/project/ROADMAP_BACKLOG.md#task-r-0399) |
 | C25 | Device eligibility, runtime/ABI/failure/evidence boundaries | Transitive rejection, target identity, output failure state, CPU/device tests | [SSA](../../Concrete/IR/SSA.lean), [backend builtins](../../Concrete/Backend/EmitBuiltins.lean) |
 | C26 | Honest performance comparisons | Equivalent work/checks, cold/warm costs, transfer/launch costs, adverse cases | [comparative workloads](../workloads/comparative-program-suite.md) |
 | C27 | Reproducible development/deployment artifacts | Separate build latency from runtime speed; no implicit hot-loading commitment | [package design](../packages-tooling/package-manager-design.md) |

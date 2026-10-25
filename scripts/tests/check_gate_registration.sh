@@ -69,7 +69,9 @@ REACHABLE_FILE="$(mktemp)"; trap 'rm -f "$REACHABLE_FILE"; rm -rf "${STRIP_DIR:-
 # (R-0546), so the edge from the workflow to those gates passes through it.
 NAMES_FILE="$(mktemp)"; EDGES_FILE="$(mktemp)"
 trap 'rm -f "$REACHABLE_FILE" "$NAMES_FILE" "$EDGES_FILE"' EXIT
-for f in scripts/tests/*.sh scripts/ci/*.sh scripts/gen/*.sh scripts/tools/*.sh; do
+# A check_*.py in scripts/tests is a gate too (bug 252: the Markdown-link checker was one, reached only
+# from the Makefile, and this enumeration of shell files never saw it).
+for f in scripts/tests/*.sh scripts/ci/*.sh scripts/gen/*.sh scripts/tools/*.sh scripts/tests/check_*.py; do
   [ -f "$f" ] || continue; basename "$f"
 done | sort -u > "$NAMES_FILE"
 
@@ -116,7 +118,7 @@ reachable() { grep -qxF "$1" "$REACHABLE_FILE"; }
 
 echo "=== every gate is reachable from CI or explicitly skipped ==="
 TOTAL=0; UNREACHABLE=""
-for f in scripts/tests/check_*.sh scripts/ci/*.sh; do
+for f in scripts/tests/check_*.sh scripts/tests/check_*.py scripts/ci/*.sh; do
   [ -f "$f" ] || continue
   b="$(basename "$f")"
   TOTAL=$((TOTAL+1))
