@@ -21,10 +21,12 @@ importer's own and imported aliases) expanded `N` to the unknown `M`, which matc
 
 The target is expanded at the import through the aliases the exporting module can see
 (`writableAliases`: its own, and the public aliases it imports expanded the same way in their
-exporters, to an import depth of 8), as an imported constant's type is (bug 233). Regression legs
-in `run_tests.sh`: `regress_246_imported_alias_chain.con` and
-`regress_246_imported_alias_chain_across_imports.con` (`b` exports `M = N` with `N` imported from
-`a`, Codex review), each `run_ok … 42` and `--interp` = 42.
+exporters, bounded by the program's module count so every acyclic chain is followed and a cycle
+stops), as an imported constant's type is (bug 233). Regression legs in `run_tests.sh`:
+`regress_246_imported_alias_chain.con`, `regress_246_imported_alias_chain_across_imports.con` (`b`
+exports `M = N` with `N` imported from `a`, Codex review) and
+`regress_246_imported_alias_chain_long.con` (ten alias imports), each `run_ok … 42` and `--interp`
+= 42.
 
 ## Structural cause
 

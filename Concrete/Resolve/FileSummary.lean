@@ -379,8 +379,8 @@ private def typeImplsOf (summary : FileSummary) (name : String) :
 
 /-- R-0492 step 4 (bugs 233 and 246, Codex review): the type aliases a module may write, each with
     its target expanded as far as the module can see: its own aliases, and the public aliases it
-    imports with their targets expanded the same way in their exporter (`fuel` bounds the depth of
-    that walk over the import graph, and so an import cycle). A type crossing an import is expanded
+    imports with their targets expanded the same way in their exporter (`fuel`, `aliasImportDepth`,
+    exceeds the length of every acyclic import chain and stops a cycle). A type crossing an import is expanded
     through these, so the importer never meets an alias spelling it cannot read. -/
 private def writableAliases (summaryTable : List (String × FileSummary)) :
     Nat → FileSummary → List (String × Ty)
@@ -396,8 +396,10 @@ private def writableAliases (summaryTable : List (String × FileSummary)) :
             (sym.effectiveName, expandAliasDeep exAliases (exAliases.length + 64) ta.targetTy)
     summary.typeAliases.map (fun ta => (ta.name, ta.targetTy)) ++ imported
 
-/-- The import depth `writableAliases` follows. -/
-private def aliasImportDepth : Nat := 8
+/-- The import depth `writableAliases` follows: one more than the program's module count, so every
+    acyclic chain of alias imports is followed to its end and a cycle still stops (Codex review). -/
+private def aliasImportDepth (summaryTable : List (String × FileSummary)) : Nat :=
+  summaryTable.length + 1
 
 def resolveImports (imports : List ImportDecl)
     (summaryTable : List (String × FileSummary))
@@ -460,7 +462,7 @@ def resolveImports (imports : List ImportDecl)
               -- aliases (`pub type N = M` with a private `type M = i32` is `i32`); the importer
               -- cannot read `M`.
               | some ta =>
-                let exAliases := writableAliases summaryTable aliasImportDepth summary
+                let exAliases := writableAliases summaryTable (aliasImportDepth summaryTable) summary
                 .ok { acc with typeAliases := acc.typeAliases ++
                   [(localName, expandAliasDeep exAliases (exAliases.length + 64) ta.targetTy)] }
               | none =>
@@ -482,7 +484,7 @@ def resolveImports (imports : List ImportDecl)
                   | some c =>
                     -- Its type with the defining module's aliases (its own and those it imports)
                     -- expanded throughout: the importer cannot read the definer's alias names.
-                    let defAliases := writableAliases summaryTable aliasImportDepth summary
+                    let defAliases := writableAliases summaryTable (aliasImportDepth summaryTable) summary
                     .ok { acc with constants := acc.constants ++
                       [{ localName, id := c.constId,
                          ty := expandAliasDeep defAliases (defAliases.length + 64) c.ty }] }

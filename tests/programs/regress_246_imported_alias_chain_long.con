@@ -1,0 +1,15 @@
+// Bug 246 (FIXED, Codex review): a chain of ten alias imports, longer than any fixed depth; the
+// target is followed to its end (the walk is bounded by the program's module count). Returns 42.
+mod m0 { pub type A0 = i32; }
+mod m1 { import m0.{A0}; pub type A1 = A0; }
+mod m2 { import m1.{A1}; pub type A2 = A1; }
+mod m3 { import m2.{A2}; pub type A3 = A2; }
+mod m4 { import m3.{A3}; pub type A4 = A3; }
+mod m5 { import m4.{A4}; pub type A5 = A4; }
+mod m6 { import m5.{A5}; pub type A6 = A5; }
+mod m7 { import m6.{A6}; pub type A7 = A6; }
+mod m8 { import m7.{A7}; pub type A8 = A7; }
+mod m9 { import m8.{A8}; pub type A9 = A8; }
+mod m10 { import m9.{A9}; pub type A10 = A9; }
+import m10.{A10};
+fn main() -> Int { let x: A10 = 42; return x as Int; }

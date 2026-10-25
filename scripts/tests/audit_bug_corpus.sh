@@ -161,7 +161,7 @@ declare -A BUG_TEST_MAP=(
   # keeps imported aliases, the import closure, own types and children's newtypes.
   [230]="error_230_toplevel_foreign_alias_cast.con error_230_parent_names_child_alias.con regress_230_toplevel_type_environment.con"
   # Bug 246: an imported alias's target is expanded through its exporter's aliases.
-  [246]="regress_246_imported_alias_chain.con regress_246_imported_alias_chain_across_imports.con"
+  [246]="regress_246_imported_alias_chain.con regress_246_imported_alias_chain_across_imports.con regress_246_imported_alias_chain_long.con"
   # Bug 223: an import alias of a type names the declaration (methods, trait impls, values of the
   # defining module); run_tests.sh compares --interp with the binary.
   [223]="regress_223_aliased_struct_methods.con regress_223_aliased_enum.con regress_223_aliased_generic_and_bound.con regress_223_aliased_destroy_impl.con regress_223_aliased_self_result.con regress_223_aliased_cap_params.con error_223_method_core_name_taken.con"

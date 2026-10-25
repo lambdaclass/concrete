@@ -60,7 +60,7 @@ immutable and inlined at each use):
   name the `ConstId`). The import rule Check and Elab share (`FileSummary.resolveImports`) binds a
   public constant under the importer's spelling as an `ImportedConst` (local name, `ConstId`, and
   its type with the aliases its defining module can see, its own and those it imports, expanded
-  throughout, to an import depth of 8: `writableAliases`),
+  throughout, along every acyclic chain of alias imports: `writableAliases`),
   only when the name binds no callable or type, so `pub fn F` beside `pub const F` is still the
   function's import (MOD-3; `regress_233_shared_spelling_import.con`). Resolve binds it in both of
   its import paths (`summaryImports`, `importScope`). Only a public trait is still unimportable
