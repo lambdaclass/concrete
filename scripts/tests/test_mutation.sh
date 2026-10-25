@@ -904,8 +904,8 @@ gate_for_last "scripts/tests/check_builtin_enum_owner.sh"
 # continue to name the defining declaration. This mutation makes `Coord` a new
 # type identity instead of another spelling of `lib.Point`.
 MUT_FILE+=("Concrete/Resolve/FileSummary.lean")
-MUT_OLD+=("            .ok { acc with structs := acc.structs ++ [{ sd with name := localName }],")
-MUT_NEW+=("            .ok { acc with structs := acc.structs ++ [{ sd with name := localName, definitionName := localName }], -- MUTATION: alias becomes identity")
+MUT_OLD+=("            let (claims, sd') := transportStruct claims summary { sd with name := localName }")
+MUT_NEW+=("            let (claims, sd') := transportStruct claims summary { sd with name := localName, definitionName := localName } -- MUTATION: alias becomes identity")
 MUT_DESC+=("TypeId: import alias replaces definition-site name")
 gate_for_last "scripts/tests/check_type_identity.sh"
 
