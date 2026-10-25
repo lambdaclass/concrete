@@ -3287,10 +3287,23 @@ partial def elabModule (m : Module) (summary : FileSummary)
     ss.implMethodSigs.map (·.1)
   let parentMethodNames := (fns.filter (·.isMethod)).map (·.name)
   let parentFreeNames := (fns.filter (!·.isMethod)).map (·.name)
+  -- A method of a submodule's type that Core respells by its module (bug 096: `outer_a_P` when
+  -- another module also declares `P`) is defined as `a_outer_a_P_get`, not `a_P_get`: the call
+  -- keeps its spelling here and the type respelling below gives it `outer_a_P_get`, which the
+  -- submodule's linker alias bridges (bug 241: the prefix rename made it `a_P_get`, a function
+  -- nothing defines, and the build failed).
+  let respelledSubMethods : List String := summary.submoduleSummaries.flatMap fun (_, ss) =>
+    let ownTypes : List (String × String) :=
+      ss.structs.map (fun sd => (sd.name, sd.definedIn))
+      ++ ss.enums.map (fun ed => (ed.name, ed.definedIn))
+      ++ ss.newtypes.map (fun nt => (nt.name, nt.definedIn))
+    (ss.implMethodSigs.map (·.1)).filter fun msName => ownTypes.any fun (tn, defIn) =>
+      !defIn.isEmpty && ambiguousTypes.contains tn && msName.startsWith (tn ++ "_")
   let spaced (rs : List (String × String)) : FnRenames :=
     { free := rs.filter fun (bare, _) => !parentFreeNames.contains bare
       method := rs.filter fun (bare, _) =>
-        subMethodNames.contains bare && !parentMethodNames.contains bare }
+        subMethodNames.contains bare && !parentMethodNames.contains bare
+          && !respelledSubMethods.contains bare }
   -- Rewrite cross-module call sites in the parent's function bodies.
   let parentRenames := spaced (renamesFor m.imports)
   let fns := fns.map fun f =>
