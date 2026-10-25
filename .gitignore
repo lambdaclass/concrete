@@ -150,6 +150,7 @@ tests/programs/adversarial_policy_empty/adversarial_policy_empty
 # output that stdout/stderr interleaving can corrupt.
 .test-summary
 .gate.lock/
+.gate.lock.reclaim/
 .ci-gates-summary
 .ci-gate-failures/
 .ci-gate-timings.tsv

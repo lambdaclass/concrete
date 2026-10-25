@@ -334,7 +334,20 @@ make build >"$BUILD_LOG" 2>&1 || {
 COMP1="$TMPD/components.start"
 [ "$RECORDABLE" = "1" ] && { ppr_components "$ROOT_DIR" "$pushed" "$CHANGED_F" "$PLAN_F" "$COMP1" || RECORDABLE=0; }
 
-bash "$RUNNER" "${SEL[@]}" || {
+# A SIGNAL TO THIS HOOK REACHES THE RUN (bug 244). The runner owns its gates as one process group and
+# terminates all of them when IT is signalled; a hook killed while it waited in the foreground died
+# alone and left the whole run working the tree. So the run is waited for in the background, where a
+# trap can forward the signal, and waited for again until it has actually exited.
+bash "$RUNNER" "${SEL[@]}" &
+RUNNER_PID=$!
+trap 'kill -TERM "$RUNNER_PID" 2>/dev/null' INT TERM HUP
+RUNNER_RC=0
+wait "$RUNNER_PID" || RUNNER_RC=$?
+while kill -0 "$RUNNER_PID" 2>/dev/null; do
+  RUNNER_RC=0; wait "$RUNNER_PID" || RUNNER_RC=$?
+done
+trap - INT TERM HUP
+[ "$RUNNER_RC" = "0" ] || {
   echo "pre-push: GATES FAILED (above) — fix, or bypass deliberately." >&2; exit 1; }
 
 if [ "$docs_only" = "1" ]; then

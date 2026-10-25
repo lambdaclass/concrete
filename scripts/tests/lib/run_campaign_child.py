@@ -76,6 +76,31 @@ def process_group_state(pgid: int) -> str:
     return "nonempty"
 
 
+def lease_groups_dir():
+    """The `groups/` directory of the repository lock this process inherited, or None (bug 244).
+
+    This launcher deliberately LEAVES its caller's session, so the caller's process group no longer
+    covers the child. A lock that is reclaimed when its recorded session is empty would then be
+    reclaimed while the campaign still works the tree — the 2026-08-20 incident. So the group this
+    launcher creates is registered in the lock it runs under, and fresh.sh keeps the lock while any
+    registered group has a member. `pending.<pid>` is written before the launch, because the group's
+    id exists only once the child does: a launcher killed in between leaves a pending entry, which
+    makes reclaim refuse rather than proceed.
+    """
+    tok = os.environ.get("CONCRETE_GATE_LOCK", "")
+    if ":" not in tok:
+        return None
+    d = tok.split(":", 1)[1]
+    if not d.endswith("/.gate.lock") or not os.path.isdir(d):
+        return None
+    return os.path.join(d, "groups")
+
+
+def _touch(path: str) -> None:
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(f"launcher={os.getpid()}\n")
+
+
 def main() -> int:
     argv = sys.argv[1:]
     if len(argv) < 6 or argv[0] != "--report" or argv[2] != "--run-id" or argv[4] != "--":
@@ -89,8 +114,27 @@ def main() -> int:
 
     # start_new_session=True calls setsid() in the child: it becomes session and group leader, so its
     # pgid is its pid and no ancestor shares the group.
+    groups = lease_groups_dir()
+    pending = None
+    if groups is not None:
+        pending = os.path.join(groups, f"pending.{os.getpid()}")
+        try:
+            os.makedirs(groups, exist_ok=True)
+            _touch(pending)
+        except OSError as exc:
+            print(f"error: cannot register the campaign group in the repository lock ({exc}); "
+                  "refusing to start work the lock could not account for", file=sys.stderr)
+            return 2
     proc = subprocess.Popen(cmd, start_new_session=True)
     pgid = proc.pid
+    registered = None
+    if groups is not None:
+        registered = os.path.join(groups, str(pgid))
+        try:
+            _touch(registered)
+            os.unlink(pending)
+        except OSError:
+            pass  # the pending entry stays, and the lock with it: fail closed
 
     try:
         raw_rc = proc.wait()
@@ -110,6 +154,11 @@ def main() -> int:
     rc_field = 128 + signum if signalled else raw_rc
 
     state = process_group_state(pgid)
+    if registered is not None and state == "empty":
+        try:
+            os.unlink(registered)
+        except OSError:
+            pass
 
     body = (
         f"protocol_version={PROTOCOL_VERSION}\n"
