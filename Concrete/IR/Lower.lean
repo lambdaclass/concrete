@@ -2586,10 +2586,8 @@ private partial def collectAllEnums (m : CModule) : List CEnumDef :=
   let sub := m.submodules.foldl (fun acc s => acc ++ collectAllEnums s) []
   own ++ sub
 
-private partial def collectAllConstants (m : CModule) : List (String × Ty × CExpr) :=
-  let own := m.constants
-  let sub := m.submodules.foldl (fun acc s => acc ++ collectAllConstants s) []
-  own ++ sub
+/-- The constants of `m`'s tree (`CModule.treeConstants`, shared with the interpreter). -/
+private def collectAllConstants (m : CModule) : List (String × Ty × CExpr) := m.treeConstants
 
 /-- R-0492 step 4 (bug 233): the constants of the tree `m`, whose path is `path`, by their imported
     Core spelling (`ConstId.coreNameAt`), each with `scope`, the constants of its top-level tree. -/

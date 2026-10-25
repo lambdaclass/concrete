@@ -407,6 +407,14 @@ structure CModule where
       the AST Module so diagnostics name the RIGHT file (ROADMAP #24a). -/
   sourceFile : String := ""
 
+/-- Bug 245: the constants a bare constant spelling in a function of the top-level tree `m` may
+    name: those of `m` and of every module nested in it. The one definition of that scope: Lower
+    inlines a constant from it (per `lowerModule`) and the interpreter evaluates one from it
+    (`Ctx.treeConsts`), so the two backends cannot scope a spelling differently. A constant of
+    another tree is reached only by its imported spelling (`ConstId.coreName`, bug 233). -/
+partial def CModule.treeConstants (m : CModule) : List (String × Ty × CExpr) :=
+  m.constants ++ m.submodules.flatMap CModule.treeConstants
+
 -- ============================================================
 -- CExpr.ty accessor
 -- ============================================================

@@ -1,0 +1,9 @@
+// Bug 245 (fixed): two top-level modules each read their own private `const K`. Lower resolves a
+// bare constant spelling in the constants of the using function's top-level tree; the interpreter
+// resolved it program-wide and refused the spelling two modules define (bug 132's refusal). Both
+// backends now scope it by `CModule.treeConstants`: binary and --interp return 42.
+mod a { const K: i32 = 40; pub fn ga() -> i32 { return K; } }
+mod b { const K: i32 = 2; pub fn gb() -> i32 { return K; } }
+import a.{ga};
+import b.{gb};
+fn main() -> Int { return (ga() + gb()) as Int; }

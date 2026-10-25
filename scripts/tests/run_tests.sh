@@ -8737,6 +8737,21 @@ else
     printf '%s\n' "$r233_out" | awk 'NR<=3'
     FAIL=$((FAIL + 1))
 fi
+# Bug 245: a bare constant spelling is scoped by the using function's top-level tree in both
+# backends (`CModule.treeConstants`), so two trees' private constants of one spelling are apart.
+run_ok "$TESTDIR/regress_245_toplevel_private_constants.con" 42
+run_ok "$TESTDIR/regress_245_nested_private_constants.con" 42
+for r245 in regress_245_toplevel_private_constants regress_245_nested_private_constants; do
+    # bounded_run, not GNU `timeout`; a timeout is INCOMPLETE, not a pass.
+    r245_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/$r245.con" --interp 2>&1 || true)
+    if [ "$r245_interp" = "42" ]; then
+        echo "  ok  bug 245: $r245 — each tree's private constant, interp == binary (42)"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  bug 245: $r245 --interp gave '$r245_interp', want 42"
+        FAIL=$((FAIL + 1))
+    fi
+done
 # Bug 231: each of the seven bound positions in the fixture is refused, not only the first.
 r231_n=$($COMPILER "$TESTDIR/error_231_unknown_bound_trait.con" --emit-core 2>&1 | grep -cF '(E0125)' || true)
 if [ "$r231_n" = "7" ]; then
