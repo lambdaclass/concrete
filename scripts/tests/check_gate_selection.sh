@@ -382,6 +382,37 @@ leg stdin run "a value redirected into a command that is not a reader is a call"
 declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
 run_it < "${M[k]}"
 EOF
+leg catfile run "a file read into another file is a call (that file may be run)" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+cat "${M[k]}" > "$tmp"
+. "$tmp"
+EOF
+leg defassign run "a value assigned by \${var:=...} is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+: "${gate:=${M[k]}}"
+"$gate" --plan
+EOF
+leg unquoted read "a value expanded unquoted (split and globbed) is a read" <<'EOF'
+declare -A M=( [k]="docs/bugs/*.md" )
+printf '%s\n' ${M[k]}
+EOF
+leg heredoc run "a value expanded into a heredoc is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+read -r gate <<END
+${M[k]}
+END
+"$gate" --plan
+EOF
+leg inlinedef run "a function defined mid-line, named like a reader, is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+if true; then cat ( ) { "$@"; }; fi
+cat "${M[k]}" --plan
+EOF
+leg fdfile run "a value printed by >&file into a file is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+printf '%s\n' "${M[k]}" >&"$tmp"
+. "$tmp"
+EOF
 leg rg run "a value handed to rg, which can run a preprocessor, is a call" <<'EOF'
 declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
 rg --pre "${M[k]}" pattern README.md

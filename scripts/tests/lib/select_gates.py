@@ -220,7 +220,7 @@ class Repo:
         a fixture list, a generated program); or ("key"|"value", NAME) for one element of a keyed
         array assignment (see KEYED ELEMENTS below). A heredoc fed to python3/bash is code, and
         its lines are judged like any other."""
-        out, buf, heredoc, hkind = [], "", None, "code"
+        out, buf, heredoc, hkind, hexpand = [], "", None, "code", False
         raws = raw.split("\n")
         i = 0
         while i < len(raws):
@@ -230,7 +230,8 @@ class Repo:
                 if line.strip() == heredoc:
                     heredoc = None
                 elif hkind == "data":
-                    out.append((line, "data"))
+                    # "xdata": the delimiter is unquoted, so the shell expands the body
+                    out.append((line, "xdata" if hexpand else "data"))
                 elif not line.lstrip().startswith("#"):
                     out.append((line, "code"))
                 continue
@@ -259,9 +260,9 @@ class Repo:
                 out.extend(_array_elements(m.group(1), [(m.group(2), m.group(3).rstrip())]))
                 continue
             out.append((line, "code"))
-            m = re.search(r"<<-?\s*['\"]?([A-Za-z_][A-Za-z0-9_]*)['\"]?", line)
+            m = re.search(r"<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)['\"]?", line)
             if m:
-                heredoc = m.group(1)
+                heredoc, hexpand = m.group(2), not m.group(1)
                 hkind = "code" if EXEC_RE.search(line[:m.start()]) else "data"
         return out
 
@@ -269,12 +270,14 @@ class Repo:
     def _map_levels(lines):
         """-> {(NAME, "key"|"value"): use level} for the keyed arrays of a script (KEYED ELEMENTS)."""
         code = [l for l, k in lines if k == "code"]
+        expanded = [l for l, k in lines if k == "xdata"]
         elements = [(k[1], k[0], l) for l, k in lines if isinstance(k, tuple)]
         levels = {}
         for name in {n for n, _, _ in elements}:
-            levels[(name, "value")] = st.use_level({st._value_pat(name)}, code, elements, EXEC_RE)
+            levels[(name, "value")] = st.use_level({st._value_pat(name)}, code, elements, EXEC_RE,
+                                                   expanded)
             levels[(name, "key")] = max(st.READ, st.use_level({st._keys_pat(name)}, code, elements,
-                                                              EXEC_RE))
+                                                              EXEC_RE, expanded))
         return levels
 
     def script(self, path):
@@ -301,7 +304,7 @@ class Repo:
             return levels[(kind[1], kind[0])] if isinstance(kind, tuple) else st.RUN
 
         for line, kind in lines:
-            if kind == "data" or level(kind) == st.TEXT:
+            if kind in ("data", "xdata") or level(kind) == st.TEXT:
                 continue  # text: a note, a reason, a message — names in it are not used
             f, d = self.deps_of_text(line, base)
             if level(kind) == st.READ:
@@ -310,7 +313,8 @@ class Repo:
                 continue
             files |= f
             dirs |= d
-            if not (DATA_RE.search(line) and not EXEC_RE.search(line)):
+            # An element judged RUN is a call whatever its text spells (a helper named grep-x.sh).
+            if isinstance(kind, tuple) or not (DATA_RE.search(line) and not EXEC_RE.search(line)):
                 runs |= {x for x in f if x.endswith(SCRIPT_EXT)}
         text = "\n".join(l for l, k in lines if not (isinstance(k, tuple) and level(k) == st.TEXT))
         if path.endswith(".py"):

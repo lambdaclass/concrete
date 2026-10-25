@@ -16,12 +16,12 @@ point). TEXT and READ are a short whitelist of plain forms; everything else is R
         that is itself only TEXT;
   READ  an argument of a command that reads files and cannot run one (`cat`, `grep`, `diff`, a
         file test), whose output goes nowhere but the terminal, a capture or pure filters; an
-        output redirection target; a word a glob enumerates;
+        output redirection target; a word a glob enumerates, or an expansion left unquoted;
   RUN   everything else, and every array of a script that could reach an array or a builtin by
         another name (a nameref, `${!var}`, eval, alias, coproc, allexport, a function named like
         a whitelisted command).
-A use inside a function body is RUN: what the caller does with the function's output is not
-followed. The reader is not a complete shell parser; what it treats as TEXT or READ is pinned by
+A use inside a function body, in a heredoc the shell expands, or in a `${v:=...}` assignment is
+RUN: what happens to the result is not followed. The reader is not a complete shell parser; what it treats as TEXT or READ is pinned by
 the "text is not a call" controls in check_gate_selection.sh.
 """
 import re
@@ -54,7 +54,9 @@ SPECIAL_VAR_RE = re.compile(r"(BASH_\w*|ENV|PATH|PROMPT_COMMAND|PS[0-4]|IFS|LD_\
 # terminal or its own line's capture, so no print in such a script is TEXT.
 COMPOUND_OUT_RE = re.compile(r"(^|[;&|\s])(\}|done|fi|esac|\))\s*([0-9]*>(?!&)|&>|\|(?!\|))"
                              r"|\bexec\s+[0-9]*>(?!&)|\bcoproc\b")
-FUNC_DEF_RE = re.compile(r"^\s*(?:function\s+([A-Za-z_][\w-]*)|([A-Za-z_][\w-]*)\s*\(\))")
+FUNC_DEF_RE = re.compile(r"(?:^|[;&|{(\s])(?:function\s+([A-Za-z_][\w-]*)|([A-Za-z_][\w-]*)\s*\(\s*\))")
+# `${var:=word}` / `${var=word}`: an assignment made by an expansion.
+EXPANSION_ASSIGN_RE = re.compile(r"\$\{[A-Za-z_]\w*:?=")
 AWK_UNSAFE_RE = re.compile(r"system|getline|\||>|ENVIRON")
 DECLARE_CMDS = {"local", "declare", "typeset", "readonly"}
 # Anywhere in a script these reach an array without spelling `$NAME`: a nameref, an indirect
@@ -228,7 +230,7 @@ def simple_commands(s):
                 while i < n and s[i] in "<>":
                     i += 1
                 if i < n and s[i] == "&":
-                    redirect, i = "fd", i + 1
+                    redirect, i = "fd?", i + 1
         else:
             j = word_end(s, i)
             j = n if j is None else max(j, i + 1)
@@ -236,6 +238,8 @@ def simple_commands(s):
             for inner in substitutions(w):
                 nested += simple_commands(inner)
             if redirect:
+                if redirect == "fd?":  # `>&2` duplicates a descriptor; `>&name` writes a file
+                    redirect = "fd" if re.match(r"[0-9]+-?$|-$", w) else "redir"
                 cur.append((w, redirect))
                 redirect = None
             elif at_cmd and not wrapped and ASSIGN_RE.match(w):
@@ -405,7 +409,7 @@ def _function_lines(code_lines):
     for i, line in enumerate(code_lines):
         opens = len(re.findall(r"(^|[\s;])\{(?=\s|$)", line))
         closes = len(re.findall(r"(^|[\s;])\}(?=[\s;)]|$)", line))
-        if not active and FUNC_DEF_RE.match(line):
+        if not active and FUNC_DEF_RE.search(line):
             active, depth = True, 0
         if active:
             inside.add(i)
@@ -415,16 +419,36 @@ def _function_lines(code_lines):
     return inside
 
 
-def use_level(seeds, code_lines, elements, exec_re):
+def _unquoted_expansion(w):
+    """Does word w expand something outside double quotes (so the result is split and globbed)?"""
+    j, n = 0, len(w)
+    while j < n:
+        c = w[j]
+        if c == "\\":
+            j += 2
+        elif c == "$" and w[j + 1:j + 2] == "'":
+            j = _ansi_end(w, j) or n
+        elif c == "'":
+            j = _sq_end(w, j) or n
+        elif c == '"':
+            j = _dq_end(w, j) or n
+        elif c == "$" or c == "`":
+            return True
+        else:
+            j += 1
+    return False
+
+
+def use_level(seeds, code_lines, elements, exec_re, expanded=()):
     """The highest use level of anything matching a seed pattern (see USE LEVELS).
 
     code_lines: the script's code lines; elements: [(NAME, "key"|"value", text)] for every keyed
-    element."""
+    element; expanded: the body lines of heredocs the shell expands (unquoted delimiter)."""
     code_lines = list(code_lines)
     if any(INDIRECT_RE.search(t) for t in code_lines) \
             or any(INDIRECT_EXP_RE.search(t) for _, _, t in elements):
         return RUN  # an element is text until used, but `${!var}` in it expands at assignment
-    funcs = {m.group(1) or m.group(2) for line in code_lines for m in [FUNC_DEF_RE.match(line)] if m}
+    funcs = {m.group(1) or m.group(2) for line in code_lines for m in FUNC_DEF_RE.finditer(line)}
     if funcs & (PRINT_CMDS | INERT_CMDS | READ_CMDS | PURE_FILTERS | TEST_CMDS | DECLARE_CMDS
                 | {"read", "for", "select", "awk", "printf", "echo"}):
         return RUN  # a function standing in for a whitelisted command
@@ -463,9 +487,13 @@ def use_level(seeds, code_lines, elements, exec_re):
         for name, part, text in elements:
             if hit(text):
                 taint(_value_pat(name) if part == "value" else _keys_pat(name))
+        if any(hit(line) for line in expanded):
+            return RUN  # expanded into a heredoc: whatever reads it is not followed
         for li, (line, cmds) in enumerate(parsed):
             if not hit(line):
                 continue
+            if EXPANSION_ASSIGN_RE.search(line):
+                return RUN  # `${var:=...}` assigns where this reader does not follow
             if li in in_func or exec_re.search(line) or re.search(r"\bxargs\b|[<>]\(", line):
                 return RUN  # a function body, an interpreter, a process substitution
             for k, cmd in enumerate(cmds):
@@ -478,14 +506,15 @@ def use_level(seeds, code_lines, elements, exec_re):
                 for w, role in cmd:
                     if not hit(w):
                         continue
-                    glob = _unquoted_glob(w)
+                    glob = _unquoted_glob(w) or (name != "[[" and _unquoted_expansion(w))
                     if role == "assign":
                         if name is not None or not taint(ASSIGN_RE.match(w).group(1)):
                             return RUN
                     elif role == "redir":
                         level = max(level, READ)
                     elif role == "redir_in":
-                        if name not in READ_CMDS or not _output_contained(cmds, k):
+                        if name not in READ_CMDS or "redir" in redirs or output_escapes \
+                                or not _output_contained(cmds, k):
                             return RUN
                         level = max(level, READ)
                     elif role == "here":
@@ -500,6 +529,8 @@ def use_level(seeds, code_lines, elements, exec_re):
                         var = args[0][2:] or (args[1] if len(args) > 1 else "")
                         if not ident(var) or not taint(var):
                             return RUN
+                        if glob:
+                            level = max(level, READ)
                     elif name in PRINT_CMDS:
                         if redirs or output_escapes or not _output_contained(cmds, k):
                             return RUN  # printed into a file or a consumer this reader cannot see
@@ -532,8 +563,8 @@ def use_level(seeds, code_lines, elements, exec_re):
                         if not plain or glob or any(a.strip("'\"") in FILE_TESTS for a in args):
                             level = max(level, READ)
                     elif name in READ_CMDS:
-                        if not _output_contained(cmds, k):
-                            return RUN
+                        if "redir" in redirs or output_escapes or not _output_contained(cmds, k):
+                            return RUN  # the file's content goes where this reader cannot see
                         level = max(level, READ)
                     else:
                         return RUN
