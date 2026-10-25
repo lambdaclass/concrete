@@ -39,9 +39,11 @@ concurrency:
 jobs:
   fast-gates:
     name: Fast surface gates
-    # Same runner routing as CI (docs/project/SELF_HOSTED_RUNNERS.md). This workflow has no
+    # Its own self-hosted pool, `concrete-light` (docs/project/SELF_HOSTED_RUNNERS.md): every push
+    # to every branch runs this, about 500 runs a day, and on CI's `concrete` pool they took 20-92
+    # runner-minutes out of each train window (measured 2026-10-24). This workflow has no
     # pull_request trigger; the guard is kept so a future one can never reach a self-hosted runner.
-    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete-light"]') || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
 

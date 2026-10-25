@@ -160,6 +160,285 @@ else
   skip "713778e2 not in this clone: the added-command leg needs the base's workflow"
 fi
 
+echo "=== text is not a call: names in keyed-array values (bug 237) ==="
+# A corpus note naming a gate script made run_tests.sh, which runs the corpus audit, look as if it ran
+# that gate and read docs/: the docs-only control selected 19 commands in train 16. A keyed array's
+# values are text only when every use of them is (shell_text.py); a value the script reads is a read,
+# one it may run is a call. The gate named in the fixtures is the runner, which this gate already
+# runs, so spelling it here adds no edge to this gate.
+NAMED="scripts/tests/run_ci_gates_local.sh"
+# script_edges FILE -> "run PATH" / "read PATH" lines: the selector's own reading of FILE
+script_edges() {
+  python3 -I - "$1" <<'PY'
+import sys
+sys.path.insert(0, "scripts/tests/lib")
+import select_gates as sg
+files, dirs, _, _, runs = sg.Repo([]).script(sys.argv[1])
+for f in sorted(runs):
+    print("run", f)
+for f in sorted(files | dirs):
+    print("read", f)
+PY
+}
+# leg NAME EXPECT DESCRIPTION < FIXTURE. EXPECT: none (no edge to the runner nor to a docs path),
+# read (a read and no run) or run.
+leg() {
+  local name="$1" want="$2" what="$3" got
+  cat > "$TMPD/$name.fixture"
+  if ! script_edges "$TMPD/$name.fixture" > "$TMPD/$name.edges" 2>"$TMPD/$name.edges.err"; then
+    no "$what: the selector could not read the fixture: $(head -c 300 "$TMPD/$name.edges.err")"; return
+  fi
+  if grep -qx "run $NAMED" "$TMPD/$name.edges"; then got=run
+  elif grep -qx "read $NAMED" "$TMPD/$name.edges" || grep -q "^read docs" "$TMPD/$name.edges"; then got=read
+  else got=none; fi
+  if [ "$got" = "$want" ]; then ok "$what ($got)"
+  else no "$what: expected $want, got $got: $(tr '\n' ' ' < "$TMPD/$name.edges")"; fi
+}
+cat > "$TMPD/map_notes" <<'EOF'
+declare -A NOTES=(
+  # a note per bug, as in the corpus audit
+  [901]="FIXED -- the regression vehicle is scripts/tests/run_ci_gates_local.sh itself (its --plan leg)"
+  [902]='OPEN -- reproduced by: bash scripts/tests/run_ci_gates_local.sh --plan; see docs/bugs/'
+)
+NOTES[903]="FIXED -- pinned by run_ci_gates_local.sh"
+for n in "${!NOTES[@]}"; do
+  entry="${NOTES[$n]}"
+  [[ -n "${NOTES[$n]:-}" && "$entry" != x ]] && echo "  skip $n (${NOTES[$n]})"
+  word="$(printf '%s' "$entry" | awk '{print $1}')"
+  case "$word" in FIXED*) : ;; esac
+done
+EOF
+leg notes none "a gate named in a map's note text is neither run nor read, nor is the directory it mentions" < "$TMPD/map_notes"
+# Through a file, not a pipe: a leg in a pipeline would count its result in a subshell.
+{ cat "$TMPD/map_notes"; echo 'bash "$ROOT_DIR/scripts/tests/run_ci_gates_local.sh" --plan'; } > "$TMPD/map_and_call"
+leg call run "a genuine invocation of the same gate in the same file is still a call" < "$TMPD/map_and_call"
+leg exec run "a map value run through a variable is a call" <<'EOF'
+declare -A GATE_FOR=(
+  [plan]="scripts/tests/run_ci_gates_local.sh"
+)
+g="${GATE_FOR[plan]}"
+bash "$g" --plan
+EOF
+leg cmdpos run "a map value in command position, behind a wrapper's options, is a call" <<'EOF'
+declare -A GATE_FOR=( [plan]="scripts/tests/run_ci_gates_local.sh" [x]=other )
+for k in plan; do nice -n 5 "${GATE_FOR[$k]}" --plan; done
+EOF
+leg chain run "a map value copied into another map that is run is a call" <<'EOF'
+declare -A A=( [k]="scripts/tests/run_ci_gates_local.sh" )
+declare -A B=( [k]="${A[k]}" )
+run_gate "${B[k]}"
+EOF
+leg readval read "a map value the script reads as a file is a read, not a call" <<'EOF'
+declare -A SRC=( [k]="scripts/tests/run_ci_gates_local.sh" )
+grep -c . "${SRC[k]}"
+EOF
+leg key read "a map key naming a gate is a read, not a call" <<'EOF'
+declare -A SKIP=(
+  ["scripts/tests/run_ci_gates_local.sh"]="a reason that names nothing"
+)
+for f in scripts/tests/*.sh; do [ -n "${SKIP[$f]:-}" ] && echo "skip $f"; done
+EOF
+leg keysub run "a command substitution in a key runs at assignment" <<'EOF'
+declare -A M=( [$(bash scripts/tests/run_ci_gates_local.sh --plan | head -1)]=note )
+EOF
+leg ansi run "an ANSI-C quoted value does not swallow the invocation after it" <<'EOF'
+declare -A M=( [k]=$'it\'s' )
+bash scripts/tests/run_ci_gates_local.sh --plan
+echo ' ) '
+EOF
+leg quote run "a quote inside \${...} does not swallow the invocation after it" <<'EOF'
+declare -A M=( [k]=${UNSET:-'}'} )
+bash scripts/tests/run_ci_gates_local.sh --plan
+echo ' ) '
+EOF
+leg printfv read "a value moved by printf -v and then read is a read" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+printf -v path '%s' "${M[k]}"
+wc -l "$path"
+EOF
+leg piped run "a value printed into a consumer the reader cannot see is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+printf '%s\n' "${M[k]}" |
+  while read -r cmd; do "$cmd" --plan; done
+EOF
+leg nameref run "an array reached through a nameref is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+declare -n alias=M
+"${alias[k]}" --plan
+EOF
+leg printfv2 run "a value moved by an attached printf -vNAME and then run is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+printf -vpath '%s' "${M[k]}"
+"$path" --plan
+EOF
+leg indirect run "an indirect expansion inside another array's element makes every array a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+ref='M[k]'
+declare -A N=( [k]="${!ref}" )
+"${N[k]}" --plan
+EOF
+leg filtered run "a value printed through a filter into a file is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+printf '%s\n' "${M[k]}" | sort > "$tmp"
+. "$tmp"
+EOF
+leg group run "a value printed inside a group whose output goes to a file is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+{
+  printf '%s\n' "${M[k]}"
+} > "$tmp"
+run_it "$tmp"
+EOF
+leg inlinegroup run "a value printed inside an inline group whose output goes to a file is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+{ printf '%s\n' "${M[k]}"; } > "$tmp"
+run_it "$tmp"
+EOF
+leg procsub run "a value printed into a process substitution is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+mapfile -t gates < <(printf '%s\n' "${M[@]}" | sort)
+for gate in "${gates[@]}"; do "$gate" --plan; done
+EOF
+leg procsub2 run "a value printed into a process substitution over several lines is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+mapfile -t gates < <(
+  printf '%s\n' "${M[@]}" | sort
+)
+for gate in "${gates[@]}"; do "$gate" --plan; done
+EOF
+leg funcout run "a value printed by a function whose output is captured is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+get_gate() {
+  printf '%s\n' "${M[$1]}"
+}
+gate=$(get_gate k)
+"$gate" --plan
+EOF
+leg funcout2 run "the same, for a function declared with the function keyword" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+function get_gate {
+  printf '%s\n' "${M[$1]}"
+}
+gate=$(get_gate k)
+"$gate" --plan
+EOF
+leg reply run "a value read into the implicit REPLY and run is a call" <<'EOF'
+declare -A M=( [plan]="scripts/tests/run_ci_gates_local.sh" )
+read -r <<< "${M[plan]}"
+"$REPLY" --plan
+EOF
+leg shadow run "a function named like a whitelisted command makes the array a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+cat() { "$@"; }
+cat "${M[k]}"
+EOF
+leg bashenv run "a value assigned to a variable the shell reads by name is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+BASH_ENV="${M[k]}"
+bash -c :
+EOF
+leg readquoted run "a value read into a destination the reader cannot name is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+read -r 'cmd' <<< "${M[k]}"
+"$cmd" --plan
+EOF
+leg sorto run "a value piped into a filter that writes a file is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+printf '%s\n' "${M[k]}" | sort -o "$tmp"
+. "$tmp"
+EOF
+leg awkvar run "a value piped into awk running a program held in a variable is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+program='{system($0)}'
+printf '%s\n' "${M[k]}" | awk "$program"
+EOF
+leg getter run "a value printed by a function called through a variable is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+get_gate() { printf '%s\n' "${M[k]}"; }
+getter=get_gate
+cmd=$("$getter")
+"$cmd"
+EOF
+leg rematch run "a value matched by =~ (captured into BASH_REMATCH) is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+[[ ${M[k]} =~ (.*) ]]
+"${BASH_REMATCH[1]}"
+EOF
+leg testop read "a value tested by an operator held in a variable is a read" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+op=-f
+test "$op" "${M[k]}" && echo present
+EOF
+leg globdir read "a value a glob enumerates is a read" <<'EOF'
+declare -A M=( [k]="docs/bugs" )
+for f in "${M[k]}"/*; do :; done
+EOF
+leg catpipe run "a file read into a pipe continued on the next line is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+cat "${M[k]}" |
+  bash
+EOF
+leg stdin run "a value redirected into a command that is not a reader is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+run_it < "${M[k]}"
+EOF
+leg catfile run "a file read into another file is a call (that file may be run)" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+cat "${M[k]}" > "$tmp"
+. "$tmp"
+EOF
+leg defassign run "a value assigned by \${var:=...} is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+: "${gate:=${M[k]}}"
+"$gate" --plan
+EOF
+leg unquoted read "a value expanded unquoted (split and globbed) is a read" <<'EOF'
+declare -A M=( [k]="docs/bugs/*.md" )
+printf '%s\n' ${M[k]}
+EOF
+leg heredoc run "a value expanded into a heredoc is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+read -r gate <<END
+${M[k]}
+END
+"$gate" --plan
+EOF
+leg inlinedef run "a function defined mid-line, named like a reader, is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+if true; then cat ( ) { "$@"; }; fi
+cat "${M[k]}" --plan
+EOF
+leg fdfile run "a value printed by >&file into a file is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+printf '%s\n' "${M[k]}" >&"$tmp"
+. "$tmp"
+EOF
+leg groupdup run "a group whose output is duplicated and redirected to a file is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+{
+  printf '%s\n' "${M[k]}"
+} 2>&1 >"$tmp"
+. "$tmp"
+EOF
+leg execout run "a value printed after exec sends output to a file is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+exec &>"$tmp"
+printf '%s\n' "${M[k]}"
+EOF
+leg valsub run "a command substitution in a value runs at assignment, however its line reads" <<'EOF'
+declare -A M=(
+  [k]="$(scripts/tests/run_ci_gates_local.sh --plan | head -n 1)"
+)
+EOF
+leg rg run "a value handed to rg, which can run a preprocessor, is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+rg --pre "${M[k]}" pattern README.md
+EOF
+leg awk run "a value handed to awk, which can run commands, is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+awk -v cmd="${M[k]}" 'BEGIN { system(cmd " --plan") }'
+EOF
+
 echo "=== wiring: run_ci_gates_local.sh --impact-files resolves to exactly the selector's list ==="
 grep -v '^#' "$FIX/stack_budget_leg_26c409f8.paths" > "$TMPD/wire.paths"
 if bash scripts/tests/run_ci_gates_local.sh --plan --impact-files "$TMPD/wire.paths" > "$TMPD/wire.plan" 2>/dev/null; then

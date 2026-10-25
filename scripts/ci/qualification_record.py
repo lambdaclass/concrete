@@ -76,6 +76,10 @@ STEP_CONDITIONS = {
     # runners and is a build accelerator, so a run on GitHub-hosted runners skips it and still
     # qualifies. `lake build` runs unconditionally after it either way.
     "runner.environment == 'self-hosted'": "optional",
+    # The `~/.elan` toolchain cache restore: GitHub-hosted runners only, since a self-hosted runner's
+    # home keeps its toolchains (restoring them cost 2-4 min per job). A cache accelerator: lean-action
+    # installs whatever is missing either way, so a run that skips it still qualifies.
+    "runner.environment != 'self-hosted'": "optional",
 }
 
 

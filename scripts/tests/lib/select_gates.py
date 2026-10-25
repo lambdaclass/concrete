@@ -18,7 +18,10 @@ every edge is read out of the tree on each run:
      resolved from the repository root and from the script's own directory; a glob such as
      `tests/programs/*.con` is a dependency on the directory. Scripts a gate names (sourced
      libraries, helper .py files, other gates it runs) are followed transitively, so a change
-     to scripts/tests/lib/X selects every gate that reaches X.
+     to scripts/tests/lib/X selects every gate that reaches X. Text is not a reference: a heredoc
+     no interpreter reads names nothing, nor does a keyed array value the script uses only as
+     text (a corpus note, an exemption reason; bug 237, shell_text.py); a name on a line that
+     only greps or prints it is a read, not a run.
   2. compiler dependencies — a gate whose closure runs the compiler binary
      (`.lake/build/bin/concrete`, `require_fresh_binary`, `run_tests.sh`) or Lean (`lake env
      lean`, `lake build`) is selected by any change to a Lean module in the import closure of
@@ -41,6 +44,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import gates_for_diff as gfd  # noqa: E402  (ALWAYS_IF: the one owner of the derived-artifact table)
+import shell_text as st  # noqa: E402  (which contexts of a script are text)
 
 SCRIPT_EXT = (".sh", ".py")
 GATE_NAME_RE = re.compile(r"(check|run|test)_[A-Za-z0-9_]+\.sh$")
@@ -67,6 +71,38 @@ TOOLCHAIN = {"lakefile.toml", "lake-manifest.json", "lean-toolchain", "flake.nix
              "Makefile"}
 # Files nothing executes. A change here that no gate names selects nothing.
 INERT_RE = re.compile(r"(^|/)[^/]*\.md$|^(docs|research|paper|site|editor|bench)/|^LICENSE$|\.png$")
+
+# KEYED ELEMENTS: `declare -A NAME=( [key]="value" ... )` and `NAME[key]="value"`. A value is
+# usually TEXT — the bug corpus's per-bug notes, a gate's exemption reasons — and a script name
+# in a note is not a call: naming the docs-drift gate in a corpus note made run_tests.sh, which
+# runs the corpus audit, look as if it ran that gate and read docs/ (bug 237). Each array's
+# values, and separately its keys, are judged by how the script uses them (shell_text.use_level):
+# used only as text, a value names nothing; used as a file to read, it is a read and never a run;
+# anything else, including every context the reader does not know, makes it code as before. A key
+# is at least a read (a lookup string matched against paths the script enumerates). An element
+# holding a command substitution, or spanning lines, is always code. A literal with no keyed
+# element (a list of gates to run), or one whose end the reader cannot place, is judged line by
+# line as before.
+ARRAY_START_RE = re.compile(
+    r"\s*(?:(?:declare|local|typeset|readonly)\s+(?:-[A-Za-z]+\s+)*)?([A-Za-z_][A-Za-z0-9_]*)\+?=\(")
+ELEM_ASSIGN_RE = re.compile(r"\s*([A-Za-z_][A-Za-z0-9_]*)\[([^\]\n]*)\]\+?=(\S.*)$")
+
+
+def _array_elements(name, elems):
+    out = []
+    for key, value in elems:
+        if key is None:
+            out.append((value, "code"))
+            continue
+        for part, text in (("key", key), ("value", value)):
+            # A substitution runs at assignment. A value over several lines is code too: the
+            # corpus notes are one line each, and a quote misread across lines must not turn the
+            # code it swallowed into text.
+            if "$(" in text or "`" in text:
+                out.append((text, "subst"))  # runs at assignment: a call, whatever it spells
+            else:
+                out.append((text, "code" if "\n" in text else (part, name)))
+    return out
 
 
 # The estimate scales the selection's share of CI serial time to the measured local full-set run
@@ -182,16 +218,22 @@ class Repo:
     @staticmethod
     def _logical_lines(raw):
         """-> [(line, kind)]: full-line comments dropped, backslash continuations joined.
-        kind is "code", or "data" for the body of a heredoc that no interpreter reads
-        (`cat <<EOF`: a fixture list, a generated program). A heredoc fed to python3/bash is
-        code, and its lines are judged like any other."""
-        out, buf, heredoc, hkind = [], "", None, "code"
-        for line in raw.split("\n"):
+        kind is "code"; "data" for the body of a heredoc that no interpreter reads (`cat <<EOF`:
+        a fixture list, a generated program); or ("key"|"value", NAME) for one element of a keyed
+        array assignment (see KEYED ELEMENTS below). A heredoc fed to python3/bash is code, and
+        its lines are judged like any other."""
+        out, buf, heredoc, hkind, hexpand = [], "", None, "code", False
+        raws = raw.split("\n")
+        i = 0
+        while i < len(raws):
+            line = raws[i]
+            i += 1
             if heredoc is not None:
                 if line.strip() == heredoc:
                     heredoc = None
                 elif hkind == "data":
-                    out.append((line, "data"))
+                    # "xdata": the delimiter is unquoted, so the shell expands the body
+                    out.append((line, "xdata" if hexpand else "data"))
                 elif not line.lstrip().startswith("#"):
                     out.append((line, "code"))
                 continue
@@ -201,12 +243,44 @@ class Repo:
                 buf += line[:-1] + " "
                 continue
             line, buf = buf + line, ""
-            out.append((line, "code"))
-            m = re.search(r"<<-?\s*['\"]?([A-Za-z_][A-Za-z0-9_]*)['\"]?", line)
+            m = ARRAY_START_RE.match(line)
             if m:
-                heredoc = m.group(1)
+                # A literal with no keyed element is left to the line rule below, line by line.
+                body, j, done = line[m.end():], i, st.array_literal(line[m.end():])
+                while done is None and j < len(raws):
+                    body += "\n" + raws[j]
+                    j += 1
+                    done = st.array_literal(body)
+                if done is not None and any(k is not None for k, _ in done[0]):
+                    out.append((line[:m.end()], "code"))
+                    out.extend(_array_elements(m.group(1), done[0]))
+                    i, line = j, done[1]
+                    if not line.strip():
+                        continue
+            m = ELEM_ASSIGN_RE.match(line)
+            if m and st.word_end(line, m.start(3)) == len(line.rstrip()):
+                out.extend(_array_elements(m.group(1), [(m.group(2), m.group(3).rstrip())]))
+                continue
+            out.append((line, "code"))
+            m = re.search(r"<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)['\"]?", line)
+            if m:
+                heredoc, hexpand = m.group(2), not m.group(1)
                 hkind = "code" if EXEC_RE.search(line[:m.start()]) else "data"
         return out
+
+    @staticmethod
+    def _map_levels(lines):
+        """-> {(NAME, "key"|"value"): use level} for the keyed arrays of a script (KEYED ELEMENTS)."""
+        code = [l for l, k in lines if k in ("code", "subst")]
+        expanded = [l for l, k in lines if k == "xdata"]
+        elements = [(k[1], k[0], l) for l, k in lines if isinstance(k, tuple)]
+        levels = {}
+        for name in {n for n, _, _ in elements}:
+            levels[(name, "value")] = st.use_level({st._value_pat(name)}, code, elements, EXEC_RE,
+                                                   expanded)
+            levels[(name, "key")] = max(st.READ, st.use_level({st._keys_pat(name)}, code, elements,
+                                                              EXEC_RE, expanded))
+        return levels
 
     def script(self, path):
         """-> (files, dirs, uses_compiler, uses_lean, runs) for one script, not transitive.
@@ -226,15 +300,26 @@ class Repo:
         files, dirs, runs = set(), set(), set()
         base = os.path.dirname(path)
         lines = self._logical_lines(raw)
+        levels = self._map_levels(lines)
+
+        def level(kind):
+            return levels[(kind[1], kind[0])] if isinstance(kind, tuple) else st.RUN
+
         for line, kind in lines:
-            if kind == "data":
-                continue
+            if kind in ("data", "xdata") or level(kind) == st.TEXT:
+                continue  # text: a note, a reason, a message — names in it are not used
             f, d = self.deps_of_text(line, base)
+            if level(kind) == st.READ:
+                files |= f  # a path the script reads, or a lookup key: never a run
+                dirs |= d
+                continue
             files |= f
             dirs |= d
-            if not (DATA_RE.search(line) and not EXEC_RE.search(line)):
+            # An element judged RUN is a call whatever its text spells (a helper named grep-x.sh).
+            if isinstance(kind, tuple) or kind == "subst" \
+                    or not (DATA_RE.search(line) and not EXEC_RE.search(line)):
                 runs |= {x for x in f if x.endswith(SCRIPT_EXT)}
-        text = "\n".join(l for l, _ in lines)
+        text = "\n".join(l for l, k in lines if not (isinstance(k, tuple) and level(k) == st.TEXT))
         if path.endswith(".py"):
             for m in re.finditer(r"^\s*(?:from|import)\s+([A-Za-z_][A-Za-z0-9_]*)", text, re.M):
                 sib = os.path.join(base, m.group(1) + ".py")
