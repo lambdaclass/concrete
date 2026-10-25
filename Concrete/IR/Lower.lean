@@ -1596,6 +1596,14 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     -- `++ [x]` per arm was O(arms²), bug 178); restore arm order once here.
     let liveSnapshots := armEndSnapshots.reverse.filter fun (_, _, term) => !term
     if liveSnapshots.length >= 2 then
+      -- Bug 271: the merge starts from the table of a
+      -- LIVE arm. The state here is whatever the last-lowered arm left, and when that arm
+      -- diverged (return/break/continue) its writes are on no path to the merge; the reconcile
+      -- below rebinds only the bindings the live arms changed, so a binding only the diverged
+      -- arm wrote kept the diverged arm's value (silent wrong code, or E0703).
+      match armEndSnapshots.head?, liveSnapshots.getLast? with
+      | some (_, _, true), some (endVars, _, _) => setState { (← getState) with vars := endVars }
+      | _, _ => pure ()
       reconcileBranchVars matchMergeRules preMatchVars
         (liveSnapshots.map fun (endVars, endLabel, _) => (endVars, endLabel))
       -- WC-0004: arm-local enum-payload bindings (e.g. `Check::Fail { code }`)
@@ -1889,6 +1897,12 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     let liveArms :=
       (if term1 then [] else [(thenEndVars, thenEndLabel)]) ++
         (if term2 then [] else [(elseEndVars, elseEndLabel)])
+    -- Bug 271: the merge starts from the table of a
+      -- LIVE arm. The state here is whatever the last-lowered arm left, and when that arm
+      -- diverged (return/break/continue) its writes are on no path to the merge; the reconcile
+      -- below rebinds only the bindings the live arms changed, so a binding only the diverged
+      -- arm wrote kept the diverged arm's value (silent wrong code, or E0703).
+    if term2 then setState { (← getState) with vars := thenEndVars }
     reconcileBranchVars ifExprMergeRules preIfVars liveArms
     -- Load result from slot (a unit/never if-expr has no slot — yields unit).
     loadResult resultSlot? ty "ifload."
@@ -2321,6 +2335,12 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
       let liveArms :=
         (if term1 then [] else [(thenEndVars, thenEndLabel)]) ++
           (if term2 then [] else [(elseEndVars, elseEndLabel)])
+      -- Bug 271: the merge starts from the table of a
+        -- LIVE arm. The state here is whatever the last-lowered arm left, and when that arm
+        -- diverged (return/break/continue) its writes are on no path to the merge; the reconcile
+        -- below rebinds only the bindings the live arms changed, so a binding only the diverged
+        -- arm wrote kept the diverged arm's value (silent wrong code, or E0703).
+      if term2 then setState { (← getState) with vars := thenEndVars }
       reconcileBranchVars stmtIfMergeRules preIfVars liveArms
       -- Drop branch-local declarations (e.g. a loop counter `let mut k` declared
       -- inside a branch) so they do not leak into a later construct's variable

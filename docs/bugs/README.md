@@ -344,6 +344,7 @@ or contained until its owner lands follows the roadmap's defect disposition rule
 - [266_lower_merges_visit_every_binding.md](266_lower_merges_visit_every_binding.md) — every branch merge in Lower visited every binding in scope and walked the branch bodies once per binding (lets interleaved with ifs or matches were cubic to lower)
 - [267_ssacleanup_one_constant_branch_per_pass.md](267_ssacleanup_one_constant_branch_per_pass.md) — SSACleanup settled one link of a chain of constant branches per run of its whole-function pass sequence (n chained constant branches took n runs)
 - [269_postmono_ref_binding_env_list.md](269_postmono_ref_binding_env_list.md) — the post-mono reference-binding verifier (REF-6@1) kept its environment in an association list searched per assignment (bindings × assignments per function)
+- [271_merge_kept_diverged_arm_writes.md](271_merge_kept_diverged_arm_writes.md) — after an if, a value if or a match whose last-lowered arm diverged, Lower continued from that arm's variable table, so a binding only the diverged arm wrote kept its value there (silent wrong code, or E0703)
 
 ## Open Numbered Bugs
 

@@ -8420,6 +8420,10 @@ run_ok "$TESTDIR/regress_266_branch_merges.con" 42
 run_ok "$TESTDIR/regress_267_constant_branch_chains.con" 42
 run_err "$TESTDIR/error_269_far_binding_assigned.con" "(E0303)"
 run_ok "$TESTDIR/regress_269_generic_bindings_at_value.con" 42
+# Bug 271: after a branch whose last-lowered arm diverged, Lower kept that arm's writes (an `if`,
+# a value `if` and a `match` whose last arm writes `x` and returns, and a `break`): the binary
+# returned the diverged arm's value or the program was refused (E0703). Binary = --interp = 42.
+run_ok "$TESTDIR/regress_271_diverged_arm_writes.con" 42
 r265_gen() {  # r265_gen SHAPE N: a generated `fn main` of the given shape and size on stdout
     awk -v shape="$1" -v n="$2" 'BEGIN {
         print "fn main() -> Int {"
