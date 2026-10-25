@@ -362,7 +362,7 @@ def hasUid (vars : VarEnv) (uid : LocalId) : Bool :=
   vars.contains uid
 
 def activeBorrowRefs (env : TypeEnv) (var : LocalRef) : List VarInfo :=
-  env.vars.foldl (fun acc (_, info) =>
+  env.vars.refs.foldl (fun acc (_, info) =>
     match info.borrowedFrom with
     | some source =>
       if source == var && info.state != .consumed then info :: acc else acc
@@ -961,7 +961,7 @@ def exemptExitBranch (stmts : List Stmt) : Bool :=
 -- spec: OWN-2 (docs/spec/ownership.md; this declaration enforces the rule)
 def checkReturnPathConsumed (before after : VarEnv)
     (span : Option Span := none) : CheckM Unit := do
-  for (nameR, infoBefore) in before do
+  for (nameR, infoBefore) in before.linear do
     let name := nameR.name
     if infoBefore.isCopy then continue
     -- References are BORROWS: letting one go out of scope on a return path is
@@ -1003,7 +1003,8 @@ def checkBlockLocalsConsumed
     (diverges : Bool)
     (span : Option Span := none) : CheckM Unit := do
   if diverges then return ()
-  for (nameR, info) in after do
+  -- only a non-Copy binding can be refused
+  for (nameR, info) in after.linear do
     let name := nameR.name
     -- Pre-existing, not block-local. By IDENTITY (bug 093): a block-local that
     -- shadows an outer name (`let r = …` over a consumed outer `r`, a match
@@ -1024,7 +1025,7 @@ def checkBlockLocalsConsumed
     loop bodies, `for` headers and borrow blocks. -/
 def closeBlockScope (outer : VarEnv) : CheckM Unit := do
   let env ← getEnv
-  setEnv { env with vars := env.vars.filter fun (_, vi) => hasUid outer vi.uid }
+  setEnv { env with vars := env.vars.closeTo outer }
 
 /-- Bug 176: run `k`, which checks `body` as a lexical block nested in the current
     environment, then apply H9 to the block's own bindings and close it

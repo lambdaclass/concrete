@@ -1,4 +1,5 @@
 import Std.Data.HashMap
+import Std.Data.TreeMap
 import Concrete.Frontend.AST
 import Concrete.Report.Diagnostic
 import Concrete.Frontend.Token
@@ -153,7 +154,10 @@ structure ResolvedModule where
 
 structure ResolveCtx where
   globalScope : Scope
-  localScopes : List (List (String × SymKind))  -- stack of local scopes
+  /-- Stack of local scopes, innermost first. Each scope is a map, not a list searched per name:
+      a lookup walked every binding of the enclosing scopes, so a function of n bindings read
+      far from their use was O(n^2) to resolve (bug MMM-R). -/
+  localScopes : List (Std.TreeMap String SymKind compare)
   errors : Diagnostics
   /-- Known type names (structs, enums, type aliases, traits, type params). -/
   knownTypes : List String
@@ -225,19 +229,19 @@ private def mkResolveDiag (err : ResolveError) (span : Option Span := none) : Di
   { severity := .error, message := err.message, pass := "resolve", span := span, hint := none, code := err.code }
 
 private def pushScope (ctx : ResolveCtx) : ResolveCtx :=
-  { ctx with localScopes := [] :: ctx.localScopes }
+  { ctx with localScopes := {} :: ctx.localScopes }
 
 private def popScope (ctx : ResolveCtx) : ResolveCtx :=
   { ctx with localScopes := ctx.localScopes.drop 1 }
 
 private def addLocal (ctx : ResolveCtx) (name : String) (kind : SymKind) : ResolveCtx :=
   match ctx.localScopes with
-  | scope :: rest => { ctx with localScopes := ((name, kind) :: scope) :: rest }
+  | scope :: rest => { ctx with localScopes := scope.insert name kind :: rest }
   | [] => ctx  -- should not happen
 
 private def lookupName (ctx : ResolveCtx) (name : String) : Bool :=
   -- Check local scopes (innermost first)
-  ctx.localScopes.any (fun scope => scope.any fun (n, _) => n == name) ||
+  ctx.localScopes.any (fun scope => scope.contains name) ||
   -- Check global scope (O(1) via symbolMap)
   ctx.globalScope.symbolMap.contains name
 
@@ -675,7 +679,7 @@ private def resolveFnBody (globalScope : Scope) (knownTypes : List String) (f : 
     (traitImpls : List (String × String) := []) : Diagnostics :=
   let ctx : ResolveCtx := {
     globalScope := globalScope
-    localScopes := [[]]
+    localScopes := [{}]
     errors := []
     knownTypes := knownTypes ++ implTypeParams ++ f.typeParams
     typeParams := implTypeParams ++ f.typeParams
@@ -724,7 +728,7 @@ private def aliasChaseCyclic (aliasMap : List (String × String)) : Nat → List
     `type A = B; type B = A` → E0112). -/
 private def resolveTypeAliases (m : Module) (globalScope : Scope) (knownTypes : List String) : Diagnostics :=
   let aliasCtx : ResolveCtx :=
-    { globalScope := globalScope, localScopes := [[]], errors := [], knownTypes := knownTypes }
+    { globalScope := globalScope, localScopes := [{}], errors := [], knownTypes := knownTypes }
   let aliasNames := m.typeAliases.map (·.name)
   let aliasMapAliasesOnly : List (String × String) := m.typeAliases.filterMap (fun ta =>
     match aliasNamedTarget ta.targetTy with
@@ -851,7 +855,7 @@ private def resolveModule (m : Module) (globalScope : Scope) (knownTypes : List 
   -- `resolveModuleTreeErrors` visits every nested submodule (bug 113: it read only
   -- `m.externFns`, so an undeclared `extern fn` inside `mod t { mod ffi { .. } }` was accepted).
   let externCtx0 : ResolveCtx :=
-    { globalScope := globalScope, localScopes := [[]], errors := [], knownTypes := knownTypes }
+    { globalScope := globalScope, localScopes := [{}], errors := [], knownTypes := knownTypes }
   let externErrors := (externEffectsCheck m externCtx0).errors
   let capParamErrors := (capParamNamesCheck m externCtx0).errors
   let boundErrors := (boundTraitsCheck m externCtx0).errors

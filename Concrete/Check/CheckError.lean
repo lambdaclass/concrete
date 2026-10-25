@@ -1,4 +1,5 @@
 import Std.Data.TreeMap
+import Std.Data.TreeSet
 import Concrete.Frontend.AST
 import Concrete.Resolve.BuiltinSigs
 import Concrete.Report.Diagnostic
@@ -97,7 +98,17 @@ structure VarInfo where
     A lookup, a registration and an update of one binding are logarithmic: the list was searched
     per use and copied per binding, so a function of n bindings was O(n^2) to check (bug MMM-C).
     Persistent maps, because the checker snapshots the environment at every branch and restores
-    it. Keyed by the identity the binding is stored under (`VarInfo.uid`, equal to the key's id). -/
+    it. Keyed by the identity the binding is stored under (`VarInfo.uid`, equal to the key's id).
+
+    Three derived subsets (by registration number, so in the same order) serve the checks that
+    run at every block, branch, assignment and exit and look only at some bindings: the non-Copy
+    bindings (every ownership-state check skips a Copy one), the reference bindings (a borrow
+    source is recorded only on them), and the bindings a pending `defer` reserves, pins or holds.
+    Walking every binding there made a function with n bindings and m blocks O(n·m).
+
+    Every registration and update also takes a fresh TICK, so the bindings changed since an
+    earlier snapshot of the same environment are found without comparing every binding: a
+    binding not touched since the snapshot is the snapshot's (`touchedSince`). -/
 structure VarEnv where
   private mk ::
   /-- each binding under its registration number; newest first is descending order -/
@@ -105,13 +116,68 @@ structure VarEnv where
   /-- the registration number of each binding, keyed by its identity's index -/
   private seqOf : Std.TreeMap Nat Nat compare
   private next : Nat
+  /-- registration numbers of the non-Copy bindings -/
+  private linearSeqs : Std.TreeSet Nat compare
+  /-- registration numbers of the bindings with a recorded borrow source -/
+  private refSeqs : Std.TreeSet Nat compare
+  /-- registration numbers of the bindings reserved, pinned or held by a pending `defer` -/
+  private deferSeqs : Std.TreeSet Nat compare
+  /-- the last tick taken -/
+  private tick : Nat
+  /-- the tick of each binding's last change, keyed by registration number -/
+  private tickOf : Std.TreeMap Nat Nat compare
+  /-- the binding last changed at each tick (its registration number) -/
+  private changedAt : Std.TreeMap Nat Nat compare
 
 namespace VarEnv
 
-def empty : VarEnv := ⟨{}, {}, 0⟩
+/-- The entries of `m` with keys at least `lo`, in ascending key order: O(k log n) for k of
+    them, never a walk of the whole map. -/
+private partial def entriesFrom (m : Std.TreeMap Nat β compare) (lo : Nat) : List (Nat × β) :=
+  let rec go (lo : Nat) (acc : List (Nat × β)) : List (Nat × β) :=
+    match m.getEntryGE? lo with
+    | some (k, v) => go (k + 1) ((k, v) :: acc)
+    | none => acc.reverse
+  go lo []
+
+def empty : VarEnv := ⟨{}, {}, 0, {}, {}, {}, 0, {}, {}⟩
 
 instance : EmptyCollection VarEnv := ⟨empty⟩
 instance : Inhabited VarEnv := ⟨empty⟩
+
+private def deferMarked (i : VarInfo) : Bool :=
+  i.state == .reserved || i.pinnedByDefer || i.heldByDefer
+
+/-- The subsets after binding `s` changed from `old` to `new` (`none`: absent). -/
+private def reindex (e : VarEnv) (s : Nat) (old new : Option VarInfo) : VarEnv :=
+  let upd (set : Std.TreeSet Nat compare) (p : VarInfo → Bool) : Std.TreeSet Nat compare :=
+    let was := old.any p
+    let is := new.any p
+    if was == is then set else if is then set.insert s else set.erase s
+  { e with linearSeqs := upd e.linearSeqs (!·.isCopy)
+           refSeqs := upd e.refSeqs (·.borrowedFrom.isSome)
+           deferSeqs := upd e.deferSeqs deferMarked }
+
+/-- Binding `s` changed (or was registered): it takes a fresh tick. -/
+private def touch (e : VarEnv) (s : Nat) : VarEnv :=
+  let t := e.tick + 1
+  let changedAt := match e.tickOf.get? s with
+    | some old => e.changedAt.erase old
+    | none => e.changedAt
+  { e with tick := t, tickOf := e.tickOf.insert s t, changedAt := changedAt.insert t s }
+
+/-- Binding `s` is gone: forget its tick. -/
+private def untouch (e : VarEnv) (s : Nat) : VarEnv :=
+  match e.tickOf.get? s with
+  | some old => { e with tickOf := e.tickOf.erase s, changedAt := e.changedAt.erase old }
+  | none => e
+
+/-- The subsets recomputed from every binding after a whole-environment rewrite; every binding
+    counts as changed. -/
+private def rebuild (e : VarEnv) (bySeq : Std.TreeMap Nat (LocalRef × VarInfo) compare)
+    (seqOf : Std.TreeMap Nat Nat compare) : VarEnv :=
+  bySeq.foldl (fun e s (_, i) => (e.reindex s none (some i)).touch s)
+    ⟨bySeq, seqOf, e.next, {}, {}, {}, e.tick, {}, {}⟩
 
 /-- The binding of identity `uid`. -/
 def lookupUid (e : VarEnv) (uid : LocalId) : Option VarInfo :=
@@ -129,29 +195,65 @@ def contains (e : VarEnv) (uid : LocalId) : Bool := e.seqOf.contains uid.idx
 /-- Register `r` as the newest binding, replacing an earlier registration of it (the list's
     `(r, info) :: vars.filter (·.1 != r)`). -/
 def push (e : VarEnv) (r : LocalRef) (info : VarInfo) : VarEnv :=
-  let bySeq := match e.seqOf.get? r.id.idx with
-    | some s => e.bySeq.erase s
-    | none => e.bySeq
-  ⟨bySeq.insert e.next (r, info), e.seqOf.insert r.id.idx e.next, e.next + 1⟩
+  let e := match e.seqOf.get? r.id.idx with
+    | some s =>
+      ({ e with bySeq := e.bySeq.erase s }.reindex s ((e.bySeq.get? s).map fun (p : LocalRef × VarInfo) => p.2) none).untouch s
+    | none => e
+  let s := e.next
+  { e with bySeq := e.bySeq.insert s (r, info), seqOf := e.seqOf.insert r.id.idx s, next := s + 1 }
+    |>.reindex s none (some info) |>.touch s
 
 /-- Update the binding of identity `uid` in place (its position is kept); absent, no change. -/
 def modifyUid (e : VarEnv) (uid : LocalId) (f : VarInfo → VarInfo) : VarEnv :=
   match e.seqOf.get? uid.idx with
-  | some s => { e with bySeq := e.bySeq.modify s fun (r, i) => (r, f i) }
+  | some s =>
+    match e.bySeq.get? s with
+    | some (r, i) =>
+      let i' := f i
+      ({ e with bySeq := e.bySeq.insert s (r, i') }.reindex s (some i) (some i')).touch s
+    | none => e
   | none => e
 
 /-- Update every binding (its key and position are kept). -/
 def map (e : VarEnv) (f : LocalRef × VarInfo → LocalRef × VarInfo) : VarEnv :=
-  { e with bySeq := e.bySeq.map fun _ (r, i) => (r, (f (r, i)).2) }
+  e.rebuild (e.bySeq.map fun _ (r, i) => (r, (f (r, i)).2)) e.seqOf
 
 /-- Keep the bindings satisfying `p`, in their order. -/
 def filter (e : VarEnv) (p : LocalRef × VarInfo → Bool) : VarEnv :=
   let bySeq := e.bySeq.filter fun _ ri => p ri
-  ⟨bySeq, e.seqOf.filter fun _ s => bySeq.contains s, e.next⟩
+  e.rebuild bySeq (e.seqOf.filter fun _ s => bySeq.contains s)
 
 /-- The bindings, newest first. -/
 def toList (e : VarEnv) : List (LocalRef × VarInfo) :=
   e.bySeq.foldl (fun acc _ ri => ri :: acc) []
+
+private def ofSeqs (e : VarEnv) (set : Std.TreeSet Nat compare) : List (LocalRef × VarInfo) :=
+  set.foldl (fun acc s => match e.bySeq.get? s with | some ri => ri :: acc | none => acc) []
+
+/-- The non-Copy bindings, newest first (`toList.filter (!·.2.isCopy)`). -/
+def linear (e : VarEnv) : List (LocalRef × VarInfo) := e.ofSeqs e.linearSeqs
+
+/-- The bindings with a recorded borrow source, newest first
+    (`toList.filter (·.2.borrowedFrom.isSome)`). -/
+def refs (e : VarEnv) : List (LocalRef × VarInfo) := e.ofSeqs e.refSeqs
+
+/-- The bindings a pending `defer` reserves, pins or holds, newest first. -/
+def deferred (e : VarEnv) : List (LocalRef × VarInfo) := e.ofSeqs e.deferSeqs
+
+/-- Close a block opened when the bindings were `outer`: drop every binding whose identity
+    `outer` does not have (`filter (outer.contains ·.2.uid)`). `e` descends from `outer` (the
+    checker restores or extends a snapshot, never mixes two), so a binding registered before the
+    snapshot (number below `outer.next`) is one `outer` has; only the newer ones are examined. -/
+def closeTo (e : VarEnv) (outer : VarEnv) : VarEnv :=
+  (entriesFrom e.bySeq outer.next).foldl (fun e (s, (_, i)) =>
+    if outer.contains i.uid then e
+    else ({ e with bySeq := e.bySeq.erase s, seqOf := e.seqOf.erase i.uid.idx }.reindex s (some i) none).untouch s) e
+
+/-- The bindings changed or registered since `before`, an earlier snapshot of this environment
+    (`e` descends from it, as `closeTo` requires), oldest change first. Every other binding of `e`
+    is exactly `before`'s. -/
+def touchedSince (e : VarEnv) (before : VarEnv) : List (LocalRef × VarInfo) :=
+  (entriesFrom e.changedAt (before.tick + 1)).filterMap fun (_, s) => e.bySeq.get? s
 
 instance [Monad m] : ForIn m VarEnv (LocalRef × VarInfo) where
   forIn e b f := forIn e.toList b f

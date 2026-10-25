@@ -168,7 +168,7 @@ def liveAliasesOf (r : LocalRef) (info : VarInfo) (onlyExclusive : Bool) : Check
   let roots := r :: info.borrowedFrom.toList
   let anc ← refAncestors r
   let env ← getEnv
-  return (env.vars.toList.filter fun (n, vi) =>
+  return (env.vars.refs.filter fun (n, vi) =>
       n != r && !anc.contains n && vi.state != .consumed &&
       (!onlyExclusive || (match vi.ty with | .refMut _ => true | _ => false)) &&
       (match vi.borrowedFrom with | some src => roots.contains src | none => false)).map (·.1)
@@ -542,7 +542,7 @@ def comparisonRefusal? (t : Ty) : CheckM (Option String) := do
 -- spec: OWN-11 (docs/spec/ownership.md; this declaration enforces the rule)
 def refuseErasedConsumption (before : TypeEnv) (span : Option Span) : CheckM Unit := do
   let env ← getEnv
-  for (nR, vi) in env.vars do
+  for (nR, vi) in env.vars.linear do
     let n := nR.name
     match lookupByUid before.vars vi.uid with
     | some old =>
@@ -560,7 +560,7 @@ def refuseErasedConsumption (before : TypeEnv) (span : Option Span) : CheckM Uni
 -- spec: OWN-11 (docs/spec/ownership.md; this declaration enforces the rule)
 def refuseConditionalConsumption (before : TypeEnv) (op : String) (span : Option Span) : CheckM Unit := do
   let env ← getEnv
-  for (nR, vi) in env.vars do
+  for (nR, vi) in env.vars.linear do
     let n := nR.name
     match lookupByUid before.vars vi.uid with
     | some old =>
@@ -578,7 +578,7 @@ def refuseConditionalConsumption (before : TypeEnv) (op : String) (span : Option
     `ghost let` binding has no runtime obligation. -/
 def checkReturnAccountsForAll (span : Option Span) : CheckM Unit := do
   let env ← getEnv
-  for (r, info) in env.vars do
+  for (r, info) in env.vars.linear do
     let name := r.name
     if info.isCopy || info.isGhost then continue
     match info.ty with
@@ -604,17 +604,19 @@ def restoreAfterLoop (before : TypeEnv) (span : Option Span) : CheckM Unit := do
   let env ← getEnv
   -- A binding consumed before the loop and given a new value inside it is live after an
   -- iteration and consumed after none: its state after the loop is undecided (Codex review).
-  for (nR, vi) in env.vars do
+  for (nR, vi) in env.vars.linear do
     let n := nR.name
     match lookupByUid before.vars vi.uid with
     | some old =>
       if !vi.isCopy && old.state == .consumed && vi.state != .consumed && vi.state != .reserved then
         throwCheck (.linearConsumedOneBranchNotOther n) span
     | none => pure ()
-  setEnv { env with vars := env.vars.map fun (n, vi) =>
+  -- Only a binding changed since `before` can differ from it (`VarEnv.touchedSince`).
+  let restore (vars : VarEnv) (vi : VarInfo) : VarEnv :=
     match lookupByUid before.vars vi.uid with
-    | some old => if old.state != vi.state then (n, { vi with state := old.state }) else (n, vi)
-    | none => (n, vi) }
+    | some old => if old.state != vi.state then vars.modifyUid vi.uid (fun vi => { vi with state := old.state }) else vars
+    | none => vars
+  setEnv { env with vars := (env.vars.touchedSince before.vars).foldl (fun vars (_, vi) => restore vars vi) env.vars }
 
 /-- A named type that is one of the enclosing function's type parameters, read as that type
     variable, at any depth (an inferred `vec_new::<[T; 1]>()` keeps `T` named; Codex review). -/
@@ -634,20 +636,22 @@ def deferScopeEntry : CheckM (List LocalId × List LocalId × List LocalId) := d
   -- Reservations, pins and (D1) reference holds are snapshotted SEPARATELY, so each is released
   -- at the exit of the scope that took it (Codex review: a shared list let an outer pin keep an
   -- inner hold alive).
-  return (env.vars.filterMap fun (_, vi) => if vi.state == .reserved then some vi.uid else none,
-          env.vars.filterMap fun (_, vi) => if vi.pinnedByDefer then some vi.uid else none,
-          env.vars.filterMap fun (_, vi) => if vi.heldByDefer then some vi.uid else none)
+  -- only a binding a `defer` reserves, pins or holds can be in any of the three
+  let marked := env.vars.deferred
+  return (marked.filterMap fun (_, vi) => if vi.state == .reserved then some vi.uid else none,
+          marked.filterMap fun (_, vi) => if vi.pinnedByDefer then some vi.uid else none,
+          marked.filterMap fun (_, vi) => if vi.heldByDefer then some vi.uid else none)
 
 /-- Defer rule (a) (bug 143): the deferred calls a block registered run when it ends, after its
     trailing value. A binding reserved in the block is consumed then, and a pin taken in it ends. -/
 def deferScopeExit (entry : List LocalId × List LocalId × List LocalId) : CheckM Unit := do
   let env ← getEnv
-  setEnv { env with vars := env.vars.map fun (n, vi) =>
+  -- Only a binding a `defer` reserves, pins or holds changes here.
+  setEnv { env with vars := env.vars.deferred.foldl (fun vars (_, vi) => vars.modifyUid vi.uid fun vi =>
     let vi := if vi.state == .reserved && !entry.1.contains vi.uid then { vi with state := .consumed } else vi
     let vi := if vi.pinnedByDefer && !entry.2.1.contains vi.uid then { vi with pinnedByDefer := false } else vi
     -- D1: the deferred call that held a reference's loan has run; the reference is usable again.
-    let vi := if vi.heldByDefer && !entry.2.2.contains vi.uid then { vi with heldByDefer := false } else vi
-    (n, vi) }
+    if vi.heldByDefer && !entry.2.2.contains vi.uid then { vi with heldByDefer := false } else vi) env.vars }
 
 set_option backward.do.legacy true in
 mutual
@@ -1884,7 +1888,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
             | none => firstArmVars := some envAfterArm.vars
             | some firstVars =>
               -- Check agreement on pre-existing variables
-              for (nameR, infoBefore) in envBefore.vars do
+              for (nameR, infoBefore) in envBefore.vars.linear do
                 let name := nameR.name
                 if infoBefore.isCopy then continue
                 let state1 := match lookupByUid firstVars infoBefore.uid with
@@ -1909,10 +1913,11 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         -- by-name state patch (bug 041's false E0208).
         match firstArmVars.orElse (fun () => divergingArmVars) with
         | some vars =>
-          let vars' := envBefore.vars.map fun (n, vi) =>
-            match lookupByUid vars vi.uid with
-            | some info => (n, { vi with state := info.state })
-            | none => (n, vi)
+          -- The arm's environment descends from `envBefore`, so only a binding it changed can
+          -- carry a different state (`VarEnv.touchedSince`).
+          let vars' := (vars.touchedSince envBefore.vars).foldl (fun acc (_, info) =>
+            if envBefore.vars.contains info.uid then acc.modifyUid info.uid (fun vi => { vi with state := info.state })
+            else acc) envBefore.vars
           setEnv { envBefore with vars := vars' }
         | none => setEnv envBefore
         refuseRefValuedBranch "a `match` expression" matchResultTy (some e.getSpan)
@@ -2025,7 +2030,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           | none => firstArmVars := some envAfterArm.vars
           | some firstVars =>
             -- Check agreement on pre-existing variables
-            for (nameR, infoBefore) in envBefore.vars do
+            for (nameR, infoBefore) in envBefore.vars.linear do
               let name := nameR.name
               if infoBefore.isCopy then continue
               let state1 := match lookupByUid firstVars infoBefore.uid with
@@ -2047,10 +2052,11 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       -- (bug 041: arm binders are arm-scoped and must not survive the match).
       match firstArmVars.orElse (fun () => divergingArmVars) with
       | some vars =>
-        let vars' := envBefore.vars.map fun (n, vi) =>
-          match lookupByUid vars vi.uid with
-          | some info => (n, { vi with state := info.state })
-          | none => (n, vi)
+        -- The arm's environment descends from `envBefore`, so only a binding it changed can
+        -- carry a different state (`VarEnv.touchedSince`).
+        let vars' := (vars.touchedSince envBefore.vars).foldl (fun acc (_, info) =>
+          if envBefore.vars.contains info.uid then acc.modifyUid info.uid (fun vi => { vi with state := info.state })
+          else acc) envBefore.vars
         setEnv { envBefore with vars := vars' }
       | none => setEnv envBefore
       refuseRefValuedBranch "a `match` expression" matchResultTy (some e.getSpan)
@@ -3007,7 +3013,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     let targetDepth := match lbl with
       | some l => (env.loopLabelDepths.lookup l).getD env.loopDepth
       | none => env.loopDepth
-    for (nameR, info) in (← getEnv).vars do
+    for (nameR, info) in (← getEnv).vars.linear do
       let name := nameR.name
       let st := if info.state == .frozen then info.frozenFrom.getD info.state else info.state
       -- a reference owns nothing, so a loop exit leaves no obligation behind (D1)
@@ -3029,7 +3035,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     let targetDepth := match lbl with
       | some l => (env.loopLabelDepths.lookup l).getD env.loopDepth
       | none => env.loopDepth
-    for (nameR, info) in env.vars do
+    for (nameR, info) in env.vars.linear do
       let name := nameR.name
       let st := if info.state == .frozen then info.frozenFrom.getD info.state else info.state
       let isRef := match info.ty with | .ref _ | .refMut _ => true | _ => false
@@ -3149,7 +3155,7 @@ partial def mergeVarStates
     (thenDiverges : Bool := false)
     (elseDiverges : Bool := false)
     (span : Option Span := none) : CheckM Unit := do
-  for (name, infoBefore) in before do
+  for (name, infoBefore) in before.linear do
     if infoBefore.isCopy then continue
     let thenState := match lookupByUid afterThen infoBefore.uid with
       | some info => info.state
@@ -3184,7 +3190,7 @@ partial def checkNoBranchConsumption
     (afterThen : VarEnv)
     (ctx : String)
     (span : Option Span := none) : CheckM Unit := do
-  for (name, infoBefore) in before do
+  for (name, infoBefore) in before.linear do
     if infoBefore.isCopy then continue
     if infoBefore.state == .consumed then continue
     let thenState := match lookupByUid afterThen infoBefore.uid with
