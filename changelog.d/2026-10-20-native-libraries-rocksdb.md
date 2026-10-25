@@ -3,7 +3,7 @@
 A package whose `extern fn`s resolve against a C library now declares that library in its
 `Concrete.toml`, in a `[native]` section with `pkg-config`, `libs` and `lib-dirs` keys.
 `concrete build`, `run` and `test` link the declared libraries of the root package and of every
-dependency package, root first, and pass each library directory as `-L` and an rpath, so an
+dependency package its manifest loads (transitive dependencies are not loaded), root first, and pass each library directory as `-L` and an rpath, so an
 application that depends on a binding package needs no linker flags of its own. Resolution happens
 only at the link step, so `check`, the reports and `--emit-llvm` work without the library
 installed. The manifest reader fails closed: any spelling of the section it does not read, a

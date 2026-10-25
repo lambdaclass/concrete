@@ -14,5 +14,6 @@ landing medians, branches, open bugs, and runner health. A sanitized public vari
 infrastructure details, and `scripts/land/notify.sh` sends deduplicated notifications to ntfy,
 Slack or stdout. [STATUS_PAGE.md](docs/project/STATUS_PAGE.md) records the publishing decision.
 
-Both installers write systemd units and enable nothing. `check_work_queue.sh` and
+Both installers write systemd units and enable nothing by default (`scripts/status/install.sh
+--enable` starts the status services on request). `check_work_queue.sh` and
 `check_status_page.sh` (CI) test them with stub tools.

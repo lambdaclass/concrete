@@ -1,8 +1,9 @@
 ### Two Heavy Runs Per Machine, A Shared Compile Cache, And A Measured Gate Profile (R-0543, R-0546, 2026-10-22)
 
-At most two heavy local runs share a machine. `run_ci_gates_local.sh` (full or larger
+Heavy local runs are limited to two at a time. `run_ci_gates_local.sh` (full or larger
 selections), `run_tests.sh --full`, `test_mutation.sh` and the mutation campaign take one of
-`CONCRETE_HEAVY_SLOTS` (default 2) machine-wide slots, shared by every worktree; a waiter prints
+`CONCRETE_HEAVY_SLOTS` (default 2) slots, shared by every worktree and clone of one user (under
+`XDG_RUNTIME_DIR`, or `~/.cache`); different users do not share the limit; a waiter prints
 the holders, a dead holder's slot is reclaimed, and `--no-wait` exits 75 instead of waiting.
 `check_heavy_slots.sh` (CI) holds the controls. The project's
 [CLAUDE.md](CLAUDE.md) states the rule for agents.

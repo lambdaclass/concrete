@@ -9,9 +9,11 @@ built by `lake build` and CI:
   checker accepts, no stuck state, each resource destroyed exactly once at normal and `return`
   exits and at most once on `abort`, and an erasure theorem;
 - borrows and reborrowing (`Borrow.lean`): an exclusive borrow passed down to callees, exclusive
-  and shared reborrows, and the rejected programs shown to dangle or get stuck;
-- structured cleanup (`Cleanup.lean`): LIFO `defer` on every exit, and a static lowering that
-  agrees with the scoped meaning on every example;
+  and shared reborrows, and rejected programs, most of them shown to dangle or get stuck (one, a
+  callee storing its parameter, is shown harmless in the model);
+- structured cleanup (`Cleanup.lean`): LIFO cleanup on fall-through, `return`, `break` and
+  `continue`, none on `abort`, a trapping cleanup that skips the later ones, and a static lowering
+  that agrees with the scoped meaning on every example;
 - typed-value representation in byte and provenance memory (`Repr.lean`).
 
 Every theorem is fully proved; `Axioms.lean` pins each theorem's axiom footprint (at most
