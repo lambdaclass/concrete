@@ -235,4 +235,49 @@ partial def hasIndirectCallStmts (ss : List CStmt) : Bool :=
   ss.any hasIndirectCallStmt
 end
 
+/-! ### Code a constant initializer reaches
+
+R-0492 step 4 (bug 233): an imported constant's initializer is inlined where it is used, outside
+the module that elaborated it. Its constants are found there by identity, but a callee or a
+function value is still a spelling resolved in the USING function's context (its foreign
+bindings, its module's call aliases), which may bind it to something else. Such an initializer
+is not inlined across modules until callables carry their `DefId` (a later R-0492 step). -/
+mutual
+partial def mentionsCallableExpr (e : CExpr) : Bool :=
+  match e with
+  | .call _ _ _ _ | .fnRef _ _ => true
+  | .ident _ (.fn_ _ _ _) => true
+  | .binOp _ l r _ | .arrayIndex l r _ | .allocCall l r _ => mentionsCallableExpr l || mentionsCallableExpr r
+  | .unaryOp _ x _ | .fieldAccess x _ _ | .borrow x _ | .borrowMut x _ | .deref x _ | .cast x _ =>
+    mentionsCallableExpr x
+  | .structLit _ _ fs _ | .enumLit _ _ _ fs _ => fs.any fun (_, v) => mentionsCallableExpr v
+  | .arrayLit es _ => es.any mentionsCallableExpr
+  | .match_ scrut arms _ => mentionsCallableExpr scrut || arms.any mentionsCallableArm
+  | .ifExpr c t el _ => mentionsCallableExpr c || mentionsCallableStmts t || mentionsCallableStmts el
+  | _ => false
+
+partial def mentionsCallableArm (arm : CMatchArm) : Bool :=
+  match arm with
+  | .enumArm _ _ _ g body | .varArm _ _ g body =>
+    (g.map mentionsCallableExpr).getD false || mentionsCallableStmts body
+  | .litArm v g body =>
+    mentionsCallableExpr v || (g.map mentionsCallableExpr).getD false || mentionsCallableStmts body
+  | .rangeArm lo hi _ g body =>
+    mentionsCallableExpr lo || mentionsCallableExpr hi || (g.map mentionsCallableExpr).getD false
+      || mentionsCallableStmts body
+
+partial def mentionsCallableStmts (ss : List CStmt) : Bool :=
+  ss.any fun s => match s with
+    | .letDecl _ _ _ v | .assign _ v | .expr v _ | .defer v => mentionsCallableExpr v
+    | .return_ v _ | .break_ v _ => (v.map mentionsCallableExpr).getD false
+    | .continue_ _ => false
+    | .ifElse c t el => mentionsCallableExpr c || mentionsCallableStmts t
+        || (el.map mentionsCallableStmts).getD false
+    | .while_ c body _ step => mentionsCallableExpr c || mentionsCallableStmts body
+        || mentionsCallableStmts step
+    | .fieldAssign o _ v | .derefAssign o v => mentionsCallableExpr o || mentionsCallableExpr v
+    | .arrayIndexAssign a i v => mentionsCallableExpr a || mentionsCallableExpr i || mentionsCallableExpr v
+    | .borrowIn _ _ _ _ _ body => mentionsCallableStmts body
+end
+
 end Concrete

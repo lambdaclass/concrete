@@ -1,0 +1,11 @@
+// Bug 233 (R-0492 step 4, Codex review): an imported constant's type names an alias its defining
+// module imports (`N`, from `types`): it crosses expanded, and the
+// importer's own `type N = i64` does not reinterpret it. Returns 42.
+mod types { pub type N = i32; }
+mod cfg {
+    import types.{N};
+    pub const X: [N; 2] = [40, 2];
+}
+import cfg.{X};
+type N = i64;
+fn main() -> Int { let x: i32 = X[0] + X[1]; return x as Int; }

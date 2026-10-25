@@ -7,6 +7,7 @@ import Concrete.Report.Diagnostic
 import Concrete.Backend.Symbols
 import Concrete.Semantics.BindingMode
 import Concrete.Resolve.TypeId
+import Concrete.Proof.CallCollect
 
 namespace Concrete
 
@@ -875,6 +876,8 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
         -- constants in scope (a constant it names is that module's), and hygienic as above.
         match s.importedConstants.find? fun (n, _, _) => n == name.name with
         | some (_, constExpr, scope) =>
+          if mentionsCallableExpr constExpr then
+            throwLower s!"imported constant '{name}' cannot be inlined outside its module: its initializer calls or names a function, which Core names by a spelling the using function would resolve in its own context (bug 233; callables get identities in a later R-0492 step)"
           let saved ← getState
           set { saved with vars := [], promotedAllocas := [], inConstInit := true, constants := scope }
           let v ← lowerExpr constExpr

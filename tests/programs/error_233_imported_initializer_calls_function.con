@@ -1,0 +1,15 @@
+// Bug 233 (R-0492 step 4, Codex review): an imported constant's initializer that calls a function
+// is not inlined outside its module. Core names the callee by a spelling the using function would
+// resolve in its own context (its foreign bindings, its call aliases); callables get identities in
+// a later R-0492 step. Refused by Lower and by --interp alike.
+mod helper {
+    const H: i32 = 42;
+    pub fn get() -> i32 { return H; }
+}
+mod cfg {
+    import helper.{get};
+    const K: i32 = 7;
+    pub const X: i32 = get();
+}
+import cfg.{X};
+fn main() -> Int { return X as Int; }

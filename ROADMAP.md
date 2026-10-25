@@ -101,7 +101,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 <!-- BEGIN GENERATED: bug dashboard (scripts/gen/bug_dashboard.py; edit docs/bugs records and docs/bugs/discovery.tsv) -->
 
 **Open bugs: 12** (1 silent, 5 loud, 6 filed before the discovery record) of 210 bug records.
-**Open bugs: 13** (1 silent, 6 loud, 6 filed before the discovery record) of 212 bug records.
+**Open bugs: 13** (1 silent, 6 loud, 6 filed before the discovery record) of 213 bug records.
 
 | open bugs by primary structural class | open | silent | bugs |
 |---|---|---|---|
@@ -127,7 +127,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 | hunt: differential hunt (interpreter vs native binary) on main 9622f7e0: 3500 fuzz_differential.py cases (seeds 102501, 102502) and hand probes on module constants, enum payloads across modules, generics and traits across module boundaries, nested submodules, defer and loops under --interp | 2026-10-24 | 60 programs | 5 | 0 | 5 | found bugs |
 
 Discovery signal (exit 2m): 0 consecutive eligible counting batches are quiet (no silent bug, at most one loud, effort at least 4 hours or 10 programs); the exit needs 3. 16 counting batches recorded. 40 attribution-only batches (reviews, follow-ons, CI, controls, development) found 54 further bugs.
-Discovery signal (exit 2m): 0 consecutive eligible counting batches are quiet (no silent bug, at most one loud, effort at least 4 hours or 10 programs); the exit needs 3. 16 counting batches recorded. 41 attribution-only batches (reviews, follow-ons, CI, controls, development) found 56 further bugs.
+Discovery signal (exit 2m): 0 consecutive eligible counting batches are quiet (no silent bug, at most one loud, effort at least 4 hours or 10 programs); the exit needs 3. 16 counting batches recorded. 41 attribution-only batches (reviews, follow-ons, CI, controls, development) found 57 further bugs.
 
 <!-- END GENERATED: bug dashboard -->
 

@@ -377,6 +377,23 @@ private def typeImplsOf (summary : FileSummary) (name : String) :
   let sigs := summary.implMethodSigs.filter fun (n, _) => mangled.contains n
   (impls, traitImpls, sigs)
 
+/-- R-0492 step 4 (bug 233, Codex review): the type aliases a module may write, as targets: its own
+    and the public aliases it imports, each expanded through its exporter's own aliases. One level
+    of imports, not their closure (an imported alias whose exporter imported it is left as it is,
+    as an imported signature's alias is). -/
+private def writableAliases (summary : FileSummary) (summaryTable : List (String × FileSummary)) :
+    List (String × Ty) :=
+  let own := summary.typeAliases.map fun ta => (ta.name, ta.targetTy)
+  let imported := summary.imports.flatMap fun imp =>
+    match summaryTable.lookup imp.moduleName with
+    | none => []
+    | some ex =>
+      let exAliases := ex.typeAliases.map fun ta => (ta.name, ta.targetTy)
+      imp.symbols.filterMap fun sym =>
+        (ex.typeAliases.find? fun ta => ta.isPublic && ta.name == sym.name).map fun ta =>
+          (sym.effectiveName, expandAliasDeep exAliases (exAliases.length + 64) ta.targetTy)
+  own ++ imported
+
 def resolveImports (imports : List ImportDecl)
     (summaryTable : List (String × FileSummary))
     (unknownModuleMsg : String → String)
@@ -434,7 +451,10 @@ def resolveImports (imports : List ImportDecl)
                              implMethodSigs := acc.implMethodSigs ++ enumSigs }
             | none =>
               match summary.typeAliases.find? fun ta => ta.isPublic && ta.name == origName with
-              | some ta => .ok { acc with typeAliases := acc.typeAliases ++ [(localName, ta.targetTy)] }
+              -- Bug 246: the target as the exporter reads it, through its own aliases (`pub type
+              -- N = M` with a private `type M = i32` is `i32`); the importer cannot read `M`.
+              | some ta => .ok { acc with typeAliases := acc.typeAliases ++
+                  [(localName, expandAliasDeep aliasMap (aliasMap.length + 64) ta.targetTy)] }
               | none =>
                 match summary.newtypes.find? fun nt => nt.isPublic && nt.name == origName with
                 | some nt =>
@@ -452,11 +472,12 @@ def resolveImports (imports : List ImportDecl)
                   -- so `pub fn F` beside `pub const F` stays the function's import (MOD-3).
                   match summary.constants.find? fun c => c.isPublic && c.name == origName with
                   | some c =>
-                    -- Its type with the defining module's aliases expanded throughout (chains,
-                    -- array elements): the importer cannot read the definer's alias names.
+                    -- Its type with the defining module's aliases (its own and those it imports)
+                    -- expanded throughout: the importer cannot read the definer's alias names.
+                    let defAliases := writableAliases summary summaryTable
                     .ok { acc with constants := acc.constants ++
                       [{ localName, id := c.constId,
-                         ty := expandAliasDeep aliasMap (aliasMap.length + 64) c.ty }] }
+                         ty := expandAliasDeep defAliases (defAliases.length + 64) c.ty }] }
                   | none =>
                   match unimportableKind summary origName with
                   | some kind => .error [{ severity := .error, message := unimportableMsg kind origName imp.moduleName, pass := pass, span := some imp.span, hint := none, code := unimportableCode pass }]

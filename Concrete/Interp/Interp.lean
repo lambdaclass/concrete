@@ -5,6 +5,7 @@ import Concrete.Resolve.Shared
 import Concrete.Check.Layout
 import Std.Data.HashMap
 import Concrete.Resolve.TypeId
+import Concrete.Proof.CallCollect
 
 namespace Concrete.Interp
 
@@ -436,10 +437,6 @@ structure Ctx where
       `cfg::BASE`), with the constants of its defining top-level tree, the scope its initializer
       is evaluated in, as Lower lowers it. -/
   importedConsts : List (String × CExpr × List (String × CExpr)) := []
-  /-- Inside an imported constant's initializer, `consts` is its defining tree's and this holds the
-      table it replaced: a function called from the initializer gets it back, as Lower lowers that
-      function in its own module, never in the initializer's scope (Codex review). -/
-  outerConsts : Option (List (String × CExpr)) := none
   /-- Every user function with the index of the top-level module whose tree defines it: the
       unit within which the backend resolves a call spelling (bug 118). Empty for a report
       harness's context, which then resolves by `fns` alone. -/
@@ -2188,9 +2185,10 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
       -- R-0492 step 4 (bug 233): an imported constant, evaluated in its defining tree's scope.
       match cx.importedConsts.find? (·.1 == name.name) with
       | some (_, init, scope) =>
+        if mentionsCallableExpr init then
+          fail s!"interp: imported constant '{name}' cannot be inlined outside its module: its initializer calls or names a function, which Core names by a spelling the using function would resolve in its own context (bug 233; callables get identities in a later R-0492 step)"
         let outerLen := env.length
-        let (env', v) ← evalExprVal { cx with consts := scope, outerConsts := some (cx.outerConsts.getD cx.consts) }
-          (envEnterFrame env) init
+        let (env', v) ← evalExprVal { cx with consts := scope } (envEnterFrame env) init
         return (env'.drop (env'.length - outerLen), .val v)
       | none =>
       -- A bare function name in value position is a function pointer, to the definition the
@@ -2415,7 +2413,7 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
         -- whatever needs their layout refuses.
         let tyEnv := if typeArgs.length == fdef.typeParams.length
           then fdef.typeParams.zip (typeArgs.map (normTy cx)) else []
-        let (postEnv, flow) ← evalStmts { cx with scope := calleeScope, tyEnv, foreign := fdef.foreignCalls, consts := cx.outerConsts.getD cx.consts, outerConsts := none } callEnv fdef.body
+        let (postEnv, flow) ← evalStmts { cx with scope := calleeScope, tyEnv, foreign := fdef.foreignCalls } callEnv fdef.body
         let restored := postEnv.drop (postEnv.length - outerLen)
         match flow with
         | .ret v => return (restored, .val v)
@@ -2947,7 +2945,7 @@ partial def destroyValue (cx : Ctx) (env : Env) (arg : IVal) :
     | some fdef =>
       let outerLen := env.length
       let callEnv := bindParams (envEnterFrame env) fdef.paramKeys [arg]
-      let (postEnv, _flow) ← evalStmts { cx with scope := keyScope cx (destroyImplKey n), foreign := fdef.foreignCalls, consts := cx.outerConsts.getD cx.consts, outerConsts := none } callEnv fdef.body
+      let (postEnv, _flow) ← evalStmts { cx with scope := keyScope cx (destroyImplKey n), foreign := fdef.foreignCalls } callEnv fdef.body
       return postEnv.drop (postEnv.length - outerLen)
     | none => return env
   | _ => return env
@@ -2977,7 +2975,7 @@ partial def evalTraitParamCall (cx : Ctx) (env : Env)
       else
         let outerLen := env.length
         let callEnv := bindParams (envEnterFrame env) fdef.paramKeys argVals
-        let (postEnv, flow) ← evalStmts { cx with scope := keyScope cx (traitImplKey tn m), foreign := fdef.foreignCalls, consts := cx.outerConsts.getD cx.consts, outerConsts := none } callEnv fdef.body
+        let (postEnv, flow) ← evalStmts { cx with scope := keyScope cx (traitImplKey tn m), foreign := fdef.foreignCalls } callEnv fdef.body
         let restored := postEnv.drop (postEnv.length - outerLen)
         match flow with
         | .ret v | .val v => return (restored, .val v)
