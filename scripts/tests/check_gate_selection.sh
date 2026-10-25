@@ -327,6 +327,61 @@ declare -A M=( [plan]="scripts/tests/run_ci_gates_local.sh" )
 read -r <<< "${M[plan]}"
 "$REPLY" --plan
 EOF
+leg shadow run "a function named like a whitelisted command makes the array a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+cat() { "$@"; }
+cat "${M[k]}"
+EOF
+leg bashenv run "a value assigned to a variable the shell reads by name is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+BASH_ENV="${M[k]}"
+bash -c :
+EOF
+leg readquoted run "a value read into a destination the reader cannot name is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+read -r 'cmd' <<< "${M[k]}"
+"$cmd" --plan
+EOF
+leg sorto run "a value piped into a filter that writes a file is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+printf '%s\n' "${M[k]}" | sort -o "$tmp"
+. "$tmp"
+EOF
+leg awkvar run "a value piped into awk running a program held in a variable is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+program='{system($0)}'
+printf '%s\n' "${M[k]}" | awk "$program"
+EOF
+leg getter run "a value printed by a function called through a variable is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+get_gate() { printf '%s\n' "${M[k]}"; }
+getter=get_gate
+cmd=$("$getter")
+"$cmd"
+EOF
+leg rematch run "a value matched by =~ (captured into BASH_REMATCH) is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+[[ ${M[k]} =~ (.*) ]]
+"${BASH_REMATCH[1]}"
+EOF
+leg testop read "a value tested by an operator held in a variable is a read" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+op=-f
+test "$op" "${M[k]}" && echo present
+EOF
+leg globdir read "a value a glob enumerates is a read" <<'EOF'
+declare -A M=( [k]="docs/bugs" )
+for f in "${M[k]}"/*; do :; done
+EOF
+leg catpipe run "a file read into a pipe continued on the next line is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+cat "${M[k]}" |
+  bash
+EOF
+leg stdin run "a value redirected into a command that is not a reader is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+run_it < "${M[k]}"
+EOF
 leg rg run "a value handed to rg, which can run a preprocessor, is a call" <<'EOF'
 declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
 rg --pre "${M[k]}" pattern README.md

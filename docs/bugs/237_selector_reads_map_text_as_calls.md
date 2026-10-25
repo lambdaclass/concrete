@@ -29,50 +29,54 @@ gate its `SKIP` map exempts, through the map key.
 
 A new module, `scripts/tests/lib/shell_text.py`, reads enough bash to tell text from use: shell
 words (quotes, ANSI-C `$'...'`, escapes, `$(...)`, `${...}`, backquotes), simple commands with
-their pipes and the role of each word (command, argument, prefix assignment, file redirection,
-descriptor duplication, here-string), and keyed array literals. The selector judges each keyed
-array's values, and separately its keys, by the highest use any expansion of them reaches,
-directly or through a variable or another array assigned from them (`v=`, `local v=`,
-`printf -v v`, `for v in`, `read v <<<`, to a fixed point). The rule is a whitelist:
+their pipes and the role of each word (command, argument, prefix assignment, input or output
+redirection, descriptor duplication, here-string), and keyed array literals. The selector judges
+each keyed array's values, and separately its keys, by the highest use any expansion of them
+reaches, directly or through a variable or another array assigned from them (to a fixed point).
+TEXT and READ are a short whitelist of plain forms; everything else is RUN:
 
-- TEXT: an argument of `echo`/`printf` or a gate message helper whose output is shown, captured
-  by a substitution, or piped only through pure filters (`grep`, `cut`, `tr`, `sort`, ..., and
-  `awk` with no `system`, `getline`, pipe or redirection in its program), not written to a file,
-  in a script that sends no compound command, function call or `exec` output to a file or pipe,
-  captures no function's output, and has no substitution spanning lines and no process
-  substitution;
-  a string test (`[[ -n ]]`, `==`); a `case` subject; `return`/`exit`/`unset`.
-- READ: an argument of a command that reads files and cannot run one (`cat`, `grep`, `diff`,
-  `wc`, ...; not `awk`, `sed`, `rg` or `sort`), a file test (`[[ -f ]]`), a redirection target.
-- RUN, the old rule, for everything else: a command word, an argument of a function, wrapper or
-  interpreter, a prefix assignment, `export`, an output piped into any other consumer, a line
-  naming an interpreter, `source`, `xargs` or a process substitution; and every array of a script that uses a nameref,
-  an indirect expansion `${!var}` or `eval` anywhere (array elements included), since those
-  reach an array without spelling it.
+- TEXT: an argument of `echo` or `printf` whose output reaches the terminal, its own line's
+  capture, or pure filters (`grep`, `cut`, `tr`, `head`, ...; `awk` only with one single-quoted
+  program free of `system`, `getline`, pipes and redirections), with no file redirection, in a
+  script whose compound commands, functions and `exec` send no output to files or pipes and that
+  has no multi-line or process substitution; a quoted operand of a string test; a `case` subject;
+  a `for` list; a plain assignment, `local`/`declare` (`-r`, `-g`, `-a`, `-A` only), `read -r` from
+  a here-string or `printf -v` into a plain variable that is itself only TEXT and is not one the
+  shell or a child reads by name (`BASH_ENV`, `PATH`, `IFS`, ...).
+- READ: an argument of a command that reads files and can neither run a command nor write a file
+  (`cat`, `grep`, `diff`, `wc`, ...; not `awk`, `sed`, `rg`, `sort` or `uniq`) whose output is
+  contained as above; a file test, or a `[`/`test` whose operator could come from an expansion; an
+  output redirection target, or an input redirection into such a reader; a word a glob enumerates.
+- RUN, the old rule: a command word; an argument of anything else (a function, a wrapper, an
+  interpreter); a prefix assignment; `=~` and arithmetic tests; any use inside a function body
+  (what the caller does with its output is not followed); a line naming an interpreter, `source`,
+  `xargs` or a process substitution; and every array of a script that could reach an array or a
+  builtin by another name: a nameref, an indirect expansion `${!var}` (in an element too), `eval`,
+  `alias`, `enable`, `export`, allexport, `coproc`, or a function named like a whitelisted command.
 
 A TEXT value names nothing; a READ value is a read and never a run; a RUN value is code. A key is
 at least a read. An element holding a command substitution, or spanning lines, is always code,
 and a literal whose closing parenthesis does not end the statement is left to the line rule, so
 a quote the reader misreads cannot turn the code after it into text. A literal with no keyed
 element (a list of gates to run) is judged line by line as before. The reader is not a complete
-shell parser: what it models is pinned by the controls below, and the contexts it does not model
-are RUN by construction.
+shell parser (deliberately deferred arithmetic evaluation, for instance, is not modeled); what it
+treats as TEXT or READ is pinned by the controls below.
 
 Effect, measured over the whole gate inventory (272 commands) on this branch's tree, old selector
-against new: no closure gained an edge or changed its compiler/Lean flag; the 16 commands that reach
-the corpus audit lost the false edges (seven tracked files no longer select them, among them
+against new: no closure gained an edge or changed its compiler/Lean flag; the 16 commands that
+reach the corpus audit lost the false edges (seven tracked files no longer select them, among them
 `scripts/review/*`, `.gitignore` and two docs); the selection for each of the seven fixtures in
-`tests/fixtures/gate_selection/` is unchanged. `check_gate_registration.sh`'s exemption keys stay
-calls (they reach a function). Regression legs in `check_gate_selection.sh` ("text is not a call"):
-a note naming a gate is neither a run nor a read, nor is the directory it mentions; a genuine
-invocation of that gate in the same file is a call; a value run through a variable, in command
-position behind a wrapper's options, copied into another array that is run, printed into an unseen
-consumer, a process substitution (one line or several), by a function whose output is captured, or
-through a filter or a group (inline or not) into a file, reached through a nameref or an indirect
-expansion, moved by an attached `printf -vNAME`, or handed to `awk` or `rg`, is a call; a value read
-as a file, directly or after `printf -v`, is a read; a key naming a gate is a read; a command
-substitution in a key is a call; an ANSI-C quoted value and a quote inside `${...}` do not swallow
-the invocation after them. The note and key legs fail against the previous selector.
+`tests/fixtures/gate_selection/` is unchanged. Of the repository's other keyed arrays, those used
+inside functions or in scripts that redirect compound output stay code. Regression legs in
+`check_gate_selection.sh` ("text is not a call", 36 legs): a note naming a gate is neither a run
+nor a read, nor is the directory it mentions, and a genuine invocation of the gate in the same file
+is a call; each RUN, READ and parser rule above has a fixture that would be judged TEXT if the rule
+were missing (values run through variables, other arrays, wrappers, namerefs, indirect expansion,
+`printf -v`, `read`, `REPLY`, `BASH_ENV`, shadowing functions, captured or redirected function and
+group output, filters that write files, unsafe or opaque `awk`, `rg`, `=~`, multi-line pipes,
+process substitutions; reads through readers, `printf -v`, file tests, test operators in variables,
+globs and keys; command substitution in keys; ANSI-C quotes and quotes inside `${...}`). The note
+and key legs fail against the previous selector.
 
 ## Structural cause
 
