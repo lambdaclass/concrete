@@ -954,7 +954,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     let st ← getState
     let intrinsic := match callee with
       | .indirect _ => none
-      | .direct fn => if st.definedFns.contains fn then none else resolveIntrinsic fn
+      | .direct fn _ => if st.definedFns.contains fn then none else resolveIntrinsic fn
       -- A compiler-generated runtime call is its helper whatever the program defines (bug 165).
       | .runtime helper => resolveIntrinsic helper
     -- Handle sizeof::<T>() and alignof::<T>() → compile-time constants
@@ -1050,7 +1050,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     -- For runtime registers, prefix with "%" to mark as indirect call target.
     let callTarget : SCallee ← do
       match callee with
-      | .direct name => pure (.direct name)
+      | .direct name _ => pure (.direct name)
       -- The helper's reserved `_C$rt.` symbol, which no Concrete definition can take (bug 165).
       | .runtime helper => pure (.foreign (Symbols.runtimeFn helper))
       | .indirect binding =>

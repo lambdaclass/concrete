@@ -67,6 +67,22 @@ end CLocal
 
 abbrev LocalKey := CLocal.LocalKey
 
+/-- The namespace a direct call was resolved in (bugs 238, 239). Core spells a free function and
+    an impl method alike (`P_get` is both a free function's name and the definition name of
+    `P`'s method `get`), so the spelling alone cannot say which one a call means. A receiver call
+    `x.m()`, a `T::m()` call that the type's method table answered, and the compiler's own method
+    dispatch (`T$m`, `$destroy`, a type's `T_destroy`) are `method`; every other direct call,
+    and every free-spelled name (`P_get(x)`, which may still name a method by its definition
+    name), is `free`. Elab's renamings (submodule prefixing, type respelling, top-level collision
+    respelling) rename each namespace by its own table, so respelling a free function never moves
+    a method call, and the reverse. Below Elab the spelling alone resolves: Elab makes the two
+    namespaces' Core spellings disjoint (`checkCalleeNamespaces`). Not part of any fingerprint or
+    rendering: a call renders and digests by its spelling, as before. -/
+inductive CallSpace where
+  | free
+  | method
+deriving Repr, Inhabited, BEq, DecidableEq
+
 /-- What a call's callee IS, decided where scope is known.
 
     Bug 050: Elab emitted a call through a fn-typed LOCAL as `.call name args`,
@@ -87,8 +103,8 @@ abbrev LocalKey := CLocal.LocalKey
     which is what every one of them is. The migration's compile errors land
     where code CONSUMES a callee as a name — exactly the hazard set. -/
 inductive Callee where
-  /-- A call of a statically known function, by canonical definition name. -/
-  | direct (name : String)
+  /-- A call of a statically known function, by canonical definition name, resolved in `space`. -/
+  | direct (name : String) (space : CallSpace)
   /-- A call through a fn-typed local/parameter: that binding (its Core name and, for a source
       binding, its identity — R-0492 step 4). -/
   | indirect (binding : CLocal)
@@ -101,7 +117,7 @@ inductive Callee where
   | runtime (helper : String)
 deriving Repr, Inhabited
 
-instance : Coe String Callee := ⟨Callee.direct⟩
+instance : Coe String Callee := ⟨fun n => Callee.direct n .free⟩
 
 namespace Callee
 
@@ -110,21 +126,29 @@ namespace Callee
     already established which case it is — never to resolve an `indirect`
     callee against global definitions. -/
 def spelling : Callee → String
-  | .direct n => n
+  | .direct n _ => n
   | .indirect b => b.name
   | .runtime h => h
 
 def isIndirect : Callee → Bool
-  | .direct _ => false
+  | .direct _ _ => false
   | .indirect _ => true
   | .runtime _ => false
 
 /-- The definition name, when this call has one. `none` for indirect calls,
     which have no global definition to name. -/
 def directName? : Callee → Option String
-  | .direct n => some n
+  | .direct n _ => some n
   | .indirect _ => none
   | .runtime _ => none
+
+/-- A call the method namespace resolved (see `CallSpace`). -/
+def isMethod : Callee → Bool
+  | .direct _ .method => true
+  | _ => false
+
+/-- A method call of `name`: what Elab emits where a type's method table answered. -/
+def method (name : String) : Callee := .direct name .method
 
 end Callee
 
@@ -197,6 +221,9 @@ structure CFnDef where
   isTrusted : Bool := false
   isEntryPoint : Bool := false  -- tagged by Elab when name == mainFnName
   trustedImplOrigin : Option String := none  -- "TypeName" for a `trusted` method of an impl/trait-impl
+  /-- An impl method (inherent or trait), not a free function: the definition a `.method` call
+      names (`CallSpace`, bugs 238 – 239). Renamings rename it by the method table. -/
+  isMethod : Bool := false
   /-- The declaration's own name when Core spells its symbol differently (bugs 096 - 098:
       a method of a type two modules declare is `a_P_get`, a function two top-level modules
       define is `a_h`). `none` when the Core name IS the declaration name. Proof and report

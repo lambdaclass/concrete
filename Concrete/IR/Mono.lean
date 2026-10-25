@@ -147,12 +147,12 @@ private partial def rewriteCallNames (nameMap : List (String × String)) : CExpr
     let callee' := match callee with
       | .indirect binding => Callee.indirect binding
       | .runtime helper => Callee.runtime helper
-      | .direct name => Callee.direct (match splitTraitParamCallee name with
+      | .direct name sp => Callee.direct (match splitTraitParamCallee name with
           | some (p, m) => match nameMap.lookup p with
             | some c =>
               if c.isEmpty then name else traitDispatchSpelling c m
             | none => name
-          | none => name)
+          | none => name) sp
     .call callee' targs (args.map (rewriteCallNames nameMap)) ty
   | .binOp op l r ty => .binOp op (rewriteCallNames nameMap l) (rewriteCallNames nameMap r) ty
   | .unaryOp op e ty => .unaryOp op (rewriteCallNames nameMap e) ty
@@ -212,7 +212,7 @@ partial def injectTypeArgsExpr (genericNames : List String) (typeArgs : List Ty)
     -- `genericNames` is bug 050 in miniature: a local fn-pointer named like a
     -- generic would be handed that generic's type arguments.
     match callee with
-    | .direct name =>
+    | .direct name _ =>
       if genericNames.contains name then .call callee typeArgs args' ty
       else .call callee [] args' ty
     | .indirect _ | .runtime _ => .call callee [] args' ty
@@ -551,7 +551,7 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
   | .call (.runtime helper) typeArgs args ty =>
     let args' ← args.mapM monoExpr
     return .call (.runtime helper) typeArgs args' ty
-  | .call (.direct fn) typeArgs args ty =>
+  | .call (.direct fn space) typeArgs args ty =>
     if fn == destroyDispatchCallee then return ← monoDestroyDispatch args ty
     if let some (c, m) := splitTraitDispatchSpelling fn then
       let st ← get
@@ -592,7 +592,7 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
             throw [{ severity := .error, pass := "mono", span := none, code := "E0299"
                      message := s!"trait method call '{m}' on '{c}' selects '{resolved}', whose signature names other same-named types than the call expects; two modules' same-named traits or types meet here (bug 096)"
                      hint := some "rename one of the traits or types. Tracking: docs/bugs/096_same_named_types_share_one_definition.md" }]
-      return ← monoExpr (.call (.direct resolved) typeArgs args ty)
+      return ← monoExpr (.call (Callee.method resolved) typeArgs args ty)
     let args' ← args.mapM monoExpr
     if typeArgs.isEmpty then
       -- Even with no explicit typeArgs, the callee might be generic.
@@ -607,7 +607,7 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
           -- wrong `get` in regress_039. Destructor dispatch, the case the post-mono
           -- verifier needs exact, is spelled by its resolved definition at the source
           -- (`destroyImpls`), and the verifier resolves aliases conservatively itself.
-          return .call fn [] args' ty
+          return .call (.direct fn space) [] args' ty
         else
           -- Generic function called without type args (e.g., sibling method call).
           -- Try to infer type args from concrete argument types.
@@ -637,7 +637,7 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
                      message := s!"destructor '{fn}' for '{String.intercalate ", " (args'.map fun a => tyToSuffix (cexprTy a))}' cannot be specialized: the argument type does not determine its type arguments (bug 100)"
                      hint := some "this is a compiler containment failure, not a program error. Tracking: docs/bugs/100_generic_destroy_impl_unspecialized.md" }]
           if inferredArgs.isEmpty then
-            return .call fn [] args' ty  -- couldn't infer, leave as-is
+            return .call (.direct fn space) [] args' ty  -- couldn't infer, leave as-is
           else
             -- Re-process as a generic call with inferred type args.
             -- Specialize under the RESOLVED def's canonical name, not the
@@ -662,6 +662,7 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
               capSet := fnDef.capSet
               -- Authority travels with the body (bug 185; see the explicit-args branch).
               isTrusted := fnDef.isTrusted
+              isMethod := fnDef.isMethod
               trustedImplOrigin := fnDef.trustedImplOrigin
               declSpan := fnDef.declSpan
               paramIds := fnDef.paramIds
@@ -669,15 +670,15 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
               foreignCalls := fnDef.foreignCalls
             }
             enqueueMono name monoFn
-            return .call name [] args' (sub ty)
-      | none => return .call fn [] args' ty
+            return .call (.direct name space) [] args' (sub ty)
+      | none => return .call (.direct fn space) [] args' ty
     -- Look up the generic function
     let fnDef? ← lookupFn fn
     match fnDef? with
-    | none => return .call fn typeArgs args' ty  -- extern or unknown, leave as-is
+    | none => return .call (.direct fn space) typeArgs args' ty  -- extern or unknown, leave as-is
     | some fnDef =>
       if fnDef.typeParams.isEmpty then
-        return .call fn typeArgs args' ty  -- not actually generic
+        return .call (.direct fn space) typeArgs args' ty  -- not actually generic
       let genericNames ← getGenericFnNames
       -- Canonical-name specialization (see the inferred-args branch above).
       refuseNestedRefSpecialization fnDef typeArgs
@@ -702,6 +703,7 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
         -- Without it the post-mono comparison rule could not tell which instances may
         -- compare raw pointers (bug 185).
         isTrusted := fnDef.isTrusted
+        isMethod := fnDef.isMethod
         trustedImplOrigin := fnDef.trustedImplOrigin
         declSpan := fnDef.declSpan
         paramIds := fnDef.paramIds
@@ -709,7 +711,7 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
         foreignCalls := fnDef.foreignCalls
       }
       enqueueMono name monoFn
-      return .call name [] args' (sub ty)
+      return .call (.direct name space) [] args' (sub ty)
   | .intLit _ _ | .floatLit _ _ | .boolLit _ | .strLit _ | .charLit _ => return e
   | .ident n ty => return .ident n ty
   | .binOp op l r ty => return .binOp op (← monoExpr l) (← monoExpr r) ty
@@ -793,7 +795,7 @@ partial def monoDestroyDispatch (args : List CExpr) (ty : Ty) : MonoM CExpr := d
     if let some dfn := chosen? then
       -- The impl's own method. Re-enter the ordinary call path with the ORIGINAL argument so
       -- a generic impl (`impl<T: Destroy> Destroy for Vec<T>`) is specialized as usual.
-      return ← monoExpr (.call (.direct dfn) [] [a0] ty)
+      return ← monoExpr (.call (Callee.method dfn) [] [a0] ty)
     let glueName := destroyGlueName (tyToSuffix argTy)
     if monoIsCopy st target then
       enqueueMono glueName {
@@ -810,7 +812,7 @@ partial def monoDestroyDispatch (args : List CExpr) (ty : Ty) : MonoM CExpr := d
         body := [
           .letDecl (CLocal.ofName "i") true .uint (.intLit 0 .uint),
           .while_ (.binOp .lt idx (.intLit size .uint) .bool)
-            [ .expr (.call (.direct destroyDispatchCallee) [] [elemRef] .unit) false,
+            [ .expr (.call (Callee.method destroyDispatchCallee) [] [elemRef] .unit) false,
               .assign (CLocal.ofName "i") (.binOp .add idx (.intLit 1 .uint) .uint) ]
             none [] ]
         isPublic := false, isTest := false

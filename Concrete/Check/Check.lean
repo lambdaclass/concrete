@@ -1099,7 +1099,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         | _ => ""
       if typeName == "" then throwCheck (.destroyRequiresNamed (tyToString argTy)) (some e.getSpan)
       -- Search function signatures for TypeName_destroy
-      let destroyFn ← lookupFn (destroyFnNameFor typeName)
+      let destroyFn ← lookupMethod (destroyFnNameFor typeName)
       match destroyFn with
       | some _ =>
         return .unit
@@ -2261,7 +2261,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       | _ => throwCheck .methodCallOnNonNamedType (some e.getSpan)
     else
     let mangledName := typeName ++ "_" ++ methodName
-    match ← lookupFn mangledName with
+    match ← lookupMethod mangledName with
     | some sig =>
       -- E0293: the auto-borrowed receiver counts as a borrow of the receiver
       -- PLACE — `m.with_value_mut(&k, &mut m, f)` and `c.scoped(&mut c.i, f)`
@@ -2313,7 +2313,12 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     checkCallRootReads (← argMutLoanRoots args) args (some e.getSpan)
     let mangledName := typeName ++ "_" ++ methodName
     checkDirectDestroyImplUse mangledName (some e.getSpan)
-    match ← lookupFn mangledName with
+    -- The type's method table first (bugs 238 – 239); a `M::f()` whose head is no type with
+    -- such a method keeps the free lookup.
+    let staticSig? ← match ← lookupMethod mangledName with
+      | some sig => pure (some sig)
+      | none => lookupFn mangledName
+    match staticSig? with
     | some sig =>
       let mapping := sig.typeParams.zip typeArgs
       for (pName, pTy) in mapping do
@@ -3709,9 +3714,18 @@ end
     declarations of one name are left to the link-name rule (E0118), which judges whether they
     bind one C symbol. -/
 def declarationCollisions (m : Module) : Diagnostics :=
+  -- An impl method's definition name `Type_method` is in the module's callable namespace (bug
+  -- 082: a free-spelled `S_value` names the method), so a free function or extern of that
+  -- spelling binds it twice (bug 239: Core gave both one name, and the build failed on a
+  -- redefined symbol). Two methods of one name on one type are TRAIT-5's (E0594), not this.
+  let methodKind := "an impl method"
   let callables : List (String × String × Span) :=
     m.functions.map (fun f => (f.name, "a function", f.span))
       ++ m.externFns.map (fun e => (e.name, "an extern declaration", e.span))
+      ++ m.implBlocks.flatMap (fun ib => ib.methods.map fun f =>
+          (mangledMethodName ib.typeName f.name, methodKind, f.span))
+      ++ m.traitImpls.flatMap (fun tb => tb.methods.map fun f =>
+          (mangledMethodName tb.typeName f.name, methodKind, f.span))
   let constants : List (String × String × Span) :=
     m.constants.map (fun c => (c.name, "a constant", c.span))
   let types : List (String × String × Span) :=
@@ -3729,6 +3743,7 @@ def declarationCollisions (m : Module) : Diagnostics :=
       match seen.lookup n with
       | some (otherKind, otherSp) =>
         if kind == "an extern declaration" && otherKind == "an extern declaration" then (seen, errs)
+        else if kind == methodKind && otherKind == methodKind then (seen, errs)
         else
           let e := CheckError.declarationCollision n kind otherKind otherSp.line
           let d : Diagnostic := { severity := .error, message := e.message, pass := "check",
@@ -3841,7 +3856,7 @@ def checkModule (m : Module) (summary : FileSummary)
   let localStructNamesList := localStructDefs.map (fun sd => sd.name)
   let initEnv : TypeEnv :=
     { vars := [], structs := allStructs, enums := allEnums, functions := allSigs,
-      fnNames := allNames, loopDepth := 0, typeAliases := typeAliasMap, constants := constantsMap,
+      fnNames := allNames, methodNames := implNames, loopDepth := 0, typeAliases := typeAliasMap, constants := constantsMap,
       traitImpls := traitImplPairs, allFnSummarys := fnSigPairs, newtypes := allNewtypes,
       userFnNames := userFnNamesList, localNewtypeNames := localNewtypeNamesList,
       localStructNames := localStructNamesList }

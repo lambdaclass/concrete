@@ -408,6 +408,15 @@ def lookupFn (name : String) : CheckM (Option FnSummary) := do
   | some idx => return listGetIdx env.functions idx
   | none => return none
 
+/-- A method by its definition name `Type_method`, in the method table only (bugs 238 – 239):
+    a receiver call `x.m()` and a `T::m()` call mean the type's method, never a free function
+    of the module that happens to be spelled `T_m`. -/
+def lookupMethod (name : String) : CheckM (Option FnSummary) := do
+  let env ← getEnv
+  match env.methodNames.lookup name with
+  | some idx => return listGetIdx env.functions idx
+  | none => return none
+
 /-- Normalize a type for comparison (normalize empty capsets in fn types). -/
 def normalizeTyForCmp : Ty → Ty
   | .fn_ params capSet retTy =>
@@ -1012,6 +1021,7 @@ def checkPeekCtx : PeekCtx CheckM where
   constant name := do return (← getEnv).constants.lookup name
   fnSig name := lookupFn name
   fnRefSig name := do return (← getEnv).allFnSummarys.lookup name
+  methodSig name := lookupMethod name
   struct name := lookupStruct name
   newtype name := lookupNewtype name
   boundMethod n methodName := do
@@ -1050,7 +1060,7 @@ partial def ownsResource (fuel : Nat) (ty : Ty) : CheckM Bool := do
     | .string | .heap _ | .heapArray _ => return true
     | .array elem _ => ownsResource fuel elem
     | .named n =>
-      if (← lookupFn (destroyFnNameFor n)).isSome then return true
+      if (← lookupMethod (destroyFnNameFor n)).isSome then return true
       match ← lookupStruct n with
       | some sd => sd.fields.anyM (fun f => ownsResource fuel f.ty)
       | none => match ← lookupEnum n with
@@ -1059,7 +1069,7 @@ partial def ownsResource (fuel : Nat) (ty : Ty) : CheckM Bool := do
     | .generic n args _ =>
       if n == "Vec" || n == "HashMap" || n == "HashSet" || n == "Heap" || n == "HeapArray" then
         return true
-      if (← lookupFn (destroyFnNameFor n)).isSome then return true
+      if (← lookupMethod (destroyFnNameFor n)).isSome then return true
       match ← lookupStruct n with
       | some sd =>
         let m := sd.typeParams.zip args

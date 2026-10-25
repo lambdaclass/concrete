@@ -675,7 +675,7 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
     for arg in args do
       ccCheckExpr arg
 
-  | .call (.direct fn) _typeArgs args _ty =>
+  | .call (.direct fn _) _typeArgs args _ty =>
     -- TRUST EDGES, emitted on the same visit as the capability decision below. A callee
     -- that is both (an `extern` declared `trusted`) yields both facts, because they are
     -- different questions: one is "audited", the other is "leaves the language".

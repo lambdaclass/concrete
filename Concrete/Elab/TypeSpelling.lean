@@ -51,7 +51,14 @@ partial def renameTyNames (tn : String → String) : Ty → Ty
     binders), which are never renamed. -/
 structure CoreRename where
   tyName : String → String
+  /-- The free namespace: a `free` direct callee, a function reference and a function value (a
+      free-spelled name, which may name a method by its definition name), and a free function's
+      definition. -/
   fnName : String → String
+  /-- The method namespace (`CallSpace.method`, bugs 238 – 239): a `method` direct callee and an
+      impl method's definition (`CFnDef.isMethod`). Kept apart from `fnName` so a rename meant
+      for one namespace never moves a name of the other that shares its spelling. -/
+  methodName : String → String
   locals : List String := []
 
 namespace CoreRename
@@ -84,7 +91,8 @@ partial def expr (r : CoreRename) : CExpr → CExpr
   | .unaryOp op e t => .unaryOp op (expr r e) (r.ty t)
   | .call callee targs args t =>
     let callee' := match callee with
-      | .direct n => Callee.direct (r.fnName n)
+      | .direct n .free => Callee.direct (r.fnName n) .free
+      | .direct n .method => Callee.direct (r.methodName n) .method
       | .indirect b => Callee.indirect b
       | .runtime h => Callee.runtime h
     .call callee' (targs.map r.ty) (args.map (expr r)) (r.ty t)
@@ -143,7 +151,7 @@ end
 
 def fnDef (r : CoreRename) (f : CFnDef) : CFnDef :=
   let r' := (r.shadow f.typeParams).bind (f.params.map (·.1))
-  let name' := r.fnName f.name
+  let name' := if f.isMethod then r.methodName f.name else r.fnName f.name
   { f with
     name := name'
     declName := if name' != f.name then some f.sourceName else f.declName

@@ -2340,7 +2340,7 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
     -- recorded in foreignCalls too, while an `#[intrinsic]`-attributed `extern fn abs` is not an
     -- intrinsic spelling and stays foreign).
     let foreign : Option String := match callee with
-      | .direct name =>
+      | .direct name _ =>
         (cx.foreign.lookup name).filter fun decl =>
           decl.startsWith runtimeHelperPrefix || (cx.externs.contains decl && (resolveIntrinsic name).isNone)
       | .indirect binding => match envGetLocal env binding.key with
@@ -2359,7 +2359,7 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
         else pure ("$extern", none)
       | none =>
       match callee with
-      | .direct name => do
+      | .direct name _ => do
         let t ← liftE (resolveCall cx name)
         pure (name, t)
       | .indirect binding =>

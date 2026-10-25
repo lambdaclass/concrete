@@ -82,7 +82,7 @@ def capSuppliers (lookup : CapLookup) (deps : Std.HashMap String (Array (String 
   -- AND kind: a body calling both `print(7)` and a user `print_int` has two suppliers, the program
   -- function and the intrinsic (Codex review).
   let all := (collectCalleesStmts f.body).filterMap fun c => match c with
-    | .direct n => spelledSupplier n
+    | .direct n _ => spelledSupplier n
     | .runtime h => runtimeSupplier h
     | .indirect _ => none
   all.foldl (fun acc x => if acc.any (fun y => y.callee == x.callee && y.kind == x.kind) then acc else acc ++ [x]) []

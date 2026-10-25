@@ -255,7 +255,7 @@ private partial def buildCallGraphModule (qualNameMap : List (String × String))
     -- name and never resolved against the program (a module's own `print_string` is another
     -- node); the capability chains of `--report authority` end at it as before.
     let callees := (collectCalleesStmts f.body).filterMap fun c => match c with
-      | .direct n => some (resolveCallee n)
+      | .direct n _ => some (resolveCallee n)
       | .runtime h => some h
       | .indirect _ => none
     (qualName, callees.eraseDups)
@@ -579,7 +579,7 @@ private partial def fingerprintExpr : CExpr → String
   | .ident name _ => s!"(var {stripAlpha name.name})"
   | .binOp op lhs rhs _ => s!"(binop {repr op} {fingerprintExpr lhs} {fingerprintExpr rhs})"
   | .unaryOp op inner _ => s!"(unary {repr op} {fingerprintExpr inner})"
-  | .call (.direct fn) _ args _ => s!"(call {fn} {fingerprintExprs args})"
+  | .call (.direct fn _) _ args _ => s!"(call {fn} {fingerprintExprs args})"
   -- Distinct prefix: a direct call and an indirect call through a same-named
   -- local are different programs, so they must not fingerprint alike.
   | .call (.indirect b) _ args _ => s!"(callptr {stripAlpha b.name} {fingerprintExprs args})"
@@ -930,7 +930,7 @@ def cExprToPExprImpl : CExpr → Option Proof.PExpr
     let pl ← cExprToPExprImpl lhs
     let pr ← cExprToPExprImpl rhs
     some (.binOp pop pl pr)
-  | .call (.direct fn) _ args _ => do
+  | .call (.direct fn _) _ args _ => do
     let pargs ← cExprListToPExpr args
     some (.call fn pargs)
   -- Indirect callee: a LOCALLY BOUND callable, not a definition. The model does
