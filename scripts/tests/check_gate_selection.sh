@@ -160,6 +160,86 @@ else
   skip "713778e2 not in this clone: the added-command leg needs the base's workflow"
 fi
 
+echo "=== text is not a call: names in keyed-array values (bug 237) ==="
+# A corpus note naming a gate script made run_tests.sh, which runs the corpus audit, look as if it ran
+# that gate and read docs/: the docs-only control selected 19 commands in train 16. The value of a
+# `[key]=value` element is text unless the script executes the map. The gate named in the fixtures is
+# the runner, which this gate already runs, so spelling it here adds no edge to this gate.
+NAMED="scripts/tests/run_ci_gates_local.sh"
+# script_edges FILE -> "run PATH" / "read PATH" lines: the selector's own reading of FILE
+script_edges() {
+  python3 -I - "$1" <<'PY'
+import sys
+sys.path.insert(0, "scripts/tests/lib")
+import select_gates as sg
+files, dirs, _, _, runs = sg.Repo([]).script(sys.argv[1])
+for f in sorted(runs):
+    print("run", f)
+for f in sorted(files | dirs):
+    print("read", f)
+PY
+}
+edges() {  # NAME FILE: edges into $TMPD/NAME.edges; a selector failure is a FAIL
+  if ! script_edges "$2" > "$TMPD/$1.edges" 2>"$TMPD/$1.edges.err"; then
+    no "$1: the selector could not read the fixture: $(head -c 300 "$TMPD/$1.edges.err")"; return 1
+  fi
+}
+cat > "$TMPD/map_notes" <<'EOF'
+declare -A NOTES=(
+  # a note per bug, as in the corpus audit
+  [901]="FIXED -- the regression vehicle is scripts/tests/run_ci_gates_local.sh itself (its --plan leg)"
+  [902]='OPEN -- reproduced by: bash scripts/tests/run_ci_gates_local.sh --plan; see docs/bugs/'
+)
+NOTES[903]="FIXED -- pinned by run_ci_gates_local.sh"
+for n in "${!NOTES[@]}"; do
+  entry="${NOTES[$n]}"
+  echo "  skip $n (${NOTES[$n]})"
+  [ -n "$entry" ] && printf '%s\n' "$entry"
+done
+EOF
+if edges notes "$TMPD/map_notes"; then
+  if ! grep -q "run_ci_gates_local\.sh" "$TMPD/notes.edges" && ! grep -q "^read docs" "$TMPD/notes.edges"; then
+    ok "a gate named in a map's note text is neither run nor read (nor is the directory it mentions)"
+  else
+    no "a gate named in a map's note text became a dependency: $(tr '\n' ' ' < "$TMPD/notes.edges")"
+  fi
+fi
+{ cat "$TMPD/map_notes"; echo 'bash "$ROOT_DIR/scripts/tests/run_ci_gates_local.sh" --plan'; } > "$TMPD/map_and_call"
+if edges call "$TMPD/map_and_call"; then
+  if grep -qx "run $NAMED" "$TMPD/call.edges"; then ok "a genuine invocation of the same gate in the same file is still a run"
+  else no "a genuine invocation beside the map is not a run: $(tr '\n' ' ' < "$TMPD/call.edges")"; fi
+fi
+cat > "$TMPD/map_exec" <<'EOF'
+declare -A GATE_FOR=(
+  [plan]="scripts/tests/run_ci_gates_local.sh"
+)
+g="${GATE_FOR[plan]}"
+bash "$g" --plan
+EOF
+if edges exec "$TMPD/map_exec"; then
+  if grep -qx "run $NAMED" "$TMPD/exec.edges"; then ok "a map whose value is executed (through a variable) keeps its values as calls"
+  else no "an executed map's value is not a run: $(tr '\n' ' ' < "$TMPD/exec.edges")"; fi
+fi
+cat > "$TMPD/map_cmdpos" <<'EOF'
+declare -A GATE_FOR=( [plan]="scripts/tests/run_ci_gates_local.sh" [x]=other )
+for k in plan; do "${GATE_FOR[$k]}" --plan; done
+EOF
+if edges cmdpos "$TMPD/map_cmdpos"; then
+  if grep -qx "run $NAMED" "$TMPD/cmdpos.edges"; then ok "a map expanded in command position keeps its values as calls"
+  else no "a map expanded in command position is not a run: $(tr '\n' ' ' < "$TMPD/cmdpos.edges")"; fi
+fi
+cat > "$TMPD/map_key" <<'EOF'
+declare -A SKIP=(
+  ["scripts/tests/run_ci_gates_local.sh"]="a reason that names nothing"
+)
+for f in scripts/tests/*.sh; do [ -n "${SKIP[$f]:-}" ] && echo "skip $f"; done
+EOF
+if edges key "$TMPD/map_key"; then
+  if grep -qx "read $NAMED" "$TMPD/key.edges" && ! grep -qx "run $NAMED" "$TMPD/key.edges"; then
+    ok "a map key naming a gate is a read, not a run"
+  else no "a map key naming a gate: expected a read and no run: $(tr '\n' ' ' < "$TMPD/key.edges")"; fi
+fi
+
 echo "=== wiring: run_ci_gates_local.sh --impact-files resolves to exactly the selector's list ==="
 grep -v '^#' "$FIX/stack_budget_leg_26c409f8.paths" > "$TMPD/wire.paths"
 if bash scripts/tests/run_ci_gates_local.sh --plan --impact-files "$TMPD/wire.paths" > "$TMPD/wire.plan" 2>/dev/null; then

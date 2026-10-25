@@ -18,7 +18,10 @@ every edge is read out of the tree on each run:
      resolved from the repository root and from the script's own directory; a glob such as
      `tests/programs/*.con` is a dependency on the directory. Scripts a gate names (sourced
      libraries, helper .py files, other gates it runs) are followed transitively, so a change
-     to scripts/tests/lib/X selects every gate that reaches X.
+     to scripts/tests/lib/X selects every gate that reaches X. Text is not a reference: a heredoc
+     no interpreter reads, and the value of a keyed array element (a corpus note, an exemption
+     reason) unless the script executes that map, name nothing (bug 237); a name on a line that
+     only greps or prints it is a read, not a run.
   2. compiler dependencies — a gate whose closure runs the compiler binary
      (`.lake/build/bin/concrete`, `require_fresh_binary`, `run_tests.sh`) or Lean (`lake env
      lean`, `lake build`) is selected by any change to a Lean module in the import closure of
@@ -67,6 +70,210 @@ TOOLCHAIN = {"lakefile.toml", "lake-manifest.json", "lean-toolchain", "flake.nix
              "Makefile"}
 # Files nothing executes. A change here that no gate names selects nothing.
 INERT_RE = re.compile(r"(^|/)[^/]*\.md$|^(docs|research|paper|site|editor|bench)/|^LICENSE$|\.png$")
+
+# KEYED ELEMENTS: `declare -A NAME=( [key]="value" ... )` and `NAME[key]="value"`. A value is
+# usually TEXT — the bug corpus's per-bug notes, a gate's exemption reasons — and a script name
+# in a note is not a call: naming the docs-drift gate in a corpus note made run_tests.sh, which
+# runs the corpus audit, look as if it ran that gate and read docs/ (bug 237). So a value
+# contributes no reference at all, and a key (a lookup string matched against paths the script
+# enumerates) is a read but never a run — unless the script EXECUTES the map (see
+# _executed_maps), when its elements are code as before. A value holding a command
+# substitution runs at assignment and is always code. A literal with no keyed element (a list
+# of gates to run) is not affected.
+ARRAY_START_RE = re.compile(
+    r"\s*(?:(?:declare|local|typeset|readonly)\s+(?:-[A-Za-z]+\s+)*)?([A-Za-z_][A-Za-z0-9_]*)\+?=\(")
+ELEM_ASSIGN_RE = re.compile(r"\s*([A-Za-z_][A-Za-z0-9_]*)\[([^\]\n]*)\]\+?=(\S.*)$")
+
+
+WORD_STOP = " \t\n;()|&<>"
+# Words after which the next word is still in command position.
+CMD_PREFIX = {"then", "do", "else", "elif", "if", "while", "until", "!", "time", "{", "}",
+              "exec", "command", "builtin", "nohup", "env", "timeout", "sudo"}
+
+
+def _dq_end(s, i):
+    """s[i] is `"`: the index after its closing quote, or None."""
+    j, n = i + 1, len(s)
+    while j < n:
+        c = s[j]
+        if c == "\\":
+            j += 2
+        elif c == '"':
+            return j + 1
+        elif c == "`" or (c == "$" and s[j + 1:j + 2] in ("(", "{")):
+            j = _subst_end(s, j)
+            if j is None:
+                return None
+        else:
+            j += 1
+    return None
+
+
+def _subst_end(s, i):
+    """s[i:] starts `$(`, `${` or a backquote: the index after its close, or None."""
+    n = len(s)
+    if s[i] == "`":
+        j = s.find("`", i + 1)
+        return None if j < 0 else j + 1
+    opener = s[i + 1]
+    close = ")" if opener == "(" else "}"
+    j, depth = i + 2, 1
+    while j < n:
+        c = s[j]
+        if c == "\\":
+            j += 2
+            continue
+        if c == "'" and opener == "(":
+            k = s.find("'", j + 1)
+            if k < 0:
+                return None
+            j = k + 1
+            continue
+        if c == '"':
+            j = _dq_end(s, j)
+            if j is None:
+                return None
+            continue
+        if c == "`" or (c == "$" and s[j + 1:j + 2] in ("(", "{")):
+            j = _subst_end(s, j)
+            if j is None:
+                return None
+            continue
+        if c == opener:
+            depth += 1
+        elif c == close:
+            depth -= 1
+            if depth == 0:
+                return j + 1
+        j += 1
+    return None
+
+
+def _word_end(s, i):
+    """End of the shell word starting at s[i] (quotes, escapes, $(...) and ${...} honored), or
+    None when a quote or substitution is still open at the end of s."""
+    n = len(s)
+    while i < n and s[i] not in WORD_STOP:
+        c = s[i]
+        if c == "\\":
+            i += 2
+        elif c == "'":
+            j = s.find("'", i + 1)
+            if j < 0:
+                return None
+            i = j + 1
+        elif c == '"':
+            i = _dq_end(s, i)
+            if i is None:
+                return None
+        elif c == "`" or (c == "$" and s[i + 1:i + 2] in ("(", "{")):
+            i = _subst_end(s, i)
+            if i is None:
+                return None
+        else:
+            i += 1
+    return min(i, n)
+
+
+def _substitutions(w):
+    """-> the command texts of the `$(...)` and backquote substitutions in word w, at any depth
+    of quoting or `${...}` nesting (not their own nested substitutions; _command_words recurses)."""
+    out, j, n, dq = [], 0, len(w), False
+    while j < n:
+        c = w[j]
+        if c == "\\":
+            j += 2
+        elif c == "'" and not dq:
+            k = w.find("'", j + 1)
+            j = n if k < 0 else k + 1
+        elif c == '"':
+            dq, j = not dq, j + 1
+        elif c == "`" or (c == "$" and w[j + 1:j + 2] in ("(", "{")):
+            k = _subst_end(w, j) or n
+            inner = w[j + (1 if c == "`" else 2):max(k - 1, j)]
+            if c == "$" and w[j + 1] == "{":
+                out += _substitutions(inner)
+            else:
+                out.append(inner)
+            j = k
+        else:
+            j += 1
+    return out
+
+
+def _words(s):
+    """-> [(word, in_command_position)] for the line s, substitutions' commands included."""
+    out, i, n, at_cmd, redirect = [], 0, len(s), True, False
+    while i < n:
+        c = s[i]
+        if c in " \t":
+            i += 1
+        elif c in ";&|()\n":
+            at_cmd, redirect, i = True, False, i + 1
+        elif c in "<>":
+            redirect, i = True, i + 1
+        else:
+            j = _word_end(s, i)
+            j = n if j is None else max(j, i + 1)
+            w = s[i:j]
+            for inner in _substitutions(w):
+                out += _words(inner)
+            if redirect:
+                redirect = False
+                out.append((w, False))
+            elif re.match(r"[A-Za-z_]\w*(\[[^\]]*\])?\+?=", w):
+                out.append((w, False))  # an assignment, alone or before a command: not run
+            else:
+                out.append((w, at_cmd))
+                if at_cmd and w not in CMD_PREFIX:
+                    at_cmd = False
+            i = j
+    return out
+
+
+def _array_literal(body):
+    """body: the text after `NAME=(`. -> ([(key or None, value)], text after the closing paren),
+    or None when the literal does not close within body."""
+    elems, i, n = [], 0, len(body)
+    while i < n:
+        c = body[i]
+        if c.isspace():
+            i += 1
+        elif c == "#":
+            j = body.find("\n", i)
+            i = n if j < 0 else j
+        elif c == ")":
+            return elems, body[i + 1:]
+        else:
+            key = None
+            m = re.match(r"\[([^\]\n]*)\]\+?=", body[i:])
+            if m:
+                key, i = m.group(1), i + m.end()
+            j = _word_end(body, i)
+            if j is None:
+                return None
+            if j == i and key is None:
+                i += 1  # a stray `;`: not a word
+                continue
+            elems.append((key, body[i:j]))
+            i = j
+    return None
+
+
+def _array_elements(name, elems):
+    out = []
+    for key, value in elems:
+        if key is None:
+            out.append((value, "code"))
+            continue
+        out.append((key, ("key", name)))
+        code = "$(" in value or "`" in value
+        out.append((value, "code" if code else ("value", name)))
+    return out
+
+
+def _expansion(var):
+    return r"\$\{?!?" + re.escape(var) + r"(?![A-Za-z0-9_])"
 
 
 # The estimate scales the selection's share of CI serial time to the measured local full-set run
@@ -182,11 +389,16 @@ class Repo:
     @staticmethod
     def _logical_lines(raw):
         """-> [(line, kind)]: full-line comments dropped, backslash continuations joined.
-        kind is "code", or "data" for the body of a heredoc that no interpreter reads
-        (`cat <<EOF`: a fixture list, a generated program). A heredoc fed to python3/bash is
-        code, and its lines are judged like any other."""
+        kind is "code"; "data" for the body of a heredoc that no interpreter reads (`cat <<EOF`:
+        a fixture list, a generated program); or ("key"|"value", NAME) for one element of a keyed
+        array assignment (see KEYED ELEMENTS below). A heredoc fed to python3/bash is code, and
+        its lines are judged like any other."""
         out, buf, heredoc, hkind = [], "", None, "code"
-        for line in raw.split("\n"):
+        raws = raw.split("\n")
+        i = 0
+        while i < len(raws):
+            line = raws[i]
+            i += 1
             if heredoc is not None:
                 if line.strip() == heredoc:
                     heredoc = None
@@ -201,12 +413,72 @@ class Repo:
                 buf += line[:-1] + " "
                 continue
             line, buf = buf + line, ""
+            m = ARRAY_START_RE.match(line)
+            if m:
+                # A literal with no keyed element is left to the line rule below, line by line.
+                body, j, done = line[m.end():], i, _array_literal(line[m.end():])
+                while done is None and j < len(raws):
+                    body += "\n" + raws[j]
+                    j += 1
+                    done = _array_literal(body)
+                if done is not None and any(k is not None for k, _ in done[0]):
+                    out.append((line[:m.end()], "code"))
+                    out.extend(_array_elements(m.group(1), done[0]))
+                    i, line = j, done[1]
+                    if not line.strip():
+                        continue
+            m = ELEM_ASSIGN_RE.match(line)
+            if m and _word_end(line, m.start(3)) == len(line.rstrip()):
+                out.extend(_array_elements(m.group(1), [(m.group(2), m.group(3).rstrip())]))
+                continue
             out.append((line, "code"))
             m = re.search(r"<<-?\s*['\"]?([A-Za-z_][A-Za-z0-9_]*)['\"]?", line)
             if m:
                 heredoc = m.group(1)
                 hkind = "code" if EXEC_RE.search(line[:m.start()]) else "data"
         return out
+
+    @staticmethod
+    def _executed_maps(lines):
+        """-> the keyed arrays whose values this script may EXECUTE.
+
+        A map is executed when it is expanded, directly or through a variable assigned from it
+        (`entry="${M[$k]}"`, `for f in ${M[$k]}`, `read`, followed to a fixed point), in a word in
+        command position (`"${M[$k]}" --flag`, `$("$f")`, after `exec`/`env`/`timeout`), or on a
+        line that names an interpreter, `source`, `eval` or `xargs`. An expansion inside an
+        argument (`echo "skip (${M[$k]})"`, `[[ -n ${M[$k]} ]]`) is not a run. Misjudging a map
+        as executed only over-selects: its elements are then read as code, the rule before."""
+        names = {k[1] for _, k in lines if isinstance(k, tuple)}
+        code = [l for l, k in lines if k == "code"]
+        executed = set()
+        for name in names:
+            tainted, grew = {name}, True
+            while grew and name not in executed:
+                grew = False
+                for line in code:
+                    pats = [re.compile(_expansion(v)) for v in tainted]
+                    if not any(p.search(line) for p in pats):
+                        continue
+                    words = _words(line)
+                    if EXEC_RE.search(line) or re.search(r"\b(eval|xargs)\b", line) \
+                            or any(cmd and any(p.search(w) for p in pats) for w, cmd in words):
+                        executed.add(name)
+                        break
+                    targets = []
+                    for w, _ in words:
+                        m = re.match(r"([A-Za-z_]\w*)(?:\[[^\]]*\])?\+?=(.*)$", w, re.S)
+                        if m and any(p.search(m.group(2)) for p in pats):
+                            targets.append(m.group(1))
+                    for m in re.finditer(r"\bfor\s+([A-Za-z_]\w*)\s+in\b(.*?)(?:;|\bdo\b|$)", line):
+                        if any(p.search(m.group(2)) for p in pats):
+                            targets.append(m.group(1))
+                    for rd in re.findall(r"\bread\s+((?:-\w+\s+)*[A-Za-z_][\w\s]*)", line):
+                        targets += [w for w in rd.split() if not w.startswith("-")]
+                    for t in targets:
+                        if t not in tainted:
+                            tainted.add(t)
+                            grew = True
+        return executed
 
     def script(self, path):
         """-> (files, dirs, uses_compiler, uses_lean, runs) for one script, not transitive.
@@ -226,15 +498,24 @@ class Repo:
         files, dirs, runs = set(), set(), set()
         base = os.path.dirname(path)
         lines = self._logical_lines(raw)
+        executed = self._executed_maps(lines)
         for line, kind in lines:
             if kind == "data":
+                continue
+            if isinstance(kind, tuple) and kind[1] not in executed:
+                if kind[0] == "value":
+                    continue  # text: a note, a reason, a message — names in it are not used
+                f, d = self.deps_of_text(line, base)  # a lookup key: read, never run
+                files |= f
+                dirs |= d
                 continue
             f, d = self.deps_of_text(line, base)
             files |= f
             dirs |= d
             if not (DATA_RE.search(line) and not EXEC_RE.search(line)):
                 runs |= {x for x in f if x.endswith(SCRIPT_EXT)}
-        text = "\n".join(l for l, _ in lines)
+        text = "\n".join(l for l, k in lines
+                         if not (isinstance(k, tuple) and k[0] == "value" and k[1] not in executed))
         if path.endswith(".py"):
             for m in re.finditer(r"^\s*(?:from|import)\s+([A-Za-z_][A-Za-z0-9_]*)", text, re.M):
                 sib = os.path.join(base, m.group(1) + ".py")
