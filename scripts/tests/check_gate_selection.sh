@@ -299,6 +299,21 @@ declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
 mapfile -t gates < <(printf '%s\n' "${M[@]}" | sort)
 for gate in "${gates[@]}"; do "$gate" --plan; done
 EOF
+leg procsub2 run "a value printed into a process substitution over several lines is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+mapfile -t gates < <(
+  printf '%s\n' "${M[@]}" | sort
+)
+for gate in "${gates[@]}"; do "$gate" --plan; done
+EOF
+leg funcout run "a value printed by a function whose output is captured is a call" <<'EOF'
+declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
+get_gate() {
+  printf '%s\n' "${M[$1]}"
+}
+gate=$(get_gate k)
+"$gate" --plan
+EOF
 leg rg run "a value handed to rg, which can run a preprocessor, is a call" <<'EOF'
 declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
 rg --pre "${M[k]}" pattern README.md

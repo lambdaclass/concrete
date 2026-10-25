@@ -44,8 +44,9 @@ READ_CMDS = {"cat", "grep", "egrep", "fgrep", "diff", "cmp", "wc", "head", "tail
 PURE_FILTERS = {"grep", "egrep", "fgrep", "cut", "tr", "sort", "uniq", "head", "tail", "wc", "rev",
                 "fold", "paste", "column"}
 # Output of a whole compound command (a group, a loop, a function call) or of the rest of the
-# script (`exec >file`) sent to a file or a pipe: a print inside it is not known to reach only the
-# terminal, so no print in such a script is TEXT.
+# script (`exec >file`) sent to a file or a pipe, a function's output captured, a substitution
+# spanning lines, a process substitution: a print inside it is not known to reach only the
+# terminal or its own line's capture, so no print in such a script is TEXT.
 COMPOUND_OUT_RE = re.compile(r"(^|[;&|\s])(\}|done|fi|esac|\))\s*([0-9]*>(?!&)|&>|\|(?!\|))"
                              r"|\bexec\s+[0-9]*>(?!&)")
 FUNC_DEF_RE = re.compile(r"^\s*(?:function\s+)?([A-Za-z_][\w-]*)\s*\(\)")
@@ -330,6 +331,14 @@ def _command_name(cmd):
     return names[-1] if names else None
 
 
+def _open_subst(line):
+    """A substitution a print's output may flow into beyond this line: a `$(` or backquote left
+    open (the command goes on over the next lines), or a process substitution `<(` / `>(`."""
+    if re.search(r"[<>]\(", line):
+        return True
+    return any(subst_end(line, m.start()) is None for m in re.finditer(r"\$\(|`", line))
+
+
 def _pure(cmd):
     if any(r == "redir" for _, r in cmd):
         return False  # the filtered text goes to a file
@@ -360,9 +369,13 @@ def use_level(seeds, code_lines, elements, exec_re):
     pats, level, grew = set(seeds), TEXT, True
     parsed = [(line, simple_commands(line)) for line in code_lines]
     funcs = {m.group(1) for line in code_lines for m in [FUNC_DEF_RE.match(line)] if m}
-    prints_escape = any(COMPOUND_OUT_RE.search(line) for line in code_lines) or any(
-        _command_name(cmd) in funcs and (cmd[-1] == ("|", "pipe") or any(r == "redir" for _, r in cmd))
-        for _, cmds in parsed for cmd in cmds)
+    prints_escape = any(COMPOUND_OUT_RE.search(line) or _open_subst(line) for line in code_lines) \
+        or any(_command_name(cmd) in funcs and (cmd[-1] == ("|", "pipe")
+                                                or any(r == "redir" for _, r in cmd))
+               for _, cmds in parsed for cmd in cmds) \
+        or any(_command_name(c) in funcs
+               for _, cmds in parsed for cmd in cmds for w, _ in cmd
+               for inner in substitutions(w) for c in simple_commands(inner))
 
     def ident(v):
         return re.match(r"[A-Za-z_]\w*$", v) is not None
