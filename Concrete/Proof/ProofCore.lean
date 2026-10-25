@@ -220,8 +220,13 @@ private partial def buildQualNameMap (m : CModule) (pfx : String := "")
   entries ++ m.submodules.foldl (fun acc sub =>
     acc ++ buildQualNameMap sub qualPrefix) []
 
+/-- Every impl method's Core name in a module tree (bugs 238 – 239). -/
+private partial def allMethodDefNames (m : CModule) : List String :=
+  (m.functions.filter (·.isMethod)).map (·.name) ++ m.submodules.flatMap allMethodDefNames
+
 private partial def buildCallGraphModule (qualNameMap : List (String × String))
-    (aliases : List (String × String)) (m : CModule) (pfx : String := "") : CallGraph :=
+    (aliases : List (String × String)) (methodCoreNames : List String) (m : CModule)
+    (pfx : String := "") : CallGraph :=
   let qualPrefix := if pfx == "" then m.name else pfx ++ "." ++ m.name
   -- Resolve a bare callee name to its qualified name.
   -- Prefer same-module match (qualPrefix.bare) over first global match.
@@ -232,6 +237,8 @@ private partial def buildCallGraphModule (qualNameMap : List (String × String))
   -- rather than guessing. Codegen takes the FIRST alias in emission order; the graph takes an alias
   -- only when the spelling has exactly one target and that symbol is defined exactly once. Anything
   -- else stays bare and the closure refuses, rather than agreeing with codegen by luck.
+  -- A method call's aliases lead to methods only (bugs 238 – 239, Codex review r13): an import
+  -- alias of its spelling to a free function is no target of it.
   let resolveCallee (bare : String) (isMethodCall : Bool := false) : String :=
     let sameModule := qualPrefix ++ "." ++ bare
     -- The same module's DEFINITION of that Core name, not merely a declaration whose SOURCE name
@@ -248,7 +255,8 @@ private partial def buildCallGraphModule (qualNameMap : List (String × String))
       -- intrinsic table is the one answer for these names, and aliases never override it.
       -- A method call is never a compiler intrinsic of its spelling (bugs 238 – 239, Codex r10).
       if !isMethodCall && (resolveIntrinsic bare).isSome then bare else
-      match (aliases.filterMap fun (a, sym) => if a == bare then some sym else none).eraseDups with
+      match (aliases.filterMap fun (a, sym) =>
+          if a == bare && (!isMethodCall || methodCoreNames.contains sym) then some sym else none).eraseDups with
       | [sym] =>
         match qualNameMap.filter fun (b, _) => b == sym with
         | [(_, qual)] => qual
@@ -271,7 +279,7 @@ private partial def buildCallGraphModule (qualNameMap : List (String × String))
       | .indirect _ => none
     (qualName, callees.eraseDups)
   fnEntries ++ m.submodules.foldl (fun acc sub =>
-    acc ++ buildCallGraphModule qualNameMap aliases sub qualPrefix) []
+    acc ++ buildCallGraphModule qualNameMap aliases methodCoreNames sub qualPrefix) []
 
 private partial def allLinkerAliases (m : CModule) : List (String × String) :=
   m.linkerAliases ++ m.submodules.foldl (fun acc sub => acc ++ allLinkerAliases sub) []
@@ -279,7 +287,8 @@ private partial def allLinkerAliases (m : CModule) : List (String × String) :=
 def buildCallGraph (modules : List CModule) : CallGraph :=
   let qualNameMap := modules.foldl (fun acc m => acc ++ buildQualNameMap m) []
   let aliases := modules.foldl (fun acc m => acc ++ allLinkerAliases m) []
-  modules.foldl (fun acc m => acc ++ buildCallGraphModule qualNameMap aliases m) []
+  let methodCoreNames := modules.flatMap allMethodDefNames
+  modules.foldl (fun acc m => acc ++ buildCallGraphModule qualNameMap aliases methodCoreNames m) []
 
 /-! ### Effect opacity (R-0484)
 

@@ -8729,6 +8729,21 @@ run_ok "$TESTDIR/regress_239_fn_parameter_spelled_like_method.con" 42
 run_ok "$TESTDIR/regress_238_extern_alias_takes_nested_method_spelling.con" 42
 run_ok "$TESTDIR/regress_238_unrelated_alias_beside_method.con" 42
 run_ok "$TESTDIR/regress_239_imported_extern_alias_beside_capable_method.con" 42
+run_ok "$TESTDIR/regress_239_method_ffi_beside_free_alias.con" 42
+check_report_multi "$TESTDIR/regress_239_method_ffi_beside_free_alias.con" effects \
+    "bug 239: --report effects follows a method call past a free alias of its spelling to its FFI" \
+    "bug 239: --report effects lost FFI behind a method call whose spelling a free alias also takes" \
+    "ffi: yes"
+run_ok "$TESTDIR/regress_239_destructor_call_is_cleanup.con" 0
+r239_alloc=$(cached_output "$TESTDIR/regress_239_destructor_call_is_cleanup.con" "--report alloc")
+if grep -q "main" <<<"$r239_alloc" && ! grep -q "no matching free" <<<"$r239_alloc"; then
+    echo "  ok  bug 239: a destructor call counts as cleanup in --report alloc"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 239: --report alloc reports a destroyed allocation as unmatched:"
+    printf '%s\n' "$r239_alloc" | awk 'NR<=6'
+    FAIL=$((FAIL + 1))
+fi
 # Bug 247: a function value written as an identifier reaches what it names in the assumption summary.
 run_ok "$TESTDIR/regress_247_function_value_reaches_foreign.con" 42
 check_report_multi "$TESTDIR/regress_247_function_value_reaches_foreign.con" caps \
@@ -8770,7 +8785,8 @@ for r238 in regress_238_free_fn_spelled_like_method_call regress_238_other_modul
             regress_239_alias_spelled_method_reaches_ffi regress_239_extern_call_beside_capable_method_explained \
             regress_239_method_edge_beside_free_alias regress_238_free_alias_takes_method_spelling \
             regress_239_fn_parameter_spelled_like_method regress_238_extern_alias_takes_nested_method_spelling \
-            regress_238_unrelated_alias_beside_method regress_239_imported_extern_alias_beside_capable_method; do
+            regress_238_unrelated_alias_beside_method regress_239_imported_extern_alias_beside_capable_method \
+            regress_239_method_ffi_beside_free_alias; do
     r238_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/$r238.con" --interp 2>&1 || true)
     if [ "$r238_interp" = "42" ]; then
         echo "  ok  bugs 238-241: $r238 — interp == binary (42)"

@@ -109,6 +109,10 @@ the declaration-collision check compared only free functions, externs and consta
 - Codex review r12: CoreCheck decides a free call bound to a foreign declaration (`currentForeign`)
   against that declaration, never a method sharing its spelling
   (`regress_239_imported_extern_alias_beside_capable_method.con`: E0520 before).
+- Codex review r13: the proof call graph follows a method call's aliases to methods only
+  (`regress_239_method_ffi_beside_free_alias.con`: the FFI behind the call was lost before), and
+  cleanup in the allocation reports is read from every call, since a destructor is a method call
+  (`regress_239_destructor_call_is_cleanup.con`, a regression in an earlier version of this fix).
 - `declarationCollisions` counts a module's impl method definition names, so a free function or
   extern spelled like one is E0299 (MOD-3); two methods of one name on one type stay TRAIT-5's.
 
