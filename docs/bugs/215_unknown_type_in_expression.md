@@ -5,6 +5,7 @@ summary: Resolve did not check the types written inside expressions (cast target
 fixtures: error_215_cast_unknown_type.con error_215_turbofish_unknown_type.con error_215_cast_field_spelling.con error_215_const_cast_unknown_type.con
 class: 12 — a type written inside an expression was not checked to name a declared type
 silent: yes
+exit: 0b
 -->
 
 **Status:** FIXED (branch `wip/diffhunt-1023`)

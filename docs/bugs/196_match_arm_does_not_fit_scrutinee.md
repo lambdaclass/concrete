@@ -5,6 +5,7 @@ summary: a match arm whose pattern did not fit the scrutinee was not checked: a 
 fixtures: error_196_other_enum_variant.con error_196_range_over_enum.con error_196_variant_over_int.con error_196_literal_type.con error_196_literal_over_type_param.con error_196_same_name_other_enum.con
 class: 13 — pattern shape left to CoreCheck, after Elab crashed or lowered the arm
 silent: yes
+exit: 0b
 -->
 
 **Status:** FIXED (branch `wip/bug196`)

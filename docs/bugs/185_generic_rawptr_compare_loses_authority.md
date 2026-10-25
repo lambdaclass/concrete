@@ -5,6 +5,7 @@ summary: a raw-pointer comparison reached through a safe `Copy`-bounded generic 
 fixtures: error_185_generic_rawptr_eq_safe.con regress_185_generic_rawptr_eq_authority.con
 class: 6 — a monomorphized instance dropped its definition's `trusted` flag
 silent: yes
+exit: 0b
 -->
 
 **Status:** FIXED (branch `soundness-holes-rawptr`, on top of `wip/train1`)

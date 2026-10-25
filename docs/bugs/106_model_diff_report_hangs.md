@@ -5,6 +5,7 @@ summary: `--report model-diff` ran for hours on thesis_demo (unbudgeted interpre
 coverage: model-diff report hang + swallowed gate failures. Regression vehicle is check_model_diff.sh (watchdog/exit legs and the thesis_demo exhausted-row leg), not a tests/programs fixture (2026-10-20)
 class: 11
 silent: yes
+exit: 0b
 -->
 
 **Status:** FIXED 2026-10-20 (report budgeted, gate fails closed); a structural residual is open

@@ -5,6 +5,7 @@ summary: `*p` read by value of a non-Copy pointee through a raw pointer duplicat
 fixtures: error_rawdup_trusted_deref.con regress_198_read_owned.con
 class: 13 — `trusted` does not relax linearity, unenforced at `*p`
 silent: yes
+exit: 0b
 -->
 
 **Status:** FIXED (branch `soundness-holes`, TIGHTENING_DECISIONS T-RAWDUP)

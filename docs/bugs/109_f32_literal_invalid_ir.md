@@ -6,6 +6,7 @@ fixtures: regress_109_float_literals.con
 class: 7
 class: 12 — float rendering kept in several places
 silent: yes
+exit: 0b
 -->
 
 **Status:** FIXED (branch `backend-108-116`, commit 0ee4252e)

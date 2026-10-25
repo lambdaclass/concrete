@@ -5,6 +5,7 @@ summary: a trait bound on a primitive type argument (`call::<Int>` with `T: Tr`)
 fixtures: error_204_primitive_bound_unchecked.con error_204_primitive_bound_unused.con regress_204_primitive_bound_satisfied.con
 class: 13 — a bound on a primitive type argument: `checkTraitBounds` skipped every unnamed shape
 silent: yes
+exit: 0b
 -->
 
 **Status:** FIXED (branch `wip/bug204`, based on `wip/train6` `13bc2527`)

@@ -5,6 +5,7 @@ summary: MOD-3 was enforced between imports and functions only, so two declarati
 fixtures: error_218_duplicate_function.con error_218_duplicate_struct.con error_218_struct_and_enum.con error_218_duplicate_constant.con error_218_duplicate_alias.con regress_218_type_and_value_namespaces.con
 class: 1 — two declarations of one spelling in a module: nothing compared declarations with each other
 silent: yes
+exit: 0b
 -->
 
 **Status:** FIXED (branch `wip/diffhunt-1023`)

@@ -5,6 +5,7 @@ summary: a generic type named without its argument list (`Box1` for `Box1<T>`) w
 fixtures: error_200_bare_generic_type.con error_200_bare_generic_signature.con regress_200_generic_type_with_arguments.con regress_200_type_param_shadows_generic.con regress_200_self_receiver_of_generic_impl.con
 class: 13 — a generic type named without its argument list: arity checked only where a list was written
 silent: yes
+exit: 0b
 -->
 
 **Status:** FIXED (branch `wip/bug200`, based on `main` `1b2dba60`)
