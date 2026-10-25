@@ -13915,3 +13915,32 @@ questions. Context: [execution model](docs/language/EXECUTION_MODEL.md), researc
 Any later adoption needs a forcing workload, bounded evidence and an explicit
 owner decision under the [design policy](docs/project/DESIGN_POLICY.md) and
 [evidence architecture](docs/verification/EVIDENCE_ARCHITECTURE.md).
+
+
+## Open Research Questions: Goose
+
+These questions remain undecided. They are not planned features, implementation
+tasks, priorities, release requirements, or changes to the current execution queue.
+The [Goose research survey](research/compiler/goose-design-survey.md) records the
+pinned sources, compatibility concerns, and possible experiments.
+
+- Could residual bounds-check reports and optional enforcement fit explicit
+  contracts and declaration-level summaries without whole-program inference?
+- Could validated indices preserve bounds, container identity, and stale-slot
+  safety while reducing repeated traversal checks?
+- Could explicit compact storage and validated binary images help a real workload
+  within the current layout contract, with visible allocation and failure behavior?
+- Does construction directly into a destination eliminate measurable copies
+  without changing evaluation order, aliasing, or linear cleanup?
+- Which benchmark controls and share-nothing concurrency constraints are useful
+  to compare without importing Goose's implicit authority or lifetime model?
+- What evidence would support or rule out each idea under Concrete's
+  [design policy](docs/project/DESIGN_POLICY.md)?
+
+A residual-check inventory and a bounded validated-index graph are possible
+experiments, not selected work. Record counterexamples, costs, contract/report
+shape, and evidence scope before recommending adoption, deferral, or rejection.
+Existing arena/index, binary-validation, concurrency, resource-fact, and
+performance-evidence owners remain unchanged. Listing Goose here neither adopts
+its nonlocal returns, automatic reclamation, or stale-slot semantics nor reopens
+standing language decisions. Any adoption requires a separate decision.
