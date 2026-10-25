@@ -974,8 +974,8 @@ gate_for_last "scripts/tests/check_binder_refs.sh"
 # 55. Frames open EAGERLY. Every positional leg still passes; only the empty-scope
 # property breaks, so this is the mutation that proves that leg is load-bearing.
 MUT_FILE+=("Concrete/Elab/Elab.lean")
-MUT_OLD+=("  let sc := extendFrame env.bodyScope env.pendingFrame name")
-MUT_NEW+=("  let sc := extendFrame env.bodyScope true name -- MUTATION: eager frames")
+MUT_OLD+=("  let sc := extendFrame env.bodyScope env.pendingFrame")
+MUT_NEW+=("  let sc := extendFrame env.bodyScope true -- MUTATION: eager frames")
 MUT_DESC+=("Elab V2 input: binder frames open eagerly, not on first binder")
 gate_for_last "scripts/tests/check_binder_refs.sh"
 
@@ -1318,8 +1318,8 @@ gate_for_last "scripts/tests/check_capability_explanations.sh"
 # instead of the innermost. check_local_identity.sh's walk legs (branch-local `w`, the shadowing
 # `x` of g) read the wrong binder.
 MUT_FILE+=("Concrete/Resolve/Locals.lean")
-MUT_OLD+=("  if let some v := vis.find? (fun v => v.name == name && v.cls == .source) then")
-MUT_NEW+=("  if let some v := vis.reverse.find? (fun v => v.name == name && v.cls == .source) then -- MUTATION: outermost binding wins")
+MUT_OLD+=("    { source := if v.cls == .source then some v else e.source")
+MUT_NEW+=("    { source := if v.cls == .source && e.source.isNone then some v else e.source -- MUTATION: outermost binding wins")
 MUT_DESC+=("local identity: a use denotes the outermost visible binding of its spelling")
 gate_for_last "scripts/tests/check_local_identity.sh"
 

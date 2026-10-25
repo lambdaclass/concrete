@@ -1,3 +1,4 @@
+import Std.Data.TreeMap
 import Concrete.Elab.Core
 import Concrete.Frontend.AST
 import Concrete.Report.Diagnostic
@@ -36,6 +37,34 @@ Declaration-level validation (on Core IR, not surface AST):
 -- Validation environment
 -- ============================================================
 
+/-- CoreCheck's local bindings: the type of each binding visible at this point, by binding
+    identity (a compiler temporary by its Core name). Persistent maps, not a list searched per
+    reference (bug 261): a lookup walked every binding introduced before it, so checking a
+    function whose statements read an early binding took time n². A block restores the earlier
+    map, which shares structure. A later binding of one key replaces the earlier (the list's
+    first match was the newest). -/
+structure CoreVars where
+  byId : Std.TreeMap Nat Ty compare := {}
+  byName : Std.TreeMap String Ty compare := {}
+  deriving Inhabited
+
+namespace CoreVars
+
+def insert (vs : CoreVars) : LocalKey → Ty → CoreVars
+  | .id i, ty => { vs with byId := vs.byId.insert i.idx ty }
+  | .name n, ty => { vs with byName := vs.byName.insert n ty }
+
+def lookup (vs : CoreVars) : LocalKey → Option Ty
+  | .id i => vs.byId.get? i.idx
+  | .name n => vs.byName.get? n
+
+/-- The bindings of a parameter list; for a repeated key the FIRST entry answers, as the list's
+    first match did. -/
+def ofList (ps : List (LocalKey × Ty)) : CoreVars :=
+  ps.foldr (fun (k, ty) vs => vs.insert k ty) {}
+
+end CoreVars
+
 structure CoreCheckEnv where
   fnSigs : List (String × CapSet × List (String × Ty) × Ty)
   /-- Bugs 238 – 239: every impl method of the program by its Core name, with its capabilities.
@@ -71,7 +100,7 @@ structure CoreCheckEnv where
       some module declares a type of that name. -/
   currentTypeParams : List String := []
   -- R-0492 step 4: keyed by binding identity (a compiler temporary by its Core name)
-  vars : List (LocalKey × Ty)
+  vars : CoreVars
   currentCapSet : CapSet
   currentRetTy : Ty
   inLoop : Bool
@@ -340,7 +369,7 @@ private def addVar (name : LocalKey) (ty : Ty) : StateM CoreCheckEnv Unit := do
   -- the first `value` binder in a function win forever: two match arms
   -- binding same-named payloads of different scalar types (Option<u64> then
   -- Option<bool>) raised a false E0500 on the second arm's uses.
-  setEnv { env with vars := (name, ty) :: env.vars }
+  setEnv { env with vars := env.vars.insert name ty }
 
 private def lookupVar (name : LocalKey) : StateM CoreCheckEnv (Option Ty) := do
   let env ← getEnv
@@ -1484,7 +1513,7 @@ def ccCheckFn (f : CFnDef) : StateM CoreCheckEnv Unit := do
   setEnv { env with
     currentFnName' := f.name
     currentTypeParams := f.typeParams
-    vars := f.paramKeys.zip (f.params.map (·.2))
+    vars := CoreVars.ofList (f.paramKeys.zip (f.params.map (·.2)))
     -- The DECLARED set, deliberately: the header is what callers rely on. A trusted
     -- body's discharge of a callee's `Unsafe` (extern calls included since R-0484)
     -- happens at the call site, not by widening this set, so it can never widen what
@@ -1614,7 +1643,7 @@ partial def ccCheckModule (m : CModule)
     newtypes := m.newtypes
     programTypeNames := allStructs.map (·.name) ++ allEnums.map (·.name) ++ allNewtypes.map (·.name)
     programNewtypes := allNewtypes
-    vars := []
+    vars := {}
     currentCapSet := .empty
     currentRetTy := .unit
     inLoop := false

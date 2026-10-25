@@ -1,0 +1,39 @@
+// Bug 255 regression: the parser appended each statement of a block to the list built so far, so
+// a block of n statements took time n² to parse (40000 statements: 11 s). This fixture pins what
+// the accumulation must keep: statement order in a plain block and in an if-expression's blocks,
+// every assignment form, a trailing value and a trailing `match` value. run_tests.sh also parses
+// and elaborates generated functions of 80000 statements within a time bound.
+struct Copy P {
+    a: i64,
+    b: i64,
+}
+
+fn digits(c: bool) -> i64 {
+    let v: i64 = if c {
+        let mut x: i64 = 1;
+        x = x * 10 + 2;
+        x = x * 10 + 3;
+        let mut p: P = P { a: 0, b: 0 };
+        p.a = x;
+        let mut arr: [i64; 3] = [0, 0, 0];
+        arr[2] = p.a;
+        arr[2]
+    } else {
+        let k: i64 = 7;
+        match k {
+            7 => { 4 },
+            _ => { 5 },
+        }
+    };
+    return v;
+}
+
+fn main() -> Int {
+    let mut s: i64 = 0;
+    s = s * 10 + 1;
+    s = s * 10 + 2;
+    let mut q: P = P { a: 0, b: 0 };
+    q.b = s;
+    // 123 + 4 + 12 = 139; 139 - 97 = 42
+    return (digits(true) + digits(false) + q.b - 97) as Int;
+}

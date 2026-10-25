@@ -147,7 +147,7 @@ def src : String := "mod m {
 
 /-- The line of the binder a use (line, spelling) denotes; 0 for a parameter. -/
 def binderLineOf (t : LocalTable) (line : Nat) (name : String) : List Nat :=
-  t.uses.filterMap fun (((l, _, _, _), n), id) =>
+  t.uses.toList.filterMap fun (((l, _, _, _), n), id) =>
     if l == line && n == name then
       t.binders.toList.find? (·.id == id) |>.map fun b =>
         match b.key with
@@ -193,7 +193,7 @@ def main : IO Unit := do
     check "T: 'x' after the branch denotes the outer 'let x' (line 19)"
       (denotes g 21 "x" 19)
     check "T: the shadowing 'let x' of line 20 records exactly one SCOPE-1 collision, against line 19"
-      (g.collisions.length == 1 && (g.collisions.headD default).earlier.line == 19)
+      (g.collisions.size == 1 && (g.collisions[0]?.getD default).earlier.line == 19)
     check "T: inside the branch, 'x' denotes the branch's own binding (line 20)"
       (denotes g 20 "x" 20)
     check "T: the for header 'i' (line 27) is read in the header and body; the call through the fn-typed parameter 'f' denotes the parameter"

@@ -676,9 +676,9 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
               capSet := fnDef.capSet
               -- Authority travels with the body (bug 185; see the explicit-args branch).
               isTrusted := fnDef.isTrusted
-              isMethod := fnDef.isMethod
               trustedImplOrigin := fnDef.trustedImplOrigin
               declSpan := fnDef.declSpan
+              isMethod := fnDef.isMethod
               paramIds := fnDef.paramIds
               -- The generic's foreign bindings travel with its body (FFI.md "Symbol Names").
               foreignCalls := fnDef.foreignCalls
@@ -719,9 +719,9 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
         -- Without it the post-mono comparison rule could not tell which instances may
         -- compare raw pointers (bug 185).
         isTrusted := fnDef.isTrusted
-        isMethod := fnDef.isMethod
         trustedImplOrigin := fnDef.trustedImplOrigin
         declSpan := fnDef.declSpan
+        isMethod := fnDef.isMethod
         paramIds := fnDef.paramIds
         -- The generic's foreign bindings travel with its body (FFI.md "Symbol Names").
         foreignCalls := fnDef.foreignCalls
