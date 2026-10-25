@@ -8767,6 +8767,8 @@ run_ok "$TESTDIR/regress_242_generic_argument.con" 42
 run_ok "$TESTDIR/regress_242_newtype_beside_other_import.con" 42
 run_ok "$TESTDIR/regress_242_struct_beside_other_import.con" 42
 run_ok "$TESTDIR/regress_242_two_modules_signatures.con" 42
+run_ok "$TESTDIR/regress_242_alias_target_closure.con" 42
+run_ok "$TESTDIR/regress_242_child_newtype_from_child_function.con" 42
 run_err "$TESTDIR/error_242_two_imported_methods_one_core_name.con" "(E0299)"
 for r242 in regress_242_imported_signature_type \
             regress_242_toplevel_signature_type \
@@ -8778,7 +8780,9 @@ for r242 in regress_242_imported_signature_type \
             regress_242_generic_argument \
             regress_242_newtype_beside_other_import \
             regress_242_struct_beside_other_import \
-            regress_242_two_modules_signatures; do
+            regress_242_two_modules_signatures \
+            regress_242_alias_target_closure \
+            regress_242_child_newtype_from_child_function; do
     # bounded_run, not GNU `timeout`; a timeout is INCOMPLETE, not a pass.
     r242_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/$r242.con" --interp 2>&1 || true)
     if [ "$r242_interp" = "42" ]; then

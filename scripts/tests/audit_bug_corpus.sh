@@ -174,7 +174,7 @@ declare -A BUG_TEST_MAP=(
   # defining module); run_tests.sh compares --interp with the binary.
   [223]="regress_223_aliased_struct_methods.con regress_223_aliased_enum.con regress_223_aliased_generic_and_bound.con regress_223_aliased_destroy_impl.con regress_223_aliased_self_result.con regress_223_aliased_cap_params.con error_223_method_core_name_taken.con"
   # Bug 242: a type crossing an import carries its declaration (respelled to its identity).
-  [242]="regress_242_imported_signature_type.con regress_242_toplevel_signature_type.con regress_242_imported_enum_beside_own_enum.con regress_242_imported_field_type.con regress_242_aliased_self_result.con regress_242_imported_constant_type.con regress_242_imported_alias_target.con regress_242_generic_argument.con regress_242_newtype_beside_other_import.con regress_242_struct_beside_other_import.con regress_242_two_modules_signatures.con error_242_two_imported_methods_one_core_name.con"
+  [242]="regress_242_imported_signature_type.con regress_242_toplevel_signature_type.con regress_242_imported_enum_beside_own_enum.con regress_242_imported_field_type.con regress_242_aliased_self_result.con regress_242_imported_constant_type.con regress_242_imported_alias_target.con regress_242_generic_argument.con regress_242_newtype_beside_other_import.con regress_242_struct_beside_other_import.con regress_242_two_modules_signatures.con regress_242_alias_target_closure.con regress_242_child_newtype_from_child_function.con error_242_two_imported_methods_one_core_name.con"
   # Bug 254: --interp constructs and unwraps a newtype over an aggregate.
   [254]="regress_254_newtype_over_struct.con regress_254_newtype_over_enum.con"
   # Bug 253: construction and field rights by declaration identity (decoy child types).

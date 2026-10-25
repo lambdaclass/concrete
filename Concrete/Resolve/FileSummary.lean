@@ -405,11 +405,14 @@ private def aliasImportDepth (summaryTable : List (String × FileSummary)) : Nat
 /-- Bug 242: the type spellings a module binds without importing them, which an import must
     therefore not bind to another declaration: its own structs, enums, newtypes and aliases, its
     children's newtypes (Check's `allNewtypes`). Every pass computes the importer's spellings with
-    this one definition, so they transport the same imports. -/
-def importerTypeSpellings (own : FileSummary) : List String :=
-  own.structs.map (·.name) ++ own.enums.map (·.name) ++ own.newtypes.map (·.name)
-    ++ own.typeAliases.map (·.name)
-    ++ own.submoduleSummaries.flatMap (fun (_, c) => c.newtypes.map (·.name))
+    this one definition, so they transport the same imports. Each comes with the declaration it
+    denotes (`none` for an alias): a transported type that IS that declaration keeps its spelling
+    (a childs newtype returned by the childs function, Codex review). -/
+def importerTypeSpellings (own : FileSummary) : List (String × Option TypeId) :=
+  own.structs.map (fun sd => (sd.name, sd.typeId?)) ++ own.enums.map (fun ed => (ed.name, ed.typeId?))
+    ++ own.newtypes.map (fun nt => (nt.name, nt.typeId?))
+    ++ own.typeAliases.map (fun ta => (ta.name, none))
+    ++ own.submoduleSummaries.flatMap (fun (_, c) => c.newtypes.map fun nt => (nt.name, nt.typeId?))
 
 /-- Bug 242: every type head a `Ty` names, renamed by `f` (wrappers kept). -/
 private partial def mapTyHeads (f : String → String) : Ty → Ty
@@ -458,7 +461,7 @@ def resolveImports (imports : List ImportDecl)
     (summaryTable : List (String × FileSummary))
     (unknownModuleMsg : String → String)
     (notPublicMsg : String → String → String)
-    (importerTypes : List String)
+    (importerTypes : List (String × Option TypeId))
     (pass : String := "resolve")
     : Except Diagnostics ResolvedImports := do
   -- Bug 242: the type spellings the explicit imports bind, each with the declaration it names.
@@ -481,7 +484,7 @@ def resolveImports (imports : List ImportDecl)
   -- transported mention claimed `n` for another declaration (`claims`: each kept spelling, with
   -- the declaration it denotes; two imported modules' `P`s cannot both be `P` here).
   let keepsPlain : List (String × TypeId) → String → TypeId → Bool := fun claims n id =>
-    !importerTypes.contains n
+    !(importerTypes.any fun (sp, i) => sp == n && i != some id)
       && !(explicitTypes.any fun (sp, i) => sp == n && i != some id)
       && (match claims.lookup n with | some c => c == id | none => true)
   -- The claims of the types `tys` written in `s` (type parameters `tps` in scope).
@@ -684,11 +687,13 @@ def resolveImports (imports : List ImportDecl)
           ed.variants.flatMap (fun v => v.fields.flatMap (fun f => tyHeadNames f.ty)))
         ++ acc.newtypes.flatMap (fun nt => tyHeadNames nt.innerTy)
         ++ acc.constants.flatMap (fun c => tyHeadNames c.ty)
+        -- an alias target respelled to an identity is bound by the closure too (Codex review)
+        ++ acc.typeAliases.flatMap (fun (_, t) => tyHeadNames t)
       let present := acc.structs.map (·.name) ++ acc.enums.map (·.name)
         ++ acc.newtypes.map (·.name) ++ acc.typeAliases.map (·.1)
       -- Bug 242: a spelling the importer binds itself is never bound to another declaration (a
       -- type its own module writes that way was respelled to its identity above).
-      let missing := (referenced.filter fun n => !present.contains n && !importerTypes.contains n).eraseDups
+      let missing := (referenced.filter fun n => !present.contains n && !importerTypes.any (·.1 == n)).eraseDups
       if missing.isEmpty then break
       let mut grew := false
       for summary in importedModules do

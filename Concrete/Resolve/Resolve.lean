@@ -871,7 +871,7 @@ private def resolveModule (m : Module) (globalScope : Scope) (knownTypes : List 
     submodule (`checkSubmodules`, E0284/E0285) and does not descend past it, and Resolve, whose
     scope for the submodule would be incomplete, leaves it to Check the same way. -/
 private def importScope (summaryTable : List (String × FileSummary)) (imports : List ImportDecl)
-    (importerTypes : List String) : Option (List (String × SymKind) × List String) :=
+    (importerTypes : List (String × Option TypeId)) : Option (List (String × SymKind) × List String) :=
   match resolveImports imports summaryTable (fun _ => "") (fun _ _ => "") importerTypes with
   | .error _ => none
   | .ok ri =>

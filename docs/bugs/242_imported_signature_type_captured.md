@@ -34,7 +34,8 @@ importer, it is respelled to the declaration's identity spelling, `TypeId.import
 (`m::shapes::P`, `::` being no identifier character), and the import closure binds that spelling
 to the declaration. A spelling denotes another declaration when the importer declares a type of
 it (`importerTypeSpellings`, the one definition every pass passes in: its structs, enums,
-newtypes, aliases and its children's newtypes), when an explicit import binds it to another
+newtypes, aliases and its children's newtypes, each with the declaration it denotes, so a
+transported type that is that declaration keeps the spelling), when an explicit import binds it to another
 declaration, or when an earlier transported mention claimed it for another declaration (two
 imported modules' `P`s). A kept spelling is bound to the declaration that claimed it, never to
 another module's of that spelling. When a type's own spelling is respelled, its methods' `Self`
@@ -48,9 +49,10 @@ of Core's backstop (E0299); four are valid and run, renamed `regress_096_*` (nat
 `--interp`). One of them needed a newtype over a struct under `--interp` (bug 254).
 
 Regression legs in `run_tests.sh`: `regress_242_imported_signature_type.con` (the reproducer) and
-ten more `regress_242_*` (top-level modules, an enum result, a field type, an aliased type's `->
+twelve more `regress_242_*` (top-level modules, an enum result, a field type, an aliased type's `->
 Self`, a constant's type, an alias target, a generic argument, an aliased newtype and struct beside
-another module's of the definition's spelling, two modules' signatures each naming their own `N`),
+another module's of the definition's spelling, two modules' signatures each naming their own `N`,
+an alias target that only the alias names, a child's newtype returned by the child's function),
 each `run_ok … 42` and `--interp` = 42; `error_242_two_imported_methods_one_core_name.con` (two
 imported types of one spelling both with `mk`: Core still calls a method by its mangled spelling,
 so Check refuses, E0299).
