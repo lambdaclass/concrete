@@ -1,0 +1,12 @@
+// Bug 257: a binder that reuses the spelling of a binding still visible at it is refused
+// (E0301), naming the earlier binding, however far up it was declared.
+fn main() -> Int {
+    let total: i64 = 1;
+    let x1: i64 = total + 1;
+    let x2: i64 = x1 + 1;
+    if x2 > 0 {
+        let total: i64 = 5;
+        return total as Int;
+    }
+    return x2 as Int;
+}

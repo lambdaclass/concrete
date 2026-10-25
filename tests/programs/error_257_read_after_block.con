@@ -1,0 +1,10 @@
+// Bug 257: a binding declared in a block is not visible after it closes (E0100), however many
+// bindings the function has.
+fn main() -> Int {
+    let a: i64 = 1;
+    if a > 0 {
+        let inner: i64 = 2;
+        let b: i64 = inner + a;
+    }
+    return inner as Int;
+}

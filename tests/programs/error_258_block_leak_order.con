@@ -1,0 +1,15 @@
+// Bug 258: a block that leaves two of its own linear bindings unconsumed is refused naming the
+// one the checker examines first (the newest), as it did when its bindings were a list.
+struct Resource {
+    value: i64,
+}
+
+fn main() -> Int {
+    let mut out: i64 = 0;
+    if out == 0 {
+        let first: Resource = Resource { value: 1 };
+        let second: Resource = Resource { value: 2 };
+        out = 1;
+    }
+    return out as Int;
+}

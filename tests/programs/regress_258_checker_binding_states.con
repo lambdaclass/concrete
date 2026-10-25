@@ -1,0 +1,69 @@
+// Bug 258 regression: the checker kept a function's bindings in a list walked per use, per
+// binding and per block, so checking a function of n bindings and m blocks took time n² (and
+// n·m). The bindings are now an ordered map with subsets of the non-Copy, reference and
+// defer-marked bindings and a change tick per binding. This fixture pins the ownership states
+// those paths must keep: a linear value consumed in both branches, consumed after a loop that
+// left it alone, consumed by every match arm, reserved by a `defer` inside a nested block,
+// frozen by a borrow block and read through it, and a block's own linear locals consumed
+// inside it. error_258_* pin which refusal is reported first. run_tests.sh also checks
+// generated functions of 80000 bindings and 40000 blocks within a time bound.
+struct Resource {
+    value: i64,
+}
+
+enum Two {
+    A { n: i64 },
+    B { n: i64 },
+}
+
+fn consume(r: Resource) -> i64 {
+    let Resource { value } = r;
+    return value;
+}
+
+fn branches(c: bool) -> i64 {
+    let r: Resource = Resource { value: 5 };
+    let mut out: i64 = 0;
+    if c {
+        out = consume(r);
+    } else {
+        out = consume(r) + 1;
+    }
+    return out;
+}
+
+fn after_loop() -> i64 {
+    let r: Resource = Resource { value: 7 };
+    let mut i: i64 = 0;
+    while i < 3 {
+        let inner: Resource = Resource { value: i };
+        i = i + consume(inner) - i + 1;
+    }
+    return consume(r) + i;
+}
+
+fn arms(t: Two) -> i64 {
+    let r: Resource = Resource { value: 2 };
+    match t {
+        Two::A { n } => { return consume(r) + n; },
+        Two::B { n } => { return consume(r) - n; },
+    }
+}
+
+fn deferred() -> i64 {
+    let mut total: i64 = 0;
+    if total == 0 {
+        let r: Resource = Resource { value: 4 };
+        defer consume(r);
+        borrow r as view in V {
+            total = view.value;
+        }
+    }
+    return total;
+}
+
+fn main() -> Int {
+    // 5 + 6 + (7 + 3) + (2 + 1) + (2 - 1) + 4 = 29; + 13 = 42
+    return (branches(true) + branches(false) + after_loop() + arms(Two::A { n: 1 })
+        + arms(Two::B { n: 1 }) + deferred() + 13) as Int;
+}
