@@ -1,7 +1,7 @@
 # Declaration identity for module-level types and constants (R-0492 slice 6)
 
 Status: design note, 2026-10-25; steps 1 and 2 landed on `wip/r0492-decl-identity` (bugs 230 and
-227 fixed), steps 3 and 4 open. Owner: R-0492 (S5 identities in
+227 fixed); step 3 landed on `wip/r0492-steps34` (bug 223 fixed); step 4 open. Owner: R-0492 (S5 identities in
 [VERIFIED_PIPELINE.md](VERIFIED_PIPELINE.md)), applied to the shared front end by R-0514. Slices
 1 – 5 gave every local binder a `LocalId` (S5 slice contracts 2 – 5). This slice starts the `DefId`
 half for the declarations a module names by spelling: structs, enums, newtypes, aliases and
@@ -70,6 +70,17 @@ intended behaviour.
    method tables (inherent and trait) are keyed by the receiver's `TypeId`. Resolve's static-method
    lookup (`Q_mk`) asks the same environment. Elab already spells an alias by its definition, so
    Core is unchanged.
+   *Landed:* `buildFileSummary` stamps an impl whose target its module declares
+   (`targetDefinedIn`) and each impl method's signature with a `MethodKey` (target `TypeId`, method
+   name). `methodByIdentity` is the one method lookup by key: Resolve's static-method check,
+   Check's calls and the shared peek (`PeekCtx.method`), and Elab's method elaboration ask it before
+   the mangled spelling, which remains for an impl with no key (on a builtin or an imported type).
+   Check compares types with `Ty.sameByIdentity` and checks bounds through `traitImplIds`. The
+   alias binding itself is still bug 069's renamed copy of the declaration (`name` the alias,
+   `definedIn`/`definitionName` the identity); Check and Elab still build their own environments.
+   Not covered: a type in an imported signature is read in the importer's environment by its
+   definition spelling, so an importer's own type of that spelling captures it (bug 242); an
+   aliased newtype import binds no name (bug 243).
 4. **Constants are imported by `ConstId` (bug 233).** An import of a `pub const` binds the
    constant's `ConstId`; Elab elaborates the imported initializer in its defining module's
    environment and Core carries the reference by identity (a module-qualified Core name for an

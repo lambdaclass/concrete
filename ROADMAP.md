@@ -101,10 +101,11 @@ a link failure, an interpreter refusal or an unrejected leak.
 <!-- BEGIN GENERATED: bug dashboard (scripts/gen/bug_dashboard.py; edit docs/bugs records and docs/bugs/discovery.tsv) -->
 
 **Open bugs: 12** (1 silent, 5 loud, 6 filed before the discovery record) of 210 bug records.
+**Open bugs: 13** (1 silent, 6 loud, 6 filed before the discovery record) of 211 bug records.
 
 | open bugs by primary structural class | open | silent | bugs |
 |---|---|---|---|
-| 1. Declaration identity by spelled name, not a resolved `DefId` | 5 | 1 | 054, 077, 114, 122, 223 |
+| 1. Declaration identity by spelled name, not a resolved `DefId` | 6 | 1 | 054, 077, 114, 122, 242, 243 |
 | 5. Borrow tracking by syntax instead of normalized places | 1 | 0 | 216 |
 | 11. Absence read as a fact (fail-open defaults) | 2 | 0 | 049, 058 |
 | 12. One fact kept in two places | 3 | 0 | 064, 226, 233 |
@@ -114,7 +115,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 |---|---|---|---|
 | exit 0b | 1 | 1 | 122 |
 | exit 2c | 1 | 0 | 114 |
-| no exit names it | 10 | 0 | 027, 049, 054, 058, 064, 077, 216, 223, 226, 233 |
+| no exit names it | 11 | 0 | 027, 049, 054, 058, 064, 077, 216, 226, 233, 242, 243 |
 
 | discovery rate: counting probe batch | date | effort | found | silent | loud | signal |
 |---|---|---|---|---|---|---|
@@ -126,6 +127,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 | hunt: differential hunt (interpreter vs native binary) on main 9622f7e0: 3500 fuzz_differential.py cases (seeds 102501, 102502) and hand probes on module constants, enum payloads across modules, generics and traits across module boundaries, nested submodules, defer and loops under --interp | 2026-10-24 | 60 programs | 5 | 0 | 5 | found bugs |
 
 Discovery signal (exit 2m): 0 consecutive eligible counting batches are quiet (no silent bug, at most one loud, effort at least 4 hours or 10 programs); the exit needs 3. 16 counting batches recorded. 40 attribution-only batches (reviews, follow-ons, CI, controls, development) found 54 further bugs.
+Discovery signal (exit 2m): 0 consecutive eligible counting batches are quiet (no silent bug, at most one loud, effort at least 4 hours or 10 programs); the exit needs 3. 16 counting batches recorded. 40 attribution-only batches (reviews, follow-ons, CI, controls, development) found 55 further bugs.
 
 <!-- END GENERATED: bug dashboard -->
 
@@ -3284,8 +3286,10 @@ skipped desugaring. Remaining: Elab, Core, SSA and `PExpr` binders; `DefId`, `Fi
 **Slice 6 (2026-10-25, branch `wip/r0492-decl-identity`):** declaration identity for module-level
 types and constants, design in [DECLARATION_IDENTITY.md](docs/compiler/DECLARATION_IDENTITY.md).
 Steps 1 – 2 landed: one type environment per module in Resolve (bug 230 fixed) and Core spells a
-user `Result` apart from the builtin (bug 227 fixed). Steps 3 (`TypeId` in Check, bug 223) and 4
-(`ConstId` through imports, bug 233) remain.
+user `Result` apart from the builtin (bug 227 fixed). Step 3 landed on `wip/r0492-steps34`: types
+are compared, and methods and trait impls looked up, by `TypeId` in Resolve, Check and Elab (bug
+223 fixed; the inherited aliased-imported-method obligation is met by its fixtures). Step 4
+(`ConstId` through imports, bug 233) remains.
 
 `LocalId` for every binder, allocated at
 Resolve so the source checker and Elab both consume it; `DefId` as a compilation-scoped declaration

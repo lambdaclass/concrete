@@ -8596,13 +8596,14 @@ run_err "$TESTDIR/error_231_bodiless_decl_bound.con" "a bodiless declaration can
 # their methods and trait impls looked up, by declaration identity in Resolve, Check and Elab, so
 # `import m.{P as Q}` is `P`: its methods (inherent, trait, Destroy), the values `m` returns, its
 # enum literals and patterns, and a bound satisfied through the alias. Binary and --interp agree.
-run_ok "tests/regressions/bug223_aliased_import_distinct_type/repro.con" 42
-run_ok "tests/regressions/bug223_aliased_import_distinct_type/repro_enum.con" 42
-run_ok "tests/regressions/bug223_aliased_import_distinct_type/repro_generic_bound.con" 42
-run_ok "tests/regressions/bug223_aliased_import_distinct_type/repro_destroy.con" 42
-for r223 in repro repro_enum repro_generic_bound repro_destroy; do
+run_ok "$TESTDIR/regress_223_aliased_struct_methods.con" 42
+run_ok "$TESTDIR/regress_223_aliased_enum.con" 42
+run_ok "$TESTDIR/regress_223_aliased_generic_and_bound.con" 42
+run_ok "$TESTDIR/regress_223_aliased_destroy_impl.con" 42
+for r223 in regress_223_aliased_struct_methods regress_223_aliased_enum \
+            regress_223_aliased_generic_and_bound regress_223_aliased_destroy_impl; do
     # bounded_run, not GNU `timeout`; a timeout is INCOMPLETE, not a pass.
-    r223_interp=$(bounded_run 20 -- $COMPILER "tests/regressions/bug223_aliased_import_distinct_type/$r223.con" --interp 2>&1 || true)
+    r223_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/$r223.con" --interp 2>&1 || true)
     if [ "$r223_interp" = "42" ]; then
         echo "  ok  bug 223: $r223 — an aliased imported type is the type, interp == binary (42)"
         PASS=$((PASS + 1))
