@@ -38,7 +38,7 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 # content — a skip with an empty justification is the thing this list exists to prevent.
 declare -A SKIP=(
   ["check_gate_registration.sh"]="this gate; it is the registration rule itself"
-  ["check_rocksdb_slice1.sh"]="RocksDB slice 1 acceptance gate; acceptance is blocked by exits 0b and 2i (ROADMAP feature prerequisites) and it fails until gap G3 in docs/platform/ROCKSDB_SLICE1.md closes (G1 is closed); wire it into the full gate set, with librocksdb-dev on the runner, when the slice is accepted"
+  ["check_rocksdb_slice1.sh"]="RocksDB slice 1 acceptance gate; acceptance is blocked by exits 0b, 2i and 2n (ROADMAP feature prerequisites) and it fails until gap G3 in docs/platform/ROCKSDB_SLICE1.md closes (G1 is closed); wire it into the full gate set, with librocksdb-dev on the runner, when the slice is accepted"
 )
 
 # Seed the reachable set with everything the workflow names directly, then repeatedly add any script
