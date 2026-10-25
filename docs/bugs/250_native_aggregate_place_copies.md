@@ -31,11 +31,12 @@ copy was a first-class load and store of the whole type.
 ## Fix
 
 - Lower writes a scalar (integer, float, `bool`, `char`) into an element or field of a promoted
-  local, or of a chain of fields of one, at its address (`placeAddr`), and reads a field, or an
-  element of an array field, of such a local at its address. Other places keep the rebuild.
-- EmitSSA loads an aggregate as a copy held by pointer (a slot and a `memcpy`), the form an
-  aggregate parameter already has, and copies an aggregate loaded only to be stored by the next
-  instruction with one `memcpy`.
+  local, or of a chain of struct fields of one (each a struct or array held by value, never a
+  reference, pointer or heap cell), at its address (`placeAddr`), and reads a field, or an element
+  of an array field whose index cannot change memory, of such a local at its address. Other places
+  keep the rebuild.
+- EmitSSA loads an aggregate as a copy held by pointer (a fresh slot and a `memcpy` into it), the
+  form an aggregate parameter already has, so no first-class load or store of it remains.
 
 The bytes each statement leaves in memory are the same; a copy taken before a write (`let b = a;`)
 is still a copy. Pinned by `regress_250_native_array_writes.con` (`run_ok … 42`, the native compile

@@ -1660,7 +1660,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     -- the whole array (and the struct holding it) to read one element.
     let aVal ← match arr with
       | .fieldAccess .. =>
-        if ← inPlaceRoot arr then
+        if pureIndexExpr index && (← inPlaceRoot arr) then
           match ← placeAddr arr (.ptrMut arr.ty) with
           | some p => pure p
           | none => lowerExpr arr
@@ -1875,17 +1875,43 @@ partial def placeAddr (place : CExpr) (refTy : Ty) : LowerM (Option SVal) := do
     | _ => addrOfLocal place refTy
   | _ => addrOfLocal place refTy
 
-/-- Bug 250: is `place` a promoted local, or a chain of struct fields of one, all held by value?
-    Such a place's storage is the local's stable alloca, so a scalar written into it can be stored
-    at its address instead of rebuilding the whole aggregate. -/
+/-- Is `ty` a struct or a fixed-size array, held by value (no reference, pointer, heap cell or
+    newtype in between)? -/
+private partial def isValueAggregate (ty : Ty) : LowerM Bool := do
+  match ty with
+  | .array _ _ => return true
+  | .named n | .generic n _ _ =>
+    let ctx ← getLayoutCtx
+    return (Layout.lookupStruct ctx n).isSome && (Layout.lookupNewtype ctx n).isNone
+  | _ => return false
+
+/-- Bug 250: is `place` a promoted local, or a chain of struct fields of one, each a struct or an
+    array held by value? Such a place's storage is inside the local's stable alloca, so a scalar
+    in it can be written or read at its address instead of through a copy of the whole aggregate.
+    A field holding a reference, pointer or heap cell is not such a place: its storage is the
+    pointee, not the slot. -/
 private partial def inPlaceRoot (place : CExpr) : LowerM Bool := do
   match place with
-  | .ident name _ => return (← isPromoted name.key).isSome
-  | .fieldAccess obj _ _ =>
-    match obj.ty with
-    | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ | .heap _ => return false
-    | _ => inPlaceRoot obj
+  | .ident name ty =>
+    if !(← isValueAggregate ty) then return false
+    return (← isPromoted name.key).isSome
+  | .fieldAccess obj _ ty =>
+    if !(← isValueAggregate ty) then return false
+    if !(← isValueAggregate obj.ty) then return false
+    inPlaceRoot obj
   | _ => return false
+
+/-- An index expression whose evaluation cannot change memory (no call, borrow or assignment
+    inside): reading an element at its address after evaluating it reads what a copy taken before
+    it would (bug 250). -/
+private partial def pureIndexExpr : CExpr → Bool
+  | .intLit .. | .boolLit _ | .charLit _ | .ident .. => true
+  | .binOp _ a b _ => pureIndexExpr a && pureIndexExpr b
+  | .unaryOp _ a _ => pureIndexExpr a
+  | .cast a _ => pureIndexExpr a
+  | .fieldAccess a _ _ => pureIndexExpr a
+  | .arrayIndex a i _ => pureIndexExpr a && pureIndexExpr i
+  | _ => false
 
 /-- A scalar store is one `store` of a register-sized value (bug 250's in-place write). -/
 private partial def isScalarStoreTy : Ty → Bool

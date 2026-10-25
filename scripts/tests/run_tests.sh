@@ -8466,7 +8466,8 @@ r027_src="$TMPDIR/r027_distinct_literal.con"
 } > "$r027_src"
 r249_rc=0; bounded_run -r 20 20 -- $COMPILER "$r027_src" --emit-core >/dev/null 2>&1 || r249_rc=$?
 r027d_rc=0; bounded_run -r 20 20 -- $COMPILER "$r027_src" -o "$TMPDIR/r027d_bin" >/dev/null 2>&1 || r027d_rc=$?
-r027d_out=""; [ "$r027d_rc" = 0 ] && { "$TMPDIR/r027d_bin" >/dev/null 2>&1; r027d_out=$?; }
+r027d_out=""
+if [ "$r027d_rc" = 0 ]; then "$TMPDIR/r027d_bin" >/dev/null 2>&1 && r027d_out=0 || r027d_out=$?; fi
 if [ "$r027_rc" = 0 ] && [ "$r027d_rc" = 0 ] && [ "$r027d_out" = 42 ]; then
     echo "  ok  bug 027: large array literals compile natively within 20 s (repeated and 2 x 100000 distinct elements, 42)"
     PASS=$((PASS + 1))

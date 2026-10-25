@@ -99,8 +99,8 @@ structure EmitSSAState where
       payload loads/stores assume natural alignment (audit 2026-07-16). -/
   maxOptPayloadAlign : Nat := 1
   maxResPayloadAlign : Nat := 1
-  /-- How many times each register of the current function is used (bug 250: an aggregate
-      loaded only to be stored is copied with `memcpy`). -/
+  /-- How many times each register of the current function is used (bug 027: a constant run is
+      copied only when each element's address register has no other use). -/
   regUseCounts : Std.HashMap String Nat := {}
 
 /-- Append a structured instruction to the current block. -/
@@ -1233,16 +1233,11 @@ private partial def constStoreRun (s : EmitSSAState) (base : String) (ty : Ty) (
     else (acc, insts)
   | insts => (acc, insts)
 
-/-- Emit a block's instructions. Bug 250: an aggregate loaded only to be stored by the next
-    instruction (`%v = load %T, ptr %p` / `store %T %v, ptr %q`, `%v` used nowhere else) is copied
-    with one `memcpy` of its size. A first-class load and store of a large aggregate made clang -O2
-    quadratic in its size (a 10000-element array in a struct: 6.5 s, 20000: 30 s); the copy is the
-    same bytes.
-
-    Bug 027: a run of at least 64 integer constants stored to consecutive elements of an array (a
-    literal's elements) is one `memcpy` from a private constant holding them: a block of n stores
-    made clang -O2's instruction scheduler superlinear in n (two 100000-element literals and a
-    loop: 40 s). -/
+/-- Emit a block's instructions. Bug 027: a run of at least 64 integer constants stored to
+    consecutive elements of an array (a literal's elements) is one `memcpy` from a private constant
+    holding them (the destination is the literal's own fresh slot, so the two never overlap): a
+    block of n stores made clang -O2's instruction scheduler superlinear in n (two 100000-element
+    literals and a loop: 40 s). -/
 private partial def emitSInsts (s : EmitSSAState) : List SInst → EmitSSAState
   | [] => s
   | i₁@(.store (.intConst c₀ ty) (.reg base bty)) :: rest =>
@@ -1259,12 +1254,6 @@ private partial def emitSInsts (s : EmitSSAState) : List SInst → EmitSSAState
       let s := emitStructured s (.memcpy (.reg base) (.global name) (n * ssaTySize s ty))
       emitSInsts s after
     else emitSInsts (emitSInst s i₁) rest
-  | i₁@(.load d p ty) :: i₂@(.store (.reg d' t') q) :: rest =>
-    if d == d' && t' == ty && ssaHoldsAggregateByPtr s ty && s.regUseCounts.get? d == some 1 then
-      let (s, pOp) := ensurePtrOp s p
-      let (s, qOp) := ensurePtrOp s q
-      emitSInsts (emitStructured s (.memcpy qOp pOp (ssaTySize s ty))) rest
-    else emitSInsts (emitSInst s i₁) (i₂ :: rest)
   | i :: rest => emitSInsts (emitSInst s i) rest
 
 private def emitSBlock (s : EmitSSAState) (b : SBlock) : EmitSSAState :=
@@ -1318,7 +1307,7 @@ private def emitSFnDef (s : EmitSSAState) (f : SFnDef) : EmitSSAState :=
   -- Reset per-function state
   let s := { s with currentBlocks := #[], fnParams := f.params, entryAllocas := #[],
                     currentForeign := f.foreignCalls }
-  -- Register use counts for `emitSInsts`'s aggregate copy (bug 250).
+  -- Register use counts for `emitSInsts`'s constant runs (bug 027).
   let count (m : Std.HashMap String Nat) (r : String) := m.insert r (m.getD r 0 + 1)
   let uses := f.blocks.foldl (fun m b =>
     (b.term.regUses.foldl count (b.insts.foldl (fun m i => i.regUses.foldl count m) m))) {}
