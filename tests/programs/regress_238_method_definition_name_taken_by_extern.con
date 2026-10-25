@@ -1,0 +1,28 @@
+// Bug 238 (FIXED), Codex review r3: both spellings of the method `get` of the respelled
+// `outer_a_P` are taken by foreign bindings of `c`: the caller spelling `outer_a_P_get` and the
+// definition name `a_outer_a_P_get`. Before the fix the call ran `abs` (99). The interpreter and
+// emission bind a spelling to a foreign binding for a FREE call alone, so the method call
+// reaches the method whatever foreign binding shares a spelling with it.
+// Expected: 42 (the method's 42, then `abs(-3) - 3` twice), natively and --interp.
+mod outer {
+    mod a {
+        pub struct Copy P { pub v: i32 }
+        impl P {
+            pub fn get(x: i32) -> i32 { return 42; }
+        }
+    }
+    mod b {
+        pub struct Copy P { pub w: i32 }
+    }
+}
+mod c {
+    import outer.a.{P};
+    #[link_name = "abs"]
+    trusted extern fn outer_a_P_get(x: i32) with() -> i32;
+    #[link_name = "abs"]
+    trusted extern fn a_outer_a_P_get(x: i32) with() -> i32;
+    pub fn run() -> i32 { return P::get(-99) + outer_a_P_get(-3) - 3 + a_outer_a_P_get(-3) - 3; }
+}
+fn main() -> Int {
+    return c::run() as Int;
+}

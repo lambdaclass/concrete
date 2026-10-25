@@ -1,0 +1,15 @@
+// Bug 239 (FIXED), Codex review r9 (a regression in the first version of this fix): `run` calls
+// the method `P::get`, whose body calls a trusted extern. The FFI tests of the effects report and
+// the predictable profile read only free calls, so `run` lost its transitive FFI crossing; a
+// method call reaches FFI through the namespace-aware call graph.
+// Expected: 42, natively and --interp; `run` crosses FFI in `--report effects` and fails the
+// predictable profile's FFI check.
+trusted extern fn abs(x: i32) with() -> i32;
+struct Copy P { v: i32 }
+impl P {
+    pub fn get() -> i32 { return abs(-42); }
+}
+fn run() -> i32 { return P::get(); }
+fn main() -> Int {
+    return run() as Int;
+}

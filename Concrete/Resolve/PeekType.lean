@@ -50,6 +50,9 @@ structure PeekCtx (m : Type → Type) where
   typeIdOf : m (String → Option TypeId)
   /-- A callable's signature as seen from a function-reference expression. -/
   fnRefSig : String → m (Option FnSummary)
+  /-- A method's signature by its definition name `Type_method`, from the method table alone
+      (bugs 238 – 239): a free function spelled like it never answers a method call. -/
+  methodSig : String → m (Option FnSummary)
   /-- A struct definition. -/
   struct : String → m (Option StructDef)
   /-- A newtype definition. -/
@@ -194,7 +197,10 @@ partial def peekExprTypeIn (ctx : PeekCtx m) (e : Expr) : m Ty := do
       | some sig => return (if sig.typeParams.isEmpty then sig.retTy else .placeholder)
       | none => return .placeholder
   | .staticMethodCall _ typeName methodName _ _ =>
-    match ← ctx.method typeName methodName with
+    let sig? ← match ← ctx.method typeName methodName with
+      | some sig => pure (some sig)
+      | none => ctx.fnSig (mangledMethodName typeName methodName)
+    match sig? with
     | some sig =>
       return (if sig.typeParams.isEmpty && sig.capParams.isEmpty then sig.retTy else .placeholder)
     | none => return .placeholder

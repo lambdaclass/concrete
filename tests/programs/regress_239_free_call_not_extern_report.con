@@ -1,0 +1,14 @@
+// Bug 239 (FIXED), Codex review r21: `run` calls the program's free function `target` while an
+// unrelated module declares an extern `target`. The effects report and proof eligibility tested
+// the call's spelling against every extern name of the program and read `run` as crossing FFI; an
+// extern call is a free call its function's resolver bound to a foreign declaration.
+// Expected: 42, natively and --interp; `run` is `ffi: no` in `--report effects`.
+fn target(x: i32) -> i32 { return x; }
+mod ffi {
+    #[link_name = "abs"]
+    trusted extern fn target(x: i32) with() -> i32;
+}
+fn run() -> i32 { return target(42); }
+fn main() -> Int {
+    return run() as Int;
+}

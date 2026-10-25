@@ -76,6 +76,30 @@ end
 def collectCallsExpr (e : CExpr) : List String := (collectCalleesExpr e).filterMap (·.directName?)
 def collectCallsStmts (ss : List CStmt) : List String := (collectCalleesStmts ss).filterMap (·.directName?)
 
+/-- The free direct calls of a function that its resolver bound to a foreign declaration
+    (`foreignCalls`, not a runtime helper), with that declaration (bugs 238 – 239, Codex review
+    r21): the only calls that are extern calls. A free call of a program function is none,
+    whatever extern elsewhere shares its spelling. -/
+def foreignBoundCalls (f : CFnDef) : List (String × String) :=
+  ((collectCalleesStmts f.body).filterMap fun c => match c with
+    | .direct n .free =>
+      match f.foreignCalls.lookup n with
+      | some d => if d.startsWith "_C$rt." then none else some (n, d)
+      | none => none
+    | _ => none).eraseDups
+
+/-- The extern calls of a function, by the spelling written, among `externNames`. -/
+def externCallsIn (externNames : List String) (f : CFnDef) : List String :=
+  (foreignBoundCalls f).filterMap fun (n, d) =>
+    if externNames.contains n || externNames.contains d then some n else none
+
+/-- The FREE direct calls of a body (`CallSpace.free`, bugs 238 – 239): the only calls a foreign
+    binding of the spelling can answer, so the ones an "is this an extern call?" test reads. -/
+def collectFreeCallsStmts (ss : List CStmt) : List String :=
+  (collectCalleesStmts ss).filterMap fun c => match c with
+    | .direct n .free => some n
+    | _ => none
+
 /-! ### Indirect calls
 
 The calls `collectCalls*` deliberately drops: a call through a fn-typed binding has no
@@ -108,6 +132,12 @@ mutual
 partial def collectFnValueRefsExpr (e : CExpr) : List String :=
   match e with
   | .fnRef name _ => [name]
+  -- A global function used as a value is a function-typed `.ident` with no binding identity
+  -- (Elab's form for `let f = g;`), which this walk missed (Codex review r7 of bugs 238 – 239: a
+  -- returned method value reached no foreign assumption, and neither did a free one).
+  -- A METHOD value (`CLocal.space = .method`) is collected by `collectMethodValueRefs*`: it names
+  -- a method, never a foreign binding of the spelling (Codex review r8).
+  | .ident n (.fn_ ..) => if n.id.isNone && n.space == .free then [n.name] else []
   | .call _ _ args _ => args.foldl (fun acc a => acc ++ collectFnValueRefsExpr a) []
   | .binOp _ l r _ => collectFnValueRefsExpr l ++ collectFnValueRefsExpr r
   | .unaryOp _ e _ => collectFnValueRefsExpr e
@@ -158,6 +188,68 @@ partial def collectFnValueRefsStmt (s : CStmt) : List String :=
 
 partial def collectFnValueRefsStmts (ss : List CStmt) : List String :=
   ss.foldl (fun acc s => acc ++ collectFnValueRefsStmt s) []
+end
+
+-- The METHOD values a body names (bugs 238 – 239): methods used as values by their definition
+-- name, which reach that method and never a foreign binding of the spelling.
+mutual
+partial def collectMethodValueRefsExpr (e : CExpr) : List String :=
+  match e with
+  | .fnRef _ _ => []
+  -- A global function used as a value is a function-typed `.ident` with no binding identity
+  -- (Elab's form for `let f = g;`), which this walk missed (Codex review r7 of bugs 238 – 239: a
+  -- returned method value reached no foreign assumption, and neither did a free one).
+  | .ident n (.fn_ ..) => if n.id.isNone && n.space == .method then [n.name] else []
+  | .call _ _ args _ => args.foldl (fun acc a => acc ++ collectMethodValueRefsExpr a) []
+  | .binOp _ l r _ => collectMethodValueRefsExpr l ++ collectMethodValueRefsExpr r
+  | .unaryOp _ e _ => collectMethodValueRefsExpr e
+  | .structLit _ _ fields _ => fields.foldl (fun acc (_, v) => acc ++ collectMethodValueRefsExpr v) []
+  | .fieldAccess obj _ _ => collectMethodValueRefsExpr obj
+  | .enumLit _ _ _ fields _ => fields.foldl (fun acc (_, v) => acc ++ collectMethodValueRefsExpr v) []
+  | .match_ scrut arms _ =>
+    collectMethodValueRefsExpr scrut ++ arms.foldl (fun acc a => acc ++ collectMethodValueRefsArm a) []
+  | .borrow inner _ | .borrowMut inner _ | .deref inner _ => collectMethodValueRefsExpr inner
+  | .arrayLit elems _ => elems.foldl (fun acc e => acc ++ collectMethodValueRefsExpr e) []
+  | .arrayIndex arr idx _ => collectMethodValueRefsExpr arr ++ collectMethodValueRefsExpr idx
+  | .cast inner _ => collectMethodValueRefsExpr inner
+  | .allocCall inner alloc _ => collectMethodValueRefsExpr inner ++ collectMethodValueRefsExpr alloc
+  | .ifExpr cond th el _ =>
+    collectMethodValueRefsExpr cond ++ collectMethodValueRefsStmts th ++ collectMethodValueRefsStmts el
+  | _ => []
+
+partial def collectMethodValueRefsArm (arm : CMatchArm) : List String :=
+  match arm with
+  | .enumArm _ _ _ guard body => (guard.map collectMethodValueRefsExpr).getD [] ++ collectMethodValueRefsStmts body
+  | .litArm v guard body =>
+    collectMethodValueRefsExpr v ++ (guard.map collectMethodValueRefsExpr).getD [] ++ collectMethodValueRefsStmts body
+  | .varArm _ _ guard body => (guard.map collectMethodValueRefsExpr).getD [] ++ collectMethodValueRefsStmts body
+  | .rangeArm lo hi _ guard body =>
+    collectMethodValueRefsExpr lo ++ collectMethodValueRefsExpr hi ++ (guard.map collectMethodValueRefsExpr).getD []
+      ++ collectMethodValueRefsStmts body
+
+partial def collectMethodValueRefsStmt (s : CStmt) : List String :=
+  match s with
+  | .letDecl _ _ _ v => collectMethodValueRefsExpr v
+  | .assign _ v => collectMethodValueRefsExpr v
+  | .return_ (some v) _ => collectMethodValueRefsExpr v
+  | .return_ none _ => []
+  | .expr e _ => collectMethodValueRefsExpr e
+  | .ifElse c t el =>
+    collectMethodValueRefsExpr c ++ collectMethodValueRefsStmts t ++
+    match el with | some stmts => collectMethodValueRefsStmts stmts | none => []
+  | .while_ c body _ step =>
+    collectMethodValueRefsExpr c ++ collectMethodValueRefsStmts body ++ collectMethodValueRefsStmts step
+  | .fieldAssign obj _ v => collectMethodValueRefsExpr obj ++ collectMethodValueRefsExpr v
+  | .derefAssign t v => collectMethodValueRefsExpr t ++ collectMethodValueRefsExpr v
+  | .arrayIndexAssign arr idx v =>
+    collectMethodValueRefsExpr arr ++ collectMethodValueRefsExpr idx ++ collectMethodValueRefsExpr v
+  | .break_ (some v) _ => collectMethodValueRefsExpr v
+  | .break_ none _ | .continue_ _ => []
+  | .defer body => collectMethodValueRefsExpr body
+  | .borrowIn _ _ _ _ _ body => collectMethodValueRefsStmts body
+
+partial def collectMethodValueRefsStmts (ss : List CStmt) : List String :=
+  ss.foldl (fun acc s => acc ++ collectMethodValueRefsStmt s) []
 end
 
 /-! ### Indirect calls

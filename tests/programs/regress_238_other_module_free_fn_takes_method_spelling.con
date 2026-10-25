@@ -1,0 +1,33 @@
+// Bug 238 (FIXED), the cross-module shape: the free function spelled like the method call
+// (`outer_a_P_get`) is defined in ANOTHER top-level module `d`, so it takes the spelling
+// program-wide. Before the fix the call in `c` met `d`'s function; its signature disagreed with the
+// method's, so the type-agreement backstop refused the program (E0299, "two modules' same-named
+// types meet here"); with an agreeing signature it would have run it. The method call is now
+// spelled by its definition, and `d`'s function stays callable.
+// Expected: 42, natively and --interp.
+mod outer {
+    mod a {
+        pub struct Copy P { pub v: i32 }
+        impl P {
+            pub fn get(&self) -> i32 { return self.v; }
+        }
+        pub fn mk() -> P { return P { v: 40 }; }
+    }
+    mod b {
+        pub struct Copy P { pub w: i32 }
+        pub fn mk() -> P { return P { w: 7 }; }
+    }
+}
+mod c {
+    import outer.a.{P, mk};
+    pub fn run() -> i32 {
+        let p: P = mk();
+        return p.get();
+    }
+}
+mod d {
+    pub fn outer_a_P_get(p: i32) -> i32 { return p + 1; }
+}
+fn main() -> Int {
+    return (c::run() + d::outer_a_P_get(1)) as Int;
+}

@@ -1,0 +1,32 @@
+// Bug 238 (FIXED), the free-spelled shapes: the method `get` of the respelled `outer_a_P` named by
+// its definition name, as a call `P_get(&p)` and as a value `let f: fn(&P) -> i32 = P_get;`
+// (both resolve to the method: `c` defines no free `P_get`). Core respells both `outer_a_P_get`,
+// which `c`'s free function `outer_a_P_get` defines. Before the fix each ran the free function
+// (99); a free-spelled reference that Check resolved to a method is now in the method namespace
+// and is spelled by the method it names.
+// Expected: 42 (20 + 22, then 99 - 99), natively and --interp.
+mod outer {
+    mod a {
+        pub struct Copy P { pub v: i32 }
+        impl P {
+            pub fn get(&self) -> i32 { return self.v; }
+        }
+        pub fn mk() -> P { return P { v: 21 }; }
+    }
+    mod b {
+        pub struct Copy P { pub w: i32 }
+        pub fn mk() -> P { return P { w: 7 }; }
+    }
+}
+mod c {
+    import outer.a.{P, mk};
+    fn outer_a_P_get(p: &P) -> i32 { return 99; }
+    pub fn run() -> i32 {
+        let p: P = mk();
+        let f: fn(&P) -> i32 = P_get;
+        return P_get(&p) + f(&p) + outer_a_P_get(&p) - 99;
+    }
+}
+fn main() -> Int {
+    return c::run() as Int;
+}

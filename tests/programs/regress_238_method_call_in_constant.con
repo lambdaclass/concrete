@@ -1,0 +1,25 @@
+// Bug 238 (FIXED), the constant shape (Codex review r2): the method reference is in a constant's
+// initializer, which Lower inlines at each use. `c`'s free function `outer_a_P_get` takes the
+// spelling Core gives the call of the respelled `outer_a_P`'s static method `get`; the repair
+// must reach constant initializers too.
+// Expected: 42, natively and --interp.
+mod outer {
+    mod a {
+        pub struct Copy P { pub v: i32 }
+        impl P {
+            pub fn get() -> i32 { return 42; }
+        }
+    }
+    mod b {
+        pub struct Copy P { pub w: i32 }
+    }
+}
+mod c {
+    import outer.a.{P};
+    fn outer_a_P_get() -> i32 { return 99; }
+    const ANSWER: i32 = P::get();
+    pub fn run() -> i32 { return ANSWER + outer_a_P_get() - 99; }
+}
+fn main() -> Int {
+    return c::run() as Int;
+}

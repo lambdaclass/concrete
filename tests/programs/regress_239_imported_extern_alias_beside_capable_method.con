@@ -1,0 +1,20 @@
+// Bug 239 (FIXED), Codex review r12: `user` calls an extern imported under the alias `P_get` while
+// the root's method `P::get` (definition name `P_get`) requires `Std`. CoreCheck decided the free
+// call against the method's capabilities (E0520); a free call the function binds to a foreign
+// declaration is decided against that declaration.
+// Expected: 42 (`abs(-42)`), natively and --interp.
+struct Copy P { v: i32 }
+impl P {
+    fn get(x: i32) with(Std) -> i32 { return 0; }
+}
+mod ffi {
+    #[link_name = "abs"]
+    pub trusted extern fn other(x: i32) with() -> i32;
+}
+mod user {
+    import ffi.{other as P_get};
+    pub fn run() -> i32 { return P_get(-42); }
+}
+fn main() -> Int {
+    return user::run() as Int;
+}

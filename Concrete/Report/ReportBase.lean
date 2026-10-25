@@ -185,11 +185,19 @@ structure AllocInfo where
 /-- A flat map of function/extern names → CapSet, built once per report. -/
 abbrev CapLookup := List (String × CapSet)
 
+/-- The namespaced key of a method or a foreign binding in a `CapLookup` (bugs 238 – 239): one Core
+    spelling may be a method in one module and an extern in another, so an explanation that knows
+    which one a call names looks it up under its namespace. `:` is in no Concrete identifier. -/
+def capKeyMethod (n : String) : String := "method:" ++ n
+def capKeyExtern (n : String) : String := "extern:" ++ n
+
 partial def buildCapLookupModule (m : CModule) : CapLookup :=
   let fnEntries := m.functions.map fun f => (f.name, f.capSet)
   let externEntries := m.externFns.map fun (n, _, _, trusted) =>
     (n, Capabilities.externFnRequiredCaps trusted ((m.externFnCaps.lookup n).getD .empty))
-  fnEntries ++ externEntries ++ m.submodules.foldl (fun acc sub =>
+  let spaced := (m.functions.filter (·.isMethod)).map (fun f => (capKeyMethod f.name, f.capSet))
+    ++ externEntries.map fun (n, cs) => (capKeyExtern n, cs)
+  fnEntries ++ externEntries ++ spaced ++ m.submodules.foldl (fun acc sub =>
     acc ++ buildCapLookupModule sub) []
 
 def buildCapLookup (modules : List CModule) : CapLookup :=

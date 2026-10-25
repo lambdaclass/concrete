@@ -68,6 +68,7 @@ inductive ResolveError where
   | capParamNamesCapability (owner : String) (param : String)
   | unknownBoundTrait (traitName : String) (param : String) (owner : String)
   | unimportable (kind : String) (symbol : String) (moduleName : String)
+  | traitIsNotAType (name : String)
 
 def ResolveError.message : ResolveError → String
   | .undeclaredVariable name => s!"undeclared variable '{name}'"
@@ -79,6 +80,8 @@ def ResolveError.message : ResolveError → String
   | .unknownStaticMethod typeName method => s!"unknown static method '{typeName}::{method}'"
   | .unknownFunctionRef name => s!"unknown function reference '{name}'"
   | .unknownType name => s!"unknown type '{name}'"
+  | .traitIsNotAType name =>
+    s!"'{name}' is a trait, not a type: there are no trait-object types (TYPE-2), so a trait names no value; bound a type parameter by it instead (`fn f<T: {name}>(x: T)`)"
   | .selfOutsideImpl => "Self can only be used inside impl blocks"
   | .unknownModule name => s!"unknown module '{name}'"
   | .notPublicInModule symbol moduleName => s!"'{symbol}' is not public in module '{moduleName}'"
@@ -217,6 +220,7 @@ def ResolveError.code : ResolveError → String
   | .capParamNamesCapability _ _ => "E0121"
   | .unknownBoundTrait _ _ _ => "E0125"
   | .unimportable _ _ _ => "E0126"
+  | .traitIsNotAType _ => "E0108"
 
 private def addError (ctx : ResolveCtx) (err : ResolveError) (span : Option Span := none) : ResolveCtx :=
   { ctx with errors := ctx.errors ++ [{ severity := .error, message := err.message, pass := "resolve", span := span, hint := none, code := err.code }] }
@@ -296,6 +300,18 @@ private def hasMethodByIdentity (ctx : ResolveCtx) (typeName method : String) : 
 
 private def isKnownType (ctx : ResolveCtx) (name : String) : Bool :=
   ctx.knownTypes.contains name
+
+/-- Bug 240: whether a written type name denotes a trait. A trait is in the type namespace
+    (`SymKind.isType`: a bound and an impl name it there) but is not a type: there are no
+    trait-object types (TYPE-2), so a trait in a type position (a cast target, an annotation, a
+    signature, a field, a type argument) denotes no value and no layout. Before this the name passed
+    as a known type, and the backend met an unknown named type (`x as Marker`: an `EmitSSA` panic).
+    A type parameter of that spelling shadows the trait. -/
+private def denotesTrait (ctx : ResolveCtx) (name : String) : Bool :=
+  !ctx.typeParams.contains name &&
+  match lookupWrittenType ctx name with
+  | some (SymKind.trait _) => true
+  | _ => false
 
 -- ============================================================
 -- Builtin names
@@ -380,6 +396,8 @@ private def checkTyDeep (ctx : ResolveCtx) (ty : Ty) (span : Option Span := none
       match ctx.currentImplType with
       | some _ => ctx
       | none => addError ctx .selfOutsideImpl span
+    else if isKnownType ctx name && denotesTrait ctx name then
+      addError ctx (.traitIsNotAType name) span
     else if isKnownType ctx name then
       -- Bug 200: a generic type named bare (`B` for `B<T>`) is E0113 (0 type arguments
       -- given), as an explicit list of the wrong length is. Before this the missing
@@ -397,7 +415,8 @@ private def checkTyDeep (ctx : ResolveCtx) (ty : Ty) (span : Option Span := none
   -- Capability arguments were already classified by position (Frontend/CapArgs), so
   -- what remains here is the kind and count check, in both directions (R-0484).
   | .generic name args caps =>
-    let ctx := if isKnownType ctx name then checkGenericArgs ctx name args caps span
+    let ctx := if isKnownType ctx name && denotesTrait ctx name then addError ctx (.traitIsNotAType name) span
+               else if isKnownType ctx name then checkGenericArgs ctx name args caps span
                else addError ctx (.unknownType name) span
     args.foldl (fun ctx ty => checkTyDeep ctx ty span) ctx
   | .ref inner | .refMut inner | .ptrMut inner | .ptrConst inner
@@ -803,6 +822,40 @@ private def capParamNamesCheck (m : Module) (ctx : ResolveCtx) : ResolveCtx :=
   m.traitImpls.foldl (fun ctx ti =>
     ti.methods.foldl (fun ctx f => check s!"{ti.typeName}::{f.name}" f.capParams f.span ctx) ctx) ctx
 
+/-- The trait names a type mentions where a type is meant (bug 240), with `params` shadowing. -/
+private partial def traitNamesInTy (ctx : ResolveCtx) : Ty → List String
+  | .named n => if denotesTrait ctx n then [n] else []
+  | .generic n args _ => (if denotesTrait ctx n then [n] else []) ++ args.flatMap (traitNamesInTy ctx)
+  | .ref t | .refMut t | .ptrMut t | .ptrConst t | .heap t | .heapArray t | .array t _ =>
+    traitNamesInTy ctx t
+  | .fn_ ps _ r => ps.flatMap (traitNamesInTy ctx) ++ traitNamesInTy ctx r
+  | _ => []
+
+/-- Bug 240: a declaration's own types (a struct's fields, an enum's payloads, a newtype's
+    representation, a trait method's signature, a foreign binding's signature) may not name a
+    trait. Resolve walks these with no `checkTyDeep` (Check validates them), so the trait half of
+    TYPE-2 is enforced here; function and impl-method signatures, bodies, aliases and constants
+    already meet `checkTyDeep`. -/
+private def declTraitTypesCheck (m : Module) (ctx : ResolveCtx) : ResolveCtx :=
+  let check (params : List String) (ty : Ty) (sp : Span) (ctx : ResolveCtx) : ResolveCtx :=
+    (traitNamesInTy { ctx with typeParams := params } ty).eraseDups.foldl
+      (fun ctx n => addError ctx (.traitIsNotAType n) (some sp)) ctx
+  let ctx := m.structs.foldl (fun ctx sd =>
+    sd.fields.foldl (fun ctx f => check sd.typeParams f.ty sd.span ctx) ctx) ctx
+  let ctx := m.enums.foldl (fun ctx ed =>
+    ed.variants.foldl (fun ctx v =>
+      v.fields.foldl (fun ctx f => check ed.typeParams f.ty ed.span ctx) ctx) ctx) ctx
+  let ctx := m.newtypes.foldl (fun ctx nt => check nt.typeParams nt.innerTy nt.span ctx) ctx
+  -- A trait's method signatures and a foreign binding's signature are not walked by any
+  -- `resolveFnBody` either (Codex review r2).
+  let ctx := m.traits.foldl (fun ctx td =>
+    td.methods.foldl (fun ctx ms =>
+      let ctx := ms.params.foldl (fun ctx p => check td.typeParams p.ty td.span ctx) ctx
+      check td.typeParams ms.retTy td.span ctx) ctx) ctx
+  m.externFns.foldl (fun ctx ef =>
+    let ctx := ef.params.foldl (fun ctx p => check [] p.ty ef.span ctx) ctx
+    check [] ef.retTy ef.span ctx) ctx
+
 /-- Bug 231: every trait a bound names resolves (MOD-1). The traits a module's bounds may name are
     the ones Check gives that module (`allTraits`: the builtin `Destroy` and the module's own
     traits, with `Copy` read by `checkTraitBounds`); traits are module-local and cannot be imported
@@ -855,6 +908,7 @@ private def resolveModule (m : Module) (globalScope : Scope) (knownTypes : List 
   let externErrors := (externEffectsCheck m externCtx0).errors
   let capParamErrors := (capParamNamesCheck m externCtx0).errors
   let boundErrors := (boundTraitsCheck m externCtx0).errors
+  let declTraitErrors := (declTraitTypesCheck m externCtx0).errors
   -- Bug 215 (Codex review): a constant's declared type and initializer are written types and
   -- an expression like any function body's; the initializer was never walked, so
   -- `const X: Int = (7 as Nope) as Int` reached the backend.
@@ -862,7 +916,7 @@ private def resolveModule (m : Module) (globalScope : Scope) (knownTypes : List 
     let ctx := checkTyDeep externCtx0 c.ty (some c.span)
     acc ++ (resolveExpr ctx c.value).errors) []
   let allErrors := aliasErrors ++ fnErrors ++ implErrors ++ traitImplErrors ++ externErrors ++ capParamErrors
-    ++ boundErrors ++ constErrors
+    ++ boundErrors ++ declTraitErrors ++ constErrors
   allErrors
 
 /-- The names a nested submodule's imports bring into its scope, by the rule Check and Elab

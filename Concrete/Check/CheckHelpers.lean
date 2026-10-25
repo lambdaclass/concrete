@@ -421,6 +421,14 @@ def TypeEnv.structIsLocal (env : TypeEnv) (sd : StructDef) : Bool :=
   | some id => env.localStructIds.contains id
   | none => env.localStructNames.contains sd.name
 
+/-- A method by its definition name `Type_method`, in the method table only (bugs 238 – 239):
+    a receiver call `x.m()` and a `T::m()` call mean the type's method, never a free function
+    of the module that happens to be spelled `T_m`. -/
+def lookupMethodByName (name : String) : CheckM (Option FnSummary) := do
+  let env ← getEnv
+  match env.methodNames.lookup name with
+  | some idx => return listGetIdx env.functions idx
+  | none => return none
 /-- R-0492 step 3: the declaration a type spelling denotes in the module being checked
     (`typeIdOfSpelling` over its environment); a type parameter of the function denotes none. -/
 def TypeEnv.typeIdOf (env : TypeEnv) (name : String) : Option TypeId :=
@@ -450,19 +458,14 @@ def lookupMethod (typeName methodName : String) (span : Option Span := none) :
   let env ← getEnv
   if let some owner := env.typeIdOf typeName then
     if let some (mangled, sig) := methodByIdentity env.allFnSummarys { owner, method := methodName } then
-      -- Core calls the method by its mangled spelling, and every consumer below resolves that
-      -- spelling in this module's callable namespace. Where the spelling names another callable
-      -- (a free function `P_mk` beside `P::mk`), the call would reach it: refused (MOD-3, E0299).
-      match ← lookupFn mangled with
-      | some other =>
-        if other.methodOf != sig.methodOf then
-          throwCheck (.declarationCollision mangled
-            s!"method '{typeName}::{methodName}' is called by its Core name; a callable"
-            "another callable" 0) span
-      | none => pure ()
+      -- The call is a METHOD call in Core (`CallSpace.method`), resolved below among methods
+      -- only, so a free function of the mangled spelling (`P_mk` beside `P::mk`) cannot answer
+      -- it and needs no refusal (bugs 238 – 239).
+      let _ := span
       return some (mangled, sig)
+  -- A method no stamped impl declares: by its spelling, in the method table alone.
   let mangled := mangledMethodName typeName methodName
-  return (← lookupFn mangled).map (mangled, ·)
+  return (← lookupMethodByName mangled).map (mangled, ·)
 
 /-- Normalize a type for comparison (normalize empty capsets in fn types). -/
 def normalizeTyForCmp : Ty → Ty
@@ -1070,6 +1073,7 @@ def checkPeekCtx : PeekCtx CheckM where
   method t m := do return (← lookupMethod t m).map (·.2)
   typeIdOf := do return (← getEnv).typeIdOf
   fnRefSig name := do return (← getEnv).allFnSummarys.lookup name
+  methodSig name := lookupMethodByName name
   struct name := lookupStruct name
   newtype name := lookupNewtype name
   boundMethod n methodName := do
@@ -1108,7 +1112,7 @@ partial def ownsResource (fuel : Nat) (ty : Ty) : CheckM Bool := do
     | .string | .heap _ | .heapArray _ => return true
     | .array elem _ => ownsResource fuel elem
     | .named n =>
-      if (← lookupFn (destroyFnNameFor n)).isSome then return true
+      if (← lookupMethodByName (destroyFnNameFor n)).isSome then return true
       match ← lookupStruct n with
       | some sd => sd.fields.anyM (fun f => ownsResource fuel f.ty)
       | none => match ← lookupEnum n with
@@ -1117,7 +1121,7 @@ partial def ownsResource (fuel : Nat) (ty : Ty) : CheckM Bool := do
     | .generic n args _ =>
       if n == "Vec" || n == "HashMap" || n == "HashSet" || n == "Heap" || n == "HeapArray" then
         return true
-      if (← lookupFn (destroyFnNameFor n)).isSome then return true
+      if (← lookupMethodByName (destroyFnNameFor n)).isSome then return true
       match ← lookupStruct n with
       | some sd =>
         let m := sd.typeParams.zip args

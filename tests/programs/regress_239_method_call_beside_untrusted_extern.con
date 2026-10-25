@@ -1,0 +1,21 @@
+// Bug 239 (FIXED), Codex review r4: `user` declares an untrusted extern `P_get` (which requires
+// `Unsafe`) and calls the imported `P`'s method `P::get`, whose definition name is `P_get` too.
+// CoreCheck decided the method call against the extern's signature (E0520, "insufficient
+// capabilities") and recorded an FFI trust edge for it; a method call is decided against the
+// method table.
+// Expected: 42, natively and --interp.
+mod defs {
+    pub struct Copy P { pub v: i32 }
+    impl P {
+        pub fn get(x: i32) -> i32 { return 42; }
+    }
+}
+mod user {
+    import defs.{P};
+    #[link_name = "abs"]
+    extern fn P_get(x: i32) with() -> i32;
+    pub fn run() -> i32 { return P::get(-99); }
+}
+fn main() -> Int {
+    return user::run() as Int;
+}

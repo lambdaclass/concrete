@@ -195,10 +195,23 @@ private structure Node where
   module : String
   spellings : List String
   direct : List String
+  /-- Method calls (`CallSpace.method`, bugs 238 – 239): resolved to methods only, never to a
+      free function or foreign binding of the spelling. -/
+  methodDirect : List String := []
+  /-- Method values (bugs 238 – 239): reach methods only, as method calls do. -/
+  methodValues : List String := []
+  /-- A method spelling's linker-alias normalization (raw → target), consulted only when no method
+      has the raw spelling: a free import alias of the spelling must not redirect a method edge
+      (Codex review r10). -/
+  methodAliasOf : List (String × String) := []
   values : List String
   indirect : List String
   trusted : Bool
   typeParams : List String
+  isMethod : Bool := false
+  /-- Spellings this function binds to a foreign declaration (`foreignCalls`): a free call of
+      one reaches that binding, never a program definition of the spelling. -/
+  foreign : List String := []
   deriving Inhabited
 
 private structure Binding where
@@ -241,8 +254,21 @@ private partial def collect (packageOf : String → Option (String × String))
     { fn := path ++ "." ++ f.name, fnKey := s!"P{pkg.length}:{pkg}|{path}.{f.name}"
       packageName := pkgName, package := pkg
       name := f.name, module := path, spellings := callSpellings path f.name
-      direct := (collectCallsStmts f.body).eraseDups.map norm
+      direct := ((collectCalleesStmts f.body).filterMap fun c => match c with
+        | .direct n .free => some n
+        | _ => none).eraseDups.map norm
+      methodDirect := ((collectCalleesStmts f.body).filterMap fun c => match c with
+        | .direct n .method => some n
+        | _ => none).eraseDups
+      isMethod := f.isMethod
+      -- by the spelling written and by its normalization, as `direct` carries it (Codex review r19)
+      foreign := ((f.foreignCalls.filter fun (_, d) => !d.startsWith "_C$rt.").map (·.1)).flatMap
+        fun n => [n, norm n]
       values := (collectFnValueRefsStmts f.body).eraseDups.map norm
+      methodValues := (collectMethodValueRefsStmts f.body).eraseDups
+      methodAliasOf := (((collectCalleesStmts f.body).filterMap fun c => match c with
+          | .direct n .method => some n
+          | _ => none) ++ collectMethodValueRefsStmts f.body).eraseDups.map fun n => (n, norm n)
       indirect := (collectIndirectCallsStmts f.body).eraseDups
       trusted := f.isTrusted, typeParams := f.typeParams : Node }
   let isIntrinsicDecl := isIntrinsicDecl m
@@ -347,9 +373,22 @@ def build (modules : List CModule)
                                 name := nd.name } : AssumptionId).key
                       via := .declaredHere }
     let mut unloadedGaps : Array Gap := #[]
-    for (name, isValue) in nd.direct.map (·, false) ++ nd.values.map (·, true) do
-      let bs := resolve bindings bIdx (·.module) nd.module name
-      let ts := resolve nodes fnIdx (·.module) nd.module name
+    for (name, isValue, isMethodCall) in nd.direct.map (·, false, false)
+        ++ nd.methodDirect.map (·, false, true) ++ nd.values.map (·, true, false)
+        ++ nd.methodValues.map (·, true, true) do
+      let bs0 := if isMethodCall then #[] else resolve bindings bIdx (·.module) nd.module name
+      -- A free call or function value names a foreign binding only when its function binds the
+      -- spelling to one, or no program definition answers it (Codex reviews r16, r20).
+      let bs := if !isMethodCall && !nd.foreign.contains name
+          && !(resolve nodes fnIdx (·.module) nd.module name).isEmpty then #[] else bs0
+      let ts := if isMethodCall then
+          let methodsNamed := fun (nm : String) => (fnIdx.getD nm #[]).filter fun j => nodes[j]!.isMethod
+          let raw := methodsNamed name
+          let all := if !raw.isEmpty then raw else methodsNamed ((nd.methodAliasOf.lookup name).getD name)
+          let local_ := all.filter fun j => nodes[j]!.module == nd.module
+          if local_.isEmpty then all else local_
+        else if !isValue && nd.foreign.contains name then #[]
+        else resolve nodes fnIdx (·.module) nd.module name
       -- A name that resolves to no loaded definition, binding or intrinsic is an UNRESOLVED edge,
       -- not an empty one: what it reaches is unknown.
       if bs.isEmpty && ts.isEmpty && !isIntrinsic name then

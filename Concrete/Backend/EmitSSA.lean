@@ -75,6 +75,10 @@ structure EmitSSAState where
       These are the PRE-MANGLING names the alias machinery resolves to; `fnSymbols` maps
       each to its link symbol. -/
   definedFnNames : List String := []
+  /-- The pre-mangling names of the program's impl methods (bugs 238 – 239): a method call is
+      resolved to one of these, never through an alias of its spelling to a free function or an
+      extern (Codex review r12). -/
+  methodFnNames : List String := []
   /-- Pre-mangling name of every Concrete-defined function → its link symbol: the mangled
       `Symbols.concreteFn` (FFI.md "Symbol Names"), or its `#[export_name]`. -/
   fnSymbols : Std.HashMap String String := {}
@@ -389,6 +393,19 @@ private def resolveAliasedName (s : EmitSSAState) (fn : String) : String :=
         | none => orig
       | none => fn
 
+/-- `resolveAliasedName` for a METHOD call (bugs 238 – 239, Codex review r12): its spelling when a
+    method has it, else the first alias target (local imports, then the program's aliases, one
+    more local hop) that is a method. An alias of the spelling to a free function or an extern is
+    never followed. -/
+private def resolveMethodName (s : EmitSSAState) (fn : String) : String :=
+  if s.methodFnNames.contains fn then fn else
+  let viaLocal := (s.localAliases.filter (·.1 == fn)).map (·.2)
+  let viaLinker := (s.linkerAliases.filter (·.1 == fn)).map (·.2)
+  let hop := viaLinker.flatMap fun t => (s.localAliases.filter (·.1 == t)).map (·.2)
+  match (viaLocal ++ viaLinker ++ hop).find? s.methodFnNames.contains with
+  | some t => t
+  | none => resolveAliasedName s fn
+
 /-- The C symbol a foreign name binds: its `#[link_name]`, else its spelling. -/
 private def externSymbol (s : EmitSSAState) (name : String) : String :=
   (s.externLinks.lookup name).getD name
@@ -397,16 +414,19 @@ private def externSymbol (s : EmitSSAState) (name : String) : String :=
     definition (FFI.md "Symbol Names"): the module's own extern binds the foreign symbol;
     otherwise a Concrete definition binds its mangled (or exported) symbol; anything else
     is foreign (an imported extern, a runtime builtin renamed at assembly, a C symbol). -/
-private def directSymbol (s : EmitSSAState) (fn : String) : String × Bool :=
+private def directSymbol (s : EmitSSAState) (fn : String) (space : CallSpace := .free) : String × Bool :=
+  -- A method call names a program method (bugs 238 – 239): the foreign spellings of this body
+  -- and the module's externs are free names, and never bind it.
+  let foreignBinding := if space == .method then none else s.currentForeign.lookup fn
   -- The resolver's verdict for this body first: an own or imported extern.
-  match s.currentForeign.lookup fn with
+  match foreignBinding with
   | some decl =>
     -- A runtime helper binding already names its reserved symbol.
     if decl.startsWith "_C$rt." then (decl, false) else (externSymbol s decl, false)
   | none =>
-  if s.moduleExterns.contains fn then (externSymbol s fn, false)
+  if space == .free && s.moduleExterns.contains fn then (externSymbol s fn, false)
   else
-    let pre := resolveAliasedName s fn
+    let pre := if space == .method then resolveMethodName s fn else resolveAliasedName s fn
     match s.fnSymbols.get? pre with
     | some sym => (sym, true)
     | none => (externSymbol s pre, false)
@@ -415,9 +435,9 @@ private def directSymbol (s : EmitSSAState) (fn : String) : String × Bool :=
 private def svalToOperand (s : EmitSSAState) (v : SVal) : LLVMOperand :=
   match v with
   | .reg name _ => .reg name
-  | .fnRef bareName _ =>
+  | .fnRef bareName _ sp =>
     -- A function-pointer reference names the same symbol a direct call would.
-    .global (directSymbol s bareName).1
+    .global (directSymbol s bareName sp).1
   | .intConst val _ => .intLit val
   -- An f32 constant is rounded to f32 here, before it is printed as a double (bug 109).
   | .floatConst val ty => .floatLit (if ty == .float32 then val.toFloat32.toFloat else val)
@@ -848,11 +868,16 @@ private def emitSInst (s : EmitSSAState) (inst : SInst) : EmitSSAState :=
     -- Previously every one of them read a string that might have been a
     -- `%`-prefixed register, and each had to be careful not to.
     let directName : Option String := match callee with
-      | .direct n => some n
+      | .direct n _ => some n
       | .indirect _ | .foreign _ => none
+    let directSpace : CallSpace := match callee with
+      | .direct _ sp => sp
+      | _ => .free
     -- Intercept vec sized operations for per-element-size dispatch
+    -- A method call is a program method, never a runtime `Vec` operation of its spelling (bugs
+    -- 238 – 239, Codex review r10).
     match (match directName with
-           | some fn => resolveVecCall s fn args retTy
+           | some fn => if directSpace == CallSpace.method then none else resolveVecCall s fn args retTy
            | none => none) with
     | some (specFn, es, payOff) =>
       let s := recordVecElemSpec s es payOff
@@ -905,7 +930,7 @@ private def emitSInst (s : EmitSSAState) (inst : SInst) : EmitSSAState :=
     -- extern elsewhere shares its spelling (the definition has its own mangled symbol).
     -- An imported alias of an extern (`import c.{take as alias}`) is foreign by the resolver's
     -- binding (`currentForeign`), not by its spelling, and must get the C ABI too.
-    let isExternCall := match directName with
+    let isExternCall := if directSpace == CallSpace.method then false else match directName with
       | some fn =>
         ((match s.currentForeign.lookup fn with
           | some d => !d.startsWith "_C$rt."
@@ -998,17 +1023,19 @@ private def emitSInst (s : EmitSSAState) (inst : SInst) : EmitSSAState :=
       | .indirect target => svalToOperand s target
       -- A C runtime symbol the compiler chose: never a Concrete definition (bug 129).
       | .foreign sym => .global sym
-      | .direct fn =>
+      | .direct fn space =>
         -- A fn-typed parameter, or a register loaded from memory (fnTypeRegs),
         -- is still a call THROUGH a value even though it is spelled as a bare
         -- symbol here.
-        if (s.fnParams.any fun (n, t) =>
+        -- Never for a method call, which names a program method (bugs 238 – 239, Codex r11: a
+        -- fn-typed parameter spelled like the method's Core name took the call).
+        if space == CallSpace.free && ((s.fnParams.any fun (n, t) =>
               n == fn && match t with | .fn_ _ _ _ => true | _ => false)
-           || s.fnTypeRegs.contains fn then
+           || s.fnTypeRegs.contains fn) then
           .reg fn
         else
           -- Resolve aliased imports to the definition, then to its link symbol.
-          .global (directSymbol s fn).1
+          .global (directSymbol s fn space).1
     -- For extern calls returning small repr(C) structs: call returns i64,
     -- store through pointer so downstream code sees the struct correctly.
     -- Downstream code expects dst to be a pointer (pass-by-ptr for structs).
@@ -1944,6 +1971,10 @@ def emitSSAProgram (modules : List SModule) (testMode : Bool := false) (moduleFi
     acc ++ m.functions.map fun f => llvmFnName { s with collidingNames := collidingNames } f
   ) ([] : List String)
   let s := { s with definedFnNames := definedFnNames }
+  let methodFnNames := modules.foldl (fun acc m =>
+    acc ++ (m.functions.filter (·.isMethod)).map fun f => llvmFnName { s with collidingNames := collidingNames } f
+  ) ([] : List String)
+  let s := { s with methodFnNames := methodFnNames }
   -- Link symbols (FFI.md "Symbol Names"): every Concrete definition is mangled into
   -- `_C.<module path>.<name>`, or takes its `#[export_name]`. Injective: (path, name) fixes
   -- the pre-mangling name, and the mangled form contains `.`, which no C name does.

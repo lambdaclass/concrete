@@ -1,0 +1,20 @@
+// Bug 239 (FIXED), Codex review r19: `user` calls the extern `ffi.P_get`, imported as `ext`, beside
+// the root's TRUSTED method `P::get` (Core name `P_get`). The assumption summary normalized `ext` to
+// `P_get` and, missing the binding under that spelling, also attributed the method's trusted
+// boundary to `user.run`; a free call bound to a foreign declaration reaches only the declaration.
+// Expected: 42 (`abs(-42)`), natively and --interp; `user.run` assumes only `ffi.P_get`.
+struct Copy P { v: i32 }
+impl P {
+    trusted fn get(x: i32) -> i32 { return x; }
+}
+mod ffi {
+    #[link_name = "abs"]
+    pub trusted extern fn P_get(x: i32) with() -> i32;
+}
+mod user {
+    import ffi.{P_get as ext};
+    pub fn run() -> i32 { return ext(-42); }
+}
+fn main() -> Int {
+    return user::run() as Int;
+}

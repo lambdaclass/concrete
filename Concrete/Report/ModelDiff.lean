@@ -178,7 +178,7 @@ def modelDiffOf (pc : ProofCore) (cx : Interp.Ctx) (constEnv : Proof.Env)
       let argEs : List CExpr := (args.zip tys).map fun
         | (.int v, ty) => .intLit v ty
         | (.bool b, _) => .boolLit b
-      let call : CExpr := .call (.direct e.fn.name) [] argEs e.fn.retTy
+      let call : CExpr := .call (.direct e.fn.name .free) [] argEs e.fn.retTy
       -- The runtime side runs under a loop budget (bug 106): a sampled boundary input can make
       -- a loop run 2^63 times, which hung the report. Running out is its own outcome,
       -- `exhausted` — compared nothing, never a trap and never agreement.

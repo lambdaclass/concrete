@@ -1,0 +1,19 @@
+// Bug 239 (FIXED), Codex review r18 control: `main` calls the imported TRUSTED extern
+// `defs_P_get` beside the trusted nested method `defs.P::get` (Core name `defs_P_get`). The call is
+// trusted by its own declaration, the imported extern: a calls-trusted edge (an intermediate version
+// of this fix dropped it because a trusted method shares the spelling).
+// Expected: 42 (`abs(-42)`), natively and --interp.
+mod defs {
+    pub struct Copy P { pub v: i32 }
+    impl P {
+        pub trusted fn get(x: i32) -> i32 { return x; }
+    }
+}
+mod ffi {
+    #[link_name = "abs"]
+    pub trusted extern fn defs_P_get(x: i32) with() -> i32;
+}
+import ffi.{defs_P_get};
+fn main() -> Int {
+    return defs_P_get(-42) as Int;
+}

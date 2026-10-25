@@ -2,7 +2,7 @@
 
 <!-- bug-ledger
 summary: `import m.{P as Q}` gave a type `Q` with none of `P`'s methods (Resolve's E0106 `Q::mk`, Check's E0264) that a `P` from `m` did not match (E0220): types and their methods were found by spelling. Types are now compared, and methods and trait impls looked up, by declaration identity (`TypeId`, `MethodKey` stamped by `buildFileSummary`) in Resolve, Check and Elab (R-0492 step 3). Found by the Phase 7 workload 10 probes, 2026-10-24. Fixtures `regress_223_*`. Class 1.
-fixtures: regress_223_aliased_struct_methods.con regress_223_aliased_enum.con regress_223_aliased_generic_and_bound.con regress_223_aliased_destroy_impl.con regress_223_aliased_self_result.con regress_223_aliased_cap_params.con error_223_method_core_name_taken.con
+fixtures: regress_223_aliased_struct_methods.con regress_223_aliased_enum.con regress_223_aliased_generic_and_bound.con regress_223_aliased_destroy_impl.con regress_223_aliased_self_result.con regress_223_aliased_cap_params.con regress_223_method_core_name_taken.con
 class: 1 — an import alias of a type is a second spelling and so a second type: the alias has none of the type's methods, and the type's values do not match it; fixed 2026-10-25, R-0492 step 3: types compared and methods looked up by `TypeId`
 silent: no
 -->
@@ -94,7 +94,7 @@ Regression legs in `run_tests.sh`: `regress_223_aliased_struct_methods.con` (the
 trait bound satisfied through the alias) and `regress_223_aliased_destroy_impl.con` (an aliased
 linear type's `Destroy` bound and method), `regress_223_aliased_self_result.con` and
 `regress_223_aliased_cap_params.con`, each `run_ok … 42` and `--interp` = 42, and
-`error_223_method_core_name_taken.con` (E0299).
+`regress_223_method_core_name_taken.con` (refused E0299 when it was written; since bugs 238 – 239 the method call is a method call in Core and the program returns 42, natively and under `--interp`).
 
 Not in this fix: an imported signature still names a type by its definition's spelling, which the
 importer reads in its own environment, so an importer declaring its own type of that spelling

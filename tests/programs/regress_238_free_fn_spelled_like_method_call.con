@@ -1,0 +1,32 @@
+// Bug 238 (FIXED): `outer.a` and `outer.b` both declare `P`, so Core spells `a`'s type
+// `outer_a_P` and a call of its method `get` from another module `outer_a_P_get` (the caller's
+// spelling, which a linker alias bridges to the definition `a_outer_a_P_get`). Module `c` also
+// defines a free function `outer_a_P_get`, a name the user may write. Every consumer below Elab
+// resolves a callee by spelling, a definition of that name first, so `p.get()` ran `c`'s free
+// function: 99, natively and under `--interp`. Elab now spells a method call whose spelling a free
+// function defines by the method it names (`spellMethodCallsApart`).
+// Expected: 42, natively and --interp.
+mod outer {
+    mod a {
+        pub struct Copy P { pub v: i32 }
+        impl P {
+            pub fn get(&self) -> i32 { return self.v; }
+        }
+        pub fn mk() -> P { return P { v: 42 }; }
+    }
+    mod b {
+        pub struct Copy P { pub w: i32 }
+        pub fn mk() -> P { return P { w: 7 }; }
+    }
+}
+mod c {
+    import outer.a.{P, mk};
+    fn outer_a_P_get(p: &P) -> i32 { return 99; }
+    pub fn run() -> i32 {
+        let p: P = mk();
+        return p.get();
+    }
+}
+fn main() -> Int {
+    return c::run() as Int;
+}

@@ -1,0 +1,26 @@
+// Bug 239 (FIXED): the method `get` of the imported `P` is declared by an `impl` in a third
+// module `ext`, which does not reach `user` (the same program without `user`'s free function is
+// refused E0264, "no method 'get' on type 'P'"). With a free function `P_get` in `user`, Check
+// found it under the method's definition name and `p.get()` ran it: 99, natively and under
+// `--interp`. A receiver call resolves in the method table alone, so this is the same E0264.
+mod defs {
+    pub struct Copy P { pub v: i32 }
+    pub fn mk() -> P { return P { v: 42 }; }
+}
+mod ext {
+    import defs.{P};
+    impl P {
+        pub fn get(&self) -> i32 { return self.v; }
+    }
+}
+mod user {
+    import defs.{P, mk};
+    fn P_get(p: P) -> i32 { return 99; }
+    pub fn run() -> i32 {
+        let p: P = mk();
+        return p.get();
+    }
+}
+fn main() -> Int {
+    return user::run() as Int;
+}

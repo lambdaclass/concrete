@@ -23,7 +23,9 @@ inductive SVal where
   -- while the interpreter, which never saw the encoding, ran the program fine.
   -- As its own constructor it simply is not a register use, so no pass needs an
   -- exemption to avoid mistaking it for one.
-  | fnRef (name : String) (ty : Ty)
+  /-- A function used as a value, in the namespace its Core reference resolved in (`CallSpace`,
+      bugs 238 – 239): a method value is never bound to a foreign spelling. -/
+  | fnRef (name : String) (ty : Ty) (space : CallSpace)
   | intConst (val : Int) (ty : Ty)
   | floatConst (val : Float) (ty : Ty)
   | boolConst (val : Bool)
@@ -45,7 +47,10 @@ phi down to a known function left a dangling `%if.phi.N` in the emitted call
 substitution, use-collection and verification reach it the same way they reach
 every other one. -/
 inductive SCallee where
-  | direct (name : String)
+  /-- A call of a program definition (or an import alias of one) by name, in the namespace its
+      Core call was resolved in (`CallSpace`, bugs 238 – 239): a `method` call is never bound to
+      a foreign spelling of the function (`foreignCalls`), which only free names can denote. -/
+  | direct (name : String) (space : CallSpace)
   | indirect (target : SVal)
   /-- A call to a C library symbol the COMPILER chose (`malloc` for `alloc`, `free`),
       by its link name. Never resolved against Concrete definitions: a user `fn malloc`
@@ -97,7 +102,7 @@ def SInst.regUses : SInst → List String
     -- that produces it; `SVal.regUses` also answers `[]` for a `.fnRef`, which is a
     -- global and needs nothing kept alive.
     match callee with
-    | .direct _ | .foreign _ => argUses
+    | .direct _ _ | .foreign _ => argUses
     | .indirect target => SVal.regUses target ++ argUses
   | .alloca _ _ => []
   | .load _ ptr _ => SVal.regUses ptr
@@ -144,6 +149,8 @@ structure SFnDef where
       function is emitted in (a specialization Mono moved): the module whose call context
       (import aliases, own `extern` bindings) its call spellings were written in. -/
   sourceTree : Option String := none
+  /-- `CFnDef.isMethod` (bugs 238 – 239): a method call's signature is a method's. -/
+  isMethod : Bool := false
 
 structure SModule where
   name : String
@@ -166,7 +173,7 @@ structure SModule where
 
 def SVal.ty : SVal → Ty
   | .reg _ t => t
-  | .fnRef _ t => t
+  | .fnRef _ t _ => t
   | .intConst _ t => t
   | .floatConst _ t => t
   | .boolConst _ => .bool
@@ -211,7 +218,7 @@ private def ppSVal : SVal → String
   | .reg n _ => s!"%{n}"
   -- `@name`, like any other global — the sigil says "not a register", which is
   -- the whole point of the constructor.
-  | .fnRef n _ => s!"@{n}"
+  | .fnRef n _ _ => s!"@{n}"
   | .intConst v _ => toString v
   | .floatConst v _ => floatLiteralString v  -- exact (bug 135), not `toString`'s six decimals
   | .boolConst b => if b then "1" else "0"
@@ -246,14 +253,14 @@ private def ppSInst (inst : SInst) : String :=
     -- A direct symbol keeps its `@` sigil; an indirect target prints as the
     -- operand it is, so `%r` and `@f` are visibly different in the dump.
     let calleeStr := match callee with
-      | .direct name => s!"@{name}"
+      | .direct name _ => s!"@{name}"
       | .foreign name => s!"@{name}"
       | .indirect target => ppSVal target
     s!"  %{dst} = call {ssaTyToStr retTy} {calleeStr}({", ".intercalate argsStr})"
   | .call none callee args retTy =>
     let argsStr := args.map fun a => s!"{ssaTyToStr a.ty} {ppSVal a}"
     let calleeStr := match callee with
-      | .direct name => s!"@{name}"
+      | .direct name _ => s!"@{name}"
       | .foreign name => s!"@{name}"
       | .indirect target => ppSVal target
     s!"  call {ssaTyToStr retTy} {calleeStr}({", ".intercalate argsStr})"

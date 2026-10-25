@@ -1,0 +1,16 @@
+// Bug 247 (FIXED): a function used as a value (`return P_get;`, here a method by its definition
+// name; a free function value is the same Core form) is a function-typed identifier in Core, and
+// the assumption summary's function-value walk read only the other form (`fnRef`). So `factory`,
+// whose returned value reaches the trusted extern `abs`, was reported "(no external authority)"
+// with a complete call graph. It now lists the foreign assumption.
+// Expected: 42, natively and --interp; `factory` assumes `main.abs` in `--report caps`.
+trusted extern fn abs(x: i32) with() -> i32;
+struct Copy P { v: i32 }
+impl P {
+    pub fn get() -> i32 { return abs(-42); }
+}
+fn factory() -> fn() -> i32 { return P_get; }
+fn main() -> Int {
+    let f: fn() -> i32 = factory();
+    return f() as Int;
+}

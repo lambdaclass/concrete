@@ -2567,7 +2567,7 @@ def compileAndReport (inputPath : String) (reportType : String)
             -- Build `f(a, b, ...)` in Core and evaluate it with the interpreter.
             let argExprs := (args.zip f.params).map
               (fun (v, (_, t)) => Concrete.CExpr.intLit v t)
-            let callExpr := Concrete.CExpr.call (.direct f.name) [] argExprs f.retTy
+            let callExpr := Concrete.CExpr.call (.direct f.name (if f.isMethod then .method else .free)) [] argExprs f.retTy
             match Concrete.Interp.evalClosed interpCx callExpr with
             | .error _ => skipped := skipped + 1   -- trap or unsupported: never counted
             | .ok v =>

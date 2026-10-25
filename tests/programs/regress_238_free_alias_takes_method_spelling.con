@@ -1,0 +1,23 @@
+// Bug 238 (FIXED), Codex review r11: the root imports `outer.defs`'s `P`, whose method `get` is
+// defined as `defs_P_get` and called by the spelling `P_get` (a linker alias bridges it), and
+// imports an unrelated free function under the alias `P_get`. Emission and the interpreter follow
+// linker aliases by spelling, so the method call ran `wrong` (99, natively and `--interp`). A
+// spelling a free import alias takes is taken for method calls too, which are then spelled by
+// their method's definition.
+// Expected: 42 (the method's 42, then `wrong() - 99`), natively and --interp.
+mod outer {
+    mod defs {
+        pub struct Copy P { pub v: i32 }
+        impl P {
+            pub fn get() -> i32 { return 42; }
+        }
+    }
+}
+mod other {
+    pub fn wrong() -> i32 { return 99; }
+}
+import outer.defs.{P};
+import other.{wrong as P_get};
+fn main() -> Int {
+    return (P::get() + P_get() - 99) as Int;
+}

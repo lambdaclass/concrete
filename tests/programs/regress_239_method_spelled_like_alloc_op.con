@@ -1,0 +1,13 @@
+// Bug 239 (FIXED), Codex review r10: a newtype `vec` with a method `new`, called as `v.new()`: its
+// Core spelling `vec_new` is an allocating intrinsic's, so the predictable profile refused `main`
+// ("allocates (vec_new)") and the allocation reports claimed an allocation that never happens.
+// Allocation is classified on free calls only.
+// Expected: 42, natively and --interp; `main` passes `--check predictable`.
+newtype vec = Int;
+impl vec {
+    pub fn new(&self) -> Int { return 42; }
+}
+fn main() -> Int {
+    let v: vec = vec(0);
+    return v.new();
+}

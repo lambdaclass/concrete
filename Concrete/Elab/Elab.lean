@@ -54,6 +54,14 @@ structure ElabEnv where
   structs : List StructDef
   enums : List EnumDef
   fnSigs : List (String × FnSummary)
+  /-- Bugs 238 – 239: the method table (inherent and trait impl methods, local and imported, by
+      `Type_method`). A receiver call and a `T::m()` call look a method up here, never in
+      `fnSigs`, so a free function spelled like a method's definition name cannot answer it. -/
+  methodSigs : List (String × FnSummary) := []
+  /-- The spellings of the free functions (local, imported, submodule, extern, builtin) this
+      module may call by name: a free-spelled name outside them that the method table holds
+      names a method by its definition name, in the method namespace (bugs 238 – 239). -/
+  freeFnNames : List String := []
   typeAliases : List (String × Ty)
   constants : List (String × Ty)
   currentTypeParams : List String := []
@@ -81,6 +89,9 @@ structure ElabEnv where
   -- rule. Installed at ElabEnv CONSTRUCTION, so there is no window in which this
   -- silently answers `none` and callers emit gaps for a reason that is not real.
   resolveCallee : String → Option CallableId := fun _ => none
+  /-- The identity of the method a method call names (bugs 238 – 239), from the method table
+      alone: a free function of the same spelling is another callable. -/
+  resolveMethodCallee : String → Option CallableId := fun _ => none
   -- Bug 082: the Core spelling of a call to an imported function whose LOCAL name
   -- does not uniquely name its definition (an `as` alias, or a sibling-module
   -- function whose bare name several top-level modules define). Keyed by the local
@@ -432,6 +443,19 @@ private def lookupFnSig (name : String) : ElabM (Option FnSummary) := do
   let env ← getEnv
   return (env.fnSigs.find? fun (n, _) => n == name).map Prod.snd
 
+/-- The namespace a free-spelled function name resolves in (bugs 238 – 239): a free function
+    first, as Check resolves it; else a method by its definition name. -/
+private def freeSpelledSpace (name : String) : ElabM CallSpace := do
+  let env ← getEnv
+  if env.freeFnNames.contains name then return .free
+  if env.methodSigs.any (·.1 == name) then return .method
+  return .free
+
+/-- A method by its definition name `Type_method`, in the method table only (bugs 238 – 239). -/
+private def lookupMethodSig (name : String) : ElabM (Option FnSummary) := do
+  let env ← getEnv
+  return (env.methodSigs.find? fun (n, _) => n == name).map Prod.snd
+
 /-- The Core spelling of a direct reference to the function bound to `name` in
     this module (bug 082). The local name unless an import says otherwise. -/
 private def coreFnSpelling (name : String) : ElabM String := do
@@ -458,7 +482,7 @@ private def lookupMethodE (typeName methodName : String) : ElabM (Option (String
   let owner? := if env.currentTypeParams.contains typeName then none
     else typeIdOfSpelling env.structs env.enums env.newtypes typeName
   if let some owner := owner? then
-    if let some r := methodByIdentity env.fnSigs { owner, method := methodName } then
+    if let some r := methodByIdentity env.methodSigs { owner, method := methodName } then
       -- Bug 242: the definer's mangled name names the method only where the definer's spelling
       -- of the type denotes it here too. Otherwise (the importer binds that spelling to another
       -- declaration) the call is spelled by this module's spelling of the owner, which the Core
@@ -471,8 +495,9 @@ private def lookupMethodE (typeName methodName : String) : ElabM (Option (String
         if typeIdOfSpelling env.structs env.enums env.newtypes dn == some owner then return some r
         return some (mangledMethodName typeName methodName, r.2)
       | none => return some r
+  -- A method no stamped impl declares: by its spelling, in the method table alone (bugs 238 – 239).
   let mangled := mangledMethodName typeName methodName
-  return (← lookupFnSig mangled).map (mangled, ·)
+  return (← lookupMethodSig mangled).map (mangled, ·)
 
 private def lookupEnum (name : String) : ElabM (Option EnumDef) := do
   let env ← getEnv
@@ -659,6 +684,7 @@ private def elabPeekCtx : PeekCtx ElabM where
   method t m := do return (← lookupMethodE t m).map (·.2)
   typeIdOf := typeIdOfE
   fnRefSig name := do return (← getEnv).allFnSigPairs.lookup name
+  methodSig name := lookupMethodSig name
   struct name := lookupStruct name
   newtype name := do return (← getEnv).newtypes.find? fun nt => nt.name == name
   boundMethod n methodName := do
@@ -748,7 +774,8 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
       | some sig =>
         refuseForeignFnValue env name (some e.getSpan)
         let paramTys := sig.params.map Prod.snd
-        return ElaboratedExprV2.mk (CExpr.ident (CLocal.ofName (← coreFnSpelling name)) (.fn_ paramTys sig.capSet sig.retTy)) (match env.resolveCallee name with
+        let space ← freeSpelledSpace name
+        return ElaboratedExprV2.mk (CExpr.ident { name := ← coreFnSpelling name, space := space } (.fn_ paramTys sig.capSet sig.retTy)) (match env.resolveCallee name with
                  | some id => Proof.evFnRef id
                  | none    => Proof.evUnhandledExpr "fn value: callee not resolvable")
       | none =>
@@ -1423,7 +1450,7 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
           -- bug 052).
           let callee := if foundBuiltin == some .destroy && methodName == destroyMethodName
             then destroyDispatchCallee else traitParamCallee n methodName
-          return ElaboratedExprV2.mk (CExpr.call callee typeArgs cArgs retTy)
+          return ElaboratedExprV2.mk (CExpr.call (Callee.method callee) typeArgs cArgs retTy)
             Proof.evTraitMethodOnTypeParam
       | _ => throwElab .methodCallOnNonNamedType (some e.getSpan)
     else
@@ -1486,14 +1513,24 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
           let cArg := cArgEv.core
           cArgs := cArgs ++ [cArg]
           argEvs := cArgEv.evidence :: argEvs
-        return ElaboratedExprV2.mk (CExpr.call mangledName (objTypeArgs ++ methodArgs) cArgs retTy)
-          (match (← getEnv).resolveCallee mangledName with
+        return ElaboratedExprV2.mk (CExpr.call (Callee.method mangledName) (objTypeArgs ++ methodArgs) cArgs retTy)
+          (match (← getEnv).resolveMethodCallee mangledName with
            | some id => Proof.evCall id argEvs.reverse
            | none    => Proof.evUnresolvedCall "method call: mangled name has no CallableId")
       | none => throwElab (.noMethodOnType methodName typeName) (some e.getSpan)
 
   | .staticMethodCall _ typeName methodName typeArgs args =>
-    match ← lookupMethodE typeName methodName with
+    -- The type's method table answers `T::m()` (bugs 238 – 239); only when it has no such
+    -- method is the spelling a free-namespace name (an upper-case module's function), resolved
+    -- as before.
+    let methodFound? ← lookupMethodE typeName methodName
+    let space : CallSpace := if methodFound?.isSome then .method else .free
+    let found? ← match methodFound? with
+      | some r => pure (some r)
+      | none =>
+        let m := mangledMethodName typeName methodName
+        pure ((← lookupFnSig m).map (m, ·))
+    match found? with
     | some (mangledName, sig) =>
       let mapping := sig.typeParams.zip typeArgs
       let paramTypes := sig.params.map fun (_, t) => substTy mapping t
@@ -1505,8 +1542,10 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
         let cArg := cArgEv.core
         cArgs := cArgs ++ [cArg]
         argEvs := cArgEv.evidence :: argEvs
-      return ElaboratedExprV2.mk (CExpr.call mangledName typeArgs cArgs retTy)
-        (match (← getEnv).resolveCallee mangledName with
+      let env ← getEnv
+      let resolve := if space == .method then env.resolveMethodCallee else env.resolveCallee
+      return ElaboratedExprV2.mk (CExpr.call (Callee.direct mangledName space) typeArgs cArgs retTy)
+        (match resolve mangledName with
          | some id => Proof.evCall id argEvs.reverse
          | none    => Proof.evUnresolvedCall "static method call: mangled name has no CallableId")
     | none => throwElab (.noMethodOnType methodName typeName) (some e.getSpan)
@@ -1534,7 +1573,7 @@ partial def elabCallEv (fnName : String) (typeArgs : List Ty) (args : List Expr)
     let cArg := cArgEv.core
     let typeName := match cArg.ty with
       | .named n => n | .generic n _ _ => n | _ => ""
-    return ElaboratedExprV2.mk (CExpr.call (destroyFnNameFor typeName) [] [cArg] .unit)
+    return ElaboratedExprV2.mk (CExpr.call (Callee.method (destroyFnNameFor typeName)) [] [cArg] .unit)
       (Proof.evCall (CallableId.ofIntrinsic (destroyFnNameFor typeName)) [cArgEv.evidence])
   -- Intercept discard(arg) — acknowledged discard of a Copy value (slice 5).
   -- Desugar to a unit-valued `if true { arg; }`: evaluate `arg` (preserving any
@@ -1880,7 +1919,8 @@ partial def elabCallEv (fnName : String) (typeArgs : List Ty) (args : List Expr)
     let callName ← match intrinsic with
       | some id => pure id.canonicalName
       | none => coreFnSpelling fnName
-    return ElaboratedExprV2.mk (CExpr.call callName inferredTypeArgs cArgs retTy)
+    let space ← if intrinsic.isSome then pure CallSpace.free else freeSpelledSpace fnName
+    return ElaboratedExprV2.mk (CExpr.call (Callee.direct callName space) inferredTypeArgs cArgs retTy)
       (match (← getEnv).resolveCallee fnName with
        | some id => Proof.evCall id argEvs.reverse
        | none    => Proof.evUnresolvedCall "call: name has no CallableId")
@@ -2481,9 +2521,18 @@ def elabFn (f : FnDef) (implTy : Option Ty := none)
 -- Submodule function name prefixing
 -- ============================================================
 
+/-- A renaming of global function names, per namespace (`CallSpace`, bugs 238 – 239): `free`
+    renames free callees, function references and function values; `method` renames method
+    callees. A plain list renames both alike (a module's own definitions, prefixed as one). -/
+structure FnRenames where
+  free : List (String × String)
+  method : List (String × String)
+
+instance : Coe (List (String × String)) FnRenames := ⟨fun l => ⟨l, l⟩⟩
+
 mutual
 /-- Rename function references in a CExpr tree using a lookup table. -/
-partial def renameFnExpr (rmap : List (String × String)) : CExpr → CExpr
+partial def renameFnExpr (rmap : FnRenames) : CExpr → CExpr
   | .call callee targs args ty =>
     -- Only a DIRECT callee names a global function that submodule prefixing may
     -- rewrite. An indirect callee names a local binding, which lives in no
@@ -2491,12 +2540,13 @@ partial def renameFnExpr (rmap : List (String × String)) : CExpr → CExpr
     -- function that merely shares the local's name — bug 050's mistake, one
     -- pass earlier.
     let callee' := match callee with
-      | .direct name => Callee.direct (rmap.lookup name |>.getD name)
+      | .direct name .free => Callee.direct (rmap.free.lookup name |>.getD name) .free
+      | .direct name .method => Callee.direct (rmap.method.lookup name |>.getD name) .method
       | .indirect binding => Callee.indirect binding
       | .runtime helper => Callee.runtime helper
     .call callee' targs (args.map (renameFnExpr rmap)) ty
   | .fnRef name ty =>
-    let name' := rmap.lookup name |>.getD name
+    let name' := rmap.free.lookup name |>.getD name
     .fnRef name' ty
   | .ident name ty =>
     -- Only rename function-typed idents (fn refs used as values), not local variables
@@ -2507,7 +2557,8 @@ partial def renameFnExpr (rmap : List (String × String)) : CExpr → CExpr
       -- function used as a value (no identity) is.
       if name.id.isSome then .ident name ty
       else
-        let name' := rmap.lookup name.name |>.getD name.name
+        let m := if name.space == .method then rmap.method else rmap.free
+        let name' := m.lookup name.name |>.getD name.name
         .ident { name with name := name' } ty
     | _ => .ident name ty
   | .binOp op l r ty => .binOp op (renameFnExpr rmap l) (renameFnExpr rmap r) ty
@@ -2533,7 +2584,7 @@ partial def renameFnExpr (rmap : List (String × String)) : CExpr → CExpr
       (renameFnStmts rmap then_) (renameFnStmts rmap else_) ty
   | e => e
 
-partial def renameFnArm (rmap : List (String × String)) : CMatchArm → CMatchArm
+partial def renameFnArm (rmap : FnRenames) : CMatchArm → CMatchArm
   | .enumArm en v binds guard body => .enumArm en v binds (guard.map (renameFnExpr rmap)) (renameFnStmts rmap body)
   | .litArm val guard body =>
     .litArm (renameFnExpr rmap val) (guard.map (renameFnExpr rmap)) (renameFnStmts rmap body)
@@ -2541,7 +2592,7 @@ partial def renameFnArm (rmap : List (String × String)) : CMatchArm → CMatchA
   | .rangeArm lo hi incl guard body =>
     .rangeArm (renameFnExpr rmap lo) (renameFnExpr rmap hi) incl (guard.map (renameFnExpr rmap)) (renameFnStmts rmap body)
 
-partial def renameFnStmt (rmap : List (String × String)) : CStmt → CStmt
+partial def renameFnStmt (rmap : FnRenames) : CStmt → CStmt
   | .letDecl n m ty val => .letDecl n m ty (renameFnExpr rmap val)
   | .assign n val => .assign n (renameFnExpr rmap val)
   | .return_ (some v) ty => .return_ (some (renameFnExpr rmap v)) ty
@@ -2565,7 +2616,7 @@ partial def renameFnStmt (rmap : List (String × String)) : CStmt → CStmt
     .borrowIn v r reg isMut ty (renameFnStmts rmap body)
   | s => s
 
-partial def renameFnStmts (rmap : List (String × String))
+partial def renameFnStmts (rmap : FnRenames)
     (stmts : List CStmt) : List CStmt :=
   stmts.map (renameFnStmt rmap)
 end
@@ -2577,13 +2628,19 @@ end
 partial def prefixModuleFnNames (pfx : String) (cm : CModule) : CModule :=
   -- Build rename map: bare name → prefixed name for all non-extern functions
   let fnRenames : List (String × String) :=
-    cm.functions.map fun f => (f.name, pfx ++ "_" ++ f.name)
+    (cm.functions.filter (!·.isMethod)).map fun f => (f.name, pfx ++ "_" ++ f.name)
+  let methodDefRenames : List (String × String) :=
+    (cm.functions.filter (·.isMethod)).map fun f => (f.name, pfx ++ "_" ++ f.name)
   -- Also prefix impl method names referenced in traitImpls
   let implRenames : List (String × String) :=
     cm.traitImpls.foldl (fun acc ti =>
       acc ++ (ti.methodNames.map fun mn => (mn, pfx ++ "_" ++ mn))
     ) []
-  let rmap := fnRenames ++ implRenames
+  -- Per namespace (bugs 238 – 239): a method reference (a method call, or a free-spelled name
+  -- Check resolved to a method, regress_096_method_value_same_named) is renamed only to this
+  -- module's method of that spelling, a free reference only to its free function.
+  let methodRenames := methodDefRenames ++ implRenames
+  let rmap : FnRenames := { free := fnRenames, method := methodRenames }
   -- Prefix function definitions and rewrite their bodies
   let prefixedFns := cm.functions.map fun f =>
     { f with
@@ -2592,7 +2649,7 @@ partial def prefixModuleFnNames (pfx : String) (cm : CModule) : CModule :=
       body := renameFnStmts rmap f.body }
   -- Prefix trait impl method names
   let prefixedTraitImpls := cm.traitImpls.map fun ti =>
-    { ti with methodNames := ti.methodNames.map (fun mn => (rmap.lookup mn).getD mn),
+    { ti with methodNames := ti.methodNames.map (fun mn => (rmap.method.lookup mn).getD mn),
               fnPrefix := pfx }
   -- Recursively prefix nested submodules
   let prefixedSubs := cm.submodules.map fun sub =>
@@ -3044,7 +3101,15 @@ partial def elabModule (m : Module) (summary : FileSummary)
       -- AFTER imported functions, BEFORE intrinsics and builtins. A plain imported
       -- function must keep priority over a same-named impl method, and an impl method
       -- must not be shadowed by a builtin of the same mangled spelling.
-      | none => match importedMethodCallIds.lookup name with
+      --
+      -- A foreign binding of this module is a free function too, and a free-spelled name means
+      -- a free function before a method by its definition name, as Check resolves it (bugs
+      -- 238 – 239, Codex review r5: an imported type's method `P_get` took the identity of
+      -- the module's own `extern fn P_get`, so the binding was missing from `foreignCalls` and
+      -- the call ran the method).
+      | none =>
+        if m.externFns.any fun ef => ef.name == name then some (CallableId.ofExtern name) else
+        match importedMethodCallIds.lookup name with
         | some id => some id
         -- INTRINSICS BEFORE BUILTINS. Many names (`string_length` among them) appear
         -- in both tables, and builtins-first classified compiler intrinsics as
@@ -3075,10 +3140,26 @@ partial def elabModule (m : Module) (summary : FileSummary)
   -- "use the shared helper". Installing the resolver into ElabEnv after construction
   -- would also leave a transient window where callee identity silently resolves to
   -- none, so every path running in it would emit gaps for a reason that is not real.
+  -- Bugs 238 – 239: a method call resolves in the method table alone. The free-namespace
+  -- resolver above prefers a free function of the same spelling, which is right for a
+  -- free-spelled name and wrong for `x.m()`.
+  let localMethodCallIds : List (String × CallableId) := (allFnPairs.filter (·.2.isSome)).map
+    fun (f, implTy) =>
+      let localKey := match implTy with
+        | some it => let tn := tyName it; if tn != "" then tn ++ "_" ++ f.name else f.name
+        | none => f.name
+      (localKey, CallableId.ofUser thisProofPath (finalDeclName f implTy) f.typeParams.length)
+  let resolveMethodCall : String → Option CallableId := fun name =>
+    match localMethodCallIds.lookup name with
+    | some id => some id
+    | none => importedMethodCallIds.lookup name
   let initEnv : ElabEnv := {
     bound := []
     proofPath := thisProofPath
     resolveCallee := resolveContractCall
+    resolveMethodCallee := resolveMethodCall
+    methodSigs := implMethodSigs ++ traitImplMethodSigs
+    freeFnNames := (imports.functions ++ userFnSigs ++ builtinFnSigs ++ externSigs ++ submoduleSigs).map (·.1)
     callSpellings := callSpellings
     importedConsts := imports.constants.map fun c => (c.localName, c.id)
     structs := allStructs
@@ -3107,7 +3188,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
           if tn != "" then some tn else none
         | none => none
       else none
-      pure ({ cfn with name := finalName, trustedImplOrigin := implOrigin },
+      pure ({ cfn with name := finalName, trustedImplOrigin := implOrigin, isMethod := implTy.isSome },
              bodyIdentityInputs, evidenceBody)
         : ElabM (CFnDef × Proof.ProofBodyIdentityInputsV2 × Proof.EvidenceBodyDraftV2)).run env' |>.run
     match result with
@@ -3252,12 +3333,10 @@ partial def elabModule (m : Module) (summary : FileSummary)
     | none => acc ++ [(bare, 1)]
   ) []
   -- Keep only unambiguous mappings; exclude names the parent module defines itself.
-  let parentFnNames := fns.map fun f => f.name
   let crossModuleRenames := allSubFnPairs.filter fun (bare, _) =>
     (match bareCounts.find? fun (n, _) => n == bare with
      | some (_, c) => c == 1
      | none => true)
-    && !(parentFnNames.contains bare)
   -- Bug 082 (same class): the renames above are keyed by BARE name and were applied
   -- to every body regardless of what that body's module imports. A submodule doing
   -- `import std.math.{abs}` while a sibling submodule defined `abs` had its call
@@ -3271,13 +3350,41 @@ partial def elabModule (m : Module) (summary : FileSummary)
       match from? with
       | none => true
       | some modName => tgt == ((modName.splitOn ".").getLastD modName) ++ "_" ++ bare
+  -- Per namespace (bugs 238 – 239): a method reference is renamed only to a submodule's METHOD
+  -- of that spelling, and only when this module defines no method of it; a free reference only to
+  -- a submodule's function, when this module defines nothing of that spelling.
+  let subMethodNames : List String := summary.submoduleSummaries.flatMap fun (_, ss) =>
+    ss.implMethodSigs.map (·.1)
+  let parentMethodNames := (fns.filter (·.isMethod)).map (·.name)
+  let parentFreeNames := (fns.filter (!·.isMethod)).map (·.name)
+  -- A method of a submodule's type that Core respells by its module (bug 096: `outer_a_P` when
+  -- another module also declares `P`) is defined as `a_outer_a_P_get`, not `a_P_get`: the call
+  -- keeps its spelling here and the type respelling below gives it `outer_a_P_get`, which the
+  -- submodule's linker alias bridges (bug 241: the prefix rename made it `a_P_get`, a function
+  -- nothing defines, and the build failed).
+  let respelledSubMethods : List String := summary.submoduleSummaries.flatMap fun (_, ss) =>
+    let ownTypes : List (String × String) :=
+      ss.structs.map (fun sd => (sd.name, sd.definedIn))
+      ++ ss.enums.map (fun ed => (ed.name, ed.definedIn))
+      ++ ss.newtypes.map (fun nt => (nt.name, nt.definedIn))
+    (ss.implMethodSigs.map (·.1)).filter fun msName => ownTypes.any fun (tn, defIn) =>
+      !defIn.isEmpty && ambiguousTypes.contains tn && msName.startsWith (tn ++ "_")
+  let subFreeNames : List String := summary.submoduleSummaries.flatMap fun (_, ss) =>
+    ss.functions.map (·.1)
+  let spaced (rs : List (String × String)) : FnRenames :=
+    { free := rs.filter fun (bare, _) =>
+        subFreeNames.contains bare && !parentFreeNames.contains bare
+          && !parentMethodNames.contains bare
+      method := rs.filter fun (bare, _) =>
+        subMethodNames.contains bare && !parentMethodNames.contains bare
+          && !respelledSubMethods.contains bare }
   -- Rewrite cross-module call sites in the parent's function bodies.
-  let parentRenames := renamesFor m.imports
+  let parentRenames := spaced (renamesFor m.imports)
   let fns := fns.map fun f =>
     { f with body := renameFnStmts parentRenames f.body }
   -- Rewrite cross-module call sites in submodule function bodies (sibling references).
   let subs := (subs.zip (m.submodules.map (·.imports))).map fun (csub, subImps) =>
-    let rn := renamesFor subImps
+    let rn := spaced (renamesFor subImps)
     { csub with functions := csub.functions.map fun f =>
         { f with body := renameFnStmts rn f.body } }
   -- SUBJECT FACTS, captured HERE because this is the last point at which they all
@@ -3519,9 +3626,15 @@ partial def elabModule (m : Module) (summary : FileSummary)
       message := s!"method '{n}' belongs to a type several modules declare, and Elab cannot tell which type's method it is; Core cannot spell it (bug 096)"
       hint := some "rename one of the types. Tracking: docs/bugs/096_same_named_types_share_one_definition.md" }
   if !unresolvedMethods.isEmpty then .error unresolvedMethods else
+  -- Bugs 238 – 239: a method call and a method definition take the method respelling; a
+  -- free-spelled name takes it only when it names no free function here (it then names a method
+  -- by its definition name, as Check resolves it: free functions first).
+  let freeSpellings : List String :=
+    (imports.functions ++ userFnSigs ++ builtinFnSigs ++ externSigs ++ submoduleSigs).map (·.1)
   let rn : CoreRename := {
     tyName := fun n => (typeSpellings.lookup n).getD n
-    fnName := renameMethod }
+    fnName := fun n => if freeSpellings.contains n then n else renameMethod n
+    methodName := renameMethod }
   let respell := !typeSpellings.isEmpty || !ambiguousTypes.isEmpty
   let localStructCanon := fun (name : String) =>
     match summary.structs.find? (·.name == name) with
@@ -3592,8 +3705,13 @@ partial def elabModule (m : Module) (summary : FileSummary)
     | some id => if id.ns == .intrinsic || id.ns == .builtin then some (n, Symbols.runtimeFn n) else none
     | none => none
   let fns := fns.map fun cfn => { cfn with foreignCalls := foreignBindings ++ runtimeBindings }
-  let preRenameCallTargets := (fns.flatMap fun cfn => collectCallsStmts cfn.body).eraseDups.filterMap fun n =>
-    (resolveContractCall n).map (n, ·)
+  -- Each spelling by the namespace its call resolved in (bugs 238 – 239): a method call's
+  -- target is the method, never a free function that shares the spelling.
+  let preRenameCallTargets := ((fns.flatMap fun cfn => collectCalleesStmts cfn.body).filterMap fun c =>
+      match c with
+      | .direct n sp => some (n, sp)
+      | _ => none).eraseDups.filterMap fun (n, sp) =>
+    (if sp == .method then resolveMethodCall n else resolveContractCall n).map (n, ·)
   let fns := if respell then fns.map rn.fnDef else fns
   let cNewtypes := if !respell then m.newtypes ++ imports.newtypes else
     (m.newtypes.map fun nt => { rn.newtypeDef { nt with innerTy := nominalTy nt.typeParams nt.innerTy } with
@@ -3848,13 +3966,20 @@ def qualifyCollidingTopLevelFns (tops : List (String × FileSummary)) (cms : Lis
   let renamed := cms.map fun cm =>
     let rmap := (rmaps.lookup cm.name).getD []
     if rmap.isEmpty then cm else
-    let rn : CoreRename := { tyName := id, fnName := fun n => (rmap.lookup n).getD n }
+    -- Free functions only (bugs 238 – 239): a method call of the same spelling names the
+    -- method, which keeps its name (`regress_239_*`).
+    let rn : CoreRename := { tyName := id, fnName := fun n => (rmap.lookup n).getD n, methodName := id }
     { cm with
       functions := cm.functions.map rn.fnDef
       -- a constant's initializer is inlined at each use, so its calls are renamed too
       constants := cm.constants.map fun (n, t, e) => (n, t, rn.expr e)
-      callTargets := cm.callTargets ++ cm.callTargets.filterMap fun (n, id) =>
-        (rmap.lookup n).map (·, id) }
+      -- A spelling keyed to this module's renamed free function moves with it; the same
+      -- spelling keyed to a method (another module's definition) stays: that call keeps it.
+      callTargets :=
+        let ownFree := fun (n : String) (id : CallableId) => (rmap.lookup n).isSome && id.defModule == cm.name
+        (cm.callTargets.filter fun (n, id) => !ownFree n id)
+          ++ cm.callTargets.filterMap fun (n, id) =>
+            if ownFree n id then (rmap.lookup n).map (·, id) else none }
   .ok renamed
 
 /-- Every Core function of a module tree whose name Core respelled (`declName` set: a method
@@ -3883,8 +4008,8 @@ partial def tyAgreeExpr (c : TyAgreeCtx) : CExpr → List TyAgreePair
   | .call callee _ args t =>
     let inner := args.flatMap (tyAgreeExpr c)
     match callee with
-    | .direct n =>
-      match c.fns n with
+    | .direct n sp =>
+      match (if sp == .method then c.methods n else c.fns n) with
       | some f =>
         if f.params.length != args.length then inner else
         (f.retTy, t, s!"the result of '{n}'", f.typeParams) ::
@@ -3900,7 +4025,8 @@ partial def tyAgreeExpr (c : TyAgreeCtx) : CExpr → List TyAgreePair
     match t with
     | .fn_ .. =>
       if c.locals.contains n.name then [] else
-      match c.fns n.name with
+      -- a method value is compared with the method (bugs 238 – 239, Codex review r14)
+      match (if n.space == .method then c.methods n.name else c.fns n.name) with
       | some f => [(.fn_ (f.params.map (·.2)) f.capSet f.retTy, t, s!"the function value '{n}'", f.typeParams)]
       | none => []
     | _ => []
@@ -4049,6 +4175,112 @@ def checkNestedFnCollisions (cms : List CModule) : Except Diagnostics (List CMod
       message := s!"function '{n}' is the Core name of several definitions, a nested module's among them (a nested module's functions are named without their top-level module); Core cannot tell them apart (bugs 097, 098)"
       hint := some "rename one of the functions or submodules. Tracking: docs/bugs/098_same_named_generic_fns_one_specialization.md" })
 
+mutual
+/-- The method values (`CLocal.space = .method`, a free-spelled method name used as a value) an
+    expression names. -/
+partial def methodValuesExpr : CExpr → List String
+  | .ident n (.fn_ ..) => if n.id.isNone && n.space == .method then [n.name] else []
+  | .call _ _ args _ => args.flatMap methodValuesExpr
+  | .binOp _ l r _ => methodValuesExpr l ++ methodValuesExpr r
+  | .unaryOp _ e _ | .fieldAccess e _ _ | .borrow e _ | .borrowMut e _ | .deref e _
+  | .cast e _ => methodValuesExpr e
+  | .structLit _ _ fs _ | .enumLit _ _ _ fs _ => fs.flatMap (methodValuesExpr ·.2)
+  | .match_ s arms _ => methodValuesExpr s ++ arms.flatMap fun a => match a with
+      | .enumArm _ _ _ g b | .varArm _ _ g b => (g.map methodValuesExpr).getD [] ++ methodValuesStmts b
+      | .litArm v g b => methodValuesExpr v ++ (g.map methodValuesExpr).getD [] ++ methodValuesStmts b
+      | .rangeArm lo hi _ g b => methodValuesExpr lo ++ methodValuesExpr hi
+          ++ (g.map methodValuesExpr).getD [] ++ methodValuesStmts b
+  | .arrayLit es _ => es.flatMap methodValuesExpr
+  | .arrayIndex a i _ | .allocCall a i _ => methodValuesExpr a ++ methodValuesExpr i
+  | .ifExpr c t e _ => methodValuesExpr c ++ methodValuesStmts t ++ methodValuesStmts e
+  | _ => []
+partial def methodValuesStmts (ss : List CStmt) : List String :=
+  ss.flatMap fun st => match st with
+    | .letDecl _ _ _ v | .assign _ v | .return_ (some v) _ | .expr v _ | .break_ (some v) _
+    | .defer v => methodValuesExpr v
+    | .ifElse c t el => methodValuesExpr c ++ methodValuesStmts t ++ ((el.map methodValuesStmts).getD [])
+    | .while_ c b _ st => methodValuesExpr c ++ methodValuesStmts b ++ methodValuesStmts st
+    | .fieldAssign o _ v | .derefAssign o v => methodValuesExpr o ++ methodValuesExpr v
+    | .arrayIndexAssign a i v => methodValuesExpr a ++ methodValuesExpr i ++ methodValuesExpr v
+    | .borrowIn _ _ _ _ _ b => methodValuesStmts b
+    | _ => []
+end
+
+/-- Every method value of a module tree, with the foreign spellings visible where it is written:
+    its function's `foreignCalls` and its module's externs (a constant's initializer, inlined at
+    each use in its module: every function's of the module). -/
+partial def scopedMethodValues (cm : CModule) : List (String × List String) :=
+  let externs := cm.externFns.map (·.1)
+  let fnVals := cm.functions.flatMap fun f =>
+    (methodValuesStmts f.body).map (·, externs ++ f.foreignCalls.map (·.1))
+  let moduleForeign := externs ++ cm.functions.flatMap (fun f => f.foreignCalls.map (·.1))
+  let constVals := cm.constants.flatMap fun (_, _, e) => (methodValuesExpr e).map (·, moduleForeign)
+  fnVals ++ constVals ++ cm.submodules.flatMap scopedMethodValues
+
+/-- Rewrite every function body and constant initializer of a module tree with `rn`. -/
+partial def renameBodiesDeep (rn : CoreRename) (cm : CModule) : CModule :=
+  { cm with
+    functions := cm.functions.map fun f => { f with body := rn.stmts f.body }
+    constants := cm.constants.map fun (n, t, e) => (n, t, rn.expr e)
+    submodules := cm.submodules.map (renameBodiesDeep rn) }
+
+/-- Bug 238: a method call is spelled by the CALLER (`outer_a_P_get` for the method `get` of a
+    respelled type, `BoundView_len` for a std method; the linker aliases bridge it to the
+    definition `a_outer_a_P_get`), and every consumer below Elab resolves a callee by its
+    spelling, a definition of that name first and the aliases after. A free function DEFINED
+    under that spelling (`fn outer_a_P_get`, legal: the user never wrote a method of that name)
+    therefore captured the method call, natively and in the interpreter.
+
+    A method reference (a method call, or a free-spelled method name: `P_get(&p)`, the value
+    `let f = P_get;`, in a function body or a constant initializer) whose spelling a free function
+    of the program defines is respelled by the method it names: the targets of its linker aliases
+    that are method definitions, which must be exactly one and a spelling no free function takes;
+    anything else is refused (E0299) rather than guessed. A call needs no repair against a foreign
+    binding: the interpreter and emission bind a spelling to one only for a free call
+    (`CallSpace`), and a method value carries its namespace to emission too (`SVal.fnRef`). Other method references keep their spelling, so the proof fingerprints over them do
+    not move. -/
+def spellMethodCallsApart (cms : List CModule) : Except Diagnostics (List CModule) :=
+  let defs := cms.flatMap coreFnsDeep
+  -- For a CALL, program definitions only: a foreign binding, under its declared name or a spelling
+  -- a function binds to it (`foreignCalls`), is consulted by the interpreter and emission for a
+  -- FREE call alone (`CallSpace`), so it cannot capture a method call (Codex reviews r2, r3).
+  let freeDefs := (defs.filter (!·.isMethod)).map (·.name)
+  let methodDefs := (defs.filter (·.isMethod)).map (·.name)
+  let aliases := cms.flatMap coreAliasesDeep
+  -- Constant initializers too: Lower inlines one at each use, after this pass (Codex review r2).
+  let consts := (cms.flatMap coreConstsWithTypesDeep).map (·.2.2.2)
+  let methodCalls : List String := ((defs.flatMap fun f => (collectCalleesStmts f.body).filterMap
+      fun c => match c with | .direct n .method => some n | _ => none)
+    ++ (consts.flatMap fun e => (collectCalleesExpr e).filterMap
+      fun c => match c with | .direct n .method => some n | _ => none)).eraseDups
+  -- A method VALUE carries its namespace too (`CLocal.space`, then `SVal.fnRef`), so no foreign
+  -- binding captures it either (Codex review r15); like a call, only a free definition of its
+  -- spelling can. A linker alias of the spelling (an import `wrong as P_get`) takes nothing:
+  -- Mono, emission and the interpreter resolve a method reference among methods only.
+  let methodValues := ((cms.flatMap scopedMethodValues).map (·.1)).eraseDups
+  let takenBy := fun (n : String) => freeDefs.contains n
+  let taken := (methodCalls ++ methodValues).eraseDups.filter takenBy
+  if taken.isEmpty then .ok cms else
+  let targetsOf := fun (n : String) =>
+    let hop1 := (aliases.filter (·.1 == n)).map (·.2)
+    let hop2 := hop1.flatMap fun t => (aliases.filter (·.1 == t)).map (·.2)
+    ((if methodDefs.contains n then [n] else []) ++ (hop1 ++ hop2).filter methodDefs.contains).eraseDups
+  let resolved := taken.map fun n => (n, targetsOf n)
+  -- The new spelling must itself be the method's alone: taken by nothing a reference of this
+  -- kind could reach instead.
+  let bad := resolved.filter fun (_, ts) => match ts with
+    | [t] => freeDefs.contains t
+    | _ => true
+  if !bad.isEmpty then
+    .error (bad.map fun (n, ts) =>
+      { severity := .error, pass := "elab", span := none, code := "E0299"
+        message := s!"the method reference spelled '{n}' is also the Core name of a free function, and the method it names has no spelling that is its alone ({ts.length} method definitions reached); Core cannot tell them apart (bug 238)"
+        hint := some "rename the free function. Tracking: docs/bugs/238_method_call_captured_by_free_fn_of_its_spelling.md" })
+  else
+  let respelt := resolved.filterMap fun (n, ts) => ts.head?.map (n, ·)
+  let rn : CoreRename := { tyName := id, fnName := id, methodName := fun n => (respelt.lookup n).getD n }
+  .ok (cms.map (renameBodiesDeep rn))
+
 /-- Bug 096: the backstop for spelling confusion the front end let through. Check compares
     types by spelling, so a program can pass one module's `P` where another module's `P` is
     meant; after respelling, Core carries the two declarations' different names. Every type
@@ -4077,6 +4309,19 @@ def checkCoreTypeAgreement (family : List String) (cms : List CModule) :
           (fun t => match allFns.filter (·.name == t) with | [f] => some f | _ => none) with
       | [f] => some f
       | _ => none
+  -- a method call's callee among the methods alone (bugs 238 – 239, Codex review r7)
+  let methodDefs := allFns.filter (·.isMethod)
+  let methods : String → Option CFnDef := fun n =>
+    match methodDefs.filter (·.name == n) with
+    | [f] => some f
+    | _ :: _ :: _ => none
+    | [] =>
+      let hop1 := (aliases.filter (·.1 == n)).map (·.2)
+      let hop2 := hop1.flatMap fun t => (aliases.filter (·.1 == t)).map (·.2)
+      match (hop1 ++ hop2).eraseDups.filterMap
+          (fun t => match methodDefs.filter (·.name == t) with | [f] => some f | _ => none) with
+      | [f] => some f
+      | _ => none
   let diag := fun (msg : String) =>
     ({ severity := .error, pass := "elab", span := none, code := "E0299"
        message := msg
@@ -4084,6 +4329,7 @@ def checkCoreTypeAgreement (family : List String) (cms : List CModule) :
   let callDiags : Diagnostics := (cms.flatMap coreFnsWithTypesDeep).flatMap fun ((sds, eds, nts), f) =>
     let ctx : TyAgreeCtx := {
       fns := fns
+      methods := methods
       structOf := fun n => sds.find? (·.name == n)
       enumOf := fun n => eds.find? (·.name == n)
       newtypeOf := fun n => nts.find? (·.name == n)
@@ -4098,6 +4344,7 @@ def checkCoreTypeAgreement (family : List String) (cms : List CModule) :
   let constDiags : Diagnostics := (cms.flatMap coreConstsWithTypesDeep).flatMap fun ((sds, eds, nts), (n, t, e)) =>
     let ctx : TyAgreeCtx := {
       fns := fns
+      methods := methods
       structOf := fun n => sds.find? (·.name == n)
       enumOf := fun n => eds.find? (·.name == n)
       newtypeOf := fun n => nts.find? (·.name == n)
@@ -4189,7 +4436,7 @@ def elabProgram (resolved : List ResolvedModule)
     let family := if ambiguousTypes.isEmpty then [] else
       (ambiguousTypes ++ (typeDecls.filter (ambiguousTypes.contains ·.1)).map canonOfDecl).eraseDups
     (qualifyCollidingTopLevelFns moduleSummaryList cms >>= checkRespelledFnNames >>= checkNestedFnCollisions
-      >>= checkCoreTypeAgreement family).map fun ms => ms.map fun cm => { cm with respelledTypes := family }
+      >>= spellMethodCallsApart >>= checkCoreTypeAgreement family).map fun ms => ms.map fun cm => { cm with respelledTypes := family }
   else .error allErrors
 
 end Concrete

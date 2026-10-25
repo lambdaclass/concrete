@@ -1,0 +1,16 @@
+// Bug 238 (FIXED), Codex review r4 control: a method value `P_get` (the method's own definition
+// name) beside an extern `P_get` of an unrelated module that `main` neither imports nor binds.
+// The extern takes nothing from `main`'s scope, so the value is the method.
+// Expected: 42, natively and --interp.
+struct Copy P { v: i32 }
+impl P {
+    pub fn get(x: i32) -> i32 { return 42; }
+}
+mod ffi {
+    #[link_name = "abs"]
+    pub trusted extern fn P_get(x: i32) with() -> i32;
+}
+fn main() -> Int {
+    let f: fn(i32) -> i32 = P_get;
+    return f(-99) as Int;
+}

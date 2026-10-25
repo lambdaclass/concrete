@@ -1,0 +1,9 @@
+// Bug 240 (FIXED): a parameter naming a trait: E0108 at Resolve (before: an opaque linear type,
+// E0208 "never consumed").
+trait Marker {
+    fn tag(&self) -> i32;
+}
+fn take(m: Marker) -> Int { return 0; }
+fn main() -> Int {
+    return 42;
+}
