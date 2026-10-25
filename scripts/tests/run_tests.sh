@@ -8654,6 +8654,32 @@ else
     echo "FAIL  bug 239: --report proof reads the method call P_get() as an extern call (or printed no report)"
     FAIL=$((FAIL + 1))
 fi
+# The predictable profile, the effects report and the unsafe report read only free calls as extern
+# calls (Codex review r8: before the fix `run` failed the profile, "calls extern (P_get)", the effects
+# report said "ffi: yes" and assumed `main.ffi.P_get`, and the unsafe report listed a method caller
+# as relying on an extern of the method's spelling).
+r239_pred=$(cached_output "$TESTDIR/regress_239_method_call_not_an_extern_call_report.con" "--check predictable")
+if grep -q "predictable profile: pass" <<<"$r239_pred"; then
+    echo "  ok  bug 239: the predictable profile does not read a method call as an extern call"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 239: --check predictable refused a method call as an extern call:"
+    printf '%s\n' "$r239_pred" | awk 'NR<=4'
+    FAIL=$((FAIL + 1))
+fi
+check_report_multi "$TESTDIR/regress_239_method_call_not_an_extern_call_report.con" effects \
+    "bug 239: --report effects does not read a method call as crossing FFI" \
+    "bug 239: --report effects reads a method call as crossing FFI" \
+    "ffi: no  trusted: no  evidence: enforced"
+check_report_multi "$TESTDIR/regress_239_nested_method_beside_extern.con" unsafe \
+    "bug 239: --report unsafe does not count a method caller as relying on an extern of its spelling" \
+    "bug 239: --report unsafe counts a method caller as relying on an extern of its spelling" \
+    "relied on by: (no caller in this module)"
+run_ok "$TESTDIR/regress_239_method_value_no_foreign_assumption.con" 42
+check_report_multi "$TESTDIR/regress_239_method_value_no_foreign_assumption.con" assumptions \
+    "bug 239: a method value reaches the method, not a foreign binding of its spelling" \
+    "bug 239: --report assumptions attributes a foreign binding to a method value" \
+    '"fn":"main.factory","package_name":"«standalone»","complete":true,"gaps":\[\],"assumes":\[\]'
 # Bug 247: a function value written as an identifier reaches what it names in the assumption summary.
 run_ok "$TESTDIR/regress_247_function_value_reaches_foreign.con" 42
 check_report_multi "$TESTDIR/regress_247_function_value_reaches_foreign.con" caps \
@@ -8689,7 +8715,7 @@ for r238 in regress_238_free_fn_spelled_like_method_call regress_238_other_modul
             regress_239_extern_call_beside_method_with_indirect_call regress_239_method_call_beside_trusted_extern \
             regress_238_method_value_beside_extern_of_other_arity regress_239_nested_method_beside_extern \
             regress_239_respelled_method_beside_extern_types regress_239_method_call_not_an_extern_call_report \
-            regress_247_function_value_reaches_foreign; do
+            regress_247_function_value_reaches_foreign regress_239_method_value_no_foreign_assumption; do
     r238_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/$r238.con" --interp 2>&1 || true)
     if [ "$r238_interp" = "42" ]; then
         echo "  ok  bugs 238-241: $r238 — interp == binary (42)"

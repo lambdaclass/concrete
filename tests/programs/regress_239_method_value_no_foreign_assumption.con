@@ -1,0 +1,18 @@
+// Bug 239 (FIXED), Codex review r8: `factory` returns the method `P::get` as a value by its
+// definition name `P_get`, while an unrelated module declares an extern `P_get`. The assumption
+// summary must follow the method value to the method, never to the foreign binding of the
+// spelling: `factory` assumes nothing in `--report assumptions`.
+// Expected: 42, natively and --interp.
+struct Copy P { v: i32 }
+impl P {
+    pub fn get(x: i32) -> i32 { return x; }
+}
+mod ffi {
+    #[link_name = "abs"]
+    pub trusted extern fn P_get(x: i32) with() -> i32;
+}
+fn factory() -> fn(i32) -> i32 { return P_get; }
+fn main() -> Int {
+    let f: fn(i32) -> i32 = factory();
+    return f(42) as Int;
+}

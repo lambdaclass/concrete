@@ -84,7 +84,10 @@ the declaration-collision check compared only free functions, externs and consta
   (`regress_239_respelled_method_beside_extern_types.con`, E0299 before); and the proof-eligibility,
   exclusion and trust-boundary reports read only free calls as extern calls
   (`regress_239_method_call_not_an_extern_call_report.con`: `--report proof` excluded `run` as
-  "calls extern: P_get").
+  "calls extern: P_get"); Codex review r8: the predictable profile, the effects report and the
+  unsafe report do the same (before: "calls extern (P_get)", "ffi: yes", and a method caller
+  listed as relying on an extern), and the assumption summary follows a method value to the
+  method alone (`regress_239_method_value_no_foreign_assumption.con`).
 - `declarationCollisions` counts a module's impl method definition names, so a free function or
   extern spelled like one is E0299 (MOD-3); two methods of one name on one type stay TRAIT-5's.
 

@@ -198,6 +198,8 @@ private structure Node where
   /-- Method calls (`CallSpace.method`, bugs 238 – 239): resolved to methods only, never to a
       free function or foreign binding of the spelling. -/
   methodDirect : List String := []
+  /-- Method values (bugs 238 – 239): reach methods only, as method calls do. -/
+  methodValues : List String := []
   values : List String
   indirect : List String
   trusted : Bool
@@ -257,6 +259,7 @@ private partial def collect (packageOf : String → Option (String × String))
       isMethod := f.isMethod
       foreign := (f.foreignCalls.filter fun (_, d) => !d.startsWith "_C$rt.").map (·.1)
       values := (collectFnValueRefsStmts f.body).eraseDups.map norm
+      methodValues := (collectMethodValueRefsStmts f.body).eraseDups.map norm
       indirect := (collectIndirectCallsStmts f.body).eraseDups
       trusted := f.isTrusted, typeParams := f.typeParams : Node }
   let isIntrinsicDecl := isIntrinsicDecl m
@@ -362,7 +365,8 @@ def build (modules : List CModule)
                       via := .declaredHere }
     let mut unloadedGaps : Array Gap := #[]
     for (name, isValue, isMethodCall) in nd.direct.map (·, false, false)
-        ++ nd.methodDirect.map (·, false, true) ++ nd.values.map (·, true, false) do
+        ++ nd.methodDirect.map (·, false, true) ++ nd.values.map (·, true, false)
+        ++ nd.methodValues.map (·, true, true) do
       let bs := if isMethodCall then #[] else resolve bindings bIdx (·.module) nd.module name
       let ts := if isMethodCall then
           let all := (fnIdx.getD name #[]).filter fun j => nodes[j]!.isMethod

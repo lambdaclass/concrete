@@ -101,7 +101,13 @@ any accepted program relies on:
   first, then a method by its definition name).
 - A Core reference to a function records the namespace it resolved in (`CallSpace`: on
   `Callee.direct` for a call, on `CLocal.space` for a function value; `CFnDef.isMethod` for a
-  definition), and every Elab renaming renames each namespace by its own table.
+  definition), carried into SSA (`SCallee.direct`, `SVal.fnRef`, `SFnDef.isMethod`), and every
+  Elab renaming renames each namespace by its own table.
+- Every consumer that resolves a callee by spelling reads its namespace: a foreign binding
+  (`foreignCalls`, a module's externs) answers free calls only (Elab's resolver, Mono, the
+  post-mono verifier, EmitSSA, the interpreter), and CoreCheck, the SSA verifier, the
+  type-agreement backstop, the proof call graph, the assumption summary and the extern-call
+  reports decide a method call against methods.
 - `spellMethodCallsApart` respells a method reference whose spelling a free function defines by
   the method it names, so below Elab the spelling alone still resolves. Other spellings do not move,
   so no V1 fingerprint over a method call moves.

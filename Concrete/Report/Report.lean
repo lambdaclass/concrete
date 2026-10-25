@@ -441,7 +441,8 @@ private partial def effectsForModule
         let others := members.filter (· != qualName)
         s!"mutual: {", ".intercalate others}"
       | _ => "none"
-    let crossesFfi := callees.any fun c => externNames.contains c
+    -- Only a free call can reach a foreign binding (bugs 238 – 239).
+    let crossesFfi := (collectFreeCallsStmts f.body).any fun c => externNames.contains c
     let loopClass := classifyLoops f.body
     -- Evidence level: enforced if passes all 5 predictable gates
     let (concreteCaps, _) := f.capSet.normalize
@@ -900,7 +901,8 @@ partial def checkPredictableModule
          , loc := fnLoc, violationSpan := match entry with | some e => some e.fnSpan | none => none }]
       else []
     -- 4. FFI — point at the extern call
-    let externCalls := callees.filter fun c => externNames.contains c
+    -- Only a free call can reach a foreign binding (bugs 238 – 239).
+    let externCalls := (collectFreeCallsStmts f.body).eraseDups.filter fun c => externNames.contains c
     let ffiSpan := findCallSpan externCalls astBody
     let ffiViolLoc := mkViolLoc ffiSpan
     let ffiViolations := if externCalls.isEmpty then []

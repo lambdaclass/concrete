@@ -453,7 +453,7 @@ partial def unsafeReportModule (externNames : List String)
       else lines ++ [s!"{indent}  Foreign effect declarations (audited assumptions):"] ++
         allExterns.foldl (fun acc (n, _, _, t) =>
           let dependents := (m.functions.filter fun f =>
-            (collectCallsStmts f.body).contains n).map (·.name)
+            (collectFreeCallsStmts f.body).contains n).map (·.name)
           let kind := if t then "trusted extern (safe for every argument, audited)"
                       else "extern (callers need Unsafe; trusted bodies absorb it)"
           acc ++ [s!"{indent}    {n}: assumed to perform only {declaredOf n} — {kind}",
