@@ -1,7 +1,8 @@
 ### Compiler Performance Tracking By Retired Instructions (2026-10-22)
 
-`scripts/perf/` measures main with a versioned benchmark suite (each cycle takes the newest
-`origin/main` commit, so intermediate commits can be skipped) and keeps the
+`scripts/perf/` measures main with a versioned benchmark suite (each cycle first finishes any
+interrupted measurement, otherwise takes the newest `origin/main` commit, so intermediate commits
+can be skipped) and keeps the
 records on the `perf-data` branch, which is never merged into main. The primary metric is retired
 user-space instructions (`perf stat -e instructions:u`), because no machine is ever quiet and
 instruction counts do not move with load: measured at load 35, they varied by at most 0.002 %

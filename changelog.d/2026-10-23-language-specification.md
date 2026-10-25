@@ -17,8 +17,9 @@ append-only, and `codes.tsv` classifies every diagnostic code.
 `scripts/spec/spec.py` is the one parser, and `check_spec.sh` (CI) is the gate, with negative
 controls. It checks the format and the ID history (no ID removed, no sentence hash changed, states
 move only forward), runs every example as its entry states, on both consumers unless the entry
-exempts the interpreter, compares the extractable functions of each non-pending accepted example
-between the Lean model and the interpreter (`--report model-diff`), requires reject
+exempts the interpreter, compares extracted scalar functions on boundary inputs between the Lean
+model and the interpreter for non-pending, non-project accepted and abort examples
+(`--report model-diff`), requires reject
 examples to pair with the rewrite they accept, classifies every code, resolves each `Enforced by:`
 and `Semantics:` site to a declaration carrying a `spec:` comment, regenerates the manifests
 (`tests/rules/exit_2i.tsv` comes from the spec), and refuses a normative sentence restated outside
