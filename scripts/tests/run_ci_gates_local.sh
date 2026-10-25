@@ -912,18 +912,29 @@ CI_SURVIVORS=0
 if [ "$CI_SESSION_OWNER" = "1" ]; then
   _sw="$GATE_OUT_TMP/session.members"
   if ! _ci_session_members "$_sw"; then
-    CI_SURVIVORS="unknown"
+    CI_SURVIVORS="unknown"; CI_KEEP_HEAVY_SLOT=1
   elif [ -s "$_sw" ]; then
     CI_SURVIVORS="$(grep -c . "$_sw")"
     _grace="${CONCRETE_GATE_SESSION_GRACE:-10}"; _grace="${_grace%.*}"; [ -n "$_grace" ] || _grace=10
-    for _sig in TERM KILL; do
-      # shellcheck disable=SC2046
-      kill -"$_sig" -- $(cat "$_sw") 2>/dev/null
-      for (( _i=0; _i<_grace*5; _i++ )); do
-        _ci_session_members "$_sw" && [ ! -s "$_sw" ] && break 2
+    # EVERY POLL RE-LISTS AND RE-SIGNALS: a member that forked after the previous signal is sent one
+    # too. SIGTERM for the grace period, then SIGKILL for 5 s; emptiness must be CONFIRMED before the
+    # summary and the heavy slot are handed on.
+    _empty=0
+    for _phase in "TERM:$((_grace*5))" "KILL:25"; do
+      _psig="${_phase%%:*}"; _pn="${_phase#*:}"
+      for (( _i=0; _i<_pn; _i++ )); do
+        # shellcheck disable=SC2046
+        [ -s "$_sw" ] && kill -"$_psig" -- $(cat "$_sw") 2>/dev/null
         sleep 0.2
+        if _ci_session_members "$_sw" && [ ! -s "$_sw" ]; then _empty=1; break 2; fi
       done
     done
+    if [ "$_empty" != "1" ]; then
+      CI_SURVIVORS="${CI_SURVIVORS}_unterminated"
+      CI_KEEP_HEAVY_SLOT=1
+      echo "  WARNING processes of this run are STILL ALIVE after SIGKILL: $(tr '\n' ' ' < "$_sw")" >&2
+      echo "          the lock stays held until they are gone, and this run does not release its heavy slot" >&2
+    fi
     [ "$RUN_INTERRUPTED" = "1" ] \
       || echo "  WARNING $CI_SURVIVORS process(es) outlived their gates and were terminated; this run cannot be a closure run" >&2
   fi
@@ -1122,7 +1133,8 @@ else
   # A no-op inside a gate session (see where fresh.sh is loaded): the launcher reclaims after its sweep.
   _gate_lock_release
 fi
-[ "$HEAVY_RUN" = "1" ] && heavy_slot_release
+# Not while processes of this run are still alive (bug 244): the slot is reclaimed from a dead holder.
+[ "$HEAVY_RUN" = "1" ] && [ "${CI_KEEP_HEAVY_SLOT:-0}" != "1" ] && heavy_slot_release
 [ "${_CI_RUNNER_TEMP_OWNED:-0}" = "1" ] && rm -rf "$RUNNER_TEMP"
 rm -rf "${GATE_OUT_TMP:-}"
 

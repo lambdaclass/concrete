@@ -851,9 +851,14 @@ fi
 for _how in TERM KILL; do
   rm -f "$TMP/stub.pid"
   ( exec env -u CONCRETE_GATE_SESSION CONCRETE_GATE_SESSION_GRACE=2 python3 "$GS" -- \
-      bash -c 'echo $$ > "$1"; trap "" TERM; sleep 60' _ "$TMP/stub.pid" >/dev/null 2>&1 ) &
+      bash -c 'trap "" TERM; echo $$ > "$1"; sleep 60' _ "$TMP/stub.pid" >/dev/null 2>&1 ) &
   _fp=$!; LIVE_PIDS="$LIVE_PIDS $_fp"
-  _wait_file "$TMP/stub.pid"; kill -"$_how" "$_fp" 2>/dev/null
+  # Readiness is published only once SIGTERM is ignored, and a run that never got ready fails here:
+  # without it, an absent pid file would read as "ended".
+  if ! _wait_file "$TMP/stub.pid"; then
+    no "launcher $_how: the stub never started; the leg proves nothing"; kill -KILL "$_fp" 2>/dev/null; continue
+  fi
+  kill -"$_how" "$_fp" 2>/dev/null
   # BOUNDED, or a launcher that waits out the 60 s sleep would pass by outliving it. The launcher's
   # SIGKILL comes 3 x grace + 5 s = 11 s after the signal.
   for _ in $(seq 1 100); do kill -0 "$_fp" 2>/dev/null || break; sleep 0.2; done

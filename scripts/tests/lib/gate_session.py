@@ -134,7 +134,9 @@ def sweep(pgid: int, grace: float, exclude=()) -> int:
     The group is probed with ps rather than killpg when `exclude` is given, because the leader
     sweeping its own group is itself a member.
     """
-    extra = registered_groups(pgid)
+    # RE-READ ON EVERY PASS: a launcher still in flight can register its group during the sweep.
+    def extra():
+        return registered_groups(pgid)
 
     def alive():
         if exclude:
@@ -144,14 +146,14 @@ def sweep(pgid: int, grace: float, exclude=()) -> int:
             m = ps_members(pgid) or []
             if group_alive(pgid) and not m:
                 m = [-1]
-        return m + [-g for g in extra if group_alive(g)]
+        return m + [-g for g in extra() if group_alive(g)]
 
     found = alive()
     if not found:
         return 0
     n = len([p for p in found if p > 0]) or 1
-    for sig, wait_for in ((signal.SIGTERM, grace), (signal.SIGKILL, 5.0)):
-        for g in extra:
+    def signal_all(sig):
+        for g in extra():
             try:
                 os.killpg(g, sig)
             except OSError:
@@ -164,11 +166,16 @@ def sweep(pgid: int, grace: float, exclude=()) -> int:
             except OSError:
                 pass
             signal_pids([p for p in (ps_members(pgid) or []) if p > 0], sig)
+
+    # EVERY POLL RE-SIGNALS what is alive now: a member that forked after the previous signal, or a
+    # group registered after it, would otherwise be listed but never sent anything.
+    for sig, wait_for in ((signal.SIGTERM, grace), (signal.SIGKILL, 5.0)):
         deadline = time.monotonic() + wait_for
         while time.monotonic() < deadline:
+            signal_all(sig)
+            time.sleep(0.1)
             if not alive():
                 return n
-            time.sleep(0.1)
     if alive():
         note(f"process group {pgid} still has members after SIGKILL; the lock stays held")
     return n
