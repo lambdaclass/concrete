@@ -49,6 +49,11 @@ the declaration-collision check compared only free functions, externs and consta
   cross-module renames, type respelling (`CoreRename.methodName`) and the top-level collision
   respelling, which now renames free functions only, so a method call keeps its spelling there.
   `CFnDef.isMethod` marks a method's definition.
+- CoreCheck decides a method call's capabilities against the program's method table
+  (`CoreCheckEnv.methodCaps`, then the imported requirements), never against a free function or
+  extern listed under the same spelling first, and records no FFI trust edge for it (Codex review
+  r4: an untrusted extern `P_get` beside `P::get(..)` made the method call require `Unsafe`,
+  E0520; `regress_239_method_call_beside_untrusted_extern.con`).
 - `declarationCollisions` counts a module's impl method definition names, so a free function or
   extern spelled like one is E0299 (MOD-3); two methods of one name on one type stay TRAIT-5's.
 

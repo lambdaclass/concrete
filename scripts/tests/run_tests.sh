@@ -8619,6 +8619,8 @@ run_ok "$TESTDIR/regress_238_extern_takes_method_spelling.con" 42
 run_ok "$TESTDIR/regress_238_imported_extern_alias_takes_method_spelling.con" 42
 run_ok "$TESTDIR/regress_238_method_definition_name_taken_by_extern.con" 42
 run_ok "$TESTDIR/regress_238_method_value_spelled_like_extern.con" 42
+run_ok "$TESTDIR/regress_238_method_value_beside_unrelated_extern.con" 42
+run_ok "$TESTDIR/regress_239_method_call_beside_untrusted_extern.con" 42
 run_err "$TESTDIR/error_240_trait_in_trait_signature.con" "error[resolve]: (E0108) 'Marker' is a trait, not a type"
 run_err "$TESTDIR/error_240_trait_in_extern_signature.con" "error[resolve]: (E0108) 'Marker' is a trait, not a type"
 run_ok "$TESTDIR/regress_239_parent_method_beside_child_free_fn.con" 42
@@ -8630,7 +8632,8 @@ for r238 in regress_238_free_fn_spelled_like_method_call regress_238_other_modul
             regress_238_method_named_by_definition_name regress_239_parent_method_beside_child_free_fn \
             regress_241_parent_names_child_respelled_method regress_238_method_call_in_constant \
             regress_238_extern_takes_method_spelling regress_238_imported_extern_alias_takes_method_spelling \
-            regress_238_method_definition_name_taken_by_extern regress_238_method_value_spelled_like_extern; do
+            regress_238_method_definition_name_taken_by_extern regress_238_method_value_spelled_like_extern \
+            regress_238_method_value_beside_unrelated_extern regress_239_method_call_beside_untrusted_extern; do
     r238_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/$r238.con" --interp 2>&1 || true)
     if [ "$r238_interp" = "42" ]; then
         echo "  ok  bugs 238-241: $r238 — interp == binary (42)"

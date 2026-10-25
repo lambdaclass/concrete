@@ -4141,6 +4141,17 @@ partial def methodValuesStmts (ss : List CStmt) : List String :=
     | _ => []
 end
 
+/-- Every method value of a module tree, with the foreign spellings visible where it is written:
+    its function's `foreignCalls` and its module's externs (a constant's initializer, inlined at
+    each use in its module: every function's of the module). -/
+partial def scopedMethodValues (cm : CModule) : List (String × List String) :=
+  let externs := cm.externFns.map (·.1)
+  let fnVals := cm.functions.flatMap fun f =>
+    (methodValuesStmts f.body).map (·, externs ++ f.foreignCalls.map (·.1))
+  let moduleForeign := externs ++ cm.functions.flatMap (fun f => f.foreignCalls.map (·.1))
+  let constVals := cm.constants.flatMap fun (_, _, e) => (methodValuesExpr e).map (·, moduleForeign)
+  fnVals ++ constVals ++ cm.submodules.flatMap scopedMethodValues
+
 /-- Rewrite every function body and constant initializer of a module tree with `rn`. -/
 partial def renameBodiesDeep (rn : CoreRename) (cm : CModule) : CModule :=
   { cm with
@@ -4178,14 +4189,14 @@ def spellMethodCallsApart (cms : List CModule) : Except Diagnostics (List CModul
     ++ (consts.flatMap fun e => (collectCalleesExpr e).filterMap
       fun c => match c with | .direct n .method => some n | _ => none)).eraseDups
   -- A method VALUE is emitted as a function reference, which carries no namespace: a foreign
-  -- binding of its spelling (an extern, or a spelling a function binds to one) would capture it,
-  -- so for values those spellings are taken too.
-  let methodValues : List String :=
-    (defs.flatMap (fun f => methodValuesStmts f.body) ++ consts.flatMap methodValuesExpr).eraseDups
-  let foreignSpellings := (cms.flatMap coreExternsDeep).map (·.name)
-    ++ defs.flatMap (fun f => f.foreignCalls.map (·.1))
-  let takenBy := fun (n : String) =>
-    freeDefs.contains n || (methodValues.contains n && foreignSpellings.contains n)
+  -- binding of its spelling IN ITS SCOPE (an extern of its module, or a spelling its function
+  -- binds to one) would capture it, so for a value those spellings are taken too (Codex r4: only
+  -- in its scope; an unrelated module's extern takes nothing from it).
+  let scopedValues := cms.flatMap scopedMethodValues
+  let methodValues := (scopedValues.map (·.1)).eraseDups
+  let foreignFor := fun (n : String) =>
+    ((scopedValues.filter (·.1 == n)).flatMap (·.2)).eraseDups
+  let takenBy := fun (n : String) => freeDefs.contains n || (foreignFor n).contains n
   let taken := (methodCalls ++ methodValues).eraseDups.filter takenBy
   if taken.isEmpty then .ok cms else
   let targetsOf := fun (n : String) =>
@@ -4196,7 +4207,7 @@ def spellMethodCallsApart (cms : List CModule) : Except Diagnostics (List CModul
   -- The new spelling must itself be the method's alone: taken by nothing a reference of this
   -- kind could reach instead.
   let bad := resolved.filter fun (n, ts) => match ts with
-    | [t] => freeDefs.contains t || (methodValues.contains n && foreignSpellings.contains t)
+    | [t] => freeDefs.contains t || (foreignFor n).contains t
     | _ => true
   if !bad.isEmpty then
     .error (bad.map fun (n, ts) =>

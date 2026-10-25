@@ -62,10 +62,12 @@ A foreign binding is bound by spelling in the interpreter and in emission (`fore
 module's externs) before any program definition. Those lookups now apply to a free call only
 (`SCallee.direct name space` carries the namespace through Lower; `EmitSSA.directSymbol`, the
 interpreter's call path), so no foreign binding answers a method call. A function reference
-carries no namespace, so a method value whose spelling a foreign binding takes is respelled by
-`spellMethodCallsApart` too.
+carries no namespace, so a method value whose spelling a foreign binding takes in its scope (its
+function's `foreignCalls`, its module's externs) is respelled by `spellMethodCallsApart` too; an
+unrelated module's extern takes nothing from it
+(`regress_238_method_value_beside_unrelated_extern.con`).
 
-Regression legs in `run_tests.sh`: the nine fixtures above, `run_ok … 42` and `--interp` = 42.
+Regression legs in `run_tests.sh`: the ten fixtures above, `run_ok … 42` and `--interp` = 42.
 
 ## Structural cause
 
