@@ -261,7 +261,9 @@ private partial def collect (packageOf : String → Option (String × String))
         | .direct n .method => some n
         | _ => none).eraseDups
       isMethod := f.isMethod
-      foreign := (f.foreignCalls.filter fun (_, d) => !d.startsWith "_C$rt.").map (·.1)
+      -- by the spelling written and by its normalization, as `direct` carries it (Codex review r19)
+      foreign := ((f.foreignCalls.filter fun (_, d) => !d.startsWith "_C$rt.").map (·.1)).flatMap
+        fun n => [n, norm n]
       values := (collectFnValueRefsStmts f.body).eraseDups.map norm
       methodValues := (collectMethodValueRefsStmts f.body).eraseDups
       methodAliasOf := (((collectCalleesStmts f.body).filterMap fun c => match c with

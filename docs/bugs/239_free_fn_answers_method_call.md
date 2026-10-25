@@ -128,7 +128,13 @@ the declaration-collision check compared only free functions, externs and consta
   name (`regress_239_extern_call_not_trusted_by_method.con`); a free call's trust is its own
   declaration's, so a trusted extern keeps its trusted-call edge beside a method of its spelling
   (`regress_239_trusted_extern_beside_method_edge.con`, Codex review r17), own or imported
-  (`regress_239_imported_trusted_extern_beside_trusted_method.con`, Codex review r18).
+  (`regress_239_imported_trusted_extern_beside_trusted_method.con`, Codex review r18), and never
+  by another module's trusted extern of its name (`regress_239_untrusted_extern_beside_trusted_extern.con`).
+- Codex review r19: an imported foreign binding's call is not checked against a method of the
+  declared name (`regress_239_imported_extern_alias_beside_method_arity.con`), and the assumption
+  summary matches a function's foreign spellings by their normalization too, so an extern import
+  alias does not also reach a trusted method of the declared name
+  (`regress_239_extern_alias_assumption_not_method.con`).
 - `declarationCollisions` counts a module's impl method definition names, so a free function or
   extern spelled like one is E0299 (MOD-3); two methods of one name on one type stay TRAIT-5's.
 

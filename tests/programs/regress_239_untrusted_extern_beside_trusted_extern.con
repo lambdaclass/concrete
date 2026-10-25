@@ -1,0 +1,17 @@
+// Bug 239 (FIXED), Codex review r19 control: module `b` calls its own UNTRUSTED extern `f` while
+// module `a` declares a trusted extern `f`. The call is trusted (or not) by its own declaration:
+// `b.call` has a calls-ffi edge and no calls-trusted edge for `f` (an intermediate version of this
+// fix took `a.f`'s trust).
+// Expected: 1 (`abs(1)`), natively and --interp.
+mod a {
+    #[link_name = "abs"]
+    pub trusted extern fn f(x: i32) with() -> i32;
+}
+mod b {
+    #[link_name = "abs"]
+    pub extern fn f(x: i32) with() -> i32;
+    pub trusted fn call() -> i32 { return f(1); }
+}
+fn main() -> Int {
+    return b::call() as Int;
+}

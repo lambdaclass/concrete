@@ -53,8 +53,11 @@ structure CoreCheckEnv where
       function binds to a foreign declaration (`currentForeign`) is decided against that
       declaration, never against a method sharing the spelling. -/
   ownExterns : List (String × CapSet × List (String × Ty) × Ty) := []
-  /-- The `trusted extern` names of the module and of the program (Codex reviews r17, r18). -/
+  /-- The module's own `trusted extern` names, and the program's (Codex reviews r17 – r19): a call
+      bound to an own extern is trusted by that extern alone; one bound to an imported extern by
+      the program's declaration of that name. -/
   ownTrustedExterns : List String := []
+  allTrustedExterns : List String := []
   structDefs : List CStructDef
   enumDefs : List CEnumDef
   newtypes : List NewtypeDef := []
@@ -726,7 +729,9 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
       -- A free call bound to a foreign declaration is trusted exactly when that declaration is a
       -- trusted extern, own or imported (Codex review r18).
       let freeTrusted := match foreignDecl? with
-        | some d => envE.ownTrustedExterns.contains d
+        | some d =>
+          if envE.ownExterns.any (·.1 == d) then envE.ownTrustedExterns.contains d
+          else envE.allTrustedExterns.contains d
         | none => envE.ownTrustedExterns.contains fn
             || (envE.trustedNames.contains fn && !trustedMethodNamed)
       if (space == .free && freeTrusted)
@@ -741,7 +746,7 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
     let calleeCaps? ← match foreignDecl?, foreignSig?, envE.importedCaps.lookup fn with
       | some _, some (_, cs, _, _), _ => pure (some cs)
       | some _, none, some cs => pure (some cs)
-      | some d, none, none => lookupFnCaps d
+      | some _, none, none => pure none
       | _, _, _ =>
       match space, methodName?.bind (fun n => envE.methodCaps.lookup n), envE.importedCaps.lookup fn with
       | .method, some caps, _ => pure (some caps)
@@ -782,8 +787,9 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
     let sig? ← match methodSig?, foreignSig?, foreignDecl? with
       | some (_, ps, r, _), _, _ => pure (some (ps, r))
       | none, some (_, _, ps, r), _ => pure (some (ps, r))
-      -- an imported foreign binding, by its declared name
-      | none, none, some d => lookupFnSig d
+      -- an imported foreign binding: its signature is not in this unit's own table, and the
+      -- declared name may be a method's Core name elsewhere (Codex review r19); Check checked it
+      | none, none, some _ => pure none
       | none, none, none =>
       match methodSig? with
       | some (_, ps, r, _) => pure (some (ps, r))
@@ -1599,7 +1605,8 @@ partial def ccCheckModule (m : CModule)
     fnSigs := fnSigs ++ externSigs ++ allFnSigs
     methodCaps := allMethods.map fun (n, cs, _, _, _) => (n, cs)
     ownExterns := externSigs
-    ownTrustedExterns := (m.externFns.filter fun (_, _, _, t) => t).map (·.1) ++ allTrustedExterns
+    ownTrustedExterns := (m.externFns.filter fun (_, _, _, t) => t).map (·.1)
+    allTrustedExterns := allTrustedExterns
     methodSigs := allMethods.map fun (n, _, ps, r, t) => (n, ps, r, t)
     aliases := allAliases
     structDefs := m.structs
