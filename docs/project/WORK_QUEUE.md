@@ -1,7 +1,8 @@
 # Agent work queue
 
-The work queue lets agents run without a human orchestrator. A systemd timer on `concrete-ci-1`
-runs one dispatcher tick every 5 minutes as user `agent`. Each tick rebuilds the queue from its
+The work queue lets agents run without a human orchestrator. Once installed on a server
+(`install-queue.sh` writes the units and enables nothing), a systemd timer runs one dispatcher
+tick every 5 minutes as user `agent`. Each tick rebuilds the queue from its
 sources, watches the running agents, and starts headless Claude Code agents on the next ready tasks.
 A finished agent leaves a branch with clean review and gate notes, and the landing bot
 ([LANDING.md](LANDING.md)) picks it up. The dispatcher never pushes to `main` or `ci/*`.

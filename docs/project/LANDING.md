@@ -303,7 +303,7 @@ train SHA from the bot's clone. The bot also needs two credentials:
 - write access to both repositories, to push main, `ci/*` and the notes.
 
 ```sh
-scripts/land/install-bot.sh --ssh dev@62.210.216.169 [--source-ref origin/wip/landing-bot]
+scripts/land/install-bot.sh --ssh dev@<server> [--source-ref <ref>]
 # then, when the maintainers decide (install-bot.sh never enables it):
 sudo loginctl enable-linger dev                                   # once, as ubuntu
 systemctl --user daemon-reload && systemctl --user enable --now concrete-landing-bot.timer   # as dev

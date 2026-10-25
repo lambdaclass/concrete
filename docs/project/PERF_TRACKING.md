@@ -18,7 +18,8 @@ from instruction counts. Where `perf` cannot count `instructions:u` (macOS, or a
 
 ## Noise and threshold
 
-Measured on concrete-ci-1 (AMD EPYC 8324P) on main `185d998c`, three suite runs at load 35 with
+Measured on concrete-ci-1 (AMD EPYC 8324P, the CI server until it was deleted on 2026-10-23) on
+main `185d998c`, three suite runs at load 35 with
 CI runners and gate runs active: compiler instruction counts varied by at most 0.002% between runs
 (median 0.000%) and 0.008% between repeats within a run. Peak RSS varied by up to 0.6% between
 runs and 1.4% within one. An alarm needs a metric above
@@ -30,8 +31,11 @@ comes from their own history.
 
 ## Server provisioning (lives outside this repository)
 
-Server pieces belong to the private server provisioning (`dotfiles/servers/`), not to concrete.
-What that provisioning must contain for the tracker on concrete-ci-1:
+Server pieces belong to the owner's private server provisioning, not to concrete. The tracker's
+host is the CI server, concrete-ci-2 (a Hetzner AX102 on Arch Linux), where `concrete-perf.service`
+and `concrete-perf.timer` are installed and the timer is not enabled (2026-10-25). The steps below
+were written for its predecessor, concrete-ci-1, an Ubuntu host; on Arch the packages are `perf`
+and `time`. What that provisioning must contain:
 
 1. **sysctl**: `kernel.perf_event_paranoid = 2` (Ubuntu ships 4, which refuses unprivileged
    counting). For example, `/etc/sysctl.d/60-perf-tracking.conf` containing that line, applied with
@@ -41,7 +45,7 @@ What that provisioning must contain for the tracker on concrete-ci-1:
    `wip/perf-tracking`, later `main`), owned by root and read-only to the perf user, for example
    `/opt/concrete-perf/tool`. Update it only while holding the runner's lock:
    `flock <PERF_HOME>/runner.lock git -C /opt/concrete-perf/tool checkout --detach origin/<ref>`.
-3. **Working directories**, owned by the perf user (`dev` on concrete-ci-1), under
+3. **Working directories**, owned by the perf user (`dev` on concrete-ci-2), under
    `PERF_HOME=/home/dev/perf`: `repo/` (a clone of origin), `data/` (a worktree of `repo/` on branch
    `perf-data`: `git -C repo worktree add --orphan -b perf-data ../data` when origin has no
    `perf-data` yet, else `worktree add -B perf-data ../data origin/perf-data`), then
@@ -58,7 +62,7 @@ What that provisioning must contain for the tracker on concrete-ci-1:
    Type=oneshot
    User=dev
    Environment=PERF_HOME=/home/dev/perf
-   Environment=PERF_MACHINE=concrete-ci-1
+   Environment=PERF_MACHINE=concrete-ci-2
    Environment=PATH=/nix/var/nix/profiles/default/bin:/usr/local/bin:/usr/bin:/bin
    ExecStart=/opt/concrete-perf/tool/scripts/perf/runner.sh
    TimeoutStartSec=8h
