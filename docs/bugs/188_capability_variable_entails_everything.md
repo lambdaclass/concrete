@@ -5,6 +5,7 @@ summary: a caller holding ANY capability variable was treated as covering every 
 fixtures: error_188_capvar_console.con error_188_capvar_process.con error_188_capvar_unsafe_call.con error_188_capvar_unsafe_op.con error_188_capvar_unsafe_callback.con error_188_capparam_named_unsafe.con error_188_capvar_method_unsafe_callback.con error_188_capvar_impl_receiver.con error_188_bodyless_capparam.con regress_188_capvar_polymorphism.con
 class: 6 — a capability variable entailed every requirement, deferred to an instantiation nothing checks
 silent: yes
+exit: 0b
 -->
 
 **Status:** FIXED

@@ -5,6 +5,7 @@ summary: `trusted impl` made every method of the block trusted whether or not it
 fixtures: error_189_trusted_impl_refused.con
 class: 14 — `trusted impl` made every method trusted without declaring it
 silent: yes
+exit: 0b
 -->
 
 **Status:** FIXED

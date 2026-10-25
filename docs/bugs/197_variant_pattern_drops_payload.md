@@ -5,6 +5,7 @@ summary: a variant pattern written without a field list (`E::A =>`) over an owne
 fixtures: error_197_variant_pattern_drops_payload.con regress_197_variant_pattern_ignores_copy.con
 class: 15 — a variant pattern with no field list ignored a non-Copy payload
 silent: yes
+exit: 0b
 -->
 
 **Status:** FIXED (branch `wip/bug197`, based on `wip/bug196`)

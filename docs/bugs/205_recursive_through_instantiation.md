@@ -5,6 +5,7 @@ summary: a struct holding itself by value through a generic instantiation (`Node
 fixtures: error_205_recursive_through_instantiation.con regress_205_instantiations_without_cycle.con
 class: 13 — finite size judged on declarations and assumed for generic instantiations
 silent: yes
+exit: 0b
 -->
 
 **Status:** FIXED (branch `wip/bug205`, based on `wip/train6` `13bc2527`)

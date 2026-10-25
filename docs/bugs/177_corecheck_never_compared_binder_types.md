@@ -6,6 +6,7 @@ fixtures: regress_177_alias_value_hints.con
 class: 12 — secondary: CoreCheck kept a width-blind copy of type equality
 class: 13 — CoreCheck documented "arguments match parameters" and never compared any binder's type with its value's
 silent: yes
+exit: 0b
 -->
 
 **Status:** FIXED (branch `wip/bug177`)

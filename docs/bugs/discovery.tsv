@@ -11,7 +11,11 @@
 #            (independent probes: they count toward the discovery-rate signal), or
 #            ci, review, follow-on, controls, development (attribution only: they find bugs as a side
 #            effect of other work and do not count as probe rounds)
-#   probe    what was probed, in a few words
+#   probe    what was probed, in a few words.
+#            A counting batch that probed one structural migration's own new code starts its probe
+#            with "class N: " (N a class of STRUCTURAL_CLASSES.md): exit 2m then counts it toward
+#            class N only, and every bug it found against class N; a silent bug still counts against
+#            its own class too
 #   effort   the size of the batch as "<N> hours|programs|probes|examples|cases" (a fuzz campaign
 #            in hours), or "unrecorded" for history seeded from the bug records; a counting batch
 #            from 2026-10-22 on must record it. A quiet counting batch below 4 hours or 10

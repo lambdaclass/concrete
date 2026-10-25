@@ -5,6 +5,7 @@ summary: Elab's import-rename pass rewrote every fn-typed identifier whose spell
 fixtures: regress_208_fn_local_named_like_import.con
 class: 1 — a fn-typed local renamed to a same-spelled imported function
 silent: yes
+exit: 0b
 -->
 
 **Status:** FIXED (branch `vp-r0492-core`)

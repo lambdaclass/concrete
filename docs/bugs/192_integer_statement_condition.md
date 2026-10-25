@@ -5,6 +5,7 @@ summary: an integer condition of an `if`, `while` or `for` statement compiled: `
 fixtures: error_192_int_if_condition.con error_192_int_while_condition.con error_192_int_for_condition.con error_192_int_match_guard.con
 class: 13 — an `if` / `while` / `for` statement condition: Check discarded its type, CoreCheck admitted integers
 silent: yes
+exit: 0b
 -->
 
 **Status:** FIXED (branch `wip/spec-single-source`)

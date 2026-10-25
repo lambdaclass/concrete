@@ -5,6 +5,7 @@ summary: `0x`, `0b` and `0o` with no digit of their radix lexed as the literal 0
 fixtures: error_220_empty_hex_literal.con error_220_empty_binary_literal.con error_220_empty_octal_literal.con regress_220_radix_literals.con
 class: 13 — the grammar's radix literal needs a digit; the lexer read none as 0
 silent: yes
+exit: 0b
 -->
 
 **Status:** FIXED (branch `wip/diffhunt-1023`)

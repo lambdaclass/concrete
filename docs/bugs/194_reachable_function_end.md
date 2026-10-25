@@ -5,6 +5,7 @@ summary: a function with a result type compiled with a reachable end and no `ret
 fixtures: error_194_missing_return_plain.con error_194_missing_return_if.con error_194_missing_return_method.con regress_194_unreachable_end_forms.con
 class: 13 — a function returns a value on every path: no site; the backend verifier noticed
 silent: yes
+exit: 0b
 -->
 
 **Status:** FIXED (branch `wip/bug194`)

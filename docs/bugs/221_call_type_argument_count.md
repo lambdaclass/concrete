@@ -5,6 +5,7 @@ summary: an explicit type-argument list at a function, method, function-pointer 
 fixtures: error_221_extra_type_argument.con error_221_type_argument_to_plain_fn.con error_221_method_extra_type_argument.con error_221_short_type_argument_list.con error_221_fn_pointer_type_argument.con error_221_bound_method_type_argument.con regress_221_exact_type_arguments.con
 class: 13 — a call's type-argument count: a `zip` stood in for the check
 silent: yes
+exit: 0b
 -->
 
 **Status:** FIXED (branch `wip/diffhunt-1023`)

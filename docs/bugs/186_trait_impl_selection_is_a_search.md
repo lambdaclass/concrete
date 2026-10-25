@@ -5,6 +5,7 @@ summary: trait impl selection was a search keyed by spellings. The parser droppe
 fixtures: error_186_duplicate_impl.con error_186_duplicate_generic_impl.con error_186_overlap_generic_impl.con error_186_overlap_blanket_impl.con error_186_orphan_impl.con error_186_specialized_impl.con error_186_method_clash.con error_186_inherent_clash.con error_186_ambiguous_bound_method.con error_186_duplicate_primitive_spelling.con error_186_orphan_sibling.con error_186_imported_alias_target.con error_186_builtin_arity.con regress_186_coherent_impls.con regress_186_primitive_impl_spellings.con regress_186_coherent_impls_reversed.con regress_186_visible_targets.con
 class: 1 — an impl keyed by its type's spelling with its arguments dropped, and a method by `Type_method`: impl selection was a first-match search
 silent: yes
+exit: 0b
 -->
 
 **Status:** FIXED (branch `trait-coherence`)
