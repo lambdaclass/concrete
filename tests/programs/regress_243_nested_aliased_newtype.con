@@ -1,0 +1,14 @@
+// Bug 243 (fixed): an aliased newtype import inside a nested module tree. Binary and --interp
+// return 42.
+mod outer {
+    mod m {
+        pub newtype N = i64;
+        impl N { pub fn mk(x: i64) -> N { return N(x); } pub fn get(self) -> i64 { return self.0; } }
+    }
+    mod user {
+        import m.{N as M};
+        pub fn run() -> i64 { let a: M = M::mk(41); return a.get() + 1; }
+    }
+    import user.{run};
+    pub fn main() -> i64 { return run(); }
+}

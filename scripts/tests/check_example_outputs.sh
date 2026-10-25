@@ -496,7 +496,6 @@ open_bug_reproducers() {
 216|bug216_field_write_non_mut_binding/repro.con|compiles|
 226|bug226_submodule_imports_private_function/repro.con|compiles|
 242|bug242_imported_signature_type_captured/repro.con|compile-fails|(E0252) missing field 'v' in struct literal 'P'
-243|bug243_aliased_newtype_import_binds_nothing/repro.con|compile-fails|(E0106) unknown static method 'M::mk'
 TABLE
 }
 if [ -z "$ONLY" ]; then

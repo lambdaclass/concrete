@@ -133,7 +133,7 @@ private def enumDecl (ed : EnumDef) (inModule : String) : TypeDecl :=
 
 private def newtypeDecl (nt : NewtypeDef) (inModule : String) : TypeDecl :=
   let defIn := if nt.definedIn.isEmpty then inModule else nt.definedIn
-  { id := .user defIn nt.name, arity := nt.typeParams.length }
+  { id := .user defIn nt.declName, arity := nt.typeParams.length }
 
 /-- Find a declaration named `n` in one module summary (its own declarations, by their
     definition-site name). -/

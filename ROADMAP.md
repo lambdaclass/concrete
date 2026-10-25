@@ -100,11 +100,11 @@ a link failure, an interpreter refusal or an unrejected leak.
 
 <!-- BEGIN GENERATED: bug dashboard (scripts/gen/bug_dashboard.py; edit docs/bugs records and docs/bugs/discovery.tsv) -->
 
-**Open bugs: 11** (1 silent, 5 loud, 5 filed before the discovery record) of 219 bug records.
+**Open bugs: 10** (1 silent, 4 loud, 5 filed before the discovery record) of 219 bug records.
 
 | open bugs by primary structural class | open | silent | bugs |
 |---|---|---|---|
-| 1. Declaration identity by spelled name, not a resolved `DefId` | 6 | 1 | 054, 077, 114, 122, 242, 243 |
+| 1. Declaration identity by spelled name, not a resolved `DefId` | 5 | 1 | 054, 077, 114, 122, 242 |
 | 5. Borrow tracking by syntax instead of normalized places | 1 | 0 | 216 |
 | 11. Absence read as a fact (fail-open defaults) | 2 | 0 | 049, 058 |
 | 12. One fact kept in two places | 2 | 0 | 064, 226 |
@@ -113,7 +113,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 |---|---|---|---|
 | exit 0b | 1 | 1 | 122 |
 | exit 2c | 1 | 0 | 114 |
-| no exit names it | 9 | 0 | 049, 054, 058, 064, 077, 216, 226, 242, 243 |
+| no exit names it | 8 | 0 | 049, 054, 058, 064, 077, 216, 226, 242 |
 
 | discovery rate: counting probe batch | date | effort | found | silent | loud | signal |
 |---|---|---|---|---|---|---|

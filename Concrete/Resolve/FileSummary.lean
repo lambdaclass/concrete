@@ -283,7 +283,8 @@ partial def buildFileSummary (m : Module) (definitionPath : String := "") : File
     constants := m.constants.map fun c =>
       { name := c.name, ty := c.ty, isPublic := c.isPublic, definedIn := thisDefinitionPath }
     typeAliases := m.typeAliases
-    newtypes := m.newtypes.map (fun nt => { nt with definedIn := thisDefinitionPath })
+    newtypes := m.newtypes.map (fun nt =>
+      { nt with definedIn := thisDefinitionPath, definitionName := nt.name })
     externFns := m.externFns
     externFnSigs := externFnSigs
     implMethodSigs := implMethodSigs
@@ -472,7 +473,9 @@ def resolveImports (imports : List ImportDecl)
                   -- the struct path. This keeps `Wrap::try_new(...)` callable
                   -- after `import Wrap.{Port}`.
                   let (newtypeImpls, newtypeTraitImpls, matchingSigs) := typeImplsOf summary origName
-                  .ok { acc with newtypes := acc.newtypes ++ [nt],
+                  -- Bug 243: bound under the importer's spelling, as a struct or enum is (bug
+                  -- 064); `definedIn` and `definitionName` keep the declaration's identity.
+                  .ok { acc with newtypes := acc.newtypes ++ [{ nt with name := localName }],
                                  implBlocks := acc.implBlocks ++ newtypeImpls,
                                  traitImpls := acc.traitImpls ++ newtypeTraitImpls,
                                  implMethodSigs := acc.implMethodSigs ++ matchingSigs }

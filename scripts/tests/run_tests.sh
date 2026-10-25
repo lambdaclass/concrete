@@ -8737,6 +8737,23 @@ else
     printf '%s\n' "$r233_out" | awk 'NR<=3'
     FAIL=$((FAIL + 1))
 fi
+# Bug 243: an aliased newtype import binds the alias to the declaration's identity, as a struct's.
+run_ok "$TESTDIR/regress_243_aliased_newtype_import.con" 42
+run_ok "$TESTDIR/regress_243_aliased_newtype_with_original.con" 42
+run_ok "$TESTDIR/regress_243_aliased_generic_newtype.con" 42
+run_ok "$TESTDIR/regress_243_nested_aliased_newtype.con" 42
+for r243 in regress_243_aliased_newtype_import regress_243_aliased_newtype_with_original \
+            regress_243_aliased_generic_newtype regress_243_nested_aliased_newtype; do
+    # bounded_run, not GNU `timeout`; a timeout is INCOMPLETE, not a pass.
+    r243_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/$r243.con" --interp 2>&1 || true)
+    if [ "$r243_interp" = "42" ]; then
+        echo "  ok  bug 243: $r243 — an aliased newtype is the newtype, interp == binary (42)"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  bug 243: $r243 --interp gave '$r243_interp', want 42"
+        FAIL=$((FAIL + 1))
+    fi
+done
 # Bug 245: a bare constant spelling is scoped by the using function's top-level tree in both
 # backends (`CModule.treeConstants`), so two trees' private constants of one spelling are apart.
 run_ok "$TESTDIR/regress_245_toplevel_private_constants.con" 42

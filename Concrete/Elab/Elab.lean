@@ -2730,7 +2730,7 @@ def summaryTypeBinding (decls : List (String × String)) (d : FileSummary) (n : 
     (summaryTable : List (String × FileSummary) := []) : Option (String × String) :=
   let own := (d.structs.filter (·.name == n)).map (fun sd => (sd.definedIn, sd.definitionName))
     ++ (d.enums.filter (·.name == n)).map (fun ed => (ed.definedIn, ed.definitionName))
-    ++ (d.newtypes.filter (·.name == n)).map (fun nt => (nt.definedIn, nt.name))
+    ++ (d.newtypes.filter (·.name == n)).map (fun nt => (nt.definedIn, nt.declName))
   -- The definer's resolved import closure (named types and the types its imported
   -- signatures reach), in the first-binding order Elab's `typeSpellings` uses: structs
   -- (imports, then own), enums (imports, then own), newtypes (imports, then own).
@@ -2745,8 +2745,8 @@ def summaryTypeBinding (decls : List (String × String)) (d : FileSummary) (n : 
       ++ d.structs.map (fun sd => (sd.name, sd.definedIn, sd.definitionName))
       ++ r.enums.map (fun ed => (ed.name, ed.definedIn, ed.definitionName))
       ++ d.enums.map (fun ed => (ed.name, ed.definedIn, ed.definitionName))
-      ++ r.newtypes.map (fun nt => (nt.name, nt.definedIn, nt.name))
-      ++ d.newtypes.map (fun nt => (nt.name, nt.definedIn, nt.name))
+      ++ r.newtypes.map (fun nt => (nt.name, nt.definedIn, nt.declName))
+      ++ d.newtypes.map (fun nt => (nt.name, nt.definedIn, nt.declName))
   match ordered.find? (fun (sp, defIn, dn) => sp == n && !defIn.isEmpty && !dn.isEmpty) with
   | some (_, defIn, dn) => some (defIn, dn)
   | none =>
@@ -3329,7 +3329,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
   let spellingCandidates : List (String × String) :=
     allStructs.map (fun sd => (sd.name, structCanon sd))
     ++ allEnums.map (fun ed => (ed.name, enumCanon ed))
-    ++ (imports.newtypes ++ localNewtypes).map (fun nt => (nt.name, canonTypeName nt.definedIn nt.name))
+    ++ (imports.newtypes ++ localNewtypes).map (fun nt => (nt.name, canonTypeName nt.definedIn nt.declName))
   let ownSpellings : List (String × String) :=
     (spellingCandidates.foldl (fun acc (sp, c) =>
       if acc.any (·.1 == sp) then acc else (sp, c) :: acc) []).filter (fun (sp, c) => sp != c)
@@ -3366,7 +3366,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
   let ownerCands : List (String × String × String) :=
     allStructs.map (fun sd => (sd.name, sd.definitionName, sd.definedIn))
     ++ (allEnums.filter (·.builtinId.isNone)).map (fun ed => (ed.name, ed.definitionName, ed.definedIn))
-    ++ (imports.newtypes ++ localNewtypes).map (fun nt => (nt.name, nt.name, nt.definedIn))
+    ++ (imports.newtypes ++ localNewtypes).map (fun nt => (nt.name, nt.declName, nt.definedIn))
   let defSummary : String → Option FileSummary := fun defIn =>
     if summary.structs.any (·.definedIn == defIn) || summary.enums.any (·.definedIn == defIn)
        || summary.newtypes.any (·.definedIn == defIn) then some summary
@@ -3384,7 +3384,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
   let closureOwners : List (String × String × String) :=
     closure.structs.map (fun sd => (sd.name, sd.definitionName, sd.definedIn))
     ++ closure.enums.map (fun ed => (ed.name, ed.definitionName, ed.definedIn))
-    ++ closure.newtypes.map (fun nt => (nt.name, nt.name, nt.definedIn))
+    ++ closure.newtypes.map (fun nt => (nt.name, nt.declName, nt.definedIn))
   let methodOwnerCands : String → Bool → List (String × String × String × String) := fun n byLocal =>
     (if byLocal then localOwners else closureOwners).filterMap fun (ln, dn, di) =>
       let sp := if byLocal then ln else dn
@@ -3583,7 +3583,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
           | some snt => canonTypeName snt.definedIn snt.name
           | none => nt.name })
     ++ (imports.newtypes.map fun nt =>
-      { (definerRn nt.definedIn).newtypeDef nt with name := canonTypeName nt.definedIn nt.name })
+      { (definerRn nt.definedIn).newtypeDef nt with name := canonTypeName nt.definedIn nt.declName })
   let ownTypeNames := (summary.structs.map structCanon) ++ (summary.enums.map enumCanon)
   .ok {
     name := m.name
@@ -3756,7 +3756,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
 partial def collectTypeDecls (s : FileSummary) : List (String × String) :=
   s.structs.map (fun sd => (sd.definitionName, sd.definedIn))
   ++ s.enums.map (fun ed => (ed.definitionName, ed.definedIn))
-  ++ s.newtypes.map (fun nt => (nt.name, nt.definedIn))
+  ++ s.newtypes.map (fun nt => (nt.declName, nt.definedIn))
   ++ s.submoduleSummaries.flatMap (fun (_, sub) => collectTypeDecls sub)
 
 /-- Bug 227 (R-0492 slice 6 step 2): the compiler-provided `Result` is a declaration too

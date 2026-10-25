@@ -110,9 +110,10 @@ def EnumDef.typeId? (ed : EnumDef) : Option TypeId :=
       if ed.definedIn.isEmpty || ed.definitionName.isEmpty then none
       else some (.user ed.definedIn ed.definitionName)
 
-/-- A newtype is imported under its own name, so its spelling is its definition name. -/
+/-- Identity from the definition site (bug 243: an import alias changes only `name`). -/
 def NewtypeDef.typeId? (nt : NewtypeDef) : Option TypeId :=
-  if nt.definedIn.isEmpty then none else some (.user nt.definedIn nt.name)
+  if nt.definedIn.isEmpty || nt.definitionName.isEmpty then none
+  else some (.user nt.definedIn nt.definitionName)
 
 /-- R-0492 step 3: the target of an impl block declared beside it (`targetDefinedIn`). -/
 def ImplBlock.targetTypeId? (ib : ImplBlock) : Option TypeId :=
