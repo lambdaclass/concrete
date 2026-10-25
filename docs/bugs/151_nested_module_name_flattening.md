@@ -1,5 +1,13 @@
 # Bug 151 — two nested modules' functions flatten to one name, and the binary calls the wrong one
 
+<!-- bug-ledger
+summary: `a.b_f` and `a_b.f` flattened to one Core name and the binary's `a_b::f()` ran `a.b_f` (found by the Codex review of the interpreter-coverage pass; the interpreter refused the ambiguous call) ((contained by the bug 097/098 E0299 refusal))
+fixtures: error_151_nested_name_flattening.con
+class: 1 — two nested modules' functions flattened to one name
+silent: yes
+exit: 0b
+-->
+
 **Status:** FIXED (contained) — refused at elaboration (E0299, the containment main landed for bugs 097/098 while this record was in review); a spelling of that class
 **Found:** 2026-10-21, by the Codex review of the interpreter-coverage pass (the interpreter's
 call resolution merged the two definitions; checking the binary showed it picks the wrong one).

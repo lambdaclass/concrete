@@ -1,5 +1,13 @@
 # Bug 194 — a function with a result type compiled with a reachable end and no `return`
 
+<!-- bug-ledger
+summary: a function with a result type compiled with a reachable end and no `return` (`fn f() -> Int { let x = 1; }`, an `if` with one returning branch, a falling-through `let ... else`, refused by bug 195); it failed in `llvm-as` natively (`ret void`) while `--interp` ran it. Refused with E0307 in `checkFn`; pinned by `error_194_*.con`. Found by the language specification's patterns chapter
+fixtures: error_194_missing_return_plain.con error_194_missing_return_if.con error_194_missing_return_method.con regress_194_unreachable_end_forms.con
+class: 13 — a function returns a value on every path: no site; the backend verifier noticed
+silent: yes
+exit: 0b
+-->
+
 **Status:** FIXED (branch `wip/bug194`)
 **Found:** 2026-10-23, by the language specification's patterns chapter (`docs/spec/patterns.md`,
 PAT-5's `let ... else` example whose `else` block falls through), on `wip/spec-single-source`

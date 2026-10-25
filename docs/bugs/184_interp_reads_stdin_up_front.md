@@ -1,5 +1,12 @@
 # Bug 184: `--interp` read all of standard input before `main` ran
 
+<!-- bug-ledger
+summary: `--interp` read ALL of standard input before `main` ran (`readBinToEnd` in `Main.interpProgram`, since 728a2a98), so a program that never reads stdin, fed by a pipe that stays open, waited for the writer to close it while the binary returns at once. Stdin is now an `Interp.StdinSource` the `read` builtin pulls from when the program reads. Pinned by two `run_tests.sh` legs with stdin held open under `timeout 10`: `regress_184_interp_stdin_unread.con` (21) and the reading control `regress_184_interp_stdin_read.con` (131)
+fixtures: regress_184_interp_stdin_unread.con regress_184_interp_stdin_read.con
+class: 7 — the interpreter read all of stdin before `main`; the binary reads when the program does
+silent: no
+-->
+
 **Status:** FIXED (branch `train3-interp-stdin`, for landing train 3)
 **Found:** 2026-10-23, on landing train 3 (`wip/train3` at 949d79e9): a `--interp` run fed by a
 pipe that stayed open did not return until the pipe closed.

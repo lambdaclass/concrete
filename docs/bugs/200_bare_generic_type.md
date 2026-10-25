@@ -1,5 +1,13 @@
 # Bug 200 — a generic type named without its argument list was accepted
 
+<!-- bug-ledger
+summary: a generic type named without its argument list (`Box1` for `Box1<T>`) was accepted: a value of it failed in `llvm-as` natively while `--interp` ran the program, and an uncalled signature naming it compiled and ran on both; bug 073 refused only a list of the wrong length. Refused with E0113 in `checkTyDeep` (type parameters in scope shadow declarations); pinned by `error_200_bare_generic_type.con`, `error_200_bare_generic_signature.con`, `regress_200_generic_type_with_arguments.con` and `regress_200_type_param_shadows_generic.con`. Found by the Codex review of the specification's types chapter (TYPE-15)
+fixtures: error_200_bare_generic_type.con error_200_bare_generic_signature.con regress_200_generic_type_with_arguments.con regress_200_type_param_shadows_generic.con regress_200_self_receiver_of_generic_impl.con
+class: 13 — a generic type named without its argument list: arity checked only where a list was written
+silent: yes
+exit: 0b
+-->
+
 **Status:** FIXED (branch `wip/bug200`, based on `main` `1b2dba60`)
 **Found:** 2026-10-23, by the Codex review of the language specification's types chapter (TYPE-15
 claims a named type takes exactly the type arguments its declaration has), then probed on both

@@ -9,6 +9,904 @@ It is intentionally milestone-oriented rather than release-oriented. The project
 For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
+<!-- changelog stamp: 6dec961b26dc4e609d5268447ee34b0a (scripts/gen/changelog.py; add a changelog.d/ fragment, never edit this file by hand) -->
+
+### Large Arrays No Longer Make Compilation or `--interp` Quadratic (bugs 027, 248, 249, 250, 2026-10-25)
+
+Natively, an array literal of n elements took time superlinear in n to compile (`[7; 80000]`:
+14 s, `[7; 200000]`: over two minutes; now under half a second): the backend searched a list of
+every pointer register for each operand, and each element became its own store, a block clang -O2
+schedules in superlinear time. A uniform literal is now filled by a loop and a literal of distinct
+constants copied from a constant. The parser appended an explicit literal's elements one at a time
+(40000 elements: 7 s to parse, now 0.03 s). Writing an element or field of a local array or struct
+in a loop copied the whole aggregate per write and made clang -O2 superlinear in its size (a
+20000-element array: 99 s to compile, now well under a second); such writes and reads now go to
+the element's address. Under `--interp`, an element write, a field write into an array and Vec
+push/set/pop copied the whole array (64.6 s for the regression program, now 5.5 s). Pinned by
+`regress_027_large_array_literals.con`, `regress_248_interp_array_write.con`,
+`regress_249_explicit_array_literal.con` and `regress_250_native_array_writes.con`.
+
+### An Import Alias Names the Imported Type (bug 223, 2026-10-25)
+
+`import m.{P as Q}` gave the importer a type `Q` with none of `P`'s methods, which a `P` returned by
+`m` did not match: Check compared named types, and every pass looked up methods, by spelling
+(`Q_mk` where the impl registered `P_mk`). Types are now compared, and their methods and trait impls
+looked up, by declaration identity (R-0492 step 3): `buildFileSummary` stamps each impl's target
+and each impl method with a `MethodKey` (the target's `TypeId` and the method name), and Resolve,
+Check and Elab select a method by that key before its spelling. Core for an aliased import is the
+Core of the same program without the alias. Pinned by `regress_223_aliased_struct_methods.con`,
+`regress_223_aliased_enum.con`, `regress_223_aliased_generic_and_bound.con` and
+`regress_223_aliased_destroy_impl.con`, native and `--interp`.
+
+### A User `enum Result` No Longer Captures the Builtin in Another Module (bug 227, 2026-10-25)
+
+A user `enum Result` in one module and the builtin `Result<T, E>` in another were one name in Core,
+so the native build of a nested module using the builtin failed in Lower (E0602: variant `Ok` not
+found) while `--interp` ran it, and between top-level modules Resolve answered the builtin with the
+user's enum (E0113). A top-level module's type namespace is now its own environment (with bug 230),
+and Core spells a user `Result` by its module (`outer_Result`, its methods with it) whenever another
+module can see the builtin, which keeps its name (R-0492 slice 6). Pinned by
+`regress_227_nested_builtin_result.con`, `regress_227_toplevel_builtin_result.con` and
+`regress_227_user_result_methods_beside_builtin.con`, natively and under `--interp`.
+
+### A Module May Write Only the Types Its Environment Holds (bug 230, 2026-10-25)
+
+Resolve checked a top-level module's written types against every module's type names, and its
+children's aliases, while Check gives the module its own declarations and its imports. A cast to
+another module's alias, or a child's, that the module never imported passed Resolve and made the
+backend panic (`unknown named type`). Every module's type namespace now comes from one definition,
+`Resolve.moduleTypeEnvironment`, plus what its imports transport (R-0492 slice 6), and the cast is
+refused with E0108. The same change lets a module use the builtin `Result` when another top-level
+module declares its own `enum Result` (the top-level half of bug 227). Pinned by
+`error_230_toplevel_foreign_alias_cast.con`, `error_230_parent_names_child_alias.con`,
+`regress_230_toplevel_type_environment.con` and `regress_227_toplevel_builtin_result.con`.
+
+### A Public Constant Can Be Imported (bug 233, 2026-10-25)
+
+MOD-2@1 lets a `pub` declaration cross a module boundary by import, but `import cfg.{BASE}` of a
+`pub const` was refused (contained since 2026-10-24 with the reason): Core named a constant by its
+spelling, and Lower inlined it from the importing module's own tree. A constant is now imported by
+its identity (R-0492 step 4): the import binds its `ConstId`, Core references it by its defining
+module (`cfg::BASE`), and Lower and the interpreter inline its initializer with the defining
+module's constants in scope. A trait import is still refused with its reason (traits are
+module-local), a constant imported beside a local constant of one spelling is E0299, and an
+imported initializer that calls or names a function is refused where it would be inlined (its
+callees are still spellings; callable identities are a later R-0492 step). Pinned by
+`regress_233_import_constant.con`, `regress_233_nested_import_constant.con`,
+`regress_233_import_constant_scope.con`, `regress_233_nested_alias_constant.con`,
+`error_233_import_constant_collides_local.con` and the project fixture, native and `--interp`.
+
+### Gate Selection Reads Map Notes as Text (bug 237, 2026-10-25)
+
+The impact selector counted a script name written in a keyed array's value (a bug-corpus note, an
+exemption reason) as a call, so a corpus note naming the docs-drift gate made the corpus runners
+look as if they read `docs/`, and a docs-only diff selected 19 gate commands in CI. A keyed
+array's values are now judged by how the script uses them: text names nothing, a file read is a
+read, anything else stays a call. Pinned by the gate-selection gate's "text is not a call"
+controls.
+
+### Four Spelling Defects Around Imports (bugs 242, 243, 245 and 246, 2026-10-25)
+
+The probes of bug 223's fix found two more cases of an import joined by spelling, both refusals of
+valid programs. A type in an imported signature is read in the importer's environment, so the
+import closure's copy of it hides the importer's own type of that spelling (bug 242, E0252); and an
+aliased newtype import binds no name (bug 243, E0106). Both are owned by R-0492/R-0514 and pinned as
+open-bug reproducers. The review of bug 233's fix
+found a third: the interpreter scopes a module constant's bare spelling program-wide, so it refuses
+two modules' private constants of one name that the binary keeps apart (bug 245). A fixture for that
+review also found an imported alias whose target is another alias of its module arriving as a
+type the importer cannot name (bug 246, fixed: the target is expanded at the import).
+
+### Bug 244: A Killed Gate Run No Longer Wedges The Repository (2026-10-25)
+
+Killing a gate run killed only the runner. Its gates, the compilers they started and the harness
+copies they worked in kept running under init, and the repository lock refused every later run
+until someone removed it by hand. A run now executes as one process group of its own session
+(`scripts/tests/lib/gate_session.py`). A signal to the runner terminates the whole group: SIGTERM,
+then SIGKILL after a grace period. The lock records the group, and a later run reclaims it
+automatically once the kernel reports the group empty. While any member, or a campaign group
+registered in the lock, is still alive, the lock still refuses. The pre-push hook forwards its
+signals to the run. Structural class 16 (artifacts at paths no run owns).
+
+### Markdown Links Checked to the Anchor, and in CI (bug 252, 2026-10-25)
+
+The Markdown-link check now checks anchors: a link to `file.md#section` must name a heading of that
+file by its GitHub slug (repeated headings take `-1`, `-2`) or an explicit `<a id>`, and same-file
+anchors are checked too. Links in `changelog.d/` fragments resolve against the repository root, where
+the fold places them (see [changelog.d/README.md](changelog.d/README.md)). The check was reached only
+from the Makefile; it is now a workflow step in the build-free job, every diff selects it before a
+push, and gate registration also enumerates Python gates. See
+[the bug record](docs/bugs/252_doc_link_check_unchecked_and_unrun.md).
+
+### Module-Level Types And Constants Are Found By Declaration Identity (R-0492 slice 6, 2026-10-25)
+
+Four bugs open when the slice started had one cause: a module-level declaration was found again by
+its spelling, in tables whose scope differed from pass to pass. The design note
+[DECLARATION_IDENTITY.md](docs/compiler/DECLARATION_IDENTITY.md) gives the fix: the `TypeId` and
+`ConstId` the front end already stamped on every declaration (defining module plus declared name,
+never changed by an import alias) are compared instead of spellings, and a module's type
+environment says which declaration a spelling denotes there. Its four steps have landed: one type environment per module (bug 230 and the top-level half of bug 227),
+Core spelling a user `Result` apart from the builtin (the rest of bug 227), Check comparing types
+and finding methods and trait impls by identity (bug 223), and an imported constant referred to by its `ConstId`
+(bug 233). Resolve now computes one type environment per module, but Check and Elab still build
+their own; constants within one module tree are still named by spelling (bug 132's refusal remains
+there); and a constant whose initializer calls or names a function is not inlined across modules.
+The design note records these limits. Each bug has its own entry. Bugs 242, 243 and 245, found while reviewing these fixes,
+stay open under R-0492/R-0514.
+
+### Bend And Roc Comparative Research Recorded (2026-10-24)
+
+Added the [Bend/Roc research record](research/meta/bend-roc-lessons.md), covering
+formal requirements versus contracts, agent/proof workflows, checking-speed
+benchmark limitations, runtime and GPU design, FFI and build-time authority,
+opportunistic mutation, compiler engineering, and proof-guided optimization.
+It includes the requested Roc video's timestamped discussion and links to the
+reviewed sources, benchmark scripts, code, and Concrete design references.
+
+The note filters every possible adaptation through Concrete's explicit ownership,
+authority, execution, and evidence philosophy. Its 27 considerations remain research
+while the owner is deciding. The roadmap ends with [open research questions](ROADMAP.md#open-research-questions-bend-and-roc),
+not planned features or implementation tasks. This records completed research,
+not adopted work. The current queue and existing task requirements are unchanged;
+upstream performance measurements were not independently reproduced.
+
+### Resolve Checks Every Nested Submodule (bug 217, 2026-10-24)
+
+Resolve walked only the modules of the top-level list, so a module nested two deep, a module written
+after `main`, and every `mod x;` file of a project (std included) produced no Resolve diagnostics: a
+cast to an unknown type there reached the backend (a panic natively; `--interp` ran it), and
+undeclared names or unknown annotation types met Check's codes (E0201, E0220) instead of Resolve's
+(E0100, E0108). Resolve now walks the whole module tree, each submodule resolved against the
+environment Check gives it: its imports, its own declarations and its sibling modules' types. Found by the Codex review of bug 215.
+Pinned by the `error_217_*.con` and `regress_217_*.con` fixtures and a project leg.
+
+### The Proof Theorems Are About The Extractor The Compiler Runs (bug 219 follow-up, 2026-10-24)
+
+`cExprToPExpr` and `cStmtsToPExprK` no longer repeat the extraction arms of `cExprToPExprImpl` and
+`cStmtsToPExprKImpl`; each is a bare delegation. The copies dated from when the implementation was a
+`partial def` and the ProofSoundness theorems needed reducible arms. The implementation is an
+ordinary `def` now, so the preservation theorems unfold its equations, and every extraction rule
+exists once. `check_proofcore_callable_identity.sh` fails if a copy reappears (two controls), and
+mutation 31 is killed against the single copy.
+
+### Resolve Admits What Check Admits: Namespaces, Builtin Option, Child Newtypes (bug 229, 2026-10-24)
+
+Resolve refused three kinds of valid program: a function declared before a same-named enum made
+`E::A` "not an enum" (E0104), a user `enum Option` hid the builtin `Option<T>` (E0113) although Check
+and Elab never withhold it, and a child module's newtype was an unknown type (E0108). Type positions
+now search the type namespace only and consult aliases and enums as Check does (an enum named
+`Option` is always the builtin), and children's newtypes are known
+types. Found by the Codex reviews of bug 217's fix. Pinned by five `regress_229_*.con` fixtures.
+
+### A Bound Must Name a Declared Trait (bug 231, 2026-10-24)
+
+A generic parameter's bound naming an undeclared trait (`fn id<A: NoSuchTrait>`) was accepted: no
+pass resolved a bound's trait names, so an unused generic compiled and a call met only E0241. In a
+nested module a bound on the enclosing module's trait was satisfied by spelling at the call while
+its methods were unknown in the body. Resolve now refuses a bound that is not `Copy`, `Destroy` or
+a trait of its module (E0125, MOD-1). Found by the differential hunt; pinned by
+`error_231_unknown_bound_trait.con`, `error_231_enclosing_trait_bound.con` and
+`regress_231_bounds_name_module_traits.con`.
+
+### Discovery-Signal Controls Follow the Record (bug 232, 2026-10-24)
+
+`check_docs_drift.sh` checked the discovery signal's controls against a literal streak (1 after a
+quiet batch, 0 after a token batch), true only while the record's last counting batch was not quiet,
+so recording a quiet batch failed the gate. The controls now read the record's streak first and
+expect one more after a quiet batch and no change after a token batch.
+
+### Importing a Public Constant or Trait Is Refused With Its Reason (bug 233, 2026-10-24)
+
+`import cfg.{BASE}` of a `pub const`, or of a `pub trait`, was refused as "'BASE' is not public in
+module 'cfg'", which it is. Traits are module-local and cannot be imported; a constant cannot be
+imported yet, because Core names a constant by its spelling (bug 132). Both are now refused with
+that reason (E0126 at Resolve, E0323 / E0423 in Check and Elab). Importing constants stayed open
+(bug 233) until constants carried their declaration's identity (R-0492 slice 6, fixed 2026-10-25).
+
+### The Interpreter's Calls No Longer Cost the Call-Stack Depth (bug 234, 2026-10-24)
+
+Under `--interp` a recursion of depth n took time n² (depth 64000: 44 s): every call, branch,
+`match` arm, block and borrow read the environment's length, and the environment, one list shared by
+every frame, was walked to count it. The environment now keeps its length, and the same recursion
+takes 0.1 s. Pinned by `regress_234_interp_deep_recursion.con` (depth 100000 under `--interp` within
+20 s).
+
+### Array Literals and Array Reads Are No Longer Quadratic (bugs 235 and 236, 2026-10-24)
+
+Elab built an array literal's element list by appending one element at a time, so `[v; 40000]` took
+4 s to elaborate (and `[v; 200000]` over a minute) for the binary, `--interp` and every report; it
+now takes milliseconds. Under `--interp`, reading `a[i]` converted the array to a list and walked
+it, so each read cost the array's length (400000 reads of a 10000-element array: 35 s, now 0.6 s).
+Pinned by `regress_235_interp_array_read.con` and `regress_236_array_repeat_literal.con`.
+
+### Four Open Bugs With Owners: 114, 122, 216 And 226 (2026-10-24)
+
+These are open, each pinned by an open-bug reproducer and assigned a structural owner:
+
+- [bug 114](docs/bugs/114_submodule_intrinsic_links_c_symbol.md): an intrinsic declared in a nested
+  submodule and called by path lowers to a C call and fails to link, because an intrinsic is
+  recognized by the call's spelling rather than by the resolved declaration. Owner: R-0492.
+  Found by the examples-health pass, 2026-10-20.
+- [bug 122](docs/bugs/122_builtin_enum_canonical_layout.md), silent: the builtin `Option` and
+  `Result` are each emitted as one LLVM union sized for the largest instantiation, while the
+  compiler lays out each instantiation (and a user enum of either name) by its own size, so
+  aggregate copies can move or overrun fields. Contained by `check_enum_union_layout.sh` leg 5 until
+  R-0502 (one `Layout` authority) with R-0492. Found by bug 121's layout probe, 2026-10-20.
+- [bug 216](docs/bugs/216_field_write_non_mut_binding.md): a write into a field, a nested array
+  element or a heap cell of a binding not declared `mut` is accepted, while `&mut` of the same place
+  (E0233) and a direct element write (E0217) are refused; both backends agree. It needs the decision
+  whether OWN-10 covers such writes, then R-0499. Found by the post-R-0492 differential hunt,
+  2026-10-23.
+- [bug 226](docs/bugs/226_submodule_imports_private_function.md): a submodule (a module written
+  after `main`, any `mod x;` file, every std module) may import another module's private function or
+  `extern fn`, which MOD-2@1 and Resolve refuse from a top-level module (E0111); both backends agree.
+  The fix needs a visibility for std's internal `std.libc` imports. Owner: R-0492/R-0514. Found by
+  bug 217's fix, 2026-10-24.
+
+### The Proof Model Computes More Operators (2026-10-24)
+
+The extracted ProofCore model now has a value for more of the operators programs use, with the
+semantics that ARITH-3 and ARITH-4 state ([PROVABLE_V1.md](docs/verification/PROVABLE_V1.md)):
+
+- `div`, left shift and bitwise and at every integer width, and wrapping add at every width.
+  Division is stuck on a zero divisor and, signed, on `MIN / -1`, and a shift count that is
+  negative or at least the width is stuck, so these are stuck exactly where the runtime aborts.
+  The two forced-width cases written before them keep their earlier values: signed `i32` division
+  at `MIN / -1` and `u32` left shift by at least 32 have a model value where the runtime aborts, so
+  a proof about them is a partial-correctness claim;
+- saturating add and subtract, clamped to the type's range;
+- `&&` and `||` as conditionals, so the right operand is evaluated only when it decides the result,
+  as at runtime;
+- unary `-` (as `0 - x`, so at `MIN` the model has a value where the runtime aborts, which makes a
+  proof about it partial-correctness) and `!`.
+
+`check_model_diff.sh` gains leg O: one function per new operator class, each compared between the
+model and the interpreter, with edge cases pinned and perturbed. Landed in train 13, where the binary-operator
+preservation proof was restated to split out `&&` and `||`.
+
+### Phase 7 Workload 10: stackvm (2026-10-24)
+
+`examples/stackvm` is a bytecode stack VM with its assembler, bytecode codec and load-time
+verifier, and disassembler (`asm`, `dis`, `run`, `exec`, `check`; 13t exit codes), written over a
+23-variant instruction enum, a generic bounded `Stack<T>`, the `Encode` and `Render` traits and
+`defer` cleanup. `scripts/tests/check_stackvm_differential.sh` compares every output (assembled
+bytes, listing, program output, stderr diagnostic, exit code) byte for byte with an independent
+Python implementation (`scripts/tests/lib/stackvm_ref.py`) on the test programs, 120 generated
+programs, a mutation of each, 120 token-edge programs and 120 corrupted bytecode files; ten `@run` cases agree natively and
+under `--interp`. The workload found bugs 222, 223, 224, 225 and 228 and no miscompile; 223 stayed open until
+R-0492 slice 6 fixed it on 2026-10-25.
+`examples/stackvm/FRICTION.md` maps its friction to the open language decisions.
+
+### An Imported Enum Brings Its Impls (bug 222, 2026-10-24)
+
+The struct and newtype import paths each selected the imported type's impl blocks and trait
+impls; the enum paths (by name and through the transitive closure) did not, so every bound needing a trait impl
+on an imported enum was refused (E0241) outside its module. One helper now selects what travels
+with an imported type, for every type kind. Pinned by `regress_222_imported_enum_impls.con`.
+
+### Diagnostics: Recovered `let mut` And Refused Bounds (bugs 224 and 225, 2026-10-24)
+
+A `let mut` whose initializer failed to check was recovered as immutable, so later assignments to
+it got a false E0217; it keeps its mutability now. A refused `Copy` bound named every builtin
+type `<type>`, and no E0241 carried a position; every refused bound now names its type and points
+at the call. Pinned by `error_224_failed_let_keeps_mutability.con` and
+`error_225_bound_names_builtin_type.con`.
+
+### Interpreter Loops Are Linear In Their Iteration Count (bug 228, 2026-10-24)
+
+`--interp` carried each loop iteration's bindings into the next, so every lookup of an outer
+variable walked all earlier iterations' bindings and a loop was quadratic (stackvm's dispatch loop:
+2000 steps in 222 s, now 2.5 s). Each iteration's bindings are dropped before the next. Pinned by
+`regress_228_interp_loop_env.con` (`--interp` within 20 s).
+
+### Trait Impl Selection Is A Function: Bug 186 (2026-10-23)
+
+Trait resolution now has exactly one answer or a refusal. Before, the compiler checked that an
+impl's trait existed and that its methods matched, but nothing checked that the impl was the only
+one. The parser dropped an impl target's type arguments, so `impl Tr for Box2<i32>` implemented
+`Tr` for every `Box2`, and a `Box2<bool>` ran the `i32` body: silent wrong code, natively and under
+`--interp`. A generic impl beside a specialized one compiled to whichever body was emitted first.
+Duplicate impls, and two traits of one type that both declare a method, failed only in `llvm-as`,
+or in the interpreter by declaration order. A call through `T: A + B` took the first bound that
+declared the method.
+
+A coherence judgment (`Concrete/Check/Coherence.lean`) now runs over the whole program before any
+method table is built. It identifies traits, impl targets and methods by typed identity, never by
+spelling, and refuses duplicate impls (E0590), overlapping impls (E0591), orphan impls (E0592,
+Austral's instance locality: an impl lives with its trait or its type), impl targets that are not
+the type applied to the impl's own parameters (E0593), and one method name supplied by two impls of
+a type (E0594). Check refuses a call through bounds that more than one bound trait answers (E0595).
+The rules are TRAIT-1 to TRAIT-7 in the new spec chapter `docs/spec/traits.md`. The interpreter
+also dispatches trait calls on primitive receivers now (`impl Tr for Int`). `rule_impact.sh` found
+no changed outcome in the 2158-unit corpus. Fixtures `error_186_*` and `regress_186_*` (one program
+in two orders; binary equal to `--interp`). Follow-ups: R-0548 (method tables keyed by `MethodKey`)
+and R-0549 (qualified trait-method calls, pull-gated).
+
+### One Diagnostic Code Per Error: Bug 203 (2026-10-23)
+
+An `append()`, `print()` or `println()` argument of an unsupported type is now reported as E0421
+(TYPE-10). Check refused it with no code, and Elab's copy of the refusal used E0420, the code of a
+ghost binding read at run time (CON-4), so neither identified the rule. Pinned by
+`error_203_append_unsupported_argument.con`, `error_203_print_unsupported_argument.con` and
+`error_203_ghost_read_at_runtime.con`.
+
+### A Bound On A Primitive Type Is Checked: Bug 204 (2026-10-23)
+
+A type argument such as `Int` for a parameter bounded by a user trait now needs an impl of that
+trait (`impl Tr for i64` serves `Int` too), or the call is refused with E0241. Before, the check
+skipped primitive types: an unused bound compiled and ran, and a used one failed only in the
+backend. Pinned by `error_204_primitive_bound_unchecked.con`, `error_204_primitive_bound_unused.con`
+and `regress_204_primitive_bound_satisfied.con`.
+
+### Finite Size Through Generic Instantiations: Bug 205 (2026-10-23)
+
+A struct that holds itself by value through a generic instantiation (`struct Node { w: W<Node> }`)
+is now refused with E0583, as a direct cycle already was. Before, the check stopped at
+instantiations: the native build failed in `llvm-as` while `--interp` ran the program. Pinned by
+`error_205_recursive_through_instantiation.con` and `regress_205_instantiations_without_cycle.con`.
+
+### Every Diagnostic Has A Code: Bug 206 (2026-10-23)
+
+Over thirty compiler refusals had no diagnostic code: twenty Check errors built from a bare message,
+eleven diagnostics written without one, and every module-loading failure. Each now names the code of the rule it enforces, with
+new codes E0122 – E0124 and E0312 – E0321 and three new rules (MOD-4, module files; PAT-8, an
+enum destructuring `let` is a block statement; STMT-10, test functions). `Diagnostic.code` no longer has a default, so a code-less
+diagnostic does not typecheck, and `check_diagnostic_codes_present.sh` and the `run_err` output
+check in `run_tests.sh` keep it that way.
+
+### check_binder_refs.sh Reports A Verdict Under Every Failure (bug 207, 2026-10-23)
+
+The binder-references gate's Lean probe threw on its first failed check, so the gate stopped
+before its verdict line. Under mutation families 55 – 57 the harness therefore recorded "no
+verdict" instead of a kill. The probe now prints a FAIL line and continues. The gate counts every
+probe outcome (one that does not elaborate, emits a diagnostic, or prints fewer than its eight
+verdicts is a FAIL) and always reaches its summary line. The three families are killed again.
+
+### A Fn-Typed Local Is No Longer Renamed To A Same-Spelled Import (bug 208, 2026-10-23)
+
+Elab's import-rename pass rewrote every fn-typed identifier whose spelling an import maps, so a
+fn-typed parameter spelled like an imported function was replaced by that function when used as a
+value. The binary and `--interp` agreed on the wrong result (141 instead of 42). This was bug 050's
+recorded remaining gap. Core references now carry their binding identity (R-0492 step 3), and an
+identified local is never renamed. Pinned by `regress_208_fn_local_named_like_import.con`.
+
+### Bug 209: A Codex Review No Longer Leaves A Stale `index.lock` (2026-10-23)
+
+A `codex exec --sandbox read-only` review runs git in the caller's worktree, and its `git status`
+took the worktree's `index.lock` to refresh the index; the sandbox did not prevent it. A reviewer
+command stopped mid-refresh left the lock behind, 0 bytes, and the next commit there failed.
+`scripts/review/review.sh` and the by-hand `/creview` rounds now run Codex with
+`GIT_OPTIONAL_LOCKS=0`, so git reads the index without writing it. `check_review_tool.sh` requires
+every reviewer call to see the variable. Structural class 16 (artifacts at paths no run owns).
+
+### Arithmetic On A Struct, Enum Or Newtype Is Refused (bug 210, 2026-10-23)
+
+CoreCheck's operator rules read every named type as a type parameter and skipped TYPE-6, so `p + p`
+on a struct and `e * e` on an enum compiled and ran natively while `--interp` stopped, and a newtype
+sum ran under `--interp` while the binary failed in `llvm-as`. One predicate, `isOpaqueOperandTy`,
+now decides which types an operator or cast rule defers to the instantiation, and a declared
+struct, enum or newtype is refused with E0501. Found by the fuzz farm's mutation generator. Pinned by
+six `error_210_*.con` fixtures (two declare the type in a child module).
+
+### Generic Arithmetic Is Checked On Each Instance (bug 211, 2026-10-23)
+
+A generic `+` instantiated at a struct or enum reached the backend, because CoreCheck
+defers a type parameter's operator to the instantiation and only comparisons had a post-Mono
+re-check. `verifyOperatorTypes` now holds every monomorphized arithmetic, wrapping, saturating,
+bitwise and shift operator to TYPE-6 (E0501, post-mono). Pinned by `error_211_generic_add_struct.con`,
+`error_211_generic_mul_enum.con`, `error_211_generic_rhs_struct.con`, `error_211_generic_mixed_width.con` and `regress_211_generic_add_numeric.con`.
+
+### A Match Arm After A Catch-All Is Not Lowered (bug 213, 2026-10-23)
+
+An arm that follows an unguarded binding or `_` arm in Core order (CoreCanonicalize keeps unguarded catch-alls last, so these are further catch-alls) was lowered into a block with no predecessor,
+so the binary failed SSA verification (E0703) while `--interp` ran the program. Lower now stops at
+the first unguarded catch-all arm, since the arms after it can never be selected. Found by the fuzz
+farm's mutation generator; pinned by `regress_213_arm_after_binding_arm.con`.
+
+### An Unknown Type In A Cast Or Type-Argument List Is Refused (bug 215, 2026-10-23)
+
+Resolve checked written types in annotations, signatures and fields but not inside expressions, so
+`x as Nope` reached the backend (a panic natively; `--interp` ran it) and an unknown type in a
+type-argument list could compile. Cast targets and the type-argument lists of calls, method calls,
+static method calls, struct literals and enum literals now go through the same check (E0108). Found
+by the fuzz farm's mutation generator. Pinned by four `error_215_*.con` fixtures.
+
+### A Module Declares Each Name Once (bug 218, 2026-10-23)
+
+MOD-3's check compared a module's imports with its functions but never its declarations with each
+other, so two structs of one name compiled with the first silently winning, a struct and an enum,
+or two aliases of one name were accepted, two constants failed at `lower`, and two functions of one name
+failed in `llvm-as`. `declarationCollisions` now refuses the later declaration with E0299; callables,
+constants and types are separate namespaces. Pinned by five `error_218_*.con` fixtures and
+`regress_218_type_and_value_namespaces.con`.
+
+### Mutation 31 Mutates The Extractor The Compiler Runs (bug 219, 2026-10-23)
+
+Mutation family 31 restores bug 061 (a parameter application extracted as a definition call). Its
+anchor matched the `.applyVar` arm of `cExprToPExpr`, the non-partial wrapper that only the
+ProofSoundness theorems read, so the mutant changed nothing a gate executes and survived. The
+anchor now names the arm of `cExprToPExprImpl`, and `check_proofcore_callable_identity.sh` kills it.
+
+### A Radix Prefix Needs A Digit (bug 220, 2026-10-23)
+
+`0x`, `0b` and `0o` with no digit of their radix lexed as the literal 0, so `return 0x;` compiled and
+returned 0. The lexer now reports a lexical error (E0001). Pinned by three `error_220_*.con` fixtures
+and `regress_220_radix_literals.con`.
+
+### A Call's Type-Argument List Matches The Callee (bug 221, 2026-10-23)
+
+An explicit type-argument list at a function, method, function-pointer or trait-bound call was zipped with the callee's type
+parameters, so extra arguments were dropped silently and a short list left parameters unbound. A
+list of the wrong length is now refused with E0322 (TYPE-9). Pinned by four `error_221_*.con`
+fixtures and `regress_221_exact_type_arguments.con`.
+
+### An Unidentified Checker Names Its Cause (2026-10-23)
+
+When the Lean checker's identity cannot be established, every report now says why. Before, the
+receipts and proof-status reports printed a bare `Checker: UNIDENTIFIED` and withheld every receipt.
+On 2026-10-23 that hid a gate host whose non-login PATH lacked `shasum`, which the build digest is
+computed with, and 17 receipt, replay and checker-identity gates failed with nothing pointing at the
+missing tool.
+
+`ReplayEnvironment.checker` is now a `CheckerResolution` (`identified` or `unidentified why`) rather
+than an `Option CheckerIdentity`. The reason comes from where identification failed: `shasum` that
+cannot run, exits non-zero or prints the wrong digests; no identity line or more than one; the
+loaded-image refusals; a checker process that could not start or exited non-zero. Both refusals
+(`ReplayEvidenceRefusal.checkerUnidentified`, `IssueRefusal.checkerUnidentified`) carry it into
+`Checker:`, `Checker now:`, every withheld or refused receipt, the policy line of the consumer's
+fresh re-check, and the JSON report (`checker_unidentified_reason`; `"checker": "UNIDENTIFIED"` is
+unchanged). An unidentified checker still mints nothing and is current against nothing.
+
+`check_checker_identity.sh` asserts the named cause for each refusal stub and adds a leg with
+`shasum` stripped from PATH (17 legs). The two identity mutation families re-anchor on the new
+refusal lines and are still killed by that gate.
+
+### CI: Self-Hosted Runners Keep Their Lean Toolchain Instead Of Re-Downloading It (2026-10-23)
+
+Every CI job restored `~/.elan` from the GitHub Actions cache: a 2.3 GB archive downloaded at
+13-16 MB/s, 2-4 minutes per job (median 176 s, 48 jobs over trains 9-11, 151 runner-minutes, about a
+third of the Hetzner runner time in a train). On the self-hosted runners the runner user's home
+persists and already held those toolchains. The `Cache the Lean toolchain (~/.elan)` steps now run
+on GitHub-hosted runners only; on self-hosted runners lean-action and the 4.35 leg's
+`elan toolchain install` add a missing toolchain once. The `.lake/build` cache, which hands the Build
+job's output to every gate job, is unchanged.
+
+Branch health, which runs on every push to every branch (about 500 runs a day), moves to its own
+self-hosted pool, label `concrete-light` (two runners on concrete-ci-2). On CI's `concrete` pool those
+runs took 20-92 runner-minutes out of each train window, and labels give no priority.
+
+### The Language Specification Is One Checked Document (2026-10-23)
+
+[docs/spec/](docs/spec/README.md) is now the one written statement of the Concrete language, in
+the Austral tradition of a language that fits in one auditable document. Each area has a chapter,
+and every rule and definition has a stable, versioned ID (`REF-3@1`) that other documents, the
+website and the compiler cite instead of restating it. The normative definition is Core's
+semantics in Lean; an entry links the Lean definition it describes where one exists, and until then
+its sentence is provisional and the missing link is tracked debt. Authority moves one chapter at a
+time: a migrated chapter replaces the area's old prose home, which becomes a design record.
+
+Fifteen chapters exist. `references.md` and `scope.md` are the pilots and carry the exit 2i rules;
+`patterns`, `ffi`, `ownership`, `pipeline`, `types`, `memory`, `trusted`, `statements`,
+`arithmetic`, `contracts`, `modules`, `syntax` and `traits` are migrated from their earlier
+documents (`PIPELINE_CONTRACTS.md`'s fixtures became spec examples and its gate was retired). `ids.tsv` registers every ID ever allocated,
+append-only, and `codes.tsv` classifies every diagnostic code.
+
+`scripts/spec/spec.py` is the one parser, and `check_spec.sh` (CI) is the gate, with negative
+controls. It checks the format and the ID history (no ID removed, no sentence hash changed, states
+move only forward), runs every example as its entry states, on both consumers unless the entry
+exempts the interpreter, compares extracted scalar functions on boundary inputs between the Lean
+model and the interpreter for non-pending, non-project accepted and abort examples
+(`--report model-diff`), requires reject
+examples to pair with the rewrite they accept, classifies every code, resolves each `Enforced by:`
+and `Semantics:` site to a declaration carrying a `spec:` comment, regenerates the manifests
+(`tests/rules/exit_2i.tsv` comes from the spec), and refuses a normative sentence restated outside
+`docs/spec/`. The website's reference pages and the spec's pages with a rule index are generated
+at build time (`scripts/gen/site_reference.py`; the tracked copies had all drifted), and
+`check_site_generated.sh` keeps them generated.
+
+### The Backends Key Locals By Binding Identity (R-0492 step 4, 2026-10-23)
+
+The interpreter, Lower, Mono, CoreCheck, the post-mono reference-binding verifier and the proof
+model's extraction now find the binding a Core local denotes by its identity (`CLocal.key`: the
+`LocalId` the local walk minted, or the Core name of a compiler temporary), one backend per slice.
+`Callee.indirect` carries the binding. The `CLocal -> String` coercion is removed, and so are
+`CLocal`'s equality, hash and order on the spelling, so a consumer says `.key` or `.name`.
+ElabVerify also runs after Mono, since Lower reads post-Mono Core. Loop-boundedness matches the
+stepped variable by identity. Core, reports and interpreter output are byte-identical on the
+corpus; SSA and LLVM differ only in register numbering on seven programs (contract 5 in
+`docs/compiler/VERIFIED_PIPELINE.md`). `check_local_identity.sh` gains compile-fail legs F9 – F13.
+
+### Elab And Core Name Locals By Binding Identity (R-0492 steps 2 and 3, 2026-10-23)
+
+Step 2: Elab no longer keeps its own name-keyed scope. It resolves every local through the table
+of the one lexical walk the checker already used (R-0492 slice 1), so no front-end pass decides
+by spelling which binding a name denotes. The Core it produces is unchanged: `--emit-core` is
+identical on all 1474 corpus files, and fingerprint and subject-fact reports are identical on 111
+example entry points. One intended difference: a parameter spelled like Elab's destructure
+temporary is no longer captured by it.
+
+Step 3: Core's local binders and references are `CLocal`s, a Core name plus the walk's `LocalId`,
+and a function records its parameters' identities. `ElabVerify`, which runs inside
+`Pipeline.elaborate`, refuses Core whose identities and names disagree: a binder identity already
+visible where it is introduced, a reference whose identity and spelling name different bindings or
+that a newer binder shadows, a reference without an identity that spells a visible source binding,
+or missing parameter identities. Elab's renaming (the bug 045 / 087 class) is therefore checked on
+every compile, not only by tests. A name does not coerce to a `CLocal`, so a string-literal pattern
+on a Core binder is a type error. Step 3 also closed bug 208.
+
+`check_local_identity.sh` gains legs E (the exact Core-name profile of the edge cases) and V (Core
+identities and ElabVerify forgeries). Mutation families 99 (Elab ignores the walk's shadow fact)
+and 100 (Elab drops a reference's identity) join the inventory. The slice
+contracts are contracts 3 and 4 in [VERIFIED_PIPELINE.md](docs/compiler/VERIFIED_PIPELINE.md).
+
+### A Constant Before An `if` / `while` / `match` Block Gets An Explaining Diagnostic (bug 212, 2026-10-23)
+
+In a control-flow head an uppercase name followed by `{` is read as the start of a struct literal,
+so `if n > LIMIT { … }` with a module constant was refused with `expected }, got =`, pointing inside
+the block. The E0001 now says that `LIMIT {` was read as a struct literal and names the
+parenthesized form (`if (n > LIMIT) { … }`). The case rule, which was in neither the grammar nor
+the specification, is written into `grammar/concrete.ebnf` and SYN-1; the accepted language is
+unchanged, and whether a head should admit a struct literal is left open. Found by Phase 7
+workload 9 (`examples/lzpack`). Pinned by `error_212_const_in_{if,while,match}_head.con` and
+`regress_212_parenthesized_const_head.con`.
+
+### Each Leaking `return` Is Named In Its E0208 (bug 214, 2026-10-23)
+
+A linear binding left unconsumed by two `return`s produced two byte-identical refusals at its
+declaration, naming neither exit. Each refusal now carries a related span on its `return`
+(`'b' is still unconsumed when this `return` leaves the function`). Which programs are refused is
+unchanged. Pinned by `error_214_two_returns_leak.con`.
+
+### Phase 7 Workload 9: lzpack (2026-10-23)
+
+`examples/lzpack` is an LZSS + PackBits RLE compressor and decompressor in a CRC-checked container
+(`c [-r]`, `d`, `t`, `selftest`; 13t exit codes). `scripts/tests/check_lzpack_differential.sh`
+compares its compressed streams byte for byte with an independent Python encoder of the same
+specification (`scripts/tests/lib/lzpack_ref.py`) over real text, source, binary and synthetic
+edge inputs, decodes the reference's streams, and checks corrupt streams and exit codes (58
+checks); six `@run` cases agree natively and under `--interp`. The workload found bugs 212 and
+214 and no miscompile. `examples/lzpack/FRICTION.md` maps its friction to the open language
+decisions.
+
+### Working Rules While Validation Runs, And A Lean-Backend Research Proposal (2026-10-22)
+
+The project's [CLAUDE.md](CLAUDE.md) states how work continues while remote CI or a push hook
+runs: continue the next authorized task on a separate branch and worktree; keep the candidate under
+validation fixed; run at most two heavy runs per machine (R-0543); inspect the logs before
+diagnosing a CI failure; and record results against exact SHAs, keeping passed, failed, skipped,
+cancelled and incomplete apart.
+
+[lean-backend-architecture.md](research/compiler/lean-backend-architecture.md) is a research
+proposal for the standalone `lean-compiler-backend` project: keep full QBE 1.3 compatibility as its
+first complete milestone while establishing function isolation, explicit semantics, typed lowering
+boundaries and reproducible artifacts, with pure compile and verify operations per function and a
+checked artifact that records exactly which properties were established. It changes neither that
+project's roadmap nor Concrete's implementation.
+
+### CI Tiers, Self-Hosted Runners And A Shared Lean Build Seed (R-0540, R-0541, R-0546, 2026-10-22)
+
+The CI workflow's jobs are in two tiers. The landing tier is what a merge candidate needs and runs
+on every push to main, pull request and dispatch. The campaign tier (the mutation plan, its 24
+shards and aggregate, the nightly differential fuzz, the clean-checkout proof replay and the
+multi-kernel mutation step) runs only in a dispatch with `campaign=true`; it gates qualification,
+not merges. The language-surface job, about 80 minutes in one job, is split by measured step time
+into four jobs of about 20 minutes, so the critical path is `Build` then `Proof evidence gate`
+(about 60 minutes, from about 85). The tiers are listed in the roadmap's promotion pipeline.
+
+The Ubuntu jobs can run on the maintainers' servers. The repository variable
+`CONCRETE_SELF_HOSTED` routes the landing tier, and `CONCRETE_SELF_HOSTED_CAMPAIGN` routes the
+campaign tier separately. A `pull_request` event never runs on a self-hosted runner, whatever the
+variables say, because the repository is public. Setup, security rules and how to switch the
+routing off are in [SELF_HOSTED_RUNNERS.md](docs/project/SELF_HOSTED_RUNNERS.md).
+
+On self-hosted runners CI seeds `.lake/build` from the server's build cache
+(`scripts/dev/seed-lake.sh`). The seed key binds the toolchain, the Lake manifest, the platform
+and the `lean` executable; a seed from an interrupted build or a checkout still being written is
+refused, and `lake build` still verifies the result. `check_build_cache.sh` (CI) holds the
+controls.
+
+### CI Triage, A Flake Ledger And Nightly Qualification (2026-10-22)
+
+`scripts/ci/triage.sh <run>` classifies each failed CI job as infra, infra-defect (our tooling
+cannot build a pinned tool), known-flaky or real. It reruns the failed jobs once only when every
+failure is infra or known-flaky, never on a second attempt and never for a run cancelled as a
+whole; otherwise it writes a report with the gate, its FAIL lines, a local reproduction and the
+suspected commits. A rerun is diagnostic: qualification reads only a first attempt.
+
+`scripts/ci/flake_history.py` derives per-gate outcomes from GitHub's run records, and
+[flaky_gates.tsv](docs/project/flaky_gates.tsv) is the human-curated ledger: a known-flaky or
+quarantined gate needs an owner, a quarantine needs an expiry, and a quarantined gate still runs
+and still fails its job.
+
+`nightly.yml` dispatches CI on main with `campaign=true` every night, so each night yields a stage
+(c) verdict for main's tip. It runs on lambdaclass/concrete, and on this repository when
+`CONCRETE_NIGHTLY_QUALIFICATION` is `true`. The report job lists the verdict, the gates that newly
+failed, the triage and the mutation-coverage difference from the previous night
+(`scripts/ci/coverage_diff.py`), and is red unless the run qualified with no new failure and no
+lost coverage. CI lost its own crons, so nothing runs twice. `check_ci_triage.sh` (CI) pins the
+behaviour against the real failure logs of 2026-10-22.
+
+### A Continuous Fuzz Farm (2026-10-22)
+
+`scripts/fuzz/farm/` runs the repository's differential and linearity generators continuously on a
+server against the newest build of main, and turns what they find into deduplicated, minimized,
+reproducible findings. Three generators feed it: `diff` (`--interp` against the compiled binary),
+`lin` (the linearity generator's ground truth) and `mut` (a `diff` program with one to three token
+edits, where the compiler must not crash or hang). Findings are classed silent, crash, unsound,
+timeout or refusal. Each one is keyed by a normalized pre-signature and minimized
+(non-refusal differential findings may go through `concrete reduce` before text reduction,
+unsound linearity findings by paired minimization, the rest by text reduction), re-checked against every new main (marked fixed there, or
+reopened when it recurs), and promoted with `promote.sh`, which writes a regression fixture and the
+`scripts/gen/new_bug.sh` command. Nothing in the farm commits to the repository. It runs at idle
+CPU and I/O priority under a hard quota and pauses when other work needs the machine. The
+[README](scripts/fuzz/farm/README.md) gives the pipeline, the classes and the resource policy;
+`check_fuzz_farm.sh` (CI) drives the engine with a fake compiler and fake generators. The farm
+found bugs 176, 210, 213 and 215, and bug 216 came from re-running one of its findings.
+
+### Two Heavy Runs Per Machine, A Shared Compile Cache, And A Measured Gate Profile (R-0543, R-0546, 2026-10-22)
+
+Heavy local runs are limited to two at a time. `run_ci_gates_local.sh` (full or larger
+selections), `run_tests.sh --full`, `test_mutation.sh` and the mutation campaign take one of
+`CONCRETE_HEAVY_SLOTS` (default 2) slots, shared by every worktree and clone of one user (under
+`XDG_RUNTIME_DIR`, or `~/.cache`); different users do not share the limit; a waiter prints
+the holders, a dead holder's slot is reclaimed, and `--no-wait` exits 75 instead of waiting.
+`check_heavy_slots.sh` (CI) holds the controls. The project's
+[CLAUDE.md](CLAUDE.md) states the rule for agents.
+
+[GATE_PROFILE.md](docs/project/GATE_PROFILE.md) records where CI time went at named SHAs: the
+critical path, the 25 slowest gates and why the top ten are slow. Its fixes:
+
+- `scripts/tests/lib/compile_cache.sh` caches allowlisted pure reports, keyed by the compiler
+  binary's hash, the build identity, the argv and working directory, the input's project closure,
+  std, `proofs/` and the tools; anything the key cannot cover runs uncached, and a result is
+  published only if no covered file changed during the compile. Measured warm: `check_vc_schema`
+  356 s to 26 s, the report views 259 s to 94 s, the Phase 3 capstone 774 s to 348 s.
+  `check_compile_cache.sh` (CI) holds the controls.
+- New worktrees seed `.lake` from another checkout, and `lake build` re-verifies the seed.
+- Gates that perturb or populate the checkout now run in a private checkout
+  (`scripts/tests/lib/private_checkout.sh`), umbrella gates delegate to the gates they used to
+  re-run, independent sub-gates and fuzz cases run concurrently, and the local runner orders its
+  pool longest-first from `scripts/tests/gate_weights.tsv`. The full local set stopped scaling at
+  about 32 jobs, where the longest gate bounds it.
+
+`run_fast_surface_gates.sh` now keeps each constituent's output and prints a failing
+constituent's FAIL lines, exit code and log (2026-10-23).
+
+### One Owner Per Fact: Ledger Generators And Changelog Fragments (R-0542, 2026-10-22)
+
+The bug ledgers were kept by hand in several shared files, and every rebase conflicted on them.
+The generators and gates that give each fact one owner have landed:
+
+- `scripts/gen/bug_ledger.py` reads a ledger block in each `docs/bugs/NNN_*.md` record (summary,
+  coverage, structural classes, silent flag, exits) and generates the bug lists of
+  [docs/bugs/README.md](docs/bugs/README.md), the bugs column of the structural classes, the
+  roadmap's exit spans and the audit coverage maps;
+- changelog entries are fragments in `changelog.d/`, which `scripts/gen/changelog.py --fold` folds
+  into this file on main ([changelog.d/README.md](changelog.d/README.md)); once stamped, a hand
+  edit of this file fails the docs-drift gate;
+- `scripts/gen/refresh_generated.sh` regenerates every derived view after a conflicted rebase;
+- `check_ledgers.sh`, a docs-drift leg, runs the one-time migration on a scratch copy, with
+  negative controls.
+
+Changelog fragments have been in use since. The one-time migration itself
+(`scripts/gen/migrate_ledgers.sh`) ran on 2026-10-25: every bug record carries its ledger block, the
+views are generated, the gate count became `scripts/tests/ci_gate_inventory.txt`, this file is
+stamped, and the 61 fragments pending since 2026-10-23 were folded in.
+
+### The Pre-Push Hook Selects Gates By Impact (R-0513, 2026-10-22)
+
+The pre-push hook had picked gates by a hand-kept map from paths to gate names, and on 2026-10-22
+four failures it did not select reached CI (the stack-budget gate, the trust gate's bug-audit
+corpus, the float round-trip judge and the linear-discard gate), each costing a CI round of about
+1.5 h. `scripts/tests/select_gates.sh` now derives, from the gate scripts themselves, every workflow
+gate command a diff can break: what each gate reads, transitively through the scripts it runs;
+every compiler- or Lean-running gate for a compiler, toolchain or std change; and every gate for a
+change no rule maps. It is the hook's default; the area map remains the fallback when the selector
+fails, or on request (`CONCRETE_PREPUSH_SELECT=area`). `run_ci_gates_local.sh --impact` runs the
+selection, and the landing script calls it over an exact `--base`/`--head` range.
+`check_gate_selection.sh` (CI) replays the four misses as fixed controls. Bug 237 (map notes read as
+calls) is its first recorded defect.
+
+### Ready Branches Land In Trains, With A Landing Bot (R-0539, 2026-10-22)
+
+Ready branches now reach main together as a train: one integrated candidate, one CI run, and
+bisection by member only when that run is red. `scripts/land/train.sh` runs the cycle that had been
+done by hand: `build` (main plus each member, `--no-ff`, in order), `check` (fast surface gates,
+impact-selected gates and the remote full set, in parallel), `ci` (push `ci/<name>` and dispatch),
+`watch`, `land` (verify, then push the exact SHA to origin and lambdaclass) and `bisect`. Conflicts
+are resolved mechanically only in append-only ledgers, whole generated files and generated blocks
+whose generator the train will run; anything else stops the build. After the last merge the
+generated views are regenerated once. Each train keeps a local per-stage log, and
+`scripts/land/report.sh` reports the median time to land. The procedure is
+[LANDING.md](docs/project/LANDING.md). Main has landed through numbered trains since, through
+train 22 on 2026-10-25.
+
+Pushing to both remotes is required (the owner's decision of 2026-10-22): `push-both.sh` mirrors
+to lambdaclass by default and checks the mirror before the primary moves, and `train.sh land`
+refuses a missing mirror. A branch is ready when it is a `wip/*` branch whose head carries a clean
+review note and a passing gates note (`scripts/land/ready.sh` writes the latter).
+
+`scripts/land/bot.sh` automates the loop: it collects ready branches, orders rule-changing branches
+first, builds and dispatches the train, bisects and ejects a culprit, rebases idle ready branches
+onto a moved main, and resumes after a restart, under a lock and a kill switch. Its installer
+writes systemd user units but never enables them; running the bot is the maintainers' decision.
+`check_landing_script.sh` and `check_landing_bot.sh` (CI) test both scripts against scratch
+repositories.
+R-0539 stays open in the roadmap until its measured exit criterion holds.
+
+### The Mutation Campaign Declares Expected-Red Gates: The PENDING Disposition (2026-10-22)
+
+`check_atomic_flip_entrance.sh` was red on the clean tree, so its two mutation families scored
+INVALID (red on clean) on shards 11 and 24 of every campaign. One cause was a pin that had drifted
+as fixtures entered its scan (updated); the other is genuine pending R-0004 work (bug 083 linked
+`thesis_demo` to `proofFns` with no attestation), and the gate's FAIL line now names the pending
+tables. The campaign driver gains `expect_red <gate> <reason> <exact FAIL legs>`. A declared gate
+whose clean baseline fails with exactly the declared legs makes its families PENDING: a fifth
+disposition, never a kill, published and named on every summary, and not blocking qualification.
+Any other red is still red on clean, and a declared gate that turns green is refused until its
+declaration is removed. The shard aggregator and the campaign supervisor each check pending results
+against the plan and the shard's baseline transcript instead of trusting them.
+
+### Compiler Performance Tracking By Retired Instructions (2026-10-22)
+
+`scripts/perf/` measures main with a versioned benchmark suite (each cycle first resumes the newest
+recorded but unprocessed commit, otherwise takes the newest `origin/main` commit, so intermediate commits
+can be skipped) and keeps the
+records on the `perf-data` branch, which is never merged into main. The primary metric is retired
+user-space instructions (`perf stat -e instructions:u`), because no machine is ever quiet and
+instruction counts do not move with load: measured at load 35, they varied by at most 0.002 %
+between runs. Peak RSS is the memory metric, and wall time is recorded but never alarmed on. An
+alarm needs a value above the baseline's noise band plus a 1 % threshold and an absolute floor
+(about +1.5 % for instructions), and `perf_bisect.py` then names the culprit commit. A run that
+cannot count instructions falls back to wall time and is marked not comparable. The suite includes
+synthetic stress programs, whose growth exponents are computed, and the ten most expensive passing
+CI gates. [PERF_TRACKING.md](docs/project/PERF_TRACKING.md) describes the engine and the server provisioning
+it needs to run periodically; `check_perf_tracking.sh` (CI) gates the decision logic.
+
+### Shared Agent Playbooks And A Race-Safe Bug Scaffold (2026-10-22)
+
+Every agent session now runs the same procedures by name: `.claude/commands/` holds `/fix-bug`,
+`/roadmap-item`, `/file-bug`, `/creview`, `/rebase`, `/land` and `/cstatus`, and
+[docs/project/AGENTS.md](docs/project/AGENTS.md) owns the rules they share (structural cause and
+owner per bug, one bug or rule per branch, `wip/*` pushes, landings only through the train, at most
+two heavy runs per machine, no piped rebases).
+
+`scripts/gen/new_bug.sh "<title>" [--class N] [--silent yes|no]` files a bug. It takes the number
+above every record on origin's branches, local branches, every worktree and every reservation, and
+owns it by creating `refs/bug-reservations/NNN` on origin with an absent-lease, so two concurrent
+agents never get one number. It writes the record with its ledger block, a reproducer skeleton and a
+fragment, regenerates the ledger views and lists its fill-in placeholders, which
+`check_bug_filing_complete.sh` refuses at landing. The pre-push hook accepts a reservation (a
+parentless empty-tree commit) without gates and refuses anything else on that namespace.
+`check_new_bug.sh` tests allocation against each source, six concurrent allocations, the scaffold's
+ledger consistency, the refusals and the hook tier in a scratch repository (256 gate commands).
+
+### One Review Procedure With Delta Rounds (R-0544, 2026-10-22)
+
+Reviews had taken 8 to 34 rounds per branch, each re-reading the whole growing diff, and the
+reviewer refused whole rounds on large ownership and memory diffs. `scripts/review/review.sh` is
+now the one procedure: round 1 reviews the full diff from the merge-base, later rounds only the
+delta since the previous round; large diffs are split into pieces by file group; a refused piece is
+retried once; a round cap (default 5) stops the loop; and the verdict is recorded as a git note
+(`refs/notes/concrete-review`) on the reviewed commit, which `scripts/review/verify.sh` and the
+landing tools read. [REVIEW.md](docs/project/REVIEW.md) describes it, and `check_review_tool.sh`
+(CI) tests it.
+
+### An Agent Work Queue And A Status Page (2026-10-22)
+
+`scripts/queue/` lets agents run without a human orchestrator. Each dispatcher tick rebuilds
+`queue.json` from its sources (open bug records, the roadmap's development-throughput rows and
+execution queue, fuzz-farm findings, and explicit `tasks/*.md` files), watches the running agents,
+and starts headless agents on the next ready tasks, with priority tiers, area conflicts, budgets, a
+heartbeat and a kill switch. A finished agent leaves a branch with review and gate notes for the
+landing bot. The dispatcher never pushes to main or `ci/*`: its clone's pre-push hook
+(`push_guard.sh`) admits only `wip/*` branches and the readiness notes. [WORK_QUEUE.md](docs/project/WORK_QUEUE.md) describes it.
+
+`scripts/status/status.py` generates `status.json` and a self-contained, phone-width `status.html`:
+whether both mains agree and their CI is green, trains in flight against the 40-minute target, the
+landing medians, branches, open bugs, and runner health. A sanitized public variant withholds
+infrastructure details, and `scripts/land/notify.sh` sends deduplicated notifications to ntfy,
+Slack or stdout. [STATUS_PAGE.md](docs/project/STATUS_PAGE.md) records the publishing decision.
+
+Both installers write systemd units and enable nothing by default (`scripts/status/install.sh
+--enable` starts the status services on request). `check_work_queue.sh` and
+`check_status_page.sh` (CI) test them with stub tools.
+
+### Backend And Interpreter Repairs: Bugs 108, 109, 110, 116, 119, 120, 130 And 133 (2026-10-21)
+
+The examples-health pass of 2026-10-20 found six of them; the semantics probes found bug 130 and
+the Codex review of bug 116's fix found bug 133, both on 2026-10-21. All are fixed and pinned:
+
+- [bug 108](docs/bugs/108_bool_cast_trunc.md): `bool as <int>` was emitted as `trunc i1`, which
+  LLVM rejects. A `bool` now widens with `zext`, and `<int> as bool`, which neither backend gave a
+  meaning, is refused (E0553). That refusal also closes
+  [bug 130](docs/bugs/130_int_as_bool_invalid_ir.md) (`x as bool` with `x: Int` failed in
+  `llvm-as`).
+- [bug 109](docs/bugs/109_f32_literal_invalid_ir.md): float constants were printed to LLVM with six
+  decimals, so an inexact `f32` was invalid IR and an `f64` silently lost precision. Constants are
+  now the hex of their IEEE bits.
+- [bug 110](docs/bugs/110_array_value_store.md): an array value held as a pointer to its storage was
+  stored as the aggregate (invalid IR); the element type now hints the value and the backend's casts
+  use the storage address.
+- [bug 116](docs/bugs/116_vec_push_first_field_through_ref.md): `vec_push(&mut p.v, x)` with `v` the
+  first field of a `&mut P` called an undefined `@vec_push`, because GEP-zero elimination gave the
+  call the wrong pointer type. A pointer use keeps its own type.
+- [bug 133](docs/bugs/133_deref_field_borrow_copies.md), silent: `&mut (*p).f` borrowed the field of
+  a copy of `*p`, so a write through it was lost in the binary while `--interp` performed it.
+  `*r` as a place is now the storage `r` points at.
+- [bug 119](docs/bugs/119_interp_generic_trait_method.md) and
+  [bug 120](docs/bugs/120_interp_field_borrow_through_ref.md): the interpreter could not call a
+  trait method on a type parameter, nor borrow a field through a reference parameter. Each has an
+  interpreter-against-native leg.
+
+### Verified-Pipeline Design Examples Are Machine-Checked (2026-10-20)
+
+`proofs/DesignExamples` holds the reviewed design examples that
+[VERIFIED_PIPELINE.md](docs/compiler/VERIFIED_PIPELINE.md) asks for before Core's interfaces
+freeze. Each is a small Lean model, a few hundred lines that import nothing from the compiler,
+built by `lake build` and CI:
+
+- linear move and destroy (`Linear.lean`, `LinearSound.lean`): for every program the model
+  checker accepts, no stuck state, each resource destroyed exactly once at normal and `return`
+  exits and at most once on `abort`, and an erasure theorem;
+- borrows and reborrowing (`Borrow.lean`): an exclusive borrow passed down to callees, exclusive
+  and shared reborrows, and rejected programs, most of them shown to dangle or get stuck (one, a
+  callee storing its parameter, is shown harmless in the model);
+- structured cleanup (`Cleanup.lean`): LIFO cleanup on fall-through, `return`, `break` and
+  `continue`, none on `abort`, a trapping cleanup that skips the later ones, and a static lowering
+  that agrees with the scoped meaning on every example;
+- typed-value representation in byte and provenance memory (`Repr.lean`).
+
+Every theorem is fully proved; `Axioms.lean` pins each theorem's axiom footprint (at most
+`propext`, `Classical.choice` and `Quot.sound`). These are design models, not proofs about the
+compiler. The [README](proofs/DesignExamples/README.md) lists the design questions they forced,
+each with a recommendation (owner R-0511).
+
+### Packages Declare Their Native Libraries; RocksDB Slice 1 Groundwork (2026-10-20)
+
+A package whose `extern fn`s resolve against a C library now declares that library in its
+`Concrete.toml`, in a `[native]` section with `pkg-config`, `libs` and `lib-dirs` keys.
+`concrete build`, `run` and `test` link the declared libraries of the root package and of every
+dependency package its manifest loads (transitive dependencies are not loaded), root first, and pass each library directory as `-L` and an rpath, so an
+application that depends on a binding package needs no linker flags of its own. Resolution happens
+only at the link step, so `check`, the reports and `--emit-llvm` work without the library
+installed. The manifest reader fails closed: any spelling of the section it does not read, a
+malformed or escaped value, an unreadable manifest, or a library name that spells a linker option
+stops the command with a diagnostic naming the declaring package, because a dropped library
+reappears later as an unresolved symbol. The rules are in
+[NATIVE_LIBRARIES.md](docs/platform/NATIVE_LIBRARIES.md), and `check_native_libs.sh` (CI) is the
+gate. This closes gap G1 of the RocksDB slice.
+
+`examples/rocksdb_kv` is RocksDB slice 1's groundwork: an application with a hand-written binding
+package (`[native] pkg-config = ["rocksdb"]`) whose resources are linear structs with exactly one
+consuming release each, two compile-fail fixtures (a handle never destroyed, a handle used after
+close), a release observer and the acceptance gate `check_rocksdb_slice1.sh`. Each fallible
+operation's failure and resource contract is recorded in
+[ROCKSDB_SLICE1.md](docs/platform/ROCKSDB_SLICE1.md), together with the gaps G1 – G7 found on the
+way. The slice is not accepted: R-0285's acceptance waits on exits 0b and 2i. The binding's
+declarations and ownership facts are reviewed assumptions taken from RocksDB's `c.h`, not checked
+facts.
+
+### The Verified-Compiler Plan: Vertical Slices, A Frozen Legacy Evidence Layer, And LCB As The Native Backend (2026-10-19, roadmap only)
+
+[VERIFIED_PIPELINE.md](docs/compiler/VERIFIED_PIPELINE.md) (plan v3, R-0491 – R-0509, later
+extended) retargets the structural refactor at an end-to-end verified compiler. Core is the
+language definition, with an executable semantics; references are strictly second-class; the
+authoritative checker runs on Core; Place MIR, a Memory CFG and a block-argument IR each get a
+semantics; and LLVM becomes a thin unverified printer. Part 1 builds the proof-ready pipeline and
+Part 2 proves it, and the plan states, per bug class, what "no bugs" means at the end.
+
+The plan is delivered as proved vertical slices rather than layer by layer: V1 (scalars, control,
+calls, checked arithmetic, an output event) is to be carried through every stage to native AArch64
+with its own compiler-correctness theorem, as a `verified` profile beside the existing compiler
+(R-0511), and V2 – V7 grow it. The current evidence layer receives
+soundness, compatibility and security maintenance only, with no new semantic claim mechanisms, and
+is to be retired claim by claim onto compiler-generated Core statements
+(R-0512). The native AArch64 code generation of the `verified` profile is to be the separately
+developed [Lean Compiler Backend](https://github.com/unbalancedparentheses/lean-compiler-backend), a
+Lean 4 port of QBE 1.3, used as a pinned dependency; Concrete builds no machine backend of its own
+(R-0517, coordinated with R-0505). These were planning changes; the full verified pipeline remains
+planned, though some constituent slices have since landed (R-0492, R-0497).
 
 ### A Function With A Result Type Returns On Every Path (bug 194, 2026-10-23)
 

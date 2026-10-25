@@ -1,5 +1,10 @@
 # Bug 029: early-return `if` + `while` + post-loop array address-of miscompiles
 
+<!-- bug-ledger
+summary: early-return `if` + `while` + post-loop array address-of miscompiles
+coverage: regress_029_if_merge_array_addr.con + regress_029_loop_exit_array_addr.con in tests/programs (run_ok 42/7) (both sites)
+-->
+
 **Status:** Fixed (2026-07-14) — both sites; trust battery green
 **Fixed in:** Lower.lean if-merge (`if.load.`) + loop-exit un-promotion (`unpro.`,
 for & while variants): `.array` types rebind their merge/promotion ALLOCA ADDRESS

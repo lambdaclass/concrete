@@ -1,8 +1,8 @@
 # Fuzz farm
 
-A continuous bug-finding loop on concrete-ci-1. It runs the repository's differential and
-linearity generators around the clock against the newest build of `origin/main`, and turns
-what they find into deduplicated, minimized, reproducible findings. Nothing here commits to
+A continuous bug-finding loop on the CI server, concrete-ci-2 (a Hetzner AX102). It runs the
+repository's differential and linearity generators around the clock against the newest build of
+`origin/main`, and turns what they find into deduplicated, minimized, reproducible findings. Nothing here commits to
 the repository. `promote.sh` prepares a reproducer, and an agent or a human files it.
 
 | file | role |
@@ -81,10 +81,17 @@ Reporting:
   plus totals, today's case counts per generator and outcome, drift alerts, pause state and the
   compiler SHA.
 
-## Resource policy (concrete-ci-1: 64 threads, 251 GiB)
+## Resource policy
 
-The farm must never slow CI (gha1..6 runner services in `system.slice`) or the gate host
+The farm must never slow CI (the GitHub runner services in `system.slice`) or the gate host
 (`dev` over SSH, `user.slice`).
+
+`install-farm.sh`'s defaults, in the table below, were sized for the first farm host,
+concrete-ci-1 (64 threads, 251 GiB; deleted 2026-10-23). The farm now runs on concrete-ci-2
+(32 threads, 125 GiB), provisioned from the owner's private server configuration with the same
+policy scaled to half the threads: `CPUQuota` 2400 % (75 % of 32 threads), `MemoryHigh` /
+`MemoryMax` 24G / 32G, 16 workers, and a pause when non-farm CPU use is above 8 cores or load1 is
+above 48. Re-running `install-farm.sh` unchanged on that host would restore the larger values.
 
 | knob | value | why |
 |---|---|---|

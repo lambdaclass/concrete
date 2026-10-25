@@ -1,5 +1,10 @@
 # Bug 023: Short-circuit `&&`/`||` lowering emits an aggregate phi (invalid IR)
 
+<!-- bug-ledger
+summary: found by #35 conlog workload
+fixtures: scand_aggregate_in_scope/src/main.con
+-->
+
 **Status:** Fixed
 **Discovered:** 2026-07-07
 **Fixed:** 2026-07-07

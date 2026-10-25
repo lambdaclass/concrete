@@ -1,5 +1,13 @@
 # Bug 135 — `concrete fmt` rewrites float literals lossily, changing the program
 
+<!-- bug-ledger
+summary: `concrete fmt` printed float literals with `toString` (six decimals), so `0.0000000001` became `0.000000` and formatting changed the program, unseen by the fmt gate's fingerprint check (the legacy fingerprint is lossy the same way); one exact canonical (shortest, then nearest) round-trip printer now serves fmt, `--emit-core` and `--emit-ssa`; pinned by `check_concrete_fmt.sh` section 8 (every corpus float literal plus a sample of doubles, judged against Python's reading) and `tests/regressions/fmt_roundtrip/floats.con`. The legacy proof fingerprint keeps its lossy rendering (changing it moves identities; recorded in the record)
+coverage: concrete fmt printed float literals with toString (six decimals), so 0.0000000001 became 0.000000 and the formatted program differed; one exact canonical (shortest, then nearest) round-trip printer (Lexer.floatLiteralString) now serves fmt, --emit-core and --emit-ssa. Regression vehicle is a gate, not a tests/programs fixture: check_concrete_fmt.sh section 8 compiles every corpus float lexeme plus 311 sampled doubles before and after fmt and requires the LLVM f64 bits to equal Python's reading, requires each sampled double's canonical spelling to survive fmt, and requires tests/regressions/fmt_roundtrip/floats.con to keep its lexemes; both legs shown to fail with toString restored; see docs/bugs/135 (2026-10-21)
+class: 12 — the formatter's copy of that rendering
+silent: yes
+exit: 0b
+-->
+
 **Status:** FIXED 2026-10-21 (branch `small-fixes-111-127-135`)
 **Found:** 2026-10-20, while fixing [bug 109](109_f32_literal_invalid_ir.md) (recorded there as
 "not repaired here"); filed 2026-10-21.

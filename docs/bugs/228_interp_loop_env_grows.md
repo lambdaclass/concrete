@@ -1,5 +1,12 @@
 # Bug 228 — the interpreter's loops are quadratic in their iteration count
 
+<!-- bug-ledger
+summary: the interpreter carried each loop iteration's bindings into the next, so its environment grew by every `let` of every iteration and every lookup or assignment of an outer variable walked them all: a loop was quadratic in its iteration count (2000 iterations of the stackvm interpreter loop took 222 s under `--interp`, 2.5 s after). `evalWhile` drops an iteration's bindings, as `evalWhileExpr` did at its end. Pinned by `regress_228_interp_loop_env.con` (`--interp` within 20 s). Found by Phase 7 workload 10 (stackvm)
+fixtures: regress_228_interp_loop_env.con
+class: 17 — the interpreter's environment, an association list, kept every loop iteration's bindings
+silent: no
+-->
+
 **Status:** FIXED (branch `wip/workload-stackvm-2`)
 **Found:** 2026-10-24, by Phase 7 workload 10 (`examples/stackvm`): `stackvm exec testdata/fib.sasm`
 did not finish in 10 minutes under `--interp`; natively it takes a millisecond.

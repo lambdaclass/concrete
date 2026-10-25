@@ -1,5 +1,12 @@
 # Bug 086 — a discarded statement was modeled as the block's value, and a nested return as a value
 
+<!-- bug-ledger
+summary: a discarded `id(x);` was modeled as its block's value (`g(5)` 5 vs 7) and a `return` inside a `let` initializer as a value (11 vs 1); only `isValue` trailing expressions are values and non-tail expressions must not escape; pinned by `check_model_diff.sh` leg T
+coverage: a discarded expression statement was modeled as its block's value (if x > 0 { id(x); } return 7; modeled as x) and a return nested in a non-tail expression as a value; only isValue trailing expressions are values and non-tail sites must not escape. Regression vehicle is a gate: check_model_diff.sh leg T pins tests/regressions/bug086_discarded_tail/repro.con; see docs/bugs/086 (2026-10-18)
+class: 7
+silent: yes
+-->
+
 **Status:** FIXED (branch `bug085-stmt-extraction`, on the unpublished bug 080 head `00efbaf4`)
 **Found:** 2026-10-18 by the model-vs-runtime hunt that followed bug 080 (`--report model-diff`).
 **Severity:** a false model: `fn g(x) { if x > 0 { id(x); } return 7; }` extracted to

@@ -1,5 +1,14 @@
 # Bug 136 — functional update evaluates its base once per omitted field
 
+<!-- bug-ledger
+summary: functional update `S { f: e, ..base }` evaluated its base once per omitted field (599 instead of 59). Elab evaluates the explicit initializers, then the base exactly once, into temporaries (`letInExpr`) when the base is not a variable; pinned by `regress_136_137_literal_eval_order.con` (`--interp == binary`, 42) and the reproducer's `run_ok` (59)
+fixtures: regress_136_137_literal_eval_order.con
+class: 7 — until 127's fix the consumers disagreed
+class: 13 — evaluation-order rule 6: Core cannot bind the base once
+silent: yes
+exit: 0b
+-->
+
 **Status:** FIXED (branch `soundness-holes`)
 **Found:** 2026-10-21, while fixing [bug 127](127_struct_literal_field_order.md) (recorded as an
 unfiled disagreement in the evaluation-order section of

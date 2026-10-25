@@ -1,5 +1,13 @@
 # Bug 081 — a call's name in the proof model was not bound to the function it calls, so an import alias could borrow a proof
 
+<!-- bug-ledger
+summary: the proof model's `.call "k"` means the theorem table's entry under `k`, but edges were justified by table CONTAINMENT, so `import main.{ check_version as check_class }` borrowed `validate_header_correct`; every call is now bound by key to the callee the elaborator resolved, and the stale-fingerprint warning prints the v2 value to pin
+coverage: the proof model calls by table KEY but edges were justified by table containment, so an import alias (check_version as check_class) borrowed validate_header_correct and minted. Regression vehicle is a gate: check_subject_binding.sh legs X refuse and do not mint tests/programs/bug081_alias_key (and its colliding-definition variant) while the unaliased elf_header claims stay proved and minted; see docs/bugs/081 (2026-10-18)
+class: 1
+class: 9
+silent: yes
+-->
+
 **Status:** FIXED (branch `bug081-callee-key`, on the unpublished bug-080 head `00efbaf4`)
 **Found:** 2026-10-18 by a name-resolution hunt, confirmed by running it.
 **Severity:** a false proof that mints a receipt. Copy `examples/elf_header`, and in a module

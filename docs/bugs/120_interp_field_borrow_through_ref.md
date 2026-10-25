@@ -1,5 +1,13 @@
 # Bug 120 — the interpreter cannot borrow a field through a reference parameter
 
+<!-- bug-ledger
+summary: the interpreter could not borrow a field through a reference parameter (`ref step .field on non-struct`); a projection base of reference type forwards the reference's path. Interp-vs-native leg on the reproducer ((batch 2))
+coverage: interp projection base of reference type forwards its path. Regression vehicle: run_tests.sh interp-vs-native leg on tests/regressions/bug120_interp_field_borrow_through_ref/repro.con (a regression dir, not a tests/programs fixture) (2026-10-20 (batch 2))
+class: 5
+class: 7
+silent: no
+-->
+
 **Status:** FIXED 2026-10-20 (batch 2)
 **Found:** 2026-10-20, by the examples-health pass (porting and output-testing every example).
 **Severity:** interpreter/native disagreement; INTERPRETER_TRUST.md lists path borrows across calls as supported.

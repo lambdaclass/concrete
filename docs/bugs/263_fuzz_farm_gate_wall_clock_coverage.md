@@ -1,5 +1,11 @@
 # Bug 263 — fuzz-farm gate assumes timed campaigns complete fixed coverage
 
+<!-- bug-ledger
+summary: fuzz-farm gate timed campaigns could expire before the required generator coverage and drift observations; bounded batch targets now make coverage deterministic and incomplete campaigns fail.
+coverage: tooling-only defect pinned by scripts/tests/check_fuzz_farm.sh and scripts/tests/check_fuzz_farm_batches.py, including virtual-clock speed, partial-batch, pause and default-mode controls; no compiler fixture applies.
+silent: no
+-->
+
 **Status:** FIXED on `fix/fuzz-farm-deterministic-gate` (pending landing).
 **Found:** 2026-10-25, while landing the R-0507 proof-library research roadmap update.
 **Severity:** loud validation failure; no Concrete compiler defect or new soundness claim.

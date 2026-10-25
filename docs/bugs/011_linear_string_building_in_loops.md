@@ -1,5 +1,10 @@
 # Bug 011: Linear String Building Is Awkward Inside Loops
 
+<!-- bug-ledger
+summary: Linear String Building Is Awkward Inside Loops
+fixtures: bug_string_building.con
+-->
+
 **Status:** Fixed
 **Discovered:** 2026-03-15
 **Discovered in:** `examples/mal/main.con`

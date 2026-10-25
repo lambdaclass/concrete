@@ -1,5 +1,12 @@
 # Bug 211 — generic arithmetic instantiated at a non-numeric type reached llvm-as
 
+<!-- bug-ledger
+summary: a generic `+` / `*` instantiated at a struct or enum reached the backend (`llvm-as` rejected the struct instance; `--interp` stopped at run time): CoreCheck defers a type parameter's operator to the instance, and only comparisons had a post-Mono re-check. `verifyOperatorTypes` checks every monomorphized arithmetic, wrapping, saturating, bitwise and shift operator (E0501, post-mono). Pinned by `error_211_generic_add_struct.con`, `error_211_generic_mul_enum.con`, `error_211_generic_rhs_struct.con`, `error_211_generic_mixed_width.con` and `regress_211_generic_add_numeric.con` (binary and --interp)
+fixtures: error_211_generic_add_struct.con error_211_generic_mul_enum.con error_211_generic_rhs_struct.con error_211_generic_mixed_width.con regress_211_generic_add_numeric.con
+class: 6 — an operator rule deferred to the instance had no instance check: arithmetic, unlike comparisons
+silent: no
+-->
+
 **Status:** FIXED (branch `wip/diffhunt-1023`)
 **Found:** 2026-10-23, in the post-R-0492 differential hunt, while reducing bug 210 (a probe of the
 same operator rule through a generic function).

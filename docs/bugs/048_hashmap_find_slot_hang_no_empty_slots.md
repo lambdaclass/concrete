@@ -1,5 +1,11 @@
 # Bug 048: HashMap find_slot infinite-loops when the table has no empty slots
 
+<!-- bug-ledger
+summary: HashMap find_slot infinite-loops when the table has no empty slots (fixed by R-0003)
+fixtures: regress_047_048_hashmap_probe/src/main.con
+class: 14
+-->
+
 **Status:** FIXED (R-0003, 2026-07-25) — occupancy is now `len + tombstones`
 (rehash at the SAME capacity when the pressure is all tombstones), and the
 lookup probe is bounded by `cap` as a fail-safe. Both halves are gated

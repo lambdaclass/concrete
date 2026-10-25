@@ -1,5 +1,13 @@
 # Bug 210 — arithmetic on a struct, enum or newtype operand was accepted
 
+<!-- bug-ledger
+summary: CoreCheck's arithmetic, wrapping and bitwise agreement rules read every named type as a type parameter and skipped TYPE-6, so `p + p` on a `Copy` struct and `e * e` on an enum compiled and ran natively (exit 0) while `--interp` stopped, a struct minus a literal failed in the SSA verifier and a newtype sum ran under `--interp` and failed in `llvm-as`. One predicate (`isOpaqueOperandTy`) now serves every operator rule and the cast rule; refused with E0501. Pinned by six `error_210_*.con` fixtures (two declare the type in a child module). Found by the fuzz farm's mutation generator
+fixtures: error_210_struct_arith.con error_210_enum_arith.con error_210_newtype_arith.con error_210_struct_minus_literal.con error_210_child_module_arith.con error_210_child_module_newtype_arith.con
+class: 12 — which types an operator rule defers to the instantiation: a local copy per rule read every named type as a parameter
+silent: yes
+exit: 0b
+-->
+
 **Status:** FIXED (branch `wip/diffhunt-1023`)
 **Found:** 2026-10-23, by the fuzz farm's mutation generator on `concrete-ci-2` (findings
 `crash-d8cc80fc873e`, `crash-4d7ad6b76351`, `crash-86e079505a3e`: a mutated literal turned

@@ -1,5 +1,10 @@
 # Bug 038: if-merge clobbered promoted-aggregate mutations
 
+<!-- bug-ledger
+summary: found by the extended differential fuzzer (string in branch arm); 4th merge-loop instance
+coverage: regress_038_if_merge_promoted_aggregate.con (run_ok qm); Lower merge loops skip ANY promoted var (aggregate included); extended fuzzer is the class gate
+-->
+
 **Status:** Fixed (2026-07-16)
 **Fixed in:** `Concrete/IR/Lower.lean` — the statement-if, if-expr, and match
 merge loops now skip reconciliation for ANY promoted variable (aggregate

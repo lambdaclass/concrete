@@ -1,5 +1,11 @@
 # Bug 046: HashMap keys()/values() and HashSet elements() duplicated linear payloads
 
+<!-- bug-ledger
+summary: HashMap keys()/values() and HashSet elements() duplicated linear payloads
+coverage: error_046_map_values_linear/src/main.con (negative project fixture, must FAIL) + std-compiled-coverage bug-046 legs (E0241 + Copy positive); keys/values/elements Copy-bounded
+class: 14
+-->
+
 **Status:** Fixed (2026-07-18)
 **Fixed in:** std — `keys` moved behind `K: Copy`, `values` behind
 `V: Copy`, `HashSet::elements` behind `K: Copy`. The scoped/borrowing APIs

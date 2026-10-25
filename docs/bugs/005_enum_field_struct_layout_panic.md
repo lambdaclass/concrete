@@ -1,5 +1,10 @@
 # Bug 005: Enum Fields Inside Structs Can Panic Layout Computation
 
+<!-- bug-ledger
+summary: Enum Fields Inside Structs Can Panic Layout Computation
+fixtures: bug_enum_in_struct.con
+-->
+
 **Status:** Fixed
 **Discovered:** 2026-03-15
 **Discovered in:** `examples/policy_engine/main.con` (early Phase H)

@@ -1,5 +1,13 @@
 # Bug 116 — `vec_push` on the first field of a struct reached through a `&mut` parameter calls an undefined `@vec_push`
 
+<!-- bug-ledger
+summary: `vec_push(&mut p.v, x)` with `v` the first field of a `&mut P` called the undefined `@vec_push`: SSA GEP-zero elimination replaced `gep p, 0` by `p` with `p`'s type, so the call lost its `Vec` element type; a pointer use now keeps its own type; pinned by `regress_116_vec_push_first_field.con`
+fixtures: regress_116_vec_push_first_field.con
+class: 3
+class: 8
+silent: no
+-->
+
 **Status:** FIXED (branch `backend-108-116`, commit 595f0fc5, follow-ups 48d813da and 35a39f6c)
 **Found:** 2026-10-20, by the examples-health pass (porting and output-testing every example).
 **Severity:** compile failure at LLVM validation.

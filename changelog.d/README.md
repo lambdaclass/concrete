@@ -22,3 +22,6 @@ roadmap gates read Completed Task headings from that view.
 `check_docs_drift.sh` fails on a malformed fragment, and on a hand edit of CHANGELOG.md: the file
 carries a stamp, and only `--fold` and `--restamp` write it. Use `--restamp` only to accept a
 deliberate correction to an old entry.
+
+The stamp was written by the one-time ledger migration (`scripts/gen/migrate_ledgers.sh`,
+2026-10-25); `--fold` refuses an unstamped or hand-edited CHANGELOG.md.

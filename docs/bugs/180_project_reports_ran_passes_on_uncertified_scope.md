@@ -1,5 +1,13 @@
 # Bug 180 — project reports ran Mono and lowering on modules CoreCheck never certified
 
+<!-- bug-ledger
+summary: in a project, `--report mono`, `verify` and `traceability` replaced a `ValidatedCore`'s modules by record update with the invoked file's modules (dependencies dropped, synthetic wrappers added) and ran Mono, lowering and the verify gates on that uncertified forest; wordfreq's report listed 0 specializations where the build emits 61, and verify called it clean. The reports now run their passes on the whole validated program and list the file's part, and R-0497 slice 1 seals the artifacts so the record update no longer compiles. Pinned by `regress_180_report_scope` (run_tests.sh) and `check_pipeline_artifacts.sh` (legs B, U, D)
+fixtures: regress_180_report_scope/src/main.con
+class: 18 — a project report replaced a `ValidatedCore`'s modules by record update and ran Mono and lowering on a forest CoreCheck never certified
+silent: yes
+exit: 0b
+-->
+
 **Status:** FIXED (branch `verified-pipeline`)
 **Found:** 2026-10-23, while sealing the pipeline artifacts (R-0497 slice 1): once
 `ValidatedCore`'s constructor became private, the record update in `compileAndReport` that

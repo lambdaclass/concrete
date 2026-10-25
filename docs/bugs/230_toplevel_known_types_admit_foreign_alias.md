@@ -1,5 +1,12 @@
 # Bug 230 — another top-level module's alias passes Resolve in a cast and crashes the backend
 
+<!-- bug-ledger
+summary: a top-level module casting to another top-level module's alias, or to its child's, without importing it passed Resolve (its known types were program-wide, and included its children's aliases) while Check kept the name, so the backend panicked (`EmitSSA.tyToLLVMTy: unknown named type`). Every module's type namespace now comes from one environment, `Resolve.moduleTypeEnvironment` plus its imports' closure (R-0492 slice 6): E0108. Found by the Codex review of bug 217's fix, 2026-10-24. Fixtures `error_230_*`, `regress_230_toplevel_type_environment.con`. Class 12.
+fixtures: error_230_toplevel_foreign_alias_cast.con error_230_parent_names_child_alias.con regress_230_toplevel_type_environment.con
+class: 12 — which type names a top-level module may write: program-wide in Resolve, per module in Check; fixed 2026-10-25 by one `moduleTypeEnvironment` for every module, R-0492 slice 6
+silent: no
+-->
+
 **Status:** FIXED (2026-10-25, R-0492 slice 6)
 **Found:** 2026-10-24, by the Codex review (round 4) of bug 217's fix: the same shape inside a
 nested submodule was closed there; between top-level modules it remains.

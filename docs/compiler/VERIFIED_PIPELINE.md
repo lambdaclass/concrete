@@ -535,7 +535,7 @@ diagnostic-path bypass.
   - Core, SSA and `PExpr` keep their string binders (R-0492 steps 2–4).
 
 **S5 slice contract 3 — Elab consumes `LocalId` (R-0492 step 2, 2026-10-23; depends on slice 2,
-branch `vp-r0492`, unlanded).**
+branch `vp-r0492`, landed in train 6; this step landed in train 8 from `vp-r0492-elab`).**
 - *Representation:* Elab's name-keyed scope (`vars`, `renames`, `ghostVars`) is gone. `ElabEnv`
   holds the function's `LocalTable` and `bound : List (LocalId × BoundLocal)`. A `BoundLocal`
   records a binding's Core name, type, ghost flag, and the absolute frame position its binder

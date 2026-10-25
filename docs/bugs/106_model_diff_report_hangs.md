@@ -1,5 +1,13 @@
 # Bug 106 — `--report model-diff` never terminated on thesis_demo, and its gate stayed green
 
+<!-- bug-ledger
+summary: `--report model-diff` ran for hours on thesis_demo (unbudgeted interpreter loop at len = i64::MAX) and `check_model_diff.sh` swallowed it with `|| true` (87/87). fixed 2026-10-20: loop budget with an explicit `exhausted` outcome, gate fails on timeout / nonzero exit; residual (recursion not budgeted) open under R-0460
+coverage: model-diff report hang + swallowed gate failures. Regression vehicle is check_model_diff.sh (watchdog/exit legs and the thesis_demo exhausted-row leg), not a tests/programs fixture (2026-10-20)
+class: 11
+silent: yes
+exit: 0b
+-->
+
 **Status:** FIXED 2026-10-20 (report budgeted, gate fails closed); a structural residual is open
 (see below).
 **Found:** 2026-10-20, while running `check_model_diff.sh` during bug 091 round 3. Present at

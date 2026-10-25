@@ -1,5 +1,10 @@
 # Bug 003: Cross-Module &mut Borrow Consumed as Move
 
+<!-- bug-ledger
+summary: Cross-Module &mut Borrow Consumed as Move
+fixtures: bug_cross_module_mut_borrow.con
+-->
+
 **Status:** Fixed
 **Discovered:** 2026-03-14
 **Fixed:** 2026-03-14

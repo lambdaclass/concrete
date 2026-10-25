@@ -1,5 +1,14 @@
 # Bug 109 — an `f32` literal that is not exactly representable is emitted as a decimal LLVM `float` constant
 
+<!-- bug-ledger
+summary: float constants were printed to LLVM with six decimals, so an inexact `f32` (0.1) was invalid IR and an `f64` silently lost precision (0.123456789 compiled as 0.123457); constants are now the hex of their IEEE bits, `f32` rounded first; pinned by `regress_109_float_literals.con`
+fixtures: regress_109_float_literals.con
+class: 7
+class: 12 — float rendering kept in several places
+silent: yes
+exit: 0b
+-->
+
 **Status:** FIXED (branch `backend-108-116`, commit 0ee4252e)
 **Found:** 2026-10-20, by the examples-health pass (porting and output-testing every example).
 **Severity:** compile failure at LLVM validation for `f32`; found while fixing it, the same printer was **silent wrong code** for `f64` (six significant decimals: `0.123456789` compiled as `0.123457`, `0.0000000001` as `0`).

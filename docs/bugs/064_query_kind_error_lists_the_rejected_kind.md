@@ -1,5 +1,11 @@
 # Bug 064: `--query KIND` rejects a kind and then lists that same kind as known, so the diagnostic contains no derivable next action
 
+<!-- bug-ledger
+summary: every bare semantic `--query KIND` exits 1 with "unknown query kind 'predictable'" and then lists `predictable` first among known kinds; the arity is wrong, not the kind, so no repair is derivable from the message (R-0471, surface audit 2026-07-31)
+coverage: a bare semantic --query KIND is rejected as unknown while the message lists that same kind as known (arity is wrong, not spelling). CLI/report diagnostic, not a .con defect: the regression vehicle is the query leg of a gate script (every knownQueryKinds/knownFactKinds member in both bare and argument form, asserting the message never lists the rejected token), not a program fixture. No gate yet
+class: 12
+-->
+
 **Status:** Open
 **Discovered:** 2026-07-31, while auditing the user-exposed surface for
 under-gated features. Reproduced on all five bare semantic kinds.

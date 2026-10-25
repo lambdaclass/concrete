@@ -1,5 +1,14 @@
 # Bug 177 — CoreCheck never compared a binder's declared type with its value's
 
+<!-- bug-ledger
+summary: CoreCheck, the independent re-check of elaborated Core, never compared a binder's declared type with its value's (`let`, assignment, call arguments, fields, stores) and compared returns width-blind, so bug 176's checker leak compiled `let y: u8 = <i32>` into a binary that printed 300. One binder-agreement relation (`bindTyAgrees`, E0510; E0560 for returns) now checks every binder exactly on scalars and shapes, deferring only named/generic/type-variable types; CoreCheck's own blocks close their scope. Found fixing bug 176, 2026-10-22. Covered by `pipeline-test` `corecheck/binder-agreement` (planted Core) and `check_corecheck_boundary.sh` class 7. Class 13 (secondary 12); owner R-0499.
+fixtures: regress_177_alias_value_hints.con
+class: 12 — secondary: CoreCheck kept a width-blind copy of type equality
+class: 13 — CoreCheck documented "arguments match parameters" and never compared any binder's type with its value's
+silent: yes
+exit: 0b
+-->
+
 **Status:** FIXED (branch `wip/bug177`)
 **Found:** 2026-10-22, while fixing bug 176 (its record's "follow-up for defence in depth").
 **Severity:** a front-end checker defect became silent wrong code instead of a refusal. CoreCheck,

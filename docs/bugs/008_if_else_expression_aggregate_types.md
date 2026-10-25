@@ -1,5 +1,10 @@
 # Bug 008: If-Else Expression Does Not Parse for Aggregate Types
 
+<!-- bug-ledger
+summary: If-Else Expression Does Not Parse for Aggregate Types
+fixtures: bug_if_expression.con
+-->
+
 **Status:** Fixed
 **Discovered:** 2026-03-15
 

@@ -1,5 +1,13 @@
 # Bug 112 — the declaration std.mem uses for `sizeof` is rejected (E0116 at 0:0) outside std
 
+<!-- bug-ledger
+summary: the declaration std.mem uses for `sizeof` was refused outside std (E0116); an `#[intrinsic]` declaration is not a foreign binding, so R-0484 R3 skips it. Fixture `regress_112_user_intrinsic.con` (exit 5) ((with 113))
+fixtures: regress_112_user_intrinsic.con
+class: 11
+class: 12
+silent: no
+-->
+
 **Status:** FIXED 2026-10-21 (branch `symbols`, with bug 113)
 **Found:** 2026-10-20, by the examples-health pass (porting and output-testing every example).
 **Severity:** a valid program is rejected; the diagnostic has no location.

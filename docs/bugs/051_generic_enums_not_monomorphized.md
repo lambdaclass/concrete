@@ -1,5 +1,11 @@
 # Bug 051: user-defined generic enums are never monomorphized — mixed instantiations corrupt memory
 
+<!-- bug-ledger
+summary: user-defined generic enums are never monomorphized — mixed instantiations corrupt memory (fixed by R-0001)
+fixtures: regress_generic_enum_051.con adversarial_mono_generic_enum.con
+class: 1
+-->
+
 **Status:** FIXED (R-0001, 2026-07-24) — user generic enums are monomorphized per
 canonical type arguments, so each instantiation has its own declaration and its
 own payload footprint (`Concrete/IR/Mono.lean` `monoTypesInProgram`). Gate:

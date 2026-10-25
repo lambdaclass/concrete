@@ -1,5 +1,13 @@
 # Bug 195 — a `let ... else` whose `else` block falls through compiled
 
+<!-- bug-ledger
+summary: a `let ... else` whose `else` block fell through compiled; the construct is desugared to a `match` before checking, so the design's divergence rule had no site, and falling out of the block skipped the rest of the function (both consumers, silent). Refused with E0308; pinned by `error_195_let_else_falls_through{,_unit}.con`. Found by the language specification's patterns chapter
+fixtures: error_195_let_else_falls_through_unit.con error_195_let_else_falls_through.con
+class: 13 — `let ... else` divergence: desugared away before any checker
+silent: yes
+exit: 0b
+-->
+
 **Status:** FIXED for every pattern that binds a field (branch `wip/bug195`); a `let ... else` over
 a field-less variant, which binds nothing, is not recognized yet (see Fix)
 **Found:** 2026-10-23, by the language specification's patterns chapter (`docs/spec/patterns.md`,

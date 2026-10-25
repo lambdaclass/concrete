@@ -1,5 +1,12 @@
 # Bug 175: a match whose arms all diverge left its merge block open
 
+<!-- bug-ledger
+summary: a `match` whose arms all diverge (break / continue / return) left its merge block open whenever the match was unit-typed, because the early return in result handling made the `unreachable` termination dead code. A loop around it failed SSA verification (E0708, a header phi fed from the unreachable block); under an `if` it failed with E0703 (the bug 078 shape). Fails closed. Pinned by `regress_175_match_arms_all_diverge.con` (run_ok plus `--interp == binary`) and four `check_divergence_detection.sh` rows
+fixtures: regress_175_match_arms_all_diverge.con
+class: 8 — a `match` whose arms all diverge left its merge open: 078's shape, missed in `match`
+silent: no
+-->
+
 **Status:** FIXED
 **Found:** 2026-10-22, by the safety-eval2 agent, which noted it as a pre-existing limitation.
 **Severity:** a valid program is rejected after checking passes (SSA verification, E0708 or

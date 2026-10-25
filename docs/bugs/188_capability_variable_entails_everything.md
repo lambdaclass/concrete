@@ -1,5 +1,13 @@
 # Bug 188: a capability variable satisfied every capability requirement
 
+<!-- bug-ledger
+summary: a caller holding ANY capability variable was treated as covering every requirement, `Unsafe` included (`capsContain`: "resolved at instantiation", which never happens for a generic body), so `fn f<cap C>(..) with(C)` printed, called `with(Process)`, called an untrusted extern and dereferenced raw pointers under a `main` declaring nothing. One entailment rule now (`Capabilities.missingCaps`): a variable entails only itself, unknown variables fail closed, a callback's `Unsafe` is decided on the instantiated set, and a capability parameter may not be spelled like a capability (E0121). Pinned by nine `error_188_*.con` witnesses (E0520/E0521/E0240/E0121/E0001), the positive control `regress_188_capvar_polymorphism.con` (binary == `--interp`), `check_capability_judgment.sh` and five mutation families ((silent authority violation))
+fixtures: error_188_capvar_console.con error_188_capvar_process.con error_188_capvar_unsafe_call.con error_188_capvar_unsafe_op.con error_188_capvar_unsafe_callback.con error_188_capparam_named_unsafe.con error_188_capvar_method_unsafe_callback.con error_188_capvar_impl_receiver.con error_188_bodyless_capparam.con regress_188_capvar_polymorphism.con
+class: 6 — a capability variable entailed every requirement, deferred to an instantiation nothing checks
+silent: yes
+exit: 0b
+-->
+
 **Status:** FIXED
 **Found:** 2026-10-23, by a Codex review of `Concrete/Semantics/Capabilities.lean`, confirmed by a
 second (Claude) review and reproduced on the build server at ee1fff8e.

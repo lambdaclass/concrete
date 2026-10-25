@@ -1,5 +1,12 @@
 # Bug 250 — natively, writing an element of an aggregate local rebuilds the whole aggregate
 
+<!-- bug-ledger
+summary: natively, writing an element or field of an aggregate local carried through a loop rebuilt the whole aggregate per write (and reading a field loaded the whole struct); the first-class loads and stores of these aggregates made clang -O2 superlinear in their size (a 20000-element array written in a loop: 99 s to compile). Lower writes and reads scalar places of promoted locals at their address; EmitSSA holds a loaded aggregate by pointer (a fresh slot and a `memcpy`). Pinned by `regress_250_native_array_writes.con`. Found writing bug 248's regression. Class 17.
+fixtures: regress_250_native_array_writes.con
+class: 17 — a native place write rebuilt its whole aggregate base
+silent: no
+-->
+
 **Status:** FIXED (branch `wip/perf-quadratics`)
 **Found:** 2026-10-25, writing bug 248's regression: its program, compiled natively, did not
 finish compiling in 120 s.

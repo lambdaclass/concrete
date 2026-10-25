@@ -1,5 +1,13 @@
 # Bug 218 — two declarations of one name in a module were accepted
 
+<!-- bug-ledger
+summary: MOD-3 was enforced between imports and functions only, so two declarations of one name in a module were accepted: two structs (the first silently won), a struct and an enum, two aliases; two functions failed in `llvm-as` and two constants at `lower`. `Check.declarationCollisions` refuses the later declaration (E0299), callables, constants and types in separate namespaces. Pinned by five `error_218_*.con` fixtures and `regress_218_type_and_value_namespaces.con`. Found by the diagnostics probes of the post-R-0492 differential hunt
+fixtures: error_218_duplicate_function.con error_218_duplicate_struct.con error_218_struct_and_enum.con error_218_duplicate_constant.con error_218_duplicate_alias.con regress_218_type_and_value_namespaces.con
+class: 1 — two declarations of one spelling in a module: nothing compared declarations with each other
+silent: yes
+exit: 0b
+-->
+
 **Status:** FIXED (branch `wip/diffhunt-1023`)
 **Found:** 2026-10-23, by the diagnostics probes of the post-R-0492 differential hunt (does every
 refusal carry a code?).

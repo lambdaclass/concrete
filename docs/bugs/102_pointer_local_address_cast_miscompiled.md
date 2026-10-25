@@ -1,5 +1,14 @@
 # Bug 102 — the address of a pointer-typed local is miscompiled
 
+<!-- bug-ledger
+summary: `&mut p as *mut *mut T` on a pointer-typed local passed `p`'s value, not its address; `&x` is now `x`'s slot for every non-array local (Lower promotes it), and the interpreter compares pointers (reference paths by place, never null), so `regress_102_pointer_local_address.con` runs natively and under `--interp` with one result ((with 126))
+fixtures: regress_102_pointer_local_address.con regress_102_zero_sized_ptr_eq.con regress_102_ptr_eq_through_raw_base.con
+class: 7
+class: 8
+silent: yes
+exit: 0b
+-->
+
 **Status:** FIXED (branch `lowering-bugs`, with bug 126)
 **Found:** 2026-10-20 by the RocksDB slice 1 groundwork (`docs/platform/ROCKSDB_SLICE1.md`, G2).
 **Severity:** silent wrong code in safe-to-write FFI code. `&mut x as *mut *mut T`, where `x` is a

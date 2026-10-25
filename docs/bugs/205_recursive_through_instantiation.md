@@ -1,5 +1,13 @@
 # Bug 205 — a struct containing itself through a generic instantiation passed the finite-size check
 
+<!-- bug-ledger
+summary: a struct holding itself by value through a generic instantiation (`Node { w: W<Node> }`) passed the finite-size check; natively `llvm-as` refused the recursive type while `--interp` ran it. `tyReachesByValue` now follows instantiations with their arguments substituted (E0583). Pinned by `error_205_recursive_through_instantiation.con` and `regress_205_instantiations_without_cycle.con`. Found by the Codex review of the specification's TYPE-16
+fixtures: error_205_recursive_through_instantiation.con regress_205_instantiations_without_cycle.con
+class: 13 — finite size judged on declarations and assumed for generic instantiations
+silent: yes
+exit: 0b
+-->
+
 **Status:** FIXED (branch `wip/bug205`, based on `wip/train6` `13bc2527`)
 **Found:** 2026-10-23, by the Codex review of the language specification's TYPE-16 (a struct has a
 finite size; `tyReachesByValue` did not traverse generic instantiations), then probed on both

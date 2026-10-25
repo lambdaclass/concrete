@@ -1,5 +1,12 @@
 # Bug 085 — a loop step's model read every variable from before the iteration
 
+<!-- bug-ledger
+summary: a `while_step` loop body's model built every `Cont` field from the pre-iteration env and ended a fall-through `if` early, so `x = x + 1; x = x + 1;` stepped by 1 and `seq(7)` was 21 vs 28; assignments now bind sequentially and branches continue with the rest of the body; pinned by `check_model_diff.sh` leg S
+coverage: a while_step loop body's model read every variable from the pre-iteration env (x = x + 1; x = x + 1 stepped by 1) and dropped the rest of the body after a fall-through if; assignments now bind sequentially. Regression vehicle is a gate: check_model_diff.sh leg S pins tests/regressions/bug085_loop_step/repro.con (ten loop shapes, each pinned to its runtime value); see docs/bugs/085 (2026-10-18)
+class: 7
+silent: yes
+-->
+
 **Status:** FIXED (branch `bug085-stmt-extraction`, on the unpublished bug 080 head `00efbaf4`)
 **Found:** 2026-10-18 by the model-vs-runtime hunt that followed bug 080 (`--report model-diff`).
 **Severity:** a false model: a loop whose body has richer control flow than flat assignments was

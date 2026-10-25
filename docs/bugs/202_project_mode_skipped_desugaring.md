@@ -1,5 +1,12 @@
 # Bug 202 — project builds skipped desugaring, so a `let … else` was refused
 
+<!-- bug-ledger
+summary: desugaring was a separate step each driver called between resolve and check, and the project loader, debug bundle, reducer and Lean pipeline tests skipped it, so a project's `let … else` reached Check undesugared and was refused while the same file compiled standalone; desugaring is now part of `Pipeline.resolve`. Pinned by `regress_202_project_let_else` (run_tests.sh project loop) and `check_local_identity.sh` leg R
+fixtures: regress_202_project_let_else/src/main.con
+class: 12 — the front-end stage sequence restated by each driver; four skipped desugaring
+silent: no
+-->
+
 **Status:** FIXED (branch `vp-r0492`)
 **Found:** 2026-10-23, while moving the checker's binding identities to Resolve (R-0492 slice 1):
 the local walk had to run after desugaring on every path into Check, and four of the paths never

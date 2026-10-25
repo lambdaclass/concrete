@@ -1,5 +1,10 @@
 # Bug 022: A submodule declaration breaks impl-method consumption in the parent
 
+<!-- bug-ledger
+summary: found by #35 conlog workload
+fixtures: submodule_linear_consume/src/main.con
+-->
+
 **Status:** Fixed
 **Discovered:** 2026-07-07
 **Fixed:** 2026-07-07

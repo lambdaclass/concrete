@@ -1,5 +1,13 @@
 # Bug 093: a block local that shadowed an outer name escaped the never-consumed check
 
+<!-- bug-ledger
+summary: a block local or match binder that shadowed an outer name was skipped by the never-consumed check (E0208), so it leaked; checker bindings now carry an identity and scope/merge checks match by it, not by name
+fixtures: error_093_shadowing_block_local_leak.con error_093_shadowing_match_binder_leak.con regress_093_shadowing_locals_consumed.con
+class: 2
+silent: no
+exit: 0b
+-->
+
 **Status:** FIXED
 **Found:** 2026-10-18, checker ownership hunt (probes `p5.con`, `p8.con`, `p12.con`; controls
 `p5q.con`, `p12c.con`).

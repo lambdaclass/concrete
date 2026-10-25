@@ -1,5 +1,10 @@
 # Bug 024: Recursive struct with infinite size leaks to `llvm-as`
 
+<!-- bug-ledger
+summary: found by panic-to-diagnostic probing; recursive struct → E0583 instead of llvm-as leak
+coverage: recursive-struct infinite size -- covered by check_error_leaks.sh gate corpus
+-->
+
 **Status:** Fixed
 **Discovered:** 2026-07-07
 **Fixed:** 2026-07-07

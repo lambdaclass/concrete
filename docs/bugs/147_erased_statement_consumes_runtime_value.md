@@ -1,5 +1,13 @@
 # Bug 147 — an erased proof statement could move a runtime value (the move never ran)
 
+<!-- bug-ledger
+summary: a move inside `assert`, `assume` or `ghost let` (for example `assert(*h == 42)`) discharged the value's obligation in the checker, but those statements are erased, so the release never ran (found by Codex reviewing bug 146). E0243. `error_147_*.con`, `regress_147_assert_reads.con`. Joins exit 0b. ((`safety-eval2`))
+fixtures: error_147_assert_consumes_heap.con error_147_ghost_let_consumes_heap.con error_147_assert_revives_binding.con regress_147_assert_reads.con regress_147_ghost_consumes_ghost.con
+class: 15 — an erased statement counted as a move
+silent: no
+exit: 0b
+-->
+
 **Status:** FIXED 2026-10-22 (branch `safety-eval2`)
 **Found:** 2026-10-22, by the Codex review of bug 146 (once `*h` frees its cell, a `*h` inside an
 erased statement is a release that never happens).

@@ -1,5 +1,13 @@
 # Bug 088 — an unhinted literal was an unchecked `Int`, and the constant folder compared it unwrapped
 
+<!-- bug-ledger
+summary: an unhinted literal defaulted to an `Int` with no range check (`let x = 18446744073709551615` was 2^64-1 interpreted, -1 compiled), a literal at a type variable was never range-checked after Mono, and the SSA folder compared unnormalized constants (`0xFFFFFFFFFFFFFFFF as i64 < 0` folded false); literals now fit their defaulted/instantiated type (E0227, both paths) and the folder normalizes through `IntArith.wrapToType`
+coverage: an unhinted integer literal defaulted to Int with NO range obligation (let x = 18446744073709551615: interp 2^64-1, binary -1), a literal at a type variable was never range-checked after Mono (let y: T = 300 at u8: interp 300, binary 44), and the SSA folder compared unnormalized constants (0xFFFFFFFFFFFFFFFF as i64 < 0: interp true, binary false). Regression vehicles: regress_088_const_fold_casts.con (run_ok 1048575; old compiler 1048574) + error_088_unhinted_literal_range.con (run_err) + check_cast_matrix.sh constant-fold and both-paths-reject sections; see docs/bugs/088 (2026-10-18)
+class: 7
+silent: yes
+exit: 0b
+-->
+
 **Status:** FIXED (branch `bug088-literal-range`)
 **Found:** 2026-10-18 by the model/interp/binary literal hunt (`hunt-model/biglit`, `hunt-model/lits`).
 **Severity:** silent wrong code, three ways. The interpreter, the proof model and the binary computed

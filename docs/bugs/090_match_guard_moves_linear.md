@@ -1,5 +1,13 @@
 # Bug 090: a match guard could move a linear value that a later arm moves again
 
+<!-- bug-ledger
+summary: a match guard could move a linear value; when the guard was false, a later arm moved it again (use after free, double free). Guards are read-only (E0300)
+fixtures: error_090_guard_moves_linear.con error_090_guard_moves_binder.con error_090_guard_defer_moves.con error_090_guard_move_then_reassign.con regress_090_guard_reads.con
+class: 15
+silent: yes
+exit: 0b
+-->
+
 **Status:** FIXED
 **Found:** 2026-10-18, checker ownership hunt (probe `g1.con`).
 **Severity:** critical. A program the checker accepted freed a heap value and then read and freed

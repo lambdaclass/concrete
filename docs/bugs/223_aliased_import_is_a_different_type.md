@@ -1,5 +1,12 @@
 # Bug 223 — an imported type under an alias is a different type
 
+<!-- bug-ledger
+summary: `import m.{P as Q}` gave a type `Q` with none of `P`'s methods (Resolve's E0106 `Q::mk`, Check's E0264) that a `P` from `m` did not match (E0220): types and their methods were found by spelling. Types are now compared, and methods and trait impls looked up, by declaration identity (`TypeId`, `MethodKey` stamped by `buildFileSummary`) in Resolve, Check and Elab (R-0492 step 3). Found by the Phase 7 workload 10 probes, 2026-10-24. Fixtures `regress_223_*`. Class 1.
+fixtures: regress_223_aliased_struct_methods.con regress_223_aliased_enum.con regress_223_aliased_generic_and_bound.con regress_223_aliased_destroy_impl.con regress_223_aliased_self_result.con regress_223_aliased_cap_params.con error_223_method_core_name_taken.con
+class: 1 — an import alias of a type is a second spelling and so a second type: the alias has none of the type's methods, and the type's values do not match it; fixed 2026-10-25, R-0492 step 3: types compared and methods looked up by `TypeId`
+silent: no
+-->
+
 **Status:** FIXED (2026-10-25, R-0492 step 3, branch `wip/r0492-steps34`)
 **Found:** 2026-10-24, while checking bug 222's fix on the import paths (probe programs on the
 alias form of each import, Phase 7 workload 10).

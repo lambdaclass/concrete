@@ -1,5 +1,10 @@
 # Bug 015: Default `-O0` Distorted Real-Workload Performance
 
+<!-- bug-ledger
+summary: Default `-O0` Distorted Real-Workload Performance
+coverage: O0 default perf -- compiler flag default change, not a .con test
+-->
+
 Status: fixed
 
 ## Symptom

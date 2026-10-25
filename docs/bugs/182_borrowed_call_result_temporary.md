@@ -1,5 +1,14 @@
 # Bug 182 — a borrowed call result is accepted: a `Heap` temporary is miscompiled and a linear one leaks
 
+<!-- bug-ledger
+summary: a borrowed call result was accepted (`&alloc(..)` SIGSEGV, `&int_to_string(..)` leaked). Only a variable or a string literal is a reference's root (E0238 REF-5@1), and loans are keyed by root (E0293 REF-8@1); std migrated at two sites. Pinned by the two reproducers, seven `error_d2_*.con` and `regress_d2_roots_and_projections.con` ((D2, the Austral model))
+fixtures: error_d2_borrow_literal.con error_d2_borrow_field_of_temporary.con error_d2_temporary_receiver.con error_d2_mut_borrow_string_literal.con error_d2_call_disjoint_fields.con error_d2_call_field_read.con error_d2_receiver_projection_read.con error_d2_branch_receiver.con error_d2_call_field_read_in_branch.con error_d2_explicit_mut_receiver_read.con regress_d2_roots_and_projections.con
+class: 8 — a borrowed temporary has no slot
+class: 13 — REF-5: a borrowed call result is accepted
+silent: yes
+exit: 0b
+-->
+
 **Status:** FIXED (branch `soundness-holes`, decision D2)
 **Found:** 2026-10-23, by the language-tightening probes (witness programs for
 [TIGHTENING_DECISIONS.md](../language/TIGHTENING_DECISIONS.md), the REF-5 / G12 row).

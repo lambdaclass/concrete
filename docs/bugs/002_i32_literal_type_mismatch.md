@@ -1,5 +1,10 @@
 # Bug 002: i32 Literal Type Mismatch in Binary Operations
 
+<!-- bug-ledger
+summary: i32 Literal Type Mismatch in Binary Operations
+fixtures: bug_i32_literal_type.con
+-->
+
 **Status:** Fixed
 **Discovered:** 2026-03-14
 **Fixed:** 2026-03-14

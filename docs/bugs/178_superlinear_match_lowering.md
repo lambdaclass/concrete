@@ -1,5 +1,12 @@
 # Bug 178: `match` lowering was cubic in the number of arms
 
+<!-- bug-ledger
+summary: a 1000-arm `match` spent 8.45 s in the `lower` stage (~n^3): SSAVerify kept dominator sets as string lists intersected by `filter`/`contains` and rebuilt every strict dominator's definitions per block, and SSACleanup and Lower added quadratic list lookups and appends; deep `if` nesting was cubic in the obligation walk (`assignedScalarsS`). Now O(1) dominance (CHK + dominator-tree times), map-based cleanup, newest-first Lower accumulation; emitted IR unchanged. Pinned by `check_ssa_lowering_scaling.sh` (lower-stage heartbeats and `instructions:u` slope ≤ 1.3). Class 17, owner R-0422
+coverage: superlinear match lowering (compile time, not output). Regression vehicle is check_ssa_lowering_scaling.sh (lower-stage heartbeat and instructions:u slope <= 1.3 over 250-2000 arms), not a tests/programs fixture (2026-10-22)
+class: 17 — a wide `match` was cubic in Lower + SSAVerify + SSACleanup; deep `if` nesting cubic in the obligation walk
+silent: no
+-->
+
 **Status:** FIXED (`wip/bug178`)
 **Found:** 2026-10-22, by the compiler perf tracking (`scripts/perf/` on `wip/perf-tracking`),
 measured on main 34f19e97 and confirmed on 185d998c.

@@ -1,5 +1,13 @@
 # Bug 208 — a fn-typed local spelled like an imported function was replaced by that function
 
+<!-- bug-ledger
+summary: Elab's import-rename pass rewrote every fn-typed identifier whose spelling an import maps, so a fn-typed parameter spelled like an imported function was replaced by that function when used as a value (silent wrong code on both backends: 141 instead of 42; bug 050's recorded remaining gap). Core references now carry binding identities (R-0492 step 3) and an identified local is never renamed. Pinned by `regress_208_fn_local_named_like_import.con` (binary and --interp)
+fixtures: regress_208_fn_local_named_like_import.con
+class: 1 — a fn-typed local renamed to a same-spelled imported function
+silent: yes
+exit: 0b
+-->
+
 **Status:** FIXED (branch `vp-r0492-core`)
 **Found:** 2026-10-23, by the Codex review of R-0492 step 3: the new `ElabVerify` pass would have
 refused the program (U1), because Elab's import-rename pass gave an identified local reference a

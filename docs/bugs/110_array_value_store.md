@@ -1,5 +1,13 @@
 # Bug 110 — an array value is stored as an aggregate where the SSA value is a pointer
 
+<!-- bug-ledger
+summary: an array value held as a pointer to its storage was stored as the aggregate (invalid IR): `a[i] = [3, 4]` elaborated its literal unhinted and Lower coerced it with a whole-array cast (which would have reinterpreted the bytes), and `x as *mut u8` / a newtype wrap of an array spilled the pointer into an array-typed slot; the element type now hints the value and the backend's casts use the storage address; pinned by `regress_110_array_value_store.con`
+fixtures: regress_110_array_value_store.con
+class: 8
+class: 12 — the element-type hint: Check passes it, Elab did not
+silent: no
+-->
+
 **Status:** FIXED (branch `backend-108-116`, commit f3bba025, follow-up 262d3fe0)
 **Found:** 2026-10-20, by the examples-health pass (porting and output-testing every example).
 **Severity:** compile failure at LLVM validation.

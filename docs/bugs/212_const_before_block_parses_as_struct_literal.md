@@ -1,5 +1,12 @@
 # Bug 212 — an uppercase constant before the block of an `if`, `while` or `match` head parses as a struct literal
 
+<!-- bug-ledger
+summary: in an `if` / `while` / `match` head an uppercase name followed by `{` is read as a struct literal, so `if n > LIMIT { … }` with a module constant was refused with a misleading `expected }, got =`; the parser's case rule was in neither the grammar nor SYN-1, and `check_ll1.py` checks FIRST/FIRST only. The E0001 now names the reading and the parenthesized form, and the rule is written into `concrete.ebnf` and SYN-1; the accepted language is unchanged. Pinned by `error_212_const_in_{if,while,match}_head.con` and `regress_212_parenthesized_const_head.con`. Found by Phase 7 workload 9 (lzpack) ((diagnostic and documentation))
+fixtures: error_212_const_in_if_head.con
+class: 12 — the struct-literal decision: a case test in the parser, an ambiguous production in the grammar
+silent: no
+-->
+
 **Status:** FIXED (branch `wip/workload-lzpack`): the refusal now explains itself and the case
 rule is written into the grammar and SYN-1. Which heads the parser accepts is unchanged; whether a
 head should admit a struct literal at all is an open syntax question (below), not decided here.

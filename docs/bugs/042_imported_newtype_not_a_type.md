@@ -1,5 +1,11 @@
 # Bug 042: Imported newtypes/type-aliases silently dropped by Resolve (E0108 at first use)
 
+<!-- bug-ledger
+summary: Imported newtypes/type-aliases silently dropped by Resolve (E0108 at first use)
+coverage: regress_042_import_newtype/src/main.con (project test, exit 0) + std-compiled-coverage numeric leg; Resolve import classifier now registers newtypes + public type aliases
+class: 12
+-->
+
 **Status:** Fixed (2026-07-17)
 **Fixed in:** Resolve.lean import validation — the symbol-kind fall-through
 (function → extern → struct → enum) now continues to newtypes and public

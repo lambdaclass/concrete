@@ -1,5 +1,13 @@
 # Bug 148 — a move inside the right operand of `&&` / `||` counted although it may not run
 
+<!-- bug-ledger
+summary: a move inside the right operand of `&&`/`||` counted as a consumption although the operand may not run (`false && consume(h)` leaked the cell; found by Codex). E0244. `error_148_*.con`, `regress_148_short_circuit_reads.con`. Joins exit 0b. ((`safety-eval2`))
+fixtures: error_148_and_operand_consumes.con error_148_or_operand_consumes.con regress_148_short_circuit_reads.con
+class: 15 — a short-circuit operand treated as sequential
+silent: no
+exit: 0b
+-->
+
 **Status:** FIXED 2026-10-22 (branch `safety-eval2`)
 **Found:** 2026-10-22, by the Codex review of `safety-eval2` (the operand checking predates the
 branch).

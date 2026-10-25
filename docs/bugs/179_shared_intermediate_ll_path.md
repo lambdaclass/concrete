@@ -1,5 +1,12 @@
 # Bug 179: concurrent compiles of one source shared the intermediate `<input>.ll`
 
+<!-- bug-ledger
+summary: the compiler built an executable through `<input>.ll` (file mode) or `<main>.ll` (project mode), a path shared by every compile of that source, so concurrent compiles to different outputs removed or rewrote it under each other's llvm-as / clang (an uncaught `no such file or directory`); every compile now owns a private temp directory (`privateIntermediate`, `IO.FS.withTempDir`), as do test mode, `concrete run` and the reducer, and `--emit-llvm` is unchanged. Found when a devshell toolchain change exposed the race in `run_tests.sh` (bug 102's `--interp == binary` leg against a `run_ok` worker). Pinned by `regress_179_concurrent_compile.con` and `regress_179_concurrent_build` (concurrent compiles in `run_tests.sh`; 35/40 and 9/12 fail on the previous compiler)
+fixtures: regress_179_concurrent_compile.con regress_179_concurrent_build/src/main.con
+class: 16 — the intermediate `.ll` at `<input>.ll`, shared by concurrent compiles of one source
+silent: no
+-->
+
 **Status:** FIXED (branch `devshell-toolchain`)
 **Found:** 2026-10-22, when a devshell toolchain change (Nix clang ahead of the Lean release's
 clang on `PATH`) changed the timing of `scripts/tests/run_tests.sh`, and one of its legs started

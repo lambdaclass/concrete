@@ -1,5 +1,10 @@
 # Bug 014: String Literal In Loop Produced Invalid LLVM IR
 
+<!-- bug-ledger
+summary: String Literal In Loop Produced Invalid LLVM IR
+fixtures: test_string_literal_in_loop.con
+-->
+
 Status: fixed
 
 ## Symptom

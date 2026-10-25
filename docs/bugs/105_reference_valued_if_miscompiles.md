@@ -1,5 +1,16 @@
 # Bug 105 — an `if` yielding a reference is miscompiled
 
+<!-- bug-ledger
+summary: a reference-valued `if`/`match` segfaulted natively; the E0238 containment missed generics instantiated at a reference type, and the defect was EmitSSA storing a reference register as the aggregate it points at (a memcpy of the referent's first 8 bytes); `regress_105_ref_valued_branch_generic.con` with an `--interp == binary` leg, the E0238 fixtures stay
+fixtures: regress_105_ref_valued_branch_generic.con error_105_ref_valued_if_arg.con error_105_ref_valued_if_field.con
+class: 4 — checker containment
+class: 6 — a source-level reference rule satisfied later by Mono's substitution
+class: 7
+class: 12 — `isPassByPtr` read both as "passed as a pointer" and "a register holding an aggregate by pointer"
+silent: yes
+exit: 0b
+-->
+
 **Status:** FIXED (branch `lowering-bugs`; the checker containment stays)
 **Found:** 2026-10-20, while testing the bug 091 round 3 overlap check.
 **Severity:** a miscompile. The compiled binary dereferences garbage (segfault) where the

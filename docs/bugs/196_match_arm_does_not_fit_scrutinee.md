@@ -1,5 +1,13 @@
 # Bug 196 — a match arm whose pattern did not fit the scrutinee was not checked
 
+<!-- bug-ledger
+summary: a match arm whose pattern did not fit the scrutinee was not checked: a variant of another enum made the checker panic (`Option.get!`) or, sharing a name, was silently taken as the scrutinee's own variant, a range over an enum failed in the SSA verifier natively while `--interp` ran it, and variant arms over integers or literals of another type were accepted. Refused with E0309; pinned by six `error_196_*.con` fixtures. Found by the language specification's patterns chapter
+fixtures: error_196_other_enum_variant.con error_196_range_over_enum.con error_196_variant_over_int.con error_196_literal_type.con error_196_literal_over_type_param.con error_196_same_name_other_enum.con
+class: 13 — pattern shape left to CoreCheck, after Elab crashed or lowered the arm
+silent: yes
+exit: 0b
+-->
+
 **Status:** FIXED (branch `wip/bug196`)
 **Found:** 2026-10-23, by the language specification's patterns chapter (`docs/spec/patterns.md`,
 PAT-3: a variant pattern names a variant of the scrutinee's enum; a literal or range pattern

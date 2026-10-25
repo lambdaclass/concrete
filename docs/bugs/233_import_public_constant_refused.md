@@ -1,5 +1,12 @@
 # Bug 233 — a public constant cannot be imported, and the refusal says it is not public
 
+<!-- bug-ledger
+summary: an import of a `pub const` was refused as "not public" (E0285; a `pub trait` too): Resolve's public-name list admitted it, the import rule Check and Elab share had no case for it, and Core named a constant by its spelling. Contained first (refused with the reason; traits stay module-local by design, E0126 / E0323 / E0423), then fixed by R-0492 step 4: a constant is imported by its `ConstId`, Core references it as `cfg::BASE`, and Lower and the interpreter inline its initializer in its defining module's scope. Found by the differential hunt, 2026-10-24. Fixtures `regress_233_*`, `error_233_*`. Classes 12 and 1.
+fixtures: regress_233_import_constant.con regress_233_nested_import_constant.con regress_233_import_constant_scope.con regress_233_nested_alias_constant.con regress_233_constant_type_alias.con regress_233_constant_type_imported_alias.con error_233_imported_initializer_calls_function.con error_233_imported_initializer_extern.con error_233_imported_initializer_via_constant.con error_233_import_constant_collides_local.con error_233_import_trait.con regress_233_shared_spelling_import.con
+class: 12 — which declarations an import may name: the public-name list holds traits and constants, the import rules have no case for them; fixed 2026-10-25, R-0492 step 4: a constant is imported by its `ConstId`, a trait refused with the reason
+silent: no
+-->
+
 **Status:** FIXED (2026-10-25, R-0492 step 4, branch `wip/r0492-steps34`; contained 2026-10-24 on
 `wip/diffhunt-1025`)
 **Found:** 2026-10-24, by the differential hunt on main `9622f7e0` (module constants across

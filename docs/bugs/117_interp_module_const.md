@@ -1,5 +1,12 @@
 # Bug 117 — the interpreter does not resolve module-level constants
 
+<!-- bug-ledger
+summary: the interpreter did not resolve module-level constants (`undefined variable 'K'`); it now evaluates the initializer at the use in a frame of its own, refuses a name two modules define (as Lower does, bug 132), and looks names up in their own frame only. Interp-vs-native leg on the reproducer ((interpreter-coverage pass))
+coverage: the interpreter evaluates a module constant's initializer at the use, in its own frame, and refuses a name two modules define (bug 132). Regression vehicle: run_tests.sh interp-vs-native leg on tests/regressions/bug117_interp_module_const/repro.con; examples/snippets/constants.con promoted to interp=yes (2026-10-21 (interpreter-coverage pass))
+class: 7
+silent: no
+-->
+
 **Status:** FIXED 2026-10-21 (interpreter-coverage pass, branch `interp-coverage`)
 **Found:** 2026-10-20, by the examples-health pass (porting and output-testing every example).
 **Severity:** interpreter/native disagreement: the interpreter rejects a valid program the binary runs.

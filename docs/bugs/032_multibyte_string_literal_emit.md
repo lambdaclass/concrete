@@ -1,5 +1,10 @@
 # Bug 032: multibyte UTF-8 string literals miscompile in emitted LLVM globals
 
+<!-- bug-ledger
+summary: multibyte UTF-8 string literals miscompile in emitted LLVM globals
+coverage: regress_032_multibyte_str_literal.con (run_ok 42); EmitSSA byte-based literal sizes+escapes
+-->
+
 **Status:** Fixed (2026-07-14)
 **Fixed in:** EmitSSA.lean — `ssaEscapeCharForLLVM` now emits each non-ASCII
 char's UTF-8 BYTES as `\XX` hex escapes (it hex-escaped the CODEPOINT, garbage

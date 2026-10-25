@@ -1,5 +1,10 @@
 # Bug 034: `&&`/`||` RHS borrow skipped lazy-promotion pre-store — silent neighbor corruption
 
+<!-- bug-ledger
+summary: found by std.cli v1 (031 class, third site)
+coverage: regress_034_shortcircuit_borrow_promotion.con (run_ok 133) guards the shape; LOAD-BEARING regression = check_cli_helpers.sh two-positionals leg (pre-fix compiler aborts 134, verified); Lower &&/|| prePromoteAddrTaken
+-->
+
 **Status:** Fixed (2026-07-16)
 **Fixed in:** Lower.lean short-circuit `.and_`/`.or_` lowering — now calls
 `prePromoteAddrTaken` (the bug-031 fix) before branching, exactly like the

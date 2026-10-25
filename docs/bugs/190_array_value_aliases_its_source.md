@@ -1,5 +1,13 @@
 # Bug 190: binding or passing an array by value shared the source's storage
 
+<!-- bug-ledger
+summary: an immutable `let`, a `match` binder or a by-value argument of array type aliased the source array in the binary (an array value is its storage's address in Lower), so writing the source changed the copy (silent; `--interp` copied). `snapshotArrayValue` copies at every by-value site; pinned by `regress_190_array_value_copy.con` (`--interp == binary`, 42)
+fixtures: regress_190_array_value_copy.con
+class: 8 — an array bound by value aliased its source
+silent: yes
+exit: 0b
+-->
+
 **Status:** FIXED (branch `soundness-holes`)
 **Found:** 2026-10-23, by the Codex review of the bug 136/137 fix (an evaluation-order temporary
 holding an array did not snapshot it), then generalized by probing plain bindings.

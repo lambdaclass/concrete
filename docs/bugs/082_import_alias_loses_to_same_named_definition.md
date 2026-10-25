@@ -1,5 +1,13 @@
 # Bug 082 — an import alias lost to any same-named definition in the program
 
+<!-- bug-ledger
+summary: `import a.{check_version as check_class}` ran another module's `check_class` on both backends, because the alias spelling went into Core and every consumer resolved it against the whole program. Elab now writes the definition's spelling, and a module binding one name twice (an import and a local function, or two imports) is E0299
+coverage: an import alias reached Core as the alias spelling and every backend resolved it program-wide, so import a.{check_version as check_class} ran another module's check_class (compiled AND interp); also an unaliased import of a name two top-level modules define, and a project submodule's std import hijacked by a sibling submodule's same-named fn. Elab now spells such calls by their definition (importCallSpellingsFor), and one name has one binding per module (E0299). Regression: tests/codegen/import_alias_binding.con (interp==compiled differential + pinned 77324 in check_codegen_execution.sh; previous compiler 12814) and tests/programs/error_082_import_alias_shadows_local.con / error_082_import_duplicate_binding.con / error_082_import_alias_shadows_method.con / error_082_import_spelling_collision.con / error_082_import_suffix_collision.con (run_err E0299), plus the project test regress_082_project_alias_binding/src/main.con (sibling alias = bug 055, and std.math.abs not hijacked by a sibling submodule's abs); see docs/bugs/082 (2026-10-18)
+class: 1
+silent: yes
+exit: 0b
+-->
+
 **Status:** FIXED (branch `bug082-alias-resolution`)
 **Found:** 2026-10-18 by a name-resolution hunt (reproducer `hunt-names/alias/main.con`).
 **Severity:** silent wrong code on both backends. A program called a function it never imported.

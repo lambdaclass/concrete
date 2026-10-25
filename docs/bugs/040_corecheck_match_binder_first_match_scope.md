@@ -1,5 +1,11 @@
 # Bug 040: CoreCheck false E0500 on same-named match binders of different scalar types
 
+<!-- bug-ledger
+summary: CoreCheck false E0500 on same-named match binders of different scalar types
+coverage: regress_040_match_binder_types.con (run_ok 42); CoreCheck addVar shadows (prepend) + match-arm binders arm-scoped (save/restore)
+class: 2
+-->
+
 **Status:** Fixed (2026-07-17)
 **Fixed in:** CoreCheck.lean — `addVar` prepends (rebinding shadows, since
 `lookupVar` is first-match), and `ccCheckMatchArm` saves/restores the var

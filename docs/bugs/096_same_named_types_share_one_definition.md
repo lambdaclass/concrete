@@ -1,5 +1,13 @@
 # Bug 096 — two modules' same-named types are one type to Core and every consumer below it
 
+<!-- bug-ledger
+summary: two modules' same-named structs, enums and newtypes were one Core type (the binary read one module's `P` at another's offsets; Resolve refused a variant of a module's own enum); Core now spells a type declared by two modules `<module path>_<name>`, and Resolve searches a module's own scope first ((`land5`))
+fixtures: regress_096_type_identity_same_named.con regress_096_imported_type_layout.con regress_096_local_and_imported_same_name.con regress_096_same_named_destroy.con regress_096_nested_same_named_methods.con regress_096_imported_struct_field_binding.con regress_096_method_value_same_named.con error_096_imported_sig_binds_other_type.con error_096_canonical_type_spelling_clash.con regress_096_import_closure_copy.con regress_096_generic_method_param_named_like_type.con error_096_method_spelling_clash.con regress_096_private_method_not_transported.con error_096_import_precedence_binding.con error_096_method_owner_exact.con regress_096_sibling_types_unused.con regress_096_method_owner_same_module.con error_096_chained_alias_signature.con regress_096_transitive_signature_binding.con error_096_qualified_call_other_type.con error_096_alias_signature_other_type.con regress_096_sibling_injected_binding.con error_096_generic_qualified_call_other_type.con error_096_fn_value_other_type.con error_096_enum_payload_binding_other_type.con error_096_const_initializer_other_type.con error_096_trait_dispatch_other_type.con error_096_extern_signature_other_type.con error_096_generic_trait_impl_dispatch_other_type.con regress_096_newtype_field_nominal.con regress_096_alias_typed_const.con error_096_newtype_unwrap_other_type.con regress_096_extern_alias_param.con regress_096_nested_newtype_construct.con regress_096_diverging_initializer.con regress_096_alias_copy_unused.con
+class: 1
+silent: yes
+exit: 0b
+-->
+
 **Status:** FIXED 2026-10-21 (`land5`)
 **Found:** 2026-10-18, by the probes behind branch `bug096-type-identity` (bug 082's review).
 **Severity:** silent wrong code in safe code: a module reads a struct, enum or newtype declared

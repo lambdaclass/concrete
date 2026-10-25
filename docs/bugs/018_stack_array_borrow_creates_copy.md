@@ -1,5 +1,10 @@
 # Bug 018: Borrowing A Stack Array Can Create A Copy Instead Of A Stable Reference
 
+<!-- bug-ledger
+summary: Borrowing A Stack Array Can Create A Copy Instead Of A Stable Reference
+fixtures: bug_stack_array_borrow_copy.con
+-->
+
 Status: fixed (f8f1bf8)
 
 ## Symptom

@@ -1,5 +1,12 @@
 # Bug 080 — a narrowing cast was the identity in the proof model, so a proof could be about a different function
 
+<!-- bug-ledger
+summary: `PExpr.cast` was the identity, so `x as u8` was 300 in the proof model and 44 in the binary; value-changing casts now extract as `wrapCast` (the runtime's wrap formula), affected proofs show their values fit, and `check_model_diff.sh` compares model and runtime on boundary inputs across the corpus
+coverage: a narrowing cast was the identity in the proof model (x as u8 = 300 in the model, 44 in the binary); value-changing casts extract as wrapCast. Regression vehicle is a gate: check_model_diff.sh compares the model with the interpreter on boundary inputs across the corpus and pins tests/regressions/bug080_narrow_cast (300 -> 44 on both sides); see docs/bugs/080 (2026-10-18)
+class: 7
+silent: yes
+-->
+
 **Status:** FIXED (branch `bug080-cast-model`)
 **Found:** 2026-10-18 by the R-0460 scoping review ("Bridge B"), confirmed by running it.
 **Severity:** a false proof: the model a theorem is about computed a different value from the

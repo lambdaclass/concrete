@@ -1,5 +1,13 @@
 # Bug 186: trait impl selection was a search, not a function
 
+<!-- bug-ledger
+summary: trait impl selection was a search keyed by spellings. The parser dropped an impl target's type arguments (`impl Tr for Box2<i32>` implemented `Tr` for every `Box2`: silent wrong code in both engines), overlapping impls compiled to the first body emitted, duplicate impls and a method name shared by two impls of a type failed only in `llvm-as` or by declaration order in `--interp`, any module could add an impl, and a call through `T: A + B` took the first bound with the method. A whole-program coherence judgment over typed identities (`Concrete/Check/Coherence.lean`) now refuses E0590 – E0594 before any method table is built, and Check refuses an ambiguous bound call (E0595); rules TRAIT-1 – TRAIT-7 in `docs/spec/traits.md`. The interpreter dispatches trait calls on primitive receivers. Fixtures `error_186_*`, `regress_186_*`. Class 1; owner R-0492/R-0514, follow-ups R-0548 and R-0549
+fixtures: error_186_duplicate_impl.con error_186_duplicate_generic_impl.con error_186_overlap_generic_impl.con error_186_overlap_blanket_impl.con error_186_orphan_impl.con error_186_specialized_impl.con error_186_method_clash.con error_186_inherent_clash.con error_186_ambiguous_bound_method.con error_186_duplicate_primitive_spelling.con error_186_orphan_sibling.con error_186_imported_alias_target.con error_186_builtin_arity.con regress_186_coherent_impls.con regress_186_primitive_impl_spellings.con regress_186_coherent_impls_reversed.con regress_186_visible_targets.con
+class: 1 — an impl keyed by its type's spelling with its arguments dropped, and a method by `Type_method`: impl selection was a first-match search
+silent: yes
+exit: 0b
+-->
+
 **Status:** FIXED (branch `trait-coherence`)
 **Found:** 2026-10-23, by a Codex audit of trait resolution, confirmed by probes on `wip/train3`
 (1df4cf48).

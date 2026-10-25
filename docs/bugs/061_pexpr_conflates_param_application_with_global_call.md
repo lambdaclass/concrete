@@ -1,5 +1,11 @@
 # Bug 061: the proof model spells a parameter application and a global call the same way
 
+<!-- bug-ledger
+summary: `PExpr.applyVar` + a `FnTable.callables` namespace; filed as latent, but the witness was already load-bearing in three shipped HOF proofs (in R-0442)
+coverage: PExpr gained .applyVar and FnTable gained a callables namespace, so a parameter application and a definition call are different nodes resolved in different namespaces; gated by check_proofcore_callable_identity.sh (29 checks) with mutations #31-#33 ((R-0442))
+class: 1
+-->
+
 **Status:** Fixed (2026-07-28, R-0442).
 **Discovered:** 2026-07-25, auditing R-0002/R-0003 against `docs/project/PRINCIPLES.md`.
 

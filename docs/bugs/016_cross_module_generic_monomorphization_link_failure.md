@@ -1,5 +1,10 @@
 # Bug 016: Cross-Module Generic Monomorphization Can Fail To Link In Package Builds
 
+<!-- bug-ledger
+summary: Cross-Module Generic Monomorphization Can Fail To Link In Package Builds
+fixtures: bug_cross_module_mut_borrow.con
+-->
+
 Status: fixed
 
 ## Fix
