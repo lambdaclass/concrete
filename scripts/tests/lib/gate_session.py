@@ -26,8 +26,12 @@ THE STRUCTURE. The run gets a process group, and the group is the unit of owners
     processes nor a lock, and a run whose children are still alive is never handed over. This is
     also the release of a NORMAL run: the session-owning runner leaves its lock in place, because a
     process its gates left behind is still working the tree until the sweep has removed it.
-  * A signalled run gets the grace period from the first signal, then SIGKILL, even while the runner
-    is still alive: waiting for a runner that ignores SIGTERM would never reach the escalation.
+  * A signalled run is SIGKILLed 3 x grace + 5 s after the first signal, even while the runner is
+    still alive: waiting for a runner that ignores SIGTERM would never reach the escalation. The
+    margin lets the runner finish its own sweep (TERM, grace, KILL) first, so its summary and its
+    heavy slot are settled only once its gates are gone.
+  * Campaign groups that run_campaign_child.py registered in this session's lock are swept with the
+    session: they left the group on purpose, so killpg() alone would not reach them.
   * If the front itself dies (SIGKILL, or the caller's whole group is killed), the leader sees its
     pipe from the front reach EOF and terminates the group itself. The front stays in the caller's
     group precisely so that terminal Ctrl-C and a caller's group kill reach it.
@@ -55,6 +59,24 @@ import time
 
 FORWARDED = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
 FRESH_SH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fresh.sh")
+LOCK_DIR = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", ".gate.lock"))
+
+
+def registered_groups(session: int) -> list:
+    """Campaign groups registered in the repository lock, if that lock is this session's (bug 244).
+
+    run_campaign_child.py leaves the session on purpose, so killpg() on the session cannot reach its
+    child; it records the group it creates under <lock>/groups instead, and cancelling the run must
+    cancel those groups too. Only a lock whose owner names THIS session is read: another run's
+    registrations are not this run's to kill.
+    """
+    try:
+        with open(os.path.join(LOCK_DIR, "owner"), encoding="utf-8") as fh:
+            if f"pgid={session}" not in fh.read().split():
+                return []
+        return [int(e) for e in os.listdir(os.path.join(LOCK_DIR, "groups")) if e.isdigit()]
+    except (OSError, ValueError):
+        return []
 
 
 def note(msg: str) -> None:
@@ -112,20 +134,28 @@ def sweep(pgid: int, grace: float, exclude=()) -> int:
     The group is probed with ps rather than killpg when `exclude` is given, because the leader
     sweeping its own group is itself a member.
     """
+    extra = registered_groups(pgid)
+
     def alive():
         if exclude:
             m = ps_members(pgid, exclude)
-            return m if m is not None else [-1]
-        m = ps_members(pgid) or []
-        if group_alive(pgid) and not m:
-            m = [-1]
-        return m
+            m = m if m is not None else [-1]
+        else:
+            m = ps_members(pgid) or []
+            if group_alive(pgid) and not m:
+                m = [-1]
+        return m + [-g for g in extra if group_alive(g)]
 
     found = alive()
     if not found:
         return 0
     n = len([p for p in found if p > 0]) or 1
     for sig, wait_for in ((signal.SIGTERM, grace), (signal.SIGKILL, 5.0)):
+        for g in extra:
+            try:
+                os.killpg(g, sig)
+            except OSError:
+                pass
         if exclude:
             signal_pids([p for p in alive() if p > 0], sig)
         else:
@@ -160,6 +190,12 @@ def leader(fd: int, cmd: list, grace: float) -> int:
     cancelled = threading.Event()
     for s in FORWARDED:
         signal.signal(s, lambda *_: cancelled.set())
+    # A TEST HOOK, inert by default: holds the startup window open so the regression leg can deliver
+    # a signal inside it rather than hoping to land there.
+    delay = float(os.environ.pop("CONCRETE_GATE_SESSION_STARTUP_DELAY", "0") or 0)
+    if delay > 0:
+        os.write(2, b"gate-session: leader waiting before launch\n")
+        cancelled.wait(delay)
     if cancelled.is_set():
         return 128 + signal.SIGTERM
     child = subprocess.Popen(cmd)
@@ -216,14 +252,17 @@ def front(cmd: list, grace: float) -> int:
     # A SIGNALLED RUN GETS THE GRACE PERIOD, then SIGKILL — measured from the first signal, and while
     # the leader is still running. Waiting for the leader first would wait for a runner that ignores
     # SIGTERM, and the escalation would never start.
+    # The runner sweeps its own group first (TERM, grace, KILL) so that its summary and heavy slot
+    # are settled after its gates are gone; the launcher's SIGKILL waits long enough for that.
+    deadline = 3 * grace + 5
     killed = False
     while True:
         try:
             raw = proc.wait(timeout=0.2)
             break
         except subprocess.TimeoutExpired:
-            if caught and not killed and time.monotonic() - caught[0][1] > grace:
-                note(f"the run did not stop within {grace:g} s of the signal; killing it")
+            if caught and not killed and time.monotonic() - caught[0][1] > deadline:
+                note(f"the run did not stop within {deadline:g} s of the signal; killing it")
                 try:
                     os.killpg(proc.pid, signal.SIGKILL)
                 except OSError:
@@ -231,7 +270,10 @@ def front(cmd: list, grace: float) -> int:
                 killed = True
     found = sweep(proc.pid, grace)
     if found and not caught and raw == 0:
-        note(f"{found} process(es) of the run outlived the runner and were terminated")
+        # A BACKSTOP: the runner sweeps before it reconciles, so this means something outlived even
+        # that — the run's verdict was published while its work went on, and it does not stand.
+        note(f"{found} process(es) of the run outlived the runner and were terminated; the run fails")
+        raw = 1
     os.close(w)
     # THE LOCK IS RECLAIMED BY THE SAME RULE ANY LATER RUN APPLIES, never released by fiat: the front
     # did not create it, and the rule refuses unless the recorded session is provably empty. This is

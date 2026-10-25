@@ -445,6 +445,13 @@ source "$ROOT_DIR/scripts/tests/lib/fresh.sh" 2>/dev/null \
   || _ci_fresh_fail "could not load scripts/tests/lib/fresh.sh — refusing to run unlocked."
 command -v _gate_lock_acquire >/dev/null 2>&1 \
   || _ci_fresh_fail "fresh.sh loaded but _gate_lock_acquire is missing."
+# INSIDE A GATE SESSION THIS RUNNER NEVER RELEASES THE LOCK, on any path (bug 244). Every exit — a
+# refusal after a failed build as much as the end of a pass — may leave a process behind that is
+# still working the tree, and the lock is what keeps the next run off it. The session launcher sweeps
+# the group and then reclaims the lock on the kernel's word that the group is empty.
+if [ "$CI_SESSION_OWNER" = "1" ]; then
+  _gate_lock_release() { return 0; }
+fi
 
 # INVALIDATE THE COMPLETION ARTIFACT BEFORE ANYTHING CAN FAIL.
 #
@@ -880,6 +887,48 @@ fi
 # and a gate can run for minutes, so a signal arriving mid-gate was routinely forgotten.
 REACHED_END=1
 
+# NOTHING THE GATES STARTED MAY OUTLIVE THEM UNACCOUNTED (bug 244). Inside a gate session every
+# process this pass started is a member of the session's group — except a campaign group registered
+# in the lock, which is swept too. Anything still alive here was left behind by a gate (or, after an
+# interruption, has not stopped yet): it is terminated (SIGTERM, the grace period, SIGKILL) BEFORE the
+# tree is reconciled, the summary written and the heavy slot released, and it blocks completion,
+# because a process still working the tree after its gate "passed" makes the verdict describe a tree
+# that kept changing. Listing excludes this shell, the session leader and the `ps` doing the listing;
+# zombies are not processes.
+_ci_session_members() { # file -> member pids, one per line; nonzero when ps could not answer
+  ps -A -o pid=,ppid=,pgid=,stat=,comm= > "$1.ps" 2>/dev/null || return 1
+  awk -v g="$CONCRETE_GATE_SESSION" -v me="$$" '
+    $3 == g && $1 != me && $1 != g && $4 !~ /^Z/ && !($2 == me && $5 ~ /(^|\/)ps$/) { print $1 }
+  ' "$1.ps" > "$1"
+  local d="${CONCRETE_GATE_LOCK#*:}" e
+  [ -d "$d/groups" ] || return 0
+  for e in "$d"/groups/*; do
+    case "${e##*/}" in ''|*[!0-9]*) continue ;; esac
+    kill -0 -- "-${e##*/}" 2>/dev/null && echo "-${e##*/}" >> "$1"
+  done
+  return 0
+}
+CI_SURVIVORS=0
+if [ "$CI_SESSION_OWNER" = "1" ]; then
+  _sw="$GATE_OUT_TMP/session.members"
+  if ! _ci_session_members "$_sw"; then
+    CI_SURVIVORS="unknown"
+  elif [ -s "$_sw" ]; then
+    CI_SURVIVORS="$(grep -c . "$_sw")"
+    _grace="${CONCRETE_GATE_SESSION_GRACE:-10}"; _grace="${_grace%.*}"; [ -n "$_grace" ] || _grace=10
+    for _sig in TERM KILL; do
+      # shellcheck disable=SC2046
+      kill -"$_sig" -- $(cat "$_sw") 2>/dev/null
+      for (( _i=0; _i<_grace*5; _i++ )); do
+        _ci_session_members "$_sw" && [ ! -s "$_sw" ] && break 2
+        sleep 0.2
+      done
+    done
+    [ "$RUN_INTERRUPTED" = "1" ] \
+      || echo "  WARNING $CI_SURVIVORS process(es) outlived their gates and were terminated; this run cannot be a closure run" >&2
+  fi
+fi
+
 # ---------------------------------------------------------------------------
 # COMPLETION INTEGRITY. Each dimension that moved is NAMED, so a suppressed completion says which
 # thing changed rather than only that something did.
@@ -891,6 +940,10 @@ REFUSALS=""
 # exactly why closure mode forces JOBS=1.
 MODE_NOTES=""
 [ "$JOBS" = "1" ] || MODE_NOTES=" jobs_not_serial(jobs=$JOBS)"
+# Survivors (bug 244; swept above) block completed=1 in every mode: the tree may have changed after
+# the gate that left them reported. They are a completion fact, not a gate failure: the gates' own
+# verdicts stand, and the warning above names how many there were.
+[ "$CI_SURVIVORS" = "0" ] || MODE_NOTES="$MODE_NOTES processes_outlived_gates($CI_SURVIVORS)"
 # The in-band marker must REFUSE, not be compared: two identical markers satisfy equality exactly
 # like two identical digests. The campaign rejected it and this producer did not.
 case "$START_HEAD$START_TRACKED$START_UNTRACKED" in
@@ -1065,12 +1118,8 @@ if [ "${RUN_INTERRUPTED:-0}" = "1" ]; then
   else
     echo "  Verify nothing is working the tree, then: rm -rf $ROOT_DIR/.gate.lock" >&2
   fi
-elif [ "$CI_SESSION_OWNER" = "1" ]; then
-  # NOT RELEASED HERE EITHER, inside a gate session. A gate may have left a process behind, and the
-  # lock is the only thing keeping a new run off the tree until the session launcher has swept it.
-  # The launcher reclaims the lock once the kernel reports the session empty (gate_session.py).
-  :
 else
+  # A no-op inside a gate session (see where fresh.sh is loaded): the launcher reclaims after its sweep.
   _gate_lock_release
 fi
 [ "$HEAVY_RUN" = "1" ] && heavy_slot_release

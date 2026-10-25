@@ -676,6 +676,42 @@ mkdir -p "$SB/.gate.lock.reclaim"
   || no "reclaim proceeded under another reclaimer's mutex"
 rm -rf "$SB/.gate.lock.reclaim"; _clear
 
+# --- release is serialized with reclaim, and keeps the lock for live registered work ---
+# A reclaimer judges a lock under the mutex; a release must wait for it, or the lock it judged could be
+# released and re-taken by another run before the reclaimer deletes "it" — the new run's lock.
+_mkprobe relwait.sh 'source scripts/tests/lib/fresh.sh
+_gate_lock_acquire || exit 9
+echo acquired > relwait.marker
+while [ ! -f relwait.go ]; do sleep 0.1; done
+exit 0'
+_clear; rm -f "$SB/relwait.marker" "$SB/relwait.go"
+( cd "$SB" && exec env -u CONCRETE_GATE_LOCK -u CONCRETE_GATE_SESSION bash relwait.sh >/dev/null 2>&1 ) & _rp=$!
+_wait_file "$SB/relwait.marker"
+mkdir "$SB/.gate.lock.reclaim"; : > "$SB/relwait.go"; sleep 1.5
+if [ -d "$SB/.gate.lock" ] && kill -0 "$_rp" 2>/dev/null; then
+  ok "a release waits while the reclaim mutex is held, instead of removing the lock under it"
+else
+  no "a release removed the lock while a reclaimer held the mutex — a reclaim could then delete a new run's lock"
+fi
+rmdir "$SB/.gate.lock.reclaim"; wait "$_rp" 2>/dev/null
+[ ! -d "$SB/.gate.lock" ] \
+  && ok "...and completes once the mutex is free" \
+  || no "...but the lock was never released after the mutex was freed"
+_clear
+_live_group "$TMP/g3.pid"; G3="$(cat "$TMP/g3.pid" 2>/dev/null)"; LIVE_PIDS="$LIVE_PIDS $G3"
+_mkprobe relreg.sh 'source scripts/tests/lib/fresh.sh
+_gate_lock_acquire || exit 9
+mkdir -p .gate.lock/groups; : > ".gate.lock/groups/$1"
+exit 0'
+( cd "$SB" && env -u CONCRETE_GATE_LOCK -u CONCRETE_GATE_SESSION bash relreg.sh "$G3" >/dev/null 2>"$TMP/err" ); _rc=$?
+if [ -d "$SB/.gate.lock" ] && [ "$_rc" != "0" ] && grep -q 'registered campaign work is still alive' "$TMP/err"; then
+  ok "a gate exiting while a campaign group it registered is alive keeps the lock, and says so"
+else
+  no "the lock was released (rc=$_rc) while registered campaign work was alive"
+fi
+kill -KILL -- "-$G3" 2>/dev/null; _wait_dead "$TMP/g3.pid"
+_clear
+
 # --- the escaping launcher registers its group, then removes it ---
 mkdir -p "$SB/.gate.lock"; printf 'pid=%s\ncmd=holder\n' "$$" > "$SB/.gate.lock/owner"
 CONCRETE_GATE_LOCK="$$:$SB/.gate.lock" python3 "$ROOT_DIR/scripts/tests/lib/run_campaign_child.py" \
@@ -778,24 +814,32 @@ _reset_marks
     CONCRETE_GATE_SESSION_GRACE=4 DUMMY_MARK="$MARK" JOBS=1 \
     bash scripts/tests/run_ci_gates_local.sh --first "bash scripts/tests/check_dummy_leaves.sh" >"$TMP/run.leaves" 2>&1 ) &
 RPID=$!; LIVE_PIDS="$LIVE_PIDS $RPID"
-_held_while_left=unknown
-for _ in $(seq 1 150); do
-  if grep -q 'summary written' "$TMP/run.leaves" 2>/dev/null; then
-    if _alive_any "$MARK/stubborn.pid"; then
-      [ -d "$RSB/.gate.lock" ] && _held_while_left=held || _held_while_left=released
-    fi
-    break
+# Sampled throughout the run: whenever the left-behind process is alive, the lock must exist.
+_violation=0; _seen_alive=0; _dead_before_summary=unknown
+for _ in $(seq 1 300); do
+  kill -0 "$RPID" 2>/dev/null || break
+  if _alive_any "$MARK/stubborn.pid"; then
+    _seen_alive=1; [ -d "$RSB/.gate.lock" ] || _violation=1
+  fi
+  if [ "$_dead_before_summary" = unknown ] && grep -q 'summary written' "$TMP/run.leaves" 2>/dev/null; then
+    _alive_any "$MARK/stubborn.pid" && _dead_before_summary=no || _dead_before_summary=yes
   fi
   sleep 0.1
 done
 wait "$RPID" 2>/dev/null
-case "$_held_while_left" in
-  held)     ok "a normal run's lock stays held while a process its gate left behind is alive" ;;
-  released) no "a normal run released its lock while a process its gate left behind was still alive" ;;
-  *)        no "the left-behind control did not reach its state (runner finished with the process alive)" ;;
-esac
+if [ "$_seen_alive" = 1 ] && [ "$_violation" = 0 ]; then
+  ok "a run's lock stays held for as long as a process its gate left behind is alive"
+else
+  no "the lock was released while a left-behind process lived (seen_alive=$_seen_alive violation=$_violation)"
+fi
+[ "$_dead_before_summary" = yes ] \
+  && ok "the runner ends what its gates left behind before it writes its summary" \
+  || no "the summary was written while a left-behind process was alive ($_dead_before_summary)"
+grep -q 'processes_outlived_gates' "$RSB/.ci-gates-summary" 2>/dev/null \
+  && ok "...and the summary records it, so the run cannot be a closure" \
+  || no "the summary does not record the left-behind process ($(grep refusals "$RSB/.ci-gates-summary" 2>/dev/null))"
 if ! _alive_any "$MARK/stubborn.pid" && [ ! -d "$RSB/.gate.lock" ]; then
-  ok "...and once the launcher has swept it, the lock is gone with no manual step"
+  ok "...and once the run is over, the lock is gone with no manual step"
 else
   no "after a normal run the left-behind process survived or the lock stayed ($(tr '\n' ' ' < "$RSB/.gate.lock/owner" 2>/dev/null))"
 fi
@@ -804,33 +848,75 @@ fi
 # Escalation must not wait for the run to exit: a runner that ignores SIGTERM would hold the main
 # wait forever. Both directions: the front signalled, and the front killed outright (the leader is then
 # the only one left to escalate). And a signal arriving as the session starts must still end it.
-for _how in TERM KILL START; do
+for _how in TERM KILL; do
   rm -f "$TMP/stub.pid"
   ( exec env -u CONCRETE_GATE_SESSION CONCRETE_GATE_SESSION_GRACE=2 python3 "$GS" -- \
       bash -c 'echo $$ > "$1"; trap "" TERM; sleep 60' _ "$TMP/stub.pid" >/dev/null 2>&1 ) &
   _fp=$!; LIVE_PIDS="$LIVE_PIDS $_fp"
-  if [ "$_how" = "START" ]; then
-    kill -TERM "$_fp" 2>/dev/null
-  else
-    _wait_file "$TMP/stub.pid"; kill -"$_how" "$_fp" 2>/dev/null
-  fi
-  # BOUNDED, or a launcher that waits out the 60 s sleep would pass by outliving it.
-  for _ in $(seq 1 60); do kill -0 "$_fp" 2>/dev/null || break; sleep 0.2; done
+  _wait_file "$TMP/stub.pid"; kill -"$_how" "$_fp" 2>/dev/null
+  # BOUNDED, or a launcher that waits out the 60 s sleep would pass by outliving it. The launcher's
+  # SIGKILL comes 3 x grace + 5 s = 11 s after the signal.
+  for _ in $(seq 1 100); do kill -0 "$_fp" 2>/dev/null || break; sleep 0.2; done
   if kill -0 "$_fp" 2>/dev/null; then
-    no "launcher $_how: still running 12 s after the signal (grace 2 s) — the escalation never started"
+    no "launcher $_how: still running 20 s after the signal (grace 2 s) — the escalation never started"
     kill -KILL "$_fp" 2>/dev/null
   fi
   wait "$_fp" 2>/dev/null
-  sleep 0.3
-  if [ "$_how" = "START" ] && [ ! -s "$TMP/stub.pid" ]; then
-    ok "a signal at session start ends the run before it does anything"
-  elif _wait_dead "$TMP/stub.pid"; then
+  if _wait_dead "$TMP/stub.pid"; then
     ok "launcher $_how: a run that ignores SIGTERM is still ended (escalation does not wait on it)"
   else
     no "launcher $_how: a run that ignores SIGTERM survived — the escalation never started"
     kill -KILL "$(cat "$TMP/stub.pid" 2>/dev/null)" 2>/dev/null
   fi
 done
+
+# A signal inside the startup window: the leader has installed its handlers and not yet started the
+# run. The window is held open by the launcher's test hook, and the signal is sent only once the
+# leader says it is inside it; a lost signal would let the run start when the delay ends.
+rm -f "$TMP/stub.pid" "$TMP/start.err"
+( exec env -u CONCRETE_GATE_SESSION CONCRETE_GATE_SESSION_STARTUP_DELAY=6 python3 "$GS" -- \
+    bash -c 'echo $$ > "$1"; sleep 60' _ "$TMP/stub.pid" >/dev/null 2>"$TMP/start.err" ) &
+_fp=$!; LIVE_PIDS="$LIVE_PIDS $_fp"
+for _ in $(seq 1 100); do grep -q 'waiting before launch' "$TMP/start.err" 2>/dev/null && break; sleep 0.1; done
+if grep -q 'waiting before launch' "$TMP/start.err" 2>/dev/null; then
+  kill -TERM "$_fp" 2>/dev/null
+  for _ in $(seq 1 50); do kill -0 "$_fp" 2>/dev/null || break; sleep 0.2; done
+  kill -0 "$_fp" 2>/dev/null && kill -KILL "$_fp" 2>/dev/null
+  wait "$_fp" 2>/dev/null
+  sleep 7
+  [ ! -s "$TMP/stub.pid" ] \
+    && ok "a signal inside the startup window is remembered: the run never starts" \
+    || { no "a signal inside the startup window was absorbed, and the run started anyway"; kill -KILL "$(cat "$TMP/stub.pid")" 2>/dev/null; }
+else
+  no "the startup-window control never reached its window ($(tr '\n' ' ' < "$TMP/start.err"))"
+  kill -KILL "$_fp" 2>/dev/null
+fi
+
+# A campaign group that left the session is cancelled with the session. The launcher reads the lock
+# beside its own copy, so this uses the runner sandbox's copy and lock.
+rm -f "$MARK/camp.pid"; rm -rf "${RSB:?}/.gate.lock"
+( cd "$RSB" && exec env -u CONCRETE_GATE_LOCK -u CONCRETE_GATE_SESSION CONCRETE_GATE_SESSION_GRACE=2 \
+    python3 scripts/tests/lib/gate_session.py -- bash -c '
+      source scripts/tests/lib/fresh.sh; _gate_lock_acquire || exit 9
+      python3 scripts/tests/lib/run_campaign_child.py --report "$1/camp.rep" --run-id camp -- \
+        bash -c "echo \$\$ > \"$1/camp.pid\"; trap \"\" TERM; sleep 60"' _ "$MARK" >/dev/null 2>&1 ) &
+_fp=$!; LIVE_PIDS="$LIVE_PIDS $_fp"
+if _wait_file "$MARK/camp.pid"; then
+  LIVE_PIDS="$LIVE_PIDS $(cat "$MARK/camp.pid")"
+  kill -TERM "$_fp" 2>/dev/null
+  for _ in $(seq 1 100); do kill -0 "$_fp" 2>/dev/null || break; sleep 0.2; done
+  wait "$_fp" 2>/dev/null
+  if _wait_dead "$MARK/camp.pid"; then
+    ok "cancelling a run also ends the campaign group it registered (which left the session)"
+  else
+    no "a registered campaign group survived the cancelled run"; kill -KILL "$(cat "$MARK/camp.pid")" 2>/dev/null
+  fi
+  [ ! -d "$RSB/.gate.lock" ] \
+    && ok "...and with it gone, the run's lock is reclaimed" \
+    || no "...but the lock stayed after the campaign group was gone ($(ls "$RSB/.gate.lock/groups" 2>/dev/null | tr '\n' ' '))"
+else
+  no "the campaign-cancel control never started its campaign child"
+fi
 
 # --- the safety property, on the real runner: inherited children alive => refuse ---
 # Stopping the launcher, the session leader and the runner before killing them removes everyone who

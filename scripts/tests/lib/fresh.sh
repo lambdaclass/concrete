@@ -126,17 +126,33 @@ _gate_lock_registered() {
   printf '%s' "${out# }"
 }
 
+# THE LIFECYCLE MUTEX: taken by reclaim (around judgment and removal) and by release (around removal),
+# so a lock cannot be released and re-acquired by another run inside a reclaimer's judgment.
+# Acquisition needs no mutex: `mkdir` succeeds only on an absent directory, and while the mutex is
+# held nothing can make the judged directory absent. Bounded: about 10 s, in 50 ms steps.
+_gate_lock_mutex_take() {
+  local i=0
+  while ! mkdir "$1" 2>/dev/null; do
+    # Not contention (no such directory appeared: permissions, a missing parent): fail at once.
+    [ -d "$1" ] || return 1
+    i=$((i+1)); [ "$i" -lt 200 ] || return 1
+    sleep 0.05 2>/dev/null || sleep 1
+  done
+  return 0
+}
+
 # RECLAIM A LOCK WHOSE RUN IS PROVABLY OVER (bug 244), and nothing else. The judgment and the removal
 # happen under a second `mkdir` mutex: without it two runs could each judge the same lock stale, and
-# the later one would delete the fresh lock the earlier one had just taken. A mutex stranded by a kill
-# inside this function (no children, a few milliseconds) makes reclaim refuse, with its path in the
-# message; it never makes reclaim proceed.
+# the later one would delete the fresh lock the earlier one had just taken, and release takes it too
+# (see the lifecycle mutex above). A mutex stranded by a kill inside the critical section (no
+# children, a few milliseconds) makes reclaim and release refuse after a bounded wait, with its path
+# in the message; it never makes reclaim proceed.
 _gate_lock_reclaim_stale() { # [quiet]
   local mutex="$_GATE_LOCK_DIR.reclaim" desc
   _GATE_LOCK_LEASE=""
   [ -d "$_GATE_LOCK_DIR" ] || return 1
   case "$_GATE_LOCK_DIR" in */.gate.lock) ;; *) return 1 ;; esac
-  if ! mkdir "$mutex" 2>/dev/null; then
+  if ! _gate_lock_mutex_take "$mutex"; then
     _GATE_LOCK_LEASE="unprovable:another reclaim holds $mutex (if no run is starting, remove it)"
     return 1
   fi
@@ -516,11 +532,36 @@ _gate_lock_release() {
     */.gate.lock) ;;
     *) echo "warning: refusing to release '$tok_dir' — not a .gate.lock path" >&2; return 1 ;;
   esac
+  # SERIALIZED WITH RECLAIM (bug 244). A reclaimer that has judged this lock's run over must not
+  # see it released and re-taken by another run before it removes the directory — it would delete
+  # the new run's lock. So release takes the same mutex; the reclaimer holds it for a ps snapshot,
+  # and the wait is bounded so a mutex stranded by a SIGKILL cannot hang a gate.
+  if ! _gate_lock_mutex_take "$tok_dir.reclaim"; then
+    echo "warning: could not release the repository lock at $tok_dir: $tok_dir.reclaim is held" >&2
+    echo "         if no run is starting, remove both: rm -rf $tok_dir $tok_dir.reclaim" >&2
+    return 1
+  fi
+  # A REGISTERED CAMPAIGN GROUP THAT IS STILL ALIVE KEEPS THE LOCK (bug 244). It left this process's
+  # group on purpose and is still working the tree; releasing would hand the tree over beside it.
+  local _reg _g _held=""
+  _reg="$(_gate_lock_registered "$tok_dir")"
+  case "$_reg" in
+    unprovable:*) _held="$_reg" ;;
+    *) for _g in $_reg; do kill -0 -- "-$_g" 2>/dev/null && _held="$_held group $_g"; done ;;
+  esac
+  if [ -n "$_held" ]; then
+    rmdir "$tok_dir.reclaim" 2>/dev/null
+    echo "warning: keeping the repository lock at $tok_dir: registered campaign work is still alive ($_held )" >&2
+    echo "         it is reclaimed automatically once that work has exited" >&2
+    return 1
+  fi
   if ! rm -rf "$tok_dir" 2>/dev/null; then
+    rmdir "$tok_dir.reclaim" 2>/dev/null
     echo "warning: could not release the repository lock at $tok_dir" >&2
     echo "         remove it explicitly before the next run: rm -rf $tok_dir" >&2
     return 1
   fi
+  rmdir "$tok_dir.reclaim" 2>/dev/null
   if [ -d "$tok_dir" ]; then
     echo "warning: the repository lock at $tok_dir still exists after release" >&2
     return 1
