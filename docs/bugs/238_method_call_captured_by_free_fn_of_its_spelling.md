@@ -61,12 +61,14 @@ fingerprint over them moves.
 A foreign binding is bound by spelling in the interpreter and in emission (`foreignCalls`, a
 module's externs) before any program definition. Those lookups now apply to a free call only
 (`SCallee.direct name space` carries the namespace through Lower; `EmitSSA.directSymbol`, the
-interpreter's call path), so no foreign binding answers a method call. A function reference
-carries no namespace, so a method value whose spelling a foreign binding takes in its scope (its
-function's `foreignCalls`, its module's externs) is respelled by `spellMethodCallsApart` too; an
-unrelated module's extern takes nothing from it
-(`regress_238_method_value_beside_unrelated_extern.con`). A function value carries its namespace
-into SSA (`SVal.fnRef`), so a method value devirtualized at its call is still a method call
+interpreter's call path), so no foreign binding answers a method call. A method value carries
+its namespace too, on `CLocal.space` in Core and `SVal.fnRef` in SSA, and CoreCheck's
+foreign-function-value rule, emission and the interpreter skip foreign bindings for it, so no
+extern answers a method value either, whether it shares the caller spelling, the definition name
+or both (`regress_238_method_value_spelled_like_extern.con`,
+`regress_238_method_value_both_spellings_taken_by_externs.con`, Codex review r15) or belongs to an
+unrelated module (`regress_238_method_value_beside_unrelated_extern.con`); a method value
+devirtualized at its call is still a method call
 (`regress_238_method_value_beside_extern_of_other_arity.con`, Codex review r7). Mono, emission (`resolveMethodName`) and the interpreter resolve a method reference among
 methods only, so an alias of its spelling to a free function or an extern (an import
 `wrong as P_get`) never takes it (`regress_238_free_alias_takes_method_spelling.con`,

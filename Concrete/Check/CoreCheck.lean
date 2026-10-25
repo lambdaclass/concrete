@@ -583,7 +583,8 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
       if !typesCompatible varTy ty && !isLenient varTy && !isLenient ty && !isRefCompat then
         addCCError (.typeMismatchVariable name.name (toString (repr varTy)) (toString (repr ty)))
     -- Not a local: a global function taken as a value (`let f = take_pair;`) when fn-typed.
-    | none => checkForeignFnValue name.name ty
+    -- A method value is never a foreign binding of its spelling (bugs 238 – 239, Codex r15).
+    | none => if name.space == .method then pure () else checkForeignFnValue name.name ty
 
   | .binOp op lhs rhs ty =>
     ccCheckExpr lhs

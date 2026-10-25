@@ -1,0 +1,31 @@
+// Bug 238 (FIXED), Codex review r15: `c` takes the respelled `outer_a_P`'s method `get` as a value
+// (`P_get`, Core `outer_a_P_get`, definition `a_outer_a_P_get`) while its own externs take both
+// spellings. A method value carries its namespace to emission and the interpreter, so neither
+// extern answers it; an intermediate version of this fix refused the program (E0299), and before
+// the fix CoreCheck refused it as a foreign function value (E0588).
+// Expected: 42, natively and --interp.
+mod outer {
+    mod a {
+        pub struct Copy P { pub v: i32 }
+        impl P {
+            pub fn get(x: i32) -> i32 { return 42; }
+        }
+    }
+    mod b {
+        pub struct Copy P { pub w: i32 }
+    }
+}
+mod c {
+    import outer.a.{P};
+    #[link_name = "abs"]
+    trusted extern fn outer_a_P_get(x: i32) with() -> i32;
+    #[link_name = "abs"]
+    trusted extern fn a_outer_a_P_get(x: i32) with() -> i32;
+    pub fn run() -> i32 {
+        let f: fn(i32) -> i32 = P_get;
+        return f(-99);
+    }
+}
+fn main() -> Int {
+    return c::run() as Int;
+}

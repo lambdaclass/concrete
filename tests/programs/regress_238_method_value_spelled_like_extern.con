@@ -1,9 +1,8 @@
 // Bug 238 (FIXED), the method-value shape against a foreign binding: `c` binds `abs` as
 // `outer_a_P_get`, and names the respelled `outer_a_P`'s method `get` as a value
-// (`let f: fn(i32) -> i32 = P_get;`, which Core respells `outer_a_P_get`). A function reference
-// carries no namespace, so the foreign binding answered it: before the fix the program was refused
-// as a foreign function value (E0588, FFI-1), though the value is a method. A method value is
-// respelled by its method when a foreign binding takes its spelling.
+// (`let f: fn(i32) -> i32 = P_get;`, which Core respells `outer_a_P_get`). Before the fix the
+// program was refused as a foreign function value (E0588, FFI-1), though the value is a method. A
+// method value carries its namespace, so no foreign binding of its spelling answers it.
 // Expected: 42, natively and --interp.
 mod outer {
     mod a {

@@ -4181,7 +4181,7 @@ partial def renameBodiesDeep (rn : CoreRename) (cm : CModule) : CModule :=
     that are method definitions, which must be exactly one and a spelling no free function takes;
     anything else is refused (E0299) rather than guessed. A call needs no repair against a foreign
     binding: the interpreter and emission bind a spelling to one only for a free call
-    (`CallSpace`). A method value does, since a function reference carries no namespace. Other method references keep their spelling, so the proof fingerprints over them do
+    (`CallSpace`), and a method value carries its namespace to emission too (`SVal.fnRef`). Other method references keep their spelling, so the proof fingerprints over them do
     not move. -/
 def spellMethodCallsApart (cms : List CModule) : Except Diagnostics (List CModule) :=
   let defs := cms.flatMap coreFnsDeep
@@ -4197,17 +4197,12 @@ def spellMethodCallsApart (cms : List CModule) : Except Diagnostics (List CModul
       fun c => match c with | .direct n .method => some n | _ => none)
     ++ (consts.flatMap fun e => (collectCalleesExpr e).filterMap
       fun c => match c with | .direct n .method => some n | _ => none)).eraseDups
-  -- A method VALUE is emitted as a function reference, which carries no namespace: a foreign
-  -- binding of its spelling IN ITS SCOPE (an extern of its module, or a spelling its function
-  -- binds to one) would capture it, so for a value those spellings are taken too (Codex r4: only
-  -- in its scope; an unrelated module's extern takes nothing from it).
-  let scopedValues := cms.flatMap scopedMethodValues
-  let methodValues := (scopedValues.map (·.1)).eraseDups
-  let foreignFor := fun (n : String) =>
-    ((scopedValues.filter (·.1 == n)).flatMap (·.2)).eraseDups
-  -- A linker alias of the spelling (an import `wrong as P_get`) takes nothing: Mono, emission
-  -- and the interpreter resolve a method reference among methods only (Codex reviews r11, r12).
-  let takenBy := fun (n : String) => freeDefs.contains n || (foreignFor n).contains n
+  -- A method VALUE carries its namespace too (`CLocal.space`, then `SVal.fnRef`), so no foreign
+  -- binding captures it either (Codex review r15); like a call, only a free definition of its
+  -- spelling can. A linker alias of the spelling (an import `wrong as P_get`) takes nothing:
+  -- Mono, emission and the interpreter resolve a method reference among methods only.
+  let methodValues := ((cms.flatMap scopedMethodValues).map (·.1)).eraseDups
+  let takenBy := fun (n : String) => freeDefs.contains n
   let taken := (methodCalls ++ methodValues).eraseDups.filter takenBy
   if taken.isEmpty then .ok cms else
   let targetsOf := fun (n : String) =>
@@ -4217,13 +4212,13 @@ def spellMethodCallsApart (cms : List CModule) : Except Diagnostics (List CModul
   let resolved := taken.map fun n => (n, targetsOf n)
   -- The new spelling must itself be the method's alone: taken by nothing a reference of this
   -- kind could reach instead.
-  let bad := resolved.filter fun (n, ts) => match ts with
-    | [t] => freeDefs.contains t || (foreignFor n).contains t
+  let bad := resolved.filter fun (_, ts) => match ts with
+    | [t] => freeDefs.contains t
     | _ => true
   if !bad.isEmpty then
     .error (bad.map fun (n, ts) =>
       { severity := .error, pass := "elab", span := none, code := "E0299"
-        message := s!"the method reference spelled '{n}' is also the Core name of a free function or (for a method value) a foreign binding, and the method it names has no spelling that is its alone ({ts.length} method definitions reached); Core cannot tell them apart (bug 238)"
+        message := s!"the method reference spelled '{n}' is also the Core name of a free function, and the method it names has no spelling that is its alone ({ts.length} method definitions reached); Core cannot tell them apart (bug 238)"
         hint := some "rename the free function. Tracking: docs/bugs/238_method_call_captured_by_free_fn_of_its_spelling.md" })
   else
   let respelt := resolved.filterMap fun (n, ts) => ts.head?.map (n, ·)
