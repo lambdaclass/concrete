@@ -1,0 +1,9 @@
+// Bug 240 (FIXED): an enum payload naming a trait: E0108 at Resolve (before: a Layout panic in
+// the native build, `--interp` 42).
+trait Marker {
+    fn tag(&self) -> i32;
+}
+enum E { A { m: Marker }, B }
+fn main() -> Int {
+    return 42;
+}

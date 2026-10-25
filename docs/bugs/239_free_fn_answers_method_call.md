@@ -40,18 +40,23 @@ the declaration-collision check compared only free functions, externs and consta
   callable identity comes from the method resolver (`resolveMethodCallee`). A `T::m()` call tries
   the method table first and keeps the free lookup only for a head that has no such method (an
   upper-case module's function). A free-spelled name keeps today's resolution: free functions
-  first, then a method by its definition name (a method used as a value,
-  `regress_096_method_value_same_named`).
-- A Core direct call carries its namespace (`CallSpace`), and every Elab renaming renames each
-  namespace by its own table: submodule prefixing (`FnRenames`), the parent and sibling
+  first, then a method by its definition name (`P_get(&p)`, or a method used as a value,
+  `regress_096_method_value_same_named`); when it resolves to a method it is in the method
+  namespace (`ElabEnv.freeFnNames`, `freeSpelledSpace`).
+- A Core reference carries its namespace (`CallSpace`: on `Callee.direct` for a call, on
+  `CLocal.space` for a function value), and every Elab renaming renames each namespace by its own
+  table: submodule prefixing (`FnRenames`), the parent and sibling
   cross-module renames, type respelling (`CoreRename.methodName`) and the top-level collision
   respelling, which now renames free functions only, so a method call keeps its spelling there.
   `CFnDef.isMethod` marks a method's definition.
 - `declarationCollisions` counts a module's impl method definition names, so a free function or
   extern spelled like one is E0299 (MOD-3); two methods of one name on one type stay TRAIT-5's.
 
-Regression legs in `run_tests.sh`: the E0264 and E0299 refusals, and the positive control
-`run_ok … 42` with `--interp` = 42.
+Regression legs in `run_tests.sh`: the E0264 and E0299 refusals, the positive control, and
+`regress_239_parent_method_beside_child_free_fn.con` (a parent naming its own method by its
+definition name, as a call and a value, beside a child's free function of that name: the parent's
+cross-module rename must leave it alone; a regression Codex found in the first version of this
+fix), each `run_ok … 42` with `--interp` = 42.
 
 ## Structural cause
 

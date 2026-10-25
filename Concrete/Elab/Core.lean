@@ -20,6 +20,22 @@ Surface forms removed:
 -- Core IR Types
 -- ============================================================
 
+/-- The namespace a reference to a global function was resolved in (bugs 238, 239). Core spells
+    a free function and an impl method alike (`P_get` is both a free function's name and the
+    definition name of `P`'s method `get`), so the spelling alone cannot say which one a reference
+    means. A receiver call `x.m()`, a `T::m()` call the type's method table answered, the
+    compiler's own method dispatch (`T$m`, `$destroy`, a type's `T_destroy`) and a free-spelled
+    name that Check resolved to a method by its definition name (`P_get(&p)`, or the value
+    `let f = P_get;`) are `method`; every other reference is `free`. A call carries its space on
+    `Callee.direct`, a function value on `CLocal.space`. Elab's renamings (submodule prefixing,
+    type respelling, top-level collision respelling) rename each namespace by its own table, and
+    `spellMethodCallsApart` makes the two namespaces' Core spellings disjoint, so below Elab the
+    spelling alone resolves. Not part of any fingerprint or printed form. -/
+inductive CallSpace where
+  | free
+  | method
+deriving Repr, Inhabited, BEq, DecidableEq
+
 /-- A local binder or local reference in Core (R-0492 step 3): its Core name (what every backend
     and printer spells) and, for a binding of the source program, the `LocalId` the local walk
     minted for it. Elab fills `id`. The struct-destructure temporary has one (the walk mints it);
@@ -35,6 +51,11 @@ Surface forms removed:
 structure CLocal where
   name : String
   id : Option LocalId := none
+  /-- For a global function used as a value (no `id`): the namespace its name resolved in
+      (`CallSpace`, bugs 238 – 239), so a renaming meant for free functions never moves a method
+      value of the same spelling. `free` for every other local. Not part of `key`, a printed
+      form or a fingerprint. -/
+  space : CallSpace := .free
 
 namespace CLocal
 /-- A Core local from a bare name, with no identity (a compiler-synthesized local, or a test).
@@ -67,21 +88,6 @@ end CLocal
 
 abbrev LocalKey := CLocal.LocalKey
 
-/-- The namespace a direct call was resolved in (bugs 238, 239). Core spells a free function and
-    an impl method alike (`P_get` is both a free function's name and the definition name of
-    `P`'s method `get`), so the spelling alone cannot say which one a call means. A receiver call
-    `x.m()`, a `T::m()` call that the type's method table answered, and the compiler's own method
-    dispatch (`T$m`, `$destroy`, a type's `T_destroy`) are `method`; every other direct call,
-    and every free-spelled name (`P_get(x)`, which may still name a method by its definition
-    name), is `free`. Elab's renamings (submodule prefixing, type respelling, top-level collision
-    respelling) rename each namespace by its own table, so respelling a free function never moves
-    a method call, and the reverse. Below Elab the spelling alone resolves: Elab makes the two
-    namespaces' Core spellings disjoint (`checkCalleeNamespaces`). Not part of any fingerprint or
-    rendering: a call renders and digests by its spelling, as before. -/
-inductive CallSpace where
-  | free
-  | method
-deriving Repr, Inhabited, BEq, DecidableEq
 
 /-- What a call's callee IS, decided where scope is known.
 

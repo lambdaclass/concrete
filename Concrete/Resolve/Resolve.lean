@@ -803,6 +803,30 @@ private def capParamNamesCheck (m : Module) (ctx : ResolveCtx) : ResolveCtx :=
   m.traitImpls.foldl (fun ctx ti =>
     ti.methods.foldl (fun ctx f => check s!"{ti.typeName}::{f.name}" f.capParams f.span ctx) ctx) ctx
 
+/-- The trait names a type mentions where a type is meant (bug 240), with `params` shadowing. -/
+private partial def traitNamesInTy (ctx : ResolveCtx) : Ty → List String
+  | .named n => if denotesTrait ctx n then [n] else []
+  | .generic n args _ => (if denotesTrait ctx n then [n] else []) ++ args.flatMap (traitNamesInTy ctx)
+  | .ref t | .refMut t | .ptrMut t | .ptrConst t | .heap t | .heapArray t | .array t _ =>
+    traitNamesInTy ctx t
+  | .fn_ ps _ r => ps.flatMap (traitNamesInTy ctx) ++ traitNamesInTy ctx r
+  | _ => []
+
+/-- Bug 240: a declaration's own types (a struct's fields, an enum's payloads, a newtype's
+    representation) may not name a trait. Resolve walks these with no `checkTyDeep` (Check
+    validates them), so the trait half of TYPE-2 is enforced here; signatures, bodies, aliases
+    and constants already meet `checkTyDeep`. -/
+private def declTraitTypesCheck (m : Module) (ctx : ResolveCtx) : ResolveCtx :=
+  let check (params : List String) (ty : Ty) (sp : Span) (ctx : ResolveCtx) : ResolveCtx :=
+    (traitNamesInTy { ctx with typeParams := params } ty).eraseDups.foldl
+      (fun ctx n => addError ctx (.traitIsNotAType n) (some sp)) ctx
+  let ctx := m.structs.foldl (fun ctx sd =>
+    sd.fields.foldl (fun ctx f => check sd.typeParams f.ty sd.span ctx) ctx) ctx
+  let ctx := m.enums.foldl (fun ctx ed =>
+    ed.variants.foldl (fun ctx v =>
+      v.fields.foldl (fun ctx f => check ed.typeParams f.ty ed.span ctx) ctx) ctx) ctx
+  m.newtypes.foldl (fun ctx nt => check nt.typeParams nt.innerTy nt.span ctx) ctx
+
 /-- Bug 231: every trait a bound names resolves (MOD-1). The traits a module's bounds may name are
     the ones Check gives that module (`allTraits`: the builtin `Destroy` and the module's own
     traits, with `Copy` read by `checkTraitBounds`); traits are module-local and cannot be imported
@@ -855,6 +879,7 @@ private def resolveModule (m : Module) (globalScope : Scope) (knownTypes : List 
   let externErrors := (externEffectsCheck m externCtx0).errors
   let capParamErrors := (capParamNamesCheck m externCtx0).errors
   let boundErrors := (boundTraitsCheck m externCtx0).errors
+  let declTraitErrors := (declTraitTypesCheck m externCtx0).errors
   -- Bug 215 (Codex review): a constant's declared type and initializer are written types and
   -- an expression like any function body's; the initializer was never walked, so
   -- `const X: Int = (7 as Nope) as Int` reached the backend.
@@ -862,7 +887,7 @@ private def resolveModule (m : Module) (globalScope : Scope) (knownTypes : List 
     let ctx := checkTyDeep externCtx0 c.ty (some c.span)
     acc ++ (resolveExpr ctx c.value).errors) []
   let allErrors := aliasErrors ++ fnErrors ++ implErrors ++ traitImplErrors ++ externErrors ++ capParamErrors
-    ++ boundErrors ++ constErrors
+    ++ boundErrors ++ declTraitErrors ++ constErrors
   allErrors
 
 /-- The names a nested submodule's imports bring into its scope, by the rule Check and Elab

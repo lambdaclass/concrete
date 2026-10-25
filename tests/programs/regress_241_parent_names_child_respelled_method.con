@@ -1,0 +1,26 @@
+// Bug 241 (FIXED), the free-spelled shapes: the parent names its child's respelled type's method
+// by its definition name, as a call `P_get(&p)` and as a value. Before the fix both were renamed
+// `a_P_get`, a function nothing defines.
+// Expected: 42 (20 + 20 + 2), natively and --interp.
+mod outer {
+    mod a {
+        pub struct Copy P { pub v: i32 }
+        impl P {
+            pub fn get(&self) -> i32 { return self.v; }
+        }
+        pub fn mk() -> P { return P { v: 20 }; }
+    }
+    mod b {
+        pub struct Copy P { pub w: i32 }
+        pub fn two() -> i32 { let p: P = P { w: 2 }; return p.w; }
+    }
+    import outer.a.{P, mk};
+    pub fn run() -> i32 {
+        let p: P = mk();
+        let f: fn(&P) -> i32 = P_get;
+        return P_get(&p) + f(&p) + b::two();
+    }
+}
+fn main() -> Int {
+    return outer::run() as Int;
+}

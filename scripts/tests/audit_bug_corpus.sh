@@ -147,13 +147,13 @@ declare -A BUG_TEST_MAP=(
   # Bug 218: two declarations of one name in a module (E0299, MOD-3).
   [218]="error_218_duplicate_function.con error_218_duplicate_struct.con error_218_struct_and_enum.con error_218_duplicate_constant.con error_218_duplicate_alias.con regress_218_type_and_value_namespaces.con"
   # Bug 241: a parent's call of its child's respelled type's method keeps a spelling the child defines (run_tests.sh compares --interp).
-  [241]="regress_241_parent_calls_child_respelled_method.con"
+  [241]="regress_241_parent_calls_child_respelled_method.con regress_241_parent_names_child_respelled_method.con"
   # Bug 240: a trait in a type position is refused at Resolve (E0108); bounds, impls and shadowing type parameters still admitted.
-  [240]="error_240_trait_cast_target.con error_240_trait_in_type_positions.con regress_240_trait_bounds_and_type_param_shadow.con"
+  [240]="error_240_trait_cast_target.con error_240_trait_struct_field.con error_240_trait_enum_payload.con error_240_trait_parameter.con error_240_trait_type_argument.con error_240_trait_let_annotation.con regress_240_trait_bounds_and_type_param_shadow.con"
   # Bug 239: a method call resolves in the method table (E0264 when the impl does not reach the caller); a free function spelled like its module's method is E0299.
-  [239]="regress_239_free_fn_beside_imported_method.con error_239_method_call_answered_by_free_fn.con error_239_free_fn_named_like_own_method.con"
+  [239]="regress_239_free_fn_beside_imported_method.con error_239_method_call_answered_by_free_fn.con error_239_free_fn_named_like_own_method.con regress_239_parent_method_beside_child_free_fn.con"
   # Bug 238: a method call whose spelling a free function defines is spelled by its method (run_tests.sh compares --interp).
-  [238]="regress_238_free_fn_spelled_like_method_call.con regress_238_other_module_free_fn_takes_method_spelling.con regress_238_parent_free_fn_takes_method_spelling.con"
+  [238]="regress_238_free_fn_spelled_like_method_call.con regress_238_other_module_free_fn_takes_method_spelling.con regress_238_parent_free_fn_takes_method_spelling.con regress_238_method_named_by_definition_name.con"
   # Bug 236: an array literal elaborates in linear time (run_tests.sh: --emit-core and --interp within 20 s).
   [236]="regress_236_array_repeat_literal.con"
   # Bug 235: interpreter array reads O(1) (run_tests.sh: --interp within 20 s).

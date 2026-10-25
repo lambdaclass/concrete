@@ -13,12 +13,15 @@ declare `struct P`; module `c` imports `outer.a.{P, mk}`, defines `fn outer_a_P_
 { return 99; }` and returns `p.get()`, whose method returns 42. Before the fix the binary and
 `--interp` returned 99; now both return 42.
 
-Two more shapes of the same capture:
+More shapes of the same capture:
 `regress_238_other_module_free_fn_takes_method_spelling.con` (the free function in another
 top-level module `d`; before the fix the type-agreement backstop happened to refuse it, E0299,
 because its signature disagreed; one that agreed would have run) and
 `regress_238_parent_free_fn_takes_method_spelling.con` (the free function in the enclosing module,
-which imports its child's `P`; before the fix it failed to build, bug 241).
+which imports its child's `P`; before the fix it failed to build, bug 241), and
+`regress_238_method_named_by_definition_name.con` (the method named by its definition name, as a
+call `P_get(&p)` and as a value `let f: fn(&P) -> i32 = P_get;`, which Core respells
+`outer_a_P_get` too; before the fix both ran the free function, 198 for 42).
 
 ## Cause
 
@@ -34,14 +37,16 @@ found first, by name.
 
 ## Fix
 
-A Core direct call now carries the namespace it was resolved in (`Callee.direct name space`,
-`CallSpace.free | .method`; bug 239), and Elab's last spelling pass, `spellMethodCallsApart`, finds
-every method call whose spelling a free function of the program defines and respells it by the
-method it names: the targets of its linker aliases that are method definitions
-(`CFnDef.isMethod`), which must be exactly one, else E0299 ("Core cannot tell them apart"). Other
-method calls keep their spelling, so no proof fingerprint over a method call moves.
+A Core reference to a function now carries the namespace it was resolved in (bug 239): a direct
+call `Callee.direct name space`, a function value `CLocal.space`, with `CallSpace.free | .method`.
+A free-spelled name that Check resolved to a method by its definition name is `method` too. Elab's
+last spelling pass, `spellMethodCallsApart`, finds every method reference whose spelling a free
+function of the program defines and respells it by the method it names: the targets of its linker
+aliases that are method definitions (`CFnDef.isMethod`), which must be exactly one and not the
+spelling itself, else E0299 ("Core cannot tell them apart"). Other method references keep their
+spelling, so no proof fingerprint over them moves.
 
-Regression legs in `run_tests.sh`: the three fixtures above, `run_ok … 42` and `--interp` = 42.
+Regression legs in `run_tests.sh`: the four fixtures above, `run_ok … 42` and `--interp` = 42.
 
 ## Structural cause
 

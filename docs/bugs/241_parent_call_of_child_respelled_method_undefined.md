@@ -10,7 +10,9 @@ candidate `593dc100`.
 
 `tests/programs/regress_241_parent_calls_child_respelled_method.con`: `outer.a` and `outer.b` each
 declare `struct P`; `outer` imports `outer.a.{P, mk}` and calls `p.get()`. Expected and now
-observed: 42, natively and under `--interp`.
+observed: 42, natively and under `--interp`. `regress_241_parent_names_child_respelled_method.con`
+names the method by its definition name, as a call `P_get(&p)` and as a value, with the same
+failure before the fix (`--interp`: "undefined variable 'a_P_get'").
 
 ## Cause
 
@@ -22,9 +24,11 @@ type respelling no longer recognised the call and the call named a function noth
 
 ## Fix
 
-The parent's cross-module rename leaves a call of a submodule's respelled type's method alone
-(`respelledSubMethods`); the type respelling then spells it `outer_a_P_get`, as for any other
-importer. The rename is per namespace now (bug 239), so it touches method calls only.
+The parent's cross-module rename leaves a reference to a submodule's respelled type's method
+alone (`respelledSubMethods`); the type respelling then spells it `outer_a_P_get`, as for any other
+importer. The rename is per namespace now (bug 239), and a free-spelled reference that resolves to
+the method is in the method namespace, so a call, a `T::m()` call, a call by definition name and a
+method value are all covered.
 
 ## Structural cause
 

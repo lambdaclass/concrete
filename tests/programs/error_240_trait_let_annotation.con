@@ -1,0 +1,8 @@
+// Bug 240 (FIXED): a let annotation naming a trait inside an array type: E0108 at Resolve.
+trait Marker {
+    fn tag(&self) -> i32;
+}
+fn main() -> Int {
+    let a: [Marker; 0] = [];
+    return 42;
+}

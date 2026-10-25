@@ -8606,13 +8606,22 @@ run_ok "$TESTDIR/regress_239_free_fn_beside_imported_method.con" 42
 run_err "$TESTDIR/error_239_method_call_answered_by_free_fn.con" "error[check]: (E0264) no method 'get' on type 'P'"
 run_err "$TESTDIR/error_239_free_fn_named_like_own_method.con" "error[check]: (E0299) a function named 'P_get' is also declared in this module as an impl method"
 run_err "$TESTDIR/error_240_trait_cast_target.con" "error[resolve]: (E0108) 'Marker' is a trait, not a type"
-run_err "$TESTDIR/error_240_trait_in_type_positions.con" "error[resolve]: (E0108) 'Marker' is a trait, not a type"
+run_err "$TESTDIR/error_240_trait_struct_field.con" "error[resolve]: (E0108) 'Marker' is a trait, not a type"
+run_err "$TESTDIR/error_240_trait_enum_payload.con" "error[resolve]: (E0108) 'Marker' is a trait, not a type"
+run_err "$TESTDIR/error_240_trait_parameter.con" "error[resolve]: (E0108) 'Marker' is a trait, not a type"
+run_err "$TESTDIR/error_240_trait_type_argument.con" "error[resolve]: (E0108) 'Marker' is a trait, not a type"
+run_err "$TESTDIR/error_240_trait_let_annotation.con" "error[resolve]: (E0108) 'Marker' is a trait, not a type"
 run_ok "$TESTDIR/regress_240_trait_bounds_and_type_param_shadow.con" 42
 run_ok "$TESTDIR/regress_241_parent_calls_child_respelled_method.con" 42
+run_ok "$TESTDIR/regress_238_method_named_by_definition_name.con" 42
+run_ok "$TESTDIR/regress_239_parent_method_beside_child_free_fn.con" 42
+run_ok "$TESTDIR/regress_241_parent_names_child_respelled_method.con" 42
 # bounded_run, not GNU `timeout` (absent on macOS runners); a timeout is INCOMPLETE, not a pass.
 for r238 in regress_238_free_fn_spelled_like_method_call regress_238_other_module_free_fn_takes_method_spelling \
             regress_238_parent_free_fn_takes_method_spelling regress_239_free_fn_beside_imported_method \
-            regress_240_trait_bounds_and_type_param_shadow regress_241_parent_calls_child_respelled_method; do
+            regress_240_trait_bounds_and_type_param_shadow regress_241_parent_calls_child_respelled_method \
+            regress_238_method_named_by_definition_name regress_239_parent_method_beside_child_free_fn \
+            regress_241_parent_names_child_respelled_method; do
     r238_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/$r238.con" --interp 2>&1 || true)
     if [ "$r238_interp" = "42" ]; then
         echo "  ok  bugs 238-241: $r238 — interp == binary (42)"
