@@ -8764,6 +8764,16 @@ run_ok "$TESTDIR/regress_238_method_value_both_spellings_taken_by_externs.con" 4
 run_ok "$TESTDIR/regress_239_method_value_beside_constant.con" 42
 run_ok "$TESTDIR/regress_239_extern_call_not_trusted_by_method.con" 42
 run_ok "$TESTDIR/regress_239_trusted_extern_beside_method_edge.con" 42
+run_ok "$TESTDIR/regress_239_imported_trusted_extern_beside_trusted_method.con" 42
+r239_edges4=$(cached_output "$TESTDIR/regress_239_imported_trusted_extern_beside_trusted_method.con" "--report trust-edges")
+if grep -qE "main[[:space:]]+calls-trusted[[:space:]]+defs_P_get" <<<"$r239_edges4"; then
+    echo "  ok  bug 239: an imported trusted extern call is trusted by its declaration beside a trusted method"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 239: --report trust-edges lost an imported trusted extern's edge:"
+    printf '%s\n' "$r239_edges4" | awk 'NR<=6'
+    FAIL=$((FAIL + 1))
+fi
 r239_edges3=$(cached_output "$TESTDIR/regress_239_trusted_extern_beside_method_edge.con" "--report trust-edges")
 if grep -qE "run[[:space:]]+calls-trusted[[:space:]]+defs_P_get" <<<"$r239_edges3" && grep -qE "run[[:space:]]+calls-ffi[[:space:]]+defs_P_get" <<<"$r239_edges3"; then
     echo "  ok  bug 239: a trusted extern call keeps its trust edge beside a method of its spelling"
@@ -8834,6 +8844,7 @@ for r238 in regress_238_free_fn_spelled_like_method_call regress_238_other_modul
             regress_238_method_value_both_spellings_taken_by_externs regress_239_method_value_beside_constant \
             regress_223_method_core_name_taken \
             regress_239_trusted_extern_beside_method_edge \
+            regress_239_imported_trusted_extern_beside_trusted_method \
             regress_239_extern_call_not_trusted_by_method regress_247_free_value_beside_unrelated_extern; do
     r238_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/$r238.con" --interp 2>&1 || true)
     if [ "$r238_interp" = "42" ]; then
