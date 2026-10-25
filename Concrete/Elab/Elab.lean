@@ -3485,9 +3485,19 @@ partial def elabModule (m : Module) (summary : FileSummary)
     if defIn.isEmpty || isOwnDef defIn then rn else
     { rn with tyName := fun n =>
         -- the defining module's binding of the spelling, aliases included (`P as Q`)
-        match (defSummary defIn).bind (summaryTypeBinding typeDecls · n summaryTable) with
-        | some (di, dn) => canonTypeName di dn
-        | none => rn.tyName n }
+        match defSummary defIn with
+        | none => rn.tyName n
+        | some d =>
+          match summaryTypeBinding typeDecls d n summaryTable with
+          | some (di, dn) => canonTypeName di dn
+          -- A defining module that binds no user `Result` means the builtin, which keeps its name,
+          -- whatever this module's own `Result` is (bug 227, Codex review r2: an imported struct's
+          -- builtin `Result` field took the importer's user enum).
+          | none =>
+            let userResultInScope := d.enums.any (·.name == n) || d.structs.any (·.name == n)
+              || d.newtypes.any (·.name == n) || d.typeAliases.any (·.name == n)
+              || d.imports.any (·.symbols.any (·.effectiveName == n))
+            if n == resultEnumName && !userResultInScope then n else rn.tyName n }
   let importedStructSrc := imports.structs.filter fun sd => !(localStructNames.contains sd.name)
   let cStructs := if !respell then cStructs ++ cImportedStructs else
     (cStructs.map fun sd => { rn.structDef sd with name := localStructCanon sd.name })
