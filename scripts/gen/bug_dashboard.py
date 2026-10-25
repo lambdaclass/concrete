@@ -361,6 +361,23 @@ def render(recs, disc, classes, exits):
     return "\n".join(out)
 
 
+def span_in_0b_cell(road):
+    """True when the one 0b list span lies in the 'closes when' cell of the Phase 1 exits table's 0b row
+    (the row load_exits reads), not merely on some line that starts like it."""
+    in_table = False
+    for ln in road.split("\n"):
+        if ln.startswith("| exit | owner | closes when |"):
+            in_table = True
+            continue
+        if in_table:
+            if not ln.startswith("|"):
+                return False
+            cells = ln.strip().strip("|").split("|")
+            if cells[0].strip() == "0b":
+                return len(cells) > 2 and BEGIN_0B in cells[2] and END_0B in cells[2]
+    return False
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default=os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")))
@@ -391,10 +408,8 @@ def main():
         die(f"{roadmap} must hold exactly one BEGIN/END generated bug-dashboard marker pair")
     if road.count(BEGIN_0B) != 1 or road.count(END_0B) != 1 or len(SPAN_0B.findall(road)) != 1:
         die(f"{roadmap} must hold exactly one BEGIN/END generated exit 0b list marker pair, in exit 0b's cell")
-    at = SPAN_0B.search(road).start()
-    row = road[road.rfind("\n", 0, at) + 1:at]
-    if not row.startswith("| 0b |") or row.count("|") != 3:
-        die(f"{roadmap}: exit 0b's generated list must sit in exit 0b's 'closes when' cell")
+    if not span_in_0b_cell(road):
+        die(f"{roadmap}: exit 0b's generated list must sit in exit 0b's 'closes when' cell of the Phase 1 exits table")
     i, j = road.index(BEGIN), road.index(END) + len(END)
     new = road[:i] + table + road[j:]
     new = SPAN_0B.sub(lambda _m: span, new)

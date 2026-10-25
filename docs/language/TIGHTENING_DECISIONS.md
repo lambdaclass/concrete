@@ -5,7 +5,8 @@ negotiation. Each is now an [owner decision](../../ROADMAP.md#owner-decisions) (
 proposed until the owner agrees to it again, explicitly, and only the owner decides it. The words
 "decided" and "implemented" below record what was proposed and landed on 2026-10-23; they are not
 the owner's current answer. Rules already on main stay as they are until the owner answers. The
-record below is kept as written.
+implementation plan of §5 is inactive: no agent implements, encodes or extends anything from it
+until the owner has answered the decision it rests on. The record below is kept as written.
 
 **Status:** decision record, 2026-10-23. The four questions this record raised were decided by the
 user on 2026-10-23 ([§4](#4-decisions-of-2026-10-23)), with a second set of decisions (D5 – D12,

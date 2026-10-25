@@ -326,6 +326,7 @@ bug_neg tag_on_attribution_row "s=s.rstrip('\n')+'\n2099-01-01\treview\tclass 2:
 # Exit 0b's bug list is generated too: a hand edit, a missing marker, and a new silent bug.
 bug_neg exit_0b_list_hand_edited "import re; s,n=re.subn(r'(BEGIN GENERATED: 0b list[^>]*-->)', r'\g<1>099, ', s); assert n==1" ROADMAP.md 1
 bug_neg exit_0b_list_moved_out_of_cell "import re; m=re.search(r'<!-- BEGIN GENERATED: 0b list.*?<!-- END GENERATED: 0b list -->', s); assert m; s=s[:m.start()]+s[m.end():]+chr(10)+m.group(0)+chr(10)" ROADMAP.md 2
+bug_neg exit_0b_list_in_a_decoy_row "import re; m=re.search(r'<!-- BEGIN GENERATED: 0b list.*?<!-- END GENERATED: 0b list -->', s); assert m; s=s[:m.start()]+s[m.end():]+chr(10)+'| 0b | R-0482 | '+m.group(0)+' |'+chr(10)" ROADMAP.md 2
 bug_neg exit_0b_list_markers_missing "old='<!-- END GENERATED: 0b list -->'; assert s.count(old)==1; s=s.replace(old,'')" ROADMAP.md 2
 bug_copy; add_control_bugs
 printf '2099-01-01\tfuzz\tcontrol campaign\t8 hours\t998,999\t999\n' >> "$BTMP/docs/bugs/discovery.tsv"
