@@ -93,12 +93,16 @@ def capSuppliers (lookup : CapLookup) (deps : Std.HashMap String (Array (String 
       | some d => if d.startsWith "_C$rt." then spelledSupplier n else (keyed (capKeyExtern d) n).getD none
       | none => spelledSupplier n
     | .direct n .method =>
-      let c := (aliases.lookup n).getD n
-      match keyed (capKeyMethod n) n with
+      -- the method of the spelling, else of any alias target that is a method; never a free
+      -- function an alias of the spelling leads to (Codex review r14)
+      let targets := n :: (aliases.filter (·.1 == n)).map (·.2)
+      match targets.findSome? fun t => keyed (capKeyMethod t) n with
       | some r => r
-      | none => match keyed (capKeyMethod c) n with
-        | some r => r
-        | none => spelledSupplier n
+      | none =>
+        -- a method of another package (the summary's dependency index), else nothing
+        let ds := targets.flatMap fun t => (deps.getD t #[]).toList
+        let hits := ds.filter fun (_, cs) => Capabilities.capSetHas cs cap
+        if hits.isEmpty then none else some { callee := n, kind := "dependency", targets := hits.map (·.1) }
     | .runtime h => runtimeSupplier h
     | .indirect _ => none
   all.foldl (fun acc x => if acc.any (fun y => y.callee == x.callee && y.kind == x.kind) then acc else acc ++ [x]) []

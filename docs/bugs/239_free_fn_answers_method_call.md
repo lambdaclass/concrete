@@ -112,7 +112,16 @@ the declaration-collision check compared only free functions, externs and consta
 - Codex review r13: the proof call graph follows a method call's aliases to methods only
   (`regress_239_method_ffi_beside_free_alias.con`: the FFI behind the call was lost before), and
   cleanup in the allocation reports is read from every call, since a destructor is a method call
-  (`regress_239_destructor_call_is_cleanup.con`, a regression in an earlier version of this fix).
+  (`regress_239_destructor_call_is_cleanup.con`, a regression in an earlier version of this fix):
+  a free call of a freeing intrinsic or a destructor call (`cleanupCallsStmts`), never an ordinary
+  method spelled like a freeing intrinsic (`regress_239_method_spelled_like_free_op.con`, Codex
+  review r14).
+- Codex review r14: the type-agreement backstop compares a method VALUE with the method
+  (`regress_239_method_value_type_agreement.con`, E0299 before), and capability explanations
+  resolve a method call to the method of its spelling or of an alias target, else a dependency,
+  never a free function an alias of the spelling names
+  (`regress_239_method_cap_explained_past_free_alias.con`: 99 for 42 natively before the fix, and
+  the explanation borrowed the free function's `Console`).
 - `declarationCollisions` counts a module's impl method definition names, so a free function or
   extern spelled like one is E0299 (MOD-3); two methods of one name on one type stay TRAIT-5's.
 

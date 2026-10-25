@@ -3969,7 +3969,8 @@ partial def tyAgreeExpr (c : TyAgreeCtx) : CExpr → List TyAgreePair
     match t with
     | .fn_ .. =>
       if c.locals.contains n.name then [] else
-      match c.fns n.name with
+      -- a method value is compared with the method (bugs 238 – 239, Codex review r14)
+      match (if n.space == .method then c.methods n.name else c.fns n.name) with
       | some f => [(.fn_ (f.params.map (·.2)) f.capSet f.retTy, t, s!"the function value '{n}'", f.typeParams)]
       | none => []
     | _ => []

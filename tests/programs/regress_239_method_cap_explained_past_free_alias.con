@@ -1,0 +1,22 @@
+// Bug 239 (FIXED), Codex review r14: `run` declares `Console` and calls the nested `P::get`
+// (definition `defs_P_get`, which needs nothing) while the root imports `other.wrong` (which needs
+// `Console`) under the alias `P_get`. `--report caps` explained `run`'s `Console` by the method
+// call through the free alias; a method call is explained by the method.
+// Expected: 42, natively and --interp; `Console <- declared` for `run` in `--report caps`.
+mod outer {
+    mod defs {
+        pub struct Copy P { pub v: i32 }
+        impl P {
+            pub fn get() -> i32 { return 42; }
+        }
+    }
+}
+mod other {
+    pub fn wrong() with(Console) -> i32 { return 99; }
+}
+import outer.defs.{P};
+import other.{wrong as P_get};
+fn run() with(Console) -> i32 { return P::get(); }
+fn main() with(Console) -> Int {
+    return run() as Int;
+}

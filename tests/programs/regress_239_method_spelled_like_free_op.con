@@ -1,0 +1,12 @@
+// Bug 239 (FIXED), Codex review r14: a newtype `vec` with a method `free`, called as `v.free()`
+// (Core spelling `vec_free`, a freeing intrinsic's). `--report alloc` counted `main` as freeing;
+// cleanup is a free call of a freeing intrinsic or a destructor call, and this is neither.
+// Expected: 42, natively and --interp; no "frees: vec_free" in `--report alloc`.
+newtype vec = Int;
+impl vec {
+    pub fn free(&self) -> Int { return 42; }
+}
+fn main() -> Int {
+    let v: vec = vec(0);
+    return v.free();
+}

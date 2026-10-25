@@ -1,0 +1,31 @@
+// Bug 239 (FIXED), Codex review r14: `user` takes the respelled `outer_a_P`'s method `get` as a
+// value (`let f: fn(P) -> i32 = P_get;`, spelled `outer_a_P_get` in Core, defined as
+// `a_outer_a_P_get`) while an unrelated module declares an extern `outer_a_P_get(x: i32)`. The
+// type-agreement backstop compared the value with the extern's signature (E0299); a method value
+// is compared with the method.
+// Expected: 42, natively and --interp.
+mod outer {
+    mod a {
+        pub struct Copy P { pub v: i32 }
+        impl P {
+            pub fn get(p: P) -> i32 { return p.v; }
+        }
+    }
+    mod b {
+        pub struct Copy P { pub w: i32 }
+    }
+}
+mod ffi {
+    #[link_name = "abs"]
+    pub trusted extern fn outer_a_P_get(x: i32) with() -> i32;
+}
+mod user {
+    import outer.a.{P};
+    pub fn run() -> i32 {
+        let f: fn(P) -> i32 = P_get;
+        return f(P { v: 42 });
+    }
+}
+fn main() -> Int {
+    return user::run() as Int;
+}

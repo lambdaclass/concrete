@@ -189,6 +189,16 @@ def isFreeCall (name : String) : Bool :=
   | some .free | some .destroy | some .vecFree | some .dropString => true
   | _ => false
 
+/-- The cleanup calls of a body (bugs 238 – 239, Codex review r14): free calls of a freeing
+    intrinsic or destructor spelling, and METHOD calls of a destructor (`T_destroy`, the typed
+    dispatch). An ordinary method spelled like a freeing intrinsic (`vec_free`) frees nothing. -/
+def cleanupCallsStmts (ss : List CStmt) : List String :=
+  ((collectCalleesStmts ss).filterMap fun c => match c with
+    | .direct n .free => if isFreeCall n then some n else none
+    | .direct n .method =>
+      if n.endsWith "_destroy" || n == destroyDispatchCallee then some n else none
+    | _ => none).eraseDups
+
 def returnsAllocation : Ty → Bool
   | .heap _ | .heapArray _ => true
   | .generic "Vec" _ _ => true

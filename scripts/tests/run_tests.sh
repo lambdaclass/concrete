@@ -8744,6 +8744,22 @@ else
     printf '%s\n' "$r239_alloc" | awk 'NR<=6'
     FAIL=$((FAIL + 1))
 fi
+run_ok "$TESTDIR/regress_239_method_value_type_agreement.con" 42
+run_ok "$TESTDIR/regress_239_method_cap_explained_past_free_alias.con" 42
+check_report_multi "$TESTDIR/regress_239_method_cap_explained_past_free_alias.con" caps \
+    "bug 239: --report caps explains a method call by the method, not a free alias of its spelling" \
+    "bug 239: --report caps explains a method call by a free function its spelling's alias names" \
+    "Console    <- declared"
+run_ok "$TESTDIR/regress_239_method_spelled_like_free_op.con" 42
+r239_alloc2=$(cached_output "$TESTDIR/regress_239_method_spelled_like_free_op.con" "--report alloc")
+if grep -q "main" <<<"$r239_alloc2" && ! grep -q "frees: vec_free" <<<"$r239_alloc2"; then
+    echo "  ok  bug 239: a method spelled like a freeing intrinsic frees nothing in --report alloc"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 239: --report alloc counts a method spelled like a freeing intrinsic as a free:"
+    printf '%s\n' "$r239_alloc2" | awk 'NR<=6'
+    FAIL=$((FAIL + 1))
+fi
 # Bug 247: a function value written as an identifier reaches what it names in the assumption summary.
 run_ok "$TESTDIR/regress_247_function_value_reaches_foreign.con" 42
 check_report_multi "$TESTDIR/regress_247_function_value_reaches_foreign.con" caps \
@@ -8786,7 +8802,8 @@ for r238 in regress_238_free_fn_spelled_like_method_call regress_238_other_modul
             regress_239_method_edge_beside_free_alias regress_238_free_alias_takes_method_spelling \
             regress_239_fn_parameter_spelled_like_method regress_238_extern_alias_takes_nested_method_spelling \
             regress_238_unrelated_alias_beside_method regress_239_imported_extern_alias_beside_capable_method \
-            regress_239_method_ffi_beside_free_alias; do
+            regress_239_method_ffi_beside_free_alias regress_239_method_value_type_agreement \
+            regress_239_method_cap_explained_past_free_alias regress_239_method_spelled_like_free_op; do
     r238_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/$r238.con" --interp 2>&1 || true)
     if [ "$r238_interp" = "42" ]; then
         echo "  ok  bugs 238-241: $r238 — interp == binary (42)"
