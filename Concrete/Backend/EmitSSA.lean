@@ -71,6 +71,10 @@ structure EmitSSAState where
       These are the PRE-MANGLING names the alias machinery resolves to; `fnSymbols` maps
       each to its link symbol. -/
   definedFnNames : List String := []
+  /-- The pre-mangling names of the program's impl methods (bugs 238 – 239): a method call is
+      resolved to one of these, never through an alias of its spelling to a free function or an
+      extern (Codex review r12). -/
+  methodFnNames : List String := []
   /-- Pre-mangling name of every Concrete-defined function → its link symbol: the mangled
       `Symbols.concreteFn` (FFI.md "Symbol Names"), or its `#[export_name]`. -/
   fnSymbols : Std.HashMap String String := {}
@@ -379,6 +383,19 @@ private def resolveAliasedName (s : EmitSSAState) (fn : String) : String :=
         | none => orig
       | none => fn
 
+/-- `resolveAliasedName` for a METHOD call (bugs 238 – 239, Codex review r12): its spelling when a
+    method has it, else the first alias target (local imports, then the program's aliases, one
+    more local hop) that is a method. An alias of the spelling to a free function or an extern is
+    never followed. -/
+private def resolveMethodName (s : EmitSSAState) (fn : String) : String :=
+  if s.methodFnNames.contains fn then fn else
+  let viaLocal := (s.localAliases.filter (·.1 == fn)).map (·.2)
+  let viaLinker := (s.linkerAliases.filter (·.1 == fn)).map (·.2)
+  let hop := viaLinker.flatMap fun t => (s.localAliases.filter (·.1 == t)).map (·.2)
+  match (viaLocal ++ viaLinker ++ hop).find? s.methodFnNames.contains with
+  | some t => t
+  | none => resolveAliasedName s fn
+
 /-- The C symbol a foreign name binds: its `#[link_name]`, else its spelling. -/
 private def externSymbol (s : EmitSSAState) (name : String) : String :=
   (s.externLinks.lookup name).getD name
@@ -399,7 +416,7 @@ private def directSymbol (s : EmitSSAState) (fn : String) (space : CallSpace := 
   | none =>
   if space == .free && s.moduleExterns.contains fn then (externSymbol s fn, false)
   else
-    let pre := resolveAliasedName s fn
+    let pre := if space == .method then resolveMethodName s fn else resolveAliasedName s fn
     match s.fnSymbols.get? pre with
     | some sym => (sym, true)
     | none => (externSymbol s pre, false)
@@ -1872,6 +1889,10 @@ def emitSSAProgram (modules : List SModule) (testMode : Bool := false) (moduleFi
     acc ++ m.functions.map fun f => llvmFnName { s with collidingNames := collidingNames } f
   ) ([] : List String)
   let s := { s with definedFnNames := definedFnNames }
+  let methodFnNames := modules.foldl (fun acc m =>
+    acc ++ (m.functions.filter (·.isMethod)).map fun f => llvmFnName { s with collidingNames := collidingNames } f
+  ) ([] : List String)
+  let s := { s with methodFnNames := methodFnNames }
   -- Link symbols (FFI.md "Symbol Names"): every Concrete definition is mangled into
   -- `_C.<module path>.<name>`, or takes its `#[export_name]`. Injective: (path, name) fixes
   -- the pre-mangling name, and the mangled form contains `.`, which no C name does.

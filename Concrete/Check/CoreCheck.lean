@@ -49,6 +49,10 @@ structure CoreCheckEnv where
   /-- Every linker alias of the program (Codex review r7): a method call spelled by its caller
       (`P_get` for a nested module's `inner_P_get`) reaches its method through one. -/
   aliases : List (String × String) := []
+  /-- The module's own externs' signatures (bugs 238 – 239, Codex review r12): a free call the
+      function binds to a foreign declaration (`currentForeign`) is decided against that
+      declaration, never against a method sharing the spelling. -/
+  ownExterns : List (String × CapSet × List (String × Ty) × Ty) := []
   structDefs : List CStructDef
   enumDefs : List CEnumDef
   newtypes : List NewtypeDef := []
@@ -713,7 +717,17 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
     if space == .free && externHere then addTrustEdge .callsFFI fn
     -- Check capability discipline: a method call against the method table first; a method of
     -- another package is in the imported requirements, keyed by the call's spelling.
-    let calleeCaps? ← match space, methodName?.bind (fun n => envE.methodCaps.lookup n), envE.importedCaps.lookup fn with
+    -- A free call bound to a foreign declaration: an imported binding's requirement travels in
+    -- `importedCaps` under the local spelling, an own extern's is in `ownExterns`.
+    let foreignDecl? := if space == .free then
+      (envE.currentForeign.lookup fn).filter (!·.startsWith "_C$rt.") else none
+    let foreignSig? := foreignDecl?.bind fun d => envE.ownExterns.find? (·.1 == d)
+    let calleeCaps? ← match foreignDecl?, foreignSig?, envE.importedCaps.lookup fn with
+      | some _, some (_, cs, _, _), _ => pure (some cs)
+      | some _, none, some cs => pure (some cs)
+      | some d, none, none => lookupFnCaps d
+      | _, _, _ =>
+      match space, methodName?.bind (fun n => envE.methodCaps.lookup n), envE.importedCaps.lookup fn with
       | .method, some caps, _ => pure (some caps)
       | .method, none, some caps => pure (some caps)
       | .method, none, none => if externHere then pure none else lookupFnCaps fn
@@ -749,7 +763,13 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
         addCCError (.insufficientCapabilities fn (capSetToString capD.required) (capSetToString capD.callerHas))
     | none => pure ()  -- builtin/extern: no recorded capability set
     -- Check argument types: a method call against the method's own signature.
-    let sig? ← match methodSig? with
+    let sig? ← match methodSig?, foreignSig?, foreignDecl? with
+      | some (_, ps, r, _), _, _ => pure (some (ps, r))
+      | none, some (_, _, ps, r), _ => pure (some (ps, r))
+      -- an imported foreign binding, by its declared name
+      | none, none, some d => lookupFnSig d
+      | none, none, none =>
+      match methodSig? with
       | some (_, ps, r, _) => pure (some (ps, r))
       | none => if space == .method && externHere then pure none else lookupFnSig fn
     match sig? with
@@ -1557,6 +1577,7 @@ partial def ccCheckModule (m : CModule)
     -- requirement where there was none, never replace a nearer one.
     fnSigs := fnSigs ++ externSigs ++ allFnSigs
     methodCaps := allMethods.map fun (n, cs, _, _, _) => (n, cs)
+    ownExterns := externSigs
     methodSigs := allMethods.map fun (n, _, ps, r, t) => (n, ps, r, t)
     aliases := allAliases
     structDefs := m.structs

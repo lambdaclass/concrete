@@ -493,10 +493,13 @@ private def monoIsCopy (st : MonoState) (ty : Ty) : Bool :=
     (fun _ => false)
     ty
 
-private def lookupFn (name : String) : MonoM (Option CFnDef) := do
+private def lookupFn (name : String) (onlyMethods : Bool := false) : MonoM (Option CFnDef) := do
   let st ← get
+  -- A method call reaches methods only (bugs 238 – 239, Codex review r12): an alias of its
+  -- spelling to a free function is not a way to it.
+  let ok := fun (f : CFnDef) => !onlyMethods || f.isMethod
   -- Try direct lookup first (O(1) via fnMap)
-  match st.fnMap.get? name with
+  match (st.fnMap.get? name).filter ok with
   | some f => return some f
   | none =>
     -- Resolve through linker aliases (e.g., HashMap_contains →
@@ -511,12 +514,12 @@ private def lookupFn (name : String) : MonoM (Option CFnDef) := do
     let targets := st.linkerAliases.filterMap fun (l, t) =>
       if l == name then some t else none
     for t in targets do
-      match st.fnMap.get? t with
+      match (st.fnMap.get? t).filter ok with
       | some f => return some f
       | none =>
         match st.linkerAliases.lookup t with
         | some t2 =>
-          match st.fnMap.get? t2 with
+          match (st.fnMap.get? t2).filter ok with
           | some f => return some f
           | none => pure ()
         | none => pure ()
@@ -608,7 +611,7 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
     if typeArgs.isEmpty then
       -- Even with no explicit typeArgs, the callee might be generic.
       -- Check if it's a generic function we need to monomorphize.
-      let fnDef? ← lookupFn fn
+      let fnDef? ← lookupFn fn (space == .method)
       match fnDef? with
       | some fnDef =>
         if fnDef.typeParams.isEmpty then
@@ -684,7 +687,7 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
             return .call (.direct name space) [] args' (sub ty)
       | none => return .call (.direct fn space) [] args' ty
     -- Look up the generic function
-    let fnDef? ← lookupFn fn
+    let fnDef? ← lookupFn fn (space == .method)
     match fnDef? with
     | none => return .call (.direct fn space) typeArgs args' ty  -- extern or unknown, leave as-is
     | some fnDef =>

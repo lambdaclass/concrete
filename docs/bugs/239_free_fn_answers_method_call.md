@@ -106,6 +106,9 @@ the declaration-collision check compared only free functions, externs and consta
 - Codex review r11: native emission no longer turns a direct method call into a call through a
   function-typed parameter of its spelling (`regress_239_fn_parameter_spelled_like_method.con`:
   99 natively, 42 under `--interp`, before).
+- Codex review r12: CoreCheck decides a free call bound to a foreign declaration (`currentForeign`)
+  against that declaration, never a method sharing its spelling
+  (`regress_239_imported_extern_alias_beside_capable_method.con`: E0520 before).
 - `declarationCollisions` counts a module's impl method definition names, so a free function or
   extern spelled like one is E0299 (MOD-3); two methods of one name on one type stay TRAIT-5's.
 

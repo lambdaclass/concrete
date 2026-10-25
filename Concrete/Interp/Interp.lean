@@ -1005,14 +1005,17 @@ def runtimeHelperPrefix : String := "_C$rt."
        backend's qualified symbol for a colliding name).
     3. The calling module's import aliases, whose target is a defined name.
     4. Any module's aliases, when they agree. -/
-def resolveCall (cx : Ctx) (name : String) : Except String (Option (CFnDef × Option Nat)) := do
+def resolveCall (cx : Ctx) (name : String) (onlyMethods : Bool := false)
+    : Except String (Option (CFnDef × Option Nat)) := do
   if cx.defs.isEmpty then
     return (findFn cx.fns name).map (·, none)
   -- Candidates carry their position in `defs`: two definitions with one flattened name (a
   -- nested `a.b_f` and `a_b.f` are both `a_b_f` in Core) stay two candidates, and are
   -- refused, never merged into one (Codex review). Only the same definition reached twice
   -- (through two alias rows) collapses.
-  let indexed := cx.defs.zipIdx
+  -- A method call reaches methods only (bugs 238 – 239, Codex review r12): an alias of its
+  -- spelling to a free function or extern is not a way to it.
+  let indexed := cx.defs.zipIdx.filter fun ((d, _), _) => !onlyMethods || d.isMethod
   let exact (n : String) : List ((CFnDef × Nat) × Nat) := indexed.filter (·.1.1.name == n)
   let pick (what : String) (cands : List ((CFnDef × Nat) × Nat)) :
       Except String (Option (CFnDef × Option Nat)) :=
@@ -2172,9 +2175,10 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
       -- A bare function name in value position is a function pointer, to the definition the
       -- spelling reaches from here (resolved now, so a later call cannot re-resolve it elsewhere).
       -- A function value (Lower intercepts intrinsics only at direct calls).
-      if let some decl := (cx.foreign.lookup name.name).filter (cx.externs.contains ·) then
+      -- A method value is never a foreign binding of its spelling (bugs 238 – 239).
+      if let some decl := (if name.space == .method then none else cx.foreign.lookup name.name).filter (cx.externs.contains ·) then
         return (env, .val (.fnPtr (externPtrPrefix ++ decl) none))
-      match ← liftE (resolveCall cx name.name) with
+      match ← liftE (resolveCall cx name.name (name.space == .method)) with
       | some (d, sc) => return (env, .val (.fnPtr d.name sc))
       | none =>
         -- A declared foreign function the resolver did not record (a local extern under an
@@ -2361,8 +2365,8 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
         else pure ("$extern", none)
       | none =>
       match callee with
-      | .direct name _ => do
-        let t ← liftE (resolveCall cx name)
+      | .direct name space => do
+        let t ← liftE (resolveCall cx name (space == .method))
         pure (name, t)
       | .indirect binding =>
         match envGetLocal env binding.key with

@@ -1,0 +1,19 @@
+// Bug 238 (FIXED), Codex review r12 control: an unrelated module imports a free function under the
+// alias `P_get`, the definition name of the root's method `P::get`. The method call keeps its
+// spelling (an exact definition) and compiles; an intermediate version of this fix refused it
+// (E0299).
+// Expected: 42, natively and --interp.
+struct Copy P { v: i32 }
+impl P {
+    fn get() -> i32 { return 42; }
+}
+mod other {
+    pub fn wrong() -> i32 { return 99; }
+}
+mod user {
+    import other.{wrong as P_get};
+    pub fn unused() -> i32 { return P_get(); }
+}
+fn main() -> Int {
+    return P::get() as Int;
+}
