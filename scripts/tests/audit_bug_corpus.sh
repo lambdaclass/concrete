@@ -289,6 +289,7 @@ declare -A BUG_TEST_MAP=(
 
 # Bugs that don't need a .con regression test (with reason).
 declare -A SKIP_BUGS=(
+  [263]="FIXED -- fuzz-farm test coverage depended on wall-clock throughput; tooling defect, covered by scripts/tests/check_fuzz_farm.sh and scripts/tests/check_fuzz_farm_batches.py (fixed work, incomplete watchdog, partial pause and production-mode controls)"
   [219]="FIXED 2026-10-23 -- mutation 31 was anchored on the proof-only cExprToPExpr wrapper and survived. Regression vehicle is the mutation harness (family 31 KILLED), not a tests/programs fixture"
   [252]="FIXED 2026-10-25 -- the Markdown-link check dropped anchors, resolved changelog fragments against their own directory, and was run only by the Makefile. Documentation tooling, no compiler program to reproduce it: the regression vehicle is the link gate's throwaway-tree controls and the selection replay controls over the selector entry point select_gates.sh"
   [237]="FIXED 2026-10-25 -- the impact gate selector counted a script name in a keyed array value (a corpus note in this file) as a call, so a docs-only diff selected the corpus runners. Regression vehicle is the text-is-not-a-call controls over the selector entry point select_gates.sh (selection replay gate)"

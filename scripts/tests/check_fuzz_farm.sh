@@ -31,6 +31,12 @@ ok() { echo "  ok   $1"; PASS=$((PASS+1)); }
 no() { echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 export PYTHONDONTWRITEBYTECODE=1
 
+# Bug 263: coverage comes from completed batches, not elapsed wall time. The generous
+# deadline is a watchdog; an incomplete bounded campaign must fail, even if it found bugs.
+if python3 scripts/tests/check_fuzz_farm_batches.py; then
+  ok "bounded campaigns stop at complete work and reject incomplete coverage"
+else no "bounded campaign controls"; fi
+
 cls_of() {  # cls_of <oracle> <file> [params-json]  -> prints the class (or None)
   local params=()
   [ $# -ge 3 ] && params=(--params "$3")
@@ -68,7 +74,7 @@ echo "\$1|\$2" >> "$TMP/notify.log"
 EOF
 chmod +x "$SNAP/scripts/land/notify.sh"
 FARM_HOME="$H" FARM_PUBLIC="$H/pub" FAKE_GEN_MODE=bugs $FARM campaign --compiler "$CC" \
-  --gen-dir "$FIX/gen" --sha 1111111 --snapshot "$SNAP" --seconds 8 --batch 20 --seed 7 \
+  --gen-dir "$FIX/gen" --sha 1111111 --snapshot "$SNAP" --seconds 180 --batches 3 --batch 20 --seed 7 \
   --generators diff,lin,mut --no-lean-reduce > "$TMP/campaign.log" 2>&1
 rc=$?
 [ "$rc" -eq 0 ] && ok "campaign exits 0" || { no "campaign exit $rc"; tail -20 "$TMP/campaign.log"; }
@@ -142,8 +148,8 @@ while read -r verdict msg; do [ "$verdict" = OK ] && ok "$msg" || no "$msg"; don
 # 1111111 reproduces the bug, which must NOT reopen it; one on the current main must.
 mkdir -p "$H/current"; echo 2222222 > "$H/current/SHA"
 FARM_HOME="$H" FARM_PUBLIC="$H/pub" FAKE_GEN_MODE=bugs $FARM campaign --compiler "$CC" \
-  --gen-dir "$FIX/gen" --sha 1111111 --seconds 3 --batch 10 --seed 9 --generators diff \
-  --no-lean-reduce >/dev/null 2>&1
+  --gen-dir "$FIX/gen" --sha 1111111 --seconds 180 --batches 1 --batch 10 --seed 9 --generators diff \
+  --no-lean-reduce > /dev/null 2>&1 || no "recheck campaign incomplete"
 python3 - "$H" <<'PY' > "$TMP/e2.txt"
 import json, os, sys
 idx = json.load(open(os.path.join(sys.argv[1], "findings", "findings.json")))
@@ -152,8 +158,8 @@ print(("OK " if e["status"] == "fixed-on-main 2222222" else "NO ") +
       f"an occurrence on an older snapshot does not reopen a fixed finding -> {e['status']}")
 PY
 FARM_HOME="$H" FARM_PUBLIC="$H/pub" FAKE_GEN_MODE=bugs $FARM campaign --compiler "$CC" \
-  --gen-dir "$FIX/gen" --sha 2222222 --seconds 3 --batch 10 --seed 9 --generators diff \
-  --no-lean-reduce >/dev/null 2>&1
+  --gen-dir "$FIX/gen" --sha 2222222 --seconds 180 --batches 1 --batch 10 --seed 9 --generators diff \
+  --no-lean-reduce > /dev/null 2>&1 || no "recheck campaign incomplete"
 python3 - "$H" <<'PY' >> "$TMP/e2.txt"
 import json, os, sys
 idx = json.load(open(os.path.join(sys.argv[1], "findings", "findings.json")))
@@ -184,8 +190,8 @@ if FARM_HOME="$FIX" $FARM promote silent-doesnotexist >/dev/null 2>&1; then
 echo "=== G: generator drift ==="
 D="$TMP/drift"
 FARM_HOME="$D" FARM_PUBLIC="$D/pub" FAKE_GEN_MODE=drift $FARM campaign --compiler "$CC" \
-  --gen-dir "$FIX/gen" --sha 4444444 --seconds 4 --batch 30 --seed 3 --generators diff \
-  --no-lean-reduce > "$TMP/drift.log" 2>&1
+  --gen-dir "$FIX/gen" --sha 4444444 --seconds 180 --batches 1 --batch 30 --seed 3 --generators diff \
+  --no-lean-reduce > "$TMP/drift.log" 2>&1 || no "drift campaign incomplete"
 FARM_HOME="$D" FARM_PUBLIC="$D/pub" $FARM status >/dev/null
 python3 - "$D" <<'PY' > "$TMP/g.txt"
 import json, os, sys
@@ -209,8 +215,8 @@ print(("OK " if "diff" in st.get("drift_alerts", {}) else "NO ") + "status JSON 
 PY
 while read -r verdict msg; do [ "$verdict" = OK ] && ok "$msg" || no "$msg"; done < "$TMP/g.txt"
 FARM_HOME="$D" FARM_PUBLIC="$D/pub" FAKE_GEN_MODE=clean $FARM campaign --compiler "$CC" \
-  --gen-dir "$FIX/gen" --sha 4444444 --seconds 2 --batch 30 --seed 4 --generators diff \
-  --no-lean-reduce > /dev/null 2>&1
+  --gen-dir "$FIX/gen" --sha 4444444 --seconds 180 --batches 1 --batch 30 --seed 4 --generators diff \
+  --no-lean-reduce > /dev/null 2>&1 || no "clean campaign incomplete"
 python3 -c 'import json,sys; a=json.load(open(sys.argv[1]))["diff"]; sys.exit(0 if not a["alert"] else 1)' \
   "$D/state/drift.json" && ok "a clean batch clears the drift alert" || no "drift alert did not clear"
 

@@ -62,6 +62,8 @@ roadmap's defect disposition rule ([execution queue](../../ROADMAP.md#the-curren
 
 ## Fixed Bugs
 
+- [263_fuzz_farm_gate_wall_clock_coverage.md](263_fuzz_farm_gate_wall_clock_coverage.md) — fuzz-farm gate coverage depended on short wall-clock campaigns; fixed-work batch targets now fail if the watchdog expires before completion. Coverage: the fuzz-farm gate and its virtual-clock controls.
+
 - [001_cross_module_struct_field_offset.md](001_cross_module_struct_field_offset.md)
 - [002_i32_literal_type_mismatch.md](002_i32_literal_type_mismatch.md)
 - [003_cross_module_mut_borrow_move.md](003_cross_module_mut_borrow_move.md)
