@@ -224,6 +224,14 @@ structure CFnDef where
       spelling (FFI.md "Symbol Names"). Copied with the body by Mono, so a specialization
       keeps its generic's bindings. An emission fact; no identity or digest reads it. -/
   foreignCalls : List (String × String) := []
+  /-- Bug 251: the top-level module whose tree defines this function's source, when Mono places a
+      copy of it elsewhere. Mono stamps it on every generic template, so a specialization, which
+      Mono emits into the tree that first instantiates it, keeps it. Lower lowers the body in
+      that tree's context, the one its spellings were written against: a bare constant spelling
+      names one of that tree's constants (`CModule.treeConstants`), and a call spelling is an
+      intrinsic only when that tree defines no function of the name. `none` for every other
+      function: its own tree. -/
+  sourceTree : Option String := none
 
 /-- The keys a function's parameters bind under (R-0492 step 4): their identities when Elab
     recorded them, their names otherwise (a synthesized function). Every backend binds parameters
@@ -406,6 +414,14 @@ structure CModule where
       Set by Project.resolveModules for `mod x;` sub-files and threaded from
       the AST Module so diagnostics name the RIGHT file (ROADMAP #24a). -/
   sourceFile : String := ""
+
+/-- Bug 245: the constants a bare constant spelling in a function of the top-level tree `m` may
+    name: those of `m` and of every module nested in it. The one definition of that scope: Lower
+    inlines a constant from it (per `lowerModule`) and the interpreter evaluates one from it
+    (`Ctx.treeConsts`), so the two backends cannot scope a spelling differently. A constant of
+    another tree is reached only by its imported spelling (`ConstId.coreName`, bug 233). -/
+partial def CModule.treeConstants (m : CModule) : List (String × Ty × CExpr) :=
+  m.constants ++ m.submodules.flatMap CModule.treeConstants
 
 -- ============================================================
 -- CExpr.ty accessor

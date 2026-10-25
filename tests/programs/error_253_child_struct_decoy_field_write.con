@@ -1,0 +1,12 @@
+// Bug 253 (fixed): writing `m.P`'s private field outside `m`, admitted because a child of the
+// writer declares a `P`. E0298.
+mod outer {
+    mod m { pub struct Copy P { v: i64 } pub fn mk() -> P { return P { v: 1 }; } }
+    mod user {
+        mod decoy { struct Copy P { v: i64 } }
+        import m.{P, mk};
+        pub fn run() -> i64 { let mut x: P = mk(); x.v = 42; return 0; }
+    }
+    import user.{run};
+    pub fn main() -> i64 { return run(); }
+}

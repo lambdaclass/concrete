@@ -2586,10 +2586,8 @@ private partial def collectAllEnums (m : CModule) : List CEnumDef :=
   let sub := m.submodules.foldl (fun acc s => acc ++ collectAllEnums s) []
   own ++ sub
 
-private partial def collectAllConstants (m : CModule) : List (String × Ty × CExpr) :=
-  let own := m.constants
-  let sub := m.submodules.foldl (fun acc s => acc ++ collectAllConstants s) []
-  own ++ sub
+/-- The constants of `m`'s tree (`CModule.treeConstants`, shared with the interpreter). -/
+private def collectAllConstants (m : CModule) : List (String × Ty × CExpr) := m.treeConstants
 
 /-- R-0492 step 4 (bug 233): the constants of the tree `m`, whose path is `path`, by their imported
     Core spelling (`ConstId.coreNameAt`), each with `scope`, the constants of its top-level tree. -/
@@ -2674,9 +2672,21 @@ def lowerModule (m : CModule) (program : List CModule := []) : Except Diagnostic
   -- specializations should be lowered.
   let concreteFns := allFunctionsWithPath.filter fun (f, _) => f.typeParams.isEmpty
   let definedFnNames := allFunctionsWithPath.map fun (f, _) => f.name
+  -- Bug 251: a specialization of another tree's generic is lowered in that tree's context
+  -- (`sourceTree`): its constants, and its defined function names (which decide whether a call
+  -- spelling is an intrinsic).
+  let contextOf : CFnDef → List (String × Ty × CExpr) × List String := fun f =>
+    match f.sourceTree with
+    | some t => if t == m.name then (allConstants, definedFnNames) else
+      match program.find? (fun (pm : CModule) => pm.name == t) with
+      | some pm => (collectAllConstants pm, (collectAllFunctionsWithPath pm).map fun (g, _) => g.name)
+      | none => (allConstants, definedFnNames)
+    | none => (allConstants, definedFnNames)
   let results ← concreteFns.foldlM (init := []) fun acc (f, path) =>
-    match lowerFn f allStructs allEnums allConstants allNewtypes definedFnNames importedConstants with
-    | .ok (sfn, lits) => .ok (acc ++ [({ sfn with modulePath := path }, lits)])
+    let (fnConstants, fnDefinedNames) := contextOf f
+    match lowerFn f allStructs allEnums fnConstants allNewtypes fnDefinedNames importedConstants with
+    | .ok (sfn, lits) =>
+      .ok (acc ++ [({ sfn with modulePath := path, sourceTree := f.sourceTree.filter (· != m.name) }, lits)])
     | .error ds => .error (ds.map (·.addContext s!"while lowering function '{f.name}'"))
   -- Build deduplicated globals list (by string value)
   -- Prefix with module name to avoid collisions across modules

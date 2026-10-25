@@ -1,0 +1,10 @@
+// Bug 251 (fixed, Codex review): a generic of `a` calls `b.val` through `a`'s import alias `v`,
+// while the instantiating module defines its own `fn v`. Binary and --interp return 40.
+mod b { pub fn val() -> i32 { return 40; } }
+mod a {
+    import b.{val as v};
+    pub fn get<T: Copy>(x: T) -> i32 { return v(); }
+}
+import a.{get};
+fn v() -> i32 { return 2; }
+fn main() -> i32 { return get::<i32>(0) + v() - 2; }

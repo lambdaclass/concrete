@@ -1,0 +1,11 @@
+// Bug 262 (fixed): a module importing a function `K` while its child declares a newtype `K`.
+// Check took the call `K(30)` for the child newtype's constructor and refused the program (E0220:
+// the constructor returns `K`, not i64), where Elab binds `K` to the imported function. The constructors bound
+// here are the module's own newtypes and its imports', in both stages: binary and --interp
+// return 42.
+mod outer {
+    mod kids { pub newtype K = i64; }
+    mod lib { pub fn K(n: i64) -> i64 { return n + 12; } }
+    import lib.{K};
+    pub fn main() -> i64 { return K(30); }
+}

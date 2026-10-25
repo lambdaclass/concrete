@@ -156,12 +156,23 @@ structure TypeEnv where
   -- public constructor fn (e.g. try_new). Everything in `newtypes` but not
   -- here is imported → direct construction is rejected.
   localNewtypeNames : List String := []
+  /-- Bug 262: the newtypes whose constructor this module calls by its spelling
+      (`newtypeConstructorsInScope`, the list Elab binds): its own and its imports', not the
+      children's that `newtypes` also holds. -/
+  newtypeConstructors : List NewtypeDef := []
   -- 0b slice 2: structs DEFINED in the module being checked. Fields are
   -- private-by-default (`pub` opts in); a struct LITERAL or field
   -- read/write on a NON-local struct is rejected unless the touched field(s)
   -- are `pub`. This is what makes representation invariants (String's
   -- {ptr,len,cap}) unforgeable from other modules.
   localStructNames : List String := []
+  /-- Bug 253: the identities of the newtypes and structs DEFINED here (module + submodules). A
+      spelling's declaration is local when its identity is one of these: an imported declaration
+      whose spelling a child module also declares is not (a decoy child type granted the import's
+      construction and field rights). The name lists above answer only for a declaration that
+      carries no identity (a parsed one: this module's own, or a child's). -/
+  localNewtypeIds : List TypeId := []
+  localStructIds : List TypeId := []
   deriving Repr
 
 abbrev CheckM := ExceptT Diagnostics (StateM TypeEnv)

@@ -667,6 +667,8 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
               paramIds := fnDef.paramIds
               -- The generic's foreign bindings travel with its body (FFI.md "Symbol Names").
               foreignCalls := fnDef.foreignCalls
+              -- Bug 251: and so does the tree its spellings were written in.
+              sourceTree := fnDef.sourceTree
             }
             enqueueMono name monoFn
             return .call name [] args' (sub ty)
@@ -707,6 +709,8 @@ partial def monoExpr (e : CExpr) : MonoM CExpr := do
         paramIds := fnDef.paramIds
         -- The generic's foreign bindings travel with its body (FFI.md "Symbol Names").
         foreignCalls := fnDef.foreignCalls
+        -- Bug 251: and so does the tree its spellings were written in.
+        sourceTree := fnDef.sourceTree
       }
       enqueueMono name monoFn
       return .call name [] args' (sub ty)
@@ -1421,7 +1425,9 @@ def monoProgram (modules : List CModule)
     -- use (`Marker<&Int>` with a phantom `T`) is visible only here (bug 092).
     (preTypeCheck : List CModule → Diagnostics := fun _ => []) :
     Except Diagnostics (List CModule) :=
-  let allFns := modules.foldl (fun acc m => acc ++ collectAllModuleFns m) []
+  -- Bug 251: every generic template records its defining tree, which its specializations copy.
+  let allFns := modules.foldl (fun acc m => acc ++ (collectAllModuleFns m).map fun f =>
+    if f.typeParams.isEmpty || f.sourceTree.isSome then f else { f with sourceTree := some m.name }) []
   let allAliases := modules.foldl (fun acc m => acc ++ collectAllModuleAliases m) []
   -- Build the name→def map once, keeping the FIRST occurrence (matches the old
   -- `allFns.find?` semantics) — O(1) call resolution instead of O(fns) per call.

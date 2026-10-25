@@ -56,6 +56,8 @@ def aliasImports : List ImportDecl :=
 def resolveAlias : Except Diagnostics ResolvedImports :=
   resolveImports aliasImports [("lib", buildFileSummary libModule)]
     (fun m => "unknown " ++ m) (fun s m => s ++ " not public in " ++ m)
+    -- the importer declares no types of its own (bug 242's `importerTypes`)
+    []
 
 def aliasKeepsDefinitionSite : Bool :=
   match resolveAlias with
@@ -86,7 +88,7 @@ def transitiveImports : List ImportDecl :=
 def transitiveKeepsDefinitionSite : Bool :=
   match resolveImports transitiveImports
       [("transitive", buildFileSummary transitiveModule)]
-      (fun m => "unknown " ++ m) (fun s m => s ++ " not public in " ++ m) with
+      (fun m => "unknown " ++ m) (fun s m => s ++ " not public in " ++ m) [] with
   | .error _ => false
   | .ok ri =>
       match ri.structs.find? (fun sd => sd.name == "Leaf") with
@@ -290,6 +292,15 @@ if LEAN_OUT="$(lake env lean "$TMP_DIR/type_identity.lean" 2>&1)"; then
 else
   rc=$?
   printf '%s\n' "$LEAN_OUT" >&2
+  # An assertion that failed (`assertTypeIdentity` throws "FAILED: <label>") is this gate's verdict,
+  # reported as one: the identity property is broken. Anything else is the probe not elaborating,
+  # which is no verdict about the property.
+  if FAILED_LABEL="$(printf '%s\n' "$LEAN_OUT" | grep -o 'FAILED: .*' | awk 'NR==1')" && [ -n "$FAILED_LABEL" ]; then
+    echo "  FAIL ${FAILED_LABEL#FAILED: }"
+    echo ""
+    echo "TYPE-IDENTITY: PASS=$(printf '%s\n' "$LEAN_OUT" | grep -c '^  ok   ' || true) FAIL=1"
+    exit 1
+  fi
   echo "FATAL: semantic TypeId probe did not elaborate" >&2
   exit "$rc"
 fi

@@ -1,0 +1,11 @@
+// Bug 251 (fixed, Codex review): a generic of `a` calls `a`'s own `fn abs`; the instantiating module
+// declares `extern fn abs`. Emitted among the instantiating module's functions, the specialization's
+// `abs` bound C's `abs` (5). It is emitted in its defining module's call context. Binary and --interp
+// return 40.
+mod a {
+    fn abs(x: i32) -> i32 { return 40; }
+    pub fn get<T: Copy>(x: T) -> i32 { return abs(0 - 5); }
+}
+import a.{get};
+trusted extern fn abs(x: i32) with() -> i32;
+fn main() -> i32 { return get::<i32>(0); }

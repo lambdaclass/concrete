@@ -1,0 +1,15 @@
+// Bug 251 (fixed): a generic of `a` calls a generic of `b`, both instantiated from main: each
+// specialization reads its own defining tree's `K` (10 + 30), main its own (2). Binary and --interp
+// return 42.
+mod b {
+    const K: Int = 30;
+    pub fn inner<T: Copy>(x: T) -> Int { return K; }
+}
+mod a {
+    import b.{inner};
+    const K: Int = 10;
+    pub fn get<T: Copy>(x: T) -> Int { return K + inner::<T>(x); }
+}
+import a.{get};
+const K: Int = 2;
+fn main() -> Int { return get::<Int>(0) + K; }

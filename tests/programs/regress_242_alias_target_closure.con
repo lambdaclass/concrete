@@ -1,0 +1,10 @@
+// Bug 242 (fixed, Codex review): an imported alias whose target the importer must respell (its own `P`)
+// is the only thing naming that target: the closure binds the respelled target too. Binary and
+// --interp return 42.
+mod m {
+    pub struct Copy P { pub v: i64 }
+    pub type T = P;
+}
+import m.{T, P as Q};
+struct Copy P { w: i64 }
+fn main() -> Int { let t: T = Q { v: 40 }; let mine: P = P { w: 2 }; return t.v + mine.w; }

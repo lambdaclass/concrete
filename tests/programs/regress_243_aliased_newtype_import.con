@@ -1,0 +1,10 @@
+// Bug 243 (fixed): `import m.{N as M}` of a newtype bound no `M` (the import appended the newtype
+// under its own name), so `M::mk` was E0106. The import binds `M` to a copy carrying the
+// declaration's identity (`definedIn`, `definitionName`), as for a struct or enum: `M` is `N`, with
+// its methods. Binary and --interp return 42.
+mod m {
+    pub newtype N = i64;
+    impl N { pub fn mk(x: i64) -> N { return N(x); } pub fn get(self) -> i64 { return self.0; } }
+}
+import m.{N as M};
+fn main() -> Int { let a: M = M::mk(42); return a.get(); }

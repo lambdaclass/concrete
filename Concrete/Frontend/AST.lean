@@ -397,12 +397,22 @@ structure NewtypeDef where
       spells a newtype declared by two modules by its defining module). Empty
       before semantic resolution. -/
   definedIn : String := ""
+  /-- Bug 243: definition-site name, stamped by `buildFileSummary` with `definedIn`, kept
+      distinct from an importer's local alias (`import m.{N as M}` binds `M` to a copy whose
+      `name` is `M` and whose `definitionName` stays `N`), as for structs and enums. -/
+  definitionName : String := ""
   innerTy : Ty
   typeParams : List String := []
   typeBounds : List (String × List String) := []
   isPublic : Bool := false
   span : Span := default
   deriving Repr
+
+/-- Bug 243: the name a newtype is declared under, whatever spelling binds it here: its
+    `definitionName` once `buildFileSummary` stamped it, else (a parsed declaration, its own
+    module) its `name`. -/
+def NewtypeDef.declName (nt : NewtypeDef) : String :=
+  if nt.definitionName.isEmpty then nt.name else nt.definitionName
 
 /-- Loop contract attached to a `while`/`for` inside a function body:
     `#[invariant(...)]` clauses and an optional `#[variant(...)]` (termination

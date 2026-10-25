@@ -140,6 +140,10 @@ structure SFnDef where
   exportName : Option String := none
   /-- `CFnDef.foreignCalls`: call spellings bound to a foreign declaration. -/
   foreignCalls : List (String × String) := []
+  /-- Bug 251: `CFnDef.sourceTree` when it names another top-level module than the one this
+      function is emitted in (a specialization Mono moved): the module whose call context
+      (import aliases, own `extern` bindings) its call spellings were written in. -/
+  sourceTree : Option String := none
 
 structure SModule where
   name : String

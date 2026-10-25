@@ -1,0 +1,11 @@
+// Bug 243 (fixed): one newtype imported under its own name and an alias in one import. `M` and
+// `N` are one type: a value of either passes where the other is declared, and the alias's methods
+// and the module's functions over `N` apply to both. Binary and --interp return 42.
+mod m {
+    pub newtype N = i64;
+    impl N { pub fn mk(x: i64) -> N { return N(x); } pub fn get(self) -> i64 { return self.0; } }
+    pub fn twice(n: N) -> N { return N::mk(n.get() * 2); }
+}
+import m.{N as M, N, twice};
+fn take(a: M) -> i64 { return a.get(); }
+fn main() -> Int { let a: M = M::mk(20); let b: N = twice(a); let c: M = b; return take(c) + 2; }

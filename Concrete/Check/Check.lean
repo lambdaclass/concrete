@@ -959,14 +959,17 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     checkCallRootReads (← argMutLoanRoots args) args (some e.getSpan)
     checkDirectDestroyImplUse fnName (some e.getSpan)
     -- Intercept newtype wrapping: NewtypeName(expr)
-    match ← lookupNewtype fnName with
+    -- MOD-2 (bug 262): the constructors bound here are the module's own newtypes and its imports'
+    -- (`newtypeConstructorsInScope`, the list Elab looks a constructor up in). A child's newtype is
+    -- a type this module may write, but its spelling in call position is not its constructor.
+    match (← getEnv).newtypeConstructors.find? (·.name == fnName) with
     | some nt =>
       -- 0b construction rights: a newtype's direct constructor is private
       -- to its defining module. External callers use its public
       -- constructor fn (e.g. try_new) — this is what makes smart-constructor
       -- invariants (NonZeroU32's non-zero property) load-bearing rather
       -- than advisory.
-      if !(← getEnv).localNewtypeNames.contains fnName then
+      if !(← getEnv).newtypeIsLocal nt then
         throwCheck (.newtypeConstructPrivate fnName) (some e.getSpan)
       if args.length != 1 then throwCheck (.newtypeCtorShape fnName "takes exactly 1 argument") (some e.getSpan)
       if !typeArgs.isEmpty then throwCheck (.newtypeCtorShape fnName "does not take type arguments") (some e.getSpan)
@@ -1495,7 +1498,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       -- 0b slice 2: a struct literal on a NON-local struct is allowed only
       -- if every field is `pub` (a private field can't be initialized from
       -- another module, so its representation can't be forged).
-      if !(← getEnv).localStructNames.contains name then
+      if !(← getEnv).structIsLocal sd then
         match sd.fields.find? (fun sf => !sf.isPublic) with
         | some priv => throwCheck (.structLiteralPrivateField name priv.name) (some e.getSpan)
         | none => pure ()
@@ -1645,7 +1648,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           -- 0b slice 2: reading a PRIVATE field of a non-local struct is
           -- rejected (the `b.len` cross-module leak). Same-module reads and
           -- `pub` fields are fine.
-          if !f.isPublic && !(← getEnv).localStructNames.contains structName then
+          if !f.isPublic && !(← getEnv).structIsLocal sd then
             throwCheck (.fieldAccessPrivate structName field) (some e.getSpan)
           let mapping := sd.typeParams.zip typeArgs
           -- R-0484: the field's type at THIS instantiation — `s.f` on a `&Sink<Console>`
@@ -2739,7 +2742,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
         | some f =>
           -- 0b slice 2: WRITING a private field of a non-local struct is
           -- rejected (the `b.len = 999` cross-module forge).
-          if !f.isPublic && !(← getEnv).localStructNames.contains structName then
+          if !f.isPublic && !(← getEnv).structIsLocal sd then
             throwCheck (.fieldAccessPrivate structName field) (some stmt.getSpan)
           let mapping := sd.typeParams.zip typeArgs
           -- R-0484: assignment compares against the field's type at this instantiation.
@@ -3853,6 +3856,10 @@ def checkModule (m : Module) (summary : FileSummary)
   let localStructDefs := m.structs
                      ++ m.submodules.foldl (fun acc sub => acc ++ sub.structs) []
   let localStructNamesList := localStructDefs.map (fun sd => sd.name)
+  -- Bug 253: the same declarations by identity, as the summaries stamped them.
+  let childSummaries := summary.submoduleSummaries.map (·.2)
+  let localNewtypeIdList := (summary.newtypes ++ childSummaries.flatMap (·.newtypes)).filterMap (·.typeId?)
+  let localStructIdList := (summary.structs ++ childSummaries.flatMap (·.structs)).filterMap (·.typeId?)
   -- R-0492 step 3: each trait impl by its target's identity: an imported impl carries it
   -- (`targetDefinedIn`), a local one names its target in this module's environment.
   let traitImplIds : List (TypeId × String) := allTraitImpls.filterMap fun tb =>
@@ -3866,7 +3873,9 @@ def checkModule (m : Module) (summary : FileSummary)
       traitImpls := traitImplPairs, traitImplIds := traitImplIds,
       allFnSummarys := fnSigPairs, newtypes := allNewtypes,
       userFnNames := userFnNamesList, localNewtypeNames := localNewtypeNamesList,
-      localStructNames := localStructNamesList }
+      newtypeConstructors := newtypeConstructorsInScope m.newtypes imports,
+      localStructNames := localStructNamesList,
+      localNewtypeIds := localNewtypeIdList, localStructIds := localStructIdList }
   -- Module-level declaration checks (Copy/Destroy, repr, FFI, traits) moved to CoreCheck.lean.
   -- Reserved name check stays here because reserved names conflict with builtins in Check.
   let reservedNameCheck := m.functions.foldl (init := (Except.ok () : Except Diagnostics Unit)) fun acc f =>
@@ -4323,7 +4332,7 @@ partial def checkSubmodules (m : Module) (summary : FileSummary)
     match resolveImports sub.imports summaryTable
         (fun modName => CheckError.message (.unknownModule modName))
         (fun sym modName => CheckError.message (.notPublicInModule sym modName))
-        (pass := "check") with
+        (importerTypeSpellings subSummary) (pass := "check") with
     | .error ds => errs ++ (ds.addContext s!"while checking module '{sub.name}'").stampFile sub.sourceFile
     | .ok subImports =>
       -- Inject sibling submodule types (filtered against local names), exactly
@@ -4365,7 +4374,7 @@ def checkProgram (resolved : List ResolvedModule)
     match resolveImports m.imports summaryTable
         (fun modName => CheckError.message (.unknownModule modName))
         (fun sym modName => CheckError.message (.notPublicInModule sym modName))
-        (pass := "check") with
+        (importerTypeSpellings summary) (pass := "check") with
     | .error ds => errs ++ ds
     | .ok imports =>
       -- Inject sibling module functions for qualified :: access

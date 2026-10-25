@@ -75,6 +75,16 @@ def ConstId.coreNameAt (defModule declName : String) : String :=
 
 def ConstId.coreName (c : ConstId) : String := ConstId.coreNameAt c.defModule c.declName
 
+/-- Bug 242: the spelling an import binds a transported type declaration to when the
+    declaration's own spelling denotes another declaration in the importer (its own type of that
+    spelling, or another import's): the defining module path and the declaration name joined by
+    `::` (`m::shapes::P`), as an imported constant is spelled. `::` is no identifier character,
+    so nothing the importer declares or writes can share it. `none` for a builtin enum, which no
+    import transports. -/
+def TypeId.importSpelling : TypeId → Option String
+  | .user defModule declName => some (ConstId.coreNameAt defModule declName)
+  | .builtin _ => none
+
 /-- A field is identified relative to the declaration that owns it. -/
 structure FieldId where
   owner : TypeId
@@ -110,9 +120,10 @@ def EnumDef.typeId? (ed : EnumDef) : Option TypeId :=
       if ed.definedIn.isEmpty || ed.definitionName.isEmpty then none
       else some (.user ed.definedIn ed.definitionName)
 
-/-- A newtype is imported under its own name, so its spelling is its definition name. -/
+/-- Identity from the definition site (bug 243: an import alias changes only `name`). -/
 def NewtypeDef.typeId? (nt : NewtypeDef) : Option TypeId :=
-  if nt.definedIn.isEmpty then none else some (.user nt.definedIn nt.name)
+  if nt.definedIn.isEmpty || nt.definitionName.isEmpty then none
+  else some (.user nt.definedIn nt.definitionName)
 
 /-- R-0492 step 3: the target of an impl block declared beside it (`targetDefinedIn`). -/
 def ImplBlock.targetTypeId? (ib : ImplBlock) : Option TypeId :=

@@ -133,7 +133,7 @@ private def enumDecl (ed : EnumDef) (inModule : String) : TypeDecl :=
 
 private def newtypeDecl (nt : NewtypeDef) (inModule : String) : TypeDecl :=
   let defIn := if nt.definedIn.isEmpty then inModule else nt.definedIn
-  { id := .user defIn nt.name, arity := nt.typeParams.length }
+  { id := .user defIn nt.declName, arity := nt.typeParams.length }
 
 /-- Find a declaration named `n` in one module summary (its own declarations, by their
     definition-site name). -/
@@ -397,7 +397,9 @@ partial def allScopes (summaryTable : List (String × FileSummary)) (path : Stri
   let file := if m.sourceFile.isEmpty then file else m.sourceFile
   let subs := m.submodules.map fun sub => (path ++ "." ++ sub.name, sub)
   -- The same import artifact Check builds; an import error is Check's to report.
-  let imports := match resolveImports m.imports summaryTable (fun _ => "") (fun _ _ => "") with
+  let own := (summaryTable.lookup path).getD (buildFileSummary m)
+  let imports := match resolveImports m.imports summaryTable (fun _ => "") (fun _ _ => "")
+      (importerTypeSpellings own) with
     | .ok r => r
     | .error _ => {}
   ({ path, module := m, summaryTable, imports, siblings }, file) ::

@@ -1,0 +1,9 @@
+// Bug 242 (fixed): an aliased newtype whose methods name it beside another module's newtype imported under the definition's spelling. The transported type keeps its declaration. Binary and --interp return 42.
+mod m {
+    pub newtype N = i64;
+    impl N { pub fn mk(x: i64) -> N { return N(x); } pub fn get(self) -> i64 { return self.0; } }
+}
+mod q { pub newtype N = i32; pub fn one() -> N { return N(1); } pub fn val(n: N) -> i32 { return n.0; } }
+import m.{N as M};
+import q.{N, one, val};
+fn main() -> Int { let a: M = M::mk(41); let b: N = one(); return a.get() + (val(b) as i64); }

@@ -458,8 +458,15 @@ structure Ctx where
   externLinks : List (String × String) := []
   /-- The program name reported as `argv[0]`. -/
   argv0 : String := "a.out"
-  /-- Every module's constants, by name (a name defined twice is refused at its use). -/
+  /-- Every module's constants, by name (a name defined twice is refused at its use). The
+      constants a bare spelling is looked up in when `scope` is unknown (a report harness), or
+      while an imported constant's initializer is evaluated in its defining tree's constants. -/
   consts : List (String × CExpr) := []
+  /-- Bug 245: per top-level module, by index, the constants of its tree. A bare constant
+      spelling in a function of top-level module `i` is looked up in `treeConsts[i]` alone, as
+      Lower resolves it in the constants of the module tree it lowers (`collectAllConstants`);
+      a private constant of another tree is not in scope there. -/
+  treeConsts : Array (List (String × CExpr)) := #[]
   /-- R-0492 step 4 (bug 233): every constant by its imported Core spelling (`ConstId.coreName`,
       `cfg::BASE`), with the constants of its defining top-level tree, the scope its initializer
       is evaluated in, as Lower lowers it. -/
@@ -2262,9 +2269,13 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
       -- A module constant (bug 117): Core keeps the reference by name and Lower inlines the
       -- initializer at each use, so the interpreter evaluates the initializer here, in a frame
       -- of its own (module-scope code: a caller's local of the same name must not capture a
-      -- name the initializer reads, Lower's bug 123 hygiene). A name two modules define is
-      -- refused, as Lower refuses it (E0602, bug 132): Core cannot tell which one is meant.
-      match cx.consts.filter (·.1 == name.name) with
+      -- name the initializer reads, Lower's bug 123 hygiene). A name two modules of one tree
+      -- define is refused, as Lower refuses it (E0602, bug 132): Core cannot tell which one is meant.
+      -- Bug 245: in the using function's top-level tree, as Lower scopes it.
+      let visible := match cx.scope.bind (cx.treeConsts[·]?) with
+        | some cs => cs
+        | none => cx.consts
+      match visible.filter (·.1 == name.name) with
       | [(_, init)] =>
         let outerLen := env.length
         let (env', v) ← evalExprVal cx (envEnterFrame env) init
@@ -2283,7 +2294,8 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
         if initReachesCallable lookup (scope.length + cx.importedConsts.length + 1) init then
           fail s!"interp: imported constant '{name}' cannot be inlined outside its module: its initializer calls or names a function, which Core names by a spelling the using function would resolve in its own context (bug 233; callables get identities in a later R-0492 step)"
         let outerLen := env.length
-        let (env', v) ← evalExprVal { cx with consts := scope } (envEnterFrame env) init
+        -- in its defining tree's constants alone (`treeConsts` cleared, so `consts` answers)
+        let (env', v) ← evalExprVal { cx with consts := scope, treeConsts := #[] } (envEnterFrame env) init
         return (env'.drop (env'.length - outerLen), .val v)
       | none =>
       -- A bare function name in value position is a function pointer, to the definition the
@@ -2937,6 +2949,11 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
       let (env, p) ← evalBorrowTarget cx env inner true
       return (env, .val (.ref { p with steps := p.steps ++ [.index 0] }))
     let (env, v) ← evalExprVal cx env inner
+    -- Bug 254: Core writes a newtype's construction `N(v)` and unwrap `n.0` as a cast between the
+    -- newtype and its inner type, which normalize to one type (`normTy` resolves newtypes). Over a
+    -- struct or enum it is the value itself, as the backend emits it.
+    if (match v with | .struct_ .. | .enum_ .. => true | _ => false) && normTy cx inner.ty == tgt then
+      return (env, .val v)
     match v with
     -- A heap pointer stays a pointer at any pointer type (typed memory decides what a read
     -- through it may see); as a reference it names the heap cell. As an integer it is a
@@ -3552,6 +3569,7 @@ def mkCtx (modules : List CModule) (loopFuel : Nat := defaultLoopFuel) : Ctx :=
     externs := (collectExterns modules).eraseDups,
     externLinks := collectExternLinks modules,
     consts := collectConsts modules, loopFuel, defs,
+    treeConsts := (modules.map fun m => m.treeConstants.map fun (n, _, e) => (n, e)).toArray,
     importedConsts := modules.flatMap fun m => collectImportedConsts (collectConsts [m]) m.name m,
     scopes := (tops.map fun (m, _) => collectLinkerAliases [m]).toArray,
     topNames := (modules.map (·.name)).toArray,

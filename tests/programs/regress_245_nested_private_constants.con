@@ -1,0 +1,15 @@
+// Bug 245 (fixed): a constant spelling is scoped by the using function's top-level tree, its
+// nested modules included. `a`, `b` and the main module each declare a private `K`; `a.inner`
+// reads its own `L`. Two `K`s in one tree would still be refused (bug 132). Binary and --interp
+// return 35 + 2 + 5 = 42.
+mod a {
+    mod inner { pub fn ka() -> i32 { return L; } const L: i32 = 30; }
+    const K: i32 = 5;
+    import inner.{ka};
+    pub fn ga() -> i32 { return K + ka(); }
+}
+mod b { const K: i32 = 2; pub fn gb() -> i32 { return K; } }
+const K: i32 = 5;
+import a.{ga};
+import b.{gb};
+fn main() -> Int { return (ga() + gb() + K) as Int; }

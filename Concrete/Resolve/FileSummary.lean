@@ -110,6 +110,16 @@ structure ResolvedImports where
   /-- R-0492 step 4 (bug 233): imported constants, by identity. -/
   constants      : List ImportedConst := []
 
+/-- MOD-2 (bug 262): the newtypes whose constructor `N(v)` a module calls by its own spelling:
+    its own and its imports' (an aliased import under its alias, bug 243), and not its children's.
+    A child is another module, so its newtype is constructed by name only where it is imported;
+    the children's newtypes Check and Resolve add to a module's environment (bug 229) are types it
+    may write, not constructors it may call. Elab binds exactly these, and Check refuses a call of
+    any other newtype's constructor, so the two stages decide `N(v)`'s binding by one definition. -/
+def newtypeConstructorsInScope (own : List NewtypeDef) (imports : ResolvedImports) :
+    List NewtypeDef :=
+  own ++ imports.newtypes
+
 private def fnDefToSummary (f : FnDef) : String × FnSummary :=
   (f.name, { params := f.params.map fun p => (p.name, p.ty)
              retTy := f.retTy
@@ -283,7 +293,8 @@ partial def buildFileSummary (m : Module) (definitionPath : String := "") : File
     constants := m.constants.map fun c =>
       { name := c.name, ty := c.ty, isPublic := c.isPublic, definedIn := thisDefinitionPath }
     typeAliases := m.typeAliases
-    newtypes := m.newtypes.map (fun nt => { nt with definedIn := thisDefinitionPath })
+    newtypes := m.newtypes.map (fun nt =>
+      { nt with definedIn := thisDefinitionPath, definitionName := nt.name })
     externFns := m.externFns
     externFnSigs := externFnSigs
     implMethodSigs := implMethodSigs
@@ -401,13 +412,146 @@ private def writableAliases (summaryTable : List (String × FileSummary)) :
 private def aliasImportDepth (summaryTable : List (String × FileSummary)) : Nat :=
   summaryTable.length + 1
 
+/-- Bug 242: the type spellings a module binds without importing them, which an import must
+    therefore not bind to another declaration: its own structs, enums, newtypes and aliases, its
+    children's newtypes (Check's `allNewtypes`). Every pass computes the importer's spellings with
+    this one definition, so they transport the same imports. Each comes with the declaration it
+    denotes (`none` for an alias): a transported type that IS that declaration keeps its spelling
+    (a childs newtype returned by the childs function, Codex review). -/
+def importerTypeSpellings (own : FileSummary) : List (String × Option TypeId) :=
+  own.structs.map (fun sd => (sd.name, sd.typeId?)) ++ own.enums.map (fun ed => (ed.name, ed.typeId?))
+    ++ own.newtypes.map (fun nt => (nt.name, nt.typeId?))
+    ++ own.typeAliases.map (fun ta => (ta.name, none))
+    ++ own.submoduleSummaries.flatMap (fun (_, c) => c.newtypes.map fun nt => (nt.name, nt.typeId?))
+
+/-- Bug 242: every type head a `Ty` names, renamed by `f` (wrappers kept). -/
+private partial def mapTyHeads (f : String → String) : Ty → Ty
+  | .named n => .named (f n)
+  | .generic n args caps => .generic (f n) (args.map (mapTyHeads f)) caps
+  | .ref t => .ref (mapTyHeads f t)
+  | .refMut t => .refMut (mapTyHeads f t)
+  | .ptrMut t => .ptrMut (mapTyHeads f t)
+  | .ptrConst t => .ptrConst (mapTyHeads f t)
+  | .heap t => .heap (mapTyHeads f t)
+  | .heapArray t => .heapArray (mapTyHeads f t)
+  | .array t n => .array (mapTyHeads f t) n
+  | .fn_ ps cs r => .fn_ (ps.map (mapTyHeads f)) cs (mapTyHeads f r)
+  | t => t
+
+/-- Bug 242: the identity of the type `n` that `s` declares (struct, enum or newtype). -/
+private def declaredTypeId (s : FileSummary) (n : String) : Option TypeId :=
+  match s.structs.find? (·.name == n) with
+  | some sd => sd.typeId?
+  | none =>
+    match s.enums.find? (·.name == n) with
+    | some ed => ed.typeId?
+    | none => (s.newtypes.find? (·.name == n)).bind (·.typeId?)
+
+/-- Bug 242: the declaration of `s` whose identity spelling (`TypeId.importSpelling`) is `n`, by its
+    declared name. -/
+private def declaredByImportSpelling (s : FileSummary) (n : String) : Option String :=
+  let isN : Option TypeId → Bool := fun id => id.bind (·.importSpelling) == some n
+  match s.structs.find? (isN ·.typeId?) with
+  | some sd => some sd.name
+  | none =>
+    match s.enums.find? (isN ·.typeId?) with
+    | some ed => some ed.name
+    | none => (s.newtypes.find? (isN ·.typeId?)).map (·.name)
+
+/-- Resolve a module's imports against the summary table: the declarations each import binds,
+    under the importer's spellings, and the import closure (bug 036). `importerTypes` are the
+    importer's own type spellings (`importerTypeSpellings`). Bug 242: a type that crosses the
+    import, in a signature, a field, a payload, an alias target or a constant's type, is written
+    as its defining module spells it; where that spelling denotes another declaration in the
+    importer (one of `importerTypes`, or an explicit import of another declaration), it is
+    respelled to the declaration's identity spelling (`TypeId.importSpelling`), which the closure
+    binds to the declaration, so the importer never reads the definer's spelling in its own
+    environment. -/
 def resolveImports (imports : List ImportDecl)
     (summaryTable : List (String × FileSummary))
     (unknownModuleMsg : String → String)
     (notPublicMsg : String → String → String)
+    (importerTypes : List (String × Option TypeId))
     (pass : String := "resolve")
     : Except Diagnostics ResolvedImports := do
-  let resolved ← imports.foldlM (init := ({} : ResolvedImports)) fun acc imp =>
+  -- Bug 242: the type spellings the explicit imports bind, each with the declaration it names.
+  let explicitTypes : List (String × Option TypeId) := imports.flatMap fun imp =>
+    match summaryTable.lookup imp.moduleName with
+    | none => []
+    | some s => imp.symbols.filterMap fun sym =>
+      if (s.functions ++ s.externFnSigs).any (·.1 == sym.name) then none
+      else match s.structs.find? (·.name == sym.name) with
+        | some sd => some (sym.effectiveName, sd.typeId?)
+        | none => match s.enums.find? (·.name == sym.name) with
+          | some ed => some (sym.effectiveName, ed.typeId?)
+          | none =>
+            if s.typeAliases.any (fun ta => ta.isPublic && ta.name == sym.name) then
+              some (sym.effectiveName, none)
+            else (s.newtypes.find? (fun nt => nt.isPublic && nt.name == sym.name)).map
+              fun nt => (sym.effectiveName, nt.typeId?)
+  -- A transported mention of spelling `n` denoting `id` keeps the spelling unless the importer
+  -- binds `n` itself (its own type, or an explicit import of another declaration), or an earlier
+  -- transported mention claimed `n` for another declaration (`claims`: each kept spelling, with
+  -- the declaration it denotes; two imported modules' `P`s cannot both be `P` here).
+  let keepsPlain : List (String × TypeId) → String → TypeId → Bool := fun claims n id =>
+    !(importerTypes.any fun (sp, i) => sp == n && i != some id)
+      && !(explicitTypes.any fun (sp, i) => sp == n && i != some id)
+      && (match claims.lookup n with | some c => c == id | none => true)
+  -- The claims of the types `tys` written in `s` (type parameters `tps` in scope).
+  let claimIn : List (String × TypeId) → FileSummary → List String → List Ty →
+      List (String × TypeId) := fun claims s tps tys =>
+    (tys.flatMap tyHeadNames).foldl (fun cl n =>
+      if tps.contains n || cl.any (·.1 == n) then cl else
+      match declaredTypeId s n with
+      | some id => if keepsPlain cl n id then cl ++ [(n, id)] else cl
+      | none => cl) claims
+  -- A type written in `s`, as the importer spells it.
+  let respellIn : List (String × TypeId) → FileSummary → List String → Ty → Ty :=
+    fun claims s tps => mapTyHeads fun n =>
+      if tps.contains n then n else
+      match declaredTypeId s n with
+      | some id => if keepsPlain claims n id then n else id.importSpelling.getD n
+      | none => n
+  let sigTys : FnSummary → List Ty := fun sig => sig.retTy :: sig.params.map (·.2)
+  let respellSig : List (String × TypeId) → FileSummary → FnSummary → FnSummary :=
+    fun claims s sig =>
+      let r := respellIn claims s sig.typeParams
+      { sig with params := sig.params.map (fun (pn, t) => (pn, r t)), retTy := r sig.retTy }
+  -- Each declaration kind, claimed and respelled: (claims after it, the transported copy).
+  let transportStruct : List (String × TypeId) → FileSummary → StructDef →
+      List (String × TypeId) × StructDef := fun claims s sd =>
+    let claims := claimIn claims s sd.typeParams (sd.fields.map (·.ty))
+    (claims, { sd with fields := sd.fields.map fun f =>
+      { f with ty := respellIn claims s sd.typeParams f.ty } })
+  let transportEnum : List (String × TypeId) → FileSummary → EnumDef →
+      List (String × TypeId) × EnumDef := fun claims s ed =>
+    let claims := claimIn claims s ed.typeParams (ed.variants.flatMap fun v => v.fields.map (·.ty))
+    (claims, { ed with variants := ed.variants.map fun v =>
+      { v with fields := v.fields.map fun f => { f with ty := respellIn claims s ed.typeParams f.ty } } })
+  let transportNewtype : List (String × TypeId) → FileSummary → NewtypeDef →
+      List (String × TypeId) × NewtypeDef := fun claims s nt =>
+    let claims := claimIn claims s nt.typeParams [nt.innerTy]
+    (claims, { nt with innerTy := respellIn claims s nt.typeParams nt.innerTy })
+  let transportTy : List (String × TypeId) → FileSummary → Ty → List (String × TypeId) × Ty :=
+    fun claims s t =>
+      let claims := claimIn claims s [] [t]
+      (claims, respellIn claims s [] t)
+  -- A type's impls (`typeImplsOf`) with their method signatures claimed and respelled. `Self`
+  -- stands for the type `n` as its module spells it (the closure binds that spelling, bug 223);
+  -- when that spelling is not kept here, `Self` is resolved first and respelled with the rest.
+  let transportImpls : List (String × TypeId) → FileSummary → String →
+      List (String × TypeId) × List ImplBlock × List ImplTraitBlock × List (String × FnSummary) :=
+    fun claims s n =>
+      let (impls, traitImpls, sigs) := typeImplsOf s n
+      let claims := claimIn claims s [] [.named n]
+      let claims := sigs.foldl (fun cl (_, sig) => claimIn cl s sig.typeParams (sigTys sig)) claims
+      let selfKept := match declaredTypeId s n with
+        | some id => keepsPlain claims n id
+        | none => true
+      let sigs := if selfKept then sigs else resolveImplMethodSigs sigs impls traitImpls
+      (claims, impls, traitImpls, sigs.map fun (k, sig) => (k, respellSig claims s sig))
+  let (resolved, claims0) ← imports.foldlM
+      (init := (({} : ResolvedImports), ([] : List (String × TypeId)))) fun (acc, claims) imp =>
     match summaryTable.lookup imp.moduleName with
     | none => .error [{ severity := .error, message := unknownModuleMsg imp.moduleName, pass := pass, span := some imp.span, hint := none, code := importCode pass true }]
     | some summary =>
@@ -417,21 +561,25 @@ def resolveImports (imports : List ImportDecl)
       -- would break type identity (Option<Port> would arrive as Option<u16>).
       let aliasMap := summary.typeAliases.map fun ta => (ta.name, ta.targetTy)
       let pubFns := summary.functions ++ summary.externFnSigs
-      imp.symbols.foldlM (init := acc) fun acc sym =>
+      imp.symbols.foldlM (init := (acc, claims)) fun (acc, claims) sym =>
         let origName := sym.name
         let localName := sym.effectiveName
         match pubFns.find? fun (n, _) => n == origName with
         | some (_, sig) =>
-          let resolvedSig := resolveAliasesInSig aliasMap sig
+          let expanded := resolveAliasesInSig aliasMap sig
+          let claims := claimIn claims summary expanded.typeParams (sigTys expanded)
+          let resolvedSig := respellSig claims summary expanded
           let newAliases := if localName != origName
             then acc.linkerAliases ++ [(localName, origName)]
             else acc.linkerAliases
-          .ok { acc with functions := acc.functions ++ [(localName, resolvedSig)],
-                         linkerAliases := newAliases }
+          .ok ({ acc with functions := acc.functions ++ [(localName, resolvedSig)],
+                          linkerAliases := newAliases }, claims)
         | none =>
           match summary.structs.find? fun sd => sd.name == origName with
           | some sd =>
-            let (structImpls, structTraitImpls, matchingSigs) := typeImplsOf summary origName
+            let (claims, sd') := transportStruct claims summary { sd with name := localName }
+            let (claims, structImpls, structTraitImpls, matchingSigs) :=
+              transportImpls claims summary origName
             -- Bug 064: register under the name the IMPORTER uses. The original
             -- `sd` kept `name = origName`, so `lookupStruct alias` found nothing
             -- and a field access on an aliased imported type was rejected as
@@ -444,18 +592,19 @@ def resolveImports (imports : List ImportDecl)
             -- R-0004 path 2 (explicit import). Change only the lookup spelling.
             -- `definedIn` and `definitionName` were minted by the defining
             -- summary and must survive aliases and re-exports unchanged.
-            .ok { acc with structs := acc.structs ++ [{ sd with name := localName }],
-                           implBlocks := acc.implBlocks ++ structImpls,
-                           traitImpls := acc.traitImpls ++ structTraitImpls,
-                           implMethodSigs := acc.implMethodSigs ++ matchingSigs }
+            .ok ({ acc with structs := acc.structs ++ [sd'],
+                            implBlocks := acc.implBlocks ++ structImpls,
+                            traitImpls := acc.traitImpls ++ structTraitImpls,
+                            implMethodSigs := acc.implMethodSigs ++ matchingSigs }, claims)
           | none =>
             match summary.enums.find? fun ed => ed.name == origName with
             | some ed =>
-              let (enumImpls, enumTraitImpls, enumSigs) := typeImplsOf summary origName
-              .ok { acc with enums := acc.enums ++ [{ ed with name := localName }],
-                             implBlocks := acc.implBlocks ++ enumImpls,
-                             traitImpls := acc.traitImpls ++ enumTraitImpls,
-                             implMethodSigs := acc.implMethodSigs ++ enumSigs }
+              let (claims, ed') := transportEnum claims summary { ed with name := localName }
+              let (claims, enumImpls, enumTraitImpls, enumSigs) := transportImpls claims summary origName
+              .ok ({ acc with enums := acc.enums ++ [ed'],
+                              implBlocks := acc.implBlocks ++ enumImpls,
+                              traitImpls := acc.traitImpls ++ enumTraitImpls,
+                              implMethodSigs := acc.implMethodSigs ++ enumSigs }, claims)
             | none =>
               match summary.typeAliases.find? fun ta => ta.isPublic && ta.name == origName with
               -- Bug 246: the target as the exporter reads it, through its own and its imported
@@ -463,19 +612,24 @@ def resolveImports (imports : List ImportDecl)
               -- cannot read `M`.
               | some ta =>
                 let exAliases := writableAliases summaryTable (aliasImportDepth summaryTable) summary
-                .ok { acc with typeAliases := acc.typeAliases ++
-                  [(localName, expandAliasDeep exAliases (exAliases.length + 64) ta.targetTy)] }
+                let (claims, target) := transportTy claims summary
+                  (expandAliasDeep exAliases (exAliases.length + 64) ta.targetTy)
+                .ok ({ acc with typeAliases := acc.typeAliases ++ [(localName, target)] }, claims)
               | none =>
                 match summary.newtypes.find? fun nt => nt.isPublic && nt.name == origName with
                 | some nt =>
                   -- Pull along inherent impl methods on the newtype, mirroring
                   -- the struct path. This keeps `Wrap::try_new(...)` callable
                   -- after `import Wrap.{Port}`.
-                  let (newtypeImpls, newtypeTraitImpls, matchingSigs) := typeImplsOf summary origName
-                  .ok { acc with newtypes := acc.newtypes ++ [nt],
-                                 implBlocks := acc.implBlocks ++ newtypeImpls,
-                                 traitImpls := acc.traitImpls ++ newtypeTraitImpls,
-                                 implMethodSigs := acc.implMethodSigs ++ matchingSigs }
+                  -- Bug 243: bound under the importer's spelling, as a struct or enum is (bug
+                  -- 064); `definedIn` and `definitionName` keep the declaration's identity.
+                  let (claims, nt') := transportNewtype claims summary { nt with name := localName }
+                  let (claims, newtypeImpls, newtypeTraitImpls, matchingSigs) :=
+                    transportImpls claims summary origName
+                  .ok ({ acc with newtypes := acc.newtypes ++ [nt'],
+                                  implBlocks := acc.implBlocks ++ newtypeImpls,
+                                  traitImpls := acc.traitImpls ++ newtypeTraitImpls,
+                                  implMethodSigs := acc.implMethodSigs ++ matchingSigs }, claims)
                 | none =>
                   -- R-0492 step 4 (bug 233): a public constant binds its identity under the
                   -- importer's spelling. Reached only when the name binds no callable or type,
@@ -485,9 +639,10 @@ def resolveImports (imports : List ImportDecl)
                     -- Its type with the defining module's aliases (its own and those it imports)
                     -- expanded throughout: the importer cannot read the definer's alias names.
                     let defAliases := writableAliases summaryTable (aliasImportDepth summaryTable) summary
-                    .ok { acc with constants := acc.constants ++
-                      [{ localName, id := c.constId,
-                         ty := expandAliasDeep defAliases (defAliases.length + 64) c.ty }] }
+                    let (claims, cty) := transportTy claims summary
+                      (expandAliasDeep defAliases (defAliases.length + 64) c.ty)
+                    .ok ({ acc with constants := acc.constants ++
+                      [{ localName, id := c.constId, ty := cty }] }, claims)
                   | none =>
                   match unimportableKind summary origName with
                   | some kind => .error [{ severity := .error, message := unimportableMsg kind origName imp.moduleName, pass := pass, span := some imp.span, hint := none, code := unimportableCode pass }]
@@ -523,6 +678,7 @@ def resolveImports (imports : List ImportDecl)
     (summaryTable.lookup imp.moduleName).map fun s => s
   let closed := Id.run do
     let mut acc := builtinResult
+    let mut claims := claims0
     for _round in [0:4] do
       let referenced :=
         acc.functions.flatMap (fun (_, sig) =>
@@ -541,42 +697,61 @@ def resolveImports (imports : List ImportDecl)
           ed.variants.flatMap (fun v => v.fields.flatMap (fun f => tyHeadNames f.ty)))
         ++ acc.newtypes.flatMap (fun nt => tyHeadNames nt.innerTy)
         ++ acc.constants.flatMap (fun c => tyHeadNames c.ty)
+        -- an alias target respelled to an identity is bound by the closure too (Codex review)
+        ++ acc.typeAliases.flatMap (fun (_, t) => tyHeadNames t)
       let present := acc.structs.map (·.name) ++ acc.enums.map (·.name)
         ++ acc.newtypes.map (·.name) ++ acc.typeAliases.map (·.1)
-      let missing := (referenced.filter fun n => !present.contains n).eraseDups
+      -- Bug 242: a spelling the importer binds itself is never bound to another declaration (a
+      -- type its own module writes that way was respelled to its identity above).
+      let missing := (referenced.filter fun n => !present.contains n && !importerTypes.any (·.1 == n)).eraseDups
       if missing.isEmpty then break
       let mut grew := false
       for summary in importedModules do
         for n in missing do
-          if !summary.publicNames.contains n then continue
+          -- the declaration `n` names here: by its spelling, or by its identity spelling (bug 242)
+          let some dn := (if n.any (· == ':') then declaredByImportSpelling summary n else some n)
+            | continue
+          if !summary.publicNames.contains dn then continue
           -- re-check presence (an earlier module this round may have added it)
           if acc.structs.any (·.name == n) || acc.enums.any (·.name == n)
              || acc.newtypes.any (·.name == n) then continue
-          match summary.structs.find? fun sd => sd.name == n with
+          -- Bug 242: a kept spelling is bound to the declaration that claimed it, never to another
+          -- module's declaration of that spelling.
+          if !n.any (· == ':') then
+            if let some id := declaredTypeId summary dn then
+              if !keepsPlain claims n id then continue
+              if !claims.any (·.1 == n) then claims := claims ++ [(n, id)]
+          match summary.structs.find? fun sd => sd.name == dn with
           | some sd =>
-            let (impls, traitImpls, sigs) := typeImplsOf summary n
             -- R-0004 path 3 (transitive closure): preserve the identity already
             -- minted by the defining summary. Reminting from this traversal's
             -- module would turn a transport path into an identity owner.
-            acc := { acc with structs := acc.structs ++ [sd],
+            let (cl, sd') := transportStruct claims summary { sd with name := n }
+            let (cl, impls, traitImpls, sigs) := transportImpls cl summary dn
+            claims := cl
+            acc := { acc with structs := acc.structs ++ [sd'],
                               implBlocks := acc.implBlocks ++ impls,
                               traitImpls := acc.traitImpls ++ traitImpls,
                               implMethodSigs := acc.implMethodSigs ++ sigs }
             grew := true
           | none =>
-            match summary.enums.find? fun ed => ed.name == n with
+            match summary.enums.find? fun ed => ed.name == dn with
             | some ed =>
-              let (impls, traitImpls, sigs) := typeImplsOf summary n
-              acc := { acc with enums := acc.enums ++ [ed],
+              let (cl, ed') := transportEnum claims summary { ed with name := n }
+              let (cl, impls, traitImpls, sigs) := transportImpls cl summary dn
+              claims := cl
+              acc := { acc with enums := acc.enums ++ [ed'],
                                 implBlocks := acc.implBlocks ++ impls,
                                 traitImpls := acc.traitImpls ++ traitImpls,
                                 implMethodSigs := acc.implMethodSigs ++ sigs }
               grew := true
             | none =>
-              match summary.newtypes.find? fun nt => nt.isPublic && nt.name == n with
+              match summary.newtypes.find? fun nt => nt.isPublic && nt.name == dn with
               | some nt =>
-                let (impls, traitImpls, sigs) := typeImplsOf summary n
-                acc := { acc with newtypes := acc.newtypes ++ [nt],
+                let (cl, nt') := transportNewtype claims summary { nt with name := n }
+                let (cl, impls, traitImpls, sigs) := transportImpls cl summary dn
+                claims := cl
+                acc := { acc with newtypes := acc.newtypes ++ [nt'],
                                   implBlocks := acc.implBlocks ++ impls,
                                   traitImpls := acc.traitImpls ++ traitImpls,
                                   implMethodSigs := acc.implMethodSigs ++ sigs }

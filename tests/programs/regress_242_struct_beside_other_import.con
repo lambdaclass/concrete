@@ -1,0 +1,9 @@
+// Bug 242 (fixed): an aliased struct whose methods name it beside another module's struct imported under the definition's spelling. The transported type keeps its declaration. Binary and --interp return 42.
+mod m {
+    pub struct Copy P { v: i64 }
+    impl P { pub fn mk(x: i64) -> P { return P { v: x }; } pub fn get(self) -> i64 { return self.v; } }
+}
+mod q { pub struct Copy P { w: i32 } pub fn one() -> P { return P { w: 1 }; } pub fn val(n: P) -> i32 { return n.w; } }
+import m.{P as M};
+import q.{P, one, val};
+fn main() -> Int { let a: M = M::mk(41); let b: P = one(); return a.get() + (val(b) as i64); }

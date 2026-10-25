@@ -1,0 +1,8 @@
+// Bug 242 (fixed): the reproducer between top-level modules. The transported type keeps its declaration. Binary and --interp return 42.
+mod shapes {
+    pub struct Copy P { pub v: i64 }
+    pub fn make(n: i64) -> P { return P { v: n }; }
+}
+import shapes.{make};
+struct Copy P { w: i64 }
+fn main() -> Int { let p: P = P { w: 2 }; return make(40).v + p.w; }

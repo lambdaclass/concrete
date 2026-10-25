@@ -1,0 +1,17 @@
+// Bug 262 (fixed): a parent calling its child's newtype constructor without importing it. Check's
+// environment holds the children's newtypes (they are types the parent may write), and its call
+// rule took one for a bound constructor, so it admitted `K(30)`; Elab, which binds a newtype's
+// constructor only for the module's own newtypes and its imports, refused it as a call to an
+// undeclared function (E0402, an internal code), natively and under --interp. A child's
+// declaration is used only by importing it (MOD-2): refused at Check, E0263.
+mod outer {
+    mod kids {
+        pub newtype K = i64;
+        pub fn get(k: K) -> i64 { return k.0; }
+    }
+    import kids.{get};
+    pub fn main() -> i64 {
+        let k: K = K(30);
+        return 0;
+    }
+}

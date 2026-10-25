@@ -1,0 +1,10 @@
+// Bug 251 (fixed, Codex review): a generic of `a` calls `a`'s own `fn sizeof`. Lowered in the
+// instantiating tree, whose functions do not include it, the call was taken for the `sizeof`
+// intrinsic (8). The specialization is lowered with its defining tree's function names. Binary and
+// --interp return 40.
+mod a {
+    fn sizeof() -> u64 { return 40; }
+    pub fn get<T: Copy>(x: T) -> u64 { return sizeof(); }
+}
+import a.{get};
+fn main() -> Int { return get::<Int>(0) as Int; }

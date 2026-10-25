@@ -1,0 +1,9 @@
+// Bug 242 (fixed): an imported struct's field type beside the importer's own type of that spelling. The transported type keeps its declaration. Binary and --interp return 42.
+mod m {
+    pub struct Copy P { pub v: i64 }
+    pub struct Copy Box { pub p: P }
+    pub fn boxed(n: i64) -> Box { return Box { p: P { v: n } }; }
+}
+import m.{Box, boxed};
+struct Copy P { w: i64 }
+fn main() -> Int { let b: Box = boxed(40); let mine: P = P { w: 2 }; return b.p.v + mine.w; }

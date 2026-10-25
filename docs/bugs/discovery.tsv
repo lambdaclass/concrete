@@ -87,3 +87,6 @@ date	kind	probe	effort	bugs	silent
 2026-10-25	development	operating the pre-push hook on the dev host (a gate run killed mid-run left orphaned gate processes and a repository lock that refused every later run)	unrecorded	244	-
 2026-10-25	review	orchestrator review of documentation links on main 032d8e12 (stale roadmap anchors in a research note; correct changelog fragment links reported broken)	unrecorded	252	-
 2026-10-25	development	bug 027 measurement (array literals of 1000 to 200000 elements, repeated and explicit, natively and per stage), the interpreter array-write note of bug 235's record, and bug 248's regression program compiled natively	unrecorded	248,249,250	-
+2026-10-25	review	Codex reviews of the fixes of bugs 245 and 243 (a generic of another tree reading a private constant; a child type sharing an imported type spelling)	unrecorded	251,253	251,253
+2026-10-25	development	bug 242's fix: the bug 096 fixtures that became valid programs, run under --interp	unrecorded	254	-
+2026-10-25	development	the identity follow-up fixes of bugs 242 to 254: newtype construction probed across parent, child and sibling modules	unrecorded	262	-

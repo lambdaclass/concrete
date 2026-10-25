@@ -1,0 +1,12 @@
+// Bug 242 (fixed, Codex review): a child's newtype, visible in the parent by its spelling, returned by
+// the child's function: the transported type is the declaration the parent's spelling denotes, so it
+// keeps that spelling. Binary and --interp return 42.
+mod outer {
+    mod child {
+        pub newtype N = i64;
+        pub fn make() -> N { return N(42); }
+        pub fn un(n: N) -> i64 { return n.0; }
+    }
+    import child.{make, un};
+    pub fn main() -> Int { let n: N = make(); return un(n); }
+}

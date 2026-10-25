@@ -408,6 +408,19 @@ def lookupFn (name : String) : CheckM (Option FnSummary) := do
   | some idx => return listGetIdx env.functions idx
   | none => return none
 
+/-- Bug 253: is the newtype a spelling resolved to defined by the module being checked? By its
+    identity; a declaration with none (parsed, not summarized) is one of the module's own. -/
+def TypeEnv.newtypeIsLocal (env : TypeEnv) (nt : NewtypeDef) : Bool :=
+  match nt.typeId? with
+  | some id => env.localNewtypeIds.contains id
+  | none => env.localNewtypeNames.contains nt.name
+
+/-- Bug 253: is the struct a spelling resolved to defined by the module being checked? -/
+def TypeEnv.structIsLocal (env : TypeEnv) (sd : StructDef) : Bool :=
+  match sd.typeId? with
+  | some id => env.localStructIds.contains id
+  | none => env.localStructNames.contains sd.name
+
 /-- R-0492 step 3: the declaration a type spelling denotes in the module being checked
     (`typeIdOfSpelling` over its environment); a type parameter of the function denotes none. -/
 def TypeEnv.typeIdOf (env : TypeEnv) (name : String) : Option TypeId :=

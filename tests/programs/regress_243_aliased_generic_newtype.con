@@ -1,0 +1,12 @@
+// Bug 243 (fixed): an aliased generic newtype: `Box<i64>` is `m.W<i64>`, its static method is
+// reached through the alias with explicit type arguments, and a function of `m` taking `W<i64>`
+// accepts it. Another module declaring a newtype `N` keeps Core spelling by identity. Binary and
+// --interp return 42.
+mod m {
+    pub newtype W<T> = T;
+    impl<T> W<T> { pub fn wrap(x: T) -> W<T> { return W(x); } }
+    pub fn unwrap_i(w: W<i64>) -> i64 { return w.0; }
+}
+mod n { pub newtype N = i32; pub fn k() -> N { return N(1); } }
+import m.{W as Box, unwrap_i};
+fn main() -> Int { let w: Box<i64> = Box::<i64>::wrap(42); return unwrap_i(w); }

@@ -1,0 +1,12 @@
+// Bug 253 (fixed): an imported struct `P` with a private field, and a child declaring its own
+// `P`: the literal `P { v: 42 }` builds `m.P` outside `m` and was admitted by spelling. E0297.
+mod outer {
+    mod m { pub struct Copy P { v: i64 } pub fn mk() -> P { return P { v: 1 }; } }
+    mod user {
+        mod decoy { struct Copy P { v: i64 } }
+        import m.{P};
+        pub fn run() -> i64 { let x: P = P { v: 42 }; return x.v; }
+    }
+    import user.{run};
+    pub fn main() -> i64 { return run(); }
+}
