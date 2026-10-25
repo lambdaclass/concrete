@@ -322,6 +322,11 @@ function get_gate {
 gate=$(get_gate k)
 "$gate" --plan
 EOF
+leg reply run "a value read into the implicit REPLY and run is a call" <<'EOF'
+declare -A M=( [plan]="scripts/tests/run_ci_gates_local.sh" )
+read -r <<< "${M[plan]}"
+"$REPLY" --plan
+EOF
 leg rg run "a value handed to rg, which can run a preprocessor, is a call" <<'EOF'
 declare -A M=( [k]="scripts/tests/run_ci_gates_local.sh" )
 rg --pre "${M[k]}" pattern README.md

@@ -420,6 +420,7 @@ def use_level(seeds, code_lines, elements, exec_re):
                     elif role == "here":
                         if name != "read":
                             return RUN
+                        taint("REPLY")  # read's destination when it names none
                         for v in words[1:]:
                             if ident(v):
                                 taint(v)
