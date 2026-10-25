@@ -93,12 +93,12 @@ inside otherwise compared constructors): a call argument against the callee's pa
 resolved through linker aliases, so `c::read` is checked: `error_096_qualified_call_other_type.con`,
 `error_096_generic_qualified_call_other_type.con`), a call result against the return type
 (`error_096_imported_sig_binds_other_type.con`, `error_096_import_precedence_binding.con`,
-`error_096_method_owner_exact.con`, `error_096_chained_alias_signature.con`), a global function
+`regress_096_method_owner_exact.con`, `error_096_chained_alias_signature.con`), a global function
 taken as a value against its definition, a local of that name excepted lexically
 (`error_096_fn_value_other_type.con`), a `let` or `return` against its declared type, a struct or
 enum literal and a field read or write against the declaration's field, a match arm's binders
-against the variant's payload or the scrutinee (`error_096_enum_payload_binding_other_type.con`),
-every constant initializer, which Lower inlines at each use (`error_096_const_initializer_other_type.con`),
+against the variant's payload or the scrutinee (`regress_096_enum_payload_binding_other_type.con`),
+every constant initializer, which Lower inlines at each use (`regress_096_const_initializer_other_type.con`),
 a call to an extern against its declared signature (and two modules' declarations of one foreign
 symbol against each other: `error_096_extern_signature_other_type.con`),
 and any two copies of one
@@ -117,7 +117,16 @@ Fields and payloads are compared by their nominal types (`CStructDef.nominalFiel
 alias-expanded like the values they are compared with (`regress_096_alias_typed_const.con`), and
 so are extern annotations (`regress_096_extern_alias_param.con`). A newtype constructor or `.0`
 unwrap is checked one step either way, as CoreCheck admits it, at the newtype's type arguments
-(`error_096_newtype_unwrap_other_type.con`, `regress_096_nested_newtype_construct.con`).
+(`regress_096_newtype_unwrap_other_type.con`, `regress_096_nested_newtype_construct.con`).
+
+Since bug 242's fix (2026-10-25) a type crossing an import carries its declaration (an imported
+signature's `P` that the importer binds to another declaration is respelled to its identity), so
+Check compares the program's types as the definitions mean them: the call-result, alias-chain and
+extern fixtures above are refused by Check (E0220) before Core, and the method-owner, enum-payload,
+constant-initializer and newtype-unwrap programs are valid and run (`regress_096_method_owner_exact`,
+`regress_096_enum_payload_binding_other_type`, `regress_096_const_initializer_other_type`,
+`regress_096_newtype_unwrap_other_type`, native and `--interp`). The Core backstop stays for the
+positions Check still compares by spelling.
 
 Residual: `--interp` cannot call a sibling submodule's method (`regress_096_nested_same_named_methods`
 fails `undefined function` there, as on main); that is the interpreter's alias-resolution gap of

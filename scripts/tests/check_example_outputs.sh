@@ -495,7 +495,6 @@ open_bug_reproducers() {
 122|bug122_builtin_enum_canonical_layout/repro.con|runs-exit|2
 216|bug216_field_write_non_mut_binding/repro.con|compiles|
 226|bug226_submodule_imports_private_function/repro.con|compiles|
-242|bug242_imported_signature_type_captured/repro.con|compile-fails|(E0252) missing field 'v' in struct literal 'P'
 TABLE
 }
 if [ -z "$ONLY" ]; then

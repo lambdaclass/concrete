@@ -1,0 +1,9 @@
+// Bug 242 (fixed): two imported modules' signatures each naming their own `N`. The transported type keeps its declaration. Binary and --interp return 42.
+mod m {
+    pub newtype N = i64;
+    impl N { pub fn mk(x: i64) -> N { return N(x); } pub fn get(self) -> i64 { return self.0; } }
+}
+mod q { pub newtype N = i32; pub fn one() -> N { return N(1); } pub fn val(n: N) -> i32 { return n.0; } }
+import m.{N as M};
+import q.{one, val};
+fn main() -> Int { let a: M = M::mk(41); return a.get() + (val(one()) as i64); }

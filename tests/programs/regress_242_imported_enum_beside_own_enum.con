@@ -1,0 +1,13 @@
+// Bug 242 (fixed): an imported function's enum result beside the importer's own enum of that spelling. The transported type keeps its declaration. Binary and --interp return 42.
+mod m {
+    pub enum E { A { v: i64 }, B }
+    pub fn make(n: i64) -> E { return E::A { v: n }; }
+    pub fn val(e: E) -> i64 { return match e { E::A { v } => v, E::B => 0 }; }
+}
+import m.{make, val};
+enum E { X, Y { w: i64 } }
+fn main() -> Int {
+    let mine: E = E::Y { w: 2 };
+    let w: i64 = match mine { E::X => 0, E::Y { w } => w };
+    return val(make(40)) + w;
+}

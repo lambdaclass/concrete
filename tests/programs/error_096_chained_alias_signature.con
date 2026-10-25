@@ -1,6 +1,6 @@
 // Bug 096 (Codex round 5): c's mk returns First = Second = c's P. The check reads the
 // signature import resolution transports (aliases normalized), so b's binding of P to a's
-// is refused (E0299).
+// was refused (E0299). Since bug 242 an imported signature's type carries its declaration, so Check refuses the mismatch (E0220) before Core.
 mod a { pub struct Copy P { pub pad: i64, pub pad2: i64, pub x: i64 } }
 mod c {
     pub struct Copy P { pub x: i64 }

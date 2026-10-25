@@ -459,7 +459,18 @@ private def lookupMethodE (typeName methodName : String) : ElabM (Option (String
     else typeIdOfSpelling env.structs env.enums env.newtypes typeName
   if let some owner := owner? then
     if let some r := methodByIdentity env.fnSigs { owner, method := methodName } then
-      return some r
+      -- Bug 242: the definer's mangled name names the method only where the definer's spelling
+      -- of the type denotes it here too. Otherwise (the importer binds that spelling to another
+      -- declaration) the call is spelled by this module's spelling of the owner, which the Core
+      -- rename resolves to the owner's method (`renameMethod`).
+      let defSpelling := match owner with
+        | .user _ declName => some declName
+        | .builtin _ => none
+      match defSpelling with
+      | some dn =>
+        if typeIdOfSpelling env.structs env.enums env.newtypes dn == some owner then return some r
+        return some (mangledMethodName typeName methodName, r.2)
+      | none => return some r
   let mangled := mangledMethodName typeName methodName
   return (← lookupFnSig mangled).map (mangled, ·)
 
@@ -2735,7 +2746,8 @@ def summaryTypeBinding (decls : List (String × String)) (d : FileSummary) (n : 
   -- signatures reach), in the first-binding order Elab's `typeSpellings` uses: structs
   -- (imports, then own), enums (imports, then own), newtypes (imports, then own).
   let closure? : Option ResolvedImports :=
-    match resolveImports d.imports summaryTable (fun _ => "") (fun _ _ => "") (pass := "elab") with
+    match resolveImports d.imports summaryTable (fun _ => "") (fun _ _ => "")
+        (importerTypeSpellings d) (pass := "elab") with
     | .ok r => some r
     | .error _ => none
   let ordered : List (String × String × String) := match closure? with
@@ -3189,7 +3201,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
       let subImports := match resolveImports sub.imports summaryTable
           (fun modName => ElabError.message (.unknownModule modName))
           (fun sym modName => ElabError.message (.notPublicInModule sym modName))
-          (pass := "elab") with
+          (importerTypeSpellings subSummary) (pass := "elab") with
         | .ok imp => imp
         | .error _ => {}
       -- Inject sibling module types so submodules can reference each other's types
@@ -3466,6 +3478,10 @@ partial def elabModule (m : Module) (summary : FileSummary)
       let tn := tyName it
       if tn.isEmpty then none else some (tn ++ "_" ++ f.name))
     ++ imports.implMethodSigs.map (·.1)
+    -- Bug 242: an imported method called through another spelling of its type (`lookupMethodE`)
+    ++ localOwners.flatMap (fun (ln, dn, di) => if ln == dn then [] else
+      imports.implMethodSigs.filterMap fun (_, sig) => sig.methodOf.bind fun mk =>
+        if mk.owner == .user di dn then some (ln ++ "_" ++ mk.method) else none)
   -- A method this module DEFINES is renamed by its own receiver type (known exactly); any
   -- other method spelling by the type that owns it (`methodOwner`).
   let localMethodRenames : List (String × String) :=
@@ -3482,7 +3498,9 @@ partial def elabModule (m : Module) (summary : FileSummary)
     if !methodNames.contains n then n else
     match methodOwner n true with
     | some (_, dn, di, rest) =>
-      if ambiguousTypes.contains dn then canonTypeName di dn ++ "_" ++ rest else n
+      -- the owner's method: by its module when its name is ambiguous, else as its module spells
+      -- it (`n` itself, unless the call spelled the type another way, bug 242)
+      if ambiguousTypes.contains dn then canonTypeName di dn ++ "_" ++ rest else dn ++ "_" ++ rest
     | none => n
   -- A method spelling that a respelled type may own, whose owner is not identified exactly,
   -- would keep a name another module's method may also have: refused.
@@ -3532,7 +3550,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
             -- a TYPE of that spelling, declared or imported (an imported function or constant
             -- named `Result` is in the value namespace and withholds nothing, MOD-3)
             let importedType := match resolveImports d.imports summaryTable (fun _ => "")
-                (fun _ _ => "") (pass := "elab") with
+                (fun _ _ => "") (importerTypeSpellings d) (pass := "elab") with
               | .ok r => r.structs.any (·.name == n) || r.enums.any (·.name == n)
                   || r.newtypes.any (·.name == n) || r.typeAliases.any (·.1 == n)
               | .error _ => true
@@ -4140,7 +4158,7 @@ def elabProgram (resolved : List ResolvedModule)
     match resolveImports m.imports summaryTable
         (fun modName => ElabError.message (.unknownModule modName))
         (fun sym modName => ElabError.message (.notPublicInModule sym modName))
-        (pass := "elab") with
+        (importerTypeSpellings summary) (pass := "elab") with
     | .error ds => (acc, errs ++ ds)
     | .ok imports =>
       -- Inject sibling module functions for qualified :: access

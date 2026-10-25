@@ -1,0 +1,4 @@
+// Bug 254 (fixed): as regress_254_newtype_over_struct, over an enum. Binary and --interp return 42.
+enum E { A { v: i64 }, B }
+newtype W = E;
+fn main() -> Int { let w: W = W(E::A { v: 42 }); return match w.0 { E::A { v } => v, E::B => 0 }; }

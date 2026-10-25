@@ -1,0 +1,6 @@
+// Bug 254 (fixed): constructing and unwrapping a newtype over a struct under --interp was "unsupported
+// cast": Core writes both as a cast between the newtype and its inner type. Binary and --interp
+// return 7.
+struct Copy P { pad: i64, x: i64 }
+newtype W = P;
+fn main() -> Int { let w: W = W(P { pad: 99, x: 7 }); return w.0.x; }

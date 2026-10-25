@@ -1,0 +1,8 @@
+// Bug 242 (fixed): an imported constant's type beside the importer's own type of that spelling. The transported type keeps its declaration. Binary and --interp return 42.
+mod m {
+    pub struct Copy P { pub v: i64 }
+    pub const ORIGIN: P = P { v: 40 };
+}
+import m.{ORIGIN};
+struct Copy P { w: i64 }
+fn main() -> Int { let mine: P = P { w: 2 }; return ORIGIN.v + mine.w; }

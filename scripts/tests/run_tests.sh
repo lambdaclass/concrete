@@ -1908,32 +1908,32 @@ run_ok "$TESTDIR/regress_096_imported_struct_field_binding.con" "73" 0
 run_ok "$TESTDIR/regress_097_param_named_like_colliding_fn.con" "1211099" 0
 run_ok "$TESTDIR/regress_097_free_fn_named_like_method.con" "51001" 0
 run_ok "$TESTDIR/regress_096_method_value_same_named.con" "1017" 0
-run_err "$TESTDIR/error_096_imported_sig_binds_other_type.con" "(E0299)"
+run_err "$TESTDIR/error_096_imported_sig_binds_other_type.con" "(E0220)"
 run_err "$TESTDIR/error_096_canonical_type_spelling_clash.con" "(E0299)"
 run_err "$TESTDIR/error_097_canonical_fn_spelling_clash.con" "(E0299)"
 run_ok "$TESTDIR/regress_096_import_closure_copy.con" "4" 0
 run_ok "$TESTDIR/regress_096_generic_method_param_named_like_type.con" "3" 0
 run_err "$TESTDIR/error_096_method_spelling_clash.con" "(E0299)"
 run_err "$TESTDIR/error_096_import_precedence_binding.con" "(E0299)"
-run_err "$TESTDIR/error_096_method_owner_exact.con" "(E0299)"
+run_ok "$TESTDIR/regress_096_method_owner_exact.con" "9" 0
 run_ok "$TESTDIR/regress_096_sibling_types_unused.con" "1" 0
 run_ok "$TESTDIR/regress_096_method_owner_same_module.con" "101007" 0
-run_err "$TESTDIR/error_096_chained_alias_signature.con" "(E0299)"
+run_err "$TESTDIR/error_096_chained_alias_signature.con" "(E0220)"
 run_ok "$TESTDIR/regress_096_transitive_signature_binding.con" "93" 0
 run_err "$TESTDIR/error_096_qualified_call_other_type.con" "(E0299)"
 run_err "$TESTDIR/error_096_alias_signature_other_type.con" "(E0299)"
 run_ok "$TESTDIR/regress_096_sibling_injected_binding.con" "7" 0
 run_err "$TESTDIR/error_096_generic_qualified_call_other_type.con" "(E0299)"
 run_err "$TESTDIR/error_096_fn_value_other_type.con" "(E0299)"
-run_err "$TESTDIR/error_096_enum_payload_binding_other_type.con" "(E0299)"
-run_err "$TESTDIR/error_096_const_initializer_other_type.con" "(E0299)"
+run_ok "$TESTDIR/regress_096_enum_payload_binding_other_type.con" "7" 0
+run_ok "$TESTDIR/regress_096_const_initializer_other_type.con" "7" 0
 run_err "$TESTDIR/error_096_trait_dispatch_other_type.con" "(E0299)"
-run_err "$TESTDIR/error_096_extern_signature_other_type.con" "(E0299)"
+run_err "$TESTDIR/error_096_extern_signature_other_type.con" "(E0220)"
 run_err "$TESTDIR/error_096_generic_trait_impl_dispatch_other_type.con" "(E0299)"
 run_ok "$TESTDIR/regress_096_newtype_field_nominal.con" "7" 0
 run_err "$TESTDIR/error_098_nested_generic_collision.con" "(E0299)"
 run_ok "$TESTDIR/regress_096_alias_typed_const.con" "7" 0
-run_err "$TESTDIR/error_096_newtype_unwrap_other_type.con" "(E0299)"
+run_ok "$TESTDIR/regress_096_newtype_unwrap_other_type.con" "7" 0
 run_err "$TESTDIR/error_098_nested_collision_same_tree.con" "(E0299)"
 run_ok "$TESTDIR/regress_096_extern_alias_param.con" "0" 0
 run_ok "$TESTDIR/regress_096_nested_newtype_construct.con" "7" 0
@@ -8751,6 +8751,68 @@ for r243 in regress_243_aliased_newtype_import regress_243_aliased_newtype_with_
         PASS=$((PASS + 1))
     else
         echo "FAIL  bug 243: $r243 --interp gave '$r243_interp', want 42"
+        FAIL=$((FAIL + 1))
+    fi
+done
+# Bug 242: a type crossing an import carries its declaration: where the importer binds the
+# definition's spelling to another declaration, the transported type is respelled to its identity.
+run_ok "$TESTDIR/regress_242_imported_signature_type.con" 42
+run_ok "$TESTDIR/regress_242_toplevel_signature_type.con" 42
+run_ok "$TESTDIR/regress_242_imported_enum_beside_own_enum.con" 42
+run_ok "$TESTDIR/regress_242_imported_field_type.con" 42
+run_ok "$TESTDIR/regress_242_aliased_self_result.con" 42
+run_ok "$TESTDIR/regress_242_imported_constant_type.con" 42
+run_ok "$TESTDIR/regress_242_imported_alias_target.con" 42
+run_ok "$TESTDIR/regress_242_generic_argument.con" 42
+run_ok "$TESTDIR/regress_242_newtype_beside_other_import.con" 42
+run_ok "$TESTDIR/regress_242_struct_beside_other_import.con" 42
+run_ok "$TESTDIR/regress_242_two_modules_signatures.con" 42
+run_err "$TESTDIR/error_242_two_imported_methods_one_core_name.con" "(E0299)"
+for r242 in regress_242_imported_signature_type \
+            regress_242_toplevel_signature_type \
+            regress_242_imported_enum_beside_own_enum \
+            regress_242_imported_field_type \
+            regress_242_aliased_self_result \
+            regress_242_imported_constant_type \
+            regress_242_imported_alias_target \
+            regress_242_generic_argument \
+            regress_242_newtype_beside_other_import \
+            regress_242_struct_beside_other_import \
+            regress_242_two_modules_signatures; do
+    # bounded_run, not GNU `timeout`; a timeout is INCOMPLETE, not a pass.
+    r242_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/$r242.con" --interp 2>&1 || true)
+    if [ "$r242_interp" = "42" ]; then
+        echo "  ok  bug 242: $r242 — interp == binary (42)"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  bug 242: $r242 --interp gave '$r242_interp', want 42"
+        FAIL=$((FAIL + 1))
+    fi
+done
+for r096 in regress_096_method_owner_exact:9 regress_096_enum_payload_binding_other_type:7 \
+            regress_096_const_initializer_other_type:7 regress_096_newtype_unwrap_other_type:7; do
+    r096_f=${r096%%:*}; r096_want=${r096##*:}
+    r096_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/$r096_f.con" --interp 2>&1 || true)
+    # each prints its value, then main returns 0
+    if [ "$r096_interp" = "$r096_want"$'\n'0 ]; then
+        echo "  ok  bug 242: $r096_f — interp == binary ($r096_want)"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  bug 242: $r096_f --interp gave '$r096_interp', want $r096_want"
+        FAIL=$((FAIL + 1))
+    fi
+done
+# Bug 254: a newtype over an aggregate is constructed and unwrapped under --interp as natively.
+run_ok "$TESTDIR/regress_254_newtype_over_struct.con" 7
+run_ok "$TESTDIR/regress_254_newtype_over_enum.con" 42
+for r254 in regress_254_newtype_over_struct:7 regress_254_newtype_over_enum:42; do
+    r254_f=${r254%%:*}; r254_want=${r254##*:}
+    r254_interp=$(bounded_run 20 -- $COMPILER "$TESTDIR/$r254_f.con" --interp 2>&1 || true)
+    if [ "$r254_interp" = "$r254_want" ]; then
+        echo "  ok  bug 254: $r254_f — interp == binary ($r254_want)"
+        PASS=$((PASS + 1))
+    else
+        echo "FAIL  bug 254: $r254_f --interp gave '$r254_interp', want $r254_want"
         FAIL=$((FAIL + 1))
     fi
 done

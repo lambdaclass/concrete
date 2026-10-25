@@ -75,6 +75,16 @@ def ConstId.coreNameAt (defModule declName : String) : String :=
 
 def ConstId.coreName (c : ConstId) : String := ConstId.coreNameAt c.defModule c.declName
 
+/-- Bug 242: the spelling an import binds a transported type declaration to when the
+    declaration's own spelling denotes another declaration in the importer (its own type of that
+    spelling, or another import's): the defining module path and the declaration name joined by
+    `::` (`m::shapes::P`), as an imported constant is spelled. `::` is no identifier character,
+    so nothing the importer declares or writes can share it. `none` for a builtin enum, which no
+    import transports. -/
+def TypeId.importSpelling : TypeId → Option String
+  | .user defModule declName => some (ConstId.coreNameAt defModule declName)
+  | .builtin _ => none
+
 /-- A field is identified relative to the declaration that owns it. -/
 structure FieldId where
   owner : TypeId

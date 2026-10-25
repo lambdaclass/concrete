@@ -1,5 +1,7 @@
+// Since bug 242 (an imported signature's types carry their declaration) this program is valid:
+// the type that crosses the import is the defining module's, and both backends print 9.
 // Bug 096 (Codex round 4): `A_B_get` is A_B's `get` (module c), not A's `B_get`; its return
-// type is c's P while b binds P to a's. Refused (E0299).
+// type is c's P while b binds P to a's.
 mod a { pub struct Copy A { pub v: i64 } pub struct Copy P { pub pad: i64, pub pad2: i64, pub x: i64 } }
 mod c {
     pub struct Copy P { pub x: i64 }

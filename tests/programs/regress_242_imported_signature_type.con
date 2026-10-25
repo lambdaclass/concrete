@@ -1,0 +1,21 @@
+// Bug 242 (fixed): `m.user` imports `make`, whose result is `m.shapes`'s `P`, and declares its own
+// `struct P`. The import closure bound `m.shapes.P` under `P` ahead of the importer's own, so the
+// literal `P { w: 2 }` was checked against it (E0252). The signature's `P` is respelled to its
+// identity (`m::shapes::P`) and bound to its declaration; `P` stays the importer's. Binary and
+// --interp return 42.
+mod m {
+    mod shapes {
+        pub struct Copy P { pub v: i64 }
+        pub fn make(n: i64) -> P { return P { v: n }; }
+    }
+    mod user {
+        import m.shapes.{make};
+        struct Copy P { w: i64 }
+        pub fn run() -> i64 {
+            let p: P = P { w: 2 };
+            return make(40).v + p.w;
+        }
+    }
+    import user.{run};
+    pub fn main() -> i64 { return run(); }
+}

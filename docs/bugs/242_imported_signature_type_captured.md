@@ -1,13 +1,14 @@
 # Bug 242 — a type in an imported signature is captured by the importer's own type of that spelling
 
-**Status:** OPEN
+**Status:** FIXED (2026-10-25, branch `wip/ident-followups`)
 **Found:** 2026-10-25, by the probes of bug 223's fix (R-0492 step 3): an alias of an imported
 type beside a local type of the definition's spelling.
 **Severity:** loud. A valid program is refused; the probes found no wrong code.
 
 ## Reproducer
 
-`tests/regressions/bug242_imported_signature_type_captured/repro.con`: `m.shapes` declares
+`tests/programs/regress_242_imported_signature_type.con` (the former
+`tests/regressions/bug242_imported_signature_type_captured/repro.con`): `m.shapes` declares
 `pub struct P { pub v: i64 }` and `pub fn make(n: i64) -> P`; `m.user` imports only `make` and
 declares its own `struct P { w: i64 }`. `user`'s literal `P { w: 2 }` is refused:
 `(E0252) missing field 'v' in struct literal 'P'`. The same with top-level modules. Expected: 42.
@@ -23,6 +24,37 @@ not consult the importer's own declarations. Check's and Elab's environments lis
 (`allStructs := imports.structs ++ summary.structs`), so the imported `P` answers the importer's
 spelling `P` everywhere, and the importer's `struct P` is unreachable.
 
+## Fix
+
+A type crosses an import carrying its declaration (`FileSummary.resolveImports`). Every type that
+an import transports (a signature's parameters and result, a struct's fields, an enum's payloads,
+a newtype's inner type, an alias's target, a constant's type, an impl method's signature) is
+written as its defining module spells it; where that spelling denotes another declaration in the
+importer, it is respelled to the declaration's identity spelling, `TypeId.importSpelling`
+(`m::shapes::P`, `::` being no identifier character), and the import closure binds that spelling
+to the declaration. A spelling denotes another declaration when the importer declares a type of
+it (`importerTypeSpellings`, the one definition every pass passes in: its structs, enums,
+newtypes, aliases and its children's newtypes), when an explicit import binds it to another
+declaration, or when an earlier transported mention claimed it for another declaration (two
+imported modules' `P`s). A kept spelling is bound to the declaration that claimed it, never to
+another module's of that spelling. When a type's own spelling is respelled, its methods' `Self`
+is resolved first. Elab names a method found by identity through the call's spelling of its type
+when the definer's spelling denotes another declaration here, and its Core rename maps a method to
+its owner's name (`renameMethod`).
+
+Two bug 096 consequences: the programs whose imported types the importer bound to other
+declarations are now checked as the definitions mean them. Three are refused by Check (E0220) instead
+of Core's backstop (E0299); four are valid and run, renamed `regress_096_*` (native and
+`--interp`). One of them needed a newtype over a struct under `--interp` (bug 254).
+
+Regression legs in `run_tests.sh`: `regress_242_imported_signature_type.con` (the reproducer) and
+ten more `regress_242_*` (top-level modules, an enum result, a field type, an aliased type's `->
+Self`, a constant's type, an alias target, a generic argument, an aliased newtype and struct beside
+another module's of the definition's spelling, two modules' signatures each naming their own `N`),
+each `run_ok … 42` and `--interp` = 42; `error_242_two_imported_methods_one_core_name.con` (two
+imported types of one spelling both with `mk`: Core still calls a method by its mangled spelling,
+so Check refuses, E0299).
+
 ## Structural cause
 
 Class 1 ("declaration identity by spelled name"): a type in a signature is a spelling, interpreted
@@ -30,7 +62,7 @@ in whichever environment reads it, so a signature crossing a module boundary cha
 
 ## Structural owner
 
-R-0492 (S5 `DefId`), applied to the front end by R-0514: an imported signature's types carry the
-declarations they resolved to in the defining module (`TypeId`), so the importer never re-reads a
-spelling. Steps 3 – 4 of [DECLARATION_IDENTITY.md](../compiler/DECLARATION_IDENTITY.md) compare by
-identity where both sides are bound but do not change how signatures are carried.
+R-0492 (S5 `DefId`), applied to the front end by R-0514. The fix carries the identity in the one
+representation the passes share, a spelling no source can write, bound by import resolution, the
+one place all passes take imports from. `Ty` carrying a `TypeId` (and Core calling methods by
+`MethodKey`, which `error_242_two_imported_methods_one_core_name.con` still needs) remains R-0514's.

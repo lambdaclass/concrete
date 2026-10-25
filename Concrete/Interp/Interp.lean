@@ -2949,6 +2949,11 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
       let (env, p) ← evalBorrowTarget cx env inner true
       return (env, .val (.ref { p with steps := p.steps ++ [.index 0] }))
     let (env, v) ← evalExprVal cx env inner
+    -- Bug 254: Core writes a newtype's construction `N(v)` and unwrap `n.0` as a cast between the
+    -- newtype and its inner type, which normalize to one type (`normTy` resolves newtypes). Over a
+    -- struct or enum it is the value itself, as the backend emits it.
+    if (match v with | .struct_ .. | .enum_ .. => true | _ => false) && normTy cx inner.ty == tgt then
+      return (env, .val v)
     match v with
     -- A heap pointer stays a pointer at any pointer type (typed memory decides what a read
     -- through it may see); as a reference it names the heap cell. As an integer it is a

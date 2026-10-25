@@ -1,6 +1,6 @@
 // Bug 096 (Codex round 2): b binds `P` to a's P but calls c's `mk`, which returns c's P;
 // Check compares the two by spelling and accepted it (the binary read the wrong layout).
-// Elab refuses it (E0299): Core cannot spell that `P`.
+// Since bug 242 an imported signature's type carries its declaration, so Check refuses the mismatch (E0220) before Core.
 mod a { pub struct Copy P { pub pad: i64, pub pad2: i64, pub x: i64 } }
 mod c {
     pub struct Copy P { pub x: i64 }

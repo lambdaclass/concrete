@@ -871,8 +871,8 @@ private def resolveModule (m : Module) (globalScope : Scope) (knownTypes : List 
     submodule (`checkSubmodules`, E0284/E0285) and does not descend past it, and Resolve, whose
     scope for the submodule would be incomplete, leaves it to Check the same way. -/
 private def importScope (summaryTable : List (String × FileSummary)) (imports : List ImportDecl)
-    : Option (List (String × SymKind) × List String) :=
-  match resolveImports imports summaryTable (fun _ => "") (fun _ _ => "") with
+    (importerTypes : List String) : Option (List (String × SymKind) × List String) :=
+  match resolveImports imports summaryTable (fun _ => "") (fun _ _ => "") importerTypes with
   | .error _ => none
   | .ok ri =>
     let syms : List (String × SymKind) :=
@@ -915,12 +915,12 @@ private partial def resolveModuleTreeErrors (summaryTable : List (String × File
   let siblingTypes : List String := summary.submoduleSummaries.foldl (fun acc (_, s) =>
     acc ++ s.structs.map (·.name) ++ s.enums.map (·.name)) []
   m.submodules.foldl (fun acc sub =>
-    match importScope summaryTable sub.imports with
+    let subSummary := match summary.submoduleSummaries.find? fun (n, _) => n == sub.name with
+      | some (_, s) => s
+      | none => buildFileSummary sub
+    match importScope summaryTable sub.imports (importerTypeSpellings subSummary) with
     | none => acc
     | some (impSyms, impTys) =>
-      let subSummary := match summary.submoduleSummaries.find? fun (n, _) => n == sub.name with
-        | some (_, s) => s
-        | none => buildFileSummary sub
       -- Its own declarations without its children's (Check's `summary.structs`/`enums`/...).
       let (declScope, _) := buildGlobalScopeFromSummary { subSummary with submoduleSummaries := [] }
       let (_, ownTypes) := moduleTypeEnvironment subSummary
@@ -1071,7 +1071,7 @@ def resolveShallow (moduleSummaries : List FileSummary)
   -- stand in so the module's other diagnostics are still produced.
   let moduleTypeEnvs := perModule.map fun (s, (_, syms, tys)) =>
     let (ownSyms, ownTys) := moduleTypeEnvironment s
-    let (impSyms, impTys) := (importScope summaryTable s.imports).getD (syms, tys)
+    let (impSyms, impTys) := (importScope summaryTable s.imports (importerTypeSpellings s)).getD (syms, tys)
     (s.name, impSyms.filter (·.2.isType) ++ ownSyms, impTys ++ ownTys)
   let combinedScope := Scope.ofSymbols (combinedScope.symbols ++ importedSymbols)
   let combinedTypes := combinedTypes ++ importedTypes

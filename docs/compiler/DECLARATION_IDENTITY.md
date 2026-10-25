@@ -79,7 +79,9 @@ intended behaviour.
    alias binding itself is still bug 069's renamed copy of the declaration (`name` the alias,
    `definedIn`/`definitionName` the identity); Check and Elab still build their own environments.
    Not covered: a type in an imported signature is read in the importer's environment by its
-   definition spelling, so an importer's own type of that spelling captures it (bug 242). An
+   definition spelling, so an importer's own type of that spelling captured it (bug 242; fixed: a
+   transported type whose spelling denotes another declaration in the importer is respelled to
+   its identity, `TypeId.importSpelling`, and bound to it). An
    aliased newtype import bound no name (bug 243); a newtype now carries `definitionName` like a
    struct or enum, and the alias is bound to the declaration's identity.
 4. **Constants are imported by `ConstId` (bug 233).** An import of a `pub const` binds the
