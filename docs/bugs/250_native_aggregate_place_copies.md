@@ -39,7 +39,12 @@ copy was a first-class load and store of the whole type.
   form an aggregate parameter already has, so no first-class load or store of it remains.
 
 The bytes each statement leaves in memory are the same; a copy taken before a write (`let b = a;`)
-is still a copy. Pinned by `regress_250_native_array_writes.con` (`run_ok … 42`, the native compile
+is still a copy. One `--emit-ssa` golden moved: in `tests/golden/ssa/defer_basic`, `return r.value;`
+on a `Resource` local promoted to its slot `%r.agg.3` read the field through the loaded struct value
+(`%t6 = load i64, %t2`) and now reads it at the slot (`%t5 = load i64, %r.agg.3`). The slot holds the
+stored struct, nothing writes it between the store and the read, and the read still comes before
+the deferred `Resource_destroy` call, so the returned value is the same; one register fewer is
+numbered. Pinned by `regress_250_native_array_writes.con` (`run_ok … 42`, the native compile
 within 20 s under `bounded_run -r 20`, and `--interp` = 42).
 
 ## Structural cause

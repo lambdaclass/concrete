@@ -7,9 +7,9 @@ entry:
   store i64 10, %t0
   %t2 = load %Resource, %t0
   store %Resource %t2, %r.agg.3
-  %t6 = load i64, %t2
+  %t5 = load i64, %r.agg.3
   call void @Resource_destroy(%Resource %t2)
-  ret i64 %t6
+  ret i64 %t5
 }
 
 ; source: main @ line 14
