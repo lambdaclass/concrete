@@ -56,7 +56,9 @@ done
   git ls-files --others --exclude-standard
   [ -n "$BASE" ] && git diff --name-only "$BASE"...HEAD
 } 2>/dev/null | sed '/^$/d' | LC_ALL=C sort -u > /tmp/gfd_changed.$$
-trap 'rm -f /tmp/gfd_changed.$$ /tmp/gfd_sel.$$' EXIT
+GFD_BOUNDED="$(mktemp -d)"
+trap 'rm -f /tmp/gfd_changed.$$ /tmp/gfd_sel.$$; rm -rf "$GFD_BOUNDED"' EXIT
+BOUNDED_PARENT="$GFD_BOUNDED"; source scripts/tests/lib/bounded.sh
 
 nchanged=$(wc -l < /tmp/gfd_changed.$$)
 if [ "$nchanged" -eq 0 ]; then
@@ -100,7 +102,7 @@ while IFS=$'\t' read -r g why; do
   esac
   printf '  %-42s ' "$g"
   # `$g` may carry flags (e.g. `run_tests.sh --trust-gate`), so it is not quoted as one word.
-  if timeout 1800 bash scripts/tests/$g >/tmp/gfd_out.$$ 2>&1; then
+  if bounded_run -r 1800 1800 -- bash scripts/tests/$g >/tmp/gfd_out.$$ 2>&1; then
     echo "ok"; pass=$((pass+1))
   else
     echo "FAIL"; fail=$((fail+1)); failed="$failed $g"

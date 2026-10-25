@@ -54,7 +54,10 @@ trap 'rm -rf "$TMP"' EXIT
 PASS=0; FAIL=0
 ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
-if command -v timeout >/dev/null 2>&1; then TO="timeout 120"; else TO=""; echo "  warn 'timeout' not found"; fi
+# Every compiler and program run goes through the watchdog form ("${TO[@]}" CMD): a hang is
+# INCOMPLETE (bounded_gate_status below), never a pass or a failure.
+BOUNDED_PARENT="$TMP"; source "$ROOT_DIR/scripts/tests/lib/bounded.sh"
+bounded_watchdog 120
 
 # `--report diagnostic-codes` needs an input file; the ledger does not depend on it
 LEDGER="$("$CC" tests/programs/fib.con --report diagnostic-codes 2>/dev/null || true)"
@@ -138,9 +141,9 @@ human_of() {  # cached compile output of a fixture (file or project dir)
   local f="$1" key; key="$(printf '%s' "$f" | tr '/.' '__')"
   if [ ! -f "$TMP/h_$key" ]; then
     if [ -d "$f" ]; then
-      ( cd "$f" && $TO "$CC" build -o "$TMP/bin_$key" ) > "$TMP/h_$key" 2>&1; echo $? > "$TMP/rc_$key"
+      ( cd "$f" && "${TO[@]}" "$CC" build -o "$TMP/bin_$key" ) > "$TMP/h_$key" 2>&1; echo $? > "$TMP/rc_$key"
     else
-      $TO "$CC" "$f" -o "$TMP/bin_$key" > "$TMP/h_$key" 2>&1; echo $? > "$TMP/rc_$key"
+      "${TO[@]}" "$CC" "$f" -o "$TMP/bin_$key" > "$TMP/h_$key" 2>&1; echo $? > "$TMP/rc_$key"
     fi
   fi
   cat "$TMP/h_$key"
@@ -166,7 +169,7 @@ check_reject() {
   elif [ -d "$f" ]; then
     : # a project fixture: the JSON stream is single-file (`<file> --diagnostics-json`)
   else
-    $TO "$CC" "$f" --diagnostics-json > "$TMP/j.json" 2>/dev/null
+    "${TO[@]}" "$CC" "$f" --diagnostics-json > "$TMP/j.json" 2>/dev/null
     python3 - "$TMP/j.json" "$code" "$tag" "$spec" "$rule" <<'PY' || why="$why JSON rendering lacks code/rule/spec/next_action/related;"
 import json, sys
 p, code, tag, spec, rule = sys.argv[1:]
@@ -210,22 +213,22 @@ check_run() {
       binary)
         human_of "$f" > /dev/null; rc="$(cat "$TMP/rc_$key")"
         if [ "$rc" -ne 0 ]; then why="$why does not build;"; continue; fi
-        $TO "$TMP/bin_$key" > /dev/null 2>&1 < /dev/null; rc=$?
+        "${TO[@]}" "$TMP/bin_$key" > /dev/null 2>&1 < /dev/null; rc=$?
         [ "$rc" = "$want" ] || why="$why binary exits $rc, want $want;" ;;
       interp)
-        out="$($TO "$CC" "$f" --interp 2>&1 < /dev/null)"; rc=$?
+        out="$("${TO[@]}" "$CC" "$f" --interp 2>&1 < /dev/null)"; rc=$?
         if [ "$rc" -ne 0 ]; then why="$why --interp failed ($rc);"
         elif [ "$(printf '%s\n' "$out" | awk 'NF{l=$0} END{print l}')" != "$want" ]; then why="$why --interp prints '$(printf '%s' "$out" | tr '\n' ' ')', want $want;"; fi ;;
       fmt)
         if ! "$CC" fmt "$f" > "$TMP/fmt_$key.con" 2>/dev/null; then why="$why fmt failed;"; continue; fi
-        if ! $TO "$CC" "$TMP/fmt_$key.con" -o "$TMP/fbin_$key" > /dev/null 2>&1; then why="$why formatted source does not build;"; continue; fi
-        $TO "$TMP/fbin_$key" > /dev/null 2>&1 < /dev/null; rc=$?
+        if ! "${TO[@]}" "$CC" "$TMP/fmt_$key.con" -o "$TMP/fbin_$key" > /dev/null 2>&1; then why="$why formatted source does not build;"; continue; fi
+        "${TO[@]}" "$TMP/fbin_$key" > /dev/null 2>&1 < /dev/null; rc=$?
         [ "$rc" = "$want" ] || why="$why formatted binary exits $rc, want $want;" ;;
       model:*)
         local id="${m#model:}" row ext
         row="$(awk -F'\t' -v id="$id" '$1==id' "$SIDECAR")"
         if [ -z "$row" ]; then why="$why no sidecar row '$id';"; continue; fi
-        ext="$($TO "$CC" "$f" --report extraction 2>&1)" || { why="$why --report extraction failed;"; continue; }
+        ext="$("${TO[@]}" "$CC" "$f" --report extraction 2>&1)" || { why="$why --report extraction failed;"; continue; }
         while IFS= read -r need; do
           [ -z "$need" ] && continue
           # grep: 0 match, 1 no match, 2 a malformed pattern — which must fail, not read as absence
@@ -356,4 +359,4 @@ PY
 
 echo ""
 echo "RULES-2I: PASS=$PASS FAIL=$FAIL"
-[ "$FAIL" -eq 0 ]
+bounded_gate_status && [ "$FAIL" -eq 0 ]

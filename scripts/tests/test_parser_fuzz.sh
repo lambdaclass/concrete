@@ -13,6 +13,7 @@ cd "$ROOT_DIR"
 COMPILER=".lake/build/bin/concrete"
 TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT
+BOUNDED_PARENT="$TMPDIR"; source scripts/tests/lib/bounded.sh
 
 ITERATIONS=${1:-500}
 TIMEOUT_SEC=5
@@ -114,7 +115,7 @@ for (( iter=0; iter<ITERATIONS; iter++ )); do
 
     # Run compiler with timeout
     exit_code=0
-    timeout "$TIMEOUT_SEC" "$COMPILER" "$local_file" -o "$TMPDIR/fuzz_out" > /dev/null 2>&1 || exit_code=$?
+    bounded_run "$TIMEOUT_SEC" -- "$COMPILER" "$local_file" -o "$TMPDIR/fuzz_out" > /dev/null 2>&1 || exit_code=$?
 
     if [ "$exit_code" -ge 128 ]; then
         # Killed by signal (128 + signal number)

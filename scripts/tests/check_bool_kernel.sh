@@ -36,6 +36,8 @@ lake build >/dev/null 2>&1 || { echo "FAIL build failed"; exit 1; }
 [ -f "$DEMO" ] || { echo "FAIL $DEMO missing"; exit 1; }
 
 WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
+# Each prover run is bounded (a hang is INCOMPLETE, not a refusal): bounded_gate_status below.
+BOUNDED_PARENT="$WORK"; source "$ROOT_DIR/scripts/tests/lib/bounded.sh"
 REPORT="$WORK/report.txt"
 "$BIN" "$DEMO" --report bool-kernel > "$REPORT" 2>&1
 
@@ -92,12 +94,12 @@ TRUE_FNS="nand nor and3 xor"
 echo "=== LEAN (decide): the four close, the false one is REFUSED ==="
 LCLOSED=0
 for t in $TRUE_FNS; do
-  if timeout 300 lake env lean "$WORK/$t.lean" >/dev/null 2>&1; then LCLOSED=$((LCLOSED+1)); fi
+  if bounded_run 300 -- lake env lean "$WORK/$t.lean" >/dev/null 2>&1; then LCLOSED=$((LCLOSED+1)); fi
 done
 [ "$LCLOSED" = "4" ] \
   && ok "lean:decide closed all 4 boolean goals" \
   || no "lean:decide closed only $LCLOSED of 4"
-if timeout 300 lake env lean "$WORK/wrong_post.lean" >/dev/null 2>&1; then
+if bounded_run 300 -- lake env lean "$WORK/wrong_post.lean" >/dev/null 2>&1; then
   no "lean:decide CLOSED the false postcondition — the tier has no teeth"
 else
   ok "lean:decide refuses the false postcondition"
@@ -226,12 +228,12 @@ PYEUF
 EUF_TRUE="sym_through_opaque congruence nested demorgan_opaque"
 ELC=0
 for t in $EUF_TRUE; do
-  timeout 300 lake env lean "$EW/$t.lean" >/dev/null 2>&1 && ELC=$((ELC+1))
+  bounded_run 300 -- lake env lean "$EW/$t.lean" >/dev/null 2>&1 && ELC=$((ELC+1))
 done
 [ "$ELC" = "4" ] \
   && ok "lean closed all 4 EUF goals (by_cases on DECIDABLE atoms, no classical axiom)" \
   || no "lean closed only $ELC of 4 EUF goals"
-if timeout 300 lake env lean "$EW/bad_constant.lean" >/dev/null 2>&1; then
+if bounded_run 300 -- lake env lean "$EW/bad_constant.lean" >/dev/null 2>&1; then
   no "lean CLOSED \`f m = f t\` — the symbol is not uninterpreted"
 else
   ok "lean refuses \`f m = f t\` (nothing implies an opaque f is constant)"
@@ -327,9 +329,9 @@ PYDT
 
 DT_TRUE="magic_kept both_fields array_read_stable mixed_demorgan"
 DLC=0
-for t in $DT_TRUE; do timeout 300 lake env lean "$DW/$t.lean" >/dev/null 2>&1 && DLC=$((DLC+1)); done
+for t in $DT_TRUE; do bounded_run 300 -- lake env lean "$DW/$t.lean" >/dev/null 2>&1 && DLC=$((DLC+1)); done
 [ "$DLC" = "4" ] && ok "lean closed all 4 struct/array goals" || no "lean closed only $DLC of 4"
-if timeout 300 lake env lean "$DW/bad_array.lean" >/dev/null 2>&1; then
+if bounded_run 300 -- lake env lean "$DW/bad_array.lean" >/dev/null 2>&1; then
   no "lean CLOSED \`a i = a j\` — two different array reads are being conflated"
 else
   ok "lean refuses \`a i = a j\` (different indices need not agree)"
@@ -457,9 +459,9 @@ open(f"{work}/n/ROOT", "w").write("session RFN = HOL +\n  theories\n    Thy_bad_
 PYRF
 
 RLC=0
-for t in double triple; do timeout 300 lake env lean "$RW/$t.lean" >/dev/null 2>&1 && RLC=$((RLC+1)); done
+for t in double triple; do bounded_run 300 -- lake env lean "$RW/$t.lean" >/dev/null 2>&1 && RLC=$((RLC+1)); done
 [ "$RLC" = "2" ] && ok "lean proved both refinements" || no "lean proved only $RLC of 2 refinements"
-if timeout 300 lake env lean "$RW/bad_refine.lean" >/dev/null 2>&1; then
+if bounded_run 300 -- lake env lean "$RW/bad_refine.lean" >/dev/null 2>&1; then
   no "lean CLOSED a body that does NOT refine its spec — portability made refinement lax"
 else
   ok "lean refuses a body that does not refine its spec"
@@ -617,4 +619,4 @@ printf '%s' "$NB" | grep -q "error\[" \
 
 echo ""
 echo "BOOL-KERNEL: PASS=$PASS  FAIL=$FAIL  INCONC=$INCONC"
-[ "$FAIL" -eq 0 ]
+bounded_gate_status && [ "$FAIL" -eq 0 ]
