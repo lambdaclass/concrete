@@ -3346,14 +3346,14 @@ private def ref6Diag (e : CheckError) (sp : Span) : Diagnostic :=
 def constInitDiagnostics (al : List (String × Ty)) (c : ConstDef) : List Diagnostic :=
   -- REF-6 for a constant (review round 14): any borrow (or cast to a reference) is refused, which
   -- leaves no source for a reference binding at all
-  (c.locals.collisions.map scope1Diagnostic)
+  (c.locals.collisions.toList.map scope1Diagnostic)
     ++ (if exprHasBorrow al c.value then [ref6Diag (.constBorrows c.name) c.value.getSpan] else [])
 
 /-- Every SCOPE-1 collision in `f` (parameters, two parameters of one function included, then
     the body). Empty when the function obeys the rule. -/
 -- spec: SCOPE-D1, spec: SCOPE-1, spec: SCOPE-2, spec: SCOPE-3 (docs/spec/scope.md; this declaration enforces the rule)
 def scope1Diagnostics (f : FnDef) : List Diagnostic :=
-  f.locals.collisions.map scope1Diagnostic
+  f.locals.collisions.toList.map scope1Diagnostic
 
 /-- A constant initializer as an expression of the constant's type, with no locals in scope. -/
 def checkConstInit (c : ConstDef) : CheckM Unit := do
@@ -4090,7 +4090,7 @@ def checkModule (m : Module) (summary : FileSummary)
   -- parameter lists with no body checkFn would walk: spec fns, extern fns, trait method
   -- declarations (review round 12)
   let paramDups (ps : List Param) (sp : Span) : List Diagnostic :=
-    (resolveParamLocals ps sp).collisions.map scope1Diagnostic
+    (resolveParamLocals ps sp).collisions.toList.map scope1Diagnostic
   let exit2iSpecParamDs : List Diagnostic :=
     m.specFns.flatMap (fun sd => paramDups sd.params sd.span)
     ++ m.externFns.flatMap (fun ef => paramDups ef.params ef.span)

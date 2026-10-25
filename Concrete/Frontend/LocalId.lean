@@ -1,3 +1,4 @@
+import Std.Data.HashMap
 import Concrete.Frontend.Token
 
 namespace Concrete
@@ -67,23 +68,26 @@ structure LocalTable where
   private mk ::
   resolved : Bool
   binders : Array LocalBinder
-  bindersByKey : List (BinderKey × LocalId)
-  uses : List ((SiteKey × String) × LocalId)
+  /-- Hash maps, not association lists: every binder and every use was a linear search of a
+      list as long as the function, so a function of n statements was O(n^2) to resolve, check
+      and elaborate (bug NNN). Only looked up, never traversed, so order is not observable. -/
+  bindersByKey : Std.HashMap BinderKey LocalId
+  uses : Std.HashMap (SiteKey × String) LocalId
   conflicts : List String
-  collisions : List ScopeCollision
+  collisions : Array ScopeCollision
   deriving Repr
 
 namespace LocalTable
 
 /-- The table of a function the local walk has not run on. Every lookup in it fails, so a
     consumer that receives it refuses instead of guessing. -/
-def unresolved : LocalTable := ⟨false, #[], [], [], [], []⟩
+def unresolved : LocalTable := ⟨false, #[], {}, {}, [], #[]⟩
 
 /-- The default table is the unresolved one, which every consumer refuses. -/
 instance : Inhabited LocalTable := ⟨unresolved⟩
 
 /-- MINTING (Resolve/Locals.lean only): an empty table for a function about to be walked. -/
-def mintStart : LocalTable := ⟨true, #[], [], [], [], []⟩
+def mintStart : LocalTable := ⟨true, #[], {}, {}, [], #[]⟩
 
 /-- MINTING (Resolve/Locals.lean only): introduce a binding. A key seen before is the SAME source
     binder reached again: the parser copies an or-pattern arm's body once per alternative
@@ -91,32 +95,32 @@ def mintStart : LocalTable := ⟨true, #[], [], [], [], []⟩
     its one identity. -/
 def mintBinder (t : LocalTable) (key : BinderKey) (name : String) (shadows : Bool := false) :
     LocalTable × LocalId :=
-  match t.bindersByKey.lookup key with
+  match t.bindersByKey.get? key with
   | some id => (t, id)
   | none =>
     let id : LocalId := ⟨t.binders.size⟩
     ({ t with binders := t.binders.push { id, name, key, shadows },
-              bindersByKey := (key, id) :: t.bindersByKey }, id)
+              bindersByKey := t.bindersByKey.insert key id }, id)
 
 /-- MINTING (Resolve/Locals.lean only): record that the use of `name` at `at_` denotes `id`. -/
 def mintUse (t : LocalTable) (at_ : SiteKey) (name : String) (id : LocalId) : LocalTable :=
-  match t.uses.lookup (at_, name) with
+  match t.uses.get? (at_, name) with
   | some prev =>
     if prev == id then t
     else { t with conflicts := t.conflicts ++ [s!"the use of '{name}' at {at_} denotes two bindings"] }
-  | none => { t with uses := ((at_, name), id) :: t.uses }
+  | none => { t with uses := t.uses.insert (at_, name) id }
 
 /-- MINTING (Resolve/Locals.lean only): record a SCOPE-1 collision. -/
 def mintCollision (t : LocalTable) (c : ScopeCollision) : LocalTable :=
-  { t with collisions := t.collisions ++ [c] }
+  { t with collisions := t.collisions.push c }
 
 /-- The binding introduced at `key`. -/
 def binderAt? (t : LocalTable) (key : BinderKey) : Option LocalId :=
-  t.bindersByKey.lookup key
+  t.bindersByKey.get? key
 
 /-- The binding the use of `name` at `sp` denotes, or `none` when `name` there is not a local. -/
 def useAt? (t : LocalTable) (sp : Span) (name : String) : Option LocalId :=
-  t.uses.lookup (SiteKey.ofSpan sp, name)
+  t.uses.get? (SiteKey.ofSpan sp, name)
 
 /-- Whether a same-spelled binding was visible where `id` was introduced. -/
 def shadowsAt (t : LocalTable) (id : LocalId) : Bool :=

@@ -980,7 +980,9 @@ partial def parseBlock : ParseM (List Stmt) := do
     Used for if-expressions: `if cond { expr } else { expr }` -/
 partial def parseExprBlock : ParseM (List Stmt) := do
   expect .lbrace
-  let mut stmts : List Stmt := []
+  -- An Array, converted once: the old per-statement `stmts ++ [stmt]` made a block of n
+  -- statements O(n^2) to parse (bug NNN).
+  let mut stmts : Array Stmt := #[]
   let mut tk ← peek
   while tk != .rbrace && tk != .eof do
     -- Try to detect: is this the last item before `}`?
@@ -993,7 +995,7 @@ partial def parseExprBlock : ParseM (List Stmt) := do
     | .«let» | .return_ | .while_ | .for_ | .break_ | .continue_
     | .defer_ | .borrow_ | .label _ | .assert_ | .assume_ =>
       let stmt ← parseStmt
-      stmts := stmts ++ [stmt]
+      stmts := stmts.push stmt
     | .match_ =>
       -- A `match` that closes the block (no `;` after `}`) AND has an arm that
       -- ends with a value is the block's trailing VALUE:
@@ -1013,46 +1015,48 @@ partial def parseExprBlock : ParseM (List Stmt) := do
           if anyValueArm then Stmt.expr msp (.match_ mmsp scrut arms) true
           else Stmt.expr msp (.match_ mmsp scrut arms) false
         | s, _ => s
-      stmts := stmts ++ [stmt]
+      stmts := stmts.push stmt
     | .if_ =>
       -- An `if` here may be the block's trailing value (if-expression) or an
       -- ordinary statement `if`; parseIfInExprBlock decides after parsing.
       let stmt ← parseIfInExprBlock
-      stmts := stmts ++ [stmt]
+      stmts := stmts.push stmt
     | _ =>
       -- Parse as expression
       let e ← parseExpr
       let nextTk ← peek
       if nextTk == .rbrace then
         -- Trailing expression without semicolon — this is the block's value
-        stmts := stmts ++ [Stmt.expr sp e true]
+        stmts := stmts.push (Stmt.expr sp e true)
       else if nextTk == .assign then
         -- Assignment: x = expr;
         advance
         let rhs ← parseExpr
         expect .semicolon
         match e with
-        | .ident _ name => stmts := stmts ++ [Stmt.assign sp name rhs]
-        | .fieldAccess _ obj field => stmts := stmts ++ [Stmt.fieldAssign sp obj field rhs]
-        | .deref _ target => stmts := stmts ++ [Stmt.derefAssign sp target rhs]
-        | .arrayIndex _ arr idx => stmts := stmts ++ [Stmt.arrayIndexAssign sp arr idx rhs]
+        | .ident _ name => stmts := stmts.push (Stmt.assign sp name rhs)
+        | .fieldAccess _ obj field => stmts := stmts.push (Stmt.fieldAssign sp obj field rhs)
+        | .deref _ target => stmts := stmts.push (Stmt.derefAssign sp target rhs)
+        | .arrayIndex _ arr idx => stmts := stmts.push (Stmt.arrayIndexAssign sp arr idx rhs)
         | _ => throwParse "invalid assignment target"
       else
         -- Normal expression statement, need semicolon
         expect .semicolon
-        stmts := stmts ++ [Stmt.expr sp e false]
+        stmts := stmts.push (Stmt.expr sp e false)
     tk ← peek
   expect .rbrace
-  return stmts
+  return stmts.toList
 
 partial def parseStmtList : ParseM (List Stmt) := do
-  let mut stmts : List Stmt := []
+  -- An Array, converted once: the old per-statement `stmts ++ [stmt]` made a block of n
+  -- statements O(n^2) to parse (bug NNN).
+  let mut stmts : Array Stmt := #[]
   let mut tk ← peek
   while tk != .rbrace && tk != .eof do
     let stmt ← parseStmt
-    stmts := stmts ++ [stmt]
+    stmts := stmts.push stmt
     tk ← peek
-  return stmts
+  return stmts.toList
 
 -- spec: PAT-6, spec: PAT-7, spec: MEM-3 (docs/spec/patterns.md; this declaration enforces the rule)
 partial def parseStmt : ParseM Stmt := do

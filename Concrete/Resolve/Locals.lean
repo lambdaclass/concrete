@@ -1,5 +1,6 @@
 import Concrete.Frontend.AST
 import Concrete.Frontend.LocalId
+import Std.Data.TreeMap
 
 namespace Concrete
 
@@ -43,45 +44,70 @@ private structure Visible where
 
 private abbrev LocalsM := StateM LocalTable
 
+/-- What one spelling denotes among the visible bindings: the innermost SOURCE binding of it (the
+    one a use names and a new binder collides with), and whether any visible binding of it is an
+    `elabVar` (the `shadows` fact). These are the only questions the walk asks of the visible
+    bindings, so they are kept as a persistent map from spelling to this summary instead of a
+    list searched per binder and per use, which made a function of n `let`s O(n^2) (bug MMM). A
+    persistent tree, because sibling scopes extend one chain independently. -/
+private structure VisEntry where
+  source : Option Visible := none
+  anyElabVar : Bool := false
+
+private abbrev Vis := Std.TreeMap String VisEntry compare
+
+private def Vis.source? (vis : Vis) (name : String) : Option Visible :=
+  (vis.get? name).bind (·.source)
+
+private def Vis.shadows (vis : Vis) (name : String) : Bool :=
+  (vis.get? name).any (·.anyElabVar)
+
+private def Vis.push (vis : Vis) (v : Visible) : Vis :=
+  let e := vis.getD v.name {}
+  vis.insert v.name
+    { source := if v.cls == .source then some v else e.source
+      anyElabVar := e.anyElabVar || v.elabVar }
+
+
 /-- Introduce a binding of `name` (form `kind`) at `key`/`sp` into the chain `vis`. `_` is a
     wildcard, not a binding. A reuse of a visible spelling is recorded as a collision and the
     binding is introduced either way, so one collision is reported once. -/
-private def bindLocal (vis : List Visible) (key : BinderKey) (name : String) (sp : Span)
-    (kind : String) (elabVar : Bool := true) : LocalsM (List Visible) := do
+private def bindLocal (vis : Vis) (key : BinderKey) (name : String) (sp : Span)
+    (kind : String) (elabVar : Bool := true) : LocalsM Vis := do
   if name.isEmpty then return vis
   -- `_` binds nothing visible (no use can name it, and it collides with nothing), but where the
   -- checker registers it (a `_` parameter, a borrow reference, a destructured field) it is still
   -- a binding with an obligation, so it has an identity.
-  let shadows := vis.any (fun v => v.name == name && v.elabVar)
+  let shadows := vis.shadows name
   if name == "_" then
     let (t', id) := (← get).mintBinder key name shadows
     set t'
-    return { name, span := sp, id, cls := .wild, elabVar } :: vis
-  if let some prev := vis.find? (fun v => v.name == name && v.cls == .source) then
+    return vis.push { name, span := sp, id, cls := .wild, elabVar }
+  if let some prev := vis.source? name then
     modify fun t => t.mintCollision { name, kind, at_ := sp, earlier := prev.span }
   let (t', id) := (← get).mintBinder key name shadows
   set t'
-  return { name, span := sp, id, elabVar } :: vis
+  return vis.push { name, span := sp, id, elabVar }
 
 /-- A pattern binder spelled `_` (an enum arm field, a catch-all arm): it has an identity and
     is visible to nothing, not even as a `_` (Elab binds no Core name for it). -/
-private def bindArmWild (vis : List Visible) (key : BinderKey) : LocalsM (List Visible) := do
+private def bindArmWild (vis : Vis) (key : BinderKey) : LocalsM Vis := do
   let (t', _) := (← get).mintBinder key "_"
   set t'
   return vis
 
 /-- A compiler temporary named `name` at `sp` (not a source binding), used at the same
     position by the statements the compiler synthesizes around it. -/
-private def bindTemp (vis : List Visible) (sp : Span) (name : String) : LocalsM (List Visible) := do
-  let shadows := vis.any (fun v => v.name == name && v.elabVar)
+private def bindTemp (vis : Vis) (sp : Span) (name : String) : LocalsM Vis := do
+  let shadows := vis.shadows name
   let (t', id) := (← get).mintBinder (.site (SiteKey.ofSpan sp) name) name shadows
   set t'
   modify fun t => t.mintUse (SiteKey.ofSpan sp) name id
-  return { name, span := sp, id, cls := .temp } :: vis
+  return vis.push { name, span := sp, id, cls := .temp }
 
 /-- Record a use of `name` at `sp`, when `name` is a visible local there. -/
-private def useLocal (vis : List Visible) (sp : Span) (name : String) : LocalsM Unit := do
-  if let some v := vis.find? (fun v => v.name == name && v.cls == .source) then
+private def useLocal (vis : Vis) (sp : Span) (name : String) : LocalsM Unit := do
+  if let some v := vis.source? name then
     modify fun t => t.mintUse (SiteKey.ofSpan sp) name v.id
 
 private def siteKey (sp : Span) (name : String) : BinderKey := .site (SiteKey.ofSpan sp) name
@@ -99,7 +125,7 @@ def destructureKey (sp : Span) (b : PatBind) : BinderKey :=
 def destructureTempName (structName : String) : String := "__destr_" ++ structName
 
 mutual
-private partial def walkExpr (vis : List Visible) : Expr → LocalsM Unit
+private partial def walkExpr (vis : Vis) : Expr → LocalsM Unit
   | .ident sp n => useLocal vis sp n
   -- a call through a fn-typed local spells the local as the callee
   | .call sp f _ args => do useLocal vis sp f; args.forM (walkExpr vis)
@@ -119,7 +145,7 @@ private partial def walkExpr (vis : List Visible) : Expr → LocalsM Unit
 /-- An arm: its pattern binders are visible in its guard and body only. A destructuring `let`
     reaches here after `desugarStmts` (its binders scope over the continuation, which is the arm
     body). -/
-private partial def walkArm (vis : List Visible) : MatchArm → LocalsM Unit
+private partial def walkArm (vis : Vis) : MatchArm → LocalsM Unit
   | .mk sp _ _ bs g body => do
     let mut v := vis
     for b in bs do
@@ -137,13 +163,13 @@ private partial def walkArm (vis : List Visible) : MatchArm → LocalsM Unit
     walkExpr vis lo; walkExpr vis hi; g.forM (walkExpr vis); walkBlock vis body
 
 /-- A block: its declarations are visible to the statements after them, not after it. -/
-private partial def walkBlock (vis : List Visible) (stmts : List Stmt) : LocalsM Unit := do
+private partial def walkBlock (vis : Vis) (stmts : List Stmt) : LocalsM Unit := do
   let mut v := vis
   for s in stmts do
     v ← walkStmt v s
 
 /-- One statement; returns the chain visible to the next statement of the same block. -/
-private partial def walkStmt (vis : List Visible) : Stmt → LocalsM (List Visible)
+private partial def walkStmt (vis : Vis) : Stmt → LocalsM Vis
   | .letDecl sp n _ _ val isGhost => do
     -- the initializer is walked before the binder exists: in `let s = f(s)` the `s` read is
     -- the earlier binding (and the new binder collides with it)
@@ -189,7 +215,7 @@ end
 /-- The local table of one function: its parameters (in order), then its body. -/
 def resolveFnLocals (f : FnDef) : LocalTable :=
   let go : LocalsM Unit := do
-    let mut vis : List Visible := []
+    let mut vis : Vis := {}
     for (p, i) in f.params.zipIdx do
       vis ← bindLocal vis (.param i) p.name f.span "parameter"
     walkBlock vis f.body
@@ -199,14 +225,14 @@ def resolveFnLocals (f : FnDef) : LocalTable :=
     declaration): only its parameters, so two of one name collide. -/
 def resolveParamLocals (ps : List Param) (sp : Span) : LocalTable :=
   let go : LocalsM Unit := do
-    let mut vis : List Visible := []
+    let mut vis : Vis := {}
     for (p, i) in ps.zipIdx do
       vis ← bindLocal vis (.param i) p.name sp "parameter"
   (go.run LocalTable.mintStart).2
 
 /-- The local table of a module constant's initializer (no parameters, nothing visible). -/
 def resolveExprLocals (e : Expr) : LocalTable :=
-  ((walkExpr [] e).run LocalTable.mintStart).2
+  ((walkExpr {} e).run LocalTable.mintStart).2
 
 /-- Attach a local table to every function and method of a module (and its submodules). -/
 partial def resolveModuleLocals (m : Module) : Module :=
