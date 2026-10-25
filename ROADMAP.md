@@ -100,7 +100,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 
 <!-- BEGIN GENERATED: bug dashboard (scripts/gen/bug_dashboard.py; edit docs/bugs records and docs/bugs/discovery.tsv) -->
 
-**Open bugs: 12** (1 silent, 5 loud, 6 filed before the discovery record) of 209 bug records.
+**Open bugs: 12** (1 silent, 5 loud, 6 filed before the discovery record) of 210 bug records.
 
 | open bugs by primary structural class | open | silent | bugs |
 |---|---|---|---|
