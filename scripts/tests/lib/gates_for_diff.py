@@ -72,6 +72,17 @@ ALWAYS_IF = {
     ],
 }
 
+# A change to ANY path can break these, so every non-empty diff selects them. They are kept
+# apart from ALWAYS_IF because selecting a gate is not mapping a file: a path no rule maps
+# still triggers the fail-safe (every gate), which an empty-prefix ALWAYS_IF entry would
+# silently switch off. A gate belongs here only if it is cheap (seconds) and its input is
+# the whole tree. Bug 252: the Markdown-link gate checks links into every tracked path and
+# anchors into every Markdown heading, so a docs-only edit, a renamed heading or a deleted
+# file can each break it, and before it was listed nothing selected it.
+EVERY_CHANGE = [
+    ("check_doc_links.sh", "a Markdown link can name any path, and its anchor any heading"),
+]
+
 
 def tokens(text, exists=os.path.exists):
     """Path tokens a gate names, keeping only those specific enough to mean something."""
@@ -148,6 +159,10 @@ def select(changed, gate_paths=None):
             for g, why in gates:
                 if os.path.exists(f"scripts/tests/{g}"):
                     selected.setdefault(g, []).append(why)
+    if changed:
+        for g, why in EVERY_CHANGE:
+            if os.path.exists(f"scripts/tests/{g}"):
+                selected.setdefault(g, []).append(why)
     return selected
 
 

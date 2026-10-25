@@ -213,7 +213,9 @@ _norm_cmd() { local c="$1"; printf '%s' "${c/bash .\//bash }"; }
 #   consumers, the gate its eighteen mutation families name). 268 + 0 + 1 + 1 = 270.
 # 270 -> 271: check_lzpack_differential.sh (Phase 7 workload 9, wip/workload-lzpack).
 # 271 -> 272: check_stackvm_differential.sh (Phase 7 workload 10, wip/workload-stackvm-2).
-EXPECTED_GATE_COMMANDS=272
+# 272 -> 273: check_doc_links.sh (bug 252, wip/doc-links-gate: the Markdown-link check, a Makefile
+#   target until then, becomes a workflow step).
+EXPECTED_GATE_COMMANDS=273
 # THE INVENTORY REPLACES THE COUNT once scripts/tests/ci_gate_inventory.txt exists (the ledger migration,
 # scripts/gen/migrate_ledgers.sh, writes it). One extracted command per line, sorted: a branch that
 # adds a gate adds its line, two branches adding different gates touch different lines instead of

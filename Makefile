@@ -340,10 +340,10 @@ test-contracts-ledger-parity: build ## --report contracts ↔ ledger parity (#15
 
 test-docs-drift: build ## Docs-drift gate: present-tense docs reference only real artifacts (#44)
 	$(NIX_DEVELOP) bash ./scripts/tests/check_docs_drift.sh
-	$(NIX_DEVELOP) python3 ./scripts/tests/check_doc_links.py
+	$(NIX_DEVELOP) bash ./scripts/tests/check_doc_links.sh
 
-test-doc-links: ## Local Markdown-link gate (no build needed)
-	python3 ./scripts/tests/check_doc_links.py
+test-doc-links: ## Markdown links and anchors resolve (no build needed)
+	bash ./scripts/tests/check_doc_links.sh
 
 test-workflow-yaml: ## Workflow-YAML gate: every .github/workflows/*.yml parses (no build needed)
 	bash ./scripts/tests/check_workflow_yaml.sh

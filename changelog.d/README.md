@@ -10,6 +10,8 @@ file, so two branches never edit the same lines and a rebase cannot conflict her
 - First line: the entry's `### ` heading, exactly as it will appear in CHANGELOG.md. A
   `### Completed Task R-NNNN` heading retires a roadmap task, as it does in CHANGELOG.md.
 - Body: ordinary Markdown, with no `#` or `##` headings. One fragment may hold several entries.
+- Links: relative to the repository root (`docs/bugs/README.md`, not `../docs/bugs/README.md`),
+  because the fragment is folded into the root CHANGELOG.md; the link check reads them that way.
 
 `python3 scripts/gen/changelog.py --fold` moves the pending fragments into CHANGELOG.md, newest
 first within that fold, and deletes them. Ordering is per fold: a fragment dated earlier than an

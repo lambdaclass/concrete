@@ -46,6 +46,10 @@ jobs:
       - name: Gate-hygiene gate (every gate is pipe-safe and fails loudly)
         run: bash scripts/tests/check_gate_hygiene.sh
 
+      # Build-free (bug 252): any change selects it, a docs-only one included.
+      - name: "Markdown links (every local link resolves; an anchor names a heading or id of its target)"
+        run: bash scripts/tests/check_doc_links.sh
+
       # Build-free: drives the landing script against a throwaway repository with a fake gh.
       - name: "Landing script (trains resolve only generated views and ledgers; refusals hold)"
         run: bash scripts/tests/check_landing_script.sh
