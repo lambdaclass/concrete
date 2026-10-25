@@ -19,6 +19,8 @@ natively (E0715, an enum compared with an integer) while `--interp` ran the prog
 enum shares the variant's name (`F::A` over an `E` that also has `A`), the arm was silently taken as
 `E::A`: wrong code with no diagnostic.
 
+Confirmed real by Codex review, 2026-10-25: docs/spec/patterns.md PAT-3 requires patterns to fit the scrutinee; lookup ignored enum identity and used get!, explaining both crashes and wrong-variant matching.
+
 ## Reproducer
 
 ```con pseudocode

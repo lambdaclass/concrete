@@ -15,6 +15,8 @@ silent: no
 **Severity:** loud. No wrong result: the next git write in that worktree refused until someone
 removed the lock by hand, which `/creview` step 5 and AGENTS.md already told agents to do.
 
+Confirmed real by Codex review, 2026-10-25: Optional index writes could strand index.lock, violating docs/project/REVIEW.md’s read-only reviewer contract; the invocation lacked lock suppression.
+
 ## Reproducer
 
 In a scratch worktree with every tracked file's stat data dirty (`git ls-files -z | xargs -0 touch`),

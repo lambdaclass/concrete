@@ -15,6 +15,8 @@ function with none and `s.m::<Int, u8>(5)` compiled and ran on both backends, th
 dropped; a short list (`first::<Int>(1, 2)` for two parameters) left the second parameter unbound
 and was refused only by an unrelated rule.
 
+Confirmed real by Codex review, 2026-10-25: TYPE-9’s signature contract and E0322 cover call arity; zip silently discarded extra type arguments. Its prose needs clarification; short lists already failed elsewhere.
+
 ## Reproducer
 
 `tests/programs/error_221_extra_type_argument.con`:

@@ -16,6 +16,8 @@ What was lost is the mutation evidence. Three mutation families (a local referen
 evidence node, eager binder frames, swapped position components) could not show that the gate
 they name is load-bearing, because the gate never printed the verdict line the harness reads.
 
+Confirmed real by Codex review, 2026-10-25: Throwing on failed assertions prevented mutation verdicts, violating ROADMAP.md R-0513’s coverage requirement; CI rejection itself remained correct.
+
 ## Reproducer
 
 ```

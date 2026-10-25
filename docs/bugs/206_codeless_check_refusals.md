@@ -15,6 +15,8 @@ other Check refusals also used
 refused, but the diagnostic named no code, so no rule tag or specification link could be attached
 to it, and the specification's code mapping (check_spec S6) could not see the refusal at all.
 
+Confirmed real by Codex review, 2026-10-25: Message-only diagnostics omitted required refusal codes, violating docs/spec/README.md’s coded-rejection contract; this is diagnostic failure, not unsound acceptance.
+
 ## Reproducer
 
 ```con pseudocode

@@ -13,6 +13,8 @@ type through an alias), then reproduced on main.
 **Severity:** loud: the compiler panicked (`EmitSSA.tyToLLVMTy: unknown named type 'IP'`) on a valid
 program; no binary, no wrong code.
 
+Confirmed real by Codex review, 2026-10-25: TYPE_ALIASES.md and TYPE-12 require alias transparency everywhere; Elab passed the unresolved cast target into Core, explaining the backend panic.
+
 ## Reproducer
 
 `tests/programs/regress_199_cast_to_alias.con`:

@@ -15,6 +15,8 @@ reject example `int-condition`, run by `scripts/tests/check_spec.sh`)
 non-zero integer is true), while `--interp` stopped at run time ("if condition is not a
 boolean"): the two consumers disagreed, silently for the binary.
 
+Confirmed real by Codex review, 2026-10-25: docs/spec/types.md TYPE-5 requires bool conditions; Check discarded their types and CoreCheck explicitly admitted integers, including unchecked guards.
+
 ## Reproducer
 
 ```con pseudocode

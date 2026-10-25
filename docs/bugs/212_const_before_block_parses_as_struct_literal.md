@@ -16,6 +16,8 @@ conditions such as `if limit > MAX_MATCH { limit = MAX_MATCH; }` failed to parse
 against a module constant spelled in uppercase, was refused with `expected }, got =` pointing
 inside the block, which says nothing about the cause.
 
+Codex review 2026-10-25: NOT CONFIRMED — pending owner decision OD16/exit 2n: SYN-1 documents the existing refusal; the fix improves diagnostics and documentation, while changing head syntax remains undecided.
+
 ## Reproducer
 
 `tests/programs/error_212_const_in_if_head.con`:
