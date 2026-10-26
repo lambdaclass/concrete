@@ -110,7 +110,7 @@ control
 
 control
 EOF
-python3 -I "$BL" --write --root "$BASE" >/dev/null 2>&1 || no "the control record 997 does not regenerate into the migrated copy"
+python3 -I "$BL" --write --root "$BASE" --history "$ROOT_DIR" >/dev/null 2>&1 || no "the control record 997 does not regenerate into the migrated copy"
 make_copy() { rm -rf "$C"; cp -RP "$BASE" "$C"; }
 
 edit() { # file (relative to the copy), python edit over s
@@ -319,7 +319,9 @@ echo "=== 5. bug areas: the mapping, the report, the overrides, the fixed point 
 H=(--history "$ROOT_DIR")
 make_copy
 expect areas_copy_checks 0 python3 -I "$BL" --check --root "$C" "${H[@]}"
-neg areas_hand_edit docs/bugs/AREAS.md "old='| Check |'; assert s.count(old)>=1; s=s.replace(old, '| Lower |', 1)" 1
+make_copy
+edit docs/bugs/AREAS.md "old='| Check |'; assert s.count(old)>=1; s=s.replace(old, '| Lower |', 1)"
+expect areas_hand_edit 1 python3 -I "$BL" --check --root "$C" "${H[@]}"
 make_copy
 edit docs/bugs/AREAS.md "old='<!-- END GENERATED: bug areas -->'; assert s.count(old)==1; s=s.replace(old,'')"
 expect areas_markers_missing 2 python3 -I "$BL" --check --root "$C" "${H[@]}"
