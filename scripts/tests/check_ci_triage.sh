@@ -211,7 +211,7 @@ printf '#!/bin/sh\ntouch "%s/new_bug.ran"\n' "$TMP" > "$TMP/root/scripts/gen/new
 printf '#!/bin/sh\ntouch "%s/select.ran"\n' "$TMP" > "$TMP/root/scripts/tests/select_gates.sh"
 OUT="$(bash "$TMP/root/scripts/ci/triage.sh" 39748808077 --repo o/r --out-dir "$TMP/out2" --ledger "$LEDGER" 2>&1)"
 R2="$TMP/out2/39748808077.md"
-grep -q 'bash scripts/tests/select_gates.sh --base 0000000000000000000000000000000000000001 --head 8c8db85a' "$R2" 2>/dev/null \
+grep -q 'nix develop --command bash scripts/tests/select_gates.sh --base 0000000000000000000000000000000000000001 --head 8c8db85a' "$R2" 2>/dev/null \
   && ok "impact-selected command for the suspected range" || no "select_gates command missing"
 grep -q 'bash scripts/gen/new_bug.sh "check_stack_budget.sh: extern_intrinsic_name' "$R2" 2>/dev/null \
   && ok "new_bug.sh command printed" || no "new_bug.sh command missing"

@@ -113,7 +113,8 @@ def write_report(path, run, repo, results, escalated, sus):
         out += [f"nix develop --command bash -c 'lake build && {repro}'", "```", ""]
         if select and base:
             out += ["Impact-selected gates for the suspected range:", "", "```sh",
-                    f"bash scripts/tests/select_gates.sh --base {base} --head {head}", "```", ""]
+                    f"nix develop --command bash scripts/tests/select_gates.sh --base {base} --head {head}",
+                    "```", ""]
         if new_bug:
             first = (r["fail_lines"] or [r["reason"]])[0]
             first = re.sub(r"^(FAIL|FAILED)\s+", "", first)[:100].replace('"', "'")

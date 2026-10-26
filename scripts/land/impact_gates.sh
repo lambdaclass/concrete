@@ -39,7 +39,7 @@ printf '%s %s %s %s\n' "$src" "$(git rev-parse "$head")" "$dst" "$(git rev-parse
   | land_in_nix bash "$HOOK" "$REMOTE" "$url"
 selected=hook
 if [ -f scripts/tests/select_gates.sh ] && ! grep -q select_gates "$HOOK" 2>/dev/null; then
-  sel="$(bash scripts/tests/select_gates.sh --base "$base" --head "$head")"
+  sel="$(land_in_nix bash scripts/tests/select_gates.sh --base "$base" --head "$head")"
   args=() c=""
   while IFS= read -r c; do [ -n "$c" ] && args+=(--first "$c"); done <<< "$sel"
   selected="$(( ${#args[@]} / 2 ))"
