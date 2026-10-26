@@ -346,7 +346,7 @@ mod scopebounds {
 }
 CON
   SC="$("$BIN" "$TMPD/scope.con" --report vcs 2>/dev/null)"
-  grep -q -- "i < 8" <<<"$SC" && printf '%s' "$SC" | grep -q "i < 16" \
+  grep -q -- "i < 8" <<<"$SC" && grep -q -- "i < 16" <<<"$SC" \
     && ok "the inner access uses 8 and the outer uses 16 (no leak either way)" \
     || no "a block-local array size leaks out of its scope, or the inner access is mis-sized"
 
