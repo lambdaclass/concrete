@@ -50,8 +50,8 @@ The `++ [` ratchet (`check_no_quadratic_append.sh`) for `Lower.lean` goes from 2
 ## Measurements
 
 `lower` stage in ms (`--emit-trace-json`, which runs Lower, SSA verification and cleanup; fastest
-of 3 runs), dev host (fede-256gb), before (the compiler built at b5040d53) and after (built from
-this branch's compiler sources on main 9d8182ea; the build had no other modification):
+of 3 runs), dev host (fede-256gb), before (the compiler built at b5040d53) and after (built from the tree of c54ea399, this fix on main 9d8182ea; the build had no other
+modification):
 
 | n | `functions` before | after | `call-chain` before | after | `structs` before | after | `enums` before | after |
 |---|---|---|---|---|---|---|---|---|
