@@ -1,0 +1,63 @@
+// Bug 271 regression: after a branch, Lower continued from the variable table of the arm it
+// lowered last, even when that arm diverged (`return`, `break`, `continue`). The merge rebinds
+// only the bindings the arms that reach it changed, so a binding only the diverged arm wrote kept
+// that arm's value after the branch: `pick(true, 5)` below returned 5 (the diverged else arm's
+// `x = y`) instead of 6, natively only (`--interp` was right), and with a value defined inside the
+// arm the program was refused (E0703). The merge now starts from a live arm's table. Each
+// function has a statement `if`, a value `if` or a `match` whose last arm writes `x` and
+// diverges; binary = --interp = 42.
+fn stmt_if(c: bool, y: i64) -> i64 {
+    let mut x: i64 = y + 1;
+    if c {
+    } else {
+        x = y;
+        return 100;
+    }
+    return x;
+}
+
+fn stmt_if_defined_inside(c: bool, y: i64) -> i64 {
+    let mut x: i64 = y + 1;
+    if c {
+    } else {
+        x = y + 7;
+        return 100;
+    }
+    return x;
+}
+
+fn value_if(c: bool, y: i64) -> i64 {
+    let mut x: i64 = y + 1;
+    let v: i64 = if c { 0 } else { x = y; return 100; };
+    return x + v;
+}
+
+fn match_last_arm(k: i64, y: i64) -> i64 {
+    let mut x: i64 = y + 1;
+    match k {
+        0 => { },
+        1 => { },
+        _ => { x = y; return 100; },
+    }
+    return x;
+}
+
+fn loop_break(y: i64) -> i64 {
+    let mut x: i64 = y + 1;
+    let mut i: i64 = 0;
+    while i < 3 {
+        if i < 10 {
+            i = i + 1;
+        } else {
+            x = y;
+            break;
+        }
+    }
+    return x + i;
+}
+
+fn main() -> Int {
+    // 6 + 6 + 6 + 6 + (6 + 3) = 33; the diverged arms' values would give 5 + 12 + 5 + 5 + 8
+    return (stmt_if(true, 5) + stmt_if_defined_inside(true, 5) + value_if(true, 5)
+        + match_last_arm(0, 5) + loop_break(5)) as Int + 9;
+}

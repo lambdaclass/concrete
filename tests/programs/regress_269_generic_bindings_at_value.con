@@ -1,0 +1,32 @@
+// Bug 269 regression: the post-mono reference-binding verifier (REF-6@1) kept its environment in
+// an association list searched per assignment; it is a map keyed by binding identity, where a later
+// binding replaces an earlier one as the list's newest-first lookup did. The generic below binds
+// values of `T` and of `Int` around blocks, a branch, a loop and a match, assigns several of them
+// (parameters, locals, a match arm binder), and is called at `T := Int`: no binding is a reference,
+// so the verifier accepts it. Run 42, binary = --interp.
+fn mix<T: Copy>(x: T, y: T, k: Int) -> T {
+    let mut first: T = x;
+    let mut n: Int = k;
+    if n > 0 {
+        let inner: Int = n + 1;
+        n = inner;
+    }
+    while n > 10 {
+        n = n - 1;
+    }
+    match n {
+        0 => { first = y; },
+        m => {
+            let mut w: Int = m;
+            w = w + 1;
+            n = w;
+            x = y;
+            first = x;
+        },
+    }
+    return first;
+}
+
+fn main() -> Int {
+    return mix::<Int>(1, 42, 3);
+}

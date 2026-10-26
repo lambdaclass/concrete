@@ -8403,6 +8403,83 @@ run_err "$TESTDIR/error_210_newtype_arith.con" "(E0501)"
 run_err "$TESTDIR/error_210_struct_minus_literal.con" "(E0501)"
 run_err "$TESTDIR/error_210_child_module_arith.con" "(E0501)"
 run_err "$TESTDIR/error_210_child_module_newtype_arith.con" "(E0501)"
+# Bugs 265-267 and 269: the back end over long functions. Lower kept its variable table in an
+# association list (265: n chained `let`s took 21 s to lower at 40000, 111 s at 80000); every branch
+# merge visited every binding in scope (266: n `let`s each followed by an `if` or a `match` took
+# time cubic in n); SSACleanup settled one link of a chain of constant branches per run of its
+# whole pass sequence (267: n such branches took n runs over the whole function); the post-mono
+# reference-binding verifier searched its environment list per assignment (269: 7.5 s at 40000
+# `let`s with an `if` each, 149 s at 80000). The fixtures pin the behavior each structure must
+# keep. The leg below reads the stage times from --emit-trace-json: `lower` (Lower, SSA verification
+# and cleanup) and `monomorphize` (which runs the post-mono verifiers). 80000 chained `let`s must
+# lower within 8 s, 40000 `let`s each followed by an `if` and 20000 each followed by a `match`
+# within 15 s, and the `if` case must monomorphize within 3 s; each retried once with twice the
+# budget. The old back end took 111 s, over 300 s and over 300 s to lower, and 7.5 s to
+# monomorphize; the new one about 1, 3-6 and 4 s, and 0.5-0.8 s.
+run_ok "$TESTDIR/regress_265_variable_table.con" 42
+run_ok "$TESTDIR/regress_266_branch_merges.con" 42
+run_ok "$TESTDIR/regress_267_constant_branch_chains.con" 42
+run_err "$TESTDIR/error_269_far_binding_assigned.con" "(E0303)"
+run_ok "$TESTDIR/regress_269_generic_bindings_at_value.con" 42
+# Bug 271: after a branch whose last-lowered arm diverged, Lower kept that arm's writes (an `if`,
+# a value `if` and a `match` whose last arm writes `x` and returns, and a `break`): the binary
+# returned the diverged arm's value or the program was refused (E0703). Binary = --interp = 42.
+run_ok "$TESTDIR/regress_271_diverged_arm_writes.con" 42
+r265_gen() {  # r265_gen SHAPE N: a generated `fn main` of the given shape and size on stdout
+    awk -v shape="$1" -v n="$2" 'BEGIN {
+        print "fn main() -> Int {"
+        print "    let s0: i64 = 0;"
+        print "    let mut t: i64 = 0;"
+        for (i = 1; i <= n; i++) {
+            printf "    let s%d: i64 = s%d + 1;\n", i, i - 1
+            if (shape == "if") printf "    if s%d > t { t = t + 1; }\n", i
+            if (shape == "match") printf "    match s%d { 0 => { t = t + 1; }, _ => { t = t + 2; }, }\n", i
+        }
+        printf "    return ((s%d + t) %% 7) as Int;\n", n
+        print "}"
+    }'
+}
+r265_stage_ms() {  # r265_stage_ms SRC STAGE: sets r265_ms to the stage's time in ms, "incomplete"
+    # (timed out twice) or "rcN" (the compiler failed); never fails itself, so a failed run reaches
+    # the verdict below instead of stopping the suite.
+    local rc=0 ms
+    bounded_run -r 180 180 -- $COMPILER "$1" --emit-trace-json > "$TMPDIR/r265_trace.json" 2>/dev/null || rc=$?
+    if bounded_is_incomplete "$rc"; then r265_ms=incomplete; return 0; fi
+    if [ "$rc" != 0 ]; then r265_ms="rc$rc"; return 0; fi
+    ms="$(sed -nE "s/.*\"timing_ms\":\\{[^}]*\"$2\":([0-9]+).*/\\1/p" "$TMPDIR/r265_trace.json" || true)"
+    r265_ms="${ms:-none}"
+}
+r265_bad=""; r265_incomplete=""
+for r265_case in "lets 80000 lower 8000" "if 40000 lower 15000" "if 40000 monomorphize 3000" "match 20000 lower 15000"; do
+    read -r r265_shape r265_n r265_stage r265_budget <<< "$r265_case"
+    r265_src="$TMPDIR/r265_${r265_shape}_$r265_n.con"
+    [ -f "$r265_src" ] || r265_gen "$r265_shape" "$r265_n" > "$r265_src"
+    r265_stage_ms "$r265_src" "$r265_stage"; r265_first="$r265_ms"
+    # A compiler failure is a FAIL and a double timeout INCOMPLETE at once; only a measured overrun
+    # of the budget is retried (Codex review: a retry must not erase a failure).
+    case "$r265_first" in
+        incomplete) r265_incomplete="$r265_incomplete $r265_shape/$r265_n/$r265_stage"; continue ;;
+        ''|*[!0-9]*) r265_bad="$r265_bad $r265_shape/$r265_n/$r265_stage:$r265_first"; continue ;;
+    esac
+    [ "$r265_first" -gt "$r265_budget" ] || continue
+    r265_stage_ms "$r265_src" "$r265_stage"
+    case "$r265_ms" in
+        incomplete) r265_incomplete="$r265_incomplete $r265_shape/$r265_n/$r265_stage" ;;
+        ''|*[!0-9]*) r265_bad="$r265_bad $r265_shape/$r265_n/$r265_stage:${r265_first}ms,$r265_ms" ;;
+        *) [ "$r265_ms" -le $((r265_budget * 2)) ] \
+               || r265_bad="$r265_bad $r265_shape/$r265_n/$r265_stage:${r265_first}ms,${r265_ms}ms" ;;
+    esac
+done
+if [ -n "$r265_bad" ]; then
+    echo "FAIL  bugs 265-267, 269: a back-end stage of a long function exceeded its budget (retry twice the budget) or the compiler failed:$r265_bad"
+    FAIL=$((FAIL + 1))
+elif [ -n "$r265_incomplete" ]; then
+    echo "  INCOMPLETE bugs 265-267, 269: timed out twice (180 s each):$r265_incomplete"
+    INCOMPLETE=$((INCOMPLETE + 1))
+else
+    echo "  ok  bugs 265-267, 269: long functions (80000 lets, 40000 lets with an if, 20000 with a match) lower and monomorphize within budget"
+    PASS=$((PASS + 1))
+fi
 # Bug 228: the interpreter's loops drop each iteration's bindings, so a loop is linear in its
 # iteration count (200000 iterations did not finish in 60 s on main). Binary 42; --interp 42 in 20 s.
 run_ok "$TESTDIR/regress_228_interp_loop_env.con" 42

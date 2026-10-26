@@ -1,0 +1,81 @@
+// Bug 265 regression: Lower kept a function's variable table (each binding's current SSA value)
+// in an association list, searched per read and searched and rebuilt or appended per write, so a
+// function of n bindings took time n² to lower. The table is now persistent search trees with a
+// listing order and a write tick per binding. This fixture pins what the table must keep: a read
+// of a binding written far above, a parameter read late, a write to a bound name (the name keeps
+// its place), a binding declared in a branch and dropped after it, sibling scopes reusing one
+// name, a module constant read where a local of another name is bound, a loop that rebuilds the
+// table at its exit, a match arm binder dropped after the match, and a block's trailing value.
+// run_tests.sh also lowers generated functions of 20000 chained `let`s within a time bound.
+const BASE: i64 = 3;
+
+fn far(seed: i64) -> i64 {
+    let a0: i64 = seed + 1;
+    let a1: i64 = a0 + 1;
+    let a2: i64 = a1 + 1;
+    let a3: i64 = a2 + 1;
+    let a4: i64 = a3 + 1;
+    let a5: i64 = a4 + 1;
+    let a6: i64 = a5 + 1;
+    let a7: i64 = a6 + 1;
+    // a0 and the parameter are read eight bindings later
+    return a7 - a0 + seed;
+}
+
+fn rewrite(n: i64) -> i64 {
+    let mut first: i64 = n;
+    let second: i64 = n * 2;
+    first = first + second;
+    first = first + 1;
+    return first;
+}
+
+fn branch_local(c: bool) -> i64 {
+    let mut out: i64 = 1;
+    if c {
+        let inner: i64 = 10;
+        out = out + inner;
+    } else {
+        let inner: i64 = 20;
+        out = out + inner;
+    }
+    let inner: i64 = 100;
+    return out + inner;
+}
+
+fn loop_rebuild(n: i64) -> i64 {
+    let mut i: i64 = 0;
+    let mut acc: i64 = BASE;
+    while i < n {
+        let step: i64 = i + 1;
+        acc = acc + step;
+        i = i + 1;
+    }
+    return acc + i;
+}
+
+fn arm_binder(o: Option<i64>) -> i64 {
+    let mut total: i64 = 0;
+    match o {
+        Option::Some { value } => { total = total + value; },
+        Option::None => { total = total + 1; },
+    }
+    let value: i64 = 5;
+    return total + value;
+}
+
+fn trailing(c: bool) -> i64 {
+    let p: [i64; 2] = [2, 3];
+    let v: i64 = if c { p[0] } else { p[1] };
+    return v;
+}
+
+fn main() -> Int {
+    // far: 7 + 1 = 8; rewrite: 2 + 4 + 1 = 7; branch_local: 111 + 121 = 232;
+    // loop_rebuild: 3 + 6 + 3 = 12; arm_binder: 9 + 6 = 15; trailing: 2 + 3 = 5
+    let total: i64 = far(1) + rewrite(2) + branch_local(true) + branch_local(false)
+        + loop_rebuild(3) + arm_binder(Option::Some { value: 4 }) + arm_binder(Option::None)
+        + trailing(true) + trailing(false);
+    // 8 + 7 + 232 + 12 + 9 + 6 + 5 = 279
+    return (total - 237) as Int;
+}

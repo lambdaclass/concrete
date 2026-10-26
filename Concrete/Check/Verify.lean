@@ -1,4 +1,5 @@
 import Std.Data.HashMap
+import Std.Data.TreeMap
 import Concrete.Elab.Core
 import Concrete.Report.Diagnostic
 import Concrete.Check.Layout
@@ -620,14 +621,21 @@ Check refuses every `let` of reference type (E0302) and every assignment to a re
 instantiates `T := &Int`. This pass re-asks both questions on every specialized (non-generic)
 function after monomorphization, with the binding types Mono substituted. Its environment is keyed
 by binding identity (`CLocal.key`, R-0492 step 4), so an assignment finds the type of the binding
-it writes, not of whichever binding last used the spelling. -/
+it writes, not of whichever binding last used the spelling.
+
+Bug 269: the environment was an association list searched per assignment, so a function of n
+bindings and m assignments took time n·m to verify; it is a persistent map keyed by binding
+identity, where a later binding of a key replaces the earlier one exactly as the list's
+newest-first `lookup` found it. -/
+
+private abbrev RefBindEnv := Std.TreeMap LocalKey Ty LocalKey.cmp
 
 private def isRefTyPM : Ty → Bool
   | .ref _ | .refMut _ => true
   | _ => false
 
 mutual
-private partial def refBindExpr (env : List (LocalKey × Ty)) : CExpr → List (String × String)
+private partial def refBindExpr (env : RefBindEnv) : CExpr → List (String × String)
   | .binOp _ l r _ | .arrayIndex l r _ | .allocCall l r _ => refBindExpr env l ++ refBindExpr env r
   | .unaryOp _ x _ | .fieldAccess x _ _ | .borrow x _ | .borrowMut x _ | .deref x _ | .cast x _ =>
     refBindExpr env x
@@ -637,34 +645,34 @@ private partial def refBindExpr (env : List (LocalKey × Ty)) : CExpr → List (
   | .ifExpr c t e _ => refBindExpr env c ++ refBindStmts env t ++ refBindStmts env e
   | _ => []
 
-private partial def refBindArm (env : List (LocalKey × Ty)) : CMatchArm → List (String × String)
+private partial def refBindArm (env : RefBindEnv) : CMatchArm → List (String × String)
   | .enumArm _ _ bs g body =>
-    let env' := (bs.map fun (b, t) => (b.key, t)).reverse ++ env
+    let env' := bs.foldl (fun env (b, t) => env.insert b.key t) env
     (g.map (refBindExpr env')).getD [] ++ refBindStmts env' body
   | .varArm b t g body =>
-    let env' := (b.key, t) :: env
+    let env' := env.insert b.key t
     (g.map (refBindExpr env')).getD [] ++ refBindStmts env' body
   | .litArm v g body => refBindExpr env v ++ (g.map (refBindExpr env)).getD [] ++ refBindStmts env body
   | .rangeArm lo hi _ g body =>
     refBindExpr env lo ++ refBindExpr env hi ++ (g.map (refBindExpr env)).getD [] ++ refBindStmts env body
 
-private partial def refBindStmts (env : List (LocalKey × Ty)) : List CStmt → List (String × String)
+private partial def refBindStmts (env : RefBindEnv) : List CStmt → List (String × String)
   | [] => []
   | s :: rest =>
     let (vs, env') := refBindStmt env s
     vs ++ refBindStmts env' rest
 
 /-- One statement: its violations (code, message) and the bindings visible after it. -/
-private partial def refBindStmt (env : List (LocalKey × Ty)) : CStmt → List (String × String) × List (LocalKey × Ty)
+private partial def refBindStmt (env : RefBindEnv) : CStmt → List (String × String) × RefBindEnv
   | .letDecl n _ ty v =>
     -- `__destr_*` is Elab's struct-destructuring temporary (a `let S { .. } = s` through `&S`
     -- binds it to the reference); it is not a source `let`, whose binders Check already saw.
     (refBindExpr env v ++
       (if isRefTyPM ty && !n.name.startsWith "__destr_" then [("E0302", s!"a `let` binding may not hold a reference after monomorphization: '{n}' has type '{tyToStr ty}'")] else []),
-     (n.key, ty) :: env)
+     env.insert n.key ty)
   | .assign n v =>
     (refBindExpr env v ++
-      (match env.lookup n.key with
+      (match env.get? n.key with
        | some t => if isRefTyPM t then [("E0303", s!"a reference binding is never assigned (after monomorphization): '{n}' has type '{tyToStr t}'")] else []
        | none => []), env)
   | .return_ v _ | .break_ v _ => ((v.map (refBindExpr env)).getD [], env)
@@ -674,7 +682,7 @@ private partial def refBindStmt (env : List (LocalKey × Ty)) : CStmt → List (
   | .fieldAssign o _ v | .derefAssign o v => (refBindExpr env o ++ refBindExpr env v, env)
   | .arrayIndexAssign a i v => (refBindExpr env a ++ refBindExpr env i ++ refBindExpr env v, env)
   | .continue_ _ => ([], env)
-  | .borrowIn _ ref _ _ refTy body => (refBindStmts ((ref.key, refTy) :: env) body, env)
+  | .borrowIn _ ref _ _ refTy body => (refBindStmts (env.insert ref.key refTy) body, env)
 end
 
 /-- REF-6@1 after monomorphization: E0302 for a `let` and E0303 for an assignment whose binding
@@ -686,7 +694,8 @@ partial def verifyNoRefBindingsPostMono : List CModule → Diagnostics
   | m :: ms =>
     let here := m.functions.foldl (fun acc fn =>
       if !fn.typeParams.isEmpty then acc else
-      acc ++ (refBindStmts (fn.paramKeys.zip (fn.params.map (·.2))).reverse fn.body).map fun (code, msg) =>
+      let params : RefBindEnv := (fn.paramKeys.zip (fn.params.map (·.2))).foldl (fun env (k, t) => env.insert k t) {}
+      acc ++ (refBindStmts params fn.body).map fun (code, msg) =>
         ({ severity := .error
            message := s!"function '{fn.name}': {msg}"
            pass := "post-mono"

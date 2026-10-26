@@ -971,12 +971,16 @@ MUT_NEW+=("      return ElaboratedExprV2.mk (CExpr.ident b.core b.ty) (Proof.evU
 MUT_DESC+=("Elab V2 input: local binder references silently dropped")
 gate_for_last "scripts/tests/check_binder_refs.sh"
 
-# 55. Frames open EAGERLY. Every positional leg still passes; only the empty-scope
-# property breaks, so this is the mutation that proves that leg is load-bearing.
+# 55. Frames open EAGERLY: entering a scope pushes its frame at once instead of marking it
+# pending until the first binder. Every positional leg still passes; only the empty-scope
+# property breaks, so this is the mutation that proves that leg is load-bearing. Bug 268: this
+# mutation made every binder open a frame of its own (`extendFrame .. true`), which the
+# positional legs also catch, while the faithful one below survived: the empty-scope leg read
+# only an `if`, which never enters a frame scope. Leg 1b (a match arm that binds nothing) kills it.
 MUT_FILE+=("Concrete/Elab/Elab.lean")
-MUT_OLD+=("  let sc := extendFrame env.bodyScope env.pendingFrame")
-MUT_NEW+=("  let sc := extendFrame env.bodyScope true -- MUTATION: eager frames")
-MUT_DESC+=("Elab V2 input: binder frames open eagerly, not on first binder")
+MUT_OLD+=("  setEnv { env with pendingFrame := true }")
+MUT_NEW+=("  setEnv { env with bodyScope := { sizes := 0 :: env.bodyScope.sizes, depth := env.bodyScope.depth + 1 }, pendingFrame := false } -- MUTATION: frames open eagerly, on scope entry")
+MUT_DESC+=("Elab V2 input: binder frames open eagerly, on scope entry, not on first binder")
 gate_for_last "scripts/tests/check_binder_refs.sh"
 
 # 56. The relative position is emitted with its components SWAPPED. A wrong

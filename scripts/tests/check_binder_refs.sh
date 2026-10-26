@@ -56,6 +56,14 @@ def binders (s : String) : List BodyIdentityUse :=
 
 def noBind : String :=
   "mod m { pub fn f(p: Int) -> Int { if p > 0 { return p; } return p; } }"
+-- Bug 268: a scope that ENTERS a frame scope (a match arm calls openScope) yet binds nothing. The
+-- `if` above never enters one, so an eager frame (pushed on scope entry rather than on the first
+-- binder) passed CHECK 1; here it would put the reference to `p` inside the arm that binds nothing one frame out.
+def noBindArm : String :=
+  "mod m {
+     enum Copy E { A { v: Int }, B { v: Int } }
+     pub fn f(e: E, p: Int) -> Int { match e { E::A { v } => { return v; }, E::B { } => { return p; } } }
+   }"
 def withLet : String :=
   "mod m { pub fn f(p: Int) -> Int { let q: Int = p; return q; } }"
 def renamed : String :=
@@ -83,6 +91,14 @@ def outerFromArm : String :=
     ((binders noBind).all fun u => match u with
       | .binderRef out _ => out == 0
       | _ => true)
+
+  -- CHECK 1b. The same for a match arm that binds nothing (bug 268): its scope is entered
+  -- (openScope) but must materialize no frame, so `p` stays in the function frame (0 frames
+  -- out, index 1) inside `E::B { }`. The scrutinee `e` is (0, 0), and `v` in the arm that binds
+  -- it is (0, 0) in that arm's own frame, so the leg pins all three positions.
+  a "a match arm that binds nothing does not shift framesOut"
+    (binders noBindArm == [BodyIdentityUse.binderRef 0 0, BodyIdentityUse.binderRef 0 0,
+                           BodyIdentityUse.binderRef 0 1])
 
   -- CHECK 2a. Progressive indexing: the let is a LATER binder than the parameter.
   a "a let binds after the parameters, in source order"
@@ -132,8 +148,8 @@ NOK="$(grep -c '^  ok   ' "$OUT" || true)"; NFL="$(grep -c '^  FAIL ' "$OUT" || 
 PASS=$(( PASS + NOK )); FAIL=$(( FAIL + NFL ))
 # The probe's own assertion count is pinned: a probe that stops early (or loses legs) prints
 # fewer verdicts, and that is a failure, not a smaller pass.
-if [ "$PRC" -eq 0 ] && [ $(( NOK + NFL )) -ne 8 ]; then
-  no "the probe printed $(( NOK + NFL )) verdicts, expected 8"
+if [ "$PRC" -eq 0 ] && [ $(( NOK + NFL )) -ne 9 ]; then
+  no "the probe printed $(( NOK + NFL )) verdicts, expected 9"
 fi
 
 # CHECK 3, structurally: the local-reference path must not be able to emit nothing.
