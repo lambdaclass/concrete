@@ -12,27 +12,40 @@
 # capture, never /dev/null, which GNU grep would treat like -q), so the producer always finishes
 # writing and pipefail sees only real failures: a producer that fails still fails the pipeline.
 #
-# Status: 0 a line matched; 1 no line matched. A grep error (status 2: an invalid pattern, an
-# unreadable input) is neither: it prints the error and stops the whole script with status 2, from
-# a pipeline stage or a substitution too, so no leg of either polarity can read it as an answer.
+# Status: 0 a line matched; 1 no line matched. Anything else is no answer at all: a grep error (an
+# invalid pattern, an unreadable input) or an option that would stop grep early or replace its
+# answer (-q, -m, -l, -L, -c and their long forms, anywhere in the arguments: GNU grep reads options
+# after the pattern too) prints the reason and stops the script. From the script's own shell that
+# is `exit 2`. From a pipeline stage or a substitution, a subshell whose status a negated leg would
+# read as "absent", it is SIGKILL to the script (status 137): a signal the script cannot trap and
+# carry on past, so neither polarity of leg can turn the error into a verdict.
 #
-# Options are grep's, minus the ones that stop early or replace the answer: -q, -m, -l, -L, -c and
-# their long forms are refused (handled as a grep error). check_gate_hygiene.sh refuses a
-# pipe into a short-circuiting grep (`| grep -q`, `-m`, `-l`, `-L`) and a `| head` before a match,
-# and proves every script that calls has_match loads this file.
+# check_gate_hygiene.sh refuses a pipe into a short-circuiting grep (`| grep -q`, `-m`, `-l`, `-L`)
+# and a `| head` feeding has_match, and proves every script that calls has_match loads this file.
 
 has_match() {
-  local _hm_a _hm_n _hm_rc
+  local _hm_a _hm_n _hm_rc _hm_c _hm_j _hm_take=0 _hm_opts=1
   for _hm_a in "$@"; do
+    if [ "$_hm_take" = 1 ]; then _hm_take=0; continue; fi   # an option's separate argument
+    [ "$_hm_opts" = 1 ] || continue
     case "$_hm_a" in
-      --) break ;;
-      --quiet|--silent|--max-count*|--files-with*|--count)
+      --) _hm_opts=0 ;;
+      --quiet|--silent|--count|--max-count|--max-count=*|--files-with-matches|--files-without-match)
         _has_match_fail "option '$_hm_a' is not a whole-input match" "$@" ;;
+      --regexp|--file|--context|--after-context|--before-context|--binary-files|--devices|\
+--directories|--label|--include|--exclude|--exclude-from|--exclude-dir|--group-separator)
+        _hm_take=1 ;;
       --*) ;;
-      -*[qmlLc]*) _has_match_fail "option '$_hm_a' is not a whole-input match" "$@" ;;
-      -*[efABC]) break ;;   # the next word is this option's argument; the rest is not inspected
-      -*) ;;
-      *) break ;;
+      -?*)
+        # A short-option cluster: letters until one that takes an argument, which is the rest of
+        # the word or, when the word ends there, the next word.
+        for (( _hm_j=1; _hm_j<${#_hm_a}; _hm_j++ )); do
+          _hm_c="${_hm_a:_hm_j:1}"
+          case "$_hm_c" in
+            [qmlLc]) _has_match_fail "option '-$_hm_c' is not a whole-input match" "$@" ;;
+            [efABCdD]) [ $((_hm_j + 1)) -eq ${#_hm_a} ] && _hm_take=1; break ;;
+          esac
+        done ;;
     esac
   done
   # Status read through && || so an ERR trap or errexit in the caller does not act on grep's 1 here.
@@ -49,8 +62,8 @@ _has_match_fail() {
   printf ' %q' "$@" >&2
   printf '); stopping %s with no verdict\n' "${0##*/}" >&2
   # A pipeline stage or a substitution is a subshell: its exit would only end that stage, and the
-  # leg would read status 2 as "no match". Stop the script itself.
-  if [ "${BASH_SUBSHELL:-0}" -gt 0 ]; then kill -s TERM "$$" 2>/dev/null; fi
+  # leg would read the status as "no match". Stop the script itself, with a signal it cannot trap.
+  if [ "${BASH_SUBSHELL:-0}" -gt 0 ]; then kill -s KILL "$$" 2>/dev/null; fi
   exit 2
 }
 

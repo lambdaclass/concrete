@@ -488,9 +488,31 @@ echo "=== no pipe into a short-circuiting grep or head before a match (bug 283) 
 #     Cap with `awk 'NR<=N'`, which reads everything.
 # `grep -c` reads all of its input, so a count is not refused here. Scanned as logical lines
 # (logical_lines above): comments and heredoc bodies are skipped, continuations are joined.
+# Each logical line is read twice: as written, so a hazard spelled inside an `eval` or `bash -c`
+# string is still seen, and with quoted text blanked (blank_quotes), so a pattern or an option
+# argument between grep and its -q (`grep -e PAT -q`, `grep 'a|b' -q`) cannot hide it.
 _QG='(^|[^|])\|&?[[:space:]]*[ef]?grep([[:space:]]+(-[A-Za-z0-9]+|--[a-z-]+(=[^[:space:]]*)?))*[[:space:]]+(-[A-Za-z0-9]*[qmlL][A-Za-z0-9]*([[:space:]]|$)|--(quiet|silent|max-count|files-with))'
-_HM='(^|[^|])\|&?[[:space:]]*(head|sed[[:space:]][^|;&]*q)[^|;&]*\|&?[[:space:]]*has_match([[:space:]]|$)'
-pipe_into_short_circuit() { logical_lines "$@" | grep -E "$_QG|$_HM" || true; }
+_QG_ANY='(^|[^|])\|&?[[:space:]]*[ef]?grep([[:space:]][^|;&]*)?[[:space:]](-[A-Za-z0-9]*[qmlL][A-Za-z0-9]*|--(quiet|silent|max-count|files-with)[a-z-]*)([[:space:]=]|$)'
+_HM='(^|[^|])\|&?[[:space:]]*(head|sed[[:space:]][^|;&]*q)([[:space:]][^;&]*)?\|&?[[:space:]]*has_match([[:space:]]|$)'
+blank_quotes() { # each line with every quoted string replaced by Q (escapes and both quote kinds)
+  awk 'BEGIN { q = sprintf("%c", 39) }
+       { s = $0; n = length(s); out = ""; i = 1
+         while (i <= n) {
+           c = substr(s, i, 1)
+           if (c == "\\") { out = out substr(s, i, 2); i += 2; continue }
+           if (c == q) { j = index(substr(s, i + 1), q); out = out "Q"; if (j == 0) break; i += j + 1; continue }
+           if (c == "\"") { k = i + 1
+             while (k <= n) { d = substr(s, k, 1); if (d == "\\") { k += 2; continue }; if (d == "\"") break; k++ }
+             out = out "Q"; i = k + 1; continue }
+           out = out c; i++ }
+         print out }'
+}
+pipe_into_short_circuit() {
+  local lines
+  lines="$(logical_lines "$@")"
+  [ -n "$lines" ] || return 0
+  { grep -E "$_QG|$_HM" <<<"$lines"; blank_quotes <<<"$lines" | grep -E "$_QG_ANY|$_HM"; } || true
+}
 # A script that calls has_match must load it (directly, or through lib/gate_env.sh): an undefined
 # has_match is "command not found", status 127, which a negated leg would read as "absent".
 has_match_unloaded() {
@@ -524,6 +546,13 @@ printf '%s\n' "make_report $_P $_G --quiet x" > "$_sc_dir/long_quiet.sh"
 printf '%s\n' "make_report $_P e$_G -q x" > "$_sc_dir/egrep.sh"
 printf '%s\n' "make_report $_P head -1 $_P has_match x" > "$_sc_dir/head_then_match.sh"
 printf '%s\n' "make_report $_P sed 5q $_P has_match x" > "$_sc_dir/sedq_then_match.sh"
+printf '%s\n' "make_report $_P $_G -e PAT -q" > "$_sc_dir/pattern_arg_then_q.sh"
+printf '%s\n' "make_report $_P $_G -A 2 -q PAT" > "$_sc_dir/context_arg_then_q.sh"
+printf '%s\n' "make_report $_P $_G PAT -q" > "$_sc_dir/pattern_then_q.sh"
+printf '%s\n' "make_report $_P $_G 'a|b' -q" > "$_sc_dir/quoted_alt_then_q.sh"
+printf '%s\n' "check x 'make_report $_P $_G -q PAT'" > "$_sc_dir/in_eval_string.sh"
+printf '%s\n' "make_report $_P head -1 $_P sed s/a/b/ $_P has_match x" > "$_sc_dir/head_filter_match.sh"
+printf '%s\n' "make_report $_P $_G -c -e ' -q' && echo \"a $_P b -l\"" > "$_sc_dir/quoted_option_text.sh"
 printf '%s\n' "make_report $_P$_P $_G -q x f" > "$_sc_dir/or_list.sh"
 printf '%s\n' "has_match -E 'a|b' <<<\"\$OUT\" && ok x || no x" > "$_sc_dir/herestring.sh"
 printf '%s\n' "make_report $_P has_match -F x" > "$_sc_dir/drained.sh"
@@ -532,11 +561,12 @@ printf '%s\n' "make_report $_P $_G -c x" > "$_sc_dir/count.sh"
 printf '%s\n' "make_report $_P awk 'NR<=1' $_P has_match x" > "$_sc_dir/awk_cap.sh"
 printf '%s\n' "cat > f <<'EOF'" "make_report $_P $_G -q x" "EOF" > "$_sc_dir/heredoc.sh"
 printf '%s\n' "# make_report $_P $_G -q x" > "$_sc_dir/comment.sh"
-for c in printf_q negated stream_qE split_opts continued backslash max_count files_with long_quiet egrep head_then_match sedq_then_match; do
+for c in printf_q negated stream_qE split_opts continued backslash max_count files_with long_quiet egrep head_then_match sedq_then_match \
+         pattern_arg_then_q context_arg_then_q pattern_then_q quoted_alt_then_q in_eval_string head_filter_match; do
   if [ -n "$(pipe_into_short_circuit "$_sc_dir/$c.sh")" ]; then ok "control: a pipe into a short-circuiting consumer ($c) is flagged"
   else no "control: a pipe into a short-circuiting consumer ($c) was NOT flagged (the scan is inert)"; fi
 done
-for c in or_list herestring drained file_operand count awk_cap heredoc comment; do
+for c in or_list herestring drained file_operand count awk_cap heredoc comment quoted_option_text; do
   if [ -z "$(pipe_into_short_circuit "$_sc_dir/$c.sh")" ]; then ok "control: $c is not flagged"
   else no "control: $c was flagged"; fi
 done
@@ -572,13 +602,23 @@ for want in pipe-positive=0 pipe-negated=forbidden-seen here-positive=0 here-neg
   if grep -qxF "$want" <<<"$RACE_OUT"; then ok "control: has_match on the same producer: $want"
   else no "control: has_match on the same producer: $want missing: $(tr '\n' ' ' <<<"$RACE_OUT")"; fi
 done
-# A grep error is no verdict in either polarity, from the main shell or a pipeline stage.
-for form in "has_match -E '(' <<<x" "printf x | has_match -E '('" "printf x | has_match -E '(' && echo verdict=forbidden || echo verdict=clean" "has_match -q x <<<x"; do
-  erc=0; eout="$(bash -c "source '$_HMLIB'; $form; echo reached" 2>&1)" || erc=$?
-  if [ "$erc" -ne 0 ] && ! grep -qE '^(reached|verdict=)' <<<"$eout" && grep -qF 'has_match:' <<<"$eout"; then
-    ok "control: a grep error stops the script with no verdict ($form)"
-  else no "control: a grep error was read as an answer ($form; rc=$erc): $(tr '\n' ' ' <<<"$eout")"; fi
+# A grep error, or an option that would stop grep early anywhere in the arguments, is no verdict
+# in either polarity: from the script's own shell it exits 2, and from a pipeline stage it kills
+# the script (137), even one that traps TERM and would carry on.
+for form in "2|has_match -E '(' <<<x" "137|printf x | has_match -E '('" \
+            "137|printf x | has_match -E '(' && echo verdict=forbidden || echo verdict=clean" \
+            "137|trap ':' TERM; printf x | has_match -E '(' && echo verdict=forbidden || echo verdict=clean" \
+            "2|has_match -q x <<<x" "137|seq 1 500000 | has_match -e '^1\$' -q" "137|seq 1 500000 | has_match '^1\$' --max-count=1"; do
+  want="${form%%|*}"; form="${form#*|}"
+  erc=0; eout="$(bash -c "source '$_HMLIB'; set -o pipefail; $form; echo reached" 2>&1)" || erc=$?
+  if [ "$erc" = "$want" ] && ! grep -qE '^(reached|verdict=)' <<<"$eout" && grep -qF 'has_match:' <<<"$eout"; then
+    ok "control: no verdict, status $want ($form)"
+  else no "control: an error or a refused option was not stopped as status $want ($form; rc=$erc): $(tr '\n' ' ' <<<"$eout")"; fi
 done
+# Options that take an argument are read past, so a pattern spelled like a refused option is not one.
+if bash -c "source '$_HMLIB'; has_match -equiet <<<'xquietx' && has_match -A 1 -e x <<<x && ! has_match -Fe m <<<x" 2>/dev/null; then
+  ok "control: has_match reads option arguments as arguments (-equiet, -A 1, -Fe m)"
+else no "control: has_match refused or misread an option argument"; fi
 rm -rf "$_sc_dir"
 
 echo ""
