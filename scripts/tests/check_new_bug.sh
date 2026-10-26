@@ -23,7 +23,7 @@
 #      second reservation; --number refuses a number that is not reserved, is another user's, is
 #      being filed by another run, or already has a record, and of two concurrent --number runs on
 #      one held number exactly one files it; the commands the fuzz farm and CI triage print are
-#      accepted as printed.
+#      accepted as printed; a filing waits for, then refuses, another filing's worktree lock.
 #
 # Copies the ledger inputs the way check_ledgers.sh does (migrating the copy when this tree is not
 # migrated yet), so it needs no compiler build. Runs in seconds.
@@ -369,6 +369,14 @@ PY
 if [ -n "$TC" ] && (cd "$W" && eval "bash $TC") > "$TMP/triage.out" 2>&1; then
   ok "CI triage's printed new_bug.sh command files a bug as printed"
 else no "CI triage's printed new_bug.sh command was refused or not found ('$TC'): $(tr '\n' ' ' < "$TMP/triage.out" 2>/dev/null | cut -c1-240)"; fi
+# One filing per worktree: a held lock makes a second filing wait, then refuse before reserving.
+LK="$(git -C "$W" rev-parse --git-path new_bug.lock)"; case "$LK" in /*) ;; *) LK="$W/$LK" ;; esac
+mkdir "$LK" && echo $$ > "$LK/pid"
+refuse "a filing while another holds the worktree's lock" "holds this worktree's lock" \
+  env NEW_BUG_LOCK_WAIT=2 bash "$NB" "x defect" "${BA[@]}"
+rm -rf "$LK"
+[ ! -e "$LK" ] && ! ls "$W/docs/bugs/"*_x_defect.md >/dev/null 2>&1 && ok "the lock is the holder's to remove, and no record was written" \
+  || no "the refused filing left a record or the lock behind"
 refuse "--number with --number-only" "--number-only reserves a new one" bash "$NB" --number-only --number 990 "x defect"
 
 echo "NEW-BUG: PASS=$PASS FAIL=$FAIL"

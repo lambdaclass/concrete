@@ -71,13 +71,17 @@ and passed while every real filing failed.
   are required and checked before the reservation, against the dashboard's own rules (kinds, the
   effort format of counting batches, class tags), together with `bug_dashboard.py --check`.
 - A failure after the reservation removes the other files and takes only its own edit back out of
-  `discovery.tsv` (a whole-file restore could erase a concurrent filing's row), hands the number
+  `discovery.tsv`, hands the number
   back and prints the command that files the same bug under it. A reservation's first line names
   its state: `bug NNN reserved:` is held and free to file (`--number-only`, or handed back by a
   failed filing), `bug NNN filing:` is taken by a run. `new_bug.sh --number NNN ...` files under a
   `reserved` number this user holds that no branch or worktree has a record for, claiming it by
   moving the ref to a `filing` commit with a lease on the one it read, so of two concurrent claims
   exactly one files it (Codex review).
+- A full filing holds a per-worktree lock (`git rev-parse --git-path new_bug.lock`) from its first
+  check to its last write or rollback, so two filings in one worktree cannot interleave their
+  rewrites of `discovery.tsv` and the generated views; `discovery.tsv` is rewritten through a
+  temporary file renamed into place (Codex review).
 - `check_new_bug.sh` copies `bug_dashboard.py`, so leg 3 runs the whole filing through the
   dashboard, and leg 6 covers the attribution, the refusals before any reservation, the rollback
   and the `--number` rerun. The automatic filing paths print commands that pass as printed: the

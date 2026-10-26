@@ -48,8 +48,16 @@
 # record, reproducer or fragment that still holds one, so a draft can be backed up on wip/* but
 # cannot land.
 #
+# ONE FILING PER WORKTREE AT A TIME. A full filing rewrites shared files of the worktree
+# (discovery.tsv, the generated views), so from its first check to its last write or rollback it
+# holds a lock, the directory `git rev-parse --git-path new_bug.lock` with the holder's pid; a second
+# run waits for it, then refuses. A lock left by a killed run is never broken automatically: the
+# refusal names the pid, and the lock is removed by hand once no new_bug.sh runs. Every rewrite of
+# discovery.tsv goes through a temporary file renamed into place, so a failed write leaves it whole.
+#
 # ENVIRONMENT: CONCRETE_BUG_REMOTE (default origin; `fork` is refused), NEW_BUG_NO_FETCH=1 (skip the
-# fetch; tests), NEW_BUG_DATE (YYYY-MM-DD; tests). Exit 0 filed, 1 refused, 2 usage.
+# fetch; tests), NEW_BUG_DATE (YYYY-MM-DD; tests), NEW_BUG_LOCK_WAIT (seconds to wait for the
+# worktree's filing lock, default 300). Exit 0 filed, 1 refused, 2 usage.
 set -euo pipefail
 
 die() { echo "new_bug: $*" >&2; exit 1; }
@@ -134,8 +142,17 @@ def cell(i, c):
     cs = lines[i].split("\t")
     return cs[col[c]].strip() if len(cs) == len(d.COLS) else ""
 def save():
-    with open(path, "w", encoding="utf-8") as fh:
-        fh.write("\n".join(lines))
+    tmp = f"{path}.new_bug.{os.getpid()}"
+    try:
+        with open(tmp, "w", encoding="utf-8") as fh:
+            fh.write("\n".join(lines))
+        os.replace(tmp, path)
+    except OSError as e:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        refuse(f"could not rewrite {rel}: {e}")
 if mode == "revert":
     def drop(v):
         rest = [b for b in v.strip().split(",") if b and b != num]
@@ -200,7 +217,20 @@ PY
 
 # ----------------------------------------------------------------------------- validate up front
 # Everything that could refuse runs before a number is reserved, so a refusal never burns one.
+LOCK=""
+unlock() { [ -z "$LOCK" ] || rm -rf "$LOCK"; LOCK=""; }
 if [ "$NUMBER_ONLY" = 0 ]; then
+  wait_s="${NEW_BUG_LOCK_WAIT:-300}"; [[ "$wait_s" =~ ^[0-9]+$ ]] || die "NEW_BUG_LOCK_WAIT takes a number of seconds"
+  lk="$(git rev-parse --git-path new_bug.lock)"; waited=0
+  until mkdir "$lk" 2>/dev/null; do
+    if [ "$waited" -ge "$wait_s" ]; then
+      die "another filing holds this worktree's lock $lk (pid $(cat "$lk/pid" 2>/dev/null || echo unknown)); if no new_bug.sh is running, remove it (rm -r '$lk') and run again"
+    fi
+    [ "$waited" -gt 0 ] || echo "new_bug: waiting for another filing in this worktree ($lk)" >&2
+    sleep 1; waited=$((waited + 1))
+  done
+  LOCK="$lk"; trap unlock EXIT
+  echo $$ > "$LOCK/pid"
   [ -n "$(python3 -I scripts/gen/bug_ledger.py corpus)" ] \
     || die "this tree is not migrated to the bug ledger (scripts/gen/migrate_ledgers.sh), so there is no ledger block to write; file by hand (docs/bugs/README.md, Filing a bug) or use --number-only"
   python3 -I scripts/gen/bug_ledger.py --check >/dev/null \
@@ -268,6 +298,7 @@ cleanup() {
       echo "new_bug: bug $num stays reserved and unfiled, and could not be handed back for --number (refs/bug-reservations/$num still reads 'filing'); leave the gap" >&2
     fi
   fi
+  unlock
 }
 seen="$(mktemp)"; trap cleanup EXIT
 record_nums() { sed -nE 's#^(.*/)?([0-9]{3})_[^/]*\.md$#\2#p'; }
