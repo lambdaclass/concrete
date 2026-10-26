@@ -35,9 +35,10 @@ quadratic stage grows a hundredfold. A linear stage's allocation count grows exa
 the heartbeat bound (hb_exp) is tight. Its time does not: caches, the allocator and memory
 bandwidth shared with other jobs cost more at 10^5 elements than at 10^4, and the fastest of three
 attempts of a linear stage has grown up to 52-fold on a host running eight gates at once. The time
-bound (exp) sits above that and below a quadratic's hundredfold; a stage whose quadratic part is
-still small at 10^4 can grow less than that, and is then caught by its budget, which its larger
-size exceeds.
+bound (exp) sits above that and below a quadratic's hundredfold. A stage whose quadratic part is
+still small next to its linear part at these sizes grows less than that (10 + 1 ms at 10^4 and
+100 + 100 ms at 10^5 is x18) and fails only if it exceeds its budget: such a mixed quadratic can
+pass both checks at these sizes, and is caught when it grows past its budget.
 
 RESOLUTION. Every stage's growth is judged, however fast. An in-compiler stage is timed in whole
 milliseconds by the compiler's own clock, so the smaller size's time is floored at floor_ms. A
@@ -46,9 +47,10 @@ baseline, the same mode on a one-line program, so process start and clang's fixe
 dilute its growth; that difference carries the noise of two process runs, so it is floored at
 wall_floor_ms (a size-dependent cost too small to resolve that way is held by its budget, and,
 inside the compiler, by the per-stage trace). So the growth check resolves a stage whose time at
-the larger size exceeds about floor x bound: about 80 ms for an in-compiler stage and about 1 s
-above baseline for a whole compile; a slower-growing cost below that is held by its budget only. Heartbeat counts are exact and need no floor; they are judged once
-the larger count reaches hb_judge_min.
+the larger size exceeds about floor x bound: about 126 ms for an in-compiler stage and about
+1.6 s above baseline for a whole compile (floors 2 and 25 ms, x63); a cost below that is held
+by its budget only. Heartbeat counts are exact and need no floor; they are judged once the larger
+count reaches hb_judge_min.
 """
 import argparse
 import json

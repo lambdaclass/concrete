@@ -11,7 +11,8 @@
 # growth between sizes is above the recorded near-linear bound. A wall-clock violation is
 # re-measured within the recorded retry budget (each stage keeps its fastest run), so host
 # noise cannot fail the gate, and a retry cannot hide a quadratic stage: growth is resolved above
-# the floors stated in compile_scaling.py (RESOLUTION), and below them the budget holds the stage.
+# the floors stated in compile_scaling.py (RESOLUTION, SIZES), and below them, or for a quadratic
+# part still small at these sizes, only the budget holds the stage.
 # Budgets, sizes, bounds and the named exclusions (known filed defects, reported on every run) are
 # in scripts/tests/lib/compile_scaling_budgets.tsv, stamped with the commit and host they were
 # measured at. Method: scripts/tests/lib/compile_scaling.py.

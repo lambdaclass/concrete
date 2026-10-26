@@ -11,8 +11,8 @@
 # allocations (heartbeats) grow exactly x10, so hb_exp 1.2 (x15.8) is tight. Its time grows more
 # (caches, the allocator, memory bandwidth shared with other jobs): up to x35 on the loaded CI host
 # and x52 with eight gates running at once on the dev host, fastest of three attempts; exp 1.8
-# (x63) sits above that. A stage too slow at 10^5 for its budget fails that instead
-# (compile_scaling.py, SIZES and RESOLUTION).
+# (x63) sits above that. A mixed stage whose quadratic part is still small at these sizes can
+# pass the time bound and is held by its budget only (compile_scaling.py, SIZES and RESOLUTION).
 # Declaration and nesting shapes run at 1000 and 10000 while the stages excluded below are open;
 # their sizes move to 10^4 and 10^5 with the fixes. The lets-* shapes run at 2000 and 20000.
 # measured: commit 10b81a467a85855d9b60186ac2c98bf7a6219c3b on concrete-ci-2, AMD Ryzen 9 7950X3D 16-Core Processor, 32 threads, 2026-10-26, 3 runs (median), budget = max(4 x median, median + 200ms)
