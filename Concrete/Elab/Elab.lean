@@ -1133,9 +1133,15 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none)
       | .named n => (n, ([] : List Ty))
       | .generic n args _ => (n, args)
       | _ => ("", [])
-    let mut cArms : List CMatchArm := []
-    -- Arm evidence, PREPENDED and reversed once: arm ORDER is semantic (first match wins).
-    let mut armEvsRev : List Proof.EvidenceArmV2 := []
+    -- Bug 284: each arm's Core and its evidence are ONE entry, pushed together. They were two
+    -- accumulators, and only the enum branch's variant, literal and variable arms pushed evidence:
+    -- every arm of a match on an integer, Bool, Char or String, every arm when the enum lookup
+    -- failed, and every range arm built Core alone. The node was then `matchExpr scrutinee []`, which
+    -- carries no gap, so the body validated as complete while describing none of its arms, and the
+    -- V2 subject digest and the implementation identity ignored every arm body. A pair cannot be
+    -- pushed without its evidence; an arm the producer cannot describe pushes a gap, never nothing.
+    -- PREPENDED and reversed once: arm ORDER is semantic (first match wins).
+    let mut armsRev : List (CMatchArm × Proof.EvidenceArmV2) := []
     if enumName != "" then
       match ← lookupEnum enumName with
       | some ed =>
@@ -1176,15 +1182,15 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none)
             let cGuard := cGuardEv.map (·.core)
             let cBodyEv ← elabStmtsEv body (valueHint := hint)
             let cBody := cBodyEv.flatMap (·.core)
-            cArms := cArms ++ [.enumArm enumName armVariant typedBindings cGuard cBody]
-            armEvsRev := (match ed.typeId? with
+            let armEv : Proof.EvidenceArmV2 := match ed.typeId? with
               | some owner =>
                 .arm (Proof.evVariantPattern { owner := owner, variant := armVariant }
                         (ev.fields.zip bindings |>.map fun fb =>
                            ({ owner := owner, field := fb.1.name }, fb.2 != "_")))
                      (cGuardEv.map (·.evidence)) (cBodyEv.map (·.evidence))
               | none => .gap { code := .unresolvedVariant,
-                               detail := "arm owner declaration has no identity" }) :: armEvsRev
+                               detail := "arm owner declaration has no identity" }
+            armsRev := (.enumArm enumName armVariant typedBindings cGuard cBody, armEv) :: armsRev
           | .litArm _ val guard body =>
             let cValEv ← elabExprEv val
             let cVal := cValEv.core
@@ -1192,9 +1198,8 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none)
             let cGuard := cGuardEv.map (·.core)
             let cBodyEv ← elabStmtsEv body (valueHint := hint)
             let cBody := cBodyEv.flatMap (·.core)
-            cArms := cArms ++ [.litArm cVal cGuard cBody]
-            armEvsRev := (.arm (Proof.evLitPattern cValEv.evidence)
-                            (cGuardEv.map (·.evidence)) (cBodyEv.map (·.evidence))) :: armEvsRev
+            armsRev := (.litArm cVal cGuard cBody,
+              .arm (Proof.evLitPattern cValEv.evidence) (cGuardEv.map (·.evidence)) (cBodyEv.map (·.evidence))) :: armsRev
           | .varArm varSp binding guard body =>
             -- D3: a whole-value binder over a reference IS the reference (`wholeBinderTy`).
             let wholeTy := wholeBinderTy scrTy innerTyR
@@ -1203,9 +1208,8 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none)
             let cGuard := cGuardEv.map (·.core)
             let cBodyEv ← elabStmtsEv body (valueHint := hint)
             let cBody := cBodyEv.flatMap (·.core)
-            cArms := cArms ++ [.varArm coreBinding wholeTy cGuard cBody]
-            armEvsRev := (.arm (if binding == "_" then .wildcard else .binder)
-                            (cGuardEv.map (·.evidence)) (cBodyEv.map (·.evidence))) :: armEvsRev
+            armsRev := (.varArm coreBinding wholeTy cGuard cBody,
+              .arm (if binding == "_" then .wildcard else .binder) (cGuardEv.map (·.evidence)) (cBodyEv.map (·.evidence))) :: armsRev
           | .rangeArm _ lo hi incl guard body =>
             let cLoEv ← elabExprEv lo (some innerTyR)
             let cLo := cLoEv.core
@@ -1215,7 +1219,8 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none)
             let cGuard := cGuardEv.map (·.core)
             let cBodyEv ← elabStmtsEv body (valueHint := hint)
             let cBody := cBodyEv.flatMap (·.core)
-            cArms := cArms ++ [.rangeArm cLo cHi incl cGuard cBody]
+            armsRev := (.rangeArm cLo cHi incl cGuard cBody,
+              .arm (.range cLoEv.evidence cHiEv.evidence incl) (cGuardEv.map (·.evidence)) (cBodyEv.map (·.evidence))) :: armsRev
         restoreScope envBefore
       | none =>
         let envBefore ← getEnv
@@ -1232,7 +1237,8 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none)
             let cGuard := cGuardEv.map (·.core)
             let cBodyEv ← elabStmtsEv body (valueHint := hint)
             let cBody := cBodyEv.flatMap (·.core)
-            cArms := cArms ++ [.litArm cVal cGuard cBody]
+            armsRev := (.litArm cVal cGuard cBody,
+              .arm (Proof.evLitPattern cValEv.evidence) (cGuardEv.map (·.evidence)) (cBodyEv.map (·.evidence))) :: armsRev
           | .varArm varSp binding guard body =>
             -- D3: a whole-value binder over a reference IS the reference (`wholeBinderTy`).
             let wholeTy := wholeBinderTy scrTy innerTyR
@@ -1241,13 +1247,17 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none)
             let cGuard := cGuardEv.map (·.core)
             let cBodyEv ← elabStmtsEv body (valueHint := hint)
             let cBody := cBodyEv.flatMap (·.core)
-            cArms := cArms ++ [.varArm coreBinding wholeTy cGuard cBody]
+            armsRev := (.varArm coreBinding wholeTy cGuard cBody,
+              .arm (if binding == "_" then .wildcard else .binder) (cGuardEv.map (·.evidence)) (cBodyEv.map (·.evidence))) :: armsRev
           | .mk _ en v _ guard body =>
             let cGuardEv ← guard.mapM (fun g => elabExprEv g (some Ty.bool))
             let cGuard := cGuardEv.map (·.core)
             let cBodyEv ← elabStmtsEv body (valueHint := hint)
             let cBody := cBodyEv.flatMap (·.core)
-            cArms := cArms ++ [.enumArm en v [] cGuard cBody]
+            -- A variant arm over a scrutinee that is not a resolved enum names no variant identity.
+            armsRev := (.enumArm en v [] cGuard cBody,
+              .gap { code := .unresolvedVariant,
+                     detail := "variant arm in a match whose scrutinee is not a resolved enum" }) :: armsRev
           | .rangeArm _ lo hi incl guard body =>
             let cLoEv ← elabExprEv lo (some innerTyR)
             let cLo := cLoEv.core
@@ -1257,7 +1267,8 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none)
             let cGuard := cGuardEv.map (·.core)
             let cBodyEv ← elabStmtsEv body (valueHint := hint)
             let cBody := cBodyEv.flatMap (·.core)
-            cArms := cArms ++ [.rangeArm cLo cHi incl cGuard cBody]
+            armsRev := (.rangeArm cLo cHi incl cGuard cBody,
+              .arm (.range cLoEv.evidence cHiEv.evidence incl) (cGuardEv.map (·.evidence)) (cBodyEv.map (·.evidence))) :: armsRev
         restoreScope envBefore
     else
       let envBefore ← getEnv
@@ -1272,7 +1283,8 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none)
           let cGuard := cGuardEv.map (·.core)
           let cBodyEv ← elabStmtsEv body (valueHint := hint)
           let cBody := cBodyEv.flatMap (·.core)
-          cArms := cArms ++ [.litArm cVal cGuard cBody]
+          armsRev := (.litArm cVal cGuard cBody,
+            .arm (Proof.evLitPattern cValEv.evidence) (cGuardEv.map (·.evidence)) (cBodyEv.map (·.evidence))) :: armsRev
         | .varArm varSp binding guard body =>
           -- D3: a variable arm over `&T` binds the reference (`wholeBinderTy`).
           let wholeTy := wholeBinderTy scrTy innerTyR
@@ -1281,13 +1293,17 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none)
           let cGuard := cGuardEv.map (·.core)
           let cBodyEv ← elabStmtsEv body (valueHint := hint)
           let cBody := cBodyEv.flatMap (·.core)
-          cArms := cArms ++ [.varArm coreBinding wholeTy cGuard cBody]
+          armsRev := (.varArm coreBinding wholeTy cGuard cBody,
+            .arm (if binding == "_" then .wildcard else .binder) (cGuardEv.map (·.evidence)) (cBodyEv.map (·.evidence))) :: armsRev
         | .mk _ en v _ guard body =>
           let cGuardEv ← guard.mapM (fun g => elabExprEv g (some Ty.bool))
           let cGuard := cGuardEv.map (·.core)
           let cBodyEv ← elabStmtsEv body (valueHint := hint)
           let cBody := cBodyEv.flatMap (·.core)
-          cArms := cArms ++ [.enumArm en v [] cGuard cBody]
+          -- A variant arm over a scrutinee that is not a resolved enum names no variant identity.
+          armsRev := (.enumArm en v [] cGuard cBody,
+            .gap { code := .unresolvedVariant,
+                   detail := "variant arm in a match whose scrutinee is not a resolved enum" }) :: armsRev
         | .rangeArm _ lo hi incl guard body =>
           let cLoEv ← elabExprEv lo (some innerTyR)
           let cLo := cLoEv.core
@@ -1297,7 +1313,8 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none)
           let cGuard := cGuardEv.map (·.core)
           let cBodyEv ← elabStmtsEv body (valueHint := hint)
           let cBody := cBodyEv.flatMap (·.core)
-          cArms := cArms ++ [.rangeArm cLo cHi incl cGuard cBody]
+          armsRev := (.rangeArm cLo cHi incl cGuard cBody,
+            .arm (.range cLoEv.evidence cHiEv.evidence incl) (cGuardEv.map (·.evidence)) (cBodyEv.map (·.evidence))) :: armsRev
       restoreScope envBefore
     -- Result type: prefer the caller's hint; otherwise infer it from the arm
     -- bodies' trailing value expressions. A nested match used as a statement
@@ -1313,13 +1330,14 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none)
     let armValueTy : List CStmt → Ty := fun body => match body.getLast? with
       | some (.expr e true) => e.ty
       | _ => .unit
+    let cArms := armsRev.reverse.map (·.1)
     let resultTy := match hint with
       | some t => t
       | none =>
         let armTys := (cArms.map (fun a => armValueTy (armBodyStmts a))).filter
           (fun t => t != .unit && t != .never)
         armTys.head?.getD .unit
-    return ElaboratedExprV2.mk (CExpr.match_ cScrut cArms resultTy) (Proof.EvidenceExprV2.matchExpr cScrutEv.evidence armEvsRev.reverse)
+    return ElaboratedExprV2.mk (CExpr.match_ cScrut cArms resultTy) (Proof.EvidenceExprV2.matchExpr cScrutEv.evidence (armsRev.reverse.map (·.2)))
 
   | .borrow _ inner =>
     let cInnerEv ← elabExprEv inner

@@ -172,10 +172,18 @@ def evLoopTarget? (frames : List (Option String)) (label : Option String) : Opti
 
     Patterns and expressions are different types, so a literal arm cannot reuse the
     expression node. Only literal forms convert; anything else is a gap rather than a
-    silent wildcard, which would make two different arms select alike. -/
+    silent wildcard, which would make two different arms select alike.
+
+    A NEGATIVE integer arm (`-1 =>`) elaborates as negation applied to a literal, and the value
+    it selects is that negated literal, so it is the integer pattern of that value (bug 284:
+    once every literal arm reached evidence, refusing it would have made such bodies
+    uncovered). Only negation of an integer literal; any other operator is still a gap. -/
 def evLitPattern (e : EvidenceExprV2) : EvidencePatternV2 :=
   match e with
   | .intLit v t  => .intLit v t
+  | .unary op (.intLit v t) =>
+      if op == unaryOpTag .neg then .intLit (-v) t
+      else .gap { code := .unhandledPattern, detail := "literal arm with a non-literal value" }
   | .boolLit v   => .boolLit v
   | .strLit v    => .strLit v
   | .charLit v   => .charLit v

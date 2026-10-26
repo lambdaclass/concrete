@@ -1,0 +1,22 @@
+// Bug 284: the evidence producer dropped every arm of a match whose scrutinee is not an enum.
+// Observed (main cc7a4084): `--report subject-facts` gives `main.pick` the same subject digest and
+// the same shadow bodyV2 after `0 => p + 1` becomes `0 => p * 9` (or `1 => helper(p)` becomes
+// `1 => other(k)`), and `shadow edges` says the body reaches no callable. A v2 pin stays current.
+// Expected: an edit inside any arm moves the body bytes, the subject digest and the implementation
+// identity. check_binder_refs.sh edits the first arm and requires a different subject digest.
+fn helper(x: Int) -> Int {
+    return x + 1;
+}
+
+fn pick(k: Int, p: Int) -> Int {
+    let r: Int = match k {
+        0 => p + 1,
+        1 => helper(p),
+        _ => 0,
+    };
+    return r;
+}
+
+pub fn main() -> Int {
+    return pick(1, 3);
+}

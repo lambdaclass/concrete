@@ -79,6 +79,34 @@ def outerFromArm : String :=
      enum Copy E { A { v: Int }, B { v: Int } }
      pub fn f(e: E, p: Int) -> Int { match e { E::A { v } => { return p; }, E::B { v } => { return v; } } }
    }"
+-- Bug 284: a match whose scrutinee is not an enum. Its arms reached Core and NOT evidence, so the
+-- evidence held `match k {}` and these references were absent from the body, its digest and the
+-- implementation identity. Literal, variable, range and Bool arms are each a separate producer
+-- path, so each has a program; `litArm2` differs from `litArm` only inside an arm body.
+def litArm : String :=
+  "mod m { pub fn f(k: Int, p: Int) -> Int { match k { 0 => { return p; }, _ => { return k; } } } }"
+def litArm2 : String :=
+  "mod m { pub fn f(k: Int, p: Int) -> Int { match k { 0 => { return k; }, _ => { return k; } } } }"
+def varArmInt : String :=
+  "mod m { pub fn f(k: Int, p: Int) -> Int { match k { 0 => { return 1; }, n => { return n + p; } } } }"
+def rangeArm : String :=
+  "mod m { pub fn f(k: Int, p: Int) -> Int { match k { 0..10 => { return p; }, _ => { return 0; } } } }"
+def boolArm : String :=
+  "mod m { pub fn f(b: Bool, p: Int) -> Int { match b { true => { return p; }, false => { return 0; } } } }"
+def negArm : String :=
+  "mod m { pub fn f(k: Int, p: Int) -> Int { match k { -1 => { return p; }, _ => { return 0; } } } }"
+
+def bodyBytes (s : String) : Option String :=
+  match (do
+    let parsed ← Pipeline.parse s
+    let summary := Pipeline.buildSummary parsed
+    let resolved ← Pipeline.resolve parsed summary
+    Pipeline.check resolved summary
+    let el ← Pipeline.elaborate resolved summary
+    pure el.coreModules : Except Diagnostics (List CModule)) with
+  | .error _ => none
+  | .ok ms => ms.head?.bind fun m => m.evidenceBodies.head?.bind fun (_, d) =>
+      match validate d with | .ok c => some (bodyBytesV2 c) | .error _ => none
 
 #eval do
   -- Sanity FIRST: an empty binder list would make every leg below vacuous.
@@ -132,6 +160,28 @@ def outerFromArm : String :=
       BodyIdentityUse.binderRef 1 1, BodyIdentityUse.binderRef 0 0])
   a "arm bodies stay covered"
     (((facts outerFromArm).map ProofBodyIdentityInputsV2.covered) == some true)
+
+  -- CHECK 4 (bug 284). Every arm of a non-enum match reaches evidence. A literal arm binds
+  -- nothing, so `p` inside it is (0, 1) and the `_` arm's `k` is (0, 0); before the fix only the
+  -- scrutinee's (0, 0) was present.
+  a "a literal arm's body references reach evidence"
+    (binders litArm == [BodyIdentityUse.binderRef 0 0, BodyIdentityUse.binderRef 0 1,
+                        BodyIdentityUse.binderRef 0 0])
+  -- A variable arm over an Int binds `n` in its own frame: `n` is (0, 0), `p` one frame out.
+  a "a variable arm over an integer opens a frame and its body reaches evidence"
+    (binders varArmInt == [BodyIdentityUse.binderRef 0 0, BodyIdentityUse.binderRef 0 0,
+                           BodyIdentityUse.binderRef 1 1])
+  a "a range arm's body references reach evidence"
+    (binders rangeArm == [BodyIdentityUse.binderRef 0 0, BodyIdentityUse.binderRef 0 1])
+  a "a Bool arm's body references reach evidence"
+    (binders boolArm == [BodyIdentityUse.binderRef 0 0, BodyIdentityUse.binderRef 0 1])
+  -- A negative literal arm is the integer pattern of its value, not a gap.
+  a "a negative literal arm is described, not refused"
+    ((bodyBytes negArm).isSome && (binders negArm).length == 2)
+  -- THE DIGEST LEG: two bodies that differ only inside a literal arm must not share body bytes,
+  -- which is what let a v2 pin and an implementation identity read current after the edit.
+  a "a body edit inside a literal arm changes the body bytes"
+    ((bodyBytes litArm).isSome && (bodyBytes litArm2).isSome && bodyBytes litArm != bodyBytes litArm2)
 LEAN
 
 OUT="$TMP_DIR/out.txt"
@@ -149,8 +199,36 @@ NOK="$(grep -c '^  ok   ' "$OUT" || true)"; NFL="$(grep -c '^  FAIL ' "$OUT" || 
 PASS=$(( PASS + NOK )); FAIL=$(( FAIL + NFL ))
 # The probe's own assertion count is pinned: a probe that stops early (or loses legs) prints
 # fewer verdicts, and that is a failure, not a smaller pass.
-if [ "$PRC" -eq 0 ] && [ $(( NOK + NFL )) -ne 9 ]; then
-  no "the probe printed $(( NOK + NFL )) verdicts, expected 9"
+if [ "$PRC" -eq 0 ] && [ $(( NOK + NFL )) -ne 15 ]; then
+  no "the probe printed $(( NOK + NFL )) verdicts, expected 15"
+fi
+
+# CHECK 4, end to end (bug 284): the regression fixture and a copy that differs only inside one
+# literal arm's body must report different subject digests. Before the fix both read the same
+# digest, so a `#[proof_fingerprint("v2:...")]` pinned on one stayed current on the other.
+B284="tests/regressions/bug284_match_arm_evidence_dropped/repro.con"
+if [ -f "$B284" ]; then
+  sed 's/0 => p + 1,/0 => p * 9,/' "$B284" > "$TMP_DIR/bug284_edited.con"
+  if cmp -s "$B284" "$TMP_DIR/bug284_edited.con"; then
+    no "bug 284: the arm edit did not change the fixture (its arm text moved)"
+  else
+    d284a="$(.lake/build/bin/concrete "$B284" --report subject-facts 2>&1 | grep -A12 '^v1:user:main.pick$' | sed -n 's/^  subject digest: //p' | head -1)" || true
+    d284b="$(.lake/build/bin/concrete "$TMP_DIR/bug284_edited.con" --report subject-facts 2>&1 | grep -A12 '^v1:user:main.pick$' | sed -n 's/^  subject digest: //p' | head -1)" || true
+    if [[ "$d284a" =~ ^[0-9a-f]{32}$ ]] && [[ "$d284b" =~ ^[0-9a-f]{32}$ ]] && [ "$d284a" != "$d284b" ]; then
+      ok "bug 284: an edit inside a literal arm moves the subject digest"
+    else
+      no "bug 284: subject digests '$d284a' and '$d284b' (want two different digests)"
+    fi
+  fi
+else
+  no "bug 284: regression fixture $B284 is missing"
+fi
+# Structurally: a Core arm cannot be accumulated apart from its evidence. The two separate lists
+# are what let three branches push Core alone.
+if grep -q "cArms := cArms ++" Concrete/Elab/Elab.lean; then
+  no "bug 284: Elab accumulates Core match arms apart from their evidence"
+else
+  ok "bug 284: each match arm's Core and evidence are pushed as one entry"
 fi
 
 # CHECK 3, structurally: the local-reference path must not be able to emit nothing.
