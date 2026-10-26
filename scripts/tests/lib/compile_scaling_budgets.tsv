@@ -20,6 +20,7 @@
 # (their native compile at 10^5 takes 30 - 40 s); lets-while at 2000 and 20000, front end only (bug 270).
 # measured: commit 10b81a467a85855d9b60186ac2c98bf7a6219c3b on concrete-ci-2, AMD Ryzen 9 7950X3D 16-Core Processor, 32 threads, 2026-10-26, 3 runs (median), budget = max(4 x median, median + 200ms)
 # measured: commit b5040d5380e18db9cee7b59024dd6c575869f7b9 on concrete-ci-2, AMD Ryzen 9 7950X3D 16-Core Processor, 32 threads, 2026-10-26, 3 runs (median), budget = max(4 x median, median + 200ms) -- shapes: chained-lets, many-locals, lets-if, lets-while, lets-match
+# measured: commit 43a65e3e9c3b814ae4f7476af59052c5c1eda528 on concrete-ci-2, AMD Ryzen 9 7950X3D 16-Core Processor, 32 threads, 2026-10-26, 3 runs (median), budget = max(4 x median, median + 200ms) -- shapes: nested-ifs
 param	exp	1.8
 param	hb_exp	1.2
 param	floor_ms	2
@@ -254,6 +255,22 @@ budget	nested-parens	10000	elaborate	784
 budget	nested-parens	10000	coreCheck	201
 budget	nested-parens	10000	monomorphize	205
 budget	nested-parens	10000	lower	221
+budget	nested-ifs	10000	parse	236
+budget	nested-ifs	10000	resolve-files	200
+budget	nested-ifs	10000	resolve	207
+budget	nested-ifs	10000	check	243
+budget	nested-ifs	10000	elaborate	237
+budget	nested-ifs	10000	coreCheck	204
+budget	nested-ifs	10000	monomorphize	222
+budget	nested-ifs	10000	lower	1224
+budget	nested-ifs	100000	parse	1592
+budget	nested-ifs	100000	resolve-files	200
+budget	nested-ifs	100000	resolve	704
+budget	nested-ifs	100000	check	2124
+budget	nested-ifs	100000	elaborate	2188
+budget	nested-ifs	100000	coreCheck	262
+budget	nested-ifs	100000	monomorphize	1992
+budget	nested-ifs	100000	lower	21452
 budget	functions	1000	parse	205
 budget	functions	1000	resolve-files	200
 budget	functions	1000	resolve	202

@@ -8442,9 +8442,9 @@ else
     FAIL=$((FAIL + 1))
 fi
 # Bug 286: every branch and loop site re-walked its whole region for address-takes, so n nested
-# `if`s took n² to lower (depth 8000: 1275 ms). Binary = --interp = 42 for the cases where a site
-# must still walk; then the `lower` stage of a nest 8000 deep within 400 ms, retried once at 800 ms
-# (118 ms with the fix on the dev host).
+# `if`s took n² to lower (depth 8000: 1275 ms). The binary returns 42 (as `--interp` did when the
+# fixture was written) for the cases where a site must still walk; then the `lower` stage of a nest
+# 8000 deep within 400 ms, retried once at 800 ms (118 ms with the fix on the dev host).
 run_ok "$TESTDIR/regress_286_nested_region_addr_taken.con" 42
 r265_gen() {  # r265_gen SHAPE N: a generated `fn main` of the given shape and size on stdout
     awk -v shape="$1" -v n="$2" 'BEGIN {
