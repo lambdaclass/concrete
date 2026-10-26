@@ -16,7 +16,10 @@
 #   pipeline    check feeds the hook exactly base..head on ci/<name>; ci pushes and records the run
 #   watch       a campaign-only failure is reported as such; a landing failure fetches log tails
 #   land        refused on a head-SHA mismatch, a red landing job, a moved main, a remote named fork;
-#               dry-run pushes nothing; a real land puts both remotes at the train head
+#               dry-run pushes nothing; a real land puts both remotes at the train head and cancels
+#               main's duplicate push run (never the validating run)
+#   dropped     (2026-10-25) a push that fails before the remote moved is retried; one that fails
+#               after it moved is accepted from ls-remote; exhausted retries fail and move nothing
 #   bisect      halving finds a seeded red member
 #   report      the median time to land is computed from the log
 set -uo pipefail
@@ -48,6 +51,7 @@ cat > "$GIT_CONFIG_GLOBAL" <<EOF
 EOF
 mkdir -p "$TMP/nohooks"
 export LAND_NO_NIX=1 LAND_STATE_DIR="$TMP/state" LAND_GH="$TMP/fake-gh" LAND_REPO=test/repo
+export LAND_PUSH_RETRY_SLEEP=0 LAND_DUP_POLL=1 LAND_DUP_POLL_SLEEP=0
 export FAKE_GH_DIR="$TMP/gh"; mkdir -p "$FAKE_GH_DIR"
 
 cat > "$TMP/fake-gh" <<'GH'
@@ -56,7 +60,11 @@ cat > "$TMP/fake-gh" <<'GH'
 echo "$*" >> "$FAKE_GH_DIR/calls.log"
 case "$1 $2" in
   "workflow run") exit 0 ;;
-  "run list") cat "$FAKE_GH_DIR/list.json" ;;
+  "run list") case " $* " in
+                *" --event push "*) cat "$FAKE_GH_DIR/push_list.json" 2>/dev/null || echo '[]' ;;
+                *) cat "$FAKE_GH_DIR/list.json" ;;
+              esac ;;
+  "run cancel") exit 0 ;;
   "run view") cat "$FAKE_GH_DIR/run.json" ;;
   "api "*) echo "fake log tail for $2" ;;
   *) echo "fake gh: unexpected $*" >&2; exit 1 ;;
@@ -163,6 +171,7 @@ branch b16; printf 'BROKEN\tx\n' >> docs/project/candidates.tsv; git add -A; git
 # b8: the seeded red member for bisection (adds a file the "test" forbids).
 branch b8; printf 'bad\n' > BAD; commit_all b8
 branch b9; printf 'nine\n' > nine.txt; commit_all b9
+branch b19; printf 'nineteen\n' > nineteen.txt; commit_all b19
 git checkout -q main
 
 no_op_left(){ for p in MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD rebase-merge rebase-apply; do [ -e "$(git rev-parse --git-path "$p")" ] && return 1; done; return 0; }
@@ -290,6 +299,9 @@ runjson "$(git rev-parse b1)" success success
 out="$(bash "$TRAIN" land t1 2>&1)"; rc=$?
 [ "$rc" != 0 ] && has "$out" "not the train HEAD" && ok "land refuses a run at another SHA" || no "land accepted a head-SHA mismatch (exit $rc)"
 runjson "$HEAD1" success failure
+# main's push run at the landed head (888) is the duplicate; the validating run (4242) is listed too
+# and must never be cancelled.
+printf '[{"databaseId": 888, "headSha": "%s", "status": "in_progress"}, {"databaseId": 4242, "headSha": "%s", "status": "in_progress"}]' "$HEAD1" "$HEAD1" > "$FAKE_GH_DIR/push_list.json"
 out="$(LAND_REMOTE=fork bash "$TRAIN" land t1 2>&1)"; rc=$?
 [ "$rc" != 0 ] && has "$out" "named 'fork'" && ok "land refuses the remote named fork as primary" || no "fork accepted as primary (exit $rc)"
 out="$(LAND_MIRROR=fork bash "$TRAIN" land t1 2>&1)"; rc=$?
@@ -313,6 +325,56 @@ out="$(bash "$TRAIN" land t1 2>&1)"; rc=$?
   && ok "land puts origin/main and lambdaclass/main at the train head" || { no "land: exit $rc"; echo "$out" | sed 's/^/      /'; }
 [ "$(git ls-remote fork refs/heads/main | cut -f1)" = "$BASE" ] && ok "fork still untouched after landing" || no "fork was pushed"
 [ ! -d "$(git rev-parse --git-common-dir)/concrete-push-both.lock" ] && ok "publish lock released" || no "publish lock left behind"
+calls="$(cat "$FAKE_GH_DIR/calls.log")"
+has "$calls" "run cancel 888 -R test/repo" && ! has "$calls" "run cancel 4242" && has "$out" "run 4242 validated that SHA" \
+  && ok "land cancels main's duplicate push run and never the validating run" || { no "duplicate-run cancel"; echo "$out" | sed 's/^/      /'; }
+
+echo "=== dropped: a push's result is read from the remote, and a failed push is retried ==="
+# The pre-push hook stands in for GitHub dropping the connection: drop.always fails every push
+# before the remote moves; drop.before fails one push before it moves; drop.after updates the
+# remote itself and then fails, as a push does whose connection drops after the update.
+cat > "$TMP/nohooks/pre-push" <<'EOF'
+#!/usr/bin/env bash
+# Like the real hook, a push that skips the gates (the ci base reset, the mirror) runs nothing.
+[ "${CONCRETE_SKIP_GATES:-0}" = 1 ] && exit 0
+[ -f "$FAKE_GH_DIR/drop.always" ] && exit 1
+if [ -f "$FAKE_GH_DIR/drop.before" ]; then rm -f "$FAKE_GH_DIR/drop.before"; exit 1; fi
+if [ -f "$FAKE_GH_DIR/drop.after" ]; then
+  rm -f "$FAKE_GH_DIR/drop.after"
+  read -r _lref lsha rref _rsha
+  git -c core.hooksPath=/dev/null push -q "$1" "$lsha:$rref" || exit 3
+  exit 1
+fi
+exit 0
+EOF
+chmod +x "$TMP/nohooks/pre-push"
+git fetch -q origin
+git checkout -q main
+bash "$TRAIN" build t8 --no-fetch b19 >/dev/null 2>&1 || no "build t8"
+git checkout -q train/t8
+HEAD8="$(git rev-parse HEAD)"; MAIN8="$(git ls-remote origin refs/heads/main | cut -f1)"
+bash "$TRAIN" check t8 --no-remote >/dev/null 2>&1 || no "check t8"
+printf '[{"databaseId": 4343, "headSha": "%s", "createdAt": "9999-01-01T00:00:00Z"}]' "$HEAD8" > "$FAKE_GH_DIR/list.json"
+touch "$FAKE_GH_DIR/drop.before"
+out="$(bash "$TRAIN" ci t8 2>&1)"; rc=$?
+[ "$rc" = 0 ] && has "$out" "retrying (1 of 3)" && [ "$(git ls-remote origin refs/heads/ci/t8 | cut -f1)" = "$HEAD8" ] \
+  && ok "ci retries a push dropped before the remote moved" || { no "ci dropped push: exit $rc"; echo "$out" | sed 's/^/      /'; }
+runjson "$HEAD8" success success
+printf '[{"databaseId": 999, "headSha": "%s", "status": "queued"}]' "$HEAD8" > "$FAKE_GH_DIR/push_list.json"
+touch "$FAKE_GH_DIR/drop.always"
+out="$(bash "$TRAIN" land t8 --keep-main-ci 2>&1)"; rc=$?
+rm -f "$FAKE_GH_DIR/drop.always"
+[ "$rc" != 0 ] && has "$out" "failed 3 time(s)" && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$MAIN8" ] \
+  && [ ! -d "$(git rev-parse --git-common-dir)/concrete-push-both.lock" ] \
+  && ok "exhausted retries fail the landing, move nothing and release the lock" || { no "exhausted retries: exit $rc"; echo "$out" | sed 's/^/      /'; }
+touch "$FAKE_GH_DIR/drop.before" "$FAKE_GH_DIR/drop.after"
+out="$(bash "$TRAIN" land t8 --keep-main-ci 2>&1)"; rc=$?
+[ "$rc" = 0 ] && has "$out" "retrying (1 of 3)" && has "$out" "the connection dropped after the update" \
+  && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$HEAD8" ] && [ "$(git ls-remote lambdaclass refs/heads/main | cut -f1)" = "$HEAD8" ] \
+  && ok "land retries a push dropped before the update, accepts one dropped after it, and both remotes reach the head" || { no "dropped land: exit $rc"; echo "$out" | sed 's/^/      /'; }
+! has "$(cat "$FAKE_GH_DIR/calls.log")" "run cancel 999" && ok "--keep-main-ci leaves main's run alone" || no "--keep-main-ci cancelled a run"
+[ ! -f "$FAKE_GH_DIR/drop.before" ] && [ ! -f "$FAKE_GH_DIR/drop.after" ] && ok "both dropped-connection seams fired" || no "a dropped-connection seam never fired (vacuous leg)"
+rm -f "$TMP/nohooks/pre-push"
 
 echo "=== bisect: halving finds the seeded red member ==="
 git checkout -q main
@@ -336,7 +398,7 @@ rm -f scripts/push-both.sh
 
 echo "=== report ==="
 out="$(bash "$REPORT" 2>&1)"; rc=$?
-[ "$rc" = 0 ] && has "$out" "median time to land" && has "$out" "landed: 1" && ok "report prints the median time to land" || { no "report: exit $rc"; echo "$out" | sed 's/^/      /'; }
+[ "$rc" = 0 ] && has "$out" "median time to land" && has "$out" "landed: 2" && ok "report prints the median time to land" || { no "report: exit $rc"; echo "$out" | sed 's/^/      /'; }
 
 echo
 echo "check_landing_script: PASS=$PASS FAIL=$FAIL"
