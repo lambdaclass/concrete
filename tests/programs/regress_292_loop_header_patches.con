@@ -27,22 +27,28 @@ fn nest(n: i64) -> i64 {
     return s;
 }
 
+// An aggregate-valued `match` inside a loop merges its arms through a result slot with one store
+// per arm (`insertStoresBeforeTerm`), patched into the arms' finished blocks.
 fn merged(n: i64) -> i64 {
-    let mut p: P = P { a: 0, b: 0 };
+    let mut acc: i64 = 0;
     let mut i: i64 = 0;
     while i < n {
-        if i % 2 == 0 {
-            p = P { a: p.a + 1, b: p.b };
-        } else {
-            p = P { a: p.a, b: p.b + 2 };
-        }
+        let p: P = match i % 2 {
+            0 => {
+                P { a: i + 1, b: 0 }
+            },
+            _ => {
+                P { a: i, b: 2 }
+            },
+        };
+        acc = acc + p.a + p.b;
         i = i + 1;
     }
-    return p.a + p.b;
+    return acc;
 }
 
 fn main() -> Int {
     // nest(3): each inner loop adds 1 + 3 + 4 (2 is skipped, 5 breaks), three times = 24
-    // merged(6): a = 3, b = 6, so 9; 24 + 9 + 9 = 42
-    return (nest(3) + merged(6) + 9) as Int;
+    // merged(6): 1 + 3 + 3 + 5 + 5 + 7 = 24; 24 + 24 - 6 = 42
+    return (nest(3) + merged(6) - 6) as Int;
 }

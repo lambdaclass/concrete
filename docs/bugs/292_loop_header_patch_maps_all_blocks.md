@@ -66,7 +66,8 @@ Callgrind with the fix, depth 2000 to 4000: `lowerModule` 103 M to 216 M instruc
 ## Regression gate and leg
 
 `run_tests.sh`: `regress_292_loop_header_patches.con` (nested loops with `continue` and `break`
-edges and an aggregate merged inside a loop) returns 42, and the `lower` stage of 8000 nested
+edges, whose header phis are patched in, and an aggregate-valued `match` inside a loop, whose result
+slot gets one store patched into each arm) returns 42, and the `lower` stage of 8000 nested
 `while`s must take at most 500 ms, retried once at 900 ms (main's compiler: 3011 ms; bug 286's:
 1084 ms).
 
