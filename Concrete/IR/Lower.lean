@@ -243,6 +243,16 @@ structure LowerState where
       module by `lowerModule`; every lookup of a declaration by name asks it through
       `getLayoutCtx` (`none`: the lists are searched). -/
   layoutIndex : Option Layout.Index := none
+  /-- Bug 292: instructions to add to finished blocks, by label: `(prefix chunks, suffix chunks)`,
+      each newest first. A loop header's phis (`prependInstsToBlock`) and an aggregate merge's
+      stores (`insertStoresBeforeTerm`) are recorded here and applied once when `lowerFn` assembles
+      the blocks; mapping the whole finished-block list per patch made n nested loops take n². Both
+      tables are persistent trees: a hash table here was copied whole on each insert whenever an
+      outer frame still held the state (as the lowering of an enclosing loop does). -/
+  blockPatches : Std.TreeMap String (List (List SInst) × List (List SInst)) compare := {}
+  /-- Bug 292: the labels of the finished blocks; a patch names only one of them, as the map over
+      the finished blocks it replaces touched only those. -/
+  finishedLabels : Std.TreeSet String compare := {}
 
 abbrev LowerM := ExceptT Diagnostics (StateM LowerState)
 
@@ -354,17 +364,22 @@ private def insertStoresBeforeTerm (stores : List (String × SVal)) (dst : SVal)
   let byLabel : Std.HashMap String (List SInst) := stores.foldr (fun (l, v) m =>
     m.insert l (SInst.store v dst :: m.getD l [])) ∅
   if byLabel.isEmpty then return
-  let blocks := s.blocksRev.map fun b =>
-    match byLabel.get? b.label with
-    | some ins => { b with insts := b.insts ++ ins }
-    | none => b
-  setState { s with blocksRev := blocks }
+  -- Bug 292: recorded, applied by `lowerFn` (`applyBlockPatches`), not a map over every block.
+  let finished := s.finishedLabels
+  let add (m : Std.TreeMap String (List (List SInst) × List (List SInst)) compare) (l : String)
+      (ins : List SInst) :=
+    if finished.contains l then
+      let (pre, suf) := m.getD l ([], [])
+      m.insert l (pre, ins :: suf)
+    else m
+  modify fun s => { s with blockPatches := byLabel.fold add s.blockPatches }
 
-private def terminateBlock (term : STerm) : LowerM Unit := do
-  let s ← getState
+private def terminateBlock (term : STerm) : LowerM Unit :=
   -- `currentInsts` is accumulated reversed by `emit`; restore program order here.
-  let block : SBlock := { label := s.currentLabel, insts := s.currentInsts.reverse, term := term }
-  setState { s with blocksRev := block :: s.blocksRev, currentInsts := [], blockTerminated := true }
+  modify fun s =>
+    let block : SBlock := { label := s.currentLabel, insts := s.currentInsts.reverse, term := term }
+    { s with blocksRev := block :: s.blocksRev, currentInsts := [], blockTerminated := true,
+             finishedLabels := s.finishedLabels.insert s.currentLabel }
 
 private def startBlock (label : String) : LowerM Unit := do
   let s ← getState
@@ -657,13 +672,24 @@ private def peekContinueEdges : LowerM (List (VarMap × String)) := do
   | info :: _ => return info.continueEdges
   | [] => return []
 
-/-- Prepend instructions to an already-finalized block. -/
+/-- Prepend instructions to an already-finalized block. Bug 292: recorded and applied by `lowerFn`
+    (`applyBlockPatches`); mapping the whole finished-block list per loop header was quadratic in
+    the loops of a function. -/
 private def prependInstsToBlock (label : String) (newInsts : List SInst) : LowerM Unit := do
-  let s ← getState
-  let blocks' := s.blocksRev.map fun b =>
-    if b.label == label then { b with insts := newInsts ++ b.insts }
-    else b
-  setState { s with blocksRev := blocks' }
+  if !(← getState).finishedLabels.contains label then return
+  modify fun s =>
+    let (pre, suf) := s.blockPatches.getD label ([], [])
+    { s with blockPatches := s.blockPatches.insert label (newInsts :: pre, suf) }
+
+/-- Bug 292: the finished blocks with their recorded patches applied: the prefixes newest first
+    (each later prepend went in front), the suffixes oldest first (each later append went after). -/
+def applyBlockPatches (patches : Std.TreeMap String (List (List SInst) × List (List SInst)) compare)
+    (blocks : List SBlock) : List SBlock :=
+  if patches.isEmpty then blocks else
+  blocks.map fun b =>
+    match patches.get? b.label with
+    | some (pre, suf) => { b with insts := pre.flatten ++ b.insts ++ suf.reverse.flatten }
+    | none => b
 
 /-- Get current var map snapshot. -/
 private def snapshotVars : LowerM VarMap := do
@@ -2801,7 +2827,7 @@ def lowerFn (f : CFnDef) (structDefs : List CStructDef) (enumDefs : List CEnumDe
   match result with
   | ((.ok ()), finalState) =>
     -- Hoist entry allocas: prepend them to the first (entry) block
-    let blocks' := match finalState.blocksRev.reverse with
+    let blocks' := match applyBlockPatches finalState.blockPatches finalState.blocksRev.reverse with
       | [] => []
       | entry :: rest =>
         { entry with insts := finalState.entryAllocasRev.reverse ++ entry.insts } :: rest

@@ -106,3 +106,4 @@ date	kind	probe	effort	bugs	silent
 2026-10-26	development	scaling probes of Check (task 3 of the R-0550 follow-up): nested if/else, match and let-block nests at 2000 and 8000, per-stage trace and callgrind	3 programs	289	-
 2026-10-26	development	scaling probes of Check and Lower over matched enums (task 3 of the R-0550 follow-up): n enum types, each built and matched once in main, at 2000 and 8000, per-stage trace and callgrind	1 program	290	-
 2026-10-26	development	many struct types each constructed and read once, beyond the R-0550 declaration shapes, timed per stage at 2000 and 8000 and profiled with callgrind	1 shape	291	-
+2026-10-26	development	nested while loops beyond the R-0550 shapes, timed per stage at 2000 and 8000 levels and profiled with callgrind after the bug 286 fix	1 shape	292	-

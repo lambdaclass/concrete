@@ -1,0 +1,48 @@
+// Bug 292: a loop header's phis and an aggregate merge's stores are added to finished blocks when
+// the function's blocks are assembled, not by a map over every finished block per loop. Nested
+// loops with continue and break edges, an aggregate merged inside a loop, and a header patched
+// after an inner loop's.
+struct Copy P {
+    a: i64,
+    b: i64,
+}
+
+fn nest(n: i64) -> i64 {
+    let mut s: i64 = 0;
+    let mut i: i64 = 0;
+    while i < n {
+        let mut j: i64 = 0;
+        while j < 10 {
+            j = j + 1;
+            if j == 2 {
+                continue;
+            }
+            if j > 4 {
+                break;
+            }
+            s = s + j;
+        }
+        i = i + 1;
+    }
+    return s;
+}
+
+fn merged(n: i64) -> i64 {
+    let mut p: P = P { a: 0, b: 0 };
+    let mut i: i64 = 0;
+    while i < n {
+        if i % 2 == 0 {
+            p = P { a: p.a + 1, b: p.b };
+        } else {
+            p = P { a: p.a, b: p.b + 2 };
+        }
+        i = i + 1;
+    }
+    return p.a + p.b;
+}
+
+fn main() -> Int {
+    // nest(3): each inner loop adds 1 + 3 + 4 (2 is skipped, 5 breaks), three times = 24
+    // merged(6): a = 3, b = 6, so 9; 24 + 9 + 9 = 42
+    return (nest(3) + merged(6) + 9) as Int;
+}
