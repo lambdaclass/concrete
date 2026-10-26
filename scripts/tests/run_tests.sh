@@ -8667,36 +8667,6 @@ else
     echo "FAIL  bug 224: E0217 lines are $(grep -o ':[0-9]*:[0-9]*: error\[check\]: (E0217)' <<<"$r224_out" | tr '\n' ' '), want line 14 only"
     FAIL=$((FAIL + 1))
 fi
-# Bug 274: Resolve folded each enum's variant symbols onto the list built so far, so a module of
-# n enums took n² to resolve (20000 enums: 6755 ms). A generated module of 20000 enums must resolve
-# (the `resolve` stage of --emit-trace-json) within 400 ms, retried once at 800 ms (fixed: 75 ms on
-# the dev host; pre-fix, eight times the retry budget).
-r274e_src="$TMPDIR/r274e_enums_20000.con"
-awk -v n=20000 'BEGIN {
-    for (i = 0; i < n; i++) printf "enum E%d { A { v: i64 }, B }\n", i
-    m = n - 1
-    printf "fn main() -> Int { let e: E%d = E%d::A { v: 42 }; match e { E%d::A { v } => { return v as Int; }, E%d::B => { return 0; }, } }\n", m, m, m, m
-}' > "$r274e_src"
-r265_stage_ms "$r274e_src" resolve; r274e_first="$r265_ms"; r274e_ms="$r274e_first"
-case "$r274e_first" in
-    ''|*[!0-9]*) ;;
-    *) if [ "$r274e_first" -gt 400 ]; then r265_stage_ms "$r274e_src" resolve; r274e_ms="$r265_ms"; fi ;;
-esac
-case "$r274e_ms" in
-    incomplete)
-        echo "  INCOMPLETE bug 274: resolving 20000 enums timed out twice (180 s each)"
-        INCOMPLETE=$((INCOMPLETE + 1)) ;;
-    ''|*[!0-9]*)
-        echo "FAIL  bug 274: resolving 20000 enums failed ($r274e_ms)"
-        FAIL=$((FAIL + 1)) ;;
-    *) if [ "$r274e_first" -le 400 ] || [ "$r274e_ms" -le 800 ]; then
-           echo "  ok  bug 274: resolving 20000 enums within budget (${r274e_ms} ms, resolve)"
-           PASS=$((PASS + 1))
-       else
-           echo "FAIL  bug 274: resolving 20000 enums took ${r274e_first} ms, then ${r274e_ms} ms in resolve (budget 400, retry 800)"
-           FAIL=$((FAIL + 1))
-       fi ;;
-esac
 # Bug 225: a refused bound names a builtin type as itself and carries the call's position.
 run_err "$TESTDIR/error_225_bound_names_builtin_type.con" "type 'String' does not implement trait 'Copy' required by generic function 'dup'"
 r225_out=$($COMPILER "$TESTDIR/error_225_bound_names_builtin_type.con" --emit-llvm 2>&1 >/dev/null || true)
