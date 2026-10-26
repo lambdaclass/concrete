@@ -60,6 +60,26 @@ rule changes in one place.
 - Read the obligation, not the prose: a header says what was true when it was written. Make gates
   assert properties, not counts, so an improvement does not read as a regression.
 
+**Before asking for review.** Each of these caused an integration failure in the week to
+2026-10-25; run them on the slice, in `nix develop`, before `/creview`:
+- `scripts/tests/test_golden.sh` after any change to compiler output or a report.
+- `scripts/tests/test_mutation.sh --check-patterns` after editing any file a mutation targets: a
+  mutation anchor that no longer matches makes its mutation inert without failing anything.
+- `scripts/tests/check_type_identity.sh` and the other gates that elaborate Lean probes against the
+  compiler (`grep -l 'lake env lean' scripts/tests/check_*.sh`) after changing a signature or a
+  structure they construct.
+- `run_ok` / `run_err` legs in `run_tests.sh` name the fixture's literal path, so the bug-corpus
+  audit can find them; never build the path in a loop variable alone.
+- Bound a command with `bounded_run` (`scripts/tests/lib/bounded.sh`), never GNU `timeout`: the
+  macOS job has no `timeout`, and `bounded_run` reports a second timeout as INCOMPLETE, not a pass.
+- Keep gate script names out of a bug record's ledger text: the audit reads a `.sh` name there
+  as the bug's coverage.
+- File in the migrated ledger format (`scripts/gen/new_bug.sh`: the `bug-ledger` block, a
+  `changelog.d/` fragment, a `discovery.tsv` row), then regenerate with
+  `scripts/gen/bug_ledger.py --write` and `scripts/gen/bug_dashboard.py --write`.
+- Have Codex confirm each bug is real (a reproducer and a verdict line in the record) before
+  filing it.
+
 **Review.** Every slice gets a Codex review before it lands, through `scripts/review/review.sh`:
 at most 5 rounds, the first over the whole diff and each later round over the delta since the
 previous one. Answer each finding with a fix or a stated reason. Run Codex by hand only with
