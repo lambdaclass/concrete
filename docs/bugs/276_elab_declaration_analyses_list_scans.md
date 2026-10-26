@@ -2,12 +2,12 @@
 
 <!-- bug-ledger
 summary: Elab's program-level declaration analyses (top-level function collisions, ambiguous type names, import spellings) scanned or deduplicated lists per declaration, its per-function results were appended to the list built so far, and a call looked its callee up in a list, so a program of n declarations took time n² to elaborate (10000 functions: 3689 ms). Found by the R-0550 scaling gate. Class 17.
-coverage: `run_tests.sh` times the `elaborate` stage of generated modules of 20000 functions and 20000 structs against a budget (the pre-fix compiler fails both); `check_compile_scaling.sh` (R-0550, on wip/r0550-scaling-gate-v2, not yet landed) judges all four declaration shapes once this bug's exclusions are removed
+coverage: `check_compile_scaling.sh` judges the `functions`, `call-chain`, `structs` and `enums` shapes' `elaborate` stage against its budget and near-linear growth: this fix removes the stage's exclusions under this bug, and the gate fails the pre-fix compiler on all four
 class: 17 — Elab's program-level declaration analyses scan lists per declaration
 silent: no
 -->
 
-**Status:** FIXED (branch `wip/perf-276`)
+**Status:** FIXED (branch `wip/perf-276-v2`)
 **Found:** 2026-10-26, building the compile-time scaling gate (R-0550, exit 2o): the gate's generated shapes, timed per stage with `--emit-trace-json` at 10b81a46.
 **Severity:** loud (performance). Compile time only: never wrong code, a refusal or a crash; a program of this shape compiles, slowly.
 
@@ -83,13 +83,9 @@ at size 60, and `--report caps|proof-status|fingerprints|obligations|traceabilit
 every `.con` under `examples`, are byte-identical between the compiler built at 91ce358b and this
 fix (d7e102d1).
 
-## Regression leg
+## Regression gate
 
-`run_tests.sh` times the `elaborate` stage of a generated module of 20000 functions against
-600 ms and of 20000 structs against 300 ms (each retried once at twice its budget): 123 ms and
-30 ms after the fix; on the build just before it (bug 275's fix on main) both FAIL (14424 ms, then
-14575 ms; 8531 ms, then 8637 ms). The R-0550 gate covers all four declaration shapes when it lands
-with this bug's exclusions removed.
+The R-0550 gate (`check_compile_scaling.sh`, on main since 9d8182ea) held the four shapes' `elaborate` stage as exclusions under this bug; the fix removes them from `compile_scaling_budgets.tsv`. With them removed (and bug 275's, below this fix) the gate passes all four on this fix (x13.0, x12.8, x5.0, x5.5 from 1000 to 10000) and fails all four on main's compiler (x159.5, x160.8, x144.9, x171.1 in time; the first two also in allocations). The bounded `run_tests.sh` leg this branch carried while the gate was unlanded is dropped as duplicate coverage.
 
 ## Containment while open
 

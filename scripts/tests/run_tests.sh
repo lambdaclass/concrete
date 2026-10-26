@@ -8777,64 +8777,6 @@ for r217 in regress_217_nested_submodule_scope regress_217_sibling_type_preceden
         FAIL=$((FAIL + 1))
     fi
 done
-# Bug 276: Elab's program-level declaration analyses (colliding top-level functions, ambiguous
-# type names, import spellings, the first binding of each type spelling) deduplicated or scanned
-# lists per declaration, its per-function results were appended one at a time, and a call found its
-# callee by list searches, so n declarations took n² to elaborate (20000 functions: 14080 ms; 20000
-# structs: 8215 ms). Generated modules of 20000 functions and of 20000 structs must elaborate (the
-# `elaborate` stage of --emit-trace-json) within 600 ms and 300 ms, retried once at twice that
-# (fixed: 122 ms and 29 ms on the dev host; pre-fix, over ten times the retry budget).
-r276f_src="$TMPDIR/r276f_functions_20000.con"
-awk -v n=20000 'BEGIN {
-    for (i = 0; i < n; i++) printf "fn f%d(x: i64) -> i64 { return x + %d; }\n", i, i % 3
-    printf "fn main() -> Int { return (f0(40) + f%d(2) - %d) as Int; }\n", n - 1, (n - 1) % 3
-}' > "$r276f_src"
-r265_stage_ms "$r276f_src" elaborate; r276f_first="$r265_ms"; r276f_ms="$r276f_first"
-case "$r276f_first" in
-    ''|*[!0-9]*) ;;
-    *) if [ "$r276f_first" -gt 600 ]; then r265_stage_ms "$r276f_src" elaborate; r276f_ms="$r265_ms"; fi ;;
-esac
-case "$r276f_ms" in
-    incomplete)
-        echo "  INCOMPLETE bug 276: elaborating 20000 functions timed out twice (180 s each)"
-        INCOMPLETE=$((INCOMPLETE + 1)) ;;
-    ''|*[!0-9]*)
-        echo "FAIL  bug 276: elaborating 20000 functions failed ($r276f_ms)"
-        FAIL=$((FAIL + 1)) ;;
-    *) if [ "$r276f_first" -le 600 ] || [ "$r276f_ms" -le 1200 ]; then
-           echo "  ok  bug 276: elaborating 20000 functions within budget (${r276f_ms} ms, elaborate)"
-           PASS=$((PASS + 1))
-       else
-           echo "FAIL  bug 276: elaborating 20000 functions took ${r276f_first} ms, then ${r276f_ms} ms in elaborate (budget 600, retry 1200)"
-           FAIL=$((FAIL + 1))
-       fi ;;
-esac
-r276s_src="$TMPDIR/r276s_structs_20000.con"
-awk -v n=20000 'BEGIN {
-    for (i = 0; i < n; i++) printf "struct S%d { a: i64, b: i64 }\n", i
-    m = n - 1
-    printf "fn main() -> Int { let s: S%d = S%d { a: 40, b: 2 }; let S%d { a, b } = s; return (a + b) as Int; }\n", m, m, m
-}' > "$r276s_src"
-r265_stage_ms "$r276s_src" elaborate; r276s_first="$r265_ms"; r276s_ms="$r276s_first"
-case "$r276s_first" in
-    ''|*[!0-9]*) ;;
-    *) if [ "$r276s_first" -gt 300 ]; then r265_stage_ms "$r276s_src" elaborate; r276s_ms="$r265_ms"; fi ;;
-esac
-case "$r276s_ms" in
-    incomplete)
-        echo "  INCOMPLETE bug 276: elaborating 20000 structs timed out twice (180 s each)"
-        INCOMPLETE=$((INCOMPLETE + 1)) ;;
-    ''|*[!0-9]*)
-        echo "FAIL  bug 276: elaborating 20000 structs failed ($r276s_ms)"
-        FAIL=$((FAIL + 1)) ;;
-    *) if [ "$r276s_first" -le 300 ] || [ "$r276s_ms" -le 600 ]; then
-           echo "  ok  bug 276: elaborating 20000 structs within budget (${r276s_ms} ms, elaborate)"
-           PASS=$((PASS + 1))
-       else
-           echo "FAIL  bug 276: elaborating 20000 structs took ${r276s_first} ms, then ${r276s_ms} ms in elaborate (budget 300, retry 600)"
-           FAIL=$((FAIL + 1))
-       fi ;;
-esac
 # Bug 229: Resolve's module scope refused what Check admits: a function hid a same-named enum
 # (E0104), a user `enum Option` hid the builtin (E0113), a child's newtype was unknown (E0108);
 # each fixture has the top-level and the nested shape.
