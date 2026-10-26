@@ -79,7 +79,11 @@ and passed while every real filing failed.
   exactly one files it (Codex review).
 - `check_new_bug.sh` copies `bug_dashboard.py`, so leg 3 runs the whole filing through the
   dashboard, and leg 6 covers the attribution, the refusals before any reservation, the rollback
-  and the `--number` rerun. The pre-push hook selects `check_new_bug.sh` when `bug_dashboard.py`
+  and the `--number` rerun. The automatic filing paths print commands that pass as printed: the
+  fuzz farm's `promote` names the finding's own generator, seed and compiler as a `fuzz` batch, and
+  CI triage names the run and gate as a `ci` batch; leg 6 runs both (the farm's from its golden).
+  The work-queue dispatcher files nothing itself: its fuzz tasks go through `promote`, and agents
+  file through `/file-bug`. The pre-push hook selects `check_new_bug.sh` when `bug_dashboard.py`
   changes.
 
 ## Structural cause
