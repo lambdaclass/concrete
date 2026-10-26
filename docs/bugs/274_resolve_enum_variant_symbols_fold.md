@@ -2,12 +2,12 @@
 
 <!-- bug-ledger
 summary: Resolve built a module's global scope by folding each enum's variant symbols onto the list built so far (`acc ++ e.variants.map ...`), once per scope build, so a module of n enums took time n² to resolve (10000 enums: 1222 ms). Found by the R-0550 scaling gate. Class 17.
-coverage: `check_compile_scaling.sh` measures the `enums` shape's `resolve` stage and reports it EXCLUDED under this bug on every run; the fix removes the exclusion, and the gate then holds the stage to its budget and to near-linear growth
+coverage: `check_compile_scaling.sh` judges the `enums` shape's `resolve` stage against its budget and near-linear growth: this fix removes the stage's exclusion under this bug, and the gate fails the pre-fix compiler
 class: 17 — Resolve folds every enum's variant symbols onto the list built so far
 silent: no
 -->
 
-**Status:** OPEN
+**Status:** FIXED (branch `wip/perf-274-v3`)
 **Found:** 2026-10-26, building the compile-time scaling gate (R-0550, exit 2o): the gate's generated shapes, timed per stage with `--emit-trace-json` at 10b81a46.
 **Severity:** loud (performance). Compile time only: never wrong code, a refusal or a crash; a program of this shape compiles, slowly.
 
@@ -27,9 +27,50 @@ A linear stage doubles with the size; these grow about fourfold or more per doub
 
 Build the variant symbols with one `flatMap` (or an `Array`), and build each module's scope once.
 
+## Fix
+
+`buildGlobalScopeFromSummary` builds the enum variant symbols with one `flatMap`, and its two
+per-submodule folds (`acc ++ ...` per submodule, the same shape over submodules) likewise; every
+list keeps its order, so the scope is the same value. `resolveShallow` builds each module's
+declaration scope once and reads it for both the combined scope and the module's own scope
+(`moduleScopes`), where it was built twice. `moduleTypeEnvironment` builds a different scope (the
+module without its children) and is unchanged.
+
+## Measurements
+
+`resolve` stage in ms (`--emit-trace-json`, fastest of 3 runs), dev host (fede-256gb), `enums`
+shape, before (the compiler built at b5040d53) and after (built from the tree of addaa003, whose
+compiler sources are this fix; the build had no other modification):
+
+| n | before | after |
+|---|---|---|
+| 2500 | 68 | 6 |
+| 5000 | 280 | 12 |
+| 10000 | 1147 | 29 |
+| 20000 | 6755 | 75 |
+
+The allocation count (`alloc_heartbeats`) of the stage is linear in n (295220, 590220, 1180220
+at 5000, 10000, 20000: 59n + 220); the remaining excess of time over linear at 20000 and above is
+the hash maps' memory traffic (gdb samples: `Scope.ofSymbols` inserts). The `functions` shape is
+unchanged (10000: 13 ms before, 12 after). The R-0550 gate (`compile_scaling.py` and its budgets at
+fe9ce031, origin/wip/r0550-scaling-gate-v2), run on the same two builds with this bug's
+exclusion removed, passes `enums/resolve` (1000: 2 ms, 10000: 27 ms, x13.5) and fails it on the pre-fix compiler
+(x119.6 against a bound of x63.1).
+
+`--emit-core`, `--emit-ssa` and `--emit-llvm` (stdout, stderr and exit status) of every `.con`
+under `tests/programs` and `examples` (the b5040d53 corpus) and of twelve generated scaling shapes
+at size 60 are byte-identical between the same two builds.
+After the rebase onto main (91ce358b, train 34) the comparison was run again, over
+91ce358b's corpus, between the compiler built at 91ce358b and the one built at b5cb1b3a (this
+fix on that base): byte-identical.
+
+## Regression gate
+
+The R-0550 gate (`check_compile_scaling.sh`, on main since 9d8182ea) held this stage as an exclusion under this bug; the fix removes it from `compile_scaling_budgets.tsv`. With it removed the gate passes `enums/resolve` (1000: 2 ms, 10000: 26 ms, x13.0) on this fix and fails it on main's compiler (x113.9 against x63.1).
+
 ## Containment while open
 
-Loud only. The scaling gate names the stage as an exclusion under this bug, so its gap is printed on every run rather than silent; the gate's other stages of the shape stay judged. A user splits such a module or nest.
+Loud only. The scaling gate named the stage as an exclusion under this bug, so its gap was printed on every run rather than silent.
 
 ## Structural cause
 
