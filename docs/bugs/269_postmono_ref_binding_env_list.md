@@ -13,6 +13,7 @@ silent: no
 **Severity:** loud (performance). Every non-generic function is verified after monomorphization; each
 assignment searched a list of every binding declared before it, so a function of n bindings and m
 assignments cost n·m.
+Confirmed real by Codex review, 2026-10-25: `refBindStmt` prepends every binding and runs `env.lookup` per assignment, O(n·m) and quadratic for assignments to an increasingly distant binding.
 
 ## Reproducer
 

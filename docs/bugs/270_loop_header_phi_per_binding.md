@@ -13,6 +13,7 @@ bugs 265-267 were fixed.
 **Severity:** loud (performance). A function of n bindings with n loops emits n² header phis; the
 raw SSA, its verification and the cleanup are quadratic in the function's length (and memory
 grows the same way).
+Confirmed real by Codex review, 2026-10-25: although valid SSA construction, a header phi for every non-promoted binding without checking whether the loop changes it creates quadratically many avoidable phis that cleanup cannot make cheap after the fact.
 
 ## Reproducer
 

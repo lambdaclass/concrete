@@ -827,10 +827,19 @@ private def stripStalePhiEntries (blocks : List SBlock) : List SBlock :=
     value not known, an instruction of any other kind proves nothing, and a block with no edge that
     can be taken is skipped. So every branch it rewrites is one the sequence would rewrite in a later
     run, and the sequence, which still runs after it to the same fixpoint, reaches the same result
-    in a few runs. Functions with a repeated block label are left alone. -/
+    in a few runs. Functions with a repeated block label, or with an unsigned division, are left
+    alone (see below). -/
 private def resolveConstantBranches (blocks : List SBlock) : List SBlock :=
   let labelCount : Std.HashSet String := blocks.foldl (fun s b => s.insert b.label) ∅
-  if labelCount.size != blocks.length then blocks
+  -- The sequence is not confluent in one respect (Codex review): `foldConstants` rewrites an
+  -- unsigned division by a power of two into a shift when it meets one whose dividend is not yet
+  -- constant, and no run folds a shift, so settling a branch earlier can let the division fold
+  -- where the sequence would have shifted. A function with an unsigned division is left to the
+  -- sequence alone, so its output cannot change.
+  let unsignedDiv := blocks.any fun b => b.insts.any fun i => match i with
+    | .binOp _ .div _ _ ty => isUnsignedTy ty
+    | _ => false
+  if labelCount.size != blocks.length || unsignedDiv then blocks
   else
     -- label → the labels of the blocks whose terminators target it
     let preds : Std.HashMap String (List String) := blocks.foldl (fun m b =>

@@ -14,6 +14,7 @@ shape (bug 259): the faithful mutation survived.
 than when its first binder arrives) would shift the relative frame of every reference inside a
 match arm that binds nothing, moving proof subject digests for a semantically irrelevant edit, and
 no gate would fail.
+Confirmed real by Codex review, 2026-10-25: CHECK 1 never exercises `openScope`, the structural leg only searches for `pendingFrame`, and the old mutation pushed a frame per binder rather than making scope entry eager.
 
 ## Reproducer
 

@@ -13,6 +13,7 @@ silent: no
 **Severity:** loud (performance). A function with a chain of n branches whose conditions become
 constant one after another (each reading the phi the previous branch merged) took n runs of the
 whole cleanup sequence over the whole function: time quadratic in its size, on top of bug 266.
+Confirmed real by Codex review, 2026-10-25: `cleanupBlocks` removes unreachable arms only after its second trivial-phi pass, so dependent merge phis and conditions need successive whole-function iterations, quadratic cleanup work.
 
 ## Reproducer
 
@@ -38,9 +39,10 @@ entries of untaken edges are gone; a branch whose condition it proves constant b
 never concludes more than the sequence eventually does (an edge from a block not yet visited, a
 loop back edge, counts as taken with an unknown value; other instructions prove nothing; a block
 with no takable edge is skipped), so each rewrite is one the sequence makes in a later run, and the
-sequence, still run to its fixpoint, reaches the same result in a few runs. The pass rewrites
+sequence, still run to its fixpoint, reaches the same result in a few runs. The sequence is not confluent in one respect (Codex review): `foldConstants` turns an unsigned division by a power of two whose dividend is not yet constant into a shift, which no run folds, so settling a branch earlier could let such a division fold instead; a function with an unsigned division is left to the sequence alone. The pass rewrites
 branches in 85 of the 1934 corpus programs and in 2123 of 3000 generated fuzz programs;
-`--emit-ssa` and `--emit-llvm` are byte-identical before and after on all of them.
+`--emit-ssa` and `--emit-llvm` are byte-identical before and after on all of them and on a second
+set of 3000 deeper fuzz programs.
 
 ## Structural cause
 

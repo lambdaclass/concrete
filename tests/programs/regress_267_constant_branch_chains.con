@@ -4,8 +4,10 @@
 // now settles the chain in one walk, proving no more than the sequence eventually does. This
 // fixture pins what the folding must keep: a chain of branches each reading the phi the previous
 // one merged, a branch on a cast and a negation of constants, a diamond whose arms both store the
-// same constant, and a loop whose condition is not constant (its back edge is not known).
-// Binary = --interp = 42.
+// same constant, a loop whose condition is not constant (its back edge is not known), and an
+// unsigned division by a power of two after a constant branch (Codex review: the cleanup turns it
+// into a shift before the branch settles, so the pass must leave such a function alone for the
+// emitted IR to stay the same). Binary = --interp = 42.
 fn chain() -> i64 {
     let s0: i64 = 0;
     let mut t: i64 = 0;
@@ -47,7 +49,15 @@ fn loop_not_constant() -> i64 {
     return n;
 }
 
+fn unsigned_division() -> i64 {
+    let mut x: u32 = 8;
+    if false { x = 16; }
+    if x / 2 == 4 { return 1; }
+    return 100;
+}
+
 fn main() -> Int {
-    // chain 3 + casts 2 + diamond 3 + 3 + loop 2 = 13; + 29 = 42
-    return (chain() + casts_and_negation() + diamond(true) + diamond(false) + loop_not_constant() + 29) as Int;
+    // chain 3 + casts 2 + diamond 3 + 3 + loop 2 + division 1 = 14; + 28 = 42
+    return (chain() + casts_and_negation() + diamond(true) + diamond(false) + loop_not_constant()
+        + unsigned_division() + 28) as Int;
 }

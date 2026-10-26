@@ -13,6 +13,7 @@ front-end agent's report: chained `let`s took 22 s to lower at 40000 and 103 s a
 **Severity:** loud (performance). A function of n bindings cost the square of n to lower: every read
 of a local and every write searched a list as long as the bindings in scope, and a write to a new
 name appended to it.
+Confirmed real by Codex review, 2026-10-25: `setVar` scans and appends to or maps the growing binding list and `lookupVar` scans it, giving quadratic work for a chain of lets.
 
 ## Reproducer
 

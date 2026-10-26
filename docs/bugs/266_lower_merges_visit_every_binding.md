@@ -14,6 +14,7 @@ front-end agent's report: 4000 `let`s each followed by an `if` took 137 s to low
 **Severity:** loud (performance). With n bindings in scope, each `if`, value `if`, `match` and
 `&&`/`||` cost n searches of each arm's table and n walks of the branch bodies: a function of n
 `let`s each followed by a branch took time cubic in n to lower.
+Confirmed real by Codex review, 2026-10-25: each branch reconciles every binding in scope with linear `find?` searches and repeats them in the scope cleanup, quadratic per branch and cubic over the sequence.
 
 ## Reproducer
 

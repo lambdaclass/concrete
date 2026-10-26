@@ -14,6 +14,7 @@ takes the current table's values, and the current table is the else arm's).
 **Severity:** silent wrong code. The native binary computes with a value assigned on a path that
 never reaches the code using it; `--interp` is right. When the value is defined inside the
 diverged arm the program is refused instead (E0703, a use the definition does not dominate).
+Confirmed real by Codex review, 2026-10-25: reconciliation leaves bindings the live arm did not change bound to the diverged arm's values, in statement and value ifs and in matches with several live arms (the single-live-arm match path restores that arm's snapshot and avoids it).
 
 ## Reproducer
 
