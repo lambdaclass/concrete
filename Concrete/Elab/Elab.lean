@@ -753,7 +753,9 @@ private def expandFieldAliases (typeParams : List String) (ty : Ty) : ElabM Ty :
 
 mutual
 
-partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedExprV2 := do
+partial def elabExprEv (e : Expr) (hint : Option Ty := none)
+    -- Bug 280: the flexibility of a literal region's nodes, handed down by the parent operator.
+    (flex : Option TypeJudgment.FlexTree := none) : ElabM ElaboratedExprV2 := do
   match e with
   | .intLit _ v =>
     -- Same shared decision as Check (TypeJudgment): Elab stamps CExpr.ty from the
@@ -806,7 +808,7 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
         if isGhostUse then throwElab (.ghostInRuntime name) (some e.getSpan)
         throwElab (.undeclaredVariable name) (some e.getSpan)
 
-  | .paren _ inner => elabExprEv inner hint
+  | .paren _ inner => elabExprEv inner hint (flex.bind (·.kid 0))
 
   | .binOp _ op lhs rhs =>
     -- Same operand-order judgment as Check (TypeJudgment.binOpOperandOrder): type
@@ -818,16 +820,20 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
     -- Check/CoreCheck, exactly as before.
     -- The operand-order block must yield EVIDENCE as well as Core: the branch decides
     -- which side is typed first, and both children's evidence is needed at the return.
+    -- Bug 280: the operands' flexibility from the region's one walk.
+    let ft := flex.getD (TypeJudgment.flexTree e)
+    let ftL := ft.kid 0
+    let ftR := ft.kid 1
     let (cLhsEv, cRhsEv) ←
       match TypeJudgment.binOpOperandOrder
-              (TypeJudgment.isFlexibleLit lhs) (TypeJudgment.isFlexibleLit rhs) with
+              ((ftL.map (·.flex)).getD false) ((ftR.map (·.flex)).getD false) with
       | .rhsFirst => do
-        let cRhsEv ← elabExprEv rhs hint
-        let cLhsEv ← elabExprEv lhs (some cRhsEv.core.ty)
+        let cRhsEv ← elabExprEv rhs hint ftR
+        let cLhsEv ← elabExprEv lhs (some cRhsEv.core.ty) ftL
         pure (cLhsEv, cRhsEv)
       | .lhsFirst => do
-        let cLhsEv ← elabExprEv lhs hint
-        let cRhsEv ← elabExprEv rhs (some cLhsEv.core.ty)
+        let cLhsEv ← elabExprEv lhs hint ftL
+        let cRhsEv ← elabExprEv rhs (some cLhsEv.core.ty) ftR
         pure (cLhsEv, cRhsEv)
     let cLhs := cLhsEv.core
     let cRhs := cRhsEv.core
@@ -838,7 +844,7 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
     return ElaboratedExprV2.mk (CExpr.binOp op cLhs cRhs resultTy) (Proof.evBinary op cLhsEv.evidence cRhsEv.evidence)
 
   | .unaryOp _ op operand =>
-    let cOpEv ← elabExprEv operand hint
+    let cOpEv ← elabExprEv operand hint (if op == .neg then flex.bind (·.kid 0) else none)
     let cOp := cOpEv.core
     let resultTy := match op with
       | .not_ => Ty.bool

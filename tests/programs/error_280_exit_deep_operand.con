@@ -1,0 +1,10 @@
+// Bug 280: an exit deep inside nested operands is refused (E0278), named by the outermost
+// operand's context, though the inner operators no longer repeat the search.
+fn f(c: i64) -> i64 {
+    let v: i64 = 1 + (2 + (3 + (if c > 0 { return 7; } else { 4 })));
+    return v;
+}
+
+fn main() -> Int {
+    return f(1) as Int;
+}

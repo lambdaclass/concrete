@@ -9140,6 +9140,77 @@ else
     echo "FAIL  bug 272: regress_272_imported_extern_ffi_edge --interp gave '$r272_interp', want 42"
     FAIL=$((FAIL + 1))
 fi
+# Bug 280: Check searched a nested expression's operands for an escaping exit, and Check and Elab
+# asked whether an operand is a literal-only tree, at every level, each a walk of the subtree
+# below, so an expression nested n deep took n² (depth 20000: check 3791 ms, elaborate 555 ms).
+# At the scaling gate's sizes the pre-fix elaborate stage grows barely past its bound, so a
+# generated expression nested 20000 deep must check and elaborate (the `check` and `elaborate`
+# stages of --emit-trace-json) within 100 ms each, retried once at 200 ms (fixed: 8 and 7 ms on
+# the dev host; pre-fix, 19 and 2.8 times the retry budget).
+run_ok "$TESTDIR/regress_280_nested_operand_exits.con" 42
+run_err "$TESTDIR/error_280_exit_deep_operand.con" "(E0278) \`return\` may not occur inside an operand of a binary operator"
+r280c_src="$TMPDIR/r280c_nested_parens_20000.con"
+awk -v n=20000 'BEGIN {
+    print "fn main() -> Int {"
+    line = "    let s: i64 = "
+    for (i = 0; i < n; i++) line = line "(1 + "
+    line = line "0"
+    for (i = 0; i < n; i++) line = line ")"
+    print line ";"
+    printf "    return (s - %d + 42) as Int;\n", n
+    print "}"
+}' > "$r280c_src"
+r265_stage_ms "$r280c_src" check; r280c_first="$r265_ms"; r280c_ms="$r280c_first"
+case "$r280c_first" in
+    ''|*[!0-9]*) ;;
+    *) if [ "$r280c_first" -gt 100 ]; then r265_stage_ms "$r280c_src" check; r280c_ms="$r265_ms"; fi ;;
+esac
+case "$r280c_ms" in
+    incomplete)
+        echo "  INCOMPLETE bug 280: checking an expression nested 20000 deep timed out twice (180 s each)"
+        INCOMPLETE=$((INCOMPLETE + 1)) ;;
+    ''|*[!0-9]*)
+        echo "FAIL  bug 280: checking an expression nested 20000 deep failed ($r280c_ms)"
+        FAIL=$((FAIL + 1)) ;;
+    *) if [ "$r280c_first" -le 100 ] || [ "$r280c_ms" -le 200 ]; then
+           echo "  ok  bug 280: checking an expression nested 20000 deep within budget (${r280c_ms} ms, check)"
+           PASS=$((PASS + 1))
+       else
+           echo "FAIL  bug 280: checking an expression nested 20000 deep took ${r280c_first} ms, then ${r280c_ms} ms in check (budget 100, retry 200)"
+           FAIL=$((FAIL + 1))
+       fi ;;
+esac
+r280e_src="$TMPDIR/r280e_nested_parens_20000.con"
+awk -v n=20000 'BEGIN {
+    print "fn main() -> Int {"
+    line = "    let s: i64 = "
+    for (i = 0; i < n; i++) line = line "(1 + "
+    line = line "0"
+    for (i = 0; i < n; i++) line = line ")"
+    print line ";"
+    printf "    return (s - %d + 42) as Int;\n", n
+    print "}"
+}' > "$r280e_src"
+r265_stage_ms "$r280e_src" elaborate; r280e_first="$r265_ms"; r280e_ms="$r280e_first"
+case "$r280e_first" in
+    ''|*[!0-9]*) ;;
+    *) if [ "$r280e_first" -gt 100 ]; then r265_stage_ms "$r280e_src" elaborate; r280e_ms="$r265_ms"; fi ;;
+esac
+case "$r280e_ms" in
+    incomplete)
+        echo "  INCOMPLETE bug 280: elaborating an expression nested 20000 deep timed out twice (180 s each)"
+        INCOMPLETE=$((INCOMPLETE + 1)) ;;
+    ''|*[!0-9]*)
+        echo "FAIL  bug 280: elaborating an expression nested 20000 deep failed ($r280e_ms)"
+        FAIL=$((FAIL + 1)) ;;
+    *) if [ "$r280e_first" -le 100 ] || [ "$r280e_ms" -le 200 ]; then
+           echo "  ok  bug 280: elaborating an expression nested 20000 deep within budget (${r280e_ms} ms, elaborate)"
+           PASS=$((PASS + 1))
+       else
+           echo "FAIL  bug 280: elaborating an expression nested 20000 deep took ${r280e_first} ms, then ${r280e_ms} ms in elaborate (budget 100, retry 200)"
+           FAIL=$((FAIL + 1))
+       fi ;;
+esac
 # Bug 247: a function value written as an identifier reaches what it names in the assumption summary.
 run_ok "$TESTDIR/regress_247_function_value_reaches_foreign.con" 42
 run_ok "$TESTDIR/regress_247_free_value_beside_unrelated_extern.con" 42

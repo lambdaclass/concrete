@@ -661,13 +661,23 @@ mutual
     call yields a reference: user functions cannot declare or instantiate one (VALUE_MODEL,
     E0236), and this guard extends it to every call form — intrinsics included (`free(h)` of a
     `Heap<&P>`, `vec_get`) — so a reference can never surface from a call (E0238). -/
-partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .value) : CheckM Ty := do
+partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .value)
+    (clean : Bool := false) (flex : Option TypeJudgment.FlexTree := none) : CheckM Ty := do
   -- Rule (d) (bug 142): no `return`/`break`/`continue` inside a protected operand. Checked
   -- here, before any operand is checked, so the exit is reported rather than a consequence.
-  if let some (ctx, ops) := protectedOperands e then
-    if let some (kw, sp) := firstOperandEscape? 0 [] ops then
-      throwCheck (.exitInOperand kw ctx) (some sp)
-  let t ← checkExprCore e hint mode
+  -- Bug 280: `clean` says `e` is an operand (through parentheses only) of a protected expression
+  -- whose operands were already searched and hold no exit; an exit leaving `e` would leave that
+  -- expression too (no loop lies between them), so the search is not repeated at every level of
+  -- a nested operand. The operands of `e` inherit the answer when its own search covered them
+  -- all (not an allocation call's, which searches only the allocator).
+  let cleanHere ← match protectedOperands e with
+    | some (ctx, ops) =>
+      if clean then pure true
+      else match firstOperandEscape? 0 [] ops with
+        | some (kw, sp) => throwCheck (.exitInOperand kw ctx) (some sp)
+        | none => pure (match e with | .allocCall .. => false | _ => true)
+    | none => pure (clean && (match e with | .paren .. => true | _ => false))
+  let t ← checkExprCore e hint mode cleanHere flex
   match e with
   | .call .. | .methodCall .. | .staticMethodCall .. | .allocCall .. =>
     match ← resolvedOr t with
@@ -689,7 +699,8 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
 
 -- spec: OWN-3, spec: OWN-5, spec: OWN-8, spec: OWN-15, spec: TYPE-4, spec: TYPE-5, spec: TYPE-6, spec: TYPE-7, spec: TYPE-8, spec: TYPE-9, spec: TYPE-10, spec: TYPE-11, spec: OWN-13, spec: PAT-3, spec: ARITH-2, spec: ARITH-6, spec: STMT-5, spec: STMT-8, spec: MEM-4, spec: MEM-5, spec: TRUST-4, spec: TRUST-7 (docs/spec/ownership.md; this declaration enforces the rule)
 -- spec: TRAIT-6, spec: PAT-5 (docs/spec/traits.md; this declaration enforces the rule)
-partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode := .value) : CheckM Ty := do
+partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode := .value)
+    (clean : Bool := false) (flex : Option TypeJudgment.FlexTree := none) : CheckM Ty := do
   match e with
   | .intLit sp n =>
     -- One shared decision (TypeJudgment): the adopted type + the range
@@ -760,6 +771,10 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         return .fn_ paramTys sig.capSet sig.retTy
       | none => throwCheck (.undeclaredVariable name) (some e.getSpan)
   | .binOp _ op lhs rhs =>
+    -- Bug 280: the operands' flexibility from the region's one walk (handed down by the parent).
+    let ft := flex.getD (TypeJudgment.flexTree e)
+    let ftL := ft.kid 0
+    let ftR := ft.kid 1
     -- The comparison rule is decided before the operands are checked: checking a non-Copy
     -- operand in value position moves it, and `x == x` would report a fictitious move (E0205)
     -- instead of the undefined comparison (Codex review, bug 140). A bound name's type is read
@@ -782,25 +797,25 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     -- Bug 148: `a && b` / `a || b` evaluate `b` only when `a` does not decide the result, so `b`
     -- may not move anything (its operands are bools; a move would be inside a call there).
     if op == .and_ || op == .or_ then
-      let lTy ← checkExpr lhs (some .bool)
+      let lTy ← checkExpr lhs (some .bool) (clean := clean) (flex := ftL)
       let before ← getEnv
-      let _ ← checkExpr rhs (some .bool)
+      let _ ← checkExpr rhs (some .bool) (clean := clean) (flex := ftR)
       refuseConditionalConsumption before (binOpSymbol op) (some e.getSpan)
       let _ := lTy
       return .bool
     let (lTy, lTyR, rTyR) ←
       match TypeJudgment.binOpOperandOrder
-              (TypeJudgment.isFlexibleLit lhs) (TypeJudgment.isFlexibleLit rhs) with
+              ((ftL.map (·.flex)).getD false) ((ftR.map (·.flex)).getD false) with
       | .rhsFirst => do
-        let rTy ← checkExpr rhs hint
+        let rTy ← checkExpr rhs hint (clean := clean) (flex := ftR)
         let rTyR ← resolveType rTy
-        let lTy ← checkExpr lhs (some rTyR)
+        let lTy ← checkExpr lhs (some rTyR) (clean := clean) (flex := ftL)
         let lTyR ← resolveType lTy
         pure (lTy, lTyR, rTyR)
       | .lhsFirst => do
-        let lTy ← checkExpr lhs hint
+        let lTy ← checkExpr lhs hint (clean := clean) (flex := ftL)
         let lTyR ← resolveType lTy
-        let rTy ← checkExpr rhs (some lTyR)
+        let rTy ← checkExpr rhs (some lTyR) (clean := clean) (flex := ftR)
         let rTyR ← resolveType rTy
         pure (lTy, lTyR, rTyR)
     let isTypeVarL := match lTyR with | .typeVar _ => true | _ => false
@@ -867,13 +882,13 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         | none => pure ()
         return ty
       | _ =>
-        let ty ← checkExpr operand hint
+        let ty ← checkExpr operand hint (clean := clean) (flex := flex.bind (·.kid 0))
         return ty  -- CoreCheck validates negation types
     | .not_ =>
-      let _ ← checkExpr operand hint
+      let _ ← checkExpr operand hint (clean := clean)
       return .bool  -- CoreCheck validates logical not types
     | .bitnot =>
-      let ty ← checkExpr operand hint
+      let ty ← checkExpr operand hint (clean := clean)
       return ty  -- CoreCheck validates bitwise not types
   | .allocCall _ inner allocExpr =>
     -- Check the allocator expression is valid
@@ -1494,7 +1509,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       -- sizeof intrinsic
       if intrinsic == some .sizeof || fnName.endsWith sizeofSuffix then return .uint
       else throwCheck (.undeclaredFunction fnName) (some e.getSpan)
-  | .paren _ inner => checkExpr inner hint mode
+  | .paren _ inner => checkExpr inner hint mode (clean := clean) (flex := flex.bind (·.kid 0))
   | .structLit _ name typeArgs fields base =>
     match ← lookupStruct name with
     | some sd =>

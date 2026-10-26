@@ -119,6 +119,31 @@ partial def isFlexibleLit : Expr → Bool
   | .binOp _ _ l r => isFlexibleLit l && isFlexibleLit r
   | _ => false
 
+/-- Bug 280: `isFlexibleLit` of every node of a literal region (the parentheses, negations and
+    binary operators `isFlexibleLit` recurses through), computed in one walk: `flex` is
+    `isFlexibleLit` of the node, `kids` the trees of the operands it recurses into (one for a
+    parenthesis or a negation, two for a binary operator). Check and Elab hand each operand its
+    subtree, so a chain of nested operators is walked once instead of once per level. -/
+structure FlexTree where
+  flex : Bool
+  kids : Array FlexTree
+
+instance : Inhabited FlexTree := ⟨{ flex := false, kids := #[] }⟩
+
+partial def flexTree : Expr → FlexTree
+  | .intLit _ _ | .floatLit _ _ => { flex := true, kids := #[] }
+  | .paren _ inner | .unaryOp _ .neg inner =>
+    let t := flexTree inner
+    { flex := t.flex, kids := #[t] }
+  | .binOp _ _ l r =>
+    let tl := flexTree l
+    let tr := flexTree r
+    { flex := tl.flex && tr.flex, kids := #[tl, tr] }
+  | _ => { flex := false, kids := #[] }
+
+/-- The tree of an operand: `i`-th of `kids`, when the node has one. -/
+def FlexTree.kid (t : FlexTree) (i : Nat) : Option FlexTree := t.kids[i]?
+
 /-- Which binop operand to type first. -/
 inductive OperandOrder where
   /-- Flexible lhs, concrete rhs: type rhs first, then hint lhs with its type. -/
