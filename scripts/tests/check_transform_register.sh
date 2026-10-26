@@ -111,7 +111,7 @@ N="$(grep -c "render := fun vars hyps concl =>" "$RO" || true)"
 # failures with `rocq:lia = closed` sitting beside a refused attestation.
 for d in rocqLowering isabelleLowering; do
   BLOCK="$(awk -v pat="def $d" 'index($0,pat){f=1} f{print} f&&/^$/{exit}' "$RO")"
-  printf '%s' "$BLOCK" | grep -q "batchRender" \
+  grep -q -- "batchRender" <<<"$BLOCK" \
     && ok "$d keeps batchRender (the agreement script, distinct from render)" \
     || no "$d has NO batchRender — its lowering-agreement check would have nothing to check"
 done
@@ -296,7 +296,7 @@ grep -q "def arrayRootName" "$RO" \
 # It must NOT over-peel: a field path has no name for the length lookup, so peeling it would
 # manufacture an obligation about the wrong array. A wrong obligation beats no obligation only
 # in the sense that it is louder; it is still unsound.
-grep -qE "^  \| \.fieldAccess" "$RO" && grep -A6 "def arrayRootName" "$RO" | grep -q "fieldAccess" \
+grep -qE "^  \| \.fieldAccess" "$RO" && grep -A6 "def arrayRootName" "$RO" | grep "fieldAccess" >/dev/null \
   && no "arrayRootName peels .fieldAccess — the length lookup would read the WRONG array" \
   || ok "arrayRootName stops at .paren (no wrong-array obligations)"
 
@@ -325,13 +325,13 @@ mod shadowbounds {
 }
 CON
   SH="$("$BIN" "$TMPD/shadow.con" --report vcs 2>/dev/null)"
-  printf '%s' "$SH" | grep -q "10 < 4" \
+  grep -q -- "10 < 4" <<<"$SH" \
     && ok "the shadowed access is sized from the INNER binding (10 < 4)" \
     || no "the shadowed access is not sized from the binding in effect"
-  printf '%s' "$SH" | grep -q "10 < 16" \
+  grep -q -- "10 < 16" <<<"$SH" \
     && no "the WRONG binding is being used again (10 < 16 on a 4-element array)" \
     || ok "the outer binding is not used for the inner access"
-  printf '%s' "$SH" | grep -q "1 counterexample" \
+  grep -q -- "1 counterexample" <<<"$SH" \
     && ok "the out-of-bounds access is REFUTED, not proved" \
     || no "an access at index 10 into a 4-element array is not being refuted"
 
@@ -346,7 +346,7 @@ mod scopebounds {
 }
 CON
   SC="$("$BIN" "$TMPD/scope.con" --report vcs 2>/dev/null)"
-  printf '%s' "$SC" | grep -q "i < 8" && printf '%s' "$SC" | grep -q "i < 16" \
+  grep -q -- "i < 8" <<<"$SC" && printf '%s' "$SC" | grep -q "i < 16" \
     && ok "the inner access uses 8 and the outer uses 16 (no leak either way)" \
     || no "a block-local array size leaks out of its scope, or the inner access is mis-sized"
 
@@ -363,7 +363,7 @@ mod forinitbounds {
 }
 CON
   FI="$("$BIN" "$TMPD/forinit.con" --report vcs 2>/dev/null)"
-  printf '%s' "$FI" | grep -q "3 < 4" \
+  grep -q -- "3 < 4" <<<"$FI" \
     && ok "a for-init array declaration is visible to the loop body" \
     || no "for-init declarations do not reach the body — that access gets no obligation"
 
@@ -389,10 +389,10 @@ mod unresbounds {
 }
 CON
   UR="$("$BIN" "$TMPD/unres.con" --report vcs 2>/dev/null)"
-  printf '%s' "$UR" | grep -q "OUTSIDE the bounds fragment" \
+  grep -q -- "OUTSIDE the bounds fragment" <<<"$UR" \
     && ok "an access with no statically known size is NAMED" \
     || no "the access vanished silently — coverage can be over-read again"
-  printf '%s' "$UR" | grep -q "unresbounds.from_call: a" \
+  grep -q -- "unresbounds.from_call: a" <<<"$UR" \
     && ok "naming works on the empty-VC path too" \
     || no "a function with only unresolvable accesses reports nothing at all"
 else
@@ -431,13 +431,13 @@ mod shiftwidth {
 }
 CON
   SW="$("$BIN" "$TMPD/shiftshadow.con" --report vcs 2>/dev/null)"
-  printf '%s' "$SW" | grep -q "40 < 8" \
+  grep -q -- "40 < 8" <<<"$SW" \
     && ok "the i8 shift uses width 8 (the binding in effect)" \
     || no "the shift width does not come from the binding in effect"
-  printf '%s' "$SW" | grep -q "40 < 64" \
+  grep -q -- "40 < 64" <<<"$SW" \
     && no "width 64 from the shadowed i64 again — a 40-bit shift of an i8 reads as in-range" \
     || ok "the shadowed i64 width is not used"
-  printf '%s' "$SW" | grep -q "1 counterexample" \
+  grep -q -- "1 counterexample" <<<"$SW" \
     && ok "the over-width shift is REFUTED, not proved" \
     || no "shifting an i8 by 40 is not being refuted"
 
@@ -452,7 +452,7 @@ mod ovfwidth {
 }
 CON
   OW="$("$BIN" "$TMPD/ovfshadow.con" --report vcs 2>/dev/null)"
-  printf '%s' "$OW" | grep -q -- "-128 ≤ (x + n)" \
+  grep -q -- "-128 ≤ (x + n)" <<<"$OW" \
     && ok "the shadowed i8 addition gets an overflow VC at the i8 range" \
     || no "an addition in an #[overflow_checked] function silently has no obligation again"
 fi
@@ -477,10 +477,10 @@ mod fieldb {
 }
 CON
   FB="$("$BIN" "$TMPD/fieldbounds.con" --report vcs 2>/dev/null)"
-  printf '%s' "$FB" | grep -q "i < 16" \
+  grep -q -- "i < 16" <<<"$FB" \
     && ok "an array reached through a field gets a bounds obligation" \
     || no "b.data[i] has no bounds obligation again — ordinary code, silently unchecked"
-  printf '%s' "$FB" | grep -q "99 < 16" \
+  grep -q -- "99 < 16" <<<"$FB" \
     && ok "and a constant out-of-range field access is REFUTED" \
     || no "b.data[99] is not being refuted — the field length is not resolved"
   NFB="$(printf '%s' "$FB" | grep -c 'array_bounds')"
