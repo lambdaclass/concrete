@@ -745,13 +745,23 @@ echo "=== every gate refuses to run outside the gate shell (lib/gate_env.sh) ===
 # shell, and `nix develop`), so a gate never reports a verdict about some host's userland. That holds
 # only if EVERY gate sources it, and sources it before doing anything else.
 #
-# A gate here is every scripts/tests/{check,test,run}_*.sh, audit_bug_corpus.sh (a standalone verdict
-# under another name) and every shell script a workflow names outside a comment. The other scripts in
-# scripts/tests are tools (select_gates, gates_for_diff, update_golden, the bundle and reduction
-# wrappers) whose output is not a verdict; some run where the shell is not (nightly triage). GUARD_EXEMPT is the audited escape hatch for an entry point that must start outside the
-# shell (and is not a gate), each with its reason. Keep it short.
+# A gate here is every shell script directly in scripts/tests, and every shell script a workflow names
+# outside a comment, except the tools listed in GATE_TOOLS: scripts whose output is not a verdict.
+# Naming a new script there is a decision with a reason; forgetting the guard is a failure here.
+# GUARD_EXEMPT is the audited escape hatch for a script a workflow runs that must not need the shell
+# (and is not a gate). Keep both short.
 declare -A GUARD_EXEMPT=(
   ["scripts/dev/seed-lake.sh"]="build-cache seeding, not a gate: it checks its own toolchain/manifest key and only decides how long lake build takes, never a verdict"
+)
+declare -A GATE_TOOLS=(
+  ["scripts/tests/select_gates.sh"]="selects gate commands for a diff, no verdict; landing and nightly triage run it outside the shell"
+  ["scripts/tests/gates_for_diff.sh"]="maps a diff to the gates it can break, no verdict (check_gates_for_diff.sh judges it)"
+  ["scripts/tests/update_golden.sh"]="regenerates the golden baselines that test_golden.sh judges"
+  ["scripts/tests/capture_release_bundle.sh"]="writes a release evidence bundle; test_release_bundle.sh judges it"
+  ["scripts/tests/capture_wrong_code_bundle.sh"]="writes a wrong-code bundle; test_bundle_smoke.sh judges it"
+  ["scripts/tests/minimize_wrong_code.sh"]="reduces a failing program; test_reducer_smoke.sh judges it"
+  ["scripts/tests/triage_failure.sh"]="reduces and bundles one failing file for a person to read"
+  ["scripts/tests/phase3_report_consistency_checks.sh"]="a snippet of check_report calls to paste into run_tests.sh, not runnable"
 )
 # _guard_first <file> <relative path of the library>: the file's first statement, or its second after
 # an opening `set -...`, is the source line itself; anything earlier would run outside the guard.
@@ -778,8 +788,7 @@ else
   ok "CONTROL: a gate that runs code before the guard, or sources it without '|| exit 2', is flagged"
 fi
 rm -rf "$GTMP"
-mapfile -t GUARDED < <( { cd "$ROOT_DIR" && ls scripts/tests/check_*.sh scripts/tests/test_*.sh scripts/tests/run_*.sh 2>/dev/null
-                         echo scripts/tests/audit_bug_corpus.sh   # standalone verdict, named audit_*
+mapfile -t GUARDED < <( { cd "$ROOT_DIR" && for t in scripts/tests/*.sh; do [[ -n "${GATE_TOOLS[$t]:-}" ]] || echo "$t"; done
                          grep -hvE '^[[:space:]]*#' .github/workflows/*.yml | grep -oE 'scripts/[A-Za-z0-9_/.-]+\.sh'; } \
                        | LC_ALL=C sort -u)
 if [ "${#GUARDED[@]}" -ge 250 ]; then
@@ -805,6 +814,10 @@ if [ -z "$UNGUARDED" ]; then
 else
   no "gate(s) not guarded by lib/gate_env.sh as their first statement:$UNGUARDED"
 fi
+for t in "${!GATE_TOOLS[@]}"; do
+  echo "  tool $t (${GATE_TOOLS[$t]})"
+  [ -f "$ROOT_DIR/$t" ] || no "GATE_TOOLS names $t, which no longer exists — remove the entry"
+done
 for g in "${!GUARD_EXEMPT[@]}"; do
   [ -f "$ROOT_DIR/$g" ] && grep -qhF "$g" "$ROOT_DIR"/.github/workflows/*.yml \
     || no "GUARD_EXEMPT names $g, which no workflow runs any more — remove the entry"
@@ -826,19 +839,53 @@ fi
 # The Makefile is the other way gates are started: each recipe that runs one enters the dev shell
 # ($(NIX_DEVELOP) / $(NIX_DEVELOP_PROVERS)), or the recipe would now stop at the guard. `make pre-push`
 # runs the hook, which re-enters the shell itself.
-_mk_unwrapped() { grep -nE '^[[:space:]].*scripts/(tests|ci|tools)/' "$1" | grep -vE '\$\(NIX_DEVELOP(_PROVERS)?\)' || true; }
-mk_bad="$(_mk_unwrapped "$ROOT_DIR/Makefile")"
+MKTMP="$(mktemp -d)"
+# One COMMAND at a time, not one line: continuation lines are joined, and a recipe line is split into
+# the commands its &&, ||, ;, | separate (quoted text stays whole, so `$(NIX_DEVELOP) bash -c "a && b"`
+# is one command). A command naming a script under scripts/{tests,ci,tools} must start with the shell.
+cat > "$MKTMP/mk_check.py" <<'PYEOF'
+import re, shlex, sys
+bad = []
+text = open(sys.argv[1]).read().replace("\\\n", " ")
+for n, line in enumerate(text.split("\n"), 1):
+    if not line.startswith("\t") or not re.search(r"scripts/(tests|ci|tools)/", line):
+        continue
+    body = re.sub(r"\$\((NIX_DEVELOP(?:_PROVERS)?)\)", r"\1", line.strip().lstrip("@-"))
+    try:
+        lex = shlex.shlex(body, posix=True, punctuation_chars=";&|")
+        lex.whitespace_split = True
+        toks = list(lex)
+    except ValueError:
+        bad.append(f"line {n}: cannot be parsed: {line.strip()}"); continue
+    cmd = []
+    for tok in toks + [";"]:
+        if tok and set(tok) <= set(";&|"):
+            words = [w for w in cmd if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", w)]
+            if any(re.search(r"scripts/(tests|ci|tools)/", w) for w in cmd) and \
+               not (words and words[0] in ("NIX_DEVELOP", "NIX_DEVELOP_PROVERS")):
+                bad.append(f"line {n}: {' '.join(cmd)}")
+            cmd = []
+        else:
+            cmd.append(tok)
+print("\n".join(bad))
+PYEOF
+mk_bad="$(python3 -I "$MKTMP/mk_check.py" "$ROOT_DIR/Makefile")"
 if [ -z "$mk_bad" ]; then
   ok "every Makefile recipe that runs a gate enters the dev shell"
 else
   no "Makefile recipe(s) run a gate outside the dev shell: $(tr '\n' ' ' <<<"$mk_bad")"
 fi
-MKTMP="$(mktemp)"
-printf 'x:\n\tbash ./scripts/tests/check_foo.sh\n' > "$MKTMP"
-[ -n "$(_mk_unwrapped "$MKTMP")" ] \
-  && ok "CONTROL: a recipe running a gate without the dev shell is flagged" \
-  || no "CONTROL: the Makefile check misses an unwrapped gate recipe"
-rm -f "$MKTMP"
+# CONTROLS: an unwrapped gate, and one chained after a wrapped gate, are flagged; a wrapped gate on a
+# continuation line and a wrapped `bash -c` holding several gates are not.
+printf 'a:\n\tbash ./scripts/tests/check_foo.sh\nb:\n\t$(NIX_DEVELOP) bash scripts/tests/check_foo.sh && bash scripts/tests/check_bar.sh\n' > "$MKTMP/bad.mk"
+printf 'c:\n\t$(NIX_DEVELOP) bash \\\n\t  scripts/tests/check_foo.sh\nd:\n\t@$(NIX_DEVELOP) bash -c "bash scripts/tests/check_foo.sh && bash scripts/tests/check_bar.sh"\n' > "$MKTMP/good.mk"
+[ "$(python3 -I "$MKTMP/mk_check.py" "$MKTMP/bad.mk" | grep -c .)" = 2 ] \
+  && ok "CONTROL: an unwrapped gate recipe, and a gate chained after a wrapped one, are both flagged" \
+  || no "CONTROL: the Makefile check missed an unwrapped or chained gate: $(python3 -I "$MKTMP/mk_check.py" "$MKTMP/bad.mk" | tr '\n' ' ')"
+[ -z "$(python3 -I "$MKTMP/mk_check.py" "$MKTMP/good.mk")" ] \
+  && ok "CONTROL: a wrapped gate on a continuation line, or inside a wrapped bash -c, is accepted" \
+  || no "CONTROL: the Makefile check flags a correctly wrapped recipe: $(python3 -I "$MKTMP/mk_check.py" "$MKTMP/good.mk" | tr '\n' ' ')"
+rm -rf "$MKTMP"
 
 echo ""
 echo "=== every workflow run step executes in the gate shell ==="

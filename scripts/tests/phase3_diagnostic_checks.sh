@@ -4,6 +4,7 @@
 # and PASS / FAIL counters to be initialised by the caller.
 #
 # If invoked standalone, set defaults:
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 : "${COMPILER:=./.lake/build/bin/concrete}"
 : "${TESTDIR:=tests/programs}"
 : "${PASS:=0}"
