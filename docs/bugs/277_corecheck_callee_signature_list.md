@@ -2,7 +2,7 @@
 
 <!-- bug-ledger
 summary: CoreCheck looked up every callee's signature and capabilities in a list of all the program's function signatures, so a program of n functions with a call each took time n² to validate (a 10000-function call chain: 649 ms). Found by the R-0550 scaling gate. Class 17.
-coverage: `check_compile_scaling.sh` (R-0550) judges the `call-chain` shape's `coreCheck` stage against its budget and near-linear growth once this bug's exclusion is removed (the pre-fix compiler fails it at the gate's sizes); the gate is on wip/r0550-scaling-gate-v2, not yet landed, so the removal lands with it
+coverage: `run_tests.sh` times the `coreCheck` stage of a generated chain of 20000 functions against a budget (the pre-fix compiler fails it); `check_compile_scaling.sh` (R-0550, on wip/r0550-scaling-gate-v2, not yet landed) judges the same stage once this bug's exclusion is removed
 class: 17 — CoreCheck looks up every callee in a list of all function signatures
 silent: no
 -->
@@ -60,6 +60,12 @@ under `tests/programs` and `examples` (91ce358b's corpus) and of twelve generate
 at size 60, and `--report caps|proof-status|fingerprints|obligations|traceability|proof-deps` of
 every `.con` under `examples`, are byte-identical between the compiler built at 91ce358b and this
 fix.
+
+## Regression leg
+
+`run_tests.sh` times the `coreCheck` stage of a generated chain of 20000 functions each calling
+the next against 250 ms (retried once at 500 ms): 51 ms on this fix (800dfbf9), FAIL on main
+91ce358b (2545 ms, then 2516 ms).
 
 ## Containment while open
 
