@@ -241,12 +241,15 @@ This is review round $ROUND. $scope
 This is $2 (file group: $3; files: $4).
 
 Report correctness findings only: wrong behaviour, logic errors, regressions, unhandled cases, tests that do not check what they claim, and documentation that contradicts the code. Do not report style preferences.
+
+Also answer one question, as a finding when the answer is yes: does this patch pick a side on any owner decision in ROADMAP.md (the OD1 - OD22 table under "Owner decisions", exit 2n), that is, choose, encode, implement, extend or revert behaviour one of them covers? Only the project owner decides those; a patch that does so must not land.
 EOF
   else
     cat <<EOF
 Please do a routine code review of the source-code patch below. It belongs to a compiler, a program that translates source code into machine code, and to that compiler's tests and documentation. Treat it as ordinary software engineering: look for logic errors and for behaviour that differs from what the code and its comments say. You may read files in the working directory for context.
 
 This is $2 (files: $4). $scope
+Also report as a finding any change that picks a side on an owner decision listed in ROADMAP.md (OD1 - OD22, exit 2n).
 EOF
   fi
   if [ -n "$PREV_FINDINGS" ]; then

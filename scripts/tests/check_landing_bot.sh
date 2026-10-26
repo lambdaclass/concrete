@@ -48,6 +48,7 @@ cat > "$GIT_CONFIG_GLOBAL" <<EOF
 	hooksPath = $TMP/nohooks
 EOF
 mkdir -p "$TMP/nohooks" "$TMP/gh"
+export LAND_DUP_POLL=1 LAND_DUP_POLL_SLEEP=0 LAND_PUSH_RETRY_SLEEP=0
 export LAND_NO_NIX=1 LAND_STATE_DIR="$TMP/landstate" LAND_GH="$TMP/fake-gh" LAND_REPO=test/repo
 export LAND_HOOK="$TMP/hook" LAND_REMOTE_RUNNER="$TMP/fake-runner" FAKE_GH_DIR="$TMP/gh" ORIGIN_GIT="$TMP/origin.git"
 export BOT_PAUSE_FILE="$TMP/paused" BOT_NOTIFY="$TMP/notify.sh" BOT_WATCH_INTERVAL=1 BOT_NO_REBASE=1

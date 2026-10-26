@@ -23,6 +23,16 @@ rule changes in one place.
 
 ## Rules
 
+**Owner decisions: never decide one.** The language decisions OD1 – OD22
+([ROADMAP.md](../../ROADMAP.md#owner-decisions), exit 2n) are decided only by the project owner. No
+agent, orchestrator or reviewer chooses, encodes, implements or provisionally ships any side of any
+of them, inside a bug fix or anywhere else. Agents present options and a recommendation to the owner
+and wait for an explicit answer. Behaviour already on main that took a side stays as it is, recorded
+as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
+- The Codex review of every fix (`scripts/review/review.sh` asks it) also answers: "does this fix
+  pick a side on any OD in ROADMAP exit 2n?" If yes, or if the fix cannot be made without picking
+  one, stop and report to the owner; do not land it.
+
 **Bugs.**
 - Every bug gets a structural cause and a structural owner: the design fact that let it exist, and
   the roadmap task or pipeline stage that removes the whole class
@@ -39,19 +49,28 @@ rule changes in one place.
 
 **Branches.**
 - One bug or one rule per branch, in its own worktree (`scripts/worktree-new.sh`,
-  [CONCURRENT_WORK.md](CONCURRENT_WORK.md)). A branch that changes a language rule lands first and
-  stays small; work that depends on it waits or rebases onto it.
+  [CONCURRENT_WORK.md](CONCURRENT_WORK.md)). This applies to all agent work now, not only once
+  R-0545 closes. A branch that changes a language rule lands first and stays small; work that
+  depends on it waits or rebases onto it.
+- Rebase onto `origin/main` after every landing (`/rebase`), not only before your own landing, so a
+  conflict or a changed rule shows up while the branch is small.
 - Commit each validated slice. Push the branch to `wip/<branch>` at least every 5 minutes of work
   (`git push origin HEAD:refs/heads/wip/<branch>`); the hook's wip tier only scans for conflict
   markers.
 - Never push to `main`, `ci/*` or the remote `fork`. Landings go to both `origin` and
   `lambdaclass`, only through the landing script (`scripts/land/train.sh`) or the landing bot.
+  `train.sh check` runs the hook's gates before the push, so the push reuses that validation record;
+  the train's push to `ci/<name>` and both pushes of `land` are read back with `ls-remote` and
+  retried when they did not move the ref (GitHub drops the connection during long hooks); `land` checks that both remotes are at
+  the head ([LANDING.md](LANDING.md#land)).
+- After any push of your own whose hook ran gates, check that the remote ref moved
+  (`git ls-remote origin refs/heads/<branch>`) and push again if it did not.
 
 **Validation.**
-- Pre-push runs the fast surface gates and the gates selected by what the push touches. Full gate
-  sets run on the server (`concrete-remote wip/<branch> 'lake build && bash
-  scripts/tests/run_ci_gates_local.sh'`) or in CI (`gh workflow run CI --ref <branch>`), never as a
-  full local run on the laptop.
+- Locally, run only the impact-selected gates (pre-push runs the fast surface gates and the gates
+  selected by what the push touches). For the full set, dispatch CI on the branch
+  (`gh workflow run CI --ref <branch>`) or use the server (`concrete-remote wip/<branch> 'lake build
+  && bash scripts/tests/run_ci_gates_local.sh'`); never a full local run on the laptop.
 - At most 2 heavy runs (full suites, mutation campaigns, `lake build` of the whole tree) per machine.
   Queue behind a running one; continue light work meanwhile. Honour a user's explicit CPU limits.
 - Run gates inside `nix develop`. A gate that passes by hand but fails under the hook: suspect an

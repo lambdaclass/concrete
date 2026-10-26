@@ -90,7 +90,7 @@ verdict; any failing leg fails the check (see [Pipelining](#pipelining)).
   1. `ci/<name>` is reset to the train's base. The base is main's own commit and has already been
      published, so this push skips the hook.
   2. The train is pushed on top with the hook running. Its range is `base..head`, so the record
-     written by `check` is reused.
+     written by `check` is reused. The push is verified (see [Verified pushes](#verified-pushes)).
 
   Without the first step, a new branch has no remote base and the hook would select gates by
   diffing the whole tree.
@@ -137,7 +137,24 @@ The push sequence:
    `push-both.sh` policy, this push runs with the hook
    skipped, because the identical commit was just accepted by the primary's hook. If it fails after
    the primary landed, the command says so and exits non-zero.
-3. Checks both remotes with `ls-remote`.
+3. Checks both remotes with `ls-remote` once more; the landing is complete only when both are at
+   the head.
+4. Cancels main's duplicate CI run. The push to main starts a `push` run at the same SHA that the
+   train's dispatched run already validated (same workflow; the push event runs no job the
+   dispatch skips). `land` cancels only an unfinished `push` run of CI on main whose head SHA is
+   exactly the landed head, never the validating run, and logs a `land-dedupe` row naming both.
+   The train's run stays the record for that SHA. Not finding the run, or failing to cancel it, is
+   a note: the landing is already complete. `--keep-main-ci` (or `LAND_KEEP_MAIN_CI=1`) keeps it.
+
+#### Verified pushes
+
+A push's exit status is not its result. GitHub drops the connection during a long pre-push hook, so
+a push can fail after the remote moved, or before. The train's push to `ci/<name>` and both pushes
+of `land` are followed by an `ls-remote` of the ref: at the head, it is done, whatever git reported; still at its old value, it is
+retried (`LAND_PUSH_ATTEMPTS`, default 3, `LAND_PUSH_RETRY_SLEEP` seconds apart); moved to anything
+else, it stops at once. A retry to main is still a plain push, a fast-forward or a refusal, and the
+hook reuses the record of the same range. The reset of `ci/<name>` to the base skips the hook and is
+not retried; a failure there stops `ci` before anything is dispatched.
 
 A remote named `fork` is refused as primary or mirror. `--no-mirror` (or `LAND_MIRROR=`) lands on
 origin only. That is a deliberate exception, and the landing is not complete until the same SHA
@@ -393,6 +410,9 @@ publishing decision are in docs/project/STATUS_PAGE.md.
 | `LAND_REMOTE_PUSH` | `1` | `0`: the runner fetches the SHA from this clone, nothing is published |
 | `LAND_FULL_GATES_CMD` | `lake build && bash scripts/tests/run_ci_gates_local.sh` | the remote leg's command |
 | `LAND_REVIEW_CMD` | `scripts/review/review.sh` when present | the review leg's command (`--base --head` appended) |
+| `LAND_PUSH_ATTEMPTS`, `LAND_PUSH_RETRY_SLEEP` | `3`, `15` | attempts and pause for a verified push |
+| `LAND_KEEP_MAIN_CI` | unset | `1` never cancels main's duplicate push run (`land --keep-main-ci`) |
+| `LAND_DUP_POLL`, `LAND_DUP_POLL_SLEEP` | `6`, `5` | polls and pause while looking for main's duplicate run |
 | `BOT_*` | see the header of `scripts/land/bot.sh` | the landing bot's state, pause file, prefix, intervals and limits |
 ## Tests
 
@@ -404,6 +424,9 @@ script against a throwaway repository with bare-repo remotes and a fake `gh`. It
   or rebase already in progress, a dirty tree, an existing train, a head-SHA mismatch, a red
   landing job, a moved main and a remote named `fork`;
 - the check → ci → watch → land pipeline, with both dry-runs;
+- cancelling main's duplicate push run but never the validating run, and `--keep-main-ci`;
+- verified pushes: a push dropped before the remote moved is retried, one dropped after it moved is
+  accepted from `ls-remote`, and exhausted retries fail without moving main;
 - bisection;
 - the report.
 

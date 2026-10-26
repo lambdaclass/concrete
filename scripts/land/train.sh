@@ -7,7 +7,7 @@
 #   train.sh [--dry-run] check  <name> [--no-remote]
 #   train.sh [--dry-run] ci     <name> [--skip-check]
 #   train.sh             watch  <name> [--interval S] [--timeout S]
-#   train.sh [--dry-run] land   <name> [--no-mirror]
+#   train.sh [--dry-run] land   <name> [--no-mirror] [--keep-main-ci]
 #   train.sh             bisect <name> (--test '<cmd>' | --ci)
 #   train.sh             status <name>
 #
@@ -22,13 +22,20 @@
 #     a result is bound to the exact candidate that ran.
 #   * pushes name the exact SHA, never `HEAD` (push-both.sh: HEAD can move during a wait), and a
 #     remote named `fork` is refused outright.
+#   * (2026-10-25) a push's exit status is not its result: GitHub drops the connection during a long
+#     hook, so a push can fail after the remote moved, or before. The train's push to ci/<name> and
+#     both pushes of `land` are followed by an `ls-remote` of the ref, and one that did not move it
+#     is retried (LAND_PUSH_ATTEMPTS). The ci/<name> reset to the base skips the hook; not retried.
 #
 # ENVIRONMENT (test seams and overrides): LAND_REPO (owner/name for gh, default
 # unbalancedparentheses/concrete2), LAND_GH (gh binary), LAND_REMOTE (primary, default origin),
 # LAND_MIRROR (default lambdaclass, required: a missing remote is refused; empty or --no-mirror skips),
 # LAND_STATE_DIR (default <git common dir>/concrete-landing), LAND_LOG_DIR (default
 # $LAND_STATE_DIR/log), LAND_NO_NIX=1 (never re-enter `nix develop`), LAND_CAMPAIGN_JOBS (regex of
-# campaign-tier job names), LAND_HOOK (pre-push hook path, default .githooks/pre-push).
+# campaign-tier job names), LAND_HOOK (pre-push hook path, default .githooks/pre-push),
+# LAND_PUSH_ATTEMPTS (default 3) and LAND_PUSH_RETRY_SLEEP (seconds, default 15) for verified pushes,
+# LAND_KEEP_MAIN_CI=1 (same as land --keep-main-ci), LAND_DUP_POLL (default 6) and
+# LAND_DUP_POLL_SLEEP (seconds, default 5) for finding main's duplicate run.
 set -euo pipefail
 
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -139,6 +146,68 @@ run_or_print() { # cmd... — executes, or prints under --dry-run
 }
 
 remote_main() { git ls-remote "$REMOTE" refs/heads/main | cut -f1; }
+
+# A push whose result is read from the remote, not from git's exit status. GitHub drops the
+# connection during a long pre-push hook: the push can fail AFTER the remote ref moved (then it is
+# done) or before (then it is retried). Each attempt is a plain push of the exact SHA, so a retry
+# to main is still a fast-forward or a refusal, and the hook's retry reuses the validation record
+# of the same range. A ref that moved to anything else stops at once. Prints nothing under --dry-run
+# except the command.
+push_verified() { # remote sha ref [env assignments...]
+  local remote="$1" sha="$2" ref="$3"; shift 3
+  if [ "$DRY" = 1 ]; then run_or_print env "$@" git push "$remote" "$sha:refs/heads/$ref"; return 0; fi
+  local before now attempt=1 max="${LAND_PUSH_ATTEMPTS:-3}" rc
+  before="$(git ls-remote "$remote" "refs/heads/$ref" | cut -f1)"
+  while :; do
+    rc=0
+    ( for kv in "$@"; do export "${kv?}"; done; in_nix git push "$remote" "$sha:refs/heads/$ref" ) || rc=$?
+    assert_no_op "push to $remote"
+    now="$(git ls-remote "$remote" "refs/heads/$ref" | cut -f1)"
+    if [ "$now" = "$sha" ]; then
+      [ "$rc" = 0 ] || note "push to $remote $ref exited $rc, but $remote/$ref is at ${sha:0:10}: the connection dropped after the update"
+      return 0
+    fi
+    [ "$now" = "$before" ] || die "push to $remote $ref: the ref moved to ${now:0:10}, neither its old value nor ${sha:0:10}; not retrying"
+    [ "$attempt" -lt "$max" ] || die "push to $remote $ref failed $attempt time(s) (last exit $rc); $remote/$ref is still ${before:0:10}"
+    note "push to $remote $ref exited $rc and the ref did not move; retrying ($attempt of $max)"
+    attempt=$((attempt + 1)); sleep "${LAND_PUSH_RETRY_SLEEP:-15}"
+  done
+}
+
+# After a landing, the push to main starts a CI run at the same SHA that the train's dispatched run
+# already validated (same workflow, same commit; the push event runs no job the dispatch skips).
+# It is cancelled so a landing costs one CI run, not two; the train's run stays main's record for
+# that SHA. Only an unfinished push-event run whose headSha is exactly the landed head is touched.
+# Not finding one, or failing to cancel it, is a note: the landing is already complete.
+cancel_duplicate_main_run() { # head validating-run-id
+  local head="$1" vid="$2" ids="" i
+  for i in $(seq 1 "${LAND_DUP_POLL:-6}"); do
+    ids="$("$GH" run list -R "$REPO" --workflow CI --branch main --event push -L 20 \
+             --json databaseId,headSha,status 2>/dev/null | python3 -I -c '
+import json, sys
+try:
+    runs = json.load(sys.stdin)
+except ValueError:
+    runs = []
+print(" ".join(str(r["databaseId"]) for r in runs
+               if r.get("headSha") == sys.argv[1] and r.get("status") != "completed"
+               and str(r.get("databaseId")) != sys.argv[2]))' "$head" "$vid")" || ids=""
+    [ -n "$ids" ] && break
+    sleep "${LAND_DUP_POLL_SLEEP:-5}"
+  done
+  if [ -z "$ids" ]; then
+    note "no unfinished push run of CI on main at ${head:0:10} found; nothing to cancel"
+    return 0
+  fi
+  local id done_ids=""
+  for id in $ids; do
+    if "$GH" run cancel "$id" -R "$REPO" >/dev/null 2>&1; then done_ids="${done_ids:+$done_ids }$id"
+    else note "could not cancel main's run $id (left running)"; fi
+  done
+  [ -n "$done_ids" ] && note "cancelled main's duplicate CI run(s) $done_ids at ${head:0:10}; run $vid validated that SHA"
+  log_row "$LAND_NAME" land-dedupe "$([ -n "$done_ids" ] && echo passed || echo failed)" "cancelled: ${done_ids:-none}; validated by run $vid"
+  return 0
+}
 
 # The train's state must describe the checkout: same branch, same HEAD, clean.
 require_train_checkout() { # name
@@ -463,7 +532,7 @@ cmd_ci() {
   git merge-base --is-ancestor "$base" "$(remote_main)" 2>/dev/null \
     || die "ci: the train's base ${base:0:10} is not on $REMOTE/main; rebuild the train"
   run_or_print env CONCRETE_SKIP_GATES=1 git push -q --force "$REMOTE" "$base:refs/heads/$branch"
-  run_or_print in_nix git push "$REMOTE" "$head:refs/heads/$branch"
+  push_verified "$REMOTE" "$head" "$branch"
   if [ "$DRY" = 1 ]; then
     note "(dry-run) would dispatch: $GH workflow run CI -R $REPO --ref $branch"
     return 0
@@ -589,10 +658,11 @@ cmd_watch() {
 # --- land ----------------------------------------------------------------------------------------
 
 cmd_land() {
-  local name="" mirror_on=1
+  local name="" mirror_on=1 keep_ci="${LAND_KEEP_MAIN_CI:-0}"
   while [ $# -gt 0 ]; do
     case "$1" in
       --no-mirror) mirror_on=0 ;;
+      --keep-main-ci) keep_ci=1 ;;
       -*) die "land: unknown option $1" ;;
       *) name="$1" ;;
     esac; shift
@@ -658,24 +728,31 @@ cmd_land() {
   # is NEVER force-pushed, not even with a lease: a plain push is a fast-forward or a refusal, so a
   # publisher that moved main without taking the lock makes this push fail instead of being undone.
   # (Head descends from base; if main moved to anything head does not contain, git refuses.)
-  run_or_print in_nix git push "$REMOTE" "$head:refs/heads/main"
+  push_verified "$REMOTE" "$head" main
   if [ "$DRY" = 0 ]; then
-    assert_no_op "push to $REMOTE"
     [ "$(remote_main)" = "$head" ] || die "land: $REMOTE/main is not at ${head:0:10} after the push"
   fi
   if [ -n "$mirror" ]; then
     # The mirror receives exactly the commit the primary's hook just accepted (push-both.sh policy).
-    run_or_print env CONCRETE_SKIP_GATES=1 git push "$mirror" "$head:refs/heads/main"
-    if [ "$DRY" = 0 ] && [ "$(git ls-remote "$mirror" refs/heads/main | cut -f1)" != "$head" ]; then
+    ( push_verified "$mirror" "$head" main CONCRETE_SKIP_GATES=1 ) || {
       log_row "$name" land failed "mirror $mirror not at head"
       die "land: $REMOTE landed, but $mirror/main is not at ${head:0:10}"
-    fi
+    }
   fi
-  [ "$DRY" = 1 ] && return 0
+  if [ "$DRY" = 1 ]; then
+    [ "$keep_ci" = 1 ] || note "(dry-run) would cancel main's duplicate push run of CI at ${head:0:10} (run $id validated it)"
+    return 0
+  fi
+  # Both remotes, read back once more: the landing is complete only when each is at the head.
+  [ "$(remote_main)" = "$head" ] || die "land: $REMOTE/main is not at ${head:0:10}"
+  if [ -n "$mirror" ] && [ "$(git ls-remote "$mirror" refs/heads/main | cut -f1)" != "$head" ]; then
+    die "land: $mirror/main is not at ${head:0:10}"
+  fi
   state_set "$name" landed_utc "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   log_row "$name" land passed "$REMOTE${mirror:+ + $mirror}"
   note "landed ${head:0:10} on $REMOTE/main${mirror:+ and $mirror/main}. Members (result: CI run $id at ${head:0:10}):"
   state_get "$name" members | tr ',' '\n' | sed 's/^/    /'
+  if [ "$keep_ci" = 0 ]; then LAND_NAME="$name" cancel_duplicate_main_run "$head" "$id"; fi
 }
 
 # --- bisect --------------------------------------------------------------------------------------
