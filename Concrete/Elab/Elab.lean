@@ -821,12 +821,10 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none)
     -- The operand-order block must yield EVIDENCE as well as Core: the branch decides
     -- which side is typed first, and both children's evidence is needed at the return.
     -- Bug 280: the operands' flexibility from the region's one walk.
-    let ft := flex.getD (TypeJudgment.flexTree e)
-    let ftL := ft.kid 0
-    let ftR := ft.kid 1
+    let (ftL, ftR) := TypeJudgment.binOpFlexTrees flex e lhs rhs
     let (cLhsEv, cRhsEv) ←
       match TypeJudgment.binOpOperandOrder
-              ((ftL.map (·.flex)).getD false) ((ftR.map (·.flex)).getD false) with
+              (TypeJudgment.operandFlex ftL lhs) (TypeJudgment.operandFlex ftR rhs) with
       | .rhsFirst => do
         let cRhsEv ← elabExprEv rhs hint ftR
         let cLhsEv ← elabExprEv lhs (some cRhsEv.core.ty) ftL
