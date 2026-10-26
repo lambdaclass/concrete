@@ -369,14 +369,25 @@ PY
 if [ -n "$TC" ] && (cd "$W" && eval "bash $TC") > "$TMP/triage.out" 2>&1; then
   ok "CI triage's printed new_bug.sh command files a bug as printed"
 else no "CI triage's printed new_bug.sh command was refused or not found ('$TC'): $(tr '\n' ' ' < "$TMP/triage.out" 2>/dev/null | cut -c1-240)"; fi
-# One filing per worktree: a held lock makes a second filing wait, then refuse before reserving.
+# One filing per worktree: a held lock makes a second filing wait for NEW_BUG_LOCK_WAIT seconds and
+# then refuse before reserving, leaving the holder's lock as it was; a lock released while it waits
+# lets it proceed.
 LK="$(git -C "$W" rev-parse --git-path new_bug.lock)"; case "$LK" in /*) ;; *) LK="$W/$LK" ;; esac
 mkdir "$LK" && echo $$ > "$LK/pid"
+t0=$SECONDS
 refuse "a filing while another holds the worktree's lock" "holds this worktree's lock" \
   env NEW_BUG_LOCK_WAIT=2 bash "$NB" "x defect" "${BA[@]}"
+waited=$((SECONDS - t0))
+if [ "$waited" -ge 2 ] && [ "$(cat "$LK/pid" 2>/dev/null)" = "$$" ] && ! ls "$W/docs/bugs/"*_x_defect.md >/dev/null 2>&1; then
+  ok "the refused filing waited ${waited}s, wrote no record, and left the holder's lock and pid intact"
+else no "the refused filing waited ${waited}s (want >= 2), or wrote a record, or touched the holder's lock"; fi
+( sleep 2; rm -rf "$LK" ) &
+if NEW_BUG_LOCK_WAIT=30 bash "$NB" "Lock wait control defect" "${BA[@]}" > "$TMP/lw.out" 2>&1 \
+   && grep -q 'waiting for another filing' "$TMP/lw.out" && grep -q '^new_bug: filed bug' "$TMP/lw.out" && [ ! -e "$LK" ]; then
+  ok "a filing that found the lock held waited, then filed once it was released, and released its own"
+else no "a filing did not wait for and then take a released lock: $(tr '\n' ' ' < "$TMP/lw.out" | cut -c1-240)"; fi
+wait
 rm -rf "$LK"
-[ ! -e "$LK" ] && ! ls "$W/docs/bugs/"*_x_defect.md >/dev/null 2>&1 && ok "the lock is the holder's to remove, and no record was written" \
-  || no "the refused filing left a record or the lock behind"
 refuse "--number with --number-only" "--number-only reserves a new one" bash "$NB" --number-only --number 990 "x defect"
 
 echo "NEW-BUG: PASS=$PASS FAIL=$FAIL"

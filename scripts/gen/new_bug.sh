@@ -51,7 +51,8 @@
 # ONE FILING PER WORKTREE AT A TIME. A full filing rewrites shared files of the worktree
 # (discovery.tsv, the generated views), so from its first check to its last write or rollback it
 # holds a lock, the directory `git rev-parse --git-path new_bug.lock` with the holder's pid; a second
-# run waits for it, then refuses. A lock left by a killed run is never broken automatically: the
+# run waits for it and proceeds once it is released, or refuses if it is still held after
+# NEW_BUG_LOCK_WAIT seconds. A lock left by a killed run is never broken automatically: the
 # refusal names the pid, and the lock is removed by hand once no new_bug.sh runs. Every rewrite of
 # discovery.tsv goes through a temporary file renamed into place, so a failed write leaves it whole.
 #
