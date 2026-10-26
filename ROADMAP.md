@@ -151,7 +151,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 | 19. A mention read as a use (tool facts inferred from where a name is spelled) | 8 | yes |
 | no class yet | 8 | yes |
 
-Discovery signal (exit 2m): 16 of 20 classes have 3 consecutive eligible quiet counting batches (for a class: no silent bug of that class, at most one loud, effort at least 4 hours or 10 programs); the exit needs every class. 16 counting batches recorded. 68 attribution-only batches (reviews, follow-ons, CI, controls, development) found 113 further bugs.
+Discovery signal (exit 2m): 16 of 20 classes have 3 consecutive eligible quiet counting batches (for a class: no silent bug of that class, at most one loud, effort at least 4 hours or 10 programs); the exit needs every class. 16 counting batches recorded. 67 attribution-only batches (reviews, follow-ons, CI, controls, development) found 113 further bugs.
 
 <!-- END GENERATED: bug dashboard -->
 

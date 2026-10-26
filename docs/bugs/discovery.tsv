@@ -108,5 +108,4 @@ date	kind	probe	effort	bugs	silent
 2026-10-26	development	many struct types each constructed and read once, beyond the R-0550 declaration shapes, timed per stage at 2000 and 8000 and profiled with callgrind	1 shape	291	-
 2026-10-26	development	nested while loops beyond the R-0550 shapes, timed per stage at 2000 and 8000 levels and profiled with callgrind after the bug 286 fix	1 shape	292	-
 2026-10-26	development	R-0550 follow-up: whole compiles (--emit-llvm) of the nested-ifs shape after bug 286, attributed by callgrind to Report's safety gate	4 programs	293	-
-2026-10-26	development	R-0550 follow-up, task 3: scaling probes of Resolve, Check and Elab beyond the gate shapes (calls, parameters, wide match, value if and match chains, struct fields) on main 1bcb7c36	11 shapes	295,296,298	-
-2026-10-26	development	scaling probes beyond the R-0550 shapes on main 1bcb7c36: one call of n arguments and one match of n arms, timed per stage and attributed by callgrind	4 programs	297	-
+2026-10-26	development	R-0550 follow-up, task 3: scaling probes of Resolve, Check and Elab beyond the gate shapes (calls, parameters, wide match, value if and match chains, struct fields) on main 1bcb7c36	11 shapes	295,296,297,298	-
