@@ -1,8 +1,8 @@
 # Bug-discovery record: one row per probe batch, the input of the reliability exit's discovery-rate
 # signal (ROADMAP Phase 1 exit 2m) and of the bug dashboard (scripts/gen/bug_dashboard.py, which
 # check_docs_drift.sh runs with --check). Every bug record from 079 on (docs/bugs/NNN_*.md) is
-# attributed to exactly one row; whoever files a bug adds it to the batch that found it, or adds that
-# batch, in the same commit, and regenerates the dashboard.
+# attributed to exactly one row, written by scripts/gen/new_bug.sh when the bug is filed (--batch adds it
+# to an existing row, --new-batch adds the row), in the same commit as the record (bug 300).
 # A row is a batch: a bounded piece of probing with a recorded effort, whether or not it found bugs.
 # A batch that finds nothing is recorded too: zero rows are the signal.
 # Columns (tab-separated, every cell non-empty, "-" for none):
@@ -110,3 +110,4 @@ date	kind	probe	effort	bugs	silent
 2026-10-26	development	R-0550 follow-up: whole compiles (--emit-llvm) of the nested-ifs shape after bug 286, attributed by callgrind to Report's safety gate	4 programs	293	-
 2026-10-26	development	R-0550 follow-up, task 3: scaling probes of Resolve, Check and Elab beyond the gate shapes (calls, parameters, wide match, value if and match chains, struct fields) on main 1bcb7c36	11 shapes	295,296,297,298	-
 2026-10-26	ci	CI run 40377660985 (wip/bug-298): check_work_queue.sh budgets leg missed budget_exhausted; the leg then repeated on OVH under load	1400 cases	299	-
+2026-10-26	development	bug filing with scripts/gen/new_bug.sh (bugs 284 and 299 aborted after reserving their numbers)	2 filings	300	-

@@ -94,9 +94,11 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
   macOS job has no `timeout`, and `bounded_run` reports a second timeout as INCOMPLETE, not a pass.
 - A ledger `coverage:` line names only the gates that cover the bug: the filing check accepts a
   `.sh` name there as the coverage claim without running or opening it.
-- File in the migrated ledger format (`scripts/gen/new_bug.sh`: the `bug-ledger` block, a
-  `changelog.d/` fragment, a `discovery.tsv` row), then regenerate with
-  `scripts/gen/bug_ledger.py --write` and `scripts/gen/bug_dashboard.py --write`.
+- File in the migrated ledger format with `scripts/gen/new_bug.sh`, which writes the `bug-ledger`
+  block, a `changelog.d/` fragment and the `discovery.tsv` row (`--batch` or `--new-batch`, with
+  `--silent`) and regenerates the views; after editing a record, regenerate with
+  `scripts/gen/bug_ledger.py --write` and `scripts/gen/bug_dashboard.py --write`. If the script fails
+  after reserving a number, rerun the `--number NNN` command it prints rather than filing by hand.
 - Have Codex confirm each bug is real (a reproducer and a verdict line in the record) before
   filing it.
 

@@ -1208,8 +1208,16 @@ def promote(args):
     print(f"== fixture: {rel}{' (written)' if out_dir and args.write else ''}")
     print(fixture)
     print("== file it (scripts/gen/new_bug.sh allocates NNN and writes the record skeleton):")
+    # Runnable as printed (bug 300): the discovery batch is this finding's own generator, seed and
+    # compiler. When the campaign that found it already has its docs/bugs/discovery.tsv row (with
+    # its hours), use --batch "<that row's probe text>" instead.
+    probe = (f"fuzz farm finding {args.signature.split('-')[-1][:8]}: generator {meta['generator']}, "
+             f"seed {meta['seed']}, compiler {meta['compiler_sha'][:12]}")
     print(f"scripts/gen/new_bug.sh {json.dumps(title)} --silent "
-          f"{'yes' if meta['class'] == 'silent' else 'no'}")
+          f"{'yes' if meta['class'] == 'silent' else 'no'} "
+          f"--new-batch fuzz --probe {json.dumps(probe)} --effort \"1 cases\"")
+    print("(or --batch \"<probe text>\" in place of --new-batch when the campaign already has its "
+          "docs/bugs/discovery.tsv row)")
     print(f"cp {rel} tests/regressions/bugNNN_{bug_slug}/repro.con && rm -r tests/regressions/{slug}")
     print("then fill the FILL-IN(new_bug.sh) fields and pin the reproducer in a gate leg.")
     return 0

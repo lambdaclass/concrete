@@ -38,10 +38,10 @@ Facts that many branches record live in files only their owner edits. The shared
 generated from them, and `check_ledgers.sh` (run by `check_docs_drift.sh`) fails when a view is
 hand-edited or stale.
 
-- **To file a bug, write its record**, starting from `scripts/gen/new_bug.sh "<title>" [--class N]
-  [--silent yes|no]`, which reserves the number on origin (`refs/bug-reservations/NNN`, race-safe
-  across branches, worktrees and machines) and scaffolds the record, a reproducer and a fragment
-  (`check_new_bug.sh` tests it). `docs/bugs/NNN_*.md` holds the bug's status and, in its
+- **To file a bug, write its record**, starting from `scripts/gen/new_bug.sh "<title>" --silent yes|no
+  --batch <text> [--class N]` (or `--new-batch <kind> --probe <text> --effort <size>`), which reserves the number on origin (`refs/bug-reservations/NNN`, race-safe
+  across branches, worktrees and machines) and scaffolds the record, a reproducer, a fragment and the
+  `discovery.tsv` row (`check_new_bug.sh` tests it). `docs/bugs/NNN_*.md` holds the bug's status and, in its
   `bug-ledger` block, its summary, its coverage (`fixtures:` or `coverage:`), its structural
   classes, whether it is silent and its exits ([docs/bugs/README.md](../../docs/bugs/README.md),
   "Filing a bug"). `audit_bug_corpus.sh` and `check_bug_filing_complete.sh` read the coverage from

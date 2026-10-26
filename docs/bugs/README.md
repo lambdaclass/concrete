@@ -29,11 +29,16 @@ fragment ([changelog.d/README.md](../../changelog.d/README.md)); never edit a ge
 fact about a bug lives in its record and nowhere else, so two branches filing bugs edit different
 files and cannot conflict.
 
-Start with `scripts/gen/new_bug.sh "<title>" [--class N] [--silent yes|no]`. It takes the next number
-no branch, worktree or reservation has used and reserves it on origin (`refs/bug-reservations/NNN`),
-so two writers never get one number; it writes the record, a reproducer skeleton under
-`tests/regressions/` and a `changelog.d/` fragment, regenerates the views and lists every
-`FILL-IN(new_bug.sh)` placeholder left to fill in. `check_bug_filing_complete.sh` refuses a
+Start with `scripts/gen/new_bug.sh "<title>" --silent yes|no --batch <text> [--class N]`, or with
+`--new-batch <kind> --probe <text> --effort <size>` in place of `--batch` when the probe batch that
+found the bug has no row yet. It takes the next number no branch, worktree or reservation has used
+and reserves it on origin (`refs/bug-reservations/NNN`), so two writers never get one number; it
+writes the record, a reproducer skeleton under `tests/regressions/`, a `changelog.d/` fragment and
+the bug's [discovery record](discovery.tsv) attribution (`--batch` adds it to the one row whose probe
+cell contains the text), regenerates the views and the dashboard, and lists every
+`FILL-IN(new_bug.sh)` placeholder left to fill in. Everything it can refuse it checks before
+reserving; if it still fails after the reservation it removes what it wrote and prints the
+`new_bug.sh --number NNN ...` command that files the same bug under the number it holds (bug 300). `check_bug_filing_complete.sh` refuses a
 placeholder, so a draft can be backed up on `wip/*` but cannot land.
 
 A bug record is `docs/bugs/NNN_short_name.md`. Every time a bug is found,
@@ -89,10 +94,11 @@ edit them:
 without regenerating), and `audit_bug_corpus.sh` and `check_bug_filing_complete.sh` fail on a
 record with no coverage or a fixture that does not exist.
 
-Also record the bug's number in the [discovery record](discovery.tsv), in the row of the probe
-batch that found it (adding that batch if it is new), and in that row's `silent` column when it is
-silent; the record's `silent:` line must agree. Then regenerate the roadmap's
-[bug dashboard](../../ROADMAP.md#bug-dashboard) (`python3 scripts/gen/bug_dashboard.py --write`;
+The bug's number is recorded in the [discovery record](discovery.tsv), in the row of the probe
+batch that found it, and in that row's `silent` column when it is silent; the record's `silent:`
+line must agree. `new_bug.sh` writes both from `--batch`/`--new-batch` and `--silent`; when a fact
+changes later (the bug turns out silent, or belongs to another batch), edit both and regenerate the
+roadmap's [bug dashboard](../../ROADMAP.md#bug-dashboard) (`python3 scripts/gen/bug_dashboard.py --write`;
 `refresh_generated.sh` runs it too). A probe batch that finds nothing is recorded too: its zero is
 the discovery-rate signal of Phase 1 exit 2m.
 
@@ -373,6 +379,7 @@ or contained until its owner lands follows the roadmap's defect disposition rule
 - [297_call_arguments_and_merge_inputs_appended.md](297_call_arguments_and_merge_inputs_appended.md) — Elab (elabCallEv and the method, static-method, trait-bound and indirect call cases of elabExprEv) and Lower (lowerExpr's call case, its `&mut` write-backs, and reconcileBranchVars' per-arm incoming list) built their lists with `xs := xs ++ [x]` per argument or per arm, so one call of n arguments took time n² to elaborate and lower (8000 arguments: elaborate 145 ms, lower 126 ms) and one match of n arms took n² to merge each binding it changes (8000 arms: lower 583 ms, half of it the dominator residue of bug 178). Found by scaling probes beyond the R-0550 shapes. Class 17.
 - [298_operand_escape_search_value_branches.md](298_operand_escape_search_value_branches.md) — bug 142's rule (no return/break/continue inside an operand, E0278) is enforced by a search of the operand's subtree at every protected expression; bug 280 handed the answer down through parentheses and operators but a value `if` or `match` dropped it, so an operand chain n deep through nested value ifs or matches was searched again at every level, time n² (8000 deep on main 1bcb7c36: check 2721 ms through ifs, 2806 ms through matches). Found probing the R-0550 shapes for Check quadratics. Class 17.
 - [299_work_queue_dispatcher_fetch_races_agent_pushes.md](299_work_queue_dispatcher_fetch_races_agent_pushes.md) — the work-queue dispatcher fetched with `git fetch --prune origin` into refs/remotes/origin/*, the namespace every agent worktree of the same clone also writes (a push updates its remote-tracking ref); an agent push landing mid-fetch failed the fetch ("incorrect old value provided"), the tick reported source_error and skipped dispatch, so check_work_queue.sh's budgets leg intermittently saw no budget_exhausted event. The dispatcher now fetches only into its own namespace refs/queue/remote/<remote>/* and reads its base and resume points from there.
+- [300_new_bug_sh_reserves_a_number_then_refuses_the_fi.md](300_new_bug_sh_reserves_a_number_then_refuses_the_fi.md) — `new_bug.sh` reserved a bug number and then failed in `bug_dashboard.py`, which refuses a record from 079 on with no `docs/bugs/discovery.tsv` row; the row has to name the number, which does not exist before the reservation, and the scaffold neither wrote the row nor offered a way to name it, so every filing left a reserved, unfiled number. The scaffold now writes the attribution itself (`--batch` joins an existing row, `--new-batch` adds one), checks it and the dashboard before reserving, restores `discovery.tsv` on a later failure, and prints a `--number NNN` command that files the same bug under the held number.
 
 ## Open Numbered Bugs
 
