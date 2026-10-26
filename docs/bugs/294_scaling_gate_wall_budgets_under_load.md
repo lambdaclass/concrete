@@ -74,8 +74,10 @@ KINDS OF MEASUREMENT"):
 
 The budgets, allocation and instruction budgets and rates are measured with the new method on
 concrete-ci-2 with no other load (the fuzz farm moved to concrete-ci-3), in the commit that records
-them (`measured:` stamp in `compile_scaling_budgets.tsv`); until it lands, the file holds the old
-wall budgets and no rates, so the gate judges as before (factor 1, wall growth for every run).
+them (`measured:` stamp in `compile_scaling_budgets.tsv`). Until it lands the file holds the old
+wall budgets and no `rate`, `instr` or `hbbudget` rows: wall budgets are judged unnormalized (host
+factor 1) and no exact budget is enforced, while growth already moves to instruction counts on a
+host that can count them (it needs no recorded rows), and stays on wall time elsewhere.
 
 ## Structural cause
 
