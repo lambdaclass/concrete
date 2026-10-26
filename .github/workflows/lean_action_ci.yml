@@ -108,6 +108,11 @@ jobs:
       - name: Perf-tracking harness (no alarm on noise, alarm on a planted 2x)
         run: bash scripts/tests/check_perf_tracking.sh
 
+      # Build-free: the leanprof profile job (R-0551) on synthetic reports, a fake leanprof and a
+      # local origin: no finding on noise or a uniform slowdown, a finding on a planted quadratic.
+      - name: Compiler-profile harness (finding on a planted hot spot, none on noise)
+        run: bash scripts/tests/check_leanprof_profile.sh
+
       - name: Run Python LL(1) checker
         run: python3 scripts/check_ll1.py grammar/concrete.ebnf
 
