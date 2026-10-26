@@ -2,7 +2,7 @@
 
 <!-- bug-ledger
 summary: gates asserted with `printf '%s' "$OUT" | grep -q PAT` (and other producers piped into `grep -q`) under `pipefail`; when grep exits on its first match while the producer is still writing, the producer dies of SIGPIPE and the pipeline's status inverts the match: a positive leg reports FAIL although the pattern is present, and a negated leg (`| grep -q FORBIDDEN && no || ok`) reports ok although the forbidden text is there. Every such site now matches with `has_match` (scripts/tests/lib/has_match.sh), which reads all of its input.
-coverage: `check_gate_hygiene.sh` leg "no pipe into a short-circuiting grep or head before a match (bug 283)" refuses the shape in every script under scripts/ and the pre-push hook, with flagged and unflagged controls, and executes the race: a 500000-line producer reproduces status 141 and the inverted negated verdict through the old pipe, and has_match answers correctly through a pipe and a here-string
+coverage: `check_gate_hygiene.sh` leg "no pipe into a short-circuiting grep or head before a match (bug 283)" refuses the shape in every script under scripts/ and the pre-push hook, with flagged and unflagged controls, and executes the race: a 500000-line producer reproduces the failing status (141, or 1 where the runner ignores SIGPIPE and printf reports EPIPE) and the inverted negated verdict through the old pipe, and has_match answers correctly through a pipe and a here-string
 silent: yes
 -->
 
@@ -89,7 +89,8 @@ controls: thirty-one hazardous fixtures are flagged (among them `grep -e PAT -q`
 `--he`, a quoted `"-q"` or `'--q'`, `-q;x`, legs inside eval strings, `head -1 | sed … | has_match`,
 `sed '5q' | has_match`) and nine safe ones
 (here-string, drained pipe, `||`, file operand, `grep -c`, `awk 'NR<=1'`, heredoc data, comment, an
-option spelled inside a quoted argument) are not; a 500000-line producer reproduces status 141 and the
+option spelled inside a quoted argument) are not; a 500000-line producer reproduces the failing status (141, or 1
+where the runner ignores SIGPIPE and printf reports EPIPE) and the
 inverted negated verdict through the old pipe and gets the right answer from has_match through a
 pipe and a here-string, with a missing pattern still 1 and a failing producer still failing the
 pipeline; eleven error and refused forms (including a script that traps TERM, `-q` placed after

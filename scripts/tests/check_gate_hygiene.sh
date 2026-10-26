@@ -620,8 +620,10 @@ cat > "$_sc_dir/race.sh" <<'RACE'
 set -uo pipefail
 source "$1"
 BIG="$(seq 1 500000)"
-printf '%s' "$BIG" | grep -q '^1$'; echo "old-positive=$?"
-printf '%s' "$BIG" | grep -q '^1$' && echo "old-negated=forbidden-seen" || echo "old-negated=passed"
+# The producer's status is 141 when SIGPIPE kills it, or 1 when the runner starts jobs with SIGPIPE
+# ignored and printf reports EPIPE as a write error (GitHub's Linux runners): either way non-zero.
+printf '%s' "$BIG" 2>/dev/null | grep -q '^1$'; rc=$?; [ "$rc" -ne 0 ] && echo "old-positive=fails" || echo "old-positive=passes"; echo "old-positive-status=$rc"
+printf '%s' "$BIG" 2>/dev/null | grep -q '^1$' && echo "old-negated=forbidden-seen" || echo "old-negated=passed"
 printf '%s' "$BIG" | has_match '^1$'; echo "pipe-positive=$?"
 printf '%s' "$BIG" | has_match '^1$' && echo "pipe-negated=forbidden-seen" || echo "pipe-negated=passed"
 has_match '^1$' <<<"$BIG"; echo "here-positive=$?"
@@ -630,8 +632,8 @@ has_match '^0$' <<<"$BIG"; echo "absent=$?"
 { echo hit; exit 3; } | has_match hit; echo "producer-failure=$?"
 RACE
 RACE_OUT="$(bash "$_sc_dir/race.sh" "$_HMLIB" 2>&1)" || true
-for want in old-positive=141 old-negated=passed; do
-  if grep -qxF "$want" <<<"$RACE_OUT"; then ok "control: the old pipe reproduces bug 283 ($want: the verdict inverts)"
+for want in old-positive=fails old-negated=passed; do
+  if grep -qxF "$want" <<<"$RACE_OUT"; then ok "control: the old pipe reproduces bug 283 ($want, $(grep -m1 '^old-positive-status=' <<<"$RACE_OUT"): the verdict inverts)"
   else no "control: the old pipe did not reproduce bug 283 ($want missing): $(tr '\n' ' ' <<<"$RACE_OUT")"; fi
 done
 for want in pipe-positive=0 pipe-negated=forbidden-seen here-positive=0 here-negated=forbidden-seen absent=1 producer-failure=3; do
