@@ -41,9 +41,9 @@ terminates (killed at 5 s); `--interp` prints the sum.
 
 `regress_285_enum_payload_addr_taken.con` exercises every site that asks the walk. On main's
 compiler, each called alone: the statement `if` returns 70 (want 4), the value `if` 70 (want 3),
-the `match` 71 (want 6), the loop does not terminate (want 15); the `&&` right operand's form
-returns the right value (6) because clang folds the uninitialized load to the one stored value,
-but its IR has the same load. With the fix all agree with `--interp`.
+the `match` 71 (want 6), the `&&` right operand (a value `if` in it assigns `x` and takes its
+address in a payload) 70 (want 6), and the loop does not terminate (want 15). With the fix all agree
+with `--interp`.
 
 ## Expected
 

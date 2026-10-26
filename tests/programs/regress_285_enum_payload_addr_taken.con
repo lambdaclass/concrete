@@ -59,8 +59,13 @@ fn match_arm(k: i64) -> i64 {
 }
 
 fn and_rhs(c: bool) -> i64 {
-    let x: i64 = 6;
-    let b: bool = c && payload(E::A { v: get(&x) }) == 6;
+    let mut x: i64 = 6;
+    let b: bool = c && if c {
+        x = 70;
+        payload(E::A { v: get(&x) }) == 70
+    } else {
+        false
+    };
     if b {
         return 100;
     }
