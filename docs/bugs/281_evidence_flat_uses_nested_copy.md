@@ -42,8 +42,8 @@ its header calls legitimate.
 ## Measurements
 
 `elaborate` stage in ms (`--emit-trace-json`, fastest of 3 runs), dev host (fede-256gb),
-`nested-ifs` shape, before (main 9d8182ea's compiler) and after (built from this branch's compiler
-sources on main; the build had no other modification):
+`nested-ifs` shape, before (main 9d8182ea's compiler) and after (built from the tree of 2c0f8d03,
+this fix on main; the build had no other modification):
 
 | depth | before | after |
 |---|---|---|
