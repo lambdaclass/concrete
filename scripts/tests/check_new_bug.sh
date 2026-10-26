@@ -22,7 +22,8 @@
 #      and prints a --number command that files the same bug under the number it holds, without a
 #      second reservation; --number refuses a number that is not reserved, is another user's, is
 #      being filed by another run, or already has a record, and of two concurrent --number runs on
-#      one held number exactly one files it.
+#      one held number exactly one files it; the commands the fuzz farm and CI triage print are
+#      accepted as printed.
 #
 # Copies the ledger inputs the way check_ledgers.sh does (migrating the copy when this tree is not
 # migrated yet), so it needs no compiler build. Runs in seconds.
@@ -347,6 +348,25 @@ if { [ "$ra" = 0 ] && [ "$rb" != 0 ]; } || { [ "$ra" != 0 ] && [ "$rb" = 0 ]; };
     ok "two concurrent --number runs on one held number: exactly one filed it, the other was refused"
   else no "two concurrent --number runs: $filed records for bug $RACE, or the loser gave another reason: $(cat "$TMP/raceA.out" "$TMP/raceB.out" | tr '\n' ' ' | cut -c1-300)"; fi
 else no "two concurrent --number runs on bug $RACE: exit statuses $ra and $rb, not one success: $(cat "$TMP/raceA.out" "$TMP/raceB.out" | tr '\n' ' ' | cut -c1-300)"; fi
+# The automatic filing paths print commands that must pass as printed (bug 300): the fuzz farm's
+# promote output (pinned byte-exact in its golden) and CI triage's skeleton command.
+FC="$(sed -n 's/^\(scripts\/gen\/new_bug\.sh .*--new-batch .*\)$/\1/p' "$ROOT_DIR/tests/fixtures/fuzz_farm/promote.golden")"
+if [ -n "$FC" ] && (cd "$W" && eval "bash $FC") > "$TMP/farm.out" 2>&1; then
+  ok "the fuzz farm's printed new_bug.sh command files a bug as printed"
+else no "the fuzz farm's printed new_bug.sh command was refused or not found: $(tr '\n' ' ' < "$TMP/farm.out" 2>/dev/null | cut -c1-240)"; fi
+TC="$(python3 -I - "$ROOT_DIR" <<'PY'
+import os, re, sys
+src = open(os.path.join(sys.argv[1], "scripts", "ci", "triage.py")).read()
+m = re.search(r"f'bash (scripts/gen/new_bug\.sh .*?)'\s*\n\s*f'(--new-batch .*?)'", src)
+cmd = (m.group(1) + m.group(2)) if m else ""
+for k, v in (('{r["gate"]}', "check_x.sh"), ("{first}", "a failing leg"), ('{run.get("databaseId")}', "1")):
+    cmd = cmd.replace(k, v)
+print(cmd if "{" not in cmd else "")
+PY
+)"
+if [ -n "$TC" ] && (cd "$W" && eval "bash $TC") > "$TMP/triage.out" 2>&1; then
+  ok "CI triage's printed new_bug.sh command files a bug as printed"
+else no "CI triage's printed new_bug.sh command was refused or not found ('$TC'): $(tr '\n' ' ' < "$TMP/triage.out" 2>/dev/null | cut -c1-240)"; fi
 refuse "--number with --number-only" "--number-only reserves a new one" bash "$NB" --number-only --number 990 "x defect"
 
 echo "NEW-BUG: PASS=$PASS FAIL=$FAIL"
