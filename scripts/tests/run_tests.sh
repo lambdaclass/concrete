@@ -9403,6 +9403,60 @@ else
     echo "  ok  bug 289: nests 8000 deep check within budget:$r289_ok"
     PASS=$((PASS + 1))
 fi
+# Bug 298: the operand-escape search (bug 142's rule, E0278) ran again at every level of a value
+# `if` or `match` nested as an operand: bug 280's fix handed its answer down only through
+# parentheses and operators, so an operand chain 8000 deep through value `if`s took 2721 ms to
+# check on main 1bcb7c36 (`match`es 2806 ms). The exit diagnostics are pinned by the two error
+# fixtures, a `break` bound by a loop inside such an operand by the run fixture; then each chain
+# 8000 deep must check within 150 ms, retried once at 300 ms (21 and 28 ms with the fix).
+run_ok "$TESTDIR/regress_298_value_branch_operand_exits.con" 42
+run_err "$TESTDIR/error_298_exit_nested_value_if.con" "(E0278) \`return\` may not occur inside an operand of a binary operator"
+run_err "$TESTDIR/error_298_exit_nested_value_match.con" "(E0278) \`return\` may not occur inside an operand of a binary operator"
+r298_bad=""; r298_incomplete=""; r298_ok=""
+for r298_shape in if match; do
+    r298_src="$TMPDIR/r298_${r298_shape}_8000.con"
+    awk -v shape="$r298_shape" -v n=8000 'BEGIN {
+        print "fn main() -> Int {"
+        print "    let t: i64 = 1;"
+        printf "    let s: i64 = "
+        for (i = 0; i < n; i++) {
+            if (shape == "match") printf "match t { 1 => 1 + "
+            else printf "if t > 0 { 1 + "
+        }
+        printf "0"
+        for (i = 0; i < n; i++) {
+            if (shape == "match") printf ", _ => 0, }"
+            else printf " } else { 0 }"
+        }
+        print ";"
+        printf "    return (s - %d + 42) as Int;\n", n
+        print "}"
+    }' > "$r298_src"
+    r265_stage_ms "$r298_src" check; r298_first="$r265_ms"; r298_ms="$r298_first"
+    case "$r298_first" in
+        ''|*[!0-9]*) ;;
+        *) if [ "$r298_first" -gt 150 ]; then r265_stage_ms "$r298_src" check; r298_ms="$r265_ms"; fi ;;
+    esac
+    case "$r298_ms" in
+        incomplete) r298_incomplete="$r298_incomplete $r298_shape" ;;
+        ''|*[!0-9]*) r298_bad="$r298_bad $r298_shape:$r298_ms" ;;
+        *) if [ "$r298_first" -le 150 ] || [ "$r298_ms" -le 300 ]; then
+               r298_ok="$r298_ok $r298_shape:${r298_ms}ms"
+           else
+               r298_bad="$r298_bad $r298_shape:${r298_first}ms,${r298_ms}ms"
+           fi ;;
+    esac
+done
+if [ -n "$r298_bad" ]; then
+    echo "FAIL  bug 298: checking an operand chain 8000 deep exceeded its budget (150 ms, retry 300) or failed:$r298_bad"
+    FAIL=$((FAIL + 1))
+elif [ -n "$r298_incomplete" ]; then
+    echo "  INCOMPLETE bug 298: checking an operand chain 8000 deep timed out twice (180 s each):$r298_incomplete"
+    INCOMPLETE=$((INCOMPLETE + 1))
+else
+    echo "  ok  bug 298: operand chains 8000 deep through value if/match check within budget:$r298_ok"
+    PASS=$((PASS + 1))
+fi
 # Bug 290: at every arm of every `match`, Check walked every non-Copy binding in scope (the H9
 # block-local check and the arms' agreement check), and it looked each enum up in the list of all
 # enums, so a function matching n enum values took n² to check (8000 on main 99084f4f: 10088 ms).

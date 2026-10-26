@@ -1,0 +1,33 @@
+// Bug 298: a value `if` or `match` nested as an operand hands an enclosing operand search's
+// answer to its condition or scrutinee and its trailing values only; a loop inside a branch
+// still starts its own search, so a `break` bound by that loop stays legal.
+fn f(c: bool, m: i64) -> i64 {
+    let s: i64 = 1 + if c {
+        let mut k: i64 = 0;
+        while k < 10 {
+            k = k + 1;
+            if k == 3 {
+                break;
+            }
+        }
+        k + if c { 4 } else { 0 }
+    } else {
+        0
+    };
+    let t: i64 = 2 + match m {
+        1 => {
+            let mut j: i64 = 0;
+            while true {
+                j = j + 5;
+                break;
+            }
+            j + match m { 1 => 26, _ => 0, }
+        },
+        _ => 0,
+    };
+    return s + t;
+}
+
+fn main() -> Int {
+    return (f(true, 1) + 1) as Int;
+}

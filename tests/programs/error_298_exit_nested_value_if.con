@@ -1,0 +1,8 @@
+fn f(c: bool) -> i64 {
+    let s: i64 = 1 + if c { 1 + if c { return 1; } else { 0 } } else { 0 };
+    return s;
+}
+
+fn main() -> Int {
+    return f(true) as Int;
+}

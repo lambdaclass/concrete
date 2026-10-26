@@ -1,0 +1,8 @@
+fn f(c: i64) -> i64 {
+    let s: i64 = 1 + match c { 1 => 1 + match c { 1 => { return 1; }, _ => 0, }, _ => 0, };
+    return s;
+}
+
+fn main() -> Int {
+    return f(1) as Int;
+}

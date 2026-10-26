@@ -677,7 +677,11 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
       else match firstOperandEscape? 0 [] ops with
         | some (kw, sp) => throwCheck (.exitInOperand kw ctx) (some sp)
         | none => pure (match e with | .allocCall .. => false | _ => true)
-    | none => pure (clean && (match e with | .paren .. => true | _ => false))
+    -- Bug 298: a value `if` or `match` passes the answer to its condition or scrutinee and to the
+    -- trailing expressions of its branches or arms (`checkExprCore`): an exit leaving one of them
+    -- leaves the `if` or `match` too, and no loop lies between, so an operand chain through nested
+    -- value `if`s and `match`es is not searched again per level.
+    | none => pure (clean && (match e with | .paren .. | .ifExpr .. | .match_ .. => true | _ => false))
   let t ← checkExprCore e hint mode cleanHere flex ends
   match e with
   | .call .. | .methodCall .. | .staticMethodCall .. | .allocCall .. =>
@@ -897,7 +901,10 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     checkExpr inner hint
   | .ifExpr _ cond then_ else_ =>
     -- if-as-expression: if cond { then_ } else { else_ }
-    let condTy ← checkExpr cond
+    -- Bug 298: `clean` (an enclosing protected expression's search covered this `if` and found
+    -- no exit) holds for the condition and each branch's trailing expression, which no loop
+    -- separates from the `if`; the statements before them start fresh searches, as before.
+    let condTy ← checkExpr cond (clean := clean)
     if condTy != .bool then
       throwCheck (.ifCondNotBool (tyToString condTy)) (some e.getSpan)
     let env ← getEnv
@@ -920,7 +927,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     checkStmtsCore thenInit env.currentRetTy
     let thenTy ← match then_.getLast? with
       | some (.expr _ tExpr true) => do
-        let ty ← checkExpr tExpr hint
+        let ty ← checkExpr tExpr hint (clean := clean)
         -- value mode auto-consumes a trailing ident (docs/spec/ownership.md OWN-15)
         pure ty
       | some (.return_ _ v) =>
@@ -943,7 +950,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     checkStmtsCore elseInit env.currentRetTy
     let elseTy ← match else_.getLast? with
       | some (.expr _ eExpr true) => do
-        let ty ← checkExpr eExpr hint
+        let ty ← checkExpr eExpr hint (clean := clean)
         pure ty
       | some (.return_ _ v) =>
         match v with
@@ -1735,7 +1742,8 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     -- `match *r` reads the pointee BY VALUE: a non-Copy pointee is E0290 (its payloads
     -- would bind as owned values the owner still holds); `match r` matches through the
     -- reference and binds non-Copy payloads as borrowed views (Codex review of round 3).
-    let scrTy ← checkExpr scrutinee
+    -- Bug 298: see the `.ifExpr` case.
+    let scrTy ← checkExpr scrutinee (clean := clean)
     -- Bug 289: the end facts of each arm's block, handed down by an enclosing construct that
     -- already computed them for this match, else computed here in one walk per arm.
     let armTrees : List EndsTree :=
@@ -1873,7 +1881,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           checkStmtsCore bodyInit curEnv.currentRetTy
           let armTy ← match body.getLast? with
             | some (.expr _ armExpr true) => do
-              let ty ← checkExpr armExpr hint (ends := some armT)
+              let ty ← checkExpr armExpr hint (clean := clean) (ends := some armT)
               pure ty
             | some (.return_ rsp v) =>
               -- A `return` inside an arm consumes the returned value (and checks it
@@ -2025,7 +2033,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         checkStmtsCore bodyInit envBefore.currentRetTy
         let armTy ← match body.getLast? with
           | some (.expr _ armExpr true) => do
-            let ty ← checkExpr armExpr hint (ends := some armT)
+            let ty ← checkExpr armExpr hint (clean := clean) (ends := some armT)
             pure ty
           | some (.return_ rsp v) =>
             checkStmt (.return_ rsp v) envBefore.currentRetTy
