@@ -51,7 +51,7 @@ jobs:
 
       - name: Install Nix (GitHub-hosted only)
         if: runner.environment != 'self-hosted'
-        uses: cachix/install-nix-action@v27
+        uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
@@ -150,7 +150,7 @@ jobs:
 
       - name: Install Nix (GitHub-hosted only)
         if: runner.environment != 'self-hosted'
-        uses: cachix/install-nix-action@v27
+        uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
@@ -221,7 +221,7 @@ jobs:
 
       - name: Install Nix (GitHub-hosted only)
         if: runner.environment != 'self-hosted'
-        uses: cachix/install-nix-action@v27
+        uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
@@ -295,7 +295,7 @@ jobs:
 
       - name: Install Nix (GitHub-hosted only)
         if: runner.environment != 'self-hosted'
-        uses: cachix/install-nix-action@v27
+        uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
@@ -367,7 +367,7 @@ jobs:
 
       - name: Install Nix (GitHub-hosted only)
         if: runner.environment != 'self-hosted'
-        uses: cachix/install-nix-action@v27
+        uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
@@ -417,7 +417,7 @@ jobs:
 
       - name: Install Nix (GitHub-hosted only)
         if: runner.environment != 'self-hosted'
-        uses: cachix/install-nix-action@v27
+        uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
@@ -494,7 +494,7 @@ jobs:
 
       - name: Install Nix (GitHub-hosted only)
         if: runner.environment != 'self-hosted'
-        uses: cachix/install-nix-action@v27
+        uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
@@ -512,7 +512,7 @@ jobs:
 
       - name: Install Nix (GitHub-hosted only)
         if: runner.environment != 'self-hosted'
-        uses: cachix/install-nix-action@v27
+        uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
@@ -608,7 +608,7 @@ jobs:
 
       - name: Install Nix (GitHub-hosted only)
         if: runner.environment != 'self-hosted'
-        uses: cachix/install-nix-action@v27
+        uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
@@ -644,7 +644,7 @@ jobs:
 
       - name: Install Nix (GitHub-hosted only)
         if: runner.environment != 'self-hosted'
-        uses: cachix/install-nix-action@v27
+        uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
@@ -746,7 +746,7 @@ jobs:
 
       - name: Install Nix (GitHub-hosted only)
         if: runner.environment != 'self-hosted'
-        uses: cachix/install-nix-action@v27
+        uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
@@ -783,7 +783,7 @@ jobs:
 
       - name: Install Nix (GitHub-hosted only)
         if: runner.environment != 'self-hosted'
-        uses: cachix/install-nix-action@v27
+        uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
@@ -852,7 +852,7 @@ jobs:
 
       - name: Install Nix (GitHub-hosted only)
         if: runner.environment != 'self-hosted'
-        uses: cachix/install-nix-action@v27
+        uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
@@ -929,7 +929,7 @@ jobs:
 
       - name: Install Nix (GitHub-hosted only)
         if: runner.environment != 'self-hosted'
-        uses: cachix/install-nix-action@v27
+        uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
@@ -1117,7 +1117,7 @@ jobs:
 
       - name: Install Nix (GitHub-hosted only)
         if: runner.environment != 'self-hosted'
-        uses: cachix/install-nix-action@v27
+        uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
@@ -1542,7 +1542,7 @@ jobs:
 
       - name: Install Nix (GitHub-hosted only)
         if: runner.environment != 'self-hosted'
-        uses: cachix/install-nix-action@v27
+        uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
@@ -1650,7 +1650,7 @@ jobs:
 
       - name: Install Nix (GitHub-hosted only)
         if: runner.environment != 'self-hosted'
-        uses: cachix/install-nix-action@v27
+        uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
@@ -1741,7 +1741,7 @@ jobs:
 
       - name: Install Nix (GitHub-hosted only)
         if: runner.environment != 'self-hosted'
-        uses: cachix/install-nix-action@v27
+        uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
@@ -1925,7 +1925,7 @@ jobs:
 
       - name: Install Nix (GitHub-hosted only)
         if: runner.environment != 'self-hosted'
-        uses: cachix/install-nix-action@v27
+        uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
@@ -2054,7 +2054,7 @@ jobs:
 
       - name: Install Nix (GitHub-hosted only)
         if: runner.environment != 'self-hosted'
-        uses: cachix/install-nix-action@v27
+        uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
@@ -2119,7 +2119,7 @@ jobs:
 
       - name: Install Nix (GitHub-hosted only)
         if: runner.environment != 'self-hosted'
-        uses: cachix/install-nix-action@v27
+        uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
@@ -2197,7 +2197,7 @@ jobs:
 
       - name: Install Nix (GitHub-hosted only)
         if: runner.environment != 'self-hosted'
-        uses: cachix/install-nix-action@v27
+        uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
@@ -2280,7 +2280,7 @@ jobs:
 
       - name: Install Nix (GitHub-hosted only)
         if: runner.environment != 'self-hosted'
-        uses: cachix/install-nix-action@v27
+        uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
@@ -2365,7 +2365,7 @@ jobs:
 
       - name: Install Nix (GitHub-hosted only)
         if: runner.environment != 'self-hosted'
-        uses: cachix/install-nix-action@v27
+        uses: cachix/install-nix-action@v31
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
