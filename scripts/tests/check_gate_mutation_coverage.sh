@@ -824,7 +824,7 @@ add "diagnostic-quality" "Concrete/Check/CoreCheck.lean" "check_diagnostics_qual
   '| .insufficientCapabilities _ required _ => some s!"add '"'"'with({required})'"'"' to the calling function, or wrap the call in a trusted function"' \
   '| .insufficientCapabilities _ _ _ => none'
 add "fact-invalidation" "Concrete/Report/ReportObligations.lean" "check_scoped_collector.sh" yes \
-  '| _ => dropStaleHyps scope (assignedScalarsS s)' \
+  '| _ => scope.drop aHere' \
   '| _ => scope'
 add "report-schema-row" "Concrete/Report/Report.lean" "check_vc_schema.sh" yes \
   '("kind", .str v.kind),' \

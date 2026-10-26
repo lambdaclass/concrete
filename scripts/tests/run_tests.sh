@@ -9504,6 +9504,53 @@ case "$r292_ms" in
            FAIL=$((FAIL + 1))
        fi ;;
 esac
+# Bug 293: every compile runs Report's safety gate (provenViolationDiagnostics), whose scoped
+# walker re-walked each statement's subtree for the scalars it assigns, filtered the whole
+# hypothesis list after every statement and copied the scope at every nesting level, so a function
+# nested n deep took n² (10000 nested ifs: --emit-llvm 9.5 s with bug 286 fixed, of which the
+# stages through lower 0.25 s). `--emit-llvm` of 10000 nested ifs must finish within 3000 ms,
+# retried once at 6000 ms.
+r293_src="$TMPDIR/r293_nested_ifs_10000.con"
+awk -v n=10000 'BEGIN {
+    print "fn main() -> Int {"
+    print "    let mut s: i64 = 0;"
+    print "    let t: i64 = 1;"
+    line = "    "
+    for (i = 0; i < n; i++) line = line "if t > 0 { s = s + 1; "
+    for (i = 0; i < n; i++) line = line "}"
+    print line
+    printf "    return (s - %d + 42) as Int;\n", n
+    print "}"
+}' > "$r293_src"
+r293_emit_ms() {  # sets r293_ms to the --emit-llvm wall time in ms, "incomplete" or "rcN"
+    local rc=0 t0 t1
+    t0="$(python3 -c 'import time; print(int(time.time() * 1000))')"
+    bounded_run -r 180 180 -- $COMPILER "$r293_src" --emit-llvm > /dev/null 2>&1 || rc=$?
+    t1="$(python3 -c 'import time; print(int(time.time() * 1000))')"
+    if bounded_is_incomplete "$rc"; then r293_ms=incomplete; return 0; fi
+    if [ "$rc" != 0 ]; then r293_ms="rc$rc"; return 0; fi
+    r293_ms=$((t1 - t0))
+}
+r293_emit_ms; r293_first="$r293_ms"
+case "$r293_first" in
+    ''|*[!0-9]*) ;;
+    *) if [ "$r293_first" -gt 3000 ]; then r293_emit_ms; fi ;;
+esac
+case "$r293_ms" in
+    incomplete)
+        echo "  INCOMPLETE bug 293: compiling 10000 nested ifs timed out twice (180 s each)"
+        INCOMPLETE=$((INCOMPLETE + 1)) ;;
+    ''|*[!0-9]*)
+        echo "FAIL  bug 293: compiling 10000 nested ifs failed ($r293_ms)"
+        FAIL=$((FAIL + 1)) ;;
+    *) if [ "$r293_first" -le 3000 ] || [ "$r293_ms" -le 6000 ]; then
+           echo "  ok  bug 293: compiling 10000 nested ifs within budget (${r293_ms} ms, --emit-llvm)"
+           PASS=$((PASS + 1))
+       else
+           echo "FAIL  bug 293: compiling 10000 nested ifs took ${r293_first} ms, then ${r293_ms} ms (--emit-llvm; budget 3000, retry 6000)"
+           FAIL=$((FAIL + 1))
+       fi ;;
+esac
 # Bug 247: a function value written as an identifier reaches what it names in the assumption summary.
 run_ok "$TESTDIR/regress_247_function_value_reaches_foreign.con" 42
 run_ok "$TESTDIR/regress_247_free_value_beside_unrelated_extern.con" 42

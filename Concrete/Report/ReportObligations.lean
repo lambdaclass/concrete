@@ -319,61 +319,125 @@ def paramDecls (f : FnDef) : ScopeDecls :=
   , sizes := f.params.filterMap fun p =>
       match p.ty with | .array _ n => some (p.name, n) | _ => none }
 
+/-- Bug 293: the hypotheses in scope at a program point, as the scoped walker threads them.
+    `rev` holds them newest first, so entering a branch or a loop body is a cons (the list
+    `scope ++ [c]` copied the whole scope at every nesting level, n² for an n-deep nest), and
+    `toList` restores the order the leaves and every obligation see. `idents` holds every
+    identifier some hypothesis names, so the invalidation after a statement filters the scope only
+    when the statement assigns one of them; it may name more than the current hypotheses (it grows
+    with each push and is recomputed after a drop that filters), never fewer. -/
+structure ScopeHyps where
+  rev    : List Expr := []
+  idents : Std.HashSet String := {}
+
+def ScopeHyps.push (sc : ScopeHyps) (h : Expr) : ScopeHyps :=
+  { rev := h :: sc.rev, idents := (collectIdents h).foldl (·.insert ·) sc.idents }
+
+/-- `sc` followed by `hs`, in order: the hand-threaded `scope ++ hs`. -/
+def ScopeHyps.pushAll (sc : ScopeHyps) (hs : List Expr) : ScopeHyps := hs.foldl ScopeHyps.push sc
+
+def ScopeHyps.ofList (hs : List Expr) : ScopeHyps := ScopeHyps.pushAll {} hs
+
+def ScopeHyps.toList (sc : ScopeHyps) : List Expr := sc.rev.reverse
+
+/-- `dropStaleHyps` on the threaded scope: the hypotheses that name no assigned variable, in
+    order. When no identifier the scope names is assigned, the filter would keep every hypothesis
+    and the scope is returned unchanged; the test walks the smaller of the two sets. -/
+def ScopeHyps.drop (sc : ScopeHyps) (assigned : Std.HashSet String) : ScopeHyps :=
+  if sc.rev.isEmpty then {} else
+  let hit := if sc.idents.size ≤ assigned.size
+    then sc.idents.fold (fun b v => b || assigned.contains v) false
+    else assigned.fold (fun b v => b || sc.idents.contains v) false
+  if !hit then sc else
+  let kept := sc.rev.filter fun h => (collectIdents h).all (fun v => !assigned.contains v)
+  { rev := kept, idents := kept.foldl (fun acc h => (collectIdents h).foldl (·.insert ·) acc) {} }
+
+/-- The union of two assigned-name sets, inserting the smaller into the larger. -/
+def unionAssigned (a b : Std.HashSet String) : Std.HashSet String :=
+  if a.size ≤ b.size then a.fold (·.insert ·) b else b.fold (·.insert ·) a
+
 mutual
-partial def scopedWalkSizedS {α}
-    (leaf : List Expr → ScopeDecls → Stmt → List α)
-    (lcs : List LoopContract) (scope : List Expr) (decls : ScopeDecls) :
-    Stmt → List α
+/-- The walk of one statement: its obligations, and the scalars it assigns (`assignedScalarsS`,
+    as a set). Bug 293: the scalars come back from the walk, which visits every sub-statement
+    anyway; the block walker used to ask `assignedScalarsS`, a walk of the statement's whole
+    subtree, for every statement, so a nested `if` was walked again at each level above it. The
+    set follows `assignedScalarsGo` case by case: a `borrow … in` block, and every other statement
+    but `let` and `=`, assigns nothing. -/
+partial def scopedWalkGoS {α}
+    (leaf : Thunk (List Expr) → ScopeDecls → Stmt → List α)
+    (lcs : List LoopContract) (scope : ScopeHyps) (decls : ScopeDecls) :
+    Stmt → List α × Std.HashSet String
   | s@(.ifElse _ c t el) =>
-      leaf scope decls s
-        ++ scopedWalkSizedB leaf lcs (scope ++ [c]) decls t
-        ++ scopedWalkSizedB leaf lcs (scope ++ (negateGuard c).toList) decls (el.getD [])
+      let (oThen, aThen) := scopedWalkGoB leaf lcs (scope.push c) decls t
+      let (oElse, aElse) := scopedWalkGoB leaf lcs (scope.pushAll (negateGuard c).toList) decls (el.getD [])
+      (leaf (Thunk.mk fun _ => scope.toList) decls s ++ oThen ++ oElse, unionAssigned aThen aElse)
   | s@(.while_ sp _ b _) =>
-      leaf scope decls s
-        ++ scopedWalkSizedB leaf lcs (scope ++ loopHypsAt lcs sp.line) decls b
+      let (oBody, aBody) := scopedWalkGoB leaf lcs (scope.pushAll (loopHypsAt lcs sp.line)) decls b
+      (leaf (Thunk.mk fun _ => scope.toList) decls s ++ oBody, aBody)
   | s@(.forLoop sp init _ step b _) =>
       -- init, then this statement's own leaves (the loop condition), then step,
       -- then body — the traversal ORDER every family's old walker used, so the
       -- positional `#idx`/`#pre`/… keys are preserved across the migration.
       -- Anything `init` declares is visible to the condition, step and body.
       let decls' := ((init.map declsOwn).getD {}).extend decls
-      ((init.map (scopedWalkSizedS leaf lcs scope decls)).getD [])
-        ++ leaf scope decls' s
-        ++ ((step.map (scopedWalkSizedS leaf lcs scope decls')).getD [])
-        ++ scopedWalkSizedB leaf lcs (scope ++ loopHypsAt lcs sp.line) decls' b
+      let (oInit, aInit) := (init.map (scopedWalkGoS leaf lcs scope decls)).getD ([], {})
+      let (oStep, aStep) := (step.map (scopedWalkGoS leaf lcs scope decls')).getD ([], {})
+      let (oBody, aBody) := scopedWalkGoB leaf lcs (scope.pushAll (loopHypsAt lcs sp.line)) decls' b
+      (oInit ++ leaf (Thunk.mk fun _ => scope.toList) decls' s ++ oStep ++ oBody,
+       unionAssigned (unionAssigned aInit aStep) aBody)
   | s@(.borrowIn _ _ _ _ _ b) =>
-      leaf scope decls s ++ scopedWalkSizedB leaf lcs scope decls b
-  | s => leaf scope decls s
-partial def scopedWalkSizedB {α}
-    (leaf : List Expr → ScopeDecls → Stmt → List α)
-    (lcs : List LoopContract) (scope : List Expr) (decls : ScopeDecls) :
-    List Stmt → List α
-  | [] => []
+      (leaf (Thunk.mk fun _ => scope.toList) decls s ++ (scopedWalkGoB leaf lcs scope decls b).1, {})
+  | s@(.assign _ n _) =>
+      (leaf (Thunk.mk fun _ => scope.toList) decls s, ({} : Std.HashSet String).insert n)
+  | s@(.letDecl _ n _ _ _ _) =>
+      (leaf (Thunk.mk fun _ => scope.toList) decls s, ({} : Std.HashSet String).insert n)
+  | s => (leaf (Thunk.mk fun _ => scope.toList) decls s, {})
+/-- The walk of a block: its obligations in order, and the scalars its statements assign. -/
+partial def scopedWalkGoB {α}
+    (leaf : Thunk (List Expr) → ScopeDecls → Stmt → List α)
+    (lcs : List LoopContract) (scope : ScopeHyps) (decls : ScopeDecls) :
+    List Stmt → List α × Std.HashSet String
+  | [] => ([], {})
   | s :: rest =>
+      let (oHere, aHere) := scopedWalkGoS leaf lcs scope decls s
       let restScope := match s with
-        -- An empty scope has nothing to invalidate: skip the subtree walk (a nested `if`
-        -- would otherwise be walked once per enclosing level; bug 178). The catch-all arm
-        -- stays as it was: `dropStaleHyps` itself answers `[]` for an empty scope, and the
-        -- arm is the fact-invalidation mutation's anchor.
-        | .ifElse _ c t none => if blockTerminates t then scope ++ (negateGuard c).toList
-                                else if scope.isEmpty then [] else dropStaleHyps scope (assignedScalarsS s)
-        | _ => dropStaleHyps scope (assignedScalarsS s)
+        -- An empty scope has nothing to invalidate (bug 178). The catch-all arm is the
+        -- fact-invalidation mutation's anchor.
+        | .ifElse _ c t none => if blockTerminates t then scope.pushAll (negateGuard c).toList
+                                else if scope.rev.isEmpty then {} else scope.drop aHere
+        | _ => scope.drop aHere
       -- A declaration is visible to what FOLLOWS it, and shadows an outer binding of the
       -- same name because it is prepended and lookups take the first match. Bindings made
       -- inside `s` (a block) do not reach `rest`: only `s`'s own declaration does.
       let restDecls := (declsOwn s).extend decls
-      scopedWalkSizedS leaf lcs scope decls s
-        ++ scopedWalkSizedB leaf lcs restScope restDecls rest
+      let (oRest, aRest) := scopedWalkGoB leaf lcs restScope restDecls rest
+      (oHere ++ oRest, unionAssigned aHere aRest)
 end
+
+/-- The ONE scoped walk of a statement: the obligations `leaf` finds in it, each with the
+    hypotheses in scope at its statement. They reach the leaf as a `Thunk`, forced only by a leaf
+    that emits an obligation, so a statement with none costs nothing however deep its scope
+    (bug 293). -/
+def scopedWalkSizedS {α}
+    (leaf : Thunk (List Expr) → ScopeDecls → Stmt → List α)
+    (lcs : List LoopContract) (scope : List Expr) (decls : ScopeDecls) (st : Stmt) : List α :=
+  (scopedWalkGoS leaf lcs (ScopeHyps.ofList scope) decls st).1
+
+/-- See `scopedWalkSizedS`. -/
+def scopedWalkSizedB {α}
+    (leaf : Thunk (List Expr) → ScopeDecls → Stmt → List α)
+    (lcs : List LoopContract) (scope : List Expr) (decls : ScopeDecls) (body : List Stmt) :
+    List α :=
+  (scopedWalkGoB leaf lcs (ScopeHyps.ofList scope) decls body).1
 
 /-- Declaration-agnostic walk, for the families that resolve nothing by name. Identical
     traversal, so positional keys are shared. -/
-def scopedWalkS {α} (leaf : List Expr → Stmt → List α)
+def scopedWalkS {α} (leaf : Thunk (List Expr) → Stmt → List α)
     (lcs : List LoopContract) (scope : List Expr) (st : Stmt) : List α :=
   scopedWalkSizedS (fun sc _ s => leaf sc s) lcs scope {} st
 
 /-- See `scopedWalkS`. -/
-def scopedWalkB {α} (leaf : List Expr → Stmt → List α)
+def scopedWalkB {α} (leaf : Thunk (List Expr) → Stmt → List α)
     (lcs : List LoopContract) (scope : List Expr) (body : List Stmt) : List α :=
   scopedWalkSizedB (fun sc _ s => leaf sc s) lcs scope {} body
 
@@ -408,12 +472,12 @@ def arrayAccessOf (structs : StructFieldEnv) (decls : ScopeDecls) (a : Expr) :
     `.ifElse`/`.while_`/`.forLoop` contribute only their condition's index uses).
     A store `a[idx] = v` carries its target bound `(a, idx)` FIRST, matching the
     old walker's ordering exactly. -/
-def boundsLeaf (structs : StructFieldEnv) (scope : List Expr) (decls : ScopeDecls) :
+def boundsLeaf (structs : StructFieldEnv) (scope : Thunk (List Expr)) (decls : ScopeDecls) :
     Stmt → List (String × Expr × List Expr × Option Nat) :=
   let mk : (Expr × Expr) → (String × Expr × List Expr × Option Nat) :=
     fun (a, i) => match arrayAccessOf structs decls a with
-      | some (nm, sz) => (nm, i, scope, some sz)
-      | none => (Concrete.fmtExpr a, i, scope, none)
+      | some (nm, sz) => (nm, i, scope.get, some sz)
+      | none => (Concrete.fmtExpr a, i, scope.get, none)
   fun
   | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v _ | .defer _ v =>
       (collectIndexUsesE v).map mk
@@ -444,17 +508,17 @@ def scopedBoundsB (structs : StructFieldEnv) (lcs : List LoopContract) (scope : 
 /-- Call-site leaf: the calls in a statement's OWN expression positions (the
     walker owns recursion into branches, loop bodies, and for-loop init/step, so
     `.ifElse`/`.while_`/`.forLoop` contribute only their condition's calls). -/
-def callLeaf (scope : List Expr) : Stmt → List (String × List Expr × List Expr)
+def callLeaf (scope : Thunk (List Expr)) : Stmt → List (String × List Expr × List Expr)
   | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v _ | .defer _ v =>
-      (collectCallsE v).map fun (_, fn, args) => (fn, args, scope)
-  | .return_ _ (some v) => (collectCallsE v).map fun (_, fn, args) => (fn, args, scope)
-  | .ifElse _ c _ _ => (collectCallsE c).map fun (_, fn, args) => (fn, args, scope)
-  | .while_ _ c _ _ => (collectCallsE c).map fun (_, fn, args) => (fn, args, scope)
-  | .forLoop _ _ c _ _ _ => (collectCallsE c).map fun (_, fn, args) => (fn, args, scope)
+      (collectCallsE v).map fun (_, fn, args) => (fn, args, scope.get)
+  | .return_ _ (some v) => (collectCallsE v).map fun (_, fn, args) => (fn, args, scope.get)
+  | .ifElse _ c _ _ => (collectCallsE c).map fun (_, fn, args) => (fn, args, scope.get)
+  | .while_ _ c _ _ => (collectCallsE c).map fun (_, fn, args) => (fn, args, scope.get)
+  | .forLoop _ _ c _ _ _ => (collectCallsE c).map fun (_, fn, args) => (fn, args, scope.get)
   | .fieldAssign _ o _ v | .derefAssign _ o v =>
-      (collectCallsE o ++ collectCallsE v).map fun (_, fn, args) => (fn, args, scope)
+      (collectCallsE o ++ collectCallsE v).map fun (_, fn, args) => (fn, args, scope.get)
   | .arrayIndexAssign _ a i v =>
-      (collectCallsE a ++ collectCallsE i ++ collectCallsE v).map fun (_, fn, args) => (fn, args, scope)
+      (collectCallsE a ++ collectCallsE i ++ collectCallsE v).map fun (_, fn, args) => (fn, args, scope.get)
   | _ => []
 
 /-- Calls paired with the hypotheses in scope at the call (Phase 3 #4 — migrated
@@ -471,9 +535,9 @@ def scopedCallsB (lcs : List LoopContract) (scope : List Expr) (body : List Stmt
 
 /-- `assert`/`assume` leaf: the only own-obligation statements are `assert`/
     `assume` themselves; everything else is pure recursion the walker owns. -/
-def assertLeaf (scope : List Expr) : Stmt → List (Bool × Expr × List Expr)
-  | .assert_ _ c => [(false, c, scope)]
-  | .assume_ _ c => [(true, c, scope)]
+def assertLeaf (scope : Thunk (List Expr)) : Stmt → List (Bool × Expr × List Expr)
+  | .assert_ _ c => [(false, c, scope.get)]
+  | .assume_ _ c => [(true, c, scope.get)]
   | _ => []
 
 /-- `assert`/`assume` with the path conditions in scope at each one (the first
@@ -775,10 +839,10 @@ def exprIntTy (vt : List (String × Ty)) : Expr → Option Ty
     (the walker owns recursion into branches/loops/init/step, so
     `.ifElse`/`.while_`/`.forLoop` contribute only their condition's divisors).
     Each item is `(isMod, divisorExpr, scope)`. -/
-def divLeaf (scope : List Expr) (decls : ScopeDecls) :
+def divLeaf (scope : Thunk (List Expr)) (decls : ScopeDecls) :
     Stmt → List (Bool × Expr × Expr × List Expr × Option Ty) :=
   let mk : (Bool × Expr × Expr) → (Bool × Expr × Expr × List Expr × Option Ty) :=
-    fun (m, n, e) => (m, n, e, scope, exprIntTy decls.tys n)
+    fun (m, n, e) => (m, n, e, scope.get, exprIntTy decls.tys n)
   fun
   | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v _ | .defer _ v =>
       (collectDivisorsE v).map mk
@@ -872,10 +936,10 @@ end
 /-- Arithmetic-op leaf: the `+`/`-`/`*` op nodes in a statement's OWN expression
     positions (the walker owns recursion into branches/loops/init/step, so
     `.ifElse`/`.while_`/`.forLoop` contribute only their condition's op nodes). -/
-def arithLeaf (scope : List Expr) (decls : ScopeDecls) :
+def arithLeaf (scope : Thunk (List Expr)) (decls : ScopeDecls) :
     Stmt → List (Expr × List Expr × Option Ty) :=
   let mk : Expr → (Expr × List Expr × Option Ty) :=
-    fun e => (e, scope, exprIntTy decls.tys e)
+    fun e => (e, scope.get, exprIntTy decls.tys e)
   fun
   | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v _ | .defer _ v =>
       (collectArithE v).map mk
@@ -1068,10 +1132,10 @@ decreasing_by
       | (rename_i h; subst h; simp +arith)
 end
 
-def shiftLeaf (scope : List Expr) (decls : ScopeDecls) :
+def shiftLeaf (scope : Thunk (List Expr)) (decls : ScopeDecls) :
     Stmt → List (Expr × Expr × List Expr × Option Ty) :=
   let mk : (Expr × Expr) → (Expr × Expr × List Expr × Option Ty) :=
-    fun (l, r) => (l, r, scope, exprIntTy decls.tys l)
+    fun (l, r) => (l, r, scope.get, exprIntTy decls.tys l)
   fun
   | .letDecl _ _ _ _ v _ | .assign _ _ v | .expr _ v _ | .defer _ v =>
       (collectShiftsE v).map mk
