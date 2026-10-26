@@ -6,7 +6,7 @@ functions, many locals, `let`s interleaved with `if`/`while`/`match`, many funct
 enums, deep nesting) at two sizes a factor of ten apart, times every stage, and fails a stage over
 its budget (measured on the CI host, recorded with its commit in
 `scripts/tests/lib/compile_scaling_budgets.tsv`) or growing faster than n^1.6; noise is retried away,
-a quadratic is not. Building it found ten more superlinear stages over many declarations or deep
+a quadratic stage is not. Building it found ten more superlinear stages over many declarations or deep
 nesting, filed open as bugs 273 – 282 (the parser's module item lists, Resolve's enum variant
 fold and scope stack, Check's duplicate-declaration list and expression re-walks, Elab's
 declaration analyses and evidence use lists, CoreCheck's and Lower's function lists, Mono's type

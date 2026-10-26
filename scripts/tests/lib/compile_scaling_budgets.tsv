@@ -2,44 +2,44 @@
 # scripts/tests/check_compile_scaling.sh judges. Tab-separated.
 #   param   NAME VALUE              gate parameters (scripts/tests/lib/compile_scaling.py)
 #   shape   NAME SIZES MODES        a generated shape, its sizes and the compiles it is timed by
-#   exclude SHAPE STAGE REASON      a stage not judged, with the filed defect that keeps it out
-#   exclude SHAPE STAGES REASON     stages (comma list, or *) not judged, with the filed defect or reason
-# Budgets are re-measured (and this header restamped) only on the CI host class; a change that
-# legitimately moves a stage re-measures, a change that breaks one fixes the compiler.
-# Declaration and nesting shapes run at 2500 and 10000 while their stages above are excluded;
-# their sizes move into 10^4 - 10^5 with the fixes. assignments runs at 40000 and 160000: below
-# about 40000 the stages still fit the host's caches and grow faster than their algorithm.
+#   exclude SHAPE STAGES REASON     stages (a comma list, or *) not judged, with the filed defect
+#                                   or the reason they are not measured
+#   budget  SHAPE SIZE STAGE MS     written by `check_compile_scaling.sh --measure` on the CI host
+# Budgets are re-measured (and the `measured:` line restamped) only on the CI host class: a change
+# that legitimately moves a stage re-measures, a change that breaks one fixes the compiler.
+# exp: sizes are a factor of ten apart. A stage whose allocations (heartbeats) grow exactly
+# tenfold still takes up to about 35 times as long at the larger size on the CI host (caches and
+# the allocator at 10^5 elements, a loaded runner); n^1.6 (x39.8) leaves room for that, and a
+# quadratic stage (x100) fails it once it is slow enough to resolve (compile_scaling.py,
+# RESOLUTION).
+# Declaration and nesting shapes run at 1000 and 10000 while the stages excluded below are open;
+# their sizes move to 10^4 and 10^5 with the fixes. The lets-* shapes run at 2000 and 20000.
 # measured: commit 10b81a467a85855d9b60186ac2c98bf7a6219c3b on concrete-ci-2, AMD Ryzen 9 7950X3D 16-Core Processor, 32 threads, 2026-10-26, 3 runs (median), budget = max(4 x median, median + 200ms)
-# exp: a stage whose allocations (heartbeats) grow exactly linearly still takes up to about
-# n^1.4 in time between a size and four times it on these hosts (caches and the allocator at
-# 10^5 elements); 1.5 (x8 over a 4x step) leaves room for that, and a quadratic stage (x16)
-# cannot pass it.
-param	exp	1.5
-param	floor_ms	10
-param	judge_min_ms	100
-param	hb_floor	10000
-param	hb_judge_min	200000
+param	exp	1.6
+param	floor_ms	2
+param	wall_floor_ms	25
+param	hb_judge_min	100000
 param	retries	2
 param	ceiling_factor	3
 param	ceiling_min_s	20
 param	measure_runs	3
 param	budget_factor	4
 param	budget_slack_ms	200
-shape	array-const	25000,100000	trace,llvm,native
-shape	array-distinct	25000,100000	trace,llvm,native
-shape	array-writes	25000,100000	trace,llvm,native,interp
-shape	assignments	40000,160000	trace,llvm,native
-shape	chained-lets	25000,100000	core
-shape	many-locals	25000,100000	core
-shape	lets-if	5000,20000	core
-shape	lets-while	5000,20000	core
-shape	lets-match	5000,20000	core
-shape	nested-parens	2500,10000	trace
-shape	nested-ifs	2500,10000	trace
-shape	functions	2500,10000	trace
-shape	call-chain	2500,10000	trace
-shape	structs	2500,10000	trace
-shape	enums	2500,10000	trace
+shape	array-const	10000,100000	trace,llvm,native
+shape	array-distinct	10000,100000	trace,llvm,native
+shape	array-writes	10000,100000	trace,llvm,native,interp
+shape	assignments	10000,100000	trace,llvm,native
+shape	chained-lets	10000,100000	core
+shape	many-locals	10000,100000	core
+shape	lets-if	2000,20000	core
+shape	lets-while	2000,20000	core
+shape	lets-match	2000,20000	core
+shape	nested-parens	1000,10000	trace
+shape	nested-ifs	1000,10000	trace
+shape	functions	1000,10000	trace
+shape	call-chain	1000,10000	trace
+shape	structs	1000,10000	trace
+shape	enums	1000,10000	trace
 exclude	chained-lets	monomorphize,lower,llvm,native	--emit-trace-json runs Lower, and Lower's long-function quadratics (bugs 265-267, 270: the variable table, branch merges, constant-branch chains, a header phi per binding per loop) are being repaired on wip/perf-backend; the front end is judged through --emit-core, and monomorphize, lower, --emit-llvm and native join the budgeted set when that branch lands
 exclude	many-locals	monomorphize,lower,llvm,native	--emit-trace-json runs Lower, and Lower's long-function quadratics (bugs 265-267, 270: the variable table, branch merges, constant-branch chains, a header phi per binding per loop) are being repaired on wip/perf-backend; the front end is judged through --emit-core, and monomorphize, lower, --emit-llvm and native join the budgeted set when that branch lands
 exclude	lets-if	monomorphize,lower,llvm,native	--emit-trace-json runs Lower, and Lower's long-function quadratics (bugs 265-267, 270: the variable table, branch merges, constant-branch chains, a header phi per binding per loop) are being repaired on wip/perf-backend; the front end is judged through --emit-core, and monomorphize, lower, --emit-llvm and native join the budgeted set when that branch lands
@@ -71,175 +71,175 @@ exclude	enums	elaborate	bug 276 (open): Elab's program-level declaration analyse
 exclude	enums	monomorphize	bug 278 (open): Mono's program-level name tables are lists searched per declaration
 exclude	enums	lower	bug 279 (open): Lower appends each lowered function to a list and deduplicates external types by list search
 exclude	enums	llvm,native	not run: every whole compile of this shape contains the excluded stages above; it runs with their fixes
-budget	array-const	25000	parse	214
-budget	array-const	25000	resolve-files	200
-budget	array-const	25000	resolve	201
-budget	array-const	25000	check	209
-budget	array-const	25000	elaborate	207
-budget	array-const	25000	coreCheck	203
-budget	array-const	25000	monomorphize	208
-budget	array-const	25000	lower	201
-budget	array-const	25000	llvm	648
-budget	array-const	25000	native	1283
-budget	array-const	100000	parse	246
+budget	array-const	10000	parse	209
+budget	array-const	10000	resolve-files	200
+budget	array-const	10000	resolve	200
+budget	array-const	10000	check	204
+budget	array-const	10000	elaborate	206
+budget	array-const	10000	coreCheck	202
+budget	array-const	10000	monomorphize	208
+budget	array-const	10000	lower	200
+budget	array-const	10000	llvm	533
+budget	array-const	10000	native	1579
+budget	array-const	100000	parse	251
 budget	array-const	100000	resolve-files	200
-budget	array-const	100000	resolve	202
-budget	array-const	100000	check	227
-budget	array-const	100000	elaborate	243
-budget	array-const	100000	coreCheck	211
-budget	array-const	100000	monomorphize	235
+budget	array-const	100000	resolve	204
+budget	array-const	100000	check	239
+budget	array-const	100000	elaborate	242
+budget	array-const	100000	coreCheck	213
+budget	array-const	100000	monomorphize	243
 budget	array-const	100000	lower	201
-budget	array-const	100000	llvm	1578
-budget	array-const	100000	native	1816
-budget	array-distinct	25000	parse	214
-budget	array-distinct	25000	resolve-files	200
-budget	array-distinct	25000	resolve	200
-budget	array-distinct	25000	check	207
-budget	array-distinct	25000	elaborate	209
-budget	array-distinct	25000	coreCheck	202
-budget	array-distinct	25000	monomorphize	208
-budget	array-distinct	25000	lower	254
-budget	array-distinct	25000	llvm	825
-budget	array-distinct	25000	native	1626
-budget	array-distinct	100000	parse	255
+budget	array-const	100000	llvm	2235
+budget	array-const	100000	native	2303
+budget	array-distinct	10000	parse	206
+budget	array-distinct	10000	resolve-files	200
+budget	array-distinct	10000	resolve	200
+budget	array-distinct	10000	check	202
+budget	array-distinct	10000	elaborate	203
+budget	array-distinct	10000	coreCheck	201
+budget	array-distinct	10000	monomorphize	203
+budget	array-distinct	10000	lower	217
+budget	array-distinct	10000	llvm	417
+budget	array-distinct	10000	native	1215
+budget	array-distinct	100000	parse	252
 budget	array-distinct	100000	resolve-files	200
 budget	array-distinct	100000	resolve	202
-budget	array-distinct	100000	check	227
-budget	array-distinct	100000	elaborate	239
-budget	array-distinct	100000	coreCheck	219
-budget	array-distinct	100000	monomorphize	250
-budget	array-distinct	100000	lower	2120
-budget	array-distinct	100000	llvm	2225
-budget	array-distinct	100000	native	4630
-budget	array-writes	25000	parse	200
-budget	array-writes	25000	resolve-files	200
-budget	array-writes	25000	resolve	201
-budget	array-writes	25000	check	206
-budget	array-writes	25000	elaborate	207
-budget	array-writes	25000	coreCheck	203
-budget	array-writes	25000	monomorphize	208
-budget	array-writes	25000	lower	201
-budget	array-writes	25000	llvm	417
-budget	array-writes	25000	native	1226
-budget	array-writes	25000	interp	633
-budget	array-writes	100000	parse	200
+budget	array-distinct	100000	check	226
+budget	array-distinct	100000	elaborate	229
+budget	array-distinct	100000	coreCheck	211
+budget	array-distinct	100000	monomorphize	232
+budget	array-distinct	100000	lower	1076
+budget	array-distinct	100000	llvm	2229
+budget	array-distinct	100000	native	4019
+budget	array-writes	10000	parse	200
+budget	array-writes	10000	resolve-files	200
+budget	array-writes	10000	resolve	201
+budget	array-writes	10000	check	202
+budget	array-writes	10000	elaborate	203
+budget	array-writes	10000	coreCheck	201
+budget	array-writes	10000	monomorphize	203
+budget	array-writes	10000	lower	200
+budget	array-writes	10000	llvm	412
+budget	array-writes	10000	native	1016
+budget	array-writes	10000	interp	409
+budget	array-writes	100000	parse	201
 budget	array-writes	100000	resolve-files	200
 budget	array-writes	100000	resolve	202
 budget	array-writes	100000	check	225
-budget	array-writes	100000	elaborate	227
-budget	array-writes	100000	coreCheck	211
-budget	array-writes	100000	monomorphize	233
-budget	array-writes	100000	lower	203
-budget	array-writes	100000	llvm	814
-budget	array-writes	100000	native	1412
-budget	array-writes	100000	interp	1816
-budget	assignments	40000	parse	312
-budget	assignments	40000	resolve-files	200
-budget	assignments	40000	resolve	222
-budget	assignments	40000	check	296
-budget	assignments	40000	elaborate	352
-budget	assignments	40000	coreCheck	205
-budget	assignments	40000	monomorphize	236
-budget	assignments	40000	lower	520
-budget	assignments	40000	llvm	2417
-budget	assignments	40000	native	3425
-budget	assignments	160000	parse	1296
-budget	assignments	160000	resolve-files	200
-budget	assignments	160000	resolve	1208
-budget	assignments	160000	check	1528
-budget	assignments	160000	elaborate	2320
-budget	assignments	160000	coreCheck	238
-budget	assignments	160000	monomorphize	1748
-budget	assignments	160000	lower	4312
-budget	assignments	160000	llvm	10433
-budget	assignments	160000	native	13439
-budget	chained-lets	25000	core	2420
-budget	chained-lets	100000	core	9259
-budget	many-locals	25000	core	1833
-budget	many-locals	100000	core	9053
-budget	lets-if	5000	core	1023
-budget	lets-if	20000	core	3032
-budget	lets-while	5000	core	818
-budget	lets-while	20000	core	3219
-budget	lets-match	5000	core	1221
-budget	lets-match	20000	core	5032
-budget	nested-parens	2500	parse	202
-budget	nested-parens	2500	resolve-files	200
-budget	nested-parens	2500	resolve	200
-budget	nested-parens	2500	check	272
-budget	nested-parens	2500	elaborate	213
-budget	nested-parens	2500	coreCheck	200
-budget	nested-parens	2500	monomorphize	201
-budget	nested-parens	2500	lower	205
-budget	nested-parens	10000	parse	209
+budget	array-writes	100000	elaborate	235
+budget	array-writes	100000	coreCheck	222
+budget	array-writes	100000	monomorphize	312
+budget	array-writes	100000	lower	212
+budget	array-writes	100000	llvm	1005
+budget	array-writes	100000	native	1453
+budget	array-writes	100000	interp	1614
+budget	assignments	10000	parse	219
+budget	assignments	10000	resolve-files	200
+budget	assignments	10000	resolve	204
+budget	assignments	10000	check	217
+budget	assignments	10000	elaborate	212
+budget	assignments	10000	coreCheck	201
+budget	assignments	10000	monomorphize	208
+budget	assignments	10000	lower	226
+budget	assignments	10000	llvm	608
+budget	assignments	10000	native	1408
+budget	assignments	100000	parse	796
+budget	assignments	100000	resolve-files	200
+budget	assignments	100000	resolve	360
+budget	assignments	100000	check	880
+budget	assignments	100000	elaborate	936
+budget	assignments	100000	coreCheck	214
+budget	assignments	100000	monomorphize	412
+budget	assignments	100000	lower	2732
+budget	assignments	100000	llvm	7621
+budget	assignments	100000	native	6027
+budget	chained-lets	10000	core	814
+budget	chained-lets	100000	core	7444
+budget	many-locals	10000	core	807
+budget	many-locals	100000	core	7834
+budget	lets-if	2000	core	624
+budget	lets-if	20000	core	3818
+budget	lets-while	2000	core	608
+budget	lets-while	20000	core	4029
+budget	lets-match	2000	core	614
+budget	lets-match	20000	core	4635
+budget	nested-parens	1000	parse	201
+budget	nested-parens	1000	resolve-files	200
+budget	nested-parens	1000	resolve	200
+budget	nested-parens	1000	check	210
+budget	nested-parens	1000	elaborate	202
+budget	nested-parens	1000	coreCheck	200
+budget	nested-parens	1000	monomorphize	200
+budget	nested-parens	1000	lower	202
+budget	nested-parens	10000	parse	213
 budget	nested-parens	10000	resolve-files	200
-budget	nested-parens	10000	resolve	200
-budget	nested-parens	10000	check	4120
-budget	nested-parens	10000	elaborate	780
+budget	nested-parens	10000	resolve	201
+budget	nested-parens	10000	check	4156
+budget	nested-parens	10000	elaborate	784
 budget	nested-parens	10000	coreCheck	201
 budget	nested-parens	10000	monomorphize	205
 budget	nested-parens	10000	lower	221
-budget	functions	2500	parse	213
-budget	functions	2500	resolve-files	200
-budget	functions	2500	resolve	204
-budget	functions	2500	check	216
-budget	functions	2500	elaborate	716
-budget	functions	2500	coreCheck	201
-budget	functions	2500	monomorphize	204
-budget	functions	2500	lower	227
-budget	functions	10000	parse	259
+budget	functions	1000	parse	205
+budget	functions	1000	resolve-files	200
+budget	functions	1000	resolve	202
+budget	functions	1000	check	204
+budget	functions	1000	elaborate	230
+budget	functions	1000	coreCheck	200
+budget	functions	1000	monomorphize	202
+budget	functions	1000	lower	207
+budget	functions	10000	parse	252
 budget	functions	10000	resolve-files	200
-budget	functions	10000	resolve	226
-budget	functions	10000	check	840
-budget	functions	10000	elaborate	16392
-budget	functions	10000	coreCheck	207
-budget	functions	10000	monomorphize	219
-budget	functions	10000	lower	1388
-budget	call-chain	2500	parse	214
-budget	call-chain	2500	resolve-files	200
-budget	call-chain	2500	resolve	204
-budget	call-chain	2500	check	235
-budget	call-chain	2500	elaborate	1048
-budget	call-chain	2500	coreCheck	225
-budget	call-chain	2500	monomorphize	207
-budget	call-chain	2500	lower	243
-budget	call-chain	10000	parse	280
+budget	functions	10000	resolve	220
+budget	functions	10000	check	860
+budget	functions	10000	elaborate	18104
+budget	functions	10000	coreCheck	206
+budget	functions	10000	monomorphize	224
+budget	functions	10000	lower	1508
+budget	call-chain	1000	parse	209
+budget	call-chain	1000	resolve-files	200
+budget	call-chain	1000	resolve	203
+budget	call-chain	1000	check	212
+budget	call-chain	1000	elaborate	254
+budget	call-chain	1000	coreCheck	206
+budget	call-chain	1000	monomorphize	203
+budget	call-chain	1000	lower	212
+budget	call-chain	10000	parse	348
 budget	call-chain	10000	resolve-files	200
-budget	call-chain	10000	resolve	231
-budget	call-chain	10000	check	2380
-budget	call-chain	10000	elaborate	23172
-budget	call-chain	10000	coreCheck	3520
-budget	call-chain	10000	monomorphize	242
-budget	call-chain	10000	lower	3300
-budget	structs	2500	parse	243
-budget	structs	2500	resolve-files	200
-budget	structs	2500	resolve	204
-budget	structs	2500	check	212
-budget	structs	2500	elaborate	480
-budget	structs	2500	coreCheck	200
-budget	structs	2500	monomorphize	225
-budget	structs	2500	lower	212
-budget	structs	10000	parse	3652
+budget	call-chain	10000	resolve	221
+budget	call-chain	10000	check	2516
+budget	call-chain	10000	elaborate	26776
+budget	call-chain	10000	coreCheck	3944
+budget	call-chain	10000	monomorphize	276
+budget	call-chain	10000	lower	3596
+budget	structs	1000	parse	209
+budget	structs	1000	resolve-files	200
+budget	structs	1000	resolve	201
+budget	structs	1000	check	203
+budget	structs	1000	elaborate	222
+budget	structs	1000	coreCheck	200
+budget	structs	1000	monomorphize	205
+budget	structs	1000	lower	202
+budget	structs	10000	parse	4452
 budget	structs	10000	resolve-files	200
-budget	structs	10000	resolve	221
-budget	structs	10000	check	1376
-budget	structs	10000	elaborate	10836
+budget	structs	10000	resolve	229
+budget	structs	10000	check	1408
+budget	structs	10000	elaborate	10788
 budget	structs	10000	coreCheck	202
-budget	structs	10000	monomorphize	3240
-budget	structs	10000	lower	1548
-budget	enums	2500	parse	244
-budget	enums	2500	resolve-files	200
-budget	enums	2500	resolve	344
-budget	enums	2500	check	213
-budget	enums	2500	elaborate	492
-budget	enums	2500	coreCheck	201
-budget	enums	2500	monomorphize	225
-budget	enums	2500	lower	211
-budget	enums	10000	parse	3868
+budget	structs	10000	monomorphize	3224
+budget	structs	10000	lower	1552
+budget	enums	1000	parse	208
+budget	enums	1000	resolve-files	200
+budget	enums	1000	resolve	212
+budget	enums	1000	check	202
+budget	enums	1000	elaborate	221
+budget	enums	1000	coreCheck	200
+budget	enums	1000	monomorphize	204
+budget	enums	1000	lower	202
+budget	enums	10000	parse	3848
 budget	enums	10000	resolve-files	200
-budget	enums	10000	resolve	5968
-budget	enums	10000	check	1644
-budget	enums	10000	elaborate	12240
+budget	enums	10000	resolve	6664
+budget	enums	10000	check	1648
+budget	enums	10000	elaborate	12244
 budget	enums	10000	coreCheck	201
-budget	enums	10000	monomorphize	3264
-budget	enums	10000	lower	1500
+budget	enums	10000	monomorphize	3324
+budget	enums	10000	lower	1496

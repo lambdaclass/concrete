@@ -4,16 +4,17 @@
 # Generated programs of 10^4 - 10^5 elements or statements per shape (array literals of constant
 # and of distinct elements, array writes in a loop, long functions of assignments, chained `let`s
 # and `let`s interleaved with `if`/`while`/`match`, many locals, many declarations, many structs
-# and enums, deep statement and expression nesting) are compiled at two sizes each, and every
-# stage is timed: the in-compiler stages from `--emit-trace-json` (parse ... lower, with their
+# and enums, deep statement and expression nesting) are compiled at two sizes a factor of ten
+# apart, and every stage is timed: the in-compiler stages from `--emit-trace-json` (parse ... lower, with their
 # deterministic allocation heartbeats) and the rest by whole compiles (`--emit-core`,
 # `--emit-llvm`, native `-o`, `--interp`). A stage FAILS over its recorded budget, or when its
 # growth between sizes is above the recorded near-linear bound. A wall-clock violation is
-# re-measured within the recorded retry budget (budgets judge a stage's fastest run, growth
-# its slowest run at the smaller size against its fastest at the larger), so host noise cannot
-# fail the gate and a quadratic cannot pass it. Budgets, sizes, bounds and the named exclusions (known
-# filed defects, reported on every run) are in scripts/tests/lib/compile_scaling_budgets.tsv,
-# stamped with the commit and host they were measured at. Method: scripts/tests/lib/compile_scaling.py.
+# re-measured within the recorded retry budget (each stage keeps its fastest run), so host
+# noise cannot fail the gate, and a retry cannot hide a quadratic stage: growth is resolved above
+# the floors stated in compile_scaling.py (RESOLUTION), and below them the budget holds the stage.
+# Budgets, sizes, bounds and the named exclusions (known filed defects, reported on every run) are
+# in scripts/tests/lib/compile_scaling_budgets.tsv, stamped with the commit and host they were
+# measured at. Method: scripts/tests/lib/compile_scaling.py.
 #
 #   check_compile_scaling.sh [--shape NAME]...     judge (all shapes by default)
 #   check_compile_scaling.sh --measure [--shape NAME]...

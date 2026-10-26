@@ -8,8 +8,7 @@ Generates programs of 10^4 - 10^5 elements or statements in each shape the budge
 compiles each at every recorded size, and times every stage. It FAILS when a stage exceeds its
 recorded budget at a size, or when a stage's growth between two sizes is worse than near-linear:
   t(n2) / max(t(n1), floor_ms)  >  (n2 / n1) ** exp
-judged when t(n2) is at least judge_min_ms (a faster stage is held by its budget alone), and on
-the heartbeat counts the same way
+(see RESOLUTION), and on the heartbeat counts the same way
 (exp is recorded in the budget file with its reason; a quadratic stage grows 16x over a 4x size
 step, far above the bound).
 
@@ -28,29 +27,25 @@ TWO KINDS OF MEASUREMENT.
     nothing; that is why wall time is judged as well.
   * Wall time is judged against the budgets and for growth. Host noise is handled by the RETRY
     BUDGET (`retries` in the budget file): when an attempt violates any wall-clock bound, the
-    whole shape is measured again. A budget is judged on the FASTEST run of a (size, stage); the
-    growth between two sizes on the slowest run at the smaller size against the fastest at the
-    larger. A noisy spike cannot survive that; a quadratic cannot get under it (its fastest large
-    run stays many times its slowest small one), so the retry never lets a pre-fix compiler pass.
+    whole shape is measured again, and every (size, stage) keeps its FASTEST run. A noisy spike
+    cannot survive a minimum, and a quadratic stage's minimum is still quadratic, so the retry
+    never turns a resolvable quadratic (see RESOLUTION) into a pass.
 
-TIMEOUTS. Every compile runs under scripts/tests/lib/bounded.sh with a ceiling of
-`ceiling_factor` times the budgets it covers (at least `ceiling_min_s`). A run killed at its
-ceiling twice took longer than its budget by construction, so for this gate that is a FAIL
-(over budget), not an unobserved result: the observation the gate makes is exactly "slower than
-the budget". It is reported separately ("timed out at ...") so it is never confused with a
-measured time.
+SIZES are a factor of ten apart (10^4 and 10^5 where the shape allows). Between two such sizes a
+quadratic stage grows a hundredfold, while a linear one grows up to about 35-fold on these hosts:
+its allocation count (heartbeats) grows exactly tenfold, but its time does not, from caches and
+the allocator at 10^5 elements on a loaded runner. The recorded bound (n^exp) sits between.
 
-EXCLUSIONS. `exclude SHAPE STAGE REASON` lines name a known, filed defect (its bug or task) for
-a stage of a shape. An excluded stage is measured and printed but not judged, and every stage
-proxy that contains it is excluded with it; `exclude SHAPE * REASON` skips the shape. Each one is
-reported as EXCLUDED with its reason on every run, so the gap is never silent; an exclusion
-without a reason is refused.
-
-BUDGETS. `--measure` runs each shape `measure_runs` times on this host, takes the median per
-(size, stage) and records  budget = max(ceil(budget_factor * median), median + budget_slack_ms),
-with the measuring commit, host and date in the file's header. Budgets are measured on the CI
-host class (the self-hosted runner, concrete-ci-2) and the factor leaves room for a slower
-runner; the growth bound is host-independent.
+RESOLUTION. Every stage's growth is judged, however fast. An in-compiler stage is timed in whole
+milliseconds by the compiler's own clock, so the smaller size's time is floored at floor_ms. A
+whole compile (core, llvm, native, interp) is timed from outside and judged on its time above a
+baseline, the same mode on a one-line program, so process start and clang's fixed cost cannot
+dilute its growth; that difference carries the noise of two process runs, so it is floored at
+wall_floor_ms (a size-dependent cost too small to resolve that way is held by its budget, and,
+inside the compiler, by the per-stage trace). So the growth check resolves a stage whose time at
+the larger size exceeds about floor x bound: about 80 ms for an in-compiler stage and about 1 s
+above baseline for a whole compile; a slower-growing cost below that is held by its budget only. Heartbeat counts are exact and need no floor; they are judged once
+the larger count reaches hb_judge_min.
 """
 import argparse
 import json
@@ -72,8 +67,7 @@ FRONT = TRACE_STAGES[:6]          # what --emit-core and --interp run before the
 CONTAINS = {"core": FRONT, "interp": FRONT, "llvm": TRACE_STAGES, "native": TRACE_STAGES}
 MODES = ["trace", "core", "llvm", "native", "interp"]
 REQUIRED = TRACE_STAGES + ["llvm", "native"]   # the compile path every shape covers or explains
-PARAM_DEFAULTS = {"exp": 1.5, "floor_ms": 10.0, "judge_min_ms": 100.0, "hb_floor": 10000.0,
-                  "hb_judge_min": 200000.0, "retries": 2.0, "ceiling_factor": 3.0,
+PARAM_DEFAULTS = {"exp": 1.6, "floor_ms": 2.0, "wall_floor_ms": 25.0, "hb_judge_min": 100000.0, "retries": 2.0, "ceiling_factor": 3.0,
                   "ceiling_min_s": 20.0, "measure_runs": 3.0, "budget_factor": 4.0,
                   "budget_slack_ms": 200.0}
 
@@ -271,6 +265,26 @@ def stages_of(modes):
 class Runner:
     def __init__(self, cc, bounded, budgets, workdir):
         self.cc, self.bounded, self.b, self.dir = cc, bounded, budgets, workdir
+        self.base = {}
+
+    def baseline(self, m):
+        """The fastest of three whole runs of mode M on a one-line program: process start, the
+        standard library, clang's fixed cost and the watchdog. Growth is judged on time above it,
+        so a size-independent cost cannot hide a stage's growth."""
+        if m not in self.base:
+            src = os.path.join(self.dir, "baseline.con")
+            with open(src, "w") as f:
+                f.write("fn main() -> Int {\n    return 42;\n}\n")
+            argv = {"core": ["--emit-core"], "llvm": ["--emit-llvm"], "interp": ["--interp"],
+                    "native": ["-o", src + ".bin"]}[m]
+            walls = []
+            for _ in range(3):
+                rc, _o, _e, wall, to = self.bounded_run(60, [self.cc, src] + argv)
+                if rc == 0 and not to:
+                    walls.append(wall)
+            # None: the baseline did not run, and a whole compile is then not judged as measured.
+            self.base[m] = min(walls) if walls else None
+        return self.base[m]
 
     def ceiling(self, shape, n, stages):
         known = [self.b.budget.get((shape, n, s)) for s in stages]
@@ -290,9 +304,8 @@ class Runner:
     def measure(self, shape, n, modes):
         """One attempt at one size: {stage: ms}, {stage: heartbeats}, {stage: 'timeout'|error}."""
         src = os.path.join(self.dir, "%s_%d.con" % (shape, n))
-        if not os.path.exists(src):
-            with open(src, "w") as f:
-                f.write(gen(shape, n))
+        with open(src, "w") as f:           # always this size's program, even in a --keep dir
+            f.write(gen(shape, n))
         times, beats, bad = {}, {}, {}
         for m in modes:
             if m == "trace":
@@ -358,7 +371,7 @@ class Runner:
         return times, beats, bad
 
 
-def judge(b, shape, sizes, stages, times, beats, bad, slowest=None):
+def judge(b, shape, sizes, stages, times, beats, bad, base=None):
     """Lines and verdicts for one shape: [(verdict, text)], verdict in ok/FAIL/EXCLUDED/note."""
     exp = b.p("exp")
     res = []
@@ -392,23 +405,19 @@ def judge(b, shape, sizes, stages, times, beats, bad, slowest=None):
         for n1, n2 in zip(sizes, sizes[1:]):
             limit = (n2 / n1) ** exp
             if (n1, s) in times and (n2, s) in times and (n1, s) not in bad and (n2, s) not in bad:
-                # The growth is judged from the SLOWEST time seen at the smaller size to the
-                # FASTEST at the larger one: a spike at either end cannot fail the ratio, and a
-                # quadratic stage, whose fastest large run is still many times its slowest small
-                # run, cannot pass it.
-                t1, t2 = (slowest or times)[(n1, s)], times[(n2, s)]
-                r = t2 / max(t1, b.p("floor_ms"))
-                if t2 < b.p("judge_min_ms"):
-                    # Too fast to time reliably: the stage is held by its budget alone.
-                    growth.append("x%.1f (under %.0fms: budget only)" % (r, b.p("judge_min_ms")))
-                elif r > limit:
+                # Whole compiles are judged above their size-independent baseline.
+                b0 = (base or {}).get(s, 0.0)
+                t1, t2 = max(0.0, times[(n1, s)] - b0), max(0.0, times[(n2, s)] - b0)
+                floor = b.p("floor_ms") if s in TRACE_STAGES else b.p("wall_floor_ms")
+                r = t2 / max(t1, floor)
+                if r > limit:
                     problems.append("time grew x%.1f from %d to %d > x%.1f (n^%.1f)"
                                     % (r, n1, n2, limit, exp))
                 else:
                     growth.append("x%.1f<=x%.1f" % (r, limit))
             if (n1, s) in beats and (n2, s) in beats:
                 h1, h2 = beats[(n1, s)], beats[(n2, s)]
-                r = h2 / max(h1, b.p("hb_floor"))
+                r = h2 / max(h1, 1.0)
                 if h2 >= b.p("hb_judge_min") and r > limit:
                     hbfail.append("heartbeats grew x%.1f from %d to %d > x%.1f" % (r, n1, n2, limit))
         if hbfail:
@@ -421,22 +430,27 @@ def judge(b, shape, sizes, stages, times, beats, bad, slowest=None):
 
 
 def run_shape(runner, b, shape, sizes, modes, attempts):
-    """Measure a shape up to ATTEMPTS times; keep the fastest and slowest run per (size, stage)."""
+    """Measure a shape up to ATTEMPTS times; keep the fastest run per (size, stage)."""
     stages = stages_of(modes)
-    times, beats, bad, slowest = {}, {}, {}, {}
+    times, beats, bad = {}, {}, {}
     for attempt in range(1, attempts + 1):
         for n in sizes:
             t, h, e = runner.measure(shape, n, modes)
             for s, v in t.items():
                 times[(n, s)] = min(v, times.get((n, s), v))
-                slowest[(n, s)] = max(v, slowest.get((n, s), v))
             for s, v in h.items():
                 beats[(n, s)] = min(v, beats.get((n, s), v))
             # A failure in ANY attempt stands: a wrong result or a refused compile is never
             # noise, and a later attempt's time does not make it a measurement.
             for s, v in e.items():
                 bad.setdefault((n, s), v)
-        verdicts = judge(b, shape, sizes, stages, times, beats, bad, slowest)
+        base = {m: runner.baseline(m) for m in modes if m != "trace"}
+        for m, v in base.items():
+            if v is None:                   # no baseline, no growth judgement: not a pass
+                for n in sizes:
+                    bad.setdefault((n, m), "its baseline (a one-line program) did not compile")
+        verdicts = judge(b, shape, sizes, stages, times, beats, bad,
+                         {m: v for m, v in base.items() if v is not None})
         wall_fail = any(v == "FAIL" for v, _ in verdicts)
         # Heartbeat failures are deterministic: no retry changes them. A compile that failed is
         # not noise, and a run killed at its ceiling twice (bounded.sh already re-ran it alone
