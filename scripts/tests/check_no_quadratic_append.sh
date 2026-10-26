@@ -53,7 +53,9 @@ check Concrete/Frontend/Parser.lean      10
 # lists accumulate newest first; the variable table is a map.
 # 25->20 (2026-10-26, bug 279): lowerModule conses its results; the external types and string
 # globals are deduplicated through sets and maps.
-check Concrete/IR/Lower.lean             20
+# 20->15 (2026-10-26, bug 297): call arguments, `&mut` write-backs and merge inputs are consed
+# and reversed once.
+check Concrete/IR/Lower.lean             15
 check Concrete/IR/Mono.lean              5
 check Concrete/IR/SSACleanup.lean        1
 check Concrete/IR/SSAVerify.lean         1
@@ -70,7 +72,9 @@ check Concrete/Check/CheckHelpers.lean   8
 # once per for-loop, not once per element of anything.
 # 56->53 (2026-10-26, bug 276): elabModule conses each function result and reverses once (the
 # tree held 54 before it).
-check Concrete/Elab/Elab.lean            53
+# 53->31 (2026-10-26, bug 297; the tree held 41): call arguments, struct literal fields, enum
+# payload bindings and desugared print/append statements are consed and reversed once.
+check Concrete/Elab/Elab.lean            31
 # 6->7 (2026-10-19, bug 052): destroyValue extends an element reference's path by one
 # `.index i` step per array element. The path is as long as the access nesting, not the
 # array, so each append is O(depth) and the loop stays linear in the elements.

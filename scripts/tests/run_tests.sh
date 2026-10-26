@@ -8426,6 +8426,10 @@ run_ok "$TESTDIR/regress_269_generic_bindings_at_value.con" 42
 # a value `if` and a `match` whose last arm writes `x` and returns, and a `break`): the binary
 # returned the diverged arm's value or the program was refused (E0703). Binary = --interp = 42.
 run_ok "$TESTDIR/regress_271_diverged_arm_writes.con" 42
+# Bug 297: argument order, `&mut` write-back order and a match's merged values on the paths
+# whose accumulation changed from appends to cons-and-reverse. The binary returns 42 (as
+# `--interp` did when the fixture was written).
+run_ok "$TESTDIR/regress_297_argument_order.con" 42
 # Bug 285: an address taken inside an enum literal's payload was invisible to Lower's
 # pre-promotion (statement `if`, value `if`, `match`, `&&`) and to the loop's slot-or-phi choice:
 # the binary loaded a never-stored slot or looped forever. Binary = --interp = 42.
@@ -9705,6 +9709,43 @@ else
     echo "  ok  bug 296: a function of 20000 calls within budget:$r296_ok"
     PASS=$((PASS + 1))
 fi
+# Bug 297: Elab (elabCallEv) and Lower (lowerExpr) appended each call argument to the list built
+# so far, quadratic in a call's arity (8000 arguments: elaborate 145 ms, lower 126 ms). A call of
+# 12000 arguments must elaborate and lower within 60 ms each, retried once at 120 ms.
+r297_src="$TMPDIR/r297_many_params_12000.con"
+awk -v n=12000 'BEGIN {
+    line = "fn f("
+    for (i = 0; i < n; i++) line = line (i ? ", " : "") "p" i ": i64"
+    print line ") -> i64 {"
+    printf "    return p0 + p%d;\n", n - 1
+    print "}"
+    line = "fn main() -> Int {\n    return (f("
+    for (i = 0; i < n; i++) line = line (i ? ", " : "") "1"
+    print line ") + 40) as Int;"
+    print "}"
+}' > "$r297_src"
+for r297_stage in elaborate lower; do
+    r265_stage_ms "$r297_src" "$r297_stage"; r297_first="$r265_ms"; r297_ms="$r297_first"
+    case "$r297_first" in
+        ''|*[!0-9]*) ;;
+        *) if [ "$r297_first" -gt 60 ]; then r265_stage_ms "$r297_src" "$r297_stage"; r297_ms="$r265_ms"; fi ;;
+    esac
+    case "$r297_ms" in
+        incomplete)
+            echo "  INCOMPLETE bug 297: a call of 12000 arguments timed out twice in $r297_stage (180 s each)"
+            INCOMPLETE=$((INCOMPLETE + 1)) ;;
+        ''|*[!0-9]*)
+            echo "FAIL  bug 297: a call of 12000 arguments failed ($r297_ms, $r297_stage)"
+            FAIL=$((FAIL + 1)) ;;
+        *) if [ "$r297_first" -le 60 ] || [ "$r297_ms" -le 120 ]; then
+               echo "  ok  bug 297: a call of 12000 arguments within budget (${r297_ms} ms, $r297_stage)"
+               PASS=$((PASS + 1))
+           else
+               echo "FAIL  bug 297: a call of 12000 arguments took ${r297_first} ms, then ${r297_ms} ms in $r297_stage (budget 60, retry 120)"
+               FAIL=$((FAIL + 1))
+           fi ;;
+    esac
+done
 # Bug 247: a function value written as an identifier reaches what it names in the assumption summary.
 run_ok "$TESTDIR/regress_247_function_value_reaches_foreign.con" 42
 run_ok "$TESTDIR/regress_247_free_value_beside_unrelated_extern.con" 42

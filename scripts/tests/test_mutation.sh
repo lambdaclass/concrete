@@ -524,8 +524,8 @@ MUT_DESC+=("Mono: generic enums detected but unmapped (E0808 backstop)")
 # resolution". It must be caught by the fn-pointer fixtures, not merely by
 # something downstream noticing an undefined symbol.
 MUT_FILE+=("Concrete/Elab/Elab.lean")
-MUT_OLD+=("    return ElaboratedExprV2.mk (CExpr.call (.indirect ((fnLocal?.map (·.2.core)).getD (CLocal.ofName fnName))) [] cArgs retTy)")
-MUT_NEW+=("    return ElaboratedExprV2.mk (CExpr.call (.direct ((fnLocal?.map (·.2.core.name)).getD fnName)) [] cArgs retTy) -- MUTATION: indirect call resolved by name")
+MUT_OLD+=("    return ElaboratedExprV2.mk (CExpr.call (.indirect ((fnLocal?.map (·.2.core)).getD (CLocal.ofName fnName))) [] cArgs.reverse retTy)")
+MUT_NEW+=("    return ElaboratedExprV2.mk (CExpr.call (.direct ((fnLocal?.map (·.2.core.name)).getD fnName)) [] cArgs.reverse retTy) -- MUTATION: indirect call resolved by name")
 MUT_DESC+=("Elab: indirect call emitted as direct (bug 050)")
 
 # 22. std map: forget the remembered tombstone (R-0003 / bug 047)

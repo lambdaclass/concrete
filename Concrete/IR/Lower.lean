@@ -992,7 +992,7 @@ private def reconcileBranchVars (rules : BranchMergeRules)
     -- by the merge's stale table value — audit 2026-07-16 fuzz).
     if (← isPromoted name).isSome then continue
     let ty := preVal.ty
-    let mut incoming : List (SVal × String) := []
+    let mut incomingRev : List (SVal × String) := []
     let mut anyChanged := false
     for (endVars, endLabel) in liveArms do
       match endVars.find? name with
@@ -1021,7 +1021,8 @@ private def reconcileBranchVars (rules : BranchMergeRules)
             | .unit => if ty == .unit then v else preVal
             | _ => v
           else v
-        incoming := incoming ++ [(contrib, endLabel)]
+        incomingRev := (contrib, endLabel) :: incomingRev
+    let incoming := incomingRev.reverse  -- bug 297: consed per arm, in arm order here
     if anyChanged then
       if incoming.length >= 2 then
         let isAgg ← isAggregateForPromotion ty
@@ -1285,7 +1286,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
         -- write-back via setVar would desync from the promoted alloca).
         match ← isPromoted varName.key with
         | some (allocaReg, _) =>
-          aVals := aVals ++ [.reg allocaReg (.refMut innerTy)]
+          aVals := .reg allocaReg (.refMut innerTy) :: aVals
         | none =>
           -- For &mut borrows of variables: alloca, store current value, pass ptr
           -- After the call we'll load back to propagate mutations.
@@ -1295,8 +1296,8 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           let slot ← freshReg "mutref."
           emitEntryAlloca (.alloca slot innerTy)
           emit (.store curVal (.reg slot innerTy))
-          aVals := aVals ++ [.reg slot (.refMut innerTy)]
-          mutBorrows := mutBorrows ++ [(varName.key, slot, innerTy)]
+          aVals := .reg slot (.refMut innerTy) :: aVals
+          mutBorrows := (varName.key, slot, innerTy) :: mutBorrows
       | _ =>
         -- All other borrow/place args (incl. `&mut o.f`, `&mut a[i]`,
         -- `&mut a[i].f`) lower through `borrowMut`/`placeAddr`, which GEPs into a
@@ -1305,7 +1306,11 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
         -- struct VALUE, so the field write was silently lost.
         -- A by-value array argument is the callee's own copy (bug 190).
         let v ← snapshotArrayValue arg (← lowerExpr arg)
-        aVals := aVals ++ [v]
+        aVals := v :: aVals
+    -- Bug 297: the arguments and write-backs were appended one at a time (quadratic in the
+    -- call's arity); they are consed and put back in argument order once.
+    aVals := aVals.reverse
+    mutBorrows := mutBorrows.reverse
     -- Resolve fn-pointer variables: if the call target is a local variable
     -- holding a fn pointer, resolve it to the actual function / register name.
     -- A statically-known target is an `SVal.fnRef`, so devirtualization here is

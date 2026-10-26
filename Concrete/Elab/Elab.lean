@@ -918,7 +918,7 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none)
       -- Functional update `..base`: the base is elaborated once here and EVALUATED once, after
       -- the explicit initializers (bug 136; see below).
       let cBase ← base.mapM (fun b => do pure (← elabExprEv b (some resultTy)).core)
-      let mut cFields : List (String × CExpr) := []
+      let mut cFieldsRev : List (String × CExpr) := []
       -- SOURCE ORDER (language decision, 2026-08-08). Initializers evaluate left-to-right as
       -- WRITTEN, so this walks the literal's own field list rather than `sd.fields`.
       --
@@ -943,9 +943,10 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none)
             (substTy mapping (← expandFieldAliases sd.typeParams sf.ty))
           recordFieldUse sd sf.name
           let cExprEv ← elabExprEv expr (some fieldTy)
-          cFields := cFields ++ [(sf.name, cExprEv.core)]
+          cFieldsRev := (sf.name, cExprEv.core) :: cFieldsRev
           structFieldEvsRev := (sf.name, cExprEv.evidence) :: structFieldEvsRev
         | none => pure ()  -- unknown field: reported by the checker, not here
+      let cFields := cFieldsRev.reverse  -- bug 297: consed per field, in source order here
       -- Without an expected type, read the capability arguments off the elaborated
       -- fields (each was elaborated exactly once, above).
       let capMap : List (String × CapSet) := match hintCapMap with
@@ -1166,7 +1167,7 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none)
               | .error _ => throwElab (.unknownVariant armVariant enumName) (some e.getSpan)
             recordVariantUse ed armVariant
             let typeMapping := ed.typeParams.zip enumTypeArgs
-            let mut typedBindings : List (CLocal × Ty) := []
+            let mut typedBindingsRev : List (CLocal × Ty) := []
             for (binding, sf) in bindings.zip ev.fields do
               -- aliases expanded (the enum's own type parameters shadow them), as the
               -- enum's Core payload types are (bug 096's agreement checker compares the two)
@@ -1180,7 +1181,8 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none)
               -- bind it in scope — it is a wildcard, not a readable variable.
               -- Bug 045: the arm carries the FRESH (alpha-renamed) name.
               let coreBinding ← bindArmVar (.site (SiteKey.ofSpan armSp) binding) binding bty (some armSp)
-              typedBindings := typedBindings ++ [(coreBinding, bty)]
+              typedBindingsRev := (coreBinding, bty) :: typedBindingsRev
+            let typedBindings := typedBindingsRev.reverse  -- bug 297
             let cGuardEv ← guard.mapM (fun g => elabExprEv g (some Ty.bool))
             let cGuard := cGuardEv.map (·.core)
             let cBodyEv ← elabStmtsEv body (valueHint := hint)
@@ -1485,7 +1487,7 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none)
           let mut cArgs : List CExpr := [selfArg]
           for (arg, p) in args.zip params do
             let cArgEv ← elabExprEv arg (some p.ty)
-            cArgs := cArgs ++ [cArgEv.core]
+            cArgs := cArgEv.core :: cArgs  -- bug 297: newest first, reversed at the call
           -- Reserved spelling (see `traitParamCallee`): a user function named `T_m` is a
           -- different callable and must not be selected, so the evidence does not resolve
           -- the call by that string either.
@@ -1497,7 +1499,7 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none)
           -- bug 052).
           let callee := if foundBuiltin == some .destroy && methodName == destroyMethodName
             then destroyDispatchCallee else traitParamCallee n methodName
-          return ElaboratedExprV2.mk (CExpr.call (Callee.method callee) typeArgs cArgs retTy)
+          return ElaboratedExprV2.mk (CExpr.call (Callee.method callee) typeArgs cArgs.reverse retTy)
             Proof.evTraitMethodOnTypeParam
       | _ => throwElab .methodCallOnNonNamedType (some e.getSpan)
     else
@@ -1558,9 +1560,9 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none)
         for (arg, pTy) in args.zip methodParams do
           let cArgEv ← elabExprEv arg (some pTy)
           let cArg := cArgEv.core
-          cArgs := cArgs ++ [cArg]
+          cArgs := cArg :: cArgs  -- bug 297: newest first, reversed at the call
           argEvs := cArgEv.evidence :: argEvs
-        return ElaboratedExprV2.mk (CExpr.call (Callee.method mangledName) (objTypeArgs ++ methodArgs) cArgs retTy)
+        return ElaboratedExprV2.mk (CExpr.call (Callee.method mangledName) (objTypeArgs ++ methodArgs) cArgs.reverse retTy)
           (match (← getEnv).resolveMethodCallee mangledName with
            | some id => Proof.evCall id argEvs.reverse
            | none    => Proof.evUnresolvedCall "method call: mangled name has no CallableId")
@@ -1587,11 +1589,11 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none)
       for (arg, pTy) in args.zip paramTypes do
         let cArgEv ← elabExprEv arg (some pTy)
         let cArg := cArgEv.core
-        cArgs := cArgs ++ [cArg]
+        cArgs := cArg :: cArgs  -- bug 297: newest first, reversed at the call
         argEvs := cArgEv.evidence :: argEvs
       let env ← getEnv
       let resolve := if space == .method then env.resolveMethodCallee else env.resolveCallee
-      return ElaboratedExprV2.mk (CExpr.call (Callee.direct mangledName space) typeArgs cArgs retTy)
+      return ElaboratedExprV2.mk (CExpr.call (Callee.direct mangledName space) typeArgs cArgs.reverse retTy)
         (match resolve mangledName with
          | some id => Proof.evCall id argEvs.reverse
          | none    => Proof.evUnresolvedCall "static method call: mangled name has no CallableId")
@@ -1927,9 +1929,9 @@ partial def elabCallEv (fnName : String) (typeArgs : List Ty) (args : List Expr)
     for (arg, pTy) in args.zip paramTys do
       let cArgEv ← elabExprEv arg (some pTy)
       let cArg := cArgEv.core
-      cArgs := cArgs ++ [cArg]
+      cArgs := cArg :: cArgs  -- bug 297: newest first, reversed at the call
       argEvs := cArgEv.evidence :: argEvs
-    return ElaboratedExprV2.mk (CExpr.call (.indirect ((fnLocal?.map (·.2.core)).getD (CLocal.ofName fnName))) [] cArgs retTy)
+    return ElaboratedExprV2.mk (CExpr.call (.indirect ((fnLocal?.map (·.2.core)).getD (CLocal.ofName fnName))) [] cArgs.reverse retTy)
       (match (← getEnv).resolveCallee fnName with
        | some id => Proof.evCall id argEvs.reverse
        | none    => Proof.evUnresolvedCall "call: name has no CallableId")
@@ -1960,14 +1962,14 @@ partial def elabCallEv (fnName : String) (typeArgs : List Ty) (args : List Expr)
     for (arg, pTy) in args.zip paramTypes do
       let cArgEv ← elabExprEv arg (some pTy)
       let cArg := cArgEv.core
-      cArgs := cArgs ++ [cArg]
+      cArgs := cArg :: cArgs  -- bug 297: newest first, reversed at the call
       argEvs := cArgEv.evidence :: argEvs
     -- Use canonical name for intrinsics (e.g., string_substr → string_slice)
     let callName ← match intrinsic with
       | some id => pure id.canonicalName
       | none => coreFnSpelling fnName
     let space ← if intrinsic.isSome then pure CallSpace.free else freeSpelledSpace fnName
-    return ElaboratedExprV2.mk (CExpr.call (Callee.direct callName space) inferredTypeArgs cArgs retTy)
+    return ElaboratedExprV2.mk (CExpr.call (Callee.direct callName space) inferredTypeArgs cArgs.reverse retTy)
       (match (← getEnv).resolveCallee fnName with
        | some id => Proof.evCall id argEvs.reverse
        | none    => Proof.evUnresolvedCall "call: name has no CallableId")
@@ -2044,10 +2046,10 @@ partial def elabStmtEv (stmt : Stmt) : ElabM ElaboratedStmtV2 := do
             CStmt.expr (CExpr.call (.runtime "print_char") [] [CExpr.cast cArg .int] .unit) false
           | _ =>
             CStmt.expr (CExpr.call (.runtime "print_string") [] [CExpr.strLit "<unprintable>"] .unit) false
-        stmts := stmts ++ [printCall]
+        stmts := printCall :: stmts  -- bug 297: newest first, reversed below
       if fnName == "println" then
-        stmts := stmts ++ [CStmt.expr (CExpr.call (.runtime "print_char") [] [CExpr.intLit 10 .int] .unit) false]
-      return ElaboratedStmtV2.mk stmts (Proof.evUnhandledStmt "desugared statement sequence")
+        stmts := CStmt.expr (CExpr.call (.runtime "print_char") [] [CExpr.intLit 10 .int] .unit) false :: stmts
+      return ElaboratedStmtV2.mk stmts.reverse (Proof.evUnhandledStmt "desugared statement sequence")
     -- Desugar variadic append(&mut buf, ...) into typed string_append calls.
     -- Only fires if (a) not shadowed by a user fn, (b) at least one arg,
     -- (c) first arg elaborates to &mut String. Otherwise fall through and
@@ -2085,8 +2087,8 @@ partial def elabStmtEv (stmt : Stmt) : ElabM ElaboratedStmtV2 := do
                      -- Bug 203: its own code. It shared E0420 with a ghost read at run time, so
                      -- the code did not identify the rule (TYPE-10 here, CON-4 there).
                      , code := "E0421" }]
-          stmts := stmts ++ [call]
-        return ElaboratedStmtV2.mk stmts (Proof.evUnhandledStmt "desugared statement sequence")
+          stmts := call :: stmts  -- bug 297: newest first, reversed below
+        return ElaboratedStmtV2.mk stmts.reverse (Proof.evUnhandledStmt "desugared statement sequence")
       | _ =>
         let cEEv ← elabExprEv (.call _sp fnName _typeArgs args)
         let cE := cEEv.core

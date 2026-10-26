@@ -1,0 +1,41 @@
+// Bug 297: Elab and Lower now cons each call argument (and each `&mut` write-back, and each arm's
+// incoming value at a merge) and restore the order once. Argument order, write-back order and
+// the arms' values must be exactly as before: this pins all three on the paths that changed.
+struct P {
+    a: i64,
+    b: i64,
+    c: i64,
+}
+
+fn weigh(a: i64, b: i64, c: i64, d: i64, e: i64) -> i64 {
+    return a * 10000 + b * 1000 + c * 100 + d * 10 + e;
+}
+
+fn bump(x: &mut i64, y: &mut i64, z: &mut i64) {
+    *x = *x + 1;
+    *y = *y * 2;
+    *z = *z - 3;
+}
+
+fn pick(k: i64) -> i64 {
+    let mut s: i64 = 0;
+    match k {
+        0 => { s = 7; },
+        1 => { s = 8; },
+        2 => { s = 9; },
+        _ => { s = 10; },
+    }
+    return s;
+}
+
+fn main() -> Int {
+    let w: i64 = weigh(1, 2, 3, 4, 5);
+    let mut x: i64 = 1;
+    let mut y: i64 = 2;
+    let mut z: i64 = 3;
+    bump(&mut x, &mut y, &mut z);
+    let p: P = P { c: 3, a: 1, b: 2 };
+    let P { a, b, c } = p;
+    // 12345 - 12345 + (2 + 4 + 0) + (1 + 2 + 3) + (7 + 8 + 9 + 10) - 4 = 42
+    return (w - 12345 + x + y + z + a + b + c + pick(0) + pick(1) + pick(2) + pick(3) - 4) as Int;
+}
