@@ -2,12 +2,12 @@
 
 <!-- bug-ledger
 summary: the parser appended each struct, enum, constant, newtype, import and submodule of a module to the list built so far (`structs := structs ++ [s]`), so a module of n such declarations took time n² to parse (10000 structs: 684 ms). Found by the R-0550 scaling gate. Class 17.
-coverage: `run_tests.sh` times the `parse` stage of generated modules of 20000 structs and 20000 enums against a budget (the pre-fix compiler fails both); `check_compile_scaling.sh` (R-0550, on wip/r0550-scaling-gate-v2, not yet landed) judges the same stage once this bug's exclusion is removed
+coverage: `check_compile_scaling.sh` judges the `structs` and `enums` shapes' `parse` stage against its budget and near-linear growth: this fix removes the stage's exclusion under this bug, and the gate fails the pre-fix compiler
 class: 17 — the parser appends each struct, enum, constant, newtype, import and submodule of a module to the list built so far
 silent: no
 -->
 
-**Status:** FIXED (branch `wip/perf-273-v2`)
+**Status:** FIXED (branch `wip/perf-273-v3`)
 **Found:** 2026-10-26, building the compile-time scaling gate (R-0550, exit 2o): the gate's generated shapes, timed per stage with `--emit-trace-json` at 10b81a46.
 **Severity:** loud (performance). Compile time only: never wrong code, a refusal or a crash; a program of this shape compiles, slowly.
 
@@ -70,12 +70,9 @@ After the rebase onto main (91ce358b, train 34) the comparison was run again, ov
 91ce358b's corpus, between the compiler built at 91ce358b and the one built at 4d1d0362 (this
 fix on that base): byte-identical.
 
-## Regression leg
+## Regression gate
 
-`run_tests.sh` times the `parse` stage of a generated module of 20000 structs and of 20000 enums
-against 300 ms each (retried once at 600 ms): 115 ms and 109 ms on the rebased fix (4d1d0362)
-while another session's gates loaded the host, FAIL on main 91ce358b (26344 ms, then 4531 ms;
-27884 ms, then 5043 ms).
+The R-0550 gate (`check_compile_scaling.sh`, on main since 9d8182ea) held this stage as an exclusion under this bug; the fix removes both exclusions from `compile_scaling_budgets.tsv`. With them removed the gate passes `structs/parse` (1000: 3 ms, 10000: 24 ms, x8.0) and `enums/parse` (x8.3) on this fix, and fails both on main's compiler (x108.0 and x114.5 in time against x63.1, x67.8 and x66.6 in allocations against x15.8).
 
 ## Containment while open
 
