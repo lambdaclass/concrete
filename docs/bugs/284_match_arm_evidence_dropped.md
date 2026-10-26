@@ -49,8 +49,8 @@ is refused: a body digest that describes less than the program must not validate
 ## Cause
 
 `Concrete/Elab/Elab.lean`, the `.match_` case of `elabExprEv`: `cArms` (Core) and `armEvsRev`
-(evidence) were separate lists. Of the thirteen arm cases across the three branches (enum found,
-enum lookup failed, scrutinee not an enum), four pushed evidence; the other nine pushed Core only.
+(evidence) were separate lists. Of the twelve arm cases across the three branches (enum found,
+enum lookup failed, scrutinee not an enum), three pushed evidence; the other nine pushed Core only.
 `EvidenceExprV2.matchExpr scrutinee []` holds no gap, so `Proof.validate` accepted the body, and
 `proofSubjectDigestV2` and `implementationDigest` digested it.
 
