@@ -51,8 +51,10 @@ KINDS OF MEASUREMENT"):
   a change adds does not raise its allowance (it fails `instr`); a change that makes the same
   instructions slower is excused only up to `norm_cap` (Codex review: the normalization trades
   that sensitivity for load immunity; the cap bounds it). Growth is judged on raw times, as before.
-- `--measure` scales each run to the session's quietest rate and keeps the fastest, and stamps the
-  load average, so budgets measured on a busy host are not inflated by it.
+- `--measure` scales each run to the session's quietest rate and keeps the fastest, which removes
+  the variation between its runs but not load lasting the whole session (Codex review); so it
+  refuses a host whose load average is above `measure_max_load` (8 of 32 threads) and stamps the
+  load it ran at.
 - A host that cannot count instructions judges as before and says so.
 - Negative controls run with every judgment: a stage over budget on an unloaded host fails; the
   same time at half host speed passes; a stage over `norm_cap` x its budget fails however slow the

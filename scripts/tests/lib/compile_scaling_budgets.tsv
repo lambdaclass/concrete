@@ -27,7 +27,9 @@
 # judged on the stage's time divided by how much slower than `rate` its run went per instruction,
 # at most norm_cap: so load cannot fail unchanged work up to norm_cap, added work still shows in
 # instr, and only a change that makes the same instructions slower is excused, up to norm_cap.
-# --measure scales each run to the session's quietest rate and keeps the fastest.
+# --measure scales each run to the session's quietest rate and keeps the fastest; that removes the
+# variation between runs, not load lasting the whole session, so it refuses a host whose load average
+# is above measure_max_load (32 threads: 8 is a quarter busy) and stamps the load it ran at.
 # Declaration and nesting shapes run at 1000 and 10000 while the stages excluded below are open;
 # their sizes move to 10^4 and 10^5 with the fixes. lets-if and lets-match run at 4000 and 40000
 # (their native compile at 10^5 takes 30 - 40 s); lets-while at 2000 and 20000, front end only (bug 270).
@@ -49,6 +51,7 @@ param	hb_budget_factor	1.25
 param	instr_budget_factor	1.25
 param	instr_exp	1.2
 param	norm_cap	2
+param	measure_max_load	8
 shape	array-const	10000,100000	trace,llvm,native
 shape	array-repeat	10000,100000	trace,llvm,native
 shape	array-distinct	10000,100000	trace,llvm,native

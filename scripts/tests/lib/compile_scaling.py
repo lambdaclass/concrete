@@ -89,7 +89,7 @@ REQUIRED = TRACE_STAGES + ["llvm", "native"]   # the compile path every shape co
 PARAM_DEFAULTS = {"exp": 1.8, "hb_exp": 1.2, "floor_ms": 2.0, "wall_floor_ms": 25.0, "hb_judge_min": 100000.0, "retries": 2.0, "ceiling_factor": 3.0,
                   "ceiling_min_s": 20.0, "measure_runs": 3.0, "budget_factor": 4.0,
                   "budget_slack_ms": 200.0, "hb_budget_factor": 1.25, "instr_budget_factor": 1.25,
-                  "instr_exp": 1.2, "norm_cap": 2.0}
+                  "instr_exp": 1.2, "norm_cap": 2.0, "measure_max_load": 8.0}
 
 
 # ----------------------------------------------------------------------------- generated corpus
@@ -617,13 +617,18 @@ def controls(workdir):
                 + "".join("budget\tassignments\t%d\t%s\t100\n" % (n, st)
                           for n in (10, 100) for st in TRACE_STAGES)
                 + "hbbudget\tassignments\t100\tlower\t1000\n"
-                + "instr\tassignments\t100\ttrace\t1000000\n")
+                + "instr\tassignments\t100\ttrace\t1000000\n"
+                + "rate\tassignments\t100\ttrace\t100.0\n")
     b = Budgets(path)
     sizes, stages = [10, 100], TRACE_STAGES
 
-    def verdicts(t100, f100, hb100=500.0, ins100=900000.0):
+    def verdicts(t100, slow100, hb100=500.0, ins100=900000.0):
+        # The run at 100 took `slow100` times the recorded 100 ms per 10^9 instructions: its host
+        # factor comes from host_factor, as in a real judgment.
+        f = host_factor(b, "assignments", 100, "trace", {"trace": 100.0 * slow100 * ins100 / 1e9},
+                        {"trace": ins100})
         times = {(n, st): (10.0 if n == 10 else t100) for n in sizes for st in stages}
-        factors = {(n, st): (1.0 if n == 10 else f100) for n in sizes for st in stages}
+        factors = {(n, st): (1.0 if n == 10 else f) for n in sizes for st in stages}
         ntimes = {k: v / factors[k] for k, v in times.items()}
         beats = {(n, st): (100.0 if n == 10 else hb100) for n in sizes for st in stages}
         instrs = {(10, "trace"): 100000.0, (100, "trace"): ins100}
@@ -633,6 +638,9 @@ def controls(workdir):
     out.append(("FAIL" in verdicts(150.0, 1.0), "CONTROL: a stage over its budget on an unloaded host fails"))
     out.append(("FAIL" not in verdicts(150.0, 2.0), "CONTROL: the same time on a host running at half speed passes"))
     out.append(("FAIL" in verdicts(250.0, 2.0), "CONTROL: a stage over norm_cap x its budget fails however slow the host"))
+    out.append(("FAIL" in verdicts(250.0, 8.0),
+                "CONTROL: a host 8 times slower is credited norm_cap (2), not 8: 2.5 x the budget fails"))
+    out.append(("FAIL" in verdicts(150.0, 0.5), "CONTROL: a host faster than at --measure is credited nothing"))
     out.append(("FAIL-INSTR" in verdicts(50.0, 2.0, ins100=1200000.0),
                 "CONTROL: a run over its instruction budget fails, host factor or not"))
     out.append(("FAIL-HB" in verdicts(50.0, 2.0, hb100=1500.0),
@@ -666,6 +674,18 @@ def host_identity():
 
 def do_measure(runner, b, shapes, root):
     runs = int(b.p("measure_runs"))
+    # Scaling to the session's quietest rate removes the variation between runs, not load that
+    # lasts the whole session (Codex review): budgets measured on a busy host would be inflated by
+    # it, so --measure refuses a host whose load is above measure_max_load.
+    try:
+        load = os.getloadavg()[0]
+    except OSError:
+        load = None
+    if load is not None and load > b.p("measure_max_load") and not os.environ.get("CONCRETE_SCALING_MEASURE_ANY_LOAD"):
+        print("  REFUSED: load average %.1f is above measure_max_load %g; budgets measured now would"
+              " carry the load. Re-run when the host is quiet (CONCRETE_SCALING_MEASURE_ANY_LOAD=1"
+              " overrides, and the stamp records the load)." % (load, b.p("measure_max_load")))
+        return 2
     new, newhb, newinstr, newrate = {}, {}, {}, {}
     if not runner.perf:
         print("  note: perf cannot count instructions:u on this host; no instruction budgets or rates"
