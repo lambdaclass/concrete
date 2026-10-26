@@ -12,18 +12,18 @@ checker refusal is a Check bug here.
 
 <!-- BEGIN GENERATED: bug areas (scripts/gen/bug_ledger.py; derived from the records, docs/bugs/area_map.tsv and git history, never edited here) -->
 
-270 records: 162 placed by their own fix commits, 38 by the files their record names in commits shared with other bugs, 36 by commits shared with other bugs, 10 by the commit that filed or closed the record, 19 by an `area:` override; 5 open bugs are not fixed yet and 0 fixed bugs have no commit the history can place.
+270 records: 161 placed by their own fix commits, 37 by the files their record names in commits shared with other bugs, 34 by commits shared with other bugs, 10 by the commit that filed or closed the record, 23 by an `area:` override; 5 open bugs are not fixed yet and 0 fixed bugs have no commit the history can place.
 
 ### By stage
 
 | stage | bugs | open | silent | shared or fallback | top modules |
 |--|-:|-:|-:|-:|--|
 | Check | 72 | 0 | 39 | 5 | Check 33, CoreCheck 13, CheckHelpers 9, Verify 5 |
-| Lower | 33 | 0 | 10 | 3 | Lower 32, - 1 |
-| Resolve | 27 | 2 | 4 | 9 | Resolve 16, FileSummary 7, BuiltinEnums 1, Intrinsic 1 |
-| Elab | 26 | 0 | 9 | 7 | Elab 23, Core 2, TypeSpelling 1 |
+| Lower | 34 | 0 | 10 | 3 | Lower 33, - 1 |
+| Resolve | 26 | 2 | 4 | 8 | Resolve 16, FileSummary 6, BuiltinEnums 1, Intrinsic 1 |
+| Elab | 25 | 0 | 9 | 7 | Elab 24, TypeSpelling 1 |
 | Proof | 19 | 1 | 8 | 2 | ProofCore 11, Proof 3, CallCollect 2, BodyIdentity 1 |
-| Interp | 17 | 0 | 4 | 9 | Interp 17 |
+| Interp | 18 | 0 | 4 | 8 | Interp 18 |
 | Parse | 11 | 0 | 3 | 0 | Parser 7, Lexer 2, AST 1, LocalId 1 |
 | EmitSSA | 10 | 0 | 1 | 3 | EmitSSA 10 |
 | Mono | 8 | 0 | 1 | 0 | Mono 7, - 1 |
@@ -39,13 +39,13 @@ checker refusal is a Check bug here.
 
 | class | bugs | stages |
 |--|-:|--|
-| 1. Declaration identity by spelled name, not a resolved `DefId` | 36 | Elab 11, Check 5, Resolve 4, Mono 3, Proof 3, Lower 2, EmitSSA 2, Interp 2, Report 2, EmitLLVM 1, CLI 1 |
+| 1. Declaration identity by spelled name, not a resolved `DefId` | 36 | Elab 10, Check 5, Resolve 4, Mono 3, Interp 3, Proof 3, Lower 2, EmitSSA 2, Report 2, EmitLLVM 1, CLI 1 |
 | 2. Binder identity by name, not a `LocalId` | 9 | Check 7, Elab 1, Proof 1 |
 | 3. Destruction dispatched by synthesized `<Type>_destroy` names | 6 | Mono 3, Resolve 1, Check 1, SSA 1 |
 | 4. No reference-provenance model in the source checker | 4 | Check 4 |
 | 5. Borrow tracking by syntax instead of normalized places | 2 | Check 1, Interp 1 |
 | 6. Capability facts not carried across dispatch, specialization or package boundaries | 5 | Check 4, Proof 1 |
-| 7. Semantics implemented several times (interpreter, proof model, folder, backend disagree) | 28 | Check 7, Interp 7, Proof 4, Lower 3, Elab 2, EmitLLVM 2, Resolve 1, EmitSSA 1, Report 1 |
+| 7. Semantics implemented several times (interpreter, proof model, folder, backend disagree) | 28 | Interp 8, Check 7, Proof 4, Lower 3, Elab 2, EmitLLVM 2, EmitSSA 1, Report 1 |
 | 8. Storage, places and control flow decided ad hoc in `Lower` | 11 | Lower 8, Check 2, Elab 1 |
 | 9. Evidence verdicts computed per surface and joined to their subject by name | 4 | Proof 2, CLI 2 |
 | 10. Evidence identity computed from a partial subject | 5 | Proof 3, Elab 2 |
@@ -55,7 +55,7 @@ checker refusal is a Check bug here.
 | 14. Trusted `std` and FFI code with no checked contract | 7 | Std 5, Parse 1, Check 1 |
 | 15. Ownership state not modeled along control-flow paths | 7 | Check 7 |
 | 16. Artifacts at paths no run owns | 5 | Tooling 2, Std 1, CLI 1, Gates 1 |
-| 17. Pass state in association lists and per-query recomputation (superlinear compile time) | 43 | Check 10, Parse 6, Lower 6, Interp 5, Elab 4, Resolve 3, SSA 3, EmitSSA 2, Proof 2, Mono 1, Report 1 |
+| 17. Pass state in association lists and per-query recomputation (superlinear compile time) | 43 | Check 10, Lower 7, Parse 6, Elab 4, Interp 4, Resolve 3, SSA 3, EmitSSA 2, Proof 2, Mono 1, Report 1 |
 | 18. Pipeline artifacts not bound to their payload | 1 | Report 1 |
 | 19. A mention read as a use (tool facts inferred from where a name is spelled) | 1 | Gates 1 |
 | no class | 38 | Lower 13, Check 6, EmitSSA 5, EmitLLVM 4, Resolve 2, Elab 2, Tooling 2, Parse 1, Mono 1, Std 1, CLI 1 |
@@ -272,7 +272,7 @@ checker refusal is a Check bug here.
 | [233](233_import_public_constant_refused.md) | Resolve | FileSummary | commits | Check, Elab, Lower |
 | [234](234_interp_recursion_quadratic.md) | Interp | Interp | commits | — |
 | [235](235_interp_array_read_walks_array.md) | Interp | Interp | shared | Elab |
-| [236](236_elab_array_literal_append.md) | Interp | Interp | shared | Elab |
+| [236](236_elab_array_literal_append.md) | Elab | Elab | override | — |
 | [237](237_selector_reads_map_text_as_calls.md) | Gates | shell_text | commits | — |
 | [238](238_method_call_captured_by_free_fn_of_its_spelling.md) | Elab | Elab | shared | Check |
 | [239](239_free_fn_answers_method_call.md) | Check | CoreCheck | commits | Elab, Proof, Report |
@@ -281,7 +281,7 @@ checker refusal is a Check bug here.
 | [242](242_imported_signature_type_captured.md) | Resolve | FileSummary | shared | — |
 | [243](243_aliased_newtype_import_binds_nothing.md) | Elab | Elab | commits | Parse, Resolve |
 | [244](244_killed_gate_run_wedges_lock.md) | Gates | check_gate_lock | commits | — |
-| [245](245_interp_constants_program_wide.md) | Elab | Core | commits | Interp, Lower, Report |
+| [245](245_interp_constants_program_wide.md) | Interp | Interp | override | Lower, Report |
 | [246](246_imported_alias_chain_unknown_type.md) | Proof | CallCollect | commits | Interp, Resolve |
 | [247](247_function_value_identifier_unreached.md) | Check | CoreCheck | shared | Elab, Report |
 | [248](248_interp_array_write_copies_array.md) | Interp | Interp | named | — |
@@ -290,7 +290,7 @@ checker refusal is a Check bug here.
 | [251](251_generic_specialization_reads_instantiating_tree_constants.md) | EmitSSA | EmitSSA | commits | Lower |
 | [252](252_doc_link_check_unchecked_and_unrun.md) | Tooling | Makefile | commits | — |
 | [253](253_privacy_judged_by_spelling.md) | Check | Check | commits | — |
-| [254](254_interp_newtype_over_aggregate_cast.md) | Resolve | FileSummary | shared | Elab |
+| [254](254_interp_newtype_over_aggregate_cast.md) | Interp | Interp | override | Elab |
 | [255](255_parser_block_statement_append.md) | Parse | Parser | named | Check, Elab |
 | [256](256_local_table_association_lists.md) | Parse | LocalId | named | Check, Elab, Resolve |
 | [257](257_resolve_visible_bindings_lists.md) | Resolve | Resolve | named | Check, Elab, Parse |
@@ -300,7 +300,7 @@ checker refusal is a Check bug here.
 | [261](261_corecheck_local_bindings_list.md) | Check | CoreCheck | override | — |
 | [262](262_child_newtype_constructor_check_elab_split.md) | Resolve | FileSummary | commits | Check |
 | [263](263_fuzz_farm_gate_wall_clock_coverage.md) | Tooling | farm | record | — |
-| [265](265_lower_variable_table_association_list.md) | Elab | Core | named | Lower, SSA |
+| [265](265_lower_variable_table_association_list.md) | Lower | Lower | override | SSA |
 | [266](266_lower_merges_visit_every_binding.md) | Lower | Lower | named | — |
 | [267](267_ssacleanup_one_constant_branch_per_pass.md) | SSA | SSACleanup | named | Lower |
 | [268](268_binder_refs_empty_scope_leg_missed_eager_frames.md) | SSA | SSACleanup | shared | — |

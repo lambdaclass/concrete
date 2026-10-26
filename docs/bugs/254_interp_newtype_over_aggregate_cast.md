@@ -5,6 +5,7 @@ summary: `--interp` refused constructing or unwrapping a newtype over a struct o
 fixtures: regress_254_newtype_over_struct.con regress_254_newtype_over_enum.con
 class: 7 — the interpreter had no case for a newtype's construction or unwrap over a struct or enum, which Core writes as a cast; fixed 2026-10-25
 silent: no
+area: Interp/Interp — the record's Fix (the interpreter's cast); its commits are shared
 -->
 
 **Status:** FIXED (2026-10-25, branch `wip/ident-followups`)
