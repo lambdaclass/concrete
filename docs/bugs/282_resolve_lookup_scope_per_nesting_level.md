@@ -7,7 +7,7 @@ class: 17 — Resolve looks a name up through one scope per nesting level
 silent: no
 -->
 
-**Status:** FIXED (branch `wip/perf-282-v2`)
+**Status:** FIXED (branch `wip/perf-282-v3`)
 **Found:** 2026-10-26, building the compile-time scaling gate (R-0550, exit 2o): the gate's generated shapes, timed per stage with `--emit-trace-json` at 10b81a46.
 **Severity:** loud (performance). Compile time only: never wrong code, a refusal or a crash; a program of this shape compiles, slowly.
 
@@ -67,10 +67,10 @@ the `resolve` stage of a generated nest 20000 `if` blocks deep against 50 ms (re
 100 ms): 11 ms after the fix, FAIL on the pre-fix compiler (599 ms, six times the retry budget,
 so a faster host still fails it; depth 10000 was 147 ms, too close to the budget, Codex review).
 
-The R-0550 scaling gate (wip/r0550-scaling-gate-v2, not yet landed) excludes the whole
-`nested-ifs` shape under this bug, bug 281 and Lower's merges (bug 266); its exclusion can drop
-this bug's name now, and the shape is judged once the other two are fixed and its budgets are
-measured.
+The R-0550 scaling gate (on main since 9d8182ea) excludes the whole `nested-ifs` shape under
+this bug, bug 281 and Lower's superlinear nesting cost; this fix drops this bug's clause from that
+exclusion in `compile_scaling_budgets.tsv`. The shape stays excluded, and unbudgeted, until the
+others are fixed, so the `run_tests.sh` leg above is this bug's committed coverage.
 
 ## Containment while open
 
