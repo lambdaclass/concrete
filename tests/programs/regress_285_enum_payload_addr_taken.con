@@ -1,7 +1,8 @@
 // Bug 285: an address taken inside an enum literal's payload is seen by every Lower site that
 // pre-promotes a local (statement if, value if, match, `&&` right operand) and by the loop's
 // slot-or-phi choice. Before the fix the first four read a never-stored slot on the path that
-// skips the payload, and the loop never terminated.
+// skips the payload, and the loop never terminated. Every `&x` here is inside a branch or loop, so
+// with the fix every promotion is made by a site before it (none lazily, as an `addr.` slot).
 enum E {
     A { v: i64 },
     B,
@@ -72,6 +73,17 @@ fn and_rhs(c: bool) -> i64 {
     return x;
 }
 
+// The `&&` site alone (no nested site in the right operand): clang folds its uninitialized load
+// to the stored 6, so run_tests.sh asserts on the SSA instead (no lazily promoted `addr.` slot).
+fn and_rhs_direct(c: bool) -> i64 {
+    let x: i64 = 6;
+    let b: bool = c && payload(E::A { v: get(&x) }) == 6;
+    if b {
+        return 100;
+    }
+    return x;
+}
+
 fn loop_sum() -> i64 {
     let mut i: i64 = 0;
     let mut s: i64 = 0;
@@ -83,6 +95,7 @@ fn loop_sum() -> i64 {
 }
 
 fn main() -> Int {
-    // 4 + 3 + 6 (5 + 1) + 6 + 15 + 8 = 42
-    return (stmt_if(false) + value_if(false) + match_arm(1) + and_rhs(false) + loop_sum() + 8) as Int;
+    // 4 + 3 + 6 (5 + 1) + 6 + 6 + 15 + 2 = 42
+    return (stmt_if(false) + value_if(false) + match_arm(1) + and_rhs(false) + and_rhs_direct(false)
+        + loop_sum() + 2) as Int;
 }
