@@ -5,9 +5,10 @@
 // fixture pins what the folding must keep: a chain of branches each reading the phi the previous
 // one merged, a branch on a cast and a negation of constants, a diamond whose arms both store the
 // same constant, a loop whose condition is not constant (its back edge is not known), and an
-// unsigned division by a power of two after a constant branch (Codex review: the cleanup turns it
-// into a shift before the branch settles, so the pass must leave such a function alone for the
-// emitted IR to stay the same). Binary = --interp = 42.
+// unsigned division by a power of two and a self-xor after a constant branch (Codex reviews: the
+// cleanup turns the division into a shift, and folds `%x ^ %x` but not `3 ^ 3`, before the branch
+// settles, so the pass must leave such functions alone for the emitted IR to stay the same).
+// Binary = --interp = 42.
 fn chain() -> i64 {
     let s0: i64 = 0;
     let mut t: i64 = 0;
@@ -56,8 +57,14 @@ fn unsigned_division() -> i64 {
     return 100;
 }
 
+fn self_xor() -> i64 {
+    let mut x: i64 = 3;
+    if false { x = 4; }
+    return (x ^ x) + 1;
+}
+
 fn main() -> Int {
-    // chain 3 + casts 2 + diamond 3 + 3 + loop 2 + division 1 = 14; + 28 = 42
+    // chain 3 + casts 2 + diamond 3 + 3 + loop 2 + division 1 + xor 1 = 15; + 27 = 42
     return (chain() + casts_and_negation() + diamond(true) + diamond(false) + loop_not_constant()
-        + unsigned_division() + 28) as Int;
+        + unsigned_division() + self_xor() + 27) as Int;
 }

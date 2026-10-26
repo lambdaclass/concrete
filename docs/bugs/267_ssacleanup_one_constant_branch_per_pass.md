@@ -39,7 +39,7 @@ entries of untaken edges are gone; a branch whose condition it proves constant b
 never concludes more than the sequence eventually does (an edge from a block not yet visited, a
 loop back edge, counts as taken with an unknown value; other instructions prove nothing; a block
 with no takable edge is skipped), so each rewrite is one the sequence makes in a later run, and the
-sequence, still run to its fixpoint, reaches the same result in a few runs. The sequence is not confluent in one respect (Codex review): `foldConstants` turns an unsigned division by a power of two whose dividend is not yet constant into a shift, which no run folds, so settling a branch earlier could let such a division fold instead; a function with an unsigned division is left to the sequence alone. The pass rewrites
+sequence, still run to its fixpoint, reaches the same result in a few runs. The sequence is not confluent for some operations (two Codex reviews): its result depends on whether an operand is still a register or already a constant when `foldConstants` meets it. An unsigned division by a power of two whose dividend is not yet constant becomes a shift, which no run folds; and a rule over two uses of one register (`x ^ x` is 0, `x & x` is `x`, `x <= x` is true) has no constant counterpart for bitwise operations, for ordering on `bool`, or for operands that are neither integers nor floats (`%x ^ %x` folds, `3 ^ 3` does not). A function with any such operation is left to the sequence alone. The pass rewrites
 branches in 85 of the 1934 corpus programs and in 2123 of 3000 generated fuzz programs;
 `--emit-ssa` and `--emit-llvm` are byte-identical before and after on all of them and on a second
 set of 3000 deeper fuzz programs.

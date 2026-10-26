@@ -827,19 +827,32 @@ private def stripStalePhiEntries (blocks : List SBlock) : List SBlock :=
     value not known, an instruction of any other kind proves nothing, and a block with no edge that
     can be taken is skipped. So every branch it rewrites is one the sequence would rewrite in a later
     run, and the sequence, which still runs after it to the same fixpoint, reaches the same result
-    in a few runs. Functions with a repeated block label, or with an unsigned division, are left
-    alone (see below). -/
+    in a few runs. Functions with a repeated block label, or with an operation whose fold depends on
+    whether its operands are still registers (see below), are left alone. -/
 private def resolveConstantBranches (blocks : List SBlock) : List SBlock :=
   let labelCount : Std.HashSet String := blocks.foldl (fun s b => s.insert b.label) ∅
-  -- The sequence is not confluent in one respect (Codex review): `foldConstants` rewrites an
-  -- unsigned division by a power of two into a shift when it meets one whose dividend is not yet
-  -- constant, and no run folds a shift, so settling a branch earlier can let the division fold
-  -- where the sequence would have shifted. A function with an unsigned division is left to the
-  -- sequence alone, so its output cannot change.
-  let unsignedDiv := blocks.any fun b => b.insts.any fun i => match i with
-    | .binOp _ .div _ _ ty => isUnsignedTy ty
+  -- The sequence is not confluent for some operations (Codex reviews): its result depends on
+  -- whether an operand is still a register or already a constant when `foldConstants` meets it.
+  -- An unsigned division by a power of two whose dividend is not yet constant becomes a shift,
+  -- which no run folds; and a rule over two uses of one register (`x ^ x` is 0, `x & x` is `x`,
+  -- `x <= x` is true) has no constant counterpart for bitwise operations, for ordering on `bool`,
+  -- or for operands that are neither integers nor floats, so `3 ^ 3` stays where `%x ^ %x` (a
+  -- merge phi of 3) folded. Settling a branch earlier turns such registers into constants sooner,
+  -- so a function with any such operation is left to the sequence alone and its output cannot
+  -- change. Every other operation folds the same whether its operands are registers or constants.
+  let orderSensitive := blocks.any fun b => b.insts.any fun i => match i with
+    | .binOp _ op lhs _ ty =>
+      let operandTy := lhs.ty
+      let intOperand := IntArith.isIntTy operandTy
+      let floatOperand := operandTy == .float32 || operandTy == .float64
+      match op with
+      | .bitxor | .bitand | .bitor => true
+      | .div => isUnsignedTy ty || !(intOperand || floatOperand)
+      | .eq | .neq => !(intOperand || floatOperand || operandTy == .bool)
+      | .lt | .gt | .leq | .geq | .sub => !(intOperand || floatOperand)
+      | _ => false
     | _ => false
-  if labelCount.size != blocks.length || unsignedDiv then blocks
+  if labelCount.size != blocks.length || orderSensitive then blocks
   else
     -- label → the labels of the blocks whose terminators target it
     let preds : Std.HashMap String (List String) := blocks.foldl (fun m b =>

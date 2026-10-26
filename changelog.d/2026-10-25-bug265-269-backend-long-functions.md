@@ -8,7 +8,8 @@ walked the branch bodies once per binding (bug 266); SSACleanup settled one link
 constant branches per run of its whole pass sequence (bug 267); and the verifier searched its
 environment list per assignment (bug 269). The table is persistent search trees that record when
 each binding was written, so a merge visits only what an arm wrote; a forward pass settles constant
-branch chains in one walk; the verifier's environment is a map. The emitted SSA and LLVM IR are
+branch chains in one walk (in functions without an operation whose fold depends on whether its
+operands are still registers); the verifier's environment is a map. The emitted SSA and LLVM IR are
 unchanged (the whole corpus and 3000 generated programs compare byte-identical). 80000 statements
 of each of these shapes now lower in 1-18 s. Pinned by `regress_265_variable_table.con`,
 `regress_266_branch_merges.con`, `regress_267_constant_branch_chains.con`, the `*_269_*` fixtures

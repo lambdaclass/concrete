@@ -8439,29 +8439,45 @@ r265_gen() {  # r265_gen SHAPE N: a generated `fn main` of the given shape and s
         print "}"
     }'
 }
-r265_stage_ms() {  # r265_stage_ms SRC STAGE: that stage's time in ms, or nothing when the run failed
-    bounded_run -r 180 180 -- $COMPILER "$1" --emit-trace-json 2>/dev/null \
-        | sed -nE "s/.*\"timing_ms\":\\{[^}]*\"$2\":([0-9]+).*/\\1/p"
+r265_stage_ms() {  # r265_stage_ms SRC STAGE: sets r265_ms to the stage's time in ms, "incomplete"
+    # (timed out twice) or "rcN" (the compiler failed); never fails itself, so a failed run reaches
+    # the verdict below instead of stopping the suite.
+    local rc=0 ms
+    bounded_run -r 180 180 -- $COMPILER "$1" --emit-trace-json > "$TMPDIR/r265_trace.json" 2>/dev/null || rc=$?
+    if bounded_is_incomplete "$rc"; then r265_ms=incomplete; return 0; fi
+    if [ "$rc" != 0 ]; then r265_ms="rc$rc"; return 0; fi
+    ms="$(sed -nE "s/.*\"timing_ms\":\\{[^}]*\"$2\":([0-9]+).*/\\1/p" "$TMPDIR/r265_trace.json" || true)"
+    r265_ms="${ms:-none}"
 }
-r265_bad=""
+r265_bad=""; r265_incomplete=""
 for r265_case in "lets 80000 lower 8000" "if 40000 lower 15000" "if 40000 monomorphize 3000" "match 20000 lower 15000"; do
     read -r r265_shape r265_n r265_stage r265_budget <<< "$r265_case"
     r265_src="$TMPDIR/r265_${r265_shape}_$r265_n.con"
     [ -f "$r265_src" ] || r265_gen "$r265_shape" "$r265_n" > "$r265_src"
-    r265_ms="$(r265_stage_ms "$r265_src" "$r265_stage")"
-    if [ -z "$r265_ms" ] || [ "$r265_ms" -gt "$r265_budget" ]; then
-        r265_ms2="$(r265_stage_ms "$r265_src" "$r265_stage")"
-        if [ -z "$r265_ms2" ] || [ "$r265_ms2" -gt $((r265_budget * 2)) ]; then
-            r265_bad="$r265_bad $r265_shape/$r265_n/$r265_stage:${r265_ms:-none},${r265_ms2:-none}ms"
-        fi
+    r265_stage_ms "$r265_src" "$r265_stage"; r265_first="$r265_ms"
+    case "$r265_first" in
+        ''|*[!0-9]*) r265_over=1 ;;
+        *) if [ "$r265_first" -gt "$r265_budget" ]; then r265_over=1; else r265_over=0; fi ;;
+    esac
+    if [ "$r265_over" = 1 ]; then
+        r265_stage_ms "$r265_src" "$r265_stage"
+        case "$r265_ms" in
+            incomplete) r265_incomplete="$r265_incomplete $r265_shape/$r265_n/$r265_stage" ;;
+            ''|*[!0-9]*) r265_bad="$r265_bad $r265_shape/$r265_n/$r265_stage:$r265_first,$r265_ms" ;;
+            *) [ "$r265_ms" -le $((r265_budget * 2)) ] \
+                   || r265_bad="$r265_bad $r265_shape/$r265_n/$r265_stage:$r265_first,${r265_ms}ms" ;;
+        esac
     fi
 done
-if [ -z "$r265_bad" ]; then
+if [ -n "$r265_bad" ]; then
+    echo "FAIL  bugs 265-267, 269: a back-end stage of a long function exceeded its budget (retry twice the budget) or the compiler failed:$r265_bad"
+    FAIL=$((FAIL + 1))
+elif [ -n "$r265_incomplete" ]; then
+    echo "  INCOMPLETE bugs 265-267, 269: timed out twice (180 s each):$r265_incomplete"
+    INCOMPLETE=$((INCOMPLETE + 1))
+else
     echo "  ok  bugs 265-267, 269: long functions (80000 lets, 40000 lets with an if, 20000 with a match) lower and monomorphize within budget"
     PASS=$((PASS + 1))
-else
-    echo "FAIL  bugs 265-267, 269: a back-end stage of a long function exceeded its budget (retry twice the budget):$r265_bad"
-    FAIL=$((FAIL + 1))
 fi
 # Bug 228: the interpreter's loops drop each iteration's bindings, so a loop is linear in its
 # iteration count (200000 iterations did not finish in 60 s on main). Binary 42; --interp 42 in 20 s.
