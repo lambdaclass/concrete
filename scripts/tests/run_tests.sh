@@ -9114,6 +9114,38 @@ else
     printf '%s\n' "$r239_edges2" | awk 'NR<=6'
     FAIL=$((FAIL + 1))
 fi
+# Bug 279: Lower appended each lowered function of a module to the list built so far, filtered the
+# program's types against the module's own by a list search per type, checked each call against a
+# list of defined functions and deduplicated string literals by a list search, so a module of n
+# declarations took n² to lower (20000 functions: 1405 ms). The R-0550 gate judges the stage, but
+# at its sizes the pre-fix `functions` shape stays inside its bound, so a generated module of 20000
+# functions must lower (the `lower` stage of --emit-trace-json) within 350 ms, retried once at
+# 700 ms (fixed: 102 ms on the dev host; pre-fix, twice the retry budget).
+r279f_src="$TMPDIR/r279f_functions_20000.con"
+awk -v n=20000 'BEGIN {
+    for (i = 0; i < n; i++) printf "fn f%d(x: i64) -> i64 { return x + %d; }\n", i, i % 3
+    printf "fn main() -> Int { return (f0(40) + f%d(2) - %d) as Int; }\n", n - 1, (n - 1) % 3
+}' > "$r279f_src"
+r265_stage_ms "$r279f_src" lower; r279f_first="$r265_ms"; r279f_ms="$r279f_first"
+case "$r279f_first" in
+    ''|*[!0-9]*) ;;
+    *) if [ "$r279f_first" -gt 350 ]; then r265_stage_ms "$r279f_src" lower; r279f_ms="$r265_ms"; fi ;;
+esac
+case "$r279f_ms" in
+    incomplete)
+        echo "  INCOMPLETE bug 279: lowering 20000 functions timed out twice (180 s each)"
+        INCOMPLETE=$((INCOMPLETE + 1)) ;;
+    ''|*[!0-9]*)
+        echo "FAIL  bug 279: lowering 20000 functions failed ($r279f_ms)"
+        FAIL=$((FAIL + 1)) ;;
+    *) if [ "$r279f_first" -le 350 ] || [ "$r279f_ms" -le 700 ]; then
+           echo "  ok  bug 279: lowering 20000 functions within budget (${r279f_ms} ms, lower)"
+           PASS=$((PASS + 1))
+       else
+           echo "FAIL  bug 279: lowering 20000 functions took ${r279f_first} ms, then ${r279f_ms} ms in lower (budget 350, retry 700)"
+           FAIL=$((FAIL + 1))
+       fi ;;
+esac
 # Bug 272: the calls-ffi edge is the call's binding to a foreign declaration, so a call of an
 # extern imported from another module (plainly, trusted, or under an alias) has one.
 run_ok "$TESTDIR/regress_272_imported_extern_ffi_edge.con" 42

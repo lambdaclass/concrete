@@ -48,13 +48,9 @@ shape	call-chain	1000,10000	trace
 shape	structs	1000,10000	trace
 shape	enums	1000,10000	trace
 exclude	lets-while	monomorphize,lower,llvm,native	bug 270 (open): Lower gives every loop a header phi for every binding in scope, so this shape's lower stage is quadratic (4.9, 18.7 and 51.7 s at 1000, 2000 and 4000 at b5040d53); --emit-trace-json runs Lower, so monomorphize is not timed apart from it, and the front end is judged through --emit-core
-exclude	functions	lower	bug 279 (open): Lower appends each lowered function to a list and deduplicates external types by list search
 exclude	functions	llvm,native	not run: every whole compile of this shape contains the excluded stages above; it runs with their fixes
-exclude	call-chain	lower	bug 279 (open): Lower appends each lowered function to a list and deduplicates external types by list search
 exclude	call-chain	llvm,native	not run: every whole compile of this shape contains the excluded stages above; it runs with their fixes
-exclude	structs	lower	bug 279 (open): Lower appends each lowered function to a list and deduplicates external types by list search
 exclude	structs	llvm,native	not run: every whole compile of this shape contains the excluded stages above; it runs with their fixes
-exclude	enums	lower	bug 279 (open): Lower appends each lowered function to a list and deduplicates external types by list search
 exclude	enums	llvm,native	not run: every whole compile of this shape contains the excluded stages above; it runs with their fixes
 budget	array-const	10000	parse	209
 budget	array-const	10000	resolve-files	200
