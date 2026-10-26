@@ -620,10 +620,21 @@ cat > "$_sc_dir/race.sh" <<'RACE'
 set -uo pipefail
 source "$1"
 BIG="$(seq 1 500000)"
-# The producer's status is 141 when SIGPIPE kills it, or 1 when the runner starts jobs with SIGPIPE
-# ignored and printf reports EPIPE as a write error (GitHub's Linux runners): either way non-zero.
-printf '%s' "$BIG" 2>/dev/null | grep -q '^1$'; rc=$?; [ "$rc" -ne 0 ] && echo "old-positive=fails" || echo "old-positive=passes"; echo "old-positive-status=$rc"
-printf '%s' "$BIG" 2>/dev/null | grep -q '^1$' && echo "old-negated=forbidden-seen" || echo "old-negated=passed"
+# The inversion counts only when grep really matched (status 0) and the producer died writing:
+# status 141 when SIGPIPE kills it, or 1 when the runner starts jobs with SIGPIPE ignored and printf
+# reports EPIPE as a write error (GitHub's Linux runners). Both statuses are read from PIPESTATUS at
+# once. A grep that failed (status 2) gives a non-zero pipeline too, without proving anything.
+OLD_PAT="${2:-^1\$}"
+inverted() { # producer-status grep-status -> true when the pipeline lost a real match to the producer
+  case "$1" in 141|1) [ "$2" = 0 ] ;; *) false ;; esac
+}
+printf '%s' "$BIG" 2>/dev/null | grep -q -- "$OLD_PAT"; ps=("${PIPESTATUS[@]}")
+echo "old-positive-status=producer:${ps[0]} grep:${ps[1]}"
+inverted "${ps[0]}" "${ps[1]}" && echo "old-positive=inverted" || echo "old-positive=not-inverted"
+printf '%s' "$BIG" 2>/dev/null | grep -q -- "$OLD_PAT"; ps=("${PIPESTATUS[@]}")
+echo "old-negated-status=producer:${ps[0]} grep:${ps[1]}"
+# The negated leg `... && no || ok` passes on any non-zero pipeline; inverted when grep did match.
+inverted "${ps[0]}" "${ps[1]}" && echo "old-negated=passed-on-forbidden" || echo "old-negated=not-inverted"
 printf '%s' "$BIG" | has_match '^1$'; echo "pipe-positive=$?"
 printf '%s' "$BIG" | has_match '^1$' && echo "pipe-negated=forbidden-seen" || echo "pipe-negated=passed"
 has_match '^1$' <<<"$BIG"; echo "here-positive=$?"
@@ -632,10 +643,17 @@ has_match '^0$' <<<"$BIG"; echo "absent=$?"
 { echo hit; exit 3; } | has_match hit; echo "producer-failure=$?"
 RACE
 RACE_OUT="$(bash "$_sc_dir/race.sh" "$_HMLIB" 2>&1)" || true
-for want in old-positive=fails old-negated=passed; do
-  if grep -qxF "$want" <<<"$RACE_OUT"; then ok "control: the old pipe reproduces bug 283 ($want, $(grep -m1 '^old-positive-status=' <<<"$RACE_OUT"): the verdict inverts)"
+for want in old-positive=inverted old-negated=passed-on-forbidden; do
+  if grep -qxF "$want" <<<"$RACE_OUT"; then ok "control: the old pipe reproduces bug 283 ($want; $(grep -E '^old-(positive|negated)-status=' <<<"$RACE_OUT" | tr '\n' ' '))"
   else no "control: the old pipe did not reproduce bug 283 ($want missing): $(tr '\n' ' ' <<<"$RACE_OUT")"; fi
 done
+# The reproduction control refuses a grep that failed: with an invalid pattern the old pipeline is
+# non-zero too (grep status 2), and that must not read as the inversion.
+BAD_OUT="$(bash "$_sc_dir/race.sh" "$_HMLIB" '\(' 2>&1)" || true
+if grep -qE '^old-positive-status=producer:[0-9]+ grep:2$' <<<"$BAD_OUT" && grep -qxF 'old-positive=not-inverted' <<<"$BAD_OUT" \
+   && grep -qxF 'old-negated=not-inverted' <<<"$BAD_OUT"; then
+  ok "control: a failing grep (invalid pattern, status 2) is not read as the inversion"
+else no "control: a failing grep was read as the inversion, or did not fail: $(grep '^old-' <<<"$BAD_OUT" | tr '\n' ' ')"; fi
 for want in pipe-positive=0 pipe-negated=forbidden-seen here-positive=0 here-negated=forbidden-seen absent=1 producer-failure=3; do
   if grep -qxF "$want" <<<"$RACE_OUT"; then ok "control: has_match on the same producer: $want"
   else no "control: has_match on the same producer: $want missing: $(tr '\n' ' ' <<<"$RACE_OUT")"; fi
