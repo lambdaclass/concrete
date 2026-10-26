@@ -47,8 +47,8 @@ Compute both facts bottom-up once per node (returned with the node's result, or 
 ## Measurements
 
 `check` and `elaborate` stages in ms (`--emit-trace-json`, fastest of 3 runs), dev host
-(fede-256gb), `nested-parens` shape, before (main 9d8182ea's compiler) and after (built from this
-branch's compiler sources, on bugs 275 and 276's fixes; the build had no other modification):
+(fede-256gb), `nested-parens` shape, before (main 9d8182ea's compiler) and after (built from the tree of f444bbdb, this fix on bugs 275 and 276's fixes; the build had no other
+modification):
 
 | depth | `check` before | after | `elaborate` before | after |
 |---|---|---|---|---|
