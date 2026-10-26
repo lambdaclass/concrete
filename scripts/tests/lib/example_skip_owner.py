@@ -112,13 +112,15 @@ def owner_runs(owner, workflow_path):
         sys.exit(2)
     # DUPLICATE KEYS ARE REFUSED, as GitHub's own parser refuses them (the workflow would not run).
     # PyYAML keeps the last one, so `shell: bash -n {0}` followed by the gate shell compared equal
-    # to the accepted default.
+    # to the accepted default. Keys compare as GitHub reads them, as the text written: PyYAML turns a
+    # bare `on` into True and a quoted "on" into a string, two keys to it and one to GitHub.
     class NoDupLoader(yaml.SafeLoader):
         pass
 
     def no_dup_mapping(loader, node, deep=False):
-        keys = [loader.construct_object(k, deep=deep) for k, _ in node.value]
-        if len(keys) != len(set(map(repr, keys))):
+        keys = [k.value if isinstance(k, yaml.ScalarNode) else repr(loader.construct_object(k, deep=deep))
+                for k, _ in node.value]
+        if len(keys) != len(set(keys)):
             raise yaml.constructor.ConstructorError(None, None, "duplicate key", node.start_mark)
         return loader.construct_mapping(node, deep)
 

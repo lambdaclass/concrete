@@ -572,6 +572,10 @@ PY
   # A duplicate key: PyYAML keeps the last value, GitHub refuses the workflow.
   printf 'defaults:\n  run:\n    shell: "bash -n {0}"\n    shell: "nix develop .#gates --command bash --noprofile --norc -eo pipefail {0}"\njobs:\n  a:\n    steps:\n      - run: bash %s\n' "$real_owner" > "$fwf"
   unit_control runs_workflow_defaults_duplicate_key 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
+  printf 'on: push\n"on": pull_request\njobs:\n  a:\n    steps:\n      - run: bash %s\n' "$real_owner" > "$fwf"
+  unit_control runs_workflow_duplicate_on_key 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
+  printf 'on: push\njobs:\n  a:\n    steps:\n      - run: bash %s\n' "$real_owner" > "$fwf"
+  unit_control runs_workflow_single_on_key 0 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
   printf 'jobs:\n  a:\n    defaults: # comment\n      run:\n        shell: bash -n {0}\n    steps:\n      - run: bash %s\n' "$real_owner" > "$fwf"
   unit_control runs_job_defaults_commented 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
   printf "jobs:\n  a:\n    defaults: {run: {working-directory: /tmp}}\n    steps:\n      - run: bash %s\n" "$real_owner" > "$fwf"
