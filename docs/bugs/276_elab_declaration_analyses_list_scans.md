@@ -2,7 +2,7 @@
 
 <!-- bug-ledger
 summary: Elab's program-level declaration analyses (top-level function collisions, ambiguous type names, import spellings) scanned or deduplicated lists per declaration, its per-function results were appended to the list built so far, and a call looked its callee up in a list, so a program of n declarations took time n² to elaborate (10000 functions: 3689 ms). Found by the R-0550 scaling gate. Class 17.
-coverage: `check_compile_scaling.sh` (R-0550) judges the `functions`, `call-chain`, `structs` and `enums` shapes' `elaborate` stage against its budget and near-linear growth once this bug's exclusions are removed (the pre-fix compiler fails all four at the gate's sizes); the gate is on wip/r0550-scaling-gate-v2, not yet landed, so the removal lands with it
+coverage: `run_tests.sh` times the `elaborate` stage of generated modules of 20000 functions and 20000 structs against a budget (the pre-fix compiler fails both); `check_compile_scaling.sh` (R-0550, on wip/r0550-scaling-gate-v2, not yet landed) judges all four declaration shapes once this bug's exclusions are removed
 class: 17 — Elab's program-level declaration analyses scan lists per declaration
 silent: no
 -->
@@ -32,7 +32,7 @@ Each analysis keys a map or set by name once per program; results accumulate in 
 
 ## Fix
 
-Two helpers in `Elab/Elab.lean` replace the n² primitives: `eraseDupsHashed` keeps the first
+Three helpers in `Elab/Elab.lean` replace the n² primitives: `eraseDupsHashed` keeps the first
 occurrence of each element, in order, exactly as `List.eraseDups`, with one hash-set pass (every
 `.eraseDups` of the file now calls it; `CallSpace` derives `Hashable` for the one site that needed
 it), and `firstWinsMap` answers as `List.lookup` (first entry of a key wins); `firstByKeyHashed`
@@ -58,8 +58,8 @@ tree before this fix).
 ## Measurements
 
 `elaborate` stage in ms (`--emit-trace-json`, fastest of 3 runs), dev host (fede-256gb), before
-(the compiler built at b5040d53) and after (built from this branch's fix commit, on main 91ce358b
-with bug 275's fix below it; the build had no other modification):
+(the compiler built at b5040d53) and after (built from the tree of d7e102d1, this fix on main
+91ce358b with bug 275's fix below it; the build had no other modification):
 
 | n | `functions` before | after | `call-chain` before | after | `structs` before | after | `enums` before | after |
 |---|---|---|---|---|---|---|---|---|
@@ -69,8 +69,9 @@ with bug 275's fix below it; the build had no other modification):
 | 20000 | 14080 | 122 | 18464 | 162 | 8215 | 29 | 10117 | 33 |
 
 The stage's allocation count (`alloc_heartbeats`) is exactly linear (`functions`: 1105543,
-2210543, 4420543, 8840543 at 5000 to 40000); the time's excess over linear at 20000 and above is
-memory traffic (gdb samples at 40000 functions show no list search). The R-0550 gate
+2210543, 4420543, 8840543 at 5000 to 40000); gdb samples at 40000 functions show no list search, so
+we attribute the time's excess over linear at 20000 and above to memory traffic (an inference, not
+a measurement). The R-0550 gate
 (`compile_scaling.py` and its budgets at fe9ce031, origin/wip/r0550-scaling-gate-v2), run with
 this bug's and bug 275's exclusions removed, passes the four shapes' `elaborate` stage (x12.7,
 x12.8, x5.0, x5.5 from 1000 to 10000) and fails all four on the compiler before this fix
@@ -80,7 +81,15 @@ x12.8, x5.0, x5.5 from 1000 to 10000) and fails all four on the compiler before 
 under `tests/programs` and `examples` (91ce358b's corpus) and of twelve generated scaling shapes
 at size 60, and `--report caps|proof-status|fingerprints|obligations|traceability|proof-deps` of
 every `.con` under `examples`, are byte-identical between the compiler built at 91ce358b and this
-fix.
+fix (d7e102d1).
+
+## Regression leg
+
+`run_tests.sh` times the `elaborate` stage of a generated module of 20000 functions against
+600 ms and of 20000 structs against 300 ms (each retried once at twice its budget): 123 ms and
+30 ms after the fix; on the build just before it (bug 275's fix on main) both FAIL (14424 ms, then
+14575 ms; 8531 ms, then 8637 ms). The R-0550 gate covers all four declaration shapes when it lands
+with this bug's exclusions removed.
 
 ## Containment while open
 
