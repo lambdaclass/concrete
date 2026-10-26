@@ -15,6 +15,8 @@ refused or where. `v.get_unchecked(0)` on a `Vec<String>` printed
 `error[check]: (E0241) type '<type>' does not implement trait 'Copy' required by method
 'get_unchecked'`, with no line and column. Every E0241 lacked a position, whatever the type.
 
+Confirmed real by Codex review, 2026-10-25: Bound failures discarded available type names and call spans, violating SAFETY.md/DIAGNOSTICS.md’s source-located semantic diagnostic contract; Copy policy need not change.
+
 ## Reproducer
 
 `tests/programs/error_225_bound_names_builtin_type.con`:

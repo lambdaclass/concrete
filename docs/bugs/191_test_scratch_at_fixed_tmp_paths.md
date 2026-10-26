@@ -15,6 +15,8 @@ in CI and for user `dev`.
 except the one who ran the suite first on the host, and concurrent runs could read or truncate each
 other's file. No wrong result was reported as a pass.
 
+Confirmed real by Codex review, 2026-10-25: Shared scratch paths violated docs/project/CONCURRENT_WORK.md’s isolation rule; unchecked fopen explains crashes. Observed rc 100/101 are expected environment errors.
+
 ## Reproducer
 
 On a host where `/tmp/concrete_test_io.txt` belongs to another user (on OVH it belongs to `dev`),

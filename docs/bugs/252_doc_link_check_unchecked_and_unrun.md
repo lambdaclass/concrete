@@ -16,6 +16,8 @@ run by hand, reported three correct changelog fragment links as broken.
 target file instead of the section it cites, and nothing said so; correct links in pending
 changelog fragments read as broken, so the check's one visible result was wrong.
 
+Confirmed real by Codex review, 2026-10-25: Fragment resolution contradicted changelog.d/README.md and CI omitted the gate; anchor checking extends the old checker’s explicitly path-only scope.
+
 ## Reproducer
 
 On main `032d8e12`, run `python3 scripts/tests/check_doc_links.py`. Observed: `FAIL=3`, all three in

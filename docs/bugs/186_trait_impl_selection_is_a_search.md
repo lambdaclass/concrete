@@ -16,6 +16,8 @@ every instantiation, and an overlapping pair of impls compiled to whichever body
 first. The other shapes failed late: `llvm-as` refused a redefined function, or the interpreter
 refused, or answered by declaration order, when the call ran.
 
+Confirmed real by Codex review, 2026-10-25: Dropping impl arguments selected an i32 impl for bool, violating docs/spec/traits.md TRAIT-D1/10; the bundled orphan and ambiguity policies remain pending OD6.
+
 ## Reproducer
 
 Each program below compiled on 1df4cf48. The results are the native binary's exit status and

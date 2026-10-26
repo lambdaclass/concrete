@@ -16,6 +16,8 @@ consumers
 with `struct W<T> { v: T }` reached `llvm-as`, which refused the recursive struct type, while
 `--interp` ran the program.
 
+Confirmed real by Codex review, 2026-10-25: docs/spec/types.md TYPE-16 forbids by-value recursion through instantiations; the pre-fix traversal skipped generic fields.
+
 ## Reproducer
 
 ```con pseudocode

@@ -15,6 +15,8 @@ nested elements and heap cell)
 wrong code. The compiler is inconsistent with itself: `&mut s.y` on the same binding is refused
 (E0233) and so is `a[1] = v` on a non-`mut` array (E0217, bug 030).
 
+Codex review 2026-10-25: NOT CONFIRMED — pending owner decision OD17/exit 2n: whether OWN-10 covers field and nested-place writes is explicitly unanswered; acceptance alone proves no defect.
+
 ## Reproducer
 
 `tests/regressions/bug216_field_write_non_mut_binding/repro.con`:

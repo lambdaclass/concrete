@@ -17,6 +17,8 @@ impl of `Tr` for `Int` compiled and ran on both consumers. When the body called 
 it failed closed late: natively in `llvm-as` (`@Int_m` undefined), under `--interp` as an
 undefined function.
 
+Confirmed real by Codex review, 2026-10-25: docs/spec/traits.md TRAIT-10 requires an impl for every explicit bound; the pre-fix primitive branch skipped that check entirely.
+
 ## Reproducer
 
 ```con pseudocode

@@ -18,6 +18,8 @@ binary ran (exit 0), while `--interp` stopped with "unsupported binop on given v
 struct minus a literal failed in the SSA verifier (E0715); a newtype sum ran under `--interp`
 (returned 7) and failed in `llvm-as` natively.
 
+Confirmed real by Codex review, 2026-10-25: docs/spec/types.md TYPE-6 restricts arithmetic to numeric operands; declared nominal types incorrectly received the type-parameter exemption.
+
 ## Reproducer
 
 `tests/programs/error_210_struct_arith.con`:

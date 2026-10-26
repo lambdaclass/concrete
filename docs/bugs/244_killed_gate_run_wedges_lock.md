@@ -18,6 +18,8 @@ explicitly: rm -rf .gate.lock"). Only deleting the lock by hand let work continu
 wedged until someone removed `.gate.lock` by hand, and until then the orphans kept loading the host
 and working the tree.
 
+Confirmed real by Codex review, 2026-10-25: Signals left gate children running, defeating ROADMAP.md R-0513’s harness lifecycle requirements; refusing a lock while child liveness was unknown was intentional.
+
 ## Reproducer
 
 In a throwaway git repository holding the runner, its libraries, a stub `lake` and a gate that

@@ -18,6 +18,8 @@ gap wider than recorded: a module written after `main` (`fn main ..` then `mod o
 submodule of the main module, so one level deep was enough, and every `mod x;` file of a project is
 a submodule of its main module, so Resolve checked only `src/main.con` (and std's empty `lib.con`).
 
+Confirmed real by Codex review, 2026-10-25: docs/spec/modules.md MOD-1 requires unknown types to be refused; skipped nested bodies let unknown cast targets reach execution or panic. Diagnostic-code changes alone are not the core defect.
+
 ## Reproducer
 
 `tests/programs/error_217_nested_cast_unknown_type.con` (moved from

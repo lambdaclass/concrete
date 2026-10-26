@@ -12,6 +12,8 @@ silent: no
 imported newtype over a struct, which `--interp` refused.
 **Severity:** loud. `--interp` refuses a program the binary runs; no wrong value.
 
+Confirmed real by Codex review, 2026-10-25: VALUE_MODEL.md’s newtype wrap/unwrap contract permits aggregate payloads; interpreter casts rejected them. Local declarations avoid OD21, and these are not OD11 numeric casts.
+
 ## Reproducer
 
 `tests/programs/regress_254_newtype_over_struct.con`: `struct Copy P { pad: i64, x: i64 }`,

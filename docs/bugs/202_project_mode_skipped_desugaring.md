@@ -14,6 +14,8 @@ desugared.
 **Severity:** loud. A valid program was refused, but only in some compilation paths: a function
 with a destructuring `let … else` built as a standalone file and was rejected inside a project.
 
+Confirmed real by Codex review, 2026-10-25: docs/spec/patterns.md PAT-5 permits diverging let-else; project builds skipped desugaring and rejected that valid form.
+
 ## Reproducer
 
 `tests/programs/let_else.con` compiles and runs (prints 0) standalone. Copied to

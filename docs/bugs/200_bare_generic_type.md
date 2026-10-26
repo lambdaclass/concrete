@@ -17,6 +17,8 @@ argument list (`Box1<i32, bool>`) but not a missing list, so `B` for a `B<T>` re
 passes with `T` never bound: a value of the bare type failed in `llvm-as` natively while `--interp`
 ran the program, and a signature that names it but is never called compiled and ran on both.
 
+Confirmed real by Codex review, 2026-10-25: docs/spec/types.md TYPE-15 requires exact generic arity; Resolve checked explicit argument lists but let bare generic names through. OD5 does not decide arity.
+
 ## Reproducer
 
 ```con pseudocode

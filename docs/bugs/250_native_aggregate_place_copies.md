@@ -15,6 +15,8 @@ array, `s.f = v` and `s.arr[i] = v` on a local struct copied the whole aggregate
 reading `s.f` or `s.arr[i]` loaded the whole struct; the first-class LLVM loads and stores of these
 aggregates made clang -O2 superlinear in their size.
 
+Confirmed real by Codex review, 2026-10-25: ROADMAP exit 2o scaling requirement: whole-aggregate writeback and LLVM aggregate loads caused superlinear compilation; fcaa1b77 removes the demonstrated bottleneck.
+
 ## Reproducer
 
 A loop writing a local `[i64; n]` (`tests/programs/regress_250_native_array_writes.con` has the

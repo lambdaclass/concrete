@@ -14,6 +14,8 @@ did not finish in 10 minutes under `--interp`; natively it takes a millisecond.
 differential checks, could not run a long loop: the time per iteration grew with the number of
 iterations already run.
 
+Confirmed real by Codex review, 2026-10-25: ROADMAP R-0422 performance defect: evalWhile retained expired iteration bindings, causing growing memory and quadratic lookup work; e494c77e removes them.
+
 ## Reproducer
 
 `tests/programs/regress_228_interp_loop_env.con`: a `while` of 200000 iterations whose body binds

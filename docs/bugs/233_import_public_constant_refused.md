@@ -14,6 +14,8 @@ modules): `mod cfg { pub const BASE: i32 = 7; } import cfg.{BASE};` is refused b
 and `--interp` with `(E0285) 'BASE' is not public in module 'cfg'`.
 **Severity:** a valid program by MOD-2 is refused, with a false diagnostic; no wrong code.
 
+Confirmed real by Codex review, 2026-10-25: docs/spec/modules.md MOD-2 permits importing public constants; missing import handling falsely reported “not public.” Trait-import refusal is intended under docs/spec/traits.md.
+
 ## Reproducer
 
 - `tests/programs/regress_233_import_constant.con` (formerly `error_233_import_constant.con`): the

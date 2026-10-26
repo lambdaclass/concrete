@@ -17,6 +17,8 @@ program compiled and ran with a meaning no document gives it: falling out of the
 the whole rest of the function unexecuted (both consumers agreed, so it was silent). In a function
 with a result type it reached the backend (bug 194's `ret void`).
 
+Confirmed real by Codex review, 2026-10-25: PATTERN_DESTRUCTURING.md §3 and PAT-5 require a diverging else; desugaring instead silently skipped the continuation. Fieldless patterns remain incompletely fixed.
+
 ## Reproducer
 
 ```con pseudocode

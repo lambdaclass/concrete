@@ -14,6 +14,8 @@ that leaked a buffer on an early return and on the final return got two identica
 byte-identical (same message, same declaration span), so the user could not tell that two paths
 leak, nor which ones.
 
+Codex review 2026-10-25: NOT CONFIRMED — intended behaviour: OWN-1 correctly requires consumption on each exit; both E0208 refusals were valid. No documented contract requires distinct return-site notes.
+
 ## Reproducer
 
 `tests/programs/error_214_two_returns_leak.con`:

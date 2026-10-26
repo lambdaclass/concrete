@@ -14,6 +14,8 @@ newtype construction across module boundaries.
 refuses it with E0402, an internal code (a refusal Check should have made first). A valid program
 is refused: a call of an imported function that shares a child newtype's spelling.
 
+Confirmed real by Codex review, 2026-10-25: MOD-1 (docs/spec/modules.md): Check mistook an explicitly imported function for a child’s constructor and rejected its call; broader parent/child rights remain pending OD21.
+
 ## Reproducer
 
 `tests/programs/error_262_parent_constructs_child_newtype.con`: `mod kids { pub newtype K = i64; }`

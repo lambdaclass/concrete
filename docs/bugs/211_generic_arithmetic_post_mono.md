@@ -14,6 +14,8 @@ same operator rule through a generic function).
 `llvm-as` (`'%a' defined with type 'ptr' but expected 'i64'`), and
 `--interp` stopped at run time with "unsupported binop on given value types".
 
+Confirmed real by Codex review, 2026-10-25: docs/spec/types.md TYPE-6 also governs specialized bodies; deferred arithmetic checks had no post-Mono enforcement.
+
 ## Reproducer
 
 `tests/programs/error_211_generic_add_struct.con`:

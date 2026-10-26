@@ -15,6 +15,8 @@ holding an array did not snapshot it), then generalized by probing plain binding
 or a by-value argument an alias of the source array, so a later write to the source changed the
 copy. `--interp` copied, so the two consumers disagreed.
 
+Confirmed real by Codex review, 2026-10-25: OWN-D1 / VALUE_MODEL.md require value copying; Lower shared array storage, so mutating the source changed its copy. The old overlapping-argument example is now rejected.
+
 ## Observed
 
 ```con

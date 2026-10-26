@@ -15,6 +15,8 @@ second (Claude) review and reproduced on the build server at ee1fff8e.
 called untrusted foreign code and dereferenced raw pointers that no function in the program was
 granted. The binary ran.
 
+Confirmed real by Codex review, 2026-10-25: A capability variable granted undeclared Console/Unsafe authority, violating docs/spec/trusted.md TRUST-4 and HANDLE_CAPABILITIES.md’s caller-supplied authority contract.
+
 ## Observed
 
 ```

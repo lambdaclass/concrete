@@ -18,6 +18,8 @@ main `eb122a01`; reduced and widened to type-argument lists in the post-R-0492 d
 met another operand failed in the SSA verifier (E0715). `sz::<[Nope; 3]>()` with a body that never
 uses its parameter compiled and ran on both backends.
 
+Confirmed real by Codex review, 2026-10-25: docs/spec/modules.md MOD-1 requires every used name to resolve; expression type positions bypassed resolution, admitting nonexistent types.
+
 ## Reproducer
 
 `tests/programs/error_215_cast_unknown_type.con`:

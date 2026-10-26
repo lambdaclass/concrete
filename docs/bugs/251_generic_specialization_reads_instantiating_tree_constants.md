@@ -14,6 +14,8 @@ constant by the defining function's tree, disagreed with the binary on a generic
 **Severity:** silent. The binary returns another module's constant; with no constant of that
 spelling in the instantiating tree, the build fails (E0704) instead.
 
+Confirmed real by Codex review, 2026-10-25: PASS-1 (docs/spec/pipeline.md): specialization changed a generic’s constant and callable bindings to those of the instantiating module, changing results.
+
 ## Reproducer
 
 `tests/programs/regress_251_generic_reads_defining_tree_constant.con`: `mod a { const K: Int =

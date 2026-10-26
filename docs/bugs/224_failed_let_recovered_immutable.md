@@ -13,6 +13,8 @@ silent: no
 **Severity:** loud (diagnostics). A program already refused for a real error got a false second
 error: `cannot assign to immutable variable 'r'` (E0217) for a variable declared `let mut r`.
 
+Confirmed real by Codex review, 2026-10-25: Recovery hardcoded mutable=false for let mut, generating false E0217 errors contrary to SAFETY.md and DIAGNOSTICS.md’s non-cascading recovery contract.
+
 ## Reproducer
 
 `tests/programs/error_224_failed_let_keeps_mutability.con`:

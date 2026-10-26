@@ -14,6 +14,8 @@ alias form of each import, Phase 7 workload 10).
 the importer a type `Q` that has none of `P`'s methods and is not `P`: a value of type `P`, from
 any function of `m`, does not have type `Q`.
 
+Confirmed real by Codex review, 2026-10-25: docs/spec/modules.md MOD-1 and traits.md declaration identity require an import alias to denote the original type; spelling-based comparison and dispatch treated Q as distinct from P.
+
 ## Reproducer
 
 `tests/programs/regress_223_aliased_struct_methods.con` (the former

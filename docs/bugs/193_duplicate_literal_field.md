@@ -14,6 +14,8 @@ exit: 0b
 **Severity:** silent wrong code in safe code. `P { n: 1, n: 41 }` compiled; the binary read 41 (the
 last occurrence) and `--interp` read 1 (the first).
 
+Confirmed real by Codex review, 2026-10-25: docs/spec/types.md TYPE-7 requires each struct field exactly once; duplicate fields bypassed checking and produced different native/interpreter values.
+
 ## Reproducer
 
 ```con pseudocode

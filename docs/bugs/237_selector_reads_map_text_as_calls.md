@@ -14,6 +14,8 @@ and `test_ssa.sh`). Worked around on the train by rewording one corpus note (`4c
 **Severity:** loud (gate false failure). The same defect over-selected silently on every push: the
 pre-push hook and the landing script ran gates a diff could not break.
 
+Confirmed real by Codex review, 2026-10-25: Note strings became executable dependency edges, violating ROADMAP.md’s docs-only selection rule; the corpus runners did not actually read those documents.
+
 ## Reproducer
 
 On main `70bcdeb6`, revert the wording of `4c4db464` (bug 232's `SKIP_BUGS` note in
