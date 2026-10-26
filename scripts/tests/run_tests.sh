@@ -9746,6 +9746,42 @@ for r297_stage in elaborate lower; do
            fi ;;
     esac
 done
+# Bug 178 follow-up: SSAVerify computed immediate dominators by Cooper-Harvey-Kennedy, whose
+# intersect walked the n-deep chain of a wide match's check blocks once per merge predecessor
+# (16000 arms: lower 895 ms with bug 297 fixed). Lengauer-Tarjan replaced it: a match of 16000
+# literal arms must lower within 400 ms, retried once at 800 ms (170 - 191 ms on the dev host).
+r178d_src="$TMPDIR/r178d_wide_match_16000.con"
+awk -v n=16000 'BEGIN {
+    print "fn main() -> Int {"
+    printf "    let t: i64 = %d;\n", n - 1
+    print "    let mut s: i64 = 0;"
+    print "    match t {"
+    for (i = 0; i < n; i++) printf "        %d => { s = %d; },\n", i, i
+    print "        _ => { s = 0; },"
+    print "    }"
+    printf "    return (s - %d + 42) as Int;\n", n - 1
+    print "}"
+}' > "$r178d_src"
+r265_stage_ms "$r178d_src" lower; r178d_first="$r265_ms"; r178d_ms="$r178d_first"
+case "$r178d_first" in
+    ''|*[!0-9]*) ;;
+    *) if [ "$r178d_first" -gt 400 ]; then r265_stage_ms "$r178d_src" lower; r178d_ms="$r265_ms"; fi ;;
+esac
+case "$r178d_ms" in
+    incomplete)
+        echo "  INCOMPLETE bug 178: lowering a 16000-arm match timed out twice (180 s each)"
+        INCOMPLETE=$((INCOMPLETE + 1)) ;;
+    ''|*[!0-9]*)
+        echo "FAIL  bug 178: lowering a 16000-arm match failed ($r178d_ms)"
+        FAIL=$((FAIL + 1)) ;;
+    *) if [ "$r178d_first" -le 400 ] || [ "$r178d_ms" -le 800 ]; then
+           echo "  ok  bug 178: lowering a 16000-arm match within budget (${r178d_ms} ms, lower)"
+           PASS=$((PASS + 1))
+       else
+           echo "FAIL  bug 178: lowering a 16000-arm match took ${r178d_first} ms, then ${r178d_ms} ms in lower (budget 400, retry 800)"
+           FAIL=$((FAIL + 1))
+       fi ;;
+esac
 # Bug 247: a function value written as an identifier reaches what it names in the assumption summary.
 run_ok "$TESTDIR/regress_247_function_value_reaches_foreign.con" 42
 run_ok "$TESTDIR/regress_247_free_value_beside_unrelated_extern.con" 42

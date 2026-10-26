@@ -253,31 +253,82 @@ private partial def dfsPostorder (succ : Array (List Nat))
     if visited[s]! then dfsPostorder succ ((v, ss) :: rest) visited order
     else dfsPostorder succ ((s, succ[s]!) :: (v, ss) :: rest) (visited.set! s true) order
 
-/-- Cooper–Harvey–Kennedy `intersect`: walk the two fingers up the current
-    dominator tree (by postorder number) until they meet. -/
-private partial def domIntersect (idom : Array (Option Nat)) (po : Array Nat) (a b : Nat) : Nat :=
-  if a == b then a
-  else if po[a]! < po[b]! then domIntersect idom po ((idom[a]!).getD b) b
-  else domIntersect idom po a ((idom[b]!).getD a)
-
-/-- Cooper–Harvey–Kennedy fixpoint over the nodes in reverse postorder. A root
-    (entry or predecessor-less block) is pinned to the virtual root `vroot`. -/
-private partial def domFixpoint (preds : Array (List Nat)) (isRoot : Array Bool)
-    (po : Array Nat) (rpo : List Nat) (vroot : Nat) (idom : Array (Option Nat)) :
-    Array (Option Nat) :=
-  let (idom', changed) := rpo.foldl (fun (idom, ch) v =>
-    if v == vroot then (idom, ch)
+/-- Preorder depth-first search from `root` over `succ` (bug 178 follow-up): `dfn` the visit
+    number (`succ.size` for a node not reached), `vertex` its inverse, `parent` the tree parent. A
+    node is visited when popped, from the copy its most recent visitor pushed, which makes the
+    tree a depth-first one. An explicit stack: no recursion as deep as the graph. -/
+private partial def ltDfs (succ : Array (List Nat)) (stack : List (Nat × Nat))
+    (dfn vertex parent : Array Nat) : Array Nat × Array Nat × Array Nat :=
+  match stack with
+  | [] => (dfn, vertex, parent)
+  | (v, p) :: rest =>
+    if dfn[v]! != succ.size then ltDfs succ rest dfn vertex parent
     else
-      let new? : Option Nat :=
-        if isRoot[v]! then some vroot
-        else
-          match (preds[v]!).filter (fun p => (idom[p]!).isSome) with
-          | [] => none
-          | p :: ps => some (ps.foldl (fun a q => domIntersect idom po a q) p)
-      match new? with
-      | some new => if idom[v]! == some new then (idom, ch) else (idom.set! v (some new), true)
-      | none => (idom, ch)) (idom, false)
-  if changed then domFixpoint preds isRoot po rpo vroot idom' else idom'
+      let dfn := dfn.set! v vertex.size
+      let parent := parent.set! v p
+      let vertex := vertex.push v
+      let rest := (succ[v]!).foldr (fun w st => if dfn[w]! == succ.size then (w, v) :: st else st) rest
+      ltDfs succ rest dfn vertex parent
+
+/-- The path `v, anc v, …` up to the node whose ancestor is a forest root, top first (the order
+    path compression processes it in). -/
+private partial def ltPath (anc : Array Nat) (undef : Nat) (x : Nat) (path : List Nat) : List Nat :=
+  if anc[anc[x]!]! != undef then ltPath anc undef anc[x]! (x :: path) else x :: path
+
+/-- Lengauer–Tarjan `eval` with path compression: the node of least semidominator number on the
+    forest path from `v` up, with the path compressed. Indices are preorder numbers. -/
+private def ltEval (anc label semi : Array Nat) (undef v : Nat) : Nat × Array Nat × Array Nat :=
+  if anc[v]! == undef then (v, anc, label)
+  else if anc[anc[v]!]! == undef then (label[v]!, anc, label)
+  else
+    let path := ltPath anc undef v []
+    let (anc, label) := path.foldl (fun (anc, label) y =>
+      let a := anc[y]!
+      if anc[a]! == undef then (anc, label) else
+      let label := if semi[label[a]!]! < semi[label[y]!]! then label.set! y label[a]! else label
+      (anc.set! y anc[a]!, label)) (anc, label)
+    (label[v]!, anc, label)
+
+/-- Immediate dominators by Lengauer–Tarjan (the simple version: path compression without
+    balancing, O(E log V)) over `succ` from `root` (bug 178 follow-up). Cooper–Harvey–Kennedy's
+    `intersect` walked each predecessor's dominator chain at a merge, O(n × depth) for an n-arm
+    `match`; immediate dominators are unique, so this computes the same ones. `none` for a node
+    `root` does not reach; `root` is its own. -/
+private def ltIdom (succ : Array (List Nat)) (root : Nat) : Array (Option Nat) :=
+  let size := succ.size
+  let undef := size
+  let (dfn, vertex, parent) := ltDfs succ [(root, undef)]
+    (Array.replicate size undef) #[] (Array.replicate size undef)
+  let count := vertex.size
+  -- Predecessors among the reached nodes, by preorder number.
+  let preds : Array (List Nat) := (List.range count).foldl (fun a i =>
+    (succ[vertex[i]!]!).foldl (fun a w =>
+      if dfn[w]! == undef then a else a.set! dfn[w]! (i :: a[dfn[w]!]!)) a)
+    (Array.replicate count [])
+  -- Steps 2 and 3, in decreasing preorder: semidominators, and the immediate dominator of every
+  -- node whose semidominator is its tree parent, or a node whose idom equals that of `u`.
+  let (semi, _, _, _, idom) := (List.range count).reverse.foldl
+    (fun (semi, label, anc, bucket, idom) w =>
+      if w == 0 then (semi, label, anc, bucket, idom) else
+      let (semi, anc, label) := (preds[w]!).foldl (fun (semi, anc, label) v =>
+        let (u, anc, label) := ltEval anc label semi undef v
+        (if semi[u]! < semi[w]! then semi.set! w semi[u]! else semi, anc, label))
+        (semi, anc, label)
+      let bucket := bucket.set! semi[w]! (w :: bucket[semi[w]!]!)
+      let p := dfn[parent[vertex[w]!]!]!
+      let anc := anc.set! w p
+      let (anc, label, idom) := (bucket[p]!).foldl (fun (anc, label, idom) v =>
+        let (u, anc, label) := ltEval anc label semi undef v
+        (anc, label, idom.set! v (if semi[u]! < semi[v]! then u else p))) (anc, label, idom)
+      (semi, label, anc, bucket.set! p [], idom))
+    (Array.range count, Array.range count, Array.replicate count undef,
+     (Array.replicate count [] : Array (List Nat)), Array.replicate count 0)
+  -- Step 4, in increasing preorder: an idom recorded as "the same as u's" becomes u's.
+  let idom := (List.range count).foldl (fun idom w =>
+    if w == 0 || idom[w]! == semi[w]! then idom else idom.set! w idom[idom[w]!]!) idom
+  (List.range count).foldl (fun r i =>
+    r.set! vertex[i]! (some (if i == 0 then root else vertex[idom[i]!]!)))
+    (Array.replicate size none)
 
 /-- Entry/exit times of a DFS over the dominator tree (one shared counter). -/
 private partial def domNumber (children : Array (List Nat)) (stack : List (Nat × Bool))
@@ -295,8 +346,9 @@ private partial def domNumber (children : Array (List Nat)) (stack : List (Nat �
     every intersection was `a.filter (s.contains ·)`, every lookup a `find?`, so
     one pass cost O(blocks · |dom set|²) — cubic on a long block chain (a wide
     `match` lowers to one) — and `strictDomDefs` then materialized, per block, the
-    defs of every strict dominator. Here: label → node index (HashMap), CHK
-    immediate dominators over Arrays in reverse postorder, and O(1) ancestor
+    defs of every strict dominator. Here: label → node index (HashMap), Lengauer–Tarjan
+    immediate dominators over Arrays (`ltIdom`; Cooper–Harvey–Kennedy's, used until the bug 178
+    follow-up, walked a merge's predecessor chains, O(n × depth) at an n-arm match), and O(1) ancestor
     queries by dominator-tree DFS times. See `DomInfo` for why the relation is
     the one the old fixpoint computed, unreachable regions included. -/
 private def computeDomInfo (blocks : List SBlock)
@@ -315,13 +367,11 @@ private def computeDomInfo (blocks : List SBlock)
     (preds[i]!).foldl (fun a p => a.set! p (i :: a[p]!)) a) (Array.replicate (n + 1) [])
   let rootList := (List.range n).filter fun i => isRoot[i]!
   let succ := succ0.set! vroot rootList
-  let (visited, order) := dfsPostorder succ [(vroot, rootList)]
+  let (visited, _) := dfsPostorder succ [(vroot, rootList)]
     ((Array.replicate (n + 1) false).set! vroot true) #[]
-  let po : Array Nat := (List.range order.size).foldl (fun a k => a.set! order[k]! k)
-    (Array.replicate (n + 1) 0)
-  let rpo := order.toList.reverse
-  let idom := domFixpoint preds isRoot po rpo vroot
-    ((Array.replicate (n + 1) none).set! vroot (some vroot))
+  -- Immediate dominators in the graph where `vroot` precedes every root, so a root's is
+  -- `vroot` (bug 178 follow-up: Lengauer–Tarjan, which replaced CHK's chain walks).
+  let idom := ltIdom succ vroot
   let children : Array (List Nat) := (List.range n).foldr (fun v a =>
     match idom[v]! with
     | some p => if visited[v]! then a.set! p (v :: a[p]!) else a

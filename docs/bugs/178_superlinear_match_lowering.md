@@ -162,6 +162,23 @@ compile, or a trace without the heartbeat count, fails. It is registered as a CI
 - CHK `intersect` at a merge with n predecessors walks each predecessor's dominator chain:
   O(n × depth) at an n-arm merge. It allocates nothing and is about 13% of a 2000-arm compile.
   Semi-NCA or Lengauer-Tarjan would remove it if a workload ever needs that.
+  **Fixed 2026-10-26 (follow-up, branch `wip/bug178-dom-order`):** the R-0550 follow-up probes
+  measured it as the larger half of a wide match's `lower` stage once bug 297 removed the
+  merge's list appends (one `match` of n literal arms each assigning a local: 8000 arms 247 ms,
+  10000 arms 352 ms, 16000 arms 895 – 940 ms on bug 297's compiler; Codex review 2026-10-26:
+  CONFIRMED — the ordered CHK predecessor fold performs quadratic chain walking). `SSAVerify`
+  now computes immediate dominators by Lengauer–Tarjan (`ltIdom`: the simple version, path
+  compression without balancing, O(E log V); an explicit-stack DFS and an iterative compression,
+  so no recursion is as deep as the graph) over the same graph, the virtual root preceding every
+  root, so roots, unreachable regions and the dominator-tree DFS times are as before. Immediate
+  dominators are unique, and the two algorithms agreed on every function of the 2067 programs of
+  `tests/programs` and `examples`, 3000 generated programs and the scaling probe shapes (a
+  temporary in-compiler comparison, removed before the commit, shown able to fire by a
+  deliberately wrong result). `lower` at 8000 / 10000 / 16000 arms: 65 / 86 / 170 – 191 ms
+  (the stage's instruction count grows 2.17 times from 4000 to 8000 arms). `--emit-ssa` and
+  `--emit-llvm` are byte-identical with bug 297's compiler on the corpus and on 3000 generated
+  programs. `run_tests.sh` times `lower` of a 16000-arm match against 400 ms, retried once at
+  800 ms.
 - Deep nesting (now n^1.39 at depth 1000 → 2000, 2.2 G instructions at 2000): the
   remaining quadratic terms are `Proof.stmtFlatUses` / `exprFlatUses` (the same `++`-per-level
   collector shape as `assignedScalarsS`, in proof identity bytes), `Lower.cstmtTakesAddrOf`
