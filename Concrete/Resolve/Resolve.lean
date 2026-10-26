@@ -631,8 +631,10 @@ private def buildGlobalScopeFromSummary (s : FileSummary) : Scope × List String
   let types := types ++ s.structs.map (·.name)
   -- Enums
   let symbols := symbols ++ s.enums.map fun e => (e.name, SymKind.enum e)
-  let symbols := symbols ++ s.enums.foldl (fun acc e =>
-    acc ++ e.variants.map fun v => (s!"{e.name}::{v.name}", SymKind.fn [] .unit)) []
+  -- One walk (bug 274): a fold that appended each enum's variants to the symbols built so far
+  -- copied them once per enum, quadratic in a module's enums.
+  let symbols := symbols ++ s.enums.flatMap fun e =>
+    e.variants.map fun v => (s!"{e.name}::{v.name}", SymKind.fn [] .unit)
   let types := types ++ s.enums.map (·.name)
   -- Traits
   let symbols := symbols ++ s.traits.map fun t => (t.name, SymKind.trait t)
@@ -650,9 +652,8 @@ private def buildGlobalScopeFromSummary (s : FileSummary) : Scope × List String
   -- Impl method signatures (pre-built in FileSummary, not rebuilt from raw blocks)
   let symbols := symbols ++ implSigsToSymbols s.implMethodSigs
   -- Submodule definitions (via submoduleSummaries)
-  let symbols := symbols ++ s.submoduleSummaries.foldl (fun acc (subName, subS) =>
-    acc
-    ++ (subS.functions.map fun (name, fs) =>
+  let symbols := symbols ++ s.submoduleSummaries.flatMap fun (subName, subS) =>
+    (subS.functions.map fun (name, fs) =>
       (s!"{subName}_{name}", SymKind.fn (fs.params.map fun (n, ty) => { name := n, ty := ty }) fs.retTy))
     ++ (subS.structs.map fun st => (st.name, SymKind.struct st))
     ++ (subS.enums.map fun e => (e.name, SymKind.enum e))
@@ -661,16 +662,13 @@ private def buildGlobalScopeFromSummary (s : FileSummary) : Scope × List String
     ++ (subS.newtypes.map fun nt => (nt.name, SymKind.newtype nt))
     ++ (implSigsToSymbols (subS.implMethodSigs.filter fun (name, _) =>
         subS.publicNames.contains name))
-  ) []
-  let types := types ++ s.submoduleSummaries.foldl (fun acc (_, subS) =>
-    acc
-    ++ (subS.structs.map (·.name))
+  let types := types ++ s.submoduleSummaries.flatMap fun (_, subS) =>
+    (subS.structs.map (·.name))
     ++ (subS.enums.map (·.name))
     ++ (subS.typeAliases.map (·.name))
     ++ (subS.traits.map (·.name))
     -- Bug 229: a child's newtype is in Check's environment (`allNewtypes`), so it is a known type.
     ++ (subS.newtypes.map (·.name))
-  ) []
   (Scope.ofSymbols symbols, types)
 
 /-- R-0492 slice 6: the type declarations a module may write by its own spelling, as Check's
@@ -1089,9 +1087,11 @@ private def summaryImports (summaryTable : List (String × FileSummary)) (s : Fi
     validate imports, and check trait impl completeness. Works entirely from FileSummary artifacts. -/
 def resolveShallow (moduleSummaries : List FileSummary)
     (summaryTable : List (String × FileSummary) := []) : ShallowResult :=
+  -- Each module's declaration scope, built once (bug 274): the combined scope and the
+  -- per-module scopes below both read it.
+  let declScopes := moduleSummaries.map fun s => (s, buildGlobalScopeFromSummary s)
   -- Build combined global scope from all module summaries
-  let (combinedScope, combinedTypes) := moduleSummaries.foldl (fun (scope, types) s =>
-    let (sScope, sTypes) := buildGlobalScopeFromSummary s
+  let (combinedScope, combinedTypes) := declScopes.foldl (fun (scope, types) (_, sScope, sTypes) =>
     (Scope.ofSymbols (scope.symbols ++ sScope.symbols), types ++ sTypes)
   ) (Scope.ofSymbols [], ([] : List String))
   -- For inline sibling modules (mod A {} mod B {}), register qualified names (A_fn)
@@ -1117,17 +1117,17 @@ def resolveShallow (moduleSummaries : List FileSummary)
   let traitImpls_ := moduleSummaries.foldl (fun acc s =>
     acc ++ s.traitImpls.map fun ti => (ti.typeName, ti.traitName)) []
   let importsOf := summaryImports summaryTable
-  let perModule := moduleSummaries.map fun s => (s, importsOf s)
-  let importErrors := perModule.flatMap fun (_, (e, _, _)) => e
-  let importedSymbols := perModule.flatMap fun (_, (_, syms, _)) => syms
-  let importedTypes := perModule.flatMap fun (_, (_, _, tys)) => tys
-  let moduleScopes := perModule.map fun (s, (_, syms, _)) =>
-    (s.name, syms ++ (buildGlobalScopeFromSummary s).1.symbols)
+  let perModule := declScopes.map fun (s, sScope, _) => (s, sScope, importsOf s)
+  let importErrors := perModule.flatMap fun (_, _, (e, _, _)) => e
+  let importedSymbols := perModule.flatMap fun (_, _, (_, syms, _)) => syms
+  let importedTypes := perModule.flatMap fun (_, _, (_, _, tys)) => tys
+  let moduleScopes := perModule.map fun (s, sScope, (_, syms, _)) =>
+    (s.name, syms ++ sScope.symbols)
   -- The imported types are what import resolution transports, as Check's `resolveImports`
   -- gives them: the named types and the types their signatures and fields reach (the import
   -- closure, bug 096). When an import fails, `summaryImports` has reported it; its own bindings
   -- stand in so the module's other diagnostics are still produced.
-  let moduleTypeEnvs := perModule.map fun (s, (_, syms, tys)) =>
+  let moduleTypeEnvs := perModule.map fun (s, _, (_, syms, tys)) =>
     let (ownSyms, ownTys) := moduleTypeEnvironment s
     let (impSyms, impTys) := (importScope summaryTable s.imports (importerTypeSpellings s)).getD (syms, tys)
     (s.name, impSyms.filter (·.2.isType) ++ ownSyms, impTys ++ ownTys)
