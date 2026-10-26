@@ -532,6 +532,13 @@ def do_measure(runner, b, shapes, root):
     for line in lines:
         if line.startswith("budget\t") or (every and line.startswith("# measured:")):
             continue
+        if line.startswith("# measured:") and " -- shapes: " in line:
+            # An earlier stamp gives up the shapes measured now, so each shape has one stamp.
+            head, names = line.split(" -- shapes: ", 1)
+            keep = [x for x in names.split(", ") if x not in measured]
+            if not keep:
+                continue
+            line = head + " -- shapes: " + ", ".join(keep)
         out.append(line)
     stamp = "# measured: commit %s on %s, %s, %d runs (median), budget = max(%g x median, median + %gms)%s" % (
         git_identity(root), host_identity(), time.strftime("%Y-%m-%d"), runs,

@@ -5,7 +5,8 @@
 #   exclude SHAPE STAGES REASON     stages (a comma list, or *) not judged, with the filed defect
 #                                   or the reason they are not measured
 #   budget  SHAPE SIZE STAGE MS     written by `check_compile_scaling.sh --measure` on the CI host
-#   a `measured:` stamp naming shapes covers those shapes' budgets; the unnamed stamp the rest
+#   a `measured:` stamp naming shapes covers exactly those shapes' budgets (each shape is named
+#   by at most one stamp); the stamp naming none covers every other shape
 # Budgets are re-measured (and the `measured:` line restamped) only on the CI host class: a change
 # that legitimately moves a stage re-measures, a change that breaks one fixes the compiler.
 # exp, hb_exp: sizes are a factor of ten apart, and a quadratic stage grows x100. A linear stage's
