@@ -23,6 +23,7 @@
 # CONCRETE_SCALING_COMPILER=<binary> judges another build (a pre-fix compiler) with this tree's
 # budgets; the freshness check applies only to this tree's own binary.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 if [ -z "${CONCRETE_SCALING_COMPILER:-}" ]; then
