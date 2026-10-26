@@ -12585,7 +12585,13 @@ functions, many locals, many declarations, deep nesting), compiles them, and tim
 back-end stage. It fails when a stage exceeds its recorded budget, or when the ratio between two sizes
 is above the recorded near-linear bound. The budgets are measured on the CI host and recorded with the
 SHA they were measured at. A retry budget keeps host noise from failing the gate; it never lets the
-pre-fix code pass. **Exit:** `scripts/tests/check_compile_scaling.sh` (new, in the full gate set) passes
+pre-fix code pass. Since bug 294 the gate separates the compiler's work from the host's speed: where
+the CI host can count retired instructions (perf), each run's instruction count and each stage's
+allocations are held to exact budgets, growth between sizes is judged on the instruction counts
+against the linear expectation (a wall-time ratio between 10^4 and 10^5 measures the caches as much
+as the work: linear stages grew x45 – x60, close to the bound a quadratic had to exceed), and wall
+time is judged only against budgets normalized to the host speed measured at `--measure` (capped
+at 2x); a host that cannot count keeps the wall bounds. **Exit:** `scripts/tests/check_compile_scaling.sh` (new, in the full gate set) passes
 at the closing commit, and each reproducer's pre-fix commit fails it.
 
 The gate is in the full gate set (2026-10-26), with budgets measured on concrete-ci-2 and recorded

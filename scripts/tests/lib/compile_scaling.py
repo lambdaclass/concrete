@@ -6,10 +6,11 @@ Usage: compile_scaling.py --compiler CC --budgets TSV --bounded BOUNDED_SH
 
 Generates programs of 10^4 - 10^5 elements or statements in each shape the budget file lists,
 compiles each at every recorded size, and times every stage. It FAILS when a stage exceeds its
-recorded budget at a size, or when a stage's growth between two sizes is worse than near-linear:
-  t(n2) / max(t(n1), floor_ms)  >  (n2 / n1) ** exp        (time; see RESOLUTION)
+recorded budget at a size, or when its growth between two sizes is worse than near-linear:
+  (I(n2) - I0) / (I(n1) - I0)    >  (n2 / n1) ** instr_exp  (a counted run's instructions)
+  t(n2) / max(t(n1), floor_ms)  >  (n2 / n1) ** exp        (time, for a run perf did not count)
   h(n2) / h(n1)                  >  (n2 / n1) ** hb_exp     (allocation counts)
-Both exponents are recorded in the budget file with their reasons (see SIZES).
+The exponents are recorded in the budget file with their reasons (see SIZES and GROWTH).
 
 STAGES. `--emit-trace-json` times parse, resolve-files, resolve, check, elaborate, coreCheck,
 monomorphize and lower inside the compiler (`timing_ms`) and counts each stage's small
@@ -28,8 +29,10 @@ THREE KINDS OF MEASUREMENT.
     allows it, as check_ssa_lowering_scaling.sh counts them) of every timed run: exact up to a few
     in a million whatever the load (bug 294), so a run's count is judged without retries against
     its budget (`instr`, instr_budget_factor x the median at --measure) and for growth between
-    sizes (instr_exp). They see work that allocates nothing, for the whole run, not per stage.
-  * Wall time is judged against the budgets and for growth. Host noise is handled two ways.
+    sizes (instr_exp, see GROWTH). They see work that allocates nothing, for the whole run, not
+    per stage.
+  * Wall time is judged against the budgets, and for growth only in a run perf did not count.
+    Host noise is handled two ways.
     The RETRY BUDGET (`retries`): when an attempt violates any wall-clock bound, the whole shape
     is measured again, and every (size, stage) keeps its FASTEST run; a noisy spike cannot
     survive a minimum, and a quadratic stage's minimum is still quadratic. HOST NORMALIZATION
@@ -49,10 +52,24 @@ quadratic stage grows a hundredfold. A linear stage's allocation count grows exa
 the heartbeat bound (hb_exp) is tight. Its time does not: caches, the allocator and memory
 bandwidth shared with other jobs cost more at 10^5 elements than at 10^4, and the fastest of three
 attempts of a linear stage has grown up to 52-fold on a host running eight gates at once. The time
-bound (exp) sits above that and below a quadratic's hundredfold. A stage whose quadratic part is
+bound (exp) sits above that and below a quadratic's hundredfold; it judges only runs perf did not
+count (see GROWTH). A stage whose quadratic part is
 still small next to its linear part at these sizes grows less than that (10 + 1 ms at 10^4 and
 100 + 100 ms at 10^5 is x18) and fails only if it exceeds its budget: such a mixed quadratic can
 pass both checks at these sizes, and is caught when it grows past its budget.
+
+GROWTH (bug 294). A run whose instructions were counted at both sizes, and none of whose stages is
+excluded, has its growth judged on those counts above its mode's baseline (the same mode on a
+one-line program: process start, the standard library, clang's fixed work), against instr_exp
+1.06: x11.5 for x10. A linear compile grows x10.0 - x10.3 above the baseline (functions, enums,
+assignments at 10^4 -> 10^5 on main ea21a2e8's stack), a quadratic part multiplies its share by a
+hundred, so one that is 1.6 % of the run at 10^4 fails. The counts are exact whatever the host
+does, so no retry is needed or allowed. Those runs' stages are then held by their wall budgets
+only: a wall RATIO between sizes measures the caches as much as the work (on an idle dev host a
+linear stage grows x45 - x60 from 10^4 to 10^5 as its data leaves the caches, close to the x63 a
+quadratic had to exceed), so it false-failed linear stages and could not resolve a small quadratic
+anyway. A run perf did not count (a host without counters, a baseline that failed) keeps the wall
+growth bound below; the negative controls prove both directions on every run.
 
 RESOLUTION. Every stage's growth is judged, however fast. An in-compiler stage is timed in whole
 milliseconds by the compiler's own clock, so the smaller size's time is floored at floor_ms. A
@@ -89,7 +106,7 @@ REQUIRED = TRACE_STAGES + ["llvm", "native"]   # the compile path every shape co
 PARAM_DEFAULTS = {"exp": 1.8, "hb_exp": 1.2, "floor_ms": 2.0, "wall_floor_ms": 25.0, "hb_judge_min": 100000.0, "retries": 2.0, "ceiling_factor": 3.0,
                   "ceiling_min_s": 20.0, "measure_runs": 3.0, "budget_factor": 4.0,
                   "budget_slack_ms": 200.0, "hb_budget_factor": 1.25, "instr_budget_factor": 1.25,
-                  "instr_exp": 1.2, "norm_cap": 2.0, "measure_max_load": 8.0}
+                  "instr_exp": 1.06, "norm_cap": 2.0, "measure_max_load": 8.0}
 
 
 # ----------------------------------------------------------------------------- generated corpus
@@ -327,6 +344,7 @@ class Runner:
     def __init__(self, cc, bounded, budgets, workdir, perf=False):
         self.cc, self.bounded, self.b, self.dir = cc, bounded, budgets, workdir
         self.base = {}
+        self.base_instr = {}
         self.perf = perf
 
     def baseline(self, m):
@@ -337,15 +355,20 @@ class Runner:
             src = os.path.join(self.dir, "baseline.con")
             with open(src, "w") as f:
                 f.write("fn main() -> Int {\n    return 42;\n}\n")
-            argv = {"core": ["--emit-core"], "llvm": ["--emit-llvm"], "interp": ["--interp"],
-                    "native": ["-o", src + ".bin"]}[m]
-            walls = []
+            argv = {"trace": ["--emit-trace-json"], "core": ["--emit-core"], "llvm": ["--emit-llvm"],
+                    "interp": ["--interp"], "native": ["-o", src + ".bin"]}[m]
+            walls, counts = [], []
             for _ in range(3):
-                rc, _o, _e, wall, to, _i = self.bounded_run(60, [self.cc, src] + argv)
+                rc, _o, _e, wall, to, ins = self.bounded_run(60, [self.cc, src] + argv, count=True)
                 if rc == 0 and not to:
                     walls.append(wall)
+                    if ins:
+                        counts.append(ins)
             # None: the baseline did not run, and a whole compile is then not judged as measured.
             self.base[m] = min(walls) if walls else None
+            # The instructions every run of this mode spends whatever its input (process start, the
+            # standard library, clang's fixed work): instruction growth is judged above them (bug 294).
+            self.base_instr[m] = min(counts) if counts else None
         return self.base[m]
 
     def ceiling(self, shape, n, stages):
@@ -466,7 +489,7 @@ def host_factor(b, shape, n, m, walls, instrs):
 
 
 def judge(b, shape, sizes, stages, times, beats, bad, base=None, ntimes=None, factors=None,
-          instrs=None, modes=None):
+          instrs=None, modes=None, base_instr=None):
     """Lines and verdicts for one shape: [(verdict, text)], verdict in ok/FAIL/FAIL-HB/FAIL-INSTR/
     EXCLUDED. A stage's time is judged against its budget after dividing by the host factor of the
     run that timed it (`ntimes`); its growth is judged on the raw fastest times."""
@@ -474,7 +497,22 @@ def judge(b, shape, sizes, stages, times, beats, bad, base=None, ntimes=None, fa
     ntimes = ntimes if ntimes is not None else times
     factors = factors or {}
     instrs = instrs or {}
+    base_instr = base_instr or {}
     res = []
+    # GROWTH BY INSTRUCTIONS (bug 294). A run whose retired instructions were counted at every size
+    # and whose stages are not excluded has its growth judged on those counts (below), exactly and
+    # whatever the host does; its stages' wall times are then held by their budgets only. A wall
+    # ratio between sizes measures the caches as much as the work (a linear stage's time grows x45 -
+    # x60 from 10^4 to 10^5 on an idle host, close to a bound a quadratic must exceed), while a
+    # quadratic part multiplies the instructions. A run that was not counted keeps the wall bound.
+    def instr_judged(m):
+        if m == "trace":
+            if any(b.excluded(shape, st) for st in TRACE_STAGES):
+                return False
+        elif b.excluded(shape, m):
+            return False
+        return all((n, m) in instrs for n in sizes)
+    by_instr = {m for m in (modes or []) if instr_judged(m)}
     for s in stages:
         why = b.excluded(shape, s)
         cells = []
@@ -509,7 +547,9 @@ def judge(b, shape, sizes, stages, times, beats, bad, base=None, ntimes=None, fa
         hbfail = []
         for n1, n2 in zip(sizes, sizes[1:]):
             limit = (n2 / n1) ** exp
-            if (n1, s) in times and (n2, s) in times and (n1, s) not in bad and (n2, s) not in bad:
+            if mode_of(s) in by_instr:
+                growth.append("by instructions")
+            elif (n1, s) in times and (n2, s) in times and (n1, s) not in bad and (n2, s) not in bad:
                 # Whole compiles are judged above their size-independent baseline.
                 b0 = (base or {}).get(s, 0.0)
                 t1, t2 = max(0.0, times[(n1, s)] - b0), max(0.0, times[(n2, s)] - b0)
@@ -555,16 +595,22 @@ def judge(b, shape, sizes, stages, times, beats, bad, base=None, ntimes=None, fa
             ib = b.instr.get((shape, n, m))
             if ib is not None and v > ib:
                 problems.append("n=%d %d instructions > budget %d" % (n, v, ib))
+        # Above the mode's baseline (a one-line program), so a size-independent cost cannot dilute
+        # the growth; a linear compile grows x10.0 - x10.3 from 10^4 to 10^5 above it.
+        b0 = base_instr.get(m) or 0.0
+        ratios = []
         for (n1, v1), (n2, v2) in zip(counted, counted[1:]):
             lim = (n2 / n1) ** b.p("instr_exp")
-            if v2 / max(v1, 1.0) > lim:
-                problems.append("instructions grew x%.1f from %d to %d > x%.1f (n^%.1f)"
-                                % (v2 / max(v1, 1.0), n1, n2, lim, b.p("instr_exp")))
+            r = max(0.0, v2 - b0) / max(v1 - b0, 1.0)
+            ratios.append("x%.2f<=x%.2f" % (r, lim))
+            if r > lim:
+                problems.append("instructions grew x%.2f from %d to %d > x%.2f (n^%.2f), above a %.0fM baseline"
+                                % (r, n1, n2, lim, b.p("instr_exp"), b0 / 1e6))
         detail = " ".join("%d:%.0fM" % (n, v / 1e6) for n, v in counted)
         if problems:
             res.append(("FAIL-INSTR", "%s/instructions:%s %s [%s]" % (shape, m, "; ".join(problems), detail)))
         else:
-            res.append(("ok", "%s/instructions:%s [%s]" % (shape, m, detail)))
+            res.append(("ok", "%s/instructions:%s [%s] growth %s" % (shape, m, detail, " ".join(ratios) or "-")))
     return res
 
 
@@ -590,13 +636,16 @@ def run_shape(runner, b, shape, sizes, modes, attempts):
             for s, v in e.items():
                 bad.setdefault((n, s), v)
         base = {m: runner.baseline(m) for m in modes if m != "trace"}
+        if "trace" in modes:
+            runner.baseline("trace")
+        base_instr = {m: runner.base_instr.get(m) for m in modes}
         for m, v in base.items():
             if v is None:                   # no baseline, no growth judgement: not a pass
                 for n in sizes:
                     bad.setdefault((n, m), "its baseline (a one-line program) did not compile")
         verdicts = judge(b, shape, sizes, stages, times, beats, bad,
                          {m: v for m, v in base.items() if v is not None}, ntimes, factors,
-                         instrs, modes)
+                         instrs, modes, base_instr)
         wall_fail = any(v == "FAIL" for v, _ in verdicts)
         # Heartbeat and instruction failures are deterministic: no retry changes them. A compile
         # that failed is not noise, and a run killed at its ceiling twice (bounded.sh already re-ran
@@ -613,7 +662,7 @@ def controls(workdir):
     stage only within norm_cap, never an instruction or heartbeat overrun. [(ok, text)]."""
     path = os.path.join(workdir, "controls.tsv")
     with open(path, "w") as f:
-        f.write("param\tnorm_cap\t2\nshape\tassignments\t10,100\ttrace\n"
+        f.write("param\tnorm_cap\t2\nparam\tfloor_ms\t1\nshape\tassignments\t10,100\ttrace\n"
                 + "".join("budget\tassignments\t%d\t%s\t100\n" % (n, st)
                           for n in (10, 100) for st in TRACE_STAGES)
                 + "hbbudget\tassignments\t100\tlower\t1000\n"
@@ -622,18 +671,18 @@ def controls(workdir):
     b = Budgets(path)
     sizes, stages = [10, 100], TRACE_STAGES
 
-    def verdicts(t100, slow100, hb100=500.0, ins100=900000.0):
+    def verdicts(t100, slow100, hb100=500.0, ins100=900000.0, t10=10.0, counted=True):
         # The run at 100 took `slow100` times the recorded 100 ms per 10^9 instructions: its host
         # factor comes from host_factor, as in a real judgment.
         f = host_factor(b, "assignments", 100, "trace", {"trace": 100.0 * slow100 * ins100 / 1e9},
                         {"trace": ins100})
-        times = {(n, st): (10.0 if n == 10 else t100) for n in sizes for st in stages}
+        times = {(n, st): (t10 if n == 10 else t100) for n in sizes for st in stages}
         factors = {(n, st): (1.0 if n == 10 else f) for n in sizes for st in stages}
         ntimes = {k: v / factors[k] for k, v in times.items()}
         beats = {(n, st): (100.0 if n == 10 else hb100) for n in sizes for st in stages}
-        instrs = {(10, "trace"): 100000.0, (100, "trace"): ins100}
+        instrs = {(10, "trace"): 100000.0, (100, "trace"): ins100} if counted else {}
         return {v for v, _ in judge(b, "assignments", sizes, stages, times, beats, {}, {}, ntimes,
-                                    factors, instrs, ["trace"])}
+                                    factors, instrs, ["trace"], {"trace": 0.0})}
     out = []
     out.append(("FAIL" in verdicts(150.0, 1.0), "CONTROL: a stage over its budget on an unloaded host fails"))
     out.append(("FAIL" not in verdicts(150.0, 2.0), "CONTROL: the same time on a host running at half speed passes"))
@@ -645,6 +694,14 @@ def controls(workdir):
                 "CONTROL: a run over its instruction budget fails, host factor or not"))
     out.append(("FAIL-HB" in verdicts(50.0, 2.0, hb100=1500.0),
                 "CONTROL: a stage over its heartbeat budget fails, host factor or not"))
+    # Growth by instructions: a planted quadratic fails however its wall time behaves, and a wall
+    # ratio alone no longer fails a counted run (the instructions grew linearly).
+    out.append(("FAIL-INSTR" in verdicts(50.0, 1.0, ins100=100000.0 * 60),
+                "CONTROL: instructions growing x60 for x10 (a planted quadratic) fail"))
+    out.append(("FAIL" not in verdicts(95.0, 1.0, t10=1.5),
+                "CONTROL: a counted run whose wall time grew x63 at x9 instructions passes (caches, not work)"))
+    out.append(("FAIL" in verdicts(95.0, 1.0, t10=1.5, counted=False),
+                "CONTROL: the same wall growth fails a run nobody counted (the wall bound still holds there)"))
     return out
 
 

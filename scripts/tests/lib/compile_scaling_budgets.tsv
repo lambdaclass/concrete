@@ -17,13 +17,17 @@
 # allocations (heartbeats) grow exactly x10, so hb_exp 1.2 (x15.8) is tight. Its time grows more
 # (caches, the allocator, memory bandwidth shared with other jobs): up to x35 on the loaded CI host
 # and x52 with eight gates running at once on the dev host, fastest of three attempts; exp 1.8
-# (x63) sits above that. A mixed stage whose quadratic part is still small at these sizes can
-# pass the time bound and is held by its budget only (compile_scaling.py, SIZES and RESOLUTION).
+# (x63) sits above that, and judges only runs perf could not count. A mixed stage whose quadratic
+# part is still small at these sizes can pass the time bound and is held by its budget only
+# (compile_scaling.py, SIZES and RESOLUTION).
 # Bug 294: wall budgets measured on a quiet host failed unchanged work on the loaded CI host (one
 # binary's monomorphize stage at 10^5 assignments took 261 - 575 ms at load 24 against a 412 ms
 # budget, the same 13.615 G instructions each time). hbbudget and instr hold a run's work exactly
 # (hb_budget_factor and instr_budget_factor above the --measure counts: a change that legitimately
-# adds work re-measures); instr_exp bounds instruction growth like hb_exp. A wall budget is
+# adds work re-measures). instr_exp 1.06 (x11.5 for x10) bounds a counted run's instruction growth
+# above its one-line baseline: a linear compile grows x10.0 - x10.3 there and a quadratic part 1.6 %
+# of the run at 10^4 exceeds it; such a run's stages are not judged for wall growth (exp, below), whose
+# ratio measures the caches as much as the work (compile_scaling.py, GROWTH). A wall budget is
 # judged on the stage's time divided by how much slower than `rate` its run went per instruction,
 # at most norm_cap: so load cannot fail unchanged work up to norm_cap, added work still shows in
 # instr, and only a change that makes the same instructions slower is excused, up to norm_cap.
@@ -49,7 +53,7 @@ param	budget_factor	4
 param	budget_slack_ms	200
 param	hb_budget_factor	1.25
 param	instr_budget_factor	1.25
-param	instr_exp	1.2
+param	instr_exp	1.06
 param	norm_cap	2
 param	measure_max_load	8
 shape	array-const	10000,100000	trace,llvm,native

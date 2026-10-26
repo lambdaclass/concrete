@@ -55,10 +55,20 @@ KINDS OF MEASUREMENT"):
   the variation between its runs but not load lasting the whole session (Codex review); so it
   refuses a host whose load average is above `measure_max_load` (8 of 32 threads) and stamps the
   load it ran at.
+- Growth between sizes is judged on the instruction counts where perf counted the run, above the
+  mode's baseline (a one-line program), against `instr_exp` 1.06 (x11.5 for x10; a linear compile
+  grows x10.0 – x10.3 there, and a quadratic part 1.6 % of the run at 10^4 exceeds it). Those runs'
+  stages are no longer judged for wall-time growth: on an idle dev host linear stages grew x45 – x60
+  from 10^4 to 10^5 (functions coreCheck x60, enums lower x54) as their data left the caches, close
+  to the x63 bound a quadratic had to exceed, so a loaded host would have false-failed them, while
+  the instructions of those runs grew x10.1 – x10.3. A quadratic multiplies the instructions, so it
+  still fails, and exactly. The wall growth bound stays for runs nobody counted.
 - A host that cannot count instructions judges as before and says so.
 - Negative controls run with every judgment: a stage over budget on an unloaded host fails; the
   same time at half host speed passes; a stage over `norm_cap` x its budget fails however slow the
-  host; an instruction or heartbeat overrun fails whatever the host factor.
+  host; an instruction or heartbeat overrun fails whatever the host factor; instructions growing
+  x60 for x10 (a planted quadratic) fail; a counted run whose wall time grew x63 at x9 instructions
+  passes; the same wall growth fails a run nobody counted.
 
 All budgets are re-measured with the new method on concrete-ci-2 (see the `measured:` stamp in
 `compile_scaling_budgets.tsv`).
