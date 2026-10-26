@@ -2422,7 +2422,7 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
           let sp ← peekSpan
           throwParse "#[link_name] / #[export_name] can only be applied to an extern fn / a function" (span := some sp)
         let imp ← parseImport
-        imports := imports ++ [imp]
+        imports := imp :: imports
       else
         let isPub := tk == .pub_
         if isPub then advance; tk ← peek
@@ -2443,8 +2443,8 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
           let reprC := pendingRepr.map (·.isReprC) |>.getD false
           let packed := pendingRepr.map (·.isPacked) |>.getD false
           let reprA := pendingRepr.bind (·.reprAlign)
-          structs := structs ++ [{ s with isPublic := isPub, isReprC := reprC,
-                                          isPacked := packed, reprAlign := reprA }]
+          structs := { s with isPublic := isPub, isReprC := reprC,
+                              isPacked := packed, reprAlign := reprA } :: structs
           pendingRepr := none
         else if tk == .hash then
           if isTrusted then
@@ -2526,21 +2526,21 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
             pendingLinkName := none
           else if tk == .enum_ then
             let e ← parseEnumDef
-            enums := enums ++ [{ e with isPublic := isPub }]
+            enums := { e with isPublic := isPub } :: enums
           else if tk == .impl_ then
             let result ← parseImplBlock
             match result with
-            | .inl ib => implBlocks := implBlocks ++ [ib]
-            | .inr tb => traitImpls := traitImpls ++ [tb]
+            | .inl ib => implBlocks := ib :: implBlocks
+            | .inr tb => traitImpls := tb :: traitImpls
           else if tk == .trait_ then
             let t ← parseTraitDef
-            traits := traits ++ [{ t with isPublic := isPub }]
+            traits := { t with isPublic := isPub } :: traits
           else if tk == .const_ then
             let c ← parseConstDef
-            constants := constants ++ [{ c with isPublic := isPub }]
+            constants := { c with isPublic := isPub } :: constants
           else if tk == .type_ then
             let ta ← parseTypeAlias
-            typeAliases := typeAliases ++ [{ ta with isPublic := isPub }]
+            typeAliases := { ta with isPublic := isPub } :: typeAliases
           else if tk == .cap_ then
             let sp ← peekSpan
             advance  -- consume 'cap'
@@ -2563,10 +2563,10 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
             for c in expanded do
               if !validCaps.contains c then
                 throwParse s!"unknown capability '{c}' in cap alias '{name}'" (span := some sp)
-            capAliases := capAliases ++ [{ name, caps := expanded, isPublic := isPub, span := sp }]
+            capAliases := { name, caps := expanded, isPublic := isPub, span := sp } :: capAliases
           else if tk == .newtype_ then
             let nt ← parseNewtypeDef
-            newtypes := newtypes ++ [{ nt with isPublic := isPub }]
+            newtypes := { nt with isPublic := isPub } :: newtypes
           else if tk == .«mod» then
             -- Nested submodule (or mod declaration)
             advance  -- consume 'mod'
@@ -2576,11 +2576,11 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
               expect .lbrace
               let sub ← parseModuleBody .rbrace
               expect .rbrace
-              submodules := submodules ++ [{ sub with name := subName }]
+              submodules := { sub with name := subName } :: submodules
             else
               -- "mod other;" - module declaration
               expect .semicolon
-              submodules := submodules ++ [{ name := subName, structs := [], enums := [], functions := [] }]
+              submodules := { name := subName, structs := [], enums := [], functions := [] } :: submodules
           else if tk == .ident "spec" then
             -- `spec fn name(params) -> ret;` — erased pure specification function
             advance  -- consume 'spec'
@@ -2604,8 +2604,7 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
                 pure (some e)
               else pure none
             expect .semicolon
-            specFns := specFns ++
-              [{ name, params, retTy, body, isPublic := isPub, span := sp }]
+            specFns := { name, params, retTy, body, isPublic := isPub, span := sp } :: specFns
           else if tk == .fn then
             -- Check if function has a body or is body-less (intrinsic/declaration)
             let f ← parseFnDefOrDecl
@@ -2622,6 +2621,9 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
             -- per top-level declaration was O(decls) each, i.e. O(N²) to parse a
             -- module of N functions — the frontend O(N²) the complexity guard's
             -- many-functions family exposed (it is PARSE, not resolve/check).
+            -- Every other declaration kind does the same since bug 273. Not an Array:
+            -- the loop's `try`/`catch` keeps the previous iteration's accumulators alive
+            -- for recovery, so `Array.push` would find each array shared and copy it.
             | .inl fnDef =>
               if pendingIntrinsic.isSome then
                 throwParse "#[intrinsic] can only be applied to a bodiless function declaration, not one with a body" (span := some fnDef.span)
@@ -2669,7 +2671,7 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
               tk3 ← peek
               if tk3 == .comma then advance; tk3 ← peek
             expect .rbrace
-            structs := structs ++ [{ name, typeParams, fields, isPublic := isPub, isUnion := true }]
+            structs := { name, typeParams, fields, isPublic := isPub, isUnion := true } :: structs
           else
             let sp ← peekSpan
             throwParse s!"unexpected token {tk}" (span := some sp)
@@ -2692,8 +2694,13 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
       pendingFingerprint := none
       skipToTopLevelBoundary itemStartPos stopToken
     tk ← peek
-  return { name := "", structs, enums, functions := fns.reverse, imports, implBlocks, traits,
-           traitImpls, constants, typeAliases, capAliases, externFns := externFns.reverse, specFns, newtypes, submodules }
+  return { name := "", structs := structs.reverse, enums := enums.reverse,
+           functions := fns.reverse, imports := imports.reverse,
+           implBlocks := implBlocks.reverse, traits := traits.reverse,
+           traitImpls := traitImpls.reverse, constants := constants.reverse,
+           typeAliases := typeAliases.reverse, capAliases := capAliases.reverse,
+           externFns := externFns.reverse, specFns := specFns.reverse,
+           newtypes := newtypes.reverse, submodules := submodules.reverse }
 
 partial def parseModule : ParseM Module := do
   expect .«mod»
@@ -2721,19 +2728,20 @@ partial def parseProgram : ParseM (List Module) := do
       expect .lbrace
       let body ← parseModuleBody .rbrace
       expect .rbrace
-      let mut modules := [{ body with name := modName }]
+      -- Prepended and reversed once (bug 273), like a module's declarations.
+      let mut modules : List Module := [{ body with name := modName }]
       let mut tk3 ← peek
       while tk3 == .«mod» do
         let m ← parseModule
-        modules := modules ++ [m]
+        modules := m :: modules
         tk3 ← peek
       -- Parse remaining top-level items (e.g. `pub fn main()`) as a sibling "main" module
       let tk4 ← peek
       if tk4 != .eof then
         let mainBody ← parseModuleBody .eof
-        return modules ++ [{ mainBody with name := "main" }]
+        return ({ mainBody with name := "main" } :: modules).reverse
       else
-        return modules
+        return modules.reverse
     else
       -- 'mod X;' is a module import, part of the main module body
       expect .semicolon

@@ -2,12 +2,12 @@
 
 <!-- bug-ledger
 summary: the parser appended each struct, enum, constant, newtype, import and submodule of a module to the list built so far (`structs := structs ++ [s]`), so a module of n such declarations took time n² to parse (10000 structs: 684 ms). Found by the R-0550 scaling gate. Class 17.
-coverage: `check_compile_scaling.sh` measures the `structs` and `enums` shapes' `parse` stage and reports it EXCLUDED under this bug on every run; the fix removes the exclusion, and the gate then holds the stage to its budget and to near-linear growth
+coverage: `check_compile_scaling.sh` judges the `structs` and `enums` shapes' `parse` stage against its budget and near-linear growth: this fix removes the stage's exclusion under this bug, and the gate fails the pre-fix compiler
 class: 17 — the parser appends each struct, enum, constant, newtype, import and submodule of a module to the list built so far
 silent: no
 -->
 
-**Status:** OPEN
+**Status:** FIXED (branch `wip/perf-273-v3`)
 **Found:** 2026-10-26, building the compile-time scaling gate (R-0550, exit 2o): the gate's generated shapes, timed per stage with `--emit-trace-json` at 10b81a46.
 **Severity:** loud (performance). Compile time only: never wrong code, a refusal or a crash; a program of this shape compiles, slowly.
 
@@ -28,9 +28,55 @@ A linear stage doubles with the size; these grow about fourfold or more per doub
 
 Accumulate in an `Array` (or cons and reverse once), as `fns` already does and as bugs 249 and 255 did for array literals and block statements.
 
+## Fix
+
+Every accumulator of `parseModuleBody` (structs and unions, enums, imports, impl and trait-impl
+blocks, traits, constants, type aliases, capability aliases, newtypes, submodules, spec functions)
+is consed and reversed once at module assembly, as `fns` and `externFns` already were;
+`parseProgram`'s list of top-level `mod` blocks likewise. Each list keeps its source order, so the
+parsed module is the same value.
+
+Not an `Array`: the declaration loop's `try`/`catch` (top-level recovery, #12c) keeps the previous
+iteration's accumulators alive for the handler, so each array is shared when it is pushed and
+`Array.push` copies it — the first version of this fix measured the same quadratic in
+`lean_copy_expand_array` (gdb samples), and moved `fns` from linear to quadratic. A cons cell
+never copies its tail.
+
+The `++ [` ratchet (`check_no_quadratic_append.sh`) for `Parser.lean` goes from 51 to 36.
+
+## Measurements
+
+`parse` stage in ms (`--emit-trace-json`, fastest of 3 runs), dev host (fede-256gb), before
+(the compiler built at b5040d53) and after (built from the tree of 5f993139, whose compiler
+sources are this fix; the build had no other modification):
+
+| n | `structs` before | after | `enums` before | after |
+|---|---|---|---|---|
+| 2500 | 32 | 6 | 34 | 6 |
+| 5000 | 144 | 12 | 151 | 13 |
+| 10000 | 656 | 24 | 696 | 27 |
+| 20000 | 2958 | 50 | 3075 | 57 |
+
+The `functions` shape is unchanged (10000: 40 ms before and after). The R-0550 gate (`compile_scaling.py` and its budgets at
+fe9ce031, origin/wip/r0550-scaling-gate-v2), run on the same two builds with this bug's
+exclusions removed, passes `structs/parse` (1000: 3 ms, 10000: 24 ms, x8.0) and `enums/parse`
+(x8.7) and fails them on the pre-fix compiler (x107.5 and x114.7 in time, x67.8 and x66.6 in
+allocations, against bounds of x63.1 and x15.8).
+
+`--emit-core`, `--emit-ssa` and `--emit-llvm` (stdout, stderr and exit status) of every `.con`
+under `tests/programs` and `examples` (the b5040d53 corpus) and of twelve generated scaling shapes
+at size 60 are byte-identical between the same two builds.
+After the rebase onto main (91ce358b, train 34) the comparison was run again, over
+91ce358b's corpus, between the compiler built at 91ce358b and the one built at 4d1d0362 (this
+fix on that base): byte-identical.
+
+## Regression gate
+
+The R-0550 gate (`check_compile_scaling.sh`, on main since 9d8182ea) held this stage as an exclusion under this bug; the fix removes both exclusions from `compile_scaling_budgets.tsv`. With them removed the gate passes `structs/parse` (1000: 3 ms, 10000: 24 ms, x8.0) and `enums/parse` (x8.3) on this fix, and fails both on main's compiler (x108.0 and x114.5 in time against x63.1, x67.8 and x66.6 in allocations against x15.8).
+
 ## Containment while open
 
-Loud only. The scaling gate names the stage as an exclusion under this bug, so its gap is printed on every run rather than silent; the gate's other stages of the shape stay judged. A user splits such a module or nest.
+Loud only. The scaling gate named the stage as an exclusion under this bug, so its gap was printed on every run rather than silent.
 
 ## Structural cause
 
