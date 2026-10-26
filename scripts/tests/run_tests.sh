@@ -8441,6 +8441,11 @@ else
     echo "FAIL  regress_285_enum_payload_addr_taken.con: a local is promoted lazily inside a branch (%addr. slot) or the SSA is missing"
     FAIL=$((FAIL + 1))
 fi
+# Bug 286: every branch and loop site re-walked its whole region for address-takes, so n nested
+# `if`s took n² to lower (depth 8000: 1275 ms). Binary = --interp = 42 for the cases where a site
+# must still walk; then the `lower` stage of a nest 8000 deep within 400 ms, retried once at 800 ms
+# (118 ms with the fix on the dev host).
+run_ok "$TESTDIR/regress_286_nested_region_addr_taken.con" 42
 r265_gen() {  # r265_gen SHAPE N: a generated `fn main` of the given shape and size on stdout
     awk -v shape="$1" -v n="$2" 'BEGIN {
         print "fn main() -> Int {"
@@ -9255,6 +9260,38 @@ case "$r280e_ms" in
            PASS=$((PASS + 1))
        else
            echo "FAIL  bug 280: elaborating an expression nested 20000 deep took ${r280e_first} ms, then ${r280e_ms} ms in elaborate (budget 100, retry 200)"
+           FAIL=$((FAIL + 1))
+       fi ;;
+esac
+r286_src="$TMPDIR/r286_nested_ifs_8000.con"
+awk -v n=8000 'BEGIN {
+    print "fn main() -> Int {"
+    print "    let mut s: i64 = 0;"
+    print "    let t: i64 = 1;"
+    line = "    "
+    for (i = 0; i < n; i++) line = line "if t > 0 { s = s + 1; "
+    for (i = 0; i < n; i++) line = line "}"
+    print line
+    printf "    return (s - %d + 42) as Int;\n", n
+    print "}"
+}' > "$r286_src"
+r265_stage_ms "$r286_src" lower; r286_first="$r265_ms"; r286_ms="$r286_first"
+case "$r286_first" in
+    ''|*[!0-9]*) ;;
+    *) if [ "$r286_first" -gt 400 ]; then r265_stage_ms "$r286_src" lower; r286_ms="$r265_ms"; fi ;;
+esac
+case "$r286_ms" in
+    incomplete)
+        echo "  INCOMPLETE bug 286: lowering 8000 nested ifs timed out twice (180 s each)"
+        INCOMPLETE=$((INCOMPLETE + 1)) ;;
+    ''|*[!0-9]*)
+        echo "FAIL  bug 286: lowering 8000 nested ifs failed ($r286_ms)"
+        FAIL=$((FAIL + 1)) ;;
+    *) if [ "$r286_first" -le 400 ] || [ "$r286_ms" -le 800 ]; then
+           echo "  ok  bug 286: lowering 8000 nested ifs within budget (${r286_ms} ms, lower)"
+           PASS=$((PASS + 1))
+       else
+           echo "FAIL  bug 286: lowering 8000 nested ifs took ${r286_first} ms, then ${r286_ms} ms in lower (budget 400, retry 800)"
            FAIL=$((FAIL + 1))
        fi ;;
 esac

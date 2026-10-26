@@ -42,14 +42,14 @@ shape	lets-if	4000,40000	trace,llvm,native
 shape	lets-while	2000,20000	core
 shape	lets-match	4000,40000	trace,llvm,native
 shape	nested-parens	1000,10000	trace
-shape	nested-ifs	1000,10000	trace
+shape	nested-ifs	10000,100000	trace
 shape	functions	1000,10000	trace
 shape	call-chain	1000,10000	trace
 shape	structs	1000,10000	trace
 shape	enums	1000,10000	trace
 exclude	lets-while	monomorphize,lower,llvm,native	bug 270 (open): Lower gives every loop a header phi for every binding in scope, so this shape's lower stage is quadratic (4.9, 18.7 and 51.7 s at 1000, 2000 and 4000 at b5040d53); --emit-trace-json runs Lower, so monomorphize is not timed apart from it, and the front end is judged through --emit-core
+exclude	nested-ifs	llvm,native	not measured yet: bug 286 is fixed, so every in-compiler stage of this shape is judged; its whole compiles join the budgeted set when they are measured on the CI host (--measure)
 exclude	nested-parens	llvm,native	not measured yet: bug 280 is fixed, so every stage of this shape is judged; its whole compiles join the budgeted set when they are measured on the CI host (--measure)
-exclude	nested-ifs	*	lower: still superlinear at b5040d53 after bugs 265-267 (23 ms at depth 1000, 448 ms at 5000), not yet attributed; the shape is not run until these are fixed (--emit-core cannot stand in: its printed Core is indented per level, quadratic by its size)
 exclude	functions	llvm,native	not run: every whole compile of this shape contains the excluded stages above; it runs with their fixes
 exclude	call-chain	llvm,native	not run: every whole compile of this shape contains the excluded stages above; it runs with their fixes
 exclude	structs	llvm,native	not run: every whole compile of this shape contains the excluded stages above; it runs with their fixes

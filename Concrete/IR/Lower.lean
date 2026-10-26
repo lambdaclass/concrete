@@ -234,6 +234,11 @@ structure LowerState where
   /-- True while a module constant's initializer is being inlined (bug 123): a constant has no
       storage, and Check does not check initializers, so every borrow form is refused here. -/
   inConstInit : Bool := false
+  /-- Bug 286: while a branch region (an arm, a loop body, a short-circuit right operand) is
+      lowered, the names its source takes the address of (`regionAddrTaken`): every nested
+      region's address-taken set is a subset. `none` outside every region, and while deferred
+      calls are lowered (their source lies outside the region they are emitted in). -/
+  addrBound : Option LocalKeySet := none
 
 abbrev LowerM := ExceptT Diagnostics (StateM LowerState)
 
@@ -826,6 +831,41 @@ private def prePromoteAddrTaken (preVars : VarMap) (taken : LocalKeySet)
         emit (.store val (.reg allocaReg vty))
         addPromotedAlloca name allocaReg vty
 
+/-- Bug 286: the address-taken set a branch site acts on, without walking every enclosing
+    region again. `walk` is the site's own walk (`cstmtsAddrTaken` / `cmatchArmAddrTaken` /
+    `cexprAddrTaken` of its region); a site at depth d of a nest used to run it on the n - d levels
+    below, so lowering n nested branches took time n².
+
+    Inside an enclosing region whose set is `bound`, the site's exact set is a subset of `bound`
+    (its region's source is part of the enclosing region's). The site acts only on the bindings of
+    `preVars` in its set that `relevant` holds of (the very test it applies before promoting); when
+    no binding of `preVars` in `bound` passes it, no binding in the exact set does either, and
+    `bound` stands in for the exact set: the site does exactly what it did with the walked set.
+    Otherwise it walks. -/
+private def regionAddrTaken (preVars : VarMap) (walk : Unit → LocalKeySet)
+    (relevant : LocalKey → SVal → LowerM Bool) : LowerM LocalKeySet := do
+  match (← getState).addrBound with
+  | none => return walk ()
+  | some bound =>
+    for (name, val) in preVars.restrictOrdered bound.keys do
+      if ← relevant name val then return walk ()
+    return bound
+
+/-- Bug 286: the test `prePromoteAddrTaken` applies to a binding of its `taken` set. -/
+private def prePromoteRelevant (excluded : LocalKey → Bool := fun _ => false)
+    (name : LocalKey) (val : SVal) : LowerM Bool := do
+  match val.ty with
+  | .array _ _ => return false
+  | _ => return (← isPromoted name).isNone && !excluded name
+
+/-- Bug 286: lower `act` (a region's source) with `taken` as the bound of every site inside it. -/
+private def withAddrBound (taken : LocalKeySet) (act : LowerM α) : LowerM α := do
+  let saved := (← getState).addrBound
+  modify fun s => { s with addrBound := some taken }
+  let r ← act
+  modify fun s => { s with addrBound := saved }
+  return r
+
 /-- Per-site rules for `reconcileBranchVars`. The three branch merge loops
     (statement-if, if-expr, match) grew these shapes separately — bugs
     029/031/033/038 were each "one site missed one invariant", so ROADMAP 1a
@@ -1080,13 +1120,14 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       -- pre-promotion the lazy alloca+store lands inside scand.rhs and does
       -- not dominate later uses — silent neighbor corruption (found by
       -- std.cli's `a.len >= 2 && a.get_unchecked(0) == '-'`).
-      prePromoteAddrTaken preVars (cexprAddrTaken {} rhs)
+      let rhsTaken ← regionAddrTaken preVars (fun _ => cexprAddrTaken {} rhs) (prePromoteRelevant)
+      prePromoteAddrTaken preVars rhsTaken
       if op == .and_ then
         terminateBlock (.condBr lVal rhsLabel mergeLabel)
       else
         terminateBlock (.condBr lVal mergeLabel rhsLabel)
       startBlock rhsLabel
-      let rVal ← lowerExpr rhs
+      let rVal ← withAddrBound rhsTaken (lowerExpr rhs)
       emit (.store rVal (.reg resultSlot .bool))
       let rhsEndVars ← snapshotVars
       let rhsEndLabel ← getCurrentLabel
@@ -1378,7 +1419,13 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       | .enumArm _ _ bindings _ _ => bindings.any fun (bn, _) => bn.key == n
       | .varArm v _ _ _ => v.key == n
       | _ => false
-    prePromoteAddrTaken preMatchVars (arms.foldl cmatchArmAddrTaken {}) armShadows
+    let armsTaken ← regionAddrTaken preMatchVars (fun _ => arms.foldl cmatchArmAddrTaken {})
+      (prePromoteRelevant armShadows)
+    prePromoteAddrTaken preMatchVars armsTaken armShadows
+    -- Bug 286: the arms (patterns, guards, bodies) are lowered with their set as the bound;
+    -- restored at the merge, which every path of the arm loops reaches.
+    let outerAddrBound := (← getState).addrBound
+    modify fun s => { s with addrBound := some armsTaken }
 
     -- Determine if this is an enum match (check first arm)
     let isEnumMatch := arms.any fun arm => match arm with
@@ -1597,6 +1644,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
         -- Mark it as unreachable to avoid creating dead-code SSA artifacts.
         terminateBlock .unreachable
 
+    modify fun s => { s with addrBound := outerAddrBound }
     startBlock mergeLabel
     -- Merge variables modified in match arms (shared with the if sites via
     -- reconcileBranchVars — ROADMAP 1a). Only arms that reached the merge
@@ -1866,7 +1914,9 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     let resultSlot? ← freshResultSlot "ifslot." ty
     let preIfVars ← snapshotVars
     -- Bug 031: see prePromoteAddrTaken — the store must dominate both branches.
-    prePromoteAddrTaken preIfVars (cstmtsAddrTaken (cstmtsAddrTaken {} then_) else_)
+    let branchTaken ← regionAddrTaken preIfVars
+      (fun _ => cstmtsAddrTaken (cstmtsAddrTaken {} then_) else_) (prePromoteRelevant)
+    prePromoteAddrTaken preIfVars branchTaken
     terminateBlock (.condBr condVal thenLabel elseLabel)
     -- Then block. Compute termination BEFORE storing the branch value: a branch
     -- that diverged (ended in return/break/continue) has no value, so storing
@@ -1874,7 +1924,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     -- after the terminator, but LLVM still type-checks it and rejects the void
     -- store. Only the live, value-producing branch writes the slot.
     startBlock thenLabel
-    lowerStmts then_
+    withAddrBound branchTaken (lowerStmts then_)
     let term1 ← currentBlockTerminated
     storeBranchResult term1 resultSlot? then_ ty "ifcast."
     let thenEndVars ← snapshotVars
@@ -1885,7 +1935,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     let s ← getState
     setState { s with vars := preIfVars }
     startBlock elseLabel
-    lowerStmts else_
+    withAddrBound branchTaken (lowerStmts else_)
     let term2 ← currentBlockTerminated
     storeBranchResult term2 resultSlot? else_ ty "ifcast."
     let elseEndVars ← snapshotVars
@@ -1950,8 +2000,13 @@ partial def storeBranchResult (term : Bool) (slot? : Option String)
 
 /-- Emit all deferred calls in LIFO order. -/
 private partial def emitFrameDeferredCalls (frame : ScopeFrame) : LowerM Unit := do
+  -- Bug 286: a deferred call's source is where it was deferred, not inside the region it is
+  -- emitted in (a `return` emits every enclosing scope's), so its sites walk afresh.
+  let saved := (← getState).addrBound
+  modify fun s => { s with addrBound := none }
   for body in frame.deferred do
     let _ ← lowerExpr body
+  modify fun s => { s with addrBound := saved }
 
 /-- Emit all deferred calls for all active scopes, from inner to outer. -/
 private partial def emitAllDeferredCalls : LowerM Unit := do
@@ -2301,14 +2356,15 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
     let mergeLabel ← freshLabel "merge"
     let preIfVars ← snapshotVars
     -- Bug 031: see prePromoteAddrTaken — the store must dominate both branches.
-    prePromoteAddrTaken preIfVars
-      (match else_ with
+    let branchTaken ← regionAddrTaken preIfVars
+      (fun _ => match else_ with
         | some el => cstmtsAddrTaken (cstmtsAddrTaken {} then_) el
-        | none => cstmtsAddrTaken {} then_)
+        | none => cstmtsAddrTaken {} then_) (prePromoteRelevant)
+    prePromoteAddrTaken preIfVars branchTaken
     terminateBlock (.condBr condVal thenLabel elseLabel)
     -- Then block
     startBlock thenLabel
-    lowerStmts then_
+    withAddrBound branchTaken (lowerStmts then_)
     let thenEndVars ← snapshotVars
     let thenEndLabel ← getCurrentLabel
     let term1 ← currentBlockTerminated
@@ -2320,7 +2376,7 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
     setState { s with vars := preIfVars }
     startBlock elseLabel
     match else_ with
-    | some stmts => lowerStmts stmts
+    | some stmts => withAddrBound branchTaken (lowerStmts stmts)
     | none => pure ()
     let elseEndVars ← snapshotVars
     let elseEndLabel ← getCurrentLabel
@@ -2377,7 +2433,11 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
     -- with a walk of the condition and body for each (now one walk, `addrTaken`), a list search
     -- per binding (`allPromotedNames.contains`) and a list append per binding; the name sets are
     -- trees and the lists accumulate newest first.
-    let addrTaken := cstmtsAddrTaken (cexprAddrTaken {} cond) body
+    -- Bug 286: the loop acts on the set for each binding not yet promoted that is not an
+    -- aggregate (an aggregate is promoted whatever the set says).
+    let addrTaken ← regionAddrTaken preLoopVars (fun _ => cstmtsAddrTaken (cexprAddrTaken {} cond) body)
+      (fun name val => do
+        return (← isPromoted name).isNone && !(← isAggregateForPromotion val.ty))
     let preLoopList := preLoopVars.toList
     let mut headerPhisRev : List (LocalKey × String × SVal × Ty) := []
     let mut allPromotedNames : LocalKeySet := {}  -- all aggregate names (including outer)
@@ -2426,7 +2486,7 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
     pushLoop loopInfo
     pushScope .loop
     -- Lower condition (uses phi values)
-    let condVal ← lowerExpr cond
+    let condVal ← withAddrBound addrTaken (lowerExpr cond)
     -- A short-circuit `&&`/`||` in the condition ends in its scand/scor merge
     -- block, so THAT (not the header) is the exit edge's predecessor.
     let condEndLabel ← getCurrentLabel
@@ -2436,9 +2496,9 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
     if hasStep then
       -- Lower only non-step body
       let bodyWithoutStep := body.take (body.length - step.length)
-      lowerStmts bodyWithoutStep
+      withAddrBound addrTaken (lowerStmts bodyWithoutStep)
     else
-      lowerStmts body
+      withAddrBound addrTaken (lowerStmts body)
     let bodyEndVars ← snapshotVars
     let bodyEndLabel ← getCurrentLabel
     let term ← currentBlockTerminated
@@ -2469,7 +2529,7 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
             match incoming.head? with
             | some (val, _) => setVar name val
             | none => pure ()
-      lowerStmts step
+      withAddrBound addrTaken (lowerStmts step)
       let stepEndVars ← snapshotVars
       let stepEndLabel ← getCurrentLabel
       let stepTerm ← currentBlockTerminated

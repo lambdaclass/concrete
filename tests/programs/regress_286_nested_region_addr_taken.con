@@ -1,0 +1,68 @@
+// Bug 286: a branch or loop site inside an enclosing region takes the region's address-taken set
+// as a bound instead of walking its own region again. These are the cases where the bound must not
+// stand in for the walk, or must give the walk's answer: a local declared inside the outer region
+// and addressed in a nested one, a local addressed only after the nest, and a loop in a branch.
+fn get(p: &i64) -> i64 {
+    return *p;
+}
+
+// The outer site promotes `x`; every inner site finds it promoted.
+fn deep(c: bool) -> i64 {
+    let mut x: i64 = 1;
+    let mut r: i64 = 0;
+    if c {
+        if c {
+            if c {
+                x = 9;
+                r = get(&x);
+            }
+        }
+    }
+    return x + r;
+}
+
+// `y` is declared inside the outer branch and addressed in the inner one: the inner site walks.
+fn declared_inside(c: bool, d: bool) -> i64 {
+    let mut r: i64 = 0;
+    if c {
+        let mut y: i64 = 2;
+        if d {
+            y = 30;
+            r = get(&y);
+        }
+        r = r + y;
+    }
+    return r;
+}
+
+// `z` is addressed only after the nest: no site in the nest promotes it.
+fn after_nest(c: bool) -> i64 {
+    let mut z: i64 = 3;
+    if c {
+        if c {
+            z = z + 1;
+        }
+    }
+    return get(&z);
+}
+
+// A loop inside a branch: the loop's own set names `i` (inside the branch's bound).
+fn loop_in_branch(c: bool) -> i64 {
+    let mut s: i64 = 0;
+    if c {
+        let mut i: i64 = 0;
+        while i < 3 {
+            s = s + get(&i);
+            i = i + 1;
+        }
+    }
+    return s;
+}
+
+fn main() -> Int {
+    // deep: 1 (false), 18 (true); declared_inside: 2 (true, false), 60 (true, true);
+    // after_nest: 3 (false), 4 (true); loop_in_branch(true): 0 + 1 + 2 = 3
+    let t: i64 = deep(false) + declared_inside(true, false) + after_nest(false) + loop_in_branch(true);
+    let u: i64 = deep(true) + declared_inside(true, true) + after_nest(true);
+    return (t + u - 91 + 42) as Int;
+}
