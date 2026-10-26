@@ -55,6 +55,58 @@
               unpackPhase = "tar --zstd -xf $src";
               installPhase = "mkdir -p $out && cp -R lean-4.34.1-${asset.name}/. $out/";
             };
+          # pyyaml so scripts/tests/check_workflow_yaml.sh can actually run: it needs pyyaml or ruby
+          # and FAILS (rather than skips) without either. The only non-stdlib module any gate imports.
+          python = pkgs.python3.withPackages (ps: [ ps.pyyaml ]);
+
+          # THE GATE USERLAND: the programs scripts/tests (and the scripts/ci, scripts/gen,
+          # scripts/land helpers they call) run, and nothing else. Gates run in three places, the
+          # dev shell, Linux CI runners and the macOS CI runner, and used to take these tools from
+          # whatever host they landed on: GNU on Linux, BSD on macOS, where `timeout` does not exist
+          # and `sed -i`, `stat`, `date` and `readlink` take other flags. CI now runs every gate step
+          # inside `nix develop .#gates`, so all three see these exact builds.
+          #
+          # NO LEAN HERE, and no lake. CI takes Lean from elan, and the checker identity a receipt
+          # records is the Lean that actually loads (R-0208); a shell that put the nix-built Lean
+          # first on PATH would change it. The C/LLVM/Rust toolchains, z3, valgrind, zola, curl and
+          # gh also stay the host's: CI provisions those separately today, and moving them is a
+          # different change.
+          gatesUserland = with pkgs; [
+            bash
+            coreutils          # timeout, stat, date, readlink, sha256sum, mktemp, ...
+            findutils
+            diffutils          # diff, cmp
+            gnused
+            gnugrep
+            gawk
+            gnutar             # check_tar_list_differential.sh compares against `tar -tf`
+            gzip
+            xz
+            zstd
+            bzip2
+            which
+            file
+            gnumake
+            git
+            jq
+            xxd                # check_hexdump_differential.sh skips its format legs without it
+            # perl for `shasum`: the checker identity hashes the Lean images with it
+            # (Concrete/Proof/Replay.lean, sha256Files), and without it every receipt is withheld
+            # as "Checker: UNIDENTIFIED". The shell used to inherit it from the host, and Arch
+            # keeps it in /usr/bin/core_perl, which only login shells put on PATH, so 17
+            # receipt/replay/checker-identity gates failed on the Arch gate host (2026-10-23).
+            # The digest it prints does not depend on which perl computes it.
+            perl
+            python
+          ] ++ lib.optionals stdenv.isLinux [
+            procps             # ps, pgrep, pkill (macOS keeps its own; nixpkgs' procps is Linux-only)
+            util-linux         # flock, hexdump, column, script
+          ];
+
+          # Every gate refuses to run without this (scripts/tests/lib/gate_env.sh). Each shell
+          # below that is a superset of the gate userland sets it too.
+          gatesMarker = { CONCRETE_GATES_SHELL = "1"; };
+
           base = with pkgs; [
             # clang BEFORE leanRelease: mkShell puts earlier packages first on PATH, and the Lean
             # release ships its own clang without C headers (stddef.h not found), so with Lean first
@@ -64,20 +116,6 @@
             leanRelease
             llvmPackages.llvm  # provides lli for fast test execution
             z3                 # external SMT solver for the pre-existing solver_trusted path
-            bash
-            gnumake
-            gnugrep
-            coreutils
-            # perl for `shasum`: the checker identity hashes the Lean images with it
-            # (Concrete/Proof/Replay.lean, sha256Files), and without it every receipt is withheld
-            # as "Checker: UNIDENTIFIED". The shell used to inherit it from the host, and Arch
-            # keeps it in /usr/bin/core_perl, which only login shells put on PATH, so 17
-            # receipt/replay/checker-identity gates failed on the Arch gate host (2026-10-23).
-            perl
-            # pyyaml so scripts/tests/check_workflow_yaml.sh can actually run: it
-            # needs pyyaml or ruby and FAILS (rather than skips) without either, so
-            # the gate was red in this shell for everyone.
-            (python3.withPackages (ps: [ ps.pyyaml ]))
             rustc
             # cargo so check_external_checker.sh can build lean4export/con-leche in this shell; CI's
             # runners have it preinstalled, so the gate failed only here.
@@ -89,16 +127,21 @@
             # fails closed when pkg-config cannot find it; it never skips.
             rocksdb
             pkg-config
-          ];
+          ] ++ gatesUserland;
         in {
           # Default shell stays light: the pre-existing toolchain only. The
           # second-kernel drivers (Rocq, Isabelle) are an opt-in spike and Isabelle
           # is a multi-GB closure, so they live in a separate shell — no contributor
           # pays for them unless they run `--report multi-kernel`.
-          default = pkgs.mkShell { packages = base; };
+          default = pkgs.mkShell ({ packages = base; } // gatesMarker);
+
+          # `nix develop .#gates` — what CI runs every gate step in: the gate userland, the marker,
+          # and no compiler toolchain (mkShellNoCC, so not even stdenv's cc). Lean and the C
+          # toolchain come from the runner, exactly as before.
+          gates = pkgs.mkShellNoCC ({ packages = gatesUserland; } // gatesMarker);
 
           # `nix develop .#provers` — adds the independent second kernels.
-          provers = pkgs.mkShell {
+          provers = pkgs.mkShell (gatesMarker // {
             packages = base ++ (with pkgs; [
               coq                # independent CIC kernel (coqc/lia)
               coqPackages.stdlib # Rocq 9.0 stdlib (ZArith, Lia) — split out of coq-core
@@ -127,7 +170,7 @@
             # (measured 2026-07-31: contrib 1.2.0 vs shell 1.3.2). Anything asserting a
             # version-scoped fact about cvc5 must therefore report which one it ran;
             # check_multi_kernel.sh prints it for exactly this reason.
-          };
+          });
         });
     };
 }
