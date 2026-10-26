@@ -110,8 +110,21 @@ def owner_runs(owner, workflow_path):
     except ImportError:
         print("example_skip_owner: PyYAML is required to read the workflow", file=sys.stderr)
         sys.exit(2)
+    # DUPLICATE KEYS ARE REFUSED, as GitHub's own parser refuses them (the workflow would not run).
+    # PyYAML keeps the last one, so `shell: bash -n {0}` followed by the gate shell compared equal
+    # to the accepted default.
+    class NoDupLoader(yaml.SafeLoader):
+        pass
+
+    def no_dup_mapping(loader, node, deep=False):
+        keys = [loader.construct_object(k, deep=deep) for k, _ in node.value]
+        if len(keys) != len(set(map(repr, keys))):
+            raise yaml.constructor.ConstructorError(None, None, "duplicate key", node.start_mark)
+        return loader.construct_mapping(node, deep)
+
+    NoDupLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, no_dup_mapping)
     try:
-        doc = yaml.safe_load(open(workflow_path).read())
+        doc = yaml.load(open(workflow_path).read(), Loader=NoDupLoader)
     except yaml.YAMLError:
         return False
     if not isinstance(doc, dict) or not set(doc) <= WORKFLOW_KEYS | {"defaults"}:
