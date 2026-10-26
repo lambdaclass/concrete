@@ -8750,37 +8750,6 @@ for r229 in regress_229_value_does_not_hide_type regress_229_user_option_does_no
         FAIL=$((FAIL + 1))
     fi
 done
-# Bug 277: CoreCheck looked every direct call's callee up in a list of all the program's
-# signatures, so n calling functions took n² to validate (a chain of 20000: 2504 ms). A generated
-# chain of 20000 functions each calling the next must pass CoreCheck (the `coreCheck` stage of
-# --emit-trace-json) within 250 ms, retried once at 500 ms (fixed: 26 ms on the dev host; pre-fix,
-# five times the retry budget).
-r277c_src="$TMPDIR/r277c_call_chain_20000.con"
-awk -v n=20000 'BEGIN {
-    for (i = 0; i < n; i++) printf "fn f%d(x: i64) -> i64 { return f%d(x) + 1; }\n", i, i + 1
-    printf "fn f%d(x: i64) -> i64 { return x; }\n", n
-    printf "fn main() -> Int { return (f0(42) - %d) as Int; }\n", n
-}' > "$r277c_src"
-r265_stage_ms "$r277c_src" coreCheck; r277c_first="$r265_ms"; r277c_ms="$r277c_first"
-case "$r277c_first" in
-    ''|*[!0-9]*) ;;
-    *) if [ "$r277c_first" -gt 250 ]; then r265_stage_ms "$r277c_src" coreCheck; r277c_ms="$r265_ms"; fi ;;
-esac
-case "$r277c_ms" in
-    incomplete)
-        echo "  INCOMPLETE bug 277: CoreCheck of a chain of 20000 functions timed out twice (180 s each)"
-        INCOMPLETE=$((INCOMPLETE + 1)) ;;
-    ''|*[!0-9]*)
-        echo "FAIL  bug 277: CoreCheck of a chain of 20000 functions failed ($r277c_ms)"
-        FAIL=$((FAIL + 1)) ;;
-    *) if [ "$r277c_first" -le 250 ] || [ "$r277c_ms" -le 500 ]; then
-           echo "  ok  bug 277: CoreCheck of a chain of 20000 functions within budget (${r277c_ms} ms, coreCheck)"
-           PASS=$((PASS + 1))
-       else
-           echo "FAIL  bug 277: CoreCheck of a chain of 20000 functions took ${r277c_first} ms, then ${r277c_ms} ms in coreCheck (budget 250, retry 500)"
-           FAIL=$((FAIL + 1))
-       fi ;;
-esac
 # Bug 230: a top-level module's known types were program-wide (and held its children's aliases), so
 # a cast to another module's alias passed Resolve and the backend panicked; E0108 now. The positive
 # control keeps what the environment holds: an imported alias, the import closure, own types and a

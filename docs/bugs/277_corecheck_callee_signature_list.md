@@ -2,12 +2,12 @@
 
 <!-- bug-ledger
 summary: CoreCheck looked up every callee's signature and capabilities in a list of all the program's function signatures, so a program of n functions with a call each took time n² to validate (a 10000-function call chain: 649 ms). Found by the R-0550 scaling gate. Class 17.
-coverage: `run_tests.sh` times the `coreCheck` stage of a generated chain of 20000 functions against a budget (the pre-fix compiler fails it); `check_compile_scaling.sh` (R-0550, on wip/r0550-scaling-gate-v2, not yet landed) judges the same stage once this bug's exclusion is removed
+coverage: `check_compile_scaling.sh` judges the `call-chain` shape's `coreCheck` stage against its budget and near-linear growth: this fix removes the stage's exclusion under this bug, and the gate fails the pre-fix compiler
 class: 17 — CoreCheck looks up every callee in a list of all function signatures
 silent: no
 -->
 
-**Status:** FIXED (branch `wip/perf-277`)
+**Status:** FIXED (branch `wip/perf-277-v2`)
 **Found:** 2026-10-26, building the compile-time scaling gate (R-0550, exit 2o): the gate's generated shapes, timed per stage with `--emit-trace-json` at 10b81a46.
 **Severity:** loud (performance). Compile time only: never wrong code, a refusal or a crash; a program of this shape compiles, slowly.
 
@@ -62,11 +62,9 @@ at size 60, and `--report caps|proof-status|fingerprints|obligations|traceabilit
 every `.con` under `examples`, are byte-identical between the compiler built at 91ce358b and this
 fix.
 
-## Regression leg
+## Regression gate
 
-`run_tests.sh` times the `coreCheck` stage of a generated chain of 20000 functions each calling
-the next against 250 ms (retried once at 500 ms): 51 ms on this fix (800dfbf9), FAIL on main
-91ce358b (2545 ms, then 2516 ms).
+The R-0550 gate (`check_compile_scaling.sh`, on main since 9d8182ea) held this stage as an exclusion under this bug; the fix removes it from `compile_scaling_budgets.tsv`. With it removed the gate passes `call-chain/coreCheck` (1000: 1 ms, 10000: 9 ms, x4.5) on this fix and fails it on main's compiler (x200.3 against x63.1).
 
 ## Containment while open
 
