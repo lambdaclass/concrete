@@ -36,6 +36,17 @@ concurrency:
   group: branch-health-${{ github.ref }}
   cancel-in-progress: true
 
+# EVERY RUN STEP EXECUTES IN THE GATE USERLAND. Gates used to take coreutils, sed, grep, python and
+# the rest from whatever runner they landed on (GNU on Linux, BSD on macOS, where `timeout` does not
+# exist). `nix develop .#gates` (flake.nix) supplies one pinned set to every job, the dev shell
+# included, and marks itself with CONCRETE_GATES_SHELL=1. It contains NO Lean: elan's toolchain
+# (lean-action below) stays the one on PATH, so the checker identity CI records (R-0208) does not
+# change. Self-hosted runners have Nix; each job installs it on a GitHub-hosted runner as its first
+# step, before any run step. A job that needs another shell says so.
+defaults:
+  run:
+    shell: "nix develop .#gates --command bash --noprofile --norc -eo pipefail {0}"
+
 jobs:
   fast-gates:
     name: Fast surface gates
@@ -46,6 +57,13 @@ jobs:
     runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete-light"]') || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
 
       # Same cache key as CI's build job, so a branch push usually reuses main's artifacts
       # rather than paying a cold build.

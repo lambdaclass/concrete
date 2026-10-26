@@ -31,6 +31,17 @@ concurrency:
   group: ci-${{ github.ref }}-${{ github.event_name }}${{ inputs.campaign && '-campaign' || '' }}
   cancel-in-progress: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
 
+# EVERY RUN STEP EXECUTES IN THE GATE USERLAND. Gates used to take coreutils, sed, grep, python and
+# the rest from whatever runner they landed on (GNU on Linux, BSD on macOS, where `timeout` does not
+# exist). `nix develop .#gates` (flake.nix) supplies one pinned set to every job, the dev shell
+# included, and marks itself with CONCRETE_GATES_SHELL=1. It contains NO Lean: elan's toolchain
+# (lean-action below) stays the one on PATH, so the checker identity CI records (R-0208) does not
+# change. Self-hosted runners have Nix; each job installs it on a GitHub-hosted runner as its first
+# step, before any run step. A job that needs another shell says so.
+defaults:
+  run:
+    shell: "nix develop .#gates --command bash --noprofile --norc -eo pipefail {0}"
+
 jobs:
   grammar:
     name: LL(1) grammar check
@@ -38,10 +49,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
       - name: Workflow-YAML gate (every workflow file parses)
-        run: |
-          python3 -m pip install --quiet pyyaml || true
-          bash scripts/tests/check_workflow_yaml.sh
+        run: bash scripts/tests/check_workflow_yaml.sh
 
       - name: Gate-hygiene gate (every gate is pipe-safe and fails loudly)
         run: bash scripts/tests/check_gate_hygiene.sh
@@ -132,6 +148,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
       - name: Cache Lean build (.lake/build shared across jobs)
         uses: actions/cache@v4
         with:
@@ -195,6 +218,13 @@ jobs:
     needs: build
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
 
       - name: Cache Lean build (.lake/build shared across jobs)
         uses: actions/cache@v4
@@ -263,6 +293,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
       - name: Cache Lean build (.lake/build shared across jobs)
         uses: actions/cache@v4
         with:
@@ -328,6 +365,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
       - name: Install Lean (via lean-action, caches disabled)
         id: lean_install
         # A toolchain download can fail on a dropped connection; one paused retry
@@ -370,6 +414,13 @@ jobs:
     needs: build
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
 
       - name: Cache Lean build (.lake/build shared across jobs)
         uses: actions/cache@v4
@@ -441,6 +492,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
       - name: Checker pins vs the Lean Kernel Arena (stale pin = finding)
         run: bash scripts/tests/check_checker_pin_freshness.sh --tier campaign
 
@@ -451,6 +509,13 @@ jobs:
     runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED_CAMPAIGN == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
 
       - name: Cache Lean build (.lake/build shared across jobs)
         uses: actions/cache@v4
@@ -541,6 +606,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
       - name: Shard plan
         id: plan
         run: |
@@ -569,6 +641,13 @@ jobs:
         shard: ${{ fromJSON(needs.mutation-plan.outputs.shards) }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
 
       - name: Cache Lean build (.lake/build shared across jobs)
         uses: actions/cache@v4
@@ -665,6 +744,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
       - name: Download plan and shard records
         uses: actions/download-artifact@v4
         with:
@@ -694,6 +780,13 @@ jobs:
     needs: build
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
 
       - name: Cache Lean build (.lake/build shared across jobs)
         uses: actions/cache@v4
@@ -756,6 +849,13 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
 
       - name: Cache Lean build (.lake/build shared across jobs)
         uses: actions/cache@v4
@@ -826,6 +926,13 @@ jobs:
     needs: build
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
 
       - name: Cache Lean build (.lake/build shared across jobs)
         uses: actions/cache@v4
@@ -1007,6 +1114,13 @@ jobs:
     needs: build
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
 
       - name: Cache Lean build (.lake/build shared across jobs)
         uses: actions/cache@v4
@@ -1426,6 +1540,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
       - name: Cache Lean build (.lake/build shared across jobs)
         uses: actions/cache@v4
         with:
@@ -1527,6 +1648,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
       - name: Cache Lean build (.lake/build shared across jobs)
         uses: actions/cache@v4
         with:
@@ -1610,6 +1738,13 @@ jobs:
     needs: build
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
 
       - name: Cache Lean build (.lake/build shared across jobs)
         uses: actions/cache@v4
@@ -1788,6 +1923,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
       - name: Cache Lean build (.lake/build shared across jobs)
         uses: actions/cache@v4
         with:
@@ -1910,6 +2052,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
       - name: Cache Lean build (.lake/build shared across jobs)
         uses: actions/cache@v4
         with:
@@ -1967,6 +2116,13 @@ jobs:
     needs: build
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
 
       - name: Cache Lean build (.lake/build shared across jobs)
         uses: actions/cache@v4
@@ -2038,6 +2194,13 @@ jobs:
     needs: build
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
 
       - name: Cache Lean build (.lake/build shared across jobs)
         uses: actions/cache@v4
@@ -2114,6 +2277,13 @@ jobs:
     needs: build
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
 
       - name: Cache Lean build (.lake/build shared across jobs)
         uses: actions/cache@v4
@@ -2192,6 +2362,13 @@ jobs:
     needs: build
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
 
       - name: Cache Lean build (.lake/build shared across jobs)
         uses: actions/cache@v4
@@ -2315,6 +2492,11 @@ jobs:
       contains(github.event.pull_request.labels.*.name, 'multi-kernel')
     runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     timeout-minutes: 90
+    # Every step here enters `.#provers` itself (a superset of the gate userland), so the job runs
+    # its steps in plain bash rather than nesting that shell inside `.#gates`.
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
 
