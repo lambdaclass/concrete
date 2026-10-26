@@ -67,6 +67,7 @@ bash scripts/tests/check_codegen_execution.sh
 bash scripts/tests/check_collections.sh
 bash scripts/tests/check_collections_copy_only.sh
 bash scripts/tests/check_compile_cache.sh
+bash scripts/tests/check_compile_scaling.sh
 bash scripts/tests/check_compiler_complexity.sh
 bash scripts/tests/check_compiler_ledger.sh
 bash scripts/tests/check_concrete_fmt.sh

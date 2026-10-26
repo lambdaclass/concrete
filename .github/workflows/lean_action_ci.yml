@@ -1174,6 +1174,9 @@ jobs:
       - name: "Match lowering scaling (bug 178 — lower stage near-linear in match arms, by heartbeats and instructions)"
         run: bash scripts/tests/check_ssa_lowering_scaling.sh
 
+      - name: "Compile-time scaling (R-0550, exit 2o — per-stage budgets and near-linear growth on generated 10^4 – 10^5-element programs; bugs 027, 248 – 250, 255 – 261)"
+        run: bash scripts/tests/check_compile_scaling.sh
+
       - name: "Pipeline trace (Phase 6C #3 — per-stage --trace-pipeline names the first failing phase)"
         run: bash scripts/tests/check_trace_pipeline.sh
 
