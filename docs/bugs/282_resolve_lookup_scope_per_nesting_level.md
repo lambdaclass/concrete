@@ -54,6 +54,9 @@ costs O(n log n) in all.
 `--emit-core`, `--emit-ssa` and `--emit-llvm` (stdout, stderr and exit status) of every `.con`
 under `tests/programs` and `examples` (the b5040d53 corpus) and of twelve generated scaling shapes
 at size 60 are byte-identical between the same two builds.
+After the rebase onto main (91ce358b, train 34) the comparison was run again, over
+91ce358b's corpus, between the compiler built at 91ce358b and the one built at f9c44a31 (this
+fix on that base): byte-identical.
 
 ## Regression leg
 
