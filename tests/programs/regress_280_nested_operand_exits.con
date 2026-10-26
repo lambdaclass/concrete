@@ -1,0 +1,24 @@
+// Bug 280 regression: Check no longer re-searches a nested operand for an escaping exit at every
+// level; an operand of an operand whose search found no exit inherits that answer through
+// parentheses. This fixture pins what must still be accepted: a `break` bound by a loop inside a
+// nested operand (it leaves that loop, not the operand), under several levels of operators.
+// error_280_exit_deep_operand pins the refusal of an exit deep inside nested operands, reported
+// with the outermost operand's context, as before.
+fn pick(c: i64) -> i64 {
+    let mut n: i64 = 0;
+    let v: i64 = 1 + (2 + (3 + (if c > 0 {
+        while true {
+            n = n + 1;
+            if n > 2 { break; }
+        }
+        n
+    } else {
+        4
+    })));
+    return v;
+}
+
+fn main() -> Int {
+    // 1 + 2 + 3 + 3 = 9; 9 + 33 = 42
+    return (pick(1) + 33) as Int;
+}

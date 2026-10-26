@@ -2,12 +2,12 @@
 
 <!-- bug-ledger
 summary: Check and Elab asked whole-subtree questions (does an operand contain an escaping `return`/`break`; is it a literal-only tree) at every level of a nested expression, each a walk of the subtree below, so an expression n levels deep took time n² to check and elaborate (depth 10000: check 1007 ms). Found by the R-0550 scaling gate. Class 17.
-coverage: `check_compile_scaling.sh` measures the `nested-parens` shape's `check` and `elaborate` stages and reports it EXCLUDED under this bug on every run; the fix removes the exclusion, and the gate then holds the stage to its budget and to near-linear growth
+fixtures: regress_280_nested_operand_exits.con error_280_exit_deep_operand.con
 class: 17 — Check and Elab re-walk a nested expression's whole operand tree at every level
 silent: no
 -->
 
-**Status:** OPEN
+**Status:** FIXED (branch `wip/perf-280`)
 **Found:** 2026-10-26, building the compile-time scaling gate (R-0550, exit 2o): the gate's generated shapes, timed per stage with `--emit-trace-json` at 10b81a46.
 **Severity:** loud (performance). Compile time only: never wrong code, a refusal or a crash; a program of this shape compiles, slowly.
 
@@ -28,9 +28,58 @@ A linear stage doubles with the size; these grow about fourfold or more per doub
 
 Compute both facts bottom-up once per node (returned with the node's result, or cached), so each node is visited a bounded number of times.
 
+## Fix
+
+- `TypeJudgment.flexTree` computes `isFlexibleLit` for every node of a literal region (the
+  parentheses, negations and binary operators `isFlexibleLit` recurses through) in one walk, as a
+  tree mirroring those operands. Check's `checkExprCore` and Elab's `elabExprEv` compute it at the
+  top of a region and hand each operand its subtree (an optional `flex` argument through the binary
+  operator, parenthesis and negation cases), so the operand-order judgment reads the same Booleans
+  without re-walking. `isFlexibleLit e = (flexTree e).flex` by construction.
+- Check's operand-escape rule (bug 142): `checkExpr` takes `clean`, true when the expression is an
+  operand (through parentheses only) of a protected expression whose operand search found no
+  exit. An exit leaving it would leave that expression as well, since no loop lies between them,
+  so the search is skipped and its operands inherit the answer when its own search covered them
+  all (an allocation call's search covers only its allocator). Statement blocks, loops and every
+  other expression kind start a fresh search, as before, so each diagnostic and its context are
+  unchanged.
+
+## Measurements
+
+`check` and `elaborate` stages in ms (`--emit-trace-json`, fastest of 3 runs), dev host
+(fede-256gb), `nested-parens` shape, before (main 9d8182ea's compiler) and after (built from this
+branch's compiler sources, on bugs 275 and 276's fixes; the build had no other modification):
+
+| depth | `check` before | after | `elaborate` before | after |
+|---|---|---|---|---|
+| 2500 | 60 | 1 | 9 | 1 |
+| 5000 | 247 | 1 | 29 | 1 |
+| 10000 | 988 | 4 | 132 | 3 |
+| 20000 | 3791 | 8 | 555 | 7 |
+
+`--emit-core`, `--emit-ssa` and `--emit-llvm` (stdout, stderr and exit status) of every `.con`
+under `tests/programs` and `examples` (91ce358b's corpus, the same compiler sources as main
+9d8182ea) and of twelve generated scaling shapes at size 60, and
+`--report caps|proof-status|fingerprints|obligations|traceability|proof-deps` of every `.con` under
+`examples`, are byte-identical between main's compiler and this fix.
+
+## Regression gate and leg
+
+The R-0550 gate (`check_compile_scaling.sh`, on main since 9d8182ea) held the `nested-parens`
+shape's `check` and `elaborate` stages as exclusions under this bug; the fix removes them from
+`compile_scaling_budgets.tsv` (the shape's whole compiles stay unmeasured until budgets are
+measured on the CI host). With them removed the gate passes both on this fix (x2.0 each from
+1000 to 10000) and fails both on main's compiler (`check` x107.9 in time and x98.1 in
+allocations; `elaborate` x64.5, barely past its x63.1 bound), so `run_tests.sh` also times both
+stages of a generated expression nested 20000 deep against 100 ms (retried once at 200 ms):
+10 ms and 7 ms with the fix, FAIL on main's compiler (3855 ms, then 3787 ms; 590 ms, then
+592 ms). `regress_280_nested_operand_exits.con` (42, native and `--interp`) pins a `break` bound
+by a loop inside a nested operand as accepted; `error_280_exit_deep_operand.con` pins E0278 for a
+`return` deep inside nested operands, named by the outermost operand's context.
+
 ## Containment while open
 
-Loud only. The scaling gate names the stage as an exclusion under this bug, so its gap is printed on every run rather than silent; the gate's other stages of the shape stay judged. A user splits such a module or nest.
+Loud only. The scaling gate named the stages as exclusions under this bug, so the gap was printed on every run rather than silent.
 
 ## Structural cause
 
