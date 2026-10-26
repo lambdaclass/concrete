@@ -22,7 +22,7 @@ A linear stage doubles with the size; these grow about fourfold or more per doub
 
 ## Cause
 
-`IR/Mono.lean`, `monoProgram`: `ownNames.filter fun n => (ownNames.filter (· == n)).length > 1` and `eraseDups` (gdb samples under `monoProgram`). Also observed, not localized and not part of this record: the many-functions shape's `monomorphize` stage grows faster than linearly in time (5000: 6 ms, 20000: 168 ms at 10b81a46) with linear allocation counts; the gate holds it by its budget (it stays under the growth check's 100 ms resolution at the gate's sizes).
+`IR/Mono.lean`, `monoProgram`: `ownNames.filter fun n => (ownNames.filter (· == n)).length > 1` and `eraseDups` (gdb samples under `monoProgram`). Also observed, not localized and not part of this record: the many-functions shape's `monomorphize` stage grows faster than linearly in time (5000: 6 ms, 20000: 168 ms at 10b81a46) with linear allocation counts; the gate judges that stage, and at its sizes (1000 and 10000 functions) it stays within the budget and the growth bound.
 
 ## Expected
 

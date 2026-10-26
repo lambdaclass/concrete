@@ -24,7 +24,7 @@ A linear stage doubles with the size; these grow about fourfold or more per doub
 
 ## Cause
 
-`Elab/Elab.lean`: `qualifyCollidingTopLevelFns` recomputes a module's free-function list for every owner (`(freeFns mn).contains n`) and asks `owners.any` per owner; `coreDefinitionSpellings` (through `importSpellingCollisions`) and `ambiguousTypeNames` deduplicate with `List.eraseDups` and count each name with `decls.filter (·.1 == n)`; `elabModule`'s per-function fold appends each result (`acc ++ [...]`); `lookupFn` walks `env.fnSigs` per call (the Codex review). gdb samples: `qualifyCollidingTopLevelFns`/`coreDefinitionSpellings` dominate for many functions, `ambiguousTypeNames` and the `elabModule` folds for many structs and enums.
+`Elab/Elab.lean`: `qualifyCollidingTopLevelFns` recomputes a module's free-function list for every owner (`(freeFns mn).contains n`) and asks `owners.any` per owner; `coreDefinitionSpellings` (through `importSpellingCollisions`) and `ambiguousTypeNames` deduplicate with `List.eraseDups` and count each name with `decls.filter (·.1 == n)`; `elabModule`'s per-function fold appends each result (`acc ++ [...]`); `lookupFnSig` walks `env.fnSigs` per call (the Codex review). gdb samples: `qualifyCollidingTopLevelFns`/`coreDefinitionSpellings` dominate for many functions, `ambiguousTypeNames` and the `elabModule` folds for many structs and enums.
 
 ## Expected
 
@@ -42,4 +42,4 @@ Class 17 ("pass state in association lists and per-query recomputation"): a prog
 
 R-0422; R-0492 (identities) owns the collision analyses' inputs. The R-0550 gate (exit 2o) keeps the class from returning once fixed.
 
-Codex review 2026-10-26: CONFIRMED — the cited recomputation, list membership scans, `eraseDups`, per-name filtering and result appending are quadratic; additionally `Elab.lookupFn` scans `env.fnSigs` per call.
+Codex review 2026-10-26: CONFIRMED — the cited recomputation, list membership scans, `eraseDups`, per-name filtering and result appending are quadratic; additionally `Elab.lookupFn` scans `env.fnSigs` per call (the function is `lookupFnSig`, corrected in the records review).

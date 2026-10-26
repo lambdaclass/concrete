@@ -7,10 +7,9 @@ Usage: compile_scaling.py --compiler CC --budgets TSV --bounded BOUNDED_SH
 Generates programs of 10^4 - 10^5 elements or statements in each shape the budget file lists,
 compiles each at every recorded size, and times every stage. It FAILS when a stage exceeds its
 recorded budget at a size, or when a stage's growth between two sizes is worse than near-linear:
-  t(n2) / max(t(n1), floor_ms)  >  (n2 / n1) ** exp
-(see RESOLUTION), and on the heartbeat counts the same way
-(exp is recorded in the budget file with its reason; a quadratic stage grows 16x over a 4x size
-step, far above the bound).
+  t(n2) / max(t(n1), floor_ms)  >  (n2 / n1) ** exp        (time; see RESOLUTION)
+  h(n2) / h(n1)                  >  (n2 / n1) ** hb_exp     (allocation counts)
+Both exponents are recorded in the budget file with their reasons (see SIZES).
 
 STAGES. `--emit-trace-json` times parse, resolve-files, resolve, check, elaborate, coreCheck,
 monomorphize and lower inside the compiler (`timing_ms`) and counts each stage's small
@@ -32,9 +31,13 @@ TWO KINDS OF MEASUREMENT.
     never turns a resolvable quadratic (see RESOLUTION) into a pass.
 
 SIZES are a factor of ten apart (10^4 and 10^5 where the shape allows). Between two such sizes a
-quadratic stage grows a hundredfold, while a linear one grows up to about 35-fold on these hosts:
-its allocation count (heartbeats) grows exactly tenfold, but its time does not, from caches and
-the allocator at 10^5 elements on a loaded runner. The recorded bound (n^exp) sits between.
+quadratic stage grows a hundredfold. A linear stage's allocation count grows exactly tenfold, so
+the heartbeat bound (hb_exp) is tight. Its time does not: caches, the allocator and memory
+bandwidth shared with other jobs cost more at 10^5 elements than at 10^4, and the fastest of three
+attempts of a linear stage has grown up to 52-fold on a host running eight gates at once. The time
+bound (exp) sits above that and below a quadratic's hundredfold; a stage whose quadratic part is
+still small at 10^4 can grow less than that, and is then caught by its budget, which its larger
+size exceeds.
 
 RESOLUTION. Every stage's growth is judged, however fast. An in-compiler stage is timed in whole
 milliseconds by the compiler's own clock, so the smaller size's time is floored at floor_ms. A
@@ -67,7 +70,7 @@ FRONT = TRACE_STAGES[:6]          # what --emit-core and --interp run before the
 CONTAINS = {"core": FRONT, "interp": FRONT, "llvm": TRACE_STAGES, "native": TRACE_STAGES}
 MODES = ["trace", "core", "llvm", "native", "interp"]
 REQUIRED = TRACE_STAGES + ["llvm", "native"]   # the compile path every shape covers or explains
-PARAM_DEFAULTS = {"exp": 1.6, "floor_ms": 2.0, "wall_floor_ms": 25.0, "hb_judge_min": 100000.0, "retries": 2.0, "ceiling_factor": 3.0,
+PARAM_DEFAULTS = {"exp": 1.8, "hb_exp": 1.2, "floor_ms": 2.0, "wall_floor_ms": 25.0, "hb_judge_min": 100000.0, "retries": 2.0, "ceiling_factor": 3.0,
                   "ceiling_min_s": 20.0, "measure_runs": 3.0, "budget_factor": 4.0,
                   "budget_slack_ms": 200.0}
 
@@ -80,6 +83,11 @@ def gen(shape, n):
     if shape == "array-const":          # bugs 027 (EmitSSA, clang), 249 (parser)
         a("fn main() -> Int {")
         a("    let a: [i64; %d] = [%s];" % (n, ", ".join(["7"] * n)))
+        a("    return (a[%d] + 35) as Int;" % (n - 1))
+        a("}")
+    elif shape == "array-repeat":       # bug 027: `[v; n]`, filled by a loop since the fix
+        a("fn main() -> Int {")
+        a("    let a: [i64; %d] = [7; %d];" % (n, n))
         a("    return (a[%d] + 35) as Int;" % (n - 1))
         a("}")
     elif shape == "array-distinct":     # bugs 027, 249: no run of equal elements to fold
@@ -418,8 +426,10 @@ def judge(b, shape, sizes, stages, times, beats, bad, base=None):
             if (n1, s) in beats and (n2, s) in beats:
                 h1, h2 = beats[(n1, s)], beats[(n2, s)]
                 r = h2 / max(h1, 1.0)
-                if h2 >= b.p("hb_judge_min") and r > limit:
-                    hbfail.append("heartbeats grew x%.1f from %d to %d > x%.1f" % (r, n1, n2, limit))
+                hlimit = (n2 / n1) ** b.p("hb_exp")
+                if h2 >= b.p("hb_judge_min") and r > hlimit:
+                    hbfail.append("heartbeats grew x%.1f from %d to %d > x%.1f (n^%.1f)"
+                                  % (r, n1, n2, hlimit, b.p("hb_exp")))
         if hbfail:
             res.append(("FAIL-HB", "%s/%s %s [%s]" % (shape, s, "; ".join(hbfail), detail)))
         if problems:
@@ -562,7 +572,8 @@ def main():
         if a.measure:
             return do_measure(runner, b, shapes, a.root)
         meas = [l for l in b.header if l.startswith("# measured:")]
-        print("=== compile-time scaling (R-0550): per-stage budgets and growth <= n^%.2f ===" % b.p("exp"))
+        print("=== compile-time scaling (R-0550): per-stage budgets; growth <= n^%.2f in time, n^%.2f in "
+              "allocations ===" % (b.p("exp"), b.p("hb_exp")))
         print("  budgets %s" % (meas[0][2:] if meas else "NOT MEASURED"))
         npass = nfail = nexcl = 0
         attempts = 1 + int(b.p("retries"))

@@ -7,15 +7,17 @@
 #   budget  SHAPE SIZE STAGE MS     written by `check_compile_scaling.sh --measure` on the CI host
 # Budgets are re-measured (and the `measured:` line restamped) only on the CI host class: a change
 # that legitimately moves a stage re-measures, a change that breaks one fixes the compiler.
-# exp: sizes are a factor of ten apart. A stage whose allocations (heartbeats) grow exactly
-# tenfold still takes up to about 35 times as long at the larger size on the CI host (caches and
-# the allocator at 10^5 elements, a loaded runner); n^1.6 (x39.8) leaves room for that, and a
-# quadratic stage (x100) fails it once it is slow enough to resolve (compile_scaling.py,
-# RESOLUTION).
+# exp, hb_exp: sizes are a factor of ten apart, and a quadratic stage grows x100. A linear stage's
+# allocations (heartbeats) grow exactly x10, so hb_exp 1.2 (x15.8) is tight. Its time grows more
+# (caches, the allocator, memory bandwidth shared with other jobs): up to x35 on the loaded CI host
+# and x52 with eight gates running at once on the dev host, fastest of three attempts; exp 1.8
+# (x63) sits above that. A stage too slow at 10^5 for its budget fails that instead
+# (compile_scaling.py, SIZES and RESOLUTION).
 # Declaration and nesting shapes run at 1000 and 10000 while the stages excluded below are open;
 # their sizes move to 10^4 and 10^5 with the fixes. The lets-* shapes run at 2000 and 20000.
 # measured: commit 10b81a467a85855d9b60186ac2c98bf7a6219c3b on concrete-ci-2, AMD Ryzen 9 7950X3D 16-Core Processor, 32 threads, 2026-10-26, 3 runs (median), budget = max(4 x median, median + 200ms)
-param	exp	1.6
+param	exp	1.8
+param	hb_exp	1.2
 param	floor_ms	2
 param	wall_floor_ms	25
 param	hb_judge_min	100000
@@ -26,6 +28,7 @@ param	measure_runs	3
 param	budget_factor	4
 param	budget_slack_ms	200
 shape	array-const	10000,100000	trace,llvm,native
+shape	array-repeat	10000,100000	trace,llvm,native
 shape	array-distinct	10000,100000	trace,llvm,native
 shape	array-writes	10000,100000	trace,llvm,native,interp
 shape	assignments	10000,100000	trace,llvm,native
@@ -91,6 +94,26 @@ budget	array-const	100000	monomorphize	243
 budget	array-const	100000	lower	201
 budget	array-const	100000	llvm	2235
 budget	array-const	100000	native	2303
+budget	array-repeat	10000	parse	200
+budget	array-repeat	10000	resolve-files	200
+budget	array-repeat	10000	resolve	200
+budget	array-repeat	10000	check	203
+budget	array-repeat	10000	elaborate	203
+budget	array-repeat	10000	coreCheck	201
+budget	array-repeat	10000	monomorphize	203
+budget	array-repeat	10000	lower	200
+budget	array-repeat	10000	llvm	410
+budget	array-repeat	10000	native	1010
+budget	array-repeat	100000	parse	201
+budget	array-repeat	100000	resolve-files	200
+budget	array-repeat	100000	resolve	203
+budget	array-repeat	100000	check	224
+budget	array-repeat	100000	elaborate	235
+budget	array-repeat	100000	coreCheck	212
+budget	array-repeat	100000	monomorphize	304
+budget	array-repeat	100000	lower	206
+budget	array-repeat	100000	llvm	822
+budget	array-repeat	100000	native	1633
 budget	array-distinct	10000	parse	206
 budget	array-distinct	10000	resolve-files	200
 budget	array-distinct	10000	resolve	200
