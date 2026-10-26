@@ -127,13 +127,18 @@ when they also touch its record or fixtures; for an old bug filed with its fix, 
 added or closed its record. It maps every path those commits changed to an area with
 [area_map.tsv](area_map.tsv) (path prefix to tier, stage and module; the longest prefix wins) and
 weights them by changed lines: compiler, std and tooling code first, then gates, then prose; tests,
-fixtures, examples, records and generated views never count. The heaviest area is the bug's
+fixtures, examples, records and generated views never count. When the record names some of a commit's code
+files (`Lower.lean`, `map.con`), only those count for it: the record says where its fix lives, which
+separates a fix from a feature it landed with, or one bug's part of a shared commit from another's.
+An open bug, or one placed by its filing commit, counts code only (a gate leg pins a bug; it does
+not locate it). The heaviest area is the bug's
 primary area; other stages with a tenth of the weight are secondary. Dates come from git too:
 found is the commit that added the record, fixed the first commit whose record reads FIXED.
 
 - [AREAS.md](AREAS.md) is the committed view: stage and class tables and every bug's area and
-  basis (its own commits, commits shared with other bugs, the record-commit fallback, an override,
-  or not fixed yet).
+  basis (`commits`: its own; `named`: commits shared with other bugs, split by the files its record
+  names; `shared`: shared and not split; `record`: the commit that filed or closed it; `override`;
+  `unfixed`; `underived`).
 - `python3 scripts/gen/bug_ledger.py report` prints the research tables: bugs by stage and
   module (total, open, silent), class by stage, found and fixed by month, silent bugs by stage, how
   found ([discovery.tsv](discovery.tsv) kind) by stage, days to fix per stage, and the recurring

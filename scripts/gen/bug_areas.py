@@ -19,6 +19,10 @@ A commit that names several bugs and touches the record or fixtures of only some
 those; otherwise it is shared, each named bug taking an equal share of its changed lines. A bug
 with no such commit falls back to the commit that added its record and the commit that first marked
 it FIXED, when that commit touched at most four records (old bugs filed with their fix).
+RECORD-NAMED FILES. When the record names some of a fix commit's code files (`Lower.lean`,
+`Concrete/IR/Lower.lean`, `map.con`), only those count for the bug from that commit, in full: the
+record says where its fix lives, and the rest of the commit is a feature it landed with or another
+bug's part of a shared commit.
 Duplicate commits (a cherry-pick or a rebased copy reachable twice: same author, date and subject)
 count once.
 
@@ -26,8 +30,8 @@ WEIGHT. A fix commit's changed lines (added + deleted, per `git log --numstat`) 
 (stage, module) of each path's area_map row. Rows have tiers: code (compiler, std and tooling
 source), gate (gates, harness, CI), docs, ignore (tests, fixtures, examples, records and generated
 files: never weighted). A bug's PRIMARY area is the heaviest (stage, module) of the highest tier it
-has any weight in (code, then gate, then docs); for an OPEN bug only code counts, because a filing
-commit's gate leg pins the bug, it does not locate it. Its SECONDARY areas are the other stages of
+has any weight in (code, then gate, then docs); for an OPEN bug, and for the record-commit
+fallback, only code counts, because a filing commit's gate leg pins the bug, it does not locate it. Its SECONDARY areas are the other stages of
 that tier holding at least a tenth of its weight. Because records and generated views carry no
 weight, regenerating a view after a fix never changes any bug's area: a regeneration commit (or an
 amend that adds the regenerated files) is a fixed point.
@@ -35,11 +39,13 @@ amend that adds the regenerated files) is a fixed point.
 BASIS (how a bug's primary area was obtained), reported per bug:
   override   the record's `area:` line (it replaces the derived primary; secondaries stay derived)
   commits    fix commits, at least half of the primary tier's weight from commits naming only it
-  shared     fix commits, but more than half of that weight from commits shared with other bugs
+  named      fix commits shared with other bugs, placed by the files the record names in them
+  shared     fix commits, more than half of that weight from commits shared with other bugs that
+             the record does not disambiguate
   record     the record-commit fallback
   none       no weighted commit: an open bug not fixed yet (unfixed) or a fixed bug the history
              cannot place (underived)
-"ambiguous" in the report means shared or underived: the bugs an `area:` override may be needed for.
+"ambiguous" in the report means shared, record or underived: the bugs an `area:` override may be needed for.
 
 DATES. found = the author date of the first commit adding the record (docs/bugs/NNN_*.md); fixed =
 the author date of the first commit whose version of the record reads FIXED (the status vocabulary of
