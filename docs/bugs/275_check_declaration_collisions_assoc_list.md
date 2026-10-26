@@ -52,8 +52,8 @@ The `++ [` ratchet (`check_no_quadratic_append.sh`) for `Check.lean` goes from 4
 ## Measurements
 
 `check` stage in ms (`--emit-trace-json`, fastest of 3 runs), dev host (fede-256gb), before (the
-compiler built at b5040d53) and after (built from this branch's fix commit; the build had no
-other modification):
+compiler built at b5040d53) and after (built from the tree of ac72bf4e, whose compiler sources are this fix; the
+build had no other modification):
 
 | n | `functions` before | after | `call-chain` before | after | `structs` before | after | `enums` before | after |
 |---|---|---|---|---|---|---|---|---|
@@ -72,6 +72,9 @@ small next to the linear part), so `run_tests.sh` holds the call chain by a time
 `--emit-core`, `--emit-ssa` and `--emit-llvm` (stdout, stderr and exit status) of every `.con`
 under `tests/programs` and `examples` (the b5040d53 corpus) and of twelve generated scaling shapes
 at size 60 are byte-identical between the same two builds.
+After the rebase onto main (91ce358b, train 34) the comparison was run again, over
+91ce358b's corpus, between the compiler built at 91ce358b and the one built at 7c66c101 (this
+fix on that base): byte-identical.
 
 ## Regression leg
 
