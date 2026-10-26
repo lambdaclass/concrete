@@ -189,64 +189,64 @@ test-showcase: build ## Showcase gate (graduated flagships stay graduated)
 	$(NIX_DEVELOP) bash ./scripts/tests/check_showcase.sh
 
 test-registry-retirement: ## Registry-retirement gate (no JSON example registries)
-	bash ./scripts/tests/check_no_example_registries.sh
+	$(NIX_DEVELOP) bash ./scripts/tests/check_no_example_registries.sh
 
 test-proof-namespace: ## Proof-namespace guard (Examples.* only)
-	bash ./scripts/tests/check_proof_namespace.sh
+	$(NIX_DEVELOP) bash ./scripts/tests/check_proof_namespace.sh
 
 test-proof-patterns: build ## Proof-patterns corpus gate
 	$(NIX_DEVELOP) bash ./scripts/tests/check_proof_patterns.sh
 
 test-one-producer: ## One producer per fact: formula copies and unregistered consumers (grep-only, ~1s)
-	bash scripts/tests/check_one_producer.sh
+	$(NIX_DEVELOP) bash scripts/tests/check_one_producer.sh
 
 test-attestation-manifest: build ## Attestation manifest: table -> attested subject, on the real corpus
-	bash scripts/tests/check_attestation_manifest.sh
+	$(NIX_DEVELOP) bash scripts/tests/check_attestation_manifest.sh
 
 test-coverage-baseline: build ## R-0004 package 3: eligibility-denominated coverage, every disposition named
-	bash scripts/tests/check_coverage_baseline.sh
+	$(NIX_DEVELOP) bash scripts/tests/check_coverage_baseline.sh
 
 test-replay-producer: build ## R-0004 package 3: kernel replay is one typed producer whose failures are values
-	bash scripts/tests/check_replay_producer.sh
+	$(NIX_DEVELOP) bash scripts/tests/check_replay_producer.sh
 
 test-receipt-issuance: build ## R-0004 package 3: production receipt issuance follows the composed authority verdict
-	bash scripts/tests/check_receipt_issuance.sh
+	$(NIX_DEVELOP) bash scripts/tests/check_receipt_issuance.sh
 
 test-receipt-consumption: build ## R-0004 package 3: a stored receipt is untrusted input, re-checked against fresh facts
-	bash scripts/tests/check_receipt_consumption.sh
+	$(NIX_DEVELOP) bash scripts/tests/check_receipt_consumption.sh
 
 test-checker-identity: build ## R-0208 slice 1a: receipts bind the checker that actually ran (loaded images), not lean-toolchain text
-	bash scripts/tests/check_checker_identity.sh
+	$(NIX_DEVELOP) bash scripts/tests/check_checker_identity.sh
 
 test-kernel-recheck: build ## R-0208 slice 1b: receipts mint only for theorems the kernel re-checked in the replay run
-	bash scripts/tests/check_kernel_recheck.sh
+	$(NIX_DEVELOP) bash scripts/tests/check_kernel_recheck.sh
 
 test-checker-policy: build ## R-0208 decisions 3-4: compiled checker advisory register, decided beside currency
-	bash scripts/tests/check_checker_policy.sh
+	$(NIX_DEVELOP) bash scripts/tests/check_checker_policy.sh
 
 test-lean14576: build ## R-0208 fire drill: the retained upstream reproducer, isolated, against the pinned checker
-	bash scripts/tests/check_lean14576_reproducer.sh
+	$(NIX_DEVELOP) bash scripts/tests/check_lean14576_reproducer.sh
 
 test-v2-migration-plan: build ## R-0004 package 3: the V1->V2 migration dry run reconciles and manufactures no freshness
-	bash scripts/tests/check_v2_migration_plan.sh
+	$(NIX_DEVELOP) bash scripts/tests/check_v2_migration_plan.sh
 
 test-clean-checkout: build ## R-0004 package 3: clean-checkout reproducibility and compiler provenance
-	bash scripts/tests/check_clean_checkout.sh
+	$(NIX_DEVELOP) bash scripts/tests/check_clean_checkout.sh
 
 test-build-identity-freshness: build ## R-0004 package 3: the embedded compiler build identity matches its sources
-	bash scripts/tests/check_build_identity_freshness.sh
+	$(NIX_DEVELOP) bash scripts/tests/check_build_identity_freshness.sh
 
 test-slice8-adversarial: build ## R-0004 Slice 8: adversarial attacks on the receipt store, through the production consumer
-	bash scripts/tests/check_slice8_adversarial.sh
+	$(NIX_DEVELOP) bash scripts/tests/check_slice8_adversarial.sh
 
 test-evidence-reproducibility: build ## R-0004 package 3: identities/roots/correspondence are properties of the program, not its path
-	bash scripts/tests/check_evidence_reproducibility.sh
+	$(NIX_DEVELOP) bash scripts/tests/check_evidence_reproducibility.sh
 
 test-atomic-flip-entrance: build ## R-0004 package 2: is the CallableId->DefinitionIdentity flip safe to perform?
-	bash scripts/tests/check_atomic_flip_entrance.sh
+	$(NIX_DEVELOP) bash scripts/tests/check_atomic_flip_entrance.sh
 
 test-impl-manifest: build ## Implementation manifest accounting on the real corpus (R-0004 slice 6) — shadow
-	bash scripts/tests/check_impl_manifest.sh
+	$(NIX_DEVELOP) bash scripts/tests/check_impl_manifest.sh
 
 test-classification-freshness: build ## Classification table matches a fresh derivation (R-0004 slice 6) — MANDATORY, ~1s
 	$(NIX_DEVELOP) bash ./scripts/tests/check_classification_freshness.sh
@@ -343,10 +343,10 @@ test-docs-drift: build ## Docs-drift gate: present-tense docs reference only rea
 	$(NIX_DEVELOP) bash ./scripts/tests/check_doc_links.sh
 
 test-doc-links: ## Markdown links and anchors resolve (no build needed)
-	bash ./scripts/tests/check_doc_links.sh
+	$(NIX_DEVELOP) bash ./scripts/tests/check_doc_links.sh
 
 test-workflow-yaml: ## Workflow-YAML gate: every .github/workflows/*.yml parses (no build needed)
-	bash ./scripts/tests/check_workflow_yaml.sh
+	$(NIX_DEVELOP) bash ./scripts/tests/check_workflow_yaml.sh
 
 test-module-visibility: build ## Module/import/visibility gate (Phase 5 #1)
 	$(NIX_DEVELOP) bash ./scripts/tests/check_module_visibility.sh
@@ -439,7 +439,7 @@ test-compile-scaling: build ## R-0550 (exit 2o): generated 10^4-10^5-element pro
 	$(NIX_DEVELOP) bash ./scripts/tests/check_compile_scaling.sh
 
 test-no-quadratic-append: ## Ratchet: no new `xs ++ [x]` (O(n²) per-element append) in the hot pipeline files — the shape behind the 6C#2 O(n²) family
-	bash ./scripts/tests/check_no_quadratic_append.sh
+	$(NIX_DEVELOP) bash ./scripts/tests/check_no_quadratic_append.sh
 
 test-trace-pipeline: build ## Phase 6C #3: `concrete <file> --trace-pipeline` per-stage JSON trace names the first failing phase (parse/resolve/check/…) for rejected programs; all-ok for accepted
 	$(NIX_DEVELOP) bash ./scripts/tests/check_trace_pipeline.sh
@@ -553,7 +553,7 @@ test-phase6-redteam: build ## Red-team gate: parser recovery, match consumption/
 	$(NIX_DEVELOP) bash ./scripts/tests/check_phase6_redteam.sh
 
 test-stdlib-handoff: ## Stdlib handoff gate: required Phase 5/6 surfaces stable/provisional, none blocked (Phase 6 #19)
-	bash ./scripts/tests/check_stdlib_handoff.sh
+	$(NIX_DEVELOP) bash ./scripts/tests/check_stdlib_handoff.sh
 
 test-build-profiles: build ## Build-profiles gate: --profile/[profile]/default/--report profile mechanism, no codegen (Phase 6 #10 Stage 1)
 	$(NIX_DEVELOP) bash ./scripts/tests/check_build_profiles.sh
@@ -583,10 +583,10 @@ test-operational-vc-autodischarge: build ## Operational-VC-auto-discharge forcin
 	$(NIX_DEVELOP) bash ./scripts/tests/check_operational_vc_auto_discharge.sh
 
 test-no-duplicate-walkers: ## No-duplicate-obligation-walkers guard
-	bash ./scripts/tests/check_no_duplicate_obligation_walkers.sh
+	$(NIX_DEVELOP) bash ./scripts/tests/check_no_duplicate_obligation_walkers.sh
 
 test-single-truth-source: ## Single-truth-source guard (ObligationCore)
-	bash ./scripts/tests/check_obligation_single_truth_source.sh
+	$(NIX_DEVELOP) bash ./scripts/tests/check_obligation_single_truth_source.sh
 
 test-obligation-policy-views: build ## Policy-as-ledger-view gate
 	$(NIX_DEVELOP) bash ./scripts/tests/check_obligation_policy_views.sh

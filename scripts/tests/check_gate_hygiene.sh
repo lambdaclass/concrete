@@ -37,36 +37,48 @@ declare -A EXEMPT=(
 
 echo "=== every shell gate is pipe-safe and propagates failure ==="
 shopt -s nullglob
-for f in check_*.sh test_*.sh; do
-  [[ -n "${EXEMPT[$f]:-}" ]] && { echo "  skip $f (${EXEMPT[$f]})"; continue; }
+# _gate_shape <file>: prints `ok`, `not-pipe-safe` or `no-exit`. The environment guard's own line
+# (`source .../lib/gate_env.sh || exit 2`, in every gate) is removed first: its `|| exit` says nothing
+# about whether the gate's ASSERTIONS can fail, and left in, it made every gate pass this check.
+_gate_shape() {
+  local body pipe_safe=false propagates=false
+  body="$(grep -vF 'lib/gate_env.sh" || exit 2' "$1" || true)"
+  grep -qF "lib/gate.sh" <<<"$body" && pipe_safe=true
+  grep -qE "set -[a-zA-Z]*o?[[:space:]]+pipefail|pipefail" <<<"$body" && pipe_safe=true
 
-  pipe_safe=false
-  grep -q "lib/gate.sh" "$f" && pipe_safe=true
-  grep -qE "set -[a-zA-Z]*o?[[:space:]]+pipefail|pipefail" "$f" && pipe_safe=true
-
-  propagates=false
   # sourcing gate.sh brings gate_finish; otherwise require an explicit construct
-  if grep -q "lib/gate.sh" "$f"; then
+  if grep -qF "lib/gate.sh" <<<"$body"; then
     propagates=true
-  elif grep -qE "exit [1-9]|gate_finish|return 1|-eq 0[[:space:]]*\]|-gt 0|-ne 0|\|\|[[:space:]]*exit" "$f"; then
+  elif grep -qE "exit [1-9]|gate_finish|return 1|-eq 0[[:space:]]*\]|-gt 0|-ne 0|\|\|[[:space:]]*exit" <<<"$body"; then
     propagates=true
   # A GATE THAT `exec`s ANOTHER GATE HAS THE STRONGEST PROPAGATION THERE IS. `exec` REPLACES this
   # process, so the delegate's exit status is this script's exit status with nothing in between to
   # lose it — there is no `exit 1` to find because there is no shell left to run one. Thin wrappers
   # that run one scoped case of an expensive gate, so a single refusal can be mutation-covered
   # without paying for the full suite, were being reported as unable to fail.
-  elif grep -qE '^[[:space:]]*exec ([a-z]+ )*(env [A-Za-z_]+=[^ ]+ )*bash "?\$' "$f"; then
+  elif grep -qE '^[[:space:]]*exec ([a-z]+ )*(env [A-Za-z_]+=[^ ]+ )*bash "?\$' <<<"$body"; then
     propagates=true
   fi
-
-  if $pipe_safe && $propagates; then
-    ok "$f"
-  elif ! $pipe_safe; then
-    no "$f — not pipe-safe (add 'set -euo pipefail' or source lib/gate.sh)"
-  else
-    no "$f — no failure-exit construct (a detected failure won't set a nonzero exit code)"
-  fi
+  if $pipe_safe && $propagates; then echo ok
+  elif ! $pipe_safe; then echo not-pipe-safe
+  else echo no-exit; fi
+}
+for f in check_*.sh test_*.sh; do
+  [[ -n "${EXEMPT[$f]:-}" ]] && { echo "  skip $f (${EXEMPT[$f]})"; continue; }
+  case "$(_gate_shape "$f")" in
+    ok) ok "$f" ;;
+    not-pipe-safe) no "$f — not pipe-safe (add 'set -euo pipefail' or source lib/gate.sh)" ;;
+    *) no "$f — no failure-exit construct (a detected failure won't set a nonzero exit code)" ;;
+  esac
 done
+# CONTROL: a guarded gate whose assertions can never fail is still flagged — the guard's `|| exit 2`
+# must not count as the gate's failure exit.
+SHTMP="$(mktemp -d)"
+printf '#!/usr/bin/env bash\nset -uo pipefail\nsource "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2\nFAIL=0\necho "FAIL=$FAIL"\n' > "$SHTMP/swallow.sh"
+[ "$(_gate_shape "$SHTMP/swallow.sh")" = no-exit ] \
+  && ok "CONTROL: a guarded gate with no failure exit of its own is flagged" \
+  || no "CONTROL: the guard's '|| exit 2' passes for a gate that cannot fail"
+rm -rf "$SHTMP"
 
 echo ""
 echo "=== no '| head -N' inside an errexit+pipefail script (SIGPIPE self-abort) ==="
@@ -733,8 +745,10 @@ echo "=== every gate refuses to run outside the gate shell (lib/gate_env.sh) ===
 # shell, and `nix develop`), so a gate never reports a verdict about some host's userland. That holds
 # only if EVERY gate sources it, and sources it before doing anything else.
 #
-# A gate here is every scripts/tests/{check,test,run}_*.sh and every shell script a workflow names
-# outside a comment. GUARD_EXEMPT is the audited escape hatch for an entry point that must start outside the
+# A gate here is every scripts/tests/{check,test,run}_*.sh, audit_bug_corpus.sh (a standalone verdict
+# under another name) and every shell script a workflow names outside a comment. The other scripts in
+# scripts/tests are tools (select_gates, gates_for_diff, update_golden, the bundle and reduction
+# wrappers) whose output is not a verdict; some run where the shell is not (nightly triage). GUARD_EXEMPT is the audited escape hatch for an entry point that must start outside the
 # shell (and is not a gate), each with its reason. Keep it short.
 declare -A GUARD_EXEMPT=(
   ["scripts/dev/seed-lake.sh"]="build-cache seeding, not a gate: it checks its own toolchain/manifest key and only decides how long lake build takes, never a verdict"
@@ -765,6 +779,7 @@ else
 fi
 rm -rf "$GTMP"
 mapfile -t GUARDED < <( { cd "$ROOT_DIR" && ls scripts/tests/check_*.sh scripts/tests/test_*.sh scripts/tests/run_*.sh 2>/dev/null
+                         echo scripts/tests/audit_bug_corpus.sh   # standalone verdict, named audit_*
                          grep -hvE '^[[:space:]]*#' .github/workflows/*.yml | grep -oE 'scripts/[A-Za-z0-9_/.-]+\.sh'; } \
                        | LC_ALL=C sort -u)
 if [ "${#GUARDED[@]}" -ge 250 ]; then
@@ -808,6 +823,23 @@ else
   no "CONTROL: the guard refuses even with CONCRETE_GATES_SHELL=1"
 fi
 
+# The Makefile is the other way gates are started: each recipe that runs one enters the dev shell
+# ($(NIX_DEVELOP) / $(NIX_DEVELOP_PROVERS)), or the recipe would now stop at the guard. `make pre-push`
+# runs the hook, which re-enters the shell itself.
+_mk_unwrapped() { grep -nE '^[[:space:]].*scripts/(tests|ci|tools)/' "$1" | grep -vE '\$\(NIX_DEVELOP(_PROVERS)?\)' || true; }
+mk_bad="$(_mk_unwrapped "$ROOT_DIR/Makefile")"
+if [ -z "$mk_bad" ]; then
+  ok "every Makefile recipe that runs a gate enters the dev shell"
+else
+  no "Makefile recipe(s) run a gate outside the dev shell: $(tr '\n' ' ' <<<"$mk_bad")"
+fi
+MKTMP="$(mktemp)"
+printf 'x:\n\tbash ./scripts/tests/check_foo.sh\n' > "$MKTMP"
+[ -n "$(_mk_unwrapped "$MKTMP")" ] \
+  && ok "CONTROL: a recipe running a gate without the dev shell is flagged" \
+  || no "CONTROL: the Makefile check misses an unwrapped gate recipe"
+rm -f "$MKTMP"
+
 echo ""
 echo "=== every workflow run step executes in the gate shell ==="
 # The guard above makes a gate refuse outside the shell; this keeps CI inside it. Each workflow that
@@ -823,11 +855,11 @@ SHELL_EXEMPT = {("lean_action_ci.yml", "multi-kernel"): "every step runs `nix de
 bad = []
 for wf in ("lean_action_ci.yml", "branch_health.yml"):
     d = yaml.safe_load(open(f"{root}/.github/workflows/{wf}"))
-    if d.get("defaults", {}).get("run", {}).get("shell") != SHELL:
+    if ((d.get("defaults") or {}).get("run") or {}).get("shell") != SHELL:
         bad.append(f"{wf}: workflow default run shell is not the gates shell")
     for name, job in d["jobs"].items():
         exempt = (wf, name) in SHELL_EXEMPT
-        js = job.get("defaults", {}).get("run", {}).get("shell")
+        js = ((job.get("defaults") or {}).get("run") or {}).get("shell")
         if js is not None and not exempt:
             bad.append(f"{wf}:{name}: job overrides the run shell ({js})")
         installed = False
@@ -855,15 +887,18 @@ cp "$ROOT_DIR/.github/workflows/branch_health.yml" "$WTMP/nodef/.github/workflow
 cp "$ROOT_DIR/.github/workflows/branch_health.yml" "$WTMP/noinst/.github/workflows/"
 sed '/^    shell: "nix develop .#gates/d' "$ROOT_DIR/.github/workflows/lean_action_ci.yml" > "$WTMP/nodef/.github/workflows/lean_action_ci.yml"
 awk '!done && /uses: cachix\/install-nix-action/ {done=1; next} {print}' "$ROOT_DIR/.github/workflows/lean_action_ci.yml" > "$WTMP/noinst/.github/workflows/lean_action_ci.yml"
-if python3 -I "$WTMP/wf_check.py" "$WTMP/nodef" >/dev/null 2>&1; then
-  no "CONTROL: a workflow without the gates default shell passed the wiring check"
-else
+# Each must fail FOR ITS REASON: a crash (a traceback) would also exit nonzero.
+wout="$(python3 -I "$WTMP/wf_check.py" "$WTMP/nodef" 2>&1)" && wrc=0 || wrc=$?
+if [ "$wrc" -eq 1 ] && grep -qF "lean_action_ci.yml: workflow default run shell is not the gates shell" <<<"$wout"; then
   ok "CONTROL: a workflow without the gates default shell is flagged"
-fi
-if python3 -I "$WTMP/wf_check.py" "$WTMP/noinst" >/dev/null 2>&1; then
-  no "CONTROL: a job that runs a step before installing Nix passed the wiring check"
 else
+  no "CONTROL: a workflow without the gates default shell was not flagged as such (rc=$wrc): $(tail -1 <<<"$wout")"
+fi
+wout="$(python3 -I "$WTMP/wf_check.py" "$WTMP/noinst" 2>&1)" && wrc=0 || wrc=$?
+if [ "$wrc" -eq 1 ] && grep -qF "runs before Nix is installed" <<<"$wout"; then
   ok "CONTROL: a job that runs a step before installing Nix is flagged"
+else
+  no "CONTROL: a job running a step before installing Nix was not flagged as such (rc=$wrc): $(tail -1 <<<"$wout")"
 fi
 rm -rf "$WTMP"
 

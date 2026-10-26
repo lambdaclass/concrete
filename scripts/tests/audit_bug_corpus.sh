@@ -17,6 +17,7 @@
 #   bash scripts/tests/audit_bug_corpus.sh
 
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BUGS_DIR="$ROOT_DIR/docs/bugs"

@@ -29,7 +29,8 @@ All scripts assume the repository root as their working directory and normalize 
 Gates run only inside the flake's shells: `nix develop .#gates` (what CI uses; no Lean, so elan's
 stays on PATH) or `nix develop`. Every gate's first statement sources `lib/gate_env.sh`, which
 refuses without the `CONCRETE_GATES_SHELL=1` marker those shells set; `check_gate_hygiene.sh`
-enforces that for every `check_*`, `test_*` and `run_*` script and every script a workflow runs.
+enforces that for every `check_*`, `test_*` and `run_*` script, `audit_bug_corpus.sh` and every
+script a workflow runs, and that every Makefile recipe running one enters `nix develop`.
 
 ## Shared ledgers: one owner per fact
 
