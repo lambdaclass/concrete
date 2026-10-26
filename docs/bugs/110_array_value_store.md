@@ -6,6 +6,7 @@ fixtures: regress_110_array_value_store.con
 class: 8
 class: 12 — the element-type hint: Check passes it, Elab did not
 silent: no
+area: Elab — the record's Fix (Elab hints the assigned value); the commit naming it mostly migrated identities
 -->
 
 **Status:** FIXED (branch `backend-108-116`, commit f3bba025, follow-up 262d3fe0)

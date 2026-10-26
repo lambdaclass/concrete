@@ -388,17 +388,35 @@ def derive(gitdir, root, recs, status_open):
             commits_used, basis = fb, "record"
         tiers = {t: defaultdict(float) for t in TIERS}
         single = {t: 0.0 for t in TIERS}
-        for h, share, _ in commits_used:
-            for path, n in stats.get(h, []):
-                a = area_of(path, amap)
-                if a is None:
+        named = {t: 0.0 for t in TIERS}
+        text = _record_text(root, r["file"])
+        resolved = []
+        for h, share, via in commits_used:
+            paths = stats.get(h, [])
+            for path, _ in paths:
+                if area_of(path, amap) is None:
                     unmapped.add(path)
-                    continue
-                if a[0] == "ignore":
+            # The code files of a fix commit that this record names (Lower.lean, map.con) are where the
+            # record says the fix lives: the rest of the commit (a feature it landed with, another
+            # bug's part of a shared commit) does not count for this bug.
+            if paths:
+                mine = [(p, n) for p, n in paths if (area_of(p, amap) or ("ignore",))[0] == "code"
+                        and re.search(r"(?<![\w.-])" + re.escape(os.path.basename(p)) + r"(?![\w-])", text)]
+                if mine:
+                    paths, via = mine, via + "+record-names"
+                    if share < 1.0:     # the record says which part of a shared commit is its own
+                        share, via = 1.0, via + "+disambiguated"
+            resolved.append((h, share, via))
+            for path, n in paths:
+                a = area_of(path, amap)
+                if a is None or a[0] == "ignore":
                     continue
                 tiers[a[0]][(a[1], a[2])] += n * share
-                if share == 1.0:
+                if "+disambiguated" in via:
+                    named[a[0]] += n
+                elif share == 1.0:
                     single[a[0]] += n
+        commits_used = resolved
         usable = ["code"] if r["open"] or basis == "record" else TIERS
         tier = next((t for t in usable if sum(tiers[t].values()) > 0), None)
         primary, secondary, single_frac = None, [], 0.0
@@ -412,8 +430,8 @@ def derive(gitdir, root, recs, status_open):
             secondary = sorted(st for st, v in by_stage.items()
                                if st != primary[0] and v >= SECONDARY_SHARE * total)
             single_frac = single[tier] / total
-            if single_frac < 0.5:
-                basis = "shared"
+            if single_frac < 0.5 and basis == "commits":
+                basis = "named" if (single[tier] + named[tier]) / total >= 0.5 else "shared"
         else:
             basis = "none"
         override = r["facts"].get("area") if r["facts"] else None
@@ -439,6 +457,13 @@ def derive(gitdir, root, recs, status_open):
                         + ", ".join(shown[:12]) + (f" (and {len(shown) - 12} more)" if len(shown) > 12 else "")
                         + "; add a row for each (the longest matching prefix wins)")
     return out
+
+
+def _record_text(root, name):
+    try:
+        return open(os.path.join(root, "docs", "bugs", name), encoding="utf-8").read()
+    except OSError as e:
+        raise AreaError(f"cannot read docs/bugs/{name}: {e}")
 
 
 def _weighted(commits_used, stats, amap, unmapped):
@@ -490,8 +515,9 @@ def render_view(recs, areas, class_names):
     silent = lambda n: bool(recs[n]["facts"]) and recs[n]["facts"].get("silent") == "yes"  # noqa: E731
     placed = [n for n in sorted(areas) if areas[n]["stage"]]
     out = [BEGIN, ""]
-    out.append(f"{len(recs)} records: {cov['commits']} placed by their own fix commits, {cov['shared']} by commits "
-               f"shared with other bugs, {cov['record']} by the commit that filed or closed the record, "
+    out.append(f"{len(recs)} records: {cov['commits']} placed by their own fix commits, {cov['named']} by the files "
+               f"their record names in commits shared with other bugs, {cov['shared']} by commits shared with "
+               f"other bugs, {cov['record']} by the commit that filed or closed the record, "
                f"{cov['override']} by an `area:` override; {cov['unfixed']} open bugs are not fixed yet and "
                f"{cov['underived']} fixed bugs have no commit the history can place.")
     out += ["", "### By stage", ""]
@@ -506,7 +532,7 @@ def render_view(recs, areas, class_names):
             mods[areas[n]["module"]] += 1
         top = ", ".join(f"{m} {k}" for m, k in sorted(mods.items(), key=lambda kv: (-kv[1], kv[0]))[:4])
         rows.append([st, len(ns), sum(recs[n]["open"] for n in ns), sum(silent(n) for n in ns),
-                     sum(areas[n]["basis"] in ("shared", "record") for n in ns), top])
+                     sum(areas[n]["basis"] in ("shared", "record") for n in ns), top])  # the less certain bases
     out += _table(["stage", "bugs", "open", "silent", "shared or fallback", "top modules"], rows,
                   ["l", "r", "r", "r", "r", "l"], pad=False)
     out += ["", "### Structural class by stage (primary class)", ""]
@@ -583,7 +609,7 @@ def report_tables(rows, class_names):
     for r in rows:
         cov[r["basis"]] += 1
     tabs.append(("Coverage: how each bug's area was obtained", ["basis", "bugs"],
-                 [[b, cov[b]] for b in ("commits", "shared", "record", "override", "unfixed", "underived")], None))
+                 [[b, cov[b]] for b in ("commits", "named", "shared", "record", "override", "unfixed", "underived")], None))
 
     def group(key):
         g = defaultdict(list)
@@ -630,7 +656,7 @@ def report_tables(rows, class_names):
         if not fx:
             continue
         mean = lambda xs: f"{sum(xs) / len(xs):.1f}" if xs else "-"  # noqa: E731
-        trows.append([st, len(fx), mean(fx), len(fo), mean(fo), sorted(fo)[len(fo) // 2] if fo else "-"])
+        trows.append([st, len(fx), mean(fx), len(fo), mean(fo), _median(fo)])
     tabs.append(("Days from filing to fix per stage (all fixed bugs; and only those filed open)",
                  ["stage", "fixed", "mean days", "filed open", "mean days", "median days"], trows, None))
     pairs = defaultdict(list)
@@ -643,6 +669,13 @@ def report_tables(rows, class_names):
     tabs.append(("Recurring area x class pairs (two or more bugs; every class a bug lists)",
                  ["stage", "module", "class", "bugs", "which"], prow[:30], ["l", "l", "l", "r", "l"]))
     return tabs
+
+
+def _median(xs):
+    if not xs:
+        return "-"
+    ys, k = sorted(xs), len(xs) // 2
+    return f"{(ys[k] if len(ys) % 2 else (ys[k - 1] + ys[k]) / 2):.1f}"
 
 
 def render_report(tabs):

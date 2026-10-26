@@ -5,6 +5,7 @@ summary: the interpreter carried each loop iteration's bindings into the next, s
 fixtures: regress_228_interp_loop_env.con
 class: 17 — the interpreter's environment, an association list, kept every loop iteration's bindings
 silent: no
+area: Interp/Interp — the record's Fix (evalWhile); the commit naming it mostly changed the Makefile
 -->
 
 **Status:** FIXED (branch `wip/workload-stackvm-2`)
