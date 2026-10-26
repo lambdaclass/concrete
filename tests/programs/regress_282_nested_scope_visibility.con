@@ -1,0 +1,57 @@
+// Bug 282 regression: Resolve looked a name up by walking its stack of block scopes from the
+// innermost, so a body nested n blocks deep reading a binding of its outermost block cost n per
+// use, n² for the nest. One map now counts, per spelling, the open scopes that bind it. This
+// fixture pins what the count must keep: an outer binding read and assigned at every depth, a
+// spelling bound in sibling blocks at different depths (bound, released, bound again), match-arm
+// and loop bindings released when their block closes. error_282_read_after_nested_block pins the
+// refusal of a binding read after its block closed while an enclosing block is still open.
+// run_tests.sh also times the resolve stage of a generated nest 10000 blocks deep.
+enum Pick {
+    One { v: i64 },
+    Two { a: i64, b: i64 },
+}
+
+fn main() -> Int {
+    let base: i64 = 1;
+    let mut acc: i64 = 0;
+    if base > 0 {
+        acc = acc + base;
+        if base > 0 {
+            let step: i64 = 2;
+            acc = acc + step;
+            if base > 0 {
+                acc = acc + base;
+                while acc < 6 {
+                    let one: i64 = 1;
+                    acc = acc + one;
+                }
+            }
+        }
+        if base > 0 {
+            let step: i64 = 3;
+            acc = acc + step;
+        }
+    }
+    let p: Pick = Pick::Two { a: 10, b: 20 };
+    match p {
+        Pick::One { v } => {
+            acc = acc + v;
+        },
+        Pick::Two { a, b } => {
+            if a > 0 {
+                acc = acc + a + b;
+            }
+        },
+    }
+    let q: Pick = Pick::One { v: 3 };
+    match q {
+        Pick::One { v } => {
+            acc = acc + v;
+        },
+        Pick::Two { a, b } => {
+            acc = acc + a + b;
+        },
+    }
+    // 1 + 2 + 1 + 2 (while) + 3 + 30 + 3 = 42
+    return acc as Int;
+}

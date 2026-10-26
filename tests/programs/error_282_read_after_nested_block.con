@@ -1,0 +1,14 @@
+// Bug 282: a binding declared in a nested block is not visible after that block closes, while
+// the blocks around it are still open (E0100).
+fn main() -> Int {
+    let a: i64 = 1;
+    let mut acc: i64 = 0;
+    if a > 0 {
+        if a > 0 {
+            let mid: i64 = 2;
+            acc = acc + mid;
+        }
+        acc = acc + mid;
+    }
+    return acc as Int;
+}
