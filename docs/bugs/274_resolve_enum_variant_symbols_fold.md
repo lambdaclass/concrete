@@ -49,8 +49,8 @@ compiler sources are this fix; the build had no other modification):
 | 10000 | 1147 | 29 |
 | 20000 | 6755 | 75 |
 
-The allocation count (`alloc_heartbeats`) of the stage doubles exactly with n (295220, 590220,
-1180220 at 5000, 10000, 20000); the remaining excess of time over linear at 20000 and above is
+The allocation count (`alloc_heartbeats`) of the stage is linear in n (295220, 590220, 1180220
+at 5000, 10000, 20000: 59n + 220); the remaining excess of time over linear at 20000 and above is
 the hash maps' memory traffic (gdb samples: `Scope.ofSymbols` inserts). The `functions` shape is
 unchanged (10000: 13 ms before, 12 after). The R-0550 gate (`compile_scaling.py` and its budgets at
 fe9ce031, origin/wip/r0550-scaling-gate-v2), run on the same two builds with this bug's
