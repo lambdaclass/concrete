@@ -754,8 +754,6 @@ declare -A GUARD_EXEMPT=(
   ["scripts/dev/seed-lake.sh"]="build-cache seeding, not a gate: it checks its own toolchain/manifest key and only decides how long lake build takes, never a verdict"
 )
 declare -A GATE_TOOLS=(
-  ["scripts/tests/select_gates.sh"]="selects gate commands for a diff, no verdict; landing and nightly triage run it outside the shell"
-  ["scripts/tests/gates_for_diff.sh"]="maps a diff to the gates it can break, no verdict (check_gates_for_diff.sh judges it)"
   ["scripts/tests/update_golden.sh"]="regenerates the golden baselines that test_golden.sh judges"
   ["scripts/tests/capture_release_bundle.sh"]="writes a release evidence bundle; test_release_bundle.sh judges it"
   ["scripts/tests/capture_wrong_code_bundle.sh"]="writes a wrong-code bundle; test_bundle_smoke.sh judges it"
@@ -840,30 +838,52 @@ fi
 # ($(NIX_DEVELOP) / $(NIX_DEVELOP_PROVERS)), or the recipe would now stop at the guard. `make pre-push`
 # runs the hook, which re-enters the shell itself.
 MKTMP="$(mktemp -d)"
-# One COMMAND at a time, not one line: continuation lines are joined, and a recipe line is split into
-# the commands its &&, ||, ;, | separate (quoted text stays whole, so `$(NIX_DEVELOP) bash -c "a && b"`
-# is one command). A command naming a script under scripts/{tests,ci,tools} must start with the shell.
+# A LINT FOR USABILITY, not the enforcement: a recipe that slips past it still cannot report a
+# verdict, because the gate it runs refuses outside the shell. It reads one COMMAND at a time, not one
+# line: simple Makefile variables are expanded, continuations joined the way the shell joins them, a
+# `target: ; recipe` read as a recipe, and each line split into the commands its &&, ||, ;, |
+# separate outside quotes (so `$(NIX_DEVELOP) bash -c "a && b"` is one command). A command naming a
+# script under scripts/{tests,ci,tools} must start with the shell, and may not reach the script
+# through a command substitution, which the outer shell would run first.
 cat > "$MKTMP/mk_check.py" <<'PYEOF'
 import re, shlex, sys
+GATE = re.compile(r"scripts/(tests|ci|tools)/")
+SHELLS = ("NIX_DEVELOP", "NIX_DEVELOP_PROVERS")
+src = open(sys.argv[1]).read()
+var = {}
+for m in re.finditer(r"^([A-Za-z_][A-Za-z0-9_]*)[ \t]*[:?+]?=[ \t]*(.*)$", src, re.M):
+    if m.group(1) not in SHELLS:
+        var[m.group(1)] = m.group(2)
+def expand(t):
+    for _ in range(4):
+        t = re.sub(r"\$[({]([A-Za-z_][A-Za-z0-9_]*)[)}]",
+                   lambda m: m.group(0) if m.group(1) in SHELLS else var.get(m.group(1), m.group(0)), t)
+    return t
 bad = []
-text = open(sys.argv[1]).read().replace("\\\n", " ")
-for n, line in enumerate(text.split("\n"), 1):
-    if not line.startswith("\t") or not re.search(r"scripts/(tests|ci|tools)/", line):
+for n, line in enumerate(re.sub(r"\\\n\t?", "", src).split("\n"), 1):
+    m = re.match(r"^[^\t#][^:=]*:[^=;]*;(.*)$", line)
+    recipe = m.group(1) if m else (line[1:] if line.startswith("\t") else None)
+    if recipe is None:
         continue
-    body = re.sub(r"\$\((NIX_DEVELOP(?:_PROVERS)?)\)", r"\1", line.strip().lstrip("@-"))
+    recipe = expand(recipe)
+    if not GATE.search(recipe):
+        continue
+    body = re.sub(r"\$\((NIX_DEVELOP(?:_PROVERS)?)\)", r"\1", recipe.strip().lstrip("@-+").strip())
     try:
-        lex = shlex.shlex(body, posix=True, punctuation_chars=";&|")
+        lex = shlex.shlex(body, posix=False, punctuation_chars=";&|")
         lex.whitespace_split = True
+        lex.commenters = ""
         toks = list(lex)
     except ValueError:
-        bad.append(f"line {n}: cannot be parsed: {line.strip()}"); continue
+        bad.append(f"line {n}: cannot be parsed: {recipe.strip()}"); continue
     cmd = []
     for tok in toks + [";"]:
         if tok and set(tok) <= set(";&|"):
+            text = " ".join(cmd)
             words = [w for w in cmd if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", w)]
-            if any(re.search(r"scripts/(tests|ci|tools)/", w) for w in cmd) and \
-               not (words and words[0] in ("NIX_DEVELOP", "NIX_DEVELOP_PROVERS")):
-                bad.append(f"line {n}: {' '.join(cmd)}")
+            if GATE.search(text) and (not (words and words[0] in SHELLS)
+                                      or re.search(r"\$\$\(|`", text)):
+                bad.append(f"line {n}: {text}")
             cmd = []
         else:
             cmd.append(tok)
@@ -877,13 +897,36 @@ else
 fi
 # CONTROLS: an unwrapped gate, and one chained after a wrapped gate, are flagged; a wrapped gate on a
 # continuation line and a wrapped `bash -c` holding several gates are not.
-printf 'a:\n\tbash ./scripts/tests/check_foo.sh\nb:\n\t$(NIX_DEVELOP) bash scripts/tests/check_foo.sh && bash scripts/tests/check_bar.sh\n' > "$MKTMP/bad.mk"
-printf 'c:\n\t$(NIX_DEVELOP) bash \\\n\t  scripts/tests/check_foo.sh\nd:\n\t@$(NIX_DEVELOP) bash -c "bash scripts/tests/check_foo.sh && bash scripts/tests/check_bar.sh"\n' > "$MKTMP/good.mk"
-[ "$(python3 -I "$MKTMP/mk_check.py" "$MKTMP/bad.mk" | grep -c .)" = 2 ] \
-  && ok "CONTROL: an unwrapped gate recipe, and a gate chained after a wrapped one, are both flagged" \
+cat > "$MKTMP/bad.mk" <<'MKEOF'
+GATE = scripts/tests/check_foo.sh
+a:
+	bash ./scripts/tests/check_foo.sh
+b:
+	$(NIX_DEVELOP) bash scripts/tests/check_foo.sh && bash scripts/tests/check_bar.sh
+c:
+	python3 $(GATE)
+d: ; python3 scripts/tests/x.py
+e:
+	echo foo#bar; python3 scripts/tests/x.py
+f:
+	$(NIX_DEVELOP) echo "$$(python3 scripts/tests/x.py)"
+MKEOF
+cat > "$MKTMP/good.mk" <<'MKEOF'
+c:
+	$(NIX_DEVELOP) bash \
+	  scripts/tests/check_foo.sh
+d:
+	@$(NIX_DEVELOP) bash -c "bash scripts/tests/check_foo.sh && bash scripts/tests/check_bar.sh"
+e:
+	$(NIX_DEVELOP) bash -c "printf x" ";" scripts/tests/x.sh
+f:
+	cd x && $(NIX_DEVELOP) bash scripts/tests/x.sh
+MKEOF
+[ "$(python3 -I "$MKTMP/mk_check.py" "$MKTMP/bad.mk" | grep -c .)" = 6 ] \
+  && ok "CONTROL: unwrapped, chained, variable-named, one-line-rule, after-#, and substituted gates are all flagged" \
   || no "CONTROL: the Makefile check missed an unwrapped or chained gate: $(python3 -I "$MKTMP/mk_check.py" "$MKTMP/bad.mk" | tr '\n' ' ')"
 [ -z "$(python3 -I "$MKTMP/mk_check.py" "$MKTMP/good.mk")" ] \
-  && ok "CONTROL: a wrapped gate on a continuation line, or inside a wrapped bash -c, is accepted" \
+  && ok "CONTROL: wrapped gates (continuation line, inside bash -c, after a quoted \";\", after cd) are accepted" \
   || no "CONTROL: the Makefile check flags a correctly wrapped recipe: $(python3 -I "$MKTMP/mk_check.py" "$MKTMP/good.mk" | tr '\n' ' ')"
 rm -rf "$MKTMP"
 

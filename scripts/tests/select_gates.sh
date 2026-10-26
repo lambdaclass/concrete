@@ -22,6 +22,7 @@
 # scripts/tests/lib/select_gates.py for the rules); check_gate_selection.sh replays those
 # misses as fixed controls.
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
