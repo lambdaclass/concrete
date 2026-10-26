@@ -1,3 +1,5 @@
+import Std.Data.HashMap
+import Std.Data.HashSet
 import Std.Data.TreeMap
 import Concrete.Frontend.AST
 import Concrete.Proof.EvidenceTree
@@ -23,6 +25,30 @@ import Concrete.Proof.CallCollect
 import Concrete.Backend.Symbols
 
 namespace Concrete
+
+/-- Bug 276: `List.eraseDupsHashed` in one pass (a hash set of the elements kept): the first occurrence
+    of each element, in order, exactly as `eraseDups` keeps them, where `eraseDups` compares every
+    element with every one kept before it. -/
+def eraseDupsHashed [BEq α] [Hashable α] (xs : List α) : List α :=
+  (xs.foldl (fun (seen, acc) x => if seen.contains x then (seen, acc) else (seen.insert x, x :: acc))
+    ((∅ : Std.HashSet α), ([] : List α))).2.reverse
+
+/-- Bug 276: the first element of each key, in order, in one pass: what a fold that prepends an
+    element unless `acc.any` already holds its key, then reverses, computes in n². -/
+def firstByKeyHashed [BEq κ] [Hashable κ] (key : α → κ) (xs : List α) : List α :=
+  (xs.foldl (fun (seen, acc) x =>
+      let k := key x
+      if seen.contains k then (seen, acc) else (seen.insert k, x :: acc))
+    ((∅ : Std.HashSet κ), ([] : List α))).2.reverse
+
+/-- `eraseDupsHashed` in method position, for `xs.eraseDupsHashed`. -/
+abbrev _root_.List.eraseDupsHashed [BEq α] [Hashable α] (xs : List α) : List α :=
+  Concrete.eraseDupsHashed xs
+
+/-- Bug 276: a key → value table that answers as `List.lookup` on `xs` did: the first entry of a
+    key wins. -/
+def firstWinsMap [BEq α] [Hashable α] (xs : List (α × β)) : Std.HashMap α β :=
+  xs.foldl (fun m (k, v) => if m.contains k then m else m.insert k v) {}
 
 /-! ## Elaboration: surface AST → Core IR
 
@@ -67,7 +93,9 @@ structure ElabEnv where
   bound : Std.TreeMap Nat BoundLocal compare := {}
   structs : List StructDef
   enums : List EnumDef
-  fnSigs : List (String × FnSummary)
+  /-- Every signature a free-spelled call may name, first entry of a name winning (bug 276: a
+      map, where a list searched per call made a module of n calling functions n²). -/
+  fnSigs : Std.HashMap String FnSummary
   /-- Bugs 238 – 239: the method table (inherent and trait impl methods, local and imported, by
       `Type_method`). A receiver call and a `T::m()` call look a method up here, never in
       `fnSigs`, so a free function spelled like a method's definition name cannot answer it. -/
@@ -75,7 +103,7 @@ structure ElabEnv where
   /-- The spellings of the free functions (local, imported, submodule, extern, builtin) this
       module may call by name: a free-spelled name outside them that the method table holds
       names a method by its definition name, in the method namespace (bugs 238 – 239). -/
-  freeFnNames : List String := []
+  freeFnNames : Std.HashSet String := {}
   typeAliases : List (String × Ty)
   constants : List (String × Ty)
   currentTypeParams : List String := []
@@ -83,7 +111,7 @@ structure ElabEnv where
   currentRetTy : Ty := .unit
   currentImplType : Option Ty := none
   traits : List TraitDef := []
-  allFnSigPairs : List (String × FnSummary) := []
+  allFnSigPairs : Std.HashMap String FnSummary := {}
   newtypes : List NewtypeDef := []
   -- Lexical frame stack for ProofBodyCanonicalV2. PARALLEL to `vars`, and
   -- deliberately not derived from it: `vars` is a flat list whose indices shift as
@@ -455,7 +483,7 @@ private def lookupVar (sp : Span) (name : String) : ElabM (Option Ty) := do
 
 private def lookupFnSig (name : String) : ElabM (Option FnSummary) := do
   let env ← getEnv
-  return (env.fnSigs.find? fun (n, _) => n == name).map Prod.snd
+  return env.fnSigs.get? name
 
 /-- The namespace a free-spelled function name resolves in (bugs 238 – 239): a free function
     first, as Check resolves it; else a method by its definition name. -/
@@ -677,7 +705,7 @@ private def elabPeekCtx : PeekCtx ElabM where
   fnSig name := lookupFnSig name
   method t m := do return (← lookupMethodE t m).map (·.2)
   typeIdOf := typeIdOfE
-  fnRefSig name := do return (← getEnv).allFnSigPairs.lookup name
+  fnRefSig name := do return (← getEnv).allFnSigPairs.get? name
   methodSig name := lookupMethodSig name
   struct name := lookupStruct name
   newtype name := do return (← getEnv).newtypes.find? fun nt => nt.name == name
@@ -1377,7 +1405,7 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none) : ElabM ElaboratedE
 
   | .fnRef _ fnName =>
     let env ← getEnv
-    match env.allFnSigPairs.lookup fnName with
+    match env.allFnSigPairs.get? fnName with
     | some sig =>
       refuseForeignFnValue env fnName (some e.getSpan)
       let paramTys := sig.params.map Prod.snd
@@ -2750,7 +2778,7 @@ def importModulePath (moduleName : String) (summary : FileSummary)
 private partial def coreDefinitionSpellings (pfx path : String) (ts : FileSummary) :
     List (String × String × String) :=
   let spell := fun (n : String) => if pfx.isEmpty then n else pfx ++ "_" ++ n
-  let own := (ts.functions.map (·.1) ++ ts.implMethodSigs.map (·.1)).eraseDups.map
+  let own := (eraseDupsHashed (ts.functions.map (·.1) ++ ts.implMethodSigs.map (·.1))).map
     fun n => (spell n, path, n)
   own ++ ts.submoduleSummaries.flatMap fun (sn, ss) =>
     coreDefinitionSpellings (spell sn) (path ++ "." ++ sn) ss
@@ -2767,6 +2795,8 @@ private partial def coreDefinitionSpellings (pfx path : String) (ts : FileSummar
 def importSpellingCollisions (m : Module) (spellings : List (String × String))
     (topLevel : List (String × FileSummary)) (summary : FileSummary)
     (siblingSubs : List (String × FileSummary)) (thisPath : String) : Diagnostics :=
+  -- Only a module that imports asks (bug 276: every module paid for the program's spellings).
+  if m.imports.isEmpty then [] else
   let defs := topLevel.flatMap fun (n, ts) => coreDefinitionSpellings "" n ts
   m.imports.flatMap fun imp =>
     let target := importModulePath imp.moduleName summary siblingSubs thisPath
@@ -2817,11 +2847,11 @@ def summaryTypeBinding (decls : List (String × String)) (d : FileSummary) (n : 
       (imp.symbols.find? (·.effectiveName == n)).map fun sym => (imp.moduleName, sym.name) with
   | some (modName, orig) =>
     match (decls.filter fun (nm, defIn) =>
-        nm == orig && (defIn == modName || defIn.endsWith ("." ++ modName))).eraseDups with
+        nm == orig && (defIn == modName || defIn.endsWith ("." ++ modName))).eraseDupsHashed with
     | [(nm, defIn)] => some (defIn, nm)
     | _ => none
   | none =>
-    match own.eraseDups with
+    match own.eraseDupsHashed with
     | [b] => some b
     | _ => none
 
@@ -3078,19 +3108,25 @@ partial def elabModule (m : Module) (summary : FileSummary)
   -- whole subject UNCOVERED — a flagship's contracts silently outside the digest.
   let specCallIds : List (String × CallableId) :=
     m.specFns.map fun sf => (sf.name, CallableId.ofSpec thisProofPath sf.name)
+  -- Bug 276: the call tables as maps (first entry of a name wins, as `lookup` did), built once:
+  -- every call resolves its callee here, and a list search per call was n² in the functions.
+  let specCallMap := firstWinsMap specCallIds
+  let localCallMap := firstWinsMap localCallIds
+  let importedCallMap := firstWinsMap importedCallIds
+  let importedMethodCallMap := firstWinsMap importedMethodCallIds
   let resolveContractCall : String → Option CallableId := fun name =>
     -- AMBIGUITY FAILS CLOSED. A spec fn and a function of the same name are two
     -- different callables, and preferring one by list order would silently pick
     -- an abstraction over an implementation (or the reverse) inside evidence
     -- bytes. Unresolvable is the honest answer; it makes the subject uncovered
     -- rather than confidently wrong.
-    match specCallIds.lookup name, localCallIds.lookup name with
+    match specCallMap.get? name, localCallMap.get? name with
     | some _, some _ => none
     | some id, none  => some id
     | none, _ =>
-    match localCallIds.lookup name with
+    match localCallMap.get? name with
     | some id => some id
-    | none => match importedCallIds.lookup name with
+    | none => match importedCallMap.get? name with
       | some id => some id
       -- AFTER imported functions, BEFORE intrinsics and builtins. A plain imported
       -- function must keep priority over a same-named impl method, and an impl method
@@ -3103,7 +3139,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
       -- the call ran the method).
       | none =>
         if m.externFns.any fun ef => ef.name == name then some (CallableId.ofExtern name) else
-        match importedMethodCallIds.lookup name with
+        match importedMethodCallMap.get? name with
         | some id => some id
         -- INTRINSICS BEFORE BUILTINS. Many names (`string_length` among them) appear
         -- in both tables, and builtins-first classified compiler intrinsics as
@@ -3143,30 +3179,32 @@ partial def elabModule (m : Module) (summary : FileSummary)
         | some it => let tn := tyName it; if tn != "" then tn ++ "_" ++ f.name else f.name
         | none => f.name
       (localKey, CallableId.ofUser thisProofPath (finalDeclName f implTy) f.typeParams.length)
+  let localMethodCallMap := firstWinsMap localMethodCallIds
   let resolveMethodCall : String → Option CallableId := fun name =>
-    match localMethodCallIds.lookup name with
+    match localMethodCallMap.get? name with
     | some id => some id
-    | none => importedMethodCallIds.lookup name
+    | none => importedMethodCallMap.get? name
   let initEnv : ElabEnv := {
     bound := {}
     proofPath := thisProofPath
     resolveCallee := resolveContractCall
     resolveMethodCallee := resolveMethodCall
     methodSigs := implMethodSigs ++ traitImplMethodSigs
-    freeFnNames := (imports.functions ++ userFnSigs ++ builtinFnSigs ++ externSigs ++ submoduleSigs).map (·.1)
+    freeFnNames := Std.HashSet.ofList ((imports.functions ++ userFnSigs ++ builtinFnSigs ++ externSigs ++ submoduleSigs).map (·.1))
     callSpellings := callSpellings
     importedConsts := imports.constants.map fun c => (c.localName, c.id)
     structs := allStructs
     enums := allEnums
-    fnSigs := allSigs
+    fnSigs := firstWinsMap allSigs
     typeAliases := typeAliasMap
     constants := constantsMap
     traits := allTraits
-    allFnSigPairs := fnSigPairs
+    allFnSigPairs := firstWinsMap fnSigPairs
     newtypes := newtypeConstructorsInScope m.newtypes imports
   }
   -- Elaborate only LOCAL functions (imported impl bodies are already elaborated in their module)
-  let (fnResults, fnErrors, _) := allFnPairs.foldl (fun (acc, errs, env) (f, implTy) =>
+  -- Results consed newest first and reversed once (bug 276: an append per function was n²).
+  let (fnResultsRev, fnErrors, _) := allFnPairs.foldl (fun (acc, errs, env) (f, implTy) =>
     let env' := { env with currentImplType := implTy, traits := allTraits }
     let result := (do
       let (cfn, bodyIdentityInputs, evidenceBody) ← elabFn f implTy
@@ -3187,12 +3225,13 @@ partial def elabModule (m : Module) (summary : FileSummary)
         : ElabM (CFnDef × Proof.ProofBodyIdentityInputsV2 × Proof.EvidenceBodyDraftV2)).run env' |>.run
     match result with
     | (.ok (cfn, bodyIdentityInputs, evidenceBody), finalEnv) =>
-        (acc ++ [((f, implTy), cfn, bodyIdentityInputs, evidenceBody)], errs, finalEnv)
+        (((f, implTy), cfn, bodyIdentityInputs, evidenceBody) :: acc, errs, finalEnv)
     | (.error ds, _) => (acc, errs ++ ds.addContext s!"while elaborating function '{f.name}'", env)
   ) (([] : List ((FnDef × Option Ty) × CFnDef × Proof.ProofBodyIdentityInputsV2 × Proof.EvidenceBodyDraftV2)),
      ([] : Diagnostics), initEnv)
   if !fnErrors.isEmpty then .error fnErrors
   else
+  let fnResults := fnResultsRev.reverse
   let fns := fnResults.map fun (_, cfn, _) => cfn
   -- Build Core structs (local definitions). Expand type aliases AND erase
   -- newtypes in field types so that layout, copy-checking, and lowering see the
@@ -3399,14 +3438,14 @@ partial def elabModule (m : Module) (summary : FileSummary)
   let declFacts : List Proof.CheckedDeclFacts :=
     fnResults.map fun ((f, implTy), _cfn, bodyIdentityInputs, _evidenceBody) =>
       let (concreteCaps, capVars) := f.capSet.normalize
-      let capParamNames := f.capParams.eraseDups
+      let capParamNames := f.capParams.eraseDupsHashed
       let capVarCanonical := capVars.map fun v =>
         match capParamNames.findIdx? fun n => n == v with
         | some i => s!"var:{i}"
         | none => "free:" ++ v
       let bounds := f.typeParams.map fun tp =>
         let bs := (f.typeBounds.find? fun (n, _) => n == tp).map Prod.snd |>.getD []
-        ("", bs.eraseDups.mergeSort (· ≤ ·))
+        ("", bs.eraseDupsHashed.mergeSort (· ≤ ·))
       { id := CallableId.ofUser thisProofPath (finalDeclName f implTy) f.typeParams.length
         params := f.params.map fun p =>
           (p.name, Proof.boundTyCanonical f.typeParams capParamNames p.ty)
@@ -3443,9 +3482,10 @@ partial def elabModule (m : Module) (summary : FileSummary)
     allStructs.map (fun sd => (sd.name, structCanon sd))
     ++ allEnums.map (fun ed => (ed.name, enumCanon ed))
     ++ (imports.newtypes ++ localNewtypes).map (fun nt => (nt.name, canonTypeName nt.definedIn nt.declName))
+  -- The first candidate of each spelling, newest first as the prepending fold left them (bug
+  -- 276: one pass, where `acc.any` per candidate was n²).
   let ownSpellings : List (String × String) :=
-    (spellingCandidates.foldl (fun acc (sp, c) =>
-      if acc.any (·.1 == sp) then acc else (sp, c) :: acc) []).filter (fun (sp, c) => sp != c)
+    (firstByKeyHashed (·.1) spellingCandidates).reverse.filter (fun (sp, c) => sp != c)
   -- Types written in ANOTHER module (an imported or sibling declaration's signature or
   -- fields, a submodule function's signature) reach this module's Core spelled as their
   -- module wrote them. Each such mention of an ambiguous name must mean, in that module,
@@ -3492,8 +3532,8 @@ partial def elabModule (m : Module) (summary : FileSummary)
   -- `ElabEnv.structs`/`enums` lookups use); a transported signature means a type of the import
   -- closure.
   let localOwners : List (String × String × String) :=
-    -- first binding wins: prepended, reversed once
-    (ownerCands.foldl (fun acc c => if acc.any (·.1 == c.1) then acc else c :: acc) []).reverse
+    -- first binding wins (bug 276: one pass, where `acc.any` per candidate was n²)
+    firstByKeyHashed (·.1) ownerCands
   let closureOwners : List (String × String × String) :=
     closure.structs.map (fun sd => (sd.name, sd.definitionName, sd.definedIn))
     ++ closure.enums.map (fun ed => (ed.name, ed.definitionName, ed.definedIn))
@@ -3513,7 +3553,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
   let methodOwner : String → Bool → Option (String × String × String × String) := fun n byLocal =>
     let cands := methodOwnerCands n byLocal
     -- one DECLARATION (two local spellings of it, `P` and an alias `Q`, are one owner)
-    match (cands.map fun (_, dn, di, rest) => (dn, di, rest)).eraseDups with
+    match (cands.map fun (_, dn, di, rest) => (dn, di, rest)).eraseDupsHashed with
     | [_] => cands.head?
     | _ => none
   -- (what, defining module's summary, types, type parameters in scope, strict)
@@ -3550,24 +3590,24 @@ partial def elabModule (m : Module) (summary : FileSummary)
            fs.retTy :: fs.params.map (·.2), fs.typeParams, true))
     ++ ((summary.submoduleSummaries ++ siblingSubs).flatMap fun (_, d) =>
       (d.functions.map (·.1) ++ d.externFnSigs.map (·.1) ++ d.structs.map (·.name)
-        ++ d.enums.map (·.name) ++ d.newtypes.map (·.name)).eraseDups.flatMap fun sym =>
+        ++ d.enums.map (·.name) ++ d.newtypes.map (·.name)).eraseDupsHashed.flatMap fun sym =>
         (summaryEntityTypes d sym).map fun (w, tys, tps) =>
           (s!"{w} of module '{d.name}'", some d, tys, tps, false))
   let foreignReqs : List (String × Option String × String × Bool) :=
     foreignEnts.flatMap fun (what, d?, tys, tps, strict) =>
-      ((tys.flatMap tyNamesIn).eraseDups.filter fun n =>
+      ((tys.flatMap tyNamesIn).eraseDupsHashed.filter fun n =>
           ambiguousTypes.contains n && !tps.contains n).map fun n =>
         (n, d?.bind fun d => (summaryTypeBinding typeDecls d n summaryTable).map (fun (defIn, nm) => canonTypeName defIn nm),
          what, strict)
-  let foreignNames := (foreignReqs.map (·.1)).eraseDups
+  let foreignNames := (foreignReqs.map (·.1)).eraseDupsHashed
   let inherited : List (String × String) := foreignNames.filterMap fun n =>
     -- A spelling this module binds itself is not inherited, also when it binds it to a declaration
     -- that keeps its name (the builtin `Result`, an identity `ownSpellings` omits): a child's
     -- signature naming the child's own `Result` must not respell the builtin here (bug 227).
     if spellingCandidates.any (·.1 == n) then none else
     -- the explicit imports' agreed binding, else the visible declarations' agreed binding
-    let strictCs := ((foreignReqs.filter fun r => r.1 == n && r.2.2.2).map (·.2.1)).eraseDups
-    let allCs := ((foreignReqs.filter (·.1 == n)).map (·.2.1)).eraseDups
+    let strictCs := ((foreignReqs.filter fun r => r.1 == n && r.2.2.2).map (·.2.1)).eraseDupsHashed
+    let allCs := ((foreignReqs.filter (·.1 == n)).map (·.2.1)).eraseDupsHashed
     match (if strictCs.isEmpty then allCs else strictCs) with
     | [some c] => some (n, c)
     | _ => none
@@ -3615,7 +3655,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
       ambiguousTypes.contains dn && n.startsWith (ln ++ "_") && (defSummary di).isNone
   let unresolvedMethods : Diagnostics := (methodNames.filter fun n =>
       (localMethodRenames.lookup n).isNone && (methodOwner n true).isNone
-      && ownerUnknowable n).eraseDups.map fun n =>
+      && ownerUnknowable n).eraseDupsHashed.map fun n =>
     { severity := .error, pass := "elab", span := none, code := "E0299"
       message := s!"method '{n}' belongs to a type several modules declare, and Elab cannot tell which type's method it is; Core cannot spell it (bug 096)"
       hint := some "rename one of the types. Tracking: docs/bugs/096_same_named_types_share_one_definition.md" }
@@ -3686,7 +3726,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
   -- a `.ident` in Core that Lower devirtualizes) is covered too (Codex round 2).
   let visibleForeign : List String :=
     (m.externFns.map (·.name)) ++ (m.imports.flatMap fun imp => imp.symbols.map (·.effectiveName))
-  let foreignBindings : List (String × String) := visibleForeign.eraseDups.filterMap fun n =>
+  let foreignBindings : List (String × String) := visibleForeign.eraseDupsHashed.filterMap fun n =>
     match resolveContractCall n with
     | some id => if id.ns == .extern then some (n, id.declName) else none
     | none => none
@@ -3704,7 +3744,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
   let preRenameCallTargets := ((fns.flatMap fun cfn => collectCalleesStmts cfn.body).filterMap fun c =>
       match c with
       | .direct n sp => some (n, sp)
-      | _ => none).eraseDups.filterMap fun (n, sp) =>
+      | _ => none).eraseDupsHashed.filterMap fun (n, sp) =>
     (if sp == .method then resolveMethodCall n else resolveContractCall n).map (n, ·)
   let fns := if respell then fns.map rn.fnDef else fns
   let cNewtypes := if !respell then m.newtypes ++ imports.newtypes else
@@ -3917,10 +3957,13 @@ def shadowsVisibleBuiltinEnum (tops : List (String × FileSummary)) (n : String)
     builtin (`shadowsVisibleBuiltinEnum`): it is respelled, and the builtin is not. -/
 def ambiguousTypeNames (tops : List (String × FileSummary)) : List String :=
   let compilerKnown := "HashMap" :: "HashSet" :: "BinaryHeap" :: builtinTypeNames
-  let decls := (tops.flatMap fun (_, s) => collectTypeDecls s).eraseDups
-  let names := (decls.map (·.1)).eraseDups
+  -- Bug 276: deduplicated and counted in one pass each, where `eraseDups` and a filter of every
+  -- declaration per name were n².
+  let decls := eraseDupsHashed (tops.flatMap fun (_, s) => collectTypeDecls s)
+  let names := eraseDupsHashed (decls.map (·.1))
+  let declCount : Std.HashMap String Nat := decls.foldl (fun m (n, _) => m.insert n (m.getD n 0 + 1)) {}
   names.filter fun n =>
-    (!compilerKnown.contains n && (decls.filter (·.1 == n)).length ≥ 2)
+    (!compilerKnown.contains n && declCount.getD n 0 ≥ 2)
     || shadowsVisibleBuiltinEnum tops n
 
 /-- Every Core function name of a module tree. -/
@@ -3944,25 +3987,40 @@ partial def coreFnNamesDeep (cm : CModule) : List String :=
     keeps its name. `checkRespelledFnNames` refuses a new spelling another function already has. -/
 def qualifyCollidingTopLevelFns (tops : List (String × FileSummary)) (cms : List CModule) :
     Except Diagnostics (List CModule) :=
-  let freeFns := fun (mn : String) => ((tops.lookup mn).map fun s => s.functions.map (·.1)).getD []
-  let methods := fun (mn : String) => ((tops.lookup mn).map fun s => s.implMethodSigs.map (·.1)).getD []
+  -- Bug 276: each module's free-function names as a set and, per name, its owning modules, built
+  -- once; asking `owners.any` per owner and `contains` of a list per function was n².
+  let topsMap := firstWinsMap tops
+  let freeFns := fun (mn : String) => ((topsMap.get? mn).map fun s => s.functions.map (·.1)).getD []
+  let methods := fun (mn : String) => ((topsMap.get? mn).map fun s => s.implMethodSigs.map (·.1)).getD []
+  let freeSet : Std.HashMap String (Std.HashSet String) := cms.foldl (fun m cm =>
+    if m.contains cm.name then m else m.insert cm.name (Std.HashSet.ofList (freeFns cm.name))) {}
+  let isFree := fun (mn n : String) => ((freeSet.get? mn).map (·.contains n)).getD false
   -- A free function collides with another module's free function OR method of its name
   -- (a method's Core name is `Type_method`, which a free function can also be named).
   let owners : List (String × String) := cms.flatMap fun cm =>
-    (freeFns cm.name ++ methods cm.name).eraseDups.map (·, cm.name)
-  let colliding := (owners.filter fun (n, mn) =>
-    (freeFns mn).contains n && owners.any fun (n2, mn2) => n2 == n && mn2 != mn).map (·.1) |>.eraseDups
+    (eraseDupsHashed (freeFns cm.name ++ methods cm.name)).map (·, cm.name)
+  -- Per name: the first owning module, and whether a module other than it owns the name too.
+  -- An owner (n, mn) has another owner of n in a different module exactly when n has two
+  -- distinct owning modules.
+  let ownerMods : Std.HashMap String (String × Bool) := owners.foldl (fun m (n, mn) =>
+    match m.get? n with
+    | none => m.insert n (mn, false)
+    | some (first, two) => if two || first == mn then m else m.insert n (first, true)) {}
+  let colliding : Std.HashSet String := owners.foldl (fun s (n, mn) =>
+    if isFree mn n && ((ownerMods.get? n).map (·.2)).getD false then s.insert n else s) {}
   if colliding.isEmpty then .ok cms else
   let rmaps : List (String × List (String × String)) := cms.map fun cm =>
-    (cm.name, ((cm.functions.filter fun f =>
-        !f.isEntryPoint && colliding.contains f.name && (freeFns cm.name).contains f.name).map
-      fun f => (f.name, cm.name ++ "_" ++ f.name)).eraseDups)
+    (cm.name, eraseDupsHashed ((cm.functions.filter fun f =>
+        !f.isEntryPoint && colliding.contains f.name && isFree cm.name f.name).map
+      fun f => (f.name, cm.name ++ "_" ++ f.name)))
+  let rmapOf := firstWinsMap rmaps
   let renamed := cms.map fun cm =>
-    let rmap := (rmaps.lookup cm.name).getD []
-    if rmap.isEmpty then cm else
+    let rmapList := (rmapOf.get? cm.name).getD []
+    if rmapList.isEmpty then cm else
+    let rmap := firstWinsMap rmapList
     -- Free functions only (bugs 238 – 239): a method call of the same spelling names the
     -- method, which keeps its name (`regress_239_*`).
-    let rn : CoreRename := { tyName := id, fnName := fun n => (rmap.lookup n).getD n, methodName := id }
+    let rn : CoreRename := { tyName := id, fnName := fun n => (rmap.get? n).getD n, methodName := id }
     { cm with
       functions := cm.functions.map rn.fnDef
       -- a constant's initializer is inlined at each use, so its calls are renamed too
@@ -3970,10 +4028,10 @@ def qualifyCollidingTopLevelFns (tops : List (String × FileSummary)) (cms : Lis
       -- A spelling keyed to this module's renamed free function moves with it; the same
       -- spelling keyed to a method (another module's definition) stays: that call keeps it.
       callTargets :=
-        let ownFree := fun (n : String) (id : CallableId) => (rmap.lookup n).isSome && id.defModule == cm.name
+        let ownFree := fun (n : String) (id : CallableId) => (rmap.get? n).isSome && id.defModule == cm.name
         (cm.callTargets.filter fun (n, id) => !ownFree n id)
           ++ cm.callTargets.filterMap fun (n, id) =>
-            if ownFree n id then (rmap.lookup n).map (·, id) else none }
+            if ownFree n id then (rmap.get? n).map (·, id) else none }
   .ok renamed
 
 /-- Every Core function of a module tree whose name Core respelled (`declName` set: a method
@@ -3988,7 +4046,7 @@ def checkRespelledFnNames (cms : List CModule) : Except Diagnostics (List CModul
   let allNames := cms.flatMap coreFnNamesDeep
   let clashes := (cms.flatMap respelledFnNamesDeep).filter fun n => (allNames.filter (· == n)).length > 1
   if clashes.isEmpty then .ok cms else
-  .error (clashes.eraseDups.map fun n =>
+  .error (clashes.eraseDupsHashed.map fun n =>
     { severity := .error, pass := "elab", span := none, code := "E0299"
       message := s!"the module-qualified Core spelling '{n}' of a function or method is already the name of another function; Core cannot tell them apart (bugs 096, 097)"
       hint := some "rename one of the functions or types. Tracking: docs/bugs/097_same_named_private_fns_interp.md" })
@@ -4162,7 +4220,7 @@ def checkNestedFnCollisions (cms : List CModule) : Except Diagnostics (List CMod
     ++ (cm.submodules.flatMap coreFnsDeep).map (fun f => (f.name, cm.name, true))
   -- two DEFINITIONS of one Core name, either of them nested, in one tree or two
   let clashes := ((owners.filter fun (n, _, nested) => nested &&
-      (owners.filter fun (n2, _, _) => n2 == n).length > 1).map (·.1)).eraseDups
+      (owners.filter fun (n2, _, _) => n2 == n).length > 1).map (·.1)).eraseDupsHashed
   if clashes.isEmpty then .ok cms else
   .error (clashes.map fun n =>
     { severity := .error, pass := "elab", span := none, code := "E0299"
@@ -4246,19 +4304,19 @@ def spellMethodCallsApart (cms : List CModule) : Except Diagnostics (List CModul
   let methodCalls : List String := ((defs.flatMap fun f => (collectCalleesStmts f.body).filterMap
       fun c => match c with | .direct n .method => some n | _ => none)
     ++ (consts.flatMap fun e => (collectCalleesExpr e).filterMap
-      fun c => match c with | .direct n .method => some n | _ => none)).eraseDups
+      fun c => match c with | .direct n .method => some n | _ => none)).eraseDupsHashed
   -- A method VALUE carries its namespace too (`CLocal.space`, then `SVal.fnRef`), so no foreign
   -- binding captures it either (Codex review r15); like a call, only a free definition of its
   -- spelling can. A linker alias of the spelling (an import `wrong as P_get`) takes nothing:
   -- Mono, emission and the interpreter resolve a method reference among methods only.
-  let methodValues := ((cms.flatMap scopedMethodValues).map (·.1)).eraseDups
+  let methodValues := ((cms.flatMap scopedMethodValues).map (·.1)).eraseDupsHashed
   let takenBy := fun (n : String) => freeDefs.contains n
-  let taken := (methodCalls ++ methodValues).eraseDups.filter takenBy
+  let taken := (methodCalls ++ methodValues).eraseDupsHashed.filter takenBy
   if taken.isEmpty then .ok cms else
   let targetsOf := fun (n : String) =>
     let hop1 := (aliases.filter (·.1 == n)).map (·.2)
     let hop2 := hop1.flatMap fun t => (aliases.filter (·.1 == t)).map (·.2)
-    ((if methodDefs.contains n then [n] else []) ++ (hop1 ++ hop2).filter methodDefs.contains).eraseDups
+    ((if methodDefs.contains n then [n] else []) ++ (hop1 ++ hop2).filter methodDefs.contains).eraseDupsHashed
   let resolved := taken.map fun n => (n, targetsOf n)
   -- The new spelling must itself be the method's alone: taken by nothing a reference of this
   -- kind could reach instead.
@@ -4289,7 +4347,7 @@ def checkCoreTypeAgreement (family : List String) (cms : List CModule) :
   -- an extern is checked by its declared signature; one foreign symbol declared by several
   -- modules is one declaration only when their signatures agree (refused below otherwise)
   let externs := cms.flatMap coreExternsDeep
-  let externNames := (externs.map (·.name)).eraseDups
+  let externNames := (externs.map (·.name)).eraseDupsHashed
   let allFns := cms.flatMap coreFnsDeep
     ++ externNames.filterMap fun n => (externs.find? (·.name == n))
   let aliases := cms.flatMap coreAliasesDeep
@@ -4299,7 +4357,7 @@ def checkCoreTypeAgreement (family : List String) (cms : List CModule) :
     | [f] => some f
     | _ :: _ :: _ => none
     | [] =>
-      match ((aliases.filter (·.1 == n)).map (·.2)).eraseDups.filterMap
+      match ((aliases.filter (·.1 == n)).map (·.2)).eraseDupsHashed.filterMap
           (fun t => match allFns.filter (·.name == t) with | [f] => some f | _ => none) with
       | [f] => some f
       | _ => none
@@ -4312,7 +4370,7 @@ def checkCoreTypeAgreement (family : List String) (cms : List CModule) :
     | [] =>
       let hop1 := (aliases.filter (·.1 == n)).map (·.2)
       let hop2 := hop1.flatMap fun t => (aliases.filter (·.1 == t)).map (·.2)
-      match (hop1 ++ hop2).eraseDups.filterMap
+      match (hop1 ++ hop2).eraseDupsHashed.filterMap
           (fun t => match methodDefs.filter (·.name == t) with | [f] => some f | _ => none) with
       | [f] => some f
       | _ => none
@@ -4349,20 +4407,20 @@ def checkCoreTypeAgreement (family : List String) (cms : List CModule) :
         if famAgree family wild exp act then none else
         some (diag s!"in constant '{n}', {whr} names type(s) {fam act} where {fam exp} is declared: two modules' same-named types meet here, which the source checker compares by name (bug 096)")
   let structs := cms.flatMap coreStructsDeep
-  let structDiags : Diagnostics := (structs.map (·.2.name)).eraseDups.filterMap fun n =>
+  let structDiags : Diagnostics := (structs.map (·.2.name)).eraseDupsHashed.filterMap fun n =>
     let copies := (structs.filter (·.2.name == n)).map fun (p : String × CStructDef) =>
       (structFieldsNominal p.2).map fun (f : String × Ty) => fam f.2
-    if copies.eraseDups.length ≤ 1 then none else
+    if copies.eraseDupsHashed.length ≤ 1 then none else
     some (diag s!"struct '{n}' reaches modules with fields naming different same-named types; Core would lay it out twice (bug 096)")
   let enums := cms.flatMap coreEnumsDeep
-  let enumDiags : Diagnostics := (enums.map (·.2.name)).eraseDups.filterMap fun n =>
+  let enumDiags : Diagnostics := (enums.map (·.2.name)).eraseDupsHashed.filterMap fun n =>
     let copies := (enums.filter (·.2.name == n)).map fun (p : String × CEnumDef) =>
       (enumVariantsNominal p.2).map fun (v : String × List (String × Ty)) => v.2.map fun (f : String × Ty) => fam f.2
-    if copies.eraseDups.length ≤ 1 then none else
+    if copies.eraseDupsHashed.length ≤ 1 then none else
     some (diag s!"enum '{n}' reaches modules with payloads naming different same-named types; Core would lay it out twice (bug 096)")
   let externDiags : Diagnostics := externNames.filterMap fun n =>
     let sigs := (externs.filter (·.name == n)).map fun f => (f.params.map fun (_, t) => fam t, fam f.retTy)
-    if sigs.eraseDups.length ≤ 1 then none else
+    if sigs.eraseDupsHashed.length ≤ 1 then none else
     some (diag s!"extern '{n}' is declared by several modules with signatures naming different same-named types (bug 096)")
   let all := callDiags ++ constDiags ++ structDiags ++ enumDiags ++ externDiags
   if all.isEmpty then .ok cms else .error (all.eraseDupsBy (·.message == ·.message))
@@ -4376,7 +4434,7 @@ def elabProgram (resolved : List ResolvedModule)
       | some (_, s) => s
       | none => buildFileSummary m)
   let ambiguousTypes := ambiguousTypeNames moduleSummaryList
-  let typeDecls := (moduleSummaryList.flatMap fun (_, s) => collectTypeDecls s).eraseDups
+  let typeDecls := (moduleSummaryList.flatMap fun (_, s) => collectTypeDecls s).eraseDupsHashed
   -- Bug 096: the canonical spellings must be new names. `a.b`'s `P` and `a_b`'s `P`, or a
   -- respelled `a_P` and a declared `a_P`, would otherwise be one Core type again.
   let canonOfDecl := fun ((nm, defIn) : String × String) =>
@@ -4386,7 +4444,7 @@ def elabProgram (resolved : List ResolvedModule)
     if (typeDecls.filter fun d2 => canonOfDecl d2 == c).length > 1
     then some (c, d.1) else none
   if !typeSpellingClashes.isEmpty then
-    .error (typeSpellingClashes.eraseDups.map fun (c, nm) =>
+    .error (typeSpellingClashes.eraseDupsHashed.map fun (c, nm) =>
       { severity := .error, pass := "elab", span := none, code := "E0299"
         message := s!"type '{nm}' is declared by several modules and its module-qualified Core spelling '{c}' is also another type's; Core cannot tell them apart (bug 096)"
         hint := some "rename one of the types. Tracking: docs/bugs/096_same_named_types_share_one_definition.md" })
@@ -4428,7 +4486,7 @@ def elabProgram (resolved : List ResolvedModule)
   ) (([] : List CModule), ([] : Diagnostics))
   if allErrors.isEmpty then
     let family := if ambiguousTypes.isEmpty then [] else
-      (ambiguousTypes ++ (typeDecls.filter (ambiguousTypes.contains ·.1)).map canonOfDecl).eraseDups
+      (ambiguousTypes ++ (typeDecls.filter (ambiguousTypes.contains ·.1)).map canonOfDecl).eraseDupsHashed
     (qualifyCollidingTopLevelFns moduleSummaryList cms >>= checkRespelledFnNames >>= checkNestedFnCollisions
       >>= spellMethodCallsApart >>= checkCoreTypeAgreement family).map fun ms => ms.map fun cm => { cm with respelledTypes := family }
   else .error allErrors
