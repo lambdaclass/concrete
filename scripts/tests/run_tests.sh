@@ -8779,36 +8779,6 @@ for r230 in regress_230_toplevel_type_environment regress_227_toplevel_builtin_r
         FAIL=$((FAIL + 1))
     fi
 done
-# Bug 278: Mono counted each type name's declarations by filtering the whole name list per name,
-# so a program of n structs or enums took n² to monomorphize (20000 structs: 2409 ms). A generated
-# module of 20000 structs must monomorphize (the `monomorphize` stage of --emit-trace-json) within
-# 200 ms, retried once at 400 ms (fixed: 4 ms on the dev host; pre-fix, six times the retry budget).
-r278s_src="$TMPDIR/r278s_structs_20000.con"
-awk -v n=20000 'BEGIN {
-    for (i = 0; i < n; i++) printf "struct S%d { a: i64, b: i64 }\n", i
-    m = n - 1
-    printf "fn main() -> Int { let s: S%d = S%d { a: 40, b: 2 }; let S%d { a, b } = s; return (a + b) as Int; }\n", m, m, m
-}' > "$r278s_src"
-r265_stage_ms "$r278s_src" monomorphize; r278s_first="$r265_ms"; r278s_ms="$r278s_first"
-case "$r278s_first" in
-    ''|*[!0-9]*) ;;
-    *) if [ "$r278s_first" -gt 200 ]; then r265_stage_ms "$r278s_src" monomorphize; r278s_ms="$r265_ms"; fi ;;
-esac
-case "$r278s_ms" in
-    incomplete)
-        echo "  INCOMPLETE bug 278: monomorphizing 20000 structs timed out twice (180 s each)"
-        INCOMPLETE=$((INCOMPLETE + 1)) ;;
-    ''|*[!0-9]*)
-        echo "FAIL  bug 278: monomorphizing 20000 structs failed ($r278s_ms)"
-        FAIL=$((FAIL + 1)) ;;
-    *) if [ "$r278s_first" -le 200 ] || [ "$r278s_ms" -le 400 ]; then
-           echo "  ok  bug 278: monomorphizing 20000 structs within budget (${r278s_ms} ms, monomorphize)"
-           PASS=$((PASS + 1))
-       else
-           echo "FAIL  bug 278: monomorphizing 20000 structs took ${r278s_first} ms, then ${r278s_ms} ms in monomorphize (budget 200, retry 400)"
-           FAIL=$((FAIL + 1))
-       fi ;;
-esac
 # Bug 231: a bound names `Copy`, `Destroy` or a trait of its module (MOD-1, E0125); no bound name
 # was resolved, so an undeclared trait compiled and an enclosing module's trait was satisfied by
 # spelling in a nested module. The positive control keeps every trait Check gives a module.

@@ -2,12 +2,12 @@
 
 <!-- bug-ledger
 summary: Mono computed the program's ambiguous type names by filtering the whole list of type names once per name, then deduplicating it with `eraseDups`, so a program of n structs or enums took time n² to monomorphize (10000 structs: 688 ms). Found by the R-0550 scaling gate. Class 17.
-coverage: `run_tests.sh` times the `monomorphize` stage of a generated module of 20000 structs against a budget (the pre-fix compiler fails it); `check_compile_scaling.sh` (R-0550, on wip/r0550-scaling-gate-v2, not yet landed) judges the `structs` and `enums` shapes' stage once this bug's exclusions are removed
+coverage: `check_compile_scaling.sh` judges the `structs` and `enums` shapes' `monomorphize` stage against its budget and near-linear growth: this fix removes the stage's exclusions under this bug, and the gate fails the pre-fix compiler
 class: 17 — Mono finds colliding type names by filtering the whole name list per name
 silent: no
 -->
 
-**Status:** FIXED (branch `wip/perf-278`)
+**Status:** FIXED (branch `wip/perf-278-v2`)
 **Found:** 2026-10-26, building the compile-time scaling gate (R-0550, exit 2o): the gate's generated shapes, timed per stage with `--emit-trace-json` at 10b81a46.
 **Severity:** loud (performance). Compile time only: never wrong code, a refusal or a crash; a program of this shape compiles, slowly.
 
@@ -82,11 +82,9 @@ at size 60, and `--report caps|proof-status|fingerprints|obligations|traceabilit
 every `.con` under `examples`, are byte-identical between the compiler built at 91ce358b and this
 fix (248b5e3b).
 
-## Regression leg
+## Regression gate
 
-`run_tests.sh` times the `monomorphize` stage of a generated module of 20000 structs against
-200 ms (retried once at 400 ms): 4 ms with the fix, FAIL on main 91ce358b (2449 ms, then
-2441 ms).
+The R-0550 gate (`check_compile_scaling.sh`, on main since 9d8182ea) held this stage as an exclusion under this bug; the fix removes both exclusions from `compile_scaling_budgets.tsv`. With them removed the gate passes `structs/monomorphize` (1000: 1 ms, 10000: 1 ms) and `enums/monomorphize` (0 and 2 ms) on this fix and fails both on main's compiler (x222.7 and x223.7 against x63.1).
 
 ## Containment while open
 
