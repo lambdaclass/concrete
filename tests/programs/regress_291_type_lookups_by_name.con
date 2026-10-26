@@ -1,0 +1,44 @@
+// Bug 291: every stage finds a struct, enum or newtype declaration by name in a table built once
+// per module, not by a search of the declaration lists per use. Each lookup here goes through the
+// tables: a struct literal and field reads at a nonzero offset (Lower's layout), a Copy struct
+// bound twice (Check's Copy judgment), an enum's variant and payload, a newtype's unwrap, and a
+// type annotation naming each declaration (Resolve's known types).
+struct Copy Pair {
+    lo: i64,
+    hi: i64,
+}
+
+struct Triple {
+    a: i64,
+    b: i64,
+    c: i64,
+}
+
+enum Shape {
+    Dot { v: i64 },
+    Line { x: i64, y: i64 },
+}
+
+newtype Meters = i64;
+
+fn area(s: Shape) -> i64 {
+    match s {
+        Shape::Dot { v } => {
+            return v;
+        },
+        Shape::Line { x, y } => {
+            return x + y;
+        },
+    }
+}
+
+fn main() -> Int {
+    let p: Pair = Pair { lo: 3, hi: 4 };
+    let q: Pair = p;
+    let t: Triple = Triple { a: 5, b: 6, c: 7 };
+    let Triple { a, b, c } = t;
+    let s: Shape = Shape::Line { x: 8, y: 1 };
+    let m: Meters = Meters(1);
+    // 3 + 4 + 4 + 5 + 6 + 7 + 9 + 1 = 39
+    return (p.lo + p.hi + q.hi + a + b + c + area(s) + m.0 + 3) as Int;
+}

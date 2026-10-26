@@ -1,3 +1,4 @@
+import Std.Data.HashMap
 import Concrete.Elab.Core
 
 namespace Concrete
@@ -13,6 +14,21 @@ and Ty→LLVM type mappings. Used by both Lower.lean and EmitSSA.lean.
 -- Layout context
 -- ============================================================
 
+/-- Bug 291: Core struct, enum and newtype declarations by name, each keeping the FIRST
+    declaration of a name (the `List.find?` order). Built once by a pass from the same lists it
+    stands for; a search of the lists per use was n² for n types each used once. -/
+structure Index where
+  structs  : Std.HashMap String CStructDef := {}
+  enums    : Std.HashMap String CEnumDef := {}
+  newtypes : Std.HashMap String NewtypeDef := {}
+
+def Index.ofLists (structDefs : List CStructDef) (enumDefs : List CEnumDef)
+    (newtypes : List NewtypeDef) : Index :=
+  let first {α : Type} (name : α → String) (xs : List α) : Std.HashMap String α :=
+    xs.foldl (fun m x => if m.contains (name x) then m else m.insert (name x) x) {}
+  { structs := first (·.name) structDefs, enums := first (·.name) enumDefs,
+    newtypes := first (·.name) newtypes }
+
 structure Ctx where
   structDefs : List CStructDef
   enumDefs   : List CEnumDef
@@ -21,15 +37,24 @@ structure Ctx where
       Elab already erases newtypes inside struct/enum fields; this handles
       the remaining cases (generic args, function bodies, enum payloads). -/
   newtypes   : List NewtypeDef := []
+  /-- Bug 291: `Index.ofLists structDefs enumDefs newtypes`, when the producer built it once (Lower
+      does, per module); `none` searches the lists. -/
+  index      : Option Index := none
 
 def lookupStruct (ctx : Ctx) (name : String) : Option CStructDef :=
-  ctx.structDefs.find? fun sd => sd.name == name
+  match ctx.index with
+  | some ix => ix.structs.get? name
+  | none => ctx.structDefs.find? fun sd => sd.name == name
 
 def lookupEnum (ctx : Ctx) (name : String) : Option CEnumDef :=
-  ctx.enumDefs.find? fun ed => ed.name == name
+  match ctx.index with
+  | some ix => ix.enums.get? name
+  | none => ctx.enumDefs.find? fun ed => ed.name == name
 
 def lookupNewtype (ctx : Ctx) (name : String) : Option NewtypeDef :=
-  ctx.newtypes.find? fun nt => nt.name == name
+  match ctx.index with
+  | some ix => ix.newtypes.get? name
+  | none => ctx.newtypes.find? fun nt => nt.name == name
 
 /-- Substitute type variables inside a newtype's inner type. -/
 partial def ntSubstTy (mapping : List (String × Ty)) : Ty → Ty

@@ -55,7 +55,9 @@ Codex review, 2026-10-26:
   same.
 - `TypeEnv.enumByName` and `LowerState.enumByName`: the enums by name, the first of a name (what
   `find?` returned), built once where the environment is made (Lower: once per module, handed to
-  `lowerFn`).
+  `lowerFn`). Bug 291, stacked on this fix, replaced both by its one by-name index of every type
+  declaration (`TypeEnv.typeIndex`, Lower's `Layout.Index`), with the same first-of-a-name rule, so
+  the program keeps one table per stage.
 
 `--emit-ssa` and `--emit-llvm` (stdout, stderr, exit status) of every `.con` under `tests/programs`
 and `examples` (4122 compiles), 3000 `fuzz_linearity.py` cases and 2000 `fuzz_differential.py`

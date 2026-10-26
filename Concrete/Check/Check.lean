@@ -3939,15 +3939,16 @@ def checkModule (m : Module) (summary : FileSummary)
     tid.map (·, tb.traitName)
   let initEnv : TypeEnv :=
     { vars := {}, structs := allStructs, enums := allEnums,
-      enumByName := allEnums.foldl (fun m ed => if m.contains ed.name then m else m.insert ed.name ed) {},
       functions := allSigs.toArray,
       fnNames := TypeEnv.nameIndex allNames, methodNames := TypeEnv.nameIndex implNames, loopDepth := 0, typeAliases := typeAliasMap, constants := constantsMap,
       traitImpls := traitImplPairs, traitImplIds := traitImplIds,
       allFnSummarys := fnSigPairs, newtypes := allNewtypes,
       userFnNames := Std.HashSet.ofList userFnNamesList, localNewtypeNames := localNewtypeNamesList,
       newtypeConstructors := newtypeConstructorsInScope m.newtypes imports,
-      localStructNames := localStructNamesList,
-      localNewtypeIds := localNewtypeIdList, localStructIds := localStructIdList }
+      localStructNames := Std.HashSet.ofList localStructNamesList,
+      localNewtypeIds := Std.HashSet.ofList localNewtypeIdList,
+      localStructIds := Std.HashSet.ofList localStructIdList,
+      typeIndex := TypeNameIndex.ofLists allStructs allEnums allNewtypes }
   -- Module-level declaration checks (Copy/Destroy, repr, FFI, traits) moved to CoreCheck.lean.
   -- Reserved name check stays here because reserved names conflict with builtins in Check.
   let reservedNameCheck := m.functions.foldl (init := (Except.ok () : Except Diagnostics Unit)) fun acc f =>

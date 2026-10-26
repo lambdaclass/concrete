@@ -207,9 +207,6 @@ structure LowerState where
   stringLits : List (String × String)
   structDefs : List CStructDef
   enumDefs : List CEnumDef
-  /-- Bug 290: each enum of `enumDefs` by name, the first of a name (as `enumDefs.find?`
-      answered); built once per module (`enumIndex`), not searched per variant use. -/
-  enumByName : Std.HashMap String CEnumDef := {}
   newtypes : List NewtypeDef := []
   loopStack : List LoopInfo
   constants : List (String × Ty × CExpr) := []
@@ -242,6 +239,10 @@ structure LowerState where
       region's address-taken set is a subset. `none` outside every region, and while deferred
       calls are lowered (their source lies outside the region they are emitted in). -/
   addrBound : Option LocalKeySet := none
+  /-- Bug 291: `structDefs`, `enumDefs` and `newtypes` by name (`Layout.Index`), built once per
+      module by `lowerModule`; every lookup of a declaration by name asks it through
+      `getLayoutCtx` (`none`: the lists are searched). -/
+  layoutIndex : Option Layout.Index := none
 
 abbrev LowerM := ExceptT Diagnostics (StateM LowerState)
 
@@ -433,10 +434,15 @@ private def getCurrentLabel : LowerM String := do
 -- Struct/enum definition lookup helpers
 -- ============================================================
 
+/-- Build a Layout.Ctx from the current LowerState. -/
+private def getLayoutCtx : LowerM Layout.Ctx := do
+  let s ← getState
+  return { structDefs := s.structDefs, enumDefs := s.enumDefs, newtypes := s.newtypes,
+           index := s.layoutIndex }
+
 /-- Look up a struct definition's fields by type name. -/
 private def lookupStructFields (tyName : String) : LowerM (List (String × Ty)) := do
-  let s ← getState
-  match s.structDefs.find? fun sd => sd.name == tyName with
+  match Layout.lookupStruct (← getLayoutCtx) tyName with
   | some sd => return sd.fields
   | none =>
     throwLower s!"Lower.lookupStructFields: struct '{tyName}' not found in struct defs"
@@ -451,8 +457,7 @@ private def fieldIndex (tyName : String) (fieldName : String) : LowerM Nat := do
 
 /-- Get variant index within an enum definition. Returns 0 if not found. -/
 private def variantIndex (enumName : String) (variantName : String) : LowerM Nat := do
-  let s ← getState
-  match s.enumByName.get? enumName with
+  match Layout.lookupEnum (← getLayoutCtx) enumName with
   | some ed =>
     match (enumerate ed.variants).find? fun (_, (vn, _)) => vn == variantName with
     | some (idx, _) => return idx
@@ -463,8 +468,7 @@ private def variantIndex (enumName : String) (variantName : String) : LowerM Nat
 
 /-- Get variant fields within an enum definition. -/
 private def variantFields (enumName : String) (variantName : String) (typeArgs : List Ty := []) : LowerM (List (String × Ty)) := do
-  let s ← getState
-  match s.enumByName.get? enumName with
+  match Layout.lookupEnum (← getLayoutCtx) enumName with
   | some ed =>
     let ed := Layout.substEnumTypeArgs ed typeArgs
     match ed.variants.find? fun (vn, _) => vn == variantName with
@@ -483,11 +487,6 @@ private def structNameFromTy (ty : Ty) : LowerM String :=
   | .ref inner | .refMut inner | .ptrMut inner | .ptrConst inner => structNameFromTy inner
   | other =>
     throwLower s!"Lower.structNameFromTy: unhandled type '{repr other}'"
-
-/-- Build a Layout.Ctx from the current LowerState. -/
-private def getLayoutCtx : LowerM Layout.Ctx := do
-  let s ← getState
-  return { structDefs := s.structDefs, enumDefs := s.enumDefs, newtypes := s.newtypes }
 
 /-- Compute byte size of a type (for malloc). Delegates to Layout.tySize. -/
 private def computeTySize (ty : Ty) : LowerM Nat := do
@@ -1379,8 +1378,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
     let layoutCtx ← getLayoutCtx
     let enumTypeArgs := typeArgsFromTy ty
     let vfields ← variantFields enumName variant enumTypeArgs
-    let s ← getState
-    let ed := s.enumByName.get? enumName
+    let ed := Layout.lookupEnum layoutCtx enumName
     let payloadOff := match ed with
       | some ed => Layout.enumPayloadOffset layoutCtx ed enumTypeArgs
       | none => 4
@@ -1468,8 +1466,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           let layoutCtx ← getLayoutCtx
           let enumTypeArgs := typeArgsFromTy scrutinee.ty
           let vfields ← variantFields enumName variant enumTypeArgs
-          let s ← getState
-          let ed := s.enumByName.get? enumName
+          let ed := Layout.lookupEnum layoutCtx enumName
           let payloadOff := match ed with
             | some ed => Layout.enumPayloadOffset layoutCtx ed enumTypeArgs
             | none => 4
@@ -2763,16 +2760,12 @@ end
 -- Function and module lowering
 -- ============================================================
 
-/-- Bug 290: enums by name, the first of a name (`List.find?`'s answer). -/
-def enumIndex (enumDefs : List CEnumDef) : Std.HashMap String CEnumDef :=
-  enumDefs.foldl (fun m ed => if m.contains ed.name then m else m.insert ed.name ed) {}
-
 def lowerFn (f : CFnDef) (structDefs : List CStructDef) (enumDefs : List CEnumDef)
     (constants : List (String × Ty × CExpr) := [])
     (newtypes : List NewtypeDef := [])
     (definedFns : Std.HashSet String := {})
     (importedConstants : List (String × CExpr × List (String × Ty × CExpr)) := [])
-    (enumByName : Option (Std.HashMap String CEnumDef) := none)
+    (layoutIndex : Option Layout.Index := none)
     : Except Diagnostics (SFnDef × List (String × String)) :=
   let initState : LowerState := {
     blocksRev := []
@@ -2784,13 +2777,13 @@ def lowerFn (f : CFnDef) (structDefs : List CStructDef) (enumDefs : List CEnumDe
     stringLits := []
     structDefs := structDefs
     enumDefs := enumDefs
-    enumByName := enumByName.getD (enumIndex enumDefs)
     newtypes := newtypes
     loopStack := []
     constants := constants
     importedConstants := importedConstants
     definedFns := definedFns
     scopeStack := [{ kind := .function }]
+    layoutIndex := layoutIndex
   }
   let result := (do
     let params ← freshVarMap ((f.paramKeys.zip f.params).map fun (k, (n, ty)) => (k, SVal.reg n ty))
@@ -2932,7 +2925,6 @@ def lowerModule (m : CModule) (program : List CModule := []) : Except Diagnostic
     !(ownNewtypeNames.contains nt.name)))
   let allStructs := syntheticStringDef :: (ownStructs ++ extStructs)
   let allEnums := ownEnums ++ extEnums
-  let allEnumIndex := enumIndex allEnums
   let allExterns := collectAllExterns m
   let allConstants := collectAllConstants m
   let importedConstants := (if program.isEmpty then [m] else program).flatMap fun pm =>
@@ -2958,11 +2950,13 @@ def lowerModule (m : CModule) (program : List CModule := []) : Except Diagnostic
     | some t => if t == m.name then (allConstants, definedFnNames) else
       (foreignTrees.get? t).getD (allConstants, definedFnNames)
     | none => (allConstants, definedFnNames)
+  -- Bug 291: the module's declarations by name, built once for every function's lookups.
+  let layoutIndex := Layout.Index.ofLists allStructs allEnums allNewtypes
   -- Newest first and reversed once (bug 279: an append per function was n²).
   let resultsRev ← concreteFns.foldlM (init := []) fun acc (f, path) =>
     let (fnConstants, fnDefinedNames) := contextOf f
     match lowerFn f allStructs allEnums fnConstants allNewtypes fnDefinedNames importedConstants
-        (enumByName := some allEnumIndex) with
+        (some layoutIndex) with
     | .ok (sfn, lits) =>
       .ok (({ sfn with modulePath := path, sourceTree := f.sourceTree.filter (· != m.name) }, lits) :: acc)
     | .error ds => .error (ds.map (·.addContext s!"while lowering function '{f.name}'"))

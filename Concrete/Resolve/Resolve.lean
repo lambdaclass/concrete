@@ -167,8 +167,12 @@ structure ResolveCtx where
       by `addLocal` and `popScope`, the only writers of `localScopes` below the function level. -/
   visibleLocals : Std.TreeMap String Nat compare := {}
   errors : Diagnostics
-  /-- Known type names (structs, enums, type aliases, traits, type params). -/
-  knownTypes : List String
+  /-- Known type names (structs, enums, type aliases, traits), a set built once per module: a
+      list was searched per written type, n² for n types each named once (bug 291). -/
+  knownTypes : Std.HashSet String
+  /-- The functions and its impls type parameters, known types inside its body (bug 291: the
+      list `knownTypes` was extended with them per function). -/
+  extraKnownTypes : List String := []
   /-- Current impl type name, for Self resolution. -/
   currentImplType : Option String := none
   /-- Trait name → list of method names. -/
@@ -318,7 +322,7 @@ private def hasMethodByIdentity (ctx : ResolveCtx) (typeName method : String) : 
       | _ => false
 
 private def isKnownType (ctx : ResolveCtx) (name : String) : Bool :=
-  ctx.knownTypes.contains name
+  ctx.knownTypes.contains name || ctx.extraKnownTypes.contains name
 
 /-- Bug 240: whether a written type name denotes a trait. A trait is in the type namespace
     (`SymKind.isType`: a bound and an impl name it there) but is not a type: there are no
@@ -705,7 +709,7 @@ private def moduleTypeEnvironment (s : FileSummary) : List (String × SymKind) �
 -- ============================================================
 
 /-- Resolve a single function body. -/
-private def resolveFnBody (globalScope : Scope) (knownTypes : List String) (f : FnDef)
+private def resolveFnBody (globalScope : Scope) (knownTypes : Std.HashSet String) (f : FnDef)
     (implType : Option String := none) (implTypeParams : List String := [])
     (traitMethods : List (String × List String) := [])
     (traitImpls : List (String × String) := []) : Diagnostics :=
@@ -713,7 +717,8 @@ private def resolveFnBody (globalScope : Scope) (knownTypes : List String) (f : 
     globalScope := globalScope
     localScopes := [{}]
     errors := []
-    knownTypes := knownTypes ++ implTypeParams ++ f.typeParams
+    knownTypes := knownTypes
+    extraKnownTypes := implTypeParams ++ f.typeParams
     typeParams := implTypeParams ++ f.typeParams
     currentImplType := implType
     traitMethods := traitMethods
@@ -758,7 +763,7 @@ private def aliasChaseCyclic (aliasMap : List (String × String)) : Nat → List
 /-- Validate a module's type-alias targets: every name in a target must be known
     (`type A = Nope` → E0108), and no alias may be recursive (`type A = A` or
     `type A = B; type B = A` → E0112). -/
-private def resolveTypeAliases (m : Module) (globalScope : Scope) (knownTypes : List String) : Diagnostics :=
+private def resolveTypeAliases (m : Module) (globalScope : Scope) (knownTypes : Std.HashSet String) : Diagnostics :=
   let aliasCtx : ResolveCtx :=
     { globalScope := globalScope, localScopes := [{}], errors := [], knownTypes := knownTypes }
   let aliasNames := m.typeAliases.map (·.name)
@@ -900,9 +905,10 @@ private def boundTraitsCheck (m : Module) (ctx : ResolveCtx) : ResolveCtx :=
 
 /-- Resolve all names in one module's declarations and bodies (not its submodules: see
     `resolveModuleTreeErrors`). -/
-private def resolveModule (m : Module) (globalScope : Scope) (knownTypes : List String)
+private def resolveModule (m : Module) (globalScope : Scope) (knownTypeList : List String)
     (traitMethods : List (String × List String))
     (traitImpls_ : List (String × String)) : Diagnostics :=
+  let knownTypes := Std.HashSet.ofList knownTypeList
   -- Validate type-alias targets (unknown target types, recursive aliases)
   let aliasErrors := resolveTypeAliases m globalScope knownTypes
   -- Check top-level functions

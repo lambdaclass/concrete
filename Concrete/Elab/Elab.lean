@@ -113,6 +113,9 @@ structure ElabEnv where
   traits : List TraitDef := []
   allFnSigPairs : Std.HashMap String FnSummary := {}
   newtypes : List NewtypeDef := []
+  /-- Bug 291: `structs`, `enums` and `newtypes` by name (first declaration of a name), built with
+      them in `elabModule`; every lookup by spelling asks this, not the lists. -/
+  typeIndex : TypeNameIndex := {}
   -- Lexical frame stack for ProofBodyCanonicalV2. PARALLEL to `vars`, and
   -- deliberately not derived from it: `vars` is a flat list whose indices shift as
   -- branches and loops push and pop, so a position read off it is not a stable
@@ -332,9 +335,9 @@ private def recordFieldUse (sd : StructDef) (_field : String) : ElabM Unit :=
     has one type namespace, and a name that resolves in neither is `none` — which the
     builder turns into a gap rather than a spelling. -/
 private def nominalTypeId? (env : ElabEnv) (n : String) : Option TypeId :=
-  match (env.structs.find? fun sd => sd.name == n).bind StructDef.typeId? with
+  match (env.typeIndex.structs.get? n).bind StructDef.typeId? with
   | some id => some id
-  | none => (env.enums.find? fun ed => ed.name == n).bind EnumDef.typeId?
+  | none => (env.typeIndex.enums.get? n).bind EnumDef.typeId?
 
 /-- A surface type as evidence, resolved against the CURRENT declaration's type
     parameters so a type variable is a binder position and not a spelling. -/
@@ -506,14 +509,14 @@ private def coreFnSpelling (name : String) : ElabM String := do
 
 private def lookupStruct (name : String) : ElabM (Option StructDef) := do
   let env ← getEnv
-  return env.structs.find? fun sd => sd.name == name
+  return env.typeIndex.structs.get? name
 
 /-- R-0492 step 3: the declaration a type spelling denotes in this module (Check's
     `TypeEnv.typeIdOf`); a type parameter denotes none. -/
 private def typeIdOfE : ElabM (String → Option TypeId) := do
   let env ← getEnv
   return fun n => if env.currentTypeParams.contains n then none
-    else typeIdOfSpelling env.structs env.enums env.newtypes n
+    else env.typeIndex.typeIdOf n
 
 /-- R-0492 step 3: the method `methodName` of the type spelled `typeName`, as its mangled name
     and signature, selected as Check selects it (`lookupMethod`): by the type's declaration
@@ -522,7 +525,7 @@ private def typeIdOfE : ElabM (String → Option TypeId) := do
 private def lookupMethodE (typeName methodName : String) : ElabM (Option (String × FnSummary)) := do
   let env ← getEnv
   let owner? := if env.currentTypeParams.contains typeName then none
-    else typeIdOfSpelling env.structs env.enums env.newtypes typeName
+    else env.typeIndex.typeIdOf typeName
   if let some owner := owner? then
     if let some r := methodByIdentity env.methodSigs { owner, method := methodName } then
       -- Bug 242: the definer's mangled name names the method only where the definer's spelling
@@ -534,7 +537,7 @@ private def lookupMethodE (typeName methodName : String) : ElabM (Option (String
         | .builtin _ => none
       match defSpelling with
       | some dn =>
-        if typeIdOfSpelling env.structs env.enums env.newtypes dn == some owner then return some r
+        if env.typeIndex.typeIdOf dn == some owner then return some r
         return some (mangledMethodName typeName methodName, r.2)
       | none => return some r
   -- A method no stamped impl declares: by its spelling, in the method table alone (bugs 238 – 239).
@@ -543,7 +546,7 @@ private def lookupMethodE (typeName methodName : String) : ElabM (Option (String
 
 private def lookupEnum (name : String) : ElabM (Option EnumDef) := do
   let env ← getEnv
-  return env.enums.find? fun ed => ed.name == name
+  return env.typeIndex.enums.get? name
 
 /-- Record a binder. `pending` means a scope was entered and its frame has not been
     materialized: open it now, with this binder first. Otherwise extend the innermost live
@@ -1038,7 +1041,7 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none)
         -- Newtype wrapping a struct: .0 unwraps to the inner type.
         if field == newtypeFieldName then
           let env ← getEnv
-          match env.newtypes.find? fun nt => nt.name == structName with
+          match env.typeIndex.newtypes.get? structName with
           | some nt =>
             let mapping := nt.typeParams.zip typeArgs
             let innerTy ← resolveTypeE (substTy mapping nt.innerTy)
@@ -1053,7 +1056,7 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none)
       -- type args so the unwrapped value carries the concrete inner type.
       if field == newtypeFieldName then
         let env ← getEnv
-        match env.newtypes.find? fun nt => nt.name == structName with
+        match env.typeIndex.newtypes.get? structName with
         | some nt =>
           let mapping := nt.typeParams.zip typeArgs
           let innerTy ← resolveTypeE (substTy mapping nt.innerTy)
@@ -1681,7 +1684,7 @@ partial def elabCallEv (fnName : String) (typeArgs : List Ty) (args : List Expr)
   -- newtypes, infer type args from explicit `::<...>` first, otherwise
   -- from the call hint (`let w: Wrapper<Int> = Wrapper(100);`).
   let env ← getEnv
-  match env.newtypes.find? fun nt => nt.name == fnName with
+  match env.typeIndex.newtypes.get? fnName with
   | some nt =>
     let arg := match args with | a :: _ => a | [] => Expr.intLit default 0
     let effectiveTypeArgs :=
@@ -2222,7 +2225,7 @@ partial def elabStmtEv (stmt : Stmt) : ElabM ElaboratedStmtV2 := do
     -- this resolution, not a second search for it.
     let mut fieldTy : Option Ty := none
     let mut fieldOwner : Option TypeId := none
-    match env.structs.find? fun s => s.name == sName with
+    match env.typeIndex.structs.get? sName with
     | some sd =>
       match sd.fields.find? fun f => f.name == field with
       | some f =>
@@ -3223,6 +3226,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
     traits := allTraits
     allFnSigPairs := firstWinsMap fnSigPairs
     newtypes := newtypeConstructorsInScope m.newtypes imports
+    typeIndex := TypeNameIndex.ofLists allStructs allEnums (newtypeConstructorsInScope m.newtypes imports)
   }
   -- Elaborate only LOCAL functions (imported impl bodies are already elaborated in their module)
   -- Results consed newest first and reversed once (bug 276: an append per function was n²).

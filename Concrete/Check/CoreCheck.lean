@@ -98,8 +98,12 @@ structure CoreCheckEnv where
       value of a type declared in another module (`child::make()`) is still a declared nominal
       type to the operator and cast rules (bug 210). `structDefs`/`enumDefs`/`newtypes` are the
       current module's. -/
-  programTypeNames : List String := []
+  programTypeNames : Std.HashSet String := {}
   programNewtypes : List NewtypeDef := []
+  /-- Bug 291: the current module's `structDefs`, `enumDefs` and `newtypes` by name, and the
+      program's newtypes by name (first declaration of a name), built with them per module. -/
+  typeIndex : Layout.Index := {}
+  programNewtypeIndex : Std.HashMap String NewtypeDef := {}
   /-- The current function's type parameters: a `named` spelling of one is a parameter even when
       some module declares a type of that name. -/
   currentTypeParams : List String := []
@@ -449,11 +453,11 @@ private def lookupFnSig (name : String) : StateM CoreCheckEnv (Option (List (Str
 
 private def lookupStruct (name : String) : StateM CoreCheckEnv (Option CStructDef) := do
   let env ← getEnv
-  return env.structDefs.find? fun sd => sd.name == name
+  return env.typeIndex.structs.get? name
 
 private def lookupEnum (name : String) : StateM CoreCheckEnv (Option CEnumDef) := do
   let env ← getEnv
-  return env.enumDefs.find? fun ed => ed.name == name
+  return env.typeIndex.enums.get? name
 
 /-- Whether CoreCheck must leave a type's operator and cast rules to the instantiation: a type
     parameter (`typeVar`), or a `named` type that is not a declared struct, enum or newtype (a
@@ -467,17 +471,17 @@ private def isOpaqueOperandTy (env : CoreCheckEnv) (t : Ty) : Bool :=
   | .typeVar _ => true
   | .named n =>
     env.currentTypeParams.contains n
-    || !(env.structDefs.any (fun sd => sd.name == n)
-      || env.enumDefs.any (fun ed => ed.name == n)
-      || env.newtypes.any (fun nt => nt.name == n)
+    || !(env.typeIndex.structs.contains n
+      || env.typeIndex.enums.contains n
+      || env.typeIndex.newtypes.contains n
       || env.programTypeNames.contains n)
   | _ => false
 
 /-- A newtype declaration by name: the current module's first, then the program's. -/
 private def findNewtype (env : CoreCheckEnv) (n : String) : Option NewtypeDef :=
-  match env.newtypes.find? fun nt => nt.name == n with
+  match env.typeIndex.newtypes.get? n with
   | some nt => some nt
-  | none => env.programNewtypes.find? fun nt => nt.name == n
+  | none => env.programNewtypeIndex.get? n
 
 /-- A capability set CoreCheck can compare before Mono: no capability variable, and only the
     built-in capability names. A capability PARAMETER inside a fn type (`fn() with(C)`, from
@@ -1340,7 +1344,8 @@ def ccCheckModuleDecls (m : CModule)
   Id.run do
   let mut errors : Diagnostics := []
   let allNewtypes := m.newtypes
-  let lctx : Layout.Ctx := { structDefs := allStructs, enumDefs := allEnums, newtypes := allNewtypes }
+  let lctx : Layout.Ctx := { structDefs := allStructs, enumDefs := allEnums, newtypes := allNewtypes,
+                             index := some (Layout.Index.ofLists allStructs allEnums allNewtypes) }
   -- 1. Copy/Destroy conflict + Copy field check for structs
   for sd in m.structs do
     if sd.isCopy then
@@ -1650,8 +1655,11 @@ partial def ccCheckModule (m : CModule)
     structDefs := m.structs
     enumDefs := m.enums
     newtypes := m.newtypes
-    programTypeNames := allStructs.map (·.name) ++ allEnums.map (·.name) ++ allNewtypes.map (·.name)
+    programTypeNames := Std.HashSet.ofList
+      (allStructs.map (·.name) ++ allEnums.map (·.name) ++ allNewtypes.map (·.name))
     programNewtypes := allNewtypes
+    typeIndex := Layout.Index.ofLists m.structs m.enums m.newtypes
+    programNewtypeIndex := (Layout.Index.ofLists [] [] allNewtypes).newtypes
     vars := {}
     currentCapSet := .empty
     currentRetTy := .unit

@@ -1,3 +1,4 @@
+import Std.Data.HashMap
 import Concrete.Frontend.AST
 
 /-! # Semantic identity for type declarations (R-0004 V2 input)
@@ -23,7 +24,7 @@ namespace Concrete
 inductive TypeId where
   | user (defModule declName : String)
   | builtin (id : BuiltinEnumId)
-deriving BEq, Repr
+deriving BEq, Hashable, Repr
 
 namespace TypeId
 
@@ -144,6 +145,33 @@ def typeIdOfSpelling (structs : List StructDef) (enums : List EnumDef)
     match enums.find? (·.name == name) with
     | some ed => ed.typeId?
     | none => (newtypes.find? (·.name == name)).bind (·.typeId?)
+
+/-- Bug 291: a module environment's struct, enum and newtype tables by name, each keeping the
+    FIRST declaration of a name, as the `List.find?` searches they replace did. Built once per
+    environment; a search of the lists per use was n² for n types each used once. -/
+structure TypeNameIndex where
+  structs : Std.HashMap String StructDef := {}
+  enums : Std.HashMap String EnumDef := {}
+  newtypes : Std.HashMap String NewtypeDef := {}
+
+/-- Opaque in `repr`: the environments that hold it derive `Repr`, and it restates their lists. -/
+instance : Repr TypeNameIndex := ⟨fun _ _ => "TypeNameIndex"⟩
+
+def TypeNameIndex.ofLists (structs : List StructDef) (enums : List EnumDef)
+    (newtypes : List NewtypeDef) : TypeNameIndex :=
+  let first {α : Type} (name : α → String) (xs : List α) : Std.HashMap String α :=
+    xs.foldl (fun m x => if m.contains (name x) then m else m.insert (name x) x) {}
+  { structs := first (·.name) structs, enums := first (·.name) enums,
+    newtypes := first (·.name) newtypes }
+
+/-- `typeIdOfSpelling` over the lists the index was built from. -/
+def TypeNameIndex.typeIdOf (ix : TypeNameIndex) (name : String) : Option TypeId :=
+  match ix.structs.get? name with
+  | some sd => sd.typeId?
+  | none =>
+    match ix.enums.get? name with
+    | some ed => ed.typeId?
+    | none => (ix.newtypes.get? name).bind (·.typeId?)
 
 /-- R-0492 step 3: the method `method` of the type declaration `owner`, the key a method table
     is searched by. An import alias of the type does not change it (bug 223). -/

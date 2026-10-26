@@ -8450,6 +8450,12 @@ run_ok "$TESTDIR/regress_286_nested_region_addr_taken.con" 42
 # exits (a second `return`, `break`s and a `continue`) read a never-stored slot. The binary returns
 # 42 (main's returned 208; `--interp` printed 42 when the fixture was written).
 run_ok "$TESTDIR/regress_287_defer_borrow_promoted_at_registration.con" 42
+# Bug 291: every stage found a struct, enum or newtype by name with a search of the declaration
+# lists per use, so n types each used once took n². The fixture's lookups (layout offsets, a Copy
+# struct, an enum payload, a newtype) return 42; then a program of 8000 Copy structs, each built
+# and read once, must check and elaborate within 150 ms per stage, retried once at 300 ms (dev host:
+# check 48 and elaborate 50 ms with the fix, 548 and 343 ms on main).
+run_ok "$TESTDIR/regress_291_type_lookups_by_name.con" 42
 r265_gen() {  # r265_gen SHAPE N: a generated `fn main` of the given shape and size on stdout
     awk -v shape="$1" -v n="$2" 'BEGIN {
         print "fn main() -> Int {"
@@ -9430,6 +9436,37 @@ case "$r290_ms" in
            FAIL=$((FAIL + 1))
        fi ;;
 esac
+r291_src="$TMPDIR/r291_struct_uses_8000.con"
+awk -v n=8000 'BEGIN {
+    for (i = 0; i < n; i++) printf "struct Copy S%d { a: i64 }\n", i
+    print "fn main() -> Int {"
+    print "    let mut t: i64 = 0;"
+    for (i = 0; i < n; i++) printf "    let s%d: S%d = S%d { a: 1 };\n    t = t + s%d.a;\n", i, i, i, i
+    printf "    return (t - %d + 42) as Int;\n", n
+    print "}"
+}' > "$r291_src"
+for r291_stage in check elaborate; do
+    r265_stage_ms "$r291_src" "$r291_stage"; r291_first="$r265_ms"; r291_ms="$r291_first"
+    case "$r291_first" in
+        ''|*[!0-9]*) ;;
+        *) if [ "$r291_first" -gt 150 ]; then r265_stage_ms "$r291_src" "$r291_stage"; r291_ms="$r265_ms"; fi ;;
+    esac
+    case "$r291_ms" in
+        incomplete)
+            echo "  INCOMPLETE bug 291: $r291_stage of 8000 struct uses timed out twice (180 s each)"
+            INCOMPLETE=$((INCOMPLETE + 1)) ;;
+        ''|*[!0-9]*)
+            echo "FAIL  bug 291: $r291_stage of 8000 struct uses failed ($r291_ms)"
+            FAIL=$((FAIL + 1)) ;;
+        *) if [ "$r291_first" -le 150 ] || [ "$r291_ms" -le 300 ]; then
+               echo "  ok  bug 291: $r291_stage of 8000 struct uses within budget (${r291_ms} ms)"
+               PASS=$((PASS + 1))
+           else
+               echo "FAIL  bug 291: $r291_stage of 8000 struct uses took ${r291_first} ms, then ${r291_ms} ms (budget 150, retry 300)"
+               FAIL=$((FAIL + 1))
+           fi ;;
+    esac
+done
 # Bug 247: a function value written as an identifier reaches what it names in the assumption summary.
 run_ok "$TESTDIR/regress_247_function_value_reaches_foreign.con" 42
 run_ok "$TESTDIR/regress_247_free_value_beside_unrelated_extern.con" 42

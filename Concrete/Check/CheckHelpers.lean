@@ -293,12 +293,12 @@ def isCopyType (ty : Ty) : CheckM Bool := do
   let ty := deAlias ty
   return Layout.isCopyTyGeneric
     (fun name =>
-      match env.structs.find? fun sd => sd.name == name with
+      match env.typeIndex.structs.get? name with
       | some sd => some (sd.isCopy, sd.typeParams, sd.fields.map (fun f => f.ty))
-      | none => match env.enumByName.get? name with
+      | none => match env.typeIndex.enums.get? name with
         | some ed => some (ed.isCopy, ed.typeParams, ed.variants.flatMap (fun v => v.fields.map (fun f => f.ty)))
         | none => none)
-    (fun name => (env.newtypes.find? fun nt => nt.name == name).map (fun nt => deAlias nt.innerTy))
+    (fun name => (env.typeIndex.newtypes.get? name).map (fun nt => deAlias nt.innerTy))
     (fun name => (((env.currentTypeBounds.find? fun b => b.1 == name).map Prod.snd).getD []).contains "Copy")
     ty
 
@@ -379,7 +379,7 @@ partial def tyContainsTypeVar : Ty → Bool
 
 def lookupStruct (name : String) : CheckM (Option StructDef) := do
   let env ← getEnv
-  return env.structs.find? fun sd => sd.name == name
+  return env.typeIndex.structs.get? name
 
 def lookupStructField (structName : String) (fieldName : String) : CheckM (Option Ty) := do
   match ← lookupStruct structName with
@@ -391,7 +391,7 @@ def lookupStructField (structName : String) (fieldName : String) : CheckM (Optio
 
 def lookupEnum (name : String) : CheckM (Option EnumDef) := do
   let env ← getEnv
-  return env.enumByName.get? name
+  return env.typeIndex.enums.get? name
 
 def lookupEnumVariant (enumName : String) (variantName : String) : CheckM (Option EnumVariant) := do
   match ← lookupEnum enumName with
@@ -400,7 +400,7 @@ def lookupEnumVariant (enumName : String) (variantName : String) : CheckM (Optio
 
 def lookupNewtype (name : String) : CheckM (Option NewtypeDef) := do
   let env ← getEnv
-  return env.newtypes.find? fun nt => nt.name == name
+  return env.typeIndex.newtypes.get? name
 
 def lookupFn (name : String) : CheckM (Option FnSummary) := do
   let env ← getEnv
@@ -433,7 +433,7 @@ def lookupMethodByName (name : String) : CheckM (Option FnSummary) := do
     (`typeIdOfSpelling` over its environment); a type parameter of the function denotes none. -/
 def TypeEnv.typeIdOf (env : TypeEnv) (name : String) : Option TypeId :=
   if env.currentTypeParams.contains name then none
-  else typeIdOfSpelling env.structs env.enums env.newtypes name
+  else env.typeIndex.typeIdOf name
 
 /-- R-0492 step 3: type equality in the module being checked, by declaration identity
     (`Ty.sameByIdentity`): an import alias and the definition's spelling are one type (bug 223). -/
