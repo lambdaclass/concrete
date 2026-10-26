@@ -2,12 +2,12 @@
 
 <!-- bug-ledger
 summary: CoreCheck looked up every callee's signature and capabilities in a list of all the program's function signatures, so a program of n functions with a call each took time n² to validate (a 10000-function call chain: 649 ms). Found by the R-0550 scaling gate. Class 17.
-coverage: `check_compile_scaling.sh` measures the `call-chain` shape's `coreCheck` stage and reports it EXCLUDED under this bug on every run; the fix removes the exclusion, and the gate then holds the stage to its budget and to near-linear growth
+coverage: `check_compile_scaling.sh` judges the `call-chain` shape's `coreCheck` stage against its budget and near-linear growth: this fix removes the stage's exclusion under this bug, and the gate fails the pre-fix compiler
 class: 17 — CoreCheck looks up every callee in a list of all function signatures
 silent: no
 -->
 
-**Status:** OPEN
+**Status:** FIXED (branch `wip/perf-277-v2`)
 **Found:** 2026-10-26, building the compile-time scaling gate (R-0550, exit 2o): the gate's generated shapes, timed per stage with `--emit-trace-json` at 10b81a46.
 **Severity:** loud (performance). Compile time only: never wrong code, a refusal or a crash; a program of this shape compiles, slowly.
 
@@ -27,9 +27,48 @@ A linear stage doubles with the size; these grow about fourfold or more per doub
 
 A map from function name (or `CallableId`) to its signature, built once per module.
 
+## Fix
+
+`CoreCheckEnv.fnSigs` is a `Std.HashMap` from a function's name to its capabilities and
+signature, built once in `ccCheckModule` from the same list in the same order (the module's
+functions, its externs, then the program's signatures), keeping the FIRST entry of a name as
+`find?` did. `lookupFnCaps` and `lookupFnSig` are one map lookup per call. No other code reads
+the field.
+
+## Measurements
+
+`coreCheck` stage in ms (`--emit-trace-json`, fastest of 3 runs), dev host (fede-256gb),
+`call-chain` shape, before (the compiler built at b5040d53) and after (built from the tree of 800dfbf9, this
+fix on main 91ce358b; the build had no other modification):
+
+| n | before | after |
+|---|---|---|
+| 2500 | 15 | 2 |
+| 5000 | 75 | 3 |
+| 10000 | 604 | 8 |
+| 20000 | 2504 | 26 |
+
+The stage's allocation count is linear (180071, 360071, 720071 at 5000, 10000, 20000); gdb
+samples of the stage at 40000 (93 ms, on a probe build of 737c0447, the merge of this series'
+branches for bugs 273-276 and 282 on main, with this fix applied uncommitted) show no list
+search. The R-0550 gate (`compile_scaling.py` and its budgets at fe9ce031,
+origin/wip/r0550-scaling-gate-v2), run with this bug's exclusion removed, passes
+`call-chain/coreCheck` (1000: 1 ms, 10000: 8 ms, x4.0) and fails it on main 91ce358b (x201.3
+against x63.1).
+
+`--emit-core`, `--emit-ssa` and `--emit-llvm` (stdout, stderr and exit status) of every `.con`
+under `tests/programs` and `examples` (91ce358b's corpus) and of twelve generated scaling shapes
+at size 60, and `--report caps|proof-status|fingerprints|obligations|traceability|proof-deps` of
+every `.con` under `examples`, are byte-identical between the compiler built at 91ce358b and this
+fix.
+
+## Regression gate
+
+The R-0550 gate (`check_compile_scaling.sh`, on main since 9d8182ea) held this stage as an exclusion under this bug; the fix removes it from `compile_scaling_budgets.tsv`. With it removed the gate passes `call-chain/coreCheck` (1000: 1 ms, 10000: 9 ms, x4.5) on this fix and fails it on main's compiler (x200.3 against x63.1).
+
 ## Containment while open
 
-Loud only. The scaling gate names the stage as an exclusion under this bug, so its gap is printed on every run rather than silent; the gate's other stages of the shape stay judged. A user splits such a module or nest.
+Loud only. The scaling gate named the stage as an exclusion under this bug, so its gap was printed on every run rather than silent.
 
 ## Structural cause
 

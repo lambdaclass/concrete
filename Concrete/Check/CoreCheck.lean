@@ -1,3 +1,4 @@
+import Std.Data.HashMap
 import Std.Data.TreeMap
 import Concrete.Elab.Core
 import Concrete.Frontend.AST
@@ -66,7 +67,10 @@ def ofList (ps : List (LocalKey × Ty)) : CoreVars :=
 end CoreVars
 
 structure CoreCheckEnv where
-  fnSigs : List (String × CapSet × List (String × Ty) × Ty)
+  /-- Every signature a direct call may name (the module's functions and externs first, then the
+      program's), by name, the FIRST entry of a name winning as the list search did: a map, where
+      a search of every signature per call made a module of n calling functions n² (bug 277). -/
+  fnSigs : Std.HashMap String (CapSet × List (String × Ty) × Ty)
   /-- Bugs 238 – 239: every impl method of the program by its Core name, with its capabilities.
       A method call (`CallSpace.method`) is decided against these first, never against a free
       function or extern of the same spelling, which `fnSigs` lists before them. -/
@@ -423,8 +427,8 @@ private def dropCrossPackageUnsafe (cs : CapSet) : CapSet :=
 
 private def lookupFnCaps (name : String) : StateM CoreCheckEnv (Option CapSet) := do
   let env ← getEnv
-  match env.fnSigs.find? fun (n, _, _, _) => n == name with
-  | some (_, caps, _, _) => return some caps
+  match env.fnSigs.get? name with
+  | some (caps, _, _) => return some caps
   | none =>
     -- Then IMPORTS. A dependency's Core is not in this compilation unit, so
     -- without this the next branch returns `none` for every cross-package call
@@ -439,8 +443,8 @@ private def lookupFnCaps (name : String) : StateM CoreCheckEnv (Option CapSet) :
 
 private def lookupFnSig (name : String) : StateM CoreCheckEnv (Option (List (String × Ty) × Ty)) := do
   let env ← getEnv
-  match env.fnSigs.find? fun (n, _, _, _) => n == name with
-  | some (_, _, params, retTy) => return some (params, retTy)
+  match env.fnSigs.get? name with
+  | some (_, params, retTy) => return some (params, retTy)
   | none => return none
 
 private def lookupStruct (name : String) : StateM CoreCheckEnv (Option CStructDef) := do
@@ -1635,7 +1639,8 @@ partial def ccCheckModule (m : CModule)
     -- Own signatures FIRST so a local definition wins a name it shares with
     -- something elsewhere in the tree; the tree entries only ever add a
     -- requirement where there was none, never replace a nearer one.
-    fnSigs := fnSigs ++ externSigs ++ allFnSigs
+    fnSigs := (fnSigs ++ externSigs ++ allFnSigs).foldl (fun m (n, cs, ps, r) =>
+      if m.contains n then m else m.insert n (cs, ps, r)) {}
     methodCaps := allMethods.map fun (n, cs, _, _, _) => (n, cs)
     ownExterns := externSigs
     ownTrustedExterns := (m.externFns.filter fun (_, _, _, t) => t).map (·.1)

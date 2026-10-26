@@ -50,7 +50,6 @@ shape	enums	1000,10000	trace
 exclude	lets-while	monomorphize,lower,llvm,native	bug 270 (open): Lower gives every loop a header phi for every binding in scope, so this shape's lower stage is quadratic (4.9, 18.7 and 51.7 s at 1000, 2000 and 4000 at b5040d53); --emit-trace-json runs Lower, so monomorphize is not timed apart from it, and the front end is judged through --emit-core
 exclude	functions	lower	bug 279 (open): Lower appends each lowered function to a list and deduplicates external types by list search
 exclude	functions	llvm,native	not run: every whole compile of this shape contains the excluded stages above; it runs with their fixes
-exclude	call-chain	coreCheck	bug 277 (open): CoreCheck looks up every callee in a list of all function signatures
 exclude	call-chain	lower	bug 279 (open): Lower appends each lowered function to a list and deduplicates external types by list search
 exclude	call-chain	llvm,native	not run: every whole compile of this shape contains the excluded stages above; it runs with their fixes
 exclude	structs	monomorphize	bug 278 (open): Mono's program-level name tables are lists searched per declaration
