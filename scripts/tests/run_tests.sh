@@ -8947,6 +8947,32 @@ else
     printf '%s\n' "$r239_edges2" | awk 'NR<=6'
     FAIL=$((FAIL + 1))
 fi
+# Bug 272: the calls-ffi edge is the call's binding to a foreign declaration, so a call of an
+# extern imported from another module (plainly, trusted, or under an alias) has one.
+run_ok "$TESTDIR/regress_272_imported_extern_ffi_edge.con" 42
+r272_edges=$(cached_output "$TESTDIR/regress_272_imported_extern_ffi_edge.con" "--report trust-edges")
+r272_missing=""
+for r272_e in "own_call calls-ffi abs" "imported_call calls-ffi abs" "trusted_call calls-ffi tabs" \
+              "trusted_call calls-trusted tabs" "aliased_call calls-ffi cabs"; do
+    read -r r272_fn r272_kind r272_tgt <<<"$r272_e"
+    grep -qE "[[:space:]]$r272_fn[[:space:]]+$r272_kind[[:space:]]+$r272_tgt\$" <<<"$r272_edges" || r272_missing="$r272_missing [$r272_e]"
+done
+if [ -z "$r272_missing" ] && grep -qF "calls-ffi=4 calls-trusted=1" <<<"$r272_edges"; then
+    echo "  ok  bug 272: imported, trusted-imported and aliased extern calls each have a calls-ffi edge"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 272: --report trust-edges missing$r272_missing (or wrong totals):"
+    printf '%s\n' "$r272_edges" | awk 'NR<=12'
+    FAIL=$((FAIL + 1))
+fi
+r272_interp=$($COMPILER "$TESTDIR/regress_272_imported_extern_ffi_edge.con" --interp 2>&1 || true)
+if [ "$r272_interp" = "42" ]; then
+    echo "  ok  bug 272: regress_272_imported_extern_ffi_edge --interp gives 42, as the binary"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 272: regress_272_imported_extern_ffi_edge --interp gave '$r272_interp', want 42"
+    FAIL=$((FAIL + 1))
+fi
 # Bug 247: a function value written as an identifier reaches what it names in the assumption summary.
 run_ok "$TESTDIR/regress_247_function_value_reaches_foreign.con" 42
 run_ok "$TESTDIR/regress_247_free_value_beside_unrelated_extern.con" 42

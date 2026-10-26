@@ -766,7 +766,11 @@ partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
       if (space == .free && freeTrusted)
           || (space == .method && envE.trustedNames.contains fn && !externHere) then
         addTrustEdge .callsTrusted fn
-    if space == .free && externHere then addTrustEdge .callsFFI fn
+    -- The FFI edge is the resolver's binding of THIS call (bug 272): a free call bound to a foreign
+    -- declaration, the module's own extern or an imported one. It was the spelling's membership in
+    -- this module tree's extern names, which an imported extern is never in, so a call of one had
+    -- no calls-ffi edge.
+    if foreignDecl?.isSome then addTrustEdge .callsFFI fn
     -- Check capability discipline: a method call against the method table first; a method of
     -- another package is in the imported requirements, keyed by the call's spelling.
     -- A free call bound to a foreign declaration: an imported binding's requirement travels in
