@@ -49,7 +49,8 @@ fix on main 91ce358b; the build had no other modification):
 | 20000 | 2504 | 26 |
 
 The stage's allocation count is linear (180071, 360071, 720071 at 5000, 10000, 20000); gdb
-samples of the stage at 40000 (on a build with bugs 273-276 and 282 fixed too, 93 ms) show no list
+samples of the stage at 40000 (93 ms, on a probe build of 737c0447, the merge of this series'
+branches for bugs 273-276 and 282 on main, with this fix applied uncommitted) show no list
 search. The R-0550 gate (`compile_scaling.py` and its budgets at fe9ce031,
 origin/wip/r0550-scaling-gate-v2), run with this bug's exclusion removed, passes
 `call-chain/coreCheck` (1000: 1 ms, 10000: 8 ms, x4.0) and fails it on main 91ce358b (x201.3

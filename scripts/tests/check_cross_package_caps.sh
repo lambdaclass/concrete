@@ -137,8 +137,9 @@ if grep -q "importedFnCaps" "$ROOT_DIR/Concrete/Elab/Core.lean" &&
 else
   no "the imported-capability transport is gone"
 fi
-# Local definitions must still win a name they share with an import.
-if grep -A6 "env.fnSigs.find?" "$ROOT_DIR/Concrete/Check/CoreCheck.lean" | grep -q "importedCaps"; then
+# Local definitions must still win a name they share with an import. The module's signatures are
+# a map since bug 277 (`env.fnSigs.get?`), read before the imported capabilities.
+if grep -A6 "env.fnSigs.get? name" "$ROOT_DIR/Concrete/Check/CoreCheck.lean" | grep -q "importedCaps"; then
   ok "imports are consulted AFTER the module's own signatures"
 else
   no "lookup order changed — an import may now shadow a local definition"
