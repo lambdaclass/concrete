@@ -212,7 +212,7 @@ echo "  manifest rows: $MLINKS  unowned: $MUNOWNED  distinct owners: $MSUBJ  dup
 # `grep -rl examples/`, so they are relative by construction, and this asserts it rather than
 # relying on that staying true.
 echo "=== source location stays migration metadata ==="
-if printf '%s' "$MROWS" | grep -qE "^/|\| /"; then
+if has_match -E "^/|\| /" <<<"$MROWS"; then
   no "a manifest row carries an ABSOLUTE path — rows must be repository-relative or receipts differ per checkout"
 else
   ok "manifest rows are repository-relative"
@@ -222,7 +222,7 @@ if grep -qE "sourceLoc|srcPath|filePath|FilePath" Concrete/Proof/Receipt.lean 2>
 else
   ok "the receipt binds no source location (it is migration metadata, not identity)"
 fi
-if grep -n "proofSubjectDigestV2" Concrete/Proof/ProofCore.lean | grep -qE "path|file|loc"; then
+if grep -n "proofSubjectDigestV2" Concrete/Proof/ProofCore.lean | has_match -E "path|file|loc"; then
   no "the subject digest takes a path/location argument — a subject must not vary with where it is compiled from"
 else
   ok "the subject digest takes no source location"

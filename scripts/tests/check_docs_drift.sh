@@ -120,7 +120,7 @@ bad=0
 for f in "${REPORT_DOCS[@]}"; do
   [ -f "$f" ] || continue
   for k in $(grep -oE -- '--report [a-z-]+' "$f" | awk '{print $2}' | sort -u); do
-    printf '%s\n' "$REPORTS" | grep -qx "$k" || { no "$f references unknown --report kind: $k"; bad=$((bad+1)); }
+    has_match -x "$k" <<<"$REPORTS" || { no "$f references unknown --report kind: $k"; bad=$((bad+1)); }
   done
 done
 [ "$bad" -eq 0 ] && ok "every --report kind in present-tense docs is a real CLI report"

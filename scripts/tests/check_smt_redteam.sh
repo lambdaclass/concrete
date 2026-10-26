@@ -39,7 +39,7 @@ echo "=== soundness: nothing adversarial is mis-proved ==="
 grep -qF <<<"$(vc_status 'reassigned_guard#aa0')" "proved_by_kernel_decision" \
   && no "reassigned guard mis-proved (stale hypothesis used) — UNSOUND" || ok "reassigned guard → not proved (stale hypothesis dropped)"
 # non-literal divisor: must not produce a kernel proof (no sound lowering).
-"$COMPILER" "$RT" --report vcs 2>/dev/null | awk '/var_divisor#aa0/{f=1} f{print} f&&/^$/{exit}' | grep -qF "proved_by_kernel_decision" \
+"$COMPILER" "$RT" --report vcs 2>/dev/null | awk '/var_divisor#aa0/{f=1} f{print} f&&/^$/{exit}' | has_match -F "proved_by_kernel_decision" \
   && no "var_divisor (non-literal divisor) was mis-proved — UNSOUND" || ok "var_divisor → not mis-proved (no sound lowering)"
 # edge/huge literal: omega proves the in-range assert (no crash, sound).
 grep -qF <<<"$(vc_status 'edge_bounds#aa0')" "proved_by_kernel_decision (omega)" \

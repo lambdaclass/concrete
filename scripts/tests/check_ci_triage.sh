@@ -87,7 +87,7 @@ triage() {
 # expect <run> <class> <gate> <rc> <reruns> <label>
 expect() {
   triage "$1"
-  if grep -E "^  $2 +[a-z]+ " <<<"$OUT" | grep -qF " :: $3 -- " && [ "$RC" = "$4" ] && [ "$RERUNS" = "$5" ]; then
+  if grep -E "^  $2 +[a-z]+ " <<<"$OUT" | has_match -F " :: $3 -- " && [ "$RC" = "$4" ] && [ "$RERUNS" = "$5" ]; then
     ok "$6: $2, exit $4, $5 rerun(s)"
   else
     no "$6: want class $2 for $3, exit $4, $5 rerun(s); got exit $RC, $RERUNS rerun(s):"

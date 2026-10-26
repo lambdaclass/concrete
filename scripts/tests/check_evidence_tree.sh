@@ -321,7 +321,7 @@ else
 fi
 # Multi-line signature: a single-line grep missed it and reported a false failure.
 validate_sig="$(awk '/^def validate/,/:=/' Concrete/Proof/EvidenceTree.lean | tr '\n' ' ')"
-if printf '%s' "$validate_sig" | grep -qE "Except \(List EvidenceGap\) CompleteEvidenceBodyV2"; then
+if has_match -E "Except \(List EvidenceGap\) CompleteEvidenceBodyV2" <<<"$validate_sig"; then
   ok "validate is the sole draft-to-complete bridge and reports gaps"
 else
   no "validate does not report the gaps it found — an incomplete body would be undiagnosable"
@@ -329,7 +329,7 @@ fi
 # The gap-walkers must be exhaustive; a wildcard would report a new construct gap-free.
 for fn in exprGaps patternGaps stmtGaps armGaps patternBindingCount exprConstRefs stmtConstRefs armConstRefs patternConstRefs stmtAssumptions armAssumptions; do
   body="$(awk "/^partial def $fn/,/^\$/" Concrete/Proof/EvidenceTree.lean)"
-  if printf '%s' "$body" | grep -qE '^\s*\|\s*_\s*=>'; then
+  if has_match -E '^\s*\|\s*_\s*=>' <<<"$body"; then
     no "$fn has a wildcard — a new constructor would be reported as gap-free"
   else
     ok "$fn is exhaustive with no wildcard"
@@ -372,7 +372,7 @@ fi
 # is a flat enum outside it and derives BEq/Repr legitimately — a first version of
 # this leg flagged that and was wrong, not the code.
 mutual_block="$(awk '/^mutual$/,/^end$/' Concrete/Proof/EvidenceTree.lean)"
-if printf '%s' "$mutual_block" | grep -qE "^deriving (BEq|Repr)|deriving.*\bRepr\b.*\bBEq\b"; then
+if has_match -E "^deriving (BEq|Repr)|deriving.*\bRepr\b.*\bBEq\b" <<<"$mutual_block"; then
   no "the mutual tree derives BEq/Repr — a derived instance can absorb new constructors"
 else
   ok "the mutual tree derives no BEq/Repr"

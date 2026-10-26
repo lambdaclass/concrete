@@ -63,11 +63,11 @@ rejects_cap extern_needs_unsafe 'mod m { extern fn raw_op() with() -> i32; fn ma
 echo "=== report ⇔ checker agreement: the fn the checker accepts as Unsafe is the one the report lists ==="
 prog='mod m { fn f(p: *const i32) with(Unsafe) -> i32 { return *p; } fn main() -> Int { return 0; } }'
 printf '%s' "$prog" > "$TMP/agree.con"
-if "$C" "$TMP/agree.con" --report unsafe 2>&1 | grep -q "fn f(" ; then ok "report lists the accepted Unsafe fn (same fact as the checker)"
+if "$C" "$TMP/agree.con" --report unsafe 2>&1 | has_match "fn f(" ; then ok "report lists the accepted Unsafe fn (same fact as the checker)"
 else no "report did not list the fn the checker accepts as Unsafe (fact disagreement)"; fi
 # negative: a pure fn must NOT be listed as Unsafe
 printf 'mod m { fn g() -> i32 { return 1; } fn main() -> Int { return 0; } }' > "$TMP/pure.con"
-if "$C" "$TMP/pure.con" --report unsafe 2>&1 | grep -q "fn g(" ; then no "report listed a pure fn as Unsafe (over-reporting)"
+if "$C" "$TMP/pure.con" --report unsafe 2>&1 | has_match "fn g(" ; then no "report listed a pure fn as Unsafe (over-reporting)"
 else ok "report does not list a pure fn as Unsafe"; fi
 
 echo ""

@@ -150,7 +150,7 @@ if grep -qE "def CallableId\.(parse|ofString|fromString|ofRendered)" Concrete/Re
 else
   ok "no String → CallableId parser exists"
 fi
-if grep -rn "CallableId" Concrete/ --include='*.lean' | grep -qE "splitOn.*render|render.*splitOn"; then
+if grep -rn "CallableId" Concrete/ --include='*.lean' | has_match -E "splitOn.*render|render.*splitOn"; then
   no "a consumer is taking apart a rendered CallableId"
 else
   ok "no consumer parses a rendered CallableId"
@@ -238,7 +238,7 @@ probe "an identified entry narrows successfully" "true" \
 # silently upgrades a legacy entry. `IdentifiedPFnDef` makes that
 # unrepresentable, so no consumer should be inspecting the identity itself.
 if code_only $(grep -rl "identity.id?" Concrete/ --include='*.lean' 2>/dev/null) 2>/dev/null \
-     | grep -E "identity\.id\?\.isSome" | grep -q .; then
+     | grep -E "identity\.id\?\.isSome" | has_match .; then
   no "a consumer tests the identity Option directly instead of narrowing to IdentifiedPFnDef"
 else
   ok "evidence goes through the IdentifiedPFnDef narrowing, not an Option test"
@@ -591,7 +591,7 @@ DET_C="$("$CC" "$ELSEWHERE/renamed_copy.con" --report lean-stubs 2>&1 | shasum -
 # No absolute path anywhere in generated evidence. Checked directly rather than
 # inferred from the hash comparison above: two runs from different directories
 # could agree and still both embed a path prefix.
-if "$CC" "$SAMENAME" --report lean-stubs 2>&1 | grep -q "$ROOT_DIR"; then
+if "$CC" "$SAMENAME" --report lean-stubs 2>&1 | has_match "$ROOT_DIR"; then
   no "the generated file embeds the absolute workspace path"
 else
   ok "no absolute workspace path appears in generated evidence"
@@ -653,7 +653,7 @@ fi
 # without that the exemption is an unmonitored hole. Anchored on the GENERATOR INVOCATION, not on a
 # mention of the filename, because a comment naming the file would satisfy a weaker check while
 # nothing re-derived anything.
-if printf '%s\n' "$gen_tracked" | grep -q "^${GEN_ALLOWED}$"; then
+if has_match "^${GEN_ALLOWED}$" <<<"$gen_tracked"; then
   refs_rederived="$(grep -rl 'scripts/gen/attestation_refs\.sh' "$ROOT_DIR/scripts/tests" 2>/dev/null || true)"
   if [ -n "$refs_rederived" ]; then
     ok "the allowed generated file is re-derived and compared by: $(printf '%s' "$refs_rederived" | xargs -n1 basename | tr '\n' ' ')"
@@ -694,18 +694,18 @@ for i in 0 1 2; do
   m="${MODS[$i]}"; lit="${LITS[$i]}"
   # the entry must reference ITS OWN Id and ITS OWN Expr
   if ! grep -q "def ${m}_computeFn : PFnDef :=" "$TMP/samename.lean" \
-     || ! grep -A3 "def ${m}_computeFn : PFnDef :=" "$TMP/samename.lean" | grep -q "identity := .semantic ${m}_computeId" \
-     || ! grep -A3 "def ${m}_computeFn : PFnDef :=" "$TMP/samename.lean" | grep -q "body := ${m}_computeExpr"; then
+     || ! grep -A3 "def ${m}_computeFn : PFnDef :=" "$TMP/samename.lean" | has_match "identity := .semantic ${m}_computeId" \
+     || ! grep -A3 "def ${m}_computeFn : PFnDef :=" "$TMP/samename.lean" | has_match "body := ${m}_computeExpr"; then
     no "$m's entry does not bind $m's own identity and body (a swap would look like this)"
     corr_ok=0; continue
   fi
   # that Id must name that module
-  if ! grep -A1 "def ${m}_computeId : CallableId :=" "$TMP/samename.lean" | grep -q "defModule := \"$m\""; then
+  if ! grep -A1 "def ${m}_computeId : CallableId :=" "$TMP/samename.lean" | has_match "defModule := \"$m\""; then
     no "${m}_computeId does not name module $m"
     corr_ok=0; continue
   fi
   # and that Expr must be the body the SOURCE gives module m
-  if ! grep -A3 "def ${m}_computeExpr : PExpr :=" "$TMP/samename.lean" | grep -q "(.lit (.int $lit))"; then
+  if ! grep -A3 "def ${m}_computeExpr : PExpr :=" "$TMP/samename.lean" | has_match "(.lit (.int $lit))"; then
     no "${m}_computeExpr is not the body source module $m has (+$lit)"
     corr_ok=0; continue
   fi
@@ -853,7 +853,7 @@ probe "an absent digest is distinguishable from a present one" "true" \
 # roles — the proof-freshness fingerprint bugs 058-060 are filed against, and a
 # body-only comparison key — and let a reader treat one as the other.
 if "$CC" "$SAMENAME" --report lean-stubs 2>/dev/null | grep -o 'value := "[a-f0-9]*"' \
-   | grep -qFf <("$CC" "$SAMENAME" --report proof 2>/dev/null | grep -oE '\b[a-f0-9]{32}\b' | sed 's/^/value := "/; s/$/"/') ; then
+   | has_match -Ff <("$CC" "$SAMENAME" --report proof 2>/dev/null | grep -oE '\b[a-f0-9]{32}\b' | sed 's/^/value := "/; s/$/"/') ; then
   no "a generated body digest equals a legacy proof fingerprint — one value in two roles"
 else
   ok "body digests are distinct from the legacy proof fingerprints"

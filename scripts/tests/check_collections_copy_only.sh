@@ -179,7 +179,7 @@ if (cd "$TMP/b52p" && "$C" build >"$TMP/b52p.out" 2>&1); then
   # Every Concrete definition, glue included, is emitted under `_C.<module path>.<name>`
   # (FFI.md "Symbol Names").
   glue="$(awk '/^define void @_C\.[A-Za-z0-9_.]*\.\$destroy\$Ref_T_Arr2_T_Tracked_E_E\(/,/^}/' "$TMP/b52p.ll")"
-  if printf '%s' "$glue" | grep -qE "call void @_C\.[A-Za-z0-9_.]*\.Tracked_destroy\(" \
+  if has_match -E "call void @_C\.[A-Za-z0-9_.]*\.Tracked_destroy\(" <<<"$glue" \
      && ! grep -qE "^define void @(_C\.[A-Za-z0-9_.]*\.)?(T_destroy|T\\\$destroy)\(" "$TMP/b52p.ll"; then
     ok "array glue calls @Tracked_destroy per element; no literal @T_destroy is synthesized"
   else
@@ -330,7 +330,7 @@ M="docs/stdlib/STDLIB_SURFACE_MANIFEST.tsv"
 # ordered traversal APIs exist
 for m in ordered_map ordered_set; do
   for f in fold for_each; do
-    grep -P "^$m\t$f\t" "$M" | grep -q . && ok "$m.$f present (defined ascending order)"       || no "$m.$f missing"
+    grep -P "^$m\t$f\t" "$M" | has_match . && ok "$m.$f present (defined ascending order)"       || no "$m.$f missing"
   done
 done
 # HashMap makes NO ordering promise: no insertion-order machinery, no doc claim

@@ -31,22 +31,22 @@ trap 'rm -rf "$BOUNDED_DIR"' EXIT  # no scratch directory of its own; an early e
 
 echo "=== project mode: inherited assumptions are listed ==="
 out="$(cd "$ROOT_DIR/examples/base64_cli" && "${TO[@]}" "$CC" src/main.con --report unsafe 2>&1)"
-if printf '%s' "$out" | grep -q 'Inherited foreign assumptions (from dependencies):'; then
+if has_match 'Inherited foreign assumptions (from dependencies):' <<<"$out"; then
   ok "base64_cli's report has an inherited-assumptions section"
 else
   no "no inherited-assumptions section — dependency bindings are not reaching the report"
 fi
-if printf '%s' "$out" | grep -A1 'std.libc.write: assumed to perform only with(Console)' | grep -q 'reached by:.*base64_cli.usage'; then
+if printf '%s' "$out" | grep -A1 'std.libc.write: assumed to perform only with(Console)' | has_match 'reached by:.*base64_cli.usage'; then
   ok "std.libc.write is listed with(Console), reached by base64_cli.usage"
 else
   no "std.libc.write with(Console) reached by usage is not listed"
 fi
-if printf '%s' "$out" | grep -q 'std.libc.realloc'; then
+if has_match 'std.libc.realloc' <<<"$out"; then
   no "std.libc.realloc is listed — a same-named binding in another module was attributed (resolution must prefer the calling module)"
 else
   ok "only the realloc binding actually reached is listed (calling-module resolution)"
 fi
-if printf '%s' "$out" | grep -q 'Dependency coverage: dependencies analysed'; then
+if has_match 'Dependency coverage: dependencies analysed' <<<"$out"; then
   ok "project mode states that dependencies were analysed"
 else
   no "project mode does not state its dependency coverage"
@@ -54,7 +54,7 @@ fi
 
 echo "=== single-file mode says it did not see dependencies ==="
 sout="$("${TO[@]}" "$CC" "$ROOT_DIR/tests/programs/trusted_absorbs_extern_unsafe.con" --report unsafe 2>&1)"
-if printf '%s' "$sout" | grep -q 'Dependency coverage: incomplete'; then
+if has_match 'Dependency coverage: incomplete' <<<"$sout"; then
   ok "single-file mode reports incomplete dependency coverage, so an empty list cannot read as none"
 else
   no "single-file mode does not state that dependency coverage is incomplete"

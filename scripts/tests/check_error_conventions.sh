@@ -40,7 +40,7 @@ ts="$("$C" "$F" --emit-trace-json 2>/dev/null | grep -oE '"trap_sites":[0-9]+' |
 [ -n "$ts" ] && [ "$ts" -ge 1 ] && ok "trap_sites visible in telemetry ($ts)" || no "trap_sites missing"
 
 echo "=== bucket 3 POLICY-GATED: read_config's File named by --report caps ==="
-"$C" "$F" --report caps 2>&1 | grep -qE "read_config *: *File" \
+"$C" "$F" --report caps 2>&1 | has_match -E "read_config *: *File" \
   && ok "caps report names read_config: File" || no "caps report missing the File classification"
 
 echo

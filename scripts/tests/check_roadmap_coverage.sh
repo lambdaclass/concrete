@@ -705,7 +705,7 @@ PY
     if [ "$?" -ne 0 ]; then no "control $1: could not build its mutated copy"; return; fi
     if run_on "$f" "$l" "$a" "$k"; then
       no "control $1: the mutated roadmap passed"
-    elif printf '%s\n' "$RESULT" | grep -q -- "$3"; then
+    elif has_match -- "$3" <<<"$RESULT"; then
       ok "control $1 is rejected ($3)"
     else
       no "control $1 failed for an unexpected reason"
@@ -908,7 +908,7 @@ open(sys.argv[2], 'w', encoding='utf-8').write(s)
 PY
     if BUG_LEDGER_DIR="$d" run_on "$TMPD/$1.ctl.md"; then
       no "control $1: the mutated ledger passed"
-    elif printf '%s\n' "$RESULT" | grep -q -- "$4"; then
+    elif has_match -- "$4" <<<"$RESULT"; then
       ok "control $1 is rejected ($4)"
     else
       no "control $1 failed for an unexpected reason"

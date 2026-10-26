@@ -41,13 +41,13 @@ grep -q 'pub struct Copy ByteView' "$NUMERIC" \
 # Isolate the struct body and assert it has only u64 fields (off/len/buf_len) and
 # no pointer field — a *ptr would make it a stored reference, not coordinates.
 body="$(awk '/pub struct Copy ByteView \{/{f=1} f{print} /^    \}/{if(f) exit}' "$NUMERIC")"
-if printf '%s\n' "$body" | grep -qE '\*\s*(const|mut)'; then
+if has_match -E '\*\s*(const|mut)' <<<"$body"; then
   no "ByteView struct contains a pointer field (not reference-free)"
 else
   ok "ByteView struct has no pointer field (coordinates only)"
 fi
 for f in off len; do
-  printf '%s\n' "$body" | grep -qE "^\s*$f:\s*u64" \
+  has_match -E "^\s*$f:\s*u64" <<<"$body" \
     && ok "ByteView.$f : u64" \
     || no "ByteView.$f : u64 missing"
 done
@@ -58,7 +58,7 @@ done
 # some substitutions reads at the call site like one that catches all of them, so it was
 # removed rather than strengthened, and a ByteView is now documented as coordinates that
 # apply to any buffer satisfying its bounds. Re-adding a length brand must fail here.
-if printf '%s\n' "$body" | grep -qE "^\s*buf_len:"; then
+if has_match -E "^\s*buf_len:" <<<"$body"; then
   no "ByteView.buf_len is back — a length is not a buffer identity (R-0483)"
 else
   ok "ByteView has no length brand (coordinates, not a claimed identity)"
@@ -75,7 +75,7 @@ grep -qE 'pub fn new\(off: u64, len: u64, buf: &Bytes\) -> Option<ByteView>' "$N
   && ok "new(...) -> Option<ByteView> (checked construction)" \
   || no "checked constructor new(...) -> Option<ByteView> changed/missing"
 # No access method may return a bare ByteView reference or Bytes — only Option/scalars/views.
-if grep -E 'pub fn (cursor|byte|new|of_cursor|try_text)\(' "$NUMERIC" | grep -qE -- '->[[:space:]]*&'; then
+if grep -E 'pub fn (cursor|byte|new|of_cursor|try_text)\(' "$NUMERIC" | has_match -E -- '->[[:space:]]*&'; then
   no "a ByteView API returns a reference (violates value model)"
 else
   ok "no ByteView API returns a reference"

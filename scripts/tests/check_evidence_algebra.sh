@@ -76,7 +76,7 @@ echo "=== validation is a WITNESS, not a boolean claim ==="
 # validates so it cannot be reused across either.
 grep -q "structure LoweringValidated where" "$EV" \
   && ok "LoweringValidated exists" || no "LoweringValidated missing — validation is a bare Bool again"
-awk '/structure LoweringValidated where/,/deriving/' "$EV" | grep -q "private mk ::" \
+awk '/structure LoweringValidated where/,/deriving/' "$EV" | has_match "private mk ::" \
   && ok "LoweringValidated constructor is private (cannot be fabricated)" \
   || no "LoweringValidated constructor is PUBLIC — a caller can fabricate a witness"
 grep -q "def LoweringValidated.mint" "$EV" \
@@ -103,7 +103,7 @@ grep -qE "w.kernel == k.name && w.obligation == ob" "$EV" \
 # lowering was not expressible as a driver, which R-0450's slice (2026-08-03) removed. Still
 # a real gap, still R-0450, but a TODO rather than an asymmetry that cannot be closed.
 if grep -rn "loweringAgreed := true" Main.lean Concrete/Report/Report.lean 2>/dev/null \
-     | grep "kernel :=" | grep -q .; then
+     | grep "kernel :=" | has_match .; then
   no "a consumer writes 'loweringAgreed := true' — validation asserted, not derived"
 else
   ok "NO kernel asserts validation as a literal — lean included, since R-0450"
@@ -147,7 +147,7 @@ echo "=== ONE derivation: badge strings are constructed in exactly one module ==
 for cls in proved_by_two_kernels proved_by_multi_kernel kernel_disagreement; do
   SITES="$(grep -rln "s!\"$cls\|(\"$cls\"," Concrete/ Main.lean 2>/dev/null | sort -u)"
   N="$(printf '%s' "$SITES" | grep -c . || true)"
-  if [ "$N" = "1" ] && printf '%s' "$SITES" | grep -q "Evidence.lean"; then
+  if [ "$N" = "1" ] && has_match "Evidence.lean" <<<"$SITES"; then
     ok "$cls is constructed only in Evidence.lean"
   else
     no "$cls constructed in $N site(s): $(printf '%s' "$SITES" | tr '\n' ' ')"

@@ -306,7 +306,7 @@ else
   exit "$rc"
 fi
 printf '%s\n' "$LEAN_OUT"
-if printf '%s\n' "$LEAN_OUT" | grep -Eq 'error:|error\(lean'; then
+if has_match -E 'error:|error\(lean' <<<"$LEAN_OUT"; then
   echo "FATAL: Lean probe emitted a diagnostic" >&2
   exit 1
 fi
@@ -329,7 +329,7 @@ if RAW_OUT="$(lake env lean "$TMP_DIR/raw_builtin.lean" 2>&1)"; then
   echo "FATAL: TypeId.ofBuiltin accepted a raw String" >&2
   exit 1
 fi
-if ! printf '%s\n' "$RAW_OUT" | grep -q 'BuiltinEnumId'; then
+if ! has_match 'BuiltinEnumId' <<<"$RAW_OUT"; then
   echo "FATAL: raw-builtin rejection was not the expected type mismatch" >&2
   printf '%s\n' "$RAW_OUT" >&2
   exit 1

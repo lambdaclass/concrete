@@ -107,7 +107,7 @@ CON
   [ "$NUNB" = "2" ] \
     && ok "a step on an unrelated variable, and a step AWAY from the bound, both read unbounded" \
     || no "expected 2 unbounded loops, got $NUNB — a non-terminating loop reads as bounded"
-  printf '%s' "$EFF" | grep -q 'loops: bounded' \
+  has_match 'loops: bounded' <<<"$EFF" \
     && ok "and the honest i = i + 1 loop is still bounded (not merely rejecting everything)" \
     || no "a genuinely bounded loop is now misclassified — the rule is too strict to be useful"
   "$BIN_LC" "$TD_LC/loops.con" --check predictable >/dev/null 2>&1 \
@@ -143,7 +143,7 @@ CON
     && no "--check predictable ADMITS a module whose recursion goes through a function pointer" \
     || ok "an indirect call is refused by the predictable profile"
   SD="$("$BIN_LC" "$TD_LC/indirect.con" --report stack-depth 2>/dev/null)"
-  printf '%s' "$SD" | grep -qE "Max stack bound: [1-9]" \
+  has_match -E "Max stack bound: [1-9]" <<<"$SD" \
     && no "a byte-exact stack bound is still claimed where recursion cannot be ruled out" \
     || ok "no stack bound is claimed when the callee set is unknown"
   UNB="$(printf '%s' "$SD" | grep -c 'stack: unbounded')"
@@ -163,7 +163,7 @@ mod transdepth {
 }
 CON
   TD2="$("$BIN_LC" "$TD_LC/transdepth.con" --report stack-depth 2>/dev/null)"
-  printf '%s' "$TD2" | grep -qE "Max stack bound: [1-9]" \
+  has_match -E "Max stack bound: [1-9]" <<<"$TD2" \
     && no "a caller of a directly-recursive function still gets a finite stack bound" \
     || ok "calling an unbounded function removes the caller's bound"
 fi
@@ -240,15 +240,15 @@ mod transrec {
 }
 CON
   TR="$("$BIN_LC" "$TD_LC/transrec.con" --check predictable 2>/dev/null)"
-  printf '%s' "$TR" | grep -q "2 function(s) failed" \
+  has_match "2 function(s) failed" <<<"$TR" \
     && ok "a caller of a recursive function fails the profile too" \
     || no "transitive recursion is not rejected — a caller of unbounded recursion is admitted"
   # And it must not reject everything: a function reaching nothing recursive still passes.
-  printf '%s' "$TR" | grep -q "1 passed" \
+  has_match "1 passed" <<<"$TR" \
     && ok "an unrelated function still passes (the closure is not swallowing the module)" \
     || no "the transitive closure is over-broad — unrelated functions are being rejected"
   TRE="$("$BIN_LC" "$TD_LC/transrec.con" --report effects 2>/dev/null)"
-  printf '%s' "$TRE" | grep -q "1 enforced" \
+  has_match "1 enforced" <<<"$TRE" \
     && ok "exactly one function is enforced in the effects report" \
     || no "the effects report disagrees with the profile gate on who is enforced"
 fi
@@ -307,11 +307,11 @@ CON
   # rejects it. Asserted on the qualName AND the state together, so a report that stopped
   # naming the function, or named it in some other state, fails here rather than matching
   # a bare phrase found anywhere in the output.
-  printf '%s' "$PS" | grep -A2 'twoprops.caller`' | grep -q "obligation: extractable" \
+  printf '%s' "$PS" | grep -A2 'twoprops.caller`' | has_match "obligation: extractable" \
     && ok "eligibility ACCEPTS the same function (per-body, and must stay so)" \
     || no "caller lost proof eligibility — a provable obligation is being refused"
   # The anti-conflation lock: the proof surface must not claim the admission property.
-  printf '%s' "$PS" | grep -q "predictable profile" \
+  has_match "predictable profile" <<<"$PS" \
     && no "proof-status speaks of the 'predictable profile' again — one phrase, two properties" \
     || ok "the proof surface does not claim the admission property"
   # And the field holds what its name says.

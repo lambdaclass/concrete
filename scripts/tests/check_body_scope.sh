@@ -126,7 +126,7 @@ PASS=$(( PASS + $(grep -c '^  ok   ' "$OUT" || true) ))
 # nothing, and a missed binder reads as a free identifier — the ghost failure again.
 for fn in stmtBinders armBinders; do
   body="$(awk "/^def $fn/,/^\$/" Concrete/Proof/BodyScope.lean)"
-  if printf '%s' "$body" | grep -qE '^\s*\|\s*_\s*=>'; then
+  if has_match -E '^\s*\|\s*_\s*=>' <<<"$body"; then
     no "$fn has a wildcard arm — a new AST form would silently bind nothing"
   else
     ok "$fn is exhaustive with no wildcard arm"
@@ -139,7 +139,7 @@ done
 # doc comment, which explains WHY env.vars is unsuitable — the explanation is the
 # point, not a violation. Strip comments and the module docstring first.
 code="$(sed -e '/^ *--/d' -e '/^ *\/-/,/-\//d' Concrete/Proof/BodyScope.lean)"
-if printf '%s' "$code" | grep -qE "env\.vars|ElabEnv"; then
+if has_match -E "env\.vars|ElabEnv" <<<"$code"; then
   no "BodyScope references elaboration state — positions would inherit its instability"
 else
   ok "BodyScope derives positions from lexical structure alone"

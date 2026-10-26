@@ -138,7 +138,7 @@ else
 fi
 # And they must NOT have been bolted onto CFnDef: Core excludes contracts on
 # purpose and no codegen path consumes them.
-if grep -A26 "^structure CFnDef" "$ROOT_DIR/Concrete/Elab/Core.lean" | grep -qE "requires|ensures"; then
+if grep -A26 "^structure CFnDef" "$ROOT_DIR/Concrete/Elab/Core.lean" | has_match -E "requires|ensures"; then
   no "CFnDef gained contracts — Core excludes them deliberately; keep facts parallel"
 else
   ok "CFnDef did NOT gain contracts; the facts stay a parallel record"
@@ -689,7 +689,7 @@ else
 fi
 # ...and the status it produces must not count as established for anything downstream.
 if grep -qE '^\s*\|.*\.needsRecheck' "$_PC" && \
-   grep -A6 'def ObligationStatus.isCurrentForDependents' "$_PC" | grep -q 'needsRecheck'; then
+   grep -A6 'def ObligationStatus.isCurrentForDependents' "$_PC" | has_match 'needsRecheck'; then
   ok "needs_recheck is enumerated as NOT current for dependents"
 else
   no "needs_recheck is not excluded from isCurrentForDependents — an older, weaker answer would propagate as established"

@@ -729,12 +729,12 @@ _spec "$_SB/renamed.sh" corecheck-unsafe-op >/dev/null 2>&1 \
 # evidence reconciliation. The reservation is enforced, and here it is attacked.
 sed '0,/^add "copy-predicate"/s//add "_sneaky"/' "$_DRV" > "$_SB/reserved.sh"
 _res_out="$(bash "$_SB/reserved.sh" --spec corecheck-unsafe-op 2>&1)"; _res_rc=$?
-{ [ "$_res_rc" = "2" ] && printf '%s' "$_res_out" | grep -q "may not begin with '_'"; } \
+{ [ "$_res_rc" = "2" ] && has_match "may not begin with '_'" <<<"$_res_out"; } \
   && ok "a family claiming the reserved underscore prefix is refused" \
   || no "a family named '_sneaky' was accepted (rc=$_res_rc)"
 
 _dupe_out="$(bash "$_SB/dupe.sh" --spec corecheck-unsafe-op 2>&1)"; _dupe_rc=$?
-{ [ "$_dupe_rc" = "2" ] && printf '%s' "$_dupe_out" | grep -q 'duplicate names'; } \
+{ [ "$_dupe_rc" = "2" ] && has_match 'duplicate names' <<<"$_dupe_out"; } \
   && ok "a duplicated family name is refused, not silently resolved to the first match" \
   || no "duplicate names accepted (rc=$_dupe_rc): $_dupe_out"
 
@@ -742,7 +742,7 @@ _dupe_out="$(bash "$_SB/dupe.sh" --spec corecheck-unsafe-op 2>&1)"; _dupe_rc=$?
 # would exempt nothing today and a family added tomorrow; it must be refused before anything runs.
 sed 's/^expect_red "check_atomic_flip_entrance.sh"/expect_red "check_no_family_names_this.sh"/' "$_DRV" > "$_SB/xred.sh"
 _xr_out="$(bash "$_SB/xred.sh" --spec corecheck-unsafe-op 2>&1)"; _xr_rc=$?
-{ [ "$_xr_rc" = "2" ] && printf '%s' "$_xr_out" | grep -q 'named-by-no-family(check_no_family_names_this.sh)'; } \
+{ [ "$_xr_rc" = "2" ] && has_match 'named-by-no-family(check_no_family_names_this.sh)' <<<"$_xr_out"; } \
   && ok "an expect_red declaration for a gate no family names is refused" \
   || no "a dangling expect_red declaration was accepted (rc=$_xr_rc)"
 
@@ -825,7 +825,7 @@ _wire_sandbox() {
   mkdir -p "$w/scripts/tests/lib" || return 1
   cp "$ROOT_DIR/scripts/tests/check_gate_mutation_coverage.sh" "$w/scripts/tests/" || return 1
   # The driver starts by sourcing the gate-shell guard from beside itself.
-  cp "$ROOT_DIR/scripts/tests/lib/gate_env.sh" "$w/scripts/tests/lib/" || return 1
+  cp "$ROOT_DIR/scripts/tests/lib/gate_env.sh" "$ROOT_DIR/scripts/tests/lib/has_match.sh" "$w/scripts/tests/lib/" || return 1
   printf '%s\n' .mutation-campaign-summary .mutation-campaign-summary.partial \
     .mutation-campaign-summary.candidate '.mutation-campaign-summary.??????' \
     '.mutation-campaign-summary.partial.*' .mutation-evidence/ .gate.lock/ \

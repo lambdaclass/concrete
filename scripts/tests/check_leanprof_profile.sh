@@ -125,7 +125,7 @@ grep -q "lowerQuadraticControl" "$TMP/quadratic.cmp.md" && grep -q "finding" "$T
 $PY compare "$TMP/base.profile.json" "$TMP/quadratic.profile.json" --new-pts 50 --grow-pts 50 >/dev/null \
   && ok "thresholds are the comparison's (raised: no finding)" || no "threshold override"
 cmpv renamed-stage; rc=$?
-[ "$rc" = 0 ] && jq_py "$TMP/renamed-stage.cmp.json" 'd["notes"]' | grep -q "stage emit timed through" \
+[ "$rc" = 0 ] && jq_py "$TMP/renamed-stage.cmp.json" 'd["notes"]' | has_match "stage emit timed through" \
   && ok "a stage timed through another declaration is a note, not a finding" || no "renamed stage: exit $rc"
 mkprof autob auto base 1 >/dev/null
 $PY compare "$TMP/base.profile.json" "$TMP/autob.profile.json" >/dev/null 2>&1; rc=$?
@@ -213,7 +213,7 @@ drive "$TMP/p13" --reps 1 --workloads scaling --scaling-corpus "$TMP/corpus2"; r
 drive "$TMP/p8" --workloads nope; rc=$?
 [ "$rc" = 2 ] && ok "an unknown workload is refused" || no "unknown workload: exit $rc"
 a="$(bash "$DRV" gen-corpus 40 | cksum)"; b="$(bash "$DRV" gen-corpus 40 | cksum)"
-[ "$a" = "$b" ] && bash "$DRV" gen-corpus 40 | grep -q '^fn main() -> Int {' && ok "gen-corpus is deterministic and has a main" || no "gen-corpus"
+[ "$a" = "$b" ] && bash "$DRV" gen-corpus 40 | has_match '^fn main() -> Int {' && ok "gen-corpus is deterministic and has a main" || no "gen-corpus"
 
 echo "F  runner (one cycle per landed commit)"
 RUN="scripts/perf/leanprof_runner.sh"

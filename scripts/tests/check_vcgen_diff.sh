@@ -30,13 +30,13 @@ for f in $(grep -rlE "/|<<|%|\[|\+|-|as " --include=*.con examples tests/program
   # Files that do not PARSE produce no `compared` line. Skipping them is not leniency: the
   # diagnostics corpus contains deliberately-malformed fixtures, and counting "did not print
   # AGREE" as "disagreed" reported 39 false divergences the first time this was measured.
-  printf '%s' "$OUT" | grep -q "compared" || continue
+  has_match "compared" <<<"$OUT" || continue
   FILES=$((FILES+1))
   H="$(printf '%s' "$OUT" | grep -oE 'compared [0-9]+' | grep -oE '[0-9]+')"
   T="$(printf '%s' "$OUT" | grep -oE 'against [0-9]+' | grep -oE '[0-9]+')"
   O="$(printf '%s' "$OUT" | grep -oE 'CALCULUS-ONLY \([0-9]+' | grep -oE '[0-9]+')"
   HERE=$((HERE+H)); THERE=$((THERE+T)); ONLY=$((ONLY+${O:-0}))
-  printf '%s' "$OUT" | grep -q "AGREE" || { DIS=$((DIS+1)); DISLIST="$DISLIST $f"; }
+  has_match "AGREE" <<<"$OUT" || { DIS=$((DIS+1)); DISLIST="$DISLIST $f"; }
 done
 
 [ "$DIS" -eq 0 ] \

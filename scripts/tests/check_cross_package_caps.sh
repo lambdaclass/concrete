@@ -62,7 +62,7 @@ echo "=== a caller declaring nothing cannot reach a dependency's sinks ==="
 # single sink would not show that the whole set travels.
 check_refused() { # dir callee cap
   local out; out="$(cd "$FIX/$1" && "${TO[@]}" "$CC" check . 2>&1)"
-  if printf '%s' "$out" | grep -q "function '$2' requires .*$3.* but caller has (none)"; then
+  if has_match "function '$2' requires .*$3.* but caller has (none)" <<<"$out"; then
     ok "$3: '$2' is refused"
   else
     no "$3: '$2' is NOT refused — the declared capability does not bind across the package"
@@ -86,7 +86,7 @@ fi
 
 echo "=== CONTROL: declared authority is ACCEPTED, and the program RUNS ==="
 dout="$(cd "$FIX/declared_ok" && "${TO[@]}" "$CC" check . 2>&1)"
-if printf '%s' "$dout" | grep -qE 'error\['; then
+if has_match -E 'error\[' <<<"$dout"; then
   no "the positive control is refused — the rule over-applies"
   printf '%s\n' "$dout" | grep -E 'error\[' | awk 'NR<=3' | sed 's/^/       /'
 else
@@ -107,7 +107,7 @@ fi
 
 echo "=== a capability-FREE dependency call stays accepted, and cap-POLYMORPHIC instantiates ==="
 cout="$(cd "$FIX/capfree_ok" && "${TO[@]}" "$CC" check . 2>&1)"
-if printf '%s' "$cout" | grep -qE 'error\['; then
+if has_match -E 'error\[' <<<"$cout"; then
   no "a capability-free or cap-polymorphic import is now refused"
   printf '%s\n' "$cout" | grep -E 'error\[' | awk 'NR<=3' | sed 's/^/       /'
 else
@@ -123,7 +123,7 @@ echo "=== the requirement travels as a SET, not a single capability ==="
 # `get` declares Env AND Alloc. Reporting only the first would look like enforcement
 # while letting the rest through.
 gout="$(cd "$FIX/env_refused" && "${TO[@]}" "$CC" check . 2>&1)"
-if printf '%s' "$gout" | grep -qE "function 'get' requires .*Alloc.*Env|function 'get' requires .*Env.*Alloc"; then
+if has_match -E "function 'get' requires .*Alloc.*Env|function 'get' requires .*Env.*Alloc" <<<"$gout"; then
   ok "both Env and Alloc are reported, not just one"
 else
   no "only part of the declared set crossed the boundary"
@@ -140,7 +140,7 @@ else
 fi
 # Local definitions must still win a name they share with an import. The module's signatures are
 # a map since bug 277 (`env.fnSigs.get?`), read before the imported capabilities.
-if grep -A6 "env.fnSigs.get? name" "$ROOT_DIR/Concrete/Check/CoreCheck.lean" | grep -q "importedCaps"; then
+if grep -A6 "env.fnSigs.get? name" "$ROOT_DIR/Concrete/Check/CoreCheck.lean" | has_match "importedCaps"; then
   ok "imports are consulted AFTER the module's own signatures"
 else
   no "lookup order changed — an import may now shadow a local definition"
@@ -160,7 +160,7 @@ fi
 # an unchecked read must refuse a caller that declares nothing.
 if [ -d "$FIX/rawcursor_refused" ]; then
   rout="$(cd "$FIX/rawcursor_refused" && "${TO[@]}" "$CC" check . 2>&1)"
-  if printf '%s' "$rout" | grep -q "requires Unsafe but caller has (none)"; then
+  if has_match "requires Unsafe but caller has (none)" <<<"$rout"; then
     ok "Unsafe: RawCursor::read_u8 is refused across a package"
   else
     no "a cross-package Unsafe obligation does not bind"
@@ -184,7 +184,7 @@ fi
 # It must be the ONLY thing held back: a local or sibling Unsafe requirement still binds.
 if [ -d "$ROOT_DIR/tests/regressions/cap_sibling_module/extern_unsafe" ]; then
   sout="$(cd "$ROOT_DIR/tests/regressions/cap_sibling_module/extern_unsafe" && "${TO[@]}" "$CC" check . 2>&1)"
-  if printf '%s' "$sout" | grep -qE "requires ([A-Za-z]+, )*Unsafe"; then
+  if has_match -E "requires ([A-Za-z]+, )*Unsafe" <<<"$sout"; then
     ok "a SIBLING-module Unsafe requirement binds too — local, sibling and dependency agree"
   else
     no "Unsafe stopped binding within a package"

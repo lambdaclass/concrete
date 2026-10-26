@@ -21,6 +21,7 @@ SUBSTR="$2"
 CANDIDATE="$3"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$ROOT_DIR/scripts/tests/lib/has_match.sh" || exit 2  # bug 283: never a pipe into grep -q
 COMPILER="$ROOT_DIR/.lake/build/bin/concrete"
 
 if [ ! -x "$COMPILER" ]; then
@@ -34,4 +35,4 @@ if [ $RC -ne 0 ]; then
   exit 1
 fi
 
-echo "$OUT" | grep -qF "$SUBSTR" && exit 0 || exit 1
+has_match -F "$SUBSTR" <<<"$OUT" && exit 0 || exit 1

@@ -81,15 +81,15 @@ for r in $ROWS; do
   # than lowering anything, so it has no contract to state and nothing to discharge.
   # Giving such a row invented Emits/Assumes fields would be worse than exempting it:
   # it would assert a contract that does not exist.
-  if printf '%s' "$SEC" | grep -q '\*\*Kind\*\*: projection'; then
+  if has_match '\*\*Kind\*\*: projection' <<<"$SEC"; then
     ok "$r is a declared projection (no lowering contract to state)"
     continue
   fi
   MISSING=""
-  printf '%s' "$SEC" | grep -q '\*\*Emits\*\*'    || MISSING="$MISSING Emits"
-  printf '%s' "$SEC" | grep -q '\*\*Assumes\*\*'  || MISSING="$MISSING Assumes"
-  printf '%s' "$SEC" | grep -q '\*\*Rejects\*\*'  || MISSING="$MISSING Rejects"
-  printf '%s' "$SEC" | grep -q 'Discharging theorem' || MISSING="$MISSING DischargingTheorem"
+  has_match '\*\*Emits\*\*' <<<"$SEC"    || MISSING="$MISSING Emits"
+  has_match '\*\*Assumes\*\*' <<<"$SEC"  || MISSING="$MISSING Assumes"
+  has_match '\*\*Rejects\*\*' <<<"$SEC"  || MISSING="$MISSING Rejects"
+  has_match 'Discharging theorem' <<<"$SEC" || MISSING="$MISSING DischargingTheorem"
   if [ -z "$MISSING" ]; then
     ok "$r states Emits / Assumes / Rejects / discharging theorem"
   else
@@ -161,12 +161,12 @@ REG="docs/verification/VC_BRIDGE_REGISTER.md"
 PHANTOM=0
 while IFS= read -r cell; do
   IDS="$(printf '%s' "$cell" | grep -oE '[A-Za-z][A-Za-z_]*_(sufficient|necessary)' | sort -u)"
-  if printf '%s' "$cell" | grep -q "DISCHARGED"; then
+  if has_match "DISCHARGED" <<<"$cell"; then
     for name in $IDS; do
       grep -rqE "^(private )?theorem $name" Concrete/ 2>/dev/null \
         || { no "a DISCHARGED cell names theorem '$name', which does not exist in Concrete/"; PHANTOM=1; }
     done
-  elif printf '%s' "$cell" | grep -q "TODO"; then
+  elif has_match "TODO" <<<"$cell"; then
     for name in $IDS; do
       if grep -rqE "^(private )?theorem $name" Concrete/ 2>/dev/null; then
         no "a TODO cell names theorem '$name', which IS proved — the row understates the compiler"

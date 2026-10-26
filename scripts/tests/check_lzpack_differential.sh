@@ -75,7 +75,7 @@ done
 
 # 3. selftest: built-in vectors and corrupt-stream classification.
 "$B" selftest > "$TMP/self.out" 2>&1; rc=$?
-[ $rc -eq 0 ] && tail -1 "$TMP/self.out" | grep -qx 'selftest: all ok' \
+[ $rc -eq 0 ] && tail -1 "$TMP/self.out" | has_match -x 'selftest: all ok' \
   && ok "selftest: all vectors and corrupt streams classified" || no "selftest (rc=$rc)"
 
 # 4. Corrupt streams: the decoder must exit 1 with the reference's diagnosis.

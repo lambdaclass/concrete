@@ -21,3 +21,6 @@ if [ "${CONCRETE_GATES_SHELL:-}" != 1 ]; then
   echo "error: ${0##*/} refuses to run outside the gate shell: run inside nix develop .#gates (CI) or nix develop" >&2
   exit 2
 fi
+
+# Every gate matches text with has_match, never a pipe into grep -q (bug 283).
+source "$(dirname "${BASH_SOURCE[0]}")/has_match.sh" || exit 2

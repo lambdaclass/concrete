@@ -45,21 +45,21 @@ echo "=== H23 (CLOSED 2026-08-03): the cap holds, on every surface ==="
 # range. A cap that silenced the trap would be a worse bug than the one it replaced.
 H23="examples/unsound_hypothesis/src/main.con"
 V23="$("$COMPILER" "$H23" --report vcs 2>/dev/null)"
-printf '%s' "$V23" | grep -A2 "#bounds0" | grep -q "assumed" \
+printf '%s' "$V23" | grep -A2 "#bounds0" | has_match "assumed" \
   && ok "bounds obligation is capped to 'assumed' (R-0461)" \
   || no "bounds0 is NOT capped — H23 has REGRESSED; capOnHypothesisDebt is not firing"
-printf '%s' "$V23" | grep -A3 "#bounds0" | grep -q "rests on (unproved).*#O2" \
+printf '%s' "$V23" | grep -A3 "#bounds0" | has_match "rests on (unproved).*#O2" \
   && ok "the report names the unproved VC the cap rests on" \
   || no "bounds0 does not name its outstanding debt — the cap fired without saying why"
 # Non-vacuity, unchanged in spirit: if the invariant ever became provable the cap would
 # correctly stop firing, and the two assertions above would then be testing nothing.
-printf '%s' "$V23" | grep -A2 "#O2" | grep -q "unproven" \
+printf '%s' "$V23" | grep -A2 "#O2" | has_match "unproven" \
   && ok "the invariant it rests on is still unproven (fixture is non-vacuous)" \
   || no "O2 is no longer unproven — the fixture stopped exercising the cap"
 # The badge surface, which is where H23's headline actually appeared. The ledger and the
 # multi-kernel report derived their class separately, so fixing one left the other lying.
 printf '%s' "$("$COMPILER" "$H23" --report multi-kernel 2>/dev/null)" \
-  | grep -A3 "#bounds0" | grep -q "=> assumed" \
+  | grep -A3 "#bounds0" | has_match "=> assumed" \
   && ok "the multi-kernel badge is capped too (no proved_by_* on this obligation)" \
   || no "the multi-kernel report still badges bounds0 as proved — surfaces disagree"
 # And the release gate. Display without enforcement is how the first fix would have been
@@ -73,7 +73,7 @@ printf '[package]\nname = "h23_policy_fixture"\nversion = "0.1.0"\n\n[policy]\nf
 # Captured, not piped: `check` exits non-zero BECAUSE the gate fired, and under
 # `set -o pipefail` that non-zero propagates past a matching grep and reads as FAIL.
 P23="$( cd "$H23DIR" && "$COMPILER" check src/main.con 2>&1 )"
-printf '%s' "$P23" | grep -q "E0617" \
+has_match "E0617" <<<"$P23" \
   && ok "release policy rejects the capped obligation (E0617 under forbid-assume)" \
   || no "forbid-assume does NOT reject a capped obligation — the cap is display-only"
 # The OTHER release stance. KNOWN_HOLES recorded that `require-two-kernels = true` built
@@ -88,7 +88,7 @@ if command -v coqc >/dev/null 2>&1 || command -v isabelle >/dev/null 2>&1; then
   H23TK="$TMP/h23twokernel"; mkdir -p "$H23TK/src"; cp "$H23" "$H23TK/src/main.con"
   printf '[policy]\nrequire-two-kernels = true\n' > "$H23TK/Concrete.toml"
   T23="$( cd "$H23TK" && "$COMPILER" check src/main.con 2>&1 )"
-  printf '%s' "$T23" | grep -q "E0616" \
+  has_match "E0616" <<<"$T23" \
     && ok "require-two-kernels also rejects the capped obligation (E0616)" \
     || no "require-two-kernels accepts the H23 fixture — the cap does not reach this gate"
 else
@@ -107,22 +107,22 @@ echo "=== H24 (CLOSED 2026-08-03): both trap conditions are now stated ==="
 H24="examples/trap_semantics_gap/src/main.con"
 V24="$("$COMPILER" "$H24" --report vcs 2>/dev/null)"
 # 1. INSUFFICIENCY: div emitted only `divisor != 0`, missing signed MIN / -1.
-printf '%s' "$V24" | grep -q "div_quotient_in_range" \
+has_match "div_quotient_in_range" <<<"$V24" \
   && ok "the quotient-overflow obligation exists (was: never generated)" \
   || no "no div_quotient_in_range VC — H24's insufficiency half has REGRESSED"
-printf '%s' "$V24" | grep -A2 "#div0q" | grep -q "unproven" \
+printf '%s' "$V24" | grep -A2 "#div0q" | has_match "unproven" \
   && ok "and it is unproven under (b != 0) alone, which is the honest answer" \
   || no "div0q is not unproven — either the fixture changed or the obligation is too weak"
 # It must be a SEPARATE key: one status for two conditions is how the weaker one masked
 # the stronger. div0 may legitimately stay proved; div0q must not be folded into it.
-printf '%s' "$V24" | grep -A2 "#div0\]" | grep -q "proved" \
+printf '%s' "$V24" | grep -A2 "#div0\]" | has_match "proved" \
   && ok "the nonzero obligation still proves separately (two conditions, two VCs)" \
   || no "div0 changed status — the two conditions may have been collapsed into one"
 # 2. INAPPLICABILITY: no shift family existed at all, so nothing looked for the fault.
-printf '%s' "$V24" | grep -q "shift_amount_in_range" \
+has_match "shift_amount_in_range" <<<"$V24" \
   && ok "the shift family exists (was: no obligation generated at all)" \
   || no "no shift_amount_in_range VC — H24's applicability half has REGRESSED"
-printf '%s' "$V24" | grep -A4 "#shift0" | grep -q "0 ≤ b ∧ b < 32" \
+printf '%s' "$V24" | grep -A4 "#shift0" | has_match "0 ≤ b ∧ b < 32" \
   && ok "the shift obligation uses the SHIFTED operand's width (32 for u32)" \
   || no "the shift bound is wrong or missing — width must come from the value, not the amount"
 "$COMPILER" "$H24" -o "$TMP/h24" >/dev/null 2>&1
@@ -134,7 +134,7 @@ echo "=== the differential surfaces still do not catch H24 ==="
 # `b != 0` holds at (MIN, -1) and nothing is refuted. If this ever goes green the
 # surface got stronger and VC_BRIDGE_REGISTER.md's correction needs revisiting.
 BC="$("$COMPILER" "$H24" --report bridge-check 2>/dev/null)"
-printf '%s' "$BC" | grep -q "no counterexample" \
+has_match "no counterexample" <<<"$BC" \
   && ok "bridge-check still reports no counterexample on the aborting function" \
   || no "bridge-check now flags it — it may probe sufficiency after all; update the register"
 

@@ -194,7 +194,7 @@ if grep -q 'bump : (no external authority)' "$TMP/caps.txt" \
 else
   no "a &mut-mutating function is reported as pure, or 'no external authority' is missing: $(grep 'bump :' "$TMP/caps.txt")"
 fi
-if grep -A1 -E '^\s+overdeclared : Console$' "$TMP/caps.txt" | grep -q 'assumes: Console (declared); reached foreign assumptions: none'; then
+if grep -A1 -E '^\s+overdeclared : Console$' "$TMP/caps.txt" | has_match 'assumes: Console (declared); reached foreign assumptions: none'; then
   ok "over-declared with(Console): the headline keeps the DECLARED allowance; the body result is only in assumes:"
 else
   no "over-declared function: declared allowance and body analysis are not kept separate: $(grep -A1 'overdeclared :' "$TMP/caps.txt" | tr '\n' ' ')"
@@ -202,7 +202,7 @@ fi
 echo '{"schema_version": 1, "schema_kind": "facts", "facts": [{"kind":"effects","function":"f","is_pure":true}]}' > "$TMP/v1.json"
 (cd "$FIX/app" && "${TO[@]}" "$CC" src/main.con --report diagnostics-json) > "$TMP/v2.json" 2>/dev/null
 dout="$("${TO[@]}" "$CC" diff "$TMP/v1.json" "$TMP/v2.json" 2>&1)"; drc=$?
-if [ "$drc" -ne 0 ] && printf '%s' "$dout" | grep -q 'schema_version 1 is older'; then
+if [ "$drc" -ne 0 ] && has_match 'schema_version 1 is older' <<<"$dout"; then
   ok "concrete diff rejects a schema v1 artifact (is_pure removed in v2) with a regeneration diagnostic"
 else
   no "concrete diff accepted a v1 artifact (rc=$drc): $(printf '%s' "$dout" | head -2)"
@@ -213,7 +213,7 @@ echo '{"schema_version": 99, "schema_kind": "facts", "facts": []}' > "$TMP/futur
 for case in "nover:has no schema_version" "bare:a bare array carries no version" "future:schema_version 99 is NEWER"; do
   f="${case%%:*}"; want="${case#*:}"
   o="$("${TO[@]}" "$CC" diff "$TMP/$f.json" "$TMP/v2.json" 2>&1)"; r=$?
-  if [ "$r" -ne 0 ] && printf '%s' "$o" | grep -q "$want" && ! printf '%s' "$o" | grep -qiE 'weaken|strength|unchanged|changed:'; then
+  if [ "$r" -ne 0 ] && has_match "$want" <<<"$o" && ! has_match -iE 'weaken|strength|unchanged|changed:' <<<"$o"; then
     ok "concrete diff rejects the $f artifact before comparing facts"
   else
     no "concrete diff did not reject the $f artifact cleanly (rc=$r): $(printf '%s' "$o" | head -2)"
@@ -235,8 +235,8 @@ fi
 
 echo "=== positive control: an assumption-free program reads complete and inherits nothing ==="
 pout="$(cd "$FIX/pure_app" && "${TO[@]}" "$CC" src/main.con --report unsafe 2>&1)"
-if printf '%s' "$pout" | grep -q 'Call-graph coverage: complete' \
-   && ! printf '%s' "$pout" | grep -q 'Inherited foreign assumptions'; then
+if has_match 'Call-graph coverage: complete' <<<"$pout" \
+   && ! has_match 'Inherited foreign assumptions' <<<"$pout"; then
   ok "pure_app: coverage complete, no inherited assumptions"
 else
   no "pure_app is not reported as complete and assumption-free"
@@ -251,13 +251,13 @@ D74="$ROOT_DIR/tests/regressions/bug074_duplicate_module_packages/app"
 bout="$(cd "$D74" && "${TO[@]}" "$CC" build . -o "$TMP/dup" 2>&1)"; brc=$?
 rout="$(cd "$D74" && "${TO[@]}" "$CC" src/main.con --report assumptions 2>&1)"; rrc=$?
 want="module 'util' is defined by two packages: 'p1'"
-if [ "$brc" -ne 0 ] && printf '%s' "$bout" | grep -q "$want" && printf '%s' "$bout" | grep -q "'p2'" \
-   && ! printf '%s' "$bout" | grep -q 'LLVM IR validation failed'; then
+if [ "$brc" -ne 0 ] && has_match "$want" <<<"$bout" && has_match "'p2'" <<<"$bout" \
+   && ! has_match 'LLVM IR validation failed' <<<"$bout"; then
   ok "build refused with the diagnostic naming p1 and p2, before LLVM"
 else
   no "the duplicate-module build was not refused as bug 074 requires (rc=$brc): $(printf '%s' "$bout" | head -2)"
 fi
-if [ "$rrc" -ne 0 ] && printf '%s' "$rout" | grep -q "$want"; then
+if [ "$rrc" -ne 0 ] && has_match "$want" <<<"$rout"; then
   ok "report mode refused too — it can no longer merge two packages' declarations"
 else
   no "report mode was not refused (rc=$rrc)"
@@ -270,7 +270,7 @@ fi
 
 echo "=== a dependency of a dependency is still refused, not silently skipped ==="
 tout="$(cd "$ROOT_DIR/tests/regressions/assumption_summary_transitive/root" && "${TO[@]}" "$CC" build . -o "$TMP/trans" 2>&1)"; trc=$?
-if [ "$trc" -ne 0 ] && printf '%s' "$tout" | grep -q "unknown module 'leaf'"; then
+if [ "$trc" -ne 0 ] && has_match "unknown module 'leaf'" <<<"$tout"; then
   ok "root -> mid -> leaf is refused (E0110 unknown module 'leaf'): leaf's assumptions cannot go missing"
 else
   no "the transitive build was not refused as expected (rc=$trc)"

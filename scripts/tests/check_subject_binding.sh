@@ -81,7 +81,7 @@ pin(){
 # fresh <file> <decl> — the stored digest matches the current subject, so a refusal is not freshness.
 fresh(){ "$C" "$1" --report subject-facts 2>/dev/null | awk -v n="$2" '
     /^[^ ]/ {k = split($1, h, "."); cur = h[k]}
-    cur == n && /subjectFreshness:/ {print; exit}' | grep -q "WOULD-MATCH"; }
+    cur == n && /subjectFreshness:/ {print; exit}' | has_match "WOULD-MATCH"; }
 mkpkg(){ mkdir -p "$W/examples/$1/src"; printf '[package]\nname = "%s"\n' "$1" > "$W/examples/$1/Concrete.toml"; cat > "$W/examples/$1/src/main.con"; }
 
 echo "=== P: a claim whose body IS its theorem's specification still mints ==="

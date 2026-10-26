@@ -28,11 +28,11 @@ echo "=== basic expectations: silent, operationally cap-free, alloc-free ==="
 OPERATIONAL='File|Console|Network|Alloc|Env|Time|Process|Random'
 for f in expect_ok expect_err expect_some expect_none; do
   r=$(grep -P "^test\t$f\t" "$M")
-  echo "$r" | awk -F'\t' '$3=="no" && $6=="none"' | grep -q . \
+  echo "$r" | awk -F'\t' '$3=="no" && $6=="none"' | has_match . \
     && ok "test.$f: no Alloc, no caps" || no "test.$f facts wrong ($r)"
 done
 r=$(grep -P "^test\tsink_matches\t" "$M")
-if echo "$r" | awk -F'\t' -v op="$OPERATIONAL" '$3=="no" && $6 !~ op' | grep -q .; then
+if echo "$r" | awk -F'\t' -v op="$OPERATIONAL" '$3=="no" && $6 !~ op' | has_match .; then
   ok "test.sink_matches: no Alloc, no operational authority (Unsafe is the caller's buffer)"
 else
   no "test.sink_matches facts wrong ($r)"
@@ -41,7 +41,7 @@ fi
 echo "=== messaging assertions: authority VISIBLE (Console) ==="
 for f in assert_eq assert_true assert_false expect_sink; do
   r=$(grep -P "^test\t$f\t" "$M")
-  echo "$r" | awk -F'\t' '$6 ~ /Console/' | grep -q . \
+  echo "$r" | awk -F'\t' '$6 ~ /Console/' | has_match . \
     && ok "test.$f carries Console" || no "test.$f missing Console ($r)"
 done
 

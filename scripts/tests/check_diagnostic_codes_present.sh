@@ -25,7 +25,7 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 # A. the structure field and the absent helper
 field_has_no_default() {  # $1 = path to Diagnostic.lean
   awk '/^structure Diagnostic where/{s=1;next} s && /^[a-z]/{s=0} s' "$1" \
-    | grep -E '^\s+code\s+:' | grep -vq ':='
+    | grep -E '^\s+code\s+:' | has_match -v ':='
 }
 no_message_only_helper() {  # $1 = source root
   # Any pass's message-only throw helper (throwCheckMsg, throwElabMsg, throwMsg, ...): train 8

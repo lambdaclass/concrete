@@ -111,8 +111,8 @@ if command -v coqc >/dev/null 2>&1; then
   RCLOSED=0; RAXFREE=0
   for t in $TRUE_FNS; do
     O="$( cd "$WORK" && coqc "$t.v" 2>&1 )"
-    echo "$O" | grep -q "Closed under the global context" && RAXFREE=$((RAXFREE+1))
-    echo "$O" | grep -qiE "^error|error:" || RCLOSED=$((RCLOSED+1))
+    has_match "Closed under the global context" <<<"$O" && RAXFREE=$((RAXFREE+1))
+    has_match -iE "^error|error:" <<<"$O" || RCLOSED=$((RCLOSED+1))
   done
   [ "$RCLOSED" = "4" ] \
     && ok "rocq closed all 4 (the GENERATED scripts, not hand-written ones)" \
@@ -121,7 +121,7 @@ if command -v coqc >/dev/null 2>&1; then
     && ok "all 4 are axiom-free (Print Assumptions: closed under the global context)" \
     || no "only $RAXFREE of 4 are axiom-free — a classical axiom leaked into an attestation"
   WO="$( cd "$WORK" && coqc wrong_post.v 2>&1 )"
-  if echo "$WO" | grep -qi "unable to unify"; then
+  if has_match -i "unable to unify" <<<"$WO"; then
     ok "rocq refuses the false postcondition (Unable to unify)"
   else
     no "rocq did not refuse the false postcondition"
@@ -133,7 +133,7 @@ fi
 echo "=== ISABELLE/HOL (auto) ==="
 if command -v isabelle >/dev/null 2>&1; then
   IO_OUT="$( cd "$WORK" && isabelle build -D . 2>&1 )"
-  printf '%s' "$IO_OUT" | grep -q "^Finished" \
+  has_match "^Finished" <<<"$IO_OUT" \
     && ok "isabelle closed all 4 boolean goals with \`auto\`" \
     || no "isabelle did not finish the session — the emitted theory is wrong"
   # The false control as its own session, so its failure cannot be confused with a real one.
@@ -141,7 +141,7 @@ if command -v isabelle >/dev/null 2>&1; then
   sed 's/theory Thy_wrong_post/theory Thy_ctl/' "$WORK/Thy_wrong_post.thy" > "$WORK/ctl/Thy_ctl.thy" 2>/dev/null
   printf 'session CTL = HOL +\n  theories\n    Thy_ctl\n' > "$WORK/ctl/ROOT"
   CO="$( cd "$WORK/ctl" && isabelle build -D . 2>&1 )"
-  if printf '%s' "$CO" | grep -qE "Failed to finish proof|FAILED"; then
+  if has_match -E "Failed to finish proof|FAILED" <<<"$CO"; then
     ok "isabelle refuses the false postcondition"
   else
     no "isabelle did not refuse the false postcondition"
@@ -193,12 +193,12 @@ grep -q "congruence#euf0\]" "$EW/report.txt" \
 # Symmetry through an opaque term IS a tautology once equality atoms are normalised: `f m = t`
 # and `t = f m` are one atom, and treating them as two made this look falsifiable.
 awk '/sym_through_opaque#euf0/{f=1} f&&/abstraction:/{print;exit}' "$EW/report.txt" \
-  | grep -q "tautology" \
+  | has_match "tautology" \
   && ok "symmetry through an opaque term is a tautology (equality atoms are normalised)" \
   || no "equality atoms are not normalised — `f m = t` and `t = f m` count as two atoms"
 # And congruence must be inconclusive, not a tautology — that is the documented incompleteness.
 awk '/eufdemo.congruence#euf0/{f=1} f&&/abstraction:/{print;exit}' "$EW/report.txt" \
-  | grep -q "inconclusive" \
+  | has_match "inconclusive" \
   && ok "congruence is inconclusive under abstraction (the incompleteness, shown)" \
   || no "congruence is being reported as decided — the abstraction cannot decide it"
 
@@ -244,8 +244,8 @@ if command -v coqc >/dev/null 2>&1; then
   ERC=0; EAX=0
   for t in $EUF_TRUE; do
     O="$( cd "$EW" && coqc "$t.v" 2>&1 )"
-    echo "$O" | grep -q "Closed under the global context" && EAX=$((EAX+1))
-    echo "$O" | grep -qiE "^error|error:" || ERC=$((ERC+1))
+    has_match "Closed under the global context" <<<"$O" && EAX=$((EAX+1))
+    has_match -iE "^error|error:" <<<"$O" || ERC=$((ERC+1))
   done
   [ "$ERC" = "4" ] && ok "rocq closed all 4 EUF goals" || no "rocq closed only $ERC of 4 EUF goals"
   # The important one. `~(A/\B) -> ~A \/ ~B` is classically valid; importing `Classical` would
@@ -254,7 +254,7 @@ if command -v coqc >/dev/null 2>&1; then
     && ok "all 4 are AXIOM-FREE — no Classical import leaked in" \
     || no "only $EAX of 4 axiom-free — a classical axiom is in the attestation"
   BO="$( cd "$EW" && coqc bad_constant.v 2>&1 )"
-  if echo "$BO" | grep -qiE "congruence failed|Tactic failure|No applicable"; then
+  if has_match -iE "congruence failed|Tactic failure|No applicable" <<<"$BO"; then
     ok "rocq refuses \`f m = f t\`"
   else
     no "rocq did not refuse \`f m = f t\`"
@@ -265,11 +265,11 @@ fi
 
 if command -v isabelle >/dev/null 2>&1; then
   EIO="$( cd "$EW" && isabelle build -D . 2>&1 )"
-  printf '%s' "$EIO" | grep -q "^Finished" \
+  has_match "^Finished" <<<"$EIO" \
     && ok "isabelle closed all 4 EUF goals" \
     || no "isabelle did not finish the EUF session"
   EIN="$( cd "$EW/n" && isabelle build -D . 2>&1 )"
-  if printf '%s' "$EIN" | grep -qE "Failed to finish proof|FAILED"; then
+  if has_match -E "Failed to finish proof|FAILED" <<<"$EIN"; then
     ok "isabelle refuses \`f m = f t\`"
   else
     no "isabelle did not refuse \`f m = f t\`"
@@ -342,15 +342,15 @@ if command -v coqc >/dev/null 2>&1; then
   DRC=0; DAX=0
   for t in $DT_TRUE; do
     O="$( cd "$DW" && coqc "$t.v" 2>&1 )"
-    echo "$O" | grep -q "Closed under the global context" && DAX=$((DAX+1))
-    echo "$O" | grep -qiE "^error|error:" || DRC=$((DRC+1))
+    has_match "Closed under the global context" <<<"$O" && DAX=$((DAX+1))
+    has_match -iE "^error|error:" <<<"$O" || DRC=$((DRC+1))
   done
   [ "$DRC" = "4" ] && ok "rocq closed all 4 struct/array goals" || no "rocq closed only $DRC of 4"
   [ "$DAX" = "4" ] \
     && ok "all 4 axiom-free — Record declarations add nothing to the trusted base" \
     || no "only $DAX of 4 axiom-free"
   BAO="$( cd "$DW" && coqc bad_array.v 2>&1 )"
-  if echo "$BAO" | grep -qiE "congruence failed|Tactic failure|No applicable"; then
+  if has_match -iE "congruence failed|Tactic failure|No applicable" <<<"$BAO"; then
     ok "rocq refuses \`a i = a j\`"
   else
     no "rocq did not refuse \`a i = a j\`"
@@ -361,11 +361,11 @@ fi
 
 if command -v isabelle >/dev/null 2>&1; then
   DIO="$( cd "$DW" && isabelle build -D . 2>&1 )"
-  printf '%s' "$DIO" | grep -q "^Finished" \
+  has_match "^Finished" <<<"$DIO" \
     && ok "isabelle closed all 4 struct/array goals" \
     || no "isabelle did not finish the struct session"
   DIN="$( cd "$DW/n" && isabelle build -D . 2>&1 )"
-  if printf '%s' "$DIN" | grep -qE "Failed to finish proof|FAILED"; then
+  if has_match -E "Failed to finish proof|FAILED" <<<"$DIN"; then
     ok "isabelle refuses \`a i = a j\`"
   else
     no "isabelle did not refuse \`a i = a j\`"
@@ -381,23 +381,23 @@ echo "=== coverage is REPORTED, so 'capability' cannot be read as 'covered' ==="
 HM="examples/hmac_sha256/src/main.con"
 if [ -f "$HM" ]; then
   HC="$("$BIN" "$HM" --report bool-kernel 2>/dev/null | grep -oE 'COVERAGE:.*')"
-  printf '%s' "$HC" | grep -q "0 reached a tier" \
+  has_match "0 reached a tier" <<<"$HC" \
     && ok "hmac_sha256's contracts reach NO tier, and the report says so" \
     || no "the coverage line no longer reports hmac_sha256 as unreached"
   # Its contracts are refinement obligations: unprovable with an opaque spec, which is why they
   # are excluded rather than attempted.
-  printf '%s' "$HC" | grep -qE "[1-9][0-9]* are refinement obligations" \
+  has_match -E "[1-9][0-9]* are refinement obligations" <<<"$HC" \
     && ok "and identifies them as refinement obligations needing the spec's definition" \
     || no "refinement obligations are not being identified — the gap becomes invisible"
   # The label must not claim to be per-file: elf_header's own source has no contracts yet the
   # count is nonzero, because imports have them.
-  printf '%s' "$HC" | grep -q "IMPORTS INCLUDED" \
+  has_match "IMPORTS INCLUDED" <<<"$HC" \
     && ok "the count is labelled as program-wide, not per-file" \
     || no "the coverage count is mislabelled as per-file"
 fi
 # And a demo file DOES reach tiers, so the measurement discriminates.
 DC="$("$BIN" "$DTDEMO" --report bool-kernel 2>/dev/null | grep -oE 'COVERAGE:.*')"
-printf '%s' "$DC" | grep -qE "[1-9][0-9]* reached a tier" \
+has_match -E "[1-9][0-9]* reached a tier" <<<"$DC" \
   && ok "a demo file reaches tiers (the coverage metric is not stuck at zero)" \
   || no "no file reaches a tier — the metric is measuring nothing"
 
@@ -471,21 +471,21 @@ if command -v coqc >/dev/null 2>&1; then
   RRC=0; RAX=0
   for t in double triple; do
     O="$( cd "$RW" && coqc "$t.v" 2>&1 )"
-    echo "$O" | grep -q "Closed under the global context" && RAX=$((RAX+1))
-    echo "$O" | grep -qiE "^error|error:" || RRC=$((RRC+1))
+    has_match "Closed under the global context" <<<"$O" && RAX=$((RAX+1))
+    has_match -iE "^error|error:" <<<"$O" || RRC=$((RRC+1))
   done
   [ "$RRC" = "2" ] && ok "rocq proved both refinements" || no "rocq proved only $RRC of 2"
   [ "$RAX" = "2" ] && ok "and both are axiom-free" || no "only $RAX of 2 axiom-free"
   RBO="$( cd "$RW" && coqc bad_refine.v 2>&1 )"
-  echo "$RBO" | grep -qiE "Tactic failure|cannot" \
+  has_match -iE "Tactic failure|cannot" <<<"$RBO" \
     && ok "rocq refuses the non-refining body" || no "rocq did not refuse the non-refining body"
 else
   inconc "coqc absent — refinement Rocq assertions not run"
 fi
 if command -v isabelle >/dev/null 2>&1; then
-  printf '%s' "$( cd "$RW" && isabelle build -D . 2>&1 )" | grep -q "^Finished" \
+  printf '%s' "$( cd "$RW" && isabelle build -D . 2>&1 )" | has_match "^Finished" \
     && ok "isabelle proved both refinements" || no "isabelle did not finish the refinement session"
-  printf '%s' "$( cd "$RW/n" && isabelle build -D . 2>&1 )" | grep -qE "Failed to finish proof|FAILED" \
+  printf '%s' "$( cd "$RW/n" && isabelle build -D . 2>&1 )" | has_match -E "Failed to finish proof|FAILED" \
     && ok "isabelle refuses the non-refining body" || no "isabelle did not refuse it"
 else
   inconc "isabelle absent — refinement HOL assertions not run"
@@ -519,11 +519,11 @@ CON
 # failure even when grep MATCHES -- and a rejected program makes the compiler exit non-zero, so
 # both of these assertions silently took the wrong branch and reported the fix as broken.
 FV_OUT="$("$BIN" "$SPW/freevar.con" --report vcs 2>&1 || true)"
-printf '%s' "$FV_OUT" | grep -q "references unknown name" \
+has_match "references unknown name" <<<"$FV_OUT" \
   && ok "a spec body referencing an undeclared name is REJECTED" \
   || no "a spec body may reference undeclared names — nonsense reaches the kernels"
 EC_OUT="$("$BIN" "$SPW/execcall.con" --report vcs 2>&1 || true)"
-printf '%s' "$EC_OUT" | grep -q "calls non-spec function" \
+has_match "calls non-spec function" <<<"$EC_OUT" \
   && ok "a spec body calling executable code is REJECTED (specs must not depend on runtime)" \
   || no "a spec body may call executable functions — the spec is no longer independent"
 # And the rule must not be so strict it forbids legitimate specs: spec-to-spec calls are fine.
@@ -537,11 +537,11 @@ cat > "$SPW/sort2.con" <<'CON'
 mod s2 { spec fn wrong2(x: i32) -> bool = x + 1; }
 CON
 S1="$("$BIN" "$SPW/sort1.con" --report vcs 2>&1 || true)"
-printf '%s' "$S1" | grep -q "wrong sort" \
+has_match "wrong sort" <<<"$S1" \
   && ok "a boolean body for an integer spec is REJECTED" \
   || no "a bool body for an int spec is accepted — the kernels see the type error instead"
 S2="$("$BIN" "$SPW/sort2.con" --report vcs 2>&1 || true)"
-printf '%s' "$S2" | grep -q "wrong sort" \
+has_match "wrong sort" <<<"$S2" \
   && ok "an integer body for a boolean spec is REJECTED (both directions)" \
   || no "an int body for a bool spec is accepted"
 
@@ -572,10 +572,10 @@ mod cap {
 }
 EOF
 CAP="$("$BIN" "$SPW/capture.con" --report bool-kernel 2>&1 || true)"
-printf '%s' "$CAP" | grep -q "binds name" \
+has_match "binds name" <<<"$CAP" \
   && ok "a spec body that BINDS a name is rejected (substitution is capture-unsafe)" \
   || no "a binder-bearing spec body is accepted — substExpr can corrupt the obligation"
-printf '%s' "$CAP" | grep -qE "refine[0-9]" \
+has_match -E "refine[0-9]" <<<"$CAP" \
   && no "the corrupted obligation still reaches the refinement tier" \
   || ok "...and no refinement obligation is issued from it"
 
@@ -595,7 +595,7 @@ EOF
 # and under `set -o pipefail` a direct `"$BIN" ... | grep -q` is nonzero even when grep MATCHES.
 # That reports a working check as broken.
 DEEP="$("$BIN" "$SPW/capture_deep.con" --report bool-kernel 2>&1 || true)"
-printf '%s' "$DEEP" | grep -q "binds name" \
+has_match "binds name" <<<"$DEEP" \
   && ok "a binder nested three branches deep is caught (the check recurses into statements)" \
   || no "a deeply nested binder escapes — the binder check is shallow"
 
@@ -614,7 +614,7 @@ mod nb {
 }
 EOF
 NB="$("$BIN" "$SPW/nobind.con" --report bool-kernel 2>&1 || true)"
-printf '%s' "$NB" | grep -q "error\[" \
+has_match "error\[" <<<"$NB" \
   && no "a BINDER-FREE conditional is rejected — containment ate the useful fragment" \
   || ok "a binder-free conditional is still admitted (containment is targeted, not blanket)"
 

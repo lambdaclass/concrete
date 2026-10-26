@@ -250,13 +250,13 @@ echo "=== the string encodings are gone, not merely unused ==="
 # Structural, because every check above passes for a fix that keeps the
 # conventions alive next to the new constructors — and a second representation
 # is how the first one came back.
-if grep -rn '"@fnref\.' Concrete/ --include='*.lean' | grep -v '^Concrete/IR/SSA.lean' | grep -q .; then
+if grep -rn '"@fnref\.' Concrete/ --include='*.lean' | grep -v '^Concrete/IR/SSA.lean' | has_match .; then
   no "a pass still spells a function reference as an @fnref. register name:
 $(grep -rn '"@fnref\.' Concrete/ --include='*.lean' | grep -v '^Concrete/IR/SSA.lean')"
 else
   ok "no pass constructs or decodes an @fnref. register name"
 fi
-if grep -rn 'startsWith "%"' Concrete/ --include='*.lean' | grep -q .; then
+if grep -rn 'startsWith "%"' Concrete/ --include='*.lean' | has_match .; then
   no "a pass still decodes a call target from a %-prefixed string:
 $(grep -rn 'startsWith "%"' Concrete/ --include='*.lean')"
 else

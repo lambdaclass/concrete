@@ -87,7 +87,7 @@ case_judge() {
   # THE MARKER MUST APPEAR ON A FAILURE LINE. Searching the whole log accepts a marker printed on an
   # `ok` line — which is exactly what a mutation that neutralises the REFUSAL while preserving its
   # MESSAGE produces. The control would then pass while the accounting it guards was disabled.
-  if grep -E '^(  FAIL|FATAL)' "$log" | grep -qF -- "$marker"; then
+  if grep -E '^(  FAIL|FATAL)' "$log" | has_match -F -- "$marker"; then
     # A MARKER IS NECESSARY, NOT SUFFICIENT. Several of these cases assert something about the SHAPE
     # of the failure — that it is confined to one group, or that it names every affected member —
     # and a single matching failure line is equally consistent with the whole gate collapsing. The

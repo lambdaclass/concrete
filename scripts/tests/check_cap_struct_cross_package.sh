@@ -42,9 +42,9 @@ fi
 echo "=== authority does not leak across the boundary ==="
 for case in leak_refused method_leak_refused; do
   out="$(cd "$FIX/$case" && "${TO[@]}" "$CC" build . -o "$TMP/$case" 2>&1)"
-  if printf '%s' "$out" | grep -q 'E0240'; then
+  if has_match 'E0240' <<<"$out"; then
     ok "$case is refused with E0240 (missing Console)"
-  elif printf '%s' "$out" | grep -q 'E0114'; then
+  elif has_match 'E0114' <<<"$out"; then
     no "$case is refused with E0114 — Sink<Console> was read as a TYPE: capability arguments were not normalized after the package merge"
   else
     no "$case was not refused with E0240: $(printf '%s' "$out" | head -2 | tr '\n' ' ' | cut -c1-200)"

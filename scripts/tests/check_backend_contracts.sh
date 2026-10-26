@@ -67,7 +67,7 @@ eLayout="$(printf '%s' "$LL" | sed -n 's/^target datalayout = "\(.*\)"/\1/p' | h
   || no "data layout drift: report=$rLayout emitted=$eLayout"
 
 echo "=== human and JSON agree on the target ==="
-"$C" "$F" --report backend-contracts 2>/dev/null | grep -qF "$rTriple" \
+"$C" "$F" --report backend-contracts 2>/dev/null | has_match -F "$rTriple" \
   && ok "human report shows the same target triple" || no "human/JSON target disagree"
 
 echo "=== fixture matrix: the report is robust + honest across program shapes (#17b) ==="

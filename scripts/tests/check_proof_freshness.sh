@@ -432,7 +432,7 @@ grep -q "main.compute_tag (stale)" <<<"$DEPS" \
 # The transitive half was specifically that `verify_message` showed NOTHING
 # about the stale leaf — worse than showing it and ignoring it, because a reader
 # of that line saw an all-proved chain. It must now name it.
-if awk '/main\.verify_message \[/{f=1;next} f&&/^$/{exit} f' <<<"$DEPS" | grep -q "compute_tag (stale)"; then
+if awk '/main\.verify_message \[/{f=1;next} f&&/^$/{exit} f' <<<"$DEPS" | has_match "compute_tag (stale)"; then
   ok "the two-hop dependency block now names the stale leaf two hops down"
 else
   no "the two-hop block still hides the stale leaf:

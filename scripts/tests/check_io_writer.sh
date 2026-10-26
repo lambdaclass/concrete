@@ -20,7 +20,7 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 
 # 1. fixed_writer: allocates=no, and the write/flush/close METHODS are cap-free
 row=$(grep -P "^io\tfixed_writer\t" "$M")
-echo "$row" | awk -F'\t' '$3=="no"' | grep -q . && ok "fixed_writer allocates: no" || no "fixed_writer must not allocate ($row)"
+echo "$row" | awk -F'\t' '$3=="no"' | has_match . && ok "fixed_writer allocates: no" || no "fixed_writer must not allocate ($row)"
 # R-0484 REVERSED THIS SECTION'S RULE (2026-10-01). It asserted that `Writer` methods are
 # capability-free because authority was settled at ACQUISITION and travels with the handle —
 # the ocap reading. That is exactly what R-0484 removed: a function holding a `Writer` could
@@ -72,18 +72,18 @@ for ctl in empty_writer_free transfer_free; do
   fi
 done
 cout="$(cd "$HC/console_use_refused" && "$CC" check . 2>&1)"
-if printf '%s' "$cout" | grep -q "function 'flush' requires capability 'Console' but 'use_unpaid' does not declare it"; then
+if has_match "function 'flush' requires capability 'Console' but 'use_unpaid' does not declare it" <<<"$cout"; then
   ok "using a Writer<Console> without declaring Console is refused, naming Console"
 else
   no "a Writer<Console> is usable without Console: $(printf '%s' "$cout" | grep error | head -1 | cut -c1-160)"
 fi
 
 # 2. acquisition capabilities
-grep -P "^io\twriter_from_file\t" "$M" | awk -F'\t' '$6 ~ /File/' | grep -q . \
+grep -P "^io\twriter_from_file\t" "$M" | awk -F'\t' '$6 ~ /File/' | has_match . \
   && ok "writer_from_file requires File" || no "writer_from_file missing File cap"
-grep -P "^io\tconsole_writer\t" "$M" | awk -F'\t' '$6 ~ /Console/' | grep -q . \
+grep -P "^io\tconsole_writer\t" "$M" | awk -F'\t' '$6 ~ /Console/' | has_match . \
   && ok "console_writer requires Console" || no "console_writer missing Console cap"
-grep -P "^io\tfixed_writer\t" "$M" | awk -F'\t' '$6 ~ /Unsafe/' | grep -q . \
+grep -P "^io\tfixed_writer\t" "$M" | awk -F'\t' '$6 ~ /Unsafe/' | has_match . \
   && ok "fixed_writer requires Unsafe (caller-owned raw region)" || no "fixed_writer missing Unsafe cap"
 
 # 3. every Writer-returning pub fn declares SOME acquisition authority (no silent sinks)
@@ -97,14 +97,14 @@ n=$(grep -l "write_fn" std/src/*.con | wc -l | tr -d ' ')
 [ "$n" -eq 1 ] && ok "the fn-pointer sink shape lives only in std.io" || no "parallel sink interfaces in $n files"
 
 echo "=== Reader (symmetric contract) ==="
-grep -P "^io\tfixed_reader\t" "$M" | awk -F'\t' '$3=="no" && $6 ~ /Unsafe/' | grep -q . \
+grep -P "^io\tfixed_reader\t" "$M" | awk -F'\t' '$3=="no" && $6 ~ /Unsafe/' | has_match . \
   && ok "fixed_reader: no Alloc, Unsafe at acquisition" || no "fixed_reader facts wrong"
-grep -P "^io\treader_from_file\t" "$M" | awk -F'\t' '$6 ~ /File/' | grep -q . \
+grep -P "^io\treader_from_file\t" "$M" | awk -F'\t' '$6 ~ /File/' | has_match . \
   && ok "reader_from_file requires File" || no "reader_from_file missing File"
 # The RESULT shape is the contract here: a read can fail at runtime and the caller must be
 # able to recover. Its capability set is asserted with the Writer methods above.
 r=$(awk -F'\t' '$1=="io" && $10=="Reader<C>" && $2=="read"' "$M")
-echo "$r" | awk -F'\t' '$5=="result"' | grep -q . \
+echo "$r" | awk -F'\t' '$5=="result"' | has_match . \
   && ok "Reader.read returns a recoverable Result" || no "Reader.read must return a recoverable Result ($r)"
 [ "$(grep -c 'struct Reader' std/src/io.con)" -eq 1 ] && ok "exactly one Reader handle" || no "multiple Readers"
 

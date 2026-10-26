@@ -57,13 +57,13 @@ env -u DB_PORT -u EMPTY_VAL DB_HOST=prod.example.com CACHE=on \
 
 # env override with empty value still wins (present-but-empty != absent)
 env -u DB_PORT -u CACHE -u EMPTY_VAL DB_HOST= "$B" "$TMP/app.conf" > "$TMP/got3.txt" 2>/dev/null
-head -1 "$TMP/got3.txt" | grep -qx "DB_HOST=" \
+head -1 "$TMP/got3.txt" | has_match -x "DB_HOST=" \
   && ok "present-but-empty env var overrides to empty" || no "empty env override"
 
 # invalid-UTF-8 env value is REJECTED (env.get -> None), file value wins
 # (String=UTF-8 contract; defect-queue item 2)
 env -u DB_PORT -u CACHE -u EMPTY_VAL DB_HOST=$'\xff\xfe' "$B" "$TMP/app.conf" > "$TMP/got5.txt" 2>/dev/null
-head -1 "$TMP/got5.txt" | grep -qx "DB_HOST=localhost" \
+head -1 "$TMP/got5.txt" | has_match -x "DB_HOST=localhost" \
   && ok "invalid-UTF-8 env value rejected, file value wins" || no "invalid-UTF-8 env value leaked through"
 
 # last line without trailing newline is still processed

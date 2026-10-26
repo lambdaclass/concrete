@@ -160,18 +160,18 @@ PASS=$(( PASS + $(grep -c '^  ok   ' "$OUT" || true) ))
 # authority. A wildcard arm would let an unclassified constructor receive a generic
 # tag, and a derived Repr would produce bytes for a node kind nobody classified.
 code="$(sed -e '/^ *--/d' -e '/^ *\/-/,/-\//d' Concrete/Proof/IdentityUseBytes.lean)"
-if printf '%s' "$code" | grep -qE '^\s*\|\s*_\s*=>'; then
+if has_match -E '^\s*\|\s*_\s*=>' <<<"$code"; then
   no "the serializer has a wildcard arm — an unclassified node would get a generic tag"
 else
   ok "the serializer has no wildcard arm"
 fi
-if printf '%s' "$code" | grep -qE "deriving.*Repr|Repr\b"; then
+if has_match -E "deriving.*Repr|Repr\b" <<<"$code"; then
   no "the serializer reaches for Repr — a derived instance absorbs new constructors silently"
 else
   ok "the serializer does not derive its bytes from Repr"
 fi
 # The split is the architecture: serialization must not resolve anything.
-if printf '%s' "$code" | grep -qE "lookup|resolve|Elab|find\?"; then
+if has_match -E "lookup|resolve|Elab|find\?" <<<"$code"; then
   no "the serializer performs resolution — that belongs to the producer, which alone has the information"
 else
   ok "the serializer resolves nothing; it only encodes captured nodes"
@@ -179,7 +179,7 @@ fi
 
 # Arity must be exhaustive in the SOURCE, not merely correct for today's four leaves.
 code_arity="$(awk '/^def nodeArity/,/^$/' Concrete/Proof/IdentityUseBytes.lean)"
-if printf '%s' "$code_arity" | grep -qE '^\s*\|\s*_\s*=>'; then
+if has_match -E '^\s*\|\s*_\s*=>' <<<"$code_arity"; then
   no "nodeArity has a wildcard — a composite node would silently be treated as a leaf"
 else
   ok "nodeArity is exhaustive with no wildcard"

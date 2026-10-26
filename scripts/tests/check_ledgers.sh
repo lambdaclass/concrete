@@ -63,7 +63,7 @@ cp scripts/gen/bug_ledger.py scripts/gen/changelog.py scripts/gen/migrate_ledger
 cp scripts/tests/audit_bug_corpus.sh scripts/tests/check_bug_filing_complete.sh \
    scripts/tests/run_tests.sh scripts/tests/run_ci_gates_local.sh "$BASE/scripts/tests/"
 # The copied gates start by sourcing the gate-shell guard from beside themselves.
-mkdir -p "$BASE/scripts/tests/lib" && cp scripts/tests/lib/gate_env.sh "$BASE/scripts/tests/lib/"
+mkdir -p "$BASE/scripts/tests/lib" && cp scripts/tests/lib/gate_env.sh scripts/tests/lib/has_match.sh "$BASE/scripts/tests/lib/"
 [ -f scripts/tests/ci_gate_inventory.txt ] && cp scripts/tests/ci_gate_inventory.txt "$BASE/scripts/tests/"
 cp .github/workflows/lean_action_ci.yml "$BASE/.github/workflows/"
 ln -s "$ROOT_DIR/tests" "$BASE/tests"
@@ -77,7 +77,7 @@ fi
 if [ "$MIGRATED_HERE" = 1 ]; then
   ok "the tree is migrated; the controls run on a copy of it"
 elif python3 -I "$BL" --check --root "$BASE" >/dev/null 2>&1 && [ -n "$(python3 -I "$BL" corpus --root "$BASE")" ] \
-     && python3 -I "$CL" --check --root "$BASE" 2>/dev/null | grep -q 'matches its stamp'; then
+     && python3 -I "$CL" --check --root "$BASE" 2>/dev/null | has_match 'matches its stamp'; then
   ok "the migration (scripts/gen/migrate_ledgers.py) runs on this tree and its result checks; the controls run on it"
 else
   no "the migration does not run cleanly on this tree (log below); scripts/gen/migrate_ledgers.sh would fail"

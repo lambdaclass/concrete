@@ -108,7 +108,7 @@ fn shout() with(Console) -> i32 { print_int(1); return 0; }
 fn main() with(Console) -> i32 { return shout(); }
 EOF
 q="$("${TO[@]}" "$CC" "$TMP/q.con" --query why-capability:main:Console 2>&1)"
-if printf '%s' "$q" | grep -q '"origin": "intrinsic"' && printf '%s' "$q" | grep -q '"answer": "transitive"'; then
+if has_match '"origin": "intrinsic"' <<<"$q" && has_match '"answer": "transitive"' <<<"$q"; then
   ok "single-file why-capability: main -> shout -> print_int (intrinsic), transitive"
 else
   no "single-file why-capability trace changed: $(printf '%s' "$q" | head -c 200)"

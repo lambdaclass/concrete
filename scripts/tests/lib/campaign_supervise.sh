@@ -15,6 +15,7 @@
 # tree.
 #
 # Empty output means "nothing refused". Any non-empty output means qualification must be denied.
+source "$(dirname "${BASH_SOURCE[0]}")/has_match.sh"  # bug 283: never a pipe into grep -q
 
 # The keys that must be present for a candidate to be a record at all. A truncated file parses as a
 # valid record with missing fields, and every one of these is load-bearing for what gets published.
@@ -1046,7 +1047,7 @@ supervisor_reconcile_and_publish() {
       # belongs to the run rather than to one experiment. It is reserved by construction: no family
       # name may begin with an underscore, so this exclusion cannot hide a real family.
       case "$_evd" in _*) continue ;; esac
-      printf '%s\n' "$_sup_fams" | grep -qxF -- "$_evd" \
+      has_match -xF -- "$_evd" <<<"$_sup_fams" \
         || _ev_undeclared="$_ev_undeclared $_evd"
     done <<EOF
 $_ev_dirs

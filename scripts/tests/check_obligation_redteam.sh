@@ -113,7 +113,7 @@ sat="$(PATH="$TMP:$PATH" "$COMPILER" "$F" --report vcs --smt --json 2>/dev/null 
 [ "$sat" = "unproven" ] \
   && ok "lying 'sat' solver → verdict DROPPED (never a proof, and never a counterexample either)" \
   || no "lying 'sat' solver produced '$sat' — an unvalidated rendering must yield no verdict"
-printf '%s' "$satout" | grep -q "DROPPED — rendering not validated" \
+has_match "DROPPED — rendering not validated" <<<"$satout" \
   && ok "and the drop is reported, not silent" \
   || no "the verdict vanished with no warning — a silent drop is indistinguishable from no solver run"
 

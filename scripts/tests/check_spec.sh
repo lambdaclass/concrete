@@ -118,7 +118,7 @@ control() {
   local name="$1" check="$2" frag="$3"; shift 4
   local out rc
   out="$("${SPECPY[@]}" "$@" 2>&1)"; rc=$?
-  if [ "$rc" -ne 0 ] && grep -F "FAIL [$check]" <<<"$out" | grep -qF -- "$frag"; then
+  if [ "$rc" -ne 0 ] && grep -F "FAIL [$check]" <<<"$out" | has_match -F -- "$frag"; then
     ok "$name"
   else
     no "$name (exit $rc; expected FAIL [$check] containing '$frag'): $(grep 'FAIL' <<<"$out" | head -2 | tr '\n' ' ')"

@@ -88,7 +88,7 @@ else
 # stopped reaching the deriver, freshness would silently fall back to the body-only fingerprint —
 # which is exactly bugs 059 and 060 reopening, since that hash sees neither declared types nor
 # contracts. The former tripwire becomes the guard on the thing it used to forbid.
-if grep -A2 "deriveObligationStatus e.eligibility" Concrete/Proof/ProofCore.lean | grep -q "subjectDigest"; then
+if grep -A2 "deriveObligationStatus e.eligibility" Concrete/Proof/ProofCore.lean | has_match "subjectDigest"; then
   ok "the status derivation consumes the subject digest — freshness is on V2, not the legacy fingerprint"
 else
   no "deriveObligationStatus no longer receives the subject digest — freshness has fallen back to the body-only fingerprint, which is bugs 059 and 060 reopening"

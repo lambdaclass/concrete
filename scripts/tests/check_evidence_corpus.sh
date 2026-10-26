@@ -46,12 +46,12 @@ echo "=== evidence-class corpus: each class reports correctly ==="
 # or that relabels this as `stale`, fails here.
 want "proved_by_lean link → unbound"          proof-status proved_by_lean "proof link unbound"
 want "proved_by_lean → exact reason"          proof-status proved_by_lean "no stored proof-subject digest"
-if "$COMPILER" "$EC/proved_by_lean/src/main.con" --report proof-status 2>&1 | grep -qE "^-- proved"; then
+if "$COMPILER" "$EC/proved_by_lean/src/main.con" --report proof-status 2>&1 | has_match -E "^-- proved"; then
   echo "  FAIL proved_by_lean must NOT report proved without a stored subject"; FAIL=$((FAIL + 1))
 else
   echo "  ok   proved_by_lean does not report proved while unbound"; PASS=$((PASS + 1))
 fi
-if "$COMPILER" "$EC/proved_by_lean/src/main.con" --report proof-status 2>&1 | grep -qE "^-- proof stale"; then
+if "$COMPILER" "$EC/proved_by_lean/src/main.con" --report proof-status 2>&1 | has_match -E "^-- proof stale"; then
   echo "  FAIL proved_by_lean reported as stale — no body change was shown; the state is unbound"; FAIL=$((FAIL + 1))
 else
   echo "  ok   proved_by_lean is not mislabelled stale"; PASS=$((PASS + 1))

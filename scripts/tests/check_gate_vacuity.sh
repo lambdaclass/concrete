@@ -39,7 +39,7 @@ count_universal(){ local tot=0
   for f in scripts/tests/check_*.sh; do
     [ "$(basename "$f")" = "check_gate_vacuity.sh" ] && continue
     while IFS= read -r line; do
-      printf '%s' "$line" | grep -qE "len\(|\[0\]|\breturn\b" || tot=$((tot+1))
+      has_match -E "len\(|\[0\]|\breturn\b" <<<"$line" || tot=$((tot+1))
     done < <(grep -hoE "\"[^\"]*all\([^\"]*for [a-z]+ in [^\"]*\"" "$f")
   done
   echo "$tot"; }
@@ -62,7 +62,7 @@ badhelpers=""
 for f in $(grep -lE "^[a-z_]*absent[a-z_]*\(\)" scripts/tests/check_*.sh); do
   [ "$(basename "$f")" = "check_gate_vacuity.sh" ] && continue
   # the helper body is the line plus the following few; look for an emptiness guard nearby
-  if ! grep -A6 -E "^[a-z_]*absent[a-z_]*\(\)" "$f" | grep -qE '\-z "\$|VACUOUS|isEmpty'; then
+  if ! grep -A6 -E "^[a-z_]*absent[a-z_]*\(\)" "$f" | has_match -E '\-z "\$|VACUOUS|isEmpty'; then
     badhelpers="$badhelpers $(basename "$f")"
   fi
 done

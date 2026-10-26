@@ -104,7 +104,7 @@ else
 fi
 
 for f in $EXPECT_CONST $EXPECT_GHOST $EXPECT_INVALID; do
-  if printf '%s' "$offenders" | grep -qF "$f"; then
+  if has_match -F "$f" <<<"$offenders"; then
     ok "known uncovered program still accounted for: $f"
   else
     no "$f is no longer uncovered — if its cause was closed, update the inventory and cause notes here"

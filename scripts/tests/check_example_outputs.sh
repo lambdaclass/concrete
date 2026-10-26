@@ -132,7 +132,7 @@ spec_pointer_ok() {
   case "$1" in *"#"*) anchor="${1#*#}" ;; esac
   [ -n "$file" ] && [ -f "$file" ] || return 1
   [ -z "$anchor" ] && return 0
-  grep -E '^#+ ' "$file" | sed -E 's/^#+ +//' | tr 'A-Z' 'a-z' | sed -E 's/[^a-z0-9 _-]//g; s/ /-/g' | grep -qxF -- "$anchor"
+  grep -E '^#+ ' "$file" | sed -E 's/^#+ +//' | tr 'A-Z' 'a-z' | sed -E 's/[^a-z0-9 _-]//g; s/ /-/g' | has_match -xF -- "$anchor"
 }
 no() {
   FAIL=$((FAIL + 1))

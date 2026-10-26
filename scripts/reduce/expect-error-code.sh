@@ -19,6 +19,7 @@ CODE="$1"
 CANDIDATE="$2"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$ROOT_DIR/scripts/tests/lib/has_match.sh" || exit 2  # bug 283: never a pipe into grep -q
 COMPILER="$ROOT_DIR/.lake/build/bin/concrete"
 
 if [ ! -x "$COMPILER" ]; then
@@ -31,4 +32,4 @@ RC=$?
 if [ $RC -eq 0 ]; then
   exit 1
 fi
-echo "$OUT" | grep -q "$CODE" && exit 0 || exit 1
+has_match "$CODE" <<<"$OUT" && exit 0 || exit 1

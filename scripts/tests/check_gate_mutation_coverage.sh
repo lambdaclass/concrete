@@ -425,7 +425,7 @@ if [ -z "${CONCRETE_MUT_SNAPSHOT:-}" ]; then
     echo "FATAL: could not snapshot the campaign driver" >&2
     _gate_lock_release 2>/dev/null || true; exit 2; }
   # The snapshot's first statement sources the gate-shell guard from beside itself (lib/gate_env.sh).
-  mkdir -p "$_snap_dir/lib" && cp "$ROOT_DIR/scripts/tests/lib/gate_env.sh" "$_snap_dir/lib/" || {
+  mkdir -p "$_snap_dir/lib" && cp "$ROOT_DIR/scripts/tests/lib/gate_env.sh" "$ROOT_DIR/scripts/tests/lib/has_match.sh" "$_snap_dir/lib/" || {
     echo "FATAL: could not snapshot the gate-shell guard next to the campaign driver" >&2
     _gate_lock_release 2>/dev/null || true; exit 2; }
   # ROOT_DIR IS PASSED EXPLICITLY. After `exec`, `BASH_SOURCE[0]` is the snapshot under /tmp, so
@@ -635,7 +635,7 @@ if [ "${1:-}" = "--coverage" ]; then
     k="$(grep -ciE 'unsound|must never|false green|no false|trap|proved|axiom|forge|launder' "$f")"
     [ "$k" -ge 4 ] || continue
     sound=$((sound+1))
-    if printf '%s\n' "$TARGETED" | grep -qx "$b"; then cov=$((cov+1)); else missing="$missing $b"; fi
+    if has_match -x "$b" <<<"$TARGETED"; then cov=$((cov+1)); else missing="$missing $b"; fi
   done
   echo "soundness gates: $sound"
   echo "  with a negative control: $cov"
@@ -1372,8 +1372,8 @@ add "manifest-source-population" "scripts/gen/attestation_manifest.sh" "check_at
 # classification row authorises material nothing asked for. The mutation drops the check, so surplus
 # stops being reported — the shape where a manifest quietly authorises more than the corpus requests.
 add "manifest-surplus-refused" "scripts/gen/attestation_manifest.sh" "check_attestation_manifest.sh" no \
-  $'  printf \'%s\\n\' "$KNOWN_TABLES" | grep -qx "$t" || { refuse "table \'$t\' is attested but referenced by no classification row (surplus)"; SURPLUS=$((SURPLUS+1)); }' \
-  $'  printf \'%s\\n\' "$KNOWN_TABLES" | grep -qx "$t" || true'
+  $'  has_match -x "$t" <<<"$KNOWN_TABLES" || { refuse "table \'$t\' is attested but referenced by no classification row (surplus)"; SURPLUS=$((SURPLUS+1)); }' \
+  $'  has_match -x "$t" <<<"$KNOWN_TABLES" || true'
 
 # R-0004 attestation provenance. SILENT FILTERING of subjects that have no identity or no table. Both
 # counts must stay EXPLICIT: a subject dropped from the denominator is indistinguishable from one that
@@ -2048,7 +2048,7 @@ for (( _j=0; _j<${#ER_GATE[@]}; _j++ )); do
   [ "$(printf '%s\n' "${ER_LEGS[$_j]}" | grep -v '^$' | LC_ALL=C sort | uniq -d)" = "" ] \
     || _er_bad="$_er_bad duplicate-leg($_erg)"
   [ "$(printf '%s\n' "${ER_GATE[@]}" | grep -cxF -- "$_erg")" = "1" ] || _er_bad="$_er_bad declared-twice($_erg)"
-  printf '%s\n' "${GATE[@]}" | grep -qxF -- "$_erg" || _er_bad="$_er_bad named-by-no-family($_erg)"
+  printf '%s\n' "${GATE[@]}" | has_match -xF -- "$_erg" || _er_bad="$_er_bad named-by-no-family($_erg)"
 done
 if [ -n "$_er_bad" ]; then
   echo "FATAL: malformed expect_red declaration(s):$_er_bad" >&2

@@ -66,7 +66,7 @@ fp_count=$(grep -h 'proof_fingerprint' std/src/*.con | wc -l | tr -d ' ')
 # 3. item 2b: free-function (constructs) duplicating a method name in its module
 ALLOW="new|with_capacity|from|default|empty"   # genuine no-receiver constructors
 dups=$(awk -F'\t' '$4=="constructs"{print $1"\t"$2}' "$TMP/derived.tsv" | while IFS=$'\t' read -r m f; do
-  if awk -F'\t' -v m="$m" -v f="$f" '$1==m && $2==f && $4!="constructs"' "$TMP/derived.tsv" | grep -q .; then
+  if awk -F'\t' -v m="$m" -v f="$f" '$1==m && $2==f && $4!="constructs"' "$TMP/derived.tsv" | has_match .; then
     echo "$m.$f" | grep -vE "\.($ALLOW)$" || true
   fi
 done)

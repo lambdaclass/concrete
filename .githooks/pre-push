@@ -194,12 +194,13 @@ else
   # under a second, so it belongs on the first local push rather than a CI round-trip.
   # Reads $changed, the union over every pushed ref. It used `git diff "$range"`, but $range
   # held only the LAST ref's range and is unset when the hook runs by hand, where `set -u`
-  # failed the substitution and silently skipped this check.
-  if printf '%s\n' "$changed" | grep -qE '^docs/bugs/|^scripts/tests/audit_bug_corpus\.sh$|^tests/programs/.*bug|^scripts/tests/check_.*\.sh$'; then
+  # failed the substitution and silently skipped this check. A here-string, not a pipe: no
+  # producer for an early-exiting grep -q to SIGPIPE (bug 283).
+  if grep -qE '^docs/bugs/|^scripts/tests/audit_bug_corpus\.sh$|^tests/programs/.*bug|^scripts/tests/check_.*\.sh$' <<<"$changed"; then
     echo "pre-push: bug-filing completeness selected (docs/bugs, corpus map, coverage)"
     SEL+=(--first "bash scripts/tests/check_bug_filing_complete.sh")
   fi
-  if printf '%s\n' "$changed" | grep -qE '^scripts/gen/(new_bug\.sh|bug_ledger\.py|changelog\.py)$|^scripts/tests/check_(new_bug|bug_filing_complete)\.sh$|^\.githooks/pre-push$'; then
+  if grep -qE '^scripts/gen/(new_bug\.sh|bug_ledger\.py|changelog\.py)$|^scripts/tests/check_(new_bug|bug_filing_complete)\.sh$|^\.githooks/pre-push$' <<<"$changed"; then
     echo "pre-push: bug scaffold selected (new_bug.sh, the ledger generators, the reservation tier)"
     SEL+=(--first "bash scripts/tests/check_new_bug.sh")
   fi

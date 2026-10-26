@@ -30,7 +30,7 @@ proved   "$D/packet_window.con" "payload_end#aa0"   "payload_end → omega (boun
 unproven "$D/packet_window.con" "unchecked_end#aa0" "unchecked_end → unproven (bad length)"
 
 echo "=== #6 fixed_point_filter: linear=omega, signed product=SMT ==="
-awk '/accumulate#ovf0/{f=1} f&&/status:/{print;exit}' <<<"$("$COMPILER" "$D/fixed_point_filter.con" --report vcs 2>/dev/null)" | grep -qF "proved_by_kernel_decision (omega)" \
+awk '/accumulate#ovf0/{f=1} f&&/status:/{print;exit}' <<<"$("$COMPILER" "$D/fixed_point_filter.con" --report vcs 2>/dev/null)" | has_match -F "proved_by_kernel_decision (omega)" \
   && ok "accumulate (linear) → omega, not SMT" || no "accumulate not omega-proved"
 grep -qF "scale#ovf0" <<<"$("$COMPILER" "$D/fixed_point_filter.con" --report vcs --emit-smt 2>/dev/null)" \
   && ok "scale (signed nonlinear product) → SMT-eligible (query emitted)" || no "scale not SMT-eligible"

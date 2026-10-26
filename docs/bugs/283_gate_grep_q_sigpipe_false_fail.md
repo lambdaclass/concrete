@@ -1,12 +1,12 @@
 # Bug 283 — gate assertions pipe captured output into `grep -q` under `pipefail` (SIGPIPE false FAIL)
 
 <!-- bug-ledger
-summary: gates assert with `printf '%s' "$OUT" | grep -q PAT` under `pipefail`; when grep exits on its first match while printf is still writing a multi-buffer string, printf dies of SIGPIPE and the pipeline's status inverts the match: a positive leg reports FAIL although the pattern is present, and a negated leg (`| grep -q FORBIDDEN && no || ok`) reports ok although the forbidden text is there.
-coverage: tooling-only defect in the gate scripts, no compiler fixture applies; reproduced by CI run 40269354812 (check_transform_register.sh line 483) and by Codex in memory (pipeline=141, printf=141, grep=0). The regression vehicle will be a check_gate_hygiene.sh scan with large-output controls.
+summary: gates asserted with `printf '%s' "$OUT" | grep -q PAT` (and other producers piped into `grep -q`) under `pipefail`; when grep exits on its first match while the producer is still writing, the producer dies of SIGPIPE and the pipeline's status inverts the match: a positive leg reports FAIL although the pattern is present, and a negated leg (`| grep -q FORBIDDEN && no || ok`) reports ok although the forbidden text is there. Every such site now matches with `has_match` (scripts/tests/lib/has_match.sh), which reads all of its input.
+coverage: `check_gate_hygiene.sh` leg "no pipe into a short-circuiting grep or head before a match (bug 283)" refuses the shape in every script under scripts/ and the pre-push hook, with flagged and unflagged controls, and executes the race: a 500000-line producer reproduces status 141 and the inverted negated verdict through the old pipe, and has_match answers correctly through a pipe and a here-string
 silent: yes
 -->
 
-**Status:** OPEN.
+**Status:** FIXED (2026-10-26, branch `wip/bug283-pipefail`)
 **Found:** 2026-10-26, on branch `wip/gates-shell` (head `3ba54626`), CI run 40269354812, job
 "Extra gates", step "Transformation register (Register B rows)". The same gate passed on the same
 compiler sources in run 40265317601 and on main. Confirmed by Codex review (read-only reproduction).
@@ -26,14 +26,15 @@ The leg is `printf '%s' "$FB" | grep -q "99 < 16" && ok ... || no ...` in a scri
 `set -uo pipefail`. `$FB` is a `--report vcs` capture larger than one stdio buffer. Any script of
 that shape reproduces it once the match falls in the first buffer and the scheduler lets grep exit
 before printf's next write: `bash -c 'set -o pipefail; s=$(seq 1 200000); printf "%s" "$s" | grep -q "^1$"; echo $?'`
-prints 141 on an ordinary Linux host.
+prints 141 on an ordinary Linux host (5 of 5 runs on the OVH dev server, GNU grep 3.11).
 
 ## Cause
 
-`grep -q` (and `grep -m`) stops reading at the first match. The producer, here bash's `printf`
-builtin, gets EPIPE on its next write and exits 141, and `pipefail` makes the pipeline report that
-status instead of grep's 0. The same family as the elaborator case `check_gate_hygiene.sh` already
-refuses (`lake env lean f.lean | grep -q`), with a builtin producer instead of a slow one.
+`grep -q` (and `grep -m`, `-l`, `-L`) stops reading at the first match. The producer, here bash's
+`printf` builtin, gets EPIPE on its next write and exits 141, and `pipefail` makes the pipeline
+report that status instead of grep's 0. The same family as the elaborator case `check_gate_hygiene.sh`
+already refused (`lake env lean f.lean | grep -q`) and the git grep case it refused separately, with
+a builtin producer instead of a slow one.
 
 ## Extent
 
@@ -42,17 +43,47 @@ On main and on `wip/gates-shell` alike (Codex, 2026-10-26): 247 direct `printf �
 lines in 100 scripts overall, every one under `pipefail` or the shared harness. Not every line fails
 in practice (payload size and match position matter), but none is structurally safe.
 
-## Fix (planned)
+## Fix
 
-Match captured text without a pipe, `grep -q -- PAT <<<"$OUT"`, and for a streaming producer use a
-draining match (`grep PAT >/dev/null`, no `-q`/`-m`) so producer failures are still seen. Extend the
-hygiene scan beyond elaborator producers to any producer piped into a short-circuiting grep under
-`pipefail`, with controls for large captured output and for a missing pattern. Never `|| true` or
-drop `pipefail`.
+One helper, `has_match [GREP_OPTION...] PATTERN` (`scripts/tests/lib/has_match.sh`), loaded by
+`lib/gate_env.sh` (so every gate has it; the four gates that copy the guard into a scratch tree copy
+it too), by the two libraries that use it on their own, and by the scripts outside `scripts/tests`
+that use it. The pre-push hook, which runs before it enters the gate shell, tests its two selections
+with a plain `grep -qE PAT <<<"$changed"`: a here-string has no producer to kill. It answers what `grep -q` answers
+but reads all of its input first (`grep -c` into a capture; not `grep >/dev/null`, which GNU grep
+short-circuits like `-q`), so the producer always finishes writing and `pipefail` still reports a
+producer that really failed. Status 0 is a match and 1 no match; a grep error (an invalid pattern,
+or an option that stops early: `-q`, `-m`, `-l`, `-L`, `-c`) prints the error and stops the script
+with no verdict, from a pipeline stage or a substitution too, so neither a positive nor a negated leg
+can read it as an answer.
+
+Every site was rewritten, the polarity of each leg unchanged (`! … | grep -q X` became
+`! … | has_match X`, `… && no || ok` kept its order): 470 sites in 104 files rewritten mechanically by a
+quote- and heredoc-aware rewriter — 209 `printf '%s' "$X" | grep -q` / `echo "$X" | grep -q` legs
+became here-strings (`has_match PAT <<<"$X"`, no producer process at all) and 261 streaming pipes
+became `producer | has_match PAT` — plus 30 legs inside `eval` and `bash -c` strings
+(`check_status_page.sh`, `check_review_tool.sh`; has_match is exported for the latter), one `sh -c`
+leg in `check_gate_lock.sh` rewritten to `grep -c`, four `grep -m1` message captures rewritten to
+`grep … | awk 'NR<=1'`, and the one mutation anchor that spelled a rewritten line
+(`check_gate_mutation_coverage.sh`, `manifest-surplus-refused`). Nothing uses `|| true` and nothing
+drops `pipefail`.
+
+`check_gate_hygiene.sh` now refuses the shape, not a producer: its leg "no pipe into a
+short-circuiting grep or head before a match (bug 283)" scans every script under `scripts/` and the
+pre-push hook (logical lines: comments and heredoc bodies skipped, continuations joined) for a pipe
+into grep/egrep/fgrep with `-q`, `-m`, `-l`, `-L` or their long forms, and for `| head` or
+`| sed …q` feeding has_match; it also requires every script that calls has_match to load it (an
+undefined has_match is status 127, which a negated leg would read as "absent"). It replaces the
+elaborator-only leg. Its controls: twelve hazardous fixtures are flagged and eight safe ones
+(here-string, drained pipe, `||`, file operand, `grep -c`, `awk 'NR<=1'`, heredoc data, comment) are
+not; a 500000-line producer reproduces status 141 and the inverted negated verdict through the old
+pipe and gets the right answer from has_match through a pipe and a here-string, with a missing
+pattern still 1 and a failing producer still failing the pipeline; and four grep-error forms stop
+the script with no verdict.
 
 ## Structural cause
 
-A gate's verdict depends on process scheduling: the assertion reads the pipeline's status, which
+A gate's verdict depended on process scheduling: the assertion reads the pipeline's status, which
 `pipefail` takes from whichever process failed, and an early-exiting consumer makes the producer fail.
 The hygiene rule was scoped to the producer that had been seen to lose the race (an elaborator)
 rather than to the shape (a short-circuiting consumer under `pipefail`). Test-harness defect, outside
@@ -61,4 +92,5 @@ the compiler structural classes.
 ## Structural owner
 
 R-0513 (gate result vocabulary: a verdict must not depend on timing), enforced in
-`scripts/tests/check_gate_hygiene.sh` next to the existing SIGPIPE scans.
+`scripts/tests/check_gate_hygiene.sh` by the shape-wide scan above, with `lib/has_match.sh` as the
+one way a script matches text.

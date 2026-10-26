@@ -59,7 +59,7 @@ if grep -qE "fn map<U, cap C>.*with\(C, Alloc\) -> Vec<U>" "$STD/vec.con"; then
   ok "Vec::map carries Alloc in its signature (allocation is visible)"
 else no "Vec::map should carry Alloc"; fi
 # for_each's with-clause must NOT include Alloc (alloc-free traversal).
-if grep -E "fn for_each<cap C>" "$STD/vec.con" | grep -q "Alloc"; then
+if grep -E "fn for_each<cap C>" "$STD/vec.con" | has_match "Alloc"; then
   no "Vec::for_each must be Alloc-free (no hidden allocation)"
 else ok "Vec::for_each is Alloc-free (no hidden allocation)"; fi
 

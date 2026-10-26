@@ -574,12 +574,12 @@ _bad_traps="$(grep -lE "^[[:space:]]*trap '[^']*\\b(exit|exec)\\b[^']*' *(EXIT|I
 # USE, NOT MENTION. The library's header explains WHY it cannot use flock ("flock is absent on
 # macOS"), so grepping for the word failed on the sentence documenting the constraint — the same
 # mention-versus-invocation error just fixed in the CI-reachability gate.
-if sed -E 's/(^|[[:space:]])#.*$/\1/' "$LIB" | grep -qE '(^|[^[:alnum:]_])flock([[:space:]]|$)'; then
+if sed -E 's/(^|[[:space:]])#.*$/\1/' "$LIB" | has_match -E '(^|[^[:alnum:]_])flock([[:space:]]|$)'; then
   no "the lock library CALLS flock, which macOS does not have"
 else
   ok "the lock library requires no flock (checked against code, not comments)"
 fi
-awk '/^_gate_lock_release\(\)/,/^}/' "$LIB" | grep -q '/proc' \
+awk '/^_gate_lock_release\(\)/,/^}/' "$LIB" | has_match '/proc' \
   && no "the RELEASE path reads /proc — it would behave differently on macOS" \
   || ok "the release path requires no /proc"
 
@@ -721,7 +721,8 @@ CONCRETE_GATE_LOCK="$$:$SB/.gate.lock" python3 "$ROOT_DIR/scripts/tests/lib/run_
     # interval), so it waits, bounded, for the settled state before reporting it.
     i=0; while [ $i -lt 50 ]; do
       l="$(ls "$1")"
-      printf "%s\n" "$l" | grep -qE "^[0-9]+$" && ! printf "%s\n" "$l" | grep -q "^pending" && break
+      # grep -c reads all of its input: no early exit to SIGPIPE the printf (bug 283).
+      [ "$(printf "%s\n" "$l" | grep -cE "^[0-9]+$")" -gt 0 ] && [ "$(printf "%s\n" "$l" | grep -c "^pending")" -eq 0 ] && break
       i=$((i+1)); sleep 0.1
     done; ls "$1"' _ "$SB/.gate.lock/groups" > "$TMP/launch.ls" 2>/dev/null
 if grep -qE '^[0-9]+$' "$TMP/launch.ls" && ! grep -q '^pending' "$TMP/launch.ls"; then

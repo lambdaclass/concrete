@@ -184,7 +184,7 @@ echo "=== 5. deliberately-stale trust/proof fixture stays stale ==="
 # fingerprint pins the original body). A blanket regeneration once un-staled it
 # (fixed 2026-06-23). Guard that it reports stale.
 PP="examples/proof_pressure/src/main.con"
-if "$C" "$PP" --report proof-status 2>&1 | grep -q "1 stale"; then
+if "$C" "$PP" --report proof-status 2>&1 | has_match "1 stale"; then
   ok "proof_pressure: deliberately-stale compute_checksum still reports stale"
 else no "proof_pressure: expected a stale proof (the deliberate fixture un-staled?)"; fi
 

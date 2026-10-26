@@ -187,7 +187,7 @@ fi
 # some other reason today and starts passing tomorrow.
 PFX_USERS=0
 for f in $(grep -rlE '#\[proof_fingerprint' examples --include='*.con' | sort); do
-  if "$CC" "$f" --report proof-deps 2>/dev/null | grep -q 'proofFnsExt'; then
+  if "$CC" "$f" --report proof-deps 2>/dev/null | has_match 'proofFnsExt'; then
     PFX_USERS=$((PFX_USERS+1)); echo "      depends on proofFnsExt: $f"
   fi
 done

@@ -138,7 +138,7 @@ check "reviewer runs with --sandbox read-only" grep -q "sandbox=read-only" "$FAK
 # Bug 209: every reviewer call runs without git's optional locks, so a reviewer command stopped
 # mid-`git status` cannot leave the caller's worktree with a stale index.lock.
 check "reviewer runs with GIT_OPTIONAL_LOCKS=0" grep -q " optional_locks=0$" "$FAKE_LOG/locks"
-check "no reviewer call ran with optional locks" bash -c '! grep -v " optional_locks=0$" "$1" | grep -q .' _ "$FAKE_LOG/locks"
+check "no reviewer call ran with optional locks" bash -c '! grep -v " optional_locks=0$" "$1" | has_match .' _ "$FAKE_LOG/locks"
 check "round 1 prompt carries the verdict rule" grep -q "^VERDICT: findings$" "$FAKE_LOG/prompt.1"
 check "round 1 reviews the full diff from the merge-base" grep -q "files=old.txt,$" "$FAKE_LOG/calls"
 R1="$(g rev-parse HEAD)"
@@ -157,7 +157,7 @@ check "note: base is the merge-base" test "$(field base)" = "$BASE"
 check "note: pieces 1" test "$(field pieces)" = 1
 check "raw output at .review/<sha>-1.md" test -s "$W/.review/$R1-1.md"
 check "findings recorded under the findings ref" \
-  bash -c "git -C '$W' notes --ref=refs/notes/concrete-review-findings show $R1 | grep -q 'counter is never reset'"
+  bash -c "git -C '$W' notes --ref=refs/notes/concrete-review-findings show $R1 | has_match 'counter is never reset'"
 check "notes ref pushed to origin" test "$(git -C "$T/origin.git" rev-parse refs/notes/concrete-review)" = "$(g rev-parse refs/notes/concrete-review)"
 check ".review/ stays untracked" test -z "$(g status --porcelain)"
 (cd "$W" && bash "$VERIFY" HEAD >/dev/null); rc=$?
@@ -230,7 +230,7 @@ MARK_REFUSE_STANDARD" "ownership change"
 review >"$T/out3" 2>&1; rc=$?
 check "refused then reviewed neutrally: clean (exit $rc)" test "$rc" -eq 0
 check "first call standard, retries neutral" \
-  bash -c "awk '{print \$2}' '$FAKE_LOG/calls' | tr '\n' ' ' | grep -qE '^standard (neutral )+$'"
+  bash -c "awk '{print \$2}' '$FAKE_LOG/calls' | tr '\n' ' ' | has_match -E '^standard (neutral )+$'"
 first_bytes="$(awk 'NR==1 { sub("bytes=", "", $4); print $4 }' "$FAKE_LOG/calls")"
 retry_max="$(awk 'NR>1 { sub("bytes=", "", $4); if ($4 + 0 > m) m = $4 + 0 } END { print m + 0 }' "$FAKE_LOG/calls")"
 check "retry pieces are smaller ($retry_max < $first_bytes)" test "$retry_max" -lt "$first_bytes"
@@ -261,7 +261,7 @@ review >"$T/out8" 2>&1; rc=$?
 check "blocked wins over findings: verdict blocked, exit 5 (got $rc, $(field verdict))" \
   test "$rc" -eq 5 -a "$(field verdict)" = blocked
 check "the reviewed piece's findings are still recorded" \
-  bash -c "git -C '$W' notes --ref=refs/notes/concrete-review-findings show HEAD | grep -q 'counter is never reset'"
+  bash -c "git -C '$W' notes --ref=refs/notes/concrete-review-findings show HEAD | has_match 'counter is never reset'"
 commit_file b.txt "more" "more work"
 reset_fake
 review >/dev/null 2>&1
@@ -271,7 +271,7 @@ check "and carries the blocked round's findings forward" grep -q "counter is nev
 commit_file a.txt "MARK_REFUSE_ALWAYS" "rewrite a.txt"
 review >/dev/null 2>&1
 check "a blocked round with no findings of its own records the carried ones" \
-  bash -c "git -C '$W' notes --ref=refs/notes/concrete-review-findings show HEAD | grep -q 'counter is never reset'"
+  bash -c "git -C '$W' notes --ref=refs/notes/concrete-review-findings show HEAD | has_match 'counter is never reset'"
 commit_file c.txt "c" "c"
 reset_fake
 review >/dev/null 2>&1
@@ -316,10 +316,10 @@ check "no piece mixes file groups" test "$mixed" -eq 0
 over="$(awk '{ sub("bytes=", "", $4); if ($4 + 0 > 2000) print }' "$FAKE_LOG/calls")"
 check "every piece within the size limit${over:+: $over}" test -z "$over"
 check "the big file is split across pieces" test "$(grep -c 'files=Concrete/Big.lean,$' "$FAKE_LOG/calls")" -ge 2
-check "compiler pieces come first" bash -c "head -1 '$FAKE_LOG/calls' | grep -q 'files=Concrete/'"
+check "compiler pieces come first" bash -c "head -1 '$FAKE_LOG/calls' | has_match 'files=Concrete/'"
 bigpart="$(grep -l '^diff --git a/Concrete/Big.lean' "$FAKE_LOG"/stdin.* | awk 'NR==2')"
 check "each split part repeats the file header and starts a hunk" \
-  bash -c "head -1 '$bigpart' | grep -q '^diff --git' && grep -q '^@@' '$bigpart'"
+  bash -c "head -1 '$bigpart' | has_match '^diff --git' && grep -q '^@@' '$bigpart'"
 
 g diff "$(g merge-base HEAD main)" HEAD >"$T/split.diff"
 total="$(wc -c <"$T/split.diff" | tr -d ' ')"
@@ -330,7 +330,7 @@ check "a limit of the whole diff still separates the four groups ($n1p)" test "$
 # Hunk headers are excluded: a hunk cut in parts gets renumbered headers.
 cat "$T"/sp3/piece-*.diff | grep -v '^@@' | sort >"$T/sp3.sorted"
 grep -v '^@@' "$T/split.diff" | sort >"$T/orig.sorted"
-check "split loses no diff line" bash -c "comm -23 '$T/orig.sorted' '$T/sp3.sorted' | grep -q . && exit 1 || exit 0"
+check "split loses no diff line" bash -c "comm -23 '$T/orig.sorted' '$T/sp3.sorted' | has_match . && exit 1 || exit 0"
 reset_fake
 g checkout -q main && g checkout -qb pieces-n
 commit_file tests/a.con "$(seq 1 300)" "tests only"
@@ -402,9 +402,9 @@ commit_file z.txt "z" "z"
 review >"$T/out6" 2>&1; rc=$?
 check "review after a concurrent notes push succeeds (exit $rc)" test "$rc" -eq 0
 check "origin keeps the other writer's note" \
-  bash -c "git -C '$T/origin.git' notes --ref=refs/notes/concrete-review show $OTHER_SHA | grep -q 'verdict: clean'"
+  bash -c "git -C '$T/origin.git' notes --ref=refs/notes/concrete-review show $OTHER_SHA | has_match 'verdict: clean'"
 check "origin has our note" \
-  bash -c "git -C '$T/origin.git' notes --ref=refs/notes/concrete-review show $(g rev-parse HEAD) | grep -q 'verdict: clean'"
+  bash -c "git -C '$T/origin.git' notes --ref=refs/notes/concrete-review show $(g rev-parse HEAD) | has_match 'verdict: clean'"
 # Now force the non-fast-forward at push time: another writer pushes between
 # our sync and our push (the fake reviewer does it while it "reviews").
 git -C "$T/other" fetch -q origin "+refs/notes/concrete-review:refs/notes/concrete-review"
@@ -421,9 +421,9 @@ REVIEW_CODEX_BIN="$T/bin/codex-race" review >"$T/out7" 2>&1; rc=$?
 check "push rejected once, then merged and pushed (exit $rc)" test "$rc" -eq 0
 check "the retry path ran" grep -q "rejected; fetching and merging" "$T/out7"
 check "origin holds the racing note" \
-  bash -c "git -C '$T/origin.git' notes --ref=refs/notes/concrete-review show $OTHER_SHA | grep -q 'race note'"
+  bash -c "git -C '$T/origin.git' notes --ref=refs/notes/concrete-review show $OTHER_SHA | has_match 'race note'"
 check "origin holds our note" \
-  bash -c "git -C '$T/origin.git' notes --ref=refs/notes/concrete-review show $(g rev-parse HEAD) | grep -q 'verdict: clean'"
+  bash -c "git -C '$T/origin.git' notes --ref=refs/notes/concrete-review show $(g rev-parse HEAD) | has_match 'verdict: clean'"
 
 echo "=== notes push: any other refusal stops at once (exit 6) ==="
 printf '#!/bin/sh\necho "remote policy says no" >&2\nexit 1\n' >"$T/origin.git/hooks/pre-receive"

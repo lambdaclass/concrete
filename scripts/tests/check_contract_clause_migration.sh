@@ -51,7 +51,7 @@ sys.exit(0 if ($expr) else 1)
 # What IS lost is the ledger's record of these two cases; that trade is recorded below.
 rejects(){ local label="$1" file="$2" pat="$3"
   local out; out="$("$COMPILER" "$file" 2>&1)"
-  if [ -n "$out" ] && printf '%s' "$out" | grep -q "$pat"; then ok "$label"
+  if [ -n "$out" ] && has_match "$pat" <<<"$out"; then ok "$label"
   else no "$label (expected a check error matching: $pat)"; fi; }
 
 echo "=== malformed clause → rejected at check time ==="

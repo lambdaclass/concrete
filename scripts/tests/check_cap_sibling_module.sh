@@ -47,14 +47,14 @@ bounded_watchdog 300
 
 echo "=== a capability-free caller cannot reach a with(Console) SIBLING ==="
 lout="$(cd "$FIX/launder" && "${TO[@]}" "$CC" check . 2>&1)"
-if printf '%s' "$lout" | grep -q "E0520"; then
+if has_match "E0520" <<<"$lout"; then
   ok "the laundering call is refused (E0520)"
 else
   no "the laundering call is ACCEPTED — a capability-free function can print"
 fi
 # The message must name the callee and the caller's actual authority, or the author
 # cannot tell which of the two to change.
-if printf '%s' "$lout" | grep -q "function 'sink_shout' requires Console but caller has (none)"; then
+if has_match "function 'sink_shout' requires Console but caller has (none)" <<<"$lout"; then
   ok "the diagnostic names the callee, the requirement and the caller's authority"
 else
   no "the diagnostic does not identify the call precisely"
@@ -69,7 +69,7 @@ fi
 
 echo "=== and an extern reached through a sibling still costs Unsafe ==="
 eout="$(cd "$FIX/extern_unsafe" && "${TO[@]}" "$CC" check . 2>&1)"
-if printf '%s' "$eout" | grep -qE "function 'raw_write' requires ([A-Za-z]+, )*Unsafe but caller has \(none\)"; then
+if has_match -E "function 'raw_write' requires ([A-Za-z]+, )*Unsafe but caller has \(none\)" <<<"$eout"; then
   ok "the sibling-module extern call is refused under its PREFIXED spelling"
 else
   no "the extern's Unsafe requirement is lost across a submodule boundary"
@@ -78,7 +78,7 @@ fi
 
 echo "=== CONTROL: the same two calls are ACCEPTED when the authority is declared ==="
 dout="$(cd "$FIX/declared_ok" && "${TO[@]}" "$CC" check . 2>&1)"
-if printf '%s' "$dout" | grep -qE 'error\['; then
+if has_match -E 'error\[' <<<"$dout"; then
   no "the positive control is refused — the rule is refusing broadly, not narrowly"
   printf '%s\n' "$dout" | grep -E 'error\[' | awk 'NR<=3' | sed 's/^/       /'
 else
@@ -111,7 +111,7 @@ else
   no "trusted_absorbs_extern_unsafe.con does not build — trusted no longer absorbs extern Unsafe"
 fi
 nout="$( [ -f "$neg" ] && "${TO[@]}" "$CC" "$neg" -o "$TMP/noabsorb" 2>&1 )"
-if printf '%s' "$nout" | grep -qE "function 'putchar' requires Console"; then
+if has_match -E "function 'putchar' requires Console" <<<"$nout"; then
   ok "a trusted body without Console calling that extern is refused for Console — the effect is not absorbed"
 else
   no "error_trusted_extern_effect_not_absorbed.con is not refused for Console: $(printf '%s' "$nout" | grep error | head -1 | cut -c1-160)"
@@ -128,7 +128,7 @@ echo "=== a BODY-LESS declaration keeps the trusted modifier the author wrote ==
 # parser now keeps a body-less declaration's `with(...)`. What is under test is what the
 # checker charges.
 tout="$(cd "$FIX/bodyless_trusted" && "${TO[@]}" "$CC" check . 2>&1)"
-if printf '%s' "$tout" | grep -qE 'error\['; then
+if has_match -E 'error\[' <<<"$tout"; then
   no "a trusted body-less declaration is still charged a capability"
   printf '%s\n' "$tout" | grep -E 'error\[' | awk 'NR<=2' | sed 's/^/       /'
 else
@@ -137,7 +137,7 @@ fi
 # CONTROL: without `trusted` it must STILL cost Unsafe, or carrying the modifier through
 # made it meaningless rather than effective.
 uout="$(cd "$FIX/bodyless_untrusted" && "${TO[@]}" "$CC" check . 2>&1)"
-if printf '%s' "$uout" | grep -q "function 'my_size' requires Unsafe"; then
+if has_match "function 'my_size' requires Unsafe" <<<"$uout"; then
   ok "the same shape WITHOUT trusted still costs Unsafe"
 else
   no "an untrusted body-less declaration is free — the modifier now means nothing"
@@ -162,13 +162,13 @@ echo "=== a PRELUDE-receiver method binds too (the last bug-071 escape) ==="
 # THE LESSON, and it is why this block now enumerates: a headline claim must name the
 # CALL FORMS it covers. "Methods bind" was true of two forms and false of a third.
 hout="$(cd "$FIX/known_hole_cross_package_method" && "${TO[@]}" "$CC" check . 2>&1)"
-if printf '%s' "$hout" | grep -q "function 'String_drop' requires Alloc but caller has (none)"; then
+if has_match "function 'String_drop' requires Alloc but caller has (none)" <<<"$hout"; then
   ok "prelude receiver: String::drop is refused to a caller declaring nothing"
 else
   no "the prelude-method escape is back — String::drop does not bind"
   printf '%s\n' "$hout" | grep -E 'error\[' | awk 'NR<=2' | sed 's/^/       /'
 fi
-if printf '%s' "$hout" | grep -q "function 'String_clone' requires Alloc"; then
+if has_match "function 'String_clone' requires Alloc" <<<"$hout"; then
   ok "and String::clone too — the whole declared set travels, not one method"
 else
   no "only part of the prelude method surface binds"
@@ -196,9 +196,9 @@ echo "=== a union of capabilities covers a requirement that spans it ==="
 # Since bug 188 `capsContain` is the boolean view of `missingCaps` (one entailment rule),
 # so the normalization lives in `missingCaps`.
 if grep -A14 "def missingCaps" "$ROOT_DIR/Concrete/Semantics/Capabilities.lean" |
-     grep -q "caller.normalize" &&
+     has_match "caller.normalize" &&
    grep -A3 "def capsContain" "$ROOT_DIR/Concrete/Semantics/Capabilities.lean" |
-     grep -q "missingCaps caller callee"; then
+     has_match "missingCaps caller callee"; then
   ok "capsContain normalizes the caller before testing membership"
 else
   no "capsContain no longer normalizes — a union caller will under-approximate again"

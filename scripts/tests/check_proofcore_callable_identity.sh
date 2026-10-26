@@ -82,7 +82,7 @@ fi
 echo "=== a parameter application takes NO dependency edge on the definition ==="
 # It must not: the parameter is not that definition. A spurious edge would make a
 # proof about the callback depend on, and stale with, an unrelated function.
-if awk '/main\.param_f/{f=1} f&&/dependencies:/{print; exit}' <<<"$FPS" | grep -q "none"; then
+if awk '/main\.param_f/{f=1} f&&/dependencies:/{print; exit}' <<<"$FPS" | has_match "none"; then
   ok "param_f depends on nothing"
 else
   no "param_f took a dependency edge: $(awk '/main\.param_f/{f=1} f&&/dependencies:/{print; exit}' <<<"$FPS")"
@@ -191,7 +191,7 @@ fi
 # its payload, so a bare grep for "universal" flags correct documentation — the
 # hazard is specifically presenting the callback as arbitrary.
 if grep -rniE "(universal|arbitrary|every|any)[^.]{0,40}(callback|callable|\bf\b)|\b(callback|callable)[^.]{0,40}(universal|arbitrary)" \
-     proofs/Examples/PureCore/Proofs.lean | grep -viE "not |NOT |gap|limitation|representative|gap\)" | grep -q .; then
+     proofs/Examples/PureCore/Proofs.lean | grep -viE "not |NOT |gap|limitation|representative|gap\)" | has_match .; then
   no "the PureCore proofs present the callback as arbitrary:
 $(grep -rniE "(universal|arbitrary|every|any)[^.]{0,40}(callback|callable|\bf\b)" proofs/Examples/PureCore/Proofs.lean | grep -viE "not |gap|limitation|representative")"
 else
@@ -201,7 +201,7 @@ fi
 for t in option_map result_map result_map_err; do
   if awk -v t="theorem ${t}_correct" '
       /\/--/{buf=""} {buf=buf" "$0} index($0,t){print buf; exit}' \
-      proofs/Examples/PureCore/Proofs.lean | grep -qi "representative"; then
+      proofs/Examples/PureCore/Proofs.lean | has_match -i "representative"; then
     ok "${t}_correct states its representative scope"
   else
     no "${t}_correct does not state that its callback is a representative"

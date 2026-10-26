@@ -40,8 +40,8 @@ OPEN_HOLES=""; CLOSED_HOLES=""
 while IFS= read -r line; do
   id="$(printf '%s' "$line" | grep -oE '^### (H[0-9]+)' | awk '{print $2}')"
   [ -n "$id" ] || continue
-  if printf '%s' "$line" | grep -q "OPEN"; then OPEN_HOLES="$OPEN_HOLES $id"
-  elif printf '%s' "$line" | grep -q "CLOSED"; then CLOSED_HOLES="$CLOSED_HOLES $id"
+  if has_match "OPEN" <<<"$line"; then OPEN_HOLES="$OPEN_HOLES $id"
+  elif has_match "CLOSED" <<<"$line"; then CLOSED_HOLES="$CLOSED_HOLES $id"
   else no "hole heading has no parseable status: $line"; fi
 done < <(grep -E '^### H[0-9]+\.' "$KH")
 

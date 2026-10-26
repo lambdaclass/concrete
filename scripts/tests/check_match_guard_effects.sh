@@ -95,7 +95,7 @@ $hdr
 $ftr
 EOF
 differential nomatch "a guard whose pattern does not match never runs"
-if { "$CC" "$T/nomatch.con" --interp 2>&1 || true; } | grep -q "T1"; then
+if { "$CC" "$T/nomatch.con" --interp 2>&1 || true; } | has_match "T1"; then
   no "a guard ran for a pattern that did not match"
 else
   ok "no guard effect leaked from a non-matching pattern"
@@ -136,7 +136,7 @@ mod g {
 }
 EOF
 differential local "an ARM-LOCAL mutation does NOT leak into the next arm"
-if { "$CC" "$T/local.con" --interp 2>&1 || true; } | grep -q "^107$"; then
+if { "$CC" "$T/local.con" --interp 2>&1 || true; } | has_match "^107$"; then
   no "arm-local binding leaked across the failed guard (saw 107, expected 7)"
 else
   ok "the arm's pattern bindings did not leak past its failed guard"

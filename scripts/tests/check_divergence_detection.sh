@@ -55,7 +55,7 @@ accepted(){ local f="$TMPDIR/$1.con" want="$2" label="$3" out rc got interp
 # rejected <name> <label>: refused with E0213, the error divergence detection exists to lift.
 rejected(){ local f="$TMPDIR/$1.con" label="$2" out rc
   out="$("$COMPILER" "$f" -o "$f.bin" 2>&1)"; rc=$?
-  if [ $rc -ne 0 ] && printf '%s' "$out" | grep -q 'E0213'; then
+  if [ $rc -ne 0 ] && has_match 'E0213' <<<"$out"; then
     ok "$label (E0213)"
   else
     no "$label — expected E0213, got rc=$rc: $(printf '%s' "$out" | head -1)"

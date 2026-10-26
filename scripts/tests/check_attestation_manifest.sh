@@ -86,7 +86,7 @@ for pair in "duplicate_mappings:$DUPES" "package_collapse_keys:$COLLAPSE" "surpl
 done
 
 # DRIFT IS EXCLUDED, AND NAMED. "Some fixture was excluded" would stay true if the WRONG one were.
-if printf '%s' "$OUT" | grep -q 'excluded = ".*main_drifted.con"'; then
+if has_match 'excluded = ".*main_drifted.con"' <<<"$OUT"; then
   ok "drift fixtures are excluded by name, not silently filtered"
 else
   no "no named drift exclusion in the manifest — the classifier stopped matching"
@@ -252,7 +252,7 @@ EXCLUSIONS="Concrete.Proof.ctTagFns:f2ce224db4c57094cad39e2b62023610:ct_compare"
 
 for ex in $EXCLUSIONS; do
   extbl="${ex%%:*}"; rest="${ex#*:}"; expkg="${rest%%:*}"; exdecl="${rest##*:}"
-  if printf '%s' "$OUT" | grep -q "^$extbl <- $expkg/[^ ]*\.$exdecl "; then
+  if has_match "^$extbl <- $expkg/[^ ]*\.$exdecl " <<<"$OUT"; then
     ok "declared exclusion $extbl/$exdecl is a REAL manifest row (not a stale entry masking a gap)"
   else
     no "declared exclusion $extbl/$exdecl matches no manifest row — either the fixture was repaired (drop the exclusion) or the manifest stopped offering it"
@@ -300,7 +300,7 @@ if [ -n "$SITES" ]; then
     while IFS= read -r r; do
       [ -n "$r" ] || continue
       rdecl="${r##*.}"
-      printf '%s' "$SITES" | grep -qxF "MODEL $tbl $rdecl" || NOMODEL_T=$((NOMODEL_T+1))
+      has_match -xF "MODEL $tbl $rdecl" <<<"$SITES" || NOMODEL_T=$((NOMODEL_T+1))
     done <<EOF_REFS
 $(printf '%s' "$OUT" | grep "^$tbl <- " | awk '{print $3}' | sort -u)
 EOF_REFS
@@ -343,9 +343,9 @@ while IFS= read -r row; do
   rmoddecl="${rrest%% *}"; rmoddecl="${rmoddecl#*/}"; rdecl="${rmoddecl#*.}"
   rent="$(site_field "$rtbl" entries)"
   if [ "${rent:-0}" = "0" ]; then VAC=$((VAC+1))
-  elif printf '%s\n' $EXCLUSIONS | grep -qx "$rtbl:$rpkg:$rdecl"; then EXC=$((EXC+1))
-  elif ! printf '%s' "$SITES" | grep -qxF "MODEL $rtbl $rdecl"; then NOMODEL=$((NOMODEL+1))
-  elif printf '%s' "$SITES" | grep -qE "^BOUND $rtbl $rpkg $rdecl$"; then SEL=$((SEL+1))
+  elif printf '%s\n' $EXCLUSIONS | has_match -x "$rtbl:$rpkg:$rdecl"; then EXC=$((EXC+1))
+  elif ! has_match -xF "MODEL $rtbl $rdecl" <<<"$SITES"; then NOMODEL=$((NOMODEL+1))
+  elif has_match -E "^BOUND $rtbl $rpkg $rdecl$" <<<"$SITES"; then SEL=$((SEL+1))
   else PEND=$((PEND+1)); fi
 done <<EOF_ROWS
 $(printf '%s' "$OUT" | grep ' <- ' | grep -v EXCLUDED | grep -v 'binding_role=dependency')
@@ -362,7 +362,7 @@ fi
 # a judgement — which is how a real misattachment could later hide among them.
 for ex in $EXCLUSIONS; do
   extbl="${ex%%:*}"; exdecl="${ex##*:}"
-  if printf '%s' "$SITES" | grep -qxF "MODEL $extbl $exdecl"; then
+  if has_match -xF "MODEL $extbl $exdecl" <<<"$SITES"; then
     ok "exclusion $extbl/$exdecl is a real decision: the table HOLDS that model and does not bind it"
   else
     no "exclusion $extbl/$exdecl restates a structural fact — the table has no such model, so nothing was excluded"
@@ -410,9 +410,9 @@ for src in $DRIFTED_SRCS; do
     # earlier version of this check asked only whether the row appeared in EXCLUSIONS, which a table
     # could satisfy while ALSO selecting the reference — declared excluded and bound anyway. So the
     # binding is read from the table site itself.
-    if printf '%s' "$SITES" | grep -qE "^BOUND $rtbl $rpkg $rdecl$"; then
+    if has_match -E "^BOUND $rtbl $rpkg $rdecl$" <<<"$SITES"; then
       no "drifted row $rtbl/$rdecl ($src) IS BOUND at the table site — the model is attested to an implementation the compiler says it does not describe"
-    elif printf '%s\n' $EXCLUSIONS | grep -qx "$rtbl:$rpkg:$rdecl"; then
+    elif printf '%s\n' $EXCLUSIONS | has_match -x "$rtbl:$rpkg:$rdecl"; then
       ok "drifted row $rtbl/$rdecl ($src) is omitted at the table site AND declared as an exclusion"
     else
       no "drifted row $rtbl/$rdecl ($src) is unbound but undeclared — say why it is excluded, or the next conversion will silently pick it up"
@@ -508,7 +508,7 @@ done
 # THE MISATTACHMENT IS REPAIRED, AND ITS ABSENCE IS ASSERTED. `proof_pressure.validate_header` no
 # longer claims `Examples.ElfHeader.Proofs.validate_header_correct`; if that link ever returns, the
 # manifest offers an `elfFns` row for a `check_nonce` edge again and this catches it.
-if printf '%s' "$OUT" | grep -q 'elfFns.*check_nonce'; then
+if has_match 'elfFns.*check_nonce' <<<"$OUT"; then
   no "the elfFns/check_nonce request is back — proof_pressure's misattached proof link has returned"
 else
   ok "no elfFns/check_nonce request exists (the misattached claim stays deleted)"
@@ -518,7 +518,7 @@ fi
 # attested — exact implementation selection is available to an unlinked helper — while its subject
 # must keep refusing, because selection says which implementation an edge points at and never that
 # the edge is justified.
-if printf '%s' "$OUT" | grep -q 'combineFns <- .*calls.dbl.*binding_role=dependency'; then
+if has_match 'combineFns <- .*calls.dbl.*binding_role=dependency' <<<"$OUT"; then
   ok "an unlinked helper's callee DOES receive exact selection (identity is available to it)"
 else
   no "composition_unlinked_helper/calls.dbl has no dependency attestation — this control lost its case"
@@ -528,7 +528,7 @@ fi
 # of its four body edges has an exact dependency reference, and none of them corresponds. Exact
 # selection says which implementation an edge points at and never that the edge is justified.
 DRIFT_SUBJECT_FACTS="$("$ROOT_DIR/.lake/build/bin/concrete" examples/elf_header_drifted/src/main.con --report subject-facts 2>/dev/null || true)"
-if printf '%s' "$DRIFT_SUBJECT_FACTS" | grep -q 'shadow correspondence: matched=0 missing=4'; then
+if has_match 'shadow correspondence: matched=0 missing=4' <<<"$DRIFT_SUBJECT_FACTS"; then
   ok "exact dependency selection did NOT make a different program's edges correspond (identity is not justification)"
 else
   no "elf_header/main_drifted changed disposition — an identity was taken for a justification"

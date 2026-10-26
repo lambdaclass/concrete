@@ -67,7 +67,7 @@ write inf    'fn main() -> i64 { let z: f64 = 0.0; let o: f64 = 1.0; let f: f64 
 for t in over under u8over u8neg nan inf; do trap_c "$t"; done
 
 echo "=== the cast no longer lowers to a raw fptosi (it calls the checked helper) ==="
-if "$C" "$TMP/over.con" --emit-llvm 2>/dev/null | grep -qE "@__cc_f64_to_i32"; then
+if "$C" "$TMP/over.con" --emit-llvm 2>/dev/null | has_match -E "@__cc_f64_to_i32"; then
   ok "lowering calls @__cc_f64_to_i32 (checked helper)"
 else
   no "lowering is not the checked helper — H2 may have regressed to raw fptosi"

@@ -2069,7 +2069,7 @@ run_mutation() {
            if (hdr) { sub(/^(\.\/)+/, "", h); inblk = (index(h, f ":") == 1) } }
          inblk { print }
        ' "$MUT_LOG_DIR/build.log" \
-         | grep -qE "unsolved goals|[Tt]ype mismatch|Unknown identifier|Unknown constant|failed to synthesize|Missing cases|declaration uses 'sorry'"; then
+         | has_match -E "unsolved goals|[Tt]ype mismatch|Unknown identifier|Unknown constant|failed to synthesize|Missing cases|declaration uses 'sorry'"; then
       # DECLARED PER FAMILY, exactly as the campaign requires. An attributable type error proves the
       # mutation is unrepresentable, which is a real result — but it also means the family's NAMED
       # GATE never ran, so it is not evidence that the gate is load-bearing. Without a declaration

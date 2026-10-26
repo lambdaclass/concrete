@@ -14,13 +14,13 @@ ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 
 # 1. the checked crossing: to_string is fallible (Option), validated
-grep -P "^bytes\tto_string\t" "$M" | awk -F'\t' '$5=="option"' | grep -q . \
+grep -P "^bytes\tto_string\t" "$M" | awk -F'\t' '$5=="option"' | has_match . \
   && ok "Bytes::to_string is CHECKED (Option)" || no "to_string not Option"
 grep -q "validate_utf8" std/src/bytes.con \
   && ok "to_string validates UTF-8" || no "to_string does not validate"
 
 # 2. the unchecked crossing names its obligation
-grep -P "^bytes\tto_string_unchecked\t" "$M" | grep -q . \
+grep -P "^bytes\tto_string_unchecked\t" "$M" | has_match . \
   && ok "_unchecked variant present (named obligation, 2a rule)" || no "_unchecked missing"
 grep -qE "caller PROVES|valid UTF-8" std/src/bytes.con \
   && ok "_unchecked documents the caller obligation" || no "_unchecked undocumented"
@@ -34,7 +34,7 @@ leaks=$(grep -rn "String { ptr" std/src/*.con | grep -vE "std/src/(string|bytes|
   || no "stray String{ptr} construction: $leaks"
 
 # 3b-pre. path validates before its String construction
-grep -B16 "from_raw_unchecked(buf" std/src/path.con | grep -q "validate_utf8" \
+grep -B16 "from_raw_unchecked(buf" std/src/path.con | has_match "validate_utf8" \
   && ok "path.to_string validates before String construction" \
   || no "path builds String without validation"
 
@@ -65,11 +65,11 @@ fleak=$(awk -F'\t' '$1=="path" && $6 ~ /File/ {print $2}' "$M" | head -3)
 [ -z "$fleak" ] && ok "std.path carries no File (pure path-value manipulation)" \
   || no "path API with File authority (belongs in std.fs): $fleak"
 # display is checked: to_string -> Option
-grep -P "^path\tto_string\t" "$M" | awk -F'\t' '$5=="option"' | grep -q . \
+grep -P "^path\tto_string\t" "$M" | awk -F'\t' '$5=="option"' | has_match . \
   && ok "Path::to_string is CHECKED (Option — display separate from raw bytes)" \
   || no "path to_string not Option"
 # raw accessor exists (the honest non-UTF-8 route)
-grep -P "^path\tbytes_view\t" "$M" | grep -q . \
+grep -P "^path\tbytes_view\t" "$M" | has_match . \
   && ok "raw bytes_view accessor present" || no "bytes_view missing"
 # no normalization / canonicalization / symlink promises in the value layer
 pd=$(grep -rlnE "pub fn (normalize|canonicalize|resolve|realpath|readlink|symlink)" std/src/path.con | head -1)

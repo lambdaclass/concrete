@@ -112,7 +112,7 @@ covers_def() {
   body="$(defbody "$file" "$fn")"
   [ -n "$body" ] || { no "walker $fn not found in $file"; return; }
   for c in "$@"; do
-    printf '%s' "$body" | grep -qE "\.${c}([^A-Za-z0-9_]|\$)" || missing="$missing $c"
+    has_match -E "\.${c}([^A-Za-z0-9_]|\$)" <<<"$body" || missing="$missing $c"
   done
   [ -z "$missing" ] \
     && ok "$fn handles all $# compound constructors" \

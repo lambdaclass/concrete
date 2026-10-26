@@ -105,17 +105,17 @@ if run_status -- --out "$TMP/full" --public-out "$TMP/public" > "$TMP/gen.log" 2
 J="$TMP/full/status.json"
 q() { python3 -I -c "import json,sys; d=json.load(open(sys.argv[1])); print($2)" "$1"; }
 check "status.json parses"                         '[ "$(q "$J" "type(d).__name__")" = dict ]'
-check "main mismatch between origin and mirror is flagged" '[ "$(q "$J" "d[\"main\"][\"in_sync\"]")" = False ] && q "$J" "d[\"main\"][\"flags\"]" | grep -q MISMATCH'
-check "a red mirror CI is flagged too"             'q "$J" "d[\"main\"][\"flags\"]" | grep -q "mirror main CI failure"'
+check "main mismatch between origin and mirror is flagged" '[ "$(q "$J" "d[\"main\"][\"in_sync\"]")" = False ] && q "$J" "d[\"main\"][\"flags\"]" | has_match MISMATCH'
+check "a red mirror CI is flagged too"             'q "$J" "d[\"main\"][\"flags\"]" | has_match "mirror main CI failure"'
 check "main CI result is read for origin"          '[ "$(q "$J" "d[\"main\"][\"remotes\"][0][\"ci\"][\"conclusion\"]")" = success ]'
 check "one ci/* run in flight"                     '[ "$(q "$J" "d[\"inflight\"][\"active\"]")" = 1 ]'
 check "its failing job is named"                   '[ "$(q "$J" "\",\".join(d[\"inflight\"][\"runs\"][0][\"failing\"])")" = "Unit tests" ]'
 check "elapsed time comes from STATUS_NOW"         '[ "$(q "$J" "d[\"inflight\"][\"runs\"][0][\"elapsed_s\"]")" -gt 0 ]'
 check "Branch health runs are not reported as ci/* runs" '[ "$(q "$J" "len(d[\"inflight\"][\"runs\"])")" = 1 ]'
 check "wip/a is one ahead and one behind main"     '[ "$(q "$J" "[(b[\"ahead\"],b[\"behind\"]) for b in d[\"branches\"][\"branches\"] if b[\"name\"]==\"wip/a\"][0]")" = "(1, 1)" ]'
-check "wip/a carries its review and gate notes"    'q "$J" "[b for b in d[\"branches\"][\"branches\"] if b[\"name\"]==\"wip/a\"][0]" | grep -q "codex: approve" && q "$J" "[b[\"gates\"] for b in d[\"branches\"][\"branches\"] if b[\"name\"]==\"wip/a\"][0]" | grep -q "fast surface"'
+check "wip/a carries its review and gate notes"    'q "$J" "[b for b in d[\"branches\"][\"branches\"] if b[\"name\"]==\"wip/a\"][0]" | has_match "codex: approve" && q "$J" "[b[\"gates\"] for b in d[\"branches\"][\"branches\"] if b[\"name\"]==\"wip/a\"][0]" | has_match "fast surface"'
 check "wip/a shows its branch-health run at tip"   '[ "$(q "$J" "[b[\"health\"][\"at_tip\"] for b in d[\"branches\"][\"branches\"] if b[\"name\"]==\"wip/a\"][0]")" = True ]'
-check "ready/b is listed"                          'q "$J" "[b[\"name\"] for b in d[\"branches\"][\"branches\"]]" | grep -q ready/b'
+check "ready/b is listed"                          'q "$J" "[b[\"name\"] for b in d[\"branches\"][\"branches\"]]" | has_match ready/b'
 check "landing: two trains, one landed"            '[ "$(q "$J" "(d[\"landing\"][\"trains_logged\"], d[\"landing\"][\"landed\"])")" = "(2, 1)" ]'
 check "landing: time to land 1h00m, on target"     '[ "$(q "$J" "(d[\"landing\"][\"median_time_to_land_s\"], d[\"landing\"][\"land_on_target\"])")" = "(3600, True)" ]'
 check "landing: CI median 44m30s, over the 40m target" '[ "$(q "$J" "(d[\"landing\"][\"median_ci_wall_s\"], d[\"landing\"][\"ci_on_target\"])")" = "(2670.0, False)" ]'
@@ -128,7 +128,7 @@ check "html headline asks for attention"           'grep -q "attention" "$TMP/fu
 echo "=== fail-soft: gh unavailable ==="
 if run_status STATUS_GH=false -- --out "$TMP/nogh" > "$TMP/nogh.log" 2>&1; then ok "status.py still exits 0 without gh"; else no "status.py still exits 0 without gh"; cat "$TMP/nogh.log"; fi
 check "the page says what is unavailable"          'grep -q "unavailable" "$TMP/nogh/status.html"'
-check "git-only sections still render"             'q "$TMP/nogh/status.json" "d[\"branches\"][\"branches\"][0][\"name\"]" | grep -q /'
+check "git-only sections still render"             'q "$TMP/nogh/status.json" "d[\"branches\"][\"branches\"][0][\"name\"]" | has_match /'
 
 echo "=== sanitizer: the public variant ==="
 for s in "$SECRET_IP" "$SECRET_TOKEN" "$SECRET_MAIL" "$SECRET_HOME" "$SECRET_HOST"; do
@@ -144,10 +144,10 @@ spec=importlib.util.spec_from_file_location("s",sys.argv[1]); m=importlib.util.m
 print(m.sanitize_text(sys.argv[2]))' "$STATUS" "ip $SECRET_IP6 hook $SECRET_HOOK xoxb-1234567890-abcdef pw: hunter2 on build-box.internal at 15:41:15 v2.338.1 ntfy.sh/concrete-secret-topic NTFY_TOKEN=opaquecred1 AWS_SECRET_ACCESS_KEY=opaquecred2 {\"password\": \"opaquecred3\"} password=\"two opaquecred4 words\" {\"secret\": \"pre\\\"opaquecred5\"} password=\"pre\\
 opaquecred6\" tokenizer: keeps this")"
 for s in "$SECRET_IP6" "$SECRET_HOOK" "xoxb-" "hunter2" "build-box.internal" "concrete-secret-topic" opaquecred1 opaquecred2 opaquecred3 opaquecred4 opaquecred5 opaquecred6; do
-  check "sanitize_text strips ${s:0:14}..." '! printf "%s" "$SAN" | grep -qF -- "$s"'
+  check "sanitize_text strips ${s:0:14}..." '! printf "%s" "$SAN" | has_match -F -- "$s"'
 done
-check "sanitize_text keeps clock times and versions" 'printf "%s" "$SAN" | grep -q "15:41:15 v2.338.1"'
-check "sanitize_text keeps a word that merely contains a key name" 'printf "%s" "$SAN" | grep -q "tokenizer: keeps this"'
+check "sanitize_text keeps clock times and versions" 'printf "%s" "$SAN" | has_match "15:41:15 v2.338.1"'
+check "sanitize_text keeps a word that merely contains a key name" 'printf "%s" "$SAN" | has_match "tokenizer: keeps this"'
 # Free-form text is withheld, not scrubbed: no pattern list can vouch for arbitrary prose.
 check "public page withholds note text but keeps its presence" '! grep -q "codex: approve" "$TMP/public/status.json" && ! grep -q "fast surface" "$TMP/public/status.json" && grep -q "present (withheld" "$TMP/public/status.json"'
 check "public page withholds landing notes"        '! grep -q "run conclusion" "$TMP/public/status.json"'
@@ -155,7 +155,7 @@ check "public page withholds landing notes"        '! grep -q "run conclusion" "
 echo "=== html validity basics ==="
 for page in "$TMP/full/status.html" "$TMP/public/status.html" "$TMP/nogh/status.html"; do
   n="${page#"$TMP"/}"
-  check "$n: doctype, charset, viewport"           'head -c 300 "$page" | grep -qi "<!doctype html>" && grep -q "charset=\"utf-8\"" "$page" && grep -q "name=\"viewport\"" "$page"'
+  check "$n: doctype, charset, viewport"           'head -c 300 "$page" | has_match -i "<!doctype html>" && grep -q "charset=\"utf-8\"" "$page" && grep -q "name=\"viewport\"" "$page"'
   check "$n: meta refresh"                         'grep -q "http-equiv=\"refresh\" content=\"120\"" "$page"'
   check "$n: dark mode"                            'grep -q "prefers-color-scheme:dark" "$page"'
   check "$n: no external asset"                    '! grep -qiE "<(script|img|iframe)[^>]* src=|<link |@import|url\(" "$page"'
@@ -199,17 +199,17 @@ printf 'NTFY_TOPIC=%s\nNTFY_TOKEN=tk_secret_token_123\nSLACK_WEBHOOK_URL=%s\nNOT
 # The dry run uses EXACTLY the arguments of the real send below: if a dry run recorded a dedup stamp,
 # that send would be suppressed and the next check would fail.
 out="$(bash "$NOTIFY" --dry-run error "land t1" "train t1 is red" 2>/dev/null)"
-check "dry-run shows the ntfy and slack messages"  'printf "%s" "$out" | grep -q "dry-run ntfy: POST https://ntfy.sh/<topic> priority=urgent" && printf "%s" "$out" | grep -q "dry-run slack: POST <webhook>"'
-check "dry-run redacts the topic and webhook"      '! printf "%s" "$out" | grep -qF -- "$TOPIC" && ! printf "%s" "$out" | grep -qF hooks.slack.com'
+check "dry-run shows the ntfy and slack messages"  'printf "%s" "$out" | has_match "dry-run ntfy: POST https://ntfy.sh/<topic> priority=urgent" && printf "%s" "$out" | has_match "dry-run slack: POST <webhook>"'
+check "dry-run redacts the topic and webhook"      '! printf "%s" "$out" | has_match -F -- "$TOPIC" && ! printf "%s" "$out" | has_match -F hooks.slack.com'
 check "dry-run sends nothing"                      '[ "$(calls)" = 0 ]'
 check "the env file is parsed, never sourced"      '[ ! -e "$TMP/pwned" ] && [ ! -e "$TMP/pwned2" ]'
 bash "$NOTIFY" error "land t1" "train t1 is red" > /dev/null 2>&1; rc=$?
 check "a real send after the dry run posts to ntfy and slack" '[ "$rc" = 0 ] && [ "$(calls)" = 2 ] && grep -q "Priority: urgent" "$FAKE_CURL_ARGV" && grep -qF "url = \"https://ntfy.sh/$TOPIC\"" "$FAKE_CURL_LOG" && grep -qF "url = \"$SECRET_HOOK\"" "$FAKE_CURL_LOG"'
-check "the ntfy token goes only to ntfy"           '[ "$(grep -c "Bearer tk_secret_token_123" "$FAKE_CURL_LOG")" = 1 ] && grep "Bearer" "$FAKE_CURL_LOG" | grep -qF "ntfy.sh"'
+check "the ntfy token goes only to ntfy"           '[ "$(grep -c "Bearer tk_secret_token_123" "$FAKE_CURL_LOG")" = 1 ] && grep "Bearer" "$FAKE_CURL_LOG" | has_match -F "ntfy.sh"'
 check "no topic, token or webhook on any argv"     '! grep -qF -- "$TOPIC" "$FAKE_CURL_ARGV" && ! grep -q "tk_secret" "$FAKE_CURL_ARGV" && ! grep -q "hooks.slack" "$FAKE_CURL_ARGV"'
-check "the curl config file is mode 600"           '! grep -v "^CALL mode=600 " "$FAKE_CURL_LOG" | grep -q .'
+check "the curl config file is mode 600"           '! grep -v "^CALL mode=600 " "$FAKE_CURL_LOG" | has_match .'
 err="$(NOTIFY_NOW=1300 bash "$NOTIFY" error "land t1" "train t1 is red" 2>&1 >/dev/null)"
-check "a duplicate inside the window is dropped"   '[ "$(calls)" = 2 ] && printf "%s" "$err" | grep -q "suppressed duplicate"'
+check "a duplicate inside the window is dropped"   '[ "$(calls)" = 2 ] && printf "%s" "$err" | has_match "suppressed duplicate"'
 NOTIFY_NOW=1300 bash "$NOTIFY" error "land t1" "train t1 is GREEN now" > /dev/null 2>&1
 check "a different body is not a duplicate"        '[ "$(calls)" = 4 ]'
 NOTIFY_NOW=1700 bash "$NOTIFY" error "land t1" "train t1 is red" > /dev/null 2>&1

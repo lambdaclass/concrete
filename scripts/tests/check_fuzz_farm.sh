@@ -178,7 +178,7 @@ else no "promote output drifted:"; head -20 "$TMP/promote.diff"; fi
 mkdir -p "$TMP/repo"
 FARM_HOME="$FIX" $FARM promote silent-000000f1x7e0 --repo "$TMP/repo" --write > /dev/null
 f="$TMP/repo/tests/regressions/fuzz_silent_000000f1/repro.con"
-if [ -f "$f" ] && head -1 "$f" | grep -q '^// Fuzz-farm finding silent-000000f1x7e0' \
+if [ -f "$f" ] && head -1 "$f" | has_match '^// Fuzz-farm finding silent-000000f1x7e0' \
    && [ "$(grep -v '^//' "$f")" = "$(cat "$FIX/findings/silent-000000f1x7e0/minimized.con")" ]; then
   ok "--write places the fixture under tests/regressions/ with header + minimized body"
 else no "--write fixture missing or malformed ($f)"; fi

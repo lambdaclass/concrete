@@ -56,7 +56,7 @@ echo "=== the gates R-0483 actually broke are all selected ==="
 # Each of these went red in CI, one round at a time, for that change.
 for g in check_stdlib_manifest.sh check_shadow_body_v2.sh check_mutation_anchors.sh \
          check_byte_view.sh check_std_compiled_coverage.sh; do
-  if printf '%s\n' "$sel_names" | grep -qx "$g"; then
+  if has_match -x "$g" <<<"$sel_names"; then
     ok "$g"
   else
     no "$g is NOT selected — it broke on this diff and the mapping would have missed it"
@@ -66,7 +66,7 @@ done
 echo "=== and the derived-artifact set, which is why they broke ==="
 for g in check_attestation_manifest.sh check_classification_freshness.sh \
          check_build_identity_freshness.sh; do
-  printf '%s\n' "$sel_names" | grep -qx "$g" \
+  has_match -x "$g" <<<"$sel_names" \
     && ok "$g" \
     || no "$g is not selected for a diff touching std/ and Concrete/"
 done
@@ -77,12 +77,12 @@ echo "=== a compiler change selects the corpus runner, in both its CI forms ==="
 # NAMES no compiler source — it compiles the whole corpus. A script is also not a gate:
 # CI runs the plain form and `--trust-gate`, and only the latter checks consistency.
 compiler_sel="$(printf 'Concrete/Report/Report.lean\n' | python3 "$SEL" 2>/dev/null | cut -f1)"
-if printf '%s\n' "$compiler_sel" | grep -qx "run_tests.sh"; then
+if has_match -x "run_tests.sh" <<<"$compiler_sel"; then
   ok "run_tests.sh is selected for a compiler change"
 else
   no "a compiler change does not select the corpus runner"
 fi
-if printf '%s\n' "$compiler_sel" | grep -qx "run_tests.sh --trust-gate"; then
+if has_match -x "run_tests.sh --trust-gate" <<<"$compiler_sel"; then
   ok "its --trust-gate form is named too (different sections, different failures)"
 else
   no "the flagged CI form is not surfaced; a script is being treated as one gate"
@@ -98,7 +98,7 @@ fi
 
 echo "=== an unrelated change does not drag in the stdlib surface ==="
 unrelated="$(printf 'docs/project/STYLE.md\n' | python3 "$SEL" 2>/dev/null | cut -f1)"
-if printf '%s\n' "$unrelated" | grep -qx "check_stdlib_manifest.sh"; then
+if has_match -x "check_stdlib_manifest.sh" <<<"$unrelated"; then
   no "editing a style document selected the stdlib surface manifest"
 else
   ok "a docs-only change does not select the stdlib surface manifest"

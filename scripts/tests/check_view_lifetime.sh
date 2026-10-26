@@ -51,7 +51,7 @@ check_rejects() {
     no "$label: expected a compile error, got none"
     return
   fi
-  if printf '%s' "$out" | grep -qE "$pat"; then
+  if has_match -E "$pat" <<<"$out"; then
     ok "$label"
   else
     no "$label: rejected, but not for the stated reason (/$pat/)"

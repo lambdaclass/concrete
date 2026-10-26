@@ -66,7 +66,7 @@ isa_build(){
     ISA_OUT="$( cd "$1" && isabelle build -D . 2>&1 )"
     rc=$?
     [ "$rc" -eq 0 ] && return 0
-    printf '%s' "$ISA_OUT" | grep -qE "$ISA_THEORY_MARKERS" && return 1
+    has_match -E "$ISA_THEORY_MARKERS" <<<"$ISA_OUT" && return 1
     attempt=$((attempt+1))
   done
   return 2
@@ -79,7 +79,7 @@ isa_build(){
 # file where only div_safe closed. `grep -A3 "[$1]"` restricts the match to the
 # obligation's own key line and the cell/class lines that follow it.
 has(){
-  printf '%s' "$3" | grep -A3 -- "$1" | grep -q -- "$2" \
+  printf '%s' "$3" | grep -A3 -- "$1" | has_match -- "$2" \
     && ok "$1: $2" || no "$1: expected '$2' in its own row"
 }
 
@@ -99,7 +99,7 @@ echo "=== SMT rendering is validated (the one-printer-many-tools path) ==="
 # verdict enters the TCB as `solver_trusted` with no kernel re-deriving it. Checked here
 # without any prover flag because z3 is in the base dev shell.
 SA="$("$COMPILER" "$FAMILIES" --report lowering-agreement 2>/dev/null)"
-printf '%s' "$SA" | grep -qE "smt \(exprToSmt\): [0-9]+/[0-9]+ ground instances agree" \
+has_match -E "smt \(exprToSmt\): [0-9]+/[0-9]+ ground instances agree" <<<"$SA" \
   && ok "exprToSmt's rendering is validated against the reference evaluator" \
   || no "SMT rendering validation did not run — the SMT path is unchecked again"
 # Non-vacuity: a count of 0/0 would satisfy the pattern above while checking nothing.
@@ -124,10 +124,10 @@ grep -q "!mine.isEmpty && mine.all" Main.lean \
 echo "=== bridge differential-check (feature #1): fuzzer teeth + soundness ==="
 BC="$("$COMPILER" "$DEMO" --report bridge-check 2>/dev/null)"
 # proved obligation: no counterexample
-printf '%s' "$BC" | grep -A2 "add_bounded" | grep -q "no counterexample" \
+printf '%s' "$BC" | grep -A2 "add_bounded" | has_match "no counterexample" \
   && ok "proved add_bounded: no concrete counterexample" || no "add_bounded should have no counterexample"
 # unproved obligation: fuzzer finds a real overflow (teeth)
-printf '%s' "$BC" | grep -A2 "mul_unbounded" | grep -q "violation found by fuzzer" \
+printf '%s' "$BC" | grep -A2 "mul_unbounded" | has_match "violation found by fuzzer" \
   && ok "unproved mul_unbounded: fuzzer finds a real overflow (teeth)" || no "fuzzer should find mul_unbounded overflow"
 # no PROVED obligation is ever refuted -> exit 0
 "$COMPILER" "$DEMO" --report bridge-check >/dev/null 2>&1
@@ -146,7 +146,7 @@ if command -v coqc >/dev/null 2>&1; then
   has "add_bounded" "rocq:lia = closed"                  "$R"
   has "add_bounded" "=> proved_by_two_kernels (lean, rocq)" "$R"
   # teeth: no kernel can bound a*b, so it stays unproven even with Rocq
-  printf '%s' "$R" | grep -A2 "mul_unbounded" | grep -q "=> unproven" \
+  printf '%s' "$R" | grep -A2 "mul_unbounded" | has_match "=> unproven" \
     && ok "mul_unbounded stays unproven with Rocq (teeth)" \
     || no "mul_unbounded should stay unproven with Rocq"
 
@@ -176,16 +176,16 @@ EOF
   # the load-bearing half: Lean DID close it, so a `refused` here would read as the
   # second kernel contradicting the first.
   has "add_with_div_hyp" "lean:omega = closed" "$P"
-  printf '%s' "$P" | grep -A2 "add_with_div_hyp" | grep -q "=> proved_by_lean" \
+  printf '%s' "$P" | grep -A2 "add_with_div_hyp" | has_match "=> proved_by_lean" \
     && ok "div-hyp: lean-proved obligation keeps its class when Rocq is not asked" \
     || no "div-hyp should be proved_by_lean, not unproven"
   rm -rf "$TMP"
 
   echo "=== bounds + div families reach Rocq too ==="
   FR="$("$COMPILER" "$FAMILIES" --report multi-kernel --rocq 2>/dev/null)"
-  printf '%s' "$FR" | grep -A2 "#bounds0" | grep -q "rocq:lia = closed" \
+  printf '%s' "$FR" | grep -A2 "#bounds0" | has_match "rocq:lia = closed" \
     && ok "array-bounds obligation closed by Rocq" || no "bounds should close in Rocq"
-  printf '%s' "$FR" | grep -A2 "#div0" | grep -q "rocq:lia = closed" \
+  printf '%s' "$FR" | grep -A2 "#div0" | has_match "rocq:lia = closed" \
     && ok "div-nonzero obligation closed by Rocq" || no "div should close in Rocq"
 
   echo "=== release gate: --require-two-kernels FAILS on an unprovable obligation (#4) ==="
@@ -214,10 +214,10 @@ EOF
   # Rocq it reaches two kernels; without Rocq it must fall back, not retain the class.
   WITH_R="$("$COMPILER" "$DEMO" --report multi-kernel --rocq 2>/dev/null)"
   WITHOUT_R="$("$COMPILER" "$DEMO" --report multi-kernel 2>/dev/null)"
-  printf '%s' "$WITH_R" | grep -A3 "add_bounded" | grep -q "proved_by_two_kernels" \
+  printf '%s' "$WITH_R" | grep -A3 "add_bounded" | has_match "proved_by_two_kernels" \
     && ok "with Rocq: add_bounded reaches two kernels" \
     || no "with Rocq: add_bounded should reach two kernels"
-  printf '%s' "$WITHOUT_R" | grep -A3 "add_bounded" | grep -q "proved_by_two_kernels" \
+  printf '%s' "$WITHOUT_R" | grep -A3 "add_bounded" | has_match "proved_by_two_kernels" \
     && no "badge PERSISTED with the kernel absent — it is sticky, not earned" \
     || ok "without Rocq: the two-kernel badge is gone (earned per run)"
 
@@ -234,11 +234,11 @@ EOF
   AG="$("$COMPILER" "$FAMILIES" --report lowering-agreement --rocq 2>/dev/null)"
   # every family must actually be CHECKED, not silently skipped
   for k in "#ovf0" "#bounds0" "#div0"; do
-    printf '%s' "$AG" | grep -q -- "$k" \
+    has_match -- "$k" <<<"$AG" \
       && ok "agreement check covers $k" || no "agreement check should cover $k"
   done
   # a kernel not requested must not be silently reported as agreeing
-  printf '%s' "$AG" | grep -q "isabelle:presburger: off" \
+  has_match "isabelle:presburger: off" <<<"$AG" \
     && ok "un-requested kernel reads 'off', not 'agrees'" \
     || no "un-requested kernel should read 'off'"
 
@@ -254,10 +254,10 @@ EOF
   BD="$("$COMPILER" "$FAMILIES" --report core-semantics-diff 2>/dev/null)"
   # Coverage must be stated, not implied: a function outside the fragment is NAMED
   # rather than silently skipped, so "N agree" cannot be read as "everything agrees".
-  printf '%s' "$BD" | grep -q "OUTSIDE the extractable fragment" \
+  has_match "OUTSIDE the extractable fragment" <<<"$BD" \
     && ok "functions outside the fragment are named, not silently skipped" \
     || no "unextractable functions should be reported"
-  printf '%s' "$BD" | grep -q "read_at" \
+  has_match "read_at" <<<"$BD" \
     && ok "array-indexing function correctly reported as outside the fragment" \
     || no "read_at should be outside the fragment"
 
@@ -284,7 +284,7 @@ Definition f (a : Z) : Z := Z.add a 1.
 Goal f 1 = 3. Proof. reflexivity. Qed.
 EOF
   U_OUT="$( cd "$DTMP" && coqc -native-compiler no u.v 2>&1 )"
-  printf '%s' "$U_OUT" | grep -q "Unable to unify" \
+  has_match "Unable to unify" <<<"$U_OUT" \
     && ok "a mismatched equation still prints 'Unable to unify' (DISAGREE marker)" \
     || no "reflexivity-mismatch marker changed — core-semantics-diff classifier needs updating"
   rm -rf "$DTMP"
@@ -315,13 +315,13 @@ EOF
                 || no "elf_header lowering-agreement should pass"
   EBD="$("$COMPILER" "$ELF" --report core-semantics-diff 2>/dev/null)"
   for fn in check_magic check_class check_data check_version validate_header; do
-    printf '%s' "$EBD" | grep -q "\[$fn\]  agree" \
+    has_match "\[$fn\]  agree" <<<"$EBD" \
       && ok "elf_header: $fn agrees across both evaluators" \
       || no "elf_header: $fn should agree"
   done
   CV="$("$COMPILER" examples/crypto_verify/src/main.con --report core-semantics-diff 2>/dev/null)"
   for fn in compute_tag verify_tag check_nonce verify_message main; do
-    printf '%s' "$CV" | grep -q "\[$fn\]  agree" \
+    has_match "\[$fn\]  agree" <<<"$CV" \
       && ok "crypto_verify: $fn agrees across both evaluators" \
       || no "crypto_verify: $fn should agree"
   done
@@ -329,7 +329,7 @@ EOF
   # depends on the early-return guard pattern (`if !ok { return 0; } ...`), which
   # verify_message uses and which is only sound because blockTerminates checks the
   # `then` branch really leaves the function.
-  printf '%s' "$CV" | grep -q "OUTSIDE the extractable fragment" \
+  has_match "OUTSIDE the extractable fragment" <<<"$CV" \
     && no "crypto_verify should have NO function outside the fragment" \
     || ok "crypto_verify is fully covered (every function bridge-checked)"
 
@@ -355,11 +355,11 @@ mod guard {
 }
 EOF
   GD="$("$COMPILER" "$GTMP/src/main.con" --report core-semantics-diff 2>/dev/null)"
-  printf '%s' "$GD" | grep -q "\[realguard\]  agree" \
+  has_match "\[realguard\]  agree" <<<"$GD" \
     && ok "a real early-return guard IS extracted and agrees" \
     || no "realguard should be extracted"
-  printf '%s' "$GD" | grep -qE "fallthrough" \
-    && printf '%s' "$GD" | grep -A3 "OUTSIDE" | grep -q "fallthrough" \
+  has_match -E "fallthrough" <<<"$GD" \
+    && printf '%s' "$GD" | grep -A3 "OUTSIDE" | has_match "fallthrough" \
     && ok "a fall-through then-branch is refused, not silently mis-extracted" \
     || no "fallthrough must be OUTSIDE the fragment"
   rm -rf "$GTMP"
@@ -393,11 +393,11 @@ Goal forall (a b : Z), (a ~= b).
 Proof. lia. Qed.
 EOF
   R_OUT="$(cd "$MKTMP" && coqc -native-compiler no refuse.v 2>&1)"
-  printf '%s' "$R_OUT" | grep -q "Tactic failure" \
+  has_match "Tactic failure" <<<"$R_OUT" \
     && ok "a genuine lia refusal still prints 'Tactic failure'" \
     || no "lia refusal marker changed — classifyRocqFailure needs updating"
   B_OUT="$(cd "$MKTMP" && coqc -native-compiler no broken.v 2>&1)"
-  printf '%s' "$B_OUT" | grep -q "Tactic failure" \
+  has_match "Tactic failure" <<<"$B_OUT" \
     && no "a malformed script must NOT look like a tactic failure" \
     || ok "a malformed script does not print 'Tactic failure' (reads as error)"
   rm -rf "$MKTMP"
@@ -405,7 +405,7 @@ EOF
   if command -v z3 >/dev/null 2>&1; then
     echo "=== solver certificate-check (#2): solver_trusted -> solver_checked ==="
     SC="$("$COMPILER" examples/contract_negatives/lowering_operators/src/main.con --report solver-cert 2>/dev/null)"
-    printf '%s' "$SC" | grep -q "=> solver_checked" \
+    has_match "=> solver_checked" <<<"$SC" \
       && ok "nonlinear VC: z3 corroborated by Rocq nia -> solver_checked" \
       || no "expected a solver_checked graduation"
   else
@@ -423,7 +423,7 @@ if command -v isabelle >/dev/null 2>&1; then
 
   echo "=== ledger fold: obligation-ledger produces the multi-kernel class (#4) ==="
   L="$("$COMPILER" "$FAMILIES" --report obligation-ledger --all-provers 2>/dev/null)"
-  printf '%s' "$L" | grep -q "proved_by_multi_kernel" \
+  has_match "proved_by_multi_kernel" <<<"$L" \
     && ok "obligation-ledger folds proved_by_multi_kernel via a real ledger path" \
     || no "ledger should show proved_by_multi_kernel under --all-provers"
   echo "=== release gate PASSES when every obligation reaches >=2 kernels (#4) ==="
@@ -453,7 +453,7 @@ if command -v isabelle >/dev/null 2>&1; then
   rc=$?
   [ $rc -ne 0 ] && ok "policy project with an unprovable obligation is REJECTED" \
                 || no "blocked project should be rejected under require-two-kernels"
-  printf '%s' "$BLK" | grep -q "E0616" \
+  has_match "E0616" <<<"$BLK" \
     && ok "rejection carries the policy code E0616" || no "expected E0616"
 
   echo "=== certificate REPLAY: the solver's proof is kernel-checked, not stamped ==="
@@ -492,7 +492,7 @@ EOF
   isa_build "$RTMP"
   case $? in
     2) inconc "oracle-mode teeth: isabelle build never reached a diagnostic" ;;
-    *) printf '%s' "$ISA_OUT" | grep -q "ORACLE PRESENT" \
+    *) printf '%s' "$ISA_OUT" | has_match "ORACLE PRESENT" \
          && ok "smt_oracle = true is DETECTED and rejected (stamping cannot pass as replay)" \
          || no "oracle mode must be rejected — the no-oracle assertion has no teeth" ;;
   esac
@@ -544,8 +544,8 @@ EOF
 (get-proof)
 EOF
     INT_OUT="$("$CVC5" --produce-proofs --proof-format-mode=alethe "$CTMP/int.smt2" 2>&1)"
-    if printf '%s' "$INT_OUT" | grep -q '^unsat' \
-       && ! printf '%s' "$INT_OUT" | grep -q 'unsupported by Alethe'; then
+    if has_match '^unsat' <<<"$INT_OUT" \
+       && ! has_match 'unsupported by Alethe' <<<"$INT_OUT"; then
       ok "quantified integer goal: proved AND Alethe-certifiable (baseline holds)"
     else
       no "quantified integer goal no longer certifies — check the cvc5 invocation first"
@@ -559,10 +559,10 @@ EOF
 (get-proof)
 EOF
     ADT_OUT="$("$CVC5" --produce-proofs --proof-format-mode=alethe "$CTMP/adt.smt2" 2>&1)"
-    printf '%s' "$ADT_OUT" | grep -q '^unsat' \
+    has_match '^unsat' <<<"$ADT_OUT" \
       && ok "ground datatype goal: cvc5 PROVES it (capability is not the barrier)" \
       || no "ground datatype goal no longer proves — revisit the two-speed rationale"
-    if printf '%s' "$ADT_OUT" | grep -q 'unsupported by Alethe'; then
+    if has_match 'unsupported by Alethe' <<<"$ADT_OUT"; then
       ok "ground datatype goal: NOT Alethe-certifiable (ceiling holds; non-arith stays kernel-proved)"
     else
       no "Alethe now certifies datatype proofs — refinement/exhaustiveness can become certifiably automatic; move them earlier"
@@ -577,7 +577,7 @@ EOF
   isa_build "$ITMP"
   case $? in
     2) inconc "refusal marker: isabelle build never reached a diagnostic" ;;
-    *) printf '%s' "$ISA_OUT" | grep -q "Failed to apply initial proof method" \
+    *) printf '%s' "$ISA_OUT" | has_match "Failed to apply initial proof method" \
          && ok "a genuine presburger refusal still prints 'Failed to apply initial proof method'" \
          || no "isabelle refusal marker changed — classifyIsabelleFailure needs updating" ;;
   esac
@@ -585,7 +585,7 @@ EOF
   isa_build "$ITMP"
   case $? in
     2) inconc "malformed-theory marker: isabelle build never reached a diagnostic" ;;
-    *) printf '%s' "$ISA_OUT" | grep -q "Failed to apply initial proof method" \
+    *) printf '%s' "$ISA_OUT" | has_match "Failed to apply initial proof method" \
          && no "a malformed theory must NOT look like a proof-method failure" \
          || ok "a malformed theory does not print the refusal marker (reads as error)" ;;
   esac
@@ -615,11 +615,11 @@ if ! command -v coqc >/dev/null 2>&1 && ! command -v isabelle >/dev/null 2>&1; t
     no "allow project BUILT with no external kernel — require-two-kernels failed OPEN"
   else
     ok "allow project is REJECTED with no external kernel (unverified is not satisfied)"
-    printf '%s' "$FC" | grep -q "E0616" \
+    has_match "E0616" <<<"$FC" \
       && ok "fail-closed rejection carries E0616" || no "fail-closed rejection should carry E0616"
     # The diagnostic must name the missing toolchain, not blame the proof: a user
     # whose obligations are fine needs to be told to install a prover.
-    printf '%s' "$FC" | grep -q "no external kernel could be run" \
+    has_match "no external kernel could be run" <<<"$FC" \
       && ok "fail-closed diagnostic blames the missing kernel, not the obligation" \
       || no "fail-closed diagnostic should say 'no external kernel could be run'"
   fi
@@ -660,10 +660,10 @@ if [ "${MULTI_KERNEL_MUTATE:-0}" = "1" ]; then
     rm -rf .concrete-cache
     if lake build >/dev/null 2>&1; then
       MB="$("$COMPILER" "$FAMILIES" --report multi-kernel --rocq 2>/dev/null)"
-      printf '%s' "$MB" | grep -q "LOWERING DISAGREES" \
+      has_match "LOWERING DISAGREES" <<<"$MB" \
         && ok "corrupted lowering is NAMED in the multi-kernel report" \
         || no "multi-kernel report should name the disagreeing lowering"
-      printf '%s' "$MB" | grep -A4 "add_bounded" | grep -q "proved_by_two_kernels" \
+      printf '%s' "$MB" | grep -A4 "add_bounded" | has_match "proved_by_two_kernels" \
         && no "badge still claims two kernels on a disagreeing lowering" \
         || ok "badge drops the disagreeing kernel (no proved_by_two_kernels)"
       "$COMPILER" "$FAMILIES" --report multi-kernel --rocq --require-two-kernels >/dev/null 2>&1
@@ -714,18 +714,18 @@ if [ "${MULTI_KERNEL_MUTATE:-0}" = "1" ]; then
     if lake build >/dev/null 2>&1; then
       VD="$("$COMPILER" "$DEMO" --report multi-kernel --rocq 2>/dev/null)"
       # add_bounded: lean closes, rocq now refuses. That is a disagreement.
-      printf '%s' "$VD" | grep -A3 "add_bounded" | grep -q "kernel_disagreement" \
+      printf '%s' "$VD" | grep -A3 "add_bounded" | has_match "kernel_disagreement" \
         && ok "lean-proves / rocq-refuses is classed kernel_disagreement" \
         || no "a refusing kernel must not be absorbed into proved_by_lean"
-      printf '%s' "$VD" | grep -A3 "add_bounded" | grep -q "proved_by_lean" \
+      printf '%s' "$VD" | grep -A3 "add_bounded" | has_match "proved_by_lean" \
         && no "disagreement still reads proved_by_lean (the old silent path)" \
         || ok "disagreement does NOT read as a plain single-kernel proof"
-      printf '%s' "$VD" | grep -q "KERNEL DISAGREEMENTS:" \
+      has_match "KERNEL DISAGREEMENTS:" <<<"$VD" \
         && ok "disagreements get their own summary block" \
         || no "report should summarise kernel disagreements"
       # mul_unbounded: BOTH refuse. Agreement on refusal is not dissent — this is the
       # assertion that keeps the check from firing on every unproved obligation.
-      printf '%s' "$VD" | grep -A3 "mul_unbounded" | grep -q "kernel_disagreement" \
+      printf '%s' "$VD" | grep -A3 "mul_unbounded" | has_match "kernel_disagreement" \
         && no "both-refused must NOT be reported as a disagreement" \
         || ok "both kernels refusing is agreement, not dissent"
       "$COMPILER" "$DEMO" --report multi-kernel --rocq --require-two-kernels >/dev/null 2>&1

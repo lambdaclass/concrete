@@ -317,7 +317,7 @@ ctl_example() { # name authority-lines source
   ( check_example "$d/assumptions.toml" ) 2>&1
 }
 actl() { # label expect reject output
-  if printf '%s' "$4" | grep -qE "$2" && ! printf '%s' "$4" | grep -qE "$3"; then
+  if has_match -E "$2" <<<"$4" && ! has_match -E "$3" <<<"$4"; then
     echo "  ok   CONTROL $1"; PASS=$((PASS + 1))
   else
     echo "  FAIL CONTROL $1"; printf '%s\n' "$4" | grep -E 'authority' | head -3 | sed 's/^/       /'; FAIL=$((FAIL + 1))

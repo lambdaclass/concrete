@@ -89,7 +89,7 @@ fi
 # progress line), so `^s VERIFIED` never matches on the raw output. Strip CRs before
 # anchoring — and anchor, because an unanchored "s VERIFIED" also matches the
 # failure verdict "s NOT VERIFIED".
-verdict_verified(){ printf '%s' "$1" | tr -d '\r' | grep -q '^s VERIFIED$'; }
+verdict_verified(){ printf '%s' "$1" | tr -d '\r' | has_match '^s VERIFIED$'; }
 
 # check_cnfs TAG CNF... — independently re-solve each CNF and check its DRAT certificate; counts the
 # non-trivial certificates verified in CERTS.
@@ -120,7 +120,7 @@ check_cnfs() {
     # A CNF that is contradictory on its own (complementary unit clauses) is reported
     # VERIFIED without the proof being read at all. That verifies nothing about the
     # certificate, so it must not be counted as a certificate check.
-    if printf '%s' "$DT" | tr -d '\r' | grep -q 'stop reading proof'; then
+    if printf '%s' "$DT" | tr -d '\r' | has_match 'stop reading proof'; then
       ok "$tag CNF $i: trivially UNSAT from the CNF alone (certificate not exercised)"
     else
       CERTS=$((CERTS+1))

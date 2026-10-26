@@ -47,7 +47,7 @@ grep -qE '^Max stack bound: [0-9]' <<<"$UNB" \
 v="$(stack_max_bound <<<"$UNB")"; rc=$?
 [ "$rc" -eq 3 ] && [ "$v" = unbounded ] && ok "lib/stack_bound.sh reads it as unbounded (rc 3)" \
                                         || no "lib/stack_bound.sh read '$v' (rc $rc), expected unbounded (rc 3)"
-grep -A1 -E '^  leaf$' <<<"$UNB" | grep -q 'stack: 20 bytes' \
+grep -A1 -E '^  leaf$' <<<"$UNB" | has_match 'stack: 20 bytes' \
   && ok "the bounded leaf keeps its exact row (unboundedness propagates to callers, not callees)" \
   || no "the bounded leaf lost its row: $(grep -A1 -E '^  leaf$' <<<"$UNB" | tail -1)"
 
@@ -117,7 +117,7 @@ out="$("$CC" "$FIX/extern_intrinsic_name.con" --report stack-depth 2>&1)"
 grep -q 'E0118' <<<"$out" && ! grep -qE '^Max stack bound: [0-9]' <<<"$out" \
   && ok "extern_intrinsic_name: refused with E0118 and no bound published" \
   || no "extern_intrinsic_name: expected an E0118 refusal and no numeric bound, got: $(head -c 300 <<<"$out")"
-grep -A1 -E '^  Sq_area$' <<<"$("$CC" "$FIX/unresolved.con" --report stack-depth 2>&1)" | grep -q 'stack: 16 bytes' \
+grep -A1 -E '^  Sq_area$' <<<"$("$CC" "$FIX/unresolved.con" --report stack-depth 2>&1)" | has_match 'stack: 16 bytes' \
   && ok "unresolved: the resolved leaf keeps its exact row" || no "unresolved: the resolved leaf lost its row"
 line="$("$CC" "$FIX/intrinsic.con" --report stack-depth 2>&1 | grep -E '^Max stack bound:')"
 [ "$line" = "Max stack bound: 24 bytes (main)" ] \

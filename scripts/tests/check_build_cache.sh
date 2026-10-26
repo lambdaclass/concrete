@@ -140,7 +140,7 @@ PATH="$T/fakecp:$PATH" seed; rc=$?
 [ $rc -eq 3 ] && [ ! -e "$T/wt/.lake/build" ] \
   && ok "a source written to during the copy discards the copy (a build was running there)" \
   || no "copy of a changing source kept (exit $rc)"
-ls "$T/wt/.lake" 2>/dev/null | grep -q 'build.seeding\|seed.stamp\|seed.lock' && no "a refused seed left temporary files" || ok "a refused seed leaves no temporary files or lock"
+ls "$T/wt/.lake" 2>/dev/null | has_match 'build.seeding\|seed.stamp\|seed.lock' && no "a refused seed left temporary files" || ok "a refused seed leaves no temporary files or lock"
 age
 
 newwt

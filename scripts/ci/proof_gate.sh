@@ -68,28 +68,28 @@ section "Extraction"
 ext_out=$($COMPILER "$PP_SRC" --report extraction 2>&1) || true
 
 # check_nonce should be extracted
-if grep <<<"$ext_out" -A2 "check_nonce" | grep -q "status: extracted"; then
+if grep <<<"$ext_out" -A2 "check_nonce" | has_match "status: extracted"; then
     pass "check_nonce extracted"
 else
     fail "check_nonce should be extracted"
 fi
 
 # clamp_value should be extracted
-if grep <<<"$ext_out" -A2 "clamp_value" | grep -q "status: extracted"; then
+if grep <<<"$ext_out" -A2 "clamp_value" | has_match "status: extracted"; then
     pass "clamp_value extracted"
 else
     fail "clamp_value should be extracted"
 fi
 
 # classify_range should be eligible but blocked
-if grep <<<"$ext_out" -A2 "classify_range" | grep -q "eligible\|extraction failed"; then
+if grep <<<"$ext_out" -A2 "classify_range" | has_match "eligible\|extraction failed"; then
     pass "classify_range blocked (eligible but not extractable)"
 else
     fail "classify_range should be eligible but blocked"
 fi
 
 # format_result should be excluded
-if grep <<<"$ext_out" -A2 "format_result" | grep -q "excluded"; then
+if grep <<<"$ext_out" -A2 "format_result" | has_match "excluded"; then
     pass "format_result excluded (has capabilities)"
 else
     fail "format_result should be excluded"

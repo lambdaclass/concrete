@@ -7,12 +7,13 @@
 # Handles module-wrapped fixtures (insert before the FINAL brace) and bare
 # top-level-fn fixtures (append); any integer return width (`as Int` matches
 # the legacy echo's full-i64 rendering).
+source "$(dirname "${BASH_SOURCE[0]}")/has_match.sh"  # bug 283: never a pipe into grep -q
 gate_selfprint_wrap() {
   local src="$1" dst="$2"
   # A main with NO return type is already self-reporting (prints its own
   # output, exits 0/traps) — wrapping it in print_int would be a type error.
   # Pass it through unchanged.
-  if { grep -E 'fn main\([^)]*\)[[:space:]]*(with\([^)]*\))?[[:space:]]*\{' "$src" || true; } | grep -qv -- '->'; then
+  if { grep -E 'fn main\([^)]*\)[[:space:]]*(with\([^)]*\))?[[:space:]]*\{' "$src" || true; } | has_match -v -- '->'; then
     cp "$src" "$dst"
     return 0
   fi

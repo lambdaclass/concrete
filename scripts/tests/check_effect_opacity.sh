@@ -56,7 +56,7 @@ out="$(cd "$FIX" && "${TO[@]}" "$CC" src/main.con --report eligibility 2>&1)"
 echo "=== a genuinely effect-free function is still admitted (positive control) ==="
 # Without this the gate would pass on a compiler that refused everything, which is a
 # different bug with the same green.
-if printf '%s' "$out" | grep -qE "eligible +\`indirect_call_not_pure\.plain\`"; then
+if has_match -E "eligible +\`indirect_call_not_pure\.plain\`" <<<"$out"; then
   ok "plain is admitted"
 else
   no "plain is no longer admitted — the rule is over-broad, not conservative"
@@ -66,19 +66,19 @@ echo "=== the REPORTS no longer claim purity they cannot establish ==="
 # This half IS live. Reports consult opacity directly, so they are honest even while
 # admission is inert.
 cout="$(cd "$FIX" && "${TO[@]}" "$CC" src/main.con --report caps 2>&1)"
-if printf '%s' "$cout" | grep -qE "plain +: \(no external authority\)"; then
+if has_match -E "plain +: \(no external authority\)" <<<"$cout"; then
   ok "a function with no external authority still reads so (not pure: no purity judgment is claimed)"
 else
   no "plain lost its (no external authority) rendering — the rule is over-broad, not conservative"
 fi
 for fn in fire fire2; do
-  if printf '%s' "$cout" | grep -qE "$fn +: \(effects unknown: reaches an indirect call\)"; then
+  if has_match -E "$fn +: \(effects unknown: reaches an indirect call\)" <<<"$cout"; then
     ok "$fn reads as effects-unknown rather than pure"
   else
     no "$fn still reads as pure in --report caps"
   fi
 done
-if printf '%s' "$cout" | grep -q "1 with no external authority"; then
+if has_match "1 with no external authority" <<<"$cout"; then
   ok "the purity total counts a claim (1), not empty capability sets (would be 4)"
 else
   no "the purity total is not counting a claim"
@@ -102,13 +102,13 @@ fi
 echo "=== admission REFUSES an effect-opaque function, and names why ==="
 pout="$(cd "$FIX" && "${TO[@]}" "$CC" src/main.con --report proof-status 2>&1)"
 for fn in fire fire2; do
-  if printf '%s' "$pout" | grep -q "admission: REFUSED"; then
+  if has_match "admission: REFUSED" <<<"$pout"; then
     ok "$fn: admission refused"
   else
     no "$fn: admission is not refusing — the opacity rule is inert again"
   fi
 done
-if printf '%s' "$pout" | grep -q "admission: REFUSED — effects may enter through an indirect call"; then
+if has_match "admission: REFUSED — effects may enter through an indirect call" <<<"$pout"; then
   ok "the refusal NAMES its reason (a refusal reporting no reason is this task's defect)"
 else
   no "admission refuses without naming the reason"
@@ -117,7 +117,7 @@ fi
 echo "=== transitive opacity refuses too, not just the direct caller ==="
 # `fire2` reaches the indirect call through `fire`. A rule that only caught the direct
 # site would leave every wrapper admitted.
-if printf '%s' "$pout" | grep -q "admission: REFUSED"; then
+if has_match "admission: REFUSED" <<<"$pout"; then
   n=$(printf '%s' "$pout" | grep -c "admission: REFUSED")
   [ "${n:-0}" -ge 2 ] && ok "at least two functions refused — opacity propagates ($n)" \
                       || no "only $n refusal: opacity is not transitive"
@@ -127,7 +127,7 @@ fi
 
 echo "=== CONTROL: genuinely effect-free code is STILL ADMITTED ==="
 # Without this the gate passes on a compiler that refuses everything.
-if printf '%s' "$pout" | grep -A3 "plain" | grep -q "admission: REFUSED"; then
+if printf '%s' "$pout" | grep -A3 "plain" | has_match "admission: REFUSED"; then
   no "plain is refused — the rule is over-broad, not conservative"
 else
   ok "plain keeps admission (the rule refuses narrowly)"
@@ -155,21 +155,21 @@ pc="$("${TO[@]}" bash "$ROOT_DIR/scripts/tests/check_purecore_proofs.sh" 2>&1 ||
 # claims from maintenance" on the strength of a gate that never executed. That is the same
 # confusion between "I do not know" and "I know it is absent" that this whole area exists
 # to prevent, reproduced in the gate checking it. Observed 2026-09-26.
-if printf '%s' "$pc" | grep -q "GATE-PRECONDITION-FAILED\|REPOSITORY BUSY"; then
+if has_match "GATE-PRECONDITION-FAILED\|REPOSITORY BUSY" <<<"$pc"; then
   echo "  SKIP check_purecore_proofs declined to run (repository busy) — no verdict available"
   echo "       Re-run this gate alone. Two checks were NOT performed, not passed."
   SKIPPED=$((SKIPPED+2))
-elif ! printf '%s' "$pc" | grep -q "PURECORE-PROOFS: PASS=[0-9]* FAIL=[0-9]*"; then
+elif ! has_match "PURECORE-PROOFS: PASS=[0-9]* FAIL=[0-9]*" <<<"$pc"; then
   no "check_purecore_proofs produced no summary line at all — its verdict cannot be read"
   printf '%s\n' "$pc" | tail -3 | sed 's/^/       /'
 else
-  if printf '%s' "$pc" | grep -q "spec binding: all 11 std links are bound"; then
+  if has_match "spec binding: all 11 std links are bound" <<<"$pc"; then
     ok "spec binding stays at 11 with admission live"
   else
     no "spec binding moved — admission is erasing claims from maintenance"
     printf '%s\n' "$pc" | grep -i 'spec binding' | awk 'NR<=2' | sed 's/^/       /'
   fi
-  if printf '%s' "$pc" | grep -q "PURECORE-PROOFS: PASS=[0-9]* FAIL=0"; then
+  if has_match "PURECORE-PROOFS: PASS=[0-9]* FAIL=0" <<<"$pc"; then
     ok "registered inadmissible claims remain replay targets (purecore 0 failures)"
   else
     no "purecore proofs fail with admission live — replay is keyed on admission again"
@@ -198,7 +198,7 @@ else
 fi
 # And the text it appends must disclaim admitted-proof coverage, or rendering it on
 # `proved` would still leave the artifact reading as an unqualified program proof.
-if grep -A16 "def admissionLine" "$ROOT_DIR/Concrete/Report/Report.lean" | grep -q "does not count as admitted proof"; then
+if grep -A16 "def admissionLine" "$ROOT_DIR/Concrete/Report/Report.lean" | has_match "does not count as admitted proof"; then
   ok "the appended text denies admitted-proof coverage to an inadmissible artifact"
 else
   no "the admission line no longer disclaims admitted proof coverage"
@@ -207,13 +207,13 @@ fi
 echo "=== the wording does not contradict itself ==="
 # `eligible` now means "an obligation can be extracted"; a reader takes "eligible for
 # proof" to mean admissible, which is exactly what this work separated.
-if printf '%s' "$pout" | grep -q "is eligible for proof but has no registered proof"; then
+if has_match "is eligible for proof but has no registered proof" <<<"$pout"; then
   no "the report still says 'eligible for proof' beside 'admission: REFUSED'"
 else
   ok "renders 'obligation: extractable' / 'registered proof: none', not 'eligible for proof'"
 fi
 # And the consequence sentence must match whether an artifact exists.
-if printf '%s' "$pout" | grep -q "no registered artifact to replay"; then
+if has_match "no registered artifact to replay" <<<"$pout"; then
   ok "with no artifact it says so, rather than claiming one 'stays replayable'"
 else
   no "the consequence sentence asserts an artifact that may not exist"
@@ -228,15 +228,15 @@ echo "=== the original instance is CLOSED: print_bytes declares what it does ===
 b64="$ROOT_DIR/examples/base64_cli"
 if [ -d "$b64" ]; then
   bout="$(cd "$b64" && "${TO[@]}" "$CC" src/main.con --report eligibility 2>&1)"
-  if printf '%s' "$bout" | grep -qE 'eligible +`base64_cli\.print_bytes`'; then
+  if has_match -E 'eligible +`base64_cli\.print_bytes`' <<<"$bout"; then
     no "print_bytes is eligible again — a writer's capability has stopped reaching its user's header"
-  elif printf '%s' "$bout" | grep -A1 'base64_cli.print_bytes' | grep -q 'has capabilities: Console'; then
+  elif printf '%s' "$bout" | grep -A1 'base64_cli.print_bytes' | has_match 'has capabilities: Console'; then
     ok "print_bytes is excluded because it declares Console (the effect is in the header)"
   else
     no "print_bytes is excluded, but not for declaring Console: $(printf '%s' "$bout" | grep -A1 'print_bytes' | tr '\n' ' ' | cut -c1-160)"
   fi
   cout="$(cd "$b64" && "${TO[@]}" "$CC" src/main.con --report caps 2>&1)"
-  if printf '%s' "$cout" | grep -qE 'print_bytes : Console$'; then
+  if has_match -E 'print_bytes : Console$' <<<"$cout"; then
     ok "the capability report shows print_bytes : Console — declared, neither pure nor unknown"
   else
     no "the capability report does not show print_bytes : Console: $(printf '%s' "$cout" | grep 'print_bytes' | head -1)"

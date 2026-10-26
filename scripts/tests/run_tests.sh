@@ -594,7 +594,7 @@ PROBE_EOF
     if "$COMPILER" "$_probe_dir/probe.con" --emit-llvm > "$_probe_dir/probe.ll" 2>/dev/null; then
         _probe_err="$("$LLI" "$_probe_dir/probe.ll" 2>&1 >/dev/null)" || true
         _probe_rc=$?
-        if printf '%s' "$_probe_err" | grep -q "not found in bootstrap symbols map"; then
+        if has_match "not found in bootstrap symbols map" <<<"$_probe_err"; then
             echo ""
             echo "  WARNING: '$LLI' cannot execute this compiler's IR on this machine."
             echo "           $(printf '%s' "$_probe_err" | awk 'NR<=1')"
@@ -5354,7 +5354,7 @@ else
 fi
 
 # 2c. Human effects says "call_raw ... ffi: yes" → JSON effects has crosses_ffi:true
-if grep <<<"$rc_effects" -A1 "call_raw" | grep -q "ffi: yes" && \
+if grep <<<"$rc_effects" -A1 "call_raw" | has_match "ffi: yes" && \
    grep <<<"$rc_json" -q '"kind": "effects".*"function": "main.call_raw".*"crosses_ffi": true'; then
     echo "  ok  consistency: --report effects ffi:yes ↔ JSON crosses_ffi for call_raw"
     PASS=$((PASS + 1))
@@ -5364,7 +5364,7 @@ else
 fi
 
 # 2d. Human effects says "pure_add ... evidence: enforced" → JSON effects matches
-if grep <<<"$rc_effects" -A1 "pure_add" | grep -q "evidence: enforced" && \
+if grep <<<"$rc_effects" -A1 "pure_add" | has_match "evidence: enforced" && \
    grep <<<"$rc_json" -q '"kind": "effects".*"function": "main.pure_add".*"evidence": "enforced"'; then
     echo "  ok  consistency: --report effects evidence ↔ JSON evidence for pure_add"
     PASS=$((PASS + 1))
@@ -5374,7 +5374,7 @@ else
 fi
 
 # 2e. Human alloc says "fn uses_alloc ... allocates: vec_new" → JSON alloc fact has vec_new
-if grep <<<"$rc_alloc" -A1 "fn uses_alloc" | grep -q "allocates: vec_new" && \
+if grep <<<"$rc_alloc" -A1 "fn uses_alloc" | has_match "allocates: vec_new" && \
    grep <<<"$rc_json" -q '"kind": "alloc".*"function": "main.uses_alloc".*"vec_new"'; then
     echo "  ok  consistency: --report alloc vec_new ↔ JSON alloc for uses_alloc"
     PASS=$((PASS + 1))
@@ -5384,7 +5384,7 @@ else
 fi
 
 # 2f. Human alloc says "fn alloc_with_defer ... cleanup: defer free" → JSON alloc has defers
-if grep <<<"$rc_alloc" -A3 "fn alloc_with_defer" | grep -q "defer free" && \
+if grep <<<"$rc_alloc" -A3 "fn alloc_with_defer" | has_match "defer free" && \
    grep <<<"$rc_json" -q '"kind": "alloc".*"function": "main.alloc_with_defer".*"defers":.*\['; then
     echo "  ok  consistency: --report alloc defer ↔ JSON alloc defers for alloc_with_defer"
     PASS=$((PASS + 1))
@@ -6018,8 +6018,8 @@ else
 fi
 
 # Obligations: missing shows none for spec/proof
-if grep <<<"$ob_proved" -A5 "main.main" | grep -q "status:.*ineligible" && \
-   grep <<<"$ob_proved" -A5 "main.main" | grep -q "source:.*none"; then
+if grep <<<"$ob_proved" -A5 "main.main" | has_match "status:.*ineligible" && \
+   grep <<<"$ob_proved" -A5 "main.main" | has_match "source:.*none"; then
     echo "  ok  obligations: ineligible function shows source:none"
     PASS=$((PASS + 1))
 else
@@ -6029,7 +6029,7 @@ else
 fi
 
 # Obligations: dependencies show proved callees
-if grep <<<"$ob_proved" -A7 "main.main" | grep -q "dependencies:.*pure_add"; then
+if grep <<<"$ob_proved" -A7 "main.main" | has_match "dependencies:.*pure_add"; then
     echo "  ok  obligations: main depends on proved helper pure_add"
     PASS=$((PASS + 1))
 else
@@ -6126,8 +6126,8 @@ else
 fi
 
 # Entry point: excluded with reason
-if grep <<<"$ext_pure" -A3 "main.main" | grep -q "excluded" && \
-   grep <<<"$ext_pure" -A3 "main.main" | grep -q "entry point"; then
+if grep <<<"$ext_pure" -A3 "main.main" | has_match "excluded" && \
+   grep <<<"$ext_pure" -A3 "main.main" | has_match "entry point"; then
     echo "  ok  extraction: main excluded as entry point"
     PASS=$((PASS + 1))
 else
@@ -6138,7 +6138,7 @@ fi
 
 # Mixed program: capabilities excluded with reasons
 ext_mixed=$(cached_output "$TESTDIR/report_integration.con" "--report extraction")
-if grep <<<"$ext_mixed" -A3 "uses_alloc" | grep -q "has capabilities: Alloc"; then
+if grep <<<"$ext_mixed" -A3 "uses_alloc" | has_match "has capabilities: Alloc"; then
     echo "  ok  extraction: uses_alloc excluded for Alloc capability"
     PASS=$((PASS + 1))
 else
@@ -6148,7 +6148,7 @@ else
 fi
 
 # Trusted function: excluded with trusted reason
-if grep <<<"$ext_mixed" -A3 "call_raw" | grep -q "marked trusted"; then
+if grep <<<"$ext_mixed" -A3 "call_raw" | has_match "marked trusted"; then
     echo "  ok  extraction: call_raw excluded as trusted"
     PASS=$((PASS + 1))
 else
@@ -6159,7 +6159,7 @@ fi
 
 # Struct literal and match both extract (Phase 4 ProofCore extensions).
 ext_elig=$(cached_output "$TESTDIR/test_proof_eligible_pure.con" "--report extraction")
-if grep <<<"$ext_elig" -A2 "make_point" | grep -q "status: extracted"; then
+if grep <<<"$ext_elig" -A2 "make_point" | has_match "status: extracted"; then
     echo "  ok  extraction: make_point extracts (struct literal supported)"
     PASS=$((PASS + 1))
 else
@@ -6168,7 +6168,7 @@ else
     FAIL=$((FAIL + 1))
 fi
 
-if grep <<<"$ext_elig" -A2 "color_value" | grep -q "status: extracted"; then
+if grep <<<"$ext_elig" -A2 "color_value" | has_match "status: extracted"; then
     echo "  ok  extraction: color_value extracts (match expression supported)"
     PASS=$((PASS + 1))
 else
@@ -6226,10 +6226,10 @@ echo "=== Source/Core/SSA/LLVM traceability tests ==="
 
 # Proved function: full pipeline trace
 tr_proved=$(cached_output "$REGISTRY_DIR/test_proof_registry.con" "--report traceability")
-if grep <<<"$tr_proved" -A10 "main.pure_add" | grep -q "evidence:.*proved" && \
-   grep <<<"$tr_proved" -A10 "main.pure_add" | grep -q "extraction:.*extracted" && \
-   grep <<<"$tr_proved" -A10 "main.pure_add" | grep -q "ssa:.*pure_add" && \
-   grep <<<"$tr_proved" -A10 "main.pure_add" | grep -q "llvm:.*pure_add"; then
+if grep <<<"$tr_proved" -A10 "main.pure_add" | has_match "evidence:.*proved" && \
+   grep <<<"$tr_proved" -A10 "main.pure_add" | has_match "extraction:.*extracted" && \
+   grep <<<"$tr_proved" -A10 "main.pure_add" | has_match "ssa:.*pure_add" && \
+   grep <<<"$tr_proved" -A10 "main.pure_add" | has_match "llvm:.*pure_add"; then
     echo "  ok  traceability: proved function traces through all pipeline stages"
     PASS=$((PASS + 1))
 else
@@ -6240,7 +6240,7 @@ fi
 
 # Entry point: main → its mangled symbol in LLVM (FFI.md "Symbol Names"; the C `main` the
 # compiler generates calls it). Was `user_main` before every Concrete function was mangled.
-if grep <<<"$tr_proved" -A10 "main.main" | grep -qE 'llvm:[[:space:]]+_C\.main\.main$'; then
+if grep <<<"$tr_proved" -A10 "main.main" | has_match -E 'llvm:[[:space:]]+_C\.main\.main$'; then
     echo "  ok  traceability: main maps to its mangled symbol _C.main.main in LLVM"
     PASS=$((PASS + 1))
 else
@@ -6250,7 +6250,7 @@ else
 fi
 
 # Claim boundary: proved function shows ProofCore boundary
-if grep <<<"$tr_proved" -A10 "main.pure_add" | grep -q "boundary:.*ProofCore"; then
+if grep <<<"$tr_proved" -A10 "main.pure_add" | has_match "boundary:.*ProofCore"; then
     echo "  ok  traceability: proved function boundary at ProofCore"
     PASS=$((PASS + 1))
 else
@@ -6261,7 +6261,7 @@ fi
 
 # Generic function: shows monomorphized specializations
 tr_generic=$(cached_output "$TESTDIR/report_integration.con" "--report traceability")
-if grep <<<"$tr_generic" -A10 "main.identity" | grep -q "identity_for_i32"; then
+if grep <<<"$tr_generic" -A10 "main.identity" | has_match "identity_for_i32"; then
     echo "  ok  traceability: generic identity shows identity_for_i32 specialization"
     PASS=$((PASS + 1))
 else
@@ -6271,8 +6271,8 @@ else
 fi
 
 # Trusted function: trusted-assumption evidence, source boundary
-if grep <<<"$tr_generic" -A10 "main.call_raw" | grep -q "trusted-assumption" && \
-   grep <<<"$tr_generic" -A10 "main.call_raw" | grep -q "boundary:.*trusted"; then
+if grep <<<"$tr_generic" -A10 "main.call_raw" | has_match "trusted-assumption" && \
+   grep <<<"$tr_generic" -A10 "main.call_raw" | has_match "boundary:.*trusted"; then
     echo "  ok  traceability: trusted function shows trusted-assumption + boundary"
     PASS=$((PASS + 1))
 else
@@ -6282,8 +6282,8 @@ else
 fi
 
 # Reported function: fails predictable, source boundary
-if grep <<<"$tr_generic" -A10 "main.uses_alloc" | grep -q "evidence:.*reported" && \
-   grep <<<"$tr_generic" -A10 "main.uses_alloc" | grep -q "boundary:.*fails predictable"; then
+if grep <<<"$tr_generic" -A10 "main.uses_alloc" | has_match "evidence:.*reported" && \
+   grep <<<"$tr_generic" -A10 "main.uses_alloc" | has_match "boundary:.*fails predictable"; then
     echo "  ok  traceability: reported function shows fails predictable boundary"
     PASS=$((PASS + 1))
 else
@@ -6345,8 +6345,8 @@ echo "=== Named spec/proof identity tests ==="
 
 # Extraction report: registry-backed function shows spec/proof names
 ext_spec=$(cached_output "$REGISTRY_DIR/test_proof_registry.con" "--report extraction")
-if grep <<<"$ext_spec" -A10 "main.pure_add" | grep -q "spec:.*PureAdd.spec_add" && \
-   grep <<<"$ext_spec" -A10 "main.pure_add" | grep -q "proof:.*PureAdd.add_comm"; then
+if grep <<<"$ext_spec" -A10 "main.pure_add" | has_match "spec:.*PureAdd.spec_add" && \
+   grep <<<"$ext_spec" -A10 "main.pure_add" | has_match "proof:.*PureAdd.add_comm"; then
     echo "  ok  named-spec: extraction report shows spec/proof from registry"
     PASS=$((PASS + 1))
 else
@@ -6369,8 +6369,8 @@ fi
 
 # Traceability report: shows spec/proof from registry
 tr_spec=$(cached_output "$REGISTRY_DIR/test_proof_registry.con" "--report traceability")
-if grep <<<"$tr_spec" -A15 "main.pure_add" | grep -q "spec:.*PureAdd.spec_add" && \
-   grep <<<"$tr_spec" -A15 "main.pure_add" | grep -q "proof:.*PureAdd.add_comm"; then
+if grep <<<"$tr_spec" -A15 "main.pure_add" | has_match "spec:.*PureAdd.spec_add" && \
+   grep <<<"$tr_spec" -A15 "main.pure_add" | has_match "proof:.*PureAdd.add_comm"; then
     echo "  ok  named-spec: traceability report shows spec/proof from registry"
     PASS=$((PASS + 1))
 else
@@ -7471,7 +7471,7 @@ else
 fi
 
 # read_header_bytes shows File capability in effects
-if grep <<<"$elf_effects" -A1 "read_header_bytes" | grep -q "caps: File"; then
+if grep <<<"$elf_effects" -A1 "read_header_bytes" | has_match "caps: File"; then
     echo "  ok  elf_header: read_header_bytes shows File capability"
     PASS=$((PASS + 1))
 else
@@ -7480,7 +7480,7 @@ else
 fi
 
 # read_byte is trusted but pure (no capabilities)
-if grep <<<"$elf_effects" -A1 "read_byte" | grep -q "caps: (no external authority)" && grep <<<"$elf_effects" -A1 "read_byte" | grep -q "trusted: yes"; then
+if grep <<<"$elf_effects" -A1 "read_byte" | has_match "caps: (no external authority)" && grep <<<"$elf_effects" -A1 "read_byte" | has_match "trusted: yes"; then
     echo "  ok  elf_header: read_byte is trusted + pure (pointer read only)"
     PASS=$((PASS + 1))
 else
@@ -7522,7 +7522,7 @@ else
 fi
 
 # Unchanged functions NOT flagged as weakened (check [~] lines only, not fingerprint text)
-if ! grep <<<"$elf_diff" '^\s*\[~\]' | grep -q "check_class"; then
+if ! grep <<<"$elf_diff" '^\s*\[~\]' | has_match "check_class"; then
     echo "  ok  elf_header: check_class not flagged as weakened (unchanged)"
     PASS=$((PASS + 1))
 else
@@ -11008,7 +11008,7 @@ fi
 pp_out=$($COMPILER examples/proof_pressure/src/main.con --report proof-status 2>/dev/null)
 
 # 1. check_nonce is proved
-if grep <<<"$pp_out" -B5 "check_nonce" | grep -q "^-- proved"; then
+if grep <<<"$pp_out" -B5 "check_nonce" | has_match "^-- proved"; then
     echo "  ok  pressure-set: check_nonce is proved"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -11023,10 +11023,10 @@ fi
 # every name-based check for months until correspondence caught it. Repaired by DELETING the claim,
 # because no theorem proves that body and attaching the nearest plausible one is the defect being
 # repaired. So the pressure set legitimately has one fewer proved function.
-if grep <<<"$pp_out" -B5 "validate_header" | grep -q "no proof"; then
+if grep <<<"$pp_out" -B5 "validate_header" | has_match "no proof"; then
     echo "  ok  pressure-set: validate_header has no proof (its misattributed link was deleted)"
     evidence_pass=$((evidence_pass + 1))
-elif grep <<<"$pp_out" -B5 "validate_header" | grep -q "^-- proved"; then
+elif grep <<<"$pp_out" -B5 "validate_header" | has_match "^-- proved"; then
     echo "  FAIL pressure-set: validate_header is proved again — no theorem proves this body; a link was re-attached"
     evidence_fail=$((evidence_fail + 1))
 else
@@ -11035,7 +11035,7 @@ else
 fi
 
 # 3. compute_checksum is stale
-if grep <<<"$pp_out" -B5 "compute_checksum" | grep -q "proof stale"; then
+if grep <<<"$pp_out" -B5 "compute_checksum" | has_match "proof stale"; then
     echo "  ok  pressure-set: compute_checksum is stale"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -11044,7 +11044,7 @@ else
 fi
 
 # 4. format_result is ineligible
-if grep <<<"$pp_out" -B5 "format_result" | grep -q "not eligible"; then
+if grep <<<"$pp_out" -B5 "format_result" | has_match "not eligible"; then
     echo "  ok  pressure-set: format_result is ineligible"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -11053,7 +11053,7 @@ else
 fi
 
 # 5. clamp_value is missing (no proof)
-if grep <<<"$pp_out" -B5 "clamp_value" | grep -q "no proof"; then
+if grep <<<"$pp_out" -B5 "clamp_value" | has_match "no proof"; then
     echo "  ok  pressure-set: clamp_value is missing (no proof)"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -11062,7 +11062,7 @@ else
 fi
 
 # 6. classify_range is blocked
-if grep <<<"$pp_out" -B5 "classify_range" | grep -q "^-- blocked"; then
+if grep <<<"$pp_out" -B5 "classify_range" | has_match "^-- blocked"; then
     echo "  ok  pressure-set: classify_range is blocked"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -11086,7 +11086,7 @@ pp_ext=$($COMPILER examples/proof_pressure/src/main.con --report extraction 2>/d
 # 8. Extraction: check_nonce has correct ProofCore form
 # (Body was aligned to crypto_verify's shared spec in commit 8a53c3db: returns 1
 #  iff 0 < nonce <= max_nonce, else 0 — so it rides the registered spec/proof.)
-if grep <<<"$pp_ext" -A2 "check_nonce" | grep -q "if (nonce > 0) then if (nonce <= max_nonce) then 1 else 0 else 0"; then
+if grep <<<"$pp_ext" -A2 "check_nonce" | has_match "if (nonce > 0) then if (nonce <= max_nonce) then 1 else 0 else 0"; then
     echo "  ok  pressure-ext: check_nonce ProofCore form correct"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -11095,7 +11095,7 @@ else
 fi
 
 # 9. Extraction: clamp_value has correct ProofCore form
-if grep <<<"$pp_ext" -A2 "clamp_value" | grep -q "if (x < lo) then lo else if (x > hi) then hi else x"; then
+if grep <<<"$pp_ext" -A2 "clamp_value" | has_match "if (x < lo) then lo else if (x > hi) then hi else x"; then
     echo "  ok  pressure-ext: clamp_value ProofCore form correct"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -11104,7 +11104,7 @@ else
 fi
 
 # 10. Extraction: classify_range is eligible but extraction failed
-if grep <<<"$pp_ext" -A2 "classify_range" | grep -q "eligible (extraction failed)"; then
+if grep <<<"$pp_ext" -A2 "classify_range" | has_match "eligible (extraction failed)"; then
     echo "  ok  pressure-ext: classify_range extraction failed (blocked)"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -11116,7 +11116,7 @@ fi
 # (Field access became extractable in e2ab5eef, so the blocker was repointed at
 #  integer division `/` in commit 8a53c3db — no PBinOp.div, durably unmodeled.
 #  The function still reads the Bounds struct, now as a supported construct.)
-if grep <<<"$pp_ext" -A5 "classify_range" | grep -q "Concrete.BinOp.mod"; then
+if grep <<<"$pp_ext" -A5 "classify_range" | has_match "Concrete.BinOp.mod"; then
     echo "  ok  pressure-ext: classify_range blocked by integer remainder at Int"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -11125,7 +11125,7 @@ else
 fi
 
 # 12. Extraction: format_result is excluded with Console reason
-if grep <<<"$pp_ext" -A5 "format_result" | grep -q "has capabilities: Console"; then
+if grep <<<"$pp_ext" -A5 "format_result" | has_match "has capabilities: Console"; then
     echo "  ok  pressure-ext: format_result excluded (Console capability)"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -11147,7 +11147,7 @@ fi
 pp_obl=$($COMPILER examples/proof_pressure/src/main.con --report obligations 2>/dev/null)
 
 # 14. Obligations: validate_header depends on check_nonce
-if grep <<<"$pp_obl" -A8 "main.validate_header" | grep -q "dependencies: main.check_nonce"; then
+if grep <<<"$pp_obl" -A8 "main.validate_header" | has_match "dependencies: main.check_nonce"; then
     echo "  ok  pressure-obl: validate_header depends on check_nonce"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -11156,7 +11156,7 @@ else
 fi
 
 # 15. Obligations: proved functions cite registry as source
-if grep <<<"$pp_obl" -A5 "main.check_nonce" | grep -q "source:.*registry"; then
+if grep <<<"$pp_obl" -A5 "main.check_nonce" | has_match "source:.*registry"; then
     echo "  ok  pressure-obl: check_nonce proof source is registry"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -11165,7 +11165,7 @@ else
 fi
 
 # 16. Obligations: missing function has no spec
-if grep <<<"$pp_obl" -A5 "main.clamp_value" | grep -q "spec:.*(none)"; then
+if grep <<<"$pp_obl" -A5 "main.clamp_value" | has_match "spec:.*(none)"; then
     echo "  ok  pressure-obl: clamp_value has no spec (missing)"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -11197,7 +11197,7 @@ else
 fi
 
 # 19. Eligibility: main excluded as entry point
-if grep <<<"$pp_elig" -A2 "main.main" | grep -q "entry point"; then
+if grep <<<"$pp_elig" -A2 "main.main" | has_match "entry point"; then
     echo "  ok  pressure-elig: main excluded as entry point"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -11209,7 +11209,7 @@ fi
 pp_eff=$($COMPILER examples/proof_pressure/src/main.con --report effects 2>/dev/null)
 
 # 20. Effects: check_nonce evidence is proved (not enforced)
-if grep <<<"$pp_eff" -A1 "check_nonce" | grep -q "evidence: proved"; then
+if grep <<<"$pp_eff" -A1 "check_nonce" | has_match "evidence: proved"; then
     echo "  ok  pressure-eff: check_nonce evidence is proved"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -11218,7 +11218,7 @@ else
 fi
 
 # 21. Effects: compute_checksum evidence shows stale
-if grep <<<"$pp_eff" -A1 "compute_checksum" | grep -q "proof stale"; then
+if grep <<<"$pp_eff" -A1 "compute_checksum" | has_match "proof stale"; then
     echo "  ok  pressure-eff: compute_checksum evidence shows stale"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -11285,7 +11285,7 @@ fi
 # collision-proof across modules and keeps the escaping injective; these patterns
 # were pinned to the older bare names.
 # 27. Lean stubs: check_nonce has .ifThenElse constructor
-if grep <<<"$pp_lean" -A5 "main_check__nonceExpr" | grep -q ".ifThenElse"; then
+if grep <<<"$pp_lean" -A5 "main_check__nonceExpr" | has_match ".ifThenElse"; then
     echo "  ok  pressure-lean: check_nonce uses .ifThenElse constructor"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -11294,7 +11294,7 @@ else
 fi
 
 # 28. Lean stubs: validate_header has .letIn and .call constructors
-if grep <<<"$pp_lean" -A5 "main_validate__headerExpr" | grep -q ".letIn"; then
+if grep <<<"$pp_lean" -A5 "main_validate__headerExpr" | has_match ".letIn"; then
     echo "  ok  pressure-lean: validate_header uses .letIn constructor"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -11303,7 +11303,7 @@ else
 fi
 
 # 29. Lean stubs: compute_checksum has .binOp .add constructor
-if grep <<<"$pp_lean" -A5 "main_compute__checksumExpr" | grep -q ".binOp .add"; then
+if grep <<<"$pp_lean" -A5 "main_compute__checksumExpr" | has_match ".binOp .add"; then
     echo "  ok  pressure-lean: compute_checksum uses .binOp .add"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -11423,7 +11423,7 @@ fi
 # 48. E2E: stale function shows stale in proof-status + obligations
 e2e_pp_ps=$($COMPILER examples/proof_pressure/src/main.con --report proof-status 2>&1) || true
 e2e_pp_ob=$($COMPILER examples/proof_pressure/src/main.con --report obligations 2>&1) || true
-if grep <<<"$e2e_pp_ps" -B5 "compute_checksum" | grep -q "proof stale" && grep <<<"$e2e_pp_ob" -A3 "compute_checksum" | grep -q "status:.*stale"; then
+if grep <<<"$e2e_pp_ps" -B5 "compute_checksum" | has_match "proof stale" && grep <<<"$e2e_pp_ob" -A3 "compute_checksum" | has_match "status:.*stale"; then
     echo "  ok  e2e-lean: stale function consistent across proof-status and obligations"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -11468,7 +11468,7 @@ blocked_ob=$($COMPILER "$BLOCKED_SRC" --report obligations 2>&1 || true)
 boundary_ps=$($COMPILER "$BOUNDARY_SRC" --report proof-status 2>&1 || true)
 
 # 57. Ineligible: File capability named in reasons
-if grep <<<"$inelig_ps" -A6 "caps_file" | grep -q "has capabilities: File"; then
+if grep <<<"$inelig_ps" -A6 "caps_file" | has_match "has capabilities: File"; then
     echo "  ok  ineligible-pressure: File capability named in reasons"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -11477,7 +11477,7 @@ else
 fi
 
 # 58. Ineligible: Network capability named in reasons
-if grep <<<"$inelig_ps" -A6 "caps_network" | grep -q "has capabilities: Network"; then
+if grep <<<"$inelig_ps" -A6 "caps_network" | has_match "has capabilities: Network"; then
     echo "  ok  ineligible-pressure: Network capability named in reasons"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -11486,7 +11486,7 @@ else
 fi
 
 # 59. Ineligible: Process capability named in reasons
-if grep <<<"$inelig_ps" -A6 "caps_process" | grep -q "has capabilities: Process"; then
+if grep <<<"$inelig_ps" -A6 "caps_process" | has_match "has capabilities: Process"; then
     echo "  ok  ineligible-pressure: Process capability named in reasons"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -11495,7 +11495,7 @@ else
 fi
 
 # 60. Ineligible: Unsafe capability named in reasons
-if grep <<<"$inelig_ps" -A6 "caps_unsafe" | grep -q "has capabilities: Unsafe"; then
+if grep <<<"$inelig_ps" -A6 "caps_unsafe" | has_match "has capabilities: Unsafe"; then
     echo "  ok  ineligible-pressure: Unsafe capability named in reasons"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -11504,7 +11504,7 @@ else
 fi
 
 # 61. Ineligible: trusted function shows trusted, not ineligible
-if grep <<<"$inelig_ps" -B5 "trusted_fn" | grep -q -- "-- trusted"; then
+if grep <<<"$inelig_ps" -B5 "trusted_fn" | has_match -- "-- trusted"; then
     echo "  ok  ineligible-pressure: trusted function shows trusted status"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -11513,7 +11513,7 @@ else
 fi
 
 # 62. Ineligible: direct recursion named in reasons
-if grep <<<"$inelig_ps" -A6 "recursive_fn" | grep -q "recursion (direct)"; then
+if grep <<<"$inelig_ps" -A6 "recursive_fn" | has_match "recursion (direct)"; then
     echo "  ok  ineligible-pressure: direct recursion named in reasons"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -11522,7 +11522,7 @@ else
 fi
 
 # 63. Ineligible: mutual recursion named in reasons
-if grep <<<"$inelig_ps" -A6 "mutual_a" | grep -q "recursion (mutual)"; then
+if grep <<<"$inelig_ps" -A6 "mutual_a" | has_match "recursion (mutual)"; then
     echo "  ok  ineligible-pressure: mutual recursion named in reasons"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -11531,7 +11531,7 @@ else
 fi
 
 # 64. Ineligible: FFI named in reasons
-if grep <<<"$inelig_ps" -A6 "ffi_fn" | grep -q "FFI"; then
+if grep <<<"$inelig_ps" -A6 "ffi_fn" | has_match "FFI"; then
     echo "  ok  ineligible-pressure: FFI named in reasons"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -11540,7 +11540,7 @@ else
 fi
 
 # 65. Ineligible: allocation named in reasons
-if grep <<<"$inelig_ps" -A6 "alloc_fn" | grep -q "allocation"; then
+if grep <<<"$inelig_ps" -A6 "alloc_fn" | has_match "allocation"; then
     echo "  ok  ineligible-pressure: allocation named in reasons"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -11549,7 +11549,7 @@ else
 fi
 
 # 66. Ineligible: combo shows multiple reasons
-if grep <<<"$inelig_ps" -A6 "combo_fn" | grep "has capabilities: File" | grep -q "recursion (direct)"; then
+if grep <<<"$inelig_ps" -A6 "combo_fn" | grep "has capabilities: File" | has_match "recursion (direct)"; then
     echo "  ok  ineligible-pressure: combo function shows multiple reasons"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -11558,7 +11558,7 @@ else
 fi
 
 # 67. Ineligible: clean_fn is missing (eligible), not ineligible
-if grep <<<"$inelig_ps" -B5 "clean_fn" | grep -q -- "-- no proof"; then
+if grep <<<"$inelig_ps" -B5 "clean_fn" | has_match -- "-- no proof"; then
     echo "  ok  ineligible-pressure: clean_fn correctly shows missing, not ineligible"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -11567,7 +11567,7 @@ else
 fi
 
 # 68. Ineligible: entry point named in reasons
-if grep <<<"$inelig_ps" -A6 'main\.main' | grep -q "is entry point (main)"; then
+if grep <<<"$inelig_ps" -A6 'main\.main' | has_match "is entry point (main)"; then
     echo "  ok  ineligible-pressure: entry point named in reasons"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -11598,7 +11598,7 @@ fi
 # 71. Blocked: integer division named in unsupported
 # (struct literal became extractable in e2ab5eef; repointed at integer division,
 #  which has no PBinOp.div and stays durably unmodeled — see fixture header.)
-if grep <<<"$blocked_ps" -A8 "uses_rem" | grep -q "Concrete.BinOp.mod"; then
+if grep <<<"$blocked_ps" -A8 "uses_rem" | has_match "Concrete.BinOp.mod"; then
     echo "  ok  blocked-pressure: integer remainder at Int named in unsupported"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -11608,7 +11608,7 @@ fi
 
 # 72. Blocked: field assignment named in unsupported
 # (match expression became extractable in e2ab5eef; repointed at field assignment.)
-if grep <<<"$blocked_ps" -A8 "uses_field_assign" | grep -q "field assignment"; then
+if grep <<<"$blocked_ps" -A8 "uses_field_assign" | has_match "field assignment"; then
     echo "  ok  blocked-pressure: field assignment named in unsupported"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -11617,7 +11617,7 @@ else
 fi
 
 # 73. Blocked: mutable assignment named in unsupported
-if grep <<<"$blocked_ps" -A8 "uses_mut" | grep -q "mutable assignment"; then
+if grep <<<"$blocked_ps" -A8 "uses_mut" | has_match "mutable assignment"; then
     echo "  ok  blocked-pressure: mutable assignment named in unsupported"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -11626,7 +11626,7 @@ else
 fi
 
 # 74. Blocked: string literal named in unsupported
-if grep <<<"$blocked_ps" -A8 "uses_string" | grep -q "string literal"; then
+if grep <<<"$blocked_ps" -A8 "uses_string" | has_match "string literal"; then
     echo "  ok  blocked-pressure: string literal named in unsupported"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -11636,7 +11636,7 @@ fi
 
 # 75. Blocked: deref named in unsupported
 # (if-without-else became extractable in e2ab5eef; repointed at deref/borrow.)
-if grep <<<"$blocked_ps" -A8 "uses_deref" | grep -q "deref"; then
+if grep <<<"$blocked_ps" -A8 "uses_deref" | has_match "deref"; then
     echo "  ok  blocked-pressure: deref named in unsupported"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -11645,7 +11645,7 @@ else
 fi
 
 # 76. Blocked: extractable_fn is missing (extractable), not blocked
-if grep <<<"$blocked_ps" -B5 "extractable_fn" | grep -q -- "-- no proof"; then
+if grep <<<"$blocked_ps" -B5 "extractable_fn" | has_match -- "-- no proof"; then
     echo "  ok  blocked-pressure: extractable_fn correctly shows missing, not blocked"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -11675,7 +11675,7 @@ fi
 
 
 # 81. Boundary: combo_profile shows both source and profile reasons
-if grep <<<"$boundary_ps" -A6 "combo_profile" | grep "has capabilities: Alloc" | grep -q "recursion (direct)"; then
+if grep <<<"$boundary_ps" -A6 "combo_profile" | grep "has capabilities: Alloc" | has_match "recursion (direct)"; then
     echo "  ok  boundary-pressure: combo_profile shows both source and profile reasons"
     evidence_pass=$((evidence_pass + 1))
 else
@@ -12198,8 +12198,8 @@ tx_text=$($COMPILER "$PP_FILE" --report proof-diagnostics 2>/dev/null)
 tx_json=$($COMPILER "$PP_FILE" --report diagnostics-json 2>/dev/null)
 
 # 1. Text output: stale_proof shows failure: stale_proof, repair: theorem_update
-if grep <<<"$tx_text" -A3 "compute_checksum" | grep -q "failure:.*stale_proof" && \
-   grep <<<"$tx_text" -A4 "compute_checksum" | grep -q "repair:.*theorem_update"; then
+if grep <<<"$tx_text" -A3 "compute_checksum" | has_match "failure:.*stale_proof" && \
+   grep <<<"$tx_text" -A4 "compute_checksum" | has_match "repair:.*theorem_update"; then
     echo "  ok  taxonomy: stale_proof → failure=stale_proof, repair=theorem_update"
     tx_pass=$((tx_pass + 1))
 else
@@ -12208,8 +12208,8 @@ else
 fi
 
 # 2. Text output: missing_proof shows failure: missing_proof, repair: add_proof
-if grep <<<"$tx_text" -A3 "clamp_value" | grep -q "failure:.*missing_proof" && \
-   grep <<<"$tx_text" -A4 "clamp_value" | grep -q "repair:.*add_proof"; then
+if grep <<<"$tx_text" -A3 "clamp_value" | has_match "failure:.*missing_proof" && \
+   grep <<<"$tx_text" -A4 "clamp_value" | has_match "repair:.*add_proof"; then
     echo "  ok  taxonomy: missing_proof → failure=missing_proof, repair=add_proof"
     tx_pass=$((tx_pass + 1))
 else
@@ -12218,8 +12218,8 @@ else
 fi
 
 # 3. Text output: ineligible with capabilities shows failure: effect_boundary, repair: policy_change
-if grep <<<"$tx_text" -A3 "format_result" | grep -q "failure:.*effect_boundary" && \
-   grep <<<"$tx_text" -A4 "format_result" | grep -q "repair:.*policy_change"; then
+if grep <<<"$tx_text" -A3 "format_result" | has_match "failure:.*effect_boundary" && \
+   grep <<<"$tx_text" -A4 "format_result" | has_match "repair:.*policy_change"; then
     echo "  ok  taxonomy: ineligible+caps → failure=effect_boundary, repair=policy_change"
     tx_pass=$((tx_pass + 1))
 else
@@ -12228,8 +12228,8 @@ else
 fi
 
 # 4. Text output: ineligible with entry point shows failure: entry_point, repair: none
-if grep <<<"$tx_text" -A3 'main.*cannot be proved' | grep -q "failure:.*entry_point" && \
-   grep <<<"$tx_text" -A4 'main.*cannot be proved' | grep -q "repair:.*none"; then
+if grep <<<"$tx_text" -A3 'main.*cannot be proved' | has_match "failure:.*entry_point" && \
+   grep <<<"$tx_text" -A4 'main.*cannot be proved' | has_match "repair:.*none"; then
     echo "  ok  taxonomy: ineligible+entry_point → failure=entry_point, repair=none"
     tx_pass=$((tx_pass + 1))
 else
@@ -12238,8 +12238,8 @@ else
 fi
 
 # 5. Text output: unsupported_construct shows failure: unsupported_construct, repair: code_rewrite
-if grep <<<"$tx_text" -A3 "classify_range" | grep -q "failure:.*unsupported_construct" && \
-   grep <<<"$tx_text" -A4 "classify_range" | grep -q "repair:.*code_rewrite"; then
+if grep <<<"$tx_text" -A3 "classify_range" | has_match "failure:.*unsupported_construct" && \
+   grep <<<"$tx_text" -A4 "classify_range" | has_match "repair:.*code_rewrite"; then
     echo "  ok  taxonomy: unsupported_construct → failure=unsupported_construct, repair=code_rewrite"
     tx_pass=$((tx_pass + 1))
 else
@@ -12341,7 +12341,7 @@ else
 fi
 
 # 12. Attachment integrity diagnostic has repair=registry_update
-if grep <<<"$tx_text" -A4 "attachment_integrity" | grep -q "repair:.*registry_update"; then
+if grep <<<"$tx_text" -A4 "attachment_integrity" | has_match "repair:.*registry_update"; then
     echo "  ok  taxonomy: attachment_integrity → repair=registry_update"
     tx_pass=$((tx_pass + 1))
 else
@@ -12930,7 +12930,7 @@ fi
 fc_effects=$("$COMPILER" "$FC_SRC" --report effects 2>&1)
 pure_enforced=true
 for fn in validate_version validate_msg_type validate_payload_len validate_total_len validate_tag; do
-    if ! grep <<<"$fc_effects" -A1 "$fn" | grep -q "evidence: enforced"; then
+    if ! grep <<<"$fc_effects" -A1 "$fn" | has_match "evidence: enforced"; then
         pure_enforced=false
     fi
 done
@@ -12945,7 +12945,7 @@ fi
 # 5. Pure validation functions are not trusted
 pure_not_trusted=true
 for fn in validate_version validate_msg_type validate_payload_len validate_total_len validate_tag; do
-    if grep <<<"$fc_effects" -A1 "$fn" | grep -q "trusted: yes"; then
+    if grep <<<"$fc_effects" -A1 "$fn" | has_match "trusted: yes"; then
         pure_not_trusted=false
     fi
 done
@@ -12960,13 +12960,13 @@ fi
 # 6. Only test-packet builders are trusted (build_msg, build_bad_version, build_bad_type, build_payload_overflow)
 trusted_ok=true
 for fn in build_msg build_bad_version build_bad_type build_payload_overflow; do
-    if ! grep <<<"$fc_effects" -A1 "$fn" | grep -q "trusted: yes"; then
+    if ! grep <<<"$fc_effects" -A1 "$fn" | has_match "trusted: yes"; then
         trusted_ok=false
     fi
 done
 # Validation core must NOT be trusted
 for fn in read_u8 read_u16_be ring_contains ring_push compute_tag validate_message; do
-    if grep <<<"$fc_effects" -A1 "$fn" | grep -q "trusted: yes"; then
+    if grep <<<"$fc_effects" -A1 "$fn" | has_match "trusted: yes"; then
         trusted_ok=false
     fi
 done
@@ -12979,7 +12979,7 @@ else
 fi
 
 # 7. Ring buffer loop is bounded
-if grep <<<"$fc_effects" -A1 "ring_contains" | grep -q "loops: bounded"; then
+if grep <<<"$fc_effects" -A1 "ring_contains" | has_match "loops: bounded"; then
     echo "  ok  fixedcap: ring buffer scan has bounded loops"
     fc_pass=$((fc_pass + 1))
 else
@@ -12988,7 +12988,7 @@ else
 fi
 
 # 8. Zero allocation in all functions
-if ! grep <<<"$fc_effects" -v "^$" | grep "alloc:" | grep -v "alloc: none" | grep -q .; then
+if ! grep <<<"$fc_effects" -v "^$" | grep "alloc:" | grep -v "alloc: none" | has_match .; then
     echo "  ok  fixedcap: zero allocation across all functions"
     fc_pass=$((fc_pass + 1))
 else
@@ -13000,7 +13000,7 @@ fi
 # Since struct-literal + if-without-else extraction landed (e2ab5eef) the
 # validators now fully EXTRACT (a strict superset of "eligible") — accept either.
 fc_extract=$("$COMPILER" "$FC_SRC" --report extraction 2>&1)
-if grep <<<"$fc_extract" -A2 "validate_version" | grep -qE "eligible|extracted"; then
+if grep <<<"$fc_extract" -A2 "validate_version" | has_match -E "eligible|extracted"; then
     echo "  ok  fixedcap: pure validators are proof-eligible"
     fc_pass=$((fc_pass + 1))
 else
@@ -13032,7 +13032,7 @@ fi
 # 12. No capabilities on validation core (pure functions)
 pure_caps=true
 for fn in validate_version validate_msg_type validate_payload_len validate_total_len validate_tag ok_result err_result; do
-    if ! grep <<<"$fc_effects" -A1 "$fn" | grep -q "caps: (no external authority)"; then
+    if ! grep <<<"$fc_effects" -A1 "$fn" | has_match "caps: (no external authority)"; then
         pure_caps=false
     fi
 done
@@ -13118,7 +13118,7 @@ else
 fi
 
 # 6. Zero allocation across all functions
-if ! grep <<<"$pv_effects" -v "^$" | grep "alloc:" | grep -v "alloc: none" | grep -q .; then
+if ! grep <<<"$pv_effects" -v "^$" | grep "alloc:" | grep -v "alloc: none" | has_match .; then
     echo "  ok  parsevalidate: zero allocation across all functions"
     pv_pass=$((pv_pass + 1))
 else
@@ -13136,7 +13136,7 @@ else
 fi
 
 # 8. compute_checksum has bounded loop (the only loop in the example)
-if grep <<<"$pv_effects" -A1 "compute_checksum" | grep -q "loops: bounded"; then
+if grep <<<"$pv_effects" -A1 "compute_checksum" | has_match "loops: bounded"; then
     echo "  ok  parsevalidate: compute_checksum has bounded loop"
     pv_pass=$((pv_pass + 1))
 else
@@ -13156,7 +13156,7 @@ fi
 # 10. All core validators are capability-free (pure)
 pv_pure_caps=true
 for fn in validate_version validate_msg_type validate_payload_len validate_total_len validate_checksum compute_checksum parse_header error_code; do
-    if ! grep <<<"$pv_effects" -A1 "$fn" | grep -q "caps: (no external authority)"; then
+    if ! grep <<<"$pv_effects" -A1 "$fn" | has_match "caps: (no external authority)"; then
         pv_pure_caps=false
     fi
 done
@@ -13239,7 +13239,7 @@ else
 fi
 
 # 6. Zero allocation across all functions
-if ! grep <<<"$se_effects" -v "^$" | grep "alloc:" | grep -v "alloc: none" | grep -q .; then
+if ! grep <<<"$se_effects" -v "^$" | grep "alloc:" | grep -v "alloc: none" | has_match .; then
     echo "  ok  serviceerrors: zero allocation across all functions"
     se_pass=$((se_pass + 1))
 else
@@ -13277,7 +13277,7 @@ fi
 # 10. All core functions are capability-free (pure)
 se_pure_caps=true
 for fn in validate authorize check_rate_limit process_action handle_request handle_validated handle_authorized service_error_code; do
-    if ! grep <<<"$se_effects" -A1 "$fn" | grep -q "caps: (no external authority)"; then
+    if ! grep <<<"$se_effects" -A1 "$fn" | has_match "caps: (no external authority)"; then
         se_pure_caps=false
     fi
 done
@@ -13338,7 +13338,7 @@ else
 fi
 
 # 5. Leaf functions have depth 0
-if grep <<<"$sd_crypto" -A1 "compute_tag" | grep -q "depth: 0"; then
+if grep <<<"$sd_crypto" -A1 "compute_tag" | has_match "depth: 0"; then
     echo "  ok  stackdepth: leaf function has depth 0"
     sd_pass=$((sd_pass + 1))
 else
@@ -13347,7 +13347,7 @@ else
 fi
 
 # 6. Callers have depth > 0
-if grep <<<"$sd_crypto" -A1 "main" | grep -q "depth: [1-9]"; then
+if grep <<<"$sd_crypto" -A1 "main" | has_match "depth: [1-9]"; then
     echo "  ok  stackdepth: caller has depth > 0"
     sd_pass=$((sd_pass + 1))
 else
@@ -13401,7 +13401,7 @@ else
 fi
 
 # 11. Fixed-capacity main has depth > 0 (calls validators)
-if grep <<<"$sd_fc" -A1 "  main" | grep -q "depth: [1-9]"; then
+if grep <<<"$sd_fc" -A1 "  main" | has_match "depth: [1-9]"; then
     echo "  ok  stackdepth: fixed_capacity main has call depth > 0"
     sd_pass=$((sd_pass + 1))
 else
@@ -13422,7 +13422,7 @@ fi
 
 # 13. Deep chain: main has depth 12 (12-function chain)
 sd_deep=$("$COMPILER" tests/programs/adversarial_stackdepth_deep_chain.con --report stack-depth 2>&1)
-if grep <<<"$sd_deep" -A1 "  main" | grep -q "depth: 12"; then
+if grep <<<"$sd_deep" -A1 "  main" | has_match "depth: 12"; then
     echo "  ok  stackdepth: deep chain main has depth 12"
     sd_pass=$((sd_pass + 1))
 else
@@ -13431,7 +13431,7 @@ else
 fi
 
 # 14. Deep chain: leaf (step_12) has depth 0
-if grep <<<"$sd_deep" -A1 "step_12" | grep -q "depth: 0"; then
+if grep <<<"$sd_deep" -A1 "step_12" | has_match "depth: 0"; then
     echo "  ok  stackdepth: deep chain leaf has depth 0"
     sd_pass=$((sd_pass + 1))
 else
@@ -13450,7 +13450,7 @@ fi
 
 # 16. Wide fan: main has depth 1 (not 8 — max not sum)
 sd_wide=$("$COMPILER" tests/programs/adversarial_stackdepth_wide_fan.con --report stack-depth 2>&1)
-if grep <<<"$sd_wide" -A1 "  main" | grep -q "depth: 1"; then
+if grep <<<"$sd_wide" -A1 "  main" | has_match "depth: 1"; then
     echo "  ok  stackdepth: wide fan main has depth 1 (max not sum)"
     sd_pass=$((sd_pass + 1))
 else
@@ -13487,7 +13487,7 @@ else
 fi
 
 # 19. Mixed recursion: recurse shows unbounded
-if grep <<<"$sd_mixed" -A1 "  recurse" | grep -q "unbounded"; then
+if grep <<<"$sd_mixed" -A1 "  recurse" | has_match "unbounded"; then
     echo "  ok  stackdepth: direct recursion shows unbounded"
     sd_pass=$((sd_pass + 1))
 else
@@ -13496,7 +13496,7 @@ else
 fi
 
 # 20. Mixed recursion: mutual_a shows unbounded
-if grep <<<"$sd_mixed" -A1 "mutual_a" | grep -q "unbounded"; then
+if grep <<<"$sd_mixed" -A1 "mutual_a" | has_match "unbounded"; then
     echo "  ok  stackdepth: mutual recursion shows unbounded"
     sd_pass=$((sd_pass + 1))
 else
@@ -13505,7 +13505,7 @@ else
 fi
 
 # 21. Mixed recursion: pure_caller has real depth (bounded)
-if grep <<<"$sd_mixed" -A1 "pure_caller" | grep -q "depth: 1"; then
+if grep <<<"$sd_mixed" -A1 "pure_caller" | has_match "depth: 1"; then
     echo "  ok  stackdepth: non-recursive in mixed file has real depth"
     sd_pass=$((sd_pass + 1))
 else
@@ -13526,7 +13526,7 @@ fi
 
 # 23. Diamond: node_a has depth 2 (A->B->D or A->C->D)
 sd_diamond=$("$COMPILER" tests/programs/adversarial_stackdepth_diamond.con --report stack-depth 2>&1)
-if grep <<<"$sd_diamond" -A1 "node_a" | grep -q "depth: 2"; then
+if grep <<<"$sd_diamond" -A1 "node_a" | has_match "depth: 2"; then
     echo "  ok  stackdepth: diamond node_a has depth 2"
     sd_pass=$((sd_pass + 1))
 else
@@ -13547,7 +13547,7 @@ fi
 
 # 25. Zero params: bare_leaf has minimum frame (8 bytes)
 sd_zero=$("$COMPILER" tests/programs/adversarial_stackdepth_zero_params.con --report stack-depth 2>&1)
-if grep <<<"$sd_zero" -A1 "bare_leaf" | grep -q "frame: 8 bytes"; then
+if grep <<<"$sd_zero" -A1 "bare_leaf" | has_match "frame: 8 bytes"; then
     echo "  ok  stackdepth: zero-param leaf has minimum frame (8 bytes)"
     sd_pass=$((sd_pass + 1))
 else
@@ -14035,7 +14035,7 @@ fi
 rm -f "$TMPDIR/test_wf_pp"
 
 # 2. Build summary mentions proved count
-if grep <<<"$wf_build" "^Proofs:" | grep -q "proved"; then
+if grep <<<"$wf_build" "^Proofs:" | has_match "proved"; then
     echo "  ok  workflow: build summary mentions proved count"
     wf_pass=$((wf_pass + 1))
 else
@@ -14044,7 +14044,7 @@ else
 fi
 
 # 3. Build summary mentions stale count
-if grep <<<"$wf_build" "^Proofs:" | grep -q "stale"; then
+if grep <<<"$wf_build" "^Proofs:" | has_match "stale"; then
     echo "  ok  workflow: build summary mentions stale count"
     wf_pass=$((wf_pass + 1))
 else
@@ -14179,7 +14179,7 @@ else
 fi
 
 # 4. Check output only shows main.* functions
-if grep <<<"$sc_check" '`main\.' | grep -q "main\."; then
+if grep <<<"$sc_check" '`main\.' | has_match "main\."; then
     echo "  ok  scoping: check report shows main.* functions"
     sc_pass=$((sc_pass + 1))
 else

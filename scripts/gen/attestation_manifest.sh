@@ -18,6 +18,7 @@
 # becomes a reconciliation rather than two counters that happen to differ.
 set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$ROOT_DIR/scripts/tests/lib/has_match.sh" || exit 2  # bug 283: never a pipe into grep -q
 cd "$ROOT_DIR"
 BIN=".lake/build/bin/concrete"
 [ -x "$BIN" ] || { echo "FATAL: build first (missing $BIN)" >&2; exit 1; }
@@ -213,7 +214,7 @@ KNOWN_TABLES="$(grep -oE '\("[A-Za-z][A-Za-z0-9._]*", "[0-9a-f]{32}"\)' Concrete
                   | grep -oE '"[A-Za-z][A-Za-z0-9._]*"' | tr -d '"' | sort -u)"
 SURPLUS=0
 for t in $(cut -f1 "$TMP/pairs.tsv" | sort -u); do
-  printf '%s\n' "$KNOWN_TABLES" | grep -qx "$t" || { refuse "table '$t' is attested but referenced by no classification row (surplus)"; SURPLUS=$((SURPLUS+1)); }
+  has_match -x "$t" <<<"$KNOWN_TABLES" || { refuse "table '$t' is attested but referenced by no classification row (surplus)"; SURPLUS=$((SURPLUS+1)); }
 done
 
 # --- typed reconciliation: every input row ends mapped, excluded, or refused ---------------------

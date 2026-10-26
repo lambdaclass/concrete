@@ -81,7 +81,7 @@ fi
 echo "=== a capability-FREE callback still works through the same combinator ==="
 # The old fallback answered `empty` for everything, so it was accidentally right here.
 # Fixing only the capability-carrying forms would break this one.
-if printf '%s' "$out" | grep -qE 'error\['; then
+if has_match -E 'error\[' <<<"$out"; then
   no "cannot assess: derived_forms does not check"
 else
   ok "the empty-capset form is unaffected (it is the same fixture's last call)"
@@ -90,13 +90,13 @@ fi
 echo "=== what remains unknowable SAYS SO, and says it in the right register ==="
 u="$FIX/uninferable"
 uout="$(cd "$u" && "${TO[@]}" "$CC" check . 2>&1)"
-if printf '%s' "$uout" | grep -q "E0242"; then
+if has_match "E0242" <<<"$uout"; then
   ok "a generic callee's return type yields E0242 cannotInferCapVariable"
 else
   no "the uninferable case does not report E0242"
   printf '%s\n' "$uout" | grep -E 'error\[' | awk 'NR<=2' | sed 's/^/       /'
 fi
-if printf '%s' "$uout" | grep -q "capability variable 'C'"; then
+if has_match "capability variable 'C'" <<<"$uout"; then
   ok "the diagnostic NAMES the variable it could not infer"
 else
   no "the diagnostic does not name the cap variable — it points somewhere unhelpful"
@@ -107,7 +107,7 @@ echo "=== CONTROL: the refusal comes from the capability leg, not from type equa
 # would mean a fabricated empty binding passed the authority check and `expectTy` caught
 # the collision afterwards — the pre-fix behaviour, and the one that survives only until
 # fn-type comparison is relaxed to subsetting.
-if printf '%s' "$uout" | grep -q "E0220"; then
+if has_match "E0220" <<<"$uout"; then
   no "E0220 is present: an empty binding was fabricated and type equality is doing the work"
 else
   ok "no E0220 — nothing invented a capability set to compare against"
@@ -131,13 +131,13 @@ else
 fi
 um="$FIX/uninferable_method"
 umout="$(cd "$um" && "${TO[@]}" "$CC" check . 2>&1)"
-if printf '%s' "$umout" | grep -q "E0242"; then
+if has_match "E0242" <<<"$umout"; then
   ok "the method path reports E0242 for what it cannot infer"
 else
   no "the method path does not report E0242 — it may still fabricate an empty capset"
   printf '%s\n' "$umout" | grep -E 'error\[' | awk 'NR<=2' | sed 's/^/       /'
 fi
-if printf '%s' "$umout" | grep -q "E0220"; then
+if has_match "E0220" <<<"$umout"; then
   no "E0220 on the method path: an empty binding was fabricated there"
 else
   ok "no E0220 on the method path either"

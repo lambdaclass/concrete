@@ -200,7 +200,7 @@ case "$L1" in
     ok "invalid path -> typed DbError, kind Open, with RocksDB's message" ;;
   *) no "first line is not the typed Open error: [$L1]" ;;
 esac
-printf '%s' "$L1" | grep -qF "$BAD" \
+has_match -F "$BAD" <<<"$L1" \
   && ok "the error message names the invalid path" \
   || no "the error message does not name $BAD: [$L1]"
 EXPECT_REST="open: ok

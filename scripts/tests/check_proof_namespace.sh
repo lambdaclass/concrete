@@ -27,7 +27,7 @@ ALLOW="scripts/tests/proof_namespace_allowlist.txt"
 FAIL=0
 
 # 1. No example module may declare the compiler proof namespace.
-if grep -rln '^namespace Concrete\.Proof\b' proofs/Examples/ 2>/dev/null | grep -q .; then
+if grep -rln '^namespace Concrete\.Proof\b' proofs/Examples/ 2>/dev/null | has_match .; then
   echo "FAIL: a file under proofs/Examples/ declares 'namespace Concrete.Proof':"
   grep -rln '^namespace Concrete\.Proof\b' proofs/Examples/ | sed 's/^/    /'
   echo "  → example proofs must use 'namespace Examples.<Ex>.Proofs'."

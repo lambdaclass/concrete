@@ -169,7 +169,7 @@ done
 # A one-step newtype rebrand between two non-integer types (`Inner -> Middle`, `Middle -> Outer`) is the
 # identity, as CoreCheck admits it; refusing it cost extraction of a well-typed body (Codex land1 review).
 "$BIN" tests/programs/adversarial/newtype/chained.con --report proof-status > "$TMP/nt" 2>&1
-grep -A1 '`main.Outer_unwrap_all`' "$TMP/nt" | grep -q 'obligation: extractable' \
+grep -A1 '`main.Outer_unwrap_all`' "$TMP/nt" | has_match 'obligation: extractable' \
   && ok "F: a chained newtype unwrap (Outer -> Middle -> Inner) is extractable" \
   || no "F: Outer_unwrap_all is not extractable: $(grep -A1 'Outer_unwrap_all' "$TMP/nt" | tr '\n' ' ')"
 
@@ -287,7 +287,7 @@ for fn in seven flip pick keep cond_cast; do
   else no "B: $fn has a non-agreeing or missing row: $(grep -v '^agree' <<<"$r" | head -1 | tr '\t' ' ')"; fi
 done
 # A bool parameter is never handed an integer: every pick row's second input is a boolean.
-grep -P "\tmain\.pick\t" "$TMP/b" | cut -f4 | grep -qvE ', (true|false)\)$' \
+grep -P "\tmain\.pick\t" "$TMP/b" | cut -f4 | has_match -vE ', (true|false)\)$' \
   && no "B: a pick row passes a non-boolean for its bool parameter: $(grep -P "\tmain\.pick\t" "$TMP/b" | cut -f4 | grep -vE ', (true|false)\)$' | head -1)" \
   || ok "B: every pick row passes a boolean for its bool parameter"
 

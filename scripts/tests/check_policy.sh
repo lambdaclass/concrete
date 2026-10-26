@@ -305,7 +305,7 @@ GAP_SRC='fn apply(f: fn(i32) -> i32, x: i32) -> i32 { return f(x); }
 fn inc(x: i32) -> i32 { return x + 1; }
 fn main() -> i32 { return apply(inc, 1) - 2; }'
 ctl_expect() { # label expect-regex reject-regex output
-  if printf '%s' "$4" | grep -qE "$2" && ! printf '%s' "$4" | grep -qE "$3"; then
+  if has_match -E "$2" <<<"$4" && ! has_match -E "$3" <<<"$4"; then
     echo "  ok   CONTROL $1"; PASS=$((PASS + 1))
   else
     echo "  FAIL CONTROL $1"; printf '%s\n' "$4" | grep -E 'FAIL|ok|info' | head -4 | sed 's/^/       /'; FAIL=$((FAIL + 1))

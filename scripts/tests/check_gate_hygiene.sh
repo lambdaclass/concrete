@@ -97,7 +97,7 @@ echo "=== no '| head -N' inside an errexit+pipefail script (SIGPIPE self-abort) 
 # this check starts covering it.
 hazard=0
 for f in "$ROOT_DIR"/scripts/tests/*.sh; do
-  head -20 "$f" | grep -qE "set -[a-z]*e[a-z]* .*pipefail|set -o errexit" || continue
+  head -20 "$f" | has_match -E "set -[a-z]*e[a-z]* .*pipefail|set -o errexit" || continue
   # `[h]ead` so this scan does not match its own pattern literal.
   hits="$(grep -nE "\| *[h]ead -[0-9]" "$f" || true)"
   if [ -n "$hits" ]; then
@@ -106,42 +106,6 @@ for f in "$ROOT_DIR"/scripts/tests/*.sh; do
   fi
 done
 [ "$hazard" -eq 0 ] && ok "no errexit gate script caps output with '| head -N'"
-
-echo ""
-echo "=== no 'lake'/'lean' piped into a short-circuiting grep whose status is used ==="
-# Same SIGPIPE family as the check above, but it INVERTS a gate leg instead of
-# aborting the script. `lake env lean f.lean 2>&1 | grep -q PAT && ok || no`:
-# grep exits at the first match, the elaborator is still writing, it dies of
-# SIGPIPE, and under `pipefail` the pipeline's status is that death — so the leg
-# reports FAIL against output that plainly contained PAT. Measured: a
-# same-name-generator leg failed this way while the pattern was present.
-#
-# Scoped to lake/lean producers deliberately. `grep -q` after a fast, small
-# producer finishes writing before grep exits and is fine; there are ~170 such
-# uses in this directory and banning them all would be noise. An elaborator is
-# slow and verbose, so it reliably loses the race.
-#
-# Fix: capture once into a variable, then grep the variable with a here-string.
-# That is faster too — these gates elaborated the same file three times.
-pipehazard=0
-for f in "$ROOT_DIR"/scripts/tests/*.sh; do
-  head -20 "$f" | grep -q "pipefail" || continue
-  # Scan CODE only. Full-line comments are stripped first: prose describing this
-  # very hazard matched it three times, and the same class (a docstring matching
-  # a structural scan) has cost this tree several false failures already. Keeping
-  # the line numbers means grep -n then filtering, not stripping in place.
-  #
-  # The producer must be an elaborator INVOCATION. A bare `lean ` alternative
-  # also matched `Report.lean | grep -q…`, i.e. a filename followed by a pipe —
-  # so the toolchain word must be anchored as a command.
-  hits="$(grep -nE '^[0-9]+: *#' -v <<<"$(grep -n "" "$f")" \
-    | grep -E "(lake +env +lean|lake +build|(^|[;(|&] *)lean +)[^|]*\| *grep -[a-zA-Z]*[q]" || true)"
-  if [ -n "$hits" ]; then
-    no "$(basename "$f") — elaborator piped into 'grep -q' under pipefail: line $(head -1 <<<"$hits" | cut -d: -f1). Capture to a variable first."
-    pipehazard=1
-  fi
-done
-[ "$pipehazard" -eq 0 ] && ok "no gate pipes an elaborator into a short-circuiting grep"
 
 echo ""
 echo "=== no 'local' statement reads a variable it assigns in the same statement ==="
@@ -235,7 +199,7 @@ echo "=== publication names a recorded SHA, never a moving ref ==="
 # mirror ended up AHEAD of the primary, the one thing that script exists to
 # prevent. Everything it checks is about the recorded SHA, so everything it
 # pushes must be too.
-if grep -nE 'git push .*"(HEAD)?:?\$BRANCH"' "$ROOT_DIR/scripts/push-both.sh" | grep -q 'HEAD:'; then
+if grep -nE 'git push .*"(HEAD)?:?\$BRANCH"' "$ROOT_DIR/scripts/push-both.sh" | has_match 'HEAD:'; then
   no "push-both pushes HEAD — a ref that can move between the CI check and the push"
 else
   ok "push-both pushes only the recorded SHA, not HEAD"
@@ -473,19 +437,19 @@ if [ -z "$GQ" ]; then ok "no git grep is piped into a short-circuiting grep (cap
 else no "git grep piped into 'grep -q' (its SIGPIPE can decide the leg): $(cut -c1-160 <<<"$GQ" | tr '\n' ';')"; fi
 # Controls, built from pieces so this file's own text never matches.
 _gg_dir="$(mktemp -d)"
-_GG='git'" grep"; _B='\'"b"
+_GG='git'" grep"; _PG='|'" grep"; _B='\'"b"
 printf '%s\n' "if $_GG -nE 'synthetic|Foo${_B}' -- x; then :; fi" > "$_gg_dir/alt.sh"
 printf '%s\n' "OUT=\"\$($_GG -nE \\" "  'synthetic|Foo${_B}' -- x)\"" > "$_gg_dir/cont.sh"
 printf '%s\n' "if git -C . grep -nE 'Foo${_B}' -- x; then :; fi" > "$_gg_dir/dashc.sh"
 printf '%s\n' "OUT=\"\$($_GG -nE '(^|[^A-Za-z0-9_])Foo([^A-Za-z0-9_]|\$)' -- x)\"" > "$_gg_dir/portable.sh"
-printf '%s\n' "if $_GG -n Foo -- x | grep -q .; then :; fi" > "$_gg_dir/quiet.sh"
-printf '%s\n' "if $_GG -n Foo -- x \\" "   | sed 's/a/b/' | grep -qE . ; then :; fi" > "$_gg_dir/quiet_cont.sh"
+printf '%s\n' "if $_GG -n Foo -- x $_PG -q .; then :; fi" > "$_gg_dir/quiet.sh"
+printf '%s\n' "if $_GG -n Foo -- x \\" "   | sed 's/a/b/' $_PG -qE . ; then :; fi" > "$_gg_dir/quiet_cont.sh"
 printf '%s\n' "if git -C \"a b\" grep -nE 'Foo${_B}' -- x; then :; fi" > "$_gg_dir/dashc_quoted.sh"
 printf '%s\n' "# a comment ending in a backslash \\" "if $_GG -nE 'Foo${_B}' -- x; then :; fi" > "$_gg_dir/after_comment.sh"
-printf '%s\n' "if $_GG -n Foo -- x | grep -E -q .; then :; fi" > "$_gg_dir/quiet_split_opts.sh"
+printf '%s\n' "if $_GG -n Foo -- x $_PG -E -q .; then :; fi" > "$_gg_dir/quiet_split_opts.sh"
 printf '%s\n' "if $_GG -n Foo -- x |" "   grep -q .; then :; fi" > "$_gg_dir/quiet_pipe_cont.sh"
-printf '%s\n' "OUT=\"\$($_GG -n Foo -- x)\"; printf '%s' \"\$OUT\" | grep -q ." > "$_gg_dir/capture_then_test.sh"
-printf '%s\n' "cat > f <<'EOF'" "$_GG -nE 'Foo${_B}' -- x | grep -q ." "EOF" > "$_gg_dir/heredoc.sh"
+printf '%s\n' "OUT=\"\$($_GG -n Foo -- x)\"; printf '%s' \"\$OUT\" $_PG -q ." > "$_gg_dir/capture_then_test.sh"
+printf '%s\n' "cat > f <<'EOF'" "$_GG -nE 'Foo${_B}' -- x $_PG -q ." "EOF" > "$_gg_dir/heredoc.sh"
 for c in alt cont dashc dashc_quoted after_comment; do
   if [ -n "$(gitgrep_gnuisms "$_gg_dir/$c.sh")" ]; then ok "control: a \\b git grep pattern ($c) is flagged"
   else no "control: a \\b git grep pattern ($c) was NOT flagged (the check above is inert)"; fi
@@ -493,9 +457,9 @@ done
 if [ -z "$(gitgrep_gnuisms "$_gg_dir/portable.sh")$(gitgrep_into_quiet_grep "$_gg_dir/portable.sh")" ]; then
   ok "control: a captured search with portable bracket-expression boundaries is not flagged"
 else no "control: a captured, portable search was flagged"; fi
-printf '%s\n' "echo \"<<EOF\"" "if $_GG -n Foo -- x | grep -q .; then :; fi" > "$_gg_dir/after_quoted_heredoc_text.sh"
-printf '%s\n' "cat <<<EOF" "if $_GG -n Foo -- x | grep -q .; then :; fi" > "$_gg_dir/after_here_string.sh"
-printf '%s\n' "echo \\\" \"<<EOF\"" "if $_GG -n Foo -- x | grep -q .; then :; fi" > "$_gg_dir/after_escaped_quote_heredoc_text.sh"
+printf '%s\n' "echo \"<<EOF\"" "if $_GG -n Foo -- x $_PG -q .; then :; fi" > "$_gg_dir/after_quoted_heredoc_text.sh"
+printf '%s\n' "cat <<<EOF" "if $_GG -n Foo -- x $_PG -q .; then :; fi" > "$_gg_dir/after_here_string.sh"
+printf '%s\n' "echo \\\" \"<<EOF\"" "if $_GG -n Foo -- x $_PG -q .; then :; fi" > "$_gg_dir/after_escaped_quote_heredoc_text.sh"
 printf '%s\n' "if $_GG -n Foo -- x |" "  # why the next stage is here" "  grep -q .; then :; fi" > "$_gg_dir/comment_in_pipeline.sh"
 for c in quiet quiet_cont quiet_split_opts quiet_pipe_cont after_quoted_heredoc_text after_here_string after_escaped_quote_heredoc_text comment_in_pipeline; do
   if [ -n "$(gitgrep_into_quiet_grep "$_gg_dir/$c.sh")" ]; then ok "control: git grep piped into grep -q ($c) is flagged"
@@ -507,6 +471,115 @@ for c in capture_then_test heredoc; do
   else no "control: $c was flagged"; fi
 done
 rm -rf "$_gg_dir"
+
+echo ""
+echo "=== no pipe into a short-circuiting grep or head before a match (bug 283) ==="
+# `producer | grep -q PAT` under `pipefail` lets the verdict depend on scheduling: grep exits at
+# its first match, a producer still writing dies of SIGPIPE (141), and the pipeline reports that
+# death. A positive leg then FAILs with the pattern present (CI run 40269354812); a negated leg
+# (`... && no || ok`) PASSES with the forbidden text present, silently. The hazard is the SHAPE, a
+# consumer that stops reading, not the producer: an elaborator, git grep and bash's own printf have
+# each lost the race. So the rule covers every producer:
+#   * no pipe into grep/egrep/fgrep with -q, -m, -l or -L (or --quiet, --silent, --max-count,
+#     --files-with-matches, --files-without-match); match captured text with
+#     `has_match PAT <<<"$OUT"` and a stream with `producer | has_match PAT`
+#     (scripts/tests/lib/has_match.sh), which reads all of its input before it answers;
+#   * no `| head` (or `| sed ...q`) feeding has_match: it closes the pipe early in the same way.
+#     Cap with `awk 'NR<=N'`, which reads everything.
+# `grep -c` reads all of its input, so a count is not refused here. Scanned as logical lines
+# (logical_lines above): comments and heredoc bodies are skipped, continuations are joined.
+_QG='(^|[^|])\|&?[[:space:]]*[ef]?grep([[:space:]]+(-[A-Za-z0-9]+|--[a-z-]+(=[^[:space:]]*)?))*[[:space:]]+(-[A-Za-z0-9]*[qmlL][A-Za-z0-9]*([[:space:]]|$)|--(quiet|silent|max-count|files-with))'
+_HM='(^|[^|])\|&?[[:space:]]*(head|sed[[:space:]][^|;&]*q)[^|;&]*\|&?[[:space:]]*has_match([[:space:]]|$)'
+pipe_into_short_circuit() { logical_lines "$@" | grep -E "$_QG|$_HM" || true; }
+# A script that calls has_match must load it (directly, or through lib/gate_env.sh): an undefined
+# has_match is "command not found", status 127, which a negated leg would read as "absent".
+has_match_unloaded() {
+  local f
+  for f in "$@"; do
+    [ "${f##*/}" = has_match.sh ] && continue
+    has_match -E '(^|[^A-Za-z0-9_.-])has_match([[:space:]]|$)' <<<"$(logical_lines "$f")" || continue
+    grep -qE '(lib/gate_env\.sh|/has_match\.sh)' "$f" || echo "$f"
+  done
+}
+SC_FILES=("$ROOT_DIR"/scripts/*.sh "$ROOT_DIR"/scripts/*/*.sh "$ROOT_DIR"/scripts/tests/lib/*.sh "$ROOT_DIR"/.githooks/pre-push)
+SC="$(pipe_into_short_circuit "${SC_FILES[@]}")"
+if [ -z "$SC" ]; then ok "no script pipes into a short-circuiting grep or through head into a match"
+else no "pipe into a short-circuiting consumer (SIGPIPE can decide the leg; use has_match): $(cut -c1-200 <<<"$SC" | tr '\n' ';')"; fi
+UL="$(has_match_unloaded "${SC_FILES[@]}")"
+if [ -z "$UL" ]; then ok "every script that calls has_match loads it"
+else no "has_match called without loading lib/has_match.sh or lib/gate_env.sh: $(tr '\n' ' ' <<<"$UL")"; fi
+
+# Controls for the scan, built from pieces so this file's own text never matches.
+_sc_dir="$(mktemp -d)"
+_P='|'; _G='grep'
+printf '%s\n' "printf '%s' \"\$OUT\" $_P $_G -q PAT && ok x || no x" > "$_sc_dir/printf_q.sh"
+printf '%s\n' "printf '%s' \"\$OUT\" $_P $_G -q FORBIDDEN && no x || ok x" > "$_sc_dir/negated.sh"
+printf '%s\n' "make_report $_P $_G -qE 'a|b'" > "$_sc_dir/stream_qE.sh"
+printf '%s\n' "make_report $_P $_G -E -q x" > "$_sc_dir/split_opts.sh"
+printf '%s\n' "make_report $_P" "  # why" "  $_G -qF x" > "$_sc_dir/continued.sh"
+printf '%s\n' "make_report \\" "  $_P $_G -q x" > "$_sc_dir/backslash.sh"
+printf '%s\n' "v=\"\$(make_report $_P $_G -m1 x)\"" > "$_sc_dir/max_count.sh"
+printf '%s\n' "make_report $_P $_G -l x" > "$_sc_dir/files_with.sh"
+printf '%s\n' "make_report $_P $_G --quiet x" > "$_sc_dir/long_quiet.sh"
+printf '%s\n' "make_report $_P e$_G -q x" > "$_sc_dir/egrep.sh"
+printf '%s\n' "make_report $_P head -1 $_P has_match x" > "$_sc_dir/head_then_match.sh"
+printf '%s\n' "make_report $_P sed 5q $_P has_match x" > "$_sc_dir/sedq_then_match.sh"
+printf '%s\n' "make_report $_P$_P $_G -q x f" > "$_sc_dir/or_list.sh"
+printf '%s\n' "has_match -E 'a|b' <<<\"\$OUT\" && ok x || no x" > "$_sc_dir/herestring.sh"
+printf '%s\n' "make_report $_P has_match -F x" > "$_sc_dir/drained.sh"
+printf '%s\n' "$_G -q x \"\$f\" && $_G -c y f" > "$_sc_dir/file_operand.sh"
+printf '%s\n' "make_report $_P $_G -c x" > "$_sc_dir/count.sh"
+printf '%s\n' "make_report $_P awk 'NR<=1' $_P has_match x" > "$_sc_dir/awk_cap.sh"
+printf '%s\n' "cat > f <<'EOF'" "make_report $_P $_G -q x" "EOF" > "$_sc_dir/heredoc.sh"
+printf '%s\n' "# make_report $_P $_G -q x" > "$_sc_dir/comment.sh"
+for c in printf_q negated stream_qE split_opts continued backslash max_count files_with long_quiet egrep head_then_match sedq_then_match; do
+  if [ -n "$(pipe_into_short_circuit "$_sc_dir/$c.sh")" ]; then ok "control: a pipe into a short-circuiting consumer ($c) is flagged"
+  else no "control: a pipe into a short-circuiting consumer ($c) was NOT flagged (the scan is inert)"; fi
+done
+for c in or_list herestring drained file_operand count awk_cap heredoc comment; do
+  if [ -z "$(pipe_into_short_circuit "$_sc_dir/$c.sh")" ]; then ok "control: $c is not flagged"
+  else no "control: $c was flagged"; fi
+done
+printf '%s\n' "has_match x <<<\"\$OUT\" && no x || ok x" > "$_sc_dir/unloaded.sh"
+printf '%s\n' "source \"\$ROOT/scripts/tests/lib/has_match.sh\"" "has_match x <<<\"\$OUT\" && no x || ok x" > "$_sc_dir/loaded.sh"
+[ -n "$(has_match_unloaded "$_sc_dir/unloaded.sh")" ] && ok "control: a script calling has_match without loading it is flagged" \
+  || no "control: a script calling has_match without loading it was NOT flagged"
+[ -z "$(has_match_unloaded "$_sc_dir/loaded.sh")" ] && ok "control: a script that sources has_match.sh is not flagged" \
+  || no "control: a script that sources has_match.sh was flagged"
+
+# The bug and the fix, executed. A producer far larger than a pipe buffer with the match on its
+# first line: grep -q exits after its first read, and the producer's next write gets EPIPE.
+_HMLIB="$ROOT_DIR/scripts/tests/lib/has_match.sh"
+cat > "$_sc_dir/race.sh" <<'RACE'
+set -uo pipefail
+source "$1"
+BIG="$(seq 1 500000)"
+printf '%s' "$BIG" | grep -q '^1$'; echo "old-positive=$?"
+printf '%s' "$BIG" | grep -q '^1$' && echo "old-negated=forbidden-seen" || echo "old-negated=passed"
+printf '%s' "$BIG" | has_match '^1$'; echo "pipe-positive=$?"
+printf '%s' "$BIG" | has_match '^1$' && echo "pipe-negated=forbidden-seen" || echo "pipe-negated=passed"
+has_match '^1$' <<<"$BIG"; echo "here-positive=$?"
+has_match '^1$' <<<"$BIG" && echo "here-negated=forbidden-seen" || echo "here-negated=passed"
+has_match '^0$' <<<"$BIG"; echo "absent=$?"
+{ echo hit; exit 3; } | has_match hit; echo "producer-failure=$?"
+RACE
+RACE_OUT="$(bash "$_sc_dir/race.sh" "$_HMLIB" 2>&1)" || true
+for want in old-positive=141 old-negated=passed; do
+  if grep -qxF "$want" <<<"$RACE_OUT"; then ok "control: the old pipe reproduces bug 283 ($want: the verdict inverts)"
+  else no "control: the old pipe did not reproduce bug 283 ($want missing): $(tr '\n' ' ' <<<"$RACE_OUT")"; fi
+done
+for want in pipe-positive=0 pipe-negated=forbidden-seen here-positive=0 here-negated=forbidden-seen absent=1 producer-failure=3; do
+  if grep -qxF "$want" <<<"$RACE_OUT"; then ok "control: has_match on the same producer: $want"
+  else no "control: has_match on the same producer: $want missing: $(tr '\n' ' ' <<<"$RACE_OUT")"; fi
+done
+# A grep error is no verdict in either polarity, from the main shell or a pipeline stage.
+for form in "has_match -E '(' <<<x" "printf x | has_match -E '('" "printf x | has_match -E '(' && echo verdict=forbidden || echo verdict=clean" "has_match -q x <<<x"; do
+  erc=0; eout="$(bash -c "source '$_HMLIB'; $form; echo reached" 2>&1)" || erc=$?
+  if [ "$erc" -ne 0 ] && ! grep -qE '^(reached|verdict=)' <<<"$eout" && grep -qF 'has_match:' <<<"$eout"; then
+    ok "control: a grep error stops the script with no verdict ($form)"
+  else no "control: a grep error was read as an answer ($form; rc=$erc): $(tr '\n' ' ' <<<"$eout")"; fi
+done
+rm -rf "$_sc_dir"
 
 echo ""
 echo "=== a summary line and the exit status cannot disagree ==="

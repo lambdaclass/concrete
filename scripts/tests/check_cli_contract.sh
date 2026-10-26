@@ -125,7 +125,7 @@ SP="examples/evidence_classes/stale_proof/src/main.con"
 
 echo "=== reports: the three that used to exit 1 on success ==="
 run "$C" "$TD" --report attestation-join
-{ [ "$rc" = "0" ] && [ -s "$OUT" ] && head -1 "$OUT" | grep -q '^# role' && ! grep -q 'Unknown report type' "$ERR"; } \
+{ [ "$rc" = "0" ] && [ -s "$OUT" ] && head -1 "$OUT" | has_match '^# role' && ! grep -q 'Unknown report type' "$ERR"; } \
   && ok "attestation-join → exit 0 with its header, no unknown-report diagnostic" \
   || no "attestation-join contract (rc=$rc)"
 

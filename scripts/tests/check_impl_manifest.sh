@@ -97,7 +97,7 @@ fi
 
 # The refusal must be NAMED, not merely counted. An unnamed refusal is a smaller number wearing a
 # different label, which is the defect this whole type replaced.
-if printf '%s' "$REASONS" | grep -q 'extracted-missing=1'; then
+if has_match 'extracted-missing=1' <<<"$REASONS"; then
   ok "the single refusal is NAMED: extracted-missing"
 else
   no "the refusal is not reported as extracted-missing — reasons seen: $(printf '%s' "$REASONS" | tr '\n' ' ')"
@@ -147,7 +147,7 @@ fi
 if grep -rn "implementationManifestOf\|implementationManifestResultOf" Concrete/ --include=*.lean \
      | grep -v "^Concrete/Proof/ProofCore.lean:" \
      | grep -v "^Concrete/Report/Report.lean:" \
-     | grep -v "^Concrete/Proof/BodyIdentity.lean:" | grep -q .; then
+     | grep -v "^Concrete/Proof/BodyIdentity.lean:" | has_match .; then
   no "the manifest producer reached a new consumer — check it is not a status derivation"
 else
   ok "the manifest producer is consumed only by the shadow report — still decides nothing"

@@ -299,7 +299,7 @@ assert_contains "workspace link.con.txt block" "#[proof_by(" cat "$WS/link.con.t
 # name stays bare, which is fine: a workspace holds one function.
 assert_contains "workspace stub theorem"       "theorem loop__invariant_count__up_refines_spec" cat "$WS/Count_upProofs.lean"
 # Workspace is a build output, NOT a proof registry: no proof-registry.json anywhere.
-if find "$WS" -name 'proof-registry.json' | grep -q .; then
+if find "$WS" -name 'proof-registry.json' | has_match .; then
   echo "  FAIL workspace contains a proof-registry.json (must not)"; FAIL=$((FAIL+1))
 else
   echo "  ok   workspace has no proof-registry.json"; PASS=$((PASS+1))

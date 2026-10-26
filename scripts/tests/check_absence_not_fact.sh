@@ -41,7 +41,7 @@ for f in Concrete/Check/Check.lean Concrete/Check/CheckHelpers.lean; do
   # type is unknown. The repaired form yields `none` and lets `resolveCaps` name the
   # variable, so the giveaway is `argCapSet?` plus no `pure CapSet.empty` beside it.
   if grep -q "argCapSet?" "$f"; then
-    if grep -A14 "argCapSet? ← do" "$f" | grep -q "pure CapSet.empty"; then
+    if grep -A14 "argCapSet? ← do" "$f" | has_match "pure CapSet.empty"; then
       no "$f: an inference fallback still yields CapSet.empty for an unknown argument"
     else
       ok "$f: unknown argument capability contributes no binding"

@@ -365,7 +365,7 @@ else
     a="$(grep -c "^$k	" "$RAW" || true)"; b="$(grep -c "^mapped	$k	" "$MAP" || true)"
     [ "$a" = "$b" ] && ok "M: every baseline $k row is mapped ($a)" || no "M: baseline has $a $k rows, the map maps $b"
   done
-  if grep -E '^mapped	(subject|dependency|reference)	' "$MAP" | grep -q 'implementation-changed'; then
+  if grep -E '^mapped	(subject|dependency|reference)	' "$MAP" | has_match 'implementation-changed'; then
     no "M: the map records an implementation change"
   else
     ok "M: no implementation digest changed across the migration"
@@ -390,7 +390,7 @@ if [ -s "$NEWRAW" ]; then
     awk "$2" "$NEWRAW" > "$TMP/doctored.raw"
     if bash scripts/tools/identity_migration_map.sh "$RAW" "$TMP/doctored.raw" "$AMEND" > "$TMP/doctored.map" 2>/dev/null; then
       no "M: the map tool accepted a tree with $1"
-    elif grep -E "^refused" "$TMP/doctored.map" | grep -q "$3"; then
+    elif grep -E "^refused" "$TMP/doctored.map" | has_match "$3"; then
       ok "M: the map tool refuses a tree with $1 ($3)"
     else
       no "M: the map tool refused a tree with $1, but not as $3"
@@ -447,11 +447,11 @@ if [ -s "$TMP/r.store" ]; then
   perl -0pe 's/^schema receiptV3$/schema receiptV2/mg; s/^scope (\S+)\ncontext \S+$/workspace $1/mg' "$TMP/r.store" > "$TMP/v.store"
   VOUT="$("$BIN" "$RCV" --report proof-status --receipts "$TMP/v.store" 2>/dev/null | sed -n '/=== Replay Receipts/,$p')"
   NREC="$(grep -c '^== ' "$TMP/v.store" || true)"
-  if [ "$NREC" -gt 0 ] && printf '%s\n' "$VOUT" | grep -qE "^  0 current, 0 not current, $NREC unreadable" \
+  if [ "$NREC" -gt 0 ] && has_match -E "^  0 current, 0 not current, $NREC unreadable" <<<"$VOUT" \
      && [ "$(printf '%s\n' "$VOUT" | grep -c 'schema_unreadable' || true)" -eq "$NREC" ]; then
     ok "V: $NREC real records rewritten into receiptV2 are all schema_unreadable and none is current"
   else
-    no "V: an old-envelope store was not read as unreadable: $(printf '%s\n' "$VOUT" | grep -m1 'current,')"
+    no "V: an old-envelope store was not read as unreadable: $(printf '%s\n' "$VOUT" | grep 'current,' | awk 'NR<=1')"
   fi
 else
   no "V: no issued store to rewrite into the old envelope (R did not issue one)"
@@ -608,7 +608,7 @@ case "$(xstatus verify_message)" in
   *) no "X5: verify_message is $(xstatus verify_message) (expected dependency not current)" ;;
 esac
 CONCRETE_STD="$W/std" "$WBIN" "$XF" --report subject-facts 2>/dev/null \
-  | awk '/^[^ ]/{cur=$1} cur ~ /main\.verify_message$/ && /shadow correspondence:/' | grep -q "usable=no" \
+  | awk '/^[^ ]/{cur=$1} cur ~ /main\.verify_message$/ && /shadow correspondence:/' | has_match "usable=no" \
   && ok "X5: unjustified edge — no table the theorem names attests p1x_nlib.check_nonce, so the closure's correspondence is unusable" \
   || no "X5: verify_message's cross-package edge reads as justified"
 # UNSUPPORTED BODY: the same app against a dependency whose check_nonce the model cannot represent.

@@ -761,13 +761,13 @@ $_dup_line"
   # LEAN'S EXIT STATUS AND DIAGNOSTICS ARE CHECKED INDEPENDENTLY of result parsing, so a driver that
   # dies after printing some results cannot pass merely because the lines it did print looked right.
   if [ "$rc" -ne 0 ]; then
-    no "mint group '$grp': driver exited $rc — $(printf '%s' "$out" | grep -m1 -E 'error' | cut -c1-160)"
+    no "mint group '$grp': driver exited $rc — $(printf '%s' "$out" | grep -E 'error' | awk 'NR<=1' | cut -c1-160)"
   fi
   # The comment above used to claim diagnostics were checked when only the exit status was. `probe()`
   # treats any Lean diagnostic as a failure regardless of exit status, and this path must match it —
   # matching the DIAGNOSTIC shape, not the bare word, because `Except.error` is a legitimate value.
   if grep -qE "error:|error\(lean" <<<"$out"; then
-    no "mint group '$grp': driver reported a Lean diagnostic — $(printf '%s' "$out" | grep -m1 -E 'error:|error\(lean' | cut -c1-160)"
+    no "mint group '$grp': driver reported a Lean diagnostic — $(printf '%s' "$out" | grep -E 'error:|error\(lean' | awk 'NR<=1' | cut -c1-160)"
   fi
 
   # EXACT SET EQUALITY over this group's declared members. Missing, duplicate and unexpected each
@@ -1409,7 +1409,7 @@ if [ "$DERIVE_N" != "$EXPECTED_DERIVE_SITES" ]; then
   no "found $DERIVE_N deriveObligationStatus call site(s), expected $EXPECTED_DERIVE_SITES — one was added, removed or moved, so this control no longer covers what it names"
 elif [ -z "$DERIVE_CTX" ]; then
   no "deriveObligationStatus no longer appears in ProofCore.lean — this control lost its anchor and was passing on absence"
-elif printf '%s' "$DERIVE_CTX" | grep -qE "dependencyRootMaterial|dependencyNodesOf"; then
+elif has_match -E "dependencyRootMaterial|dependencyNodesOf" <<<"$DERIVE_CTX"; then
   no "a dependency root reaches deriveObligationStatus — that bypasses the composition rather than joining it"
 else
   # NARROWED TO WHAT THIS ACTUALLY CHECKS. It used to claim "roots are consumed by the composed
@@ -1462,7 +1462,7 @@ if [ -z "$CONSFILES" ]; then
 fi
 for f in $CONSFILES; do
   out="$(cc "$f" consistency || true)"
-  if printf '%s' "$out" | grep -q "PROVED-ROOTS"; then
+  if has_match "PROVED-ROOTS" <<<"$out"; then
     CONSBAD=$((CONSBAD+1)); echo "      $f: $(printf '%s' "$out" | grep 'PROVED-ROOTS' | head -1)"
   fi
 done
@@ -1684,7 +1684,7 @@ else
 fi
 # ...and the one-hop case still holds, so the deep control did not replace it.
 ONE_HOP="$(cc examples/proof_patterns/composition_trusted_helper/src/main.con proof-status || true)"
-if printf '%s' "$ONE_HOP" | grep -q 'ASSUMES trusted boundaries (not proved): calls.dbl'; then
+if has_match 'ASSUMES trusted boundaries (not proved): calls.dbl' <<<"$ONE_HOP"; then
   ok "a PROVED claim one hop from a boundary still states its assumption"
 else
   no "composition_trusted_helper no longer discloses calls.dbl — the proved path lost its qualification"
@@ -1731,7 +1731,7 @@ def mkEntryC (q d : String) : Option ProofCoreEntry :=
 # ...and a closure crossing a TRUSTED boundary must still root. Its absence refused `calls.combine`
 # entirely, for a reason that had nothing to do with its evidence.
 TH_ROOTS="$(cc examples/proof_patterns/composition_trusted_helper/src/main.con subject-facts || true)"
-if printf '%s' "$TH_ROOTS" | grep -q 'shadow depRoot: REFUSED'; then
+if has_match 'shadow depRoot: REFUSED' <<<"$TH_ROOTS"; then
   no "composition_trusted_helper cannot root — an edge to a trusted callee has no node again"
 else
   ok "a closure crossing a TRUSTED boundary roots (trusted exclusions are leaf nodes)"
@@ -2061,7 +2061,7 @@ judge_negative_tests() {
     elif ! grep -qE "error:|error\(lean" <<<"$out"; then
       no "$label — exited $rc but produced no Lean diagnostic, so it failed for an unrelated reason"
     elif [ -n "$miss" ]; then
-      no "$label — rejected for the WRONG reason (missing /$miss/): $(printf '%s' "$out" | grep -m1 -E 'error' | cut -c1-180)"
+      no "$label — rejected for the WRONG reason (missing /$miss/): $(printf '%s' "$out" | grep -E 'error' | awk 'NR<=1' | cut -c1-180)"
     else
       ok "$label"
     fi
@@ -2411,7 +2411,7 @@ DRR="$(cc examples/proof_patterns/composition/src/main.con subject-facts | grep 
 # pass total while proving nothing. The transition it watches for is still worth printing.
 if [ -z "$DRR" ]; then
   echo "  note no root refusals in this fixture"
-elif printf '%s' "$DRR" | grep -q "unclassified"; then
+elif has_match "unclassified" <<<"$DRR"; then
   echo "  note refusals are UNCLASSIFIED (our state, not the program's) — step 6 stays blocked, correctly"
 else
   echo "  note PRECONDITION MET: refusals are no longer unclassified — real classifications have landed, so the root may now gate proved"
@@ -3545,12 +3545,12 @@ probe "two same-named models attesting DIFFERENT implementations are permitted" 
 # of the report — `--report impl-manifest` behaves the same and its gate does likewise. The report
 # CONTENT is what is asserted, so a nonzero exit must not abort the gate under `set -u`/pipefail.
 GEN="$(cc examples/proof_patterns/composition/src/main.con generated-implementations || true)"
-if printf '%s' "$GEN" | grep -q 'def calls_inc : Except DefinitionIdentityRefusal DefinitionIdentity'; then
+if has_match 'def calls_inc : Except DefinitionIdentityRefusal DefinitionIdentity' <<<"$GEN"; then
   ok "the generator emits typed opaque references (author selects a symbol, transcribes nothing)"
 else
   no "the generated-implementations report does not emit typed references"
 fi
-if printf '%s' "$GEN" | grep -qE 'emitted=[0-9]+ unscoped=0'; then
+if has_match -E 'emitted=[0-9]+ unscoped=0' <<<"$GEN"; then
   ok "every entry in that fixture has a scoped identity to reference (unscoped=0)"
 else
   no "the generator reported unscoped entries: $(printf '%s' "$GEN" | grep -oE 'emitted=[0-9]+ unscoped=[0-9]+')"
@@ -3981,7 +3981,7 @@ VH="$(printf '%s' "$CORR_LINES" | grep -c 'usable=no' || true)"
 if [ "$VH" = "2" ]; then
   ok "a subject WITH a theorem but unusable justification still reports usable=no (no-claim is not a hiding place)"
   CVD_FACTS="$(cc examples/crypto_verify_drifted/src/main.con subject-facts || true)"
-  if printf '%s' "$CVD_FACTS" | awk '/^v1:user:main.verify_tag/{p=1;next} /^v1:/{p=0} p' | grep -q 'shadow correspondence: matched=0 missing=1 .*usable=no'; then
+  if printf '%s' "$CVD_FACTS" | awk '/^v1:user:main.verify_tag/{p=1;next} /^v1:/{p=0} p' | has_match 'shadow correspondence: matched=0 missing=1 .*usable=no'; then
     ok "crypto_verify_drifted's verify_tag refuses its edge to the drifted compute_tag (missing=1)"
   else
     no "crypto_verify_drifted's verify_tag no longer refuses with missing=1 — a drifted callee is being justified by cryptoFns"
@@ -3994,7 +3994,7 @@ if [ "$VH" = "2" ]; then
   # separates them and all four fall to `missing`. If this ever reads `usable=yes`, the join has
   # gone back to matching names.
   DRIFT_FACTS="$(cc examples/elf_header_drifted/src/main.con subject-facts || true)"
-  if ! printf '%s' "$DRIFT_FACTS" | grep -q 'shadow correspondence: matched=0 missing=4'; then
+  if ! has_match 'shadow correspondence: matched=0 missing=4' <<<"$DRIFT_FACTS"; then
     no "elf_header/main_drifted no longer refuses with missing=4 — a different program's edges are being justified by elfFns again"
   else
     ok "elf_header/main_drifted refuses all 4 edges (cross-program substitution, caught by scope)"
@@ -4237,7 +4237,7 @@ DR="$(cc examples/proof_patterns/composition/src/main.con subject-facts | grep '
 
 # A leaf must ROOT: if everything refused, the integration would be indistinguishable from not
 # having run, and "0 roots" would look like success.
-printf '%s' "$DR" | grep -qE "shadow depRoot: [0-9a-f]{8}" \
+has_match -E "shadow depRoot: [0-9a-f]{8}" <<<"$DR" \
   && ok "a leaf subject produces a root (the builder is actually reachable)" \
   || no "no subject produced a root — refusal is expected for unclassified edges, but a leaf with no edges must succeed"
 

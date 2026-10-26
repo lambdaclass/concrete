@@ -474,8 +474,8 @@ for fx in ens_missing_theorem ens_unrelated_theorem ens_missing_with_proof_by en
   S="$B89/$fx/src/main.con"
   if [ ! -f "$S" ]; then echo "  FAIL $fx — fixture missing (vacuous)"; FAIL=$((FAIL+1)); continue; fi
   ens_block(){ sed -n '/=== Source Contracts/,/^=== /p' | awk '/  O1  ensures result == 42/{f=1} f{print} f&&/^$/{exit}'; }
-  CST="$("$COMPILER" "$S" --report contracts 2>/dev/null | ens_block | grep -m1 'status:' | sed 's/.*status:  //')"
-  AST="$("$COMPILER" "$S" --report audit 2>/dev/null | ens_block | grep -m1 'status:' | sed 's/.*status:  //')"
+  CST="$("$COMPILER" "$S" --report contracts 2>/dev/null | ens_block | grep 'status:' | awk 'NR<=1' | sed 's/.*status:  //')"
+  AST="$("$COMPILER" "$S" --report audit 2>/dev/null | ens_block | grep 'status:' | awk 'NR<=1' | sed 's/.*status:  //')"
   VST="$("$COMPILER" "$S" --report vcs --json 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print(','.join(v['status'] for v in d['vcs'] if v['kind']=='postcondition'))" 2>/dev/null)"
   LST="$("$COMPILER" "$S" --report obligation-ledger --json 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print(','.join(o['status'] for o in d['obligations'] if o['kind']=='postcondition'))" 2>/dev/null)"
   if [ "$VST" = "unproven" ] && [ "$LST" = "unproven" ] \

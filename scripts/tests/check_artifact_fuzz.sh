@@ -49,11 +49,11 @@ fuzz_one() {
   local body
   body="$(printf '%s' "$plan" | sed -n "/BEGIN ${kind}DRIVER/,/END ${kind}DRIVER/p" | sed '1d;$d')"
   # An empty body means the driver has no calls: not "clean", but "nothing was exercised".
-  printf '%s' "$body" | grep -q "acc = acc +" || { echo nodriver; return; }
+  has_match "acc = acc +" <<<"$body" || { echo nodriver; return; }
   printf '%s' "$body" >> "$work"
   local out; out="$("$COMPILER" "$work" --test 2>&1)"
-  if printf '%s' "$out" | grep -q "exited with code 134"; then echo trap
-  elif printf '%s' "$out" | grep -qE "^PASS|tests passed|^OK"; then echo clean
+  if has_match "exited with code 134" <<<"$out"; then echo trap
+  elif has_match -E "^PASS|tests passed|^OK" <<<"$out"; then echo clean
   else echo "error:$(printf '%s' "$out" | grep -oE 'error\[[a-z]+\]: \([A-Z0-9]+\)' | head -1)"
   fi
 }
@@ -166,10 +166,10 @@ fi
 
 echo "=== the plan states its own coverage ==="
 P="$("$COMPILER" examples/trap_semantics_gap/src/main.con --report artifact-fuzz 2>/dev/null)"
-printf '%s' "$P" | grep -qE "fuzzable functions: [0-9]+ of [0-9]+" \
+has_match -E "fuzzable functions: [0-9]+ of [0-9]+" <<<"$P" \
   && ok "the report states how many functions were fuzzable out of the total" \
   || no "no coverage ratio printed — a clean run would not say how little was tried"
-printf '%s' "$P" | grep -q "unproved  (NOT fuzzed" \
+has_match "unproved  (NOT fuzzed" <<<"$P" \
   && ok "the report distinguishes claimed / unclaimed / unproved" \
   || no "the report does not classify by claim — every trap would be ambiguous"
 

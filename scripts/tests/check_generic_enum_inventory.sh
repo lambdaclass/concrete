@@ -44,7 +44,7 @@ mapfile -t FILES < <(grep -rlE --include='*.con' "$PAT" . 2>/dev/null \
   | grep -vE '/\.lake/' \
   | while IFS= read -r f; do
       # exclude files whose only generic-enum matches are Option/Result
-      if grep -oE "$PAT" "$f" | grep -qvE 'enum (Copy |pub )*(Option|Result)[[:space:]]*<'; then echo "$f"; fi
+      if grep -oE "$PAT" "$f" | has_match -vE 'enum (Copy |pub )*(Option|Result)[[:space:]]*<'; then echo "$f"; fi
     done | sort -u)
 
 if [ "${#FILES[@]}" -eq 0 ]; then

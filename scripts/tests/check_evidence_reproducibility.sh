@@ -99,7 +99,7 @@ echo "=== no absolute path appears in any identity ==="
 # an identity that embedded a path would be reproducible only by accident of this machine's layout.
 JOIN="$("$BIN" examples/elf_header/src/main.con --report attestation-join 2>/dev/null || true)"
 IDS="$(printf '%s' "$JOIN" | grep -E '^(subject|dependency)' | awk -F'\t' '{print $2, $3, $4, $5, $6}' || true)"
-if printf '%s' "$IDS" | grep -qE '/|\\\\'; then
+if has_match -E '/|\\\\' <<<"$IDS"; then
   no "an identity component contains a path separator — identity is tracking the checkout"
   printf '%s' "$IDS" | grep -E '/|\\\\' | head -3 | sed 's/^/      /'
 else
