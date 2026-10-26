@@ -34,7 +34,7 @@ Surface forms removed:
 inductive CallSpace where
   | free
   | method
-deriving Repr, Inhabited, BEq, DecidableEq
+deriving Repr, Inhabited, BEq, DecidableEq, Hashable
 
 /-- A local binder or local reference in Core (R-0492 step 3): its Core name (what every backend
     and printer spells) and, for a binding of the source program, the `LocalId` the local walk

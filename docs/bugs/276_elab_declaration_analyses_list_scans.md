@@ -2,12 +2,12 @@
 
 <!-- bug-ledger
 summary: Elab's program-level declaration analyses (top-level function collisions, ambiguous type names, import spellings) scanned or deduplicated lists per declaration, its per-function results were appended to the list built so far, and a call looked its callee up in a list, so a program of n declarations took time n² to elaborate (10000 functions: 3689 ms). Found by the R-0550 scaling gate. Class 17.
-coverage: `check_compile_scaling.sh` measures the `functions`, `call-chain`, `structs` and `enums` shapes' `elaborate` stage and reports it EXCLUDED under this bug on every run; the fix removes the exclusion, and the gate then holds the stage to its budget and to near-linear growth
+coverage: `check_compile_scaling.sh` judges the `functions`, `call-chain`, `structs` and `enums` shapes' `elaborate` stage against its budget and near-linear growth: this fix removes the stage's exclusions under this bug, and the gate fails the pre-fix compiler on all four
 class: 17 — Elab's program-level declaration analyses scan lists per declaration
 silent: no
 -->
 
-**Status:** OPEN
+**Status:** FIXED (branch `wip/perf-276-v2`)
 **Found:** 2026-10-26, building the compile-time scaling gate (R-0550, exit 2o): the gate's generated shapes, timed per stage with `--emit-trace-json` at 10b81a46.
 **Severity:** loud (performance). Compile time only: never wrong code, a refusal or a crash; a program of this shape compiles, slowly.
 
@@ -30,9 +30,66 @@ A linear stage doubles with the size; these grow about fourfold or more per doub
 
 Each analysis keys a map or set by name once per program; results accumulate in an `Array`.
 
+## Fix
+
+Three helpers in `Elab/Elab.lean` replace the n² primitives: `eraseDupsHashed` keeps the first
+occurrence of each element, in order, exactly as `List.eraseDups`, with one hash-set pass (every
+`.eraseDups` of the file now calls it; `CallSpace` derives `Hashable` for the one site that needed
+it), and `firstWinsMap` answers as `List.lookup` (first entry of a key wins); `firstByKeyHashed`
+replaces the two "prepend unless `acc.any` holds the key" folds (`ownSpellings`, `localOwners`).
+
+- `qualifyCollidingTopLevelFns`: each module's free-function names are a set and, per name, the
+  first owning module and whether a second distinct module owns it are one table, so "a free
+  function another module also owns" is a lookup, where it asked `owners.any` per owner; the
+  per-module rename maps are hash maps.
+- `ambiguousTypeNames`: the declarations and names deduplicated in one pass, each name's count
+  from one map.
+- `importSpellingCollisions`: a module with no imports no longer computes the program's spellings
+  (`coreDefinitionSpellings`), which every module computed for every module.
+- `elabModule`: the per-function results are consed and reversed once; the call tables the callee
+  resolvers read (`specCallIds`, `localCallIds`, `importedCallIds`, `importedMethodCallIds`,
+  `localMethodCallIds`) are first-wins hash maps built once; `ElabEnv.fnSigs` and `allFnSigPairs`
+  are first-wins hash maps (`lookupFnSig`, the `fnRef` lookups) and `freeFnNames` a hash set.
+  These fields are written only where `elabModule` builds the environment.
+
+The `++ [` ratchet (`check_no_quadratic_append.sh`) for `Elab.lean` goes from 56 to 53 (54 in the
+tree before this fix).
+
+## Measurements
+
+`elaborate` stage in ms (`--emit-trace-json`, fastest of 3 runs), dev host (fede-256gb), before
+(the compiler built at b5040d53) and after (built from the tree of d7e102d1, this fix on main
+91ce358b with bug 275's fix below it; the build had no other modification):
+
+| n | `functions` before | after | `call-chain` before | after | `structs` before | after | `enums` before | after |
+|---|---|---|---|---|---|---|---|---|
+| 2500 | 149 | 7 | 158 | 9 | 75 | 2 | 79 | 2 |
+| 5000 | 748 | 14 | 849 | 18 | 397 | 4 | 395 | 5 |
+| 10000 | 3135 | 38 | 4202 | 51 | 2068 | 10 | 2398 | 11 |
+| 20000 | 14080 | 122 | 18464 | 162 | 8215 | 29 | 10117 | 33 |
+
+The stage's allocation count (`alloc_heartbeats`) is exactly linear (`functions`: 1105543,
+2210543, 4420543, 8840543 at 5000 to 40000); gdb samples at 40000 functions show no list search, so
+we attribute the time's excess over linear at 20000 and above to memory traffic (an inference, not
+a measurement). The R-0550 gate
+(`compile_scaling.py` and its budgets at fe9ce031, origin/wip/r0550-scaling-gate-v2), run with
+this bug's and bug 275's exclusions removed, passes the four shapes' `elaborate` stage (x12.7,
+x12.8, x5.0, x5.5 from 1000 to 10000) and fails all four on the compiler before this fix
+(bug 275's build: x164.3, x161.3, x162.8, x184.8 in time; the first two also in allocations).
+
+`--emit-core`, `--emit-ssa` and `--emit-llvm` (stdout, stderr and exit status) of every `.con`
+under `tests/programs` and `examples` (91ce358b's corpus) and of twelve generated scaling shapes
+at size 60, and `--report caps|proof-status|fingerprints|obligations|traceability|proof-deps` of
+every `.con` under `examples`, are byte-identical between the compiler built at 91ce358b and this
+fix (d7e102d1).
+
+## Regression gate
+
+The R-0550 gate (`check_compile_scaling.sh`, on main since 9d8182ea) held the four shapes' `elaborate` stage as exclusions under this bug; the fix removes them from `compile_scaling_budgets.tsv`. With them removed (and bug 275's, below this fix) the gate passes all four on this fix (x13.0, x12.8, x5.0, x5.5 from 1000 to 10000) and fails all four on main's compiler (x159.5, x160.8, x144.9, x171.1 in time; the first two also in allocations). The bounded `run_tests.sh` leg this branch carried while the gate was unlanded is dropped as duplicate coverage.
+
 ## Containment while open
 
-Loud only. The scaling gate names the stage as an exclusion under this bug, so its gap is printed on every run rather than silent; the gate's other stages of the shape stay judged. A user splits such a module or nest.
+Loud only. The scaling gate named the stage as an exclusion under this bug, so its gap was printed on every run rather than silent.
 
 ## Structural cause
 
