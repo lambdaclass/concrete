@@ -73,8 +73,8 @@ rule changes in one place.
   parts is reported as uncovered.
 - Bound a command with `bounded_run` (`scripts/tests/lib/bounded.sh`), never GNU `timeout`: the
   macOS job has no `timeout`, and `bounded_run` reports a second timeout as INCOMPLETE, not a pass.
-- A ledger `coverage:` line names only the gates that cover the bug: the filing check reads a
-  `.sh` name there as the coverage claim and requires the script to exist.
+- A ledger `coverage:` line names only the gates that cover the bug: the filing check accepts a
+  `.sh` name there as the coverage claim without running or opening it.
 - File in the migrated ledger format (`scripts/gen/new_bug.sh`: the `bug-ledger` block, a
   `changelog.d/` fragment, a `discovery.tsv` row), then regenerate with
   `scripts/gen/bug_ledger.py --write` and `scripts/gen/bug_dashboard.py --write`.
