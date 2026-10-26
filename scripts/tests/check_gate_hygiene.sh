@@ -494,20 +494,23 @@ echo "=== no pipe into a short-circuiting grep or head before a match (bug 283) 
 # inside an `eval` or `bash -c` string is read as the code it is. The blanked views over-approximate:
 # `grep -e -q` (a pattern spelled like the option) is flagged too; spell such a pattern otherwise.
 _QG='(^|[^|])\|&?[[:space:]]*[ef]?grep([[:space:]]+(-[A-Za-z0-9]+|--[a-z-]+(=[^[:space:]]*)?))*[[:space:]]+(-[A-Za-z0-9]*[qmlL][A-Za-z0-9]*([[:space:]]|$)|--(quiet|silent|max-count|files-with))'
-_QG_ANY='(^|[^|])\|&?[[:space:]]*[ef]?grep([[:space:]][^|;&]*)?[[:space:]](-[A-Za-z0-9]*[qmlL][A-Za-z0-9]*|--(q|s|m|files-with|c)[a-z-]*)([[:space:]=]|$)'
+_QG_ANY='(^|[^|])\|&?[[:space:]]*[ef]?grep([[:space:]][^|;&]*)?[[:space:]](-[A-Za-z0-9]*[qmlLV]|--(q|s|m|files-with|c|v|he))'
 _HM='(^|[^|])\|&?[[:space:]]*(head([[:space:]][^;&]*)?|sed[[:space:]][^|;&]*q[^;&]*)\|&?[[:space:]]*has_match([[:space:]]|$)'
-blank_quotes() { # each line with every quoted string replaced by Q (escapes and both quote kinds)
+blank_quotes() { # each line with every quoted string replaced by Q, or by its text when that is one
+                 # dash-led word (a quoted option, `grep "-q"`, is still an option)
   awk 'BEGIN { q = sprintf("%c", 39) }
        { s = $0; n = length(s); out = ""; i = 1
          while (i <= n) {
            c = substr(s, i, 1)
            if (c == "\\") { out = out substr(s, i, 2); i += 2; continue }
-           if (c == q) { j = index(substr(s, i + 1), q); out = out "Q"; if (j == 0) break; i += j + 1; continue }
+           if (c == q) { j = index(substr(s, i + 1), q); if (j == 0) { out = out "Q"; break }
+             out = out word(substr(s, i + 1, j - 1)); i += j + 1; continue }
            if (c == "\"") { k = i + 1
              while (k <= n) { d = substr(s, k, 1); if (d == "\\") { k += 2; continue }; if (d == "\"") break; k++ }
-             out = out "Q"; i = k + 1; continue }
+             out = out word(substr(s, i + 1, k - i - 1)); i = k + 1; continue }
            out = out c; i++ }
-         print out }'
+         print out }
+       function word(t) { return (t ~ /^-[^ \t]*$/) ? t : "Q" }'
 }
 quoted_texts() { # FILE:LINE:text -> FILE:LINE:<the text inside each quoted string>, one per line
   awk 'BEGIN { q = sprintf("%c", 39) }
@@ -578,6 +581,12 @@ printf '%s\n' "make_report $_P $_G PAT --qui" > "$_sc_dir/abbreviated_long.sh"
 printf '%s\n' "make_report $_P $_G --q PAT" > "$_sc_dir/shortest_quiet.sh"
 printf '%s\n' "make_report $_P $_G --s PAT" > "$_sc_dir/shortest_silent.sh"
 printf '%s\n' "make_report $_P $_G --m=1 PAT" > "$_sc_dir/shortest_max_count.sh"
+printf '%s\n' "make_report $_P $_G -m+1 PAT" > "$_sc_dir/signed_max_count.sh"
+printf '%s\n' "make_report $_P $_G -V PAT" > "$_sc_dir/version.sh"
+printf '%s\n' "make_report $_P $_G --he" > "$_sc_dir/help_abbrev.sh"
+printf '%s\n' "make_report $_P $_G \"-q\" PAT" > "$_sc_dir/dq_option.sh"
+printf '%s\n' "make_report $_P $_G '--q' PAT" > "$_sc_dir/sq_long_option.sh"
+printf '%s\n' "make_report $_P $_G -q;x" > "$_sc_dir/option_then_semicolon.sh"
 printf '%s\n' "make_report $_P$_P $_G -q x f" > "$_sc_dir/or_list.sh"
 printf '%s\n' "has_match -E 'a|b' <<<\"\$OUT\" && ok x || no x" > "$_sc_dir/herestring.sh"
 printf '%s\n' "make_report $_P has_match -F x" > "$_sc_dir/drained.sh"
@@ -589,7 +598,7 @@ printf '%s\n' "# make_report $_P $_G -q x" > "$_sc_dir/comment.sh"
 for c in printf_q negated stream_qE split_opts continued backslash max_count files_with long_quiet egrep head_then_match sedq_then_match \
          pattern_arg_then_q context_arg_then_q pattern_then_q quoted_alt_then_q in_eval_string head_filter_match \
          quoted_sedq_then_match in_eval_pattern_then_q in_dq_string abbreviated_long shortest_quiet shortest_silent \
-         shortest_max_count; do
+         shortest_max_count signed_max_count version help_abbrev dq_option sq_long_option option_then_semicolon; do
   if [ -n "$(pipe_into_short_circuit "$_sc_dir/$c.sh")" ]; then ok "control: a pipe into a short-circuiting consumer ($c) is flagged"
   else no "control: a pipe into a short-circuiting consumer ($c) was NOT flagged (the scan is inert)"; fi
 done
@@ -636,7 +645,9 @@ for form in "2|has_match -E '(' <<<x" "137|printf x | has_match -E '('" \
             "137|printf x | has_match -E '(' && echo verdict=forbidden || echo verdict=clean" \
             "137|trap ':' TERM; printf x | has_match -E '(' && echo verdict=forbidden || echo verdict=clean" \
             "2|has_match -q x <<<x" "137|seq 1 500000 | has_match -e '^1\$' -q" "137|seq 1 500000 | has_match '^1\$' --max-count=1" \
-            "137|seq 1 500000 | has_match '^1\$' --qui && echo verdict=forbidden || echo verdict=clean"; do
+            "137|seq 1 500000 | has_match '^1\$' --qui && echo verdict=forbidden || echo verdict=clean" \
+            "137|seq 1 500000 | has_match -V absent && echo verdict=forbidden || echo verdict=clean" \
+            "2|has_match x /etc/hostname <<<x" "2|has_match -e x /etc/hostname <<<x"; do
   want="${form%%|*}"; form="${form#*|}"
   erc=0; eout="$(bash -c "source '$_HMLIB'; set -o pipefail; $form; echo reached" 2>&1)" || erc=$?
   if [ "$erc" = "$want" ] && ! grep -qE '^(reached|verdict=)' <<<"$eout" && grep -qF 'has_match:' <<<"$eout"; then
@@ -644,7 +655,7 @@ for form in "2|has_match -E '(' <<<x" "137|printf x | has_match -E '('" \
   else no "control: an error or a refused option was not stopped as status $want ($form; rc=$erc): $(tr '\n' ' ' <<<"$eout")"; fi
 done
 # Options that take an argument are read past, so a pattern spelled like a refused option is not one.
-if bash -c "source '$_HMLIB'; has_match -equiet <<<'xquietx' && has_match -A 1 -e x <<<x && ! has_match -Fe m <<<x && has_match --regexp -q <<<'a-qb' && has_match --fixed-strings --regexp=. <<<'a.b'" 2>/dev/null; then
+if bash -c "source '$_HMLIB'; set -o pipefail; seq 1 500000 | has_match -f /dev/null; [ \$? = 1 ] && has_match -equiet <<<'xquietx' && has_match -A 1 -e x <<<x && ! has_match -Fe m <<<x && has_match --regexp -q <<<'a-qb' && has_match --fixed-strings --regexp=. <<<'a.b'" 2>/dev/null; then
   ok "control: has_match reads option arguments as arguments (-equiet, -A 1, -Fe m, --regexp -q, --regexp=.)"
 else no "control: has_match refused or misread an option argument"; fi
 rm -rf "$_sc_dir"

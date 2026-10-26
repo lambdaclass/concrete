@@ -46,13 +46,15 @@ in practice (payload size and match position matter), but none is structurally s
 ## Fix
 
 One helper, `has_match [GREP_OPTION...] PATTERN` (`scripts/tests/lib/has_match.sh`). It answers
-what `grep -q` answers but reads all of its input first (`grep -c` into a capture; not
-`grep >/dev/null`, which GNU grep short-circuits like `-q`), so the producer always finishes writing
+what `grep -q` answers but reads all of its input first (`grep -c` into a capture, not
+`grep >/dev/null`, which GNU grep short-circuits like `-q`; then `cat` drains whatever grep still
+left, as an empty `-f` pattern list does), so the producer always finishes writing
 and `pipefail` still reports a producer that really failed. Status 0 is a match and 1 no match.
 Anything else is no answer: a grep error (an invalid pattern, an unreadable input) or an option that
-would stop grep early or replace its answer (`-q`, `-m`, `-l`, `-L`, `-c` anywhere in the arguments,
+would stop grep early or replace its answer (`-q`, `-m`, `-l`, `-L`, `-c`, `-V` anywhere in the arguments,
 option arguments such as `-e PAT` and `-A 2` read past, and any long option outside a short list of
-full spellings, since GNU grep takes abbreviations like `--qui`) prints the reason
+full spellings, since GNU grep takes abbreviations like `--qui`), or a file operand (it reads
+standard input only, so the drain never reads the caller's own input) prints the reason
 and stops the script: `exit 2` from the script's own shell, and SIGKILL to the script (status 137)
 from a pipeline stage or a substitution, whose own exit a negated leg would read as "absent" and
 whose TERM a script could trap and carry on past. So neither a positive nor a negated leg can read
@@ -82,16 +84,18 @@ pipe into grep/egrep/fgrep with `-q`, `-m`, `-l`, `-L` or a long form or abbrevi
 anywhere in its arguments, and for `| head` or `| sed …q` feeding
 has_match; it also requires every script that calls has_match to load it (an undefined has_match is
 status 127, which a negated leg would read as "absent"). It replaces the elaborator-only leg. Its
-controls: twenty-five hazardous fixtures are flagged (among them `grep -e PAT -q`, `grep PAT -q`,
-`grep 'a|b' -q`, `grep PAT --qui`, the shortest abbreviations `--q`, `--s`, `--m=1`, legs inside eval strings, `head -1 | sed … | has_match`,
+controls: thirty-one hazardous fixtures are flagged (among them `grep -e PAT -q`, `grep PAT -q`,
+`grep 'a|b' -q`, `grep PAT --qui`, the shortest abbreviations `--q`, `--s`, `--m=1`, `-m+1`, `-V`,
+`--he`, a quoted `"-q"` or `'--q'`, `-q;x`, legs inside eval strings, `head -1 | sed … | has_match`,
 `sed '5q' | has_match`) and nine safe ones
 (here-string, drained pipe, `||`, file operand, `grep -c`, `awk 'NR<=1'`, heredoc data, comment, an
 option spelled inside a quoted argument) are not; a 500000-line producer reproduces status 141 and the
 inverted negated verdict through the old pipe and gets the right answer from has_match through a
 pipe and a here-string, with a missing pattern still 1 and a failing producer still failing the
-pipeline; eight error and refused-option forms (including a script that traps TERM, `-q` placed
-after `-e PAT`, and `--qui`) stop the script with the documented status and no verdict; and option
-arguments that look like refused options (`-equiet`, `-Fe m`, `--regexp -q`) are read as arguments.
+pipeline; eleven error and refused forms (including a script that traps TERM, `-q` placed after
+`-e PAT`, `--qui`, `-V`, and a file operand) stop the script with the documented status and no
+verdict; an empty `-f` pattern list on a large producer answers 1, not 141; and option arguments
+that look like refused options (`-equiet`, `-Fe m`, `--regexp -q`) are read as arguments.
 The blanked views over-approximate: a pattern spelled like a refused option (`grep -e -q`) is
 flagged too, which is loud and spelled around, never silent.
 
