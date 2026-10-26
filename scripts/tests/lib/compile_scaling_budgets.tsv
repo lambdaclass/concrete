@@ -34,12 +34,12 @@
 # --measure scales each run to the session's quietest rate and keeps the fastest; that removes the
 # variation between runs, not load lasting the whole session, so it refuses a host whose load average
 # is above measure_max_load (32 threads: 8 is a quarter busy) and stamps the load it ran at.
-# Declaration and nesting shapes run at 1000 and 10000 while the stages excluded below are open;
-# their sizes move to 10^4 and 10^5 with the fixes. lets-if and lets-match run at 4000 and 40000
+# Declaration and nesting shapes run at 10^4 and 10^5 with their whole compiles since bugs 280,
+# 286, 288 - 293 (R-0550 follow-up); functions and call-chain are compiled natively only by the
+# other shapes (clang alone takes 80 - 130 s on 10^5 functions). lets-if and lets-match run at
+# 4000 and 40000
 # (their native compile at 10^5 takes 30 - 40 s); lets-while at 2000 and 20000, front end only (bug 270).
-# measured: commit 10b81a467a85855d9b60186ac2c98bf7a6219c3b on concrete-ci-2, AMD Ryzen 9 7950X3D 16-Core Processor, 32 threads, 2026-10-26, 3 runs (median), budget = max(4 x median, median + 200ms)
-# measured: commit 43a65e3e9c3b814ae4f7476af59052c5c1eda528 on concrete-ci-2, AMD Ryzen 9 7950X3D 16-Core Processor, 32 threads, 2026-10-26, 3 runs (median), budget = max(4 x median, median + 200ms) -- shapes: nested-ifs
-# measured: commit a37ec8ee5fc44e3f16a4e15fda881f05ccef40f5 on concrete-ci-2, AMD Ryzen 9 7950X3D 16-Core Processor, 32 threads, 2026-10-27, 3 runs (fastest run, each scaled to the quietest instruction rate of the session; load average 1.3 at the end), budget = max(4 x t, t + 200ms) -- shapes: array-const, array-repeat, array-distinct, array-writes, assignments, chained-lets, many-locals, lets-if, lets-while, lets-match
+# measured: commit a37ec8ee5fc44e3f16a4e15fda881f05ccef40f5 on concrete-ci-2, AMD Ryzen 9 7950X3D 16-Core Processor, 32 threads, 2026-10-27, 3 runs (fastest run, each scaled to the quietest instruction rate of the session; load average 1.3 at the end), budget = max(4 x t, t + 200ms)
 param	exp	1.8
 param	hb_exp	1.2
 param	floor_ms	2
@@ -66,115 +66,15 @@ shape	many-locals	10000,100000	trace,llvm,native
 shape	lets-if	4000,40000	trace,llvm,native
 shape	lets-while	2000,20000	core
 shape	lets-match	4000,40000	trace,llvm,native
-shape	nested-parens	1000,10000	trace
-shape	nested-ifs	10000,100000	trace
-shape	functions	1000,10000	trace
-shape	call-chain	1000,10000	trace
-shape	structs	1000,10000	trace
-shape	enums	1000,10000	trace
+shape	nested-parens	10000,100000	trace,llvm,native
+shape	nested-ifs	10000,100000	trace,llvm,native
+shape	functions	10000,100000	trace,llvm
+shape	call-chain	10000,100000	trace,llvm
+shape	structs	10000,100000	trace,llvm,native
+shape	enums	10000,100000	trace,llvm,native
 exclude	lets-while	monomorphize,lower,llvm,native	bug 270 (open): Lower gives every loop a header phi for every binding in scope, so this shape's lower stage is quadratic (4.9, 18.7 and 51.7 s at 1000, 2000 and 4000 at b5040d53); --emit-trace-json runs Lower, so monomorphize is not timed apart from it, and the front end is judged through --emit-core
-exclude	nested-ifs	llvm,native	not measured yet: bug 286 is fixed, so every in-compiler stage of this shape is judged; its whole compiles join the budgeted set when they are measured on the CI host (--measure)
-exclude	nested-parens	llvm,native	not measured yet: bug 280 is fixed, so every stage of this shape is judged; its whole compiles join the budgeted set when they are measured on the CI host (--measure)
-exclude	functions	llvm,native	not run: every whole compile of this shape contains the excluded stages above; it runs with their fixes
-exclude	call-chain	llvm,native	not run: every whole compile of this shape contains the excluded stages above; it runs with their fixes
-exclude	structs	llvm,native	not run: every whole compile of this shape contains the excluded stages above; it runs with their fixes
-exclude	enums	llvm,native	not run: every whole compile of this shape contains the excluded stages above; it runs with their fixes
-budget	nested-parens	1000	parse	201
-budget	nested-parens	1000	resolve-files	200
-budget	nested-parens	1000	resolve	200
-budget	nested-parens	1000	check	210
-budget	nested-parens	1000	elaborate	202
-budget	nested-parens	1000	coreCheck	200
-budget	nested-parens	1000	monomorphize	200
-budget	nested-parens	1000	lower	202
-budget	nested-parens	10000	parse	213
-budget	nested-parens	10000	resolve-files	200
-budget	nested-parens	10000	resolve	201
-budget	nested-parens	10000	check	4156
-budget	nested-parens	10000	elaborate	784
-budget	nested-parens	10000	coreCheck	201
-budget	nested-parens	10000	monomorphize	205
-budget	nested-parens	10000	lower	221
-budget	nested-ifs	10000	parse	236
-budget	nested-ifs	10000	resolve-files	200
-budget	nested-ifs	10000	resolve	207
-budget	nested-ifs	10000	check	243
-budget	nested-ifs	10000	elaborate	237
-budget	nested-ifs	10000	coreCheck	204
-budget	nested-ifs	10000	monomorphize	222
-budget	nested-ifs	10000	lower	1224
-budget	nested-ifs	100000	parse	1592
-budget	nested-ifs	100000	resolve-files	200
-budget	nested-ifs	100000	resolve	704
-budget	nested-ifs	100000	check	2124
-budget	nested-ifs	100000	elaborate	2188
-budget	nested-ifs	100000	coreCheck	262
-budget	nested-ifs	100000	monomorphize	1992
-budget	nested-ifs	100000	lower	21452
-budget	functions	1000	parse	205
-budget	functions	1000	resolve-files	200
-budget	functions	1000	resolve	202
-budget	functions	1000	check	204
-budget	functions	1000	elaborate	230
-budget	functions	1000	coreCheck	200
-budget	functions	1000	monomorphize	202
-budget	functions	1000	lower	207
-budget	functions	10000	parse	252
-budget	functions	10000	resolve-files	200
-budget	functions	10000	resolve	220
-budget	functions	10000	check	860
-budget	functions	10000	elaborate	18104
-budget	functions	10000	coreCheck	206
-budget	functions	10000	monomorphize	224
-budget	functions	10000	lower	1508
-budget	call-chain	1000	parse	209
-budget	call-chain	1000	resolve-files	200
-budget	call-chain	1000	resolve	203
-budget	call-chain	1000	check	212
-budget	call-chain	1000	elaborate	254
-budget	call-chain	1000	coreCheck	206
-budget	call-chain	1000	monomorphize	203
-budget	call-chain	1000	lower	212
-budget	call-chain	10000	parse	348
-budget	call-chain	10000	resolve-files	200
-budget	call-chain	10000	resolve	221
-budget	call-chain	10000	check	2516
-budget	call-chain	10000	elaborate	26776
-budget	call-chain	10000	coreCheck	3944
-budget	call-chain	10000	monomorphize	276
-budget	call-chain	10000	lower	3596
-budget	structs	1000	parse	209
-budget	structs	1000	resolve-files	200
-budget	structs	1000	resolve	201
-budget	structs	1000	check	203
-budget	structs	1000	elaborate	222
-budget	structs	1000	coreCheck	200
-budget	structs	1000	monomorphize	205
-budget	structs	1000	lower	202
-budget	structs	10000	parse	4452
-budget	structs	10000	resolve-files	200
-budget	structs	10000	resolve	229
-budget	structs	10000	check	1408
-budget	structs	10000	elaborate	10788
-budget	structs	10000	coreCheck	202
-budget	structs	10000	monomorphize	3224
-budget	structs	10000	lower	1552
-budget	enums	1000	parse	208
-budget	enums	1000	resolve-files	200
-budget	enums	1000	resolve	212
-budget	enums	1000	check	202
-budget	enums	1000	elaborate	221
-budget	enums	1000	coreCheck	200
-budget	enums	1000	monomorphize	204
-budget	enums	1000	lower	202
-budget	enums	10000	parse	3848
-budget	enums	10000	resolve-files	200
-budget	enums	10000	resolve	6664
-budget	enums	10000	check	1648
-budget	enums	10000	elaborate	12244
-budget	enums	10000	coreCheck	201
-budget	enums	10000	monomorphize	3324
-budget	enums	10000	lower	1496
+exclude	functions	native	not run: clang's own cost on 10^5 one-line functions (80 - 130 s on the dev host at bug 288's fix, growing x11 - x12 from 10^4) is outside the compiler and over the ceiling a gate run can afford; --emit-llvm times every stage of the compiler for this shape
+exclude	call-chain	native	not run: clang's own cost on 10^5 one-line functions (80 - 130 s on the dev host at bug 288's fix, growing x11 - x12 from 10^4) is outside the compiler and over the ceiling a gate run can afford; --emit-llvm times every stage of the compiler for this shape
 budget	array-const	10000	parse	202
 budget	array-const	10000	resolve-files	200
 budget	array-const	10000	resolve	200
@@ -359,6 +259,122 @@ budget	lets-match	40000	monomorphize	1816
 budget	lets-match	40000	lower	11093
 budget	lets-match	40000	llvm	21445
 budget	lets-match	40000	native	26848
+budget	nested-parens	10000	parse	209
+budget	nested-parens	10000	resolve-files	200
+budget	nested-parens	10000	resolve	200
+budget	nested-parens	10000	check	205
+budget	nested-parens	10000	elaborate	204
+budget	nested-parens	10000	coreCheck	200
+budget	nested-parens	10000	monomorphize	205
+budget	nested-parens	10000	lower	227
+budget	nested-parens	10000	llvm	603
+budget	nested-parens	10000	native	1198
+budget	nested-parens	100000	parse	310
+budget	nested-parens	100000	resolve-files	200
+budget	nested-parens	100000	resolve	206
+budget	nested-parens	100000	check	250
+budget	nested-parens	100000	elaborate	244
+budget	nested-parens	100000	coreCheck	203
+budget	nested-parens	100000	monomorphize	252
+budget	nested-parens	100000	lower	1221
+budget	nested-parens	100000	llvm	3211
+budget	nested-parens	100000	native	3824
+budget	nested-ifs	10000	parse	227
+budget	nested-ifs	10000	resolve-files	200
+budget	nested-ifs	10000	resolve	205
+budget	nested-ifs	10000	check	235
+budget	nested-ifs	10000	elaborate	222
+budget	nested-ifs	10000	coreCheck	203
+budget	nested-ifs	10000	monomorphize	214
+budget	nested-ifs	10000	lower	780
+budget	nested-ifs	10000	llvm	1615
+budget	nested-ifs	10000	native	2409
+budget	nested-ifs	100000	parse	1484
+budget	nested-ifs	100000	resolve-files	200
+budget	nested-ifs	100000	resolve	744
+budget	nested-ifs	100000	check	2112
+budget	nested-ifs	100000	elaborate	2268
+budget	nested-ifs	100000	coreCheck	259
+budget	nested-ifs	100000	monomorphize	2053
+budget	nested-ifs	100000	lower	24059
+budget	nested-ifs	100000	llvm	30062
+budget	nested-ifs	100000	native	32472
+budget	functions	10000	parse	247
+budget	functions	10000	resolve-files	200
+budget	functions	10000	resolve	211
+budget	functions	10000	check	227
+budget	functions	10000	elaborate	244
+budget	functions	10000	coreCheck	205
+budget	functions	10000	monomorphize	214
+budget	functions	10000	lower	258
+budget	functions	10000	llvm	1221
+budget	functions	100000	parse	1706
+budget	functions	100000	resolve-files	200
+budget	functions	100000	resolve	1000
+budget	functions	100000	check	1277
+budget	functions	100000	elaborate	3420
+budget	functions	100000	coreCheck	608
+budget	functions	100000	monomorphize	1408
+budget	functions	100000	lower	3242
+budget	functions	100000	llvm	16874
+budget	call-chain	10000	parse	256
+budget	call-chain	10000	resolve-files	200
+budget	call-chain	10000	resolve	212
+budget	call-chain	10000	check	239
+budget	call-chain	10000	elaborate	246
+budget	call-chain	10000	coreCheck	209
+budget	call-chain	10000	monomorphize	219
+budget	call-chain	10000	lower	264
+budget	call-chain	10000	llvm	1623
+budget	call-chain	100000	parse	2419
+budget	call-chain	100000	resolve-files	200
+budget	call-chain	100000	resolve	1503
+budget	call-chain	100000	check	2160
+budget	call-chain	100000	elaborate	5225
+budget	call-chain	100000	coreCheck	1309
+budget	call-chain	100000	monomorphize	3093
+budget	call-chain	100000	lower	4791
+budget	call-chain	100000	llvm	21287
+budget	structs	10000	parse	233
+budget	structs	10000	resolve-files	200
+budget	structs	10000	resolve	214
+budget	structs	10000	check	208
+budget	structs	10000	elaborate	212
+budget	structs	10000	coreCheck	202
+budget	structs	10000	monomorphize	202
+budget	structs	10000	lower	202
+budget	structs	10000	llvm	614
+budget	structs	10000	native	1412
+budget	structs	100000	parse	1387
+budget	structs	100000	resolve-files	207
+budget	structs	100000	resolve	1430
+budget	structs	100000	check	1207
+budget	structs	100000	elaborate	1790
+budget	structs	100000	coreCheck	376
+budget	structs	100000	monomorphize	340
+budget	structs	100000	lower	344
+budget	structs	100000	llvm	5424
+budget	structs	100000	native	6418
+budget	enums	10000	parse	236
+budget	enums	10000	resolve-files	200
+budget	enums	10000	resolve	226
+budget	enums	10000	check	205
+budget	enums	10000	elaborate	212
+budget	enums	10000	coreCheck	202
+budget	enums	10000	monomorphize	202
+budget	enums	10000	lower	202
+budget	enums	10000	llvm	822
+budget	enums	10000	native	1612
+budget	enums	100000	parse	987
+budget	enums	100000	resolve-files	200
+budget	enums	100000	resolve	1640
+budget	enums	100000	check	424
+budget	enums	100000	elaborate	948
+budget	enums	100000	coreCheck	252
+budget	enums	100000	monomorphize	248
+budget	enums	100000	lower	263
+budget	enums	100000	llvm	9082
+budget	enums	100000	native	7822
 hbbudget	array-const	10000	parse	563513
 hbbudget	array-const	10000	resolve-files	20
 hbbudget	array-const	10000	resolve	25213
@@ -503,6 +519,102 @@ hbbudget	lets-match	40000	elaborate	20103875
 hbbudget	lets-match	40000	coreCheck	2025065
 hbbudget	lets-match	40000	monomorphize	7678247
 hbbudget	lets-match	40000	lower	51114869
+hbbudget	nested-parens	10000	parse	1063432
+hbbudget	nested-parens	10000	resolve-files	20
+hbbudget	nested-parens	10000	resolve	37712
+hbbudget	nested-parens	10000	check	338018
+hbbudget	nested-parens	10000	elaborate	313158
+hbbudget	nested-parens	10000	coreCheck	25077
+hbbudget	nested-parens	10000	monomorphize	137623
+hbbudget	nested-parens	10000	lower	1138174
+hbbudget	nested-parens	100000	parse	10625935
+hbbudget	nested-parens	100000	resolve-files	20
+hbbudget	nested-parens	100000	resolve	375212
+hbbudget	nested-parens	100000	check	3375518
+hbbudget	nested-parens	100000	elaborate	3125658
+hbbudget	nested-parens	100000	coreCheck	250077
+hbbudget	nested-parens	100000	monomorphize	1375123
+hbbudget	nested-parens	100000	lower	11375674
+hbbudget	nested-ifs	10000	parse	3963714
+hbbudget	nested-ifs	10000	resolve-files	20
+hbbudget	nested-ifs	10000	resolve	387734
+hbbudget	nested-ifs	10000	check	2863113
+hbbudget	nested-ifs	10000	elaborate	1750745
+hbbudget	nested-ifs	10000	coreCheck	212583
+hbbudget	nested-ifs	10000	monomorphize	562657
+hbbudget	nested-ifs	10000	lower	8209934
+hbbudget	nested-ifs	100000	parse	39626218
+hbbudget	nested-ifs	100000	resolve-files	20
+hbbudget	nested-ifs	100000	resolve	3875234
+hbbudget	nested-ifs	100000	check	28625613
+hbbudget	nested-ifs	100000	elaborate	17500745
+hbbudget	nested-ifs	100000	coreCheck	2125083
+hbbudget	nested-ifs	100000	monomorphize	5625157
+hbbudget	nested-ifs	100000	lower	82707498
+hbbudget	functions	10000	parse	5188339
+hbbudget	functions	10000	resolve-files	20
+hbbudget	functions	10000	resolve	762687
+hbbudget	functions	10000	check	2000519
+hbbudget	functions	10000	elaborate	2763192
+hbbudget	functions	10000	coreCheck	312594
+hbbudget	functions	10000	monomorphize	600134
+hbbudget	functions	10000	lower	3288200
+hbbudget	functions	100000	parse	52250843
+hbbudget	functions	100000	resolve-files	20
+hbbudget	functions	100000	resolve	7625187
+hbbudget	functions	100000	check	20000519
+hbbudget	functions	100000	elaborate	27625692
+hbbudget	functions	100000	coreCheck	3125094
+hbbudget	functions	100000	monomorphize	6000134
+hbbudget	functions	100000	lower	32875700
+hbbudget	call-chain	10000	parse	6092848
+hbbudget	call-chain	10000	resolve-files	20
+hbbudget	call-chain	10000	resolve	812753
+hbbudget	call-chain	10000	check	2925605
+hbbudget	call-chain	10000	elaborate	3400847
+hbbudget	call-chain	10000	coreCheck	450107
+hbbudget	call-chain	10000	monomorphize	787650
+hbbudget	call-chain	10000	lower	3700755
+hbbudget	call-chain	100000	parse	61667859
+hbbudget	call-chain	100000	resolve-files	20
+hbbudget	call-chain	100000	resolve	8125253
+hbbudget	call-chain	100000	check	29250605
+hbbudget	call-chain	100000	elaborate	34000847
+hbbudget	call-chain	100000	coreCheck	4500107
+hbbudget	call-chain	100000	monomorphize	7875150
+hbbudget	call-chain	100000	lower	37000755
+hbbudget	structs	10000	parse	3522230
+hbbudget	structs	10000	resolve-files	20
+hbbudget	structs	10000	resolve	400300
+hbbudget	structs	10000	check	375797
+hbbudget	structs	10000	elaborate	538553
+hbbudget	structs	10000	coreCheck	87617
+hbbudget	structs	10000	monomorphize	37700
+hbbudget	structs	10000	lower	76137
+hbbudget	structs	100000	parse	35584744
+hbbudget	structs	100000	resolve-files	20
+hbbudget	structs	100000	resolve	4000300
+hbbudget	structs	100000	check	3750797
+hbbudget	structs	100000	elaborate	5376053
+hbbudget	structs	100000	coreCheck	875117
+hbbudget	structs	100000	monomorphize	375200
+hbbudget	structs	100000	lower	751137
+hbbudget	enums	10000	parse	3759978
+hbbudget	enums	10000	resolve-files	20
+hbbudget	enums	10000	resolve	737780
+hbbudget	enums	10000	check	250774
+hbbudget	enums	10000	elaborate	500919
+hbbudget	enums	10000	coreCheck	62613
+hbbudget	enums	10000	monomorphize	37662
+hbbudget	enums	10000	lower	77134
+hbbudget	enums	100000	parse	37959994
+hbbudget	enums	100000	resolve-files	20
+hbbudget	enums	100000	resolve	7375280
+hbbudget	enums	100000	check	2500774
+hbbudget	enums	100000	elaborate	5000919
+hbbudget	enums	100000	coreCheck	625113
+hbbudget	enums	100000	monomorphize	375162
+hbbudget	enums	100000	lower	752134
 instr	array-const	10000	llvm	512601288
 instr	array-const	10000	native	1495487268
 instr	array-const	10000	trace	558452168
@@ -561,6 +673,38 @@ instr	lets-match	4000	trace	4633861884
 instr	lets-match	40000	llvm	47764481759
 instr	lets-match	40000	native	48722446260
 instr	lets-match	40000	trace	47680160815
+instr	nested-parens	10000	llvm	1199979384
+instr	nested-parens	10000	native	2158285660
+instr	nested-parens	10000	trace	1242351093
+instr	nested-parens	100000	llvm	10094782995
+instr	nested-parens	100000	native	11053063882
+instr	nested-parens	100000	trace	10135599145
+instr	nested-ifs	10000	llvm	5322846189
+instr	nested-ifs	10000	native	6281308910
+instr	nested-ifs	10000	trace	5195055335
+instr	nested-ifs	100000	llvm	52364509065
+instr	nested-ifs	100000	native	53323029742
+instr	nested-ifs	100000	trace	50842020278
+instr	functions	10000	llvm	4018168157
+instr	functions	10000	trace	3709139187
+instr	functions	100000	llvm	38658767129
+instr	functions	100000	trace	35126085283
+instr	call-chain	10000	llvm	4802899805
+instr	call-chain	10000	trace	4407809477
+instr	call-chain	100000	llvm	46650234268
+instr	call-chain	100000	trace	42208788427
+instr	structs	10000	llvm	1378261382
+instr	structs	10000	native	2425856665
+instr	structs	10000	trace	1365469325
+instr	structs	100000	llvm	12381247432
+instr	structs	100000	native	14232310814
+instr	structs	100000	trace	11857817339
+instr	enums	10000	llvm	1570117828
+instr	enums	10000	native	2841985425
+instr	enums	10000	trace	1529920754
+instr	enums	100000	llvm	14056257907
+instr	enums	100000	native	18186223849
+instr	enums	100000	trace	13248316065
 rate	array-const	10000	llvm	247.6
 rate	array-const	10000	native	252.9
 rate	array-const	10000	trace	104.9
@@ -619,3 +763,35 @@ rate	lets-match	4000	trace	108.6
 rate	lets-match	40000	llvm	140.3
 rate	lets-match	40000	native	172.2
 rate	lets-match	40000	trace	144.6
+rate	nested-parens	10000	llvm	157.0
+rate	nested-parens	10000	native	173.4
+rate	nested-parens	10000	trace	151.4
+rate	nested-parens	100000	llvm	99.4
+rate	nested-parens	100000	native	108.1
+rate	nested-parens	100000	trace	86.6
+rate	nested-ifs	10000	llvm	94.8
+rate	nested-ifs	10000	native	119.8
+rate	nested-ifs	10000	trace	96.6
+rate	nested-ifs	100000	llvm	179.4
+rate	nested-ifs	100000	native	190.3
+rate	nested-ifs	100000	trace	214.4
+rate	functions	10000	llvm	94.9
+rate	functions	10000	trace	102.2
+rate	functions	100000	llvm	136.4
+rate	functions	100000	trace	133.7
+rate	call-chain	10000	llvm	105.6
+rate	call-chain	10000	trace	100.3
+rate	call-chain	100000	llvm	142.6
+rate	call-chain	100000	trace	169.2
+rate	structs	10000	llvm	139.2
+rate	structs	10000	native	181.8
+rate	structs	10000	trace	185.7
+rate	structs	100000	llvm	136.9
+rate	structs	100000	native	140.9
+rate	structs	100000	trace	206.0
+rate	enums	10000	llvm	163.6
+rate	enums	10000	native	177.2
+rate	enums	10000	trace	166.5
+rate	enums	100000	llvm	201.9
+rate	enums	100000	native	134.4
+rate	enums	100000	trace	137.2
