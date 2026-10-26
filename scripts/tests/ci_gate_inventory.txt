@@ -133,6 +133,7 @@ bash scripts/tests/check_iteration_protocol.sh
 bash scripts/tests/check_landing_bot.sh
 bash scripts/tests/check_landing_script.sh
 bash scripts/tests/check_lean14576_reproducer.sh
+bash scripts/tests/check_leanprof_profile.sh
 bash scripts/tests/check_lex_escapes.sh
 bash scripts/tests/check_linear_conservation.sh
 bash scripts/tests/check_linear_discard.sh

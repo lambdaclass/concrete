@@ -29,6 +29,24 @@ instruction-count alarm fires at about +1.5%. Multi-threaded builds (`lake build
 suite may spin while waiting on other threads, which can add instructions under load; their band
 comes from their own history.
 
+## Where it got slower: compiler profiles (R-0551)
+
+The instruction-count alarm says that a commit made the compiler slower. The profile job says where:
+`scripts/perf/leanprof_profile.sh` runs [leanprof](https://github.com/unbalancedparentheses/leanprof)
+on `examples/lox` and `std` (`concrete build --emit-llvm`, in copies) and on the scaling corpus, and
+records each workload's time per compiler stage and its top hot spots as shares of the build. Shares,
+not milliseconds, decide a finding: a uniformly slower host moves every scope by the same factor and
+no share. A finding is a hot spot or stage that grew by at least 2 points and 1.3x, or a new hot spot
+at 3% or more; the thresholds are in `leanprof_profile.py` and recorded in every comparison. Mode
+`auto` (`leanprof run --auto`, the default) needs no perf events, so it runs at the CI host's
+`perf_event_paranoid=2`; `sample` needs samply and paranoid at most 1.
+
+`scripts/perf/leanprof_runner.sh` is one cycle of the scheduled job: it profiles the oldest landed
+main commit (first-parent) without a profile, compares it with the previous profiled commit, appends
+findings to `findings.jsonl`, notifies through `scripts/land/notify.sh`, and rewrites `out/index.md`.
+Its header documents the layout and the environment. `scripts/tests/check_leanprof_profile.sh` gates
+both. The unit and timer that run it on concrete-ci-2 are server provisioning, like the tracker's.
+
 ## Server provisioning (lives outside this repository)
 
 Server pieces belong to the owner's private server provisioning, not to concrete. The tracker's
