@@ -8455,19 +8455,20 @@ for r265_case in "lets 80000 lower 8000" "if 40000 lower 15000" "if 40000 monomo
     r265_src="$TMPDIR/r265_${r265_shape}_$r265_n.con"
     [ -f "$r265_src" ] || r265_gen "$r265_shape" "$r265_n" > "$r265_src"
     r265_stage_ms "$r265_src" "$r265_stage"; r265_first="$r265_ms"
+    # A compiler failure is a FAIL and a double timeout INCOMPLETE at once; only a measured overrun
+    # of the budget is retried (Codex review: a retry must not erase a failure).
     case "$r265_first" in
-        ''|*[!0-9]*) r265_over=1 ;;
-        *) if [ "$r265_first" -gt "$r265_budget" ]; then r265_over=1; else r265_over=0; fi ;;
+        incomplete) r265_incomplete="$r265_incomplete $r265_shape/$r265_n/$r265_stage"; continue ;;
+        ''|*[!0-9]*) r265_bad="$r265_bad $r265_shape/$r265_n/$r265_stage:$r265_first"; continue ;;
     esac
-    if [ "$r265_over" = 1 ]; then
-        r265_stage_ms "$r265_src" "$r265_stage"
-        case "$r265_ms" in
-            incomplete) r265_incomplete="$r265_incomplete $r265_shape/$r265_n/$r265_stage" ;;
-            ''|*[!0-9]*) r265_bad="$r265_bad $r265_shape/$r265_n/$r265_stage:$r265_first,$r265_ms" ;;
-            *) [ "$r265_ms" -le $((r265_budget * 2)) ] \
-                   || r265_bad="$r265_bad $r265_shape/$r265_n/$r265_stage:$r265_first,${r265_ms}ms" ;;
-        esac
-    fi
+    [ "$r265_first" -gt "$r265_budget" ] || continue
+    r265_stage_ms "$r265_src" "$r265_stage"
+    case "$r265_ms" in
+        incomplete) r265_incomplete="$r265_incomplete $r265_shape/$r265_n/$r265_stage" ;;
+        ''|*[!0-9]*) r265_bad="$r265_bad $r265_shape/$r265_n/$r265_stage:${r265_first}ms,$r265_ms" ;;
+        *) [ "$r265_ms" -le $((r265_budget * 2)) ] \
+               || r265_bad="$r265_bad $r265_shape/$r265_n/$r265_stage:${r265_first}ms,${r265_ms}ms" ;;
+    esac
 done
 if [ -n "$r265_bad" ]; then
     echo "FAIL  bugs 265-267, 269: a back-end stage of a long function exceeded its budget (retry twice the budget) or the compiler failed:$r265_bad"
