@@ -38,8 +38,9 @@ module without its children) and is unchanged.
 
 ## Measurements
 
-`resolve` stage in ms (`--emit-trace-json`, fastest of 3 runs), dev host, `enums` shape, before
-(b5040d53) and after this branch:
+`resolve` stage in ms (`--emit-trace-json`, fastest of 3 runs), dev host (fede-256gb), `enums`
+shape, before (the compiler built at b5040d53) and after (built from the tree of addaa003, whose
+compiler sources are this fix; the build had no other modification):
 
 | n | before | after |
 |---|---|---|
@@ -48,16 +49,17 @@ module without its children) and is unchanged.
 | 10000 | 1147 | 29 |
 | 20000 | 6755 | 75 |
 
-The allocation count (`alloc_heartbeats`) of the stage doubles exactly with n (700242, 1400242,
-2800242 at 10000, 20000, 40000); the remaining excess of time over linear at 20000 and above is
+The allocation count (`alloc_heartbeats`) of the stage doubles exactly with n (295220, 590220,
+1180220 at 5000, 10000, 20000); the remaining excess of time over linear at 20000 and above is
 the hash maps' memory traffic (gdb samples: `Scope.ofSymbols` inserts). The `functions` shape is
-unchanged (10000: 13 ms before, 12 after). The R-0550 gate run with this bug's exclusion removed
-passes `enums/resolve` (1000: 2 ms, 10000: 27 ms, x13.5) and fails it on the pre-fix compiler
+unchanged (10000: 13 ms before, 12 after). The R-0550 gate (`compile_scaling.py` and its budgets at
+fe9ce031, origin/wip/r0550-scaling-gate-v2), run on the same two builds with this bug's
+exclusion removed, passes `enums/resolve` (1000: 2 ms, 10000: 27 ms, x13.5) and fails it on the pre-fix compiler
 (x119.6 against a bound of x63.1).
 
 `--emit-core`, `--emit-ssa` and `--emit-llvm` (stdout, stderr and exit status) of every `.con`
-under `tests/programs` and `examples` and of twelve generated scaling shapes at size 60 are
-byte-identical before and after.
+under `tests/programs` and `examples` (the b5040d53 corpus) and of twelve generated scaling shapes
+at size 60 are byte-identical between the same two builds.
 
 ## Containment while open
 
