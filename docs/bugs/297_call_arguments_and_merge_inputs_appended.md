@@ -66,8 +66,10 @@ recorded; it is fixed on the stacked bug-178 follow-up branch.
 
 `run_tests.sh` times `elaborate` and `lower` of a call of 12000 arguments against 60 ms each,
 retried once at 120 ms (13 and 7 ms with the fix; 353 and 324 ms on main's compiler).
-`regress_297_argument_order.con` pins argument order, `&mut` write-back order, field order and a
-match's merged values (binary 42, as `--interp`). `check_no_quadratic_append.sh`'s Lower baseline
+`regress_297_argument_order.con` pins argument order, each `&mut` local written back to itself,
+field-to-name association and each arm's merged value, each with distinct weights so a
+permutation fails (binary 42, as `--interp`); the order of write-backs to distinct locals is not
+observable from a program and is held by the byte-identical IR comparison. `check_no_quadratic_append.sh`'s Lower baseline
 goes down 20 → 15 and Elab's 53 → 31 (the tree held 41 before the fix).
 
 ## Structural cause

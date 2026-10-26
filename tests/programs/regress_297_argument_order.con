@@ -1,6 +1,7 @@
 // Bug 297: Elab and Lower now cons each call argument (and each `&mut` write-back, and each arm's
-// incoming value at a merge) and restore the order once. Argument order, write-back order and
-// the arms' values must be exactly as before: this pins all three on the paths that changed.
+// incoming value at a merge) and restore the order once. This pins argument order, each `&mut`
+// local written back to itself, field-to-name association and each arm's merged value; the
+// order of write-backs to distinct locals is not observable and is pinned by the IR comparison.
 struct P {
     a: i64,
     b: i64,
@@ -36,6 +37,9 @@ fn main() -> Int {
     bump(&mut x, &mut y, &mut z);
     let p: P = P { c: 3, a: 1, b: 2 };
     let P { a, b, c } = p;
-    // 12345 - 12345 + (2 + 4 + 0) + (1 + 2 + 3) + (7 + 8 + 9 + 10) - 4 = 42
-    return (w - 12345 + x + y + z + a + b + c + pick(0) + pick(1) + pick(2) + pick(3) - 4) as Int;
+    // Each term is 0 only when its values arrive in their own positions: arguments in order
+    // (12345), each borrowed local written back to itself (240), each field read under its own
+    // name (123), each arm's value merged from its own predecessor (7900).
+    return ((w - 12345) + (x * 100 + y * 10 + z - 240) + (a * 100 + b * 10 + c - 123)
+        + (pick(0) * 1000 + pick(1) * 100 + pick(2) * 10 + pick(3) - 7900) + 42) as Int;
 }
