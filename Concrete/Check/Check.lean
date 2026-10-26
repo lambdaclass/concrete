@@ -662,7 +662,8 @@ mutual
     E0236), and this guard extends it to every call form — intrinsics included (`free(h)` of a
     `Heap<&P>`, `vec_get`) — so a reference can never surface from a call (E0238). -/
 partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .value)
-    (clean : Bool := false) (flex : Option TypeJudgment.FlexTree := none) : CheckM Ty := do
+    (clean : Bool := false) (flex : Option TypeJudgment.FlexTree := none)
+    (ends : Option EndsTree := none) : CheckM Ty := do
   -- Rule (d) (bug 142): no `return`/`break`/`continue` inside a protected operand. Checked
   -- here, before any operand is checked, so the exit is reported rather than a consequence.
   -- Bug 280: `clean` says `e` is an operand (through parentheses only) of a protected expression
@@ -677,7 +678,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
         | some (kw, sp) => throwCheck (.exitInOperand kw ctx) (some sp)
         | none => pure (match e with | .allocCall .. => false | _ => true)
     | none => pure (clean && (match e with | .paren .. => true | _ => false))
-  let t ← checkExprCore e hint mode cleanHere flex
+  let t ← checkExprCore e hint mode cleanHere flex ends
   match e with
   | .call .. | .methodCall .. | .staticMethodCall .. | .allocCall .. =>
     match ← resolvedOr t with
@@ -700,7 +701,8 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
 -- spec: OWN-3, spec: OWN-5, spec: OWN-8, spec: OWN-15, spec: TYPE-4, spec: TYPE-5, spec: TYPE-6, spec: TYPE-7, spec: TYPE-8, spec: TYPE-9, spec: TYPE-10, spec: TYPE-11, spec: OWN-13, spec: PAT-3, spec: ARITH-2, spec: ARITH-6, spec: STMT-5, spec: STMT-8, spec: MEM-4, spec: MEM-5, spec: TRUST-4, spec: TRUST-7 (docs/spec/ownership.md; this declaration enforces the rule)
 -- spec: TRAIT-6, spec: PAT-5 (docs/spec/traits.md; this declaration enforces the rule)
 partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode := .value)
-    (clean : Bool := false) (flex : Option TypeJudgment.FlexTree := none) : CheckM Ty := do
+    (clean : Bool := false) (flex : Option TypeJudgment.FlexTree := none)
+    (ends : Option EndsTree := none) : CheckM Ty := do
   match e with
   | .intLit sp n =>
     -- One shared decision (TypeJudgment): the adopted type + the range
@@ -907,7 +909,10 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     -- snapshot, check each arm from the snapshot, then merge with agreement.
     let envBefore ← getEnv
     -- Check then branch: all stmts except the last, then check last for its type
-    if exemptExitBranch then_ then
+    -- Bug 289: each branch's end facts, computed once (four predicate walks per branch before).
+    let thenEnds := (blockEnds then_).facts
+    let elseEnds := (blockEnds else_).facts
+    if exemptExitBranchGiven thenEnds.exitsFunction then_ then
       setEnv { envBefore with inFnExitingBranch := true }
     let thenInit := then_.dropLast
     -- Defer rule (a): the branch's deferred calls run after its trailing value.
@@ -928,10 +933,10 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       | none => pure Ty.unit
     deferScopeExit thenDefer
     let envAfterThen ← getEnv
-    checkBlockLocalsConsumed envBefore.vars envAfterThen.vars (blockNonTerminating then_) (some e.getSpan)
+    checkBlockLocalsConsumed envBefore.vars envAfterThen.vars thenEnds.nonTerminating (some e.getSpan)
     -- Check else branch from the SNAPSHOT (not the then-arm's aftermath)
     setEnv envBefore
-    if exemptExitBranch else_ then
+    if exemptExitBranchGiven elseEnds.exitsFunction else_ then
       setEnv { envBefore with inFnExitingBranch := true }
     let elseInit := else_.dropLast
     let elseDefer ← deferScopeEntry
@@ -950,14 +955,14 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       | none => pure Ty.unit
     deferScopeExit elseDefer
     let envAfterElse ← getEnv
-    checkBlockLocalsConsumed envBefore.vars envAfterElse.vars (blockNonTerminating else_) (some e.getSpan)
-    if blockExitsFunction then_ then
+    checkBlockLocalsConsumed envBefore.vars envAfterElse.vars elseEnds.nonTerminating (some e.getSpan)
+    if thenEnds.exitsFunction then
       checkReturnPathConsumed envBefore.vars envAfterThen.vars (some e.getSpan)
-    if blockExitsFunction else_ then
+    if elseEnds.exitsFunction then
       checkReturnPathConsumed envBefore.vars envAfterElse.vars (some e.getSpan)
     -- Merge: fall-through arms must AGREE on consumption of outer linears.
     mergeVarStates envBefore.vars envAfterThen.vars envAfterElse.vars
-      (blockDiverges then_) (blockDiverges else_) (some e.getSpan)
+      thenEnds.diverges elseEnds.diverges (some e.getSpan)
     -- Drop branch-locals; restore the exit flag.
     closeBlockScope envBefore.vars
     let envM ← getEnv
@@ -1507,7 +1512,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       -- sizeof intrinsic
       if intrinsic == some .sizeof || fnName.endsWith sizeofSuffix then return .uint
       else throwCheck (.undeclaredFunction fnName) (some e.getSpan)
-  | .paren _ inner => checkExpr inner hint mode (clean := clean) (flex := flex.bind (·.kid 0))
+  | .paren _ inner => checkExpr inner hint mode (clean := clean) (flex := flex.bind (·.kid 0)) (ends := ends)
   | .structLit _ name typeArgs fields base =>
     match ← lookupStruct name with
     | some sd =>
@@ -1731,6 +1736,10 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     -- would bind as owned values the owner still holds); `match r` matches through the
     -- reference and binds non-Copy payloads as borrowed views (Codex review of round 3).
     let scrTy ← checkExpr scrutinee
+    -- Bug 289: the end facts of each arm's block, handed down by an enclosing construct that
+    -- already computed them for this match, else computed here in one walk per arm.
+    let armTrees : List EndsTree :=
+      (ends.bind (·.kidsIf (.match_ arms.length))).getD (arms.map armEnds)
     -- A match through a reference reads through it: the reference must normalize (E0238),
     -- whatever the arms bind (normalized place rule).
     match scrTy with
@@ -1759,7 +1768,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         let mut divergingArmVars : Option (VarEnv) := none
         let mut matchResultTy : Ty := .unit
         let mut firstArmDone := false
-        for arm in arms do
+        for (arm, armT) in arms.zip armTrees do
           setEnv envBefore
           let body ← match arm with
           | .mk armSp armEnum armVariant patBinds guard body => do
@@ -1853,7 +1862,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
             throwCheck (.patternDoesNotFit "a range pattern" (tyToString innerTyR)) (some e.getSpan)
           -- Function-exiting arms relax the consume-inside-loop rule (see
           -- TypeEnv.inFnExitingBranch); per-arm setEnv envBefore resets it.
-          if exemptExitBranch body then
+          if exemptExitBranchGiven armT.facts.exitsFunction body then
             let cur ← getEnv
             setEnv { cur with inFnExitingBranch := true }
           -- Check all stmts except the last, then extract type from last
@@ -1864,7 +1873,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           checkStmtsCore bodyInit curEnv.currentRetTy
           let armTy ← match body.getLast? with
             | some (.expr _ armExpr true) => do
-              let ty ← checkExpr armExpr hint
+              let ty ← checkExpr armExpr hint (ends := some armT)
               pure ty
             | some (.return_ rsp v) =>
               -- A `return` inside an arm consumes the returned value (and checks it
@@ -1874,7 +1883,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
               checkStmt (.return_ rsp v) curEnv.currentRetTy
               pure Ty.never
             | some other =>
-              checkStmt other curEnv.currentRetTy
+              checkStmt other curEnv.currentRetTy (ends := some armT)
               pure Ty.unit
             | none => pure Ty.unit
           deferScopeExit armDefer
@@ -1890,16 +1899,16 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           -- H9: a linear value declared in this arm — a matched payload binding or
           -- a `let` in the arm body — must be consumed before the arm exits (unless
           -- the arm is non-terminating). This is the matched-payload half of H9.
-          checkBlockLocalsConsumed envBefore.vars envAfterArm.vars (blockNonTerminating body) (some e.getSpan)
+          checkBlockLocalsConsumed envBefore.vars envAfterArm.vars armT.facts.nonTerminating (some e.getSpan)
           -- A DIVERGING arm (return/break/continue/abort) never reaches the
           -- code after the match: it cannot disagree with the other arms and
           -- contributes nothing to the merged state. Only fall-through arms
           -- participate — `Some{v} => { use(v) }, None => { drop(x); return 1 }`
           -- is sound. An arm that exits the FUNCTION must still have consumed
           -- everything live (the exit is a leak point, not a merge point).
-          if blockExitsFunction body then
+          if armT.facts.exitsFunction then
             checkReturnPathConsumed envBefore.vars envAfterArm.vars (some e.getSpan)
-          if !(blockDiverges body) then
+          if !armT.facts.diverges then
             match firstArmVars with
             | none => firstArmVars := some envAfterArm.vars
             | some firstVars =>
@@ -1949,7 +1958,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       let mut firstArmDone := false
       let mut firstArmVars : Option (VarEnv) := none
       let mut divergingArmVars : Option (VarEnv) := none
-      for arm in arms do
+      for (arm, armT) in arms.zip armTrees do
         setEnv envBefore
         let body ← match arm with
         | .litArm _ val guard body => do
@@ -2004,7 +2013,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           checkGuard guard
           pure body
         -- Function-exiting arms relax the consume-inside-loop rule (see enum path).
-        if exemptExitBranch body then
+        if exemptExitBranchGiven armT.facts.exitsFunction body then
           let cur ← getEnv
           setEnv { cur with inFnExitingBranch := true }
         -- Check all stmts except the last, then extract type from last
@@ -2013,13 +2022,13 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         checkStmtsCore bodyInit envBefore.currentRetTy
         let armTy ← match body.getLast? with
           | some (.expr _ armExpr true) => do
-            let ty ← checkExpr armExpr hint
+            let ty ← checkExpr armExpr hint (ends := some armT)
             pure ty
           | some (.return_ rsp v) =>
             checkStmt (.return_ rsp v) envBefore.currentRetTy
             pure Ty.never
           | some other =>
-            checkStmt other envBefore.currentRetTy
+            checkStmt other envBefore.currentRetTy (ends := some armT)
             pure Ty.unit
           | none => pure Ty.unit
         deferScopeExit armDefer
@@ -2034,14 +2043,14 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
         -- H9 for value-pattern arms too: a named arm binding over a non-Copy
         -- scrutinee is an arm-local linear value and must be consumed before the
         -- arm exits. Enum payload arms already enforce this above.
-        checkBlockLocalsConsumed envBefore.vars envAfterArm.vars (blockNonTerminating body) (some e.getSpan)
+        checkBlockLocalsConsumed envBefore.vars envAfterArm.vars armT.facts.nonTerminating (some e.getSpan)
         -- Diverging arms never reach the code after the match — only
         -- fall-through arms participate in the consumption merge (see the
         -- enum-path comment above); a function-exiting arm must still have
         -- consumed everything live.
-        if blockExitsFunction body then
+        if armT.facts.exitsFunction then
           checkReturnPathConsumed envBefore.vars envAfterArm.vars (some e.getSpan)
-        if !(blockDiverges body) then
+        if !armT.facts.diverges then
           match firstArmVars with
           | none => firstArmVars := some envAfterArm.vars
           | some firstVars =>
@@ -2398,7 +2407,7 @@ partial def checkGuard (guard : Option Expr) : CheckM Unit := do
     | none => pure ()
 
 -- spec: REF-6, spec: REF-7, spec: OWN-2, spec: OWN-5, spec: OWN-6, spec: OWN-7, spec: OWN-9, spec: OWN-10, spec: OWN-12, spec: OWN-15, spec: OWN-1, spec: TYPE-4, spec: TYPE-7, spec: TYPE-11, spec: TYPE-5, spec: PAT-5, spec: STMT-6, spec: SYN-3, spec: PAT-8 (docs/spec/references.md; this declaration enforces the rule)
-partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
+partial def checkStmt (stmt : Stmt) (retTy : Ty) (ends : Option EndsTree := none) : CheckM Unit := do
   -- Rule (d) (bug 142): an assignment's destination (the indexed array, the index, the
   -- dereferenced target, the projected base) is an operand too; only the assigned value keeps
   -- the initializer's branch chain (Codex review: `a[if c { return 7; } else { 0 }] = v`).
@@ -2560,7 +2569,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     expectTy .unit retTy "return (void)" (some stmt.getSpan)
     checkReturnAccountsForAll (some stmt.getSpan)
   | .expr _ e isValue =>
-    let eTy ← checkExpr e
+    let eTy ← checkExpr e (ends := ends)
     -- Phase 6 #13: a `;`-terminated statement expression (`isValue := false`)
     -- discards its value. If that value is a fallible result (`Result`/`Option`),
     -- the discard silently throws away a possible failure/absence — flag it. A
@@ -2607,36 +2616,44 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
       throwCheck (.condNotBool "if" (tyToString condTy)) (some cond.getSpan)
     -- Snapshot variable states before branches
     let envBefore ← getEnv
+    -- Bug 289: the end facts of both branches, handed down by the enclosing construct when it
+    -- computed them for this `if` (an `if` with an `else` is a node of its tree), else computed
+    -- here in one walk; each branch hands its own last statement its subtree.
+    let (thenT, elseT) : EndsTree × Option EndsTree :=
+      match ends.bind (·.kidsIf .ifElse), elseBody with
+      | some [tt, et], some _ => (tt, some et)
+      | _, _ => (blockEnds thenBody, elseBody.map blockEnds)
     -- Check then branch (flagging it if it exits the function, which relaxes
     -- the consume-inside-loop rule — see TypeEnv.inFnExitingBranch)
-    if exemptExitBranch thenBody then
+    if exemptExitBranchGiven thenT.facts.exitsFunction thenBody then
       setEnv { envBefore with inFnExitingBranch := true }
-    checkStmts thenBody retTy
+    checkStmts thenBody retTy (ends := some thenT)
     let envAfterThen ← getEnv
     -- H9: a linear value declared in the then-branch must be consumed before the
     -- branch exits — including on a `return`/`break` path (that's a real leak).
     -- Only a truly non-terminating branch (infinite loop / abort) is exempt.
-    checkBlockLocalsConsumed envBefore.vars envAfterThen.vars (blockNonTerminating thenBody) (some stmt.getSpan)
+    checkBlockLocalsConsumed envBefore.vars envAfterThen.vars thenT.facts.nonTerminating (some stmt.getSpan)
     -- Restore env and check else branch
     setEnv envBefore
     match elseBody with
     | some stmts =>
-      if exemptExitBranch stmts then
+      let elseT := elseT.getD (blockEnds stmts)
+      if exemptExitBranchGiven elseT.facts.exitsFunction stmts then
         setEnv { envBefore with inFnExitingBranch := true }
-      checkStmts stmts retTy
+      checkStmts stmts retTy (ends := some elseT)
       let envAfterElse ← getEnv
       -- H9: same for else-branch locals.
-      checkBlockLocalsConsumed envBefore.vars envAfterElse.vars (blockNonTerminating stmts) (some stmt.getSpan)
+      checkBlockLocalsConsumed envBefore.vars envAfterElse.vars elseT.facts.nonTerminating (some stmt.getSpan)
       -- A branch that exits the function must consume everything live — the
       -- divergence exemption below is about merge AGREEMENT, not the exit.
-      if blockExitsFunction thenBody then
+      if thenT.facts.exitsFunction then
         checkReturnPathConsumed envBefore.vars envAfterThen.vars (some stmt.getSpan)
-      if blockExitsFunction stmts then
+      if elseT.facts.exitsFunction then
         checkReturnPathConsumed envBefore.vars envAfterElse.vars (some stmt.getSpan)
       -- Merge: the branches that FALL THROUGH must agree on consumption state
       -- of linear vars (a diverging branch never reaches the merge point).
       mergeVarStates envBefore.vars envAfterThen.vars envAfterElse.vars
-        (blockDiverges thenBody) (blockDiverges stmts) (some stmt.getSpan)
+        thenT.facts.diverges elseT.facts.diverges (some stmt.getSpan)
       -- Drop branch-locals — they are out of scope after the `if`. Only pre-existing
       -- names survive (their merged consumption states were applied above). Without
       -- this, else-branch locals leaked into the outer env (the accidental, lopsided
@@ -2647,14 +2664,14 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
     | none =>
       -- No else branch: then branch must not consume any linear var
       -- Exception: if then-branch diverges, consumption is fine (control never falls through)
-      let thenDiverges := blockDiverges thenBody
+      let thenDiverges := thenT.facts.diverges
       if !thenDiverges then
         checkNoBranchConsumption envBefore.vars envAfterThen.vars "if-without-else" (some stmt.getSpan)
       else
         -- Exiting the function inside the branch requires everything live to
         -- be consumed on that path (`if bad { return 1; }` with a live linear
         -- `s` leaks it on the early-return path).
-        if blockExitsFunction thenBody then
+        if thenT.facts.exitsFunction then
           checkReturnPathConsumed envBefore.vars envAfterThen.vars (some stmt.getSpan)
         -- The then-branch never falls through, so the code AFTER the `if` sees
         -- the pre-branch state — a consume inside the diverging branch must
@@ -3130,18 +3147,24 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) : CheckM Unit := do
         addVar (← binderRef (destructureKey lsdSp pb) b (some stmt.getSpan)) bTy true (declSpan := some stmt.getSpan)
       | none => throwCheck (.structHasNoField structName pb.fieldName) (some stmt.getSpan)
 
-partial def checkStmts (stmts : List Stmt) (retTy : Ty) : CheckM Unit := do
+/-- `ends`: the end facts of this block (`blockEnds stmts`) when the caller computed them; its
+    last statement is handed them (bug 289). -/
+partial def checkStmts (stmts : List Stmt) (retTy : Ty) (ends : Option EndsTree := none) : CheckM Unit := do
   -- Defer rule (a) (bug 143): the deferred calls this block registers run when it ends.
   -- A binding reserved here is consumed then, and a pin taken here ends then.
   let entry ← deferScopeEntry
-  checkStmtsCore stmts retTy
+  checkStmtsCore stmts retTy ends
   deferScopeExit entry
 
-partial def checkStmtsCore (stmts : List Stmt) (retTy : Ty) : CheckM Unit := do
+partial def checkStmtsCore (stmts : List Stmt) (retTy : Ty) (ends : Option EndsTree := none) :
+    CheckM Unit := do
   let mut accumulated : Diagnostics := []
-  for stmt in stmts do
+  let lastIdx := stmts.length - 1
+  for (stmt, idx) in stmts.zipIdx do
     let envBefore ← getEnv
-    let result := (checkStmt stmt retTy).run envBefore |>.run
+    -- Bug 289: a block's end facts are its last statement's.
+    let lastEnds := if idx == lastIdx then ends else none
+    let result := (checkStmt stmt retTy lastEnds).run envBefore |>.run
     match result with
     | (.ok (), envAfter) => setEnv envAfter
     | (.error ds, _) =>
@@ -3522,43 +3545,63 @@ private partial def impureFnsIn (pfx : String) (m : Module) : List String :=
 --    binder-free `if x > 0 { 1 } else { 2 }` is perfectly safe for by-name substitution, and
 --    banning it would have thrown out the whole conditional fragment to contain a defect that
 --    only shadowing can trigger.
+-- Bug 289: the names are pushed onto one accumulator, in the order the list version produced
+-- them. The list version concatenated each nested block's names onto its parent's (`flatMap`,
+-- `++`), so a binding n blocks deep was copied once per enclosing level: n² for a deep nest.
 mutual
-private partial def specBinders : Expr → List String
-  | .ifExpr _ c t e => specBinders c ++ (t ++ e).flatMap specBindersStmt
-  | .match_ _ sc arms => specBinders sc ++ arms.flatMap specBindersArm
-  | .paren _ e | .unaryOp _ _ e | .cast _ e _ => specBinders e
-  | .binOp _ _ l r => specBinders l ++ specBinders r
-  | .call _ _ _ args => args.flatMap specBinders
-  | .fieldAccess _ o _ => specBinders o
-  | .arrayIndex _ a i => specBinders a ++ specBinders i
-  | _ => []
+private partial def specBindersAcc (acc : Array String) : Expr → Array String
+  | .ifExpr _ c t e => (t ++ e).foldl specBindersStmtAcc (specBindersAcc acc c)
+  | .match_ _ sc arms => arms.foldl specBindersArmAcc (specBindersAcc acc sc)
+  | .paren _ e | .unaryOp _ _ e | .cast _ e _ => specBindersAcc acc e
+  | .binOp _ _ l r => specBindersAcc (specBindersAcc acc l) r
+  | .call _ _ _ args => args.foldl specBindersAcc acc
+  | .fieldAccess _ o _ => specBindersAcc acc o
+  | .arrayIndex _ a i => specBindersAcc (specBindersAcc acc a) i
+  | _ => acc
 
-private partial def specBindersArm : MatchArm → List String
-  | .mk _ _ _ bs g b => PatBind.names bs ++ (g.map specBinders).getD [] ++ b.flatMap specBindersStmt
-  | .varArm _ n g b => n :: (g.map specBinders).getD [] ++ b.flatMap specBindersStmt
-  | .litArm _ v g b => specBinders v ++ (g.map specBinders).getD [] ++ b.flatMap specBindersStmt
+private partial def specBindersGuardAcc (acc : Array String) : Option Expr → Array String
+  | some g => specBindersAcc acc g
+  | none => acc
+
+private partial def specBindersArmAcc (acc : Array String) : MatchArm → Array String
+  | .mk _ _ _ bs g b =>
+      b.foldl specBindersStmtAcc (specBindersGuardAcc (acc ++ (PatBind.names bs).toArray) g)
+  | .varArm _ n g b => b.foldl specBindersStmtAcc (specBindersGuardAcc (acc.push n) g)
+  | .litArm _ v g b => b.foldl specBindersStmtAcc (specBindersGuardAcc (specBindersAcc acc v) g)
   | .rangeArm _ lo hi _ g b =>
-      specBinders lo ++ specBinders hi ++ (g.map specBinders).getD [] ++ b.flatMap specBindersStmt
+      b.foldl specBindersStmtAcc (specBindersGuardAcc (specBindersAcc (specBindersAcc acc lo) hi) g)
 
-private partial def specBindersStmt : Stmt → List String
-  | .letDecl _ n _ _ v _ => n :: specBinders v
-  | .letDestructure _ _ _ bs v eb => PatBind.names bs ++ specBinders v ++ (eb.map (·.flatMap specBindersStmt)).getD []
-  | .letStructDestructure _ _ bs v => PatBind.names bs ++ specBinders v
-  | .borrowIn _ _ r _ _ b => r :: b.flatMap specBindersStmt
+private partial def specBindersStmtAcc (acc : Array String) : Stmt → Array String
+  | .letDecl _ n _ _ v _ => specBindersAcc (acc.push n) v
+  | .letDestructure _ _ _ bs v eb =>
+      let acc := specBindersAcc (acc ++ (PatBind.names bs).toArray) v
+      match eb with
+      | some b => b.foldl specBindersStmtAcc acc
+      | none => acc
+  | .letStructDestructure _ _ bs v => specBindersAcc (acc ++ (PatBind.names bs).toArray) v
+  | .borrowIn _ _ r _ _ b => b.foldl specBindersStmtAcc (acc.push r)
   | .forLoop _ init c st b _ =>
-      (init.map specBindersStmt).getD [] ++ specBinders c
-        ++ (st.map specBindersStmt).getD [] ++ b.flatMap specBindersStmt
-  | .ifElse _ c t e => specBinders c ++ t.flatMap specBindersStmt ++ (e.map (·.flatMap specBindersStmt)).getD []
-  | .while_ _ c b _ => specBinders c ++ b.flatMap specBindersStmt
-  | .expr _ e _ | .assert_ _ e | .assume_ _ e | .defer _ e => specBinders e
-  | .assign _ _ v => specBinders v
-  | .return_ _ v => (v.map specBinders).getD []
-  | .break_ _ v _ => (v.map specBinders).getD []
-  | .fieldAssign _ o _ v => specBinders o ++ specBinders v
-  | .derefAssign _ t v => specBinders t ++ specBinders v
-  | .arrayIndexAssign _ a i v => specBinders a ++ specBinders i ++ specBinders v
-  | .continue_ _ _ => []
+      let acc := match init with | some i => specBindersStmtAcc acc i | none => acc
+      let acc := specBindersAcc acc c
+      let acc := match st with | some x => specBindersStmtAcc acc x | none => acc
+      b.foldl specBindersStmtAcc acc
+  | .ifElse _ c t e =>
+      let acc := t.foldl specBindersStmtAcc (specBindersAcc acc c)
+      match e with
+      | some b => b.foldl specBindersStmtAcc acc
+      | none => acc
+  | .while_ _ c b _ => b.foldl specBindersStmtAcc (specBindersAcc acc c)
+  | .expr _ e _ | .assert_ _ e | .assume_ _ e | .defer _ e => specBindersAcc acc e
+  | .assign _ _ v => specBindersAcc acc v
+  | .return_ _ v => match v with | some x => specBindersAcc acc x | none => acc
+  | .break_ _ v _ => match v with | some x => specBindersAcc acc x | none => acc
+  | .fieldAssign _ o _ v => specBindersAcc (specBindersAcc acc o) v
+  | .derefAssign _ t v => specBindersAcc (specBindersAcc acc t) v
+  | .arrayIndexAssign _ a i v => specBindersAcc (specBindersAcc (specBindersAcc acc a) i) v
+  | .continue_ _ _ => acc
 end
+
+private def specBinders (e : Expr) : List String := (specBindersAcc #[] e).toList
 
 /-- Function names called anywhere in an expression — for validating `spec fn` bodies. -/
 private partial def specBodyCalls : Expr → List String
@@ -4159,7 +4202,7 @@ def checkModule (m : Module) (summary : FileSummary)
         -- catches the defect that actually occurs (a name that exists nowhere). Enforcing real
         -- scoping needs the per-function environment, which this module-level pass does not have;
         -- it belongs with the typed contract record rather than being faked here.
-        let localNames := f.body.flatMap specBindersStmt
+        let localNames := (f.body.foldl specBindersStmtAcc #[]).toList
         let boundLoop := boundReq ++ localNames
         let loopExprs := f.loopContracts.flatMap (fun lc => lc.invariants ++ lc.variant.toList)
         let freeL := loopExprs.flatMap (badName boundLoop)

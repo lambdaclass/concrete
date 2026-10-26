@@ -9338,6 +9338,60 @@ case "$r288_ms" in
            FAIL=$((FAIL + 1))
        fi ;;
 esac
+# Bug 289: Check asked whether a branch's block diverges, never terminates or exits the function
+# (each a walk down the block's last statements) at every level of an `if`/`else` or `match` nest,
+# and its contract binder collector copied every nested block's names into each enclosing
+# level's list, so a nest n deep took n² to check (depth 8000 on main 99084f4f: `if`/`else`
+# 2133 ms, `match` 3253 ms, blocks with `let`s 681 ms). Each nest 8000 deep must check (the
+# `check` stage of --emit-trace-json) within 250 ms, retried once at 500 ms (54, 58 and 62 ms with
+# the fix on the dev host).
+r289_bad=""; r289_incomplete=""; r289_ok=""
+for r289_shape in ifelse match blocks; do
+    r289_src="$TMPDIR/r289_${r289_shape}_8000.con"
+    awk -v shape="$r289_shape" -v n=8000 'BEGIN {
+        print "fn main() -> Int {"
+        print "    let mut s: i64 = 0;"
+        print "    let t: i64 = 1;"
+        printf "    "
+        for (i = 0; i < n; i++) {
+            if (shape == "match") printf "match t { 1 => { s = s + 1; "
+            else if (shape == "blocks") printf "if t > 0 { let x%d: i64 = s + 1; s = x%d; ", i, i
+            else printf "if t > 0 { s = s + 1; "
+        }
+        for (i = 0; i < n; i++) {
+            if (shape == "match") printf "}, _ => { s = s + 2; }, }"
+            else if (shape == "blocks") printf "}"
+            else printf "} else { s = s + 2; }"
+        }
+        print ""
+        printf "    return (s - %d + 42) as Int;\n", n
+        print "}"
+    }' > "$r289_src"
+    r265_stage_ms "$r289_src" check; r289_first="$r265_ms"; r289_ms="$r289_first"
+    case "$r289_first" in
+        ''|*[!0-9]*) ;;
+        *) if [ "$r289_first" -gt 250 ]; then r265_stage_ms "$r289_src" check; r289_ms="$r265_ms"; fi ;;
+    esac
+    case "$r289_ms" in
+        incomplete) r289_incomplete="$r289_incomplete $r289_shape" ;;
+        ''|*[!0-9]*) r289_bad="$r289_bad $r289_shape:$r289_ms" ;;
+        *) if [ "$r289_first" -le 250 ] || [ "$r289_ms" -le 500 ]; then
+               r289_ok="$r289_ok $r289_shape:${r289_ms}ms"
+           else
+               r289_bad="$r289_bad $r289_shape:${r289_first}ms,${r289_ms}ms"
+           fi ;;
+    esac
+done
+if [ -n "$r289_bad" ]; then
+    echo "FAIL  bug 289: checking a nest 8000 deep exceeded its budget (250 ms, retry 500) or failed:$r289_bad"
+    FAIL=$((FAIL + 1))
+elif [ -n "$r289_incomplete" ]; then
+    echo "  INCOMPLETE bug 289: checking a nest 8000 deep timed out twice (180 s each):$r289_incomplete"
+    INCOMPLETE=$((INCOMPLETE + 1))
+else
+    echo "  ok  bug 289: nests 8000 deep check within budget:$r289_ok"
+    PASS=$((PASS + 1))
+fi
 # Bug 247: a function value written as an identifier reaches what it names in the assumption summary.
 run_ok "$TESTDIR/regress_247_function_value_reaches_foreign.con" 42
 run_ok "$TESTDIR/regress_247_free_value_beside_unrelated_extern.con" 42

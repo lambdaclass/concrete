@@ -967,6 +967,84 @@ end
 def exemptExitBranch (stmts : List Stmt) : Bool :=
   blockExitsFunction stmts && !stmtsLeaveLoop 0 [] stmts
 
+/-- Bug 289: the three end facts of a block (`blockDiverges`, `blockNonTerminating`,
+    `blockExitsFunction`) for one block, with the facts of the blocks they were computed from.
+    Each fact of a block is a fact of its last statement, and of an `if`/`else` or a `match` it is
+    a conjunction over the branches' blocks, so a nest n deep was walked again at every level the
+    checker asks at: n² for a deep `if`/`else` or `match` nest. `blockEnds` computes the facts of a
+    whole nest in one walk, as a tree that mirrors the recursion of the three predicates (the
+    branches of an `if` with an `else`, the arms of a `match`, through parentheses), and a checked
+    construct hands each branch its subtree, so no level is walked twice. `ends.diverges =
+    blockDiverges b`, and likewise for the other two, by construction: every node combines its
+    kids exactly as the predicates combine the recursive calls, and a leaf is the predicates' own
+    answer for a statement they do not recurse through. -/
+structure EndFacts where
+  diverges : Bool
+  nonTerminating : Bool
+  exitsFunction : Bool
+  deriving Inhabited
+
+/-- What the node's kids are: the branches of an `if` with an `else`, the arms of a `match`
+    (their count), or none. A consumer reads kids only when the node is the shape it expects. -/
+inductive EndsShape where
+  | leaf
+  | ifElse
+  | match_ (arms : Nat)
+  deriving BEq, Inhabited
+
+inductive EndsTree where
+  | node (facts : EndFacts) (shape : EndsShape) (kids : List EndsTree)
+  deriving Inhabited
+
+def EndsTree.facts : EndsTree → EndFacts
+  | .node f _ _ => f
+
+/-- The kids of the node when it has `shape`, else `none`: a tree handed to the wrong construct
+    is never read. -/
+def EndsTree.kidsIf (t : EndsTree) (shape : EndsShape) : Option (List EndsTree) :=
+  match t with
+  | .node _ sh kids => if sh == shape && kids.length == (match shape with
+      | .ifElse => 2 | .match_ n => n | .leaf => 0) then some kids else none
+
+private def noEnds : EndFacts := { diverges := false, nonTerminating := false, exitsFunction := false }
+
+mutual
+partial def blockEnds (stmts : List Stmt) : EndsTree :=
+  match stmts.getLast? with
+  | none => .node noEnds .leaf []
+  | some s => stmtEnds s
+partial def stmtEnds (s : Stmt) : EndsTree :=
+  match s with
+  | .ifElse _ _ t (some e) =>
+    let tt := blockEnds t
+    let et := blockEnds e
+    .node { diverges := tt.facts.diverges && et.facts.diverges,
+            nonTerminating := tt.facts.nonTerminating && et.facts.nonTerminating,
+            exitsFunction := tt.facts.exitsFunction && et.facts.exitsFunction } .ifElse [tt, et]
+  | .expr _ e _ => exprEnds e
+  | _ => .node { diverges := stmtDiverges s, nonTerminating := stmtNonTerminating s,
+                 exitsFunction := stmtExitsFunction s } .leaf []
+partial def exprEnds (e : Expr) : EndsTree :=
+  match e with
+  | .paren _ inner => exprEnds inner
+  | .match_ _ _ arms =>
+    let kids := arms.map armEnds
+    let all (p : EndFacts → Bool) := !arms.isEmpty && kids.all (p ·.facts)
+    .node { diverges := all (·.diverges), nonTerminating := all (·.nonTerminating),
+            exitsFunction := all (·.exitsFunction) } (.match_ arms.length) kids
+  | _ => .node { diverges := exprDiverges e, nonTerminating := exprNonTerminating e,
+                 exitsFunction := exprExitsFunction e } .leaf []
+partial def armEnds : MatchArm → EndsTree
+  | .mk _ _ _ _ _ body => blockEnds body
+  | .litArm _ _ _ body => blockEnds body
+  | .varArm _ _ _ body => blockEnds body
+  | .rangeArm _ _ _ _ _ body => blockEnds body
+end
+
+/-- `exemptExitBranch stmts`, given `blockExitsFunction stmts` (bug 289). -/
+def exemptExitBranchGiven (exitsFunction : Bool) (stmts : List Stmt) : Bool :=
+  exitsFunction && !stmtsLeaveLoop 0 [] stmts
+
 
 /-- A branch or arm that EXITS THE FUNCTION must have consumed every linear
     value that was live when it started — `if c { return 0; } … drop(s);`
