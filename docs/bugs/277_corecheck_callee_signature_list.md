@@ -38,8 +38,8 @@ the field.
 ## Measurements
 
 `coreCheck` stage in ms (`--emit-trace-json`, fastest of 3 runs), dev host (fede-256gb),
-`call-chain` shape, before (the compiler built at b5040d53) and after (built from this branch's
-fix commit on main 91ce358b; the build had no other modification):
+`call-chain` shape, before (the compiler built at b5040d53) and after (built from the tree of 800dfbf9, this
+fix on main 91ce358b; the build had no other modification):
 
 | n | before | after |
 |---|---|---|
