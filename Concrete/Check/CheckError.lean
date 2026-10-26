@@ -1,3 +1,5 @@
+import Std.Data.HashMap
+import Std.Data.HashSet
 import Std.Data.TreeMap
 import Std.Data.TreeSet
 import Concrete.Frontend.AST
@@ -266,6 +268,11 @@ def foldl (e : VarEnv) (f : β → LocalRef × VarInfo → β) (init : β) : β 
 
 end VarEnv
 
+/-- Bug 275: a name → index table that answers as `List.lookup` on `entries` did: the first entry
+    of a name wins. -/
+def TypeEnv.nameIndex (entries : List (String × Nat)) : Std.HashMap String Nat :=
+  entries.foldl (fun m (n, i) => if m.contains n then m else m.insert n i) {}
+
 structure TypeEnv where
   -- R-0492: keyed by binding identity. A use finds its binding through the local table
   -- (`localAt`), never by searching it for a spelling.
@@ -274,12 +281,16 @@ structure TypeEnv where
   locals : LocalTable := LocalTable.unresolved
   structs : List StructDef
   enums : List EnumDef
-  functions : List FnSummary
-  fnNames : List (String × Nat)
+  /-- Bug 275: an array and maps, not lists searched per call: a call looked its callee's name
+      up in a list of every function's name and then walked the signature list to its index,
+      so a module of n functions calling each other took n² to check. The maps keep the FIRST
+      entry of a name, as the lists' `lookup` did (`TypeEnv.nameIndex`). -/
+  functions : Array FnSummary
+  fnNames : Std.HashMap String Nat
   /-- Bugs 238 – 239: the impl methods alone (`Type_method` → index into `functions`). A
       receiver call and a `T::m()` call resolve here; `fnNames` (free functions first, then
       methods by definition name) answers free-spelled names. -/
-  methodNames : List (String × Nat) := []
+  methodNames : Std.HashMap String Nat := {}
   loopDepth : Nat
   currentRetTy : Ty := .unit
   typeAliases : List (String × Ty) := []
@@ -329,7 +340,7 @@ structure TypeEnv where
   traits : List TraitDef := []             -- all trait definitions (for method lookup on type vars)
   currentTypeBounds : List (String × List String) := []  -- current function's type param bounds
   newtypes : List NewtypeDef := []         -- all newtype definitions
-  userFnNames : List String := []          -- names of user-defined, imported, and extern functions (NOT builtins)
+  userFnNames : Std.HashSet String := {}   -- names of user-defined, imported, and extern functions (NOT builtins)
   -- Construction rights (0b): newtypes DEFINED in the module being checked
   -- (incl. its submodules). A newtype constructor `N(v)` and unwrap are
   -- private to the defining module; external callers use the module's

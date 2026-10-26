@@ -1,0 +1,10 @@
+// Bug 275: Check found duplicate declarations by searching an association list per declaration
+// (now a map). Every collision is still reported, in source order within each namespace:
+// callables (`first`, then `second`), then types (`P`).
+fn first() -> i64 { return 1; }
+struct P { a: i64 }
+fn second() -> i64 { return 2; }
+struct P { b: i64 }
+fn first() -> i64 { return 3; }
+fn second() -> i64 { return 4; }
+fn main() -> Int { return 0; }

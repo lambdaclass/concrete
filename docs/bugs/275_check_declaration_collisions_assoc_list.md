@@ -2,12 +2,12 @@
 
 <!-- bug-ledger
 summary: Check's duplicate-declaration rule (bug 218) searched an association list of the declarations seen so far for every declaration, and a call looked its callee up in a list of the module's functions, so a module of n declarations took time n² to check (10000 functions: 159 ms). Found by the R-0550 scaling gate. Class 17.
-coverage: `check_compile_scaling.sh` measures the `functions`, `call-chain`, `structs` and `enums` shapes' `check` stage and reports it EXCLUDED under this bug on every run; the fix removes the exclusion, and the gate then holds the stage to its budget and to near-linear growth
+fixtures: error_275_collision_order.con
 class: 17 — Check finds duplicate declarations by searching an association list per declaration, and looks up each callee in a list
 silent: no
 -->
 
-**Status:** OPEN
+**Status:** FIXED (branch `wip/perf-275`)
 **Found:** 2026-10-26, building the compile-time scaling gate (R-0550, exit 2o): the gate's generated shapes, timed per stage with `--emit-trace-json` at 10b81a46.
 **Severity:** loud (performance). Compile time only: never wrong code, a refusal or a crash; a program of this shape compiles, slowly.
 
@@ -30,9 +30,60 @@ A linear stage doubles with the size; these grow about fourfold or more per doub
 
 A hash set (or map) of the names seen, and the function table keyed by name.
 
+## Fix
+
+`declarationCollisions` keeps the first declaration of each name in a `Std.HashMap` (each name is
+inserted once, when it is first seen, as the list was only extended then) and conses the
+collisions, reversed once, where it appended each one. In the checker's environment (`TypeEnv`,
+`Check/CheckError.lean`) the signatures are an `Array`, the name → index tables (`fnNames`,
+`methodNames`) are hash maps built once by `TypeEnv.nameIndex`, which keeps the FIRST entry of a
+name as `List.lookup` did, and `userFnNames` is a hash set. `lookupFn` and `lookupMethodByName`
+(the callee lookups) are a map lookup and an array index; a call's `userFnNames` membership test
+(the intrinsic check) a set lookup. These fields are written only where the environment is built
+(`checkModule`), so no other reader sees a different value.
+
+Not changed: a `fnRef` (a function used as a value) still finds its signature with
+`allFnSummarys.lookup`, and a method call by type identity with `methodByIdentity`, both list
+searches of every signature; no measured shape calls them per declaration, and the list is shared
+with `methodByIdentity`'s other callers.
+
+The `++ [` ratchet (`check_no_quadratic_append.sh`) for `Check.lean` goes from 4 to 3.
+
+## Measurements
+
+`check` stage in ms (`--emit-trace-json`, fastest of 3 runs), dev host (fede-256gb), before (the
+compiler built at b5040d53) and after (built from this branch's fix commit; the build had no
+other modification):
+
+| n | `functions` before | after | `call-chain` before | after | `structs` before | after | `enums` before | after |
+|---|---|---|---|---|---|---|---|---|
+| 2500 | 12 | 5 | 24 | 8 | 9 | 1 | 9 | 1 |
+| 5000 | 52 | 12 | 94 | 15 | 30 | 2 | 41 | 2 |
+| 10000 | 150 | 24 | 412 | 31 | 251 | 5 | 304 | 4 |
+| 20000 | 513 | 58 | 1504 | 77 | 1142 | 16 | 1438 | 14 |
+
+The R-0550 gate (`compile_scaling.py` and its budgets at fe9ce031, origin/wip/r0550-scaling-gate-v2),
+run on the same two builds with this bug's exclusions removed, passes the four shapes' `check`
+stage (x10.5, x10.3, x2.5, x2.5 from 1000 to 10000) and fails `structs/check` and `enums/check` on
+the pre-fix compiler (x122.5 and x151.0 against x63.1). At the gate's sizes the pre-fix
+`functions` and `call-chain` stages grow x36.2 and x57.6, inside its bound (a quadratic still
+small next to the linear part), so `run_tests.sh` holds the call chain by a time budget.
+
+`--emit-core`, `--emit-ssa` and `--emit-llvm` (stdout, stderr and exit status) of every `.con`
+under `tests/programs` and `examples` (the b5040d53 corpus) and of twelve generated scaling shapes
+at size 60 are byte-identical between the same two builds.
+
+## Regression leg
+
+`error_275_collision_order.con` declares two functions and a struct twice each: E0299 names
+`first` first, and `run_tests.sh` checks that all three collisions are reported in the order
+`first`, `second`, `P`. `run_tests.sh` also times the `check` stage of a generated chain of 20000
+functions each calling the next against 200 ms (retried once at 400 ms): 73 ms after the fix,
+FAIL on the pre-fix compiler (1463 ms, then 1371 ms).
+
 ## Containment while open
 
-Loud only. The scaling gate names the stage as an exclusion under this bug, so its gap is printed on every run rather than silent; the gate's other stages of the shape stay judged. A user splits such a module or nest.
+Loud only. The scaling gate named the stage as an exclusion under this bug, so its gap was printed on every run rather than silent.
 
 ## Structural cause
 
