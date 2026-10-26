@@ -132,6 +132,19 @@ $PY compare "$TMP/base.profile.json" "$TMP/autob.profile.json" >/dev/null 2>&1; 
 $PY compare "$TMP/base.profile.json" "$TMP/base-1.json" >/dev/null 2>&1; rc=$?
 [ "$rc" = 2 ] && ok "a raw report is not a profile (exit 2)" || no "raw report as profile: exit $rc"
 
+python3 - "$TMP" <<'PY'
+import json, sys
+t = sys.argv[1]
+def prof(sha, pct):
+    w = {"name": "lox", "status": "ok", "stages": [], "self_pct_all": {"f": pct},
+         "hotspots": [{"name": "f", "pos": "", "self_pct": pct, "self_ms": 1, "total_pct": pct, "calls": 0}]}
+    json.dump({"schema": "concrete-leanprof-profile/1", "mode": "auto", "sha": sha, "workloads": [w]},
+              open("%s/edge-%s.json" % (t, sha), "w"))
+prof("b", 2.1); prof("h", 4.1)
+PY
+$PY compare "$TMP/edge-b.json" "$TMP/edge-h.json" >/dev/null; rc=$?
+[ "$rc" = 1 ] && ok "a share at exactly the threshold (2.1% -> 4.1%: +2.0 points) is a finding" || no "threshold edge: exit $rc"
+
 echo "D  driver"
 FAKEBIN="$TMP/fakebin"; mkdir -p "$FAKEBIN"
 printf '#!/bin/sh\n[ -z "$FAKE_LAKE_FAIL" ] || exit 1\n' > "$FAKEBIN/lake"; chmod +x "$FAKEBIN/lake"
@@ -185,6 +198,17 @@ drive "$TMP/p10" --source "$TMP/corpus"; rc=$?
 [ "$rc" = 2 ] && ok "--source that is not a concrete tree is refused" || no "bad --source: exit $rc"
 env IN_NIX_SHELL=impure PATH="$FAKEBIN:$PATH" FAKE_LP_LOG="$TMP/lp.log" bash "$DRV" profile --leanprof "$LPF" --out "$TMP/p11" --workloads lox >/dev/null 2>&1; rc=$?
 [ "$rc" = 0 ] && [ "$(cut -d'|' -f1 "$TMP/lp.log")" = auto ] && ok "the default mode is auto (any perf_event_paranoid)" || no "default mode: exit $rc"
+cp -R "$TMP/src" "$TMP/src-nostd"; rm -rf "$TMP/src-nostd/std"
+drive "$TMP/p12" --reps 1 --workloads lox,std --source "$TMP/src-nostd"; rc=$?
+[ "$rc" = 3 ] && [ "$(jq_py "$TMP/p12/profile.json" '",".join(w["name"] + "=" + w["status"] for w in d["workloads"])')" = "lox=ok,std=failed" ] \
+  && ok "a workload that cannot be copied is failed (exit 3), never left out" || no "uncopyable workload: exit $rc"
+mkdir -p "$TMP/corpus2"; printf 'fn main() -> Int { return 0; }\n' > "$TMP/corpus2/a+b.con"; cp "$TMP/corpus2/a+b.con" "$TMP/corpus2/a_b.con"
+drive "$TMP/p13" --reps 1 --workloads scaling --scaling-corpus "$TMP/corpus2"; rc=$?
+[ "$rc" = 0 ] && [ "$(ls "$TMP/p13/raw" | wc -l | tr -d ' ')" = 2 ] \
+  && [ "$(jq_py "$TMP/p13/profile.json" '",".join(w["name"] for w in d["workloads"])')" = "scaling:a+b,scaling:a_b" ] \
+  && ok "two corpus names that sanitize alike keep separate reports" || no "name collision: exit $rc"
+( env IN_NIX_SHELL=impure PATH="$FAKEBIN:$PATH" timeout 20 bash "$DRV" profile --leanprof "$LPF" --out ) >/dev/null 2>&1; rc=$?
+[ "$rc" = 2 ] && ok "an option without its value is a usage error, not a loop" || no "trailing option: exit $rc"
 drive "$TMP/p8" --workloads nope; rc=$?
 [ "$rc" = 2 ] && ok "an unknown workload is refused" || no "unknown workload: exit $rc"
 a="$(bash "$DRV" gen-corpus 40 | cksum)"; b="$(bash "$DRV" gen-corpus 40 | cksum)"

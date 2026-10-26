@@ -64,8 +64,8 @@ case "$cmd" in
     out=""; th=()
     while [ $# -gt 0 ]; do
       case "$1" in
-        --out) out="${2:?--out needs a directory}"; shift 2 ;;
-        --grow-pts|--grow-ratio|--new-pts|--new-base-max) th+=("$1" "${2:?$1 needs a value}"); shift 2 ;;
+        --out) [ $# -ge 2 ] || die "--out needs a directory"; out="$2"; shift 2 ;;
+        --grow-pts|--grow-ratio|--new-pts|--new-base-max) [ $# -ge 2 ] || die "$1 needs a value"; th+=("$1" "$2"); shift 2 ;;
         *) die "compare: unknown option $1" ;;
       esac
     done
@@ -83,6 +83,7 @@ WORKLOADS="lox,std,scaling" CORPUS="" SCALING_SIZE=5000 REPS=3 RATE=2000 TOP=15 
 BASELINE="" SHA=""
 nat() { [[ "$2" =~ ^[1-9][0-9]*$ ]] || die "$1 must be a positive integer (got '$2')"; }
 while [ $# -gt 0 ]; do
+  [ $# -ge 2 ] || die "$1 needs a value"
   case "$1" in
     --leanprof) LEANPROF="${2:-}"; shift 2 ;;
     --out) OUT="${2:-}"; shift 2 ;;
@@ -134,10 +135,13 @@ source "$ROOT_DIR/scripts/tests/lib/bounded.sh"
 export PYTHONDONTWRITEBYTECODE=1
 
 # One workload: NAME, the directory it runs in, then the compiler's arguments.
-WL_FILES=(); STATUS=0
+# SAFE: the current workload's file stem, numbered so that two names that sanitize alike
+# (scaling:a+b, scaling:a_b) never share raw reports or a summary.
+WL_FILES=(); STATUS=0; WL_N=0; SAFE=""
+next_safe() { WL_N=$((WL_N + 1)); SAFE="$(printf '%02d' "$WL_N")_${1//[^A-Za-z0-9_.-]/_}"; }
 profile_one() {
   local name="$1" dir="$2"; shift 2
-  local safe="${name//[^A-Za-z0-9_.-]/_}" reports=() r rc lp
+  local safe="$SAFE" reports=() r rc lp
   for r in $(seq 1 "$REPS"); do
     local json="$OUT/raw/$safe-$r.json"
     rm -f "$json"
@@ -170,7 +174,7 @@ profile_one() {
   fi
 }
 wl_status() {  # NAME STATUS DETAIL: a workload without an observation
-  local f; f="$WORK/wl-${1//[^A-Za-z0-9_.-]/_}.json"
+  local f="$WORK/wl-$SAFE.json"
   python3 -c 'import json,sys; json.dump({"name": sys.argv[1], "status": sys.argv[2], "detail": sys.argv[3], "stages": [], "hotspots": []}, open(sys.argv[4], "w"))' \
     "$1" "$2" "$3" "$f"
   WL_FILES+=("$f"); STATUS=3
@@ -182,20 +186,23 @@ copy_pkg() {  # SRC NAME -> a private copy, so the build writes nothing into the
 IFS=',' read -r -a WL <<< "$WORKLOADS"
 for w in "${WL[@]}"; do
   case "$w" in
-    lox) d="$(copy_pkg "$SRC/examples/lox" lox)" && profile_one lox "$d" build --emit-llvm ;;
-    std) d="$(copy_pkg "$SRC/std" std)" && profile_one std "$d" build --emit-llvm ;;
+    lox|std)
+      next_safe "$w"
+      src="$SRC/std"; [ "$w" = std ] || src="$SRC/examples/lox"
+      if d="$(copy_pkg "$src" "$w")"; then profile_one "$w" "$d" build --emit-llvm
+      else log "$w: FAILED (cannot copy $src)"; wl_status "$w" failed "cannot copy $src"; fi ;;
     scaling)
       mkdir -p "$WORK/scaling"
       if [ -n "$CORPUS" ]; then
         found=0
         for f in "$CORPUS"/*.con; do
           [ -f "$f" ] || continue; found=1
-          cp "$f" "$WORK/scaling/"; profile_one "scaling:$(basename "$f" .con)" "$WORK/scaling" "$(basename "$f")" --emit-llvm
+          cp "$f" "$WORK/scaling/"; next_safe "scaling:$(basename "$f" .con)"; profile_one "scaling:$(basename "$f" .con)" "$WORK/scaling" "$(basename "$f")" --emit-llvm
         done
         [ "$found" = 1 ] || die "scaling corpus $CORPUS has no .con files"
       else
         python3 "$PY" gen-corpus "$SCALING_SIZE" > "$WORK/scaling/scaling.con" || die "gen-corpus failed"
-        profile_one scaling "$WORK/scaling" scaling.con --emit-llvm
+        next_safe scaling; profile_one scaling "$WORK/scaling" scaling.con --emit-llvm
       fi ;;
     *) die "unknown workload '$w' (lox, std, scaling)" ;;
   esac
@@ -215,6 +222,7 @@ json.dump({"sha": sha, "mode": mode, "reps": int(reps), "rate": int(rate), "lean
            "scaling": {"corpus": corpus or None, "size": None if corpus else int(size)},
            "cores": cores or None}, open(o, "w"))
 PY
+[ "${#WL_FILES[@]}" -gt 0 ] || die "no workload was profiled"
 python3 "$PY" assemble --meta "$WORK/meta.json" --out "$OUT/profile.json" "${WL_FILES[@]}" || die "assemble failed"
 python3 "$PY" render "$OUT/profile.json" > "$OUT/summary.md" || die "render failed"
 bounded_summary >&2

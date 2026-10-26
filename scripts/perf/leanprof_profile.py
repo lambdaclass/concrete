@@ -193,8 +193,11 @@ def check_profile(p, path):
     return p
 
 
+EPS = 1e-6  # shares are rounded to hundredths; 2.1 -> 4.1 is +2.0 points, not 1.9999999999999996
+
+
 def grew(base, head, t):
-    return head - base >= t["grow_pts"] and head >= base * t["grow_ratio"]
+    return head - base >= t["grow_pts"] - EPS and head >= base * t["grow_ratio"] - EPS
 
 
 def compare(base, head, t):
@@ -215,7 +218,7 @@ def compare(base, head, t):
             if h["name"] in ball and grew(bp, h["self_pct"], t):
                 findings.append({"workload": w["name"], "kind": "grown", "name": h["name"],
                                  "pos": h.get("pos", ""), "base_pct": bp, "head_pct": h["self_pct"]})
-            elif h["self_pct"] >= t["new_pts"] and bp < t["new_base_max"]:
+            elif h["self_pct"] >= t["new_pts"] - EPS and bp < t["new_base_max"]:
                 findings.append({"workload": w["name"], "kind": "new", "name": h["name"],
                                  "pos": h.get("pos", ""), "base_pct": bp, "head_pct": h["self_pct"]})
         bst = {s["stage"]: s for s in b["stages"]}
