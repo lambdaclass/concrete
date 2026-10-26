@@ -144,6 +144,34 @@ partial def flexTree : Expr → FlexTree
 /-- The tree of an operand: `i`-th of `kids`, when the node has one. -/
 def FlexTree.kid (t : FlexTree) (i : Nat) : Option FlexTree := t.kids[i]?
 
+/-- Whether `isFlexibleLit` recurses into `e` (a parenthesis, a negation, a binary operator). An
+    operand that does not is a leaf of the region: its `isFlexibleLit` is answered without a walk,
+    so a binary operator over two leaves (`s + t`) builds no tree. Building one per operator
+    allocated on every such expression and, with the same work, left the later monomorphize stage
+    about 13% slower on 10^5 assignments (train 37 CI). -/
+def opensFlexRegion : Expr → Bool
+  | .paren _ _ | .unaryOp _ .neg _ | .binOp _ _ _ _ => true
+  | _ => false
+
+/-- The trees of a binary operator's two operands: the parent's subtrees when it handed one down,
+    none when both operands are leaves (their flexibility is `isFlexibleLit`, O(1)), otherwise
+    from one walk of the region (`flexTree`). -/
+@[inline] def binOpFlexTrees (flex : Option FlexTree) (e lhs rhs : Expr) :
+    Option FlexTree × Option FlexTree :=
+  match flex with
+  | some ft => (ft.kid 0, ft.kid 1)
+  | none =>
+    if opensFlexRegion lhs || opensFlexRegion rhs then
+      let ft := flexTree e
+      (ft.kid 0, ft.kid 1)
+    else (none, none)
+
+/-- An operand's flexibility: from its tree when there is one, else `isFlexibleLit` (a leaf). -/
+@[inline] def operandFlex (t : Option FlexTree) (e : Expr) : Bool :=
+  match t with
+  | some t => t.flex
+  | none => isFlexibleLit e
+
 /-- Which binop operand to type first. -/
 inductive OperandOrder where
   /-- Flexible lhs, concrete rhs: type rhs first, then hint lhs with its type. -/

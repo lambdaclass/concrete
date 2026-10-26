@@ -772,9 +772,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       | none => throwCheck (.undeclaredVariable name) (some e.getSpan)
   | .binOp _ op lhs rhs =>
     -- Bug 280: the operands' flexibility from the region's one walk (handed down by the parent).
-    let ft := flex.getD (TypeJudgment.flexTree e)
-    let ftL := ft.kid 0
-    let ftR := ft.kid 1
+    let (ftL, ftR) := TypeJudgment.binOpFlexTrees flex e lhs rhs
     -- The comparison rule is decided before the operands are checked: checking a non-Copy
     -- operand in value position moves it, and `x == x` would report a fictitious move (E0205)
     -- instead of the undefined comparison (Codex review, bug 140). A bound name's type is read
@@ -805,7 +803,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       return .bool
     let (lTy, lTyR, rTyR) ←
       match TypeJudgment.binOpOperandOrder
-              ((ftL.map (·.flex)).getD false) ((ftR.map (·.flex)).getD false) with
+              (TypeJudgment.operandFlex ftL lhs) (TypeJudgment.operandFlex ftR rhs) with
       | .rhsFirst => do
         let rTy ← checkExpr rhs hint (clean := clean) (flex := ftR)
         let rTyR ← resolveType rTy
