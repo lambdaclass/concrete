@@ -19,16 +19,30 @@ CoreCheck), `llvm` (`--emit-llvm`: through EmitSSA), `native` (`-o`: through cla
 link) and `interp` (`--interp`: the front end and the interpreter running the program). A stage
 proxy contains every in-compiler stage before it, so a quadratic anywhere upstream fails it too.
 
-TWO KINDS OF MEASUREMENT.
-  * Heartbeats are deterministic for a given binary and input: their growth check needs no
-    retry and is immune to host load. They count allocations, so they see an append-built list
-    (bugs 249, 255, 259) but not a list SEARCH (bugs 256 - 258, 260, 261), which allocates
-    nothing; that is why wall time is judged as well.
-  * Wall time is judged against the budgets and for growth. Host noise is handled by the RETRY
-    BUDGET (`retries` in the budget file): when an attempt violates any wall-clock bound, the
-    whole shape is measured again, and every (size, stage) keeps its FASTEST run. A noisy spike
-    cannot survive a minimum, and a quadratic stage's minimum is still quadratic, so the retry
-    never turns a resolvable quadratic (see RESOLUTION) into a pass.
+THREE KINDS OF MEASUREMENT.
+  * Heartbeats are deterministic for a given binary and input: their growth check and their
+    budget (`hbbudget`, hb_budget_factor x the count at --measure) need no retry and are immune to
+    host load. They count allocations, so they see an append-built list (bugs 249, 255, 259) but
+    not a list SEARCH (bugs 256 - 258, 260, 261), which allocates nothing.
+  * Retired user instructions (`perf stat -e instructions:u`, on a host whose perf_event_paranoid
+    allows it, as check_ssa_lowering_scaling.sh counts them) of every timed run: exact up to a few
+    in a million whatever the load (bug 294), so a run's count is judged without retries against
+    its budget (`instr`, instr_budget_factor x the median at --measure) and for growth between
+    sizes (instr_exp). They see work that allocates nothing, for the whole run, not per stage.
+  * Wall time is judged against the budgets and for growth. Host noise is handled two ways.
+    The RETRY BUDGET (`retries`): when an attempt violates any wall-clock bound, the whole shape
+    is measured again, and every (size, stage) keeps its FASTEST run; a noisy spike cannot
+    survive a minimum, and a quadratic stage's minimum is still quadratic. HOST NORMALIZATION
+    (bug 294): a CI host under sustained load runs the same instructions several times slower
+    (concrete-ci-2 at load 24: one binary's 10^5-assignment trace in 4637, 3585 and 2190 ms at
+    the same 13.615 G instructions), which no retry outlasts. So --measure records, per (shape,
+    size, mode), the run's milliseconds per 10^9 instructions (`rate`, the session's quietest),
+    and the judge divides a stage's time by the factor its run went slower than that, at least 1
+    and at most norm_cap, before comparing it with the budget. The run's own instruction count is
+    the denominator, so added work does not raise its allowance (it shows in the instruction
+    budget); a change that makes the same instructions slower raises it, up to norm_cap: such a
+    regression is held by the budget only beyond norm_cap times it. Growth is judged on raw times.
+    A host that cannot count judges raw times against the budgets and says so.
 
 SIZES are a factor of ten apart (10^4 and 10^5 where the shape allows). Between two such sizes a
 quadratic stage grows a hundredfold. A linear stage's allocation count grows exactly tenfold, so
@@ -74,7 +88,8 @@ MODES = ["trace", "core", "llvm", "native", "interp"]
 REQUIRED = TRACE_STAGES + ["llvm", "native"]   # the compile path every shape covers or explains
 PARAM_DEFAULTS = {"exp": 1.8, "hb_exp": 1.2, "floor_ms": 2.0, "wall_floor_ms": 25.0, "hb_judge_min": 100000.0, "retries": 2.0, "ceiling_factor": 3.0,
                   "ceiling_min_s": 20.0, "measure_runs": 3.0, "budget_factor": 4.0,
-                  "budget_slack_ms": 200.0}
+                  "budget_slack_ms": 200.0, "hb_budget_factor": 1.25, "instr_budget_factor": 1.25,
+                  "instr_exp": 1.2, "norm_cap": 2.0}
 
 
 # ----------------------------------------------------------------------------- generated corpus
@@ -191,6 +206,9 @@ class Budgets:
         self.params = dict(PARAM_DEFAULTS)
         self.shapes = []                 # [(name, [sizes], [modes])] in file order
         self.budget = {}                 # (shape, n, stage) -> ms
+        self.hbbudget = {}               # (shape, n, stage) -> allocation heartbeats
+        self.instr = {}                  # (shape, n, mode) -> retired user instructions
+        self.rate = {}                   # (shape, n, mode) -> ms per 10^9 instructions at --measure
         self.exclude = {}                # (shape, stage) -> reason
         self.errors = []
         self.header = []
@@ -219,6 +237,12 @@ class Budgets:
                         self.shapes.append((parts[1], sizes, modes))
                     elif kind == "budget" and len(parts) == 5:
                         self.budget[(parts[1], int(parts[2]), parts[3])] = float(parts[4])
+                    elif kind == "hbbudget" and len(parts) == 5:
+                        self.hbbudget[(parts[1], int(parts[2]), parts[3])] = float(parts[4])
+                    elif kind == "instr" and len(parts) == 5:
+                        self.instr[(parts[1], int(parts[2]), parts[3])] = float(parts[4])
+                    elif kind == "rate" and len(parts) == 5:
+                        self.rate[(parts[1], int(parts[2]), parts[3])] = float(parts[4])
                     elif kind == "exclude" and len(parts) == 4:
                         if not parts[3].strip():
                             raise ValueError("an exclusion needs a reason")
@@ -264,6 +288,33 @@ class Budgets:
         return None
 
 
+def instr_of(text):
+    """The `instructions:u` count of a `perf stat -x,` report, or None."""
+    for line in text.splitlines():
+        parts = line.split(",")
+        if len(parts) >= 3 and parts[2].strip() == "instructions:u" and re.match(r"^\d+$", parts[0].strip()):
+            return int(parts[0].strip())
+    return None
+
+
+def perf_ok():
+    """Whether this host can count retired user instructions (perf_event_paranoid <= 2), as
+    check_ssa_lowering_scaling.sh asks it."""
+    if not shutil.which("perf"):
+        return False
+    try:
+        p = subprocess.run(["perf", "stat", "-e", "instructions:u", "-x,", "true"],
+                           capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return p.returncode == 0 and instr_of(p.stderr) is not None
+
+
+def mode_of(stage):
+    """The run that times a stage: the trace for an in-compiler stage, else the stage itself."""
+    return "trace" if stage in TRACE_STAGES else stage
+
+
 def stages_of(modes):
     out = []
     for m in modes:
@@ -273,9 +324,10 @@ def stages_of(modes):
 
 # ----------------------------------------------------------------------------- running
 class Runner:
-    def __init__(self, cc, bounded, budgets, workdir):
+    def __init__(self, cc, bounded, budgets, workdir, perf=False):
         self.cc, self.bounded, self.b, self.dir = cc, bounded, budgets, workdir
         self.base = {}
+        self.perf = perf
 
     def baseline(self, m):
         """The fastest of three whole runs of mode M on a one-line program: process start, the
@@ -289,7 +341,7 @@ class Runner:
                     "native": ["-o", src + ".bin"]}[m]
             walls = []
             for _ in range(3):
-                rc, _o, _e, wall, to = self.bounded_run(60, [self.cc, src] + argv)
+                rc, _o, _e, wall, to, _i = self.bounded_run(60, [self.cc, src] + argv)
                 if rc == 0 and not to:
                     walls.append(wall)
             # None: the baseline did not run, and a whole compile is then not judged as measured.
@@ -302,25 +354,40 @@ class Runner:
             return 600.0
         return max(self.b.p("ceiling_min_s"), self.b.p("ceiling_factor") * sum(known) / 1000.0)
 
-    def bounded_run(self, secs, argv):
-        """(rc, stdout, stderr, wall_ms, timed_out)."""
+    def bounded_run(self, secs, argv, count=False):
+        """(rc, stdout, stderr, wall_ms, timed_out, instructions). With COUNT on a host that can
+        count, the run is wrapped in `perf stat -e instructions:u` (its report goes to a file, so the
+        command's own streams are unchanged) and its retired user instructions are returned, else
+        None."""
+        stat = None
+        if count and self.perf:
+            stat = os.path.join(self.dir, "perf.stat")
+            if os.path.exists(stat):
+                os.unlink(stat)
+            argv = ["perf", "stat", "-e", "instructions:u", "-x,", "-o", stat, "--"] + argv
         t0 = time.monotonic()
         r = subprocess.run(["bash", self.bounded, "%.3f" % secs] + argv,
                            capture_output=True, text=True)
         wall = (time.monotonic() - t0) * 1000.0
         timed_out = r.returncode == 124 and "INCOMPLETE:" in r.stderr
-        return r.returncode, r.stdout, r.stderr, wall, timed_out
+        instr = None
+        if stat is not None and not timed_out and os.path.exists(stat):
+            with open(stat) as f:
+                instr = instr_of(f.read())
+        return r.returncode, r.stdout, r.stderr, wall, timed_out, instr
 
     def measure(self, shape, n, modes):
-        """One attempt at one size: {stage: ms}, {stage: heartbeats}, {stage: 'timeout'|error}."""
+        """One attempt at one size: {stage: ms}, {stage: heartbeats}, {stage: 'timeout'|error},
+        {mode: instructions}, {mode: whole-run wall ms} (the last two for the runs `perf` counted)."""
         src = os.path.join(self.dir, "%s_%d.con" % (shape, n))
         with open(src, "w") as f:           # always this size's program, even in a --keep dir
             f.write(gen(shape, n))
-        times, beats, bad = {}, {}, {}
+        times, beats, bad, instrs, walls = {}, {}, {}, {}, {}
         for m in modes:
             if m == "trace":
                 secs = self.ceiling(shape, n, TRACE_STAGES)
-                rc, out, err, _w, to = self.bounded_run(secs, [self.cc, src, "--emit-trace-json"])
+                rc, out, err, w, to, ins = self.bounded_run(secs, [self.cc, src, "--emit-trace-json"],
+                                                            count=True)
                 if to:
                     for s in TRACE_STAGES:
                         bad[s] = "timeout %.0fs" % secs
@@ -333,6 +400,8 @@ class Runner:
                             raise KeyError(s)
                         times[s] = float(tm[s])
                         beats[s] = float(hb[s])
+                    if ins:
+                        instrs[m], walls[m] = float(ins), w
                 except (ValueError, KeyError, TypeError):
                     msg = "trace failed rc %d: %s" % (rc, (err or out)[:160].replace("\n", " "))
                     for s in TRACE_STAGES:
@@ -350,7 +419,7 @@ class Runner:
                 argv = [self.cc, src, "--interp"]
             else:
                 argv = [self.cc, src, "-o", binary]
-            rc, out, err, wall, to = self.bounded_run(secs, argv)
+            rc, out, err, wall, to, ins = self.bounded_run(secs, argv, count=True)
             if to:
                 bad[m] = "timeout %.0fs" % secs
                 continue
@@ -373,17 +442,38 @@ class Runner:
             if m == "native":
                 # The compile is measured; the binary must also be right (an unmeasured or
                 # miscompiled run is not a pass).
-                rrc, _o, _e, _w, rto = self.bounded_run(20, [binary])
+                rrc, _o, _e, _w, rto, _i = self.bounded_run(20, [binary])
                 if rto or rrc != 42:
                     bad[m] = "binary exited %s, want 42" % ("timeout" if rto else rrc)
                     continue
             times[m] = wall
-        return times, beats, bad
+            if ins:
+                instrs[m], walls[m] = float(ins), wall
+        return times, beats, bad, instrs, walls
 
 
-def judge(b, shape, sizes, stages, times, beats, bad, base=None):
-    """Lines and verdicts for one shape: [(verdict, text)], verdict in ok/FAIL/EXCLUDED/note."""
+def host_factor(b, shape, n, m, walls, instrs):
+    """How much slower this host ran mode M's compile than when the budgets were measured, per
+    instruction: (wall / instructions) now over the rate recorded at --measure, at least 1 and at
+    most `norm_cap`. 1 when either side was not counted. The compile's own instruction count is the
+    denominator, so a change that adds work does not raise its own allowance; a change that makes
+    the same instructions slower raises it up to the cap (stated in compile_scaling_budgets.tsv)."""
+    ref = b.rate.get((shape, n, m))
+    ins, w = instrs.get(m), walls.get(m)
+    if ref is None or not ins or not w or ref <= 0:
+        return 1.0
+    return min(b.p("norm_cap"), max(1.0, (w / (ins / 1e9)) / ref))
+
+
+def judge(b, shape, sizes, stages, times, beats, bad, base=None, ntimes=None, factors=None,
+          instrs=None, modes=None):
+    """Lines and verdicts for one shape: [(verdict, text)], verdict in ok/FAIL/FAIL-HB/FAIL-INSTR/
+    EXCLUDED. A stage's time is judged against its budget after dividing by the host factor of the
+    run that timed it (`ntimes`); its growth is judged on the raw fastest times."""
     exp = b.p("exp")
+    ntimes = ntimes if ntimes is not None else times
+    factors = factors or {}
+    instrs = instrs or {}
     res = []
     for s in stages:
         why = b.excluded(shape, s)
@@ -406,10 +496,15 @@ def judge(b, shape, sizes, stages, times, beats, bad, base=None):
                 problems.append("n=%d not measured" % n)
                 continue
             bud = b.budget.get((shape, n, s))
+            fac = factors.get((n, s), 1.0)
             if bud is None:
                 problems.append("n=%d has no recorded budget" % n)
-            elif times[(n, s)] > bud:
-                problems.append("n=%d %.0fms > budget %.0fms" % (n, times[(n, s)], bud))
+            elif ntimes[(n, s)] > bud:
+                if fac > 1.0:
+                    problems.append("n=%d %.0fms (host x%.2f) > budget %.0fms"
+                                    % (n, ntimes[(n, s)] * fac, fac, bud))
+                else:
+                    problems.append("n=%d %.0fms > budget %.0fms" % (n, times[(n, s)], bud))
         growth = []
         hbfail = []
         for n1, n2 in zip(sizes, sizes[1:]):
@@ -432,26 +527,64 @@ def judge(b, shape, sizes, stages, times, beats, bad, base=None):
                 if h2 >= b.p("hb_judge_min") and r > hlimit:
                     hbfail.append("heartbeats grew x%.1f from %d to %d > x%.1f (n^%.1f)"
                                   % (r, n1, n2, hlimit, b.p("hb_exp")))
+        # Allocation budgets: exact counts, judged once a budget is recorded (--measure).
+        for n in sizes:
+            hbud = b.hbbudget.get((shape, n, s))
+            if hbud is not None and (n, s) in beats and beats[(n, s)] > hbud:
+                hbfail.append("n=%d %d heartbeats > budget %d" % (n, beats[(n, s)], hbud))
         if hbfail:
             res.append(("FAIL-HB", "%s/%s %s [%s]" % (shape, s, "; ".join(hbfail), detail)))
         if problems:
             res.append(("FAIL", "%s/%s %s [%s]" % (shape, s, "; ".join(problems), detail)))
         elif not hbfail:
-            res.append(("ok", "%s/%s [%s] growth %s" % (shape, s, detail, " ".join(growth) or "-")))
+            hf = [factors[(n, s)] for n in sizes if factors.get((n, s), 1.0) > 1.0]
+            res.append(("ok", "%s/%s [%s] growth %s%s" % (shape, s, detail, " ".join(growth) or "-",
+                        (" host x%.2f" % max(hf)) if hf else "")))
+    # Retired instructions of each counted run: exact up to a few in a million, so their budget and
+    # growth are judged without retries and whatever the host's load.
+    for m in (modes or []):
+        if m == "trace":
+            why = next((b.excluded(shape, st) for st in TRACE_STAGES if b.excluded(shape, st)), None)
+        else:
+            why = b.excluded(shape, m)
+        counted = [(n, instrs[(n, m)]) for n in sizes if (n, m) in instrs]
+        if why is not None or not counted:
+            continue
+        problems = []
+        for n, v in counted:
+            ib = b.instr.get((shape, n, m))
+            if ib is not None and v > ib:
+                problems.append("n=%d %d instructions > budget %d" % (n, v, ib))
+        for (n1, v1), (n2, v2) in zip(counted, counted[1:]):
+            lim = (n2 / n1) ** b.p("instr_exp")
+            if v2 / max(v1, 1.0) > lim:
+                problems.append("instructions grew x%.1f from %d to %d > x%.1f (n^%.1f)"
+                                % (v2 / max(v1, 1.0), n1, n2, lim, b.p("instr_exp")))
+        detail = " ".join("%d:%.0fM" % (n, v / 1e6) for n, v in counted)
+        if problems:
+            res.append(("FAIL-INSTR", "%s/instructions:%s %s [%s]" % (shape, m, "; ".join(problems), detail)))
+        else:
+            res.append(("ok", "%s/instructions:%s [%s]" % (shape, m, detail)))
     return res
 
 
 def run_shape(runner, b, shape, sizes, modes, attempts):
     """Measure a shape up to ATTEMPTS times; keep the fastest run per (size, stage)."""
     stages = stages_of(modes)
-    times, beats, bad = {}, {}, {}
+    times, beats, bad, ntimes, factors, instrs = {}, {}, {}, {}, {}, {}
     for attempt in range(1, attempts + 1):
         for n in sizes:
-            t, h, e = runner.measure(shape, n, modes)
+            t, h, e, ins, w = runner.measure(shape, n, modes)
             for s, v in t.items():
                 times[(n, s)] = min(v, times.get((n, s), v))
+                # The budget is judged on the attempt with the least time per host factor.
+                f = host_factor(b, shape, n, mode_of(s), w, ins)
+                if (n, s) not in ntimes or v / f < ntimes[(n, s)]:
+                    ntimes[(n, s)], factors[(n, s)] = v / f, f
             for s, v in h.items():
                 beats[(n, s)] = min(v, beats.get((n, s), v))
+            for m, v in ins.items():
+                instrs[(n, m)] = min(v, instrs.get((n, m), v))
             # A failure in ANY attempt stands: a wrong result or a refused compile is never
             # noise, and a later attempt's time does not make it a measurement.
             for s, v in e.items():
@@ -462,16 +595,49 @@ def run_shape(runner, b, shape, sizes, modes, attempts):
                 for n in sizes:
                     bad.setdefault((n, m), "its baseline (a one-line program) did not compile")
         verdicts = judge(b, shape, sizes, stages, times, beats, bad,
-                         {m: v for m, v in base.items() if v is not None})
+                         {m: v for m, v in base.items() if v is not None}, ntimes, factors,
+                         instrs, modes)
         wall_fail = any(v == "FAIL" for v, _ in verdicts)
-        # Heartbeat failures are deterministic: no retry changes them. A compile that failed is
-        # not noise, and a run killed at its ceiling twice (bounded.sh already re-ran it alone
-        # with twice the time) is over its budget by more than the ceiling factor: neither is
-        # retried again.
+        # Heartbeat and instruction failures are deterministic: no retry changes them. A compile
+        # that failed is not noise, and a run killed at its ceiling twice (bounded.sh already re-ran
+        # it alone with twice the time) is over its budget by more than the ceiling factor: neither
+        # is retried again.
         hard = bool(bad)
         if not wall_fail or hard or attempt == attempts:
             return verdicts, attempt
     return verdicts, attempts
+
+
+def controls(workdir):
+    """Negative controls of the judge (bug 294), on a synthetic record: a host factor rescues a
+    stage only within norm_cap, never an instruction or heartbeat overrun. [(ok, text)]."""
+    path = os.path.join(workdir, "controls.tsv")
+    with open(path, "w") as f:
+        f.write("param\tnorm_cap\t2\nshape\tassignments\t10,100\ttrace\n"
+                + "".join("budget\tassignments\t%d\t%s\t100\n" % (n, st)
+                          for n in (10, 100) for st in TRACE_STAGES)
+                + "hbbudget\tassignments\t100\tlower\t1000\n"
+                + "instr\tassignments\t100\ttrace\t1000000\n")
+    b = Budgets(path)
+    sizes, stages = [10, 100], TRACE_STAGES
+
+    def verdicts(t100, f100, hb100=500.0, ins100=900000.0):
+        times = {(n, st): (10.0 if n == 10 else t100) for n in sizes for st in stages}
+        factors = {(n, st): (1.0 if n == 10 else f100) for n in sizes for st in stages}
+        ntimes = {k: v / factors[k] for k, v in times.items()}
+        beats = {(n, st): (100.0 if n == 10 else hb100) for n in sizes for st in stages}
+        instrs = {(10, "trace"): 100000.0, (100, "trace"): ins100}
+        return {v for v, _ in judge(b, "assignments", sizes, stages, times, beats, {}, {}, ntimes,
+                                    factors, instrs, ["trace"])}
+    out = []
+    out.append(("FAIL" in verdicts(150.0, 1.0), "CONTROL: a stage over its budget on an unloaded host fails"))
+    out.append(("FAIL" not in verdicts(150.0, 2.0), "CONTROL: the same time on a host running at half speed passes"))
+    out.append(("FAIL" in verdicts(250.0, 2.0), "CONTROL: a stage over norm_cap x its budget fails however slow the host"))
+    out.append(("FAIL-INSTR" in verdicts(50.0, 2.0, ins100=1200000.0),
+                "CONTROL: a run over its instruction budget fails, host factor or not"))
+    out.append(("FAIL-HB" in verdicts(50.0, 2.0, hb100=1500.0),
+                "CONTROL: a stage over its heartbeat budget fails, host factor or not"))
+    return out
 
 
 def git_identity(root):
@@ -500,26 +666,54 @@ def host_identity():
 
 def do_measure(runner, b, shapes, root):
     runs = int(b.p("measure_runs"))
-    new = {}
+    new, newhb, newinstr, newrate = {}, {}, {}, {}
+    if not runner.perf:
+        print("  note: perf cannot count instructions:u on this host; no instruction budgets or rates"
+              " are recorded, and the wall budgets are judged without host normalization")
     for shape, sizes, modes in shapes:
         if b.excluded(shape, "*") is not None:
             print("  skip %s (excluded: %s)" % (shape, b.excluded(shape, "*")))
             continue
-        samples = {}
+        samples, hbs, isamples, rsamples = {}, {}, {}, {}
         for _ in range(runs):
             for n in sizes:
-                t, _h, e = runner.measure(shape, n, modes)
+                t, h, e, ins, w = runner.measure(shape, n, modes)
                 if e:
                     print("  FAIL %s n=%d: %s" % (shape, n, e))
                     return 1
                 for s, v in t.items():
-                    samples.setdefault((n, s), []).append(v)
+                    m = mode_of(s)
+                    rate = (w[m] / (ins[m] / 1e9)) if ins.get(m) and w.get(m) else None
+                    samples.setdefault((n, s), []).append((v, rate))
+                for s, v in h.items():
+                    hbs[(n, s)] = max(v, hbs.get((n, s), v))
+                for m, v in ins.items():
+                    isamples.setdefault((n, m), []).append(v)
+                    rsamples.setdefault((n, m), []).append(w[m] / (v / 1e9))
+        for (n, s), v in sorted(hbs.items()):
+            if b.excluded(shape, s) is None:
+                newhb[(shape, n, s)] = math.ceil(b.p("hb_budget_factor") * v)
+        for (n, m), vs in sorted(isamples.items()):
+            newinstr[(shape, n, m)] = math.ceil(b.p("instr_budget_factor") * statistics.median(vs))
+            # The reference rate is the session's quietest run of this compile: the rate the
+            # budgets below are scaled to.
+            newrate[(shape, n, m)] = round(min(rsamples[(n, m)]), 1)
+            print("  %s n=%d %s: median %.0fM instructions, %.1f ms per 10^9 -> instruction budget %dM"
+                  % (shape, n, m, statistics.median(vs) / 1e6, newrate[(shape, n, m)],
+                     newinstr[(shape, n, m)] / 1e6))
         for (n, s), vs in sorted(samples.items()):
-            med = statistics.median(vs)
+            # Each run's time at the quietest rate of the session (a run whose compile went at
+            # twice that rate is counted at half its time); unscaled where nothing was counted.
+            ref = newrate.get((shape, n, mode_of(s)))
+            scaled = [v * (ref / r) if (ref and r) else v for v, r in vs]
+            # Counted runs: the fastest scaled run, as the judge keeps the fastest attempt (a scaled
+            # run still carries the load a stage felt beyond the whole compile's); else the median.
+            med = min(scaled) if ref else statistics.median(scaled)
             bud = max(math.ceil(b.p("budget_factor") * med), math.ceil(med + b.p("budget_slack_ms")))
             new[(shape, n, s)] = bud
-            print("  %s n=%d %s: median %.0fms of %s -> budget %dms"
-                  % (shape, n, s, med, ",".join("%.0f" % v for v in vs), bud))
+            print("  %s n=%d %s: %.0fms of %s (raw %s) -> budget %dms"
+                  % (shape, n, s, med, ",".join("%.0f" % v for v in scaled),
+                     ",".join("%.0f" % v for v, _r in vs), bud))
     # Rewrite the file: keep every other line, replace the measured shapes' budgets. A run over
     # every shape replaces every `measured:` stamp; a run over some shapes keeps the earlier stamps
     # (which then cover the other shapes) and adds one naming the shapes it measured, so every
@@ -532,6 +726,8 @@ def do_measure(runner, b, shapes, root):
     for line in lines:
         if line.startswith("budget\t") or (every and line.startswith("# measured:")):
             continue
+        if line.split("\t")[0] in ("hbbudget", "instr", "rate"):
+            continue
         if line.startswith("# measured:") and " -- shapes: " in line:
             # An earlier stamp gives up the shapes measured now, so each shape has one stamp.
             head, names = line.split(" -- shapes: ", 1)
@@ -540,8 +736,15 @@ def do_measure(runner, b, shapes, root):
                 continue
             line = head + " -- shapes: " + ", ".join(keep)
         out.append(line)
-    stamp = "# measured: commit %s on %s, %s, %d runs (median), budget = max(%g x median, median + %gms)%s" % (
-        git_identity(root), host_identity(), time.strftime("%Y-%m-%d"), runs,
+    try:
+        load = "load average %.1f at the end" % os.getloadavg()[0]
+    except OSError:
+        load = "load average unknown"
+    scaled = ("fastest run, each scaled to the quietest instruction rate of the session" if runner.perf
+              else "median, unscaled (no instruction counts)")
+    stamp = ("# measured: commit %s on %s, %s, %d runs (%s; %s), "
+             "budget = max(%g x t, t + %gms)%s") % (
+        git_identity(root), host_identity(), time.strftime("%Y-%m-%d"), runs, scaled, load,
         b.p("budget_factor"), b.p("budget_slack_ms"),
         "" if every else " -- shapes: " + ", ".join(measured))
     # The stamp goes after the leading comment block (and after earlier stamps).
@@ -555,6 +758,15 @@ def do_measure(runner, b, shapes, root):
                       key=lambda k: (order.get(k[0], 999), k[1], stages_of(MODES).index(k[2]))):
         v = new.get(key, old.get(key))
         out.append("budget\t%s\t%d\t%s\t%d" % (key[0], key[1], key[2], v))
+    # The exact budgets and the host rates, kept for the shapes not measured now.
+    for kind, fresh, kept, fmt in (("hbbudget", newhb, b.hbbudget, "%d"), ("instr", newinstr, b.instr, "%d"),
+                                   ("rate", newrate, b.rate, "%.1f")):
+        oldk = {k: v for k, v in kept.items() if k[0] not in measured}
+        allk = set(oldk) | set(fresh)
+        idx = stages_of(MODES)
+        for key in sorted(allk, key=lambda k: (order.get(k[0], 999), k[1], idx.index(k[2]) if k[2] in idx else 99)):
+            v = fresh.get(key, oldk.get(key))
+            out.append(("%s\t%s\t%d\t%s\t" + fmt) % (kind, key[0], key[1], key[2], v))
     with open(b.path, "w") as f:
         f.write("\n".join(out) + "\n")
     print("wrote %d budgets to %s" % (len(new), b.path))
@@ -583,7 +795,7 @@ def main():
         return 2
     workdir = a.keep or tempfile.mkdtemp(prefix="compile_scaling.")
     os.makedirs(workdir, exist_ok=True)
-    runner = Runner(a.compiler, a.bounded, b, workdir)
+    runner = Runner(a.compiler, a.bounded, b, workdir, perf=perf_ok())
     try:
         if a.measure:
             return do_measure(runner, b, shapes, a.root)
@@ -592,7 +804,17 @@ def main():
               "allocations ===" % (b.p("exp"), b.p("hb_exp")))
         for m in meas or ["# NOT MEASURED"]:
             print("  budgets %s" % m[2:])
+        if not runner.perf:
+            print("  note: perf cannot count instructions:u on this host; wall budgets are judged"
+                  " unnormalized and instruction budgets are not judged")
         npass = nfail = nexcl = 0
+        for ok, text in controls(workdir):
+            if ok:
+                npass += 1
+                print("  ok   " + text)
+            else:
+                nfail += 1
+                print("  FAIL " + text)
         attempts = 1 + int(b.p("retries"))
         for shape, sizes, modes in shapes:
             why = b.excluded(shape, "*")
@@ -619,7 +841,8 @@ def main():
                     print("  EXCLUDED " + text)
                 else:
                     nfail += 1
-                    print("  FAIL " + text + ("  (heartbeats: deterministic, not retried)" if v == "FAIL-HB" else ""))
+                    print("  FAIL " + text + ("  (heartbeats: deterministic, not retried)" if v == "FAIL-HB" else
+                                              "  (instructions: deterministic, not retried)" if v == "FAIL-INSTR" else ""))
             print("  -- %s: %d attempt(s), %.1fs" % (shape, used, time.monotonic() - t0))
         print()
         print("check_compile_scaling: PASS=%d FAIL=%d EXCLUDED=%d" % (npass, nfail, nexcl))

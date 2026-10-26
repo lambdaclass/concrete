@@ -9,8 +9,11 @@
 # deterministic allocation heartbeats) and the rest by whole compiles (`--emit-core`,
 # `--emit-llvm`, native `-o`, `--interp`). A stage FAILS over its recorded budget, or when its
 # growth between sizes is above the recorded near-linear bound. A wall-clock violation is
-# re-measured within the recorded retry budget (each stage keeps its fastest run), so host
-# noise cannot fail the gate, and a retry cannot hide a quadratic stage: growth is resolved above
+# re-measured within the recorded retry budget (each stage keeps its fastest run), and on a host
+# that can count instructions (perf) a stage is judged against its budget at the host speed the
+# budgets were measured at, up to a cap, while each runs instructions and each stages
+# allocations are held exactly (bug 294); so host load cannot fail unchanged work, and a retry
+# cannot hide a quadratic stage: growth is resolved above
 # the floors stated in compile_scaling.py (RESOLUTION, SIZES), and below them, or for a quadratic
 # part still small at these sizes, only the budget holds the stage.
 # Budgets, sizes, bounds and the named exclusions (known filed defects, reported on every run) are

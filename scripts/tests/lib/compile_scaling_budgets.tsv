@@ -5,6 +5,10 @@
 #   exclude SHAPE STAGES REASON     stages (a comma list, or *) not judged, with the filed defect
 #                                   or the reason they are not measured
 #   budget  SHAPE SIZE STAGE MS     written by `check_compile_scaling.sh --measure` on the CI host
+#   hbbudget SHAPE SIZE STAGE COUNT allocation heartbeats a stage may make (exact; bug 294)
+#   instr   SHAPE SIZE MODE COUNT   retired user instructions a run may take (perf; bug 294)
+#   rate    SHAPE SIZE MODE MS      that run's ms per 10^9 instructions at --measure: the host
+#                                   speed the wall budgets are normalized to (bug 294)
 #   a `measured:` stamp naming shapes covers exactly those shapes' budgets (each shape is named
 #   by at most one stamp); the stamp naming none covers every other shape
 # Budgets are re-measured (and the `measured:` line restamped) only on the CI host class: a change
@@ -15,6 +19,15 @@
 # and x52 with eight gates running at once on the dev host, fastest of three attempts; exp 1.8
 # (x63) sits above that. A mixed stage whose quadratic part is still small at these sizes can
 # pass the time bound and is held by its budget only (compile_scaling.py, SIZES and RESOLUTION).
+# Bug 294: wall budgets measured on a quiet host failed unchanged work on the loaded CI host (one
+# binary's monomorphize stage at 10^5 assignments took 261 - 575 ms at load 24 against a 412 ms
+# budget, the same 13.615 G instructions each time). hbbudget and instr hold a run's work exactly
+# (hb_budget_factor and instr_budget_factor above the --measure counts: a change that legitimately
+# adds work re-measures); instr_exp bounds instruction growth like hb_exp. A wall budget is
+# judged on the stage's time divided by how much slower than `rate` its run went per instruction,
+# at most norm_cap: so load cannot fail unchanged work up to norm_cap, added work still shows in
+# instr, and only a change that makes the same instructions slower is excused, up to norm_cap.
+# --measure scales each run to the session's quietest rate and keeps the fastest.
 # Declaration and nesting shapes run at 1000 and 10000 while the stages excluded below are open;
 # their sizes move to 10^4 and 10^5 with the fixes. lets-if and lets-match run at 4000 and 40000
 # (their native compile at 10^5 takes 30 - 40 s); lets-while at 2000 and 20000, front end only (bug 270).
@@ -32,6 +45,10 @@ param	ceiling_min_s	20
 param	measure_runs	3
 param	budget_factor	4
 param	budget_slack_ms	200
+param	hb_budget_factor	1.25
+param	instr_budget_factor	1.25
+param	instr_exp	1.2
+param	norm_cap	2
 shape	array-const	10000,100000	trace,llvm,native
 shape	array-repeat	10000,100000	trace,llvm,native
 shape	array-distinct	10000,100000	trace,llvm,native
