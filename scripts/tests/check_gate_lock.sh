@@ -19,6 +19,7 @@
 # TESTED IN A SANDBOX, never against the real lock: a gate that experiments on the repository's own
 # lock would be doing the exact thing it exists to forbid.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 # CHECKED. Unchecked under a shell without errexit, a failed `mktemp -d` left TMP empty, making

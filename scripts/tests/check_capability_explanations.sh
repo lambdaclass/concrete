@@ -10,6 +10,7 @@
 # summary does), then an intrinsic — and the caps text, the authority text and the diagnostics-json
 # `why` suppliers all render from it.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 CC="$ROOT_DIR/.lake/build/bin/concrete"

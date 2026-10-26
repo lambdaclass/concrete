@@ -7,6 +7,7 @@
 # example; that's opt-in per Phase 7 showcase manifest entry.
 
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"

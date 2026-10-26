@@ -16,6 +16,7 @@
 # one-shot `++ [x]` (not in a loop) may bump the baseline with a one-line note.
 
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 PASS=0; FAIL=0

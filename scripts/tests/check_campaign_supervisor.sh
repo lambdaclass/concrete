@@ -15,6 +15,7 @@
 # EVERY REFUSAL HAS A POSITIVE CONTROL. A gate that only checks refusals passes when the function
 # refuses everything, which would be just as broken and far easier to ship.
 set -uEo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 # HERMETIC: run inside a campaign, this gate inherited the driver's CONCRETE_MUT_SNAPSHOT/ROOT/SNAPDIR
 # and lock token, and every sandboxed driver copy below then refused to start — red on the clean tree
 # in each campaign, green everywhere else. The wiring subshells set the CONCRETE_MUT_* values they need.
@@ -821,8 +822,10 @@ WFAM=mint-missing-result-refusal
 # and the run refuses over the sandbox rather than over the code under test.
 _wire_sandbox() {
   local w="$TMP/wire.$1"
-  mkdir -p "$w/scripts/tests" || return 1
+  mkdir -p "$w/scripts/tests/lib" || return 1
   cp "$ROOT_DIR/scripts/tests/check_gate_mutation_coverage.sh" "$w/scripts/tests/" || return 1
+  # The driver starts by sourcing the gate-shell guard from beside itself.
+  cp "$ROOT_DIR/scripts/tests/lib/gate_env.sh" "$w/scripts/tests/lib/" || return 1
   printf '%s\n' .mutation-campaign-summary .mutation-campaign-summary.partial \
     .mutation-campaign-summary.candidate '.mutation-campaign-summary.??????' \
     '.mutation-campaign-summary.partial.*' .mutation-evidence/ .gate.lock/ \

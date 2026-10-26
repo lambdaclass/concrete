@@ -34,6 +34,7 @@
 # reason — the common path should not pay for it, and a golden that is only checked when someone
 # remembers is not a golden.
 set -uEo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 # PRIVATE CHECKOUT (R-0546, lib/private_checkout.sh). This gate identifies its own artifact by the

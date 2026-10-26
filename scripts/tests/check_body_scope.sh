@@ -6,6 +6,7 @@
 # unresolved name must REFUSE rather than get invented. Raw env.vars indices satisfy
 # none of the three, which is why this exists.
 set -Eeuo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 

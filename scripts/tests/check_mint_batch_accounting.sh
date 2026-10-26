@@ -18,6 +18,7 @@
 # It is deliberately a separate gate: it runs the dependency-edge gate repeatedly, which is minutes
 # per case, and burying that inside the gate it tests would make the common path pay for it.
 set -uEo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 GATE="$ROOT_DIR/scripts/tests/check_dependency_edges.sh"

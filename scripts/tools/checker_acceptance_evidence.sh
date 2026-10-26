@@ -16,6 +16,7 @@
 #
 # Usage: scripts/tools/checker_acceptance_evidence.sh <out-dir>   (exit 0 = evidence complete and clean)
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/../tests/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 OUT="${1:?usage: checker_acceptance_evidence.sh <out-dir>}"

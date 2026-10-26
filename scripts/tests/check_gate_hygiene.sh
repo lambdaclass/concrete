@@ -18,6 +18,7 @@
 # `grammar` CI job next to the workflow-YAML gate.
 
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 GATES_DIR="$ROOT_DIR/scripts/tests"
 cd "$GATES_DIR"
@@ -724,6 +725,147 @@ CONEOF
   && ok "CONTROL: the .con fixed-/tmp scan ignores comments, doc examples and relative paths containing /tmp/" \
   || no "CONTROL: the .con fixed-/tmp scan flags non-shared text: $(con_fixed_tmp_scan "$CTMP/clean.con" | tr '\n' ' ')"
 rm -rf "$CTMP"
+
+echo ""
+echo "=== every gate refuses to run outside the gate shell (lib/gate_env.sh) ==="
+# Gates run in the dev shell, on Linux CI runners and on the macOS CI runner. lib/gate_env.sh refuses
+# unless CONCRETE_GATES_SHELL=1, which only the flake's shells set (`nix develop .#gates`, the CI
+# shell, and `nix develop`), so a gate never reports a verdict about some host's userland. That holds
+# only if EVERY gate sources it, and sources it before doing anything else.
+#
+# A gate here is every scripts/tests/{check,test,run}_*.sh and every shell script a workflow names
+# outside a comment. GUARD_EXEMPT is the audited escape hatch for an entry point that must start outside the
+# shell (and is not a gate), each with its reason. Keep it short.
+declare -A GUARD_EXEMPT=(
+  ["scripts/dev/seed-lake.sh"]="build-cache seeding, not a gate: it checks its own toolchain/manifest key and only decides how long lake build takes, never a verdict"
+)
+# _guard_first <file> <relative path of the library>: the file's first statement, or its second after
+# an opening `set -...`, is the source line itself; anything earlier would run outside the guard.
+# `|| exit 2` keeps a copy of the gate that cannot find the library (a snapshot, a sandbox) from
+# running on unguarded. awk reads the file itself: a pipe into an early-exiting awk would SIGPIPE
+# under pipefail.
+_guard_first() {
+  local first
+  [ -n "$2" ] || return 1
+  first="$(awk '/^[[:space:]]*(#|$)/ {next} !n++ && /^set -/ {next} {print; exit}' "$1")"
+  [ "$first" = "source \"\$(dirname \"\${BASH_SOURCE[0]}\")/$2\" || exit 2" ]
+}
+GTMP="$(mktemp -d)"
+GLINE='source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2'
+printf '#!/usr/bin/env bash\n# header\nset -euo pipefail\n%s\nok=1\n' "$GLINE" > "$GTMP/good.sh"
+printf '#!/usr/bin/env bash\nROOT=x\n%s\n' "$GLINE" > "$GTMP/late.sh"
+printf '#!/usr/bin/env bash\nsource "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh"\n' > "$GTMP/open.sh"
+_guard_first "$GTMP/good.sh" lib/gate_env.sh \
+  && ok "CONTROL: a gate whose first statement (after set -...) sources the guard is accepted" \
+  || no "CONTROL: the guard check rejects a correctly guarded gate"
+if _guard_first "$GTMP/late.sh" lib/gate_env.sh || _guard_first "$GTMP/open.sh" lib/gate_env.sh; then
+  no "CONTROL: the guard check accepts a gate that runs code first, or sources the guard without '|| exit 2'"
+else
+  ok "CONTROL: a gate that runs code before the guard, or sources it without '|| exit 2', is flagged"
+fi
+rm -rf "$GTMP"
+mapfile -t GUARDED < <( { cd "$ROOT_DIR" && ls scripts/tests/check_*.sh scripts/tests/test_*.sh scripts/tests/run_*.sh 2>/dev/null
+                         grep -hvE '^[[:space:]]*#' .github/workflows/*.yml | grep -oE 'scripts/[A-Za-z0-9_/.-]+\.sh'; } \
+                       | LC_ALL=C sort -u)
+if [ "${#GUARDED[@]}" -ge 250 ]; then
+  ok "enumerated ${#GUARDED[@]} gates for the environment-guard check (floor 250)"
+else
+  no "only ${#GUARDED[@]} gates enumerated for the environment-guard check — it would be vacuous"
+fi
+UNGUARDED=""
+for g in "${GUARDED[@]}"; do
+  [ -f "$ROOT_DIR/$g" ] || { UNGUARDED="$UNGUARDED $g(missing)"; continue; }
+  [[ -n "${GUARD_EXEMPT[$g]:-}" ]] && { echo "  skip $g (${GUARD_EXEMPT[$g]})"; continue; }
+  case "$g" in
+    scripts/tests/*/*) want="" ;;                      # no gate lives below scripts/tests
+    scripts/tests/*) want="lib/gate_env.sh" ;;
+    scripts/*/*/*) want="" ;;
+    scripts/*/*) want="../tests/lib/gate_env.sh" ;;
+    *) want="" ;;
+  esac
+  _guard_first "$ROOT_DIR/$g" "$want" || UNGUARDED="$UNGUARDED $g"
+done
+if [ -z "$UNGUARDED" ]; then
+  ok "every gate sources lib/gate_env.sh as its first statement"
+else
+  no "gate(s) not guarded by lib/gate_env.sh as their first statement:$UNGUARDED"
+fi
+for g in "${!GUARD_EXEMPT[@]}"; do
+  [ -f "$ROOT_DIR/$g" ] && grep -qhF "$g" "$ROOT_DIR"/.github/workflows/*.yml \
+    || no "GUARD_EXEMPT names $g, which no workflow runs any more — remove the entry"
+done
+# Behaviour, not just text: a real gate started without the marker stops with the message and exit 2,
+# and the library lets a marked shell through.
+gout="$(cd "$ROOT_DIR" && env -u CONCRETE_GATES_SHELL bash scripts/tests/check_build_cache.sh 2>&1)" && grc=0 || grc=$?
+if [ "$grc" -eq 2 ] && grep -qF "run inside nix develop .#gates (CI) or nix develop" <<<"$gout"; then
+  ok "a gate started outside the gate shell refuses (exit 2, names the shells)"
+else
+  no "a gate started outside the gate shell did not refuse (rc=$grc): $(head -1 <<<"$gout")"
+fi
+if [ "$(CONCRETE_GATES_SHELL=1 bash -c 'source "$1"; echo reached' _ "$ROOT_DIR/scripts/tests/lib/gate_env.sh" 2>&1)" = reached ]; then
+  ok "CONTROL: inside the gate shell the guard lets the gate run"
+else
+  no "CONTROL: the guard refuses even with CONCRETE_GATES_SHELL=1"
+fi
+
+echo ""
+echo "=== every workflow run step executes in the gate shell ==="
+# The guard above makes a gate refuse outside the shell; this keeps CI inside it. Each workflow that
+# runs gates sets the gates shell as its default run shell, no job or step replaces it except the
+# audited exceptions, and every job installs Nix on a GitHub-hosted runner before its first run step.
+WTMP="$(mktemp -d)"
+cat > "$WTMP/wf_check.py" <<'PYEOF'
+import sys, yaml
+root = sys.argv[1]
+SHELL = "nix develop .#gates --command bash --noprofile --norc -eo pipefail {0}"
+# job -> reason. Each step of these enters a superset shell itself.
+SHELL_EXEMPT = {("lean_action_ci.yml", "multi-kernel"): "every step runs `nix develop .#provers` itself"}
+bad = []
+for wf in ("lean_action_ci.yml", "branch_health.yml"):
+    d = yaml.safe_load(open(f"{root}/.github/workflows/{wf}"))
+    if d.get("defaults", {}).get("run", {}).get("shell") != SHELL:
+        bad.append(f"{wf}: workflow default run shell is not the gates shell")
+    for name, job in d["jobs"].items():
+        exempt = (wf, name) in SHELL_EXEMPT
+        js = job.get("defaults", {}).get("run", {}).get("shell")
+        if js is not None and not exempt:
+            bad.append(f"{wf}:{name}: job overrides the run shell ({js})")
+        installed = False
+        for i, st in enumerate(job.get("steps", [])):
+            if str(st.get("uses", "")).startswith("cachix/install-nix-action"):
+                installed = True
+            if "run" in st:
+                if "shell" in st and not exempt:
+                    bad.append(f"{wf}:{name}: step {st.get('name', i)!r} overrides the run shell")
+                if not installed and not exempt:
+                    bad.append(f"{wf}:{name}: step {st.get('name', i)!r} runs before Nix is installed")
+for (wf, name), why in SHELL_EXEMPT.items():
+    print(f"  skip {wf}:{name} ({why})")
+for b in bad:
+    print("  FAIL " + b)
+sys.exit(1 if bad else 0)
+PYEOF
+python3 -I "$WTMP/wf_check.py" "$ROOT_DIR" \
+  && ok "CI and Branch health run every step in nix develop .#gates (Nix installed first on GitHub-hosted runners)" \
+  || no "a workflow step runs outside the gates shell (above)"
+# CONTROLS: the same check on a copy without the default shell, and on one whose first job lost its
+# Nix install, must fail.
+mkdir -p "$WTMP/nodef/.github/workflows" "$WTMP/noinst/.github/workflows"
+cp "$ROOT_DIR/.github/workflows/branch_health.yml" "$WTMP/nodef/.github/workflows/"
+cp "$ROOT_DIR/.github/workflows/branch_health.yml" "$WTMP/noinst/.github/workflows/"
+sed '/^    shell: "nix develop .#gates/d' "$ROOT_DIR/.github/workflows/lean_action_ci.yml" > "$WTMP/nodef/.github/workflows/lean_action_ci.yml"
+awk '!done && /uses: cachix\/install-nix-action/ {done=1; next} {print}' "$ROOT_DIR/.github/workflows/lean_action_ci.yml" > "$WTMP/noinst/.github/workflows/lean_action_ci.yml"
+if python3 -I "$WTMP/wf_check.py" "$WTMP/nodef" >/dev/null 2>&1; then
+  no "CONTROL: a workflow without the gates default shell passed the wiring check"
+else
+  ok "CONTROL: a workflow without the gates default shell is flagged"
+fi
+if python3 -I "$WTMP/wf_check.py" "$WTMP/noinst" >/dev/null 2>&1; then
+  no "CONTROL: a job that runs a step before installing Nix passed the wiring check"
+else
+  ok "CONTROL: a job that runs a step before installing Nix is flagged"
+fi
+rm -rf "$WTMP"
 
 echo ""
 echo "GATE-HYGIENE: PASS=$PASS FAIL=$FAIL"

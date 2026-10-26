@@ -19,6 +19,7 @@
 # the fail-safe (an unmapped path selects everything) and the runner wiring (`--impact-files`
 # resolves to exactly the selector's list).
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 

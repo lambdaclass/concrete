@@ -12,6 +12,7 @@
 # program (base64_cli, std) and the R10 fixture (a non-std binding), and checks that the text,
 # the assumptions JSON and the diagnostics-json facts carry the same classification.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 CC="$ROOT_DIR/.lake/build/bin/concrete"

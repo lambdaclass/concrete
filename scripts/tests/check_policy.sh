@@ -8,6 +8,7 @@
 # Contract: docs/project/POLICY_FILES.md
 
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/fresh.sh"
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/stack_bound.sh"
 require_fresh_binary || exit 1

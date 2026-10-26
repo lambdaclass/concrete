@@ -19,6 +19,7 @@
 # Shell syntax of runner.sh is also checked (bash -n). The server provisioning (systemd unit and
 # timer, perf_event_paranoid) lives outside this repository; docs/project/PERF_TRACKING.md lists it.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 PERF="$ROOT_DIR/scripts/perf"

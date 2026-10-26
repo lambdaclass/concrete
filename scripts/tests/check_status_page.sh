@@ -17,6 +17,7 @@
 #               failed delivery falls back to stdout and is not recorded; the env file is not sourced
 #   install     writes localhost-only units and enables nothing without --enable
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 STATUS="$ROOT_DIR/scripts/status/status.py"
 NOTIFY="$ROOT_DIR/scripts/land/notify.sh"

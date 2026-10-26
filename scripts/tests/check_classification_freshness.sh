@@ -11,6 +11,7 @@
 # reproved, restated, or replaced by a different theorem of the same name — and every downstream
 # check passes, because the row is structurally valid. Only re-derivation catches it.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 source "$ROOT_DIR/scripts/tests/lib/fresh.sh"

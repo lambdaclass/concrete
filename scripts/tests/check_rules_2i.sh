@@ -35,6 +35,7 @@
 # expects is the one the spec records. Negative controls (section N) feed corrupted manifests and
 # wrong expectations through the same checks and require each to fail.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 source "$ROOT_DIR/scripts/tests/lib/fresh.sh"

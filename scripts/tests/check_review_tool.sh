@@ -16,6 +16,7 @@
 # hook's review-notes tier (a notes-only push runs no gates).
 
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 REVIEW="$ROOT_DIR/scripts/review/review.sh"
 VERIFY="$ROOT_DIR/scripts/review/verify.sh"

@@ -26,6 +26,7 @@
 # Both halves are asserted below, because a repair that only did the first half would be
 # the original defect and a repair that only did the second would be the failed attempt.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 CC="$ROOT_DIR/.lake/build/bin/concrete"

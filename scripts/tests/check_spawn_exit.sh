@@ -11,6 +11,7 @@
 # The fixture returns 0 only if the child really exited 127 — the exec-failure path this
 # gate is about — so a spawn that took some other path cannot make it pass vacuously.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 CC="$ROOT_DIR/.lake/build/bin/concrete"

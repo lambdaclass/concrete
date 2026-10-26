@@ -26,6 +26,11 @@ Supporting helpers:
 
 All scripts assume the repository root as their working directory and normalize to it internally.
 
+Gates run only inside the flake's shells: `nix develop .#gates` (what CI uses; no Lean, so elan's
+stays on PATH) or `nix develop`. Every gate's first statement sources `lib/gate_env.sh`, which
+refuses without the `CONCRETE_GATES_SHELL=1` marker those shells set; `check_gate_hygiene.sh`
+enforces that for every `check_*`, `test_*` and `run_*` script and every script a workflow runs.
+
 ## Shared ledgers: one owner per fact
 
 Facts that many branches record live in files only their owner edits. The shared views are

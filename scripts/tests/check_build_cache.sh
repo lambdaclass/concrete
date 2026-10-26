@@ -13,6 +13,7 @@
 #   5. publish/consume through a cache root picks the exact-sources entry, else the newest.
 # Build-free: a fake lean and a fake lake stand in for the toolchain.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SEED="$ROOT_DIR/scripts/dev/seed-lake.sh"
 WF="$ROOT_DIR/.github/workflows/lean_action_ci.yml"

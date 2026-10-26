@@ -19,6 +19,7 @@
 #   C12 a mutex whose owner is dead is reclaimed; one whose owner is alive is never taken by age
 #   C11 JOBS scale with the slot count: with N>1 the default is at most (cores-2)/N, no fixed 8
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 TMP="$(mktemp -d)" || { echo "FATAL: could not create a sandbox directory" >&2; exit 2; }

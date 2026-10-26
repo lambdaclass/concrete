@@ -20,6 +20,7 @@
 #   H  status JSON       the status-page contract fields exist
 #   I  shell syntax      farm.sh, install-farm.sh, promote.sh, predicate.sh parse
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 FARM="python3 scripts/fuzz/farm/farm.py"

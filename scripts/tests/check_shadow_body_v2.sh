@@ -13,6 +13,7 @@
 # that it stays that way: structural bytes reaching a STATUS is the thing that must not
 # happen by accident.
 set -Eeuo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/fresh.sh"
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/code_refs.sh"
 require_fresh_binary || exit 1

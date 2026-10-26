@@ -20,6 +20,7 @@
 # Each F/U/D control must fail for its stated reason (the expected message is pinned), so a
 # control that fails for an unrelated reason (a renamed import, a typo) is reported, not counted.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/fresh.sh"
 require_fresh_binary || exit 1
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"

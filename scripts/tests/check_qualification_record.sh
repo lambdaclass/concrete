@@ -8,6 +8,7 @@
 # from the REAL workflow's jobs, matrix instances and steps: the honest record must qualify
 # (positive control), and each hostile one must not.
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 REC="$ROOT_DIR/scripts/ci/qualification_record.py"
 WF="$ROOT_DIR/.github/workflows/lean_action_ci.yml"

@@ -38,6 +38,7 @@
 #
 # Sampling, not proof: agreement on boundaries is evidence, not a theorem (R-0460 owns the theorems).
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 BIN="$ROOT_DIR/.lake/build/bin/concrete"

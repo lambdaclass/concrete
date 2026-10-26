@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/../tests/lib/gate_env.sh" || exit 2
 
 # Proof Evidence Gate
 #

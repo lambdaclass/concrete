@@ -25,6 +25,7 @@
 #   4. the copy's audit_bug_corpus.sh and check_bug_filing_complete.sh read coverage from the records:
 #      they pass, and fail on a record whose fixture is missing or on a legacy inline entry left behind.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 PASS=0; FAIL=0
@@ -61,6 +62,8 @@ cp -R changelog.d "$BASE/changelog.d"
 cp scripts/gen/bug_ledger.py scripts/gen/changelog.py scripts/gen/migrate_ledgers.py "$BASE/scripts/gen/"
 cp scripts/tests/audit_bug_corpus.sh scripts/tests/check_bug_filing_complete.sh \
    scripts/tests/run_tests.sh scripts/tests/run_ci_gates_local.sh "$BASE/scripts/tests/"
+# The copied gates start by sourcing the gate-shell guard from beside themselves.
+mkdir -p "$BASE/scripts/tests/lib" && cp scripts/tests/lib/gate_env.sh "$BASE/scripts/tests/lib/"
 [ -f scripts/tests/ci_gate_inventory.txt ] && cp scripts/tests/ci_gate_inventory.txt "$BASE/scripts/tests/"
 cp .github/workflows/lean_action_ci.yml "$BASE/.github/workflows/"
 ln -s "$ROOT_DIR/tests" "$BASE/tests"

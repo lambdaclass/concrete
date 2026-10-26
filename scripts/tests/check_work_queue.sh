@@ -29,6 +29,7 @@
 #   install     the unit text (KillMode=process) and the timer is NOT enabled; no systemd is run,
 #               and the agents' permission settings are checked as text, not by a real claude
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 QD="$ROOT_DIR/scripts/queue"
 for f in build_queue.py dispatch.py dispatch.sh run_agent.sh push_guard.sh install-queue.sh; do

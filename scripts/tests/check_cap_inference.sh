@@ -36,6 +36,7 @@
 # work. A gate that only checked "does it fail" would pass either way, and would go on
 # passing after the subset relaxation — testing `expectTy`, not capabilities.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 CC="$ROOT_DIR/.lake/build/bin/concrete"

@@ -12,6 +12,7 @@
 # The controls below run the same checker on throwaway trees, so a checker that accepts everything,
 # skips anchors, or resolves fragments against the wrong directory fails here before the real run.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 CHECK="scripts/tests/lib/doc_links.py"

@@ -27,6 +27,7 @@
 #                    silently skipped every night would never report anything.
 # The gate makes no network request beyond the two reads above and runs nothing it downloads.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 for git_local_var in $(git rev-parse --local-env-vars 2>/dev/null); do unset "$git_local_var"; done

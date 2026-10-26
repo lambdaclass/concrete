@@ -23,6 +23,7 @@
 # spells its command line. Designed using portable POSIX mechanisms; whether Linux and macOS agree
 # is established by running this gate on both in CI, not by claiming it here.
 set -uEo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 LAUNCH="$ROOT_DIR/scripts/tests/lib/run_campaign_child.py"

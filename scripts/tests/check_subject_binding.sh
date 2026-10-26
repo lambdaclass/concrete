@@ -33,6 +33,7 @@
 #
 # Everything runs in a scratch copy: receipts are minted only for a workspace resolved from the input.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 export LC_ALL=C

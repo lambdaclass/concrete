@@ -22,6 +22,7 @@
 #      single-file compile inside a package (`concrete <file> -o`), which refuses a malformed
 #      [native] exactly as project mode does
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 source "scripts/tests/lib/fresh.sh"

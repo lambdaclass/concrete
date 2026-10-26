@@ -14,6 +14,7 @@
 # This runs in seconds so the FIRST local push catches it; the trust gate stays in CI
 # as the broader backstop.
 set -Eeuo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 fatal() { local rc=$?; echo "FATAL: check_bug_filing_complete stopped at line ${BASH_LINENO[0]} (exit $rc)" >&2; exit "$rc"; }

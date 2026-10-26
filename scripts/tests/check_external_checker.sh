@@ -44,6 +44,7 @@
 # affected. One worker shares no object between concurrently running threads. Leg P checks that
 # every con-leche run here passes the flag. See docs/verification/EXTERNAL_CHECKER.md.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 # A pre-push hook in a linked worktree exports repository-local Git variables.

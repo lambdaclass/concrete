@@ -16,6 +16,7 @@
 # Fixture: tests/regressions/trusted_boundaries/tb (one package). Dependency case: base64_cli,
 # whose boundaries are std's.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 CC="$ROOT_DIR/.lake/build/bin/concrete"

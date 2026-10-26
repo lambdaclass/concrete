@@ -7,6 +7,7 @@
 #      summary, so a foreign binding reached through it is listed for the caller;
 #   3. no R-0484 acceptance case depends on it: each acceptance project builds and runs.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 CC="$ROOT_DIR/.lake/build/bin/concrete"

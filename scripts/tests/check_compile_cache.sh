@@ -20,6 +20,7 @@
 #   K11 an input edited and reverted while the compiler runs: the result is returned, not stored
 #   K12 a lake/lean launcher outside /nix/store (elan) is not cached: it cannot name its toolchain
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 source "$ROOT_DIR/scripts/tests/lib/fresh.sh"

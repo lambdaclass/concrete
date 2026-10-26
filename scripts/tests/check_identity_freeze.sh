@@ -17,6 +17,7 @@
 # generator, the references, the consumers and the deletion of the old symbols. A change to any of
 # them at any other time is drift and should fail here.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 PASS=0; FAIL=0

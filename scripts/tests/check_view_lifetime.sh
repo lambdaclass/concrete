@@ -14,6 +14,7 @@
 # to fail FOR THE RIGHT REASON, so that re-admitting the old surface is caught. The
 # `current_*` fixtures are what actually exercise the replacement.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 FIX="$ROOT_DIR/tests/regressions/view_lifetime"

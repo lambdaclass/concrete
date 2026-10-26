@@ -16,6 +16,7 @@
 # flake candidates (fail-then-pass on one SHA; infra and infra defects excluded), and the coverage
 # diff's regression verdict. No network: `gh` is a stub that serves the fixtures and logs calls.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 FIX="$ROOT_DIR/scripts/tests/fixtures/ci_triage"
 PASS=0; FAIL=0

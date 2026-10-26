@@ -28,6 +28,7 @@
 # Design note: research/proof-evidence/operational-vc-auto-discharge.md
 # Fixtures:    scripts/tests/fixtures/operational_vc_autodischarge/
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 

@@ -5,6 +5,7 @@
 # Return values agree even when the bug is present — only the EFFECTS diverge — so
 # every leg compares interpreter output against compiled output, never exit codes.
 set -Eeuo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 fatal() { local rc=$?; echo "FATAL: check_match_guard_effects stopped at line ${BASH_LINENO[0]} (exit $rc)" >&2; exit "$rc"; }

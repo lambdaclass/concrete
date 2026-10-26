@@ -24,6 +24,7 @@
 #              leaves the branch and the clone untouched; a tried pair is not retried
 #   main       no script under scripts/land force-pushes main
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 BOT="$ROOT_DIR/scripts/land/bot.sh"
 NOTES="$ROOT_DIR/scripts/land/notes.sh"

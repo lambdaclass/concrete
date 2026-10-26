@@ -25,6 +25,7 @@
 # manifestless control, std reached/unreached, a closure of only trusted std methods, and the refusals
 # that must survive (unjustified edge, missing evidence, unsupported body).
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 export LC_ALL=C

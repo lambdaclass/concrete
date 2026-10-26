@@ -8,6 +8,7 @@
 # -E (errtrace) IS LOAD-BEARING: without it bash does not propagate the ERR trap into functions, so
 # every failure inside flush_mint_probes and its helpers was invisible to the guard below.
 set -uEo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 # GATE_DONE IS INITIALIZED HERE, not left to `${GATE_DONE:-0}`. It was only ever assigned near the
 # end, so an inherited GATE_DONE=1 from the environment disarmed the trap for the WHOLE run.
 GATE_DONE=0

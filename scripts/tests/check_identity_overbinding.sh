@@ -20,6 +20,7 @@
 # touched. The binary is COPIED into the scratch tree, never linked: the compiler finds std relative to
 # `IO.appPath`, so a linked binary would read the original std and the std legs would measure nothing.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 BIN="$ROOT_DIR/.lake/build/bin/concrete"

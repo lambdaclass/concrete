@@ -12,6 +12,7 @@
 #   * 77 EXTRACTED functions across eight examples — what the golden hashes;
 #   * 43 STORED #[proof_fingerprint] values — the migration input (44 before one wrong link was deleted).
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/fresh.sh"
 require_fresh_binary || exit 1
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"

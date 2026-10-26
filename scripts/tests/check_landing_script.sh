@@ -23,6 +23,7 @@
 #   bisect      halving finds a seeded red member
 #   report      the median time to land is computed from the log
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 TRAIN="$ROOT_DIR/scripts/land/train.sh"
 REPORT="$ROOT_DIR/scripts/land/report.sh"

@@ -25,6 +25,7 @@
 # would pass both negatives. `declared_ok` calls the same sibling function and the same
 # extern with the authority declared, and must BUILD AND RUN.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 CC="$ROOT_DIR/.lake/build/bin/concrete"

@@ -21,6 +21,7 @@
 #
 # Deliberate bypass:  CONCRETE_SKIP_GATES=1 git push
 set -uo pipefail
+HOOK_SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 ROOT_DIR="$(git rev-parse --show-toplevel)"
 cd "$ROOT_DIR"
 
@@ -65,6 +66,8 @@ pushed=""
 # that also targets any other ref takes the full gates.
 wip_refs=0; wip_dels=0; other_refs=0; wip_shas=""; review_note_refs=0; res_refs=0; res_bad=""
 EMPTY_TREE="$(git hash-object -t tree /dev/null)"
+# Kept whole so the hook can hand the same lines to itself when it re-enters the gate shell (below).
+HOOK_STDIN="$(cat)"
 while read -r _localref localsha _remoteref remotesha; do
   [ -z "${localsha:-}" ] && continue
   case "${_remoteref:-}" in
@@ -100,7 +103,7 @@ while read -r _localref localsha _remoteref remotesha; do
   else
     changed="$changed"$'\n'"$(git diff --name-only $range 2>/dev/null || true)"
   fi
-done
+done <<< "$HOOK_STDIN"
 [ -z "$res_bad" ] || { echo "pre-push (reservation tier): only a parentless empty-tree commit may be pushed to refs/bug-reservations/NNN:$res_bad — refusing"; exit 1; }
 if [ "$res_refs" -gt 0 ] && [ "$wip_refs" -eq 0 ] && [ "$wip_dels" -eq 0 ] && [ "$other_refs" -eq 0 ]; then
   echo "pre-push: bug-number reservation — no code published, no gates"
@@ -137,6 +140,21 @@ if [ -z "$(printf '%s' "$changed" | tr -d '[:space:]')" ]; then
 fi
 changed="$(printf '%s\n' "$changed" | sed '/^$/d' | sort -u)"
 [ -z "$changed" ] && { echo "pre-push: nothing to check"; exit 0; }
+
+# THE GATES RUN IN THE GATE SHELL: scripts/tests/lib/gate_env.sh makes every gate refuse anywhere else.
+# git runs this hook in whatever shell `git push` was typed in, so from outside the flake's shells the
+# hook re-executes itself inside `nix develop` (the dev shell, as `make` uses), with the same
+# arguments and the same ref lines on stdin. Everything above is plain git and simply runs again
+# there; the no-gate tiers have already exited, so they never pay for the shell.
+if [ "${CONCRETE_GATES_SHELL:-}" != 1 ]; then
+  if [ "${CONCRETE_PREPUSH_REENTERED:-0}" = 1 ]; then
+    echo "pre-push: nix develop did not provide the gate shell (CONCRETE_GATES_SHELL unset) — refusing to push." >&2; exit 1
+  fi
+  command -v nix >/dev/null 2>&1 || {
+    echo "pre-push: the gates run inside nix develop .#gates (CI) or nix develop, and nix is not on PATH — refusing to push." >&2; exit 1; }
+  echo "pre-push: entering nix develop for the gates"
+  CONCRETE_PREPUSH_REENTERED=1 exec nix develop "$ROOT_DIR" --command bash "$HOOK_SELF" "$@" <<< "$HOOK_STDIN"
+fi
 echo "pre-push: $(printf '%s\n' "$changed" | wc -l | tr -d ' ') changed file(s) in this push"
 
 docs_only=1

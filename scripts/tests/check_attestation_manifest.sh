@@ -9,6 +9,7 @@
 # EXACT VALUES, not ratchets. A mapping count rising is not automatically good — it can mean a drift
 # fixture stopped being excluded — so every number is asserted and a change must be explained.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 source "scripts/tests/lib/fresh.sh"

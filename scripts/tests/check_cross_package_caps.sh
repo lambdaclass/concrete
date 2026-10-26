@@ -27,6 +27,7 @@
 # because a safe wrapper marked `trusted` no longer re-exports a requirement its callers
 # never owed. The last section asserts the uniform state and the `Std` control.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 CC="$ROOT_DIR/.lake/build/bin/concrete"

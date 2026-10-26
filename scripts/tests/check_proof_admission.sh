@@ -23,6 +23,7 @@
 # BUILD); this gate checks the end-to-end wiring on tests/regressions/proof_admission and that
 # admission agrees with the summary facts the reports publish.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 CC="$ROOT_DIR/.lake/build/bin/concrete"

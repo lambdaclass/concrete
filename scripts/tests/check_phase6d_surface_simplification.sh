@@ -11,6 +11,7 @@
 #   - unsafe/raw authority stays visible via capabilities, not syntax
 
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 # Per-run scratch (R-0546): a fixed /tmp path collides with a concurrent run of this gate.
 GATE_TMP="$(mktemp -d)"; trap 'rm -rf "$GATE_TMP"' EXIT
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/fresh.sh"

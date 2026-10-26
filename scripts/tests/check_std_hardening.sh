@@ -4,6 +4,7 @@
 # unproven-content check: exact-COUNT gates once blessed an unproven std
 # obligation (io.read_all's indexed buffer); counts are not content.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 cd "$(dirname "$0")/../.."
 PASS=0; FAIL=0
 ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }

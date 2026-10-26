@@ -12,6 +12,7 @@
 # zero-extension, truncation, and negative-to-unsigned reinterpretation are
 # all pinned, per pair.
 
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/gate.sh"
 gate_init "check_cast_matrix"
 

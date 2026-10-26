@@ -9,5 +9,6 @@
 # named as missing, not silently counted as a pass. The comprehensive gate still runs the full set in
 # CI; this exists so the refusal can be mutation-covered without dominating the campaign.
 set -uEo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 exec env MBA_ONLY=MINT_SELFTEST_BREAK bash "$ROOT_DIR/scripts/tests/check_mint_batch_accounting.sh"

@@ -25,6 +25,7 @@
 # workflow -> run_fast_surface_gates.sh -> check_docs_drift.sh -> it, and the gate reported a covered
 # file as unreachable. A fixpoint costs a few lines and cannot be wrong about depth.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 WORKFLOW=".github/workflows/lean_action_ci.yml"

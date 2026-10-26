@@ -17,6 +17,7 @@
 # were the defect, and the trusted-extern site that is its root. Each assertion names what
 # would have to be true for it to fail.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 

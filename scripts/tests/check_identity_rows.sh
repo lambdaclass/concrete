@@ -23,6 +23,7 @@
 # in the same commit and explains every changed row:
 #   bash scripts/tools/identity_rows.sh > docs/verification/identity-rows-pre-r0482.tsv
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 FROZEN="docs/verification/identity-rows-pre-r0482.tsv"

@@ -6,6 +6,7 @@
 # discipline check_vc_bridge_register.sh applies to Register A, added at the same time as the
 # first row rather than after the document had drifted.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 IR="Concrete/Semantics/TermIR.lean"

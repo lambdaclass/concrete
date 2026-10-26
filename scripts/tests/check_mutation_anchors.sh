@@ -20,6 +20,7 @@
 # in seconds on every push. It cannot tell you a mutation is KILLED — only that it is still
 # capable of being applied at all. That is the property that was silently lost.
 set -Eeuo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/fresh.sh"
 require_fresh_binary || exit 1
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"

@@ -16,6 +16,7 @@
 # EVERY REFUSAL HAS A POSITIVE CONTROL: the honest set must qualify, or a reader that refuses
 # everything would pass this gate.
 set -uEo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 . "$ROOT_DIR/scripts/tests/lib/campaign_supervise.sh" || { echo "cannot load the decision library" >&2; exit 2; }

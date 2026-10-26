@@ -34,7 +34,8 @@ concurrency:
 # EVERY RUN STEP EXECUTES IN THE GATE USERLAND. Gates used to take coreutils, sed, grep, python and
 # the rest from whatever runner they landed on (GNU on Linux, BSD on macOS, where `timeout` does not
 # exist). `nix develop .#gates` (flake.nix) supplies one pinned set to every job, the dev shell
-# included, and marks itself with CONCRETE_GATES_SHELL=1. It contains NO Lean: elan's toolchain
+# included, and marks itself with CONCRETE_GATES_SHELL=1, without which every gate refuses
+# (scripts/tests/lib/gate_env.sh). It contains NO Lean: elan's toolchain
 # (lean-action below) stays the one on PATH, so the checker identity CI records (R-0208) does not
 # change. Self-hosted runners have Nix; each job installs it on a GitHub-hosted runner as its first
 # step, before any run step. A job that needs another shell says so.

@@ -24,6 +24,7 @@
 # check_gate_mutation_coverage.sh), so its two families are reported PENDING rather than INVALID,
 # any other red leg still invalidates them, and the run fails loudly once this gate turns green.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 source "scripts/tests/lib/fresh.sh"

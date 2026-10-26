@@ -2,6 +2,7 @@
 # R-0004: evidence BUILDERS — the semantic decisions, tested before the producer
 # cutover so that cutover is mechanical rather than semantic.
 set -Eeuo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 fatal() { local rc=$?; echo "FATAL: check_evidence_build stopped at line ${BASH_LINENO[0]} (exit $rc)" >&2; exit "$rc"; }

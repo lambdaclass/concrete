@@ -19,6 +19,7 @@
 # `with(Console)` is still refused to a caller holding none — trust is about memory
 # discipline, not about permission to reach a sink.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 # Matches read here-strings, not `printf | grep -q`: under pipefail an early-exiting grep -q
 # SIGPIPEs printf on large output and turns a MATCH into a failure (CI run 37678716769, step 99).
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"

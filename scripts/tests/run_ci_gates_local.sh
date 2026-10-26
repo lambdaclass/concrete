@@ -47,6 +47,7 @@
 # the 6, and the 40th broke a Lean fixture that only CI typechecks.
 
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 WORKFLOW=".github/workflows/lean_action_ci.yml"

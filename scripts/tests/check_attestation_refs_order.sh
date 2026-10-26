@@ -21,6 +21,7 @@
 # bytes — and carries a control proving the comparison can fail, because a test whose
 # negative case never runs is a test that passes vacuously.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 

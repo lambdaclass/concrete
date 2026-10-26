@@ -70,6 +70,7 @@
 # capped track two slots or leaves RocksDB slice 1 uncapped; a crashed or silent checker must fail too.
 # With arguments `ROADMAP [LEDGER [ARCHIVE [BACKLOG]]]` it checks those files only.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 PASS=0; FAIL=0

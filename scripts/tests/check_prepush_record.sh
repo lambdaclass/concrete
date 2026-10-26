@@ -11,6 +11,7 @@
 #
 # Everything runs in throwaway repositories under mktemp; the real checkout is only read.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PASS=0; FAIL=0
 ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
@@ -40,6 +41,9 @@ printf 'kernel v1\n' > "$SB/tc/lib/lean/libleanshared.so"
 export PATH="$SB/bin:$PATH"
 unset SEED
 for v in $(env | grep -oE '^CONCRETE_[A-Z0-9_]*'); do unset "$v"; done
+# Except the gate-shell marker: this gate passed lib/gate_env.sh, so it IS in the gate shell, and the
+# hook under test must see that, or it re-enters `nix develop` in a sandbox that has no flake.
+export CONCRETE_GATES_SHELL=1
 
 g() { git -C "$REPO" "$@"; }
 new_repo() { # -> sets REPO; a repository with the shape the record reads

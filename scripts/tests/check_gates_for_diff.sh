@@ -17,6 +17,7 @@
 # is asserted too: the answer must be a small fraction of the suite, and an unrelated
 # change must not drag in the stdlib surface.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 

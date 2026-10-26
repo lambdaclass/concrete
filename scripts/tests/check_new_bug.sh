@@ -19,6 +19,7 @@
 # Copies the ledger inputs the way check_ledgers.sh does (migrating the copy when this tree is not
 # migrated yet), so it needs no compiler build. Runs in seconds.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 # A pre-push hook exports GIT_DIR and friends; the scratch repositories must not inherit them.
@@ -42,6 +43,8 @@ cp -R changelog.d "$W/changelog.d"
 cp scripts/gen/bug_ledger.py scripts/gen/changelog.py scripts/gen/migrate_ledgers.py scripts/gen/new_bug.sh "$W/scripts/gen/"
 cp scripts/tests/audit_bug_corpus.sh scripts/tests/check_bug_filing_complete.sh \
    scripts/tests/run_tests.sh scripts/tests/run_ci_gates_local.sh "$W/scripts/tests/"
+# The copied gates start by sourcing the gate-shell guard from beside themselves.
+mkdir -p "$W/scripts/tests/lib" && cp scripts/tests/lib/gate_env.sh "$W/scripts/tests/lib/"
 [ -f scripts/tests/ci_gate_inventory.txt ] && cp scripts/tests/ci_gate_inventory.txt "$W/scripts/tests/"
 cp .github/workflows/lean_action_ci.yml "$W/.github/workflows/"
 cp .githooks/pre-push "$W/.githooks/"

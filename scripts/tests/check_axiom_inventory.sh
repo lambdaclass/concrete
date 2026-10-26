@@ -17,6 +17,7 @@
 # `lake env lean`, and diff each axiom set against the allowlist.
 
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 PASS=0; FAIL=0

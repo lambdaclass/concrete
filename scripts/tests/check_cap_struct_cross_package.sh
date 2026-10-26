@@ -11,6 +11,7 @@
 # TYPE argument and rejected with E0114 — a refusal, but for the wrong reason, and one
 # that would hide the authority check this gate exists to see.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 CC="$ROOT_DIR/.lake/build/bin/concrete"

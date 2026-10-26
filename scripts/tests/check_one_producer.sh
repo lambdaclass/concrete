@@ -31,6 +31,7 @@
 # not crossing it. The stripper is self-tested below before any verdict uses it, because narrowing
 # what a guard reads is only safe if it still fires.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 source "scripts/tests/lib/code_refs.sh"

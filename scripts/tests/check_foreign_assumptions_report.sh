@@ -14,6 +14,7 @@
 # only the one actually reached is listed); and the coverage note in both modes — project
 # mode says dependencies were analysed, single-file mode says they were not.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 CC="$ROOT_DIR/.lake/build/bin/concrete"

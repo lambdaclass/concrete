@@ -71,6 +71,7 @@
 # a wrong claim.
 
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # HASHED BEFORE ANYTHING ELSE RUNS. The snapshot below makes the driver immutable from the point it is
 # taken — but the lock acquisition and artifact invalidation execute from the LIVE file first, and bash
@@ -422,6 +423,10 @@ if [ -z "${CONCRETE_MUT_SNAPSHOT:-}" ]; then
   _snap="$_snap_dir/driver.sh"
   cp "${BASH_SOURCE[0]}" "$_snap" || {
     echo "FATAL: could not snapshot the campaign driver" >&2
+    _gate_lock_release 2>/dev/null || true; exit 2; }
+  # The snapshot's first statement sources the gate-shell guard from beside itself (lib/gate_env.sh).
+  mkdir -p "$_snap_dir/lib" && cp "$ROOT_DIR/scripts/tests/lib/gate_env.sh" "$_snap_dir/lib/" || {
+    echo "FATAL: could not snapshot the gate-shell guard next to the campaign driver" >&2
     _gate_lock_release 2>/dev/null || true; exit 2; }
   # ROOT_DIR IS PASSED EXPLICITLY. After `exec`, `BASH_SOURCE[0]` is the snapshot under /tmp, so
   # deriving the repository root from it lands in the wrong tree and every mutation target reads as

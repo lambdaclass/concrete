@@ -12,6 +12,7 @@
 # vacuous. Three separate checks passed over an empty set on the day this was written, so a
 # differential that cannot distinguish "they match" from "neither ran" is not evidence.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 BIN="./.lake/build/bin/concrete"

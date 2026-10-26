@@ -34,6 +34,7 @@
 # std (CONCRETE_STD); the compiler binary is this checkout's, verified fresh by require_fresh_binary.
 # Rebuilding the compiler inside the clone is the fresh-consumer CI case R-0285 schedules separately.
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 source "scripts/tests/lib/fresh.sh"
