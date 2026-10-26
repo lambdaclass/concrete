@@ -615,7 +615,8 @@ def report_tables(rows, class_names):
     for r in rows:
         cov[r["basis"]] += 1
     tabs.append(("Coverage: how each bug's area was obtained", ["basis", "bugs"],
-                 [[b, cov[b]] for b in ("commits", "named", "shared", "record", "override", "unfixed", "underived")], None))
+                 [[b, cov[b]] for b in ("commits", "named", "shared", "record", "override", "unfixed", "underived")]
+                 + [["ambiguous (shared, record, underived)", cov["shared"] + cov["record"] + cov["underived"]]], None))
 
     def group(key):
         g = defaultdict(list)
