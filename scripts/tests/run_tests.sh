@@ -9605,6 +9605,62 @@ case "$r293_ms" in
            FAIL=$((FAIL + 1))
        fi ;;
 esac
+# Bug 295: the parser appended each match arm, parameter, call argument (and every other list it
+# builds element by element: fields, variants, bindings, methods, import symbols) to the list built
+# so far, so a list of n took n² to parse (10000 on main 1bcb7c36: a match of 10000 arms 263 ms,
+# a function of 10000 parameters called with 10000 arguments 434 ms). Each shape at 20000 must
+# parse (the `parse` stage of --emit-trace-json) within 250 ms, retried once at 500 ms.
+r295_bad=""; r295_incomplete=""; r295_ok=""
+for r295_shape in arms params; do
+    r295_src="$TMPDIR/r295_${r295_shape}_20000.con"
+    awk -v shape="$r295_shape" -v n=20000 'BEGIN {
+        if (shape == "arms") {
+            print "fn main() -> Int {"
+            printf "    let t: i64 = %d;\n", n - 1
+            print "    let mut s: i64 = 0;"
+            print "    match t {"
+            for (i = 0; i < n; i++) printf "        %d => { s = %d; },\n", i, i
+            print "        _ => { s = 0; },"
+            print "    }"
+            printf "    return (s - %d + 42) as Int;\n", n - 1
+            print "}"
+        } else {
+            printf "fn f("
+            for (i = 0; i < n; i++) printf "%sp%d: i64", (i ? ", " : ""), i
+            print ") -> i64 {"
+            printf "    return p0 + p%d;\n", n - 1
+            print "}"
+            printf "fn main() -> Int {\n    return (f("
+            for (i = 0; i < n; i++) printf "%s1", (i ? ", " : "")
+            print ") + 40) as Int;"
+            print "}"
+        }
+    }' > "$r295_src"
+    r265_stage_ms "$r295_src" parse; r295_first="$r265_ms"; r295_ms="$r295_first"
+    case "$r295_first" in
+        ''|*[!0-9]*) ;;
+        *) if [ "$r295_first" -gt 250 ]; then r265_stage_ms "$r295_src" parse; r295_ms="$r265_ms"; fi ;;
+    esac
+    case "$r295_ms" in
+        incomplete) r295_incomplete="$r295_incomplete $r295_shape" ;;
+        ''|*[!0-9]*) r295_bad="$r295_bad $r295_shape:$r295_ms" ;;
+        *) if [ "$r295_first" -le 250 ] || [ "$r295_ms" -le 500 ]; then
+               r295_ok="$r295_ok $r295_shape:${r295_ms}ms"
+           else
+               r295_bad="$r295_bad $r295_shape:${r295_first}ms,${r295_ms}ms"
+           fi ;;
+    esac
+done
+if [ -n "$r295_bad" ]; then
+    echo "FAIL  bug 295: parsing a list of 20000 exceeded its budget (250 ms, retry 500) or failed:$r295_bad"
+    FAIL=$((FAIL + 1))
+elif [ -n "$r295_incomplete" ]; then
+    echo "  INCOMPLETE bug 295: parsing a list of 20000 timed out twice (180 s each):$r295_incomplete"
+    INCOMPLETE=$((INCOMPLETE + 1))
+else
+    echo "  ok  bug 295: lists of 20000 parse within budget:$r295_ok"
+    PASS=$((PASS + 1))
+fi
 # Bug 247: a function value written as an identifier reaches what it names in the assumption summary.
 run_ok "$TESTDIR/regress_247_function_value_reaches_foreign.con" 42
 run_ok "$TESTDIR/regress_247_free_value_beside_unrelated_extern.con" 42

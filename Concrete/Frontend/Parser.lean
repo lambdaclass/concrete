@@ -110,16 +110,17 @@ partial def parseType : ParseM Ty := do
     -- Function type: fn(T, U) with(C) -> R
     advance
     expect .lparen
-    let mut paramTys : List Ty := []
+    -- Bug 295: an Array, converted once (appending each element to the list built so far was O(n²)).
+    let mut paramTys : Array Ty := #[]
     let ptk ← peek
     if ptk != .rparen then
       let first ← parseType
-      paramTys := [first]
+      paramTys := #[first]
       let mut ptk2 ← peek
       while ptk2 == .comma do
         advance
         let ty ← parseType
-        paramTys := paramTys ++ [ty]
+        paramTys := paramTys.push ty
         ptk2 ← peek
     expect .rparen
     -- Inline with() parsing (parseWithCaps not yet in scope)
@@ -127,20 +128,20 @@ partial def parseType : ParseM Ty := do
     let capSet ← if wtk == .with_ then
       advance
       expect .lparen
-      let mut caps : List String := []
+      let mut caps : Array String := #[]
       let ctk ← peek
       if ctk != .rparen then
         let firstName ← expectIdent
-        caps := [firstName]
+        caps := #[firstName]
         let mut ctk2 ← peek
         while ctk2 == .comma do
           advance
           let capName ← expectIdent
-          caps := caps ++ [capName]
+          caps := caps.push capName
           ctk2 ← peek
       expect .rparen
       -- Expand Std
-      let expanded := caps.flatMap fun c =>
+      let expanded := caps.toList.flatMap fun c =>
         if c == stdCapMacroName then stdCaps else [c]
       pure (CapSet.concrete expanded)
     else
@@ -151,7 +152,7 @@ partial def parseType : ParseM Ty := do
       parseType
     else
       pure .unit
-    return .fn_ paramTys capSet retTy
+    return .fn_ paramTys.toList capSet retTy
   | .ident "Int" | .ident "i64" => advance; return .int
   | .ident "Uint" | .ident "u64" => advance; return .uint
   | .ident "i8" => advance; return .i8
@@ -317,52 +318,56 @@ partial def parseParamList : ParseM (List Param) := do
   let tk ← peek
   if tk == .rparen then return []
   let first ← parseParam
-  let mut params := [first]
+  -- Bug 295: an Array, converted once (appending each element to the list built so far was O(n²)).
+  let mut params := #[first]
   let mut tk ← peek
   while tk == .comma do
     advance
     let p ← parseParam
-    params := params ++ [p]
+    params := params.push p
     tk ← peek
-  return params
+  return params.toList
 
 partial def parseTypeArgList : ParseM (List Ty) := do
   let first ← parseType
-  let mut args := [first]
+  -- Bug 295: an Array, converted once (appending each element to the list built so far was O(n²)).
+  let mut args := #[first]
   let mut tk ← peek
   while tk == .comma do
     advance
     let ty ← parseType
-    args := args ++ [ty]
+    args := args.push ty
     tk ← peek
-  return args
+  return args.toList
 
 partial def parseTypeBounds : ParseM (List String) := do
-  let mut bounds : List String := []
+  -- Bug 295: an Array, converted once (appending each element to the list built so far was O(n²)).
+  let mut bounds : Array String := #[]
   let first ← expectIdent
-  bounds := [first]
+  bounds := #[first]
   let mut tk ← peek
   while tk == .plus do
     advance
     let name ← expectIdent
-    bounds := bounds ++ [name]
+    bounds := bounds.push name
     tk ← peek
-  return bounds
+  return bounds.toList
 
 partial def parseTypeParams : ParseM (List String × List (String × List String)) := do
   let tk ← peek
   if tk == .lt then
     advance
-    let mut params : List String := []
-    let mut bounds : List (String × List String) := []
+    -- Bug 295: an Array, converted once (appending each element to the list built so far was O(n²)).
+    let mut params : Array String := #[]
+    let mut bounds : Array (String × List String) := #[]
     let firstName ← expectIdent
-    params := [firstName]
+    params := #[firstName]
     -- Check for bounds: T: Trait1 + Trait2
     let mut tk2 ← peek
     if tk2 == .colon then
       advance
       let bs ← parseTypeBounds
-      bounds := [(firstName, bs)]
+      bounds := #[(firstName, bs)]
     tk2 ← peek
     while tk2 == .comma do
       advance
@@ -370,16 +375,16 @@ partial def parseTypeParams : ParseM (List String × List (String × List String
       tk2 ← peek
       if tk2 == .cap_ then break
       let name ← expectIdent
-      params := params ++ [name]
+      params := params.push name
       -- Check for bounds
       tk2 ← peek
       if tk2 == .colon then
         advance
         let bs ← parseTypeBounds
-        bounds := bounds ++ [(name, bs)]
+        bounds := bounds.push (name, bs)
       tk2 ← peek
     expect .gt
-    return (params, bounds)
+    return (params.toList, bounds.toList)
   else
     return ([], [])
 
@@ -388,25 +393,26 @@ partial def parseTypeAndCapParams : ParseM (List String × List (String × List 
   let tk ← peek
   if tk == .lt then
     advance
-    let mut typeParams : List String := []
-    let mut typeBounds : List (String × List String) := []
-    let mut capParams : List String := []
+    -- Bug 295: an Array, converted once (appending each element to the list built so far was O(n²)).
+    let mut typeParams : Array String := #[]
+    let mut typeBounds : Array (String × List String) := #[]
+    let mut capParams : Array String := #[]
     -- Parse first item
     let mut tk2 ← peek
     if tk2 == .cap_ then
       -- First item is a cap param
       advance
       let capName ← expectIdent
-      capParams := [capName]
+      capParams := #[capName]
     else if tk2 != .gt then
       let firstName ← expectIdent
-      typeParams := [firstName]
+      typeParams := #[firstName]
       -- Check for bounds
       tk2 ← peek
       if tk2 == .colon then
         advance
         let bs ← parseTypeBounds
-        typeBounds := [(firstName, bs)]
+        typeBounds := #[(firstName, bs)]
     tk2 ← peek
     while tk2 == .comma do
       advance
@@ -414,19 +420,19 @@ partial def parseTypeAndCapParams : ParseM (List String × List (String × List 
       if tk2 == .cap_ then
         advance
         let capName ← expectIdent
-        capParams := capParams ++ [capName]
+        capParams := capParams.push capName
       else
         let name ← expectIdent
-        typeParams := typeParams ++ [name]
+        typeParams := typeParams.push name
         -- Check for bounds
         tk2 ← peek
         if tk2 == .colon then
           advance
           let bs ← parseTypeBounds
-          typeBounds := typeBounds ++ [(name, bs)]
+          typeBounds := typeBounds.push (name, bs)
       tk2 ← peek
     expect .gt
-    return (typeParams, typeBounds, capParams)
+    return (typeParams.toList, typeBounds.toList, capParams.toList)
   else
     return ([], [], [])
 
@@ -436,21 +442,22 @@ partial def parseWithCaps : ParseM CapSet := do
   if tk == .with_ then
     advance
     expect .lparen
-    let mut caps : List String := []
+    -- Bug 295: an Array, converted once (appending each element to the list built so far was O(n²)).
+    let mut caps : Array String := #[]
     let tk2 ← peek
     if tk2 != .rparen then
       let firstName ← expectIdent
       -- Validate it's a known cap name or a cap variable (uppercase single letter is typically a cap var)
-      caps := [firstName]
+      caps := #[firstName]
       let mut tk3 ← peek
       while tk3 == .comma do
         advance
         let capName ← expectIdent
-        caps := caps ++ [capName]
+        caps := caps.push capName
         tk3 ← peek
     expect .rparen
     -- Expand "Std" to the full set
-    let expanded := caps.flatMap fun c =>
+    let expanded := caps.toList.flatMap fun c =>
       if c == stdCapMacroName then stdCaps else [c]
     return .concrete expanded
   else
@@ -791,7 +798,8 @@ partial def parseStructLitFields : ParseM (List (String × Expr) × Option Expr)
     advance
     let base ← parseExpr
     return ([], some base)
-  let mut fields : List (String × Expr) := []
+  -- Bug 295: an Array, converted once (appending each element to the list built so far was O(n²)).
+  let mut fields : Array (String × Expr) := #[]
   let sp ← peekSpan
   let firstName ← expectIdent
   let tk2 ← peek
@@ -801,7 +809,7 @@ partial def parseStructLitFields : ParseM (List (String × Expr) × Option Expr)
   else
     -- Field punning: { value } means { value: value }
     pure (.ident sp firstName)
-  fields := [(firstName, firstVal)]
+  fields := #[(firstName, firstVal)]
   let mut base : Option Expr := none
   let mut tk ← peek
   while tk == .comma do
@@ -822,9 +830,9 @@ partial def parseStructLitFields : ParseM (List (String × Expr) × Option Expr)
     else
       -- Field punning: { name } means { name: name }
       pure (.ident fsp fieldName)
-    fields := fields ++ [(fieldName, fieldVal)]
+    fields := fields.push (fieldName, fieldVal)
     tk ← peek
-  return (fields, base)
+  return (fields.toList, base)
 
 partial def parsePostfixNoAs (e : Expr) : ParseM Expr := do
   let mut result := e
@@ -921,14 +929,15 @@ partial def parseCallArgs : ParseM (List Expr) := do
   let tk ← peek
   if tk == .rparen then return []
   let first ← parseExpr
-  let mut args := [first]
+  -- Bug 295: an Array, converted once (appending each element to the list built so far was O(n²)).
+  let mut args := #[first]
   let mut tk ← peek
   while tk == .comma do
     advance
     let e ← parseExpr
-    args := args ++ [e]
+    args := args.push e
     tk ← peek
-  return args
+  return args.toList
 
 partial def binOpPrec (tk : TokenKind) : Option (Nat × BinOp) :=
   match tk with
@@ -1177,7 +1186,8 @@ partial def parseStmt : ParseM Stmt := do
     binder, exit 2i G4). Shared by `match`, `if let`, `while let` and destructuring `let`. -/
 -- spec: PAT-1 (docs/spec/patterns.md; this declaration enforces the rule)
 partial def parseBindingList : ParseM (List PatBind) := do
-  let mut bindings : List PatBind := []
+  -- Bug 295: an Array, converted once (appending each element to the list built so far was O(n²)).
+  let mut bindings : Array PatBind := #[]
   let mut tk ← peek
   while tk != .rbrace && tk != .eof do
     let first ← expectIdent
@@ -1186,11 +1196,11 @@ partial def parseBindingList : ParseM (List PatBind) := do
       let inner ← expectIdent
       pure ({ field := some first, name := inner } : PatBind)
     else pure (PatBind.short first)
-    bindings := bindings ++ [bind]
+    bindings := bindings.push bind
     tk ← peek
     if tk == .comma then advance; tk ← peek
   expect .rbrace
-  return bindings
+  return bindings.toList
 
 partial def parseLet (isGhost : Bool := false) : ParseM Stmt := do
   let sp ← peekSpan
@@ -1485,12 +1495,14 @@ partial def parseMatchStmt : ParseM Stmt := do
   return .expr sp (.match_ sp scrutinee arms) false
 
 partial def parseMatchArms : ParseM (List MatchArm) := do
-  let mut arms : List MatchArm := []
+  -- Bug 295: an Array, converted once (appending each element to the list built so far was O(n²)).
+  let mut arms : Array MatchArm := #[]
   let mut tk ← peek
   while tk != .rbrace && tk != .eof do
-    arms := arms ++ (← parseMatchArm)   -- one arm normally; several for an OR pattern
+    for arm in (← parseMatchArm) do   -- one arm normally; several for an OR pattern
+      arms := arms.push arm
     tk ← peek
-  return arms
+  return arms.toList
 
 /-- Parse a match arm body: block or single statement (where comma can end the stmt instead of semicolon) -/
 partial def parseMatchArmBody : ParseM (List Stmt) := do
@@ -1604,14 +1616,15 @@ partial def parsePatternHead : ParseM (Option Expr → List Stmt → MatchArm) :
     the same guard and body) — OR support with no new AST/Core/lowering. -/
 partial def parseMatchArm : ParseM (List MatchArm) := do
   let firstHead ← parsePatternHead
-  let mut heads := [firstHead]
+  -- Bug 295: an Array, converted once (appending each element to the list built so far was O(n²)).
+  let mut heads := #[firstHead]
   while (← peek) == .pipe do
     advance
-    heads := heads ++ [← parsePatternHead]
+    heads := heads.push (← parsePatternHead)
   let guard ← parseArmGuard
   let body ← parseMatchArmBody
   if (← peek) == .comma then advance
-  return heads.map (fun mk => mk guard body)
+  return heads.toList.map (fun mk => mk guard body)
 
 partial def parseExprOrAssign : ParseM Stmt := do
   let e ← parseExpr
@@ -1891,7 +1904,8 @@ partial def parseImplBlock : ParseM (ImplBlock ⊕ ImplTraitBlock) := do
       expect .gt
     let implCapSet ← parseWithCaps
     expect .lbrace
-    let mut methods : List FnDef := []
+    -- Bug 295: an Array, converted once (appending each element to the list built so far was O(n²)).
+    let mut methods : Array FnDef := #[]
     let mut tk ← peek
     while tk != .rbrace && tk != .eof do
       let isPub := tk == .pub_
@@ -1913,18 +1927,19 @@ partial def parseImplBlock : ParseM (ImplBlock ⊕ ImplTraitBlock) := do
         | none => []
       let f := { f with params := selfParam ++ f.params, isPublic := isPub,
                         isTrusted := f.isTrusted || isTrustedM }
-      methods := methods ++ [f]
+      methods := methods.push f
       tk ← peek
     expect .rbrace
     -- `impl Tr<..> for X` has no meaning (traits take no arguments here); refuse rather than drop.
     if firstArgs.isSome then
       throwParse "a trait in `impl Trait for Type` takes no type arguments"
-    return .inr { traitName := firstName, typeName, typeParams, typeBounds, methods, capSet := implCapSet, span := declSp, targetArgs }
+    return .inr { traitName := firstName, typeName, typeParams, typeBounds, methods := methods.toList, capSet := implCapSet, span := declSp, targetArgs }
   | _ =>
     -- Inherent impl: impl TypeName { ... }. Head spelled canonically, as for a trait impl.
     let typeName := tyName (tyFromName firstName)
     expect .lbrace
-    let mut methods : List FnDef := []
+    -- Bug 295: an Array, converted once (appending each element to the list built so far was O(n²)).
+    let mut methods : Array FnDef := #[]
     let mut tk ← peek
     while tk != .rbrace && tk != .eof do
       -- Proof-link attributes on impl METHODS (pure-core proof arc: stdlib
@@ -1973,10 +1988,10 @@ partial def parseImplBlock : ParseM (ImplBlock ⊕ ImplTraitBlock) := do
         | none => []
       let f := { f with params := selfParam ++ f.params, isPublic := isPub,
                         isTrusted := f.isTrusted || isTrustedM }
-      methods := methods ++ [f]
+      methods := methods.push f
       tk ← peek
     expect .rbrace
-    return .inl { typeName, typeParams, typeBounds, capParams := implCapParams, methods, span := declSp, targetArgs := firstArgs }
+    return .inl { typeName, typeParams, typeBounds, capParams := implCapParams, methods := methods.toList, span := declSp, targetArgs := firstArgs }
 
 partial def parseTraitDef : ParseM TraitDef := do
   let declSp ← peekSpan
@@ -1990,7 +2005,8 @@ partial def parseTraitDef : ParseM TraitDef := do
   if !typeBounds.isEmpty then
     throwParse s!"bounds on a trait's type parameters are not supported: '{name}' bounds {", ".intercalate (typeBounds.map (·.1))}" (span := some boundsSp)
   expect .lbrace
-  let mut methods : List FnSigDef := []
+  -- Bug 295: an Array, converted once (appending each element to the list built so far was O(n²)).
+  let mut methods : Array FnSigDef := #[]
   let mut tk ← peek
   while tk != .rbrace && tk != .eof do
     expect .fn
@@ -2047,10 +2063,10 @@ partial def parseTraitDef : ParseM TraitDef := do
     else
       pure .unit
     expect .semicolon
-    methods := methods ++ [{ name := methodName, params, retTy, selfKind, capSet }]
+    methods := methods.push { name := methodName, params, retTy, selfKind, capSet }
     tk ← peek
   expect .rbrace
-  return { name, typeParams, methods, span := declSp }
+  return { name, typeParams, methods := methods.toList, span := declSp }
 
 partial def parseFnDef : ParseM FnDef := do
   let sp ← peekSpan
@@ -2130,7 +2146,8 @@ partial def parseStructDef : ParseM StructDef := do
   let name ← expectIdent
   let (typeParams, typeBounds, capParams) ← parseTypeAndCapParams
   expect .lbrace
-  let mut fields : List StructField := []
+  -- Bug 295: an Array, converted once (appending each element to the list built so far was O(n²)).
+  let mut fields : Array StructField := #[]
   let mut tk ← peek
   while tk != .rbrace && tk != .eof do
     -- 0b slice 2: optional `pub` marks a field public (else private-to-module)
@@ -2140,13 +2157,13 @@ partial def parseStructDef : ParseM StructDef := do
     let fieldName ← expectIdent
     expect .colon
     let ty ← parseType
-    fields := fields ++ [{ name := fieldName, ty, isPublic := fieldPub }]
+    fields := fields.push { name := fieldName, ty, isPublic := fieldPub }
     tk ← peek
     if tk == .comma then
       advance
       tk ← peek
   expect .rbrace
-  return { name, typeParams, typeBounds, capParams, fields, isCopy, span := declSp }
+  return { name, typeParams, typeBounds, capParams, fields := fields.toList, isCopy, span := declSp }
 
 partial def parseEnumDef : ParseM EnumDef := do
   let declSp ← peekSpan
@@ -2159,7 +2176,8 @@ partial def parseEnumDef : ParseM EnumDef := do
   let name ← expectIdent
   let (typeParams, typeBounds) ← parseTypeParams
   expect .lbrace
-  let mut variants : List EnumVariant := []
+  -- Bug 295: an Array, converted once (appending each element to the list built so far was O(n²)).
+  let mut variants : Array EnumVariant := #[]
   let mut tk ← peek
   while tk != .rbrace && tk != .eof do
     let variantName ← expectIdent
@@ -2167,17 +2185,17 @@ partial def parseEnumDef : ParseM EnumDef := do
     let tk2 ← peek
     if tk2 == .lbrace then
       advance
-      let mut fields : List StructField := []
+      let mut fields : Array StructField := #[]
       let mut tk3 ← peek
       while tk3 != .rbrace && tk3 != .eof do
         let fieldName ← expectIdent
         expect .colon
         let ty ← parseType
-        fields := fields ++ [{ name := fieldName, ty }]
+        fields := fields.push { name := fieldName, ty }
         tk3 ← peek
         if tk3 == .comma then advance; tk3 ← peek
       expect .rbrace
-      variants := variants ++ [{ name := variantName, fields }]
+      variants := variants.push { name := variantName, fields := fields.toList }
     else if tk2 == .assign then
       -- Explicit discriminant value: `Variant = 3`. NOT supported yet — the
       -- value used to be parsed and silently discarded, so variants got
@@ -2191,11 +2209,11 @@ partial def parseEnumDef : ParseM EnumDef := do
         (hint := some "remove the `= <value>`; variant tags are assigned positionally. Explicit discriminants for FFI/protocol enums are a planned feature (ROADMAP Phase 12).")
     else
       -- Fieldless variant
-      variants := variants ++ [{ name := variantName, fields := [] }]
+      variants := variants.push { name := variantName, fields := [] }
     tk ← peek
     if tk == .comma then advance; tk ← peek
   expect .rbrace
-  return { name, typeParams, typeBounds, variants, isCopy, span := declSp }
+  return { name, typeParams, typeBounds, variants := variants.toList, isCopy, span := declSp }
 
 partial def parseImport : ParseM ImportDecl := do
   let sp ← peekSpan
@@ -2217,7 +2235,8 @@ partial def parseImport : ParseM ImportDecl := do
       modPath := modPath ++ "." ++ nextName
     tk ← peek
   expect .lbrace
-  let mut symbols : List ImportSymbol := []
+  -- Bug 295: an Array, converted once (appending each element to the list built so far was O(n²)).
+  let mut symbols : Array ImportSymbol := #[]
   tk ← peek
   while tk != .rbrace && tk != .eof do
     let sym ← expectIdent
@@ -2225,14 +2244,14 @@ partial def parseImport : ParseM ImportDecl := do
     if tk == .as_ then
       advance
       let aliasName ← expectIdent
-      symbols := symbols ++ [{ name := sym, alias := some aliasName }]
+      symbols := symbols.push { name := sym, alias := some aliasName }
     else
-      symbols := symbols ++ [{ name := sym }]
+      symbols := symbols.push { name := sym }
     tk ← peek
     if tk == .comma then advance; tk ← peek
   expect .rbrace
   expect .semicolon
-  return { moduleName := modPath, symbols, span := sp }
+  return { moduleName := modPath, symbols := symbols.toList, span := sp }
 
 partial def parseNewtypeDef : ParseM NewtypeDef := do
   let sp ← peekSpan
@@ -2546,18 +2565,19 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
             advance  -- consume 'cap'
             let name ← expectIdent
             expect .assign
-            let mut caps : List String := []
+            -- Bug 295: an Array, converted once (appending each element to the list built so far was O(n²)).
+            let mut caps : Array String := #[]
             let firstName ← expectIdent
-            caps := [firstName]
+            caps := #[firstName]
             let mut tk2 ← peek
             while tk2 == .plus do
               advance  -- consume '+'
               let capName ← expectIdent
-              caps := caps ++ [capName]
+              caps := caps.push capName
               tk2 ← peek
             expect .semicolon
             -- Expand "Std" macro inside alias definitions
-            let expanded := caps.flatMap fun c =>
+            let expanded := caps.toList.flatMap fun c =>
               if c == stdCapMacroName then stdCaps else [c]
             -- Validate all names are known capabilities
             for c in expanded do
@@ -2661,17 +2681,18 @@ partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
             if !typeBounds.isEmpty then
               throwParse s!"bounds on a union's type parameters are not supported: '{name}' bounds {", ".intercalate (typeBounds.map (·.1))}" (span := some boundsSp)
             expect .lbrace
-            let mut fields : List StructField := []
+            -- Bug 295: an Array, converted once (appending each element to the list built so far was O(n²)).
+            let mut fields : Array StructField := #[]
             let mut tk3 ← peek
             while tk3 != .rbrace && tk3 != .eof do
               let fieldName ← expectIdent
               expect .colon
               let ty ← parseType
-              fields := fields ++ [{ name := fieldName, ty }]
+              fields := fields.push { name := fieldName, ty }
               tk3 ← peek
               if tk3 == .comma then advance; tk3 ← peek
             expect .rbrace
-            structs := { name, typeParams, fields, isPublic := isPub, isUnion := true } :: structs
+            structs := { name, typeParams, fields := fields.toList, isPublic := isPub, isUnion := true } :: structs
           else
             let sp ← peekSpan
             throwParse s!"unexpected token {tk}" (span := some sp)
