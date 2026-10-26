@@ -351,10 +351,8 @@ partial def armFlatUsesInto (acc : Array BodyIdentityUse) : EvidenceArmV2 → Ar
 
 end
 
-def exprFlatUses (e : EvidenceExprV2) : List BodyIdentityUse := (exprFlatUsesInto #[] e).toList
-def patternFlatUses (p : EvidencePatternV2) : List BodyIdentityUse := (patternFlatUsesInto #[] p).toList
+/-- One statement's uses, in order (`flatUsesOf` maps it over a body's top-level statements). -/
 def stmtFlatUses (s : EvidenceStmtV2) : List BodyIdentityUse := (stmtFlatUsesInto #[] s).toList
-def armFlatUses (a : EvidenceArmV2) : List BodyIdentityUse := (armFlatUsesInto #[] a).toList
 
 /-- The legacy flat identity-use view, DERIVED from the structural body. -/
 def flatUsesOf (b : EvidenceBodyDraftV2) : List BodyIdentityUse :=

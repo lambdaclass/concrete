@@ -32,7 +32,11 @@ trap fatal ERR
 
 # Measured 2026-08-07. Raise this ONLY with a note saying why the new definition has no
 # consumer and when it will get one.
-BASELINE=23
+# 23 -> 24 (2026-10-26, bug 281): the identity-use walk is four accumulator-passing members of one
+# mutual recursion (`exprFlatUsesInto` ... `armFlatUsesInto`), consumed by their own file's entry
+# point (`stmtFlatUses`, then `flatUsesOf`), the same-file use this header calls legitimate; the
+# three list-returning members they replace had no other consumer and are deleted.
+BASELINE=24
 
 rc=0
 python3 - "$BASELINE" <<'PY' || rc=$?

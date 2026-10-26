@@ -29,11 +29,15 @@ Accumulate into one buffer threaded through the walk (or build a difference list
 
 ## Fix
 
-`exprFlatUses`, `patternFlatUses`, `stmtFlatUses` and `armFlatUses` (`Proof/IdentityUseBytes.lean`)
-are wrappers over `…FlatUsesInto`, which append to one `Array` threaded through the whole walk:
-each case pushes exactly what the list version concatenated, in the same left-to-right order, so
-`flatUsesOf` (unchanged) yields the same list. A node's uses are no longer copied by every level
-above it.
+The list-returning walk (`exprFlatUses`, `patternFlatUses`, `stmtFlatUses`, `armFlatUses`,
+`Proof/IdentityUseBytes.lean`) is replaced by `exprFlatUsesInto` … `armFlatUsesInto`, which append
+to one `Array` threaded through the whole walk: each case pushes exactly what the list version
+concatenated, in the same left-to-right order. `stmtFlatUses` remains as the per-statement entry
+(`flatUsesOf`, unchanged, maps it over the body's top-level statements, so it yields the same
+list); the other three list functions had no consumer left and are deleted. A node's uses are no
+longer copied by every level above it. `check_wired_definitions.sh`'s ratchet goes from 23 to 24:
+the four accumulator members are consumed only by their own file's entry point, the same-file use
+its header calls legitimate.
 
 ## Measurements
 
