@@ -71,7 +71,7 @@ quote- and heredoc-aware rewriter — 209 `printf '%s' "$X" | grep -q` / `echo "
 became here-strings (`has_match PAT <<<"$X"`, no producer process at all) and 261 streaming pipes
 became `producer | has_match PAT` — plus 30 legs inside `eval` and `bash -c` strings
 (`check_status_page.sh`, `check_review_tool.sh`; has_match is exported for the latter), one `sh -c`
-leg in `check_gate_lock.sh` rewritten to `grep -c`, four `grep -m1` message captures rewritten to
+leg in `check_gate_lock.sh` rewritten to `grep -c`, six `grep -m1` captures (two status reads, four messages) rewritten to
 `grep … | awk 'NR<=1'`, and the one mutation anchor that spelled a rewritten line
 (`check_gate_mutation_coverage.sh`, `manifest-surplus-refused`; the campaign golden regenerated for
 the driver digest). Nothing uses `|| true` and nothing drops `pipefail`.
