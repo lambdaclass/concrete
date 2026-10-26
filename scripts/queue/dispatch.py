@@ -63,7 +63,7 @@ CONFIG = {
     "repo": E("QUEUE_REPO", os.path.join(HOME, "queue/concrete2")),
     "source_root": E("QUEUE_SOURCE_ROOT", ""),          # default: <home>/source, detached at base
     "remote": E("QUEUE_REMOTE", "origin"),
-    "base": E("QUEUE_BASE", "origin/main"),
+    "base": E("QUEUE_BASE", "origin/main"),                  # <remote>/<branch>, read from REMOTE_NS
     "wip_prefix": E("QUEUE_WIP_PREFIX", "wip/queue/"),
     "branch_prefix": E("QUEUE_BRANCH_PREFIX", "queue/"),
     "max_agents": env_int("QUEUE_MAX_AGENTS", 3),
@@ -82,13 +82,19 @@ CONFIG = {
     "notify": E("QUEUE_NOTIFY", ""),
     "status_json": E("QUEUE_STATUS_JSON", ""),
     "fuzz_dir": E("QUEUE_FUZZ_DIR", ""),
-    "no_fetch": E("QUEUE_NO_FETCH", "0") == "1",
+    "no_fetch": E("QUEUE_NO_FETCH", "0") == "1",                  # 1 = use the last fetch in REMOTE_NS
     "require_guard": E("QUEUE_REQUIRE_GUARD", "1") == "1",
     "usage_limit_re": E("QUEUE_USAGE_LIMIT_RE",
                         r"usage limit|hit your (?:usage )?limit|limit reached|out of extra usage|"
                         r"rate_limit_error|\b429\b"),
 }
 ACTIVE = ("running", "exited", "stopping")
+# The dispatcher's own copy of the remote's branches (bug 299). Agents work in worktrees of the
+# queue clone and share its ref store: their pushes and fetches write refs/remotes/<remote>/*. A
+# dispatcher fetch into that same namespace fails ("incorrect old value provided") whenever an agent
+# moves one of those refs mid-fetch, and the tick then skips dispatch. Nothing but the dispatcher
+# writes REMOTE_NS, so its fetch, its base and its resume points cannot race an agent.
+REMOTE_NS = "refs/queue/remote/"
 NO_GO = 98  # run_agent.sh's exit when the dispatcher never confirmed the launch
 
 
@@ -133,6 +139,10 @@ def day_start(t):
 class Q:
     def __init__(self, cfg):
         self.cfg = cfg
+        remote = cfg["remote"]
+        if not cfg["base"].startswith(remote + "/") or cfg["base"] == remote + "/":
+            sys.exit(f"dispatch: QUEUE_BASE={cfg['base']!r} must name a branch of QUEUE_REMOTE as {remote}/<branch>")
+        self.base = self.remote_ref(cfg["base"][len(remote) + 1:])
         self.home = cfg["home"]
         os.makedirs(os.path.join(self.home, "runs"), exist_ok=True)
         self.state_path = os.path.join(self.home, "state.json")
@@ -200,20 +210,27 @@ class Q:
             raise RuntimeError(f"git {' '.join(args)}: {r.stderr.strip()[:300]}")
         return r.stdout.strip()
 
+    def remote_ref(self, branch):
+        """The dispatcher's copy of the remote's `branch` (REMOTE_NS), never refs/remotes/."""
+        return f"{REMOTE_NS}{self.cfg['remote']}/{branch}"
+
     def source_root(self):
         return self.cfg["source_root"] or os.path.join(self.home, "source")
 
     def refresh_sources(self):
         if not self.cfg["no_fetch"]:
-            self.git("fetch", "-q", "--prune", self.cfg["remote"])
+            # --refmap= drops the configured refspec, so not even the opportunistic update of
+            # refs/remotes/ happens: this fetch writes REMOTE_NS and nothing else (no tags either).
+            self.git("fetch", "-q", "--prune", "--no-tags", "--refmap=", self.cfg["remote"],
+                     "+refs/heads/*:" + self.remote_ref("*"))
         if self.cfg["source_root"]:
             return
         src = self.source_root()
         if not os.path.isdir(src):
             self.git("worktree", "prune")  # a removed directory may still be registered
-            self.git("worktree", "add", "-q", "--detach", src, self.cfg["base"])
+            self.git("worktree", "add", "-q", "--detach", src, self.base)
         else:
-            self.git("checkout", "-q", "--detach", "-f", self.cfg["base"], cwd=src)
+            self.git("checkout", "-q", "--detach", "-f", self.base, cwd=src)
 
     def guard_ok(self):
         if not self.cfg["require_guard"]:
@@ -521,7 +538,7 @@ class Q:
             return True
         if t.get("status") != "done" or not t.get("last_sha"):
             return False
-        r = subprocess.run(["git", "merge-base", "--is-ancestor", t["last_sha"], self.cfg["base"]],
+        r = subprocess.run(["git", "merge-base", "--is-ancestor", t["last_sha"], self.base],
                            cwd=self.cfg["repo"], capture_output=True)
         if r.returncode == 0:
             t["landed"] = utc()
@@ -556,9 +573,9 @@ class Q:
         wip_ref = self.cfg["wip_prefix"] + tid
         wt = os.path.join(self.cfg["worktrees"], tid)
         if not os.path.isdir(wt):
-            remote_wip = f"refs/remotes/{self.cfg['remote']}/{wip_ref}"
+            remote_wip = self.remote_ref(wip_ref)
             start_at = remote_wip if self.git("rev-parse", "-q", "--verify", remote_wip, check=False) \
-                else self.cfg["base"]
+                else self.base
             self.git("worktree", "prune")
             self.git("worktree", "add", "-q", "-B", branch, wt, start_at)
         n = len([r for r in self.state["runs"] if r["task"] == tid]) + 1

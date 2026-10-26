@@ -109,3 +109,4 @@ date	kind	probe	effort	bugs	silent
 2026-10-26	development	nested while loops beyond the R-0550 shapes, timed per stage at 2000 and 8000 levels and profiled with callgrind after the bug 286 fix	1 shape	292	-
 2026-10-26	development	R-0550 follow-up: whole compiles (--emit-llvm) of the nested-ifs shape after bug 286, attributed by callgrind to Report's safety gate	4 programs	293	-
 2026-10-26	development	R-0550 follow-up, task 3: scaling probes of Resolve, Check and Elab beyond the gate shapes (calls, parameters, wide match, value if and match chains, struct fields) on main 1bcb7c36	11 shapes	295,296,297,298	-
+2026-10-26	ci	CI run 40377660985 (wip/bug-298): check_work_queue.sh budgets leg missed budget_exhausted; the leg then repeated on OVH under load	1400 cases	299	-

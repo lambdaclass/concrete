@@ -24,6 +24,9 @@
 #               fails (the clone is gone)
 #   handshake   run_agent.sh starts the agent only after the dispatcher's `go`; unconfirmed or
 #               cancelled launches exit 98 without running it
+#   refs        the dispatcher fetches into its own namespace (refs/queue/remote/) and never moves
+#               or prunes refs/remotes/, which agents write from their worktrees (bug 299); a
+#               QUEUE_BASE that is not <remote>/<branch> is refused
 #   guard       the queue clone refuses pushes to main and ci/*, runs the repository's own pre-push
 #               after it; a missing or non-executable guard starts nothing
 #   install     the unit text (KillMode=process) and the timer is NOT enabled; no systemd is run,
@@ -68,7 +71,8 @@ EOF
 mkdir -p "$TMP/nohooks"
 unset QUEUE_MAX_AGENTS QUEUE_MAX_AGENT_HOURS QUEUE_MAX_DAILY_USD QUEUE_MAX_DAILY_TOKENS QUEUE_SLOTS \
   QUEUE_STUCK_MINUTES QUEUE_MAX_ATTEMPTS QUEUE_NOTIFY QUEUE_STATUS_JSON QUEUE_FUZZ_DIR QUEUE_NO_FETCH \
-  QUEUE_SOURCE_ROOT QUEUE_TASK_MAX_USD QUEUE_MODEL QUEUE_SLOT_COOLDOWN QUEUE_REQUIRE_GUARD QUEUE_ENV_FILE
+  QUEUE_SOURCE_ROOT QUEUE_TASK_MAX_USD QUEUE_MODEL QUEUE_SLOT_COOLDOWN QUEUE_REQUIRE_GUARD QUEUE_ENV_FILE \
+  QUEUE_BASE QUEUE_REMOTE
 T0=1800000000
 
 # ------------------------------------------------------------------ fixture sources
@@ -316,6 +320,39 @@ rm -rf "$QUEUE_HOME"
 git -C "$QUEUE_REPO" config --unset core.hooksPath
 tick "$T0"
 [ -z "$(running_ids)" ] && [ "$(events push_guard_missing)" = 1 ] && ok "no guard, no agents (and one event)" || no "started without the guard: $(running_ids)"
+
+# ------------------------------------------------------------------ leg: the dispatcher's refs
+# Bug 299: the dispatcher's `git fetch --prune` wrote refs/remotes/origin/*, which every agent
+# worktree of the same clone also writes (a push updates its remote-tracking ref). An agent push
+# landing mid-fetch failed the fetch, the tick reported source_error and skipped dispatch (the
+# budgets leg then saw no budget_exhausted event, about 1 run in 1400). The race is closed by
+# ownership, so this leg checks the ownership, deterministically: an agent's view of a remote branch
+# that differs from the remote, and one the remote no longer has, both survive a tick untouched.
+echo "=== the dispatcher's fetch writes only its own refs ==="
+scenario refs
+main_sha="$(git -C "$TMP/remote.git" rev-parse refs/heads/main)"
+probe="$(git -C "$TMP/remote.git" commit-tree -p "$main_sha" -m probe "$main_sha^{tree}")"
+git -C "$TMP/remote.git" update-ref refs/heads/wip/queue/refs-probe "$probe"
+git -C "$QUEUE_REPO" update-ref refs/remotes/origin/wip/queue/refs-probe "$main_sha"
+git -C "$QUEUE_REPO" update-ref refs/remotes/origin/wip/queue/refs-gone "$main_sha"
+QUEUE_MAX_AGENTS=0 tick "$T0"
+[ "$(events source_error)" = 0 ] && ok "the tick's fetch succeeds" || no "source_error: $(cat "$QUEUE_HOME/events.log")"
+[ "$(git -C "$QUEUE_REPO" rev-parse -q --verify refs/remotes/origin/wip/queue/refs-probe)" = "$main_sha" ] \
+  && [ "$(git -C "$QUEUE_REPO" rev-parse -q --verify refs/remotes/origin/wip/queue/refs-gone)" = "$main_sha" ] \
+  && ok "a tick neither moves nor prunes refs/remotes/ (the agents' namespace)" \
+  || no "the tick wrote refs/remotes/: probe=$(git -C "$QUEUE_REPO" rev-parse -q --verify refs/remotes/origin/wip/queue/refs-probe) gone=$(git -C "$QUEUE_REPO" rev-parse -q --verify refs/remotes/origin/wip/queue/refs-gone)"
+[ "$(git -C "$QUEUE_REPO" rev-parse -q --verify refs/queue/remote/origin/wip/queue/refs-probe)" = "$probe" ] \
+  && [ "$(git -C "$QUEUE_REPO" rev-parse -q --verify refs/queue/remote/origin/main)" = "$main_sha" ] \
+  && [ "$(git -C "$QUEUE_HOME/source" rev-parse HEAD)" = "$main_sha" ] \
+  && ok "the fetch lands in refs/queue/remote/ and the source checkout is detached at its main" \
+  || no "dispatcher namespace: $(git -C "$QUEUE_REPO" for-each-ref --format='%(refname) %(objectname)' refs/queue/)"
+git -C "$TMP/remote.git" update-ref -d refs/heads/wip/queue/refs-probe
+QUEUE_MAX_AGENTS=0 tick "$T0"
+[ -z "$(git -C "$QUEUE_REPO" rev-parse -q --verify refs/queue/remote/origin/wip/queue/refs-probe)" ] \
+  && ok "a branch deleted on the remote is pruned from refs/queue/remote/" || no "refs/queue/remote/ not pruned"
+rc=0; QUEUE_BASE=main QUEUE_NOW="$T0" bash "$QD/dispatch.sh" tick > /dev/null 2> "$S/base.err" || rc=$?
+[ "$rc" != 0 ] && has_match "must name a branch of QUEUE_REMOTE" < "$S/base.err" \
+  && ok "a QUEUE_BASE that is not <remote>/<branch> is refused" || no "QUEUE_BASE=main: rc=$rc $(cat "$S/base.err")"
 
 # ------------------------------------------------------------------ leg: areas and concurrency
 echo "=== area conflicts and the concurrency cap ==="

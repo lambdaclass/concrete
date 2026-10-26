@@ -100,7 +100,12 @@ Each tick runs these steps:
 1. It takes an exclusive lock, reads the state, fetches, and re-detaches the source checkout at
    `origin/main`. Process control comes before the sources: a failed fetch or a malformed source
    is reported as `source_error`, and monitoring and the kill switch still run. Only dispatch is
-   skipped in that case.
+   skipped in that case. The fetch writes only the dispatcher's own copy of the remote's branches,
+   `refs/queue/remote/origin/*`, and every `origin/...` this page names is read from there. Agents
+   work in worktrees of the same clone, so their pushes and fetches write `refs/remotes/origin/*`;
+   a dispatcher fetch into that namespace failed whenever an agent moved one of its refs mid-fetch
+   (bug 299). `QUEUE_BASE` (default `origin/main`) names a branch of `QUEUE_REMOTE` as
+   `<remote>/<branch>`; anything else is refused.
 2. **Monitor.** For every running or exited task:
    - If the process has ended, it reads the exit status and the run's `result` event (cost, tokens).
      A usage limit releases the task. Any other nonzero exit is a failure.
