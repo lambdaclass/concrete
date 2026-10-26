@@ -9661,6 +9661,50 @@ else
     echo "  ok  bug 295: lists of 20000 parse within budget:$r295_ok"
     PASS=$((PASS + 1))
 fi
+# Bug 296: the callee walk (Proof/CallCollect.lean) built its list by appending each statement's,
+# argument's, field's, arm's and element's callees to the list built so far, and the post-mono
+# verifier deduplicated a function's callees by pairwise comparison, so a function of n calls
+# took n² in Elab (asked twice per body) and in the monomorphize stage (20000 calls on main's
+# compiler: elaborate 2681 ms, monomorphize 2440 ms). A `main` calling 20000 functions must
+# elaborate within 800 ms and monomorphize within 600 ms, each retried once at twice that
+# (315 and 174 ms with the fix on the dev host).
+r296_src="$TMPDIR/r296_many_calls_20000.con"
+awk -v n=20000 'BEGIN {
+    for (i = 0; i < n; i++) printf "fn f%d(x: i64) -> i64 { return x + 1; }\n", i
+    print "fn main() -> Int {"
+    print "    let mut t: i64 = 0;"
+    for (i = 0; i < n; i++) printf "    t = f%d(t);\n", i
+    printf "    return (t - %d + 42) as Int;\n", n
+    print "}"
+}' > "$r296_src"
+r296_bad=""; r296_incomplete=""; r296_ok=""
+for r296_case in "elaborate 800" "monomorphize 600"; do
+    read -r r296_stage r296_budget <<< "$r296_case"
+    r265_stage_ms "$r296_src" "$r296_stage"; r296_first="$r265_ms"; r296_ms="$r296_first"
+    case "$r296_first" in
+        ''|*[!0-9]*) ;;
+        *) if [ "$r296_first" -gt "$r296_budget" ]; then r265_stage_ms "$r296_src" "$r296_stage"; r296_ms="$r265_ms"; fi ;;
+    esac
+    case "$r296_ms" in
+        incomplete) r296_incomplete="$r296_incomplete $r296_stage" ;;
+        ''|*[!0-9]*) r296_bad="$r296_bad $r296_stage:$r296_ms" ;;
+        *) if [ "$r296_first" -le "$r296_budget" ] || [ "$r296_ms" -le $((2 * r296_budget)) ]; then
+               r296_ok="$r296_ok $r296_stage:${r296_ms}ms"
+           else
+               r296_bad="$r296_bad $r296_stage:${r296_first}ms,${r296_ms}ms(budget $r296_budget)"
+           fi ;;
+    esac
+done
+if [ -n "$r296_bad" ]; then
+    echo "FAIL  bug 296: a function of 20000 calls exceeded its stage budget (retry at twice) or failed:$r296_bad"
+    FAIL=$((FAIL + 1))
+elif [ -n "$r296_incomplete" ]; then
+    echo "  INCOMPLETE bug 296: a function of 20000 calls timed out twice (180 s each):$r296_incomplete"
+    INCOMPLETE=$((INCOMPLETE + 1))
+else
+    echo "  ok  bug 296: a function of 20000 calls within budget:$r296_ok"
+    PASS=$((PASS + 1))
+fi
 # Bug 247: a function value written as an identifier reaches what it names in the assumption summary.
 run_ok "$TESTDIR/regress_247_function_value_reaches_foreign.con" 42
 run_ok "$TESTDIR/regress_247_free_value_beside_unrelated_extern.con" 42

@@ -12,59 +12,80 @@ namespace Concrete
 
 -- Call collection
 
--- Every callee of every call in a body, in walk order: THE one walk. The views below select
--- by the callee's form, so they cannot disagree about which expressions are visited.
+-- Bug 296: ONE accumulating walk serves every collection below. Each family gives the items an
+-- expression contributes itself (`here`), before its sub-expressions, and the walk visits the
+-- sub-expressions, arms and statements in source order, prepending to an accumulator that is
+-- reversed once. The walks it replaces built each list with `acc ++ child` per statement,
+-- argument, field, arm and element, so a function of n calls copied its prefix n times (n²).
 mutual
-partial def collectCalleesExpr (e : CExpr) : List Callee :=
+partial def collectGoExpr {α} (here : CExpr → List α) (acc : List α) (e : CExpr) : List α :=
+  let acc := (here e).foldl (fun a x => x :: a) acc
+  let go := collectGoExpr here
   match e with
-  | .call callee _ args _ =>
-    callee :: args.foldl (fun acc a => acc ++ collectCalleesExpr a) []
-  | .binOp _ l r _ => collectCalleesExpr l ++ collectCalleesExpr r
-  | .unaryOp _ e _ => collectCalleesExpr e
-  | .structLit _ _ fields _ => fields.foldl (fun acc (_, v) => acc ++ collectCalleesExpr v) []
-  | .fieldAccess obj _ _ => collectCalleesExpr obj
-  | .enumLit _ _ _ fields _ => fields.foldl (fun acc (_, v) => acc ++ collectCalleesExpr v) []
-  | .match_ scrut arms _ => collectCalleesExpr scrut ++ arms.foldl (fun acc a => acc ++ collectCalleesArm a) []
-  | .borrow inner _ | .borrowMut inner _ | .deref inner _ => collectCalleesExpr inner
-  | .arrayLit elems _ => elems.foldl (fun acc e => acc ++ collectCalleesExpr e) []
-  | .arrayIndex arr idx _ => collectCalleesExpr arr ++ collectCalleesExpr idx
-  | .cast inner _ => collectCalleesExpr inner
-  | .allocCall inner alloc _ => collectCalleesExpr inner ++ collectCalleesExpr alloc
-  | .ifExpr cond th el _ =>
-    collectCalleesExpr cond ++ collectCalleesStmts th ++ collectCalleesStmts el
+  | .call _ _ args _ => args.foldl go acc
+  | .binOp _ l r _ => go (go acc l) r
+  | .unaryOp _ e _ => go acc e
+  | .structLit _ _ fields _ => fields.foldl (fun a (_, v) => go a v) acc
+  | .fieldAccess obj _ _ => go acc obj
+  | .enumLit _ _ _ fields _ => fields.foldl (fun a (_, v) => go a v) acc
+  | .match_ scrut arms _ => arms.foldl (collectGoArm here) (go acc scrut)
+  | .borrow inner _ | .borrowMut inner _ | .deref inner _ => go acc inner
+  | .arrayLit elems _ => elems.foldl go acc
+  | .arrayIndex arr idx _ => go (go acc arr) idx
+  | .cast inner _ => go acc inner
+  | .allocCall inner alloc _ => go (go acc inner) alloc
+  | .ifExpr cond th el _ => collectGoStmts here (collectGoStmts here (go acc cond) th) el
+  | _ => acc
+
+partial def collectGoGuard {α} (here : CExpr → List α) (acc : List α) : Option CExpr → List α
+  | some g => collectGoExpr here acc g
+  | none => acc
+
+partial def collectGoArm {α} (here : CExpr → List α) (acc : List α) (arm : CMatchArm) : List α :=
+  let go := collectGoExpr here
+  match arm with
+  | .enumArm _ _ _ guard body => collectGoStmts here (collectGoGuard here acc guard) body
+  | .litArm v guard body => collectGoStmts here (collectGoGuard here (go acc v) guard) body
+  | .varArm _ _ guard body => collectGoStmts here (collectGoGuard here acc guard) body
+  | .rangeArm lo hi _ guard body =>
+    collectGoStmts here (collectGoGuard here (go (go acc lo) hi) guard) body
+
+partial def collectGoStmt {α} (here : CExpr → List α) (acc : List α) (s : CStmt) : List α :=
+  let go := collectGoExpr here
+  let gs := collectGoStmts here
+  match s with
+  | .letDecl _ _ _ v => go acc v
+  | .assign _ v => go acc v
+  | .return_ (some v) _ => go acc v
+  | .return_ none _ => acc
+  | .expr e _ => go acc e
+  | .ifElse c t el =>
+    let acc := gs (go acc c) t
+    match el with | some stmts => gs acc stmts | none => acc
+  | .while_ c body _ step => gs (gs (go acc c) body) step
+  | .fieldAssign obj _ v => go (go acc obj) v
+  | .derefAssign t v => go (go acc t) v
+  | .arrayIndexAssign arr idx v => go (go (go acc arr) idx) v
+  | .break_ (some v) _ => go acc v
+  | .break_ none _ | .continue_ _ => acc
+  | .defer body => go acc body
+  | .borrowIn _ _ _ _ _ body => gs acc body
+
+partial def collectGoStmts {α} (here : CExpr → List α) (acc : List α) (ss : List CStmt) : List α :=
+  ss.foldl (collectGoStmt here) acc
+end
+
+/-- The callee a call names: a call's own contribution to the callee walk. -/
+def calleeHere : CExpr → List Callee
+  | .call callee _ _ _ => [callee]
   | _ => []
 
-partial def collectCalleesArm (arm : CMatchArm) : List Callee :=
-  match arm with
-  | .enumArm _ _ _ guard body => (guard.map collectCalleesExpr).getD [] ++ collectCalleesStmts body
-  | .litArm v guard body => collectCalleesExpr v ++ (guard.map collectCalleesExpr).getD [] ++ collectCalleesStmts body
-  | .varArm _ _ guard body => (guard.map collectCalleesExpr).getD [] ++ collectCalleesStmts body
-  | .rangeArm lo hi _ guard body => collectCalleesExpr lo ++ collectCalleesExpr hi ++ (guard.map collectCalleesExpr).getD [] ++ collectCalleesStmts body
-
-partial def collectCalleesStmt (s : CStmt) : List Callee :=
-  match s with
-  | .letDecl _ _ _ v => collectCalleesExpr v
-  | .assign _ v => collectCalleesExpr v
-  | .return_ (some v) _ => collectCalleesExpr v
-  | .return_ none _ => []
-  | .expr e _ => collectCalleesExpr e
-  | .ifElse c t el =>
-    collectCalleesExpr c ++ collectCalleesStmts t ++
-    match el with | some stmts => collectCalleesStmts stmts | none => []
-  | .while_ c body _ step =>
-    collectCalleesExpr c ++ collectCalleesStmts body ++ collectCalleesStmts step
-  | .fieldAssign obj _ v => collectCalleesExpr obj ++ collectCalleesExpr v
-  | .derefAssign t v => collectCalleesExpr t ++ collectCalleesExpr v
-  | .arrayIndexAssign arr idx v =>
-    collectCalleesExpr arr ++ collectCalleesExpr idx ++ collectCalleesExpr v
-  | .break_ (some v) _ => collectCalleesExpr v
-  | .break_ none _ | .continue_ _ => []
-  | .defer body => collectCalleesExpr body
-  | .borrowIn _ _ _ _ _ body => collectCalleesStmts body
-
-partial def collectCalleesStmts (ss : List CStmt) : List Callee :=
-  ss.foldl (fun acc s => acc ++ collectCalleesStmt s) []
-end
+-- Every callee of every call in a body, in walk order: THE one walk. The views below select
+-- by the callee's form, so they cannot disagree about which expressions are visited.
+def collectCalleesExpr (e : CExpr) : List Callee := (collectGoExpr calleeHere [] e).reverse
+def collectCalleesArm (arm : CMatchArm) : List Callee := (collectGoArm calleeHere [] arm).reverse
+def collectCalleesStmt (s : CStmt) : List Callee := (collectGoStmt calleeHere [] s).reverse
+def collectCalleesStmts (ss : List CStmt) : List Callee := (collectGoStmts calleeHere [] ss).reverse
 
 /-- Direct callees. Only a direct callee names a definition. An indirect callee is a fn-typed
     binding, so its statically-known target set is empty — which is also why it contributes no
@@ -128,129 +149,38 @@ call. Reachability for REPORTING foreign assumptions (R-0484 R10) needs them: a
 `Writer<Console>` reaches libc `write` only because its constructor stored `console_write`.
 Counting a reference as a possible call is a sound over-approximation for that purpose,
 and it is used only there. -/
-mutual
-partial def collectFnValueRefsExpr (e : CExpr) : List String :=
-  match e with
+/-- A function value's own contribution: a `fnRef`, or a free global function used as a value
+    (a function-typed `.ident` with no binding identity, Elab's form for `let f = g;`), which the
+    walk once missed (Codex review r7 of bugs 238 – 239: a returned method value reached no
+    foreign assumption, and neither did a free one). A METHOD value (`CLocal.space = .method`) is
+    collected by `collectMethodValueRefs*`: it names a method, never a foreign binding of the
+    spelling (Codex review r8). -/
+def fnValueHere : CExpr → List String
   | .fnRef name _ => [name]
-  -- A global function used as a value is a function-typed `.ident` with no binding identity
-  -- (Elab's form for `let f = g;`), which this walk missed (Codex review r7 of bugs 238 – 239: a
-  -- returned method value reached no foreign assumption, and neither did a free one).
-  -- A METHOD value (`CLocal.space = .method`) is collected by `collectMethodValueRefs*`: it names
-  -- a method, never a foreign binding of the spelling (Codex review r8).
   | .ident n (.fn_ ..) => if n.id.isNone && n.space == .free then [n.name] else []
-  | .call _ _ args _ => args.foldl (fun acc a => acc ++ collectFnValueRefsExpr a) []
-  | .binOp _ l r _ => collectFnValueRefsExpr l ++ collectFnValueRefsExpr r
-  | .unaryOp _ e _ => collectFnValueRefsExpr e
-  | .structLit _ _ fields _ => fields.foldl (fun acc (_, v) => acc ++ collectFnValueRefsExpr v) []
-  | .fieldAccess obj _ _ => collectFnValueRefsExpr obj
-  | .enumLit _ _ _ fields _ => fields.foldl (fun acc (_, v) => acc ++ collectFnValueRefsExpr v) []
-  | .match_ scrut arms _ =>
-    collectFnValueRefsExpr scrut ++ arms.foldl (fun acc a => acc ++ collectFnValueRefsArm a) []
-  | .borrow inner _ | .borrowMut inner _ | .deref inner _ => collectFnValueRefsExpr inner
-  | .arrayLit elems _ => elems.foldl (fun acc e => acc ++ collectFnValueRefsExpr e) []
-  | .arrayIndex arr idx _ => collectFnValueRefsExpr arr ++ collectFnValueRefsExpr idx
-  | .cast inner _ => collectFnValueRefsExpr inner
-  | .allocCall inner alloc _ => collectFnValueRefsExpr inner ++ collectFnValueRefsExpr alloc
-  | .ifExpr cond th el _ =>
-    collectFnValueRefsExpr cond ++ collectFnValueRefsStmts th ++ collectFnValueRefsStmts el
   | _ => []
 
-partial def collectFnValueRefsArm (arm : CMatchArm) : List String :=
-  match arm with
-  | .enumArm _ _ _ guard body => (guard.map collectFnValueRefsExpr).getD [] ++ collectFnValueRefsStmts body
-  | .litArm v guard body =>
-    collectFnValueRefsExpr v ++ (guard.map collectFnValueRefsExpr).getD [] ++ collectFnValueRefsStmts body
-  | .varArm _ _ guard body => (guard.map collectFnValueRefsExpr).getD [] ++ collectFnValueRefsStmts body
-  | .rangeArm lo hi _ guard body =>
-    collectFnValueRefsExpr lo ++ collectFnValueRefsExpr hi ++ (guard.map collectFnValueRefsExpr).getD []
-      ++ collectFnValueRefsStmts body
-
-partial def collectFnValueRefsStmt (s : CStmt) : List String :=
-  match s with
-  | .letDecl _ _ _ v => collectFnValueRefsExpr v
-  | .assign _ v => collectFnValueRefsExpr v
-  | .return_ (some v) _ => collectFnValueRefsExpr v
-  | .return_ none _ => []
-  | .expr e _ => collectFnValueRefsExpr e
-  | .ifElse c t el =>
-    collectFnValueRefsExpr c ++ collectFnValueRefsStmts t ++
-    match el with | some stmts => collectFnValueRefsStmts stmts | none => []
-  | .while_ c body _ step =>
-    collectFnValueRefsExpr c ++ collectFnValueRefsStmts body ++ collectFnValueRefsStmts step
-  | .fieldAssign obj _ v => collectFnValueRefsExpr obj ++ collectFnValueRefsExpr v
-  | .derefAssign t v => collectFnValueRefsExpr t ++ collectFnValueRefsExpr v
-  | .arrayIndexAssign arr idx v =>
-    collectFnValueRefsExpr arr ++ collectFnValueRefsExpr idx ++ collectFnValueRefsExpr v
-  | .break_ (some v) _ => collectFnValueRefsExpr v
-  | .break_ none _ | .continue_ _ => []
-  | .defer body => collectFnValueRefsExpr body
-  | .borrowIn _ _ _ _ _ body => collectFnValueRefsStmts body
-
-partial def collectFnValueRefsStmts (ss : List CStmt) : List String :=
-  ss.foldl (fun acc s => acc ++ collectFnValueRefsStmt s) []
-end
+def collectFnValueRefsExpr (e : CExpr) : List String := (collectGoExpr fnValueHere [] e).reverse
+def collectFnValueRefsArm (arm : CMatchArm) : List String := (collectGoArm fnValueHere [] arm).reverse
+def collectFnValueRefsStmt (s : CStmt) : List String := (collectGoStmt fnValueHere [] s).reverse
+def collectFnValueRefsStmts (ss : List CStmt) : List String :=
+  (collectGoStmts fnValueHere [] ss).reverse
 
 -- The METHOD values a body names (bugs 238 – 239): methods used as values by their definition
 -- name, which reach that method and never a foreign binding of the spelling.
-mutual
-partial def collectMethodValueRefsExpr (e : CExpr) : List String :=
-  match e with
-  | .fnRef _ _ => []
-  -- A global function used as a value is a function-typed `.ident` with no binding identity
-  -- (Elab's form for `let f = g;`), which this walk missed (Codex review r7 of bugs 238 – 239: a
-  -- returned method value reached no foreign assumption, and neither did a free one).
+/-- A method value's own contribution: a function-typed `.ident` with no binding identity in the
+    method namespace, by its definition name. -/
+def methodValueHere : CExpr → List String
   | .ident n (.fn_ ..) => if n.id.isNone && n.space == .method then [n.name] else []
-  | .call _ _ args _ => args.foldl (fun acc a => acc ++ collectMethodValueRefsExpr a) []
-  | .binOp _ l r _ => collectMethodValueRefsExpr l ++ collectMethodValueRefsExpr r
-  | .unaryOp _ e _ => collectMethodValueRefsExpr e
-  | .structLit _ _ fields _ => fields.foldl (fun acc (_, v) => acc ++ collectMethodValueRefsExpr v) []
-  | .fieldAccess obj _ _ => collectMethodValueRefsExpr obj
-  | .enumLit _ _ _ fields _ => fields.foldl (fun acc (_, v) => acc ++ collectMethodValueRefsExpr v) []
-  | .match_ scrut arms _ =>
-    collectMethodValueRefsExpr scrut ++ arms.foldl (fun acc a => acc ++ collectMethodValueRefsArm a) []
-  | .borrow inner _ | .borrowMut inner _ | .deref inner _ => collectMethodValueRefsExpr inner
-  | .arrayLit elems _ => elems.foldl (fun acc e => acc ++ collectMethodValueRefsExpr e) []
-  | .arrayIndex arr idx _ => collectMethodValueRefsExpr arr ++ collectMethodValueRefsExpr idx
-  | .cast inner _ => collectMethodValueRefsExpr inner
-  | .allocCall inner alloc _ => collectMethodValueRefsExpr inner ++ collectMethodValueRefsExpr alloc
-  | .ifExpr cond th el _ =>
-    collectMethodValueRefsExpr cond ++ collectMethodValueRefsStmts th ++ collectMethodValueRefsStmts el
   | _ => []
 
-partial def collectMethodValueRefsArm (arm : CMatchArm) : List String :=
-  match arm with
-  | .enumArm _ _ _ guard body => (guard.map collectMethodValueRefsExpr).getD [] ++ collectMethodValueRefsStmts body
-  | .litArm v guard body =>
-    collectMethodValueRefsExpr v ++ (guard.map collectMethodValueRefsExpr).getD [] ++ collectMethodValueRefsStmts body
-  | .varArm _ _ guard body => (guard.map collectMethodValueRefsExpr).getD [] ++ collectMethodValueRefsStmts body
-  | .rangeArm lo hi _ guard body =>
-    collectMethodValueRefsExpr lo ++ collectMethodValueRefsExpr hi ++ (guard.map collectMethodValueRefsExpr).getD []
-      ++ collectMethodValueRefsStmts body
-
-partial def collectMethodValueRefsStmt (s : CStmt) : List String :=
-  match s with
-  | .letDecl _ _ _ v => collectMethodValueRefsExpr v
-  | .assign _ v => collectMethodValueRefsExpr v
-  | .return_ (some v) _ => collectMethodValueRefsExpr v
-  | .return_ none _ => []
-  | .expr e _ => collectMethodValueRefsExpr e
-  | .ifElse c t el =>
-    collectMethodValueRefsExpr c ++ collectMethodValueRefsStmts t ++
-    match el with | some stmts => collectMethodValueRefsStmts stmts | none => []
-  | .while_ c body _ step =>
-    collectMethodValueRefsExpr c ++ collectMethodValueRefsStmts body ++ collectMethodValueRefsStmts step
-  | .fieldAssign obj _ v => collectMethodValueRefsExpr obj ++ collectMethodValueRefsExpr v
-  | .derefAssign t v => collectMethodValueRefsExpr t ++ collectMethodValueRefsExpr v
-  | .arrayIndexAssign arr idx v =>
-    collectMethodValueRefsExpr arr ++ collectMethodValueRefsExpr idx ++ collectMethodValueRefsExpr v
-  | .break_ (some v) _ => collectMethodValueRefsExpr v
-  | .break_ none _ | .continue_ _ => []
-  | .defer body => collectMethodValueRefsExpr body
-  | .borrowIn _ _ _ _ _ body => collectMethodValueRefsStmts body
-
-partial def collectMethodValueRefsStmts (ss : List CStmt) : List String :=
-  ss.foldl (fun acc s => acc ++ collectMethodValueRefsStmt s) []
-end
+def collectMethodValueRefsExpr (e : CExpr) : List String := (collectGoExpr methodValueHere [] e).reverse
+def collectMethodValueRefsArm (arm : CMatchArm) : List String :=
+  (collectGoArm methodValueHere [] arm).reverse
+def collectMethodValueRefsStmt (s : CStmt) : List String :=
+  (collectGoStmt methodValueHere [] s).reverse
+def collectMethodValueRefsStmts (ss : List CStmt) : List String :=
+  (collectGoStmts methodValueHere [] ss).reverse
 
 /-! ### Indirect calls
 

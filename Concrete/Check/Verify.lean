@@ -1,4 +1,5 @@
 import Std.Data.HashMap
+import Std.Data.HashSet
 import Std.Data.TreeMap
 import Concrete.Elab.Core
 import Concrete.Report.Diagnostic
@@ -599,9 +600,12 @@ partial def verifyCapsPostMono (modules : List CModule) : Diagnostics :=
       -- Per namespace (bugs 238 – 239): a free call its function binds to a foreign declaration
       -- is that declaration (CoreCheck decides it), and otherwise each call is decided against
       -- the definitions of its namespace, a method call against methods only.
-      let directs := ((collectCalleesStmts f.body).filterMap fun c => match c with
-        | .direct n sp => some (n, sp)
-        | _ => none).eraseDups
+      -- Bug 296: the first occurrence of each (callee, namespace), in order, kept by a hash set
+      -- (was `eraseDups`, which compares each callee with every one kept before it).
+      let directs := ((collectCalleesStmts f.body).foldl (fun (seen, acc) c => match c with
+        | .direct n sp =>
+          if seen.contains (n, sp) then (seen, acc) else (seen.insert (n, sp), (n, sp) :: acc)
+        | _ => (seen, acc)) ((∅ : Std.HashSet (String × CallSpace)), ([] : List (String × CallSpace)))).2.reverse
       let decided := directs.filter fun (n, sp) =>
         !(sp == .free && (f.foreignCalls.lookup n).any (fun d => !d.startsWith "_C$rt."))
       decided.foldl (fun acc (callee, sp) =>
