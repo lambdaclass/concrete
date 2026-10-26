@@ -9296,6 +9296,9 @@ case "$r286_ms" in
            PASS=$((PASS + 1))
        else
            echo "FAIL  bug 286: lowering 8000 nested ifs took ${r286_first} ms, then ${r286_ms} ms in lower (budget 400, retry 800)"
+           FAIL=$((FAIL + 1))
+       fi ;;
+esac
 # Bug 288: EmitSSA kept its program-wide name tables (colliding names, defined and method names,
 # link symbols, emitted types, string lengths, deduplicated declarations) as lists searched per
 # function or per type, so emitting n functions took n² (20000 functions: --emit-llvm 5.9 s, the
