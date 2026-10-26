@@ -2,7 +2,7 @@
 
 <!-- bug-ledger
 summary: Resolve built a module's global scope by folding each enum's variant symbols onto the list built so far (`acc ++ e.variants.map ...`), once per scope build, so a module of n enums took time n² to resolve (10000 enums: 1222 ms). Found by the R-0550 scaling gate. Class 17.
-coverage: `check_compile_scaling.sh` (R-0550) judges the `enums` shape's `resolve` stage against its budget and near-linear growth once this bug's exclusion is removed; the gate is on wip/r0550-scaling-gate-v2, not yet landed, so the removal lands with it
+coverage: `run_tests.sh` times the `resolve` stage of a generated module of 20000 enums against a budget (the pre-fix compiler fails it); `check_compile_scaling.sh` (R-0550, on wip/r0550-scaling-gate-v2, not yet landed) judges the same stage once this bug's exclusion is removed
 class: 17 — Resolve folds every enum's variant symbols onto the list built so far
 silent: no
 -->
@@ -63,6 +63,12 @@ at size 60 are byte-identical between the same two builds.
 After the rebase onto main (91ce358b, train 34) the comparison was run again, over
 91ce358b's corpus, between the compiler built at 91ce358b and the one built at b5cb1b3a (this
 fix on that base): byte-identical.
+
+## Regression leg
+
+`run_tests.sh` times the `resolve` stage of a generated module of 20000 enums against 400 ms
+(retried once at 800 ms): 194 ms on the rebased fix (b5cb1b3a) while another session's gates loaded
+the host, FAIL on main 91ce358b (7517 ms, then 7200 ms).
 
 ## Containment while open
 
