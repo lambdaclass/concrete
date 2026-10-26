@@ -8655,6 +8655,63 @@ else
     echo "FAIL  bug 222: interp gave '$r222_interp', want 42"
     FAIL=$((FAIL + 1))
 fi
+# Bug 273: the parser appended each struct, enum, constant, newtype, import and submodule of a
+# module to the list built so far, so n such declarations took n² to parse (20000 structs:
+# 2958 ms; 20000 enums: 3075 ms). Generated modules of 20000 structs and of 20000 enums must parse
+# (the `parse` stage of --emit-trace-json) within 300 ms, retried once at 600 ms (fixed: 50 and
+# 57 ms on the dev host; pre-fix, five times the retry budget).
+r273s_src="$TMPDIR/r273s_structs_20000.con"
+awk -v n=20000 'BEGIN {
+    for (i = 0; i < n; i++) printf "struct S%d { a: i64, b: i64 }\n", i
+    m = n - 1
+    printf "fn main() -> Int { let s: S%d = S%d { a: 40, b: 2 }; let S%d { a, b } = s; return (a + b) as Int; }\n", m, m, m
+}' > "$r273s_src"
+r265_stage_ms "$r273s_src" parse; r273s_first="$r265_ms"; r273s_ms="$r273s_first"
+case "$r273s_first" in
+    ''|*[!0-9]*) ;;
+    *) if [ "$r273s_first" -gt 300 ]; then r265_stage_ms "$r273s_src" parse; r273s_ms="$r265_ms"; fi ;;
+esac
+case "$r273s_ms" in
+    incomplete)
+        echo "  INCOMPLETE bug 273: parsing 20000 structs timed out twice (180 s each)"
+        INCOMPLETE=$((INCOMPLETE + 1)) ;;
+    ''|*[!0-9]*)
+        echo "FAIL  bug 273: parsing 20000 structs failed ($r273s_ms)"
+        FAIL=$((FAIL + 1)) ;;
+    *) if [ "$r273s_first" -le 300 ] || [ "$r273s_ms" -le 600 ]; then
+           echo "  ok  bug 273: parsing 20000 structs within budget (${r273s_ms} ms, parse)"
+           PASS=$((PASS + 1))
+       else
+           echo "FAIL  bug 273: parsing 20000 structs took ${r273s_first} ms, then ${r273s_ms} ms in parse (budget 300, retry 600)"
+           FAIL=$((FAIL + 1))
+       fi ;;
+esac
+r273e_src="$TMPDIR/r273e_enums_20000.con"
+awk -v n=20000 'BEGIN {
+    for (i = 0; i < n; i++) printf "enum E%d { A { v: i64 }, B }\n", i
+    m = n - 1
+    printf "fn main() -> Int { let e: E%d = E%d::A { v: 42 }; match e { E%d::A { v } => { return v as Int; }, E%d::B => { return 0; }, } }\n", m, m, m, m
+}' > "$r273e_src"
+r265_stage_ms "$r273e_src" parse; r273e_first="$r265_ms"; r273e_ms="$r273e_first"
+case "$r273e_first" in
+    ''|*[!0-9]*) ;;
+    *) if [ "$r273e_first" -gt 300 ]; then r265_stage_ms "$r273e_src" parse; r273e_ms="$r265_ms"; fi ;;
+esac
+case "$r273e_ms" in
+    incomplete)
+        echo "  INCOMPLETE bug 273: parsing 20000 enums timed out twice (180 s each)"
+        INCOMPLETE=$((INCOMPLETE + 1)) ;;
+    ''|*[!0-9]*)
+        echo "FAIL  bug 273: parsing 20000 enums failed ($r273e_ms)"
+        FAIL=$((FAIL + 1)) ;;
+    *) if [ "$r273e_first" -le 300 ] || [ "$r273e_ms" -le 600 ]; then
+           echo "  ok  bug 273: parsing 20000 enums within budget (${r273e_ms} ms, parse)"
+           PASS=$((PASS + 1))
+       else
+           echo "FAIL  bug 273: parsing 20000 enums took ${r273e_first} ms, then ${r273e_ms} ms in parse (budget 300, retry 600)"
+           FAIL=$((FAIL + 1))
+       fi ;;
+esac
 # Bug 224: a `let` whose initializer fails is recovered with the declaration's mutability, so the
 # assignment to the `let mut` (line 12) gets no E0217 and the one to the plain `let` (line 14) does.
 run_err "$TESTDIR/error_224_failed_let_keeps_mutability.con" "(E0241)"

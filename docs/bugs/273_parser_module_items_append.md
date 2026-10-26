@@ -2,7 +2,7 @@
 
 <!-- bug-ledger
 summary: the parser appended each struct, enum, constant, newtype, import and submodule of a module to the list built so far (`structs := structs ++ [s]`), so a module of n such declarations took time n² to parse (10000 structs: 684 ms). Found by the R-0550 scaling gate. Class 17.
-coverage: `check_compile_scaling.sh` (R-0550) judges the `structs` and `enums` shapes' `parse` stage against its budget and near-linear growth once this bug's exclusion is removed; the gate is on wip/r0550-scaling-gate-v2, not yet landed, so the removal lands with it
+coverage: `run_tests.sh` times the `parse` stage of generated modules of 20000 structs and 20000 enums against a budget (the pre-fix compiler fails both); `check_compile_scaling.sh` (R-0550, on wip/r0550-scaling-gate-v2, not yet landed) judges the same stage once this bug's exclusion is removed
 class: 17 — the parser appends each struct, enum, constant, newtype, import and submodule of a module to the list built so far
 silent: no
 -->
@@ -69,6 +69,13 @@ at size 60 are byte-identical between the same two builds.
 After the rebase onto main (91ce358b, train 34) the comparison was run again, over
 91ce358b's corpus, between the compiler built at 91ce358b and the one built at 4d1d0362 (this
 fix on that base): byte-identical.
+
+## Regression leg
+
+`run_tests.sh` times the `parse` stage of a generated module of 20000 structs and of 20000 enums
+against 300 ms each (retried once at 600 ms): 115 ms and 109 ms on the rebased fix (4d1d0362)
+while another session's gates loaded the host, FAIL on main 91ce358b (26344 ms, then 4531 ms;
+27884 ms, then 5043 ms).
 
 ## Containment while open
 
