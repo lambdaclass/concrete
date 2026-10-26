@@ -98,3 +98,4 @@ date	kind	probe	effort	bugs	silent
 2026-10-25	development	repointing mutation 56 to Elab's frame shape (front-end perf branch): the faithful eager-frames mutation survived check_binder_refs.sh	unrecorded	268	-
 2026-10-25	development	the name-capture fixes of bugs 238-247: CoreCheck judges an FFI edge against its own module tree's extern names; reproduced with an imported extern under --report trust-edges	unrecorded	272	272
 2026-10-26	development	R-0550 compile-time scaling gate: 15 generated shapes (array literals, long functions, many locals, lets with blocks, many functions, structs and enums, deep nesting) timed per stage at 1000 to 160000 elements	unrecorded	273,274,275,276,277,278,279,280,281,282	-
+2026-10-26	development	gates-shell branch CI (run 40269354812): a transform-register leg failed on printf: write error: Broken pipe with its pattern present	unrecorded	283	-
