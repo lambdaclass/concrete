@@ -40,8 +40,8 @@ costs O(n log n) in all.
 ## Measurements
 
 `resolve` stage in ms (`--emit-trace-json`, fastest of 3 runs), dev host (fede-256gb),
-`nested-ifs` shape, before (the compiler built at b5040d53) and after (built from this branch's
-compiler sources; the build had no other modification):
+`nested-ifs` shape, before (the compiler built at b5040d53) and after (built from the tree of
+66e50ae3, whose compiler sources are this fix; the build had no other modification):
 
 | depth | before | after |
 |---|---|---|
@@ -60,8 +60,9 @@ at size 60 are byte-identical between the same two builds.
 `regress_282_nested_scope_visibility.con` (42, native and `--interp`) pins visibility across
 nested, sibling, loop and match-arm blocks; `error_282_read_after_nested_block.con` pins E0100 for
 a binding read after its nested block closed while an enclosing one is open. `run_tests.sh` times
-the `resolve` stage of a generated nest 10000 `if` blocks deep against 50 ms (retried once at
-100 ms): 5 ms after the fix, FAIL on the pre-fix compiler (161 ms, then 147 ms).
+the `resolve` stage of a generated nest 20000 `if` blocks deep against 50 ms (retried once at
+100 ms): 11 ms after the fix, FAIL on the pre-fix compiler (599 ms, six times the retry budget,
+so a faster host still fails it; depth 10000 was 147 ms, too close to the budget, Codex review).
 
 The R-0550 scaling gate (wip/r0550-scaling-gate-v2, not yet landed) excludes the whole
 `nested-ifs` shape under this bug, bug 281 and Lower's merges (bug 266); its exclusion can drop
