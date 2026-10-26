@@ -42,7 +42,8 @@ echo "=== O(n^2) '++ [x]' ratchet over hot pipeline files ==="
 check Concrete/Frontend/Lexer.lean       1
 # 64->59 (2026-10-25, bug 249): explicit array literal elements accumulate in an Array.
 # 59->51 (2026-10-25, bug 255): a block's statements accumulate in an Array.
-check Concrete/Frontend/Parser.lean      51
+# 51->36 (2026-10-26, bug 273): every declaration list of a module is consed and reversed once.
+check Concrete/Frontend/Parser.lean      36
 # 64->32, 2->1 (2026-10-22, bug 178): match arm lists prepend+reverse, blocks and entry
 # allocas accumulate newest-first, SSAVerify regTypes (dead) removed.
 # 32->25 (2026-10-25, bugs 265-266): the loop header phis, phi instructions and promoted-name
