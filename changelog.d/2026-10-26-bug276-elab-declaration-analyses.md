@@ -1,4 +1,4 @@
-### Elaborating Many Declarations Takes Linear Time (bug 276, 2026-10-26)
+### Elab's Declaration Analyses and Callee Lookups No Longer Scan Lists per Declaration (bug 276, 2026-10-26)
 
 Elab's program-level declaration analyses (top-level function collisions, ambiguous type names,
 import spellings, the first binding of each type spelling) deduplicated or scanned lists per
