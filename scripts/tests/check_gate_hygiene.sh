@@ -494,7 +494,7 @@ echo "=== no pipe into a short-circuiting grep or head before a match (bug 283) 
 # inside an `eval` or `bash -c` string is read as the code it is. The blanked views over-approximate:
 # `grep -e -q` (a pattern spelled like the option) is flagged too; spell such a pattern otherwise.
 _QG='(^|[^|])\|&?[[:space:]]*[ef]?grep([[:space:]]+(-[A-Za-z0-9]+|--[a-z-]+(=[^[:space:]]*)?))*[[:space:]]+(-[A-Za-z0-9]*[qmlL][A-Za-z0-9]*([[:space:]]|$)|--(quiet|silent|max-count|files-with))'
-_QG_ANY='(^|[^|])\|&?[[:space:]]*[ef]?grep([[:space:]][^|;&]*)?[[:space:]](-[A-Za-z0-9]*[qmlL][A-Za-z0-9]*|--(qu|si|ma|files-with|c)[a-z-]*)([[:space:]=]|$)'
+_QG_ANY='(^|[^|])\|&?[[:space:]]*[ef]?grep([[:space:]][^|;&]*)?[[:space:]](-[A-Za-z0-9]*[qmlL][A-Za-z0-9]*|--(q|s|m|files-with|c)[a-z-]*)([[:space:]=]|$)'
 _HM='(^|[^|])\|&?[[:space:]]*(head([[:space:]][^;&]*)?|sed[[:space:]][^|;&]*q[^;&]*)\|&?[[:space:]]*has_match([[:space:]]|$)'
 blank_quotes() { # each line with every quoted string replaced by Q (escapes and both quote kinds)
   awk 'BEGIN { q = sprintf("%c", 39) }
@@ -575,6 +575,9 @@ printf '%s\n' "make_report $_P sed '5q' $_P has_match x" > "$_sc_dir/quoted_sedq
 printf '%s\n' "check x 'make_report $_P $_G -e PAT -q'" > "$_sc_dir/in_eval_pattern_then_q.sh"
 printf '%s\n' "check x \"make_report $_P $_G -q 'PAT'\"" > "$_sc_dir/in_dq_string.sh"
 printf '%s\n' "make_report $_P $_G PAT --qui" > "$_sc_dir/abbreviated_long.sh"
+printf '%s\n' "make_report $_P $_G --q PAT" > "$_sc_dir/shortest_quiet.sh"
+printf '%s\n' "make_report $_P $_G --s PAT" > "$_sc_dir/shortest_silent.sh"
+printf '%s\n' "make_report $_P $_G --m=1 PAT" > "$_sc_dir/shortest_max_count.sh"
 printf '%s\n' "make_report $_P$_P $_G -q x f" > "$_sc_dir/or_list.sh"
 printf '%s\n' "has_match -E 'a|b' <<<\"\$OUT\" && ok x || no x" > "$_sc_dir/herestring.sh"
 printf '%s\n' "make_report $_P has_match -F x" > "$_sc_dir/drained.sh"
@@ -585,7 +588,8 @@ printf '%s\n' "cat > f <<'EOF'" "make_report $_P $_G -q x" "EOF" > "$_sc_dir/her
 printf '%s\n' "# make_report $_P $_G -q x" > "$_sc_dir/comment.sh"
 for c in printf_q negated stream_qE split_opts continued backslash max_count files_with long_quiet egrep head_then_match sedq_then_match \
          pattern_arg_then_q context_arg_then_q pattern_then_q quoted_alt_then_q in_eval_string head_filter_match \
-         quoted_sedq_then_match in_eval_pattern_then_q in_dq_string abbreviated_long; do
+         quoted_sedq_then_match in_eval_pattern_then_q in_dq_string abbreviated_long shortest_quiet shortest_silent \
+         shortest_max_count; do
   if [ -n "$(pipe_into_short_circuit "$_sc_dir/$c.sh")" ]; then ok "control: a pipe into a short-circuiting consumer ($c) is flagged"
   else no "control: a pipe into a short-circuiting consumer ($c) was NOT flagged (the scan is inert)"; fi
 done

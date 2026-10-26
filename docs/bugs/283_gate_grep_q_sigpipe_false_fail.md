@@ -82,8 +82,8 @@ pipe into grep/egrep/fgrep with `-q`, `-m`, `-l`, `-L` or a long form or abbrevi
 anywhere in its arguments, and for `| head` or `| sed …q` feeding
 has_match; it also requires every script that calls has_match to load it (an undefined has_match is
 status 127, which a negated leg would read as "absent"). It replaces the elaborator-only leg. Its
-controls: twenty-two hazardous fixtures are flagged (among them `grep -e PAT -q`, `grep PAT -q`,
-`grep 'a|b' -q`, `grep PAT --qui`, legs inside eval strings, `head -1 | sed … | has_match`,
+controls: twenty-five hazardous fixtures are flagged (among them `grep -e PAT -q`, `grep PAT -q`,
+`grep 'a|b' -q`, `grep PAT --qui`, the shortest abbreviations `--q`, `--s`, `--m=1`, legs inside eval strings, `head -1 | sed … | has_match`,
 `sed '5q' | has_match`) and nine safe ones
 (here-string, drained pipe, `||`, file operand, `grep -c`, `awk 'NR<=1'`, heredoc data, comment, an
 option spelled inside a quoted argument) are not; a 500000-line producer reproduces status 141 and the
