@@ -941,7 +941,7 @@ import sys, yaml
 root = sys.argv[1]
 SHELL = "nix develop .#gates --command bash --noprofile --norc -eo pipefail {0}"
 # job -> reason. Each step of these enters a superset shell itself.
-SHELL_EXEMPT = {("lean_action_ci.yml", "multi-kernel"): "every step runs `nix develop .#provers` itself"}
+SHELL_EXEMPT = {("lean_action_ci.yml", "multi-kernel"): "every step runs nix develop .#provers itself"}
 bad = []
 for wf in ("lean_action_ci.yml", "branch_health.yml"):
     d = yaml.safe_load(open(f"{root}/.github/workflows/{wf}"))
