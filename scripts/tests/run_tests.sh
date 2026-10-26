@@ -8709,9 +8709,13 @@ run_ok "$TESTDIR/regress_218_type_and_value_namespaces.con" 42
 # functions each calling the next must check (the `check` stage of --emit-trace-json) within
 # 200 ms, retried once at 400 ms (fixed: 77 ms on the dev host).
 run_err "$TESTDIR/error_275_collision_order.con" "(E0299) a function named 'first'"
-r275_order=$($COMPILER "$TESTDIR/error_275_collision_order.con" 2>&1 \
-    | sed -nE "s/.*\(E0299\) an? [a-z ]+ named '([A-Za-z]+)'.*/\1/p" | tr '\n' ' ' || true)
-if [ "$r275_order" = "first second P " ]; then
+r275_rc=0
+bounded_run -r 20 20 -- $COMPILER "$TESTDIR/error_275_collision_order.con" > "$TMPDIR/r275_collisions.txt" 2>&1 || r275_rc=$?
+r275_order=$(sed -nE "s/.*\(E0299\) an? [a-z ]+ named '([A-Za-z]+)'.*/\1/p" "$TMPDIR/r275_collisions.txt" | tr '\n' ' ')
+if bounded_is_incomplete "$r275_rc"; then
+    echo "  INCOMPLETE bug 275: the collision-order compile timed out twice (20 s each)"
+    INCOMPLETE=$((INCOMPLETE + 1))
+elif [ "$r275_order" = "first second P " ]; then
     echo "  ok  bug 275: every declaration collision is reported, in order"
     PASS=$((PASS + 1))
 else

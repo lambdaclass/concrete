@@ -7,7 +7,7 @@ class: 17 — Check finds duplicate declarations by searching an association lis
 silent: no
 -->
 
-**Status:** FIXED (branch `wip/perf-275`)
+**Status:** FIXED (branch `wip/perf-275-v2`)
 **Found:** 2026-10-26, building the compile-time scaling gate (R-0550, exit 2o): the gate's generated shapes, timed per stage with `--emit-trace-json` at 10b81a46.
 **Severity:** loud (performance). Compile time only: never wrong code, a refusal or a crash; a program of this shape compiles, slowly.
 
