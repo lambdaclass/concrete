@@ -1,17 +1,19 @@
 # Bug 283 — gate assertions pipe captured output into `grep -q` under `pipefail` (SIGPIPE false FAIL)
 
 <!-- bug-ledger
-summary: gates assert with `printf '%s' "$OUT" | grep -q PAT` under `pipefail`; when grep exits on its first match while printf is still writing a multi-buffer string, printf dies of SIGPIPE and the pipeline's status turns the leg into a FAIL although the pattern is present.
+summary: gates assert with `printf '%s' "$OUT" | grep -q PAT` under `pipefail`; when grep exits on its first match while printf is still writing a multi-buffer string, printf dies of SIGPIPE and the pipeline's status inverts the match: a positive leg reports FAIL although the pattern is present, and a negated leg (`| grep -q FORBIDDEN && no || ok`) reports ok although the forbidden text is there.
 coverage: tooling-only defect in the gate scripts, no compiler fixture applies; reproduced by CI run 40269354812 (check_transform_register.sh line 483) and by Codex in memory (pipeline=141, printf=141, grep=0). The regression vehicle will be a check_gate_hygiene.sh scan with large-output controls.
-silent: no
+silent: yes
 -->
 
 **Status:** OPEN.
 **Found:** 2026-10-26, on branch `wip/gates-shell` (head `3ba54626`), CI run 40269354812, job
 "Extra gates", step "Transformation register (Register B rows)". The same gate passed on the same
 compiler sources in run 40265317601 and on main. Confirmed by Codex review (read-only reproduction).
-**Severity:** loud, intermittent false failure. It cannot turn a failing assertion into a pass: a
-missing pattern still fails. It can turn a passing assertion into a FAIL.
+**Severity:** intermittent, both ways. On a positive leg (`| grep -q PAT && ok || no`) it is loud:
+a present pattern reports FAIL, which is what CI showed. On a negated leg (`| grep -q FORBIDDEN && no
+|| ok`) it is silent: the forbidden text is there, the pipeline still fails, and the leg reports ok
+(Codex reproduced both). A missing pattern on a positive leg still fails.
 
 ## Reproducer
 
