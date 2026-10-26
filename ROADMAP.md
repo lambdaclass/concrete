@@ -12590,9 +12590,9 @@ at the closing commit, and each reproducer's pre-fix commit fails it.
 
 The gate is in the full gate set (2026-10-26), with budgets measured on concrete-ci-2 and recorded
 in `scripts/tests/lib/compile_scaling_budgets.tsv`. Building it found ten more superlinear stages
-over declaration count and nesting depth (bugs 273 – 282, open); they and Lower's long-function
-quadratics (bugs 265 – 267 and 270, on `wip/perf-backend`) are named exclusions the gate reports
-on every run. What remains for the exit: each fix removes its exclusion, and the declaration and
+over declaration count and nesting depth (bugs 273 – 282, open); they and Lower's loop header phis
+(bug 270; bugs 265 – 267 are fixed and their shapes judged) are named exclusions the gate reports on
+every run. What remains for the exit: each fix removes its exclusion, and the declaration and
 nesting shapes move to 10^4 – 10^5 elements.
 
 ### Task R-0551

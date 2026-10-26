@@ -11,6 +11,6 @@ found ten more superlinear stages over many declarations or deep nesting, filed 
 273 – 282 (the parser's module item lists, Resolve's enum variant fold and scope stack, Check's duplicate-declaration list and
 expression re-walks, Elab's declaration analyses and evidence use lists, CoreCheck's and Lower's
 function lists, Mono's type names; [bug 273](docs/bugs/273_parser_module_items_append.md) and the
-records after it). Those stages, and Lower's long-function quadratics being repaired separately,
+records after it). Those stages, and Lower's loop header phis (bug 270, the `let`-then-`while` shape),
 are named exclusions the gate reports on every run; the declaration and nesting shapes run at 1000
 and 10000 until their fixes land.

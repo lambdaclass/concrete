@@ -40,6 +40,6 @@ Class 17 ("pass state in association lists and per-query recomputation"): a prog
 
 ## Structural owner
 
-R-0422; ROADMAP #5 (the Lower builder). Lower's per-function quadratics (bugs 265-267, 270) are a separate repair on wip/perf-backend. The R-0550 gate (exit 2o) keeps the class from returning once fixed.
+R-0422; ROADMAP #5 (the Lower builder). Lower's per-function quadratics are bugs 265-267 (fixed) and 270. The R-0550 gate (exit 2o) keeps the class from returning once fixed.
 
 Codex review 2026-10-26: CONFIRMED — `lowerModule`'s function-result append is quadratic; for single-module types the cause is the per-type `ownStructs.any`/`ownEnums.any` filters; additionally `lowerExpr` scans `definedFns` per call.

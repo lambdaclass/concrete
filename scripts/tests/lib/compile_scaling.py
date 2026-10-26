@@ -520,26 +520,33 @@ def do_measure(runner, b, shapes, root):
             new[(shape, n, s)] = bud
             print("  %s n=%d %s: median %.0fms of %s -> budget %dms"
                   % (shape, n, s, med, ",".join("%.0f" % v for v in vs), bud))
-    # Rewrite the file: keep every non-budget line, replace the measurement header and budgets.
+    # Rewrite the file: keep every other line, replace the measured shapes' budgets. A run over
+    # every shape replaces every `measured:` stamp; a run over some shapes keeps the earlier stamps
+    # (which then cover the other shapes) and adds one naming the shapes it measured, so every
+    # budget row keeps the commit and host it was measured at.
+    measured = sorted({k[0] for k in new}, key=lambda n: [x[0] for x in b.shapes].index(n))
+    every = all(name in measured or b.excluded(name, "*") is not None for name, _s, _m in b.shapes)
     with open(b.path) as f:
         lines = f.read().splitlines()
     out = []
     for line in lines:
-        if line.startswith("budget\t") or line.startswith("# measured:"):
+        if line.startswith("budget\t") or (every and line.startswith("# measured:")):
             continue
         out.append(line)
-    stamp = "# measured: commit %s on %s, %s, %d runs (median), budget = max(%g x median, median + %gms)" % (
+    stamp = "# measured: commit %s on %s, %s, %d runs (median), budget = max(%g x median, median + %gms)%s" % (
         git_identity(root), host_identity(), time.strftime("%Y-%m-%d"), runs,
-        b.p("budget_factor"), b.p("budget_slack_ms"))
-    # The stamp goes right after the leading comment block.
+        b.p("budget_factor"), b.p("budget_slack_ms"),
+        "" if every else " -- shapes: " + ", ".join(measured))
+    # The stamp goes after the leading comment block (and after earlier stamps).
     i = 0
     while i < len(out) and out[i].startswith("#"):
         i += 1
     out.insert(i, stamp)
+    old = {k: v for k, v in b.budget.items() if k[0] not in measured}
     order = {name: k for k, (name, _s, _m) in enumerate(b.shapes)}
-    for key in sorted(set(b.budget) | set(new),
+    for key in sorted(set(old) | set(new),
                       key=lambda k: (order.get(k[0], 999), k[1], stages_of(MODES).index(k[2]))):
-        v = new.get(key, b.budget.get(key))
+        v = new.get(key, old.get(key))
         out.append("budget\t%s\t%d\t%s\t%d" % (key[0], key[1], key[2], v))
     with open(b.path, "w") as f:
         f.write("\n".join(out) + "\n")
@@ -576,7 +583,8 @@ def main():
         meas = [l for l in b.header if l.startswith("# measured:")]
         print("=== compile-time scaling (R-0550): per-stage budgets; growth <= n^%.2f in time, n^%.2f in "
               "allocations ===" % (b.p("exp"), b.p("hb_exp")))
-        print("  budgets %s" % (meas[0][2:] if meas else "NOT MEASURED"))
+        for m in meas or ["# NOT MEASURED"]:
+            print("  budgets %s" % m[2:])
         npass = nfail = nexcl = 0
         attempts = 1 + int(b.p("retries"))
         for shape, sizes, modes in shapes:
