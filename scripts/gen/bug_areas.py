@@ -159,9 +159,25 @@ def area_of(path, amap):
 
 
 # ----------------------------------------------------------------------------- git
+# A hook exports GIT_DIR and friends; read the history of the directory named, never an inherited one.
+_LOCAL_ENV = {"GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_CONFIG", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT",
+              "GIT_OBJECT_DIRECTORY", "GIT_DIR", "GIT_WORK_TREE", "GIT_IMPLICIT_WORK_TREE", "GIT_GRAFT_FILE",
+              "GIT_INDEX_FILE", "GIT_NO_REPLACE_OBJECTS", "GIT_REPLACE_REF_BASE", "GIT_PREFIX",
+              "GIT_SHALLOW_FILE", "GIT_COMMON_DIR", "GIT_QUARANTINE_PATH"}
+
+
+def _env():
+    return {k: v for k, v in os.environ.items() if k not in _LOCAL_ENV and not k.startswith("GIT_CONFIG_KEY_")
+            and not k.startswith("GIT_CONFIG_VALUE_")}
+
+
+def _run(gitdir, args, data=None):
+    return subprocess.run(["git", "-C", gitdir, "-c", "core.quotepath=off", "--no-replace-objects", *args],
+                          input=data, capture_output=True, env=_env())
+
+
 def _git(gitdir, *args, data=None):
-    p = subprocess.run(["git", "-C", gitdir, "-c", "core.quotepath=off", *args], input=data,
-                       capture_output=True)
+    p = _run(gitdir, args, data)
     if p.returncode != 0:
         raise AreaError(f"git {' '.join(args[:3])} failed in {gitdir}: "
                         f"{p.stderr.decode(errors='replace').strip()[:200]}")
@@ -170,11 +186,10 @@ def _git(gitdir, *args, data=None):
 
 def check_history(gitdir):
     """Refuse a shallow clone; raise NoHistory for a directory with no project history."""
-    p = subprocess.run(["git", "-C", gitdir, "rev-parse", "--show-toplevel", "--is-shallow-repository"],
-                       capture_output=True, text=True)
+    p = _run(gitdir, ["rev-parse", "--show-toplevel", "--is-shallow-repository"])
     if p.returncode != 0:
         raise NoHistory(f"{gitdir} is not a git work tree")
-    top, shallow = (p.stdout.split("\n") + ["", ""])[:2]
+    top, shallow = (p.stdout.decode().split("\n") + ["", ""])[:2]
     if os.path.realpath(top) != os.path.realpath(gitdir):
         raise NoHistory(f"{gitdir} is not the top of a git work tree (it lies inside {top})")
     if shallow.strip() == "true":
@@ -262,8 +277,7 @@ def _blobs(gitdir, specs):
     """{"<hash>:<path>": text} via one `git cat-file --batch`."""
     if not specs:
         return {}
-    p = subprocess.run(["git", "-C", gitdir, "cat-file", "--batch"], input=("\n".join(specs) + "\n").encode(),
-                       capture_output=True)
+    p = _run(gitdir, ["cat-file", "--batch"], ("\n".join(specs) + "\n").encode())
     if p.returncode != 0:
         raise AreaError(f"git cat-file failed in {gitdir}")
     out, data, pos = {}, p.stdout, 0

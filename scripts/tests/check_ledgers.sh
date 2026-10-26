@@ -39,8 +39,13 @@ case "$TMP" in /?*/?*) [ -d "$TMP" ] || { echo "FATAL: mktemp gave no directory"
 trap 'rm -rf "$TMP"' EXIT
 
 echo "=== 1. the committed views match their records ==="
-if python3 -I "$BL" --check; then ok "bug ledger views match the records"
-else no "bug ledger views differ from the records (run python3 $BL --write)"; fi
+if python3 -I "$BL" --check > "$TMP/check1.out" 2>&1; then ok "bug ledger views match the records"
+else no "bug ledger views differ from the records (run python3 $BL --write)"; sed 's/^/      /' "$TMP/check1.out" | awk 'NR<=6'; fi
+# AREAS.md derives from git history too; this checkout must really have compared it (a tree with no
+# history skips it, which is right for a scratch copy and wrong here).
+if [ -f docs/bugs/AREAS.md ] && ! has_match 'not compared' < "$TMP/check1.out"; then
+  ok "docs/bugs/AREAS.md was derived from this checkout's history and compared"
+else no "docs/bugs/AREAS.md was not compared against this checkout's history (see above)"; fi
 if python3 -I "$CL" --check; then ok "CHANGELOG.md matches its stamp and every changelog.d/ fragment is well-formed"
 else no "CHANGELOG.md was hand-edited or a fragment is malformed (see above)"; fi
 if [ -f scripts/tests/ci_gate_inventory.txt ]; then
@@ -59,7 +64,7 @@ mkdir -p "$BASE/docs" "$BASE/scripts/tests" "$BASE/scripts/gen" "$BASE/.github/w
 cp -R docs/bugs "$BASE/docs/bugs"
 cp ROADMAP.md CHANGELOG.md "$BASE/"
 cp -R changelog.d "$BASE/changelog.d"
-cp scripts/gen/bug_ledger.py scripts/gen/changelog.py scripts/gen/migrate_ledgers.py "$BASE/scripts/gen/"
+cp scripts/gen/bug_ledger.py scripts/gen/bug_areas.py scripts/gen/changelog.py scripts/gen/migrate_ledgers.py "$BASE/scripts/gen/"
 cp scripts/tests/audit_bug_corpus.sh scripts/tests/check_bug_filing_complete.sh \
    scripts/tests/run_tests.sh scripts/tests/run_ci_gates_local.sh "$BASE/scripts/tests/"
 # The copied gates start by sourcing the gate-shell guard from beside themselves.
@@ -308,6 +313,102 @@ expect filing_missing_fixture 1 bash "$C/scripts/tests/check_bug_filing_complete
 make_copy
 edit scripts/tests/audit_bug_corpus.sh "old='declare -A SKIP_BUGS=(\n'; assert s.count(old)==1; s=s.replace(old, old+'  [996]=\"OPEN -- a legacy entry left behind\"\n')"
 expect audit_legacy_entry_left 1 bash "$C/scripts/tests/audit_bug_corpus.sh"
+
+echo "=== 5. bug areas: the mapping, the report, the overrides, the fixed point ==="
+# The copies have no git history of their own: --history names this checkout's.
+H=(--history "$ROOT_DIR")
+make_copy
+expect areas_copy_checks 0 python3 -I "$BL" --check --root "$C" "${H[@]}"
+neg areas_hand_edit docs/bugs/AREAS.md "old='| Check |'; assert s.count(old)>=1; s=s.replace(old, '| Lower |', 1)" 1
+make_copy
+edit docs/bugs/AREAS.md "old='<!-- END GENERATED: bug areas -->'; assert s.count(old)==1; s=s.replace(old,'')"
+expect areas_markers_missing 2 python3 -I "$BL" --check --root "$C" "${H[@]}"
+# An area: override that names an unknown stage is refused, with or without history; a malformed one too.
+neg area_unknown_stage "$R" "$(add 'area: Codegen')" 2
+neg area_malformed "$R" "$(add 'area: Lower/')" 2
+make_copy
+edit "$R" "$(add 'area: Codegen')"
+expect area_unknown_stage_with_history 2 python3 -I "$BL" --check --root "$C" "${H[@]}"
+# A valid override makes the view stale until it is regenerated, and then places the bug.
+make_copy
+edit "$R" "$(add 'area: Lower/Lower — control override')"
+expect area_override_not_regenerated 1 python3 -I "$BL" --check --root "$C" "${H[@]}"
+if python3 -I "$BL" --write --root "$C" "${H[@]}" >/dev/null 2>&1 && python3 -I "$BL" --check --root "$C" "${H[@]}" >/dev/null 2>&1 \
+   && grep -qE '^\| \[997\]\(997_ledger_control\.md\) \| Lower \| Lower \| override \|' "$C/docs/bugs/AREAS.md"; then
+  ok "positive control: an area: override regenerates into AREAS.md and checks"
+else no "positive control: an area: override did not regenerate into AREAS.md"; fi
+# The mapping covers every path a fix commit touched: drop the row for Lower and the derivation stops.
+make_copy
+edit docs/bugs/area_map.tsv "import re; s,n=re.subn(r'^Concrete/IR/Lower\.lean\t.*\n', '', s, flags=re.M); assert n==1"
+python3 -I "$BL" --check --root "$C" "${H[@]}" > "$TMP/unmapped.out" 2>&1; rc=$?
+if [ "$rc" = 2 ] && has_match 'Concrete/IR/Lower.lean' < "$TMP/unmapped.out"; then
+  ok "control: a fix-commit path with no area_map.tsv row is refused (exit 2) and named"
+else no "control: an unmapped fix-commit path gave exit $rc, expected 2 naming Concrete/IR/Lower.lean"; fi
+neg area_map_unknown_stage docs/bugs/area_map.tsv "s = s.replace('\tcode\tLower\tLower\n', '\tcode\tLowering\tLower\n', 1)" 2
+neg area_map_bad_tier docs/bugs/area_map.tsv "s = s.replace('Main.lean\tcode\t', 'Main.lean\tsource\t', 1)" 2
+neg area_map_duplicate_prefix docs/bugs/area_map.tsv "s = s + 'Main.lean\tcode\tCLI\tMain\n'" 2
+# The report is deterministic: three runs (each with its own hash seed), text and JSON, agree; a run
+# from another directory agrees too; the SQLite database is written and holds every record.
+for i in 1 2 3; do
+  python3 -I "$BL" report > "$TMP/report.$i" 2>"$TMP/report.err" || { no "the report failed (run $i): $(head -c 300 "$TMP/report.err")"; break; }
+  python3 -I "$BL" report --json > "$TMP/report.json.$i" 2>/dev/null || { no "the JSON report failed (run $i)"; break; }
+done
+( cd "$TMP" && python3 -I "$ROOT_DIR/$BL" report --root "$ROOT_DIR" ) > "$TMP/report.cwd" 2>/dev/null
+if [ -s "$TMP/report.1" ] && cmp -s "$TMP/report.1" "$TMP/report.2" && cmp -s "$TMP/report.1" "$TMP/report.3" \
+   && cmp -s "$TMP/report.1" "$TMP/report.cwd" && cmp -s "$TMP/report.json.1" "$TMP/report.json.2" \
+   && cmp -s "$TMP/report.json.1" "$TMP/report.json.3" && has_match '^## Bugs by stage$' < "$TMP/report.1"; then
+  ok "the report is deterministic (text and JSON, three runs and another working directory agree)"
+else no "the report differs between runs, or is empty"; fi
+NREC="$(ls docs/bugs | grep -cE '^[0-9]{3}_.*\.md$')"
+if python3 -I "$BL" report --sqlite "$TMP/areas.db" >/dev/null 2>&1 && python3 -I - "$TMP/areas.db" "$NREC" <<'PY'
+import sqlite3, sys
+n = sqlite3.connect(sys.argv[1]).execute("select count(*) from bugs").fetchone()[0]
+sys.exit(0 if n == int(sys.argv[2]) and n > 0 else 1)
+PY
+then ok "report --sqlite writes a database holding every record ($NREC)"
+else no "report --sqlite did not write a database holding every record"; fi
+# Histories that cannot be read. A scratch copy committed as one snapshot has no project history: the
+# view is skipped, and said so. A shallow clone is refused: it would silently lose fix commits.
+make_copy
+if ( unset $(git rev-parse --local-env-vars) 2>/dev/null; export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+     git -C "$C" init -q && git -C "$C" add -A && git -C "$C" -c user.name=gate -c user.email=gate@example.invalid commit -q -m snapshot ) >/dev/null 2>&1; then
+  python3 -I "$BL" --check --root "$C" > "$TMP/snap.out" 2>&1; rc=$?
+  if [ "$rc" = 0 ] && has_match 'AREAS.md is neither regenerated nor compared: .*snapshot' < "$TMP/snap.out"; then
+    ok "control: a snapshot history skips AREAS.md and says so"
+  else no "control: a snapshot history gave exit $rc without the skip note"; fi
+  python3 -I "$BL" report --root "$C" >/dev/null 2>&1; rc=$?
+  [ "$rc" = 2 ] && ok "control: the report refuses a tree with no project history (exit 2)" \
+    || no "control: the report on a snapshot history gave exit $rc, expected 2"
+else no "control: could not build the snapshot repository"; fi
+SH="$TMP/shallow-src"
+if ( unset $(git rev-parse --local-env-vars) 2>/dev/null; export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+     git init -q "$SH" && for i in 1 2; do echo "$i" > "$SH/f"; git -C "$SH" add f && git -C "$SH" -c user.name=gate -c user.email=gate@example.invalid commit -q -m "c$i" || exit 1; done
+     git clone -q --depth 1 "file://$SH" "$TMP/shallow" ) >/dev/null 2>&1; then
+  expect shallow_history 2 python3 -I "$BL" --check --root "$C" --history "$TMP/shallow"
+else no "control: could not build the shallow clone"; fi
+# The fixed point, on a clone of this checkout's HEAD: a commit naming a bug that changes compiler
+# code makes AREAS.md stale (exit 1); regenerating and committing the result checks, and the
+# regeneration commit, which names the bug too, changes no area. Regenerated views carry no weight.
+FP="$TMP/fixpoint"
+FP_BUG=997   # the control record, open and unfixed: a fix commit must place it
+fp_git() { ( unset $(git rev-parse --local-env-vars) 2>/dev/null; export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+             git -C "$FP" -c user.name=gate -c user.email=gate@example.invalid "$@" ); }
+if ( unset $(git rev-parse --local-env-vars) 2>/dev/null; git clone -q --shared --no-checkout "$ROOT_DIR" "$FP" \
+       && git -C "$FP" checkout -q --detach "$(git -C "$ROOT_DIR" rev-parse HEAD)" ) >/dev/null 2>&1 \
+   && cp scripts/gen/bug_ledger.py scripts/gen/bug_areas.py "$FP/scripts/gen/" && cp docs/bugs/area_map.tsv docs/bugs/AREAS.md "$BASE/$R" "$FP/docs/bugs/" \
+   && fp_git add -A && fp_git commit -q --allow-empty -m "gate: this checkout's generator and views" \
+   && python3 -I "$FP/scripts/gen/bug_ledger.py" --write --root "$FP" >/dev/null 2>&1 \
+   && fp_git commit -q -a --allow-empty -m "gate: regenerate" && python3 -I "$FP/scripts/gen/bug_ledger.py" --check --root "$FP" >/dev/null 2>&1; then
+  printf '\n-- fixed-point control\n' >> "$FP/Concrete/Frontend/Lexer.lean"
+  fp_git commit -q -a -m "bug $FP_BUG: a control change to the lexer"
+  expect fix_commit_makes_areas_stale 1 python3 -I "$FP/scripts/gen/bug_ledger.py" --check --root "$FP"
+  python3 -I "$FP/scripts/gen/bug_ledger.py" --write --root "$FP" >/dev/null 2>&1
+  fp_git commit -q -a -m "bug $FP_BUG: regenerate the views"
+  if python3 -I "$FP/scripts/gen/bug_ledger.py" --check --root "$FP" >/dev/null 2>&1 \
+     && grep -qE "^\| \[$FP_BUG\]\([^)]*\) \| Parse \| Lexer \| commits \|" "$FP/docs/bugs/AREAS.md"; then
+    ok "control: after a fix commit, one regeneration commit (naming the bug too) is a fixed point"
+  else no "control: the regeneration commit changed the derived areas again (no fixed point)"; fi
+else no "control: could not build the fixed-point clone"; fi
 
 echo
 echo "LEDGERS: PASS=$PASS FAIL=$FAIL"

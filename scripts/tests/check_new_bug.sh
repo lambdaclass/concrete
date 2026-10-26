@@ -51,7 +51,7 @@ cp ROADMAP.md CHANGELOG.md "$W/"
 cp -R changelog.d "$W/changelog.d"
 # bug_dashboard.py too: without it the scaffold skips the discovery attribution and the dashboard,
 # which is how bug 300 (a filing the dashboard refused after the reservation) went unseen here.
-cp scripts/gen/bug_ledger.py scripts/gen/bug_dashboard.py scripts/gen/changelog.py scripts/gen/migrate_ledgers.py \
+cp scripts/gen/bug_ledger.py scripts/gen/bug_areas.py scripts/gen/bug_dashboard.py scripts/gen/changelog.py scripts/gen/migrate_ledgers.py \
    scripts/gen/new_bug.sh "$W/scripts/gen/"
 cp scripts/tests/audit_bug_corpus.sh scripts/tests/check_bug_filing_complete.sh \
    scripts/tests/run_tests.sh scripts/tests/run_ci_gates_local.sh "$W/scripts/tests/"
