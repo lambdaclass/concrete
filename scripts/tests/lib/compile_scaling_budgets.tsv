@@ -68,7 +68,6 @@ exclude	structs	monomorphize	bug 278 (open): Mono's program-level name tables ar
 exclude	structs	lower	bug 279 (open): Lower appends each lowered function to a list and deduplicates external types by list search
 exclude	structs	llvm,native	not run: every whole compile of this shape contains the excluded stages above; it runs with their fixes
 exclude	enums	parse	bug 273 (open): the parser appends each struct and enum of a module to the list built so far
-exclude	enums	resolve	bug 274 (open): Resolve folds every enum's variant symbols onto the list built so far
 exclude	enums	check	bug 275 (open): Check's duplicate-declaration check searches an association list per declaration
 exclude	enums	elaborate	bug 276 (open): Elab's program-level declaration analyses (colliding top-level functions, ambiguous type names, import spellings, the per-function result list) scan lists per declaration
 exclude	enums	monomorphize	bug 278 (open): Mono's program-level name tables are lists searched per declaration
