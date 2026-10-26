@@ -8404,17 +8404,18 @@ run_err "$TESTDIR/error_210_struct_minus_literal.con" "(E0501)"
 run_err "$TESTDIR/error_210_child_module_arith.con" "(E0501)"
 run_err "$TESTDIR/error_210_child_module_newtype_arith.con" "(E0501)"
 # Bugs 265-267 and 269: the back end over long functions. Lower kept its variable table in an
-# association list (265: n chained `let`s took 22 s to lower at 40000, 111 s at 80000); every branch
+# association list (265: n chained `let`s took 21 s to lower at 40000, 111 s at 80000); every branch
 # merge visited every binding in scope (266: n `let`s each followed by an `if` or a `match` took
 # time cubic in n); SSACleanup settled one link of a chain of constant branches per run of its
 # whole pass sequence (267: n such branches took n runs over the whole function); the post-mono
-# reference-binding verifier searched its environment list per assignment (269). The fixtures pin the
-# behavior each structure must keep. The leg below times the `lower` stage alone (Lower, SSA
-# verification and cleanup, from --emit-trace-json), so the front end's cost on long functions
-# does not enter the budget: 12000 chained `let`s, and 1500 `let`s each followed by an `if` or a
-# `match`, must lower within 600 ms (retried once with 1200 ms). The old back end took 1.1 s,
-# 9.6 s and over 4 s; the new one 30-60 ms. The verifier's own time leg (269) waits for the front
-# end of bugs 255-261: on this front end a function long enough to show it takes minutes to reach it.
+# reference-binding verifier searched its environment list per assignment (269: 7.5 s at 40000
+# `let`s with an `if` each, 149 s at 80000). The fixtures pin the behavior each structure must
+# keep. The leg below reads the stage times from --emit-trace-json: `lower` (Lower, SSA verification
+# and cleanup) and `monomorphize` (which runs the post-mono verifiers). 80000 chained `let`s must
+# lower within 8 s, 40000 `let`s each followed by an `if` and 20000 each followed by a `match`
+# within 15 s, and the `if` case must monomorphize within 3 s; each retried once with twice the
+# budget. The old back end took 111 s, over 300 s and over 300 s to lower, and 7.5 s to
+# monomorphize; the new one about 1, 3-6 and 4 s, and 0.5-0.8 s.
 run_ok "$TESTDIR/regress_265_variable_table.con" 42
 run_ok "$TESTDIR/regress_266_branch_merges.con" 42
 run_ok "$TESTDIR/regress_267_constant_branch_chains.con" 42
@@ -8438,28 +8439,28 @@ r265_gen() {  # r265_gen SHAPE N: a generated `fn main` of the given shape and s
         print "}"
     }'
 }
-r265_lower_ms() {  # r265_lower_ms SRC: the `lower` stage time in ms, or nothing when the run failed
-    bounded_run -r 120 120 -- $COMPILER "$1" --emit-trace-json 2>/dev/null \
-        | sed -nE 's/.*"timing_ms":\{[^}]*"lower":([0-9]+).*/\1/p'
+r265_stage_ms() {  # r265_stage_ms SRC STAGE: that stage's time in ms, or nothing when the run failed
+    bounded_run -r 180 180 -- $COMPILER "$1" --emit-trace-json 2>/dev/null \
+        | sed -nE "s/.*\"timing_ms\":\\{[^}]*\"$2\":([0-9]+).*/\\1/p"
 }
 r265_bad=""
-for r265_case in "lets 12000" "if 1500" "match 1500"; do
-    read -r r265_shape r265_n <<< "$r265_case"
+for r265_case in "lets 80000 lower 8000" "if 40000 lower 15000" "if 40000 monomorphize 3000" "match 20000 lower 15000"; do
+    read -r r265_shape r265_n r265_stage r265_budget <<< "$r265_case"
     r265_src="$TMPDIR/r265_${r265_shape}_$r265_n.con"
-    r265_gen "$r265_shape" "$r265_n" > "$r265_src"
-    r265_ms="$(r265_lower_ms "$r265_src")"
-    if [ -z "$r265_ms" ] || [ "$r265_ms" -gt 600 ]; then
-        r265_ms2="$(r265_lower_ms "$r265_src")"
-        if [ -z "$r265_ms2" ] || [ "$r265_ms2" -gt 1200 ]; then
-            r265_bad="$r265_bad $r265_shape/$r265_n:${r265_ms:-none},${r265_ms2:-none}ms"
+    [ -f "$r265_src" ] || r265_gen "$r265_shape" "$r265_n" > "$r265_src"
+    r265_ms="$(r265_stage_ms "$r265_src" "$r265_stage")"
+    if [ -z "$r265_ms" ] || [ "$r265_ms" -gt "$r265_budget" ]; then
+        r265_ms2="$(r265_stage_ms "$r265_src" "$r265_stage")"
+        if [ -z "$r265_ms2" ] || [ "$r265_ms2" -gt $((r265_budget * 2)) ]; then
+            r265_bad="$r265_bad $r265_shape/$r265_n/$r265_stage:${r265_ms:-none},${r265_ms2:-none}ms"
         fi
     fi
 done
 if [ -z "$r265_bad" ]; then
-    echo "  ok  bugs 265-267: long functions (12000 lets, 1500 lets with an if or a match each) lower within 600 ms"
+    echo "  ok  bugs 265-267, 269: long functions (80000 lets, 40000 lets with an if, 20000 with a match) lower and monomorphize within budget"
     PASS=$((PASS + 1))
 else
-    echo "FAIL  bugs 265-267: the lower stage of a long function exceeded 600 ms (retry 1200 ms):$r265_bad"
+    echo "FAIL  bugs 265-267, 269: a back-end stage of a long function exceeded its budget (retry twice the budget):$r265_bad"
     FAIL=$((FAIL + 1))
 fi
 # Bug 228: the interpreter's loops drop each iteration's bindings, so a loop is linear in its

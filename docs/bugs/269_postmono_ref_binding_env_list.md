@@ -50,5 +50,5 @@ Class 17: pass state in association lists, the same shape as bug 261 (CoreCheck)
 
 ## Structural owner
 
-R-0422 (complexity envelopes). Its time leg waits for the front end of bugs 255-261: on main's
-front end a function long enough to show the verifier's cost takes minutes to reach it.
+R-0422 (complexity envelopes). run_tests.sh's long-function leg bounds the `monomorphize` stage
+of 40000 `let`s each followed by an `if` (3 s, retried with 6 s).
