@@ -8,8 +8,9 @@
 # conflict and is resolved by hand first; a generator refuses (exit 2) rather than guess when its
 # markers or inputs are damaged.
 #
-#   bug ledger      docs/bugs/README.md lists, STRUCTURAL_CLASSES.md table column, ROADMAP exit spans
-#                   (scripts/gen/bug_ledger.py, from docs/bugs/NNN_*.md)
+#   bug ledger      docs/bugs/README.md lists, STRUCTURAL_CLASSES.md table column, ROADMAP exit spans,
+#                   docs/bugs/AREAS.md (scripts/gen/bug_ledger.py, from docs/bugs/NNN_*.md; AREAS.md
+#                   also from git history, so rerun this after committing a fix and commit the result)
 #   bug dashboard   ROADMAP.md's bug dashboard (scripts/gen/bug_dashboard.py), when present
 #   candidates      ROADMAP.md's "Implemented, not yet accepted" table (scripts/gen/candidate_table.py)
 #   build identity  Concrete/BuildIdentity.lean (scripts/gen/build_identity.sh, from the compiler sources)
@@ -34,7 +35,7 @@ if [ -f scripts/gen/candidate_table.py ]; then
 fi
 bash scripts/gen/build_identity.sh
 
-left="$(grep -lE '^(<{7}|>{7})( |$)' docs/bugs/README.md docs/bugs/STRUCTURAL_CLASSES.md ROADMAP.md \
+left="$(grep -lE '^(<{7}|>{7})( |$)' docs/bugs/README.md docs/bugs/STRUCTURAL_CLASSES.md docs/bugs/AREAS.md ROADMAP.md \
           Concrete/BuildIdentity.lean 2>/dev/null || true)"
 if [ -n "$left" ]; then
   echo "refresh_generated: conflict markers remain OUTSIDE the generated blocks in:" >&2

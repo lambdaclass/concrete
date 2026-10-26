@@ -1115,7 +1115,11 @@ jobs:
     runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     needs: build
     steps:
+      # Full history: docs/bugs/AREAS.md (checked by the fast surface gates' docs-drift leg) derives
+      # each bug's area from its fix commits, and the ledger generator refuses a shallow clone.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install Nix (GitHub-hosted only)
         if: runner.environment != 'self-hosted'

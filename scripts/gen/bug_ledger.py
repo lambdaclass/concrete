@@ -6,6 +6,11 @@
                              a generated block: the block is replaced whole, conflict markers included)
   bug_ledger.py --check      exit 1 when a view differs from the records (stale or hand-edited);
                              check_docs_drift.sh runs this
+  bug_ledger.py report       print the bug-area research tables (stage and module, class x stage,
+                             month, silent, how found, time to fix, recurring pairs) derived by
+                             scripts/gen/bug_areas.py; --json for JSON, --sqlite PATH to also write a
+                             throwaway SQLite database (generated, never committed); --history DIR
+                             reads another checkout's git history (default: --root)
   bug_ledger.py corpus       print the regression-coverage map, one tab-separated row per bug:
                              NNN<TAB>fixtures<TAB>open|fixed<TAB>a.con b.con   or
                              NNN<TAB>coverage<TAB>open|fixed<TAB>rationale;
@@ -27,6 +32,8 @@ ONE OWNER PER FACT. A bug's facts live in its record, docs/bugs/NNN_*.md, and no
       class: 12                                       (one line per class; table order picks primary)
       silent: yes | no                                (silent wrong code / unsound claim vs loud)
       exit: 0b                                        (ROADMAP exits whose generated bug list names it)
+      area: Lower/Lower — why the derivation is wrong (optional: replaces the derived primary area;
+                                                      an unknown stage is refused, see bug_areas.py)
       -->
 
   Exactly one of `fixtures` and `coverage` is required. A value is one line with no tab and no `-->`.
@@ -38,6 +45,13 @@ THE GENERATED VIEWS (each between BEGIN/END GENERATED markers; never edit inside
                                    are owned by the class and kept as written)
   ROADMAP.md                       each `<!-- BEGIN GENERATED: exit X bugs ... -->` span: the bugs
                                    whose record names exit X, ranges compacted
+  docs/bugs/AREAS.md               each bug's stage and module, derived from its fix commits in git
+                                   history and docs/bugs/area_map.tsv (scripts/gen/bug_areas.py), with
+                                   the stage and class tables. It goes stale when a commit naming a bug
+                                   changes code: after committing a fix, --write and commit (or amend);
+                                   regenerated views carry no weight, so that settles it. A tree with no
+                                   project history (a scratch copy) skips it and says so; a shallow
+                                   clone is refused
 
 BEFORE THE MIGRATION (scripts/gen/migrate_ledgers.sh) no record carries a ledger block: every mode
 says so and exits 0, and `corpus` prints nothing, so the legacy maps in audit_bug_corpus.sh stay the
@@ -48,7 +62,8 @@ an unknown key, a missing summary, both or neither of fixtures/coverage, a class
 does not have, an exit with no generated span, a bad silent value, missing or duplicated markers, a
 structural row whose cells disagree between the two sides of a conflict, or a silent value that
 disagrees with docs/bugs/discovery.tsv (when that file exists, its `silent` column must name exactly
-the records marked `silent: yes` among the bugs it lists).
+the records marked `silent: yes` among the bugs it lists); an `area:` that names an unknown stage, a malformed
+docs/bugs/area_map.tsv, a fix-commit path no area_map row matches, or a shallow history.
 
 --root overrides the repository root (a test seam for the gate's negative controls).
 """

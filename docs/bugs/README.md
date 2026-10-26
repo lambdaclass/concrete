@@ -56,6 +56,7 @@ coverage: check_x.sh leg y covers it                   (instead of fixtures: the
 class: 8 — optional note shown in STRUCTURAL_CLASSES.md's summary table
 silent: yes                                            (silent wrong code or unsound claim; no = loud)
 exit: 0b                                               (ROADMAP exits whose bug list names it)
+area: Lower/Lower — why                                (rare: only when the derived area is wrong)
 -->
 
 **Status:** OPEN | FIXED (branch, commit)
@@ -78,7 +79,8 @@ The record owns the bug's facts:
 - **the ledger block** (it renders as nothing): `summary` is required, and exactly one of
   `fixtures` (regression fixtures, each registered in `scripts/tests/run_tests.sh`) or `coverage`
   (a rationale naming the gate or fixture that covers it). `class` (one line per structural class;
-  the primary class is the first in the summary table's order), `silent` and `exit` are optional.
+  the primary class is the first in the summary table's order), `silent`, `exit` and `area` are
+  optional (see [Bug areas](#bug-areas) for `area`).
   Neither `summary` nor `coverage` states the status. The format is in `scripts/gen/bug_ledger.py`.
 
 These views are generated from the records by `python3 scripts/gen/bug_ledger.py --write`; never
@@ -88,6 +90,7 @@ edit them:
 - the bugs column of [STRUCTURAL_CLASSES.md](STRUCTURAL_CLASSES.md)'s summary table (the class
   name and owner cells are the class's own and are edited there);
 - each exit's generated bug list in [ROADMAP.md](../../ROADMAP.md);
+- [AREAS.md](AREAS.md), each bug's stage and module (from the records and git history, below);
 - the coverage maps of `scripts/tests/audit_bug_corpus.sh`, built at run time and never committed.
 
 `check_docs_drift.sh` fails when a view differs from the records (a hand edit, or a record changed
@@ -114,6 +117,43 @@ their owners, are in [STRUCTURAL_CLASSES.md](STRUCTURAL_CLASSES.md); a new bug e
 there (a `class:` line) or adds one (a new table row and section). Whether a new bug is repaired now
 or contained until its owner lands follows the roadmap's defect disposition rule
 ([execution queue](../../ROADMAP.md#the-current-execution-queue)).
+
+## Bug areas
+
+Which compiler areas keep having bugs is derived, never recorded by hand. `scripts/gen/bug_areas.py`
+(run by `bug_ledger.py`) finds each bug's fix commits in git history: the commits whose subject
+names it (`bug 297: ...`, `bugs 027, 248 and 250 ...`, `bugs 273-282 ...`), or whose body names it
+when they also touch its record or fixtures; for an old bug filed with its fix, the commit that
+added or closed its record. It maps every path those commits changed to an area with
+[area_map.tsv](area_map.tsv) (path prefix to tier, stage and module; the longest prefix wins) and
+weights them by changed lines: compiler, std and tooling code first, then gates, then prose; tests,
+fixtures, examples, records and generated views never count. The heaviest area is the bug's
+primary area; other stages with a tenth of the weight are secondary. Dates come from git too:
+found is the commit that added the record, fixed the first commit whose record reads FIXED.
+
+- [AREAS.md](AREAS.md) is the committed view: stage and class tables and every bug's area and
+  basis (its own commits, commits shared with other bugs, the record-commit fallback, an override,
+  or not fixed yet).
+- `python3 scripts/gen/bug_ledger.py report` prints the research tables: bugs by stage and
+  module (total, open, silent), class by stage, found and fixed by month, silent bugs by stage, how
+  found ([discovery.tsv](discovery.tsv) kind) by stage, days to fix per stage, and the recurring
+  area and class pairs. `--json` prints the same as JSON with every bug's weights and commits;
+  `--sqlite /tmp/bugs.db` also writes a throwaway SQLite database for ad-hoc queries (tables
+  `bugs`, `bug_classes`, `bug_secondary`, `bug_weights`, `bug_commits`; never commit it).
+- A fix commit that touches a path no `area_map.tsv` row matches stops the generator: add a row
+  (a new compiler file usually needs one).
+- AREAS.md derives from commits, so a commit that names a bug and changes code makes it stale:
+  after committing a fix, run `bash scripts/gen/refresh_generated.sh` and commit the result (or
+  amend it into the fix). Regenerated files carry no weight, so one regeneration settles it. The
+  generator refuses a shallow clone; a scratch copy with no project history skips the view and
+  says so.
+
+**When to add an `area:` override.** Only when the derived area is clearly wrong and the record
+itself shows it: the fix commit named another bug, the bug was renumbered (commits naming its old
+number are another bug's), or the commit that names it only recorded a fix made elsewhere. Write
+`area: Stage` or `area: Stage/module`, then ` — ` and the reason; an unknown stage is refused.
+Do not override a `shared` area only because it is shared: a multi-bug commit is evidence too, and
+the report counts those bugs as ambiguous.
 
 <!-- BEGIN GENERATED: bug list (scripts/gen/bug_ledger.py; edit the docs/bugs/NNN_*.md records, never this list) -->
 

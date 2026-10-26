@@ -43,6 +43,13 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
   lists, the class table's bugs column, ROADMAP's generated spans, `CHANGELOG.md`,
   `Concrete/BuildIdentity.lean`); see [scripts/tests/README.md](../../scripts/tests/README.md),
   "Shared ledgers".
+- Each bug's compiler area is derived from its fix commits ([AREAS.md](../bugs/AREAS.md);
+  `python3 scripts/gen/bug_ledger.py report` for the stage, class, month, silent, how-found and
+  time-to-fix tables, `--json` or `--sqlite PATH` for queries). Name the bug in the subject of each
+  commit that fixes it (`bug NNN: ...`), and after committing a fix rerun
+  `scripts/gen/refresh_generated.sh` and commit the regenerated AREAS.md. Add an `area:` line to a
+  record only when the record shows the derived area is wrong
+  ([README.md](../bugs/README.md#bug-areas)); never fill areas in by hand otherwise.
 - A silent defect (wrong code, unsound claim) is stopped at once by repair or fail-closed
   containment; a loud one is filed, pinned and owned (the defect disposition rule in
   [ROADMAP.md](../../ROADMAP.md#the-current-execution-queue)).

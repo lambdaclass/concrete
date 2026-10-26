@@ -56,7 +56,11 @@ jobs:
     # pull_request trigger; the guard is kept so a future one can never reach a self-hosted runner.
     runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete-light"]') || 'ubuntu-latest' }}
     steps:
+      # Full history: docs/bugs/AREAS.md (the docs-drift gate) derives each bug's area from its fix
+      # commits, and the ledger generator refuses a shallow clone.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install Nix (GitHub-hosted only)
         if: runner.environment != 'self-hosted'
