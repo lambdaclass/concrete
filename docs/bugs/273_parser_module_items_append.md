@@ -66,6 +66,9 @@ allocations, against bounds of x63.1 and x15.8).
 `--emit-core`, `--emit-ssa` and `--emit-llvm` (stdout, stderr and exit status) of every `.con`
 under `tests/programs` and `examples` (the b5040d53 corpus) and of twelve generated scaling shapes
 at size 60 are byte-identical between the same two builds.
+After the rebase onto main (91ce358b, train 34) the comparison was run again, over
+91ce358b's corpus, between the compiler built at 91ce358b and the one built at 4d1d0362 (this
+fix on that base): byte-identical.
 
 ## Containment while open
 
