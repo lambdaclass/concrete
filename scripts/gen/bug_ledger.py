@@ -54,11 +54,15 @@ the records marked `silent: yes` among the bugs it lists).
 """
 import argparse
 import glob
+import json
 import os
 import re
 import sys
 
-KEYS = {"summary", "fixtures", "coverage", "class", "silent", "exit"}
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import bug_areas  # noqa: E402  (beside this file; -I leaves the script's directory off sys.path)
+
+KEYS = {"summary", "fixtures", "coverage", "class", "silent", "exit", "area"}
 REPEATABLE = {"class"}
 OPEN_WORDS = {"open", "contained", "half", "partially"}
 CLOSED_WORDS = {"fixed"}
@@ -93,16 +97,21 @@ def read(path):
         die(f"cannot read {path}: {e}")
 
 
+def status_word(text):
+    """True (open), False (fixed) or None (no status line, or a word outside the vocabulary)."""
+    m = re.search(r"^(?:\*\*Status:\*\*|Status:)\s*(.*)$", text, re.M)
+    word = (re.findall(r"[A-Za-z]+", m.group(1))[:1] or [""])[0].lower() if m else ""
+    return True if word in OPEN_WORDS else False if word in CLOSED_WORDS else None
+
+
 def status_open(text, name):
     m = re.search(r"^(?:\*\*Status:\*\*|Status:)\s*(.*)$", text, re.M)
     if not m:
         die(f"{name} has no **Status:** line")
-    word = (re.findall(r"[A-Za-z]+", m.group(1))[:1] or [""])[0].lower()
-    if word in OPEN_WORDS:
-        return True
-    if word in CLOSED_WORDS:
-        return False
-    die(f"{name}: status '{m.group(1)[:40]}' is not one of OPEN, CONTAINED, Half closed, Partially fixed or FIXED")
+    st = status_word(text)
+    if st is None:
+        die(f"{name}: status '{m.group(1)[:40]}' is not one of OPEN, CONTAINED, Half closed, Partially fixed or FIXED")
+    return st
 
 
 def title_of(text, num):
@@ -153,6 +162,11 @@ def parse_block(body, name):
         die(f"{name}: a ledger value holds a tab")
     if facts.get("silent", "yes") not in ("yes", "no"):
         die(f"{name}: silent must be yes or no, got '{facts['silent']}'")
+    if "area" in facts:
+        try:
+            bug_areas.parse_area(facts["area"], name)
+        except bug_areas.AreaError as e:
+            die(str(e))
     exits = re.split(r"[,\s]+", facts.get("exit", "").strip()) if "exit" in facts else []
     if not all(re.fullmatch(r"\d[a-z]", x) for x in exits) or len(set(exits)) != len(exits):
         die(f"{name}: exit must be distinct exit ids like 0b or 2c, got '{facts.get('exit')}'")
@@ -314,8 +328,30 @@ def exit_text(recs, x):
     return compact(r["num"] for r in recs.values() if x in r["facts"]["exit"]) or "—"
 
 
-def views(root, recs):
-    """[(path, current text, regenerated text)] for every generated view."""
+def class_names(root):
+    p = os.path.join(root, "docs", "bugs", "STRUCTURAL_CLASSES.md")
+    _, block = splice(read(p), CLASS_BEGIN, CLASS_END, "", p)
+    return {n: name for n, name, _ in class_rows(block, p)}
+
+
+def derive_areas(root, history, recs, required):
+    """(areas, None) from the history, or (None, reason) when it has no usable project history (an
+    error when `required`). A malformed input or an unmapped path exits 2."""
+    try:
+        bug_areas.load_map(root)
+        bug_areas.check_history(history)
+        return bug_areas.derive(history, root, recs, status_word), None
+    except bug_areas.NoHistory as e:
+        if required:
+            die(f"the bug areas derive from git history, and there is none to read: {e}")
+        return None, str(e)
+    except bug_areas.AreaError as e:
+        die(str(e))
+
+
+def views(root, recs, areas=None):
+    """[(path, current text, regenerated text)] for every generated view (AREAS.md only when the
+    areas could be derived)."""
     out = []
     p = os.path.join(root, "docs", "bugs", "README.md")
     cur = read(p)
@@ -340,17 +376,28 @@ def views(root, recs):
     new = EXIT_SPAN.sub(lambda m: EXIT_BEGIN.format(x=m.group(1)) + exit_text(recs, m.group(1))
                         + EXIT_END.format(x=m.group(1)), base)
     out.append((p, cur, new))
+    if areas is not None:
+        p = os.path.join(root, "docs", "bugs", "AREAS.md")
+        cur = read(p)
+        new, _ = splice(cur, bug_areas.BEGIN, bug_areas.END, bug_areas.render_view(recs, areas, class_names(root)), p)
+        out.append((p, cur, new))
     return out
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("mode", nargs="?", choices=["corpus"])
+    ap.add_argument("mode", nargs="?", choices=["corpus", "report"])
     ap.add_argument("--root", default=os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")))
+    ap.add_argument("--history", help="the git work tree whose history the bug areas derive from (default: --root)")
+    ap.add_argument("--json", action="store_true", help="report: print JSON instead of text tables")
+    ap.add_argument("--sqlite", metavar="PATH", help="report: also write a throwaway SQLite database to PATH")
     g = ap.add_mutually_exclusive_group()
     g.add_argument("--write", action="store_true")
     g.add_argument("--check", action="store_true")
     a = ap.parse_args()
+    if (a.json or a.sqlite) and a.mode != "report":
+        ap.error("--json and --sqlite apply to the report mode")
+    history = a.history or a.root
     recs, migrated = load_records(a.root)
     if a.mode == "corpus":
         for r in recs.values() if migrated else []:
@@ -363,15 +410,41 @@ def main():
               "hand-maintained until scripts/gen/migrate_ledgers.sh runs")
         return 0
     check_discovery(a.root, recs)
-    vs = views(a.root, recs)
+    if a.mode == "report":
+        areas, _ = derive_areas(a.root, history, recs, required=True)
+        try:
+            rows = bug_areas.bug_rows(recs, areas, bug_areas.load_discovery_kinds(a.root))
+        except bug_areas.AreaError as e:
+            die(str(e))
+        names = class_names(a.root)
+        if a.sqlite:
+            bug_areas.write_sqlite(a.sqlite, rows, names)
+        if a.json:
+            print(json.dumps({"bugs": rows, "tables": [{"title": t, "header": h, "rows": r}
+                                                       for t, h, r, _ in bug_areas.report_tables(rows, names)]},
+                             indent=1, sort_keys=True))
+        else:
+            print(bug_areas.render_report(bug_areas.report_tables(rows, names)), end="")
+        return 0
+    areas, why_not = derive_areas(a.root, history, recs, required=False)
+    if why_not:
+        print(f"bug ledger: docs/bugs/AREAS.md is neither regenerated nor compared: {why_not} "
+              "(pass --history <checkout> to derive the areas from another checkout's history)", file=sys.stderr)
+    vs = views(a.root, recs, areas)
     if a.check:
         stale = [os.path.relpath(p, a.root) for p, cur, new in vs if cur != new]
         if stale:
             print(f"bug ledger: generated views differ from the records: {', '.join(stale)}; edit the records "
                   "and run python3 scripts/gen/bug_ledger.py --write (the views are generated, never "
                   "hand-edited)", file=sys.stderr)
+            if "docs/bugs/AREAS.md" in stale:
+                print("bug ledger: docs/bugs/AREAS.md also derives from git history (a bug's fix commits), so it "
+                      "goes stale when a commit naming a bug changes code: after committing a fix, run --write and "
+                      "commit the result (or amend it into the fix). Regenerated views carry no weight, so one "
+                      "regeneration settles it", file=sys.stderr)
             return 1
-        print(f"bug ledger: {len(vs)} generated views match {len(recs)} records")
+        print(f"bug ledger: {len(vs)} generated views match {len(recs)} records"
+              + ("" if areas is not None else " (AREAS.md not compared: no history)"))
         return 0
     if a.write:
         for p, cur, new in vs:

@@ -1,0 +1,129 @@
+# Area map: which compiler area a changed path belongs to. scripts/gen/bug_ledger.py reads it to
+# derive each bug's area from its fix commits (docs/bugs/AREAS.md; `bug_ledger.py report`).
+# This table owns the path -> area mapping and nothing else: no fact about any bug lives here.
+#
+# Columns (tab-separated, every cell non-empty):
+#   prefix   a path prefix, matched as a plain string against the repository path a commit
+#            touched; the LONGEST matching prefix wins. Paths of the old flat layout
+#            (Concrete/Lower.lean before Concrete/IR/) keep their rows: history still names them.
+#   tier     code     compiler, stdlib and tooling source: where a fix lives; weighted first
+#            gate     gates, the test harness and CI: weighted only when a bug's fix touched no code
+#            docs     prose: weighted only when a fix touched neither code nor gates
+#            ignore   test programs, fixtures, examples, bug records and generated files: never
+#                     weighted (a regenerated view carries no area, so regenerating after a fix
+#                     never changes a derived area)
+#   stage    Parse Resolve Check Elab Mono Lower SSA EmitSSA EmitLLVM Interp Proof Report Std CLI
+#            Tooling Gates Docs, or "-" on an ignore row
+#   module   the module the path belongs to, or "*" for the path's own file name without its
+#            extension; "-" on an ignore row
+#
+# A fix commit that touches a path no row matches stops the ledger generator (exit 2): add a row.
+prefix	tier	stage	module
+.claude/	ignore	-	-
+.envrc	ignore	-	-
+.gitattributes	ignore	-	-
+.githooks/	gate	Gates	pre-push
+.github/	gate	Gates	ci-workflow
+.gitignore	ignore	-	-
+Browser.lean	code	CLI	Browser
+CHANGELOG.md	ignore	-	-
+CLAUDE.md	docs	Docs	agents
+Concrete.lean	code	CLI	Concrete
+Concrete/AST.lean	code	Parse	AST
+Concrete/Backend.lean	code	EmitLLVM	Backend
+Concrete/Backend/	code	EmitLLVM	*
+Concrete/Backend/EmitSSA.lean	code	EmitSSA	EmitSSA
+Concrete/BuildIdentity.lean	ignore	-	-
+Concrete/BuiltinSigs.lean	code	Resolve	BuiltinSigs
+Concrete/Check.lean	code	Check	Check
+Concrete/Check/	code	Check	*
+Concrete/Codegen	code	EmitLLVM	*
+Concrete/CompilerLedger.lean	code	Report	CompilerLedger
+Concrete/Core.lean	code	Elab	Core
+Concrete/CoreCanonicalize.lean	code	Elab	CoreCanonicalize
+Concrete/CoreCheck.lean	code	Check	CoreCheck
+Concrete/DebugBundle.lean	code	Report	DebugBundle
+Concrete/Diagnostic.lean	code	Report	Diagnostic
+Concrete/Elab.lean	code	Elab	Elab
+Concrete/Elab/	code	Elab	*
+Concrete/EmitBuiltins.lean	code	EmitLLVM	EmitBuiltins
+Concrete/EmitLLVM.lean	code	EmitLLVM	EmitLLVM
+Concrete/EmitSSA.lean	code	EmitSSA	EmitSSA
+Concrete/Examples	code	Proof	*
+Concrete/FileSummary.lean	code	Resolve	FileSummary
+Concrete/Format.lean	code	Parse	Format
+Concrete/Frontend/	code	Parse	*
+Concrete/IR/Lower.lean	code	Lower	Lower
+Concrete/IR/Mono.lean	code	Mono	Mono
+Concrete/IR/SSA	code	SSA	*
+Concrete/Interp	code	Interp	Interp
+Concrete/Intrinsic.lean	code	Resolve	Intrinsic
+Concrete/LLVM.lean	code	EmitLLVM	LLVM
+Concrete/Layout.lean	code	Check	Layout
+Concrete/Lexer.lean	code	Parse	Lexer
+Concrete/Lower.lean	code	Lower	Lower
+Concrete/Mono.lean	code	Mono	Mono
+Concrete/ObligationCore.lean	code	Proof	ObligationCore
+Concrete/Parser.lean	code	Parse	Parser
+Concrete/Pipeline	code	CLI	*
+Concrete/Policy.lean	code	Check	Policy
+Concrete/Profile.lean	code	Report	Profile
+Concrete/Project.lean	code	Resolve	Project
+Concrete/Proof.lean	code	Proof	Proof
+Concrete/Proof/	code	Proof	*
+Concrete/Proof/ClassificationTable.lean	ignore	-	-
+Concrete/Proof/GeneratedAttestations.lean	ignore	-	-
+Concrete/ProofCore.lean	code	Proof	ProofCore
+Concrete/ProofKit	code	Proof	*
+Concrete/ProofSoundness.lean	code	Proof	ProofSoundness
+Concrete/Reduce.lean	code	Report	Reduce
+Concrete/Report.lean	code	Report	Report
+Concrete/Report/	code	Report	*
+Concrete/Report/ReportVC.lean	code	Proof	ReportVC
+Concrete/Report/TermOfExpr.lean	code	Proof	TermOfExpr
+Concrete/Report/TermTranslate.lean	code	Proof	TermTranslate
+Concrete/Report/VCGen.lean	code	Proof	VCGen
+Concrete/Resolve.lean	code	Resolve	Resolve
+Concrete/Resolve/	code	Resolve	*
+Concrete/SSA	code	SSA	*
+Concrete/Semantics/	code	Check	*
+Concrete/Sha256Refine.lean	code	Proof	Sha256Refine
+Concrete/Sha256Spec.lean	code	Proof	Sha256Spec
+Concrete/Shared.lean	code	Resolve	Shared
+Concrete/Token.lean	code	Parse	Token
+Concrete/Verify.lean	code	Check	Verify
+LICENSE	ignore	-	-
+Main.lean	code	CLI	Main
+Makefile	code	Tooling	Makefile
+PipelineTest.lean	code	CLI	PipelineTest
+README.md	docs	Docs	readme
+ROADMAP.md	ignore	-	-
+bench/	ignore	-	-
+changelog.d/	ignore	-	-
+docs/	docs	Docs	docs
+docs/bugs/	ignore	-	-
+docs/compiler/	docs	Docs	compiler
+docs/language/	docs	Docs	language
+docs/spec/	docs	Docs	spec
+docs/stdlib/	docs	Docs	stdlib
+docs/verification/	docs	Docs	verification
+editor/	code	Tooling	editor
+examples/	ignore	-	-
+flake.lock	ignore	-	-
+flake.nix	code	Tooling	flake
+grammar/	docs	Docs	grammar
+lake-manifest.json	ignore	-	-
+lakefile.toml	code	Tooling	lakefile
+lean-toolchain	code	Tooling	lean-toolchain
+lean_tests/	ignore	-	-
+paper/	ignore	-	-
+proofs/	code	Proof	proofs
+research/	docs	Docs	research
+run_tests.sh	gate	Gates	run_tests
+scripts/	code	Tooling	*
+scripts/gen/classifications.lean	code	Proof	classifications
+scripts/tests/	gate	Gates	*
+site/	docs	Docs	site
+std/	code	Std	*
+tasks/	ignore	-	-
+tests/	ignore	-	-

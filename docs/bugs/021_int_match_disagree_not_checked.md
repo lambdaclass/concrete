@@ -3,6 +3,7 @@
 <!-- bug-ledger
 summary: Integer Match Does Not Check Consumption Agreement
 fixtures: bug_int_match_disagree.con
+area: Check — the record's Root Cause: the linearity checker's value-pattern match; no commit names the bug
 -->
 
 **Status:** Fixed

@@ -5,6 +5,7 @@ summary: the interpreter could not call a trait method on a type parameter (`und
 coverage: interp dispatch of a trait method on a type parameter through the trait-impl table. Regression vehicle: run_tests.sh interp-vs-native leg on tests/regressions/bug119_interp_generic_trait_method/repro.con (a regression dir, not a tests/programs fixture) (2026-10-20 (batch 2))
 class: 7
 silent: no
+area: Interp/Interp — fixed by bug 052's batch-2 interpreter change; the commit naming 119 only recorded it
 -->
 
 **Status:** FIXED 2026-10-20 (batch 2)

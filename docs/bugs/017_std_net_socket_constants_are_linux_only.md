@@ -3,6 +3,7 @@
 <!-- bug-ledger
 summary: `std.net` Socket Constants Are Linux-Only
 coverage: socket constants linux-only -- platform-specific stdlib
+area: Std/net — fixed in bdb2d7f (std/src/net.con), whose subject names no bug
 -->
 
 Status: fixed
