@@ -52,24 +52,20 @@ exclude	nested-parens	check	bug 280 (open): Check and Elab re-walk a nested expr
 exclude	nested-parens	elaborate	bug 280 (open): Check and Elab re-walk a nested expression's whole operand tree at every level (firstOperandEscape?, TypeJudgment.isFlexibleLit)
 exclude	nested-parens	llvm,native	not run: every whole compile of this shape contains the excluded stages above; it runs with their fixes
 exclude	nested-ifs	*	bug 281 (open): Elab's evidence use list copies each nested block's list at every level (Proof.stmtFlatUses); bug 282 (open): Resolve looks a name up through one scope per nesting level; lower: still superlinear at b5040d53 after bugs 265-267 (23 ms at depth 1000, 448 ms at 5000), not yet attributed; the shape is not run until these are fixed (--emit-core cannot stand in: its printed Core is indented per level, quadratic by its size)
-exclude	functions	check	bug 275 (open): Check's duplicate-declaration check searches an association list per declaration
 exclude	functions	elaborate	bug 276 (open): Elab's program-level declaration analyses (colliding top-level functions, ambiguous type names, import spellings, the per-function result list) scan lists per declaration
 exclude	functions	lower	bug 279 (open): Lower appends each lowered function to a list and deduplicates external types by list search
 exclude	functions	llvm,native	not run: every whole compile of this shape contains the excluded stages above; it runs with their fixes
-exclude	call-chain	check	bug 275 (open): Check's duplicate-declaration check searches an association list per declaration
 exclude	call-chain	elaborate	bug 276 (open): Elab's program-level declaration analyses (colliding top-level functions, ambiguous type names, import spellings, the per-function result list) scan lists per declaration
 exclude	call-chain	coreCheck	bug 277 (open): CoreCheck looks up every callee in a list of all function signatures
 exclude	call-chain	lower	bug 279 (open): Lower appends each lowered function to a list and deduplicates external types by list search
 exclude	call-chain	llvm,native	not run: every whole compile of this shape contains the excluded stages above; it runs with their fixes
 exclude	structs	parse	bug 273 (open): the parser appends each struct and enum of a module to the list built so far
-exclude	structs	check	bug 275 (open): Check's duplicate-declaration check searches an association list per declaration
 exclude	structs	elaborate	bug 276 (open): Elab's program-level declaration analyses (colliding top-level functions, ambiguous type names, import spellings, the per-function result list) scan lists per declaration
 exclude	structs	monomorphize	bug 278 (open): Mono's program-level name tables are lists searched per declaration
 exclude	structs	lower	bug 279 (open): Lower appends each lowered function to a list and deduplicates external types by list search
 exclude	structs	llvm,native	not run: every whole compile of this shape contains the excluded stages above; it runs with their fixes
 exclude	enums	parse	bug 273 (open): the parser appends each struct and enum of a module to the list built so far
 exclude	enums	resolve	bug 274 (open): Resolve folds every enum's variant symbols onto the list built so far
-exclude	enums	check	bug 275 (open): Check's duplicate-declaration check searches an association list per declaration
 exclude	enums	elaborate	bug 276 (open): Elab's program-level declaration analyses (colliding top-level functions, ambiguous type names, import spellings, the per-function result list) scan lists per declaration
 exclude	enums	monomorphize	bug 278 (open): Mono's program-level name tables are lists searched per declaration
 exclude	enums	lower	bug 279 (open): Lower appends each lowered function to a list and deduplicates external types by list search

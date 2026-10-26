@@ -7,7 +7,7 @@ class: 17 — Check finds duplicate declarations by searching an association lis
 silent: no
 -->
 
-**Status:** FIXED (branch `wip/perf-275-v2`)
+**Status:** FIXED (branch `wip/perf-275-v3`)
 **Found:** 2026-10-26, building the compile-time scaling gate (R-0550, exit 2o): the gate's generated shapes, timed per stage with `--emit-trace-json` at 10b81a46.
 **Severity:** loud (performance). Compile time only: never wrong code, a refusal or a crash; a program of this shape compiles, slowly.
 
@@ -83,6 +83,13 @@ fix on that base): byte-identical.
 `first`, `second`, `P`. `run_tests.sh` also times the `check` stage of a generated chain of 20000
 functions each calling the next against 200 ms (retried once at 400 ms): 73 ms after the fix,
 FAIL on the pre-fix compiler (1463 ms, then 1371 ms).
+
+The R-0550 scaling gate (on main since 9d8182ea) held the four shapes' `check` stage as exclusions
+under this bug; the fix removes them from `compile_scaling_budgets.tsv`. With them removed the gate
+passes all four on this fix (x10.5, x7.8, x2.5, x2.5 from 1000 to 10000) and fails `structs/check`
+and `enums/check` on main's compiler (x123.0 and x149.5 against x63.1); at its sizes the pre-fix
+`functions` and `call-chain` stages grow x53.3 and x60.7, inside its bound, which is why the
+`run_tests.sh` call-chain leg stays.
 
 ## Containment while open
 
