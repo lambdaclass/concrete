@@ -12,7 +12,7 @@ and unfiled, and the author had to write the record, fragment and discovery row 
 compiler output or claim is affected.
 
 <!-- bug-ledger
-summary: `new_bug.sh` reserved a bug number and then failed in `bug_dashboard.py`, which refuses a record from 079 on with no `docs/bugs/discovery.tsv` row; the row has to name the number, which does not exist before the reservation, and the scaffold neither wrote the row nor offered a way to name it, so every filing left a reserved, unfiled number. The scaffold now writes the attribution itself (`--batch` joins an existing row, `--new-batch` adds one), checks it and the dashboard before reserving, restores `discovery.tsv` on a later failure, and prints a `--number NNN` command that files the same bug under the held number.
+summary: `new_bug.sh` reserved a bug number and then failed in `bug_dashboard.py`, which refuses a record from 079 on with no `docs/bugs/discovery.tsv` row; the row has to name the number, which does not exist before the reservation, and the scaffold neither wrote the row nor offered a way to name it, so every filing left a reserved, unfiled number. The scaffold now writes the attribution itself (`--batch` joins an existing row, `--new-batch` adds one), checks it and the dashboard before reserving, undoes its `discovery.tsv` edit on a later failure, and prints a `--number NNN` command that files the same bug under the held number.
 coverage: `check_new_bug.sh` leg 3 (the scaffold runs through `bug_dashboard.py`, which its scratch copy now includes, and writes the new batch's row) and leg 6 (the discovery attribution: refusals before any reservation, `--batch` on an existing row, rollback of `discovery.tsv` after a failure past the reservation, and the printed `--number` rerun with no second reservation)
 class: 12
 silent: no
@@ -70,7 +70,8 @@ and passed while every real filing failed.
   `--silent yes`. When the tree has the discovery record and the dashboard, a batch and `--silent`
   are required and checked before the reservation, against the dashboard's own rules (kinds, the
   effort format of counting batches, class tags), together with `bug_dashboard.py --check`.
-- A failure after the reservation restores `discovery.tsv` with the other files, hands the number
+- A failure after the reservation removes the other files and takes only its own edit back out of
+  `discovery.tsv` (a whole-file restore could erase a concurrent filing's row), hands the number
   back and prints the command that files the same bug under it. A reservation's first line names
   its state: `bug NNN reserved:` is held and free to file (`--number-only`, or handed back by a
   failed filing), `bug NNN filing:` is taken by a run. `new_bug.sh --number NNN ...` files under a
@@ -81,7 +82,9 @@ and passed while every real filing failed.
   dashboard, and leg 6 covers the attribution, the refusals before any reservation, the rollback
   and the `--number` rerun. The automatic filing paths print commands that pass as printed: the
   fuzz farm's `promote` names the finding's own generator, seed and compiler as a `fuzz` batch, and
-  CI triage names the run and gate as a `ci` batch; leg 6 runs both (the farm's from its golden).
+  CI triage names the run and gate as a `ci` batch and leaves `--silent SILENT` for the filer
+  (a CI failure does not say whether the defect is silent; the bare placeholder is refused before
+  any reservation); leg 6 runs both (the farm's from its golden).
   The work-queue dispatcher files nothing itself: its fuzz tasks go through `promote`, and agents
   file through `/file-bug`. The pre-push hook selects `check_new_bug.sh` when `bug_dashboard.py`
   changes.

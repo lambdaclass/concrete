@@ -14,7 +14,7 @@
 # row dated today with that kind, probe and effort. Either one, and --silent (the row's silent cell
 # and the record's silent: line must agree), is required when the tree has the discovery record and
 # the dashboard, and is checked before a number is reserved. A filing that still fails after the
-# reservation removes everything it wrote, restores discovery.tsv, hands the number back as
+# reservation removes everything it wrote, takes the bug back out of discovery.tsv, hands the number back as
 # `reserved` (see RESERVATION) and prints the --number command that files the same bug under it.
 #
 # NUMBER. The next number is one above the highest bug number seen anywhere another writer could
@@ -113,7 +113,9 @@ no_op_in_progress
 
 # The discovery attribution (bug 300). `check` validates --batch or --new-batch against the record
 # and its rules (bug_dashboard.py's own constants); `apply NNN` adds NNN to the matched row, or
-# inserts the new row in date order, with NNN in the silent cell when --silent yes.
+# inserts the new row in date order, with NNN in the silent cell when --silent yes; `revert NNN`
+# undoes only that edit (NNN out of every row, and the --new-batch row it inserted), so a rollback
+# never clobbers another filing's row written meanwhile, as restoring a whole copy would.
 discovery() {
   python3 -I - "$ROOT" "$DISC" "$1" "${2:-}" "$SILENT" "$HAVE_BATCH" "$BATCH" "$NEW_KIND" "$NEW_PROBE" "$NEW_EFFORT" "$TODAY" <<'PY'
 import os, sys
@@ -131,6 +133,27 @@ rows, col = data[1:], {c: i for i, c in enumerate(d.COLS)}
 def cell(i, c):
     cs = lines[i].split("\t")
     return cs[col[c]].strip() if len(cs) == len(d.COLS) else ""
+def save():
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(lines))
+if mode == "revert":
+    def drop(v):
+        rest = [b for b in v.strip().split(",") if b and b != num]
+        return ",".join(rest) or "-"
+    mine = "\t".join([today, kind, probe, effort, "-", "-"])
+    keep = []
+    for i, ln in enumerate(lines):
+        if i in rows and len(ln.split("\t")) == len(d.COLS):
+            cs = ln.split("\t")
+            if num in cs[col["bugs"]].split(",") or num in cs[col["silent"]].split(","):
+                cs[col["bugs"]], cs[col["silent"]] = drop(cs[col["bugs"]]), drop(cs[col["silent"]])
+                ln = "\t".join(cs)
+                if have_batch != "1" and ln == mine:
+                    continue
+        keep.append(ln)
+    lines = keep
+    save()
+    sys.exit(0)
 target = None
 if have_batch == "1":
     if not batch.strip():
@@ -171,8 +194,7 @@ else:
         if cell(i, "date") <= today:
             pos = i
     lines.insert(pos + 1, "\t".join([today, kind, probe, effort, num, num if silent == "yes" else "-"]))
-with open(path, "w", encoding="utf-8") as fh:
-    fh.write("\n".join(lines))
+save()
 PY
 }
 
@@ -222,16 +244,16 @@ if [ "${NEW_BUG_NO_FETCH:-0}" != 1 ]; then
   no_op_in_progress
 fi
 # On any failure after the first file is written (a refused record, a failed write), every file this
-# run created is removed, discovery.tsv is restored, and the views are regenerated without it, so a
+# run created is removed, its discovery.tsv edit is undone, and the views are regenerated without it, so a
 # failed filing leaves the tree as it found it. The reserved number stays reserved, and the message
 # names the --number command that files the same bug under it.
-WRITING=0; HELD=0; CLAIM=""; REC=""; REPRO=""; REPRO_DIR=""; FRAG=""; DISC_BAK=""
+WRITING=0; HELD=0; CLAIM=""; REC=""; REPRO=""; REPRO_DIR=""; FRAG=""; DISC_EDIT=0
 cleanup() {
   local rc=$? resume
   rm -f "${seen:-}"
   if [ "$rc" -ne 0 ] && [ "$WRITING" = 1 ]; then
     rm -f "$REC" "$REPRO" "$FRAG"; [ -z "$REPRO_DIR" ] || rmdir "$REPRO_DIR" 2>/dev/null || true
-    [ -z "$DISC_BAK" ] || cat "$DISC_BAK" > "$DISC" || true
+    [ "$DISC_EDIT" = 0 ] || discovery revert "$num" || echo "new_bug: could not take bug $num back out of $DISC; remove it by hand" >&2
     python3 -I scripts/gen/bug_ledger.py --write >/dev/null 2>&1 || true
     [ "$TRACKED" = 0 ] || python3 -I scripts/gen/bug_dashboard.py --write >/dev/null 2>&1 || true
     echo "new_bug: filing failed; removed the files it had written and restored the views" >&2
@@ -246,7 +268,6 @@ cleanup() {
       echo "new_bug: bug $num stays reserved and unfiled, and could not be handed back for --number (refs/bug-reservations/$num still reads 'filing'); leave the gap" >&2
     fi
   fi
-  rm -f "$DISC_BAK"
 }
 seen="$(mktemp)"; trap cleanup EXIT
 record_nums() { sed -nE 's#^(.*/)?([0-9]{3})_[^/]*\.md$#\2#p'; }
@@ -388,10 +409,7 @@ mkdir -p "$REPRO_DIR"
   printf '([bug %s](docs/bugs/%s)).\n' "$num" "$(basename "$REC")"
 } > "$FRAG"
 if [ "$TRACKED" = 1 ]; then
-  # Restoration is armed only once the backup is whole: a failed copy must never overwrite the record.
-  bak="$(mktemp)" || die "could not back up $DISC"
-  cat "$DISC" > "$bak" || { rm -f "$bak"; die "could not back up $DISC"; }
-  DISC_BAK="$bak"
+  DISC_EDIT=1   # armed first: revert is a no-op when apply wrote nothing
   discovery apply "$num" || die "could not add bug $num to $DISC (above)"
 fi
 

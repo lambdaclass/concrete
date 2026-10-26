@@ -349,7 +349,8 @@ if { [ "$ra" = 0 ] && [ "$rb" != 0 ]; } || { [ "$ra" != 0 ] && [ "$rb" = 0 ]; };
   else no "two concurrent --number runs: $filed records for bug $RACE, or the loser gave another reason: $(cat "$TMP/raceA.out" "$TMP/raceB.out" | tr '\n' ' ' | cut -c1-300)"; fi
 else no "two concurrent --number runs on bug $RACE: exit statuses $ra and $rb, not one success: $(cat "$TMP/raceA.out" "$TMP/raceB.out" | tr '\n' ' ' | cut -c1-300)"; fi
 # The automatic filing paths print commands that must pass as printed (bug 300): the fuzz farm's
-# promote output (pinned byte-exact in its golden) and CI triage's skeleton command.
+# promote output (pinned byte-exact in its golden) and CI triage's skeleton command, once its SILENT
+# placeholder is chosen (the bare placeholder is refused before any reservation: leg 4's bad --silent).
 FC="$(sed -n 's/^\(scripts\/gen\/new_bug\.sh .*--new-batch .*\)$/\1/p' "$ROOT_DIR/tests/fixtures/fuzz_farm/promote.golden")"
 if [ -n "$FC" ] && (cd "$W" && eval "bash $FC") > "$TMP/farm.out" 2>&1; then
   ok "the fuzz farm's printed new_bug.sh command files a bug as printed"
@@ -359,7 +360,8 @@ import os, re, sys
 src = open(os.path.join(sys.argv[1], "scripts", "ci", "triage.py")).read()
 m = re.search(r"f'bash (scripts/gen/new_bug\.sh .*?)'\s*\n\s*f'(--new-batch .*?)'", src)
 cmd = (m.group(1) + m.group(2)) if m else ""
-for k, v in (('{r["gate"]}', "check_x.sh"), ("{first}", "a failing leg"), ('{run.get("databaseId")}', "1")):
+for k, v in (('{r["gate"]}', "check_x.sh"), ("{first}", "a failing leg"), ('{run.get("databaseId")}', "1"),
+             ("--silent SILENT", "--silent no")):
     cmd = cmd.replace(k, v)
 print(cmd if "{" not in cmd else "")
 PY
