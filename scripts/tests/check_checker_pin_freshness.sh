@@ -41,6 +41,8 @@ ARENA="${CONCRETE_ARENA_URL:-https://arena.lean-lang.org}"
 ARENA_RAW="${CONCRETE_ARENA_RAW:-https://raw.githubusercontent.com/leanprover/lean-kernel-arena}"
 # shellcheck source=external_checker.pins
 . scripts/tests/external_checker.pins
+PIN_TMP="$(mktemp -d)"; trap 'rm -rf "$PIN_TMP"' EXIT
+BOUNDED_PARENT="$PIN_TMP"; source scripts/tests/lib/bounded.sh
 
 STALE=0; UNKNOWN=0; FRESH=0
 note(){ echo "  info $1"; }
@@ -52,8 +54,8 @@ warn(){
 fetch(){ curl -fsSL --max-time 30 --retry 2 "$1" 2>/dev/null; }
 ls_head(){
   local out
-  if command -v timeout >/dev/null 2>&1; then out=$(timeout 60 git ls-remote "$1" HEAD 2>/dev/null)
-  else out=$(git ls-remote "$1" HEAD 2>/dev/null); fi
+  # Bounded: an unreachable remote that hangs is the same finding as one that refuses (no head).
+  out=$(bounded_run 60 -- git ls-remote "$1" HEAD 2>/dev/null)
   awk 'NR==1 && $1 ~ /^[0-9a-f]{40}$/ {print $1}' <<<"$out"
 }
 yaml_rev(){ sed -n 's/^rev:[[:space:]]*\([0-9a-f]\{40\}\)[[:space:]]*$/\1/p' | awk 'NR==1'; }

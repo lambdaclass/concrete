@@ -79,6 +79,27 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
 - Read the obligation, not the prose: a header says what was true when it was written. Make gates
   assert properties, not counts, so an improvement does not read as a regression.
 
+**Before asking for review.** Each of these caused an integration failure in the week to
+2026-10-25; run them on the slice, in `nix develop`, before `/creview`:
+- `scripts/tests/test_golden.sh` after any change to compiler output or a report.
+- `scripts/tests/test_mutation.sh --check-patterns` after editing any file a mutation targets: it
+  finds an anchor the edit broke in seconds, before a mutation campaign fails on it.
+- `scripts/tests/check_type_identity.sh` and the other gates that elaborate Lean probes against the
+  compiler (`grep -l 'lake env lean' scripts/tests/check_*.sh`) after changing a signature or a
+  structure they construct.
+- A fixture's `run_ok` / `run_err` leg in `run_tests.sh` spells its file name literally: the
+  bug-corpus audit looks for each fixture's basename in `run_tests.sh`, so a name assembled from
+  parts is reported as uncovered.
+- Bound a command with `bounded_run` (`scripts/tests/lib/bounded.sh`), never GNU `timeout`: the
+  macOS job has no `timeout`, and `bounded_run` reports a second timeout as INCOMPLETE, not a pass.
+- A ledger `coverage:` line names only the gates that cover the bug: the filing check accepts a
+  `.sh` name there as the coverage claim without running or opening it.
+- File in the migrated ledger format (`scripts/gen/new_bug.sh`: the `bug-ledger` block, a
+  `changelog.d/` fragment, a `discovery.tsv` row), then regenerate with
+  `scripts/gen/bug_ledger.py --write` and `scripts/gen/bug_dashboard.py --write`.
+- Have Codex confirm each bug is real (a reproducer and a verdict line in the record) before
+  filing it.
+
 **Review.** Every slice gets a Codex review before it lands, through `scripts/review/review.sh`:
 at most 5 rounds, the first over the whole diff and each later round over the delta since the
 previous one. Answer each finding with a fix or a stated reason. Run Codex by hand only with

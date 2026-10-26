@@ -1,0 +1,36 @@
+// Bug 272 (FIXED): a call of an extern IMPORTED from another module had no calls-ffi trust edge;
+// CoreCheck asked whether the spelling was one of its own module tree's externs. The edge now comes
+// from the resolver's binding of the call. Expected: 42 (abs(-5) + abs(-7) + abs(-10) + abs(-20)
+// - 0), natively and --interp; `--report trust-edges` gives calls-ffi to own_call, imported_call
+// (abs), trusted_call (tabs, plus calls-trusted) and aliased_call (the local spelling `cabs`).
+mod c {
+    pub extern fn abs(x: i32) with() -> i32;
+    #[link_name = "abs"]
+    pub trusted extern fn tabs(x: i32) with() -> i32;
+    pub fn own_call() with(Unsafe) -> i32 {
+        return abs(0 - 7);
+    }
+}
+mod u {
+    import c.{abs, tabs};
+    pub fn imported_call() with(Unsafe) -> i32 {
+        return abs(0 - 5);
+    }
+    pub fn trusted_call() -> i32 {
+        return tabs(0 - 10);
+    }
+}
+mod v {
+    import c.{abs as cabs};
+    pub fn aliased_call() with(Unsafe) -> i32 {
+        return cabs(0 - 20);
+    }
+}
+mod m {
+    import u.{imported_call, trusted_call};
+    import v.{aliased_call};
+    import c.{own_call};
+    pub fn main() with(Unsafe) -> i32 {
+        return imported_call() + own_call() + trusted_call() + aliased_call();
+    }
+}

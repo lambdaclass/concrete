@@ -23,6 +23,7 @@ cd "$ROOT_DIR"
 COMPILER=".lake/build/bin/concrete"
 TMPDIR_FUZZ=$(mktemp -d)
 trap 'rm -rf "$TMPDIR_FUZZ"' EXIT
+BOUNDED_PARENT="$TMPDIR_FUZZ"; source "$ROOT_DIR/scripts/tests/lib/bounded.sh"
 
 MODE="${1:-all}"
 case "$MODE" in
@@ -398,7 +399,7 @@ run_crash_check() {
     local file="$1"
     local label="$2"
     local exit_code=0
-    timeout "$TIMEOUT_SEC" "$COMPILER" "$file" --emit-llvm > /dev/null 2>&1 || exit_code=$?
+    bounded_run "$TIMEOUT_SEC" -- "$COMPILER" "$file" --emit-llvm > /dev/null 2>&1 || exit_code=$?
 
     if [ "$exit_code" -ge 128 ]; then
         echo "CRASH  $label — signal $((exit_code - 128))"

@@ -232,6 +232,35 @@ push; rc=$?
   || no "dirty tree: rc=$rc runs=$(runs) — $(tail -3 "$SB/out" | tr '\n' ' ')"
 g checkout -q -- src/a.txt
 
+echo "=== deletions: wip/* is the backup tier, a protected ref keeps the full gates ==="
+Z=0000000000000000000000000000000000000000
+pushlines() { # stdin: lines as git feeds them -> runs the hook; output in $SB/out
+  (cd "$REPO" && bash .githooks/pre-push > "$SB/out" 2>&1)
+}
+n0="$(runs)"
+printf '(delete) %s refs/heads/wip/old %s\n' "$Z" "$tip" | pushlines; rc=$?
+{ [ "$rc" = 0 ] && [ "$(runs)" = "$n0" ] && grep -qF 'wip/* backup push (0 update(s), 1 deletion(s))' "$SB/out"; } \
+  && ok "deleting a wip/* ref takes the backup tier and runs no gates" \
+  || no "wip deletion: rc=$rc runs=$(runs) (was $n0) — $(tail -3 "$SB/out" | tr '\n' ' ')"
+printf '(delete) %s refs/heads/wip/a %s\n(delete) %s refs/heads/wip/b %s\nrefs/heads/wip/c %s refs/heads/wip/c %s\n' \
+  "$Z" "$tip" "$Z" "$tip" "$tip" "$Z" | pushlines; rc=$?
+{ [ "$rc" = 0 ] && [ "$(runs)" = "$n0" ] && grep -qF 'backup push (1 update(s), 2 deletion(s))' "$SB/out"; } \
+  && ok "wip/* deletions alongside a wip/* update take the backup tier" \
+  || no "wip deletions + update: rc=$rc runs=$(runs) (was $n0) — $(tail -3 "$SB/out" | tr '\n' ' ')"
+for ref in refs/heads/main refs/heads/ci/train1; do
+  n1="$(runs)"
+  printf '(delete) %s %s %s\n' "$Z" "$ref" "$tip" | CONCRETE_PREPUSH_NO_REUSE=1 pushlines; rc=$?
+  { [ "$rc" = 0 ] && [ "$(runs)" = "$((n1 + 1))" ] && ! grep -q 'backup push' "$SB/out"; } \
+    && ok "deleting $ref keeps the full gates" \
+    || no "deleting $ref: rc=$rc runs=$(runs) (was $n1) — $(tail -3 "$SB/out" | tr '\n' ' ')"
+done
+n1="$(runs)"
+printf '(delete) %s refs/heads/wip/old %s\n(delete) %s refs/heads/main %s\n' "$Z" "$tip" "$Z" "$tip" \
+  | CONCRETE_PREPUSH_NO_REUSE=1 pushlines; rc=$?
+{ [ "$rc" = 0 ] && [ "$(runs)" = "$((n1 + 1))" ] && ! grep -q 'backup push' "$SB/out"; } \
+  && ok "a wip/* deletion alongside a main deletion keeps the full gates" \
+  || no "wip + main deletion: rc=$rc runs=$(runs) (was $n1) — $(tail -3 "$SB/out" | tr '\n' ' ')"
+
 echo
 echo "PREPUSH-RECORD: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
