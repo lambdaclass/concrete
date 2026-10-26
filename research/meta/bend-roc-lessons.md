@@ -1,6 +1,7 @@
 # Bend And Roc: Evidence, Performance, Authority And Execution
 
-Status: Research — considerations only; not adopted, scheduled, or release requirements.
+Status: Research — broad considerations remain undecided; five narrow roadmap
+clarifications were approved on 2026-10-25. No implementation is claimed here.
 
 Date: 2026-10-24. Bend source inspected at
 [`295e996574573e3a88827b1cf7045b437333c8f0`](https://github.com/bendlang/bend/tree/295e996574573e3a88827b1cf7045b437333c8f0).
@@ -14,9 +15,12 @@ This note preserves the full Bend/Roc discussion, including corrections to initi
 interpretations. The [roadmap](../../ROADMAP.md#the-current-execution-queue) remains
 the only execution queue. Its final [open research questions](../../ROADMAP.md#open-research-questions-bend-and-roc)
 record uncertainties while the owner is deciding, not planned features or tasks.
-Earlier discussion ranked some ideas as useful next steps, but no adoption or
-scheduling decision has been made. Any future consideration remains subject to
-Concrete's design policy and workload evidence.
+The 2026-10-25 review led to narrow amendments under [R-0215](../../ROADMAP.md#task-r-0215),
+[R-0285](../../ROADMAP.md#task-r-0285), [R-0150](../../ROADMAP.md#task-r-0150),
+[R-0486](../../ROADMAP.md#task-r-0486) and [R-0416](../../ROADMAP.md#task-r-0416).
+Those amendments clarify existing work; they neither reorder the queue nor adopt
+the rest of this register. Further decisions remain subject to Concrete's design
+policy and workload evidence.
 
 ## 1. Concrete's Philosophy Is The Admission Filter
 
@@ -87,9 +91,11 @@ the full third-party transcript is not vendored.
 
 The [guide](https://github.com/bendlang/bend/blob/295e996574573e3a88827b1cf7045b437333c8f0/guide/GUIDE.md)
 puts formal propositions in `LAWS.bend` and their proofs in `PROOF.bend`. Comments
-explain intent; propositions are code. The CLI rejects a proof file that omits an
-adjacent laws file. This convention is useful but does not make specifications
-immutable or protect against weakening them.
+explain intent; propositions are code. The [CLI import check](https://github.com/bendlang/bend/blob/295e996574573e3a88827b1cf7045b437333c8f0/bend2/main.ts#L1025-L1028)
+requires `PROOF.bend` to import a sibling `LAWS.bend` only when that sibling exists.
+Removing the laws file bypasses this particular check; other program checks still
+apply. The convention does not preserve a frozen set of requirements or prevent
+weakening them.
 
 Concrete contracts usually attach pre/postconditions to a function. A law can
 name a property spanning calls or traces. This is an organizational distinction,
@@ -114,9 +120,10 @@ and [Proof Patterns](../../examples/proof_patterns/README.md):
 - A version-matched installed guide with working examples, common diagnostics,
   supported evidence, and exact validation commands. The existing command catalog
   should own machine discovery; no stale parallel feature list.
-- One demonstration using the already-planned protocol-state-machine flagship:
-  introduce an invalid transition, observe rejection, repair, independently replay.
-  Do not create a fourth flagship just to imitate a game.
+- Reuse R-0486's planned bounded component and R-0215's mutation controls for a
+  demonstration: invalid change, visible rejection, repair and scoped replay.
+  The protocol-state-machine flagship is planned, not an available example.
+  Its existing prerequisites still apply; do not create a fourth flagship.
 - Difficulty-graded proof/repair tasks inspired by conservation, undo, protocol
   equivalence, and resource certificates in Bend's eval corpus. Hide reference
   solutions from evaluated agents; include cases where refusal is correct.
@@ -138,12 +145,16 @@ The [recorded M4 Max checker table](https://github.com/bendlang/bend/blob/295e99
 is stamped 2026-09-09 at `f655a39d`; its Isabelle column was retained from an older
 run. Values below are upstream observations, not this review's measurements:
 
-| Fixture | Bend | Lean | Agda |
-|---|---:|---:|---:|
-| `defs_12800` | 0.295 s | 36.177 s | >300 s |
-| `generics_3200` | 0.384 s | 19.214 s | >300 s |
-| `proofs_3200` | 0.834 s | >300 s | >300 s |
-| `trees_400` | 0.606 s | 1.335 s | 3.266 s |
+| Fixture | Bend | Lean | Agda | Rocq |
+|---|---:|---:|---:|---:|
+| `defs_12800` | 0.295 s | 36.177 s | >300 s | 5.985 s |
+| `generics_3200` | 0.384 s | 19.214 s | >300 s | 6.038 s |
+| `proofs_3200` | 0.834 s | >300 s | >300 s | 9.526 s |
+| `trees_400` | 0.606 s | 1.335 s | 3.266 s | 1.339 s |
+
+Rocq's proof-fixture result is a useful counterexample to treating the Lean/Agda
+timeouts as a property of proof assistants generally. These are still different
+pipelines and fixture encodings, not isolated measurements of language choice.
 
 The [measurement script](https://github.com/bendlang/bend/blob/295e996574573e3a88827b1cf7045b437333c8f0/bend2/docs/gen_pins.ts)
 runs source checking, not optimized native compilation. Bend's invocation omits
@@ -236,7 +247,10 @@ and [concurrency research](../proof-evidence/concurrency-formal-model.md).
 The inspected builtins use host allocation/abort services; a device backend needs
 its own supported operation and runtime boundary.
 
-Only if a real workload justifies investigation, consider:
+A workload alone is insufficient: [R-0399](../../docs/project/ROADMAP_BACKLOG.md#task-r-0399)
+keeps concurrency design-only until its v1/formal-model and pressure-test
+prerequisites are met. Synchronous host completion still permits device-side
+concurrency. Only after those prerequisites and a forcing workload, consider:
 
 1. One backend and a restricted integer array map/reduce workload, with an ordinary
    explicit host API and synchronous completion first. No new `!` syntax is implied.
@@ -455,25 +469,26 @@ adopted as a comparative safety theorem.
 ## 11. Complete Consideration Register
 
 This is an unordered inventory, not an implementation queue. “Possible evidence”
-means evidence needed to decide whether to adopt an idea, not a new release gate.
+means evidence for a decision, not an additional release gate. The limited approved
+amendments are identified at the top of this note; all broader questions remain open.
 
 | ID | Consideration | Possible evidence / boundary | Existing context |
 |---|---|---|---|
 | C01 | Version-matched installed guide and agent onboarding | A non-author completes an existing example using installed guidance | [R-0397](../../ROADMAP.md#task-r-0397), [developer tooling](../packages-tooling/developer-tooling.md) |
 | C02 | Required-claim inventory and one project verification entry | Missing/stale/deleted/weakened/unsupported claims stay visible; policy remains separate | [Evidence Architecture](../../docs/verification/EVIDENCE_ARCHITECTURE.md) |
 | C03 | Fixed-spec agent repair workflow | Unauthorized specification/assumption changes are rejected | [Proof Synthesis](../../docs/verification/PROOF_SYNTHESIS.md) |
-| C04 | Rejected-bug demo | Existing protocol flagship shows failure, repair, and independent replay | [current queue](../../ROADMAP.md#the-current-execution-queue) |
+| C04 | Rejected-bug demo | Planned R-0486 component shows failure, repair and scoped replay after prerequisites | [current queue](../../ROADMAP.md#the-current-execution-queue) |
 | C05 | Graded proof and repair corpus | Hidden solutions, refusal tasks, conservation/undo/protocol cases | [Proof Patterns](../../examples/proof_patterns/README.md) |
 | C06 | Bounded synthesis/repair harness | Attempts, costs, failures, exact tasks, independent replay | [Proof Authoring And Automation](../../ROADMAP.md#area-proof-authoring-and-automation) |
 | C07 | Complete independent-check accounting | Every claim classified, including timeout and infrastructure failure | [R-0353](../../ROADMAP.md#task-r-0353) |
-| C08 | Compiler/checker/replay phase budgets | Cold/warm/incremental measurements; explicit proof terms versus tactic costs | [pipeline fixtures](../../tests/perf/compiler_pipeline/README.md) |
+| C08 | Compiler/checker/replay phase budgets | Cold/warm/incremental measurements; explicit proof terms versus tactic costs | [existing telemetry gate](../../scripts/tests/check_pipeline_telemetry.sh), [R-0150](../../ROADMAP.md#task-r-0150) |
 | C09 | Small explicit generated obligations and reusable proof patterns | Lower authoring/replay cost with identical statements and trust | [ProofKit](../../Concrete/ProofKit.lean) |
 | C10 | Compact guides and complexity discipline | Documentation stays useful without imposing arbitrary monolithic token caps | [Bend repo gate](https://github.com/bendlang/bend/blob/295e996574573e3a88827b1cf7045b437333c8f0/gates/repo.ts) |
 | C11 | Transitive restricted dependency policy | Reject unapproved native/trusted/unsafe additions; accepted foundation explicit | [R-0440](../../ROADMAP.md#task-r-0440), [trusted-code policy](../language/trusted-code-policy.md) |
 | C12 | Build-time authority controls | Dependency build execution is identified and isolated, including upgrades | [package design](../packages-tooling/package-manager-design.md), [FFI integration](../../docs/platform/FFI_GLUE.md) |
 | C13 | Separate authority, mutation, purity, determinism, totality | No false inference from an empty capability set | [R-0487](../../ROADMAP.md#task-r-0487), [R-0488](../../ROADMAP.md#task-r-0488) |
 | C14 | Same-type consuming/mutating collection transforms | Capacity reuse without hidden copy/allocation/cleanup changes | [Vec](../../std/src/vec.con), [Value Model](../../docs/language/VALUE_MODEL.md) |
-| C15 | Allocation/copy/peak-memory regression measurements | Detect extra growth, retained sharing, and abstraction overhead | [performance fixtures](../../tests/perf/compiler_pipeline/README.md) |
+| C15 | Allocation/copy/peak-memory regression measurements | Detect extra growth, retained sharing, and abstraction overhead | [R-0416](../../ROADMAP.md#task-r-0416) |
 | C16 | Ownership-aware lowering and callable specialization | Sound alias facts, scoped borrows, direct calls; no blanket noalias | [SSA](../../Concrete/IR/SSA.lean), [callable model](../../docs/language/CALLABLE_VALUES_AND_CAPABILITIES.md) |
 | C17 | Check hoisting, constant tables, intentional wrapping | Same bounds/trap/arithmetic semantics before and after | [Arithmetic Policy](../../docs/language/ARITHMETIC_POLICY.md) |
 | C18 | Unboxing, tail-call analysis, allocation reuse | Measure applicability and cleanup/stack behavior; ordinary loops remain available | [Execution Model](../../docs/language/EXECUTION_MODEL.md) |
@@ -505,7 +520,48 @@ independent verdict replay; Roc's 2021 video is not current compiler documentati
 BendAI's future features are not shipped evidence. No benchmark or advertised
 security incident was reproduced here.
 
-If any consideration is later promoted, identify its existing normative owner,
+If any further consideration is promoted, identify its existing normative owner,
 produce a forcing workload and bounded experiment, record the decision, and only
-then update the active roadmap. This document alone changes no language guarantee,
-implementation priority, required gate, or release commitment.
+then update the active roadmap. This research record alone changes no language guarantee or implementation
+priority; the five approved task clarifications are owned by the roadmap.
+
+
+## 13. Review Corrections And Implementation Boundaries (2026-10-25)
+
+A read-only Claude review prompted the corrections above. The review inspected
+repository documentation/code and the pinned Bend clone; it did not execute the
+proposed mutation experiment or independently recheck the Roc articles/video.
+The findings are recorded here with durable code/owner links rather than depending
+on a temporary review transcript.
+
+- Requirement identity must be held by the experiment's verifier outside the
+  candidate's writable scope. Re-pinning a changed contract is not preservation
+  of its earlier requirement. The bounded experiment rejects identity changes;
+  semantic implication/weakening analysis is a separate problem.
+- Whether transitions to ineligible/trusted code evade a required-claim policy
+  remains an untested hypothesis. [R-0215](../../ROADMAP.md#task-r-0215) owns the
+  adversarial cases, including an unchanged-requirement positive control.
+- Replaying without the model/network separates accepted evidence from candidate
+  search. It does not establish checker implementation independence. The
+  [evidence architecture](../../docs/verification/EVIDENCE_ARCHITECTURE.md#independence)
+  distinguishes same-kernel replay, independent implementations and other axes.
+  Source/model correspondence is another claim, not a consequence of either replay.
+- Existing [pipeline telemetry](../../Concrete/Pipeline/Pipeline.lean) and its
+  [gate](../../scripts/tests/check_pipeline_telemetry.sh) already cover front-end
+  stages. The performance-fixture directory linked in the original review was a
+  README scaffold, not an implemented benchmark corpus. R-0150 owns the added
+  feedback-cost attribution; R-0416 owns workload-scoped performance evidence.
+- Collection reuse is conditional on measured demand and instrumentation. Existing
+  [Vec](../../std/src/vec.con) mutation and its trusted implementation must be
+  considered before introducing APIs; trusted-code and cleanup costs are part of
+  the comparison. This review does not establish a workload bottleneck.
+- Build-time authority belongs with [R-0285](../../ROADMAP.md#task-r-0285)'s
+  executing foreign-toolchain integration. Recording authority is not sandboxing;
+  unsupported isolation claims must remain explicit trust assumptions.
+- GPU feasibility remains behind R-0399, including device-side concurrency even
+  for synchronous host APIs. No workload overrides that existing gate.
+
+The seven final roadmap question groups cover C01–C27 without promoting the
+register wholesale. They preserve the distinction between approved narrow task
+amendments, future experiments and features that remain excluded by Concrete's
+philosophy.

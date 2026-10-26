@@ -909,8 +909,9 @@ def _campaign_loop(args, p, gens, order, ctx, wd, stats, deadline):
     master = random.Random(args.seed if args.seed is not None else
                            int.from_bytes(os.urandom(8), "big"))
     gi = args.worker_id
+    completed_batches = 0
     seeds_log = os.path.join(p["state"], "seeds.log")
-    while time.time() < deadline:
+    while time.time() < deadline and (args.batches is None or completed_batches < args.batches):
         if paused(p):
             time.sleep(10)
             continue
@@ -942,6 +943,8 @@ def _campaign_loop(args, p, gens, order, ctx, wd, stats, deadline):
                         stats.data["new"][res.cls] = stats.data["new"].get(res.cls, 0) + 1
                     print(f"[farm] {res.cls} {'NEW ' if new else ''}{sig} gen={gen} seed={seed}",
                           flush=True)
+        else:
+            completed_batches += 1
         if gen != "mut" and compared:
             rate = len(refusals) / compared
             if compared >= DRIFT_MIN_CASES and rate > DRIFT_THRESHOLD:
@@ -959,6 +962,10 @@ def _campaign_loop(args, p, gens, order, ctx, wd, stats, deadline):
         stats.data["seconds"] += time.time() - t0
         stats.flush()
     stats.flush()
+    if args.batches is not None and completed_batches < args.batches:
+        print(f"[farm] incomplete: completed {completed_batches}/{args.batches} batches before deadline",
+              file=sys.stderr)
+        return 2
     return 0
 
 
@@ -1263,9 +1270,16 @@ def main():
     c.add_argument("--sha", required=True)
     c.add_argument("--snapshot", default=None)
     c.add_argument("--seconds", type=float, default=900)
+    def positive_int(value):
+        n = int(value)
+        if n <= 0:
+            raise argparse.ArgumentTypeError("must be positive")
+        return n
+    c.add_argument("--batches", type=positive_int, default=None,
+                   help="stop after this many complete batches; deadline expiry before completion exits 2")
     c.add_argument("--worker-id", type=int, default=0)
     c.add_argument("--generators", default="diff,lin,mut")
-    c.add_argument("--batch", type=int, default=40)
+    c.add_argument("--batch", type=positive_int, default=40)
     c.add_argument("--seed", type=int, default=None)
     c.add_argument("--min-seconds", type=float, default=900)
     c.add_argument("--no-lean-reduce", action="store_true")
