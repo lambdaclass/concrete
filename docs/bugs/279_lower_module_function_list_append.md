@@ -2,12 +2,12 @@
 
 <!-- bug-ledger
 summary: Lower appended each lowered function of a module to the list built so far, filtered the program's types against the module's own by a list search per type, and checked each call's callee against a list of defined functions, so a module of n declarations took time n² to lower (10000 functions: 279 ms). Found by the R-0550 scaling gate. Class 17.
-coverage: `check_compile_scaling.sh` measures the `functions`, `call-chain`, `structs` and `enums` shapes' `lower` stage and reports it EXCLUDED under this bug on every run; the fix removes the exclusion, and the gate then holds the stage to its budget and to near-linear growth
+coverage: `check_compile_scaling.sh` judges the `functions`, `call-chain`, `structs` and `enums` shapes' `lower` stage against its budget and near-linear growth (this fix removes the exclusions; the gate fails the pre-fix compiler on call-chain, structs and enums), and `run_tests.sh` times the `lower` stage of 20000 generated functions, which the gate's sizes cannot resolve
 class: 17 — Lower appends each lowered function to a list and filters types by list search
 silent: no
 -->
 
-**Status:** OPEN
+**Status:** FIXED (branch `wip/perf-279`)
 **Found:** 2026-10-26, building the compile-time scaling gate (R-0550, exit 2o): the gate's generated shapes, timed per stage with `--emit-trace-json` at 10b81a46.
 **Severity:** loud (performance). Compile time only: never wrong code, a refusal or a crash; a program of this shape compiles, slowly.
 
@@ -30,9 +30,57 @@ A linear stage doubles with the size; these grow about fourfold or more per doub
 
 Accumulate in an `Array`; key the own and external type names and the defined functions by a set.
 
+## Fix
+
+`lowerModule` (`IR/Lower.lean`):
+
+- The lowered functions are consed and reversed once.
+- The external structs, enums and newtypes are filtered by a hash set of the module's own names and
+  deduplicated by name in one pass (the first of each name, in order), where an `any` over the own
+  declarations per external one and over the kept ones per candidate were n².
+- The string-literal globals are numbered through a map from each string to its global name (the
+  same `<module>.str.<k>` names, in the same order), where an `any` over the globals per literal,
+  an append and a `length` were n²; the per-function rename reads the map.
+- `LowerState.definedFns` (asked per call: a defined function is never an intrinsic) is a hash set,
+  and a specialization of another tree's generic gets that tree's context (its constants and
+  defined names) from a table built once per tree, where it was rebuilt for every such function.
+
+The `++ [` ratchet (`check_no_quadratic_append.sh`) for `Lower.lean` goes from 25 to 20.
+
+## Measurements
+
+`lower` stage in ms (`--emit-trace-json`, which runs Lower, SSA verification and cleanup; fastest
+of 3 runs), dev host (fede-256gb), before (the compiler built at b5040d53) and after (built from
+this branch's compiler sources on main 9d8182ea; the build had no other modification):
+
+| n | `functions` before | after | `call-chain` before | after | `structs` before | after | `enums` before | after |
+|---|---|---|---|---|---|---|---|---|
+| 2500 | 29 | 10 | 27 | 11 | 7 | 0 | 7 | 0 |
+| 5000 | 90 | 21 | 132 | 23 | 43 | 1 | 40 | 1 |
+| 10000 | 265 | 41 | 522 | 47 | 288 | 2 | 275 | 2 |
+| 20000 | 1405 | 100 | 3882 | 134 | 1324 | 6 | 1095 | 6 |
+
+The stage's allocation count is linear (`call-chain`: 1315532, 2630532, 5260532 at 5000, 10000,
+20000). `--emit-core`, `--emit-ssa` and `--emit-llvm` (stdout, stderr and exit status) of every
+`.con` under `tests/programs` and `examples` (91ce358b's corpus) and of twelve generated scaling
+shapes at size 60, and `--report caps|proof-status|fingerprints|obligations|traceability|proof-deps`
+of every `.con` under `examples`, are byte-identical between the compiler built at 91ce358b and
+this fix (main 9d8182ea changes no compiler source since 91ce358b).
+
+## Regression gate
+
+The R-0550 gate (`check_compile_scaling.sh`, on main since 9d8182ea) held the four shapes' `lower`
+stage as exclusions under this bug; the fix removes them from `compile_scaling_budgets.tsv`. With
+them removed the gate passes all four on this fix (x8.4, x9.4, x1.0, x1.0 from 1000 to 10000) and
+fails `call-chain/lower`, `structs/lower` and `enums/lower` on main's compiler (x74.0, x142.0,
+x136.0 against x63.1). At the gate's sizes the pre-fix `functions` stage grows x52.6, inside its
+bound, so `run_tests.sh` times the `lower` stage of a generated module of 20000 functions against
+350 ms (retried once at 700 ms): 100 ms with the fix, FAIL on main's compiler (1396 ms, then
+1404 ms).
+
 ## Containment while open
 
-Loud only. The scaling gate names the stage as an exclusion under this bug, so its gap is printed on every run rather than silent; the gate's other stages of the shape stay judged. A user splits such a module or nest.
+Loud only. The scaling gate named the stage as an exclusion under this bug, so its gap was printed on every run rather than silent.
 
 ## Structural cause
 

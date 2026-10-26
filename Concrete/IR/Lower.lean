@@ -1,4 +1,5 @@
 import Std.Data.HashMap
+import Std.Data.HashSet
 import Std.Data.TreeMap
 import Concrete.Elab.Core
 import Concrete.IR.SSA
@@ -216,8 +217,9 @@ structure LowerState where
   /-- Names of user/Core-defined functions in the program. A call to a
       DEFINED function is never an intrinsic — intrinsic identity is
       by-resolution, not by raw name (audit 2026-07-16: user fns named
-      sizeof/alloc/... were hijacked at this pass too). -/
-  definedFns : List String := []
+      sizeof/alloc/... were hijacked at this pass too). A set, asked per call (bug 279: a list
+      searched per call was calls × functions). -/
+  definedFns : Std.HashSet String := {}
   /-- Allocas that must be hoisted to the function entry block.
       Prevents unbounded stack growth when &mut borrows occur in loops. -/
   entryAllocasRev : List SInst := []
@@ -2687,7 +2689,7 @@ end
 def lowerFn (f : CFnDef) (structDefs : List CStructDef) (enumDefs : List CEnumDef)
     (constants : List (String × Ty × CExpr) := [])
     (newtypes : List NewtypeDef := [])
-    (definedFns : List String := [])
+    (definedFns : Std.HashSet String := {})
     (importedConstants : List (String × CExpr × List (String × Ty × CExpr)) := [])
     : Except Diagnostics (SFnDef × List (String × String)) :=
   let initState : LowerState := {
@@ -2829,15 +2831,22 @@ def lowerModule (m : CModule) (program : List CModule := []) : Except Diagnostic
   let ownStructs := collectAllStructs m
   let ownEnums := collectAllEnums m
   let ownNewtypes := collectAllNewtypes m
-  let extStructs := (program.flatMap collectAllStructs).filter (fun sd =>
-    !(ownStructs.any (·.name == sd.name)) && sd.name != "String")
-    |>.foldl (fun acc sd => if acc.any (·.name == sd.name) then acc else acc ++ [sd]) []
-  let extEnums := (program.flatMap collectAllEnums).filter (fun ed =>
-    !(ownEnums.any (·.name == ed.name)))
-    |>.foldl (fun acc ed => if acc.any (·.name == ed.name) then acc else acc ++ [ed]) []
-  let extNewtypes := (program.flatMap collectAllNewtypes).filter (fun nt =>
-    !(ownNewtypes.any (·.name == nt.name)))
-    |>.foldl (fun acc nt => if acc.any (·.name == nt.name) then acc else acc ++ [nt]) []
+  -- Bug 279: the own names as sets and the external declarations deduplicated by name in one
+  -- pass (the first of each name, in order), where an `any` over the own declarations per
+  -- external one and over the kept ones per candidate were n².
+  let ownStructNames := Std.HashSet.ofList (ownStructs.map (·.name))
+  let ownEnumNames := Std.HashSet.ofList (ownEnums.map (·.name))
+  let ownNewtypeNames := Std.HashSet.ofList (ownNewtypes.map (·.name))
+  let firstByName := fun {α : Type} (name : α → String) (xs : List α) =>
+    (xs.foldl (fun (seen, acc) x =>
+        if seen.contains (name x) then (seen, acc) else (seen.insert (name x), x :: acc))
+      ((∅ : Std.HashSet String), ([] : List α))).2.reverse
+  let extStructs := firstByName (·.name) ((program.flatMap collectAllStructs).filter (fun sd =>
+    !(ownStructNames.contains sd.name) && sd.name != "String"))
+  let extEnums := firstByName (·.name) ((program.flatMap collectAllEnums).filter (fun ed =>
+    !(ownEnumNames.contains ed.name)))
+  let extNewtypes := firstByName (·.name) ((program.flatMap collectAllNewtypes).filter (fun nt =>
+    !(ownNewtypeNames.contains nt.name)))
   let allStructs := syntheticStringDef :: (ownStructs ++ extStructs)
   let allEnums := ownEnums ++ extEnums
   let allExterns := collectAllExterns m
@@ -2848,36 +2857,50 @@ def lowerModule (m : CModule) (program : List CModule := []) : Except Diagnostic
   -- Skip generic functions (non-empty typeParams); only their monomorphized
   -- specializations should be lowered.
   let concreteFns := allFunctionsWithPath.filter fun (f, _) => f.typeParams.isEmpty
-  let definedFnNames := allFunctionsWithPath.map fun (f, _) => f.name
+  let definedFnNames := Std.HashSet.ofList (allFunctionsWithPath.map fun (f, _) => f.name)
   -- Bug 251: a specialization of another tree's generic is lowered in that tree's context
   -- (`sourceTree`): its constants, and its defined function names (which decide whether a call
-  -- spelling is an intrinsic).
-  let contextOf : CFnDef → List (String × Ty × CExpr) × List String := fun f =>
+  -- spelling is an intrinsic). Bug 279: each such tree's context is built once, for the trees
+  -- some function names, where it was rebuilt for every function of that tree.
+  let foreignTrees := (concreteFns.filterMap fun (f, _) => f.sourceTree.filter (· != m.name)).foldl
+    (fun (acc : Std.HashMap String (List (String × Ty × CExpr) × Std.HashSet String)) t =>
+      if acc.contains t then acc else
+      match program.find? (fun (pm : CModule) => pm.name == t) with
+      | some pm => acc.insert t (collectAllConstants pm,
+          Std.HashSet.ofList ((collectAllFunctionsWithPath pm).map fun (g, _) => g.name))
+      | none => acc) {}
+  let contextOf : CFnDef → List (String × Ty × CExpr) × Std.HashSet String := fun f =>
     match f.sourceTree with
     | some t => if t == m.name then (allConstants, definedFnNames) else
-      match program.find? (fun (pm : CModule) => pm.name == t) with
-      | some pm => (collectAllConstants pm, (collectAllFunctionsWithPath pm).map fun (g, _) => g.name)
-      | none => (allConstants, definedFnNames)
+      (foreignTrees.get? t).getD (allConstants, definedFnNames)
     | none => (allConstants, definedFnNames)
-  let results ← concreteFns.foldlM (init := []) fun acc (f, path) =>
+  -- Newest first and reversed once (bug 279: an append per function was n²).
+  let resultsRev ← concreteFns.foldlM (init := []) fun acc (f, path) =>
     let (fnConstants, fnDefinedNames) := contextOf f
     match lowerFn f allStructs allEnums fnConstants allNewtypes fnDefinedNames importedConstants with
     | .ok (sfn, lits) =>
-      .ok (acc ++ [({ sfn with modulePath := path, sourceTree := f.sourceTree.filter (· != m.name) }, lits)])
+      .ok (({ sfn with modulePath := path, sourceTree := f.sourceTree.filter (· != m.name) }, lits) :: acc)
     | .error ds => .error (ds.map (·.addContext s!"while lowering function '{f.name}'"))
+  let results := resultsRev.reverse
   -- Build deduplicated globals list (by string value)
   -- Prefix with module name to avoid collisions across modules
-  let globals := results.foldl (fun deduped (_, lits) =>
-    lits.foldl (fun deduped (_, strVal) =>
-      if deduped.any fun (_, v) => v == strVal then deduped
-      else deduped ++ [(s!"{m.name}.str.{deduped.length}", strVal)]
-    ) deduped
-  ) ([] : List (String × String))
+  -- Bug 279: a map from each string to its global name, the globals newest first and reversed
+  -- once, where an `any` over the globals per literal, an append and a `length` were n².
+  let (globalOf, globalsRev, _) := results.foldl (fun st (_, lits) =>
+    lits.foldl (fun (st : Std.HashMap String String × List (String × String) × Nat) (_, strVal) =>
+      let (globalOf, globalsRev, count) := st
+      if globalOf.contains strVal then st
+      else
+        let canon := s!"{m.name}.str.{count}"
+        (globalOf.insert strVal canon, (canon, strVal) :: globalsRev, count + 1)
+    ) st
+  ) (({} : Std.HashMap String String), ([] : List (String × String)), 0)
+  let globals := globalsRev.reverse
   -- Rename strConst references per-function using its own string literals
   let fns := results.map fun (fn, lits) =>
     -- Build per-function rename map: old local name → global canonical name
     let renameMap := lits.filterMap fun (oldName, strVal) =>
-      match globals.find? fun (_, v) => v == strVal with
+      match (globalOf.get? strVal).map (·, strVal) with
       | some (canonName, _) => if oldName == canonName then none else some (oldName, canonName)
       | none => none
     if renameMap.isEmpty then fn else { fn with
