@@ -51,10 +51,13 @@ structure EmitSSAState where
       operand: as a list, each query walked every pointer register defined so far in the
       function, quadratic in the function's size (bug 027). -/
   ptrRegs : Std.HashSet String := {}
-  /-- Type names already emitted (for dedup across modules). -/
-  emittedTypes : List String := []
-  /-- String literal name → length (for building %struct.String at use sites). -/
-  stringLengths : List (String × Nat) := []
+  /-- Type names already emitted (for dedup across modules). A set, asked per struct and enum
+      (bug 288: as a list, each type searched every name emitted before it). -/
+  emittedTypes : Std.HashSet String := {}
+  /-- String literal name → length (for building %struct.String at use sites). A map, asked per
+      use (bug 288: a list appended per literal and searched per use). The first entry of a name
+      wins, as the list's  did. -/
+  stringLengths : Std.HashMap String Nat := {}
   /-- Parameter names of the current function (for indirect call detection). -/
   fnParams : List (String × Ty) := []
   /-- Registers holding function-pointer values loaded from memory (e.g. struct fields).
@@ -67,18 +70,18 @@ structure EmitSSAState where
   vecElemSpecs : List (Nat × Nat) := []
   /-- Names of extern functions (for C ABI calling convention at call sites). -/
   externFnNames : List String := []
-  /-- Set of bare function names that collide across modules. -/
-  collidingNames : List String := []
+  /-- Set of bare function names that collide across modules (bug 288: a set, not a list). -/
+  collidingNames : Std.HashSet String := {}
   /-- Per-module linker aliases (reset per module, used before global aliases). -/
   localAliases : List (String × String) := []
   /-- Set of all LLVM function names that will be emitted (for direct-match resolution).
       These are the PRE-MANGLING names the alias machinery resolves to; `fnSymbols` maps
       each to its link symbol. -/
-  definedFnNames : List String := []
+  definedFnNames : Std.HashSet String := {}
   /-- The pre-mangling names of the program's impl methods (bugs 238 – 239): a method call is
       resolved to one of these, never through an alias of its spelling to a free function or an
       extern (Codex review r12). -/
-  methodFnNames : List String := []
+  methodFnNames : Std.HashSet String := {}
   /-- Pre-mangling name of every Concrete-defined function → its link symbol: the mangled
       `Symbols.concreteFn` (FFI.md "Symbol Names"), or its `#[export_name]`. -/
   fnSymbols : Std.HashMap String String := {}
@@ -402,7 +405,7 @@ private def resolveMethodName (s : EmitSSAState) (fn : String) : String :=
   let viaLocal := (s.localAliases.filter (·.1 == fn)).map (·.2)
   let viaLinker := (s.linkerAliases.filter (·.1 == fn)).map (·.2)
   let hop := viaLinker.flatMap fun t => (s.localAliases.filter (·.1 == t)).map (·.2)
-  match (viaLocal ++ viaLinker ++ hop).find? s.methodFnNames.contains with
+  match (viaLocal ++ viaLinker ++ hop).find? (s.methodFnNames.contains ·) with
   | some t => t
   | none => resolveAliasedName s fn
 
@@ -584,8 +587,8 @@ private def ssaEscapeStringForLLVM (str : String) : String :=
 /-- Materialize a string constant as a %struct.String pointer.
     Allocates a %struct.String, stores {ptr to chars, length}, returns ptr. -/
 private def materializeStrConst (s : EmitSSAState) (name : String) : EmitSSAState × String :=
-  let strLen : Nat := match s.stringLengths.find? fun (n, _) => n == name with
-    | some (_, n) => n
+  let strLen : Nat := match s.stringLengths.get? name with
+    | some n => n
     | none => panic! s!"internal error: string constant '{name}' not found in stringLengths table"
   let arrLen := strLen + 1  -- includes null terminator in the global
   -- GEP into the global char array
@@ -622,8 +625,8 @@ private def materializeStrConst (s : EmitSSAState) (name : String) : EmitSSAStat
     Points directly at the global constant — no malloc, no memcpy.
     Cap is set to 0 to signal this is not a heap-owned buffer. -/
 private def materializeStrConstRef (s : EmitSSAState) (name : String) : EmitSSAState × String :=
-  let strLen : Nat := match s.stringLengths.find? fun (n, _) => n == name with
-    | some (_, n) => n
+  let strLen : Nat := match s.stringLengths.get? name with
+    | some n => n
     | none => panic! s!"internal error: string constant '{name}' not found in stringLengths table"
   let arrLen := strLen + 1
   -- GEP into the global char array (read-only pointer)
@@ -1584,7 +1587,7 @@ private def moduleCallContext (s : EmitSSAState) (m : SModule) :
   -- Local aliases: import aliases take priority (they specify which module was imported)
   -- This module's own externs bind their foreign symbols at its call sites, ahead of
   -- another module's same-spelled definition; a name the module itself defines stays its own.
-  let ownDefs := m.functions.map (·.name)
+  let ownDefs : Std.HashSet String := Std.HashSet.ofList (m.functions.map (·.name))
   (ownImportAliases ++ importQualAliases ++ selfQualAliases,
    (m.externFns.map (·.1)).filter (!ownDefs.contains ·))
 
@@ -1621,11 +1624,11 @@ def emitSModule (s : EmitSSAState) (m : SModule) (testMode : Bool := false) : Em
       match genericArgs[sd.name]? with
       | some args =>
         let sd := Layout.substStructTypeArgs sd args
-        let s := { s with emittedTypes := sd.name :: s.emittedTypes }
+        let s := { s with emittedTypes := s.emittedTypes.insert sd.name }
         emitTypeDef s (Layout.structTypeDef (layoutCtxOf s) sd)
       | none => s  -- no instantiation found, skip
     else
-      let s := { s with emittedTypes := sd.name :: s.emittedTypes }
+      let s := { s with emittedTypes := s.emittedTypes.insert sd.name }
       emitTypeDef s (Layout.structTypeDef (layoutCtxOf s) sd)
   ) s
   let ctx := layoutCtxOf s
@@ -1635,11 +1638,11 @@ def emitSModule (s : EmitSSAState) (m : SModule) (testMode : Bool := false) : Em
       -- Generic enum: find concrete type args from function types
       match genericArgs[ed.name]? with
       | some args =>
-        let s := { s with emittedTypes := ed.name :: s.emittedTypes }
+        let s := { s with emittedTypes := s.emittedTypes.insert ed.name }
         (Layout.enumTypeDefs ctx ed args).foldl (fun s line => emitTypeDef s line) s
       | none => s  -- no instantiation found, skip
     else
-      let s := { s with emittedTypes := ed.name :: s.emittedTypes }
+      let s := { s with emittedTypes := s.emittedTypes.insert ed.name }
       (Layout.enumTypeDefs ctx ed).foldl (fun s line => emitTypeDef s line) s
   ) s
   -- String literal globals
@@ -1650,7 +1653,8 @@ def emitSModule (s : EmitSSAState) (m : SModule) (testMode : Bool := false) : Em
     -- about String.len downstream.
     let len := val.utf8ByteSize + 1
     let s := emitGlobal s { name := name, ty := .array len .i8, value := s!"c\"{escaped}\\00\"" }
-    { s with stringLengths := s.stringLengths ++ [(name, val.utf8ByteSize)] }
+    { s with stringLengths := if s.stringLengths.contains name then s.stringLengths
+                              else s.stringLengths.insert name val.utf8ByteSize }
   ) s
   -- Functions
   let (aliases, externs) := moduleCallContext s m
@@ -1916,7 +1920,7 @@ def emitSSAProgram (modules : List SModule) (testMode : Bool := false) (moduleFi
   -- Well-known struct types (String, Vec)
   let s := Layout.builtinTypeDefs.foldl (fun s line => emitTypeDef s line) s
   -- Mark builtins as emitted so user-defined versions don't duplicate them
-  let s := { s with emittedTypes := ["String", "Vec"] ++ s.emittedTypes }
+  let s := { s with emittedTypes := s.emittedTypes.insertMany ["String", "Vec"] }
   -- Whole-program monomorphic ABI for builtin generic enums:
   -- Scan all SSA modules for concrete type arguments, then emit a single LLVM type
   -- definition covering the worst ALIGNMENT-AWARE footprint across all
@@ -1949,7 +1953,7 @@ def emitSSAProgram (modules : List SModule) (testMode : Bool := false) (moduleFi
   let resTypeDefs := Layout.enumTypeDefs ctx resultDef resTypeArgs resMaxA resMaxE
   let s := resTypeDefs.foldl (fun s line => emitTypeDef s line) s
   -- Mark these as emitted so user enums with the same names won't duplicate
-  let s := { s with emittedTypes := [resultEnumName, optionEnumName] ++ s.emittedTypes }
+  let s := { s with emittedTypes := s.emittedTypes.insertMany [resultEnumName, optionEnumName] }
   -- External declarations (skip externs that shadow defined functions)
   let allExternFns := modules.foldl (fun acc m => acc ++ m.externFns) []
   let s := { s with externLinks := modules.foldl (fun acc m => acc ++ m.externLinkNames) [] }
@@ -1959,21 +1963,24 @@ def emitSSAProgram (modules : List SModule) (testMode : Bool := false) (moduleFi
   let fnNamesByModule := modules.foldl (fun acc m =>
     acc ++ (m.functions.map fun f => (f.name, if f.modulePath.isEmpty then m.name else f.modulePath))
   ) ([] : List (String × String))
-  let collidingNames := fnNamesByModule.foldl (fun acc (name, mod1) =>
-    if acc.contains name then acc
-    else if fnNamesByModule.any fun (n, mod2) => n == name && mod2 != mod1 then
-      acc ++ [name]
-    else acc
-  ) ([] : List String)
+  -- Bug 288: a name collides when it is defined under two module paths. One pass keeps each
+  -- name's first path; each later definition under another path marks it (was: a search of every
+  -- definition per definition, quadratic in the program's functions).
+  let (_, collidingNames) := fnNamesByModule.foldl
+    (fun ((firstPath, acc) : Std.HashMap String String × Std.HashSet String) (name, mod) =>
+      match firstPath.get? name with
+      | some mod1 => (firstPath, if mod1 != mod then acc.insert name else acc)
+      | none => (firstPath.insert name mod, acc))
+    (({} : Std.HashMap String String), ({} : Std.HashSet String))
   let s := { s with collidingNames := collidingNames }
   -- Build set of all LLVM function names (post-collision-qualification)
-  let definedFnNames := modules.foldl (fun acc m =>
-    acc ++ m.functions.map fun f => llvmFnName { s with collidingNames := collidingNames } f
-  ) ([] : List String)
+  let definedFnNames := modules.foldl (fun (acc : Std.HashSet String) m =>
+    acc.insertMany (m.functions.map fun f => llvmFnName { s with collidingNames := collidingNames } f)
+  ) {}
   let s := { s with definedFnNames := definedFnNames }
-  let methodFnNames := modules.foldl (fun acc m =>
-    acc ++ (m.functions.filter (·.isMethod)).map fun f => llvmFnName { s with collidingNames := collidingNames } f
-  ) ([] : List String)
+  let methodFnNames := modules.foldl (fun (acc : Std.HashSet String) m =>
+    acc.insertMany ((m.functions.filter (·.isMethod)).map fun f => llvmFnName { s with collidingNames := collidingNames } f)
+  ) {}
   let s := { s with methodFnNames := methodFnNames }
   -- Link symbols (FFI.md "Symbol Names"): every Concrete definition is mangled into
   -- `_C.<module path>.<name>`, or takes its `#[export_name]`. Injective: (path, name) fixes
@@ -1983,8 +1990,15 @@ def emitSSAProgram (modules : List SModule) (testMode : Bool := false) (moduleFi
   -- A legacy pre-mangling name shared by two different definitions (e.g. `a.f` qualified to
   -- `a_f` beside a `z.a_f`) is AMBIGUOUS: it is left out of the map, so a call through it
   -- binds no definition and fails to link, loudly, rather than picking one.
-  let fnSymbols := pairs.foldl (fun (acc : Std.HashMap String String) (pre, sym) =>
-    if pairs.any (fun (p, q) => p == pre && q != sym) then acc else acc.insert pre sym) {}
+  -- Bug 288: one pass keeps each name's first symbol and marks a name a second, different symbol
+  -- claims (was: a search of every pair per pair).
+  let (firstSym, ambiguous) := pairs.foldl
+    (fun ((m, amb) : Std.HashMap String String × Std.HashSet String) (pre, sym) =>
+      match m.get? pre with
+      | some sym1 => (m, if sym1 != sym then amb.insert pre else amb)
+      | none => (m.insert pre sym, amb))
+    (({} : Std.HashMap String String), ({} : Std.HashSet String))
+  let fnSymbols := firstSym.filter fun pre _ => !ambiguous.contains pre
   let s := { s with fnSymbols := fnSymbols }
   -- Emit each module
   let s := { s with programModules := modules }
@@ -1997,10 +2011,13 @@ def emitSSAProgram (modules : List SModule) (testMode : Bool := false) (moduleFi
   -- Assemble the final LLVMModule and print it
   -- Deduplicate declarations: remove duplicates by name and declarations
   -- that collide with a defined function (user code takes precedence)
-  let fnNames := s.moduleFunctions.toList.map (·.name)
-  let dedupDecls := s.moduleDeclarations.toList.foldl (fun (acc : List LLVMFnDecl) d =>
-    if acc.any (·.name == d.name) || fnNames.contains d.name then acc
-    else acc ++ [d]) []
+  -- Bug 288: the names seen and the defined names are sets (were lists searched per declaration).
+  let fnNames : Std.HashSet String := Std.HashSet.ofList (s.moduleFunctions.toList.map (·.name))
+  let (_, dedupRev) := s.moduleDeclarations.toList.foldl
+    (fun ((seen, acc) : Std.HashSet String × List LLVMFnDecl) d =>
+      if seen.contains d.name || fnNames.contains d.name then (seen, acc)
+      else (seen.insert d.name, d :: acc)) (({} : Std.HashSet String), [])
+  let dedupDecls := dedupRev.reverse
   let llvmModule : LLVMModule := {
     header := s.moduleHeader.toList
     typeDefs := s.moduleTypeDefs.toList

@@ -9296,6 +9296,42 @@ case "$r286_ms" in
            PASS=$((PASS + 1))
        else
            echo "FAIL  bug 286: lowering 8000 nested ifs took ${r286_first} ms, then ${r286_ms} ms in lower (budget 400, retry 800)"
+# Bug 288: EmitSSA kept its program-wide name tables (colliding names, defined and method names,
+# link symbols, emitted types, string lengths, deduplicated declarations) as lists searched per
+# function or per type, so emitting n functions took n² (20000 functions: --emit-llvm 5.9 s, the
+# in-compiler stages 0.6 s). `--emit-llvm` of 20000 generated functions must finish within 2000 ms,
+# retried once at 4000 ms (0.6 s with the fix on the dev host).
+r288_src="$TMPDIR/r288_functions_20000.con"
+awk -v n=20000 'BEGIN {
+    for (i = 0; i < n; i++) printf "fn f%d(x: i64) -> i64 { return x + %d; }\n", i, i % 3
+    printf "fn main() -> Int { return (f0(40) + f%d(2) - %d) as Int; }\n", n - 1, (n - 1) % 3
+}' > "$r288_src"
+r288_emit_ms() {  # sets r288_ms to the --emit-llvm wall time in ms, "incomplete" or "rcN"
+    local rc=0 t0 t1
+    t0="$(python3 -c 'import time; print(int(time.time() * 1000))')"
+    bounded_run -r 180 180 -- $COMPILER "$r288_src" --emit-llvm > /dev/null 2>&1 || rc=$?
+    t1="$(python3 -c 'import time; print(int(time.time() * 1000))')"
+    if bounded_is_incomplete "$rc"; then r288_ms=incomplete; return 0; fi
+    if [ "$rc" != 0 ]; then r288_ms="rc$rc"; return 0; fi
+    r288_ms=$((t1 - t0))
+}
+r288_emit_ms; r288_first="$r288_ms"
+case "$r288_first" in
+    ''|*[!0-9]*) ;;
+    *) if [ "$r288_first" -gt 2000 ]; then r288_emit_ms; fi ;;
+esac
+case "$r288_ms" in
+    incomplete)
+        echo "  INCOMPLETE bug 288: emitting 20000 functions timed out twice (180 s each)"
+        INCOMPLETE=$((INCOMPLETE + 1)) ;;
+    ''|*[!0-9]*)
+        echo "FAIL  bug 288: emitting 20000 functions failed ($r288_ms)"
+        FAIL=$((FAIL + 1)) ;;
+    *) if [ "$r288_first" -le 2000 ] || [ "$r288_ms" -le 4000 ]; then
+           echo "  ok  bug 288: emitting 20000 functions within budget (${r288_ms} ms, --emit-llvm)"
+           PASS=$((PASS + 1))
+       else
+           echo "FAIL  bug 288: emitting 20000 functions took ${r288_first} ms, then ${r288_ms} ms (--emit-llvm; budget 2000, retry 4000)"
            FAIL=$((FAIL + 1))
        fi ;;
 esac
