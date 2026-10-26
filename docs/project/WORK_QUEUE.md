@@ -105,7 +105,8 @@ Each tick runs these steps:
    work in worktrees of the same clone, so their pushes and fetches write `refs/remotes/origin/*`;
    a dispatcher fetch into that namespace failed whenever an agent moved one of its refs mid-fetch
    (bug 299). `QUEUE_BASE` (default `origin/main`) names a branch of `QUEUE_REMOTE` as
-   `<remote>/<branch>`; anything else is refused.
+   `<remote>/<branch>`, where `<branch>` is a valid branch name (`git check-ref-format`); anything
+   else, a revision expression such as `origin/main~1` included, is refused.
 2. **Monitor.** For every running or exited task:
    - If the process has ended, it reads the exit status and the run's `result` event (cost, tokens).
      A usage limit releases the task. Any other nonzero exit is a failure.

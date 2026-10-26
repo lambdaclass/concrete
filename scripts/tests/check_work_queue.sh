@@ -355,9 +355,11 @@ git -C "$TMP/remote.git" update-ref -d refs/heads/wip/queue/refs-probe
 QUEUE_MAX_AGENTS=0 tick "$T0"
 [ -z "$(git -C "$QUEUE_REPO" rev-parse -q --verify refs/queue/remote/origin/wip/queue/refs-probe)" ] \
   && ok "a branch deleted on the remote is pruned from refs/queue/remote/" || no "refs/queue/remote/ not pruned"
-rc=0; QUEUE_BASE=main QUEUE_NOW="$T0" bash "$QD/dispatch.sh" tick > /dev/null 2> "$S/base.err" || rc=$?
-[ "$rc" != 0 ] && has_match "must name a branch of QUEUE_REMOTE" < "$S/base.err" \
-  && ok "a QUEUE_BASE that is not <remote>/<branch> is refused" || no "QUEUE_BASE=main: rc=$rc $(cat "$S/base.err")"
+for b in main origin/ "origin/main~1" "origin/main^" "origin/@{1}"; do
+  rc=0; QUEUE_BASE="$b" QUEUE_NOW="$T0" bash "$QD/dispatch.sh" tick > /dev/null 2> "$S/base.err" || rc=$?
+  [ "$rc" != 0 ] && has_match "must name a branch of QUEUE_REMOTE" < "$S/base.err" \
+    && ok "QUEUE_BASE=$b (not <remote>/<branch>) is refused" || no "QUEUE_BASE=$b: rc=$rc $(cat "$S/base.err")"
+done
 
 # ------------------------------------------------------------------ leg: areas and concurrency
 echo "=== area conflicts and the concurrency cap ==="

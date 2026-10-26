@@ -140,9 +140,12 @@ class Q:
     def __init__(self, cfg):
         self.cfg = cfg
         remote = cfg["remote"]
-        if not cfg["base"].startswith(remote + "/") or cfg["base"] == remote + "/":
+        branch = cfg["base"][len(remote) + 1:] if cfg["base"].startswith(remote + "/") else ""
+        # A branch name, nothing git would read as a revision expression (origin/main~1, ^, @{...}).
+        if not branch or subprocess.run(["git", "check-ref-format", "refs/heads/" + branch],
+                                        capture_output=True).returncode != 0:
             sys.exit(f"dispatch: QUEUE_BASE={cfg['base']!r} must name a branch of QUEUE_REMOTE as {remote}/<branch>")
-        self.base = self.remote_ref(cfg["base"][len(remote) + 1:])
+        self.base = self.remote_ref(branch)
         self.home = cfg["home"]
         os.makedirs(os.path.join(self.home, "runs"), exist_ok=True)
         self.state_path = os.path.join(self.home, "state.json")

@@ -57,7 +57,8 @@ an agent's view of a remote branch that differs from the remote, and one the rem
 survive a tick (the old fetch force-updated the first and pruned the second, so the leg fails on
 `1bcb7c36` every time); an agent's stale `refs/remotes/origin/main` is neither moved nor used: the
 source checkout is detached at the remote's main read from `refs/queue/remote/`; the fetch lands in
-and prunes `refs/queue/remote/`; `QUEUE_BASE=main` is refused.
+and prunes `refs/queue/remote/`; a `QUEUE_BASE` that is not `<remote>/<branch>` (`main`, `origin/`,
+`origin/main~1`, `origin/main^`, `origin/@{1}`) is refused.
 
 Measured on OVH (`nix develop .#gates`; the first two rows run the budgets leg alone, the dispatcher at `1bcb7c36` and at `8789b10d`):
 
