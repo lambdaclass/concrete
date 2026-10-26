@@ -511,7 +511,9 @@ def judge(b, shape, sizes, stages, times, beats, bad, base=None, ntimes=None, fa
                 return False
         elif b.excluded(shape, m):
             return False
-        return all((n, m) in instrs for n in sizes)
+        # A count without its baseline is not judged by instructions: fixed startup work would
+        # dilute the growth (Codex review), so the wall bound keeps such a run.
+        return base_instr.get(m) is not None and all((n, m) in instrs for n in sizes)
     by_instr = {m for m in (modes or []) if instr_judged(m)}
     for s in stages:
         why = b.excluded(shape, s)
@@ -630,7 +632,9 @@ def run_shape(runner, b, shape, sizes, modes, attempts):
             for s, v in h.items():
                 beats[(n, s)] = min(v, beats.get((n, s), v))
             for m, v in ins.items():
-                instrs[(n, m)] = min(v, instrs.get((n, m), v))
+                # Exact counts: the first attempt's stands (a retry for a wall-clock bound must not
+                # replace an instruction overrun with a later count; Codex review).
+                instrs.setdefault((n, m), v)
             # A failure in ANY attempt stands: a wrong result or a refused compile is never
             # noise, and a later attempt's time does not make it a measurement.
             for s, v in e.items():
@@ -651,7 +655,7 @@ def run_shape(runner, b, shape, sizes, modes, attempts):
         # that failed is not noise, and a run killed at its ceiling twice (bounded.sh already re-ran
         # it alone with twice the time) is over its budget by more than the ceiling factor: neither
         # is retried again.
-        hard = bool(bad)
+        hard = bool(bad) or any(v in ("FAIL-HB", "FAIL-INSTR") for v, _ in verdicts)
         if not wall_fail or hard or attempt == attempts:
             return verdicts, attempt
     return verdicts, attempts

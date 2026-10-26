@@ -42,27 +42,29 @@ The gate now separates the compiler's work from the host's speed (compile_scalin
 KINDS OF MEASUREMENT"):
 - Every timed run is wrapped in `perf stat -e instructions:u` where the host can count (as
   `check_ssa_lowering_scaling.sh` already does). A run's retired instructions are judged exactly,
-  without retries: against a budget (`instr`, 1.25 x the count at `--measure`) and for growth
-  between sizes (`instr_exp` 1.2, as for heartbeats).
+  without retries (an overrun stops the shape's retries, and a later attempt's count never replaces
+  the first): against a budget (`instr`, 1.25 x the count at `--measure`) and for growth between
+  sizes (below).
 - Each stage's allocation heartbeats are judged against a budget too (`hbbudget`, 1.25 x).
 - A stage's wall time is judged against its budget after dividing by its run's host factor: how
   much slower per instruction the run went than the rate recorded at `--measure` (`rate`), at
   least 1 and at most `norm_cap` (2). The run's own instruction count is the denominator, so work
   a change adds does not raise its allowance (it fails `instr`); a change that makes the same
   instructions slower is excused only up to `norm_cap` (Codex review: the normalization trades
-  that sensitivity for load immunity; the cap bounds it). Growth is judged on raw times, as before.
+  that sensitivity for load immunity; the cap bounds it).
 - `--measure` scales each run to the session's quietest rate and keeps the fastest, which removes
   the variation between its runs but not load lasting the whole session (Codex review); so it
   refuses a host whose load average is above `measure_max_load` (8 of 32 threads) and stamps the
   load it ran at.
-- Growth between sizes is judged on the instruction counts where perf counted the run, above the
-  mode's baseline (a one-line program), against `instr_exp` 1.06 (x11.5 for x10; a linear compile
-  grows x10.0 – x10.3 there, and a quadratic part 1.6 % of the run at 10^4 exceeds it). Those runs'
-  stages are no longer judged for wall-time growth: on an idle dev host linear stages grew x45 – x60
-  from 10^4 to 10^5 (functions coreCheck x60, enums lower x54) as their data left the caches, close
-  to the x63 bound a quadratic had to exceed, so a loaded host would have false-failed them, while
-  the instructions of those runs grew x10.1 – x10.3. A quadratic multiplies the instructions, so it
-  still fails, and exactly. The wall growth bound stays for runs nobody counted.
+- Growth between sizes is judged on the instruction counts where perf counted the run and its
+  mode's baseline, above that baseline (a one-line program), against `instr_exp` 1.06 (x11.5 for
+  x10; a linear compile grows x10.0 – x10.3 there, and a quadratic part 1.6 % of the run at 10^4
+  exceeds it). Those runs' stages are no longer judged for wall-time growth: on an idle dev host
+  linear stages grew x45 – x60 from 10^4 to 10^5 (functions coreCheck x60, enums lower x54) as
+  their data left the caches, close to the x63 bound a quadratic had to exceed, so a loaded host
+  would have false-failed them, while the instructions of those runs grew x10.1 – x10.3. A
+  quadratic multiplies the instructions, so it still fails, and exactly. The wall growth bound
+  stays for runs nobody counted.
 - A host that cannot count instructions judges as before and says so.
 - Negative controls run with every judgment: a stage over budget on an unloaded host fails; the
   same time at half host speed passes; a stage over `norm_cap` x its budget fails however slow the
@@ -70,8 +72,10 @@ KINDS OF MEASUREMENT"):
   x60 for x10 (a planted quadratic) fail; a counted run whose wall time grew x63 at x9 instructions
   passes; the same wall growth fails a run nobody counted.
 
-All budgets are re-measured with the new method on concrete-ci-2 (see the `measured:` stamp in
-`compile_scaling_budgets.tsv`).
+The budgets, allocation and instruction budgets and rates are measured with the new method on
+concrete-ci-2 with no other load (the fuzz farm moved to concrete-ci-3), in the commit that records
+them (`measured:` stamp in `compile_scaling_budgets.tsv`); until it lands, the file holds the old
+wall budgets and no rates, so the gate judges as before (factor 1, wall growth for every run).
 
 ## Structural cause
 
