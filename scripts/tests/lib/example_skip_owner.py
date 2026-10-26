@@ -15,7 +15,9 @@ A manifest `skip owner=<gate>` is accepted only when both hold:
                            transitively `needs`, and the step itself use only
                            allowlisted keys (no if:, env:, shell:,
                            working-directory:, defaults:, ... -- anything that can
-                           skip the step or change how it runs).
+                           skip the step or change how it runs). The one exception
+                           is the workflow default that runs every step in the
+                           gate shell (gates_shell.py), exactly that value.
 
 The workflow is read with a real YAML parser (PyYAML), so quoting, spacing,
 comments, block and multi-line scalars, flow mappings and indentation are the
@@ -24,8 +26,12 @@ of those in turn.
 
 Exit status: 0 holds, 1 does not, 2 usage error (including PyYAML missing).
 """
+import os
 import re
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from gates_shell import RUN_SHELL  # noqa: E402
 
 TOK = re.compile(r"[A-Za-z0-9_./-]+")
 
@@ -108,7 +114,12 @@ def owner_runs(owner, workflow_path):
         doc = yaml.safe_load(open(workflow_path).read())
     except yaml.YAMLError:
         return False
-    if not isinstance(doc, dict) or not set(doc) <= WORKFLOW_KEYS:
+    if not isinstance(doc, dict) or not set(doc) <= WORKFLOW_KEYS | {"defaults"}:
+        return False
+    # The one workflow default accepted: every step runs in the gate shell. It decides which
+    # userland runs the step, never whether or where it runs. Any other value (another shell, a
+    # working directory, an extra key) still disqualifies.
+    if "defaults" in doc and doc["defaults"] != {"run": {"shell": RUN_SHELL}}:
         return False
     jobs = doc.get("jobs")
     if not isinstance(jobs, dict):

@@ -939,7 +939,8 @@ WTMP="$(mktemp -d)"
 cat > "$WTMP/wf_check.py" <<'PYEOF'
 import sys, yaml
 root = sys.argv[1]
-SHELL = "nix develop .#gates --command bash --noprofile --norc -eo pipefail {0}"
+sys.path.insert(0, sys.argv[2])
+from gates_shell import RUN_SHELL as SHELL
 # job -> reason. Each step of these enters a superset shell itself.
 SHELL_EXEMPT = {("lean_action_ci.yml", "multi-kernel"): "every step runs nix develop .#provers itself"}
 bad = []
@@ -967,7 +968,7 @@ for b in bad:
     print("  FAIL " + b)
 sys.exit(1 if bad else 0)
 PYEOF
-python3 -I "$WTMP/wf_check.py" "$ROOT_DIR" \
+python3 -I "$WTMP/wf_check.py" "$ROOT_DIR" "$ROOT_DIR/scripts/tests/lib" \
   && ok "CI and Branch health run every step in nix develop .#gates (Nix installed first on GitHub-hosted runners)" \
   || no "a workflow step runs outside the gates shell (above)"
 # CONTROLS: the same check on a copy without the default shell, and on one whose first job lost its
@@ -978,13 +979,13 @@ cp "$ROOT_DIR/.github/workflows/branch_health.yml" "$WTMP/noinst/.github/workflo
 sed '/^    shell: "nix develop .#gates/d' "$ROOT_DIR/.github/workflows/lean_action_ci.yml" > "$WTMP/nodef/.github/workflows/lean_action_ci.yml"
 awk '!done && /uses: cachix\/install-nix-action/ {done=1; next} {print}' "$ROOT_DIR/.github/workflows/lean_action_ci.yml" > "$WTMP/noinst/.github/workflows/lean_action_ci.yml"
 # Each must fail FOR ITS REASON: a crash (a traceback) would also exit nonzero.
-wout="$(python3 -I "$WTMP/wf_check.py" "$WTMP/nodef" 2>&1)" && wrc=0 || wrc=$?
+wout="$(python3 -I "$WTMP/wf_check.py" "$WTMP/nodef" "$ROOT_DIR/scripts/tests/lib" 2>&1)" && wrc=0 || wrc=$?
 if [ "$wrc" -eq 1 ] && grep -qF "lean_action_ci.yml: workflow default run shell is not the gates shell" <<<"$wout"; then
   ok "CONTROL: a workflow without the gates default shell is flagged"
 else
   no "CONTROL: a workflow without the gates default shell was not flagged as such (rc=$wrc): $(tail -1 <<<"$wout")"
 fi
-wout="$(python3 -I "$WTMP/wf_check.py" "$WTMP/noinst" 2>&1)" && wrc=0 || wrc=$?
+wout="$(python3 -I "$WTMP/wf_check.py" "$WTMP/noinst" "$ROOT_DIR/scripts/tests/lib" 2>&1)" && wrc=0 || wrc=$?
 if [ "$wrc" -eq 1 ] && grep -qF "runs before Nix is installed" <<<"$wout"; then
   ok "CONTROL: a job that runs a step before installing Nix is flagged"
 else

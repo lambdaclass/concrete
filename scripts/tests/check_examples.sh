@@ -562,6 +562,13 @@ PY
   unit_control runs_workflow_defaults_commented 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
   printf "defaults: {run: {shell: 'bash -n {0}'}}\njobs:\n  a:\n    steps:\n      - run: bash %s\n" "$real_owner" > "$fwf"
   unit_control runs_workflow_defaults_flow 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
+  # The gate-shell default, exactly as the CI workflow spells it, is the one accepted; a near miss is not.
+  printf 'defaults:\n  run:\n    shell: "nix develop .#gates --command bash --noprofile --norc -eo pipefail {0}"\njobs:\n  a:\n    steps:\n      - run: bash %s\n' "$real_owner" > "$fwf"
+  unit_control runs_workflow_defaults_gates_shell 0 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
+  printf 'defaults:\n  run:\n    shell: "nix develop .#gates --command bash -n {0}"\njobs:\n  a:\n    steps:\n      - run: bash %s\n' "$real_owner" > "$fwf"
+  unit_control runs_workflow_defaults_gates_shell_near_miss 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
+  printf 'defaults:\n  run:\n    shell: "nix develop .#gates --command bash --noprofile --norc -eo pipefail {0}"\n    working-directory: /tmp\njobs:\n  a:\n    steps:\n      - run: bash %s\n' "$real_owner" > "$fwf"
+  unit_control runs_workflow_defaults_gates_shell_plus_wd 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
   printf 'jobs:\n  a:\n    defaults: # comment\n      run:\n        shell: bash -n {0}\n    steps:\n      - run: bash %s\n' "$real_owner" > "$fwf"
   unit_control runs_job_defaults_commented 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
   printf "jobs:\n  a:\n    defaults: {run: {working-directory: /tmp}}\n    steps:\n      - run: bash %s\n" "$real_owner" > "$fwf"
