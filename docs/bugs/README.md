@@ -128,10 +128,11 @@ added or closed its record. It maps every path those commits changed to an area 
 [area_map.tsv](area_map.tsv) (path prefix to tier, stage and module; the longest prefix wins) and
 weights them by changed lines: compiler, std and tooling code first, then gates, then prose; tests,
 fixtures, examples, records and generated views never count. When the record names some of a commit's code
-files (`Lower.lean`, `map.con`), only those count for it: the record says where its fix lives, which
+files (`Lower.lean`, `map.con`; its Fix section first, else anywhere), those decide the primary area
+and count in full even in a commit shared with other bugs: the record says where its fix lives, which
 separates a fix from a feature it landed with, or one bug's part of a shared commit from another's.
-An open bug, or one placed by its filing commit, counts code only (a gate leg pins a bug; it does
-not locate it). The heaviest area is the bug's
+The other files still count toward the weights and secondary areas. An open bug counts code only (a
+gate leg pins a bug; it does not locate it). The heaviest area is the bug's
 primary area; other stages with a tenth of the weight are secondary. Dates come from git too:
 found is the commit that added the record, fixed the first commit whose record reads FIXED.
 

@@ -20,9 +20,11 @@ those; otherwise it is shared, each named bug taking an equal share of its chang
 with no such commit falls back to the commit that added its record and the commit that first marked
 it FIXED, when that commit touched at most four records (old bugs filed with their fix).
 RECORD-NAMED FILES. When the record names some of a fix commit's code files (`Lower.lean`,
-`Concrete/IR/Lower.lean`, `map.con`), only those count for the bug from that commit, in full: the
-record says where its fix lives, and the rest of the commit is a feature it landed with or another
-bug's part of a shared commit.
+`Concrete/IR/Lower.lean`, `map.con`) — in its `## Fix` sections, status and `**Fixed in:**` lines
+when those name any, else anywhere in the record — those files decide the bug's primary area, and in
+a commit shared with other bugs they count for it in full: the record says where its fix lives. The
+commit's other files still count, at the commit's share, for the weights and secondary areas (the
+naming is evidence of where the fix is, not an exhaustive list).
 Duplicate commits (a cherry-pick or a rebased copy reachable twice: same author, date and subject)
 count once.
 
@@ -30,8 +32,9 @@ WEIGHT. A fix commit's changed lines (added + deleted, per `git log --numstat`) 
 (stage, module) of each path's area_map row. Rows have tiers: code (compiler, std and tooling
 source), gate (gates, harness, CI), docs, ignore (tests, fixtures, examples, records and generated
 files: never weighted). A bug's PRIMARY area is the heaviest (stage, module) of the highest tier it
-has any weight in (code, then gate, then docs); for an OPEN bug, and for the record-commit
-fallback, only code counts, because a filing commit's gate leg pins the bug, it does not locate it. Its SECONDARY areas are the other stages of
+has any weight in (code, then gate, then docs), restricted to the record-named files when it has
+any; for an OPEN bug only code counts, because a filing commit's gate leg pins the bug, it does not
+locate it. Its SECONDARY areas are the other stages of
 that tier holding at least a tenth of its weight. Because records and generated views carry no
 weight, regenerating a view after a fix never changes any bug's area: a regeneration commit (or an
 amend that adds the regenerated files) is a fixed point.
@@ -39,7 +42,7 @@ amend that adds the regenerated files) is a fixed point.
 BASIS (how a bug's primary area was obtained), reported per bug:
   override   the record's `area:` line (it replaces the derived primary; secondaries stay derived)
   commits    fix commits, at least half of the primary tier's weight from commits naming only it
-  named      fix commits shared with other bugs, placed by the files the record names in them
+  named      fix commits mostly shared with other bugs, placed by the files the record names
   shared     fix commits, more than half of that weight from commits shared with other bugs that
              the record does not disambiguate
   record     the record-commit fallback
@@ -393,43 +396,45 @@ def derive(gitdir, root, recs, status_open):
                     fb.append((h, 1.0 / len(mine), "record"))
             commits_used, basis = fb, "record"
         tiers = {t: defaultdict(float) for t in TIERS}
+        fixed_in = {t: defaultdict(float) for t in TIERS}
         single = {t: 0.0 for t in TIERS}
-        named = {t: 0.0 for t in TIERS}
-        text = _record_text(root, r["file"])
+        whole = _record_text(root, r["file"])
+        fix_text = _fix_text(whole)
         resolved = []
         for h, share, via in commits_used:
             paths = stats.get(h, [])
-            for path, _ in paths:
-                if area_of(path, amap) is None:
-                    unmapped.add(path)
-            # The code files of a fix commit that this record names (Lower.lean, map.con) are where the
-            # record says the fix lives: the rest of the commit (a feature it landed with, another
-            # bug's part of a shared commit) does not count for this bug.
-            if paths:
-                mine = [(p, n) for p, n in paths if (area_of(p, amap) or ("ignore",))[0] == "code"
-                        and re.search(r"(?<![\w.-])" + re.escape(os.path.basename(p)) + r"(?![\w-])", text)]
-                if mine:
-                    paths, via = mine, via + "+record-names"
-                    if share < 1.0:     # the record says which part of a shared commit is its own
-                        share, via = 1.0, via + "+disambiguated"
+            # The code files of a fix commit that the record names (Lower.lean, map.con) are where the
+            # record says the fix lives: its fix section when that names any, else the whole record.
+            # They decide the primary area, and in a commit shared with other bugs they are this
+            # bug's part in full. The commit's other files still count, at the commit's share, for
+            # the secondary areas and the weights.
+            code = [p for p, _ in paths if (area_of(p, amap) or ("ignore",))[0] == "code"]
+            mine = _named(code, fix_text) or _named(code, whole)
+            if mine:
+                via += "+record-names"
             resolved.append((h, share, via))
             for path, n in paths:
                 a = area_of(path, amap)
-                if a is None or a[0] == "ignore":
+                if a is None:
+                    unmapped.add(path)
                     continue
-                tiers[a[0]][(a[1], a[2])] += n * share
-                if "+disambiguated" in via:
-                    named[a[0]] += n
-                elif share == 1.0:
+                if a[0] == "ignore":
+                    continue
+                full = path in mine
+                tiers[a[0]][(a[1], a[2])] += n * (1.0 if full else share)
+                if full:
+                    fixed_in[a[0]][(a[1], a[2])] += n
+                if share == 1.0:
                     single[a[0]] += n
         commits_used = resolved
-        usable = ["code"] if r["open"] or basis == "record" else TIERS
+        usable = ["code"] if r["open"] else TIERS
         tier = next((t for t in usable if sum(tiers[t].values()) > 0), None)
         primary, secondary, single_frac = None, [], 0.0
         if tier:
             w = tiers[tier]
             total = sum(w.values())
-            primary = max(w.items(), key=lambda kv: (kv[1], kv[0][0], kv[0][1]))[0]
+            decide = fixed_in[tier] or w
+            primary = max(decide.items(), key=lambda kv: (kv[1], kv[0][0], kv[0][1]))[0]
             by_stage = defaultdict(float)
             for (st, _), v in w.items():
                 by_stage[st] += v
@@ -437,7 +442,7 @@ def derive(gitdir, root, recs, status_open):
                                if st != primary[0] and v >= SECONDARY_SHARE * total)
             single_frac = single[tier] / total
             if single_frac < 0.5 and basis == "commits":
-                basis = "named" if (single[tier] + named[tier]) / total >= 0.5 else "shared"
+                basis = "named" if fixed_in[tier] else "shared"
         else:
             basis = "none"
         override = r["facts"].get("area") if r["facts"] else None
@@ -463,6 +468,27 @@ def derive(gitdir, root, recs, status_open):
                         + ", ".join(shown[:12]) + (f" (and {len(shown) - 12} more)" if len(shown) > 12 else "")
                         + "; add a row for each (the longest matching prefix wins)")
     return out
+
+
+FIX_HEAD = re.compile(r"^#{2,3} +(?:Fix|Fixed)\b.*$", re.M | re.I)
+FIX_LINE = re.compile(r"^(?:\*\*Status:\*\*|Status:|\*\*Fix(?:ed)?(?: in| by)?:\*\*).*$", re.M)
+
+
+def _named(paths, text):
+    """The paths whose file name the text spells (`Lower.lean`, `Concrete/IR/Lower.lean`)."""
+    return {p for p in paths if text
+            and re.search(r"(?<![\w.-])" + re.escape(os.path.basename(p)) + r"(?![\w-])", text)}
+
+
+def _fix_text(text):
+    """The parts of a record that say where its fix lives: every `## Fix…` / `## Fixed…` section and
+    the status and `**Fixed in:**` lines. A record's Cause section names where the defect showed,
+    which is not always where it was fixed, so it is not read."""
+    parts = [m.group(0) for m in FIX_LINE.finditer(text)]
+    for m in FIX_HEAD.finditer(text):
+        nxt = re.compile(r"^#{1,2} ", re.M).search(text, m.end())
+        parts.append(text[m.end():nxt.start() if nxt else len(text)])
+    return "\n".join(parts)
 
 
 def _record_text(root, name):
