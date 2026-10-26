@@ -62,8 +62,8 @@ not demonstrated.
 ## Measurements
 
 `monomorphize` stage in ms (`--emit-trace-json`, fastest of 3 runs), dev host (fede-256gb), before
-(the compiler built at b5040d53) and after (built from this branch's fix commit on main 91ce358b;
-the build had no other modification):
+(the compiler built at b5040d53) and after (built from the tree of 248b5e3b, this fix on main
+91ce358b; the build had no other modification):
 
 | n | `structs` before | after | `enums` before | after |
 |---|---|---|---|---|
@@ -80,7 +80,7 @@ run with this bug's exclusions removed, passes `structs/monomorphize` and `enums
 under `tests/programs` and `examples` (91ce358b's corpus) and of twelve generated scaling shapes
 at size 60, and `--report caps|proof-status|fingerprints|obligations|traceability|proof-deps` of
 every `.con` under `examples`, are byte-identical between the compiler built at 91ce358b and this
-fix.
+fix (248b5e3b).
 
 ## Regression leg
 
