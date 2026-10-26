@@ -978,11 +978,8 @@ gate_for_last "scripts/tests/check_binder_refs.sh"
 # positional legs also catch, while the faithful one below survived: the empty-scope leg read
 # only an `if`, which never enters a frame scope. Leg 1b (a match arm that binds nothing) kills it.
 MUT_FILE+=("Concrete/Elab/Elab.lean")
-MUT_OLD+=("  let sc := extendFrame env.bodyScope env.pendingFrame")
-MUT_NEW+=("  let sc := extendFrame env.bodyScope true -- MUTATION: eager frames")
-MUT_DESC+=("Elab V2 input: binder frames open eagerly, not on first binder")
 MUT_OLD+=("  setEnv { env with pendingFrame := true }")
-MUT_NEW+=("  setEnv { env with bodyScope := env.bodyScope.push [], pendingFrame := false } -- MUTATION: frames open eagerly, on scope entry")
+MUT_NEW+=("  setEnv { env with bodyScope := { sizes := 0 :: env.bodyScope.sizes, depth := env.bodyScope.depth + 1 }, pendingFrame := false } -- MUTATION: frames open eagerly, on scope entry")
 MUT_DESC+=("Elab V2 input: binder frames open eagerly, on scope entry, not on first binder")
 gate_for_last "scripts/tests/check_binder_refs.sh"
 
