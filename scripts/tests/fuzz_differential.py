@@ -308,6 +308,7 @@ class BorrowGen:
         self.maxdepth = depth
         self.ctr = 0
         self.fns = []          # (name, nscalar-args) of the functions generated so far
+        self.fors = True       # also C-style `for` loops (off: `while` only)
 
     # -- scope bookkeeping: a stack of frames of (name, kind); kind in
     #    "mut" (assignable i64), "ro" (readable i64: a parameter), "ctr" (a loop counter: borrowed
@@ -549,7 +550,7 @@ class BorrowGen:
         body = " ".join(self.stmt(d - 1) for _ in range(r.randint(1, 3)))
         self.scopes.pop()
         self.loopdepth -= 1
-        if r.random() < 0.5:
+        if not self.fors or r.random() < 0.5:
             # the counter steps first, so `continue` never skips it
             return f"let mut {n}: i64 = 0; while {n} < {bound} {{ {n} = {n} + 1; {body} }}"
         return f"for (let mut {n}: i64 = 0; {n} < {bound}; {n} = {n} + 1) {{ {body} }}"
