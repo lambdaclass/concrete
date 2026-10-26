@@ -1913,7 +1913,10 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
             | none => firstArmVars := some envAfterArm.vars
             | some firstVars =>
               -- Check agreement on pre-existing variables
-              for (nameR, infoBefore) in envBefore.vars.linear do
+              -- Bug 290: a binding neither arm changed since `envBefore` has its `envBefore`
+              -- state in both, so only the changed ones can disagree (in `linear`'s order).
+              for (nameR, infoBefore) in envBefore.vars.linearAmong
+                  ((firstVars.touchedSince envBefore.vars ++ envAfterArm.vars.touchedSince envBefore.vars).map (·.2.uid)) do
                 let name := nameR.name
                 if infoBefore.isCopy then continue
                 let state1 := match lookupByUid firstVars infoBefore.uid with
@@ -2055,7 +2058,9 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           | none => firstArmVars := some envAfterArm.vars
           | some firstVars =>
             -- Check agreement on pre-existing variables
-            for (nameR, infoBefore) in envBefore.vars.linear do
+            -- Bug 290: only bindings an arm changed since `envBefore` can disagree.
+            for (nameR, infoBefore) in envBefore.vars.linearAmong
+                ((firstVars.touchedSince envBefore.vars ++ envAfterArm.vars.touchedSince envBefore.vars).map (·.2.uid)) do
               let name := nameR.name
               if infoBefore.isCopy then continue
               let state1 := match lookupByUid firstVars infoBefore.uid with
@@ -3933,7 +3938,9 @@ def checkModule (m : Module) (summary : FileSummary)
       | none => typeIdOfSpelling allStructs allEnums allNewtypes tb.typeName
     tid.map (·, tb.traitName)
   let initEnv : TypeEnv :=
-    { vars := {}, structs := allStructs, enums := allEnums, functions := allSigs.toArray,
+    { vars := {}, structs := allStructs, enums := allEnums,
+      enumByName := allEnums.foldl (fun m ed => if m.contains ed.name then m else m.insert ed.name ed) {},
+      functions := allSigs.toArray,
       fnNames := TypeEnv.nameIndex allNames, methodNames := TypeEnv.nameIndex implNames, loopDepth := 0, typeAliases := typeAliasMap, constants := constantsMap,
       traitImpls := traitImplPairs, traitImplIds := traitImplIds,
       allFnSummarys := fnSigPairs, newtypes := allNewtypes,

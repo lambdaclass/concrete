@@ -235,6 +235,30 @@ private def ofSeqs (e : VarEnv) (set : Std.TreeSet Nat compare) : List (LocalRef
 /-- The non-Copy bindings, newest first (`toList.filter (!·.2.isCopy)`). -/
 def linear (e : VarEnv) : List (LocalRef × VarInfo) := e.ofSeqs e.linearSeqs
 
+/-- Bug 290: the non-Copy bindings registered since `before`, an earlier snapshot of this
+    environment (`e` descends from it, as `closeTo` requires), newest first: the bindings of
+    `linear` whose registration number is at least `before.next`. Every other non-Copy binding
+    is one `before` has. O(k log n) for k of them; `linear` lists them all, which at every arm of
+    every `match` made a function of n non-Copy bindings O(n²) to check. -/
+def linearSince (e : VarEnv) (before : VarEnv) : List (LocalRef × VarInfo) :=
+  let rec go (lo : Nat) (fuel : Nat) (acc : List (LocalRef × VarInfo)) : List (LocalRef × VarInfo) :=
+    match fuel with
+    | 0 => acc
+    | fuel + 1 =>
+      match e.linearSeqs.getGE? lo with
+      | some s => go (s + 1) fuel (match e.bySeq.get? s with | some ri => ri :: acc | none => acc)
+      | none => acc
+  go before.next e.linearSeqs.size []
+
+/-- Bug 290: the non-Copy bindings of `e` whose identities are among `uids`, newest first (the
+    order of `linear`), each once. -/
+def linearAmong (e : VarEnv) (uids : List LocalId) : List (LocalRef × VarInfo) :=
+  let seqs : Std.TreeSet Nat compare := uids.foldl (fun acc uid =>
+    match e.seqOf.get? uid.idx with
+    | some s => if e.linearSeqs.contains s then acc.insert s else acc
+    | none => acc) {}
+  e.ofSeqs seqs
+
 /-- The bindings with a recorded borrow source, newest first
     (`toList.filter (·.2.borrowedFrom.isSome)`). -/
 def refs (e : VarEnv) : List (LocalRef × VarInfo) := e.ofSeqs e.refSeqs
@@ -281,6 +305,10 @@ structure TypeEnv where
   locals : LocalTable := LocalTable.unresolved
   structs : List StructDef
   enums : List EnumDef
+  /-- Bug 290: each enum of `enums` by name, the FIRST of a name (as `enums.find?` answered): a
+      lookup per use searched the list, so n enums each used once took n² to check. Built with
+      `enums` where the environment is made (`TypeEnv.enumIndex`). -/
+  enumByName : Std.HashMap String EnumDef
   /-- Bug 275: an array and maps, not lists searched per call: a call looked its callee's name
       up in a list of every function's name and then walked the signature list to its index,
       so a module of n functions calling each other took n² to check. The maps keep the FIRST

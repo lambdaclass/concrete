@@ -9392,6 +9392,44 @@ else
     echo "  ok  bug 289: nests 8000 deep check within budget:$r289_ok"
     PASS=$((PASS + 1))
 fi
+# Bug 290: at every arm of every `match`, Check walked every non-Copy binding in scope (the H9
+# block-local check and the arms' agreement check), and it looked each enum up in the list of all
+# enums, so a function matching n enum values took n² to check (8000 on main 99084f4f: 10088 ms).
+# A generated `main` that builds and matches 8000 enum values of 8000 enum types must check (the
+# `check` stage of --emit-trace-json) within 600 ms, retried once at 1200 ms (149 ms with the fix
+# on the dev host).
+r290_src="$TMPDIR/r290_enum_uses_8000.con"
+awk -v n=8000 'BEGIN {
+    for (i = 0; i < n; i++) printf "enum E%d { A { v: i64 }, B }\n", i
+    print "fn main() -> Int {"
+    print "    let mut t: i64 = 0;"
+    for (i = 0; i < n; i++) {
+        printf "    let e%d: E%d = E%d::A { v: 1 };\n", i, i, i
+        printf "    match e%d { E%d::A { v } => { t = t + v; }, E%d::B => { t = t + 2; }, }\n", i, i, i
+    }
+    printf "    return (t - %d + 42) as Int;\n", n
+    print "}"
+}' > "$r290_src"
+r265_stage_ms "$r290_src" check; r290_first="$r265_ms"; r290_ms="$r290_first"
+case "$r290_first" in
+    ''|*[!0-9]*) ;;
+    *) if [ "$r290_first" -gt 600 ]; then r265_stage_ms "$r290_src" check; r290_ms="$r265_ms"; fi ;;
+esac
+case "$r290_ms" in
+    incomplete)
+        echo "  INCOMPLETE bug 290: checking 8000 matched enum values timed out twice (180 s each)"
+        INCOMPLETE=$((INCOMPLETE + 1)) ;;
+    ''|*[!0-9]*)
+        echo "FAIL  bug 290: checking 8000 matched enum values failed ($r290_ms)"
+        FAIL=$((FAIL + 1)) ;;
+    *) if [ "$r290_first" -le 600 ] || [ "$r290_ms" -le 1200 ]; then
+           echo "  ok  bug 290: checking 8000 matched enum values within budget (${r290_ms} ms, check)"
+           PASS=$((PASS + 1))
+       else
+           echo "FAIL  bug 290: checking 8000 matched enum values took ${r290_first} ms, then ${r290_ms} ms in check (budget 600, retry 1200)"
+           FAIL=$((FAIL + 1))
+       fi ;;
+esac
 # Bug 247: a function value written as an identifier reaches what it names in the assumption summary.
 run_ok "$TESTDIR/regress_247_function_value_reaches_foreign.con" 42
 run_ok "$TESTDIR/regress_247_free_value_beside_unrelated_extern.con" 42

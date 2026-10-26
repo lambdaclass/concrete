@@ -295,7 +295,7 @@ def isCopyType (ty : Ty) : CheckM Bool := do
     (fun name =>
       match env.structs.find? fun sd => sd.name == name with
       | some sd => some (sd.isCopy, sd.typeParams, sd.fields.map (fun f => f.ty))
-      | none => match env.enums.find? fun ed => ed.name == name with
+      | none => match env.enumByName.get? name with
         | some ed => some (ed.isCopy, ed.typeParams, ed.variants.flatMap (fun v => v.fields.map (fun f => f.ty)))
         | none => none)
     (fun name => (env.newtypes.find? fun nt => nt.name == name).map (fun nt => deAlias nt.innerTy))
@@ -391,7 +391,7 @@ def lookupStructField (structName : String) (fieldName : String) : CheckM (Optio
 
 def lookupEnum (name : String) : CheckM (Option EnumDef) := do
   let env ← getEnv
-  return env.enums.find? fun ed => ed.name == name
+  return env.enumByName.get? name
 
 def lookupEnumVariant (enumName : String) (variantName : String) : CheckM (Option EnumVariant) := do
   match ← lookupEnum enumName with
@@ -1097,8 +1097,9 @@ def checkBlockLocalsConsumed
     (diverges : Bool)
     (span : Option Span := none) : CheckM Unit := do
   if diverges then return ()
-  -- only a non-Copy binding can be refused
-  for (nameR, info) in after.linear do
+  -- only a non-Copy binding can be refused; one registered before `before` is `before`'s (bug
+  -- 290: `after` descends from `before`, so only the newer registrations are visited)
+  for (nameR, info) in after.linearSince before do
     let name := nameR.name
     -- Pre-existing, not block-local. By IDENTITY (bug 093): a block-local that
     -- shadows an outer name (`let r = …` over a consumed outer `r`, a match
