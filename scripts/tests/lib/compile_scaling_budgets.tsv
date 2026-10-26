@@ -52,10 +52,8 @@ exclude	functions	lower	bug 279 (open): Lower appends each lowered function to a
 exclude	functions	llvm,native	not run: every whole compile of this shape contains the excluded stages above; it runs with their fixes
 exclude	call-chain	lower	bug 279 (open): Lower appends each lowered function to a list and deduplicates external types by list search
 exclude	call-chain	llvm,native	not run: every whole compile of this shape contains the excluded stages above; it runs with their fixes
-exclude	structs	monomorphize	bug 278 (open): Mono's program-level name tables are lists searched per declaration
 exclude	structs	lower	bug 279 (open): Lower appends each lowered function to a list and deduplicates external types by list search
 exclude	structs	llvm,native	not run: every whole compile of this shape contains the excluded stages above; it runs with their fixes
-exclude	enums	monomorphize	bug 278 (open): Mono's program-level name tables are lists searched per declaration
 exclude	enums	lower	bug 279 (open): Lower appends each lowered function to a list and deduplicates external types by list search
 exclude	enums	llvm,native	not run: every whole compile of this shape contains the excluded stages above; it runs with their fixes
 budget	array-const	10000	parse	209

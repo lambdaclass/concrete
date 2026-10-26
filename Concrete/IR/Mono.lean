@@ -1,4 +1,5 @@
 import Std.Data.HashMap
+import Std.Data.HashSet
 import Concrete.Elab.Core
 import Concrete.Elab.TypeSpelling
 import Concrete.Resolve.Shared
@@ -1463,8 +1464,14 @@ def monoProgram (modules : List CModule)
     (ti.methodNames ++ ti.methodSigs.map (·.name)).eraseDups.map fun mn =>
       (ti.typeName, mn, ti.implMethodFnName mn)
   let ownNames := modules.foldl (fun acc m => acc ++ collectAllOwnTypeNames m) []
+  -- Bug 278: each name's count from one map and the duplicates kept once, in first-occurrence
+  -- order, by a set: a filter of every name per name and `eraseDups` were n² in the types.
+  let ownCount : Std.HashMap String Nat :=
+    ownNames.foldl (fun m n => m.insert n (m.getD n 0 + 1)) {}
   let ambiguousTypeNames :=
-    (ownNames.filter fun n => (ownNames.filter (· == n)).length > 1).eraseDups
+    ((ownNames.filter fun n => ownCount.getD n 0 > 1).foldl (fun (seen, acc) n =>
+        if seen.contains n then (seen, acc) else (seen.insert n, n :: acc))
+      ((∅ : Std.HashSet String), ([] : List String))).2.reverse
   let initState : MonoState := { allFns := allFns, linkerAliases := allAliases, fnMap := fnMap,
                                  structs := allStructs, enums := allEnums,
                                  newtypes := allNewtypes, destroyImpls := destroyImpls,

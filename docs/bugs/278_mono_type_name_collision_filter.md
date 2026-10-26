@@ -2,12 +2,12 @@
 
 <!-- bug-ledger
 summary: Mono computed the program's ambiguous type names by filtering the whole list of type names once per name, then deduplicating it with `eraseDups`, so a program of n structs or enums took time n² to monomorphize (10000 structs: 688 ms). Found by the R-0550 scaling gate. Class 17.
-coverage: `check_compile_scaling.sh` measures the `structs` and `enums` shapes' `monomorphize` stage and reports it EXCLUDED under this bug on every run; the fix removes the exclusion, and the gate then holds the stage to its budget and to near-linear growth
+coverage: `check_compile_scaling.sh` judges the `structs` and `enums` shapes' `monomorphize` stage against its budget and near-linear growth: this fix removes the stage's exclusions under this bug, and the gate fails the pre-fix compiler
 class: 17 — Mono finds colliding type names by filtering the whole name list per name
 silent: no
 -->
 
-**Status:** OPEN
+**Status:** FIXED (branch `wip/perf-278-v2`)
 **Found:** 2026-10-26, building the compile-time scaling gate (R-0550, exit 2o): the gate's generated shapes, timed per stage with `--emit-trace-json` at 10b81a46.
 **Severity:** loud (performance). Compile time only: never wrong code, a refusal or a crash; a program of this shape compiles, slowly.
 
@@ -28,9 +28,67 @@ A linear stage doubles with the size; these grow about fourfold or more per doub
 
 Count names in one pass over a map.
 
+## Fix
+
+`monoProgram` counts each own type name's declarations in one pass over a `Std.HashMap` and keeps
+the names declared more than once, in first-occurrence order, with a hash set: the same list
+`filter` + `eraseDups` produced. (For names that are all distinct, the cost was the nested filter
+alone: the outer filter returned nothing for `eraseDups` to work on; Codex review.)
+
+## The many-functions observation, located
+
+The `monomorphize` stage of the `functions` shape does linear work, and there is no quadratic to
+fix in it:
+
+- The compiler built at 10b81a46 itself takes 6 / 12 / 34 ms at 5000 / 10000 / 20000 functions
+  (allocations 235100 / 470100 / 940100); the 168 ms at 20000 recorded above does not reproduce.
+  Main 91ce358b: 5 / 12 / 34 ms.
+- callgrind instruction counts of the stage (`--toggle-collect` on `Pipeline.monomorphize`, which
+  runs `monoProgram` and `verifyPostMono`), on a probe build of this series' front-end fixes
+  merged on main (737c0447): 235,068,435 / 469,981,838 / 940,104,488 at 10000 / 20000 / 40000,
+  exactly linear.
+- About 70 gdb samples of the stage at 40000 land in the walkers (`monoExpr`, `verifyFnTypes`,
+  `collectExprViolations`, `verifyCapsPostMono`, `verifyNoRefBindingsPostMono`), none in a search
+  of a program-sized list.
+- Its wall time at 20000 → 40000 grows about x4 (34 → 140 ms), as do stages with linear
+  instruction counts on the same builds (resolve 35 → 116 ms, check 54 → 129 ms).
+
+Linear work; the superlinear elapsed time at these sizes is consistent with memory and system
+effects (cache, TLB, host load), which these measurements do not separate. Codex review
+2026-10-26: CONFIRMED that no per-function search of a program-sized list exists on this path and
+that there is no quadratic defect to fix for this shape; the memory-hierarchy reading is plausible,
+not demonstrated.
+
+## Measurements
+
+`monomorphize` stage in ms (`--emit-trace-json`, fastest of 3 runs), dev host (fede-256gb), before
+(the compiler built at b5040d53) and after (built from the tree of 248b5e3b, this fix on main
+91ce358b; the build had no other modification):
+
+| n | `structs` before | after | `enums` before | after |
+|---|---|---|---|---|
+| 2500 | 17 | 1 | 17 | 0 |
+| 5000 | 81 | 1 | 79 | 1 |
+| 10000 | 659 | 2 | 672 | 2 |
+| 20000 | 2409 | 4 | 2323 | 4 |
+
+The R-0550 gate (`compile_scaling.py` and its budgets at fe9ce031, origin/wip/r0550-scaling-gate-v2),
+run with this bug's exclusions removed, passes `structs/monomorphize` and `enums/monomorphize`
+(1000: 0 ms, 10000: 2 ms) and fails both on main 91ce358b (x228.0 and x229.0 against x63.1).
+
+`--emit-core`, `--emit-ssa` and `--emit-llvm` (stdout, stderr and exit status) of every `.con`
+under `tests/programs` and `examples` (91ce358b's corpus) and of twelve generated scaling shapes
+at size 60, and `--report caps|proof-status|fingerprints|obligations|traceability|proof-deps` of
+every `.con` under `examples`, are byte-identical between the compiler built at 91ce358b and this
+fix (248b5e3b).
+
+## Regression gate
+
+The R-0550 gate (`check_compile_scaling.sh`, on main since 9d8182ea) held this stage as an exclusion under this bug; the fix removes both exclusions from `compile_scaling_budgets.tsv`. With them removed the gate passes `structs/monomorphize` (1000: 1 ms, 10000: 1 ms) and `enums/monomorphize` (0 and 2 ms) on this fix and fails both on main's compiler (x222.7 and x223.7 against x63.1).
+
 ## Containment while open
 
-Loud only. The scaling gate names the stage as an exclusion under this bug, so its gap is printed on every run rather than silent; the gate's other stages of the shape stay judged. A user splits such a module or nest.
+Loud only. The scaling gate named the stage as an exclusion under this bug, so its gap was printed on every run rather than silent.
 
 ## Structural cause
 
