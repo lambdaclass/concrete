@@ -1,0 +1,83 @@
+// Bug 285: an address taken inside an enum literal's payload is seen by every Lower site that
+// pre-promotes a local (statement if, value if, match, `&&` right operand) and by the loop's
+// slot-or-phi choice. Before the fix the first four read a never-stored slot on the path that
+// skips the payload, and the loop never terminated.
+enum E {
+    A { v: i64 },
+    B,
+}
+
+fn get(p: &i64) -> i64 {
+    return *p;
+}
+
+fn payload(e: E) -> i64 {
+    match e {
+        E::A { v } => {
+            return v;
+        },
+        E::B => {
+            return 0;
+        },
+    }
+}
+
+fn stmt_if(c: bool) -> i64 {
+    let mut x: i64 = 4;
+    let mut r: i64 = 0;
+    if c {
+        x = 70;
+        r = payload(E::A { v: get(&x) });
+    }
+    return x + r;
+}
+
+fn value_if(c: bool) -> i64 {
+    let mut x: i64 = 3;
+    let r: i64 = if c {
+        x = 70;
+        payload(E::A { v: get(&x) })
+    } else {
+        0
+    };
+    return x + r;
+}
+
+fn match_arm(k: i64) -> i64 {
+    let mut x: i64 = 5;
+    let mut r: i64 = 0;
+    match k {
+        0 => {
+            x = 70;
+            r = payload(E::A { v: get(&x) });
+        },
+        _ => {
+            r = 1;
+        },
+    }
+    return x + r;
+}
+
+fn and_rhs(c: bool) -> i64 {
+    let x: i64 = 6;
+    let b: bool = c && payload(E::A { v: get(&x) }) == 6;
+    if b {
+        return 100;
+    }
+    return x;
+}
+
+fn loop_sum() -> i64 {
+    let mut i: i64 = 0;
+    let mut s: i64 = 0;
+    while i < 6 {
+        s = s + payload(E::A { v: get(&i) });
+        i = i + 1;
+    }
+    return s;
+}
+
+fn main() -> Int {
+    // 4 + 3 + 6 (5 + 1) + 6 + 15 + 8 = 42
+    return (stmt_if(false) + value_if(false) + match_arm(1) + and_rhs(false) + loop_sum() + 8) as Int;
+}

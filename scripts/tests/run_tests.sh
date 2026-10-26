@@ -8426,6 +8426,10 @@ run_ok "$TESTDIR/regress_269_generic_bindings_at_value.con" 42
 # a value `if` and a `match` whose last arm writes `x` and returns, and a `break`): the binary
 # returned the diverged arm's value or the program was refused (E0703). Binary = --interp = 42.
 run_ok "$TESTDIR/regress_271_diverged_arm_writes.con" 42
+# Bug 285: an address taken inside an enum literal's payload was invisible to Lower's
+# pre-promotion (statement `if`, value `if`, `match`, `&&`) and to the loop's slot-or-phi choice:
+# the binary loaded a never-stored slot or looped forever. Binary = --interp = 42.
+run_ok "$TESTDIR/regress_285_enum_payload_addr_taken.con" 42
 r265_gen() {  # r265_gen SHAPE N: a generated `fn main` of the given shape and size on stdout
     awk -v shape="$1" -v n="$2" 'BEGIN {
         print "fn main() -> Int {"

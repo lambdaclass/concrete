@@ -743,6 +743,8 @@ where
 -- `&name`?`), a walk of the body per binding at every branch and loop; the walk now runs once
 -- and collects the names. `name ∈ cexprAddrTaken acc e` iff `name ∈ acc` or the old
 -- `cexprTakesAddrOf name e` held (each clause below is the old one's disjunction as a union).
+-- Every constructor is listed (bug 285): a sub-expression the walk skips is an address-take no
+-- site sees.
 mutual
 partial def cexprAddrTaken (acc : LocalKeySet) : CExpr → LocalKeySet
   | .borrow inner _ => cexprAddrTaken (match inner with | .ident n _ => acc.insert n.key () | _ => acc) inner
@@ -759,7 +761,12 @@ partial def cexprAddrTaken (acc : LocalKeySet) : CExpr → LocalKeySet
   | .cast inner _ => cexprAddrTaken acc inner
   | .allocCall inner alloc _ => cexprAddrTaken (cexprAddrTaken acc inner) alloc
   | .ifExpr c t e _ => cstmtsAddrTaken (cstmtsAddrTaken (cexprAddrTaken acc c) t) e
-  | _ => acc
+  -- Bug 285: an enum literal's payload is evaluated like a struct literal's fields; the walk had
+  -- no case for it, so an address taken there was invisible to every site that asks (a pre-branch
+  -- local was promoted lazily inside the branch, a loop variable was phi-carried and promoted
+  -- mid-body). No wildcard: a new expression form is a compile error here, not a silent miss.
+  | .enumLit _ _ _ fields _ => fields.foldl (fun acc fe => cexprAddrTaken acc fe.2) acc
+  | .intLit .. | .floatLit .. | .boolLit _ | .strLit _ | .charLit _ | .ident .. | .fnRef .. => acc
 
 partial def cguardAddrTaken (acc : LocalKeySet) : Option CExpr → LocalKeySet
   | some g => cexprAddrTaken acc g
