@@ -14,8 +14,9 @@
 #
 # Status: 0 a line matched; 1 no line matched. Anything else is no answer at all: a grep error (an
 # invalid pattern, an unreadable input) or an option that would stop grep early or replace its
-# answer (-q, -m, -l, -L, -c and their long forms, anywhere in the arguments: GNU grep reads options
-# after the pattern too) prints the reason and stops the script. From the script's own shell that
+# answer (-q, -m, -l, -L, -c, anywhere in the arguments: GNU grep reads options after the pattern
+# too), or a long option outside the short list below (GNU grep takes abbreviations, so `--qui` is
+# --quiet), prints the reason and stops the script. From the script's own shell that
 # is `exit 2`. From a pipeline stage or a substitution, a subshell whose status a negated leg would
 # read as "absent", it is SIGKILL to the script (status 137): a signal the script cannot trap and
 # carry on past, so neither polarity of leg can turn the error into a verdict.
@@ -30,12 +31,13 @@ has_match() {
     [ "$_hm_opts" = 1 ] || continue
     case "$_hm_a" in
       --) _hm_opts=0 ;;
-      --quiet|--silent|--count|--max-count|--max-count=*|--files-with-matches|--files-without-match)
-        _has_match_fail "option '$_hm_a' is not a whole-input match" "$@" ;;
-      --regexp|--file|--context|--after-context|--before-context|--binary-files|--devices|\
---directories|--label|--include|--exclude|--exclude-from|--exclude-dir|--group-separator)
-        _hm_take=1 ;;
-      --*) ;;
+      # Long options only spelled in full and only these: GNU grep also accepts any unambiguous
+      # abbreviation (`--qui` is --quiet), so a list of refused names would be bypassable.
+      --extended-regexp|--fixed-strings|--basic-regexp|--perl-regexp|--ignore-case|\
+--no-ignore-case|--word-regexp|--line-regexp|--invert-match|--null-data|--text|\
+--regexp=*|--file=*|--binary-files=*) ;;
+      --regexp|--file|--binary-files) _hm_take=1 ;;
+      --*) _has_match_fail "option '$_hm_a' is not one has_match accepts (long options in full: see has_match.sh)" "$@" ;;
       -?*)
         # A short-option cluster: letters until one that takes an argument, which is the rest of
         # the word or, when the word ends there, the next word.
