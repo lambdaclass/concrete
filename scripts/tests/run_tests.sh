@@ -8643,6 +8643,47 @@ else
     echo "FAIL  bugs 255-261: front end over a long function did not finish within 10 s (retry 20 s):$r255_bad"
     FAIL=$((FAIL + 1))
 fi
+# Bug 282: Resolve looked a name up by walking its stack of block scopes from the innermost, so a
+# body nested n blocks deep that reads a binding of its outermost block cost n per use and n² for
+# the nest (depth 10000: 147 ms to resolve). One map counts, per spelling, the open scopes binding
+# it. The fixtures pin visibility across nested, sibling, loop and match-arm blocks and the refusal
+# of a read after a nested block closed; a generated `fn main` of `if` blocks nested 10000 deep,
+# each assigning a binding of the outermost block, must resolve (the `resolve` stage of
+# --emit-trace-json) within 50 ms, retried once at 100 ms (fixed: 5 ms on the dev host).
+run_ok "$TESTDIR/regress_282_nested_scope_visibility.con" 42
+run_err "$TESTDIR/error_282_read_after_nested_block.con" "(E0100) undeclared variable 'mid'"
+r282_src="$TMPDIR/r282_nested_ifs_10000.con"
+awk -v n=10000 'BEGIN {
+    print "fn main() -> Int {"
+    print "    let mut s: i64 = 0;"
+    print "    let t: i64 = 1;"
+    line = "    "
+    for (i = 0; i < n; i++) line = line "if t > 0 { s = s + 1; "
+    for (i = 0; i < n; i++) line = line "}"
+    print line
+    printf "    return (s - %d + 42) as Int;\n", n
+    print "}"
+}' > "$r282_src"
+r265_stage_ms "$r282_src" resolve; r282_first="$r265_ms"; r282_ms="$r282_first"
+case "$r282_first" in
+    ''|*[!0-9]*) ;;
+    *) if [ "$r282_first" -gt 50 ]; then r265_stage_ms "$r282_src" resolve; r282_ms="$r265_ms"; fi ;;
+esac
+case "$r282_ms" in
+    incomplete)
+        echo "  INCOMPLETE bug 282: resolving a nest 10000 blocks deep timed out twice (180 s each)"
+        INCOMPLETE=$((INCOMPLETE + 1)) ;;
+    ''|*[!0-9]*)
+        echo "FAIL  bug 282: resolving a nest 10000 blocks deep failed ($r282_ms)"
+        FAIL=$((FAIL + 1)) ;;
+    *) if [ "$r282_first" -le 50 ] || [ "$r282_ms" -le 100 ]; then
+           echo "  ok  bug 282: a nest 10000 blocks deep resolves within budget (${r282_ms} ms)"
+           PASS=$((PASS + 1))
+       else
+           echo "FAIL  bug 282: resolving a nest 10000 blocks deep took ${r282_first} ms, then ${r282_ms} ms (budget 50, retry 100)"
+           FAIL=$((FAIL + 1))
+       fi ;;
+esac
 # Bug 222: an imported enum brings its impl blocks and trait impls (trait bounds on it were E0241
 # outside its module, directly imported and through the transitive closure); binary and --interp
 # must agree on 42.

@@ -161,6 +161,11 @@ structure ResolveCtx where
       a lookup walked every binding of the enclosing scopes, so a function of n bindings read
       far from their use was O(n^2) to resolve (bug 257). -/
   localScopes : List (Std.TreeMap String SymKind compare)
+  /-- For each name bound in some scope of `localScopes`, how many of those scopes bind it, so a
+      lookup asks one map instead of walking the stack: a body nested n blocks deep reading a
+      binding of its outermost block walked n scopes per use, n^2 for the nest (bug 282). Kept
+      by `addLocal` and `popScope`, the only writers of `localScopes` below the function level. -/
+  visibleLocals : Std.TreeMap String Nat compare := {}
   errors : Diagnostics
   /-- Known type names (structs, enums, type aliases, traits, type params). -/
   knownTypes : List String
@@ -236,17 +241,27 @@ private def pushScope (ctx : ResolveCtx) : ResolveCtx :=
   { ctx with localScopes := {} :: ctx.localScopes }
 
 private def popScope (ctx : ResolveCtx) : ResolveCtx :=
-  { ctx with localScopes := ctx.localScopes.drop 1 }
+  match ctx.localScopes with
+  | scope :: rest =>
+    -- Each name the closing scope bound is visible in one scope fewer (bug 282).
+    let visible := scope.foldl (fun (m : Std.TreeMap String Nat compare) n _ =>
+      match m.get? n with
+      | some k => if k ≤ 1 then m.erase n else m.insert n (k - 1)
+      | none => m) ctx.visibleLocals
+    { ctx with localScopes := rest, visibleLocals := visible }
+  | [] => ctx
 
 private def addLocal (ctx : ResolveCtx) (name : String) (kind : SymKind) : ResolveCtx :=
   match ctx.localScopes with
-  | scope :: rest => { ctx with localScopes := scope.insert name kind :: rest }
+  | scope :: rest =>
+    let visible := if scope.contains name then ctx.visibleLocals
+      else ctx.visibleLocals.insert name (ctx.visibleLocals.getD name 0 + 1)
+    { ctx with localScopes := scope.insert name kind :: rest, visibleLocals := visible }
   | [] => ctx  -- should not happen
 
 private def lookupName (ctx : ResolveCtx) (name : String) : Bool :=
-  -- Check local scopes (innermost first)
-  ctx.localScopes.any (fun scope => scope.contains name) ||
-  -- Check global scope (O(1) via symbolMap)
+  -- A local of any enclosing scope (one map, bug 282), then the global scope (O(1) via symbolMap)
+  ctx.visibleLocals.contains name ||
   ctx.globalScope.symbolMap.contains name
 
 /-- The builtin enum a name denotes in an enum table, as `BuiltinEnums.builtinEnums` orders it
