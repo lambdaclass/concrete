@@ -8744,6 +8744,53 @@ run_err "$TESTDIR/error_218_struct_and_enum.con" "(E0299)"
 run_err "$TESTDIR/error_218_duplicate_constant.con" "(E0299)"
 run_err "$TESTDIR/error_218_duplicate_alias.con" "(E0299)"
 run_ok "$TESTDIR/regress_218_type_and_value_namespaces.con" 42
+# Bug 275: the duplicate-declaration rule searched an association list of the declarations seen so
+# far per declaration, and a call found its callee by a search of the module's function names and
+# a walk of the signature list, so a module of n functions calling each other took n² to check
+# (a 20000-function call chain: 1504 ms). Maps now; every collision is still reported, in the same
+# order (error_275_collision_order: `first`, `second`, then `P`), and a generated chain of 20000
+# functions each calling the next must check (the `check` stage of --emit-trace-json) within
+# 200 ms, retried once at 400 ms (fixed: 77 ms on the dev host).
+run_err "$TESTDIR/error_275_collision_order.con" "(E0299) a function named 'first'"
+r275_rc=0
+bounded_run -r 20 20 -- $COMPILER "$TESTDIR/error_275_collision_order.con" > "$TMPDIR/r275_collisions.txt" 2>&1 || r275_rc=$?
+r275_order=$(sed -nE "s/.*\(E0299\) an? [a-z ]+ named '([A-Za-z]+)'.*/\1/p" "$TMPDIR/r275_collisions.txt" | tr '\n' ' ')
+if bounded_is_incomplete "$r275_rc"; then
+    echo "  INCOMPLETE bug 275: the collision-order compile timed out twice (20 s each)"
+    INCOMPLETE=$((INCOMPLETE + 1))
+elif [ "$r275_order" = "first second P " ]; then
+    echo "  ok  bug 275: every declaration collision is reported, in order"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  bug 275: declaration collisions reported as '$r275_order', expected 'first second P '"
+    FAIL=$((FAIL + 1))
+fi
+r275_src="$TMPDIR/r275_call_chain_20000.con"
+awk -v n=20000 'BEGIN {
+    for (i = 0; i < n; i++) printf "fn f%d(x: i64) -> i64 { return f%d(x) + 1; }\n", i, i + 1
+    printf "fn f%d(x: i64) -> i64 { return x; }\n", n
+    printf "fn main() -> Int { return (f0(42) - %d) as Int; }\n", n
+}' > "$r275_src"
+r265_stage_ms "$r275_src" check; r275_first="$r265_ms"; r275_ms="$r275_first"
+case "$r275_first" in
+    ''|*[!0-9]*) ;;
+    *) if [ "$r275_first" -gt 200 ]; then r265_stage_ms "$r275_src" check; r275_ms="$r265_ms"; fi ;;
+esac
+case "$r275_ms" in
+    incomplete)
+        echo "  INCOMPLETE bug 275: checking a chain of 20000 functions timed out twice (180 s each)"
+        INCOMPLETE=$((INCOMPLETE + 1)) ;;
+    ''|*[!0-9]*)
+        echo "FAIL  bug 275: checking a chain of 20000 functions failed ($r275_ms)"
+        FAIL=$((FAIL + 1)) ;;
+    *) if [ "$r275_first" -le 200 ] || [ "$r275_ms" -le 400 ]; then
+           echo "  ok  bug 275: a chain of 20000 functions checks within budget (${r275_ms} ms)"
+           PASS=$((PASS + 1))
+       else
+           echo "FAIL  bug 275: checking a chain of 20000 functions took ${r275_first} ms, then ${r275_ms} ms (budget 200, retry 400)"
+           FAIL=$((FAIL + 1))
+       fi ;;
+esac
 # Bug 215: an unknown type written in a cast or a type-argument list (backend panic / silent
 # acceptance before); Resolve refuses it with E0108.
 run_err "$TESTDIR/error_215_cast_unknown_type.con" "(E0108)"

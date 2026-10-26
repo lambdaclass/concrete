@@ -58,7 +58,8 @@ check Concrete/IR/SSAVerify.lean         1
 # 34->29 (2026-10-25, bug 027): the pointer-register facts are sets; baseline pinned to the tree.
 check Concrete/Backend/EmitSSA.lean      29
 check Concrete/Resolve/Resolve.lean      8
-check Concrete/Check/Check.lean          4
+# 4->3 (2026-10-26, bug 275): declaration collisions are consed and reversed once.
+check Concrete/Check/Check.lean          3
 check Concrete/Check/CheckHelpers.lean   8
 # 57->58 (2026-08-06): +1 one-shot `initEv ++ [loop ...]` building the desugared
 # for-loop's evidence block. `initEv` holds at most one statement and the append runs

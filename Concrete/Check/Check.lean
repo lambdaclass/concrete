@@ -3745,8 +3745,10 @@ def declarationCollisions (m : Module) : Diagnostics :=
   let dupes := fun (decls0 : List (String × String × Span)) =>
     let decls := (decls0.toArray.qsort (fun a b =>
       a.2.2.line < b.2.2.line || (a.2.2.line == b.2.2.line && a.2.2.col < b.2.2.col))).toList
+    -- Bug 275: the first declaration of each name in a map, the collisions newest first, where
+    -- an association list searched per declaration and an append per collision were n².
     let (_, errs) := decls.foldl (fun (seen, errs) (n, kind, sp) =>
-      match seen.lookup n with
+      match seen.get? n with
       | some (otherKind, otherSp) =>
         if kind == "an extern declaration" && otherKind == "an extern declaration" then (seen, errs)
         else if kind == methodKind && otherKind == methodKind then (seen, errs)
@@ -3754,9 +3756,10 @@ def declarationCollisions (m : Module) : Diagnostics :=
           let e := CheckError.declarationCollision n kind otherKind otherSp.line
           let d : Diagnostic := { severity := .error, message := e.message, pass := "check",
                                   span := (if sp.line == 0 then none else some sp), hint := e.hint, code := e.code }
-          (seen, errs ++ [d])
-      | none => ((n, (kind, sp)) :: seen, errs)) (([] : List (String × (String × Span))), ([] : Diagnostics))
-    errs
+          (seen, d :: errs)
+      | none => (seen.insert n (kind, sp), errs))
+        (({} : Std.HashMap String (String × Span)), ([] : Diagnostics))
+    errs.reverse
   dupes callables ++ dupes constants ++ dupes types
 
 -- spec: REF-3, spec: STMT-7, spec: MOD-3, spec: REF-1, spec: REF-2, spec: CON-3 (docs/spec/references.md; this declaration enforces the rule)
@@ -3874,11 +3877,11 @@ def checkModule (m : Module) (summary : FileSummary)
       | none => typeIdOfSpelling allStructs allEnums allNewtypes tb.typeName
     tid.map (·, tb.traitName)
   let initEnv : TypeEnv :=
-    { vars := {}, structs := allStructs, enums := allEnums, functions := allSigs,
-      fnNames := allNames, methodNames := implNames, loopDepth := 0, typeAliases := typeAliasMap, constants := constantsMap,
+    { vars := {}, structs := allStructs, enums := allEnums, functions := allSigs.toArray,
+      fnNames := TypeEnv.nameIndex allNames, methodNames := TypeEnv.nameIndex implNames, loopDepth := 0, typeAliases := typeAliasMap, constants := constantsMap,
       traitImpls := traitImplPairs, traitImplIds := traitImplIds,
       allFnSummarys := fnSigPairs, newtypes := allNewtypes,
-      userFnNames := userFnNamesList, localNewtypeNames := localNewtypeNamesList,
+      userFnNames := Std.HashSet.ofList userFnNamesList, localNewtypeNames := localNewtypeNamesList,
       newtypeConstructors := newtypeConstructorsInScope m.newtypes imports,
       localStructNames := localStructNamesList,
       localNewtypeIds := localNewtypeIdList, localStructIds := localStructIdList }

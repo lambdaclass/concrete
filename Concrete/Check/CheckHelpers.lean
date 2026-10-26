@@ -404,8 +404,8 @@ def lookupNewtype (name : String) : CheckM (Option NewtypeDef) := do
 
 def lookupFn (name : String) : CheckM (Option FnSummary) := do
   let env ← getEnv
-  match env.fnNames.lookup name with
-  | some idx => return listGetIdx env.functions idx
+  match env.fnNames.get? name with
+  | some idx => return env.functions[idx]?
   | none => return none
 
 /-- Bug 253: is the newtype a spelling resolved to defined by the module being checked? By its
@@ -426,8 +426,8 @@ def TypeEnv.structIsLocal (env : TypeEnv) (sd : StructDef) : Bool :=
     of the module that happens to be spelled `T_m`. -/
 def lookupMethodByName (name : String) : CheckM (Option FnSummary) := do
   let env ← getEnv
-  match env.methodNames.lookup name with
-  | some idx => return listGetIdx env.functions idx
+  match env.methodNames.get? name with
+  | some idx => return env.functions[idx]?
   | none => return none
 /-- R-0492 step 3: the declaration a type spelling denotes in the module being checked
     (`typeIdOfSpelling` over its environment); a type parameter of the function denotes none. -/
