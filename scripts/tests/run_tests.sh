@@ -8446,6 +8446,10 @@ fi
 # fixture was written) for the cases where a site must still walk; then the `lower` stage of a nest
 # 8000 deep within 400 ms, retried once at 800 ms (118 ms with the fix on the dev host).
 run_ok "$TESTDIR/regress_286_nested_region_addr_taken.con" 42
+# Bug 287: a deferred call that borrows a local promoted it at the first exit lowered, so the other
+# exits (a second `return`, `break`s and a `continue`) read a never-stored slot. The binary returns
+# 42 (main's returned 208; `--interp` printed 42 when the fixture was written).
+run_ok "$TESTDIR/regress_287_defer_borrow_promoted_at_registration.con" 42
 r265_gen() {  # r265_gen SHAPE N: a generated `fn main` of the given shape and size on stdout
     awk -v shape="$1" -v n="$2" 'BEGIN {
         print "fn main() -> Int {"

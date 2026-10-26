@@ -1,0 +1,62 @@
+// Bug 287: a deferred call that borrows a local is emitted at every exit of its scope; the local
+// is promoted where the `defer` registers, so every exit reads the value the local holds there.
+// Before the fix the first exit lowered promoted it, and the other exits read a never-stored slot.
+fn copy(dst: &mut i64, src: &i64) {
+    *dst = *src;
+}
+
+// Two returns: the one inside the branch is lowered first.
+fn two_returns(c: bool, sink: &mut i64) -> i64 {
+    let mut x: i64 = 4;
+    defer copy(sink, &x);
+    if c {
+        x = 50;
+        return 1;
+    }
+    return 0;
+}
+
+// Two breaks out of a loop whose body registers the defer.
+fn two_breaks(c: bool, sink: &mut i64) -> i64 {
+    let mut n: i64 = 0;
+    while n < 10 {
+        let mut x: i64 = 5;
+        defer copy(sink, &x);
+        n = n + 1;
+        if c {
+            x = 60;
+            break;
+        }
+        break;
+    }
+    return n;
+}
+
+// A continue lowered before the loop's other exits.
+fn with_continue(sink: &mut i64) -> i64 {
+    let mut n: i64 = 0;
+    while n < 3 {
+        let mut x: i64 = 7;
+        defer copy(sink, &x);
+        n = n + 1;
+        if n < 2 {
+            x = 70;
+            continue;
+        }
+        x = x + n;
+    }
+    return n;
+}
+
+fn main() -> Int {
+    let mut a: i64 = 0;
+    let mut b: i64 = 0;
+    let mut c: i64 = 0;
+    let mut d: i64 = 0;
+    let mut e: i64 = 0;
+    // a = 4, b = 50, c = 5, d = 60, e = 7 + 3 = 10
+    let r: i64 = two_returns(false, &mut a) + two_returns(true, &mut b) + two_breaks(false, &mut c)
+        + two_breaks(true, &mut d) + with_continue(&mut e);
+    // r = 0 + 1 + 1 + 1 + 3 = 6
+    return (a + b + c + d + e + r - 135 + 42) as Int;
+}

@@ -2703,6 +2703,13 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
     | none => pure ()
 
   | .defer body =>
+    -- Bug 287: the deferred call is emitted at every exit of its scope, and the first emission
+    -- lowered (a `return` inside a branch, say) used to promote a local it borrows lazily there:
+    -- its initializing store sat on that exit's path only, and every other exit read the slot.
+    -- The registration point dominates every exit that emits the call, so the locals the body
+    -- takes the address of are promoted here (a write after it goes through the slot, and the
+    -- call reads the place when it runs: OWN-12).
+    prePromoteAddrTaken (← snapshotVars) (cexprAddrTaken {} body)
     addDeferredToCurrentScope body
 
   | .borrowIn var ref _region isMut refTy body =>
