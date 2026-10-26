@@ -337,6 +337,7 @@ git -C "$QUEUE_REPO" update-ref refs/remotes/origin/wip/queue/refs-probe "$main_
 git -C "$QUEUE_REPO" update-ref refs/remotes/origin/wip/queue/refs-gone "$main_sha"
 agent_main="$(git -C "$QUEUE_REPO" commit-tree -p "$main_sha" -m "an agent's stale view of main" "$main_sha^{tree}")"
 git -C "$QUEUE_REPO" update-ref refs/remotes/origin/main "$agent_main"
+git -C "$QUEUE_REPO" update-ref refs/heads/main "$agent_main"   # nor the clone's local main
 QUEUE_MAX_AGENTS=0 tick "$T0"
 [ "$(events source_error)" = 0 ] && ok "the tick's fetch succeeds" || no "source_error: $(cat "$QUEUE_HOME/events.log")"
 [ "$(git -C "$QUEUE_REPO" rev-parse -q --verify refs/remotes/origin/wip/queue/refs-probe)" = "$main_sha" ] \
@@ -348,7 +349,7 @@ QUEUE_MAX_AGENTS=0 tick "$T0"
   && [ "$(git -C "$QUEUE_REPO" rev-parse -q --verify refs/queue/remote/origin/main)" = "$main_sha" ] \
   && [ "$(git -C "$QUEUE_HOME/source" rev-parse HEAD)" = "$main_sha" ] \
   && ! git -C "$QUEUE_HOME/source" symbolic-ref -q HEAD > /dev/null \
-  && ok "the fetch lands in refs/queue/remote/; the source checkout is detached at its main, not at refs/remotes/origin/main" \
+  && ok "the fetch lands in refs/queue/remote/; the source checkout is detached at its main, not at refs/remotes/origin/main or local main" \
   || no "dispatcher namespace: $(git -C "$QUEUE_REPO" for-each-ref --format='%(refname) %(objectname)' refs/queue/)"
 git -C "$TMP/remote.git" update-ref -d refs/heads/wip/queue/refs-probe
 QUEUE_MAX_AGENTS=0 tick "$T0"
