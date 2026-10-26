@@ -9122,6 +9122,44 @@ for r238 in regress_238_free_fn_spelled_like_method_call regress_238_other_modul
         FAIL=$((FAIL + 1))
     fi
 done
+# Bug 281: the body-identity use list (`Proof.stmtFlatUses`) built each branch's uses by appending
+# its nested blocks' lists, copying the list from below at every level, so statements nested n deep
+# took n² to elaborate (depth 10000: 1362 ms). The scaling gate excludes the whole `nested-ifs`
+# shape until its other open costs are fixed, so a generated body of `if` blocks nested 20000 deep
+# must elaborate (the `elaborate` stage of --emit-trace-json) within 300 ms, retried once at
+# 600 ms (fixed: about 60 ms on the dev host; pre-fix, about nine times the retry budget).
+r281e_src="$TMPDIR/r281e_nested_ifs_20000.con"
+awk -v n=20000 'BEGIN {
+    print "fn main() -> Int {"
+    print "    let mut s: i64 = 0;"
+    print "    let t: i64 = 1;"
+    line = "    "
+    for (i = 0; i < n; i++) line = line "if t > 0 { s = s + 1; "
+    for (i = 0; i < n; i++) line = line "}"
+    print line
+    printf "    return (s - %d + 42) as Int;\n", n
+    print "}"
+}' > "$r281e_src"
+r265_stage_ms "$r281e_src" elaborate; r281e_first="$r265_ms"; r281e_ms="$r281e_first"
+case "$r281e_first" in
+    ''|*[!0-9]*) ;;
+    *) if [ "$r281e_first" -gt 300 ]; then r265_stage_ms "$r281e_src" elaborate; r281e_ms="$r265_ms"; fi ;;
+esac
+case "$r281e_ms" in
+    incomplete)
+        echo "  INCOMPLETE bug 281: elaborating a body nested 20000 deep timed out twice (180 s each)"
+        INCOMPLETE=$((INCOMPLETE + 1)) ;;
+    ''|*[!0-9]*)
+        echo "FAIL  bug 281: elaborating a body nested 20000 deep failed ($r281e_ms)"
+        FAIL=$((FAIL + 1)) ;;
+    *) if [ "$r281e_first" -le 300 ] || [ "$r281e_ms" -le 600 ]; then
+           echo "  ok  bug 281: elaborating a body nested 20000 deep within budget (${r281e_ms} ms, elaborate)"
+           PASS=$((PASS + 1))
+       else
+           echo "FAIL  bug 281: elaborating a body nested 20000 deep took ${r281e_first} ms, then ${r281e_ms} ms in elaborate (budget 300, retry 600)"
+           FAIL=$((FAIL + 1))
+       fi ;;
+esac
 # Bug 223 (R-0492 step 3): an import alias names the imported declaration. Types are compared, and
 # their methods and trait impls looked up, by declaration identity in Resolve, Check and Elab, so
 # `import m.{P as Q}` is `P`: its methods (inherent, trait, Destroy), the values `m` returns, its
