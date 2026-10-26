@@ -46,8 +46,9 @@ The `++ [` ratchet (`check_no_quadratic_append.sh`) for `Parser.lean` goes from 
 
 ## Measurements
 
-`parse` stage in ms (`--emit-trace-json`, fastest of 3 runs), dev host, before (b5040d53) and
-after this branch:
+`parse` stage in ms (`--emit-trace-json`, fastest of 3 runs), dev host (fede-256gb), before
+(the compiler built at b5040d53) and after (built from the tree of 5f993139, whose compiler
+sources are this fix; the build had no other modification):
 
 | n | `structs` before | after | `enums` before | after |
 |---|---|---|---|---|
@@ -56,14 +57,15 @@ after this branch:
 | 10000 | 656 | 24 | 696 | 27 |
 | 20000 | 2958 | 50 | 3075 | 57 |
 
-The `functions` shape is unchanged (10000: 40 ms before and after). The R-0550 gate run with this
-bug's exclusions removed passes `structs/parse` (1000: 3 ms, 10000: 24 ms, x8.0) and `enums/parse`
+The `functions` shape is unchanged (10000: 40 ms before and after). The R-0550 gate (`compile_scaling.py` and its budgets at
+fe9ce031, origin/wip/r0550-scaling-gate-v2), run on the same two builds with this bug's
+exclusions removed, passes `structs/parse` (1000: 3 ms, 10000: 24 ms, x8.0) and `enums/parse`
 (x8.7) and fails them on the pre-fix compiler (x107.5 and x114.7 in time, x67.8 and x66.6 in
 allocations, against bounds of x63.1 and x15.8).
 
 `--emit-core`, `--emit-ssa` and `--emit-llvm` (stdout, stderr and exit status) of every `.con`
-under `tests/programs` and `examples` and of twelve generated scaling shapes at size 60 are
-byte-identical before and after.
+under `tests/programs` and `examples` (the b5040d53 corpus) and of twelve generated scaling shapes
+at size 60 are byte-identical between the same two builds.
 
 ## Containment while open
 
