@@ -39,8 +39,8 @@ that margin; the ranking does not.
 | EmitSSA | 10 | 1 | EmitSSA 10 |
 | Mono, Std, EmitLLVM, Report, CLI, SSA, Tooling, Gates | 4 – 8 each | | |
 
-- Five files hold more than half of all bugs: `Check.lean` (33), `Lower.lean` (33), `Elab.lean`
-  (24), `Interp.lean` (18) and `Resolve.lean` (16). They are also the largest single-pass files.
+- Five files hold nearly half of all bugs (124 of 270): `Check.lean` (33), `Lower.lean` (33),
+  `Elab.lean` (24), `Interp.lean` (18) and `Resolve.lean` (16).
 - The checker is the largest area by far (27 % of bugs) and the most silent: 39 of its 72 bugs were
   silent wrong code or unsound acceptance. Most of those are fixes that make the checker refuse a
   program the back end miscompiled, so "Check" here largely means "the source rules had no
@@ -53,8 +53,8 @@ that margin; the ranking does not.
 
 The recurring area and class pairs (`report`, last table), largest first:
 
-- **Check × class 13** (documented rules with no enforcing site): 11 in `Check.lean`, 4 more each in
-  `CoreCheck` and `CheckHelpers`, 4 in `Resolve`. The largest single recurrence.
+- **Check × class 13** (documented rules with no enforcing site): 11 in `Check.lean`, 4 in `CoreCheck`,
+  3 in `CheckHelpers`, 4 in `Resolve`. The largest single recurrence.
 - **Lower × class 8** (storage, places and control flow decided ad hoc in Lower): 10, plus 12 older
   Lower bugs with no class that read as the same shape (aggregate phis, divergent merges, field
   writes through references).
