@@ -55,9 +55,17 @@ is deterministic as written.
 Regression coverage: `check_work_queue.sh`, leg "the dispatcher's fetch writes only its own refs":
 an agent's view of a remote branch that differs from the remote, and one the remote no longer has,
 survive a tick (the old fetch force-updated the first and pruned the second, so the leg fails on
-`1bcb7c36` every time); the fetch lands in and prunes `refs/queue/remote/`; the source checkout is
-detached at its main; `QUEUE_BASE=main` is refused. The budgets leg repeated 1000 times under load
-after the fix: 0 failures (see the branch's validation record).
+`1bcb7c36` every time); an agent's stale `refs/remotes/origin/main` is neither moved nor used: the
+source checkout is detached at the remote's main read from `refs/queue/remote/`; the fetch lands in
+and prunes `refs/queue/remote/`; `QUEUE_BASE=main` is refused.
+
+Measured on OVH (`nix develop .#gates`; the first two rows run the budgets leg alone, the dispatcher at `1bcb7c36` and at `8789b10d`):
+
+| run | before (`1bcb7c36`) | after |
+|---|---|---|
+| as written, repeated | 1 / 1400 failed | 0 / 1200 failed (4 × 300 in parallel, 16 CPU hogs) |
+| amplified: the stub pushes in a loop and the second tick waits for its first push | 9 / 200 failed, all `source_error` with "incorrect old value provided" | 0 / 200 failed |
+| mechanism: worktree push loop against the clone's fetch | 31 / 300 fetches failed | 0 / 300 (the new fetch command) |
 
 ## Structural cause
 
@@ -69,7 +77,9 @@ location derived from a shared default instead of from the process that writes a
 ## Structural owner
 
 The work-queue dispatcher (`scripts/queue/dispatch.py`, `REMOTE_NS`), under R-0543 (validation under
-load); `check_work_queue.sh` enforces that a tick writes no ref outside its namespace. Remaining
+load); `check_work_queue.sh` enforces that the dispatcher's branch fetch writes only its namespace
+(after a tick, no `refs/remotes/` entry has moved or been pruned, and the source checkout follows
+`refs/queue/remote/`, not the agents' `refs/remotes/origin/main`). Remaining
 exposure of the same shape, not observed: readiness runs `scripts/land/notes.sh fetch` in the queue
 clone, which writes `refs/notes/remote/concrete-*`, a namespace the landing scripts an agent runs
 also write. A failed notes fetch there is ignored rather than skipping the tick, and the read then
