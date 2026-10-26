@@ -285,56 +285,74 @@ same order the accumulator recorded in. Exhaustive at every level: a new constru
 state whether it contributes a use, or the derived view would silently lose one.
 -/
 
+-- Each walk appends to ONE accumulator threaded through it (bug 281): returning a list per node
+-- that the level above copied again (`exprFlatUses c ++ t.flatMap stmtFlatUses ++ ...`) made a
+-- body nested n deep cost n². The order is unchanged: each case pushes exactly what the list
+-- version concatenated, left to right.
 mutual
 
-partial def exprFlatUses : EvidenceExprV2 → List BodyIdentityUse
-  | .binderRef o i   => [.binderRef o i]
+partial def exprFlatUsesInto (acc : Array BodyIdentityUse) : EvidenceExprV2 → Array BodyIdentityUse
+  | .binderRef o i   => acc.push (.binderRef o i)
   | .intLit _ _ | .floatLit _ _ | .boolLit _ | .strLit _ | .charLit _
-  | .constRef _ | .fnRef _ | .gap _ => []
-  | .unary _ x | .deref x | .borrow _ x => exprFlatUses x
-  | .binary _ l r    => exprFlatUses l ++ exprFlatUses r
-  | .index c i       => exprFlatUses c ++ exprFlatUses i
-  | .call _ args     => args.flatMap exprFlatUses
+  | .constRef _ | .fnRef _ | .gap _ => acc
+  | .unary _ x | .deref x | .borrow _ x => exprFlatUsesInto acc x
+  | .binary _ l r    => exprFlatUsesInto (exprFlatUsesInto acc l) r
+  | .index c i       => exprFlatUsesInto (exprFlatUsesInto acc c) i
+  | .call _ args     => args.foldl exprFlatUsesInto acc
   -- OBJECT FIRST: `q.x` evaluates q before projecting x, and the accumulator records in
   -- that order. Emitting the field first would put the derived view out of step with the
   -- traversal it is meant to reproduce.
-  | .field id o      => exprFlatUses o ++ [.field id]
-  | .structLit t fs  => [.typeRef t] ++ fs.flatMap (fun fe => [.field fe.1] ++ exprFlatUses fe.2)
-  | .variantLit i fs => [.variant i] ++ fs.flatMap (fun fe => [.field fe.1] ++ exprFlatUses fe.2)
-  | .cast t x        => (typeRefNominals t).map .typeRef ++ exprFlatUses x
-  | .arrayLit t els  => (typeRefNominals t).map .typeRef ++ els.flatMap exprFlatUses
-  | .matchExpr sc arms => exprFlatUses sc ++ arms.flatMap armFlatUses
-  | .ifExpr c t e => exprFlatUses c ++ t.flatMap stmtFlatUses ++ e.flatMap stmtFlatUses
+  | .field id o      => (exprFlatUsesInto acc o).push (.field id)
+  | .structLit t fs  => fs.foldl (fun a fe => exprFlatUsesInto (a.push (.field fe.1)) fe.2)
+                          (acc.push (.typeRef t))
+  | .variantLit i fs => fs.foldl (fun a fe => exprFlatUsesInto (a.push (.field fe.1)) fe.2)
+                          (acc.push (.variant i))
+  | .cast t x        => exprFlatUsesInto ((typeRefNominals t).foldl (fun a n => a.push (.typeRef n)) acc) x
+  | .arrayLit t els  => els.foldl exprFlatUsesInto ((typeRefNominals t).foldl (fun a n => a.push (.typeRef n)) acc)
+  | .matchExpr sc arms => arms.foldl armFlatUsesInto (exprFlatUsesInto acc sc)
+  | .ifExpr c t e => e.foldl stmtFlatUsesInto (t.foldl stmtFlatUsesInto (exprFlatUsesInto acc c))
 
-partial def patternFlatUses : EvidencePatternV2 → List BodyIdentityUse
-  | .wildcard | .binder | .gap _ => []
-  | .intLit _ _ | .boolLit _ | .strLit _ | .charLit _ => []
-  | .variant i fs   => [.variant i] ++ fs.flatMap (fun fp => [.field fp.1] ++ patternFlatUses fp.2)
-  | .structPat t fs => [.typeRef t] ++ fs.flatMap (fun fp => [.field fp.1] ++ patternFlatUses fp.2)
-  | .range lo hi _  => exprFlatUses lo ++ exprFlatUses hi
+partial def patternFlatUsesInto (acc : Array BodyIdentityUse) : EvidencePatternV2 → Array BodyIdentityUse
+  | .wildcard | .binder | .gap _ => acc
+  | .intLit _ _ | .boolLit _ | .strLit _ | .charLit _ => acc
+  | .variant i fs   => fs.foldl (fun a fp => patternFlatUsesInto (a.push (.field fp.1)) fp.2)
+                         (acc.push (.variant i))
+  | .structPat t fs => fs.foldl (fun a fp => patternFlatUsesInto (a.push (.field fp.1)) fp.2)
+                         (acc.push (.typeRef t))
+  | .range lo hi _  => exprFlatUsesInto (exprFlatUsesInto acc lo) hi
 
-partial def stmtFlatUses : EvidenceStmtV2 → List BodyIdentityUse
-  | .gap _ | .continueStmt _ => []
-  | .letBind _ t e   => (t.map (fun ty => (typeRefNominals ty).map BodyIdentityUse.typeRef)).getD []
-                          ++ exprFlatUses e
-  | .assign p v      => exprFlatUses p ++ exprFlatUses v
-  | .ret v           => (v.map exprFlatUses).getD []
-  | .breakStmt _ v   => (v.map exprFlatUses).getD []
-  | .exprStmt e _    => exprFlatUses e
-  | .deferStmt a     => exprFlatUses a
-  | .assertStmt pr | .assumeStmt pr => exprFlatUses pr
-  | .branch c t e    => exprFlatUses c ++ t.flatMap stmtFlatUses ++ e.flatMap stmtFlatUses
-  | .match_ sc arms  => exprFlatUses sc ++ arms.flatMap armFlatUses
-  | .loop c inv var b => exprFlatUses c ++ inv.flatMap exprFlatUses
-                          ++ (var.map exprFlatUses).getD [] ++ b.flatMap stmtFlatUses
-  | .block sts       => sts.flatMap stmtFlatUses
+partial def stmtFlatUsesInto (acc : Array BodyIdentityUse) : EvidenceStmtV2 → Array BodyIdentityUse
+  | .gap _ | .continueStmt _ => acc
+  | .letBind _ t e   =>
+      let acc := match t with
+        | some ty => (typeRefNominals ty).foldl (fun a n => a.push (BodyIdentityUse.typeRef n)) acc
+        | none => acc
+      exprFlatUsesInto acc e
+  | .assign p v      => exprFlatUsesInto (exprFlatUsesInto acc p) v
+  | .ret v           => match v with | some x => exprFlatUsesInto acc x | none => acc
+  | .breakStmt _ v   => match v with | some x => exprFlatUsesInto acc x | none => acc
+  | .exprStmt e _    => exprFlatUsesInto acc e
+  | .deferStmt a     => exprFlatUsesInto acc a
+  | .assertStmt pr | .assumeStmt pr => exprFlatUsesInto acc pr
+  | .branch c t e    => e.foldl stmtFlatUsesInto (t.foldl stmtFlatUsesInto (exprFlatUsesInto acc c))
+  | .match_ sc arms  => arms.foldl armFlatUsesInto (exprFlatUsesInto acc sc)
+  | .loop c inv var b =>
+      let acc := inv.foldl exprFlatUsesInto (exprFlatUsesInto acc c)
+      let acc := match var with | some x => exprFlatUsesInto acc x | none => acc
+      b.foldl stmtFlatUsesInto acc
+  | .block sts       => sts.foldl stmtFlatUsesInto acc
 
-partial def armFlatUses : EvidenceArmV2 → List BodyIdentityUse
-  | .gap _ => []
+partial def armFlatUsesInto (acc : Array BodyIdentityUse) : EvidenceArmV2 → Array BodyIdentityUse
+  | .gap _ => acc
   | .arm pat guard body =>
-      patternFlatUses pat ++ (guard.map exprFlatUses).getD [] ++ body.flatMap stmtFlatUses
+      let acc := patternFlatUsesInto acc pat
+      let acc := match guard with | some g => exprFlatUsesInto acc g | none => acc
+      body.foldl stmtFlatUsesInto acc
 
 end
+
+/-- One statement's uses, in order (`flatUsesOf` maps it over a body's top-level statements). -/
+def stmtFlatUses (s : EvidenceStmtV2) : List BodyIdentityUse := (stmtFlatUsesInto #[] s).toList
 
 /-- The legacy flat identity-use view, DERIVED from the structural body. -/
 def flatUsesOf (b : EvidenceBodyDraftV2) : List BodyIdentityUse :=

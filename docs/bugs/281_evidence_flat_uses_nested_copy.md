@@ -2,12 +2,12 @@
 
 <!-- bug-ledger
 summary: the body-identity use list (`Proof.stmtFlatUses`) built each branch's uses by appending its nested blocks' lists, copying the list from below at every level, so statements nested n deep took time n² to elaborate (depth 5000: 325 ms). Found by the R-0550 scaling gate. Class 17.
-coverage: `check_compile_scaling.sh` measures the `nested-ifs` shape (excluded whole: also bugs 282 and 266) and reports it EXCLUDED under this bug on every run; the fix removes the exclusion, and the gate then holds the stage to its budget and to near-linear growth
+coverage: `run_tests.sh` times the `elaborate` stage of a body of `if` blocks nested 20000 deep against a budget (the pre-fix compiler fails it); the R-0550 gate excludes the whole `nested-ifs` shape until bug 282 and Lower's nesting cost are fixed too
 class: 17 — Elab's evidence use list copies each nested block's list at every level
 silent: no
 -->
 
-**Status:** OPEN
+**Status:** FIXED (branch `wip/perf-281`)
 **Found:** 2026-10-26, building the compile-time scaling gate (R-0550, exit 2o): the gate's generated shapes, timed per stage with `--emit-trace-json` at 10b81a46.
 **Severity:** loud (performance). Compile time only: never wrong code, a refusal or a crash; a program of this shape compiles, slowly.
 
@@ -27,9 +27,50 @@ A linear stage doubles with the size; these grow about fourfold or more per doub
 
 Accumulate into one buffer threaded through the walk (or build a difference list), so each use is emitted once.
 
+## Fix
+
+The list-returning walk (`exprFlatUses`, `patternFlatUses`, `stmtFlatUses`, `armFlatUses`,
+`Proof/IdentityUseBytes.lean`) is replaced by `exprFlatUsesInto` … `armFlatUsesInto`, which append
+to one `Array` threaded through the whole walk: each case pushes exactly what the list version
+concatenated, in the same left-to-right order. `stmtFlatUses` remains as the per-statement entry
+(`flatUsesOf`, unchanged, maps it over the body's top-level statements, so it yields the same
+list); the other three list functions had no consumer left and are deleted. A node's uses are no
+longer copied by every level above it. `check_wired_definitions.sh`'s ratchet goes from 23 to 24:
+the four accumulator members are consumed only by their own file's entry point, the same-file use
+its header calls legitimate.
+
+## Measurements
+
+`elaborate` stage in ms (`--emit-trace-json`, fastest of 3 runs), dev host (fede-256gb),
+`nested-ifs` shape, before (main 9d8182ea's compiler) and after (built from the tree of 2c0f8d03,
+this fix on main; the build had no other modification):
+
+| depth | before | after |
+|---|---|---|
+| 1250 | 20 | 2 |
+| 2500 | 81 | 4 |
+| 5000 | 326 | 10 |
+| 10000 | 1362 | 26 |
+
+`--emit-core`, `--emit-ssa` and `--emit-llvm` (stdout, stderr and exit status) of every `.con`
+under `tests/programs` and `examples` (91ce358b's corpus, the same compiler sources as main) and
+of twelve generated scaling shapes at size 60, and
+`--report caps|proof-status|fingerprints|obligations|traceability|proof-deps` of every `.con` under
+`examples` (the fingerprints and proof dependencies read the use list), are byte-identical between
+main's compiler and this fix.
+
+## Regression leg
+
+`run_tests.sh` times the `elaborate` stage of a generated body of `if` blocks nested 20000 deep
+against 300 ms (retried once at 600 ms): 66 ms with the fix, FAIL on main's compiler (6065 ms,
+then 6020 ms). The R-0550 gate (on main since 9d8182ea) excludes the whole `nested-ifs` shape
+under this bug, bug 282 and Lower's nesting cost; this fix drops its clause from that exclusion
+in `compile_scaling_budgets.tsv`, and the shape is judged once the others are fixed and its
+budgets are measured.
+
 ## Containment while open
 
-Loud only. The scaling gate names the stage as an exclusion under this bug, so its gap is printed on every run rather than silent; the gate's other stages of the shape stay judged. A user splits such a module or nest.
+Loud only. The scaling gate named the shape as an exclusion under this bug, so its gap was printed on every run rather than silent.
 
 ## Structural cause
 
