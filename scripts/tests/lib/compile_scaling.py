@@ -675,7 +675,7 @@ def controls(workdir):
     b = Budgets(path)
     sizes, stages = [10, 100], TRACE_STAGES
 
-    def verdicts(t100, slow100, hb100=500.0, ins100=900000.0, t10=10.0, counted=True):
+    def verdicts(t100, slow100, hb100=500.0, ins100=900000.0, t10=10.0, counted=True, base0=0.0):
         # The run at 100 took `slow100` times the recorded 100 ms per 10^9 instructions: its host
         # factor comes from host_factor, as in a real judgment.
         f = host_factor(b, "assignments", 100, "trace", {"trace": 100.0 * slow100 * ins100 / 1e9},
@@ -686,7 +686,7 @@ def controls(workdir):
         beats = {(n, st): (100.0 if n == 10 else hb100) for n in sizes for st in stages}
         instrs = {(10, "trace"): 100000.0, (100, "trace"): ins100} if counted else {}
         return {v for v, _ in judge(b, "assignments", sizes, stages, times, beats, {}, {}, ntimes,
-                                    factors, instrs, ["trace"], {"trace": 0.0})}
+                                    factors, instrs, ["trace"], {"trace": base0})}
     out = []
     out.append(("FAIL" in verdicts(150.0, 1.0), "CONTROL: a stage over its budget on an unloaded host fails"))
     out.append(("FAIL" not in verdicts(150.0, 2.0), "CONTROL: the same time on a host running at half speed passes"))
@@ -706,6 +706,8 @@ def controls(workdir):
                 "CONTROL: a counted run whose wall time grew x63 at x9 instructions passes (caches, not work)"))
     out.append(("FAIL" in verdicts(95.0, 1.0, t10=1.5, counted=False),
                 "CONTROL: the same wall growth fails a run nobody counted (the wall bound still holds there)"))
+    out.append(("FAIL" in verdicts(95.0, 1.0, t10=1.5, base0=None),
+                "CONTROL: a counted run whose baseline was not counted keeps the wall bound"))
     return out
 
 
