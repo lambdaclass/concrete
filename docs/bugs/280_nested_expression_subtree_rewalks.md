@@ -39,12 +39,14 @@ Compute both facts bottom-up once per node (returned with the node's result, or 
   operands are leaves of the region (neither a parenthesis, a negation nor an operator, as in
   `s + t`) builds no tree: their `isFlexibleLit` is O(1) (`binOpFlexTrees`, `operandFlex`). The
   first version built a tree at every operator; train 37's CI then failed
-  `assignments/monomorphize` (418 ms against 412) — not more work (the stage's callgrind
-  instruction counts at 10^5 assignments: 1,291,486,649 on main b3606ae1, 1,292,832,790 on the
-  train) but slower: interleaved runs on the quiet dev host put the stage at a median of 145 ms on
-  main and 164 ms on the train, and the step appeared at the merge of this branch. With the leaf
+  `assignments/monomorphize` (418 ms against 412). The stage's callgrind instruction counts at 10^5
+  assignments were nearly unchanged (1,291,486,649 on main b3606ae1, 1,292,832,790 on the train),
+  but interleaved runs on the quiet dev host put it at a median of 145 ms on main and 164 ms on the
+  train, and bisection over the train's merges placed the step at the merge of this branch. With the leaf
   case allocation-free it is 133 ms (main 139 in the same interleaved runs), and `check` and
-  `elaborate` on that program are back to main's medians.
+  `elaborate` on that program are back to main's medians: consistent with an allocation-related
+  effect on the later stage's timing; the mechanism was not established, and these figures are
+  from the dev host, not CI.
 - Check's operand-escape rule (bug 142): `checkExpr` takes `clean`, true when the expression is an
   operand (through parentheses only) of a protected expression whose operand search found no
   exit. An exit leaving it would leave that expression as well, since no loop lies between them,

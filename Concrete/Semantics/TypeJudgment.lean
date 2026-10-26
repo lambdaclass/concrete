@@ -146,9 +146,10 @@ def FlexTree.kid (t : FlexTree) (i : Nat) : Option FlexTree := t.kids[i]?
 
 /-- Whether `isFlexibleLit` recurses into `e` (a parenthesis, a negation, a binary operator). An
     operand that does not is a leaf of the region: its `isFlexibleLit` is answered without a walk,
-    so a binary operator over two leaves (`s + t`) builds no tree. Building one per operator
-    allocated on every such expression and, with the same work, left the later monomorphize stage
-    about 13% slower on 10^5 assignments (train 37 CI). -/
+    so a binary operator over two leaves (`s + t`) builds no tree. With a tree built at every
+    operator, the later monomorphize stage of 10^5 assignments ran about 13% slower on the dev host
+    and train 37's CI failed its budget; the slowdown went away once these allocations were
+    avoided. Its instruction counts were nearly unchanged; the mechanism was not established. -/
 def opensFlexRegion : Expr → Bool
   | .paren _ _ | .unaryOp _ .neg _ | .binOp _ _ _ _ => true
   | _ => false
