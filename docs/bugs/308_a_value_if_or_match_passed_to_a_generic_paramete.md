@@ -24,7 +24,8 @@ fn main() with(Console) { println(a(true)); }
 On main ea21a2e8 both `--interp` and the compiler refuse it: `error[check]: (E0220) type mismatch in
 argument 'x' of 'gid': expected <unknown>, got i64` (TYPE-4@1). Binding the value `if` to an `i64`
 first is accepted. A value `match` argument fails the same way. `regress_308_generic_arg_value_if.con`
-covers both, arms whose values are arm-local typed `let`s, and a wildcard arm; main refuses it.
+covers both, arms whose values are arm-local typed `let`s, arms that assign before their value,
+and a wildcard arm; main refuses it.
 
 ## Expected
 
@@ -43,7 +44,8 @@ With no binding for `T`, Check compared the argument against the unresolved para
 The peek answers a value `if` and `match` with the type of the first arm, in order, whose
 trailing value it can type (`peekFirstArmValue`, `peekArmValue`). The peek has no scope for the
 names an arm binds, and such a name could resolve to an outer constant of the same spelling (Codex
-review round 1), so an arm that binds names (a pattern binder other than `_`, or a `let`) is read
+review rounds 1 – 4), so an arm that binds names (a pattern binder other than `_`, a `let`, or a
+destructuring `let`) is read
 only when its trailing value names one of its own `let`s written with a type, which gives that
 type; an arm that binds nothing is peeked as any expression; an arm that diverges or ends in `;`
 has no value. The peek is the one both passes use, so Check and Elab infer the same `T`.

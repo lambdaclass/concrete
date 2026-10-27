@@ -35,12 +35,26 @@ fn both_local(c: bool) -> i64 {
     });
 }
 
+// Arms that assign before their value bind nothing.
+fn assigning(c: bool) -> i64 {
+    let mut x: i64 = 0;
+    let r: i64 = gid(if c {
+        x = 1;
+        2
+    } else {
+        x = 2;
+        3
+    });
+    return r + x;
+}
+
 // A wildcard arm binds nothing.
 fn wildcard(k: i64) -> i64 {
     return gid(match k { _ => 6 });
 }
 
 fn main() -> Int {
-    // 2 + 20 + 7 + 2 + 6 + 5 = 42
-    return (if_arg(false) + match_arg(1) + local_arm(false) + both_local(false) + wildcard(3) + 5) as Int;
+    // 2 + 20 + 7 + 2 + 6 + 5 (3 + 2) = 42
+    return (if_arg(false) + match_arg(1) + local_arm(false) + both_local(false) + wildcard(3)
+        + assigning(false)) as Int;
 }

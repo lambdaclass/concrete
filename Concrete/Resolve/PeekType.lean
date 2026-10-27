@@ -91,18 +91,22 @@ mutual
     outer constant of the same spelling (Codex review), so:
     * an arm that binds nothing and is its trailing value alone is peeked as any expression;
     * a trailing value that names one of the arm's own `let`s written with a type has that type;
-    * anything else in an arm with a pattern binder, or with any statement other than an
-      expression statement before its value, has no type here. -/
+    * anything else in an arm with a pattern binder or a binding statement (`let`, a destructuring
+      `let`) has no type here. -/
 partial def peekArmValue (ctx : PeekCtx m) (binds : Bool) (body : List Stmt) : m Ty := do
   match body.getLast? with
   | some (.expr _ e true) =>
     let lets := body.filterMap fun
       | .letDecl _ n _ ty _ _ => some (n, ty)
       | _ => none
-    -- Any statement before the value other than an expression statement may bind a name (a `let`,
-    -- a destructuring `let`, a borrow block's reference), so the arm counts as binding (Codex
-    -- review round 3).
-    let bindsHere := binds || (body.dropLast.any fun | .expr .. => false | _ => true)
+    -- A `let`, an enum or a struct destructuring `let` binds a name in the arm's scope (Codex
+    -- review round 3); the other statements bind none there (a loop's or borrow block's names are
+    -- its own). Every constructor is listed, so a new statement form must be classified.
+    let bindsHere := binds || (body.dropLast.any fun
+      | .letDecl .. | .letDestructure .. | .letStructDestructure .. => true
+      | .assign .. | .return_ .. | .expr .. | .ifElse .. | .while_ .. | .forLoop .. | .fieldAssign ..
+      | .derefAssign .. | .arrayIndexAssign .. | .break_ .. | .continue_ .. | .defer .. | .assert_ ..
+      | .assume_ .. | .borrowIn .. => false)
     match e with
     | .ident _ n =>
       match lets.reverse.find? (·.1 == n) with
