@@ -14,7 +14,7 @@ fn match_arg(k: i64) -> i64 {
     return gid(match k { 0 => 10, _ => 20 });
 }
 
-// The first arm's value is an arm-local binding.
+// The first arm's value is an arm-local binding written with its type.
 fn local_arm(c: bool) -> i64 {
     return gid(if c {
         let t: i64 = 5;
@@ -24,7 +24,23 @@ fn local_arm(c: bool) -> i64 {
     });
 }
 
+// Both arms' values are arm-local bindings written with their type.
+fn both_local(c: bool) -> i64 {
+    return gid(if c {
+        let x: i64 = 1;
+        x
+    } else {
+        let y: i64 = 2;
+        y
+    });
+}
+
+// A wildcard arm binds nothing.
+fn wildcard(k: i64) -> i64 {
+    return gid(match k { _ => 6 });
+}
+
 fn main() -> Int {
-    // 2 + 20 + 7 + 13 = 42
-    return (if_arg(false) + match_arg(1) + local_arm(false) + 13) as Int;
+    // 2 + 20 + 7 + 2 + 6 + 5 = 42
+    return (if_arg(false) + match_arg(1) + local_arm(false) + both_local(false) + wildcard(3) + 5) as Int;
 }
