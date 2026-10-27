@@ -892,6 +892,9 @@ def campaign(args):
     if "borrow" in order and not hasattr(gens.diff, "BorrowGen"):
         print("farm: snapshot has no BorrowGen; the borrow generator is skipped", file=sys.stderr)
         order = [g for g in order if g != "borrow"]
+        if not order:
+            print("farm: no generator this snapshot supports; nothing to run", file=sys.stderr)
+            return 0
     ctx = {"compiler": args.compiler, "sha": args.sha, "snapshot": args.snapshot,
            "min_seconds": args.min_seconds, "lean_reduce": not args.no_lean_reduce,
            "notify": not args.no_notify}
