@@ -55,6 +55,11 @@ DATA_EXT = (".txt", ".toml", ".tsv", ".json", ".list", ".csv")
 # helpers as "$ROOT/scripts/tests/$name", which would make every gate depend on every script. A
 # script-to-script edge is taken from the script's NAME instead; a real `scripts/tests/check_*.sh`
 # glob (a gate over all gates) is still kept.
+# Data files whose rows are path PREFIXES used to classify paths, never paths a gate reads: indirecting
+# through them would make every gate that reaches their reader depend on the whole tree (a mention
+# read as a use, class 19). docs/bugs/area_map.tsv maps the paths fix commits touched to compiler
+# areas for scripts/gen/bug_areas.py; what it classifies is git history, not files on disk.
+PATH_CLASSIFIERS = {"docs/bugs/area_map.tsv"}
 SCRIPT_TREES = {"scripts", "scripts/tests", "scripts/tests/lib", "scripts/ci", "scripts/tools",
                 "scripts/gen", "scripts/reduce"}
 COMPILER_RE = re.compile(
@@ -362,7 +367,7 @@ class Repo:
         # ONE LEVEL OF DATA INDIRECTION. A gate that reads a manifest (example_manifest.txt,
         # test_manifest.toml, a .tsv ledger) depends on every path the manifest names, though the
         # gate's own text names none of them.
-        for f in [f for f in files if f.endswith(DATA_EXT)]:
+        for f in [f for f in files if f.endswith(DATA_EXT) and f not in PATH_CLASSIFIERS]:
             df, dd = self.data(f)
             files |= df
             dirs |= dd
