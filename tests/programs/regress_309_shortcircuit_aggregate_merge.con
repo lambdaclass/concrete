@@ -1,0 +1,56 @@
+// Bug 309: a loop in the right operand of `&&` / `||` (inside a value `match` or `if` there) promotes
+// and un-promotes every aggregate in scope, rebinding it to a load made on the right operand's path.
+// The short-circuit merge reconciled scalars only, so the aggregate kept that binding after the merge,
+// which does not dominate later uses (E0703). The merge now goes through the branch merge every
+// other branch site uses.
+struct Copy P {
+    x: i64,
+    y: i64,
+}
+
+fn idv(v: i64) -> i64 {
+    return v;
+}
+
+fn or_match(c: bool, pp: P) -> i64 {
+    let b: bool = c || idv(match pp.x {
+        0 => {
+            let mut k: i64 = 0;
+            while k < 2 {
+                k = k + 1;
+            }
+            1
+        },
+        _ => 2,
+    }) > 1;
+    if b {
+        return pp.y;
+    }
+    return pp.x + 10;
+}
+
+fn and_if(c: bool, pp: P) -> i64 {
+    let s: P = P { x: pp.x + 1, y: pp.y };
+    let b: bool = c && idv(if s.x == 1 {
+        let mut k: i64 = 0;
+        while k < 2 {
+            k = k + 1;
+        }
+        1
+    } else {
+        2
+    }) > 1;
+    if b {
+        return s.y;
+    }
+    return s.x + pp.y;
+}
+
+fn main() -> Int {
+    // or_match: (false, x 0) -> 10; (false, x 5) -> 4; (true, x 0) -> 4
+    // and_if: (true, x 0) -> 1 + 4 = 5; (true, x 5) -> 4; (false, x 0) -> 5
+    let a: P = P { x: 0, y: 4 };
+    let d: P = P { x: 5, y: 4 };
+    return (or_match(false, a) + or_match(false, d) + or_match(true, a) + and_if(true, a)
+        + and_if(true, d) + and_if(false, a) + 10) as Int;
+}

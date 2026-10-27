@@ -8482,6 +8482,9 @@ run_ok "$TESTDIR/regress_304_comparison_operand_hint.con" 42
 # Bug 308: a value `if` or `match` passed to a bare generic parameter left the type variable
 # uninferred, and Check refused the call (E0220). Binary = --interp = 42.
 run_ok "$TESTDIR/regress_308_generic_arg_value_if.con" 42
+# Bug 309: a loop in the right operand of `&&` / `||` rebound an aggregate the short-circuit merge
+# did not reconcile, and the program was refused (E0703). Binary = --interp = 42.
+run_ok "$TESTDIR/regress_309_shortcircuit_aggregate_merge.con" 42
 # Bug 291: every stage found a struct, enum or newtype by name with a search of the declaration
 # lists per use, so n types each used once took n². The fixture's lookups (layout offsets, a Copy
 # struct, an enum payload, a newtype) return 42; then a program of 8000 Copy structs, each built

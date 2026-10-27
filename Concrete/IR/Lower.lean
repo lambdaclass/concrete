@@ -978,6 +978,18 @@ private def matchMergeRules : BranchMergeRules where
   loadPfx := "match.load."
   phiPfx := "match.phi."
 
+/-- Short-circuit (`&&` / `||`) merge rules (bug 309): the right operand is one arm and the block
+    that decided the result without it is the other, carrying the pre-branch values. `pfx` is
+    `scand` or `scor`; the phi prefix is the one this site always used. -/
+private def shortCircuitMergeRules (pfx : String) : BranchMergeRules where
+  unitArmUsesPreVal := false
+  arrayRebindsAllocaAddr := true
+  skipUnitPhi := true
+  singleIncomingRebinds := true
+  mergePfx := s!"{pfx}.merge."
+  loadPfx := s!"{pfx}.load."
+  phiPfx := s!"{pfx}phi."
+
 /-- Reconcile live pre-branch variables across the arms of a branch
     (statement-if, if-expr, or match) at the merge block. For each pre-branch
     variable, scan the LIVE arm-end snapshots — `(endVars, endLabel)` per
@@ -1188,34 +1200,15 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       let rhsEndVars ← snapshotVars
       let rhsEndLabel ← getCurrentLabel
       terminateBlock (.br mergeLabel)
-      -- Merge: phi any scalar var the RHS remapped (a match/if-expression in
-      -- the RHS can contain arm statements), mirroring ifExpr's merge.
+      -- Merge: the right operand is a branch like any other, so its writes merge through
+      -- `reconcileBranchVars` with the path that skipped it (the pre-branch values). Bug 309: this
+      -- site merged only scalars, assuming an aggregate could not change in a boolean operand; a
+      -- loop in it (inside a value `if` or `match`) promotes and un-promotes every aggregate in
+      -- scope, rebinding it to a load made on the right operand's path, which then did not
+      -- dominate the uses after the merge (E0703).
       startBlock mergeLabel
-      -- Bug 263: only the bindings the RHS wrote, or whose value is not a register, can count
-      -- as changed below (`VarMap.mergeCandidates`).
-      for (name, preVal) in preVars.mergeCandidates [rhsEndVars] do
-        -- Promoted vars are memory-backed (their alloca slot carries the value;
-        -- reads reload) — never phi them. Aggregates are NEVER phi'd either:
-        -- emitting `phi %String` is invalid IR (E0714). A var only "changes"
-        -- across a boolean `&&`/`||` RHS via reassignment, which promotes it —
-        -- so a still-unpromoted aggregate cannot have changed, and skipping it
-        -- is correct. (Bug found by the #35 conlog workload: `a && b` with a
-        -- promoted `String` in scope produced an aggregate phi.)
-        if (← isPromoted name).isSome then continue
-        if (← isAggregateForPromotion preVal.ty) then continue
-        let rhsV := rhsEndVars.find? name
-        let changed := match rhsV with
-          | some v => match v, preVal with
-            | .reg n1 _, .reg n2 _ => n1 != n2
-            | _, _ => true
-          | none => false
-        if changed then
-          match rhsV with
-          | some v =>
-            let phiReg ← freshReg s!"{pfx}phi."
-            emit (.phi phiReg [(v, rhsEndLabel), (preVal, entryEndLabel)] preVal.ty)
-            setVar name (.reg phiReg preVal.ty)
-          | none => pure ()
+      reconcileBranchVars (shortCircuitMergeRules pfx) preVars
+        [(rhsEndVars, rhsEndLabel), (preVars, entryEndLabel)]
       let loadDst ← freshReg s!"{pfx}load."
       emit (.load loadDst (.reg resultSlot .bool) .bool)
       return .reg loadDst .bool
