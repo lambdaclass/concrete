@@ -85,6 +85,18 @@ variable {m : Type → Type} [Monad m]
 /-- A `partial` peek needs its result type inhabited; `.placeholder` is the honest default. -/
 private local instance : Inhabited (m Ty) := ⟨pure .placeholder⟩
 
+mutual
+/-- Bug 308: the type of the first arm, in order, whose trailing value (`expr` with `isValue`)
+    the peek can type; `.placeholder` if none. -/
+partial def peekFirstArmValue (ctx : PeekCtx m) : List (List Stmt) → m Ty
+  | [] => return .placeholder
+  | body :: rest => do
+    match body.getLast? with
+    | some (.expr _ e true) =>
+      let t ← peekExprTypeIn ctx e
+      if t == .placeholder then peekFirstArmValue ctx rest else return t
+    | _ => peekFirstArmValue ctx rest
+
 /-- Peek at an expression's type without any side effects, for type inference. -/
 partial def peekExprTypeIn (ctx : PeekCtx m) (e : Expr) : m Ty := do
   match e with
@@ -134,6 +146,13 @@ partial def peekExprTypeIn (ctx : PeekCtx m) (e : Expr) : m Ty := do
     | some sig => return .fn_ (sig.params.map Prod.snd) sig.capSet sig.retTy
     | none => return .placeholder
   | .paren _ inner => peekExprTypeIn ctx inner
+  -- Bug 308: a value `if` or `match` has its arms' type, read off an arm's trailing value (the
+  -- first arm whose value the peek can type; an arm that diverges or ends in `;` has none).
+  -- Answering `.placeholder` left a bare type parameter bound to nothing, so `gid(if c { 1 }
+  -- else { 2 })` was refused (E0220).
+  | .ifExpr _ _ then_ else_ => peekFirstArmValue ctx [then_, else_]
+  | .match_ _ _ arms => peekFirstArmValue ctx (arms.map fun
+      | .mk _ _ _ _ _ body | .litArm _ _ _ body | .varArm _ _ _ body | .rangeArm _ _ _ _ _ body => body)
   | .binOp _ op lhs _ =>
     -- Comparisons and logical connectives are Bool whatever the operand type.
     match op with
@@ -240,6 +259,7 @@ partial def peekExprTypeIn (ctx : PeekCtx m) (e : Expr) : m Ty := do
         return substCapNamesTy capBinds (ctx.subst tyMap sig.retTy)
       | none => return .placeholder
   | _ => return .placeholder
+end
 
 end
 

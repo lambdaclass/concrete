@@ -1,0 +1,25 @@
+// Bug 308: generic inference peeks each argument's type before checking it, and the peek had no
+// case for a value `if` or `match`: a bare type parameter given only such an argument was left
+// unbound, and Check refused the call (E0220, "expected <unknown>"). The peek now reads an arm's
+// trailing value.
+fn gid<T>(x: T) -> T {
+    return x;
+}
+
+fn if_arg(c: bool) -> i64 {
+    return gid(if c { 1 } else { 2 });
+}
+
+fn match_arg(k: i64) -> i64 {
+    return gid(match k { 0 => 10, _ => 20 });
+}
+
+// The first arm diverges, so the type comes from the second.
+fn diverging_arm(c: bool) -> i64 {
+    return gid(if c { return 5; } else { 7 });
+}
+
+fn main() -> Int {
+    // 2 + 20 + 7 + 13 = 42
+    return (if_arg(false) + match_arg(1) + diverging_arm(false) + 13) as Int;
+}
