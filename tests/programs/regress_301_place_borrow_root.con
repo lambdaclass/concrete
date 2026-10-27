@@ -1,0 +1,111 @@
+// Bug 301: a borrow of a field or element (`&s.x`, `&q.p.y`, `&w.a[1]`, a method call on a field)
+// promotes the place's root local, as `&s` does. Lower's address-taken walk now sees that root, so
+// the statement `if`, the value `if`, `match` and the `&&` right operand promote it before they
+// branch. Before the fix the root was promoted inside the branch that borrows it, and the other
+// path read a never-stored slot. Every root here is an immutable local or a parameter (a `let mut`
+// aggregate is promoted at its declaration).
+struct Copy P {
+    x: i64,
+    y: i64,
+}
+
+struct Copy Q {
+    p: P,
+    z: i64,
+}
+
+struct Copy W {
+    a: [i64; 3],
+}
+
+impl P {
+    fn sum(&self) -> i64 {
+        return self.x + self.y;
+    }
+}
+
+fn get(p: &i64) -> i64 {
+    return *p;
+}
+
+fn stmt_if_param(k: i64, s: P) -> i64 {
+    let mut r: i64 = 0;
+    if k > 5 {
+        r = get(&s.y);
+    }
+    return s.x + r;
+}
+
+fn stmt_if_local(c: bool, k: i64) -> i64 {
+    let s: P = P { x: k, y: 2 };
+    let mut r: i64 = 0;
+    if c {
+        r = get(&s.x);
+    }
+    return s.x + s.y + r;
+}
+
+fn nested_field(c: bool, q: Q) -> i64 {
+    let mut r: i64 = 0;
+    if c {
+        r = get(&q.p.y);
+    }
+    return q.p.x + q.z + r;
+}
+
+fn element_of_field(c: bool, w: W) -> i64 {
+    let mut r: i64 = 0;
+    if c {
+        r = get(&w.a[1]);
+    }
+    return w.a[0] + r;
+}
+
+fn method_on_field(c: bool, q: Q) -> i64 {
+    let mut r: i64 = 0;
+    if c {
+        r = q.p.sum();
+    }
+    return q.z + r;
+}
+
+fn value_if(c: bool, s: P) -> i64 {
+    let r: i64 = if c {
+        get(&s.x)
+    } else {
+        0
+    };
+    return s.y + r;
+}
+
+fn match_arm(k: i64, s: P) -> i64 {
+    let mut r: i64 = 0;
+    match k {
+        0 => {
+            r = get(&s.x);
+        },
+        _ => {
+            r = 1;
+        },
+    }
+    return s.y + r;
+}
+
+fn and_rhs(c: bool, s: P) -> i64 {
+    let b: bool = c && get(&s.x) == 9;
+    if b {
+        return 100;
+    }
+    return s.y;
+}
+
+fn main() -> Int {
+    // 9 + 6 + 10 + 7 + 3 + 4 + 5 + 4 = 48: every call takes the path that skips the borrow
+    let p: P = P { x: 9, y: 4 };
+    let q: Q = Q { p: P { x: 7, y: 8 }, z: 3 };
+    let w: W = W { a: [7, 5, 6] };
+    let t: i64 = stmt_if_param(1, p) + stmt_if_local(false, 4) + nested_field(false, q)
+        + element_of_field(false, w) + method_on_field(false, q) + value_if(false, p)
+        + match_arm(1, p) + and_rhs(false, p);
+    return (t - 6) as Int;
+}

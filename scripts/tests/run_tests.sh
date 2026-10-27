@@ -8454,6 +8454,20 @@ run_ok "$TESTDIR/regress_286_nested_region_addr_taken.con" 42
 # exits (a second `return`, `break`s and a `continue`) read a never-stored slot. The binary returns
 # 42 (main's returned 208; `--interp` printed 42 when the fixture was written).
 run_ok "$TESTDIR/regress_287_defer_borrow_promoted_at_registration.con" 42
+# Bug 301: a borrow of a field or element (`&s.x`, `&q.p.y`, `&w.a[1]`, a method call on a field)
+# promotes its root local, and the address-taken walk did not see that root: the root was promoted
+# inside the branch that borrows it and the other path read a never-stored slot (main's binary
+# returned 249). Binary = --interp = 42; and no root is promoted lazily (`%addr.N`), since every
+# borrow in the fixture is inside a branch.
+run_ok "$TESTDIR/regress_301_place_borrow_root.con" 42
+r301_ssa=$($COMPILER "$TESTDIR/regress_301_place_borrow_root.con" --emit-ssa 2>&1 || true)
+if [[ "$r301_ssa" == *"define i64 @and_rhs("* && "$r301_ssa" != *"%addr."* ]]; then
+    echo "  ok  regress_301_place_borrow_root.con: every borrowed root is promoted before its branch"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  regress_301_place_borrow_root.con: a root is promoted lazily inside a branch (%addr. slot) or the SSA is missing"
+    FAIL=$((FAIL + 1))
+fi
 # Bug 291: every stage found a struct, enum or newtype by name with a search of the declaration
 # lists per use, so n types each used once took n². The fixture's lookups (layout offsets, a Copy
 # struct, an enum payload, a newtype) return 42; then a program of 8000 Copy structs, each built

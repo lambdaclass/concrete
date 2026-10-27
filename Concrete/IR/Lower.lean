@@ -766,6 +766,25 @@ where
         addPromotedAlloca name slot varTy
         return some (.reg slot refTy)
 
+/-- Does a place whose base has type `ty` address the storage the base POINTS AT (a reference,
+    raw pointer or heap cell: the base's value is the address) rather than the base's own storage?
+    `placeAddr` decides its recursion with this, and `placeRootLocal?` follows the same decision
+    (bug 301). -/
+def placeBaseIsPointer : Ty → Bool
+  | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ | .heap _ => true
+  | _ => false
+
+/-- Bug 301: the local whose own storage a borrow of `place` takes the address of, following the
+    recursion of `placeAddr`: through a field access or an element index whose base is held by
+    value, down to the root identifier (`&s.x`, `&q.p.y`, `&s.items[i]` promote `s` / `q`). A base
+    that is a reference or pointer (`placeBaseIsPointer`) is not the root's storage, and any other
+    operand (a dereference, a call, a literal) is no local's storage. -/
+partial def placeRootLocal? : CExpr → Option LocalKey
+  | .ident n _ => some n.key
+  | .fieldAccess obj _ _ => if placeBaseIsPointer obj.ty then none else placeRootLocal? obj
+  | .arrayIndex arr _ _ => if placeBaseIsPointer arr.ty then none else placeRootLocal? arr
+  | _ => none
+
 -- Which locals do `&name` / `&mut name` (or a `borrow name as ...` block) name anywhere
 -- in these expressions/statements? A scalar loop variable whose address is taken
 -- in the loop body must be promoted to a stable alloca BEFORE the loop (like
@@ -780,8 +799,10 @@ where
 -- site sees.
 mutual
 partial def cexprAddrTaken (acc : LocalKeySet) : CExpr → LocalKeySet
-  | .borrow inner _ => cexprAddrTaken (match inner with | .ident n _ => acc.insert n.key () | _ => acc) inner
-  | .borrowMut inner _ => cexprAddrTaken (match inner with | .ident n _ => acc.insert n.key () | _ => acc) inner
+  -- Bug 301: the root local of a field or element borrow (`&s.x`) is promoted by `placeAddr` as
+  -- `&s` is, so it is taken here too, not only a bare `&x`.
+  | .borrow inner _ => cexprAddrTaken (match placeRootLocal? inner with | some k => acc.insert k () | none => acc) inner
+  | .borrowMut inner _ => cexprAddrTaken (match placeRootLocal? inner with | some k => acc.insert k () | none => acc) inner
   | .binOp _ l r _ => cexprAddrTaken (cexprAddrTaken acc l) r
   | .unaryOp _ o _ => cexprAddrTaken acc o
   | .call _ _ args _ => args.foldl cexprAddrTaken acc
@@ -2096,11 +2117,11 @@ partial def placeAddr (place : CExpr) (refTy : Ty) : LowerM (Option SVal) := do
     -- else `lowerExpr arr` (an array ident / `&[T;N]` already lowers to a pointer).
     -- A pointer-valued base (`&[T;N]`, `*mut [T;N]`, a heap array) IS the
     -- address: its value, never the address of the slot holding it (bug 102).
-    let baseAddr ← match arr.ty with
-      | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ | .heap _ => lowerExpr arr
-      | _ => match ← placeAddr arr (.ptrMut arr.ty) with
-             | some p => pure p
-             | none => lowerExpr arr
+    -- Bug 301: `placeRootLocal?` (the address-taken walk) follows this same decision.
+    let baseAddr ← if placeBaseIsPointer arr.ty then lowerExpr arr else
+      match ← placeAddr arr (.ptrMut arr.ty) with
+      | some p => pure p
+      | none => lowerExpr arr
     let iVal ← lowerExpr index
     match arrayLenOfTy arr.ty with        -- H8: bounds-check `&a[i]` / `&mut a[i]`
     | some n => emitBoundsCheck iVal n
@@ -2111,11 +2132,10 @@ partial def placeAddr (place : CExpr) (refTy : Ty) : LowerM (Option SVal) := do
   | .fieldAccess obj field _ =>
     let tyName ← structNameFromTy obj.ty
     let byteOff ← fieldByteOffset tyName field (typeArgsFromTy obj.ty)
-    let baseAddr ← match obj.ty with
-      | .ref _ | .refMut _ | .ptrMut _ | .ptrConst _ | .heap _ => lowerExpr obj
-      | _ => match ← placeAddr obj (.ptrMut obj.ty) with
-             | some p => pure p
-             | none => lowerExpr obj
+    let baseAddr ← if placeBaseIsPointer obj.ty then lowerExpr obj else
+      match ← placeAddr obj (.ptrMut obj.ty) with
+      | some p => pure p
+      | none => lowerExpr obj
     let gepDst ← freshReg
     emit (.gep gepDst baseAddr [.intConst (Int.ofNat byteOff) .int] .i8)
     return some (.reg gepDst refTy)
