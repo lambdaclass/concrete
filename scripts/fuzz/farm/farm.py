@@ -131,7 +131,9 @@ class Generators:
         if generator == "borrow":
             # BorrowGen (`fuzz_differential.py --mode borrow`): borrows of locals in every position
             # where Lower decides a local's storage; judged by the same interp-vs-binary oracle.
-            src = self.diff.BorrowGen(random.Random(seed), depth).program()
+            g = self.diff.BorrowGen(random.Random(seed), depth)
+            g.fors = False  # until bug 306 (OD2) is decided; as the CI leg's --no-for
+            src = g.program()
             return [{"oracle": "diff", "src": src, "params": {}}]
         if generator == "lin":
             rng = random.Random(seed)
