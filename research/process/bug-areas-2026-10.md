@@ -60,8 +60,8 @@ The recurring area and class pairs (`report`, last table), largest first:
   writes through references).
 - **Interp × class 7** (semantics implemented several times): 10 — the interpreter disagreeing with
   the binary.
-- **Elab × class 1** (declaration identity by spelled name): 9; class 1 spreads over ten stages
-  (36 bugs), the widest class.
+- **Elab × class 1** (declaration identity by spelled name): 9; class 1 spreads over eleven
+  stages (36 bugs), tied with class 17 as the widest.
 - **Resolve × class 12** (one fact kept in two places): 8, plus 3 in FileSummary.
 - **Check × class 15** (ownership state along control-flow paths): 7, all in Check.
 - **Class 17** (superlinear pass state, 43 bugs) is in every stage from Parse to EmitSSA: Check 10,
@@ -77,8 +77,9 @@ The recurring area and class pairs (`report`, last table), largest first:
 - How found (from `discovery.tsv`, bugs 079 on): reviews found 37 bugs, 16 of them in Check;
   development work 62; hunts 24, spread over Proof, Check, Elab and Resolve; spec and semantics
   passes found almost only Check bugs (16 of 20).
-- Time to fix: most records were filed with their fix (the same commit), so the mean is near zero for
-  every stage. Among bugs filed open, the slowest are EmitSSA (mean 36 days, bug 027's quadratic
+- Time to fix: most records were filed with their fix (the same commit), so the mean over all fixed
+  bugs is under four days in most stages; Mono (13.4) and EmitSSA (10.9) are the exceptions. Among
+  bugs filed open, the slowest are EmitSSA (mean 36 days, bug 027's quadratic
   rendering), Mono (18) and Elab (12); Resolve, Lower and Interp bugs filed open were fixed within
   a day on average.
 
