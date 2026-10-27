@@ -566,12 +566,13 @@ jobs:
       - name: Install clang
         run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo "self-hosted runner, using preinstalled clang"; else sudo apt-get update && sudo apt-get install -y clang; fi
 
-      - name: Fuzz campaign (date-derived seed, depth 3 + depth 4)
+      - name: Fuzz campaign (date-derived seed, depth 3 + depth 4, borrow mode)
         run: |
           SEED=$(date -u +%Y%m%d)
           echo "seed: $SEED"
           python3 scripts/tests/fuzz_differential.py --n 2000 --seed "$SEED" --depth 3
           python3 scripts/tests/fuzz_differential.py --n 500 --seed "$SEED" --depth 4
+          python3 scripts/tests/fuzz_differential.py --mode borrow --n 200 --seed "$SEED" --depth 3
 
       - name: Linearity fuzz campaign (ground-truth conservation oracle, rotating seed)
         run: |

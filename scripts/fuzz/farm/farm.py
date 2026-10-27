@@ -128,6 +128,11 @@ class Generators:
         if generator == "diff":
             src = self.diff.Gen(random.Random(seed), depth).program()
             return [{"oracle": "diff", "src": src, "params": {}}]
+        if generator == "borrow":
+            # BorrowGen (`fuzz_differential.py --mode borrow`): borrows of locals in every position
+            # where Lower decides a local's storage; judged by the same interp-vs-binary oracle.
+            src = self.diff.BorrowGen(random.Random(seed), depth).program()
+            return [{"oracle": "diff", "src": src, "params": {}}]
         if generator == "lin":
             rng = random.Random(seed)
             steps = rng.randrange(1, 7)
@@ -1286,7 +1291,7 @@ def main():
     c.add_argument("--batches", type=positive_int, default=None,
                    help="stop after this many complete batches; deadline expiry before completion exits 2")
     c.add_argument("--worker-id", type=int, default=0)
-    c.add_argument("--generators", default="diff,lin,mut")
+    c.add_argument("--generators", default="diff,lin,mut,borrow")
     c.add_argument("--batch", type=positive_int, default=40)
     c.add_argument("--seed", type=int, default=None)
     c.add_argument("--min-seconds", type=float, default=900)

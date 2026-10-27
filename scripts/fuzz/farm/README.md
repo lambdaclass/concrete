@@ -26,6 +26,7 @@ the language rules they track. The engine and the oracles are this directory's o
 | `diff` | `fuzz_differential.py` `Gen(rng, depth).program()` | `--interp` vs the compiled binary |
 | `lin` | `fuzz_linearity.py` `gen_cases(rng, steps)` | ground truth: must compile / must reject with a linearity code |
 | `mut` | a `diff` program with 1 to 3 token edits on one line | the compiler must not crash or hang |
+| `borrow` | `fuzz_differential.py` `BorrowGen(rng, depth).program()` (`--mode borrow`) | `--interp` vs the compiled binary |
 
 Each batch draws a 63-bit batch seed and each case a 63-bit seed from it. Both are logged in
 `state/seeds.log` with the generator, depth and compiler SHA, and every finding records its

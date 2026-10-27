@@ -76,6 +76,7 @@ test-array-bounds: build ## Array-bounds gate (KNOWN_HOLES H8): raw a[i] is runt
 test-fuzz-differential: build ## Random interp-vs-compiled differential fuzzer smoke (Phase 14 #13). Loops re-enabled after H7 fix.
 	$(NIX_DEVELOP) python3 ./scripts/tests/fuzz_differential.py --n 200 --seed 1 --depth 3
 	$(NIX_DEVELOP) python3 ./scripts/tests/fuzz_differential.py --n 200 --seed 2 --depth 3
+	$(NIX_DEVELOP) python3 ./scripts/tests/fuzz_differential.py --mode borrow --n 100 --seed 1 --depth 3
 
 test-golden: build ## Golden baselines for --emit-core, --emit-ssa, --fmt
 	$(NIX_DEVELOP) bash ./scripts/tests/test_golden.sh

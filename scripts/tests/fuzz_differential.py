@@ -309,6 +309,10 @@ class BorrowGen:
         self.ctr = 0
         self.fns = []          # (name, nscalar-args) of the functions generated so far
         self.fors = True       # also C-style `for` loops (off: `while` only)
+        # A `break`, `continue` or `return` out of a `borrow mut` block: what an enclosing deferred
+        # call then reads of the owner is the exit order OD2 leaves to the owner (bug 305), so the
+        # generator does not produce it until that is decided.
+        self.borrow_block_exits = False
 
     # -- scope bookkeeping: a stack of frames of (name, kind); kind in
     #    "mut" (assignable i64), "ro" (readable i64: a parameter), "ctr" (a loop counter: borrowed
@@ -561,6 +565,9 @@ class BorrowGen:
         region = f"R{self.ctr}"
         self.frozen.add(m)
         self.scopes.append([])
+        saved_exit = self.no_exit
+        if not self.borrow_block_exits:
+            self.no_exit = True
         inner = []
         mut = r.random() < 0.7
         n = r.randint(0, 2)
@@ -571,6 +578,7 @@ class BorrowGen:
                              else f"*q = (*q + *{ref}) % 1000;")
             if i < n:
                 inner.append(self.stmt(d - 1))
+        self.no_exit = saved_exit
         self.scopes.pop()
         self.frozen.discard(m)
         kw = "borrow mut" if mut else "borrow"
