@@ -1,0 +1,61 @@
+// Bug 303: the value `if` did not drop the bindings its arms declare at its merge (the statement
+// `if` and `match` did). A loop counter declared in an arm stayed bound to the inner loop's header
+// phi, and the next loop built a header phi for it whose value from the merge is defined on one
+// arm's path only, so the program was refused (E0708). Every merge now drops the arms' bindings.
+fn while_in_else(c: bool) -> i64 {
+    let mut x: i64 = 1;
+    let r: i64 = if c {
+        2
+    } else {
+        let mut k: i64 = 0;
+        while k < 3 {
+            k = k + 1;
+        }
+        k
+    };
+    let mut j: i64 = 0;
+    while j < 2 {
+        x = x + j;
+        j = j + 1;
+    }
+    return x + r;
+}
+
+fn for_in_else(c: bool) -> i64 {
+    let mut x: i64 = 1;
+    let r: i64 = if c {
+        2
+    } else {
+        for (let mut k: i64 = 0; k < 3; k = k + 1) {
+            x = x + 1;
+        }
+        5
+    };
+    for (let mut j: i64 = 0; j < 2; j = j + 1) {
+        x = x + j;
+    }
+    return x + r;
+}
+
+// A plain arm-local `let` computed from a register.
+fn let_in_else(c: bool, y: i64) -> i64 {
+    let mut x: i64 = 1;
+    let r: i64 = if c {
+        2
+    } else {
+        let t: i64 = y + 1;
+        t
+    };
+    let mut j: i64 = 0;
+    while j < 2 {
+        x = x + j;
+        j = j + 1;
+    }
+    return x + r;
+}
+
+fn main() -> Int {
+    // 4 + 5 + 4 + 10 + 4 + 9 = 36
+    return (while_in_else(true) + while_in_else(false) + for_in_else(true) + for_in_else(false)
+        + let_in_else(true, 6) + let_in_else(false, 6) + 6) as Int;
+}

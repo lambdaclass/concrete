@@ -1082,6 +1082,12 @@ private def reconcileBranchVars (rules : BranchMergeRules)
         | [(val, _)] =>
           if rules.singleIncomingRebinds then setVar name val
         | _ => pure ()
+  -- Bug 303: the merge ends the arms' scopes. A binding an arm declared (a `let`, a loop counter, an
+  -- enum payload binder) is out of scope after it; left in the table, the next loop's header phi
+  -- took it as a pre-loop value defined on one arm's path only (E0708; H7, WC-0004). Every merge
+  -- site drops them here, so no site can forget to: the value `if` did.
+  let st ← getState
+  setState { st with vars := preVars.restrictTo st.vars }
 
 mutual
 
@@ -1713,19 +1719,10 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
       match armEndSnapshots.head?, liveSnapshots.getLast? with
       | some (_, _, true), some (endVars, _, _) => setState { (← getState) with vars := endVars }
       | _, _ => pure ()
+      -- WC-0004: arm-local enum-payload bindings (e.g. `Check::Fail { code }`) are out of scope
+      -- after the merge; the merge drops them (bug 303).
       reconcileBranchVars matchMergeRules preMatchVars
         (liveSnapshots.map fun (endVars, endLabel, _) => (endVars, endLabel))
-      -- WC-0004: arm-local enum-payload bindings (e.g. `Check::Fail { code }`)
-      -- enter the var-table via `setVar` inside the arm body. After merge,
-      -- those bindings are out of scope but still leak into vars; the next
-      -- match's preMatchVars snapshot then sees them, builds a phi across
-      -- arms that don't all bind them, and produces a dominator violation
-      -- (E0708) when an arm without the binding pulls a value defined
-      -- inside a different arm. Restrict vars back to preMatchVars's name
-      -- set; merged updates from the phi pass survive because we just
-      -- wrote them via `setVar`.
-      let st ← getState
-      setState { st with vars := preMatchVars.restrictTo st.vars }
     else if liveSnapshots.length == 1 then
       -- Only one arm reached merge — use its vars directly, then drop
       -- arm-local bindings (same WC-0004 leakage applies).
@@ -2457,16 +2454,8 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
         -- below rebinds only the bindings the live arms changed, so a binding only the diverged
         -- arm wrote kept the diverged arm's value (silent wrong code, or E0703).
       if term2 then setState { (← getState) with vars := thenEndVars }
+      -- Branch-local declarations are dropped by the merge itself (H7, bug 303).
       reconcileBranchVars stmtIfMergeRules preIfVars liveArms
-      -- Drop branch-local declarations (e.g. a loop counter `let mut k` declared
-      -- inside a branch) so they do not leak into a later construct's variable
-      -- snapshot. A leaked branch-local would make the next loop/merge build a
-      -- spurious header phi whose pre-value is defined inside the branch and does
-      -- not dominate the merge (H7: E0708). Keep the merged values for names that
-      -- existed before the `if`; restrict the live set to exactly those names —
-      -- the same scope cleanup the match lowering does (WC-0004).
-      let st ← getState
-      setState { st with vars := preIfVars.restrictTo st.vars }
 
   | .while_ cond body whileLabel step =>
     let headerLabel ← freshLabel "while.hdr"
