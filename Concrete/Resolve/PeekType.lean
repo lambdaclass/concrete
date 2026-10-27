@@ -86,13 +86,14 @@ variable {m : Type → Type} [Monad m]
 private local instance : Inhabited (m Ty) := ⟨pure .placeholder⟩
 
 mutual
-/-- Bug 308: the type of the first arm, in order, whose trailing value (`expr` with `isValue`)
-    the peek can type; `.placeholder` if none. -/
+/-- Bug 308: the type of the first arm, in order, whose body is its trailing value alone
+    (`expr` with `isValue`, no statement before it that could bind a name) and which the peek can
+    type; `.placeholder` if none. -/
 partial def peekFirstArmValue (ctx : PeekCtx m) : List (List Stmt) → m Ty
   | [] => return .placeholder
   | body :: rest => do
-    match body.getLast? with
-    | some (.expr _ e true) =>
+    match body with
+    | [.expr _ e true] =>
       let t ← peekExprTypeIn ctx e
       if t == .placeholder then peekFirstArmValue ctx rest else return t
     | _ => peekFirstArmValue ctx rest
@@ -150,9 +151,13 @@ partial def peekExprTypeIn (ctx : PeekCtx m) (e : Expr) : m Ty := do
   -- first arm whose value the peek can type; an arm that diverges or ends in `;` has none).
   -- Answering `.placeholder` left a bare type parameter bound to nothing, so `gid(if c { 1 }
   -- else { 2 })` was refused (E0220).
+  -- Only an arm that binds nothing is read: the peek has no scope for an arm's own `let`s or
+  -- pattern binders, so a name they bind could resolve to an outer constant of that spelling
+  -- (Codex review). Such an arm counts as having no value here.
   | .ifExpr _ _ then_ else_ => peekFirstArmValue ctx [then_, else_]
   | .match_ _ _ arms => peekFirstArmValue ctx (arms.map fun
-      | .mk _ _ _ _ _ body | .litArm _ _ _ body | .varArm _ _ _ body | .rangeArm _ _ _ _ _ body => body)
+      | .mk _ _ _ [] _ body | .litArm _ _ _ body | .rangeArm _ _ _ _ _ body => body
+      | .mk .. | .varArm .. => [])
   | .binOp _ op lhs _ =>
     -- Comparisons and logical connectives are Bool whatever the operand type.
     match op with
