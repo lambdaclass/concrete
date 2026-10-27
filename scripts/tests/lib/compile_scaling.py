@@ -599,9 +599,11 @@ def judge(b, shape, sizes, stages, times, beats, bad, base=None, ntimes=None, fa
                 problems.append("n=%d %d instructions > budget %d" % (n, v, ib))
         # Above the mode's baseline (a one-line program), so a size-independent cost cannot dilute
         # the growth; a linear compile grows x10.0 - x10.3 from 10^4 to 10^5 above it.
-        b0 = base_instr.get(m) or 0.0
+        b0 = base_instr.get(m)
         ratios = []
-        for (n1, v1), (n2, v2) in zip(counted, counted[1:]):
+        # Without its baseline the growth is not judged by instructions (fixed startup work would
+        # dilute it); the wall bound judges the run instead (instr_judged above; Codex review).
+        for (n1, v1), (n2, v2) in (zip(counted, counted[1:]) if b0 is not None else []):
             lim = (n2 / n1) ** b.p("instr_exp")
             r = max(0.0, v2 - b0) / max(v1 - b0, 1.0)
             ratios.append("x%.2f<=x%.2f" % (r, lim))
@@ -675,7 +677,8 @@ def controls(workdir):
     b = Budgets(path)
     sizes, stages = [10, 100], TRACE_STAGES
 
-    def verdicts(t100, slow100, hb100=500.0, ins100=900000.0, t10=10.0, counted=True, base0=0.0):
+    def verdicts(t100, slow100, hb100=500.0, ins100=900000.0, t10=10.0, counted=True, base0=0.0,
+                 ins10=100000.0):
         # The run at 100 took `slow100` times the recorded 100 ms per 10^9 instructions: its host
         # factor comes from host_factor, as in a real judgment.
         f = host_factor(b, "assignments", 100, "trace", {"trace": 100.0 * slow100 * ins100 / 1e9},
@@ -684,7 +687,7 @@ def controls(workdir):
         factors = {(n, st): (1.0 if n == 10 else f) for n in sizes for st in stages}
         ntimes = {k: v / factors[k] for k, v in times.items()}
         beats = {(n, st): (100.0 if n == 10 else hb100) for n in sizes for st in stages}
-        instrs = {(10, "trace"): 100000.0, (100, "trace"): ins100} if counted else {}
+        instrs = {(10, "trace"): ins10, (100, "trace"): ins100} if counted else {}
         return {v for v, _ in judge(b, "assignments", sizes, stages, times, beats, {}, {}, ntimes,
                                     factors, instrs, ["trace"], {"trace": base0})}
     out = []
@@ -700,7 +703,8 @@ def controls(workdir):
                 "CONTROL: a stage over its heartbeat budget fails, host factor or not"))
     # Growth by instructions: a planted quadratic fails however its wall time behaves, and a wall
     # ratio alone no longer fails a counted run (the instructions grew linearly).
-    out.append(("FAIL-INSTR" in verdicts(50.0, 1.0, ins100=100000.0 * 60),
+    # Within its instruction budget (1000000), so only the growth check can fail it.
+    out.append(("FAIL-INSTR" in verdicts(50.0, 1.0, ins10=10000.0, ins100=600000.0),
                 "CONTROL: instructions growing x60 for x10 (a planted quadratic) fail"))
     out.append(("FAIL" not in verdicts(95.0, 1.0, t10=1.5),
                 "CONTROL: a counted run whose wall time grew x63 at x9 instructions passes (caches, not work)"))
