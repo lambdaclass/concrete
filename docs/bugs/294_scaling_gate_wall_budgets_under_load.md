@@ -72,12 +72,15 @@ KINDS OF MEASUREMENT"):
   x60 for x10 (a planted quadratic) fail; a counted run whose wall time grew x63 at x9 instructions
   passes; the same wall growth fails a run nobody counted.
 
-The budgets, allocation and instruction budgets and rates are measured with the new method on
-concrete-ci-2 with no other load (the fuzz farm moved to concrete-ci-3), in the commit that records
-them (`measured:` stamp in `compile_scaling_budgets.tsv`). Until it lands the file holds the old
-wall budgets and no `rate`, `instr` or `hbbudget` rows: wall budgets are judged unnormalized (host
-factor 1) and no exact budget is enforced, while growth already moves to instruction counts on a
-host that can count them (it needs no recorded rows), and stays on wall time elsewhere.
+The budgets, allocation and instruction budgets and rates were measured with the new method on
+concrete-ci-2 on 2026-10-27, after the fuzz farm moved to concrete-ci-3: no runner job, load average
+0.04 at the start and 1.3 at the end (`measured:` stamp in `compile_scaling_budgets.tsv`; the six
+declaration and nesting shapes are measured with their new sizes by the R-0550 follow-up branch).
+Judged on the same host afterwards: PASS=206 FAIL=0 EXCLUDED=6. Instruction growth above each
+mode's baseline from the smaller size to the larger is x8.66 – x11.23 against the x11.48 bound;
+the two shapes nearest it are `chained-lets` and `many-locals` (x11.18 – x11.23: a binding table
+looked up per statement grows as n log n), so a regression adding about 2 % to their larger
+size's work fails them, which is the bound doing its job, not noise (the counts are exact).
 
 ## Structural cause
 
