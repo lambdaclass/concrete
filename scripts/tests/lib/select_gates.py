@@ -58,7 +58,11 @@ DATA_EXT = (".txt", ".toml", ".tsv", ".json", ".list", ".csv")
 # Data files whose rows are path PREFIXES used to classify paths, never paths a gate reads: indirecting
 # through them would make every gate that reaches their reader depend on the whole tree (a mention
 # read as a use, class 19). docs/bugs/area_map.tsv maps the paths fix commits touched to compiler
-# areas for scripts/gen/bug_areas.py; what it classifies is git history, not files on disk.
+# areas for scripts/gen/bug_areas.py; what it classifies is git history, not files on disk. That
+# history dependence (a commit naming a bug can make docs/bugs/AREAS.md stale whatever it touches)
+# is one no file-based rule can express: it is covered by check_docs_drift.sh, which the pre-push
+# hook runs on EVERY push (alone for a docs-only push, inside run_fast_surface_gates.sh otherwise)
+# and CI runs in the fast surface gates. The table itself is still a file the ledger gates name.
 PATH_CLASSIFIERS = {"docs/bugs/area_map.tsv"}
 SCRIPT_TREES = {"scripts", "scripts/tests", "scripts/tests/lib", "scripts/ci", "scripts/tools",
                 "scripts/gen", "scripts/reduce"}
