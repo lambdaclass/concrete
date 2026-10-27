@@ -697,6 +697,9 @@ def main():
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--depth", type=int, default=3)
     ap.add_argument("--keep", action="store_true")
+    ap.add_argument("--no-for", action="store_true",
+                    help="borrow mode: `while` loops only, no C-style `for` (a deferred call in a "
+                         "`for` body reading what the step writes is bug 306, which waits for OD2)")
     ap.add_argument("--mode", choices=["mixed", "borrow"], default="mixed",
                     help="mixed: the integer-width / aggregate generator (Gen); borrow: BorrowGen, "
                          "borrows of locals in every position Lower decides storage at")
@@ -716,6 +719,7 @@ def main():
     for i in range(args.n):
         if args.mode == "borrow":
             g = BorrowGen(random.Random(rng.getrandbits(64)), args.depth)
+            g.fors = not args.no_for
         else:
             g = Gen(random.Random(rng.getrandbits(64)), args.depth)
             g.loops = not args.no_loops
