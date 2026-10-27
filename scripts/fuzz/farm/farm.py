@@ -887,6 +887,11 @@ def campaign(args):
     args.compiler = os.path.abspath(args.compiler)
     gens = Generators(args.gen_dir)
     order = [g for g in args.generators.split(",") if g]
+    # A snapshot older than the borrow generator has no BorrowGen: its batches are skipped until a
+    # newer snapshot is built, rather than raising in every worker that reaches one.
+    if "borrow" in order and not hasattr(gens.diff, "BorrowGen"):
+        print("farm: snapshot has no BorrowGen; the borrow generator is skipped", file=sys.stderr)
+        order = [g for g in order if g != "borrow"]
     ctx = {"compiler": args.compiler, "sha": args.sha, "snapshot": args.snapshot,
            "min_seconds": args.min_seconds, "lean_reduce": not args.no_lean_reduce,
            "notify": not args.no_notify}
