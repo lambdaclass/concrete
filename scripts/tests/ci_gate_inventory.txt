@@ -269,7 +269,7 @@ bash scripts/tests/run_fast_surface_gates.sh --mutate
 bash scripts/tests/test_prove_cli.sh
 bash scripts/tools/checker_acceptance_evidence.sh "$RUNNER_TEMP/checker-acceptance"
 python3 scripts/check_ll1.py grammar/concrete.ebnf
-python3 scripts/tests/fuzz_differential.py --mode borrow --no-for --n 200 --seed "$SEED" --depth 3
+python3 scripts/tests/fuzz_differential.py --mode borrow --n 200 --seed "$SEED" --depth 3
 python3 scripts/tests/fuzz_differential.py --n 2000 --seed "$SEED" --depth 3
 python3 scripts/tests/fuzz_differential.py --n 500 --seed "$SEED" --depth 4
 python3 scripts/tests/fuzz_linearity.py --n 40 --seed 20260706

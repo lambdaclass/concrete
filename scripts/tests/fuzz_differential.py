@@ -308,7 +308,11 @@ class BorrowGen:
         self.maxdepth = depth
         self.ctr = 0
         self.fns = []          # (name, nscalar-args) of the functions generated so far
-        self.fors = True       # also C-style `for` loops (off: `while` only)
+        self.loops = True      # loops at all (`--no-loops`)
+        # C-style `for` loops, off by default: a deferred call in a `for` body that reads what the
+        # step writes observes the order of the body's deferred calls and the step, which is OD2's
+        # (bug 306). `--for-loops` turns them on.
+        self.fors = False
         # A `break`, `continue` or `return` out of a `borrow mut` block: what an enclosing deferred
         # call then reads of the owner is the exit order OD2 leaves to the owner (bug 305), so the
         # generator does not produce it until that is decided.
@@ -519,20 +523,22 @@ class BorrowGen:
                     f"1 => {{ {self.stmts(d - 1)} }}, _ => {{ {self.stmts(d - 1)} }} }}")
         if k == 11 and "e" not in self.frozen:
             return f"match e {{ {self.enum_arms(d, value=False)} }}"
-        if k in (12, 13) and d > 0:
+        if k in (12, 13) and d > 0 and self.loops:
             return self.loop(d)
         if k == 14 and not self.no_exit and self.loopdepth > 0:
             return f"if {self.cond(d)} {{ {self.stmts(d - 1)} {r.choice(['break;', 'continue;'])} }}"
         if k in (14, 15) and not self.no_exit:
             return f"if {self.cond(d)} {{ {self.stmts(d - 1)} return {self.expr(d)} % 1000; }}"
-        if k == 16:
-            v = self.scalar(("mut", "ro", "ctr"))
-            if v:
-                return f"defer show(&{v});"
-        if k == 17 and m:
-            src = self.scalar(("mut", "ro", "ctr"))
-            if src and src != m:
-                return f"defer mix(&mut {m}, &{src});"
+        if k in (16, 17):
+            # A deferred call borrows a local declared for it and never touched again: whether a
+            # deferred call's loan pins its root until the call runs is OD2's (proposed), so the
+            # generator does not write the root after the `defer`. The local is still promoted at
+            # the registration and read at every exit (bug 287's site).
+            dn = self.fresh("d")
+            init = f"let mut {dn}: i64 = {self.expr(max(0, d - 1))} % 1000; "
+            if k == 16:
+                return init + f"defer show(&{dn});"
+            return init + f"defer bump(&mut {dn}, {self.lit()}); defer show(&{dn});"
         if k == 18 and m and d > 0:
             return self.borrow_block(d, m)
         if k == 19 and self.callable():
@@ -697,9 +703,9 @@ def main():
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--depth", type=int, default=3)
     ap.add_argument("--keep", action="store_true")
-    ap.add_argument("--no-for", action="store_true",
-                    help="borrow mode: `while` loops only, no C-style `for` (a deferred call in a "
-                         "`for` body reading what the step writes is bug 306, which waits for OD2)")
+    ap.add_argument("--for-loops", action="store_true",
+                    help="borrow mode: also C-style `for` loops (off by default: a deferred call in "
+                         "a `for` body reading what the step writes is bug 306, which waits for OD2)")
     ap.add_argument("--mode", choices=["mixed", "borrow"], default="mixed",
                     help="mixed: the integer-width / aggregate generator (Gen); borrow: BorrowGen, "
                          "borrows of locals in every position Lower decides storage at")
@@ -719,7 +725,8 @@ def main():
     for i in range(args.n):
         if args.mode == "borrow":
             g = BorrowGen(random.Random(rng.getrandbits(64)), args.depth)
-            g.fors = not args.no_for
+            g.fors = args.for_loops
+            g.loops = not args.no_loops
         else:
             g = Gen(random.Random(rng.getrandbits(64)), args.depth)
             g.loops = not args.no_loops

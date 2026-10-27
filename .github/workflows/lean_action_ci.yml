@@ -572,7 +572,7 @@ jobs:
           echo "seed: $SEED"
           python3 scripts/tests/fuzz_differential.py --n 2000 --seed "$SEED" --depth 3
           python3 scripts/tests/fuzz_differential.py --n 500 --seed "$SEED" --depth 4
-          python3 scripts/tests/fuzz_differential.py --mode borrow --no-for --n 200 --seed "$SEED" --depth 3
+          python3 scripts/tests/fuzz_differential.py --mode borrow --n 200 --seed "$SEED" --depth 3
 
       - name: Linearity fuzz campaign (ground-truth conservation oracle, rotating seed)
         run: |
