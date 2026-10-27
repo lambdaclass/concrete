@@ -12,16 +12,16 @@ checker refusal is a Check bug here.
 
 <!-- BEGIN GENERATED: bug areas (scripts/gen/bug_ledger.py; derived from the records, docs/bugs/area_map.tsv and git history, never edited here) -->
 
-271 records: 162 placed by their own fix commits, 37 by the files their record names in commits shared with other bugs, 34 by commits shared with other bugs, 10 by the commit that filed or closed the record, 23 by an `area:` override; 5 open bugs are not fixed yet and 0 fixed bugs have no commit the history can place.
+278 records: 169 placed by their own fix commits, 37 by the files their record names in commits shared with other bugs, 34 by commits shared with other bugs, 10 by the commit that filed or closed the record, 23 by an `area:` override; 5 open bugs are not fixed yet and 0 fixed bugs have no commit the history can place.
 
 ### By stage
 
 | stage | bugs | open | silent | shared or fallback | top modules |
 |--|-:|-:|-:|-:|--|
 | Check | 72 | 0 | 39 | 5 | Check 33, CoreCheck 13, CheckHelpers 9, Verify 5 |
-| Lower | 34 | 0 | 10 | 3 | Lower 33, - 1 |
-| Resolve | 26 | 2 | 4 | 8 | Resolve 16, FileSummary 6, BuiltinEnums 1, Intrinsic 1 |
-| Elab | 25 | 0 | 9 | 7 | Elab 24, TypeSpelling 1 |
+| Lower | 38 | 0 | 12 | 3 | Lower 37, - 1 |
+| Resolve | 27 | 2 | 4 | 8 | Resolve 16, FileSummary 6, PeekType 2, BuiltinEnums 1 |
+| Elab | 26 | 0 | 9 | 7 | Elab 25, TypeSpelling 1 |
 | Proof | 19 | 1 | 8 | 2 | ProofCore 11, Proof 3, CallCollect 2, BodyIdentity 1 |
 | Interp | 18 | 0 | 4 | 8 | Interp 18 |
 | Parse | 11 | 0 | 3 | 0 | Parser 7, Lexer 2, AST 1, LocalId 1 |
@@ -33,7 +33,7 @@ checker refusal is a Check bug here.
 | CLI | 6 | 0 | 2 | 1 | Main 4, Pipeline 1, PipelineTest 1 |
 | Tooling | 6 | 0 | 1 | 1 | Makefile 1, dispatch 1, farm 1, new_bug 1 |
 | SSA | 5 | 1 | 0 | 2 | SSACleanup 4, SSAVerify 1 |
-| Gates | 4 | 0 | 0 | 0 | authority_facts 1, check_binder_refs 1, check_gate_lock 1, shell_text 1 |
+| Gates | 5 | 0 | 0 | 0 | authority_facts 1, check_binder_refs 1, check_gate_lock 1, compile_scaling_budgets 1 |
 
 ### Structural class by stage (primary class)
 
@@ -46,11 +46,11 @@ checker refusal is a Check bug here.
 | 5. Borrow tracking by syntax instead of normalized places | 2 | Check 1, Interp 1 |
 | 6. Capability facts not carried across dispatch, specialization or package boundaries | 5 | Check 4, Proof 1 |
 | 7. Semantics implemented several times (interpreter, proof model, folder, backend disagree) | 28 | Interp 8, Check 7, Proof 4, Lower 3, Elab 2, EmitLLVM 2, EmitSSA 1, Report 1 |
-| 8. Storage, places and control flow decided ad hoc in `Lower` | 11 | Lower 8, Check 2, Elab 1 |
+| 8. Storage, places and control flow decided ad hoc in `Lower` | 15 | Lower 12, Check 2, Elab 1 |
 | 9. Evidence verdicts computed per surface and joined to their subject by name | 4 | Proof 2, CLI 2 |
 | 10. Evidence identity computed from a partial subject | 5 | Proof 3, Elab 2 |
-| 11. Absence read as a fact (fail-open defaults) | 11 | Resolve 2, Proof 2, Report 2, Gates 2, Check 1, SSA 1, Tooling 1 |
-| 12. One fact kept in two places | 25 | Resolve 10, Check 5, Parse 2, Elab 2, Interp 2, Proof 1, Std 1, CLI 1, Tooling 1 |
+| 11. Absence read as a fact (fail-open defaults) | 12 | Gates 3, Resolve 2, Proof 2, Report 2, Check 1, SSA 1, Tooling 1 |
+| 12. One fact kept in two places | 27 | Resolve 11, Check 5, Elab 3, Parse 2, Interp 2, Proof 1, Std 1, CLI 1, Tooling 1 |
 | 13. Documented rules with no enforcing site | 18 | Check 11, Resolve 4, Parse 1, Elab 1, Lower 1 |
 | 14. Trusted `std` and FFI code with no checked contract | 7 | Std 5, Parse 1, Check 1 |
 | 15. Ownership state not modeled along control-flow paths | 7 | Check 7 |
@@ -329,11 +329,18 @@ checker refusal is a Check bug here.
 | [291](291_type_lookups_by_list_search.md) | Lower | Lower | commits | Check, Elab, Resolve |
 | [292](292_loop_header_patch_maps_all_blocks.md) | Lower | Lower | commits | — |
 | [293](293_report_scoped_walker_nested_rewalks.md) | Report | ReportObligations | commits | — |
+| [294](294_scaling_gate_wall_budgets_under_load.md) | Gates | compile_scaling_budgets | commits | — |
 | [295](295_parser_list_appends.md) | Parse | Parser | commits | — |
 | [296](296_callee_walk_list_appends.md) | Proof | CallCollect | commits | — |
 | [297](297_call_arguments_and_merge_inputs_appended.md) | Elab | Elab | commits | Lower |
 | [298](298_operand_escape_search_value_branches.md) | Check | Check | commits | — |
 | [299](299_work_queue_dispatcher_fetch_races_agent_pushes.md) | Tooling | dispatch | commits | — |
 | [300](300_new_bug_sh_reserves_a_number_then_refuses_the_fi.md) | Tooling | new_bug | commits | — |
+| [301](301_lower_s_address_taken_walk_did_not_see_the_root.md) | Lower | Lower | commits | — |
+| [302](302_a_loop_moved_an_address_taken_scalar_back_into_a.md) | Lower | Lower | commits | — |
+| [303](303_the_value_if_did_not_drop_the_bindings_its_arms.md) | Lower | Lower | commits | — |
+| [304](304_a_value_if_or_match_written_as_a_comparison_oper.md) | Elab | Elab | commits | Check |
+| [308](308_a_value_if_or_match_passed_to_a_generic_paramete.md) | Resolve | PeekType | commits | — |
+| [309](309_a_loop_in_the_right_operand_of_or_rebound_an_agg.md) | Lower | Lower | commits | — |
 
 <!-- END GENERATED: bug areas -->
