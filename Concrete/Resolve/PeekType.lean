@@ -91,20 +91,25 @@ mutual
     outer constant of the same spelling (Codex review), so:
     * an arm that binds nothing and is its trailing value alone is peeked as any expression;
     * a trailing value that names one of the arm's own `let`s written with a type has that type;
-    * anything else in an arm that binds names has no type here. -/
+    * anything else in an arm with a pattern binder, or with any statement other than an
+      expression statement before its value, has no type here. -/
 partial def peekArmValue (ctx : PeekCtx m) (binds : Bool) (body : List Stmt) : m Ty := do
   match body.getLast? with
   | some (.expr _ e true) =>
     let lets := body.filterMap fun
       | .letDecl _ n _ ty _ _ => some (n, ty)
       | _ => none
+    -- Any statement before the value other than an expression statement may bind a name (a `let`,
+    -- a destructuring `let`, a borrow block's reference), so the arm counts as binding (Codex
+    -- review round 3).
+    let bindsHere := binds || (body.dropLast.any fun | .expr .. => false | _ => true)
     match e with
     | .ident _ n =>
       match lets.reverse.find? (·.1 == n) with
       | some (_, some ty) => ctx.resolve ty
       | some (_, none) => return .placeholder
-      | none => if binds || !lets.isEmpty then return .placeholder else peekExprTypeIn ctx e
-    | _ => if binds || !lets.isEmpty then return .placeholder else peekExprTypeIn ctx e
+      | none => if bindsHere then return .placeholder else peekExprTypeIn ctx e
+    | _ => if bindsHere then return .placeholder else peekExprTypeIn ctx e
   | _ => return .placeholder
 
 /-- Bug 308: the type of the first arm, in order, whose trailing value `peekArmValue` can type;
