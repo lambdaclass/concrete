@@ -111,4 +111,5 @@ date	kind	probe	effort	bugs	silent
 2026-10-26	development	R-0550 follow-up, task 3: scaling probes of Resolve, Check and Elab beyond the gate shapes (calls, parameters, wide match, value if and match chains, struct fields) on main 1bcb7c36	11 shapes	295,296,297,298	-
 2026-10-26	ci	CI run 40377660985 (wip/bug-298): check_work_queue.sh budgets leg missed budget_exhausted; the leg then repeated on OVH under load	1400 cases	299	-
 2026-10-26	development	bug filing with scripts/gen/new_bug.sh (bugs 284 and 299 aborted after reserving their numbers)	2 filings	300	-
+2026-10-26	ci	train 37 candidate CI (run 40289036334): assignments/monomorphize over its wall budget at an unchanged instruction count; re-measured on concrete-ci-2 under load with perf instruction counts	unrecorded	294	-
 2026-10-26	hunt	Lower borrows and address-taken locals: hand probes of every CExpr and CStmt constructor, and the differential fuzzer's borrow mode (fuzz_differential.py --mode borrow)	3000 programs	301,302,303,304,308,309	301,302
