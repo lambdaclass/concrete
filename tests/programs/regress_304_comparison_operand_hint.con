@@ -1,0 +1,38 @@
+// Bug 304: a comparison passed its own hint (its result type, Bool) on to the operand it typed
+// first, so Elab stamped a value `if` or `match` written as that operand `Bool` while its arms are
+// integers, and CoreCheck refused a program Check had accepted (E0510, E0503). A comparison's
+// operands now get no hint from its result, in Check and Elab alike.
+fn if_operand(c: bool) -> bool {
+    return (if c { 1 } else { 2 }) >= 2;
+}
+
+fn match_operand(c: bool) -> bool {
+    return (match c { true => 1, false => 2 }) > 1;
+}
+
+fn in_condition(c: bool) -> i64 {
+    if (if c { 3 } else { 4 }) == 4 {
+        return 10;
+    }
+    return 20;
+}
+
+fn bound(c: bool) -> i64 {
+    let b: bool = (if c { 5 } else { 6 }) != 5;
+    if b {
+        return 1;
+    }
+    return 0;
+}
+
+fn main() -> Int {
+    let mut t: i64 = 0;
+    if if_operand(false) {
+        t = t + 1;
+    }
+    if match_operand(false) {
+        t = t + 2;
+    }
+    // 1 + 2 + 20 + 10 + 0 + 1 + 8 = 42
+    return (t + in_condition(true) + in_condition(false) + bound(true) + bound(false) + 8) as Int;
+}

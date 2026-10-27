@@ -807,6 +807,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
       refuseConditionalConsumption before (binOpSymbol op) (some e.getSpan)
       let _ := lTy
       return .bool
+    let hint := TypeJudgment.binOpOperandHint op hint  -- bug 304: the same operand hint as Elab
     let (lTy, lTyR, rTyR) ←
       match TypeJudgment.binOpOperandOrder
               (TypeJudgment.operandFlex ftL lhs) (TypeJudgment.operandFlex ftR rhs) with

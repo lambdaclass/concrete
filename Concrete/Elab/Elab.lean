@@ -825,6 +825,7 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none)
     -- which side is typed first, and both children's evidence is needed at the return.
     -- Bug 280: the operands' flexibility from the region's one walk.
     let (ftL, ftR) := TypeJudgment.binOpFlexTrees flex e lhs rhs
+    let hint := TypeJudgment.binOpOperandHint op hint  -- bug 304: a comparison's Bool stays out
     let (cLhsEv, cRhsEv) ←
       match TypeJudgment.binOpOperandOrder
               (TypeJudgment.operandFlex ftL lhs) (TypeJudgment.operandFlex ftR rhs) with

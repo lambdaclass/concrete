@@ -190,5 +190,18 @@ inductive OperandOrder where
 def binOpOperandOrder (lhsFlexible rhsFlexible : Bool) : OperandOrder :=
   if lhsFlexible && !rhsFlexible then .rhsFirst else .lhsFirst
 
+/-- Bug 304: the hint a binary operator passes on to the operand it types first, shared by Check
+    and Elab. An arithmetic, bitwise or logical operator's result has its operands' type, so its
+    hint is theirs. A comparison's hint is its RESULT type (`Bool`) and says nothing about its
+    operands: passed on, it made Elab stamp a value `if` / `match` operand `Bool`
+    (`(if c { 1 } else { 2 }) >= 2`), and CoreCheck refused the program Check had accepted. -/
+def binOpOperandHint (op : BinOp) (hint : Option Ty) : Option Ty :=
+  match op with
+  | .eq | .neq | .lt | .gt | .leq | .geq => none
+  | .add | .sub | .mul | .div | .mod | .and_ | .or_
+  | .bitand | .bitor | .bitxor | .shl | .shr
+  | .wrappingAdd | .wrappingSub | .wrappingMul
+  | .saturatingAdd | .saturatingSub | .saturatingMul => hint
+
 end TypeJudgment
 end Concrete
