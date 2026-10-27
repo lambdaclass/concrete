@@ -2752,31 +2752,20 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
 
   | .borrowIn var ref _region isMut refTy body =>
     refuseBorrowInConstInit
-    -- Create a memory slot for the borrowed variable, set ref to point to it.
-    -- The ref variable is stored with the full reference type (refMut T / ref T)
-    -- so that when passed as a function argument, the correct pointer type is emitted.
-    -- The alloca is hoisted to the entry block so it dominates all uses, including
-    -- across early returns inside the borrow block body.
-    let curVal ← lookupVar var.key
+    -- Bug 305: the reference is the owner's own storage, exactly as `&owner` / `&mut owner`
+    -- (`addrOfLocal` promotes the owner; the address-taken walk names a borrow block's owner, so
+    -- a branch or loop around it promotes the owner before it). The block used to point the
+    -- reference at a COPY of the owner in a fresh slot and load the copy back into the owner when
+    -- the block fell through its end; a `break`, `continue` or `return` leaving the block early
+    -- skipped that write-back, and the writes made through the reference were lost on that exit.
+    -- With the owner's storage there is nothing to write back on any exit.
     let innerTy := match refTy with
       | .ref t | .refMut t | .ptrMut t | .ptrConst t => t
       | _ => refTy
-    let slot ← freshReg "borrow."
-    emitEntryAlloca (.alloca slot innerTy)
-    match curVal with
-    | some cv => emit (.store cv (.reg slot innerTy))
-    | none => pure ()
-    setVar ref.key (.reg slot refTy)
+    let owner := CExpr.ident var innerTy
+    let refVal ← lowerExpr (if isMut then .borrowMut owner refTy else .borrow owner refTy)
+    setVar ref.key refVal
     lowerStmts body
-    -- For mutable borrows, load back the value and update the original variable.
-    -- Skip write-back if the body terminated early (return/break) — the write-back
-    -- would be dead code and reference registers from non-dominating blocks.
-    if isMut then
-      let s ← getState
-      if !s.blockTerminated then
-        let loadBack ← freshReg "wb."
-        emit (.load loadBack (.reg slot innerTy) innerTy)
-        setVar var.key (.reg loadBack innerTy)
 
 partial def lowerStmts (stmts : List CStmt) : LowerM Unit := do
   pushScope .block

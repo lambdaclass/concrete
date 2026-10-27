@@ -1,0 +1,133 @@
+// Bug 305: a `borrow mut` block pointed its reference at a copy of the owner and loaded the copy
+// back into the owner only when the block fell through its end, so a `break`, `continue` or
+// `return` leaving the block early lost the writes made through the reference. The reference is
+// now the owner's own storage, as `&mut owner` is.
+fn show(p: &i64, sink: &mut i64) {
+    *sink = *p;
+}
+
+// A `break` out of the block, inside a loop.
+fn brk(c: i64) -> i64 {
+    let mut n: i64 = 0;
+    let mut i: i64 = 0;
+    while i < 3 {
+        borrow mut n as r in R {
+            *r = *r + 10;
+            if i == c {
+                break;
+            }
+        }
+        i = i + 1;
+    }
+    return n * 100 + i;
+}
+
+// A `continue` out of the block.
+fn cont() -> i64 {
+    let mut n: i64 = 0;
+    let mut i: i64 = 0;
+    while i < 3 {
+        i = i + 1;
+        borrow mut n as r in R {
+            *r = *r + 10;
+            if i == 2 {
+                continue;
+            }
+        }
+    }
+    return n;
+}
+
+// A labelled `break` out of two loops, from a block in the inner one.
+fn labelled() -> i64 {
+    let mut n: i64 = 0;
+    let mut i: i64 = 0;
+    'outer: while i < 5 {
+        i = i + 1;
+        let mut j: i64 = 0;
+        while j < 5 {
+            j = j + 1;
+            borrow mut n as r in R {
+                *r = *r + 1;
+                if *r == 7 {
+                    break 'outer;
+                }
+            }
+        }
+    }
+    return n;
+}
+
+// A `return` out of the block reads nothing of the owner, but the owner's value on that path is the
+// one the loop exit carries in `brk`; here a second block after a conditional exit reads it.
+fn after_exit(c: bool) -> i64 {
+    let mut n: i64 = 1;
+    let mut i: i64 = 0;
+    while i < 1 {
+        i = i + 1;
+        borrow mut n as r in R {
+            *r = 4;
+            if c {
+                break;
+            }
+            *r = 5;
+        }
+    }
+    let mut out: i64 = 0;
+    borrow n as s in S {
+        show(s, &mut out);
+    }
+    return out;
+}
+
+// OD2 (2026-10-29): a write through the reference is the write to the owner, immediately, and a
+// `return` out of the block runs one exit sequence: the exit value, then the deferred calls,
+// innermost scope first, then loan end. The function's deferred call reads the owner after the
+// `return` and sees the writes the block made before it.
+fn rec(p: &i64, sink: &mut i64) {
+    *sink = *sink * 100 + *p;
+}
+
+fn ret_in_block(c: bool, sink: &mut i64) -> i64 {
+    let mut n: i64 = 1;
+    defer rec(&n, sink);
+    borrow mut n as r in R {
+        *r = 7;
+        if c {
+            return 3;
+        }
+        *r = 9;
+    }
+    return 4;
+}
+
+fn ret_defer() -> i64 {
+    let mut s: i64 = 0;
+    let a: i64 = ret_in_block(true, &mut s);
+    let b: i64 = ret_in_block(false, &mut s);
+    // s = 7 * 100 + 9 = 709; a = 3; b = 4
+    return s + a + b;
+}
+
+// A `continue` out of a block in a `for` body: the step still runs, and the writes stay.
+fn for_cont() -> i64 {
+    let mut n: i64 = 0;
+    for (let mut i: i64 = 0; i < 4; i = i + 1) {
+        borrow mut n as r in R {
+            *r = *r + 10;
+            if i == 1 {
+                continue;
+            }
+            *r = *r + 1;
+        }
+    }
+    return n;
+}
+
+fn main() -> Int {
+    // brk(1) = 2001, brk(9) = 3003, cont() = 30, labelled() = 7, after_exit(true) = 4,
+    // after_exit(false) = 5, ret_defer() = 716, for_cont() = 43
+    let t: i64 = brk(1) + brk(9) + cont() + labelled() + after_exit(true) + after_exit(false)
+        + ret_defer() + for_cont();
+    return (t - 5767) as Int;
+}
