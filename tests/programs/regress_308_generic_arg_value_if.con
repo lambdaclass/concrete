@@ -14,12 +14,17 @@ fn match_arg(k: i64) -> i64 {
     return gid(match k { 0 => 10, _ => 20 });
 }
 
-// The first arm diverges, so the type comes from the second.
-fn diverging_arm(c: bool) -> i64 {
-    return gid(if c { return 5; } else { 7 });
+// The first arm's value is an arm-local binding.
+fn local_arm(c: bool) -> i64 {
+    return gid(if c {
+        let t: i64 = 5;
+        t
+    } else {
+        7
+    });
 }
 
 fn main() -> Int {
     // 2 + 20 + 7 + 13 = 42
-    return (if_arg(false) + match_arg(1) + diverging_arm(false) + 13) as Int;
+    return (if_arg(false) + match_arg(1) + local_arm(false) + 13) as Int;
 }

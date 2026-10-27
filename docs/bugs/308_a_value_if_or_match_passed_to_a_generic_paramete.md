@@ -24,7 +24,7 @@ fn main() with(Console) { println(a(true)); }
 On main ea21a2e8 both `--interp` and the compiler refuse it: `error[check]: (E0220) type mismatch in
 argument 'x' of 'gid': expected <unknown>, got i64` (TYPE-4@1). Binding the value `if` to an `i64`
 first is accepted. A value `match` argument fails the same way. `regress_308_generic_arg_value_if.con`
-covers both and an `if` whose first arm diverges; main refuses it.
+covers both and an `if` whose first arm's value is an arm-local binding; main refuses it.
 
 ## Expected
 
