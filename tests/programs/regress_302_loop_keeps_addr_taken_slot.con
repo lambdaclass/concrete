@@ -1,0 +1,62 @@
+// Bug 302: a loop whose body or condition takes the address of a scalar local promotes it to a
+// slot. At the loop's exit Lower moved it back into a register, so a raw pointer taken in the loop
+// still pointed at the slot while the local's later reads and writes used the register. The local
+// now stays slot-backed after the loop. In each function the loop is where `x` is first borrowed.
+trusted fn wr(p: *mut i64, v: i64) {
+    *p = v;
+}
+
+trusted fn rd(p: *mut i64) -> i64 {
+    return *p;
+}
+
+// Advances `*x` and leaves its address in `*out`.
+trusted fn step(x: &mut i64, out: &mut *mut i64) -> bool {
+    *out = x as *mut i64;
+    *x = *x + 1;
+    return *x < 3;
+}
+
+// A write to `x` after the loop is seen through the pointer.
+fn write_local_read_ptr() -> i64 {
+    let mut x: i64 = 1;
+    let mut y: i64 = 0;
+    let mut p: *mut i64 = &mut y as *mut i64;
+    let mut i: i64 = 0;
+    while i < 2 {
+        p = &mut x as *mut i64;
+        i = i + 1;
+    }
+    x = 5;
+    return rd(p);
+}
+
+// A write through the pointer after the loop is seen by `x`.
+fn write_ptr_read_local() -> i64 {
+    let mut x: i64 = 1;
+    let mut y: i64 = 0;
+    let mut p: *mut i64 = &mut y as *mut i64;
+    for (let mut i: i64 = 0; i < 2; i = i + 1) {
+        p = &mut x as *mut i64;
+    }
+    wr(p, 9);
+    return x;
+}
+
+// The first borrow is in the loop condition, and the pointer it leaves outlives the loop.
+fn borrowed_in_condition() -> i64 {
+    let mut x: i64 = 0;
+    let mut y: i64 = 0;
+    let mut p: *mut i64 = &mut y as *mut i64;
+    let mut n: i64 = 0;
+    while step(&mut x, &mut p) {
+        n = n + 1;
+    }
+    x = x + 10;
+    return rd(p) + n;
+}
+
+fn main() -> Int {
+    // 5 + 9 + (13 + 2) = 29
+    return (write_local_read_ptr() + write_ptr_read_local() + borrowed_in_condition() + 13) as Int;
+}

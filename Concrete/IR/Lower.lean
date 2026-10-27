@@ -2492,7 +2492,12 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
     let preLoopList := preLoopVars.toList
     let mut headerPhisRev : List (LocalKey × String × SVal × Ty) := []
     let mut allPromotedNames : LocalKeySet := {}  -- all aggregate names (including outer)
-    let mut newlyPromotedRev : List LocalKey := [] -- only promoted by THIS loop, newest first
+    -- Only the aggregates promoted by THIS loop, newest first: they are un-promoted at its exit.
+    -- A scalar this loop promoted because its body or condition takes its address stays
+    -- slot-backed for the rest of the function (bug 302): a raw pointer taken in the loop
+    -- (`&mut x as *mut T`) still points at the slot after the exit, so moving the local back into
+    -- a register would split it from its alias.
+    let mut newlyPromotedRev : List LocalKey := []
     -- Promote aggregate variables BEFORE terminating the block (stores go here)
     for (name, val) in preLoopList do
       let ty := val.ty
@@ -2515,7 +2520,7 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
           emit (.store val (.reg allocaReg ty))
           addPromotedAlloca name allocaReg ty
           allPromotedNames := allPromotedNames.insert name ()
-          newlyPromotedRev := name :: newlyPromotedRev
+          if isAgg then newlyPromotedRev := name :: newlyPromotedRev
     terminateBlock (.br headerLabel)
     startBlock headerLabel
     -- Create phi nodes only for scalar variables
