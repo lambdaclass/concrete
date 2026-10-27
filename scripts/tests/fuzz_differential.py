@@ -538,7 +538,9 @@ class BorrowGen:
             init = f"let mut {dn}: i64 = {self.expr(max(0, d - 1))} % 1000; "
             if k == 16:
                 return init + f"defer show(&{dn});"
-            return init + f"defer bump(&mut {dn}, {self.lit()}); defer show(&{dn});"
+            # one deferred call per such local: two deferred loans of one local overlap, which is
+            # OD2's question too
+            return init + f"defer bump(&mut {dn}, {self.lit()});"
         if k == 18 and m and d > 0:
             return self.borrow_block(d, m)
         if k == 19 and self.callable():
