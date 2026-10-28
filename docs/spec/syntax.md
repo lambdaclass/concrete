@@ -13,16 +13,17 @@ with the parser as syntax lands (range patterns `lo..=hi` and `lo..hi`, alternat
 guards `pat if cond`, `if let` and `while let`, functional update `S { ..base }`, field punning,
 `defer <call>`).
 
-The keywords are `mod import pub fn let mut return if else while for match break continue defer
-borrow as in struct enum trait impl type newtype const extern trusted ghost assert assume true
-false with`. The primitive type names (`Int`, `Uint`, `i8` to `u64`, `bool`, `char`, `String`) and
+The keywords (`Concrete.Frontend.Lexer`'s `lookupKeyword`) are `fn let mut if else while for return
+assert assume true false mod struct enum match pub import as impl trait const type extern with cap
+break continue defer borrow in newtype trusted`; `ghost` is read contextually before `let`. The primitive type names (`Int`, `Uint`, `i8` to `u64`, `bool`, `char`, `String`) and
 the capability names (`Std`, `Alloc`, `Console`, `File`, `Unsafe` and the rest) are contextual.
 
 Attributes are written `#[name(args)]` and form a fixed set the compiler recognizes (for example
 `#[test]`, `#[spec(...)]`, `#[proof_by(...)]`, `#[proof_fingerprint("...")]`, `#[invariant(...)]`,
 `#[variant(...)]`, `#[overflow_checked]`). An unknown attribute is a parse error (SYN-1). The
 contract surface (`#[requires]`, `#[ensures]`, `assert`, `assume`, `ghost let`) is the contracts
-chapter's; it is erased metadata, with no run-time effect beyond `assert`.
+chapter's; it is erased metadata with no run-time effect, `assert` included (it elaborates to proof
+evidence and no runtime statement).
 
 Syntax that is deliberately absent is pinned by gates rather than left implicit: tuples
 (`check_no_tuples.sh`), nested patterns (`check_nested_patterns.sh`), block-form `defer`

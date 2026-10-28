@@ -36,3 +36,4 @@ E0323	MOD-2	unreachable:Resolve refuses a trait import first (E0126)
 E0418	MOD-2	unreachable:Resolve refuses an unknown module first (E0110)
 E0419	MOD-2	unreachable:Resolve refuses a private import first (E0111)
 E0423	MOD-2	unreachable:Resolve refuses a trait import first (E0126)
+E0124	MOD-4	od:OD9

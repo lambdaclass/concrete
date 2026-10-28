@@ -1031,9 +1031,9 @@ INVENTORY_HEADER = """# GENERATED from docs/spec/*.md by `python3 scripts/spec/s
 """
 ALLOW_REASON_RE = re.compile(r"^(od:OD[0-9]+|R-[0-9]{4}|bug-[0-9]{3}|unreachable:\S.*)$")
 WITNESS_GLOBS = ["tests/**/*.con"]
-# A program is a witness only when a gate runs it: its path (or, for a single-directory fixture,
-# `<dir>/<file>`, or its basename) is spelled in one of these files, as run_tests.sh's run_err legs
-# and the conformance tables spell theirs.
+# A program is a witness only when a gate runs it: its repository path, or its path under
+# tests/programs as run_tests.sh spells it (`$TESTDIR/<path>`), occurs on a line of one of these files
+# that is not a comment.
 WITNESS_RUNNERS = ["scripts/tests/*.sh", "scripts/tests/lib/*.sh", "tests/rules/*.tsv", "docs/spec/*.md"]
 
 def inventory_rows(spec):
@@ -1066,8 +1066,9 @@ def observe_codes(spec, cc, jobs, workdir, root):
     """Compile every negative-witness candidate (test programs and the spec's non-project reject
     examples) and record each diagnostic code each one reports: {code: [witness, ...]}."""
     os.makedirs(workdir, exist_ok=True)
-    runners = "\n".join(open(p, encoding="utf-8", errors="replace").read()
-                         for g in WITNESS_RUNNERS for p in glob.glob(os.path.join(root, g)))
+    runners = "\n".join(l for g in WITNESS_RUNNERS for p in glob.glob(os.path.join(root, g))
+                         for l in open(p, encoding="utf-8", errors="replace").read().split("\n")
+                         if not l.lstrip().startswith(("#", "<!--")))
     def in_project(f):
         d = os.path.dirname(f)
         while len(d) > len(root):
@@ -1075,9 +1076,8 @@ def observe_codes(spec, cc, jobs, workdir, root):
             d = os.path.dirname(d)
         return False
     def referenced(rel):
-        parts = rel.split("/")
-        keys = [rel, "/".join(parts[-2:])] + ([parts[-1]] if not parts[-1] in ("main.con", "mod.con", "repro.con") else [])
-        return any(k in runners for k in keys)
+        keys = [rel] + (["$TESTDIR/" + rel[len("tests/programs/"):]] if rel.startswith("tests/programs/") else [])
+        return any(re.search(re.escape(k) + r"(?![\w./-])", runners) for k in keys)
     srcs = []
     for g in WITNESS_GLOBS:
         for f in sorted(glob.glob(os.path.join(root, g), recursive=True)):
@@ -1091,9 +1091,23 @@ def observe_codes(spec, cc, jobs, workdir, root):
         open(p, "w").write(x.body)
         srcs.append((f"spec:{x.key}", p))
     def one(item):
+        # a refusal counts only when the compiler exits normally with a failure status; each error is
+        # keyed by its code and the rule its diagnostic is tagged with (`rule: ID@n`, None if untagged)
         name, path = item
         rc, out, _ = run([cc, path, "-o", os.path.join(workdir, "w%d.bin" % (hash(name) & 0xffffff))], timeout=120)
-        return name, {m.group(2) for m in ERR_ALL_RE.finditer(out or "")}
+        if rc is None or rc <= 0 or rc >= 128 or LEAK_RE.search(out or ""):
+            return name, set()
+        found, lines = set(), (out or "").split("\n")
+        for i, ln in enumerate(lines):
+            m = ERR_ALL_RE.search(ln)
+            if not m: continue
+            tag = None
+            for l2 in lines[i + 1:]:
+                if ERR_ALL_RE.search(l2) or l2.startswith("error"): break
+                t = re.match(r"^\s+rule: ([A-Z]+-D?[0-9]+)@[0-9]+$", l2)
+                if t: tag = t.group(1); break
+            found.add((m.group(2), tag))
+        return name, found
     seen = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as ex:
         for name, codes in ex.map(one, srcs):
@@ -1114,7 +1128,10 @@ def check_code_coverage(spec, root, seen, n):
     covered = missing = allowed = 0
     for rid, st, c, stages, sites in rows:
         if st.startswith("pending") or c == "new": continue
-        w = seen.get(c, [])
+        # a witness is a refusal with this code tagged with this rule; an untagged one counts only for
+        # a code that this rule alone names
+        sole = len(code_map(spec).get(c, set())) <= 1
+        w = seen.get((c, rid), []) + (seen.get((c, None), []) if sole else [])
         if w:
             covered += 1
             if (c, rid) in allow:
@@ -1254,12 +1271,13 @@ def main():
         if a.observed:   # a recorded observation (the negative controls replay one without compiling)
             seen, n = {}, 0
             for r in read_tsv(a.observed) or []:
-                seen[r[0]] = [r[2]]; n = max(n, int(r[1]))
+                seen[(r[0], None if r[1] == "-" else r[1])] = [r[3]]; n += 1
         else:
             seen, n = observe_codes(spec, a.compiler, a.jobs, a.work or os.path.join("/tmp", "spec-s12"), a.root)
         if a.out:
             with open(a.out, "w") as f:
-                for k in sorted(seen): f.write(f"{k}\t{len(seen[k])}\t{seen[k][0]}\n")
+                for k in sorted(seen, key=lambda k: (k[0], k[1] or "")):
+                    f.write(f"{k[0]}\t{k[1] or '-'}\t{len(seen[k])}\t{seen[k][0]}\n")
         check_code_coverage(spec, a.root, seen, n)
     elif c == "site":
         n = gen_site(spec, a.out)
