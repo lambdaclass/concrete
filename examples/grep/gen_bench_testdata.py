@@ -10,6 +10,7 @@ Usage: gen_bench_testdata.py [OUT] [--lines N] [--seed S]
 import argparse
 import os
 import random
+import tempfile
 
 WORDS = ['the', 'quick', 'brown', 'fox', 'error', 'warning', 'debug',
          'info', 'jumps', 'over', 'lazy', 'dog', 'connection', 'timeout',
@@ -24,12 +25,21 @@ def main():
     ap.add_argument("--seed", type=int, default=20261028)
     args = ap.parse_args()
     rng = random.Random(args.seed)
-    tmp = args.out + ".tmp"
-    with open(tmp, "w") as f:
-        for _ in range(args.lines):
-            n = rng.randint(4, 15)
-            f.write(" ".join(rng.choice(WORDS) for _ in range(n)) + "\n")
-    os.replace(tmp, args.out)
+    # A private temp file beside the output, renamed into place: concurrent runs cannot interleave,
+    # an interrupted run leaves no partial output, and LF line ends on every platform keep the
+    # bytes (and bench.sh's pinned SHA-256) the same everywhere.
+    out_dir = os.path.dirname(os.path.abspath(args.out))
+    fd, tmp = tempfile.mkstemp(dir=out_dir, prefix=".bench_testdata.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="ascii", newline="\n") as f:
+            for _ in range(args.lines):
+                n = rng.randint(4, 15)
+                f.write(" ".join(rng.choice(WORDS) for _ in range(n)) + "\n")
+        os.replace(tmp, args.out)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
 
 
 if __name__ == "__main__":
