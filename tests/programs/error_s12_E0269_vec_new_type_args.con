@@ -1,0 +1,6 @@
+// S12 witness (E0269, TYPE-10): a builtin given the wrong number of type arguments.
+fn main() with(Alloc) -> Int {
+    let v: Vec<Int> = vec_new::<Int, Int>();
+    vec_free(v);
+    return 42;
+}

@@ -2536,6 +2536,7 @@ run_err "$TESTDIR/error_s12_e0508_not_int.con" "(E0508)"
 run_err "$TESTDIR/error_s12_e0509_bitnot_bool.con" "(E0509)"
 run_err "$TESTDIR/error_s12_E0123_module_cycle/main.con" "(E0123)"
 run_err "$TESTDIR/error_s12_E0124_two_modules_in_file/main.con" "(E0124)"
+run_err "$TESTDIR/error_s12_E0269_vec_new_type_args.con" "(E0269)"
 run_err "$TESTDIR/module_circular/main.con" "circular module import"
 # Self keyword errors
 run_err "$TESTDIR/error_self_outside_impl.con" "Self can only be used inside impl blocks"
