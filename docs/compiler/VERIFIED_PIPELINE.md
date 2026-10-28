@@ -791,7 +791,12 @@ are rejected transitively, kernel-only evidence permits only `propext`, `Classic
 passes (untrusted search may stay partial).
 **Exit:** every registered boundary, including the native backend and linking, has a type-checked
 obligation with explicit premises and status; evidence dependencies pass the declared axiom policy;
-semantics, checkers, validators and proved passes pass the totality gate. Before each boundary is frozen, its
+semantics, checkers, validators and proved passes pass the totality gate. The gate's first form is
+the totality ratchet (`scripts/tests/check_totality_ratchet.sh`, 2026-10-28): it reads the elaborated
+environment, holds every non-total compiler declaration in `docs/compiler/totality_baseline.tsv`
+with its stage and reason, fails on a new one, on `sorry` and on an unregistered axiom, and lets the
+baseline only shrink; the inventory and conversion order are in
+[research/compiler/partial-def-inventory-2026-10.md](../../research/compiler/partial-def-inventory-2026-10.md). Before each boundary is frozen, its
 semantic relations and obligations type-check and a representative preservation or
 validator-soundness lemma is proved for its motivating feature, including native encoding and
 linking.

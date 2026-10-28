@@ -18,15 +18,11 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 [ -f "$IR" ]  || { echo "FAIL $IR missing"; exit 1; }
 [ -f "$REG" ] || { echo "FAIL $REG missing"; exit 1; }
 
-echo "=== the IR is provable at all: structural, not partial ==="
-# The reference evaluator this IR replaces (ReportObligations.evalIntEnv) is a `partial def`,
-# so the kernel cannot reduce it and no theorem can say anything about it. If these become
-# partial, every row below silently stops meaning anything.
-if grep -qE "^\s*partial def (evalInt|evalBool|elimTmod)\b" "$IR"; then
-  no "an evaluator or transformation is 'partial' — the kernel cannot reduce it, so the rows are vacuous"
-else
-  ok "evaluators and transformations are structurally recursive (kernel-reducible)"
-fi
+# THE IR IS PROVABLE AT ALL. The reference evaluator this IR replaces (ReportObligations.evalIntEnv)
+# is a `partial def`, so the kernel cannot reduce it and no theorem can say anything about it. That
+# evalInt, evalBool and elimTmod stay total is pinned in docs/compiler/totality_pinned.tsv and held
+# by scripts/tests/check_totality_ratchet.sh, which reads the elaborated environment instead of
+# grepping for the keyword (one owner for every totality claim).
 
 echo "=== Row 1: eliminate_tmod is discharged by real theorems ==="
 for t in evalInt_elimTmod evalBool_elimTmod elimTmod_sound; do
@@ -196,21 +192,15 @@ else
   echo "  (skip capability fixture — compiler not built)"
 fi
 
-echo '=== the lowering path is kernel-reducible (no gratuitous `partial`) ==='
+echo '=== the lowering path is kernel-reducible: the locks it made possible ==='
 # A `partial def` is opaque to the kernel: no theorem and no `rfl` example can say anything
 # about it. That limitation blocked three separate locks this week before anyone checked
 # whether the keyword was NEEDED. Seven functions in the report layer — including the SMT
 # printer, both prover lowerings and the bv renderer — recurse only on direct subterms and
-# were marked partial by habit. Removing the keyword was the entire fix.
-RO="Concrete/Report/ReportObligations.lean"
-for f in exprToSmt exprToProver exprToProverU exprToLeanProp arithToBVW; do
-  if grep -qE "^partial def $f\b" "$RO"; then
-    no "$f is 'partial' again — its behaviour becomes unprovable and its locks impossible"
-  else
-    ok "$f is structural (kernel-reducible)"
-  fi
-done
-# And the locks that only became possible because of it. A drop the IR exists to repair,
+# were marked partial by habit. Removing the keyword was the entire fix. That they stay total
+# (exprToSmt, exprToProver, exprToProverU, exprToLeanProp, arithToBVW) is pinned in
+# docs/compiler/totality_pinned.tsv and held by check_totality_ratchet.sh.
+# The locks that only became possible because of it. A drop the IR exists to repair,
 # pinned at compile time rather than counted at runtime.
 LK="Concrete/Report/TermOfExpr.lean"
 grep -q "(.binOp sp .lt (.binOp sp .div (.ident sp \"a\") (.ident sp \"b\")) (.intLit sp 10)) = none := rfl" "$LK" \
@@ -226,11 +216,7 @@ echo "=== obligation DISCOVERY is complete on the arithmetic fragment ==="
 # first statement about the prior question, and it exists only because `collectShiftsE` stopped
 # being `partial`.
 DC="Concrete/Report/DiscoveryComplete.lean"
-if grep -qE "^partial def collectShiftsE\b" "$RO"; then
-  no "collectShiftsE is 'partial' again — the discovery-completeness theorem cannot be stated"
-else
-  ok "collectShiftsE is total (the theorem is expressible)"
-fi
+# collectShiftsE staying total (the theorem is expressible) is pinned in totality_pinned.tsv.
 grep -q "theorem collectShiftsE_complete" "$DC" \
   && ok "discovery completeness is a theorem: a present shift is always found" \
   || no "the discovery-completeness theorem is gone — missed obligations are unconstrained again"
@@ -243,12 +229,8 @@ grep -q "hasShift (.binOp spD .add" "$DC" \
 grep -q "= false := by simp \[hasShift\]" "$DC" \
   && ok "the coverage GAP (shift under a call) is pinned, not left to be discovered" \
   || no "the boundary example is gone — the theorem reads as global completeness"
-# The four walkers that recovered structural recursion outright.
-for f in exprIntTy exprIntervalMax cartesianEnvs cartesianEnvsPer; do
-  grep -qE "^partial def $f\b" "$RO" \
-    && no "$f is 'partial' again" \
-    || ok "$f is structural"
-done
+# The four walkers that recovered structural recursion outright (exprIntTy, exprIntervalMax,
+# cartesianEnvs, cartesianEnvsPer) are pinned total in totality_pinned.tsv.
 
 echo "=== discovery completeness covers all FOUR runtime-safety families ==="
 for t in collectShiftsE_complete collectDivisorsE_complete collectArithE_complete \
@@ -257,11 +239,8 @@ for t in collectShiftsE_complete collectDivisorsE_complete collectArithE_complet
     && ok "$t" \
     || no "$t is gone — that family's discovery is unconstrained again"
 done
-for f in collectDivisorsE collectIndexUsesE collectArithE; do
-  grep -qE "^partial def $f\b" "$RO" \
-    && no "$f is 'partial' again — its completeness theorem cannot be stated" \
-    || ok "$f is total"
-done
+# collectDivisorsE, collectIndexUsesE and collectArithE stay total (their completeness theorems
+# can be stated): pinned in totality_pinned.tsv.
 
 echo "=== the bounds bug this work FOUND stays fixed (end-to-end, not just by rfl) ==="
 # `(a)[i]` produced NO array-bounds obligation: absent from the report, not merely unproven,

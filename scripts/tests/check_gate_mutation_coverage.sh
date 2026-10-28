@@ -502,7 +502,9 @@ cd "$ROOT_DIR"
 # top of train 4's 136; the cap-soundness branch alone counted 134 -> 139.
 # 141 -> 159 with landing train 6's eighteen tightening families (bugs 165, 166, 183, 137, 190,
 # 185, 198, 199; D1, D2, D3, D6; G13, G15, G16), each killed by check_tightening_rules.sh.
-EXPECTED_FAMILIES=159
+# 159 -> 160 with the totality ratchet's totality-ratchet-new-partial family (R-0506), killed by
+# check_totality_ratchet.sh.
+EXPECTED_FAMILIES=160
 
 # LOADED FOR BOTH ROLES, BEFORE THE DISPATCH. The child computes the evidence root and the
 # supervisor recomputes it; they must use the SAME function or two implementations could each agree
@@ -1054,6 +1056,13 @@ add "post-mono-literal-range" "Concrete/Check/Verify.lean" "check_cast_matrix.sh
 # build" is the correct mechanism rather than the weak one, unlike a mutation that dies on an
 # unrelated lint. This family records that the vacuity guard, not just the soundness proof,
 # is load-bearing.
+# R-0506 totality ratchet. Marking a total, structurally recursive Lower helper `partial` still
+# builds and changes no output, so only the ratchet can notice: the declaration becomes kernel-opaque
+# and is not in docs/compiler/totality_baseline.tsv.
+add "totality-ratchet-new-partial" "Concrete/IR/Lower.lean" "check_totality_ratchet.sh" yes \
+  $'private def arrayLenOfTy : Ty → Option Nat' \
+  $'private partial def arrayLenOfTy : Ty → Option Nat'
+
 add "transform-has-effect" "Concrete/Semantics/TermIR.lean" "check_transform_register.sh" yes \
   $'    | .bin .tmod l r =>\n      let l\' := elimTmod l\n      let r\' := elimTmod r\n      .bin .sub l\' (.bin .mul r\' (.bin .tdiv l\' r\'))' \
   $'    | .bin .tmod l r => .bin .tmod (elimTmod l) (elimTmod r)'

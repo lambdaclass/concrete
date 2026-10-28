@@ -1165,6 +1165,15 @@ jobs:
           use-github-cache: ${{ steps.lake_seed.outputs.seeded != 'true' }}
           build-args: "--log-level=warning"
 
+      # The totality ratchet (R-0506): no NEW non-total compiler declaration, a baseline that only
+      # shrinks against the base revision (hence this job: it checks out full history), no sorry and
+      # no unregistered axiom in a compiler declaration.
+      - name: Totality ratchet (no new partial/unsafe/opaque compiler declarations)
+        env:
+          # A push is compared with the revision before ALL of its commits, not with the tip's parent.
+          TOTALITY_BASE: ${{ github.event_name == 'push' && github.event.before || '' }}
+        run: bash scripts/tests/check_totality_ratchet.sh
+
       - name: Install clang
         run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo "self-hosted runner, using preinstalled clang"; else sudo apt-get update && sudo apt-get install -y clang; fi
 

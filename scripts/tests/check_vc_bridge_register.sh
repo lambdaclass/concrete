@@ -227,12 +227,9 @@ echo "=== the reference evaluator's division convention (2026-08-04) ==="
 # could not reduce it and no `rfl` example could pin its behaviour. R-0455 replaced it with a
 # structural wrapper over the term IR, so the behaviour is now pinned by COMPILE-TIME
 # examples and this gate only has to prove those were not deleted.
+# That evalIntEnv and evalBoolEnv stay total is pinned in docs/compiler/totality_pinned.tsv and held
+# by scripts/tests/check_totality_ratchet.sh, which reads the elaborated environment.
 RO="Concrete/Report/ReportObligations.lean"
-if grep -qE "^\s*partial def (evalIntEnv|evalBoolEnv)\b" "$RO"; then
-  no "the reference evaluator is 'partial' again — its behaviour becomes unprovable and the locks below are impossible"
-else
-  ok "the reference evaluator is structural (kernel-reducible, so its behaviour is provable)"
-fi
 # The locks that grep stood in for. Truncating vs flooring divergence at a negative dividend
 # is where a silent re-pointing of the reference would hide.
 grep -q 'example : evalIntEnv \[("a", -7), ("b", 2)\]' "$RO" \

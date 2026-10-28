@@ -1,0 +1,26 @@
+# Declarations a stated theorem or kernel lock needs TOTAL, for the totality ratchet
+# (scripts/tests/check_totality_ratchet.sh). A pinned declaration may not appear in the
+# inventory as non-total, and may not be admitted by adding it to the baseline: making it
+# partial again makes the named theorem unstatable, so the row must be deleted here first,
+# together with the theorem. Moved from the point checks check_transform_register.sh and
+# check_vc_bridge_register.sh held.
+#
+# file	declaration (last name component)	why it must stay total
+Concrete/Semantics/TermIR.lean	evalInt	Register B rows (TRANSFORM_REGISTER.md) are theorems about it; partial, every row is vacuous
+Concrete/Semantics/TermIR.lean	evalBool	Register B rows (TRANSFORM_REGISTER.md) are theorems about it; partial, every row is vacuous
+Concrete/Semantics/TermIR.lean	elimTmod	Register B row 1 (elimTmod_sound) is a theorem about it
+Concrete/Report/ReportObligations.lean	exprToSmt	the SMT printer's locks (TermOfExpr.lean) reduce it by rfl
+Concrete/Report/ReportObligations.lean	exprToProver	the prover lowering's locks reduce it by rfl
+Concrete/Report/ReportObligations.lean	exprToProverU	the prover lowering's locks reduce it by rfl
+Concrete/Report/ReportObligations.lean	exprToLeanProp	the Lean-prop lowering's locks reduce it by rfl
+Concrete/Report/ReportObligations.lean	arithToBVW	the bv renderer's locks reduce it by rfl
+Concrete/Report/ReportObligations.lean	collectShiftsE	collectShiftsE_complete (DiscoveryComplete.lean) is stated about it
+Concrete/Report/ReportObligations.lean	collectDivisorsE	collectDivisorsE_complete (DiscoveryComplete.lean) is stated about it
+Concrete/Report/ReportObligations.lean	collectIndexUsesE	collectIndexUsesE_complete (DiscoveryComplete.lean) is stated about it
+Concrete/Report/ReportObligations.lean	collectArithE	collectArithE_complete (DiscoveryComplete.lean) is stated about it
+Concrete/Report/ReportObligations.lean	exprIntTy	the discovery-completeness proofs unfold it
+Concrete/Report/ReportObligations.lean	exprIntervalMax	the discovery-completeness proofs unfold it
+Concrete/Report/ReportObligations.lean	cartesianEnvs	the discovery-completeness proofs unfold it
+Concrete/Report/ReportObligations.lean	cartesianEnvsPer	the discovery-completeness proofs unfold it
+Concrete/Report/ReportObligations.lean	evalIntEnv	the reference evaluator every lowering-agreement check measures against; its division convention is pinned by rfl
+Concrete/Report/ReportObligations.lean	evalBoolEnv	the reference evaluator every lowering-agreement check measures against; pinned by rfl

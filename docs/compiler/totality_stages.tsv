@@ -1,0 +1,37 @@
+# Pipeline stage of each compiler source file, for the totality ratchet
+# (scripts/tests/check_totality_ratchet.sh, docs/compiler/totality_baseline.tsv).
+#
+# The longest matching path prefix wins. `proof` = yes marks the stages docs/compiler/VERIFIED_PIPELINE.md
+# says get proven: principle 8, "semantics, checkers, validators and proved passes are total; untrusted
+# search may stay partial", and the pass table (Check and Elab checked against the declarative
+# relation, S8/R-0499; Mono's validator, S8a/R-0510; the Core -> Place MIR lowering, S10/R-0501; SSA
+# validators, S12/R-0504; Core semantics and the reference evaluators, S7/R-0496; claims generated on
+# Core, S9/R-0495). A non-total declaration in a `proof = yes` stage must carry a baseline reason;
+# in every stage a NEW one fails the gate. `owner` is the roadmap row whose delivery needs the
+# stage total; it becomes the baseline row's owner.
+#
+# Every compiler source file (Concrete.lean, Concrete/, and the executable root Main.lean) must
+# match a prefix; the gate refuses an unmapped one. Browser.lean is not inventoried: see the gate.
+#
+# prefix	stage	proof	owner
+Concrete/Check/	Check	yes	R-0499
+Concrete/Elab/	Elab	yes	R-0499
+Concrete/IR/Mono.lean	Mono	yes	R-0510
+Concrete/IR/Lower.lean	Lower	yes	R-0501
+Concrete/IR/SSA.lean	SSA	yes	R-0504
+Concrete/IR/SSACleanup.lean	SSA	yes	R-0504
+Concrete/IR/SSAVerify.lean	SSA	yes	R-0504
+Concrete/Backend/EmitSSA.lean	EmitSSA	yes	R-0504
+Concrete/Semantics/	Semantics	yes	R-0496
+Concrete/Interp/	Semantics	yes	R-0496
+Concrete/Proof/ProofCore.lean	ProofCore	yes	R-0495
+Concrete/Frontend/	Frontend	no	R-0506
+Concrete/Resolve/	Resolve	no	R-0506
+Concrete/Backend/	Backend	no	R-0506
+Concrete/Proof/	Proof	no	R-0506
+Concrete/ProofKit	ProofKit	no	R-0506
+Concrete/Report/	Report	no	R-0506
+Concrete/Pipeline/	Pipeline	no	R-0506
+Concrete/BuildIdentity.lean	Pipeline	no	R-0506
+Concrete.lean	Pipeline	no	R-0506
+Main.lean	Pipeline	no	R-0506

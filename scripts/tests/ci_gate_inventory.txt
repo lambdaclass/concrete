@@ -244,6 +244,7 @@ bash scripts/tests/check_tar_list_differential.sh
 bash scripts/tests/check_tcpserve.sh
 bash scripts/tests/check_tightening_rules.sh
 bash scripts/tests/check_totality_judgment.sh
+bash scripts/tests/check_totality_ratchet.sh
 bash scripts/tests/check_trace_pipeline.sh
 bash scripts/tests/check_trailing_value_blocks.sh
 bash scripts/tests/check_trap_inventory.sh

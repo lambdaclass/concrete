@@ -180,6 +180,16 @@ AREA_SEL=()
 # changed only Markdown, left a diff3 marker in CHANGELOG.md, passed this hook, and turned main red
 # on the lint job. The gate takes seconds; a red main costs a CI round-trip and blocks everyone.
 SEL+=(--first "bash scripts/tests/check_gate_hygiene.sh")
+# THE TOTALITY RATCHET BLOCKS THE PUSH (R-0506). Any compiler source, the baseline, its stage or pin
+# tables, or the inventory tool: a new partial/unsafe/opaque declaration, a sorry or an unregistered
+# axiom in the compiler fails here, before CI. Named explicitly rather than left to impact selection,
+# so the area-map fallback cannot drop it either, and BEFORE the docs-only split: a push that changes
+# only docs/compiler/totality_baseline.tsv (or the stage and pin tables) is exactly the push that
+# could admit a partial declaration.
+if grep -qE '^Concrete/|^Concrete\.lean$|^Main\.lean$|^Browser\.lean$|^docs/compiler/totality_|^scripts/tools/totality_|^scripts/tests/check_totality_ratchet\.sh$|^scripts/tests/axiom_native_owners\.txt$' <<<"$changed"; then
+  echo "pre-push: totality ratchet selected (compiler sources or its baseline changed)"
+  SEL+=(--first "bash scripts/tests/check_totality_ratchet.sh")
+fi
 if [ "$docs_only" = "1" ]; then
   echo "pre-push: docs-only change — docs gates"
   SEL+=(--first "bash scripts/tests/check_docs_drift.sh"
