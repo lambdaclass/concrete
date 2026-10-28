@@ -884,6 +884,21 @@ if [ "$_drc" != 0 ] && grep -q 'FAIL bash scripts/tests/check_dummy_77.sh.*does 
 else
   no "CONTROL: an undeclared gate's exit 77 was not a failure (rc=$_drc): $(grep -E 'DEFERRED|FAIL' "$TMP/run.undecl" | tr '\n' ' ')"
 fi
+# A pool FAILURE re-run sequentially that then only defers keeps the failure: the declared gate fails
+# its first run (a catastrophic overrun, say) and exits 77 on the re-run.
+printf 'if [ -e "$DUMMY_MARK/failed-once" ]; then exit 77; fi\ntouch "$DUMMY_MARK/failed-once"\nexit 1\n' \
+  > "$RSB/scripts/tests/check_compile_scaling.sh"
+( cd "$RSB" && git add -A && git -c user.email=gate@local -c user.name=gate commit -qm fail-then-defer ) >/dev/null 2>&1
+rm -f "$MARK/failed-once"
+( cd "$RSB" && exec env -u CONCRETE_GATE_LOCK -u CONCRETE_GATE_SESSION PATH="$TMP/bin:$PATH" \
+    DUMMY_MARK="$MARK" JOBS=2 bash scripts/tests/run_ci_gates_local.sh --first "bash scripts/tests/check_dummy_quick.sh" \
+    --filter "bash scripts/tests/check_compile_scaling.sh" >"$TMP/run.faildefer" 2>&1 ); _drc=$?
+if [ "$_drc" != 0 ] && [ -e "$MARK/failed-once" ] && grep -q 'the failure stands' "$TMP/run.faildefer" \
+   && grep -qx 'deferred=0' "$RSB/.ci-gates-summary" && grep -qx 'failed=1' "$RSB/.ci-gates-summary"; then
+  ok "CONTROL: a pool failure whose sequential re-run exits 77 stays a FAIL, not a deferral"
+else
+  no "CONTROL: a pool failure became a deferral on re-run (rc=$_drc): $(grep -E 'DEFERRED|FAIL|stands' "$TMP/run.faildefer" | tr '\n' ' ')"
+fi
 
 # --- the launcher itself, against a run that ignores SIGTERM ---
 # Escalation must not wait for the run to exit: a runner that ignores SIGTERM would hold the main

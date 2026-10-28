@@ -681,9 +681,7 @@ printf 'start\tend\tsecs\tstage\tverdict\tcmd\n' > "$GATE_TIMINGS"
 # Creating and deleting a log per gate inside the checkout churned the tree that other gates copy
 # (`cp -a` of the checkout in the mutation driver refused when a file vanished under it).
 GATE_OUT_TMP="$(mktemp -d)"
-RUN_SEQ_DEFERRED=0   # set by run_seq: its last 0 was a deferral (bug 315), not a pass
-run_seq() { # cmd [stage] -> 0 pass or deferred (RUN_SEQ_DEFERRED=1) / 1 fail; output kept only on failure
-  RUN_SEQ_DEFERRED=0
+run_seq() { # cmd [stage] -> 0 pass or deferred (bug 315; never at stage recheck) / 1 fail; output kept only on failure
   local _out="$FAILLOG_DIR/$(faillog_name "$1").log" _t0 _st="${2:-seq}" _tmp
   _tmp="$GATE_OUT_TMP/seq.$RANDOM$RANDOM.log"
   _t0="$(_now)"
@@ -704,11 +702,15 @@ run_seq() { # cmd [stage] -> 0 pass or deferred (RUN_SEQ_DEFERRED=1) / 1 fail; o
     PASS=$((PASS+1)); rm -f "$_tmp"; _timing_row "$_t0" "$(_now)" "$_st" PASS "$1"; return 0
   fi
   local _why=""
-  if [ "$_rc" = "$GATE_DEFERRED_RC" ]; then
+  if [ "$_rc" = "$GATE_DEFERRED_RC" ] && [ "$_st" = recheck ]; then
+    # The pool run FAILED; this re-run made no verdict, so it cannot overturn that one (a failure
+    # the gate judged on any host, such as a catastrophic overrun, would otherwise read as deferred).
+    _why="failed in the pool; the sequential re-run exited $GATE_DEFERRED_RC (not judged), so the failure stands"
+  elif [ "$_rc" = "$GATE_DEFERRED_RC" ]; then
     # Kept, like a failure's: what this host did not judge is worth reading.
     if _why="$(gate_deferral "$1" "$WORKFLOW")"; then
       mv -f "$_tmp" "${_out%.log}.deferred.log" 2>/dev/null || cp -f "$_tmp" "${_out%.log}.deferred.log" 2>/dev/null
-      _timing_row "$_t0" "$(_now)" "$_st" DEFERRED "$1"; _defer "$1"; RUN_SEQ_DEFERRED=1
+      _timing_row "$_t0" "$(_now)" "$_st" DEFERRED "$1"; _defer "$1"
       echo "  DEFERRED $1 (not judged on this host; CI decides: ${_out#$ROOT_DIR/} -> .deferred.log)"
       return 0
     fi
@@ -820,12 +822,9 @@ else
     # The re-run's output is KEPT on failure, as in sequential mode. Parallel is the default, and it
     # discarded both runs' output — so the hook's fast surface checklist, whose own report names the
     # failing constituent, failed with nothing but its name.
+    # A re-run that only defers keeps the pool's failure (run_seq, stage recheck): only a pass recovers.
     if run_seq "$cmd" recheck; then
-      if [ "$RUN_SEQ_DEFERRED" = 1 ]; then
-        RECHECKED="$RECHECKED\n  (failed in the pool, DEFERRED to CI on sequential re-run: not a pass) $cmd"
-      else
-        RECHECKED="$RECHECKED\n  (contention flake, passed on sequential re-run) $cmd"
-      fi
+      RECHECKED="$RECHECKED\n  (contention flake, passed on sequential re-run) $cmd"
     fi
   done
   [ -n "$RECHECKED" ] && echo -e "Recovered under sequential re-run:$RECHECKED"
