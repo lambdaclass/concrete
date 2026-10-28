@@ -1007,6 +1007,102 @@ def rewrite_links(txt, here):
 
 
 # ---------------------------------------------------------------------------------------------
+# ---------------------------------------------------------------------------------------------
+# S12 rule sites and negative witnesses (class 13: a documented rule with no enforcing site)
+# ---------------------------------------------------------------------------------------------
+INVENTORY_PATH = "docs/spec/rule_sites.tsv"
+ALLOW_PATH = "docs/spec/coverage_allow.tsv"
+INVENTORY_HEADER = """# GENERATED from docs/spec/*.md by `python3 scripts/spec/spec.py inventory` -- do not edit; edit the
+# spec (check_spec.sh S12). One row per (refusal entry, diagnostic code): the rule, its status, the
+# code, the stages it is reported at, and the declarations that enforce it (`Enforced by:`). S12
+# requires every row of an enforced or partial refusal to have a negative witness: a spec reject
+# example or a test program the compiler refuses with that code, unless coverage_allow.tsv names it
+# with a reason. Columns: rule, status, code, stages, enforced_by.
+"""
+ALLOW_REASON_RE = re.compile(r"^(od:OD[0-9]+|R-[0-9]{4}|bug-[0-9]{3}|unreachable:\S.*)$")
+WITNESS_GLOBS = ["tests/programs/*.con", "tests/regressions/*/*.con", "tests/invalid_programs/**/*.con"]
+
+def inventory_rows(spec):
+    rows = []
+    for e in spec.entries:
+        if e.kind != "refusal": continue
+        st = " ".join(x for x in e.status() if x)
+        sites = ", ".join(e.names("Enforced by")) or "-"
+        for c, stages in e.codes():
+            if c is None: continue
+            rows.append((e.id, st, c, ",".join(stages) if isinstance(stages, list) else stages, sites))
+    return rows
+
+def gen_inventory(spec):
+    lines = [INVENTORY_HEADER.rstrip("\n")]
+    for r in inventory_rows(spec):
+        lines.append("\t".join(r))
+    return "\n".join(lines) + "\n"
+
+def check_inventory(spec, root):
+    txt = gen_inventory(spec)
+    p = os.path.join(root, INVENTORY_PATH)
+    cur = open(p, encoding="utf-8").read() if os.path.exists(p) else ""
+    if cur != txt: fail("S12", f"{INVENTORY_PATH} differs from `spec.py inventory` (hand edit or stale; regenerate)")
+    else: ok(f"S12 inventory: {INVENTORY_PATH} equals its generator's output ({len(inventory_rows(spec))} rule codes)")
+
+ERR_ALL_RE = re.compile(r"error\[([a-z-]+)\]: \((E[0-9]{4})\)")
+
+def observe_codes(spec, cc, jobs, workdir, root):
+    """Compile every negative-witness candidate (test programs and the spec's non-project reject
+    examples) and record each diagnostic code each one reports: {code: [witness, ...]}."""
+    os.makedirs(workdir, exist_ok=True)
+    srcs = []
+    for g in WITNESS_GLOBS:
+        for f in sorted(glob.glob(os.path.join(root, g), recursive=True)):
+            # a project's sources compile only as a package; single files only
+            if not os.path.exists(os.path.join(os.path.dirname(f), "Concrete.toml")):
+                srcs.append((os.path.relpath(f, root), f))
+    for i, x in enumerate(x for e in spec.entries for x in e.examples
+                          if not x.errors and x.verdict == "reject" and not x.attrs.get("project")):
+        p = os.path.join(workdir, f"rej{i:04d}.con")
+        open(p, "w").write(x.body)
+        srcs.append((f"spec:{x.key}", p))
+    def one(item):
+        name, path = item
+        rc, out, _ = run([cc, path, "-o", os.path.join(workdir, "w%d.bin" % (hash(name) & 0xffffff))], timeout=120)
+        return name, {m.group(2) for m in ERR_ALL_RE.finditer(out or "")}
+    seen = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as ex:
+        for name, codes in ex.map(one, srcs):
+            for c in codes: seen.setdefault(c, []).append(name)
+    if not srcs: fail("S12", "no witness candidates found (refusing a vacuous run)")
+    return seen, len(srcs)
+
+def check_code_coverage(spec, root, seen, n):
+    allow = {}
+    for r in read_tsv(os.path.join(root, ALLOW_PATH)) or []:
+        if len(r) != 3: fail("S12", f"{ALLOW_PATH} row {r} does not have 3 columns (code, rule, reason)"); continue
+        if not ALLOW_REASON_RE.match(r[2]):
+            fail("S12", f"{ALLOW_PATH}: {r[0]} {r[1]}: reason '{r[2]}' is not od:ODn, R-NNNN, bug-NNN or unreachable:<why>")
+        if (r[0], r[1]) in allow: fail("S12", f"{ALLOW_PATH}: {r[0]} {r[1]} listed twice")
+        allow[(r[0], r[1])] = r[2]
+    rows = inventory_rows(spec)
+    keys = {(c, rid) for rid, st, c, _, _ in rows}
+    covered = missing = allowed = 0
+    for rid, st, c, stages, sites in rows:
+        if st.startswith("pending") or c == "new": continue
+        w = seen.get(c, [])
+        if w:
+            covered += 1
+            if (c, rid) in allow:
+                fail("S12", f"{ALLOW_PATH}: {c} {rid} is allow-listed but {w[0]} now witnesses it (remove the row)")
+        elif (c, rid) in allow:
+            allowed += 1
+            print(f"  ALLOWED {rid} {c}: {allow[(c, rid)]}")
+        else:
+            missing += 1
+            fail("S12", f"{rid} names {c} ({stages}), enforced by {sites}, but no test program or reject example is refused with {c}: add a negative fixture, or an allow row with its reason")
+    for k in sorted(set(allow) - keys):
+        fail("S12", f"{ALLOW_PATH}: {k[0]} {k[1]} names no (rule, code) of the spec")
+    print(f"  S12 witnesses: {covered} rule codes witnessed, {allowed} allow-listed, {missing} missing, over {n} programs")
+    if missing == 0: ok(f"S12 witnesses: every enforced rule code has a negative witness or a stated reason")
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd")
@@ -1083,6 +1179,16 @@ def main():
             else: ok(f"S9 manifest: {path} equals its generator's output ({txt.count(chr(10)) - MANIFEST_HEADER.count(chr(10))} rows)")
         else:
             open(os.path.join(a.root, path), "w").write(txt) if a.out is None else open(a.out, "w").write(txt)
+    elif c == "inventory":
+        if a.check: check_inventory(spec, a.root)
+        else:
+            open(os.path.join(a.root, INVENTORY_PATH) if a.out is None else a.out, "w").write(gen_inventory(spec))
+    elif c == "code-coverage":
+        seen, n = observe_codes(spec, a.compiler, a.jobs, a.work, a.root)
+        if a.out:
+            with open(a.out, "w") as f:
+                for k in sorted(seen): f.write(f"{k}\t{len(seen[k])}\t{seen[k][0]}\n")
+        check_code_coverage(spec, a.root, seen, n)
     elif c == "site":
         n = gen_site(spec, a.out)
         print(f"wrote {n} chapter pages to {a.out}")

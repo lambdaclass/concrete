@@ -1,0 +1,215 @@
+# GENERATED from docs/spec/*.md by `python3 scripts/spec/spec.py inventory` -- do not edit; edit the
+# spec (check_spec.sh S12). One row per (refusal entry, diagnostic code): the rule, its status, the
+# code, the stages it is reported at, and the declarations that enforce it (`Enforced by:`). S12
+# requires every row of an enforced or partial refusal to have a negative witness: a spec reject
+# example or a test program the compiler refuses with that code, unless coverage_allow.tsv names it
+# with a reason. Columns: rule, status, code, stages, enforced_by.
+REF-1	enforced	E0236	check,post-mono	Concrete.checkFn, Concrete.verifyNoReturnedRefs, Concrete.checkModule
+REF-2	enforced	E0236	check	Concrete.resolveType, Concrete.checkModule
+REF-3	enforced	E0239	check,post-mono	Concrete.checkModule, Concrete.verifyNoStoredRefs
+REF-4	enforced	E0236	check	Concrete.refuseNestedRefInstantiation, Concrete.refuseNestedRefSpecialization, Concrete.verifyNoStoredRefs
+REF-4	enforced	E0239	post-mono	Concrete.refuseNestedRefInstantiation, Concrete.refuseNestedRefSpecialization, Concrete.verifyNoStoredRefs
+REF-4	enforced	E0238	check,mono	Concrete.refuseNestedRefInstantiation, Concrete.refuseNestedRefSpecialization, Concrete.verifyNoStoredRefs
+REF-5	enforced	E0238	check	Concrete.normPlace, Concrete.refuseRefValuedBranch, Concrete.checkRefArg, Concrete.recordRefProvenance, Concrete.refuseTemporaryBorrow
+REF-6	enforced	E0302	check,post-mono	Concrete.checkStmt, Concrete.verifyNoRefBindingsPostMono
+REF-6	enforced	E0303	check,post-mono	Concrete.checkStmt, Concrete.verifyNoRefBindingsPostMono
+REF-6	enforced	E0234	check	Concrete.checkStmt, Concrete.verifyNoRefBindingsPostMono
+REF-6	enforced	E0238	check	Concrete.checkStmt, Concrete.verifyNoRefBindingsPostMono
+REF-7	enforced	E0238	check	Concrete.checkStmt
+REF-8	enforced	E0203	check	Concrete.consumeVar, Concrete.checkCallBorrowConflicts, Concrete.checkWriteAccess
+REF-8	enforced	E0204	check	Concrete.consumeVar, Concrete.checkCallBorrowConflicts, Concrete.checkWriteAccess
+REF-8	enforced	E0218	check	Concrete.consumeVar, Concrete.checkCallBorrowConflicts, Concrete.checkWriteAccess
+REF-8	enforced	E0231	check	Concrete.consumeVar, Concrete.checkCallBorrowConflicts, Concrete.checkWriteAccess
+REF-8	enforced	E0232	check	Concrete.consumeVar, Concrete.checkCallBorrowConflicts, Concrete.checkWriteAccess
+REF-8	enforced	E0235	check	Concrete.consumeVar, Concrete.checkCallBorrowConflicts, Concrete.checkWriteAccess
+REF-8	enforced	E0293	check	Concrete.consumeVar, Concrete.checkCallBorrowConflicts, Concrete.checkWriteAccess
+REF-8	enforced	E0238	check	Concrete.consumeVar, Concrete.checkCallBorrowConflicts, Concrete.checkWriteAccess
+REF-11	enforced	E0293	check	Concrete.pathsOverlap, Concrete.checkCallRootReads
+REF-12	enforced	E0237	elab,check	Concrete.checkMutAccess, Concrete.checkWriteAccess
+SCOPE-1	enforced	E0301	check	Concrete.scope1Diagnostics, Concrete.constInitDiagnostics
+SCOPE-1	enforced	E0305	check	Concrete.scope1Diagnostics, Concrete.constInitDiagnostics
+SCOPE-1	enforced	E0292	check	Concrete.scope1Diagnostics, Concrete.constInitDiagnostics
+SCOPE-1	enforced	E0214	check	Concrete.scope1Diagnostics, Concrete.constInitDiagnostics
+SCOPE-1	enforced	E0215	check	Concrete.scope1Diagnostics, Concrete.constInitDiagnostics
+PAT-2	enforced	E0530	core-check	Concrete.ccCheckExpr
+PAT-2	enforced	E0534	core-check	Concrete.ccCheckExpr
+PAT-3	enforced	E0304	check	Concrete.checkExprCore, Concrete.ccCheckExpr
+PAT-3	enforced	E0309	check	Concrete.checkExprCore, Concrete.ccCheckExpr
+PAT-3	enforced	E0531	core-check	Concrete.checkExprCore, Concrete.ccCheckExpr
+PAT-3	enforced	E0532	core-check	Concrete.checkExprCore, Concrete.ccCheckExpr
+PAT-3	enforced	E0533	core-check	Concrete.checkExprCore, Concrete.ccCheckExpr
+PAT-4	enforced	E0300	check	Concrete.checkGuard
+PAT-5	enforced	E0252	check	Concrete.checkStmt, Concrete.checkExprCore
+PAT-5	enforced	E0308	check	Concrete.checkStmt, Concrete.checkExprCore
+PAT-8	enforced	E0318	check	Concrete.checkStmt
+FFI-1	enforced	E0588	elab,core-check	Concrete.refuseForeignFnValue
+FFI-3	enforced	E0116	resolve	Concrete.coreCheckProgram, Concrete.ccCheckModuleDecls
+FFI-3	enforced	E0117	resolve	Concrete.coreCheckProgram, Concrete.ccCheckModuleDecls
+FFI-3	enforced	E0574	core-check	Concrete.coreCheckProgram, Concrete.ccCheckModuleDecls
+FFI-3	enforced	E0575	core-check	Concrete.coreCheckProgram, Concrete.ccCheckModuleDecls
+FFI-4	enforced	E0572	core-check	Concrete.ccCheckModuleDecls
+FFI-4	enforced	E0573	core-check	Concrete.ccCheckModuleDecls
+FFI-4	enforced	E0576	core-check	Concrete.ccCheckModuleDecls
+FFI-4	enforced	E0577	core-check	Concrete.ccCheckModuleDecls
+FFI-4	enforced	E0585	core-check	Concrete.ccCheckModuleDecls
+FFI-5	enforced	E0118	resolve	Concrete.Pipeline.emit
+FFI-5	enforced	E0119	resolve	Concrete.Pipeline.emit
+OWN-1	enforced	E0205	check	Concrete.consumeVar, Concrete.checkSharedAccess, Concrete.checkStmt
+OWN-1	enforced	E0230	check	Concrete.consumeVar, Concrete.checkSharedAccess, Concrete.checkStmt
+OWN-2	enforced	E0208	check	Concrete.checkScopeExit, Concrete.checkBlockLocalsConsumed, Concrete.checkReturnPathConsumed, Concrete.checkStmt
+OWN-2	enforced	E0210	check	Concrete.checkScopeExit, Concrete.checkBlockLocalsConsumed, Concrete.checkReturnPathConsumed, Concrete.checkStmt
+OWN-2	enforced	E0211	check	Concrete.checkScopeExit, Concrete.checkBlockLocalsConsumed, Concrete.checkReturnPathConsumed, Concrete.checkStmt
+OWN-3	enforced	E0209	check	Concrete.mergeVarStates, Concrete.checkNoBranchConsumption, Concrete.checkExprCore
+OWN-3	enforced	E0212	check	Concrete.mergeVarStates, Concrete.checkNoBranchConsumption, Concrete.checkExprCore
+OWN-3	enforced	E0213	check	Concrete.mergeVarStates, Concrete.checkNoBranchConsumption, Concrete.checkExprCore
+OWN-4	enforced	E0207	check	Concrete.consumeVar
+OWN-5	enforced	E0287	check	Concrete.checkStmt, Concrete.checkExprCore
+OWN-5	enforced	E0288	check	Concrete.checkStmt, Concrete.checkExprCore
+OWN-5	enforced	E0289	check	Concrete.checkStmt, Concrete.checkExprCore
+OWN-5	enforced	E0295	check	Concrete.checkStmt, Concrete.checkExprCore
+OWN-6	enforced	E0286	check	Concrete.checkStmt
+OWN-7	enforced	E0294	check	Concrete.checkStmt
+OWN-8	enforced	E0290	check	Concrete.checkExprCore
+OWN-9	enforced	E0219	check	Concrete.checkStmt
+OWN-9	enforced	E0291	check	Concrete.checkStmt
+OWN-10	enforced	E0217	check	Concrete.checkStmt, Concrete.checkMutAccess
+OWN-10	enforced	E0233	check	Concrete.checkStmt, Concrete.checkMutAccess
+OWN-11	enforced	E0243	check	Concrete.refuseErasedConsumption, Concrete.refuseConditionalConsumption
+OWN-11	enforced	E0244	check	Concrete.refuseErasedConsumption, Concrete.refuseConditionalConsumption
+OWN-12	enforced	E0206	check	Concrete.consumeVar, Concrete.checkStmt
+OWN-12	enforced	E0279	check	Concrete.consumeVar, Concrete.checkStmt
+OWN-12	enforced	E0282	check	Concrete.consumeVar, Concrete.checkStmt
+OWN-13	enforced	E0570	core-check	Concrete.ccCheckModuleDecls, Concrete.checkExprCore
+OWN-13	enforced	E0584	core-check	Concrete.ccCheckModuleDecls, Concrete.checkExprCore
+OWN-13	enforced	E0272	check	Concrete.ccCheckModuleDecls, Concrete.checkExprCore
+OWN-13	enforced	E0273	check	Concrete.ccCheckModuleDecls, Concrete.checkExprCore
+OWN-14	enforced	E0571	core-check,post-mono	Concrete.ccCheckModuleDecls
+TYPE-4	enforced	E0220	check	Concrete.expectTy, Concrete.checkExprCore, Concrete.checkStmt, Concrete.ccCheckExpr, Concrete.ccCheckStmt
+TYPE-4	enforced	E0222	check	Concrete.expectTy, Concrete.checkExprCore, Concrete.checkStmt, Concrete.ccCheckExpr, Concrete.ccCheckStmt
+TYPE-4	enforced	E0224	check	Concrete.expectTy, Concrete.checkExprCore, Concrete.checkStmt, Concrete.ccCheckExpr, Concrete.ccCheckStmt
+TYPE-4	enforced	E0225	check	Concrete.expectTy, Concrete.checkExprCore, Concrete.checkStmt, Concrete.ccCheckExpr, Concrete.ccCheckStmt
+TYPE-4	enforced	E0226	check	Concrete.expectTy, Concrete.checkExprCore, Concrete.checkStmt, Concrete.ccCheckExpr, Concrete.ccCheckStmt
+TYPE-4	enforced	E0500	core-check	Concrete.expectTy, Concrete.checkExprCore, Concrete.checkStmt, Concrete.ccCheckExpr, Concrete.ccCheckStmt
+TYPE-4	enforced	E0560	core-check	Concrete.expectTy, Concrete.checkExprCore, Concrete.checkStmt, Concrete.ccCheckExpr, Concrete.ccCheckStmt
+TYPE-5	enforced	E0223	check	Concrete.checkExprCore, Concrete.checkStmt, Concrete.ccCheckExpr, Concrete.ccCheckStmt
+TYPE-5	enforced	E0504	core-check	Concrete.checkExprCore, Concrete.checkStmt, Concrete.ccCheckExpr, Concrete.ccCheckStmt
+TYPE-5	enforced	E0505	core-check	Concrete.checkExprCore, Concrete.checkStmt, Concrete.ccCheckExpr, Concrete.ccCheckStmt
+TYPE-5	enforced	E0508	core-check	Concrete.checkExprCore, Concrete.checkStmt, Concrete.ccCheckExpr, Concrete.ccCheckStmt
+TYPE-5	enforced	E0540	core-check	Concrete.checkExprCore, Concrete.checkStmt, Concrete.ccCheckExpr, Concrete.ccCheckStmt
+TYPE-5	enforced	E0541	core-check	Concrete.checkExprCore, Concrete.checkStmt, Concrete.ccCheckExpr, Concrete.ccCheckStmt
+TYPE-6	enforced	E0228	check	Concrete.checkExprCore, Concrete.ccCheckExpr
+TYPE-6	enforced	E0229	check	Concrete.checkExprCore, Concrete.ccCheckExpr
+TYPE-6	enforced	E0501	core-check,post-mono	Concrete.checkExprCore, Concrete.ccCheckExpr
+TYPE-6	enforced	E0502	core-check	Concrete.checkExprCore, Concrete.ccCheckExpr
+TYPE-6	enforced	E0503	core-check	Concrete.checkExprCore, Concrete.ccCheckExpr
+TYPE-6	enforced	E0506	core-check	Concrete.checkExprCore, Concrete.ccCheckExpr
+TYPE-6	enforced	E0507	core-check	Concrete.checkExprCore, Concrete.ccCheckExpr
+TYPE-6	enforced	E0509	core-check	Concrete.checkExprCore, Concrete.ccCheckExpr
+TYPE-7	enforced	E0250	check	Concrete.checkExprCore, Concrete.checkStmt, Concrete.ccCheckExpr
+TYPE-7	enforced	E0251	check	Concrete.checkExprCore, Concrete.checkStmt, Concrete.ccCheckExpr
+TYPE-7	enforced	E0252	check	Concrete.checkExprCore, Concrete.checkStmt, Concrete.ccCheckExpr
+TYPE-7	enforced	E0253	check	Concrete.checkExprCore, Concrete.checkStmt, Concrete.ccCheckExpr
+TYPE-7	enforced	E0254	check	Concrete.checkExprCore, Concrete.checkStmt, Concrete.ccCheckExpr
+TYPE-7	enforced	E0260	check	Concrete.checkExprCore, Concrete.checkStmt, Concrete.ccCheckExpr
+TYPE-7	enforced	E0261	check	Concrete.checkExprCore, Concrete.checkStmt, Concrete.ccCheckExpr
+TYPE-7	enforced	E0306	check	Concrete.checkExprCore, Concrete.checkStmt, Concrete.ccCheckExpr
+TYPE-7	enforced	E0416	elab	Concrete.checkExprCore, Concrete.checkStmt, Concrete.ccCheckExpr
+TYPE-7	enforced	E0550	core-check	Concrete.checkExprCore, Concrete.checkStmt, Concrete.ccCheckExpr
+TYPE-7	enforced	E0551	core-check	Concrete.checkExprCore, Concrete.checkStmt, Concrete.ccCheckExpr
+TYPE-7	enforced	E0552	core-check	Concrete.checkExprCore, Concrete.checkStmt, Concrete.ccCheckExpr
+TYPE-7	enforced	E0316	check	Concrete.checkExprCore, Concrete.checkStmt, Concrete.ccCheckExpr
+TYPE-8	enforced	E0221	check	Concrete.checkExprCore, Concrete.ccCheckExpr, Concrete.ccCheckStmt
+TYPE-8	enforced	E0554	core-check	Concrete.checkExprCore, Concrete.ccCheckExpr, Concrete.ccCheckStmt
+TYPE-8	enforced	E0555	core-check	Concrete.checkExprCore, Concrete.ccCheckExpr, Concrete.ccCheckStmt
+TYPE-9	enforced	E0262	check	Concrete.checkExprCore
+TYPE-9	enforced	E0264	check	Concrete.checkExprCore
+TYPE-9	enforced	E0265	check	Concrete.checkExprCore
+TYPE-9	enforced	E0266	check	Concrete.checkExprCore
+TYPE-9	enforced	E0522	core-check	Concrete.checkExprCore
+TYPE-9	enforced	E0313	check	Concrete.checkExprCore
+TYPE-9	enforced	E0317	check	Concrete.checkExprCore
+TYPE-9	enforced	E0322	check	Concrete.checkExprCore
+TYPE-10	enforced	E0268	check	Concrete.checkExprCore
+TYPE-10	enforced	E0269	check	Concrete.checkExprCore
+TYPE-10	enforced	E0270	check	Concrete.checkExprCore
+TYPE-10	enforced	E0271	check	Concrete.checkExprCore
+TYPE-10	enforced	E0274	check	Concrete.checkExprCore
+TYPE-10	enforced	E0421	check,elab	Concrete.checkExprCore
+TYPE-10	enforced	E0314	check	Concrete.checkExprCore
+TYPE-10	enforced	E0315	check	Concrete.checkExprCore
+TYPE-11	partial R-0500	E0296	check	Concrete.checkExprCore, Concrete.checkStmt
+TYPE-11	partial R-0500	E0297	check	Concrete.checkExprCore, Concrete.checkStmt
+TYPE-11	partial R-0500	E0298	check	Concrete.checkExprCore, Concrete.checkStmt
+TYPE-15	enforced	E0113	resolve	Concrete.resolveProgram
+TYPE-15	enforced	E0114	resolve	Concrete.resolveProgram
+TYPE-15	enforced	E0115	resolve	Concrete.resolveProgram
+TYPE-16	enforced	E0583	core-check	Concrete.ccCheckModuleDecls
+TRUST-1	pending R-0502	new	check	-
+TRUST-4	enforced	E0121	resolve	Concrete.ccCheckExpr, Concrete.checkExprCore
+TRUST-4	enforced	E0240	check	Concrete.ccCheckExpr, Concrete.checkExprCore
+TRUST-4	enforced	E0242	check	Concrete.ccCheckExpr, Concrete.checkExprCore
+TRUST-4	enforced	E0520	core-check	Concrete.ccCheckExpr, Concrete.checkExprCore
+TRUST-4	enforced	E0521	core-check	Concrete.ccCheckExpr, Concrete.checkExprCore
+TRUST-6	pending R-0509	new	check	-
+TRUST-7	enforced	E0311	check	Concrete.checkExprCore
+STMT-5	enforced	E0278	check	Concrete.checkExprCore
+STMT-6	enforced	E0216	check	Concrete.checkStmt, Concrete.ccCheckStmt
+STMT-6	enforced	E0280	check	Concrete.checkStmt, Concrete.ccCheckStmt
+STMT-6	enforced	E0281	check	Concrete.checkStmt, Concrete.ccCheckStmt
+STMT-6	enforced	E0542	core-check	Concrete.checkStmt, Concrete.ccCheckStmt
+STMT-6	enforced	E0543	core-check	Concrete.checkStmt, Concrete.ccCheckStmt
+STMT-7	enforced	E0310	check	Concrete.checkModule
+STMT-9	enforced	E0307	check	Concrete.checkFn
+STMT-10	enforced	E0319	check	Concrete.checkFn
+ARITH-2	enforced	E0227	check	Concrete.checkExprCore
+ARITH-5	partial R-0500	E0553	core-check	Concrete.ccCheckExpr
+CON-3	partial R-0473	E0320	check	Concrete.checkModule
+CON-3	partial R-0473	E0321	check	Concrete.checkModule
+CON-4	partial R-0499	E0420	elab	Concrete.throwElab
+MOD-1	enforced	E0100	resolve	Concrete.Pipeline.resolve
+MOD-1	enforced	E0101	resolve	Concrete.Pipeline.resolve
+MOD-1	enforced	E0102	resolve	Concrete.Pipeline.resolve
+MOD-1	enforced	E0103	resolve	Concrete.Pipeline.resolve
+MOD-1	enforced	E0104	resolve	Concrete.Pipeline.resolve
+MOD-1	enforced	E0105	resolve	Concrete.Pipeline.resolve
+MOD-1	enforced	E0106	resolve	Concrete.Pipeline.resolve
+MOD-1	enforced	E0107	resolve	Concrete.Pipeline.resolve
+MOD-1	enforced	E0108	resolve	Concrete.Pipeline.resolve
+MOD-1	enforced	E0109	resolve	Concrete.Pipeline.resolve
+MOD-1	enforced	E0112	resolve	Concrete.Pipeline.resolve
+MOD-1	enforced	E0125	resolve	Concrete.Pipeline.resolve
+MOD-1	enforced	E0200	check	Concrete.Pipeline.resolve
+MOD-1	enforced	E0201	check	Concrete.Pipeline.resolve
+MOD-1	enforced	E0202	check	Concrete.Pipeline.resolve
+MOD-1	enforced	E0263	check	Concrete.Pipeline.resolve
+MOD-1	enforced	E0267	check	Concrete.Pipeline.resolve
+MOD-2	enforced	E0110	resolve	Concrete.Pipeline.resolve
+MOD-2	enforced	E0111	resolve	Concrete.Pipeline.resolve
+MOD-2	enforced	E0126	resolve	Concrete.Pipeline.resolve
+MOD-2	enforced	E0284	check	Concrete.Pipeline.resolve
+MOD-2	enforced	E0285	check	Concrete.Pipeline.resolve
+MOD-2	enforced	E0323	check	Concrete.Pipeline.resolve
+MOD-2	enforced	E0418	elab	Concrete.Pipeline.resolve
+MOD-2	enforced	E0419	elab	Concrete.Pipeline.resolve
+MOD-2	enforced	E0423	elab	Concrete.Pipeline.resolve
+MOD-3	enforced	E0299	check	Concrete.checkModule
+MOD-3	enforced	E0120	resolve	Concrete.checkModule
+MOD-3	enforced	E0578	check,core-check	Concrete.checkModule
+MOD-4	enforced	E0122	resolve	Concrete.Pipeline.resolveFiles
+MOD-4	enforced	E0123	resolve	Concrete.Pipeline.resolveFiles
+MOD-4	enforced	E0124	resolve	Concrete.Pipeline.resolveFiles
+SYN-1	enforced	E0001	parse	Concrete.parse
+SYN-3	enforced	E0283	check	Concrete.checkStmt
+TRAIT-1	enforced	E0590	check	Concrete.Coherence.pairwise
+TRAIT-2	enforced	E0591	check	Concrete.Coherence.pairwise, Concrete.Coherence.unify
+TRAIT-3	enforced	E0592	check	Concrete.Coherence.moduleImpls
+TRAIT-4	enforced	E0593	check	Concrete.Coherence.moduleImpls
+TRAIT-5	enforced	E0594	check	Concrete.Coherence.pairwise
+TRAIT-6	enforced	E0595	check	Concrete.boundMethodCandidates, Concrete.checkExprCore
+TRAIT-8	enforced	E0579	core-check	Concrete.ccCheckModuleDecls
+TRAIT-8	enforced	E0580	core-check	Concrete.ccCheckModuleDecls
+TRAIT-9	enforced	E0581	core-check	Concrete.ccCheckModuleDecls
+TRAIT-9	enforced	E0582	core-check	Concrete.ccCheckModuleDecls
+TRAIT-9	enforced	E0586	core-check	Concrete.ccCheckModuleDecls
+TRAIT-9	enforced	E0587	core-check	Concrete.ccCheckModuleDecls
+TRAIT-10	enforced	E0241	check	Concrete.checkTraitBounds
