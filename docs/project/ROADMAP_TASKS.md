@@ -1751,15 +1751,62 @@ made total.
    Each batch removes its rows from the baseline in the same commit, and the ratchet gate checks that.
    For an `implemented_by` or `extern` row, the batch removes the attribute, or records why the
    replacement must stay and what checks its agreement with the Lean body.
-3. **Exit:** the baseline is empty for the proof-relevant pipeline stages (the stages the verified
-   pipeline proves, R-0491 – R-0510). From then on the same gate refuses any non-total declaration in
-   those stages outright, in CI and in the pre-push hook. Extending the inventory to the whole
-   compiler follows later, under this task, with every remaining non-total declaration outside those
-   stages recorded as untrusted search with its reason.
+3. **Exit:** for the stages the verified pipeline proves (R-0491 – R-0510), the baseline holds no
+   semantics, checker, validator or proved-pass declaration; the only rows left in those stages are
+   untrusted search whose result a total validator checks, each with its reason. From then on the same
+   gate refuses outright any other non-total declaration in those stages, in CI and in the pre-push
+   hook. Later, under this task, the same requirement extends to the whole compiler: every remaining
+   row is converted or is genuine untrusted search with its reason.
 
 Phase 1 closes on step 1 (exit 2p: the ratchet gate runs in CI and in the pre-push hook with its
 baseline committed); steps 2 and 3 continue through Phases 2 and 4, stage by stage ahead of the pass
 proofs that need them.
+
+### Task R-0554
+
+**Phase:** 1, 2, 3
+
+**Objective:** Repository cleanup: one owner per fact, document and test, so the repository says each
+thing once and the gates read manifests instead of hand-kept lists (the repository reorganization plan
+approved 2026-07-28). It is queued in row 2 after R-0553 and has no Phase 1 exit of its own: its
+sub-items continue alongside the queue, each landing on its own branch under the normal promotion
+pipeline, and none may choose, encode or implement a side of an [owner decision](../../ROADMAP.md#owner-decisions).
+Completed sub-items are recorded only in [CHANGELOG.md](../../CHANGELOG.md); this list keeps every
+sub-item with its owner and branch.
+
+Owners: the cleanup agent (branches `wip/cleanup-*`), the spec agent (`wip/spec`) and the roadmap
+agent (`wip/roadmap-compaction`).
+
+1. One normative language specification, `docs/language/SPEC.md`: absorb, then delete, the
+   `docs/language/*.md` design documents; a gate refuses new normative language documents. Owner: the
+   spec agent, `wip/spec`.
+2. The book's language chapters (`docs/book/src/language/`) teach by example and link to SPEC rule IDs
+   instead of restating rules. Owner: the spec agent, `wip/spec`.
+3. ROADMAP compaction to its control plane, and the `tasks/` disposition records folded in. Owner: the
+   roadmap agent, `wip/roadmap-compaction`.
+4. Consolidate `docs/project/` (36 documents) into `PROJECT.md` plus the contributor documents. Owner:
+   the cleanup agent, `wip/cleanup-*`.
+5. Consolidate `docs/verification/` (59 documents) into one normative verification specification plus
+   its rationale. Owner: the cleanup agent, `wip/cleanup-*`.
+6. Move `docs/NOTES/` into `research/`. Owner: the cleanup agent, `wip/cleanup-*`.
+7. Gate and test manifest: about 284 `check_*` gates; `run_tests.sh` (686 KB), the CI workflow (2,556
+   lines) and the Makefile become manifest-driven; duplicate gates merge; a new `tests/` taxonomy.
+   Owner: the cleanup agent, `wip/cleanup-*`.
+8. Split the report code (`Report.lean`, 6.5k lines, and `ReportObligations`). Owner: the cleanup
+   agent, `wip/cleanup-*`.
+9. Proof-module overlap audit (`Proof.lean` against `ProofCore.lean`), research only. Owner: the
+   cleanup agent, `wip/cleanup-*`.
+10. Replace string-encoded identities (184 `== "literal"` comparisons). Owner: the cleanup agent,
+    `wip/cleanup-*`.
+11. A dead-code finder with a ratchet gate. Owner: the cleanup agent, `wip/cleanup-*`.
+12. Generated artifacts out of git: `concrete.wasm` (15 MB) and the grep benchmark data (6 MB). Owner:
+    the cleanup agent, `wip/cleanup-*`.
+13. The grammar checkers turned into a real three-way cross-check. Owner: the cleanup agent,
+    `wip/cleanup-grammar-checker`.
+14. Branch hygiene: merged remote branches are deleted (192 on 2026-10-28), and merged and dead
+    worktrees are pruned periodically. Owner: the cleanup agent.
+15. The compile-scaling gate (R-0550, exit 2o) false-fails on hosts without perf instruction counting
+    (the OVH server); its resolution waits for the project owner's choice. Owner: the cleanup agent.
 
 ## Area: Standard Library And Core APIs
 

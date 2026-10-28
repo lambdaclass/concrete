@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # log_reports_incomplete LOG: true when a gate log reports an INCOMPLETE result (a command that timed
 # out twice, or whose runner reported no outcome; scripts/tests/lib/bounded.sh). Such a run is red
-# without being a verdict, so a mutation driver must not read it as a kill (ROADMAP "Promotion
-# pipeline", result vocabulary: incomplete is neither failed nor passed).
+# without being a verdict, so a mutation driver must not read it as a kill (docs/project/PROMOTION_PIPELINE.md,
+# result vocabulary: incomplete is neither failed nor passed).
 #
 # The forms, as the gates print them: a per-test line "  INCOMPLETE <label>" (check_example_outputs,
 # check_callable_values, check_hashmap_probe_invariants, check_model_diff, run_tests' projects,

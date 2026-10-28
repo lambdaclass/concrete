@@ -305,4 +305,9 @@ To check on it, use `systemctl --user list-timers` and `~/.local/share/concrete-
 - **Fuzz farm** (`wip/fuzz-farm`): the farm writes the findings JSON and `promote.sh`.
 
 `tasks/*.md` records in-flight branches as `disposition: in-flight`, so the queue does not start a
-duplicate. When a branch lands, set its file to `done`.
+duplicate. When a branch lands, set its file to `done` or delete it. The first such records (R-0513,
+R-0539 – R-0542, R-0544, R-0545, R-0547, on `wip/impact-gates`, `wip/landing-script`,
+`wip/landing-bot`, `wip/ci-tiering`, `wip/ledgers`, `wip/review-tool` and `wip/playbooks`) were
+deleted on 2026-10-28: every one of those branches had landed on main, so they no longer described
+work in flight, and the tasks' state is in their bodies in the
+[task register](ROADMAP_TASKS.md#area-development-throughput).

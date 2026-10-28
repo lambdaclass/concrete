@@ -1,6 +1,6 @@
 name: Nightly qualification
 
-# THE NIGHTLY STAGE (c) RUN ON MAIN (ROADMAP promotion pipeline, "CI tiers", "Nightly").
+# THE NIGHTLY STAGE (c) RUN ON MAIN (docs/project/PROMOTION_PIPELINE.md, "CI tiers", "Nightly").
 #
 # `dispatch` starts the CI workflow on main with campaign=true: the landing tier plus the campaign
 # tier (gate-mutation plan, 24 shards and aggregate, differential fuzz, clean-checkout proof replay,

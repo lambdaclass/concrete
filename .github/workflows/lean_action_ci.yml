@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       campaign:
-        # The CAMPAIGN TIER (ROADMAP promotion pipeline, stage (c)): the gate-mutation campaign
+        # The CAMPAIGN TIER (docs/project/PROMOTION_PIPELINE.md, stage (c)): the gate-mutation campaign
         # (plan, 24 shards, aggregate), the differential fuzz campaigns, the clean-checkout proof
         # replay and the multi-kernel mutation coverage. Off by default, so a dispatch of a
         # candidate branch runs the LANDING TIER only. A qualification run sets it:

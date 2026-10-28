@@ -194,8 +194,10 @@ case " $order " in *" bug-205 "*|*" fuzz-f2 "*|*" fuzz-f3 "*|*" R-0999 "*) no "a
 [ "$(qget bug-201 areas)" = "mod:Lower rule:R-0501" ] && ok "bug areas come from the structural owner" || no "bug-201 areas: $(qget bug-201 areas)"
 [ "$(qget R-0500 areas)" = "mod:Mono rule:R-0500" ] && ok "roadmap areas: the task's rule and the modules its body names" || no "R-0500 areas: $(qget R-0500 areas)"
 mkdir -p "$TMP/noreg"; cp -R "$SRC/." "$TMP/noreg/"; rm "$TMP/noreg/docs/project/ROADMAP_TASKS.md"
-rc=0; python3 "$QD/build_queue.py" --root "$TMP/noreg" > /dev/null 2>&1 || rc=$?
-[ "$rc" = 2 ] && ok "a missing task register exits 2 instead of queueing tasks without bodies" || no "missing task register exit $rc (want 2)"
+rc=0; python3 "$QD/build_queue.py" --root "$TMP/noreg" > /dev/null 2> "$TMP/noreg.err" || rc=$?
+[ "$rc" = 2 ] && grep -q 'ROADMAP_TASKS.md is missing' "$TMP/noreg.err" \
+  && ok "a missing task register exits 2 instead of queueing tasks without bodies" \
+  || no "missing task register: exit $rc, $(cat "$TMP/noreg.err")"
 mkdir -p "$TMP/bad/tasks"; printf -- '---\nid: x\nsize: 3\n---\nbody\n' > "$TMP/bad/tasks/x.md"
 rc=0; python3 "$QD/build_queue.py" --root "$TMP/bad" > /dev/null 2>&1 || rc=$?
 [ "$rc" = 2 ] && ok "an unknown task-file key exits 2" || no "malformed task file exit $rc (want 2)"

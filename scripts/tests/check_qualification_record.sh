@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ONE QUALIFICATION VERDICT OVER EVERY REQUIRED JOB (ROADMAP promotion pipeline, stage (c)).
+# ONE QUALIFICATION VERDICT OVER EVERY REQUIRED JOB (docs/project/PROMOTION_PIPELINE.md, stage (c)).
 #
 # scripts/ci/qualification_record.py turns GitHub run records into one stage (c) verdict. The
 # mutation aggregate's qualified=1 is one component of it: the aggregate job succeeds while the

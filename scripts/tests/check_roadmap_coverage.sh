@@ -70,7 +70,8 @@
 # integrity or adversarial validation without a positive minimum, does not add up to 100%, gives the
 # capped track two slots or leaves RocksDB slice 1 uncapped; a crashed or silent checker must fail too.
 # With arguments `ROADMAP [LEDGER [ARCHIVE [BACKLOG [TASKS]]]]` it checks those files only. The checker
-# reads ROADMAP.md followed by the task register as one roadmap: the control plane, then the task bodies.
+# reads every control-plane section and line from ROADMAP.md alone and the task bodies from the task
+# register alone.
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -106,8 +107,8 @@ reg = open(sys.argv[6], encoding='utf-8').read()
 out = []
 def ok(m): out.append('OK ' + m)
 def no(m): out.append('FAIL ' + m)
-# ROADMAP.md is the control plane and the task register holds the task bodies; the checks below read
-# them as one roadmap, plane first. Neither may take over the other's part.
+# ROADMAP.md is the control plane and the task register holds the task bodies. Neither may take over
+# the other's part.
 PLANE_SECTIONS = ('Phases and releases', 'The current execution queue', 'Implemented, not yet accepted',
                   'Phase 1 exits', 'Owner decisions', 'Feature prerequisites', 'Capacity allocation',
                   'Reconciliation record', 'Release map')
@@ -761,7 +762,7 @@ PY
   neg plane_section_in_register \
     "s=s.rstrip('\\n')+'\\n\\n## The current execution queue\\n\\n| 0 | **ctl (R-0482)** | ctl |\\n'" \
     "the task register declares the control-plane section" tasks
-  neg phases_line_moved_to_register \
+  neg phases_line_in_register \
     "s=s.rstrip('\\n')+'\\n\\n**Active phases:** 1\\n'" \
     "the task register declares" tasks
   neg bad_active_phases \

@@ -169,12 +169,11 @@ def roadmap_tasks(root, mods):
     # Task bodies live in the task register next to the control plane (2026-10-28); the queue and the
     # throughput table stay in ROADMAP.md, so the register is appended after it.
     reg = os.path.join(root, "docs", "project", "ROADMAP_TASKS.md")
-    if os.path.exists(reg):
-        rm += "\n" + read(reg)
-    elif not re.search(r"^### Task R-\d{4}$", rm, re.M):
+    if not os.path.exists(reg):
         # Without the register every queued task would be built from an empty body: no objective,
         # no dependencies, no areas. Refuse rather than schedule work blind.
-        die(f"{reg} is missing and ROADMAP.md holds no task bodies; the queue's tasks cannot be read")
+        die(f"{reg} is missing: the queue's task bodies cannot be read (ROADMAP.md keeps none)")
+    rm += "\n" + read(reg)
     tasks, seen = [], set()
 
     def add(rid, tier, title, deps):

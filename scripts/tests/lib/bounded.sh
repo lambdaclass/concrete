@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Bounded runs: a timeout is INCOMPLETE, never a failure and never a pass.
 #
-# The rule (ROADMAP "Promotion pipeline", result vocabulary): a test that exceeds its time budget
+# The rule (docs/project/PROMOTION_PIPELINE.md, result vocabulary): a test that exceeds its time budget
 # has produced no observation. Under machine load a freshly linked binary or a compile can overrun
 # a budget sized for an idle machine (test_ssa.sh once reported hundreds of 5-second alarms as
 # failures), so a timeout is re-run once, alone, with a larger budget:
