@@ -343,9 +343,13 @@ if source "scripts/tests/lib/prepush_record.sh" 2>/dev/null \
       echo "pre-push: record reuse disabled by CONCRETE_PREPUSH_NO_REUSE=1 — running the gates"
     elif ppr_check "$RECORD" "$COMP0"; then
       echo "pre-push: REUSED validation record $RECORD"
-      echo "pre-push:   $(grep -E '^(head|written_at|selection_count)=' "$RECORD" | tr '\n' ' ')"
+      echo "pre-push:   $(grep -E '^(head|written_at|selection_count|status)=' "$RECORD" | tr '\n' ' ')"
       echo "pre-push:   every bound input matches (commit, clean tree, untracked files, toolchain, compiler"
       echo "pre-push:   binary, gate definitions, selection, changed-file list); no gate was re-run."
+      if grep -q '^deferred_gate=' "$RECORD"; then
+        echo "pre-push:   DEFERRED to CI in that run (not judged on this host; they did NOT pass here):"
+        sed -n 's/^deferred_gate=/pre-push:     /p' "$RECORD"
+      fi
       exit 0
     else
       echo "pre-push: no reusable validation record ($PPR_REASON) — running the gates"
@@ -375,7 +379,11 @@ COMP1="$TMPD/components.start"
 # terminates all of them when IT is signalled; a hook killed while it waited in the foreground died
 # alone and left the whole run working the tree. So the run is waited for in the background, where a
 # trap can forward the signal, and waited for again until it has actually exited.
-bash "$RUNNER" "${SEL[@]}" &
+# DEFERRED TO CI (bug 315): the runner lists here the gates whose verdict this host could not make
+# and CI decides (scripts/tests/lib/host_tools.sh declares which may). They do not fail the push, and
+# they are named below and in the record, which then says pass-deferred, not pass.
+DEFERRED_F="$TMPD/deferred"
+CONCRETE_GATES_DEFERRED_OUT="$DEFERRED_F" bash "$RUNNER" "${SEL[@]}" &
 RUNNER_PID=$!
 trap 'kill -TERM "$RUNNER_PID" 2>/dev/null' INT TERM HUP
 RUNNER_RC=0
@@ -393,6 +401,14 @@ else
   echo "pre-push: fast surface gates + touched-area gates pass"
   echo "pre-push: NOTE the full set was not run — 'make pre-push-full' or CI covers it."
 fi
+if [ ! -f "$DEFERRED_F" ]; then
+  # Without the list the record could not say what this run did not judge: no record.
+  echo "pre-push: the runner did not report its deferrals; no validation record will be written"
+  RECORDABLE=0
+elif [ -s "$DEFERRED_F" ]; then
+  echo "pre-push: DEFERRED to CI — not judged on this host, NOT passed here; CI decides (bug 315):"
+  sed 's/^/pre-push:   /' "$DEFERRED_F"
+fi
 
 # The record binds what the gates actually ran against: components captured after the build, and
 # captured again now. If any moved during the run, the result describes neither — fail closed.
@@ -406,7 +422,7 @@ if [ "$RECORDABLE" = "1" ]; then
     diff "$COMP1" "$COMP2" | sed 's/^/  /' >&2
     echo "pre-push: the gates' verdict describes neither state — refusing to push." >&2; exit 1
   fi
-  if ppr_write "$RECORD" "$COMP2"; then
+  if ppr_write "$RECORD" "$COMP2" "$DEFERRED_F"; then
     echo "pre-push: validation record written to $RECORD (a push of this exact candidate may reuse it)"
   else
     echo "pre-push: warning: could not write the validation record; the next push will re-run." >&2

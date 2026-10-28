@@ -45,7 +45,7 @@ THREE KINDS OF MEASUREMENT.
     the denominator, so added work does not raise its allowance (it shows in the instruction
     budget); a change that makes the same instructions slower raises it, up to norm_cap: such a
     regression is held by the budget only beyond norm_cap times it. Growth is judged on raw times.
-    A host that cannot count judges raw times against the budgets and says so.
+    A host that cannot count does not judge wall time at all (see HOSTS THAT CANNOT COUNT).
 
 SIZES are a factor of ten apart (10^4 and 10^5 where the shape allows). Between two such sizes a
 quadratic stage grows a hundredfold. A linear stage's allocation count grows exactly tenfold, so
@@ -53,7 +53,7 @@ the heartbeat bound (hb_exp) is tight. Its time does not: caches, the allocator 
 bandwidth shared with other jobs cost more at 10^5 elements than at 10^4, and the fastest of three
 attempts of a linear stage has grown up to 52-fold on a host running eight gates at once. The time
 bound (exp) sits above that and below a quadratic's hundredfold; it judges only runs perf did not
-count (see GROWTH). A stage whose quadratic part is
+count on a host that counts (see GROWTH and HOSTS THAT CANNOT COUNT). A stage whose quadratic part is
 still small next to its linear part at these sizes grows less than that (10 + 1 ms at 10^4 and
 100 + 100 ms at 10^5 is x18) and fails only if it exceeds its budget: such a mixed quadratic can
 pass both checks at these sizes, and is caught when it grows past its budget.
@@ -68,8 +68,27 @@ does, so no retry is needed or allowed. Those runs' stages are then held by thei
 only: a wall RATIO between sizes measures the caches as much as the work (on an idle dev host a
 linear stage grows x45 - x60 from 10^4 to 10^5 as its data leaves the caches, close to the x63 a
 quadratic had to exceed), so it false-failed linear stages and could not resolve a small quadratic
-anyway. A run perf did not count (a host without counters, a baseline that failed) keeps the wall
+anyway. A run perf did not count on a host that counts (a baseline that failed) keeps the wall
 growth bound below; the negative controls prove both directions on every run.
+
+HOSTS THAT CANNOT COUNT (bug 315). Where perf cannot count instructions:u (perf missing, or
+perf_event_paranoid above 2, as on the dev host), every verdict that depends on the host's speed is
+NOT JUDGED there: a stage's wall growth (the ratio false-failed linear stages on a loaded dev host:
+enums/lower x80 from 2 ms at 10^4, while its instructions grow linearly) and its wall budget (no
+host factor can be measured, and the budgets were measured on the CI host class). Such a stage
+reports NOT-JUDGED, never ok, and the gate exits NOT_JUDGED_RC (77): the CI-gates runner accepts
+that status only from a gate that scripts/tests/lib/host_tools.sh declares judged on CI (judged_on:
+ci-counted) and that CI runs as an unconditional step, and records it as deferred to CI, which is
+not a pass. What still holds on such a host is what does not depend on its speed: allocation
+heartbeats (exact counts: their budget and growth), every compile's result (a refused compile, a
+wrong answer, a missing baseline), the run ceiling (a compile killed at ceiling_factor x its
+budgets, and again when bounded.sh re-runs it alone with twice the time, is no measurement and fails
+its stages), and a catastrophic overrun: a stage over
+uncounted_fail_factor (10) x its budget, which is 40 x the CI host's quiet median, and at least 2 s
+for the smallest stage (budget_slack_ms); load has slowed a stage at most x2 - x3 (bug 294, this
+bug), so no load reaches that, while a hang or an accidental exponential does.
+CI must count: on CI (GITHUB_ACTIONS=true or CI=true/1) a host that cannot count FAILS the gate,
+because the verdict deferred to CI must be made there, not deferred again.
 
 RESOLUTION. Every stage's growth is judged, however fast. An in-compiler stage is timed in whole
 milliseconds by the compiler's own clock, so the smaller size's time is floored at floor_ms. A
@@ -106,7 +125,34 @@ REQUIRED = TRACE_STAGES + ["llvm", "native"]   # the compile path every shape co
 PARAM_DEFAULTS = {"exp": 1.8, "hb_exp": 1.2, "floor_ms": 2.0, "wall_floor_ms": 25.0, "hb_judge_min": 100000.0, "retries": 2.0, "ceiling_factor": 3.0,
                   "ceiling_min_s": 20.0, "measure_runs": 3.0, "budget_factor": 4.0,
                   "budget_slack_ms": 200.0, "hb_budget_factor": 1.25, "instr_budget_factor": 1.25,
-                  "instr_exp": 1.06, "norm_cap": 2.0, "measure_max_load": 8.0}
+                  "instr_exp": 1.06, "norm_cap": 2.0, "measure_max_load": 8.0,
+                  "uncounted_fail_factor": 10.0}
+# The exit status of a run whose only shortfall is verdicts not judged on this host (bug 315): not 0
+# (it did not pass) and not 1 (nothing failed). run_ci_gates_local.sh reads it through
+# scripts/tests/lib/host_tools.sh (GATE_DEFERRED_RC), and only for a gate declared there.
+NOT_JUDGED_RC = 77
+
+
+def on_ci(env):
+    """Whether this run is CI's: GitHub sets GITHUB_ACTIONS=true and CI=true on every runner."""
+    return env.get("GITHUB_ACTIONS", "") == "true" or env.get("CI", "").lower() in ("true", "1")
+
+
+def host_policy(counts, env):
+    """How this host's wall-time verdicts are made (bug 315): 'counted' where perf counts
+    instructions:u, 'deferred' (not judged here; CI decides) where it cannot, and 'refused' where it
+    cannot on CI, which is where the deferred verdicts are decided."""
+    if counts:
+        return "counted"
+    return "refused" if on_ci(env) else "deferred"
+
+
+def exit_status(npass, nfail, nnot):
+    """0 only when everything judged passed and nothing was left unjudged; 1 on any failure or when
+    nothing at all was judged; NOT_JUDGED_RC when the only shortfall is NOT-JUDGED verdicts."""
+    if nfail or (npass == 0 and nnot == 0):
+        return 1
+    return NOT_JUDGED_RC if nnot else 0
 
 
 # ----------------------------------------------------------------------------- generated corpus
@@ -489,10 +535,13 @@ def host_factor(b, shape, n, m, walls, instrs):
 
 
 def judge(b, shape, sizes, stages, times, beats, bad, base=None, ntimes=None, factors=None,
-          instrs=None, modes=None, base_instr=None):
+          instrs=None, modes=None, base_instr=None, wall_judged=True):
     """Lines and verdicts for one shape: [(verdict, text)], verdict in ok/FAIL/FAIL-HB/FAIL-INSTR/
-    EXCLUDED. A stage's time is judged against its budget after dividing by the host factor of the
-    run that timed it (`ntimes`); its growth is judged on the raw fastest times."""
+    NOT-JUDGED/EXCLUDED. A stage's time is judged against its budget after dividing by the host
+    factor of the run that timed it (`ntimes`); its growth is judged on the raw fastest times.
+    WALL_JUDGED False (a host that cannot count instructions, bug 315): wall growth and wall budgets
+    are not judged, only a catastrophic overrun (uncounted_fail_factor x the budget) fails, and a
+    stage nothing else fails is NOT-JUDGED, never ok."""
     exp = b.p("exp")
     ntimes = ntimes if ntimes is not None else times
     factors = factors or {}
@@ -539,6 +588,12 @@ def judge(b, shape, sizes, stages, times, beats, bad, base=None, ntimes=None, fa
             fac = factors.get((n, s), 1.0)
             if bud is None:
                 problems.append("n=%d has no recorded budget" % n)
+            elif not wall_judged:
+                # No host factor can be measured here: only an overrun no load reaches fails.
+                cat = b.p("uncounted_fail_factor")
+                if times[(n, s)] > cat * bud:
+                    problems.append("n=%d %.0fms > %g x budget %.0fms (catastrophic: judged on any host)"
+                                    % (n, times[(n, s)], cat, bud))
             elif ntimes[(n, s)] > bud:
                 if fac > 1.0:
                     problems.append("n=%d %.0fms (host x%.2f) > budget %.0fms"
@@ -551,6 +606,8 @@ def judge(b, shape, sizes, stages, times, beats, bad, base=None, ntimes=None, fa
             limit = (n2 / n1) ** exp
             if mode_of(s) in by_instr:
                 growth.append("by instructions")
+            elif not wall_judged:
+                pass                        # a wall ratio is not a verdict here (bug 315)
             elif (n1, s) in times and (n2, s) in times and (n1, s) not in bad and (n2, s) not in bad:
                 # Whole compiles are judged above their size-independent baseline.
                 b0 = (base or {}).get(s, 0.0)
@@ -578,6 +635,10 @@ def judge(b, shape, sizes, stages, times, beats, bad, base=None, ntimes=None, fa
             res.append(("FAIL-HB", "%s/%s %s [%s]" % (shape, s, "; ".join(hbfail), detail)))
         if problems:
             res.append(("FAIL", "%s/%s %s [%s]" % (shape, s, "; ".join(problems), detail)))
+        elif not hbfail and not wall_judged:
+            res.append(("NOT-JUDGED", "%s/%s [%s] wall growth and budget not judged: this host cannot"
+                        " count instructions:u, CI decides%s" % (shape, s, detail,
+                        "; heartbeats ok" if any((n, s) in beats for n in sizes) else "")))
         elif not hbfail:
             hf = [factors[(n, s)] for n in sizes if factors.get((n, s), 1.0) > 1.0]
             res.append(("ok", "%s/%s [%s] growth %s%s" % (shape, s, detail, " ".join(growth) or "-",
@@ -618,7 +679,7 @@ def judge(b, shape, sizes, stages, times, beats, bad, base=None, ntimes=None, fa
     return res
 
 
-def run_shape(runner, b, shape, sizes, modes, attempts):
+def run_shape(runner, b, shape, sizes, modes, attempts, wall_judged=True):
     """Measure a shape up to ATTEMPTS times; keep the fastest run per (size, stage)."""
     stages = stages_of(modes)
     times, beats, bad, ntimes, factors, instrs = {}, {}, {}, {}, {}, {}
@@ -651,7 +712,7 @@ def run_shape(runner, b, shape, sizes, modes, attempts):
                     bad.setdefault((n, m), "its baseline (a one-line program) did not compile")
         verdicts = judge(b, shape, sizes, stages, times, beats, bad,
                          {m: v for m, v in base.items() if v is not None}, ntimes, factors,
-                         instrs, modes, base_instr)
+                         instrs, modes, base_instr, wall_judged)
         wall_fail = any(v == "FAIL" for v, _ in verdicts)
         # Heartbeat and instruction failures are deterministic: no retry changes them. A compile
         # that failed is not noise, and a run killed at its ceiling twice (bounded.sh already re-ran
@@ -678,7 +739,7 @@ def controls(workdir):
     sizes, stages = [10, 100], TRACE_STAGES
 
     def verdicts(t100, slow100, hb100=500.0, ins100=900000.0, t10=10.0, counted=True, base0=0.0,
-                 ins10=100000.0):
+                 ins10=100000.0, wall=True):
         # The run at 100 took `slow100` times the recorded 100 ms per 10^9 instructions: its host
         # factor comes from host_factor, as in a real judgment.
         f = host_factor(b, "assignments", 100, "trace", {"trace": 100.0 * slow100 * ins100 / 1e9},
@@ -689,7 +750,7 @@ def controls(workdir):
         beats = {(n, st): (100.0 if n == 10 else hb100) for n in sizes for st in stages}
         instrs = {(10, "trace"): ins10, (100, "trace"): ins100} if counted else {}
         return {v for v, _ in judge(b, "assignments", sizes, stages, times, beats, {}, {}, ntimes,
-                                    factors, instrs, ["trace"], {"trace": base0})}
+                                    factors, instrs, ["trace"], {"trace": base0}, wall)}
     out = []
     out.append(("FAIL" in verdicts(150.0, 1.0), "CONTROL: a stage over its budget on an unloaded host fails"))
     out.append(("FAIL" not in verdicts(150.0, 2.0), "CONTROL: the same time on a host running at half speed passes"))
@@ -712,6 +773,39 @@ def controls(workdir):
                 "CONTROL: the same wall growth fails a run nobody counted (the wall bound still holds there)"))
     out.append(("FAIL" in verdicts(95.0, 1.0, t10=1.5, base0=None),
                 "CONTROL: a counted run whose baseline was not counted keeps the wall bound"))
+    # A host that cannot count (bug 315): wall verdicts are not judged there, never passed, and CI
+    # must count. The judge is the real one; only the host's ability is set.
+    uncounted = dict(counted=False, wall=False)
+    v = verdicts(95.0, 1.0, t10=1.5, **uncounted)
+    out.append((v == {"NOT-JUDGED"},
+                "CONTROL: uncounted off CI, wall growth x63 (which fails a counting host's uncounted run)"
+                " is NOT-JUDGED, not FAIL"))
+    v = verdicts(50.0, 1.0, **uncounted)
+    out.append((v == {"NOT-JUDGED"},
+                "CONTROL: uncounted off CI, a stage within its budget and linear is NOT-JUDGED, not PASS"))
+    v = verdicts(150.0, 1.0, **uncounted)
+    out.append((v == {"NOT-JUDGED"},
+                "CONTROL: uncounted off CI, a stage over its budget but under uncounted_fail_factor x it"
+                " is NOT-JUDGED (its host speed is unknown)"))
+    out.append(("FAIL" in verdicts(1500.0, 1.0, **uncounted),
+                "CONTROL: uncounted off CI, a stage over uncounted_fail_factor (10) x its budget fails"))
+    out.append(("FAIL-HB" in verdicts(50.0, 1.0, hb100=1500.0, **uncounted),
+                "CONTROL: uncounted off CI, a heartbeat overrun still fails (exact counts)"))
+    out.append((host_policy(False, {"GITHUB_ACTIONS": "true", "CI": "true"}) == "refused"
+                and host_policy(False, {"CI": "1"}) == "refused",
+                "CONTROL: uncounted on CI (GITHUB_ACTIONS=true, or CI=true/1) is refused: the gate FAILS"))
+    out.append((host_policy(False, {}) == "deferred" and host_policy(False, {"CI": "false"}) == "deferred",
+                "CONTROL: uncounted off CI is deferred to CI"))
+    out.append((host_policy(True, {"GITHUB_ACTIONS": "true"}) == "counted" and host_policy(True, {}) == "counted",
+                "CONTROL: a counting host is judged as before, on CI or off it"))
+    counted_runs = [verdicts(150.0, 1.0), verdicts(150.0, 2.0), verdicts(95.0, 1.0, t10=1.5),
+                    verdicts(95.0, 1.0, t10=1.5, counted=False), verdicts(50.0, 1.0)]
+    out.append((all("NOT-JUDGED" not in v for v in counted_runs) and verdicts(50.0, 1.0) == {"ok"},
+                "CONTROL: a counting host never reports NOT-JUDGED, and passes a stage within its bounds"))
+    out.append((exit_status(5, 0, 3) == NOT_JUDGED_RC and exit_status(5, 1, 3) == 1
+                and exit_status(5, 0, 0) == 0 and exit_status(0, 0, 0) == 1,
+                "CONTROL: NOT-JUDGED exits %d (not 0); any failure exits 1; nothing judged exits 1"
+                % NOT_JUDGED_RC))
     return out
 
 
@@ -891,10 +985,12 @@ def main():
               "allocations ===" % (b.p("exp"), b.p("hb_exp")))
         for m in meas or ["# NOT MEASURED"]:
             print("  budgets %s" % m[2:])
-        if not runner.perf:
-            print("  note: perf cannot count instructions:u on this host; wall budgets are judged"
-                  " unnormalized and instruction budgets are not judged")
-        npass = nfail = nexcl = 0
+        policy = host_policy(runner.perf, os.environ)
+        if policy == "deferred":
+            print("  note: perf cannot count instructions:u on this host: wall growth and wall budgets are"
+                  " NOT JUDGED here (CI decides them; bug 315); heartbeats, compile results, the run"
+                  " ceiling and overruns of %g x a budget are" % b.p("uncounted_fail_factor"))
+        npass = nfail = nexcl = nnot = 0
         for ok, text in controls(workdir):
             if ok:
                 npass += 1
@@ -902,6 +998,13 @@ def main():
             else:
                 nfail += 1
                 print("  FAIL " + text)
+        if policy == "refused":
+            # The verdicts a dev host defers are decided here, so CI may not defer them again.
+            nfail += 1
+            print("  FAIL CI host must count instructions:u: perf is missing or perf_event_paranoid is"
+                  " above 2 on this runner, and the scaling gate's growth and budget verdicts are decided"
+                  " on CI (bug 315). Fix the runner; no shape was judged.")
+            shapes = []
         attempts = 1 + int(b.p("retries"))
         for shape, sizes, modes in shapes:
             why = b.excluded(shape, "*")
@@ -918,11 +1021,15 @@ def main():
             if "core" in modes and "trace" not in modes:
                 print("  note %s: %s are timed together as `core` (--emit-core); the per-stage trace "
                       "would also run lower" % (shape, ", ".join(FRONT)))
-            verdicts, used = run_shape(runner, b, shape, sizes, modes, attempts)
+            verdicts, used = run_shape(runner, b, shape, sizes, modes, attempts,
+                                       wall_judged=(policy == "counted"))
             for v, text in verdicts:
                 if v == "ok":
                     npass += 1
                     print("  ok   " + text)
+                elif v == "NOT-JUDGED":
+                    nnot += 1
+                    print("  NOT-JUDGED " + text)
                 elif v == "EXCLUDED":
                     nexcl += 1
                     print("  EXCLUDED " + text)
@@ -932,8 +1039,13 @@ def main():
                                               "  (instructions: deterministic, not retried)" if v == "FAIL-INSTR" else ""))
             print("  -- %s: %d attempt(s), %.1fs" % (shape, used, time.monotonic() - t0))
         print()
-        print("check_compile_scaling: PASS=%d FAIL=%d EXCLUDED=%d" % (npass, nfail, nexcl))
-        return 1 if nfail or npass == 0 else 0
+        print("check_compile_scaling: PASS=%d FAIL=%d NOT-JUDGED=%d EXCLUDED=%d" % (npass, nfail, nnot, nexcl))
+        rc = exit_status(npass, nfail, nnot)
+        if rc == NOT_JUDGED_RC:
+            print("NOT JUDGED HERE: %d stage verdict(s) need instruction counts this host cannot make;"
+                  " CI decides them (judged_on: ci-counted). This run did not pass; exit %d."
+                  % (nnot, NOT_JUDGED_RC))
+        return rc
     finally:
         if not a.keep:
             shutil.rmtree(workdir, ignore_errors=True)

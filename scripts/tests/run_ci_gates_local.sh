@@ -24,6 +24,14 @@
 #        scripts/tests/run_ci_gates_local.sh [--plan] [--no-wait] --impact <base-ref> | --impact-files <paths-file>
 #   --no-wait    a heavy run (see R-0543 below) exits 75 instead of waiting when every slot is busy.
 #
+# DEFERRED TO CI (bug 315). A gate that cannot make part of its verdict on this host exits 77
+# (GATE_DEFERRED_RC); that is DEFERRED, counted apart from passed and failed, only for a gate that
+# scripts/tests/lib/host_tools.sh declares (HOST_DEFERRED_TABLE, judged_on) and that CI runs as an
+# unconditional step; from any other gate exit 77 is a failure. A deferral leaves the run's exit 0 (the
+# pre-push hook accepts it) but PARTIAL: deferred_to_ci(...) blocks completed=1 like a host skip, and
+# .ci-gates-summary records deferred= and deferred_gates=. CONCRETE_GATES_DEFERRED_OUT=<file>, when
+# set, receives the deferred commands one per line (the hook writes them into its record).
+#
 # SELECTORS COMPOSE INTO ONE UNIQUE LIST. `--job`, `--filter` (or a bare positional substring) and
 # `--first` may each be repeated; the union is resolved ONCE, deduplicated by the normalized command
 # text, and every selected command runs exactly once. The pre-push hook used to call this runner once
@@ -390,6 +398,8 @@ ci_write_summary() { # completed refusals ; atomic — a truncate-in-place write
          # Stated in the record, so completed=1 cannot be read as covering what this runner cannot run.
          echo "excludes=check_gate_mutation_coverage.sh${EXCLUSIONS:-}"
          echo "host_skipped=${HOST_SKIPPED_N:-0}"
+         echo "deferred=${DEFERRED:-0}"
+         [ -z "${DEFERRED_GATES:-}" ] || echo "deferred_gates=${DEFERRED_GATES}"
          [ -n "$2" ] && echo "refusals=$2"
          true
        } > "$tmp" 2>/dev/null; then
@@ -633,6 +643,12 @@ done
 HOST_SKIPPED_N="${#HOST_SKIPPED[@]}"
 
 PASS=0; FAIL=0; FAILED=""
+# DEFERRED (bug 315): a declared gate that exited GATE_DEFERRED_RC; neither passed nor failed.
+DEFERRED=0; DEFERRED_GATES=""; DEFERRED_LIST=""; DEFERRED_NL=""
+_defer() { # cmd -> records a deferral
+  DEFERRED=$((DEFERRED+1)); DEFERRED_LIST="$DEFERRED_LIST\n  DEFERRED $1"
+  DEFERRED_GATES="$DEFERRED_GATES${DEFERRED_GATES:+; }$1"; DEFERRED_NL="$DEFERRED_NL$1"$'\n'
+}
 
 # A FAILING GATE'S OUTPUT IS KEPT. Discarding it means a failure in a 40-minute pass leaves nothing
 # to diagnose but the gate's name — and a gate that passes standalone but fails inside the pass is
@@ -682,9 +698,19 @@ run_seq() { # cmd [stage] -> 0 pass / 1 fail; output kept only on failure
   if [ "$_rc" = "0" ]; then
     PASS=$((PASS+1)); rm -f "$_tmp"; _timing_row "$_t0" "$(_now)" "$_st" PASS "$1"; return 0
   fi
+  local _why=""
+  if [ "$_rc" = "$GATE_DEFERRED_RC" ]; then
+    # Kept, like a failure's: what this host did not judge is worth reading.
+    if _why="$(gate_deferral "$1" "$WORKFLOW")"; then
+      mv -f "$_tmp" "${_out%.log}.deferred.log" 2>/dev/null || cp -f "$_tmp" "${_out%.log}.deferred.log" 2>/dev/null
+      _timing_row "$_t0" "$(_now)" "$_st" DEFERRED "$1"; _defer "$1"
+      echo "  DEFERRED $1 (not judged on this host; CI decides: ${_out#$ROOT_DIR/} -> .deferred.log)"
+      return 0
+    fi
+  fi
   mv -f "$_tmp" "$_out" 2>/dev/null || cp -f "$_tmp" "$_out" 2>/dev/null
   _timing_row "$_t0" "$(_now)" "$_st" FAIL "$1"
-  FAIL=$((FAIL+1)); FAILED="$FAILED\n  FAIL $1"; echo "  FAIL $1 (output: ${_out#$ROOT_DIR/})"
+  FAIL=$((FAIL+1)); FAILED="$FAILED\n  FAIL $1${_why:+ ($_why)}"; echo "  FAIL $1 (output: ${_out#$ROOT_DIR/})${_why:+ -- $_why}"
   return 1
 }
 
@@ -739,7 +765,12 @@ else
     # The pool's own output is kept on failure too (<name>.pool.log): a gate that fails only under
     # load is a defect in the gate, and the sequential recheck's output cannot show why it failed.
     ( _t0="$(_now)"; _pl="$GATE_OUT_TMP/pool.$idx.log"
-      if eval "$cmd" >"$_pl" 2>&1; then rm -f "$_pl"; _timing_row "$_t0" "$(_now)" pool PASS "$cmd"; echo "OK" > "$RES/$idx"
+      eval "$cmd" >"$_pl" 2>&1; _prc=$?
+      if [ "$_prc" = 0 ]; then rm -f "$_pl"; _timing_row "$_t0" "$(_now)" pool PASS "$cmd"; echo "OK" > "$RES/$idx"
+      elif [ "$_prc" = "$GATE_DEFERRED_RC" ]; then
+        # Judged in the parent (gate_deferral): a deferral, or a failure from an undeclared gate.
+        mv -f "$_pl" "$FAILLOG_DIR/$(faillog_name "$cmd").deferred.log" 2>/dev/null
+        _timing_row "$_t0" "$(_now)" pool DEFERRED "$cmd"; echo "DEFER $cmd" > "$RES/$idx"
       else mv -f "$_pl" "$FAILLOG_DIR/$(faillog_name "$cmd").pool.log" 2>/dev/null
         _timing_row "$_t0" "$(_now)" pool FAIL "$cmd"; echo "FAIL $cmd" > "$RES/$idx"; fi ) &
   done
@@ -765,6 +796,15 @@ else
     [ -f "$f" ] || continue
     RESULTS_SEEN=$((RESULTS_SEEN+1))
     if grep -q '^OK$' "$f"; then PASS=$((PASS+1)); continue; fi
+    if grep -q '^DEFER ' "$f"; then
+      cmd="$(sed 's/^DEFER //' "$f")"
+      if _why="$(gate_deferral "$cmd" "$WORKFLOW")"; then
+        _defer "$cmd"; echo "  DEFERRED $cmd (not judged on this host; CI decides)"
+      else
+        FAIL=$((FAIL+1)); FAILED="$FAILED\n  FAIL $cmd ($_why)"; echo "  FAIL $cmd -- $_why"
+      fi
+      continue
+    fi
     if ! grep -q '^FAIL ' "$f"; then
       FAIL=$((FAIL+1))
       FAILED="$FAILED\n  FAIL <result file $f is empty or malformed — the child died before recording>"
@@ -930,7 +970,7 @@ EXCLUSIONS=""
   || EXCLUSIONS=" workflow_step_env_uncaptured($UNCAPTURED_ENV_STEPS)"
 
 DISCOVERED="${#CMDS[@]}"
-EXECUTED=$(( PASS + FAIL ))
+EXECUTED=$(( PASS + FAIL + DEFERRED ))
 # SCOPE IS NOT INTEGRITY — the same distinction the campaign needed. A `--job`/filter run deliberately
 # executes a subset, and calling that `discovered_not_executed` classified the operator's own request
 # as corruption: every successful filtered run printed REFUSED and exited nonzero. A filtered run
@@ -962,6 +1002,11 @@ fi
 # block completed=1 in every mode, closure included; unlike a refusal they say nothing about the tree.
 HOST_NOTES=""
 [ "$HOST_SKIPPED_N" -eq 0 ] || HOST_NOTES=" host_tool_missing($HOST_SKIP_TOOLS: $HOST_SKIPPED_N not run)"
+# A deferral (bug 315) is a skip: the gate ran, but part of its verdict is made on CI. It keeps the run
+# PARTIAL and blocks completed=1 in every mode, like a host skip, and says nothing about the tree.
+DEFER_NOTES=""
+[ "$DEFERRED" -eq 0 ] || DEFER_NOTES=" deferred_to_ci($DEFERRED not judged here)"
+HOST_NOTES="$HOST_NOTES$DEFER_NOTES"
 ALL_REFUSALS="$REFUSALS$SCOPE_NOTES$MODE_NOTES$HOST_NOTES"
 
 COMPLETED=0
@@ -973,6 +1018,14 @@ COMPLETED=0
 if [ -z "$ALL_REFUSALS" ] && [ "$CLOSURE" = "1" ] && [ "$FAIL" -eq 0 ]; then COMPLETED=1; fi
 
 CI_ARTIFACT_OK=1; ci_write_summary "$COMPLETED" "$ALL_REFUSALS" || CI_ARTIFACT_OK=0
+# The deferred commands for the pre-push hook's record (bug 315), part of the run's durable output.
+if [ -n "${CONCRETE_GATES_DEFERRED_OUT:-}" ]; then
+  # Written whole or not at all: the hook reads an absent file as "the runner said nothing".
+  _dtmp="$(mktemp "$CONCRETE_GATES_DEFERRED_OUT.XXXXXX" 2>/dev/null)" \
+    && printf '%s' "$DEFERRED_NL" > "$_dtmp" \
+    && mv -f "$_dtmp" "$CONCRETE_GATES_DEFERRED_OUT" \
+    || { rm -f "${_dtmp:-}" 2>/dev/null; echo "error: could not write $CONCRETE_GATES_DEFERRED_OUT" >&2; CI_ARTIFACT_OK=0; }
+fi
 
 # THE SUMMARY LINE COMES AFTER RECONCILIATION, and says REFUSED when completion was refused. It used
 # to print `CI-GATES-LOCAL: PASS=.. FAIL=0` BEFORE this block, so a head/tree/compiler change — or a
@@ -990,7 +1043,7 @@ echo
 if [ "$RUN_OK" = "1" ] && [ -z "$SCOPE_NOTES$MODE_NOTES$HOST_NOTES" ]; then
   echo "CI-GATES-LOCAL: PASS=$PASS FAIL=$FAIL (JOBS=$JOBS)"
 elif [ "$RUN_OK" = "1" ]; then
-  echo "CI-GATES-LOCAL: PARTIAL PASS=$PASS FAIL=$FAIL (JOBS=$JOBS) —$SCOPE_NOTES$MODE_NOTES$HOST_NOTES"
+  echo "CI-GATES-LOCAL: PARTIAL PASS=$PASS FAIL=$FAIL${DEFERRED:+ DEFERRED=$DEFERRED} (JOBS=$JOBS) —$SCOPE_NOTES$MODE_NOTES$HOST_NOTES"
 else
   echo "CI-GATES-LOCAL: REFUSED PASS=$PASS FAIL=$FAIL (JOBS=$JOBS)"
 fi
@@ -999,6 +1052,7 @@ if [ "$HOST_SKIPPED_N" -gt 0 ]; then
   echo "Not run — this host lacks a tool CI has ($HOST_SKIP_TOOLS); they did NOT pass here:"
   printf '  SKIP %s\n' "${HOST_SKIPPED[@]}"
 fi
+[ "$DEFERRED" -eq 0 ] || echo -e "Deferred to CI — not judged on this host (scripts/tests/lib/host_tools.sh); they did NOT pass here:$DEFERRED_LIST"
 
 if [ -n "$REFUSALS" ]; then
   echo

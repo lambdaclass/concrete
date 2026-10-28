@@ -27,6 +27,15 @@
 #                                                  re-measure budgets on this host (CI host class)
 # CONCRETE_SCALING_COMPILER=<binary> judges another build (a pre-fix compiler) with this tree's
 # budgets; the freshness check applies only to this tree's own binary.
+#
+# HOSTS THAT CANNOT COUNT (bug 315). Where perf cannot count instructions:u, wall growth and wall
+# budgets are NOT JUDGED (a wall ratio is the cache and the host's load, not the compiler's work):
+# each such stage prints NOT-JUDGED, the summary counts them, and the gate exits 77 when nothing
+# failed. That is not a pass: run_ci_gates_local.sh records it as deferred to CI only because
+# scripts/tests/lib/host_tools.sh declares this gate judged on CI (judged_on: ci-counted) and CI runs
+# it as an unconditional step. Heartbeats, compile results, the run ceiling and a stage over
+# uncounted_fail_factor x its budget are still judged there. On CI an uncounted host FAILS: the
+# deferred verdicts are made there. Exit: 0 passed, 1 failed, 2 setup, 77 not judged here.
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -38,6 +47,26 @@ fi
 COMPILER="${CONCRETE_SCALING_COMPILER:-.lake/build/bin/concrete}"
 [ -x "$COMPILER" ] || { echo "error: build first ($COMPILER missing)" >&2; exit 2; }
 command -v python3 >/dev/null || { echo "error: python3 required" >&2; exit 2; }
+# CI MUST COUNT, end to end (bug 315): the real entry point, on CI with no perf on PATH, fails with
+# the runner message before it judges a shape (so it needs no compiler). Without this leg a CI host
+# that lost its counters would defer every verdict to itself.
+case " $* " in *" --measure "*) MEASURING=1 ;; *) MEASURING=0 ;; esac
+if [ "$MEASURING" = 0 ]; then
+  NOPERF="$(mktemp -d)" || exit 2
+  ci_out="$(env -i HOME="$NOPERF" PATH="$NOPERF" GITHUB_ACTIONS=true "$(command -v python3)" -I -u \
+    "$ROOT_DIR/scripts/tests/lib/compile_scaling.py" --compiler "$NOPERF/no-compiler" \
+    --budgets "$ROOT_DIR/scripts/tests/lib/compile_scaling_budgets.tsv" \
+    --bounded "$ROOT_DIR/scripts/tests/lib/bounded.sh" --root "$ROOT_DIR" 2>&1)"; ci_rc=$?
+  rm -rf "$NOPERF"
+  if [ "$ci_rc" = 1 ] && has_match -F "FAIL CI host must count instructions:u" <<<"$ci_out" \
+     && has_match -E '^check_compile_scaling: PASS=[0-9]+ FAIL=1 NOT-JUDGED=0 ' <<<"$ci_out"; then
+    echo "  ok   CONTROL (end to end): on CI, a host that cannot count instructions:u fails the gate"
+  else
+    echo "  FAIL CONTROL (end to end): on CI without perf the gate exited $ci_rc without the refusal:"
+    printf '%s\n' "$ci_out" | tail -5 | sed 's/^/    /'
+    exit 1
+  fi
+fi
 # Not `exec`: fresh.sh releases the tree lock from this shell's EXIT trap.
 python3 -I -u "$ROOT_DIR/scripts/tests/lib/compile_scaling.py" \
   --compiler "$COMPILER" \

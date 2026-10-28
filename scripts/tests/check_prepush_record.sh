@@ -172,6 +172,12 @@ ppr_check "$SB/rec.trunc" "$SB/comp"; [ "$PPR_REASON" = "record_incomplete" ] \
 sed 's/^status=pass$/status=fail/' "$REC" > "$SB/rec.fail"
 ppr_check "$SB/rec.fail" "$SB/comp"; [ "$PPR_REASON" = "record_not_a_pass" ] \
   && ok "failed record -> no reuse" || no "a failed record was not refused ($PPR_REASON)"
+comp && printf 'bash scripts/tests/check_x.sh\n' > "$SB/deferred" && ppr_write "$REC" "$SB/comp" "$SB/deferred"
+{ grep -qx 'status=pass-deferred' "$REC" && ! grep -qx 'status=pass' "$REC" \
+  && grep -qx 'deferred_gate=bash scripts/tests/check_x.sh' "$REC" && ppr_check "$REC" "$SB/comp"; } \
+  && ok "a run with a deferral is recorded pass-deferred, never pass, names the gate, and is reusable" \
+  || no "deferral record: $(grep -E '^(status|deferred_gate)=' "$REC" | tr '\n' ' ') ($PPR_REASON)"
+comp && ppr_write "$REC" "$SB/comp"
 grep -v '^binary=' "$REC" > "$SB/rec.partial"
 ppr_check "$SB/rec.partial" "$SB/comp" ; case "$PPR_REASON" in *binary*) ok "record missing a component -> no reuse" ;;
   *) no "a record missing a component was not refused ($PPR_REASON)" ;; esac
@@ -186,6 +192,10 @@ cat > "$REPO/scripts/tests/run_ci_gates_local.sh" <<'STUB'
 #!/usr/bin/env bash
 if [ "${1:-}" = "--plan" ]; then shift; printf '%s\n' "$@" | paste -d' ' - - | sed 's#^--impact-files .*#--impact-files CHANGED#'; exit 0; fi
 echo run >> "$STUB_STATE"
+# The deferred-to-CI list the real runner writes (bug 315): STUB_DEFER's lines, or no file at all.
+if [ -n "${CONCRETE_GATES_DEFERRED_OUT:-}" ] && [ "${STUB_NO_DEFER_FILE:-0}" != 1 ]; then
+  printf '%s' "${STUB_DEFER:-}" > "$CONCRETE_GATES_DEFERRED_OUT"
+fi
 exit "${STUB_RC:-0}"
 STUB
 g add -A; g commit -qm hook
@@ -235,6 +245,24 @@ push; rc=$?
   && ok "a dirty tree runs in full and writes no record" \
   || no "dirty tree: rc=$rc runs=$(runs) — $(tail -3 "$SB/out" | tr '\n' ' ')"
 g checkout -q -- src/a.txt
+
+echo "=== deferred to CI (bug 315): accepted, named, and never recorded as a pass ==="
+n0="$(runs)"
+STUB_DEFER=$'bash scripts/tests/check_compile_scaling.sh\n' FAKE_LEAN_VERSION=5.0 push; rc=$?
+{ [ "$rc" = 0 ] && [ "$(runs)" = "$((n0 + 1))" ] && grep -q 'DEFERRED to CI' "$SB/out" \
+  && grep -qx 'status=pass-deferred' "$HREC" && grep -qx 'deferred_gate=bash scripts/tests/check_compile_scaling.sh' "$HREC"; } \
+  && ok "a run that deferred a gate is accepted, names it, and records pass-deferred with the gate" \
+  || no "deferred run: rc=$rc runs=$(runs) (was $n0) — $(grep -E '^status=' "$HREC" 2>/dev/null) $(tail -3 "$SB/out" | tr '\n' ' ')"
+FAKE_LEAN_VERSION=5.0 push; rc=$?
+{ [ "$rc" = 0 ] && [ "$(runs)" = "$((n0 + 1))" ] && grep -q 'REUSED validation record' "$SB/out" \
+  && grep -q 'DEFERRED to CI in that run' "$SB/out" && grep -q 'check_compile_scaling.sh' "$SB/out"; } \
+  && ok "reusing a pass-deferred record says again what was deferred" \
+  || no "deferred reuse: rc=$rc runs=$(runs) — $(tail -4 "$SB/out" | tr '\n' ' ')"
+STUB_NO_DEFER_FILE=1 FAKE_LEAN_VERSION=6.0 push; rc=$?
+{ [ "$rc" = 0 ] && [ "$(runs)" = "$((n0 + 2))" ] && [ ! -e "$HREC" ] \
+  && grep -q 'did not report its deferrals' "$SB/out"; } \
+  && ok "a runner that did not report its deferrals writes no record" \
+  || no "no deferral report: rc=$rc runs=$(runs) record=$( [ -e "$HREC" ] && echo present || echo absent)"
 
 echo "=== deletions: wip/* is the backup tier, a protected ref keeps the full gates ==="
 Z=0000000000000000000000000000000000000000

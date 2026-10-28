@@ -226,6 +226,46 @@ else
     *) no "run_ci_gates_local.sh does not use $HT_LIB" ;; esac
   case "$runner_code" in *'ALL_REFUSALS="$REFUSALS$SCOPE_NOTES$MODE_NOTES$HOST_NOTES"'*) ok "a host skip is part of the completion-blocking notes (PARTIAL, completed=0)" ;;
     *) no "HOST_NOTES is not in ALL_REFUSALS — a host-skipped run could be recorded completed=1" ;; esac
+
+  echo "=== a verdict deferred to CI is declared, judged on CI, and never a pass (bug 315) ==="
+  # host_tools.sh's HOST_DEFERRED_TABLE names the gates whose exit GATE_DEFERRED_RC the runner records
+  # as deferred. Each must be a gate CI runs unconditionally (else nothing judges it), with a known
+  # judged_on, and must itself use that exit status.
+  if [ "${#HOST_DEFERRED_TABLE[@]}" -eq 0 ] || ! command -v gate_deferral >/dev/null 2>&1; then
+    no "$HT_LIB declares no deferral table or no gate_deferral — the runner could not accept a deferral"
+  else
+    for row in "${HOST_DEFERRED_TABLE[@]}"; do
+      name="${row%%|*}"; on="${row#*|}"
+      case "$on" in ci-counted) ok "deferral row '$row' has a known judged_on ($on)" ;;
+        *) no "deferral row '$row': judged_on '$on' is not one this file defines" ;; esac
+      if why="$(gate_deferral "bash scripts/tests/$name")"; then
+        ok "deferral row '$row': CI runs $name as an unconditional step, so the deferred verdict is made there"
+      else
+        no "deferral row '$row': $why"
+      fi
+    done
+    # The scaling gate's own exit for "not judged here" is the runner's deferral status.
+    grep -qx "NOT_JUDGED_RC = $GATE_DEFERRED_RC" scripts/tests/lib/compile_scaling.py \
+      && ok "compile_scaling.py exits $GATE_DEFERRED_RC (GATE_DEFERRED_RC) when it did not judge" \
+      || no "compile_scaling.py's NOT_JUDGED_RC is not GATE_DEFERRED_RC ($GATE_DEFERRED_RC)"
+    # CONTROLS: an undeclared gate, and a declared gate whose CI step is conditional, are refused.
+    gate_deferral "bash scripts/tests/check_this_gate_does_not_exist_$$.sh" >/dev/null \
+      && no "CONTROL: gate_deferral accepted an undeclared gate — every exit 77 would read as deferred" \
+      || ok "CONTROL: gate_deferral refuses an undeclared gate"
+    df_wf="$(mktemp)"
+    printf 'jobs:\n  j:\n    runs-on: x\n    steps:\n      - if: false\n        run: bash scripts/tests/%s\n' \
+      "${HOST_DEFERRED_TABLE[0]%%|*}" > "$df_wf"
+    gate_deferral "bash scripts/tests/${HOST_DEFERRED_TABLE[0]%%|*}" "$df_wf" >/dev/null \
+      && no "CONTROL: a declared gate whose only CI step is conditional was accepted as deferred" \
+      || ok "CONTROL: a declared gate whose CI step is conditional cannot defer (nothing would judge it)"
+    rm -f "$df_wf"
+  fi
+  case "$runner_code" in *gate_deferral*GATE_DEFERRED_RC*gate_deferral*) ok "run_ci_gates_local.sh classifies exit GATE_DEFERRED_RC with gate_deferral (sequential and pool)" ;;
+    *) no "run_ci_gates_local.sh does not classify GATE_DEFERRED_RC with gate_deferral in both paths" ;; esac
+  case "$runner_code" in *'HOST_NOTES="$HOST_NOTES$DEFER_NOTES"'*) ok "a deferral is part of the completion-blocking notes (PARTIAL, completed=0)" ;;
+    *) no "DEFER_NOTES is not in HOST_NOTES — a deferred run could be recorded completed=1" ;; esac
+  case "$runner_code" in *'EXECUTED=$(( PASS + FAIL + DEFERRED ))'*) ok "a deferral counts as executed, not passed" ;;
+    *) no "EXECUTED does not count deferrals apart from passes" ;; esac
 fi
 
 echo "GATE-REGISTRATION: PASS=$PASS FAIL=$FAIL"

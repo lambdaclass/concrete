@@ -35,7 +35,10 @@
 #   env              digest of every CONCRETE_* environment variable.
 #
 # A record is written only after a fully successful run, atomically, with `complete=1` as its LAST
-# line; a missing, truncated, failed or foreign record simply does not match. It lives in the git
+# line; a missing, truncated, failed or foreign record simply does not match. A run in which a gate's
+# verdict was DEFERRED TO CI (bug 315; scripts/tests/lib/host_tools.sh) is recorded as
+# `status=pass-deferred` with one `deferred_gate=` line per gate, never as `status=pass`: the hook
+# accepted it, and the record says which verdicts it did not make. It lives in the git
 # directory (`git rev-parse --git-path`), per worktree and never committed.
 #
 # Every function takes the repository root explicitly and reports why it refused in PPR_REASON.
@@ -175,7 +178,7 @@ ppr_check() {
   [ -s "$comp" ] || { PPR_REASON="no_components"; return 1; }
   # COMPLETE, PASSED, OURS — or nothing. `complete=1` is written last, so a truncated write fails here.
   [ "$(tail -n 1 "$rec")" = "complete=1" ] || { PPR_REASON="record_incomplete"; return 1; }
-  grep -qx "status=pass" "$rec" || { PPR_REASON="record_not_a_pass"; return 1; }
+  grep -qxE "status=(pass|pass-deferred)" "$rec" || { PPR_REASON="record_not_a_pass"; return 1; }
   grep -qx "format=$PPR_FORMAT" "$rec" || { PPR_REASON="record_format_mismatch"; return 1; }
   while IFS= read -r line; do
     k="${line%%=*}"; v="${line#*=}"
@@ -189,13 +192,20 @@ ppr_check() {
   return 0
 }
 
-# ppr_write RECORD COMPONENTS_FILE -> atomic write; status=pass and complete=1 come from here only.
+# ppr_write RECORD COMPONENTS_FILE [DEFERRED_FILE] -> atomic write; status and complete=1 come from
+# here only. DEFERRED_FILE lists the commands the run deferred to CI, one per line: any line makes the
+# status pass-deferred and is recorded as deferred_gate=<command>.
 ppr_write() {
-  local rec="$1" comp="$2" tmp
+  local rec="$1" comp="$2" deferred="${3:-}" tmp
   [ -s "$comp" ] || return 1
   tmp="$(mktemp "$rec.XXXXXX" 2>/dev/null)" || return 1
   if ! { cat "$comp"
-         echo "status=pass"
+         if [ -n "$deferred" ] && [ -s "$deferred" ]; then
+           echo "status=pass-deferred"
+           sed '/^$/d; s/^/deferred_gate=/' "$deferred"
+         else
+           echo "status=pass"
+         fi
          echo "written_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
          echo "complete=1"; } > "$tmp" 2>/dev/null; then
     rm -f "$tmp"; return 1

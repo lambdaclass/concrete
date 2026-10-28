@@ -846,6 +846,45 @@ else
   no "after a normal run the left-behind process survived or the lock stayed ($(tr '\n' ' ' < "$RSB/.gate.lock/owner" 2>/dev/null))"
 fi
 
+# --- a verdict deferred to CI (bug 315): exit 77 is DEFERRED only from a declared gate ---
+# The sandbox's check_compile_scaling.sh stands in for the real one (host_tools.sh declares it, and
+# the copied workflow runs it as an unconditional step); check_dummy_77.sh exits 77 undeclared.
+printf 'echo "NOT-JUDGED stub"\nexit 77\n' > "$RSB/scripts/tests/check_compile_scaling.sh"
+printf 'echo undeclared\nexit 77\n' > "$RSB/scripts/tests/check_dummy_77.sh"
+( cd "$RSB" && git add -A && git -c user.email=gate@local -c user.name=gate commit -qm defer ) >/dev/null 2>&1
+_reset_marks
+for _jobs in 1 2; do
+  rm -f "$TMP/deferred.out"
+  # JOBS=2 with a second, passing gate sends the deferral through the parallel pool instead.
+  ( cd "$RSB" && exec env -u CONCRETE_GATE_LOCK -u CONCRETE_GATE_SESSION PATH="$TMP/bin:$PATH" \
+      DUMMY_MARK="$MARK" JOBS="$_jobs" CONCRETE_GATES_DEFERRED_OUT="$TMP/deferred.out" \
+      bash scripts/tests/run_ci_gates_local.sh $([ "$_jobs" = 1 ] && echo --first || echo --filter) \
+        "bash scripts/tests/check_compile_scaling.sh" \
+        $([ "$_jobs" = 2 ] && echo --first "bash scripts/tests/check_dummy_quick.sh") >"$TMP/run.defer" 2>&1 ); _drc=$?
+  if [ "$_drc" = 0 ] && grep -q '^  DEFERRED bash scripts/tests/check_compile_scaling.sh' "$TMP/run.defer" \
+     && grep -qx 'deferred=1' "$RSB/.ci-gates-summary" && grep -qx 'deferred_gates=bash scripts/tests/check_compile_scaling.sh' "$RSB/.ci-gates-summary" \
+     && grep -q 'deferred_to_ci(1 not judged here)' "$RSB/.ci-gates-summary" && grep -qx 'completed=0' "$RSB/.ci-gates-summary" \
+     && grep -q 'CI-GATES-LOCAL: PARTIAL' "$TMP/run.defer" \
+     && [ "$(cat "$TMP/deferred.out" 2>/dev/null)" = "bash scripts/tests/check_compile_scaling.sh" ]; then
+    ok "JOBS=$_jobs: exit 77 from the declared gate is DEFERRED: run exit 0, PARTIAL, deferred=1 and named in the summary and the hook's list"
+  else
+    no "JOBS=$_jobs: the declared deferral was not recorded as one (rc=$_drc): $(grep -E 'DEFERRED|FAIL|CI-GATES' "$TMP/run.defer" | tr '\n' ' ') / $(grep -E '^(deferred|passed|failed|refusals)' "$RSB/.ci-gates-summary" 2>/dev/null | tr '\n' ' ')"
+  fi
+  if grep -qx "passed=$((_jobs - 1))" "$RSB/.ci-gates-summary" && grep -qx 'failed=0' "$RSB/.ci-gates-summary"; then
+    ok "JOBS=$_jobs: ...and it is not counted as passed (nor failed)"
+  else
+    no "JOBS=$_jobs: the deferral was counted as a pass or a failure: $(grep -E '^(passed|failed)=' "$RSB/.ci-gates-summary" | tr '\n' ' ')"
+  fi
+done
+( cd "$RSB" && exec env -u CONCRETE_GATE_LOCK -u CONCRETE_GATE_SESSION PATH="$TMP/bin:$PATH" \
+    DUMMY_MARK="$MARK" JOBS=1 bash scripts/tests/run_ci_gates_local.sh --first "bash scripts/tests/check_dummy_77.sh" >"$TMP/run.undecl" 2>&1 ); _drc=$?
+if [ "$_drc" != 0 ] && grep -q 'FAIL bash scripts/tests/check_dummy_77.sh.*does not declare' "$TMP/run.undecl" \
+   && grep -qx 'deferred=0' "$RSB/.ci-gates-summary" && grep -qx 'failed=1' "$RSB/.ci-gates-summary"; then
+  ok "CONTROL: exit 77 from a gate host_tools.sh does not declare is a FAIL, not a deferral"
+else
+  no "CONTROL: an undeclared gate's exit 77 was not a failure (rc=$_drc): $(grep -E 'DEFERRED|FAIL' "$TMP/run.undecl" | tr '\n' ' ')"
+fi
+
 # --- the launcher itself, against a run that ignores SIGTERM ---
 # Escalation must not wait for the run to exit: a runner that ignores SIGTERM would hold the main
 # wait forever. Both directions: the front signalled, and the front killed outright (the leader is then

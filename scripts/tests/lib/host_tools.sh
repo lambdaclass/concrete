@@ -46,3 +46,53 @@ host_tool_missing() {
   printf '%s\n' "$missing"
   return 0
 }
+
+# GATES THAT DEFER A VERDICT TO CI (bug 315). Some verdicts only a capable host can make soundly: the
+# compile-scaling gate judges growth and budgets by retired instructions, and a host whose perf cannot
+# count instructions:u (the dev host: perf_event_paranoid 4) can only offer wall ratios, which measure
+# its caches and load, not the compiler. Such a gate still runs everywhere (what does not depend on
+# the host is judged), prints NOT-JUDGED for the rest, and exits GATE_DEFERRED_RC when nothing failed.
+# run_ci_gates_local.sh records that exit as DEFERRED (not passed, not failed) only for a gate named
+# below that CI runs as an unconditional step of its own; from any other gate, or from a gate whose CI
+# step was removed or made conditional, the same exit is a FAIL. A deferral is a skip, never a pass: it
+# keeps the run PARTIAL (completed=0) and is named in .ci-gates-summary and the pre-push record.
+#
+# One row per gate: "<gate file name>|<judged_on>". judged_on says where the verdict is decided:
+#   ci-counted   on CI, by a runner whose perf counts instructions:u; the gate FAILS on a CI runner
+#                that cannot count, so the verdict cannot be deferred again there.
+GATE_DEFERRED_RC=77
+HOST_DEFERRED_TABLE=(
+  "check_compile_scaling.sh|ci-counted"
+)
+_ht_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/tests/lib/delegated_gates.sh
+source "$_ht_dir/delegated_gates.sh" || return 2
+
+# host_gate_judged_on <cmd>: prints the judged_on of the row naming <cmd>'s gate; 1 when no row does.
+host_gate_judged_on() {
+  local row
+  row="$(_host_deferred_row "$1")" || return 1
+  printf '%s\n' "${row#*|}"
+}
+
+_host_deferred_row() { # cmd -> the row whose gate <cmd> invokes
+  local cmd="$1" row
+  for row in "${HOST_DEFERRED_TABLE[@]}"; do
+    case "$cmd " in *"scripts/tests/${row%%|*} "*) printf '%s\n' "$row"; return 0 ;; esac
+  done
+  return 1
+}
+
+# gate_deferral <cmd> [workflow]: 0 when <cmd> may report GATE_DEFERRED_RC as deferred to CI: a row
+# declares its gate and the workflow runs that gate as an unconditional step (delegated_gate_step).
+# Otherwise prints why not and returns 1, and the runner counts the exit as a failure.
+gate_deferral() {
+  local cmd="$1" wf="${2:-.github/workflows/lean_action_ci.yml}" row
+  if ! row="$(_host_deferred_row "$cmd")"; then
+    echo "exit $GATE_DEFERRED_RC (not judged here) from a gate host_tools.sh does not declare judged on CI"
+    return 1
+  fi
+  delegated_gate_step "${row%%|*}" "$wf" >/dev/null && return 0
+  echo "exit $GATE_DEFERRED_RC (not judged here), but ${row%%|*} is not an unconditional CI step of $wf: nothing would judge it"
+  return 1
+}

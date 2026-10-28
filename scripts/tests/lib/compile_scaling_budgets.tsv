@@ -17,9 +17,9 @@
 # allocations (heartbeats) grow exactly x10, so hb_exp 1.2 (x15.8) is tight. Its time grows more
 # (caches, the allocator, memory bandwidth shared with other jobs): up to x35 on the loaded CI host
 # and x52 with eight gates running at once on the dev host, fastest of three attempts; exp 1.8
-# (x63) sits above that, and judges only runs perf could not count. A mixed stage whose quadratic
-# part is still small at these sizes can pass the time bound and is held by its budget only
-# (compile_scaling.py, SIZES and RESOLUTION).
+# (x63) sits above that, and judges only a run perf did not count on a host that counts. A mixed
+# stage whose quadratic part is still small at these sizes can pass the time bound and is held by its
+# budget only (compile_scaling.py, SIZES and RESOLUTION).
 # Bug 294: wall budgets measured on a quiet host failed unchanged work on the loaded CI host (one
 # binary's monomorphize stage at 10^5 assignments took 261 - 575 ms at load 24 against a 412 ms
 # budget, the same 13.615 G instructions each time). hbbudget and instr hold a run's work exactly
@@ -34,6 +34,11 @@
 # --measure scales each run to the session's quietest rate and keeps the fastest; that removes the
 # variation between runs, not load lasting the whole session, so it refuses a host whose load average
 # is above measure_max_load (32 threads: 8 is a quarter busy) and stamps the load it ran at.
+# Bug 315: where perf cannot count instructions:u (the dev host), wall growth and wall budgets are
+# NOT JUDGED (the gate exits 77, which the CI-gates runner records as deferred to CI, never as a pass);
+# only a stage over uncounted_fail_factor x its budget (40 x the CI host's quiet median, at least 2 s)
+# still fails there, a level no load reaches (load slowed stages x2 - x3 in bugs 294 and 315). CI must
+# count: an uncounted CI runner fails the gate.
 # Declaration and nesting shapes run at 10^4 and 10^5 with their whole compiles since bugs 280,
 # 286, 288 - 293 (R-0550 follow-up); functions and call-chain are compiled natively only by the
 # other shapes (clang alone takes 80 - 130 s on 10^5 functions). lets-if and lets-match run at
@@ -56,6 +61,7 @@ param	instr_budget_factor	1.25
 param	instr_exp	1.06
 param	norm_cap	2
 param	measure_max_load	8
+param	uncounted_fail_factor	10
 shape	array-const	10000,100000	trace,llvm,native
 shape	array-repeat	10000,100000	trace,llvm,native
 shape	array-distinct	10000,100000	trace,llvm,native
