@@ -13,7 +13,7 @@
 #   S10 site       the generated spec pages build with zola
 #   S12 witnesses  docs/spec/rule_sites.tsv (rule, code, enforcing sites) is generated; every code of an
 #                  enforced refusal is reported for some program a gate runs, or coverage_allow.tsv says why not
-#   S13 one spec   no document under docs/language beyond those unabsorbed.tsv lists (shrink-only)
+#   S13 one spec   is check_docs_drift.sh's (scripts/spec/one_spec.py), a source check run on every push
 #
 # Fails closed: zero entries or examples is a failure, a missing compiler / Lean / zola / history base
 # is a failure, and the only skips are SPEC_SKIP_SITE=1 / SPEC_BASE=none outside CI (counted SKIPPED).
@@ -234,8 +234,6 @@ else no "N12: S12 recorded no observation to replay"; fi
 mkdir -p "$TMP/n13/docs/spec" "$TMP/n13/docs/language"; cp -R docs/spec/. "$TMP/n13/docs/spec/"; cp -R docs/language/. "$TMP/n13/docs/language/"
 printf 'planted\n' >> "$TMP/n13/docs/spec/rule_sites.tsv"
 control "N12c: a hand edit to the generated rule-site inventory" S12 "rule_sites.tsv differs" -- inventory --check --root "$TMP/n13" --spec "$TMP/n13/docs/spec"
-printf '# A new rule document\n' > "$TMP/n13/docs/language/NEW_RULES.md"
-control "N13: a new document under docs/language" S13 "NEW_RULES.md is a new document" -- lint --root "$TMP/n13" --spec "$TMP/n13/docs/spec"
 
 # S9: a hand edit to the generated manifest
 mkdir -p "$TMP/nroot/tests/rules"; cp tests/rules/exit_2i.tsv "$TMP/nroot/tests/rules/"

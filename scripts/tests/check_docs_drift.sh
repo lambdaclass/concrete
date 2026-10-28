@@ -334,5 +334,19 @@ else
 fi
 
 echo ""
+echo "=== 8. one specification: no new document under docs/language (S13, docs/spec/README.md §3) ==="
+if out="$(python3 scripts/spec/one_spec.py 2>&1)"; then
+  ok "$(grep -m1 'S13' <<<"$out" | sed 's/^  ok   //')"
+else
+  printf '%s\n' "$out" | grep 'FAIL' | sed 's/^  FAIL /    /'
+  no "docs/language gained a document, or unabsorbed.tsv is out of step with it"
+fi
+if out="$(python3 scripts/spec/one_spec.py --self-test 2>&1)"; then
+  ok "S13 controls: a new docs/language document and a deleted one with its row kept are refused"
+else
+  printf '%s\n' "$out" | grep 'FAIL' | sed 's/^  FAIL /    /'
+  no "an S13 control was not refused"
+fi
+echo ""
 echo "DOCS-DRIFT: PASS=$PASS  FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

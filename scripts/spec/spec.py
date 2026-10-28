@@ -1143,43 +1143,6 @@ def check_code_coverage(spec, root, seen, n):
     print(f"  S12 witnesses: {covered} rule codes witnessed, {allowed} allow-listed, {missing} missing, over {n} programs")
     if missing == 0: ok(f"S12 witnesses: every enforced rule code has a negative witness or a stated reason")
 
-# ---------------------------------------------------------------------------------------------
-# S13 one specification: docs/language is absorbed into docs/spec and emptied
-# ---------------------------------------------------------------------------------------------
-UNABSORBED_PATH = "docs/spec/unabsorbed.tsv"
-
-def check_absorbed(root):
-    """Every Markdown file under docs/language is a document not yet absorbed into this spec, and is
-    listed in unabsorbed.tsv with the chapters that will take it; a new file there is refused (the
-    spec is the one normative document; S3 makes the list shrink-only)."""
-    rows = read_tsv(os.path.join(root, UNABSORBED_PATH))
-    if rows is None:
-        fail("S13", f"{UNABSORBED_PATH} is missing"); return
-    listed, bad = {}, 0
-    for r in rows:
-        if len(r) != 2: fail("S13", f"{UNABSORBED_PATH}: row {r} is not (path, chapters)"); bad += 1; continue
-        if r[0] in listed: fail("S13", f"{UNABSORBED_PATH}: {r[0]} listed twice"); bad += 1
-        listed[r[0]] = r[1]
-        if not os.path.exists(os.path.join(root, r[0])):
-            fail("S13", f"{UNABSORBED_PATH}: {r[0]} no longer exists (remove its row in the commit that deletes it)"); bad += 1
-    for f in sorted(glob.glob(os.path.join(root, "docs/language/**/*.md"), recursive=True)):
-        rel = os.path.relpath(f, root)
-        if rel not in listed:
-            fail("S13", f"{rel} is a new document under docs/language: the language is stated in docs/spec (add an entry or a rationale there)"); bad += 1
-    if bad == 0:
-        ok(f"S13 one specification: {len(listed)} docs/language files still to absorb, none new")
-
-def check_absorbed_history(root, base):
-    try:
-        old = subprocess.run(["git", "-C", root, "show", f"{base}:{UNABSORBED_PATH}"], capture_output=True, text=True)
-    except Exception:
-        return
-    if old.returncode != 0: return
-    old_paths = {l.split("\t")[0] for l in old.stdout.split("\n") if l.strip() and not l.startswith("#")}
-    for r in read_tsv(os.path.join(root, UNABSORBED_PATH)) or []:
-        if r and r[0] not in old_paths:
-            fail("S3", f"{UNABSORBED_PATH}: {r[0]} was added (the list only shrinks)")
-
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd")
@@ -1208,7 +1171,7 @@ def main():
     if c == "lint":
         check_format(spec, a.root); check_registry(spec); check_coverage(spec); check_tracking(spec, a.root)
         check_restatements(spec, a.root, a.scan_root)
-        check_inventory(spec, a.root); check_absorbed(a.root)
+        check_inventory(spec, a.root)
     elif c == "register":
         # append-only: add a row for every chapter key ids.tsv lacks; never edits an existing row
         path = os.path.join(spec.dir, "ids.tsv")
@@ -1238,7 +1201,6 @@ def main():
         check_restatements(spec, a.root, a.scan_root)
     elif c == "history":
         check_history(spec, a.base, a.base_ids, a.base_codes, a.base_spec)
-        if a.base and a.base != "ctl": check_absorbed_history(a.root, a.base)
     elif c == "run-examples":
         run_examples(spec, a.compiler, a.jobs, a.work, a.only)
     elif c == "codes":
