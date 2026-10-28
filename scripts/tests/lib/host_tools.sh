@@ -75,10 +75,19 @@ host_gate_judged_on() {
   printf '%s\n' "${row#*|}"
 }
 
-_host_deferred_row() { # cmd -> the row whose gate <cmd> invokes
-  local cmd="$1" row
+_host_deferred_row() { # cmd -> the row whose gate <cmd> INVOKES
+  # The command must BE the gate, as delegated_gate_step reads a step: optional VAR=value prefixes,
+  # bash/python3/sh or ./, the gate's path, then plain arguments. A gate named only as an argument of
+  # another command, or inside a pipeline, list or substitution, matches no row: that command's exit
+  # 77 is not the declared gate's.
+  local cmd="$1" row script rest
+  while [[ "$cmd" =~ ^[A-Z_][A-Z0-9_]*=[^[:space:]]+[[:space:]]+(.*)$ ]]; do cmd="${BASH_REMATCH[1]}"; done
+  if [[ "$cmd" =~ ^(bash|python3|sh)[[:space:]]+(.*)$ ]]; then cmd="${BASH_REMATCH[2]}"; fi
+  cmd="${cmd#./}"
+  script="${cmd%%[[:space:]]*}"; rest="${cmd#"$script"}"
+  case "$rest" in *['|;&<>`$()']*) return 1 ;; esac
   for row in "${HOST_DEFERRED_TABLE[@]}"; do
-    case "$cmd " in *"scripts/tests/${row%%|*} "*) printf '%s\n' "$row"; return 0 ;; esac
+    [ "$script" = "scripts/tests/${row%%|*}" ] && { printf '%s\n' "$row"; return 0; }
   done
   return 1
 }

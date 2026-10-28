@@ -856,11 +856,11 @@ _reset_marks
 for _jobs in 1 2; do
   rm -f "$TMP/deferred.out"
   # JOBS=2 with a second, passing gate sends the deferral through the parallel pool instead.
+  if [ "$_jobs" = 1 ]; then _dsel=(--first "bash scripts/tests/check_compile_scaling.sh")
+  else _dsel=(--first "bash scripts/tests/check_dummy_quick.sh" --filter "bash scripts/tests/check_compile_scaling.sh"); fi
   ( cd "$RSB" && exec env -u CONCRETE_GATE_LOCK -u CONCRETE_GATE_SESSION PATH="$TMP/bin:$PATH" \
       DUMMY_MARK="$MARK" JOBS="$_jobs" CONCRETE_GATES_DEFERRED_OUT="$TMP/deferred.out" \
-      bash scripts/tests/run_ci_gates_local.sh $([ "$_jobs" = 1 ] && echo --first || echo --filter) \
-        "bash scripts/tests/check_compile_scaling.sh" \
-        $([ "$_jobs" = 2 ] && echo --first "bash scripts/tests/check_dummy_quick.sh") >"$TMP/run.defer" 2>&1 ); _drc=$?
+      bash scripts/tests/run_ci_gates_local.sh "${_dsel[@]}" >"$TMP/run.defer" 2>&1 ); _drc=$?
   if [ "$_drc" = 0 ] && grep -q '^  DEFERRED bash scripts/tests/check_compile_scaling.sh' "$TMP/run.defer" \
      && grep -qx 'deferred=1' "$RSB/.ci-gates-summary" && grep -qx 'deferred_gates=bash scripts/tests/check_compile_scaling.sh' "$RSB/.ci-gates-summary" \
      && grep -q 'deferred_to_ci(1 not judged here)' "$RSB/.ci-gates-summary" && grep -qx 'completed=0' "$RSB/.ci-gates-summary" \

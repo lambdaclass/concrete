@@ -252,6 +252,16 @@ else
     gate_deferral "bash scripts/tests/check_this_gate_does_not_exist_$$.sh" >/dev/null \
       && no "CONTROL: gate_deferral accepted an undeclared gate — every exit 77 would read as deferred" \
       || ok "CONTROL: gate_deferral refuses an undeclared gate"
+    df_gate="scripts/tests/${HOST_DEFERRED_TABLE[0]%%|*}"
+    gate_deferral "bash ./$df_gate" >/dev/null && gate_deferral "FOO=1 bash $df_gate --shape x" >/dev/null \
+      && ok "gate_deferral accepts the declared gate as ./path and with a VAR= prefix and plain arguments" \
+      || no "gate_deferral refused a plain invocation of the declared gate"
+    for df_cmd in "bash scripts/tests/check_gate_lock.sh $df_gate" "bash $df_gate; bash scripts/tests/check_x.sh" \
+                  "bash $df_gate || true" "bash $df_gate | tee x" "bash $df_gate \$(echo x)"; do
+      gate_deferral "$df_cmd" >/dev/null \
+        && no "CONTROL: gate_deferral accepted '$df_cmd', which is not the declared gate's own exit" \
+        || ok "CONTROL: gate_deferral refuses '$df_cmd' (the gate as an argument, or in a compound command)"
+    done
     df_wf="$(mktemp)"
     printf 'jobs:\n  j:\n    runs-on: x\n    steps:\n      - if: false\n        run: bash scripts/tests/%s\n' \
       "${HOST_DEFERRED_TABLE[0]%%|*}" > "$df_wf"
