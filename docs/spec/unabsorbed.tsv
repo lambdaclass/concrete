@@ -22,7 +22,6 @@ docs/language/IGNORED_RESULT.md	ownership
 docs/language/LANGUAGE_GAPS.md	README
 docs/language/LANGUAGE_INVARIANTS.md	ownership,references
 docs/language/LANGUAGE_SHAPE.md	README
-docs/language/LOOP_CONTROL.md	statements
 docs/language/MEMORY_GUARANTEES.md	memory
 docs/language/MEMORY_MODEL.md	memory
 docs/language/MEMORY_REGRESSION_CHECKLIST.md	memory

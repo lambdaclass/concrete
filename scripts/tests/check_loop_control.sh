@@ -16,7 +16,7 @@
 #      the same type (E0222).
 #
 # Fixtures live in tests/programs/loop_control/ (not picked up by the main suite,
-# which only scans tests/programs/*.con). See docs/language/LOOP_CONTROL.md.
+# which only scans tests/programs/*.con). See docs/spec/statements.md, STMT-6.
 
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2

@@ -5,9 +5,8 @@ Statements execute in source order. A block's trailing expression without `;` is
 chapter covers how executions end (STMT-1 to STMT-3), evaluation order (STMT-4), where exits may
 appear (STMT-5), loops (STMT-6), `main` (STMT-7), value blocks (STMT-8) and returning a value on
 every path (STMT-9). The design records are
-[STATEMENT_EXPRESSION_MODEL.md](../language/STATEMENT_EXPRESSION_MODEL.md),
-[LOOP_CONTROL.md](../language/LOOP_CONTROL.md) and
-[MAIN_EXIT_MODEL.md](../platform/MAIN_EXIT_MODEL.md). [EXECUTION_MODEL.md](../language/EXECUTION_MODEL.md)
+[STATEMENT_EXPRESSION_MODEL.md](../language/STATEMENT_EXPRESSION_MODEL.md)
+and [MAIN_EXIT_MODEL.md](../platform/MAIN_EXIT_MODEL.md). [EXECUTION_MODEL.md](../language/EXECUTION_MODEL.md)
 keeps the runtime and platform description (hosted runtime, startup, allocation, targets).
 
 ## Rules
@@ -185,6 +184,28 @@ fn main() -> Int {
 value (the value `while … else` form was removed in Phase 6D); a result is a mutable local
 assigned before `break`. In a `for (init; cond; step)` loop, `continue` still runs `step`. A
 `break` or `continue` leaves the loop body's scopes like any exit (OWN-2).
+
+The loop forms are `while cond { ... }` and `for (init; cond; step) { ... }`, whose `init` and
+`step` are ordinary statements and whose `cond` is the continuation test. An unlabeled `break` or
+`continue` acts on the innermost enclosing loop; a label (`'outer: while ...`) is the only way to
+act on an outer loop, and `break 'outer;` or `continue 'outer;` exits or continues every loop in
+between. A `break` or `continue` that would leave a linear value live is refused (E0210, E0211;
+OWN-2), while consuming the value before the jump is fine: the rule concerns values live at the
+jump, as for an early `return`. A `break` or `continue` does not disable runtime-safety
+obligations (an index in a loop with a `break` still gets its bounds obligation), and loop
+contracts (`#[invariant]`, `#[variant]`) attach to the loop and are checked as usual.
+
+Deliberately absent: a bare `loop { }` (write `while true`) and a `break` or `continue` out of a
+non-loop block. `break <expr>;` is still parsed; its value is evaluated and discarded, and a
+non-Copy value is refused (bug 149), since no loop produces a value. History: before Phase 6D a
+`while` in value position took its value from `break <expr>` or from its `else` block's trailing
+expression, with E0222 for a disagreement between the two (`while-expression break type 'T' does
+not match else type 'U'`); a bug once stored that value at the default `i64` width into a narrower
+slot, fixed by coercing it to the result type (`tests/programs/loop_control/while_expr_*_i32.con`).
+Phase 6D item 2 removed the form: a loop result is a mutable local assigned before `break;`
+(`tests/programs/loop_break_result_*.con`). The surface is pinned by
+`scripts/tests/check_loop_control.sh` (fixtures in `tests/programs/loop_control/`; ROADMAP old
+Phase 6 #4, 2026-06-21).
 
 ```con reject name=break-outside-loop code=E0280 stage=check pair=labeled-break
 fn main() -> Int {
