@@ -30,6 +30,7 @@ bash scripts/tests/check_binder_refs.sh
 bash scripts/tests/check_body_scope.sh
 bash scripts/tests/check_bool_kernel.sh
 bash scripts/tests/check_bounds_migration.sh
+bash scripts/tests/check_browser_native.sh
 bash scripts/tests/check_bug077_contained.sh
 bash scripts/tests/check_bug_filing_complete.sh
 bash scripts/tests/check_build_cache.sh

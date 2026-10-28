@@ -1,6 +1,6 @@
 name = "concrete"
 version = "0.1.0"
-defaultTargets = ["concrete", "Examples", "DesignExamples", "pipeline-test"]
+defaultTargets = ["concrete", "Examples", "DesignExamples", "pipeline-test", "concrete-browser-native"]
 
 [leanOptions]
 warningAsError = true
@@ -33,7 +33,9 @@ root = "Main"
 name = "pipeline-test"
 root = "Concrete.Pipeline.PipelineTest"
 
-# Optional browser adapter; excluded from defaultTargets and the native CLI.
+# Browser adapter (the native twin of the site's Wasm compiler; scripts/browser/README.md). Not part
+# of the native CLI, but a DEFAULT TARGET: outside defaultTargets nothing built it, and it stopped
+# compiling for a week before anyone noticed (bug 316). check_browser_native.sh runs it.
 [[lean_exe]]
 name = "concrete-browser-native"
 root = "Browser"

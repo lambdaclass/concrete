@@ -1189,6 +1189,10 @@ jobs:
           CONFORMANCE_BASE: ${{ github.event_name == 'push' && github.event.before || '' }}
         run: bash scripts/tests/check_grammar_conformance.sh
 
+      # Bug 316: the browser compiler's root, built and run on the parity cases natively.
+      - name: Browser compiler root (builds; native adapter answers the parity cases)
+        run: bash scripts/tests/check_browser_native.sh
+
       - name: Install clang
         run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo "self-hosted runner, using preinstalled clang"; else sudo apt-get update && sudo apt-get install -y clang; fi
 

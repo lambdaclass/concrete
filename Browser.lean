@@ -40,7 +40,6 @@ private def run (source : String) : BrowserM Unit := do
   let parsed ← liftExcept (Pipeline.parse source)
   let summary := Pipeline.buildSummary parsed
   let resolved ← liftExcept (Pipeline.resolve parsed summary)
-  let resolved := Pipeline.desugar resolved
   liftExcept (Pipeline.check resolved summary)
   let elaborated ← liftExcept (Pipeline.elaborate resolved summary)
   let core ← liftExcept (Pipeline.coreCheck elaborated)
