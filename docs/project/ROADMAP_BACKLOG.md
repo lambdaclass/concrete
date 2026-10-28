@@ -1905,7 +1905,7 @@ The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](
    struct's size and field offsets equal the declared bit layout; an over-wide
    store into a `uN` field is rejected or wraps per the declared width, not
    silently. (SOA containers and `std.bigint` are stdlib-level, pulled the same
-   way; nested patterns is tracked in `docs/language/NESTED_PATTERNS.md`.)
+   way; nested patterns is recorded in `docs/spec/patterns.md`, "No nested patterns".)
 
 ## Area: WebAssembly Portability And Sandbox Backend (provisional)
 

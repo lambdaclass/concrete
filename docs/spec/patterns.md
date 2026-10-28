@@ -7,7 +7,7 @@ is REF-9 (pending), and which values `_` may ignore is OWN-5.
 
 Two things are deliberately not in the language. **Nested patterns** (`E::Wrap { P { x, y } }`)
 are deferred until a workload needs them; one level of destructuring plus a field access or an
-inner `match` expresses the same programs ([NESTED_PATTERNS.md](../language/NESTED_PATTERNS.md),
+inner `match` expresses the same programs ([No nested patterns](#no-nested-patterns),
 `check_nested_patterns.sh`). **Tuples** do not exist; the named struct is the one product type
 ([types.md, "No anonymous tuples"](types.md#no-anonymous-tuples), `check_no_tuples.sh`). The design records are
 [PATTERN_ERGONOMICS.md](../language/PATTERN_ERGONOMICS.md) and
@@ -467,3 +467,42 @@ fn main() -> Int {
     return out;
 }
 ```
+
+## Absent by decision
+
+This section is explanatory: it records pattern forms the language does not have, why, and what
+would reopen them. The grammar (SYN-1) is what refuses them.
+
+### No nested patterns
+
+Deferred, not in V1 (decided 2026-06-22, ROADMAP old Phase 6 #5, the last open pattern item),
+pinned by `scripts/tests/check_nested_patterns.sh`. A pattern destructures exactly one level: an
+arm binds each field of a variant or struct to one name, and the value at that field is bound
+whole. `E::Wrap { P { x, y } }` and `Some(Some(n))` are parse errors. A deeper value is reached in a
+second step, by a field access or an inner `match`:
+
+```con pseudocode
+match e { E::Wrap { p } => use(p.x, p.y) }
+
+match outer {
+    Option::Some { value } => match value {
+        Option::Some { value } => use(value),
+        Option::None => fallback(),
+    },
+    Option::None => fallback(),
+}
+```
+
+This is more verbose and exactly as expressive: no program written with nested patterns lacks a
+one-level equivalent. The feature is deferred because it is a large cross-cutting change for sugar
+(the flat binder list would become a recursive pattern type, threaded through parsing, resolution,
+checking, elaboration, lowering with recursive field extraction, and the proof path, the heaviest
+change of the pattern-ergonomics work), and because it is workload-driven, not symmetry-driven: no
+example or workload is blocked by the one-level limit, since decoders, parsers and interpreters are
+served by ranges, guards, alternatives, `if let` and `while let`, matching on `&T`, functional
+update and one-level destructuring, all of which landed. The same call was made for const generics
+and tuples ([types.md](types.md#no-anonymous-tuples)). Nested patterns are built when a real
+workload shows the one-level form untenable (for example deep protocol syntax trees where the
+inner matches dominate the code), as a recursive pattern type with recursive destructuring in
+check, elaboration and lowering.
+
