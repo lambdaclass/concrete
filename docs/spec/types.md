@@ -865,9 +865,9 @@ consequences, not a local addition: a unit-tagged integer must extract to the sa
 untagged form, or units become a proof axis; unit erasure must be an audit fact, never silent, so no
 proof status may depend on erasing a unit unless a contract or VC names the conversion; and done
 poorly they add ceremony for little near-term value. Programs encode the unit in the name instead
-(`len_bytes`, `timeout_ms`, `off_in_block`, `size_bits`, per [STYLE.md](../project/STYLE.md)),  (whether
-arithmetic traps on overflow, which would also catch some unit mix-ups, is ARITH-3's question and
-owner decision OD10, open). If a real
+(`len_bytes`, `timeout_ms`, `off_in_block`, `size_bits`, per [STYLE.md](../project/STYLE.md)), , and today's checked arithmetic
+(ARITH-3, on main and provisional until the owner answers OD10) removes the silent corruption unit
+mix-ups often hide behind. If a real
 workload keeps hitting unit bugs, the first step is a report-only prototype (`examples/units_probe/`
 over the mistake classes above) with optional annotations erased only after the audit records the
 conversion: no implicit unit conversion, no dependent numeric refinements.

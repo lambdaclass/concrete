@@ -353,6 +353,8 @@ def check_format(spec, root):
             fail("S1", f"{where}: an open entry, and only an open entry, has Status `open ODn`"); s1 += 1
         if e.kind == "open" and e.examples:
             fail("S1", f"{where}: an open entry has no examples (it encodes no answer)"); s1 += 1
+        if e.kind == "open" and (e.names("Enforced by") or e.names("Semantics")):
+            fail("S1", f"{where}: an open entry names no enforcing or semantic declaration (it encodes no answer)"); s1 += 1
         codes = e.codes()
         if e.kind == "refusal" and not codes:
             fail("S1", f"{where}: a refusal names at least one code"); s1 += 1

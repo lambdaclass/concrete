@@ -1,0 +1,8 @@
+// S12 witness (E0226, TYPE-4): two break values of different types in one loop.
+fn main() -> Int {
+    while true {
+        break 1;
+        break true;
+    }
+    return 42;
+}

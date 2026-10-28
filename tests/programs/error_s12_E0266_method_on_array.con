@@ -1,0 +1,5 @@
+// S12 witness (E0266, TYPE-9): a method call on an array, which is not a named type.
+fn main() -> Int {
+    let a: [Int; 2] = [1, 2];
+    return a.foo();
+}

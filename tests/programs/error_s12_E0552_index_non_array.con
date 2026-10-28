@@ -1,0 +1,6 @@
+// S12 witness (E0552, TYPE-7): indexing an integer, with no type hint for Check to refuse it first.
+fn g<T: Copy>(x: T) -> Int { return 42; }
+fn main() -> Int {
+    let x: Int = 5;
+    return g(x[0]);
+}

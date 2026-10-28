@@ -1,6 +1,6 @@
 # Rule codes with no negative witness, each with its reason (check_spec.sh S12). Columns: code, rule, reason
 # (od:ODn, R-NNNN, bug-NNN or unreachable:<why>). A row whose code gains a witness fails, so the list only shrinks.
-E0234	REF-6	unreachable:a let that binds a borrow-block reference is refused first by E0302 (REF-6); defence in depth
+E0234	REF-6	unreachable:binding or assigning a borrow-block reference is refused first, by E0302 for a `let` and E0303 for an assignment to a reference binding; defence in depth
 E0231	REF-8	unreachable:needs a live `let s = &mut *r` alias, which E0302 refuses; two exclusive borrows in one call are E0293
 E0235	REF-8	unreachable:a variable inside a borrow block is frozen, and that refusal is checked first
 E0292	SCOPE-1	unreachable:no longer emitted, subsumed by E0301 (R-0492); retire from SCOPE-1's Codes
@@ -8,7 +8,6 @@ E0214	SCOPE-1	unreachable:no longer emitted, subsumed by E0301 (exit 2i); retire
 E0215	SCOPE-1	unreachable:no longer emitted, subsumed by E0301 (exit 2i); retire from SCOPE-1's Codes
 E0531	PAT-3	unreachable:Check refuses a variant pattern of another enum first (E0309); CoreCheck defence in depth
 E0222	TYPE-4	unreachable:the value `while` was removed in Phase 6D, so no loop has a value type to mismatch
-E0226	TYPE-4	unreachable:the value `while` was removed in Phase 6D, so no break value flows into a position
 E0500	TYPE-4	unreachable:Check refuses the mismatch first (E0220); CoreCheck defence in depth
 E0560	TYPE-4	unreachable:Check refuses the mismatch first (E0220); CoreCheck defence in depth
 E0504	TYPE-5	unreachable:Check refuses the mismatch first (E0220); CoreCheck defence in depth
@@ -17,11 +16,9 @@ E0541	TYPE-5	unreachable:Check refuses a non-bool condition first (E0223); CoreC
 E0250	TYPE-7	unreachable:Resolve refuses an unknown struct first (E0102)
 E0260	TYPE-7	unreachable:Resolve refuses an unknown variant first (E0103)
 E0261	TYPE-7	unreachable:Resolve refuses an unknown enum first (E0105)
-E0416	TYPE-7	unreachable:Check refuses an empty array literal first (E0220)
-E0550	TYPE-7	unreachable:Check refuses an empty array literal first (E0220); CoreCheck defence in depth
-E0552	TYPE-7	unreachable:Check refuses indexing a non-array first (E0220); CoreCheck defence in depth
+E0416	TYPE-7	unreachable:in every form tried (a hinted `let`, an argument of a generic parameter) Check refuses an empty array literal first with E0220
+E0550	TYPE-7	unreachable:an empty array literal is refused before CoreCheck (E0220 at check, or E0416 at elab); CoreCheck defence in depth
 E0554	TYPE-8	unreachable:Check refuses dereferencing a non-reference first (E0221); CoreCheck defence in depth
-E0266	TYPE-9	unreachable:Check reports a method call on a non-named type as E0264 first
 E0522	TYPE-9	unreachable:Check refuses an argument-count mismatch first (E0262); CoreCheck defence in depth
 E0271	TYPE-10	unreachable:no site emits it (CheckError.builtinBadKeyType has no use); retire from TYPE-10's Codes
 E0542	STMT-6	unreachable:Check refuses a break outside a loop first (E0280); CoreCheck defence in depth
