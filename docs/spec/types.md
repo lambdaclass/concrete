@@ -6,8 +6,7 @@ operators (TYPE-4 to TYPE-10), construction rights (TYPE-11), type aliases (TYPE
 kinds of type parameters (TYPE-13, TYPE-14), generic arguments (TYPE-15) and finite size (TYPE-16). Copy itself is defined in the ownership chapter
 (OWN-D1, OWN-14).
 
-The design records are [TYPE_ALIASES.md](../language/TYPE_ALIASES.md),
-[CONSTRUCTION_RIGHTS.md](../language/CONSTRUCTION_RIGHTS.md),
+The design records are [CONSTRUCTION_RIGHTS.md](../language/CONSTRUCTION_RIGHTS.md),
 [VALIDATED_WRAPPERS.md](../language/VALIDATED_WRAPPERS.md) (a library pattern built on
 TYPE-11, not a language rule) and [VALUE_MODEL.md](../language/VALUE_MODEL.md).
 Const generics are not part of the language. Their design is decided, and the build is
@@ -607,6 +606,21 @@ sees the underlying type. A program written with an alias and the same program w
 it have byte-identical layout and fingerprint reports. Aliases take no type parameters, but an
 alias may name a generic instantiation (`type IntBox = Box<i32>;`). An unknown target is refused
 at the declaration (E0108) and so is a cycle (E0112), both in the resolver.
+
+An alias is written `type Name = <type>;` (`type Digest = [u8; 32];`, `type Point = P;`), and
+`pub type Meters = i32;` is importable like any public item. Aliases compose: a chain
+(`type C = B; type B = A; type A = i32`) resolves `C` to `i32`, and an alias nested in another type
+(`type Arr = [E; 3]` with `type E = i32`) expands to `[i32; 3]`. The expansion is structural and
+transitive (`closeAliasMap`, `expandAliasDeep`), so layout, the Copy and representation checks,
+monomorphization and lowering all see the underlying type: `type Id = i32; struct Copy S { a: Id }`
+is Copy. An alias never shifts a struct's size or offsets and never changes a function's semantic
+body fingerprint, so it cannot affect proof or evidence identity; `scripts/tests/check_type_alias.sh`
+(fixtures in `tests/programs/type_alias/`) asserts the byte-identical `--report layout` and
+`--report fingerprints`. The unknown-target refusal holds even for an alias that is never used, and
+the cycle refusal (`type A = A;`, or `type A = B; type B = A;`) is its own diagnostic rather than a
+later type mismatch. Not provided in V1: alias type parameters (`type Pair<T> = ...`; target a
+concrete instantiation instead) and opaque or distinct aliases (a newtype gives a type its own
+identity). Implemented as ROADMAP old Phase 6 #3 (2026-06-22).
 
 ```con accept name=alias-is-transparent exit=12
 mod m {

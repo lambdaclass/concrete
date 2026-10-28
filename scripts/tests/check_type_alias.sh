@@ -17,7 +17,7 @@
 #      declaration (E0108); a recursive alias, direct or mutual, is rejected with
 #      a dedicated diagnostic (E0112) rather than a confusing downstream error.
 #
-# Fixtures: tests/programs/type_alias/. See docs/language/TYPE_ALIASES.md.
+# Fixtures: tests/programs/type_alias/. See docs/spec/types.md, TYPE-12.
 
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
