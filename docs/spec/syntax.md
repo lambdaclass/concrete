@@ -2,7 +2,7 @@
 
 The surface grammar is [`grammar/concrete.ebnf`](../../grammar/concrete.ebnf). It is LL(1): every
 alternation resolves with one token of lookahead, which three independent checkers verify
-(`scripts/check_ll1.py`, `.c` and `.rs`). This chapter does not copy productions; it cites them
+(`scripts/check_ll1.py`, `.c` and `.rs`; `scripts/tests/check_grammar_ll1.sh` requires them to agree). This chapter does not copy productions; it cites them
 by name and states what the productions alone do not say: that the parser accepts exactly the
 grammar (SYN-1), how operators group (SYN-2) and which spellings the compiler reserves (SYN-3).
 The trailing-value rule of blocks is STMT-8, and function names the compiler reserves are MOD-3.

@@ -7,9 +7,14 @@ for every alternation (A | B | C), the FIRST sets of A, B, C
 must be pairwise disjoint (after accounting for nullable rules).
 
 Usage:
-    python3 scripts/check_ll1.py [grammar/concrete.ebnf]
+    python3 scripts/check_ll1.py [--canonical] [grammar/concrete.ebnf]
 
-Exit code 0 = LL(1) clean, 1 = conflicts found.
+Exit code 0 = LL(1) clean, 1 = conflicts found, 2 = bad input.
+
+--canonical prints the cross-check form shared by check_ll1.c and check_ll1.rs (one of three
+deliberately independent implementations; scripts/tests/check_grammar_ll1.sh diffs them):
+    rule <name> <nullable|-> <FIRST tokens, sorted bytewise, space-separated>
+    conflict <path> <alt a> <alt b> <shared tokens, sorted bytewise, comma-separated>
 """
 
 import re
@@ -272,11 +277,15 @@ def compute_first(node, rules, nullable, memo=None):
 
 # ── LL(1) Conflict Detection ─────────────────────────────────────
 
-def check_ll1(rules):
-    """Check all alternations for LL(1) conflicts. Returns list of issues."""
+def check_ll1(rules, memo=None, canonical=None):
+    """Check all alternations for LL(1) conflicts. Returns list of issues.
+
+    `memo` is the FIRST-set memo the caller shares (the --canonical dump uses the same one), and
+    `canonical`, when a list, receives one `conflict ...` line per issue."""
     nullable = compute_nullable(rules)
     issues = []
-    memo = {}
+    if memo is None:
+        memo = {}
 
     def check_node(node, path):
         if isinstance(node, Alternation):
@@ -293,6 +302,10 @@ def check_ll1(rules):
                     overlap = first_a & first_b
                     if overlap:
                         overlap_str = ", ".join(str(t) for t in sorted(overlap, key=str))
+                        if canonical is not None:
+                            canonical.append(
+                                f"conflict {path} {j_a+1} {j_b+1} "
+                                + ",".join(sorted(str(t) for t in overlap)))
                         issues.append(
                             f"  {path}: alternatives {j_a+1} and {j_b+1} "
                             f"share FIRST tokens: {{{overlap_str}}}\n"
@@ -324,18 +337,41 @@ def check_ll1(rules):
 
 # ── Main ─────────────────────────────────────────────────────────
 
+def canonical_report(rules):
+    """The --canonical form: every rule's nullability and FIRST set, then every conflict."""
+    nullable = compute_nullable(rules)
+    memo = {}
+    lines = []
+    for name, body in rules.items():
+        first = sorted(str(t) for t in compute_first(body, rules, nullable, memo))
+        flag = "nullable" if name in nullable else "-"
+        lines.append(" ".join([f"rule {name} {flag}"] + first))
+    conflicts = []
+    check_ll1(rules, memo, conflicts)
+    return lines + conflicts
+
+
 def main():
-    grammar_path = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("grammar/concrete.ebnf")
+    args = sys.argv[1:]
+    canonical = "--canonical" in args
+    args = [a for a in args if a != "--canonical"]
+    grammar_path = Path(args[0]) if args else Path("grammar/concrete.ebnf")
     if not grammar_path.exists():
         print(f"error: grammar file not found: {grammar_path}", file=sys.stderr)
-        sys.exit(1)
+        sys.exit(2)
 
     text = grammar_path.read_text()
     try:
         rules = parse_ebnf(text)
     except ValueError as e:
         print(f"error: failed to parse grammar: {e}", file=sys.stderr)
-        sys.exit(1)
+        sys.exit(2)
+
+    if canonical:
+        lines = canonical_report(rules)
+        for line in lines:
+            print(line)
+        sys.exit(1 if any(l.startswith("conflict ") for l in lines) else 0)
 
     print(f"Parsed {len(rules)} grammar rules from {grammar_path}")
 

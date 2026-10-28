@@ -249,5 +249,5 @@ bash scripts/tests/test_release_bundle.sh	20
 bash scripts/tests/test_ssa.sh	45
 bash scripts/tests/test_wrong_code.sh	3
 bash scripts/tools/checker_acceptance_evidence.sh "$RUNNER_TEMP/checker-acceptance"	651
-python3 scripts/check_ll1.py grammar/concrete.ebnf	0
+bash scripts/tests/check_grammar_ll1.sh	0
 python3 scripts/tests/fuzz_linearity.py --n 40 --seed 20260706	12

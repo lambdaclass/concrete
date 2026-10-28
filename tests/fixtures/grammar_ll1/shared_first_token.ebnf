@@ -1,0 +1,5 @@
+(* Planted LL(1) conflict for scripts/tests/check_grammar_ll1.sh:
+   both alternatives of `stmt` start with IDENT. *)
+program = { stmt } ;
+stmt = IDENT '=' expr ';' | IDENT '(' ')' ';' ;
+expr = INT | IDENT ;

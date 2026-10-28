@@ -4,9 +4,13 @@
 ///! for every alternation, FIRST sets of alternatives must be disjoint.
 ///!
 ///! Build:  rustc -O -o scripts/check_ll1_rs scripts/check_ll1.rs
-///! Usage:  ./scripts/check_ll1_rs [grammar/concrete.ebnf]
+///! Usage:  ./scripts/check_ll1_rs [--canonical] [grammar/concrete.ebnf]
 ///!
-///! Exit 0 = LL(1) clean, 1 = conflicts found.
+///! Exit 0 = LL(1) clean, 1 = conflicts found, 2 = bad input.
+///!
+///! One of three deliberately independent implementations (check_ll1.py, check_ll1.c);
+///! scripts/tests/check_grammar_ll1.sh diffs their --canonical output, whose format is
+///! documented in check_ll1.py.
 
 use std::collections::{HashMap, HashSet};
 use std::env;
@@ -336,6 +340,7 @@ fn check_node(
     rules: &HashMap<String, &Node>,
     nullable: &HashSet<String>,
     issues: &mut Vec<String>,
+    canonical: bool,
 ) {
     match node {
         Node::Alternation(alts) => {
@@ -355,6 +360,15 @@ fn check_node(
                         let mut sorted: Vec<&str> =
                             overlap.iter().map(|s| s.as_str()).collect();
                         sorted.sort();
+                        if canonical {
+                            issues.push(format!(
+                                "conflict {path} {} {} {}",
+                                a + 1,
+                                b + 1,
+                                sorted.join(",")
+                            ));
+                            continue;
+                        }
                         issues.push(format!(
                             "  {path}: alternatives {} and {} share FIRST tokens: {{{}}}",
                             a + 1,
@@ -366,16 +380,16 @@ fn check_node(
             }
 
             for (i, alt) in alts.iter().enumerate() {
-                check_node(alt, &format!("{path}|{}", i + 1), rules, nullable, issues);
+                check_node(alt, &format!("{path}|{}", i + 1), rules, nullable, issues, canonical);
             }
         }
         Node::Sequence(items) => {
             for (i, item) in items.iter().enumerate() {
-                check_node(item, &format!("{path}.{}", i + 1), rules, nullable, issues);
+                check_node(item, &format!("{path}.{}", i + 1), rules, nullable, issues, canonical);
             }
         }
         Node::Optional(body) | Node::Repetition(body) => {
-            check_node(body, path, rules, nullable, issues);
+            check_node(body, path, rules, nullable, issues, canonical);
         }
         _ => {}
     }
@@ -384,18 +398,19 @@ fn check_node(
 // ── Main ────────────────────────────────────────────────────────
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
-    let path = if args.len() > 1 {
-        &args[1]
-    } else {
-        "grammar/concrete.ebnf"
-    };
+    let args: Vec<String> = env::args().skip(1).collect();
+    let canonical = args.iter().any(|a| a == "--canonical");
+    let path = args
+        .iter()
+        .find(|a| a.as_str() != "--canonical")
+        .map(|a| a.as_str())
+        .unwrap_or("grammar/concrete.ebnf");
 
     let text = match fs::read_to_string(path) {
         Ok(t) => t,
         Err(e) => {
             eprintln!("error: cannot open {path}: {e}");
-            process::exit(1);
+            process::exit(2);
         }
     };
 
@@ -408,11 +423,35 @@ fn main() {
     let rule_map: HashMap<String, &Node> =
         rule_list.iter().map(|(n, b)| (n.clone(), b)).collect();
 
+    if canonical {
+        for (name, body) in &rule_list {
+            let mut visiting = HashSet::new();
+            let mut first: Vec<String> =
+                compute_first(body, &rule_map, &nullable, &mut visiting).into_iter().collect();
+            first.sort();
+            let flag = if nullable.contains(name) { "nullable" } else { "-" };
+            let mut line = format!("rule {name} {flag}");
+            for t in &first {
+                line.push(' ');
+                line.push_str(t);
+            }
+            println!("{line}");
+        }
+        let mut issues = Vec::new();
+        for (name, body) in &rule_list {
+            check_node(body, name, &rule_map, &nullable, &mut issues, true);
+        }
+        for issue in &issues {
+            println!("{issue}");
+        }
+        process::exit(if issues.is_empty() { 0 } else { 1 });
+    }
+
     println!("Parsed {} grammar rules from {path}", rule_list.len());
 
     let mut issues = Vec::new();
     for (name, body) in &rule_list {
-        check_node(body, name, &rule_map, &nullable, &mut issues);
+        check_node(body, name, &rule_map, &nullable, &mut issues, false);
     }
 
     if !issues.is_empty() {

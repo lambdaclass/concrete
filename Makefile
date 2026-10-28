@@ -676,8 +676,8 @@ docs-serve: ## Serve the documentation site locally on port 18080
 
 ##@ Misc
 
-check-grammar: ## Verify the grammar is LL(1)
-	$(NIX_DEVELOP) python3 scripts/check_ll1.py grammar/concrete.ebnf
+check-grammar: ## Verify the grammar is LL(1) (three independent checkers must agree)
+	$(NIX_DEVELOP) bash scripts/tests/check_grammar_ll1.sh
 
 help: ## Show this help (targets grouped by category)
 	@awk 'BEGIN {FS = ":.*##"} \

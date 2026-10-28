@@ -130,18 +130,10 @@ jobs:
       - name: Compiler-profile harness (finding on a planted hot spot, none on noise)
         run: bash scripts/tests/check_leanprof_profile.sh
 
-      - name: Run Python LL(1) checker
-        run: python3 scripts/check_ll1.py grammar/concrete.ebnf
-
-      - name: Run C LL(1) checker
-        run: |
-          cc -Wall -Wextra -Werror -O2 -o "$RUNNER_TEMP/check_ll1" scripts/check_ll1.c
-          "$RUNNER_TEMP/check_ll1" grammar/concrete.ebnf
-
-      - name: Run Rust LL(1) checker
-        run: |
-          rustc -O -o "$RUNNER_TEMP/check_ll1_rs" scripts/check_ll1.rs
-          "$RUNNER_TEMP/check_ll1_rs" grammar/concrete.ebnf
+      # The three independent LL(1) checkers (py, c, rs) must agree byte-for-byte on every
+      # rule's FIRST set and nullability, report no conflict, and all refuse the planted grammars.
+      - name: LL(1) grammar (three independent checkers agree)
+        run: bash scripts/tests/check_grammar_ll1.sh
 
   build:
     name: Build

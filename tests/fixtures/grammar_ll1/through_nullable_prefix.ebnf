@@ -1,0 +1,7 @@
+(* Planted LL(1) conflict for scripts/tests/check_grammar_ll1.sh, reachable only through a
+   nonterminal and a nullable prefix: both alternatives of `item` admit 'pub' first, the first
+   one via the optional `vis` that starts `fn_decl`. *)
+program = { item } ;
+item = fn_decl | 'pub' 'const' IDENT ';' ;
+fn_decl = vis 'fn' IDENT '(' ')' ;
+vis = [ 'pub' ] ;

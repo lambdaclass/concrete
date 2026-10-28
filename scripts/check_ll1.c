@@ -5,9 +5,13 @@
  * for every alternation, FIRST sets of alternatives must be disjoint.
  *
  * Build:  cc -O2 -o check_ll1 scripts/check_ll1.c
- * Usage:  ./check_ll1 [grammar/concrete.ebnf]
+ * Usage:  ./check_ll1 [--canonical] [grammar/concrete.ebnf]
  *
- * Exit 0 = LL(1) clean, 1 = conflicts found.
+ * Exit 0 = LL(1) clean, 1 = conflicts found, 2 = bad input.
+ *
+ * One of three deliberately independent implementations (check_ll1.py, check_ll1.rs);
+ * scripts/tests/check_grammar_ll1.sh diffs their --canonical output, whose format is
+ * documented in check_ll1.py.
  */
 
 #include <stdio.h>
@@ -83,6 +87,15 @@ static void tset_intersect(TermSet *dst, const TermSet *a, const TermSet *b) {
     for (int i = 0; i < a->count; i++)
         if (tset_contains(b, a->names[i]))
             tset_add(dst, a->names[i]);
+}
+
+static int cmp_name(const void *a, const void *b) {
+    return strcmp((const char *)a, (const char *)b);
+}
+
+/* Sort a set bytewise in place (the --canonical order). */
+static void tset_sort(TermSet *s) {
+    qsort(s->names, (size_t)s->count, MAX_NAME, cmp_name);
 }
 
 /* ── Node allocation ──────────────────────────────────────────── */
@@ -411,6 +424,7 @@ static void compute_first(const Node *n, TermSet *out) {
 /* ── LL(1) check ─────────────────────────────────────────────── */
 
 static int n_issues;
+static bool canonical;
 
 static void check_node(const Node *n, const char *path) {
     if (n->kind == NODE_ALTERNATION) {
@@ -423,7 +437,14 @@ static void check_node(const Node *n, const char *path) {
             for (int b = a + 1; b < n->n_items; b++) {
                 TermSet overlap;
                 tset_intersect(&overlap, &firsts[a], &firsts[b]);
-                if (overlap.count > 0) {
+                if (overlap.count > 0 && canonical) {
+                    n_issues++;
+                    tset_sort(&overlap);
+                    printf("conflict %s %d %d ", path, a + 1, b + 1);
+                    for (int k = 0; k < overlap.count; k++)
+                        printf("%s%s", k ? "," : "", overlap.names[k]);
+                    printf("\n");
+                } else if (overlap.count > 0) {
                     n_issues++;
                     printf("  %s: alternatives %d and %d share FIRST tokens: {",
                            path, a + 1, b + 1);
@@ -452,9 +473,13 @@ static void check_node(const Node *n, const char *path) {
 /* ── Main ────────────────────────────────────────────────────── */
 
 int main(int argc, char **argv) {
-    const char *path = argc > 1 ? argv[1] : "grammar/concrete.ebnf";
+    const char *path = "grammar/concrete.ebnf";
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--canonical") == 0) canonical = true;
+        else path = argv[i];
+    }
     FILE *f = fopen(path, "r");
-    if (!f) { fprintf(stderr, "error: cannot open %s\n", path); return 1; }
+    if (!f) { fprintf(stderr, "error: cannot open %s\n", path); return 2; }
 
     static char buf[MAX_FILE];
     size_t len = fread(buf, 1, MAX_FILE - 1, f);
@@ -465,9 +490,24 @@ int main(int argc, char **argv) {
     parse_rules();
     compute_nullable();
 
+    n_issues = 0;
+    if (canonical) {
+        static TermSet first;
+        for (int i = 0; i < n_rules; i++) {
+            tset_init(&first);
+            compute_first(rules[i].body, &first);
+            tset_sort(&first);
+            printf("rule %s %s", rules[i].name, nullable_set[i] ? "nullable" : "-");
+            for (int k = 0; k < first.count; k++) printf(" %s", first.names[k]);
+            printf("\n");
+        }
+        for (int i = 0; i < n_rules; i++)
+            check_node(rules[i].body, rules[i].name);
+        return n_issues > 0 ? 1 : 0;
+    }
+
     printf("Parsed %d grammar rules from %s\n", n_rules, path);
 
-    n_issues = 0;
     for (int i = 0; i < n_rules; i++)
         check_node(rules[i].body, rules[i].name);
 
