@@ -96,7 +96,8 @@ GATES=36
 # 45 -> 46 with bug 080's model-diff family, which introduced `check_model_diff.sh`.
 # 46 -> 47 with bug 088's literal-range families, which introduced `check_cast_matrix.sh`.
 # 47 -> 48 with landing train 6's tightening families, which introduced `check_tightening_rules.sh`.
-DRIVER_GATES=48
+# 48 -> 49 with the totality ratchet's family (R-0506), which introduced `check_totality_ratchet.sh`.
+DRIVER_GATES=49
 _fixture_refusals="$(decode_candidate "$GOOD")"
 if [ -n "$_fixture_refusals" ]; then
   echo "FIXTURE BUG: the positive control does not decode:$_fixture_refusals" >&2
