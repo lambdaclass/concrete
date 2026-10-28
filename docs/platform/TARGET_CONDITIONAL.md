@@ -41,7 +41,7 @@ narrow attribute MAY be added later, but only under these constraints:
 1. **LL(1)-safe** — fits the existing attribute grammar; no new ambiguity.
 2. **Small and target/profile-only** — conditions over target/profile facts
    (`CONCRETE_OS`, `CONCRETE_ARCH`, `CONCRETE_TARGET_PROFILE`, …), never arbitrary
-   expressions; no nesting into a general macro system (see MACRO_STANCE.md).
+   expressions; no nesting into a general macro system (see [SYN-1](../spec/syntax.md#SYN-1)).
 3. **Reported in audit** — every conditional that affected compiled source,
    proofs, obligations, or stdlib module selection appears in `--report audit`,
    exactly like the target constants in #27.

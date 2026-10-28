@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Macro-stance gate (ROADMAP Phase 6 #11; docs/language/MACRO_STANCE.md).
+# Macro-stance gate (ROADMAP Phase 6 #11; docs/spec/syntax.md, SYN-1's rationale).
 #
 # Concrete has no language macro system: no unrestricted macros (`macro …`,
 # `foo!(…)`) and no `#[derive(…)]`. This gate pins that all three stay clean

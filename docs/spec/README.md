@@ -416,8 +416,8 @@ Each step lands with the gate green. The steps run in this order:
    with generated interfaces) enters as pending.
 9. **traits.md** (`TRAIT-`, migrated 2026-10-23): traits, impls, bounds and coherence (D7). The trait-coherence
    branch may start this chapter at any point. It does not wait for its place in this order.
-10. **syntax.md** (`SYN-`, migrated 2026-10-23): the surface grammar. GRAMMAR.md and its LL(1) checks stay the
-    owners of the productions, and the chapter cites productions by name rather than copying
+10. **syntax.md** (`SYN-`, migrated 2026-10-23): the surface grammar. `grammar/concrete.ebnf` and its LL(1) checks stay the
+    owners of the productions (GRAMMAR.md and MACRO_STANCE.md were absorbed into the chapter and deleted), and the chapter cites productions by name rather than copying
     them. Its entries cover what the grammar cannot say, such as the precedence and
     trailing-value rules.
 

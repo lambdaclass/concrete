@@ -6,8 +6,28 @@ alternation resolves with one token of lookahead, which three independent checke
 by name and states what the productions alone do not say: that the parser accepts exactly the
 grammar (SYN-1), how operators group (SYN-2) and which spellings the compiler reserves (SYN-3).
 The trailing-value rule of blocks is STMT-8, and function names the compiler reserves are MOD-3.
-[GRAMMAR.md](../language/GRAMMAR.md) indexes the grammar and the syntax that is deliberately
-rejected (tuples, nested patterns, macros).
+
+The hand-written recursive-descent parser (`Concrete/Frontend/Parser.lean`) follows the grammar
+production by production, and a change that breaks LL(1) fails CI. The grammar is kept in step
+with the parser as syntax lands (range patterns `lo..=hi` and `lo..hi`, alternatives `A | B`,
+guards `pat if cond`, `if let` and `while let`, functional update `S { ..base }`, field punning,
+`defer <call>`).
+
+The keywords are `mod import pub fn let mut return if else while for match break continue defer
+borrow as in struct enum trait impl type newtype const extern trusted ghost assert assume true
+false with`. The primitive type names (`Int`, `Uint`, `i8` to `u64`, `bool`, `char`, `String`) and
+the capability names (`Std`, `Alloc`, `Console`, `File`, `Unsafe` and the rest) are contextual.
+
+Attributes are written `#[name(args)]` and form a fixed set the compiler recognizes (for example
+`#[test]`, `#[spec(...)]`, `#[proof_by(...)]`, `#[proof_fingerprint("...")]`, `#[invariant(...)]`,
+`#[variant(...)]`, `#[overflow_checked]`). An unknown attribute is a parse error (SYN-1). The
+contract surface (`#[requires]`, `#[ensures]`, `assert`, `assume`, `ghost let`) is the contracts
+chapter's; it is erased metadata, with no run-time effect beyond `assert`.
+
+Syntax that is deliberately absent is pinned by gates rather than left implicit: tuples
+(`check_no_tuples.sh`), nested patterns (`check_nested_patterns.sh`), block-form `defer`
+(`check_defer.sh`), macros and `derive` (`check_no_macros.sh`, see SYN-1's rationale) and the
+`tests/wrong-code/` corpus, each with its diagnostic code.
 
 ## Rules
 
@@ -30,6 +50,22 @@ production, keeps the language readable by tools other than the compiler. Unknow
 the legacy `->` field access are parse errors, not warnings. The parser
 recovers at top-level declarations so one bad declaration does not hide the errors after it,
 but a file with any parse error produces no program.
+
+The grammar has no macro system, permanently (decided 2026-06-23, ROADMAP old Phase 6 #11): no
+`macro` or `macro_rules`-style declaration, no procedural macro, no bang invocation such as
+`foo!(...)`, no `#[derive(...)]` or derive-like attribute, no syntax macro, no source generation
+inside the language and no `comptime` evaluation as a code generator. This is part of the audit
+model, not a v1 omission: the code a reviewer reads is the code that is checked, lowered, given
+obligations and reported, and a hidden expansion would obscure capabilities, allocation, trusted
+boundaries, obligations, source spans and proof evidence. A derive is refused for the same reason
+as a macro: source the programmer did not write would become part of the checked program.
+Programs use ordinary functions, monomorphized generics, capability-polymorphic function pointers,
+named structs and enums, and attributes that classify contracts, policy or evidence without
+generating source. An external generator is a tool, not a language feature: its output is checked
+in, or audited as ordinary source, and is visible to the formatter, diagnostics, reports and
+review. A workload that wants generated code proposes an external generator or a library API
+first; reopening language macros is a thesis-level decision, not a roadmap item.
+`scripts/tests/check_no_macros.sh` pins the refusals.
 
 ```con reject name=unbalanced-parenthesis code=E0001 stage=parse pair=balanced-parenthesis
 fn main() -> Int {

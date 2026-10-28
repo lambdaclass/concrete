@@ -16,7 +16,6 @@ docs/language/ERROR_CONVENTIONS.md	statements
 docs/language/ERROR_HANDLING_DESIGN.md	statements
 docs/language/EXECUTION_MODEL.md	statements
 docs/language/FAILURE_STRATEGY.md	statements
-docs/language/GRAMMAR.md	syntax
 docs/language/HANDLE_CAPABILITIES.md	trusted
 docs/language/HANDLE_CAPABILITIES_AUDIT.md	trusted
 docs/language/IGNORED_RESULT.md	ownership
@@ -24,7 +23,6 @@ docs/language/LANGUAGE_GAPS.md	README
 docs/language/LANGUAGE_INVARIANTS.md	ownership,references
 docs/language/LANGUAGE_SHAPE.md	README
 docs/language/LOOP_CONTROL.md	statements
-docs/language/MACRO_STANCE.md	README
 docs/language/MEMORY_GUARANTEES.md	memory
 docs/language/MEMORY_MODEL.md	memory
 docs/language/MEMORY_REGRESSION_CHECKLIST.md	memory
