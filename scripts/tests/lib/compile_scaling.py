@@ -90,7 +90,8 @@ bug), so no load reaches that, while a hang or an accidental exponential does.
 CI must count: on CI (GITHUB_ACTIONS=true or CI=true/1) a host that cannot count FAILS the gate,
 because the verdict deferred to CI must be made there, not deferred again.
 
-RESOLUTION. Every stage's growth is judged, however fast. An in-compiler stage is timed in whole
+RESOLUTION. Every stage's growth is judged, however fast, on a host that counts (on one that
+cannot, wall growth is not judged at all: HOSTS THAT CANNOT COUNT). An in-compiler stage is timed in whole
 milliseconds by the compiler's own clock, so the smaller size's time is floored at floor_ms. A
 whole compile (core, llvm, native, interp) is timed from outside and judged on its time above a
 baseline, the same mode on a one-line program, so process start and clang's fixed cost cannot
@@ -977,7 +978,13 @@ def main():
     workdir = a.keep or tempfile.mkdtemp(prefix="compile_scaling.")
     os.makedirs(workdir, exist_ok=True)
     runner = Runner(a.compiler, a.bounded, b, workdir, perf=perf_ok())
+    policy = host_policy(runner.perf, os.environ)
     try:
+        if policy == "refused" and a.measure:
+            # Budgets measured on CI without counts would record no instruction budgets or rates.
+            print("  FAIL CI host must count instructions:u: perf is missing or perf_event_paranoid is"
+                  " above 2 on this runner; --measure records nothing here (bug 315).")
+            return 1
         if a.measure:
             return do_measure(runner, b, shapes, a.root)
         meas = [l for l in b.header if l.startswith("# measured:")]
@@ -985,7 +992,6 @@ def main():
               "allocations ===" % (b.p("exp"), b.p("hb_exp")))
         for m in meas or ["# NOT MEASURED"]:
             print("  budgets %s" % m[2:])
-        policy = host_policy(runner.perf, os.environ)
         if policy == "deferred":
             print("  note: perf cannot count instructions:u on this host: wall growth and wall budgets are"
                   " NOT JUDGED here (CI decides them; bug 315); heartbeats, compile results, the run"

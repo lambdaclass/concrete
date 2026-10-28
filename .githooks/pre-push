@@ -395,10 +395,12 @@ trap - INT TERM HUP
 [ "$RUNNER_RC" = "0" ] || {
   echo "pre-push: GATES FAILED (above) — fix, or bypass deliberately." >&2; exit 1; }
 
+# "pass" only when nothing was deferred: a deferred gate did not pass here (bug 315).
+_verdict="pass"; [ -s "$DEFERRED_F" ] && _verdict="accepted, with verdicts deferred to CI (below)"
 if [ "$docs_only" = "1" ]; then
-  echo "pre-push: docs gates pass"
+  echo "pre-push: docs gates $_verdict"
 else
-  echo "pre-push: fast surface gates + touched-area gates pass"
+  echo "pre-push: fast surface gates + touched-area gates $_verdict"
   echo "pre-push: NOTE the full set was not run — 'make pre-push-full' or CI covers it."
 fi
 if [ ! -f "$DEFERRED_F" ]; then

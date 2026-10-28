@@ -681,7 +681,9 @@ printf 'start\tend\tsecs\tstage\tverdict\tcmd\n' > "$GATE_TIMINGS"
 # Creating and deleting a log per gate inside the checkout churned the tree that other gates copy
 # (`cp -a` of the checkout in the mutation driver refused when a file vanished under it).
 GATE_OUT_TMP="$(mktemp -d)"
-run_seq() { # cmd [stage] -> 0 pass / 1 fail; output kept only on failure
+RUN_SEQ_DEFERRED=0   # set by run_seq: its last 0 was a deferral (bug 315), not a pass
+run_seq() { # cmd [stage] -> 0 pass or deferred (RUN_SEQ_DEFERRED=1) / 1 fail; output kept only on failure
+  RUN_SEQ_DEFERRED=0
   local _out="$FAILLOG_DIR/$(faillog_name "$1").log" _t0 _st="${2:-seq}" _tmp
   _tmp="$GATE_OUT_TMP/seq.$RANDOM$RANDOM.log"
   _t0="$(_now)"
@@ -706,7 +708,7 @@ run_seq() { # cmd [stage] -> 0 pass / 1 fail; output kept only on failure
     # Kept, like a failure's: what this host did not judge is worth reading.
     if _why="$(gate_deferral "$1" "$WORKFLOW")"; then
       mv -f "$_tmp" "${_out%.log}.deferred.log" 2>/dev/null || cp -f "$_tmp" "${_out%.log}.deferred.log" 2>/dev/null
-      _timing_row "$_t0" "$(_now)" "$_st" DEFERRED "$1"; _defer "$1"
+      _timing_row "$_t0" "$(_now)" "$_st" DEFERRED "$1"; _defer "$1"; RUN_SEQ_DEFERRED=1
       echo "  DEFERRED $1 (not judged on this host; CI decides: ${_out#$ROOT_DIR/} -> .deferred.log)"
       return 0
     fi
@@ -770,8 +772,8 @@ else
     ( _t0="$(_now)"; _pl="$GATE_OUT_TMP/pool.$idx.log"
       eval "$cmd" >"$_pl" 2>&1; _prc=$?
       if [ "$_prc" = 0 ]; then rm -f "$_pl"; _timing_row "$_t0" "$(_now)" pool PASS "$cmd"; echo "OK" > "$RES/$idx"
-      elif [ "$_prc" = "$GATE_DEFERRED_RC" ]; then
-        # Judged in the parent (gate_deferral): a deferral, or a failure from an undeclared gate.
+      elif [ "$_prc" = "$GATE_DEFERRED_RC" ] && gate_deferral "$cmd" "$WORKFLOW" >/dev/null; then
+        # A declared deferral (the parent checks it again); an undeclared exit 77 is a FAIL below.
         mv -f "$_pl" "$FAILLOG_DIR/$(faillog_name "$cmd").deferred.log" 2>/dev/null
         _timing_row "$_t0" "$(_now)" pool DEFERRED "$cmd"; echo "DEFER $cmd" > "$RES/$idx"
       else mv -f "$_pl" "$FAILLOG_DIR/$(faillog_name "$cmd").pool.log" 2>/dev/null
@@ -804,7 +806,6 @@ else
       if _why="$(gate_deferral "$cmd" "$WORKFLOW")"; then
         _defer "$cmd"; echo "  DEFERRED $cmd (not judged on this host; CI decides)"
       else
-        mv -f "$FAILLOG_DIR/$(faillog_name "$cmd").deferred.log" "$FAILLOG_DIR/$(faillog_name "$cmd").pool.log" 2>/dev/null
         FAIL=$((FAIL+1)); FAILED="$FAILED\n  FAIL $cmd ($_why)"; echo "  FAIL $cmd -- $_why"
       fi
       continue
@@ -820,7 +821,11 @@ else
     # discarded both runs' output — so the hook's fast surface checklist, whose own report names the
     # failing constituent, failed with nothing but its name.
     if run_seq "$cmd" recheck; then
-      RECHECKED="$RECHECKED\n  (contention flake, passed on sequential re-run) $cmd"
+      if [ "$RUN_SEQ_DEFERRED" = 1 ]; then
+        RECHECKED="$RECHECKED\n  (failed in the pool, DEFERRED to CI on sequential re-run: not a pass) $cmd"
+      else
+        RECHECKED="$RECHECKED\n  (contention flake, passed on sequential re-run) $cmd"
+      fi
     fi
   done
   [ -n "$RECHECKED" ] && echo -e "Recovered under sequential re-run:$RECHECKED"

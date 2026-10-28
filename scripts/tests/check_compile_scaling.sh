@@ -50,23 +50,25 @@ command -v python3 >/dev/null || { echo "error: python3 required" >&2; exit 2; }
 # CI MUST COUNT, end to end (bug 315): the real entry point, on CI with no perf on PATH, fails with
 # the runner message before it judges a shape (so it needs no compiler). Without this leg a CI host
 # that lost its counters would defer every verdict to itself.
-case " $* " in *" --measure "*) MEASURING=1 ;; *) MEASURING=0 ;; esac
-if [ "$MEASURING" = 0 ]; then
-  NOPERF="$(mktemp -d)" || exit 2
+# --measure is refused there too, before it writes anything; the leg runs on a copy of the budgets.
+NOPERF="$(mktemp -d)" || exit 2
+cp "$ROOT_DIR/scripts/tests/lib/compile_scaling_budgets.tsv" "$NOPERF/budgets.tsv" || exit 2
+for ci_mode in judge measure; do
   ci_out="$(env -i HOME="$NOPERF" PATH="$NOPERF" GITHUB_ACTIONS=true "$(command -v python3)" -I -u \
     "$ROOT_DIR/scripts/tests/lib/compile_scaling.py" --compiler "$NOPERF/no-compiler" \
-    --budgets "$ROOT_DIR/scripts/tests/lib/compile_scaling_budgets.tsv" \
-    --bounded "$ROOT_DIR/scripts/tests/lib/bounded.sh" --root "$ROOT_DIR" 2>&1)"; ci_rc=$?
-  rm -rf "$NOPERF"
+    --budgets "$NOPERF/budgets.tsv" --bounded "$ROOT_DIR/scripts/tests/lib/bounded.sh" \
+    --root "$ROOT_DIR" $([ "$ci_mode" = measure ] && echo --measure) 2>&1)"; ci_rc=$?
   if [ "$ci_rc" = 1 ] && has_match -F "FAIL CI host must count instructions:u" <<<"$ci_out" \
-     && has_match -E '^check_compile_scaling: PASS=[0-9]+ FAIL=1 NOT-JUDGED=0 ' <<<"$ci_out"; then
-    echo "  ok   CONTROL (end to end): on CI, a host that cannot count instructions:u fails the gate"
+     && { [ "$ci_mode" = measure ] || has_match -E '^check_compile_scaling: PASS=[0-9]+ FAIL=1 NOT-JUDGED=0 ' <<<"$ci_out"; } \
+     && cmp -s "$NOPERF/budgets.tsv" "$ROOT_DIR/scripts/tests/lib/compile_scaling_budgets.tsv"; then
+    echo "  ok   CONTROL (end to end, $ci_mode): on CI, a host that cannot count instructions:u fails the gate"
   else
-    echo "  FAIL CONTROL (end to end): on CI without perf the gate exited $ci_rc without the refusal:"
+    echo "  FAIL CONTROL (end to end, $ci_mode): on CI without perf the gate exited $ci_rc without the refusal:"
     printf '%s\n' "$ci_out" | tail -5 | sed 's/^/    /'
-    exit 1
+    rm -rf "$NOPERF"; exit 1
   fi
-fi
+done
+rm -rf "$NOPERF"
 # Not `exec`: fresh.sh releases the tree lock from this shell's EXIT trap.
 python3 -I -u "$ROOT_DIR/scripts/tests/lib/compile_scaling.py" \
   --compiler "$COMPILER" \
