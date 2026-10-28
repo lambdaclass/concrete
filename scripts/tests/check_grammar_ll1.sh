@@ -15,6 +15,7 @@
 # Requires python3, a C compiler (cc) and rustc; the nix devshell provides all three.
 # Usage: scripts/tests/check_grammar_ll1.sh
 set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 
@@ -65,7 +66,7 @@ for g in "$FIXTURES"/*.ebnf; do
   grep -q '^conflict ' "$WORK/$t.py" || no "$t: no conflict line reported"
   n=$((n + 1))
 done
-[ "$n" -ge 2 ] || no "expected at least two planted grammars under $FIXTURES, found $n"
+[ "$n" -ge 4 ] || no "expected at least four planted grammars under $FIXTURES, found $n"
 
 if [ "$FAIL" -ne 0 ]; then exit 1; fi
 echo "grammar LL(1): 3 checkers agree on $(grep -c '^rule ' "$WORK/real.py") rules, no conflict; $n planted grammars refused by all three"

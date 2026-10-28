@@ -239,60 +239,63 @@ def is_nullable(node, nullable):
     return False
 
 
-def compute_first(node, rules, nullable, memo=None):
-    """Compute the FIRST set of a grammar node (set of terminals)."""
-    if memo is None:
-        memo = {}
+def compute_first_table(rules, nullable):
+    """FIRST set of every nonterminal, by fixpoint iteration.
 
-    key = id(node)
-    if key in memo:
-        return memo[key]
-    # Mark as being computed (avoid infinite recursion)
-    memo[key] = set()
+    The textbook algorithm, deliberately unlike the depth-first walks of check_ll1.c and
+    check_ll1.rs: start every set empty and grow them until nothing changes. A recursive rule
+    (`a = b 'x' ; b = a | 'y' ;`) reaches its full set because the iteration revisits it,
+    where a memo filled in mid-recursion would keep a partial one."""
+    table = {name: set() for name in rules}
+    changed = True
+    while changed:
+        changed = False
+        for name, body in rules.items():
+            new = compute_first(body, table, nullable)
+            if not new <= table[name]:
+                table[name] |= new
+                changed = True
+    return table
+
+
+def compute_first(node, table, nullable):
+    """FIRST set of a grammar node (set of terminals), reading nonterminals from `table`."""
     result = set()
-
     if node == EPSILON:
         pass
     elif isinstance(node, Terminal):
         result.add(node)
     elif isinstance(node, Nonterminal):
-        if node.name in rules:
-            result |= compute_first(rules[node.name], rules, nullable, memo)
+        result |= table.get(node.name, set())
     elif isinstance(node, Sequence):
         for item in node.items:
-            result |= compute_first(item, rules, nullable, memo)
+            result |= compute_first(item, table, nullable)
             if not is_nullable(item, nullable):
                 break
     elif isinstance(node, Alternation):
         for alt in node.alts:
-            result |= compute_first(alt, rules, nullable, memo)
-    elif isinstance(node, Optional):
-        result |= compute_first(node.body, rules, nullable, memo)
-    elif isinstance(node, Repetition):
-        result |= compute_first(node.body, rules, nullable, memo)
-
-    memo[key] = result
+            result |= compute_first(alt, table, nullable)
+    elif isinstance(node, (Optional, Repetition)):
+        result |= compute_first(node.body, table, nullable)
     return result
 
 
 # ── LL(1) Conflict Detection ─────────────────────────────────────
 
-def check_ll1(rules, memo=None, canonical=None):
+def check_ll1(rules, canonical=None):
     """Check all alternations for LL(1) conflicts. Returns list of issues.
 
-    `memo` is the FIRST-set memo the caller shares (the --canonical dump uses the same one), and
     `canonical`, when a list, receives one `conflict ...` line per issue."""
     nullable = compute_nullable(rules)
+    table = compute_first_table(rules, nullable)
     issues = []
-    if memo is None:
-        memo = {}
 
     def check_node(node, path):
         if isinstance(node, Alternation):
             # Check pairwise FIRST set disjointness
             alt_firsts = []
             for j, alt in enumerate(node.alts):
-                first = compute_first(alt, rules, nullable, memo)
+                first = compute_first(alt, table, nullable)
                 alt_firsts.append((j, alt, first))
 
             for a_idx in range(len(alt_firsts)):
@@ -340,14 +343,14 @@ def check_ll1(rules, memo=None, canonical=None):
 def canonical_report(rules):
     """The --canonical form: every rule's nullability and FIRST set, then every conflict."""
     nullable = compute_nullable(rules)
-    memo = {}
+    table = compute_first_table(rules, nullable)
     lines = []
-    for name, body in rules.items():
-        first = sorted(str(t) for t in compute_first(body, rules, nullable, memo))
+    for name in rules:
+        first = sorted(str(t) for t in table[name])
         flag = "nullable" if name in nullable else "-"
         lines.append(" ".join([f"rule {name} {flag}"] + first))
     conflicts = []
-    check_ll1(rules, memo, conflicts)
+    check_ll1(rules, conflicts)
     return lines + conflicts
 
 

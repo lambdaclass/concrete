@@ -466,7 +466,10 @@ static void check_node(const Node *n, const char *path) {
             check_node(n->items[i], sub);
         }
     } else if (n->kind == NODE_OPTIONAL || n->kind == NODE_REPETITION) {
-        check_node(n->body, path);
+        /* The same path spelling as check_ll1.py: `[?]` into an optional, `{*}` into a repetition. */
+        char sub[512];
+        snprintf(sub, sizeof(sub), "%s%s", path, n->kind == NODE_OPTIONAL ? "[?]" : "{*}");
+        check_node(n->body, sub);
     }
 }
 

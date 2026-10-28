@@ -1,0 +1,4 @@
+(* Planted LL(1) conflicts for scripts/tests/check_grammar_ll1.sh, inside an optional and a
+   repetition, so the three checkers must spell the conflict path the same way
+   (`program.1[?]`, `program.2{*}`). *)
+program = [ 'a' | 'a' 'b' ] { 'c' | 'c' 'd' } ;

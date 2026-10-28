@@ -388,8 +388,12 @@ fn check_node(
                 check_node(item, &format!("{path}.{}", i + 1), rules, nullable, issues, canonical);
             }
         }
-        Node::Optional(body) | Node::Repetition(body) => {
-            check_node(body, path, rules, nullable, issues, canonical);
+        // The same path spelling as check_ll1.py: `[?]` into an optional, `{*}` into a repetition.
+        Node::Optional(body) => {
+            check_node(body, &format!("{path}[?]"), rules, nullable, issues, canonical);
+        }
+        Node::Repetition(body) => {
+            check_node(body, &format!("{path}{{*}}"), rules, nullable, issues, canonical);
         }
         _ => {}
     }

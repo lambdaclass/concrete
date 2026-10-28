@@ -1,0 +1,7 @@
+(* Planted LL(1) conflict for scripts/tests/check_grammar_ll1.sh, inside a recursive rule:
+   both alternatives of `b` admit 'y' first, the first one through `a`, which recurses into `b`.
+   A FIRST-set memo filled in mid-recursion once hid this conflict from check_ll1.py --canonical
+   (Kimi's review of the gate); the fixpoint table finds it. *)
+program = a ;
+a = b 'x' ;
+b = a | 'y' ;
