@@ -14,8 +14,8 @@ native CLI and its outputs were not affected.
 
 <!-- bug-ledger
 summary: `Browser.lean`, the root of the `concrete-browser-native` executable (the native twin of the site's Wasm compiler), still called `Pipeline.desugar` after `6269002b` folded desugaring into `Pipeline.resolve`, so the browser compiler could not be built from source; nothing noticed for a week because the root sat outside `lakefile.toml`'s `defaultTargets` and no `lake build`, CI job or hook compiled it. The call is removed (resolve already desugars) and the executable is a default target, run by `check_browser_native.sh`.
-coverage: check_browser_native.sh (builds concrete-browser-native, then runs the native adapter on scripts/browser/test-parity.mjs's cases: verdicts, the four stages, diagnostics on refusal)
-class: 11 — a build root that nothing built read as a root that builds
+coverage: check_browser_native.sh (builds concrete-browser-native, then runs the native adapter on scripts/browser/parity_cases.json, the cases test-parity.mjs compares with Wasm: verdicts, the four stages, diagnostics on refusal)
+class: 11 — a build root that nothing built read as a root that builds (the broken call is a class 12 instance: the stage sequence restated per driver, as in 202)
 silent: no
 -->
 
@@ -56,6 +56,18 @@ and updated the drivers it could see. `Browser.lean` was not compiled by any of 
 change was tested with, so its call survived. Deleting the call is the whole repair:
 `Pipeline.resolve` maps `finishResolve`, `resolveModuleLocals (desugarModule …)`, over every module,
 which is what `Pipeline.desugar` did.
+
+## Fix
+
+- `Browser.lean` no longer calls `Pipeline.desugar`.
+- `lakefile.toml` lists `concrete-browser-native` in `defaultTargets`. Every `lake build`
+  compiles it, so its sources are part of the build cache keys: `Browser.lean` joins the
+  workflows' `hashFiles` and `scripts/dev/seed-lake.sh`'s source hash.
+- The parity cases live in one file, `scripts/browser/parity_cases.json`, which
+  `test-parity.mjs` (native against Wasm) and `check_browser_native.sh` (native, in CI) both read.
+
+Regression leg: `check_browser_native.sh`. Run on the unfixed `Browser.lean`, it fails with the
+original `Unknown identifier Pipeline.desugar`. On the fix, it passes all 11 parity cases.
 
 ## Structural cause
 

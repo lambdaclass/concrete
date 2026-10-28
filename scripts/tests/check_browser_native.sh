@@ -8,7 +8,8 @@
 # folded into resolve by 6269002b). It is a default target now, and this gate runs it:
 #
 #   1. the executable builds;
-#   2. on the cases scripts/browser/test-parity.mjs compares with the Wasm build, the native adapter
+#   2. on scripts/browser/parity_cases.json, the cases test-parity.mjs compares with the Wasm build,
+#      the native adapter
 #      exits 0 with JSON whose verdict is the expected one, every accepted program shows the four
 #      stages Core, Specialized Core, SSA and LLVM, and every refused one carries a diagnostic.
 #
@@ -35,40 +36,38 @@ else
 fi
 
 echo "=== the native adapter on the parity cases ==="
-# name <TAB> expected ok <TAB> source; the same cases as scripts/browser/test-parity.mjs.
-cases_file="$TMP/cases.tsv"
-cat > "$cases_file" <<'EOF'
-constant	true	mod demo { fn main() -> Int { return 42; } }
-arithmetic	true	mod demo { fn add(a: i64, b: i64) -> i64 { return a + b; } fn main() -> Int { return add(20, 22); } }
-generic	true	mod demo { fn identity<T>(x: T) -> T { return x; } fn main() -> Int { return identity::<Int>(42); } }
-struct	true	mod demo { struct Copy Point { x: Int, y: Int } fn main() -> Int { let p = Point { x: 20, y: 22 }; return p.x + p.y; } }
-capability	true	mod demo { fn report() with(Console) { println("Hello from Concrete"); } fn main() with(Console) -> Int { report(); return 0; } }
-ownership error	false	mod demo { struct Point { x: Int } fn main() -> Int { let p = Point { x: 42 }; return p.x; } }
-branch	true	mod demo { fn main() -> Int { if true { return 42; } else { return 0; } } }
-type error	false	mod demo { fn main() -> Int { return true; } }
-parse error	false	mod demo { fn main(
-unknown name	false	mod demo { fn main() -> Int { return missing; } }
-EOF
-while IFS=$'\t' read -r name want source; do
-  if ! printf '%s' "$source" | timeout 60 "$BIN" > "$TMP/out.json" 2> "$TMP/err.txt"; then
-    no "$name: the adapter exited non-zero: $(head -c 200 "$TMP/err.txt")"; continue
-  fi
-  verdict="$(python3 -I - "$TMP/out.json" "$want" <<'PY'
-import json, sys
-d = json.load(open(sys.argv[1]))
-want = sys.argv[2] == "true"
-if d.get("ok") is not want:
-    print(f"verdict ok={d.get('ok')}, expected {want}"); sys.exit()
-names = [s.get("name") for s in d.get("stages", [])]
-if want and names != ["Core", "Specialized Core", "SSA", "LLVM"]:
-    print(f"stages {names}"); sys.exit()
-if not want and not d.get("diagnostics"):
-    print("refused with no diagnostic"); sys.exit()
-print("ok")
+# The cases scripts/browser/test-parity.mjs compares with the Wasm build: one list, one file.
+CASES="scripts/browser/parity_cases.json"
+python3 -I - "$CASES" "$BIN" "$TMP" <<'PY' > "$TMP/results.txt"
+import json, subprocess, sys
+cases, binary, tmp = json.load(open(sys.argv[1])), sys.argv[2], sys.argv[3]
+if len(cases) < 5:
+    print(f"FAIL only {len(cases)} parity cases"); sys.exit()
+for name, source, want in cases:
+    try:
+        r = subprocess.run([binary], input=source, capture_output=True, text=True, timeout=60)
+    except subprocess.TimeoutExpired:
+        print(f"FAIL {name}: timed out"); continue
+    if r.returncode != 0:
+        print(f"FAIL {name}: the adapter exited {r.returncode}: {r.stderr[:200]}"); continue
+    try:
+        d = json.loads(r.stdout)
+    except ValueError:
+        print(f"FAIL {name}: not JSON: {r.stdout[:200]}"); continue
+    names = [s.get("name") for s in d.get("stages", [])]
+    if d.get("ok") is not want:
+        print(f"FAIL {name}: verdict ok={d.get('ok')}, expected {want}")
+    elif want and names != ["Core", "Specialized Core", "SSA", "LLVM"]:
+        print(f"FAIL {name}: stages {names}")
+    elif not want and not d.get("diagnostics"):
+        print(f"FAIL {name}: refused with no diagnostic")
+    else:
+        print(f"ok {name}")
 PY
-)"
-  [ "$verdict" = "ok" ] && ok "$name" || no "$name: $verdict"
-done < "$cases_file"
+while IFS= read -r line; do
+  case "$line" in ok\ *) ok "${line#ok }" ;; FAIL\ *) no "${line#FAIL }" ;; *) no "unexpected: $line" ;; esac
+done < "$TMP/results.txt"
+[ -s "$TMP/results.txt" ] || no "the case runner printed nothing"
 
 echo "BROWSER-NATIVE: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

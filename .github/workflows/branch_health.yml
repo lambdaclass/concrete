@@ -75,7 +75,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .lake/build
-          key: ${{ runner.os }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+          key: ${{ runner.os }}-lakebuild-${{ hashFiles('Concrete/**', 'Main.lean', 'Browser.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
 
       - name: Install Lean (via lean-action)
         uses: leanprover/lean-action@v1

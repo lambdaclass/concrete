@@ -99,7 +99,7 @@ key_of_preimage() { sha256_stdin | cut -c1-32; }
 source_hash() {
   local dir="$1"
   ( cd "$dir" || exit 1
-    git ls-files -z -- Concrete.lean Main.lean 'Concrete/*.lean' 'proofs/*.lean' \
+    git ls-files -z -- Concrete.lean Main.lean Browser.lean 'Concrete/*.lean' 'proofs/*.lean' \
       | LC_ALL=C sort -z \
       | while IFS= read -r -d '' f; do
           [ -f "$f" ] && printf '%s %s\n' "$(sha256_file "$f")" "$f"

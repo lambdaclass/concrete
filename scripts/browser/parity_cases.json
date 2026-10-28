@@ -1,0 +1,13 @@
+[
+  ["constant", "mod demo { fn main() -> Int { return 42; } }", true],
+  ["arithmetic", "mod demo { fn add(a: i64, b: i64) -> i64 { return a + b; } fn main() -> Int { return add(20, 22); } }", true],
+  ["generic", "mod demo { fn identity<T>(x: T) -> T { return x; } fn main() -> Int { return identity::<Int>(42); } }", true],
+  ["struct", "mod demo { struct Copy Point { x: Int, y: Int } fn main() -> Int { let p = Point { x: 20, y: 22 }; return p.x + p.y; } }", true],
+  ["capability", "mod demo { fn report() with(Console) { println(\"Hello from Concrete\"); } fn main() with(Console) -> Int { report(); return 0; } }", true],
+  ["ownership error", "mod demo { struct Point { x: Int } fn main() -> Int { let p = Point { x: 42 }; return p.x; } }", false],
+  ["branch", "mod demo { fn main() -> Int { if true { return 42; } else { return 0; } } }", true],
+  ["type error", "mod demo { fn main() -> Int { return true; } }", false],
+  ["parse error", "mod demo { fn main(", false],
+  ["unknown name", "mod demo { fn main() -> Int { return missing; } }", false],
+  ["unicode comment", "// café λ\nmod demo { fn main() -> Int { return 42; } }", true]
+]
