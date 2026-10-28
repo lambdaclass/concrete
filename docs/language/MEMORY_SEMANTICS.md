@@ -352,7 +352,7 @@ defer destroy(resource);
 
 1. The body of `defer` must be a single function call expression (not a method call, E0282).
 2. Its arguments are local names, borrows of local names (`&x`, `&mut x`) or constants; anything
-   else is E0279 (decided 2026-10-21, "reserve by place"; [DEFER.md](DEFER.md)).
+   else is E0279 (decided 2026-10-21, "reserve by place"; [OWN-12](../spec/ownership.md#OWN-12)).
 3. Variables passed by value are marked `reserved` instead of `consumed`; variables passed by
    borrow are **pinned**. Neither may be moved or consumed before the deferred call runs (E0206),
    by a later `defer` included; both may still be read, borrowed and mutated in place.

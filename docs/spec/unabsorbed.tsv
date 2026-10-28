@@ -11,7 +11,6 @@ docs/language/CAPABILITY_FACTS.md	trusted
 docs/language/CONSTRUCTION_RIGHTS.md	types
 docs/language/CONST_GENERICS_V1.md	types,decisions
 docs/language/CONTRACTS_GUIDE.md	contracts
-docs/language/DEFER.md	ownership
 docs/language/ERROR_CONVENTIONS.md	statements
 docs/language/ERROR_HANDLING_DESIGN.md	statements
 docs/language/EXECUTION_MODEL.md	statements

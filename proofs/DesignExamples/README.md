@@ -218,11 +218,11 @@ be exit time for `let mut v = …; defer v.drop(); v.push(1);` to drop the final
 *Recommendation:* Core evaluates a deferred call at scope exit against the current values of its
 argument places, and restricts deferred-call arguments to places and constants. Expanding the
 call onto several exit edges then cannot duplicate an effect or a trap. This is in addition to,
-not instead of, the registration-time reservation DEFER.md specifies: a linear argument is
+not instead of, the registration-time reservation OWN-12 specifies: a linear argument is
 reserved when the `defer` is registered and cannot be moved afterwards. `deferPrint` shows only
-the read timing. Write both into DEFER.md.
+the read timing. Write both into OWN-12.
 
-**C3. Failure during cleanup** (open in DEFER.md). *Recommendation:* a trap inside a deferred call
+**C3. Failure during cleanup** (open in OWN-12's rationale). *Recommendation:* a trap inside a deferred call
 is fatal like any other. Effects of the cleanups that already ran remain, and the remaining
 cleanups, outer scopes' included, do not run. `trapCleanupEx_fatal` shows this on a return
 path, and `trapCleanupEx_lowered` shows the static expansion agrees. This is the plan's existing

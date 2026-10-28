@@ -687,7 +687,7 @@ than once in the same call with at least one `&mut`", on main and train3), while
 generic calls; the reborrows are recorded in Core before specialization, so a specialization cannot
 change them.
 
-**Defer.** A deferred call's arguments are read at the exit, not at registration (DEFER.md,
+**Defer.** A deferred call's arguments are read at the exit, not at registration (OWN-12,
 decided 2026-10-21: arguments are local names, borrows of local names or constants; a local passed
 by value is reserved and one passed by borrow is pinned). A loan a deferred call retains, a borrow
 argument or a reference binder passed to it, **stays live until the deferred call runs**, so its
@@ -879,7 +879,7 @@ order), bug 165 (generated calls carry the runtime callee).
       - one `&mut` argument mode;
       - parent suspension (E0293 kept);
       - reborrows recorded before specialization;
-      - the defer and exit-order rules of §4.5, written into DEFER.md and MEMORY_SEMANTICS;
+      - the defer and exit-order rules of §4.5, written into OWN-12 and MEMORY_SEMANTICS;
       - the G19 policy sentence (every pass) into VERIFIED_PIPELINE.
 
       B7 stays deferred (T-G10).

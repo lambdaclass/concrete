@@ -1,7 +1,7 @@
 // `defer <call>;` runs the call at scope exit, in LIFO order, on every exit path
 // (fall-through and early return). The defer body must be a call expression
 // (deferBodyNotCall otherwise); here we defer no-argument cleanup functions.
-// See docs/language/DEFER.md. Output order proves the semantics.
+// See docs/spec/ownership.md, OWN-12. Output order proves the semantics.
 mod cleanup_order {
     fn d1() with(Std) { println("d1"); }
     fn d2() with(Std) { println("d2"); }

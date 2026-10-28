@@ -7,7 +7,7 @@
 #   - LIFO: the last-registered defer runs first;
 #   - runs on every exit path: both early `return` and normal fall-through.
 # It also pins the current limitation that the defer body must be a CALL (a block
-# body `defer { … }` is rejected) — a documented V1 boundary (docs/language/DEFER.md).
+# body `defer { … }` is rejected) — a documented V1 boundary (docs/spec/ownership.md, OWN-12).
 
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2

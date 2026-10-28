@@ -723,6 +723,35 @@ because it would be evaluated at the exit. The decided refinements are pending: 
 a deferred call stay live until it runs, and the exit order (the exit value first, then each
 scope's deferred calls innermost first, then its loans end) is TIGHTENING_DECISIONS §4.5.
 
+`defer <call>;` schedules the call for the exit of the enclosing block: within a block the calls
+run last registered first (`defer a(); defer b();` runs `b`, then `a`), on fall-through, on an early
+`return` (an explicit `Result::Err` return included) and on a `break` or `continue` out of the block,
+and each block runs its own list, inner blocks before outer ones (`Concrete/IR/Lower.lean`:
+`emitFrameDeferredCalls` at a scope's end, `emitAllDeferredCalls` on `return`,
+`emitDeferredUntilLoop` on `break` and `continue`). An argument is a local name, a shared or
+exclusive borrow of a local name, or a constant (a literal, a module constant, a function name); a
+projection (`defer f(t.id)`, `defer f(&t.field)`), a nested call (`defer f(g(x))`) or a string literal
+is E0279, so write a named cleanup function that takes the local or a borrow of it and computes
+inside (decided 2026-10-21, bug 143). A by-value local is reserved, not taken: E0206 ("reserved by
+defer") refuses a later move or consumption (`error_defer_move.con`,
+`error_memory_edge_defer_then_move.con`, `pressure_err_defer_then_move.con`), and when the block ends
+the reserved locals are consumed (a later use is E0205) and the pins end. A borrowed local is
+pinned (E0206, "borrowed by a pending defer"), so `defer peek(&t); defer kill(t);` is refused and
+`defer peek(&t);` alone leaves `t` unconsumed (E0208). A registration-time value is spelled
+`let x0 = x; defer show(x0);`; `let x = 1; defer show(x); let x = 5;` shows 1, natively and under
+`--interp`, because Elab gives a shadowing binder a fresh Core name (bug 087). A method call
+`defer obj.method();` is E0282 (`deferBodyNotCall`; an earlier design note wrongly allowed it,
+EVALUATION2 D7): defer the function the method desugars to, or a named cleanup function; `defer
+{ ... }` is a parse error. A deferred call applies none of the argument coercions of an ordinary call
+(the literal and auto-borrow ones: `defer println("x")` fails where `println("x")` compiles), so
+defer a cleanup function without arguments or pass values already of the parameter type; aligning
+the two is a follow-up. What a deferred call that fails or diverges does on a return or error path
+is open, with the abort rule of OD10 and STMT-2 (an abort runs no deferred call); today a deferred
+call is an ordinary call with no recovery rule. There is no implicit scope-end drop to order
+against `defer` (OWN-13): `destroy(x)`, `x.drop()` or a deferred explicit call consumes a value.
+The surface is pinned by `scripts/tests/check_defer.sh` and `examples/defer/cleanup_order/`
+(ROADMAP old Phase 6 #7, 2026-06-23).
+
 ```con reject name=move-reserved code=E0206 stage=check pair=defer-consumes
 struct R { v: Int }
 
