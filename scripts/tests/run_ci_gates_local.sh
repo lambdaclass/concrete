@@ -86,6 +86,9 @@ if [ -z "${CONCRETE_GATE_SESSION:-}" ]; then
     echo "         will leave its children running and the lock held until recovered by hand." >&2
   fi
 fi
+# The deferral list is this runner's output, not its gates' input: a gate that runs a runner of its
+# own (check_gate_lock.sh does) must not write this run's list (bug 315).
+DEFERRED_OUT="${CONCRETE_GATES_DEFERRED_OUT:-}"; unset CONCRETE_GATES_DEFERRED_OUT
 # THIS RUNNER OWNS THE SESSION when the session's leader is its parent and it is in that group. Only
 # the owner signals the group: a nested runner that did would kill the run enclosing it.
 CI_SESSION_OWNER=0
@@ -1019,12 +1022,12 @@ if [ -z "$ALL_REFUSALS" ] && [ "$CLOSURE" = "1" ] && [ "$FAIL" -eq 0 ]; then COM
 
 CI_ARTIFACT_OK=1; ci_write_summary "$COMPLETED" "$ALL_REFUSALS" || CI_ARTIFACT_OK=0
 # The deferred commands for the pre-push hook's record (bug 315), part of the run's durable output.
-if [ -n "${CONCRETE_GATES_DEFERRED_OUT:-}" ]; then
+if [ -n "$DEFERRED_OUT" ]; then
   # Written whole or not at all: the hook reads an absent file as "the runner said nothing".
-  _dtmp="$(mktemp "$CONCRETE_GATES_DEFERRED_OUT.XXXXXX" 2>/dev/null)" \
+  _dtmp="$(mktemp "$DEFERRED_OUT.XXXXXX" 2>/dev/null)" \
     && printf '%s' "$DEFERRED_NL" > "$_dtmp" \
-    && mv -f "$_dtmp" "$CONCRETE_GATES_DEFERRED_OUT" \
-    || { rm -f "${_dtmp:-}" 2>/dev/null; echo "error: could not write $CONCRETE_GATES_DEFERRED_OUT" >&2; CI_ARTIFACT_OK=0; }
+    && mv -f "$_dtmp" "$DEFERRED_OUT" \
+    || { rm -f "${_dtmp:-}" 2>/dev/null; echo "error: could not write $DEFERRED_OUT" >&2; CI_ARTIFACT_OK=0; }
 fi
 
 # THE SUMMARY LINE COMES AFTER RECONCILIATION, and says REFUSED when completion was refused. It used
@@ -1043,7 +1046,7 @@ echo
 if [ "$RUN_OK" = "1" ] && [ -z "$SCOPE_NOTES$MODE_NOTES$HOST_NOTES" ]; then
   echo "CI-GATES-LOCAL: PASS=$PASS FAIL=$FAIL (JOBS=$JOBS)"
 elif [ "$RUN_OK" = "1" ]; then
-  echo "CI-GATES-LOCAL: PARTIAL PASS=$PASS FAIL=$FAIL${DEFERRED:+ DEFERRED=$DEFERRED} (JOBS=$JOBS) —$SCOPE_NOTES$MODE_NOTES$HOST_NOTES"
+  echo "CI-GATES-LOCAL: PARTIAL PASS=$PASS FAIL=$FAIL$([ "$DEFERRED" -eq 0 ] || echo " DEFERRED=$DEFERRED") (JOBS=$JOBS) —$SCOPE_NOTES$MODE_NOTES$HOST_NOTES"
 else
   echo "CI-GATES-LOCAL: REFUSED PASS=$PASS FAIL=$FAIL (JOBS=$JOBS)"
 fi
