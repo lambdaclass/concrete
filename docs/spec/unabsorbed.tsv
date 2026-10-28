@@ -40,10 +40,8 @@ docs/language/SAFETY.md	trusted,ffi
 docs/language/STATEMENT_EXPRESSION_MODEL.md	statements
 docs/language/STRING_TEXT_CONTRACT.md	types
 docs/language/TIGHTENING_DECISIONS.md	decisions
-docs/language/TUPLES.md	types
 docs/language/TWO_AXIS_SAFETY.md	trusted
 docs/language/TYPE_ALIASES.md	types
-docs/language/UNITS_OF_MEASURE.md	types
 docs/language/VALIDATED_WRAPPERS.md	types
 docs/language/VALUE_MODEL.md	types,references
 docs/language/VISIBILITY_AND_MODULE_HYGIENE.md	modules,types

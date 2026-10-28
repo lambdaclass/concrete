@@ -53,7 +53,7 @@ an inner access/`match`.
   one-level destructure (all of which DID land). Building nested patterns now
   would be adding a big feature because it is conventional, not because a
   workload demands it — the same call made for const generics
-  (`docs/language/CONST_GENERICS_V1.md`) and tuples (`docs/language/TUPLES.md`).
+  (`docs/language/CONST_GENERICS_V1.md`) and tuples (`docs/spec/types.md`, "No anonymous tuples").
 
 ## If the verdict flips
 

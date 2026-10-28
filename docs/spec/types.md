@@ -826,3 +826,48 @@ fn main() -> Int { return 42; }
 struct Copy Node { v: Int, w: Int }
 fn main() -> Int { let n: Node = Node { v: 40, w: 2 }; return n.v + n.w; }
 ```
+
+## Absent by decision
+
+This section is explanatory: it records type-system features the language does not have, why, and
+what would reopen them. The grammar (SYN-1) is what refuses them.
+
+### No anonymous tuples
+
+Decided 2026-06-22 (ROADMAP old Phase 6 #5, which asked for tuple types or a recorded decision
+against them), pinned by `scripts/tests/check_no_tuples.sh`. There are no tuple types `(A, B)`, no
+tuple literals `(a, b)` and no positional tuple indexing; each is a parse error. The named struct is
+the one product type, and a function that returns two values returns a small `struct Copy`:
+
+```con pseudocode
+struct Copy DivMod { quotient: i32, remainder: i32 }
+fn divmod(a: i32, b: i32) -> DivMod {
+    return DivMod { quotient: a / b, remainder: a % b };
+}
+```
+
+`t.0` stays the representation projection of a newtype (`Port(u16)` gives `port.0 : u16`), a named
+single-field wrapper, not a tuple. The reasons: field names flow into layout reports, obligation
+messages, backend contracts and proofs, and `result.remainder` describes itself where `result.1`
+does not; anonymous tuples and named structs overlap almost entirely, so carrying both would double
+the surface (patterns, layout, code generation, formatting, documentation); the language is
+explicit and named everywhere else (no implicit conversions, named capabilities, named fields); and
+no workload needs them, so adding them would be symmetry-driven rather than workload-driven. Tuples
+would be reconsidered only if a real workload shows named structs insufficient (for example heavy
+generic plumbing where naming every intermediate pair is untenable).
+
+### No units of measure
+
+Evaluated and deferred for v1 (ROADMAP old Phase 6 #15). Unit annotations (bytes or bits,
+milliseconds or seconds, block counts or byte offsets, protocol lengths, memory sizes) would catch a
+real class of systems mistakes, but they are a type-system feature with proof and report
+consequences, not a local addition: a unit-tagged integer must extract to the same `PExpr` as its
+untagged form, or units become a proof axis; unit erasure must be an audit fact, never silent, so no
+proof status may depend on erasing a unit unless a contract or VC names the conversion; and done
+poorly they add ceremony for little near-term value. Programs encode the unit in the name instead
+(`len_bytes`, `timeout_ms`, `off_in_block`, `size_bits`, per [STYLE.md](../project/STYLE.md)), and
+checked arithmetic (ARITH-3) removes the silent corruption unit mix-ups often hide behind. If a real
+workload keeps hitting unit bugs, the first step is a report-only prototype (`examples/units_probe/`
+over the mistake classes above) with optional annotations erased only after the audit records the
+conversion: no implicit unit conversion, no dependent numeric refinements.
+

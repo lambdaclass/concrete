@@ -9,7 +9,7 @@ Two things are deliberately not in the language. **Nested patterns** (`E::Wrap {
 are deferred until a workload needs them; one level of destructuring plus a field access or an
 inner `match` expresses the same programs ([NESTED_PATTERNS.md](../language/NESTED_PATTERNS.md),
 `check_nested_patterns.sh`). **Tuples** do not exist; the named struct is the one product type
-([TUPLES.md](../language/TUPLES.md), `check_no_tuples.sh`). The design records are
+([types.md, "No anonymous tuples"](types.md#no-anonymous-tuples), `check_no_tuples.sh`). The design records are
 [PATTERN_ERGONOMICS.md](../language/PATTERN_ERGONOMICS.md) and
 [PATTERN_DESTRUCTURING.md](../language/PATTERN_DESTRUCTURING.md).
 

@@ -204,7 +204,7 @@ let E::Pair { a, _ } = p;           // binds `a`, ignores the second field
 ## Closed / Workload-Gated Decisions
 
 - **Tuples** — no anonymous tuples in V1; use named structs. See
-  `docs/language/TUPLES.md` (gated by `scripts/tests/check_no_tuples.sh`).
+  `docs/spec/types.md`, "No anonymous tuples" (gated by `scripts/tests/check_no_tuples.sh`).
 - **Nested patterns** — deferred. Use staged destructuring, field access, or
   nested `match`; see `docs/language/NESTED_PATTERNS.md` (gated by
   `scripts/tests/check_nested_patterns.sh`). The trigger to reconsider is a
