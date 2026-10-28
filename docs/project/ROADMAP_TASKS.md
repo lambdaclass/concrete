@@ -1774,6 +1774,14 @@ pipeline, and none may choose, encode or implement a side of an [owner decision]
 Completed sub-items are recorded only in [CHANGELOG.md](../../CHANGELOG.md); this list keeps every
 sub-item with its owner and branch.
 
+**Queue entry and capacity.** The task names no reproducer and no dependency of RocksDB slice 1 or
+V1a, so the queue's entry rule alone would send it to the backlog. It is in row 2 because the project
+owner asked, on 2026-10-28, for the whole cleanup programme to be queued after R-0553; that request is
+its admission, recorded here as an explicit exception like the development-process exception. Its
+integration effort is charged to track C (adversarial validation and gate health) of the
+[capacity allocation](../../ROADMAP.md#capacity-allocation), since most sub-items consolidate gates,
+tests and the documents gates read, and it never preempts a defect repair or weakens an exit.
+
 Owners: the cleanup agent (branches `wip/cleanup-*`), the spec agent (`wip/spec`) and the roadmap
 agent (`wip/roadmap-compaction`).
 
@@ -1782,8 +1790,9 @@ agent (`wip/roadmap-compaction`).
    spec agent, `wip/spec`.
 2. The book's language chapters (`docs/book/src/language/`) teach by example and link to SPEC rule IDs
    instead of restating rules. Owner: the spec agent, `wip/spec`.
-3. ROADMAP compaction to its control plane, and the `tasks/` disposition records folded in. Owner: the
-   roadmap agent, `wip/roadmap-compaction`.
+3. ROADMAP compaction to its control plane, and the `tasks/` disposition records reconciled (the
+   queue builder reads them, so they stay, set to `done` where their branch landed). Owner: the roadmap
+   agent, `wip/roadmap-compaction`.
 4. Consolidate `docs/project/` (36 documents) into `PROJECT.md` plus the contributor documents. Owner:
    the cleanup agent, `wip/cleanup-*`.
 5. Consolidate `docs/verification/` (59 documents) into one normative verification specification plus
@@ -1806,7 +1815,9 @@ agent (`wip/roadmap-compaction`).
 14. Branch hygiene: merged remote branches are deleted (192 on 2026-10-28), and merged and dead
     worktrees are pruned periodically. Owner: the cleanup agent.
 15. The compile-scaling gate (R-0550, exit 2o) false-fails on hosts without perf instruction counting
-    (the OVH server); its resolution waits for the project owner's choice. Owner: the cleanup agent.
+    (the OVH server). The owner chose to change the gate, not the server: on a host that cannot count
+    instructions it reports NOT-JUDGED and defers to CI, and CI fails closed when it cannot count.
+    Owner: a separate agent, fixing it as a filed bug on its own `wip/bug-NNN` branch.
 
 ## Area: Standard Library And Core APIs
 

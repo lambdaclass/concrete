@@ -10,8 +10,9 @@ bodies to the [task register](docs/project/ROADMAP_TASKS.md), the dated decision
 [archived language scope](docs/archive/roadmap-language-scope.md) (pending absorption into the
 language specification) and completed records to the
 [roadmap history](docs/archive/ROADMAP_HISTORY.md). The roadmap gates read the control plane and
-the task register separately and refuse either taking over the other's part. The `tasks/`
-in-flight records were deleted: every branch they named had landed. This is sub-item 3 of R-0554.
+the task register separately and refuse either taking over the other's part. The eight `tasks/`
+in-flight records now read `done`: every branch they named had landed, and the queue builder needs
+the record to keep from dispatching the task again. This is sub-item 3 of R-0554.
 
 New tasks in queue row 2: R-0553, compiler totality (a ratchet gate over every non-total `Concrete.*`
 declaration, exit 2p, then conversion stage by stage ahead of the pass proofs), and R-0554, the
