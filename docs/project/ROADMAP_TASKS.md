@@ -1706,9 +1706,14 @@ trip confirms ABI agreement for a `repr`-annotated enum.
 **Objective:** Compiler totality: every pipeline function provable (no `partial`, `unsafe` or opaque
 definitions). A proof about a compiler pass cannot see inside a `partial` function: Lean compiles it
 to an opaque constant, so a theorem about the pass can only treat it as an unknown. The same holds for
-`unsafe`, `opaque`, `@[implemented_by]` and `@[extern]` declarations. Proving the verified-pipeline
+`unsafe` and `opaque` declarations. `@[implemented_by]` and `@[extern]` are a different case: the
+definition keeps its Lean body, so proofs can unfold it, but the compiled compiler runs the replacement
+instead, so a theorem about the Lean body says nothing about the executed code until the replacement's
+correspondence is checked or the attribute is removed. The inventory tracks all five so that both gaps
+(no proof possible, proof about code that does not run) only shrink. Proving the verified-pipeline
 passes (R-0491 – R-0510, queue rows 3, 4 and 6) therefore needs the functions those passes run to be
-total first, which is why this task sits ahead of them in the queue (row 2, exit 2p).
+total and executed as proved first, which is why this task sits ahead of them in the queue (row 2,
+exit 2p).
 
 **Depends on:** nothing. **Blocks:** the pass proofs of R-0491 – R-0510 for each stage it has not yet
 made total.
@@ -1721,8 +1726,9 @@ made total.
    became total or was removed and was not deleted from the baseline), so the count only goes down.
    The baseline file is the source of truth for the count; this task does not restate it.
 2. **Step 2: convert the baseline's `partial` definitions in batches.** Batches go in pipeline-stage
-   order, closest-to-proven stage first, guided by the inventory in
-   `research/compiler/partial-def-inventory-2026-10.md`. Each definition falls in one of three classes:
+   order, closest-to-proven stage first, guided by the per-stage inventory
+   `research/compiler/partial-def-inventory-2026-10.md` (written with the gate on
+   `wip/cleanup-totality-gate`; not yet on main). Each definition falls in one of three classes:
    - *structural*: the recursion is already structural, and the change is often only deleting the
      keyword;
    - *measure-based*: the parser, worklists and fixpoints, given a `termination_by` measure and its
@@ -1730,6 +1736,8 @@ made total.
    - *fuel*: the interpreter, which runs programs that may diverge, takes an explicit fuel argument
      and reports running out of fuel as its own outcome.
    Each batch removes its rows from the baseline in the same commit, and the ratchet gate checks that.
+   For an `implemented_by` or `extern` row, the batch removes the attribute, or records why the
+   replacement must stay and what checks its agreement with the Lean body.
 3. **Exit:** the baseline is empty for the proof-relevant pipeline stages (the stages the verified
    pipeline proves, R-0491 – R-0510). From then on the same gate refuses any non-total declaration in
    those stages outright, in CI and in the pre-push hook. Extending the refusal to the whole compiler

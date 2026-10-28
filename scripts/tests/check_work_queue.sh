@@ -114,6 +114,12 @@ cat > "$SRC/ROADMAP.md" <<'EOF'
 ### Phase 1 exits
 
 Not a row: R-0999.
+EOF
+# Task bodies live in the task register, not in ROADMAP.md (2026-10-28): R-0500's areas and R-0501's
+# dependencies below are read from it.
+mkdir -p "$SRC/docs/project"
+cat > "$SRC/docs/project/ROADMAP_TASKS.md" <<'EOF'
+# Roadmap tasks
 
 ## Area
 

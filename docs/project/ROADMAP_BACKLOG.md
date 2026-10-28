@@ -1,14 +1,15 @@
 # Concrete Roadmap Backlog
 
 This file holds the roadmap tasks that no active or next phase schedules. [ROADMAP.md](../../ROADMAP.md)
-keeps the phases, the execution queue and every task a queue row names or whose **Phase:** line includes
-an active or next phase; every other `### Task R-NNNN` lives here, with its full text, stable ID and
+keeps the phases and the execution queue, and the [task register](ROADMAP_TASKS.md) every task a queue
+row names or whose **Phase:** line includes an active or next phase (in ROADMAP.md itself until
+2026-10-28); every other `### Task R-NNNN` lives here, with its full text, stable ID and
 **Phase:** line unchanged. A task in this file is not abandoned and not lower quality: it waits for its
 phase or its trigger. Task IDs remain immutable across the move, so a reference such as `R-0305` means
 the same task in either file.
 
 The tasks were split out of ROADMAP.md on 2026-10-19. They are filed under the same topical
-**area** headings as in ROADMAP.md (an area's prose and its scheduled tasks stay there; an area with
+**area** headings as in the task register (an area's prose and its scheduled tasks stay there; an area with
 no scheduled task, such as WebAssembly or the freestanding target, moved here whole). Stubs of
 superseded, merged, duplicate, retired and delegated tasks whose **Phase:** line names no active or
 next phase are here too; their archived bodies stay in
@@ -22,17 +23,17 @@ workload, defect, user need or prerequisite that makes the task worth doing now.
 **Disposition** retires or merges it has no trigger of its own; its line names the owner that carries its
 obligations.
 
-1. **Pull triggers.** A task moves into ROADMAP.md when any of these happens:
+1. **Pull triggers.** A task moves into the task register when any of these happens:
    - a workload, bug report, pilot or user need hits it (its **Pull trigger:** names which ones);
    - a phase that depends on it becomes active or next, or a queue row needs it; or
    - a release checkpoint in the [release section](../../ROADMAP.md#releases) needs a bounded
      increment of it.
 
-   Pulling moves the whole task, unchanged, into its area in ROADMAP.md, in the same change that
+   Pulling moves the whole task, unchanged, into its area in the task register, in the same change that
    updates its **Phase:** line or the queue row that needs it. The **Pull trigger:** line may be dropped
-   once the task lives in ROADMAP.md.
+   once the task lives in the task register.
 2. **Phase entry checkpoint.** When a phase becomes active (the **Active phases:** line in
-   ROADMAP.md changes), every task in this file is reviewed. Each is either pulled into ROADMAP.md,
+   ROADMAP.md changes), every task in this file is reviewed. Each is either pulled into the task register,
    kept here with a reason, or retired to the archive with a reason recorded in the reconciliation
    record. A task kept here although its **Phase:** line names an active or next phase carries a
    **Kept in backlog:** line giving the reason. The review is recorded in the
@@ -41,10 +42,10 @@ obligations.
    reviewed the same way, with attention to tasks whose triggers the release's pilots, workloads or
    bug reports have hit. The review is recorded in the review log.
 4. **Placement is gated.** `scripts/tests/check_roadmap_coverage.sh` checks that every task lives in
-   exactly one of ROADMAP.md and this file; that every task here has a **Phase:** or disposition
+   exactly one of the task register and this file; that every task here has a **Phase:** or disposition
    line and a **Pull trigger:** line, with no two live tasks sharing the same trigger text; that
    ROADMAP.md names its **Active phases:** and **Next phases:**; that no task here is scheduled in
-   one of those phases without a **Kept in backlog:** reason; that no task in ROADMAP.md is scheduled
+   one of those phases without a **Kept in backlog:** reason; that no task in the task register is scheduled
    only in later phases unless a queue row names it; and that the latest review-log row names the
    current active phases.
 
