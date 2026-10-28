@@ -80,12 +80,14 @@ _host_deferred_row() { # cmd -> the row whose gate <cmd> INVOKES
   # bash/python3/sh or ./, the gate's path, then plain arguments. A gate named only as an argument of
   # another command, or inside a pipeline, list or substitution, matches no row: that command's exit
   # 77 is not the declared gate's.
-  local cmd="$1" row script rest
+  local cmd="$1" row script
+  # Anything that could make the command more than one plain invocation, anywhere in it (prefixes
+  # included: `X=x;(exit 77);# ...` is a list), or any line break, or a comment.
+  case "$cmd" in *[$'\n\r''|;&<>`$()#\\{}']*) return 1 ;; esac
   while [[ "$cmd" =~ ^[A-Z_][A-Z0-9_]*=[^[:space:]]+[[:space:]]+(.*)$ ]]; do cmd="${BASH_REMATCH[1]}"; done
   if [[ "$cmd" =~ ^(bash|python3|sh)[[:space:]]+(.*)$ ]]; then cmd="${BASH_REMATCH[2]}"; fi
   cmd="${cmd#./}"
-  script="${cmd%%[[:space:]]*}"; rest="${cmd#"$script"}"
-  case "$rest" in *['|;&<>`$()']*) return 1 ;; esac
+  script="${cmd%%[[:space:]]*}"
   for row in "${HOST_DEFERRED_TABLE[@]}"; do
     [ "$script" = "scripts/tests/${row%%|*}" ] && { printf '%s\n' "$row"; return 0; }
   done

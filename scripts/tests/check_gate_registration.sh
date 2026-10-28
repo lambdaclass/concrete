@@ -257,7 +257,8 @@ else
       && ok "gate_deferral accepts the declared gate as ./path and with a VAR= prefix and plain arguments" \
       || no "gate_deferral refused a plain invocation of the declared gate"
     for df_cmd in "bash scripts/tests/check_gate_lock.sh $df_gate" "bash $df_gate; bash scripts/tests/check_x.sh" \
-                  "bash $df_gate || true" "bash $df_gate | tee x" "bash $df_gate \$(echo x)"; do
+                  "bash $df_gate || true" "bash $df_gate | tee x" "bash $df_gate \$(echo x)" \
+                  "X=x;(exit\${IFS}77);# bash $df_gate" $'true\nbash '"$df_gate" "X=\$(false) bash $df_gate"; do
       gate_deferral "$df_cmd" >/dev/null \
         && no "CONTROL: gate_deferral accepted '$df_cmd', which is not the declared gate's own exit" \
         || ok "CONTROL: gate_deferral refuses '$df_cmd' (the gate as an argument, or in a compound command)"
