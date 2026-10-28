@@ -20,7 +20,7 @@
 # the key: a seed from different sources is exactly the useful case, and lake handles it. Neither
 # is lakefile.toml: lake mixes each module's options into its trace, and a branch that adds a
 # library would otherwise never get a warm start.
-# The source hash (Concrete/, proofs/, Concrete.lean, Main.lean) only picks the best entry in a
+# The source hash (Concrete/, proofs/, Concrete.lean, Main.lean, Browser.lean) only picks the best entry in a
 # cache root (an exact source match first, else the newest entry for the key).
 #
 # SOURCES OF A SEED

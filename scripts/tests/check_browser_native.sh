@@ -38,6 +38,8 @@ fi
 echo "=== the native adapter on the parity cases ==="
 # The cases scripts/browser/test-parity.mjs compares with the Wasm build: one list, one file.
 CASES="scripts/browser/parity_cases.json"
+# The runner's own exit status counts: a crash after some cases must not read as a partial pass.
+N_CASES="$(python3 -I -c 'import json,sys; print(len(json.load(open(sys.argv[1]))))' "$CASES")"
 python3 -I - "$CASES" "$BIN" "$TMP" <<'PY' > "$TMP/results.txt"
 import json, subprocess, sys
 cases, binary, tmp = json.load(open(sys.argv[1])), sys.argv[2], sys.argv[3]
@@ -64,10 +66,13 @@ for name, source, want in cases:
     else:
         print(f"ok {name}")
 PY
+runner_rc=$?
+[ "$runner_rc" -eq 0 ] || no "the case runner exited $runner_rc (a crash, not a verdict)"
 while IFS= read -r line; do
   case "$line" in ok\ *) ok "${line#ok }" ;; FAIL\ *) no "${line#FAIL }" ;; *) no "unexpected: $line" ;; esac
 done < "$TMP/results.txt"
-[ -s "$TMP/results.txt" ] || no "the case runner printed nothing"
+[ "$(grep -cE '^(ok|FAIL) ' "$TMP/results.txt")" = "$N_CASES" ] \
+  || no "the case runner reported $(grep -cE '^(ok|FAIL) ' "$TMP/results.txt") of $N_CASES cases"
 
 echo "BROWSER-NATIVE: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
