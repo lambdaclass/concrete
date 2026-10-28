@@ -21,8 +21,8 @@ Supporting helpers:
   command is re-run once alone with a larger budget, and a second timeout is reported as incomplete
   (the gate still exits nonzero). Use `bounded_run` for per-test budgets, or `bounded_watchdog SECS`
   and `"${TO[@]}" CMD` for single bounded commands with `bounded_gate_status && [ "$FAIL" -eq 0 ]`
-  as the gate's last line; do not call `timeout` directly in a new gate (ROADMAP "Promotion
-  pipeline", result vocabulary).
+  as the gate's last line; do not call `timeout` directly in a new gate (docs/project/PROMOTION_PIPELINE.md,
+  result vocabulary).
 
 All scripts assume the repository root as their working directory and normalize to it internally.
 

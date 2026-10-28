@@ -1715,6 +1715,19 @@ passes (R-0491 – R-0510, queue rows 3, 4 and 6) therefore needs the functions 
 total and executed as proved first, which is why this task sits ahead of them in the queue (row 2,
 exit 2p).
 
+**Scope and owner.** This task builds the mechanism behind the totality gate that R-0506 (stage S12a)
+owns: R-0506 states which code must be total (semantics, checkers, validators and proved passes) and
+keeps its exit; R-0553 supplies the environment inventory, the ratchet and the conversions. As the
+[verified-compiler plan](../compiler/VERIFIED_PIPELINE.md) allows, untrusted search (heuristics,
+elaboration search, register-allocation search) may stay partial: its result is checked by a total
+validator, and its baseline row records that reason instead of being converted.
+
+**Queue entry.** It enters under the entry rule as an explicit dependency of V1a, the next proof
+deliverable: V1a proves checked Core → BIR refinement for the passes its subset runs, and that proof
+cannot be completed while those passes' functions are `partial`. Making V1a's own stages total is part
+of R-0511's V1a work and is supplied by step 2 below; step 1, the ratchet that exit 2p closes on, is a
+prevention gate that no deliverable's acceptance waits for, so exit 2p continues alongside.
+
 **Depends on:** nothing. **Blocks:** the pass proofs of R-0491 – R-0510 for each stage it has not yet
 made total.
 
@@ -1740,8 +1753,9 @@ made total.
    replacement must stay and what checks its agreement with the Lean body.
 3. **Exit:** the baseline is empty for the proof-relevant pipeline stages (the stages the verified
    pipeline proves, R-0491 – R-0510). From then on the same gate refuses any non-total declaration in
-   those stages outright, in CI and in the pre-push hook. Extending the refusal to the whole compiler
-   follows later, under this task.
+   those stages outright, in CI and in the pre-push hook. Extending the inventory to the whole
+   compiler follows later, under this task, with every remaining non-total declaration outside those
+   stages recorded as untrusted search with its reason.
 
 Phase 1 closes on step 1 (exit 2p: the ratchet gate runs in CI and in the pre-push hook with its
 baseline committed); steps 2 and 3 continue through Phases 2 and 4, stage by stage ahead of the pass

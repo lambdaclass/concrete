@@ -286,7 +286,7 @@ above names the same task IDs per row (checked by `scripts/tests/check_roadmap_c
 - **Phase 7 — Release and ecosystem** (rows 16 – 17). **Goal:** External-user workflow and three graduated flagships, then package-level evidence and typed policy. **Exit:** a non-author replays and upgrades with exact diffs; three flagships graduate; package evidence composes under typed policy. **Release:** **0.10 Project beta**, then **1.0 Stable supported subset** (V7 with source correspondence, Phases 5 – 7's acceptance, release-bar compatibility and post-release readiness) and **1.x** feature releases.
 
 The [verified-compiler plan](docs/compiler/VERIFIED_PIPELINE.md) holds Phases 2 and 4 in detail; the
-task sections below hold every row's exit.
+[task register](docs/project/ROADMAP_TASKS.md) holds every row's task and its exit.
 
 ### Estimated plan to a proven compiler
 
@@ -312,7 +312,7 @@ This is the only current queue and the authoritative scheduling section; executi
 is intentionally not padded to a fixed number: rows exist only for work whose ordering is presently
 decided. A newly reproduced authority defect enters ahead of the next transition; completed milestones
 move to the changelog rather than accumulating here. When the queue is exhausted, execution resumes at
-the first active `Task R-NNNN` in file order unless the table is refreshed in the same change that
+the first active `Task R-NNNN` in the [task register](docs/project/ROADMAP_TASKS.md)'s file order unless the table is refreshed in the same change that
 exhausts it. The `R-NNNN` value is immutable identity, not priority: existing IDs are never renumbered
 or reused, and a newly confirmed urgent defect receives the next unused ID before entering the queue.
 Area headings and task position are topical filing only. There are no area-local queues, hidden

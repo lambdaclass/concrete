@@ -19,7 +19,7 @@ runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED =
   the nightly workflow (`nightly.yml`: the dispatch and the report, which need `gh` and `python3`). Leave it unset
   unless the servers can absorb 24 shards of up to ~85 minutes each. Labels give no priority, so a
   campaign on self-hosted runners would queue landing runs behind it.
-  The tiers are listed in ROADMAP.md, "Promotion pipeline", "CI tiers".
+  The tiers are listed in [PROMOTION_PIPELINE.md](PROMOTION_PIPELINE.md#ci-tiers).
 - An unset variable, or any value other than `true`, means GitHub-hosted. That is the default.
 - **A `pull_request` event never runs on a self-hosted runner**, whatever the variables say. See
   the security section for why this guard alone is not enough.

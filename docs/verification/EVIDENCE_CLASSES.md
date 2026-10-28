@@ -7,7 +7,7 @@ has sub-states (kernel-decision vs Lean refinement) and honest negative states
 line, the command that shows it, and a small worked reference.
 
 **Model transition:** the labels below describe the current CLI and artifact
-schema. The ratified target in [ROADMAP R-0440](../../ROADMAP.md) separates subject,
+schema. The ratified target in [ROADMAP R-0440](../project/ROADMAP_TASKS.md#task-r-0440) separates subject,
 scope, method, status, trust, freshness, and replay facts. These labels will
 remain useful composite views, but they are not a universal ranking and must not
 be read as mutually exclusive semantic dimensions.

@@ -9,6 +9,9 @@ Date: 2026-10-19
 > [Where every area fits](ROADMAP_TASKS.md#where-every-area-fits) table maps each old phase number to its area.
 > Since the same day's backlog split, tasks that no active or next phase schedules (their stubs included)
 > live in [ROADMAP_BACKLOG.md](ROADMAP_BACKLOG.md); "the roadmap" below means ROADMAP.md and that file.
+> Since the 2026-10-28 compaction the task bodies live in the [task register](ROADMAP_TASKS.md), so "the
+> roadmap" also includes it, and the binding dispositions below are in
+> [this record](#binding-reconciliation-dispositions).
 > The record below is kept as written.
 
 The 2026-10-19 reconciliation mapped every task heading and every open-work prose item in

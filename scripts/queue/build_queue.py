@@ -171,6 +171,10 @@ def roadmap_tasks(root, mods):
     reg = os.path.join(root, "docs", "project", "ROADMAP_TASKS.md")
     if os.path.exists(reg):
         rm += "\n" + read(reg)
+    elif not re.search(r"^### Task R-\d{4}$", rm, re.M):
+        # Without the register every queued task would be built from an empty body: no objective,
+        # no dependencies, no areas. Refuse rather than schedule work blind.
+        die(f"{reg} is missing and ROADMAP.md holds no task bodies; the queue's tasks cannot be read")
     tasks, seen = [], set()
 
     def add(rid, tier, title, deps):

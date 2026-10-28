@@ -33,7 +33,7 @@ Each term is defined once, here; the linked documents hold the full definitions.
   component alpha, project beta, 1.0 stable). A *release* is a published candidate (nightly, train or
   milestone) that passes its scope's acceptance. See [Releases](../../ROADMAP.md#releases).
 - **Active / next phases; backlog.** The phases in progress and those that start next, named at the top
-  of this file. Tasks neither scheduled in an active or next phase nor named by a queue row live in the
+  of [ROADMAP.md](../../ROADMAP.md). Tasks neither scheduled in an active or next phase nor named by a queue row live in the
   [backlog](ROADMAP_BACKLOG.md) until pulled.
 - **Core.** The language definition: the typed IR elaboration produces, with an executable semantics.
   Claims and the authoritative checker work on it.

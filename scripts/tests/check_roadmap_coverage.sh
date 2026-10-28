@@ -116,7 +116,12 @@ for t in re.findall(r'^#+ (?:Completed )?Task (R-\d{4})$', plane, re.M):
 for h in PLANE_SECTIONS:
     if re.search(r'^#+ ' + re.escape(h) + r'$', reg, re.M):
         no(f'the task register declares the control-plane section "{h}", which belongs to ROADMAP.md')
-road = plane + '\n' + reg
+for label in ('Active phases', 'Next phases'):
+    if re.search(r'^\*\*' + label + r':\*\*', reg, re.M):
+        no(f'the task register declares "**{label}:**", which belongs to ROADMAP.md')
+# Every control-plane section, table and line below is read from ROADMAP.md alone; only the task
+# bodies are read from the register.
+road = plane
 
 def expand(text):
     ids = []
@@ -132,7 +137,7 @@ def task_bodies(text):
         found.append((h.group(1), text[h.start():(m.start() if m else len(text))]))
     return found
 
-road_tasks = task_bodies(road)
+road_tasks = task_bodies(reg)
 back_tasks = task_bodies(back)
 completed = set(re.findall(r'^### Completed Task (R-\d{4})$', chg, re.M))
 if not road_tasks: no('no task headings found'); print('\n'.join(out)); sys.exit()
@@ -756,6 +761,9 @@ PY
   neg plane_section_in_register \
     "s=s.rstrip('\\n')+'\\n\\n## The current execution queue\\n\\n| 0 | **ctl (R-0482)** | ctl |\\n'" \
     "the task register declares the control-plane section" tasks
+  neg phases_line_moved_to_register \
+    "s=s.rstrip('\\n')+'\\n\\n**Active phases:** 1\\n'" \
+    "the task register declares" tasks
   neg bad_active_phases \
     "old='**Active phases:** 1'; assert s.count(old)==1; s=s.replace(old,'**Active phases:** 9')" \
     "names Phase 9, which is not in"
