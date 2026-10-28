@@ -1074,3 +1074,36 @@ now carries the requirement; *done* items are closure records; *historical* item
 | D | “Negative questions only under completeness” · 18639–18644 | Live | 3, 4 | Keep under R-0487 |
 | D | “Out of scope…mutation, termination…inputs” · 18645–18647 | Live under R-0488/R-0473/R-0474 | 3, 6 | Keep owner cross-references; do not duplicate |
 | D | R-0487 “Exit” · 18649–18656 | Live | 3, 4 | Keep |
+
+
+<!-- Moved from ROADMAP.md's "Reconciliation record" on 2026-10-28; still binding. -->
+
+## Binding reconciliation dispositions
+
+The following dispositions replace conflicting implementation directions in the named tasks.
+Existing regression cases and acceptance obligations survive unless explicitly retired with a reason.
+
+- R-0114 merges into R-0492/R-0514; R-0116 merges into R-0497/R-0510/R-0514.
+- R-0123, R-0163 and R-0164 target checked Core, generated ClaimSpec statements and
+  Core-based composition under R-0495/R-0512. They add no new PExpr/FnTable mechanism.
+- R-0176's forward ProofCore architecture is retired. R-0512 owns any isolation needed
+  to preserve historical replay.
+- R-0202, R-0262 and R-0269 retain legacy correctness maintenance only. New dependency
+  closure and statement-generation work belongs to R-0495/R-0509; a PExpr bridge is
+  permitted only as an explicitly proved R-0512 migration bridge.
+- R-0268's architecture decision is settled by R-0496.
+- R-0274 preserves a single authoritative checker over Core under R-0499/R-0514.
+  Source diagnostics and elaboration do not replace its typing, ownership or capability rules.
+- R-0278/R-0288 supply the validated BIR contract under R-0503, not an additional
+  competing IR. R-0295's decision is settled by R-0501/R-0502.
+- R-0464 retains the shared trap-definition and fail-closed analysis requirements.
+  R-0460 owns VC generation proved sound against Core. Any SSA-based analysis needs
+  an explicit proved relation to Core and must account for stores, aliases and calls.
+- R-0408/R-0409 evaluate instrumentation and proof-engineering improvements to normative
+  Core semantics under R-0496; they do not establish another language evaluator.
+- R-0446's generated trap/fuzzer/consumer coverage is an increment of R-0491/R-0493.
+- R-0297 is delegated to the Lean Compiler Backend; R-0505 integrates LCB and builds no Concrete
+  machine backend; R-0113 records that LCB is Concrete's QBE path (R-0517).
+
+R-0460, R-0299/R-0300 and R-0353 are not redundant with compiler correctness: VC soundness,
+LLVM-profile validation and independent evidence consumption retain distinct obligations.

@@ -832,13 +832,13 @@ PY
     "old='demonstrated enforcement (2l)'; assert s.count(old)==1; s=s.replace(old,'demonstrated enforcement')" \
     "queue row 2 does not name its exit 2l"
   neg continues_exit_blocks \
-    "old='| RocksDB slice 1 (row 5, R-0285) | 0b, 2i, 2n | 0a, 0c, 1a, 2a, 2b, 2c, 2d, 2e, 2f, 2g, 2h, 2j, 2k, 2l, 2m, 2o |'; assert s.count(old)==1; s=s.replace(old,'| RocksDB slice 1 (row 5, R-0285) | 0b, 2i, 2k, 2n | 0a, 0c, 1a, 2a, 2b, 2c, 2d, 2e, 2f, 2g, 2h, 2j, 2l, 2m, 2o |')" \
+    "old='| RocksDB slice 1 (row 5, R-0285) | 0b, 2i, 2n | 0a, 0c, 1a, 2a, 2b, 2c, 2d, 2e, 2f, 2g, 2h, 2j, 2k, 2l, 2m, 2o, 2p |'; assert s.count(old)==1; s=s.replace(old,'| RocksDB slice 1 (row 5, R-0285) | 0b, 2i, 2k, 2n | 0a, 0c, 1a, 2a, 2b, 2c, 2d, 2e, 2f, 2g, 2h, 2j, 2l, 2m, 2o, 2p |')" \
     "exit 2k is continues alongside but blocks a deliverable"
   neg blocks_exit_unlisted \
     "import re; m=re.search(r'^\| 2c \|[^\n]*$', s, re.M); assert m; c=m.group(0).split(' | '); assert c[4]=='continues alongside'; c[4]='blocks features'; s=s[:m.start()]+' | '.join(c)+s[m.end():]" \
     "exit 2c is blocks features but no deliverable lists it"
   neg prerequisites_drop_exit \
-    "old='| V1a (row 3, R-0511) | 0a, 0b, 2a, 2g, 2h, 2i, 2j, 2n | 0c, 1a, 2b, 2c, 2d, 2e, 2f, 2k, 2l, 2m, 2o |'; assert s.count(old)==1; s=s.replace(old,'| V1a (row 3, R-0511) | 0a, 0b, 2a, 2g, 2h, 2i, 2j, 2n | 0c, 1a, 2b, 2c, 2d, 2e, 2f, 2k, 2m, 2o |')" \
+    "old='| V1a (row 3, R-0511) | 0a, 0b, 2a, 2g, 2h, 2i, 2j, 2n | 0c, 1a, 2b, 2c, 2d, 2e, 2f, 2k, 2l, 2m, 2o, 2p |'; assert s.count(old)==1; s=s.replace(old,'| V1a (row 3, R-0511) | 0a, 0b, 2a, 2g, 2h, 2i, 2j, 2n | 0c, 1a, 2b, 2c, 2d, 2e, 2f, 2k, 2m, 2o, 2p |')" \
     "prerequisites of \"V1a (row 3, R-0511)\" do not account for exit 2l"
   neg queue_prerequisites_drift \
     "old='prerequisite exits: 0b, 2i, 2n;'; assert s.count(old)==1; s=s.replace(old,'prerequisite exits: 0b, 2n;')" \
@@ -853,7 +853,7 @@ PY
     "old='| V1b (row 3, R-0511 with R-0517) | 0a, 0b, 2a, 2g, 2h, 2i, 2j, 2n | 0c,'; assert s.count(old)==1; s=s.replace(old,'| V1b (row 3, R-0511 with R-0517) | 0b, 2a, 2g, 2h, 2i, 2j, 2n | 0a, 0c,')" \
     "for V1b"
   neg prerequisites_row_relabelled \
-    "old='| V1b (row 3, R-0511 with R-0517) | 0a, 0b, 2a, 2g, 2h, 2i, 2j, 2n | 0c, 1a, 2b, 2c, 2d, 2e, 2f, 2k, 2l, 2m, 2o |'; assert s.count(old)==1; s=s.replace(old,'| V1b (row 5, R-0511 with R-0517) | 0b, 2i, 2n | 0a, 0c, 1a, 2a, 2b, 2c, 2d, 2e, 2f, 2g, 2h, 2j, 2k, 2l, 2m, 2o |')" \
+    "old='| V1b (row 3, R-0511 with R-0517) | 0a, 0b, 2a, 2g, 2h, 2i, 2j, 2n | 0c, 1a, 2b, 2c, 2d, 2e, 2f, 2k, 2l, 2m, 2o, 2p |'; assert s.count(old)==1; s=s.replace(old,'| V1b (row 5, R-0511 with R-0517) | 0b, 2i, 2n | 0a, 0c, 1a, 2a, 2b, 2c, 2d, 2e, 2f, 2g, 2h, 2j, 2k, 2l, 2m, 2o, 2p |')" \
     "deliverable V1b is labelled row 5, but queue row 3 schedules it"
   # The implemented-table controls do not depend on which candidates are live: each inserts two
   # control rows (bugs 901, 902 and 903, which no ledger record names) into its copy first.

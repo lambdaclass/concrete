@@ -7,8 +7,8 @@ Roadmap task: $ARGUMENTS
 
 Rules: [docs/project/AGENTS.md](../../docs/project/AGENTS.md).
 
-1. **Read the task**: its `### Task $ARGUMENTS` section in `ROADMAP.md`, its row in "The current
-   execution queue", the exits it owns ("Phase 1 exits") and their acceptance tests, and the docs
+1. **Read the task**: its `### Task $ARGUMENTS` section in `docs/project/ROADMAP_TASKS.md` (or
+   `docs/project/ROADMAP_BACKLOG.md`), its row in `ROADMAP.md`'s "The current execution queue", the exits it owns ("Phase 1 exits") and their acceptance tests, and the docs
    it cites. If its prerequisites have not landed, stop and report which.
 2. **Check nobody has it**: `git branch -r | grep -i <id or topic>`, and the "Implemented, not yet
    accepted" table. Continue an existing `wip/*` branch rather than starting a second one.

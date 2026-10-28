@@ -4053,3 +4053,138 @@ define") is asserted on every run rather than registered as a mutation, because 
 proves a gate goes RED when a rule is disabled and this property is a gate staying GREEN under a
 change that is none of its business. Verified both ways: the H26 mutation no longer moves the
 golden, and appending a `sha256.` entry makes the assertion fail.
+
+
+## Moved at the 2026-10-28 roadmap compaction
+
+Completed and historical records moved out of ROADMAP.md when it was cut down to its control plane
+(the queue, the owner decisions, the release map and pointers). Moved verbatim from ROADMAP.md on 2026-10-28 (the roadmap compaction); only heading levels and relative links were adjusted. Nothing here
+schedules work; the live remainder of each record stays with its owning task or in
+[ROADMAP.md](../../ROADMAP.md).
+
+### Development throughput: why the track exists (measured 2026-10-22)
+
+**Why (measured 2026-10-22).**
+
+- **Time to land.** A finished, Codex-clean branch took 6 – 10 h of wall clock to reach main for about
+  1 h of real work.
+- **Review loops.** Codex took 8 – 26 rounds per branch (interp-coverage 26, exit-2i 17, validation
+  12), and each round re-reviewed the whole diff. The cybersecurity filter blocked rounds on ownership
+  work.
+- **Big branches.** safety-eval2 carried 10 bugs and 23 test migrations, and exit-2i touched about 100
+  files. Rule-changing branches broke other branches' new fixtures (symbols' mangling, exit-2i's REF-6,
+  safety's heap rule).
+- **Late failures.** The pre-push hook runs about 92 of 255 gates, chosen by area name. Stack-budget,
+  trust-gate, float round-trip and linear-discard failures were first seen in CI or on later pushes,
+  at about 1.5 h per round.
+- **Serial landing.** Candidates landed one at a time. Each landing made every other branch rebase and
+  re-run its local gates and CI. Hand-edited shared ledgers conflicted on every rebase: CHANGELOG, the
+  bugs README, STRUCTURAL_CLASSES, the audit corpus, ROADMAP rows, the example manifest, the gate
+  count and BuildIdentity.
+- **CI wall time.** A run has about 35 jobs against roughly 20 concurrent jobs on the free plan, so
+  runs queued. One waited 45 min, and its shards started an hour late. The language-surface job and
+  the mutation shards take about 80 min each. lambdaclass/concrete is on GitHub Enterprise, with about
+  500 concurrent jobs.
+- **One laptop.** 5 – 7 agents plus gate runs pushed the load average to 140 – 240, which caused
+  timeout false failures and 90-minute local full runs.
+- **Infrastructure defects.** The hooks pointed at a stale pre-push without the wip tier. GIT_DIR
+  leaked into gates under the hook (repaired in `run_ci_gates_local.sh` on branch `bug175`).
+  Automatic git maintenance repacked during runs.
+- **No measurement.** Stage timestamps were not recorded.
+
+### Development throughput: parts in use on main (2026-10-25)
+
+**Working on main (2026-10-25).** These parts of the track are in use; each item still closes only
+by its exit criterion in the table below.
+
+- **Landing trains (R-0539).** `scripts/land/train.sh` builds a train, runs its gates, dispatches CI
+  and lands the exact SHA on both remotes ([LANDING.md](../project/LANDING.md)). Recent trains
+  landed this way, among them train 22 (`1b69ed0e`).
+- **Landing CI tier (R-0540).** A candidate's CI run is the landing tier; the mutation campaign, the
+  fuzz campaigns and proof replay are the campaign tier, run on dispatch with `campaign=true` or on
+  schedule (`.github/workflows/lean_action_ci.yml`). `check_qualification_record.sh` refuses a
+  landing-only run as a qualification.
+- **Self-hosted runners (R-0541).** CI jobs run on runners on concrete-ci-2 when the repository
+  variable `CONCRETE_SELF_HOSTED` is set, and never for `pull_request`
+  ([SELF_HOSTED_RUNNERS.md](../project/SELF_HOSTED_RUNNERS.md)).
+- **Load control (R-0543).** A heavy run takes a machine-wide slot (`scripts/tests/lib/heavy_slots.sh`,
+  gated by `check_heavy_slots.sh`).
+- **Gate-run cleanup on kill** ([bug 244](../bugs/244_killed_gate_run_wedges_lock.md)). A gate run
+  that is killed no longer leaves gate processes running and the repository lock held.
+- **Documentation-link gate** ([bug 252](../bugs/252_doc_link_check_unchecked_and_unrun.md)).
+  `check_doc_links.sh` checks heading anchors and runs in CI and the local gate set.
+- **Impact gate selection (R-0513).** The selector judges the text in a keyed array as text, not as a
+  call ([bug 237](../bugs/237_selector_reads_map_text_as_calls.md)), so a docs-only change no
+  longer selects unrelated gates.
+- **Generated ledgers (R-0542).** Each bug record holds its facts in a ledger block (migrated by
+  `scripts/gen/migrate_ledgers.sh`), CHANGELOG entries are `changelog.d/` fragments, and the bug
+  lists, the class table, exit 0b's bug list, the bug dashboard and the candidate table are generated,
+  each with a drift gate.
+
+### Browser compiler and explorer — bounded website delivery
+
+**2026-10-22: implemented, validated, and delivered on main.** This is a small website feature using
+existing compiler passes, not a new backend or a replacement for the execution
+queue above. Implementation and build instructions: [browser compiler](../../scripts/browser/README.md).
+
+- Run the existing compiler as WebAssembly in a browser worker, for self-contained
+  files; show real diagnostics and Core → specialized Core → SSA → LLVM.
+- Explain the stages, expose source-declaration links where available, retain
+  completed stages on later failure, and export the result with compiler identity
+  and the actual LLVM target. Successful checking is never labeled proof verification.
+- Include representative checked examples, on-demand download progress, versioned
+  HTTP caching, cancellation/retry, and stale-result invalidation after source edits.
+- Validation: 33 native/Wasm comparisons; loader progress, integrity, five failure
+  modes and retry; UI cancellation, stale messages, source invalidation and partial
+  stage controls; successful site build. The local browser prototype was exercised
+  and the redesigned layout reviewed from browser screenshots. Versioned compiler
+  assets are included in ordinary Pages builds; deployment follows the existing site
+  workflow. All four selected pre-push gates passed (not the full CI suite).
+- Explicit non-goals: editor upgrades, program execution/linking, standard-library
+  or multi-file loading, a Concrete-to-Wasm backend, and independent verification.
+
+**Maintenance:** update this entry when scope, status, dependencies, or acceptance
+criteria change. Record completed delivery in the changelog; keep remaining work
+and the separate verifier status here.
+
+### Next-release blockers met before 2026-10-28
+
+Two items of the experimental systems preview's checklist, met and recorded:
+
+- [x] R-0484 meets its closure criteria (closed 2026-10-08 at `245cd51c`, main CI 37771982899);
+  its accepted limits are listed in its task section and its mutation campaign is
+  incompletely qualified at that revision; the campaign later qualified on `670ec85a`
+  (2026-10-11, run 38104755470).
+- [x] R-0483 rejects mismatched owners for parsed results with retained controls (closed
+  2026-10-09 at `4f005715`; `check_view_lifetime.sh` 28/0 in main CI 37917463687).
+### Gate inventory — what was added, and what each actually guards
+
+| Gate | Guards | Build? | CI job |
+|---|---|---|---|
+| `check_evidence_algebra.sh` | Register C rows present, no `sorry`/`native_decide`, one construction site per badge string, all consumers share the derivation | no | `grammar` |
+| `check_known_wrong_corpus.sh` | H24's fixture still reproduces; H23's now guards its fix (`assumed` on both surfaces + `E0617`) — a counterexample that stops demonstrating its hole is worse than none | **yes** | `extra-gates` |
+| `check_hole_status_consistency.sh` | no document contradicts KNOWN_HOLES; every fixtured hole's corpus heading declares reproduces-vs-guards and matches its documented status (an unclassifiable heading FAILS rather than skipping — see R-0461's note) | no | `grammar` |
+| `check_multi_kernel.sh` | 14 assertions bare, 74 with provers, 82 with `MULTI_KERNEL_MUTATE=1` | yes | `multi-kernel` (opt-in — **R-0467**) |
+| `check_vc_bridge_register.sh` | every family *generator* has a register row — **cannot detect a missing family**, which is how H24's shift gap hid | no | `grammar` |
+
+### Mutation coverage: 10 of 10 families KILLED (2026-08-01, this repository)
+
+Every gate in `check_gate_mutation_coverage.sh` detects removal of the property it guards.
+The run was manual — the scheduled job is pinned to `lambdaclass/concrete` and cannot fire
+here (**R-0468**).
+
+This retires the standing suspicion R-0468 recorded ("assume more H22s until the gate has
+run clean once"). It has run clean.
+
+**But note precisely what a KILLED verdict means, because it is narrower than it feels.**
+Family 9 `fact-invalidation` is KILLED — removing fact invalidation turns
+`check_scoped_collector.sh` red — and H23 lives in that exact machinery, untouched. The
+gate guards *staleness* (does a mutated variable drop its facts?); H23 is *composition* (is
+the invariant that supplied the fact itself established?). A fully load-bearing gate,
+adjacent to the bug, blind to it.
+
+> **Mutation coverage proves a gate detects the removal of what it tests. It never shows
+> the gate tests the right thing.** Both H22 and H23 were invisible to gate suites that
+> were green — H22 because its gate was decorative, H23 because no gate had the property
+> in scope at all. The second failure mode is not detectable by mutation testing and needs
+> counterexample fixtures instead, which is what `check_known_wrong_corpus.sh` is for.

@@ -55,10 +55,7 @@ fi
 # retired body sits under its bare `## R-NNNN` heading, its `### Task` stub stays in ROADMAP.md.
 # The roadmap's companion documents (direction, decision log, promotion pipeline, and the archived
 # language scope pending absorption into the specification) cite task IDs under the same rule.
-ARCHIVES="docs/archive/ROADMAP_HISTORY.md docs/archive/ROADMAP_RETIRED_TASKS.md"
-for c in docs/project/ROADMAP_DIRECTION.md docs/project/ROADMAP_DECISIONS.md docs/project/PROMOTION_PIPELINE.md docs/archive/roadmap-language-scope.md; do
-  [ -f "$c" ] && ARCHIVES="$ARCHIVES $c"
-done
+ARCHIVES="docs/archive/ROADMAP_HISTORY.md docs/archive/ROADMAP_RETIRED_TASKS.md docs/project/ROADMAP_DIRECTION.md docs/project/ROADMAP_DECISIONS.md docs/project/PROMOTION_PIPELINE.md docs/archive/roadmap-language-scope.md"
 for a in $ARCHIVES; do
   if [ ! -f "$a" ]; then
     echo "FAIL $a is missing; ROADMAP.md links it"

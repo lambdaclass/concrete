@@ -10,7 +10,7 @@ the diff's relationship to a file it does not touch. Worth opening:
   Concrete/Semantics/IntArith.lean          the single definition of when an operation traps
   docs/verification/KNOWN_HOLES.md                       the ONLY authority on hole status
   docs/verification/VC_BRIDGE_REGISTER.md                which lowering rules are discharged
-  ROADMAP.md "Open holes, owners, acceptance tests"  holes -> owner -> reproduce -> done-when
+  docs/project/ROADMAP_DIRECTION.md "Open holes, owners, acceptance tests"  holes -> owner -> reproduce -> done-when
   Concrete/Proof/ObligationCore.lean        isCurrentForDependents — the reference shape
                                             for composing a status with its inputs
   examples/unsound_hypothesis/              H23 fixture (open hole)

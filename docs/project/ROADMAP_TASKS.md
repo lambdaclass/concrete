@@ -68,7 +68,7 @@ These tasks carry the [development throughput](../../ROADMAP.md#development-thro
 2026-10-22. The measurements behind them, the targets and the dependency order are in that section.
 Pre-push gate selection belongs to R-0513 (exit 2f), so it is not restated here. None of these tasks
 changes what a validation result means. Every result stays bound to its exact SHA under the
-[promotion pipeline](../../ROADMAP.md#promotion-pipeline).
+[promotion pipeline](PROMOTION_PIPELINE.md#promotion-pipeline).
 
 ### Task R-0539
 
@@ -105,7 +105,7 @@ landing tier).
 **Phase:** 1
 
 **Objective:** CI tiers. A landing tier is required for merge, with a target of ≤ 40 min. The mutation
-campaign runs on schedule or dispatch and gates campaign qualification ([stage (c)](../../ROADMAP.md#promotion-pipeline)),
+campaign runs on schedule or dispatch and gates campaign qualification ([stage (c)](PROMOTION_PIPELINE.md#promotion-pipeline)),
 not merges.
 
 **Work:** in progress on branch `ci-tiering`, which edits the workflow and the promotion-pipeline tier
@@ -686,7 +686,7 @@ fixtures and S1 generator coverage meeting its minima. S7's exit later adds link
 paragraph to its semantic clause.
 
 **Semantics decisions (2026-10-21):** the rules this task enforces are now written in their
-canonical homes ([Decisions](../../ROADMAP.md#decisions)): references and scoping in MEMORY_SEMANTICS §15 (REF-6
+canonical homes ([Decisions](ROADMAP_DECISIONS.md#decisions)): references and scoping in MEMORY_SEMANTICS §15 (REF-6
 rewritten: no `let`-bound reference, no assignment to a reference binding, E0302 / E0303, enforced since 2026-10-21;
 constants are values; SCOPE-1 staged behind the renamed pattern binder), evaluation order and
 assignment in STATEMENT_EXPRESSION_MODEL and MEMORY_SEMANTICS §10 (exit 2j), and casts in
@@ -1231,7 +1231,7 @@ regression cases and controls of these tasks transfer here unless the reason ret
 authoritative checker over Core for the whole language, consumed by both the existing lowering and the
 `verified` profile.
 
-**Status (2026-10-19; amended 2026-10-20): planned; queue row 4, alongside R-0511.** The parts V1a's subset exercises proceed with V1a now and are accepted with it once its [prerequisite exits](../../ROADMAP.md#feature-prerequisites) hold; the whole-language rollout starts once row 0's in-flight candidates (batch 2, type-identity, generic-destroy) are accepted on main, implementing the rules as exits 2i – 2k state them, without waiting for row 2's other exits (amended 2026-10-21, [priority decision](../../ROADMAP.md#decisions)). Neither task waits for the other's complete exit; both use the same identities, Core representation, checker implementation and checked-artifact interfaces. The source-tree checker returns `Unit`
+**Status (2026-10-19; amended 2026-10-20): planned; queue row 4, alongside R-0511.** The parts V1a's subset exercises proceed with V1a now and are accepted with it once its [prerequisite exits](../../ROADMAP.md#feature-prerequisites) hold; the whole-language rollout starts once row 0's in-flight candidates (batch 2, type-identity, generic-destroy) are accepted on main, implementing the rules as exits 2i – 2k state them, without waiting for row 2's other exits (amended 2026-10-21, [priority decision](ROADMAP_DECISIONS.md#decisions)). Neither task waits for the other's complete exit; both use the same identities, Core representation, checker implementation and checked-artifact interfaces. The source-tree checker returns `Unit`
 and elaboration rebuilds the program independently, so the program checked is not the program compiled;
 bugs 087 (borrow-block use-after-free), 090 and 092 – 094 lived in that gap, and name-keyed
 environments produced 082, 087, 093, 094 and 096 – 098. The slices prove these rules only as they reach
@@ -1698,6 +1698,46 @@ proof enters V2/V6 through R-0502's layout certificates.
 
 **Exit:** explicit tags are emitted as written; duplicate or out-of-range tags are rejected; a C round
 trip confirms ABI agreement for a `repr`-annotated enum.
+
+### Task R-0553
+
+**Phase:** 1, 2, 4
+
+**Objective:** Compiler totality: every pipeline function provable (no `partial`, `unsafe` or opaque
+definitions). A proof about a compiler pass cannot see inside a `partial` function: Lean compiles it
+to an opaque constant, so a theorem about the pass can only treat it as an unknown. The same holds for
+`unsafe`, `opaque`, `@[implemented_by]` and `@[extern]` declarations. Proving the verified-pipeline
+passes (R-0491 – R-0510, queue rows 3, 4 and 6) therefore needs the functions those passes run to be
+total first, which is why this task sits ahead of them in the queue (row 2, exit 2p).
+
+**Depends on:** nothing. **Blocks:** the pass proofs of R-0491 – R-0510 for each stage it has not yet
+made total.
+
+1. **Step 1, now: the ratchet gate.** `scripts/tests/check_totality_ratchet.sh` (being built on branch
+   `wip/cleanup-totality-gate`) inventories, from the Lean environment rather than by text search,
+   every `partial`, `unsafe`, `opaque`, `implemented_by` or `extern` declaration in the `Concrete.*`
+   modules, and compares it with a committed baseline, `docs/compiler/totality_baseline.tsv`. CI and
+   the pre-push hook fail on any new entry and on any stale entry (a baseline row whose declaration
+   became total or was removed and was not deleted from the baseline), so the count only goes down.
+   The baseline file is the source of truth for the count; this task does not restate it.
+2. **Step 2: convert the baseline's `partial` definitions in batches.** Batches go in pipeline-stage
+   order, closest-to-proven stage first, guided by the inventory in
+   `research/compiler/partial-def-inventory-2026-10.md`. Each definition falls in one of three classes:
+   - *structural*: the recursion is already structural, and the change is often only deleting the
+     keyword;
+   - *measure-based*: the parser, worklists and fixpoints, given a `termination_by` measure and its
+     decreasing proof;
+   - *fuel*: the interpreter, which runs programs that may diverge, takes an explicit fuel argument
+     and reports running out of fuel as its own outcome.
+   Each batch removes its rows from the baseline in the same commit, and the ratchet gate checks that.
+3. **Exit:** the baseline is empty for the proof-relevant pipeline stages (the stages the verified
+   pipeline proves, R-0491 – R-0510). From then on the same gate refuses any non-total declaration in
+   those stages outright, in CI and in the pre-push hook. Extending the refusal to the whole compiler
+   follows later, under this task.
+
+Phase 1 closes on step 1 (exit 2p: the ratchet gate runs in CI and in the pre-push hook with its
+baseline committed); steps 2 and 3 continue through Phases 2 and 4, stage by stage ahead of the pass
+proofs that need them.
 
 ## Area: Standard Library And Core APIs
 
