@@ -60,6 +60,7 @@ areas exist (§8).
 | `modules.md` | `MOD-` | migrated: MOD-1 to MOD-4 (name resolution, visibility, one binding per name, module files) |
 | `syntax.md` | `SYN-` | migrated: SYN-1 to SYN-3 (the grammar, operator precedence, reserved spellings) |
 | `traits.md` | `TRAIT-` | migrated: TRAIT-D1, TRAIT-1 to TRAIT-10 (coherence: one impl per trait and type, no overlap, instance locality, impl targets, one method name per type, unambiguous bound calls, order independence; declared traits, impl conformance, satisfied bounds) |
+| `decisions.md` | `OPEN-` | open: OPEN-1 to OPEN-22 (the owner decisions OD1 to OD22 of ROADMAP exit 2n, stated as questions with no answer encoded) |
 
 **pilot**: the chapter is written in this format and checked by the gate. **stub**: the chapter
 holds only the rules the pilot needed, and the rest of its area migrates later.
@@ -115,6 +116,11 @@ chapter's prefix, written in upper case. A definition's number has a `D` in fron
      - A **refusal** rejects a breaking program with a diagnostic.
      - A **guarantee** is a semantic property with no diagnostic of its own.
      - A **definition** fixes a term that rules use. It is as normative as a rule.
+     - An **open** entry states a language question that only the project owner decides (the
+       owner decisions OD1 – OD22 of ROADMAP exit 2n). It encodes no answer: it has no codes, no
+       examples and no `Enforced by:` names, its `Status:` is `open ODn` and its `Evidence:` is
+       `open`. Its rationale names the rules it bears on and what current main does, which stays
+       provisional until the owner answers; the answer turns it into the rules it decides.
      - A **preservation** statement is one pipeline stage's contract: the relation between its
        input and its output (for example, Mono's output refines its input, with binder modes
        unchanged), stated against the stage boundaries of
@@ -255,6 +261,8 @@ and it is counted in SKIPPED.
 | S9 manifests | Every generated manifest (§5) is byte-equal to its generator's output. |
 | S10 site | The site generator (§4) writes one page per chapter with every entry's anchor and the rule index, `scripts/gen/site_reference.py` writes the reference pages, and `zola build` succeeds on a scratch copy of `site/`. `check_site_generated.sh` keeps both sections generated: no tracked copy, every site build runs both generators first, and every site link resolves. Without `zola` the check fails, unless `SPEC_SKIP_SITE=1` is set outside CI, which counts it as SKIPPED. CI installs the pinned Zola that `book.yml` uses. |
 | S11 restatement | No normative sentence occurs in a Markdown file outside `docs/spec/` (§6). |
+| S12 witnesses | `rule_sites.tsv` is byte-equal to `spec.py inventory`: one row per (refusal, code) with its stages and `Enforced by:` declarations. Every row of an enforced or partial refusal has a negative witness: a spec reject example or a test program that a gate runs (its path is spelled in `scripts/tests/`, `tests/rules/` or a chapter) and that the compiler refuses with that code. A row with none is named in `coverage_allow.tsv` with a reason (`od:ODn`, `R-NNNN`, `bug-NNN` or `unreachable:<why>`), and an allow row whose code gained a witness fails, so the list only shrinks. This is the check that a rule's enforcing site is load-bearing: removing it removes its code from every witness. |
+| S13 one specification | `docs/spec` is the one normative statement of the language. Every Markdown file under `docs/language` is listed in `unabsorbed.tsv` with the chapters that will absorb it; a file not listed is refused, and S3 refuses a row added to the list. Absorbing a document moves its rules into entries and its useful rationale under them, moves tracking material to ROADMAP or KNOWN_HOLES, and deletes the file and its row in one commit. |
 
 Code-to-rule mapping (S6), behaviour (S4) and coverage (S5) are mechanical. The association
 in `Enforced by:` and the placement of a `spec:` comment (S7) are reviewed claims: the gate
@@ -280,6 +288,8 @@ control's own defect message. Failing for some other reason does not satisfy the
 | S9 | a hand edit to a generated manifest |
 | S10 | a chapter missing from the generated site |
 | S11 | a normative sentence copied into another doc |
+| S12 | a rule code with no witness; an allow row for a witnessed code; a hand edit to `rule_sites.tsv` |
+| S13 | a new document under `docs/language` |
 
 ## 4. Website
 

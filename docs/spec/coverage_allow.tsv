@@ -1,0 +1,2 @@
+# Rule codes with no negative witness, each with its reason (check_spec.sh S12). Columns: code, rule, reason
+# (od:ODn, R-NNNN, bug-NNN or unreachable:<why>). A row whose code gains a witness fails, so the list only shrinks.

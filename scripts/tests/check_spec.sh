@@ -11,6 +11,9 @@
 #   S7 sites       `spec: ID` comments at every Enforced by: declaration; names resolve in Lean
 #   S9 manifests   tests/rules/exit_2i.tsv == `spec.py manifest exit_2i`
 #   S10 site       the generated spec pages build with zola
+#   S12 witnesses  docs/spec/rule_sites.tsv (rule, code, enforcing sites) is generated; every code of an
+#                  enforced refusal is reported for some program a gate runs, or coverage_allow.tsv says why not
+#   S13 one spec   no document under docs/language beyond those unabsorbed.tsv lists (shrink-only)
 #
 # Fails closed: zero entries or examples is a failure, a missing compiler / Lean / zola / history base
 # is a failure, and the only skips are SPEC_SKIP_SITE=1 / SPEC_BASE=none outside CI (counted SKIPPED).
@@ -78,6 +81,10 @@ if [ -s "$TMP/names.lean" ]; then
   lake env lean "$TMP/names.lean" > "$TMP/names.out" 2>&1
   step lean-result --out "$TMP/names.out" --count "$TMP/names.lean.count"
 else no "S7: no Lean name file was generated"; fi
+
+echo ""
+echo "=== S12: every rule code has a negative witness (docs/spec/rule_sites.tsv, coverage_allow.tsv) ==="
+step code-coverage --compiler "$CC" --jobs "$JOBS" --work "$TMP/s12" --out "$TMP/s12.observed"
 
 echo ""
 echo "=== S9: generated manifests ==="
@@ -212,6 +219,21 @@ fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("- Enforced by: Concrete.checkF
   && { "${SPECPY[@]}" sites "${SP[@]}" --out "$TMP/n7c.lean" > /dev/null 2>&1
        lake env lean "$TMP/n7c.lean" > "$TMP/n7c.out" 2>&1
        control "N7c: an Enforced by: name that does not resolve in Lean" S7 "Concrete.noSuchCheckFn does not resolve" -- lean-result --out "$TMP/n7c.out" --count "$TMP/n7c.lean.count"; }
+
+# S12: a rule code whose only witness is gone; an allow row naming a code that is witnessed
+if [ -s "$TMP/s12.observed" ]; then
+  grep -v '^E0310'$'\t' "$TMP/s12.observed" > "$TMP/s12.n1"
+  control "N12a: a rule code with no negative witness" S12 "STMT-7 names E0310" -- code-coverage --observed "$TMP/s12.n1"
+  mkdir -p "$TMP/n12/docs/spec"; cp -R docs/spec/. "$TMP/n12/docs/spec/"
+  printf 'E0310\tSTMT-7\tunreachable:planted\n' >> "$TMP/n12/docs/spec/coverage_allow.tsv"
+  control "N12b: an allow row for a witnessed code" S12 "E0310 STMT-7 is allow-listed" -- code-coverage --observed "$TMP/s12.observed" --root "$TMP/n12" --spec "$TMP/n12/docs/spec"
+else no "N12: S12 recorded no observation to replay"; fi
+# S12: a hand edit to the generated inventory; S13: a new document under docs/language
+mkdir -p "$TMP/n13/docs/spec" "$TMP/n13/docs/language"; cp -R docs/spec/. "$TMP/n13/docs/spec/"; cp -R docs/language/. "$TMP/n13/docs/language/"
+printf 'planted\n' >> "$TMP/n13/docs/spec/rule_sites.tsv"
+control "N12c: a hand edit to the generated rule-site inventory" S12 "rule_sites.tsv differs" -- inventory --check --root "$TMP/n13" --spec "$TMP/n13/docs/spec"
+printf '# A new rule document\n' > "$TMP/n13/docs/language/NEW_RULES.md"
+control "N13: a new document under docs/language" S13 "NEW_RULES.md is a new document" -- lint --root "$TMP/n13" --spec "$TMP/n13/docs/spec"
 
 # S9: a hand edit to the generated manifest
 mkdir -p "$TMP/nroot/tests/rules"; cp tests/rules/exit_2i.tsv "$TMP/nroot/tests/rules/"

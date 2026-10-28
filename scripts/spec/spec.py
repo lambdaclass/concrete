@@ -23,7 +23,10 @@ import argparse, concurrent.futures, glob, hashlib, json, os, re, subprocess, sy
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 REPO_URL = "https://github.com/unbalancedparentheses/concrete2/blob/main/"
 STAGES = {"parse", "resolve", "check", "elab", "mono", "post-mono", "core-check", "ssa-verify", "link"}
-KINDS = {"refusal", "guarantee", "definition", "preservation"}
+KINDS = {"refusal", "guarantee", "definition", "preservation", "open"}
+# An `open` entry records a language question only the project owner decides (ROADMAP "Owner
+# decisions", OD1 - OD22). It states the question, encodes no answer, and has Status `open ODn`.
+OD_RE = re.compile(r"^OD[0-9]+$")
 FIELDS = ["Kind", "Uses", "Codes", "Status", "Enforced by", "Semantics", "Obligation", "Evidence"]
 CODE_CLASSES = ("rule", "internal", "tooling", "retired")  # plus unmigrated:<chapter>
 # Generated acceptance manifests (README §5): name -> (output path, chapters whose tables feed it)
@@ -304,6 +307,9 @@ def read_tsv(path):
     return rows
 
 def tracking_exists(t, root):
+    if OD_RE.match(t):
+        p = os.path.join(root, "ROADMAP.md")
+        return os.path.exists(p) and re.search(r"^\| " + re.escape(t) + r" \|", open(p, encoding="utf-8").read(), re.M) is not None
     if t.startswith("R-"):
         for f in ("ROADMAP.md", "docs/project/ROADMAP_TASKS.md", "docs/project/ROADMAP_BACKLOG.md"):
             p = os.path.join(root, f)
@@ -334,15 +340,19 @@ def check_format(spec, root):
             if n != 1 or not ends:
                 fail("S1", f"{where}: the normative statement must be exactly one sentence (found {n})"); s1 += 1
         for f in FIELDS:
-            if f not in e.fields and not (f == "Enforced by" and e.status()[0] == "pending"):
+            if f not in e.fields and not (f == "Enforced by" and e.status()[0] in ("pending", "open")):
                 fail("S1", f"{where}: missing field '{f}'"); s1 += 1
         if e.kind and e.kind not in KINDS:
             fail("S1", f"{where}: unknown Kind '{e.kind}'"); s1 += 1
         if (e.id.split("-")[1].startswith("D")) != (e.kind == "definition"):
             fail("S1", f"{where}: definitions, and only definitions, have a D-numbered ID"); s1 += 1
         st, tr = e.status()
-        if st not in ("enforced", "partial", "pending") or (st == "enforced") != (tr is None):
+        if st not in ("enforced", "partial", "pending", "open") or (st == "enforced") != (tr is None):
             fail("S1", f"{where}: malformed Status '{e.fields.get('Status','')}'"); s1 += 1
+        if (e.kind == "open") != (st == "open") or (st == "open" and not OD_RE.match(tr or "")):
+            fail("S1", f"{where}: an open entry, and only an open entry, has Status `open ODn`"); s1 += 1
+        if e.kind == "open" and e.examples:
+            fail("S1", f"{where}: an open entry has no examples (it encodes no answer)"); s1 += 1
         codes = e.codes()
         if e.kind == "refusal" and not codes:
             fail("S1", f"{where}: a refusal names at least one code"); s1 += 1
@@ -355,7 +365,7 @@ def check_format(spec, root):
                 for sg in stages:
                     if sg not in STAGES: fail("S1", f"{where}: unknown stage '{sg}'"); s1 += 1
         ev = e.fields.get("Evidence", "")
-        good_ev = (ev == "by-users") if e.kind == "definition" else (
+        good_ev = (ev == "by-users") if e.kind == "definition" else (ev == "open") if e.kind == "open" else (
             ev == "tested" or re.fullmatch(r"(proved|trusted): \S+", ev) is not None)
         if not good_ev:
             fail("S1", f"{where}: malformed Evidence '{ev}'"); s1 += 1
@@ -433,7 +443,7 @@ def check_tracking(spec, root):
         for t in ts:
             if not t: continue
             seen.add(t)
-            if not TRACK_RE.match(t) or not tracking_exists(t, root):
+            if not (TRACK_RE.match(t) or OD_RE.match(t)) or not tracking_exists(t, root):
                 fail("S8", f"{e.id}: tracking ID '{t}' does not exist"); bad += 1
     if bad == 0:
         ok(f"S8 tracking: {len(seen)} tracking IDs exist ({', '.join(sorted(seen))})")
@@ -852,7 +862,7 @@ def check_sites(spec, src_dir, lean_out):
             cands = decls.get(n.split(".")[-1], [])
             if not any(re.search(r"spec: " + re.escape(e.id) + r"\b", t) for _, _, _, t in cands):
                 fail("S7", f"{e.id}: Semantics declaration {n} has no `spec: {e.id}` comment" + ("" if cands else " (declaration not found)")); bad += 1
-        if e.status()[0] == "pending": continue
+        if e.status()[0] in ("pending", "open"): continue
         en = e.names("Enforced by")
         if not en:
             fail("S7", f"{e.id}: no Enforced by: names"); bad += 1
@@ -1120,6 +1130,43 @@ def check_code_coverage(spec, root, seen, n):
     print(f"  S12 witnesses: {covered} rule codes witnessed, {allowed} allow-listed, {missing} missing, over {n} programs")
     if missing == 0: ok(f"S12 witnesses: every enforced rule code has a negative witness or a stated reason")
 
+# ---------------------------------------------------------------------------------------------
+# S13 one specification: docs/language is absorbed into docs/spec and emptied
+# ---------------------------------------------------------------------------------------------
+UNABSORBED_PATH = "docs/spec/unabsorbed.tsv"
+
+def check_absorbed(root):
+    """Every Markdown file under docs/language is a document not yet absorbed into this spec, and is
+    listed in unabsorbed.tsv with the chapters that will take it; a new file there is refused (the
+    spec is the one normative document; S3 makes the list shrink-only)."""
+    rows = read_tsv(os.path.join(root, UNABSORBED_PATH))
+    if rows is None:
+        fail("S13", f"{UNABSORBED_PATH} is missing"); return
+    listed, bad = {}, 0
+    for r in rows:
+        if len(r) != 2: fail("S13", f"{UNABSORBED_PATH}: row {r} is not (path, chapters)"); bad += 1; continue
+        if r[0] in listed: fail("S13", f"{UNABSORBED_PATH}: {r[0]} listed twice"); bad += 1
+        listed[r[0]] = r[1]
+        if not os.path.exists(os.path.join(root, r[0])):
+            fail("S13", f"{UNABSORBED_PATH}: {r[0]} no longer exists (remove its row in the commit that deletes it)"); bad += 1
+    for f in sorted(glob.glob(os.path.join(root, "docs/language/**/*.md"), recursive=True)):
+        rel = os.path.relpath(f, root)
+        if rel not in listed:
+            fail("S13", f"{rel} is a new document under docs/language: the language is stated in docs/spec (add an entry or a rationale there)"); bad += 1
+    if bad == 0:
+        ok(f"S13 one specification: {len(listed)} docs/language files still to absorb, none new")
+
+def check_absorbed_history(root, base):
+    try:
+        old = subprocess.run(["git", "-C", root, "show", f"{base}:{UNABSORBED_PATH}"], capture_output=True, text=True)
+    except Exception:
+        return
+    if old.returncode != 0: return
+    old_paths = {l.split("\t")[0] for l in old.stdout.split("\n") if l.strip() and not l.startswith("#")}
+    for r in read_tsv(os.path.join(root, UNABSORBED_PATH)) or []:
+        if r and r[0] not in old_paths:
+            fail("S3", f"{UNABSORBED_PATH}: {r[0]} was added (the list only shrinks)")
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd")
@@ -1131,6 +1178,7 @@ def main():
     ap.add_argument("--compiler", default=os.path.join(ROOT, ".lake/build/bin/concrete"))
     ap.add_argument("--jobs", type=int, default=8)
     ap.add_argument("--work")
+    ap.add_argument("--observed")
     ap.add_argument("--ledger")
     ap.add_argument("--base")
     ap.add_argument("--base-ids")
@@ -1147,6 +1195,7 @@ def main():
     if c == "lint":
         check_format(spec, a.root); check_registry(spec); check_coverage(spec); check_tracking(spec, a.root)
         check_restatements(spec, a.root, a.scan_root)
+        check_inventory(spec, a.root); check_absorbed(a.root)
     elif c == "register":
         # append-only: add a row for every chapter key ids.tsv lacks; never edits an existing row
         path = os.path.join(spec.dir, "ids.tsv")
@@ -1176,6 +1225,7 @@ def main():
         check_restatements(spec, a.root, a.scan_root)
     elif c == "history":
         check_history(spec, a.base, a.base_ids, a.base_codes, a.base_spec)
+        if a.base and a.base != "ctl": check_absorbed_history(a.root, a.base)
     elif c == "run-examples":
         run_examples(spec, a.compiler, a.jobs, a.work, a.only)
     elif c == "codes":
@@ -1201,7 +1251,12 @@ def main():
         else:
             open(os.path.join(a.root, INVENTORY_PATH) if a.out is None else a.out, "w").write(gen_inventory(spec))
     elif c == "code-coverage":
-        seen, n = observe_codes(spec, a.compiler, a.jobs, a.work, a.root)
+        if a.observed:   # a recorded observation (the negative controls replay one without compiling)
+            seen, n = {}, 0
+            for r in read_tsv(a.observed) or []:
+                seen[r[0]] = [r[2]]; n = max(n, int(r[1]))
+        else:
+            seen, n = observe_codes(spec, a.compiler, a.jobs, a.work or os.path.join("/tmp", "spec-s12"), a.root)
         if a.out:
             with open(a.out, "w") as f:
                 for k in sorted(seen): f.write(f"{k}\t{len(seen[k])}\t{seen[k][0]}\n")
