@@ -1031,10 +1031,11 @@ INVENTORY_HEADER = """# GENERATED from docs/spec/*.md by `python3 scripts/spec/s
 """
 ALLOW_REASON_RE = re.compile(r"^(od:OD[0-9]+|R-[0-9]{4}|bug-[0-9]{3}|unreachable:\S.*)$")
 WITNESS_GLOBS = ["tests/**/*.con"]
-# A program is a witness only when a gate runs it: its repository path, or its path under
-# tests/programs as run_tests.sh spells it (`$TESTDIR/<path>`), occurs on a line of one of these files
-# that is not a comment.
-WITNESS_RUNNERS = ["scripts/tests/*.sh", "scripts/tests/lib/*.sh", "tests/rules/*.tsv", "docs/spec/*.md"]
+# A program is a witness only when it is a negative leg of a structured runner: the first argument of
+# a `run_err` invocation in run_tests.sh (the leg that fails when the program stops being refused),
+# or a reject row of a chapter's conformance table (checked by check_rules_2i.sh). Prose, comments
+# and other scripts do not count. The bug-corpus audit reads run_tests.sh the same way.
+RUN_ERR_RE = re.compile(r'^\s*run_err\s+"([^"]+)"', re.M)
 
 def inventory_rows(spec):
     rows = []
@@ -1066,9 +1067,15 @@ def observe_codes(spec, cc, jobs, workdir, root):
     """Compile every negative-witness candidate (test programs and the spec's non-project reject
     examples) and record each diagnostic code each one reports: {code: [witness, ...]}."""
     os.makedirs(workdir, exist_ok=True)
-    runners = "\n".join(l for g in WITNESS_RUNNERS for p in glob.glob(os.path.join(root, g))
-                         for l in open(p, encoding="utf-8", errors="replace").read().split("\n")
-                         if not l.lstrip().startswith(("#", "<!--")))
+    legs = set()
+    rt = os.path.join(root, "scripts/tests/run_tests.sh")
+    if os.path.exists(rt):
+        for m in RUN_ERR_RE.finditer(open(rt, encoding="utf-8", errors="replace").read()):
+            legs.add(os.path.normpath(m.group(1).replace("$TESTDIR/", "tests/programs/")))
+    for e in spec.entries:
+        for r in e.rows:
+            if r and r[1].startswith("reject:"):
+                legs.add(os.path.normpath(r[0].strip("`")))
     def in_project(f):
         d = os.path.dirname(f)
         while len(d) > len(root):
@@ -1076,8 +1083,7 @@ def observe_codes(spec, cc, jobs, workdir, root):
             d = os.path.dirname(d)
         return False
     def referenced(rel):
-        keys = [rel] + (["$TESTDIR/" + rel[len("tests/programs/"):]] if rel.startswith("tests/programs/") else [])
-        return any(re.search(re.escape(k) + r"(?![\w./-])", runners) for k in keys)
+        return os.path.normpath(rel) in legs
     srcs = []
     for g in WITNESS_GLOBS:
         for f in sorted(glob.glob(os.path.join(root, g), recursive=True)):
