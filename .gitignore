@@ -22,6 +22,8 @@ build/
 
 # Compiled example binaries (extensionless, built by `concrete build`)
 examples/grep/cgrep
+# Generated benchmark input (examples/grep/gen_bench_testdata.py, run by bench.sh)
+examples/grep/bench_testdata.txt
 examples/verify/conhash
 examples/project/project
 examples/base64_cli/base64_cli

@@ -3,7 +3,7 @@
 # bench.sh -- benchmark Concrete cgrep vs C cgrep_c
 #
 # Steps:
-#   1. Generate a 100k-line test file with mixed text
+#   1. Generate a 100k-line test file with mixed text (deterministic; not tracked)
 #   2. Compile the C version with -O2
 #   3. Build the Concrete version with `concrete build`
 #   4. Run both on the same search pattern 5 times each
@@ -22,23 +22,23 @@ PATTERN="error"
 RUNS=5
 
 # ── 1. Generate test file ────────────────────────────────────────────
-echo "==> Generating $TESTFILE (100000 lines)..."
-if [ ! -f "$TESTFILE" ]; then
-    python3 -c "
-import random, string
-words = ['the', 'quick', 'brown', 'fox', 'error', 'warning', 'debug',
-         'info', 'jumps', 'over', 'lazy', 'dog', 'connection', 'timeout',
-         'ERROR', 'failed', 'success', 'retry', 'null', 'pointer',
-         'exception', 'traceback', 'segfault', 'ok', 'result']
-with open('$TESTFILE', 'w') as f:
-    for _ in range(100000):
-        n = random.randint(4, 15)
-        line = ' '.join(random.choice(words) for _ in range(n))
-        f.write(line + '\n')
-"
-    echo "    done."
+# The input is generated, not tracked (it is about 6 MB): gen_bench_testdata.py with a fixed seed
+# writes byte-identical data on every machine, pinned by its SHA-256 below. A file left by an older,
+# unseeded generator does not match and is regenerated, so every run measures the same bytes.
+TESTFILE_SHA256="54d077a08cabb3dd17fd5d00c0a0682abbb9697aa115f08a4d7b1aea3d2cf366"
+sha256_of() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
+echo "==> Generating $TESTFILE (100000 lines, fixed seed)..."
+if [ -f "$TESTFILE" ] && [ "$(sha256_of "$TESTFILE")" = "$TESTFILE_SHA256" ]; then
+    echo "    (already exists and matches, skipping)"
 else
-    echo "    (already exists, skipping)"
+    python3 gen_bench_testdata.py "$TESTFILE"
+    got="$(sha256_of "$TESTFILE")"
+    if [ "$got" != "$TESTFILE_SHA256" ]; then
+        echo "    ERROR: generated $TESTFILE has SHA-256 $got, expected $TESTFILE_SHA256" >&2
+        echo "    (the generator is no longer deterministic here; fix it before comparing timings)" >&2
+        exit 1
+    fi
+    echo "    done."
 fi
 
 # ── 2. Compile C version ─────────────────────────────────────────────
