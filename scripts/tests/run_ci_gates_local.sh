@@ -804,6 +804,7 @@ else
       if _why="$(gate_deferral "$cmd" "$WORKFLOW")"; then
         _defer "$cmd"; echo "  DEFERRED $cmd (not judged on this host; CI decides)"
       else
+        mv -f "$FAILLOG_DIR/$(faillog_name "$cmd").deferred.log" "$FAILLOG_DIR/$(faillog_name "$cmd").pool.log" 2>/dev/null
         FAIL=$((FAIL+1)); FAILED="$FAILED\n  FAIL $cmd ($_why)"; echo "  FAIL $cmd -- $_why"
       fi
       continue

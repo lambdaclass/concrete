@@ -101,6 +101,11 @@ gate_deferral() {
     echo "exit $GATE_DEFERRED_RC (not judged here) from a gate host_tools.sh does not declare judged on CI"
     return 1
   fi
+  case "${row#*|}" in
+    ci-counted) ;;
+    *) echo "exit $GATE_DEFERRED_RC (not judged here), but ${row%%|*} declares judged_on '${row#*|}', which this file does not define"
+       return 1 ;;
+  esac
   delegated_gate_step "${row%%|*}" "$wf" >/dev/null && return 0
   echo "exit $GATE_DEFERRED_RC (not judged here), but ${row%%|*} is not an unconditional CI step of $wf: nothing would judge it"
   return 1

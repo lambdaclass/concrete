@@ -177,6 +177,12 @@ comp && printf 'bash scripts/tests/check_x.sh\n' > "$SB/deferred" && ppr_write "
   && grep -qx 'deferred_gate=bash scripts/tests/check_x.sh' "$REC" && ppr_check "$REC" "$SB/comp"; } \
   && ok "a run with a deferral is recorded pass-deferred, never pass, names the gate, and is reusable" \
   || no "deferral record: $(grep -E '^(status|deferred_gate)=' "$REC" | tr '\n' ' ') ($PPR_REASON)"
+grep -v '^deferred_gate=' "$REC" > "$SB/rec.unnamed"
+ppr_check "$SB/rec.unnamed" "$SB/comp"; [ "$PPR_REASON" = "record_deferral_unnamed" ] \
+  && ok "a pass-deferred record that names no gate -> no reuse" || no "an unnamed deferral was reused ($PPR_REASON)"
+sed 's/^status=pass-deferred$/status=pass/' "$REC" > "$SB/rec.passdef"
+ppr_check "$SB/rec.passdef" "$SB/comp"; [ "$PPR_REASON" = "record_pass_with_deferral" ] \
+  && ok "a record that says pass but lists a deferred gate -> no reuse" || no "a pass with a deferral was reused ($PPR_REASON)"
 comp && ppr_write "$REC" "$SB/comp"
 grep -v '^binary=' "$REC" > "$SB/rec.partial"
 ppr_check "$SB/rec.partial" "$SB/comp" ; case "$PPR_REASON" in *binary*) ok "record missing a component -> no reuse" ;;

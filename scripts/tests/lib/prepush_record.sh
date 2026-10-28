@@ -179,6 +179,12 @@ ppr_check() {
   # COMPLETE, PASSED, OURS — or nothing. `complete=1` is written last, so a truncated write fails here.
   [ "$(tail -n 1 "$rec")" = "complete=1" ] || { PPR_REASON="record_incomplete"; return 1; }
   grep -qxE "status=(pass|pass-deferred)" "$rec" || { PPR_REASON="record_not_a_pass"; return 1; }
+  # pass-deferred names what it deferred, and pass defers nothing: either mismatch is not a record.
+  if grep -qx "status=pass-deferred" "$rec"; then
+    grep -q '^deferred_gate=.' "$rec" || { PPR_REASON="record_deferral_unnamed"; return 1; }
+  elif grep -q '^deferred_gate=' "$rec"; then
+    PPR_REASON="record_pass_with_deferral"; return 1
+  fi
   grep -qx "format=$PPR_FORMAT" "$rec" || { PPR_REASON="record_format_mismatch"; return 1; }
   while IFS= read -r line; do
     k="${line%%=*}"; v="${line#*=}"
