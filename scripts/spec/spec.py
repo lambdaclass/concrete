@@ -1020,7 +1020,11 @@ INVENTORY_HEADER = """# GENERATED from docs/spec/*.md by `python3 scripts/spec/s
 # with a reason. Columns: rule, status, code, stages, enforced_by.
 """
 ALLOW_REASON_RE = re.compile(r"^(od:OD[0-9]+|R-[0-9]{4}|bug-[0-9]{3}|unreachable:\S.*)$")
-WITNESS_GLOBS = ["tests/programs/*.con", "tests/regressions/*/*.con", "tests/invalid_programs/**/*.con"]
+WITNESS_GLOBS = ["tests/**/*.con"]
+# A program is a witness only when a gate runs it: its path (or, for a single-directory fixture,
+# `<dir>/<file>`, or its basename) is spelled in one of these files, as run_tests.sh's run_err legs
+# and the conformance tables spell theirs.
+WITNESS_RUNNERS = ["scripts/tests/*.sh", "scripts/tests/lib/*.sh", "tests/rules/*.tsv", "docs/spec/*.md"]
 
 def inventory_rows(spec):
     rows = []
@@ -1052,12 +1056,25 @@ def observe_codes(spec, cc, jobs, workdir, root):
     """Compile every negative-witness candidate (test programs and the spec's non-project reject
     examples) and record each diagnostic code each one reports: {code: [witness, ...]}."""
     os.makedirs(workdir, exist_ok=True)
+    runners = "\n".join(open(p, encoding="utf-8", errors="replace").read()
+                         for g in WITNESS_RUNNERS for p in glob.glob(os.path.join(root, g)))
+    def in_project(f):
+        d = os.path.dirname(f)
+        while len(d) > len(root):
+            if os.path.exists(os.path.join(d, "Concrete.toml")): return True
+            d = os.path.dirname(d)
+        return False
+    def referenced(rel):
+        parts = rel.split("/")
+        keys = [rel, "/".join(parts[-2:])] + ([parts[-1]] if not parts[-1] in ("main.con", "mod.con", "repro.con") else [])
+        return any(k in runners for k in keys)
     srcs = []
     for g in WITNESS_GLOBS:
         for f in sorted(glob.glob(os.path.join(root, g), recursive=True)):
-            # a project's sources compile only as a package; single files only
-            if not os.path.exists(os.path.join(os.path.dirname(f), "Concrete.toml")):
-                srcs.append((os.path.relpath(f, root), f))
+            rel = os.path.relpath(f, root)
+            # a project's sources compile only as a package; single files (and their `mod x;` files) only
+            if not in_project(f) and referenced(rel):
+                srcs.append((rel, f))
     for i, x in enumerate(x for e in spec.entries for x in e.examples
                           if not x.errors and x.verdict == "reject" and not x.attrs.get("project")):
         p = os.path.join(workdir, f"rej{i:04d}.con")

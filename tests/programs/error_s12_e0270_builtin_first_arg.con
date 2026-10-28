@@ -1,0 +1,5 @@
+// S12 witness (E0270): the spec names E0270 for a rule, and this program is refused with it.
+fn main() -> Int {
+    let n: Int = vec_len(5);
+    return 42;
+}

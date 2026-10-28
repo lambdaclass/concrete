@@ -1,0 +1,9 @@
+// S12 witness (E0304): the spec names E0304 for a rule, and this program is refused with it.
+enum E { A { x: Int }, B }
+fn main() -> Int {
+    let e: E = E::A { x: 42 };
+    match e {
+        E::A { y: v } => { return v; },
+        E::B => { return 1; },
+    }
+}

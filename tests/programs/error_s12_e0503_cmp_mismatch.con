@@ -1,0 +1,6 @@
+// S12 witness (E0503): the spec names E0503 for a rule, and this program is refused with it.
+fn main() -> Int {
+    let a: i32 = 1;
+    let b: bool = a < true;
+    return 42;
+}

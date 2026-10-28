@@ -1,0 +1,5 @@
+// S12 witness (E0124, MOD-4): a.con holds two modules, not one module body.
+mod a;
+fn main() -> Int {
+    return 42;
+}

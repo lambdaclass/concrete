@@ -1,0 +1,3 @@
+// S12 witness (E0106): the spec names E0106 for a rule, and this program is refused with it.
+struct Copy S { a: Int }
+fn main() -> Int { return S::nope(); }

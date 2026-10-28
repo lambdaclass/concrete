@@ -1,0 +1,6 @@
+// S12 witness (E0272): the spec names E0272 for a rule, and this program is refused with it.
+fn main() -> Int {
+    let x: Int = 1;
+    destroy(x);
+    return 42;
+}

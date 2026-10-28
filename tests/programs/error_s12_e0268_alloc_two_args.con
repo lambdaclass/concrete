@@ -1,0 +1,5 @@
+// S12 witness (E0268): the spec names E0268 for a rule, and this program is refused with it.
+fn main() with(Alloc) -> Int {
+    let h: Heap<Int> = alloc(1, 2);
+    return 42;
+}

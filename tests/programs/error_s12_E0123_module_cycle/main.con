@@ -1,0 +1,5 @@
+// S12 witness (E0123, MOD-4): a.con declares `mod main;`, so main.con would be loaded twice.
+mod a;
+fn main() -> Int {
+    return a::f();
+}

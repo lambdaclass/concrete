@@ -1,0 +1,6 @@
+mod x {
+    pub fn f() -> Int { return 1; }
+}
+mod y {
+    pub fn g() -> Int { return 2; }
+}

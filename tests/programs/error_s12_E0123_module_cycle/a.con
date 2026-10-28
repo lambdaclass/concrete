@@ -1,0 +1,4 @@
+mod main;
+pub fn f() -> Int {
+    return 42;
+}

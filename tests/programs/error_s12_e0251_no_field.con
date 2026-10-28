@@ -1,0 +1,6 @@
+// S12 witness (E0251): the spec names E0251 for a rule, and this program is refused with it.
+struct Copy S { a: Int }
+fn main() -> Int {
+    let s: S = S { a: 1 };
+    return s.b;
+}

@@ -1,0 +1,6 @@
+// S12 witness (E0505): the spec names E0505 for a rule, and this program is refused with it.
+fn main() -> Int {
+    let a: Int = 1;
+    let b: bool = a && true;
+    return 42;
+}

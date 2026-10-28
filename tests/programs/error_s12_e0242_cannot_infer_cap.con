@@ -1,0 +1,3 @@
+// S12 witness (E0242): the spec names E0242 for a rule, and this program is refused with it.
+fn g<cap C>() with(C) -> Int { return 42; }
+fn main() -> Int { return g(); }

@@ -1,0 +1,3 @@
+// S12 witness (E0112): the spec names E0112 for a rule, and this program is refused with it.
+type A = A;
+fn main() -> Int { return 42; }

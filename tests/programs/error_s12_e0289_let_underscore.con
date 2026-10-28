@@ -1,0 +1,5 @@
+// S12 witness (E0289): the spec names E0289 for a rule, and this program is refused with it.
+fn main() -> Int {
+    let _ = 5;
+    return 42;
+}
