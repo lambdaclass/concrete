@@ -76,15 +76,15 @@ host_gate_judged_on() {
 }
 
 _host_deferred_row() { # cmd -> the row whose gate <cmd> INVOKES
-  # The command must BE the gate, as delegated_gate_step reads a step: optional VAR=value prefixes,
-  # bash/python3/sh or ./, the gate's path, then plain arguments. A gate named only as an argument of
+  # The command must BE the gate: bash/python3/sh or ./, the gate's path, then plain arguments. No
+  # VAR=value prefix: BASH_ENV or ENV would run a startup file that can exit 77 before the gate does. A gate named only as an argument of
   # another command, or inside a pipeline, list or substitution, matches no row: that command's exit
   # 77 is not the declared gate's.
   local cmd="$1" row script
   # Anything that could make the command more than one plain invocation, anywhere in it (prefixes
   # included: `X=x;(exit 77);# ...` is a list), or any line break, or a comment.
   case "$cmd" in *[$'\n\r''|;&<>`$()#\\{}']*) return 1 ;; esac
-  while [[ "$cmd" =~ ^[A-Z_][A-Z0-9_]*=[^[:space:]]+[[:space:]]+(.*)$ ]]; do cmd="${BASH_REMATCH[1]}"; done
+  [[ "$cmd" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]] && return 1
   if [[ "$cmd" =~ ^(bash|python3|sh)[[:space:]]+(.*)$ ]]; then cmd="${BASH_REMATCH[2]}"; fi
   cmd="${cmd#./}"
   script="${cmd%%[[:space:]]*}"

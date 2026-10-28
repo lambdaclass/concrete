@@ -178,6 +178,7 @@ ppr_check() {
   [ -s "$comp" ] || { PPR_REASON="no_components"; return 1; }
   # COMPLETE, PASSED, OURS — or nothing. `complete=1` is written last, so a truncated write fails here.
   [ "$(tail -n 1 "$rec")" = "complete=1" ] || { PPR_REASON="record_incomplete"; return 1; }
+  [ "$(grep -c '^status=' "$rec")" = 1 ] || { PPR_REASON="record_status_not_unique"; return 1; }
   grep -qxE "status=(pass|pass-deferred)" "$rec" || { PPR_REASON="record_not_a_pass"; return 1; }
   # pass-deferred names what it deferred, and pass defers nothing: either mismatch is not a record.
   if grep -qx "status=pass-deferred" "$rec"; then

@@ -180,6 +180,9 @@ comp && printf 'bash scripts/tests/check_x.sh\n' > "$SB/deferred" && ppr_write "
 grep -v '^deferred_gate=' "$REC" > "$SB/rec.unnamed"
 ppr_check "$SB/rec.unnamed" "$SB/comp"; [ "$PPR_REASON" = "record_deferral_unnamed" ] \
   && ok "a pass-deferred record that names no gate -> no reuse" || no "an unnamed deferral was reused ($PPR_REASON)"
+sed 's/^status=pass-deferred$/status=pass\nstatus=pass-deferred/' "$REC" > "$SB/rec.twostatus"
+ppr_check "$SB/rec.twostatus" "$SB/comp"; [ "$PPR_REASON" = "record_status_not_unique" ] \
+  && ok "a record with two status lines -> no reuse" || no "a record with two statuses was reused ($PPR_REASON)"
 sed 's/^status=pass-deferred$/status=pass/' "$REC" > "$SB/rec.passdef"
 ppr_check "$SB/rec.passdef" "$SB/comp"; [ "$PPR_REASON" = "record_pass_with_deferral" ] \
   && ok "a record that says pass but lists a deferred gate -> no reuse" || no "a pass with a deferral was reused ($PPR_REASON)"

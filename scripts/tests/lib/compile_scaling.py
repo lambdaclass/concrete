@@ -720,6 +720,9 @@ def run_shape(runner, b, shape, sizes, modes, attempts, wall_judged=True):
         # it alone with twice the time) is over its budget by more than the ceiling factor: neither
         # is retried again.
         hard = bool(bad) or any(v in ("FAIL-HB", "FAIL-INSTR") for v, _ in verdicts)
+        # A catastrophic overrun on a host that cannot count (bug 315) is beyond any load, so a later,
+        # faster attempt must not turn it into NOT-JUDGED: it stands like a refused compile.
+        hard = hard or any(v == "FAIL" and "(catastrophic:" in t for v, t in verdicts)
         if not wall_fail or hard or attempt == attempts:
             return verdicts, attempt
     return verdicts, attempts
