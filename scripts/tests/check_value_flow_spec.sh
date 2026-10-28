@@ -19,7 +19,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 AST="Concrete/Frontend/AST.lean"
-SPEC="docs/spec/ownership.md"   # OWN-15; was docs/language/VALUE_FLOW_SPEC.md (now its design record)
+SPEC="docs/spec/ownership.md"   # OWN-15 (absorbed docs/language/VALUE_FLOW_SPEC.md, deleted)
 [ -f "$AST" ] || { echo "error: $AST missing" >&2; exit 2; }
 [ -f "$SPEC" ] || { echo "error: $SPEC missing — the value-flow tables of OWN-15 (ROADMAP 13c)" >&2; exit 1; }
 

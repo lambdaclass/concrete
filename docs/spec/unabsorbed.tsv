@@ -47,6 +47,5 @@ docs/language/TWO_AXIS_SAFETY.md	trusted
 docs/language/TYPE_ALIASES.md	types
 docs/language/UNITS_OF_MEASURE.md	types
 docs/language/VALIDATED_WRAPPERS.md	types
-docs/language/VALUE_FLOW_SPEC.md	ownership
 docs/language/VALUE_MODEL.md	types,references
 docs/language/VISIBILITY_AND_MODULE_HYGIENE.md	modules,types

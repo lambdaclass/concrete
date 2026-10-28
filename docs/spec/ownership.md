@@ -890,6 +890,13 @@ and fails until each one has a row here, and its gate name, where there is one, 
 fixture. Since the 2026-07-06 refactor, `checkExpr` decides consumption centrally by mode.
 `callArg` is confined to argument checking, and the gate pins its use-site count.
 
+The tables were introduced under ROADMAP 13c, the prevention program after the H13 – H17 sweep,
+which named three failure classes, each with its gate: **discard** (a value vanishes,
+`check_linear_discard.sh`), **conservation** (a value duplicates or aliases,
+`check_linear_conservation.sh`) and **scope** (a value falls out of nested control flow,
+`check_linear_nested_scope.sh`). The cross-cutting ruling H17 (2026-07-05) made parameters owned
+locals, by-value `self` and `Destroy` bodies included.
+
 ```con accept name=flows-move-once exit=42
 struct R { v: Int }
 
