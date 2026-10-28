@@ -81,6 +81,14 @@ continued, on CI too: no workflow step and no leg of the gate required counters.
   and its validation record says `status=pass-deferred` with a `deferred_gate=` line per gate, never
   `status=pass`; a reuse of that record names them again, and a runner that did not report its
   deferrals gets no record.
+- **Hardened in review (Codex, Kimi).** A deferring command must be exactly the declared gate
+  (`bash`/`python3`/`sh` or `./`, its path, plain arguments): no `VAR=` prefix (`BASH_ENV` or `ENV`
+  could exit 77 before the gate runs), and no shell operator, substitution, comment or line break
+  anywhere in it. A row's `judged_on` is checked where it is used. The pool's child authorizes a
+  deferral before recording it, and a pool failure whose sequential re-run only exits 77 stays a
+  failure (the re-run made no verdict). A catastrophic overrun is not retried. `--measure` is refused
+  on an uncounted CI host too. A record has exactly one `status=` line, and `deferred_gate=` lines
+  exactly when it says `pass-deferred`.
 - **Counting hosts unchanged.** Where perf counts, every verdict is made as before (budgets with the
   host factor, growth by instructions, the wall bound for a run whose count failed).
 - **Controls.** The gate's eleven judge controls stand; ten more run with every judgment: off CI
