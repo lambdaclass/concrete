@@ -1033,11 +1033,10 @@ INVENTORY_HEADER = """# GENERATED from docs/spec/*.md by `python3 scripts/spec/s
 """
 ALLOW_REASON_RE = re.compile(r"^(od:OD[0-9]+|R-[0-9]{4}|bug-[0-9]{3}|unreachable:\S.*)$")
 WITNESS_GLOBS = ["tests/**/*.con"]
-# A program is a witness only when it is a negative leg of a structured runner: the first argument of
-# a `run_err` invocation in run_tests.sh (the leg that fails when the program stops being refused),
-# or a reject row of a chapter's conformance table (checked by check_rules_2i.sh). Prose, comments
-# and other scripts do not count. The bug-corpus audit reads run_tests.sh the same way.
-RUN_ERR_RE = re.compile(r'^\s*run_err\s+"([^"]+)"', re.M)
+# Every program under tests/ (outside a package) and every non-project spec reject example is a
+# candidate. S12 compiles each one itself on every run, so S12 is the gate that executes its
+# witnesses: deleting the only site that reports a rule's code makes S12 fail, whether or not
+# another runner also runs the program.
 
 def inventory_rows(spec):
     rows = []
@@ -1069,29 +1068,18 @@ def observe_codes(spec, cc, jobs, workdir, root):
     """Compile every negative-witness candidate (test programs and the spec's non-project reject
     examples) and record each diagnostic code each one reports: {code: [witness, ...]}."""
     os.makedirs(workdir, exist_ok=True)
-    legs = set()
-    rt = os.path.join(root, "scripts/tests/run_tests.sh")
-    if os.path.exists(rt):
-        for m in RUN_ERR_RE.finditer(open(rt, encoding="utf-8", errors="replace").read()):
-            legs.add(os.path.normpath(m.group(1).replace("$TESTDIR/", "tests/programs/")))
-    for e in spec.entries:
-        for r in e.rows:
-            if r and r[1].startswith("reject:"):
-                legs.add(os.path.normpath(r[0].strip("`")))
     def in_project(f):
         d = os.path.dirname(f)
         while len(d) > len(root):
             if os.path.exists(os.path.join(d, "Concrete.toml")): return True
             d = os.path.dirname(d)
         return False
-    def referenced(rel):
-        return os.path.normpath(rel) in legs
     srcs = []
     for g in WITNESS_GLOBS:
         for f in sorted(glob.glob(os.path.join(root, g), recursive=True)):
             rel = os.path.relpath(f, root)
             # a project's sources compile only as a package; single files (and their `mod x;` files) only
-            if not in_project(f) and referenced(rel):
+            if not in_project(f):
                 srcs.append((rel, f))
     for i, x in enumerate(x for e in spec.entries for x in e.examples
                           if not x.errors and x.verdict == "reject" and not x.attrs.get("project")):

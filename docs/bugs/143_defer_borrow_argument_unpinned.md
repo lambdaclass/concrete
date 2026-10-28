@@ -51,7 +51,7 @@ call) reserved nothing, so the local stayed free to be consumed before the defer
 ## Fix
 
 Defer rule (a), "reserve by place" (user decision, 2026-10-21; normative text in
-[DEFER.md](../language/DEFER.md) and MEMORY_SEMANTICS §9):
+[OWN-12](../spec/ownership.md#OWN-12) (absorbed DEFER.md) and MEMORY_SEMANTICS §9):
 
 - A deferred call's arguments are local names, borrows of local names (`&x`, `&mut x`) or constants
   (literals, a module constant, a function name). A projection, a nested call or a string literal is

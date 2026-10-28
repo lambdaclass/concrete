@@ -746,8 +746,8 @@ EVALUATION2 D7): defer the function the method desugars to, or a named cleanup f
 (the literal and auto-borrow ones: `defer println("x")` fails where `println("x")` compiles), so
 defer a cleanup function without arguments or pass values already of the parameter type; aligning
 the two is a follow-up. What a deferred call that fails or diverges does on a return or error path
-is open, with the abort rule of OD10 and STMT-2 (an abort runs no deferred call); today a deferred
-call is an ordinary call with no recovery rule. There is no implicit scope-end drop to order
+is open; whether an abort runs deferred calls is owner decision OD10 (STMT-2 is pending), and today
+a deferred call is an ordinary call with no recovery rule. There is no implicit scope-end drop to order
 against `defer` (OWN-13): `destroy(x)`, `x.drop()` or a deferred explicit call consumes a value.
 The surface is pinned by `scripts/tests/check_defer.sh` and `examples/defer/cleanup_order/`
 (ROADMAP old Phase 6 #7, 2026-06-23).
