@@ -9,7 +9,7 @@ It is intentionally milestone-oriented rather than release-oriented. The project
 For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
-<!-- changelog stamp: 6dec961b26dc4e609d5268447ee34b0a (scripts/gen/changelog.py; add a changelog.d/ fragment, never edit this file by hand) -->
+<!-- changelog stamp: 661cc6fed8cad1821a6b2d77e507b397 (scripts/gen/changelog.py; add a changelog.d/ fragment, never edit this file by hand) -->
 
 ### Large Arrays No Longer Make Compilation or `--interp` Quadratic (bugs 027, 248, 249, 250, 2026-10-25)
 
@@ -145,7 +145,7 @@ reviewed sources, benchmark scripts, code, and Concrete design references.
 
 The note filters every possible adaptation through Concrete's explicit ownership,
 authority, execution, and evidence philosophy. Its 27 considerations remain research
-while the owner is deciding. The roadmap ends with [open research questions](ROADMAP.md#open-research-questions-bend-and-roc),
+while the owner is deciding. The roadmap ends with [open research questions](docs/project/ROADMAP_TASKS.md#open-research-questions-bend-and-roc),
 not planned features or implementation tasks. This records completed research,
 not adopted work. The current queue and existing task requirements are unchanged;
 upstream performance measurements were not independently reproduced.

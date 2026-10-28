@@ -292,7 +292,7 @@ contracts are fixed at this boundary (S7 with R-0502).
   comparisons, checked addition/subtraction/multiplication, and one capability-authorized `print_int`
   event, including terminating, trapping and divergent behaviours. Other widths, casts, division, shifts,
   recursion and further surface loop forms are explicit subsequent V1 increments. Its named target
-  programs and regression set are listed under R-0511 in the [roadmap](../../ROADMAP.md#task-r-0511);
+  programs and regression set are listed under R-0511 in the [roadmap](../project/ROADMAP_TASKS.md#task-r-0511);
   they do not widen the subset. A Core → BIR theorem
   is an intermediate result, not the native guarantee; no throwaway VM is built.
 - **V1b** carries the subset to native AArch64 through Concrete's BIR → LCB-IR adapter and the Lean
@@ -402,7 +402,7 @@ exhaustion, crash), never skipped. model-diff for zero-argument, `bool` and aggr
 plus a binary leg, with a pinned claimed-function inventory. The four 2026-10-18 hunts and the
 checker hunt run before every release candidate. A hand-written adversarial suite of eight named examples,
 each with its own gate leg, and scaled interpreter/native/model campaigns are scheduled under R-0491 in
-the [roadmap](../../ROADMAP.md#task-r-0491).
+the [roadmap](../project/ROADMAP_TASKS.md#task-r-0491).
 **Exit:** each of 080 – 095 has a checked-in bug record, reproducer, expected outcome and
 pre-fix/fixed SHA pair. The deterministic differential suite detects 080 and 084 – 088;
 name-binding controls detect 081 – 082; evidence and cross-surface controls detect 083 and 089;

@@ -6,7 +6,7 @@ boundaries and R-0416's workload-driven explicit reuse comparison. These are
 approved documentation amendments to existing tasks, not completed implementations;
 the execution queue and task IDs are unchanged.
 
-Expanded the [final research questions](ROADMAP.md#open-research-questions-bend-and-roc)
+Expanded the [final research questions](docs/project/ROADMAP_TASKS.md#open-research-questions-bend-and-roc)
 into seven groups covering the complete Bend/Roc consideration register. These
 questions remain undecided and add no gates or commitments; GPU research retains
 R-0399's concurrency prerequisites. Corrected the [research record](research/meta/bend-roc-lessons.md)

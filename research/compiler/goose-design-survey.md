@@ -15,7 +15,7 @@ results have not been independently reproduced. Concrete's
 [design policy](../../docs/project/DESIGN_POLICY.md),
 [recorded decisions](../../docs/project/DECISIONS.md), and
 [layout contract](../../docs/platform/LAYOUT_CONTRACT.md) remain authoritative.
-The investigation is recorded under [roadmap questions](../../ROADMAP.md#open-research-questions-goose).
+The investigation is recorded under [roadmap questions](../../docs/project/ROADMAP_TASKS.md#open-research-questions-goose).
 
 ## Remaining Runtime Checks
 

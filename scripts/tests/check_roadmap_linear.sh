@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Fail-closed structural gate for ROADMAP.md's single stable-ID task sequence.
-# Since the 2026-10-19 backlog split the sequence spans ROADMAP.md and docs/project/ROADMAP_BACKLOG.md:
-# every task is declared once across both (and CHANGELOG's Completed Tasks), and both obey the rules below.
+# Since the 2026-10-19 backlog split the sequence spans the task register and the backlog
+# (docs/project/ROADMAP_TASKS.md, docs/project/ROADMAP_BACKLOG.md; ROADMAP.md itself keeps the control
+# plane since 2026-10-28): every task is declared once across them (and CHANGELOG's Completed Tasks), and
+# all three files obey the rules below.
 
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
@@ -31,7 +33,16 @@ elif grep -nE '^#+ Completed Task R-[0-9]{4}' "$BACKLOG"; then
   echo "FAIL $BACKLOG declares completed tasks; those belong to CHANGELOG.md"
   fail=$((fail + 1))
 fi
-TASK_FILES="ROADMAP.md${BACKLOG:+ $BACKLOG}"
+TASKS="docs/project/ROADMAP_TASKS.md"
+if [ ! -f "$TASKS" ]; then
+  echo "FAIL $TASKS is missing; ROADMAP.md links it as the home of scheduled task bodies"
+  fail=$((fail + 1))
+  TASKS=""
+elif grep -nE '^#+ Completed Task R-[0-9]{4}' "$TASKS"; then
+  echo "FAIL $TASKS declares completed tasks; those belong to CHANGELOG.md"
+  fail=$((fail + 1))
+fi
+TASK_FILES="ROADMAP.md${TASKS:+ $TASKS}${BACKLOG:+ $BACKLOG}"
 if [ ! -f "$RECORD" ]; then
   echo "FAIL $RECORD is missing; ROADMAP.md's Reconciliation record links it"
   fail=$((fail + 1))
@@ -42,7 +53,12 @@ fi
 
 # The roadmap archives (history and retired task bodies) cite task IDs but declare none either: a
 # retired body sits under its bare `## R-NNNN` heading, its `### Task` stub stays in ROADMAP.md.
+# The roadmap's companion documents (direction, decision log, promotion pipeline, and the archived
+# language scope pending absorption into the specification) cite task IDs under the same rule.
 ARCHIVES="docs/archive/ROADMAP_HISTORY.md docs/archive/ROADMAP_RETIRED_TASKS.md"
+for c in docs/project/ROADMAP_DIRECTION.md docs/project/ROADMAP_DECISIONS.md docs/project/PROMOTION_PIPELINE.md docs/archive/roadmap-language-scope.md; do
+  [ -f "$c" ] && ARCHIVES="$ARCHIVES $c"
+done
 for a in $ARCHIVES; do
   if [ ! -f "$a" ]; then
     echo "FAIL $a is missing; ROADMAP.md links it"
@@ -60,7 +76,7 @@ cat "$active_file" "$retired_file" > "$all_ids_file"
 count="$(wc -l < "$active_file" | tr -d ' ')"
 
 if [ "$count" -eq 0 ]; then
-  echo "FAIL ROADMAP.md and its backlog have no stable task IDs"
+  echo "FAIL ROADMAP.md, its task register and its backlog have no stable task IDs"
   fail=$((fail + 1))
 fi
 

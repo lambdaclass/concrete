@@ -278,7 +278,7 @@ fi
 #    history archive, and its open items are owned by roadmap tasks (`solver_error` is R-0520).
 HIST=docs/archive/ROADMAP_HISTORY.md
 if grep -q "Multi-prover work that remains AFTER R-0004" ROADMAP.md "$HIST" 2>/dev/null \
-   && grep -q '^### Task R-0520$' ROADMAP.md; then
+   && grep -q '^### Task R-0520$' docs/project/ROADMAP_TASKS.md docs/project/ROADMAP_BACKLOG.md; then
   ok "GAP OPEN: the post-R-0004 multi-prover work is recorded (roadmap history) and owned (R-0520)"
 else
   no "the post-R-0004 multi-prover section is missing from ROADMAP.md and $HIST, or its owner R-0520 is gone"

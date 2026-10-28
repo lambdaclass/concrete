@@ -6,7 +6,7 @@ Date: 2026-10-19
 > **Vocabulary after the same day's rename:** the seven execution *stages* named in this record are the
 > roadmap's **Phases 1 – 7**, and a task's **Stage:** line is now its **Phase:** line. The topical
 > sections it calls "Phase 7" to "Phase 20" are now *areas* (`## Area: …`); the roadmap's
-> [Where every area fits](../../ROADMAP.md#where-every-area-fits) table maps each old phase number to its area.
+> [Where every area fits](ROADMAP_TASKS.md#where-every-area-fits) table maps each old phase number to its area.
 > Since the same day's backlog split, tasks that no active or next phase schedules (their stubs included)
 > live in [ROADMAP_BACKLOG.md](ROADMAP_BACKLOG.md); "the roadmap" below means ROADMAP.md and that file.
 > The record below is kept as written.

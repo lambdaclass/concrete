@@ -305,7 +305,7 @@ def read_tsv(path):
 
 def tracking_exists(t, root):
     if t.startswith("R-"):
-        for f in ("ROADMAP.md", "docs/project/ROADMAP_BACKLOG.md"):
+        for f in ("ROADMAP.md", "docs/project/ROADMAP_TASKS.md", "docs/project/ROADMAP_BACKLOG.md"):
             p = os.path.join(root, f)
             if os.path.exists(p) and re.search(r"\b" + re.escape(t) + r"\b", open(p, encoding="utf-8").read()):
                 return True

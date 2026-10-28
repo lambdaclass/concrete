@@ -78,7 +78,7 @@ schedules work: obligations bind through their owners, not through this file.
 
 ## R-0004
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0004) · disposition: done · owner(s): —_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0004) · disposition: done · owner(s): —_
 
 > **Historical boundary:** the detailed R-0004 execution material below is retained for design
 > rationale, rejected hypotheses, dated measurements, and audit traceability. Its `ACTIVE`,
@@ -925,7 +925,7 @@ boundaries close.
 
 ## R-0478
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0478) · disposition: merged · owner(s): R-0481, R-0474_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0478) · disposition: merged · owner(s): R-0481, R-0474_
 
 **Scheduling: opportunistic.** No queue position and nothing blocks on it. Do either half when
 already working in the affected file; the `substExpr` rename is the one with a deadline, since it
@@ -958,7 +958,7 @@ enforces.
 
 ## R-0007
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0007) · disposition: superseded · owner(s): R-0492, R-0510_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0007) · disposition: superseded · owner(s): R-0492, R-0510_
 
    The TYPE-name half of "first fail closed" already landed with R-0001 (E0809:
    a specialization whose mangled name is declared, or two instantiations
@@ -989,7 +989,7 @@ _Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0007) · disposition: superseded · 
 
 ## R-0434
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0434) · disposition: superseded · owner(s): R-0502_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0434) · disposition: superseded · owner(s): R-0502_
 
    The gate for R-0001 asserts this structurally for its own programs (distinct
    declarations, differing footprints) and mutation #19 proves those programs are
@@ -1010,7 +1010,7 @@ _Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0434) · disposition: superseded · 
 
 ## R-0435
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0435) · disposition: superseded · owner(s): R-0500_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0435) · disposition: superseded · owner(s): R-0500_
 
 **Decision status:** ratified 2026-07-25; implementation pending. This reopens
 the same R-0435 task after the earlier same-day “shadowing stays legal” decision
@@ -1074,7 +1074,7 @@ Land the cross-cutting migration in a worktree and merge once green.
 
 ## R-0437
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0437) · disposition: superseded · owner(s): R-0514, R-0510_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0437) · disposition: superseded · owner(s): R-0514, R-0510_
 
 Verified 2026-07-25 against the built compiler: `fn ident<T: Nonsense>(x: T) -> T`
 instantiated at `T = i64` compiles, runs, and returns its argument — the
@@ -1131,7 +1131,7 @@ section of the Phase 17 language reference.
 
 ## R-0447
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0447) · disposition: merged · owner(s): R-0481_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0447) · disposition: merged · owner(s): R-0481_
 
 This is an ownership contract and no-new-debt migration, not a repository-wide
 rename commit. The compiler is comparatively small; the pressure is in the
@@ -1573,7 +1573,7 @@ a global hand-maintained registry.
 
 ## R-0019
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0019) · disposition: merged · owner(s): R-0031_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0019) · disposition: merged · owner(s): R-0031_
 
 Then:
 
@@ -1624,7 +1624,7 @@ Do not duplicate compiler-command cleanup here.
 
 ## R-0051
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0051) · disposition: merged · owner(s): R-0014_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0051) · disposition: merged · owner(s): R-0014_
 
  Add an explicit **boundary-module pattern**, borrowing the useful part of
  Elm's ports without copying Elm's web-application architecture: authority
@@ -1644,7 +1644,7 @@ _Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0051) · disposition: merged · owne
 
 ## R-0483
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0483) · disposition: done · owner(s): —_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0483) · disposition: done · owner(s): —_
 
 **Earlier status (2026-09-16): REPAIRED AND GATED.** The three properties are fixed by
 structure rather than by checks, the attestation migration is done and validated, and
@@ -1861,7 +1861,7 @@ heap proofs or emitted-binary correctness.
 
 ## R-0484
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0484) · disposition: done · owner(s): —_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0484) · disposition: done · owner(s): —_
 
 The record below is the pre-closure inventory, kept for its commit trail.
 
@@ -2412,7 +2412,7 @@ Do not infer support from an OS or CPU-family label alone.
 
 ## R-0074
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0074) · disposition: superseded · owner(s): R-0503, R-0517_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0074) · disposition: superseded · owner(s): R-0503, R-0517_
 
  `{backend, target, codegen_input_hash, primary_text, auxiliary_files,
  runtime_helpers, link_inputs, diagnostics, toolchain_facts}`. Use a closed
@@ -2422,7 +2422,7 @@ _Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0074) · disposition: superseded · 
 
 ## R-0076
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0076) · disposition: superseded · owner(s): R-0502_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0076) · disposition: superseded · owner(s): R-0502_
 
  Sequencing dependency: perform this ownership split before the queued
  Layout panic-to-diagnostic conversion, then convert the panic paths in the
@@ -2432,7 +2432,7 @@ _Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0076) · disposition: superseded · 
 
 ## R-0079
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0079) · disposition: superseded · owner(s): R-0493, R-0501, R-0503_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0079) · disposition: superseded · owner(s): R-0493, R-0501, R-0503_
 
  for every `SInst`/terminator, state whether Concrete SSA already expresses
  the exact semantics, a shared target-neutral expansion is required, or the
@@ -2445,7 +2445,7 @@ _Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0079) · disposition: superseded · 
 
 ## R-0082
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0082) · disposition: superseded · owner(s): R-0497, R-0501, R-0503_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0082) · disposition: superseded · owner(s): R-0497, R-0501, R-0503_
 
 `source -> Core -> Mono -> ValidatedSSA -> SSACleanup`, followed by sibling
 LLVM and QBE emitters. QBE must consume `SModule` / `SInst` (or a minimal
@@ -2466,7 +2466,7 @@ tool/target; never fall back to LLVM after the user selects QBE.
 
 ## R-0086
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0086) · disposition: superseded · owner(s): R-0511, R-0517_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0086) · disposition: superseded · owner(s): R-0511, R-0517_
 
 Gate negative, wide, shift, division/remainder, overflow, NaN, signed-zero,
 and exit-code edge cases rather than accepting scalar happy paths alone.
@@ -2495,7 +2495,7 @@ realize receives a named `qbe_pending` row or runtime-mediated boundary.
 
 ## R-0092
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0092) · disposition: superseded · owner(s): R-0491_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0092) · disposition: superseded · owner(s): R-0491_
 
  `{compile_class, stdout_bytes, stderr_bytes, exit_status, runtime_class}`.
  Normalize only declared platform noise; never normalize program output,
@@ -2503,7 +2503,7 @@ _Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0092) · disposition: superseded · 
 
 ## R-0093
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0093) · disposition: merged · owner(s): R-0092_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0093) · disposition: merged · owner(s): R-0092_
 
  - interpreter == QBE != LLVM: `llvm_backend_mismatch`;
  - interpreter == LLVM != QBE: `qbe_backend_mismatch`;
@@ -2518,7 +2518,7 @@ _Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0093) · disposition: merged · owne
 
 ## R-0097
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0097) · disposition: superseded · owner(s): R-0511, R-0512_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0097) · disposition: superseded · owner(s): R-0511, R-0512_
 
  `concrete agent features --json`, help, audit output, and documentation list
  supported targets/features and `qbe_pending` cases. A program outside the
@@ -2527,7 +2527,7 @@ _Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0097) · disposition: superseded · 
 
 ## R-0098
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0098) · disposition: merged · owner(s): R-0137_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0098) · disposition: merged · owner(s): R-0137_
 
  exclusions require a named missing feature and roadmap owner. Record bugs
  found by the backend/differential suite in the bug corpus with the disagreement classification
@@ -2559,7 +2559,7 @@ _Stub: [ROADMAP_BACKLOG.md](../project/ROADMAP_BACKLOG.md#task-r-0101) · dispos
 
 ## R-0105
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0105) · disposition: superseded · owner(s): R-0491, R-0504_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0105) · disposition: superseded · owner(s): R-0491, R-0504_
 
  Classify within-backend disagreement separately as
  `llvm_optimization_mismatch` or `qbe_toolchain_mismatch`; retain pre/post
@@ -2569,7 +2569,7 @@ _Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0105) · disposition: superseded · 
 
 ## R-0107
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0107) · disposition: merged · owner(s): R-0075_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0107) · disposition: merged · owner(s): R-0075_
 
  `ssa_to_qbe`, `qbe_verify`, `qbe_codegen`, `assemble`, `link`, `runtime`, or
  `observation_compare`; capture exit code/signal/timeout/resource-limit and a
@@ -2580,7 +2580,7 @@ _Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0107) · disposition: merged · owne
 
 ## R-0108
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0108) · disposition: merged · owner(s): R-0416, R-0515_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0108) · disposition: merged · owner(s): R-0416, R-0515_
 
  Phase 7.5 fails on unbounded or accidental regressions, not on a fixed
  QBE-versus-LLVM speed ratio. Performance results are benchmark facts only;
@@ -2588,7 +2588,7 @@ _Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0108) · disposition: merged · owne
 
 ## R-0110
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0110) · disposition: merged · owner(s): R-0075, R-0333_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0110) · disposition: merged · owner(s): R-0075, R-0333_
 
  reserve backend names and project-manifest schema, define `.qbe` artifact
  naming without colliding with Concrete's own SSA dumps, keep LLVM as the
@@ -2600,7 +2600,7 @@ _Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0110) · disposition: merged · owne
 
 ## R-0111
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0111) · disposition: superseded · owner(s): R-0511, R-0137_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0111) · disposition: superseded · owner(s): R-0511, R-0137_
 
  `examples/qbe_backend_validation/` plus
  `scripts/tests/check_phase7_5_qbe.sh`. It must exercise every supported
@@ -2616,14 +2616,14 @@ _Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0111) · disposition: superseded · 
 
 ## R-0112
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0112) · disposition: superseded · owner(s): R-0512_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0112) · disposition: superseded · owner(s): R-0512_
 
  the compatibility window must have a named removal commit and mutation-
  sensitive parity gate.
 
 ## R-0114
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0114) · disposition: superseded · owner(s): R-0492_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0114) · disposition: superseded · owner(s): R-0492_
 
 
 Acceptance: IDs originate once at the owning boundary, survive rename/re-export
@@ -2634,7 +2634,7 @@ and delete each superseded text-keyed lookup in the same slice.
 
 ## R-0116
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0116) · disposition: superseded · owner(s): R-0497, R-0510, R-0514_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0116) · disposition: superseded · owner(s): R-0497, R-0510, R-0514_
 
 
 Acceptance: migrate one production edge per green slice, preserve diagnostics
@@ -2644,7 +2644,7 @@ each boundary lands. Do not introduce a universal pass monad.
 
 ## R-0171
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0171) · disposition: superseded · owner(s): R-0494_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0171) · disposition: superseded · owner(s): R-0494_
 
  Any auto-discharge, generated proof, solver route, cache hit, replay helper,
  agent suggestion, or future MCP proof tool must emit a replayable artifact,
@@ -2675,7 +2675,7 @@ reports stale/spec-drift rather than silently accepting the old proof.
 
 ## R-0208
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0208) · disposition: done · owner(s): —_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0208) · disposition: done · owner(s): —_
 
 **Lean #14576 fire drill:** the repository's currently pinned `leanprover/lean4:v4.28.0` predates
 the upstream fix and must be treated as not accepted for new high-assurance claims until an exact
@@ -2846,7 +2846,7 @@ R-0208 closes only when the final commit passes CI and its complete campaign qua
 
 ## R-0211
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0211) · disposition: superseded · owner(s): R-0509_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0211) · disposition: superseded · owner(s): R-0509_
 
 
 V1 deliverable: `concrete audit --trust-boundaries --json` shows the trusted
@@ -2859,13 +2859,13 @@ the smaller boundary.
 
 ## R-0221
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0221) · disposition: superseded · owner(s): R-0493_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0221) · disposition: superseded · owner(s): R-0493_
 
 `proof`.
 
 ## R-0228
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0228) · disposition: superseded · owner(s): R-0499_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0228) · disposition: superseded · owner(s): R-0499_
 
  accepted.
 
@@ -2894,7 +2894,7 @@ _Stub: [ROADMAP_BACKLOG.md](../project/ROADMAP_BACKLOG.md#task-r-0235) · dispos
 
 ## R-0464
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0464) · disposition: superseded · owner(s): R-0493, R-0495, R-0460_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0464) · disposition: superseded · owner(s): R-0493, R-0495, R-0460_
 
 **The order here is deliberate and was corrected 2026-07-31.** Moving obligation
 generation to SSA fixes *staleness* (facts about a mutable `i`), which is real. It does
@@ -2989,7 +2989,7 @@ one pipeline and they are easy to mistake for overlapping work:
 
 ## R-0465
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0465) · disposition: done · owner(s): —_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0465) · disposition: done · owner(s): —_
 
 `DischargeAdapter` is the right shape and is genuinely well built: one choke point, a
 declared `actsOn` precondition, a declared `allowed` output set, and compile-time
@@ -3039,7 +3039,7 @@ which is precisely this task's subject.
 
 ## R-0260
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0260) · disposition: superseded · owner(s): R-0506_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0260) · disposition: superseded · owner(s): R-0506_
 
 `shape-preserved`, `eval-preserved`, `source-preserved`, `trusted`, or
 `blocked`, with theorem names and source links for each status.
@@ -3053,7 +3053,7 @@ agree.
 
 ## R-0266
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0266) · disposition: superseded · owner(s): R-0509_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0266) · disposition: superseded · owner(s): R-0509_
 
 Lean kernel, compiler modules, backend/toolchain, runtime/OS/hardware,
 trusted/extern code, and the external Lean proof-library surface the corpus
@@ -3079,7 +3079,7 @@ mandatory proofs for ordinary generic code.
 
 ## R-0273
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0273) · disposition: superseded · owner(s): R-0491, R-0498_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0273) · disposition: superseded · owner(s): R-0491, R-0498_
 
  - **source-semantics matrix** for each core operation: parser/AST,
    checker rule, Core/Elab representation, interpreter behavior, SSA
@@ -3113,7 +3113,7 @@ _Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0273) · disposition: superseded · 
 
 ## R-0274
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0274) · disposition: superseded · owner(s): R-0499, R-0514_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0274) · disposition: superseded · owner(s): R-0499, R-0514_
 
  `typesCompatible` was lenient where SSA-verify was strict (the E0715 class);
  Elab carried a private int-vs-fixed-width re-elaboration Check knew nothing
@@ -3170,7 +3170,7 @@ _Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0274) · disposition: superseded · 
 
 ## R-0276
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0276) · disposition: superseded · owner(s): R-0506, R-0496_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0276) · disposition: superseded · owner(s): R-0506, R-0496_
 
  (Rehomed from Phase 6B: its trigger is here, not there.) ProofCore still
  contains many `partial def` walkers/wrappers, which are opaque to the kernel.
@@ -3220,7 +3220,7 @@ split, without which this arrives as a second extractor and the factoring never 
 
 ## R-0288
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0288) · disposition: superseded · owner(s): R-0503_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0288) · disposition: superseded · owner(s): R-0503_
 
 
 V1 should cover a narrow subset: integer arithmetic, bools, branches,
@@ -3274,7 +3274,7 @@ itself, and this investigation does not block R-0299/R-0300 or interop delivery.
 
 ## R-0348
 
-_Stub: [ROADMAP.md](../../ROADMAP.md#task-r-0348) · disposition: merged · owner(s): R-0349_
+_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0348) · disposition: merged · owner(s): R-0349_
 
 
   Required cleanup: remove or close the stale `LANGUAGE_GAPS.md` and

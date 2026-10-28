@@ -23,10 +23,11 @@
 #   6. every transfer the ledger records (followed through superseded owners to a live one), plus the
 #      three explicit residuals of done tasks, appears as an entry in that live owner's
 #      **Inherited obligations** block, and no block lists a transfer the ledger does not record.
-#   7. (backlog split, 2026-10-19) tasks live in ROADMAP.md or docs/project/ROADMAP_BACKLOG.md, each in
-#      exactly one, and no ID between R-0001 and the highest declared one is missing from both files and
+#   7. (backlog split, 2026-10-19; task register, 2026-10-28) scheduled tasks live in
+#      docs/project/ROADMAP_TASKS.md (the task register; ROADMAP.md itself keeps the control plane and
+#      declares no task) and unscheduled ones in docs/project/ROADMAP_BACKLOG.md, each in exactly one, and no ID between R-0001 and the highest declared one is missing from both files and
 #      CHANGELOG (except the IDs recorded as never allocated); every task a queue row names lives in
-#      ROADMAP.md.
+#      the task register. The register holds none of the control-plane sections.
 #   8. ROADMAP.md names its **Active phases:** and **Next phases:**, each a phase of the "Phases and
 #      releases" table; a ROADMAP.md task is scheduled in one of them or named by a queue row; a backlog
 #      task is not, unless it carries a **Kept in backlog:** reason.
@@ -68,7 +69,8 @@
 # primary track a minority, fewer or more than two slots or loses V1's row from it, leaves evidence
 # integrity or adversarial validation without a positive minimum, does not add up to 100%, gives the
 # capped track two slots or leaves RocksDB slice 1 uncapped; a crashed or silent checker must fail too.
-# With arguments `ROADMAP [LEDGER [ARCHIVE [BACKLOG]]]` it checks those files only.
+# With arguments `ROADMAP [LEDGER [ARCHIVE [BACKLOG [TASKS]]]]` it checks those files only. The checker
+# reads ROADMAP.md followed by the task register as one roadmap: the control plane, then the task bodies.
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -81,6 +83,7 @@ TARGET="${1:-ROADMAP.md}"
 LEDGER="${2:-docs/project/ROADMAP_RECONCILIATION.md}"
 ARCHIVE="${3:-docs/archive/ROADMAP_RETIRED_TASKS.md}"
 BACKLOG="${4:-docs/project/ROADMAP_BACKLOG.md}"
+TASKSF="${5:-docs/project/ROADMAP_TASKS.md}"
 # The changelog as it reads with the pending changelog.d/ fragments folded in: a branch retires a task
 # with a `### Completed Task R-NNNN` heading in its fragment, and that counts before the fold.
 CHANGELOG="$(mktemp)"
@@ -89,18 +92,31 @@ python3 -I scripts/gen/changelog.py --print > "$CHANGELOG" || { echo "FATAL: scr
 [ -f "$LEDGER" ] || { echo "FATAL: $LEDGER missing" >&2; exit 2; }
 [ -f "$ARCHIVE" ] || { echo "FATAL: $ARCHIVE missing" >&2; exit 2; }
 [ -f "$BACKLOG" ] || { echo "FATAL: $BACKLOG missing" >&2; exit 2; }
+[ -f "$TASKSF" ] || { echo "FATAL: $TASKSF missing" >&2; exit 2; }
 
-check_file() { # roadmap ledger archive backlog -> prints "OK <msg>" / "FAIL <msg>" lines
-  python3 - "$1" "$CHANGELOG" "$2" "$3" "$4" <<'PY'
+check_file() { # roadmap ledger archive backlog tasks -> prints "OK <msg>" / "FAIL <msg>" lines
+  python3 - "$1" "$CHANGELOG" "$2" "$3" "$4" "$5" <<'PY'
 import re, sys
-road = open(sys.argv[1], encoding='utf-8').read()
+plane = open(sys.argv[1], encoding='utf-8').read()
 chg = open(sys.argv[2], encoding='utf-8').read()
 rec = open(sys.argv[3], encoding='utf-8').read()
 arc = open(sys.argv[4], encoding='utf-8').read()
 back = open(sys.argv[5], encoding='utf-8').read()
+reg = open(sys.argv[6], encoding='utf-8').read()
 out = []
 def ok(m): out.append('OK ' + m)
 def no(m): out.append('FAIL ' + m)
+# ROADMAP.md is the control plane and the task register holds the task bodies; the checks below read
+# them as one roadmap, plane first. Neither may take over the other's part.
+PLANE_SECTIONS = ('Phases and releases', 'The current execution queue', 'Implemented, not yet accepted',
+                  'Phase 1 exits', 'Owner decisions', 'Feature prerequisites', 'Capacity allocation',
+                  'Reconciliation record', 'Release map')
+for t in re.findall(r'^#+ (?:Completed )?Task (R-\d{4})$', plane, re.M):
+    no(f'ROADMAP.md declares task {t}; task bodies live in the task register (docs/project/ROADMAP_TASKS.md)')
+for h in PLANE_SECTIONS:
+    if re.search(r'^#+ ' + re.escape(h) + r'$', reg, re.M):
+        no(f'the task register declares the control-plane section "{h}", which belongs to ROADMAP.md')
+road = plane + '\n' + reg
 
 def expand(text):
     ids = []
@@ -125,7 +141,7 @@ if not back_tasks: no('the backlog declares no task headings')
 # --- one live home per task (ROADMAP.md or the backlog), and no ID lost
 home = {}
 hbad = 0
-for where, tasks in (('ROADMAP.md', road_tasks), ('the backlog', back_tasks)):
+for where, tasks in (('ROADMAP_TASKS.md', road_tasks), ('the backlog', back_tasks)):
     for tid, _ in tasks:
         if tid in home:
             no(f'{tid} is declared in both {home[tid]} and {where}' if home[tid] != where
@@ -141,11 +157,11 @@ top = max(int(t[2:]) for t in declared)
 for k in range(1, top + 1):
     tid = 'R-%04d' % k
     if tid not in declared and tid not in NEVER_ALLOCATED:
-        no(f'{tid} is lost: declared in neither ROADMAP.md, the backlog nor CHANGELOG'); hbad += 1
+        no(f'{tid} is lost: declared in neither the task register, the backlog nor CHANGELOG'); hbad += 1
 for tid in sorted(NEVER_ALLOCATED & declared):
     no(f'{tid} is recorded as never allocated but is declared'); hbad += 1
 if not hbad:
-    ok(f'{len(home)} live tasks ({len(road_tasks)} in ROADMAP.md, {len(back_tasks)} in the backlog) each have one home; R-0001..R-{top:04d} are all accounted for')
+    ok(f'{len(home)} live tasks ({len(road_tasks)} in the task register, {len(back_tasks)} in the backlog) each have one home; R-0001..R-{top:04d} are all accounted for')
 
 active = list(home)
 known = set(active) | completed
@@ -500,7 +516,7 @@ qbad = 0; named = 0
 for order, work in qrows:
     for tid in expand(work):
         if home.get(tid) == 'the backlog':
-            no(f'queue row {order} names {tid}, which lives in the backlog; a queued task lives in ROADMAP.md'); qbad += 1
+            no(f'queue row {order} names {tid}, which lives in the backlog; a queued task lives in the task register'); qbad += 1
     phase = row_phase.get(order)
     if phase is None:
         no(f'queue row {order} has no phase in "Phases and releases"'); qbad += 1; continue
@@ -531,7 +547,7 @@ for tid in sorted(set(t for t in sections if sections.count(t) > 1)):
 def stub_re(prefix):
     return re.compile(r"^The rest of this task's original body is archived in \[ROADMAP_RETIRED_TASKS\.md\]"
                       r"\(" + re.escape(prefix) + r"ROADMAP_RETIRED_TASKS\.md#(r-\d{4})\)\.$", re.M)
-STUB = {'ROADMAP.md': stub_re('docs/archive/'), 'the backlog': stub_re('../archive/')}
+STUB = {'ROADMAP_TASKS.md': stub_re('../archive/'), 'the backlog': stub_re('../archive/')}
 stubs = {}
 for tid in active:
     for target in STUB[home[tid]].findall(bodies[tid]):
@@ -583,12 +599,12 @@ if act_ph is not None and next_ph is not None:
     for tid, body in road_tasks:
         st = phases_of(body)
         if tid not in queued and not (st and st[0] & near):
-            no(f'{tid} lives in ROADMAP.md but is scheduled in no active or next phase ({sorted(near)}) and no queue row names it; move it to the backlog'); pbad += 1
+            no(f'{tid} lives in the task register but is scheduled in no active or next phase ({sorted(near)}) and no queue row names it; move it to the backlog'); pbad += 1
     for tid, body in back_tasks:
         st = phases_of(body)
         hit = sorted(st[0] & near) if st else []
         if hit and not re.search(r'^\*\*Kept in backlog[^*]*:\*\* \S', body, re.M):
-            no(f'{tid} is in the backlog but its Phase line schedules it in active/next Phase {hit}; pull it into ROADMAP.md or record **Kept in backlog:** with a reason'); pbad += 1
+            no(f'{tid} is in the backlog but its Phase line schedules it in active/next Phase {hit}; pull it into the task register or record **Kept in backlog:** with a reason'); pbad += 1
     if not pbad:
         ok(f'placement agrees with Active phases {sorted(act_ph)} and Next phases {sorted(next_ph)}')
 else:
@@ -659,8 +675,8 @@ print('\n'.join(out))
 PY
 }
 
-run_on() { # roadmap [ledger [archive [backlog]]] -> sets RESULT lines, returns 0 iff the checker ran, reported, and found no FAIL
-  if ! RESULT="$(check_file "$1" "${2:-$LEDGER}" "${3:-$ARCHIVE}" "${4:-$BACKLOG}")"; then
+run_on() { # roadmap [ledger [archive [backlog [tasks]]]] -> sets RESULT lines, returns 0 iff the checker ran, reported, and found no FAIL
+  if ! RESULT="$(check_file "$1" "${2:-$LEDGER}" "${3:-$ARCHIVE}" "${4:-$BACKLOG}" "${5:-$TASKSF}")"; then
     RESULT="FAIL checker execution failed for $1"
     return 1
   fi
@@ -683,14 +699,16 @@ done <<< "$RESULT"
 if [ $# -eq 0 ]; then
   echo "=== 2. negative controls ==="
   TMPD="$(mktemp -d)"; trap 'rm -rf "$TMPD" "$CHANGELOG"' EXIT
-  neg() { # name, python-edit, expected-substring[, "ledger"/"archive"/"backlog"/"both" to mutate that file instead]
-    # "both" runs the edit with s = ROADMAP and b = backlog, and writes both back.
-    local f="$TMPD/$1.md" l="$TMPD/$1.ledger.md" a="$TMPD/$1.archive.md" k="$TMPD/$1.backlog.md" src="$TARGET" dst
-    cp "$TARGET" "$f"; cp "$LEDGER" "$l"; cp "$ARCHIVE" "$a"; cp "$BACKLOG" "$k"
+  neg() { # name, python-edit, expected-substring[, "ledger"/"archive"/"backlog"/"tasks"/"both" to mutate that file instead]
+    # "tasks" mutates the task register; "both" runs the edit with s = the task register and b = the
+    # backlog, and writes both back.
+    local f="$TMPD/$1.md" l="$TMPD/$1.ledger.md" a="$TMPD/$1.archive.md" k="$TMPD/$1.backlog.md" t="$TMPD/$1.tasks.md" src="$TARGET" dst
+    cp "$TARGET" "$f"; cp "$LEDGER" "$l"; cp "$ARCHIVE" "$a"; cp "$BACKLOG" "$k"; cp "$TASKSF" "$t"
     case "${4:-}" in
       ledger) src="$LEDGER"; dst="$l" ;;
       archive) src="$ARCHIVE"; dst="$a" ;;
       backlog) src="$BACKLOG"; dst="$k" ;;
+      tasks|both) src="$TASKSF"; dst="$t" ;;
       *) dst="$f" ;;
     esac
     python3 - "$src" "$dst" "$2" "${4:-}" "$BACKLOG" "$k" <<'PY'
@@ -703,7 +721,7 @@ if sys.argv[4] == 'both':
     open(sys.argv[6], 'w', encoding='utf-8').write(b)
 PY
     if [ "$?" -ne 0 ]; then no "control $1: could not build its mutated copy"; return; fi
-    if run_on "$f" "$l" "$a" "$k"; then
+    if run_on "$f" "$l" "$a" "$k" "$t"; then
       no "control $1: the mutated roadmap passed"
     elif has_match -- "$3" <<<"$RESULT"; then
       ok "control $1 is rejected ($3)"
@@ -713,7 +731,7 @@ PY
   }
   neg removed_phase \
     "h='### Task R-0494\n\n'; i=s.index(h)+len(h); j=s.index('\n\n',i); assert s[i:j].startswith('**Phase:**'); s=s[:i]+s[j+2:]" \
-    "R-0494 has no phase assignment"
+    "R-0494 has no phase assignment" tasks
   neg removed_phase_unscheduled \
     "h='### Task R-0522\n\n'; i=s.index(h)+len(h); j=s.index('\n\n',i); assert s[i:j].startswith('**Phase:**'); s=s[:i]+s[j+2:]" \
     "R-0522 has no phase assignment" backlog
@@ -728,10 +746,16 @@ PY
     "share one pull trigger" backlog
   neg task_in_both_files \
     "i=b.index('### Task R-0305\n'); j=b.index('\n### ',i+1); s=s.rstrip('\n')+'\n\n'+b[i:j]+'\n'" \
-    "R-0305 is declared in both ROADMAP.md and the backlog" both
+    "R-0305 is declared in both ROADMAP_TASKS.md and the backlog" both
   neg lost_task \
     "i=s.index('### Task R-0305\n'); j=s.index('\n### ',i+1); s=s[:i]+s[j+1:]" \
     "R-0305 is lost" backlog
+  neg task_in_control_plane \
+    "s=s.rstrip('\\n')+'\\n\\n### Task R-0494\\n\\n**Phase:** 2\\n'" \
+    "ROADMAP.md declares task R-0494"
+  neg plane_section_in_register \
+    "s=s.rstrip('\\n')+'\\n\\n## The current execution queue\\n\\n| 0 | **ctl (R-0482)** | ctl |\\n'" \
+    "the task register declares the control-plane section" tasks
   neg bad_active_phases \
     "old='**Active phases:** 1'; assert s.count(old)==1; s=s.replace(old,'**Active phases:** 9')" \
     "names Phase 9, which is not in"
@@ -743,7 +767,7 @@ PY
     "R-0305 is in the backlog but its Phase line schedules it in active/next Phase \[2\]" backlog
   neg roadmap_task_only_later \
     "h='### Task R-0518\n\n**Phase:** '; i=s.index(h)+len(h); j=s.index('\n',i); s=s[:i]+'7'+s[j:]" \
-    "R-0518 lives in ROADMAP.md but is scheduled in no active or next phase"
+    "R-0518 lives in the task register but is scheduled in no active or next phase" tasks
   neg queued_task_in_backlog \
     "i=s.index('### Task R-0521\n'); j=s.index('\n### ',i+1); b=b.rstrip('\n')+'\n\n'+s[i:j].replace('**Phase:**','**Pull trigger:** control: a queued task moved to the backlog.\n\n**Phase:**',1)+'\n'; s=s[:i]+s[j+1:]" \
     "queue row 9 names R-0521, which lives in the backlog" both
@@ -758,7 +782,7 @@ PY
     "names nonexistent task R-9998"
   neg phase_contradicts_queue \
     "h='### Task R-0511\n\n**Phase:** 2'; assert h in s; s=s.replace(h,'### Task R-0511\n\n**Phase:** 6')" \
-    "R-0511: queue row 3 schedules it in Phase 2"
+    "R-0511: queue row 3 schedules it in Phase 2" tasks
   neg phase_table_row_moved \
     "old='| 3 – 4 | V1a and V1b'; assert old in s; s=s.replace(old,'| 4 | V1a and V1b')" \
     "queue row 3 has no phase"
@@ -784,17 +808,17 @@ PY
     "i=s.index('\n## R-0007\n'); j=s.index('\n## ',i+1); s=s[:i]+s[j:]" \
     "R-0007 links an archived body that does not exist" archive
   neg stub_names_other_body \
-    "old='archived in [ROADMAP_RETIRED_TASKS.md](docs/archive/ROADMAP_RETIRED_TASKS.md#r-0007).'; assert old in s; s=s.replace(old,'archived in [ROADMAP_RETIRED_TASKS.md](docs/archive/ROADMAP_RETIRED_TASKS.md#r-0019).')" \
-    "R-0007: its stub sentence names the archived body of R-0019"
+    "old='archived in [ROADMAP_RETIRED_TASKS.md](../archive/ROADMAP_RETIRED_TASKS.md#r-0007).'; assert old in s; s=s.replace(old,'archived in [ROADMAP_RETIRED_TASKS.md](../archive/ROADMAP_RETIRED_TASKS.md#r-0019).')" \
+    "R-0007: its stub sentence names the archived body of R-0019" tasks
   neg stub_link_removed \
-    "old='archived in [ROADMAP_RETIRED_TASKS.md](docs/archive/ROADMAP_RETIRED_TASKS.md#r-0007).'; assert old in s; s=s.replace(old,'archived.')" \
-    "archived body R-0007 has no stub"
+    "old='archived in [ROADMAP_RETIRED_TASKS.md](../archive/ROADMAP_RETIRED_TASKS.md#r-0007).'; assert old in s; s=s.replace(old,'archived.')" \
+    "archived body R-0007 has no stub" tasks
   neg inheritance_entry_removed \
     "import re; m=re.search(r'^- \*\*R-0007\*\* \(superseded\)[^\n]*\n', s, re.M); assert m; i=s.index('### Task R-0492\n'); assert m.start()>i; s=s[:m.start()]+s[m.end():]" \
-    "R-0492 lacks inherited obligations from R-0007"
+    "R-0492 lacks inherited obligations from R-0007" tasks
   neg inheritance_entry_fabricated \
     "old='- **R-0008** (superseded):'; assert s.count(old)==1; s=s.replace(old,'- **R-0019** (merged): fabricated transfer.\n'+old)" \
-    "R-0492 has unexplained inherited obligations from R-0019"
+    "R-0492 has unexplained inherited obligations from R-0019" tasks
   neg exit_missing_class \
     "old='| blocks features | known false proofs and unsound claims |'; assert s.count(old)==1; s=s.replace(old,'|  | known false proofs and unsound claims |')" \
     "exit 0a has no class"

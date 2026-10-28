@@ -2,7 +2,7 @@
 
 Status: groundwork built 2026-10-20; **not accepted**. The deliverable is defined in the roadmap
 under [feature prerequisites](../../ROADMAP.md#feature-prerequisites) (row 5,
-[R-0285](../../ROADMAP.md#task-r-0285)) and is blocked by exits 0b and 2i, which are not done.
+[R-0285](../project/ROADMAP_TASKS.md#task-r-0285)) and is blocked by exits 0b and 2i, which are not done.
 This page records what exists, how to run it, and the gaps that stand between it and acceptance.
 It makes no acceptance claim: `scripts/tests/check_rocksdb_slice1.sh` is the authority, and it
 fails today.

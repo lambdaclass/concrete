@@ -1,9 +1,9 @@
 # C, Rust and Zig Package Interop — Design Decision
 
 Status: direction decided; implementation pending. Updated 2026-10-18 under
-[R-0285](../../ROADMAP.md#task-r-0285), with ABI validation under
-[R-0283](../../ROADMAP.md#task-r-0283)/[R-0287](../../ROADMAP.md#task-r-0287)
-and exports under [R-0286](../../ROADMAP.md#task-r-0286).
+[R-0285](../project/ROADMAP_TASKS.md#task-r-0285), with ABI validation under
+[R-0283](../project/ROADMAP_TASKS.md#task-r-0283)/[R-0287](../project/ROADMAP_TASKS.md#task-r-0287)
+and exports under [R-0286](../project/ROADMAP_TASKS.md#task-r-0286).
 The generator, package integration and proposed tooling below are **not built yet**.
 [FFI.md](FFI.md) describes the direct foreign declarations implemented today.
 
@@ -276,7 +276,7 @@ path and exercise it on four bounded cases before closing the interop checkpoint
 Select and record the Zig upstream and revision before its gate is claimed complete. A
 locally invented arithmetic shim is not its acceptance workload. These four cases exercise
 the interface subset; wrapping every client dependency is not a prerequisite to starting
-[R-0490](../../ROADMAP.md#task-r-0490).
+[R-0490](../project/ROADMAP_TASKS.md#task-r-0490).
 
 A non-author starts from a clean application and completes dependency setup, ordinary
 imports, build/run/test, warm and offline rebuilds, and a dependency upgrade. For all four

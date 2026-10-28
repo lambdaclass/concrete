@@ -3595,7 +3595,7 @@ is, and grouping the three as equally-open understates what has been paid for.
 
 ## R-0480: physical documentation migration (2026-08-14)
 
-_Moved from the body of [R-0480](../../ROADMAP.md#task-r-0480); the task keeps its objective, current status, exit and a summary of this record._
+_Moved from the body of [R-0480](../project/ROADMAP_TASKS.md#task-r-0480); the task keeps its objective, current status, exit and a summary of this record._
 
 **Physical migration landed 2026-08-14.** The worktree reached a clean integration boundary, so
 the stable documents moved into `language`, `compiler`, `verification`, `platform`, and `project`
@@ -3607,7 +3607,7 @@ physical neatness is not completion of the authority audit.
 
 ## R-0473: the embedded R-0004 Slice-6 record (2026-08-07 – 2026-09-02)
 
-_Moved from the body of [R-0473](../../ROADMAP.md#task-r-0473); the task keeps its objective, current status, exit and a summary of this record._
+_Moved from the body of [R-0473](../project/ROADMAP_TASKS.md#task-r-0473); the task keeps its objective, current status, exit and a summary of this record._
 
 **STEP 1 CLOSED (2026-08-09).** `check_migration_manifest.sh` reports **44/44 links accounted,
 0 unowned, 0 non-deterministic, 0 without a subject** — the closure gate is CLOSED and
@@ -4025,7 +4025,7 @@ before the freeze.
 
 ## R-0475: exposure audit and shipped snapshot fix (2026-08-07)
 
-_Moved from the body of [R-0475](../../ROADMAP.md#task-r-0475); the task keeps its objective, current status, exit and a summary of this record._
+_Moved from the body of [R-0475](../project/ROADMAP_TASKS.md#task-r-0475); the task keeps its objective, current status, exit and a summary of this record._
 
 **Exposure audited 2026-08-07, and it is exactly one snapshot.** The audit is recorded because
 "the other project-mode fixtures probably have this too" was the natural assumption and it was

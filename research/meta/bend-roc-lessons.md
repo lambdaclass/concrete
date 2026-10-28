@@ -13,11 +13,11 @@ No comparative compiler, runtime, or GPU benchmarks were independently reproduce
 
 This note preserves the full Bend/Roc discussion, including corrections to initial
 interpretations. The [roadmap](../../ROADMAP.md#the-current-execution-queue) remains
-the only execution queue. Its final [open research questions](../../ROADMAP.md#open-research-questions-bend-and-roc)
+the only execution queue. Its final [open research questions](../../docs/project/ROADMAP_TASKS.md#open-research-questions-bend-and-roc)
 record uncertainties while the owner is deciding, not planned features or tasks.
-The 2026-10-25 review led to narrow amendments under [R-0215](../../ROADMAP.md#task-r-0215),
-[R-0285](../../ROADMAP.md#task-r-0285), [R-0150](../../ROADMAP.md#task-r-0150),
-[R-0486](../../ROADMAP.md#task-r-0486) and [R-0416](../../ROADMAP.md#task-r-0416).
+The 2026-10-25 review led to narrow amendments under [R-0215](../../docs/project/ROADMAP_TASKS.md#task-r-0215),
+[R-0285](../../docs/project/ROADMAP_TASKS.md#task-r-0285), [R-0150](../../docs/project/ROADMAP_TASKS.md#task-r-0150),
+[R-0486](../../docs/project/ROADMAP_TASKS.md#task-r-0486) and [R-0416](../../docs/project/ROADMAP_TASKS.md#task-r-0416).
 Those amendments clarify existing work; they neither reorder the queue nor adopt
 the rest of this register. Further decisions remain subject to Concrete's design
 policy and workload evidence.
@@ -474,27 +474,27 @@ amendments are identified at the top of this note; all broader questions remain 
 
 | ID | Consideration | Possible evidence / boundary | Existing context |
 |---|---|---|---|
-| C01 | Version-matched installed guide and agent onboarding | A non-author completes an existing example using installed guidance | [R-0397](../../ROADMAP.md#task-r-0397), [developer tooling](../packages-tooling/developer-tooling.md) |
+| C01 | Version-matched installed guide and agent onboarding | A non-author completes an existing example using installed guidance | [R-0397](../../docs/project/ROADMAP_TASKS.md#task-r-0397), [developer tooling](../packages-tooling/developer-tooling.md) |
 | C02 | Required-claim inventory and one project verification entry | Missing/stale/deleted/weakened/unsupported claims stay visible; policy remains separate | [Evidence Architecture](../../docs/verification/EVIDENCE_ARCHITECTURE.md) |
 | C03 | Fixed-spec agent repair workflow | Unauthorized specification/assumption changes are rejected | [Proof Synthesis](../../docs/verification/PROOF_SYNTHESIS.md) |
 | C04 | Rejected-bug demo | Planned R-0486 component shows failure, repair and scoped replay after prerequisites | [current queue](../../ROADMAP.md#the-current-execution-queue) |
 | C05 | Graded proof and repair corpus | Hidden solutions, refusal tasks, conservation/undo/protocol cases | [Proof Patterns](../../examples/proof_patterns/README.md) |
-| C06 | Bounded synthesis/repair harness | Attempts, costs, failures, exact tasks, independent replay | [Proof Authoring And Automation](../../ROADMAP.md#area-proof-authoring-and-automation) |
-| C07 | Complete independent-check accounting | Every claim classified, including timeout and infrastructure failure | [R-0353](../../ROADMAP.md#task-r-0353) |
-| C08 | Compiler/checker/replay phase budgets | Cold/warm/incremental measurements; explicit proof terms versus tactic costs | [existing telemetry gate](../../scripts/tests/check_pipeline_telemetry.sh), [R-0150](../../ROADMAP.md#task-r-0150) |
+| C06 | Bounded synthesis/repair harness | Attempts, costs, failures, exact tasks, independent replay | [Proof Authoring And Automation](../../docs/project/ROADMAP_TASKS.md#area-proof-authoring-and-automation) |
+| C07 | Complete independent-check accounting | Every claim classified, including timeout and infrastructure failure | [R-0353](../../docs/project/ROADMAP_TASKS.md#task-r-0353) |
+| C08 | Compiler/checker/replay phase budgets | Cold/warm/incremental measurements; explicit proof terms versus tactic costs | [existing telemetry gate](../../scripts/tests/check_pipeline_telemetry.sh), [R-0150](../../docs/project/ROADMAP_TASKS.md#task-r-0150) |
 | C09 | Small explicit generated obligations and reusable proof patterns | Lower authoring/replay cost with identical statements and trust | [ProofKit](../../Concrete/ProofKit.lean) |
 | C10 | Compact guides and complexity discipline | Documentation stays useful without imposing arbitrary monolithic token caps | [Bend repo gate](https://github.com/bendlang/bend/blob/295e996574573e3a88827b1cf7045b437333c8f0/gates/repo.ts) |
-| C11 | Transitive restricted dependency policy | Reject unapproved native/trusted/unsafe additions; accepted foundation explicit | [R-0440](../../ROADMAP.md#task-r-0440), [trusted-code policy](../language/trusted-code-policy.md) |
+| C11 | Transitive restricted dependency policy | Reject unapproved native/trusted/unsafe additions; accepted foundation explicit | [R-0440](../../docs/project/ROADMAP_TASKS.md#task-r-0440), [trusted-code policy](../language/trusted-code-policy.md) |
 | C12 | Build-time authority controls | Dependency build execution is identified and isolated, including upgrades | [package design](../packages-tooling/package-manager-design.md), [FFI integration](../../docs/platform/FFI_GLUE.md) |
-| C13 | Separate authority, mutation, purity, determinism, totality | No false inference from an empty capability set | [R-0487](../../ROADMAP.md#task-r-0487), [R-0488](../../ROADMAP.md#task-r-0488) |
+| C13 | Separate authority, mutation, purity, determinism, totality | No false inference from an empty capability set | [R-0487](../../docs/project/ROADMAP_TASKS.md#task-r-0487), [R-0488](../../docs/project/ROADMAP_TASKS.md#task-r-0488) |
 | C14 | Same-type consuming/mutating collection transforms | Capacity reuse without hidden copy/allocation/cleanup changes | [Vec](../../std/src/vec.con), [Value Model](../../docs/language/VALUE_MODEL.md) |
-| C15 | Allocation/copy/peak-memory regression measurements | Detect extra growth, retained sharing, and abstraction overhead | [R-0416](../../ROADMAP.md#task-r-0416) |
+| C15 | Allocation/copy/peak-memory regression measurements | Detect extra growth, retained sharing, and abstraction overhead | [R-0416](../../docs/project/ROADMAP_TASKS.md#task-r-0416) |
 | C16 | Ownership-aware lowering and callable specialization | Sound alias facts, scoped borrows, direct calls; no blanket noalias | [SSA](../../Concrete/IR/SSA.lean), [callable model](../../docs/language/CALLABLE_VALUES_AND_CAPABILITIES.md) |
 | C17 | Check hoisting, constant tables, intentional wrapping | Same bounds/trap/arithmetic semantics before and after | [Arithmetic Policy](../../docs/language/ARITHMETIC_POLICY.md) |
 | C18 | Unboxing, tail-call analysis, allocation reuse | Measure applicability and cleanup/stack behavior; ordinary loops remain available | [Execution Model](../../docs/language/EXECUTION_MODEL.md) |
 | C19 | Immutable snapshots and incremental reuse | Saved downstream work exceeds copying; exact cache identities retained | [compiler research](../compiler/COMPILER_PIPELINE_RESEARCH.md) |
-| C20 | Proof-preserving optimization experiment | Fixed spec, replay, differential tests, runtime and memory measurements | [AI-assisted optimization](ai-assisted-optimization.md), [R-0482](../../ROADMAP.md#task-r-0482) |
-| C21 | Emitted-code validation | Distinguish host compiler safety from native behavior | [R-0299](../../ROADMAP.md#task-r-0299), [R-0300](../../ROADMAP.md#task-r-0300) |
+| C20 | Proof-preserving optimization experiment | Fixed spec, replay, differential tests, runtime and memory measurements | [AI-assisted optimization](ai-assisted-optimization.md), [R-0482](../../docs/project/ROADMAP_TASKS.md#task-r-0482) |
+| C21 | Emitted-code validation | Distinguish host compiler safety from native behavior | [R-0299](../../docs/project/ROADMAP_TASKS.md#task-r-0299), [R-0300](../../docs/project/ROADMAP_TASKS.md#task-r-0300) |
 | C22 | Compact indexed data and validated caches | Profile first; owner/bounds/schema/target/corruption controls | [compiler research](../compiler/COMPILER_PIPELINE_RESEARCH.md) |
 | C23 | Explicit allocator/arena experiments | Workload-specific lifetime and peak-memory benefit, no hidden policy | [R-0404](../../docs/project/ROADMAP_BACKLOG.md#task-r-0404) |
 | C24 | Restricted GPU feasibility experiment | One array workload, explicit buffers/transfers, synchronous completion | [Execution Model](../../docs/language/EXECUTION_MODEL.md), [R-0399](../../docs/project/ROADMAP_BACKLOG.md#task-r-0399) |
@@ -539,7 +539,7 @@ on a temporary review transcript.
   of its earlier requirement. The bounded experiment rejects identity changes;
   semantic implication/weakening analysis is a separate problem.
 - Whether transitions to ineligible/trusted code evade a required-claim policy
-  remains an untested hypothesis. [R-0215](../../ROADMAP.md#task-r-0215) owns the
+  remains an untested hypothesis. [R-0215](../../docs/project/ROADMAP_TASKS.md#task-r-0215) owns the
   adversarial cases, including an unchanged-requirement positive control.
 - Replaying without the model/network separates accepted evidence from candidate
   search. It does not establish checker implementation independence. The
@@ -555,7 +555,7 @@ on a temporary review transcript.
   [Vec](../../std/src/vec.con) mutation and its trusted implementation must be
   considered before introducing APIs; trusted-code and cleanup costs are part of
   the comparison. This review does not establish a workload bottleneck.
-- Build-time authority belongs with [R-0285](../../ROADMAP.md#task-r-0285)'s
+- Build-time authority belongs with [R-0285](../../docs/project/ROADMAP_TASKS.md#task-r-0285)'s
   executing foreign-toolchain integration. Recording authority is not sandboxing;
   unsupported isolation claims must remain explicit trust assumptions.
 - GPU feasibility remains behind R-0399, including device-side concurrency even

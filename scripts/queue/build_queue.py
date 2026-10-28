@@ -166,6 +166,11 @@ def roadmap_tasks(root, mods):
     if not os.path.exists(path):
         return []
     rm = read(path)
+    # Task bodies live in the task register next to the control plane (2026-10-28); the queue and the
+    # throughput table stay in ROADMAP.md, so the register is appended after it.
+    reg = os.path.join(root, "docs", "project", "ROADMAP_TASKS.md")
+    if os.path.exists(reg):
+        rm += "\n" + read(reg)
     tasks, seen = [], set()
 
     def add(rid, tier, title, deps):

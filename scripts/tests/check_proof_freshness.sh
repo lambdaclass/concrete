@@ -312,7 +312,7 @@ ORD_AFTERDECL="$(ord_digest "$ORD2")"
 # temporary state becomes permanent — which is the normal fate of revocation markers, and the
 # reason removing it is specified as part of the refreeze commit rather than as follow-up.
 if [ -n "$ORD_BEFORE" ] && [ "$ORD_BEFORE" = "$ORD_AFTER" ]; then
-  if grep -q "V2_FREEZE_REVOKED" "$ROOT_DIR/ROADMAP.md" "$ROOT_DIR/docs/project/ROADMAP_BACKLOG.md"; then
+  if grep -q "V2_FREEZE_REVOKED" "$ROOT_DIR/ROADMAP.md" "$ROOT_DIR/docs/project/ROADMAP_TASKS.md" "$ROOT_DIR/docs/project/ROADMAP_BACKLOG.md"; then
     no "determinism is FIXED but V2_FREEZE_REVOKED is still in ROADMAP.md — refreeze with evidence and remove the marker in the same commit"
   else
     ok "determinism fixed and the revocation marker removed together"

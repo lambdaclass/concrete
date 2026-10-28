@@ -271,7 +271,7 @@ probe "implementation digest and proof subject are in DIFFERENT domains" "true" 
 # REFROZEN 2026-08-09, in the same commit that removed the revocation marker — the two are tied
 # in both directions and neither may drift alone. The freeze prerequisite that failed
 # (cross-compilation determinism) now holds: see the ORDER assertions in check_proof_freshness.sh.
-if grep -q "V2_FREEZE_REVOKED" ROADMAP.md docs/project/ROADMAP_BACKLOG.md; then
+if grep -q "V2_FREEZE_REVOKED" ROADMAP.md docs/project/ROADMAP_TASKS.md docs/project/ROADMAP_BACKLOG.md; then
   no "ROADMAP.md still carries V2_FREEZE_REVOKED, but determinism is repaired and V2 is refrozen — remove the marker"
 else
   ok "V2 freeze is in force and the revocation marker is gone"
