@@ -259,7 +259,7 @@ else
     for df_cmd in "bash scripts/tests/check_gate_lock.sh $df_gate" "bash $df_gate; bash scripts/tests/check_x.sh" \
                   "bash $df_gate || true" "bash $df_gate | tee x" "bash $df_gate \$(echo x)" \
                   "X=x;(exit\${IFS}77);# bash $df_gate" $'true\nbash '"$df_gate" "X=\$(false) bash $df_gate" \
-                  "BASH_ENV=/tmp/defer bash $df_gate" "ENV=/tmp/defer sh $df_gate" "FOO=1 bash $df_gate"; do
+                  "BASH_ENV=defer.sh bash $df_gate" "ENV=defer.sh sh $df_gate" "FOO=1 bash $df_gate"; do
       gate_deferral "$df_cmd" >/dev/null \
         && no "CONTROL: gate_deferral accepted '$df_cmd', which is not the declared gate's own exit" \
         || ok "CONTROL: gate_deferral refuses '$df_cmd' (the gate as an argument, or in a compound command)"
