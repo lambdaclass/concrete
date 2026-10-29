@@ -991,7 +991,7 @@ locals, by-value `self` and `Destroy` bodies included.
 Version 3 records the owner's decision of 2026-10-29 (OD32): there is no receiver auto-borrow; a
 `&self` or `&mut self` method on an owned place is called as `(&s).m()` or `(&mut s).m()`, and a
 receiver that is already a reference is unchanged. Main still borrows an owned receiver implicitly
-(bug 328), so the receiver rows of the tables below describe main until it lands. `break <expr>`
+(bug 328); the `methodCall` row below states the decided form and notes main's. `break <expr>`
 is refused at parse (STMT-6, OD27).
 
 
