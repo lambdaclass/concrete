@@ -8833,7 +8833,7 @@ foreign-name rule of [FFI.md](../platform/FFI.md), owned with R-0283.
 active soundness and R-0482 work. Its first deliverable is **RocksDB slice 1**, defined with its
 acceptance and its prerequisite checklist under [feature prerequisites](../../ROADMAP.md#feature-prerequisites): its
 implementation and experiments proceed now, and it is accepted, and its safety advertised, when Phase 1
-exits 0b and 2i hold, not when all of row 2 closes. This task owns the user workflow. R-0279 owns target/runtime facts;
+exits 0b, 2i and 2q hold, not when all of row 2 closes. This task owns the user workflow. R-0279 owns target/runtime facts;
 R-0283/R-0287 own ABI checks, R-0286 owns exports/library artifacts and R-0289 owns sanitizer
 validation. The later full BackendIR, independent verifier and functional-proof milestones are
 not prerequisites for a tested foreign-library integration. Changes to evidence formats still
