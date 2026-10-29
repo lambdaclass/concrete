@@ -8549,12 +8549,12 @@ fi
 # the body's exit sequence completes before the step. run_ok compares the binary with 42 and the
 # interpreter leg below compares --interp with the same value.
 run_ok "$TESTDIR/regress_306_for_step_after_body_defers.con" 42
-r306_i=$($COMPILER "$TESTDIR/regress_306_for_step_after_body_defers.con" --interp </dev/null 2>&1 | awk 'END{print}' || true)
-if [ "$r306_i" = "42" ]; then
-    echo "  ok  regress_306_for_step_after_body_defers.con: --interp == binary (42)"
+r306_i=$($COMPILER "$TESTDIR/regress_306_for_step_after_body_defers.con" --interp </dev/null 2>&1; echo "rc=$?")
+if [ "$r306_i" = "$(printf '42\nrc=0')" ]; then
+    echo "  ok  regress_306_for_step_after_body_defers.con: --interp == binary (42, exit 0)"
     PASS=$((PASS + 1))
 else
-    echo "FAIL  regress_306_for_step_after_body_defers.con: --interp gave '$r306_i', want 42 (the binary's exit)"
+    echo "FAIL  regress_306_for_step_after_body_defers.con: --interp gave '$r306_i', want 42 and exit 0 (the binary's exit)"
     FAIL=$((FAIL + 1))
 fi
 # Bug 291: every stage found a struct, enum or newtype by name with a search of the declaration
