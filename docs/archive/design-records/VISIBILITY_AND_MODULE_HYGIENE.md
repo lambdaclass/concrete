@@ -1,18 +1,20 @@
 # Visibility and Module Hygiene
 
-The rules are MOD-1 to MOD-3 of [docs/spec/modules.md](../spec/modules.md) and TYPE-11 of
-[docs/spec/types.md](../spec/types.md); this document is the design record (visibility levels,
+Archived from docs/language: the visibility design record and pre-package checklist (Phase 3 items 73 and 78). Several first-release choices here were since replaced: struct fields are private by default (TYPE-11), and variant privacy is R-0011. The rules are MOD-1 to MOD-4 and TYPE-11 of docs/spec.
+
+The rules are MOD-1 to MOD-3 of [docs/spec/modules.md](../../spec/modules.md) and TYPE-11 of
+[docs/spec/types.md](../../spec/types.md); this document is the design record (visibility levels,
 module hygiene, the pre-package checklist).
 
 Status: stable reference (Phase 3, items 73 and 78)
 
 This document defines Concrete's visibility model and the module hygiene guarantees that must hold before stdlib freeze and package management. It covers the current state, the target rules, what the compiler must enforce, and how to validate that modules expose clean, stable interfaces.
 
-For the language identity, see [IDENTITY.md](../project/IDENTITY.md).
-For anti-features, see [ANTI_FEATURES.md](../project/ANTI_FEATURES.md).
-For the stdlib design principles, see [STDLIB_DESIGN_PRINCIPLES.md](../stdlib/STDLIB_DESIGN_PRINCIPLES.md).
-For the core/hosted boundary, see [HOSTED_STDLIB_SPLIT.md](../stdlib/HOSTED_STDLIB_SPLIT.md).
-For the stdlib API audit, see [STDLIB_API_REVIEW.md](../stdlib/STDLIB_API_REVIEW.md).
+For the language identity, see [IDENTITY.md](../../project/IDENTITY.md).
+For anti-features, see [ANTI_FEATURES.md](../../project/ANTI_FEATURES.md).
+For the stdlib design principles, see [STDLIB_DESIGN_PRINCIPLES.md](../../stdlib/STDLIB_DESIGN_PRINCIPLES.md).
+For the core/hosted boundary, see [HOSTED_STDLIB_SPLIT.md](../../stdlib/HOSTED_STDLIB_SPLIT.md).
+For the stdlib API audit, see [STDLIB_API_REVIEW.md](../../stdlib/STDLIB_API_REVIEW.md).
 
 ---
 

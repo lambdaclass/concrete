@@ -12,7 +12,7 @@ top-level function, an import alias or an intrinsic, is still open: today it may
 D9 (one source file per module with `pub` as its interface, and interface artifacts the compiler
 generates and checks) is decided and scheduled late; it enters as an entry with its owner when that
 work starts. The design record is
-[VISIBILITY_AND_MODULE_HYGIENE.md](../language/VISIBILITY_AND_MODULE_HYGIENE.md).
+[VISIBILITY_AND_MODULE_HYGIENE.md](../archive/design-records/VISIBILITY_AND_MODULE_HYGIENE.md).
 
 ## Rules
 
@@ -67,6 +67,23 @@ fn main() -> Int {
 export a helper by accident. `pub` on a type exports its name, not its representation (TYPE-11).
 There is one public level today; a package-internal `pub(pkg)` is designed for when packages
 depend on packages. Resolve, Check and Elab each verify imports (E0111, E0285, E0419).
+
+Visibility has two levels, `pub` and private, and private is the default, so a module's public
+surface is explicit and nothing is exported by accident; a `pub(pkg)` level is deferred until
+packages need it, and `pub(super)` or `pub(in path)` will not be added (restructure the modules
+instead). There are no glob imports, permanently: every imported name is listed, so each module
+begins with a manifest of what it uses and a name's origin is always visible (STDLIB design
+principle 8). A module's non-public items are not in its `FileSummary.publicNames` and cannot be
+named in an import list (E0111). Capabilities are not hidden by a module boundary: calling a
+function needs the capabilities in its signature (TRUST-4), so a module cannot smuggle a `File`
+call behind an `Alloc` signature, and each public function declares only what it needs; std contains
+`Unsafe` behind `trusted` functions that expose domain capabilities (`println` needs `Console`).
+`--report caps`, `--report authority` and `--report interface` show these surfaces, and a package
+policy (`[policy] deny = ["Unsafe"]`) can refuse capabilities. The visibility design and its
+pre-package hygiene checklist are the archived
+[VISIBILITY_AND_MODULE_HYGIENE.md](../archive/design-records/VISIBILITY_AND_MODULE_HYGIENE.md)
+(several of its first-release choices, such as all fields and variants visible, were since replaced
+by TYPE-11 and R-0011).
 
 ```con reject name=import-private code=E0111 stage=resolve pair=import-public
 mod a {

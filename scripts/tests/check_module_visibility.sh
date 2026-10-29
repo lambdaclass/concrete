@@ -6,7 +6,7 @@
 # importable; unknown modules and circular file-imports produce clean
 # diagnostics; and `--report interface` summarizes only the public surface.
 # Behavioral (drives the real compiler over small fixtures); see also
-# docs/language/VISIBILITY_AND_MODULE_HYGIENE.md.
+# MOD-2 of docs/spec/modules.md (the design record is docs/archive/design-records/VISIBILITY_AND_MODULE_HYGIENE.md).
 
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2

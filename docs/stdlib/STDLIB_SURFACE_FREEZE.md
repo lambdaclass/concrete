@@ -517,7 +517,7 @@ Allocation primitives (`grow`, `dealloc`). Used by Vec, String, Bytes, HashMap i
 
 Raw libc FFI bindings. Should not be imported by user code. Candidate for `pub(pkg)` restriction when package management lands.
 
-Source: [STDLIB_API_REVIEW.md](STDLIB_API_REVIEW.md), [VISIBILITY_AND_MODULE_HYGIENE.md](../language/VISIBILITY_AND_MODULE_HYGIENE.md)
+Source: [STDLIB_API_REVIEW.md](STDLIB_API_REVIEW.md), [VISIBILITY_AND_MODULE_HYGIENE.md](../archive/design-records/VISIBILITY_AND_MODULE_HYGIENE.md)
 
 #### `std.ptr` -- internal
 
@@ -600,7 +600,7 @@ These are designed, LL(1)-verified, and approved. They may be implemented before
 | Multi-line strings | Deferred | [STRING_TEXT_CONTRACT.md](STRING_TEXT_CONTRACT.md) |
 | Pre/post conditions (`requires`/`ensures`) | Proof pipeline not mature; deferred | [ANTI_FEATURES.md](../project/ANTI_FEATURES.md) |
 | `comptime` evaluation | Blurs parse-time/run-time boundary; deferred | [ANTI_FEATURES.md](../project/ANTI_FEATURES.md) |
-| `pub(pkg)` visibility | Deferred until package management | [VISIBILITY_AND_MODULE_HYGIENE.md](../language/VISIBILITY_AND_MODULE_HYGIENE.md) |
+| `pub(pkg)` visibility | Deferred until package management | [VISIBILITY_AND_MODULE_HYGIENE.md](../archive/design-records/VISIBILITY_AND_MODULE_HYGIENE.md) |
 | Unifying `#` with `::` | Deferred pending user feedback | [SYNTAX_FREEZE_REVIEW.md](../compiler/SYNTAX_FREEZE_REVIEW.md) #10 |
 
 ---
