@@ -109,25 +109,23 @@ for g in "$FIXTURES"/*.ebnf; do
 done
 [ "$n" -ge 10 ] || no "expected at least ten planted grammars under $FIXTURES, found $n"
 # Bug 329's regression: the FIRST/FOLLOW fixtures must fail as FOLLOW conflicts, not by accident.
-# One planted grammar per FIRST/FOLLOW kind the checkers claim, each pinned to the EXACT
-# conflict it must produce (rule path, kind and tokens), so a shared omission or a wrong token set
-# cannot pass on another line: an optional, a repetition, a non-nullable alternative against a
-# nullable one, two nullable alternatives, a nullable body under [ ] and { }, and a conflict
-# reached only through FOLLOW propagated from the enclosing rule.
-while IFS=$'\t' read -r fixture line; do
-  [ -n "$fixture" ] || continue
-  grep -qxF -- "$line" "$WORK/planted_$fixture.py" \
-    || no "planted_$fixture: missing '$line' (bug 329 is back)"
-done <<'EOF'
-follow_optional_before_same_start	conflict-follow for_hdr.2 opt IDENT
-follow_optional_then_same_token	conflict-follow x.2 opt 'b'
-follow_repetition_then_same_token	conflict-follow program.2 rep ','
-follow_nullable_alternative	conflict-follow tail alt1 'x'
-follow_nullable_alternative	conflict-follow twin nullable alt1,alt2
-follow_nullable_body	conflict-follow program.1 nullable body
-follow_nullable_body	conflict-follow program.3 nullable body
-follow_through_enclosing_rule	conflict-follow item.2 opt 'z'
-EOF
+# EVERY PLANTED GRAMMAR IS PINNED TO ITS EXACT CONFLICTS (tests/fixtures/grammar_ll1/
+# expected_conflicts.tsv): no more and no fewer lines than listed, so neither a shared omission nor
+# a spurious extra report can pass. Between them the follow_* grammars cover every FIRST/FOLLOW kind
+# (an optional, a repetition, an alternative against a nullable one, two nullable alternatives, a
+# nullable body under [ ] and { }, and a conflict reached only through FOLLOW propagated from the
+# enclosing rule); the others cover FIRST/FIRST shapes.
+EXPECTED="$FIXTURES/expected_conflicts.tsv"
+for g in "$FIXTURES"/*.ebnf; do
+  b="$(basename "$g" .ebnf)"
+  awk -F'\t' -v f="$b" '!/^#/ && $1 == f { print $2 }' "$EXPECTED" | LC_ALL=C sort > "$WORK/want.$b"
+  grep -E '^conflict(-follow)? ' "$WORK/planted_$b.py" | LC_ALL=C sort > "$WORK/got.$b"
+  if [ ! -s "$WORK/want.$b" ]; then no "planted_$b: no expected conflicts listed in $EXPECTED"
+  elif ! cmp -s "$WORK/want.$b" "$WORK/got.$b"; then
+    no "planted_$b: conflicts differ from $EXPECTED (< expected, > reported):"
+    diff "$WORK/want.$b" "$WORK/got.$b" >&2
+  fi
+done
 
 if [ "$FAIL" -ne 0 ]; then exit 1; fi
 echo "grammar LL(1): 3 checkers agree on $(grep -c '^rule ' "$WORK/real.py") rules and their FIRST and FOLLOW sets; $(wc -l < "$WORK/real.conflicts" | tr -d ' ') conflicts, all known ($KNOWN); $n planted grammars refused by all three"

@@ -1,0 +1,18 @@
+# The EXACT conflicts each planted grammar in this directory must produce, in every one of the
+# three LL(1) checkers (scripts/tests/check_grammar_ll1.sh). A fixture's conflict lines must equal
+# its rows here, no more and no fewer, and every planted grammar must have rows.
+#
+# fixture (file name without .ebnf)	canonical conflict line
+follow_nullable_alternative	conflict-follow tail alt1 'x'
+follow_nullable_alternative	conflict-follow twin nullable alt1,alt2
+follow_nullable_body	conflict-follow program.1 nullable body
+follow_nullable_body	conflict-follow program.3 nullable body
+follow_optional_before_same_start	conflict-follow for_hdr.2 opt IDENT
+follow_optional_then_same_token	conflict-follow x.2 opt 'b'
+follow_repetition_then_same_token	conflict-follow program.2 rep ','
+follow_through_enclosing_rule	conflict-follow item.2 opt 'z'
+nested_in_optional_and_repetition	conflict program.1[?] 1 2 'a'
+nested_in_optional_and_repetition	conflict program.2{*} 1 2 'c'
+recursive_rule	conflict b 1 2 'y'
+shared_first_token	conflict stmt 1 2 IDENT
+through_nullable_prefix	conflict item 1 2 'pub'
