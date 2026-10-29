@@ -12,7 +12,7 @@ checker refusal is a Check bug here.
 
 <!-- BEGIN GENERATED: bug areas (scripts/gen/bug_ledger.py; derived from the records, docs/bugs/area_map.tsv and git history, never edited here) -->
 
-279 records: 170 placed by their own fix commits, 37 by the files their record names in commits shared with other bugs, 34 by commits shared with other bugs, 10 by the commit that filed or closed the record, 23 by an `area:` override; 5 open bugs are not fixed yet and 0 fixed bugs have no commit the history can place.
+279 records: 171 placed by their own fix commits, 37 by the files their record names in commits shared with other bugs, 33 by commits shared with other bugs, 10 by the commit that filed or closed the record, 23 by an `area:` override; 5 open bugs are not fixed yet and 0 fixed bugs have no commit the history can place.
 
 ### By stage
 
@@ -21,7 +21,7 @@ checker refusal is a Check bug here.
 | Check | 72 | 0 | 39 | 5 | Check 33, CoreCheck 13, CheckHelpers 9, Verify 5 |
 | Lower | 38 | 0 | 12 | 3 | Lower 37, - 1 |
 | Resolve | 27 | 2 | 4 | 8 | Resolve 16, FileSummary 6, PeekType 2, BuiltinEnums 1 |
-| Elab | 26 | 0 | 9 | 7 | Elab 25, TypeSpelling 1 |
+| Elab | 25 | 0 | 9 | 6 | Elab 24, TypeSpelling 1 |
 | Proof | 19 | 1 | 8 | 2 | ProofCore 11, Proof 3, CallCollect 2, BodyIdentity 1 |
 | Interp | 18 | 0 | 4 | 8 | Interp 18 |
 | Parse | 11 | 0 | 3 | 0 | Parser 7, Lexer 2, AST 1, LocalId 1 |
@@ -30,8 +30,8 @@ checker refusal is a Check bug here.
 | Std | 8 | 0 | 0 | 0 | map 4, fs 2, libc 1, net 1 |
 | EmitLLVM | 7 | 0 | 3 | 4 | EmitBuiltins 5, EmitLLVM 1, Symbols 1 |
 | Report | 7 | 1 | 3 | 0 | AssumptionSummary 2, ModelDiff 2, Report 2, ReportObligations 1 |
+| Tooling | 7 | 0 | 1 | 1 | Makefile 1, dispatch 1, farm 1, new_bug 1 |
 | CLI | 6 | 0 | 2 | 1 | Main 4, Pipeline 1, PipelineTest 1 |
-| Tooling | 6 | 0 | 1 | 1 | Makefile 1, dispatch 1, farm 1, new_bug 1 |
 | Gates | 6 | 0 | 0 | 0 | authority_facts 1, check_binder_refs 1, check_gate_lock 1, compile_scaling 1 |
 | SSA | 5 | 1 | 0 | 2 | SSACleanup 4, SSAVerify 1 |
 
@@ -50,7 +50,7 @@ checker refusal is a Check bug here.
 | 9. Evidence verdicts computed per surface and joined to their subject by name | 4 | Proof 2, CLI 2 |
 | 10. Evidence identity computed from a partial subject | 5 | Proof 3, Elab 2 |
 | 11. Absence read as a fact (fail-open defaults) | 13 | Gates 4, Resolve 2, Proof 2, Report 2, Check 1, SSA 1, Tooling 1 |
-| 12. One fact kept in two places | 27 | Resolve 11, Check 5, Elab 3, Parse 2, Interp 2, Proof 1, Std 1, CLI 1, Tooling 1 |
+| 12. One fact kept in two places | 27 | Resolve 11, Check 5, Parse 2, Elab 2, Interp 2, Tooling 2, Proof 1, Std 1, CLI 1 |
 | 13. Documented rules with no enforcing site | 18 | Check 11, Resolve 4, Parse 1, Elab 1, Lower 1 |
 | 14. Trusted `std` and FFI code with no checked contract | 7 | Std 5, Parse 1, Check 1 |
 | 15. Ownership state not modeled along control-flow paths | 7 | Check 7 |
@@ -236,7 +236,7 @@ checker refusal is a Check bug here.
 | [196](196_match_arm_does_not_fit_scrutinee.md) | Check | Check | commits | Report |
 | [197](197_variant_pattern_drops_payload.md) | Check | Check | commits | Parse, Resolve |
 | [198](198_raw_deref_duplicates_non_copy.md) | Check | Check | commits | Elab, Std |
-| [199](199_cast_to_type_alias_panics.md) | Elab | Elab | shared | Interp, Proof, Resolve |
+| [199](199_cast_to_type_alias_panics.md) | Tooling | spec | commits | Elab |
 | [200](200_bare_generic_type.md) | Resolve | Resolve | commits | — |
 | [202](202_project_mode_skipped_desugaring.md) | CLI | Pipeline | record | — |
 | [203](203_e0420_names_two_errors.md) | Elab | Elab | commits | Check, Report |
