@@ -1,7 +1,7 @@
 mod derived_forms {
     // BUG 063: every one of these but the first was rejected with E0220, reporting a
     // type mismatch against `fn(i64) with() -> i64` — a capability set the program never
-    // wrote and the compiler invented. DECISIONS.md recommends a struct of function
+    // wrote and the compiler invented. PROJECT.md's language decisions recommend a struct of function
     // pointers as THE answer for pluggable interfaces, so the struct-field form is the
     // intended use rather than an exotic one.
     fn shout(x: i64) with(Console) -> i64 { return x * 2; }

@@ -98,8 +98,8 @@ roadmap's flagship/example work.
 - Stack-depth reporting end-to-end (`--report stack-depth`, 25 trust-gate tests)
 - Bounded-capacity types practical (`fixed_capacity`)
 - Error propagation documented (`parse_validate`, `service_errors`)
-- Example governance (`EXAMPLE_INVENTORY.md`, `EXAMPLE_LIFECYCLE.md`,
-  `EXAMPLE_NO_DUPLICATES.md`)
+- Example governance (`docs/project/EXAMPLES.md`: inventory, lifecycle,
+  no-duplicate rule)
 - Diagnostic UX design (`docs/compiler/DIAGNOSTIC_UX.md`)
 - Trusted boundary guide (`docs/verification/TRUSTED_BOUNDARY_GUIDE.md`)
 - Freestanding split defined (`docs/platform/FREESTANDING_SPLIT.md`,

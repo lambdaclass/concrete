@@ -104,7 +104,7 @@ When to revisit: when scoped `defer` + mutation APIs have been in use for 2-3 pr
 - Make scoped `defer` the dominant cleanup pattern
 - Reduce temporary allocations with better string/builder APIs
 - Unify destruction ergonomics over time so individual `drop_X` calls don't feel like manual bookkeeping
-- Every improvement should pass the DESIGN_POLICY.md admission criteria
+- Every improvement should pass the design-policy admission criteria (`docs/project/PROJECT.md`)
 
 ## Evidence Source
 

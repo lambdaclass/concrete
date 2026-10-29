@@ -40,9 +40,7 @@ This table is an ownership map, not another summary of each document's contents.
 
 Use these files as the primary reference once a design has moved out of exploration:
 
-- [IDENTITY.md](project/IDENTITY.md) — what Concrete is optimizing for, where it intends to differentiate, and what it is not trying to be
-- [WHY_CONCRETE.md](project/WHY_CONCRETE.md) — a direct overview for C and Rust developers: why Concrete exists, what it makes visible, and what it deliberately avoids
-- [PRINCIPLES.md](project/PRINCIPLES.md) — the stable language principles: minimalist systems programming, no GC, linear/resource-aware ownership, explicit boundaries, predictable execution, and Lean-backed proof direction
+- [PROJECT.md](project/PROJECT.md) — the project in one document: [why Concrete](project/PROJECT.md#why-concrete) (a direct overview for C and Rust developers), [identity](project/PROJECT.md#identity) (what Concrete is optimizing for, where it intends to differentiate, and what it is not trying to be), [principles](project/PROJECT.md#principles) (minimalist systems programming, no GC, linear/resource-aware ownership, explicit boundaries, predictable execution, Lean-backed proof direction), [design policy](project/PROJECT.md#design-policy) (feature-admission criteria and design filter), [language shape](project/PROJECT.md#language-shape) (long-term structural commitments) and [language decisions](project/PROJECT.md#language-decisions) (first-class "no" and "not yet" decisions)
 - [INFLUENCES.md](project/INFLUENCES.md) — which external language ideas Concrete copies, adapts, or rejects
 - [SAFETY.md](language/SAFETY.md) — capabilities, `trusted`, `Unsafe`, proof boundary, and high-integrity direction
 - [HANDLE_CAPABILITIES.md](language/HANDLE_CAPABILITIES.md) — R-0484 design: `with(...)` as the complete list of external authority, handle capabilities (`Writer<C>`), `trusted` and the foreign boundary
@@ -64,9 +62,6 @@ Use these files as the primary reference once a design has moved out of explorat
 - [ABI.md](platform/ABI.md) — layout, enum representation, FFI-safety, and ABI boundary rules
 - [DIAGNOSTICS.md](compiler/DIAGNOSTICS.md) — diagnostics model, current status, and staged diagnostics work
 - [FFI.md](platform/FFI.md) — externs, raw pointers, and the `Unsafe` boundary
-- [DESIGN_POLICY.md](project/DESIGN_POLICY.md) — feature-admission criteria and design filter
-- [DECISIONS.md](project/DECISIONS.md) — first-class "no" and "not yet" decisions
-- [LANGUAGE_SHAPE.md](project/LANGUAGE_SHAPE.md) — long-term structural commitments for the language
 - [PROOF_WORKFLOW.md](verification/PROOF_WORKFLOW.md) — proof-authoring and maintenance workflow: choose, generate, write, attach, verify, diagnose, repair, refactor
 - [PROOF_SYNTHESIS.md](verification/PROOF_SYNTHESIS.md) — LLM-guided proof synthesis target: AI searches for invariants/lemmas/proofs, Lean replay decides evidence
 - [SPARK_CLASS_ASSURANCE.md](verification/SPARK_CLASS_ASSURANCE.md) — SPARK-class assurance target and AI-facing guide for contracts, loop invariants, frame/dependency facts, ghost/spec code, and package evidence

@@ -60,5 +60,5 @@ The two remaining `provisional_with_gate` surfaces (const-generics,
 build-profiles) bound what early stdlib APIs may assume; their deferred parts are
 tracked by ROADMAP #6a / #10 respectively. (Iteration was promoted to
 `stable_for_stdlib` once its protocol was written and gated — ROADMAP #17,
-[ITERATION_PROTOCOL.md](../project/ITERATION_PROTOCOL.md).) When the others close, promote
+[the iteration protocol](../project/STYLE.md#iteration-protocol).) When the others close, promote
 the corresponding row to `stable_for_stdlib` here and in the gate.

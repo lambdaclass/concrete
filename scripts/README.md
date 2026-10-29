@@ -27,7 +27,7 @@ Every concurrent line of work gets its OWN git worktree:
 scripts/worktree-new.sh <name> [base-committish]
 ```
 
-One working tree cannot serve two writers. See `docs/project/CONCURRENT_WORK.md` for what
+One working tree cannot serve two writers. See `docs/project/AGENTS.md` ("Concurrent work") for what
 a worktree does and does not isolate (remotes, the stash stack and the branch
 namespace stay shared), and for why the concurrency guards live in
 `test_mutation.sh` and `push-both.sh` rather than in a head-count heuristic.

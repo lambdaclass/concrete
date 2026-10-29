@@ -175,7 +175,7 @@ ahead of it, and the current execution queue remains the owner of current work.
 The architecture package is not prepared merely because its two normative documents exist. Before
 implementation relies on them, close these documentation and drift boundaries:
 
-1. **Ratified decisions:** add durable `docs/project/DECISIONS.md` entries for the five identity
+1. **Ratified decisions:** add durable `docs/project/PROJECT.md` language-decision entries for the five identity
    domains and the separate evidence dimensions and lifecycle artifacts; the task/attempt/session/
    receipt/policy/cache separation; immutable receipt versus time-relative policy decision; Concrete
    ownership of the evidence formats and Why3 non-goal;

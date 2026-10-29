@@ -13,7 +13,7 @@
 #   E0220: type mismatch in argument 'f' of 'apply':
 #          expected fn(i64) with() -> i64, got fn(i64) with(Console) -> i64
 #
-# `with()` is not something the program wrote. DECISIONS.md recommends a struct of
+# `with()` is not something the program wrote. docs/project/PROJECT.md (language decisions) recommends a struct of
 # function pointers as THE answer for pluggable interfaces, so the rejected form is the
 # intended use.
 #

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Iteration-protocol gate (ROADMAP Phase 6 #17; docs/project/ITERATION_PROTOCOL.md).
+# Iteration-protocol gate (ROADMAP Phase 6 #17; docs/project/STYLE.md, "Iteration protocol").
 #
 # Concrete's traversal story is a fixed hierarchy of explicit forms — NOT a
 # universal lazy `Iterator` trait. This gate locks the blessed forms that exist

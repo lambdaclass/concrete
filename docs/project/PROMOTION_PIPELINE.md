@@ -116,7 +116,7 @@ to re-run a check, never to accept an incomplete one.
 **How the stages run today.** CI is the validator; local runs give feedback.
 
 1. **Development.** Work happens on a candidate branch in its own worktree
-   ([CONCURRENT_WORK.md](CONCURRENT_WORK.md)). Work in progress is backed up to
+   ([AGENTS.md](AGENTS.md#concurrent-work-one-worktree-per-writer)). Work in progress is backed up to
    `wip/<name>` every few minutes; the pre-push hook's wip tier checks only for conflict markers, so
    a usage limit or crash never loses work, and a `wip/*` ref is never a candidate.
 2. **Stage (a), the fast local tier.** The pre-push hook (`.githooks/pre-push`) runs the selected

@@ -73,7 +73,7 @@ runtime — but that's a trusted component, differentially tested against the
 reference interpreter, which is a reasonable trust boundary.
 
 ### 4. Ecosystem — mostly N/A by philosophy
-`docs/project/DESIGN_POLICY.md`'s admission principle favors a small, compiler-owned
+The design policy's admission principle (`docs/project/PROJECT.md`) favors a small, compiler-owned
 proof surface over importing large frameworks; Concrete rolls its own minimal
 `ProofKit`/`ProofCore`. The only place Rocq's ecosystem lead would matter is the
 deferred heap/allocation and concurrency proofs, where Iris-grade separation
@@ -83,7 +83,7 @@ logic is decades ahead and Concrete would be reinventing a lot.
 Concrete targets auditable, safety-critical low-level code (constant-time crypto,
 ELF parsing, evidence ledgers). Its Lean-based TCB inherits none of the
 ANSSI/CompCert regulatory track record Rocq carries. Doesn't affect the
-engineering, but worth a `DECISIONS.md` note if certification ever becomes a goal.
+engineering, but worth a language-decision note in `docs/project/PROJECT.md` if certification ever becomes a goal.
 
 ### 6. "AI prefers Lean" — meta
 Undercuts one common "why we picked Lean" justification, but not actionable.

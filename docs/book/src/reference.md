@@ -6,7 +6,7 @@ Use them when you need exact current direction rather than the book's higher-lev
 
 ## Core References
 
-- [`docs/project/IDENTITY.md`](../../project/IDENTITY.md)
+- [`docs/project/PROJECT.md`](../../project/PROJECT.md#identity)
   Project identity, differentiators, non-goals, and what Concrete must eventually be able to show.
 
 - [`docs/compiler/ARCHITECTURE.md`](../../compiler/ARCHITECTURE.md)

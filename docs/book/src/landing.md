@@ -3,7 +3,7 @@
   <p>Auditable low-level programming with explicit authority and trust boundaries, on top of a small, honest, proof-friendly language and compiler.</p>
   <div class="hero-actions">
     <a class="primary" href="./getting_started.md">Get Started</a>
-    <a href="../../IDENTITY.md">Read the Identity</a>
+    <a href="../../project/PROJECT.md#identity">Read the Identity</a>
     <a href="../../../ROADMAP.md">See the Roadmap</a>
   </div>
 </section>
@@ -127,7 +127,7 @@ Compared to Lean, Concrete is the low-level language and Lean 4 is the proof env
 
 <div class="quick-links">
   <a href="../../../README.md">Repository README</a>
-  <a href="../../IDENTITY.md">Project Identity</a>
+  <a href="../../project/PROJECT.md#identity">Project Identity</a>
   <a href="./why_lean4.md">Why Lean 4?</a>
   <a href="./high_integrity.md">High-Integrity Concrete</a>
   <a href="./use_cases.md">Use Cases</a>

@@ -190,7 +190,7 @@ the longer-term direction separately from current support.
 | [Contract negatives](examples/contract_negatives/) | Invalid and unsupported claims that the tools must refuse. |
 | [VC examples](examples/vc_suite/) | Bounds, arithmetic and contract obligations. |
 
-The [example inventory](docs/project/EXAMPLE_INVENTORY.md) distinguishes tested
+The [example inventory](docs/project/EXAMPLES.md#inventory) distinguishes tested
 examples from exploratory workloads. The [documentation index](docs/README.md)
 links the language, standard library, compiler and verification references.
 
@@ -208,7 +208,7 @@ The full suite is substantial. For a focused change, consult the
 [test guide](scripts/tests/README.md) for the relevant checks. Documentation code
 blocks are checked too, including the project example in this README.
 
-For the design rationale, read [Why Concrete?](docs/project/WHY_CONCRETE.md).
+For the design rationale, read [Why Concrete?](docs/project/PROJECT.md#why-concrete).
 For current priorities and release plans, use the [roadmap](ROADMAP.md).
 Questions and discussion are welcome in [Telegram][tg-url].
 

@@ -127,7 +127,7 @@ Compared to Lean, Concrete is the low-level language and Lean 4 is the proof env
 ## Start Here
 
 - [Getting started](@/guide/getting_started.md)
-- [Project identity](@/reference/IDENTITY.md)
+- [Project identity](@/reference/PROJECT.md#identity)
 - [High-integrity Concrete](@/guide/high_integrity.md)
 - [Use cases](@/guide/use_cases.md)
 - [Status](@/guide/status.md)

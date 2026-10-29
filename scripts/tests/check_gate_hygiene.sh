@@ -153,7 +153,7 @@ for f in "$ROOT_DIR"/scripts/tests/*.sh; do
 done
 [ "$selfref" -eq 0 ] && ok "no 'local' statement depends on its own earlier assignment"
 echo ""
-echo "=== concurrency guards are at the point of danger (docs/project/CONCURRENT_WORK.md) ==="
+echo "=== concurrency guards are at the point of danger (docs/project/AGENTS.md, concurrent work) ==="
 # Two agents shared one worktree on 2026-07-31 and the mutation harness restored a
 # backup OVER a concurrent edit, then verified against the pre-edit hash and
 # reported success — work destroyed, with the tool saying nothing was wrong. These

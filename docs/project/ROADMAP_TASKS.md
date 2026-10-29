@@ -3023,7 +3023,7 @@ in `VERIFICATION_STATUS.md`; author meaning in `PROOF_CONTRACT.md`; author proce
 `PROOF_WORKFLOW.md`; hostile cases in `THREAT_MODEL.md`; product invariant in
 `VERIFICATION_CHARTER.md`; proposition boundary in `VERIFICATION_IR.md`; shipped limitations in
 `CLAIMS_TODAY.md`; theorem categories in `PROOF_THEOREM_SHAPES.md`; feature admission in
-`docs/project/DESIGN_POLICY.md`. No roadmap-only architecture counts as implemented or normative.
+`docs/project/PROJECT.md` (design policy). No roadmap-only architecture counts as implemented or normative.
 
 Reports expose at least these independent dimensions:
 
@@ -4823,7 +4823,7 @@ roadmap task. It aligns the canonical arithmetic/bounds and proof-eligibility
 claims; rewrites `INTERPRETER_TRUST.md` around a second semantics tested for
 divergence rather than a fictional tiny width-blind oracle; narrows
 `KNOWN_HOLES.md` to an index over the numbered corpus; and corrects stale
-`DEFER.md`, `LANGUAGE_GAPS.md`, `IDENTITY.md`, error-convention, and anti-feature
+`DEFER.md`, `LANGUAGE_GAPS.md`, `IDENTITY.md` (now the identity section of `PROJECT.md`), error-convention, and anti-feature
 statements. The repair may land as documentation commits before the generated
 claim records exist; R-0438 owns preventing recurrence. The same repair removes
 stale hand-counted theorem totals, replaces “empty capability set means pure”
@@ -5162,7 +5162,7 @@ regression cases and controls of these tasks transfer here unless the reason ret
 
 **Reconciliation (2026-10-19):** Keep workload-pulled; no external iterator/lifetime expansion.
 
-**Objective:** Build internal-iteration and builder APIs in proposed `std.iter` and `std.builder` after the collection shape is known. This is NOT Rust's external-iterator / adapter-tower model: `research/stdlib/iterators.md` resolved the v1 design as per-container internal traversal (`for_each`, `fold`, context-threaded callbacks, and optional early-exit via an explicit `Continue | Break` tag), with no iterator trait, no lazy adapter chain, and no cursor/lifetime model. Add known-length reporting and reverse traversal (`rev_fold`/`rev_for_each` — today every backwards walk is a manual index-decrement loop; extend `docs/project/ITERATION_PROTOCOL.md` when these land),
+**Objective:** Build internal-iteration and builder APIs in proposed `std.iter` and `std.builder` after the collection shape is known. This is NOT Rust's external-iterator / adapter-tower model: `research/stdlib/iterators.md` resolved the v1 design as per-container internal traversal (`for_each`, `fold`, context-threaded callbacks, and optional early-exit via an explicit `Continue | Break` tag), with no iterator trait, no lazy adapter chain, and no cursor/lifetime model. Add known-length reporting and reverse traversal (`rev_fold`/`rev_for_each` — today every backwards walk is a manual index-decrement loop; extend the iteration protocol in `docs/project/STYLE.md` when these land),
 
 plus byte/text builders and tree/buffer builders inspired by Gleam's
 `BytesTree` and `StringTree`. Do not hide allocation; builder APIs either carry
@@ -6658,7 +6658,7 @@ from the flagships area flagships and workloads, before public comparison pressu
 informal speed impressions into claims.
 
 **Decision status:** the project affirms predictable generated-code performance
-as an evidence-bearing claim; `docs/project/DECISIONS.md` records the posture.
+as an evidence-bearing claim; `docs/project/PROJECT.md` (language decisions) records the posture.
 Individual comparisons remain `performance_not_claimed` until this task supplies
 their workload-scoped evidence.
 
@@ -7662,7 +7662,7 @@ outright is likely the cleanest rule and should be the default proposal.
 
 **Reconciliation (2026-10-19):** Keep as release acceptance.
 
-**Objective:** Keep public-facing docs and website copy grounded in the same evidence vocabulary. Use `docs/project/WHY_CONCRETE.md` as the source for a C/Rust-oriented "why this exists" page: small systems code, explicit authority, visible evidence classes, spec-drift-tied proofs, named trust boundaries, and what Concrete deliberately avoids. The website should show the end goal and the current honest status, not catchy slogans or one-badge proof claims.
+**Objective:** Keep public-facing docs and website copy grounded in the same evidence vocabulary. Use the "Why Concrete" section of `docs/project/PROJECT.md` as the source for a C/Rust-oriented "why this exists" page: small systems code, explicit authority, visible evidence classes, spec-drift-tied proofs, named trust boundaries, and what Concrete deliberately avoids. The website should show the end goal and the current honest status, not catchy slogans or one-badge proof claims.
 
 ## Area: Proof Status And Trust Gates
 
@@ -11195,7 +11195,7 @@ offload, managed shared heap or general recursive device runtime follows from th
 questions. Context: [execution model](../platform/EXECUTION_MODEL.md), research C24–C26.
 
 Any later adoption needs a forcing workload, bounded evidence and an explicit
-owner decision under the [design policy](DESIGN_POLICY.md) and
+owner decision under the [design policy](PROJECT.md#design-policy) and
 [evidence architecture](../verification/EVIDENCE_ARCHITECTURE.md).
 
 
@@ -11217,7 +11217,7 @@ pinned sources, compatibility concerns, and possible experiments.
 - Which benchmark controls and share-nothing concurrency constraints are useful
   to compare without importing Goose's implicit authority or lifetime model?
 - What evidence would support or rule out each idea under Concrete's
-  [design policy](DESIGN_POLICY.md)?
+  [design policy](PROJECT.md#design-policy)?
 
 A residual-check inventory and a bounded validated-index graph are possible
 experiments, not selected work. Record counterexamples, costs, contract/report

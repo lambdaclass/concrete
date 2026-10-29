@@ -12,8 +12,8 @@ schedule implementation, select syntax, or reopen standing language decisions.
 The source snapshot is [aardappel/goose at 94cc64d](https://github.com/aardappel/goose/tree/94cc64daeabcae6f072dc1fe2b864acda5a001bc).
 The observations below come from source and documentation review; benchmark
 results have not been independently reproduced. Concrete's
-[design policy](../../docs/project/DESIGN_POLICY.md),
-[recorded decisions](../../docs/project/DECISIONS.md), and
+[design policy](../../docs/project/PROJECT.md#design-policy),
+[recorded decisions](../../docs/project/PROJECT.md#language-decisions), and
 [layout contract](../../docs/platform/LAYOUT_CONTRACT.md) remain authoritative.
 The investigation is recorded under [roadmap questions](../../docs/project/ROADMAP_TASKS.md#open-research-questions-goose).
 

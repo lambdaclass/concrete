@@ -96,7 +96,7 @@ evidence-class machinery.
   compilation pipeline with an explicit trusted surface. Residual: the compiler *binary*
   runs on Lean's unverified runtime — a trusted component, differentially tested against
   the reference interpreter (a reasonable trust boundary).
-- **Point 4 (ecosystem) — mostly N/A by philosophy.** `docs/project/DESIGN_POLICY.md`'s
+- **Point 4 (ecosystem) — mostly N/A by philosophy.** The design policy's (`docs/project/PROJECT.md`)
   admission principle favors a small, compiler-owned proof surface over importing large
   frameworks. Only relevant to the deferred heap/concurrency proofs, where Rocq's Iris is
   decades ahead.
@@ -170,7 +170,7 @@ compiler to Rocq" is four jobs with very different costs:
   `/proc/self/statm`); `IO.Process.spawn` ×8; parser uses `StateT`/`ExceptT`. No
   `IO.Ref`. The compiler *core* is IO-free and Gallina-natural.
 - **Metaprogramming:** effectively **zero** — **no `Lean.Elab`/`Lean.Meta` imports**;
-  `DESIGN_POLICY.md` bans macros/`#[derive]`. The reported `elab`/`syntax` hits are almost
+  the design policy (`docs/project/PROJECT.md`) bans macros/`#[derive]`. The reported `elab`/`syntax` hits are almost
   certainly the compiler's own *elaboration pass* (the `Elab.lean` module), not Lean
   metaprogramming. (Correction to the raw sweep, which over-counted this bucket.)
 - **Dependencies:** zero Mathlib, zero Batteries; only a few `Std.Data.HashMap/HashSet`

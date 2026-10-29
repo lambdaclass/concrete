@@ -394,7 +394,7 @@ campaign runs' evidence directories; now isolated), `check_qualification_record.
 `check_mint_batch_accounting.sh` case and one `check_phase6c_observability.sh` artifact write at
 JOBS=64, which passed on re-check and are not yet explained.
 
-**Final candidate, `5852dd12`, JOBS=32** (the command in CONCURRENT_WORK.md): pool wall **407 s
+**Final candidate, `5852dd12`, JOBS=32** (the command in AGENTS.md, "Running the full gate set on the server"): pool wall **407 s
 (6.8 min)**, 250 passed, no gate failed only under parallelism, peak memory used 18.9 GB, max load 75.
 The only failures were the two host-environment gates above (they failed in the pool and again on
 re-check); their serial re-check brought the total to 799 s. `check_external_checker.sh` was a named
