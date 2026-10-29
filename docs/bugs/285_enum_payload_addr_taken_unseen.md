@@ -6,7 +6,7 @@ fixtures: regress_285_enum_payload_addr_taken.con
 class: 8 — the address-taken walk had a wildcard case
 silent: yes
 exit: 0b
-ruling: Violates: unrecorded
+ruling: Violates: MEM-3@1
 -->
 
 **Status:** FIXED (branch `wip/bug-285`)

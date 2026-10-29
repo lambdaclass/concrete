@@ -8,7 +8,7 @@ class: 11
 silent: yes
 exit: 0b
 area: Mono/Mono — fixed by 0c507fb9 (Mono.monoExpr) before the record was filed
-ruling: Violates: unrecorded
+ruling: Violates: FFI-5@1
 -->
 
 **Status:** FIXED 2026-10-18 by `0c507fb9` (bug 052 follow-up, "destructor dispatch is typed, never a name lookup"), on main through `13e92ee9`; verified and recorded 2026-10-21 (branch `symbols`)

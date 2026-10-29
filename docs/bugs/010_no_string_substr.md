@@ -3,7 +3,7 @@
 <!-- bug-ledger
 summary: No String Substring Extraction Path
 coverage: missing string_substr -- stdlib addition
-ruling: Violates: unrecorded
+ruling: Outside the spec: library — no substring operation (string_slice/string_substr added)
 -->
 
 **Status:** Fixed

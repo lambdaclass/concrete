@@ -6,7 +6,7 @@ fixtures: regress_bug121_enum_field_layout.con
 class: 12
 silent: yes
 exit: 0b
-ruling: Violates: unrecorded
+ruling: Violates: FFI-2@1
 -->
 
 **Status:** FIXED (branch `bug121-conlog-segv`; fix 5349311d, regression and gate leg 49438482)

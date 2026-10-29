@@ -5,7 +5,7 @@ summary: Check asked whether a branch's block diverges, never terminates or exit
 coverage: run_tests.sh, the bug 289 leg: the check stage of an if/else, a match and a let-block nest 8000 deep, each within 250 ms (retry 500)
 class: 17 — Check re-walked a nest's subtree at every level
 silent: no
-ruling: Violates: unrecorded
+ruling: Outside the spec: performance — Check re-walked nested branches for end facts and binder names
 -->
 
 **Status:** FIXED (branch `wip/bug-289`)

@@ -6,7 +6,7 @@ fixtures: regress_208_fn_local_named_like_import.con
 class: 1 — a fn-typed local renamed to a same-spelled imported function
 silent: yes
 exit: 0b
-ruling: Violates: unrecorded
+ruling: Violates: SCOPE-3@1
 -->
 
 **Status:** FIXED (branch `vp-r0492-core`)

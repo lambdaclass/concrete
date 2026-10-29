@@ -5,7 +5,7 @@ summary: the parser appended each element of an explicit array literal to the li
 fixtures: regress_249_explicit_array_literal.con
 class: 17 — the parser appended an explicit array literal's elements one at a time
 silent: no
-ruling: Violates: unrecorded
+ruling: Outside the spec: performance — the parser appended explicit array-literal elements one at a time, quadratic
 -->
 
 **Status:** FIXED (branch `wip/perf-quadratics`)

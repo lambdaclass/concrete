@@ -8,7 +8,7 @@ class: 8
 class: 13 — no type had a defined comparison
 silent: no
 area: Check — the record's Fix: refused at the checker (E0229)
-ruling: Violates: unrecorded
+ruling: Violates: TYPE-6@1
 -->
 
 **Status:** FIXED 2026-10-21 (branch `safety-eval2`, with [bug 140](140_comparison_consumes_linear.md))

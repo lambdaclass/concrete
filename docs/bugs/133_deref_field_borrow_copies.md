@@ -8,7 +8,7 @@ class: 8
 silent: yes
 exit: 0b
 area: Lower/Lower — the record's Fix (placeAddr in Lower.lean)
-ruling: Violates: unrecorded
+ruling: Violates: MEM-4@2
 -->
 
 **Status:** FIXED (branch `backend-108-116`, commit 35a39f6c)

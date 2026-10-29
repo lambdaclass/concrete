@@ -3,7 +3,7 @@
 <!-- bug-ledger
 summary: No Easy Timing Path For Standalone Benchmark Programs
 fixtures: bug_clock_builtin.con
-ruling: Violates: unrecorded
+ruling: Outside the spec: library — no standalone timing builtin (clock_monotonic_ns added); a missing library feature
 -->
 
 **Status:** Fixed

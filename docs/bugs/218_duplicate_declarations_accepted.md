@@ -6,7 +6,7 @@ fixtures: error_218_duplicate_function.con error_218_duplicate_struct.con error_
 class: 1 — two declarations of one spelling in a module: nothing compared declarations with each other
 silent: yes
 exit: 0b
-ruling: Violates: unrecorded
+ruling: Violates: MOD-3@2
 -->
 
 **Status:** FIXED (branch `wip/diffhunt-1023`)

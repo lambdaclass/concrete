@@ -6,7 +6,7 @@ coverage: model-diff report hang + swallowed gate failures. Regression vehicle i
 class: 11
 silent: yes
 exit: 0b
-ruling: Violates: unrecorded
+ruling: Outside the spec: tooling — --report model-diff never terminated and its gate swallowed the failure
 -->
 
 **Status:** FIXED 2026-10-20 (report budgeted, gate fails closed); a structural residual is open

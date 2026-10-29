@@ -5,7 +5,7 @@ summary: an imported `pub type N = M` whose target `M` is a private alias of its
 fixtures: regress_246_imported_alias_chain.con regress_246_imported_alias_chain_across_imports.con regress_246_imported_alias_chain_long.con
 class: 1 — an imported alias's target crossed as the exporter's spelling; fixed 2026-10-25 by expanding it at the import
 silent: no
-ruling: Violates: unrecorded
+ruling: Violates: TYPE-12@1
 -->
 
 **Status:** FIXED (2026-10-25, branch `wip/r0492-steps34`)

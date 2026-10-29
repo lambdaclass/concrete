@@ -6,7 +6,7 @@ fixtures: regress_180_report_scope/src/main.con
 class: 18 — a project report replaced a `ValidatedCore`'s modules by record update and ran Mono and lowering on a forest CoreCheck never certified
 silent: yes
 exit: 0b
-ruling: Violates: unrecorded
+ruling: Outside the spec: tooling — project --report mono/verify/traceability ran passes on an uncertified module subset
 -->
 
 **Status:** FIXED (branch `verified-pipeline`)

@@ -6,7 +6,7 @@ fixtures: error_197_variant_pattern_drops_payload.con regress_197_variant_patter
 class: 15 — a variant pattern with no field list ignored a non-Copy payload
 silent: yes
 exit: 0b
-ruling: Violates: unrecorded
+ruling: Violates: PAT-3@2, OWN-5@2
 -->
 
 **Status:** FIXED (branch `wip/bug197`, based on `wip/bug196`)

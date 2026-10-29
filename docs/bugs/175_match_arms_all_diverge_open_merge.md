@@ -5,7 +5,7 @@ summary: a `match` whose arms all diverge (break / continue / return) left its m
 fixtures: regress_175_match_arms_all_diverge.con
 class: 8 — a `match` whose arms all diverge left its merge open: 078's shape, missed in `match`
 silent: no
-ruling: Violates: unrecorded
+ruling: Violates: PASS-9@1
 -->
 
 **Status:** FIXED

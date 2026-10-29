@@ -5,7 +5,7 @@ summary: the interpreter did not resolve module-level constants (`undefined vari
 coverage: the interpreter evaluates a module constant's initializer at the use, in its own frame, and refuses a name two modules define (bug 132). Regression vehicle: run_tests.sh interp-vs-native leg on tests/regressions/bug117_interp_module_const/repro.con; examples/snippets/constants.con promoted to interp=yes (2026-10-21 (interpreter-coverage pass))
 class: 7
 silent: no
-ruling: Violates: unrecorded
+ruling: Violates: MOD-1@1
 -->
 
 **Status:** FIXED 2026-10-21 (interpreter-coverage pass, branch `interp-coverage`)

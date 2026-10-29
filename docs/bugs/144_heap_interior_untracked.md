@@ -6,7 +6,7 @@ fixtures: error_144_heap_field_read_twice.con error_144_free_drops_linear.con er
 class: 13 — heap interiors exempted from use-once by a disclosed exclusion
 silent: yes
 exit: 0b
-ruling: Violates: unrecorded
+ruling: Violates: OWN-8@2, MEM-5@1
 -->
 
 **Status:** FIXED 2026-10-21 (branch `safety-eval2`)

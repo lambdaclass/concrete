@@ -4,7 +4,7 @@
 summary: huge `[v; N]` repeat count → clean parse diagnostic instead of O(N²) hang/OOM
 coverage: huge array-repeat count hang -- covered by check_error_leaks.sh (huge_array case)
 class: 17
-ruling: Violates: unrecorded
+ruling: Outside the spec: performance — `[v; N]` repeat expansion was an O(N²) list append (hang/OOM)
 -->
 
 **Status:** Fixed

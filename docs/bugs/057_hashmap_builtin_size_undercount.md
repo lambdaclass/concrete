@@ -4,7 +4,7 @@
 summary: the hardcoded HashMap size undercounts the struct, truncating by-value copies (fixed in the R-0003 slice)
 fixtures: regress_057_hashmap_by_value/src/main.con
 class: 12
-ruling: Violates: unrecorded
+ruling: Violates: FFI-2@1
 -->
 
 **Status:** FIXED (2026-07-25, in the R-0003 slice) — `Builtin.hashmapSize` now

@@ -5,7 +5,7 @@ summary: the compiler built an executable through `<input>.ll` (file mode) or `<
 fixtures: regress_179_concurrent_compile.con regress_179_concurrent_build/src/main.con
 class: 16 — the intermediate `.ll` at `<input>.ll`, shared by concurrent compiles of one source
 silent: no
-ruling: Violates: unrecorded
+ruling: Outside the spec: tooling — concurrent compiles of one source shared the intermediate `<input>.ll` path
 -->
 
 **Status:** FIXED (branch `devshell-toolchain`)

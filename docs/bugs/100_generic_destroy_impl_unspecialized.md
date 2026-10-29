@@ -6,7 +6,7 @@ fixtures: regress_100_generic_ref_destroy.con
 class: 3
 silent: no
 exit: 0b
-ruling: Violates: unrecorded
+ruling: Violates: PASS-7@1
 -->
 
 **Status:** FIXED 2026-10-21 (`land5`)

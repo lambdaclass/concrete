@@ -5,7 +5,7 @@ summary: in an `if` / `while` / `match` head an uppercase name followed by `{` i
 fixtures: error_212_const_in_if_head.con
 class: 12 — the struct-literal decision: a case test in the parser, an ambiguous production in the grammar
 silent: no
-ruling: Violates: unrecorded
+ruling: Open: OPEN-16
 -->
 
 **Status:** FIXED (branch `wip/workload-lzpack`): the refusal now explains itself and the case

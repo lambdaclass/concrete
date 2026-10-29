@@ -6,7 +6,7 @@ fixtures: regress_152_string_trim_empty.con
 class: 7 — a runtime string builtin's empty-input edge
 silent: yes
 exit: 0b
-ruling: Violates: unrecorded
+ruling: Outside the spec: library — string_trim("") returned a one-byte string because of a runtime builtin's phi edge
 -->
 
 **Status:** FIXED 2026-10-21 (interpreter-coverage pass, branch `interp-coverage`)

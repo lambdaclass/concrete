@@ -5,7 +5,7 @@ summary: twenty Check refusals built from a bare message (`throwCheckMsg`) and e
 fixtures: error_206_newtype_field_other_than_zero.con error_206_newtype_constructor_arity.con error_206_receiverless_trait_method.con error_206_wrapping_on_non_integers.con error_206_print_without_arguments.con error_206_destructure_in_for_header.con error_206_test_with_parameter.con error_206_integer_requires.con error_206_spec_fn_calls_runtime_code.con
 class: 11 — an empty diagnostic code was a valid value
 silent: no
-ruling: Violates: unrecorded
+ruling: Outside the spec: tooling — Check refusals and literal diagnostics carried no diagnostic code
 -->
 
 **Status:** FIXED (branch `wip/bug206`, based on `main` `1b2dba60` with `wip/train6` `36bf7612` and `wip/bug203` merged)

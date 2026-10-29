@@ -5,7 +5,7 @@ summary: killing a gate run killed only the runner; its gates, compilers and har
 coverage: a killed gate run left its children working the tree and the repository lock held until removed by hand. Regression vehicle is the repository-lock gate's bug-244 legs (a runner sandbox killed by SIGTERM, SIGINT and SIGKILL; the lock library fresh.sh reclaims only a provably empty session group), not a tests/programs fixture (2026-10-25)
 class: 16 — a killed gate run's children and its lock, owned by no process group a signal or a later run could address
 silent: no
-ruling: Violates: unrecorded
+ruling: Outside the spec: tooling — a killed gate run left children running and the repository lock wedged
 -->
 
 **Status:** FIXED (branch `wip/gate-runner-kill`)

@@ -6,7 +6,7 @@ coverage: an unhinted integer literal defaulted to Int with NO range obligation 
 class: 7
 silent: yes
 exit: 0b
-ruling: Violates: unrecorded
+ruling: Violates: ARITH-2@1
 -->
 
 **Status:** FIXED (branch `bug088-literal-range`)

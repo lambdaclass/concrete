@@ -5,7 +5,7 @@ summary: the body hash drops declared types and never sees the signature; `i32 -
 coverage: the authoritative subject is proofSubjectDigestV2, which binds CheckedDeclFacts (full typed signature), so i32 -> u32 now stales the claim; LOAD-BEARING regression = check_proof_freshness.sh '059 CLOSED' leg (whole-signature change must report stale) ((R-0004 V2 activation 2026-08-17))
 class: 10
 area: Proof/ProofCore — the record's Root cause (bodyFingerprint); the commits naming it changed gates and ledgers
-ruling: Violates: unrecorded
+ruling: Outside the spec: tooling — proof body fingerprint omitted the signature and declared types, so a stale proof stayed proved
 -->
 
 **Status:** FIXED 2026-08-17 by the R-0004 V2 activation — second of R-0004's evidence-integrity defect class.

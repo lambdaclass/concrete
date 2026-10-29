@@ -6,7 +6,7 @@ fixtures: regress_183_deref_assign_rhs_first.con
 class: 7 — a dereference assignment's operand order
 silent: yes
 exit: 0b
-ruling: Violates: unrecorded
+ruling: Violates: STMT-4@1
 -->
 
 **Status:** FIXED (branch `soundness-holes`)

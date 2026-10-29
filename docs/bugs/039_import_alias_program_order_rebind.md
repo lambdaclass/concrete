@@ -4,7 +4,7 @@
 summary: Imported bare fn name rebinds to another module's colliding import
 coverage: regress_039_import_alias_collision/src/main.con (project test, exit 0); emitSModule puts the module's own bare->qualified import aliases ahead of the program-wide pool
 class: 1
-ruling: Violates: unrecorded
+ruling: Violates: MOD-1@1
 -->
 
 **Status:** Fixed (2026-07-17)

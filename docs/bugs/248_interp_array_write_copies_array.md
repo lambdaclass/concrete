@@ -5,7 +5,7 @@ summary: under `--interp` an element write (`a[i] = v`, `s.f[i] = v`, through `&
 fixtures: regress_248_interp_array_write.con
 class: 17 — an interpreter element write copied the array the environment still held
 silent: no
-ruling: Violates: unrecorded
+ruling: Outside the spec: performance — interpreter element writes copied the whole array
 -->
 
 **Status:** FIXED (branch `wip/perf-quadratics`)

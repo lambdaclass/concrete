@@ -6,7 +6,7 @@ fixtures: error_2i_scope1_duplicate_params.con regress_2i_scope1_duplicate_param
 class: 2
 class: 13 — closed by SCOPE-1@1, exit 2i
 silent: no
-ruling: Violates: unrecorded
+ruling: Violates: SCOPE-1@1
 -->
 
 **Status:** FIXED 2026-10-21 (exit 2i, SCOPE-1@1: E0301 at binder introduction)

@@ -6,7 +6,7 @@ fixtures: regress_165_generated_helper_call.con
 class: 1 — a compiler-generated `print_int` call binds to a same-named user function
 silent: yes
 exit: 0b
-ruling: Violates: unrecorded
+ruling: Spec gap: MOD — a call the compiler generates when it desugars print/println/append is bound to its runtime helper by identity, never to a same-named declaration of the program
 -->
 
 **Status:** FIXED (branch `soundness-holes`)

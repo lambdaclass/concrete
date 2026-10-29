@@ -5,7 +5,7 @@ summary: Resolve built a module's global scope by folding each enum's variant sy
 coverage: `check_compile_scaling.sh` judges the `enums` shape's `resolve` stage against its budget and near-linear growth: this fix removes the stage's exclusion under this bug, and the gate fails the pre-fix compiler
 class: 17 — Resolve folds every enum's variant symbols onto the list built so far
 silent: no
-ruling: Violates: unrecorded
+ruling: Outside the spec: performance — Resolve folds enum variant symbols onto the list built so far
 -->
 
 **Status:** FIXED (branch `wip/perf-274-v3`)

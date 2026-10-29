@@ -5,7 +5,7 @@ summary: check_binder_refs.sh's empty-scope leg read only an `if`, which never e
 coverage: check_binder_refs.sh leg "a match arm that binds nothing does not shift framesOut", and test_mutation.sh mutation 56 (frames open eagerly, on scope entry) is KILLED by it
 class: 11 — a gate that could not see the defect it names
 silent: no
-ruling: Violates: unrecorded
+ruling: Outside the spec: tooling — check_binder_refs.sh empty-scope leg could not detect eagerly opened binder frames
 -->
 
 **Status:** FIXED (branch `wip/perf-backend`)

@@ -7,7 +7,7 @@ class: 4
 class: 5
 silent: yes
 exit: 0b
-ruling: Violates: unrecorded
+ruling: Violates: REF-6@1
 -->
 
 **Status:** FIXED 2026-10-20 (batch 2, bug 091 normalized place rule)

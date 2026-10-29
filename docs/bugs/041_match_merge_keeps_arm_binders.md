@@ -4,7 +4,7 @@
 summary: Match merge kept arm binders — stale Copy binder poisons a later same-named linear binder
 coverage: regress_041_match_binder_states.con (run_ok 42) + error_041_match_leak_still_caught.con (run_err E0208); Check post-match merges rebuild from envBefore (arm binders arm-scoped)
 class: 2
-ruling: Violates: unrecorded
+ruling: Violates: SCOPE-3@1
 -->
 
 **Status:** Fixed (2026-07-17)

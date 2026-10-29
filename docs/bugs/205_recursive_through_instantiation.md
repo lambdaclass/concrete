@@ -6,7 +6,7 @@ fixtures: error_205_recursive_through_instantiation.con regress_205_instantiatio
 class: 13 — finite size judged on declarations and assumed for generic instantiations
 silent: yes
 exit: 0b
-ruling: Violates: unrecorded
+ruling: Violates: TYPE-16@1
 -->
 
 **Status:** FIXED (branch `wip/bug205`, based on `wip/train6` `13bc2527`)

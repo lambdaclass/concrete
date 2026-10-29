@@ -5,7 +5,7 @@ summary: the R-0550 scaling gate compared each stage's fastest-of-three wall tim
 coverage: check_compile_scaling.sh
 class: 11 — the host's speed at judgment, never measured, read as its speed at --measure
 silent: no
-ruling: Violates: unrecorded
+ruling: Outside the spec: tooling — scaling gate judged absolute wall-time budgets, so a busy CI host failed unchanged work
 -->
 
 **Status:** FIXED (branch `wip/bug-294`)

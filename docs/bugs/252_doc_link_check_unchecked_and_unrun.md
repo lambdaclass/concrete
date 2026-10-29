@@ -5,7 +5,7 @@ summary: the Markdown-link check dropped every `#anchor`, so links to renamed or
 coverage: the Markdown-link check dropped anchors, resolved changelog fragments against their own directory, and was run only by the Makefile. Documentation tooling, no compiler program to reproduce it: the regression vehicle is the link gate's throwaway-tree controls and the selection replay controls over the selector entry point select_gates.sh (2026-10-25)
 class: 11 — a link check that skipped every anchor and that no workflow step ran passed as coverage
 silent: no
-ruling: Violates: unrecorded
+ruling: Outside the spec: tooling — the Markdown link check ignored anchors, misresolved changelog fragments and was never run by CI
 -->
 
 **Status:** FIXED (branch `wip/doc-links-gate`)

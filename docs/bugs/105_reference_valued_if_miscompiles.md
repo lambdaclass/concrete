@@ -9,7 +9,7 @@ class: 7
 class: 12 — `isPassByPtr` read both as "passed as a pointer" and "a register holding an aggregate by pointer"
 silent: yes
 exit: 0b
-ruling: Violates: unrecorded
+ruling: Violates: PASS-1@1
 -->
 
 **Status:** FIXED (branch `lowering-bugs`; the checker containment stays)

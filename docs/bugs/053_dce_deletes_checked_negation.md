@@ -4,7 +4,7 @@
 summary: the unary trap inventory moved into `IntArith`, so DCE stops deciding locally whether `-x` can trap (in R-0005)
 coverage: the unary trap inventory moved into IntArith (evalIntUnaryOp / unaryOpCanTrap) so DCE stops deciding locally whether -x can trap; gated by check_trap_inventory.sh (12 checks, both paths at i8/i16/i32/Int) with mutations #25-#27 ((R-0005))
 class: 7
-ruling: Violates: unrecorded
+ruling: Violates: ARITH-3@1
 -->
 
 **Status:** Fixed (2026-07-27, R-0005)

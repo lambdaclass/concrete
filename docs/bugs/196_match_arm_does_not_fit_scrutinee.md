@@ -6,7 +6,7 @@ fixtures: error_196_other_enum_variant.con error_196_range_over_enum.con error_1
 class: 13 — pattern shape left to CoreCheck, after Elab crashed or lowered the arm
 silent: yes
 exit: 0b
-ruling: Violates: unrecorded
+ruling: Violates: PAT-3@2
 -->
 
 **Status:** FIXED (branch `wip/bug196`)

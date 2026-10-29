@@ -5,7 +5,7 @@ summary: Lower added a loop header's phis (`prependInstsToBlock`) and an aggrega
 fixtures: regress_292_loop_header_patches.con
 class: 17 — every loop header patched by a map over all finished blocks
 silent: no
-ruling: Violates: unrecorded
+ruling: Outside the spec: performance — loop header phis patched by mapping every finished block
 -->
 
 **Status:** FIXED (branch `wip/bug-292`, based on `wip/perf-286`)

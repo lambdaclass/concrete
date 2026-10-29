@@ -5,7 +5,7 @@ summary: Check and Elab asked whole-subtree questions (does an operand contain a
 fixtures: regress_280_nested_operand_exits.con error_280_exit_deep_operand.con
 class: 17 — Check and Elab re-walk a nested expression's whole operand tree at every level
 silent: no
-ruling: Violates: unrecorded
+ruling: Outside the spec: performance — Check and Elab re-walk nested operand subtrees at every level
 -->
 
 **Status:** FIXED (branch `wip/perf-280`)

@@ -4,7 +4,7 @@
 summary: a capability declared in a dependency did not bind on its caller: a function declaring nothing read `$HOME` through `std.env.get`. Only hardcoded intrinsics were enforced across a package boundary
 coverage: a capability declared in a DEPENDENCY did not bind on its caller: a function declaring nothing called std.env.get and the program printed $HOME. ALL FOUR CALL FORMS now bind, and they are enumerated because a headline that did not name them is exactly how the last one stayed open: imported free function, explicitly imported receiver method (RawCursor::read_u8), associated call (TcpStream::connect), and PRELUDE receiver method (String::drop). The prelude case survived two rounds because importedFnCaps was built by walking m.imports and String needs no import; check_cap_sibling_module.sh asserted the acceptance as a KNOWN HOLE (a passing check) while check_cross_package_caps.sh passed claiming methods bind -- two green gates, incompatible headlines. Public std Unsafe fell 154->21 via per-method trusted. Gated by check_cross_package_caps.sh (18/0) and check_cap_sibling_module.sh (17/0, now a rejection test with a positive control); see docs/bugs/071 (2026-09-21 (sinks+Alloc) / 2026-09-25 (Unsafe) / 2026-09-25 (prelude receivers))
 class: 6
-ruling: Violates: unrecorded
+ruling: Violates: TRUST-4@1
 -->
 
 **Status:** Fixed — stage 1 2026-09-21 (sinks + `Alloc`), stage 2 2026-09-25 (`Unsafe`

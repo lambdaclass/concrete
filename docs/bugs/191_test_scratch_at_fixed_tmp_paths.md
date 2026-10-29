@@ -5,7 +5,7 @@ summary: test programs (`file_write_read.con`, `file_read_basic.con`) and nine s
 fixtures: file_write_read.con file_read_basic.con regress_191_test_scratch.con
 class: 16 — test scratch files at fixed `/tmp` names, owned by the first user on a shared host
 silent: no
-ruling: Violates: unrecorded
+ruling: Outside the spec: tooling — test programs and std tests wrote fixed shared /tmp scratch paths
 -->
 
 **Status:** FIXED (branch `train3-tmp-paths`, for landing train 3)

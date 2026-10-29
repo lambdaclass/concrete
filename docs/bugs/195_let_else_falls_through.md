@@ -6,7 +6,7 @@ fixtures: error_195_let_else_falls_through_unit.con error_195_let_else_falls_thr
 class: 13 — `let ... else` divergence: desugared away before any checker
 silent: yes
 exit: 0b
-ruling: Violates: unrecorded
+ruling: Violates: PAT-5@2
 -->
 
 **Status:** FIXED for every pattern that binds a field (branch `wip/bug195`); a `let ... else` over

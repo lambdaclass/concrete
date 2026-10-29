@@ -7,7 +7,7 @@ class: 7
 class: 12 — float rendering kept in several places
 silent: yes
 exit: 0b
-ruling: Violates: unrecorded
+ruling: Spec gap: ARITH — a floating literal denotes its correctly rounded value at the floating type it takes, and emission preserves that value
 -->
 
 **Status:** FIXED (branch `backend-108-116`, commit 0ee4252e)

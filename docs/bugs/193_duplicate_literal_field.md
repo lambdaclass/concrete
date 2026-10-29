@@ -6,7 +6,7 @@ fixtures: error_193_duplicate_struct_field.con error_193_duplicate_variant_field
 class: 7 — which occurrence of a repeated literal field counts
 silent: yes
 exit: 0b
-ruling: Violates: unrecorded
+ruling: Violates: TYPE-7@1
 -->
 
 **Status:** FIXED (branch `wip/spec-single-source`)

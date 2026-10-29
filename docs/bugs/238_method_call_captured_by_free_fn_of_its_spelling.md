@@ -6,7 +6,7 @@ fixtures: regress_238_free_fn_spelled_like_method_call.con regress_238_other_mod
 class: 1 — a method call's caller-side spelling met a free function (or extern, constant, alias) defined under it; fixed 2026-10-26: Core references carry their namespace (`CallSpace`) and method references resolve among methods only
 silent: yes
 exit: 0b
-ruling: Violates: unrecorded
+ruling: Violates: MOD-1@1
 -->
 
 **Status:** FIXED (branch `wip/name-capture`)

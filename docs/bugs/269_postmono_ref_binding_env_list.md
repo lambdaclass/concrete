@@ -5,7 +5,7 @@ summary: the post-mono reference-binding verifier (REF-6@1) kept its environment
 fixtures: error_269_far_binding_assigned.con regress_269_generic_bindings_at_value.con
 class: 17 — the post-mono verifier's environment
 silent: no
-ruling: Violates: unrecorded
+ruling: Outside the spec: performance — post-mono reference-binding verifier searched an environment list per assignment
 -->
 
 **Status:** FIXED (branch `wip/perf-backend`)

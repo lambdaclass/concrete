@@ -6,7 +6,7 @@ fixtures: error_149_loop_cond_moves_outer.con error_149_return_after_unreached_d
 class: 15 — loop conditions, nested returns and labelled exits
 silent: yes
 exit: 0b
-ruling: Violates: unrecorded
+ruling: Violates: OWN-2@2, OWN-4@2
 -->
 
 **Status:** FIXED 2026-10-22 (branch `safety-eval2`)

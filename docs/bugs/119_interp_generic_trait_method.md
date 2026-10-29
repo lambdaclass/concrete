@@ -6,7 +6,7 @@ coverage: interp dispatch of a trait method on a type parameter through the trai
 class: 7
 silent: no
 area: Interp/Interp — fixed by bug 052's batch-2 interpreter change; the commit naming 119 only recorded it
-ruling: Violates: unrecorded
+ruling: Violates: PASS-1@1
 -->
 
 **Status:** FIXED 2026-10-20 (batch 2)

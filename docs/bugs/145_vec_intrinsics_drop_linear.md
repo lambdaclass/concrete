@@ -6,7 +6,7 @@ fixtures: error_145_vec_free_linear.con regress_145_vec_free_copy_param.con regr
 class: 13 — raw collection intrinsics outside rule (c)
 silent: no
 exit: 0b
-ruling: Violates: unrecorded
+ruling: Violates: OWN-5@2, OWN-9@2
 -->
 
 **Status:** FIXED 2026-10-22 (branch `safety-eval2`, containment of `vec_free`; the `vec_set` half is

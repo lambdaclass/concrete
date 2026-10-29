@@ -6,7 +6,7 @@ fixtures: error_113_submodule_extern_undeclared.con error_113_submodule_extern_e
 class: 13
 silent: yes
 exit: 0b
-ruling: Violates: unrecorded
+ruling: Violates: FFI-3@1
 -->
 
 **Status:** FIXED 2026-10-21 (branch `symbols`)

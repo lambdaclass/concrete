@@ -3,7 +3,7 @@
 <!-- bug-ledger
 summary: found by workload 1 (base64_cli)
 coverage: regress_031_if_branch_borrow.con + regress_031_ifexpr_branch_borrow.con + regress_031_match_arm_borrow.con (run_ok 101/107/8); Lower prePromoteAddrTaken (all 3 sites)
-ruling: Violates: unrecorded
+ruling: Violates: MEM-3@1
 -->
 
 **Status:** Fixed (2026-07-14) — all three sites; trust battery green

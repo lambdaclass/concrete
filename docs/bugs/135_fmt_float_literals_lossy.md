@@ -6,7 +6,7 @@ coverage: concrete fmt printed float literals with toString (six decimals), so 0
 class: 12 — the formatter's copy of that rendering
 silent: yes
 exit: 0b
-ruling: Violates: unrecorded
+ruling: Outside the spec: tooling — concrete fmt printed float literals with six decimals and changed program values
 -->
 
 **Status:** FIXED 2026-10-21 (branch `small-fixes-111-127-135`)

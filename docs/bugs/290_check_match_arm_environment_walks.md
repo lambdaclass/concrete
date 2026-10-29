@@ -5,7 +5,7 @@ summary: at every arm of every `match`, Check's H9 block-local check (`checkBloc
 coverage: run_tests.sh, the bug 290 leg: the check stage of a main that builds and matches 8000 enum values of 8000 enum types within 600 ms (retry 1200)
 class: 17 — per-arm walks of the binding environment and per-use enum list searches
 silent: no
-ruling: Violates: unrecorded
+ruling: Outside the spec: performance — Check walked every non-Copy binding at every match arm; enums found by list search
 -->
 
 **Status:** FIXED (branch `wip/bug-290`)

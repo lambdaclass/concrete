@@ -3,7 +3,7 @@
 <!-- bug-ledger
 summary: user fn named `user_main`/`__*` → clean `reserved identifier` instead of an LLVM duplicate-symbol leak
 coverage: reserved-name collision -- covered by check_error_leaks.sh (clash_*, extern_argc cases)
-ruling: Violates: unrecorded
+ruling: Violates: MOD-3@2
 -->
 
 **Status:** Fixed

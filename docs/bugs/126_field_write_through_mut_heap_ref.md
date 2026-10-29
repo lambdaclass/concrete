@@ -6,7 +6,7 @@ fixtures: regress_126_heap_ref_one_hop.con
 class: 8
 silent: yes
 exit: 0b
-ruling: Violates: unrecorded
+ruling: Violates: MEM-4@2
 -->
 
 **Status:** FIXED (branch `lowering-bugs`, with bug 102)

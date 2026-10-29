@@ -7,7 +7,7 @@ class: 8 — a borrowed temporary has no slot
 class: 13 — REF-5: a borrowed call result is accepted
 silent: yes
 exit: 0b
-ruling: Violates: unrecorded
+ruling: Violates: REF-5@1
 -->
 
 **Status:** FIXED (branch `soundness-holes`, decision D2)

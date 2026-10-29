@@ -7,7 +7,7 @@ class: 8
 class: 12 — the element-type hint: Check passes it, Elab did not
 silent: no
 area: Elab — the record's Fix (Elab hints the assigned value); the commit naming it mostly migrated identities
-ruling: Violates: unrecorded
+ruling: Violates: PASS-6@1, PASS-9@1
 -->
 
 **Status:** FIXED (branch `backend-108-116`, commit f3bba025, follow-up 262d3fe0)

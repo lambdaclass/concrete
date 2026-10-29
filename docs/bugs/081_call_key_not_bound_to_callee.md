@@ -6,7 +6,7 @@ coverage: the proof model calls by table KEY but edges were justified by table c
 class: 1
 class: 9
 silent: yes
-ruling: Violates: unrecorded
+ruling: Outside the spec: tooling — a proof call key was not bound to the resolved callee, so an import alias borrowed a theorem
 -->
 
 **Status:** FIXED (branch `bug081-callee-key`, on the unpublished bug-080 head `00efbaf4`)

@@ -6,7 +6,7 @@ fixtures: regress_228_interp_loop_env.con
 class: 17 — the interpreter's environment, an association list, kept every loop iteration's bindings
 silent: no
 area: Interp/Interp — the record's Fix (evalWhile); the commit naming it mostly changed the Makefile
-ruling: Violates: unrecorded
+ruling: Outside the spec: performance — interpreter loops kept every iteration's bindings, quadratic in iteration count
 -->
 
 **Status:** FIXED (branch `wip/workload-stackvm-2`)

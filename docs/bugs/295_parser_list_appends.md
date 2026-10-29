@@ -5,7 +5,7 @@ summary: the parser built its lists by appending one element at a time to the li
 coverage: run_tests.sh
 class: 17 — the parser's per-element list appends
 silent: no
-ruling: Violates: unrecorded
+ruling: Outside the spec: performance — parser appended match arms, parameters, arguments and the like one at a time
 -->
 
 **Status:** FIXED (branch `wip/bug-295`)

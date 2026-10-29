@@ -3,7 +3,7 @@
 <!-- bug-ledger
 summary: found by the extended differential fuzzer (string in branch arm); 4th merge-loop instance
 coverage: regress_038_if_merge_promoted_aggregate.con (run_ok qm); Lower merge loops skip ANY promoted var (aggregate included); extended fuzzer is the class gate
-ruling: Violates: unrecorded
+ruling: Spec gap: PASS — every consumer gives an accepted program its checked Core behaviour: lowering, emission and the interpreter preserve meaning on every profile (PASS-3 states it for the native profile only)
 -->
 
 **Status:** Fixed (2026-07-16)

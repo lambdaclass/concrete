@@ -6,7 +6,7 @@ coverage: Vec<[T;N]>.drop() skipped element destruction because tyName is empty 
 class: 3
 class: 11
 exit: 0b
-ruling: Violates: unrecorded
+ruling: Violates: PASS-1@1, TRAIT-10@1
 -->
 
 **Status:** FIXED 2026-10-18 (arrays of destroyable elements get real glue; every

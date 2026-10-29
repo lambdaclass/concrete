@@ -5,7 +5,7 @@ summary: a body was compared with a specification only when its source name keye
 coverage: a body was compared with a specification only when its source name keyed Concrete.Proof.specs, so a claim borrowing any theorem by naming that theorem's spec was proved and minted a receipt (always_seven + check_nonce_correct on b87152ba). Regression vehicle is a gate: check_subject_binding.sh mints nothing for always_seven, rejects the receipt b87152ba issued for it (scripts/tests/fixtures/bug079/always_seven.b87152ba.store), and refuses the changed-together, attested-wrong-model and permuted-parameter shapes; see docs/bugs/079 (2026-10-17)
 class: 9
 silent: yes
-ruling: Violates: unrecorded
+ruling: Outside the spec: tooling — a receipt was minted for a body the linked theorem says nothing about
 -->
 
 **Status:** FIXED (branch `bug079-spec-binding`, from published main `b87152ba`)

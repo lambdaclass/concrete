@@ -3,7 +3,7 @@
 <!-- bug-ledger
 summary: Cross-Module String Literal Name Collisions
 coverage: string literal collision -- fixed in EmitSSA, covered by cross-module tests
-ruling: Violates: unrecorded
+ruling: Spec gap: PASS — every consumer gives an accepted program its checked Core behaviour: lowering, emission and the interpreter preserve meaning on every profile (PASS-3 states it for the native profile only)
 -->
 
 **Status:** Fixed

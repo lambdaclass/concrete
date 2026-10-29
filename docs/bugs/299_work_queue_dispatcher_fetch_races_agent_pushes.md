@@ -5,7 +5,7 @@ summary: the work-queue dispatcher fetched with `git fetch --prune origin` into 
 coverage: tooling-only defect pinned by scripts/tests/check_work_queue.sh leg "the dispatcher's fetch writes only its own refs" (an agent's diverged and pruned-on-remote refs/remotes/ entries survive a tick; the fetch lands in refs/queue/remote/ and prunes there; a QUEUE_BASE outside <remote>/<branch> is refused) and its budgets leg; no compiler fixture applies.
 class: 16
 silent: no
-ruling: Violates: unrecorded
+ruling: Outside the spec: tooling — work-queue dispatcher's fetch raced agent pushes on shared remote-tracking refs
 -->
 
 **Status:** FIXED (2026-10-26, branch `wip/bug299-queue-fetch-refs`)

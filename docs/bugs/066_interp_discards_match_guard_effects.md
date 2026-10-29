@@ -4,7 +4,7 @@
 summary: the interpreter discards a match guard's effects
 coverage: the interpreter discarded a match guard's environment, so a guard's output and mutations vanished while its VALUE still selected the arm; return values agreed, so only an OUTPUT differential caught it. Gated by check_match_guard_effects.sh (12 checks: succeeding guard, failing guard's effects surviving the fall-through, two failing guards in order, a guard whose pattern never matches, outer-mutation persistence, arm-local mutation NOT leaking, binder-frame restoration with a rebinding control). Mutation-verified on the EFFECTS axis (threading the env only on success fails 3 legs). The binding-LEAK axis is prevented upstream, so its mutation legitimately survives rather than indicating missing coverage: code owner Elab.bindArmVar alpha-renames every match payload binder to a fresh Core name (x -> x.b0, verified with --emit-core), gated by regress_045_match_binder_shadow.con (run_ok 42) in run_tests.sh. If that owner or gate changes, the leak mutation becomes killable and check_match_guard_effects.sh's restoration leg starts doing real work -- a 045/066 coupling, also recorded in the bug doc (2026-08-04)
 class: 7
-ruling: Violates: unrecorded
+ruling: Violates: PAT-4@2
 -->
 
 **Status:** FIXED 2026-08-04

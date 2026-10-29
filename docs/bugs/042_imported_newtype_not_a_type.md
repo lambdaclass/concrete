@@ -4,7 +4,7 @@
 summary: Imported newtypes/type-aliases silently dropped by Resolve (E0108 at first use)
 coverage: regress_042_import_newtype/src/main.con (project test, exit 0) + std-compiled-coverage numeric leg; Resolve import classifier now registers newtypes + public type aliases
 class: 12
-ruling: Violates: unrecorded
+ruling: Violates: MOD-1@1
 -->
 
 **Status:** Fixed (2026-07-17)

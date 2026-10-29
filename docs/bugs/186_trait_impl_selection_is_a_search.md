@@ -6,7 +6,7 @@ fixtures: error_186_duplicate_impl.con error_186_duplicate_generic_impl.con erro
 class: 1 — an impl keyed by its type's spelling with its arguments dropped, and a method by `Type_method`: impl selection was a first-match search
 silent: yes
 exit: 0b
-ruling: Violates: unrecorded
+ruling: Violates: TRAIT-10@1, TRAIT-2@1
 -->
 
 **Status:** FIXED (branch `trait-coherence`)

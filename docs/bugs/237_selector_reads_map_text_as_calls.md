@@ -5,7 +5,7 @@ summary: the impact gate selector counted a script name in a keyed array's value
 coverage: the impact gate selector counted a script name in a keyed array value (a corpus note in this file) as a call, so a docs-only diff selected the corpus runners. Regression vehicle is the text-is-not-a-call controls over the selector entry point select_gates.sh (selection replay gate) (2026-10-25)
 class: 19 — the impact selector counted a script name in a keyed array's note text as a call
 silent: no
-ruling: Violates: unrecorded
+ruling: Outside the spec: tooling — the impact gate selector read script names in a keyed array's note text as calls
 -->
 
 **Status:** FIXED (branch `wip/gate-selector-data`)

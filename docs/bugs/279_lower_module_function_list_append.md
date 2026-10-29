@@ -5,7 +5,7 @@ summary: Lower appended each lowered function of a module to the list built so f
 coverage: `check_compile_scaling.sh` judges the `functions`, `call-chain`, `structs` and `enums` shapes' `lower` stage against its budget and near-linear growth (this fix removes the exclusions; the gate fails the pre-fix compiler on call-chain, structs and enums), and `run_tests.sh` times the `lower` stage of 20000 generated functions, which the gate's sizes cannot resolve
 class: 17 — Lower appends each lowered function to a list and filters types by list search
 silent: no
-ruling: Violates: unrecorded
+ruling: Outside the spec: performance — Lower appends each function to a list and filters types by list search
 -->
 
 **Status:** FIXED (branch `wip/perf-279`)

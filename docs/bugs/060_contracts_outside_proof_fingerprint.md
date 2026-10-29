@@ -4,7 +4,7 @@
 summary: `#[ensures]` is outside the hash, so a FALSE postcondition still reports `proved` (R-0004, 2026-07-25)
 coverage: contracts are inside the v2 subject, so attaching or changing an #[ensures] moves the digest and the claim no longer reports proved; LOAD-BEARING regression = check_proof_freshness.sh '060 CLOSED' leg (a false postcondition must not report proved) ((R-0004 V2 activation 2026-08-17))
 class: 10
-ruling: Violates: unrecorded
+ruling: Outside the spec: tooling — requires/ensures were outside the proof fingerprint, so a false postcondition reported proved
 -->
 
 **Status:** FIXED 2026-08-17 by the R-0004 V2 activation — third of R-0004's evidence-integrity defect class.

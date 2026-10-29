@@ -5,7 +5,7 @@ summary: a cast to a type alias (`x as IP`) reached the backend unexpanded and t
 fixtures: regress_199_cast_to_alias.con
 class: 12 — a cast target was not resolved through type aliases
 silent: no
-ruling: Violates: unrecorded
+ruling: Violates: TYPE-12@1
 -->
 
 **Status:** FIXED (branch `soundness-holes`)

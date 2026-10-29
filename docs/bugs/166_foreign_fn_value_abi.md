@@ -6,7 +6,7 @@ fixtures: error_166_foreign_fn_value_repr_c.con error_166_foreign_fn_value_repr_
 class: 14 — a foreign fn value called with the Concrete ABI
 silent: yes
 exit: 0b
-ruling: Violates: unrecorded
+ruling: Violates: FFI-1@1
 -->
 
 **Status:** FIXED by containment (branch `soundness-holes`): an extern fn is never a value, E0588

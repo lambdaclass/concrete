@@ -6,7 +6,7 @@ fixtures: regress_271_diverged_arm_writes.con
 class: 8 — the merge's starting table
 silent: yes
 exit: 0b
-ruling: Violates: unrecorded
+ruling: Violates: PASS-9@1
 -->
 
 **Status:** FIXED (branch `wip/perf-backend`)

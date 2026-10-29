@@ -5,7 +5,7 @@ summary: Mono computed the program's ambiguous type names by filtering the whole
 coverage: `check_compile_scaling.sh` judges the `structs` and `enums` shapes' `monomorphize` stage against its budget and near-linear growth: this fix removes the stage's exclusions under this bug, and the gate fails the pre-fix compiler
 class: 17 — Mono finds colliding type names by filtering the whole name list per name
 silent: no
-ruling: Violates: unrecorded
+ruling: Outside the spec: performance — Mono filters the whole type-name list per name
 -->
 
 **Status:** FIXED (branch `wip/perf-278-v2`)

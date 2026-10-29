@@ -7,7 +7,7 @@ class: 7
 class: 13 — nor was a comparison non-consuming
 silent: yes
 exit: 0b
-ruling: Violates: unrecorded
+ruling: Violates: TYPE-6@1, ARITH-6@1
 -->
 
 **Status:** FIXED 2026-10-21 (branch `safety-eval2`)

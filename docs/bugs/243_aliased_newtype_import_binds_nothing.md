@@ -5,7 +5,7 @@ summary: `import m.{N as M}` of a newtype bound no `M` (`resolveImports` appende
 fixtures: regress_243_aliased_newtype_import.con regress_243_aliased_newtype_with_original.con regress_243_aliased_generic_newtype.con regress_243_nested_aliased_newtype.con
 class: 1 — an aliased newtype import binds no name: an import copies the declaration under the alias, and the newtype kind has no such copy; fixed 2026-10-25: a newtype carries its definition name, and the import binds the alias to a copy with the declaration's identity
 silent: no
-ruling: Violates: unrecorded
+ruling: Violates: MOD-1@1
 -->
 
 **Status:** FIXED (2026-10-25, branch `wip/ident-followups`)

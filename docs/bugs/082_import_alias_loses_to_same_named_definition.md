@@ -6,7 +6,7 @@ coverage: an import alias reached Core as the alias spelling and every backend r
 class: 1
 silent: yes
 exit: 0b
-ruling: Violates: unrecorded
+ruling: Violates: MOD-1@1, MOD-3@2
 -->
 
 **Status:** FIXED (branch `bug082-alias-resolution`)

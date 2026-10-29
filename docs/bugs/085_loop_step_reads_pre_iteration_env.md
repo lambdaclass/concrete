@@ -5,7 +5,7 @@ summary: a `while_step` loop body's model built every `Cont` field from the pre-
 coverage: a while_step loop body's model read every variable from the pre-iteration env (x = x + 1; x = x + 1 stepped by 1) and dropped the rest of the body after a fall-through if; assignments now bind sequentially. Regression vehicle is a gate: check_model_diff.sh leg S pins tests/regressions/bug085_loop_step/repro.con (ten loop shapes, each pinned to its runtime value); see docs/bugs/085 (2026-10-18)
 class: 7
 silent: yes
-ruling: Violates: unrecorded
+ruling: Outside the spec: tooling — a loop step's proof model read every variable from the pre-iteration environment
 -->
 
 **Status:** FIXED (branch `bug085-stmt-extraction`, on the unpublished bug 080 head `00efbaf4`)

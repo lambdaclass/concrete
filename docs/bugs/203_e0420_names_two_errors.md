@@ -5,7 +5,7 @@ summary: an `append()` / `print()` argument of an unsupported type was refused w
 fixtures: error_203_append_unsupported_argument.con error_203_ghost_read_at_runtime.con error_203_print_unsupported_argument.con
 class: 12 — one diagnostic code, E0420, for two unrelated errors
 silent: no
-ruling: Violates: unrecorded
+ruling: Outside the spec: tooling — diagnostic code identity: the TYPE-10 refusal carried no code in Check and CON-4's E0420 in Elab
 -->
 
 **Status:** FIXED (branch `wip/bug203`, based on `main` `1b2dba60` with `wip/train6` `13bc2527` merged)

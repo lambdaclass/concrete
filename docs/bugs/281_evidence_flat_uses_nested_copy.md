@@ -5,7 +5,7 @@ summary: the body-identity use list (`Proof.stmtFlatUses`) built each branch's u
 coverage: `run_tests.sh` times the `elaborate` stage of a body of `if` blocks nested 20000 deep against a budget (the pre-fix compiler fails it); the R-0550 gate excludes the whole `nested-ifs` shape until bug 282 and Lower's nesting cost are fixed too
 class: 17 — Elab's evidence use list copies each nested block's list at every level
 silent: no
-ruling: Violates: unrecorded
+ruling: Outside the spec: performance — Elab's evidence use list copies nested lists at every level
 -->
 
 **Status:** FIXED (branch `wip/perf-281`)

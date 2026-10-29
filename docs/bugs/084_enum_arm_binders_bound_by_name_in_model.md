@@ -5,7 +5,7 @@ summary: the proof model bound match-arm binders by name (and bound 0 when no fi
 coverage: the proof model bound match-arm binders by name (0 when no field had the binder's name) while Elab/interp/binary bind by position (Box::Full { v } => v: model 0, runtime x; Mk { b, a } => b: model 100). Regression vehicle is a gate: check_model_diff.sh leg E pins tests/regressions/bug084_enum_arm_binding/repro.con (positional values on both sides, binary exits 22); fails 7/10 on the previous compiler; see docs/bugs/084 (2026-10-18)
 class: 7
 silent: yes
-ruling: Violates: unrecorded
+ruling: Outside the spec: tooling — the proof model bound match-arm binders by name where the program binds by position
 -->
 
 **Status:** FIXED (branch `bug084-enum-binding`, on top of the unpublished bug 080 head `00efbaf4`,

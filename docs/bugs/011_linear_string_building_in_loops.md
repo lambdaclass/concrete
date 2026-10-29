@@ -3,7 +3,7 @@
 <!-- bug-ledger
 summary: Linear String Building Is Awkward Inside Loops
 fixtures: bug_string_building.con
-ruling: Violates: unrecorded
+ruling: Outside the spec: library — no in-place string append (string_push_char/string_append added)
 -->
 
 **Status:** Fixed

@@ -5,7 +5,7 @@ summary: a 1000-arm `match` spent 8.45 s in the `lower` stage (~n^3): SSAVerify 
 coverage: superlinear match lowering (compile time, not output). Regression vehicle is check_ssa_lowering_scaling.sh (lower-stage heartbeat and instructions:u slope <= 1.3 over 250-2000 arms), not a tests/programs fixture (2026-10-22)
 class: 17 — a wide `match` was cubic in Lower + SSAVerify + SSACleanup; deep `if` nesting cubic in the obligation walk
 silent: no
-ruling: Violates: unrecorded
+ruling: Outside the spec: performance — match lowering, SSA verification and cleanup were cubic in the number of arms
 -->
 
 **Status:** FIXED (`wip/bug178`)

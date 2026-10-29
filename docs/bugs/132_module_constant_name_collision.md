@@ -7,7 +7,7 @@ class: 1 — two modules' constants of one name
 silent: yes
 exit: 0b
 area: Lower/Lower — the record's Fix (containment in lowerExpr)
-ruling: Violates: unrecorded
+ruling: Violates: MOD-1@1
 -->
 
 **Status:** FIXED 2026-10-21 (contained, batch 2, `land2-fix`): refused at the use (E0602) until

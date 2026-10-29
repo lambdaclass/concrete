@@ -6,7 +6,7 @@ fixtures: regress_136_137_literal_eval_order.con
 class: 7 — the payload list is both evaluation order and positional identity
 silent: yes
 exit: 0b
-ruling: Violates: unrecorded
+ruling: Violates: STMT-4@1
 -->
 
 **Status:** FIXED (branch `soundness-holes`)

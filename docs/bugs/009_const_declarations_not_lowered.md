@@ -3,7 +3,7 @@
 <!-- bug-ledger
 summary: Const Declarations Parsed But Not Lowered
 coverage: const decls not lowered -- fixed in Lower.lean, no standalone repro needed
-ruling: Violates: unrecorded
+ruling: Spec gap: PASS — a program every rule accepts is compiled: no stage after Check refuses it, crashes on it or emits invalid LLVM IR for it
 -->
 
 **Status:** Fixed

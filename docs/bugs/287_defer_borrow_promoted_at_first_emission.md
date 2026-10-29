@@ -6,7 +6,7 @@ fixtures: regress_287_defer_borrow_promoted_at_registration.con
 class: 8 — where a deferred call's borrowed local gets its slot
 silent: yes
 exit: 0b
-ruling: Violates: unrecorded
+ruling: Violates: MEM-3@1
 -->
 
 **Status:** FIXED (branch `wip/bug-287`)

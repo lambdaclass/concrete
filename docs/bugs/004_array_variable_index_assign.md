@@ -3,7 +3,7 @@
 <!-- bug-ledger
 summary: Array Variable-Index Assignment Produces Wrong Code
 fixtures: bug_array_var_index_assign.con
-ruling: Violates: unrecorded
+ruling: Spec gap: PASS — every consumer gives an accepted program its checked Core behaviour: lowering, emission and the interpreter preserve meaning on every profile (PASS-3 states it for the native profile only)
 -->
 
 **Status:** Fixed

@@ -5,7 +5,7 @@ summary: an imported enum's impl blocks and trait impls were not imported (the s
 fixtures: regress_222_imported_enum_impls.con
 class: 12 — what travels with an imported type, selected once per type kind; the enum paths did not select it
 silent: no
-ruling: Violates: unrecorded
+ruling: Violates: TRAIT-10@1
 -->
 
 **Status:** FIXED (branch `wip/workload-stackvm-2`)

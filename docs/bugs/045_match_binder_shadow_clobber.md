@@ -4,7 +4,7 @@
 summary: Nested same-named match binders shared one runtime slot (silent wrong values)
 coverage: regress_045_match_binder_shadow.con (run_ok 42); Elab alpha-renames match binders (value -> value.bN), retiring the name-scoping class below Elab
 class: 2
-ruling: Violates: unrecorded
+ruling: Violates: SCOPE-1@1, SCOPE-3@1
 -->
 
 **Status:** Fixed (2026-07-18)

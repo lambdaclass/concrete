@@ -4,7 +4,7 @@
 summary: fuzz-farm gate timed campaigns could expire before the required generator coverage and drift observations; bounded batch targets now make coverage deterministic and incomplete campaigns fail.
 coverage: tooling-only defect pinned by scripts/tests/check_fuzz_farm.sh and scripts/tests/check_fuzz_farm_batches.py, including virtual-clock speed, partial-batch, pause and default-mode controls; no compiler fixture applies.
 silent: no
-ruling: Violates: unrecorded
+ruling: Outside the spec: tooling — fuzz-farm gate assumed time-limited fuzz runs reach fixed coverage
 -->
 
 **Status:** FIXED on `fix/fuzz-farm-deterministic-gate` (pending landing).

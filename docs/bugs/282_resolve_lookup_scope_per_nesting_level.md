@@ -5,7 +5,7 @@ summary: Resolve kept one local scope per block on a stack and looked a name up 
 fixtures: regress_282_nested_scope_visibility.con error_282_read_after_nested_block.con
 class: 17 — Resolve looks a name up through one scope per nesting level
 silent: no
-ruling: Violates: unrecorded
+ruling: Outside the spec: performance — Resolve walks one scope per nesting level per lookup
 -->
 
 **Status:** FIXED (branch `wip/perf-282-v3`)

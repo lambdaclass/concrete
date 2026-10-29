@@ -6,7 +6,7 @@ fixtures: error_142_struct_field_return.con error_142_call_arg_return.con error_
 class: 15 — a value moved into a construct an exit left incomplete
 silent: no
 exit: 0b
-ruling: Violates: unrecorded
+ruling: Violates: STMT-5@1
 -->
 
 **Status:** FIXED 2026-10-21 (branch `safety-eval2`)

@@ -5,7 +5,7 @@ summary: a parent module calling a method of its submodule's respelled type had 
 fixtures: regress_241_parent_calls_child_respelled_method.con regress_241_parent_names_child_respelled_method.con
 class: 1 — a method call renamed by two passes that each recompute its definition's spelling
 silent: no
-ruling: Violates: unrecorded
+ruling: Violates: MOD-1@1
 -->
 
 **Status:** FIXED (branch `wip/name-capture`)

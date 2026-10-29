@@ -5,7 +5,7 @@ summary: every branch merge in Lower visited every binding in scope and walked t
 fixtures: regress_266_branch_merges.con
 class: 17 — Lower's branch merges
 silent: no
-ruling: Violates: unrecorded
+ruling: Outside the spec: performance — every Lower branch merge visited every binding in scope
 -->
 
 **Status:** FIXED (branch `wip/perf-backend`)

@@ -6,7 +6,7 @@ fixtures: error_094_arm_binder_shadows_live.con error_094_destructure_shadows_li
 class: 2
 silent: no
 exit: 0b
-ruling: Violates: unrecorded
+ruling: Violates: SCOPE-1@1, OWN-2@2
 -->
 
 **Status:** FIXED

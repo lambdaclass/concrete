@@ -6,7 +6,7 @@ fixtures: error_185_generic_rawptr_eq_safe.con regress_185_generic_rawptr_eq_aut
 class: 6 — a monomorphized instance dropped its definition's `trusted` flag
 silent: yes
 exit: 0b
-ruling: Violates: unrecorded
+ruling: Violates: TYPE-6@1, TRUST-4@1
 -->
 
 **Status:** FIXED (branch `soundness-holes-rawptr`, on top of `wip/train1`)

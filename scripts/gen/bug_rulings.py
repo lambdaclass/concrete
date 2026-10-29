@@ -42,8 +42,7 @@ import sys
 
 RULING_FROM = 300
 # The records filed before the rulings that are not ruled yet (fixed, all below RULING_FROM).
-UNRULED_SPEC = ("001-048 050-053 055-057 059-063 065-076 078-094 096-113 115-121 123-124 126-137 140 "
-                "142-152 165-166 175-186 188-200 202-215 217-225 227-263 265-269 271-299")
+UNRULED_SPEC = "008 013 070"
 
 
 def _expand(spec):

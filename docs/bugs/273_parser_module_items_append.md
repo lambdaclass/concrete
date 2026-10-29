@@ -5,7 +5,7 @@ summary: the parser appended each struct, enum, constant, newtype, import and su
 coverage: `check_compile_scaling.sh` judges the `structs` and `enums` shapes' `parse` stage against its budget and near-linear growth: this fix removes the stage's exclusion under this bug, and the gate fails the pre-fix compiler
 class: 17 — the parser appends each struct, enum, constant, newtype, import and submodule of a module to the list built so far
 silent: no
-ruling: Violates: unrecorded
+ruling: Outside the spec: performance — parser appends each module item to the list built so far
 -->
 
 **Status:** FIXED (branch `wip/perf-273-v3`)

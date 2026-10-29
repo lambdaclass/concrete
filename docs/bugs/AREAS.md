@@ -64,292 +64,309 @@ checker refusal is a Check bug here.
 
 | ruling | bugs | stages |
 |--|-:|--|
-| violates FFI | 1 | Resolve 1 |
-| violates MEM | 1 | Lower 1 |
-| violates MOD | 1 | Resolve 1 |
-| violates PASS | 3 | Lower 2, Elab 1 |
+| violates ARITH | 6 | Check 3, Interp 2, Elab 1 |
+| violates FFI | 8 | Resolve 2, Check 2, Mono 1, EmitSSA 1, EmitLLVM 1, Std 1 |
+| violates MEM | 10 | Lower 7, Check 1, Elab 1, Interp 1 |
+| violates MOD | 26 | Resolve 10, Elab 8, Interp 4, Check 2, Lower 1, EmitSSA 1 |
+| violates OWN | 12 | Check 9, Lower 3 |
+| violates PASS | 20 | Lower 9, Mono 3, Check 2, Elab 2, Resolve 1, EmitSSA 1, Interp 1, CLI 1 |
+| violates PAT | 6 | Check 4, Interp 1, CLI 1 |
+| violates REF | 6 | Check 6 |
+| violates SCOPE | 13 | Check 7, Proof 3, Elab 1, Mono 1, CLI 1 |
+| violates STMT | 7 | Check 3, Elab 2, Lower 2 |
+| violates SYN | 1 | Parse 1 |
+| violates TRAIT | 4 | Check 3, Resolve 1 |
+| violates TRUST | 3 | Check 2, Proof 1 |
+| violates TYPE | 17 | Check 11, Resolve 3, Elab 2, Proof 1 |
+| spec gap ARITH | 1 | EmitLLVM 1 |
+| spec gap FFI | 1 | Resolve 1 |
 | spec gap MEM | 1 | Lower 1 |
-| spec gap PASS | 1 | Report 1 |
-| spec gap TYPE | 1 | Resolve 1 |
-| outside (performance) | 1 | SSA 1 |
-| outside (tooling) | 3 | Proof 1, Tooling 1, Gates 1 |
-| unrecorded | 261 | Check 72, Lower 34, Elab 25, Resolve 24, Interp 18, Proof 18, Parse 11, EmitSSA 10, Mono 8, Std 8, EmitLLVM 7, Report 6, CLI 6, Tooling 5, Gates 5, SSA 4 |
+| spec gap MOD | 5 | Resolve 3, Elab 1, Report 1 |
+| spec gap OWN | 1 | Check 1 |
+| spec gap PASS | 19 | Lower 8, EmitSSA 3, Interp 3, Mono 2, Elab 1, SSA 1, Report 1 |
+| spec gap TRUST | 1 | Check 1 |
+| spec gap TYPE | 2 | Resolve 1, Check 1 |
+| open | 2 | Parse 2 |
+| outside (library) | 11 | Std 6, EmitLLVM 5 |
+| outside (performance) | 44 | Check 10, Lower 7, Parse 6, Elab 4, Interp 4, Resolve 3, SSA 3, EmitSSA 3, Proof 2, Mono 1, Report 1 |
+| outside (tooling) | 44 | Proof 12, Tooling 6, Gates 6, Check 4, Report 4, Elab 3, CLI 3, Interp 2, Parse 1, Resolve 1, SSA 1, Std 1 |
+| unrecorded | 3 | Parse 1, Resolve 1, EmitSSA 1 |
 
 ### Every bug
 
 | bug | stage | module | basis | also touches | spec ruling |
 |--|--|--|--|--|--|
-| [001](001_cross_module_struct_field_offset.md) | Elab | Elab | named | — | unrecorded |
-| [002](002_i32_literal_type_mismatch.md) | Elab | Elab | named | — | unrecorded |
-| [003](003_cross_module_mut_borrow_move.md) | Check | Check | named | Elab | unrecorded |
-| [004](004_array_variable_index_assign.md) | Lower | Lower | commits | — | unrecorded |
-| [005](005_enum_field_struct_layout_panic.md) | Lower | Lower | shared | Check, Parse | unrecorded |
-| [006](006_cross_module_string_literal_collision.md) | Lower | Lower | commits | — | unrecorded |
-| [007](007_no_print_string_builtin.md) | EmitLLVM | EmitBuiltins | shared | Check, Resolve | unrecorded |
+| [001](001_cross_module_struct_field_offset.md) | Elab | Elab | named | — | violates MEM-4@2 |
+| [002](002_i32_literal_type_mismatch.md) | Elab | Elab | named | — | violates ARITH-2@1, PASS-6@1 |
+| [003](003_cross_module_mut_borrow_move.md) | Check | Check | named | Elab | violates OWN-15@2 |
+| [004](004_array_variable_index_assign.md) | Lower | Lower | commits | — | spec gap (PASS) |
+| [005](005_enum_field_struct_layout_panic.md) | Lower | Lower | shared | Check, Parse | spec gap (PASS) |
+| [006](006_cross_module_string_literal_collision.md) | Lower | Lower | commits | — | spec gap (PASS) |
+| [007](007_no_print_string_builtin.md) | EmitLLVM | EmitBuiltins | shared | Check, Resolve | outside (library) |
 | [008](008_if_else_expression_aggregate_types.md) | Parse | Parser | named | Check, Lower | unrecorded |
-| [009](009_const_declarations_not_lowered.md) | Lower | Lower | named | Parse | unrecorded |
-| [010](010_no_string_substr.md) | EmitLLVM | EmitBuiltins | shared | Check, Resolve | unrecorded |
-| [011](011_linear_string_building_in_loops.md) | EmitLLVM | EmitBuiltins | shared | Check, Resolve | unrecorded |
-| [012](012_no_standalone_timing_path.md) | EmitLLVM | EmitBuiltins | shared | Check, Resolve | unrecorded |
+| [009](009_const_declarations_not_lowered.md) | Lower | Lower | named | Parse | spec gap (PASS) |
+| [010](010_no_string_substr.md) | EmitLLVM | EmitBuiltins | shared | Check, Resolve | outside (library) |
+| [011](011_linear_string_building_in_loops.md) | EmitLLVM | EmitBuiltins | shared | Check, Resolve | outside (library) |
+| [012](012_no_standalone_timing_path.md) | EmitLLVM | EmitBuiltins | shared | Check, Resolve | outside (library) |
 | [013](013_alloca_inside_loops_stack_overflow.md) | EmitSSA | EmitSSA | record | — | unrecorded |
-| [014](014_string_literal_in_loop_invalid_ir.md) | EmitSSA | EmitSSA | record | — | unrecorded |
-| [015](015_O0_default_distorted_real_workload_performance.md) | EmitSSA | EmitSSA | record | — | unrecorded |
-| [016](016_cross_module_generic_monomorphization_link_failure.md) | Mono | - | override | — | unrecorded |
-| [017](017_std_net_socket_constants_are_linux_only.md) | Std | net | override | — | unrecorded |
-| [018](018_stack_array_borrow_creates_copy.md) | Lower | Lower | commits | — | unrecorded |
-| [019](019_array_struct_field_mutation.md) | Lower | - | override | — | unrecorded |
-| [020](020_int_match_consume_not_propagated.md) | Check | - | override | — | unrecorded |
-| [021](021_int_match_disagree_not_checked.md) | Check | - | override | — | unrecorded |
-| [022](022_submodule_breaks_parent_impl_method_consume.md) | Check | Check | named | Lower | unrecorded |
-| [023](023_shortcircuit_aggregate_phi.md) | Lower | Lower | named | Check | unrecorded |
-| [024](024_recursive_struct_infinite_size.md) | Check | CoreCheck | commits | — | unrecorded |
-| [025](025_no_main_linker_error.md) | CLI | Main | commits | — | unrecorded |
-| [026](026_array_repeat_count_hang.md) | Parse | Parser | named | — | unrecorded |
-| [027](027_emitssa_quadratic_rendering.md) | EmitSSA | EmitSSA | named | Interp, Lower, SSA | unrecorded |
-| [028](028_reserved_name_collision.md) | Resolve | Intrinsic | commits | — | unrecorded |
-| [029](029_divergent_if_array_addr_after_loop.md) | Lower | Lower | commits | Std | unrecorded |
-| [030](030_nonmut_array_write.md) | Check | Check | commits | — | unrecorded |
-| [031](031_branch_lazy_promotion_uninit.md) | Lower | Lower | commits | — | unrecorded |
-| [032](032_multibyte_string_literal_emit.md) | EmitSSA | EmitSSA | commits | Std | unrecorded |
-| [033](033_ifexpr_merge_aggregate_phi.md) | Lower | Lower | commits | — | unrecorded |
-| [034](034_shortcircuit_borrow_promotion.md) | Lower | Lower | commits | Std | unrecorded |
-| [035](035_fieldoffset_generic_enum_panic.md) | Lower | Lower | named | Resolve | unrecorded |
-| [036](036_import_dependent_type_metadata.md) | Resolve | FileSummary | named | Lower | unrecorded |
-| [037](037_repr_align_exceeds_declared_type.md) | EmitSSA | EmitSSA | commits | Check, Parse | unrecorded |
-| [038](038_if_merge_promoted_aggregate_clobber.md) | Lower | Lower | named | Check, Interp | unrecorded |
-| [039](039_import_alias_program_order_rebind.md) | EmitSSA | EmitSSA | commits | Tooling | unrecorded |
-| [040](040_corecheck_match_binder_first_match_scope.md) | Check | CoreCheck | commits | Std | unrecorded |
-| [041](041_match_merge_keeps_arm_binders.md) | Check | Check | named | Resolve | unrecorded |
-| [042](042_imported_newtype_not_a_type.md) | Resolve | Resolve | named | Check | unrecorded |
-| [043](043_string_not_nul_terminated_ffi.md) | Std | fs | commits | — | unrecorded |
-| [044](044_renamed_generic_import_not_monomorphized.md) | Mono | Mono | commits | — | unrecorded |
-| [045](045_match_binder_shadow_clobber.md) | Elab | Elab | commits | Interp, Proof | unrecorded |
-| [046](046_map_keys_values_duplicate_linear.md) | Std | map | commits | — | unrecorded |
-| [047](047_hashmap_insert_duplicate_past_tombstone.md) | Std | map | named | — | unrecorded |
-| [048](048_hashmap_find_slot_hang_no_empty_slots.md) | Std | map | named | — | unrecorded |
+| [014](014_string_literal_in_loop_invalid_ir.md) | EmitSSA | EmitSSA | record | — | spec gap (PASS) |
+| [015](015_O0_default_distorted_real_workload_performance.md) | EmitSSA | EmitSSA | record | — | outside (performance) |
+| [016](016_cross_module_generic_monomorphization_link_failure.md) | Mono | - | override | — | spec gap (PASS) |
+| [017](017_std_net_socket_constants_are_linux_only.md) | Std | net | override | — | outside (library) |
+| [018](018_stack_array_borrow_creates_copy.md) | Lower | Lower | commits | — | violates OWN-15@2 |
+| [019](019_array_struct_field_mutation.md) | Lower | - | override | — | spec gap (PASS) |
+| [020](020_int_match_consume_not_propagated.md) | Check | - | override | — | violates OWN-2@2 |
+| [021](021_int_match_disagree_not_checked.md) | Check | - | override | — | violates OWN-3@2 |
+| [022](022_submodule_breaks_parent_impl_method_consume.md) | Check | Check | named | Lower | violates MOD-1@1 |
+| [023](023_shortcircuit_aggregate_phi.md) | Lower | Lower | named | Check | violates PASS-9@1 |
+| [024](024_recursive_struct_infinite_size.md) | Check | CoreCheck | commits | — | violates TYPE-16@1 |
+| [025](025_no_main_linker_error.md) | CLI | Main | commits | — | violates PASS-10@1 |
+| [026](026_array_repeat_count_hang.md) | Parse | Parser | named | — | outside (performance) |
+| [027](027_emitssa_quadratic_rendering.md) | EmitSSA | EmitSSA | named | Interp, Lower, SSA | outside (performance) |
+| [028](028_reserved_name_collision.md) | Resolve | Intrinsic | commits | — | violates MOD-3@2 |
+| [029](029_divergent_if_array_addr_after_loop.md) | Lower | Lower | commits | Std | spec gap (PASS) |
+| [030](030_nonmut_array_write.md) | Check | Check | commits | — | spec gap (OWN) |
+| [031](031_branch_lazy_promotion_uninit.md) | Lower | Lower | commits | — | violates MEM-3@1 |
+| [032](032_multibyte_string_literal_emit.md) | EmitSSA | EmitSSA | commits | Std | spec gap (PASS) |
+| [033](033_ifexpr_merge_aggregate_phi.md) | Lower | Lower | commits | — | violates PASS-9@1 |
+| [034](034_shortcircuit_borrow_promotion.md) | Lower | Lower | commits | Std | violates MEM-3@1 |
+| [035](035_fieldoffset_generic_enum_panic.md) | Lower | Lower | named | Resolve | spec gap (PASS) |
+| [036](036_import_dependent_type_metadata.md) | Resolve | FileSummary | named | Lower | violates TYPE-14@2 |
+| [037](037_repr_align_exceeds_declared_type.md) | EmitSSA | EmitSSA | commits | Check, Parse | violates FFI-4@1, FFI-2@1 |
+| [038](038_if_merge_promoted_aggregate_clobber.md) | Lower | Lower | named | Check, Interp | spec gap (PASS) |
+| [039](039_import_alias_program_order_rebind.md) | EmitSSA | EmitSSA | commits | Tooling | violates MOD-1@1 |
+| [040](040_corecheck_match_binder_first_match_scope.md) | Check | CoreCheck | commits | Std | violates SCOPE-3@1 |
+| [041](041_match_merge_keeps_arm_binders.md) | Check | Check | named | Resolve | violates SCOPE-3@1 |
+| [042](042_imported_newtype_not_a_type.md) | Resolve | Resolve | named | Check | violates MOD-1@1 |
+| [043](043_string_not_nul_terminated_ffi.md) | Std | fs | commits | — | outside (library) |
+| [044](044_renamed_generic_import_not_monomorphized.md) | Mono | Mono | commits | — | spec gap (PASS) |
+| [045](045_match_binder_shadow_clobber.md) | Elab | Elab | commits | Interp, Proof | violates SCOPE-1@1, SCOPE-3@1 |
+| [046](046_map_keys_values_duplicate_linear.md) | Std | map | commits | — | outside (library) |
+| [047](047_hashmap_insert_duplicate_past_tombstone.md) | Std | map | named | — | outside (library) |
+| [048](048_hashmap_find_slot_hang_no_empty_slots.md) | Std | map | named | — | outside (library) |
 | [049](049_reduce_crash_predicate_vacuous.md) | — | — | unfixed | — | outside (tooling) |
-| [050](050_mono_indirect_call_hijack.md) | Mono | Mono | commits | Check, Elab, Lower, Proof | unrecorded |
-| [051](051_generic_enums_not_monomorphized.md) | Mono | Mono | commits | — | unrecorded |
-| [052](052_array_element_destroy_noop.md) | Mono | Mono | commits | Interp, Std | unrecorded |
-| [053](053_dce_deletes_checked_negation.md) | Check | IntArith | commits | Interp, SSA | unrecorded |
+| [050](050_mono_indirect_call_hijack.md) | Mono | Mono | commits | Check, Elab, Lower, Proof | violates SCOPE-3@1 |
+| [051](051_generic_enums_not_monomorphized.md) | Mono | Mono | commits | — | violates PASS-7@1, FFI-2@1 |
+| [052](052_array_element_destroy_noop.md) | Mono | Mono | commits | Interp, Std | violates PASS-1@1, TRAIT-10@1 |
+| [053](053_dce_deletes_checked_negation.md) | Check | IntArith | commits | Interp, SSA | violates ARITH-3@1 |
 | [054](054_struct_mono_name_collision.md) | — | — | unfixed | — | spec gap (PASS) |
-| [055](055_sibling_import_alias_unusable.md) | Elab | Elab | record | Check | unrecorded |
-| [056](056_fnptr_reassign_phi_undefined_register.md) | Lower | Lower | commits | EmitSSA, SSA | unrecorded |
-| [057](057_hashmap_builtin_size_undercount.md) | Std | map | named | — | unrecorded |
+| [055](055_sibling_import_alias_unusable.md) | Elab | Elab | record | Check | spec gap (PASS) |
+| [056](056_fnptr_reassign_phi_undefined_register.md) | Lower | Lower | commits | EmitSSA, SSA | violates PASS-9@1 |
+| [057](057_hashmap_builtin_size_undercount.md) | Std | map | named | — | violates FFI-2@1 |
 | [058](058_proof_by_without_fingerprint_never_stales.md) | Proof | ProofCore | commits | — | outside (tooling) |
-| [059](059_body_fingerprint_omits_signature_and_types.md) | Proof | ProofCore | override | — | unrecorded |
-| [060](060_contracts_outside_proof_fingerprint.md) | Proof | ProofCore | shared | Std | unrecorded |
-| [061](061_pexpr_conflates_param_application_with_global_call.md) | Proof | Proof | commits | — | unrecorded |
-| [062](062_proof_dependency_staleness_does_not_propagate.md) | Proof | ProofCore | commits | Report | unrecorded |
-| [063](063_cap_inference_defaults_derived_fnptr_to_empty.md) | Check | CheckHelpers | commits | Resolve | unrecorded |
+| [059](059_body_fingerprint_omits_signature_and_types.md) | Proof | ProofCore | override | — | outside (tooling) |
+| [060](060_contracts_outside_proof_fingerprint.md) | Proof | ProofCore | shared | Std | outside (tooling) |
+| [061](061_pexpr_conflates_param_application_with_global_call.md) | Proof | Proof | commits | — | violates SCOPE-3@1 |
+| [062](062_proof_dependency_staleness_does_not_propagate.md) | Proof | ProofCore | commits | Report | outside (tooling) |
+| [063](063_cap_inference_defaults_derived_fnptr_to_empty.md) | Check | CheckHelpers | commits | Resolve | spec gap (TRUST) |
 | [064](064_query_kind_error_lists_the_rejected_kind.md) | — | — | unfixed | — | outside (tooling) |
-| [065](065_stack_depth_unboundedness_not_propagated.md) | Report | Report | commits | Check, Elab, Parse, Resolve | unrecorded |
-| [066](066_interp_discards_match_guard_effects.md) | Interp | Interp | commits | Proof | unrecorded |
-| [067](067_capped_obligation_escapes_forbid_assume.md) | CLI | Main | commits | — | unrecorded |
-| [068](068_ghost_and_runtime_let_share_evidence.md) | Elab | Elab | commits | Proof | unrecorded |
-| [069](069_aliased_imported_type_unresolvable.md) | Resolve | FileSummary | override | — | unrecorded |
+| [065](065_stack_depth_unboundedness_not_propagated.md) | Report | Report | commits | Check, Elab, Parse, Resolve | outside (tooling) |
+| [066](066_interp_discards_match_guard_effects.md) | Interp | Interp | commits | Proof | violates PAT-4@2 |
+| [067](067_capped_obligation_escapes_forbid_assume.md) | CLI | Main | commits | — | outside (tooling) |
+| [068](068_ghost_and_runtime_let_share_evidence.md) | Elab | Elab | commits | Proof | outside (tooling) |
+| [069](069_aliased_imported_type_unresolvable.md) | Resolve | FileSummary | override | — | violates MOD-1@1 |
 | [070](070_builtin_enum_list_built_twice.md) | Resolve | BuiltinEnums | override | — | unrecorded |
-| [071](071_cross_package_capability_requirements_unenforced.md) | Proof | Proof | commits | Std | unrecorded |
-| [072](072_spawn_exec_failure_flushes_parent_buffers.md) | Std | libc | commits | Proof | unrecorded |
-| [073](073_generic_type_argument_arity_unchecked.md) | Resolve | Resolve | commits | — | unrecorded |
-| [074](074_duplicate_module_names_across_packages.md) | Report | AssumptionSummary | commits | Resolve | unrecorded |
-| [075](075_policy_assumption_authority_checks_vacuous.md) | Gates | authority_facts | commits | — | unrecorded |
-| [076](076_proof_admission_blind_to_dependencies.md) | Proof | ProofCore | commits | — | unrecorded |
+| [071](071_cross_package_capability_requirements_unenforced.md) | Proof | Proof | commits | Std | violates TRUST-4@1 |
+| [072](072_spawn_exec_failure_flushes_parent_buffers.md) | Std | libc | commits | Proof | outside (library) |
+| [073](073_generic_type_argument_arity_unchecked.md) | Resolve | Resolve | commits | — | violates TYPE-15@1 |
+| [074](074_duplicate_module_names_across_packages.md) | Report | AssumptionSummary | commits | Resolve | spec gap (MOD) |
+| [075](075_policy_assumption_authority_checks_vacuous.md) | Gates | authority_facts | commits | — | outside (tooling) |
+| [076](076_proof_admission_blind_to_dependencies.md) | Proof | ProofCore | commits | — | outside (tooling) |
 | [077](077_nested_submodule_relative_call_undefined_symbol.md) | Report | AssumptionSummary | commits | Parse | spec gap (PASS) |
-| [078](078_if_else_both_diverge_open_merge.md) | Lower | Lower | commits | Tooling | unrecorded |
-| [079](079_receipt_for_a_body_the_theorem_is_not_about.md) | Proof | ProofCore | commits | — | unrecorded |
-| [080](080_narrowing_cast_modeled_as_identity.md) | Report | ModelDiff | commits | Proof | unrecorded |
-| [081](081_call_key_not_bound_to_callee.md) | Proof | ProofCore | commits | CLI | unrecorded |
-| [082](082_import_alias_loses_to_same_named_definition.md) | Elab | Elab | commits | Check | unrecorded |
-| [083](083_name_keyed_proof_fallback.md) | Proof | classifications | commits | Tooling | unrecorded |
-| [084](084_enum_arm_binders_bound_by_name_in_model.md) | Proof | Proof | commits | — | unrecorded |
-| [085](085_loop_step_reads_pre_iteration_env.md) | Proof | ProofCore | commits | — | unrecorded |
-| [086](086_discarded_statement_modeled_as_value.md) | Proof | ProofCore | commits | — | unrecorded |
-| [087](087_block_let_shadowing_not_lexical.md) | Proof | BodyIdentity | commits | Elab | unrecorded |
-| [088](088_unchecked_default_literal_and_unnormalized_fold.md) | Check | Verify | commits | SSA | unrecorded |
-| [089](089_ensures_discharged_by_a_link.md) | CLI | Main | commits | Report | unrecorded |
-| [090](090_match_guard_moves_linear.md) | Check | Check | commits | — | unrecorded |
-| [091](091_trait_impl_capabilities_hidden_by_generic_dispatch.md) | Check | CheckHelpers | commits | — | unrecorded |
-| [092](092_reference_stored_in_aggregate.md) | Check | Check | commits | — | unrecorded |
-| [093](093_shadowing_local_escapes_scope_check.md) | Check | CheckHelpers | commits | — | unrecorded |
-| [094](094_binding_state_updates_keyed_by_name.md) | Check | CheckHelpers | commits | — | unrecorded |
-| [096](096_same_named_types_share_one_definition.md) | Elab | TypeSpelling | commits | — | unrecorded |
-| [097](097_same_named_private_fns_interp.md) | Elab | Elab | shared | — | unrecorded |
-| [098](098_same_named_generic_fns_one_specialization.md) | Elab | Elab | shared | — | unrecorded |
-| [099](099_generic_inference_peek_diverges.md) | Resolve | PeekType | named | Check, Elab | unrecorded |
-| [100](100_generic_destroy_impl_unspecialized.md) | Mono | Mono | named | Check, Elab, Resolve | unrecorded |
-| [101](101_branch_local_let_captures_continuation.md) | Proof | ProofCore | record | — | unrecorded |
-| [102](102_pointer_local_address_cast_miscompiled.md) | Interp | Interp | shared | Lower | unrecorded |
-| [103](103_extern_destroy_replaced_by_empty_body.md) | Mono | Mono | override | — | unrecorded |
-| [104](104_assigned_reference_outlives_block_local.md) | Check | Check | named | — | unrecorded |
-| [105](105_reference_valued_if_miscompiles.md) | Check | Check | shared | Interp, Lower | unrecorded |
-| [106](106_model_diff_report_hangs.md) | Report | ModelDiff | commits | Interp | unrecorded |
-| [107](107_shadowed_binding_reference_reads_new_slot.md) | Check | Check | shared | — | unrecorded |
-| [108](108_bool_cast_trunc.md) | EmitSSA | EmitSSA | commits | Check | unrecorded |
-| [109](109_f32_literal_invalid_ir.md) | EmitLLVM | EmitLLVM | commits | EmitSSA | unrecorded |
-| [110](110_array_value_store.md) | Elab | Elab | override | EmitSSA, Tooling | unrecorded |
-| [111](111_main_params_accepted.md) | Check | Check | commits | — | unrecorded |
-| [112](112_user_intrinsic_e0116.md) | Resolve | Resolve | shared | — | unrecorded |
-| [113](113_submodule_extern_effects_unchecked.md) | Resolve | Resolve | shared | — | unrecorded |
+| [078](078_if_else_both_diverge_open_merge.md) | Lower | Lower | commits | Tooling | violates PASS-9@1 |
+| [079](079_receipt_for_a_body_the_theorem_is_not_about.md) | Proof | ProofCore | commits | — | outside (tooling) |
+| [080](080_narrowing_cast_modeled_as_identity.md) | Report | ModelDiff | commits | Proof | outside (tooling) |
+| [081](081_call_key_not_bound_to_callee.md) | Proof | ProofCore | commits | CLI | outside (tooling) |
+| [082](082_import_alias_loses_to_same_named_definition.md) | Elab | Elab | commits | Check | violates MOD-1@1, MOD-3@2 |
+| [083](083_name_keyed_proof_fallback.md) | Proof | classifications | commits | Tooling | outside (tooling) |
+| [084](084_enum_arm_binders_bound_by_name_in_model.md) | Proof | Proof | commits | — | outside (tooling) |
+| [085](085_loop_step_reads_pre_iteration_env.md) | Proof | ProofCore | commits | — | outside (tooling) |
+| [086](086_discarded_statement_modeled_as_value.md) | Proof | ProofCore | commits | — | outside (tooling) |
+| [087](087_block_let_shadowing_not_lexical.md) | Proof | BodyIdentity | commits | Elab | violates SCOPE-3@1, SCOPE-1@1 |
+| [088](088_unchecked_default_literal_and_unnormalized_fold.md) | Check | Verify | commits | SSA | violates ARITH-2@1 |
+| [089](089_ensures_discharged_by_a_link.md) | CLI | Main | commits | Report | outside (tooling) |
+| [090](090_match_guard_moves_linear.md) | Check | Check | commits | — | violates PAT-4@2 |
+| [091](091_trait_impl_capabilities_hidden_by_generic_dispatch.md) | Check | CheckHelpers | commits | — | violates TRAIT-9@1, TRUST-4@1 |
+| [092](092_reference_stored_in_aggregate.md) | Check | Check | commits | — | violates REF-3@1 |
+| [093](093_shadowing_local_escapes_scope_check.md) | Check | CheckHelpers | commits | — | violates SCOPE-1@1, OWN-2@2 |
+| [094](094_binding_state_updates_keyed_by_name.md) | Check | CheckHelpers | commits | — | violates SCOPE-1@1, OWN-2@2 |
+| [096](096_same_named_types_share_one_definition.md) | Elab | TypeSpelling | commits | — | violates MOD-1@1 |
+| [097](097_same_named_private_fns_interp.md) | Elab | Elab | shared | — | violates MOD-1@1 |
+| [098](098_same_named_generic_fns_one_specialization.md) | Elab | Elab | shared | — | violates MOD-1@1 |
+| [099](099_generic_inference_peek_diverges.md) | Resolve | PeekType | named | Check, Elab | violates PASS-6@1 |
+| [100](100_generic_destroy_impl_unspecialized.md) | Mono | Mono | named | Check, Elab, Resolve | violates PASS-7@1 |
+| [101](101_branch_local_let_captures_continuation.md) | Proof | ProofCore | record | — | violates SCOPE-3@1 |
+| [102](102_pointer_local_address_cast_miscompiled.md) | Interp | Interp | shared | Lower | spec gap (PASS) |
+| [103](103_extern_destroy_replaced_by_empty_body.md) | Mono | Mono | override | — | violates FFI-5@1 |
+| [104](104_assigned_reference_outlives_block_local.md) | Check | Check | named | — | violates REF-6@1 |
+| [105](105_reference_valued_if_miscompiles.md) | Check | Check | shared | Interp, Lower | violates PASS-1@1 |
+| [106](106_model_diff_report_hangs.md) | Report | ModelDiff | commits | Interp | outside (tooling) |
+| [107](107_shadowed_binding_reference_reads_new_slot.md) | Check | Check | shared | — | violates SCOPE-1@1, REF-6@1 |
+| [108](108_bool_cast_trunc.md) | EmitSSA | EmitSSA | commits | Check | spec gap (PASS) |
+| [109](109_f32_literal_invalid_ir.md) | EmitLLVM | EmitLLVM | commits | EmitSSA | spec gap (ARITH) |
+| [110](110_array_value_store.md) | Elab | Elab | override | EmitSSA, Tooling | violates PASS-6@1, PASS-9@1 |
+| [111](111_main_params_accepted.md) | Check | Check | commits | — | violates STMT-7@2 |
+| [112](112_user_intrinsic_e0116.md) | Resolve | Resolve | shared | — | spec gap (FFI) |
+| [113](113_submodule_extern_effects_unchecked.md) | Resolve | Resolve | shared | — | violates FFI-3@1 |
 | [114](114_submodule_intrinsic_links_c_symbol.md) | — | — | unfixed | — | violates FFI-5@1 |
-| [115](115_vec_get_duplicates_linear.md) | Lower | Lower | shared | Check, Elab, EmitSSA, Interp | unrecorded |
-| [116](116_vec_push_first_field_through_ref.md) | SSA | SSACleanup | commits | Lower | unrecorded |
-| [117](117_interp_module_const.md) | Interp | Interp | record | — | unrecorded |
-| [118](118_interp_nested_module_import.md) | Interp | Interp | record | — | unrecorded |
-| [119](119_interp_generic_trait_method.md) | Interp | Interp | override | — | unrecorded |
-| [120](120_interp_field_borrow_through_ref.md) | Interp | Interp | override | — | unrecorded |
-| [121](121_enum_llvm_layout_disagrees.md) | Check | Layout | commits | — | unrecorded |
+| [115](115_vec_get_duplicates_linear.md) | Lower | Lower | shared | Check, Elab, EmitSSA, Interp | violates OWN-8@2, OWN-9@2 |
+| [116](116_vec_push_first_field_through_ref.md) | SSA | SSACleanup | commits | Lower | spec gap (PASS) |
+| [117](117_interp_module_const.md) | Interp | Interp | record | — | violates MOD-1@1 |
+| [118](118_interp_nested_module_import.md) | Interp | Interp | record | — | violates MOD-1@1 |
+| [119](119_interp_generic_trait_method.md) | Interp | Interp | override | — | violates PASS-1@1 |
+| [120](120_interp_field_borrow_through_ref.md) | Interp | Interp | override | — | violates MEM-4@2 |
+| [121](121_enum_llvm_layout_disagrees.md) | Check | Layout | commits | — | violates FFI-2@1 |
 | [122](122_builtin_enum_canonical_layout.md) | Resolve | Resolve | shared | — | violates FFI-2@1 |
-| [123](123_const_borrow_uninitialized_slot.md) | Check | Check | commits | Lower | unrecorded |
-| [124](124_duplicate_parameter_names.md) | Check | Check | commits | Std | unrecorded |
-| [126](126_field_write_through_mut_heap_ref.md) | Lower | Lower | commits | Check | unrecorded |
-| [127](127_struct_literal_field_order.md) | Lower | Lower | commits | — | unrecorded |
-| [128](128_interp_int_to_float_identity.md) | Interp | Interp | override | — | unrecorded |
-| [129](129_user_fn_captures_libc_symbol.md) | EmitLLVM | Symbols | commits | EmitSSA, Parse, Resolve | unrecorded |
-| [130](130_int_as_bool_invalid_ir.md) | Check | CoreCheck | named | — | unrecorded |
-| [131](131_reference_parameter_repointed.md) | Check | Check | override | — | unrecorded |
-| [132](132_module_constant_name_collision.md) | Lower | Lower | override | — | unrecorded |
-| [133](133_deref_field_borrow_copies.md) | Lower | Lower | override | — | unrecorded |
-| [134](134_aggregate_eq_invalid_ir.md) | Check | - | override | — | unrecorded |
-| [135](135_fmt_float_literals_lossy.md) | Parse | Lexer | commits | — | unrecorded |
-| [136](136_functional_update_base_reevaluated.md) | Elab | Elab | named | — | unrecorded |
-| [137](137_enum_literal_field_order.md) | Elab | Elab | named | — | unrecorded |
-| [140](140_comparison_consumes_linear.md) | Check | Verify | commits | — | unrecorded |
-| [142](142_exit_in_operand_leaks.md) | Check | CheckHelpers | commits | — | unrecorded |
-| [143](143_defer_borrow_argument_unpinned.md) | Check | Check | commits | Tooling | unrecorded |
-| [144](144_heap_interior_untracked.md) | Check | Check | commits | — | unrecorded |
-| [145](145_vec_intrinsics_drop_linear.md) | Check | Check | named | — | unrecorded |
-| [146](146_heap_deref_does_not_free.md) | Check | Check | shared | Elab | unrecorded |
-| [147](147_erased_statement_consumes_runtime_value.md) | Check | Check | commits | — | unrecorded |
-| [148](148_short_circuit_operand_consumes.md) | Check | Check | commits | — | unrecorded |
-| [149](149_exit_paths_unchecked.md) | Check | Check | commits | — | unrecorded |
-| [150](150_float_self_compare_fold.md) | Interp | Interp | record | — | unrecorded |
-| [151](151_nested_module_name_flattening.md) | Interp | Interp | shared | — | unrecorded |
-| [152](152_string_trim_empty.md) | EmitLLVM | EmitBuiltins | named | Interp | unrecorded |
-| [165](165_generated_helper_call_binds_by_spelling.md) | Elab | Elab | commits | Proof | unrecorded |
-| [166](166_foreign_fn_value_abi.md) | Check | CoreCheck | commits | Elab | unrecorded |
-| [175](175_match_arms_all_diverge_open_merge.md) | Lower | Lower | commits | — | unrecorded |
-| [176](176_loop_body_shadow_leaks_in_checker.md) | Check | CheckHelpers | commits | — | unrecorded |
-| [177](177_corecheck_never_compared_binder_types.md) | Check | CoreCheck | commits | CLI, Elab | unrecorded |
-| [178](178_superlinear_match_lowering.md) | SSA | SSAVerify | commits | Lower | unrecorded |
-| [179](179_shared_intermediate_ll_path.md) | CLI | Main | commits | — | unrecorded |
-| [180](180_project_reports_ran_passes_on_uncertified_scope.md) | Report | Report | commits | CLI | unrecorded |
-| [181](181_generic_borrowed_scrutinee_binder_mode.md) | Check | BindingMode | commits | Elab, Interp, Lower | unrecorded |
-| [182](182_borrowed_call_result_temporary.md) | Check | Check | commits | — | unrecorded |
-| [183](183_deref_assign_destination_first.md) | Lower | Lower | commits | Check, Mono | unrecorded |
-| [184](184_interp_reads_stdin_up_front.md) | Interp | Interp | commits | CLI | unrecorded |
-| [185](185_generic_rawptr_compare_loses_authority.md) | Check | Verify | commits | Mono | unrecorded |
-| [186](186_trait_impl_selection_is_a_search.md) | Check | Coherence | commits | — | unrecorded |
-| [188](188_capability_variable_entails_everything.md) | Check | Capabilities | commits | Resolve | unrecorded |
-| [189](189_trusted_impl_confers_trust.md) | Parse | AST | commits | Std | unrecorded |
-| [190](190_array_value_aliases_its_source.md) | Lower | Lower | shared | Check, Elab | unrecorded |
-| [191](191_test_scratch_at_fixed_tmp_paths.md) | Std | fs | commits | CLI | unrecorded |
-| [192](192_integer_statement_condition.md) | Check | CoreCheck | commits | — | unrecorded |
-| [193](193_duplicate_literal_field.md) | Check | Check | commits | Report | unrecorded |
-| [194](194_reachable_function_end.md) | Check | Check | commits | Report | unrecorded |
-| [195](195_let_else_falls_through.md) | Check | CheckHelpers | commits | Report | unrecorded |
-| [196](196_match_arm_does_not_fit_scrutinee.md) | Check | Check | commits | Report | unrecorded |
-| [197](197_variant_pattern_drops_payload.md) | Check | Check | commits | Parse, Resolve | unrecorded |
-| [198](198_raw_deref_duplicates_non_copy.md) | Check | Check | commits | Elab, Std | unrecorded |
-| [199](199_cast_to_type_alias_panics.md) | Elab | Elab | shared | Interp, Proof, Resolve | unrecorded |
-| [200](200_bare_generic_type.md) | Resolve | Resolve | commits | — | unrecorded |
-| [202](202_project_mode_skipped_desugaring.md) | CLI | Pipeline | record | — | unrecorded |
-| [203](203_e0420_names_two_errors.md) | Elab | Elab | commits | Check, Report | unrecorded |
-| [204](204_primitive_bound_unchecked.md) | Check | CheckHelpers | commits | — | unrecorded |
-| [205](205_recursive_through_instantiation.md) | Check | CoreCheck | commits | — | unrecorded |
-| [206](206_codeless_check_refusals.md) | Check | CheckHelpers | commits | Report, Resolve | unrecorded |
-| [207](207_binder_refs_gate_aborts_before_verdict.md) | Gates | check_binder_refs | commits | — | unrecorded |
-| [208](208_fn_local_renamed_to_import.md) | CLI | PipelineTest | commits | Check | unrecorded |
-| [209](209_codex_review_stale_index_lock.md) | Tooling | review | commits | — | unrecorded |
-| [210](210_arithmetic_on_nominal_type.md) | Check | CoreCheck | commits | — | unrecorded |
-| [211](211_generic_arithmetic_post_mono.md) | Check | Verify | commits | — | unrecorded |
-| [212](212_const_before_block_parses_as_struct_literal.md) | Parse | Parser | commits | — | unrecorded |
-| [213](213_arm_after_catch_all_lowered.md) | Lower | Lower | commits | — | unrecorded |
-| [214](214_two_returns_leak_same_diagnostic.md) | Check | Check | shared | Tooling | unrecorded |
-| [215](215_unknown_type_in_expression.md) | Resolve | Resolve | commits | — | unrecorded |
+| [123](123_const_borrow_uninitialized_slot.md) | Check | Check | commits | Lower | violates REF-3@1, REF-5@1 |
+| [124](124_duplicate_parameter_names.md) | Check | Check | commits | Std | violates SCOPE-1@1 |
+| [126](126_field_write_through_mut_heap_ref.md) | Lower | Lower | commits | Check | violates MEM-4@2 |
+| [127](127_struct_literal_field_order.md) | Lower | Lower | commits | — | violates STMT-4@1 |
+| [128](128_interp_int_to_float_identity.md) | Interp | Interp | override | — | violates ARITH-5@1 |
+| [129](129_user_fn_captures_libc_symbol.md) | EmitLLVM | Symbols | commits | EmitSSA, Parse, Resolve | violates FFI-5@1 |
+| [130](130_int_as_bool_invalid_ir.md) | Check | CoreCheck | named | — | violates ARITH-5@1 |
+| [131](131_reference_parameter_repointed.md) | Check | Check | override | — | violates REF-6@1 |
+| [132](132_module_constant_name_collision.md) | Lower | Lower | override | — | violates MOD-1@1 |
+| [133](133_deref_field_borrow_copies.md) | Lower | Lower | override | — | violates MEM-4@2 |
+| [134](134_aggregate_eq_invalid_ir.md) | Check | - | override | — | violates TYPE-6@1 |
+| [135](135_fmt_float_literals_lossy.md) | Parse | Lexer | commits | — | outside (tooling) |
+| [136](136_functional_update_base_reevaluated.md) | Elab | Elab | named | — | violates STMT-4@1 |
+| [137](137_enum_literal_field_order.md) | Elab | Elab | named | — | violates STMT-4@1 |
+| [140](140_comparison_consumes_linear.md) | Check | Verify | commits | — | violates TYPE-6@1, ARITH-6@1 |
+| [142](142_exit_in_operand_leaks.md) | Check | CheckHelpers | commits | — | violates STMT-5@1 |
+| [143](143_defer_borrow_argument_unpinned.md) | Check | Check | commits | Tooling | violates OWN-12@1 |
+| [144](144_heap_interior_untracked.md) | Check | Check | commits | — | violates OWN-8@2, MEM-5@1 |
+| [145](145_vec_intrinsics_drop_linear.md) | Check | Check | named | — | violates OWN-5@2, OWN-9@2 |
+| [146](146_heap_deref_does_not_free.md) | Check | Check | shared | Elab | violates MEM-5@1 |
+| [147](147_erased_statement_consumes_runtime_value.md) | Check | Check | commits | — | violates OWN-11@1 |
+| [148](148_short_circuit_operand_consumes.md) | Check | Check | commits | — | violates OWN-11@1 |
+| [149](149_exit_paths_unchecked.md) | Check | Check | commits | — | violates OWN-2@2, OWN-4@2 |
+| [150](150_float_self_compare_fold.md) | Interp | Interp | record | — | violates ARITH-6@1 |
+| [151](151_nested_module_name_flattening.md) | Interp | Interp | shared | — | violates MOD-1@1 |
+| [152](152_string_trim_empty.md) | EmitLLVM | EmitBuiltins | named | Interp | outside (library) |
+| [165](165_generated_helper_call_binds_by_spelling.md) | Elab | Elab | commits | Proof | spec gap (MOD) |
+| [166](166_foreign_fn_value_abi.md) | Check | CoreCheck | commits | Elab | violates FFI-1@1 |
+| [175](175_match_arms_all_diverge_open_merge.md) | Lower | Lower | commits | — | violates PASS-9@1 |
+| [176](176_loop_body_shadow_leaks_in_checker.md) | Check | CheckHelpers | commits | — | violates SCOPE-3@1 |
+| [177](177_corecheck_never_compared_binder_types.md) | Check | CoreCheck | commits | CLI, Elab | violates PASS-6@1 |
+| [178](178_superlinear_match_lowering.md) | SSA | SSAVerify | commits | Lower | outside (performance) |
+| [179](179_shared_intermediate_ll_path.md) | CLI | Main | commits | — | outside (tooling) |
+| [180](180_project_reports_ran_passes_on_uncertified_scope.md) | Report | Report | commits | CLI | outside (tooling) |
+| [181](181_generic_borrowed_scrutinee_binder_mode.md) | Check | BindingMode | commits | Elab, Interp, Lower | violates REF-9@2, PASS-2@2 |
+| [182](182_borrowed_call_result_temporary.md) | Check | Check | commits | — | violates REF-5@1 |
+| [183](183_deref_assign_destination_first.md) | Lower | Lower | commits | Check, Mono | violates STMT-4@1 |
+| [184](184_interp_reads_stdin_up_front.md) | Interp | Interp | commits | CLI | spec gap (PASS) |
+| [185](185_generic_rawptr_compare_loses_authority.md) | Check | Verify | commits | Mono | violates TYPE-6@1, TRUST-4@1 |
+| [186](186_trait_impl_selection_is_a_search.md) | Check | Coherence | commits | — | violates TRAIT-10@1, TRAIT-2@1 |
+| [188](188_capability_variable_entails_everything.md) | Check | Capabilities | commits | Resolve | violates TRUST-4@1 |
+| [189](189_trusted_impl_confers_trust.md) | Parse | AST | commits | Std | open OPEN-22 |
+| [190](190_array_value_aliases_its_source.md) | Lower | Lower | shared | Check, Elab | violates OWN-15@2 |
+| [191](191_test_scratch_at_fixed_tmp_paths.md) | Std | fs | commits | CLI | outside (tooling) |
+| [192](192_integer_statement_condition.md) | Check | CoreCheck | commits | — | violates TYPE-5@1 |
+| [193](193_duplicate_literal_field.md) | Check | Check | commits | Report | violates TYPE-7@1 |
+| [194](194_reachable_function_end.md) | Check | Check | commits | Report | violates STMT-9@1 |
+| [195](195_let_else_falls_through.md) | Check | CheckHelpers | commits | Report | violates PAT-5@2 |
+| [196](196_match_arm_does_not_fit_scrutinee.md) | Check | Check | commits | Report | violates PAT-3@2 |
+| [197](197_variant_pattern_drops_payload.md) | Check | Check | commits | Parse, Resolve | violates PAT-3@2, OWN-5@2 |
+| [198](198_raw_deref_duplicates_non_copy.md) | Check | Check | commits | Elab, Std | violates TRUST-7@1 |
+| [199](199_cast_to_type_alias_panics.md) | Elab | Elab | shared | Interp, Proof, Resolve | violates TYPE-12@1 |
+| [200](200_bare_generic_type.md) | Resolve | Resolve | commits | — | violates TYPE-15@1 |
+| [202](202_project_mode_skipped_desugaring.md) | CLI | Pipeline | record | — | violates PAT-5@2 |
+| [203](203_e0420_names_two_errors.md) | Elab | Elab | commits | Check, Report | outside (tooling) |
+| [204](204_primitive_bound_unchecked.md) | Check | CheckHelpers | commits | — | violates TRAIT-10@1 |
+| [205](205_recursive_through_instantiation.md) | Check | CoreCheck | commits | — | violates TYPE-16@1 |
+| [206](206_codeless_check_refusals.md) | Check | CheckHelpers | commits | Report, Resolve | outside (tooling) |
+| [207](207_binder_refs_gate_aborts_before_verdict.md) | Gates | check_binder_refs | commits | — | outside (tooling) |
+| [208](208_fn_local_renamed_to_import.md) | CLI | PipelineTest | commits | Check | violates SCOPE-3@1 |
+| [209](209_codex_review_stale_index_lock.md) | Tooling | review | commits | — | outside (tooling) |
+| [210](210_arithmetic_on_nominal_type.md) | Check | CoreCheck | commits | — | violates TYPE-6@1 |
+| [211](211_generic_arithmetic_post_mono.md) | Check | Verify | commits | — | violates TYPE-6@1 |
+| [212](212_const_before_block_parses_as_struct_literal.md) | Parse | Parser | commits | — | open OPEN-16 |
+| [213](213_arm_after_catch_all_lowered.md) | Lower | Lower | commits | — | violates PASS-9@1 |
+| [214](214_two_returns_leak_same_diagnostic.md) | Check | Check | shared | Tooling | outside (tooling) |
+| [215](215_unknown_type_in_expression.md) | Resolve | Resolve | commits | — | violates MOD-1@1 |
 | [216](216_field_write_non_mut_binding.md) | — | — | unfixed | — | open OPEN-17 |
-| [217](217_resolve_skips_nested_submodules.md) | Resolve | Resolve | commits | — | unrecorded |
-| [218](218_duplicate_declarations_accepted.md) | Check | Check | commits | — | unrecorded |
-| [219](219_mutation_31_anchored_on_proof_only_wrapper.md) | Proof | ProofCore | commits | — | unrecorded |
-| [220](220_empty_radix_literal.md) | Parse | Lexer | commits | — | unrecorded |
-| [221](221_call_type_argument_count.md) | Check | Check | commits | Resolve | unrecorded |
-| [222](222_imported_enum_impls_not_imported.md) | Resolve | FileSummary | commits | Check, Interp | unrecorded |
-| [223](223_aliased_import_is_a_different_type.md) | Resolve | TypeId | commits | Check, Elab | unrecorded |
-| [224](224_failed_let_recovered_immutable.md) | Interp | Interp | shared | Check | unrecorded |
-| [225](225_bound_refusal_names_type_as_placeholder.md) | Interp | Interp | shared | Check | unrecorded |
+| [217](217_resolve_skips_nested_submodules.md) | Resolve | Resolve | commits | — | violates MOD-1@1 |
+| [218](218_duplicate_declarations_accepted.md) | Check | Check | commits | — | violates MOD-3@2 |
+| [219](219_mutation_31_anchored_on_proof_only_wrapper.md) | Proof | ProofCore | commits | — | outside (tooling) |
+| [220](220_empty_radix_literal.md) | Parse | Lexer | commits | — | violates SYN-1@1 |
+| [221](221_call_type_argument_count.md) | Check | Check | commits | Resolve | spec gap (TYPE) |
+| [222](222_imported_enum_impls_not_imported.md) | Resolve | FileSummary | commits | Check, Interp | violates TRAIT-10@1 |
+| [223](223_aliased_import_is_a_different_type.md) | Resolve | TypeId | commits | Check, Elab | spec gap (MOD) |
+| [224](224_failed_let_recovered_immutable.md) | Interp | Interp | shared | Check | outside (tooling) |
+| [225](225_bound_refusal_names_type_as_placeholder.md) | Interp | Interp | shared | Check | outside (tooling) |
 | [226](226_submodule_imports_private_function.md) | Resolve | Resolve | shared | — | violates MOD-2@1 |
-| [227](227_user_result_captures_builtin_in_other_module.md) | Elab | Elab | commits | Resolve | unrecorded |
-| [228](228_interp_loop_env_grows.md) | Interp | Interp | override | — | unrecorded |
-| [229](229_resolve_scope_refuses_check_names.md) | Resolve | Resolve | commits | — | unrecorded |
-| [230](230_toplevel_known_types_admit_foreign_alias.md) | Resolve | Resolve | shared | — | unrecorded |
-| [231](231_bound_names_undeclared_trait.md) | Resolve | Resolve | shared | Parse | unrecorded |
-| [232](232_discovery_controls_pin_streak.md) | Resolve | Resolve | shared | Parse | unrecorded |
-| [233](233_import_public_constant_refused.md) | Resolve | FileSummary | commits | Check, Elab, Lower | unrecorded |
-| [234](234_interp_recursion_quadratic.md) | Interp | Interp | commits | — | unrecorded |
-| [235](235_interp_array_read_walks_array.md) | Interp | Interp | shared | Elab | unrecorded |
-| [236](236_elab_array_literal_append.md) | Elab | Elab | override | — | unrecorded |
-| [237](237_selector_reads_map_text_as_calls.md) | Gates | shell_text | commits | — | unrecorded |
-| [238](238_method_call_captured_by_free_fn_of_its_spelling.md) | Elab | Elab | shared | Check | unrecorded |
-| [239](239_free_fn_answers_method_call.md) | Check | CoreCheck | commits | Elab, Proof, Report | unrecorded |
-| [240](240_trait_name_as_type_crashes_backend.md) | Elab | Elab | shared | Resolve | unrecorded |
-| [241](241_parent_call_of_child_respelled_method_undefined.md) | Elab | Elab | shared | Resolve | unrecorded |
-| [242](242_imported_signature_type_captured.md) | Resolve | FileSummary | shared | — | unrecorded |
-| [243](243_aliased_newtype_import_binds_nothing.md) | Elab | Elab | commits | Parse, Resolve | unrecorded |
-| [244](244_killed_gate_run_wedges_lock.md) | Gates | check_gate_lock | commits | — | unrecorded |
-| [245](245_interp_constants_program_wide.md) | Interp | Interp | override | Lower, Report | unrecorded |
-| [246](246_imported_alias_chain_unknown_type.md) | Proof | CallCollect | commits | Interp, Resolve | unrecorded |
-| [247](247_function_value_identifier_unreached.md) | Check | CoreCheck | shared | Elab, Report | unrecorded |
-| [248](248_interp_array_write_copies_array.md) | Interp | Interp | named | — | unrecorded |
-| [249](249_parser_array_literal_append.md) | Parse | Parser | named | Interp | unrecorded |
-| [250](250_native_aggregate_place_copies.md) | Lower | Lower | named | EmitSSA, SSA | unrecorded |
-| [251](251_generic_specialization_reads_instantiating_tree_constants.md) | EmitSSA | EmitSSA | commits | Lower | unrecorded |
-| [252](252_doc_link_check_unchecked_and_unrun.md) | Tooling | Makefile | commits | — | unrecorded |
-| [253](253_privacy_judged_by_spelling.md) | Check | Check | commits | — | unrecorded |
-| [254](254_interp_newtype_over_aggregate_cast.md) | Interp | Interp | override | Elab | unrecorded |
-| [255](255_parser_block_statement_append.md) | Parse | Parser | named | Check, Elab | unrecorded |
-| [256](256_local_table_association_lists.md) | Parse | LocalId | named | Check, Elab, Resolve | unrecorded |
-| [257](257_resolve_visible_bindings_lists.md) | Resolve | Resolve | named | Check, Elab, Parse | unrecorded |
-| [258](258_checker_binding_list.md) | Check | CheckError | named | Elab, Parse, Resolve | unrecorded |
-| [259](259_elab_binder_frames_append.md) | Elab | Elab | named | Check, Parse | unrecorded |
-| [260](260_elabverify_visible_binders_list.md) | Check | ElabVerify | named | Elab, Parse, Resolve | unrecorded |
-| [261](261_corecheck_local_bindings_list.md) | Check | CoreCheck | override | — | unrecorded |
-| [262](262_child_newtype_constructor_check_elab_split.md) | Resolve | FileSummary | commits | Check | unrecorded |
-| [263](263_fuzz_farm_gate_wall_clock_coverage.md) | Tooling | farm | record | — | unrecorded |
-| [265](265_lower_variable_table_association_list.md) | Lower | Lower | override | SSA | unrecorded |
-| [266](266_lower_merges_visit_every_binding.md) | Lower | Lower | named | — | unrecorded |
-| [267](267_ssacleanup_one_constant_branch_per_pass.md) | SSA | SSACleanup | named | Lower | unrecorded |
-| [268](268_binder_refs_empty_scope_leg_missed_eager_frames.md) | SSA | SSACleanup | shared | — | unrecorded |
-| [269](269_postmono_ref_binding_env_list.md) | Check | Verify | named | Lower, SSA | unrecorded |
+| [227](227_user_result_captures_builtin_in_other_module.md) | Elab | Elab | commits | Resolve | violates MOD-1@1 |
+| [228](228_interp_loop_env_grows.md) | Interp | Interp | override | — | outside (performance) |
+| [229](229_resolve_scope_refuses_check_names.md) | Resolve | Resolve | commits | — | spec gap (MOD) |
+| [230](230_toplevel_known_types_admit_foreign_alias.md) | Resolve | Resolve | shared | — | violates MOD-2@1, MOD-1@1 |
+| [231](231_bound_names_undeclared_trait.md) | Resolve | Resolve | shared | Parse | violates MOD-1@1 |
+| [232](232_discovery_controls_pin_streak.md) | Resolve | Resolve | shared | Parse | outside (tooling) |
+| [233](233_import_public_constant_refused.md) | Resolve | FileSummary | commits | Check, Elab, Lower | spec gap (MOD) |
+| [234](234_interp_recursion_quadratic.md) | Interp | Interp | commits | — | outside (performance) |
+| [235](235_interp_array_read_walks_array.md) | Interp | Interp | shared | Elab | outside (performance) |
+| [236](236_elab_array_literal_append.md) | Elab | Elab | override | — | outside (performance) |
+| [237](237_selector_reads_map_text_as_calls.md) | Gates | shell_text | commits | — | outside (tooling) |
+| [238](238_method_call_captured_by_free_fn_of_its_spelling.md) | Elab | Elab | shared | Check | violates MOD-1@1 |
+| [239](239_free_fn_answers_method_call.md) | Check | CoreCheck | commits | Elab, Proof, Report | violates TYPE-9@1, MOD-1@1 |
+| [240](240_trait_name_as_type_crashes_backend.md) | Elab | Elab | shared | Resolve | violates TYPE-2@1 |
+| [241](241_parent_call_of_child_respelled_method_undefined.md) | Elab | Elab | shared | Resolve | violates MOD-1@1 |
+| [242](242_imported_signature_type_captured.md) | Resolve | FileSummary | shared | — | violates MOD-1@1 |
+| [243](243_aliased_newtype_import_binds_nothing.md) | Elab | Elab | commits | Parse, Resolve | violates MOD-1@1 |
+| [244](244_killed_gate_run_wedges_lock.md) | Gates | check_gate_lock | commits | — | outside (tooling) |
+| [245](245_interp_constants_program_wide.md) | Interp | Interp | override | Lower, Report | violates MOD-1@1 |
+| [246](246_imported_alias_chain_unknown_type.md) | Proof | CallCollect | commits | Interp, Resolve | violates TYPE-12@1 |
+| [247](247_function_value_identifier_unreached.md) | Check | CoreCheck | shared | Elab, Report | outside (tooling) |
+| [248](248_interp_array_write_copies_array.md) | Interp | Interp | named | — | outside (performance) |
+| [249](249_parser_array_literal_append.md) | Parse | Parser | named | Interp | outside (performance) |
+| [250](250_native_aggregate_place_copies.md) | Lower | Lower | named | EmitSSA, SSA | outside (performance) |
+| [251](251_generic_specialization_reads_instantiating_tree_constants.md) | EmitSSA | EmitSSA | commits | Lower | violates PASS-1@1 |
+| [252](252_doc_link_check_unchecked_and_unrun.md) | Tooling | Makefile | commits | — | outside (tooling) |
+| [253](253_privacy_judged_by_spelling.md) | Check | Check | commits | — | violates TYPE-11@1 |
+| [254](254_interp_newtype_over_aggregate_cast.md) | Interp | Interp | override | Elab | spec gap (PASS) |
+| [255](255_parser_block_statement_append.md) | Parse | Parser | named | Check, Elab | outside (performance) |
+| [256](256_local_table_association_lists.md) | Parse | LocalId | named | Check, Elab, Resolve | outside (performance) |
+| [257](257_resolve_visible_bindings_lists.md) | Resolve | Resolve | named | Check, Elab, Parse | outside (performance) |
+| [258](258_checker_binding_list.md) | Check | CheckError | named | Elab, Parse, Resolve | outside (performance) |
+| [259](259_elab_binder_frames_append.md) | Elab | Elab | named | Check, Parse | outside (performance) |
+| [260](260_elabverify_visible_binders_list.md) | Check | ElabVerify | named | Elab, Parse, Resolve | outside (performance) |
+| [261](261_corecheck_local_bindings_list.md) | Check | CoreCheck | override | — | outside (performance) |
+| [262](262_child_newtype_constructor_check_elab_split.md) | Resolve | FileSummary | commits | Check | violates MOD-1@1 |
+| [263](263_fuzz_farm_gate_wall_clock_coverage.md) | Tooling | farm | record | — | outside (tooling) |
+| [265](265_lower_variable_table_association_list.md) | Lower | Lower | override | SSA | outside (performance) |
+| [266](266_lower_merges_visit_every_binding.md) | Lower | Lower | named | — | outside (performance) |
+| [267](267_ssacleanup_one_constant_branch_per_pass.md) | SSA | SSACleanup | named | Lower | outside (performance) |
+| [268](268_binder_refs_empty_scope_leg_missed_eager_frames.md) | SSA | SSACleanup | shared | — | outside (tooling) |
+| [269](269_postmono_ref_binding_env_list.md) | Check | Verify | named | Lower, SSA | outside (performance) |
 | [270](270_loop_header_phi_per_binding.md) | SSA | SSACleanup | shared | — | outside (performance) |
-| [271](271_merge_kept_diverged_arm_writes.md) | Lower | Lower | commits | — | unrecorded |
-| [272](272_imported_extern_no_ffi_edge.md) | Check | CoreCheck | commits | — | unrecorded |
-| [273](273_parser_module_items_append.md) | Parse | Parser | commits | — | unrecorded |
-| [274](274_resolve_enum_variant_symbols_fold.md) | Resolve | Resolve | commits | — | unrecorded |
-| [275](275_check_declaration_collisions_assoc_list.md) | Check | CheckError | commits | — | unrecorded |
-| [276](276_elab_declaration_analyses_list_scans.md) | Elab | Elab | commits | — | unrecorded |
-| [277](277_corecheck_callee_signature_list.md) | Check | CoreCheck | commits | — | unrecorded |
-| [278](278_mono_type_name_collision_filter.md) | Mono | Mono | commits | — | unrecorded |
-| [279](279_lower_module_function_list_append.md) | Lower | Lower | commits | — | unrecorded |
-| [280](280_nested_expression_subtree_rewalks.md) | Check | TypeJudgment | commits | Elab | unrecorded |
-| [281](281_evidence_flat_uses_nested_copy.md) | Proof | IdentityUseBytes | commits | — | unrecorded |
-| [282](282_resolve_lookup_scope_per_nesting_level.md) | Resolve | Resolve | commits | — | unrecorded |
-| [283](283_gate_grep_q_sigpipe_false_fail.md) | Tooling | proof_gate | commits | — | unrecorded |
-| [284](284_match_arm_evidence_dropped.md) | Elab | Elab | commits | Proof | unrecorded |
-| [285](285_enum_payload_addr_taken_unseen.md) | Lower | Lower | commits | — | unrecorded |
-| [286](286_lower_nested_region_addr_taken_rewalks.md) | Lower | Lower | commits | — | unrecorded |
-| [287](287_defer_borrow_promoted_at_first_emission.md) | Lower | Lower | commits | — | unrecorded |
-| [288](288_emitssa_name_tables_lists.md) | EmitSSA | EmitSSA | commits | — | unrecorded |
-| [289](289_check_nested_branch_end_facts_rewalks.md) | Check | Check | commits | — | unrecorded |
-| [290](290_check_match_arm_environment_walks.md) | Check | Check | commits | Lower | unrecorded |
-| [291](291_type_lookups_by_list_search.md) | Lower | Lower | commits | Check, Elab, Resolve | unrecorded |
-| [292](292_loop_header_patch_maps_all_blocks.md) | Lower | Lower | commits | — | unrecorded |
-| [293](293_report_scoped_walker_nested_rewalks.md) | Report | ReportObligations | commits | — | unrecorded |
-| [294](294_scaling_gate_wall_budgets_under_load.md) | Gates | compile_scaling_budgets | commits | — | unrecorded |
-| [295](295_parser_list_appends.md) | Parse | Parser | commits | — | unrecorded |
-| [296](296_callee_walk_list_appends.md) | Proof | CallCollect | commits | — | unrecorded |
-| [297](297_call_arguments_and_merge_inputs_appended.md) | Elab | Elab | commits | Lower | unrecorded |
-| [298](298_operand_escape_search_value_branches.md) | Check | Check | commits | — | unrecorded |
-| [299](299_work_queue_dispatcher_fetch_races_agent_pushes.md) | Tooling | dispatch | commits | — | unrecorded |
+| [271](271_merge_kept_diverged_arm_writes.md) | Lower | Lower | commits | — | violates PASS-9@1 |
+| [272](272_imported_extern_no_ffi_edge.md) | Check | CoreCheck | commits | — | outside (tooling) |
+| [273](273_parser_module_items_append.md) | Parse | Parser | commits | — | outside (performance) |
+| [274](274_resolve_enum_variant_symbols_fold.md) | Resolve | Resolve | commits | — | outside (performance) |
+| [275](275_check_declaration_collisions_assoc_list.md) | Check | CheckError | commits | — | outside (performance) |
+| [276](276_elab_declaration_analyses_list_scans.md) | Elab | Elab | commits | — | outside (performance) |
+| [277](277_corecheck_callee_signature_list.md) | Check | CoreCheck | commits | — | outside (performance) |
+| [278](278_mono_type_name_collision_filter.md) | Mono | Mono | commits | — | outside (performance) |
+| [279](279_lower_module_function_list_append.md) | Lower | Lower | commits | — | outside (performance) |
+| [280](280_nested_expression_subtree_rewalks.md) | Check | TypeJudgment | commits | Elab | outside (performance) |
+| [281](281_evidence_flat_uses_nested_copy.md) | Proof | IdentityUseBytes | commits | — | outside (performance) |
+| [282](282_resolve_lookup_scope_per_nesting_level.md) | Resolve | Resolve | commits | — | outside (performance) |
+| [283](283_gate_grep_q_sigpipe_false_fail.md) | Tooling | proof_gate | commits | — | outside (tooling) |
+| [284](284_match_arm_evidence_dropped.md) | Elab | Elab | commits | Proof | outside (tooling) |
+| [285](285_enum_payload_addr_taken_unseen.md) | Lower | Lower | commits | — | violates MEM-3@1 |
+| [286](286_lower_nested_region_addr_taken_rewalks.md) | Lower | Lower | commits | — | outside (performance) |
+| [287](287_defer_borrow_promoted_at_first_emission.md) | Lower | Lower | commits | — | violates MEM-3@1 |
+| [288](288_emitssa_name_tables_lists.md) | EmitSSA | EmitSSA | commits | — | outside (performance) |
+| [289](289_check_nested_branch_end_facts_rewalks.md) | Check | Check | commits | — | outside (performance) |
+| [290](290_check_match_arm_environment_walks.md) | Check | Check | commits | Lower | outside (performance) |
+| [291](291_type_lookups_by_list_search.md) | Lower | Lower | commits | Check, Elab, Resolve | outside (performance) |
+| [292](292_loop_header_patch_maps_all_blocks.md) | Lower | Lower | commits | — | outside (performance) |
+| [293](293_report_scoped_walker_nested_rewalks.md) | Report | ReportObligations | commits | — | outside (performance) |
+| [294](294_scaling_gate_wall_budgets_under_load.md) | Gates | compile_scaling_budgets | commits | — | outside (tooling) |
+| [295](295_parser_list_appends.md) | Parse | Parser | commits | — | outside (performance) |
+| [296](296_callee_walk_list_appends.md) | Proof | CallCollect | commits | — | outside (performance) |
+| [297](297_call_arguments_and_merge_inputs_appended.md) | Elab | Elab | commits | Lower | outside (performance) |
+| [298](298_operand_escape_search_value_branches.md) | Check | Check | commits | — | outside (performance) |
+| [299](299_work_queue_dispatcher_fetch_races_agent_pushes.md) | Tooling | dispatch | commits | — | outside (tooling) |
 | [300](300_new_bug_sh_reserves_a_number_then_refuses_the_fi.md) | Tooling | new_bug | commits | — | outside (tooling) |
 | [301](301_lower_s_address_taken_walk_did_not_see_the_root.md) | Lower | Lower | commits | — | violates MEM-3@1 |
 | [302](302_a_loop_moved_an_address_taken_scalar_back_into_a.md) | Lower | Lower | commits | — | spec gap (MEM) |

@@ -4,7 +4,7 @@
 summary: a child whose exec failed called `exit`, flushing stdio buffers copied from the parent, so pending output was written twice; it now calls `_exit` (2026-10-01)
 coverage: std.process.spawn's child called exit(127) when exec failed, flushing stdio buffers it had copied from the parent, so pending buffered output was written twice (measured: XX for one byte). Now _exit. Regression vehicle is a std-using package, not a tests/programs .con: tests/regressions/spawn_exit/exec_failure_no_double_flush, run by check_spawn_exit.sh, which asserts the child exited 127 and the file holds exactly X; shown to fail on XX with the fix reverted; see docs/bugs/072 (2026-10-01)
 class: 14
-ruling: Violates: unrecorded
+ruling: Outside the spec: library — std.process.spawn's child called exit instead of _exit after a failed exec, flushing the parent's stdio buffers twice
 -->
 
 **Status:** FIXED 2026-10-01

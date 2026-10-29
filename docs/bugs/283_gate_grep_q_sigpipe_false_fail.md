@@ -4,7 +4,7 @@
 summary: gates asserted with `printf '%s' "$OUT" | grep -q PAT` (and other producers piped into `grep -q`) under `pipefail`; when grep exits on its first match while the producer is still writing, the producer dies of SIGPIPE and the pipeline's status inverts the match: a positive leg reports FAIL although the pattern is present, and a negated leg (`| grep -q FORBIDDEN && no || ok`) reports ok although the forbidden text is there. Every such site now matches with `has_match` (scripts/tests/lib/has_match.sh), which reads all of its input.
 coverage: `check_gate_hygiene.sh` leg "no pipe into a short-circuiting grep or head before a match (bug 283)" refuses the shape in every script under scripts/ and the pre-push hook, with flagged and unflagged controls, and executes the race: a 500000-line producer reproduces the failing status (141, or 1 where the runner ignores SIGPIPE and printf reports EPIPE) and the inverted negated verdict through the old pipe, and has_match answers correctly through a pipe and a here-string
 silent: yes
-ruling: Violates: unrecorded
+ruling: Outside the spec: tooling — gates piped into `grep -q` under pipefail, so SIGPIPE inverted results
 -->
 
 **Status:** FIXED (2026-10-26, branch `wip/bug283-pipefail`)
