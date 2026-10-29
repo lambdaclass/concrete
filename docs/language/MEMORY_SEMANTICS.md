@@ -8,7 +8,7 @@ the status history (status: was the canonical reference for ownership, borrowing
 
 This document describes the memory and reference model that the checker (`Check.lean`) enforces for safe Concrete code. Where the checker and this document disagree, one of them must be corrected. Neither is silently authoritative over the other.
 
-For the public guarantee boundary, see [MEMORY_GUARANTEES.md](MEMORY_GUARANTEES.md).
+For the public guarantee boundary, see [MEMORY_GUARANTEES.md](../verification/MEMORY_GUARANTEES.md).
 For value categories and layout, see [VALUE_MODEL.md](VALUE_MODEL.md).
 For the broader safety model, see [SAFETY.md](SAFETY.md).
 

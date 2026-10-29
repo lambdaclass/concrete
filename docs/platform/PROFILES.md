@@ -90,7 +90,7 @@ Enforced by the Concrete checker. Safe code declares no `trusted`/`Unsafe`
 boundary, but the claim still depends on checker and artifact-pipeline
 correctness; R-0440 will carry that dependency per claim.
 
-References: [MEMORY_GUARANTEES.md](../language/MEMORY_GUARANTEES.md), [GUARANTEE_STATEMENT.md](../verification/GUARANTEE_STATEMENT.md), [SAFETY.md](../language/SAFETY.md)
+References: [MEMORY_GUARANTEES.md](../verification/MEMORY_GUARANTEES.md), [GUARANTEE_STATEMENT.md](../verification/GUARANTEE_STATEMENT.md), [SAFETY.md](../language/SAFETY.md)
 
 ---
 

@@ -279,7 +279,7 @@ Raw pointers (`*const T`, `*mut T`) and FFI need the `Unsafe` capability or a `t
 There, and only there, memory may be indeterminate or aliased outside these rules, and that is an
 explicit, audited assumption ([trusted code](../../../spec/trusted.md)). The public claim of what
 is enforced and where it stops is
-[MEMORY_GUARANTEES.md](../../../language/MEMORY_GUARANTEES.md).
+[MEMORY_GUARANTEES.md](../../../verification/MEMORY_GUARANTEES.md).
 
 ## What This Means In Practice
 

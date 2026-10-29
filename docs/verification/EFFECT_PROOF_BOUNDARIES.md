@@ -5,7 +5,7 @@ other evidence apply, and how effect/trust boundaries constrain those scopes.
 
 For the safety model and three-way split, see [SAFETY.md](../language/SAFETY.md).
 For the provable subset definition, see [PROVABLE_V1.md](PROVABLE_V1.md).
-For memory/ownership guarantees, see [MEMORY_GUARANTEES.md](../language/MEMORY_GUARANTEES.md).
+For memory/ownership guarantees, see [MEMORY_GUARANTEES.md](MEMORY_GUARANTEES.md).
 For the execution model and runtime boundary, see [EXECUTION_MODEL.md](../platform/EXECUTION_MODEL.md).
 For the language-semantics vs proof-semantics boundary, see [PROOF_SEMANTICS_BOUNDARY.md](PROOF_SEMANTICS_BOUNDARY.md).
 
@@ -78,7 +78,7 @@ boundary. Heap operations (`Heap<T>`, `HeapArray<T>`) are outside the current
 functional proof model; allocation authority and reachability remain valid
 whole-program structural facts.
 
-**What the compiler still guarantees:** Linear ownership of heap pointers. Every `Heap<T>` must be consumed (freed, dereferenced, or passed to an owner). The no-leak guarantee (see [MEMORY_GUARANTEES.md](../language/MEMORY_GUARANTEES.md)) is enforced by the checker, not by the proof pipeline.
+**What the compiler still guarantees:** Linear ownership of heap pointers. Every `Heap<T>` must be consumed (freed, dereferenced, or passed to an owner). The no-leak guarantee (see [MEMORY_GUARANTEES.md](MEMORY_GUARANTEES.md)) is enforced by the checker, not by the proof pipeline.
 
 ### Blocking and Host Interaction
 

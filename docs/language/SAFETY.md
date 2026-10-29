@@ -9,7 +9,7 @@ Status: stable reference
 This document is the central reference for Concrete's safety model. It defines the organizing principles, explains how the pieces fit together, and points to the detailed references for each subsystem.
 
 For ownership and linearity, see [VALUE_MODEL.md](VALUE_MODEL.md).
-For the current safe-memory guarantee boundary, see [MEMORY_GUARANTEES.md](MEMORY_GUARANTEES.md).
+For the current safe-memory guarantee boundary, see [MEMORY_GUARANTEES.md](../verification/MEMORY_GUARANTEES.md).
 For named profiles (`safe`, `predictable`, `provable`, `high-integrity`), see [PROFILES.md](../platform/PROFILES.md).
 For the short public claim surface, see [CLAIMS_TODAY.md](../verification/CLAIMS_TODAY.md).
 For explicit trusted-computing-base accounting, see [TRUSTED_COMPUTING_BASE.md](../verification/TRUSTED_COMPUTING_BASE.md).

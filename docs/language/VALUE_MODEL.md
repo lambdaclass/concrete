@@ -9,7 +9,7 @@ FFI chapter. This document keeps the overview and the four-cell value model's re
 Concrete uses a strict value/reference model with linear types by default.
 
 For the full safety model (capabilities, trusted boundaries, `Unsafe`), see [SAFETY.md](SAFETY.md).
-For the current safe-memory guarantee boundary, see [MEMORY_GUARANTEES.md](MEMORY_GUARANTEES.md).
+For the current safe-memory guarantee boundary, see [MEMORY_GUARANTEES.md](../verification/MEMORY_GUARANTEES.md).
 For FFI and trust boundaries, see [FFI.md](../platform/FFI.md).
 
 ## Value Categories

@@ -7,7 +7,7 @@ This document classifies the runtime boundaries of Concrete code that passes the
 For the general execution model, see [EXECUTION_MODEL.md](EXECUTION_MODEL.md).
 For profile definitions and gates, see [PROFILES.md](PROFILES.md).
 For the trusted computing base, see [TRUSTED_COMPUTING_BASE.md](../verification/TRUSTED_COMPUTING_BASE.md).
-For memory safety guarantees, see [MEMORY_GUARANTEES.md](../language/MEMORY_GUARANTEES.md).
+For memory safety guarantees, see [MEMORY_GUARANTEES.md](../verification/MEMORY_GUARANTEES.md).
 
 ---
 
