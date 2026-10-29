@@ -512,6 +512,11 @@ exemption: std uses constructors, accessors, scoped mutation and audited raw-par
 any other module. Enforcement is the same in Resolve, Check, Elab, project mode, the interpreter and
 the compiled path (Check refuses; later stages inherit).
 
+The table states the design. Which module counts as the declaring one is open: today a parent module
+has these rights over the declarations it imports from its child modules (bug 262), and whether
+that stays is owner decision OD21 (OPEN-21); "other module" below means a module the current rule
+does not grant them to.
+
 | operation | same module | other module |
 |---|---|---|
 | name the type (`let x: T`, a generic argument) | yes | if the type is `pub` |

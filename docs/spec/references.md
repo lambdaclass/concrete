@@ -788,7 +788,8 @@ reborrow it (this entry); reading or writing through it (`*r`, `*r = v`, `r.f`, 
 `r[i] = v`; MEM-4) uses it without consuming it, because a dereference does not go through
 `consumeVar`, an invariant any change to consumption must keep. Branches agree on a `&mut`
 binding as on any linear value (OWN-3), a loop does not consume one declared outside it (OWN-4),
-and a `break` or `continue` does not skip an unconsumed one (OWN-2). A borrow-block binder need not
+while a `break` or `continue` may leave one unconsumed: OWN-2's exit checks exempt references, which
+own nothing. A borrow-block binder need not
 be consumed: dereferencing it inside the block is the normal use, and the binder lapses at the
 block's end, when the owner is unfrozen. On current main the block lowers to an entry-block alloca
 holding the owner's value, the binder points at it, and every exit writes it back to the owner
