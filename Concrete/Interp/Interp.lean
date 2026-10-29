@@ -3462,10 +3462,10 @@ partial def evalWhile (cx : Ctx) (baseLen : Nat) (env : Env) (cond : CExpr) (bod
   -- path that goes on to the next iteration (fall-through, `continue` of this loop, and `continue`
   -- out of the condition), and the step's own control flow is handled the same way on all of them:
   -- a `return` or `break` inside it leaves the loop. One definition, so no path can drop it. A
-  -- `continue` inside the step goes to the next iteration here, while Lower's continue target in
-  -- the step is the step itself; Check refuses only the value-expression steps that could contain
-  -- one (E0224), not a statement-`if` step, so the two disagree: bug 330, open until the owner
-  -- decides what such a `continue` does.
+  -- `continue` inside the step that targets this loop goes to the next iteration here, while
+  -- Lower's continue target in the step is the step itself; Check refuses only the value-expression
+  -- steps that could contain one (E0224, E0225), not a statement-`if` step, so the two disagree:
+  -- bug 330, open until the owner decides what such a `continue` does.
   let stepThenLoop := fun (e : Env) => do
     let (stepEnv, stepFlow) ← evalStmts cx e step
     match stepFlow with

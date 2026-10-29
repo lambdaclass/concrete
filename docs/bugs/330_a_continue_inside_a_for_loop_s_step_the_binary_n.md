@@ -44,7 +44,9 @@ side of it. With `break;` or `return 40 + n;` in place of `k = 4; continue;` the
 
 ## Expected
 
-No rule says where a `continue` that is already inside a `for` loop's step goes.
+No rule says where a `continue` inside a `for` loop's step that targets that same loop goes (a
+labelled `continue` of an outer loop, or one belonging to a loop nested in the step, follows its own
+loop's rules).
 [STMT-6@2](../spec/statements.md#STMT-6) says which loop a `continue` acts on, and its rationale has
 a `continue` in the body run the step; neither says what a `continue` in the step does. Three
 readings: (a) it re-runs the step (the literal reading, Lower's continue target): P = 3; (b) it ends
