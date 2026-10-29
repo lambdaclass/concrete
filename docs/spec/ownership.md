@@ -467,7 +467,7 @@ fn main() -> Int {
 ```
 
 <a id="OWN-7"></a>
-### OWN-7. A pure value is not computed and thrown away
+### OWN-7. A result is not thrown away unwritten
 
 **OWN-7@3.** A statement expression has type `Unit`, and a result of any other type is dropped only by writing `discard(e)`.
 
@@ -480,18 +480,12 @@ fn main() -> Int {
 - Obligation: none
 - Evidence: tested
 
-**Rationale.** `2 + 3;` or `x;` is a dead computation, usually a mistake. Calls are not covered:
-an empty capability set does not make a call pure, because mutation through `&mut` parameters
-and foreign effects are not capabilities. Division and remainder are not covered either, because
-their zero check is a real runtime trap. An intentional discard is written `discard(e)`.
-
-This rule keys on effect-freedom as OWN-6 keys on fallibility (CapabilityJudgment slice 5). Calls
-are never flagged: the capability model tracks no mutation through `&mut` parameters, `trusted` or
-`extern` code, so an empty capability set does not prove a call pure (`env_assign(&mut e, ...)`,
-`fclose(fp)`), and a discarded call result may be deliberate. Operations that can trap (`/`, `%`)
-are not flagged either. `discard(e)` acknowledges an intentional discard of a Copy value. Site:
-`exprPureDiscardable`, a local structural purity predicate, in the same `Stmt.expr` check
-(`CheckError.discardedPureValue`).
+**Rationale.** `2 + 3;` or `f();` with a result is either a dead computation or a deliberate
+discard, and the reader cannot tell which; `discard(e)` says it. Version 2 (CapabilityJudgment slice
+5) flagged only syntactically pure values: it skipped calls, because an empty capability set does not
+prove a call pure (mutation through `&mut` and foreign effects are not capabilities), and operations
+that can trap (`/`, `%`). That is still main's behaviour: its site is `exprPureDiscardable`, a local
+structural purity predicate in the `Stmt.expr` check (`CheckError.discardedPureValue`).
 
 Version 3 records the owner's decision of 2026-10-29 (OD29): every unused non-Unit result needs
 `discard(e)`, and the syntactic purity heuristic of version 2 is removed. Main refuses only a

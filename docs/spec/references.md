@@ -828,7 +828,7 @@ fn main() -> Int {
 <a id="REF-11"></a>
 ### REF-11. Loans are keyed by root binding
 
-**REF-11@3.** A borrow of any part of a value is a loan on its root binding and freezes the whole owner while it lives, so within one call every argument, the receiver included and a re-lent `&mut` binding included, conflicts with any other argument that borrows the same root when at least one of them is exclusive, whatever their projections.
+**REF-11@3.** A borrow of any part of a value is a loan on its root binding and freezes the whole owner while it lives, so within one call every argument, the receiver included and a re-lent `&mut` binding included, conflicts with any other argument that reads or borrows the same root when at least one of them is exclusive, whatever their projections.
 
 - Kind: refusal
 - Uses: none
@@ -845,10 +845,7 @@ already enforces. This tightens OD2's part 2 as first recorded the same day: an 
 conflicts with any other argument that borrows the same root, so even disjoint fields conflict and
 `h(&mut a.f, &mut a.g)` is refused, as are `upd(&mut s.a, &s.b)` and `add(&mut s.a, s.b)` (E0293);
 the version recorded earlier that day, which allowed disjoint siblings, was never published. Two
-fields of one owner are lent one call at a time, or read into a `let` first. Lending a reference
-binding the caller already holds (`r.add(r.step)` with `r: &mut S`, `self.sift_up(self.len - 1)`
-with `self: &mut Self`) lends that reference (REF-10) and makes no new loan, so reading through it
-in another argument is not a second loan. A conflict between a borrow and a later use of its
+fields of one owner are lent one call at a time, or read into a `let` first. A conflict between a borrow and a later use of its
 place, outside one call, is REF-8's. History: the rule dates from 2026-10-23 (TIGHTENING_DECISIONS
 D2); the measured migration was one std site (`std/src/cli.con:77`) and this fixture, and
 `error_d2_call_disjoint_fields.con`, `error_d2_call_field_read.con`,

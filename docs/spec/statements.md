@@ -276,10 +276,9 @@ fn main() -> Int {
 
 **Rationale.** Command-line arguments come from `std.args` (`with(Env)`); a parameterized `main`
 used to read an undefined register (bug 111). There is no `std.process.exit`: an early exit would
-skip cleanup the linear rules promise, so status flows back through `main`. The `bool` and
-non-scalar cases are deprecated corners kept from stage 1 of MAIN_EXIT_MODEL. Narrowing the result
-to `u8` (so masking is unrepresentable) is a recorded preference, not the rule
-(MAIN_EXIT_MODEL). `--interp` prints the result instead of exiting with it.
+skip cleanup the linear rules promise, so status flows back through `main`. Version 2 masked an integer result to
+0–255 and mapped `bool` (stage 1 of MAIN_EXIT_MODEL); OD24 narrows the result to `u8` or `Unit`, so
+masking is unrepresentable. `--interp` prints the result instead of exiting with it.
 The owner decided OD8 on 2026-10-29: `main` will receive the root resource value and split it
 (TRUST-9); this entry changes with R-0557, which lands that parameter, and until then `main` takes
 none.

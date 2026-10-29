@@ -48,8 +48,9 @@ be 44. The negated value is what is range-checked, so `let a: i8 = -128` is acce
 `-129` is not. Hex (`0xFF`) and binary (`0b1010`) literals are accepted; suffixes such as `7u8`
 are not part of the language (an annotation or a conversion says the type).
 
-An unannotated integer literal with no expected type is `Int` (`i64`); a hint (an annotation, a
-parameter, a field, an arm) gives it the hinted integer type. Suffixes are workload-gated: an
+A hint (an annotation, a parameter, a field, an arm) gives a literal the hinted type; version 1
+typed a literal with no expected type `Int` (`i64`), which is still main's behaviour. Suffixes are
+workload-gated: an
 annotation already covers the need, so a suffix would be pure convenience, revisited if a real
 workload finds annotations too noisy. Gated by `scripts/tests/check_numeric_literals.sh` (ROADMAP
 old Phase 6 #6, 2026-06-23).

@@ -536,7 +536,9 @@ so the arm that runs is the first one written that matches. This changes main: C
 moves unguarded catch-all arms after the others (bug 213's provisional repair), so a specific arm
 written after `_` is reached and the program below returns 42 on both consumers; under this rule the
 catch-all wins and the later arm is unreachable, a refusal. Repeating a variant an earlier
-unguarded arm covers is already PAT-3's refusal.
+unguarded arm covers is already PAT-3's refusal. Two readings are open for the owner: whether the fallback arm of a desugared
+`if let`, `let ... else` or `while let` is judged (OPEN-40), and whether a catch-all after integer
+ranges that span the scrutinee's type is unreachable (OPEN-41).
 
 ```con reject name=arm-after-catch-all code=new stage=check pair=catch-all-last pending=R-0500 now=accept:42
 fn main() -> Int {

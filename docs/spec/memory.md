@@ -77,7 +77,7 @@ fn main() -> Int {
 ```
 
 <a id="MEM-4"></a>
-### MEM-4. Field access dereferences one reference, then one heap layer
+### MEM-4. Field access dereferences at most one reference
 
 **MEM-4@3.** A field access `e.f`, read or written, requires `e` to be the struct or a reference to it, dereferencing at most that one reference, and a `Heap` or `HeapArray` is opened by an explicit non-consuming place form, `*` remaining the consuming move-out.
 
@@ -92,9 +92,9 @@ fn main() -> Int {
 
 **Rationale.** A reference to any place, a heap shell included, denotes that place: `&h` and
 `&mut h` denote the slot `h`. Every consumer gives `e.f` this one meaning; a write through
-`&mut Heap<S>` once corrupted the caller's slot (bug 126). Deeper types (`& &S`,
-`Heap<Heap<S>>`) need an explicit `*`; a `HeapArray<T>` auto-dereferences only directly, not
-through a reference. A field access does not consume a heap pointer.
+`&mut Heap<S>` once corrupted the caller's slot (bug 126). Deeper types (`& &S`)
+need an explicit `*`. Version 2, still main's behaviour, also opened one `Heap` layer implicitly (a
+`HeapArray<T>` only directly, not through a reference), without consuming the heap pointer.
 
 Version 3 records the owner's decision of 2026-10-29 (OD30): a field access no longer opens a heap
 cell implicitly. The spelling of the explicit non-consuming place form is OPEN-36. Main still reaches

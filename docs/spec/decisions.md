@@ -193,7 +193,7 @@ These entries were retired when the owner answered them; their IDs are never reu
   STMT-7@3 (OD24), PAT-3@3 and PAT-5@3 (OD25), TYPE-6@2 (OD26), STMT-6@2 (OD27), TRAIT-10@2 (OD28),
   OWN-7@3 (OD29), MEM-4@3 (OD30), ARITH-2@2 (OD31) and OWN-15@3 (OD32), each pending its bug (319 –
   328); OD28 and OD30 left OPEN-35 and OPEN-36.
-- **OPEN-1** (OD1, references): decided 2026-10-29. Now REF-5 (formation, `&s.f`, no temporary root), REF-1 and REF-3 (second-class), TRUST-3 (the raw-pointer validity premise, pending) and REF-8 (loans keyed by the root variable; the keying waits on OD15).
+- **OPEN-1** (OD1, references): decided 2026-10-29. Now REF-5 (formation, `&s.f`, no temporary root), REF-1 and REF-3 (second-class), TRUST-3 (the raw-pointer validity premise, pending) and REF-8 (loans keyed by the root variable, as OD15 (a) confirmed).
 - **OPEN-4** (OD4, foreign function values): decided 2026-10-29. Now FFI-1.
 - **OPEN-5** (OD5, generics and Copy): decided 2026-10-29. Now OWN-D1, TYPE-13 and TYPE-14.
 - **OPEN-6** (OD6, trait coherence): decided 2026-10-29. Now TRAIT-1 to TRAIT-7.
@@ -213,7 +213,8 @@ These entries were retired when the owner answered them; their IDs are never reu
   Now REF-9 (the binder is always a reference), PASS-2 (its mode stored in Core) and REF-8 (the root
   is not reassigned while the binder's loan lives).
 - **OPEN-15** (OD15, freezing and `&mut` exclusivity): decided 2026-10-29. Part (a), whole-owner
-  freezing with loans keyed by the root binding, is REF-11@3 (enforced; it tightens OD2's part 2).
+  freezing with loans keyed by the root binding, is REF-11@3 (it tightens OD2's part 2; partial, bug 319,
+  for OD23's re-lent case).
   Part (b), the strict option, is REF-14 (pending, R-0496): no pass exploits `&mut` exclusivity until
   it is proved, and an alias derived from a loan is valid only while the loan lives.
 - **OPEN-16** (OD16, a struct literal in a condition head): decided 2026-10-29, refused unless

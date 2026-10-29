@@ -235,9 +235,9 @@ fn main() -> Int {
 
 **Rationale.** Mixed widths and signedness are a classic source of silent conversion bugs, so they
 are refused rather than promoted. Comparing aggregates would need a definition of equality per
-type, which the language does not have. Comparing raw pointers exposes addresses, so it needs
-`Unsafe` (bugs 134 and 140). Pointer arithmetic written as `p + k` is the form TRUST-1 replaces
-with `ptr::offset` (pending).
+type, which the language does not have. Version 1 admitted raw-pointer comparison
+and `p + k` in trusted or `Unsafe` code (bugs 134 and 140); OD26 removes both, pointer arithmetic
+becoming `ptr::offset` (TRUST-1).
 
 Version 2 records the owner's decision of 2026-10-29 (OD26), aligned with TRUST-1: arithmetic,
 shifts and comparisons take numbers only, and pointer offset, difference and ordering are
