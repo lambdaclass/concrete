@@ -560,6 +560,10 @@ every call site a potential exit for proofs, and the model stays small enough to
 | a hardware signal | the OS ends the process | no |
 | `abort()` | terminal abort | no |
 
+Every non-abort exit runs one sequence (STMT-11): the exit value, then the scope's deferred calls,
+then its loans end, then the remaining locals are destroyed. There is no write-back step: a `&mut`
+refers to the place it borrows, so a write through it is already the write to that place (REF-13).
+
 **Terminal failures** abort with no cleanup after the trap. A trap inside cleanup is terminal too,
 and a value is destroyed at most once, so a destructor never runs again after a trap interrupted it
 (the trap helpers and `__concrete_check_oom` call libc `abort()`). The sources are: out of memory
