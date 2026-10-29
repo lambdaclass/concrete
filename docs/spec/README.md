@@ -237,6 +237,29 @@ example states, never only with the other legs.
 - `con pseudocode` marks an illustration that is not compiled. It is allowed only outside
   entries.
 
+## Path to the complete spec
+
+[R-0555](../project/ROADMAP_TASKS.md#task-r-0555) ("Language spec: the WebAssembly model") tracks
+the target. Its four workstreams:
+
+- **(a) Mechanized.** Every entry names the Lean definition of its rule (`Semantics:`), and the link
+  becomes required chapter by chapter (S7), starting with the definitions in `Concrete/Semantics/`
+  (`IntArith`, `TypeJudgment`, `RefWellFormed`, `BindingMode`, `Capabilities`, `TrustEdges`).
+- **(b) Complete.** Every `docs/language` file and the archived language-scope text is absorbed (S13),
+  and expression evaluation, generics and monomorphization, lexical structure, the built-ins the
+  compiler treats specially, and abort and failure semantics get chapters; a language question this
+  surfaces becomes an `open` entry.
+- **(c) Conformance suite.** Accept and reject cases indexed by rule ID, runnable by any
+  implementation, as the WebAssembly spec tests are; the gate reports every forbidding rule without a
+  reject case.
+- **(d) The spec decides what is a bug.** Every bug record names the rule it violates
+  (`Violates: RULE-ID@n`), or records `Spec gap` or `Open: OPEN-n`; a not-a-bug verdict cites the rule
+  that permits the behaviour; `new_bug.sh` requires one of the three and a gate checks that every
+  cited ID resolves in `ids.tsv`.
+
+Measured on 2026-10-29: 0 of 147 entries link a Lean definition; 120 of 147 have `Evidence: tested`;
+22 entries are open (OD1 – OD22); 17 `docs/language` files remain to absorb (`unabsorbed.tsv`).
+
 ## 3. The gate: `scripts/tests/check_spec.sh`
 
 The gate runs on the built compiler and is registered as its own step in CI's `language-gates`

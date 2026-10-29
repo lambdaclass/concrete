@@ -1785,9 +1785,10 @@ tests and the documents gates read, and it never preempts a defect repair or wea
 Owners: the cleanup agent (branches `wip/cleanup-*`), the spec agent (`wip/spec`) and the roadmap
 agent (`wip/roadmap-compaction`).
 
-1. One normative language specification, `docs/language/SPEC.md`: absorb, then delete, the
-   `docs/language/*.md` design documents; a gate refuses new normative language documents. Owner: the
-   spec agent, `wip/spec`.
+1. One normative language specification, `docs/spec/` (kept as chapters rather than one SPEC.md file,
+   so no rule is stated twice): absorb, then delete, the `docs/language/*.md` design documents; a gate
+   (S13) refuses new normative language documents. Its full target is [R-0555](#task-r-0555). Owner:
+   the spec agent, `wip/spec`.
 2. The book's language chapters (`docs/book/src/language/`) teach by example and link to SPEC rule IDs
    instead of restating rules. Owner: the spec agent, `wip/spec`.
 3. ROADMAP compaction to its control plane, and the `tasks/` disposition records reconciled (the
@@ -1818,6 +1819,59 @@ agent (`wip/roadmap-compaction`).
     (the OVH server). The owner chose to change the gate, not the server: on a host that cannot count
     instructions it reports NOT-JUDGED and defers to CI, and CI fails closed when it cannot count.
     Owner: a separate agent, fixing it as a filed bug on its own `wip/bug-NNN` branch.
+
+### Task R-0555
+
+**Phase:** 1, 2, 3
+
+**Objective:** Language spec: the WebAssembly model. `docs/spec/` becomes a specification in the sense
+of the WebAssembly specification: every rule is mechanized against a formal definition, the language
+is covered completely, a conformance suite indexed by rule ID runs on any implementation, and the
+spec decides what is a bug. It continues R-0554 sub-item 1 and is placed ahead of the
+verified-pipeline proof rows it serves (R-0496, R-0499): those proofs are stated against the rules
+this task makes exact. No workstream may choose, encode or implement a side of an
+[owner decision](../../ROADMAP.md#owner-decisions); a question one of them surfaces becomes an `open`
+entry (`docs/spec/decisions.md`) for the owner. Owner: the spec agent, `wip/spec`.
+
+**Queue entry.** Admitted to row 2 by the project owner's request of 2026-10-29, like R-0554; it
+names no reproducer and is charged to track C, and it never preempts a defect repair.
+
+(a) **Mechanized.** Every entry names the Lean definition of the rule (`Semantics:`), and the spec is
+checked against that formal definition, not only against the implementation. The link becomes
+required chapter by chapter (check_spec.sh S7), so a linked chapter never regresses. It starts with
+the definitions that already exist in `Concrete/Semantics/`: `IntArith` (the ARITH chapter),
+`TypeJudgment` (the TYPE typing rules), `RefWellFormed` (REF), `BindingMode` (pattern binder modes),
+`Capabilities` and `TrustEdges` (TRUST and capabilities). Exit: every chapter has a required link.
+
+(b) **Complete.** Every `docs/language/*.md` file is absorbed (rules and rationale into the spec,
+tracking material to ROADMAP, KNOWN_HOLES or research, the file deleted; S13), and so is the archived
+language-scope text (`docs/archive/roadmap-language-scope.md`). The areas the spec covers thinly get
+chapters: expression evaluation (the dynamic semantics beyond statement outcomes), generics and
+monomorphization, lexical structure, the built-ins the compiler treats specially, and abort and
+failure semantics. Exit: `docs/language/` holds no document, and each listed area has a chapter whose
+refusals all have reject examples.
+
+(c) **Conformance suite.** Accept and reject cases indexed by rule ID, runnable by any implementation
+(today the native compiler and `--interp`), in the style of the WebAssembly spec tests; the per-rule
+fixtures become this suite. Exit: the gate reports every rule that forbids something and has no reject
+case, and that list is empty or each entry is an `open` entry.
+
+(d) **The spec decides what is a bug.** Every bug record names the rule it violates
+(`Violates: <RULE-ID>@<version>`), or records `Spec gap` (no rule decides the behaviour: the fix starts
+by writing the rule, filed as spec work) or `Open: OPEN-n` (the behaviour waits on an owner question:
+the fix is parked until the owner decides, as bugs 305 – 307 and 311 are). A not-a-bug verdict cites
+the rule that permits the behaviour ("permitted by RULE-ID", as the class-13 audit's G5 did). This is
+enforced, not a convention: `scripts/gen/new_bug.sh` requires one of `--violates RULE-ID`,
+`--spec-gap` or `--open OPEN-n`; the bug ledger and dashboard count bugs by the rule violated and by
+spec gap and open; a gate checks that every cited rule ID resolves in `docs/spec/ids.tsv`. The open
+records and the 2026-10 records are backfilled; older records may say `Violates: unrecorded`, and the
+share of those only shrinks. Exit: the gate holds on every record, and no record filed after the gate
+lands says `unrecorded`.
+
+Measured state (2026-10-29, `wip/spec-s3`): 0 of 147 entries link a Lean definition; 120 of 147 have
+`Evidence: tested` (the rest are definitions, open entries and pending rules); 22 open entries (OD1 –
+OD22); 17 `docs/language` files remain. `docs/spec/README.md` ("Path to the complete spec") keeps the
+current figures.
 
 ## Area: Standard Library And Core APIs
 
