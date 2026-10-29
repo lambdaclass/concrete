@@ -37,7 +37,7 @@ turns the entry into the rules it decides; until then no agent picks a side
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on REF-10, REF-11, OWN-12. Current main: the reborrow is on main as REF-10; the defer and exit-order rules are not implemented (bugs 305 and 306 wait on this item). The options and the recommendation are in ROADMAP's row OD2; the owner's answer is recorded there.
+**Rationale.** Bears on REF-10, REF-11, OWN-12. Current main: the reborrow is on main as REF-10; a deferred call already holds the loan of a `&mut` argument until it runs (`heldByDefer`, `refuseDeferHeldRef`, E0206), provisionally; the exit order (cleanup, loan end, write-back) is not implemented (bugs 305 and 306 wait on this item). The options and the recommendation are in ROADMAP's row OD2; the owner's answer is recorded there.
 
 <a id="OPEN-3"></a>
 ### OPEN-3. Pattern binders through a borrowed scrutinee

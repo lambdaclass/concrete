@@ -11,7 +11,9 @@ its useful rationale under them, its tracking material to ROADMAP or KNOWN_HOLES
 This is a source check with no compiler, run by check_docs_drift.sh on every push. It lives apart
 from spec.py so that the gates which run the compiler do not depend on every docs/language file.
 
-  one_spec.py [--root DIR] [--base REV]     check (base: merge-base with origin/main, or HEAD~1)
+  one_spec.py [--root DIR] [--base REV]     check (base: $ONE_SPEC_BASE, else the merge-base with
+                                            origin/main, else HEAD~1; no base is a failure, and
+                                            ONE_SPEC_BASE=none skips the history check outside CI)
   one_spec.py --self-test                   plant one defect per refusal in a scratch copy
 """
 import argparse, glob, os, shutil, subprocess, sys, tempfile
@@ -99,7 +101,16 @@ def main():
     a = ap.parse_args()
     if a.self_test:
         sys.exit(1 if self_test(a.root) else 0)
-    res = check(a.root, a.base or default_base(a.root))
+    base = a.base or os.environ.get("ONE_SPEC_BASE") or default_base(a.root)
+    if base == "none":
+        if os.environ.get("CI"):
+            print("  FAIL [S13] ONE_SPEC_BASE=none is not allowed in CI"); sys.exit(1)
+        base = None
+        print("  SKIP S13 history (ONE_SPEC_BASE=none)")
+    elif base is None:
+        print("  FAIL [S13] no base revision to check that the list only shrinks (fetch origin/main, pass --base, or set ONE_SPEC_BASE=none outside CI)")
+        sys.exit(1)
+    res = check(a.root, base)
     if isinstance(res, list):
         fails, n = res, 0
     else:

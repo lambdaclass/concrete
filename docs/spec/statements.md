@@ -185,9 +185,10 @@ value (the value `while … else` form was removed in Phase 6D); a result is a m
 assigned before `break`. In a `for (init; cond; step)` loop, `continue` still runs `step`. A
 `break` or `continue` leaves the loop body's scopes like any exit (OWN-2).
 
-The loop forms are `while cond { ... }` and `for (init; cond; step) { ... }`, whose `init` is a
-`let`, whose `cond` is the continuation test and whose `step` is an expression or an assignment
-(`for (i = 0; ...)` is a parse error). An unlabeled `break` or
+The loop forms are `while cond { ... }`, `for (init; cond; step) { ... }`, whose `init` is a `let`,
+whose `cond` is the continuation test and whose `step` is an expression or an assignment
+(`for (i = 0; ...)` is a parse error), `for (cond) { ... }` and the unconditional `for { ... }`
+(`regress_176_loop_shadow_restores_outer.con`). An unlabeled `break` or
 `continue` acts on the innermost enclosing loop; a label (`'outer: while ...`) is the only way to
 act on an outer loop, and `break 'outer;` or `continue 'outer;` exits or continues every loop in
 between. A `break` or `continue` that would leave a linear value live is refused (E0210, E0211;
