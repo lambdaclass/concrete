@@ -402,7 +402,7 @@ Each step lands with the gate green. The steps run in this order:
    EXECUTION_MODEL stays the runtime and platform description. T-ORDER's violations (bugs 136,
    137 and 183) were fixed in landing train 6, so STMT-4 is enforced.
 5a. **memory.md** (`MEM-`, migrated 2026-10-23): allocations, `Heap<T>`, what safe code may
-   observe. It replaces MEMORY_MODEL, MEMORY_GUARANTEES and the remaining sections of
+   observe. It replaces MEMORY_MODEL (its overview now in the book's memory chapter), MEMORY_GUARANTEES and the remaining sections of
    MEMORY_SEMANTICS.
 6. **ffi.md** (`FFI-`) and **trusted.md** (`TRUST-`), migrated 2026-10-23 except handle and callable-value capabilities: the C boundary,
    raw pointers, `trusted`, `Unsafe`, capabilities and handle capabilities. They replace the

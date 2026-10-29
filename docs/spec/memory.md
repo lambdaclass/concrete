@@ -7,9 +7,8 @@ bindings are not tracked. This chapter covers initialization (MEM-3), field acce
 references and heap shells (MEM-4), heap ownership (MEM-5), array bounds (MEM-6) and the two
 layers of the memory model the Core semantics defines (MEM-1, MEM-2, pending). The checker
 tracks whole owners: a borrow freezes its whole root (REF-8, REF-11), with no field- or
-element-granular borrows. The design records are [MEMORY_SEMANTICS.md](../language/MEMORY_SEMANTICS.md),
-[MEMORY_MODEL.md](../language/MEMORY_MODEL.md) and
-[MEMORY_GUARANTEES.md](../language/MEMORY_GUARANTEES.md), which keeps the public safety claim and
+element-granular borrows. The design records are [MEMORY_SEMANTICS.md](../language/MEMORY_SEMANTICS.md)
+and [MEMORY_GUARANTEES.md](../language/MEMORY_GUARANTEES.md), which keeps the public safety claim and
 its boundaries.
 
 ## Rules

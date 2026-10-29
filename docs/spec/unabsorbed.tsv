@@ -22,7 +22,6 @@ docs/language/LANGUAGE_GAPS.md	README
 docs/language/LANGUAGE_INVARIANTS.md	ownership,references
 docs/language/LANGUAGE_SHAPE.md	README
 docs/language/MEMORY_GUARANTEES.md	memory
-docs/language/MEMORY_MODEL.md	memory
 docs/language/MEMORY_REGRESSION_CHECKLIST.md	memory
 docs/language/MEMORY_SEMANTICS.md	references,scope,memory
 docs/language/MUT_REF_CLOSURE.md	references

@@ -244,6 +244,43 @@ So a useful rough mental model is:
 - Rust: ownership with more convenience and more language machinery
 - Concrete: ownership with a stronger bias toward visible effects, visible cleanup, and a smaller semantic surface
 
+## What Safe Concrete Guarantees
+
+Safe Concrete (no `Unsafe`, no FFI) holds these by construction. Each links the rule of the
+[language specification](../../../spec/README.md) that states it.
+
+1. **No uninitialized reads.** A binding is declared with a value (`let x: T = e`); `let x: T;` is
+   a parse error, so there is no uninitialized state to read and no definite-assignment analysis
+   ([MEM-3](../../../spec/memory.md#MEM-3)).
+2. **No use after move.** A linear value is consumed when it is moved, and using it afterwards is a
+   compile error ([OWN-1](../../../spec/ownership.md#OWN-1)).
+3. **No aliasing through an exclusive borrow.** While a `&mut T` borrow is live, its owner is
+   frozen: you cannot read or move it ([REF-8](../../../spec/references.md#REF-8)).
+4. **No dangling references.** References are second-class: no function returns one, directly or
+   inside an aggregate, and none is stored
+   ([REF-1](../../../spec/references.md#REF-1), [REF-3](../../../spec/references.md#REF-3)).
+5. **Defined cleanup.** A linear resource is consumed or handed to cleanup (`defer`); a tracked
+   linear value that would leak is a compile error
+   ([OWN-2](../../../spec/ownership.md#OWN-2), [OWN-12](../../../spec/ownership.md#OWN-12)).
+
+The common compile errors, and why:
+
+| You wrote | Why it is rejected |
+|-----------|--------------------|
+| `let x: T;` (no initializer) | uninitialized bindings do not exist (MEM-3, a parse error) |
+| a linear value used after passing it by value | use after move (OWN-1) |
+| a value read or moved while it is `&mut`-borrowed | frozen by the borrow (REF-8) |
+| a `&T` or `&mut T` returned from a function, or an aggregate holding one | references never escape (REF-1) |
+| a `&T` or `&mut T` stored in a field, array, `Heap` or generic argument | references are never stored (REF-3, E0239) |
+| a linear resource dropped without being consumed | it would leak (OWN-2, OWN-5) |
+| a raw pointer dereferenced without `Unsafe` | missing capability (TRUST-4) |
+
+Raw pointers (`*const T`, `*mut T`) and FFI need the `Unsafe` capability or a `trusted` function.
+There, and only there, memory may be indeterminate or aliased outside these rules, and that is an
+explicit, audited assumption ([trusted code](../../../spec/trusted.md)). The public claim of what
+is enforced and where it stops is
+[MEMORY_GUARANTEES.md](../../../language/MEMORY_GUARANTEES.md).
+
 ## What This Means In Practice
 
 When you read Concrete code, you should usually be able to answer:
