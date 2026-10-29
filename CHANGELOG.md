@@ -9,7 +9,7 @@ It is intentionally milestone-oriented rather than release-oriented. The project
 For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
-<!-- changelog stamp: 661cc6fed8cad1821a6b2d77e507b397 (scripts/gen/changelog.py; add a changelog.d/ fragment, never edit this file by hand) -->
+<!-- changelog stamp: 24b97c87f4513032ee18a1ca2225ea26 (scripts/gen/changelog.py; add a changelog.d/ fragment, never edit this file by hand) -->
 
 ### Large Arrays No Longer Make Compilation or `--interp` Quadratic (bugs 027, 248, 249, 250, 2026-10-25)
 
@@ -9671,7 +9671,7 @@ Also removed: `inDeferBody` field from `TypeEnv`, `mutBorrowed` field from `VarI
 
 ### Memory/reference semantics, `&mut T` closure, and the first explicit no-leak boundary land
 
-**The safe-memory claim is now centralized and checker-matching:** Concrete now has a canonical memory/reference semantics document in [docs/language/MEMORY_SEMANTICS.md](docs/language/MEMORY_SEMANTICS.md), an explicit public guarantee statement in [docs/language/MEMORY_GUARANTEES.md](docs/language/MEMORY_GUARANTEES.md), and a dedicated `&mut T` closure tracker in [docs/language/MUT_REF_CLOSURE.md](docs/language/MUT_REF_CLOSURE.md). This is the point where the memory story stopped being scattered invariants and became one checked claim surface.
+**The safe-memory claim is now centralized and checker-matching:** Concrete now has a canonical memory/reference semantics document in [docs/language/MEMORY_SEMANTICS.md](docs/language/MEMORY_SEMANTICS.md), an explicit public guarantee statement in [docs/language/MEMORY_GUARANTEES.md](docs/language/MEMORY_GUARANTEES.md), and a dedicated `&mut T` closure tracker in docs/language/MUT_REF_CLOSURE.md (absorbed into [REF-10](docs/spec/references.md#REF-10)). This is the point where the memory story stopped being scattered invariants and became one checked claim surface.
 
 **`&mut T` soundness-critical closure landed:** the compiler now distinguishes two real `&mut T` modes:
 
