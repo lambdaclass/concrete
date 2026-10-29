@@ -263,5 +263,7 @@ fn main() -> Int {
 
 **Rationale.** Decided by the owner on 2026-10-29 (OD9). The generator of interface artifacts and
 the gate that diffs them between commits are R-0556, built on the interface data of R-0492 and
-R-0497; separate compilation (V6) reads the same artifacts. Inline submodules (`mod m { ... }`) are
-modules written inside their parent's file; `mod X;` loads one module per file (MOD-4).
+R-0497; separate compilation (V6) reads the same artifacts. `mod X;` loads one module per file
+(MOD-4). Today the language also accepts an inline submodule (`mod m { ... }` written inside its
+parent's file, as most examples in this specification are); whether that form is compatible with
+"one file per module" is a question for the owner, OPEN-23, and this entry does not settle it.

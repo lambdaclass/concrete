@@ -279,6 +279,24 @@ turns the entry into the rules it decides; until then no agent picks a side
 
 **Rationale.** Bears on CON-1. Current main: open (PROVABLE_V1). The options and the recommendation are in ROADMAP's row OD19; the owner's answer is recorded there.
 
+<a id="OPEN-23"></a>
+### OPEN-23. Inline submodules under one file per module
+
+**OPEN-23@1.** Whether an inline submodule (`mod m { ... }` written inside its parent's file) is compatible with OD9's one file per module is an open owner decision (OD23).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD23
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on MOD-4 and MOD-7. Current main: inline submodules are accepted, and most
+examples of this specification use them. Raised while recording OD9 (2026-10-29). The options are in
+ROADMAP's row OD23; the owner's answer is recorded there.
+
 ## Decided
 
 These entries were retired when the owner answered them; their IDs are never reused.
