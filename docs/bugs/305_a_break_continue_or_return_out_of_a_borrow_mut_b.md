@@ -2,7 +2,7 @@
 
 <!-- bug-ledger
 summary: Lower pointed a borrow block's reference at a copy of the owner in a fresh slot and loaded the copy back into the owner only when the block fell through its end; a `break`, `continue` (labelled or not) or `return` leaving a `borrow mut` block early skipped that write-back, so the writes made through the reference were lost on that exit: the loop exit or continue edge carried the owner's old value, and an enclosing deferred call reading the owner read it too (silent wrong code)
-fixtures: regress_305_borrow_block_early_exit.con, regress_305_borrow_block_owners_and_exits.con
+fixtures: regress_305_borrow_block_early_exit.con regress_305_borrow_block_owners_and_exits.con
 class: 8 — a borrow block's reference was a copy with a write-back on one exit
 silent: yes
 exit: 0b
