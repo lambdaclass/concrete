@@ -12,7 +12,7 @@ checker refusal is a Check bug here.
 
 <!-- BEGIN GENERATED: bug areas (scripts/gen/bug_ledger.py; derived from the records, docs/bugs/area_map.tsv and git history, never edited here) -->
 
-280 records: 171 placed by their own fix commits, 37 by the files their record names in commits shared with other bugs, 34 by commits shared with other bugs, 10 by the commit that filed or closed the record, 23 by an `area:` override; 5 open bugs are not fixed yet and 0 fixed bugs have no commit the history can place.
+281 records: 172 placed by their own fix commits, 37 by the files their record names in commits shared with other bugs, 34 by commits shared with other bugs, 10 by the commit that filed or closed the record, 23 by an `area:` override; 5 open bugs are not fixed yet and 0 fixed bugs have no commit the history can place.
 
 ### By stage
 
@@ -22,8 +22,8 @@ checker refusal is a Check bug here.
 | Lower | 39 | 0 | 13 | 3 | Lower 38, - 1 |
 | Resolve | 27 | 2 | 4 | 8 | Resolve 16, FileSummary 6, PeekType 2, BuiltinEnums 1 |
 | Elab | 26 | 0 | 9 | 7 | Elab 25, TypeSpelling 1 |
+| Interp | 19 | 0 | 5 | 8 | Interp 19 |
 | Proof | 19 | 1 | 8 | 2 | ProofCore 11, Proof 3, CallCollect 2, BodyIdentity 1 |
-| Interp | 18 | 0 | 4 | 8 | Interp 18 |
 | Parse | 11 | 0 | 3 | 0 | Parser 7, Lexer 2, AST 1, LocalId 1 |
 | EmitSSA | 10 | 0 | 1 | 3 | EmitSSA 10 |
 | Mono | 8 | 0 | 1 | 0 | Mono 7, - 1 |
@@ -50,7 +50,7 @@ checker refusal is a Check bug here.
 | 9. Evidence verdicts computed per surface and joined to their subject by name | 4 | Proof 2, CLI 2 |
 | 10. Evidence identity computed from a partial subject | 5 | Proof 3, Elab 2 |
 | 11. Absence read as a fact (fail-open defaults) | 13 | Gates 4, Resolve 2, Proof 2, Report 2, Check 1, SSA 1, Tooling 1 |
-| 12. One fact kept in two places | 27 | Resolve 11, Check 5, Elab 3, Parse 2, Interp 2, Proof 1, Std 1, CLI 1, Tooling 1 |
+| 12. One fact kept in two places | 28 | Resolve 11, Check 5, Elab 3, Interp 3, Parse 2, Proof 1, Std 1, CLI 1, Tooling 1 |
 | 13. Documented rules with no enforcing site | 18 | Check 11, Resolve 4, Parse 1, Elab 1, Lower 1 |
 | 14. Trusted `std` and FFI code with no checked contract | 7 | Std 5, Parse 1, Check 1 |
 | 15. Ownership state not modeled along control-flow paths | 7 | Check 7 |
@@ -85,6 +85,7 @@ checker refusal is a Check bug here.
 | spec gap OWN | 1 | Check 1 |
 | spec gap PASS | 19 | Lower 8, EmitSSA 3, Interp 3, Mono 2, Elab 1, SSA 1, Report 1 |
 | spec gap REF | 1 | Lower 1 |
+| spec gap STMT | 1 | Interp 1 |
 | spec gap TRUST | 1 | Check 1 |
 | spec gap TYPE | 2 | Resolve 1, Check 1 |
 | open | 2 | Parse 2 |
@@ -374,6 +375,7 @@ checker refusal is a Check bug here.
 | [303](303_the_value_if_did_not_drop_the_bindings_its_arms.md) | Lower | Lower | commits | — | violates PASS-9@1 |
 | [304](304_a_value_if_or_match_written_as_a_comparison_oper.md) | Elab | Elab | commits | Check | violates PASS-6@1 |
 | [305](305_a_break_continue_or_return_out_of_a_borrow_mut_b.md) | Lower | Lower | commits | — | spec gap (REF) |
+| [306](306_the_interpreter_ran_a_for_loop_s_step_inside_the.md) | Interp | Interp | commits | Tooling | spec gap (STMT) |
 | [308](308_a_value_if_or_match_passed_to_a_generic_paramete.md) | Resolve | PeekType | commits | — | spec gap (TYPE) |
 | [309](309_a_loop_in_the_right_operand_of_or_rebound_an_agg.md) | Lower | Lower | commits | — | violates PASS-9@1 |
 | [315](315_the_scaling_gate_judged_wall_time_growth_on_a_ho.md) | Gates | compile_scaling | commits | — | outside (tooling) |

@@ -17,14 +17,14 @@ of [docs/spec/ids.tsv](../spec/ids.tsv), or the generator refuses the record.
 
 <!-- BEGIN GENERATED: spec rulings (scripts/gen/bug_ledger.py; edit the records' ruling lines) -->
 
-280 bug records, 277 of them ruled: violates a rule 140, spec gap 33, open owner question 3, permitted by a rule 0, outside the spec 101; not ruled yet (fixed bugs filed before bug 300) 3. Open bugs are in bold.
+281 bug records, 278 of them ruled: violates a rule 140, spec gap 34, open owner question 3, permitted by a rule 0, outside the spec 101; not ruled yet (fixed bugs filed before bug 300) 3. Open bugs are in bold.
 
 ### By kind
 
 | ruling | bugs | open | silent |
 |---|--:|--:|--:|
 | violates a rule | 140 | 3 | 68 |
-| spec gap | 33 | 2 | 6 |
+| spec gap | 34 | 2 | 7 |
 | open owner question | 3 | 1 | 1 |
 | permitted by a rule (not a bug) | 0 | 0 | 0 |
 | outside the spec | 101 | 4 | 16 |
@@ -44,8 +44,8 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 | memory.md | MEM | 12 | 0 | 7 | 11 | 1 | 0 | 0 |
 | ffi.md | FFI | 11 | 2 | 6 | 10 | 1 | 0 | 0 |
 | references.md | REF | 8 | 0 | 8 | 7 | 1 | 0 | 0 |
+| statements.md | STMT | 8 | 0 | 7 | 7 | 1 | 0 | 0 |
 | arithmetic.md | ARITH | 8 | 0 | 5 | 7 | 1 | 0 | 0 |
-| statements.md | STMT | 7 | 0 | 6 | 7 | 0 | 0 | 0 |
 | patterns.md | PAT | 6 | 0 | 4 | 6 | 0 | 0 | 0 |
 | trusted.md | TRUST | 6 | 0 | 4 | 5 | 1 | 0 | 0 |
 | traits.md | TRAIT | 5 | 0 | 3 | 5 | 0 | 0 | 0 |
@@ -134,6 +134,7 @@ No rule decides these bugs' behaviour. Each fix starts by writing the rule (spec
 | MOD | two packages of one program do not define the same top-level module name (or module paths are qualified by their package) | 074 |
 | OWN | assigning an element of a directly named array requires its binding to be declared mut | 030 |
 | REF | a `&mut` refers to the place, and every exit that does not abort runs one exit sequence (OD2 parts 3 and 5, decided 2026-10-29; written as REF-13@1 and STMT-11@1 on wip/spec-od, cited here once they are on main) | 305 |
+| STMT | every exit of a scope that does not abort runs one exit sequence, and a `for` loop's step runs after its body's (OD2 part 5, decided 2026-10-29; written as STMT-11@1 on wip/spec-od, cited here once it is on main) | 306 |
 | TRUST | a capability variable is bound from the capability set of the argument's function type whatever expression supplies that argument, and a variable no argument determines is refused as uninferable | 063 |
 | TYPE | a call of a generic function without explicit type arguments binds each type parameter from the types of the arguments given for it, whatever expression form supplies them | 308 |
 | TYPE | a call's explicit type-argument list has exactly as many types as the callee has type parameters | 221 |
