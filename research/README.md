@@ -233,6 +233,7 @@ If you want the highest-leverage current research first:
 
 - [process/testing-strategy.md](process/testing-strategy.md) — gaps beyond the current suites: fuzzing, property tests, and differential testing (`P1`, `Open`)
 - [process/bug-areas-2026-10.md](process/bug-areas-2026-10.md) — which stages, modules and structural classes the 270 bugs were fixed in, silent shares, discovery and time to fix, measured 2026-10-26 (`P1`, `Research`; method owned by [docs/bugs/README.md](../docs/bugs/README.md#bug-areas))
+- [process/proof-module-overlap-2026-10.md](process/proof-module-overlap-2026-10.md) — what `Proof.lean` and `ProofCore.lean` each hold, where they overlap (two body digests, no shared `PExpr` fold), what `proofs/` pins, and a module structure for when proof work resumes; read-only audit (`P2`, `Research`)
 
 ## Meta And Long-Horizon
 
