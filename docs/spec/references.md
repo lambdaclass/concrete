@@ -853,8 +853,8 @@ place, outside one call, is REF-8's. History: the rule dates from 2026-10-23 (TI
 D2); the measured migration was one std site (`std/src/cli.con:77`) and this fixture, and
 `error_d2_call_disjoint_fields.con`, `error_d2_call_field_read.con`,
 `error_d2_receiver_projection_read.con`, `error_d2_call_field_read_in_branch.con` and
-`error_d2_explicit_mut_receiver_read.con` pin it in run_tests.sh. What passes may assume about `&mut`
-exclusivity (OD15, part (b)) is still open (OPEN-15).
+`error_d2_explicit_mut_receiver_read.con` pin it in run_tests.sh. No pass may assume or exploit this
+exclusivity until it is proved (OD15, part (b), REF-14).
 
 ```con reject name=disjoint-fields-one-call code=E0293 stage=check pair=fields-in-sequence
 struct Copy W { a: Int, b: Int }
