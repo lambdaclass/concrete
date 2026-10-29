@@ -100,7 +100,11 @@ Setup and security rules: [SELF_HOSTED_RUNNERS.md](SELF_HOSTED_RUNNERS.md).
   group (TERM, then KILL) before the retry starts. Fuzzers are the exception by
   design: a hang on a generated input is their finding, triaged like a crash;
 - **skipped**: deliberately not run, with a recorded reason (a platform without the tool, an opt-in
-  leg);
+  leg). A judgment a host cannot make soundly is skipped there, not approximated: the gate reports it
+  NOT-JUDGED and exits 77, and `run_ci_gates_local.sh` records that as *deferred to CI* only for a
+  gate `scripts/tests/lib/host_tools.sh` declares judged on CI (its `judged_on`) and CI runs
+  unconditionally; CI itself must be able to judge it, or the gate fails there (bug 315: the scaling
+  gate's wall verdicts on a host without instruction counters);
 - **cancelled**: the run was stopped from outside (a superseded CI run).
 
 A gate with an incomplete result exits nonzero, so incomplete never reads as green; its log names

@@ -108,7 +108,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 
 <!-- BEGIN GENERATED: bug dashboard (scripts/gen/bug_dashboard.py; edit docs/bugs records and docs/bugs/discovery.tsv) -->
 
-**Open bugs: 10** (1 silent, 4 loud, 5 filed before the discovery record) of 278 bug records.
+**Open bugs: 10** (1 silent, 4 loud, 5 filed before the discovery record) of 279 bug records.
 
 | open bugs by primary structural class | open | silent | bugs |
 |---|---|---|---|
@@ -157,7 +157,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 | 19. A mention read as a use (tool facts inferred from where a name is spelled) | 9 | yes |
 | no class yet | 9 | yes |
 
-Discovery signal (exit 2m): 17 of 20 classes have 3 consecutive eligible quiet counting batches (for a class: no silent bug of that class, at most one loud, effort at least 4 hours or 10 programs); the exit needs every class. 17 counting batches recorded. 70 attribution-only batches (reviews, follow-ons, CI, controls, development) found 116 further bugs.
+Discovery signal (exit 2m): 17 of 20 classes have 3 consecutive eligible quiet counting batches (for a class: no silent bug of that class, at most one loud, effort at least 4 hours or 10 programs); the exit needs every class. 17 counting batches recorded. 71 attribution-only batches (reviews, follow-ons, CI, controls, development) found 117 further bugs.
 
 <!-- END GENERATED: bug dashboard -->
 
