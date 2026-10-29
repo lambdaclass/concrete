@@ -233,8 +233,11 @@ and failure"), whose language half is now there.
 2. **No trusted hardware UB from safe operations**: proof-eligible functions
    exclude raw-pointer/FFI behavior; admitted checked operations may still abort
    outside the theorem's modeled domain.
-3. **Normal control flow only**: proved functions return normally or via explicit `Result` error — no hidden exit paths
-4. **Defer runs if present**: deferred expressions in proved functions always execute (no abort path exists)
+3. **No hidden exit paths**: a proved function leaves only by returning (a value or an explicit
+   `Result` error) or by a runtime trap; it has no other exit. Normal return for all inputs still
+   needs the trap-unreachability and termination obligations below.
+4. **Defer runs on every return**: a deferred call runs whenever the function returns; an abort
+   (a trap) runs none (STMT-1, STMT-2), so "always runs" also needs trap-unreachability.
 
 ### What proved code may NOT assume
 
@@ -256,4 +259,4 @@ and failure"), whose language half is now there.
 | Integers | Mostly unbounded, with selected width-aware operators | Fixed-width checked or explicitly wrapping/saturating | Normal-return claim needs matching range/width semantics |
 | Array access | Functional get/set for admitted forms | Runtime bounds trap | Trap-unreachability is a separate obligation |
 | Control flow | Selected bounded loops and functional state forms | Compiled with LLVM optimizations | Backend not verified |
-| Failure | Not modeled | abort/signal/UB possible in theory | Proved functions avoid all sources in practice |
+| Failure | Not modeled | checked traps abort; no UB in safe code | A trap is excluded only by an explicit trap-unreachability obligation |

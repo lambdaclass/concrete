@@ -37,7 +37,7 @@ Four filters did the real work, and they are worth keeping for future candidates
    deliberately refuses. This excluded every candidate small-language runtime
    except the ones already covered by `examples/lox` and `examples/mal`.
 4. **Global mutable state is an admission cost.**
-   `docs/spec/overview.md` §10 forbids it, so a program built around
+   [TRUST-8](../../docs/spec/trusted.md#TRUST-8) forbids it (owner decision OD8), so a program built around
    file-scope mutable arrays must have every one threaded through an explicit
    context struct before the port starts. Candidates already organized around a
    context handle (`MD_CTX`, `z_stream`, `lfs_t`) port close to 1:1; QBE,
