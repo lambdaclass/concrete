@@ -1,0 +1,7 @@
+(* Planted FIRST/FOLLOW conflict for scripts/tests/check_grammar_ll1.sh (bug 329), the shape of
+   the C-style for header: after '(' an IDENT may start the optional `a ';'` or the `b` that
+   follows it. No two alternatives share a FIRST token, so a FIRST/FIRST-only checker passes it. *)
+program = for_hdr ;
+for_hdr = '(' [ a ';' ] b ';' ')' ;
+a = IDENT | 'let' IDENT ;
+b = IDENT ;

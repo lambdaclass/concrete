@@ -29,7 +29,7 @@ rejects(){ local l="$1" f="$2" pat="$3" out
   else echo "  FAIL $l"; FAIL=$((FAIL+1)); fi; }
 
 echo "=== grammar stays LL(1) ==="
-run "LL(1) checker" python3 scripts/check_ll1.py grammar/concrete.ebnf
+run "LL(1) checker" bash scripts/tests/check_grammar_ll1.sh
 
 echo "=== removed forms reject with migration hints ==="
 rejects "#1 fn name! is dead grammar"        tests/programs/error_fn_bang_removed.con    "E0001"

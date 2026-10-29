@@ -7,8 +7,9 @@
 # only print "passed" are three opinions nobody compares, and the C and Rust ones ran only as
 # ad-hoc CI steps the local runner could not see. This gate is the one place they run:
 #
-#   1. each checker's --canonical output on the real grammar (every rule's nullability and FIRST
-#      set, then every conflict) is byte-identical across the three, and reports no conflict;
+#   1. each checker's --canonical output on the real grammar (every rule's nullability, FIRST and
+#      FOLLOW set, then every FIRST/FIRST and FIRST/FOLLOW conflict) is byte-identical across the
+#      three, and its conflicts are exactly grammar/ll1_known_conflicts.tsv (bug 329);
 #   2. on each planted grammar under tests/fixtures/grammar_ll1/, all three exit 1 and agree
 #      byte-for-byte on the conflicts they report, so a checker that silently passes is caught.
 #
@@ -53,9 +54,26 @@ agree() {
   done
 }
 
+# THE REAL GRAMMAR'S CONFLICTS ARE EXACTLY THE KNOWN ONES (bug 329). Since the checkers compute
+# FOLLOW sets, the grammar shows FIRST/FOLLOW conflicts that no checker reported before. They are
+# not resolved here (every grammar edit is the owner's); grammar/ll1_known_conflicts.tsv lists each
+# with its disposition, and may only shrink: an unlisted conflict fails, and so does a listed one
+# that no longer occurs. With an empty list the real grammar must check clean.
+KNOWN="grammar/ll1_known_conflicts.tsv"
 run_all "$GRAMMAR" real
-agree real 0
+grep -v '^#' "$KNOWN" | grep -v '^$' | cut -f1 | LC_ALL=C sort > "$WORK/known"
+grep -E '^conflict(-follow)? ' "$WORK/real.py" | LC_ALL=C sort > "$WORK/real.conflicts"
+if [ -s "$WORK/known" ]; then agree real 1; else agree real 0; fi
+if cmp -s "$WORK/known" "$WORK/real.conflicts"; then
+  :
+else
+  no "the real grammar's LL(1) conflicts differ from $KNOWN (< listed, > found):"
+  diff "$WORK/known" "$WORK/real.conflicts" >&2
+fi
+grep -v '^#' "$KNOWN" | grep -v '^$' | awk -F'\t' 'NF != 3 || $2 == "" || $3 == ""' | grep -q . \
+  && no "$KNOWN: every row needs the conflict, a disposition and a reason (3 tab-separated columns)"
 grep -q '^rule program ' "$WORK/real.py" || no "real: the canonical dump has no 'program' rule (vacuous output)"
+grep -q '^follow program ' "$WORK/real.py" || no "real: the canonical dump has no FOLLOW sets (the bug 329 regression)"
 
 n=0
 for g in "$FIXTURES"/*.ebnf; do
@@ -63,10 +81,14 @@ for g in "$FIXTURES"/*.ebnf; do
   t="planted_$(basename "$g" .ebnf)"
   run_all "$g" "$t"
   agree "$t" 1
-  grep -q '^conflict ' "$WORK/$t.py" || no "$t: no conflict line reported"
+  grep -qE '^conflict(-follow)? ' "$WORK/$t.py" || no "$t: no conflict line reported"
   n=$((n + 1))
 done
-[ "$n" -ge 4 ] || no "expected at least four planted grammars under $FIXTURES, found $n"
+[ "$n" -ge 6 ] || no "expected at least six planted grammars under $FIXTURES, found $n"
+# Bug 329's regression: the FIRST/FOLLOW fixtures must fail as FOLLOW conflicts, not by accident.
+for t in planted_follow_optional_before_same_start planted_follow_optional_then_same_token; do
+  grep -q '^conflict-follow ' "$WORK/$t.py" || no "$t: no FIRST/FOLLOW conflict reported (bug 329 is back)"
+done
 
 if [ "$FAIL" -ne 0 ]; then exit 1; fi
-echo "grammar LL(1): 3 checkers agree on $(grep -c '^rule ' "$WORK/real.py") rules, no conflict; $n planted grammars refused by all three"
+echo "grammar LL(1): 3 checkers agree on $(grep -c '^rule ' "$WORK/real.py") rules and their FIRST and FOLLOW sets; $(wc -l < "$WORK/real.conflicts" | tr -d ' ') conflicts, all known ($KNOWN); $n planted grammars refused by all three"

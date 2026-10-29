@@ -118,3 +118,4 @@ date	kind	probe	effort	bugs	silent
 2026-10-29	spec	OD16 (decided 2026-10-29) check: struct literals and uppercase constants in if and while heads, native against --interp, on main 0bf8350a (wip/spec-od)	5 probes	318	-
 2026-10-29	spec	OD23-OD32 (decided 2026-10-29, strict across the board) check: one program per tightening, native against --interp, on main 0bf8350a (wip/spec-od)	13 probes	319,320,321,322,323,324,325,326,327,328	319,320,321,322,323,324,325,326,327,328
 2026-10-29	review	Kimi review of a spec delta (a for step's control flow), then hand probes of break, continue and return inside for steps on main 71df9c25	17 programs	330	-
+2026-10-29	review	Grok review of grammar/concrete.ebnf (2026-10-29): the C-style for header [ for_init ';' ] expr ';' is not LL(1); planted grammars confirmed the checkers miss it	1 review	329	-

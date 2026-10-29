@@ -421,12 +421,121 @@ static void compute_first(const Node *n, TermSet *out) {
     }
 }
 
+/* ── FOLLOW set ──────────────────────────────────────────────── */
+
+#define EOF_TOKEN "<eof>"
+
+static TermSet *tset_new(void) {
+    TermSet *s = malloc(sizeof *s);
+    if (!s) { fprintf(stderr, "error: out of memory\n"); exit(2); }
+    tset_init(s);
+    return s;
+}
+
+static void tset_union(TermSet *dst, const TermSet *src) {
+    for (int i = 0; i < src->count; i++) tset_add(dst, src->names[i]);
+}
+
+static int rule_index(const char *name) {
+    for (int i = 0; i < n_rules; i++)
+        if (strcmp(rules[i].name, name) == 0) return i;
+    return -1;
+}
+
+/* What can follow item i of a sequence: FIRST of the items after it up to the first
+   non-nullable one, plus the sequence's own FOLLOW if all of those can vanish. */
+static void seq_follow(const Node *n, int i, const TermSet *fol, TermSet *out) {
+    tset_init(out);
+    bool rest_nullable = true;
+    for (int j = i + 1; j < n->n_items; j++) {
+        compute_first(n->items[j], out);
+        if (!is_nullable(n->items[j])) { rest_nullable = false; break; }
+    }
+    if (rest_nullable) tset_union(out, fol);
+}
+
+static TermSet follow_sets[MAX_RULES];
+
+static bool follow_walk(const Node *n, const TermSet *fol) {
+    bool changed = false;
+    switch (n->kind) {
+    case NODE_NONTERMINAL: {
+        int idx = rule_index(n->name);
+        if (idx >= 0) {
+            int before = follow_sets[idx].count;
+            tset_union(&follow_sets[idx], fol);
+            changed = follow_sets[idx].count != before;
+        }
+        break;
+    }
+    case NODE_SEQUENCE:
+        for (int i = 0; i < n->n_items; i++) {
+            TermSet *f = tset_new();
+            seq_follow(n, i, fol, f);
+            changed |= follow_walk(n->items[i], f);
+            free(f);
+        }
+        break;
+    case NODE_ALTERNATION:
+        for (int i = 0; i < n->n_items; i++) changed |= follow_walk(n->items[i], fol);
+        break;
+    case NODE_OPTIONAL:
+        changed |= follow_walk(n->body, fol);
+        break;
+    case NODE_REPETITION: {
+        TermSet *f = tset_new();
+        tset_union(f, fol);
+        compute_first(n->body, f);
+        changed |= follow_walk(n->body, f);
+        free(f);
+        break;
+    }
+    default: break;
+    }
+    return changed;
+}
+
+/* FOLLOW of every nonterminal, by fixpoint; the first rule is the start symbol. */
+static void compute_follow(void) {
+    for (int i = 0; i < n_rules; i++) tset_init(&follow_sets[i]);
+    if (n_rules > 0) tset_add(&follow_sets[0], EOF_TOKEN);
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        for (int i = 0; i < n_rules; i++) {
+            if (rule_index(rules[i].name) != i) continue;   /* a duplicate rule name */
+            TermSet *f = tset_new();
+            tset_union(f, &follow_sets[i]);
+            changed |= follow_walk(rules[i].body, f);
+            free(f);
+        }
+    }
+}
+
 /* ── LL(1) check ─────────────────────────────────────────────── */
 
 static int n_issues;
 static bool canonical;
 
-static void check_node(const Node *n, const char *path) {
+/* A FIRST/FOLLOW conflict: a choice that may derive nothing can be entered on a token that may
+   also follow it (bug 329: until then no checker computed FOLLOW). */
+static void follow_conflict(const char *path, const char *kind, TermSet *overlap) {
+    n_issues++;
+    tset_sort(overlap);
+    if (canonical) {
+        printf("conflict-follow %s %s ", path, kind);
+        for (int k = 0; k < overlap->count; k++)
+            printf("%s%s", k ? "," : "", overlap->names[k]);
+        printf("\n");
+    } else {
+        printf("  %s: %s can be entered on a token that may follow it: {", path, kind);
+        for (int k = 0; k < overlap->count; k++)
+            printf("%s%s", k ? ", " : "", overlap->names[k]);
+        printf("}\n\n");
+    }
+}
+
+static void check_node(const Node *n, const char *path, const TermSet *fol) {
     if (n->kind == NODE_ALTERNATION) {
         static TermSet firsts[MAX_ALTS];
         for (int i = 0; i < n->n_items; i++) {
@@ -454,22 +563,59 @@ static void check_node(const Node *n, const char *path) {
                 }
             }
         }
+        /* An alternation that can derive nothing: no alternative may start with a token that
+           can follow the alternation. */
+        bool any_nullable = false;
+        for (int i = 0; i < n->n_items; i++)
+            if (is_nullable(n->items[i])) any_nullable = true;
+        if (any_nullable) {
+            for (int i = 0; i < n->n_items; i++) {
+                TermSet *fi = tset_new(), *overlap = tset_new();
+                compute_first(n->items[i], fi);
+                tset_intersect(overlap, fi, fol);
+                if (overlap->count > 0) {
+                    char kind[32];
+                    snprintf(kind, sizeof(kind), "alt%d", i + 1);
+                    follow_conflict(path, kind, overlap);
+                }
+                free(fi); free(overlap);
+            }
+        }
         for (int i = 0; i < n->n_items; i++) {
             char sub[512];
             snprintf(sub, sizeof(sub), "%s|%d", path, i + 1);
-            check_node(n->items[i], sub);
+            check_node(n->items[i], sub, fol);
         }
     } else if (n->kind == NODE_SEQUENCE) {
         for (int i = 0; i < n->n_items; i++) {
             char sub[512];
             snprintf(sub, sizeof(sub), "%s.%d", path, i + 1);
-            check_node(n->items[i], sub);
+            TermSet *f = tset_new();
+            seq_follow(n, i, fol, f);
+            check_node(n->items[i], sub, f);
+            free(f);
         }
     } else if (n->kind == NODE_OPTIONAL || n->kind == NODE_REPETITION) {
+        TermSet *fb = tset_new(), *overlap = tset_new();
+        compute_first(n->body, fb);
+        tset_intersect(overlap, fb, fol);
+        if (overlap->count > 0)
+            follow_conflict(path, n->kind == NODE_OPTIONAL ? "opt" : "rep", overlap);
         /* The same path spelling as check_ll1.py: `[?]` into an optional, `{*}` into a repetition. */
         char sub[512];
         snprintf(sub, sizeof(sub), "%s%s", path, n->kind == NODE_OPTIONAL ? "[?]" : "{*}");
-        check_node(n->body, sub);
+        TermSet *inner = tset_new();
+        tset_union(inner, fol);
+        if (n->kind == NODE_REPETITION) tset_union(inner, fb);
+        check_node(n->body, sub, inner);
+        free(fb); free(overlap); free(inner);
+    }
+}
+
+static void check_all(void) {
+    for (int i = 0; i < n_rules; i++) {
+        if (rule_index(rules[i].name) != i) continue;
+        check_node(rules[i].body, rules[i].name, &follow_sets[i]);
     }
 }
 
@@ -492,6 +638,7 @@ int main(int argc, char **argv) {
     tokenize(buf);
     parse_rules();
     compute_nullable();
+    compute_follow();
 
     n_issues = 0;
     if (canonical) {
@@ -504,21 +651,26 @@ int main(int argc, char **argv) {
             for (int k = 0; k < first.count; k++) printf(" %s", first.names[k]);
             printf("\n");
         }
-        for (int i = 0; i < n_rules; i++)
-            check_node(rules[i].body, rules[i].name);
+        for (int i = 0; i < n_rules; i++) {
+            if (rule_index(rules[i].name) != i) continue;
+            tset_sort(&follow_sets[i]);
+            printf("follow %s", rules[i].name);
+            for (int k = 0; k < follow_sets[i].count; k++) printf(" %s", follow_sets[i].names[k]);
+            printf("\n");
+        }
+        check_all();
         return n_issues > 0 ? 1 : 0;
     }
 
     printf("Parsed %d grammar rules from %s\n", n_rules, path);
 
-    for (int i = 0; i < n_rules; i++)
-        check_node(rules[i].body, rules[i].name);
+    check_all();
 
     if (n_issues > 0) {
         printf("\nFound %d LL(1) conflict(s).\n", n_issues);
         return 1;
     }
 
-    printf("LL(1) check passed: no FIRST/FIRST conflicts found.\n");
+    printf("LL(1) check passed: no FIRST/FIRST or FIRST/FOLLOW conflicts found.\n");
     return 0;
 }

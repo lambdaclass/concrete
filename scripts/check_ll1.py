@@ -280,17 +280,92 @@ def compute_first(node, table, nullable):
     return result
 
 
+# ── FOLLOW ───────────────────────────────────────────────────────
+
+EOF_TOKEN = "<eof>"
+
+
+def first_names(node, table, nullable):
+    return {str(t) for t in compute_first(node, table, nullable)}
+
+
+def seq_follows(items, fol, table, nullable):
+    """For each item of a sequence, the tokens that can follow it: the FIRST of the items after
+    it up to the first non-nullable one, and the sequence's own FOLLOW if all of those can
+    vanish."""
+    out = []
+    for i in range(len(items)):
+        f = set()
+        rest_nullable = True
+        for nxt in items[i + 1:]:
+            f |= first_names(nxt, table, nullable)
+            if not is_nullable(nxt, nullable):
+                rest_nullable = False
+                break
+        if rest_nullable:
+            f |= fol
+        out.append(f)
+    return out
+
+
+def compute_follow_table(rules, nullable, table):
+    """FOLLOW set of every nonterminal, by fixpoint iteration. The first rule is the start
+    symbol, followed by end of input."""
+    follow = {name: set() for name in rules}
+    if rules:
+        follow[next(iter(rules))].add(EOF_TOKEN)
+
+    def walk(node, fol):
+        changed = False
+        if isinstance(node, Nonterminal):
+            if node.name in follow and not fol <= follow[node.name]:
+                follow[node.name] |= fol
+                changed = True
+        elif isinstance(node, Sequence):
+            for item, f in zip(node.items, seq_follows(node.items, fol, table, nullable)):
+                changed |= walk(item, f)
+        elif isinstance(node, Alternation):
+            for alt in node.alts:
+                changed |= walk(alt, fol)
+        elif isinstance(node, Optional):
+            changed |= walk(node.body, fol)
+        elif isinstance(node, Repetition):
+            changed |= walk(node.body, fol | first_names(node.body, table, nullable))
+        return changed
+
+    changed = True
+    while changed:
+        changed = False
+        for name, body in rules.items():
+            changed |= walk(body, set(follow[name]))
+    return follow
+
+
 # ── LL(1) Conflict Detection ─────────────────────────────────────
 
 def check_ll1(rules, canonical=None):
-    """Check all alternations for LL(1) conflicts. Returns list of issues.
+    """Check every choice point for LL(1) conflicts. Returns list of issues.
 
-    `canonical`, when a list, receives one `conflict ...` line per issue."""
+    FIRST/FIRST: two alternatives of one alternation start with a common token.
+    FIRST/FOLLOW: a choice that may derive nothing (an optional, a repetition, an alternation
+    with a nullable alternative) can be entered on a token that may also FOLLOW it, so one
+    token of lookahead cannot decide whether to enter it (bug 329: until then no checker
+    computed FOLLOW, and these conflicts passed).
+
+    `canonical`, when a list, receives one `conflict ...` / `conflict-follow ...` line per issue."""
     nullable = compute_nullable(rules)
     table = compute_first_table(rules, nullable)
+    follow = compute_follow_table(rules, nullable, table)
     issues = []
 
-    def check_node(node, path):
+    def follow_conflict(path, kind, overlap):
+        toks = sorted(overlap)
+        if canonical is not None:
+            canonical.append(f"conflict-follow {path} {kind} " + ",".join(toks))
+        issues.append(f"  {path}: {kind} can be entered on a token that may follow it: "
+                      f"{{{', '.join(toks)}}}")
+
+    def check_node(node, path, fol):
         if isinstance(node, Alternation):
             # Check pairwise FIRST set disjointness
             alt_firsts = []
@@ -316,24 +391,36 @@ def check_ll1(rules, canonical=None):
                             f"    alt {j_b+1}: {alt_b}"
                         )
 
+            # An alternation that can derive nothing: no alternative may start with a token
+            # that can follow the alternation.
+            if any(is_nullable(alt, nullable) for alt in node.alts):
+                for j, alt in enumerate(node.alts):
+                    overlap = first_names(alt, table, nullable) & fol
+                    if overlap:
+                        follow_conflict(path, f"alt{j+1}", overlap)
+
             # Recurse into each alternative
             for j, alt in enumerate(node.alts):
-                check_node(alt, f"{path}|{j+1}")
+                check_node(alt, f"{path}|{j+1}", fol)
 
         elif isinstance(node, Sequence):
-            for j, item in enumerate(node.items):
-                check_node(item, f"{path}.{j+1}")
+            for j, (item, f) in enumerate(zip(node.items, seq_follows(node.items, fol, table, nullable))):
+                check_node(item, f"{path}.{j+1}", f)
 
         elif isinstance(node, Optional):
-            # Optional: FIRST(body) must not overlap with FOLLOW
-            # (We approximate: just recurse into body)
-            check_node(node.body, f"{path}[?]")
+            overlap = first_names(node.body, table, nullable) & fol
+            if overlap:
+                follow_conflict(path, "opt", overlap)
+            check_node(node.body, f"{path}[?]", fol)
 
         elif isinstance(node, Repetition):
-            check_node(node.body, f"{path}{{*}}")
+            overlap = first_names(node.body, table, nullable) & fol
+            if overlap:
+                follow_conflict(path, "rep", overlap)
+            check_node(node.body, f"{path}{{*}}", fol | first_names(node.body, table, nullable))
 
     for name, body in rules.items():
-        check_node(body, name)
+        check_node(body, name, set(follow[name]))
 
     return issues
 
@@ -341,14 +428,18 @@ def check_ll1(rules, canonical=None):
 # ── Main ─────────────────────────────────────────────────────────
 
 def canonical_report(rules):
-    """The --canonical form: every rule's nullability and FIRST set, then every conflict."""
+    """The --canonical form: every rule's nullability and FIRST set, every rule's FOLLOW set,
+    then every conflict."""
     nullable = compute_nullable(rules)
     table = compute_first_table(rules, nullable)
+    follow = compute_follow_table(rules, nullable, table)
     lines = []
     for name in rules:
         first = sorted(str(t) for t in table[name])
         flag = "nullable" if name in nullable else "-"
         lines.append(" ".join([f"rule {name} {flag}"] + first))
+    for name in rules:
+        lines.append(" ".join([f"follow {name}"] + sorted(follow[name])))
     conflicts = []
     check_ll1(rules, conflicts)
     return lines + conflicts
@@ -374,7 +465,7 @@ def main():
         lines = canonical_report(rules)
         for line in lines:
             print(line)
-        sys.exit(1 if any(l.startswith("conflict ") for l in lines) else 0)
+        sys.exit(1 if any(l.startswith(("conflict ", "conflict-follow ")) for l in lines) else 0)
 
     print(f"Parsed {len(rules)} grammar rules from {grammar_path}")
 
@@ -387,7 +478,7 @@ def main():
             print()
         sys.exit(1)
     else:
-        print("LL(1) check passed: no FIRST/FIRST conflicts found.")
+        print("LL(1) check passed: no FIRST/FIRST or FIRST/FOLLOW conflicts found.")
         sys.exit(0)
 
 

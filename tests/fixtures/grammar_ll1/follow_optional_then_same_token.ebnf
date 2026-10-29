@@ -1,0 +1,5 @@
+(* Planted FIRST/FOLLOW conflict for scripts/tests/check_grammar_ll1.sh (bug 329), the minimal
+   shape: `[ 'b' ] 'b'` cannot decide on 'b' whether the optional is present. *)
+program = { item } ;
+item = x ;
+x = 'a' [ 'b' ] 'b' ;

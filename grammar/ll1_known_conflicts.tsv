@@ -1,0 +1,24 @@
+# LL(1) conflicts of grammar/concrete.ebnf known today, held by scripts/tests/check_grammar_ll1.sh.
+#
+# Bug 329: until 2026-10-29 the three checkers (scripts/check_ll1.{py,c,rs}) computed no FOLLOW
+# sets, so a FIRST/FOLLOW conflict at an optional, a repetition or a nullable alternation passed,
+# and SYN-1's "LL(1), which three independent checkers verify" was unchecked for those shapes.
+# Once FOLLOW was computed, the grammar showed the conflicts below.
+# None is resolved here: every grammar edit is the owner's to review. The list may only SHRINK.
+# The gate fails on a conflict that is not listed, and on a listed one that no longer occurs.
+#
+# Columns: the checkers' --canonical conflict line (exact) | disposition | why it conflicts.
+# Dispositions:
+#   language decision          respelling it changes which programs are accepted (owner)
+#   refactor, no language change  left-factoring removes it without changing the accepted language;
+#                              pending owner review like every grammar edit
+#   decided, to encode         the owner already decided the rule; the grammar does not state it yet
+#
+conflict-follow block.2 rep '!','&','(','*','-','[','false','true','~',CHAR,FLOAT,IDENT,INT,STRING	refactor, no language change (pending owner review)	`{ stmt } [ expr ] '}'`: a statement may itself be `expr ';'`, so an expression start cannot decide between another statement and the trailing value; the parser parses the expression, then looks for `;`. Left-factoring, e.g. block_items = ε | stmt_nonexpr block_items | expr ( ';' block_items | ε ), removes it
+conflict-follow enum_variants.2 rep ','	refactor, no language change (pending owner review)	`{ ',' enum_variant } [ ',' ]`: a ',' may continue the list or be the trailing comma; factor as `{ ',' ( enum_variant | ε before '}' ) }`
+conflict-follow field_values|2.2 rep ','	refactor, no language change (pending owner review)	`{ ',' field_value } [ ',' [ '..' expr ] ]`: a ',' may continue the fields or start the trailing comma / `..base`; factor the comma tail
+conflict-follow for_tail|1.2 opt '!','&','(','*','-','[','false','true','~',CHAR,FLOAT,IDENT,INT,STRING	language decision (owner)	`'(' [ for_init ';' ] expr ';' …`: for_init includes expr, so an expression start cannot decide whether an init is present. Options include an init that must be a `let`, a mandatory init with an empty form `( ; cond ; step )`, or declaring the rule non-LL(1). The parser commits to reading an init (`for ( "s" ; ) { }`, which the grammar derives, is refused)
+conflict-follow ident_tail alt4 '{'	decided, to encode (OD16, bug 212)	after IDENT, `{` may begin a struct literal or the block after an if/while/match head; the grammar's comment states the uppercase rule, which no production encodes (OD16's head nonterminal)
+conflict-follow ident_tail|2.3 opt '{'	decided, to encode (OD16, bug 212)	`'#' IDENT [ '{' field_values '}' ]`: the same struct-literal-or-block question after an enum variant
+conflict-follow struct_fields.2 rep ','	refactor, no language change (pending owner review)	`{ ',' struct_field } [ ',' ]`: a ',' may continue the list or be the trailing comma; factor as for enum_variants
+conflict-follow type|5.2 opt '<'	language decision (owner)	`IDENT [ type_args ]` in a cast `x as T < y`: '<' may start type arguments or be the less-than operator. The parser always reads type arguments, so `x as T < y` (which the grammar derives) is refused

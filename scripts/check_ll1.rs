@@ -332,71 +332,209 @@ fn compute_first(
     }
 }
 
-// ── LL(1) check ─────────────────────────────────────────────────
+// ── FOLLOW set ──────────────────────────────────────────────────
 
-fn check_node(
-    node: &Node,
-    path: &str,
+const EOF_TOKEN: &str = "<eof>";
+
+fn first_of(node: &Node, rules: &HashMap<String, &Node>, nullable: &HashSet<String>) -> HashSet<String> {
+    let mut visiting = HashSet::new();
+    compute_first(node, rules, nullable, &mut visiting)
+}
+
+/// What can follow item `i` of a sequence: FIRST of the items after it up to the first
+/// non-nullable one, plus the sequence's own FOLLOW if all of those can vanish.
+fn seq_follow(
+    items: &[Node],
+    i: usize,
+    fol: &HashSet<String>,
     rules: &HashMap<String, &Node>,
     nullable: &HashSet<String>,
-    issues: &mut Vec<String>,
-    canonical: bool,
-) {
-    match node {
-        Node::Alternation(alts) => {
-            let firsts: Vec<HashSet<String>> = alts
-                .iter()
-                .map(|alt| {
-                    let mut visiting = HashSet::new();
-                    compute_first(alt, rules, nullable, &mut visiting)
-                })
-                .collect();
+) -> HashSet<String> {
+    let mut out = HashSet::new();
+    let mut rest_nullable = true;
+    for nxt in &items[i + 1..] {
+        out.extend(first_of(nxt, rules, nullable));
+        if !is_nullable(nxt, nullable) {
+            rest_nullable = false;
+            break;
+        }
+    }
+    if rest_nullable {
+        out.extend(fol.iter().cloned());
+    }
+    out
+}
 
-            for a in 0..firsts.len() {
-                for b in (a + 1)..firsts.len() {
-                    let overlap: Vec<&String> =
-                        firsts[a].intersection(&firsts[b]).collect();
-                    if !overlap.is_empty() {
-                        let mut sorted: Vec<&str> =
-                            overlap.iter().map(|s| s.as_str()).collect();
-                        sorted.sort();
-                        if canonical {
-                            issues.push(format!(
-                                "conflict {path} {} {} {}",
-                                a + 1,
-                                b + 1,
-                                sorted.join(",")
-                            ));
-                            continue;
+fn follow_walk(
+    node: &Node,
+    fol: &HashSet<String>,
+    follow: &mut HashMap<String, HashSet<String>>,
+    rules: &HashMap<String, &Node>,
+    nullable: &HashSet<String>,
+) -> bool {
+    match node {
+        Node::Nonterminal(name) => match follow.get_mut(name) {
+            Some(set) => {
+                let before = set.len();
+                set.extend(fol.iter().cloned());
+                set.len() != before
+            }
+            None => false,
+        },
+        Node::Sequence(items) => {
+            let mut changed = false;
+            for (i, item) in items.iter().enumerate() {
+                let f = seq_follow(items, i, fol, rules, nullable);
+                changed |= follow_walk(item, &f, follow, rules, nullable);
+            }
+            changed
+        }
+        Node::Alternation(alts) => {
+            let mut changed = false;
+            for alt in alts {
+                changed |= follow_walk(alt, fol, follow, rules, nullable);
+            }
+            changed
+        }
+        Node::Optional(body) => follow_walk(body, fol, follow, rules, nullable),
+        Node::Repetition(body) => {
+            let mut f = fol.clone();
+            f.extend(first_of(body, rules, nullable));
+            follow_walk(body, &f, follow, rules, nullable)
+        }
+        _ => false,
+    }
+}
+
+/// FOLLOW of every nonterminal, by fixpoint; the first rule is the start symbol.
+fn compute_follow(
+    rule_list: &[(String, Node)],
+    rules: &HashMap<String, &Node>,
+    nullable: &HashSet<String>,
+) -> HashMap<String, HashSet<String>> {
+    let mut follow: HashMap<String, HashSet<String>> =
+        rule_list.iter().map(|(n, _)| (n.clone(), HashSet::new())).collect();
+    if let Some((start, _)) = rule_list.first() {
+        follow.get_mut(start).unwrap().insert(EOF_TOKEN.to_string());
+    }
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for (name, body) in rule_list {
+            let f = follow[name].clone();
+            changed |= follow_walk(body, &f, &mut follow, rules, nullable);
+        }
+    }
+    follow
+}
+
+// ── LL(1) check ─────────────────────────────────────────────────
+
+struct Checker<'a> {
+    rules: &'a HashMap<String, &'a Node>,
+    nullable: &'a HashSet<String>,
+    issues: Vec<String>,
+    canonical: bool,
+}
+
+impl<'a> Checker<'a> {
+    /// A FIRST/FOLLOW conflict: a choice that may derive nothing can be entered on a token that
+    /// may also follow it (bug 329: until then no checker computed FOLLOW).
+    fn follow_conflict(&mut self, path: &str, kind: &str, overlap: &HashSet<String>) {
+        let mut sorted: Vec<&str> = overlap.iter().map(|s| s.as_str()).collect();
+        sorted.sort();
+        if self.canonical {
+            self.issues.push(format!("conflict-follow {path} {kind} {}", sorted.join(",")));
+        } else {
+            self.issues.push(format!(
+                "  {path}: {kind} can be entered on a token that may follow it: {{{}}}",
+                sorted.join(", ")
+            ));
+        }
+    }
+
+    fn check_node(&mut self, node: &Node, path: &str, fol: &HashSet<String>) {
+        let (rules, nullable) = (self.rules, self.nullable);
+        match node {
+            Node::Alternation(alts) => {
+                let firsts: Vec<HashSet<String>> =
+                    alts.iter().map(|alt| first_of(alt, rules, nullable)).collect();
+                for a in 0..firsts.len() {
+                    for b in (a + 1)..firsts.len() {
+                        let overlap: Vec<&String> = firsts[a].intersection(&firsts[b]).collect();
+                        if !overlap.is_empty() {
+                            let mut sorted: Vec<&str> = overlap.iter().map(|s| s.as_str()).collect();
+                            sorted.sort();
+                            if self.canonical {
+                                self.issues.push(format!(
+                                    "conflict {path} {} {} {}",
+                                    a + 1,
+                                    b + 1,
+                                    sorted.join(",")
+                                ));
+                            } else {
+                                self.issues.push(format!(
+                                    "  {path}: alternatives {} and {} share FIRST tokens: {{{}}}",
+                                    a + 1,
+                                    b + 1,
+                                    sorted.join(", ")
+                                ));
+                            }
                         }
-                        issues.push(format!(
-                            "  {path}: alternatives {} and {} share FIRST tokens: {{{}}}",
-                            a + 1,
-                            b + 1,
-                            sorted.join(", ")
-                        ));
                     }
                 }
+                // An alternation that can derive nothing: no alternative may start with a token
+                // that can follow the alternation.
+                if alts.iter().any(|alt| is_nullable(alt, nullable)) {
+                    for (i, fi) in firsts.iter().enumerate() {
+                        let overlap: HashSet<String> = fi.intersection(fol).cloned().collect();
+                        if !overlap.is_empty() {
+                            self.follow_conflict(path, &format!("alt{}", i + 1), &overlap);
+                        }
+                    }
+                }
+                for (i, alt) in alts.iter().enumerate() {
+                    self.check_node(alt, &format!("{path}|{}", i + 1), fol);
+                }
             }
-
-            for (i, alt) in alts.iter().enumerate() {
-                check_node(alt, &format!("{path}|{}", i + 1), rules, nullable, issues, canonical);
+            Node::Sequence(items) => {
+                for (i, item) in items.iter().enumerate() {
+                    let f = seq_follow(items, i, fol, rules, nullable);
+                    self.check_node(item, &format!("{path}.{}", i + 1), &f);
+                }
             }
-        }
-        Node::Sequence(items) => {
-            for (i, item) in items.iter().enumerate() {
-                check_node(item, &format!("{path}.{}", i + 1), rules, nullable, issues, canonical);
+            // The same path spelling as check_ll1.py: `[?]` into an optional, `{*}` into a repetition.
+            Node::Optional(body) | Node::Repetition(body) => {
+                let is_opt = matches!(node, Node::Optional(_));
+                let fb = first_of(body, rules, nullable);
+                let overlap: HashSet<String> = fb.intersection(fol).cloned().collect();
+                if !overlap.is_empty() {
+                    self.follow_conflict(path, if is_opt { "opt" } else { "rep" }, &overlap);
+                }
+                let mut inner = fol.clone();
+                if !is_opt {
+                    inner.extend(fb);
+                }
+                let sub = if is_opt { format!("{path}[?]") } else { format!("{path}{{*}}") };
+                self.check_node(body, &sub, &inner);
             }
+            _ => {}
         }
-        // The same path spelling as check_ll1.py: `[?]` into an optional, `{*}` into a repetition.
-        Node::Optional(body) => {
-            check_node(body, &format!("{path}[?]"), rules, nullable, issues, canonical);
-        }
-        Node::Repetition(body) => {
-            check_node(body, &format!("{path}{{*}}"), rules, nullable, issues, canonical);
-        }
-        _ => {}
     }
+}
+
+fn check_all(
+    rule_list: &[(String, Node)],
+    rules: &HashMap<String, &Node>,
+    nullable: &HashSet<String>,
+    follow: &HashMap<String, HashSet<String>>,
+    canonical: bool,
+) -> Vec<String> {
+    let mut checker = Checker { rules, nullable, issues: Vec::new(), canonical };
+    for (name, body) in rule_list {
+        checker.check_node(body, name, &follow[name]);
+    }
+    checker.issues
 }
 
 // ── Main ────────────────────────────────────────────────────────
@@ -426,12 +564,11 @@ fn main() {
 
     let rule_map: HashMap<String, &Node> =
         rule_list.iter().map(|(n, b)| (n.clone(), b)).collect();
+    let follow = compute_follow(&rule_list, &rule_map, &nullable);
 
     if canonical {
         for (name, body) in &rule_list {
-            let mut visiting = HashSet::new();
-            let mut first: Vec<String> =
-                compute_first(body, &rule_map, &nullable, &mut visiting).into_iter().collect();
+            let mut first: Vec<String> = first_of(body, &rule_map, &nullable).into_iter().collect();
             first.sort();
             let flag = if nullable.contains(name) { "nullable" } else { "-" };
             let mut line = format!("rule {name} {flag}");
@@ -441,10 +578,17 @@ fn main() {
             }
             println!("{line}");
         }
-        let mut issues = Vec::new();
-        for (name, body) in &rule_list {
-            check_node(body, name, &rule_map, &nullable, &mut issues, true);
+        for (name, _) in &rule_list {
+            let mut fol: Vec<&String> = follow[name].iter().collect();
+            fol.sort();
+            let mut line = format!("follow {name}");
+            for t in fol {
+                line.push(' ');
+                line.push_str(t);
+            }
+            println!("{line}");
         }
+        let issues = check_all(&rule_list, &rule_map, &nullable, &follow, true);
         for issue in &issues {
             println!("{issue}");
         }
@@ -453,10 +597,7 @@ fn main() {
 
     println!("Parsed {} grammar rules from {path}", rule_list.len());
 
-    let mut issues = Vec::new();
-    for (name, body) in &rule_list {
-        check_node(body, name, &rule_map, &nullable, &mut issues, false);
-    }
+    let issues = check_all(&rule_list, &rule_map, &nullable, &follow, false);
 
     if !issues.is_empty() {
         println!("\nFound {} LL(1) conflict(s):\n", issues.len());
@@ -466,5 +607,5 @@ fn main() {
         process::exit(1);
     }
 
-    println!("LL(1) check passed: no FIRST/FIRST conflicts found.");
+    println!("LL(1) check passed: no FIRST/FIRST or FIRST/FOLLOW conflicts found.");
 }
