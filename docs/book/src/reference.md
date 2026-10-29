@@ -26,7 +26,7 @@ Use them when you need exact current direction rather than the book's higher-lev
 - [`docs/language/VALUE_MODEL.md`](../../language/VALUE_MODEL.md)
   The current value and ownership model.
 
-- [`docs/language/LANGUAGE_INVARIANTS.md`](../../language/LANGUAGE_INVARIANTS.md)
+- [`docs/spec/overview.md`](../../spec/overview.md)
   The invariants the language and compiler are trying to preserve.
 
 - [`docs/platform/FFI.md`](../../platform/FFI.md)

@@ -97,5 +97,5 @@ Examples that fit this well:
 ## Relationship To Other Docs
 
 - [ROADMAP.md](../../ROADMAP.md) records the LL(1) parser cleanup as a completed milestone and keeps the LL(1) commitment active as a standing language rule.
-- [docs/language/LANGUAGE_INVARIANTS.md](../../docs/language/LANGUAGE_INVARIANTS.md) records the LL(1) commitment as a language invariant.
+- [docs/spec/overview.md](../../docs/spec/overview.md) records the LL(1) commitment as a language invariant.
 - [docs/compiler/ARCHITECTURE.md](../../docs/compiler/ARCHITECTURE.md) describes the parser as the syntax-only phase; this note sharpens what that means operationally.

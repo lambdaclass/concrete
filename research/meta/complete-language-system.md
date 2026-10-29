@@ -65,7 +65,7 @@ The important missing pieces here are:
 - proof-backed lowering claims
 - a smaller/frozen kernel story if the project still wants one
 
-See [docs/compiler/ARCHITECTURE.md](../../docs/compiler/ARCHITECTURE.md) and [docs/language/LANGUAGE_INVARIANTS.md](../../docs/language/LANGUAGE_INVARIANTS.md).
+See [docs/compiler/ARCHITECTURE.md](../../docs/compiler/ARCHITECTURE.md) and [docs/spec/overview.md](../../docs/spec/overview.md).
 
 ### 5. Ecosystem and package model
 

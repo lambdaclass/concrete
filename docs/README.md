@@ -31,7 +31,7 @@ the other.
 | proof status vocabulary | [VERIFICATION_STATUS.md](verification/VERIFICATION_STATUS.md) |
 | threats, hostile artifacts and advisories | [THREAT_MODEL.md](verification/THREAT_MODEL.md) |
 | compiler stages and ownership | [ARCHITECTURE.md](compiler/ARCHITECTURE.md), [PASSES.md](compiler/PASSES.md) |
-| language invariants and value model | [LANGUAGE_INVARIANTS.md](language/LANGUAGE_INVARIANTS.md), [VALUE_MODEL.md](language/VALUE_MODEL.md) |
+| language invariants and value model | [the spec's overview](spec/overview.md), [VALUE_MODEL.md](language/VALUE_MODEL.md) |
 | contracts and verification conditions | [CONTRACTS_AND_VCS.md](verification/CONTRACTS_AND_VCS.md) |
 | active implementation order/status | [../ROADMAP.md](../ROADMAP.md) |
 | completed changes | [../CHANGELOG.md](../CHANGELOG.md) |
@@ -67,7 +67,7 @@ Use these files as the primary reference once a design has moved out of explorat
 - [SPARK_CLASS_ASSURANCE.md](verification/SPARK_CLASS_ASSURANCE.md) — SPARK-class assurance target and AI-facing guide for contracts, loop invariants, frame/dependency facts, ghost/spec code, and package evidence
 - [PROVABLE_V1.md](verification/PROVABLE_V1.md) — the first named, release-facing provable subset contract
 - [PROVABLE_SUBSET.md](verification/PROVABLE_SUBSET.md) — current proof-eligible subset and its boundary
-- [LANGUAGE_INVARIANTS.md](language/LANGUAGE_INVARIANTS.md) — the language rules that must hold across every phase
+- [the spec's overview](spec/overview.md) — the language rules that must hold across every phase
 - [STDLIB.md](stdlib/STDLIB.md) — current stable stdlib direction and module priorities
 - [TESTING.md](compiler/TESTING.md) — current test structure and what each suite is for
 - [VALUE_MODEL.md](language/VALUE_MODEL.md) — value, borrow, ownership, and resource-model rules

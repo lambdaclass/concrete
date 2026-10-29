@@ -137,7 +137,7 @@ worktree's `index.lock` and can leave it behind (bug 209).
 **Language invariants.** Link to the normative documents instead of restating them:
 [OWNERSHIP_MODEL.md](../language/OWNERSHIP_MODEL.md) (linear, not affine: non-Copy values are used
 exactly once), [MEMORY_SEMANTICS.md](../language/MEMORY_SEMANTICS.md) (strictly second-class
-references, §15), [LANGUAGE_INVARIANTS.md](../language/LANGUAGE_INVARIANTS.md),
+references, §15), [the spec's overview](../spec/overview.md),
 [STATEMENT_EXPRESSION_MODEL.md](../archive/design-records/STATEMENT_EXPRESSION_MODEL.md) (evaluation order, value
 vs statement position), [KNOWN_HOLES.md](../verification/KNOWN_HOLES.md) (the only authority on
 hole status) and [VERIFIED_PIPELINE.md](../compiler/VERIFIED_PIPELINE.md) (the structural owners).

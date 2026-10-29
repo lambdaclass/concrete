@@ -80,7 +80,7 @@ Examples:
 ## Relationship To Other Notes
 
 1. [../../docs/platform/EXECUTION_MODEL.md](../../docs/platform/EXECUTION_MODEL.md)
-2. [../../docs/language/LANGUAGE_INVARIANTS.md](../../docs/language/LANGUAGE_INVARIANTS.md)
+2. [../../docs/spec/overview.md](../../docs/spec/overview.md)
 3. [high-integrity-profile.md](high-integrity-profile.md)
 4. [../predictable-execution/predictable-execution.md](../predictable-execution/predictable-execution.md)
 

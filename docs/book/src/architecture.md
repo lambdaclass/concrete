@@ -61,5 +61,5 @@ Read the stable architecture references:
 
 - [`docs/compiler/ARCHITECTURE.md`](../../compiler/ARCHITECTURE.md)
 - [`docs/compiler/PASSES.md`](../../compiler/PASSES.md)
-- [`docs/language/LANGUAGE_INVARIANTS.md`](../../language/LANGUAGE_INVARIANTS.md)
+- [`docs/spec/overview.md`](../../spec/overview.md)
 - [`docs/language/VALUE_MODEL.md`](../../language/VALUE_MODEL.md)

@@ -45,6 +45,7 @@ areas exist (§8).
 
 | chapter | ID prefix | state |
 |---|---|---|
+| `overview.md` | `LANG-` | explanatory: the language's invariants and the entries that state them (no entries) |
 | `references.md` | `REF-` | pilot |
 | `scope.md` | `SCOPE-` | pilot |
 | `patterns.md` | `PAT-` | migrated: PAT-1 to PAT-8 (renamed binders, exhaustiveness, arm shapes, guards, destructuring `let`, `if let` / `while let`, ranges and alternatives, where an enum destructuring `let` may appear) |

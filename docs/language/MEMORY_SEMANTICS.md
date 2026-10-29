@@ -619,7 +619,7 @@ history, the migration counts and the gap analysis (§15.7). Its text below is h
 single normative statement of the reference and binding rules. The narrative in
 [VALUE_MODEL.md](VALUE_MODEL.md) ("References are second-class"), the summary in
 the book's memory chapter (`docs/book/src/language/memory.md`), and the decision records in
-[LANGUAGE_INVARIANTS.md](LANGUAGE_INVARIANTS.md) §4 and [DECISIONS.md](../project/DECISIONS.md)
+[the spec's overview](../spec/overview.md) §4 and [DECISIONS.md](../project/DECISIONS.md)
 ("No lexical value shadowing") explain the rules. Where they disagree with this section, this
 section governs and the other text is corrected.
 

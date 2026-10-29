@@ -23,7 +23,6 @@ PAGES = {
     "DIAGNOSTICS.md": ("Diagnostics", "docs/compiler/DIAGNOSTICS.md"),
     "EXECUTION_MODEL.md": ("Execution Model", "docs/platform/EXECUTION_MODEL.md"),
     "FFI.md": ("FFI", "docs/platform/FFI.md"),
-    "LANGUAGE_INVARIANTS.md": ("Language Invariants", "docs/language/LANGUAGE_INVARIANTS.md"),
     "PASSES.md": ("Compiler Pass Contracts", "docs/compiler/PASSES.md"),
     "PROJECT.md": ("Project", "docs/project/PROJECT.md"),
     "PROVABLE_SUBSET.md": ("Provable Subset", "docs/verification/PROVABLE_SUBSET.md"),
