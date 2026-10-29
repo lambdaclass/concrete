@@ -1,15 +1,17 @@
 # Anti-Features: What the First Release Will NOT Include
 
+Moved from docs/language: the stable-subset refusal list is project direction; the language rules are in docs/spec.
+
 Status: design reference (Phase 3, item 57)
 
 This document is the stable-subset refusal list. It names features that the first release will not include, explains why each is excluded on principled grounds, and distinguishes permanent exclusions from deferred possibilities.
 
 This is not a list of things we have not gotten around to building. Every entry is a deliberate design decision motivated by Concrete's core commitments: explicit authority, predictable execution, auditable trust boundaries, and proof-compatible code.
 
-For the language identity, see [IDENTITY.md](../project/IDENTITY.md).
-For permanent and deferred decisions, see [DECISIONS.md](../project/DECISIONS.md).
-For the language shape commitments, see [LANGUAGE_SHAPE.md](../project/LANGUAGE_SHAPE.md).
-For design admission criteria, see [DESIGN_POLICY.md](../project/DESIGN_POLICY.md).
+For the language identity, see [IDENTITY.md](IDENTITY.md).
+For permanent and deferred decisions, see [DECISIONS.md](DECISIONS.md).
+For the language shape commitments, see [LANGUAGE_SHAPE.md](LANGUAGE_SHAPE.md).
+For design admission criteria, see [DESIGN_POLICY.md](DESIGN_POLICY.md).
 
 ---
 
@@ -44,7 +46,7 @@ Each entry has:
 
 **Why:** Async runtimes (Tokio-style executors, goroutine schedulers, libuv-style event loops) create hidden concurrency, hidden scheduling, and function coloring. A function that looks like a normal call may suspend, resume on a different thread, or block a shared executor. This violates "no hidden runtime model" and "all code paths known at compile time."
 
-**What Concrete does instead:** Single-threaded execution today. Future concurrency is research-only and must remain explicit: OS threads first, structured scopes, capability-gated concurrency authority, no implicit executor, and no function coloring. The current research direction separates optional overlap (`Async`) from required concurrent progress (`Concurrent`) without implementing either yet. See [EXECUTION_MODEL.md](EXECUTION_MODEL.md) and [../research/stdlib/async-concurrency-evidence.md](../../research/stdlib/async-concurrency-evidence.md).
+**What Concrete does instead:** Single-threaded execution today. Future concurrency is research-only and must remain explicit: OS threads first, structured scopes, capability-gated concurrency authority, no implicit executor, and no function coloring. The current research direction separates optional overlap (`Async`) from required concurrent progress (`Concurrent`) without implementing either yet. See [EXECUTION_MODEL.md](../language/EXECUTION_MODEL.md) and [../research/stdlib/async-concurrency-evidence.md](../../research/stdlib/async-concurrency-evidence.md).
 
 **Status:** Permanent for hidden runtimes. Deferred for explicit structured concurrency.
 
@@ -132,7 +134,7 @@ rejected, and the required `Console`/`Alloc` authority remains visible.
 
 **What Concrete does instead:** `Result<T, E>` for all recoverable errors, exhaustive `match`, and
 an explicit `return Result::Err ...` in the failure arm. Abort-only for unrecoverable failures
-(OOM). See [FAILURE_STRATEGY.md](FAILURE_STRATEGY.md).
+(OOM). See [FAILURE_STRATEGY.md](../language/FAILURE_STRATEGY.md).
 
 **Status:** Permanent. The abort-only, no-unwinding model is a load-bearing commitment.
 
@@ -231,7 +233,7 @@ lowering rule.
 
 **What Concrete does instead:** Named functions. Function pointers (no capture, C-compatible). Monomorphized generics for higher-order patterns. Enums + match for dispatch.
 
-**Status:** Permanent. See [DECISIONS.md](../project/DECISIONS.md) and the full analysis in `research/language/no-closures.md`.
+**Status:** Permanent. See [DECISIONS.md](DECISIONS.md) and the full analysis in `research/language/no-closures.md`.
 
 **Comparison:**
 - Rust: Has closures with explicit capture modes (`Fn`, `FnMut`, `FnOnce`). The capture is type-checked but invisible at the call site without reading the closure body.
@@ -252,7 +254,7 @@ whose output is audited as ordinary source. A small surface of
 compiler-recognized attributes may classify evidence or policy, but it does not
 generate source.
 
-**Status:** Permanent. See [DECISIONS.md](../project/DECISIONS.md).
+**Status:** Permanent. See [DECISIONS.md](DECISIONS.md).
 
 There is no derive-helper exception. `#[derive(...)]`-style generation is macro
 machinery by another name and stays out unless a future external tool generates

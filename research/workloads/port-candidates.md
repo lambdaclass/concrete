@@ -46,7 +46,7 @@ Four filters did the real work, and they are worth keeping for future candidates
 Two structural notes that are *not* filters, because Concrete has an answer:
 
 - **Callback/renderer architectures are fine.** A C struct of function pointers
-  is exactly the shape `docs/language/ANTI_FEATURES.md` prescribes in place of trait
+  is exactly the shape `docs/project/ANTI_FEATURES.md` prescribes in place of trait
   objects, so md4c's renderer interface validates that decision on real code.
   The friction is the untyped `void *userdata` beside it, which wants to become
   a typed generic parameter.

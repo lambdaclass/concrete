@@ -10,7 +10,7 @@ This document covers two items before syntax freeze:
 All proposals in this document must preserve LL(1). Anything requiring backtracking, context-sensitivity, or lookahead > 1 is explicitly rejected.
 
 For the LL(1) commitment, see [research/compiler/ll1-grammar.md](../../research/compiler/ll1-grammar.md).
-For what is permanently excluded, see [ANTI_FEATURES.md](../language/ANTI_FEATURES.md).
+For what is permanently excluded, see [ANTI_FEATURES.md](../project/ANTI_FEATURES.md).
 For error handling ergonomics, see [the spec's recoverable-failure section](../spec/statements.md#recoverable-failure-explicit-result-flow).
 For stdlib API friction, see [STDLIB_API_REVIEW.md](../stdlib/STDLIB_API_REVIEW.md).
 

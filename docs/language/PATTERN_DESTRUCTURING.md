@@ -12,7 +12,7 @@ This document designs pattern destructuring for Concrete. The goal is to reduce 
 Note: some examples below use older schematic names such as `ParseResult` or `ServiceResult` to isolate the destructuring shape. The shipped canonical examples now use builtin `Result<T, E>` directly.
 
 For the LL(1) grammar commitment, see `research/compiler/ll1-grammar.md`.
-For what Concrete permanently excludes, see [ANTI_FEATURES.md](ANTI_FEATURES.md).
+For what Concrete permanently excludes, see [ANTI_FEATURES.md](../project/ANTI_FEATURES.md).
 For the error handling context that motivates this, see [the spec's recoverable-failure section](../spec/statements.md#recoverable-failure-explicit-result-flow).
 For the language gap that first identified this need, see [LANGUAGE_GAPS.md](../archive/LANGUAGE_GAPS.md) (item 9: "No destructuring let").
 

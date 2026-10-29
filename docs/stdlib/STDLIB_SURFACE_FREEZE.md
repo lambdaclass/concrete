@@ -584,11 +584,11 @@ These are designed, LL(1)-verified, and approved. They may be implemented before
 
 | Form | Reason | Reference |
 |------|--------|-----------|
-| Closures / anonymous functions | Permanent exclusion: hidden capture, hidden data flow | [ANTI_FEATURES.md](../language/ANTI_FEATURES.md) |
-| `async` / `await` | No async runtime; permanent for hidden runtimes | [ANTI_FEATURES.md](../language/ANTI_FEATURES.md) |
-| Macros | Permanent exclusion: breaks phase separation and auditability | [ANTI_FEATURES.md](../language/ANTI_FEATURES.md) |
-| Operator overloading | Permanent for first release: hidden effects | [ANTI_FEATURES.md](../language/ANTI_FEATURES.md) |
-| Default function arguments | Hidden parameters; deferred | [ANTI_FEATURES.md](../language/ANTI_FEATURES.md) |
+| Closures / anonymous functions | Permanent exclusion: hidden capture, hidden data flow | [ANTI_FEATURES.md](../project/ANTI_FEATURES.md) |
+| `async` / `await` | No async runtime; permanent for hidden runtimes | [ANTI_FEATURES.md](../project/ANTI_FEATURES.md) |
+| Macros | Permanent exclusion: breaks phase separation and auditability | [ANTI_FEATURES.md](../project/ANTI_FEATURES.md) |
+| Operator overloading | Permanent for first release: hidden effects | [ANTI_FEATURES.md](../project/ANTI_FEATURES.md) |
+| Default function arguments | Hidden parameters; deferred | [ANTI_FEATURES.md](../project/ANTI_FEATURES.md) |
 | String interpolation | Requires macros or special parser form; deferred | [SYNTAX_FREEZE_REVIEW.md](../compiler/SYNTAX_FREEZE_REVIEW.md) |
 | `for x in collection` | Requires iterator protocol; deferred | [SYNTAX_FREEZE_REVIEW.md](../compiler/SYNTAX_FREEZE_REVIEW.md) #18 |
 | Compound assignment (`+=`, `-=`) | Low priority sugar; deferred | [SYNTAX_FREEZE_REVIEW.md](../compiler/SYNTAX_FREEZE_REVIEW.md) #20 |
@@ -598,8 +598,8 @@ These are designed, LL(1)-verified, and approved. They may be implemented before
 | Byte-string literals (`b"..."`) | Byte/string boundary not settled; deferred | [SYNTAX_FREEZE_REVIEW.md](../compiler/SYNTAX_FREEZE_REVIEW.md) #8 |
 | Raw strings (`r"..."`) | Deferred | [STRING_TEXT_CONTRACT.md](STRING_TEXT_CONTRACT.md) |
 | Multi-line strings | Deferred | [STRING_TEXT_CONTRACT.md](STRING_TEXT_CONTRACT.md) |
-| Pre/post conditions (`requires`/`ensures`) | Proof pipeline not mature; deferred | [ANTI_FEATURES.md](../language/ANTI_FEATURES.md) |
-| `comptime` evaluation | Blurs parse-time/run-time boundary; deferred | [ANTI_FEATURES.md](../language/ANTI_FEATURES.md) |
+| Pre/post conditions (`requires`/`ensures`) | Proof pipeline not mature; deferred | [ANTI_FEATURES.md](../project/ANTI_FEATURES.md) |
+| `comptime` evaluation | Blurs parse-time/run-time boundary; deferred | [ANTI_FEATURES.md](../project/ANTI_FEATURES.md) |
 | `pub(pkg)` visibility | Deferred until package management | [VISIBILITY_AND_MODULE_HYGIENE.md](../language/VISIBILITY_AND_MODULE_HYGIENE.md) |
 | Unifying `#` with `::` | Deferred pending user feedback | [SYNTAX_FREEZE_REVIEW.md](../compiler/SYNTAX_FREEZE_REVIEW.md) #10 |
 
@@ -701,7 +701,7 @@ Rules:
 - Core-layer functions have `caps: (pure)` -- no capabilities.
 - No new capabilities may be added without an unfreeze.
 
-Source: [HOSTED_STDLIB_SPLIT.md](HOSTED_STDLIB_SPLIT.md), [ANTI_FEATURES.md](../language/ANTI_FEATURES.md)
+Source: [HOSTED_STDLIB_SPLIT.md](HOSTED_STDLIB_SPLIT.md), [ANTI_FEATURES.md](../project/ANTI_FEATURES.md)
 
 ---
 
@@ -780,7 +780,7 @@ These cannot be added without rethinking fundamental language invariants.
 | String interpolation | Requires macros (permanently excluded) or special form |
 | `pub(pkg)` visibility | Package management lands |
 
-Full rationale for each: [ANTI_FEATURES.md](../language/ANTI_FEATURES.md), [STDLIB_TARGET.md](STDLIB_TARGET.md) (out-of-scope section).
+Full rationale for each: [ANTI_FEATURES.md](../project/ANTI_FEATURES.md), [STDLIB_TARGET.md](STDLIB_TARGET.md) (out-of-scope section).
 
 ---
 

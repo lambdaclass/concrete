@@ -28,7 +28,7 @@ The governing references are [Identity](../../docs/project/IDENTITY.md),
 [Why Concrete](../../docs/project/WHY_CONCRETE.md),
 [Design Policy](../../docs/project/DESIGN_POLICY.md),
 [Decisions](../../docs/project/DECISIONS.md),
-[Anti-Features](../../docs/language/ANTI_FEATURES.md),
+[Anti-Features](../../docs/project/ANTI_FEATURES.md),
 [Value Model](../../docs/language/VALUE_MODEL.md), and
 [Evidence Architecture](../../docs/verification/EVIDENCE_ARCHITECTURE.md).
 

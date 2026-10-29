@@ -2630,7 +2630,7 @@ includes the memory-model question Concrete must not answer accidentally:
 atomics, synchronization, shared mutable state, data-race freedom,
 capability-gated thread authority, and proof/evidence classes for concurrent
 code all remain research-gated until a formal model and pressure tests exist.
-Async syntax remains rejected for v1 per `docs/language/ANTI_FEATURES.md`; the
+Async syntax remains rejected for v1 per `docs/project/ANTI_FEATURES.md`; the
 positive research direction lives here and in `docs/language/EXECUTION_MODEL.md`:
 explicit concurrency primitives, visible effects, linear handles, and
 bounded scheduling/failure evidence rather than hidden async lowering or a
