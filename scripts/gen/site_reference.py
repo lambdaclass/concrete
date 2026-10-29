@@ -32,6 +32,13 @@ PAGES = {
     "TESTING.md": ("Testing", "docs/compiler/TESTING.md"),
     "VALUE_MODEL.md": ("Value Model", "docs/language/VALUE_MODEL.md"),
 }
+# Old page URLs kept alive as Zola redirects to the page that absorbed them (page -> URL paths).
+# docs/project's IDENTITY, DESIGN_POLICY, LANGUAGE_SHAPE and DECISIONS became PROJECT.md on
+# 2026-10-29; their published reference pages redirect there so outside links do not break.
+ALIASES = {
+    "PROJECT.md": ["/reference/identity/", "/reference/design-policy/",
+                   "/reference/language-shape/", "/reference/decisions/"],
+}
 INDEX = '''+++
 title = "Index"
 description = "Stable contracts for the language model, compiler, safety rules, ABI, diagnostics, testing, and stdlib direction."
@@ -58,6 +65,10 @@ def rewrite(txt, src):
         return f"[{text}]({REPO_URL}{path}{frag})"
     return LINK.sub(sub, txt)
 
+def aliases(page):
+    paths = ALIASES.get(page)
+    return "aliases = [" + ", ".join(f'"{p}"' for p in paths) + "]\n" if paths else ""
+
 def generate(out):
     os.makedirs(out, exist_ok=True)
     for f in glob.glob(os.path.join(out, "*.md")): os.remove(f)
@@ -65,7 +76,7 @@ def generate(out):
     for page, (title, src) in PAGES.items():
         txt = open(os.path.join(ROOT, src), encoding="utf-8").read()
         open(os.path.join(out, page), "w", encoding="utf-8").write(
-            f'+++\ntitle = "{title}"\n+++\n\n{MARK.format(src=src)}\n{rewrite(txt, src)}')
+            f'+++\ntitle = "{title}"\n{aliases(page)}+++\n\n{MARK.format(src=src)}\n{rewrite(txt, src)}')
     return len(PAGES)
 
 def main():
