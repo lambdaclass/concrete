@@ -8533,10 +8533,11 @@ fi
 # The reference-parameter owner, in the IR: `take` receives the owner's own slot, the slot every
 # later read of `p` loads from (main passed a fresh copy slot that nothing read again). Behaviour
 # alone cannot show it, since a read through the binder of a reference owner is refused (E0238).
-r305_irfn=$($COMPILER "$TESTDIR/regress_305_borrow_block_owners_and_exits.con" --emit-llvm 2>/dev/null \
-    | awk '/^define .*@_C\.main\.ref_owner\(/{p=1} p{print} p&&/^}/{exit}')
-r305_slot=$(printf '%s\n' "$r305_irfn" | sed -n 's/.*call i64 @_C\.main\.take(ptr \(%[A-Za-z0-9_.]*\)).*/\1/p' | head -n1)
-if [ -n "$r305_slot" ] && printf '%s\n' "$r305_irfn" | grep -qF "load ptr, ptr $r305_slot"; then
+r305_ir=$($COMPILER "$TESTDIR/regress_305_borrow_block_owners_and_exits.con" --emit-llvm 2>/dev/null || true)
+r305_irfn=$(awk '/^define .*@_C\.main\.ref_owner\(/{p=1} p{print} p&&/^}/{exit}' <<<"$r305_ir")
+r305_slot=$(sed -n 's/.*call i64 @_C\.main\.take(ptr \(%[A-Za-z0-9_.]*\)).*/\1/p' <<<"$r305_irfn")
+r305_slot=${r305_slot%%$'\n'*}
+if [ -n "$r305_slot" ] && has_match -F "load ptr, ptr $r305_slot" <<<"$r305_irfn"; then
     echo "  ok  regress_305_borrow_block_owners_and_exits.con: a reference owner's binder is the owner's slot ($r305_slot)"
     PASS=$((PASS + 1))
 else
