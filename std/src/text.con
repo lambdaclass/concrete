@@ -2,7 +2,7 @@ mod text {
     import std.alloc.{grow,dealloc};
 
     // ============================================================
-    // AsciiText — canonical validated wrapper (docs/language/VALIDATED_WRAPPERS.md §4).
+    // AsciiText — canonical validated wrapper (docs/stdlib/VALIDATED_WRAPPERS.md §4).
     //
     // Invariant: every byte in the inner String is in 0..=127. Validation
     // runs once in try_new; .0 extraction is zero-cost after that.

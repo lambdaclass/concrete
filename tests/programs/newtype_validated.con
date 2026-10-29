@@ -1,4 +1,4 @@
-// Test: validated-wrapper convention per docs/language/VALIDATED_WRAPPERS.md
+// Test: validated-wrapper convention per docs/stdlib/VALIDATED_WRAPPERS.md
 // Demonstrates the free-function try_new shape without inherent impl.
 // Both this shape and the inherent `impl Port { fn try_new ... }` shape
 // (used by std.numeric / std.text) lower cleanly on the native/SSA path

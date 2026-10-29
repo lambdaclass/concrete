@@ -6,7 +6,7 @@ operators (TYPE-4 to TYPE-10), construction rights (TYPE-11), type aliases (TYPE
 kinds of type parameters (TYPE-13, TYPE-14), generic arguments (TYPE-15) and finite size (TYPE-16). Copy itself is defined in the ownership chapter
 (OWN-D1, OWN-14).
 
-The design records are [VALIDATED_WRAPPERS.md](../language/VALIDATED_WRAPPERS.md) (a library pattern built on
+The design records are [VALIDATED_WRAPPERS.md](../stdlib/VALIDATED_WRAPPERS.md) (a library pattern built on
 TYPE-11, not a language rule) and [VALUE_MODEL.md](../language/VALUE_MODEL.md).
 Const generics are not part of the language. Their design is decided, and the build is
 deferred until a workload needs it (see "No const generics" below).

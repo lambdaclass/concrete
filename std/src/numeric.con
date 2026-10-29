@@ -1,7 +1,7 @@
 mod numeric {
 
     // ============================================================
-    // Canonical validated wrappers — see docs/language/VALIDATED_WRAPPERS.md §4.
+    // Canonical validated wrappers — see docs/stdlib/VALIDATED_WRAPPERS.md §4.
     //
     // Canonical construction is try_new / try_from_*; .0 remains the
     // representation-level extraction path. Instance methods on newtypes

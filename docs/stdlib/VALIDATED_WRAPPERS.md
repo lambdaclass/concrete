@@ -1,5 +1,7 @@
 # Opaque Validated Wrappers and Fallible Conversions
 
+Moved from docs/language: a library pattern built on TYPE-11 (construction rights), not a language rule.
+
 The language rules this library pattern relies on are in the specification: newtypes and
 construction rights (TYPE-11), type aliases (TYPE-12) and owned `Text` (TYPE-3) of
 [docs/spec/types.md](../spec/types.md). This document describes the pattern, not the rules.
@@ -11,7 +13,7 @@ This document is the stable-direction counterpart to [../research/language/opaqu
 > add opaque/newtype validated wrapper types and canonical fallible conversion conventions: zero-cost domain wrappers, smart constructors, checked narrowing/parsing, and explicit `try_from`-style paths should make validated values easy to carry without implicit coercions or ambient convention.
 
 For the underlying layout story, see [LAYOUT_CONTRACT.md](../platform/LAYOUT_CONTRACT.md).
-For the broader stdlib direction, see [STDLIB.md](../stdlib/STDLIB.md).
+For the broader stdlib direction, see [STDLIB.md](STDLIB.md).
 
 ---
 
@@ -71,7 +73,7 @@ The language feature is settled. What remains is the stable convention for **how
 |---|---|---|
 | Wrapper type | `PascalCase`, domain name | `UserId`, `Port`, `PacketLen`, `NonZeroU32`, `AsciiText` |
 | Smart constructor | `TypeName::try_new(inner) -> Option<Self>` | `Port::try_new(value)` |
-| Smart constructor, non-`Copy` inner | `TypeName::try_new(inner) -> Result<Self, Inner>`: a rejected input is returned, never dropped ([ownership on failure](../stdlib/STDLIB_DESIGN_PRINCIPLES.md#ownership-on-failure)) | `AsciiText::try_new(s)` |
+| Smart constructor, non-`Copy` inner | `TypeName::try_new(inner) -> Result<Self, Inner>`: a rejected input is returned, never dropped ([ownership on failure](STDLIB_DESIGN_PRINCIPLES.md#ownership-on-failure)) | `AsciiText::try_new(s)` |
 | Total constructor (when validation is free/trivial) | `TypeName(inner)` (raw) | `UserId(42)` |
 | Inner access | `.0` | `port.0` |
 | Raw construction bypassing validation | `trusted` context, `TypeName(inner)` | only inside the module that owns the wrapper |
@@ -189,7 +191,7 @@ The validated-wrapper surface is accepted as freeze-ready on the current evidenc
 - [x] `NonZeroU32`, `NonZeroU64`, `Port`, `AsciiText` exist in stdlib with the shapes in section 4.
 - [x] Each ships tests that cover `try_new` happy path, `try_new` rejection, `.0` extraction, and absence of implicit coercion.
 - [x] No stdlib validated wrapper exposes an infallible `from_*` where validation is required.
-- [x] This document and [STDLIB.md](../stdlib/STDLIB.md) cross-reference each other on the validated-wrapper section.
+- [x] This document and [STDLIB.md](STDLIB.md) cross-reference each other on the validated-wrapper section.
 - [x] The compiler/runtime contract is closed and covered by end-to-end regressions: native/SSA layout on enum-payload newtypes, cross-module newtype identity, instance-method dispatch on wrappers, and narrowed cast exemption for wrap/unwrap-only representation casts.
 
 A medium-workload example using a stdlib validated wrapper end-to-end would still be useful follow-up evidence under item 67, but it is not a freeze blocker now that the design and compiler gaps are closed.

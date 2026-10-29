@@ -1,6 +1,6 @@
 # Unicode Policy (Phase 7 items 5–6, v1 — NORMATIVE)
 
-Status: normative for all stdlib text APIs. Companion: `docs/language/VALIDATED_WRAPPERS.md`,
+Status: normative for all stdlib text APIs. Companion: `docs/stdlib/VALIDATED_WRAPPERS.md`,
 `docs/stdlib/ERROR_CONVENTIONS.md`, the Bytes/Text boundary gate
 (`check_bytes_text_boundary.sh`) and the unicode-policy section within it.
 
