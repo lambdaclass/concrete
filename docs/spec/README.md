@@ -384,7 +384,7 @@ Each step lands with the gate green. The steps run in this order:
    entries' reject examples, and PIPELINE_CONTRACTS.md becomes their design record.
 1. **ownership.md** (`OWN-`, migrated 2026-10-23): linearity, consumption, Copy and Destroy, discards, defer.
    It replaces the normative parts of OWNERSHIP_MODEL, VALUE_FLOW_SPEC (the constructor table
-   and its gate), LANGUAGE_INVARIANTS §2, IGNORED_RESULT and DEFER. The decided defer and
+   and its gate), LANGUAGE_INVARIANTS §2, IGNORED_RESULT and DEFER (the last two since absorbed and deleted). The decided defer and
    exit-order rules (TIGHTENING_DECISIONS §4.5) enter as pending.
 2. **types.md** (`TYPE-`, migrated 2026-10-23): type formation, aliases, generics and const generics, newtypes,
    construction rights. It replaces TYPE_ALIASES, CONST_GENERICS_V1, CONSTRUCTION_RIGHTS,

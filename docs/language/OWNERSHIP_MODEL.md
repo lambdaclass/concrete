@@ -272,4 +272,4 @@ foundation**; the linear rule stands without it.
   moves a linear value exactly once — array-lit/struct-lit/destructure/arg/return/
   match; the anti-duplication backstop), `scripts/tests/check_ignored_result.sh`
   (`Result`/`Option` must-use).
-- Related docs: `docs/verification/KNOWN_HOLES.md` (H6 and H9 entries), `docs/language/IGNORED_RESULT.md`.
+- Related docs: `docs/verification/KNOWN_HOLES.md` (H6 and H9 entries), OWN-5 to OWN-7 of `docs/spec/ownership.md`.

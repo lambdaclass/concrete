@@ -326,6 +326,12 @@ variants is a hidden `_` and is refused the same way. Write an exhaustive `match
 variant pattern written without a field list ignores every field, so over an owned scrutinee it
 is refused when a field is not Copy (bug 197).
 
+`_` can never silence a resource: a resource-bearing payload is non-Copy, so `Ok { _ }` over it is
+E0288, and the payload is bound and released (`Result::Ok { f } => { f.destroy(); }`). For data
+(`Result` or `Option` over Copy payloads) an exhaustive match with `_` payloads is a genuine,
+auditable drop. `discard` with a non-Copy argument is E0295 (`CheckError.discardNonCopy`): a
+resource is consumed or `destroy`ed, never discarded, since dropping it would leak it.
+
 ```con reject name=wildcard-drops-linear code=E0288 stage=check pair=account-for-it
 struct R { v: Int }
 
@@ -413,6 +419,21 @@ matching it, propagating it or binding it (OWN-2 then requires a linear binding 
 trailing value expression with no `;` is the block's value, not a discard. User enums are not
 must-use.
 
+A statement expression ending in `;` discards its value, and discarding a `Result` or `Option`
+throws away a possible failure or absence. The linear checker already catches a named value that
+is never consumed (E0208); this rule closes the gap for an unnamed temporary a call produces and
+drops. Only these two types are must-use, however spelled (bare or with type arguments); an
+`i32`, a `bool` or a `()` is not flagged, and user enums are not must-use (a workload that needs
+one would widen `mustUseEnumName?` in `Concrete/Check/Check.lean`). Handling the value (`match
+risky() { ... }`), propagating it by matching and returning the error arm, binding it (`let r =
+risky();`, after which OWN-2 requires `r` be used) and a trailing value expression (the block's
+value, not a discard) never trip E0286. The deliberate acknowledgement is an exhaustive match that
+ignores only Copy payloads (`Option::Some { _ } => {}`): a catch-all `_` arm over the non-Copy value
+is E0288 and `let _ = e;` is E0289 (OWN-5). The future error-set report (`--report error-sets`,
+ROADMAP old Phase 6 #14) must keep these diagnostics firing. Site: `mustUseEnumName?` and the
+`Stmt.expr` discard check of `checkStmt` (`CheckError.discardedMustUse`); fixtures in
+`tests/programs/ignored_result/`, gate `scripts/tests/check_ignored_result.sh`.
+
 ```con reject name=ignored-option code=E0286 stage=check pair=handled-option
 fn find(k: Int) -> Option<Int> {
     if k > 0 {
@@ -463,6 +484,14 @@ fn main() -> Int {
 an empty capability set does not make a call pure, because mutation through `&mut` parameters
 and foreign effects are not capabilities. Division and remainder are not covered either, because
 their zero check is a real runtime trap. An intentional discard is written `discard(e)`.
+
+This rule keys on effect-freedom as OWN-6 keys on fallibility (CapabilityJudgment slice 5). Calls
+are never flagged: the capability model tracks no mutation through `&mut` parameters, `trusted` or
+`extern` code, so an empty capability set does not prove a call pure (`env_assign(&mut e, ...)`,
+`fclose(fp)`), and a discarded call result may be deliberate. Operations that can trap (`/`, `%`)
+are not flagged either. `discard(e)` acknowledges an intentional discard of a Copy value. Site:
+`exprPureDiscardable`, a local structural purity predicate, in the same `Stmt.expr` check
+(`CheckError.discardedPureValue`).
 
 ```con reject name=dead-computation code=E0294 stage=check pair=used-computation
 fn main() -> Int {

@@ -18,7 +18,6 @@ docs/language/EXECUTION_MODEL.md	statements
 docs/language/FAILURE_STRATEGY.md	statements
 docs/language/HANDLE_CAPABILITIES.md	trusted
 docs/language/HANDLE_CAPABILITIES_AUDIT.md	trusted
-docs/language/IGNORED_RESULT.md	ownership
 docs/language/LANGUAGE_GAPS.md	README
 docs/language/LANGUAGE_INVARIANTS.md	ownership,references
 docs/language/LANGUAGE_SHAPE.md	README

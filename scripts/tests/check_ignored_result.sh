@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Ignored-result diagnostics gate (ROADMAP Phase 6 #13; docs/language/IGNORED_RESULT.md).
+# Ignored-result diagnostics gate (ROADMAP Phase 6 #13; docs/spec/ownership.md, OWN-5 to OWN-7).
 #
 # A `;`-terminated statement expression whose value is a fallible result
 # (`Result<…>` or `Option<…>`) silently throws away a possible failure/absence.
