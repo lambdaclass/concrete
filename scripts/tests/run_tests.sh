@@ -8519,6 +8519,17 @@ else
     echo "FAIL  regress_305_borrow_block_early_exit.con: --interp gave '$r305_i', want output 42 and status 0 (the binary exits 42)"
     FAIL=$((FAIL + 1))
 fi
+# Bug 305, second fixture: raw-pointer, Heap and reference-parameter owners, and early exits from a
+# nested block and from `match` arms inside the borrow block.
+run_ok "$TESTDIR/regress_305_borrow_block_owners_and_exits.con" 42
+r3052_i=$($COMPILER "$TESTDIR/regress_305_borrow_block_owners_and_exits.con" --interp </dev/null 2>&1; echo "rc=$?")
+if [ "$r3052_i" = "$(printf '42\nrc=0')" ]; then
+    echo "  ok  regress_305_borrow_block_owners_and_exits.con: --interp prints 42 and exits 0, as the binary exits 42"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  regress_305_borrow_block_owners_and_exits.con: --interp gave '$r3052_i', want output 42 and status 0 (the binary exits 42)"
+    FAIL=$((FAIL + 1))
+fi
 # Bug 291: every stage found a struct, enum or newtype by name with a search of the declaration
 # lists per use, so n types each used once took n². The fixture's lookups (layout offsets, a Copy
 # struct, an enum payload, a newtype) return 42; then a program of 8000 Copy structs, each built

@@ -2,7 +2,7 @@
 
 <!-- bug-ledger
 summary: Lower pointed a borrow block's reference at a copy of the owner in a fresh slot and loaded the copy back into the owner only when the block fell through its end; a `break`, `continue` (labelled or not) or `return` leaving a `borrow mut` block early skipped that write-back, so the writes made through the reference were lost on that exit: the loop exit or continue edge carried the owner's old value, and an enclosing deferred call reading the owner read it too (silent wrong code)
-fixtures: regress_305_borrow_block_early_exit.con
+fixtures: regress_305_borrow_block_early_exit.con, regress_305_borrow_block_owners_and_exits.con
 class: 8 — a borrow block's reference was a copy with a write-back on one exit
 silent: yes
 exit: 0b
@@ -81,6 +81,23 @@ The repair is OD2 as the owner decided it on 2026-10-29:
   an enclosing deferred call sees the writes (`ret_in_block` in the fixture: 7 and 9);
 - part 4: a deferred call inside the block that takes the reference pins it until the call runs
   (OWN-12, E0206, already on main), so the reference is not written after such a `defer`.
+
+**Owner types (review of the rebased branch, 2026-10-29).** A review (Kimi) reported that the new
+lowering gives a reference-, pointer- or heap-typed owner's pointee instead of the owner's place,
+because `addrOfLocal` declines those types. It declines them only for a retagging borrow:
+`.borrowIn` borrows `.ident owner innerTy` at `refTy` with `innerTy` the pointee of `refTy`, so
+`borrowsSlot innerTy refTy` holds by construction and the owner is promoted to its own slot
+(MEMORY_SEMANTICS §5's one-hop rule for `Heap`). Measured (binary = `--interp` on main and on the
+branch): a raw-pointer owner repointed through `borrow mut p` (21), read through `borrow p` (3), a
+`Heap<B>` owner written through `borrow mut h` with a `continue` and read through `borrow h`; a
+reference-parameter owner `borrow p as a` lowers to `%addr = alloca ptr; store ptr %p, ptr %addr`
+and passes `%addr`. The review's reproducer (`let mut p: &i64 = &x;`) is refused (E0302), and any
+read through the binder of a reference owner is refused (E0238), also in trusted code. Codex
+(2026-10-29): not a defect, for this branch and for bug 307's call arguments.
+`regress_305_borrow_block_owners_and_exits.con` pins those owner types and adds early exits from a
+block nested in the borrow block (`break`, `return`, and a `return` read by an enclosing deferred
+call) and from `match` arms inside it (`break`, `continue`, `return`): main's binary exits 58,
+`--interp` 42; the branch 42 on both.
 
 ## Structural cause
 

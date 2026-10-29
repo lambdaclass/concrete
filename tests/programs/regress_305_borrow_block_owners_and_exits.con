@@ -1,0 +1,166 @@
+// Bug 305, second fixture: a borrow block's reference is the owner's place for every owner type
+// the checker admits (a scalar is in the first fixture; here a raw pointer, a `Heap` and a
+// reference parameter), and every early exit keeps the writes made through it, including exits
+// from a nested block and from a `match` arm inside the block. Binary = --interp = 42.
+struct Copy B {
+    v: i64,
+    w: i64,
+}
+
+// A raw-pointer owner: the block's reference is the pointer variable's slot, so writing a new
+// pointer through it repoints `p`.
+trusted fn ptr_owner_mut() -> i64 {
+    let mut x: i64 = 1;
+    let mut y: i64 = 2;
+    let mut p: *mut i64 = &mut x as *mut i64;
+    borrow mut p as r in R {
+        *r = &mut y as *mut i64;
+    }
+    // p now points at y: 2 * 10 + 1
+    return *p * 10 + x;
+}
+
+trusted fn ptr_owner_shared() -> i64 {
+    let mut x: i64 = 3;
+    let p: *mut i64 = &mut x as *mut i64;
+    let mut out: i64 = 0;
+    borrow p as r in R {
+        out = **r;
+    }
+    return out;
+}
+
+fn bump(h: &mut Heap<B>) {
+    h.v = h.v + 1;
+}
+
+fn peek(h: &Heap<B>) -> i64 {
+    return h.v + h.w;
+}
+
+// A `Heap` owner (MEMORY_SEMANTICS §5, one hop: the reference is the slot `h`, a field access
+// through it reaches the cell), left early by `continue`.
+fn heap_owner() with(Alloc) -> i64 {
+    let mut h: Heap<B> = alloc(B { v: 0, w: 0 });
+    let mut i: i64 = 0;
+    while i < 3 {
+        i = i + 1;
+        borrow mut h as r in R {
+            bump(r);
+            if i == 2 {
+                continue;
+            }
+            r.w = r.w + 1;
+        }
+    }
+    let mut seen: i64 = 0;
+    borrow h as s in S {
+        seen = peek(s);
+    }
+    free(h);
+    // v = 3, w = 2
+    return seen;
+}
+
+fn take(r: & &i64) -> i64 {
+    return 1;
+}
+
+// A reference-parameter owner: the binder is the address of `p`'s own slot (a reference read
+// through it is refused by E0238, so the program can only pass it on).
+fn ref_owner(p: &i64) -> i64 {
+    let mut out: i64 = 0;
+    borrow p as a in R {
+        out = take(a);
+    }
+    return out + *p;
+}
+
+fn add10(p: &mut i64) {
+    *p = *p + 10;
+}
+
+// A `break` and a `return` from a block nested inside the borrow block.
+fn nested_exit(c: i64) -> i64 {
+    let mut n: i64 = 0;
+    let mut i: i64 = 0;
+    while i < 3 {
+        i = i + 1;
+        borrow mut n as r in R {
+            *r = *r + 1;
+            if i == 2 {
+                if c == 0 {
+                    break;
+                }
+                if c == 1 {
+                    return *r * 100;
+                }
+            }
+            *r = *r + 10;
+        }
+    }
+    return n;
+}
+
+// A deferred call outside the block reads the owner after a `return` from a nested block.
+fn nested_return_defer(sink: &mut i64) -> i64 {
+    let mut n: i64 = 0;
+    defer add_into(&n, sink);
+    borrow mut n as r in R {
+        *r = 5;
+        if true {
+            if *r == 5 {
+                return 0;
+            }
+        }
+        *r = 6;
+    }
+    return 1;
+}
+
+fn add_into(p: &i64, sink: &mut i64) {
+    *sink = *sink + *p;
+}
+
+// `break`, `continue` and `return` from `match` arms inside the block.
+fn match_exit(k: i64) -> i64 {
+    let mut n: i64 = 0;
+    let mut i: i64 = 0;
+    while i < 4 {
+        i = i + 1;
+        let o: Option<i64> = if i == k { Option::None } else { Option::Some { value: i } };
+        borrow mut n as r in R {
+            *r = *r + 1;
+            match o {
+                Option::Some { value } => {
+                    if value == 3 {
+                        continue;
+                    }
+                    *r = *r + 10;
+                },
+                Option::None => {
+                    if k == 2 {
+                        break;
+                    }
+                    return *r * 1000;
+                },
+            }
+        }
+    }
+    return n;
+}
+
+fn main() with(Alloc) -> Int {
+    let x: i64 = 4;
+    let mut sink: i64 = 0;
+    let rv: i64 = nested_return_defer(&mut sink);
+    // ptr_owner_mut() = 21, ptr_owner_shared() = 3, heap_owner() = 5, ref_owner(&x) = 5,
+    // nested_exit(0) = 12 (11, then 1 at the break), nested_exit(1) = 1200 (12 at the return),
+    // nested_exit(2) = 33, rv + sink = 0 + 5 (the deferred call sees the block's write),
+    // match_exit(2) = 12 (11, then 1 at the break), match_exit(4) = 24000 (11 + 11 + 1, then 1
+    // at the return), match_exit(9) = 34 (11 + 11 + 1 + 11); the total is 25330
+    let t: i64 = ptr_owner_mut() + ptr_owner_shared() + heap_owner() + ref_owner(&x)
+        + nested_exit(0) + nested_exit(1) + nested_exit(2) + rv + sink
+        + match_exit(2) + match_exit(4) + match_exit(9);
+    return (t - 25288) as Int;
+}
