@@ -384,7 +384,10 @@ for o, delivs in sorted(row_blocked.items()):
         continue
     have = set(re.findall(r'\b(\d[a-z])\b', m.group(1)))
     for dname, want in delivs:
-        if have != want:
+        # One deliverable of a row may wait for more than the row's shared list only when the row says
+        # so by name ("V1c also waits for exit 2q"), so an extra exit is never silent.
+        stated = {e for e in want - have if re.search(r'\b' + re.escape(dname) + r' also waits for exit ' + e + r'\b', qexit.get(o, ''))}
+        if have != want - stated:
             no(f'queue row {o} names prerequisite exits {sorted(have)}, the prerequisites table says {sorted(want)} for {dname}'); pbad2 += 1
 if prows and not pbad2:
     ok(f'{len(prows)} feature deliverables partition the exits; classes agree with the prerequisite lists and queue rows')
@@ -856,6 +859,9 @@ PY
   neg queue_prerequisites_drift \
     "old='prerequisite exits: 0b, 2i, 2q;'; assert s.count(old)==1; s=s.replace(old,'prerequisite exits: 0b, 2q;')" \
     "queue row 5 names prerequisite exits \['0b', '2q'\], the prerequisites table says \['0b', '2i', '2q'\]"
+  neg prerequisites_extra_unstated \
+    "old='V1c also waits for exit 2q'; assert s.count(old)==1; s=s.replace(old,'V1c also waits for the decided rules')" \
+    "queue row 3 names prerequisite exits"
   neg prerequisites_deliverable_deleted \
     "import re; s,n=re.subn(r'^\| V1b \(row 3[^\n]*\n', '', s, flags=re.M); assert n==1" \
     "the prerequisites table has no row for deliverable V1b"
