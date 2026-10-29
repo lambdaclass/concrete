@@ -192,8 +192,13 @@ if [ -f scripts/gen/bug_rulings.py ] && [ -f docs/spec/ids.tsv ] && [ -n "$LEDGE
     || ok "control: a ruling with a line break is refused"
   rcheck --num 100 --open-bug "Violates: unrecorded" && no "control: an open bug was allowed 'Violates: unrecorded'" \
     || ok "control: an open bug cannot be unruled"
-  rcheck --num 001 --fixed "Violates: unrecorded" && ok "control: an old fixed bug may still be unruled (the ratchet counts it)" \
-    || no "control: an old fixed bug's 'Violates: unrecorded' was refused"
+  first_listed="$(python3 -I -c 'import sys; sys.path.insert(0, "scripts/gen"); import bug_rulings as b; print(min(b.UNRULED, default=""))')"
+  if [ -n "$first_listed" ]; then
+    rcheck --num "$first_listed" --fixed "Violates: unrecorded" && ok "control: a fixed bug listed in UNRULED ($first_listed) may still be unruled" \
+      || no "control: bug $first_listed, listed in UNRULED, was refused 'Violates: unrecorded'"
+  else
+    ok "UNRULED is empty: every record is ruled, so no unruled control applies"
+  fi
   rcheck --num 999 --open-bug "Open: OPEN-999" && no "control: an owner question that does not exist was accepted" \
     || ok "control: an unknown owner question is refused"
   rcheck --num 999 --open-bug "Spec gap: NOPE — a rule" && no "control: a spec gap in an unknown chapter was accepted" \
