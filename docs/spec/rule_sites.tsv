@@ -157,6 +157,7 @@ TRUST-7	enforced	E0311	check	Concrete.checkExprCore
 TRUST-8	pending R-0557	new	check	-
 STMT-5	enforced	E0278	check	Concrete.checkExprCore
 STMT-6	partial bug-323	E0216	check	Concrete.checkStmt, Concrete.ccCheckStmt
+STMT-6	partial bug-323	E0245	check	Concrete.checkStmt, Concrete.ccCheckStmt
 STMT-6	partial bug-323	E0280	check	Concrete.checkStmt, Concrete.ccCheckStmt
 STMT-6	partial bug-323	E0281	check	Concrete.checkStmt, Concrete.ccCheckStmt
 STMT-6	partial bug-323	E0542	core-check	Concrete.checkStmt, Concrete.ccCheckStmt
