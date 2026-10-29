@@ -70,8 +70,8 @@ else
   no "the real grammar's LL(1) conflicts differ from $KNOWN (< listed, > found):"
   diff "$WORK/known" "$WORK/real.conflicts" >&2
 fi
-grep -v '^#' "$KNOWN" | grep -v '^$' | awk -F'\t' 'NF != 3 || $2 == "" || $3 == ""' | grep -q . \
-  && no "$KNOWN: every row needs the conflict, a disposition and a reason (3 tab-separated columns)"
+bad_rows="$(awk -F'\t' '!/^#/ && NF > 0 && (NF != 3 || $2 == "" || $3 == "")' "$KNOWN")"
+[ -z "$bad_rows" ] || no "$KNOWN: every row needs the conflict, a disposition and a reason (3 tab-separated columns)"
 grep -q '^rule program ' "$WORK/real.py" || no "real: the canonical dump has no 'program' rule (vacuous output)"
 grep -q '^follow program ' "$WORK/real.py" || no "real: the canonical dump has no FOLLOW sets (the bug 329 regression)"
 
