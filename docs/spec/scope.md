@@ -46,7 +46,7 @@ the old name mean something new.
 - Evidence: tested
 
 **Rationale.** Binders are function parameters, `let` binders (destructuring ones included),
-match-arm, `if let` and `while let` binders, `for` header binders, and the reference and region
+match-arm, `if let` and `while let` binders, `for` header binders (a counted loop's index, once OD47's loop lands), and the reference and region
 names of a borrow block. The visible binding's state and type do not matter. So
 `let s = transform(s)` is refused even though the right-hand side consumed `s`, and a Copy
 binding is protected like a linear one. Contract expressions are binder-free propositions, so a

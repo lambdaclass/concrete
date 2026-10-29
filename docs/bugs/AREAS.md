@@ -12,7 +12,7 @@ checker refusal is a Check bug here.
 
 <!-- BEGIN GENERATED: bug areas (scripts/gen/bug_ledger.py; derived from the records, docs/bugs/area_map.tsv and git history, never edited here) -->
 
-299 records: 178 placed by their own fix commits, 37 by the files their record names in commits shared with other bugs, 33 by commits shared with other bugs, 13 by the commit that filed or closed the record, 23 by an `area:` override; 15 open bugs are not fixed yet and 0 fixed bugs have no commit the history can place.
+300 records: 178 placed by their own fix commits, 37 by the files their record names in commits shared with other bugs, 33 by commits shared with other bugs, 13 by the commit that filed or closed the record, 23 by an `area:` override; 16 open bugs are not fixed yet and 0 fixed bugs have no commit the history can place.
 
 ### By stage
 
@@ -379,7 +379,7 @@ checker refusal is a Check bug here.
 | [320](320_main_may_return_int_or_bool_the_native_exit_stat.md) | — | — | unfixed | — | violates STMT-7@3 |
 | [321](321_a_bare_variant_name_ignores_a_payload_and_a_stru.md) | — | — | unfixed | — | violates PAT-3@3, PAT-5@3 |
 | [322](322_trusted_code_compares_raw_pointers_with_and_the.md) | — | — | unfixed | — | violates TYPE-6@2 |
-| [323](323_break_with_a_value_is_accepted_inside_a_while_or.md) | — | — | unfixed | — | violates STMT-6@2 |
+| [323](323_break_with_a_value_is_accepted_inside_a_while_or.md) | — | — | unfixed | — | violates STMT-6@3 |
 | [324](324_a_copy_type_or_an_array_satisfies_a_destroy_boun.md) | — | — | unfixed | — | violates TRAIT-10@2 |
 | [325](325_a_call_statement_whose_result_is_not_unit_discar.md) | — | — | unfixed | — | violates OWN-7@3 |
 | [326](326_a_field_access_opens_a_heap_or_heaparray_implici.md) | — | — | unfixed | — | violates MEM-4@3 |
@@ -387,6 +387,7 @@ checker refusal is a Check bug here.
 | [328](328_a_method_taking_self_or_mut_self_is_called_on_an.md) | — | — | unfixed | — | violates OWN-15@3 |
 | [329](329_the_ll_1_checkers_never_computed_follow_sets_a_f.md) | Tooling | check_ll1 | commits | — | violates SYN-1@1 |
 | [330](330_a_continue_inside_a_for_loop_s_step_the_binary_n.md) | Interp | Interp | commits | Check | spec gap (STMT) |
+| [331](331_c_style_for_loops_are_accepted_and_the_counted_l.md) | — | — | unfixed | — | violates STMT-6@3 |
 | [332](332_a_float_literal_of_type_f32_is_rounded_twice_thr.md) | Lower | Lower | record | — | violates ARITH-7@1 |
 | [333](333_an_extra_type_argument_to_a_body_less_generic_de.md) | Lower | Lower | record | — | violates TYPE-9@2 |
 

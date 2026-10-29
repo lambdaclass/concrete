@@ -5,7 +5,7 @@ summary: break with a value is accepted inside a while or for statement and its 
 coverage: reproducer tests/regressions/bug323_break_with_a_value_is_accepted_inside_a_while_or/repro.con, found checking main against OD27 on 2026-10-29; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, runs-exit 1) and check_spec.sh S4 (the pending STMT-6 example)
 class: 13
 silent: yes
-ruling: Violates: STMT-6@2
+ruling: Violates: STMT-6@3
 -->
 
 **Status:** OPEN

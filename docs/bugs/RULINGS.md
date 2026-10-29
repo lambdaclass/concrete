@@ -17,13 +17,13 @@ of [docs/spec/ids.tsv](../spec/ids.tsv), or the generator refuses the record.
 
 <!-- BEGIN GENERATED: spec rulings (scripts/gen/bug_ledger.py; edit the records' ruling lines) -->
 
-299 bug records, 296 of them ruled: violates a rule 188, spec gap 1, open owner question 4, permitted by a rule 1, outside the spec 102; not ruled yet (fixed bugs filed before bug 300) 3. Open bugs are in bold.
+300 bug records, 297 of them ruled: violates a rule 189, spec gap 1, open owner question 4, permitted by a rule 1, outside the spec 102; not ruled yet (fixed bugs filed before bug 300) 3. Open bugs are in bold.
 
 ### By kind
 
 | ruling | bugs | open | silent |
 |---|--:|--:|--:|
-| violates a rule | 188 | 18 | 89 |
+| violates a rule | 189 | 19 | 89 |
 | spec gap | 1 | 0 | 0 |
 | open owner question | 4 | 0 | 0 |
 | permitted by a rule (not a bug) | 1 | 0 | 0 |
@@ -41,8 +41,8 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 | types.md | TYPE | 21 | 2 | 13 | 21 | 0 | 0 | 0 |
 | ownership.md | OWN | 19 | 3 | 8 | 19 | 0 | 0 | 0 |
 | scope.md | SCOPE | 13 | 0 | 5 | 13 | 0 | 0 | 0 |
+| statements.md | STMT | 13 | 3 | 10 | 12 | 1 | 0 | 0 |
 | memory.md | MEM | 12 | 1 | 7 | 12 | 0 | 0 | 0 |
-| statements.md | STMT | 12 | 2 | 10 | 11 | 1 | 0 | 0 |
 | ffi.md | FFI | 11 | 2 | 6 | 11 | 0 | 0 | 0 |
 | references.md | REF | 10 | 1 | 9 | 9 | 0 | 0 | 1 |
 | arithmetic.md | ARITH | 10 | 2 | 7 | 10 | 0 | 0 | 0 |
@@ -95,6 +95,7 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 | REF-3@1 | references.md | 2 | 092, 123 |
 | REF-5@1 | references.md | 2 | 123, 182 |
 | STMT-11@1 | statements.md | 2 | 305, 306 |
+| STMT-6@3 | statements.md | 2 | **323**, **331** |
 | SYN-1@1 | syntax.md | 2 | 220, 329 |
 | SYN-4@1 | syntax.md | 2 | 212, **318** |
 | TYPE-11@1 | types.md | 2 | 253, 311 |
@@ -124,7 +125,6 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 | REF-13@1 | references.md | 1 | 305 |
 | REF-9@2 | references.md | 1 | 181 |
 | STMT-5@1 | statements.md | 1 | 142 |
-| STMT-6@2 | statements.md | 1 | **323** |
 | STMT-7@2 | statements.md | 1 | 111 |
 | STMT-7@3 | statements.md | 1 | **320** |
 | STMT-9@1 | statements.md | 1 | 194 |

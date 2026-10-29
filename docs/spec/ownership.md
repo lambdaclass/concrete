@@ -1077,7 +1077,7 @@ fn main() -> Int {
 | `expr` | `e;` (not a value) **discards**: a fallible result is **refused** (**E0286**, whether or not it is Copy), a non-Copy value is **refused** (**E0287**); a trailing `e` (a value) is the block's value, never a discard; `free(...)` is itself the consumption when its pointee is Copy (a non-Copy pointee would be dropped: **E0287**, bug 144) | discard |
 | `ifElse` | branches must agree on consumption of outer linear values (E0209 / E0212, OWN-3); branch locals are checked at branch exit (H9) | scope |
 | `while_` | the body may not consume an outer linear value (**E0207**, OWN-4) except in a branch that exits the function, a rebind, or a move next to a `break` (the H14 one-level exemption) | scope |
-| `forLoop` | the same rules as `while_` | scope |
+| `forLoop` | the same rules as `while_`; the counted loop of OD47 desugars to `while_` in Core, its index an immutable Copy binder of the body | scope |
 | `fieldAssign` | an overwrite of a non-Copy field is **refused** (**E0219**); an ident right-hand side **moves**; the object is a place | conservation |
 | `derefAssign` | through `&mut T`: an overwrite of a non-Copy pointee is **refused** (**E0291**, H15); through `*mut T`: a trusted uninitialized-slot store (exempt); an ident right-hand side **moves** | conservation (H15 rows) |
 | `arrayIndexAssign` | an overwrite of a non-Copy element is **refused** (**E0291**, H15); an ident right-hand side **moves**; the array is a place | conservation (H15 rows) |

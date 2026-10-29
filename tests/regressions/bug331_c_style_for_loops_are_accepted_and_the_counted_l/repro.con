@@ -1,0 +1,11 @@
+// Bug 331 (STMT-6@3, OD47): the C-style `for` is removed and the counted loop `for i from a until b`
+// is the language's counted loop. Observed on main: this C-style loop compiles and returns 42 on
+// both consumers, and `for i from lo until hi { ... }` is a parse error (E0001). Expected: this
+// program refused at parse, the counted loop accepted.
+fn main() -> Int {
+    let mut s: Int = 0;
+    for (let mut i: Int = 0; i < 7; i = i + 1) {
+        s = s + i;
+    }
+    return s + 21;
+}

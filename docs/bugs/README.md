@@ -499,6 +499,7 @@ the report counts those bugs as ambiguous.
 - [326_a_field_access_opens_a_heap_or_heaparray_implici.md](326_a_field_access_opens_a_heap_or_heaparray_implici.md) — A field access opens a Heap or HeapArray implicitly, which MEM-4 refuses as the owner decided OD30 on 2026-10-29
 - [327_an_integer_or_float_literal_with_no_expected_typ.md](327_an_integer_or_float_literal_with_no_expected_typ.md) — An integer or float literal with no expected type defaults to Int or Float64, which ARITH-2 refuses as the owner decided OD31 on 2026-10-29
 - [328_a_method_taking_self_or_mut_self_is_called_on_an.md](328_a_method_taking_self_or_mut_self_is_called_on_an.md) — A method taking &self or &mut self is called on an owned place with an implicit borrow, which OWN-15 refuses as the owner decided OD32 on 2026-10-29
+- [331_c_style_for_loops_are_accepted_and_the_counted_l.md](331_c_style_for_loops_are_accepted_and_the_counted_l.md) — C-style for loops are accepted and the counted loop for i from a until b is not (OD47)
 - [332_a_float_literal_of_type_f32_is_rounded_twice_thr.md](332_a_float_literal_of_type_f32_is_rounded_twice_thr.md) — A float literal of type f32 is rounded twice, through binary64, instead of once
 - [333_an_extra_type_argument_to_a_body_less_generic_de.md](333_an_extra_type_argument_to_a_body_less_generic_de.md) — An extra type argument to a body-less generic declaration is ignored natively and fails at run time under --interp
 

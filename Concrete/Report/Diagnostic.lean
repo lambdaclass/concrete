@@ -117,7 +117,7 @@ def codeRuleTag : String → Option String
   | "E0311" => some "TRUST-7@1"
   -- docs/spec/statements.md
   | "E0278" => some "STMT-5@1"
-  | "E0216" | "E0245" | "E0280" | "E0281" | "E0542" | "E0543" => some "STMT-6@2"
+  | "E0216" | "E0245" | "E0280" | "E0281" | "E0542" | "E0543" => some "STMT-6@3"
   | "E0310" => some "STMT-7@3"
   | "E0307" => some "STMT-9@1"
   -- docs/spec/arithmetic.md

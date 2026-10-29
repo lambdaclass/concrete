@@ -497,7 +497,8 @@ fn main() -> Int {
 **Rationale.** A `let` over an enum variant is lowered to a `match` over the rest of its block
 (PAT-5); a `for` header has no block of its own to become that match, so the form is refused
 rather than skipped. A struct destructuring needs no match (it becomes field reads) and is
-accepted there. Destructure the enum before the loop.
+accepted there. Destructure the enum before the loop. OD47 removes the C-style `for` and its header (bug 331), and with it the form this entry
+refuses; the entry retires when that lands.
 
 ```con reject name=destructure-in-for-header code=E0318 stage=check pair=destructure-before-loop
 enum Copy E { A { v: Int } }

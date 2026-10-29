@@ -1,12 +1,12 @@
 # Open Owner Decisions
 
-This chapter lists the language questions that only the project owner decides: OD1 to OD46 of
+This chapter lists the language questions that only the project owner decides: OD1 to OD49 of
 [ROADMAP.md](../../ROADMAP.md#owner-decisions), exit 2n. Each entry states the question and encodes
 no answer. The rules it bears on are named in its rationale, together with what current main does,
 which stays provisional until the owner answers. The answer, when given, is recorded in ROADMAP and
 turns the entry into the rules it decides; until then no agent picks a side
 ([AGENTS.md](../project/AGENTS.md#rules)). OD1 to OD22 were answered on 2026-10-29 and are listed under
-Decided; OD23 to OD32 were decided the same day; OPEN-33 to OPEN-46, raised while recording them, are open.
+Decided; OD23 to OD32 were decided the same day; OPEN-33 to OPEN-46 and OPEN-48 to OPEN-49, raised while recording them, are open.
 
 <a id="OPEN-33"></a>
 ### OPEN-33. Inline submodules under one file per module
@@ -257,10 +257,47 @@ recorded there.
 found missing. The options and a recommendation are in ROADMAP's row OD46; the owner's answer is
 recorded there.
 
+<a id="OPEN-48"></a>
+### OPEN-48. The index type of a counted loop over two literals
+
+**OPEN-48@1.** Which integer type the index of a counted loop takes when both of its bounds are untyped integer literals (`for i from 0 until 7`) is an open owner decision (OD48).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD48
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on STMT-6 and ARITH-2. OD47 gives the index the bounds' shared integer type, and OD31 removes the `Int` fallback for a literal with no expected type, so two literal bounds give the index no type. The counted loop is not on main yet (bug 331). Raised while recording OD47 (2026-10-29). The options and
+a recommendation are in ROADMAP's row OD48; the owner's answer is recorded there.
+
+<a id="OPEN-49"></a>
+### OPEN-49. The arithmetic of a counted loop's termination measure
+
+**OPEN-49@1.** How the termination measure `b - i` of a counted loop is represented when it does not fit the bounds' type (a signed type with `a` near its minimum and `b` near its maximum) is an open owner decision (OD49).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD49
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on STMT-6, ARITH-3 and the loop variant of the contracts chapter. OD47 says the counted form carries the measure `b - i` and desugars to `while`; ARITH-3 checks ordinary arithmetic, and silently choosing wrapping, a wider type or a mathematical integer would add a rule. Raised while recording OD47 (2026-10-29). The options and
+a recommendation are in ROADMAP's row OD49; the owner's answer is recorded there.
+
 ## Decided
 
 These entries were retired when the owner answered them; their IDs are never reused.
 
+- **OD47** (loops, decided 2026-10-29, never an open entry): `while` and the counted loop `for i from a
+  until b`, the C-style `for` removed. Now STMT-6@3 and STMT-11@2 (pending, bug 331); OD47 left OPEN-48
+  and OPEN-49.
 - **OD23 – OD32** (the strictness pass, decided 2026-10-29, never open entries): REF-11@3 (OD23),
   STMT-7@3 (OD24), PAT-3@3 and PAT-5@3 (OD25), TYPE-6@2 (OD26), STMT-6@2 (OD27), TRAIT-10@2 (OD28),
   OWN-7@3 (OD29), MEM-4@3 (OD30), ARITH-2@2 (OD31) and OWN-15@3 (OD32), each pending its bug (319 –

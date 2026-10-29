@@ -183,12 +183,12 @@ fn main() -> Int {
 <a id="STMT-6"></a>
 ### STMT-6. Loops are statements; `break` and `continue` name a loop
 
-**STMT-6@2.** `while` and `for` are statements, `break` carries no value, and `break` and `continue` act on the innermost enclosing loop or, with a label, on the labeled loop, and appear only inside a loop.
+**STMT-6@3.** The loops are `while cond { ... }` and the counted loop `for i from a until b { ... }`, both statements, where the counted loop evaluates `a` and `b` once before its first iteration and runs its body with `i` bound, immutably, to each value from `a` up to but not including `b` at the integer type both bounds share; `break` carries no value, and `break` and `continue` act on the innermost enclosing loop or, with a label, on the labeled loop and appear only inside a loop, `continue` advancing a counted loop to its next index.
 
 - Kind: refusal
 - Uses: none
 - Codes: E0216 (check), E0245 (check), E0280 (check), E0281 (check), E0542 (core-check), E0543 (core-check)
-- Status: partial bug-323
+- Status: partial bug-331
 - Enforced by: Concrete.checkStmt, Concrete.ccCheckStmt
 - Semantics: none
 - Obligation: none
@@ -226,6 +226,24 @@ Phase 6 #4, 2026-06-21).
 Version 2 records the owner's decision of 2026-10-29 (OD27): `break <expr>` is refused at parse.
 Main still parses a value after `break` inside a `while` or `for` statement and drops it (bug 323).
 
+
+Version 3 records the owner's decision of 2026-10-29 (OD47): the loops are `while` and a counted
+range loop, and the C-style `for` is removed in every form (`for (init; cond; step)`,
+`for (cond)` and the unconditional `for`). The counted loop is half-open, `for i from a until b`
+running `a`, `a + 1`, ..., `b - 1` and nothing when `a >= b`; its index cannot be assigned in the
+body; both bounds must have one integer type, which the index takes; and `from` and `until` become
+reserved words. The grammar is LL(1): `for` IDENT `from` expr `until` expr block, the upper bound
+being a restricted head expression so that `{` ends the head (SYN-4, OD16). In Core the counted loop
+desugars to the one `while` form, so proofs keep a single loop construct, and the counted form
+carries its termination measure, `b - i`. Why: a counted loop terminates without a proof and gives
+a bounds check over its index something to eliminate; the C-style step had its own control flow,
+which bugs 306 and 330 got wrong; and the old header was an LL(1) conflict. Austral and Ada have a
+counted loop (inclusive), and Swift removed the C-style loop (SE-0007); `until` is half-open to avoid
+off-by-one errors and because `to` reads as exclusive to some and inclusive to others. Main still has
+only the C-style forms (bug 331 implements the decision and migrates the corpus under exit 2q). The
+index type when both bounds are untyped literals is OPEN-48, and the arithmetic of the termination
+measure is OPEN-49. The examples of this specification that use the C-style form migrate with the
+corpus.
 
 ```con reject name=break-outside-loop code=E0280 stage=check pair=labeled-break
 fn main() -> Int {
@@ -271,6 +289,78 @@ fn main() -> Int {
         break;
     }
     return i;
+}
+```
+
+```con reject name=c-style-for code=new stage=parse pair=counted-loop pending=bug-331 now=accept:42
+fn main() -> Int {
+    let mut s: Int = 0;
+    for (let mut i: Int = 0; i < 7; i = i + 1) {
+        s = s + i;
+    }
+    return s + 21;
+}
+```
+
+```con reject name=for-condition-only code=new stage=parse pair=while-loop pending=bug-331 now=accept:42
+fn main() -> Int {
+    let mut i: Int = 0;
+    for (i < 42) {
+        i = i + 1;
+    }
+    return i;
+}
+```
+
+```con reject name=unconditional-for code=new stage=parse pair=while-loop pending=bug-331 now=accept:42
+fn main() -> Int {
+    let mut i: Int = 0;
+    for {
+        i = i + 1;
+        if i == 42 { break; }
+    }
+    return i;
+}
+```
+
+```con accept name=while-loop exit=42
+fn main() -> Int {
+    let mut i: Int = 0;
+    while i < 42 {
+        i = i + 1;
+    }
+    return i;
+}
+```
+
+```con accept name=counted-loop exit=42 pending=bug-331 now=reject:E0001:parse
+fn main() -> Int {
+    let lo: Int = 0;
+    let hi: Int = 7;
+    let mut s: Int = 0;
+    for i from lo until hi {
+        s = s + i;
+    }
+    return s + 21;
+}
+```
+
+```con accept name=counted-loop-empty exit=42 pending=bug-331 now=reject:E0001:parse
+fn main() -> Int {
+    let lo: Int = 5;
+    let hi: Int = 5;
+    let mut s: Int = 42;
+    for i from lo until hi {
+        s = 0;
+    }
+    return s;
+}
+```
+
+```con reject name=from-is-reserved code=new stage=parse pair=while-loop pending=bug-331 now=accept:42
+fn main() -> Int {
+    let from: Int = 40;
+    return from + 2;
 }
 ```
 
@@ -461,7 +551,7 @@ fn main() -> Int {
 <a id="STMT-11"></a>
 ### STMT-11. One exit sequence
 
-**STMT-11@1.** Every exit of a scope that does not abort runs the same sequence: the exit value is computed, then the scope's deferred calls run, last registered first and innermost scope first, then the scope's loans end, and then its remaining locals are destroyed, so a `for` loop's step runs after its body scope's exit sequence.
+**STMT-11@2.** Every exit of a scope that does not abort runs the same sequence: the exit value is computed, then the scope's deferred calls run, last registered first and innermost scope first, then the scope's loans end, and then its remaining locals are destroyed, so a counted loop advances its index only after its body scope's exit sequence.
 
 - Kind: guarantee
 - Uses: none
@@ -474,9 +564,10 @@ fn main() -> Int {
 **Rationale.** Decided by the owner on 2026-10-29 (OD2, part 5). One order on every normal exit
 (falling off the end, `return`, `break`, `continue`) is what lets a deferred call see the exit value
 already computed and the loans it was given still live (OWN-16), and lets the destruction of the
-remaining locals come last. An abort runs none of it (STMT-2; OD10). A `for` loop's body is its own scope and the step belongs to the loop, outside it,
-so the body's deferred calls, loan ends and destructions run, on a fall-through or a `continue`,
-before the step does. Bugs 305 and 306 brought the borrow block's exits and the interpreter's `for`
+remaining locals come last. An abort runs none of it (STMT-2; OD10). A counted loop's body is its own scope and advancing the index belongs to the loop,
+outside it, so the body's deferred calls, loan ends and destructions run, on a fall-through or a
+`continue`, before the index advances. Version 2 restates for the counted loop of OD47 what version 1
+said of the C-style `for` step, which OD47 removes. Bugs 305 and 306 brought the borrow block's exits and the interpreter's `for`
 step into this order; the entry stays pending until
 R-0496's Core semantics defines the sequence for every exit form.
 
