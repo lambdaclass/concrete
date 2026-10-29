@@ -96,6 +96,8 @@ For example `let c: u8 = 200 + 100` compiles and traps at run time: the folder p
 only for what it recognizes, so E0900 is a partial guarantee (`provenViolationDiagnostics`, the
 same path as a proven out-of-bounds index or zero divisor); completing the folder is ROADMAP #10.
 
+Decided by the owner on 2026-10-29 (OD10): integer arithmetic is checked by default and the shift count is checked; wrapping and saturating arithmetic are named operations (ARITH-4), and an abort runs no deferred call (STMT-2).
+
 ```con accept name=checked-in-range exit=42
 fn main() -> Int {
     let a: u8 = 200;
@@ -189,6 +191,8 @@ numeric conversions (TRUST-1 owns the pointer–integer case).
 Until then, on current main, narrowing truncates silently (`300 as u8` is 44, `-1 as u32` is
 4294967295, `3.9 as i32` is 3). Even a widening needs `as`: `want_u64(my_u8)` is E0220 (TYPE-4),
 so every conversion is visible at the call site.
+
+Decided by the owner on 2026-10-29 (OD11): `as` only when lossless by value domain, and every lossy conversion a named function.
 
 ```con reject name=int-to-bool code=E0553 stage=core-check pair=widening
 fn main() -> Int {

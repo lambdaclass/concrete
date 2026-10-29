@@ -32,6 +32,8 @@ the first workload passes a callback to C. Enforced 2026-10-23 where a global fu
 value, on the resolver's identity of the name, so an import alias, a constant initializer and a
 shadowing local are all decided right; CoreCheck re-checks it.
 
+Decided by the owner on 2026-10-29 (OD4): every foreign function value is refused now; typed `extern "C" fn` types may come later.
+
 ```con reject name=extern-as-value code=E0588 stage=elab pair=wrapper-as-value
 mod c {
     pub trusted extern fn abs(x: i32) with() -> i32;

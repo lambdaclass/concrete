@@ -93,6 +93,8 @@ capability-free runtime function is still callable there until the full judgment
 Under the full judgment, operand sorts must agree inside an expression too and literals are
 mathematical.
 
+Decided by the owner on 2026-10-29 (OD12): a contract is a pure, non-consuming specification judgment, with machine and mathematical arithmetic kept distinct.
+
 ```con reject name=ill-typed-contract code=new stage=check pair=well-typed-contract pending=R-0473 now=accept:42
 #[requires((x > 0) + 1 > 0)]
 fn f(x: i32) -> i32 {

@@ -2,6 +2,10 @@
 
 Status: v1 contract
 
+**Scope decided by the owner on 2026-10-29 (OD19):** the provable subset admits discarded
+statements, guards and ranges, each entering as its Core semantics lands (this unblocks the
+model-coverage branch, `wip/model-coverage-3`).
+
 `ProvableV1` is the first named subset of Concrete where the project is willing
 to say: this function can carry Lean-backed evidence, and the compiler has a
 defined workflow for keeping that evidence tied to the source.

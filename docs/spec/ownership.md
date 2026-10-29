@@ -775,7 +775,7 @@ EVALUATION2 D7): defer the function the method desugars to, or a named cleanup f
 call (`defer f(1);` passes an `i32` to an `i32` parameter), but a string literal is not a deferred
 argument (E0279), so `defer println("x")` is refused where `println("x")` compiles: defer a cleanup
 function instead (an earlier design note blamed a missing argument coercion). What a deferred call that fails or diverges does on a return or error path
-is open; whether an abort runs deferred calls is owner decision OD10 (STMT-2 is pending), and today
+is open (an abort runs no deferred call: OD10, decided 2026-10-29; STMT-2 is pending), and today
 a deferred call is an ordinary call with no recovery rule. There is no implicit scope-end drop to order
 against `defer` (OWN-13): `destroy(x)`, `x.drop()` or a deferred explicit call consumes a value.
 The surface is pinned by `scripts/tests/check_defer.sh` and `examples/defer/cleanup_order/`

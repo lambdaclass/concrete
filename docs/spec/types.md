@@ -723,6 +723,8 @@ mod m {
 mandatory kind annotation would add syntax without removing a semantic case. There is no
 linear-only kind. Duplicating a value of a bare `T` is a use after move (OWN-1).
 
+Decided by the owner on 2026-10-29 (OD5): a bare `<T>` means Any, and `T: Copy` is explicit.
+
 ```con accept name=bare-and-copy-parameters exit=42
 struct R { v: Int }
 
@@ -766,6 +768,8 @@ over the type graph; the fixpoint is gone. A generic declared `Copy` behaves lik
 as Copy (OWN-14), and `Bx<Int>` is Copy while `Bx<String>` is linear. A parameter no field
 mentions still counts. A generic not declared `Copy` is never Copy. Version 1 (pending, never
 enforced) required a `T: Copy` bound instead and was retired by the option (a) decision.
+
+Decided by the owner on 2026-10-29 (OD5): Copy for a generic struct or enum is declared and checked, never derived, and a generic declared Copy is Copy when every argument is.
 
 ```con accept name=copy-over-bare-parameter-at-copy exit=42
 struct Copy Bx<T> { v: T }
@@ -947,7 +951,7 @@ untagged form, or units become a proof axis; unit erasure must be an audit fact,
 proof status may depend on erasing a unit unless a contract or VC names the conversion; and done
 poorly they add ceremony for little near-term value. Programs encode the unit in the name instead
 (`len_bytes`, `timeout_ms`, `off_in_block`, `size_bits`, per [STYLE.md](../project/STYLE.md)), and today's checked arithmetic
-(ARITH-3, on main and provisional until the owner answers OD10) removes the silent corruption unit
+(ARITH-3; OD10, decided 2026-10-29) removes the silent corruption unit
 mix-ups often hide behind. If a real
 workload keeps hitting unit bugs, the first step is a report-only prototype (`examples/units_probe/`
 over the mistake classes above) with optional annotations erased only after the audit records the

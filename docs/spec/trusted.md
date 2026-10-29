@@ -85,6 +85,9 @@ reference. Trusted code may form a reference this way, but only by discharging t
 premise itself (TIGHTENING_DECISIONS D2, caveats). The resulting reference is second-class like
 any other.
 
+Decided by the owner on 2026-10-29 (OD1): a raw-pointer dereference needs a trusted validity premise.
+
+
 <a id="TRUST-4"></a>
 ### TRUST-4. A function exercises only the capabilities it declares
 
@@ -213,22 +216,23 @@ fn main() -> Int {
 <a id="TRUST-6"></a>
 ### TRUST-6. Trusted code lives in marked modules
 
-**TRUST-6@1.** Only a module declared `trusted mod` may contain `trusted` functions, `extern` declarations, raw-pointer operations and global state cells, every global state cell is reached only through functions that require a capability, and there is no unrestricted mutable global.
+**TRUST-6@2.** Only a module declared `trusted mod` may contain `trusted` functions, `extern` declarations and raw-pointer operations, and the marker confers no trust by itself.
 
 - Kind: refusal
 - Uses: none
 - Codes: new (check)
 - Status: pending R-0509
 - Semantics: none
-- Obligation: the trusted base is the list of marked modules, and each cell is part of the world state its capability grants (R-0509, R-0496)
+- Obligation: the trusted base is the list of marked modules (R-0509)
 - Evidence: tested
 
-**Rationale.** Decided 2026-10-23 (TIGHTENING_DECISIONS D8 and D10). The marker puts the trusted
-base in the source, where a reviewer reads it, and a gate lists every marked module; it never
-confers trust, so each function still declares `trusted` and its capabilities. Immutable globals
-(`const`, immutable statics) are allowed everywhere. The compiler's emitted globals
-(`__concrete_argc`, `__concrete_argv`) and std's environment mutation are inventoried as trusted
-base. Cells are built when a workload needs them, allocators being the likely first.
+**Rationale.** Decided by the owner on 2026-10-29 (OD7). The marker puts the trusted base in the
+source, where a reviewer reads it, and a gate lists every marked module; it never confers trust, so
+each function still declares `trusted` (per method, OD22) and its capabilities. Whether and how a
+program holds mutable global state (global cells reached through capabilities, no unrestricted
+`static mut`) is OD8, still open (OPEN-8); the 2026-10-23 proposal (TIGHTENING_DECISIONS D8) is
+recorded there. The compiler's emitted globals (`__concrete_argc`, `__concrete_argv`) and std's
+environment mutation are inventoried as trusted base.
 
 ```con reject name=trusted-outside-marked-module code=new stage=check pair=trusted-in-marked-module pending=R-0509 now=accept:42
 mod m {
@@ -271,6 +275,8 @@ trusted helper could free one heap cell twice. `read_owned(p)` states the transf
 slot is logically uninitialized until a value is stored back, a premise the trusted code's author
 discharges (TRUST-2), which no checker tracks yet. Place uses
 (`(*p).f`, `&*p`), Copy pointees and stores through `*p` are unchanged.
+
+Decided by the owner on 2026-10-29 (OD13): a value moves out of raw memory only through `read_owned(p)` or an explicit replace or take through `&mut T`, and a raw address carries a trusted ownership obligation; bug 198's repair is final.
 
 ```con reject name=raw-deref-moves-linear code=E0311 stage=check pair=read-owned-moves
 struct Copy B { v: Int }

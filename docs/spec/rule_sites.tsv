@@ -41,6 +41,7 @@ PAT-4	enforced	E0300	check	Concrete.checkGuard
 PAT-5	enforced	E0252	check	Concrete.checkStmt, Concrete.checkExprCore
 PAT-5	enforced	E0308	check	Concrete.checkStmt, Concrete.checkExprCore
 PAT-8	enforced	E0318	check	Concrete.checkStmt
+PAT-9	pending R-0500	new	check	-
 FFI-1	enforced	E0588	elab,core-check	Concrete.refuseForeignFnValue
 FFI-3	enforced	E0116	resolve	Concrete.coreCheckProgram, Concrete.ccCheckModuleDecls
 FFI-3	enforced	E0117	resolve	Concrete.coreCheckProgram, Concrete.ccCheckModuleDecls

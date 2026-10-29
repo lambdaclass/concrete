@@ -69,6 +69,8 @@ them.
 code then failed in `llvm-as` with a redefined function, and the interpreter refused only when
 the call ran. Neither is a language rule; the refusal now happens at the impl.
 
+Decided by the owner on 2026-10-29 (OD6): traits are coherent (this entry to TRAIT-7): one impl per trait and type, the orphan rule (TRAIT-3), an ambiguous method call qualified (TRAIT-6), and resolution by typed identity.
+
 ```con reject name=twice code=E0590 stage=check pair=once
 trait Tr { fn m(&self) -> Int; }
 struct Copy Foo { a: Int }

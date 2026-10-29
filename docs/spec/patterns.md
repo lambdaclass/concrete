@@ -468,6 +468,54 @@ fn main() -> Int {
 }
 ```
 
+<a id="PAT-9"></a>
+### PAT-9. The first matching arm wins
+
+**PAT-9@1.** A `match` selects the first arm in source order whose pattern matches and whose guard holds, and an arm that no value can reach because earlier unguarded arms cover every value it matches is refused.
+
+- Kind: refusal
+- Uses: none
+- Codes: new (check)
+- Status: pending R-0500
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** Decided by the owner on 2026-10-29 (OD18). Source order is the order a reader sees,
+so the arm that runs is the first one written that matches. This changes main: CoreCanonicalize
+moves unguarded catch-all arms after the others (bug 213's provisional repair), so a specific arm
+written after `_` is reached and the program below returns 42 on both consumers; under this rule the
+catch-all wins and the later arm is unreachable, a refusal. Repeating a variant an earlier
+unguarded arm covers is already PAT-3's refusal.
+
+```con reject name=arm-after-catch-all code=new stage=check pair=catch-all-last pending=R-0500 now=accept:42
+fn main() -> Int {
+    let x: Int = 1;
+    match x {
+        _ => {
+            return 1;
+        },
+        1 => {
+            return 42;
+        },
+    }
+}
+```
+
+```con accept name=catch-all-last exit=42
+fn main() -> Int {
+    let x: Int = 1;
+    match x {
+        1 => {
+            return 42;
+        },
+        _ => {
+            return 1;
+        },
+    }
+}
+```
+
 ## Absent by decision
 
 This section is explanatory: it records pattern forms the language does not have, why, and what

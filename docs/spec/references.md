@@ -79,6 +79,8 @@ by FFI-3 (gap G15, closed 2026-10-23). A generic reached at a
 reference-returning instantiation only through another generic is refused after
 monomorphization by the same judgment (gap G2).
 
+Decided by the owner on 2026-10-29 (OD1): references are second-class, never returned (this entry) or stored (REF-3).
+
 ```con reject name=return-param code=E0236 stage=check pair=return-value
 fn id(x: &Int) -> &Int {
     return x;
@@ -144,6 +146,8 @@ out of a scoped accessor such as `with_value`. Parameters of reference type are 
 type is refused wherever it is written, also through a type alias, as a field type and in a
 trait method signature (gap G16, closed 2026-10-23), although no value of it could be made in
 safe code, because every function that could inhabit it is refused by REF-1.
+
+Decided by the owner on 2026-10-29 (OD14): function types that return a reference are refused everywhere, and one structural well-formedness judgment runs before specialization (R-0499).
 
 ```con reject name=param-fn-type code=E0236 stage=check pair=callback-takes-ref
 fn apply(x: &Int, f: fn(&Int) -> &Int) -> Int {
@@ -342,6 +346,8 @@ destroying one are not. A raw-pointer dereference is neither of the two operatio
 or `Unsafe` code, `&*p` forms a reference only under that code's validity premise (TRUST-3). Borrowing a temporary was gap G12 (bug 182: a borrowed call result
 miscompiled or leaked), closed 2026-10-23 at every reference-forming site, explicit borrows and
 implicit `&self` receivers alike. Loans are keyed by the root (REF-11).
+
+Decided by the owner on 2026-10-29 (OD1, the Austral model): a reference is formed by borrowing a variable or projecting through a reference, `&s.f` is sugar, and a temporary is never a root. Loans are keyed by the root variable (REF-8) until OD15 settles the keying.
 
 ```con reject name=borrow-operator code=E0238 stage=check pair=root-plus-projections
 fn read(r: &Int) -> Int {
@@ -843,7 +849,7 @@ loan by the root binding, so main still refuses disjoint siblings in one call (E
 example below; `error_d2_call_disjoint_fields.con`, `error_d2_call_field_read.con`,
 `error_d2_receiver_projection_read.con`, `error_d2_call_field_read_in_branch.con` and
 `error_d2_explicit_mut_receiver_read.con` pin that over-refusal in run_tests.sh and flip when the
-repair lands (R-0496). How loans outside a single call are keyed is OPEN-1.
+repair lands (R-0496). Loans outside a single call are keyed by the root variable (OD1, decided 2026-10-29; REF-8) until OD15 (OPEN-15) settles the keying.
 
 ```con accept name=disjoint-siblings-one-call exit=2 pending=R-0496 now=reject:E0293:check
 struct Copy W { a: Int, b: Int }
