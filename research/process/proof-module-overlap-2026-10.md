@@ -76,8 +76,9 @@ The overlap is real only in three places (see below).
   - two fixtures of the operational VC auto-discharge gate.
 - Only `ProofCore`: `Proof/DependencyEdges`, `Proof/Issue`, `Report/ModelDiff`, `Report/DebugBundle`,
   `Report/Reduce`, `Check/Policy`.
-- Both: `Proof/ProofSoundness`, `Report/ReportInterface`, `ReportVC`, `ReportBase`, and the report
-  modules (`Effects` and `ObligationDiscovery` once the report split lands).
+- Both: the umbrella `Concrete.lean` (48–49), `Proof/ProofSoundness`, `Report/Report` (7–8),
+  `Report/ReportObligations` (7–8), `Report/ReportInterface`, `ReportVC` and `ReportBase`. After the
+  report split, the importers are its first modules, `Effects` and `ObligationDiscovery`.
 - By name, not by import:
   - `scripts/tools/identity_rows.sh` reads `Proof.lean` by path;
   - `scripts/gen/classifications.lean` finds the `SpecDecl` and `PFnDef` constants by reflection;
@@ -90,7 +91,7 @@ The overlap is real only in three places (see below).
 |---|---|---|---|
 | the `PExpr` language | defines it | builds it from Core | producer and consumer; correct split |
 | binary-operator semantics | `evalBinOp` | `binOpToPBinOp` emits only what `evalBinOp` supports (comments at 680, 702) | a coupled contract, proved in `ProofSoundness`; not a copy |
-| body digests | `pexprCanonical`, `SourceBodyDigest`, `FnTable.root` (over the model) | `bodyFingerprint` (V1, over `CExpr`), `proofSubjectDigestV2`, and a call to `sourceBodyDigestV1Of` (3009) | three different subjects, but **two "body" digests side by side**: the frozen V1 `CExpr` fingerprint still drives `ProofRegistryEntry.bodyFingerprint` and staleness next to `sourceBodyDigestV1Of` / V2. The most likely place for an identity mix-up |
+| body digests | `pexprCanonical`, `SourceBodyDigest`, `FnTable.root` (over the model) | `bodyFingerprint` (V1, over `CExpr`), `proofSubjectDigestV2`, and a call to `sourceBodyDigestV1Of` (3009) | three different subjects, but **two "body" digests side by side**. A registry entry with an `expectedHash` is judged by the V2 subject digest (2896–2901, 2927–2931); one without falls back to the frozen V1 `CExpr` fingerprint (3074–3085). Two staleness rules for one question is the most likely place for an identity mix-up |
 | `PExpr` traversals | `eval`, `pexprCanonical` | `pexprMentions` (837), `pexprCallKeys` (2701) | the same *pattern* duplicated about eight times across the repository (also `BodyIdentity` four times, `ProofSoundness`, the report's `renderPExpr` and `renderPExprAsLean`). There is no shared fold, so each new `PExpr` constructor is a set of hand edits that `check_constructor_coverage.sh` has to police |
 | function tables and identity | `FnTable`, `PFnIdentity`, `AttestedPFnDef`, `lookupById` | `ProofCoreEntry.definitionIdentity`, `FunctionIdentity`, `SpecIdentity`, table-resolution refusals | producer and consumer (model side and source side); `FunctionIdentity` / `SpecIdentity` overlap in concept with `DefinitionIdentity` |
 | attestation and subject binding | `AttestedPFnDef`, `withAttestations` | `SubjectBinding`, `specIsStale`, `validateRegistry` | two halves of one "model and source agree" story, split across the files |
@@ -99,9 +100,12 @@ The overlap is real only in three places (see below).
 
 ## What cannot move without proof churn
 
-Every `proofs/` file imports `Proof.lean` alone, and they use, by name:
-- **the model:** `PExpr`, `PVal`, `PBinOp`, `PFnDef`, `SpecDecl`, `Env`, `FnTable`, `FnTable.root`,
-  `FnTable.withAttestations`, `AttestedPFnDef.of`;
+All 13 `proofs/Examples/*/Proofs.lean` import `Proof.lean` (some import more than it, such as
+`HmacSha256`), none imports `ProofCore.lean`, and `proofs/DesignExamples` imports neither. They use,
+by name:
+- **the model:** `PExpr`, `PVal`, `PFnDef`, `SpecDecl`, `Env`, `FnTable`,
+  `FnTable.withAttestations`, `AttestedPFnDef.of` (`PBinOp` and the table root appear only in
+  comments);
 - **the semantics:** `eval` (including `eval.evalArgs` in simp sets), `evalBinOp`, `bindArgs`,
   `wrapInt` and its lemmas;
 - **the ladder:** `eval_fuel_le`, `eval_while_count`, `eval_while_step_unfold`, the while-step
@@ -121,18 +125,21 @@ These come from whole-word greps, so generic names are approximate; check each b
 
 - **`Proof.lean`:**
   - the tombstone comment at 2638–2645 for the removed `provedFunctions`;
-  - the legacy packet demos (1455–1813), which no `proofs/` file uses. `ClassificationTable` and
-    `TableResolve` reference only three theorems and the two tables, as strings, and gates read them
-    too. The rest is file-local.
-  - basic lemmas (`eval_lit`, `eval_add_lits`, …) and several model helpers (`ctCompareFn`,
-    `fcTagFn`, the `ring*Fn`, `verifyMessageFn`, `parseHeaderFn`, the `evalComputeTag` wrappers) that
-    nothing outside the file names.
+  - the legacy packet demos (1455–1813). No `proofs/` file uses them, but they are not dead: source
+    fixtures name their specifications and theorems (`tests/programs/proof_decode_header.con`,
+    18–34), `ClassificationTable` and `TableResolve` name three theorems and the two tables as
+    strings, and gates read them;
+  - basic lemmas (`eval_lit`, `eval_add_lits`, …), pinned by
+    `scripts/tests/proof_namespace_allowlist.txt` (18–25), and several model helpers (`ctCompareFn`,
+    `fcTagFn`, the `ring*Fn`, `verifyMessageFn`, `parseHeaderFn`). No other Lean module names them,
+    but gate scripts do (for example `check_gate_mutation_coverage.sh`, 1516).
 - **Not dead:** the eleven `SpecDecl`s. No Lean code names them, but
   `scripts/gen/classifications.lean` reads them by reflection.
 - **`ProofCore.lean`:** `FunctionIdentity`, `SpecIdentity`, `SpecSource`, `ExclusionKind`,
   `ObligationStatus.allCanonical`, `ProofCore.findExcluded`, `registryIssuesToDiagnostics`,
   `classifyIneligible` and `admissionRefusalsOf` are not referenced outside the file.
-  `correspondenceInputOf` says "SHADOW. Nothing consumes this."; one other file mentions its name.
+  `correspondenceInputOf` says "SHADOW. Nothing consumes this."; one other Lean file mentions its
+  name, and `check_dependency_edges.sh` (1592) does too.
 
 The dead-code item of the cleanup (a Lean-side unused-declaration finder) is the right tool to
 confirm these, with reflection and proof use treated as live.
@@ -172,13 +179,14 @@ states, instead of the whole pass.
 
 ## Three findings worth acting on before any split
 
-1. **Two body digests side by side.** The frozen V1 `CExpr` fingerprint still decides registry
-   staleness while V1/V2 source-body digests exist next to it (R-0004's territory). Which one
+1. **Two body digests side by side.** Registry staleness is decided by the V2 subject digest for
+   entries with an `expectedHash` and by the frozen V1 `CExpr` fingerprint for entries without one
+   (R-0004's territory). Which one
    decides is the kind of fact that should have one owner. The `DependencyEdge` and `BodyIdentity`
    work already tracks the identity side.
 2. **No shared `PExpr` fold.** About eight exhaustive hand-written walkers. A single
    `PExpr.foldM`, or a `Children` view, would let `pexprMentions`, `pexprCallKeys`,
    `pexprCanonical` and the renderers stop restating the constructor list. This is a structural
    class (one fact kept in several places), not a style point.
-3. **Dead legacy demos.** Removing `Proof.lean` 1455–1813 is churn the owner has deferred; the
-   dead-code ratchet can hold them in its baseline until then.
+3. **Legacy demos.** `Proof.lean` 1455–1813 has no Lean consumer but is pinned by fixtures,
+   strings and gates; retiring it means retiring those too, which is churn the owner has deferred.
