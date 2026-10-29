@@ -9,7 +9,7 @@ behaviour (TRUST-2), capabilities (TRUST-4), `trusted` (TRUST-5), the trusted-mo
 (TRUST-6, pending), moving a value out of raw memory (TRUST-7) and global state (TRUST-8 to TRUST-10). Handle capabilities (`Sink<cap C>`) and callable values with capabilities are
 specified in [HANDLE_CAPABILITIES.md](../language/HANDLE_CAPABILITIES.md) and
 [CALLABLE_VALUES_AND_CAPABILITIES.md](../language/CALLABLE_VALUES_AND_CAPABILITIES.md) until they
-migrate. The design records are [SAFETY.md](../language/SAFETY.md),
+migrate. The design records are [SAFETY.md](../verification/SAFETY.md),
 [CAPABILITY_FACTS.md](../compiler/CAPABILITY_FACTS.md).
 
 ## Rules
@@ -130,6 +130,16 @@ capability-polymorphic function has neither. One rule, `Capabilities.missingCaps
 `capsContain` its boolean view), serves direct calls, calls through a function pointer, method calls,
 calls through a trait bound and the raw-operation gate; where the capability facts live in the
 compiler is [docs/compiler/CAPABILITY_FACTS.md](../compiler/CAPABILITY_FACTS.md).
+
+`Random` is authority over external entropy (the OS or hardware generator), not permission to run
+a pseudo-random generator: a deterministic generator seeded from a value is pure and needs no
+capability. Reserved for later: `Device` (memory-mapped hardware, when freestanding code needs
+it), `Thread` (with the concurrency model) and `Signal` (deferred), recorded in
+`research/language/capability-sandboxing.md` §4a. A capability alias expands at parse time, so the
+rest of the compiler sees only capability names; `Std` is a fixed alias, not a macro system.
+The safety model as a whole (capabilities, `trusted`, `Unsafe`, the audit reports, the proof
+boundary and the high-integrity profile direction) is described in
+[docs/verification/SAFETY.md](../verification/SAFETY.md).
 
 ```con reject name=undeclared-capability code=E0520 stage=core-check pair=declared-capability
 fn needs() with(File) -> Int {

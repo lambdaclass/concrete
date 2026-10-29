@@ -310,7 +310,7 @@ wrapper generation, package/build integration and validation of the advertised A
 The supported surface must grow through the acceptance cases and actual port blockers.
 Keep explicit native adapters available without making every application author write them.
 See [ABI.md](ABI.md) for current layout limits and
-[SAFETY.md](../language/SAFETY.md) for the trust-boundary model.
+[SAFETY.md](../verification/SAFETY.md) for the trust-boundary model.
 
 Primary references informing this direction, checked 2026-10-17/18:
 

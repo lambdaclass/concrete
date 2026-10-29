@@ -11,7 +11,7 @@ Status: active reference
 This document separates what the checker enforces today, what is safe to claim publicly, and what still needs closure. For the full operational semantics, see [MEMORY_SEMANTICS.md](../language/MEMORY_SEMANTICS.md).
 
 For the value/reference categories, see [VALUE_MODEL.md](../language/VALUE_MODEL.md).
-For the broader safety model, see [SAFETY.md](../language/SAFETY.md).
+For the broader safety model, see [SAFETY.md](SAFETY.md).
 For the precise public guarantee statement, see [GUARANTEE_STATEMENT.md](GUARANTEE_STATEMENT.md).
 
 ## What the Checker Enforces Today

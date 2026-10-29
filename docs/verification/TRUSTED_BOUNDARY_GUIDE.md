@@ -196,7 +196,7 @@ The best trusted boundary is one you don't need.
 ## Cross-references
 
 - `docs/platform/FFI.md` — FFI mechanics and authority wrapper patterns
-- `docs/language/SAFETY.md` — the three-way split (capabilities / trusted / Unsafe)
+- `docs/verification/SAFETY.md` — the three-way split (capabilities / trusted / Unsafe)
 - `docs/platform/PREDICTABLE_BOUNDARIES.md` — trusted functions in predictable code
 - `docs/verification/TRUSTED_COMPUTING_BASE.md` — what the compiler trusts vs verifies
 - `docs/spec/statements.md ("Abort and failure")` — cleanup and failure behavior in trusted code

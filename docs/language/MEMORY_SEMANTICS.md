@@ -10,7 +10,7 @@ This document describes the memory and reference model that the checker (`Check.
 
 For the public guarantee boundary, see [MEMORY_GUARANTEES.md](../verification/MEMORY_GUARANTEES.md).
 For value categories and layout, see [VALUE_MODEL.md](VALUE_MODEL.md).
-For the broader safety model, see [SAFETY.md](SAFETY.md).
+For the broader safety model, see [SAFETY.md](../verification/SAFETY.md).
 
 ---
 
@@ -48,7 +48,7 @@ Consequently, safe Concrete has **no uninitialized reads, by construction** —
 there is no uninitialized state for a read to observe, so this needs no
 definite-assignment dataflow analysis; it is a grammar-level guarantee. (The
 only path to indeterminate memory is through `Unsafe`/FFI, where it is an
-explicit, audited assumption — see [SAFETY.md](SAFETY.md) and [FFI.md](../platform/FFI.md).)
+explicit, audited assumption — see [SAFETY.md](../verification/SAFETY.md) and [FFI.md](../platform/FFI.md).)
 Locked by `scripts/tests/check_memory_model.sh`.
 
 ---

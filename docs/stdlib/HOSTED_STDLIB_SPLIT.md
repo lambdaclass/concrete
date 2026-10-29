@@ -7,7 +7,7 @@ This document defines the boundary between the bounded/provable-friendly core st
 For the existing stdlib direction, see [STDLIB.md](STDLIB.md).
 For the three-layer classification, see [EXECUTION_MODEL.md](../platform/EXECUTION_MODEL.md).
 For the freestanding/hosted execution split, see [FREESTANDING_SPLIT.md](../platform/FREESTANDING_SPLIT.md).
-For the trust model, see [SAFETY.md](../language/SAFETY.md) and [TRUSTED_COMPUTING_BASE.md](../verification/TRUSTED_COMPUTING_BASE.md).
+For the trust model, see [SAFETY.md](../verification/SAFETY.md) and [TRUSTED_COMPUTING_BASE.md](../verification/TRUSTED_COMPUTING_BASE.md).
 
 ---
 

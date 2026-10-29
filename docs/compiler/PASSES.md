@@ -2,7 +2,7 @@
 
 This document describes each pass in the Concrete compiler pipeline, its signature, preconditions, postconditions, error conditions, and the invariant it establishes.
 
-For the safety model enforced by these passes, see [SAFETY.md](../language/SAFETY.md).
+For the safety model enforced by these passes, see [SAFETY.md](../verification/SAFETY.md).
 
 ## Pipeline Overview
 
@@ -630,7 +630,7 @@ The following report mode is explicitly deferred — named here so its scope is 
 
 | Mode | Purpose | Pipeline stage | Status |
 |------|---------|---------------|--------|
-| `--report high-integrity` | High-integrity profile summary: which functions could run in a no-alloc/no-panic/bounded-stack environment. | Post-Mono | Profile defined in `docs/language/SAFETY.md`; compiler enforcement not yet implemented |
+| `--report high-integrity` | High-integrity profile summary: which functions could run in a no-alloc/no-panic/bounded-stack environment. | Post-Mono | Profile defined in `docs/verification/SAFETY.md`; compiler enforcement not yet implemented |
 
 These are audit-oriented modes — they answer questions about what the program does, not what it should do. No mode should become a second semantic authority; all should consume validated artifacts from the existing pipeline.
 

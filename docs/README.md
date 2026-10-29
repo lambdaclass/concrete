@@ -42,7 +42,7 @@ Use these files as the primary reference once a design has moved out of explorat
 
 - [PROJECT.md](project/PROJECT.md) — the project in one document: [why Concrete](project/PROJECT.md#why-concrete) (a direct overview for C and Rust developers), [identity](project/PROJECT.md#identity) (what Concrete is optimizing for, where it intends to differentiate, and what it is not trying to be), [principles](project/PROJECT.md#principles) (minimalist systems programming, no GC, linear/resource-aware ownership, explicit boundaries, predictable execution, Lean-backed proof direction), [design policy](project/PROJECT.md#design-policy) (feature-admission criteria and design filter), [language shape](project/PROJECT.md#language-shape) (long-term structural commitments) and [language decisions](project/PROJECT.md#language-decisions) (first-class "no" and "not yet" decisions)
 - [INFLUENCES.md](project/INFLUENCES.md) — which external language ideas Concrete copies, adapts, or rejects
-- [SAFETY.md](language/SAFETY.md) — capabilities, `trusted`, `Unsafe`, proof boundary, and high-integrity direction
+- [SAFETY.md](verification/SAFETY.md) — capabilities, `trusted`, `Unsafe`, proof boundary, and high-integrity direction
 - [HANDLE_CAPABILITIES.md](language/HANDLE_CAPABILITIES.md) — R-0484 design: `with(...)` as the complete list of external authority, handle capabilities (`Writer<C>`), `trusted` and the foreign boundary
 - [PROFILES.md](platform/PROFILES.md) — named user-facing profiles: `safe`, `predictable`, `provable`, and the long-term `high-integrity` direction
 - [CLAIMS_TODAY.md](verification/CLAIMS_TODAY.md) — the short public claim surface: what Concrete claims today, what it does not, and what remains trusted

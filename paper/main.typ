@@ -428,7 +428,7 @@ Concrete is an attempt to make systems programming more inspectable by default. 
 
 [1] Compiler Architecture. `docs/compiler/ARCHITECTURE.md`.
 
-[2] Safety Model. `docs/language/SAFETY.md`.
+[2] Safety Model. `docs/verification/SAFETY.md`.
 
 [3] Execution Model. `docs/platform/EXECUTION_MODEL.md`.
 

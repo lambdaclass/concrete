@@ -26,7 +26,7 @@ PAGES = {
     "PASSES.md": ("Compiler Pass Contracts", "docs/compiler/PASSES.md"),
     "PROJECT.md": ("Project", "docs/project/PROJECT.md"),
     "PROVABLE_SUBSET.md": ("Provable Subset", "docs/verification/PROVABLE_SUBSET.md"),
-    "SAFETY.md": ("Safety", "docs/language/SAFETY.md"),
+    "SAFETY.md": ("Safety", "docs/verification/SAFETY.md"),
     "STDLIB.md": ("Stdlib", "docs/stdlib/STDLIB.md"),
     "TESTING.md": ("Testing", "docs/compiler/TESTING.md"),
     "VALUE_MODEL.md": ("Value Model", "docs/language/VALUE_MODEL.md"),

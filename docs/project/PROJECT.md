@@ -891,7 +891,7 @@ Concrete gets stronger by becoming sharper, not merely bigger.
 
 This section makes Concrete's long-term language shape decisions explicit instead of letting them
 emerge from local convenience. It draws the commitments of the sections above, the
-[language decisions](#language-decisions) below and [SAFETY.md](../language/SAFETY.md) into a
+[language decisions](#language-decisions) below and [SAFETY.md](../verification/SAFETY.md) into a
 single picture of what Concrete is becoming. The rules it commits to are stated in the language
 specification, [docs/spec](../spec/README.md).
 
@@ -931,7 +931,7 @@ Semantic effects (file, network, allocation, etc.) are declared in function sign
 - `trusted` — audited pointer-level containment behind safe APIs
 - `with(Unsafe)` — foreign boundary authority
 
-Each concept does one thing. They do not overlap. See [SAFETY.md](../language/SAFETY.md).
+Each concept does one thing. They do not overlap. See [SAFETY.md](../verification/SAFETY.md).
 
 #### Ownership model: linear by default
 
@@ -1170,7 +1170,7 @@ informational benchmark scripts cannot substantiate it.
 
 **Status:** Decided (2026-03-15)
 
-`trusted` permits exactly four pointer-level operations (arithmetic, deref, assign, cast) without `with(Unsafe)`. It does not suppress capabilities, does not permit extern calls, does not relax linearity. See [SAFETY.md](../language/SAFETY.md).
+`trusted` permits exactly four pointer-level operations (arithmetic, deref, assign, cast) without `with(Unsafe)`. It does not suppress capabilities, does not permit extern calls, does not relax linearity. See [SAFETY.md](../verification/SAFETY.md).
 
 ### Deferred Decisions
 
@@ -1282,7 +1282,7 @@ selected.
 
 ## Related documents
 
-- [SAFETY.md](../language/SAFETY.md): the three-way trust/capability/unsafe model
+- [SAFETY.md](../verification/SAFETY.md): the three-way trust/capability/unsafe model
 - [PROVABLE_SUBSET.md](../verification/PROVABLE_SUBSET.md): the proof-eligible subset definition
 - [INFLUENCES.md](INFLUENCES.md): what Concrete copies, adapts or rejects from other languages
 - [ABSENCE_IS_NOT_A_FACT.md](ABSENCE_IS_NOT_A_FACT.md): the gated rule that an unknown value never

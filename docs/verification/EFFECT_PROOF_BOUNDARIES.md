@@ -3,7 +3,7 @@
 Status: canonical reference — defines the semantic scopes in which proof and
 other evidence apply, and how effect/trust boundaries constrain those scopes.
 
-For the safety model and three-way split, see [SAFETY.md](../language/SAFETY.md).
+For the safety model and three-way split, see [SAFETY.md](SAFETY.md).
 For the provable subset definition, see [PROVABLE_V1.md](PROVABLE_V1.md).
 For memory/ownership guarantees, see [MEMORY_GUARANTEES.md](MEMORY_GUARANTEES.md).
 For the execution model and runtime boundary, see [EXECUTION_MODEL.md](../platform/EXECUTION_MODEL.md).

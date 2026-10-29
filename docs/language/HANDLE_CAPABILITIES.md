@@ -142,7 +142,7 @@ other than `Unsafe` that its body uses must appear in its header.
 foreign boundary "even inside trusted code", and a `trusted fn` calling a plain `extern`
 still needs `with(Unsafe)`. The rule is stated in three places:
 
-- `docs/language/SAFETY.md` (the table row for `with(Unsafe)`)
+- `docs/verification/SAFETY.md` (the table row for `with(Unsafe)`)
 - `docs/platform/FFI.md:109`
 - `docs/compiler/CAPABILITY_FACTS.md:142-146`
 
@@ -426,7 +426,7 @@ per the repository's gate discipline.
 
 ## 9. Documents and gates that change
 
-- `docs/language/SAFETY.md`, `docs/platform/FFI.md`, `docs/compiler/CAPABILITY_FACTS.md`:
+- `docs/verification/SAFETY.md`, `docs/platform/FFI.md`, `docs/compiler/CAPABILITY_FACTS.md`:
   the R2 reversal and the R4 criterion.
 - `tests/programs/error_trusted_extern_needs_unsafe.con`, `error_trusted_no_extern.con`:
   replaced by `trusted_absorbs_extern_unsafe.con` and

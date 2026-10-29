@@ -8,7 +8,7 @@ Status: stable reference
 
 This document describes the current foreign-function interface boundary and the role of `Unsafe` in Concrete.
 
-For the full safety model (capabilities, trusted, Unsafe, proof boundary), see [SAFETY.md](../language/SAFETY.md). For layout and representation rules, see [ABI.md](ABI.md). For active priorities, see [../ROADMAP.md](../../ROADMAP.md).
+For the full safety model (capabilities, trusted, Unsafe, proof boundary), see [SAFETY.md](../verification/SAFETY.md). For layout and representation rules, see [ABI.md](ABI.md). For active priorities, see [../ROADMAP.md](../../ROADMAP.md).
 
 The planned package workflow for C, Rust and Zig is described in
 [FFI_GLUE.md](FFI_GLUE.md): applications declare a dependency and use normal imports;

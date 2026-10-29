@@ -191,7 +191,7 @@ each one sharp.
   permission to run a pure PRNG. A deterministic PRNG seeded from a value is pure
   and needs no capability; only drawing real entropy requires `with(Random)`.
   This keeps the predictable/`ProvableV1` boundary honest. (Clarify in
-  `docs/language/SAFETY.md`.)
+  `docs/verification/SAFETY.md`.)
 - **`Signal` — deferred.** OS signal handling (`with(Signal)`) is deferred: its
   control-flow/async-safety semantics are subtle and no current workload needs
   it. Revisit only with concrete evidence.

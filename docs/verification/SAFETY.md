@@ -1,5 +1,7 @@
 # Safety Model
 
+Moved from docs/language: the overview of the safety model, its claims, audit reports and the high-integrity profile direction; the rules are TRUST-1 to TRUST-7 of docs/spec/trusted.md and FFI-1 to FFI-5 of docs/spec/ffi.md.
+
 The rules are in [docs/spec/trusted.md](../spec/trusted.md) (TRUST-1 to TRUST-6) and
 [docs/spec/ffi.md](../spec/ffi.md) (FFI-1 to FFI-5); this document is the design record of the
 safety model and keeps its claims, audit reports and the high-integrity profile direction.
@@ -8,14 +10,14 @@ Status: stable reference
 
 This document is the central reference for Concrete's safety model. It defines the organizing principles, explains how the pieces fit together, and points to the detailed references for each subsystem.
 
-For ownership and linearity, see [VALUE_MODEL.md](VALUE_MODEL.md).
-For the current safe-memory guarantee boundary, see [MEMORY_GUARANTEES.md](../verification/MEMORY_GUARANTEES.md).
+For ownership and linearity, see [VALUE_MODEL.md](../language/VALUE_MODEL.md).
+For the current safe-memory guarantee boundary, see [MEMORY_GUARANTEES.md](MEMORY_GUARANTEES.md).
 For named profiles (`safe`, `predictable`, `provable`, `high-integrity`), see [PROFILES.md](../platform/PROFILES.md).
-For the short public claim surface, see [CLAIMS_TODAY.md](../verification/CLAIMS_TODAY.md).
-For explicit trusted-computing-base accounting, see [TRUSTED_COMPUTING_BASE.md](../verification/TRUSTED_COMPUTING_BASE.md).
-For effect/trust proof boundaries, see [EFFECT_PROOF_BOUNDARIES.md](../verification/EFFECT_PROOF_BOUNDARIES.md).
-For the precise public guarantee statement, see [GUARANTEE_STATEMENT.md](../verification/GUARANTEE_STATEMENT.md).
-For the proof-claim taxonomy, see [CLAIM_TAXONOMY.md](../verification/CLAIM_TAXONOMY.md).
+For the short public claim surface, see [CLAIMS_TODAY.md](CLAIMS_TODAY.md).
+For explicit trusted-computing-base accounting, see [TRUSTED_COMPUTING_BASE.md](TRUSTED_COMPUTING_BASE.md).
+For effect/trust proof boundaries, see [EFFECT_PROOF_BOUNDARIES.md](EFFECT_PROOF_BOUNDARIES.md).
+For the precise public guarantee statement, see [GUARANTEE_STATEMENT.md](GUARANTEE_STATEMENT.md).
+For the proof-claim taxonomy, see [CLAIM_TAXONOMY.md](CLAIM_TAXONOMY.md).
 For FFI, trusted boundaries, and capability aliases, see [FFI.md](../platform/FFI.md).
 For diagnostics and error recovery, see [DIAGNOSTICS.md](../compiler/DIAGNOSTICS.md).
 For pass contracts and report modes, see [PASSES.md](../compiler/PASSES.md).
@@ -86,7 +88,7 @@ impl Vec<T> {
 
 **What `trusted` does not do:**
 - Does **not** suppress capabilities — callers still need the declared capabilities
-- **Does** absorb the `Unsafe` of calling a plain `extern fn` (since R-0484, 2026-10-01): `trusted` vouches for memory safety. It absorbs **nothing else** — the binding's declared effects (`extern fn write(..) with(Console)`) still bind the trusted caller, and every `extern` must declare them (E0116). See [HANDLE_CAPABILITIES.md](HANDLE_CAPABILITIES.md) R2–R3
+- **Does** absorb the `Unsafe` of calling a plain `extern fn` (since R-0484, 2026-10-01): `trusted` vouches for memory safety. It absorbs **nothing else** — the binding's declared effects (`extern fn write(..) with(Console)`) still bind the trusted caller, and every `extern` must declare them (E0116). See [HANDLE_CAPABILITIES.md](../language/HANDLE_CAPABILITIES.md) R2–R3
 - Does **not** relax linearity rules — linear values follow the same ownership rules everywhere
 - Does **not** hide any caller-visible semantic fact
 - `trusted extern fn` is a separate, narrower mechanism: a binding safe for every argument its types permit, with no undeclared effects (e.g., `sqrt`). Its declared effects still bind every caller
@@ -100,9 +102,9 @@ would confer trust on methods that never declared it. The stdlib demonstrates th
 throughout: `Vec<T>`'s and `HashMap<K, V>`'s raw-storage methods, `TextFile`'s I/O methods,
 `trusted fn print/println`. See [FFI.md](../platform/FFI.md) for wrapper patterns.
 
-### Unsafe-marked modules and global state (decided 2026-10-23, not implemented)
+### Unsafe-marked modules and global state (proposed 2026-10-23; owner decisions OD7 and OD8, open)
 
-Decided in [TIGHTENING_DECISIONS D8 and D10](../project/TIGHTENING_DECISIONS.md#46-decisions-of-2026-10-23-second-set):
+Proposed in [TIGHTENING_DECISIONS D8 and D10](../project/TIGHTENING_DECISIONS.md#46-decisions-of-2026-10-23-second-set):
 
 - **`trusted mod name { ... }`** marks a module as part of the trusted base. Only a marked module
   may contain `trusted` functions, `extern` declarations, raw-pointer operations and global cells.
@@ -136,7 +138,7 @@ Concrete uses linear types by default for structs and enums. This provides compi
 - `borrow(x) { ... }` creates scoped references without consuming
 - `Heap<T>` is linear — must be freed, cannot be silently dropped
 
-Primitives, `&T`, raw pointers, and function pointers are Copy. See [VALUE_MODEL.md](VALUE_MODEL.md) for the full value category table.
+Primitives, `&T`, raw pointers, and function pointers are Copy. See [VALUE_MODEL.md](../language/VALUE_MODEL.md) for the full value category table.
 
 ### Current Claim Boundary
 
@@ -201,8 +203,8 @@ does not by itself imply termination or absence of traps.
 **Excluded:** Functions with capabilities, trusted/unsafe functions, extern functions, entry points.
 
 `Concrete/Proof/Proof.lean` defines formal evaluation semantics for the admitted
-authority-free Core fragment. See [PROVABLE_V1.md](../verification/PROVABLE_V1.md) for the
-canonical admitted surface, [PROVABLE_SUBSET.md](../verification/PROVABLE_SUBSET.md) for its
+authority-free Core fragment. See [PROVABLE_V1.md](PROVABLE_V1.md) for the
+canonical admitted surface, [PROVABLE_SUBSET.md](PROVABLE_SUBSET.md) for its
 architecture, and [ARCHITECTURE.md](../compiler/ARCHITECTURE.md) for the proof pipeline.
 
 ## High-Integrity Profile Direction
@@ -301,10 +303,10 @@ High-Integrity ── future profile: same language, stricter rules
 | Capabilities | This document, [FFI.md](../platform/FFI.md) | [PASSES.md](../compiler/PASSES.md), [STDLIB.md](../stdlib/STDLIB.md) |
 | Trusted boundaries | [FFI.md](../platform/FFI.md) | This document, [STDLIB.md](../stdlib/STDLIB.md) |
 | Capability aliases | [FFI.md](../platform/FFI.md) | [PASSES.md](../compiler/PASSES.md) |
-| Linearity / ownership | [VALUE_MODEL.md](VALUE_MODEL.md) | This document |
+| Linearity / ownership | [VALUE_MODEL.md](../language/VALUE_MODEL.md) | This document |
 | Error model | [DIAGNOSTICS.md](../compiler/DIAGNOSTICS.md) | [PASSES.md](../compiler/PASSES.md) |
 | Report modes | [PASSES.md](../compiler/PASSES.md) | This document |
 | Proof boundary | [ARCHITECTURE.md](../compiler/ARCHITECTURE.md) | This document, [PASSES.md](../compiler/PASSES.md) |
 | Execution model | [EXECUTION_MODEL.md](../platform/EXECUTION_MODEL.md) | [STDLIB.md](../stdlib/STDLIB.md) |
 | High-integrity profile | This document | [IDENTITY.md](../project/IDENTITY.md), [EXECUTION_MODEL.md](../platform/EXECUTION_MODEL.md) |
-| ABI / FFI safety | [ABI.md](../platform/ABI.md) | [FFI.md](../platform/FFI.md), [VALUE_MODEL.md](VALUE_MODEL.md) |
+| ABI / FFI safety | [ABI.md](../platform/ABI.md) | [FFI.md](../platform/FFI.md), [VALUE_MODEL.md](../language/VALUE_MODEL.md) |

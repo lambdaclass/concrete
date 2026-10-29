@@ -73,7 +73,7 @@ Legacy H-series and cross-cutting safety boundaries are indexed in
 [KNOWN_HOLES.md](KNOWN_HOLES.md); numbered defects and their current status live
 in [bugs/README.md](../bugs/README.md).
 
-References: [GUARANTEE_STATEMENT.md](GUARANTEE_STATEMENT.md), [MEMORY_GUARANTEES.md](MEMORY_GUARANTEES.md), [SAFETY.md](../language/SAFETY.md), [KNOWN_HOLES.md](KNOWN_HOLES.md)
+References: [GUARANTEE_STATEMENT.md](GUARANTEE_STATEMENT.md), [MEMORY_GUARANTEES.md](MEMORY_GUARANTEES.md), [SAFETY.md](SAFETY.md), [KNOWN_HOLES.md](KNOWN_HOLES.md)
 
 ---
 
