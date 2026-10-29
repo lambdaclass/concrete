@@ -133,14 +133,14 @@ Concrete/IR/SSAVerify.lean	497	HeapArray	builtin-type-name	the builtin TypeId (C
 Concrete/Interp/Interp.lean	893	ptr	builtin-layout-field	named field constants of the builtin Vec/String layout	match fields.find? (·.1 == "ptr"), fields.find? (·.1 == "len"), fields.find? (·.1 == "cap") with
 Concrete/Interp/Interp.lean	893	len	builtin-layout-field	named field constants of the builtin Vec/String layout	match fields.find? (·.1 == "ptr"), fields.find? (·.1 == "len"), fields.find? (·.1 == "cap") with
 Concrete/Interp/Interp.lean	893	cap	builtin-layout-field	named field constants of the builtin Vec/String layout	match fields.find? (·.1 == "ptr"), fields.find? (·.1 == "len"), fields.find? (·.1 == "cap") with
-Concrete/Interp/Interp.lean	1784	abs	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	|| (name == "abs" && what == "the argument") then 4 else 8
+Concrete/Interp/Interp.lean	1784	abs	foreign-c-name	legitimate: the interpreter models a C library function by its C symbol	|| (name == "abs" && what == "the argument") then 4 else 8
 Concrete/Interp/Interp.lean	1784	the argument	message-text-as-key	an enum for the kind; the text is rendered from it	|| (name == "abs" && what == "the argument") then 4 else 8
 Concrete/Interp/Interp.lean	1939	r	boundary-parsing	legitimate: parsing a boolean spelling	if mode != "r" && (hostReadFile rawPath matches .bytes _) && hostMultiLinked path then
 Concrete/Interp/Interp.lean	1951	r	boundary-parsing	legitimate: parsing a boolean spelling	if st.handles.any (fun (_, h) => h.path == path && (h.writable || mode != "r")) then
 Concrete/Interp/Interp.lean	1972	r	boundary-parsing	legitimate: parsing a boolean spelling	| .directory => if mode == "r" then fail s!"interp: fopen of the directory '{path}' for reading is not modelled" else pure none
-Concrete/Interp/Interp.lean	1995	fread	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	if name == "fread" then
-Concrete/Interp/Interp.lean	2081	abs	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	let ty : Ty := if name == "abs" then .i32 else .int
-Concrete/Interp/Interp.lean	2084	abs	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	if v == (if name == "abs" then -(2 ^ 31 : Int) else -(2 ^ 63 : Int)) then
+Concrete/Interp/Interp.lean	1995	fread	foreign-c-name	legitimate: the interpreter models a C library function by its C symbol	if name == "fread" then
+Concrete/Interp/Interp.lean	2081	abs	foreign-c-name	legitimate: the interpreter models a C library function by its C symbol	let ty : Ty := if name == "abs" then .i32 else .int
+Concrete/Interp/Interp.lean	2084	abs	foreign-c-name	legitimate: the interpreter models a C library function by its C symbol	if v == (if name == "abs" then -(2 ^ 31 : Int) else -(2 ^ 63 : Int)) then
 Concrete/Interp/Interp.lean	2543	clock_monotonic_ns	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	if fnName == "clock_monotonic_ns" then
 Concrete/Interp/Interp.lean	2565	ptr	builtin-layout-field	named field constants of the builtin Vec/String layout	if f == "ptr" then (f, .ptr blk 0) else if f == "cap" then (f, .int newCap .uint) else (f, v))
 Concrete/Interp/Interp.lean	2565	cap	builtin-layout-field	named field constants of the builtin Vec/String layout	if f == "ptr" then (f, .ptr blk 0) else if f == "cap" then (f, .int newCap .uint) else (f, v))

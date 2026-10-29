@@ -27,13 +27,14 @@ the source column keeps the line as written, so read it with a plain split, not 
 | attribute-name | 51 | Parser (43), Report, ObligationCore, Main | parse attributes once into a typed attribute record |
 | sentinel-empty | 41 | Report, Check, Elab, ProofCore, ReportInterface, ReportBase | `Option` in the type where `""` stands for absent |
 | sentinel-wildcard | 26 | Check, Elab, Lower, Locals, ElabVerify, Interp, Parser | one definition, `isWildcardBinder` |
-| intrinsic-name | 25 | EmitSSA (9), Interp, Elab, AssumptionSummary, ReportInterface, Resolve | dispatch on `IntrinsicId` |
+| intrinsic-name | 21 | EmitSSA (9), Elab, AssumptionSummary, ReportInterface, Resolve, CoreCheck, Interp | dispatch on `IntrinsicId` |
 | reserved-name | 18 | Project, Elab, Resolve, Format, Check, Interp | one named definition per reserved spelling |
 | builtin-type-name | 18 | CheckHelpers, SSAVerify, Coherence, CheckError (`"()"`), Lower | the builtin `TypeId` (Coherence already resolves `.builtin` ids) |
 | capability-name | 11 | Report, ProofCore, Parser | a capability identity; `CapSet` itself still carries strings |
 | test-harness | 8 | PipelineTest | legitimate: the harness names its own fixture binders |
 | builtin-layout-field | 6 | Interp | named field constants of the builtin `Vec`/`String` layout |
 | message-text-as-key | 5 | Check (`"an extern declaration"` twice, `"REF-1@1"`), Verify (`"post-elab"`), Interp (`"the argument"`) | an enum for the kind, with the text rendered from it |
+| foreign-c-name | 4 | Interp (`fread`, `abs`) | legitimate: the interpreter models a C library function by its C symbol |
 | builtin-trait-name | 3 | CheckHelpers | a builtin-trait identity |
 | other | 3 | TypeSpelling (a doc comment), PeekType (tuple field `0`), TermIR (a test `example`) | keep |
 
@@ -87,6 +88,15 @@ because a pattern cannot name a definition.
 interpreter outputs byte-identical (8850), every report kind byte-identical after normalisation
 (14310), `run_tests` 2883 passed / 0 failed, golden 54/0, fast surface 13/0, totality 12/0.
 
+## Slice 3 (behaviour-preserving)
+
+- **The interpreter's C integer widths.** `evalExtern`'s argument reader chose the C parameter's
+  width (4 or 8 bytes) by matching the argument's description in messages (`"the descriptor"`,
+  `"the byte"`, …). Every call site now states the width; the description is used in messages
+  only. Each of the 20 call sites keeps the width the table gave it.
+- **The interpreter's clock refusal** dispatches on `IntrinsicId` (`clock_monotonic_ns` has one
+  spelling).
+
 ## Next slices, in order
 
 1. **Remaining sentinels.** In Resolve, `baseDir == ""` (Project) and `structName == ""` /
@@ -96,11 +106,10 @@ interpreter outputs byte-identical (8850), every report kind byte-identical afte
 3. **Builtin type, trait and field spellings.** In Check, SSAVerify, Coherence, CheckError, Lower
    and Interp, compare against the builtin `TypeId` and not the spelling (see the candidate
    defect below).
-4. **Interp intrinsic names.** `clock_monotonic_ns`, `fread` and `abs` dispatch on `IntrinsicId`.
-5. **Message text as a key.** In Check (`"an extern declaration"`, `"REF-1@1"`), Verify
-   (`"post-elab"`) and Interp (`"the argument"`), carry the kind as data.
-6. **Attributes.** One typed attribute record parsed once in the parser.
-7. **Report vocabulary.** After the report split lands, statuses and verdicts become enums.
+4. **Message text as a key.** In Check (`"an extern declaration"`, `"REF-1@1"`) and Verify
+   (`"post-elab"`), carry the kind as data.
+5. **Attributes.** One typed attribute record parsed once in the parser.
+6. **Report vocabulary.** After the report split lands, statuses and verdicts become enums.
 
 Boundary parsing stays as it is.
 

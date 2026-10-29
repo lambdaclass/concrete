@@ -1773,15 +1773,13 @@ def evalExtern (cx : Ctx) (env : Env) (name : String) (args : List IVal) : IM (E
     | _ => fail s!"interp: {name}: argument is not a FILE pointer"
   let setHandle (blk : Nat) (h : FileHandle) : IM Unit :=
     modify fun st => { st with handles := st.handles.map fun (b, x) => if b == blk then (b, h) else (b, x) }
-  -- An integer argument, as the C parameter receives it: the C parameter's width (4 bytes for
-  -- an `int`, 8 for `size_t`, `long`, `off_t`) must not exceed the declared argument's, whose
-  -- missing high bits the C function would read unspecified; a wider declaration is truncated
-  -- by the caller below. Anything but an integer (a pointer declared where C takes an
-  -- integer) is refused.
-  let int (v : IVal) (what : String) : IM Int := do
-    let cWidth : Nat :=
-      if ["the descriptor", "the origin", "the status", "the index", "the character", "the byte"].contains what
-        || (name == "abs" && what == "the argument") then 4 else 8
+  -- An integer argument, as the C parameter receives it: the C parameter's width `cWidth` (4
+  -- bytes for an `int`, 8 for `size_t`, `long`, `off_t`) must not exceed the declared argument's,
+  -- whose missing high bits the C function would read unspecified; a wider declaration is
+  -- truncated by the caller below. Anything but an integer (a pointer declared where C takes an
+  -- integer) is refused. `what` names the argument in messages only; each call site states the
+  -- C parameter's width.
+  let int (v : IVal) (what : String) (cWidth : Nat) : IM Int := do
     match v with
     | .int n ty =>
       if !(IntArith.isIntTy ty || ty == .char) then
@@ -1801,14 +1799,14 @@ def evalExtern (cx : Ctx) (env : Env) (name : String) (args : List IVal) : IM (E
     | _ => fail s!"interp: {name}: an argument that is not an f64 (the C function takes a double) is not modelled"
   match name, args with
   | "malloc", [n] => do
-    let size := (← int n "the size") % 2 ^ 64
+    let size := (← int n "the size" 8) % 2 ^ 64
     match allocVerdict size with
     | .null => return (env, .int 0 (.ptrMut .u8))
     | .unknown => fail s!"interp: whether malloc({size}) succeeds depends on the machine, which is not modelled"
     | .ok => return (env, .ptr (← allocBlock size.toNat s!"malloc({size})") 0)
   | "calloc", [n, sz] => do
     -- calloc checks the product for overflow and returns NULL.
-    let size := ((← int n "the count") % 2 ^ 64) * ((← int sz "the size") % 2 ^ 64)
+    let size := ((← int n "the count" 8) % 2 ^ 64) * ((← int sz "the size" 8) % 2 ^ 64)
     match allocVerdict size with
     | .null => return (env, .int 0 (.ptrMut .u8))
     | .unknown => fail s!"interp: whether calloc of {size} bytes succeeds depends on the machine, which is not modelled"
@@ -1817,7 +1815,7 @@ def evalExtern (cx : Ctx) (env : Env) (name : String) (args : List IVal) : IM (E
     writeBytes cx blk 0 (ByteArray.mk (Array.replicate size.toNat 0))
     return (env, .ptr blk 0)
   | "realloc", [p, n] => do
-    let sizeI := (← int n "the size") % 2 ^ 64
+    let sizeI := (← int n "the size" 8) % 2 ^ 64
     match allocVerdict sizeI with
     | .null => return (env, .int 0 (.ptrMut .u8))
     | .unknown => fail s!"interp: whether realloc to {sizeI} bytes succeeds depends on the machine, which is not modelled"
@@ -1839,7 +1837,7 @@ def evalExtern (cx : Ctx) (env : Env) (name : String) (args : List IVal) : IM (E
     | .ptr blk off => freeBlock blk off; return (env, .unit)
     | _ => fail "interp: free of a value that is not a heap pointer"
   | "memcpy", [d, s, n] | "memmove", [d, s, n] => do
-    let n := ((← int n "the length") % (2 : Int) ^ 64).toNat
+    let n := ((← int n "the length" 8) % (2 : Int) ^ 64).toNat
     match ← pure d, ← pure s with
     | .ptr db doff, .ptr sb soff => copyMem cx db doff sb soff n; return (env, d)
     | dv, sv =>
@@ -1848,14 +1846,14 @@ def evalExtern (cx : Ctx) (env : Env) (name : String) (args : List IVal) : IM (E
       let env ← ptrWriteBytes cx env dv bytes name
       return (env, d)
   | "memset", [p, c, n] => do
-    let n := ((← int n "the length") % (2 : Int) ^ 64).toNat
-    let c := ((← int c "the byte") % 256).toNat.toUInt8
+    let n := ((← int n "the length" 8) % (2 : Int) ^ 64).toNat
+    let c := ((← int c "the byte" 4) % 256).toNat.toUInt8
     let env ← ptrWriteBytes cx env p (ByteArray.mk (Array.replicate n c)) name
     return (env, p)
   | "memcmp", [a, b, n] => do
     -- The sign is what C specifies; the magnitude is the difference of the first differing
     -- bytes, which is what the C libraries of the supported platforms return.
-    let n := ((← int n "the length") % (2 : Int) ^ 64).toNat
+    let n := ((← int n "the length" 8) % (2 : Int) ^ 64).toNat
     let ab ← ptrReadBytes cx env a n name
     let bb ← ptrReadBytes cx env b n name
     let diff := (List.range n).findSome? fun k =>
@@ -1869,12 +1867,12 @@ def evalExtern (cx : Ctx) (env : Env) (name : String) (args : List IVal) : IM (E
     -- puts returns "a nonnegative number": '\n' on Darwin's libc, the count written on glibc.
     return (env, .int (if System.Platform.isOSX then 10 else bytes.size + 1) .i32)
   | "putchar", [c] => do
-    let c := ((← int c "the character") % 256).toNat
+    let c := ((← int c "the character" 4) % 256).toNat
     emitBytes (ByteArray.mk #[c.toUInt8])
     return (env, .int c .i32)
   | "write", [fd, buf, n] => do
-    let fd := IntArith.wrapToType .i32 (← int fd "the descriptor")
-    let nI := (← int n "the length") % 2 ^ 64
+    let fd := IntArith.wrapToType .i32 (← int fd "the descriptor" 4)
+    let nI := (← int n "the length" 8) % 2 ^ 64
     -- A count past SSIZE_MAX (Darwin: INT_MAX) is EINVAL.
     if nI > (if System.Platform.isOSX then 2 ^ 31 - 1 else 2 ^ 63 - 1) then return (env, .int (-1) .int)
     let n := nI.toNat
@@ -1884,10 +1882,10 @@ def evalExtern (cx : Ctx) (env : Env) (name : String) (args : List IVal) : IM (E
     else fail s!"interp: write to descriptor {fd} is not modelled (only stdout and stderr)"
     return (env, .int n .int)
   | "read", [fd, buf, n] => do
-    let fd := IntArith.wrapToType .i32 (← int fd "the descriptor")
+    let fd := IntArith.wrapToType .i32 (← int fd "the descriptor" 4)
     if fd != 0 then fail s!"interp: read from descriptor {fd} is not modelled (only stdin)"
     if (← get).stdinTty then fail "interp: reading standard input from a terminal is not modelled; redirect it from a file"
-    let nI := (← int n "the length") % 2 ^ 64
+    let nI := (← int n "the length" 8) % 2 ^ 64
     if nI > (if System.Platform.isOSX then 2 ^ 31 - 1 else 2 ^ 63 - 1) then return (env, .int (-1) .int)
     let n := nI.toNat
     -- `read(0, buf, 0)` reads nothing: the source is not pulled.
@@ -1986,8 +1984,8 @@ def evalExtern (cx : Ctx) (env : Env) (name : String) (args : List IVal) : IM (E
   | "fread", [buf, sz, cnt, f] | "fwrite", [buf, sz, cnt, f] => do
     let blk ← fileBlock f
     let some h := (← get).handles.lookup blk | fail s!"interp: {name} on a closed or unknown FILE"
-    let size := ((← int sz "the size") % (2 : Int) ^ 64).toNat
-    let count := ((← int cnt "the count") % (2 : Int) ^ 64).toNat
+    let size := ((← int sz "the size" 8) % (2 : Int) ^ 64).toNat
+    let count := ((← int cnt "the count" 8) % (2 : Int) ^ 64).toNat
     let n := size * count
     -- An element size times count past 2^64 overflows `size_t`; what the C library does then
     -- differs between libraries, so it is refused.
@@ -2015,8 +2013,8 @@ def evalExtern (cx : Ctx) (env : Env) (name : String) (args : List IVal) : IM (E
   | "fseek", [f, o, w] => do
     let blk ← fileBlock f
     let some h := (← get).handles.lookup blk | fail "interp: fseek on a closed or unknown FILE"
-    let off := IntArith.wrapToType .int (← int o "the offset")
-    let origin := IntArith.wrapToType .i32 (← int w "the origin")
+    let off := IntArith.wrapToType .int (← int o "the offset" 8)
+    let origin := IntArith.wrapToType .i32 (← int w "the origin" 4)
     -- SEEK_SET, SEEK_CUR, SEEK_END; any other origin is EINVAL (-1).
     if origin < 0 || origin > 2 then return (env, .int (-1) .i32)
     let base : Int := match origin with
@@ -2053,10 +2051,10 @@ def evalExtern (cx : Ctx) (env : Env) (name : String) (args : List IVal) : IM (E
     releaseBlock blk
     return (env, .int 0 .i32)
   | "abort", [] => fail "interp: abort() called (the binary aborts)"
-  | "exit", [code] => throw (.exit (IntArith.wrapToType .i32 (← int code "the status")))
+  | "exit", [code] => throw (.exit (IntArith.wrapToType .i32 (← int code "the status" 4)))
   | "__concrete_get_argc", [] => return (env, .int (cx.args.length + 1) .i32)
   | "__concrete_get_argv", [i] => do
-    let i := IntArith.wrapToType .i32 (← int i "the index")
+    let i := IntArith.wrapToType .i32 (← int i "the index" 4)
     let all := cx.argv0 :: cx.args
     if i < 0 || i > all.length then
       fail s!"interp: argv[{i}] is out of range (argc is {all.length}; undefined behaviour in the binary)"
@@ -2080,7 +2078,7 @@ def evalExtern (cx : Ctx) (env : Env) (name : String) (args : List IVal) : IM (E
   | "abs", [x] | "labs", [x] => do
     let ty : Ty := if name == "abs" then .i32 else .int
     -- The argument as the C parameter (`int`, `long`) receives it.
-    let v := IntArith.wrapToType ty (← int x "the argument")
+    let v := IntArith.wrapToType ty (← int x "the argument" (if name == "abs" then 4 else 8))
     if v == (if name == "abs" then -(2 ^ 31 : Int) else -(2 ^ 63 : Int)) then
       fail s!"interp: {name} of the most negative value is undefined behaviour in C"
     return (env, .int v.natAbs ty)
@@ -2540,7 +2538,7 @@ partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
       -- undefined function: never guessed.
       -- The clock is a value the interpreter cannot know: refused (and so still counted among
       -- the builtins the interpreter does not implement, check_builtin_semantics.sh).
-      if fnName == "clock_monotonic_ns" then
+      if resolveIntrinsic fnName == some .clockMonotonicNs then
         fail "interp: clock_monotonic_ns reads the system clock, a value the interpreter cannot know; run the compiled binary"
       let strOf (v : IVal) : IM ByteArray := do stringBytes cx (← autoDeref cx env v)
       let intOf (v : IVal) (what : String) : IM Int := do
