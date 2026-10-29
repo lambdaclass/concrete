@@ -7,7 +7,7 @@
 # patterns are explicit workload-gated decisions with separate gates/docs.
 #
 # Fixtures: tests/programs/patterns/. Example: examples/patterns/byte_ranges/.
-# See docs/language/PATTERN_ERGONOMICS.md.
+# See docs/spec/patterns.md (PAT-1 to PAT-8).
 
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2

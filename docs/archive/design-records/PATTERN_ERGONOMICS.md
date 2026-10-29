@@ -1,7 +1,9 @@
 # Pattern Ergonomics (design record)
 
+Archived from docs/language: the implementation history of the pattern forms (several notes here describe behaviour since changed, such as a Copy binder through a reference and the functional-update base); the rules are PAT-1 to PAT-8 and REF-9 of docs/spec.
+
 **Superseded as the normative text (2026-10-23).** The rules are in
-[docs/spec/patterns.md](../spec/patterns.md): exhaustiveness (PAT-2), arm shapes (PAT-3), guards
+[docs/spec/patterns.md](../../spec/patterns.md): exhaustiveness (PAT-2), arm shapes (PAT-3), guards
 (PAT-4), `if let` / `while let` (PAT-6), ranges and OR patterns (PAT-7). How a binder through a
 reference scrutinee binds is REF-9 (pending: today a Copy payload binds by value, as described
 below). This note keeps the history and the implementation notes.
@@ -180,8 +182,8 @@ let copy = State { ..state };                  // every field from state
   so no new Core/lowering. **Use a variable (or simple place) as the base** — a
   complex base expression is re-read once per copied field. This is today's behaviour, not the
   rule: since 2026-10-21 the base is evaluated exactly once, after the explicit initializers
-  ([STATEMENT_EXPRESSION_MODEL.md](../archive/design-records/STATEMENT_EXPRESSION_MODEL.md#evaluation-order-and-assignment),
-  rule 6; exit 2j). The violation is [bug 136](../bugs/136_functional_update_base_reevaluated.md).
+  ([STATEMENT_EXPRESSION_MODEL.md](STATEMENT_EXPRESSION_MODEL.md#evaluation-order-and-assignment),
+  rule 6; exit 2j). The violation is [bug 136](../../bugs/136_functional_update_base_reevaluated.md).
 - Cleanest for `Copy` structs (the typical state-update case); a non-`Copy` base
   follows the usual linearity/borrow rules through the generated field reads.
 

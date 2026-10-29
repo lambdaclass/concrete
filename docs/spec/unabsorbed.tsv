@@ -9,7 +9,6 @@ docs/language/LANGUAGE_INVARIANTS.md	ownership,references
 docs/language/MEMORY_SEMANTICS.md	references,scope,memory
 docs/language/OWNERSHIP_MODEL.md	ownership
 docs/language/PATTERN_DESTRUCTURING.md	patterns
-docs/language/PATTERN_ERGONOMICS.md	patterns
 docs/language/README.md	README
 docs/language/SAFETY.md	trusted,ffi
 docs/language/VALUE_MODEL.md	types,references

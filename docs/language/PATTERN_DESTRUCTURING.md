@@ -357,7 +357,7 @@ Status: IMPLEMENTED (Phase 6 #5 increment 2). `if let` is parsed as a
 destructuring conditional and desugared to a `match` before Check/Elab:
 `if let Type::Variant { binds } = e { then } else { else }` becomes
 `match e { Variant { binds } => then, _ => else }`. With no `else`, the
-non-matching arm is an empty block. See `docs/language/PATTERN_ERGONOMICS.md` and
+non-matching arm is an empty block. See `docs/archive/design-records/PATTERN_ERGONOMICS.md` and
 `scripts/tests/check_pattern_ergonomics.sh`.
 
 ### `while let`

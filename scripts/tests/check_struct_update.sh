@@ -8,7 +8,7 @@
 #   - `S { ..base }` copies all fields,
 #   - a base of a different struct type is rejected (E0220).
 #
-# Fixtures: tests/programs/struct_update/. See docs/language/PATTERN_ERGONOMICS.md
+# Fixtures: tests/programs/struct_update/. See docs/spec/patterns.md (PAT-1 to PAT-8)
 # (struct update is recorded alongside the Phase 6 #5 surface).
 
 set -uo pipefail

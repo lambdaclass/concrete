@@ -222,7 +222,7 @@ updated by the bug 127 fix, 2026-10-21):
 Struct literals follow source order in both consumers since the bug 127 fix (`Lower` no longer
 reorders them). Changing enum literals to source order (bug 137) changes Elab, the positional
 payload in Lower, the interpreter and the extracted model, and Core semantics, so that all agree. Functional update needs Elab to bind the base once to a fresh local
-before reading the omitted fields (the guidance in [PATTERN_ERGONOMICS.md](../../language/PATTERN_ERGONOMICS.md)
+before reading the omitted fields (the guidance in [PATTERN_ERGONOMICS.md](PATTERN_ERGONOMICS.md)
 to use a simple place as the base describes today's behaviour, which this rule replaces), and the
 dereference assignment needs Lower to evaluate the right-hand side first. No source migration is expected: no corpus program was observed to
 depend on declaration-order evaluation of field initializers with effects (a scan of literals

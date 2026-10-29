@@ -4,7 +4,7 @@
 // exist for. Without ranges this is a stack of `if b >= 0x30 && b <= 0x39`
 // chains; with them each class is one arm. Inclusive ranges use `lo..=hi`,
 // exclusive use `lo..hi`. Comparisons follow the scrutinee's type, so a `u8`
-// scrutinee compares UNSIGNED. See docs/language/PATTERN_ERGONOMICS.md.
+// scrutinee compares UNSIGNED. See docs/archive/design-records/PATTERN_ERGONOMICS.md.
 
 mod byte_ranges {
 
