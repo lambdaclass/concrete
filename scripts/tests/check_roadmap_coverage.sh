@@ -391,7 +391,7 @@ for o, delivs in sorted(row_blocked.items()):
             no(f'queue row {o} names prerequisite exits {sorted(have)}, the prerequisites table says {sorted(want)} for {dname}'); pbad2 += 1
     # Every extra exit a row names for one deliverable is in that deliverable's blocked-by list.
     for pre, e in re.findall(r'([^;:(]*?) also waits for exit (\d[a-z])\b', qexit.get(o, '')):
-        named = [n2 for n2 in REQUIRED_DELIVERABLES if pre.strip().endswith(n2)]
+        named = [n2 for n2 in REQUIRED_DELIVERABLES if re.search(r'(^|\s)' + re.escape(n2) + r'$', pre.strip())]
         dn = max(named, key=len) if named else pre.strip().split(' ')[-1]
         wants = [w for n2, w in delivs if n2 == dn]
         if not wants:
