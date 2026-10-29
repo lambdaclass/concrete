@@ -516,6 +516,8 @@ def encode(tokens):
 
 def decode(s):
     out = []
+    if not s:
+        return out
     for part in s.split(" "):
         t, c = part.split("\x1f")
         out.append((t, c or None))
@@ -524,15 +526,26 @@ def decode(s):
 
 def cmd_generate(args):
     rules = load_rules()
-    gen = Generator(rules, args.seed, args.depth)
     rec = Recognizer(rules)
     vocab, _ = vocabulary_of(rules)
     mrng = random.Random(args.seed + 1)
     os.makedirs(args.out, exist_ok=True)
     # The empty program is a derivation too (`program = { top_decl }`, zero times).
     rows = [("derived", "-", [])]
-    gen._mark(rules["program"], "rep", 0)
     n_gen = 0
+    # Pass 1, SMALL programs: a shallow depth bound, so every difference also shows up in a short
+    # program, which the judge keeps as its example. Pass 2: the full depth, run until every
+    # alternative, optional and repetition of the grammar is covered (coverage is pass 2's).
+    small = Generator(rules, args.seed + 2, args.small_depth)
+    for _ in range(args.small):
+        toks, choices = small.program()
+        if not rec.run(toks):
+            raise SystemExit(f"generator bug: the recognizer rejects a generated program: {render(toks)}")
+        rows.append(("derived", "-", toks))
+        for m, desc in mutants(toks, choices, mrng, vocab, args.mutants):
+            rows.append(("mutant", desc, m))
+    gen = Generator(rules, args.seed, args.depth)
+    gen._mark(rules["program"], "rep", 0)
     while n_gen < args.budget:
         toks, choices = gen.program()
         n_gen += 1
@@ -555,12 +568,14 @@ def cmd_generate(args):
         f.write(f"programs {n_gen}\nitems {len(gen.items)}\ncovered {len(gen.covered)}\n")
         for m in missing:
             f.write(f"uncovered {m}\n")
-    print(f"generated {n_gen} programs and {len(rows) - n_gen} mutants; "
+    n_derived = sum(1 for r in rows if r[0] == "derived")
+    print(f"generated {n_derived} programs ({n_gen} in the coverage pass) and {len(rows) - n_derived} mutants; "
           f"coverage {len(gen.covered)}/{len(gen.items)} items")
     return 0
 
 
 def normalize_message(msg):
+    msg = re.sub(r"\bgot (str|float|int|char)\([^)]*\)", r"got \1", msg)
     msg = re.sub(r'"[^"]*"', '"…"', msg)
     msg = re.sub(r"\b\d+\b", "N", msg)
     msg = re.sub(r"\bident [A-Za-z_][A-Za-z0-9_]*", "ident …", msg)
@@ -586,6 +601,7 @@ def cmd_judge(args):
     with open(os.path.join(args.dir, "programs.tsv")) as f:
         for line in f:
             i, kind, member, desc, extra, toks = line.rstrip("\n").split("\t")
+            toks = toks if toks else ""
             rows.append((int(i), kind, member == "1", desc, extra, toks))
     with open(args.verdicts) as f:
         verdicts = [l.rstrip("\n") for l in f if l.strip()]
@@ -604,10 +620,15 @@ def cmd_judge(args):
             sig = f"reject-gap {rule}: {tok if not IDENT_RE.match(tok) or tok in KEYWORDS else 'IDENT'}"
         else:
             continue
-        if sig not in seen:
-            seen[sig] = (i, kind, desc, " ".join(t for t, _ in decode(toks)))
+        src = " ".join(t for t, _ in decode(toks)) if toks else ""
+        if sig not in seen or len(src) < len(seen[sig][3]):
+            seen[sig] = (i, kind, desc, src)
     known = load_known(args.known)
     fails = 0
+    if args.examples:
+        with open(args.examples, "w") as f:
+            for sig, (i, kind, desc, src) in sorted(seen.items()):
+                f.write(f"{sig}\t{kind}\t{desc}\t{src}\n")
     for sig, (i, kind, desc, src) in seen.items():
         if sig in known:
             print(f"  known {sig}")
@@ -637,10 +658,13 @@ def main():
     g.add_argument("--min-programs", type=int, default=150)
     g.add_argument("--depth", type=int, default=20)
     g.add_argument("--mutants", type=int, default=6)
+    g.add_argument("--small", type=int, default=1500)
+    g.add_argument("--small-depth", type=int, default=7)
     j = sub.add_parser("judge")
     j.add_argument("--dir", required=True)
     j.add_argument("--verdicts", required=True)
     j.add_argument("--known")
+    j.add_argument("--examples", help="write each difference's shortest example here")
     args = ap.parse_args()
     return {"generate": cmd_generate, "judge": cmd_judge}[args.cmd](args)
 
