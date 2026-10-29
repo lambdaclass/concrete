@@ -162,8 +162,12 @@ def resolve(ruling, spec, name, num, is_open):
             known = (r in ids) if "@" in r else any(key.split("@")[0] == base for key in ids)
             if not known:
                 raise RulingError(f"{name}: '{r}' is not an owner question of docs/spec/ids.tsv")
-            if is_open and "@" in r and ids[r] not in LIVE_STATES:
-                raise RulingError(f"{name}: {r} is {ids[r]}; an open bug cites the question's current version")
+            if prefix_of(r) not in chapters:
+                raise RulingError(f"{name}: {r}'s prefix is not a chapter of docs/spec/README.md's chapter table")
+            states = [ids[r]] if "@" in r else [st for key, st in ids.items() if key.split("@")[0] == base]
+            if is_open and not any(st in LIVE_STATES for st in states):
+                raise RulingError(f"{name}: {r} is no longer an open question in docs/spec/ids.tsv; an open bug is "
+                                  "ruled against the rule that answers it")
             continue
         if r not in ids:
             known = sorted(key for key in ids if key.split("@")[0] == r.split("@")[0])
