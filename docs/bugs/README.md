@@ -495,6 +495,7 @@ the report counts those bugs as ambiguous.
 - [326_a_field_access_opens_a_heap_or_heaparray_implici.md](326_a_field_access_opens_a_heap_or_heaparray_implici.md) — A field access opens a Heap or HeapArray implicitly, which MEM-4 refuses as the owner decided OD30 on 2026-10-29
 - [327_an_integer_or_float_literal_with_no_expected_typ.md](327_an_integer_or_float_literal_with_no_expected_typ.md) — An integer or float literal with no expected type defaults to Int or Float64, which ARITH-2 refuses as the owner decided OD31 on 2026-10-29
 - [328_a_method_taking_self_or_mut_self_is_called_on_an.md](328_a_method_taking_self_or_mut_self_is_called_on_an.md) — A method taking &self or &mut self is called on an owned place with an implicit borrow, which OWN-15 refuses as the owner decided OD32 on 2026-10-29
+- [330_a_continue_inside_a_for_loop_s_step_the_binary_n.md](330_a_continue_inside_a_for_loop_s_step_the_binary_n.md) — a continue inside a for loop's step: the binary never terminates and the interpreter goes to the condition
 
 <!-- END GENERATED: bug list -->
 

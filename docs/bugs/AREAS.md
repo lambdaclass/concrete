@@ -22,7 +22,7 @@ checker refusal is a Check bug here.
 | Lower | 40 | 0 | 13 | 3 | Lower 39, - 1 |
 | Resolve | 27 | 2 | 4 | 8 | Resolve 16, FileSummary 6, PeekType 2, BuiltinEnums 1 |
 | Elab | 26 | 0 | 9 | 7 | Elab 25, TypeSpelling 1 |
-| Interp | 19 | 0 | 5 | 8 | Interp 19 |
+| Interp | 20 | 1 | 5 | 8 | Interp 20 |
 | Proof | 19 | 1 | 8 | 2 | ProofCore 11, Proof 3, CallCollect 2, BodyIdentity 1 |
 | Parse | 11 | 0 | 3 | 0 | Parser 7, Lexer 2, AST 1, LocalId 1 |
 | EmitSSA | 10 | 0 | 1 | 3 | EmitSSA 10 |
@@ -50,7 +50,7 @@ checker refusal is a Check bug here.
 | 9. Evidence verdicts computed per surface and joined to their subject by name | 4 | Proof 2, CLI 2 |
 | 10. Evidence identity computed from a partial subject | 5 | Proof 3, Elab 2 |
 | 11. Absence read as a fact (fail-open defaults) | 13 | Gates 4, Resolve 2, Proof 2, Report 2, Check 1, SSA 1, Tooling 1 |
-| 12. One fact kept in two places | 28 | Resolve 11, Check 5, Elab 3, Interp 3, Parse 2, Proof 1, Std 1, CLI 1, Tooling 1 |
+| 12. One fact kept in two places | 29 | Resolve 11, Check 5, Interp 4, Elab 3, Parse 2, Proof 1, Std 1, CLI 1, Tooling 1 |
 | 13. Documented rules with no enforcing site | 19 | Check 11, Resolve 4, Parse 1, Elab 1, Lower 1, Report 1 |
 | 14. Trusted `std` and FFI code with no checked contract | 7 | Std 5, Parse 1, Check 1 |
 | 15. Ownership state not modeled along control-flow paths | 7 | Check 7 |
@@ -84,6 +84,7 @@ checker refusal is a Check bug here.
 | spec gap MOD | 5 | Resolve 3, Elab 1, Report 1 |
 | spec gap OWN | 1 | Check 1 |
 | spec gap PASS | 19 | Lower 8, EmitSSA 3, Interp 3, Mono 2, Elab 1, SSA 1, Report 1 |
+| spec gap STMT | 1 | Interp 1 |
 | spec gap TRUST | 1 | Check 1 |
 | spec gap TYPE | 2 | Resolve 1, Check 1 |
 | permitted | 1 | Lower 1 |
@@ -389,5 +390,6 @@ checker refusal is a Check bug here.
 | [326](326_a_field_access_opens_a_heap_or_heaparray_implici.md) | — | — | unfixed | — | violates MEM-4@3 |
 | [327](327_an_integer_or_float_literal_with_no_expected_typ.md) | — | — | unfixed | — | violates ARITH-2@2 |
 | [328](328_a_method_taking_self_or_mut_self_is_called_on_an.md) | — | — | unfixed | — | violates OWN-15@3 |
+| [330](330_a_continue_inside_a_for_loop_s_step_the_binary_n.md) | Interp | Interp | commits | — | spec gap (STMT) |
 
 <!-- END GENERATED: bug areas -->
