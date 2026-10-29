@@ -311,50 +311,15 @@ turns the entry into the rules it decides; until then no agent picks a side
 
 **Rationale.** Bears on CON-1. Current main: open (PROVABLE_V1). The options and the recommendation are in ROADMAP's row OD19; the owner's answer is recorded there.
 
-<a id="OPEN-20"></a>
-### OPEN-20. Visibility of std's internal bindings
+## Decided
 
-**OPEN-20@1.** Whether std's internal `std.libc` bindings are visible to programs is an open owner decision (OD20).
+These entries were retired when the owner answered them; their IDs are never reused.
 
-- Kind: open
-- Uses: none
-- Codes: none
-- Status: open OD20
-- Enforced by: none
-- Semantics: none
-- Obligation: none
-- Evidence: open
+- **OPEN-20** (OD20, the visibility of std's `std.libc` bindings): decided 2026-10-29, private to std.
+  Now MOD-6 of [modules.md](modules.md#MOD-6) (pending, bug 226).
+- **OPEN-21** (OD21, a parent module's rights over its child): decided 2026-10-29, only the declaring
+  module. Now TYPE-11 of [types.md](types.md#TYPE-11), enforced as written (the parent case is pending,
+  R-0011).
+- **OPEN-22** (OD22, trust on an `impl` block): decided 2026-10-29, per method only. Now TRUST-5@2 of
+  [trusted.md](trusted.md#TRUST-5).
 
-**Rationale.** Bears on MOD-2. Current main: open (bug 226). The options and the recommendation are in ROADMAP's row OD20; the owner's answer is recorded there.
-
-<a id="OPEN-21"></a>
-### OPEN-21. A parent module's rights over its child
-
-**OPEN-21@1.** Whether a parent module may construct its child's newtypes and read or write its child's private fields is an open owner decision (OD21).
-
-- Kind: open
-- Uses: none
-- Codes: none
-- Status: open OD21
-- Enforced by: none
-- Semantics: none
-- Obligation: none
-- Evidence: open
-
-**Rationale.** Bears on TYPE-11. Current main: on main provisionally: a parent has these rights (bug 262). The options and the recommendation are in ROADMAP's row OD21; the owner's answer is recorded there.
-
-<a id="OPEN-22"></a>
-### OPEN-22. Trust on an impl block
-
-**OPEN-22@1.** Whether trust is declared on an `impl` block or only on each `trusted fn` is an open owner decision (OD22).
-
-- Kind: open
-- Uses: none
-- Codes: none
-- Status: open OD22
-- Enforced by: none
-- Semantics: none
-- Obligation: none
-- Evidence: open
-
-**Rationale.** Bears on TRUST-5. Current main: on main provisionally: `trusted impl` is refused and trust is per method (bug 189), while TRUST-5@1 still names `trusted impl`. The options and the recommendation are in ROADMAP's row OD22; the owner's answer is recorded there.

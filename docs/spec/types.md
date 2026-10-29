@@ -512,10 +512,10 @@ exemption: std uses constructors, accessors, scoped mutation and audited raw-par
 any other module. Enforcement is the same in Resolve, Check, Elab, project mode, the interpreter and
 the compiled path (Check refuses; later stages inherit).
 
-The table states the design. Which module counts as the declaring one is open: today a parent module
-has these rights over the declarations it imports from its child modules (bug 262), and whether
-that stays is owner decision OD21 (OPEN-21); "other module" below means a module the current rule
-does not grant them to.
+The owner decided on 2026-10-29 (OD21) that only the declaring module has these rights: a parent
+module gets none over its child's declarations. Today a parent still has them over the declarations
+it imports from its children (bug 262's record); that case is pending (R-0011), pinned by the
+pending examples below.
 
 | operation | same module | other module |
 |---|---|---|
@@ -594,6 +594,38 @@ mod m {
             Option::None => {}
         }
         return out;
+    }
+}
+```
+
+```con reject name=parent-constructs-child-newtype code=E0296 stage=check pair=foreign-constructor pending=R-0011 now=accept:42
+mod outer {
+    mod kids {
+        pub newtype K = Int;
+        pub fn get(k: K) -> Int {
+            return k.0;
+        }
+    }
+    import kids.{K, get};
+    pub fn main() -> Int {
+        let k: K = K(42);
+        return get(k);
+    }
+}
+```
+
+```con reject name=parent-reads-child-private-field code=E0298 stage=check pair=foreign-constructor pending=R-0011 now=accept:42
+mod outer {
+    mod kids {
+        pub struct Copy Box { v: Int }
+        pub fn mk() -> Box {
+            return Box { v: 42 };
+        }
+    }
+    import kids.{Box, mk};
+    pub fn main() -> Int {
+        let b: Box = mk();
+        return b.v;
     }
 }
 ```

@@ -57,7 +57,7 @@ fn main() -> Int {
 - Kind: refusal
 - Uses: none
 - Codes: E0110 (resolve), E0111 (resolve), E0126 (resolve), E0284 (check), E0285 (check), E0323 (check), E0418 (elab), E0419 (elab), E0423 (elab)
-- Status: enforced
+- Status: partial bug-226
 - Enforced by: Concrete.Pipeline.resolve
 - Semantics: none
 - Obligation: none
@@ -78,6 +78,25 @@ mod m {
     import a.{hidden};
     pub fn main() -> Int {
         return hidden();
+    }
+}
+```
+
+```con reject name=submodule-imports-private code=E0111 stage=resolve pair=import-public pending=bug-226 now=accept:42
+fn main() -> Int {
+    return b::g();
+}
+
+mod a {
+    fn secret() -> Int {
+        return 42;
+    }
+}
+
+mod b {
+    import a.{secret};
+    pub fn g() -> Int {
+        return secret();
     }
 }
 ```
@@ -188,3 +207,44 @@ fn main() -> Int {
     return present::answer();
 }
 ```
+
+<a id="MOD-6"></a>
+### MOD-6. The bindings of `std.libc` are private to std
+
+**MOD-6@1.** The `extern` bindings of `std.libc` are imported only by modules of std, so no module of a program names them.
+
+- Kind: refusal
+- Uses: none
+- Codes: new (resolve)
+- Status: pending bug-226
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** Decided by the owner on 2026-10-29 (OD20). std reaches the C library through
+`std.libc`, whose `extern` declarations are not `pub`; std's own modules import them, and a program
+uses std's wrappers instead. Today the import rule of a submodule admits a private declaration (bug
+226), which is how std's modules reach `std.libc` and also how a program's submodule could; the
+repair gives MOD-2 back to every program module and keeps `std.libc` visible to std alone.
+
+```con reject name=program-imports-libc code=new stage=resolve pair=program-uses-std pending=bug-226 now=accept:42 project=libcuser interp-exempt=project-needs-std
+fn main() -> Int {
+    return b::g();
+}
+
+mod b {
+    import std.libc.{strlen};
+    pub fn g() -> Int {
+        return 42;
+    }
+}
+```
+
+```con accept name=program-uses-std exit=42 project=stduser interp-exempt=project-needs-std
+import std.string.{String};
+
+fn main() -> Int {
+    return 42;
+}
+```
+

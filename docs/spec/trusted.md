@@ -162,7 +162,7 @@ fn main() with(File, Unsafe) -> Int {
 <a id="TRUST-5"></a>
 ### TRUST-5. `trusted` absorbs `Unsafe` and nothing else
 
-**TRUST-5@1.** A `trusted fn` or `trusted impl` may perform raw-pointer operations and call an `extern fn` without declaring `Unsafe`, while every other capability it uses, those an `extern fn` declares included, still appears in its `with(...)` set and binds its callers, and a `trusted extern fn` is a foreign binding callable without `Unsafe`.
+**TRUST-5@2.** Trust is declared per function, never on an `impl` block, and a `trusted fn` may perform raw-pointer operations and call an `extern fn` without declaring `Unsafe`, while every other capability it uses, those an `extern fn` declares included, still appears in its `with(...)` set and binds its callers, and a `trusted extern fn` is a foreign binding callable without `Unsafe`.
 
 - Kind: guarantee
 - Uses: none
@@ -187,8 +187,9 @@ declared: the implementation depends on raw operations, FFI or an audited assert
 safe to call while raw inside (`Vec::push`, `String::clone`), so provenance never propagates as a
 caller requirement; the four combinations are a safe interface over a checked or a trusted body, and
 an obligation-bearing interface over a checked or a trusted body. Per-method `trusted` makes a safe
-interface over an audited method expressible, which a whole-impl modifier could not (whether a
-`trusted impl` form exists at all is OD22, open: OPEN-22), and the two axes stay independent: `pub trusted fn read_unchecked(..) with(Unsafe)` is an audited body whose
+interface over an audited method expressible, which a whole-impl modifier could not; the owner
+decided on 2026-10-29 (OD22) that trust is per method only, so `trusted impl` stays refused (a parse
+error, E0001; bug 189's repair, `error_189_trusted_impl_refused.con`), and the two axes stay independent: `pub trusted fn read_unchecked(..) with(Unsafe)` is an audited body whose
 caller still owes an obligation. A trusted body discharges an `Unsafe` obligation at a call, scoped
 three ways so that it is a discharge and not an erasure: only `Unsafe` (operational capabilities
 still bind), `extern` callees included since R-0484 (every `extern` now declares its effects, E0116),

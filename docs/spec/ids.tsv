@@ -296,7 +296,7 @@ TRUST-4@1	live	2520571bfac95b39fa6cbc22eb456ddc
 TRUST-4/undeclared-capability	live	-
 TRUST-4/raw-deref-needs-unsafe	live	-
 TRUST-4/declared-capability	live	-
-TRUST-5@1	live	d340ebd6e15e920a41fb40c02078616a
+TRUST-5@1	superseded	d340ebd6e15e920a41fb40c02078616a
 TRUST-5/trusted-absorbs-unsafe	live	-
 TRUST-6@1	pending	14c3ecb1d6866dc7575b974baafc9804
 TRUST-6/trusted-outside-marked-module	pending	-
@@ -421,6 +421,13 @@ OPEN-16@1	live	b868af6f4817bbff89ed43377c8923e5
 OPEN-17@1	live	389df526d28f4abb375c4378f07cdf78
 OPEN-18@1	live	c90b4ea8895868baa22d45ffc1b92b8c
 OPEN-19@1	live	7863c0d7c23b8fc18ae35c9f76f98090
-OPEN-20@1	live	a092a41064ada16d7acc5e63c35757f6
-OPEN-21@1	live	5c4dd79614f1afdd1ecf03b349bd34eb
-OPEN-22@1	live	becbd2ebc12edecfb07e94c5603bfc4d
+OPEN-20@1	retired:decided-by-the-owner-2026-10-29	a092a41064ada16d7acc5e63c35757f6
+OPEN-21@1	retired:decided-by-the-owner-2026-10-29	5c4dd79614f1afdd1ecf03b349bd34eb
+OPEN-22@1	retired:decided-by-the-owner-2026-10-29	becbd2ebc12edecfb07e94c5603bfc4d
+TRUST-5@2	live	4cd08d23b34ccad07c15f0a98c0ceddd
+TYPE-11/parent-constructs-child-newtype	pending	-
+TYPE-11/parent-reads-child-private-field	pending	-
+MOD-2/submodule-imports-private	pending	-
+MOD-6@1	pending	35dc776904350d27ff4ae2817d973b0a
+MOD-6/program-imports-libc	pending	-
+MOD-6/program-uses-std	live	-
