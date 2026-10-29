@@ -1997,7 +1997,7 @@ name per method.
 [docs/language/HANDLE_CAPABILITIES.md](../language/HANDLE_CAPABILITIES.md); encoding A
 selected for the first implementation (B a later option); construction/caller audit
 taken 2026-09-30 in
-[HANDLE_CAPABILITIES_AUDIT.md](../language/HANDLE_CAPABILITIES_AUDIT.md); classification
+[HANDLE_CAPABILITIES_AUDIT.md](../stdlib/HANDLE_CAPABILITIES_AUDIT.md); classification
 decisions D1-D4 settled 2026-10-01, findings F1-F10 are the slice 3 work list (F10 fixed
 early as bug 072); per-handle `close` arguments recorded in R6 — slice 1 complete; (2) compiler:
 effect declarations on externs, symbol aliasing, rules 4–5, capability parameters on

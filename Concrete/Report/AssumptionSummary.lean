@@ -580,7 +580,7 @@ def FnSummary.trustedBoundaries (s : FnSummary) : Array String :=
 
 /-- R5 DESCRIPTOR CLASSIFICATION IS NOT CHECKED BY THE COMPILER. Under encoding A there are no
     typed descriptors, so which descriptor a foreign binding receives is an assumption. Its only
-    coverage is the construction/caller audit (`docs/language/HANDLE_CAPABILITIES_AUDIT.md`,
+    coverage is the construction/caller audit (`docs/stdlib/HANDLE_CAPABILITIES_AUDIT.md`,
     revised 2026-10-01), a document that is not re-run against today's callers.
 
     The audit covers std's bindings by NAME, in two groups: §3.1 the descriptor and I/O bindings

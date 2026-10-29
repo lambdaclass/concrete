@@ -9,7 +9,7 @@ ruling: Outside the spec: library — std.process.spawn's child called exit inst
 
 **Status:** FIXED 2026-10-01
 **Found:** 2026-09-30, by the R-0484 construction/caller audit
-(`docs/language/HANDLE_CAPABILITIES_AUDIT.md`, finding F10), while auditing `fork`.
+(`docs/stdlib/HANDLE_CAPABILITIES_AUDIT.md`, finding F10), while auditing `fork`.
 **Severity:** silent data duplication, reachable from ordinary user code through
 `std.process.spawn` whenever the command fails to exec. Not a memory-safety defect.
 

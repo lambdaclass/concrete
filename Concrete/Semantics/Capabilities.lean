@@ -148,7 +148,7 @@ def trustedGrantsUnsafeOnCalls : Bool := true
 /-- C symbols known to have external effects (R-0484 R3). Binding one of them with an
     EMPTY effect declaration is refused: the likeliest audit mistake, caught mechanically.
     It suppresses nothing — a binding that declares an effect is checked like any other.
-    From the construction/caller audit (`docs/language/HANDLE_CAPABILITIES_AUDIT.md` §3).
+    From the construction/caller audit (`docs/stdlib/HANDLE_CAPABILITIES_AUDIT.md` §3).
     `abort` is deliberately absent: a language-defined failure carries no capability (D3).
     The list is incomplete by nature; its completeness is itself an audited assumption. -/
 def knownEffectfulForeignSymbols : List String :=

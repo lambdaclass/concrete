@@ -1,11 +1,13 @@
 # Handle Capabilities: Construction and Caller Audit
 
+Moved from docs/language: an audit of std's handle construction and callers; the rules it measures against are in HANDLE_CAPABILITIES.md until they migrate into docs/spec.
+
 Status: audited design inventory (ROADMAP R-0484, slice 1), taken 2026-09-30 against
 `bbba9ebf`, revised 2026-10-01 after review, and brought current 2026-10-06 (F6 carried out;
 `_exit`, added by the bug 072 fix, audited in §3.2; every std binding now appears in exactly
 one of §3.1–§3.3, checked by `check_descriptor_coverage.sh`). It records
 std as it is today, measured against the rules in
-[HANDLE_CAPABILITIES.md](HANDLE_CAPABILITIES.md). It is evidence for the design and a
+[HANDLE_CAPABILITIES.md](../language/HANDLE_CAPABILITIES.md). It is evidence for the design and a
 work list for slice 3, not a claim that anything is fixed. Line numbers refer to that
 commit.
 
@@ -339,7 +341,7 @@ Defects are fixed in slice 3 unless noted. None is fixed by this audit.
   `TextFile::close`, `fs.File::close`, `TcpListener::close` and `TcpStream::close` used to
   ignore their close results; each now returns a `Result` whose error carries no handle
   (consumed on failure), per the ownership-on-failure convention in
-  [STDLIB_DESIGN_PRINCIPLES.md](../stdlib/STDLIB_DESIGN_PRINCIPLES.md#ownership-on-failure).
+  [STDLIB_DESIGN_PRINCIPLES.md](STDLIB_DESIGN_PRINCIPLES.md#ownership-on-failure).
 - **F8. `ftell` failure is unchecked (outside R-0484).** In `fs.read_file` and
   `fs.read_to_string`, `ftell` returns `-1` for a stream that cannot seek (a pipe, a
   directory), and `size as u64` becomes an enormous capacity.

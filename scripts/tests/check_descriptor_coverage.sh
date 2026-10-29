@@ -3,7 +3,7 @@
 #
 # Encoding A has no typed descriptors: which descriptor a foreign binding receives is not
 # checked by the compiler. The only coverage is the construction/caller audit
-# (docs/language/HANDLE_CAPABILITIES_AUDIT.md), a document. Reports must say that, and must place
+# (docs/stdlib/HANDLE_CAPABILITIES_AUDIT.md), a document. Reports must say that, and must place
 # every reached foreign binding in exactly one group — audited descriptor binding (§3.1), audited
 # as taking no descriptor (§3.2–3.3), or covered by NO audit — so an empty listing can never be
 # read as "checked".
@@ -16,7 +16,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 CC="$ROOT_DIR/.lake/build/bin/concrete"
-AUDIT="$ROOT_DIR/docs/language/HANDLE_CAPABILITIES_AUDIT.md"
+AUDIT="$ROOT_DIR/docs/stdlib/HANDLE_CAPABILITIES_AUDIT.md"
 SUMMARY="$ROOT_DIR/Concrete/Report/AssumptionSummary.lean"
 PASS=0; FAIL=0
 ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }

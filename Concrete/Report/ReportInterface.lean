@@ -585,7 +585,7 @@ def inheritedAssumptionsSection (assumptions : Assumptions.Table) (programRoots 
   let group (c : Assumptions.DescriptorCoverage) (label : String) : List String :=
     let xs := byCov c
     if xs.isEmpty then [] else [s!"  {label}: {names xs}"]
-  let auditRef := "docs/language/HANDLE_CAPABILITIES_AUDIT.md, revised 2026-10-01; a document, not re-checked against current callers"
+  let auditRef := "docs/stdlib/HANDLE_CAPABILITIES_AUDIT.md, revised 2026-10-01; a document, not re-checked against current callers"
   let dLines :=
     ["Descriptor classification (R5): NOT CHECKED by the compiler. Encoding A has no typed descriptors, so which descriptor a foreign binding receives is an assumption."] ++
     (if reached.isEmpty then ["  no foreign binding is reached, so no descriptor assumption is made"] else []) ++

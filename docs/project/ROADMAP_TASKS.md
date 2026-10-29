@@ -4359,7 +4359,7 @@ variant or omit one enforcement path.
    any explicit Rng/system-entropy redesign.
 
 **Additional input (2026-10-02, owner confirmed 2026-10-04):** R-0484's
-construction/caller audit (`docs/language/HANDLE_CAPABILITIES_AUDIT.md`) assigns F7/F8 to
+construction/caller audit (`docs/stdlib/HANDLE_CAPABILITIES_AUDIT.md`) assigns F7/F8 to
 item 3 here: ignored write/close results (`console_err_write`, `TextFile::write`,
 `TextFile::close`, `fs.File::close`, `TcpListener::close`, `TcpStream::close`) and unchecked
 `ftell` failure in `fs.read_file`/`fs.read_to_string`. Repair each with an injected-failure

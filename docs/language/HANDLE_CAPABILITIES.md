@@ -24,7 +24,7 @@ What each surface establishes:
 | | |
 |---|---|
 | **Checked by the compiler** | every function's `with(...)` covers what it reaches, through handles, trusted bodies, externs and dependencies; externs declare effects; proof admission refuses any function whose summary is missing, ambiguous, has an unresolved edge (indirect call, type-parameter dispatch, unloaded callee) or reaches a foreign binding; a compiler intrinsic is recognized only with its exact name, attribute and signature |
-| **Human assumptions, named in reports** | each foreign binding's declared effects; each trusted function's memory safety (named, with the raw operations and foreign calls it absorbs and what relies on it); which descriptor each binding receives (covered only by [HANDLE_CAPABILITIES_AUDIT.md](HANDLE_CAPABILITIES_AUDIT.md), which `check_descriptor_coverage.sh` keeps complete over std's bindings but does not re-verify) |
+| **Human assumptions, named in reports** | each foreign binding's declared effects; each trusted function's memory safety (named, with the raw operations and foreign calls it absorbs and what relies on it); which descriptor each binding receives (covered only by [HANDLE_CAPABILITIES_AUDIT.md](../stdlib/HANDLE_CAPABILITIES_AUDIT.md), which `check_descriptor_coverage.sh` keeps complete over std's bindings but does not re-verify) |
 | **Incomplete coverage, reported as such** | indirect calls, type-parameter dispatch and unloaded callees make a summary incomplete and block "no external authority" and admission; single-file mode and `--query` say dependencies were not analysed, and `--query` refuses a project file it cannot resolve without them |
 | **Unsupported or open** | typed descriptors (second step, §10); a bodiless user `fn` declaration cannot declare effects, so user code cannot itself declare an intrinsic; bug 077 (relative call into a third-level submodule fails LLVM validation) is separately owned — the build refuses it, the summary keeps what such a call reaches, and no R-0484 acceptance case depends on it (`check_bug077_contained.sh`); the reports still compute the older indirect-call analysis beside the summary and treat a function as opaque if either says so |
 
@@ -233,7 +233,7 @@ required C.** Possession grants nothing; using the descriptor independently requ
   answered by types. `Reader` and `Writer` are already separate; a read-only socket would
   be its own type exposing only reads, not a second capability parameter.
 - **Closing requires `C`.** The argument differs by handle type (from the audit, §2 of
-  [HANDLE_CAPABILITIES_AUDIT.md](HANDLE_CAPABILITIES_AUDIT.md)):
+  [HANDLE_CAPABILITIES_AUDIT.md](../stdlib/HANDLE_CAPABILITIES_AUDIT.md)):
 
   | handle | what `close` does | why it requires `C` |
   |---|---|---|
@@ -484,7 +484,7 @@ and for cross-classification aliasing.
 
 - **When, if ever, to move to B** (§5), once duplicate bindings can be measured.
 - **The construction/caller audit** (R5, §10): taken 2026-09-30 in
-  [HANDLE_CAPABILITIES_AUDIT.md](HANDLE_CAPABILITIES_AUDIT.md), revised 2026-10-01. Its
+  [HANDLE_CAPABILITIES_AUDIT.md](../stdlib/HANDLE_CAPABILITIES_AUDIT.md), revised 2026-10-01. Its
   classification decisions are settled (D1–D2 accepted, D3–D4 revised); its findings
   F1–F10 are the slice 3 work list, and its remaining assumptions are listed in §1 there.
 - **Replacement and cross-classification aliasing** (R5), for the second step: binding
