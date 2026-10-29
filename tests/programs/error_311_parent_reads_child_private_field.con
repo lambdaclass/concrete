@@ -1,0 +1,14 @@
+// Bug 311 (TYPE-11; OD21): a parent module may not read its child's private field (E0298).
+mod outer {
+    mod kids {
+        pub struct Copy Box { v: Int }
+        pub fn mk() -> Box {
+            return Box { v: 42 };
+        }
+    }
+    import kids.{Box, mk};
+    pub fn main() -> Int {
+        let b: Box = mk();
+        return b.v;
+    }
+}

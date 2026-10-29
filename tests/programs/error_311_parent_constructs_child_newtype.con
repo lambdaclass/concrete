@@ -1,0 +1,15 @@
+// Bug 311 (TYPE-11; OD21, decided 2026-10-29: only the declaring module has representation
+// rights): a parent module that imports its child's newtype may not construct it (E0296).
+mod outer {
+    mod kids {
+        pub newtype K = Int;
+        pub fn get(k: K) -> Int {
+            return k.0;
+        }
+    }
+    import kids.{K, get};
+    pub fn main() -> Int {
+        let k: K = K(42);
+        return get(k);
+    }
+}

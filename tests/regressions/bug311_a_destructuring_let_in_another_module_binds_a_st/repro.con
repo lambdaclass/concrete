@@ -1,0 +1,22 @@
+// Bug 311: a destructuring `let` in another module binds a private field. `nz` keeps the field
+// `v` private so that only `mk` builds a NonZero, yet `m` reads it by destructuring. Before the
+// fix both consumers accepted it (42) while `value.v` was refused E0298. Expected: refused at
+// check, E0298 (TYPE-11).
+mod nz {
+    pub struct Copy NonZero { v: Int }
+    pub fn mk(v: Int) -> Option<NonZero> {
+        if v == 0 { return Option::None; }
+        return Option::Some { value: NonZero { v: v } };
+    }
+}
+mod m {
+    import nz.{NonZero, mk};
+    pub fn main() -> Int {
+        let mut out: Int = 0;
+        match mk(42) {
+            Option::Some { value } => { let NonZero { v } = value; out = v; },
+            Option::None => {}
+        }
+        return out;
+    }
+}

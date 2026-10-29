@@ -3172,6 +3172,22 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) (ends : Option EndsTree := none
           if !(fieldKeys.contains sf.name) then
             throwCheck (.missingFieldInLiteral sf.name s!"struct destructure '{structName}'") (some stmt.getSpan)
       | none => pure ()
+    -- Bug 311 (TYPE-11): a destructuring `let` reads every field it binds, so outside the
+    -- declaring module it names only `pub` fields, exactly as `s.f` does (E0298). A non-Copy
+    -- struct must bind every field, so one with a private field is consumed through its module.
+    -- The test is the field-read site's own (`structIsLocal`), so a module that may read the field
+    -- may destructure it and no other may; since OD21 (decided 2026-10-29) that is the declaring
+    -- module alone, so a parent module may not destructure its child's private fields either.
+    match ← lookupStruct structName with
+    | some sd =>
+      if !(← getEnv).structIsLocal sd then
+        for pb in bindings do
+          match sd.fields.find? (·.name == pb.fieldName) with
+          | some f =>
+            if !f.isPublic then
+              throwCheck (.fieldAccessPrivate structName pb.fieldName) (some stmt.getSpan)
+          | none => pure ()
+    | none => pure ()
     for pb in bindings do
       let b := pb.name
       match ← lookupStructField structName pb.fieldName with
@@ -3965,21 +3981,18 @@ def checkModule (m : Module) (summary : FileSummary)
   -- across module boundaries) and reach Layout via the elaborated CModule.
   let allNewtypes := m.newtypes ++ imports.newtypes
                      ++ m.submodules.foldl (fun acc sub => acc ++ sub.newtypes) []
-  -- 0b construction rights: newtypes DEFINED here (module + submodules),
-  -- NOT the imported ones — direct `N(v)` construction is private to the
-  -- defining module.
+  -- 0b construction rights: newtypes DEFINED in this module only, not the imported ones and not
+  -- its submodules' (OD21, decided 2026-10-29: only the declaring module constructs a newtype or
+  -- names a private field; a parent gets no rights over its child; bug 311).
   let localNewtypeDefs := m.newtypes
-                     ++ m.submodules.foldl (fun acc sub => acc ++ sub.newtypes) []
   let localNewtypeNamesList := localNewtypeDefs.map (fun nt => nt.name)
-  -- 0b slice 2: structs defined HERE (module + submodules). Field privacy
-  -- is enforced against non-local structs.
+  -- 0b slice 2: structs defined in this module only (OD21). Field privacy is enforced against every
+  -- other struct, a child module's included.
   let localStructDefs := m.structs
-                     ++ m.submodules.foldl (fun acc sub => acc ++ sub.structs) []
   let localStructNamesList := localStructDefs.map (fun sd => sd.name)
   -- Bug 253: the same declarations by identity, as the summaries stamped them.
-  let childSummaries := summary.submoduleSummaries.map (·.2)
-  let localNewtypeIdList := (summary.newtypes ++ childSummaries.flatMap (·.newtypes)).filterMap (·.typeId?)
-  let localStructIdList := (summary.structs ++ childSummaries.flatMap (·.structs)).filterMap (·.typeId?)
+  let localNewtypeIdList := summary.newtypes.filterMap (·.typeId?)
+  let localStructIdList := summary.structs.filterMap (·.typeId?)
   -- R-0492 step 3: each trait impl by its target's identity: an imported impl carries it
   -- (`targetDefinedIn`), a local one names its target in this module's environment.
   let traitImplIds : List (TypeId × String) := allTraitImpls.filterMap fun tb =>

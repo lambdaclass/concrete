@@ -1,0 +1,14 @@
+// Bug 311 (TYPE-11): a non-Copy struct with a private field cannot be destructured outside its
+// module (it must bind every field, and the private one is refused, E0298).
+mod a {
+    pub struct S { x: Int }
+    pub fn mk() -> S { return S { x: 42 }; }
+}
+mod m {
+    import a.{S, mk};
+    pub fn main() -> Int {
+        let s: S = mk();
+        let S { x: y } = s;
+        return y;
+    }
+}

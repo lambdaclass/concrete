@@ -18,6 +18,7 @@ of [docs/spec/ids.tsv](../spec/ids.tsv), or the generator refuses the record.
 <!-- BEGIN GENERATED: spec rulings (scripts/gen/bug_ledger.py; edit the records' ruling lines) -->
 
 298 bug records, 295 of them ruled: violates a rule 187, spec gap 1, open owner question 4, permitted by a rule 1, outside the spec 102; not ruled yet (fixed bugs filed before bug 300) 3. Open bugs are in bold.
+293 bug records, 290 of them ruled: violates a rule 157, spec gap 32, open owner question 0, permitted by a rule 0, outside the spec 101; not ruled yet (fixed bugs filed before bug 300) 3. Open bugs are in bold.
 
 ### By kind
 
@@ -28,6 +29,11 @@ of [docs/spec/ids.tsv](../spec/ids.tsv), or the generator refuses the record.
 | open owner question | 4 | 0 | 0 |
 | permitted by a rule (not a bug) | 1 | 0 | 0 |
 | outside the spec | 102 | 4 | 16 |
+| violates a rule | 157 | 15 | 82 |
+| spec gap | 32 | 2 | 5 |
+| open owner question | 0 | 0 | 0 |
+| permitted by a rule (not a bug) | 0 | 0 | 0 |
+| outside the spec | 101 | 4 | 16 |
 | not ruled yet | 3 | 0 | 0 |
 
 ### By chapter
@@ -40,6 +46,10 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 | modules.md | MOD | 30 | 0 | 11 | 30 | 0 | 0 | 0 |
 | types.md | TYPE | 20 | 2 | 12 | 20 | 0 | 0 | 0 |
 | ownership.md | OWN | 19 | 3 | 8 | 19 | 0 | 0 | 0 |
+| pipeline.md | PASS | 42 | 2 | 6 | 22 | 20 | 0 | 0 |
+| modules.md | MOD | 32 | 1 | 11 | 27 | 5 | 0 | 0 |
+| types.md | TYPE | 21 | 1 | 12 | 19 | 2 | 0 | 0 |
+| ownership.md | OWN | 19 | 3 | 8 | 18 | 1 | 0 | 0 |
 | scope.md | SCOPE | 13 | 0 | 5 | 13 | 0 | 0 | 0 |
 | memory.md | MEM | 12 | 1 | 7 | 12 | 0 | 0 | 0 |
 | statements.md | STMT | 12 | 2 | 10 | 11 | 1 | 0 | 0 |
@@ -97,6 +107,7 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 | STMT-11@1 | statements.md | 2 | 305, 306 |
 | SYN-1@1 | syntax.md | 2 | 220, 329 |
 | SYN-4@1 | syntax.md | 2 | 212, **318** |
+| TYPE-11@1 | types.md | 2 | 253, 311 |
 | TYPE-12@1 | types.md | 2 | 199, 246 |
 | TYPE-15@1 | types.md | 2 | 073, 200 |
 | TYPE-16@1 | types.md | 2 | 024, 205 |
@@ -132,7 +143,6 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 | TRAIT-9@1 | traits.md | 1 | 091 |
 | TRUST-5@2 | trusted.md | 1 | 189 |
 | TRUST-7@1 | trusted.md | 1 | 198 |
-| TYPE-11@1 | types.md | 1 | 253 |
 | TYPE-14@2 | types.md | 1 | 036 |
 | TYPE-2@1 | types.md | 1 | 240 |
 | TYPE-5@1 | types.md | 1 | 192 |

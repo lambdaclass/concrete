@@ -572,9 +572,9 @@ any other module. Enforcement is the same in Resolve, Check, Elab, project mode,
 the compiled path (Check refuses; later stages inherit).
 
 The owner decided on 2026-10-29 (OD21) that only the declaring module has these rights: a parent
-module gets none over its child's declarations. Today a parent still has them over the declarations
-it imports from its children (bug 262's record); that case is pending (R-0011), pinned by the
-pending examples below.
+module gets none over its child's declarations. Until bug 311's fix a parent still had them over
+the declarations it imported from its children (bug 262's record); the `parent-*` examples below
+pin the refusal.
 
 | operation | same module | other module |
 |---|---|---|
@@ -583,7 +583,7 @@ pending examples below.
 | struct literal `T { f: ... }` | yes | only if every field is `pub` |
 | field read `x.f`, field write `x.f = ...` | yes | only if `f` is `pub` |
 | functional update `T { ..x, f: ... }` | yes | only if every named or required field is `pub` |
-| destructuring `let T { f } = x` | yes | only if every bound field is `pub` (pending: bug 311) |
+| destructuring `let T { f } = x` | yes | only if every bound field is `pub` |
 | newtype construction `N(v)` | yes | no: use the module's constructor function |
 | newtype unwrap to the inner value | yes | no, once the follow-on lands (R-0011) |
 | construct or match an enum variant | yes | once the follow-on lands, only a `pub` variant (R-0011); names are matchable meanwhile |
@@ -631,6 +631,23 @@ mod m {
 }
 ```
 
+```con reject name=destructure-private-field code=E0298 stage=check pair=foreign-constructor
+mod box {
+    pub struct Copy Bx { v: Int }
+    pub fn mk() -> Bx {
+        return Bx { v: 42 };
+    }
+}
+mod m {
+    import box.{Bx, mk};
+    pub fn main() -> Int {
+        let b: Bx = mk();
+        let Bx { v } = b;
+        return v;
+    }
+}
+```
+
 ```con accept name=foreign-constructor exit=42
 mod num {
     pub newtype NonZero = Int;
@@ -657,7 +674,7 @@ mod m {
 }
 ```
 
-```con reject name=parent-constructs-child-newtype code=E0296 stage=check pair=foreign-constructor pending=R-0011 now=accept:42
+```con reject name=parent-constructs-child-newtype code=E0296 stage=check pair=foreign-constructor
 mod outer {
     mod kids {
         pub newtype K = Int;
@@ -673,7 +690,7 @@ mod outer {
 }
 ```
 
-```con reject name=parent-reads-child-private-field code=E0298 stage=check pair=foreign-constructor pending=R-0011 now=accept:42
+```con reject name=parent-reads-child-private-field code=E0298 stage=check pair=foreign-constructor
 mod outer {
     mod kids {
         pub struct Copy Box { v: Int }

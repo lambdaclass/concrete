@@ -1,0 +1,13 @@
+// Bug 311 (TYPE-11): destructuring only `pub` fields of another module's Copy struct is accepted.
+mod a {
+    pub struct Copy S { pub y: Int, x: Int }
+    pub fn mk() -> S { return S { y: 42, x: 1 }; }
+}
+mod m {
+    import a.{S, mk};
+    pub fn main() -> Int {
+        let s: S = mk();
+        let S { y } = s;
+        return y;
+    }
+}

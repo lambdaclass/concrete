@@ -427,8 +427,8 @@ OPEN-20@1	retired:decided-by-the-owner-2026-10-29	a092a41064ada16d7acc5e63c35757
 OPEN-21@1	retired:decided-by-the-owner-2026-10-29	5c4dd79614f1afdd1ecf03b349bd34eb
 OPEN-22@1	retired:decided-by-the-owner-2026-10-29	becbd2ebc12edecfb07e94c5603bfc4d
 TRUST-5@2	live	4cd08d23b34ccad07c15f0a98c0ceddd
-TYPE-11/parent-constructs-child-newtype	pending	-
-TYPE-11/parent-reads-child-private-field	pending	-
+TYPE-11/parent-constructs-child-newtype	live	-
+TYPE-11/parent-reads-child-private-field	live	-
 MOD-2/submodule-imports-private	live	-
 MOD-6@1	live	35dc776904350d27ff4ae2817d973b0a
 MOD-6/program-imports-libc	live	-
@@ -518,3 +518,4 @@ TYPE-9/type-arguments-to-bodyless-declaration	pending	-
 TYPE-9/type-argument-to-bodyless-declaration	live	-
 ARITH-7/f32-literal-rounded-once	pending	-
 MOD-6/program-root-imports-libc	live	-
+TYPE-11/destructure-private-field	live	-

@@ -10324,6 +10324,13 @@ run_err "$TESTDIR/error_262_parent_constructs_child_newtype.con" "(E0263)"
 run_err "$TESTDIR/error_262_sibling_constructs_newtype.con" "(E0296)"
 run_err "$TESTDIR/error_262_child_constructs_parent_newtype.con" "(E0296)"
 run_ok "$TESTDIR/regress_262_own_rights_beside_child.con" 42
+run_err "tests/regressions/bug311_a_destructuring_let_in_another_module_binds_a_st/repro.con" "(E0298)"
+run_err "$TESTDIR/error_311_destructure_private_linear.con" "(E0298)"
+run_err "$TESTDIR/error_311_destructure_private_copy_partial.con" "(E0298)"
+run_ok "$TESTDIR/regress_311_destructure_pub_fields.con" 42
+run_err "$TESTDIR/error_311_parent_constructs_child_newtype.con" "(E0296)"
+run_err "$TESTDIR/error_311_parent_reads_child_private_field.con" "(E0298)"
+run_err "$TESTDIR/error_311_parent_destructures_child_private_field.con" "(E0298)"
 run_ok "$TESTDIR/regress_262_imported_fn_beside_child_newtype.con" 42
 for r262 in "error_262_parent_constructs_child_newtype.con:(E0263)" \
             "error_262_sibling_constructs_newtype.con:(E0296)" \

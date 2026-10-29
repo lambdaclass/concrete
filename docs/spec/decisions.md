@@ -299,8 +299,8 @@ These entries were retired when the owner answered them; their IDs are never reu
 - **OPEN-20** (OD20, the visibility of std's `std.libc` bindings): decided 2026-10-29, private to std.
   Now MOD-6 of [modules.md](modules.md#MOD-6) (enforced by bug 226's fix).
 - **OPEN-21** (OD21, a parent module's rights over its child): decided 2026-10-29, only the declaring
-  module. Now TYPE-11 of [types.md](types.md#TYPE-11), enforced as written (the parent case is pending,
-  R-0011).
+  module. Now TYPE-11 of [types.md](types.md#TYPE-11), enforced as written for a parent too (bug
+  311's fix).
 - **OPEN-22** (OD22, trust on an `impl` block): decided 2026-10-29, per method only. Now TRUST-5@2 of
   [trusted.md](trusted.md#TRUST-5).
 

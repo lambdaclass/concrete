@@ -1,0 +1,14 @@
+// Bug 311 (TYPE-11): a Copy struct's destructuring may omit fields, but it may not bind a
+// private one outside the declaring module (E0298).
+mod a {
+    pub struct Copy S { pub y: Int, x: Int }
+    pub fn mk() -> S { return S { y: 1, x: 42 }; }
+}
+mod m {
+    import a.{S, mk};
+    pub fn main() -> Int {
+        let s: S = mk();
+        let S { x } = s;
+        return x;
+    }
+}
