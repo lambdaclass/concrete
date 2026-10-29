@@ -581,7 +581,10 @@ static void check_node(const Node *n, const char *path, const TermSet *fol) {
         if (n_nullable > 1) follow_conflict(path, "nullable", nalts);
         free(nalts);
         if (any_nullable) {
+            /* Director sets: a nullable alternative is predicted on FOLLOW, so it clashes with
+               every OTHER alternative whose FIRST meets FOLLOW. */
             for (int i = 0; i < n->n_items; i++) {
+                if (is_nullable(n->items[i])) continue;
                 TermSet *fi = tset_new(), *overlap = tset_new();
                 compute_first(n->items[i], fi);
                 tset_intersect(overlap, fi, fol);
@@ -608,6 +611,13 @@ static void check_node(const Node *n, const char *path, const TermSet *fol) {
             free(f);
         }
     } else if (n->kind == NODE_OPTIONAL || n->kind == NODE_REPETITION) {
+        if (is_nullable(n->body)) {
+            /* `[ a ]` / `{ a }` with a nullable `a`: both choices derive nothing. */
+            TermSet *body = tset_new();
+            tset_add(body, "body");
+            follow_conflict(path, "nullable", body);
+            free(body);
+        }
         TermSet *fb = tset_new(), *overlap = tset_new();
         compute_first(n->body, fb);
         tset_intersect(overlap, fb, fol);

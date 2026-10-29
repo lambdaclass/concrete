@@ -399,7 +399,12 @@ def check_ll1(rules, canonical=None):
                 # follows; one token can never tell them apart.
                 follow_conflict(path, "nullable", {f"alt{j+1}" for j in nullable_alts})
             if nullable_alts:
+                # Director sets: a nullable alternative is predicted on FOLLOW, so it clashes with
+                # every OTHER alternative whose FIRST meets FOLLOW. (Its own FIRST predicts only
+                # itself; two nullable alternatives are reported above.)
                 for j, alt in enumerate(node.alts):
+                    if j in nullable_alts:
+                        continue
                     overlap = first_names(alt, table, nullable) & fol
                     if overlap:
                         follow_conflict(path, f"alt{j+1}", overlap)
@@ -413,12 +418,18 @@ def check_ll1(rules, canonical=None):
                 check_node(item, f"{path}.{j+1}", f)
 
         elif isinstance(node, Optional):
+            if is_nullable(node.body, nullable):
+                # `[ a ]` with a nullable `a`: skipping and entering both derive nothing.
+                follow_conflict(path, "nullable", {"body"})
             overlap = first_names(node.body, table, nullable) & fol
             if overlap:
                 follow_conflict(path, "opt", overlap)
             check_node(node.body, f"{path}[?]", fol)
 
         elif isinstance(node, Repetition):
+            if is_nullable(node.body, nullable):
+                # `{ a }` with a nullable `a`: stopping and iterating both derive nothing.
+                follow_conflict(path, "nullable", {"body"})
             overlap = first_names(node.body, table, nullable) & fol
             if overlap:
                 follow_conflict(path, "rep", overlap)

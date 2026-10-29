@@ -85,6 +85,10 @@ fi
 if [ -n "$BASE" ]; then
   if ! git rev-parse --verify -q "$BASE^{commit}" >/dev/null; then
     no "base revision '$BASE' does not resolve (fetch history, or set LL1_BASE)"
+  elif ! git cat-file -e "$BASE:$KNOWN" 2>/dev/null; then
+    # The base revision has no list: this change introduces it (bug 329), so there is nothing to
+    # shrink from. Said, not silent.
+    echo "  note: $(git rev-parse --short "$BASE") has no $KNOWN; this change introduces the list"
   elif git show "$BASE:$KNOWN" > "$WORK/known_base.tsv" 2>/dev/null; then
     grep -v '^#' "$WORK/known_base.tsv" | grep -v '^$' | cut -f1 | LC_ALL=C sort > "$WORK/known_base"
     added="$(LC_ALL=C comm -13 "$WORK/known_base" "$WORK/known")"
@@ -92,7 +96,7 @@ if [ -n "$BASE" ]; then
   fi
 fi
 grep -q '^rule program ' "$WORK/real.py" || no "real: the canonical dump has no 'program' rule (vacuous output)"
-grep -q '^follow program ' "$WORK/real.py" || no "real: the canonical dump has no FOLLOW sets (the bug 329 regression)"
+grep -qxF 'follow program <eof>' "$WORK/real.py" || no "real: FOLLOW(program) is not exactly end of input (the bug 329 regression)"
 
 n=0
 for g in "$FIXTURES"/*.ebnf; do
@@ -103,17 +107,27 @@ for g in "$FIXTURES"/*.ebnf; do
   grep -qE '^conflict(-follow)? ' "$WORK/$t.py" || no "$t: no conflict line reported"
   n=$((n + 1))
 done
-[ "$n" -ge 6 ] || no "expected at least six planted grammars under $FIXTURES, found $n"
+[ "$n" -ge 10 ] || no "expected at least ten planted grammars under $FIXTURES, found $n"
 # Bug 329's regression: the FIRST/FOLLOW fixtures must fail as FOLLOW conflicts, not by accident.
-# One planted grammar per FIRST/FOLLOW kind the checkers claim: an optional, a repetition, an
-# alternation with a nullable alternative, and two nullable alternatives.
-for want in "planted_follow_optional_before_same_start opt" "planted_follow_optional_then_same_token opt" \
-            "planted_follow_repetition_then_same_token rep" "planted_follow_nullable_alternative alt1" \
-            "planted_follow_nullable_alternative nullable"; do
-  set -- $want
-  grep -qE "^conflict-follow [^ ]+ $2 " "$WORK/$1.py" \
-    || no "$1: no FIRST/FOLLOW conflict of kind '$2' reported (bug 329 is back)"
-done
+# One planted grammar per FIRST/FOLLOW kind the checkers claim, each pinned to the EXACT
+# conflict it must produce (rule path, kind and tokens), so a shared omission or a wrong token set
+# cannot pass on another line: an optional, a repetition, a non-nullable alternative against a
+# nullable one, two nullable alternatives, a nullable body under [ ] and { }, and a conflict
+# reached only through FOLLOW propagated from the enclosing rule.
+while IFS=$'\t' read -r fixture line; do
+  [ -n "$fixture" ] || continue
+  grep -qxF -- "$line" "$WORK/planted_$fixture.py" \
+    || no "planted_$fixture: missing '$line' (bug 329 is back)"
+done <<'EOF'
+follow_optional_before_same_start	conflict-follow for_hdr.2 opt IDENT
+follow_optional_then_same_token	conflict-follow x.2 opt 'b'
+follow_repetition_then_same_token	conflict-follow program.2 rep ','
+follow_nullable_alternative	conflict-follow tail alt1 'x'
+follow_nullable_alternative	conflict-follow twin nullable alt1,alt2
+follow_nullable_body	conflict-follow program.1 nullable body
+follow_nullable_body	conflict-follow program.3 nullable body
+follow_through_enclosing_rule	conflict-follow item.2 opt 'z'
+EOF
 
 if [ "$FAIL" -ne 0 ]; then exit 1; fi
 echo "grammar LL(1): 3 checkers agree on $(grep -c '^rule ' "$WORK/real.py") rules and their FIRST and FOLLOW sets; $(wc -l < "$WORK/real.conflicts" | tr -d ' ') conflicts, all known ($KNOWN); $n planted grammars refused by all three"

@@ -1,0 +1,5 @@
+(* Planted FIRST/FOLLOW conflict for scripts/tests/check_grammar_ll1.sh (bug 329, Grok's review),
+   reached only through FOLLOW propagation: the optional ends `item`, so what may follow it is
+   FOLLOW(item), which holds the 'z' that `program` puts after `item`. *)
+program = item 'z' ;
+item = 'a' [ 'z' ] ;

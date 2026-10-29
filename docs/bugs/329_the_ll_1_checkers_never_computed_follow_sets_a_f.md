@@ -61,14 +61,17 @@ each other.
 ## Fix
 
 - All three checkers compute every nonterminal's FOLLOW set (a fixpoint from the start symbol).
-  They check each choice point in its FOLLOW context. They report a FIRST/FOLLOW conflict where an
-  optional's or repetition's FIRST meets what follows it, or where an alternative of an
-  alternation that can derive nothing starts with a token that can follow the alternation. They
-  also report two alternatives that can both derive nothing, which no lookahead token can tell
-  apart.
+  They check each choice point in its FOLLOW context, by director sets. A FIRST/FOLLOW
+  conflict is reported in four cases:
+  - an optional's or repetition's FIRST meets what follows it;
+  - its body can itself derive nothing, so skipping and entering both derive nothing;
+  - in an alternation with a nullable alternative, another alternative's FIRST meets what follows
+    the alternation;
+  - two alternatives can both derive nothing.
+  No lookahead token can decide any of them.
 - `--canonical` prints every rule's FOLLOW set and each FIRST/FOLLOW conflict
   (`conflict-follow <path> <opt|rep|altN> <tokens>`, or `conflict-follow <path> nullable
-  altI,altJ`). The three outputs stay byte-identical.
+  altI,altJ|body`). The three outputs stay byte-identical.
 - The real grammar shows eight conflicts. They are not resolved here: every grammar edit is the
   owner's. `grammar/ll1_known_conflicts.tsv` lists each with its disposition. The list may only
   shrink: the gate fails on an unlisted conflict, on a stale row, and on a row the base revision's
@@ -78,11 +81,12 @@ each other.
   - the struct-literal rule after an identifier is OD16, decided and still to encode;
   - the block's trailing value and three trailing-comma lists can be left-factored without changing
     the accepted language.
-- Regression leg: `check_grammar_ll1.sh`. Four planted grammars
-  (`tests/fixtures/grammar_ll1/follow_*.ebnf`) must fail in all three checkers, between them as
-  each FIRST/FOLLOW kind: optional, repetition, nullable alternative, and two nullable
-  alternatives. The real grammar's conflicts must equal the list. The canonical dump must carry
-  FOLLOW sets. `check_phase6d_surface_simplification.sh` called `check_ll1.py` directly; it now
+- Regression leg: `check_grammar_ll1.sh`. Six planted grammars
+  (`tests/fixtures/grammar_ll1/follow_*.ebnf`) must fail in all three checkers. Each must produce
+  its exact expected conflict lines, which together cover every kind: an optional, a repetition,
+  an alternative against a nullable one, two nullable alternatives, a nullable body under `[ ]` and
+  `{ }`, and a conflict reached only through FOLLOW propagated from the enclosing rule. The real
+  grammar's conflicts must equal the list, and FOLLOW(program) must be exactly end of input. `check_phase6d_surface_simplification.sh` called `check_ll1.py` directly; it now
   runs the gate.
 
 ## Structural cause

@@ -1,0 +1,6 @@
+(* Planted FIRST/FOLLOW conflicts for scripts/tests/check_grammar_ll1.sh (bug 329, Grok's review):
+   a NULLABLE BODY under [ ] and under { }. Skipping and entering both derive nothing, so no
+   token can decide; FIRST(body) never meets FOLLOW here, so a FIRST-only test passes it. *)
+program = [ a ] 'x' { b } ';' ;
+a = 'y' | ;
+b = ;

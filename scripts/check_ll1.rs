@@ -497,7 +497,12 @@ impl<'a> Checker<'a> {
                     self.follow_conflict(path, "nullable", &nullable_alts);
                 }
                 if !nullable_alts.is_empty() {
+                    // Director sets: a nullable alternative is predicted on FOLLOW, so it clashes
+                    // with every OTHER alternative whose FIRST meets FOLLOW.
                     for (i, fi) in firsts.iter().enumerate() {
+                        if is_nullable(&alts[i], nullable) {
+                            continue;
+                        }
                         let overlap: HashSet<String> = fi.intersection(fol).cloned().collect();
                         if !overlap.is_empty() {
                             self.follow_conflict(path, &format!("alt{}", i + 1), &overlap);
@@ -517,6 +522,11 @@ impl<'a> Checker<'a> {
             // The same path spelling as check_ll1.py: `[?]` into an optional, `{*}` into a repetition.
             Node::Optional(body) | Node::Repetition(body) => {
                 let is_opt = matches!(node, Node::Optional(_));
+                if is_nullable(body, nullable) {
+                    // `[ a ]` / `{ a }` with a nullable `a`: both choices derive nothing.
+                    let body_set: HashSet<String> = std::iter::once("body".to_string()).collect();
+                    self.follow_conflict(path, "nullable", &body_set);
+                }
                 let fb = first_of(body, rules, nullable);
                 let overlap: HashSet<String> = fb.intersection(fol).cloned().collect();
                 if !overlap.is_empty() {
