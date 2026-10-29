@@ -97,6 +97,12 @@ interpreter outputs byte-identical (8850), every report kind byte-identical afte
 - **The interpreter's clock refusal** dispatches on `IntrinsicId` (`clock_monotonic_ns` has one
   spelling).
 
+**Evidence:** at `40e39134`, on OVH, against main `22d6bff0`: emitted outputs (including
+`--interp` over every test program) byte-identical (8850), reports byte-identical (14310),
+`check_builtin_semantics` 11/0, `run_tests` 2883 passed / 0 failed (a first run that overlapped
+a Wasm build reported one failure, unnamed in the tail it printed; the rerun on the same binary
+passed every test), golden 54/0, fast surface 13/0, totality 12/0.
+
 ## Next slices, in order
 
 1. **Remaining sentinels.** In Resolve, `baseDir == ""` (Project) and `structName == ""` /
