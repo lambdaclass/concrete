@@ -33,7 +33,7 @@ binds `K` to the imported function. Expected: 42.
 
 MOD-2@1 ([docs/spec/modules.md](../spec/modules.md#MOD-2)): a declaration is private to its module
 unless it is `pub`, and another module uses it only by importing it. A child module is another
-module (TYPE-11 and [CONSTRUCTION_RIGHTS.md](../language/CONSTRUCTION_RIGHTS.md): visibility is
+module (TYPE-11 and [CONSTRUCTION_RIGHTS.md](../spec/types.md#TYPE-11): visibility is
 module-granular). So the parent calls `K`'s constructor only after importing it. Elab already binds
 exactly that: a newtype constructor is the module's own newtype or an imported one
 (`m.newtypes ++ imports.newtypes`). The rule is unchanged; Check now enforces it.
