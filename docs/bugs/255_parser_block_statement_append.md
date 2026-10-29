@@ -5,6 +5,7 @@ summary: the parser appended each statement of a block to the list built so far,
 fixtures: regress_255_block_statement_order.con
 class: 17 — one function of many statements: the parser's statement lists, the local binder table, the resolver's scopes, the checker's bindings, Elab's binder frames, ElabVerify's and CoreCheck's scopes, each a list appended or searched per statement
 silent: no
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/perf-frontend`)

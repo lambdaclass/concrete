@@ -6,6 +6,7 @@ fixtures: regress_301_place_borrow_root.con
 class: 8 — the address-taken walk and `placeAddr` decided separately which local a borrow promotes
 silent: yes
 exit: 0b
+ruling: Violates: MEM-3@1
 -->
 
 **Status:** FIXED (branch `wip/bug-301`)

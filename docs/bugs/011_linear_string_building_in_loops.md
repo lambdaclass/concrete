@@ -3,6 +3,7 @@
 <!-- bug-ledger
 summary: Linear String Building Is Awkward Inside Loops
 fixtures: bug_string_building.con
+ruling: Violates: unrecorded
 -->
 
 **Status:** Fixed

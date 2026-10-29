@@ -5,6 +5,7 @@ summary: the value `if` (lowerExpr's `.ifExpr`) kept the bindings its arms decla
 fixtures: regress_303_value_if_arm_scope.con
 class: 8 — each branch merge site did its own scope cleanup, and one did not
 silent: no
+ruling: Violates: PASS-9@1
 -->
 
 **Status:** FIXED (branch `wip/bug-303`)

@@ -5,6 +5,7 @@ summary: bug 142's rule (no return/break/continue inside an operand, E0278) is e
 fixtures: regress_298_value_branch_operand_exits.con error_298_exit_nested_value_if.con error_298_exit_nested_value_match.con
 class: 17 — the operand-escape search restarted at every value if or match
 silent: no
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/bug-298`)

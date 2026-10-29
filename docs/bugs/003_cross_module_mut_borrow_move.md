@@ -3,6 +3,7 @@
 <!-- bug-ledger
 summary: Cross-Module &mut Borrow Consumed as Move
 fixtures: bug_cross_module_mut_borrow.con
+ruling: Violates: unrecorded
 -->
 
 **Status:** Fixed

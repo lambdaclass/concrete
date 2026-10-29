@@ -5,6 +5,7 @@ summary: an aliased imported struct/enum was registered under its definition-sit
 coverage: aliased imported structs/enums are registered under the importer's local spelling; positive alias fixture compiles and the unaliased E0298 privacy control proves resolution was preserved; gated by check_type_identity.sh via tests/programs/bug_064_aliased_imported_type.con (2026-08-02 (renumbered from 064))
 class: 1
 area: Resolve/FileSummary — resolveImports; the bug was renumbered from 064, so commits naming 064 are another bug's
+ruling: Violates: unrecorded
 -->
 
 > **Renumbered 064 -> 069 on 2026-09-20.** A second, unrelated bug was filed under

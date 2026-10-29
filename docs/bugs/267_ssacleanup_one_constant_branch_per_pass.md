@@ -5,6 +5,7 @@ summary: SSACleanup settled one link of a chain of constant branches per run of 
 fixtures: regress_267_constant_branch_chains.con
 class: 17 — SSACleanup's whole-function fixpoint
 silent: no
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/perf-backend`)

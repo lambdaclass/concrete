@@ -5,6 +5,7 @@ summary: `PExpr.cast` was the identity, so `x as u8` was 300 in the proof model 
 coverage: a narrowing cast was the identity in the proof model (x as u8 = 300 in the model, 44 in the binary); value-changing casts extract as wrapCast. Regression vehicle is a gate: check_model_diff.sh compares the model with the interpreter on boundary inputs across the corpus and pins tests/regressions/bug080_narrow_cast (300 -> 44 on both sides); see docs/bugs/080 (2026-10-18)
 class: 7
 silent: yes
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `bug080-cast-model`)

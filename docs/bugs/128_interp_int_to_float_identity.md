@@ -8,6 +8,7 @@ class: 11
 silent: yes
 exit: 0b
 area: Interp/Interp — the record's Cause and Fix (evalCast); the fixing commit names it only in parentheses
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED 2026-10-21 (interpreter-coverage pass, branch `interp-coverage`)

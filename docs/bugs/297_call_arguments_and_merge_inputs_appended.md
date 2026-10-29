@@ -5,6 +5,7 @@ summary: Elab (elabCallEv and the method, static-method, trait-bound and indirec
 fixtures: regress_297_argument_order.con
 class: 17 — call arguments and merge inputs appended one at a time
 silent: no
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/bug-297`)

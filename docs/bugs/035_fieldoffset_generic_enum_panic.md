@@ -3,6 +3,7 @@
 <!-- bug-ledger
 summary: layout made program-wide (own-module priority)
 coverage: enum_generic_payload_layout/src/main.con (project test, exit 0); lowerModule now receives program-wide struct/enum/newtype defs (own-module priority, additive fill)
+ruling: Violates: unrecorded
 -->
 
 **Status:** Fixed (2026-07-16)

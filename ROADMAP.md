@@ -125,6 +125,16 @@ a link failure, an interpreter refusal or an unrejected leak.
 | exit 2n | 2 | 0 | 216, 226 |
 | no exit names it | 6 | 0 | 049, 054, 058, 064, 077, 270 |
 
+| open bugs by spec ruling ([RULINGS.md](docs/bugs/RULINGS.md)) | open | silent | bugs |
+|---|---|---|---|
+| violates FFI-2@1 | 1 | 1 | 122 |
+| violates FFI-5@1 | 1 | 0 | 114 |
+| violates MOD-2@1 | 1 | 0 | 226 |
+| spec gap (PASS) | 2 | 0 | 054, 077 |
+| open OPEN-17 | 1 | 0 | 216 |
+| outside the spec (performance) | 1 | 0 | 270 |
+| outside the spec (tooling) | 3 | 0 | 049, 058, 064 |
+
 | discovery rate: counting probe batch | date | effort | found | silent | loud | signal |
 |---|---|---|---|---|---|---|
 | spec: language-specification examples (docs/spec: pilot, pipeline, ownership and types chapters, both consumers, and their reviews) | 2026-10-23 | 116 programs | 2 | 2 | 0 | found bugs |

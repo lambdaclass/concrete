@@ -6,6 +6,7 @@ fixtures: regress_247_function_value_reaches_foreign.con regress_247_free_value_
 class: 12 — a function value has two Core forms, `fnRef` and an identifier; the assumption summary's value walk read one
 silent: yes
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/name-capture`)

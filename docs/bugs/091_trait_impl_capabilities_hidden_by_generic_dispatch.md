@@ -10,6 +10,7 @@ class: 6 — impl capabilities
 class: 13 — impl conformance
 silent: yes
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED

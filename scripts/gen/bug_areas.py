@@ -510,6 +510,47 @@ def _weighted(commits_used, stats, amap, unmapped):
 
 
 # ----------------------------------------------------------------------------- shared helpers
+RULING_GROUPS = ["violates", "spec gap", "open", "permitted", "outside", "unrecorded"]
+
+
+def _ruling(rec):
+    return (rec["facts"] or {}).get("ruling") if isinstance((rec["facts"] or {}).get("ruling"), dict) else None
+
+
+def ruling_group(rec):
+    """The ruling's kind, with a violation and a spec gap shown with its (first) chapter prefix."""
+    r = _ruling(rec)
+    if r is None:
+        return "unrecorded"
+    if r["kind"] in ("violates", "spec gap") and r.get("chapters"):
+        return f"{r['kind']} {r['chapters'][0]}"
+    if r["kind"] == "outside":
+        return f"outside ({r['reason']})"
+    return r["kind"]
+
+
+def _ruling_order(g):
+    head = g.split(" (")[0]
+    for i, k in enumerate(RULING_GROUPS):
+        if head == k or head.startswith(k + " "):
+            return (i, g)
+    return (len(RULING_GROUPS), g)
+
+
+def ruling_label(rec):
+    r = _ruling(rec)
+    if r is None:
+        return "unrecorded"
+    k = r["kind"]
+    if k in ("violates", "permitted", "open"):
+        return f"{'permitted by' if k == 'permitted' else k} {', '.join(r['rules'])}"
+    if k == "spec gap":
+        return f"spec gap ({r['chapter']})"
+    if k == "outside":
+        return f"outside ({r['reason']})"
+    return "unrecorded"
+
+
 def primary_class(rec):
     cs = rec["facts"]["class"] if rec["facts"] else []
     return min((int(c) for c, _ in cs), default=None)
@@ -578,14 +619,24 @@ def render_view(recs, areas, class_names):
         rows.append([name, sum(st.values()),
                      ", ".join(f"{s} {k}" for s, k in sorted(st.items(), key=lambda kv: (-kv[1], _stage_order(kv[0]))))])
     out += _table(["class", "bugs", "stages"], rows, ["l", "r", "l"], pad=False)
+    out += ["", "### Spec ruling by stage (docs/bugs/RULINGS.md has the rules)", ""]
+    by_rk = defaultdict(lambda: defaultdict(int))
+    for n in placed:
+        by_rk[ruling_group(recs[n])][areas[n]["stage"]] += 1
+    rows = []
+    for g in sorted(by_rk, key=_ruling_order):
+        st = by_rk[g]
+        rows.append([g, sum(st.values()),
+                     ", ".join(f"{s} {k}" for s, k in sorted(st.items(), key=lambda kv: (-kv[1], _stage_order(kv[0]))))])
+    out += _table(["ruling", "bugs", "stages"], rows, ["l", "r", "l"], pad=False)
     out += ["", "### Every bug", ""]
     rows = []
     for n in sorted(areas):
         a = areas[n]
         rows.append([f"[{n}]({recs[n]['file']})", a["stage"] or "—", a["module"] or "—",
                      a["basis"] if a["basis"] != "none" else ("unfixed" if recs[n]["open"] else "underived"),
-                     ", ".join(a["secondary"]) or "—"])
-    out += _table(["bug", "stage", "module", "basis", "also touches"], rows, ["l"] * 5, pad=False)
+                     ", ".join(a["secondary"]) or "—", ruling_label(recs[n])])
+    out += _table(["bug", "stage", "module", "basis", "also touches", "spec ruling"], rows, ["l"] * 6, pad=False)
     out += ["", END]
     return "\n".join(out)
 
@@ -615,13 +666,17 @@ def _days(a, b):
     return (d(b) - d(a)).days
 
 
-def bug_rows(recs, areas, kinds):
+def bug_rows(recs, areas, kinds, chapters=None):
     rows = []
     for n in sorted(areas):
         r, a = recs[n], areas[n]
         f = r["facts"] or {}
+        rl = _ruling(r) or {"kind": "unrecorded", "rules": [], "chapters": []}
         days = _days(a["found"], a["fixed"]) if a["found"] and a["fixed"] else None
         rows.append({
+            "ruling": rl["kind"], "ruling_group": ruling_group(r), "rules": list(rl.get("rules", [])),
+            "spec_chapters": list(rl.get("chapters", [])),
+            "spec_gap": rl.get("note") if rl["kind"] == "spec gap" else None,
             "bug": n, "title": r["title"], "open": r["open"], "silent": f.get("silent") == "yes",
             "classes": [int(c) for c, _ in f.get("class", [])], "primary_class": primary_class(r),
             "stage": a["stage"], "module": a["module"], "tier": a["tier"], "secondary": a["secondary"],
@@ -701,6 +756,36 @@ def report_tables(rows, class_names):
     prow.sort(key=lambda r: (-r[3], _stage_order(r[0]), r[1], r[2]))
     tabs.append(("Recurring area x class pairs (two or more bugs; every class a bug lists)",
                  ["stage", "module", "class", "bugs", "which"], prow[:30], ["l", "l", "l", "r", "l"]))
+    groups = defaultdict(list)
+    for r in rows:
+        groups[r["ruling"]].append(r)
+    tabs.append(("Bugs by spec ruling (docs/bugs/RULINGS.md)", ["ruling", "bugs", "open", "silent"],
+                 [[k, len(groups[k]), sum(x["open"] for x in groups[k]), sum(x["silent"] for x in groups[k])]
+                  for k in RULING_GROUPS], ["l", "r", "r", "r"]))
+    ch = defaultdict(list)
+    for r in rows:
+        for c in r["spec_chapters"]:
+            ch[c].append(r)
+    tabs.append(("Bugs by spec chapter (every chapter a ruling names)",
+                 ["chapter", "bugs", "open", "silent", "violates", "spec gap", "open question", "permitted"],
+                 [[c, len(v), sum(x["open"] for x in v), sum(x["silent"] for x in v)]
+                  + [sum(x["ruling"] == k for x in v) for k in ("violates", "spec gap", "open", "permitted")]
+                  for c, v in sorted(ch.items(), key=lambda kv: (-len(kv[1]), kv[0]))], None))
+    rules = defaultdict(list)
+    for r in rows:
+        if r["ruling"] == "violates":
+            for x in r["rules"]:
+                rules[x].append(r["bug"])
+    tabs.append(("Violated rules", ["rule", "bugs", "which"],
+                 [[x, len(b), ", ".join(b)] for x, b in sorted(rules.items(), key=lambda kv: (-len(kv[1]), kv[0]))],
+                 ["l", "r", "l"]))
+    st = sorted({r["stage"] for r in placed}, key=_stage_order)
+    rg = sorted({r["ruling_group"] for r in placed}, key=_ruling_order)
+    mat = defaultdict(int)
+    for r in placed:
+        mat[(r["ruling_group"], r["stage"])] += 1
+    tabs.append(("Spec ruling x stage", ["ruling"] + st + ["total"],
+                 [[g] + [mat[(g, s)] or "." for s in st] + [sum(mat[(g, s)] for s in st)] for g in rg], None))
     return tabs
 
 
@@ -726,17 +811,21 @@ def write_sqlite(path, rows, class_names):
     db.executescript("""
         CREATE TABLE bugs (bug TEXT PRIMARY KEY, title TEXT, open INTEGER, silent INTEGER, stage TEXT,
             module TEXT, tier TEXT, basis TEXT, primary_class INTEGER, found TEXT, fixed TEXT,
-            filed_fixed INTEGER, days_to_fix INTEGER, discovery TEXT, single_share REAL);
+            filed_fixed INTEGER, days_to_fix INTEGER, discovery TEXT, single_share REAL, ruling TEXT,
+            spec_gap TEXT);
+        CREATE TABLE bug_rules (bug TEXT, rule TEXT, chapter TEXT);
         CREATE TABLE bug_classes (bug TEXT, class INTEGER, name TEXT);
         CREATE TABLE bug_secondary (bug TEXT, stage TEXT);
         CREATE TABLE bug_weights (bug TEXT, tier TEXT, stage TEXT, module TEXT, lines REAL);
         CREATE TABLE bug_commits (bug TEXT, hash TEXT, share REAL, via TEXT);
     """)
     for r in rows:
-        db.execute("INSERT INTO bugs VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        db.execute("INSERT INTO bugs VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                    (r["bug"], r["title"], int(r["open"]), int(r["silent"]), r["stage"], r["module"], r["tier"],
                     r["basis"], r["primary_class"], r["found"], r["fixed"], int(r["filed_fixed"]), r["days_to_fix"],
-                    r["discovery"], r["single_share"]))
+                    r["discovery"], r["single_share"], r["ruling"], r["spec_gap"]))
+        db.executemany("INSERT INTO bug_rules VALUES (?,?,?)",
+                       [(r["bug"], x, x.split("-", 1)[0]) for x in r["rules"]])
         db.executemany("INSERT INTO bug_classes VALUES (?,?,?)", [(r["bug"], c, class_names.get(str(c))) for c in r["classes"]])
         db.executemany("INSERT INTO bug_secondary VALUES (?,?)", [(r["bug"], s) for s in r["secondary"]])
         for tier, w in r["weights"].items():

@@ -5,6 +5,7 @@ summary: CoreCheck looked up every callee's signature and capabilities in a list
 coverage: `check_compile_scaling.sh` judges the `call-chain` shape's `coreCheck` stage against its budget and near-linear growth: this fix removes the stage's exclusion under this bug, and the gate fails the pre-fix compiler
 class: 17 — CoreCheck looks up every callee in a list of all function signatures
 silent: no
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/perf-277-v2`)

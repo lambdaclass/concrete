@@ -14,7 +14,8 @@ mod m {
 }
 
 == file it (scripts/gen/new_bug.sh allocates NNN and writes the record skeleton):
-scripts/gen/new_bug.sh "fuzz silent 000000f1: compiled and interpreted runs disagree" --silent yes --new-batch fuzz --probe "fuzz farm finding 000000f1: generator diff, seed 4242, compiler 0123456789ab" --effort "1 cases"
+scripts/gen/new_bug.sh "fuzz silent 000000f1: compiled and interpreted runs disagree" --violates RULE-ID@V --silent yes --new-batch fuzz --probe "fuzz farm finding 000000f1: generator diff, seed 4242, compiler 0123456789ab" --effort "1 cases"
+(replace RULE-ID@V with the docs/spec rule the program's behaviour contradicts, or use --spec-gap, --open or --outside in its place: docs/bugs/RULINGS.md)
 (or --batch "<probe text>" in place of --new-batch when the campaign already has its docs/bugs/discovery.tsv row)
 cp tests/regressions/fuzz_silent_000000f1/repro.con tests/regressions/bugNNN_fuzz_silent_000000f1_compiled_and_interpreted_ru/repro.con && rm -r tests/regressions/fuzz_silent_000000f1
 then fill the FILL-IN(new_bug.sh) fields and pin the reproducer in a gate leg.

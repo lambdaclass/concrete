@@ -6,6 +6,7 @@ fixtures: regress_181_borrowed_binders.con error_181_root_reassigned_match.con e
 class: 12 — an arm binder through a borrowed scrutinee: `&T` in Check, `T` in Elab
 silent: yes
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `soundness-holes`, decision D3)

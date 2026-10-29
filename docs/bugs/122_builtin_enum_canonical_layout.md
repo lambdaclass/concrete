@@ -7,6 +7,7 @@ class: 1 — the builtin/user `Option`/`Result` name join
 class: 12
 silent: yes
 exit: 0b
+ruling: Violates: FFI-2@1
 -->
 
 **Status:** OPEN

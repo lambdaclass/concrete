@@ -6,6 +6,7 @@ fixtures: error_220_empty_hex_literal.con error_220_empty_binary_literal.con err
 class: 13 — the grammar's radix literal needs a digit; the lexer read none as 0
 silent: yes
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/diffhunt-1023`)

@@ -6,6 +6,7 @@ fixtures: error_188_capvar_console.con error_188_capvar_process.con error_188_ca
 class: 6 — a capability variable entailed every requirement, deferred to an instantiation nothing checks
 silent: yes
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED

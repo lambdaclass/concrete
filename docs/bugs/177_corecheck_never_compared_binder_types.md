@@ -7,6 +7,7 @@ class: 12 — secondary: CoreCheck kept a width-blind copy of type equality
 class: 13 — CoreCheck documented "arguments match parameters" and never compared any binder's type with its value's
 silent: yes
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/bug177`)

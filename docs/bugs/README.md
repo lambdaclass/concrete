@@ -29,9 +29,11 @@ fragment ([changelog.d/README.md](../../changelog.d/README.md)); never edit a ge
 fact about a bug lives in its record and nowhere else, so two branches filing bugs edit different
 files and cannot conflict.
 
-Start with `scripts/gen/new_bug.sh "<title>" --silent yes|no --batch <text> [--class N]`, or with
-`--new-batch <kind> --probe <text> --effort <size>` in place of `--batch` when the probe batch that
-found the bug has no row yet. It takes the next number no branch, worktree or reservation has used
+Start with `scripts/gen/new_bug.sh "<title>" --violates ID@V --silent yes|no --batch <text> [--class N]`,
+or with `--new-batch <kind> --probe <text> --effort <size>` in place of `--batch` when the probe batch
+that found the bug has no row yet. In place of `--violates`, give the bug's other [spec
+ruling](#spec-rulings): `--spec-gap "PREFIX — <the missing rule>"`, `--open OPEN-N` or `--outside
+"tooling|performance|library — <why>"`. It takes the next number no branch, worktree or reservation has used
 and reserves it on origin (`refs/bug-reservations/NNN`), so two writers never get one number; it
 writes the record, a reproducer skeleton under `tests/regressions/`, a `changelog.d/` fragment and
 the bug's [discovery record](discovery.tsv) attribution (`--batch` adds it to the one row whose probe
@@ -57,6 +59,7 @@ class: 8 — optional note shown in STRUCTURAL_CLASSES.md's summary table
 silent: yes                                            (silent wrong code or unsound claim; no = loud)
 exit: 0b                                               (ROADMAP exits whose bug list names it)
 area: Lower/Lower — why                                (rare: only when the derived area is wrong)
+ruling: Violates: OWN-1@2                              (the spec ruling; see Spec rulings below)
 -->
 
 **Status:** OPEN | FIXED (branch, commit)
@@ -78,7 +81,8 @@ The record owns the bug's facts:
 - **status**: the first `**Status:**` line. Changing it is the whole of recording a fix.
 - **the ledger block** (it renders as nothing): `summary` is required, and exactly one of
   `fixtures` (regression fixtures, each registered in `scripts/tests/run_tests.sh`) or `coverage`
-  (a rationale naming the gate or fixture that covers it). `class` (one line per structural class;
+  (a rationale naming the gate or fixture that covers it), and a `ruling` ([Spec rulings](#spec-rulings)).
+  `class` (one line per structural class;
   the primary class is the first in the summary table's order), `silent`, `exit` and `area` are
   optional (see [Bug areas](#bug-areas) for `area`).
   Neither `summary` nor `coverage` states the status. The format is in `scripts/gen/bug_ledger.py`.
@@ -90,6 +94,8 @@ edit them:
 - the bugs column of [STRUCTURAL_CLASSES.md](STRUCTURAL_CLASSES.md)'s summary table (the class
   name and owner cells are the class's own and are edited there);
 - each exit's generated bug list in [ROADMAP.md](../../ROADMAP.md);
+- [RULINGS.md](RULINGS.md), the bugs by spec ruling: by kind, by chapter, by violated rule, the spec
+  gaps (the rules to write) and the open owner questions;
 - [AREAS.md](AREAS.md), each bug's stage and module (from the records and git history, below);
 - the coverage maps of `scripts/tests/audit_bug_corpus.sh`, built at run time and never committed.
 
@@ -118,6 +124,31 @@ there (a `class:` line) or adds one (a new table row and section). Whether a new
 or contained until its owner lands follows the roadmap's defect disposition rule
 ([execution queue](../../ROADMAP.md#the-current-execution-queue)).
 
+## Spec rulings
+
+The [language specification](../spec/README.md) decides what is a bug and what is not. Every record
+states its **ruling**, one `ruling:` line in its ledger block, in exactly one of these forms
+(`scripts/gen/bug_rulings.py` holds the format):
+
+| ruling | means |
+|---|---|
+| `Violates: OWN-1@2` | the implementation contradicts that versioned rule (several: `Violates: OWN-1@2, REF-8@1`, the primary first) |
+| `Spec gap: PASS — <the missing rule>` | no rule decides the behaviour; the fix starts by writing the rule, in the chapter of that prefix, which is spec work |
+| `Open: OPEN-17` | the behaviour depends on an undecided owner question ([decisions.md](../spec/decisions.md)) |
+| `Permitted by: PAT-2@2` | not a bug: the rule allows the behaviour |
+| `Outside the spec: tooling — <why>` | not a language behaviour: `tooling` (gates, reports, evidence and proof machinery), `performance` (compile time or generated-code speed) or `library` (a std function, or a missing library feature) |
+| `Violates: unrecorded` | not ruled yet: only a fixed bug numbered below 300 |
+
+`Violates`, `Open` and `Permitted by` may end in ` — <note>`. A cited rule is the version in force
+when the ruling is recorded, and must be a key of [docs/spec/ids.tsv](../spec/ids.tsv): `bug_ledger.py`
+refuses a record whose ruling is missing or malformed or names a rule the registry does not have, an
+open bug that cites a retired version, and `Violates: unrecorded` on an open bug or on one numbered
+300 or higher. `check_bug_filing_complete.sh` ratchets the unruled records: their count may only fall.
+Ruling an old bug means reading its record against the rule's sentence and its chapter entry; cite a
+rule only when its sentence, read literally, decides the behaviour. [RULINGS.md](RULINGS.md) shows the
+counts by kind and chapter and lists the spec gaps, which the spec's owner turns into rules, and the
+roadmap's [bug dashboard](../../ROADMAP.md#bug-dashboard) shows the open bugs by ruling.
+
 ## Bug areas
 
 Which compiler areas keep having bugs is derived, never recorded by hand. `scripts/gen/bug_areas.py`
@@ -145,7 +176,8 @@ found is the commit that added the record, fixed the first commit whose record r
   found ([discovery.tsv](discovery.tsv) kind) by stage, days to fix per stage, and the recurring
   area and class pairs. `--json` prints the same as JSON with every bug's weights and commits;
   `--sqlite /tmp/bugs.db` also writes a throwaway SQLite database for ad-hoc queries (tables
-  `bugs`, `bug_classes`, `bug_secondary`, `bug_weights`, `bug_commits`; never commit it).
+  `bugs` (with its `ruling`), `bug_rules`, `bug_classes`, `bug_secondary`, `bug_weights`, `bug_commits`;
+  never commit it). The report also counts bugs by spec ruling, by spec chapter and by violated rule.
 - A fix commit that touches a path no `area_map.tsv` row matches stops the generator: add a row
   (a new compiler file usually needs one).
 - AREAS.md derives from commits, so a commit that names a bug and changes code makes it stale:

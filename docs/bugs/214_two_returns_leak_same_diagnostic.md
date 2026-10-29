@@ -5,6 +5,7 @@ summary: a linear binding left unconsumed by two `return`s got two byte-identica
 fixtures: error_214_two_returns_leak.con
 class: 15 — a per-exit refusal named the binding but not the exit
 silent: no
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/workload-lzpack`)

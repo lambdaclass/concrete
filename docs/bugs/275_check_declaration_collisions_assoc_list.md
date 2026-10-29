@@ -5,6 +5,7 @@ summary: Check's duplicate-declaration rule (bug 218) searched an association li
 fixtures: error_275_collision_order.con
 class: 17 — Check finds duplicate declarations by searching an association list per declaration, and looks up each callee in a list
 silent: no
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/perf-275-v3`)

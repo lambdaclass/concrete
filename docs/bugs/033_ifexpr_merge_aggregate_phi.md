@@ -3,6 +3,7 @@
 <!-- bug-ledger
 summary: found by workload 2 (png_chunks)
 coverage: regress_033_discard_live_string.con (run_ok live-across); Lower ifExpr merge aggregate alloca path
+ruling: Violates: unrecorded
 -->
 
 **Status:** Fixed (2026-07-16)

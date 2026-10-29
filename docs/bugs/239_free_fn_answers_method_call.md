@@ -6,6 +6,7 @@ fixtures: regress_239_free_fn_beside_imported_method.con error_239_method_call_a
 class: 1 — free functions and impl methods were one spelled namespace in Check, Elab and Core: a free `P_get` answered `p.get()`; fixed 2026-10-26: method tables, `CallSpace` on every Core/SSA reference, namespace-aware consumers
 silent: yes
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/name-capture`)

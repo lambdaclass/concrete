@@ -6,6 +6,7 @@ fixtures: regress_302_loop_keeps_addr_taken_slot.con
 class: 8 — a local's storage changed back at a loop exit while an alias to the slot lived on
 silent: yes
 exit: 0b
+ruling: Violates: MEM-1@1
 -->
 
 **Status:** FIXED (branch `wip/bug-302`)

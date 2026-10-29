@@ -6,6 +6,7 @@ fixtures: error_111_main_params.con error_111_main_params_unit.con error_111_sub
 class: 13
 silent: yes
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED 2026-10-21 (branch `small-fixes-111-127-135`)

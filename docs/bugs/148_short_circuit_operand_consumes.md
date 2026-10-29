@@ -6,6 +6,7 @@ fixtures: error_148_and_operand_consumes.con error_148_or_operand_consumes.con r
 class: 15 — a short-circuit operand treated as sequential
 silent: no
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED 2026-10-22 (branch `safety-eval2`)

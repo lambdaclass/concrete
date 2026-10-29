@@ -16,6 +16,7 @@ summary: `new_bug.sh` reserved a bug number and then failed in `bug_dashboard.py
 coverage: `check_new_bug.sh` leg 3 (the scaffold runs through `bug_dashboard.py`, which its scratch copy now includes, and writes the new batch's row) and leg 6 (the discovery attribution: refusals before any reservation, `--batch` on an existing row, rollback of `discovery.tsv` after a failure past the reservation, and the printed `--number` rerun with no second reservation)
 class: 12
 silent: no
+ruling: Outside the spec: tooling — new_bug.sh reserved a number and then refused the filing for want of a discovery row naming it
 -->
 
 ## Reproducer

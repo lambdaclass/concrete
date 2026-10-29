@@ -4,6 +4,7 @@
 summary: Mono rewrites indirect fn-pointer calls to direct calls when the local's name matches a generic fn (fixed by R-0002)
 fixtures: regress_050_indirect_call_shadow.con regress_050_generic_f_std_io/src/main.con
 class: 1
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (R-0002, 2026-07-25) — a call's callee is now `Callee.direct` or

@@ -6,6 +6,7 @@ fixtures: regress_165_generated_helper_call.con
 class: 1 — a compiler-generated `print_int` call binds to a same-named user function
 silent: yes
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `soundness-holes`)

@@ -4,6 +4,7 @@
 summary: user-defined generic enums are never monomorphized — mixed instantiations corrupt memory (fixed by R-0001)
 fixtures: regress_generic_enum_051.con adversarial_mono_generic_enum.con
 class: 1
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (R-0001, 2026-07-24) — user generic enums are monomorphized per

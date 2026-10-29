@@ -5,6 +5,7 @@ summary: a comparison passed its own type hint (its result type, Bool, from a `r
 fixtures: regress_304_comparison_operand_hint.con
 class: 12 — the operand hint of a binary operator decided separately in Check and Elab, and the comparison's result type taken for its operands' type
 silent: no
+ruling: Violates: PASS-6@1
 -->
 
 **Status:** FIXED (branch `wip/bug-304`)

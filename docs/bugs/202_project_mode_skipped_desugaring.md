@@ -5,6 +5,7 @@ summary: desugaring was a separate step each driver called between resolve and c
 fixtures: regress_202_project_let_else/src/main.con
 class: 12 — the front-end stage sequence restated by each driver; four skipped desugaring
 silent: no
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `vp-r0492`)

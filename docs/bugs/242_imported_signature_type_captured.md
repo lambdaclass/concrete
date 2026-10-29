@@ -5,6 +5,7 @@ summary: a type in an imported signature (`fn make() -> P`) was read in the impo
 fixtures: regress_242_imported_signature_type.con regress_242_toplevel_signature_type.con regress_242_imported_enum_beside_own_enum.con regress_242_imported_field_type.con regress_242_aliased_self_result.con regress_242_imported_constant_type.con regress_242_imported_alias_target.con regress_242_generic_argument.con regress_242_newtype_beside_other_import.con regress_242_struct_beside_other_import.con regress_242_two_modules_signatures.con regress_242_alias_target_closure.con regress_242_child_newtype_from_child_function.con regress_242_two_imported_methods_one_core_name.con
 class: 1 — a type in an imported signature is a spelling the importer re-reads, so the importer's own type of that spelling is captured; fixed 2026-10-25: a transported type whose spelling denotes another declaration in the importer is respelled to its identity
 silent: no
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (2026-10-25, branch `wip/ident-followups`)

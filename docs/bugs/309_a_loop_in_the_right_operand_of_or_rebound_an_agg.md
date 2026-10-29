@@ -5,6 +5,7 @@ summary: the short-circuit lowering of `&&` / `||` merged only the scalars its r
 fixtures: regress_309_shortcircuit_aggregate_merge.con
 class: 8 — the short-circuit merge was a fourth, hand-written branch merge with its own rule for aggregates
 silent: no
+ruling: Violates: PASS-9@1
 -->
 
 **Status:** FIXED (branch `wip/bug-309`)

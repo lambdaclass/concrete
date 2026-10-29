@@ -5,6 +5,7 @@ summary: every branch and loop site in Lower (statement and value `if`, `match`,
 fixtures: regress_286_nested_region_addr_taken.con
 class: 17 — every branch site re-walked its region for address-takes
 silent: no
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/perf-286`, based on `wip/bug-285`)

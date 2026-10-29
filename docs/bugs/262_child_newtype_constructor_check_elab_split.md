@@ -5,6 +5,7 @@ summary: a parent calling its child's newtype constructor without importing it (
 fixtures: error_262_parent_constructs_child_newtype.con error_262_sibling_constructs_newtype.con error_262_child_constructs_parent_newtype.con regress_262_own_rights_beside_child.con regress_262_imported_fn_beside_child_newtype.con
 class: 12 — which newtype constructors a module binds: Check's environment includes its children's newtypes, Elab's does not; fixed 2026-10-25: one definition, the module's own and its imports'
 silent: no
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (2026-10-25, branch `wip/newtype-ctor-stage`)

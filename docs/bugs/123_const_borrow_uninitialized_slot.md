@@ -8,6 +8,7 @@ class: 11
 class: 13
 silent: yes
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED 2026-10-21 (batch 2, `land2-fix`)

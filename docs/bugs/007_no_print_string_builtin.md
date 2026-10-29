@@ -3,6 +3,7 @@
 <!-- bug-ledger
 summary: No Print Path for Standalone Programs
 fixtures: bug_print_builtins.con
+ruling: Violates: unrecorded
 -->
 
 **Status:** Fixed

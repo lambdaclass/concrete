@@ -3,6 +3,7 @@
 <!-- bug-ledger
 summary: String Literal In Loop Produced Invalid LLVM IR
 fixtures: test_string_literal_in_loop.con
+ruling: Violates: unrecorded
 -->
 
 Status: fixed

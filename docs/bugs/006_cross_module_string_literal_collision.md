@@ -3,6 +3,7 @@
 <!-- bug-ledger
 summary: Cross-Module String Literal Name Collisions
 coverage: string literal collision -- fixed in EmitSSA, covered by cross-module tests
+ruling: Violates: unrecorded
 -->
 
 **Status:** Fixed

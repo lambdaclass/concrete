@@ -5,6 +5,7 @@ summary: a discarded `id(x);` was modeled as its block's value (`g(5)` 5 vs 7) a
 coverage: a discarded expression statement was modeled as its block's value (if x > 0 { id(x); } return 7; modeled as x) and a return nested in a non-tail expression as a value; only isValue trailing expressions are values and non-tail sites must not escape. Regression vehicle is a gate: check_model_diff.sh leg T pins tests/regressions/bug086_discarded_tail/repro.con; see docs/bugs/086 (2026-10-18)
 class: 7
 silent: yes
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `bug085-stmt-extraction`, on the unpublished bug 080 head `00efbaf4`)

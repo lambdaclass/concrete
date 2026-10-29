@@ -6,6 +6,7 @@ fixtures: regress_099_generic_infer_field_index.con regress_099_generic_infer_ca
 class: 3
 silent: no
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED 2026-10-21 (`land5`)

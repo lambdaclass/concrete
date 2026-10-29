@@ -6,6 +6,7 @@ fixtures: regress_150_float_self_compare.con
 class: 7 — the folder's float self-comparison
 silent: yes
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED 2026-10-21 (interpreter-coverage pass, branch `interp-coverage`)

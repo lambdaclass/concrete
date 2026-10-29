@@ -7,6 +7,7 @@ class: 7
 class: 8
 class: 13
 silent: no
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `backend-108-116`, commit 70025ca9, the bug 108 fix)

@@ -6,6 +6,7 @@ fixtures: regress_146_heap_deref_frees.con regress_146_heap_deref_cast.con error
 class: 8 — `*h` lowered as a load only
 silent: no
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED 2026-10-22 (branch `safety-eval2`)

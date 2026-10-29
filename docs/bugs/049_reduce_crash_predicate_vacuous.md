@@ -4,6 +4,7 @@
 summary: `concrete reduce --predicate crash` reduces anything to an empty program (reducer audit 2026-07-18)
 coverage: reduce --predicate crash is vacuous (parse-only); reduces any program to ~empty, fix pending
 class: 11
+ruling: Outside the spec: tooling — `concrete reduce --predicate crash` accepts every candidate that parses, so it reduces any program to an empty one
 -->
 
 **Status:** Open

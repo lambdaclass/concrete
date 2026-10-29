@@ -5,6 +5,7 @@ summary: the R-0550 scaling gate compared each stage's fastest-of-three wall tim
 coverage: check_compile_scaling.sh
 class: 11 — the host's speed at judgment, never measured, read as its speed at --measure
 silent: no
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/bug-294`)

@@ -7,6 +7,7 @@ class: 7 — until 127's fix the consumers disagreed
 class: 13 — evaluation-order rule 6: Core cannot bind the base once
 silent: yes
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `soundness-holes`)

@@ -6,6 +6,7 @@ fixtures: regress_272_imported_extern_ffi_edge.con
 class: 1 — the FFI edge asked whether an extern of the call's spelling is declared in this module tree, not whether the call is bound to a foreign declaration; fixed 2026-10-25: the resolver's binding
 silent: yes
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (2026-10-25, branch `wip/tooling-batch`)

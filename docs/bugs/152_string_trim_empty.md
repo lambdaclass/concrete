@@ -6,6 +6,7 @@ fixtures: regress_152_string_trim_empty.con
 class: 7 — a runtime string builtin's empty-input edge
 silent: yes
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED 2026-10-21 (interpreter-coverage pass, branch `interp-coverage`)

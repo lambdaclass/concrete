@@ -5,6 +5,7 @@ summary: a refused `Copy` bound named every builtin type `<type>` (`v.get_unchec
 fixtures: error_225_bound_names_builtin_type.con
 class: 12 — the type a refused bound names, rendered per branch; one copy printed `<type>`
 silent: no
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/workload-stackvm-2`)

@@ -6,6 +6,7 @@ fixtures: regress_176_loop_shadow_restores_outer.con error_176_while_shadow_type
 class: 2 — a loop body's shadowing `let` outlived the loop in the checker) (and 068's binder half
 silent: yes
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/bug176`)

@@ -2,10 +2,15 @@
 # File a new bug: allocate its number race-safely, write the record, the reproducer skeleton, the
 # changelog fragment and its discovery attribution, regenerate the views, and print what is left.
 #
-#   scripts/gen/new_bug.sh "<title>" --silent yes|no --batch <text> [--class N]
-#   scripts/gen/new_bug.sh "<title>" --silent yes|no --new-batch <kind> --probe <text> --effort <size> [--class N]
+#   scripts/gen/new_bug.sh "<title>" RULING --silent yes|no --batch <text> [--class N]
+#   scripts/gen/new_bug.sh "<title>" RULING --silent yes|no --new-batch <kind> --probe <text> --effort <size> [--class N]
 #   scripts/gen/new_bug.sh --number NNN "<title>" ...  file under NNN, already reserved and unfiled
 #   scripts/gen/new_bug.sh --number-only "<title>"     allocate and reserve a number, write nothing
+# RULING (the spec decides what is a bug; scripts/gen/bug_rulings.py) is exactly one of:
+#   --violates ID@V       the rule of docs/spec/ the implementation contradicts (OWN-1@2)
+#   --spec-gap "PREFIX — <the missing rule>"     no rule decides it; the chapter prefix it belongs to
+#   --open OPEN-N         it depends on an undecided owner question
+#   --outside "tooling|performance|library — <why>"   not a language behaviour
 #
 # DISCOVERY (bug 300). Every bug from 079 on is attributed to one probe batch of
 # docs/bugs/discovery.tsv, and bug_dashboard.py refuses a record without one. The row names the
@@ -62,7 +67,7 @@
 set -euo pipefail
 
 die() { echo "new_bug: $*" >&2; exit 1; }
-usage() { sed -n '2,19p' "$0" >&2; exit 2; }
+usage() { sed -n '2,13p' "$0" >&2; exit 2; }
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
@@ -71,12 +76,14 @@ TODAY="${NEW_BUG_DATE:-$(date +%Y-%m-%d)}"
 TOKEN="FILL-IN(new_bug.sh)"
 
 TITLE=""; CLASS=""; SILENT=""; NUMBER_ONLY=0; NUMBER=""
+RULING_ARGS=(); N_RULING=0
 BATCH=""; NEW_KIND=""; NEW_PROBE=""; NEW_EFFORT=""; HAVE_BATCH=0; HAVE_NEW=0; HAVE_PROBE=0; HAVE_EFFORT=0
 ARGS=("$@")
 while [ $# -gt 0 ]; do
   case "$1" in
     --class) [ $# -ge 2 ] || usage; CLASS="$2"; shift 2 ;;
     --silent) [ $# -ge 2 ] || usage; SILENT="$2"; shift 2 ;;
+    --violates|--spec-gap|--open|--outside) [ $# -ge 2 ] || usage; RULING_ARGS+=("$1" "$2"); N_RULING=$((N_RULING + 1)); shift 2 ;;
     --batch) [ $# -ge 2 ] || usage; BATCH="$2"; HAVE_BATCH=1; shift 2 ;;
     --new-batch) [ $# -ge 2 ] || usage; NEW_KIND="$2"; HAVE_NEW=1; shift 2 ;;
     --probe) [ $# -ge 2 ] || usage; NEW_PROBE="$2"; HAVE_PROBE=1; shift 2 ;;
@@ -98,8 +105,13 @@ case "$SILENT" in ""|yes|no) ;; *) die "--silent takes yes or no" ;; esac
 [ "$NUMBER_ONLY" = 0 ] || [ -z "$NUMBER" ] || die "--number files under a number already held; --number-only reserves a new one"
 DISC="docs/bugs/discovery.tsv"
 TRACKED=0; if [ -f "$DISC" ] && [ -f scripts/gen/bug_dashboard.py ]; then TRACKED=1; fi
+# The spec ruling (scripts/gen/bug_rulings.py): required when the tree has it, built and checked
+# against docs/spec/ids.tsv here, before any number is reserved.
+RULED=0; [ -f scripts/gen/bug_rulings.py ] && [ -f docs/spec/ids.tsv ] && RULED=1
+RULING=""
 if [ "$NUMBER_ONLY" = 1 ]; then
   [ "$HAVE_BATCH$HAVE_NEW$HAVE_PROBE$HAVE_EFFORT" = 0000 ] || die "--number-only writes nothing, so it takes no batch"
+  [ "$N_RULING" = 0 ] || die "--number-only writes nothing, so it takes no ruling"
 else
   [ "$HAVE_BATCH" = 0 ] || [ "$HAVE_NEW" = 0 ] || die "--batch and --new-batch both given: a bug belongs to exactly one batch"
   [ "$HAVE_NEW" = 1 ] || [ "$HAVE_PROBE$HAVE_EFFORT" = 00 ] || die "--probe and --effort describe the row of a --new-batch"
@@ -109,6 +121,13 @@ else
     [ "$HAVE_NEW" = 0 ] || { [ "$HAVE_PROBE" = 1 ] && [ "$HAVE_EFFORT" = 1 ]; } || die "--new-batch needs --probe and --effort"
   else
     [ "$HAVE_BATCH$HAVE_NEW" = 00 ] || die "this tree has no discovery record ($DISC with scripts/gen/bug_dashboard.py), so --batch and --new-batch have no row to write"
+  fi
+  if [ "$RULED" = 1 ]; then
+    [ "$N_RULING" = 1 ] || die "give exactly one spec ruling: --violates ID@V (the rule of docs/spec/ the implementation contradicts), --spec-gap \"PREFIX — <the missing rule>\", --open OPEN-N (an undecided owner question) or --outside \"tooling|performance|library — <why>\" (docs/bugs/RULINGS.md)"
+    RULING="$(python3 -I scripts/gen/bug_rulings.py value "${RULING_ARGS[@]}")" || die "the ruling flags are malformed (above)"
+    python3 -I scripts/gen/bug_rulings.py check --num 999 --open-bug "$RULING" || die "the spec ruling '$RULING' is refused (above)"
+  else
+    [ "$N_RULING" = 0 ] || die "this tree has no spec registry (docs/spec/ids.tsv with scripts/gen/bug_rulings.py), so a ruling has nothing to resolve against"
   fi
 fi
 
@@ -415,6 +434,7 @@ mkdir -p "$REPRO_DIR"
   printf 'coverage: reproducer %s, pinned by %s the gate leg that pins it (for example check_example_outputs.sh, open-bug reproducers leg)\n' "$REPRO" "$TOKEN"
   [ -z "$CLASS" ] || printf 'class: %s\n' "$CLASS"
   [ -z "$SILENT" ] || printf 'silent: %s\n' "$SILENT"
+  [ -z "$RULING" ] || printf 'ruling: %s\n' "$RULING"
   printf -- '-->\n\n'
   printf '## Reproducer\n\n`%s`: %s the smallest program that shows the defect.\n\n' "$REPRO" "$TOKEN"
   printf '## Observed\n\n%s what the binary and `--interp` do (exit status, output, diagnostic).\n\n' "$TOKEN"
@@ -458,6 +478,7 @@ echo "new_bug: filed bug $num"
 echo "  record      $REC"
 echo "  reproducer  $REPRO"
 echo "  changelog   $FRAG"
+[ -z "$RULING" ] || echo "  ruling      $RULING (docs/bugs/RULINGS.md)"
 if [ "$TRACKED" = 1 ]; then
   if [ "$HAVE_BATCH" = 1 ]; then echo "  discovery   $DISC: added to the batch matching '$BATCH'"
   else echo "  discovery   $DISC: new $NEW_KIND batch dated $TODAY"; fi

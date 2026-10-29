@@ -4,6 +4,7 @@
 summary: HashMap keys()/values() and HashSet elements() duplicated linear payloads
 coverage: error_046_map_values_linear/src/main.con (negative project fixture, must FAIL) + std-compiled-coverage bug-046 legs (E0241 + Copy positive); keys/values/elements Copy-bounded
 class: 14
+ruling: Violates: unrecorded
 -->
 
 **Status:** Fixed (2026-07-18)

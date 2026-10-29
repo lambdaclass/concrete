@@ -5,6 +5,7 @@ summary: Elab's program-level declaration analyses (top-level function collision
 coverage: `check_compile_scaling.sh` judges the `functions`, `call-chain`, `structs` and `enums` shapes' `elaborate` stage against its budget and near-linear growth: this fix removes the stage's exclusions under this bug, and the gate fails the pre-fix compiler on all four
 class: 17 — Elab's program-level declaration analyses scan lists per declaration
 silent: no
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/perf-276-v2`)

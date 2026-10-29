@@ -3,6 +3,7 @@
 <!-- bug-ledger
 summary: No Easy Timing Path For Standalone Benchmark Programs
 fixtures: bug_clock_builtin.con
+ruling: Violates: unrecorded
 -->
 
 **Status:** Fixed

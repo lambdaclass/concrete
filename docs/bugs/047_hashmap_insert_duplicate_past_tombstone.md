@@ -4,6 +4,7 @@
 summary: HashMap::insert duplicates a key that lives past a tombstone (fixed by R-0003)
 fixtures: regress_047_048_hashmap_probe/src/main.con
 class: 14
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (R-0003, 2026-07-25) — `insert` remembers the first tombstone

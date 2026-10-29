@@ -6,6 +6,7 @@ fixtures: regress_251_generic_reads_defining_tree_constant.con regress_251_gener
 class: 1 — a generic's specialization moved to the instantiating tree, whose constants and function names then answered its spellings; fixed 2026-10-25: a specialization keeps its defining tree
 silent: yes
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (2026-10-25, branch `wip/ident-followups`)

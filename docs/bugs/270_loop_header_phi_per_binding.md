@@ -5,6 +5,7 @@ summary: Lower gives every loop a header phi for every binding in scope, so n lo
 coverage: the `let`-then-`while` shape of the long-function measurement in this record; no gate bounds it yet (a time leg fails until it is fixed)
 class: 17 — Lower's loop phis
 silent: no
+ruling: Outside the spec: performance — Lower gives every loop a header phi for every binding in scope (n² phis)
 -->
 
 **Status:** OPEN

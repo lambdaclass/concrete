@@ -6,6 +6,7 @@ coverage: the interpreter resolves a call spelling per calling module as the bac
 class: 1
 class: 7
 silent: no
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED 2026-10-21 (interpreter-coverage pass, branch `interp-coverage`)

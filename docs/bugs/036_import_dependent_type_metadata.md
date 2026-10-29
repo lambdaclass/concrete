@@ -3,6 +3,7 @@
 <!-- bug-ledger
 summary: import closure: type metadata travels with the type
 coverage: import_closure_metadata/src/main.con (project test, exit 0); resolveImports closes over public types reachable through imported signatures
+ruling: Violates: unrecorded
 -->
 
 **Status:** Fixed (2026-07-16)

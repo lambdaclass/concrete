@@ -5,6 +5,7 @@ summary: a `let mut` whose initializer failed to check was recovered as an immut
 fixtures: error_224_failed_let_keeps_mutability.con
 class: 12 — a recovered `let` restated by hand with its mutability fixed to false
 silent: no
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/workload-stackvm-2`)

@@ -5,6 +5,7 @@ summary: mutation family 31 (bug 061 restored) was anchored on the `.applyVar` a
 coverage: mutation 31 was anchored on the proof-only cExprToPExpr wrapper and survived. Regression vehicle is the mutation harness (family 31 KILLED), not a tests/programs fixture (2026-10-23)
 class: 12 — the bug-061 extraction arm in an executed and a proof-only copy; the mutation hit the unexecuted one
 silent: no
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `vp-r0492-backends`, R-0492 step 4)

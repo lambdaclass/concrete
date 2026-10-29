@@ -3,6 +3,7 @@
 <!-- bug-ledger
 summary: Cross-Module Struct Field Offset
 fixtures: bug_cross_module_struct_field.con
+ruling: Violates: unrecorded
 -->
 
 **Status:** Fixed

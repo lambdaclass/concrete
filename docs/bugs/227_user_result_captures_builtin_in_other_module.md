@@ -5,6 +5,7 @@ summary: a user `enum Result` in one module captured the builtin `Result<T, E>` 
 fixtures: regress_227_nested_builtin_result.con regress_227_toplevel_builtin_result.con regress_227_user_result_methods_beside_builtin.con regress_227_child_result_beside_builtin.con regress_227_imported_field_builtin_result.con regress_227_value_import_named_result.con
 class: 1 — a user `Result` in one module answers the builtin in another: Lower's and Resolve's program-wide spelled-name lookups; fixed 2026-10-25, R-0492 slice 6: one type environment per module, and Core spells a user `Result` apart from the builtin
 silent: no
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (2026-10-25, R-0492 slice 6: the top-level half with bug 230, the nested half by Core spelling)

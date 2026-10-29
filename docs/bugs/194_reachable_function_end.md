@@ -6,6 +6,7 @@ fixtures: error_194_missing_return_plain.con error_194_missing_return_if.con err
 class: 13 — a function returns a value on every path: no site; the backend verifier noticed
 silent: yes
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/bug194`)

@@ -6,6 +6,7 @@ fixtures: regress_245_toplevel_private_constants.con regress_245_nested_private_
 class: 1 — a constant reference is its spelling, scoped program-wide by the interpreter and per tree by Lower; fixed 2026-10-25: both scope it by one definition, `CModule.treeConstants`
 silent: no
 area: Interp/Interp — the record's Fix: the interpreter keeps the scope per tree; it spells only Core.lean
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (2026-10-25, branch `wip/ident-followups`)

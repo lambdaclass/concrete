@@ -23,7 +23,10 @@
 #      second reservation; --number refuses a number that is not reserved, is another user's, is
 #      being filed by another run, or already has a record, and of two concurrent --number runs on
 #      one held number exactly one files it; the commands the fuzz farm and CI triage print are
-#      accepted as printed; a filing waits for, then refuses, another filing's worktree lock.
+#      accepted as printed; a filing waits for, then refuses, another filing's worktree lock;
+#   7. the spec ruling (docs/bugs/RULINGS.md): a filing names exactly one of --violates, --spec-gap,
+#      --open and --outside, the record's ledger block carries it, and a filing with none, with two,
+#      or naming a rule docs/spec/ids.tsv does not have is refused before a number is reserved.
 #
 # Copies the ledger inputs the way check_ledgers.sh does (migrating the copy when this tree is not
 # migrated yet), so it needs no compiler build. Runs in seconds.
@@ -51,8 +54,10 @@ cp ROADMAP.md CHANGELOG.md "$W/"
 cp -R changelog.d "$W/changelog.d"
 # bug_dashboard.py too: without it the scaffold skips the discovery attribution and the dashboard,
 # which is how bug 300 (a filing the dashboard refused after the reservation) went unseen here.
-cp scripts/gen/bug_ledger.py scripts/gen/bug_areas.py scripts/gen/bug_dashboard.py scripts/gen/changelog.py scripts/gen/migrate_ledgers.py \
-   scripts/gen/new_bug.sh "$W/scripts/gen/"
+cp scripts/gen/bug_ledger.py scripts/gen/bug_areas.py scripts/gen/bug_dashboard.py scripts/gen/bug_rulings.py scripts/gen/changelog.py \
+   scripts/gen/migrate_ledgers.py scripts/gen/new_bug.sh "$W/scripts/gen/"
+# The spec registry and chapter table the rulings resolve against (read only).
+mkdir -p "$W/docs/spec" && cp docs/spec/ids.tsv docs/spec/README.md "$W/docs/spec/"
 cp scripts/tests/audit_bug_corpus.sh scripts/tests/check_bug_filing_complete.sh \
    scripts/tests/run_tests.sh scripts/tests/run_ci_gates_local.sh "$W/scripts/tests/"
 # The copied gates start by sourcing the gate-shell guard from beside themselves.
@@ -79,7 +84,7 @@ NB="$W/scripts/gen/new_bug.sh"
 # Every full filing names its discovery batch (bug 300); refusal legs pass one so they reach the
 # refusal they are about.
 BN=(--new-batch development --probe "gate control batch" --effort "1 probe")
-BA=(--silent no "${BN[@]}")
+BA=(--silent no --outside "tooling — gate control" "${BN[@]}")
 DISC="$W/docs/bugs/discovery.tsv"
 dash_ok() { python3 -I "$W/scripts/gen/bug_dashboard.py" --check --root "$W" >/dev/null 2>&1; }
 M="$(ls "$W/docs/bugs" | sed -nE 's/^([0-9]{3})_.*/\1/p' | sort -n | tail -1)"; M=$((10#$M))
@@ -130,7 +135,7 @@ else no "concurrent allocations collided or failed: $(echo $got) (exit status $r
 echo "=== 3. the scaffold files a bug and the generated views agree ==="
 before="$(git -C "$W" ls-remote origin 'refs/bug-reservations/*' | wc -l | tr -d ' ')"
 NEXT="$(printf '%03d' $((M + 41 + 6 + 1)))"
-if bash "$NB" "Scaffold control: a placeholder defect" --class 1 --silent yes \
+if bash "$NB" "Scaffold control: a placeholder defect" --class 1 --silent yes --violates OWN-1@2 \
      --new-batch hunt --probe "scaffold control hunt" --effort "12 programs" > "$TMP/file.out" 2>&1; then
   ok "new_bug.sh filed a bug"
 else no "new_bug.sh failed:"; sed 's/^/      /' "$TMP/file.out" | awk 'NR<=15'; fi
@@ -145,6 +150,9 @@ done
 [ -z "$missing" ] && ok "the record has every section" || no "the record lacks sections:$missing"
 grep -qx 'class: 1' "${REC:-/dev/null}" && grep -qx 'silent: yes' "${REC:-/dev/null}" \
   && ok "the ledger block carries the requested class and silent values" || no "the ledger block lost --class or --silent"
+grep -qx 'ruling: Violates: OWN-1@2' "${REC:-/dev/null}" && grep -qF "| OWN-1@2 |" "$W/docs/bugs/RULINGS.md" \
+  && ok "the ledger block carries the --violates ruling, and RULINGS.md lists the bug under OWN-1@2" \
+  || no "the ledger block lost --violates, or docs/bugs/RULINGS.md does not list OWN-1@2"
 [ -f "$W/tests/regressions/bug${NEXT}_scaffold_control_a_placeholder_defect/repro.con" ] \
   && ok "the reproducer skeleton exists" || no "no reproducer skeleton under tests/regressions/bug${NEXT}_*"
 FRAG="$(ls "$W/changelog.d/2026-01-02-bug${NEXT}-"*.md 2>/dev/null | head -1)"
@@ -287,7 +295,7 @@ awk '{ print } /BEGIN GENERATED: bug dashboard/ { print "a hand edit" }' "$TMP/r
 refuse "a stale bug dashboard" "stale or refuses" bash "$NB" "x defect" "${BA[@]}"
 cat "$TMP/roadmap.bak" > "$W/ROADMAP.md"
 # --batch joins an existing row: the number goes in its bugs cell, and in its silent cell only when silent.
-if bash "$NB" "Joined control defect" --silent no --batch "scaffold control hunt" > "$TMP/join.out" 2>&1; then
+if bash "$NB" "Joined control defect" --silent no --outside "tooling — control" --batch "scaffold control hunt" > "$TMP/join.out" 2>&1; then
   J="$(sed -nE 's/^new_bug: filed bug ([0-9]{3})$/\1/p' "$TMP/join.out")"
   if [ -n "$J" ] && [ "$(awk -F'\t' -v b="$NEXT,$J" -v s="$NEXT" '$3 == "scaffold control hunt" && $5 == b && $6 == s' "$DISC" | wc -l | tr -d ' ')" = 1 ] && dash_ok; then
     ok "--batch added loud bug $J to the existing row's bugs cell only, and the dashboard accepts it"
@@ -301,7 +309,7 @@ chmod 444 "$W/ROADMAP.md"
 if [ -w "$W/ROADMAP.md" ]; then
   echo "  skip a failure after the reservation rolls back and resumes (ROADMAP.md stays writable for this user)"
   chmod 644 "$W/ROADMAP.md"
-elif bash "$NB" "Resume control defect" --silent yes --batch "scaffold control hunt" > "$TMP/rs.out" 2>&1; then
+elif bash "$NB" "Resume control defect" --silent yes --open OPEN-17 --batch "scaffold control hunt" > "$TMP/rs.out" 2>&1; then
   chmod 644 "$W/ROADMAP.md"; no "filing succeeded although ROADMAP.md was read-only"
 else
   chmod 644 "$W/ROADMAP.md"
@@ -351,8 +359,13 @@ else no "two concurrent --number runs on bug $RACE: exit statuses $ra and $rb, n
 # The automatic filing paths print commands that must pass as printed (bug 300): the fuzz farm's
 # promote output (pinned byte-exact in its golden) and CI triage's skeleton command, once its SILENT
 # placeholder is chosen (the bare placeholder is refused before any reservation: leg 4's bad --silent).
-FC="$(sed -n 's/^\(scripts\/gen\/new_bug\.sh .*--new-batch .*\)$/\1/p' "$ROOT_DIR/tests/fixtures/fuzz_farm/promote.golden")"
-if [ -n "$FC" ] && (cd "$W" && eval "bash $FC") > "$TMP/farm.out" 2>&1; then
+# Its ruling placeholder (RULE-ID@V) is the filer's to replace, as CI triage's SILENT is: as printed it
+# is refused before any reservation, and with a rule in its place it files.
+FC0="$(sed -n 's/^\(scripts\/gen\/new_bug\.sh .*--new-batch .*\)$/\1/p' "$ROOT_DIR/tests/fixtures/fuzz_farm/promote.golden")"
+FC="${FC0/RULE-ID@V/OWN-1@2}"
+refuse "the fuzz farm's command with its ruling placeholder left in" "ID@VERSION" \
+  bash -c 'cd "$1" && eval "bash $2"' _ "$W" "$FC0"
+if [ -n "$FC0" ] && [ "$FC" != "$FC0" ] && (cd "$W" && eval "bash $FC") > "$TMP/farm.out" 2>&1; then
   ok "the fuzz farm's printed new_bug.sh command files a bug as printed"
 else no "the fuzz farm's printed new_bug.sh command was refused or not found: $(tr '\n' ' ' < "$TMP/farm.out" 2>/dev/null | cut -c1-240)"; fi
 TC="$(python3 -I - "$ROOT_DIR" <<'PY'
@@ -361,7 +374,7 @@ src = open(os.path.join(sys.argv[1], "scripts", "ci", "triage.py")).read()
 m = re.search(r"f'bash (scripts/gen/new_bug\.sh .*?)'\s*\n\s*f'(--new-batch .*?)'", src)
 cmd = (m.group(1) + m.group(2)) if m else ""
 for k, v in (('{r["gate"]}', "check_x.sh"), ("{first}", "a failing leg"), ('{run.get("databaseId")}', "1"),
-             ("--silent SILENT", "--silent no")):
+             ("--silent SILENT", "--silent no"), ("--violates RULE-ID@V", "--violates OWN-1@2")):
     cmd = cmd.replace(k, v)
 print(cmd if "{" not in cmd else "")
 PY
@@ -389,6 +402,23 @@ else no "a filing did not wait for and then take a released lock: $(tr '\n' ' ' 
 wait
 rm -rf "$LK"
 refuse "--number with --number-only" "--number-only reserves a new one" bash "$NB" --number-only --number 990 "x defect"
+
+echo "=== 7. the spec ruling ==="
+refuse "a filing with no spec ruling" "give exactly one spec ruling" bash "$NB" "unruled defect" --silent no "${BN[@]}"
+refuse "a filing with two spec rulings" "give exactly one spec ruling" bash "$NB" "x defect" --silent no --violates OWN-1@2 --open OPEN-17 "${BN[@]}"
+refuse "a rule docs/spec/ids.tsv does not have" "not a rule version" bash "$NB" "x defect" --silent no --violates OWN-1@99 "${BN[@]}"
+refuse "a ruling that is not ID@VERSION" "ID@VERSION" bash "$NB" "x defect" --silent no --violates RULE-ID@V "${BN[@]}"
+refuse "an unknown owner question" "not an owner question" bash "$NB" "x defect" --silent no --open OPEN-999 "${BN[@]}"
+refuse "a spec gap with no chapter" "Spec gap: PREFIX" bash "$NB" "x defect" --silent no --spec-gap "a rule" "${BN[@]}"
+refuse "--number-only with a ruling" "takes no ruling" bash "$NB" --number-only --violates OWN-1@2 "x defect"
+G2=""
+if bash "$NB" "Spec gap control defect" --silent no --spec-gap "OWN — a control rule" "${BN[@]}" > "$TMP/gap.out" 2>&1; then
+  G2="$(sed -nE 's/^new_bug: filed bug ([0-9]{3})$/\1/p' "$TMP/gap.out")"
+fi
+if [ -n "$G2" ] && grep -qx 'ruling: Spec gap: OWN — a control rule' "$W/docs/bugs/${G2}_spec_gap_control_defect.md" \
+   && grep -qF "| OWN | a control rule |" "$W/docs/bugs/RULINGS.md"; then
+  ok "--spec-gap files bug $G2 with its gap, which RULINGS.md lists among the rules to write"
+else no "--spec-gap did not file a bug carrying its gap: $(tr '\n' ' ' < "$TMP/gap.out" | cut -c1-240)"; fi
 
 echo "NEW-BUG: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ] || exit 1

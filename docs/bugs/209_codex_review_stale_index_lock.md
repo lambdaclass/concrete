@@ -5,6 +5,7 @@ summary: a `codex exec --sandbox read-only` review ran `git status` in the calle
 coverage: a read-only Codex review left a stale index.lock in the caller's worktree. Regression vehicle is check_review_tool.sh (every reviewer call runs with GIT_OPTIONAL_LOCKS=0), not a tests/programs fixture (2026-10-23)
 class: 16 — a read-only review's git left the caller's `index.lock` behind
 silent: no
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `checker-unidentified-cause`, for landing train 11)

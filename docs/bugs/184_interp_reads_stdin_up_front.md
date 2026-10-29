@@ -5,6 +5,7 @@ summary: `--interp` read ALL of standard input before `main` ran (`readBinToEnd`
 fixtures: regress_184_interp_stdin_unread.con regress_184_interp_stdin_read.con
 class: 7 — the interpreter read all of stdin before `main`; the binary reads when the program does
 silent: no
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `train3-interp-stdin`, for landing train 3)

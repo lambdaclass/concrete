@@ -6,6 +6,7 @@ fixtures: error_rawdup_trusted_deref.con regress_198_read_owned.con
 class: 13 — `trusted` does not relax linearity, unenforced at `*p`
 silent: yes
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `soundness-holes`, TIGHTENING_DECISIONS T-RAWDUP)

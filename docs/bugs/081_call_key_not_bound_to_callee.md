@@ -6,6 +6,7 @@ coverage: the proof model calls by table KEY but edges were justified by table c
 class: 1
 class: 9
 silent: yes
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `bug081-callee-key`, on the unpublished bug-080 head `00efbaf4`)

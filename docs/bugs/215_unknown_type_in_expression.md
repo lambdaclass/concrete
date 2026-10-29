@@ -6,6 +6,7 @@ fixtures: error_215_cast_unknown_type.con error_215_turbofish_unknown_type.con e
 class: 12 — a type written inside an expression was not checked to name a declared type
 silent: yes
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/diffhunt-1023`)

@@ -7,6 +7,7 @@ class: 7
 class: 8
 silent: yes
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED 2026-10-21 (branch `small-fixes-111-127-135`)

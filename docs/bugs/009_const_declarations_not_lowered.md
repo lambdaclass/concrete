@@ -3,6 +3,7 @@
 <!-- bug-ledger
 summary: Const Declarations Parsed But Not Lowered
 coverage: const decls not lowered -- fixed in Lower.lean, no standalone repro needed
+ruling: Violates: unrecorded
 -->
 
 **Status:** Fixed

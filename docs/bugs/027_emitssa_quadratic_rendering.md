@@ -4,6 +4,7 @@
 summary: a large array literal compiled natively in superlinear time (`[7; 80000]`: 14 s; `[7; 200000]`: over 120 s; now 0.44 s): EmitSSA searched a list of pointer registers per operand, and one store per element made a block clang -O2 schedules in superlinear time. Pointer registers are a set, a uniform literal is filled by a loop, and a run of constant element stores is one `memcpy` from a private constant. Pinned by `regress_027_large_array_literals.con` and a generated distinct-element literal. Class 17.
 fixtures: regress_027_large_array_literals.con
 class: 17 — EmitSSA searched a list of pointer registers per operand; one store per literal element
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/perf-quadratics`)

@@ -5,6 +5,7 @@ summary: Resolve walked only the modules of the top-level list, so a nested subm
 fixtures: error_217_nested_cast_unknown_type.con error_217_nested_undeclared_name.con error_217_nested_annotation_unknown_type.con error_217_module_after_main_cast.con error_217_nested_enclosing_alias_cast.con regress_217_nested_submodule_scope.con regress_217_sibling_type_precedence.con regress_217_enclosing_type_not_in_scope.con
 class: 11 — a nested submodule Resolve never visits yields no diagnostics
 silent: no
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/bughunt-216-217`)

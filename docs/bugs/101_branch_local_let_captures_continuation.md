@@ -5,6 +5,7 @@ summary: a branch-local `let` was nested over the code after its branch (and a l
 coverage: a branch- or body-local let was nested over the code after its scope in the proof model (scoped(1): model 10, runtime 1); branches composing with a continuation refuse when their locals reach it. Regression vehicle: tests/regressions/bug085_loop_step/repro.con scoped/reloop + check_model_diff.sh leg S (2026-10-19)
 class: 7
 silent: yes
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `land-batch1`)

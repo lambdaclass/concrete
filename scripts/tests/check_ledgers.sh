@@ -64,7 +64,9 @@ mkdir -p "$BASE/docs" "$BASE/scripts/tests" "$BASE/scripts/gen" "$BASE/.github/w
 cp -R docs/bugs "$BASE/docs/bugs"
 cp ROADMAP.md CHANGELOG.md "$BASE/"
 cp -R changelog.d "$BASE/changelog.d"
-cp scripts/gen/bug_ledger.py scripts/gen/bug_areas.py scripts/gen/changelog.py scripts/gen/migrate_ledgers.py "$BASE/scripts/gen/"
+cp scripts/gen/bug_ledger.py scripts/gen/bug_areas.py scripts/gen/bug_rulings.py scripts/gen/changelog.py scripts/gen/migrate_ledgers.py "$BASE/scripts/gen/"
+# The rulings resolve against the spec's registry and chapter table (read only).
+mkdir -p "$BASE/docs/spec" && cp docs/spec/ids.tsv docs/spec/README.md "$BASE/docs/spec/"
 cp scripts/tests/audit_bug_corpus.sh scripts/tests/check_bug_filing_complete.sh \
    scripts/tests/run_tests.sh scripts/tests/run_ci_gates_local.sh "$BASE/scripts/tests/"
 # The copied gates start by sourcing the gate-shell guard from beside themselves.
@@ -98,6 +100,7 @@ summary: control record
 coverage: control record, covered by scripts/tests/check_ledgers.sh
 class: 1 — control note
 silent: no
+ruling: Violates: OWN-1@2
 -->
 
 **Status:** OPEN
@@ -169,6 +172,15 @@ neg class_row_unreadable docs/bugs/STRUCTURAL_CLASSES.md "import re; s,n=re.subn
 neg summary_status_no_punctuation "$R" "old='summary: control record'; assert s.count(old)==1; s=s.replace(old, 'summary: Fixed in R-1234')" 2
 neg value_closes_comment "$R" "old='summary: control record'; assert s.count(old)==1; s=s.replace(old, 'summary: control --> visible')" 2
 neg class_block_prose docs/bugs/STRUCTURAL_CLASSES.md "old='<!-- END GENERATED: class table -->'; assert s.count(old)==1; s=s.replace(old, 'prose inside the block\n'+old)" 2
+neg ruling_changed_not_regenerated "$R" "old='ruling: Violates: OWN-1@2'; assert s.count(old)==1; s=s.replace(old, 'ruling: Violates: OWN-2@2')" 1
+neg no_ruling "$R" "import re; s,n=re.subn(r'^ruling: .*\n', '', s, count=1, flags=re.M); assert n==1" 2
+neg ruling_unknown_rule "$R" "old='ruling: Violates: OWN-1@2'; assert s.count(old)==1; s=s.replace(old, 'ruling: Violates: NOPE-1@1')" 2
+neg ruling_unknown_version "$R" "old='ruling: Violates: OWN-1@2'; assert s.count(old)==1; s=s.replace(old, 'ruling: Violates: OWN-1@99')" 2
+neg ruling_malformed "$R" "old='ruling: Violates: OWN-1@2'; assert s.count(old)==1; s=s.replace(old, 'ruling: breaks ownership')" 2
+neg ruling_unrecorded_on_new_record "$R" "old='ruling: Violates: OWN-1@2'; assert s.count(old)==1; s=s.replace(old, 'ruling: Violates: unrecorded')" 2
+neg ruling_unknown_question "$R" "old='ruling: Violates: OWN-1@2'; assert s.count(old)==1; s=s.replace(old, 'ruling: Open: OPEN-999')" 2
+neg rulings_markers_missing docs/bugs/RULINGS.md "old='<!-- END GENERATED: spec rulings -->'; assert s.count(old)==1; s=s.replace(old,'')" 2
+neg rulings_view_hand_edit docs/bugs/RULINGS.md "old='### By violated rule'; assert s.count(old)==1; s=s.replace(old, old+' (edited)')" 1
 neg duplicate_number "$R" "import shutil, os; d=os.path.dirname(p); shutil.copy(p, os.path.join(d, '997_duplicate.md'))" 2
 if [ -n "$EXIT_ID" ]; then
   neg exit_span_hand_edit ROADMAP.md "import re; s,n=re.subn(r'(<!-- BEGIN GENERATED: exit $EXIT_ID bugs[^>]*-->)', r'\g<1>999, ', s); assert n==1" 1
@@ -189,6 +201,7 @@ summary: control: a new open bug
 coverage: control record, covered by scripts/tests/check_ledgers.sh
 class: 1 — the control's note
 silent: yes
+ruling: Spec gap: OWN — a control rule
 ${EXIT_ID:+exit: $EXIT_ID}
 -->
 
@@ -397,7 +410,8 @@ fp_git() { ( unset $(git rev-parse --local-env-vars) 2>/dev/null; export GIT_CON
              git -C "$FP" -c user.name=gate -c user.email=gate@example.invalid "$@" ); }
 if ( unset $(git rev-parse --local-env-vars) 2>/dev/null; git clone -q --shared --no-checkout "$ROOT_DIR" "$FP" \
        && git -C "$FP" checkout -q --detach "$(git -C "$ROOT_DIR" rev-parse HEAD)" ) >/dev/null 2>&1 \
-   && cp scripts/gen/bug_ledger.py scripts/gen/bug_areas.py "$FP/scripts/gen/" && cp docs/bugs/area_map.tsv docs/bugs/AREAS.md "$BASE/$R" "$FP/docs/bugs/" \
+   && cp scripts/gen/bug_ledger.py scripts/gen/bug_areas.py scripts/gen/bug_rulings.py "$FP/scripts/gen/" \
+   && cp docs/bugs/area_map.tsv docs/bugs/AREAS.md docs/bugs/RULINGS.md "$BASE/$R" "$FP/docs/bugs/" \
    && fp_git add -A && fp_git commit -q --allow-empty -m "gate: this checkout's generator and views" \
    && python3 -I "$FP/scripts/gen/bug_ledger.py" --write --root "$FP" >/dev/null 2>&1 \
    && fp_git commit -q -a --allow-empty -m "gate: regenerate" && python3 -I "$FP/scripts/gen/bug_ledger.py" --check --root "$FP" >/dev/null 2>&1; then

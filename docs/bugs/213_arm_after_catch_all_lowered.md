@@ -5,6 +5,7 @@ summary: a match arm following an unguarded binding or `_` arm in Core order (af
 fixtures: regress_213_arm_after_binding_arm.con
 class: 8 — an arm after an unguarded catch-all lowered into a block no edge reaches
 silent: no
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/diffhunt-1023`)

@@ -5,6 +5,7 @@ summary: a bound naming an undeclared trait was accepted (no pass resolved a bou
 fixtures: error_231_unknown_bound_trait.con error_231_enclosing_trait_bound.con error_231_trait_param_bound.con error_231_union_param_bound.con error_231_bodiless_decl_bound.con regress_231_bounds_name_module_traits.con
 class: 13 — MOD-1 for a bound's trait names: no pass resolved them, later reads matched spellings
 silent: no
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/diffhunt-1025`)

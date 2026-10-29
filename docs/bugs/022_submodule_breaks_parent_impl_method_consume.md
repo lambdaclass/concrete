@@ -3,6 +3,7 @@
 <!-- bug-ledger
 summary: found by #35 conlog workload
 fixtures: submodule_linear_consume/src/main.con
+ruling: Violates: unrecorded
 -->
 
 **Status:** Fixed

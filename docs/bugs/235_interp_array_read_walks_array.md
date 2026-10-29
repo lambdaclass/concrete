@@ -5,6 +5,7 @@ summary: under `--interp` every `a[i]` converted the array to a list and walked 
 fixtures: regress_235_interp_array_read.con
 class: 17 — an interpreter array read converted the array to a list per read
 silent: no
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/diffhunt-1025`)

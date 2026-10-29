@@ -14,6 +14,8 @@ Inputs, each the single owner of its fact:
   docs/bugs/STRUCTURAL_CLASSES.md    the summary table's classes; a bug's primary class is the first
                                      class row, in table order, that lists it
   docs/bugs/discovery.tsv            which probe batch found each bug from 079 on, and which are silent
+  the records' `ruling:` lines       each open bug's spec ruling (scripts/gen/bug_rulings.py; read for
+                                     their form only: bug_ledger.py resolves them against docs/spec)
   ROADMAP.md "Phase 1 exits"         which exits name each bug in their completion condition
 
 The discovery-rate signal (Phase 1 exit 2m) is kept PER STRUCTURAL CLASS (a bug's primary class, as
@@ -42,6 +44,9 @@ import glob
 import os
 import re
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import bug_rulings  # noqa: E402  (beside this file; -I leaves the script's directory off sys.path)
 
 BEGIN = "<!-- BEGIN GENERATED: bug dashboard (scripts/gen/bug_dashboard.py; edit docs/bugs records and docs/bugs/discovery.tsv) -->"
 END = "<!-- END GENERATED: bug dashboard -->"
@@ -103,6 +108,26 @@ def load_records(root):
     if not recs:
         die("no bug records under docs/bugs")
     return recs
+
+
+LEDGER_BLOCK = re.compile(r"^<!-- bug-ledger[ \t]*\n(.*?)^-->[ \t]*$", re.M | re.S)
+RULING_LINE = re.compile(r"^ruling:[ \t]*(.*?)[ \t]*$", re.M)
+
+
+def load_rulings(root, recs):
+    """{bug: parsed ruling, or None when the record has none} for the open bugs."""
+    out = {}
+    for p in sorted(glob.glob(os.path.join(root, "docs", "bugs", "[0-9][0-9][0-9]_*.md"))):
+        num = os.path.basename(p)[:3]
+        if not recs.get(num):
+            continue
+        blk = LEDGER_BLOCK.search(read(p))
+        m = RULING_LINE.search(blk.group(1)) if blk else None
+        try:
+            out[num] = bug_rulings.parse(m.group(1), os.path.basename(p)) if m else None
+        except bug_rulings.RulingError as e:
+            die(str(e))
+    return out
 
 
 def load_discovery(root, recs):
@@ -198,7 +223,7 @@ def joined(bs):
     return ", ".join(sorted(bs)) if bs else "—"
 
 
-def render(recs, disc, classes, exits):
+def render(recs, disc, classes, exits, rulings=None):
     silent = {b for r in disc for b in r["silent"]}
     attributed = {b for r in disc for b in r["bugs"]}
     open_bugs = sorted(b for b, o in recs.items() if o)
@@ -241,6 +266,18 @@ def render(recs, disc, classes, exits):
     if rest:
         out.append(f"| no exit names it | {len(rest)} | {sum(1 for b in rest if kind(b) == 'silent')} | {joined(rest)} |")
     out.append("")
+    if rulings is not None:
+        groups = {}
+        for b in open_bugs:
+            r = rulings.get(b)
+            groups.setdefault(bug_rulings.label(r) if r else "no ruling", []).append(b)
+        order = {k: i for i, k in enumerate(bug_rulings.KINDS)}
+        out.append("| open bugs by spec ruling ([RULINGS.md](docs/bugs/RULINGS.md)) | open | silent | bugs |")
+        out.append("|---|---|---|---|")
+        for lab in sorted(groups, key=lambda g: (order.get(rulings[groups[g][0]]["kind"], 99) if rulings.get(groups[g][0]) else 99, g)):
+            mine = groups[lab]
+            out.append(f"| {lab} | {len(mine)} | {sum(1 for b in mine if kind(b) == 'silent')} | {joined(mine)} |")
+        out.append("")
     counting = [r for r in disc if r["kind"] in COUNTING]
     quiet = lambda r: not r["silent"] and len(r["bugs"]) - len(r["silent"]) <= 1  # noqa: E731
 
@@ -323,7 +360,7 @@ def main():
     for r in disc:
         if r["tag"] is not None and r["tag"] not in known:
             die(f"discovery batch '{r['probe'][:60]}' is tagged class {r['tag']}, which STRUCTURAL_CLASSES.md does not have")
-    table = render(recs, disc, classes, load_exits(a.root, road))
+    table = render(recs, disc, classes, load_exits(a.root, road), load_rulings(a.root, recs))
     if not (a.write or a.check):
         print(table)
         return 0

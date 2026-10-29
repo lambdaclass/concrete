@@ -5,6 +5,7 @@ summary: under `--interp` a recursion of depth n took time n² (depth 64000: 44 
 fixtures: regress_234_interp_deep_recursion.con
 class: 17 — the same environment's length, a scope's restore point and a reference's frame, recomputed by a walk at every call, branch, arm and borrow
 silent: no
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/diffhunt-1025`)

@@ -5,6 +5,7 @@ summary: the one callee walk (Proof/CallCollect.lean: collectCallees*, and the f
 coverage: run_tests.sh
 class: 17 — the callee walk's per-statement list appends
 silent: no
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/bug-296`, based on `wip/bug-295`)

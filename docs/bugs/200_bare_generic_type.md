@@ -6,6 +6,7 @@ fixtures: error_200_bare_generic_type.con error_200_bare_generic_signature.con r
 class: 13 — a generic type named without its argument list: arity checked only where a list was written
 silent: yes
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/bug200`, based on `main` `1b2dba60`)

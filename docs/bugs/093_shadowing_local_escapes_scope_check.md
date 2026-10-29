@@ -6,6 +6,7 @@ fixtures: error_093_shadowing_block_local_leak.con error_093_shadowing_match_bin
 class: 2
 silent: no
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED

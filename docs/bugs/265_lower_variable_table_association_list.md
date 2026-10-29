@@ -6,6 +6,7 @@ fixtures: regress_265_variable_table.con
 class: 17 — Lower's per-function variable table
 silent: no
 area: Lower/Lower — the record's Fix (Lower's VarMap); it spells only Core.lean, where the comparator moved
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/perf-backend`)

@@ -5,6 +5,7 @@ summary: `check_binder_refs.sh`'s Lean probe threw on its first failed check, so
 coverage: check_binder_refs.sh aborted before its verdict on a failed assertion. Regression vehicle is the mutation harness (families 55-57 KILLED), not a tests/programs fixture (2026-10-23)
 class: 11 — a gate that died on its first failed check gave the mutation harness no verdict
 silent: no
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `binder-refs-verdict`)

@@ -11,6 +11,8 @@
                              scripts/gen/bug_areas.py; --json for JSON, --sqlite PATH to also write a
                              throwaway SQLite database (generated, never committed); --history DIR
                              reads another checkout's git history (default: --root)
+  bug_ledger.py rulings      print every bug's spec ruling, one tab-separated row per bug:
+                             NNN<TAB>open|fixed<TAB>kind<TAB>label (check_bug_filing_complete.sh reads it)
   bug_ledger.py corpus       print the regression-coverage map, one tab-separated row per bug:
                              NNN<TAB>fixtures<TAB>open|fixed<TAB>a.con b.con   or
                              NNN<TAB>coverage<TAB>open|fixed<TAB>rationale;
@@ -34,9 +36,13 @@ ONE OWNER PER FACT. A bug's facts live in its record, docs/bugs/NNN_*.md, and no
       exit: 0b                                        (ROADMAP exits whose generated bug list names it)
       area: Lower/Lower — why the derivation is wrong (optional: replaces the derived primary area;
                                                       an unknown stage is refused, see bug_areas.py)
+      ruling: Violates: OWN-1@2                       (required: the spec ruling, see bug_rulings.py)
       -->
 
-  Exactly one of `fixtures` and `coverage` is required. A value is one line with no tab and no `-->`.
+  Exactly one of `fixtures` and `coverage` is required, and a `ruling`: Violates: ID@V, Spec gap:
+  PREFIX — <rule>, Open: OPEN-N, Permitted by: ID@V, Outside the spec: REASON — <why>, or, for a fixed
+  bug below bug_rulings.RULING_FROM only, Violates: unrecorded. A cited rule must be a key of
+  docs/spec/ids.tsv. A value is one line with no tab and no `-->`.
 
 THE GENERATED VIEWS (each between BEGIN/END GENERATED markers; never edit inside them):
 
@@ -45,6 +51,9 @@ THE GENERATED VIEWS (each between BEGIN/END GENERATED markers; never edit inside
                                    are owned by the class and kept as written)
   ROADMAP.md                       each `<!-- BEGIN GENERATED: exit X bugs ... -->` span: the bugs
                                    whose record names exit X, ranges compacted
+  docs/bugs/RULINGS.md             the spec rulings: counts by kind and by spec chapter, every violated
+                                   rule with its bugs, the spec gaps (rules to write) and the open owner
+                                   questions (scripts/gen/bug_rulings.py)
   docs/bugs/AREAS.md               each bug's stage and module, derived from its fix commits in git
                                    history and docs/bugs/area_map.tsv (scripts/gen/bug_areas.py), with
                                    the stage and class tables. It goes stale when a commit naming a bug
@@ -76,8 +85,9 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bug_areas  # noqa: E402  (beside this file; -I leaves the script's directory off sys.path)
+import bug_rulings  # noqa: E402
 
-KEYS = {"summary", "fixtures", "coverage", "class", "silent", "exit", "area"}
+KEYS = {"summary", "fixtures", "coverage", "class", "silent", "exit", "area", "ruling"}
 REPEATABLE = {"class"}
 OPEN_WORDS = {"open", "contained", "half", "partially"}
 CLOSED_WORDS = {"fixed"}
@@ -182,6 +192,13 @@ def parse_block(body, name):
             bug_areas.parse_area(facts["area"], name)
         except bug_areas.AreaError as e:
             die(str(e))
+    if "ruling" not in facts:
+        die(f"{name}: the ledger block has no ruling: the spec rule the bug violates (ruling: Violates: ID@V), "
+            "or Spec gap, Open or Outside the spec (scripts/gen/bug_rulings.py; docs/bugs/README.md, Filing a bug)")
+    try:
+        facts["ruling"] = bug_rulings.parse(facts["ruling"], name)
+    except bug_rulings.RulingError as e:
+        die(str(e))
     exits = re.split(r"[,\s]+", facts.get("exit", "").strip()) if "exit" in facts else []
     if not all(re.fullmatch(r"\d[a-z]", x) for x in exits) or len(set(exits)) != len(exits):
         die(f"{name}: exit must be distinct exit ids like 0b or 2c, got '{facts.get('exit')}'")
@@ -213,6 +230,17 @@ def load_records(root):
         die(f"records without a ledger block: {', '.join(missing)} (once the ledger is migrated every "
             "record carries one; see docs/bugs/README.md, Filing a bug)")
     return recs, bool(with_block)
+
+
+def resolve_rulings(root, recs):
+    """Resolve every record's ruling against docs/spec/ids.tsv; returns the spec's chapter table."""
+    try:
+        spec = bug_rulings.load_spec(root)
+        for r in recs.values():
+            r["facts"]["ruling"] = bug_rulings.resolve(r["facts"]["ruling"], spec, r["file"], r["num"], r["open"])
+    except bug_rulings.RulingError as e:
+        die(str(e))
+    return spec[1]
 
 
 def check_discovery(root, recs):
@@ -364,10 +392,14 @@ def derive_areas(root, history, recs, required):
         die(str(e))
 
 
-def views(root, recs, areas=None):
+def views(root, recs, chapters, areas=None):
     """[(path, current text, regenerated text)] for every generated view (AREAS.md only when the
     areas could be derived)."""
     out = []
+    p = os.path.join(root, "docs", "bugs", "RULINGS.md")
+    cur = read(p)
+    new, _ = splice(cur, bug_rulings.BEGIN, bug_rulings.END, bug_rulings.render_view(recs, chapters), p)
+    out.append((p, cur, new))
     p = os.path.join(root, "docs", "bugs", "README.md")
     cur = read(p)
     new, _ = splice(cur, README_BEGIN, README_END, render_readme(recs), p)
@@ -401,7 +433,7 @@ def views(root, recs, areas=None):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("mode", nargs="?", choices=["corpus", "report"])
+    ap.add_argument("mode", nargs="?", choices=["corpus", "report", "rulings"])
     ap.add_argument("--root", default=os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")))
     ap.add_argument("--history", help="the git work tree whose history the bug areas derive from (default: --root)")
     ap.add_argument("--json", action="store_true", help="report: print JSON instead of text tables")
@@ -425,10 +457,16 @@ def main():
               "hand-maintained until scripts/gen/migrate_ledgers.sh runs")
         return 0
     check_discovery(a.root, recs)
+    chapters = resolve_rulings(a.root, recs)
+    if a.mode == "rulings":
+        for r in recs.values():
+            rl = r["facts"]["ruling"]
+            print(f"{r['num']}\t{'open' if r['open'] else 'fixed'}\t{rl['kind']}\t{bug_rulings.label(rl)}")
+        return 0
     if a.mode == "report":
         areas, _ = derive_areas(a.root, history, recs, required=True)
         try:
-            rows = bug_areas.bug_rows(recs, areas, bug_areas.load_discovery_kinds(a.root))
+            rows = bug_areas.bug_rows(recs, areas, bug_areas.load_discovery_kinds(a.root), chapters)
         except bug_areas.AreaError as e:
             die(str(e))
         names = class_names(a.root)
@@ -445,7 +483,7 @@ def main():
     if why_not:
         print(f"bug ledger: docs/bugs/AREAS.md is neither regenerated nor compared: {why_not} "
               "(pass --history <checkout> to derive the areas from another checkout's history)", file=sys.stderr)
-    vs = views(a.root, recs, areas)
+    vs = views(a.root, recs, chapters, areas)
     if a.check:
         stale = [os.path.relpath(p, a.root) for p, cur, new in vs if cur != new]
         if stale:

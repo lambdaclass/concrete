@@ -6,6 +6,7 @@ fixtures: error_210_struct_arith.con error_210_enum_arith.con error_210_newtype_
 class: 12 — which types an operator rule defers to the instantiation: a local copy per rule read every named type as a parameter
 silent: yes
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/diffhunt-1023`)

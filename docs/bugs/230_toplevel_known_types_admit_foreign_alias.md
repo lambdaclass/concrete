@@ -5,6 +5,7 @@ summary: a top-level module casting to another top-level module's alias, or to i
 fixtures: error_230_toplevel_foreign_alias_cast.con error_230_parent_names_child_alias.con regress_230_toplevel_type_environment.con
 class: 12 — which type names a top-level module may write: program-wide in Resolve, per module in Check; fixed 2026-10-25 by one `moduleTypeEnvironment` for every module, R-0492 slice 6
 silent: no
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (2026-10-25, R-0492 slice 6)

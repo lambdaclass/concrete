@@ -7,6 +7,7 @@ class: 13
 class: 15
 silent: yes
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `lowering-bugs`)

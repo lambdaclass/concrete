@@ -6,6 +6,7 @@ fixtures: error_192_int_if_condition.con error_192_int_while_condition.con error
 class: 13 — an `if` / `while` / `for` statement condition: Check discarded its type, CoreCheck admitted integers
 silent: yes
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/spec-single-source`)

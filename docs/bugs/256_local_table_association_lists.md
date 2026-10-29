@@ -5,6 +5,7 @@ summary: the local binder table's binders and uses were association lists search
 fixtures: regress_256_local_table_lookups.con
 class: 17 — one function of many statements: the parser's statement lists, the local binder table, the resolver's scopes, the checker's bindings, Elab's binder frames, ElabVerify's and CoreCheck's scopes, each a list appended or searched per statement
 silent: no
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/perf-frontend`)

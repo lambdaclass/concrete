@@ -7,6 +7,7 @@ class: 5 — a deferred call's borrow reserved nothing
 class: 15 — a pending deferred call was not part of the state
 silent: yes
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED 2026-10-21 (branch `safety-eval2`)

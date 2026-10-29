@@ -6,6 +6,7 @@ fixtures: regress_236_array_repeat_literal.con
 class: 17 — Elab appended an array literal's elements one at a time
 silent: no
 area: Elab/Elab — the record's summary and Fix (Elab's element list); its commits are a seven-bug batch
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/diffhunt-1025`)

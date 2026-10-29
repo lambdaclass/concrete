@@ -1226,9 +1226,13 @@ def promote(args):
     # its hours), use --batch "<that row's probe text>" instead.
     probe = (f"fuzz farm finding {args.signature.split('-')[-1][:8]}: generator {meta['generator']}, "
              f"seed {meta['seed']}, compiler {meta['compiler_sha'][:12]}")
-    print(f"scripts/gen/new_bug.sh {json.dumps(title)} --silent "
+    # The spec ruling is the filer's call (docs/bugs/RULINGS.md): new_bug.sh refuses the RULE-ID@V
+    # placeholder before it reserves a number.
+    print(f"scripts/gen/new_bug.sh {json.dumps(title)} --violates RULE-ID@V --silent "
           f"{'yes' if meta['class'] == 'silent' else 'no'} "
           f"--new-batch fuzz --probe {json.dumps(probe)} --effort \"1 cases\"")
+    print("(replace RULE-ID@V with the docs/spec rule the program's behaviour contradicts, or use --spec-gap, "
+          "--open or --outside in its place: docs/bugs/RULINGS.md)")
     print("(or --batch \"<probe text>\" in place of --new-batch when the campaign already has its "
           "docs/bugs/discovery.tsv row)")
     print(f"cp {rel} tests/regressions/bugNNN_{bug_slug}/repro.con && rm -r tests/regressions/{slug}")

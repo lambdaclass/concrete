@@ -6,6 +6,7 @@ fixtures: error_221_extra_type_argument.con error_221_type_argument_to_plain_fn.
 class: 13 — a call's type-argument count: a `zip` stood in for the check
 silent: yes
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/diffhunt-1023`)

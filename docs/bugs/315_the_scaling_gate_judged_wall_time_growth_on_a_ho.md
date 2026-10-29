@@ -13,6 +13,7 @@ summary: on a host whose perf cannot count instructions:u (the dev host, perf_ev
 coverage: check_compile_scaling.sh
 class: 11 — a host without instruction counters read as licence to judge by wall time
 silent: no
+ruling: Outside the spec: tooling — the scaling gate judged wall-time growth on a host without instruction counters
 -->
 
 ## Reproducer

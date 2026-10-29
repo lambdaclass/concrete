@@ -6,6 +6,7 @@ fixtures: error_253_child_newtype_decoy.con error_253_aliased_newtype_decoy.con 
 class: 1 — construction and field rights asked whether a type of the spelling is defined here, not whether the declaration the spelling resolved to is; fixed 2026-10-25: judged by identity
 silent: yes
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (2026-10-25, branch `wip/ident-followups`)

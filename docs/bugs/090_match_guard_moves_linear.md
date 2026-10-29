@@ -6,6 +6,7 @@ fixtures: error_090_guard_moves_linear.con error_090_guard_moves_binder.con erro
 class: 15
 silent: yes
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED

@@ -5,6 +5,7 @@ summary: Elab built each match arm's Core and its evidence in two accumulators a
 coverage: reproducer tests/regressions/bug284_match_arm_evidence_dropped/repro.con, pinned by check_binder_refs.sh legs "a literal arm's body references reach evidence", "a body edit inside a literal arm changes the body bytes", "bug 284: an edit inside a literal arm moves the subject digest" and "bug 284: each match arm's Core and evidence are pushed as one entry"
 class: 10
 silent: yes
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/bug284-match-arm-evidence`)

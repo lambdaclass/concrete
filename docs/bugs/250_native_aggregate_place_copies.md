@@ -5,6 +5,7 @@ summary: natively, writing an element or field of an aggregate local carried thr
 fixtures: regress_250_native_array_writes.con
 class: 17 — a native place write rebuilt its whole aggregate base
 silent: no
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/perf-quadratics`)

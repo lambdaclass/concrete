@@ -5,6 +5,7 @@ summary: EmitSSA kept its program-wide tables (names defined under two module pa
 coverage: run_tests.sh
 class: 17 — EmitSSA's program-wide tables were lists
 silent: no
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/bug-288`)

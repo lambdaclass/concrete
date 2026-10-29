@@ -3,6 +3,7 @@
 <!-- bug-ledger
 summary: Enum Fields Inside Structs Can Panic Layout Computation
 fixtures: bug_enum_in_struct.con
+ruling: Violates: unrecorded
 -->
 
 **Status:** Fixed

@@ -3,6 +3,7 @@
 <!-- bug-ledger
 summary: i32 Literal Type Mismatch in Binary Operations
 fixtures: bug_i32_literal_type.con
+ruling: Violates: unrecorded
 -->
 
 **Status:** Fixed

@@ -5,6 +5,7 @@ summary: Resolve (`isKnownType`), Check (`lookupStruct`/`lookupEnum`/`lookupNewt
 fixtures: regress_291_type_lookups_by_name.con
 class: 17 — type declarations found by a list search per use
 silent: no
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/bug-291`)

@@ -5,6 +5,7 @@ summary: every compile (`-o`, `--emit-llvm`) runs Report's safety gate (provenVi
 coverage: run_tests.sh
 class: 17 — the scoped obligation walker re-walked and re-copied per level
 silent: no
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/bug-293`)

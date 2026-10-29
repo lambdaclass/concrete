@@ -5,6 +5,7 @@ summary: `check_docs_drift.sh`'s discovery-signal controls grepped the regenerat
 coverage: the docs-drift gate pinned the discovery signal's streak as a literal (1 after a quiet batch, 0 after a token batch), so recording a quiet batch failed the gate. Regression vehicle is the docs-drift gate itself (its controls now read the record's streak and expect +1 / +0) (2026-10-24)
 class: 12 — the discovery signal's streak: computed by the dashboard generator, restated as a literal by the docs-drift controls
 silent: no
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/diffhunt-1025`)

@@ -3,6 +3,7 @@
 <!-- bug-ledger
 summary: Array Variable-Index Assignment Produces Wrong Code
 fixtures: bug_array_var_index_assign.con
+ruling: Violates: unrecorded
 -->
 
 **Status:** Fixed

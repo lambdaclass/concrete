@@ -6,6 +6,7 @@ fixtures: error_147_assert_consumes_heap.con error_147_ghost_let_consumes_heap.c
 class: 15 — an erased statement counted as a move
 silent: no
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED 2026-10-22 (branch `safety-eval2`)

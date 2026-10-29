@@ -6,6 +6,7 @@ fixtures: regress_097_098_same_named_private_fns.con regress_097_param_named_lik
 class: 1
 silent: yes
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED 2026-10-21 (`land5`)

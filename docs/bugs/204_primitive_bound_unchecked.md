@@ -6,6 +6,7 @@ fixtures: error_204_primitive_bound_unchecked.con error_204_primitive_bound_unus
 class: 13 — a bound on a primitive type argument: `checkTraitBounds` skipped every unnamed shape
 silent: yes
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/bug204`, based on `wip/train6` `13bc2527`)

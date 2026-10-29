@@ -6,6 +6,7 @@ fixtures: regress_190_array_value_copy.con
 class: 8 — an array bound by value aliased its source
 silent: yes
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `soundness-holes`)

@@ -4,6 +4,7 @@
 summary: Integer Match Does Not Propagate Consumption State
 fixtures: bug_int_match_consume.con
 area: Check — the record's Root Cause: the linearity checker's value-pattern match; no commit names the bug
+ruling: Violates: unrecorded
 -->
 
 **Status:** Fixed

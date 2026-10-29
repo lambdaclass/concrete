@@ -5,6 +5,7 @@ summary: a generic `+` / `*` instantiated at a struct or enum reached the backen
 fixtures: error_211_generic_add_struct.con error_211_generic_mul_enum.con error_211_generic_rhs_struct.con error_211_generic_mixed_width.con regress_211_generic_add_numeric.con
 class: 6 — an operator rule deferred to the instance had no instance check: arithmetic, unlike comparisons
 silent: no
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/diffhunt-1023`)

@@ -5,6 +5,7 @@ summary: generic inference types each argument with a side-effect-free peek (`pe
 fixtures: regress_308_generic_arg_value_if.con
 class: 12 — an expression's type answered twice, by the full checker and by the inference peek, and the peek lacked two forms
 silent: no
+ruling: Spec gap: TYPE — a call of a generic function without explicit type arguments binds each type parameter from the types of the arguments given for it, whatever expression form supplies them
 -->
 
 **Status:** FIXED (branch `wip/bug-308`)

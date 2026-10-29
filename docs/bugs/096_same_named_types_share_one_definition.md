@@ -6,6 +6,7 @@ fixtures: regress_096_type_identity_same_named.con regress_096_imported_type_lay
 class: 1
 silent: yes
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED 2026-10-21 (`land5`)

@@ -6,6 +6,7 @@ fixtures: error_151_nested_name_flattening.con
 class: 1 — two nested modules' functions flattened to one name
 silent: yes
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (contained) — refused at elaboration (E0299, the containment main landed for bugs 097/098 while this record was in review); a spelling of that class

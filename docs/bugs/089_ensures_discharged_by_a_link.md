@@ -5,6 +5,7 @@ summary: `#[ensures_proof(No.Such.Theorem)]` made a false `#[ensures]` read `pro
 coverage: an #[ensures] read proved_by_lean on contracts/vcs/obligation-ledger/audit whenever a link named a theorem (even No.Such.Theorem, or only #[proof_coverage(iff)]), check-proofs printed a check mark for any theorem that type-checked, and a rejected ensures theorem exited 1 under 0 failed while its receipt minted. One verdict (ensuresVerdictOf) decides every surface; nothing discharges a postcondition until Exact property acceptance. Regression vehicle is a gate: check_contract_negatives.sh section bug 089 runs tests/regressions/bug089_ensures_proof (four fixtures x every surface, check-proofs summaries/exit, receipts); see docs/bugs/089 (2026-10-18)
 class: 9
 silent: yes
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `bug089-ensures-proof`, on top of the unpublished bug-080 head `00efbaf4`)

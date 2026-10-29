@@ -5,6 +5,7 @@ summary: a compiler-side table keyed by function NAME (`Proof.provedFunctions`) 
 coverage: resolveSpec fell back to Proof.provedFunctions, a table keyed by qualified NAME with v1 body-string freshness, so a program with no proof attributes defining main.compute_tag (u8, aborting at runtime) was reported proved (origin hardcoded). The table is deleted; every program it served links in source with a v2 pin. Regression fixture tests/programs/regress_083_no_claim_by_name.con (run_tests.sh: 0 proved, 3 unproved, no hardcoded origin); see docs/bugs/083 (2026-10-18)
 class: 9
 silent: yes
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `bug083-hardcoded-proved`, based on the unpublished bug-080 head `00efbaf4`)

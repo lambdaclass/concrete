@@ -7,6 +7,7 @@ class: 1 — a user function's link symbol was its spelling; fixed 2026-10-21 by
 class: 12
 silent: yes
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED 2026-10-21 (branch `symbols`)

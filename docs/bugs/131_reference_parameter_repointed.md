@@ -8,6 +8,7 @@ class: 5
 silent: yes
 exit: 0b
 area: Check/Check — the record's Cause and Fix (batch 2's re-pointing rule in Check.lean)
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED 2026-10-21 (batch 2, `land2-fix`)

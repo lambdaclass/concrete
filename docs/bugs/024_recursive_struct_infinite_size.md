@@ -3,6 +3,7 @@
 <!-- bug-ledger
 summary: found by panic-to-diagnostic probing; recursive struct → E0583 instead of llvm-as leak
 coverage: recursive-struct infinite size -- covered by check_error_leaks.sh gate corpus
+ruling: Violates: unrecorded
 -->
 
 **Status:** Fixed

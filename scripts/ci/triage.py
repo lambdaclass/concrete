@@ -118,11 +118,13 @@ def write_report(path, run, repo, results, escalated, sus):
         if new_bug:
             first = (r["fail_lines"] or [r["reason"]])[0]
             first = re.sub(r"^(FAIL|FAILED)\s+", "", first)[:100].replace('"', "'")
-            # SILENT is the filer's call: a CI failure does not say whether the defect is silent (wrong
-            # code, unsound claim) or loud. new_bug.sh refuses the placeholder before reserving.
+            # SILENT and the ruling are the filer's call: a CI failure does not say whether the defect is
+            # silent (wrong code, unsound claim) or loud, nor which spec rule it breaks.
+            # new_bug.sh refuses both placeholders before reserving.
             out += ["File a bug skeleton (not run automatically; replace SILENT with yes for wrong code or an "
-                    "unsound claim, no otherwise):", "", "```sh",
-                    f'bash scripts/gen/new_bug.sh "{r["gate"]}: {first}" --silent SILENT '
+                    "unsound claim, no otherwise, and RULE-ID@V with the docs/spec rule it violates, or use "
+                    "--spec-gap, --open or --outside in its place: docs/bugs/RULINGS.md):", "", "```sh",
+                    f'bash scripts/gen/new_bug.sh "{r["gate"]}: {first}" --violates RULE-ID@V --silent SILENT '
                     f'--new-batch ci --probe "CI run {run.get("databaseId")}: {r["gate"]}" --effort "1 probe"',
                     "```", ""]
     out += ["## Suspected commits", ""]

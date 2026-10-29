@@ -6,6 +6,7 @@ fixtures: regress_112_user_intrinsic.con
 class: 11
 class: 12
 silent: no
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED 2026-10-21 (branch `symbols`, with bug 113)

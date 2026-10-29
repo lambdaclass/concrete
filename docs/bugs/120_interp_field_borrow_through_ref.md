@@ -7,6 +7,7 @@ class: 5
 class: 7
 silent: no
 area: Interp/Interp — fixed by bug 091's batch-2 interpreter change; the commit naming 120 only recorded it
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED 2026-10-20 (batch 2)

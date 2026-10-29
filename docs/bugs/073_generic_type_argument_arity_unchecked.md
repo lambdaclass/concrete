@@ -4,6 +4,7 @@
 summary: `Box1<i32, bool>` for a one-parameter struct compiled with the extra argument dropped; Resolve now checks type-argument arity (E0113) (2026-10-01)
 fixtures: error_type_arg_count_extra.con error_type_arg_count_missing.con type_arg_count_ok.con
 class: 13
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED 2026-10-01 (branch `r0484-struct-caps`)

@@ -4,6 +4,7 @@
 summary: user types shadow generated specializations (middle-end audit 2026-07-18)
 coverage: the collision now fails closed with E0809 (a specialization whose mangled name is declared, or two instantiations mangling to one name); gated in check_mono_name_collision.sh. Still open: the mangling is forgeable, so a legitimate program spelling Box_Int is refused rather than compiled, and fn symbols are uncovered (R-0007)
 class: 1
+ruling: Spec gap: PASS — a program every rule accepts is compiled: no stage after Check refuses it, crashes on it or emits invalid LLVM IR for it
 -->
 
 **Status:** Half closed — the collision now FAILS CLOSED (**E0809**), the mangling

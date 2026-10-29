@@ -6,6 +6,7 @@ fixtures: regress_087_let_block_shadow.con regress_087_borrow_shadow_uaf/src/mai
 class: 2
 silent: yes
 exit: 0b
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `bug087-let-shadowing`)

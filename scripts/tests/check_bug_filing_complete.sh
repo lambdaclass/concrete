@@ -150,6 +150,51 @@ printf '# Bug 999\n\n## Structural cause\nnames\n\n## Structural owner\nrow 4\n'
 [ -z "$(structural_missing "$STMP/complete.md")" ] && ok "control: a complete record is accepted" \
   || no "control: a complete record was refused"
 
+# SPEC RULINGS (docs/bugs/RULINGS.md, scripts/gen/bug_rulings.py). The spec decides what is a bug: every
+# record's ledger block names the rule the implementation violates (`ruling: Violates: OWN-1@2`), a spec
+# gap, an open owner question, the rule that permits it, or why it is outside the spec. bug_ledger.py
+# refuses a record with no ruling, a malformed one, or a cited rule that is not a key of
+# docs/spec/ids.tsv, and allows `Violates: unrecorded` only on a FIXED bug below RULING_FROM (300).
+# RATCHET: those unruled records may only become fewer. The count must equal the baseline: a record
+# ruled lowers the count, and then the baseline is lowered with it in the same change; a record turned
+# back into `unrecorded` raises it and fails.
+UNRECORDED_BASELINE=261
+if [ -f scripts/gen/bug_rulings.py ] && [ -f docs/spec/ids.tsv ] && [ -n "$LEDGER_ROWS" ]; then
+  RERR="$(mktemp)" || { echo "error: mktemp failed" >&2; exit 2; }
+  if RULING_ROWS="$(python3 -I scripts/gen/bug_ledger.py rulings 2>"$RERR")"; then
+    ok "every bug record states a spec ruling that resolves in docs/spec/ids.tsv ($(grep -c . <<<"$RULING_ROWS") records)"
+    n_unrec="$(awk -F'\t' '$3 == "unrecorded"' <<<"$RULING_ROWS" | grep -c . || true)"
+    if [ "$n_unrec" -eq "$UNRECORDED_BASELINE" ]; then
+      ok "unruled (Violates: unrecorded) records: $n_unrec, at the ratchet baseline"
+    elif [ "$n_unrec" -lt "$UNRECORDED_BASELINE" ]; then
+      no "unruled records fell to $n_unrec: lower UNRECORDED_BASELINE in $0 from $UNRECORDED_BASELINE to $n_unrec in this change (the ratchet only moves down)"
+    else
+      no "unruled (Violates: unrecorded) records rose to $n_unrec, above the baseline $UNRECORDED_BASELINE: a ruled record was turned back into unrecorded"
+    fi
+  else
+    no "the bug records' spec rulings do not resolve: $(tr '\n' ' ' < "$RERR" | cut -c1-300)"
+  fi
+  rm -f "$RERR"
+  # Controls: the resolver itself (the same function bug_ledger.py and new_bug.sh call).
+  rcheck() { python3 -I scripts/gen/bug_rulings.py check "$@" >/dev/null 2>&1; }
+  rcheck --num 999 --open-bug "Violates: OWN-1@2" && ok "control: a registered rule version is accepted" \
+    || no "control: 'Violates: OWN-1@2' was refused (is OWN-1@2 still in docs/spec/ids.tsv?)"
+  rcheck --num 999 --open-bug "Violates: NOPE-1@1" && no "control: a rule that is not in docs/spec/ids.tsv was accepted" \
+    || ok "control: a rule that does not resolve in docs/spec/ids.tsv is refused"
+  rcheck --num 999 --open-bug "Violates: OWN-1@99" && no "control: an unregistered version of a real rule was accepted" \
+    || ok "control: an unregistered version of a real rule is refused"
+  rcheck --num 999 --fixed "Violates: unrecorded" && no "control: a bug numbered 999 was allowed 'Violates: unrecorded'" \
+    || ok "control: a new record (number at or above the cutoff) cannot be unruled"
+  rcheck --num 100 --open-bug "Violates: unrecorded" && no "control: an open bug was allowed 'Violates: unrecorded'" \
+    || ok "control: an open bug cannot be unruled"
+  rcheck --num 100 --fixed "Violates: unrecorded" && ok "control: an old fixed bug may still be unruled (the ratchet counts it)" \
+    || no "control: an old fixed bug's 'Violates: unrecorded' was refused"
+  rcheck --num 999 --open-bug "Open: OPEN-999" && no "control: an owner question that does not exist was accepted" \
+    || ok "control: an unknown owner question is refused"
+  rcheck --num 999 --open-bug "Spec gap: NOPE — a rule" && no "control: a spec gap in an unknown chapter was accepted" \
+    || ok "control: a spec gap names a chapter of docs/spec/README.md"
+fi
+
 # UNFILLED SCAFFOLD. scripts/gen/new_bug.sh marks every placeholder it writes with FILL-IN(new_bug.sh).
 # A placeholder is not a statement: a '## Structural cause' holding only the token passes the section
 # leg above, so the token itself is refused wherever the scaffold writes (record, reproducer,

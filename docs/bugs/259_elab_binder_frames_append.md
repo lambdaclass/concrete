@@ -5,6 +5,7 @@ summary: Elab appended every binder's spelling to its lexical frame, rebuilt eve
 fixtures: regress_259_binder_positions.con
 class: 17 — one function of many statements: the parser's statement lists, the local binder table, the resolver's scopes, the checker's bindings, Elab's binder frames, ElabVerify's and CoreCheck's scopes, each a list appended or searched per statement
 silent: no
+ruling: Violates: unrecorded
 -->
 
 **Status:** FIXED (branch `wip/perf-frontend`)
