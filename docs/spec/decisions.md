@@ -1,12 +1,12 @@
 # Open Owner Decisions
 
-This chapter lists the language questions that only the project owner decides: OD1 to OD41 of
+This chapter lists the language questions that only the project owner decides: OD1 to OD42 of
 [ROADMAP.md](../../ROADMAP.md#owner-decisions), exit 2n. Each entry states the question and encodes
 no answer. The rules it bears on are named in its rationale, together with what current main does,
 which stays provisional until the owner answers. The answer, when given, is recorded in ROADMAP and
 turns the entry into the rules it decides; until then no agent picks a side
 ([AGENTS.md](../project/AGENTS.md#rules)). OD1 to OD22 were answered on 2026-10-29 and are listed under
-Decided; OD23 to OD32 were decided the same day; OPEN-33 to OPEN-41, raised while recording them, are open.
+Decided; OD23 to OD32 were decided the same day; OPEN-33 to OPEN-42, raised while recording them, are open.
 
 <a id="OPEN-33"></a>
 ### OPEN-33. Inline submodules under one file per module
@@ -166,6 +166,24 @@ the owner's answer is recorded there.
 
 **Rationale.** Bears on PAT-9 and PAT-2. PAT-2 requires a catch-all over an integer scrutinee, so refusing it there would make such a match impossible to write. Bug 317's fix, unlanded, does not count the type's range as covered. The options and a recommendation are in ROADMAP's row OD41;
 the owner's answer is recorded there.
+
+<a id="OPEN-42"></a>
+### OPEN-42. Comparisons on `bool` and `char`
+
+**OPEN-42@1.** Whether OD26's "comparisons take numbers only" removes equality and ordering on `bool` and `char` is an open owner decision (OD42).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD42
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on TYPE-6. Current main compares `bool` and `char`, and TYPE-6@2 keeps that
+while this is open. The options and a recommendation are in ROADMAP's row OD42; the owner's answer is
+recorded there.
 
 ## Decided
 

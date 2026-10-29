@@ -41,4 +41,4 @@ Questions raised while recording these are open for the owner: OD33 (inline subm
 file per module), OD34 (a struct literal inside a call's arguments in a condition head), OD35 (how an
 array satisfies `Destroy`), OD36 (the explicit heap place form), OD37 (the pointer difference and
 ordering functions), OD38 (the root resource API), OD39 (the interface artifact format), OD40 and
-OD41 (two readings of PAT-9).
+OD41 (two readings of PAT-9), and OD42 (comparisons on `bool` and `char` under OD26).

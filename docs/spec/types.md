@@ -241,7 +241,8 @@ with `ptr::offset` (pending).
 
 Version 2 records the owner's decision of 2026-10-29 (OD26), aligned with TRUST-1: arithmetic,
 shifts and comparisons take numbers only, and pointer offset, difference and ordering are
-`ptr::offset` and named functions. Main still admits pointer arithmetic and comparison in trusted or
+`ptr::offset` and named functions. Whether "numbers only" also removes comparisons on `bool` and
+`char` is OPEN-42; until it is answered this entry keeps them. Main still admits pointer arithmetic and comparison in trusted or
 `Unsafe` code (bug 322).
 
 
