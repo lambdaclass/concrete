@@ -241,7 +241,7 @@ exist to stop.
 
 Gated by `scripts/tests/check_trusted_method.sh`. The migration experiment that
 motivated this — and the measurements behind it — is in
-[TWO_AXIS_SAFETY.md](TWO_AXIS_SAFETY.md).
+[TWO_AXIS_SAFETY.md](../../research/language/two-axis-safety-migration.md).
 
 ## Enforcement
 

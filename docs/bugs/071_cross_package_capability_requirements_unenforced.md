@@ -188,7 +188,7 @@ identical to pre-migration, with an injected parse error required to surface as
 and `println` builds and runs with no `Unsafe` anywhere; `RawCursor::read_u8` is refused
 to a caller declaring nothing. Both are pinned.
 
-Full record: [TWO_AXIS_SAFETY.md](../language/TWO_AXIS_SAFETY.md).
+Full record: [TWO_AXIS_SAFETY.md](../../research/language/two-axis-safety-migration.md).
 
 
 ## Stage 3 (2026-09-25) — the prelude receiver, and why two green gates hid it

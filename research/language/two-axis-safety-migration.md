@@ -1,8 +1,9 @@
 # The two safety axes, and what the migration experiment measured
 
-The rules are in [docs/spec/trusted.md](../spec/trusted.md); this document is a design record.
+The rules are in [docs/spec/trusted.md](../../docs/spec/trusted.md); this document is a design record.
 
-Status: design note + experiment record.
+Status: design note + experiment record (moved from docs/language; the three facts it separates are
+stated in TRUST-4 and TRUST-5's rationale).
 Date: 2026-09-25. Gated by `scripts/tests/check_trusted_method.sh`.
 
 ## The three facts `Unsafe` was conflating

@@ -10,7 +10,6 @@ behaviour (TRUST-2), capabilities (TRUST-4), `trusted` (TRUST-5), the trusted-mo
 specified in [HANDLE_CAPABILITIES.md](../language/HANDLE_CAPABILITIES.md) and
 [CALLABLE_VALUES_AND_CAPABILITIES.md](../language/CALLABLE_VALUES_AND_CAPABILITIES.md) until they
 migrate. The design records are [SAFETY.md](../language/SAFETY.md),
-[TWO_AXIS_SAFETY.md](../language/TWO_AXIS_SAFETY.md) and
 [CAPABILITY_FACTS.md](../language/CAPABILITY_FACTS.md).
 
 ## Rules
@@ -180,6 +179,24 @@ safety, so it absorbs `Unsafe` (R-0484); it never hides an effect a caller shoul
 does not relax linearity. A `trusted extern fn` asserts that the foreign function is safe for every
 argument its types permit (`sqrt`, `abs`); one whose safety depends on pointer validity, or that can
 invalidate a resource another handle owns, stays a plain `extern fn`.
+
+`Unsafe` used to conflate three facts, which are now separate: operational authority, declared
+as `with(File, Alloc, ...)`, which the caller supplies; a caller safety obligation, declared as
+`with(Unsafe)`, an invariant the language cannot establish; and trust provenance, derived, never
+declared: the implementation depends on raw operations, FFI or an audited assertion. An API may be
+safe to call while raw inside (`Vec::push`, `String::clone`), so provenance never propagates as a
+caller requirement; the four combinations are a safe interface over a checked or a trusted body, and
+an obligation-bearing interface over a checked or a trusted body. Per-method `trusted` makes a safe
+interface over an audited method expressible, which a whole-impl modifier could not (whether a
+`trusted impl` form exists at all is OD22, open: OPEN-22), and the two axes stay independent: `pub trusted fn read_unchecked(..) with(Unsafe)` is an audited body whose
+caller still owes an obligation. A trusted body discharges an `Unsafe` obligation at a call, scoped
+three ways so that it is a discharge and not an erasure: only `Unsafe` (operational capabilities
+still bind), `extern` callees included since R-0484 (every `extern` now declares its effects, E0116),
+and only the call (the raw-operation gate, E0521, is untouched). The 2026-09-25 migration took std's
+public `Unsafe` declarations from 154 to 21 with no operational capability set changed and no
+corpus regression; it found the inverse defect too, 15 public std APIs that traffic raw pointers
+and declare no obligation (`String::from_raw_unchecked` the worst), recorded with the measurements
+in [research/language/two-axis-safety-migration.md](../../research/language/two-axis-safety-migration.md).
 
 ```con accept name=trusted-absorbs-unsafe exit=42
 trusted fn rd(p: *const Int) -> Int {
