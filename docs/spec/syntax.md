@@ -93,18 +93,8 @@ too, so an uppercase constant just before a head's block is read as the start of
 and the head does not parse, and the E0001 diagnostic suggests parentheses ([bug
 212](../bugs/212_const_before_block_parses_as_struct_literal.md)'s provisional repair). Bug 318
 replaces that with SYN-4, and the reject example below, which pins main's behaviour, is retired when
-it lands. `scripts/check_ll1.py` checks FIRST/FIRST conflicts only; this one is a FIRST/FOLLOW
-conflict between `ident_tail` and the block after a head, which the head context resolves.
-One disambiguation is lexical, so the productions cannot show it: after an `IDENT`, a `{` begins
-a struct literal's field list (`ident_tail`) only when the name begins with an uppercase letter,
-the type-name convention; after a lowercase name it ends the expression. In the head of an `if`,
-`while` or `match` (and of `if let` / `while let`) the head's block follows the expression, so an
-uppercase name just before that block, typically a module constant, is read as the start of a
-struct literal and the head does not parse. Parenthesizing the head (`if (n > LIMIT) { … }`)
-removes the reading, and the E0001 diagnostic names that form ([bug
-212](../bugs/212_const_before_block_parses_as_struct_literal.md)). This is a FIRST/FOLLOW conflict between `ident_tail` and the block after a head, which the case
-rule resolves; the checkers report it, and `grammar/ll1_known_conflicts.tsv` lists it. Whether a head should admit a struct literal at all
-is an open syntax question, not decided here.
+it lands. This is a FIRST/FOLLOW conflict between `ident_tail` and the block after a head, which
+the head context resolves; the checkers report it, and `grammar/ll1_known_conflicts.tsv` lists it.
 
 ```con reject name=head-constant-struct-literal code=E0001 stage=parse pair=head-constant-parenthesized
 const LIMIT: Int = 16;
