@@ -102,21 +102,19 @@ would confer trust on methods that never declared it. The stdlib demonstrates th
 throughout: `Vec<T>`'s and `HashMap<K, V>`'s raw-storage methods, `TextFile`'s I/O methods,
 `trusted fn print/println`. See [FFI.md](../platform/FFI.md) for wrapper patterns.
 
-### Unsafe-marked modules and global state (proposed 2026-10-23; owner decisions OD7 and OD8, open)
+### Unsafe-marked modules and global state (decided 2026-10-29: OD7 and OD8)
 
-Proposed in [TIGHTENING_DECISIONS D8 and D10](../project/TIGHTENING_DECISIONS.md#46-decisions-of-2026-10-23-second-set):
-
-- **`trusted mod name { ... }`** marks a module as part of the trusted base. Only a marked module
-  may contain `trusted` functions, `extern` declarations, raw-pointer operations and global cells.
-  The marker never confers trust: each function still declares `trusted`, and its `with(...)`
-  obligations, `Unsafe` included, still apply. A gate lists every marked module.
-- **Global state.** Immutable globals (`const`, immutable statics) are allowed everywhere. Mutable
-  global state exists only as declared global cells. A cell is defined in a marked module and is
-  reachable only through functions that require a capability (`with(Alloc)` for allocator state,
-  or a named capability per cell). In the semantics it is part of the world state that capability
-  grants, like the process environment for `with(Env)`. There is no unrestricted `static mut`.
-- The compiler's emitted globals (`__concrete_argc`, `__concrete_argv`) and std.env's environment
-  mutation are inventoried as trusted base. Global cells are built when a workload pulls them.
+The owner decided both on 2026-10-29. A `trusted mod` marker puts the trusted base in the source and
+never confers trust by itself ([TRUST-6](../spec/trusted.md#TRUST-6), pending). Global state follows
+Austral's capability model: a program has no mutable global state and a constant holds no token
+([TRUST-8](../spec/trusted.md#TRUST-8)), global resources are linear tokens descending from the root
+value `main` receives, with hardware and runtime singletons minted only by listed `trusted fn`
+wrappers ([TRUST-9](../spec/trusted.md#TRUST-9)), and handlers and callbacks hold only the tokens
+they are given ([TRUST-10](../spec/trusted.md#TRUST-10)); all pending R-0557. The proposal of
+2026-10-23 (declared global cells in marked modules, [TIGHTENING_DECISIONS D8 and
+D10](../project/TIGHTENING_DECISIONS.md#46-decisions-of-2026-10-23-second-set)) was rejected for global
+state. The compiler's emitted globals (`__concrete_argc`, `__concrete_argv`) and std.env's environment
+mutation are inventoried as trusted base.
 
 ### `with(Unsafe)`
 
