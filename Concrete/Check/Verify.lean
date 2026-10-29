@@ -242,15 +242,25 @@ partial def verifyModuleTypes (pred : Ty → Bool) (label : String) (m : CModule
 -- Public API: specific verifiers
 -- ============================================================
 
+/-- Which verifier found a violation: it decides the code and the message's tag. -/
+inductive VerifyStage where
+  | postElab | postMono
+
+def VerifyStage.tag : VerifyStage → String
+  | .postElab => "post-elab" | .postMono => "post-mono"
+
+def VerifyStage.code : VerifyStage → String
+  | .postElab => "E0600" | .postMono => "E0601"
+
 /-- Convert violations to diagnostics. -/
-def violationsToDiagnostics (pass : String) (violations : List VerifyViolation) : Diagnostics :=
+def violationsToDiagnostics (stage : VerifyStage) (violations : List VerifyViolation) : Diagnostics :=
   violations.map fun v => {
     severity := .error
-    message := s!"[{pass}] {v.fnName}: {v.message}"
+    message := s!"[{stage.tag}] {v.fnName}: {v.message}"
     pass := "verify"
     span := none
     hint := some "this is an internal compiler error — please report it"
-    code := if pass == "post-elab" then "E0600" else "E0601"
+    code := stage.code
   }
 
 /-- **Post-Elab verifier**: no `Ty.placeholder` may survive elaboration.
@@ -258,7 +268,7 @@ def violationsToDiagnostics (pass : String) (violations : List VerifyViolation) 
 def verifyNoPlaceholders (modules : List CModule) : Diagnostics :=
   let violations := modules.foldl (fun acc m =>
     acc ++ verifyModuleTypes Ty.containsPlaceholder "Ty.placeholder found" m) []
-  violationsToDiagnostics "post-elab" violations
+  violationsToDiagnostics .postElab violations
 
 /-- **Post-Mono verifier**: no `Ty.typeVar` may survive monomorphization.
     Run after `Pipeline.monomorphize`. Skips generic definitions — only
@@ -266,7 +276,7 @@ def verifyNoPlaceholders (modules : List CModule) : Diagnostics :=
 def verifyNoTypeVars (modules : List CModule) : Diagnostics :=
   let violations := modules.foldl (fun acc m =>
     acc ++ verifyModuleTypes Ty.containsTypeVar "Ty.typeVar found" m (skipGenerics := true)) []
-  violationsToDiagnostics "post-mono" violations
+  violationsToDiagnostics .postMono violations
 
 /-- Check whether a type is Copy, given the full post-mono struct and enum lists.
     Delegates to the one shared definition (`Layout.isCopyTyCore`). Post-mono
@@ -616,7 +626,7 @@ partial def verifyCapsPostMono (modules : List CModule) : Diagnostics :=
           if missing.isEmpty then acc
           else acc ++ [{ fnName := f.name
                          message := s!"call to '{callee}' requires capabilities ({String.intercalate ", " missing}) that '{f.name}' does not declare — a capability reached a caller through monomorphization without a front-end decision" }]) acc) []
-  violationsToDiagnostics "post-mono" violations
+  violationsToDiagnostics .postMono violations
 /-! ### Post-mono reference-binding verifier (exit 2i, REF-6@1, MEMORY_SEMANTICS §15.3)
 
 Check refuses every `let` of reference type (E0302) and every assignment to a reference binding

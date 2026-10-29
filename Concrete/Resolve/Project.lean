@@ -44,6 +44,10 @@ private def loadError (code msg : String) (file : String := "") : Diagnostics :=
     Detects circular imports via parsedPaths. Collects source map entries. -/
 -- MOD-4 (docs/spec/modules.md): its refusals; `Pipeline.resolveFiles` is the boundary the spec names
 -- (this module is not imported by `Concrete`).
+/-- `name` under the directory `dir`; the empty directory is the current one. -/
+private def underDir (dir name : String) : String :=
+  if dir.isEmpty then name else dir ++ "/" ++ name
+
 partial def resolveModules (baseDir : String) (m : Module) (parsedPaths : List String)
     (srcMap : SourceMap := [])
     : IO (Except Diagnostics (Module × List String × SourceMap)) := do
@@ -52,11 +56,9 @@ partial def resolveModules (baseDir : String) (m : Module) (parsedPaths : List S
   let mut sources := srcMap
   for sub in m.submodules do
     if isModuleStub sub then
-      let filePath := if baseDir == "" then sub.name ++ ".con"
-                      else baseDir ++ "/" ++ sub.name ++ ".con"
+      let filePath := underDir baseDir (sub.name ++ ".con")
       -- Try name.con first, then name/mod.con for directory modules
-      let dirPath := if baseDir == "" then sub.name ++ "/mod.con"
-                     else baseDir ++ "/" ++ sub.name ++ "/mod.con"
+      let dirPath := underDir baseDir (sub.name ++ "/mod.con")
       let (actualPath, source) ← do
         match ← (try pure (some (← readFile filePath)) catch _ => pure none) with
         | some s => pure (filePath, s)
@@ -67,7 +69,7 @@ partial def resolveModules (baseDir : String) (m : Module) (parsedPaths : List S
       let filePath := actualPath
       -- For directory modules, resolve sub-stubs from the subdirectory
       let subBaseDir := if actualPath == dirPath then
-        if baseDir == "" then sub.name else baseDir ++ "/" ++ sub.name
+        underDir baseDir sub.name
       else baseDir
       -- CANONICAL COMPARISON. `paths` is the already-visited list and it was compared as RAW TEXT,
       -- so the same file reached under two spellings — `./src/x.con` and `src/x.con` — was not

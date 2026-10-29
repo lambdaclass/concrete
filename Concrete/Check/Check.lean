@@ -3810,6 +3810,18 @@ private partial def contractExprBad (refPs : List String) : Expr → List String
   | .ifExpr _ c t e => contractExprBad refPs c ++ contractStmtsBad refPs t ++ contractStmtsBad refPs e
 end
 
+/-- The kind of a module-level declaration, for the collision check; `phrase` is how a message
+    names it. The two exemptions below compare kinds, not the phrases. -/
+inductive DeclKind where
+  | function | externFn | implMethod | constant | struct | enum | newtype | typeAlias | trait
+  deriving BEq
+
+def DeclKind.phrase : DeclKind → String
+  | .function => "a function" | .externFn => "an extern declaration"
+  | .implMethod => "an impl method" | .constant => "a constant" | .struct => "a struct"
+  | .enum => "an enum" | .newtype => "a newtype" | .typeAlias => "a type alias"
+  | .trait => "a trait"
+
 /-- Bug 218 (MOD-3): a module binds each name to at most one DECLARATION too, not only one per
     import. Two functions `f` reached `llvm-as` as a redefinition (`--interp` refused the call),
     two structs `S` or a struct and an enum `S` compiled with the first declaration silently
@@ -3824,25 +3836,24 @@ def declarationCollisions (m : Module) : Diagnostics :=
   -- 082: a free-spelled `S_value` names the method), so a free function or extern of that
   -- spelling binds it twice (bug 239: Core gave both one name, and the build failed on a
   -- redefined symbol). Two methods of one name on one type are TRAIT-5's (E0594), not this.
-  let methodKind := "an impl method"
-  let callables : List (String × String × Span) :=
-    m.functions.map (fun f => (f.name, "a function", f.span))
-      ++ m.externFns.map (fun e => (e.name, "an extern declaration", e.span))
+  let callables : List (String × DeclKind × Span) :=
+    m.functions.map (fun f => (f.name, .function, f.span))
+      ++ m.externFns.map (fun e => (e.name, .externFn, e.span))
       ++ m.implBlocks.flatMap (fun ib => ib.methods.map fun f =>
-          (mangledMethodName ib.typeName f.name, methodKind, f.span))
+          (mangledMethodName ib.typeName f.name, .implMethod, f.span))
       ++ m.traitImpls.flatMap (fun tb => tb.methods.map fun f =>
-          (mangledMethodName tb.typeName f.name, methodKind, f.span))
-  let constants : List (String × String × Span) :=
-    m.constants.map (fun c => (c.name, "a constant", c.span))
-  let types : List (String × String × Span) :=
-    m.structs.map (fun d => (d.name, "a struct", d.span))
-      ++ m.enums.map (fun d => (d.name, "an enum", d.span))
-      ++ m.newtypes.map (fun d => (d.name, "a newtype", d.span))
-      ++ m.typeAliases.map (fun d => (d.name, "a type alias", d.span))
-      ++ m.traits.map (fun d => (d.name, "a trait", d.span))
+          (mangledMethodName tb.typeName f.name, .implMethod, f.span))
+  let constants : List (String × DeclKind × Span) :=
+    m.constants.map (fun c => (c.name, .constant, c.span))
+  let types : List (String × DeclKind × Span) :=
+    m.structs.map (fun d => (d.name, .struct, d.span))
+      ++ m.enums.map (fun d => (d.name, .enum, d.span))
+      ++ m.newtypes.map (fun d => (d.name, .newtype, d.span))
+      ++ m.typeAliases.map (fun d => (d.name, .typeAlias, d.span))
+      ++ m.traits.map (fun d => (d.name, .trait, d.span))
   -- Report the LATER declaration of a pair: in source order where the parser recorded spans
   -- (constants and aliases carry none and keep declaration order).
-  let dupes := fun (decls0 : List (String × String × Span)) =>
+  let dupes := fun (decls0 : List (String × DeclKind × Span)) =>
     let decls := (decls0.toArray.qsort (fun a b =>
       a.2.2.line < b.2.2.line || (a.2.2.line == b.2.2.line && a.2.2.col < b.2.2.col))).toList
     -- Bug 275: the first declaration of each name in a map, the collisions newest first, where
@@ -3850,15 +3861,15 @@ def declarationCollisions (m : Module) : Diagnostics :=
     let (_, errs) := decls.foldl (fun (seen, errs) (n, kind, sp) =>
       match seen.get? n with
       | some (otherKind, otherSp) =>
-        if kind == "an extern declaration" && otherKind == "an extern declaration" then (seen, errs)
-        else if kind == methodKind && otherKind == methodKind then (seen, errs)
+        if kind == .externFn && otherKind == .externFn then (seen, errs)
+        else if kind == .implMethod && otherKind == .implMethod then (seen, errs)
         else
-          let e := CheckError.declarationCollision n kind otherKind otherSp.line
+          let e := CheckError.declarationCollision n kind.phrase otherKind.phrase otherSp.line
           let d : Diagnostic := { severity := .error, message := e.message, pass := "check",
                                   span := (if sp.line == 0 then none else some sp), hint := e.hint, code := e.code }
           (seen, d :: errs)
       | none => (seen.insert n (kind, sp), errs))
-        (({} : Std.HashMap String (String × Span)), ([] : Diagnostics))
+        (({} : Std.HashMap String (DeclKind × Span)), ([] : Diagnostics))
     errs.reverse
   dupes callables ++ dupes constants ++ dupes types
 
