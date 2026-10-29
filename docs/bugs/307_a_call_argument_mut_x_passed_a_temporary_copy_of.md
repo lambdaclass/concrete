@@ -5,7 +5,7 @@ summary: Lower lowered a call argument `&mut x` whose local was not yet slot-bac
 fixtures: regress_307_call_arg_mut_is_place.con regress_307_call_arg_owner_types.con
 class: 8 — a call argument's `&mut x` had its own storage scheme beside `addrOfLocal`'s, kept in agreement with it by the checker's exclusivity guarantee
 silent: no
-ruling: Spec gap: REF — a pointer or alias derived from a loan is valid only while the loan lives, and no pass assumes or exploits `&mut` exclusivity until it is proven (OD15 part (b), decided 2026-10-29; written as REF-14@1 on wip/spec-od, cited here as Permitted by once it is on main: the raw-pointer witnesses are undefined, so not a miscompile)
+ruling: Permitted by: REF-14@1 — the raw-pointer reproducers dereference a pointer after its loan ended, so no miscompile; the copy-in/copy-out lowering is removed because it relied on the unproven `&mut` exclusivity guarantee (REF-14@1) and is not the place semantics of REF-13@1
 -->
 
 **Status:** FIXED (branch `wip/bug-307-od2`); reclassified 2026-10-29 under OD15: not a miscompile of any defined program, a lowering that relied on the unproven `&mut` exclusivity guarantee (OD15(b)), removed under OD2 part 3

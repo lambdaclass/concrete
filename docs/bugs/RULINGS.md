@@ -17,7 +17,7 @@ of [docs/spec/ids.tsv](../spec/ids.tsv), or the generator refuses the record.
 
 <!-- BEGIN GENERATED: spec rulings (scripts/gen/bug_ledger.py; edit the records' ruling lines) -->
 
-292 bug records, 289 of them ruled: violates a rule 156, spec gap 32, open owner question 0, permitted by a rule 0, outside the spec 101; not ruled yet (fixed bugs filed before bug 300) 3. Open bugs are in bold.
+293 bug records, 290 of them ruled: violates a rule 156, spec gap 32, open owner question 0, permitted by a rule 1, outside the spec 101; not ruled yet (fixed bugs filed before bug 300) 3. Open bugs are in bold.
 
 ### By kind
 
@@ -26,7 +26,7 @@ of [docs/spec/ids.tsv](../spec/ids.tsv), or the generator refuses the record.
 | violates a rule | 156 | 15 | 81 |
 | spec gap | 32 | 2 | 5 |
 | open owner question | 0 | 0 | 0 |
-| permitted by a rule (not a bug) | 0 | 0 | 0 |
+| permitted by a rule (not a bug) | 1 | 0 | 0 |
 | outside the spec | 101 | 4 | 16 |
 | not ruled yet | 3 | 0 | 0 |
 
@@ -44,7 +44,7 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 | memory.md | MEM | 13 | 1 | 8 | 12 | 1 | 0 | 0 |
 | ffi.md | FFI | 11 | 2 | 6 | 10 | 1 | 0 | 0 |
 | statements.md | STMT | 11 | 2 | 10 | 11 | 0 | 0 | 0 |
-| references.md | REF | 9 | 1 | 9 | 9 | 0 | 0 | 0 |
+| references.md | REF | 10 | 1 | 9 | 9 | 0 | 0 | 1 |
 | arithmetic.md | ARITH | 9 | 1 | 6 | 8 | 1 | 0 | 0 |
 | patterns.md | PAT | 7 | 1 | 5 | 7 | 0 | 0 | 0 |
 | trusted.md | TRUST | 7 | 0 | 5 | 6 | 1 | 0 | 0 |
@@ -163,7 +163,7 @@ No rule decides these bugs' behaviour. Each fix starts by writing the rule (spec
 
 | rule | bugs |
 |---|---|
-| — | — |
+| REF-14@1 | 307 |
 
 ### Outside the spec
 
