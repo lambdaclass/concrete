@@ -6,7 +6,7 @@ fixtures: regress_305_borrow_block_early_exit.con regress_305_borrow_block_owner
 class: 8 — a borrow block's reference was a copy with a write-back on one exit
 silent: yes
 exit: 0b
-ruling: Spec gap: REF — a `&mut` refers to the place, and every exit that does not abort runs one exit sequence (OD2 parts 3 and 5, decided 2026-10-29; written as REF-13@1 and STMT-11@1 on wip/spec-od, cited here once they are on main)
+ruling: Violates: REF-13@1, STMT-11@1 — a borrow block's reference was a copy written back on one exit only (OD2 parts 3 and 5)
 -->
 
 **Status:** FIXED (branch `wip/bug-305-od2`), under the owner's decision OD2 (2026-10-29)

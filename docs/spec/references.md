@@ -1000,9 +1000,10 @@ fn main() -> Int {
 
 **Rationale.** Decided by the owner on 2026-10-29 (OD2, part 3). Copy-in and copy-out is not part
 of the language: a backend may copy only as an optimization proven equivalent, which REF-11's
-exclusivity at a call makes possible. Current main still lowers a borrow block and a `&mut x`
-argument by copying the owner into a slot and writing it back at the exit, and an exit can lose
-those writes (bugs 305 and 307, under repair); the guarantee holds once that lowering is replaced.
+exclusivity at a call makes possible. A borrow block's reference is the owner's own storage since
+bug 305's fix, with no copy and no write-back on any exit; main still lowers a `&mut x` argument by
+copying the owner into a slot and writing it back (bug 307, under repair), and the guarantee holds
+once that lowering is replaced.
 
 <a id="REF-14"></a>
 ### REF-14. An alias derived from a loan lives no longer than the loan
