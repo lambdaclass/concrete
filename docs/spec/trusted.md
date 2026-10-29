@@ -10,7 +10,7 @@ behaviour (TRUST-2), capabilities (TRUST-4), `trusted` (TRUST-5), the trusted-mo
 specified in [HANDLE_CAPABILITIES.md](../language/HANDLE_CAPABILITIES.md) and
 [CALLABLE_VALUES_AND_CAPABILITIES.md](../language/CALLABLE_VALUES_AND_CAPABILITIES.md) until they
 migrate. The design records are [SAFETY.md](../language/SAFETY.md),
-[CAPABILITY_FACTS.md](../language/CAPABILITY_FACTS.md).
+[CAPABILITY_FACTS.md](../compiler/CAPABILITY_FACTS.md).
 
 ## Rules
 
@@ -112,6 +112,24 @@ is re-checked after monomorphization. Raw-pointer dereference and assignment, po
 pointer casts other than a reference to a pointer, and calls to an `extern fn` require `Unsafe`.
 A capability variable (`<cap C>`) entails only itself, so it may not be spelled like a capability:
 `<cap Unsafe>` would hold the real `Unsafe` by name without being granted it (bug 188, E0121).
+
+Until bug 188 a caller holding any capability variable was treated as covering every requirement,
+`Unsafe` included, on the theory that the variable is resolved at instantiation; nothing re-checked
+the generic body there, so `fn f<cap C>(g: fn(i32) with(C) -> i32) with(C)` could print, call
+`with(Process)`, call an untrusted `extern` or dereference a raw pointer, and `main` instantiated
+`C := {}` and ran it with no authority. Now a requirement is satisfied by a concrete capability the
+caller declares, or by a capability variable only when the variable's declared bound entails it;
+a capability parameter declares no bound, so it entails exactly itself, and an unknown variable
+fails closed. The decision is made on the generic definition, before monomorphization: CoreCheck
+checks a call against the callee's declared concrete set, and Check checks a call to a
+capability-polymorphic callee against the instantiated set, `Unsafe` included, with the trusted-body
+discharge (TRUST-5); the post-monomorphization re-check stays as defence in depth. Two questions
+about `Unsafe` stay distinct: authority (`trusted`, or a set that covers `Unsafe`) gates the raw
+operations, while literal membership (the set lists `Unsafe`) is what reports count, and a
+capability-polymorphic function has neither. One rule, `Capabilities.missingCaps` (with
+`capsContain` its boolean view), serves direct calls, calls through a function pointer, method calls,
+calls through a trait bound and the raw-operation gate; where the capability facts live in the
+compiler is [docs/compiler/CAPABILITY_FACTS.md](../compiler/CAPABILITY_FACTS.md).
 
 ```con reject name=undeclared-capability code=E0520 stage=core-check pair=declared-capability
 fn needs() with(File) -> Int {
