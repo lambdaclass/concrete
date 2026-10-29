@@ -24,7 +24,7 @@ hex, binary, octal, boolean, and padding helpers; `String::append`,
 compiler desugaring supports mixed-value `print`/`println`.
 
 String interpolation and a general format-pattern language remain deliberately
-deferred in [STRING_TEXT_CONTRACT.md](../language/STRING_TEXT_CONTRACT.md). Their absence is
+deferred in [STRING_TEXT_CONTRACT.md](../stdlib/STRING_TEXT_CONTRACT.md). Their absence is
 not the original Phase-H blocker and is not a “remaining finding” in this
 historical audit.
 
