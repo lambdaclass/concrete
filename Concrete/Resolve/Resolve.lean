@@ -1120,7 +1120,7 @@ def resolveShallow (moduleSummaries : List FileSummary)
   -- For inline sibling modules (mod A {} mod B {}), register qualified names (A_fn)
   -- so that B can use A::fn() syntax (parsed as A_fn).
   let siblingQualified : List (String × SymKind) := moduleSummaries.foldl (fun acc s =>
-    if s.name == "main" then acc
+    if s.name == rootModuleName then acc
     else
       let qualFns : List (String × SymKind) :=
         (s.functions.filter fun (name, _) => s.publicNames.contains name).map fun (name, fs) =>

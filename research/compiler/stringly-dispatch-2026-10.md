@@ -13,24 +13,28 @@ builtin `TypeId`s, the binder's `LocalId`), so most sites are fixed by dispatchi
 ## Inventory
 
 `stringly-dispatch-sites-2026-10.tsv` lists every `== "…"` and `!= "…"` in `Concrete/` and
-`Main.lean` at origin/main `22d6bff0`: 458 comparisons on 349 lines. Each row has a class and a
-disposition. A classifier assigned the class from the literal and the file; every row it left
-unclassified was then classified by hand.
+`Main.lean` at origin/main `22d6bff0`: 458 comparisons on 399 lines. Each row has a class and a
+disposition. A classifier assigned the class from the literal, the file and, in `Main.lean`, the
+expression compared (a report kind or flag is boundary text; a status, engine or severity field is
+internal vocabulary). Its rules were corrected after review (Kimi) found misfiled rows, and the
+three rows left in `other` were read by hand. The TSV is plain tab-separated text with no quoting:
+the source column keeps the line as written, so read it with a plain split, not a CSV reader.
 
 | class | sites | where | disposition |
 |---|---:|---|---|
-| report-vocabulary | 133 | Report (75 in `Report.lean`), Diff, Main, ObligationCore, ProofCore | typed status and verdict enums; waits for the report split, which moves these lines |
-| boundary-parsing | 116 | Main (96), PipelineTest, Project, Policy | legitimate: CLI flags, config keys, file modes. Keep |
-| attribute-name | 49 | Parser (41), Report | parse attributes once into a typed attribute record |
-| sentinel-empty | 41 | Report, Check, Elab, ProofCore, ReportInterface | `Option` in the type where `""` stands for absent |
-| intrinsic-name | 29 | EmitSSA (9), Interp (7), Elab, Resolve, Report | dispatch on `IntrinsicId` |
+| report-vocabulary | 163 | Report (75), Main (41), Diff (15), ProofCore, ReportObligations, ObligationCore | typed status, verdict and engine enums; waits for the report split, which moves most of these lines |
+| boundary-parsing | 80 | Main (68: report kinds, flags, solver output), Project, Policy, Interp (fopen modes) | legitimate: text read at the boundary. Keep |
+| attribute-name | 51 | Parser (43), Report, ObligationCore, Main | parse attributes once into a typed attribute record |
+| sentinel-empty | 41 | Report, Check, Elab, ProofCore, ReportInterface, ReportBase | `Option` in the type where `""` stands for absent |
 | sentinel-wildcard | 26 | Check, Elab, Lower, Locals, ElabVerify, Interp, Parser | one definition, `isWildcardBinder` |
+| intrinsic-name | 25 | EmitSSA (9), Interp, Elab, AssumptionSummary, ReportInterface, Resolve | dispatch on `IntrinsicId` |
 | reserved-name | 18 | Project, Elab, Resolve, Format, Check, Interp | one named definition per reserved spelling |
-| capability-name | 17 | Report, ProofCore, CheckHelpers, Coherence, Parser, SSAVerify | a capability identity; `CapSet` itself still carries strings |
-| builtin-type-name | 12 | CheckHelpers, SSAVerify, CheckError, Coherence, Lower | the builtin `TypeId` (Coherence already resolves `.builtin` ids) |
-| message-text-as-key | 5 | Check, Verify, Interp | an enum for the kind, with the text rendered from it |
-| builtin-trait-name | 5 | CheckHelpers, BodyIdentity, ProofCore | a builtin-trait identity |
-| builtin-layout-field | 4 | Interp | named field constants of the builtin `Vec`/`String` layout |
+| builtin-type-name | 18 | CheckHelpers, SSAVerify, Coherence, CheckError (`"()"`), Lower | the builtin `TypeId` (Coherence already resolves `.builtin` ids) |
+| capability-name | 11 | Report, ProofCore, Parser | a capability identity; `CapSet` itself still carries strings |
+| test-harness | 8 | PipelineTest | legitimate: the harness names its own fixture binders |
+| builtin-layout-field | 6 | Interp | named field constants of the builtin `Vec`/`String` layout |
+| message-text-as-key | 5 | Check (`"an extern declaration"` twice, `"REF-1@1"`), Verify (`"post-elab"`), Interp (`"the argument"`) | an enum for the kind, with the text rendered from it |
+| builtin-trait-name | 3 | CheckHelpers | a builtin-trait identity |
 | other | 3 | TypeSpelling (a doc comment), PeekType (tuple field `0`), TermIR (a test `example`) | keep |
 
 ## Slice 1 (behaviour-preserving)
@@ -50,7 +54,7 @@ unclassified was then classified by hand.
   a pattern cannot name a definition; a comment there points to the definition. The proof model
   (`Proof/Proof.lean`) keeps its literal so that no proof's unfolding changes.
 - **The implicit root module.** `rootModuleName` is now the one definition of the name the parser
-  gives the implicit root module, used by the parser, the formatter, Check and Elab.
+  gives the implicit root module, used by the parser, the formatter, Resolve, Check and Elab.
 
 **Evidence:** at `983d8527`, on OVH, against main `22d6bff0`:
 - `--emit-core`, `--emit-ssa`, `--emit-llvm`, `--check` and `--interp` outputs are byte-identical
@@ -64,13 +68,14 @@ unclassified was then classified by hand.
 
 1. **Elab and Resolve sentinels.** `typeName == ""` and `baseDir == ""` become `Option`s at the
    producer.
-2. **Reserved names.** `"self"` as the receiver parameter, `"main"` as the entry function (as
-   opposed to the root module), and `"std"`/`"core"` as package names, each defined once.
-3. **Builtin type, trait and field spellings.** In Check, SSAVerify, Lower and Interp, compare
-   against the builtin `TypeId` and not the spelling (see the candidate defect below).
+2. **Reserved names.** `"self"` as the receiver parameter, `"main"` and `"user_main"` as the entry
+   function (as opposed to the root module), and `"std"`/`"core"` as package names, each defined once.
+3. **Builtin type, trait and field spellings.** In Check, SSAVerify, Coherence, CheckError, Lower
+   and Interp, compare against the builtin `TypeId` and not the spelling (see the candidate
+   defect below).
 4. **Interp intrinsic names.** `clock_monotonic_ns`, `fread` and `abs` dispatch on `IntrinsicId`.
-5. **Message text as a key.** In Check (`"an extern declaration"`), Verify (`"post-elab"`) and
-   CheckError (`"()"`), carry the kind as data.
+5. **Message text as a key.** In Check (`"an extern declaration"`, `"REF-1@1"`), Verify
+   (`"post-elab"`) and Interp (`"the argument"`), carry the kind as data.
 6. **Attributes.** One typed attribute record parsed once in the parser.
 7. **Report vocabulary.** After the report split lands, statuses and verdicts become enums.
 

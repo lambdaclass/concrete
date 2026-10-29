@@ -33,16 +33,16 @@ Concrete/Check/CheckError.lean	853	()	builtin-type-name	the builtin TypeId (Cohe
 Concrete/Check/CheckHelpers.lean	1198	Vec	builtin-type-name	the builtin TypeId (Coherence already resolves .builtin ids) instead of the spelling	if n == "Vec" || n == "HashMap" || n == "HashSet" || n == "Heap" || n == "HeapArray" then
 Concrete/Check/CheckHelpers.lean	1198	HashMap	builtin-type-name	the builtin TypeId (Coherence already resolves .builtin ids) instead of the spelling	if n == "Vec" || n == "HashMap" || n == "HashSet" || n == "Heap" || n == "HeapArray" then
 Concrete/Check/CheckHelpers.lean	1198	HashSet	builtin-type-name	the builtin TypeId (Coherence already resolves .builtin ids) instead of the spelling	if n == "Vec" || n == "HashMap" || n == "HashSet" || n == "Heap" || n == "HeapArray" then
-Concrete/Check/CheckHelpers.lean	1198	Heap	capability-name	a capability identity type (CapSet still carries strings: owner of CapSet)	if n == "Vec" || n == "HashMap" || n == "HashSet" || n == "Heap" || n == "HeapArray" then
-Concrete/Check/CheckHelpers.lean	1198	HeapArray	capability-name	a capability identity type (CapSet still carries strings: owner of CapSet)	if n == "Vec" || n == "HashMap" || n == "HashSet" || n == "Heap" || n == "HeapArray" then
+Concrete/Check/CheckHelpers.lean	1198	Heap	builtin-type-name	the builtin TypeId (Coherence already resolves .builtin ids) instead of the spelling	if n == "Vec" || n == "HashMap" || n == "HashSet" || n == "Heap" || n == "HeapArray" then
+Concrete/Check/CheckHelpers.lean	1198	HeapArray	builtin-type-name	the builtin TypeId (Coherence already resolves .builtin ids) instead of the spelling	if n == "Vec" || n == "HashMap" || n == "HashSet" || n == "Heap" || n == "HeapArray" then
 Concrete/Check/CheckHelpers.lean	1254	Copy	builtin-trait-name	a builtin-trait identity (TypeId-style) instead of the spelling	if traitName == "Copy" then
 Concrete/Check/CheckHelpers.lean	1257	Destroy	builtin-trait-name	a builtin-trait identity (TypeId-style) instead of the spelling	else if traitName == "Destroy" then
 Concrete/Check/CheckHelpers.lean	1292	String	builtin-type-name	the builtin TypeId (Coherence already resolves .builtin ids) instead of the spelling	return env.traitImpls.any fun (ty, tr) => ty == "String" && tr == "Destroy"
 Concrete/Check/CheckHelpers.lean	1292	Destroy	builtin-trait-name	a builtin-trait identity (TypeId-style) instead of the spelling	return env.traitImpls.any fun (ty, tr) => ty == "String" && tr == "Destroy"
 Concrete/Check/Coherence.lean	219	Option	builtin-type-name	the builtin TypeId (Coherence already resolves .builtin ids) instead of the spelling	if n == "Option" then .decl { id := .builtin .option, arity := 1 } else
 Concrete/Check/Coherence.lean	220	Result	builtin-type-name	the builtin TypeId (Coherence already resolves .builtin ids) instead of the spelling	if n == "Result" then .decl { id := .builtin .result, arity := 2 } else
-Concrete/Check/Coherence.lean	229	Heap	capability-name	a capability identity type (CapSet still carries strings: owner of CapSet)	if n == "Heap" || n == "HeapArray" then .prim n 1 else .unresolved
-Concrete/Check/Coherence.lean	229	HeapArray	capability-name	a capability identity type (CapSet still carries strings: owner of CapSet)	if n == "Heap" || n == "HeapArray" then .prim n 1 else .unresolved
+Concrete/Check/Coherence.lean	229	Heap	builtin-type-name	the builtin TypeId (Coherence already resolves .builtin ids) instead of the spelling	if n == "Heap" || n == "HeapArray" then .prim n 1 else .unresolved
+Concrete/Check/Coherence.lean	229	HeapArray	builtin-type-name	the builtin TypeId (Coherence already resolves .builtin ids) instead of the spelling	if n == "Heap" || n == "HeapArray" then .prim n 1 else .unresolved
 Concrete/Check/CoreCheck.lean	723	read_owned	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	if helper == "read_owned" then
 Concrete/Check/ElabVerify.lean	98	_	sentinel-wildcard	one definition (wildcardBinder / isWildcardBinder)	if b.name != "_" then v ← introduce fn v b
 Concrete/Check/ElabVerify.lean	101	_	sentinel-wildcard	one definition (wildcardBinder / isWildcardBinder)	let v ← if b.name == "_" then pure vis else introduce fn vis b
@@ -97,7 +97,7 @@ Concrete/Frontend/Parser.lean	1955	proof_coverage	attribute-name	parse attribute
 Concrete/Frontend/Parser.lean	1956	proof_fingerprint	attribute-name	parse attributes once into a typed attribute record	else if key == "proof_fingerprint" then mFingerprint := attrVal
 Concrete/Frontend/Parser.lean	2402	repr	attribute-name	parse attributes once into a typed attribute record	if key == "repr" then
 Concrete/Frontend/Parser.lean	2404	test	attribute-name	parse attributes once into a typed attribute record	if key == "test" then
-Concrete/Frontend/Parser.lean	2406	overflow_checked	report-vocabulary	typed status / verdict enums; after the report split lands	if key == "overflow_checked" then pendingOverflow := true
+Concrete/Frontend/Parser.lean	2406	overflow_checked	attribute-name	parse attributes once into a typed attribute record	if key == "overflow_checked" then pendingOverflow := true
 Concrete/Frontend/Parser.lean	2407	intrinsic	attribute-name	parse attributes once into a typed attribute record	if key == "intrinsic" then pendingIntrinsic := attrVal
 Concrete/Frontend/Parser.lean	2408	link_name	attribute-name	parse attributes once into a typed attribute record	if key == "link_name" then
 Concrete/Frontend/Parser.lean	2412	export_name	attribute-name	parse attributes once into a typed attribute record	if key == "export_name" then
@@ -109,7 +109,7 @@ Concrete/Frontend/Parser.lean	2428	proof_fingerprint	attribute-name	parse attrib
 Concrete/Frontend/Parser.lean	2432	requires	attribute-name	parse attributes once into a typed attribute record	| some e => if key == "requires" then pendingRequires := pendingRequires ++ [e]
 Concrete/Frontend/Parser.lean	2474	repr	attribute-name	parse attributes once into a typed attribute record	if key == "repr" then
 Concrete/Frontend/Parser.lean	2476	test	attribute-name	parse attributes once into a typed attribute record	if key == "test" then
-Concrete/Frontend/Parser.lean	2478	overflow_checked	report-vocabulary	typed status / verdict enums; after the report split lands	if key == "overflow_checked" then pendingOverflow := true
+Concrete/Frontend/Parser.lean	2478	overflow_checked	attribute-name	parse attributes once into a typed attribute record	if key == "overflow_checked" then pendingOverflow := true
 Concrete/Frontend/Parser.lean	2479	intrinsic	attribute-name	parse attributes once into a typed attribute record	if key == "intrinsic" then pendingIntrinsic := attrVal
 Concrete/Frontend/Parser.lean	2480	link_name	attribute-name	parse attributes once into a typed attribute record	if key == "link_name" then
 Concrete/Frontend/Parser.lean	2484	export_name	attribute-name	parse attributes once into a typed attribute record	if key == "export_name" then
@@ -128,10 +128,10 @@ Concrete/IR/Mono.lean	146		sentinel-empty	Option in the type, where the empty st
 Concrete/IR/SSAVerify.lean	496	Vec	builtin-type-name	the builtin TypeId (Coherence already resolves .builtin ids) instead of the spelling	name != "Vec" && name != "HashMap" && name != "HashSet" &&
 Concrete/IR/SSAVerify.lean	496	HashMap	builtin-type-name	the builtin TypeId (Coherence already resolves .builtin ids) instead of the spelling	name != "Vec" && name != "HashMap" && name != "HashSet" &&
 Concrete/IR/SSAVerify.lean	496	HashSet	builtin-type-name	the builtin TypeId (Coherence already resolves .builtin ids) instead of the spelling	name != "Vec" && name != "HashMap" && name != "HashSet" &&
-Concrete/IR/SSAVerify.lean	497	Heap	capability-name	a capability identity type (CapSet still carries strings: owner of CapSet)	name != "Heap" && name != "HeapArray"
-Concrete/IR/SSAVerify.lean	497	HeapArray	capability-name	a capability identity type (CapSet still carries strings: owner of CapSet)	name != "Heap" && name != "HeapArray"
+Concrete/IR/SSAVerify.lean	497	Heap	builtin-type-name	the builtin TypeId (Coherence already resolves .builtin ids) instead of the spelling	name != "Heap" && name != "HeapArray"
+Concrete/IR/SSAVerify.lean	497	HeapArray	builtin-type-name	the builtin TypeId (Coherence already resolves .builtin ids) instead of the spelling	name != "Heap" && name != "HeapArray"
 Concrete/Interp/Interp.lean	893	ptr	builtin-layout-field	named field constants of the builtin Vec/String layout	match fields.find? (·.1 == "ptr"), fields.find? (·.1 == "len"), fields.find? (·.1 == "cap") with
-Concrete/Interp/Interp.lean	893	len	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	match fields.find? (·.1 == "ptr"), fields.find? (·.1 == "len"), fields.find? (·.1 == "cap") with
+Concrete/Interp/Interp.lean	893	len	builtin-layout-field	named field constants of the builtin Vec/String layout	match fields.find? (·.1 == "ptr"), fields.find? (·.1 == "len"), fields.find? (·.1 == "cap") with
 Concrete/Interp/Interp.lean	893	cap	builtin-layout-field	named field constants of the builtin Vec/String layout	match fields.find? (·.1 == "ptr"), fields.find? (·.1 == "len"), fields.find? (·.1 == "cap") with
 Concrete/Interp/Interp.lean	1784	abs	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	|| (name == "abs" && what == "the argument") then 4 else 8
 Concrete/Interp/Interp.lean	1784	the argument	message-text-as-key	an enum for the kind; the text is rendered from it	|| (name == "abs" && what == "the argument") then 4 else 8
@@ -144,18 +144,18 @@ Concrete/Interp/Interp.lean	2084	abs	intrinsic-name	dispatch on IntrinsicId (res
 Concrete/Interp/Interp.lean	2543	clock_monotonic_ns	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	if fnName == "clock_monotonic_ns" then
 Concrete/Interp/Interp.lean	2565	ptr	builtin-layout-field	named field constants of the builtin Vec/String layout	if f == "ptr" then (f, .ptr blk 0) else if f == "cap" then (f, .int newCap .uint) else (f, v))
 Concrete/Interp/Interp.lean	2565	cap	builtin-layout-field	named field constants of the builtin Vec/String layout	if f == "ptr" then (f, .ptr blk 0) else if f == "cap" then (f, .int newCap .uint) else (f, v))
-Concrete/Interp/Interp.lean	2582	len	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	| .struct_ n fs => .struct_ n (fs.map fun (f, v) => if f == "len" then (f, .int needed .uint) else (f, v))
+Concrete/Interp/Interp.lean	2582	len	builtin-layout-field	named field constants of the builtin Vec/String layout	| .struct_ n fs => .struct_ n (fs.map fun (f, v) => if f == "len" then (f, .int needed .uint) else (f, v))
 Concrete/Interp/Interp.lean	3199	_	sentinel-wildcard	one definition (wildcardBinder / isWildcardBinder)	let armEnv := if binding.name == "_" then env else envBind env binding.key bound
 Concrete/Interp/Interp.lean	3636	main	reserved-name	one named definition per reserved spelling	match cx.defs.find? (fun (f, _) => f.name == "main") with
-Concrete/Pipeline/PipelineTest.lean	398	y	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	| s@(.letDecl b m ty _) => if b.name == "y" then .letDecl b m ty wide else s
-Concrete/Pipeline/PipelineTest.lean	401	y	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	| s@(.assign b _) => if b.name == "y" then .assign b wide else s
-Concrete/Pipeline/PipelineTest.lean	405	t	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if b.name == "t" then .letDecl b m ty (.call c tas [wide] rt) else s
-Concrete/Pipeline/PipelineTest.lean	409	p	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if b.name == "p" then .letDecl b m ty (.structLit n tas [(fname, wide)] st) else s
-Concrete/Pipeline/PipelineTest.lean	412	r	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	| s@(.return_ (some (.ident r _)) rt) => if r.name == "r" then .return_ (some wide) rt else s
-Concrete/Pipeline/PipelineTest.lean	416	w	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if b.name == "w" then .letDecl b m ty (.ifExpr c ((t.dropLast) ++ [.expr wide true]) e it) else s
-Concrete/Pipeline/PipelineTest.lean	420	arr	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if b.name == "arr" then .letDecl b m ty (.arrayLit [e0, wide] at_) else s
-Concrete/Pipeline/PipelineTest.lean	426	f	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if b.name == "f" then .letDecl b m ty (.fnRef "loud" (.fn_ [] (.concrete ["Console"]) .int)) else s
-Concrete/Proof/BodyIdentity.lean	191	LoopStep	builtin-trait-name	a builtin-trait identity (TypeId-style) instead of the spelling	private def isLoopCarriedLabel (en v : String) : Bool := en == "LoopStep" && v == "Cont"
+Concrete/Pipeline/PipelineTest.lean	398	y	test-harness	legitimate: a test harness naming its own fixture binders	| s@(.letDecl b m ty _) => if b.name == "y" then .letDecl b m ty wide else s
+Concrete/Pipeline/PipelineTest.lean	401	y	test-harness	legitimate: a test harness naming its own fixture binders	| s@(.assign b _) => if b.name == "y" then .assign b wide else s
+Concrete/Pipeline/PipelineTest.lean	405	t	test-harness	legitimate: a test harness naming its own fixture binders	if b.name == "t" then .letDecl b m ty (.call c tas [wide] rt) else s
+Concrete/Pipeline/PipelineTest.lean	409	p	test-harness	legitimate: a test harness naming its own fixture binders	if b.name == "p" then .letDecl b m ty (.structLit n tas [(fname, wide)] st) else s
+Concrete/Pipeline/PipelineTest.lean	412	r	test-harness	legitimate: a test harness naming its own fixture binders	| s@(.return_ (some (.ident r _)) rt) => if r.name == "r" then .return_ (some wide) rt else s
+Concrete/Pipeline/PipelineTest.lean	416	w	test-harness	legitimate: a test harness naming its own fixture binders	if b.name == "w" then .letDecl b m ty (.ifExpr c ((t.dropLast) ++ [.expr wide true]) e it) else s
+Concrete/Pipeline/PipelineTest.lean	420	arr	test-harness	legitimate: a test harness naming its own fixture binders	if b.name == "arr" then .letDecl b m ty (.arrayLit [e0, wide] at_) else s
+Concrete/Pipeline/PipelineTest.lean	426	f	test-harness	legitimate: a test harness naming its own fixture binders	if b.name == "f" then .letDecl b m ty (.fnRef "loud" (.fn_ [] (.concrete ["Console"]) .int)) else s
+Concrete/Proof/BodyIdentity.lean	191	LoopStep	report-vocabulary	typed status / verdict enums; after the report split lands	private def isLoopCarriedLabel (en v : String) : Bool := en == "LoopStep" && v == "Cont"
 Concrete/Proof/BodyIdentity.lean	191	Cont	report-vocabulary	typed status / verdict enums; after the report split lands	private def isLoopCarriedLabel (en v : String) : Bool := en == "LoopStep" && v == "Cont"
 Concrete/Proof/DefinitionIdentity.lean	228	resolver:bundled-std	report-vocabulary	typed status / verdict enums; after the report split lands	if requester == "resolver:bundled-std" then .ok (PackageScopeIdentity.mk (.toolchain "std") "std")
 Concrete/Proof/DependencyEdge.lean	403	sourceBodyDigestV1	report-vocabulary	typed status / verdict enums; after the report split lands	if stored.schema != "sourceBodyDigestV1" then
@@ -171,7 +171,7 @@ Concrete/Proof/Proof.lean	1396	_	sentinel-wildcard	one definition (wildcardBinde
 Concrete/Proof/ProofCore.lean	228		sentinel-empty	Option in the type, where the empty string stands for absent	let qualPrefix := if pfx == "" then m.name else pfx ++ "." ++ m.name
 Concrete/Proof/ProofCore.lean	240		sentinel-empty	Option in the type, where the empty string stands for absent	let qualPrefix := if pfx == "" then m.name else pfx ++ "." ++ m.name
 Concrete/Proof/ProofCore.lean	334		sentinel-empty	Option in the type, where the empty string stands for absent	let qualPrefix := if pfx == "" then m.name else pfx ++ "." ++ m.name
-Concrete/Proof/ProofCore.lean	848	LoopStep	builtin-trait-name	a builtin-trait identity (TypeId-style) instead of the spelling	| .enumLit en _ fs => (en == "LoopStep" && fs.any (·.1 == n)) || fs.any (pexprMentions n ·.2)
+Concrete/Proof/ProofCore.lean	848	LoopStep	report-vocabulary	typed status / verdict enums; after the report split lands	| .enumLit en _ fs => (en == "LoopStep" && fs.any (·.1 == n)) || fs.any (pexprMentions n ·.2)
 Concrete/Proof/ProofCore.lean	3279	none	report-vocabulary	typed status / verdict enums; after the report split lands	(if rec_ != "none" && rec_ != "unclassified" then [s!"recursion ({rec_})"] else []) ++
 Concrete/Proof/ProofCore.lean	3279	unclassified	report-vocabulary	typed status / verdict enums; after the report split lands	(if rec_ != "none" && rec_ != "unclassified" then [s!"recursion ({rec_})"] else []) ++
 Concrete/Proof/ProofCore.lean	3280	unbounded	report-vocabulary	typed status / verdict enums; after the report split lands	(if loopClass == "unbounded" || loopClass == "mixed" then ["unbounded loops"] else []) ++
@@ -319,7 +319,7 @@ Concrete/Report/ReportObligations.lean	1962	unproved	report-vocabulary	typed sta
 Concrete/Report/ReportObligations.lean	1974	unproved	report-vocabulary	typed status / verdict enums; after the report split lands	artifactFuzzDriverFor (cases.filter (fun c => c.claim == "unproved")) "artifact_fuzz_mechanism"
 Concrete/Report/ReportObligations.lean	2766	iff	report-vocabulary	typed status / verdict enums; after the report split lands	let coverageClaim := (e.coverage == "iff" || e.coverage == "one_direction") && !e.proof.isEmpty
 Concrete/Report/ReportObligations.lean	2766	one_direction	report-vocabulary	typed status / verdict enums; after the report split lands	let coverageClaim := (e.coverage == "iff" || e.coverage == "one_direction") && !e.proof.isEmpty
-Concrete/Resolve/Intrinsic.lean	382	user_main	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	|| name == "user_main"
+Concrete/Resolve/Intrinsic.lean	382	user_main	reserved-name	one named definition per reserved spelling	|| name == "user_main"
 Concrete/Resolve/Locals.lean	82	_	sentinel-wildcard	one definition (wildcardBinder / isWildcardBinder)	if name == "_" then
 Concrete/Resolve/Locals.lean	152	_	sentinel-wildcard	one definition (wildcardBinder / isWildcardBinder)	if b.name == "_" then v ← bindArmWild v (siteKey sp b.name)
 Concrete/Resolve/Locals.lean	158	_	sentinel-wildcard	one definition (wildcardBinder / isWildcardBinder)	let v ← if b == "_" then bindArmWild vis (siteKey sp b) else bindLocal vis (siteKey sp b) b sp "pattern binder"
@@ -348,7 +348,7 @@ Concrete/Resolve/Resolve.lean	1121	main	reserved-name	one named definition per r
 Concrete/Resolve/Resolve.lean	1201	main	reserved-name	one named definition per reserved spelling	else if sym == "main" then bad "'main' is the process entry the compiler generates"
 Concrete/Semantics/TermIR.lean	428	f	other	review	example : evalInt [] (fun n vs => if n == "f" then some (vs.length) else none)
 Main.lean	136	Darwin	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if os.stdout.trimAscii.toString != "Darwin" then return #[]
-Main.lean	590	core	reserved-name	one named definition per reserved spelling	if mode == "core" then
+Main.lean	590	core	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if mode == "core" then
 Main.lean	603	ssa-unverified	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	let lowerResult := if mode == "ssa-unverified"
 Main.lean	674	traceability	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if parts[0]! == "traceability" then
 Main.lean	952	version	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	match toks.dropWhile (· != "version") with
@@ -357,29 +357,29 @@ Main.lean	991	sat	boundary-parsing	legitimate: parsing CLI flags, config or exte
 Main.lean	999	unknown	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	else if line == "unknown" then pure ("unknown", [])
 Main.lean	1000	timeout	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	else if line == "timeout" then pure ("timeout", [])
 Main.lean	1049	version	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	match (firstLine.splitOn " ").dropWhile (· != "version") with
-Main.lean	1510	proved_by_two_kernels	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if v.status == "proved_by_two_kernels" || v.status == "proved_by_multi_kernel"
-Main.lean	1510	proved_by_multi_kernel	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if v.status == "proved_by_two_kernels" || v.status == "proved_by_multi_kernel"
+Main.lean	1510	proved_by_two_kernels	report-vocabulary	typed status / verdict enums; after the report split lands	if v.status == "proved_by_two_kernels" || v.status == "proved_by_multi_kernel"
+Main.lean	1510	proved_by_multi_kernel	report-vocabulary	typed status / verdict enums; after the report split lands	if v.status == "proved_by_two_kernels" || v.status == "proved_by_multi_kernel"
 Main.lean	1540	solver_trusted	report-vocabulary	typed status / verdict enums; after the report split lands	let trusted := dvcs.filterMap fun v => if v.status == "solver_trusted" then some v.id else none
-Main.lean	1574	assumed	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	-- This read `v.status == "assumed" && !v.hypDebt.isEmpty`. When enough kernels attest,
-Main.lean	1622	omega	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	let omegaProved := dvcs.filterMap fun v => if v.engine == "omega" then some v.id else none
-Main.lean	1623	bv_decide	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	let bvProved    := dvcs.filterMap fun v => if v.engine == "bv_decide" then some v.id else none
+Main.lean	1574	assumed	report-vocabulary	typed status / verdict enums; after the report split lands	-- This read `v.status == "assumed" && !v.hypDebt.isEmpty`. When enough kernels attest,
+Main.lean	1622	omega	report-vocabulary	typed status / verdict enums; after the report split lands	let omegaProved := dvcs.filterMap fun v => if v.engine == "omega" then some v.id else none
+Main.lean	1623	bv_decide	report-vocabulary	typed status / verdict enums; after the report split lands	let bvProved    := dvcs.filterMap fun v => if v.engine == "bv_decide" then some v.id else none
 Main.lean	1690	interface	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "interface" then
 Main.lean	1931	ensures	attribute-name	parse attributes once into a typed attribute record	else if st == "ensures" then "not_discharged"
 Main.lean	1936	proved	report-vocabulary	typed status / verdict enums; after the report split lands	else if st == "proved" then "checked"
-Main.lean	1939	checked	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	let allChecked := results.all (fun (_, _, st) => st == "checked")
-Main.lean	1942	failed	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	else if results.any (fun (_, _, st) => st == "failed") then 4
-Main.lean	1943	missing_theorem	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	else if results.any (fun (_, _, st) => st == "missing_theorem") then 2
+Main.lean	1939	checked	report-vocabulary	typed status / verdict enums; after the report split lands	let allChecked := results.all (fun (_, _, st) => st == "checked")
+Main.lean	1942	failed	report-vocabulary	typed status / verdict enums; after the report split lands	else if results.any (fun (_, _, st) => st == "failed") then 4
+Main.lean	1943	missing_theorem	report-vocabulary	typed status / verdict enums; after the report split lands	else if results.any (fun (_, _, st) => st == "missing_theorem") then 2
 Main.lean	1944	stale	report-vocabulary	typed status / verdict enums; after the report split lands	else if results.any (fun (_, _, st) => st == "stale") then 3
-Main.lean	1946	checked	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	else if results.any (fun (_, _, st) => st != "checked") then 2
-Main.lean	1948	failed	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	let leanErr := if !envFailure && !results.any (fun (_, _, st) => st == "failed" || st == "missing_theorem") then "" else String.ofList (comb
-Main.lean	1948	missing_theorem	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	let leanErr := if !envFailure && !results.any (fun (_, _, st) => st == "failed" || st == "missing_theorem") then "" else String.ofList (comb
-Main.lean	1953	checked	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	", \"discharged\": ", (if st == "checked" then "true" else "false"),
-Main.lean	1960	checked	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	",\n  \"summary\": ", q s!"{results.countP (fun (_,_,s) => s == "checked")} checked, {results.countP (fun (_,_,s) => s != "checked")} not ch
-Main.lean	1960	checked	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	",\n  \"summary\": ", q s!"{results.countP (fun (_,_,s) => s == "checked")} checked, {results.countP (fun (_,_,s) => s != "checked")} not ch
-Main.lean	1965	checked	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	let mark := if st == "checked" then "✓" else "✗"
-Main.lean	1967	not_discharged	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if st == "not_discharged" then
-Main.lean	1970	checked	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	out := out ++ s!"\nSummary: {results.countP (fun (_,_,s) => s == "checked")} checked, {results.countP (fun (_,_,s) => s != "checked")} not c
-Main.lean	1970	checked	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	out := out ++ s!"\nSummary: {results.countP (fun (_,_,s) => s == "checked")} checked, {results.countP (fun (_,_,s) => s != "checked")} not c
+Main.lean	1946	checked	report-vocabulary	typed status / verdict enums; after the report split lands	else if results.any (fun (_, _, st) => st != "checked") then 2
+Main.lean	1948	failed	report-vocabulary	typed status / verdict enums; after the report split lands	let leanErr := if !envFailure && !results.any (fun (_, _, st) => st == "failed" || st == "missing_theorem") then "" else String.ofList (comb
+Main.lean	1948	missing_theorem	report-vocabulary	typed status / verdict enums; after the report split lands	let leanErr := if !envFailure && !results.any (fun (_, _, st) => st == "failed" || st == "missing_theorem") then "" else String.ofList (comb
+Main.lean	1953	checked	report-vocabulary	typed status / verdict enums; after the report split lands	", \"discharged\": ", (if st == "checked" then "true" else "false"),
+Main.lean	1960	checked	report-vocabulary	typed status / verdict enums; after the report split lands	",\n  \"summary\": ", q s!"{results.countP (fun (_,_,s) => s == "checked")} checked, {results.countP (fun (_,_,s) => s != "checked")} not ch
+Main.lean	1960	checked	report-vocabulary	typed status / verdict enums; after the report split lands	",\n  \"summary\": ", q s!"{results.countP (fun (_,_,s) => s == "checked")} checked, {results.countP (fun (_,_,s) => s != "checked")} not ch
+Main.lean	1965	checked	report-vocabulary	typed status / verdict enums; after the report split lands	let mark := if st == "checked" then "✓" else "✗"
+Main.lean	1967	not_discharged	report-vocabulary	typed status / verdict enums; after the report split lands	if st == "not_discharged" then
+Main.lean	1970	checked	report-vocabulary	typed status / verdict enums; after the report split lands	out := out ++ s!"\nSummary: {results.countP (fun (_,_,s) => s == "checked")} checked, {results.countP (fun (_,_,s) => s != "checked")} not c
+Main.lean	1970	checked	report-vocabulary	typed status / verdict enums; after the report split lands	out := out ++ s!"\nSummary: {results.countP (fun (_,_,s) => s == "checked")} checked, {results.countP (fun (_,_,s) => s != "checked")} not c
 Main.lean	2050	backend-contracts	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "backend-contracts" then
 Main.lean	2057	contracts	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "contracts" then
 Main.lean	2060	obligation-ledger	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "obligation-ledger" then
@@ -388,28 +388,28 @@ Main.lean	2126	solver_trusted	report-vocabulary	typed status / verdict enums; af
 Main.lean	2139	vcgen-diff	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "vcgen-diff" then
 Main.lean	2167	bool-kernel	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "bool-kernel" then
 Main.lean	2281	multi-kernel	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "multi-kernel" then
-Main.lean	2300	assumed	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if v.status == "assumed" && !v.hypDebt.isEmpty then some (v.id, v.hypDebt) else none)
-Main.lean	2332	rocq	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	let validatedOf := fun (name : String) => if name == "rocq" then rocqOk else isaOk
-Main.lean	2442	closed	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if en && (c == "closed" || c == "refused") && !(validatedOf name).contains o.key
-Main.lean	2442	refused	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if en && (c == "closed" || c == "refused") && !(validatedOf name).contains o.key
+Main.lean	2300	assumed	report-vocabulary	typed status / verdict enums; after the report split lands	if v.status == "assumed" && !v.hypDebt.isEmpty then some (v.id, v.hypDebt) else none)
+Main.lean	2332	rocq	report-vocabulary	typed status / verdict enums; after the report split lands	let validatedOf := fun (name : String) => if name == "rocq" then rocqOk else isaOk
+Main.lean	2442	closed	report-vocabulary	typed status / verdict enums; after the report split lands	if en && (c == "closed" || c == "refused") && !(validatedOf name).contains o.key
+Main.lean	2442	refused	report-vocabulary	typed status / verdict enums; after the report split lands	if en && (c == "closed" || c == "refused") && !(validatedOf name).contains o.key
 Main.lean	2484	bridge-check	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "bridge-check" then
 Main.lean	2520	core-semantics-diff	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "core-semantics-diff" then
 Main.lean	2640	term-ir	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "term-ir" then
 Main.lean	2675	artifact-fuzz	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "artifact-fuzz" then
 Main.lean	2689	arithmetic_proved	report-vocabulary	typed status / verdict enums; after the report split lands	else if mine.all (fun v => v.status.startsWith "proved" || v.status == "arithmetic_proved")
 Main.lean	2722	lowering-agreement	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "lowering-agreement" then
-Main.lean	2747	isabelle:presburger	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	let res ← if label == "isabelle:presburger"
+Main.lean	2747	isabelle:presburger	report-vocabulary	typed status / verdict enums; after the report split lands	let res ← if label == "isabelle:presburger"
 Main.lean	2810	solver-cert	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "solver-cert" then
 Main.lean	2861	solver_trusted	report-vocabulary	typed status / verdict enums; after the report split lands	if cls == "solver_trusted" && replayCell == "closed" then "solver_replayed"
-Main.lean	2861	closed	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if cls == "solver_trusted" && replayCell == "closed" then "solver_replayed"
+Main.lean	2861	closed	report-vocabulary	typed status / verdict enums; after the report split lands	if cls == "solver_trusted" && replayCell == "closed" then "solver_replayed"
 Main.lean	2862	solver_trusted	report-vocabulary	typed status / verdict enums; after the report split lands	else if cls == "solver_trusted" && niaCell == "closed" then "solver_checked"
-Main.lean	2862	closed	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	else if cls == "solver_trusted" && niaCell == "closed" then "solver_checked"
+Main.lean	2862	closed	report-vocabulary	typed status / verdict enums; after the report split lands	else if cls == "solver_trusted" && niaCell == "closed" then "solver_checked"
 Main.lean	2876	caps	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "caps" then
 Main.lean	2879	unsafe	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "unsafe" then
 Main.lean	2887	assumptions	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "assumptions" then
 Main.lean	2892	trust-edges	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "trust-edges" then
 Main.lean	2895	layout	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "layout" then
-Main.lean	2898	alloc	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	if reportType == "alloc" then
+Main.lean	2898	alloc	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "alloc" then
 Main.lean	2901	authority	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "authority" then
 Main.lean	2904	proof	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "proof" then
 Main.lean	2907	eligibility	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "eligibility" then
@@ -433,8 +433,8 @@ Main.lean	3140	receipts	boundary-parsing	legitimate: parsing CLI flags, config o
 Main.lean	3244	check-proofs	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "check-proofs" then
 Main.lean	3305	proved	report-vocabulary	typed status / verdict enums; after the report split lands	let isRefused := fun (fn : String) => claimStatus fn != "proved"
 Main.lean	3351	proved	report-vocabulary	typed status / verdict enums; after the report split lands	else if oblStatus == "proved" then "checked"
-Main.lean	3356	checked	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	", \"discharged\": ", (if statusOf thm oblStatus == "checked" then "true" else "false"),
-Main.lean	3388	checked	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	&& refStatuses.all (· == "checked")
+Main.lean	3356	checked	report-vocabulary	typed status / verdict enums; after the report split lands	", \"discharged\": ", (if statusOf thm oblStatus == "checked" then "true" else "false"),
+Main.lean	3388	checked	report-vocabulary	typed status / verdict enums; after the report split lands	&& refStatuses.all (· == "checked")
 Main.lean	3501	diagnostics-json	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "diagnostics-json" then
 Main.lean	3504	schema	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "schema" then
 Main.lean	3507	diagnostic-codes	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "diagnostic-codes" then
@@ -451,9 +451,9 @@ Main.lean	3565	mono	boundary-parsing	legitimate: parsing CLI flags, config or ex
 Main.lean	3578	predictable	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if checkType != "predictable" then
 Main.lean	3935	--json	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	| "trace" :: file :: rest => file :: "--trace-pipeline" :: rest.filter (· != "--json")
 Main.lean	3965	--	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	let userArgs := match args.dropWhile (· != "--") with
-Main.lean	4004	registry	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if d.code == "registry" then IO.eprintln d.message
-Main.lean	4037	registry	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	let hasRegistryErrors := ledger.diagnostics.any (fun d => d.code == "registry" && d.severity == "error")
-Main.lean	4037	error	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	let hasRegistryErrors := ledger.diagnostics.any (fun d => d.code == "registry" && d.severity == "error")
+Main.lean	4004	registry	report-vocabulary	typed status / verdict enums; after the report split lands	if d.code == "registry" then IO.eprintln d.message
+Main.lean	4037	registry	report-vocabulary	typed status / verdict enums; after the report split lands	let hasRegistryErrors := ledger.diagnostics.any (fun d => d.code == "registry" && d.severity == "error")
+Main.lean	4037	error	report-vocabulary	typed status / verdict enums; after the report split lands	let hasRegistryErrors := ledger.diagnostics.any (fun d => d.code == "registry" && d.severity == "error")
 Main.lean	4066	weakened	report-vocabulary	typed status / verdict enums; after the report split lands	return (if entries.any (·.drift == "weakened") then 1 else 0)
 Main.lean	4096	weakened	report-vocabulary	typed status / verdict enums; after the report split lands	return (if entries.any (·.drift == "weakened") then 1 else 0)
 Main.lean	4256	--verbose	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	let verbose := rest.any (· == "--verbose")
