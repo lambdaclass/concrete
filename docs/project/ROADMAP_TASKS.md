@@ -2353,7 +2353,9 @@ Create `journal/` for material whose value is historical context rather than cur
 - `journal/decisions/` — dated decision rationale and supersession records;
 - `journal/milestones/` — implementation narratives and release retrospectives.
 
-Migrate `docs/NOTES/`, dated roadmap narratives and bug write-ups selectively, not mechanically.
+Migrate dated roadmap narratives and bug write-ups selectively, not mechanically. (The four
+`docs/NOTES/` notes already moved to `research/proof-evidence/` on 2026-10-29; they are research
+records, not journal entries.)
 An active reproducible defect specification remains in `docs/bugs/`; an incident narrative moves
 to the journal and links the living bug/contract. A journal entry records date, commit, toolchain,
 denominator, conclusion-at-the-time, current normative owner and supersession state.
@@ -4675,6 +4677,9 @@ constructors, and make the docs-drift gate check claims rather than paths.
 Also expand the gate's coverage: `PRESENT_DOCS` currently lists five files,
 while `docs/NOTES/` and `research/` accumulate claim-bearing design notes
 outside any drift check — bring both under the path check at minimum.
+(2026-10-29: `docs/NOTES/` no longer exists; its notes moved to `research/proof-evidence/`,
+which stays outside the gate by the convention in `research/README.md`. What remains here is
+the claim check over gated `docs/`.)
 
 `docs/verification/PROOF_STORY_MATRIX.md` is what `docs/README.md` calls "the 'no semantically
 dark constructs' inventory": every construct must be `proved`, `enforced`,
