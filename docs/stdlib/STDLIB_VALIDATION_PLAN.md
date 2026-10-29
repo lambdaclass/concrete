@@ -8,7 +8,7 @@ Status note: the `parse_validate` and `service_errors` rewrites are landed. Sect
 
 For the stdlib module inventory, see [STDLIB_TARGET.md](STDLIB_TARGET.md).
 For error handling ergonomics, see [the spec's recoverable-failure section](../spec/statements.md#recoverable-failure-explicit-result-flow).
-For byte cursor APIs, see [BYTE_CURSOR_API.md](../language/BYTE_CURSOR_API.md).
+For byte cursor APIs, see [BYTE_CURSOR_API.md](BYTE_CURSOR_API.md).
 For the string/text/bytes split, see [STRING_TEXT_CONTRACT.md](../language/STRING_TEXT_CONTRACT.md).
 For the core/hosted layer split, see [HOSTED_STDLIB_SPLIT.md](HOSTED_STDLIB_SPLIT.md).
 For Phase 3 exit criteria, see [PHASE_EXIT_CHECKLISTS.md](../compiler/PHASE_EXIT_CHECKLISTS.md) lines 72-94.

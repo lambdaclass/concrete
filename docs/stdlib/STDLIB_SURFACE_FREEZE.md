@@ -189,7 +189,7 @@ Endian-aware byte reading, byte cursor, byte writer. 9 tests pass.
 
 Implemented in `std/src/numeric.con`. ByteCursor and ByteWriter provide typed endian reads/writes. Validated by `examples/packet/` (uses `ByteCursor` for all header reads) and 9 unit tests in the module. Checked arithmetic and narrowing helpers are not yet implemented. Signed variants (`read_i16_be`, etc.) are deferred.
 
-Source: [BYTE_CURSOR_API.md](../language/BYTE_CURSOR_API.md), [ARITHMETIC_POLICY.md](../language/ARITHMETIC_POLICY.md), [STDLIB_TARGET.md](STDLIB_TARGET.md)
+Source: [BYTE_CURSOR_API.md](BYTE_CURSOR_API.md), [ARITHMETIC_POLICY.md](../language/ARITHMETIC_POLICY.md), [STDLIB_TARGET.md](STDLIB_TARGET.md)
 
 ### 2.2 Alloc Layer (requires malloc/free)
 
