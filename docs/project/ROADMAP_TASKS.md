@@ -3275,7 +3275,7 @@ ResolvedContractRef
   | spec      CallableId
 ```
 
-`BindingId` here stays the *internal lexical* identity from `docs/language/BINDING_IDENTITY_DESIGN.md` —
+`BindingId` here stays the *internal lexical* identity from `docs/compiler/BINDING_IDENTITY_DESIGN.md` —
 supplied by R-0492's Resolve-owned identities and regenerated every build. It must not be serialized
 as stable evidence identity, which has to survive harmless source edits.
 
@@ -3324,7 +3324,7 @@ identities are distinguished from all locally bound identities.
 `eval(subst(Q, x, e), rho) = eval(Q, rho[x |-> eval(e, rho)])` proved or exhaustively gated over
 the supported fragment.
 
-Scope is fixed in `docs/language/BINDING_IDENTITY_DESIGN.md` before any editing, because this refactor
+Scope is fixed in `docs/compiler/BINDING_IDENTITY_DESIGN.md` before any editing, because this refactor
 becomes invasive quietly. The load-bearing decision there is to keep **two** notions apart rather
 than build one identifier for both: a *lexical binding ID* (internal, unique within one elaborated
 function, regenerated every build, never serialized) and a *stable evidence identity* (canonical

@@ -1,5 +1,8 @@
 # Binding identities — scope, decided before editing
 
+Status: compiler design record (moved from docs/language, which holds no language rules now: the
+scope rules it serves are SCOPE-1 to SCOPE-3 of [docs/spec/scope.md](../spec/scope.md)).
+
 Stable binding identities are the prerequisite for retiring `substExpr` as proof infrastructure
 (H25) and for resolving the shadowing ambiguity (H27). They are also the kind of refactor that
 becomes invasive quietly, so this note fixes the scope first. It answers seven questions that were
