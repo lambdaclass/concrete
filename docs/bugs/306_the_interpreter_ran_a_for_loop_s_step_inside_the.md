@@ -6,6 +6,7 @@ fixtures: regress_306_for_step_after_body_defers.con
 class: 12 — the step is kept twice in Core's `.while_`, and each consumer cut the body's block out of it on its own
 silent: yes
 exit: 0b
+ruling: Spec gap: STMT — every exit of a scope that does not abort runs one exit sequence, and a `for` loop's step runs after its body's (OD2 part 5, decided 2026-10-29; written as STMT-11@1 on wip/spec-od, cited here once it is on main)
 -->
 
 **Status:** FIXED (branch `wip/bug-306-od2`), under the owner's decision OD2 (2026-10-29)
