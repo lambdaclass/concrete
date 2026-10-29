@@ -1804,8 +1804,9 @@ Owners: the cleanup agent (branches `wip/cleanup-*`) and the spec agent (`wip/sp
 10. Replace string-encoded identities (184 `== "literal"` comparisons). Owner: the cleanup agent,
     `wip/cleanup-*`.
 11. A dead-code finder with a ratchet gate. Owner: the cleanup agent, `wip/cleanup-*`.
-12. Generated artifacts out of git: `concrete.wasm` (15 MB) remains. Owner: the cleanup agent,
-    `wip/cleanup-*`.
+12. Generated artifacts out of git: `concrete.wasm` is no longer committed; the site workflow
+    builds it from the published commit (`scripts/browser/build-site-compiler.sh`). Owner: the
+    cleanup agent, `wip/cleanup-*`.
 14. Branch hygiene: merged remote branches are deleted (192 on 2026-10-28), and merged and dead
     worktrees are pruned periodically. Owner: the cleanup agent.
 
