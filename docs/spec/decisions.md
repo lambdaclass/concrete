@@ -1,12 +1,12 @@
 # Open Owner Decisions
 
-This chapter lists the language questions that only the project owner decides: OD1 to OD36 of
+This chapter lists the language questions that only the project owner decides: OD1 to OD41 of
 [ROADMAP.md](../../ROADMAP.md#owner-decisions), exit 2n. Each entry states the question and encodes
 no answer. The rules it bears on are named in its rationale, together with what current main does,
 which stays provisional until the owner answers. The answer, when given, is recorded in ROADMAP and
 turns the entry into the rules it decides; until then no agent picks a side
 ([AGENTS.md](../project/AGENTS.md#rules)). OD1 to OD22 were answered on 2026-10-29 and are listed under
-Decided; OD23 to OD32 were decided the same day; OPEN-33 to OPEN-36, raised while recording them, are open.
+Decided; OD23 to OD32 were decided the same day; OPEN-33 to OPEN-41, raised while recording them, are open.
 
 <a id="OPEN-33"></a>
 ### OPEN-33. Inline submodules under one file per module
@@ -81,6 +81,91 @@ recommendation are in ROADMAP's row OD35; the owner's answer is recorded there.
 **Rationale.** Bears on MEM-4. OD30's answer requires such a form and keeps `*` as the consuming
 move-out, but names no spelling; current main opens one heap layer implicitly (bug 326). The options
 and a recommendation are in ROADMAP's row OD36; the owner's answer is recorded there.
+
+<a id="OPEN-37"></a>
+### OPEN-37. The names of the pointer difference and ordering functions
+
+**OPEN-37@1.** The names and signatures of the named functions that replace pointer difference and pointer ordering, beside `ptr::offset`, are an open owner decision (OD37).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD37
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on TYPE-6 and TRUST-1. OD26 removes the operators and asks for named functions without naming them; TRUST-1 already names `ptr::offset`, `ptr::expose` and `ptr::from_exposed`. The options and a recommendation are in ROADMAP's row OD37;
+the owner's answer is recorded there.
+
+<a id="OPEN-38"></a>
+### OPEN-38. The root resource API
+
+**OPEN-38@1.** The type of the root resource value `main` receives, how it is split into tokens, and the signature `main` declares to receive it are an open owner decision (OD38).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD38
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on TRUST-9 and STMT-7. OD8 decides that `main` receives a root value and splits it, in the spirit of Austral's `RootCapability`, without naming its type or the splitting functions. The options and a recommendation are in ROADMAP's row OD38;
+the owner's answer is recorded there.
+
+<a id="OPEN-39"></a>
+### OPEN-39. The interface artifact format
+
+**OPEN-39@1.** The format and location of the interface artifact the compiler generates for each module are an open owner decision (OD39).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD39
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on MOD-7. OD9 decides that the compiler generates the artifact and a gate diffs it, without fixing its format. The options and a recommendation are in ROADMAP's row OD39;
+the owner's answer is recorded there.
+
+<a id="OPEN-40"></a>
+### OPEN-40. PAT-9 and the fallback arm of a desugared form
+
+**OPEN-40@1.** Whether PAT-9's refusal of an unreachable arm applies to the fallback arm the parser adds when it desugars `if let`, `let ... else` and `while let` is an open owner decision (OD40).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD40
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on PAT-9. OD18 is stated for a `match`; over a one-variant enum the fallback arm of `if let` can never run, and refusing it would refuse `if let` there. Bug 317's fix, unlanded, does not judge that arm. The options and a recommendation are in ROADMAP's row OD40;
+the owner's answer is recorded there.
+
+<a id="OPEN-41"></a>
+### OPEN-41. PAT-9 and integer ranges that span their type
+
+**OPEN-41@1.** Whether a catch-all after integer ranges that together span the scrutinee's whole type is an unreachable arm under PAT-9 is an open owner decision (OD41).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD41
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on PAT-9 and PAT-2. PAT-2 requires a catch-all over an integer scrutinee, so refusing it there would make such a match impossible to write. Bug 317's fix, unlanded, does not count the type's range as covered. The options and a recommendation are in ROADMAP's row OD41;
+the owner's answer is recorded there.
 
 ## Decided
 
