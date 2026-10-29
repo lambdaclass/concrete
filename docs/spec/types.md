@@ -222,7 +222,7 @@ fn main() -> Int {
 <a id="TYPE-6"></a>
 ### TYPE-6. Operators take operands of one numeric type
 
-**TYPE-6@2.** Arithmetic operators take two operands of one numeric type, bitwise and shift operators take integers, unary minus takes a number, and comparisons are defined only on integers, floats, `bool` and `char`, so no operator takes a raw pointer.
+**TYPE-6@2.** Arithmetic operators take two operands of one numeric type, bitwise and shift operators take integers, unary minus takes a number, comparisons take numbers, and no operator takes a raw pointer; whether comparisons also take `bool` and `char` is OPEN-42.
 
 - Kind: refusal
 - Uses: none
@@ -242,7 +242,7 @@ becoming `ptr::offset` (TRUST-1).
 Version 2 records the owner's decision of 2026-10-29 (OD26), aligned with TRUST-1: arithmetic,
 shifts and comparisons take numbers only, and pointer offset, difference and ordering are
 `ptr::offset` and named functions. Whether "numbers only" also removes comparisons on `bool` and
-`char` is OPEN-42; until it is answered this entry keeps them. Main still admits pointer arithmetic and comparison in trusted or
+`char` is OPEN-42; main compares them today, and this entry does not decide it. Main still admits pointer arithmetic and comparison in trusted or
 `Unsafe` code (bug 322).
 
 
