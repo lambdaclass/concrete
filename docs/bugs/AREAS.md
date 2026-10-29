@@ -30,7 +30,7 @@ checker refusal is a Check bug here.
 | Report | 8 | 2 | 3 | 1 | Report 3, AssumptionSummary 2, ModelDiff 2, ReportObligations 1 |
 | Std | 8 | 0 | 0 | 0 | map 4, fs 2, libc 1, net 1 |
 | EmitLLVM | 7 | 0 | 3 | 4 | EmitBuiltins 5, EmitLLVM 1, Symbols 1 |
-| Tooling | 7 | 0 | 1 | 1 | Makefile 1, check_ll1 1, dispatch 1, farm 1 |
+| Tooling | 7 | 0 | 1 | 1 | Makefile 1, dispatch 1, farm 1, new_bug 1 |
 | CLI | 6 | 0 | 2 | 1 | Main 4, Pipeline 1, PipelineTest 1 |
 | Gates | 6 | 0 | 0 | 0 | authority_facts 1, check_binder_refs 1, check_gate_lock 1, compile_scaling 1 |
 | SSA | 5 | 1 | 0 | 2 | SSACleanup 4, SSAVerify 1 |
@@ -74,7 +74,7 @@ checker refusal is a Check bug here.
 | violates REF | 7 | Check 6, Lower 1 |
 | violates SCOPE | 13 | Check 7, Proof 3, Elab 1, Mono 1, CLI 1 |
 | violates STMT | 8 | Check 3, Elab 2, Lower 2, Interp 1 |
-| violates SYN | 4 | Parse 2, Report 1, Tooling 1 |
+| violates SYN | 3 | Parse 2, Report 1 |
 | violates TRAIT | 4 | Check 3, Resolve 1 |
 | violates TRUST | 4 | Check 2, Parse 1, Proof 1 |
 | violates TYPE | 17 | Check 11, Resolve 3, Elab 2, Proof 1 |
@@ -88,7 +88,7 @@ checker refusal is a Check bug here.
 | spec gap TYPE | 2 | Resolve 1, Check 1 |
 | outside (library) | 11 | Std 6, EmitLLVM 5 |
 | outside (performance) | 44 | Check 10, Lower 7, Parse 6, Elab 4, Interp 4, Resolve 3, SSA 3, EmitSSA 3, Proof 2, Mono 1, Report 1 |
-| outside (tooling) | 44 | Proof 12, Tooling 6, Gates 6, Check 4, Report 4, Elab 3, CLI 3, Interp 2, Parse 1, Resolve 1, SSA 1, Std 1 |
+| outside (tooling) | 45 | Proof 12, Tooling 7, Gates 6, Check 4, Report 4, Elab 3, CLI 3, Interp 2, Parse 1, Resolve 1, SSA 1, Std 1 |
 | unrecorded | 3 | Parse 1, Resolve 1, EmitSSA 1 |
 
 ### Every bug
@@ -376,6 +376,7 @@ checker refusal is a Check bug here.
 | [308](308_a_value_if_or_match_passed_to_a_generic_paramete.md) | Resolve | PeekType | commits | — | spec gap (TYPE) |
 | [309](309_a_loop_in_the_right_operand_of_or_rebound_an_agg.md) | Lower | Lower | commits | — | violates PASS-9@1 |
 | [315](315_the_scaling_gate_judged_wall_time_growth_on_a_ho.md) | Gates | compile_scaling | commits | — | outside (tooling) |
+| [316](316_browser_lean_the_browser_compiler_root_did_not_b.md) | Tooling | test-parity | commits | — | outside (tooling) |
 | [318](318_a_struct_literal_in_an_if_while_or_match_head_is.md) | Report | Report | record | Check | violates SYN-4@1 |
 | [319](319_a_call_that_re_lends_a_mut_binding_is_not_overla.md) | — | — | unfixed | — | violates REF-11@3 |
 | [320](320_main_may_return_int_or_bool_the_native_exit_stat.md) | — | — | unfixed | — | violates STMT-7@3 |
@@ -387,6 +388,5 @@ checker refusal is a Check bug here.
 | [326](326_a_field_access_opens_a_heap_or_heaparray_implici.md) | — | — | unfixed | — | violates MEM-4@3 |
 | [327](327_an_integer_or_float_literal_with_no_expected_typ.md) | — | — | unfixed | — | violates ARITH-2@2 |
 | [328](328_a_method_taking_self_or_mut_self_is_called_on_an.md) | — | — | unfixed | — | violates OWN-15@3 |
-| [329](329_the_ll_1_checkers_never_computed_follow_sets_a_f.md) | Tooling | check_ll1 | commits | — | violates SYN-1@1 |
 
 <!-- END GENERATED: bug areas -->

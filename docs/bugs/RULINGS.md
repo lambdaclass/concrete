@@ -17,8 +17,7 @@ of [docs/spec/ids.tsv](../spec/ids.tsv), or the generator refuses the record.
 
 <!-- BEGIN GENERATED: spec rulings (scripts/gen/bug_ledger.py; edit the records' ruling lines) -->
 
-292 bug records, 289 of them ruled: violates a rule 156, spec gap 32, open owner question 0, permitted by a rule 0, outside the spec 101; not ruled yet (fixed bugs filed before bug 300) 3. Open bugs are in bold.
-280 bug records, 277 of them ruled: violates a rule 140, spec gap 32, open owner question 3, permitted by a rule 0, outside the spec 102; not ruled yet (fixed bugs filed before bug 300) 3. Open bugs are in bold.
+293 bug records, 290 of them ruled: violates a rule 156, spec gap 32, open owner question 0, permitted by a rule 0, outside the spec 102; not ruled yet (fixed bugs filed before bug 300) 3. Open bugs are in bold.
 
 ### By kind
 
