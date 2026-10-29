@@ -7,7 +7,7 @@ generation and never change what the program does. This chapter states what a co
 (CON-1, CON-2), what a contract expression may contain (CON-3, pending its specification
 judgment) and how ghost code is kept apart from runtime code (CON-4). How obligations are
 discharged and reported is the verification documentation:
-[CONTRACTS_GUIDE.md](../language/CONTRACTS_GUIDE.md) (now a usage guide),
+[CONTRACTS_GUIDE.md](../verification/CONTRACTS_GUIDE.md) (now a usage guide),
 [CONTRACTS_AND_VCS.md](../verification/CONTRACTS_AND_VCS.md) and
 [EVIDENCE_CLASSES.md](../verification/EVIDENCE_CLASSES.md).
 

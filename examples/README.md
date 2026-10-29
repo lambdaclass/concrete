@@ -29,7 +29,7 @@ registry or in-source links, and a release bundle):
 | [`elf_header/`](elf_header/) | trusted FFI shell + pure proved validator core; biconditional correctness theorem. |
 
 Read these alongside the guides:
-[CONTRACTS_GUIDE](../docs/language/CONTRACTS_GUIDE.md) ·
+[CONTRACTS_GUIDE](../docs/verification/CONTRACTS_GUIDE.md) ·
 [AUTHORING_WALKTHROUGH](../docs/project/AUTHORING_WALKTHROUGH.md) ·
 [EVIDENCE_CLASSES](../docs/verification/EVIDENCE_CLASSES.md) ·
 [PROOFKIT_GUIDE](../docs/verification/PROOFKIT_GUIDE.md).

@@ -1,9 +1,11 @@
 # Concrete Contracts: A Practical Guide
 
+Moved from docs/language: a usage guide; the contract rules are CON-1 to CON-4 of docs/spec/contracts.md.
+
 Status: usage guide for what works **today** (2026-06-03). The language rules for contracts are
 [docs/spec/contracts.md](../spec/contracts.md) (CON-1 to CON-4); this guide shows how to use them.
 
-This is the hands-on companion to [CONTRACTS_AND_VCS.md](../verification/CONTRACTS_AND_VCS.md)
+This is the hands-on companion to [CONTRACTS_AND_VCS.md](CONTRACTS_AND_VCS.md)
 (the design/architecture). That document says where contracts are going; this
 one shows what you can write right now, what the compiler does with it, and —
 honestly — what still falls through to a hand-written Lean proof.
@@ -18,7 +20,7 @@ Everything below is exercised by real fixtures:
 A contract is a **claim**, not a guarantee. The compiler turns each claim into
 one or more **obligations** with stable ids, then attaches **evidence**. Audit
 shows the evidence class — never a single green badge.
-[EVIDENCE_CLASSES.md](../verification/EVIDENCE_CLASSES.md) is the full catalog, each class backed
+[EVIDENCE_CLASSES.md](EVIDENCE_CLASSES.md) is the full catalog, each class backed
 by a worked subexample under `examples/evidence_classes/`. The classes you will
 see:
 
@@ -34,7 +36,7 @@ see:
 
 Trust is tiered: kernel-checked first. `omega` and `bv_decide` are decision
 procedures with checked certificates — using them adds **no** external solver to
-the trusted base. See [PROOF_LADDER.md](../verification/PROOF_LADDER.md).
+the trusted base. See [PROOF_LADDER.md](PROOF_LADDER.md).
 
 ## `#[requires]` — preconditions
 
@@ -195,7 +197,7 @@ kernel-checked Lean proof, surfaced (not hidden) in the report:
 - **The operational step of invariant_preservation** — that the extracted loop
   body realizes the state transition (`evalAssigns body = state'`). The report
   prints the theorem shape; you write it with the ProofKit (see
-  [PROOFKIT_GUIDE.md](../verification/PROOFKIT_GUIDE.md)).
+  [PROOFKIT_GUIDE.md](PROOFKIT_GUIDE.md)).
 - **Refinement theorems** — "this extracted `PExpr` computes exactly this spec"
   (e.g. the HMAC/SHA-256 chain). These are the flagship-grade proofs.
 - **Ghost *value* substitution into VCs** — today a ghost like `bound = 8` is a
@@ -203,7 +205,7 @@ kernel-checked Lean proof, surfaced (not hidden) in the report:
   (e.g. `0 ≤ bound`) show `planned`, not proved. Substituting ghost values is a
   later slice.
 - **Non-linear arithmetic, aliasing/multi-cell array updates, and frame
-  conditions** — see [PROOF_LADDER.md](../verification/PROOF_LADDER.md) and the frame-inference
+  conditions** — see [PROOF_LADDER.md](PROOF_LADDER.md) and the frame-inference
   note in the roadmap.
 
 ## Linking a proof: in-source attributes

@@ -127,7 +127,7 @@ theorem eval_while_count (fns : FnTable)
 ## 4. How to start a proof
 
 For source-contract functions, the fastest on-ramp is `concrete prove` (see
-[CONTRACTS_GUIDE.md](../language/CONTRACTS_GUIDE.md) for the full workflow):
+[CONTRACTS_GUIDE.md](CONTRACTS_GUIDE.md) for the full workflow):
 
 ```sh
 concrete prove FILE FN                      # scaffold: extracted body, VCs, next obligation

@@ -193,5 +193,5 @@ write contract → concrete prove → --show-obligation → (omega closes the ea
 ones) → write Lean for the rest → --emit-link → check-proofs → --replay → audit
 ```
 
-See [CONTRACTS_GUIDE.md](../language/CONTRACTS_GUIDE.md) for the reference on each construct
+See [CONTRACTS_GUIDE.md](../verification/CONTRACTS_GUIDE.md) for the reference on each construct
 and [PROOFKIT_GUIDE.md](../verification/PROOFKIT_GUIDE.md) for writing the Lean proofs.

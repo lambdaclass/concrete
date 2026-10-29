@@ -102,6 +102,6 @@ All nine evidence-class subexamples are now worked references; none are stubbed.
 
 ## See also
 
-- [CONTRACTS_GUIDE.md](../language/CONTRACTS_GUIDE.md) — the authoring workflow
+- [CONTRACTS_GUIDE.md](CONTRACTS_GUIDE.md) — the authoring workflow
 - [PROOFKIT_GUIDE.md](PROOFKIT_GUIDE.md) — how to write the Lean proofs
 - [PROOF_LADDER.md](PROOF_LADDER.md) — the discharge tiers and trust costs
