@@ -12,14 +12,14 @@ checker refusal is a Check bug here.
 
 <!-- BEGIN GENERATED: bug areas (scripts/gen/bug_ledger.py; derived from the records, docs/bugs/area_map.tsv and git history, never edited here) -->
 
-279 records: 170 placed by their own fix commits, 37 by the files their record names in commits shared with other bugs, 34 by commits shared with other bugs, 10 by the commit that filed or closed the record, 23 by an `area:` override; 5 open bugs are not fixed yet and 0 fixed bugs have no commit the history can place.
+280 records: 171 placed by their own fix commits, 37 by the files their record names in commits shared with other bugs, 34 by commits shared with other bugs, 10 by the commit that filed or closed the record, 23 by an `area:` override; 5 open bugs are not fixed yet and 0 fixed bugs have no commit the history can place.
 
 ### By stage
 
 | stage | bugs | open | silent | shared or fallback | top modules |
 |--|-:|-:|-:|-:|--|
 | Check | 72 | 0 | 39 | 5 | Check 33, CoreCheck 13, CheckHelpers 9, Verify 5 |
-| Lower | 38 | 0 | 12 | 3 | Lower 37, - 1 |
+| Lower | 39 | 0 | 13 | 3 | Lower 38, - 1 |
 | Resolve | 27 | 2 | 4 | 8 | Resolve 16, FileSummary 6, PeekType 2, BuiltinEnums 1 |
 | Elab | 26 | 0 | 9 | 7 | Elab 25, TypeSpelling 1 |
 | Proof | 19 | 1 | 8 | 2 | ProofCore 11, Proof 3, CallCollect 2, BodyIdentity 1 |
@@ -46,7 +46,7 @@ checker refusal is a Check bug here.
 | 5. Borrow tracking by syntax instead of normalized places | 2 | Check 1, Interp 1 |
 | 6. Capability facts not carried across dispatch, specialization or package boundaries | 5 | Check 4, Proof 1 |
 | 7. Semantics implemented several times (interpreter, proof model, folder, backend disagree) | 28 | Interp 8, Check 7, Proof 4, Lower 3, Elab 2, EmitLLVM 2, EmitSSA 1, Report 1 |
-| 8. Storage, places and control flow decided ad hoc in `Lower` | 15 | Lower 12, Check 2, Elab 1 |
+| 8. Storage, places and control flow decided ad hoc in `Lower` | 16 | Lower 13, Check 2, Elab 1 |
 | 9. Evidence verdicts computed per surface and joined to their subject by name | 4 | Proof 2, CLI 2 |
 | 10. Evidence identity computed from a partial subject | 5 | Proof 3, Elab 2 |
 | 11. Absence read as a fact (fail-open defaults) | 13 | Gates 4, Resolve 2, Proof 2, Report 2, Check 1, SSA 1, Tooling 1 |
@@ -84,6 +84,7 @@ checker refusal is a Check bug here.
 | spec gap MOD | 5 | Resolve 3, Elab 1, Report 1 |
 | spec gap OWN | 1 | Check 1 |
 | spec gap PASS | 19 | Lower 8, EmitSSA 3, Interp 3, Mono 2, Elab 1, SSA 1, Report 1 |
+| spec gap REF | 1 | Lower 1 |
 | spec gap TRUST | 1 | Check 1 |
 | spec gap TYPE | 2 | Resolve 1, Check 1 |
 | open | 2 | Parse 2 |
@@ -372,6 +373,7 @@ checker refusal is a Check bug here.
 | [302](302_a_loop_moved_an_address_taken_scalar_back_into_a.md) | Lower | Lower | commits | — | spec gap (MEM) |
 | [303](303_the_value_if_did_not_drop_the_bindings_its_arms.md) | Lower | Lower | commits | — | violates PASS-9@1 |
 | [304](304_a_value_if_or_match_written_as_a_comparison_oper.md) | Elab | Elab | commits | Check | violates PASS-6@1 |
+| [305](305_a_break_continue_or_return_out_of_a_borrow_mut_b.md) | Lower | Lower | commits | — | spec gap (REF) |
 | [308](308_a_value_if_or_match_passed_to_a_generic_paramete.md) | Resolve | PeekType | commits | — | spec gap (TYPE) |
 | [309](309_a_loop_in_the_right_operand_of_or_rebound_an_agg.md) | Lower | Lower | commits | — | violates PASS-9@1 |
 | [315](315_the_scaling_gate_judged_wall_time_growth_on_a_ho.md) | Gates | compile_scaling | commits | — | outside (tooling) |
