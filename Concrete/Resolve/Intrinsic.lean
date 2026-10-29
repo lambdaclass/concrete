@@ -149,14 +149,6 @@ def resolveIntrinsic (name : String) : Option IntrinsicId :=
 def isIntrinsic (name : String) : Bool :=
   (resolveIntrinsic name).isSome
 
-/-- The intrinsic whose canonical name is exactly `name`. Elaboration rewrites every intrinsic call
-    to its canonical spelling, so code after elaboration dispatches on this identity rather than on
-    string literals; an alias spelling (`Vec_new`) is not canonical and answers `none`. -/
-def IntrinsicId.ofCanonical? (name : String) : Option IntrinsicId :=
-  match resolveIntrinsic name with
-  | some id => if id.canonicalName == name then some id else none
-  | none => none
-
 /-- The canonical LLVM/runtime name for an intrinsic.
 
 This is the name emitted in the final IR — it may differ from the
@@ -211,6 +203,14 @@ def IntrinsicId.canonicalName : IntrinsicId → String
   | .saturatingAdd => "saturating_add"
   | .saturatingSub => "saturating_sub"
   | .saturatingMul => "saturating_mul"
+
+/-- The intrinsic whose canonical name is exactly `name`. Elaboration rewrites every intrinsic call
+    to its canonical spelling, so code after elaboration dispatches on this identity rather than on
+    string literals; an alias spelling (`Vec_new`) is not canonical and answers `none`. -/
+def IntrinsicId.ofCanonical? (name : String) : Option IntrinsicId :=
+  match resolveIntrinsic name with
+  | some id => if id.canonicalName == name then some id else none
+  | none => none
 
 /-- Required capability set for an intrinsic, if any. -/
 def IntrinsicId.capability : IntrinsicId → Option String
