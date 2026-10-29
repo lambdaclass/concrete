@@ -370,8 +370,8 @@ structure TypeEnv where
   currentTypeBounds : List (String × List String) := []  -- current function's type param bounds
   newtypes : List NewtypeDef := []         -- all newtype definitions
   userFnNames : Std.HashSet String := {}   -- names of user-defined, imported, and extern functions (NOT builtins)
-  -- Construction rights (0b): newtypes DEFINED in the module being checked
-  -- (incl. its submodules). A newtype constructor `N(v)` and unwrap are
+  -- Construction rights (0b): newtypes DEFINED in the module being checked, not its
+  -- submodules' (OD21: a parent has no rights over its child). A newtype constructor `N(v)` and unwrap are
   -- private to the defining module; external callers use the module's
   -- public constructor fn (e.g. try_new). Everything in `newtypes` but not
   -- here is imported → direct construction is rejected.
@@ -386,11 +386,11 @@ structure TypeEnv where
   -- are `pub`. This is what makes representation invariants (String's
   -- {ptr,len,cap}) unforgeable from other modules.
   localStructNames : Std.HashSet String := {}
-  /-- Bug 253: the identities of the newtypes and structs DEFINED here (module + submodules). A
+  /-- Bug 253: the identities of the newtypes and structs DEFINED here (this module only, OD21). A
       spelling's declaration is local when its identity is one of these: an imported declaration
       whose spelling a child module also declares is not (a decoy child type granted the import's
       construction and field rights). The name lists above answer only for a declaration that
-      carries no identity (a parsed one: this module's own, or a child's). -/
+      carries no identity (a parsed one: this module's own). -/
   localNewtypeIds : Std.HashSet TypeId := {}
   localStructIds : Std.HashSet TypeId := {}
   /-- Bug 291: `structs`, `enums` and `newtypes` by name (first declaration of a name), built with
