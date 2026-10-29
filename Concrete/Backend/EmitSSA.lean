@@ -519,22 +519,23 @@ private def vecElemTy : Ty → Option Ty
   | .refMut (.generic "Vec" (t :: _) _) => some t
   | _ => none
 
-/-- The set of vec intrinsic names that need per-size specialization.
+/-- The Vec intrinsics that need per-size specialization.
     vec_len and vec_free are size-independent and stay unspecialized. -/
-private def vecSizedOps : List String :=
-  ["vec_new", "vec_push", "vec_get", "vec_set", "vec_pop"]
+private def isVecSizedOp : IntrinsicId → Bool
+  | .vecNew | .vecPush | .vecGet | .vecSet | .vecPop => true
+  | _ => false
 
-/-- Resolve the Vec element size for a call to a vec intrinsic.
-    Returns `(specializedName, elemSize, optionPayloadOffset)` or none if not a vec op.
+/-- Resolve the Vec element size for a call to the vec intrinsic `op`, spelled `fn`.
+    Returns `(op, specializedName, elemSize, optionPayloadOffset)` or none if not a vec op.
     The payload offset is needed for vec_pop's Option construction. -/
-private def resolveVecCall (s : EmitSSAState) (fn : String) (args : List SVal) (retTy : Ty) : Option (String × Nat × Nat) :=
-  if !vecSizedOps.contains fn then none
+private def resolveVecOp (s : EmitSSAState) (op : IntrinsicId) (fn : String) (args : List SVal) (retTy : Ty) : Option (IntrinsicId × String × Nat × Nat) :=
+  if !isVecSizedOp op then none
   else
     -- Extract element type from args or return type
     let elemTy? : Option Ty :=
-      if fn == "vec_new" then vecElemTy retTy
-      else if fn == "vec_get" then some retTy
-      else if fn == "vec_pop" then
+      if op == .vecNew then vecElemTy retTy
+      else if op == .vecGet then some retTy
+      else if op == .vecPop then
         match retTy with
         | .generic _ (t :: _) _ => some t  -- Option<T> → T
         | _ => none
@@ -549,9 +550,16 @@ private def resolveVecCall (s : EmitSSAState) (fn : String) (args : List SVal) (
       let al := ssaTyAlign s elemTy
       let payOff := Layout.alignUp 4 al
       -- vec_pop is named by size_payoff (different alignments need different Option layouts)
-      let name := if fn == "vec_pop" then s!"{fn}_{sz}_{payOff}" else s!"{fn}_{sz}"
-      some (name, sz, payOff)
+      let name := if op == .vecPop then s!"{fn}_{sz}_{payOff}" else s!"{fn}_{sz}"
+      some (op, name, sz, payOff)
     | none => none
+
+/-- `resolveVecOp` for a direct callee named `fn`: only the canonical spelling of a sized Vec
+    intrinsic, which is what elaboration emits, is a Vec operation. -/
+private def resolveVecCall (s : EmitSSAState) (fn : String) (args : List SVal) (retTy : Ty) : Option (IntrinsicId × String × Nat × Nat) :=
+  match IntrinsicId.ofCanonical? fn with
+  | some op => resolveVecOp s op fn args retTy
+  | none => none
 
 /-- Record a Vec element spec as used (for builtin generation). -/
 private def recordVecElemSpec (s : EmitSSAState) (sz : Nat) (payOff : Nat) : EmitSSAState :=
@@ -882,14 +890,11 @@ private def emitSInst (s : EmitSSAState) (inst : SInst) : EmitSSAState :=
     match (match directName with
            | some fn => if directSpace == CallSpace.method then none else resolveVecCall s fn args retTy
            | none => none) with
-    | some (specFn, es, payOff) =>
+    | some (op, specFn, es, payOff) =>
       let s := recordVecElemSpec s es payOff
-      -- `resolveVecCall` only answered `some` for a direct callee, so this is
-      -- always bound; `""` cannot match any vec op name.
-      let fn := directName.getD ""
-      if fn == "vec_new" then
+      if op == .vecNew then
         emitStructured s (.call dst (.struct_ "Vec") (.global specFn) [])
-      else if fn == "vec_get" then
+      else if op == .vecGet then
         match args with
         | [vecArg, idxArg] =>
           let (s, vecPtr) := ensurePtrOp s vecArg
@@ -902,14 +907,14 @@ private def emitSInst (s : EmitSSAState) (inst : SInst) : EmitSSAState :=
           | some d => emitStructured s (.load d (tyToLLVMTy s retTy) (.reg slotName))
           | none => s
         | _ => s
-      else if fn == "vec_push" then
+      else if op == .vecPush then
         match args with
         | [vecArg, valArg] =>
           let (s, vecPtr) := ensurePtrOp s vecArg
           let (s, valPtr) := ensureValAsPtr s valArg
           emitStructured s (.call none .void (.global specFn) [(.ptr, vecPtr), (.ptr, valPtr)])
         | _ => s
-      else if fn == "vec_set" then
+      else if op == .vecSet then
         match args with
         | [vecArg, idxArg, valArg] =>
           let (s, vecPtr) := ensurePtrOp s vecArg
@@ -917,7 +922,7 @@ private def emitSInst (s : EmitSSAState) (inst : SInst) : EmitSSAState :=
           let (s, valPtr) := ensureValAsPtr s valArg
           emitStructured s (.call none .void (.global specFn) [(.ptr, vecPtr), (.i64, idxOp), (.ptr, valPtr)])
         | _ => s
-      else if fn == "vec_pop" then
+      else if op == .vecPop then
         -- vec_pop returns %enum.Option by value, same calling convention as before
         match args with
         | [vecArg] =>

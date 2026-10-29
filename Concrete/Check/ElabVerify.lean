@@ -95,10 +95,10 @@ private partial def vArm (fn : String) (vis : Vis) : CMatchArm → VM Unit
   | .enumArm _ _ bs g body => do
     let mut v := vis
     for (b, _) in bs do
-      if b.name != "_" then v ← introduce fn v b
+      if !isWildcardBinder b.name then v ← introduce fn v b
     g.forM (vExpr fn v); vBlock fn v body
   | .varArm b _ g body => do
-    let v ← if b.name == "_" then pure vis else introduce fn vis b
+    let v ← if isWildcardBinder b.name then pure vis else introduce fn vis b
     g.forM (vExpr fn v); vBlock fn v body
   | .litArm x g body => do vExpr fn vis x; g.forM (vExpr fn vis); vBlock fn vis body
   | .rangeArm lo hi _ g body => do

@@ -515,7 +515,7 @@ end
 def formatProgram (modules : List Module) : String :=
   match modules with
   | [m] =>
-    if m.name == "main" then
+    if m.name == rootModuleName then
       -- Bare file — output contents at indent 0 (no mod wrapper)
       fmtModuleBody m 0 ++ "\n"
     else

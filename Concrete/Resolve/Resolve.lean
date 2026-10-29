@@ -503,7 +503,7 @@ partial def resolveExpr (ctx : ResolveCtx) (e : Expr) : ResolveCtx :=
       | .mk _ _ _ bindings guard body =>
         let ctx := pushScope ctx
         -- `_` is a wildcard field binding: positional, but not added to scope.
-        let ctx := (PatBind.names bindings).foldl (fun ctx b => if b == "_" then ctx else addLocal ctx b (.var none false)) ctx
+        let ctx := (PatBind.names bindings).foldl (fun ctx b => if isWildcardBinder b then ctx else addLocal ctx b (.var none false)) ctx
         let ctx := resolveGuard ctx guard
         let ctx := resolveStmts ctx body
         popScope ctx
@@ -801,7 +801,9 @@ private def externEffectsCheck (m : Module) (ctx : ResolveCtx) : ResolveCtx :=
     -- C, so a foreign binding of that name is refused, except `free` and `abort` without a
     -- link name, whose intrinsics ARE the C functions of those names (std binds both).
     let ctx := if (resolveIntrinsic ef.name).isSome
-        && !(ef.linkName.isNone && (ef.name == "free" || ef.name == "abort")) then
+        && !(ef.linkName.isNone && (match resolveIntrinsic ef.name with
+              | some .free | some .abort => true
+              | _ => false)) then
         addError ctx (.invalidLinkName ef.name sym s!"'{ef.name}' is the name of a compiler intrinsic, so a call to it is compiled as the intrinsic and never reaches the C function") (some ef.span)
       else ctx
     let ctx := if Symbols.isRuntimeHelperName sym then

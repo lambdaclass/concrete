@@ -1301,7 +1301,7 @@ partial def parseIfLet (sp : Span) : ParseM Stmt := do
   else
     pure []
   let successArm := MatchArm.mk sp enumName variant bindings none thenBody
-  let wildcardArm := MatchArm.varArm sp "_" none elseBody
+  let wildcardArm := MatchArm.varArm sp wildcardBinder none elseBody
   return .expr sp (.match_ sp scrutinee [successArm, wildcardArm]) false
 
 /-- An `if` inside a VALUE block (if-expression branch, while-else block, match
@@ -1401,7 +1401,7 @@ partial def parseWhileLet (sp : Span) (lbl : Option String) : ParseM Stmt := do
     pure sc
   let body ← parseBlock
   let successArm := MatchArm.mk sp enumName variant bindings none body
-  let breakArm := MatchArm.varArm sp "_" none [Stmt.break_ sp none none]
+  let breakArm := MatchArm.varArm sp wildcardBinder none [Stmt.break_ sp none none]
   let matchStmt := Stmt.expr sp (Expr.match_ sp scrutinee [successArm, breakArm]) false
   return .while_ sp (.boolLit sp true) [matchStmt] lbl
 
@@ -2760,7 +2760,7 @@ partial def parseProgram : ParseM (List Module) := do
       let tk4 ← peek
       if tk4 != .eof then
         let mainBody ← parseModuleBody .eof
-        return ({ mainBody with name := "main" } :: modules).reverse
+        return ({ mainBody with name := rootModuleName } :: modules).reverse
       else
         return modules.reverse
     else
@@ -2768,10 +2768,10 @@ partial def parseProgram : ParseM (List Module) := do
       expect .semicolon
       let m ← parseModuleBody .eof
       let importedSub : Module := { name := modName, structs := [], enums := [], functions := [] }
-      return [{ m with name := "main", submodules := [importedSub] ++ m.submodules }]
+      return [{ m with name := rootModuleName, submodules := [importedSub] ++ m.submodules }]
   else
     let m ← parseModuleBody .eof
-    return [{ m with name := "main" }]
+    return [{ m with name := rootModuleName }]
 
 /-- Parse, returning the (best-effort) modules ALONGSIDE every recovered top-level
     parse error, instead of stopping at the first (ROADMAP Phase 4 #12c). The

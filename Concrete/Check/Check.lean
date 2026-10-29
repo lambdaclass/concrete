@@ -1750,6 +1750,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
     -- success arm's binders are `letBound`). Its `else` block must diverge: falling out of it
     -- would continue after the whole statement with the pattern's bindings never made.
     match arms with
+    -- `"_"` is `wildcardBinder`; a pattern cannot name the definition.
     | [.mk _ _ _ bs _ _, .varArm sp "_" none elseBody] =>
       if !bs.isEmpty && bs.all (·.letBound) && !(blockEndUnreachable elseBody) then
         throwCheck .letElseFallsThrough (some sp)
@@ -1825,7 +1826,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
               let fieldTy := substTy typeMapping sf.ty
               -- A reference STORED in a payload has no traced source: binding it out of the
               -- enum would be an alias the checker cannot see (normalized place rule, E0238).
-              if binding != "_" then
+              if !isWildcardBinder binding then
                 match ← resolveType fieldTy with
                 | .ref _ | .refMut _ =>
                   throwCheck (.untraceablePlace s!"what the payload reference '{binding}' borrows"
@@ -1837,13 +1838,13 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
               -- checker's binder is the Core binder, and Copy-ness (which specialization
               -- changes) no longer picks the mode.
               let bindTy := payloadBinderTy scrTy fieldTy
-              if fromLet && binding != "_" then
+              if fromLet && !isWildcardBinder binding then
                 match ← resolvedOr bindTy with
                 | .ref _ | .refMut _ =>
                   throwCheck (.letBindsReference binding (tyToString bindTy)) (some e.getSpan)
                 | _ => pure ()
               -- An arm binder is arm-scoped and has its own identity (R-0492).
-              if binding != "_" then
+              if !isWildcardBinder binding then
                 let br ← binderAt armSp binding
                 addVar br bindTy
                 -- A payload bound THROUGH a reference borrows the scrutinee's storage: same
@@ -1866,7 +1867,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
             -- provenance: it borrows what the scrutinee borrows.
             let isRefScrut := bindsThroughReference scrTy
             let wholeTy := wholeBinderTy scrTy innerTyR
-            if binding != "_" then
+            if !isWildcardBinder binding then
               let br ← binderAt varSp binding
               let scrutPre ← if isRefScrut then some <$> normRef scrutinee else pure none
               addVar br wholeTy
@@ -2004,7 +2005,7 @@ partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode 
           let isRefScrutinee := bindsThroughReference scrTy
           let bindTy := wholeBinderTy scrTy innerTyR
           let scrCopy ← isCopyType bindTy
-          if binding != "_" then
+          if !isWildcardBinder binding then
             -- A named value pattern over a non-Copy scrutinee is a move into the
             -- arm-local binding. Without consuming the original identifier here,
             -- `match h { y => free(y) } ; free(h);` aliases one linear handle
@@ -2493,7 +2494,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) (ends : Option EndsTree := none
     -- that makes an owned value vanish. Ignore a non-resource value with
     -- `match e { _ => {} }` (gated so it can't silently drop a resource owner);
     -- consume or `destroy()` anything else.
-    if name == "_" then
+    if isWildcardBinder name then
       throwCheck .letUnderscoreRemoved (some stmt.getSpan)
     else
       -- This binder's identity is the local walk's (R-0492): a visible binding of the same
@@ -3178,7 +3179,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) (ends : Option EndsTree := none
         -- REF-6 (a `let` may not hold a reference) with D3 (a binder through a reference is a
         -- reference): destructuring a struct THROUGH a reference would bind references, so it is
         -- refused (E0302), exactly as the enum form is. Read the field (`r.f`) or `match` instead.
-        if b != "_" && bindsThroughReference (← resolvedOr valTy) then
+        if !isWildcardBinder b && bindsThroughReference (← resolvedOr valTy) then
           throwCheck (.letBindsReference b (tyToString (payloadBinderTy valTy (substTy mapping fieldTy)))) (some stmt.getSpan)
         let bTy ← resolvedOr (substTy mapping fieldTy)
         -- a reference-valued field has no traced source (normalized place rule): E0238
@@ -3777,9 +3778,9 @@ private partial def contractStmtsBad (refPs : List String) (ss : List Stmt) : Li
       | _ => "a statement"
     what :: contractStmtsBad refPs rest
 private partial def contractArmBad (refPs : List String) : MatchArm → List String
-  | .mk _ _ _ bs g b => (PatBind.names bs |>.filter (· != "_") |>.map fun n => s!"the pattern binder `{n}`")
+  | .mk _ _ _ bs g b => (PatBind.names bs |>.filter (!isWildcardBinder ·) |>.map fun n => s!"the pattern binder `{n}`")
       ++ (g.map (contractExprBad refPs)).getD [] ++ contractStmtsBad refPs b
-  | .varArm _ n g b => (if n == "_" then [] else [s!"the pattern binder `{n}`"])
+  | .varArm _ n g b => (if isWildcardBinder n then [] else [s!"the pattern binder `{n}`"])
       ++ (g.map (contractExprBad refPs)).getD [] ++ contractStmtsBad refPs b
   | .litArm _ v g b => contractExprBad refPs v ++ (g.map (contractExprBad refPs)).getD [] ++ contractStmtsBad refPs b
   | .rangeArm _ lo hi _ g b => contractExprBad refPs lo ++ contractExprBad refPs hi ++ (g.map (contractExprBad refPs)).getD [] ++ contractStmtsBad refPs b
@@ -4490,7 +4491,7 @@ def checkProgram (resolved : List ResolvedModule)
     | .ok imports =>
       -- Inject sibling module functions for qualified :: access
       let siblingFns : List (String × FnSummary) := moduleSummaryList.foldl (fun acc (sibName, sibSummary) =>
-        if sibName == m.name || sibName == "main" then acc
+        if sibName == m.name || sibName == rootModuleName then acc
         else acc ++ (sibSummary.functions.filter fun (name, _) =>
           sibSummary.publicNames.contains name).map fun (name, fs) =>
             (sibName ++ "_" ++ name, fs)

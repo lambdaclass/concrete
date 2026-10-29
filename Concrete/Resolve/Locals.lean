@@ -79,7 +79,7 @@ private def bindLocal (vis : Vis) (key : BinderKey) (name : String) (sp : Span)
   -- checker registers it (a `_` parameter, a borrow reference, a destructured field) it is still
   -- a binding with an obligation, so it has an identity.
   let shadows := vis.shadows name
-  if name == "_" then
+  if isWildcardBinder name then
     let (t', id) := (← get).mintBinder key name shadows
     set t'
     return vis.push { name, span := sp, id, cls := .wild, elabVar }
@@ -92,7 +92,7 @@ private def bindLocal (vis : Vis) (key : BinderKey) (name : String) (sp : Span)
 /-- A pattern binder spelled `_` (an enum arm field, a catch-all arm): it has an identity and
     is visible to nothing, not even as a `_` (Elab binds no Core name for it). -/
 private def bindArmWild (vis : Vis) (key : BinderKey) : LocalsM Vis := do
-  let (t', _) := (← get).mintBinder key "_"
+  let (t', _) := (← get).mintBinder key wildcardBinder
   set t'
   return vis
 
@@ -149,13 +149,13 @@ private partial def walkArm (vis : Vis) : MatchArm → LocalsM Unit
   | .mk sp _ _ bs g body => do
     let mut v := vis
     for b in bs do
-      if b.name == "_" then v ← bindArmWild v (siteKey sp b.name)
+      if isWildcardBinder b.name then v ← bindArmWild v (siteKey sp b.name)
       else
         let kind := if b.letBound then "destructuring `let` binder" else "pattern binder"
         v ← bindLocal v (siteKey sp b.name) b.name sp kind
     g.forM (walkExpr v); walkBlock v body
   | .varArm sp b g body => do
-    let v ← if b == "_" then bindArmWild vis (siteKey sp b) else bindLocal vis (siteKey sp b) b sp "pattern binder"
+    let v ← if isWildcardBinder b then bindArmWild vis (siteKey sp b) else bindLocal vis (siteKey sp b) b sp "pattern binder"
     g.forM (walkExpr v); walkBlock v body
   | .litArm _ val g body => do
     walkExpr vis val; g.forM (walkExpr vis); walkBlock vis body

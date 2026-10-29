@@ -181,7 +181,7 @@ partial def peekExprTypeIn (ctx : PeekCtx m) (e : Expr) : m Ty := do
   | .ifExpr _ _ then_ else_ => peekFirstArmValue ctx [(false, then_), (false, else_)]
   | .match_ _ _ arms => peekFirstArmValue ctx (arms.map fun
       | .mk _ _ _ bindings _ body => (!bindings.isEmpty, body)
-      | .varArm _ binding _ body => (binding != "_", body)
+      | .varArm _ binding _ body => (!isWildcardBinder binding, body)
       | .litArm _ _ _ body | .rangeArm _ _ _ _ _ body => (false, body))
   | .binOp _ op lhs _ =>
     -- Comparisons and logical connectives are Bool whatever the operand type.

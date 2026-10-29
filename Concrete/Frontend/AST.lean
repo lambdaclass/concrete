@@ -5,6 +5,21 @@ import Concrete.Resolve.Intrinsic
 namespace Concrete
 
 -- ============================================================
+-- Reserved spellings
+-- ============================================================
+
+/-- The binder spelled `_`. It binds nothing: the parser keeps it as an ordinary binder name, so
+    every later stage asks `isWildcardBinder` rather than comparing with the literal. -/
+def wildcardBinder : String := "_"
+
+/-- Whether a binder name is the wildcard `_`. -/
+@[inline] def isWildcardBinder (name : String) : Bool := name == wildcardBinder
+
+/-- The name the parser gives the implicit root module: a file's top-level items outside any
+    `mod` block, and a single bare module without a `mod` wrapper. -/
+def rootModuleName : String := "main"
+
+-- ============================================================
 -- Capability Sets
 -- ============================================================
 
@@ -220,7 +235,7 @@ def PatBind.resolveEnum (fieldNames : List String) (bs : List PatBind) : Except 
       | none =>
         match fieldNames.find? (fun f => !keys.contains f) with
         | some f => .error s!"a labeled pattern must list every field; '{f}' is missing (write `{f}: _` to ignore a Copy field)"
-        | none => .ok (fieldNames.map fun f => ((bs.find? (·.fieldName == f)).map (·.name)).getD "_")
+        | none => .ok (fieldNames.map fun f => ((bs.find? (·.fieldName == f)).map (·.name)).getD wildcardBinder)
 
 mutual
 inductive Expr where
@@ -808,7 +823,7 @@ partial def desugarStmts : List Stmt → List Stmt
   | (.letDestructure sp enumName variant bindings value (some elseBody)) :: rest =>
     let continuation := desugarStmts rest
     let successArm := MatchArm.mk sp enumName variant (bindings.map ({ · with letBound := true })) none continuation
-    let wildcardArm := MatchArm.varArm sp "_" none (desugarStmts elseBody)
+    let wildcardArm := MatchArm.varArm sp wildcardBinder none (desugarStmts elseBody)
     [Stmt.expr sp (Expr.match_ sp (desugarExpr value) [successArm, wildcardArm]) (endsWithValue continuation)]
   | (.letDestructure sp enumName variant bindings value none) :: rest =>
     let continuation := desugarStmts rest

@@ -589,7 +589,7 @@ private def registerBound (id : LocalId) (core : String) (ty : Ty) : ElabM CLoca
 /-- Bug 045: bind a match-arm payload/pattern variable under a FRESH Core name (`value` →
     `value.b7`) and return it. `_` stays `_` and binds nothing. -/
 private def bindArmVar (key : BinderKey) (binding : String) (ty : Ty) (span : Option Span) : ElabM CLocal := do
-  if binding == "_" then return { name := binding }
+  if isWildcardBinder binding then return { name := binding }
   let id ← binderId key binding span
   let env ← getEnv
   let fresh := s!"{binding}.b{env.freshBinder}"
@@ -1192,7 +1192,7 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none)
               | some owner =>
                 .arm (Proof.evVariantPattern { owner := owner, variant := armVariant }
                         (ev.fields.zip bindings |>.map fun fb =>
-                           ({ owner := owner, field := fb.1.name }, fb.2 != "_")))
+                           ({ owner := owner, field := fb.1.name }, !isWildcardBinder fb.2)))
                      (cGuardEv.map (·.evidence)) (cBodyEv.map (·.evidence))
               | none => .gap { code := .unresolvedVariant,
                                detail := "arm owner declaration has no identity" }
@@ -1215,7 +1215,7 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none)
             let cBodyEv ← elabStmtsEv body (valueHint := hint)
             let cBody := cBodyEv.flatMap (·.core)
             armsRev := (.varArm coreBinding wholeTy cGuard cBody,
-              .arm (if binding == "_" then .wildcard else .binder) (cGuardEv.map (·.evidence)) (cBodyEv.map (·.evidence))) :: armsRev
+              .arm (if isWildcardBinder binding then .wildcard else .binder) (cGuardEv.map (·.evidence)) (cBodyEv.map (·.evidence))) :: armsRev
           | .rangeArm _ lo hi incl guard body =>
             let cLoEv ← elabExprEv lo (some innerTyR)
             let cLo := cLoEv.core
@@ -1254,7 +1254,7 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none)
             let cBodyEv ← elabStmtsEv body (valueHint := hint)
             let cBody := cBodyEv.flatMap (·.core)
             armsRev := (.varArm coreBinding wholeTy cGuard cBody,
-              .arm (if binding == "_" then .wildcard else .binder) (cGuardEv.map (·.evidence)) (cBodyEv.map (·.evidence))) :: armsRev
+              .arm (if isWildcardBinder binding then .wildcard else .binder) (cGuardEv.map (·.evidence)) (cBodyEv.map (·.evidence))) :: armsRev
           | .mk _ en v _ guard body =>
             let cGuardEv ← guard.mapM (fun g => elabExprEv g (some Ty.bool))
             let cGuard := cGuardEv.map (·.core)
@@ -1300,7 +1300,7 @@ partial def elabExprEv (e : Expr) (hint : Option Ty := none)
           let cBodyEv ← elabStmtsEv body (valueHint := hint)
           let cBody := cBodyEv.flatMap (·.core)
           armsRev := (.varArm coreBinding wholeTy cGuard cBody,
-            .arm (if binding == "_" then .wildcard else .binder) (cGuardEv.map (·.evidence)) (cBodyEv.map (·.evidence))) :: armsRev
+            .arm (if isWildcardBinder binding then .wildcard else .binder) (cGuardEv.map (·.evidence)) (cBodyEv.map (·.evidence))) :: armsRev
         | .mk _ en v _ guard body =>
           let cGuardEv ← guard.mapM (fun g => elabExprEv g (some Ty.bool))
           let cGuard := cGuardEv.map (·.core)
@@ -2027,7 +2027,8 @@ partial def elabStmtEv (stmt : Stmt) : ElabM ElaboratedStmtV2 := do
     -- Desugar print/println into individual typed print calls
     -- Only if not shadowed by a user/stdlib function with the same name
     let existingFn ← lookupFnSig fnName
-    if existingFn.isNone && (fnName == "print" || fnName == "println") then
+    let variadic := resolveIntrinsic fnName
+    if existingFn.isNone && (variadic == some .print || variadic == some .println) then
       let mut stmts : List CStmt := []
       for arg in args do
         let cArgEv ← elabExprEv arg
@@ -2048,14 +2049,14 @@ partial def elabStmtEv (stmt : Stmt) : ElabM ElaboratedStmtV2 := do
           | _ =>
             CStmt.expr (CExpr.call (.runtime "print_string") [] [CExpr.strLit "<unprintable>"] .unit) false
         stmts := printCall :: stmts  -- bug 297: newest first, reversed below
-      if fnName == "println" then
+      if variadic == some .println then
         stmts := CStmt.expr (CExpr.call (.runtime "print_char") [] [CExpr.intLit 10 .int] .unit) false :: stmts
       return ElaboratedStmtV2.mk stmts.reverse (Proof.evUnhandledStmt "desugared statement sequence")
     -- Desugar variadic append(&mut buf, ...) into typed string_append calls.
     -- Only fires if (a) not shadowed by a user fn, (b) at least one arg,
     -- (c) first arg elaborates to &mut String. Otherwise fall through and
     -- let normal elaboration produce the usual "undeclared function" error.
-    else if existingFn.isNone && fnName == "append" then
+    else if existingFn.isNone && variadic == some .append then
     match args with
     | bufArg :: rest =>
       let cBufEv ← elabExprEv bufArg
@@ -2772,7 +2773,7 @@ def importCallSpellingsFor (m : Module) (summary : FileSummary)
             if aliased && ms.functions.any (·.1 == orig)
             then some (localName, "_".intercalate subPath ++ "_" ++ orig) else none
           | none => none
-        else if imp.moduleName == m.name || imp.moduleName == "main" then none
+        else if imp.moduleName == m.name || imp.moduleName == rootModuleName then none
         else match topLevel.find? fun (n, _) => n == imp.moduleName with
           | some (_, ts) =>
             if !(ts.functions.any (·.1 == orig)) then none
@@ -4491,14 +4492,14 @@ def elabProgram (resolved : List ResolvedModule)
     | .ok imports =>
       -- Inject sibling module functions for qualified :: access
       let siblingFns : List (String × FnSummary) := moduleSummaryList.foldl (fun acc (sibName, sibSummary) =>
-        if sibName == m.name || sibName == "main" then acc
+        if sibName == m.name || sibName == rootModuleName then acc
         else acc ++ (sibSummary.functions.filter fun (name, _) =>
           sibSummary.publicNames.contains name).map fun (name, fs) =>
             (sibName ++ "_" ++ name, fs)
       ) []
       -- Linker aliases: math_add → add (qualified call name → bare definition name)
       let siblingAliases : List (String × String) := moduleSummaryList.foldl (fun acc (sibName, sibSummary) =>
-        if sibName == m.name || sibName == "main" then acc
+        if sibName == m.name || sibName == rootModuleName then acc
         else acc ++ (sibSummary.functions.filter fun (name, _) =>
           sibSummary.publicNames.contains name).map fun (name, _) =>
             (sibName ++ "_" ++ name, name)

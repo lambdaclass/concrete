@@ -1496,7 +1496,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           emit (.gep payloadGep scrVal [.intConst (Int.ofNat payloadOff) .int] .i8)
           for (fieldIdx, (bname, bty)) in enumerate bindings do
             -- `_` is a wildcard field: skip the load/bind entirely (not read).
-            if bname.name != "_" then
+            if !isWildcardBinder bname.name then
               let gepDst ← freshReg
               let foff := Layout.variantFieldOffset layoutCtx vfields fieldIdx
               -- The base operand carries the binder's type for a borrowed binder: SSA cleanup
@@ -1524,7 +1524,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
         | .varArm binding _bindTy guard body =>
           terminateBlock (.br armLabel)
           startBlock armLabel
-          if binding.name != "_" then setVar binding.key scrVal
+          if !isWildcardBinder binding.name then setVar binding.key scrVal
           let (inc?, snap) ← finishMatchArmBody guard body ty mergeLabel nextCheck
           match inc? with
           | some i =>
@@ -1639,7 +1639,7 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
         | .varArm binding _bindTy guard body =>
           terminateBlock (.br armLabel)
           startBlock armLabel
-          if binding.name != "_" then setVar binding.key (if binderIsBorrow _bindTy then scrRef else scrVal)
+          if !isWildcardBinder binding.name then setVar binding.key (if binderIsBorrow _bindTy then scrRef else scrVal)
           let (inc?, snap) ← finishMatchArmBody guard body ty mergeLabel nextCheck
           match inc? with
           | some i =>

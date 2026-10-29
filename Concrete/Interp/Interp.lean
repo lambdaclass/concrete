@@ -3196,7 +3196,7 @@ partial def evalMatch (cx : Ctx) (env : Env) (scrutinee : IVal) (arms : List CMa
       let bound := match scrRef with
         | some r => if binderIsBorrow bindTy then r else scrutinee
         | none => scrutinee
-      let armEnv := if binding.name == "_" then env else envBind env binding.key bound
+      let armEnv := if isWildcardBinder binding.name then env else envBind env binding.key bound
       let (gEnv, ok) ← guardOk armEnv guard
       if ok then
         let (bodyEnv, flow) ← evalStmts cx gEnv body
