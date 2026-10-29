@@ -48,7 +48,7 @@ the source column keeps the line as written, so read it with a plain split, not 
   the three ids has exactly one source spelling, so the result is the same.
 - **Resolve `free`/`abort`.** The foreign-binding exemption now matches the two ids; each has one
   spelling.
-- **The wildcard binder.** `wildcardBinder` and `isWildcardBinder` (in `Frontend/AST.lean`) are
+- **The wildcard binder.** `wildcardBinder` and `isWildcardBinder` are
   now the one definition of `_` as a binder that binds nothing, used by the parser, Resolve,
   Check, ElabVerify, Elab, Lower and Interp. One pattern match in Check keeps the literal, because
   a pattern cannot name a definition; a comment there points to the definition. The proof model
@@ -64,12 +64,35 @@ the source column keeps the line as written, so read it with a plain split, not 
 - `run_tests`: 2883 passed, 0 failed;
 - golden 54/0, fast surface 13/0, totality 12/0, hygiene 430/0.
 
+## Slice 2 (behaviour-preserving)
+
+- **One home for reserved spellings.** `Resolve/Intrinsic.lean` already held `mainFnName`,
+  `okVariantName` and the like. The wildcard binder and the root module name moved there from
+  `Frontend/AST.lean`. New there: `selfParamName` (the receiver parameter the parser creates,
+  read back by Elab, Resolve and the formatter), `cEntrySymbol` (the C `main` that EmitSSA
+  generates and that no `#[export]` may take; this is not the program's `main`) and
+  `userMainName` (reserved by MOD-3; it was the entry point's symbol before every Concrete
+  function was mangled, and the comment that still said EmitSSA renames to it is corrected). The
+  interpreter now finds the entry through `mainFnName`.
+- **One computation of a method's local name.** Elab built `Type_method` from `tyName` with an
+  empty-string test in four copies, plus two more in the type-respelling code; FileSummary
+  concatenated it in ten places. All of them now go through `implLocalName` /
+  `mangledMethodName`. `tyName?` is the one place where the empty string from `tyName` means "no
+  name".
+
+Patterns (`| .ident "self" =>` in the parser, `| some ("self", _)` in Check) keep the literal,
+because a pattern cannot name a definition.
+
+**Evidence:** at `c34894d2`, on OVH, against main `22d6bff0`: emitted Core, SSA, LLVM, check and
+interpreter outputs byte-identical (8850), every report kind byte-identical after normalisation
+(14310), `run_tests` 2883 passed / 0 failed, golden 54/0, fast surface 13/0, totality 12/0.
+
 ## Next slices, in order
 
-1. **Elab and Resolve sentinels.** `typeName == ""` and `baseDir == ""` become `Option`s at the
-   producer.
-2. **Reserved names.** `"self"` as the receiver parameter, `"main"` and `"user_main"` as the entry
-   function (as opposed to the root module), and `"std"`/`"core"` as package names, each defined once.
+1. **Remaining sentinels.** In Resolve, `baseDir == ""` (Project) and `structName == ""` /
+   `typeName == ""` (PeekType) become `Option`s at the producer. The report-layer sentinels wait
+   for the report split.
+2. **Package names.** `"std"`, `"core"` and `"native"` in Project, each defined once.
 3. **Builtin type, trait and field spellings.** In Check, SSAVerify, Coherence, CheckError, Lower
    and Interp, compare against the builtin `TypeId` and not the spelling (see the candidate
    defect below).
