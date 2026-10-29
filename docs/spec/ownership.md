@@ -9,8 +9,23 @@ permit or proof token owns nothing and has no `Destroy`, yet it is linear and mu
 `&mut T` owns nothing either: it is exclusive, but letting it lapse discharges nothing and leaks
 nothing (REF-10).
 
-The design record, including why the language is linear rather than affine, is
-[OWNERSHIP_MODEL.md](../language/OWNERSHIP_MODEL.md). The decided `defer` and exit-order
+**Why linear, not affine** (decided 2026-07-01). The language had drifted into two predicates for
+"may this disappear": a named binding used "not Copy" (linear), while the `_` wildcard used "owns a
+resource" (affine), so `match e { _ => {} }` dropped an `Option<i32>` or a plain view struct that the
+same value bound to a name had to consume. Of the three coherent fixes, Copy-centric (drop iff Copy)
+needed conditional Copy for generics, and resource-centric (must consume iff it owns a resource)
+could not express a token that owns no memory yet must not vanish, which a capability language
+needs; the linear rule was chosen: a non-Copy value is used exactly once, `_` ignores only Copy
+values, one law and no implicit weakening. In substructural terms Copy is contraction and
+discardability is weakening, and a linear type permits neither; the precedents are Austral
+(explicit linearity, no implicit `Drop`) and Linear Haskell. Unlike Rust, affine with an implicit
+`Drop`, Concrete makes cleanup explicit, so it refuses silent disappearance instead of running a
+destructor. Drop glue does not change this: when source consumes an owner (`v.drop()`,
+`defer v.drop()`, `destroy(v)`), that operation may destroy the owner's live fields or elements, but
+the compiler never inserts a scope-end destructor (OWN-13). Copy answers "may it be duplicated", not
+"may it be dropped": a value that owns nothing and is safe to copy and drop is declared `Copy`
+(OWN-D1, TYPE-14). The design record with the per-site history is the archived
+[OWNERSHIP_MODEL.md](../archive/design-records/OWNERSHIP_MODEL.md). The decided `defer` and exit-order
 refinements (TIGHTENING_DECISIONS §4.5) and Copy being explicit (D6) are not yet implemented.
 Every claim of "exactly once" here holds on every path that does not abort (STMT-2).
 

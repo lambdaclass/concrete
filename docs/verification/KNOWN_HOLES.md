@@ -820,7 +820,7 @@ is E0205). Locked by `scripts/tests/check_linear_conservation.sh`, which walks e
 value-flow site — let-binding, array-literal, struct-literal, struct destructure,
 function argument, return, match scrutinee — and asserts move-exactly-once. Same audit
 fixed linear struct destructure (was a fail-closed E0208 over-rejection); see
-`docs/language/OWNERSHIP_MODEL.md`.
+`docs/archive/design-records/OWNERSHIP_MODEL.md`.
 
 ### H9. Named linear bound in a nested scope, left unconsumed — CLOSED 2026-06-28
 

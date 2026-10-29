@@ -66,7 +66,7 @@ mod option {
 
     // Value-selecting helper: returns ONE of two owned values, so the loser
     // must be freely droppable — hence `T: Copy` (same decision as std.math
-    // max/min — see docs/language/OWNERSHIP_MODEL.md control-flow rules). Non-Copy
+    // max/min — see docs/spec/ownership.md control-flow rules). Non-Copy
     // callers use `unwrap_or_else` (lazy default, no loser).
     impl<T: Copy> Option<T> {
         #[spec(Concrete.Proof.optionUnwrapOrExpr)]

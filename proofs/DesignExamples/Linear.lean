@@ -1,7 +1,7 @@
 /-!
 # Design example 1: linear move and destroy
 
-A deliberately tiny model of Concrete's ownership law (docs/language/OWNERSHIP_MODEL.md):
+A deliberately tiny model of Concrete's ownership law (docs/spec/ownership.md):
 a non-Copy value is used exactly once, and its cleanup (`destroy`) is an explicit,
 consuming verb — never inserted implicitly. It tests the semantic contract of
 docs/compiler/VERIFIED_PIPELINE.md ("Resources and failure", "No implicit destruction",

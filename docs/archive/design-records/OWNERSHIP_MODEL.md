@@ -1,7 +1,9 @@
 # Ownership Model: Copy, Linear, Destroy (design record)
 
+Archived from docs/language: the ownership design record (the rules by site, the linear-not-affine decision, conditional Copy as first landed, where it lives). The rules are OWN-D1 to OWN-15 of docs/spec/ownership.md, whose introduction carries the decision's reasoning.
+
 **Superseded as the normative text (2026-10-23).** The ownership rules are stated, with stable
-IDs and runnable examples, in [docs/spec/ownership.md](../spec/ownership.md): Copy (OWN-D1), use
+IDs and runnable examples, in [docs/spec/ownership.md](../../spec/ownership.md): Copy (OWN-D1), use
 after move (OWN-1), consumption at every exit (OWN-2), branch agreement (OWN-3), loops (OWN-4),
 discards (OWN-5 to OWN-7), sub-place reads (OWN-8), overwrites (OWN-9), mutability (OWN-10),
 moves in code that may not run (OWN-11), `defer` (OWN-12), explicit destruction (OWN-13), Copy
@@ -151,9 +153,9 @@ duplicating one would let it be freed twice. Concretely:
   collection idiom writes UNINITIALIZED slots. What an assignment does to the old value
   (Copy overwritten with no event; a live non-Copy value never overwritten; the operations
   that return the displaced value) is stated in
-  [MEMORY_SEMANTICS.md §10](MEMORY_SEMANTICS.md#10-assignment-rules), and the order in which an
+  [MEMORY_SEMANTICS.md §10](../../language/MEMORY_SEMANTICS.md#10-assignment-rules), and the order in which an
   assignment evaluates its parts (right-hand side first) in
-  [STATEMENT_EXPRESSION_MODEL.md](../archive/design-records/STATEMENT_EXPRESSION_MODEL.md#evaluation-order-and-assignment)
+  [STATEMENT_EXPRESSION_MODEL.md](STATEMENT_EXPRESSION_MODEL.md#evaluation-order-and-assignment)
   (decided 2026-10-21).
 - **Functional update `S { ..base }`** may not *copy* a non-Copy field from `base`
   (**E0220**) — the value would be owned by both `base` and the result. Set each

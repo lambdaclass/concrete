@@ -819,7 +819,7 @@ partial def desugarStmts : List Stmt → List Stmt
   -- field access does not move, so `__destr` is left unconsumed (E0208) and the
   -- fields would alias it. Instead it is linearity-checked natively in Check
   -- (consume the source, move each field out) and expanded to the temp+field form
-  -- only at Elab time, past the linear checker. See docs/language/OWNERSHIP_MODEL.md.
+  -- only at Elab time, past the linear checker. See docs/spec/ownership.md.
   | s :: rest => desugarStmt s :: desugarStmts rest
 
 /-- One non-destructuring statement, with its nested blocks and expressions desugared. -/

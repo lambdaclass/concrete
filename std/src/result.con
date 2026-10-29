@@ -70,7 +70,7 @@ mod result {
 
     // Value-selecting helpers return one branch's owned value and drop the
     // other's, so both payloads must be freely droppable — hence Copy bounds
-    // (same decision as std.math max/min — see docs/language/OWNERSHIP_MODEL.md
+    // (same decision as std.math max/min — see docs/spec/ownership.md
     // control-flow rules). Non-Copy callers use `unwrap_or_else` (lazy default,
     // no loser) or an explicit match.
     impl<T: Copy, E: Copy> Result<T, E> {
