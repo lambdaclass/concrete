@@ -1,10 +1,12 @@
 # Safe-Memory Regression Checklist
 
+Moved from docs/language: a tracking surface (hard cases, coverage, open gaps) beside KNOWN_HOLES; the rules are in docs/spec.
+
 Status: canonical tracking surface — one place for all memory/ownership hard cases, their checker behavior, test coverage, doc claims, proof status, and open gaps.
 
-For the memory guarantee boundary, see [MEMORY_GUARANTEES.md](MEMORY_GUARANTEES.md).
+For the memory guarantee boundary, see [MEMORY_GUARANTEES.md](../language/MEMORY_GUARANTEES.md).
 For `&mut T` closure status, see [REF-10](../spec/references.md#REF-10).
-For the public guarantee statement, see [GUARANTEE_STATEMENT.md](../verification/GUARANTEE_STATEMENT.md).
+For the public guarantee statement, see [GUARANTEE_STATEMENT.md](GUARANTEE_STATEMENT.md).
 
 ---
 
