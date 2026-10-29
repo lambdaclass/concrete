@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+# The parser accepts exactly the grammar (SYN-1), checked from both sides.
+#
+# check_grammar_ll1.sh proves grammar/concrete.ebnf is LL(1) (apart from its listed conflicts).
+# Nothing checked that Concrete/Frontend/Parser.lean follows it. scripts/tests/lib/
+# grammar_conformance.py does:
+#
+#   1. ACCEPTANCE. It generates derivations of the grammar from a fixed seed, covering every
+#      alternative, optional and repetition of every rule (the run fails if coverage is
+#      incomplete). The parser (scripts/tools/parse_batch.lean, the real Concrete.parse) must
+#      accept each one.
+#   2. REJECTION. It mutates each derivation by one token (delete, insert, swap), mostly where an
+#      alternative was chosen. A mutant the grammar rejects, decided by an exact reference
+#      recognizer built from the same EBNF, must be rejected by the parser too.
+#   3. LOOKAHEAD. Statically, every place in Parser.lean that reads past the next token
+#      (peek2, direct token indexing) or can undo a decision (try/catch, a position write, a
+#      state restore) is counted per function. Count growth fails.
+#   4. RESERVED WORDS. Every reserved word of the lexer appears in some grammar production.
+#
+# Today's differences are listed, each with a reason, in:
+#   grammar/conformance_known.tsv          differences in acceptance and rejection, by signature
+#   grammar/parser_lookahead_sites.tsv     lookahead and backtracking sites
+#   grammar/conformance_keywords_known.tsv reserved words the grammar does not mention
+# A difference not listed fails; a listed one that no longer occurs fails too, so each list only
+# shrinks. Fixing a difference is a parser fix (a bug, ruled against SYN-1) or a grammar edit,
+# which is the owner's decision.
+#
+# Controls, each must hold or the gate fails:
+#   C1  coverage: the generator covered every alternative, optional and repetition;
+#   C2  the judge, given a verdict file in which the parser accepts a grammar-rejected mutant,
+#       reports a new difference;
+#   C3  the lookahead scan, run on a copy of Parser.lean with one planted `peek2` call, fails.
+set -uo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$ROOT_DIR"
+PASS=0; FAIL=0
+ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
+no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
+TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
+GC="scripts/tests/lib/grammar_conformance.py"
+KNOWN="grammar/conformance_known.tsv"
+LOOKAHEAD="grammar/parser_lookahead_sites.tsv"
+KEYWORDS="grammar/conformance_keywords_known.tsv"
+
+echo "=== build the parser (the batch runner imports Concrete.Frontend.Parser) ==="
+if lake build Concrete.Frontend.Parser > "$TMP/build.log" 2>&1; then ok "Concrete.Frontend.Parser built"
+else tail -20 "$TMP/build.log"; no "lake build Concrete.Frontend.Parser failed"; echo "GRAMMAR-CONFORMANCE: PASS=$PASS FAIL=$FAIL"; exit 1; fi
+
+echo "=== generate derivations and one-token mutants ==="
+if python3 "$GC" generate --out "$TMP/run" > "$TMP/gen.out"; then ok "$(cat "$TMP/gen.out")"
+else cat "$TMP/gen.out"; no "the generator failed"; fi
+items="$(sed -n 's/^items //p' "$TMP/run/coverage.txt")"; covered="$(sed -n 's/^covered //p' "$TMP/run/coverage.txt")"
+[ -n "$items" ] && [ "$items" = "$covered" ] && [ "$items" -gt 100 ] \
+  && ok "C1 coverage: every alternative, optional and repetition of the grammar ($covered of $items)" \
+  || { no "C1 coverage incomplete: $covered of $items"; grep '^uncovered' "$TMP/run/coverage.txt" | head -10; }
+
+echo "=== the parser's verdicts ==="
+if lake env lean --run scripts/tools/parse_batch.lean "$TMP/run/sources.txt" > "$TMP/run/verdicts.txt" 2> "$TMP/batch.err"; then
+  ok "parse_batch.lean ran on $(grep -c . "$TMP/run/verdicts.txt") sources"
+else
+  head -5 "$TMP/batch.err"; no "parse_batch.lean failed"; echo "GRAMMAR-CONFORMANCE: PASS=$PASS FAIL=$FAIL"; exit 1
+fi
+
+echo "=== acceptance and rejection against $KNOWN ==="
+if python3 "$GC" judge --dir "$TMP/run" --verdicts "$TMP/run/verdicts.txt" --known "$KNOWN" > "$TMP/judge.out"; then
+  ok "$(tail -1 "$TMP/judge.out")"
+else
+  grep -v '^  known ' "$TMP/judge.out"; no "acceptance/rejection differences above"
+fi
+
+echo "=== C2: a planted parser acceptance of a grammar-rejected mutant is caught ==="
+python3 - "$TMP/run" <<'PY' > "$TMP/c2.verdicts"
+import sys
+rows = [l.rstrip("\n").split("\t") for l in open(sys.argv[1] + "/programs.tsv")]
+verdicts = [l.rstrip("\n") for l in open(sys.argv[1] + "/verdicts.txt") if l.strip()]
+flipped = False
+for i, r in enumerate(rows):
+    # The first grammar-rejected mutant whose parser verdict is a rejection: flip it to accept.
+    if not flipped and r[1] == "mutant" and r[2] == "0" and verdicts[i] != "ACCEPT":
+        verdicts[i] = "ACCEPT"; flipped = True
+print("\n".join(verdicts))
+PY
+if python3 "$GC" judge --dir "$TMP/run" --verdicts "$TMP/c2.verdicts" --known "$KNOWN" > "$TMP/c2.out"; then
+  no "C2: the judge accepted a planted parser acceptance of a grammar-rejected program"
+else
+  grep -q 'FAIL new difference: reject-gap' "$TMP/c2.out" && ok "C2 a planted reject-gap is reported" \
+    || { no "C2 failed, but not as a new reject-gap"; head -3 "$TMP/c2.out"; }
+fi
+
+echo "=== lookahead and backtracking sites against $LOOKAHEAD ==="
+if python3 "$GC" lookahead --known "$LOOKAHEAD" > "$TMP/la.out"; then ok "$(tail -1 "$TMP/la.out")"
+else cat "$TMP/la.out"; no "lookahead sites changed (above)"; fi
+# C3: a planted second-token lookahead in a copy of the parser.
+awk '{print} /^partial def parsePrimary : ParseM Expr := do$/ && !done {print "  let _ ← peek2"; done=1}' \
+  Concrete/Frontend/Parser.lean > "$TMP/Parser.lean"
+if ! cmp -s Concrete/Frontend/Parser.lean "$TMP/Parser.lean" \
+   && ! python3 "$GC" lookahead --known "$LOOKAHEAD" --parser "$TMP/Parser.lean" > "$TMP/c3.out" \
+   && grep -q "parsePrimary: 1 'peek2'" "$TMP/c3.out"; then
+  ok "C3 a planted peek2 in parsePrimary is reported"
+else
+  no "C3 the lookahead scan did not report a planted peek2 in parsePrimary"
+fi
+
+echo "=== reserved words against $KEYWORDS ==="
+if python3 "$GC" keywords --known "$KEYWORDS" > "$TMP/kw.out"; then ok "$(tail -1 "$TMP/kw.out")"
+else cat "$TMP/kw.out"; no "reserved words (above)"; fi
+
+echo "GRAMMAR-CONFORMANCE: PASS=$PASS FAIL=$FAIL"
+[ "$FAIL" -eq 0 ]

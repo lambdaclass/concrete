@@ -1,0 +1,7 @@
+# Reserved words of the lexer (Concrete/Frontend/Lexer.lean) that no production of
+# grammar/concrete.ebnf mentions, held by scripts/tests/check_grammar_conformance.sh. Each is
+# syntax the parser reads and the grammar does not describe. The list may only shrink.
+#
+# word	reason
+assert	the proof-annotation statement `assert expr;` (parseAssertOrAssume) is parsed but not in the grammar
+assume	the proof-annotation statement `assume expr;` (parseAssertOrAssume) is parsed but not in the grammar

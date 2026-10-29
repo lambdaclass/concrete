@@ -1,0 +1,11 @@
+# Places in Concrete/Frontend/Parser.lean that read past the next token or can undo a decision,
+# outside the token primitives (peek, peekSpan, peek2, advance, expect), counted per function by
+# scripts/tests/check_grammar_conformance.sh. SYN-1 says the parser decides with one token; each
+# site here is an exception with its reason. The counts may only fall.
+#
+# function	kind	count	reason
+condHeadHint	token-index	1	after a failed control-flow head, scans back over the consumed tokens to explain bug 212's struct-literal reading in the diagnostic; runs only on an error, never steers the parse
+parseModuleBody	try-catch	1	top-level error recovery (ROADMAP Phase 4 #12c): a failed declaration is recorded and the parser resyncs; the accepted language is unchanged, since any caught error fails the parse
+parseStmt	peek2	1	`ghost let`: a second token separates the contextual keyword `ghost` from an identifier statement; neither `ghost let` nor the proof-only statement is in the grammar
+skipToTopLevelBoundary	token-index	1	error recovery: counts the braces the failed declaration consumed, to resync at the right depth; runs only after an error
+withCondHeadHint	try-catch	1	rethrows a head's parse error with bug 212's hint attached; never catches a success

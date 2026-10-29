@@ -738,6 +738,103 @@ def tok_of(text):
     return (text, None)
 
 
+# ── Lookahead: the parser decides with one token ───────────────────────────────────────────────
+
+PARSER = os.path.join(ROOT, "Concrete", "Frontend", "Parser.lean")
+DEF_RE = re.compile(r"^\s*(?:@\[[^\]]*\]\s*)?(?:private |protected )*(?:partial )?(?:def|abbrev) ([^\s(:]+)")
+LOOKAHEAD_KINDS = [
+    # kind, pattern, what it means
+    ("peek2", re.compile(r"\bpeek2\b"), "a second token of lookahead"),
+    ("token-index", re.compile(r"\.tokens\[|\btokens\[[^\]]*\]\?"), "reads the token array directly, not through peek"),
+    ("try-catch", re.compile(r"\btry\b"), "catches a parse failure (a backtracking or recovery point)"),
+    ("pos-write", re.compile(r"\bpos\s*:="), "writes the token position"),
+    ("state-restore", re.compile(r"^\s*set\s"), "restores a saved parser state"),
+]
+# The token primitives themselves: one token of lookahead is implemented here.
+LOOKAHEAD_PRIMITIVES = {"peek", "peekSpan", "peek2", "advance", "expect", "mkParserState"}
+
+
+def lookahead_sites(path=PARSER):
+    """Every place in Parser.lean that looks further than one token, or can undo a decision,
+    outside the token primitives: (function, kind) -> count."""
+    sites = collections.Counter()
+    fn = None
+    in_block_comment = False
+    with open(path) as f:
+        for line in f:
+            stripped = line.strip()
+            if in_block_comment:
+                if "-/" in stripped:
+                    in_block_comment = False
+                continue
+            if stripped.startswith("/-"):
+                in_block_comment = "-/" not in stripped
+                continue
+            code = line.split("--", 1)[0]
+            m = DEF_RE.match(code)
+            if m:
+                fn = m.group(1)
+            if fn in LOOKAHEAD_PRIMITIVES:
+                continue
+            for kind, pat, _ in LOOKAHEAD_KINDS:
+                if pat.search(code):
+                    sites[(fn or "<top>", kind)] += 1
+    return sites
+
+
+def cmd_lookahead(args):
+    sites = lookahead_sites(args.parser)
+    known = {}
+    with open(args.known) as f:
+        for line in f:
+            line = line.rstrip("\n")
+            if not line or line.startswith("#"):
+                continue
+            fn, kind, count, reason = line.split("\t")
+            known[(fn, kind)] = (int(count), reason)
+    fails = 0
+    for key in sorted(set(sites) | set(known)):
+        got = sites.get(key, 0)
+        want = known.get(key, (0, ""))[0]
+        if got > want:
+            fails += 1
+            print(f"  FAIL {key[0]}: {got} '{key[1]}' site(s), {want} allowed — new lookahead beyond one token "
+                  f"or a new backtracking point; the parser must decide with one token (SYN-1)")
+        elif got < want:
+            fails += 1
+            print(f"  FAIL {key[0]}: {got} '{key[1]}' site(s), {want} listed — the list only shrinks; lower it")
+    print(f"lookahead sites beyond one token: {sum(sites.values())} in {len(sites)} (function, kind) pairs, "
+          f"{len(known)} listed")
+    if args.print:
+        for (fn, kind), n in sorted(sites.items()):
+            print(f"{fn}\t{kind}\t{n}")
+    return 1 if fails else 0
+
+
+def cmd_keywords(args):
+    """Every reserved word of the lexer appears in the grammar, unless listed (a word the parser
+    reads that no production mentions is syntax the grammar does not describe)."""
+    _, terms = vocabulary_of(load_rules())
+    known = set()
+    with open(args.known) as f:
+        for line in f:
+            line = line.rstrip("\n")
+            if line and not line.startswith("#"):
+                known.add(line.split("\t")[0])
+    missing = sorted(k for k in KEYWORDS if f"'{k}'" not in terms)
+    fails = 0
+    for k in missing:
+        if k not in known:
+            fails += 1
+            print(f"  FAIL the lexer reserves '{k}', and no grammar production mentions it")
+    for k in sorted(known):
+        if k not in missing:
+            fails += 1
+            print(f"  FAIL '{k}' is listed as missing from the grammar but the grammar mentions it now; delete the row")
+    print(f"reserved words missing from the grammar: {len(missing)} ({', '.join(missing) or 'none'}), {len(known)} listed")
+    return 1 if fails else 0
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -759,8 +856,15 @@ def main():
     r.add_argument("--examples", required=True, help="examples.tsv from judge; rewritten in place")
     r.add_argument("--workdir", required=True)
     r.add_argument("--rounds", type=int, default=25)
+    la = sub.add_parser("lookahead")
+    la.add_argument("--known", required=True)
+    la.add_argument("--parser", default=PARSER)
+    la.add_argument("--print", action="store_true")
+    kw = sub.add_parser("keywords")
+    kw.add_argument("--known", required=True)
     args = ap.parse_args()
-    return {"generate": cmd_generate, "judge": cmd_judge, "reduce": cmd_reduce}[args.cmd](args)
+    return {"generate": cmd_generate, "judge": cmd_judge, "reduce": cmd_reduce,
+            "lookahead": cmd_lookahead, "keywords": cmd_keywords}[args.cmd](args)
 
 
 if __name__ == "__main__":
