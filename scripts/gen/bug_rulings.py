@@ -118,13 +118,13 @@ def parse(value, name):
     if value.startswith("Permitted by: "):
         body, note = split_note(value[len("Permitted by: "):])
         rules = [r.strip() for r in body.split(",")]
-        if not rules or any(not KEY.match(r) for r in rules):
+        if not rules or len(set(rules)) != len(rules) or any(not KEY.match(r) for r in rules):
             raise RulingError(f"{name}: 'Permitted by:' names rules as ID@VERSION, got '{body[:60]}'")
         return {"kind": "permitted", "rules": rules, "chapter": None, "note": note}
     if value.startswith("Open: "):
         body, note = split_note(value[len("Open: "):])
         rules = [r.strip() for r in body.split(",")]
-        if not rules or any(not OPEN_ID.match(r) for r in rules):
+        if not rules or len(set(rules)) != len(rules) or any(not OPEN_ID.match(r) for r in rules):
             raise RulingError(f"{name}: 'Open:' names owner questions as OPEN-N, got '{body[:60]}'")
         return {"kind": "open", "rules": rules, "chapter": None, "note": note}
     if value.startswith("Spec gap: "):
