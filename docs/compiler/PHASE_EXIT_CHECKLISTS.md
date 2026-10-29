@@ -123,7 +123,7 @@ requirements ledger (`docs/stdlib/STDLIB_AUDIT.md`).
 
 The shipped stdlib/syntax surface froze on this evidence (2026-04-20 through
 2026-04-25): string/text contract, byte-cursor API, checked indexing, 38 std
-modules, runtime collections (`docs/language/RUNTIME_COLLECTIONS.md`), arithmetic
+modules, runtime collections (`docs/stdlib/RUNTIME_COLLECTIONS.md`), arithmetic
 policy, formatting triad (no format strings), error ergonomics (Result
 helpers), validated wrappers/newtypes (layout fix, cross-module identity,
 method dispatch, cast exemption narrowed), `Type::Variant` qualification,

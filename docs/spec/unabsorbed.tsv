@@ -19,7 +19,6 @@ docs/language/OWNERSHIP_MODEL.md	ownership
 docs/language/PATTERN_DESTRUCTURING.md	patterns
 docs/language/PATTERN_ERGONOMICS.md	patterns
 docs/language/README.md	README
-docs/language/RUNTIME_COLLECTIONS.md	memory
 docs/language/SAFETY.md	trusted,ffi
 docs/language/STATEMENT_EXPRESSION_MODEL.md	statements
 docs/language/STRING_TEXT_CONTRACT.md	types

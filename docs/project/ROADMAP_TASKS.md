@@ -4952,7 +4952,7 @@ usable `std` subset, not for completeness ([capacity allocation](../../ROADMAP.m
 stays this task's eventual scope.
 
 Every new collection API must preserve the H18 ownership contract documented
-in [CHANGELOG.md](../../CHANGELOG.md) and `docs/language/RUNTIME_COLLECTIONS.md`: a
+in [CHANGELOG.md](../../CHANGELOG.md) and `docs/stdlib/RUNTIME_COLLECTIONS.md`: a
 collection owns its live elements until they are explicitly moved out.
 `clear`, `drop`, overwrite,
 set/replacement, and compaction paths destroy displaced live elements;

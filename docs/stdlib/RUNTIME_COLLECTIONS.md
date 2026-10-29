@@ -1,5 +1,7 @@
 # Runtime-Oriented Collection Maturity
 
+Moved from docs/language: a std library design and contract, not a language rule (the language rules it relies on are in docs/spec).
+
 Status: PARTIALLY SUPERSEDED (2026-06-11) — the borrowed-accessor design below
 is being withdrawn. The `map.get(&k) -> Option<&V>` / `map.get_mut(&k) ->
 Option<&mut V>` "lookup" and "mutating lookup" rows (§4) are the **H1 known
@@ -17,8 +19,8 @@ This document settles the question posed by ROADMAP item 57:
 
 > define runtime-oriented collection maturity explicitly before stdlib freeze: interpreters, analyzers, schedulers, and storage-like programs should have credible map/update patterns, nested mutable structure idioms, and frame-friendly environment/container patterns, with a clear decision about what belongs in stdlib versus example-only support.
 
-For the broader stdlib direction, see [STDLIB.md](../stdlib/STDLIB.md).
-For collection-free pressure work (fixed-capacity), see [STDLIB_DESIGN_PRINCIPLES.md](../stdlib/STDLIB_DESIGN_PRINCIPLES.md).
+For the broader stdlib direction, see [STDLIB.md](STDLIB.md).
+For collection-free pressure work (fixed-capacity), see [STDLIB_DESIGN_PRINCIPLES.md](STDLIB_DESIGN_PRINCIPLES.md).
 
 ---
 
@@ -259,7 +261,7 @@ A pattern moves from example-only into stdlib only if **all** of the following h
 1. Two or more unrelated examples independently implement the same API shape.
 2. The shape is stable across those uses (no per-program flags or type parameters that bend the signature).
 3. The stdlib addition does not require a new language feature (trait, macro, GAT).
-4. The addition preserves the stdlib design rules in [STDLIB.md](../stdlib/STDLIB.md): explicit allocation, explicit ownership, small and sharp, one vocabulary.
+4. The addition preserves the stdlib design rules in [STDLIB.md](STDLIB.md): explicit allocation, explicit ownership, small and sharp, one vocabulary.
 
 Patterns that fail any of these remain example-shaped. That is not a negative judgment on the pattern; it is a statement that the evidence does not yet support a stable stdlib commitment.
 
@@ -277,7 +279,7 @@ closure:
 - [x] `Deque<T>::push_back` / `pop_front` / `push_front` / `pop_back` exist and are covered by stdlib tests; the scheduler/work-queue shape in section 3.3 remains the canonical usage pattern.
 - [x] Stdlib maps accept explicit `hash` / `eq` function pointers (no trait dependency).
 - [x] Runtime-heavy evidence is sufficient: `lox` runs end-to-end against the frozen surface, and the remaining drift (`Vec<Binding>` tables rather than `HashMap<String, Value>` + `Vec<Frame>`) is example-shape, not a missing stdlib API. A canonical-shape rewrite remains useful follow-up evidence, but not a freeze blocker.
-- [x] `Env`, `Frame`, `InternPool`, and multimap variants are intentionally example-shaped here and in [STDLIB.md](../stdlib/STDLIB.md).
+- [x] `Env`, `Frame`, `InternPool`, and multimap variants are intentionally example-shaped here and in [STDLIB.md](STDLIB.md).
 
 ---
 

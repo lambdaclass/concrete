@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Collections surface gate (ROADMAP Phase 5 #6).
 #
-# The runtime collections are BUILT and documented (docs/language/RUNTIME_COLLECTIONS.md):
+# The runtime collections are BUILT and documented (docs/stdlib/RUNTIME_COLLECTIONS.md):
 # Vec, HashMap, OrderedMap, OrderedSet, Set, Deque, BitSet, BinaryHeap, slice.
 # This gate locks the property that makes that surface SOUND under the value
 # model, not just present:
@@ -74,8 +74,8 @@ grep -qE 'pub (trusted )?fn with_at<' "$STD/vec.con" \
   && ok "Vec::with_at (scoped callback)" || no "Vec::with_at missing"
 
 echo "=== 4. the collections story is documented ==="
-[ -f "docs/language/RUNTIME_COLLECTIONS.md" ] \
-  && ok "docs/language/RUNTIME_COLLECTIONS.md present" || no "docs/language/RUNTIME_COLLECTIONS.md missing"
+[ -f "docs/stdlib/RUNTIME_COLLECTIONS.md" ] \
+  && ok "docs/stdlib/RUNTIME_COLLECTIONS.md present" || no "docs/stdlib/RUNTIME_COLLECTIONS.md missing"
 
 echo ""
 echo "COLLECTIONS: PASS=$PASS  FAIL=$FAIL"
