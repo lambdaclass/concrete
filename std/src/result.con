@@ -33,7 +33,7 @@ mod result {
         // error into `f` or a fresh Err — so there is no loser to drop and no
         // Copy bound is needed; they work for non-Copy (linear) T and E.
         // (`unwrap_or`/`ok`/`err` stay behind Copy: they drop the other arm's
-        // payload.) fn-pointer-in-generic verified working (ERROR_HANDLING_DESIGN
+        // payload.) fn-pointer-in-generic verified working (the spec's recoverable-failure section (docs/spec/statements.md)
         // Part 2); per docs/language/ERROR_CONVENTIONS.md these never change a failure's
         // bucket.
         #[spec(Concrete.Proof.resultMapExpr)]

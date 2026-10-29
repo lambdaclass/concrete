@@ -388,3 +388,66 @@ fn main() -> Int {
     return 42;
 }
 ```
+
+## Recoverable failure: explicit `Result` flow
+
+This section is explanatory; it records a design decision and the shape of programs under it. A
+recoverable failure is a `Result<T, E>` value. There are no exceptions, no unwinding, no implicit
+error conversion and no propagation operator: every propagation edge is an exhaustive `match` whose
+error arm contains the `return` that leaves the function. A fatal failure is an abort (STMT-2).
+
+**Postfix `?` was removed (2026-09-08).** It compressed a match and an early return into
+punctuation at an expression site, which saved characters but made a reviewer reconstruct which
+call can exit the function, which error type leaves it, whether a conversion happens, which
+deferred cleanup runs and whether a refactor moved or duplicated a linear value. For an
+audit-first language that trade is not worth it: generated explicit arms are cheap, review is the
+scarce resource. The lexer still recognizes `?`, only so the parser can refuse it with a migration
+diagnostic, and the retired diagnostics stay reserved.
+
+Same-error propagation:
+
+```con pseudocode
+fn parse_header(data: [i32; 8]) -> Result<Header, ParseError> {
+    let version: i32 = match validate_version(data[0]) {
+        Result::Ok { value } => value,
+        Result::Err { error } => {
+            return Result::<Header, ParseError>::Err { error: error };
+        },
+    };
+    return Result::<Header, ParseError>::Ok { value: Header { version: version } };
+}
+```
+
+Cross-error propagation converts visibly in the error arm
+(`return Result::<Response, ServiceError>::Err { error: to_service_validation(error) };`). `map_err`
+is an ordinary named function: it creates no hidden return, and its caller still matches the
+mapped value.
+
+An error arm's `return` is a normal return: the deferred calls of the scopes it leaves run in the
+same order as for any return (OWN-12), while an abort runs none. Calling a fallible function uses
+the capabilities it declares; propagating its result needs no capability, allocation or
+conversion. A `Result` obeys the ordinary conservation rules: the match consumes it, the selected
+payload becomes a new binding, neither arm may drop the other's linear payload, and returning a
+payload moves it once; the checker and Core have no propagation case.
+
+The library's helper floor is ordinary functions, not control flow: `is_ok`, `is_err` (borrowed
+receiver), `unwrap_or_else`, `map`, `map_err`, `and_then` (explicit function pointers, since there
+are no closures, implicit trait resolution or `From` conversion), and `unwrap_or`, `ok`, `err`
+(Copy bounds where the other arm is discarded) on `Result`; `is_some`, `is_none`,
+`unwrap_or_else`, `map`, `and_then` on `Option`. A helper that returns a `Result` never propagates it
+out of its caller. Parsers keep a flat named error enum, with each failure next to its check;
+services convert stage errors in a visible arm at the stage boundary. A long run of similar arms is
+not evidence that syntax is needed: first prefer a narrower named validation function, a combinator
+where it improves the data flow, one match around a multi-step function, or reviewed source
+generated outside the language.
+
+Rejected: postfix `?` (permanently), implicit error conversion (hidden conversion lookup),
+exceptions and unwinding (excluded by STMT-2), try/catch blocks (a second failure-control model),
+result-specific statement syntax (duplicates `match`), closure-taking combinators (closures are
+excluded, TYPE-1). These hold only while: `?` is refused with its removal message; neither the
+surface AST nor Core has a propagation node; no stage (Check, Elab, Mono, lowering, the
+interpreter, proof extraction, evidence identity) has a propagation path; same-type and
+cross-type explicit propagation compile and run; explicit error returns run `defer` cleanup in
+nested scopes; ignored fallible results stay refused (OWN-6); and the documentation, the book, the
+site, tests and examples show the exhaustive match and the explicit return.
+

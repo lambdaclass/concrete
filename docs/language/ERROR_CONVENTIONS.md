@@ -1,7 +1,7 @@
 # Error Conventions: Recoverable vs Fatal (normative)
 
 Status: NORMATIVE for Phase 7 stdlib APIs (Phase 6 item 13t, 2026-07-14)
-Companion: `docs/language/ERROR_HANDLING_DESIGN.md` (ergonomics/helpers),
+Companion: `docs/spec/statements.md ("Recoverable failure")` (ergonomics/helpers),
 `docs/language/OWNERSHIP_MODEL.md` (linearity of error values), `docs/ARITHMETIC.md`.
 
 This document is the drift-stopper: every new stdlib API classifies each of its

@@ -11,7 +11,7 @@ All proposals in this document must preserve LL(1). Anything requiring backtrack
 
 For the LL(1) commitment, see [research/compiler/ll1-grammar.md](../../research/compiler/ll1-grammar.md).
 For what is permanently excluded, see [ANTI_FEATURES.md](../language/ANTI_FEATURES.md).
-For error handling ergonomics, see [ERROR_HANDLING_DESIGN.md](../language/ERROR_HANDLING_DESIGN.md).
+For error handling ergonomics, see [the spec's recoverable-failure section](../spec/statements.md#recoverable-failure-explicit-result-flow).
 For stdlib API friction, see [STDLIB_API_REVIEW.md](../stdlib/STDLIB_API_REVIEW.md).
 
 ---
@@ -454,8 +454,8 @@ Building a string requires multiple append calls. There is no string interpolati
 | # | Pain Point | Relief Type | Status | Notes |
 |---|-----------|------------|--------|-------|
 | 1 | **Generic enum construction verbosity** (`Result::<T, E>::Ok`) | Elaboration-time inference | **CHANGE** | Highest-impact single improvement. No parser change. |
-| 2 | **Verbose error propagation (multi-step)** | Explicit `match` + library combinators | **DECIDED: no syntax sugar** | Postfix `?` was removed. The exit and conversion arm stay visible (ERROR_HANDLING_DESIGN.md). |
-| 3 | **Ad hoc result types instead of `Result<T, E>`** | Library: `unwrap_or` on Result/Option | Freeze as-is | Stdlib addition, not syntax. See ERROR_HANDLING_DESIGN.md items. |
+| 2 | **Verbose error propagation (multi-step)** | Explicit `match` + library combinators | **DECIDED: no syntax sugar** | Postfix `?` was removed. The exit and conversion arm stay visible (the spec's recoverable-failure section (docs/spec/statements.md)). |
+| 3 | **Ad hoc result types instead of `Result<T, E>`** | Library: `unwrap_or` on Result/Option | Freeze as-is | Stdlib addition, not syntax. See the spec's recoverable-failure section (docs/spec/statements.md) items. |
 | 4 | **`Vec::<T>::new()` type repetition on let-binding** | Elaboration-time inference | **CHANGE** | Same mechanism as #1. `let mut v: Vec<i32> = Vec::new();` with type inferred from LHS. |
 | 5 | **`Option::<T>::None` / `Option::<T>::Some` everywhere** | Elaboration-time inference | **CHANGE** | Same mechanism as #1. |
 | 6 | **Custom result enums duplicating `Result<T, E>`** | Library: Result helpers | Freeze as-is | `Result` helpers and explicit matching avoid parallel result types without new control-flow syntax. |
@@ -469,7 +469,7 @@ Building a string requires multiple append calls. There is no string interpolati
 | 14 | **`->` vs `=>` in match arms** | Documentation | Freeze as-is | Standardize on `=>`. Emit warning for `->`. |
 | 15 | **Legacy free-function API style** | Stdlib migration | Freeze as-is | `vec_push` -> `v.push()`. Migration tracked in STDLIB_API_REVIEW.md. |
 | 16 | **No `else if` match/switch** | Already supported | Freeze as-is | `else if` already works in the parser. |
-| 17 | **Repetitive enum error ceremony** | Library: `map_err` | Freeze as-is | See ERROR_HANDLING_DESIGN.md Wave 2 helpers. |
+| 17 | **Repetitive enum error ceremony** | Library: `map_err` | Freeze as-is | See the spec's recoverable-failure section (docs/spec/statements.md) Wave 2 helpers. |
 | 18 | **No `for x in collection` syntax** | Syntax | **Deferred** | Requires iterator protocol. Current `for (init; cond; step)` is C-style. |
 | 19 | **Integer literal as char** | Syntax/stdlib | Freeze as-is | `58` for `:` is painful but explicit. `':'` (char literal) with cast to `u8`/`i32` is available. |
 | 20 | **Missing `+=`, `-=`, `*=` compound assignment** | Syntax | **Deferred** | Would reduce `x = x + 1` to `x += 1`. LL(1)-safe. Low priority. |

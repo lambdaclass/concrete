@@ -57,7 +57,7 @@ Generic absence type.
 | `unwrap_or(self, default: T) -> T` | method |
 | `ok_or<E>(self, err: E) -> Result<T, E>` | method |
 
-Source: [STDLIB_TARGET.md](STDLIB_TARGET.md), [STDLIB_AUDIT.md](STDLIB_AUDIT.md), [ERROR_HANDLING_DESIGN.md](../language/ERROR_HANDLING_DESIGN.md)
+Source: [STDLIB_TARGET.md](STDLIB_TARGET.md), [STDLIB_AUDIT.md](STDLIB_AUDIT.md), [the spec's recoverable-failure section](../spec/statements.md#recoverable-failure-explicit-result-flow)
 
 #### `std.result` -- stable
 
@@ -75,7 +75,7 @@ Generic success/failure type.
 
 Tier 2 helpers (`map`, `map_err`, `and_then`, `or_else`, `unwrap_or_else`) are approved additions pending function-pointer-in-generic validation. They are not frozen because they do not yet exist.
 
-Source: [ERROR_HANDLING_DESIGN.md](../language/ERROR_HANDLING_DESIGN.md)
+Source: [the spec's recoverable-failure section](../spec/statements.md#recoverable-failure-explicit-result-flow)
 
 #### `std.math` -- stable
 

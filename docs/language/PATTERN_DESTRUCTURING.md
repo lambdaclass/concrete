@@ -13,7 +13,7 @@ Note: some examples below use older schematic names such as `ParseResult` or `Se
 
 For the LL(1) grammar commitment, see `research/compiler/ll1-grammar.md`.
 For what Concrete permanently excludes, see [ANTI_FEATURES.md](ANTI_FEATURES.md).
-For the error handling context that motivates this, see [ERROR_HANDLING_DESIGN.md](ERROR_HANDLING_DESIGN.md).
+For the error handling context that motivates this, see [the spec's recoverable-failure section](../spec/statements.md#recoverable-failure-explicit-result-flow).
 For the language gap that first identified this need, see [LANGUAGE_GAPS.md](../archive/LANGUAGE_GAPS.md) (item 9: "No destructuring let").
 
 ---
@@ -702,7 +702,7 @@ fn handle_request(req: Request) -> ServiceResult {
 }
 ```
 
-This is an important boundary: `let...else` does not help when the else block needs to inspect the non-matching variant. The design deliberately does not try to solve this case. Error conversion is addressed by `map_err`-style helpers (see [ERROR_HANDLING_DESIGN.md](ERROR_HANDLING_DESIGN.md)).
+This is an important boundary: `let...else` does not help when the else block needs to inspect the non-matching variant. The design deliberately does not try to solve this case. Error conversion is addressed by `map_err`-style helpers (see [the spec's recoverable-failure section](../spec/statements.md#recoverable-failure-explicit-result-flow)).
 
 ### Example 3: Test assertions with expected errors
 

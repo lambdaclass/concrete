@@ -7,7 +7,7 @@ This document maps each canonical example and pressure test to the stdlib APIs i
 Status note: the `parse_validate` and `service_errors` rewrites are landed. Sections 2.1 and 2.2 are marked DONE. The remaining sections are kept as a template for future rewrites.
 
 For the stdlib module inventory, see [STDLIB_TARGET.md](STDLIB_TARGET.md).
-For error handling ergonomics, see [ERROR_HANDLING_DESIGN.md](../language/ERROR_HANDLING_DESIGN.md).
+For error handling ergonomics, see [the spec's recoverable-failure section](../spec/statements.md#recoverable-failure-explicit-result-flow).
 For byte cursor APIs, see [BYTE_CURSOR_API.md](../language/BYTE_CURSOR_API.md).
 For the string/text/bytes split, see [STRING_TEXT_CONTRACT.md](../language/STRING_TEXT_CONTRACT.md).
 For the core/hosted layer split, see [HOSTED_STDLIB_SPLIT.md](HOSTED_STDLIB_SPLIT.md).
@@ -494,7 +494,7 @@ If an example CANNOT be rewritten with stdlib, that is a stdlib gap. Each gap is
 
 **Current workaround.** 9-line match-and-convert blocks per pipeline stage.
 
-**Stdlib gap.** `Result.map_err` is Tier 2 in ERROR_HANDLING_DESIGN.md, requiring function-pointer-in-generic validation.
+**Stdlib gap.** `Result.map_err` is Tier 2 in the spec's recoverable-failure section (docs/spec/statements.md), requiring function-pointer-in-generic validation.
 
 **Recommendation.** Validate function-pointer-in-generic methods and implement `map_err`. Callers still use explicit match blocks for propagation. The exit criterion is satisfied when custom result enums are eliminated even without `map_err`.
 
@@ -504,7 +504,7 @@ If an example CANNOT be rewritten with stdlib, that is a stdlib gap. Each gap is
 
 **Affected programs.** All pressure tests using ad hoc `ok: i32` result structs.
 
-**Stdlib gap.** `unwrap_or` is Tier 1 in ERROR_HANDLING_DESIGN.md (no function pointer needed) but not yet implemented.
+**Stdlib gap.** `unwrap_or` is Tier 1 in the spec's recoverable-failure section (docs/spec/statements.md) (no function pointer needed) but not yet implemented.
 
 **Recommendation.** Implement as the first Result/Option helper. Low compiler risk.
 
