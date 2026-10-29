@@ -781,6 +781,28 @@ keeps the loan of a `&mut` it was given until it runs (OWN-12). The reborrow is 
 the call and not yet a Core form. An exclusive reference that is never used may go unused, because it owns
 nothing. Overlapping exclusive arguments in one call stay refused (REF-8).
 
+`&mut T` is linear (not Copy: `consumeVar` tracks it like any linear binding), while `&T` is Copy.
+Of the operations on a `&mut T` binding, returning it is REF-1's refusal and rebinding it (`let r2 =
+r;`) is REF-6's; passing it to a call that takes `&mut T`, and calling a `&mut self` method on it,
+reborrow it (this entry); reading or writing through it (`*r`, `*r = v`, `r.f`, `r.f = v`, `r[i]`,
+`r[i] = v`; MEM-4) uses it without consuming it, because a dereference does not go through
+`consumeVar`, an invariant any change to consumption must keep. Branches agree on a `&mut`
+binding as on any linear value (OWN-3), a loop does not consume one declared outside it (OWN-4),
+and a `break` or `continue` does not skip an unconsumed one (OWN-2). A borrow-block binder need not
+be consumed: dereferencing it inside the block is the normal use, and the binder lapses at the
+block's end, when the owner is unfrozen. On current main the block lowers to an entry-block alloca
+holding the owner's value, the binder points at it, and every exit writes it back to the owner
+unconditionally; consumption is a checker notion the lowering does not see. Where that write-back
+sits among the other exit actions is owner decision OD2 (OPEN-2). A `return` inside a `borrow mut`
+block once failed SSA verification (the write-back was emitted as dead code after the return); the
+lowering now skips a terminated block's write-back (`blockTerminated`) and hoists the alloca to the
+entry block (`emitEntryAlloca`), pinned by `adversarial_mut_ref_return_in_borrow.con` and
+`adversarial_mut_ref_return_deref_in_borrow.con`. The earlier gaps of this area are closed: field and
+element writes through `&mut T` work (MEM-4), a `&mut T` stored in a struct is REF-3's refusal, and
+an explicit reborrow `let s = &mut *r` is REF-6's (the reborrow is implicit in the call). Making the
+reborrow an explicit Core form (R-0496, design example B5) would move every function's frozen V1
+fingerprint, so it waits for the V2-only identities.
+
 ```con accept name=reborrow-in-borrow-block exit=42
 fn inc(r: &mut Int) {
     *r = *r + 21;

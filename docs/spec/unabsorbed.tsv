@@ -21,8 +21,6 @@ docs/language/LANGUAGE_INVARIANTS.md	ownership,references
 docs/language/MEMORY_GUARANTEES.md	memory
 docs/language/MEMORY_REGRESSION_CHECKLIST.md	memory
 docs/language/MEMORY_SEMANTICS.md	references,scope,memory
-docs/language/MUT_REF_CLOSURE.md	references
-docs/language/MUT_REF_SEMANTICS.md	references
 docs/language/OWNERSHIP_MODEL.md	ownership
 docs/language/PATTERN_DESTRUCTURING.md	patterns
 docs/language/PATTERN_ERGONOMICS.md	patterns

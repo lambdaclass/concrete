@@ -39,7 +39,7 @@ These properties are mechanically enforced by `Check.lean` and verified by adver
 
 10. **Trusted code does not relax linearity.** `trusted` permits pointer arithmetic and raw pointer operations but does not suppress ownership, borrow, or scope-exit rules.
 
-11. **`&mut T` consumption tracking.** Exclusive references created in borrow blocks are linear and consumed on function call or return. Function parameter `&mut T` refs are reborrowable (not consumed on call). Deref read/write does not consume. Branch agreement and loop-consumption restrictions apply. (Tests: `adversarial_mut_ref_*.con`, `error_mut_ref_*.con`) See [MUT_REF_SEMANTICS.md](MUT_REF_SEMANTICS.md) for the full two-kind model.
+11. **`&mut T` consumption tracking.** Exclusive references created in borrow blocks are linear and consumed on function call or return. Function parameter `&mut T` refs are reborrowable (not consumed on call). Deref read/write does not consume. Branch agreement and loop-consumption restrictions apply. (Tests: `adversarial_mut_ref_*.con`, `error_mut_ref_*.con`) See [REF-10](../spec/references.md#REF-10) for the full two-kind model.
 
 ## Public Claim That Is Safe Today
 
@@ -138,7 +138,7 @@ This requires:
 
 - ~~one checker-matching memory/reference semantics document~~ **done** — [MEMORY_SEMANTICS.md](MEMORY_SEMANTICS.md)
 - ~~closure on hard edge cases~~ **done** — edge cases documented with status in MEMORY_SEMANTICS.md §13, adversarial tests for each, integer-match consumption bug fixed
-- ~~`&mut T` ownership/consumption closure~~ **done** — two-kind model (borrow-block vs parameter refs), checker enforcement, codegen alignment, 21 adversarial tests, return-in-borrow codegen fix; see [MUT_REF_SEMANTICS.md](MUT_REF_SEMANTICS.md) and [MUT_REF_CLOSURE.md](MUT_REF_CLOSURE.md)
+- ~~`&mut T` ownership/consumption closure~~ **done** — two-kind model (borrow-block vs parameter refs), checker enforcement, codegen alignment, 21 adversarial tests, return-in-borrow codegen fix; see [REF-10](../spec/references.md#REF-10) and [REF-10](../spec/references.md#REF-10)
 - ~~no-codegen-crash regression rule~~ **done** — documented above; safe-subset programs must either compile or fail with an explicit checker diagnostic
 - ~~no-leak guarantee boundary~~ **done** — strong no-leak for safe code defined above; weaker audit reporting deferred
 - proof-facing articulation of the memory model (future: connect to ProofCore/obligations)

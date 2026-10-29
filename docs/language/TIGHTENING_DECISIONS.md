@@ -444,7 +444,7 @@ case, so no program breaks; the refused `inc(r); inc(r);` inside a borrow block 
 After elaboration the reborrow is explicit in Core (B5), so the verified pipeline models one
 operation.
 
-**Homes.** MEMORY_SEMANTICS §15.7 G9 and MUT_REF_SEMANTICS §2 – §3 record the decision; R-0496
+**Homes.** MEMORY_SEMANTICS §15.7 G9 and REF-10's rationale (the former MUT_REF_SEMANTICS §2 – §3) record the decision; R-0496
 (Core reborrow form) implements it with the checker change in exit 2i. **Migration:** none.
 
 ### D2. The Austral model: borrow a variable, then project (Q2, REF-5, G12; revised 2026-10-23)

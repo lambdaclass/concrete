@@ -3,7 +3,7 @@
 Status: canonical tracking surface — one place for all memory/ownership hard cases, their checker behavior, test coverage, doc claims, proof status, and open gaps.
 
 For the memory guarantee boundary, see [MEMORY_GUARANTEES.md](MEMORY_GUARANTEES.md).
-For `&mut T` closure status, see [MUT_REF_CLOSURE.md](MUT_REF_CLOSURE.md).
+For `&mut T` closure status, see [REF-10](../spec/references.md#REF-10).
 For the public guarantee statement, see [GUARANTEE_STATEMENT.md](../verification/GUARANTEE_STATEMENT.md).
 
 ---
@@ -30,7 +30,7 @@ For the public guarantee statement, see [GUARANTEE_STATEMENT.md](../verification
 **Proof-facing status:** Not in proof model. PExpr has no borrow/deref/field constructs.
 
 **Open gaps:**
-- No field-write through `&mut T` (`r.field = val`). Documented in MUT_REF_CLOSURE.md §5.
+- (Closed: a field write through `&mut T`, `r.field = val`, works; MEM-4 and REF-10's rationale.)
 - No disjoint field borrow (two borrows of separate fields simultaneously). Deliberately conservative.
 
 ---
@@ -53,7 +53,7 @@ For the public guarantee statement, see [GUARANTEE_STATEMENT.md](../verification
 **Proof-facing status:** Not in proof model. PExpr has no array constructs.
 
 **Open gaps:**
-- No array element access through `&mut T` (`r[i]` and `r[i] = val`). Documented in MUT_REF_CLOSURE.md §5.
+- (Closed: element reads and writes through `&mut T`, `r[i]` and `r[i] = val`, work; REF-10's rationale.)
 - No slice splitting (disjoint sub-array borrows). Future work.
 
 ---
@@ -118,24 +118,19 @@ For the public guarantee statement, see [GUARANTEE_STATEMENT.md](../verification
 
 ## 5. `&mut T` Feature Gaps
 
-**Intended rule:** `&mut T` borrow-block refs are linear, consumed on function call. Function parameter `&mut T` refs are reborrowable. Deref read/write does not consume. See MUT_REF_SEMANTICS.md.
+**Intended rule:** REF-10: every `&mut T` binding (parameter, borrow-block binder, arm binder) is reborrowed when passed to a call (decision D1, 2026-10-23, provisional under OD2). Deref read/write does not consume.
 
-**Current checker behavior:** Two-kind model enforced. Borrow-block refs tracked in `env.borrowRefs`. Function parameter refs not in `borrowRefs`, so not consumed on call.
+**Current checker behavior:** One mode since D1 (`consumeCallArgIdent`); before it, borrow-block refs (`env.borrowRefs`) were consumed on a call and parameter refs were not.
 
 **Test coverage:** 11 adversarial + 8 error tests (see §5 in inventory above).
 - **pressure_sequential_mut_ref.con** — sequential deref read/write then call on borrow-block ref
 - **pressure_param_ref_multiuse.con** — parameter &mut ref across multiple function calls
 
-**Doc claim:** MEMORY_GUARANTEES.md property 11. MUT_REF_SEMANTICS.md. MUT_REF_CLOSURE.md.
+**Doc claim:** MEMORY_GUARANTEES.md property 11; REF-10 and its rationale.
 
 **Proof-facing status:** Not in proof model.
 
-**Open gaps (documented in MUT_REF_CLOSURE.md §5):**
-- **Reborrowing** (`&mut *r`) — no syntax or checker support.
-- **Field write through `&mut T`** (`r.field = val`) — no codegen (needs GEP through pointer).
-- **Array element access through `&mut T`** (`r[i]`, `r[i] = val`) — no checker or codegen support.
-- **`&mut T` in struct fields** — storing a `&mut T` inside a struct; struct becomes linear.
-- These are all future work, explicitly outside the current strong claim.
+**Former gaps, now closed (REF-10's rationale):** an explicit reborrow `let s = &mut *r` is REF-6's refusal (the reborrow is implicit in the call); field and element writes through `&mut T` work (MEM-4); a `&mut T` in a struct field is REF-3's refusal.
 
 ---
 

@@ -207,7 +207,7 @@ Every claim in a Concrete document must carry its taxonomy class explicitly or b
 | PROOF_SEMANTICS_BOUNDARY.md | Sections 2–4 use "proof-backed" = Proved, "compiler-enforced" = Enforced |
 | PROVABLE_SUBSET.md | Eligibility is Reported; proved theorems are Proved; checked invariants are Enforced |
 | SAFETY.md | Three-way split maps to: Capabilities = Enforced, Trusted = Trusted Assumption, Unsafe = Trusted Assumption |
-| MUT_REF_SEMANTICS.md | Checker behavior = Enforced |
+| REF-10 (docs/spec/references.md) | Checker behavior = Enforced |
 | Release criteria (future) | Must specify which class each requirement belongs to |
 
 ---

@@ -76,7 +76,7 @@ All other types are linear. Linear values must be consumed exactly once before s
 
 - Structs and enums (default)
 - `String`
-- `&mut T` (exclusive reference — see [MUT_REF_SEMANTICS.md](MUT_REF_SEMANTICS.md) for consumption rules)
+- `&mut T` (exclusive reference — see [REF-10](../spec/references.md#REF-10) for consumption rules)
 - `Heap<T>`, `HeapArray<T>`
 - Newtypes wrapping a linear inner type
 
@@ -166,7 +166,7 @@ If a reference created by a borrow block is assigned to a variable outside the b
 
 - Borrows do not consume the owner (the owner is frozen, not consumed).
 - The reference type `&T` is Copy — it can be passed to multiple functions within the borrow block.
-- The reference type `&mut T` is linear — see [MUT_REF_SEMANTICS.md](MUT_REF_SEMANTICS.md) for the two-kind consumption model (borrow-block refs vs function parameter refs).
+- The reference type `&mut T` is linear — see [REF-10](../spec/references.md#REF-10) for the two-kind consumption model (borrow-block refs vs function parameter refs).
 - Borrow blocks do not nest into the same owner (the inner borrow sees the owner as frozen).
 
 ---
@@ -1174,7 +1174,7 @@ These rules constrain the same expressions and are cited so the reference rules 
 the whole story; their own documents own them: overwriting a non-Copy place through a reference
 (`fn replace(slot: &mut String, v: String) { *slot = v; }`) is E0291
 (`cannotOverwriteLinearPlace`, OWNERSHIP_MODEL); a mutable borrow or `&mut self` receiver
-through a shared reference is E0237 (`land2-fix`, bug 091; MUT_REF_SEMANTICS); moving a non-Copy
+through a shared reference is E0237 (`land2-fix`, bug 091; REF-10's rationale (the former MUT_REF_SEMANTICS)); moving a non-Copy
 value out of a projection or through a reference is E0290 (H11); a match guard that moves is E0300
 (bug 090). Exit 2i does not version or migrate them.
 

@@ -111,7 +111,7 @@ loop rule needs an invariant that holds at the loop head.
 ### Borrows (example 2)
 
 **B1. Does passing a borrow-block `&mut` to a call consume it?** Today it does
-(MUT_REF_SEMANTICS §3), while parameter references are implicitly reborrowed (§4). The model
+(REF-10's rationale (the former MUT_REF_SEMANTICS §3)), while parameter references are implicitly reborrowed (§4). The model
 treats every call argument as an implicit reborrow scoped to the call. Because references are
 second-class, the callee cannot retain it, and `reborrowEx` passes the same block reference to
 `inc` twice with no unsafety. *Recommendation:* decide this under exit 2i (the plan says the
@@ -124,15 +124,15 @@ overlapping borrows within a call), and loan propagation when a reference is tra
 reborrowed.
 
 **B2. Is `&mut T` linear or affine?** OWNERSHIP_MODEL says `&mut T` is linear "anyway". Its
-control-flow section and MUT_REF_SEMANTICS §7 say an unconsumed borrow may lapse. In the model a
+control-flow section and REF-10's rationale (the former MUT_REF_SEMANTICS §7) say an unconsumed borrow may lapse. In the model a
 reference is non-duplicable but carries no consumption obligation. *Recommendation:* Core has
 three usage modes: Copy (duplicable, droppable), owned linear (neither), and exclusive
 reference (droppable but not duplicable). Conservation applies to owned values only. This is a
-coordinated change to OWNERSHIP_MODEL, MEMORY_SEMANTICS, MUT_REF_SEMANTICS and VALUE_MODEL, not a
+coordinated change to OWNERSHIP_MODEL, MEMORY_SEMANTICS, REF-10's rationale (the former MUT_REF_SEMANTICS)and VALUE_MODEL, not a
 wording fix in one document.
 
 **B3. Is a borrow an alias of the owner's place or a copy?** Today's codegen copies the owner into
-a temporary and writes it back at block exit (MUT_REF_SEMANTICS §8). The model, like the plan's
+a temporary and writes it back at block exit (REF-10's rationale (the former MUT_REF_SEMANTICS §8)). The model, like the plan's
 "stable storage identities", aliases the owner's storage. The two agree only while the frozen-owner
 rule holds. Once a raw pointer derived from the borrow exposes its address, they differ
 observably: the address is the temporary's, not the owner's. *Recommendation:* Core's semantics
@@ -147,7 +147,7 @@ by emitting LLVM `noalias`. Loans are ghost state for checker soundness only. Ad
 optimization later requires that model and a proof against it.
 
 **B5. Reborrow needs a Core form.** The surface language has no reborrow syntax (`&mut *r` does
-not parse; MUT_REF_SEMANTICS §10), but the plan requires "permitted reborrowing". The model's
+not parse; REF-10's rationale (the former MUT_REF_SEMANTICS §10)), but the plan requires "permitted reborrowing". The model's
 `reborrow` is a scoped form: the parent is frozen under an exclusive reborrow and read-only
 under a shared one. *Recommendation:* Core has an explicit scoped reborrow. Elaboration produces
 it for implicit call-argument reborrows (B1). Surface syntax waits for a workload.

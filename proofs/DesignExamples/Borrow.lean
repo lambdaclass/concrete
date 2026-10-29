@@ -16,7 +16,7 @@ shared and exclusive borrows, a reborrow, and an exclusive borrow passed down ac
   longer-lived slot (`stashRef`, the stand-in for "stored in an aggregate or returned").
 
 A borrow here **aliases the owner's storage** (one storage identity). Today's codegen copies
-the owner into a temporary and writes it back at block exit (docs/language/MUT_REF_SEMANTICS.md
+the owner into a temporary and writes it back at block exit (REF-10 of docs/spec/references.md
 §8); design question B3 records the equivalence obligation that choice creates.
 
 This is a design model, not Core: it imports nothing from the compiler.
