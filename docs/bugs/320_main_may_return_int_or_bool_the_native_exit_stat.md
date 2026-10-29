@@ -5,6 +5,7 @@ summary: main may return Int or bool: the native exit status is the result maske
 coverage: reproducer tests/regressions/bug320_main_may_return_int_or_bool_the_native_exit_stat/repro.con, found checking main against OD24 on 2026-10-29; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, runs-exit 42) and check_spec.sh S4 (the pending STMT-7 example)
 class: 13
 silent: yes
+ruling: Violates: STMT-7@3
 -->
 
 **Status:** OPEN

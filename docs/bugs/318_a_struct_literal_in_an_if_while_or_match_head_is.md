@@ -5,6 +5,7 @@ summary: A struct literal in an if, while or match head is accepted without pare
 coverage: reproducer tests/regressions/bug318_a_struct_literal_in_an_if_while_or_match_head_is/repro.con, found checking main against OD16 on 2026-10-29; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, runs-exit 42) and check_spec.sh S4 (the pending SYN-4 examples)
 class: 13
 silent: no
+ruling: Violates: SYN-4@1
 -->
 
 **Status:** OPEN

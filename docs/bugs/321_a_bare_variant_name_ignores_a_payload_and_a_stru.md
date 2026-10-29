@@ -5,6 +5,7 @@ summary: A bare variant name ignores a payload and a struct let over a Copy stru
 coverage: reproducer tests/regressions/bug321_a_bare_variant_name_ignores_a_payload_and_a_stru/repro.con, found checking main against OD25 on 2026-10-29; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, runs-exit 42) and check_spec.sh S4 (the pending PAT-3 example)
 class: 13
 silent: yes
+ruling: Violates: PAT-3@3, PAT-5@3
 -->
 
 **Status:** OPEN

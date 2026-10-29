@@ -6,7 +6,7 @@ fixtures: error_189_trusted_impl_refused.con
 class: 14 — `trusted impl` made every method trusted without declaring it
 silent: yes
 exit: 0b
-ruling: Open: OPEN-22
+ruling: Violates: TRUST-5@2 — trust is declared per function, never on an impl (OD22)
 -->
 
 **Status:** FIXED

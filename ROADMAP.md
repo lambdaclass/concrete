@@ -128,11 +128,22 @@ a link failure, an interpreter refusal or an unrejected leak.
 
 | open bugs by spec ruling ([RULINGS.md](docs/bugs/RULINGS.md)) | open | silent | bugs |
 |---|---|---|---|
+| violates ARITH-2@2 | 1 | 1 | 327 |
 | violates FFI-2@1 | 1 | 1 | 122 |
 | violates FFI-5@1 | 1 | 0 | 114 |
-| violates MOD-2@1 | 1 | 0 | 226 |
+| violates MEM-4@3 | 1 | 1 | 326 |
+| violates MOD-2@1, MOD-6@1 | 1 | 0 | 226 |
+| violates OWN-10@2 | 1 | 0 | 216 |
+| violates OWN-15@3 | 1 | 1 | 328 |
+| violates OWN-7@3 | 1 | 1 | 325 |
+| violates PAT-3@3, PAT-5@3 | 1 | 1 | 321 |
+| violates REF-11@3 | 1 | 1 | 319 |
+| violates STMT-6@2 | 1 | 1 | 323 |
+| violates STMT-7@3 | 1 | 1 | 320 |
+| violates SYN-4@1 | 1 | 0 | 318 |
+| violates TRAIT-10@2 | 1 | 1 | 324 |
+| violates TYPE-6@2 | 1 | 1 | 322 |
 | spec gap (PASS) | 2 | 0 | 054, 077 |
-| open OPEN-17 | 1 | 0 | 216 |
 | outside the spec (performance) | 1 | 0 | 270 |
 | outside the spec (tooling) | 3 | 0 | 049, 058, 064 |
 

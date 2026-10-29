@@ -5,6 +5,7 @@ summary: An integer or float literal with no expected type defaults to Int or Fl
 coverage: reproducer tests/regressions/bug327_an_integer_or_float_literal_with_no_expected_typ/repro.con, found checking main against OD31 on 2026-10-29; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, runs-exit 42) and check_spec.sh S4 (the pending ARITH-2 example)
 class: 13
 silent: yes
+ruling: Violates: ARITH-2@2
 -->
 
 **Status:** OPEN

@@ -5,7 +5,7 @@ summary: a submodule (a module written after `main`, any `mod x;` file, every st
 coverage: a submodule may import a private function or extern of another module (FileSummary.resolveImports, used by Check and Elab for submodules, admits every function), while a top-level module importing it is E0111; fixing it needs a visibility for std's imports of std.libc's non-pub bindings; reproducer tests/regressions/bug226_submodule_imports_private_function/repro.con, found by bug 217's fix 2026-10-24; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, compiles)
 class: 12 — which declarations an import may name: Resolve's rule checks `pub`, the submodule rule Check and Elab use does not
 silent: no
-ruling: Violates: MOD-2@1 — a user program's private import is accepted from a submodule; the fix waits on std.libc's visibility (OPEN-20)
+ruling: Violates: MOD-2@1, MOD-6@1 — a submodule imports a private declaration; std.libc's bindings are private to std (OD20)
 -->
 
 **Status:** OPEN (the fix needs std's internal imports of `std.libc` to be given a visibility, which

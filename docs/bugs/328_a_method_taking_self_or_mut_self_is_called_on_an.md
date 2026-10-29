@@ -5,6 +5,7 @@ summary: A method taking &self or &mut self is called on an owned place with an 
 coverage: reproducer tests/regressions/bug328_a_method_taking_self_or_mut_self_is_called_on_an/repro.con, found checking main against OD32 on 2026-10-29; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, runs-exit 42) and check_spec.sh S4 (the pending OWN-15 example)
 class: 13
 silent: yes
+ruling: Violates: OWN-15@3
 -->
 
 **Status:** OPEN

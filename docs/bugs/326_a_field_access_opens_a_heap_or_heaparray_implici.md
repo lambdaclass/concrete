@@ -5,6 +5,7 @@ summary: A field access opens a Heap or HeapArray implicitly, which MEM-4 refuse
 coverage: reproducer tests/regressions/bug326_a_field_access_opens_a_heap_or_heaparray_implici/repro.con, found checking main against OD30 on 2026-10-29; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, runs-exit 42) and check_spec.sh S4 (the pending MEM-4 example)
 class: 13
 silent: yes
+ruling: Violates: MEM-4@3
 -->
 
 **Status:** OPEN
