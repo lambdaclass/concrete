@@ -1181,6 +1181,14 @@ jobs:
           TOTALITY_BASE: ${{ github.event_name == 'push' && github.event.before || '' }}
         run: bash scripts/tests/check_totality_ratchet.sh
 
+      # SYN-1's other half: the parser accepts exactly the grammar. Generated derivations must
+      # parse, grammar-rejected one-token mutants must not, the parser decides with one token, and
+      # every listed difference may only disappear (grammar/conformance_known.tsv).
+      - name: Grammar conformance (the parser accepts exactly the grammar)
+        env:
+          CONFORMANCE_BASE: ${{ github.event_name == 'push' && github.event.before || '' }}
+        run: bash scripts/tests/check_grammar_conformance.sh
+
       - name: Install clang
         run: if [ "$RUNNER_ENVIRONMENT" = self-hosted ] && command -v clang >/dev/null; then echo "self-hosted runner, using preinstalled clang"; else sudo apt-get update && sudo apt-get install -y clang; fi
 

@@ -94,5 +94,37 @@ echo "=== reserved words against $KEYWORDS ==="
 if python3 "$GC" keywords --known "$KEYWORDS" > "$TMP/kw.out"; then ok "$(tail -1 "$TMP/kw.out")"
 else cat "$TMP/kw.out"; no "reserved words (above)"; fi
 
+echo "=== the three lists only shrink, against the base revision ==="
+# merge-base with origin/main on a branch; the parent on main; CONFORMANCE_BASE when set (CI passes
+# github.event.before on a push). Listing a new difference does not admit it.
+BASE="${CONFORMANCE_BASE:-}"
+case "$BASE" in *[!0]*) ;; *) BASE="" ;; esac
+if [ -z "$BASE" ]; then
+  MB="$(git merge-base HEAD origin/main 2>/dev/null || true)"
+  if [ -z "$MB" ]; then no "no merge-base with origin/main (fetch it, or set CONFORMANCE_BASE)"
+  elif [ "$MB" != "$(git rev-parse HEAD)" ]; then BASE="$MB"
+  else BASE="HEAD~1"; fi
+fi
+if [ -n "$BASE" ] && git rev-parse --verify -q "$BASE^{commit}" >/dev/null; then
+  for list in "$KNOWN" "$LOOKAHEAD" "$KEYWORDS"; do
+    if ! git cat-file -e "$BASE:$list" 2>/dev/null; then
+      echo "  note: $(git rev-parse --short "$BASE") has no $list; this change introduces it"; continue
+    fi
+    git show "$BASE:$list" | awk -F'\t' '!/^#/ && NF { print $1 "\t" $2 }' | LC_ALL=C sort > "$TMP/base.list"
+    awk -F'\t' '!/^#/ && NF { print $1 "\t" $2 }' "$list" | LC_ALL=C sort > "$TMP/cur.list"
+    if [ "$list" = "$LOOKAHEAD" ]; then
+      # Counts: a (function, kind) row may stay or fall, never rise or appear.
+      grown="$(join -t "$(printf '\t')" -a 2 -e 0 -o 0,1.2,2.2 <(awk -F'\t' '!/^#/ && NF {print $1"/"$2"\t"$3}' <(git show "$BASE:$list") | LC_ALL=C sort) \
+               <(awk -F'\t' '!/^#/ && NF {print $1"/"$2"\t"$3}' "$list" | LC_ALL=C sort) | awk -F'\t' '$3 > $2')"
+    else
+      grown="$(LC_ALL=C comm -13 <(cut -f1 "$TMP/base.list") <(cut -f1 "$TMP/cur.list"))"
+    fi
+    [ -z "$grown" ] && ok "$list did not grow against $(git rev-parse --short "$BASE")" \
+      || no "$list grew against $(git rev-parse --short "$BASE"); the list only shrinks: $grown"
+  done
+elif [ -n "$BASE" ]; then
+  no "base revision '$BASE' does not resolve (fetch history, or set CONFORMANCE_BASE)"
+fi
+
 echo "GRAMMAR-CONFORMANCE: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

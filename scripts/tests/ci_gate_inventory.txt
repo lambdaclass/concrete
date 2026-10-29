@@ -115,6 +115,7 @@ bash scripts/tests/check_gate_vacuity.sh
 bash scripts/tests/check_gates_for_diff.sh
 bash scripts/tests/check_generic_enum_inventory.sh
 bash scripts/tests/check_generic_enum_mono.sh
+bash scripts/tests/check_grammar_conformance.sh
 bash scripts/tests/check_grammar_ll1.sh
 bash scripts/tests/check_hashmap_probe_invariants.sh
 bash scripts/tests/check_heavy_slots.sh

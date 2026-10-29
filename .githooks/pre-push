@@ -190,6 +190,12 @@ if grep -qE '^Concrete/|^Concrete\.lean$|^Main\.lean$|^Browser\.lean$|^docs/comp
   echo "pre-push: totality ratchet selected (compiler sources or its baseline changed)"
   SEL+=(--first "bash scripts/tests/check_totality_ratchet.sh")
 fi
+# THE GRAMMAR-CONFORMANCE GATE: the parser, the lexer, the grammar or its lists, or the tool. Also
+# before the docs-only split: a push that changes only grammar/*.tsv can admit a difference.
+if grep -qE '^Concrete/Frontend/(Parser|Lexer|Token)\.lean$|^grammar/|^scripts/tests/lib/grammar_conformance\.py$|^scripts/tools/parse_batch\.lean$|^scripts/tests/check_grammar_conformance\.sh$|^scripts/check_ll1\.py$' <<<"$changed"; then
+  echo "pre-push: grammar conformance selected (parser, lexer or grammar changed)"
+  SEL+=(--first "bash scripts/tests/check_grammar_conformance.sh")
+fi
 if [ "$docs_only" = "1" ]; then
   echo "pre-push: docs-only change — docs gates"
   SEL+=(--first "bash scripts/tests/check_docs_drift.sh"
