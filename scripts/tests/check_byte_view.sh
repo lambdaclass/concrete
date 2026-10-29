@@ -14,7 +14,7 @@
 #      out-of-bounds, and overflow uses return None rather than silently passing.
 #      They exit 0 only when every unsafe use is rejected.
 #
-# See docs/language/BYTE_VIEW.md.
+# See docs/stdlib/BYTE_VIEW.md.
 
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
@@ -26,7 +26,7 @@ COMPILER="$ROOT_DIR/.lake/build/bin/concrete"
 [ -x "$COMPILER" ] || { echo "error: build first ($COMPILER missing)" >&2; exit 2; }
 
 NUMERIC="std/src/numeric.con"
-DOC="docs/language/BYTE_VIEW.md"
+DOC="docs/stdlib/BYTE_VIEW.md"
 
 PASS=0; FAIL=0
 ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
@@ -141,7 +141,7 @@ for ex in http_header_view tlv_packet_view utf8_text_slice wrong_buffer; do
 done
 
 echo "=== 4. design doc present and referenced ==="
-[ -f "$DOC" ] && ok "docs/language/BYTE_VIEW.md present" || no "docs/language/BYTE_VIEW.md missing"
+[ -f "$DOC" ] && ok "docs/stdlib/BYTE_VIEW.md present" || no "docs/stdlib/BYTE_VIEW.md missing"
 
 echo ""
 echo "BYTE-VIEW: PASS=$PASS  FAIL=$FAIL"

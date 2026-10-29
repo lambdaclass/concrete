@@ -43,7 +43,7 @@ examples/byte_view/utf8_text_slice/src/main.con
 Concrete/Proof/GeneratedAttestations.lean
 Concrete/Proof/Proof.lean
 proofs/Examples/HmacSha256/Proofs.lean
-docs/language/BYTE_VIEW.md
+docs/stdlib/BYTE_VIEW.md
 EOF
 )
 

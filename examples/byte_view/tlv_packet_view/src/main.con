@@ -5,7 +5,7 @@
 // stored ByteView via ByteView::of_cursor — the parser idiom: mark a start,
 // advance the cursor over the field, then snapshot [start, cur.pos()) as an
 // owned handle. The returned Tlv stores the type tag plus the value VIEW, with
-// zero copying of the payload bytes. See docs/language/BYTE_VIEW.md.
+// zero copying of the payload bytes. See docs/stdlib/BYTE_VIEW.md.
 
 mod tlv_packet_view {
 

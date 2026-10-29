@@ -1197,7 +1197,7 @@ whole picture is in one place.
   `BoundFn` values need a storage workload, and `from(param)` stays deferred
   (old Phase 7 #8e) and is explicitly NOT the H1 fix.
 - **Owned `ByteView` zero-copy stored idiom** — old Phase 5 #5a. DONE (2026-06-21):
-  `docs/language/BYTE_VIEW.md` design + `std.numeric` `ByteView { off, len, buf_len }`
+  `docs/stdlib/BYTE_VIEW.md` design + `std.numeric` `ByteView { off, len, buf_len }`
   (reference-free Copy, checked Option-returning access, overflow / bounds /
   wrong-buffer-length brand) + the explicit UTF-8-validated raw→`Text` step
   (`std.text` `try_from_raw`/`validate_utf8`, `ByteView::try_text`) +

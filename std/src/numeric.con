@@ -411,7 +411,7 @@ mod numeric {
 
     // ---- ByteView: owned, Copy, reference-free [off, len) handle ----
     //
-    // See docs/language/BYTE_VIEW.md. A ByteView stores no pointer and borrows nothing, so
+    // See docs/stdlib/BYTE_VIEW.md. A ByteView stores no pointer and borrows nothing, so
     // it is freely storable in struct fields, returnable, and Copy.
     //
     // R-0483: THIS IS A COORDINATE API AND SAYS SO. A view is a RANGE, not a handle on a

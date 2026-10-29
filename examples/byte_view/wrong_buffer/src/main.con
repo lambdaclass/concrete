@@ -11,7 +11,7 @@
 //   3. construction overflow — off+len wraps u64 => None
 //
 // This program SUCCEEDS (exit 0) exactly when every unsafe use is rejected.
-// See docs/language/BYTE_VIEW.md.
+// See docs/stdlib/BYTE_VIEW.md.
 
 mod wrong_buffer {
 

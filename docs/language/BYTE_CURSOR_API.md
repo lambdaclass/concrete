@@ -21,7 +21,7 @@ Status: design reference (Phase 3, item 65) — **signatures superseded by R-048
 >
 > Read the endian/bounds discussion below as design rationale. For current
 > signatures see `std/src/numeric.con`; for the properties see
-> `scripts/tests/check_view_lifetime.sh` and `docs/language/BYTE_VIEW.md`.
+> `scripts/tests/check_view_lifetime.sh` and `docs/stdlib/BYTE_VIEW.md`.
 
 This document specifies the endian-aware byte cursor APIs for Concrete's stdlib. These APIs replace the hand-rolled byte-to-integer conversion patterns found in every parser pressure test with checked, library-first primitives. No bitfield syntax is proposed; the approach is plain functions on plain types.
 

@@ -1,5 +1,7 @@
 # Owned Byte Views
 
+Moved from docs/language: a std library design and contract, not a language rule (the language rules it relies on are in docs/spec).
+
 Status: IMPLEMENTED — ROADMAP old Phase 5 #5a. Design + `std.numeric.ByteView` +
 `std.text` UTF-8 path + `examples/byte_view/*`, gated by
 `scripts/tests/check_byte_view.sh`.

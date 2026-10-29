@@ -8,7 +8,7 @@
 // This is the idiom that a `&[u8]` field would express in a language with
 // lifetimes. Concrete has none, and references are second-class (never stored,
 // never returned), so the stored view is the value-model-clean substitute.
-// See docs/language/BYTE_VIEW.md.
+// See docs/stdlib/BYTE_VIEW.md.
 
 mod http_header_view {
 
