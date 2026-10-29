@@ -421,8 +421,8 @@ Each step lands with the gate green. The steps run in this order:
     them. Its entries cover what the grammar cannot say, such as the precedence and
     trailing-value rules.
 
-LANGUAGE_GAPS and KNOWN_HOLES are not migrated, because they record open problems, not
-rules. A gap or hole that a rule will close is that rule's `partial` or `pending` tracking ID,
+LANGUAGE_GAPS (now `docs/archive/LANGUAGE_GAPS.md`, a historical record) and KNOWN_HOLES are not
+migrated, because they record open problems, not rules. A gap or hole that a rule will close is that rule's `partial` or `pending` tracking ID,
 and the record cites the rule's ID.
 
 The migration is complete when no `unmigrated` row remains in `codes.tsv` and every row of

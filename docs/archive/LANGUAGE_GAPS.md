@@ -1,6 +1,6 @@
 # Phase H Language-Gap Audit — Historical Record
 
-Status: historical. This records what the first real programs
+Status: historical (archived from docs/language, which holds no language rules now). This records what the first real programs
 (`examples/policy_engine/` and `examples/mal/`) pulled into the language and
 stdlib. It is not a current backlog. Residual defects belong in
 [the bug ledger](../bugs/README.md) and scheduled work belongs in
@@ -24,7 +24,7 @@ hex, binary, octal, boolean, and padding helpers; `String::append`,
 compiler desugaring supports mixed-value `print`/`println`.
 
 String interpolation and a general format-pattern language remain deliberately
-deferred in [STRING_TEXT_CONTRACT.md](STRING_TEXT_CONTRACT.md). Their absence is
+deferred in [STRING_TEXT_CONTRACT.md](../language/STRING_TEXT_CONTRACT.md). Their absence is
 not the original Phase-H blocker and is not a “remaining finding” in this
 historical audit.
 
@@ -65,7 +65,7 @@ a concrete identity bug, not absence of the language feature.
 
 ### ~~9. No destructuring let~~ — FIXED (enum/struct forms)
 
-**Status:** Fixed for the forms Concrete actually has. Enum-variant destructuring `let Type::Variant { a, b } = expr;` (with optional diverging `else { ... }`) and struct destructuring `let StructType { a, b } = expr;` are implemented in `parseLet` and desugar to `match` / field-access lets before Check and Elab. Tests: `tests/programs/let_else.con`, `tests/programs/struct_destructure.con`. Design: [PATTERN_DESTRUCTURING.md](PATTERN_DESTRUCTURING.md).
+**Status:** Fixed for the forms Concrete actually has. Enum-variant destructuring `let Type::Variant { a, b } = expr;` (with optional diverging `else { ... }`) and struct destructuring `let StructType { a, b } = expr;` are implemented in `parseLet` and desugar to `match` / field-access lets before Check and Elab. Tests: `tests/programs/let_else.con`, `tests/programs/struct_destructure.con`. Design: [PATTERN_DESTRUCTURING.md](../language/PATTERN_DESTRUCTURING.md).
 
 Tuple destructuring `let (a, b) = ...;` remains unsupported, but only because Concrete has no tuple types — there is nothing to destructure.
 
@@ -106,7 +106,7 @@ lowering, and formatter respect it. The spurious **E0225** statement-match-arm c
 gone (`=> { side(); }` is now `Unit` and agrees with a unit arm). Done in 3 staged
 commits (flag threading → semantics flip → formatter); locked by
 `tests/programs/regress_stmt_match_arm_unit.con`. See ROADMAP #36 and
-[STATEMENT_EXPRESSION_MODEL.md](STATEMENT_EXPRESSION_MODEL.md). Deferred follow-ups
+[STATEMENT_EXPRESSION_MODEL.md](../language/STATEMENT_EXPRESSION_MODEL.md). Deferred follow-ups
 (not the bug): braced block-as-value in arbitrary position (`let x = { …; v }`) is
 still not parsed; and the formatter doesn't round-trip a direct value-arm containing an
 if-expression (block-wraps it). Original report below.

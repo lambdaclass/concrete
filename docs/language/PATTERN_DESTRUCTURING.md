@@ -14,7 +14,7 @@ Note: some examples below use older schematic names such as `ParseResult` or `Se
 For the LL(1) grammar commitment, see `research/compiler/ll1-grammar.md`.
 For what Concrete permanently excludes, see [ANTI_FEATURES.md](ANTI_FEATURES.md).
 For the error handling context that motivates this, see [ERROR_HANDLING_DESIGN.md](ERROR_HANDLING_DESIGN.md).
-For the language gap that first identified this need, see [LANGUAGE_GAPS.md](LANGUAGE_GAPS.md) (item 9: "No destructuring let").
+For the language gap that first identified this need, see [LANGUAGE_GAPS.md](../archive/LANGUAGE_GAPS.md) (item 9: "No destructuring let").
 
 ---
 
