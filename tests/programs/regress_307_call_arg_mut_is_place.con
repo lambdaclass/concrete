@@ -1,0 +1,136 @@
+// Bug 307: Lower passed a call argument `&mut x` (x not yet slot-backed) as a temporary copy of `x`
+// and loaded it back after the call; `&mut x` is now `x`'s own place, as every other spelling is
+// (OD2 part 3). No defined program told the two apart (OD15, G19: a pointer derived from a loan is
+// valid only while the loan lives), so this is a differential fixture of defined programs over the
+// shapes the copy covered: binary = --interp = 42, on main as on the fix.
+fn bump(p: &mut i64) {
+    *p = *p + 1;
+}
+
+fn plain() -> i64 {
+    let mut x: i64 = 11;
+    bump(&mut x);
+    return x;
+}
+
+// Plain lending (OD2 part 1): a `&mut` parameter passed on to calls in sequence.
+fn lend(r: &mut i64) {
+    bump(r);
+    bump(r);
+    bump(r);
+}
+
+fn sequence() -> i64 {
+    let mut x: i64 = 0;
+    lend(&mut x);
+    return x;
+}
+
+fn tick(p: &mut i64) -> bool {
+    *p = *p + 1;
+    return *p < 5;
+}
+
+// A call in a loop condition.
+fn in_condition() -> i64 {
+    let mut x: i64 = 0;
+    while tick(&mut x) {
+    }
+    return x;
+}
+
+fn adv(p: &mut i64) -> i64 {
+    *p = *p + 2;
+    return *p;
+}
+
+// A call in a `for` step: k = 0, 2, 4, 6, then 8 stops it after 4 iterations.
+fn in_step() -> i64 {
+    let mut s: i64 = 0;
+    let mut n: i64 = 0;
+    for (let mut k: i64 = 0; k < 7; k = adv(&mut s)) {
+        n = n + 1;
+    }
+    return n;
+}
+
+fn inc(p: &mut i64) -> i64 {
+    *p = *p + 1;
+    return *p;
+}
+
+fn two(a: i64, b: i64) -> i64 {
+    return a * 10 + b;
+}
+
+// Nested calls, each lending a different local.
+fn nested() -> i64 {
+    let mut x: i64 = 0;
+    let mut y: i64 = 3;
+    let r: i64 = two(inc(&mut x), inc(&mut y));
+    // r = 14, x = 1
+    return r % 10 + x;
+}
+
+fn setall(a: &mut [i64; 3]) {
+    a[0] = 1;
+    a[1] = 1;
+    a[2] = 1;
+}
+
+fn array() -> i64 {
+    let mut a: [i64; 3] = [0, 0, 0];
+    setall(&mut a);
+    return a[0] + a[1] + a[2];
+}
+
+fn put<T: Copy>(p: &mut T, v: T) {
+    *p = v;
+}
+
+fn generic() -> i64 {
+    let mut x: i64 = 0;
+    put::<i64>(&mut x, 1);
+    return x;
+}
+
+struct Copy P {
+    a: i64,
+    b: i64,
+}
+
+fn seta(p: &mut P) {
+    p.a = p.a + 1;
+}
+
+fn setf(q: &mut i64) {
+    *q = 0;
+}
+
+// A whole-struct argument, a field argument, then the whole struct again.
+fn whole_and_field() -> i64 {
+    let mut s: P = P { a: 0, b: 5 };
+    seta(&mut s);
+    setf(&mut s.b);
+    seta(&mut s);
+    return s.a + s.b;
+}
+
+// Trusted code that writes through a raw pointer derived from the loan while the loan lives (G19).
+trusted fn write_via_raw(p: &mut i64) {
+    let q: *mut i64 = p as *mut i64;
+    *q = 7;
+}
+
+fn raw_within_loan() -> i64 {
+    let mut x: i64 = 1;
+    write_via_raw(&mut x);
+    return x;
+}
+
+fn main() -> Int {
+    // 12 + 3 + 5 + 4 + 5 + 3 + 1 + 2 + 7 = 42
+    let t: i64 = plain() + sequence() + in_condition() + in_step() + nested() + array() + generic()
+        + whole_and_field() + raw_within_loan();
+    return t as Int;
+}

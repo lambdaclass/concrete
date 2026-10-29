@@ -1293,44 +1293,25 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           return .reg loadDst innerTy
       | none => return .unit
     else
-    -- Track borrowMut args that need write-back after the call
+    -- Bug 307: every argument lowers as the expression it is. An argument `&mut x` used to copy an
+    -- unpromoted `x` into a temporary `mutref.` slot, pass the temporary and load it back after the
+    -- call. `&mut` is a reference to the place, and copy-in/copy-out is not the language's semantics
+    -- (OD2 part 3). The copy agreed with `x`'s slot only because the checker refuses an argument
+    -- overlapping the `&mut` one (E0293): Lower chose to copy before lowering the other arguments,
+    -- so `f(&mut x, &x)` would have passed two slots. That is the exclusivity guarantee no pass may
+    -- rely on until it is proven (OD15(b)). `&mut x` now promotes `x` as it does anywhere else
+    -- (`placeAddr` / `addrOfLocal`; a branch or loop around the call promotes it before it, from the
+    -- address-taken walk), and there is nothing to write back.
+    -- All borrow/place args (incl. `&mut o.f`, `&mut a[i]`, `&mut a[i].f`) lower through
+    -- `borrowMut`/`placeAddr`, which GEPs into a STABLE base address (promoted local or pointer) —
+    -- never a loaded copy. A by-value array argument is the callee's own copy (bug 190).
     let mut aVals : List SVal := []
-    let mut mutBorrows : List (LocalKey × String × Ty) := []  -- (var key, allocaReg, innerTy)
     for arg in args do
-      match arg with
-      | .borrowMut (.ident varName innerTy) _ =>
-        refuseBorrowInConstInit
-        -- If the variable is already promoted to a stable alloca (address taken,
-        -- e.g. an address-taken loop counter), pass that alloca directly — the
-        -- alloca IS the storage, so no copy + write-back is needed (and a
-        -- write-back via setVar would desync from the promoted alloca).
-        match ← isPromoted varName.key with
-        | some (allocaReg, _) =>
-          aVals := .reg allocaReg (.refMut innerTy) :: aVals
-        | none =>
-          -- For &mut borrows of variables: alloca, store current value, pass ptr
-          -- After the call we'll load back to propagate mutations.
-          -- The alloca is hoisted to the entry block so that loops don't
-          -- grow the stack on every iteration.
-          let curVal ← lowerExpr (.ident varName innerTy)
-          let slot ← freshReg "mutref."
-          emitEntryAlloca (.alloca slot innerTy)
-          emit (.store curVal (.reg slot innerTy))
-          aVals := .reg slot (.refMut innerTy) :: aVals
-          mutBorrows := (varName.key, slot, innerTy) :: mutBorrows
-      | _ =>
-        -- All other borrow/place args (incl. `&mut o.f`, `&mut a[i]`,
-        -- `&mut a[i].f`) lower through `borrowMut`/`placeAddr`, which GEPs into a
-        -- STABLE base address (promoted local or pointer) — never a loaded copy.
-        -- The old `&mut field` special case GEP'd into `lowerExpr obj`, a loaded
-        -- struct VALUE, so the field write was silently lost.
-        -- A by-value array argument is the callee's own copy (bug 190).
-        let v ← snapshotArrayValue arg (← lowerExpr arg)
-        aVals := v :: aVals
-    -- Bug 297: the arguments and write-backs were appended one at a time (quadratic in the
-    -- call's arity); they are consed and put back in argument order once.
+      let v ← snapshotArrayValue arg (← lowerExpr arg)
+      aVals := v :: aVals
+    -- Bug 297: the arguments were appended one at a time (quadratic in the call's arity); they are
+    -- consed and put back in argument order once.
     aVals := aVals.reverse
-    mutBorrows := mutBorrows.reverse
     -- Resolve fn-pointer variables: if the call target is a local variable
     -- holding a fn pointer, resolve it to the actual function / register name.
     -- A statically-known target is an `SVal.fnRef`, so devirtualization here is
@@ -1356,20 +1337,10 @@ partial def lowerExpr (e : CExpr) : LowerM SVal := do
           throwLower s!"Lower: indirect callee '{binding}' is not bound to a fn-pointer register"
     if ty == .unit || ty == .never then
       emit (.call none callTarget aVals ty)
-      -- Write back mutably borrowed variables
-      for (varName, slot, innerTy) in mutBorrows do
-        let loadBack ← freshReg "wb."
-        emit (.load loadBack (.reg slot innerTy) innerTy)
-        setVar varName (.reg loadBack innerTy)
       return .unit
     else
       let dst ← freshReg
       emit (.call (some dst) callTarget aVals ty)
-      -- Write back mutably borrowed variables
-      for (varName, slot, innerTy) in mutBorrows do
-        let loadBack ← freshReg "wb."
-        emit (.load loadBack (.reg slot innerTy) innerTy)
-        setVar varName (.reg loadBack innerTy)
       return .reg dst ty
 
   | .structLit name _typeArgs fields ty =>

@@ -8557,6 +8557,41 @@ else
     echo "FAIL  regress_306_for_step_after_body_defers.con: --interp gave '$r306_i', want output 42 and status 0 (the binary exits 42)"
     FAIL=$((FAIL + 1))
 fi
+# Bug 307: a call argument `&mut x` is `x`'s place (OD2 part 3), not a copy written back after the
+# call, which agreed with the place only under the checker's unproven exclusivity guarantee (OD15(b)).
+# A differential fixture of defined programs: run_ok compares the binary with 42 and the interpreter
+# leg below compares --interp.
+run_ok "$TESTDIR/regress_307_call_arg_mut_is_place.con" 42
+r307_i=$($COMPILER "$TESTDIR/regress_307_call_arg_mut_is_place.con" --interp </dev/null 2>&1; echo "rc=$?")
+if [ "$r307_i" = "$(printf '42\nrc=0')" ]; then
+    echo "  ok  regress_307_call_arg_mut_is_place.con: --interp prints 42 and exits 0, as the binary exits 42"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  regress_307_call_arg_mut_is_place.con: --interp gave '$r307_i', want output 42 and status 0 (the binary exits 42)"
+    FAIL=$((FAIL + 1))
+fi
+# The lowering itself: no call argument gets a `mutref.` copy slot (main emitted 23 such names for
+# this fixture). The differential legs above pass with the copy too, since no defined program
+# observes it; this leg fails if the copy comes back.
+r307_ir=$($COMPILER "$TESTDIR/regress_307_call_arg_mut_is_place.con" --emit-llvm 2>/dev/null) && r307_irc=0 || r307_irc=$?
+r307_mr=$(printf '%s\n' "$r307_ir" | grep -c 'mutref\.' || true)
+if [ "$r307_irc" = "0" ] && [ -n "$r307_ir" ] && [ "$r307_mr" = "0" ]; then
+    echo "  ok  regress_307_call_arg_mut_is_place.con: no argument copy slot (mutref.) in the LLVM IR"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  regress_307_call_arg_mut_is_place.con: --emit-llvm exit $r307_irc, $r307_mr mutref. names (want exit 0, none)"
+    FAIL=$((FAIL + 1))
+fi
+# Bug 307, second fixture: raw-pointer, Heap and `&mut`-parameter owners of a `&mut` call argument.
+run_ok "$TESTDIR/regress_307_call_arg_owner_types.con" 42
+r3072_i=$($COMPILER "$TESTDIR/regress_307_call_arg_owner_types.con" --interp </dev/null 2>&1; echo "rc=$?")
+if [ "$r3072_i" = "$(printf '42\nrc=0')" ]; then
+    echo "  ok  regress_307_call_arg_owner_types.con: --interp prints 42 and exits 0, as the binary exits 42"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  regress_307_call_arg_owner_types.con: --interp gave '$r3072_i', want output 42 and status 0 (the binary exits 42)"
+    FAIL=$((FAIL + 1))
+fi
 # Bug 291: every stage found a struct, enum or newtype by name with a search of the declaration
 # lists per use, so n types each used once took n². The fixture's lookups (layout offsets, a Copy
 # struct, an enum payload, a newtype) return 42; then a program of 8000 Copy structs, each built
