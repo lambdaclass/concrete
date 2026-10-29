@@ -1,8 +1,9 @@
 # Language Shape
 
-Status: standing reference
+Status: standing reference (project direction, moved from docs/language: the rules it commits to are
+stated in the language specification, [docs/spec](../spec/README.md)).
 
-This document makes Concrete's long-term language shape decisions explicit instead of letting them emerge from local convenience. It synthesizes commitments from [IDENTITY.md](../project/IDENTITY.md), [DESIGN_POLICY.md](../project/DESIGN_POLICY.md), [DECISIONS.md](../project/DECISIONS.md), and [SAFETY.md](SAFETY.md) into a single picture of what Concrete is becoming.
+This document makes Concrete's long-term language shape decisions explicit instead of letting them emerge from local convenience. It synthesizes commitments from [IDENTITY.md](IDENTITY.md), [DESIGN_POLICY.md](DESIGN_POLICY.md), [DECISIONS.md](DECISIONS.md), and [SAFETY.md](../language/SAFETY.md) into a single picture of what Concrete is becoming.
 
 ## The Language Concrete Is Trying To Be
 
@@ -40,11 +41,11 @@ Semantic effects (file, network, allocation, etc.) are declared in function sign
 - `trusted` — audited pointer-level containment behind safe APIs
 - `with(Unsafe)` — foreign boundary authority
 
-Each concept does one thing. They do not overlap. See [SAFETY.md](SAFETY.md).
+Each concept does one thing. They do not overlap. See [SAFETY.md](../language/SAFETY.md).
 
 ### Ownership model: linear by default
 
-All structs and enums are linear (must be consumed exactly once) unless marked `Copy`. A linear variable cannot be *overwritten while still live* (E0219); reassigning one whose old value has already been consumed is legal and is the ordinary fold/accumulate pattern (`acc = f(acc, x)`, including inside loops — see [OWNERSHIP_MODEL.md](OWNERSHIP_MODEL.md) "Linear rebind"). Branches must agree on consumption. Loops cannot consume linear variables from outer scope. Resources have deterministic, explicit destruction: the compiler rejects an unconsumed live value instead of silently auto-dropping it at scope exit. Generated recursive drop glue is allowed only inside an explicit owner-consuming operation such as `x.drop()` / `defer x.drop()`.
+All structs and enums are linear (must be consumed exactly once) unless marked `Copy`. A linear variable cannot be *overwritten while still live* (E0219); reassigning one whose old value has already been consumed is legal and is the ordinary fold/accumulate pattern (`acc = f(acc, x)`, including inside loops — see [OWNERSHIP_MODEL.md](../language/OWNERSHIP_MODEL.md) "Linear rebind"). Branches must agree on consumption. Loops cannot consume linear variables from outer scope. Resources have deterministic, explicit destruction: the compiler rejects an unconsumed live value instead of silently auto-dropping it at scope exit. Generated recursive drop glue is allowed only inside an explicit owner-consuming operation such as `x.drop()` / `defer x.drop()`.
 
 **Depends on:** Linearity checking in Check.
 **Enables:** Resource safety without GC, deterministic cleanup.
@@ -90,17 +91,17 @@ These are areas where the current design may evolve, but only under explicit cri
 
 ## Shape Principles
 
-1. **Features must earn admission.** The default answer to "should we add X?" is "not yet." See [DESIGN_POLICY.md](../project/DESIGN_POLICY.md).
+1. **Features must earn admission.** The default answer to "should we add X?" is "not yet." See [DESIGN_POLICY.md](DESIGN_POLICY.md).
 2. **Removals are improvements.** Making the language smaller (removing `main!()`, narrowing `trusted`) makes it more coherent.
 3. **Constraints compound.** Each "no" decision makes the remaining language easier to verify, teach, and audit.
 4. **Real programs test shape.** The language shape should be validated by writing serious programs (Phase H), not by thought experiments alone.
-5. **Document "no" decisions.** A rejected feature with a recorded rationale is more valuable than a feature added without one. See [DECISIONS.md](../project/DECISIONS.md).
+5. **Document "no" decisions.** A rejected feature with a recorded rationale is more valuable than a feature added without one. See [DECISIONS.md](DECISIONS.md).
 
 ## Related Documents
 
-- [IDENTITY.md](../project/IDENTITY.md) — what Concrete is and is not
-- [DESIGN_POLICY.md](../project/DESIGN_POLICY.md) — feature admission criteria
-- [DECISIONS.md](../project/DECISIONS.md) — recorded "no" and "not yet" decisions
-- [SAFETY.md](SAFETY.md) — the three-way trust/capability/unsafe model
+- [IDENTITY.md](IDENTITY.md) — what Concrete is and is not
+- [DESIGN_POLICY.md](DESIGN_POLICY.md) — feature admission criteria
+- [DECISIONS.md](DECISIONS.md) — recorded "no" and "not yet" decisions
+- [SAFETY.md](../language/SAFETY.md) — the three-way trust/capability/unsafe model
 - [PROVABLE_SUBSET.md](../verification/PROVABLE_SUBSET.md) — proof-eligible subset definition
 - [../research/language/high-integrity-profile.md](../../research/language/high-integrity-profile.md) — high-integrity profile direction

@@ -66,7 +66,7 @@ Use these files as the primary reference once a design has moved out of explorat
 - [FFI.md](platform/FFI.md) — externs, raw pointers, and the `Unsafe` boundary
 - [DESIGN_POLICY.md](project/DESIGN_POLICY.md) — feature-admission criteria and design filter
 - [DECISIONS.md](project/DECISIONS.md) — first-class "no" and "not yet" decisions
-- [LANGUAGE_SHAPE.md](language/LANGUAGE_SHAPE.md) — long-term structural commitments for the language
+- [LANGUAGE_SHAPE.md](project/LANGUAGE_SHAPE.md) — long-term structural commitments for the language
 - [PROOF_WORKFLOW.md](verification/PROOF_WORKFLOW.md) — proof-authoring and maintenance workflow: choose, generate, write, attach, verify, diagnose, repair, refactor
 - [PROOF_SYNTHESIS.md](verification/PROOF_SYNTHESIS.md) — LLM-guided proof synthesis target: AI searches for invariants/lemmas/proofs, Lean replay decides evidence
 - [SPARK_CLASS_ASSURANCE.md](verification/SPARK_CLASS_ASSURANCE.md) — SPARK-class assurance target and AI-facing guide for contracts, loop invariants, frame/dependency facts, ghost/spec code, and package evidence

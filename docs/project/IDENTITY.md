@@ -4,7 +4,7 @@ Status: stable reference
 
 This document states what Concrete is, what it optimizes for, and what it is not.
 
-For feature admission criteria, see [DESIGN_POLICY.md](DESIGN_POLICY.md). For recorded "no" and "not yet" decisions, see [DECISIONS.md](DECISIONS.md). For long-term shape commitments, see [LANGUAGE_SHAPE.md](../language/LANGUAGE_SHAPE.md).
+For feature admission criteria, see [DESIGN_POLICY.md](DESIGN_POLICY.md). For recorded "no" and "not yet" decisions, see [DECISIONS.md](DECISIONS.md). For long-term shape commitments, see [LANGUAGE_SHAPE.md](LANGUAGE_SHAPE.md).
 
 ## What Concrete Is
 

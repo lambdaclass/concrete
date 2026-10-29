@@ -8,7 +8,7 @@ This is not a list of things we have not gotten around to building. Every entry 
 
 For the language identity, see [IDENTITY.md](../project/IDENTITY.md).
 For permanent and deferred decisions, see [DECISIONS.md](../project/DECISIONS.md).
-For the language shape commitments, see [LANGUAGE_SHAPE.md](LANGUAGE_SHAPE.md).
+For the language shape commitments, see [LANGUAGE_SHAPE.md](../project/LANGUAGE_SHAPE.md).
 For design admission criteria, see [DESIGN_POLICY.md](../project/DESIGN_POLICY.md).
 
 ---
