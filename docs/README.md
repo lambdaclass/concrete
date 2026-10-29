@@ -57,7 +57,7 @@ Use these files as the primary reference once a design has moved out of explorat
 - [PREDICTABLE_BOUNDARIES.md](platform/PREDICTABLE_BOUNDARIES.md) — host calls, cleanup paths, determinism sources, failure paths, and memory/UB boundaries for predictable/proved code
 - [FAILURE_STRATEGY.md](language/FAILURE_STRATEGY.md) — abort-only decision, cleanup guarantees, FFI failure consequences, and proof-backed code failure assumptions
 - [PREDICTABLE_FAILURE_DISCIPLINE.md](platform/PREDICTABLE_FAILURE_DISCIPLINE.md) — allowed and excluded failure forms for predictable-profile code
-- [EXECUTION_MODEL.md](language/EXECUTION_MODEL.md) — runtime boundary, allocation model, FFI/runtime contract, and execution profiles
+- [EXECUTION_MODEL.md](platform/EXECUTION_MODEL.md) — runtime boundary, allocation model, FFI/runtime contract, and execution profiles
 - [ARCHITECTURE.md](compiler/ARCHITECTURE.md) — compiler pipeline, artifact flow, pass boundaries, and architecture phase reference
 - [PROOF_AUDIT_PIPELINE.md](verification/PROOF_AUDIT_PIPELINE.md) — target proof/audit pipeline: CheckedProgram, Core, normalized Core, ProofCore, obligations, shared facts, and pass contracts
 - [PASSES.md](compiler/PASSES.md) — pass-by-pass contracts, ownership boundaries, and what each phase may assume

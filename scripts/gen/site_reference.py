@@ -23,7 +23,7 @@ PAGES = {
     "DECISIONS.md": ("Decisions", "docs/project/DECISIONS.md"),
     "DESIGN_POLICY.md": ("Design Policy", "docs/project/DESIGN_POLICY.md"),
     "DIAGNOSTICS.md": ("Diagnostics", "docs/compiler/DIAGNOSTICS.md"),
-    "EXECUTION_MODEL.md": ("Execution Model", "docs/language/EXECUTION_MODEL.md"),
+    "EXECUTION_MODEL.md": ("Execution Model", "docs/platform/EXECUTION_MODEL.md"),
     "FFI.md": ("FFI", "docs/platform/FFI.md"),
     "IDENTITY.md": ("Identity", "docs/project/IDENTITY.md"),
     "LANGUAGE_INVARIANTS.md": ("Language Invariants", "docs/language/LANGUAGE_INVARIANTS.md"),

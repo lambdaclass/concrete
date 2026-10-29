@@ -430,7 +430,7 @@ Concrete is an attempt to make systems programming more inspectable by default. 
 
 [2] Safety Model. `docs/language/SAFETY.md`.
 
-[3] Execution Model. `docs/language/EXECUTION_MODEL.md`.
+[3] Execution Model. `docs/platform/EXECUTION_MODEL.md`.
 
 [4] Standard Library Direction. `docs/stdlib/STDLIB.md`.
 

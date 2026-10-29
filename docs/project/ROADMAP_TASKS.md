@@ -4920,7 +4920,7 @@ correction slice.
   gains an injectable backend. Design record:
   [`docs/project/DETERMINISTIC_SIMULATION.md`](DETERMINISTIC_SIMULATION.md), which
   refines the tier-J+ "deterministic simulation backend" earmark in
-  `docs/language/EXECUTION_MODEL.md`. Gate: `scripts/tests/check_effect_simulation.sh`
+  `docs/platform/EXECUTION_MODEL.md`. Gate: `scripts/tests/check_effect_simulation.sh`
   replays a fixed fault schedule and asserts each effect-boundary property.
 
 **Shared fault-injection checkpoint (2026-10-21; pulled by RocksDB slice 1's companions).** One
@@ -9338,7 +9338,7 @@ producer-only bytes or mint stronger receipts during the development probe.
 
 **Reconciliation (2026-10-19):** Keep; connect candidate identity to R-0357.
 
-**Objective:** Pin the supported LLVM/clang version and gate version drift. The backend today targets whatever `clang` defaults to on the host (`docs/language/EXECUTION_MODEL.md`), yet the TCB already conditions backend correctness on "LLVM version" — so a floating toolchain leaves the trusted boundary a moving, un-audited target and makes native output non-reproducible across hosts (`docs/compiler/DETERMINISM.md` already disclaims binary reproducibility for exactly this reason). Declare one supported LLVM version (or a narrow tested range) as part of the backend contract, and make an upgrade a deliberate, gated event: on a version bump the wrong-code corpus, the backend-contract gate, and IR golden tests must re-pass before the new version is
+**Objective:** Pin the supported LLVM/clang version and gate version drift. The backend today targets whatever `clang` defaults to on the host (`docs/platform/EXECUTION_MODEL.md`), yet the TCB already conditions backend correctness on "LLVM version" — so a floating toolchain leaves the trusted boundary a moving, un-audited target and makes native output non-reproducible across hosts (`docs/compiler/DETERMINISM.md` already disclaims binary reproducibility for exactly this reason). Declare one supported LLVM version (or a narrow tested range) as part of the backend contract, and make an upgrade a deliberate, gated event: on a version bump the wrong-code corpus, the backend-contract gate, and IR golden tests must re-pass before the new version is
 
  declared supported. This is the cheap control that turns the moving boundary into
  a fixed one; the structured `BackendIR` contract (Task R-0288) and a future hand-written
@@ -11111,7 +11111,7 @@ Context: [R-0416](#task-r-0416), [R-0299](#task-r-0299), [R-0300](#task-r-0300),
 
 Synchronous host completion does not remove device-side concurrency. No automatic
 offload, managed shared heap or general recursive device runtime follows from these
-questions. Context: [execution model](../language/EXECUTION_MODEL.md), research C24–C26.
+questions. Context: [execution model](../platform/EXECUTION_MODEL.md), research C24–C26.
 
 Any later adoption needs a forcing workload, bounded evidence and an explicit
 owner decision under the [design policy](DESIGN_POLICY.md) and

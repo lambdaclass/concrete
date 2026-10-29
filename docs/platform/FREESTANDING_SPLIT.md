@@ -5,7 +5,7 @@ Status: reference (Phase 1, item 34)
 This document defines the two execution targets for Concrete programs: **freestanding** (no-std, no hosted runtime) and **hosted** (stdlib available, OS-backed entry point). It specifies what each target provides, excludes, and how they relate to the predictable profile.
 
 For profile definitions and gates, see [PROFILES.md](PROFILES.md).
-For the execution model and stdlib layers, see [EXECUTION_MODEL.md](../language/EXECUTION_MODEL.md).
+For the execution model and stdlib layers, see [EXECUTION_MODEL.md](EXECUTION_MODEL.md).
 For the predictable runtime boundary, see [PREDICTABLE_BOUNDARIES.md](PREDICTABLE_BOUNDARIES.md).
 For the stdlib module inventory, see [STDLIB.md](../stdlib/STDLIB.md).
 

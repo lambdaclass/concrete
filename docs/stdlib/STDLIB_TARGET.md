@@ -6,7 +6,7 @@ This document names the exact modules and APIs that must exist in the first-rele
 
 For the stdlib design principles that filter every API, see [STDLIB_DESIGN_PRINCIPLES.md](STDLIB_DESIGN_PRINCIPLES.md).
 For the existing stdlib direction and module descriptions, see [STDLIB.md](STDLIB.md).
-For the execution model layers (core / alloc / hosted), see [EXECUTION_MODEL.md](../language/EXECUTION_MODEL.md).
+For the execution model layers (core / alloc / hosted), see [EXECUTION_MODEL.md](../platform/EXECUTION_MODEL.md).
 For Phase 3 exit criteria, see [PHASE_EXIT_CHECKLISTS.md](../compiler/PHASE_EXIT_CHECKLISTS.md).
 
 ---

@@ -4,7 +4,7 @@ Status: reference
 
 This document defines Concrete's failure strategy: what can fail, how the language responds, what cleanup runs, what FFI must assume, and what proof-backed code may rely on. It is the authoritative reference for panic/abort/failure decisions.
 
-For the general execution model, see [EXECUTION_MODEL.md](EXECUTION_MODEL.md).
+For the general execution model, see [EXECUTION_MODEL.md](../platform/EXECUTION_MODEL.md).
 For predictable-profile runtime boundaries, see [PREDICTABLE_BOUNDARIES.md](../platform/PREDICTABLE_BOUNDARIES.md).
 For proof semantics gaps, see [PROOF_SEMANTICS_BOUNDARY.md](../verification/PROOF_SEMANTICS_BOUNDARY.md).
 

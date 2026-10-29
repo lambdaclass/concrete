@@ -6,7 +6,7 @@ other evidence apply, and how effect/trust boundaries constrain those scopes.
 For the safety model and three-way split, see [SAFETY.md](../language/SAFETY.md).
 For the provable subset definition, see [PROVABLE_V1.md](PROVABLE_V1.md).
 For memory/ownership guarantees, see [MEMORY_GUARANTEES.md](../language/MEMORY_GUARANTEES.md).
-For the execution model and runtime boundary, see [EXECUTION_MODEL.md](../language/EXECUTION_MODEL.md).
+For the execution model and runtime boundary, see [EXECUTION_MODEL.md](../platform/EXECUTION_MODEL.md).
 For the language-semantics vs proof-semantics boundary, see [PROOF_SEMANTICS_BOUNDARY.md](PROOF_SEMANTICS_BOUNDARY.md).
 
 ---

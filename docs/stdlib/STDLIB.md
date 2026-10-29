@@ -121,7 +121,7 @@ The stdlib should not quietly assume one overflow story while docs and proofs as
 
 ## Execution Model Alignment
 
-The stdlib is classified into three layers by host dependency, documented in [EXECUTION_MODEL.md](../language/EXECUTION_MODEL.md):
+The stdlib is classified into three layers by host dependency, documented in [EXECUTION_MODEL.md](../platform/EXECUTION_MODEL.md):
 
 | Layer | Modules | Host assumption |
 |-------|---------|-----------------|

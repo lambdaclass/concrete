@@ -6,7 +6,7 @@ chapter covers how executions end (STMT-1 to STMT-3), evaluation order (STMT-4),
 appear (STMT-5), loops (STMT-6), `main` (STMT-7), value blocks (STMT-8) and returning a value on
 every path (STMT-9). The design records are
 [STATEMENT_EXPRESSION_MODEL.md](../language/STATEMENT_EXPRESSION_MODEL.md)
-and [MAIN_EXIT_MODEL.md](../platform/MAIN_EXIT_MODEL.md). [EXECUTION_MODEL.md](../language/EXECUTION_MODEL.md)
+and [MAIN_EXIT_MODEL.md](../platform/MAIN_EXIT_MODEL.md). [EXECUTION_MODEL.md](../platform/EXECUTION_MODEL.md)
 keeps the runtime and platform description (hosted runtime, startup, allocation, targets).
 
 ## Rules

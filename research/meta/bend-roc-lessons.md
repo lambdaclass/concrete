@@ -241,7 +241,7 @@ device suitability or uniqueness of all reachable memory.
 
 ### Conditional GPU Investigation For Concrete
 
-Relevant foundations are [Execution Model](../../docs/language/EXECUTION_MODEL.md),
+Relevant foundations are [Execution Model](../../docs/platform/EXECUTION_MODEL.md),
 [SSA](../../Concrete/IR/SSA.lean), [runtime builtins](../../Concrete/Backend/EmitBuiltins.lean),
 and [concurrency research](../proof-evidence/concurrency-formal-model.md).
 The inspected builtins use host allocation/abort services; a device backend needs
@@ -491,13 +491,13 @@ amendments are identified at the top of this note; all broader questions remain 
 | C15 | Allocation/copy/peak-memory regression measurements | Detect extra growth, retained sharing, and abstraction overhead | [R-0416](../../docs/project/ROADMAP_TASKS.md#task-r-0416) |
 | C16 | Ownership-aware lowering and callable specialization | Sound alias facts, scoped borrows, direct calls; no blanket noalias | [SSA](../../Concrete/IR/SSA.lean), [callable model](../../docs/language/CALLABLE_VALUES_AND_CAPABILITIES.md) |
 | C17 | Check hoisting, constant tables, intentional wrapping | Same bounds/trap/arithmetic semantics before and after | [Arithmetic Policy](../../docs/language/ARITHMETIC_POLICY.md) |
-| C18 | Unboxing, tail-call analysis, allocation reuse | Measure applicability and cleanup/stack behavior; ordinary loops remain available | [Execution Model](../../docs/language/EXECUTION_MODEL.md) |
+| C18 | Unboxing, tail-call analysis, allocation reuse | Measure applicability and cleanup/stack behavior; ordinary loops remain available | [Execution Model](../../docs/platform/EXECUTION_MODEL.md) |
 | C19 | Immutable snapshots and incremental reuse | Saved downstream work exceeds copying; exact cache identities retained | [compiler research](../compiler/COMPILER_PIPELINE_RESEARCH.md) |
 | C20 | Proof-preserving optimization experiment | Fixed spec, replay, differential tests, runtime and memory measurements | [AI-assisted optimization](ai-assisted-optimization.md), [R-0482](../../docs/project/ROADMAP_TASKS.md#task-r-0482) |
 | C21 | Emitted-code validation | Distinguish host compiler safety from native behavior | [R-0299](../../docs/project/ROADMAP_TASKS.md#task-r-0299), [R-0300](../../docs/project/ROADMAP_TASKS.md#task-r-0300) |
 | C22 | Compact indexed data and validated caches | Profile first; owner/bounds/schema/target/corruption controls | [compiler research](../compiler/COMPILER_PIPELINE_RESEARCH.md) |
 | C23 | Explicit allocator/arena experiments | Workload-specific lifetime and peak-memory benefit, no hidden policy | [R-0404](../../docs/project/ROADMAP_BACKLOG.md#task-r-0404) |
-| C24 | Restricted GPU feasibility experiment | One array workload, explicit buffers/transfers, synchronous completion | [Execution Model](../../docs/language/EXECUTION_MODEL.md), [R-0399](../../docs/project/ROADMAP_BACKLOG.md#task-r-0399) |
+| C24 | Restricted GPU feasibility experiment | One array workload, explicit buffers/transfers, synchronous completion | [Execution Model](../../docs/platform/EXECUTION_MODEL.md), [R-0399](../../docs/project/ROADMAP_BACKLOG.md#task-r-0399) |
 | C25 | Device eligibility, runtime/ABI/failure/evidence boundaries | Transitive rejection, target identity, output failure state, CPU/device tests | [SSA](../../Concrete/IR/SSA.lean), [backend builtins](../../Concrete/Backend/EmitBuiltins.lean) |
 | C26 | Honest performance comparisons | Equivalent work/checks, cold/warm costs, transfer/launch costs, adverse cases | [comparative workloads](../workloads/comparative-program-suite.md) |
 | C27 | Reproducible development/deployment artifacts | Separate build latency from runtime speed; no implicit hot-loading commitment | [package design](../packages-tooling/package-manager-design.md) |

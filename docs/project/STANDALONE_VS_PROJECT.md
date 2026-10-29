@@ -142,6 +142,6 @@ Standalone files have no manifest and therefore no policy enforcement. If you ne
 
 - [STDLIB.md](../stdlib/STDLIB.md) — stdlib module inventory and design rules
 - [PROFILES.md](../platform/PROFILES.md) — profile definitions
-- [EXECUTION_MODEL.md](../language/EXECUTION_MODEL.md) — core/alloc/hosted stdlib layers
+- [EXECUTION_MODEL.md](../platform/EXECUTION_MODEL.md) — core/alloc/hosted stdlib layers
 - [bugs/007_no_print_string_builtin.md](../bugs/007_no_print_string_builtin.md) — standalone print gap history (fixed via builtins)
 - [bugs/012_no_standalone_timing_path.md](../bugs/012_no_standalone_timing_path.md) — standalone timing gap history (fixed via builtin)

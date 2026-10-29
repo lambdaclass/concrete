@@ -19,7 +19,7 @@ For the proof-claim taxonomy, see [CLAIM_TAXONOMY.md](../verification/CLAIM_TAXO
 For FFI, trusted boundaries, and capability aliases, see [FFI.md](../platform/FFI.md).
 For diagnostics and error recovery, see [DIAGNOSTICS.md](../compiler/DIAGNOSTICS.md).
 For pass contracts and report modes, see [PASSES.md](../compiler/PASSES.md).
-For the execution model and runtime boundary, see [EXECUTION_MODEL.md](EXECUTION_MODEL.md).
+For the execution model and runtime boundary, see [EXECUTION_MODEL.md](../platform/EXECUTION_MODEL.md).
 For the stdlib module inventory and capability mapping, see [STDLIB.md](../stdlib/STDLIB.md).
 
 ## The Three-Way Split
@@ -305,6 +305,6 @@ High-Integrity ── future profile: same language, stricter rules
 | Error model | [DIAGNOSTICS.md](../compiler/DIAGNOSTICS.md) | [PASSES.md](../compiler/PASSES.md) |
 | Report modes | [PASSES.md](../compiler/PASSES.md) | This document |
 | Proof boundary | [ARCHITECTURE.md](../compiler/ARCHITECTURE.md) | This document, [PASSES.md](../compiler/PASSES.md) |
-| Execution model | [EXECUTION_MODEL.md](EXECUTION_MODEL.md) | [STDLIB.md](../stdlib/STDLIB.md) |
-| High-integrity profile | This document | [IDENTITY.md](../project/IDENTITY.md), [EXECUTION_MODEL.md](EXECUTION_MODEL.md) |
+| Execution model | [EXECUTION_MODEL.md](../platform/EXECUTION_MODEL.md) | [STDLIB.md](../stdlib/STDLIB.md) |
+| High-integrity profile | This document | [IDENTITY.md](../project/IDENTITY.md), [EXECUTION_MODEL.md](../platform/EXECUTION_MODEL.md) |
 | ABI / FFI safety | [ABI.md](../platform/ABI.md) | [FFI.md](../platform/FFI.md), [VALUE_MODEL.md](VALUE_MODEL.md) |

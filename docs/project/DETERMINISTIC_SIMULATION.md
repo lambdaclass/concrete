@@ -2,7 +2,7 @@
 
 **Status:** design record, pull-gated. Not scheduled work. Refines the tier-J+
 "deterministic simulation backend" earmark in
-[EXECUTION_MODEL.md](../language/EXECUTION_MODEL.md); the pull-trigger is ROADMAP old Phase 7 item
+[EXECUTION_MODEL.md](../platform/EXECUTION_MODEL.md); the pull-trigger is ROADMAP old Phase 7 item
 H6 (attached to H3, IO honesty). Written so the approach is not re-derived or
 mis-scoped later. Companion to [TESTING.md](../compiler/TESTING.md).
 

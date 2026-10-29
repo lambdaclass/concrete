@@ -5,7 +5,7 @@ Status: design reference (Phase 3, item 56)
 This document defines the boundary between the bounded/provable-friendly core stdlib and the OS/runtime-dependent hosted stdlib. It specifies what belongs in each layer, why, and how the capability/trust model makes the boundary auditable.
 
 For the existing stdlib direction, see [STDLIB.md](STDLIB.md).
-For the three-layer classification, see [EXECUTION_MODEL.md](../language/EXECUTION_MODEL.md).
+For the three-layer classification, see [EXECUTION_MODEL.md](../platform/EXECUTION_MODEL.md).
 For the freestanding/hosted execution split, see [FREESTANDING_SPLIT.md](../platform/FREESTANDING_SPLIT.md).
 For the trust model, see [SAFETY.md](../language/SAFETY.md) and [TRUSTED_COMPUTING_BASE.md](../verification/TRUSTED_COMPUTING_BASE.md).
 
@@ -294,7 +294,7 @@ Go has a single, large stdlib. There is no core/alloc/hosted distinction. All pa
 
 ## Implementation Status
 
-The three-layer classification exists in documentation ([EXECUTION_MODEL.md](../language/EXECUTION_MODEL.md), [STDLIB.md](STDLIB.md)) and is enforced indirectly by the capability system. What remains:
+The three-layer classification exists in documentation ([EXECUTION_MODEL.md](../platform/EXECUTION_MODEL.md), [STDLIB.md](STDLIB.md)) and is enforced indirectly by the capability system. What remains:
 
 | Item | Status |
 |------|--------|
