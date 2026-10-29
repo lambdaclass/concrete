@@ -14,16 +14,18 @@ carries one `ruling:` line, in exactly one of these forms:
                                              evidence and proof machinery), performance (compile
                                              time or generated-code speed) or library (a std
                                              function, or a missing library feature)
-  ruling: Violates: unrecorded               not ruled yet: allowed only for a FIXED bug numbered
-                                             below RULING_FROM, and check_bug_filing_complete.sh
-                                             ratchets their count, so it only shrinks
+  ruling: Violates: unrecorded               not ruled yet: allowed only for a FIXED bug listed in
+                                             UNRULED (the records filed before the rulings and not
+                                             ruled since). The list only shrinks: ruling a listed bug
+                                             removes it in the same change (check_bug_filing_complete.sh
+                                             fails while a listed bug is ruled), and no number joins it
 
 A `Violates:`, `Open:` or `Permitted by:` form may end in ` — <note>`. A cited `ID@V` must be a key
-of docs/spec/ids.tsv (append-only, so a key once there stays). An open bug may not cite a retired
-version (re-rule it against the rule's current version); a fixed bug may cite any registered one,
-since it was ruled against the rule of its time. `Open:` cites an OPEN-n entry with or without a
-version. The chapter of a rule is the chapter whose prefix it carries, from the chapter table of
-docs/spec/README.md.
+of docs/spec/ids.tsv (append-only, so a key once there stays), and its prefix a chapter of the chapter
+table of docs/spec/README.md. An open bug cites only a live or pending version: when the spec
+supersedes or retires a rule an open bug cites, the change that does so re-rules the bug against the
+current version. A fixed bug may cite any registered version, since it was ruled against the rule of
+its time. `Open:` cites an OPEN-n entry with or without a version.
 
   bug_rulings.py check --num NNN --open|--fixed "<ruling>"   exit 0 when the ruling is valid for
                                                               such a record, else 1 with the reason
@@ -39,6 +41,21 @@ import re
 import sys
 
 RULING_FROM = 300
+# The records filed before the rulings that are not ruled yet (fixed, all below RULING_FROM).
+UNRULED_SPEC = ("001-048 050-053 055-057 059-063 065-076 078-094 096-113 115-121 123-124 126-137 140 "
+                "142-152 165-166 175-186 188-200 202-215 217-225 227-263 265-269 271-299")
+
+
+def _expand(spec):
+    out = set()
+    for part in spec.split():
+        a, _, b = part.partition("-")
+        out.update(f"{i:03d}" for i in range(int(a), int(b or a) + 1))
+    return frozenset(out)
+
+
+UNRULED = _expand(UNRULED_SPEC)
+LIVE_STATES = ("live", "pending")
 OUTSIDE = ("tooling", "performance", "library")
 RULE = r"[A-Z]+-D?\d+"
 KEY = re.compile(r"^(" + RULE + r")@(\d+)$")
@@ -79,6 +96,8 @@ def prefix_of(rule):
 
 def parse(value, name):
     """The ruling's form, syntax only: {kind, rules: [ID@V or OPEN-n], chapter (spec gap), note}."""
+    if any(c in value for c in "\t\r\n\x0b\x0c\x1c\x1d\x1e\x85\u2028\u2029") or "-->" in value:
+        raise RulingError(f"{name}: a ruling is one line with no tab, line break or '-->'")
     def split_note(rest):
         m = NOTE.match(rest.strip())
         return m.group(1).strip(), (m.group(2) or "").strip()
@@ -134,15 +153,17 @@ def resolve(ruling, spec, name, num, is_open):
         if is_open:
             raise RulingError(f"{name}: an open bug states its ruling; 'Violates: unrecorded' is only for "
                               f"fixed bugs filed before the rulings")
-        if int(num) >= RULING_FROM:
-            raise RulingError(f"{name}: every bug from {RULING_FROM} on states its ruling; 'Violates: unrecorded' "
-                              f"is only for older fixed bugs")
+        if int(num) >= RULING_FROM or num not in UNRULED:
+            raise RulingError(f"{name}: 'Violates: unrecorded' is only for the old fixed bugs listed in "
+                              f"bug_rulings.UNRULED (the list only shrinks); rule this bug")
     for r in ruling["rules"]:
         if k == "open":
             base = r.split("@")[0]
             known = (r in ids) if "@" in r else any(key.split("@")[0] == base for key in ids)
             if not known:
                 raise RulingError(f"{name}: '{r}' is not an owner question of docs/spec/ids.tsv")
+            if is_open and "@" in r and ids[r] not in LIVE_STATES:
+                raise RulingError(f"{name}: {r} is {ids[r]}; an open bug cites the question's current version")
             continue
         if r not in ids:
             known = sorted(key for key in ids if key.split("@")[0] == r.split("@")[0])
@@ -150,8 +171,12 @@ def resolve(ruling, spec, name, num, is_open):
                               + (f" (registered: {', '.join(known)})" if known else " (no such rule)"))
         if prefix_of(r) == "OPEN":
             raise RulingError(f"{name}: {r} is an owner question; cite it with 'Open: {r.split('@')[0]}'")
-        if is_open and ids[r].startswith("retired"):
-            raise RulingError(f"{name}: {r} is {ids[r]}; an open bug is ruled against the rule's current version")
+        if is_open and ids[r] not in LIVE_STATES:
+            current = sorted(key for key, st in ids.items() if key.split("@")[0] == r.split("@")[0] and st in LIVE_STATES)
+            raise RulingError(f"{name}: {r} is {ids[r]}; an open bug is ruled against the rule's current version"
+                              + (f" ({', '.join(current)})" if current else ""))
+        if prefix_of(r) not in chapters:
+            raise RulingError(f"{name}: {r}'s prefix is not a chapter of docs/spec/README.md's chapter table")
     if k == "spec gap" and ruling["chapter"] == "OPEN":
         raise RulingError(f"{name}: OPEN holds owner questions, not rules; a gap names the chapter its rule belongs to")
     if k == "spec gap" and ruling["chapter"] not in chapters:
@@ -310,8 +335,7 @@ def main():
     try:
         if a.mode == "value":
             v = build_value(a)
-            if "\n" in v or "\t" in v or "-->" in v:
-                raise RulingError("a ruling is one line with no tab and no '-->'")
+            parse(v, "the ruling")
             print(v)
             return 0
         if a.ruling is None or a.num is None or a.is_open is None:

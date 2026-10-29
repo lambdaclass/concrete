@@ -65,9 +65,10 @@ checker refusal is a Check bug here.
 | ruling | bugs | stages |
 |--|-:|--|
 | violates FFI | 1 | Resolve 1 |
-| violates MEM | 2 | Lower 2 |
+| violates MEM | 1 | Lower 1 |
 | violates MOD | 1 | Resolve 1 |
 | violates PASS | 3 | Lower 2, Elab 1 |
+| spec gap MEM | 1 | Lower 1 |
 | spec gap PASS | 1 | Report 1 |
 | spec gap TYPE | 1 | Resolve 1 |
 | outside (performance) | 1 | SSA 1 |
@@ -351,7 +352,7 @@ checker refusal is a Check bug here.
 | [299](299_work_queue_dispatcher_fetch_races_agent_pushes.md) | Tooling | dispatch | commits | — | unrecorded |
 | [300](300_new_bug_sh_reserves_a_number_then_refuses_the_fi.md) | Tooling | new_bug | commits | — | outside (tooling) |
 | [301](301_lower_s_address_taken_walk_did_not_see_the_root.md) | Lower | Lower | commits | — | violates MEM-3@1 |
-| [302](302_a_loop_moved_an_address_taken_scalar_back_into_a.md) | Lower | Lower | commits | — | violates MEM-1@1 |
+| [302](302_a_loop_moved_an_address_taken_scalar_back_into_a.md) | Lower | Lower | commits | — | spec gap (MEM) |
 | [303](303_the_value_if_did_not_drop_the_bindings_its_arms.md) | Lower | Lower | commits | — | violates PASS-9@1 |
 | [304](304_a_value_if_or_match_written_as_a_comparison_oper.md) | Elab | Elab | commits | Check | violates PASS-6@1 |
 | [308](308_a_value_if_or_match_passed_to_a_generic_paramete.md) | Resolve | PeekType | commits | — | spec gap (TYPE) |

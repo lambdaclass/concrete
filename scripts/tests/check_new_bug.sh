@@ -282,14 +282,14 @@ hook "refs/x $E refs/bug-reservations/904 $Z"$'\n'"refs/heads/w $T refs/heads/wi
 echo "=== 6. the discovery attribution (bug 300) ==="
 refuse "a filing that names no discovery batch" "no discovery batch given" bash "$NB" "unattributed defect" --silent no
 refuse "a batch without --silent" "--silent yes|no is required" bash "$NB" "unattributed defect" "${BN[@]}"
-refuse "--batch text no row has" "matches 0 rows" bash "$NB" "x defect" --silent no --batch "no batch has this probe text"
-refuse "--batch text several rows have" "not one" bash "$NB" "x defect" --silent no --batch "e"
+refuse "--batch text no row has" "matches 0 rows" bash "$NB" "x defect" --silent no --outside "tooling — gate control" --batch "no batch has this probe text"
+refuse "--batch text several rows have" "not one" bash "$NB" "x defect" --silent no --outside "tooling — gate control" --batch "e"
 refuse "--batch and --new-batch together" "both given" bash "$NB" "x defect" --silent no --batch "scaffold control hunt" "${BN[@]}"
-refuse "--new-batch with an unknown kind" "is not one of" bash "$NB" "x defect" --silent no --new-batch probing --probe p --effort "1 probe"
+refuse "--new-batch with an unknown kind" "is not one of" bash "$NB" "x defect" --silent no --outside "tooling — gate control" --new-batch probing --probe p --effort "1 probe"
 refuse "--new-batch without --effort" "needs --probe and --effort" bash "$NB" "x defect" --silent no --new-batch hunt --probe p
 refuse "a counting batch from 2026-10-22 on without an effort size" "records its effort" \
-  env NEW_BUG_DATE=2026-10-26 bash "$NB" "x defect" --silent no --new-batch hunt --probe p --effort unrecorded
-refuse "a class tag on an attribution-only batch" "marks a counting batch" bash "$NB" "x defect" --silent no --new-batch review --probe "class 1: p" --effort "1 probe"
+  env NEW_BUG_DATE=2026-10-26 bash "$NB" "x defect" --silent no --outside "tooling — gate control" --new-batch hunt --probe p --effort unrecorded
+refuse "a class tag on an attribution-only batch" "marks a counting batch" bash "$NB" "x defect" --silent no --outside "tooling — gate control" --new-batch review --probe "class 1: p" --effort "1 probe"
 cp "$W/ROADMAP.md" "$TMP/roadmap.bak"
 awk '{ print } /BEGIN GENERATED: bug dashboard/ { print "a hand edit" }' "$TMP/roadmap.bak" > "$W/ROADMAP.md"
 refuse "a stale bug dashboard" "stale or refuses" bash "$NB" "x defect" "${BA[@]}"

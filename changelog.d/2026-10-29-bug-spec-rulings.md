@@ -10,5 +10,5 @@ cited rule that is not a key of `docs/spec/ids.tsv`; `scripts/gen/new_bug.sh` re
 generated view `docs/bugs/RULINGS.md` counts the bugs by ruling, by spec chapter and by violated rule
 and lists the spec gaps; the roadmap's bug dashboard shows the open bugs by ruling, and `bug_ledger.py
 report` (with `--json` and `--sqlite`) carries the rulings too. Every open bug and every bug from 300
-on is ruled. Older fixed bugs may say `Violates: unrecorded`, and `check_bug_filing_complete.sh`
-ratchets their count so it only falls.
+on is ruled. Older fixed bugs may say `Violates: unrecorded` while they are listed in
+`bug_rulings.UNRULED`, a list `check_bug_filing_complete.sh` keeps equal to them, so it only shrinks.

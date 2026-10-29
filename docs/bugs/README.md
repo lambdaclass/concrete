@@ -143,7 +143,9 @@ states its **ruling**, one `ruling:` line in its ledger block, in exactly one of
 when the ruling is recorded, and must be a key of [docs/spec/ids.tsv](../spec/ids.tsv): `bug_ledger.py`
 refuses a record whose ruling is missing or malformed or names a rule the registry does not have, an
 open bug that cites a retired version, and `Violates: unrecorded` on an open bug or on one numbered
-300 or higher. `check_bug_filing_complete.sh` ratchets the unruled records: their count may only fall.
+300 or higher. The unruled records must be exactly `bug_rulings.UNRULED`, a list that only shrinks: ruling an
+old bug removes it from the list in the same change, and no other record may become unruled
+(`check_bug_filing_complete.sh`).
 Ruling an old bug means reading its record against the rule's sentence and its chapter entry; cite a
 rule only when its sentence, read literally, decides the behaviour. [RULINGS.md](RULINGS.md) shows the
 counts by kind and chapter and lists the spec gaps, which the spec's owner turns into rules, and the
@@ -176,7 +178,7 @@ found is the commit that added the record, fixed the first commit whose record r
   found ([discovery.tsv](discovery.tsv) kind) by stage, days to fix per stage, and the recurring
   area and class pairs. `--json` prints the same as JSON with every bug's weights and commits;
   `--sqlite /tmp/bugs.db` also writes a throwaway SQLite database for ad-hoc queries (tables
-  `bugs` (with its `ruling`), `bug_rules`, `bug_classes`, `bug_secondary`, `bug_weights`, `bug_commits`;
+  `bugs` (with its `ruling`), `bug_rules`, `bug_chapters`, `bug_classes`, `bug_secondary`, `bug_weights`, `bug_commits`;
   never commit it). The report also counts bugs by spec ruling, by spec chapter and by violated rule.
 - A fix commit that touches a path no `area_map.tsv` row matches stops the generator: add a row
   (a new compiler file usually needs one).

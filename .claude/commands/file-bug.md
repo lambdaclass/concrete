@@ -13,10 +13,14 @@ Rules: [docs/project/AGENTS.md](../../docs/project/AGENTS.md).
 2. **Reduce it** to the smallest program; run it natively and with `--interp`.
 3. **Classify**: pick its class in `docs/bugs/STRUCTURAL_CLASSES.md` (or decide it adds one), and
    whether it is silent (wrong code or an unsound claim) or loud (crash, refusal, invalid IR).
+   **Rule on it** against the spec (docs/bugs/README.md, "Spec rulings"): the versioned rule of
+   `docs/spec/` it violates (`--violates OWN-1@2`, cited only if the rule's sentence decides it), or
+   `--spec-gap "PREFIX — <the missing rule>"`, `--open OPEN-N`, or
+   `--outside "tooling|performance|library — <why>"`.
 4. **Scaffold** in your bug branch's worktree:
    ```sh
-   scripts/gen/new_bug.sh "<title>" --class N --silent yes|no --batch "<text from the probe cell>"
-   scripts/gen/new_bug.sh "<title>" --class N --silent yes|no \
+   scripts/gen/new_bug.sh "<title>" --violates ID@V --class N --silent yes|no --batch "<text from the probe cell>"
+   scripts/gen/new_bug.sh "<title>" --violates ID@V --class N --silent yes|no \
        --new-batch <kind> --probe "<what was probed>" --effort "<N> hours|programs|probes|examples|cases"
    ```
    The title says what the defect is, never its status. `--batch` names the existing
@@ -36,4 +40,4 @@ Rules: [docs/project/AGENTS.md](../../docs/project/AGENTS.md).
    (it refuses a leftover placeholder). Commit and push `wip/<branch>`.
 7. A silent bug is stopped now (repair or fail-closed containment); continue with `/fix-bug NNN`.
 
-Report: the number, the record path, class, silent or loud, the pinning leg, and the owner.
+Report: the number, the record path, the spec ruling, class, silent or loud, the pinning leg, and the owner.

@@ -154,22 +154,21 @@ printf '# Bug 999\n\n## Structural cause\nnames\n\n## Structural owner\nrow 4\n'
 # record's ledger block names the rule the implementation violates (`ruling: Violates: OWN-1@2`), a spec
 # gap, an open owner question, the rule that permits it, or why it is outside the spec. bug_ledger.py
 # refuses a record with no ruling, a malformed one, or a cited rule that is not a key of
-# docs/spec/ids.tsv, and allows `Violates: unrecorded` only on a FIXED bug below RULING_FROM (300).
-# RATCHET: those unruled records may only become fewer. The count must equal the baseline: a record
-# ruled lowers the count, and then the baseline is lowered with it in the same change; a record turned
-# back into `unrecorded` raises it and fails.
-UNRECORDED_BASELINE=261
+# docs/spec/ids.tsv, and allows `Violates: unrecorded` only on a FIXED bug listed in
+# bug_rulings.UNRULED (the records filed before the rulings). RATCHET: the unruled records must be
+# exactly that list, so ruling a listed bug removes it from the list in the same change, and no record
+# outside it can become unruled again: the list only shrinks.
 if [ -f scripts/gen/bug_rulings.py ] && [ -f docs/spec/ids.tsv ] && [ -n "$LEDGER_ROWS" ]; then
   RERR="$(mktemp)" || { echo "error: mktemp failed" >&2; exit 2; }
   if RULING_ROWS="$(python3 -I scripts/gen/bug_ledger.py rulings 2>"$RERR")"; then
     ok "every bug record states a spec ruling that resolves in docs/spec/ids.tsv ($(grep -c . <<<"$RULING_ROWS") records)"
-    n_unrec="$(awk -F'\t' '$3 == "unrecorded"' <<<"$RULING_ROWS" | grep -c . || true)"
-    if [ "$n_unrec" -eq "$UNRECORDED_BASELINE" ]; then
-      ok "unruled (Violates: unrecorded) records: $n_unrec, at the ratchet baseline"
-    elif [ "$n_unrec" -lt "$UNRECORDED_BASELINE" ]; then
-      no "unruled records fell to $n_unrec: lower UNRECORDED_BASELINE in $0 from $UNRECORDED_BASELINE to $n_unrec in this change (the ratchet only moves down)"
+    unrec="$(awk -F'\t' '$3 == "unrecorded" { print $1 }' <<<"$RULING_ROWS" | tr '\n' ' ')"
+    listed="$(python3 -I -c 'import sys; sys.path.insert(0, "scripts/gen"); import bug_rulings as b; print(" ".join(sorted(b.UNRULED)))')"
+    ruled_listed="$(comm -13 <(tr ' ' '\n' <<<"$unrec" | sed '/^$/d' | sort) <(tr ' ' '\n' <<<"$listed" | sed '/^$/d' | sort) | tr '\n' ' ')"
+    if [ -z "$ruled_listed" ]; then
+      ok "the unruled (Violates: unrecorded) records are exactly bug_rulings.UNRULED ($(wc -w <<<"$unrec" | tr -d ' ') records)"
     else
-      no "unruled (Violates: unrecorded) records rose to $n_unrec, above the baseline $UNRECORDED_BASELINE: a ruled record was turned back into unrecorded"
+      no "bugs listed in bug_rulings.UNRULED are ruled now: $ruled_listed(remove them from UNRULED_SPEC in this change; the list only shrinks)"
     fi
   else
     no "the bug records' spec rulings do not resolve: $(tr '\n' ' ' < "$RERR" | cut -c1-300)"
@@ -185,9 +184,15 @@ if [ -f scripts/gen/bug_rulings.py ] && [ -f docs/spec/ids.tsv ] && [ -n "$LEDGE
     || ok "control: an unregistered version of a real rule is refused"
   rcheck --num 999 --fixed "Violates: unrecorded" && no "control: a bug numbered 999 was allowed 'Violates: unrecorded'" \
     || ok "control: a new record (number at or above the cutoff) cannot be unruled"
+  rcheck --num 049 --fixed "Violates: unrecorded" && no "control: a bug outside bug_rulings.UNRULED was allowed 'Violates: unrecorded'" \
+    || ok "control: a bug outside the unruled list cannot become unruled (049, an open bug's number, read as fixed)"
+  rcheck --num 999 --open-bug "Violates: OWN-1@1" && no "control: an open bug cited a superseded rule version" \
+    || ok "control: an open bug cites only a live or pending rule version"
+  rcheck --num 999 --open-bug "Outside the spec: tooling — a$(printf '\r')b" && no "control: a ruling with a carriage return was accepted" \
+    || ok "control: a ruling with a line break is refused"
   rcheck --num 100 --open-bug "Violates: unrecorded" && no "control: an open bug was allowed 'Violates: unrecorded'" \
     || ok "control: an open bug cannot be unruled"
-  rcheck --num 100 --fixed "Violates: unrecorded" && ok "control: an old fixed bug may still be unruled (the ratchet counts it)" \
+  rcheck --num 001 --fixed "Violates: unrecorded" && ok "control: an old fixed bug may still be unruled (the ratchet counts it)" \
     || no "control: an old fixed bug's 'Violates: unrecorded' was refused"
   rcheck --num 999 --open-bug "Open: OPEN-999" && no "control: an owner question that does not exist was accepted" \
     || ok "control: an unknown owner question is refused"

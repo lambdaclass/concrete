@@ -178,6 +178,7 @@ neg ruling_unknown_rule "$R" "old='ruling: Violates: OWN-1@2'; assert s.count(ol
 neg ruling_unknown_version "$R" "old='ruling: Violates: OWN-1@2'; assert s.count(old)==1; s=s.replace(old, 'ruling: Violates: OWN-1@99')" 2
 neg ruling_malformed "$R" "old='ruling: Violates: OWN-1@2'; assert s.count(old)==1; s=s.replace(old, 'ruling: breaks ownership')" 2
 neg ruling_unrecorded_on_new_record "$R" "old='ruling: Violates: OWN-1@2'; assert s.count(old)==1; s=s.replace(old, 'ruling: Violates: unrecorded')" 2
+neg ruling_superseded_on_open_bug "$R" "old='ruling: Violates: OWN-1@2'; assert s.count(old)==1; s=s.replace(old, 'ruling: Violates: OWN-1@1')" 2
 neg ruling_unknown_question "$R" "old='ruling: Violates: OWN-1@2'; assert s.count(old)==1; s=s.replace(old, 'ruling: Open: OPEN-999')" 2
 neg rulings_markers_missing docs/bugs/RULINGS.md "old='<!-- END GENERATED: spec rulings -->'; assert s.count(old)==1; s=s.replace(old,'')" 2
 neg rulings_view_hand_edit docs/bugs/RULINGS.md "old='### By violated rule'; assert s.count(old)==1; s=s.replace(old, old+' (edited)')" 1

@@ -677,6 +677,7 @@ def bug_rows(recs, areas, kinds, chapters=None):
             "ruling": rl["kind"], "ruling_group": ruling_group(r), "rules": list(rl.get("rules", [])),
             "spec_chapters": list(rl.get("chapters", [])),
             "spec_gap": rl.get("note") if rl["kind"] == "spec gap" else None,
+            "outside_reason": rl.get("reason") if rl["kind"] == "outside" else None,
             "bug": n, "title": r["title"], "open": r["open"], "silent": f.get("silent") == "yes",
             "classes": [int(c) for c, _ in f.get("class", [])], "primary_class": primary_class(r),
             "stage": a["stage"], "module": a["module"], "tier": a["tier"], "secondary": a["secondary"],
@@ -812,18 +813,20 @@ def write_sqlite(path, rows, class_names):
         CREATE TABLE bugs (bug TEXT PRIMARY KEY, title TEXT, open INTEGER, silent INTEGER, stage TEXT,
             module TEXT, tier TEXT, basis TEXT, primary_class INTEGER, found TEXT, fixed TEXT,
             filed_fixed INTEGER, days_to_fix INTEGER, discovery TEXT, single_share REAL, ruling TEXT,
-            spec_gap TEXT);
+            spec_gap TEXT, outside_reason TEXT);
         CREATE TABLE bug_rules (bug TEXT, rule TEXT, chapter TEXT);
+        CREATE TABLE bug_chapters (bug TEXT, chapter TEXT, ruling TEXT);
         CREATE TABLE bug_classes (bug TEXT, class INTEGER, name TEXT);
         CREATE TABLE bug_secondary (bug TEXT, stage TEXT);
         CREATE TABLE bug_weights (bug TEXT, tier TEXT, stage TEXT, module TEXT, lines REAL);
         CREATE TABLE bug_commits (bug TEXT, hash TEXT, share REAL, via TEXT);
     """)
     for r in rows:
-        db.execute("INSERT INTO bugs VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        db.execute("INSERT INTO bugs VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                    (r["bug"], r["title"], int(r["open"]), int(r["silent"]), r["stage"], r["module"], r["tier"],
                     r["basis"], r["primary_class"], r["found"], r["fixed"], int(r["filed_fixed"]), r["days_to_fix"],
-                    r["discovery"], r["single_share"], r["ruling"], r["spec_gap"]))
+                    r["discovery"], r["single_share"], r["ruling"], r["spec_gap"], r["outside_reason"]))
+        db.executemany("INSERT INTO bug_chapters VALUES (?,?,?)", [(r["bug"], c, r["ruling"]) for c in r["spec_chapters"]])
         db.executemany("INSERT INTO bug_rules VALUES (?,?,?)",
                        [(r["bug"], x, x.split("-", 1)[0]) for x in r["rules"]])
         db.executemany("INSERT INTO bug_classes VALUES (?,?,?)", [(r["bug"], c, class_names.get(str(c))) for c in r["classes"]])
