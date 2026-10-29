@@ -25,11 +25,24 @@
 # shrinks. Fixing a difference is a parser fix (a bug, ruled against SYN-1) or a grammar edit,
 # which is the owner's decision.
 #
+# LIMITS, stated so that a green run is not over-read:
+#   - A difference is held by its SIGNATURE (the parser's normalized message for an accept-gap;
+#     the recognizer's furthest-failure rule and token class for a reject-gap). A second, distinct
+#     divergence that produces the same signature is absorbed by the listed row: the list holds
+#     classes of differences, not individual programs.
+#   - Rejection is sampled: one-token edits of the derivations, not the grammar's complement.
+#   - The lookahead scan reads Parser.lean only, and only the spellings it counts (peek2, the
+#     token array, try, a position write, a state restore). Lookahead written another way (a
+#     helper in another file, a list pattern over the tokens) is not seen.
+#   - SYN-1's struct-literal side rule (bug 212) is implemented by hand in the generator and the
+#     recognizer against the shape of `ident_tail`; a change to that rule needs both updated.
+#
 # Controls, each must hold or the gate fails:
 #   C1  coverage: the generator covered every alternative, optional and repetition;
-#   C2  the judge, given a verdict file in which the parser accepts a grammar-rejected mutant,
-#       reports a new difference;
-#   C3  the lookahead scan, run on a copy of Parser.lean with one planted `peek2` call, fails.
+#   C2  the judge reports a planted parser acceptance of a grammar-rejected mutant, and a planted
+#       parser refusal of a derivation, each as a new difference;
+#   C3  the lookahead scan, run on copies of Parser.lean with one planted site of each kind
+#       (peek2, token index, try, position write), reports each.
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
