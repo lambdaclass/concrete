@@ -648,6 +648,96 @@ def cmd_judge(args):
     return 1 if fails else 0
 
 
+def signature_of(rec, toks, verdict):
+    """The difference signature of one program, or None when grammar and parser agree."""
+    member = rec.run(toks)
+    accepted = verdict == "ACCEPT"
+    if member and not accepted:
+        return "accept-gap " + normalize_message(verdict.split("\t", 1)[1] if "\t" in verdict else verdict)
+    if not member and accepted:
+        tok = toks[rec.fail_pos][0] if rec.fail_pos < len(toks) else "<eof>"
+        return f"reject-gap {rec.fail_rule}: {tok if not IDENT_RE.match(tok) or tok in KEYWORDS else 'IDENT'}"
+    return None
+
+
+def parse_batch(sources, workdir):
+    """The parser's verdict on each source, from one run of scripts/tools/parse_batch.lean."""
+    import subprocess
+    path = os.path.join(workdir, "reduce_sources.txt")
+    with open(path, "w") as f:
+        f.write(SEP.join(sources))
+    out = subprocess.run(["lake", "env", "lean", "--run", os.path.join(ROOT, "scripts", "tools", "parse_batch.lean"), path],
+                         cwd=ROOT, capture_output=True, text=True, check=True).stdout
+    verdicts = [l for l in out.split("\n") if l.strip()]
+    if len(verdicts) != len(sources):
+        raise SystemExit(f"parse_batch gave {len(verdicts)} verdicts for {len(sources)} sources")
+    return verdicts
+
+
+def cmd_reduce(args):
+    """Shrink each difference's example while it keeps its signature (delta debugging over token
+    spans, one parser batch per round for every difference at once)."""
+    rules = load_rules()
+    rec = Recognizer(rules)
+    cur = {}
+    with open(args.examples) as f:
+        for line in f:
+            sig, kind, desc, src = line.rstrip("\n").split("\t")
+            cur[sig] = [tok_of(t) for t in src.split(" ")] if src else []
+    for rnd in range(args.rounds):
+        cands = []
+        for sig, toks in cur.items():
+            n = len(toks)
+            size = max(1, n // 2)
+            while True:
+                for start in range(0, n, max(1, size // 2) if size > 1 else 1):
+                    c = toks[:start] + toks[start + size:]
+                    if len(c) < n:
+                        cands.append((sig, c))
+                if size == 1:
+                    break
+                size = max(1, size // 2)
+        if not cands:
+            break
+        verdicts = parse_batch([render(c) for _, c in cands], args.workdir)
+        improved = 0
+        best = {}
+        for (sig, c), v in zip(cands, verdicts):
+            if signature_of(rec, c, v) == sig and len(c) < len(best.get(sig, cur[sig])):
+                best[sig] = c
+        for sig, c in best.items():
+            cur[sig] = c
+            improved += 1
+        print(f"round {rnd + 1}: {len(cands)} candidates, {improved} examples shrunk")
+        if not improved:
+            break
+    with open(args.examples, "w") as f:
+        for sig in sorted(cur):
+            f.write(f"{sig}\treduced\t-\t{' '.join(t for t, _ in cur[sig])}\n")
+    for sig in sorted(cur):
+        print(f"{sig}\n    {' '.join(t for t, _ in cur[sig])}")
+    return 0
+
+
+def tok_of(text):
+    """A token back from its spelling (reduction works on rendered examples)."""
+    if text.startswith('"'):
+        return (text, "STRING")
+    if text.startswith("'") and text.endswith("'") and len(text) > 2:
+        return (text, "CHAR")
+    if text.startswith("'"):
+        return (text, "LABEL")
+    if re.match(r"^\d+\.\d+$", text):
+        return (text, "FLOAT")
+    if re.match(r"^(0x[0-9A-Fa-f]+|\d+)$", text):
+        return (text, "INT")
+    if IDENT_RE.match(text) and text not in KEYWORDS:
+        # A spelling that is also a grammar terminal (self, Copy, C, repr, ...) stays fixed text;
+        # term_matches lets it match IDENT too.
+        return (text, None)
+    return (text, None)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -665,8 +755,12 @@ def main():
     j.add_argument("--verdicts", required=True)
     j.add_argument("--known")
     j.add_argument("--examples", help="write each difference's shortest example here")
+    r = sub.add_parser("reduce")
+    r.add_argument("--examples", required=True, help="examples.tsv from judge; rewritten in place")
+    r.add_argument("--workdir", required=True)
+    r.add_argument("--rounds", type=int, default=25)
     args = ap.parse_args()
-    return {"generate": cmd_generate, "judge": cmd_judge}[args.cmd](args)
+    return {"generate": cmd_generate, "judge": cmd_judge, "reduce": cmd_reduce}[args.cmd](args)
 
 
 if __name__ == "__main__":
