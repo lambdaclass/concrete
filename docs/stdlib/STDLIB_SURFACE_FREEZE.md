@@ -213,7 +213,7 @@ Owned mutable UTF-8 string.
 
 Note: `push_char` is flagged for rename to `push` in [STDLIB_API_REVIEW.md](STDLIB_API_REVIEW.md) for verb consistency. Frozen under the current name; the rename is an approved future change.
 
-Source: [STDLIB_TARGET.md](STDLIB_TARGET.md), [STRING_TEXT_CONTRACT.md](../language/STRING_TEXT_CONTRACT.md)
+Source: [STDLIB_TARGET.md](STDLIB_TARGET.md), [STRING_TEXT_CONTRACT.md](STRING_TEXT_CONTRACT.md)
 
 #### `std.bytes` -- stable
 
@@ -243,9 +243,9 @@ Borrowed text view over `String`.
 | `Text` | struct: `{ ptr, len }` |
 | `from_string`, `len`, `is_empty`, `get_unchecked`, `eq` | methods |
 
-Experimental because the relationship between `Text`, `&String`, and the borrow checker is not fully settled. See open question on `Text` vs `&str` in [STRING_TEXT_CONTRACT.md](../language/STRING_TEXT_CONTRACT.md).
+Experimental because the relationship between `Text`, `&String`, and the borrow checker is not fully settled. See open question on `Text` vs `&str` in [STRING_TEXT_CONTRACT.md](STRING_TEXT_CONTRACT.md).
 
-Source: [STDLIB_TARGET.md](STDLIB_TARGET.md), [STRING_TEXT_CONTRACT.md](../language/STRING_TEXT_CONTRACT.md)
+Source: [STDLIB_TARGET.md](STDLIB_TARGET.md), [STRING_TEXT_CONTRACT.md](STRING_TEXT_CONTRACT.md)
 
 #### `std.vec` -- stable
 
@@ -596,8 +596,8 @@ These are designed, LL(1)-verified, and approved. They may be implemented before
 | Nested patterns in match/let | Complexity; deferred | [PATTERN_DESTRUCTURING.md](../language/PATTERN_DESTRUCTURING.md) |
 | `_` wildcard in destructuring | Can be added without grammar changes; deferred | [PATTERN_DESTRUCTURING.md](../language/PATTERN_DESTRUCTURING.md) |
 | Byte-string literals (`b"..."`) | Byte/string boundary not settled; deferred | [SYNTAX_FREEZE_REVIEW.md](../compiler/SYNTAX_FREEZE_REVIEW.md) #8 |
-| Raw strings (`r"..."`) | Deferred | [STRING_TEXT_CONTRACT.md](../language/STRING_TEXT_CONTRACT.md) |
-| Multi-line strings | Deferred | [STRING_TEXT_CONTRACT.md](../language/STRING_TEXT_CONTRACT.md) |
+| Raw strings (`r"..."`) | Deferred | [STRING_TEXT_CONTRACT.md](STRING_TEXT_CONTRACT.md) |
+| Multi-line strings | Deferred | [STRING_TEXT_CONTRACT.md](STRING_TEXT_CONTRACT.md) |
 | Pre/post conditions (`requires`/`ensures`) | Proof pipeline not mature; deferred | [ANTI_FEATURES.md](../language/ANTI_FEATURES.md) |
 | `comptime` evaluation | Blurs parse-time/run-time boundary; deferred | [ANTI_FEATURES.md](../language/ANTI_FEATURES.md) |
 | `pub(pkg)` visibility | Deferred until package management | [VISIBILITY_AND_MODULE_HYGIENE.md](../language/VISIBILITY_AND_MODULE_HYGIENE.md) |
@@ -635,7 +635,7 @@ Source: [ARITHMETIC_POLICY.md](../language/ARITHMETIC_POLICY.md)
 | `Bytes` | Raw bytes | Owned, linear | Alloc |
 | `[u8; N]` | Raw bytes, fixed | Copy, stack | Core |
 
-Source: [STRING_TEXT_CONTRACT.md](../language/STRING_TEXT_CONTRACT.md), [STDLIB_DESIGN_PRINCIPLES.md](STDLIB_DESIGN_PRINCIPLES.md) Principle 4
+Source: [STRING_TEXT_CONTRACT.md](STRING_TEXT_CONTRACT.md), [STDLIB_DESIGN_PRINCIPLES.md](STDLIB_DESIGN_PRINCIPLES.md) Principle 4
 
 ### 4.3 Generic types
 

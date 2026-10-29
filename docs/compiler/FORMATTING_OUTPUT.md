@@ -7,7 +7,7 @@ This document defines the direction for formatting and text output in Concrete b
 
 > string-heavy programs such as `policy_engine`, `grep`, and parser error reporters should have explicit, buffer-oriented formatting paths that feel idiomatic enough without depending on interpolation magic, hidden allocation, or ad hoc builtin-shaped helpers.
 
-For encoding rules, see [STRING_TEXT_CONTRACT.md](../language/STRING_TEXT_CONTRACT.md).
+For encoding rules, see [STRING_TEXT_CONTRACT.md](../stdlib/STRING_TEXT_CONTRACT.md).
 For stdlib direction, see [STDLIB.md](../stdlib/STDLIB.md). For the current
 roadmap contract, see old Phase 7 items 14a/14b in [ROADMAP.md](../../ROADMAP.md):
 formatting targets a `Writer`, and user-defined rendering is an explicit

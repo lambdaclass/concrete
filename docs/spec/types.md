@@ -118,7 +118,7 @@ value's whole life. UTF-8 validity is checked by `Text::copy_from_raw`; `Text::f
 relies on `String`'s own UTF-8 invariant, which `String::push_char` does not check today (STRING_TEXT_CONTRACT
 §6 and §12), so this entry claims ownership, not validity. The borrowed
 form of a string is `&String`.
-[STRING_TEXT_CONTRACT.md](../language/STRING_TEXT_CONTRACT.md) is the library contract.
+[STRING_TEXT_CONTRACT.md](../stdlib/STRING_TEXT_CONTRACT.md) is the library contract.
 
 ```con accept name=outlives-its-source exit=42 project=text_owned interp-exempt=project-needs-std
 mod text_owned {

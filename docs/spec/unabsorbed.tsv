@@ -21,7 +21,6 @@ docs/language/PATTERN_ERGONOMICS.md	patterns
 docs/language/README.md	README
 docs/language/SAFETY.md	trusted,ffi
 docs/language/STATEMENT_EXPRESSION_MODEL.md	statements
-docs/language/STRING_TEXT_CONTRACT.md	types
 docs/language/TIGHTENING_DECISIONS.md	decisions
 docs/language/VALUE_MODEL.md	types,references
 docs/language/VISIBILITY_AND_MODULE_HYGIENE.md	modules,types

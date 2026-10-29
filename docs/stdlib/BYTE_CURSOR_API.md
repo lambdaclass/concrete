@@ -28,7 +28,7 @@ Status: design reference (Phase 3, item 65) — **signatures superseded by R-048
 This document specifies the endian-aware byte cursor APIs for Concrete's stdlib. These APIs replace the hand-rolled byte-to-integer conversion patterns found in every parser pressure test with checked, library-first primitives. No bitfield syntax is proposed; the approach is plain functions on plain types.
 
 For the module inventory that lists `std.numeric` as priority 1, see [STDLIB_TARGET.md](STDLIB_TARGET.md).
-For the byte-vs-text separation, see [STRING_TEXT_CONTRACT.md](../language/STRING_TEXT_CONTRACT.md).
+For the byte-vs-text separation, see [STRING_TEXT_CONTRACT.md](STRING_TEXT_CONTRACT.md).
 For narrowing/widening cast rules, see [ARITHMETIC_POLICY.md](../language/ARITHMETIC_POLICY.md).
 For the existing text cursor, see `std.parse.Cursor`.
 For checked indexing direction, see [STDLIB_TARGET.md](STDLIB_TARGET.md) (item 54).
