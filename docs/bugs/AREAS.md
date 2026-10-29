@@ -12,25 +12,25 @@ checker refusal is a Check bug here.
 
 <!-- BEGIN GENERATED: bug areas (scripts/gen/bug_ledger.py; derived from the records, docs/bugs/area_map.tsv and git history, never edited here) -->
 
-293 records: 173 placed by their own fix commits, 37 by the files their record names in commits shared with other bugs, 34 by commits shared with other bugs, 11 by the commit that filed or closed the record, 23 by an `area:` override; 15 open bugs are not fixed yet and 0 fixed bugs have no commit the history can place.
+296 records: 176 placed by their own fix commits, 37 by the files their record names in commits shared with other bugs, 34 by commits shared with other bugs, 11 by the commit that filed or closed the record, 23 by an `area:` override; 15 open bugs are not fixed yet and 0 fixed bugs have no commit the history can place.
 
 ### By stage
 
 | stage | bugs | open | silent | shared or fallback | top modules |
 |--|-:|-:|-:|-:|--|
 | Check | 72 | 0 | 39 | 5 | Check 33, CoreCheck 13, CheckHelpers 9, Verify 5 |
-| Lower | 39 | 0 | 13 | 3 | Lower 38, - 1 |
+| Lower | 40 | 0 | 13 | 3 | Lower 39, - 1 |
 | Resolve | 27 | 2 | 4 | 8 | Resolve 16, FileSummary 6, PeekType 2, BuiltinEnums 1 |
 | Elab | 26 | 0 | 9 | 7 | Elab 25, TypeSpelling 1 |
-| Interp | 19 | 0 | 5 | 8 | Interp 19 |
+| Interp | 20 | 1 | 5 | 8 | Interp 20 |
 | Proof | 19 | 1 | 8 | 2 | ProofCore 11, Proof 3, CallCollect 2, BodyIdentity 1 |
 | Parse | 11 | 0 | 3 | 0 | Parser 7, Lexer 2, AST 1, LocalId 1 |
 | EmitSSA | 10 | 0 | 1 | 3 | EmitSSA 10 |
 | Mono | 8 | 0 | 1 | 0 | Mono 7, - 1 |
 | Report | 8 | 2 | 3 | 1 | Report 3, AssumptionSummary 2, ModelDiff 2, ReportObligations 1 |
 | Std | 8 | 0 | 0 | 0 | map 4, fs 2, libc 1, net 1 |
+| Tooling | 8 | 0 | 1 | 1 | Makefile 1, check_ll1 1, dispatch 1, farm 1 |
 | EmitLLVM | 7 | 0 | 3 | 4 | EmitBuiltins 5, EmitLLVM 1, Symbols 1 |
-| Tooling | 7 | 0 | 1 | 1 | Makefile 1, dispatch 1, farm 1, new_bug 1 |
 | CLI | 6 | 0 | 2 | 1 | Main 4, Pipeline 1, PipelineTest 1 |
 | Gates | 6 | 0 | 0 | 0 | authority_facts 1, check_binder_refs 1, check_gate_lock 1, compile_scaling 1 |
 | SSA | 5 | 1 | 0 | 2 | SSACleanup 4, SSAVerify 1 |
@@ -46,11 +46,11 @@ checker refusal is a Check bug here.
 | 5. Borrow tracking by syntax instead of normalized places | 2 | Check 1, Interp 1 |
 | 6. Capability facts not carried across dispatch, specialization or package boundaries | 5 | Check 4, Proof 1 |
 | 7. Semantics implemented several times (interpreter, proof model, folder, backend disagree) | 28 | Interp 8, Check 7, Proof 4, Lower 3, Elab 2, EmitLLVM 2, EmitSSA 1, Report 1 |
-| 8. Storage, places and control flow decided ad hoc in `Lower` | 16 | Lower 13, Check 2, Elab 1 |
+| 8. Storage, places and control flow decided ad hoc in `Lower` | 17 | Lower 14, Check 2, Elab 1 |
 | 9. Evidence verdicts computed per surface and joined to their subject by name | 4 | Proof 2, CLI 2 |
 | 10. Evidence identity computed from a partial subject | 5 | Proof 3, Elab 2 |
-| 11. Absence read as a fact (fail-open defaults) | 14 | Gates 4, Resolve 2, Proof 2, Report 2, Tooling 2, Check 1, SSA 1 |
-| 12. One fact kept in two places | 28 | Resolve 11, Check 5, Elab 3, Interp 3, Parse 2, Proof 1, Std 1, CLI 1, Tooling 1 |
+| 11. Absence read as a fact (fail-open defaults) | 15 | Gates 4, Tooling 3, Resolve 2, Proof 2, Report 2, Check 1, SSA 1 |
+| 12. One fact kept in two places | 29 | Resolve 11, Check 5, Interp 4, Elab 3, Parse 2, Proof 1, Std 1, CLI 1, Tooling 1 |
 | 13. Documented rules with no enforcing site | 19 | Check 11, Resolve 4, Parse 1, Elab 1, Lower 1, Report 1 |
 | 14. Trusted `std` and FFI code with no checked contract | 7 | Std 5, Parse 1, Check 1 |
 | 15. Ownership state not modeled along control-flow paths | 7 | Check 7 |
@@ -74,7 +74,7 @@ checker refusal is a Check bug here.
 | violates REF | 7 | Check 6, Lower 1 |
 | violates SCOPE | 13 | Check 7, Proof 3, Elab 1, Mono 1, CLI 1 |
 | violates STMT | 8 | Check 3, Elab 2, Lower 2, Interp 1 |
-| violates SYN | 3 | Parse 2, Report 1 |
+| violates SYN | 4 | Parse 2, Report 1, Tooling 1 |
 | violates TRAIT | 4 | Check 3, Resolve 1 |
 | violates TRUST | 4 | Check 2, Parse 1, Proof 1 |
 | violates TYPE | 17 | Check 11, Resolve 3, Elab 2, Proof 1 |
@@ -84,8 +84,10 @@ checker refusal is a Check bug here.
 | spec gap MOD | 5 | Resolve 3, Elab 1, Report 1 |
 | spec gap OWN | 1 | Check 1 |
 | spec gap PASS | 19 | Lower 8, EmitSSA 3, Interp 3, Mono 2, Elab 1, SSA 1, Report 1 |
+| spec gap STMT | 1 | Interp 1 |
 | spec gap TRUST | 1 | Check 1 |
 | spec gap TYPE | 2 | Resolve 1, Check 1 |
+| permitted | 1 | Lower 1 |
 | outside (library) | 11 | Std 6, EmitLLVM 5 |
 | outside (performance) | 44 | Check 10, Lower 7, Parse 6, Elab 4, Interp 4, Resolve 3, SSA 3, EmitSSA 3, Proof 2, Mono 1, Report 1 |
 | outside (tooling) | 45 | Proof 12, Tooling 7, Gates 6, Check 4, Report 4, Elab 3, CLI 3, Interp 2, Parse 1, Resolve 1, SSA 1, Std 1 |
@@ -373,6 +375,7 @@ checker refusal is a Check bug here.
 | [304](304_a_value_if_or_match_written_as_a_comparison_oper.md) | Elab | Elab | commits | Check | violates PASS-6@1 |
 | [305](305_a_break_continue_or_return_out_of_a_borrow_mut_b.md) | Lower | Lower | commits | — | violates REF-13@1, STMT-11@1 |
 | [306](306_the_interpreter_ran_a_for_loop_s_step_inside_the.md) | Interp | Interp | commits | Tooling | violates STMT-11@1 |
+| [307](307_a_call_argument_mut_x_passed_a_temporary_copy_of.md) | Lower | Lower | commits | — | permitted by REF-14@1 |
 | [308](308_a_value_if_or_match_passed_to_a_generic_paramete.md) | Resolve | PeekType | commits | — | spec gap (TYPE) |
 | [309](309_a_loop_in_the_right_operand_of_or_rebound_an_agg.md) | Lower | Lower | commits | — | violates PASS-9@1 |
 | [315](315_the_scaling_gate_judged_wall_time_growth_on_a_ho.md) | Gates | compile_scaling | commits | — | outside (tooling) |
@@ -388,5 +391,7 @@ checker refusal is a Check bug here.
 | [326](326_a_field_access_opens_a_heap_or_heaparray_implici.md) | — | — | unfixed | — | violates MEM-4@3 |
 | [327](327_an_integer_or_float_literal_with_no_expected_typ.md) | — | — | unfixed | — | violates ARITH-2@2 |
 | [328](328_a_method_taking_self_or_mut_self_is_called_on_an.md) | — | — | unfixed | — | violates OWN-15@3 |
+| [329](329_the_ll_1_checkers_never_computed_follow_sets_a_f.md) | Tooling | check_ll1 | commits | — | violates SYN-1@1 |
+| [330](330_a_continue_inside_a_for_loop_s_step_the_binary_n.md) | Interp | Interp | commits | — | spec gap (STMT) |
 
 <!-- END GENERATED: bug areas -->
