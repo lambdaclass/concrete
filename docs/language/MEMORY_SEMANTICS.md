@@ -704,7 +704,7 @@ positive-control mutations (§15.6); it has no diagnostic of its own.
   `&*h` is accepted and moves the heap, so a later use of `h` fails (E0213 in the probe, an
   `if` without `else` that freed it); on `land2-fix` the borrow itself is E0230, because the
   dereference consumes `h` before the shared-access check sees the consumed root. The **root** of a canonical
-  place is its binding. **Decided 2026-10-23, the Austral model ([TIGHTENING_DECISIONS D2](TIGHTENING_DECISIONS.md#d2-the-austral-model-borrow-a-variable-then-project-q2-ref-5-g12-revised-2026-10-23)),
+  place is its binding. **Decided 2026-10-23, the Austral model ([TIGHTENING_DECISIONS D2](../project/TIGHTENING_DECISIONS.md#d2-the-austral-model-borrow-a-variable-then-project-q2-ref-5-g12-revised-2026-10-23)),
   not yet enforced:** a reference is a **root plus a sequence of projections**. The root is a
   variable, or a string literal, which is a static, immutable variable-like root (its `String`
   descriptor and bytes are static storage; it can be borrowed shared, never exclusively, and is
@@ -932,7 +932,7 @@ source of a reference:
   an owned temporary as a `&mut self` receiver (`make().bump()`), and a module constant (`&C`;
   constants are values, REF-3): bind the value to a `let` first. INV-REF's root argument needs
   every reference to have a binding root. **Decided 2026-10-23, the Austral model**
-  ([TIGHTENING_DECISIONS D2](TIGHTENING_DECISIONS.md#d2-the-austral-model-borrow-a-variable-then-project-q2-ref-5-g12-revised-2026-10-23)): the core has exactly two
+  ([TIGHTENING_DECISIONS D2](../project/TIGHTENING_DECISIONS.md#d2-the-austral-model-borrow-a-variable-then-project-q2-ref-5-g12-revised-2026-10-23)): the core has exactly two
   reference-forming operations, borrowing a **variable** (`&x`, `&mut x`; a string literal is a
   static, immutable variable-like root, so `&"text"` is accepted and `&mut "text"` refused) and
   **projecting through a reference** (field, bounds-checked index, `.0`, nested). `&s.f`,
@@ -958,7 +958,7 @@ R-0499 may lift it as REF-5@2.
   `match o { Option::Some { value } => take_ref(value), Option::None => 0 }` with
   `o: &Option<P>` (today a non-Copy payload binds as `&P` and a Copy payload by value: `Check.lean`
   `match` case; both consumers return 42 for this shape). **Decided 2026-10-23**
-  ([TIGHTENING_DECISIONS D3](TIGHTENING_DECISIONS.md#d3-a-binder-through-a-reference-is-a-reference-q3)):
+  ([TIGHTENING_DECISIONS D3](../project/TIGHTENING_DECISIONS.md#d3-a-binder-through-a-reference-is-a-reference-q3)):
   every binder through a scrutinee of reference type has reference type, Copy or not (a Copy value
   is read with `*value`), so the mode no longer changes under monomorphization
   ([bug 181](../bugs/181_generic_borrowed_scrutinee_binder_mode.md)). Not yet enforced.
@@ -1126,7 +1126,7 @@ on `land2-fix`, reference arguments by their normalized place) may not overlap w
 is exclusive. Two borrows overlap when they have the same root and one projection path is a prefix
 of the other (`x` and `x.f`; distinct fields are disjoint; every index is the step `[]`, so two
 indexings of one array overlap). **Decided 2026-10-23, not yet enforced** (the Austral model,
-[TIGHTENING_DECISIONS D2](TIGHTENING_DECISIONS.md#d2-the-austral-model-borrow-a-variable-then-project-q2-ref-5-g12-revised-2026-10-23)): loans are keyed by **root variable only**, so any two
+[TIGHTENING_DECISIONS D2](../project/TIGHTENING_DECISIONS.md#d2-the-austral-model-borrow-a-variable-then-project-q2-ref-5-g12-revised-2026-10-23)): loans are keyed by **root variable only**, so any two
 borrows of one root in one call overlap when one is exclusive, and so do a projection's `&mut`
 loan and a read of a sibling field (`upd(&mut s.a, &s.b)`, `add(&mut s.a, s.b)`,
 `self.offs.push(self.names.len())`). Field-precise loans are deferred until a workload needs them

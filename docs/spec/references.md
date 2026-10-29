@@ -10,7 +10,7 @@ lexical argument (INV-REF, the proof target of R-0500 and V1).
 This chapter states the rules. For the design record behind them (probes, status history, gap
 analysis G1 to G19), see [MEMORY_SEMANTICS §15](../language/MEMORY_SEMANTICS.md). For the
 decisions of 2026-10-23 (D1 to D4), see
-[TIGHTENING_DECISIONS §4](../language/TIGHTENING_DECISIONS.md#4-decisions-of-2026-10-23). Those decisions enter this
+[TIGHTENING_DECISIONS §4](../project/TIGHTENING_DECISIONS.md#4-decisions-of-2026-10-23). Those decisions enter this
 chapter as pending examples and entries until they are implemented. Raw pointers
 (`*const T`, `*mut T`) are not references, and these rules do not cover them. The trusted
 boundary is in [ffi.md](ffi.md).

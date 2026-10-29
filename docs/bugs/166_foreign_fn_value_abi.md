@@ -56,7 +56,7 @@ contract: the C boundary's ABI is decided at one call form and not at the other)
 ## Structural owner
 
 R-0283 / R-0287 (ABI checks for the C boundary). Decided 2026-10-23
-([TIGHTENING_DECISIONS D4](../language/TIGHTENING_DECISIONS.md#d4-foreign-function-values-refuse-now-typed-calling-convention-later-q4)):
+([TIGHTENING_DECISIONS D4](../project/TIGHTENING_DECISIONS.md#d4-foreign-function-values-refuse-now-typed-calling-convention-later-q4)):
 the containment under exit 0b refuses taking **any** `extern fn` as a value (revised after review:
 a scalar-only exemption would rest on an accidental ABI match; 2 fixtures migrate); the long-term
 design makes calling convention, capabilities and safety obligations part of the function type

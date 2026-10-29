@@ -22,7 +22,7 @@ input set counted; all agree). Ten `@run` cases
 agree natively and under `--interp`.
 
 This log is input to the language-design negotiation in
-[TIGHTENING_DECISIONS.md](../../docs/language/TIGHTENING_DECISIONS.md). It records what the
+[TIGHTENING_DECISIONS.md](../../docs/project/TIGHTENING_DECISIONS.md). It records what the
 current language (origin/main `408880cb`) did to this program and, per item, where a proposal on
 the table would help and where it would hurt. Nothing here is a decision, and nothing here changed
 the language. Snippets marked "probe" come from 25 probe programs written on the workload's shapes

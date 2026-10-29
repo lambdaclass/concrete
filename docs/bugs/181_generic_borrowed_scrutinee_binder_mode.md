@@ -11,7 +11,7 @@ ruling: Violates: REF-9@2, PASS-2@2
 
 **Status:** FIXED (branch `soundness-holes`, decision D3)
 **Found:** 2026-10-23, by the language-tightening probes (witness programs for
-[TIGHTENING_DECISIONS.md](../language/TIGHTENING_DECISIONS.md), the binding-mode row).
+[TIGHTENING_DECISIONS.md](../project/TIGHTENING_DECISIONS.md), the binding-mode row).
 **Severity:** memory-unsafe wrong code in safe code. A generic function that matches through a
 reference and passes the payload binder to a `fn(&T)` parameter compiles; specialized at a Copy
 scalar such as `Int`, the binary dereferences the payload's value as an address (SIGSEGV), and
@@ -67,7 +67,7 @@ mode keyed on Copy-ness is decided before monomorphization and means something e
 ## Structural owner
 
 The rule decided on 2026-10-23
-([TIGHTENING_DECISIONS D3](../language/TIGHTENING_DECISIONS.md#d3-a-binder-through-a-reference-is-a-reference-q3)):
+([TIGHTENING_DECISIONS D3](../project/TIGHTENING_DECISIONS.md#d3-a-binder-through-a-reference-is-a-reference-q3)):
 every binder through a scrutinee of reference type is a reference, Copy or not, so the mode no
 longer depends on a property substitution changes. Check, Elab and Mono carry that one type (exit
 2i, R-0500), and R-0496 (S7 Core semantics) makes the binder's type explicit in Core, re-checked by

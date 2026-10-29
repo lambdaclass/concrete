@@ -12,7 +12,7 @@ ruling: Violates: REF-5@1
 
 **Status:** FIXED (branch `soundness-holes`, decision D2)
 **Found:** 2026-10-23, by the language-tightening probes (witness programs for
-[TIGHTENING_DECISIONS.md](../language/TIGHTENING_DECISIONS.md), the REF-5 / G12 row).
+[TIGHTENING_DECISIONS.md](../project/TIGHTENING_DECISIONS.md), the REF-5 / G12 row).
 **Severity:** memory-unsafe wrong code in safe code, and a silent leak of a linear value. REF-5@1
 ([MEMORY_SEMANTICS §15.3](../language/MEMORY_SEMANTICS.md)) refuses a borrow of anything but a
 canonical place; gap G12 records that a borrow of a literal, call result or aggregate literal is
@@ -59,7 +59,7 @@ spill), the shape of bugs 102 and 126.
 ## Structural owner
 
 The rule decided on 2026-10-23
-([TIGHTENING_DECISIONS D2](../language/TIGHTENING_DECISIONS.md#d2-the-austral-model-borrow-a-variable-then-project-q2-ref-5-g12-revised-2026-10-23)):
+([TIGHTENING_DECISIONS D2](../project/TIGHTENING_DECISIONS.md#d2-the-austral-model-borrow-a-variable-then-project-q2-ref-5-g12-revised-2026-10-23)):
 the Austral model: only a variable (or a string literal, a static root) is borrowed, a reference
 to a part is a projection through a reference, `&s.f` is front-end sugar, and loans are keyed by
 root; every other operand is E0238 (REF-5), enforced under exit 2i (R-0500). A temporary is never a

@@ -1,5 +1,7 @@
 # Language Tightening Decisions
 
+Moved from docs/language: a decision record (paused, owner decisions OD1 to OD22); the rules on main are stated in docs/spec, and the open questions are OPEN-1 to OPEN-22 of docs/spec/decisions.md.
+
 **Paused (2026-10-25).** After this record was written, the project owner paused its decisions for
 negotiation. Each is now an [owner decision](../../ROADMAP.md#owner-decisions) (exit 2n): it stays
 proposed until the owner agrees to it again, explicitly, and only the owner decides it. The words
@@ -16,9 +18,9 @@ rules are REF-10, REF-5 and REF-11, REF-9, FFI-1, OWN-D1 and TYPE-14, and TRUST-
 [docs/spec](../spec/README.md). The other
 recommendations stand as recommendations until their owners implement them.
 This document does not restate rules. Each rule is normative in its canonical owner: references and
-binding in [MEMORY_SEMANTICS §15](MEMORY_SEMANTICS.md), evaluation order in
-[STATEMENT_EXPRESSION_MODEL](STATEMENT_EXPRESSION_MODEL.md#evaluation-order-and-assignment),
-arithmetic and casts in [ARITHMETIC_POLICY](ARITHMETIC_POLICY.md), the C boundary in
+binding in [MEMORY_SEMANTICS §15](../language/MEMORY_SEMANTICS.md), evaluation order in
+[STATEMENT_EXPRESSION_MODEL](../language/STATEMENT_EXPRESSION_MODEL.md#evaluation-order-and-assignment),
+arithmetic and casts in [ARITHMETIC_POLICY](../language/ARITHMETIC_POLICY.md), the C boundary in
 [FFI.md](../platform/FFI.md) and `main` in [MAIN_EXIT_MODEL](../platform/MAIN_EXIT_MODEL.md).
 Sequencing belongs to [ROADMAP.md](../../ROADMAP.md). An adopted item is written into its owner
 and its exit, and this record then points there.
@@ -34,7 +36,7 @@ one of two things:
   ([VERIFIED_PIPELINE.md](../compiler/VERIFIED_PIPELINE.md), R-0491 – R-0509) must formalize.
 
 A rule that is only stricter style waits for a workload, under the workload-driven rule
-([DESIGN_POLICY.md](../project/DESIGN_POLICY.md)). Each candidate gets one class:
+([DESIGN_POLICY.md](DESIGN_POLICY.md)). Each candidate gets one class:
 
 | class | meaning |
 |---|---|

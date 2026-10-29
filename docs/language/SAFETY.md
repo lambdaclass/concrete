@@ -102,7 +102,7 @@ throughout: `Vec<T>`'s and `HashMap<K, V>`'s raw-storage methods, `TextFile`'s I
 
 ### Unsafe-marked modules and global state (decided 2026-10-23, not implemented)
 
-Decided in [TIGHTENING_DECISIONS D8 and D10](TIGHTENING_DECISIONS.md#46-decisions-of-2026-10-23-second-set):
+Decided in [TIGHTENING_DECISIONS D8 and D10](../project/TIGHTENING_DECISIONS.md#46-decisions-of-2026-10-23-second-set):
 
 - **`trusted mod name { ... }`** marks a module as part of the trusted base. Only a marked module
   may contain `trusted` functions, `extern` declarations, raw-pointer operations and global cells.

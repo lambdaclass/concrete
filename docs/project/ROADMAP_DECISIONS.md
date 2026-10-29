@@ -94,7 +94,7 @@ criterion is removed; exit 2i's acceptance and exits 2j and 2k's scopes are made
 **Tightening decisions, 2026-10-23:** the user approved selective tightening (a rule lands when it
 closes a soundness hole or removes a case from the semantics the verified pipeline must formalize;
 style-only rules wait for a workload) and answered the four open questions of
-[TIGHTENING_DECISIONS.md](../language/TIGHTENING_DECISIONS.md) with "do the best long term
+[TIGHTENING_DECISIONS.md](TIGHTENING_DECISIONS.md) with "do the best long term
 solution for this problem and every problem". **Adopted:** every `&mut` argument is an implicit
 reborrow and an unused `&mut` may lapse, as an exclusive scoped loan that suspends its parent (D1,
 G9 / B1 / B2; R-0496 with exit 2i); the Austral model, "ok do the austral model with `&s.f`

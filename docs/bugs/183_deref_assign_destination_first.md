@@ -13,7 +13,7 @@ ruling: Violates: STMT-4@1
 **Found:** 2026-10-21, while writing the evaluation-order rule (the semantics decisions of
 2026-10-21; recorded in [STATEMENT_EXPRESSION_MODEL.md](../language/STATEMENT_EXPRESSION_MODEL.md)
 and in ROADMAP exit 0b as "not yet filed"); reproduced and filed 2026-10-23 by the
-language-tightening probes ([TIGHTENING_DECISIONS.md](../language/TIGHTENING_DECISIONS.md)).
+language-tightening probes ([TIGHTENING_DECISIONS.md](../project/TIGHTENING_DECISIONS.md)).
 **Severity:** silent wrong code: the binary and `--interp` run the effects of one statement in
 different orders, and the binary's order is not the rule's.
 

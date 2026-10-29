@@ -11,7 +11,7 @@ checks eight corrupt streams against the reference's diagnosis and checks the 13
 checks). The six `@run` cases agree natively and under `--interp`.
 
 This log is input to the language-design negotiation in
-[TIGHTENING_DECISIONS.md](../../docs/language/TIGHTENING_DECISIONS.md). It records what the
+[TIGHTENING_DECISIONS.md](../../docs/project/TIGHTENING_DECISIONS.md). It records what the
 current language (origin/main `eb122a01`, with D1 – D4 and D6 implemented) did to this program,
 and, per item, where a proposal on the table would help and where it would hurt. Nothing here is
 a decision. Snippets marked "probe" come from nine probe programs written on the workload's shapes

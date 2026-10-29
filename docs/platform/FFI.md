@@ -275,7 +275,7 @@ value would call C with the wrong ABI. Scalar-only externs happen to pass alike 
 conventions, but exempting them would keep a second rule that rests on that coincidence; the
 rewrite is a Concrete wrapper that calls the extern directly.
 
-**Long term** ([TIGHTENING_DECISIONS D4](../language/TIGHTENING_DECISIONS.md#d4-foreign-function-values-refuse-now-typed-calling-convention-later-q4)):
+**Long term** ([TIGHTENING_DECISIONS D4](../project/TIGHTENING_DECISIONS.md#d4-foreign-function-values-refuse-now-typed-calling-convention-later-q4)):
 the calling convention is part of the function type.
 
 - `fn(A) -> R` is a Concrete function type and `extern "C" fn(A) -> R` a C function type. They are
