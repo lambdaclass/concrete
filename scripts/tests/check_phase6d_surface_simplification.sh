@@ -28,7 +28,7 @@ rejects(){ local l="$1" f="$2" pat="$3" out
   if grep -q <<<"$out" "$pat"; then echo "  ok   $l"; PASS=$((PASS+1));
   else echo "  FAIL $l"; FAIL=$((FAIL+1)); fi; }
 
-echo "=== grammar stays LL(1) ==="
+echo "=== grammar stays LL(1) (beyond its listed conflicts, grammar/ll1_known_conflicts.tsv) ==="
 run "LL(1) checker" bash scripts/tests/check_grammar_ll1.sh
 
 echo "=== removed forms reject with migration hints ==="

@@ -566,8 +566,20 @@ static void check_node(const Node *n, const char *path, const TermSet *fol) {
         /* An alternation that can derive nothing: no alternative may start with a token that
            can follow the alternation. */
         bool any_nullable = false;
+        int n_nullable = 0;
+        TermSet *nalts = tset_new();
         for (int i = 0; i < n->n_items; i++)
-            if (is_nullable(n->items[i])) any_nullable = true;
+            if (is_nullable(n->items[i])) {
+                any_nullable = true;
+                n_nullable++;
+                char name[32];
+                snprintf(name, sizeof(name), "alt%d", i + 1);
+                tset_add(nalts, name);
+            }
+        /* Two alternatives that can both derive nothing are both chosen on whatever follows;
+           one token can never tell them apart. */
+        if (n_nullable > 1) follow_conflict(path, "nullable", nalts);
+        free(nalts);
         if (any_nullable) {
             for (int i = 0; i < n->n_items; i++) {
                 TermSet *fi = tset_new(), *overlap = tset_new();

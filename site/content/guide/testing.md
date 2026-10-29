@@ -70,7 +70,7 @@ Concrete's syntax is intended to stay LL(1). The repository now includes externa
 - C checker
 - Rust checker
 
-The three are deliberately independent implementations. [`scripts/tests/check_grammar_ll1.sh`](../../../scripts/tests/check_grammar_ll1.sh) (`make check-grammar`) requires them to agree byte-for-byte on every rule's nullability and FIRST set, to report no conflict on the reference grammar, and all to refuse the planted conflicts in `tests/fixtures/grammar_ll1/`.
+The three are deliberately independent implementations. [`scripts/tests/check_grammar_ll1.sh`](../../../scripts/tests/check_grammar_ll1.sh) (`make check-grammar`) requires them to agree byte-for-byte on every rule's nullability, FIRST and FOLLOW set, to report on the reference grammar exactly the FIRST/FOLLOW conflicts listed in `grammar/ll1_known_conflicts.tsv` (a list that only shrinks; bug 329), and all to refuse the planted FIRST/FIRST and FIRST/FOLLOW conflicts in `tests/fixtures/grammar_ll1/`.
 
 Relevant files:
 

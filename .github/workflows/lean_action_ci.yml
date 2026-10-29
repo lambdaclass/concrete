@@ -48,7 +48,11 @@ jobs:
     name: LL(1) grammar check
     runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     steps:
+      # Full history: check_grammar_ll1.sh compares the known-conflict list with the base revision
+      # (bug 329), and a shallow clone has neither the merge-base nor the push's before-revision.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install Nix (GitHub-hosted only)
         if: runner.environment != 'self-hosted'
@@ -133,6 +137,9 @@ jobs:
       # The three independent LL(1) checkers (py, c, rs) must agree byte-for-byte on every
       # rule's FIRST set and nullability, report no conflict, and all refuse the planted grammars.
       - name: LL(1) grammar (three independent checkers agree)
+        env:
+          # A push is compared with the revision before ALL of its commits (the known-conflict list only shrinks).
+          LL1_BASE: ${{ github.event_name == 'push' && github.event.before || '' }}
         run: bash scripts/tests/check_grammar_ll1.sh
 
   build:

@@ -1,0 +1,3 @@
+(* Planted FIRST/FOLLOW conflict for scripts/tests/check_grammar_ll1.sh (bug 329) at a
+   REPETITION: after 'a', a ',' may continue `{ ',' 'b' }` or be the trailing ',' that follows it. *)
+program = 'a' { ',' 'b' } [ ',' ] ';' ;

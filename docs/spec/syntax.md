@@ -1,8 +1,11 @@
 # Syntax
 
-The surface grammar is [`grammar/concrete.ebnf`](../../grammar/concrete.ebnf). It is LL(1): every
-alternation resolves with one token of lookahead, which three independent checkers verify
-(`scripts/check_ll1.py`, `.c` and `.rs`; `scripts/tests/check_grammar_ll1.sh` requires them to agree). This chapter does not copy productions; it cites them
+The surface grammar is [`grammar/concrete.ebnf`](../../grammar/concrete.ebnf). It is LL(1), every
+choice resolving with one token of lookahead, except for the FIRST/FOLLOW conflicts listed in
+[`grammar/ll1_known_conflicts.tsv`](../../grammar/ll1_known_conflicts.tsv), which await the owner
+([bug 329](../bugs/329_the_ll_1_checkers_never_computed_follow_sets_a_f.md)). Three independent
+checkers verify it (`scripts/check_ll1.py`, `.c` and `.rs`; `scripts/tests/check_grammar_ll1.sh`
+requires them to agree and the list to only shrink). This chapter does not copy productions; it cites them
 by name and states what the productions alone do not say: that the parser accepts exactly the
 grammar (SYN-1), how operators group (SYN-2) and which spellings the compiler reserves (SYN-3).
 The trailing-value rule of blocks is STMT-8, and function names the compiler reserves are MOD-3.
@@ -92,6 +95,16 @@ and the head does not parse, and the E0001 diagnostic suggests parentheses ([bug
 replaces that with SYN-4, and the reject example below, which pins main's behaviour, is retired when
 it lands. `scripts/check_ll1.py` checks FIRST/FIRST conflicts only; this one is a FIRST/FOLLOW
 conflict between `ident_tail` and the block after a head, which the head context resolves.
+One disambiguation is lexical, so the productions cannot show it: after an `IDENT`, a `{` begins
+a struct literal's field list (`ident_tail`) only when the name begins with an uppercase letter,
+the type-name convention; after a lowercase name it ends the expression. In the head of an `if`,
+`while` or `match` (and of `if let` / `while let`) the head's block follows the expression, so an
+uppercase name just before that block, typically a module constant, is read as the start of a
+struct literal and the head does not parse. Parenthesizing the head (`if (n > LIMIT) { … }`)
+removes the reading, and the E0001 diagnostic names that form ([bug
+212](../bugs/212_const_before_block_parses_as_struct_literal.md)). This is a FIRST/FOLLOW conflict between `ident_tail` and the block after a head, which the case
+rule resolves; the checkers report it, and `grammar/ll1_known_conflicts.tsv` lists it. Whether a head should admit a struct literal at all
+is an open syntax question, not decided here.
 
 ```con reject name=head-constant-struct-literal code=E0001 stage=parse pair=head-constant-parenthesized
 const LIMIT: Int = 16;

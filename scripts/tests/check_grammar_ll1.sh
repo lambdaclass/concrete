@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The grammar is LL(1), and three independent checkers agree on why.
+# The grammar is LL(1) except for its listed conflicts, and three independent checkers agree on why.
 #
 # grammar/concrete.ebnf is checked by three deliberately independent implementations,
 # scripts/check_ll1.{py,c,rs} (added together in ced8b114 as a diverse-implementation cross-check:
@@ -72,6 +72,25 @@ else
 fi
 bad_rows="$(awk -F'\t' '!/^#/ && NF > 0 && (NF != 3 || $2 == "" || $3 == "")' "$KNOWN")"
 [ -z "$bad_rows" ] || no "$KNOWN: every row needs the conflict, a disposition and a reason (3 tab-separated columns)"
+# THE LIST ONLY SHRINKS, against the base revision (merge-base with origin/main; the parent on
+# main; LL1_BASE when set, e.g. github.event.before in CI). Listing a new conflict does not admit it.
+BASE="${LL1_BASE:-}"
+case "$BASE" in *[!0]*) ;; *) BASE="" ;; esac
+if [ -z "$BASE" ]; then
+  MB="$(git merge-base HEAD origin/main 2>/dev/null || true)"
+  if [ -z "$MB" ]; then no "no merge-base with origin/main (fetch it, or set LL1_BASE)"
+  elif [ "$MB" != "$(git rev-parse HEAD)" ]; then BASE="$MB"
+  else BASE="HEAD~1"; fi
+fi
+if [ -n "$BASE" ]; then
+  if ! git rev-parse --verify -q "$BASE^{commit}" >/dev/null; then
+    no "base revision '$BASE' does not resolve (fetch history, or set LL1_BASE)"
+  elif git show "$BASE:$KNOWN" > "$WORK/known_base.tsv" 2>/dev/null; then
+    grep -v '^#' "$WORK/known_base.tsv" | grep -v '^$' | cut -f1 | LC_ALL=C sort > "$WORK/known_base"
+    added="$(LC_ALL=C comm -13 "$WORK/known_base" "$WORK/known")"
+    [ -z "$added" ] || no "$KNOWN gained conflicts relative to $(git rev-parse --short "$BASE"); the list only shrinks: $added"
+  fi
+fi
 grep -q '^rule program ' "$WORK/real.py" || no "real: the canonical dump has no 'program' rule (vacuous output)"
 grep -q '^follow program ' "$WORK/real.py" || no "real: the canonical dump has no FOLLOW sets (the bug 329 regression)"
 
@@ -86,8 +105,14 @@ for g in "$FIXTURES"/*.ebnf; do
 done
 [ "$n" -ge 6 ] || no "expected at least six planted grammars under $FIXTURES, found $n"
 # Bug 329's regression: the FIRST/FOLLOW fixtures must fail as FOLLOW conflicts, not by accident.
-for t in planted_follow_optional_before_same_start planted_follow_optional_then_same_token; do
-  grep -q '^conflict-follow ' "$WORK/$t.py" || no "$t: no FIRST/FOLLOW conflict reported (bug 329 is back)"
+# One planted grammar per FIRST/FOLLOW kind the checkers claim: an optional, a repetition, an
+# alternation with a nullable alternative, and two nullable alternatives.
+for want in "planted_follow_optional_before_same_start opt" "planted_follow_optional_then_same_token opt" \
+            "planted_follow_repetition_then_same_token rep" "planted_follow_nullable_alternative alt1" \
+            "planted_follow_nullable_alternative nullable"; do
+  set -- $want
+  grep -qE "^conflict-follow [^ ]+ $2 " "$WORK/$1.py" \
+    || no "$1: no FIRST/FOLLOW conflict of kind '$2' reported (bug 329 is back)"
 done
 
 if [ "$FAIL" -ne 0 ]; then exit 1; fi

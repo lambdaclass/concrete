@@ -393,7 +393,12 @@ def check_ll1(rules, canonical=None):
 
             # An alternation that can derive nothing: no alternative may start with a token
             # that can follow the alternation.
-            if any(is_nullable(alt, nullable) for alt in node.alts):
+            nullable_alts = [j for j, alt in enumerate(node.alts) if is_nullable(alt, nullable)]
+            if len(nullable_alts) > 1:
+                # Two alternatives that can both derive nothing are both chosen on whatever
+                # follows; one token can never tell them apart.
+                follow_conflict(path, "nullable", {f"alt{j+1}" for j in nullable_alts})
+            if nullable_alts:
                 for j, alt in enumerate(node.alts):
                     overlap = first_names(alt, table, nullable) & fol
                     if overlap:

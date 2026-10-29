@@ -485,7 +485,18 @@ impl<'a> Checker<'a> {
                 }
                 // An alternation that can derive nothing: no alternative may start with a token
                 // that can follow the alternation.
-                if alts.iter().any(|alt| is_nullable(alt, nullable)) {
+                let nullable_alts: HashSet<String> = alts
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, alt)| is_nullable(alt, nullable))
+                    .map(|(i, _)| format!("alt{}", i + 1))
+                    .collect();
+                // Two alternatives that can both derive nothing are both chosen on whatever
+                // follows; one token can never tell them apart.
+                if nullable_alts.len() > 1 {
+                    self.follow_conflict(path, "nullable", &nullable_alts);
+                }
+                if !nullable_alts.is_empty() {
                     for (i, fi) in firsts.iter().enumerate() {
                         let overlap: HashSet<String> = fi.intersection(fol).cloned().collect();
                         if !overlap.is_empty() {

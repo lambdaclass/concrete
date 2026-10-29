@@ -63,18 +63,25 @@ each other.
 - All three checkers compute every nonterminal's FOLLOW set (a fixpoint from the start symbol).
   They check each choice point in its FOLLOW context. They report a FIRST/FOLLOW conflict where an
   optional's or repetition's FIRST meets what follows it, or where an alternative of an
-  alternation that can derive nothing starts with a token that can follow the alternation.
+  alternation that can derive nothing starts with a token that can follow the alternation. They
+  also report two alternatives that can both derive nothing, which no lookahead token can tell
+  apart.
 - `--canonical` prints every rule's FOLLOW set and each FIRST/FOLLOW conflict
-  (`conflict-follow <path> <opt|rep|altN> <tokens>`). The three outputs stay byte-identical.
+  (`conflict-follow <path> <opt|rep|altN> <tokens>`, or `conflict-follow <path> nullable
+  altI,altJ`). The three outputs stay byte-identical.
 - The real grammar shows eight conflicts. They are not resolved here: every grammar edit is the
-  owner's. `grammar/ll1_known_conflicts.tsv` lists each with its disposition, and may only shrink:
+  owner's. `grammar/ll1_known_conflicts.tsv` lists each with its disposition. The list may only
+  shrink: the gate fails on an unlisted conflict, on a stale row, and on a row the base revision's
+  list did not have (the merge-base with origin/main; in CI on a push, the revision before it).
+  The dispositions:
   - the `for` header and the `as T <` cast are language decisions;
   - the struct-literal rule after an identifier is OD16, decided and still to encode;
   - the block's trailing value and three trailing-comma lists can be left-factored without changing
     the accepted language.
-- Regression leg: `check_grammar_ll1.sh`. The two planted grammars
-  (`tests/fixtures/grammar_ll1/follow_optional_*.ebnf`) must fail as FIRST/FOLLOW conflicts in all
-  three checkers. The real grammar's conflicts must equal the list. The canonical dump must carry
+- Regression leg: `check_grammar_ll1.sh`. Four planted grammars
+  (`tests/fixtures/grammar_ll1/follow_*.ebnf`) must fail in all three checkers, between them as
+  each FIRST/FOLLOW kind: optional, repetition, nullable alternative, and two nullable
+  alternatives. The real grammar's conflicts must equal the list. The canonical dump must carry
   FOLLOW sets. `check_phase6d_surface_simplification.sh` called `check_ll1.py` directly; it now
   runs the gate.
 
@@ -90,4 +97,5 @@ refusing what it must. Bugs 252 and 268 are other gates that could not see the d
 
 R-0498 (S3, exit 2l: demonstrated enforcement): a claim is tied to a gate leg and a planted
 control the leg must refuse. The gate now holds a planted grammar for each conflict kind it
-claims to check.
+claims to check. SYN-1's text (`docs/spec/syntax.md`), the book and the site's testing pages now
+state the exception and point at the list.

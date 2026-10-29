@@ -1,0 +1,6 @@
+(* Planted FIRST/FOLLOW conflicts for scripts/tests/check_grammar_ll1.sh (bug 329) at an
+   ALTERNATION with nullable alternatives: `tail`'s first alternative starts with 'x', which may
+   also follow `tail`; and `twin`'s two alternatives can both derive nothing. *)
+program = 'a' tail 'x' twin ';' ;
+tail = 'x' 'y' | ;
+twin = [ 'p' ] | [ 'q' ] ;
