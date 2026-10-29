@@ -895,8 +895,6 @@ emerge from local convenience. It draws the commitments of the sections above, t
 single picture of what Concrete is becoming. The rules it commits to are stated in the language
 specification, [docs/spec](../spec/README.md).
 
-stated in the language specification, [docs/spec](../spec/README.md)).
-
 ### The Language Concrete Is Trying To Be
 
 A small, low-level language where:
