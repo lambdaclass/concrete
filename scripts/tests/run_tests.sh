@@ -9010,6 +9010,7 @@ run_err "tests/regressions/bug226_submodule_imports_private_function/repro.con" 
 run_err "$TESTDIR/error_226_submodule_imports_private_extern.con" "(E0285)"
 run_err "$TESTDIR/error_226_submodule_imports_private_struct.con" "(E0285)"
 run_ok "$TESTDIR/regress_226_submodule_imports_pub.con" 42
+run_err "$TESTDIR/error_226_private_fn_beside_pub_const.con" "(E0111)"
 # Bug 217: Resolve walked only the modules of the top-level list, so a nested submodule (two
 # modules deep, a module written after `main`, every `mod x;` file of a project) produced no
 # Resolve diagnostics: the cast reached the backend (panic), and other name errors met Check's

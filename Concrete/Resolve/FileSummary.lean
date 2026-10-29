@@ -92,6 +92,9 @@ structure FileSummary where
   /-- The module's full definition path (`std.string`, `main.b`): which package and module it
       is, for the import rule's std-private exception (MOD-6, bug 226). -/
   definitionPath : String := ""
+  /-- The `pub` functions and foreign bindings, by name: an import binds a function before any other
+      declaration of the same name, so its visibility is the function's own (bug 226). -/
+  publicCallables : List String := []
 
 instance : Inhabited FileSummary where
   default := { name := "", functions := [], structs := [], enums := [],
@@ -283,6 +286,7 @@ partial def buildFileSummary (m : Module) (definitionPath : String := "") : File
                      (n, resolveAliasesInSig aliasMap sig)
   { name := m.name
     definitionPath := thisDefinitionPath
+    publicCallables := pubFns ++ pubExterns
     functions := functions
     -- R-0004 path 1 (local): stamp both definition-site components once.
     -- Import aliases may later change `.name`; they never change these fields.
@@ -485,13 +489,20 @@ inductive ImportRefusal where
     and a module outside std imports none of them, `pub` or not. `none` admits the import; a name
     the exporter does not declare is not judged here (its own refusal reports it). -/
 def importRefusal (importer exporter : FileSummary) (name : String) : Option ImportRefusal :=
+  -- The declaration an import of `name` binds, in `resolveImports`' order: a function or foreign
+  -- binding, then a struct, then an enum; the rest (aliases, newtypes, constants) check their own
+  -- `pub` where they are bound.
+  let callable := (exporter.functions ++ exporter.externFnSigs).any (·.1 == name)
   if exporter.definitionPath == stdPrivateModulePath then
-    if inStdPackage importer.definitionPath then none else some .stdPrivate
-  else if exporter.publicNames.contains name then none
-  else
-    let bindable := (exporter.functions ++ exporter.externFnSigs).any (·.1 == name)
-      || exporter.structs.any (·.name == name) || exporter.enums.any (·.name == name)
-    if bindable then some .notPublic else none
+    if !callable then none
+    else if inStdPackage importer.definitionPath then none else some .stdPrivate
+  else if callable then
+    if exporter.publicCallables.contains name then none else some .notPublic
+  else match exporter.structs.find? (·.name == name) with
+    | some sd => if sd.isPublic then none else some .notPublic
+    | none => match exporter.enums.find? (·.name == name) with
+      | some ed => if ed.isPublic then none else some .notPublic
+      | none => none
 
 /-- The message of a MOD-6 refusal (E0326, every pass). -/
 def stdPrivateImportMsg (name moduleName : String) : String :=

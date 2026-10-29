@@ -1,0 +1,14 @@
+// Bug 226 (Kimi review): a private function beside a `pub const` of the same name. An import of the
+// name binds the function first, so it is refused as not public (E0111 from a top-level module).
+mod a {
+    fn F() -> Int {
+        return 1;
+    }
+    pub const F: Int = 42;
+}
+mod m {
+    import a.{F};
+    pub fn main() -> Int {
+        return F();
+    }
+}

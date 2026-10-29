@@ -1063,6 +1063,8 @@ private def summaryImports (summaryTable : List (String × FileSummary)) (s : Fi
               && (ms.functions ++ ms.externFnSigs).any (·.1 == sym.name)
           if refusal == some .stdPrivate then
             (errs ++ [mkResolveDiag (.stdPrivateImport sym.name imp.moduleName) (some imp.span)], syms, tys)
+          else if refusal == some .notPublic then
+            (errs ++ [mkResolveDiag (.notPublicInModule sym.name imp.moduleName) (some imp.span)], syms, tys)
           else if (pubNames.contains sym.name || stdOwn) && unimportable.isNone then
             let localName := sym.effectiveName
             -- Try to bring the symbol into scope from the module summary
