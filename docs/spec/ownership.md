@@ -797,7 +797,7 @@ run last registered first (`defer a(); defer b();` runs `b`, then `a`), on fall-
 and each block runs its own list, inner blocks before outer ones (`Concrete/IR/Lower.lean`:
 `emitFrameDeferredCalls` at a scope's end, `emitAllDeferredCalls` on `return`,
 `emitDeferredUntilLoop` on `break` and `continue`). An argument is a local name, a shared or
-exclusive borrow of a local name, or a constant (a literal, a module constant, a function name); a
+exclusive borrow of a local name, or a constant (a non-string literal, a module constant, a function name); a
 projection (`defer f(t.id)`, `defer f(&t.field)`), a nested call (`defer f(g(x))`) or a string literal
 is E0279, so write a named cleanup function that takes the local or a borrow of it and computes
 inside (decided 2026-10-21, bug 143). A by-value local is reserved, not taken: E0206 ("reserved by
@@ -805,9 +805,9 @@ defer") refuses a later move or consumption (`error_defer_move.con`,
 `error_memory_edge_defer_then_move.con`, `pressure_err_defer_then_move.con`), and when the block ends
 the reserved locals are consumed (a later use is E0205) and the pins end. A borrowed local is
 pinned (E0206, "borrowed by a pending defer"), so `defer peek(&t); defer kill(t);` is refused and
-`defer peek(&t);` alone leaves `t` unconsumed (E0208). A registration-time value is spelled
-`let x0 = x; defer show(x0);`; `let x = 1; defer show(x); let x = 5;` shows 1, natively and under
-`--interp`, because Elab gives a shadowing binder a fresh Core name (bug 087). A method call
+`defer peek(&t);` alone leaves `t` unconsumed (E0208). A deferred call reads its arguments when it runs, so a registration-time value is
+spelled `let x0 = x; defer show(x0);`. Rebinding the name in the same block is not a way around
+this: a visible binding cannot be shadowed (SCOPE-1, E0301). A method call
 `defer obj.method();` is E0282 (`deferBodyNotCall`; an earlier design note wrongly allowed it,
 EVALUATION2 D7): defer the function the method desugars to, or a named cleanup function; `defer
 { ... }` is a parse error. A deferred call's arguments are typed by its parameters as in an ordinary

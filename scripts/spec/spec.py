@@ -1136,6 +1136,8 @@ def check_code_coverage(spec, root, seen, n):
         if len(r) != 3: fail("S12", f"{ALLOW_PATH} row {r} does not have 3 columns (code, rule, reason)"); continue
         if not ALLOW_REASON_RE.match(r[2]):
             fail("S12", f"{ALLOW_PATH}: {r[0]} {r[1]}: reason '{r[2]}' is not od:ODn, R-NNNN, bug-NNN or unreachable:<why>")
+        elif not r[2].startswith("unreachable:") and not tracking_exists(r[2][3:] if r[2].startswith("od:") else r[2], root):
+            fail("S12", f"{ALLOW_PATH}: {r[0]} {r[1]}: reason '{r[2]}' names a tracking ID that does not exist")
         if (r[0], r[1]) in allow: fail("S12", f"{ALLOW_PATH}: {r[0]} {r[1]} listed twice")
         allow[(r[0], r[1])] = r[2]
     rows = inventory_rows(spec)

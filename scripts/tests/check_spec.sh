@@ -229,6 +229,9 @@ if [ -s "$TMP/s12.observed" ]; then
   mkdir -p "$TMP/n12/docs/spec"; cp -R docs/spec/. "$TMP/n12/docs/spec/"
   printf 'E0310\tSTMT-7\tunreachable:planted\n' >> "$TMP/n12/docs/spec/coverage_allow.tsv"
   control "N12b: an allow row for a witnessed code" S12 "E0310 STMT-7 is allow-listed" -- code-coverage --observed "$TMP/s12.observed" --root "$TMP/n12" --spec "$TMP/n12/docs/spec"
+  mkdir -p "$TMP/n12d/docs/spec" "$TMP/n12d/docs/project"; cp -R docs/spec/. "$TMP/n12d/docs/spec/"; cp ROADMAP.md "$TMP/n12d/"; cp docs/project/ROADMAP_*.md "$TMP/n12d/docs/project/"
+  printf 'E9999\tSTMT-7\tR-9999\n' >> "$TMP/n12d/docs/spec/coverage_allow.tsv"
+  control "N12d: an allow row whose reason names no tracking ID" S12 "reason 'R-9999' names a tracking ID that does not exist" -- code-coverage --observed "$TMP/s12.observed" --root "$TMP/n12d" --spec "$TMP/n12d/docs/spec"
 else no "N12: S12 recorded no observation to replay"; fi
 # S12: a hand edit to the generated inventory
 mkdir -p "$TMP/n13/docs/spec"; cp -R docs/spec/. "$TMP/n13/docs/spec/"

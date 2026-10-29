@@ -584,7 +584,7 @@ match e { E::Wrap { p } => use(p.x, p.y) }
 
 match outer {
     Option::Some { value } => match value {
-        Option::Some { value } => use(value),
+        Option::Some { value: inner } => use(inner),
         Option::None => fallback(),
     },
     Option::None => fallback(),

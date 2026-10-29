@@ -112,7 +112,7 @@ chapter's prefix, written in upper case. A definition's number has a `D` in fron
    diagnostics carry the same versioned tag (`rule: REF-3@1`).
 4. **The fields.** Each field is one bullet. The fields appear in the order shown and none
    repeats. An unknown field is refused. Values that are lists are separated by `, `.
-   - `Kind:` one of `refusal`, `guarantee`, `definition` or `preservation`:
+   - `Kind:` one of `refusal`, `guarantee`, `definition`, `preservation` or `open`:
      - A **refusal** rejects a breaking program with a diagnostic.
      - A **guarantee** is a semantic property with no diagnostic of its own.
      - A **definition** fixes a term that rules use. It is as normative as a rule.
@@ -135,12 +135,12 @@ chapter's prefix, written in upper case. A definition's number has a `D` in fron
      [PIPELINE_CONTRACTS.md](../compiler/PIPELINE_CONTRACTS.md): `parse`, `resolve`, `check`,
      `elab`, `mono`, `post-mono`, `core-check`. Guarantees and definitions have `none`.
    - `Status:` one of `enforced`, `partial <tracking>` (the rule holds for its non-pending
-     examples, and the pending ones are tracked) or `pending <tracking>` (decided, not
-     implemented). A tracking ID is a roadmap item (`R-0496`) or a bug (`bug-181`).
+     examples, and the pending ones are tracked), `pending <tracking>` (decided, not
+     implemented) or, for an open entry, `open ODn`. A tracking ID is a roadmap item (`R-0496`) or a bug (`bug-181`).
    - `Enforced by:` the Lean declarations of today's compiler that implement the entry, as
      fully qualified names, or, for a library contract, a std declaration written
      `std/src/<file>.con#<Name>` (whose `//` comment block carries the `spec:` comment). It is
-     required unless the status is `pending`. A definition names
+     required unless the status is `pending` or `open`. A definition names
      the Lean predicate it denotes, such as `Concrete.tyContainsRef`.
    - `Semantics:` the declarations in Core's semantics or checker judgments that define the
      entry, or `none` while they do not exist. This is the normative link (see "Authority"
@@ -148,8 +148,8 @@ chapter's prefix, written in upper case. A definition's number has a `D` in fron
      they are the same declaration only when the implementation is the definition.
    - `Obligation:` what the verified pipeline must prove for this entry, given as an
      invariant or roadmap ID, or `none`.
-   - `Evidence:` exactly one of `tested`, `proved: <Lean theorem>` or `trusted: <ID>`. These
-     three are kept distinct:
+   - `Evidence:` exactly one of `tested`, `proved: <Lean theorem>` or `trusted: <ID>` (`by-users` for
+     a definition, `open` for an open entry). These three are kept distinct:
      - `tested` means the examples and fixtures pass.
      - `proved` names a kernel-checked theorem. The gate checks that the declaration is a
        theorem and that it depends on no axiom beyond Lean's standard three.
