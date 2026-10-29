@@ -496,6 +496,7 @@ open_bug_reproducers() {
 122|bug122_builtin_enum_canonical_layout/repro.con|runs-exit|2
 216|bug216_field_write_non_mut_binding/repro.con|compiles|
 226|bug226_submodule_imports_private_function/repro.con|compiles|
+318|bug318_a_struct_literal_in_an_if_while_or_match_head_is/repro.con|runs-exit|42
 TABLE
 }
 if [ -z "$ONLY" ]; then

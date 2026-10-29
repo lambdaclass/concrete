@@ -347,7 +347,7 @@ or `Unsafe` code, `&*p` forms a reference only under that code's validity premis
 miscompiled or leaked), closed 2026-10-23 at every reference-forming site, explicit borrows and
 implicit `&self` receivers alike. Loans are keyed by the root (REF-11).
 
-Decided by the owner on 2026-10-29 (OD1, the Austral model): a reference is formed by borrowing a variable or projecting through a reference, `&s.f` is sugar, and a temporary is never a root. Loans are keyed by the root variable (REF-8) until OD15 settles the keying.
+Decided by the owner on 2026-10-29 (OD1, the Austral model): a reference is formed by borrowing a variable or projecting through a reference, `&s.f` is sugar, and a temporary is never a root. Loans are keyed by the root variable (REF-8, REF-11; OD15 part (a), decided 2026-10-29).
 
 ```con reject name=borrow-operator code=E0238 stage=check pair=root-plus-projections
 fn read(r: &Int) -> Int {
@@ -755,6 +755,9 @@ in `match r { n => .. }`) is the scrutinee reference itself, so over `&mut T` it
 (version 2; version 1 said `&T` for it too). A Copy payload is read with `*value`.
 Literal and range patterns still compare the referenced value. The binder is a loan on the
 scrutinee's root for its arm (REF-8).
+The owner decided OD3 on 2026-10-29 as enforced here: the binder through a borrowed scrutinee is
+always a reference (this rule), its mode is stored in Core as its type (PASS-2), and the root is not
+reassigned while the binder's loan lives (REF-8).
 
 ```con accept name=copy-payload-is-ref exit=42
 fn main() -> Int {
@@ -825,33 +828,35 @@ fn main() -> Int {
 <a id="REF-11"></a>
 ### REF-11. Loans are keyed by root binding
 
-**REF-11@3.** Within one call, an exclusive argument conflicts with another argument only when their places overlap, two places overlapping when they have the same root binding and the path of one is a prefix of the path of the other, so `h(&mut a.f, &mut a.g)` is accepted.
+**REF-11@3.** A borrow of any part of a value is a loan on its root binding and freezes the whole owner while it lives, so within one call two arguments that borrow the same root conflict when at least one of them is exclusive, whatever their projections, and lending a reference binding the caller already holds (REF-10) makes no new loan.
 
-- Kind: guarantee
+- Kind: refusal
 - Uses: none
-- Codes: none
-- Status: pending R-0496
+- Codes: E0293 (check)
+- Status: enforced
 - Enforced by: Concrete.pathsOverlap, Concrete.checkCallRootReads
 - Semantics: none
-- Obligation: INV-REF (R-0500)
+- Obligation: INV-REF (R-0500); the loan checker needs no path-overlap analysis
 - Evidence: tested
 
-**Rationale.** Decided by the owner on 2026-10-29 (OD2, part 2): exclusivity at a call follows
-places, root plus path. An exclusive argument conflicts with an argument whose place is the same
-place, a projection of it, or a place it projects from (`h(r, r)`, `h(&mut x, &x)` and
-`h(&mut a, &mut a.f)` are refused, by REF-8, E0293), and not with a disjoint sibling, so two
-fields of one owner may be lent exclusively to one call. Lending a reference binding the caller
-already holds (`r.add(r.step)` with `r: &mut S`, `self.sift_up(self.len - 1)` with
-`self: &mut Self`) lends that reference (REF-10); reading through it in another argument overlaps
-only if the read place does. A conflict between a borrow and a later use of its place, outside one
-call, is REF-8's. History: the 2026-10-23 proposal (TIGHTENING_DECISIONS D2, under OD1) keyed every
-loan by the root binding, so main still refuses disjoint siblings in one call (E0293), the pending
-example below; `error_d2_call_disjoint_fields.con`, `error_d2_call_field_read.con`,
+**Rationale.** Decided by the owner on 2026-10-29 (OD15, part (a)): a live borrow of any part of a
+value freezes the whole owner, and loans are keyed by the root binding, as OD1 put it and as main
+already enforces. This tightens OD2's part 2 as first recorded the same day: an exclusive argument
+conflicts with any other argument that borrows the same root, so even disjoint fields conflict and
+`h(&mut a.f, &mut a.g)` is refused, as are `upd(&mut s.a, &s.b)` and `add(&mut s.a, s.b)` (E0293);
+the version recorded earlier that day, which allowed disjoint siblings, was never published. Two
+fields of one owner are lent one call at a time, or read into a `let` first. Lending a reference
+binding the caller already holds (`r.add(r.step)` with `r: &mut S`, `self.sift_up(self.len - 1)`
+with `self: &mut Self`) lends that reference (REF-10) and makes no new loan, so reading through it
+in another argument is not a second loan. A conflict between a borrow and a later use of its
+place, outside one call, is REF-8's. History: the rule dates from 2026-10-23 (TIGHTENING_DECISIONS
+D2); the measured migration was one std site (`std/src/cli.con:77`) and this fixture, and
+`error_d2_call_disjoint_fields.con`, `error_d2_call_field_read.con`,
 `error_d2_receiver_projection_read.con`, `error_d2_call_field_read_in_branch.con` and
-`error_d2_explicit_mut_receiver_read.con` pin that over-refusal in run_tests.sh and flip when the
-repair lands (R-0496). Loans outside a single call are keyed by the root variable (OD1, decided 2026-10-29; REF-8) until OD15 (OPEN-15) settles the keying.
+`error_d2_explicit_mut_receiver_read.con` pin it in run_tests.sh. What passes may assume about `&mut`
+exclusivity (OD15, part (b)) is still open (OPEN-15).
 
-```con accept name=disjoint-siblings-one-call exit=2 pending=R-0496 now=reject:E0293:check
+```con reject name=disjoint-fields-one-call code=E0293 stage=check pair=fields-in-sequence
 struct Copy W { a: Int, b: Int }
 
 fn two(a: &mut Int, b: &mut Int) {
@@ -947,4 +952,27 @@ of the language: a backend may copy only as an optimization proven equivalent, w
 exclusivity at a call makes possible. Current main still lowers a borrow block and a `&mut x`
 argument by copying the owner into a slot and writing it back at the exit, and an exit can lose
 those writes (bugs 305 and 307, under repair); the guarantee holds once that lowering is replaced.
+
+<a id="REF-14"></a>
+### REF-14. An alias derived from a loan lives no longer than the loan
+
+**REF-14@1.** A pointer or other alias derived from a loan is valid only while that loan lives, and `&mut` exclusivity is a guarantee the checker enforces, which no compiler pass or optimization assumes or exploits until that guarantee is proved in Lean.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: pending R-0496
+- Semantics: none
+- Obligation: the checker's exclusivity guarantee, proved over the Core semantics (R-0499, R-0496), before any pass relies on it
+- Evidence: tested
+
+**Rationale.** Decided by the owner on 2026-10-29 (OD15, part (b)), the strict option. The language
+guarantees `&mut` exclusivity and the checker enforces it (REF-8, REF-11), but a pass that exploits
+it (alias metadata, reordering loads and stores across a call) would turn any checker bug into a
+miscompile, so none may until the guarantee is a theorem (R-0499 with R-0496's Core semantics). Until
+then the operational loan rules are the definition: a loan starts at its borrow and ends with the
+borrow block, the arm or the call that holds it (REF-8), and a raw pointer or other alias derived
+from it (G19) is valid only while it lives; using one afterwards is outside safe code's guarantee
+(TRUST-3). Main emits no alias assumption today (no `noalias` or alias metadata); the rule is
+pending until a gate checks that and the Core semantics defines loan lifetimes (R-0496).
 

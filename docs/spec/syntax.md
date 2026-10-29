@@ -89,8 +89,9 @@ struct literal and the head does not parse. Parenthesizing the head (`if (n > LI
 removes the reading, and the E0001 diagnostic names that form ([bug
 212](../bugs/212_const_before_block_parses_as_struct_literal.md)). `scripts/check_ll1.py` checks
 FIRST/FIRST conflicts only; this one is a FIRST/FOLLOW conflict between `ident_tail` and the block
-after a head, which the case rule resolves. Whether a head should admit a struct literal at all
-is an open syntax question, not decided here.
+after a head, which the case rule resolves. The case rule is provisional: the owner decided OD16 on
+2026-10-29 that a struct literal in a head is refused unless parenthesized, with no exceptions
+(SYN-4, pending bug 318), and when that lands the head below parses and this example is retired.
 
 ```con reject name=head-constant-struct-literal code=E0001 stage=parse pair=head-constant-parenthesized
 const LIMIT: Int = 16;
@@ -176,5 +177,60 @@ fn main() -> Int {
 fn main() -> Int {
     let destr_x: Int = 42;
     return destr_x;
+}
+```
+
+<a id="SYN-4"></a>
+### SYN-4. A struct literal in a condition head is parenthesized
+
+**SYN-4@1.** A struct literal in the head of an `if`, `while` or `match`, or of an `if let` or `while let`, is refused unless it is parenthesized.
+
+- Kind: refusal
+- Uses: none
+- Codes: E0001 (parse)
+- Status: pending bug-318
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** Decided by the owner on 2026-10-29 (OD16): one uniform rule, with no exceptions,
+replaces the uppercase-name heuristic of SYN-1 (bug 212, provisional). The head's block follows its
+expression, so a `{` after a name in a head opens the block; a struct literal there is written
+`(P { v: 1 })`. Main still reads an uppercase name followed by `{` in a head as a struct literal: it
+accepts the first program below and refuses `if n > LIMIT { ... }` (bug 318 implements the rule).
+Whether a struct literal inside a call's argument list or an index within a head counts as
+parenthesized is OPEN-24.
+
+```con reject name=bare-struct-literal-in-head code=E0001 stage=parse pair=parenthesized-struct-literal-in-head pending=bug-318 now=accept:42
+struct Copy P { v: Int }
+
+fn main() -> Int {
+    if P { v: 1 }.v == 1 {
+        return 42;
+    }
+    return 0;
+}
+```
+
+```con accept name=parenthesized-struct-literal-in-head exit=42
+struct Copy P { v: Int }
+
+fn main() -> Int {
+    if (P { v: 1 }).v == 1 {
+        return 42;
+    }
+    return 0;
+}
+```
+
+```con accept name=head-constant-unparenthesized exit=42 pending=bug-318 now=reject:E0001:parse
+const LIMIT: Int = 3;
+
+fn main() -> Int {
+    let mut n: Int = 0;
+    while n < LIMIT {
+        n = n + 1;
+    }
+    return n + 39;
 }
 ```

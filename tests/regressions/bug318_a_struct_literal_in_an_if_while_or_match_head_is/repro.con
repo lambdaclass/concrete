@@ -1,0 +1,12 @@
+// Bug 318 (SYN-4, OD16): a struct literal in a condition head is refused unless parenthesized.
+// Observed on main: the uppercase-name heuristic of SYN-1 (bug 212) reads `P {` in the head as a
+// struct literal, so this program compiles and returns 42 on both consumers. Expected: refused at
+// parse (E0001), and `if n > LIMIT { ... }` with a constant LIMIT accepted.
+struct Copy P { v: Int }
+
+fn main() -> Int {
+    if P { v: 1 }.v == 1 {
+        return 42;
+    }
+    return 0;
+}

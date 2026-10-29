@@ -80,7 +80,7 @@ def codeRuleTag : String → Option String
   | "E0294" => some "OWN-7@2"
   | "E0290" => some "OWN-8@2"
   | "E0219" | "E0291" => some "OWN-9@2"
-  | "E0217" | "E0233" => some "OWN-10@1"
+  | "E0217" | "E0233" => some "OWN-10@2"
   | "E0243" | "E0244" => some "OWN-11@1"
   | "E0206" | "E0279" | "E0282" => some "OWN-12@1"
   | "E0570" | "E0584" | "E0272" | "E0273" => some "OWN-13@2"

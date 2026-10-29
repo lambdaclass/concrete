@@ -1,75 +1,12 @@
 # Open Owner Decisions
 
-This chapter lists the language questions that only the project owner decides: OD1 to OD22 of
+This chapter lists the language questions that only the project owner decides: OD1 to OD24 of
 [ROADMAP.md](../../ROADMAP.md#owner-decisions), exit 2n. Each entry states the question and encodes
 no answer. The rules it bears on are named in its rationale, together with what current main does,
 which stays provisional until the owner answers. The answer, when given, is recorded in ROADMAP and
 turns the entry into the rules it decides; until then no agent picks a side
-([AGENTS.md](../project/AGENTS.md#rules)).
-
-<a id="OPEN-3"></a>
-### OPEN-3. Pattern binders through a borrowed scrutinee
-
-**OPEN-3@1.** The type and mode of a pattern binder that binds through a borrowed scrutinee, and whether the root may be reassigned while such a binder lives, are an open owner decision (OD3).
-
-- Kind: open
-- Uses: none
-- Codes: none
-- Status: open OD3
-- Enforced by: none
-- Semantics: none
-- Obligation: none
-- Evidence: open
-
-**Rationale.** Bears on REF-9, PASS-2. Current main: on main as REF-9 (every such binder has reference type). The options and the recommendation are in ROADMAP's row OD3; the owner's answer is recorded there.
-
-<a id="OPEN-15"></a>
-### OPEN-15. Freezing under a shared borrow and `&mut` exclusivity
-
-**OPEN-15@1.** Whether a shared borrow freezes its whole owner, and what passes may assume about `&mut` exclusivity, are an open owner decision (OD15).
-
-- Kind: open
-- Uses: none
-- Codes: none
-- Status: open OD15
-- Enforced by: none
-- Semantics: none
-- Obligation: none
-- Evidence: open
-
-**Rationale.** Bears on REF-8, REF-11, REF-12. Current main: on main as REF-8, REF-11 and REF-12. The options and the recommendation are in ROADMAP's row OD15; the owner's answer is recorded there.
-
-<a id="OPEN-16"></a>
-### OPEN-16. A struct literal in a condition head
-
-**OPEN-16@1.** How a struct literal written in an `if`, `while` or `match` head is parsed or refused is an open owner decision (OD16).
-
-- Kind: open
-- Uses: none
-- Codes: none
-- Status: open OD16
-- Enforced by: none
-- Semantics: none
-- Obligation: none
-- Evidence: open
-
-**Rationale.** Bears on SYN-1. Current main: on main provisionally as part of SYN-1 (bug 212). The options and the recommendation are in ROADMAP's row OD16; the owner's answer is recorded there.
-
-<a id="OPEN-17"></a>
-### OPEN-17. Field writes and `mut`
-
-**OPEN-17@1.** Whether writing a field requires the binding to be declared `mut` is an open owner decision (OD17).
-
-- Kind: open
-- Uses: none
-- Codes: none
-- Status: open OD17
-- Enforced by: none
-- Semantics: none
-- Obligation: none
-- Evidence: open
-
-**Rationale.** Bears on OWN-10. Current main: open: today a field write on a binding not declared `mut` is accepted (bug 216). The options and the recommendation are in ROADMAP's row OD17; the owner's answer is recorded there.
+([AGENTS.md](../project/AGENTS.md#rules)). OD1 to OD22 were answered on 2026-10-29 and are listed under
+Decided; OPEN-23 and OPEN-24, raised while recording them, are open.
 
 <a id="OPEN-23"></a>
 ### OPEN-23. Inline submodules under one file per module
@@ -89,6 +26,26 @@ turns the entry into the rules it decides; until then no agent picks a side
 examples of this specification use them. Raised while recording OD9 (2026-10-29). The options are in
 ROADMAP's row OD23; the owner's answer is recorded there.
 
+<a id="OPEN-24"></a>
+### OPEN-24. A struct literal inside brackets in a condition head
+
+**OPEN-24@1.** Whether a struct literal written inside a call's argument list, an index or an array literal within an `if`, `while` or `match` head counts as parenthesized under SYN-4 is an open owner decision (OD24).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD24
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on SYN-4. Current main: `if same(p, P { v: 1 }) { ... }` is accepted (an
+uppercase struct literal is read anywhere in a head). The grammar distinguishes a grouped expression
+`( expr )` from the parentheses of a call's arguments, and OD16's answer does not say which one it
+means. Raised while recording OD16 (2026-10-29). The options are in ROADMAP's row OD24; the owner's
+answer is recorded there.
+
 ## Decided
 
 These entries were retired when the owner answered them; their IDs are never reused.
@@ -106,9 +63,20 @@ These entries were retired when the owner answered them; their IDs are never reu
 - **OPEN-18** (OD18, match arm order and unreachable arms): decided 2026-10-29. Now PAT-9 (pending, R-0500).
 - **OPEN-19** (OD19, the provable subset): decided 2026-10-29. Now the scope of [PROVABLE_V1.md](../verification/PROVABLE_V1.md), not a language rule.
 - **OPEN-2** (OD2, `&mut` arguments, deferred loans and the exit order): decided 2026-10-29. Now
-  REF-10@2 (lending), REF-11@3 (exclusivity at a call by root plus path), REF-13 (a `&mut` refers to the
+  REF-10@2 (lending), REF-11@3 (exclusivity at a call, keyed by the root as OD15 (a) tightened it), REF-13 (a `&mut` refers to the
   place), OWN-16 (a deferred call's borrow lives until it runs) and STMT-11 (one exit sequence).
 - **OPEN-9** (OD9, modules and interfaces): decided 2026-10-29. Now MOD-7 (pending, R-0556).
+- **OPEN-3** (OD3, pattern binders through a borrowed scrutinee): decided 2026-10-29, as enforced.
+  Now REF-9 (the binder is always a reference), PASS-2 (its mode stored in Core) and REF-8 (the root
+  is not reassigned while the binder's loan lives).
+- **OPEN-15** (OD15, freezing and `&mut` exclusivity): decided 2026-10-29. Part (a), whole-owner
+  freezing with loans keyed by the root binding, is REF-11@3 (enforced; it tightens OD2's part 2).
+  Part (b), the strict option, is REF-14 (pending, R-0496): no pass exploits `&mut` exclusivity until
+  it is proved, and an alias derived from a loan is valid only while the loan lives.
+- **OPEN-16** (OD16, a struct literal in a condition head): decided 2026-10-29, refused unless
+  parenthesized, with no exceptions. Now SYN-4 (pending, bug 318); what counts as parenthesized inside
+  a call's arguments is OPEN-24.
+- **OPEN-17** (OD17, field writes and `mut`): decided 2026-10-29. Now OWN-10@2 (partial, bug 216).
 - **OPEN-8** (OD8, global state): decided 2026-10-29, constants only and global resources as linear
   tokens. Now TRUST-8, TRUST-9 and TRUST-10 of [trusted.md](trusted.md#TRUST-8) (pending, R-0557).
 

@@ -24,6 +24,7 @@ REF-8	enforced	E0232	check	Concrete.consumeVar, Concrete.checkCallBorrowConflict
 REF-8	enforced	E0235	check	Concrete.consumeVar, Concrete.checkCallBorrowConflicts, Concrete.checkWriteAccess
 REF-8	enforced	E0293	check	Concrete.consumeVar, Concrete.checkCallBorrowConflicts, Concrete.checkWriteAccess
 REF-8	enforced	E0238	check	Concrete.consumeVar, Concrete.checkCallBorrowConflicts, Concrete.checkWriteAccess
+REF-11	enforced	E0293	check	Concrete.pathsOverlap, Concrete.checkCallRootReads
 REF-12	enforced	E0237	elab,check	Concrete.checkMutAccess, Concrete.checkWriteAccess
 SCOPE-1	enforced	E0301	check	Concrete.scope1Diagnostics, Concrete.constInitDiagnostics
 SCOPE-1	enforced	E0305	check	Concrete.scope1Diagnostics, Concrete.constInitDiagnostics
@@ -72,8 +73,8 @@ OWN-7	enforced	E0294	check	Concrete.checkStmt
 OWN-8	enforced	E0290	check	Concrete.checkExprCore
 OWN-9	enforced	E0219	check	Concrete.checkStmt
 OWN-9	enforced	E0291	check	Concrete.checkStmt
-OWN-10	enforced	E0217	check	Concrete.checkStmt, Concrete.checkMutAccess
-OWN-10	enforced	E0233	check	Concrete.checkStmt, Concrete.checkMutAccess
+OWN-10	partial bug-216	E0217	check	Concrete.checkStmt, Concrete.checkMutAccess
+OWN-10	partial bug-216	E0233	check	Concrete.checkStmt, Concrete.checkMutAccess
 OWN-11	enforced	E0243	check	Concrete.refuseErasedConsumption, Concrete.refuseConditionalConsumption
 OWN-11	enforced	E0244	check	Concrete.refuseErasedConsumption, Concrete.refuseConditionalConsumption
 OWN-12	enforced	E0206	check	Concrete.consumeVar, Concrete.checkStmt
@@ -203,6 +204,7 @@ MOD-4	enforced	E0124	resolve	Concrete.Pipeline.resolveFiles
 MOD-6	pending bug-226	new	resolve	-
 SYN-1	enforced	E0001	parse	Concrete.parse
 SYN-3	enforced	E0283	check	Concrete.checkStmt
+SYN-4	pending bug-318	E0001	parse	-
 TRAIT-1	enforced	E0590	check	Concrete.Coherence.pairwise
 TRAIT-2	enforced	E0591	check	Concrete.Coherence.pairwise, Concrete.Coherence.unify
 TRAIT-3	enforced	E0592	check	Concrete.Coherence.moduleImpls

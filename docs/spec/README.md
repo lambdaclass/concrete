@@ -60,7 +60,7 @@ areas exist (§8).
 | `modules.md` | `MOD-` | migrated: MOD-1 to MOD-4, MOD-6 and MOD-7 (name resolution, visibility, one binding per name, module files, the privacy of `std.libc` and generated interfaces, both pending) |
 | `syntax.md` | `SYN-` | migrated: SYN-1 to SYN-3 (the grammar, operator precedence, reserved spellings) |
 | `traits.md` | `TRAIT-` | migrated: TRAIT-D1, TRAIT-1 to TRAIT-10 (coherence: one impl per trait and type, no overlap, instance locality, impl targets, one method name per type, unambiguous bound calls, order independence; declared traits, impl conformance, satisfied bounds) |
-| `decisions.md` | `OPEN-` | open: the owner decisions of ROADMAP exit 2n still open (OPEN-3, OPEN-15, OPEN-16, OPEN-17, OPEN-23), stated as questions with no answer encoded; the others were retired when the owner decided them (2026-10-29) |
+| `decisions.md` | `OPEN-` | open: the owner decisions of ROADMAP exit 2n still open (OPEN-23, OPEN-24), stated as questions with no answer encoded; the others were retired when the owner decided them (2026-10-29) |
 
 **pilot**: the chapter is written in this format and checked by the gate. **stub**: the chapter
 holds only the rules the pilot needed, and the rest of its area migrates later.
@@ -257,9 +257,9 @@ the target. Its four workstreams:
   that permits the behaviour; `new_bug.sh` requires one of the three and a gate checks that every
   cited ID resolves in `ids.tsv`.
 
-Measured on 2026-10-29 (after the owner's decisions of that day on 18 of the open questions): 0 of
-139 entries link a Lean definition; 129 of 139 have `Evidence: tested`; 5 entries are open (OPEN-3,
-OPEN-15, OPEN-16, OPEN-17 and the new OPEN-23); the `docs/language` files still to absorb are
+Measured on 2026-10-29 (after the owner answered all of OD1 – OD22 that day): 0 of 138 entries
+link a Lean definition; 131 of 138 have `Evidence: tested`; 2 entries are open (OPEN-23 and OPEN-24,
+raised while recording those answers); the `docs/language` files still to absorb are
 listed in `unabsorbed.tsv`.
 
 ## 3. The gate: `scripts/tests/check_spec.sh`

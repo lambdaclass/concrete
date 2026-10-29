@@ -115,3 +115,4 @@ date	kind	probe	effort	bugs	silent
 2026-10-26	hunt	Lower borrows and address-taken locals: hand probes of every CExpr and CStmt constructor, and the differential fuzzer's borrow mode (fuzz_differential.py --mode borrow)	3000 programs	301,302,303,304,305,308,309	301,302,305
 2026-10-27	hunt	the differential fuzzer's borrow mode with for loops (fuzz_differential.py --mode borrow) on a build with bugs 301 - 305 fixed: every remaining mismatch	1000 programs	306	306
 2026-10-28	development	pre-push hook on the OVH dev host (perf_event_paranoid=4, load 15-26): check_compile_scaling.sh enums/lower wall growth x80	unrecorded	315	-
+2026-10-29	spec	OD16 (decided 2026-10-29) check: struct literals and uppercase constants in if and while heads, native against --interp, on main 0bf8350a (wip/spec-od)	5 probes	318	-

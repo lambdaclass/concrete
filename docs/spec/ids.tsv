@@ -42,7 +42,7 @@ REF-9/copy-payload-is-ref	live	-
 REF-10@1	superseded	63dc8107de80fbe74f8e72e1bfe85be6
 REF-10/reborrow-in-borrow-block	live	-
 REF-11@1	retired:reborrow-exception-stated-in-version-2	97454bcc4fd20c562dce878c05b25e6a
-REF-11/disjoint-fields-one-call	retired:od2-allows-disjoint-siblings	-
+REF-11/disjoint-fields-one-call	live	-
 REF-11/fields-in-sequence	live	-
 SCOPE-D1@1	live	7c4e5273e014f57bbfa31a35e0f9147b
 SCOPE-1@1	live	f14c34958bd147613f4a26265e5eb83d
@@ -135,7 +135,7 @@ OWN-9@1	superseded	7089f1242fbca5169131ede656376e31
 OWN-9/overwrite-live	live	-
 OWN-9/overwrite-through-mut-ref	live	-
 OWN-9/rebind-after-consume	live	-
-OWN-10@1	live	8a5a4c6fda7ece0629660979801e2f8c
+OWN-10@1	superseded	8a5a4c6fda7ece0629660979801e2f8c
 OWN-10/assign-immutable	live	-
 OWN-10/mut-borrow-immutable	live	-
 OWN-10/assign-mut	live	-
@@ -406,7 +406,7 @@ SYN-1/head-constant-struct-literal	live	-
 SYN-1/head-constant-parenthesized	live	-
 OPEN-1@1	retired:decided-by-the-owner-2026-10-29	74bc65950c62bc57f435d128a488128a
 OPEN-2@1	retired:decided-by-the-owner-2026-10-29	5bab966868435c1cf3336488eb82000f
-OPEN-3@1	live	e942e4105fc951094f42c349e179ba8c
+OPEN-3@1	retired:decided-by-the-owner-2026-10-29	e942e4105fc951094f42c349e179ba8c
 OPEN-4@1	retired:decided-by-the-owner-2026-10-29	9146f5d5dd8d88696cc2e5702067c769
 OPEN-5@1	retired:decided-by-the-owner-2026-10-29	ccdb9f9251b032c2ca72bedb870a7037
 OPEN-6@1	retired:decided-by-the-owner-2026-10-29	006a90419d6e548332c173be0ad92741
@@ -418,9 +418,9 @@ OPEN-11@1	retired:decided-by-the-owner-2026-10-29	5803198a265d218a670fdd6f18b4f6
 OPEN-12@1	retired:decided-by-the-owner-2026-10-29	c571dfda27eaff82ede218d74d1f11ea
 OPEN-13@1	retired:decided-by-the-owner-2026-10-29	2722e14fe2399249ab14c39d8e31c6ff
 OPEN-14@1	retired:decided-by-the-owner-2026-10-29	39d1da281d7123ad2032ae17fcd7a82e
-OPEN-15@1	live	993c980e22a74da3ddc37798c438f8bc
-OPEN-16@1	live	b868af6f4817bbff89ed43377c8923e5
-OPEN-17@1	live	389df526d28f4abb375c4378f07cdf78
+OPEN-15@1	retired:decided-by-the-owner-2026-10-29	993c980e22a74da3ddc37798c438f8bc
+OPEN-16@1	retired:decided-by-the-owner-2026-10-29	b868af6f4817bbff89ed43377c8923e5
+OPEN-17@1	retired:decided-by-the-owner-2026-10-29	389df526d28f4abb375c4378f07cdf78
 OPEN-18@1	retired:decided-by-the-owner-2026-10-29	c90b4ea8895868baa22d45ffc1b92b8c
 OPEN-19@1	retired:decided-by-the-owner-2026-10-29	7863c0d7c23b8fc18ae35c9f76f98090
 OPEN-20@1	retired:decided-by-the-owner-2026-10-29	a092a41064ada16d7acc5e63c35757f6
@@ -434,9 +434,8 @@ MOD-6@1	pending	35dc776904350d27ff4ae2817d973b0a
 MOD-6/program-imports-libc	pending	-
 MOD-6/program-uses-std	live	-
 REF-10@2	live	0285af262ac5b919230f34e331d870a3
-REF-11@3	pending	5c94236113a4c45a8ecfa7469cdb5299
+REF-11@3	live	3e0be048c415349643bb07d1651b8da0
 REF-11/overlapping-path	retired:refused-by-ref-8	-
-REF-11/disjoint-siblings-one-call	pending	-
 REF-13@1	pending	9bc44814b65d2f656ae0a49a4d600e01
 OWN-16@1	pending	8423d8d4f6645181736bb8ebaf2bfd55
 OWN-16/borrow-while-deferred	pending	-
@@ -453,3 +452,11 @@ TRUST-8/constant-holds-token	pending	-
 TRUST-8/constant	live	-
 TRUST-9@1	pending	093d98fd88fcaa28da96acf9c9d04aad
 TRUST-10@1	pending	e352e0795fc8294fc63da0fb72c18253
+OWN-10@2	live	bb8550835f1bdd3a799e80dc62752515
+OWN-10/field-write-immutable	pending	-
+REF-14@1	pending	143c727ca2cbb602af8406b11b619c09
+SYN-4@1	pending	bb0630b34e5fabb83f18293582e54868
+SYN-4/bare-struct-literal-in-head	pending	-
+SYN-4/parenthesized-struct-literal-in-head	live	-
+SYN-4/head-constant-unparenthesized	pending	-
+OPEN-24@1	live	908024d757bbdf5e734eb879d3d01973

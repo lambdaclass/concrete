@@ -130,6 +130,12 @@ REF-8	tests/programs/error_181_root_reassigned_nested.con	reject:E0232:REF-8@1	r
 REF-8	tests/programs/error_181_root_reassigned_while_let.con	reject:E0232:REF-8@1	ref8-arm	-
 REF-8	tests/programs/error_181_root_reassigned_whole_binder.con	reject:E0232:REF-8@1	ref8-arm	-
 REF-8	tests/programs/regress_181_borrowed_binders.con	run:42	ref8-arm	binary,interp
+REF-11	tests/programs/error_d2_call_disjoint_fields.con	reject:E0293:REF-11@3	ref11	-
+REF-11	tests/programs/error_d2_call_field_read.con	reject:E0293:REF-11@3	ref11	-
+REF-11	tests/programs/error_d2_receiver_projection_read.con	reject:E0293:REF-11@3	ref11	-
+REF-11	tests/programs/error_d2_call_field_read_in_branch.con	reject:E0293:REF-11@3	ref11	-
+REF-11	tests/programs/error_d2_explicit_mut_receiver_read.con	reject:E0293:REF-11@3	ref11	-
+REF-11	tests/programs/regress_2i_ref8_call_disjoint.con	run:42	ref11	binary,interp
 SCOPE-1	tests/programs/error_2i_scope1_const_initializer.con	reject:E0301:SCOPE-1@1	const-init	-
 SCOPE-1	tests/programs/regress_2i_const_initializer_block.con	run:42	const-init	binary,interp-exempt:bug-117-the-interpreter-has-no-module-constants
 SCOPE-1	tests/programs/error_2i_ref6_contract_ref_binding.con	reject:E0305:SCOPE-1@1	contract	-

@@ -1,15 +1,15 @@
 # Bug 216 — a field of a binding not declared `mut` can be assigned
 
 <!-- bug-ledger
-summary: a write into a field, a nested array element or a heap cell of a binding not declared `mut` is accepted, while `&mut` of the same place is refused (E0233) and a direct array element write is refused (E0217, bug 030); both backends agree. Whether OWN-10 covers such writes is not stated (post-R-0492 differential hunt, 2026-10-23) ((needs a language decision))
-coverage: a write into a field, nested element or heap cell of a binding not declared mut is accepted while &mut of the same place is refused (needs the OWN-10 scope decision); reproducer tests/regressions/bug216_field_write_non_mut_binding/repro.con, found by the post-R-0492 differential hunt 2026-10-23; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, compiles)
+summary: a write into a field, a nested array element or a heap cell of a binding not declared `mut` is accepted, while `&mut` of the same place is refused (E0233) and a direct array element write is refused (E0217, bug 030); both backends agree. OD17 (decided 2026-10-29) makes OWN-10@2 cover them (post-R-0492 differential hunt, 2026-10-23)
+coverage: a write into a field, nested element or heap cell of a binding not declared mut is accepted while &mut of the same place is refused; reproducer tests/regressions/bug216_field_write_non_mut_binding/repro.con, found by the post-R-0492 differential hunt 2026-10-23; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, compiles)
 class: 5 — OWN-10's mutability half applied per statement form, not at the normalized place: field writes are not checked
 silent: no
 ruling: Open: OPEN-17
 -->
 
-**Status:** OPEN (needs a language decision: whether OWN-10 covers writes into a binding's fields,
-nested elements and heap cell)
+**Status:** OPEN (the owner decided OD17 on 2026-10-29: a field write requires a `mut` binding,
+[OWN-10@2](../spec/ownership.md#OWN-10), pending this bug's repair)
 **Found:** 2026-10-23, in the post-R-0492 differential hunt, while re-running the fuzz farm's
 `crash-206151600c0e` (a mutated program assigned `s0.y = ...` with `let s0`, not `let mut s0`).
 **Severity:** a program the mutability rule appears to refuse is accepted; both backends agree, so no

@@ -623,19 +623,23 @@ fn main() -> Int {
 <a id="OWN-10"></a>
 ### OWN-10. Only a `mut` binding is assigned or mutably borrowed
 
-**OWN-10@1.** A binding is assigned, or borrowed with `&mut`, only when it is declared `mut`.
+**OWN-10@2.** A binding, or a field, element or heap cell of it, is assigned, or borrowed with `&mut`, only when the binding is declared `mut`.
 
 - Kind: refusal
 - Uses: none
 - Codes: E0217 (check), E0233 (check)
-- Status: enforced
+- Status: partial bug-216
 - Enforced by: Concrete.checkStmt, Concrete.checkMutAccess
 - Semantics: none
 - Obligation: none
 - Evidence: tested
 
 **Rationale.** Mutation is visible at the declaration. A `&mut` parameter is already a mutable
-place, so writing through it needs no `mut` on the parameter.
+place, so writing through it needs no `mut` on the parameter. Version 2 records the owner's
+decision of 2026-10-29 (OD17): a field write requires a `mut` binding, as `&mut` of the field and a
+direct array element write already did. Main still accepts a write into a field, a nested array
+element or a heap cell of a binding not declared `mut` (bug 216, which implements the rule), pinned
+by the pending example below.
 
 ```con reject name=assign-immutable code=E0217 stage=check pair=assign-mut
 fn main() -> Int {
@@ -654,6 +658,16 @@ fn main() -> Int {
     let x: Int = 1;
     set(&mut x);
     return x;
+}
+```
+
+```con reject name=field-write-immutable code=E0217 stage=check pair=assign-mut pending=bug-216 now=accept:21
+struct Copy P { x: Int, y: Int }
+
+fn main() -> Int {
+    let s: P = P { x: 1, y: 1 };
+    s.y = 20;
+    return s.x + s.y;
 }
 ```
 
@@ -1071,7 +1085,7 @@ The checker decides consumption by the position an expression is checked in (`Us
 **Rationale.** Decided by the owner on 2026-10-29 (OD2, part 4), alongside OWN-12, which stands: a
 deferred call's arguments are read at the exit, and a local passed by value is reserved and one
 passed by borrow pinned. This entry adds the loan: after `defer log(&mut x)`, no borrow of `x` that
-conflicts with that exclusive borrow (REF-11's overlap) may be taken before the block exits. Main
+conflicts with that exclusive borrow (any borrow of the same root, REF-11) may be taken before the block exits. Main
 already holds a deferred `&mut` reference binding's loan (`heldByDefer`, `refuseDeferHeldRef`,
 E0206), but it accepts a shared borrow of a local whose exclusive borrow a deferred call holds.
 
