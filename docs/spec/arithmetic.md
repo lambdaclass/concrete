@@ -5,8 +5,8 @@ the floating-point types are `f64` and `f32`. Every ordinary integer operation i
 traps on a result its type cannot represent, and the trap is an abort (STMT-2). Wrapping and
 saturating arithmetic are named operations. There is no implicit numeric conversion (TYPE-4), and
 which operand types an operator takes is TYPE-6. The design records are
-[ARITHMETIC_POLICY.md](../language/ARITHMETIC_POLICY.md) and
-[NUMERIC_MODEL.md](../language/NUMERIC_MODEL.md); the profile mapping, report classification and
+[ARITHMETIC_POLICY.md](../language/ARITHMETIC_POLICY.md) (NUMERIC_MODEL.md was absorbed into
+ARITH-2, ARITH-3 and ARITH-5 and deleted); the profile mapping, report classification and
 proof boundaries stay there.
 
 ## Rules
@@ -48,6 +48,12 @@ be 44. The negated value is what is range-checked, so `let a: i8 = -128` is acce
 `-129` is not. Hex (`0xFF`) and binary (`0b1010`) literals are accepted; suffixes such as `7u8`
 are not part of the language (an annotation or a conversion says the type).
 
+An unannotated integer literal with no expected type is `Int` (`i64`); a hint (an annotation, a
+parameter, a field, an arm) gives it the hinted integer type. Suffixes are workload-gated: an
+annotation already covers the need, so a suffix would be pure convenience, revisited if a real
+workload finds annotations too noisy. Gated by `scripts/tests/check_numeric_literals.sh` (ROADMAP
+old Phase 6 #6, 2026-06-23).
+
 ```con reject name=literal-out-of-range code=E0227 stage=check pair=literal-in-range
 fn main() -> Int {
     let a: u8 = 300;
@@ -85,6 +91,10 @@ for an unsigned one. Integer division truncates toward zero (`-7 / 2` is `-3`), 
 has the sign of its dividend. Constant folding may refuse an operation it proves always overflows (E0900),
 but it does not see every such operation, so the run-time trap is the guarantee. Array bounds are
 checked the same way, an index out of bounds aborting.
+
+For example `let c: u8 = 200 + 100` compiles and traps at run time: the folder proves overflow
+only for what it recognizes, so E0900 is a partial guarantee (`provenViolationDiagnostics`, the
+same path as a proven out-of-bounds index or zero divisor); completing the folder is ROADMAP #10.
 
 ```con accept name=checked-in-range exit=42
 fn main() -> Int {
@@ -175,6 +185,10 @@ and sign changes are still accepted and truncate or reinterpret, and float to in
 toward zero and aborts on NaN, an infinity or a value outside the target's range (a checked
 conversion), until the named operations land and the corpus migrates (about 500 to 700 sites). Pointer and reference casts are not
 numeric conversions (TRUST-1 owns the pointer–integer case).
+
+Until then, on current main, narrowing truncates silently (`300 as u8` is 44, `-1 as u32` is
+4294967295, `3.9 as i32` is 3). Even a widening needs `as`: `want_u64(my_u8)` is E0220 (TYPE-4),
+so every conversion is visible at the call site.
 
 ```con reject name=int-to-bool code=E0553 stage=core-check pair=widening
 fn main() -> Int {

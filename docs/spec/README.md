@@ -394,7 +394,7 @@ Each step lands with the gate green. The steps run in this order:
    patterns, guards, `if let` and `while let`. It replaces PATTERN_DESTRUCTURING and
    PATTERN_ERGONOMICS; the deferred decisions of NESTED_PATTERNS and TUPLES were absorbed into the patterns and types chapters ("Absent by decision").
 4. **arithmetic.md** (`ARITH-`, migrated 2026-10-23): integer and float semantics, overflow, checked, wrapping and
-   saturating operations, casts. It replaces ARITHMETIC_POLICY and NUMERIC_MODEL. T-ARITH and
+   saturating operations, casts. It replaces ARITHMETIC_POLICY and NUMERIC_MODEL (since absorbed and deleted). T-ARITH and
    T-CAST enter as pending.
 5. **statements.md** (`STMT-`, migrated 2026-10-23): statements and expressions, value blocks, loops and loop
    control, evaluation order, `main` and the exit status. It replaces

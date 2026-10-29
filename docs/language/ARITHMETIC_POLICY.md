@@ -484,7 +484,7 @@ from what every consumer must model.
 
 **Owners.** The rule and its class table: ROADMAP exit 2k (R-0500), "cast semantics per width
 pair". The authority that implements it: exit 2h (R-0493). The defects: bug 128 in exit 0b (R-0482); bugs 130 and 108
-and the permanent differential legs in exit 2c (R-0491). [NUMERIC_MODEL.md](NUMERIC_MODEL.md) points here for casts.
+and the permanent differential legs in exit 2c (R-0491). ARITH-5 of [docs/spec/arithmetic.md](../spec/arithmetic.md#ARITH-5) states the cast rule.
 
 ---
 
