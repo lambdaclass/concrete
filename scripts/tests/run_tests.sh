@@ -8530,6 +8530,19 @@ else
     echo "FAIL  regress_305_borrow_block_owners_and_exits.con: --interp gave '$r3052_i', want output 42 and status 0 (the binary exits 42)"
     FAIL=$((FAIL + 1))
 fi
+# The reference-parameter owner, in the IR: `take` receives the owner's own slot, the slot every
+# later read of `p` loads from (main passed a fresh copy slot that nothing read again). Behaviour
+# alone cannot show it, since a read through the binder of a reference owner is refused (E0238).
+r305_irfn=$($COMPILER "$TESTDIR/regress_305_borrow_block_owners_and_exits.con" --emit-llvm 2>/dev/null \
+    | awk '/^define .*@_C\.main\.ref_owner\(/{p=1} p{print} p&&/^}/{exit}')
+r305_slot=$(printf '%s\n' "$r305_irfn" | sed -n 's/.*call i64 @_C\.main\.take(ptr \(%[A-Za-z0-9_.]*\)).*/\1/p' | head -n1)
+if [ -n "$r305_slot" ] && printf '%s\n' "$r305_irfn" | grep -qF "load ptr, ptr $r305_slot"; then
+    echo "  ok  regress_305_borrow_block_owners_and_exits.con: a reference owner's binder is the owner's slot ($r305_slot)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  regress_305_borrow_block_owners_and_exits.con: ref_owner passes '${r305_slot:-nothing}' to take, which no later read of p loads from"
+    FAIL=$((FAIL + 1))
+fi
 # Bug 291: every stage found a struct, enum or newtype by name with a search of the declaration
 # lists per use, so n types each used once took n². The fixture's lookups (layout offsets, a Copy
 # struct, an enum payload, a newtype) return 42; then a program of 8000 Copy structs, each built

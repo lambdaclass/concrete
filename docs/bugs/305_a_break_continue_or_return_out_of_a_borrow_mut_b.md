@@ -99,7 +99,9 @@ read through the binder of a reference owner is refused (E0238), also in trusted
 `regress_305_borrow_block_owners_and_exits.con` pins those owner types and adds early exits from a
 block nested in the borrow block (`break`, `return`, and a `return` read by an enclosing deferred
 call) and from `match` arms inside it (`break`, `continue`, `return`): main's binary exits 58,
-`--interp` 42; the branch 42 on both.
+`--interp` 42; the branch 42 on both. An IR leg checks the reference-parameter owner: the register
+`take` receives is the slot every later read of `p` loads from (main passed a copy slot nothing
+read again).
 
 ## Structural cause
 
