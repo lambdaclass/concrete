@@ -1,5 +1,7 @@
 # Registry of every allocated spec key (docs/spec/README.md S2, S3). Append-only: a row is never
 # removed, a hash never changes, and states move only pending -> live, live -> superseded, or to retired:<reason>.
+# These hold against S3's base, the merge base with origin/main: a row a branch adds is unpublished until
+# it lands, and its hash and state may change on that branch before then.
 # key	state	sentence-hash (entry versions; `-` for examples)
 REF-D1@1	live	45fdefef32f7b9e33bdfcc1065e56b5e
 REF-D2@1	live	5e0e2058dbb02629ba35ba42ba769b57
