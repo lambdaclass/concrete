@@ -17,17 +17,18 @@ of [docs/spec/ids.tsv](../spec/ids.tsv), or the generator refuses the record.
 
 <!-- BEGIN GENERATED: spec rulings (scripts/gen/bug_ledger.py; edit the records' ruling lines) -->
 
-293 bug records, 290 of them ruled: violates a rule 157, spec gap 32, open owner question 0, permitted by a rule 0, outside the spec 101; not ruled yet (fixed bugs filed before bug 300) 3. Open bugs are in bold.
+292 bug records, 289 of them ruled: violates a rule 156, spec gap 32, open owner question 0, permitted by a rule 0, outside the spec 101; not ruled yet (fixed bugs filed before bug 300) 3. Open bugs are in bold.
+280 bug records, 277 of them ruled: violates a rule 140, spec gap 32, open owner question 3, permitted by a rule 0, outside the spec 102; not ruled yet (fixed bugs filed before bug 300) 3. Open bugs are in bold.
 
 ### By kind
 
 | ruling | bugs | open | silent |
 |---|--:|--:|--:|
-| violates a rule | 157 | 15 | 81 |
+| violates a rule | 156 | 15 | 81 |
 | spec gap | 32 | 2 | 5 |
 | open owner question | 0 | 0 | 0 |
 | permitted by a rule (not a bug) | 0 | 0 | 0 |
-| outside the spec | 101 | 4 | 16 |
+| outside the spec | 102 | 4 | 16 |
 | not ruled yet | 3 | 0 | 0 |
 
 ### By chapter
@@ -49,7 +50,7 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 | patterns.md | PAT | 7 | 1 | 5 | 7 | 0 | 0 | 0 |
 | trusted.md | TRUST | 7 | 0 | 5 | 6 | 1 | 0 | 0 |
 | traits.md | TRAIT | 6 | 1 | 4 | 6 | 0 | 0 | 0 |
-| syntax.md | SYN | 4 | 1 | 1 | 4 | 0 | 0 | 0 |
+| syntax.md | SYN | 3 | 1 | 1 | 3 | 0 | 0 | 0 |
 
 ### By violated rule
 
@@ -89,7 +90,6 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 | REF-3@1 | references.md | 2 | 092, 123 |
 | REF-5@1 | references.md | 2 | 123, 182 |
 | STMT-11@1 | statements.md | 2 | 305, 306 |
-| SYN-1@1 | syntax.md | 2 | 220, 329 |
 | SYN-4@1 | syntax.md | 2 | 212, **318** |
 | TYPE-12@1 | types.md | 2 | 199, 246 |
 | TYPE-15@1 | types.md | 2 | 073, 200 |
@@ -119,6 +119,7 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 | STMT-7@2 | statements.md | 1 | 111 |
 | STMT-7@3 | statements.md | 1 | **320** |
 | STMT-9@1 | statements.md | 1 | 194 |
+| SYN-1@1 | syntax.md | 1 | 220 |
 | TRAIT-10@2 | traits.md | 1 | **324** |
 | TRAIT-2@1 | traits.md | 1 | 186 |
 | TRAIT-9@1 | traits.md | 1 | 091 |
@@ -169,7 +170,7 @@ No rule decides these bugs' behaviour. Each fix starts by writing the rule (spec
 
 | reason | bugs |
 |---|---|
-| tooling | **049**, **058**, 059, 060, 062, **064**, 065, 067, 068, 075, 076, 079, 080, 081, 083, 084, 085, 086, 089, 106, 135, 179, 180, 191, 203, 206, 207, 209, 214, 219, 224, 225, 232, 237, 244, 247, 252, 263, 268, 272, 283, 284, 294, 299, 300, 315 |
+| tooling | **049**, **058**, 059, 060, 062, **064**, 065, 067, 068, 075, 076, 079, 080, 081, 083, 084, 085, 086, 089, 106, 135, 179, 180, 191, 203, 206, 207, 209, 214, 219, 224, 225, 232, 237, 244, 247, 252, 263, 268, 272, 283, 284, 294, 299, 300, 315, 316 |
 | performance | 015, 026, 027, 178, 228, 234, 235, 236, 248, 249, 250, 255, 256, 257, 258, 259, 260, 261, 265, 266, 267, 269, **270**, 273, 274, 275, 276, 277, 278, 279, 280, 281, 282, 286, 288, 289, 290, 291, 292, 293, 295, 296, 297, 298 |
 | library | 007, 010, 011, 012, 017, 043, 046, 047, 048, 072, 152 |
 

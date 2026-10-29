@@ -16,7 +16,7 @@ native CLI and its outputs were not affected.
 summary: `Browser.lean`, the root of the `concrete-browser-native` executable (the native twin of the site's Wasm compiler), still called `Pipeline.desugar` after `6269002b` folded desugaring into `Pipeline.resolve`, so the browser compiler could not be built from source; nothing noticed for a week because the root sat outside `lakefile.toml`'s `defaultTargets` and no `lake build`, CI job or hook compiled it. The call is removed (resolve already desugars) and the executable is a default target, run by `check_browser_native.sh`.
 coverage: check_browser_native.sh (builds concrete-browser-native, then runs the native adapter on scripts/browser/parity_cases.json, the cases test-parity.mjs compares with Wasm: verdicts, the four stages, diagnostics on refusal)
 class: 11 — a build root that nothing built read as a root that builds (the broken call is a class 12 instance: the stage sequence restated per driver, as in 202)
-ruling: Outside the spec: build — the browser compiler's root did not compile; no program's meaning is involved
+ruling: Outside the spec: tooling — the browser compiler's root did not compile; no program's meaning is involved
 silent: no
 -->
 
