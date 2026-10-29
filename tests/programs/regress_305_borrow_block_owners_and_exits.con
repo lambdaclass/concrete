@@ -8,24 +8,34 @@ struct Copy B {
 }
 
 // A raw-pointer owner: the block's reference is the pointer variable's slot, so writing a new
-// pointer through it repoints `p`.
+// pointer through it repoints `p`. Every raw pointer is derived from a named loan (`rx`, `ry`)
+// that lives through every dereference (G19, OD15: a pointer derived from a loan is valid only
+// while the loan lives).
 trusted fn ptr_owner_mut() -> i64 {
     let mut x: i64 = 1;
     let mut y: i64 = 2;
-    let mut p: *mut i64 = &mut x as *mut i64;
-    borrow mut p as r in R {
-        *r = &mut y as *mut i64;
+    let mut out: i64 = 0;
+    borrow mut x as rx in RX {
+        borrow mut y as ry in RY {
+            let mut p: *mut i64 = rx as *mut i64;
+            borrow mut p as r in R {
+                *r = ry as *mut i64;
+            }
+            // p now points at y: 2 * 10 + 1
+            out = *p * 10 + *rx;
+        }
     }
-    // p now points at y: 2 * 10 + 1
-    return *p * 10 + x;
+    return out;
 }
 
 trusted fn ptr_owner_shared() -> i64 {
     let mut x: i64 = 3;
-    let p: *mut i64 = &mut x as *mut i64;
     let mut out: i64 = 0;
-    borrow p as r in R {
-        out = **r;
+    borrow mut x as rx in RX {
+        let p: *mut i64 = rx as *mut i64;
+        borrow p as r in R {
+            out = **r;
+        }
     }
     return out;
 }

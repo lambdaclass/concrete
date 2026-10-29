@@ -87,7 +87,9 @@ lowering gives a reference-, pointer- or heap-typed owner's pointee instead of t
 because `addrOfLocal` declines those types. It declines them only for a retagging borrow:
 `.borrowIn` borrows `.ident owner innerTy` at `refTy` with `innerTy` the pointee of `refTy`, so
 `borrowsSlot innerTy refTy` holds by construction and the owner is promoted to its own slot
-(MEMORY_SEMANTICS §5's one-hop rule for `Heap`). Measured (binary = `--interp` on main and on the
+(MEMORY_SEMANTICS §5's one-hop rule for `Heap`). The fixture derives every raw pointer from a
+named borrow-block loan that lives through each dereference, so it stays defined under G19.
+Measured (binary = `--interp` on main and on the
 branch): a raw-pointer owner repointed through `borrow mut p` (21), read through `borrow p` (3), a
 `Heap<B>` owner written through `borrow mut h` with a `continue` and read through `borrow h`; a
 reference-parameter owner `borrow p as a` lowers to `%addr = alloca ptr; store ptr %p, ptr %addr`
