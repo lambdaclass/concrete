@@ -8513,10 +8513,10 @@ run_ok "$TESTDIR/regress_309_shortcircuit_aggregate_merge.con" 42
 run_ok "$TESTDIR/regress_305_borrow_block_early_exit.con" 42
 r305_i=$($COMPILER "$TESTDIR/regress_305_borrow_block_early_exit.con" --interp </dev/null 2>&1; echo "rc=$?")
 if [ "$r305_i" = "$(printf '42\nrc=0')" ]; then
-    echo "  ok  regress_305_borrow_block_early_exit.con: --interp == binary (42, exit 0)"
+    echo "  ok  regress_305_borrow_block_early_exit.con: --interp prints 42 and exits 0, as the binary exits 42"
     PASS=$((PASS + 1))
 else
-    echo "FAIL  regress_305_borrow_block_early_exit.con: --interp gave '$r305_i', want 42 and exit 0 (the binary's exit)"
+    echo "FAIL  regress_305_borrow_block_early_exit.con: --interp gave '$r305_i', want output 42 and status 0 (the binary exits 42)"
     FAIL=$((FAIL + 1))
 fi
 # Bug 291: every stage found a struct, enum or newtype by name with a search of the declaration
