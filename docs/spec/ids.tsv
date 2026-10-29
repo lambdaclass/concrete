@@ -432,8 +432,8 @@ MOD-6@1	pending	35dc776904350d27ff4ae2817d973b0a
 MOD-6/program-imports-libc	pending	-
 MOD-6/program-uses-std	live	-
 REF-10@2	live	0285af262ac5b919230f34e331d870a3
-REF-11@3	live	9dabcd12c67aaca7c21850c941624846
-REF-11/overlapping-path	live	-
+REF-11@3	pending	9dabcd12c67aaca7c21850c941624846
+REF-11/overlapping-path	retired:refused-by-ref-8	-
 REF-11/disjoint-siblings-one-call	pending	-
 REF-13@1	pending	9bc44814b65d2f656ae0a49a4d600e01
 OWN-16@1	pending	8423d8d4f6645181736bb8ebaf2bfd55

@@ -717,6 +717,7 @@ fn main() -> Int {
 | `tests/programs/regress_2i_ref8_free_after_ref_block.con` | `run:42` | `ref8-block` | `binary,interp-exempt:no-heap-allocation-in-the-interpreter` |
 | `tests/programs/error_2i_ref8_call_overlap.con` | `reject:E0293:REF-8@1` | `ref8-call` | `-` |
 | `tests/programs/error_091_norm_cast_arg_overlap.con` | `reject:E0293:REF-8@1` | `ref8-call` | `-` |
+| `tests/programs/error_od2_call_overlapping_path.con` | `reject:E0293:REF-8@1` | `ref8-call` | `-` |
 | `tests/programs/regress_2i_ref8_call_disjoint.con` | `run:42` | `ref8-call` | `binary,interp` |
 | `tests/programs/regress_2i_ref8_match_borrow_scrutinee.con` | `run:42` | `-` | `binary,interp` |
 | `tests/programs/error_181_root_reassigned_match.con` | `reject:E0232:REF-8@1` | `ref8-arm` | `-` |
@@ -818,12 +819,12 @@ fn main() -> Int {
 <a id="REF-11"></a>
 ### REF-11. Loans are keyed by root binding
 
-**REF-11@3.** A call is refused when one of its exclusive arguments overlaps any other argument, two places overlapping when they have the same root binding and the path of one is a prefix of the path of the other, so `h(r, r)`, `h(&mut x, &x)` and `h(&mut a, &mut a.f)` are refused and `h(&mut a.f, &mut a.g)` is not.
+**REF-11@3.** Within one call, an exclusive argument conflicts with another argument only when their places overlap, two places overlapping when they have the same root binding and the path of one is a prefix of the path of the other, so `h(&mut a.f, &mut a.g)` is accepted.
 
-- Kind: refusal
+- Kind: guarantee
 - Uses: none
-- Codes: E0293 (check)
-- Status: partial R-0496
+- Codes: none
+- Status: pending R-0496
 - Enforced by: Concrete.pathsOverlap, Concrete.checkCallRootReads
 - Semantics: none
 - Obligation: INV-REF (R-0500)
@@ -831,7 +832,8 @@ fn main() -> Int {
 
 **Rationale.** Decided by the owner on 2026-10-29 (OD2, part 2): exclusivity at a call follows
 places, root plus path. An exclusive argument conflicts with an argument whose place is the same
-place, a projection of it, or a place it projects from, and not with a disjoint sibling, so two
+place, a projection of it, or a place it projects from (`h(r, r)`, `h(&mut x, &x)` and
+`h(&mut a, &mut a.f)` are refused, by REF-8, E0293), and not with a disjoint sibling, so two
 fields of one owner may be lent exclusively to one call. Lending a reference binding the caller
 already holds (`r.add(r.step)` with `r: &mut S`, `self.sift_up(self.len - 1)` with
 `self: &mut Self`) lends that reference (REF-10); reading through it in another argument overlaps
@@ -842,20 +844,6 @@ example below; `error_d2_call_disjoint_fields.con`, `error_d2_call_field_read.co
 `error_d2_receiver_projection_read.con`, `error_d2_call_field_read_in_branch.con` and
 `error_d2_explicit_mut_receiver_read.con` pin that over-refusal in run_tests.sh and flip when the
 repair lands (R-0496). How loans outside a single call are keyed is OPEN-1.
-
-```con reject name=overlapping-path code=E0293 stage=check pair=fields-in-sequence
-struct Copy P { f: Int, g: Int }
-
-fn h(a: &mut P, b: &mut Int) {
-    *b = 2;
-}
-
-fn main() -> Int {
-    let mut p: P = P { f: 40, g: 0 };
-    h(&mut p, &mut p.g);
-    return p.f + p.g;
-}
-```
 
 ```con accept name=disjoint-siblings-one-call exit=2 pending=R-0496 now=reject:E0293:check
 struct Copy W { a: Int, b: Int }
@@ -886,13 +874,6 @@ fn main() -> Int {
     return w.a + w.b;
 }
 ```
-
-**Conformance fixtures.**
-
-| fixture | expected | pair | modes |
-|---|---|---|---|
-| `tests/programs/error_od2_call_overlapping_path.con` | `reject:E0293:REF-11@3` | `ref11` | `-` |
-| `tests/programs/regress_2i_ref8_call_disjoint.con` | `run:42` | `ref11` | `binary,interp` |
 
 <a id="REF-12"></a>
 ### REF-12. Nothing is mutated through a shared reference

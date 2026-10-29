@@ -1012,7 +1012,7 @@ def CheckError.rule : CheckError → Option String
   | .temporaryNotBorrowable _ => some "REF-5@1"
   | .variableFrozenByBorrow _ | .cannotMoveLinearBorrowed _ => some "REF-8@1"
   | .cannotBorrowMutablyBorrowed _ | .cannotMutBorrowAlreadyBorrowed _ => some "REF-8@1"
-  | .conflictingCallBorrows _ byRoot => some (if byRoot then "REF-11@3" else "REF-8@1")
+  | .conflictingCallBorrows _ _ => some "REF-8@1"
   -- E0252 is shared: a destructuring `let` (PAT-5) and a struct literal (TYPE-7)
   | .missingFieldInLiteral _ d => some (if d.startsWith "struct destructure" then "PAT-5@2" else "TYPE-7@1")
   | e => codeRuleTag e.code
