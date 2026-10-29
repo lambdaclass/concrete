@@ -562,6 +562,14 @@ def cmd_generate(args):
         rows.append(("derived", "-", toks))
         for m, desc in mutants(toks, choices, mrng, vocab, args.mutants):
             rows.append(("mutant", desc, m))
+    # PROBES: parser features that one-token edits of a derivation cannot reach (a different
+    # statement keyword, a whole construct the grammar lacks). Each runs through the same judge.
+    if args.probes and os.path.exists(args.probes):
+        with open(args.probes) as f:
+            for line in f:
+                line = line.rstrip("\n")
+                if line and not line.startswith("#"):
+                    rows.append(("probe", "-", [tok_of(t) for t in line.split(" ")]))
     gen = Generator(rules, args.seed, args.depth)
     if isinstance(rules["program"], REP):
         gen._mark(rules["program"], "rep", 0)    # the empty program, written above
@@ -643,7 +651,7 @@ def cmd_judge(args):
         return 1
     known = load_known(args.known)
     if args.control:
-        return judge_control(rows, verdicts, known)
+        return judge_control(rows, verdicts, known, args)
     seen, stats = differences(rows, verdicts)
     return report(seen, stats, known, args)
 
@@ -667,41 +675,42 @@ def differences(rows, verdicts):
     return seen, stats
 
 
-def judge_control(rows, verdicts, known):
-    """The judge's negative control: flip one grammar-rejected mutant that the parser rejects to
-    an acceptance, choosing one whose difference signature is neither seen nor listed, and
-    require the judge to report it as new. Exit 0 when the control holds."""
+def judge_control(rows, verdicts, known, args):
+    """The judge's negative control, through the same report() that decides the real run: flip one
+    grammar-rejected mutant the parser rejects to an acceptance (choosing one whose signature is
+    neither seen nor listed), and one derived program the parser accepts to a refusal; report()
+    must fail and name both as new differences. Exit 0 when the control holds."""
+    import contextlib
+    import io
     seen, _ = differences(rows, verdicts)
+    flip_rej = flip_acc = None
     for idx, ((i, kind, member, desc, extra, toks), v) in enumerate(zip(rows, verdicts)):
-        if kind != "mutant" or member or v == "ACCEPT":
-            continue
-        rule, tok = extra.split("\x1d")
-        sig = f"reject-gap {rule}: {tok}"
-        if sig in seen or sig in known:
-            continue
-        flipped = list(verdicts)
-        flipped[idx] = "ACCEPT"
-        seen2, _ = differences(rows, flipped)
-        if not (sig in seen2 and sig not in known):
-            print(f"control FAILED: flipping #{i} did not yield '{sig}'")
-            return 1
-        # And the other direction: a derived program the parser accepted, flipped to a refusal
-        # with a message no listed difference has, must be reported as a new accept-gap.
-        for jdx, ((j, kind2, member2, _, _, _), v2) in enumerate(zip(rows, verdicts)):
-            if kind2 == "derived" and member2 and v2 == "ACCEPT":
-                flipped2 = list(verdicts)
-                flipped2[jdx] = "REJECT\tplanted conformance control refusal"
-                seen3, _ = differences(rows, flipped2)
-                sig2 = "accept-gap planted conformance control refusal"
-                if sig2 in seen3 and sig2 not in known:
-                    print(f"control: flipping #{i} ({desc}) to an acceptance yields the new difference '{sig}', "
-                          f"and #{j} to a refusal yields '{sig2}'")
-                    return 0
-                print(f"control FAILED: flipping #{j} to a refusal did not yield '{sig2}'")
-                return 1
-        print("control FAILED: no derived program the parser accepts")
+        if flip_rej is None and kind == "mutant" and not member and v != "ACCEPT":
+            rule, tok = extra.split("\x1d")
+            sig = f"reject-gap {rule}: {tok}"
+            if sig not in seen and sig not in known:
+                flip_rej = (idx, i, desc, sig)
+        if flip_acc is None and kind == "derived" and member and v == "ACCEPT":
+            flip_acc = (idx, i)
+    if flip_rej is None or flip_acc is None:
+        print("control FAILED: nothing to flip (no fresh grammar-rejected mutant, or no accepted derivation)")
         return 1
-    print("control FAILED: no grammar-rejected mutant with a fresh signature to flip")
+    message = "planted conformance control refusal"
+    sig2 = "accept-gap " + normalize_message(message)
+    flipped = list(verdicts)
+    flipped[flip_rej[0]] = "ACCEPT"
+    flipped[flip_acc[0]] = "REJECT\t" + message
+    seen2, stats2 = differences(rows, flipped)
+    out = io.StringIO()
+    quiet = argparse.Namespace(**{**vars(args), "examples": None})
+    with contextlib.redirect_stdout(out):
+        rc = report(seen2, stats2, known, quiet)
+    text = out.getvalue()
+    if rc != 0 and f"FAIL new difference: {flip_rej[3]}" in text and f"FAIL new difference: {sig2}" in text:
+        print(f"control: report() fails on #{flip_rej[1]} ({flip_rej[2]}) flipped to an acceptance "
+              f"('{flip_rej[3]}') and #{flip_acc[1]} flipped to a refusal ('{sig2}')")
+        return 0
+    print(f"control FAILED: report() returned {rc} without naming both planted differences")
     return 1
 
 
@@ -858,8 +867,9 @@ def lookahead_sites(path=PARSER):
             if fn in LOOKAHEAD_PRIMITIVES:
                 continue
             for kind, pat, _ in LOOKAHEAD_KINDS:
-                if pat.search(code):
-                    sites[(fn or "<top>", kind)] += 1
+                n = len(pat.findall(code))
+                if n:
+                    sites[(fn or "<top>", kind)] += n
     return sites
 
 
@@ -927,6 +937,7 @@ def main():
     g.add_argument("--depth", type=int, default=20)
     g.add_argument("--mutants", type=int, default=6)
     g.add_argument("--small", type=int, default=1500)
+    g.add_argument("--probes", default=os.path.join(ROOT, "tests", "fixtures", "grammar_conformance", "probes.txt"))
     g.add_argument("--small-depth", type=int, default=7)
     j = sub.add_parser("judge")
     j.add_argument("--dir", required=True)

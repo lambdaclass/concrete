@@ -36,6 +36,10 @@
 #     helper in another file, a list pattern over the tokens) is not seen.
 #   - SYN-1's struct-literal side rule (bug 212) is implemented by hand in the generator and the
 #     recognizer against the shape of `ident_tail`; a change to that rule needs both updated.
+#   - The reserved words are read from Lexer.lean's `lookupKeyword` arms spelled
+#     `| "word" => some …`; an arm written another way is not seen.
+#   - Parser features that no one-token edit of a derivation reaches (a construct the grammar
+#     lacks entirely) are covered only by tests/fixtures/grammar_conformance/probes.txt.
 #
 # Controls, each must hold or the gate fails:
 #   C1  coverage: the generator covered every alternative, optional and repetition;
@@ -62,9 +66,9 @@ else tail -20 "$TMP/build.log"; no "lake build Concrete.Frontend.Parser failed";
 
 echo "=== generate derivations and one-token mutants ==="
 if python3 "$GC" generate --out "$TMP/run" > "$TMP/gen.out"; then ok "$(cat "$TMP/gen.out")"
-else cat "$TMP/gen.out"; no "the generator failed"; fi
+else cat "$TMP/gen.out"; no "the generator failed or left grammar items uncovered (see C1)"; fi
 items="$(sed -n 's/^items //p' "$TMP/run/coverage.txt")"; covered="$(sed -n 's/^covered //p' "$TMP/run/coverage.txt")"
-uncovered="$(grep -c '^uncovered ' "$TMP/run/coverage.txt")"
+uncovered="$(grep -c '^uncovered ' "$TMP/run/coverage.txt" || true)"
 [ -n "$items" ] && [ "$items" = "$covered" ] && [ "$uncovered" = 0 ] && [ "$items" -gt 100 ] \
   && ok "C1 coverage: every alternative, optional and repetition of the grammar ($covered of $items)" \
   || { no "C1 coverage incomplete: $covered of $items"; grep '^uncovered' "$TMP/run/coverage.txt" | head -10; }
@@ -95,7 +99,8 @@ if python3 "$GC" lookahead --known "$LOOKAHEAD" > "$TMP/la.out"; then ok "$(tail
 else cat "$TMP/la.out"; no "lookahead sites changed (above)"; fi
 # C3: each kind of lookahead or backtracking, planted in a copy of the parser, is reported.
 for plant in "peek2|  let _ ← peek2" "token-index|  let _ := (← get).tokens[0]?" \
-             "try-catch|  try pure () catch _ => pure ()" "pos-write|  modify fun s => { s with pos := s.pos }"; do
+             "try-catch|  try pure () catch _ => pure ()" "pos-write|  modify fun s => { s with pos := s.pos }" \
+             "state-restore|  set (← get)"; do
   kind="${plant%%|*}"; line="${plant#*|}"
   awk -v L="$line" '{print} /^partial def parsePrimary : ParseM Expr := do$/ && !done {print L; done=1}' \
     Concrete/Frontend/Parser.lean > "$TMP/Parser.lean"

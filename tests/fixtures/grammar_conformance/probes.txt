@@ -1,0 +1,13 @@
+# Probe programs for scripts/tests/check_grammar_conformance.sh: parser features that no one-token
+# edit of a grammar derivation reaches, because the grammar lacks the construct entirely. Each
+# line is one program, tokens separated by single spaces. The judge treats them like mutants:
+# grammar membership decides, and a parser acceptance of a grammar-rejected probe is a reject-gap
+# (listed in grammar/conformance_known.tsv while the grammar and the parser disagree).
+mod x ;
+fn f ( ) { assert true ; }
+fn f ( ) { assume true ; }
+fn f ( ) { ghost let x = 1 ; }
+fn f ( ) { # [ invariant ( true ) ] while true { } }
+fn f ( ) { let a = g ( ) with ( Alloc = h ) ; }
+fn f ( s : S ) -> i32 { let S { a } = s ; return a ; }
+fn f ( o : E ) { let E :: V { a } = o else { return ; } ; }
