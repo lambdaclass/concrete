@@ -13,6 +13,8 @@
 #   LL(1) conflict           a FIRST/FOLLOW conflict that the parser resolves one way
 #   parser accepts           the parser takes a form the grammar refuses: a SYN-1 bug unless the
 #                            grammar is the stale side
+#   grammar lacks a parsed construct  the parser accepts a construct the grammar has no production for
+#                            (found by tests/fixtures/grammar_conformance/probes.txt)
 #   parser refuses           the parser refuses a grammar form: a SYN-1 bug unless the grammar is
 #                            wider than intended
 #
@@ -58,3 +60,11 @@ reject-gap type: fn	parser accepts what the grammar refuses (candidate SYN-1 bug
 reject-gap type_args: ;	parser accepts what the grammar refuses (candidate SYN-1 bug, or grammar stale)	the same bodyless function declaration, reached after a return type	fn bar_1 ( ) with ( ) -> foo ;
 reject-gap type_args: IDENT	parser accepts what the grammar refuses (candidate SYN-1 bug, or grammar stale)	struct fields with no ',' between them, after a field of generic type	struct y { x : * const x T : x }
 reject-gap type_param_def: >	parser accepts what the grammar refuses (candidate SYN-1 bug, or grammar stale)	an empty type parameter list (`impl<> T`) is parsed; type_params requires one parameter	impl < > y { }
+reject-gap decl_keyword: ;	grammar lacks a parsed construct (owner edit)	`mod name;`, a module in its own file (the parser's file-import form); decl_keyword has only the braced `mod name { … }`	mod x ;
+reject-gap stmt: assert	grammar lacks a parsed construct (owner edit)	the proof-annotation statement `assert expr;` (parseAssertOrAssume)	fn f ( ) { assert true ; }
+reject-gap stmt: assume	grammar lacks a parsed construct (owner edit)	the proof-annotation statement `assume expr;` (parseAssertOrAssume)	fn f ( ) { assume true ; }
+reject-gap ident_tail: let	grammar lacks a parsed construct (owner edit)	`ghost let`, the proof-only binding (contextual keyword `ghost`, decided with peek2)	fn f ( ) { ghost let x = 1 ; }
+reject-gap stmt: #	grammar lacks a parsed construct (owner edit)	loop contracts `#[invariant(e)]` / `#[variant(e)]` before a while or for	fn f ( ) { # [ invariant ( true ) ] while true { } }
+reject-gap postfix_op: with	grammar lacks a parsed construct (owner edit)	the call-site allocator binding `f(…) with(Alloc = e)`	fn f ( ) { let a = g ( ) with ( Alloc = h ) ; }
+reject-gap stmt: {	grammar lacks a parsed construct (owner edit)	struct destructuring `let S { a } = e;` (PATTERN_DESTRUCTURING, shipped)	fn f ( s : S ) -> i32 { let S { a } = s ; return a ; }
+reject-gap stmt: ::	grammar lacks a parsed construct (owner edit)	variant destructuring with `else`: `let E::V { a } = e else { … };` (PATTERN_DESTRUCTURING, shipped)	fn f ( o : E ) { let E :: V { a } = o else { return ; } ; }
