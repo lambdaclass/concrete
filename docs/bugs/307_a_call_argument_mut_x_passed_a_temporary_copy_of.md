@@ -102,8 +102,9 @@ proven.
 
 ## Structural owner
 
-OD2 part 3 (`&mut` is the place) and OD15(b) (no pass relies on `&mut` exclusivity until it is
-proven), decided 2026-10-29; the rule IDs follow when the specification records them. Every
+[REF-13@1](../spec/references.md#REF-13) (`&mut` is the place, OD2 part 3) and
+[REF-14@1](../spec/references.md#REF-14) (an alias derived from a loan lives no longer than the loan,
+and no pass relies on `&mut` exclusivity until it is proven, OD15(b)), decided 2026-10-29. Every
 `&mut x` is lowered by one path (`placeAddr` / `addrOfLocal`); then R-0501 (S10 Place MIR: every
 reference a place).
 
