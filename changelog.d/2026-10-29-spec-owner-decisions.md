@@ -19,7 +19,7 @@ main does not enforce it yet); the open entries were retired with pointers in `d
 - OD13, raw-pointer ownership: TRUST-7.
 - OD14, type validity: REF-2, REF-4.
 - OD15, whole-owner freezing (REF-11@3) and no pass exploiting `&mut` exclusivity until it is proved (REF-14).
-- OD16, a struct literal in a condition head only in parentheses, and a `{` there ends the head with no case heuristic: SYN-4 (bug 318).
+- OD16, a struct literal in a condition head only in parentheses, and a `{` outside brackets there ends the head with no case heuristic (a literal inside a call's arguments is OD34): SYN-4 (bug 318).
 - OD17, a field write needs a `mut` binding: OWN-10@2 (bug 216).
 - OD18, the first matching arm wins and an unreachable arm is refused: PAT-9.
 - OD19, the provable subset: the scope of PROVABLE_V1.md.
