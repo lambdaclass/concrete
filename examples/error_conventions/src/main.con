@@ -1,4 +1,4 @@
-// docs/language/ERROR_CONVENTIONS.md fixture (13t): one public API per bucket, each
+// docs/stdlib/ERROR_CONVENTIONS.md fixture (13t): one public API per bucket, each
 // classification visible on a report surface.
 mod error_conventions {
     // RECOVERABLE (bucket 1): domain failure -> Result with a domain error.

@@ -8732,7 +8732,7 @@ do not qualify a target or an aggregate calling shape.
 **Semantics decisions (2026-10-21):** with R-0285, this task owns the foreign-name rule of
 [FFI.md, "Symbol Names"](../platform/FFI.md) (every Concrete-defined function mangled into a
 namespace disjoint from C; `#[link_name]` on `extern fn`) and the ownership-on-failure
-classification for foreign-boundary APIs ([ERROR_CONVENTIONS](../language/ERROR_CONVENTIONS.md)).
+classification for foreign-boundary APIs ([ERROR_CONVENTIONS](../stdlib/ERROR_CONVENTIONS.md)).
 
 ### Task R-0285
 
@@ -8745,7 +8745,7 @@ bindings and one build command, before the bulk ethlambda port.
 
 **Semantics decisions (2026-10-21):** every RocksDB slice-1 handle API states what happens to the
 handle when it fails (returned, consumed or retained;
-[ERROR_CONVENTIONS](../language/ERROR_CONVENTIONS.md)), and slice 1 binds C symbols through
+[ERROR_CONVENTIONS](../stdlib/ERROR_CONVENTIONS.md)), and slice 1 binds C symbols through
 `extern fn` (with `#[link_name]` where the C name is not a Concrete identifier) under the
 foreign-name rule of [FFI.md](../platform/FFI.md), owned with R-0283.
 

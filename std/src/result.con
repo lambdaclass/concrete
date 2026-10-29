@@ -34,7 +34,7 @@ mod result {
         // Copy bound is needed; they work for non-Copy (linear) T and E.
         // (`unwrap_or`/`ok`/`err` stay behind Copy: they drop the other arm's
         // payload.) fn-pointer-in-generic verified working (the spec's recoverable-failure section (docs/spec/statements.md)
-        // Part 2); per docs/language/ERROR_CONVENTIONS.md these never change a failure's
+        // Part 2); per docs/stdlib/ERROR_CONVENTIONS.md these never change a failure's
         // bucket.
         #[spec(Concrete.Proof.resultMapExpr)]
         #[proof_by(Examples.PureCore.Proofs.result_map_correct)]

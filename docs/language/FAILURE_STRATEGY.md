@@ -44,7 +44,7 @@ The table above is the rule, restated as the 2026-10-21 decision adopted it:
   inside cleanup is terminal too, and a value is destroyed at most once, so a destructor never runs
   again after a trap interrupted it. This is the shipped policy (enforced: the trap helpers and
   `__concrete_check_oom` call libc `abort()`).
-- **Recoverable failures** are values (`Result` / `Option`, [ERROR_CONVENTIONS.md](ERROR_CONVENTIONS.md)
+- **Recoverable failures** are values (`Result` / `Option`, [ERROR_CONVENTIONS.md](../stdlib/ERROR_CONVENTIONS.md)
   bucket 1). Operations an application can reasonably handle get a fallible API: resource
   acquisition already has one (`read_file` and the open functions return `Result`); a consuming
   fallible API states what happens to the resource on failure (ERROR_CONVENTIONS, "Ownership on

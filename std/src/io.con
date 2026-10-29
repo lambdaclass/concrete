@@ -202,7 +202,7 @@ mod io {
 
     // ---- fixed-buffer sink (NO Alloc: caller owns the region) ----
     // ctx points at a caller-owned FixedSinkState. Overflow is BufferFull —
-    // a recoverable Result, per docs/language/ERROR_CONVENTIONS.md (the caller sized it).
+    // a recoverable Result, per docs/stdlib/ERROR_CONVENTIONS.md (the caller sized it).
     pub struct Copy FixedSinkState {
         pub buf: *mut u8,
         pub cap: u64,

@@ -13,7 +13,7 @@ lookahead + duplicate-positional rejection). base64_cli and png_chunks
 each hand-rolled smaller variants of the same loop. Three workloads, one
 shape — this is the pull ROADMAP item 2 asked for.
 
-Related: `docs/language/ERROR_CONVENTIONS.md` (13t buckets — usage errors exit 2),
+Related: `docs/stdlib/ERROR_CONVENTIONS.md` (13t buckets — usage errors exit 2),
 `docs/platform/MAIN_EXIT_MODEL.md` (u8 main), `std.args` (raw access layer, stays),
 `docs/language/CALLABLE_VALUES_AND_CAPABILITIES.md` (no callback registration in
 v1, so none of its machinery is needed here).

@@ -1,6 +1,7 @@
 # Error Conventions: Recoverable vs Fatal (normative)
 
-Status: NORMATIVE for Phase 7 stdlib APIs (Phase 6 item 13t, 2026-07-14)
+Status: NORMATIVE for Phase 7 stdlib APIs (Phase 6 item 13t, 2026-07-14). A std convention, not a
+language rule; moved from docs/language to docs/stdlib.
 Companion: `docs/spec/statements.md ("Recoverable failure")` (ergonomics/helpers),
 `docs/language/OWNERSHIP_MODEL.md` (linearity of error values), `docs/ARITHMETIC.md`.
 
@@ -137,7 +138,7 @@ sink", and `io.Reader.close`), now documented as consumed. The four closes that 
 OS result (`fs.File.close`, `io.TextFile.close`, `TcpListener.close`, `TcpStream.close`) now
 return a `Result` and consume the handle on failure (2026-10-21). The stdlib audit of every
 consuming fallible or replacing API, with each one's class, is
-[STDLIB_DESIGN_PRINCIPLES.md, "Ownership on failure"](../stdlib/STDLIB_DESIGN_PRINCIPLES.md#ownership-on-failure);
+[STDLIB_DESIGN_PRINCIPLES.md, "Ownership on failure"](STDLIB_DESIGN_PRINCIPLES.md#ownership-on-failure);
 it also fixed `AsciiText::try_new` (now returns the rejected input) and `set_unchecked` (now
 `Copy`-only). The classification column does not exist yet.
 

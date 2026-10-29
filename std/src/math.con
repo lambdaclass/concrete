@@ -29,7 +29,7 @@ mod math {
 
     /// abs(i64::MIN) TRAPS: the positive magnitude is unrepresentable, and
     /// checked `-` aborts on the overflow — an invariant failure (bucket 2,
-    /// docs/language/ERROR_CONVENTIONS.md), not a silent wrap. Callers needing a total
+    /// docs/stdlib/ERROR_CONVENTIONS.md), not a silent wrap. Callers needing a total
     /// function should guard the MIN case explicitly.
     pub fn abs(value: i64) -> i64 {
         if value < 0 {

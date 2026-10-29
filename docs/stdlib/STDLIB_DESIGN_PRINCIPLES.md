@@ -139,7 +139,7 @@ Every stdlib type has one clear ownership story. The story is visible from the t
 
 Ownership is linear, so a consuming API that can fail must also say who owns the
 resource after the failure. The normative rule, with its three classes, is
-[ERROR_CONVENTIONS.md, "Ownership on failure in consuming APIs"](../language/ERROR_CONVENTIONS.md#ownership-on-failure-in-consuming-apis-normative-convention-decided-2026-10-21); this
+[ERROR_CONVENTIONS.md, "Ownership on failure in consuming APIs"](ERROR_CONVENTIONS.md); this
 section is the stdlib's application of it and uses the same class names. Every
 such API takes exactly one of these shapes, and its error type shows which:
 
@@ -170,7 +170,7 @@ the normative rule requires: returned to the caller, destroyed (only under a
 which owns it from then on.
 
 The rule covers foreign-boundary APIs as well (same
-[normative section](../language/ERROR_CONVENTIONS.md#ownership-on-failure-in-consuming-apis-normative-convention-decided-2026-10-21)); the classification
+[normative section](ERROR_CONVENTIONS.md)); the classification
 column it calls for in the fact manifest does not exist yet. Every public stdlib API that consumes an owned non-`Copy` value and can fail or
 displace a value is listed here (audit 2026-10-21, from
 `STDLIB_SURFACE_MANIFEST.tsv`; breaking changes from that audit are marked).
