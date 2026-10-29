@@ -17,15 +17,13 @@ of [docs/spec/ids.tsv](../spec/ids.tsv), or the generator refuses the record.
 
 <!-- BEGIN GENERATED: spec rulings (scripts/gen/bug_ledger.py; edit the records' ruling lines) -->
 
-292 bug records, 289 of them ruled: violates a rule 156, spec gap 32, open owner question 0, permitted by a rule 0, outside the spec 101; not ruled yet (fixed bugs filed before bug 300) 3. Open bugs are in bold.
-280 bug records, 277 of them ruled: violates a rule 141, spec gap 32, open owner question 3, permitted by a rule 0, outside the spec 101; not ruled yet (fixed bugs filed before bug 300) 3. Open bugs are in bold.
+293 bug records, 290 of them ruled: violates a rule 157, spec gap 32, open owner question 0, permitted by a rule 0, outside the spec 101; not ruled yet (fixed bugs filed before bug 300) 3. Open bugs are in bold.
 
 ### By kind
 
 | ruling | bugs | open | silent |
 |---|--:|--:|--:|
-| violates a rule | 156 | 15 | 81 |
-| violates a rule | 141 | 3 | 68 |
+| violates a rule | 157 | 15 | 81 |
 | spec gap | 32 | 2 | 5 |
 | open owner question | 0 | 0 | 0 |
 | permitted by a rule (not a bug) | 0 | 0 | 0 |
@@ -51,15 +49,7 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 | patterns.md | PAT | 7 | 1 | 5 | 7 | 0 | 0 | 0 |
 | trusted.md | TRUST | 7 | 0 | 5 | 6 | 1 | 0 | 0 |
 | traits.md | TRAIT | 6 | 1 | 4 | 6 | 0 | 0 | 0 |
-| syntax.md | SYN | 3 | 1 | 1 | 3 | 0 | 0 | 0 |
-| arithmetic.md | ARITH | 8 | 0 | 5 | 7 | 1 | 0 | 0 |
-| references.md | REF | 7 | 0 | 7 | 7 | 0 | 0 | 0 |
-| statements.md | STMT | 7 | 0 | 6 | 7 | 0 | 0 | 0 |
-| patterns.md | PAT | 6 | 0 | 4 | 6 | 0 | 0 | 0 |
-| trusted.md | TRUST | 6 | 0 | 4 | 5 | 1 | 0 | 0 |
-| traits.md | TRAIT | 5 | 0 | 3 | 5 | 0 | 0 | 0 |
-| decisions.md | OPEN | 3 | 1 | 1 | 0 | 0 | 3 | 0 |
-| syntax.md | SYN | 2 | 0 | 1 | 2 | 0 | 0 | 0 |
+| syntax.md | SYN | 4 | 1 | 1 | 4 | 0 | 0 | 0 |
 
 ### By violated rule
 
@@ -99,8 +89,8 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 | REF-3@1 | references.md | 2 | 092, 123 |
 | REF-5@1 | references.md | 2 | 123, 182 |
 | STMT-11@1 | statements.md | 2 | 305, 306 |
-| SYN-4@1 | syntax.md | 2 | 212, **318** |
 | SYN-1@1 | syntax.md | 2 | 220, 329 |
+| SYN-4@1 | syntax.md | 2 | 212, **318** |
 | TYPE-12@1 | types.md | 2 | 199, 246 |
 | TYPE-15@1 | types.md | 2 | 073, 200 |
 | TYPE-16@1 | types.md | 2 | 024, 205 |
@@ -129,7 +119,6 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 | STMT-7@2 | statements.md | 1 | 111 |
 | STMT-7@3 | statements.md | 1 | **320** |
 | STMT-9@1 | statements.md | 1 | 194 |
-| SYN-1@1 | syntax.md | 1 | 220 |
 | TRAIT-10@2 | traits.md | 1 | **324** |
 | TRAIT-2@1 | traits.md | 1 | 186 |
 | TRAIT-9@1 | traits.md | 1 | 091 |
