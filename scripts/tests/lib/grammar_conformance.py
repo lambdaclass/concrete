@@ -23,7 +23,7 @@ SIGNATURES that do not depend on the random program:
   reject-gap  the grammar rejects the program and the parser accepts it:
               `reject-gap <rule>: <token>`, the rule and token where the recognizer got
               furthest before failing.
-docs/compiler/grammar_conformance_known.tsv lists the signatures known today, each with a
+grammar/conformance_known.tsv lists the signatures known today, each with a
 reason; the gate fails on a signature that is not listed, and on a listed one that no longer
 occurs (the list only shrinks).
 
@@ -563,7 +563,8 @@ def cmd_generate(args):
         for m, desc in mutants(toks, choices, mrng, vocab, args.mutants):
             rows.append(("mutant", desc, m))
     gen = Generator(rules, args.seed, args.depth)
-    gen._mark(rules["program"], "rep", 0)
+    if isinstance(rules["program"], REP):
+        gen._mark(rules["program"], "rep", 0)    # the empty program, written above
     while n_gen < args.budget:
         toks, choices = gen.program()
         n_gen += 1
@@ -577,7 +578,7 @@ def cmd_generate(args):
     with open(os.path.join(args.out, "programs.tsv"), "w") as f:
         for i, (kind, desc, toks) in enumerate(rows):
             member = "1" if (kind == "derived" or rec.run(toks)) else "0"
-            extra = "" if member == "1" else f"{rec.fail_rule}\x1d{toks[rec.fail_pos][0] if rec.fail_pos < len(toks) else '<eof>'}"
+            extra = "" if member == "1" else f"{rec.fail_rule}\x1d{fail_token(rec, toks)}"
             f.write(f"{i}\t{kind}\t{member}\t{desc}\t{extra}\t{encode(toks)}\n")
     with open(os.path.join(args.out, "sources.txt"), "w") as f:
         f.write(SEP.join(render(toks) for _, _, toks in rows))
@@ -589,7 +590,21 @@ def cmd_generate(args):
     n_derived = sum(1 for r in rows if r[0] == "derived")
     print(f"generated {n_derived} programs ({n_gen} in the coverage pass) and {len(rows) - n_derived} mutants; "
           f"coverage {len(gen.covered)}/{len(gen.items)} items")
-    return 0
+    # Coverage is a set, not a count: every item of the grammar, listed by name if missing.
+    return 1 if missing else 0
+
+
+def fail_token(rec, toks):
+    """The token at the recognizer's furthest failure, as a signature spells it: a literal by its
+    class, an identifier as IDENT, a reserved word or symbol as itself, past the end as <eof>."""
+    if rec.fail_pos < 0 or rec.fail_pos >= len(toks):
+        return "<eof>"
+    text, cls = toks[rec.fail_pos]
+    if cls in ("INT", "FLOAT", "STRING", "CHAR", "LABEL"):
+        return cls
+    if IDENT_RE.match(text) and text not in KEYWORDS:
+        return "IDENT"
+    return text
 
 
 def normalize_message(msg):
@@ -643,7 +658,7 @@ def differences(rows, verdicts):
             sig = "accept-gap " + normalize_message(v.split("\t", 1)[1] if "\t" in v else v)
         elif not member and accepted:
             rule, tok = extra.split("\x1d")
-            sig = f"reject-gap {rule}: {tok if not IDENT_RE.match(tok) or tok in KEYWORDS else 'IDENT'}"
+            sig = f"reject-gap {rule}: {tok}"
         else:
             continue
         src = " ".join(t for t, _ in decode(toks)) if toks else ""
@@ -661,16 +676,30 @@ def judge_control(rows, verdicts, known):
         if kind != "mutant" or member or v == "ACCEPT":
             continue
         rule, tok = extra.split("\x1d")
-        sig = f"reject-gap {rule}: {tok if not IDENT_RE.match(tok) or tok in KEYWORDS else 'IDENT'}"
+        sig = f"reject-gap {rule}: {tok}"
         if sig in seen or sig in known:
             continue
         flipped = list(verdicts)
         flipped[idx] = "ACCEPT"
         seen2, _ = differences(rows, flipped)
-        if sig in seen2 and sig not in known:
-            print(f"control: flipping #{i} ({desc}) to an acceptance yields the new difference '{sig}'")
-            return 0
-        print(f"control FAILED: flipping #{i} did not yield '{sig}'")
+        if not (sig in seen2 and sig not in known):
+            print(f"control FAILED: flipping #{i} did not yield '{sig}'")
+            return 1
+        # And the other direction: a derived program the parser accepted, flipped to a refusal
+        # with a message no listed difference has, must be reported as a new accept-gap.
+        for jdx, ((j, kind2, member2, _, _, _), v2) in enumerate(zip(rows, verdicts)):
+            if kind2 == "derived" and member2 and v2 == "ACCEPT":
+                flipped2 = list(verdicts)
+                flipped2[jdx] = "REJECT\tplanted conformance control refusal"
+                seen3, _ = differences(rows, flipped2)
+                sig2 = "accept-gap planted conformance control refusal"
+                if sig2 in seen3 and sig2 not in known:
+                    print(f"control: flipping #{i} ({desc}) to an acceptance yields the new difference '{sig}', "
+                          f"and #{j} to a refusal yields '{sig2}'")
+                    return 0
+                print(f"control FAILED: flipping #{j} to a refusal did not yield '{sig2}'")
+                return 1
+        print("control FAILED: no derived program the parser accepts")
         return 1
     print("control FAILED: no grammar-rejected mutant with a fresh signature to flip")
     return 1
@@ -708,8 +737,7 @@ def signature_of(rec, toks, verdict):
     if member and not accepted:
         return "accept-gap " + normalize_message(verdict.split("\t", 1)[1] if "\t" in verdict else verdict)
     if not member and accepted:
-        tok = toks[rec.fail_pos][0] if rec.fail_pos < len(toks) else "<eof>"
-        return f"reject-gap {rec.fail_rule}: {tok if not IDENT_RE.match(tok) or tok in KEYWORDS else 'IDENT'}"
+        return f"reject-gap {rec.fail_rule}: {fail_token(rec, toks)}"
     return None
 
 

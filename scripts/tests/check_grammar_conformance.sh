@@ -51,7 +51,8 @@ echo "=== generate derivations and one-token mutants ==="
 if python3 "$GC" generate --out "$TMP/run" > "$TMP/gen.out"; then ok "$(cat "$TMP/gen.out")"
 else cat "$TMP/gen.out"; no "the generator failed"; fi
 items="$(sed -n 's/^items //p' "$TMP/run/coverage.txt")"; covered="$(sed -n 's/^covered //p' "$TMP/run/coverage.txt")"
-[ -n "$items" ] && [ "$items" = "$covered" ] && [ "$items" -gt 100 ] \
+uncovered="$(grep -c '^uncovered ' "$TMP/run/coverage.txt")"
+[ -n "$items" ] && [ "$items" = "$covered" ] && [ "$uncovered" = 0 ] && [ "$items" -gt 100 ] \
   && ok "C1 coverage: every alternative, optional and repetition of the grammar ($covered of $items)" \
   || { no "C1 coverage incomplete: $covered of $items"; grep '^uncovered' "$TMP/run/coverage.txt" | head -10; }
 
@@ -79,16 +80,20 @@ fi
 echo "=== lookahead and backtracking sites against $LOOKAHEAD ==="
 if python3 "$GC" lookahead --known "$LOOKAHEAD" > "$TMP/la.out"; then ok "$(tail -1 "$TMP/la.out")"
 else cat "$TMP/la.out"; no "lookahead sites changed (above)"; fi
-# C3: a planted second-token lookahead in a copy of the parser.
-awk '{print} /^partial def parsePrimary : ParseM Expr := do$/ && !done {print "  let _ ← peek2"; done=1}' \
-  Concrete/Frontend/Parser.lean > "$TMP/Parser.lean"
-if ! cmp -s Concrete/Frontend/Parser.lean "$TMP/Parser.lean" \
-   && ! python3 "$GC" lookahead --known "$LOOKAHEAD" --parser "$TMP/Parser.lean" > "$TMP/c3.out" \
-   && grep -q "parsePrimary: 1 'peek2'" "$TMP/c3.out"; then
-  ok "C3 a planted peek2 in parsePrimary is reported"
-else
-  no "C3 the lookahead scan did not report a planted peek2 in parsePrimary"
-fi
+# C3: each kind of lookahead or backtracking, planted in a copy of the parser, is reported.
+for plant in "peek2|  let _ ← peek2" "token-index|  let _ := (← get).tokens[0]?" \
+             "try-catch|  try pure () catch _ => pure ()" "pos-write|  modify fun s => { s with pos := s.pos }"; do
+  kind="${plant%%|*}"; line="${plant#*|}"
+  awk -v L="$line" '{print} /^partial def parsePrimary : ParseM Expr := do$/ && !done {print L; done=1}' \
+    Concrete/Frontend/Parser.lean > "$TMP/Parser.lean"
+  if ! cmp -s Concrete/Frontend/Parser.lean "$TMP/Parser.lean" \
+     && ! python3 "$GC" lookahead --known "$LOOKAHEAD" --parser "$TMP/Parser.lean" > "$TMP/c3.out" \
+     && grep -q "parsePrimary: 1 '$kind'" "$TMP/c3.out"; then
+    ok "C3 a planted '$kind' in parsePrimary is reported"
+  else
+    no "C3 the lookahead scan did not report a planted '$kind' in parsePrimary"
+  fi
+done
 
 echo "=== reserved words against $KEYWORDS ==="
 if python3 "$GC" keywords --known "$KEYWORDS" > "$TMP/kw.out"; then ok "$(tail -1 "$TMP/kw.out")"
