@@ -797,7 +797,7 @@ PY
     "h='### Task R-0511\n\n**Phase:** 2'; assert h in s; s=s.replace(h,'### Task R-0511\n\n**Phase:** 6')" \
     "R-0511: queue row 3 schedules it in Phase 2" tasks
   neg phase_table_row_moved \
-    "old='| 3 – 4 | V1a and V1b'; assert old in s; s=s.replace(old,'| 4 | V1a and V1b')" \
+    "old='| 0s, 3 – 4 | V1a and V1b'; assert old in s; s=s.replace(old,'| 0s, 4 | V1a and V1b')" \
     "queue row 3 has no phase"
   neg queue_summary_drift \
     "old='| 9 | R-0521 | Compiler provenance'; assert old in s; s=s.replace(old,'| 9 | R-0522 | Compiler provenance')" \
@@ -905,7 +905,7 @@ PY
     "old='| at least 55% |'; assert s.count(old)==1; s=s.replace(old,'| at least 45% |').replace('| at most 20% |','| at most 30% |')" \
     "not a majority minimum"
   neg capacity_v1_not_primary \
-    "old='| **A. Verified compiler** (primary) | 3, 4, 6 |'; assert s.count(old)==1; s=s.replace(old,'| **A. Verified compiler** (primary) | 4, 6 |').replace('| **D. Bounded features** (capped) | 5, 7, 8, 16 |','| **D. Bounded features** (capped) | 3, 5, 7, 8, 16 |')" \
+    "old='| **A. Verified compiler** (primary) | 0s, 3, 4, 6 |'; assert s.count(old)==1; s=s.replace(old,'| **A. Verified compiler** (primary) | 0s, 4, 6 |').replace('| **D. Bounded features** (capped) | 5, 7, 8, 16 |','| **D. Bounded features** (capped) | 3, 5, 7, 8, 16 |')" \
     "queue row 3 (V1 or the shared compiler structure) is not in the primary track"
   neg capacity_shares_not_100 \
     "old='| at least 15% |'; assert s.count(old)==1; s=s.replace(old,'| at least 25% |')" \
