@@ -924,6 +924,7 @@ echo "=== every gate refuses to run outside the gate shell (lib/gate_env.sh) ===
 # (and is not a gate). Keep both short.
 declare -A GUARD_EXEMPT=(
   ["scripts/dev/seed-lake.sh"]="build-cache seeding, not a gate: it checks its own toolchain/manifest key and only decides how long lake build takes, never a verdict"
+  ["scripts/browser/build-site-compiler.sh"]="the site deployment's build of the browser compiler (book.yml, no gate shell there): a build step whose own parity tests fail it, not a gate verdict"
 )
 declare -A GATE_TOOLS=(
   ["scripts/tests/update_golden.sh"]="regenerates the golden baselines that test_golden.sh judges"
