@@ -1,1 +1,60 @@
-# placeholder; filled from the first run
+# Known differences between the parser (Concrete/Frontend/Parser.lean) and grammar/concrete.ebnf,
+# held by scripts/tests/check_grammar_conformance.sh. A difference is a SIGNATURE:
+#   accept-gap <parser message>   the grammar derives the program; the parser refuses it
+#   reject-gap <rule>: <token>    the grammar refuses the program (the reference recognizer got
+#                                 furthest in <rule> and stopped at <token>); the parser accepts it
+# The gate fails on a signature that is not listed, and on a listed one that no longer occurs:
+# the list only shrinks. Removing a row is either a parser fix (a bug, ruled `Violates: SYN-1@1`)
+# or a grammar edit, which the owner reviews. Nothing here changes either.
+#
+# Categories:
+#   grammar stale            the grammar spells syntax the language has replaced
+#   grammar wider            the parser enforces a rule the grammar does not state
+#   LL(1) conflict           a FIRST/FOLLOW conflict that the parser resolves one way
+#   parser accepts           the parser takes a form the grammar refuses: a SYN-1 bug unless the
+#                            grammar is the stale side
+#   parser refuses           the parser refuses a grammar form: a SYN-1 bug unless the grammar is
+#                            wider than intended
+#
+# signature	category	reason	shortest example found (reduced)
+accept-gap #[repr(...)] can only be applied to struct definitions	grammar wider than the language (owner edit)	attribute placement is checked by the parser; the grammar allows any attribute before any declaration, or alone	# [ repr ( packed ) ]
+accept-gap 'trusted impl' is not allowed: trust is never conferred by a block (bug N)	grammar wider than the language (owner edit)	`trusted impl` is refused by the parser (bug 189); the grammar admits it	trusted impl y { }
+accept-gap 'trusted' can only be applied to fn or extern fn	grammar wider than the language (owner edit)	the parser restricts `trusted` to functions; decl_after_trusted admits every declaration keyword	trusted mod foo { }
+accept-gap a capability argument combines capability names with `+`, e.g. `Console + File`	grammar wider than the language (owner edit)	the parser requires `+` capability unions to be names; type_arg admits `type + IDENT` for any type	extern fn Foo ( Bar : y < [ Bar ; 42 ] + Bar , fn ( ) > ) -> Foo ;
+accept-gap a type argument cannot follow a capability argument	grammar wider than the language (owner edit)	argument order (types before capabilities) is checked by the parser, not stated by type_args	fn Bar ( bar_1 : y < { } , Bar < Bar > > ) -> [ T ; 0x1F ] { borrow y as x in bar_1 { borrow T as Bar in Bar { } } }
+accept-gap capability parameters on a trait impl are not supported; declare them on an inherent impl (`impl<cap C> Writer<C>`)	grammar wider than the language (owner edit)	`impl<cap C> X for T` is refused by the parser; the grammar admits it	impl < cap Bar > foo for T with ( ) { fn y ( ) { } }
+accept-gap expected ';' or '=', got #	grammar stale (owner edit)	`E#V` in an expression statement: the language writes `E::V`	mod y { fn Bar ( ) -> fn ( [ * mut foo ; 1 ] ) { Bar # Foo } }
+accept-gap expected ';' or '=', got }	grammar wider than the language (owner edit)	a trailing expression in a function body: STMT-8 gives a function its result only through `return`, and the grammar's single `block` allows a trailing value everywhere	fn x ( ) { x }
+accept-gap expected ::, got #	grammar stale (owner edit)	enum variants are written `E::V`; the grammar still spells `E#V` (enum_pattern, match_pattern_tail, ident_tail)	mod y { fn foo < Foo : y > ( ) { if let y # Foo { T } = false { } } }
+accept-gap expected ;, got #	grammar stale (owner edit)	`E#V` in an expression: the language writes `E::V`	const bar_1 : fn ( ) = bar_1 # T ;
+accept-gap expected => or -> in match arm, got #	grammar stale (owner edit)	`E#V` in a match pattern: the language writes `E::V`	pub impl foo { fn Foo ( ) -> y { match 0x1F { foo # Foo if ! T => { 0x1F } } } }
+accept-gap expected => or -> in match arm, got {	grammar stale (owner edit)	a match pattern `Name { fields }` without a qualified variant: the parser takes `E::V { fields }` only; the grammar's match_pattern_tail '{' alternative is not in the language	pub fn bar_1 < bar_1 > ( ) -> fn ( ) { borrow T as Foo in Foo { match ! 1 { Bar { Bar } if ! false => 0x1F ; , } x } }
+accept-gap expected >, got +	parser refuses a grammar form (candidate SYN-1 bug, or grammar wider)	a capability union `T + C` as an expression turbofish argument: type_args admits it, the expression turbofish parser does not	const Foo : * const fn ( fn ( ) , [ T ; 0 ] ) = [ ! ~ [ & mut x ; 1 ] ; 1 ] . bar_1 :: < fn ( ) + Foo , Bar > ( true ) ;
+accept-gap expected >, got as	LL(1) conflict resolved by the parser (owner decision)	`x as T < y as U`: the same cast/type-argument conflict	impl x { fn foo ( ) { if true as x < T as bar_1 { } 1 as fn ( ) } }
+accept-gap expected expression, got continue	parser refuses a grammar form (candidate SYN-1 bug, or grammar wider)	`continue ;` as a match-arm body: match_body = block | stmt admits it, the parser parses an arm body as an expression	pub mod Bar { trusted fn x < x > ( Bar : fn ( ) with ( ) ) { match Foo as foo { 0x1F => continue ; false => 42 ; , } } } trusted fn y ( foo : [ fn ( ) with ( T ) -> & mut foo ; 0 ] , y : * mut fn ( ) -> fn ( ) ) with ( ) { ! & ! 0.25 as fn ( ) [ * "hello" as Foo | * x as y < Bar > . 0 [ "s" ] ] }
+accept-gap expected identifier, got <	LL(1) conflict resolved by the parser (owner decision)	`struct Copy <T>`: 'Copy' is the optional modifier or the struct's name (an IDENT); the parser always takes the modifier. A FIRST/FOLLOW conflict the LL(1) checkers cannot see, because they treat 'Copy' and IDENT as different tokens	struct Copy < T , foo > { T : foo }
+accept-gap expected type, got !	LL(1) conflict resolved by the parser (owner decision)	`x as T < y`: '<' after a cast's type name (grammar/ll1_known_conflicts.tsv, type): the parser reads type arguments	const bar_1 : fn ( ) = [ [ ] as Bar < ! T ] ;
+accept-gap expected type, got false	LL(1) conflict resolved by the parser (owner decision)	`x as T < y`: '<' after a cast's type name (grammar/ll1_known_conflicts.tsv, type): the parser reads type arguments	const Bar : fn ( ) = Foo as bar_1 < false ;
+accept-gap expected type, got float	LL(1) conflict resolved by the parser (owner decision)	`x as T < y`: '<' after a cast's type name (grammar/ll1_known_conflicts.tsv, type): the parser reads type arguments	fn y ( ) { [ y as foo < 0.25 ] }
+accept-gap expected type, got int	LL(1) conflict resolved by the parser (owner decision)	`x as T < y`: '<' after a cast's type name (grammar/ll1_known_conflicts.tsv, type): the parser reads type arguments	newtype bar_1 = fn ( ) ; const Bar : x = y as foo < 42 ;
+accept-gap expected type, got str	LL(1) conflict resolved by the parser (owner decision)	`x as T < y`: '<' after a cast's type name (grammar/ll1_known_conflicts.tsv, type): the parser reads type arguments	mod Bar { const Foo : [ foo ; 1 ] = [ Bar as Foo < "hello" ] ; }
+accept-gap expected type, got true	LL(1) conflict resolved by the parser (owner decision)	`x as T < y`: '<' after a cast's type name (grammar/ll1_known_conflicts.tsv, type): the parser reads type arguments	mod x { const Foo : x < [ * mut bar_1 ; 0x1F ] > = [ x as x < true | 'c' ] ; }
+accept-gap expected type, got {	parser refuses a grammar form (candidate SYN-1 bug, or grammar wider)	an empty capability set `{}` as an expression turbofish argument (`T.m::<{}>()`): type_args admits it, the expression turbofish parser does not	const Foo : fn ( [ bar_1 ; 42 ] ) = T . Bar :: < { } > ( false ) ;
+accept-gap generic trait methods are not supported: '…' declares type parameters (…)	grammar wider than the language (owner edit)	trait methods with type parameters are refused by the parser; trait_method admits type_params	trait Foo { fn foo < y > ( ) -> x ; }
+accept-gap invalid assignment target	grammar wider than the language (owner edit)	assignment targets are restricted by the parser; expr_or_assign admits any expression on the left	mod foo { fn x ( ) -> [ bar_1 ; 0x1F ] { 0.25 = 0.25 ; } }
+accept-gap unknown attribute '#[…]'	grammar wider than the language (owner edit)	the parser accepts a fixed set of attribute names; the grammar admits any IDENT	# [ bar_1 = "s" ]
+accept-gap unsupported for loop syntax	LL(1) conflict resolved by the parser (owner decision)	the for header's optional init (grammar/ll1_known_conflicts.tsv, for_tail): the parser always reads an init, so `for ( cond ; ) { }` is refused	mod y { fn Bar ( Bar : [ fn ( ) ; 42 ] ) { borrow x as T in T { for ( "hello" ; ) { } } } }
+reject-gap block: ;	parser accepts what the grammar refuses (candidate SYN-1 bug, or grammar stale)	a function declaration with no body (`fn f() -> T ;`) is parsed; decl_keyword requires a block	fn Bar ( foo : T , T : x ) with ( ) -> [ Foo ; 1 ] ;
+reject-gap cap_clause: ;	parser accepts what the grammar refuses (candidate SYN-1 bug, or grammar stale)	the same bodyless function declaration, reached after the parameter list	fn y ( ) ;
+reject-gap cap_clause: IDENT	parser accepts what the grammar refuses (candidate SYN-1 bug, or grammar stale)	struct fields with no ',' between them (`{ x: fn() y: T }`) are parsed; struct_fields requires commas	struct y { x : fn ( ) foo : Foo }
+reject-gap enum_variant: IDENT	parser accepts what the grammar refuses (candidate SYN-1 bug, or grammar stale)	enum variants with no ',' between them are parsed; enum_variants requires commas	enum x < foo > { bar_1 { x : Bar } , x Foo }
+reject-gap enum_variant: cap	parser accepts what the grammar refuses (candidate SYN-1 bug, or grammar stale)	`cap` as a variant name: the parser lets the contextual keywords `cap` and `type` be identifiers; the grammar's IDENT excludes reserved words	enum T < T , Foo > { cap { } }
+reject-gap enum_variant: }	parser accepts what the grammar refuses (candidate SYN-1 bug, or grammar stale)	an enum with no variants (`enum E { }`) is parsed; enum_variants requires one	enum bar_1 { }
+reject-gap enum_variants: IDENT	parser accepts what the grammar refuses (candidate SYN-1 bug, or grammar stale)	enum variants with no ',' after a variant with fields	enum y { bar_1 { foo : T } Foo }
+reject-gap type: &	parser accepts what the grammar refuses (candidate SYN-1 bug, or grammar stale)	a raw pointer type with neither `mut` nor `const` (`* &T`) is parsed; type requires one	type bar_1 = * & foo ;
+reject-gap type: *	parser accepts what the grammar refuses (candidate SYN-1 bug, or grammar stale)	a raw pointer type with neither `mut` nor `const` (`* *T`)	type x = * * bar_1 ;
+reject-gap type: IDENT	parser accepts what the grammar refuses (candidate SYN-1 bug, or grammar stale)	a raw pointer type with neither `mut` nor `const` (`*T`)	type Bar = * bar_1 ;
+reject-gap type: fn	parser accepts what the grammar refuses (candidate SYN-1 bug, or grammar stale)	a raw pointer type with neither `mut` nor `const` (`* fn()`)	const y : * fn ( ) = "s" ;
+reject-gap type_args: ;	parser accepts what the grammar refuses (candidate SYN-1 bug, or grammar stale)	the same bodyless function declaration, reached after a return type	fn bar_1 ( ) with ( ) -> foo ;
+reject-gap type_args: IDENT	parser accepts what the grammar refuses (candidate SYN-1 bug, or grammar stale)	struct fields with no ',' between them, after a field of generic type	struct y { x : * const x T : x }
+reject-gap type_param_def: >	parser accepts what the grammar refuses (candidate SYN-1 bug, or grammar stale)	an empty type parameter list (`impl<> T`) is parsed; type_params requires one parameter	impl < > y { }

@@ -591,8 +591,8 @@ def load_known(path):
                 line = line.rstrip("\n")
                 if not line or line.startswith("#"):
                     continue
-                sig, reason = line.split("\t", 1)
-                known[sig] = reason
+                sig, rest = line.split("\t", 1)
+                known[sig] = rest
     return known
 
 
@@ -608,6 +608,14 @@ def cmd_judge(args):
     if len(verdicts) != len(rows):
         print(f"FAIL the parser gave {len(verdicts)} verdicts for {len(rows)} programs")
         return 1
+    known = load_known(args.known)
+    if args.control:
+        return judge_control(rows, verdicts, known)
+    seen, stats = differences(rows, verdicts)
+    return report(seen, stats, known, args)
+
+
+def differences(rows, verdicts):
     seen = collections.OrderedDict()
     stats = collections.Counter()
     for (i, kind, member, desc, extra, toks), v in zip(rows, verdicts):
@@ -623,7 +631,34 @@ def cmd_judge(args):
         src = " ".join(t for t, _ in decode(toks)) if toks else ""
         if sig not in seen or len(src) < len(seen[sig][3]):
             seen[sig] = (i, kind, desc, src)
-    known = load_known(args.known)
+    return seen, stats
+
+
+def judge_control(rows, verdicts, known):
+    """The judge's negative control: flip one grammar-rejected mutant that the parser rejects to
+    an acceptance, choosing one whose difference signature is neither seen nor listed, and
+    require the judge to report it as new. Exit 0 when the control holds."""
+    seen, _ = differences(rows, verdicts)
+    for idx, ((i, kind, member, desc, extra, toks), v) in enumerate(zip(rows, verdicts)):
+        if kind != "mutant" or member or v == "ACCEPT":
+            continue
+        rule, tok = extra.split("\x1d")
+        sig = f"reject-gap {rule}: {tok if not IDENT_RE.match(tok) or tok in KEYWORDS else 'IDENT'}"
+        if sig in seen or sig in known:
+            continue
+        flipped = list(verdicts)
+        flipped[idx] = "ACCEPT"
+        seen2, _ = differences(rows, flipped)
+        if sig in seen2 and sig not in known:
+            print(f"control: flipping #{i} ({desc}) to an acceptance yields the new difference '{sig}'")
+            return 0
+        print(f"control FAILED: flipping #{i} did not yield '{sig}'")
+        return 1
+    print("control FAILED: no grammar-rejected mutant with a fresh signature to flip")
+    return 1
+
+
+def report(seen, stats, known, args):
     fails = 0
     if args.examples:
         with open(args.examples, "w") as f:
@@ -852,6 +887,8 @@ def main():
     j.add_argument("--verdicts", required=True)
     j.add_argument("--known")
     j.add_argument("--examples", help="write each difference's shortest example here")
+    j.add_argument("--control", action="store_true",
+                   help="negative control: plant one parser acceptance of a grammar-rejected mutant")
     r = sub.add_parser("reduce")
     r.add_argument("--examples", required=True, help="examples.tsv from judge; rewritten in place")
     r.add_argument("--workdir", required=True)

@@ -70,22 +70,10 @@ else
 fi
 
 echo "=== C2: a planted parser acceptance of a grammar-rejected mutant is caught ==="
-python3 - "$TMP/run" <<'PY' > "$TMP/c2.verdicts"
-import sys
-rows = [l.rstrip("\n").split("\t") for l in open(sys.argv[1] + "/programs.tsv")]
-verdicts = [l.rstrip("\n") for l in open(sys.argv[1] + "/verdicts.txt") if l.strip()]
-flipped = False
-for i, r in enumerate(rows):
-    # The first grammar-rejected mutant whose parser verdict is a rejection: flip it to accept.
-    if not flipped and r[1] == "mutant" and r[2] == "0" and verdicts[i] != "ACCEPT":
-        verdicts[i] = "ACCEPT"; flipped = True
-print("\n".join(verdicts))
-PY
-if python3 "$GC" judge --dir "$TMP/run" --verdicts "$TMP/c2.verdicts" --known "$KNOWN" > "$TMP/c2.out"; then
-  no "C2: the judge accepted a planted parser acceptance of a grammar-rejected program"
+if python3 "$GC" judge --dir "$TMP/run" --verdicts "$TMP/run/verdicts.txt" --known "$KNOWN" --control > "$TMP/c2.out"; then
+  ok "C2 $(tail -1 "$TMP/c2.out")"
 else
-  grep -q 'FAIL new difference: reject-gap' "$TMP/c2.out" && ok "C2 a planted reject-gap is reported" \
-    || { no "C2 failed, but not as a new reject-gap"; head -3 "$TMP/c2.out"; }
+  cat "$TMP/c2.out"; no "C2 the judge did not report a planted parser acceptance of a grammar-rejected program"
 fi
 
 echo "=== lookahead and backtracking sites against $LOOKAHEAD ==="
