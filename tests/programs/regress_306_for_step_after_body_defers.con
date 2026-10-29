@@ -1,0 +1,81 @@
+// Bug 306: in `for (init; cond; step) { body }` the body's block ends, running its deferred calls,
+// before the step runs, on fall-through as on `continue` (STMT-6). The interpreter ran the step
+// first on fall-through, so a deferred call reading the counter saw the stepped value there and
+// the unstepped one after `continue`. The binary and the interpreter now agree.
+fn record(k: &i64, acc: &mut i64) {
+    *acc = *acc * 10 + *k;
+}
+
+fn fall_through() -> i64 {
+    let mut acc: i64 = 0;
+    for (let mut k: i64 = 0; k < 3; k = k + 1) {
+        defer record(&k, &mut acc);
+    }
+    return acc;
+}
+
+fn with_continue() -> i64 {
+    let mut acc: i64 = 0;
+    for (let mut k: i64 = 0; k < 3; k = k + 1) {
+        defer record(&k, &mut acc);
+        if k == 1 {
+            continue;
+        }
+    }
+    return acc;
+}
+
+// OD2 (2026-10-29): every non-abort exit of the body's block runs one exit sequence (its deferred
+// calls, innermost scope first, then its loans end), and the step runs after it. A `break` leaves
+// the loop without the step.
+fn with_break() -> i64 {
+    let mut acc: i64 = 0;
+    for (let mut k: i64 = 0; k < 5; k = k + 1) {
+        defer record(&k, &mut acc);
+        if k == 2 {
+            break;
+        }
+    }
+    return acc;
+}
+
+// A labelled `continue` from the inner body leaves both bodies' blocks, the inner one first, and
+// runs the outer step only.
+fn labelled_continue() -> i64 {
+    let mut acc: i64 = 0;
+    'outer: for (let mut i: i64 = 0; i < 2; i = i + 1) {
+        defer record(&i, &mut acc);
+        for (let mut j: i64 = 1; j < 4; j = j + 1) {
+            defer record(&j, &mut acc);
+            if j == 2 {
+                continue 'outer;
+            }
+        }
+    }
+    return acc;
+}
+
+// A `return` from the body: the exit value first, then the body's deferred calls.
+fn ret_in_body(acc: &mut i64) -> i64 {
+    for (let mut k: i64 = 0; k < 5; k = k + 1) {
+        defer record(&k, acc);
+        if k == 1 {
+            return k + 100;
+        }
+    }
+    return 0;
+}
+
+fn with_return() -> i64 {
+    let mut acc: i64 = 0;
+    let v: i64 = ret_in_body(&mut acc);
+    return v * 100 + acc;
+}
+
+fn main() -> Int {
+    // Each deferred call records the counter before the step: 0, 1, 2 -> 12 (the digits 0 1 2).
+    // fall_through() = 12, with_continue() = 12, with_break() = 12,
+    // labelled_continue() = 120121 (the digits 1 2 0 1 2 1), with_return() = 101 * 100 + 1 = 10101.
+    let t: i64 = fall_through() + with_continue() + with_break() + labelled_continue() + with_return();
+    return (t - 130216) as Int;
+}

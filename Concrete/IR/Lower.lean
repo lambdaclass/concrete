@@ -2533,7 +2533,7 @@ partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
     startBlock bodyLabel
     if hasStep then
       -- Lower only non-step body
-      let bodyWithoutStep := body.take (body.length - step.length)
+      let bodyWithoutStep := CStmt.whileBodyBlock body step
       withAddrBound addrTaken (lowerStmts bodyWithoutStep)
     else
       withAddrBound addrTaken (lowerStmts body)

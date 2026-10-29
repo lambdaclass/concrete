@@ -219,6 +219,14 @@ inductive CStmt where
              (isMut : Bool) (refTy : Ty) (body : List CStmt)
 end
 
+/-- Bug 306: the statements of a `.while_` body that form the body's own block. Elab desugars
+    `for (init; cond; step) { body }` to `.while_ cond (body ++ step) label step`, so the body list
+    ends with the step; the body's block (its scope, and the deferred calls registered in it) ends
+    before the step, which runs after it on fall-through as on `continue` (STMT-6). Lower and the
+    interpreter both take the body's block from here. -/
+def CStmt.whileBodyBlock (body step : List CStmt) : List CStmt :=
+  body.take (body.length - step.length)
+
 -- ============================================================
 -- Top-level definitions
 -- ============================================================
