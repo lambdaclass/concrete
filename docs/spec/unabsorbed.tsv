@@ -1,6 +1,7 @@
-# docs/language files not yet absorbed into docs/spec (check_spec.sh S13). Each is moved into the chapters named,
-# rules as entries and useful rationale under them, tracking material to ROADMAP or KNOWN_HOLES, and is
-# deleted with its row in the same commit. The list only shrinks (S3). Columns: path, target chapters.
+# docs/language files not yet absorbed into docs/spec (S13: scripts/spec/one_spec.py, run by check_docs_drift.sh).
+# Each is moved into the chapters named, rules as entries and useful rationale under them, tracking material
+# to ROADMAP, KNOWN_HOLES or research, and is deleted with its row in the same commit. The list only shrinks
+# (S13 against the base revision). Columns: path, target chapters.
 docs/language/ANTI_FEATURES.md	README
 docs/language/ARITHMETIC_POLICY.md	arithmetic
 docs/language/BINDING_IDENTITY_DESIGN.md	scope

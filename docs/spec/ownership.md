@@ -742,10 +742,10 @@ pinned (E0206, "borrowed by a pending defer"), so `defer peek(&t); defer kill(t)
 `--interp`, because Elab gives a shadowing binder a fresh Core name (bug 087). A method call
 `defer obj.method();` is E0282 (`deferBodyNotCall`; an earlier design note wrongly allowed it,
 EVALUATION2 D7): defer the function the method desugars to, or a named cleanup function; `defer
-{ ... }` is a parse error. A deferred call applies none of the argument coercions of an ordinary call
-(the literal and auto-borrow ones: `defer println("x")` fails where `println("x")` compiles), so
-defer a cleanup function without arguments or pass values already of the parameter type; aligning
-the two is a follow-up. What a deferred call that fails or diverges does on a return or error path
+{ ... }` is a parse error. A deferred call's arguments are typed by its parameters as in an ordinary
+call (`defer f(1);` passes an `i32` to an `i32` parameter), but a string literal is not a deferred
+argument (E0279), so `defer println("x")` is refused where `println("x")` compiles: defer a cleanup
+function instead (an earlier design note blamed a missing argument coercion). What a deferred call that fails or diverges does on a return or error path
 is open; whether an abort runs deferred calls is owner decision OD10 (STMT-2 is pending), and today
 a deferred call is an ordinary call with no recovery rule. There is no implicit scope-end drop to order
 against `defer` (OWN-13): `destroy(x)`, `x.drop()` or a deferred explicit call consumes a value.

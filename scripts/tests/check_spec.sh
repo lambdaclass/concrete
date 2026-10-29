@@ -230,8 +230,8 @@ if [ -s "$TMP/s12.observed" ]; then
   printf 'E0310\tSTMT-7\tunreachable:planted\n' >> "$TMP/n12/docs/spec/coverage_allow.tsv"
   control "N12b: an allow row for a witnessed code" S12 "E0310 STMT-7 is allow-listed" -- code-coverage --observed "$TMP/s12.observed" --root "$TMP/n12" --spec "$TMP/n12/docs/spec"
 else no "N12: S12 recorded no observation to replay"; fi
-# S12: a hand edit to the generated inventory; S13: a new document under docs/language
-mkdir -p "$TMP/n13/docs/spec" "$TMP/n13/docs/language"; cp -R docs/spec/. "$TMP/n13/docs/spec/"; cp -R docs/language/. "$TMP/n13/docs/language/"
+# S12: a hand edit to the generated inventory
+mkdir -p "$TMP/n13/docs/spec"; cp -R docs/spec/. "$TMP/n13/docs/spec/"
 printf 'planted\n' >> "$TMP/n13/docs/spec/rule_sites.tsv"
 control "N12c: a hand edit to the generated rule-site inventory" S12 "rule_sites.tsv differs" -- inventory --check --root "$TMP/n13" --spec "$TMP/n13/docs/spec"
 

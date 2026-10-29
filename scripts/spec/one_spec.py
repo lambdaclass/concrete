@@ -42,7 +42,12 @@ def check(root, base=None):
         if rel not in listed:
             fails.append(f"{rel} is a new document under docs/language: the language is stated in docs/spec (add an entry or a rationale there)")
     if base:
+        ok_rev = subprocess.run(["git", "-C", root, "rev-parse", "--verify", "--quiet", base + "^{commit}"],
+                                capture_output=True, text=True)
+        if ok_rev.returncode != 0:
+            return [f"base revision '{base}' does not resolve (fetch history, or pass --base)"], len(listed)
         old = subprocess.run(["git", "-C", root, "show", f"{base}:{LIST}"], capture_output=True, text=True)
+        # a base without the list is the inventory's first revision: nothing to compare
         if old.returncode == 0:
             before = {r[0] for r in rows_of(old.stdout)}
             for k in listed:
@@ -64,13 +69,20 @@ def default_base(root):
 def self_test(root):
     bad = 0
     def scratch():
+        # works whatever is left to absorb, an empty list and no docs/language included
         d = tempfile.mkdtemp()
         shutil.copytree(os.path.join(root, "docs/spec"), os.path.join(d, "docs/spec"))
-        shutil.copytree(os.path.join(root, "docs/language"), os.path.join(d, "docs/language"))
+        if os.path.isdir(os.path.join(root, "docs/language")):
+            shutil.copytree(os.path.join(root, "docs/language"), os.path.join(d, "docs/language"))
+        else:
+            os.makedirs(os.path.join(d, "docs/language"))
         return d
+    def deleted_with_row(d):
+        open(os.path.join(d, LIST), "a").write("docs/language/PLANTED.md\tREADME\n")
+        # listed, then deleted: the row stays behind
     for name, plant, frag in (
             ("a new document under docs/language", lambda d: open(os.path.join(d, "docs/language/NEW_RULES.md"), "w").write("# new\n"), "NEW_RULES.md is a new document"),
-            ("a listed document deleted without its row", lambda d: os.remove(os.path.join(d, rows_of(open(os.path.join(d, LIST)).read())[0][0])), "no longer exists")):
+            ("a listed document deleted without its row", deleted_with_row, "PLANTED.md no longer exists")):
         d = scratch(); plant(d)
         fails, _ = check(d)
         if any(frag in f for f in fails): print(f"  ok   control: {name} is refused")

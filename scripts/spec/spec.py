@@ -525,6 +525,25 @@ def tsv_text(t):
 def read_opt(p):
     return open(p, encoding="utf-8").read() if p and os.path.exists(p) else None
 
+def check_allow_history(spec, root, base):
+    """S12 against the base: an allow row is added only for a (code, rule) pair the base's inventory
+    did not have, so an exemption never replaces a witness that existed (the list only shrinks)."""
+    def show(path):
+        r = subprocess.run(["git", "-C", root, "show", f"{base}:{path}"], capture_output=True, text=True)
+        return r.stdout if r.returncode == 0 else None
+    old_allow, old_inv = show(ALLOW_PATH), show(INVENTORY_PATH)
+    if old_allow is None or old_inv is None:
+        ok(f"S12 history: no allow list or inventory at base {base} (first revision)"); return
+    keys = lambda t: {(r[0], r[1]) for r in tsv_text(t) if len(r) >= 2}
+    old_rows = keys(old_allow)
+    old_pairs = {(r[2], r[0]) for r in tsv_text(old_inv) if len(r) >= 3}
+    bad = 0
+    for r in read_tsv(os.path.join(root, ALLOW_PATH)) or []:
+        if len(r) >= 2 and (r[0], r[1]) not in old_rows and (r[0], r[1]) in old_pairs:
+            fail("S12", f"{ALLOW_PATH}: {r[0]} {r[1]} was added though the base already named that rule code (an exemption may not replace a witness)"); bad += 1
+    if bad == 0:
+        ok(f"S12 history: the allow list adds rows only for rule codes new since {base}")
+
 def check_history(spec, base, old_ids_path, old_codes_path, old_spec_dir):
     """S3 against the base revision's ids.tsv, codes.tsv and chapters (extracted by check_spec.sh)."""
     old_ids = read_opt(old_ids_path)
@@ -1201,6 +1220,7 @@ def main():
         check_restatements(spec, a.root, a.scan_root)
     elif c == "history":
         check_history(spec, a.base, a.base_ids, a.base_codes, a.base_spec)
+        if a.base and a.base != "ctl": check_allow_history(spec, a.root, a.base)
     elif c == "run-examples":
         run_examples(spec, a.compiler, a.jobs, a.work, a.only)
     elif c == "codes":
