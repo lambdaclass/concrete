@@ -136,7 +136,7 @@ the first is the mechanism behind the article's *coinduction* complaint:
   frictions the article warns about. The article's value is as a **checklist for the edge
   of the provable fragment.**
 
-*(This analysis was also written to `docs/NOTES/lean-vs-rocq-tradeoffs.md` in the repo.)*
+*(This analysis was also written to `research/proof-evidence/lean-vs-rocq-tradeoffs.md` in the repo.)*
 
 ---
 
@@ -473,7 +473,7 @@ vectors as the cheap always-on cross-check.
 
 ## Artifacts produced this session
 - Cloned repo: `/home/unbalancedparen/projects/concrete2`
-- In-repo note: `docs/NOTES/lean-vs-rocq-tradeoffs.md` (the Q2 analysis; written earlier this
+- In-repo note: `research/proof-evidence/lean-vs-rocq-tradeoffs.md` (the Q2 analysis; written earlier this
   session when explicitly requested)
 - This file: `/home/unbalancedparen/concrete-design.md` (full session Q&A, incl. the Q5 + Q6
   + Q7 prover-neutral-obligation-IR design)

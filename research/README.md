@@ -29,8 +29,9 @@ The consequences, which is what makes this safe:
   stays useful after it stops being current; one written in the timeless present
   becomes a lie the moment the code moves.
 
-`docs/NOTES/` is the opposite case and IS gated (by glob), because notes there are cited
-from normative documents and make present-tense claims about modules and report kinds.
+The former `docs/NOTES/` directory, gated by glob from 2026-07-31, moved here on 2026-10-29: its
+four notes are dated session records (now under `proof-evidence/`), and the design they sketched
+binds through the gated `docs/verification/PROVER_NEUTRAL_OBLIGATIONS.md`.
 
 ## How To Use This Directory
 
@@ -202,6 +203,10 @@ If you want the highest-leverage current research first:
 - [proof-evidence/cryptographic-source-commitments.md](proof-evidence/cryptographic-source-commitments.md) — cryptographic source/bundle provenance (`P1`, `Open`)
 - [proof-evidence/proof-carrying-supply-chain.md](proof-evidence/proof-carrying-supply-chain.md) — proof/evidence-aware supply-chain direction (`P2`, `Research`)
 - [proof-evidence/self-describing-binaries.md](proof-evidence/self-describing-binaries.md) — binary-to-proof/evidence traceability direction (`P2`, `Research`)
+- [proof-evidence/concrete-design.md](proof-evidence/concrete-design.md) — 2026-07-29 design-session Q&A: Rocq port estimate, multi-prover architecture, prover-neutral obligation IR, candidate proof backends; superseded by `docs/verification/PROVER_NEUTRAL_OBLIGATIONS.md` (relocated from `docs/NOTES/` 2026-10-29) (`P2`, `Closed`)
+- [proof-evidence/lean-vs-rocq-tradeoffs.md](proof-evidence/lean-vs-rocq-tradeoffs.md) — which points of "Why Rocq is better than Lean" bite Concrete and which its design neutralizes (relocated from `docs/NOTES/` 2026-10-29) (`P2`, `Research`)
+- [proof-evidence/response-to-why-rocq-is-better.md](proof-evidence/response-to-why-rocq-is-better.md) — position note answering "Why Rocq is better than Lean" from Concrete's perspective (relocated from `docs/NOTES/` 2026-10-29) (`P2`, `Research`)
+- [proof-evidence/why3-architecture-and-positioning.md](proof-evidence/why3-architecture-and-positioning.md) — what to copy from Why3's architecture and why Concrete still exists; normative owner `docs/verification/PROVER_NEUTRAL_OBLIGATIONS.md` (relocated from `docs/NOTES/` 2026-10-29) (`P1`, `Closed`)
 - [proof-evidence/SIZED_EVALUATOR_INVESTIGATION.md](proof-evidence/SIZED_EVALUATOR_INVESTIGATION.md) — sized/indexed ProofCore evaluator investigation; ProofCore v2 research (relocated from `docs/` 2026-07-12) (`P2`, `Research`)
 
 ## Packages And Tooling

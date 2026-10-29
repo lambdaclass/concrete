@@ -85,17 +85,14 @@ PRESENT_DOCS=(
   # Normative architecture for the prover-neutral obligation layer.
   docs/verification/PROVER_NEUTRAL_OBLIGATIONS.md
 )
-# docs/NOTES/ by GLOB, not by name. These are design notes that make present-tense
-# claims about modules and report kinds, and the design in them was re-derived more
-# than once precisely because nothing checked them. A glob rather than a list so the
-# NEXT note is gated on arrival instead of when someone remembers to add it — the
-# failure mode here has always been the unlisted file.
+# The former docs/NOTES/ glob is gone: those notes moved to research/proof-evidence/
+# on 2026-10-29, and their design binds through PROVER_NEUTRAL_OBLIGATIONS.md above.
+# A new normative note belongs in docs/ and in this list by name.
 #
 # research/ is deliberately NOT included: it holds dated investigation records whose
 # value is that they say what was believed at the time. Gating them would force either
 # rewriting history or freezing it. That convention is written down in
 # research/README.md so the omission reads as a decision, not an oversight.
-for f in docs/NOTES/*.md; do [ -e "$f" ] && PRESENT_DOCS+=("$f"); done
 REPORT_DOCS=(  # --report claims here describe the current CLI
   docs/verification/CLAIMS_TODAY.md
   docs/verification/KNOWN_HOLES.md

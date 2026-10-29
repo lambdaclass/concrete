@@ -145,7 +145,8 @@ Current families:
 - `docs/platform/` — ABI, FFI, targets, runtime and freestanding boundaries;
 - `docs/project/` — project identity, policy, decisions, examples and authoring conventions;
 - `docs/archive/` — dated, non-authoritative execution history retained for traceability;
-- existing `docs/stdlib/`, `docs/bugs/`, `docs/book/`, and `docs/NOTES/` remain distinct.
+- existing `docs/stdlib/`, `docs/bugs/`, and `docs/book/` remain distinct; the former `docs/NOTES/`
+  design notes moved to `research/proof-evidence/` on 2026-10-29.
 
 The canonical-owner table above remains the authority layer. Do not create compatibility copies
 that can drift; update inbound repository links when a file moves, and use a pointer only when an

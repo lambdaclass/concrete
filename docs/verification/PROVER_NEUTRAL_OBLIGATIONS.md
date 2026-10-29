@@ -7,9 +7,9 @@ versioned, validated artifact form is VIR as defined by
 [VERIFICATION_IR.md](VERIFICATION_IR.md). “Neutral IR” below means promoting
 TermIR, not introducing a parallel proposition representation.
 
-Supersedes the sketches in [NOTES/concrete-design.md](../NOTES/concrete-design.md) §Q5
-and [NOTES/why3-architecture-and-positioning.md](../NOTES/why3-architecture-and-positioning.md),
-which remain as provenance. Those live under `NOTES/`, are non-normative, and are
+Supersedes the sketches in [research/proof-evidence/concrete-design.md](../../research/proof-evidence/concrete-design.md) §Q5
+and [research/proof-evidence/why3-architecture-and-positioning.md](../../research/proof-evidence/why3-architecture-and-positioning.md),
+which remain as provenance. Those live under `research/`, are non-normative, and are
 outside this gate's `PRESENT_DOCS` list — which is why the design in them was
 independently re-derived more than once. This file is the version that binds.
 

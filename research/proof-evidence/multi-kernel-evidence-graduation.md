@@ -140,7 +140,9 @@ passed the path and `--report` checks, so gating them cost nothing and stops
 the next one from drifting). `research/` stays out and is declared
 non-normative in `research/README.md` — it holds dated investigation records
 whose value is that they say what was believed *then*, and gating those would
-either force rewriting history or freeze it.
+either force rewriting history or freeze it. (2026-10-29: the four notes left
+`docs/NOTES/` for `research/proof-evidence/` and the glob was removed; their
+design binds through `docs/verification/PROVER_NEUTRAL_OBLIGATIONS.md`.)
 
 ## Measured status of the merge bar (2026-07-31)
 

@@ -366,7 +366,7 @@ Concrete wants to copy (workflow):
 - proof workflow that feels like a real tool pipeline, not hidden magic
 - machine-consumable proof/audit artifacts rather than only human prose
 
-Concrete wants to copy (architecture — see `NOTES/why3-architecture-and-positioning.md`):
+Concrete wants to copy (architecture — see `research/proof-evidence/why3-architecture-and-positioning.md`):
 
 - **Task = obligation.** Why3's "task" (a self-contained context + one goal) is the
   right shape for Concrete's prover-neutral obligation unit.

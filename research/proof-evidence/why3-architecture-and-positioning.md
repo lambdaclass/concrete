@@ -2,7 +2,7 @@
 
 **Status:** design note (2026-07-29). Companion to
 [`lean-vs-rocq-tradeoffs.md`](lean-vs-rocq-tradeoffs.md) and the influence entry in
-[`../INFLUENCES.md`](../project/INFLUENCES.md).
+[`docs/project/INFLUENCES.md`](../../docs/project/INFLUENCES.md).
 
 Why3 is the closest existing system to Concrete's proof-backend ambition, so it forces
 the sharpest version of the question: **why build Concrete if Why3/WhyML already exists?**

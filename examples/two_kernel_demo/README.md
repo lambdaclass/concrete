@@ -36,4 +36,4 @@ false verdict.
 This attests *checker* diversity (independent kernels each accept a lowering of
 the obligation), not *bridge* diversity: the Core→obligation lowering is
 single-sourced and trusted, identical for every kernel. See
-`docs/NOTES/response-to-why-rocq-is-better.md`.
+`research/proof-evidence/response-to-why-rocq-is-better.md`.
