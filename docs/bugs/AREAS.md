@@ -64,12 +64,12 @@ checker refusal is a Check bug here.
 
 | ruling | bugs | stages |
 |--|-:|--|
-| violates ARITH | 6 | Check 3, Interp 2, Elab 1 |
-| violates FFI | 8 | Resolve 2, Check 2, Mono 1, EmitSSA 1, EmitLLVM 1, Std 1 |
-| violates MEM | 10 | Lower 7, Check 1, Elab 1, Interp 1 |
-| violates MOD | 26 | Resolve 10, Elab 8, Interp 4, Check 2, Lower 1, EmitSSA 1 |
-| violates OWN | 12 | Check 9, Lower 3 |
-| violates PASS | 20 | Lower 9, Mono 3, Check 2, Elab 2, Resolve 1, EmitSSA 1, Interp 1, CLI 1 |
+| violates ARITH | 7 | Check 3, Interp 2, Elab 1, EmitLLVM 1 |
+| violates FFI | 9 | Resolve 3, Check 2, Mono 1, EmitSSA 1, EmitLLVM 1, Std 1 |
+| violates MEM | 11 | Lower 8, Check 1, Elab 1, Interp 1 |
+| violates MOD | 29 | Resolve 12, Elab 9, Interp 4, Check 2, Lower 1, EmitSSA 1 |
+| violates OWN | 13 | Check 10, Lower 3 |
+| violates PASS | 39 | Lower 17, Mono 5, EmitSSA 4, Interp 4, Elab 3, Check 2, Resolve 1, SSA 1, Report 1, CLI 1 |
 | violates PAT | 6 | Check 4, Interp 1, CLI 1 |
 | violates REF | 7 | Check 6, Lower 1 |
 | violates SCOPE | 13 | Check 7, Proof 3, Elab 1, Mono 1, CLI 1 |
@@ -77,16 +77,9 @@ checker refusal is a Check bug here.
 | violates SYN | 4 | Parse 2, Report 1, Tooling 1 |
 | violates TRAIT | 4 | Check 3, Resolve 1 |
 | violates TRUST | 4 | Check 2, Parse 1, Proof 1 |
-| violates TYPE | 17 | Check 11, Resolve 3, Elab 2, Proof 1 |
-| spec gap ARITH | 1 | EmitLLVM 1 |
-| spec gap FFI | 1 | Resolve 1 |
-| spec gap MEM | 1 | Lower 1 |
-| spec gap MOD | 5 | Resolve 3, Elab 1, Report 1 |
-| spec gap OWN | 1 | Check 1 |
-| spec gap PASS | 19 | Lower 8, EmitSSA 3, Interp 3, Mono 2, Elab 1, SSA 1, Report 1 |
+| violates TYPE | 18 | Check 12, Resolve 3, Elab 2, Proof 1 |
 | spec gap STMT | 1 | Interp 1 |
-| spec gap TRUST | 1 | Check 1 |
-| spec gap TYPE | 2 | Resolve 1, Check 1 |
+| open | 4 | Resolve 2, Check 1, Report 1 |
 | permitted | 1 | Lower 1 |
 | outside (library) | 11 | Std 6, EmitLLVM 5 |
 | outside (performance) | 44 | Check 10, Lower 7, Parse 6, Elab 4, Interp 4, Resolve 3, SSA 3, EmitSSA 3, Proof 2, Mono 1, Report 1 |
@@ -100,22 +93,22 @@ checker refusal is a Check bug here.
 | [001](001_cross_module_struct_field_offset.md) | Elab | Elab | named | — | violates MEM-4@2 |
 | [002](002_i32_literal_type_mismatch.md) | Elab | Elab | named | — | violates ARITH-2@1, PASS-6@1 |
 | [003](003_cross_module_mut_borrow_move.md) | Check | Check | named | Elab | violates OWN-15@2 |
-| [004](004_array_variable_index_assign.md) | Lower | Lower | commits | — | spec gap (PASS) |
-| [005](005_enum_field_struct_layout_panic.md) | Lower | Lower | shared | Check, Parse | spec gap (PASS) |
-| [006](006_cross_module_string_literal_collision.md) | Lower | Lower | commits | — | spec gap (PASS) |
+| [004](004_array_variable_index_assign.md) | Lower | Lower | commits | — | violates PASS-13@1 |
+| [005](005_enum_field_struct_layout_panic.md) | Lower | Lower | shared | Check, Parse | violates PASS-12@1 |
+| [006](006_cross_module_string_literal_collision.md) | Lower | Lower | commits | — | violates PASS-13@1 |
 | [007](007_no_print_string_builtin.md) | EmitLLVM | EmitBuiltins | shared | Check, Resolve | outside (library) |
 | [008](008_if_else_expression_aggregate_types.md) | Parse | Parser | named | Check, Lower | unrecorded |
-| [009](009_const_declarations_not_lowered.md) | Lower | Lower | named | Parse | spec gap (PASS) |
+| [009](009_const_declarations_not_lowered.md) | Lower | Lower | named | Parse | violates PASS-12@1 |
 | [010](010_no_string_substr.md) | EmitLLVM | EmitBuiltins | shared | Check, Resolve | outside (library) |
 | [011](011_linear_string_building_in_loops.md) | EmitLLVM | EmitBuiltins | shared | Check, Resolve | outside (library) |
 | [012](012_no_standalone_timing_path.md) | EmitLLVM | EmitBuiltins | shared | Check, Resolve | outside (library) |
 | [013](013_alloca_inside_loops_stack_overflow.md) | EmitSSA | EmitSSA | record | — | unrecorded |
-| [014](014_string_literal_in_loop_invalid_ir.md) | EmitSSA | EmitSSA | record | — | spec gap (PASS) |
+| [014](014_string_literal_in_loop_invalid_ir.md) | EmitSSA | EmitSSA | record | — | violates PASS-12@1 |
 | [015](015_O0_default_distorted_real_workload_performance.md) | EmitSSA | EmitSSA | record | — | outside (performance) |
-| [016](016_cross_module_generic_monomorphization_link_failure.md) | Mono | - | override | — | spec gap (PASS) |
+| [016](016_cross_module_generic_monomorphization_link_failure.md) | Mono | - | override | — | violates PASS-12@1 |
 | [017](017_std_net_socket_constants_are_linux_only.md) | Std | net | override | — | outside (library) |
 | [018](018_stack_array_borrow_creates_copy.md) | Lower | Lower | commits | — | violates OWN-15@2 |
-| [019](019_array_struct_field_mutation.md) | Lower | - | override | — | spec gap (PASS) |
+| [019](019_array_struct_field_mutation.md) | Lower | - | override | — | violates PASS-13@1 |
 | [020](020_int_match_consume_not_propagated.md) | Check | - | override | — | violates OWN-2@2 |
 | [021](021_int_match_disagree_not_checked.md) | Check | - | override | — | violates OWN-3@2 |
 | [022](022_submodule_breaks_parent_impl_method_consume.md) | Check | Check | named | Lower | violates MOD-1@1 |
@@ -125,22 +118,22 @@ checker refusal is a Check bug here.
 | [026](026_array_repeat_count_hang.md) | Parse | Parser | named | — | outside (performance) |
 | [027](027_emitssa_quadratic_rendering.md) | EmitSSA | EmitSSA | named | Interp, Lower, SSA | outside (performance) |
 | [028](028_reserved_name_collision.md) | Resolve | Intrinsic | commits | — | violates MOD-3@2 |
-| [029](029_divergent_if_array_addr_after_loop.md) | Lower | Lower | commits | Std | spec gap (PASS) |
-| [030](030_nonmut_array_write.md) | Check | Check | commits | — | spec gap (OWN) |
+| [029](029_divergent_if_array_addr_after_loop.md) | Lower | Lower | commits | Std | violates PASS-12@1 |
+| [030](030_nonmut_array_write.md) | Check | Check | commits | — | violates OWN-10@2 |
 | [031](031_branch_lazy_promotion_uninit.md) | Lower | Lower | commits | — | violates MEM-3@1 |
-| [032](032_multibyte_string_literal_emit.md) | EmitSSA | EmitSSA | commits | Std | spec gap (PASS) |
+| [032](032_multibyte_string_literal_emit.md) | EmitSSA | EmitSSA | commits | Std | violates PASS-12@1 |
 | [033](033_ifexpr_merge_aggregate_phi.md) | Lower | Lower | commits | — | violates PASS-9@1 |
 | [034](034_shortcircuit_borrow_promotion.md) | Lower | Lower | commits | Std | violates MEM-3@1 |
-| [035](035_fieldoffset_generic_enum_panic.md) | Lower | Lower | named | Resolve | spec gap (PASS) |
+| [035](035_fieldoffset_generic_enum_panic.md) | Lower | Lower | named | Resolve | violates PASS-12@1 |
 | [036](036_import_dependent_type_metadata.md) | Resolve | FileSummary | named | Lower | violates TYPE-14@2 |
 | [037](037_repr_align_exceeds_declared_type.md) | EmitSSA | EmitSSA | commits | Check, Parse | violates FFI-4@1, FFI-2@1 |
-| [038](038_if_merge_promoted_aggregate_clobber.md) | Lower | Lower | named | Check, Interp | spec gap (PASS) |
+| [038](038_if_merge_promoted_aggregate_clobber.md) | Lower | Lower | named | Check, Interp | violates PASS-13@1 |
 | [039](039_import_alias_program_order_rebind.md) | EmitSSA | EmitSSA | commits | Tooling | violates MOD-1@1 |
 | [040](040_corecheck_match_binder_first_match_scope.md) | Check | CoreCheck | commits | Std | violates SCOPE-3@1 |
 | [041](041_match_merge_keeps_arm_binders.md) | Check | Check | named | Resolve | violates SCOPE-3@1 |
 | [042](042_imported_newtype_not_a_type.md) | Resolve | Resolve | named | Check | violates MOD-1@1 |
 | [043](043_string_not_nul_terminated_ffi.md) | Std | fs | commits | — | outside (library) |
-| [044](044_renamed_generic_import_not_monomorphized.md) | Mono | Mono | commits | — | spec gap (PASS) |
+| [044](044_renamed_generic_import_not_monomorphized.md) | Mono | Mono | commits | — | violates PASS-12@1 |
 | [045](045_match_binder_shadow_clobber.md) | Elab | Elab | commits | Interp, Proof | violates SCOPE-1@1, SCOPE-3@1 |
 | [046](046_map_keys_values_duplicate_linear.md) | Std | map | commits | — | outside (library) |
 | [047](047_hashmap_insert_duplicate_past_tombstone.md) | Std | map | named | — | outside (library) |
@@ -150,8 +143,8 @@ checker refusal is a Check bug here.
 | [051](051_generic_enums_not_monomorphized.md) | Mono | Mono | commits | — | violates PASS-7@1, FFI-2@1 |
 | [052](052_array_element_destroy_noop.md) | Mono | Mono | commits | Interp, Std | violates PASS-1@1, TRAIT-10@1 |
 | [053](053_dce_deletes_checked_negation.md) | Check | IntArith | commits | Interp, SSA | violates ARITH-3@1 |
-| [054](054_struct_mono_name_collision.md) | — | — | unfixed | — | spec gap (PASS) |
-| [055](055_sibling_import_alias_unusable.md) | Elab | Elab | record | Check | spec gap (PASS) |
+| [054](054_struct_mono_name_collision.md) | — | — | unfixed | — | violates PASS-12@1 |
+| [055](055_sibling_import_alias_unusable.md) | Elab | Elab | record | Check | violates PASS-12@1 |
 | [056](056_fnptr_reassign_phi_undefined_register.md) | Lower | Lower | commits | EmitSSA, SSA | violates PASS-9@1 |
 | [057](057_hashmap_builtin_size_undercount.md) | Std | map | named | — | violates FFI-2@1 |
 | [058](058_proof_by_without_fingerprint_never_stales.md) | Proof | ProofCore | commits | — | outside (tooling) |
@@ -159,7 +152,7 @@ checker refusal is a Check bug here.
 | [060](060_contracts_outside_proof_fingerprint.md) | Proof | ProofCore | shared | Std | outside (tooling) |
 | [061](061_pexpr_conflates_param_application_with_global_call.md) | Proof | Proof | commits | — | violates SCOPE-3@1 |
 | [062](062_proof_dependency_staleness_does_not_propagate.md) | Proof | ProofCore | commits | Report | outside (tooling) |
-| [063](063_cap_inference_defaults_derived_fnptr_to_empty.md) | Check | CheckHelpers | commits | Resolve | spec gap (TRUST) |
+| [063](063_cap_inference_defaults_derived_fnptr_to_empty.md) | Check | CheckHelpers | commits | Resolve | open OPEN-45 |
 | [064](064_query_kind_error_lists_the_rejected_kind.md) | — | — | unfixed | — | outside (tooling) |
 | [065](065_stack_depth_unboundedness_not_propagated.md) | Report | Report | commits | Check, Elab, Parse, Resolve | outside (tooling) |
 | [066](066_interp_discards_match_guard_effects.md) | Interp | Interp | commits | Proof | violates PAT-4@2 |
@@ -170,10 +163,10 @@ checker refusal is a Check bug here.
 | [071](071_cross_package_capability_requirements_unenforced.md) | Proof | Proof | commits | Std | violates TRUST-4@1 |
 | [072](072_spawn_exec_failure_flushes_parent_buffers.md) | Std | libc | commits | Proof | outside (library) |
 | [073](073_generic_type_argument_arity_unchecked.md) | Resolve | Resolve | commits | — | violates TYPE-15@1 |
-| [074](074_duplicate_module_names_across_packages.md) | Report | AssumptionSummary | commits | Resolve | spec gap (MOD) |
+| [074](074_duplicate_module_names_across_packages.md) | Report | AssumptionSummary | commits | Resolve | open OPEN-44 |
 | [075](075_policy_assumption_authority_checks_vacuous.md) | Gates | authority_facts | commits | — | outside (tooling) |
 | [076](076_proof_admission_blind_to_dependencies.md) | Proof | ProofCore | commits | — | outside (tooling) |
-| [077](077_nested_submodule_relative_call_undefined_symbol.md) | Report | AssumptionSummary | commits | Parse | spec gap (PASS) |
+| [077](077_nested_submodule_relative_call_undefined_symbol.md) | Report | AssumptionSummary | commits | Parse | violates PASS-12@1 |
 | [078](078_if_else_both_diverge_open_merge.md) | Lower | Lower | commits | Tooling | violates PASS-9@1 |
 | [079](079_receipt_for_a_body_the_theorem_is_not_about.md) | Proof | ProofCore | commits | — | outside (tooling) |
 | [080](080_narrowing_cast_modeled_as_identity.md) | Report | ModelDiff | commits | Proof | outside (tooling) |
@@ -197,21 +190,21 @@ checker refusal is a Check bug here.
 | [099](099_generic_inference_peek_diverges.md) | Resolve | PeekType | named | Check, Elab | violates PASS-6@1 |
 | [100](100_generic_destroy_impl_unspecialized.md) | Mono | Mono | named | Check, Elab, Resolve | violates PASS-7@1 |
 | [101](101_branch_local_let_captures_continuation.md) | Proof | ProofCore | record | — | violates SCOPE-3@1 |
-| [102](102_pointer_local_address_cast_miscompiled.md) | Interp | Interp | shared | Lower | spec gap (PASS) |
+| [102](102_pointer_local_address_cast_miscompiled.md) | Interp | Interp | shared | Lower | violates PASS-13@1 |
 | [103](103_extern_destroy_replaced_by_empty_body.md) | Mono | Mono | override | — | violates FFI-5@1 |
 | [104](104_assigned_reference_outlives_block_local.md) | Check | Check | named | — | violates REF-6@1 |
 | [105](105_reference_valued_if_miscompiles.md) | Check | Check | shared | Interp, Lower | violates PASS-1@1 |
 | [106](106_model_diff_report_hangs.md) | Report | ModelDiff | commits | Interp | outside (tooling) |
 | [107](107_shadowed_binding_reference_reads_new_slot.md) | Check | Check | shared | — | violates SCOPE-1@1, REF-6@1 |
-| [108](108_bool_cast_trunc.md) | EmitSSA | EmitSSA | commits | Check | spec gap (PASS) |
-| [109](109_f32_literal_invalid_ir.md) | EmitLLVM | EmitLLVM | commits | EmitSSA | spec gap (ARITH) |
+| [108](108_bool_cast_trunc.md) | EmitSSA | EmitSSA | commits | Check | violates PASS-12@1 |
+| [109](109_f32_literal_invalid_ir.md) | EmitLLVM | EmitLLVM | commits | EmitSSA | violates ARITH-7@1 |
 | [110](110_array_value_store.md) | Elab | Elab | override | EmitSSA, Tooling | violates PASS-6@1, PASS-9@1 |
 | [111](111_main_params_accepted.md) | Check | Check | commits | — | violates STMT-7@2 |
-| [112](112_user_intrinsic_e0116.md) | Resolve | Resolve | shared | — | spec gap (FFI) |
+| [112](112_user_intrinsic_e0116.md) | Resolve | Resolve | shared | — | violates FFI-6@1 |
 | [113](113_submodule_extern_effects_unchecked.md) | Resolve | Resolve | shared | — | violates FFI-3@1 |
 | [114](114_submodule_intrinsic_links_c_symbol.md) | — | — | unfixed | — | violates FFI-5@1 |
 | [115](115_vec_get_duplicates_linear.md) | Lower | Lower | shared | Check, Elab, EmitSSA, Interp | violates OWN-8@2, OWN-9@2 |
-| [116](116_vec_push_first_field_through_ref.md) | SSA | SSACleanup | commits | Lower | spec gap (PASS) |
+| [116](116_vec_push_first_field_through_ref.md) | SSA | SSACleanup | commits | Lower | violates PASS-12@1 |
 | [117](117_interp_module_const.md) | Interp | Interp | record | — | violates MOD-1@1 |
 | [118](118_interp_nested_module_import.md) | Interp | Interp | record | — | violates MOD-1@1 |
 | [119](119_interp_generic_trait_method.md) | Interp | Interp | override | — | violates PASS-1@1 |
@@ -244,7 +237,7 @@ checker refusal is a Check bug here.
 | [150](150_float_self_compare_fold.md) | Interp | Interp | record | — | violates ARITH-6@1 |
 | [151](151_nested_module_name_flattening.md) | Interp | Interp | shared | — | violates MOD-1@1 |
 | [152](152_string_trim_empty.md) | EmitLLVM | EmitBuiltins | named | Interp | outside (library) |
-| [165](165_generated_helper_call_binds_by_spelling.md) | Elab | Elab | commits | Proof | spec gap (MOD) |
+| [165](165_generated_helper_call_binds_by_spelling.md) | Elab | Elab | commits | Proof | violates MOD-8@1 |
 | [166](166_foreign_fn_value_abi.md) | Check | CoreCheck | commits | Elab | violates FFI-1@1 |
 | [175](175_match_arms_all_diverge_open_merge.md) | Lower | Lower | commits | — | violates PASS-9@1 |
 | [176](176_loop_body_shadow_leaks_in_checker.md) | Check | CheckHelpers | commits | — | violates SCOPE-3@1 |
@@ -255,7 +248,7 @@ checker refusal is a Check bug here.
 | [181](181_generic_borrowed_scrutinee_binder_mode.md) | Check | BindingMode | commits | Elab, Interp, Lower | violates REF-9@2, PASS-2@2 |
 | [182](182_borrowed_call_result_temporary.md) | Check | Check | commits | — | violates REF-5@1 |
 | [183](183_deref_assign_destination_first.md) | Lower | Lower | commits | Check, Mono | violates STMT-4@1 |
-| [184](184_interp_reads_stdin_up_front.md) | Interp | Interp | commits | CLI | spec gap (PASS) |
+| [184](184_interp_reads_stdin_up_front.md) | Interp | Interp | commits | CLI | violates PASS-13@1 |
 | [185](185_generic_rawptr_compare_loses_authority.md) | Check | Verify | commits | Mono | violates TYPE-6@1, TRUST-4@1 |
 | [186](186_trait_impl_selection_is_a_search.md) | Check | Coherence | commits | — | violates TRAIT-10@1, TRAIT-2@1 |
 | [188](188_capability_variable_entails_everything.md) | Check | Capabilities | commits | Resolve | violates TRUST-4@1 |
@@ -290,19 +283,19 @@ checker refusal is a Check bug here.
 | [218](218_duplicate_declarations_accepted.md) | Check | Check | commits | — | violates MOD-3@2 |
 | [219](219_mutation_31_anchored_on_proof_only_wrapper.md) | Proof | ProofCore | commits | — | outside (tooling) |
 | [220](220_empty_radix_literal.md) | Parse | Lexer | commits | — | violates SYN-1@1 |
-| [221](221_call_type_argument_count.md) | Check | Check | commits | Resolve | spec gap (TYPE) |
+| [221](221_call_type_argument_count.md) | Check | Check | commits | Resolve | violates TYPE-9@2 |
 | [222](222_imported_enum_impls_not_imported.md) | Resolve | FileSummary | commits | Check, Interp | violates TRAIT-10@1 |
-| [223](223_aliased_import_is_a_different_type.md) | Resolve | TypeId | commits | Check, Elab | spec gap (MOD) |
+| [223](223_aliased_import_is_a_different_type.md) | Resolve | TypeId | commits | Check, Elab | violates MOD-9@1 |
 | [224](224_failed_let_recovered_immutable.md) | Interp | Interp | shared | Check | outside (tooling) |
 | [225](225_bound_refusal_names_type_as_placeholder.md) | Interp | Interp | shared | Check | outside (tooling) |
 | [226](226_submodule_imports_private_function.md) | Resolve | Resolve | shared | — | violates MOD-2@1, MOD-6@1 |
 | [227](227_user_result_captures_builtin_in_other_module.md) | Elab | Elab | commits | Resolve | violates MOD-1@1 |
 | [228](228_interp_loop_env_grows.md) | Interp | Interp | override | — | outside (performance) |
-| [229](229_resolve_scope_refuses_check_names.md) | Resolve | Resolve | commits | — | spec gap (MOD) |
+| [229](229_resolve_scope_refuses_check_names.md) | Resolve | Resolve | commits | — | open OPEN-43 |
 | [230](230_toplevel_known_types_admit_foreign_alias.md) | Resolve | Resolve | shared | — | violates MOD-2@1, MOD-1@1 |
 | [231](231_bound_names_undeclared_trait.md) | Resolve | Resolve | shared | Parse | violates MOD-1@1 |
 | [232](232_discovery_controls_pin_streak.md) | Resolve | Resolve | shared | Parse | outside (tooling) |
-| [233](233_import_public_constant_refused.md) | Resolve | FileSummary | commits | Check, Elab, Lower | spec gap (MOD) |
+| [233](233_import_public_constant_refused.md) | Resolve | FileSummary | commits | Check, Elab, Lower | violates MOD-9@1 |
 | [234](234_interp_recursion_quadratic.md) | Interp | Interp | commits | — | outside (performance) |
 | [235](235_interp_array_read_walks_array.md) | Interp | Interp | shared | Elab | outside (performance) |
 | [236](236_elab_array_literal_append.md) | Elab | Elab | override | — | outside (performance) |
@@ -323,7 +316,7 @@ checker refusal is a Check bug here.
 | [251](251_generic_specialization_reads_instantiating_tree_constants.md) | EmitSSA | EmitSSA | commits | Lower | violates PASS-1@1 |
 | [252](252_doc_link_check_unchecked_and_unrun.md) | Tooling | Makefile | commits | — | outside (tooling) |
 | [253](253_privacy_judged_by_spelling.md) | Check | Check | commits | — | violates TYPE-11@1 |
-| [254](254_interp_newtype_over_aggregate_cast.md) | Interp | Interp | override | Elab | spec gap (PASS) |
+| [254](254_interp_newtype_over_aggregate_cast.md) | Interp | Interp | override | Elab | violates PASS-13@1 |
 | [255](255_parser_block_statement_append.md) | Parse | Parser | named | Check, Elab | outside (performance) |
 | [256](256_local_table_association_lists.md) | Parse | LocalId | named | Check, Elab, Resolve | outside (performance) |
 | [257](257_resolve_visible_bindings_lists.md) | Resolve | Resolve | named | Check, Elab, Parse | outside (performance) |
@@ -370,13 +363,13 @@ checker refusal is a Check bug here.
 | [299](299_work_queue_dispatcher_fetch_races_agent_pushes.md) | Tooling | dispatch | commits | — | outside (tooling) |
 | [300](300_new_bug_sh_reserves_a_number_then_refuses_the_fi.md) | Tooling | new_bug | commits | — | outside (tooling) |
 | [301](301_lower_s_address_taken_walk_did_not_see_the_root.md) | Lower | Lower | commits | — | violates MEM-3@1 |
-| [302](302_a_loop_moved_an_address_taken_scalar_back_into_a.md) | Lower | Lower | commits | — | spec gap (MEM) |
+| [302](302_a_loop_moved_an_address_taken_scalar_back_into_a.md) | Lower | Lower | commits | — | violates MEM-7@1 |
 | [303](303_the_value_if_did_not_drop_the_bindings_its_arms.md) | Lower | Lower | commits | — | violates PASS-9@1 |
 | [304](304_a_value_if_or_match_written_as_a_comparison_oper.md) | Elab | Elab | commits | Check | violates PASS-6@1 |
 | [305](305_a_break_continue_or_return_out_of_a_borrow_mut_b.md) | Lower | Lower | commits | — | violates REF-13@1, STMT-11@1 |
 | [306](306_the_interpreter_ran_a_for_loop_s_step_inside_the.md) | Interp | Interp | commits | Tooling | violates STMT-11@1 |
 | [307](307_a_call_argument_mut_x_passed_a_temporary_copy_of.md) | Lower | Lower | commits | — | permitted by REF-14@1 |
-| [308](308_a_value_if_or_match_passed_to_a_generic_paramete.md) | Resolve | PeekType | commits | — | spec gap (TYPE) |
+| [308](308_a_value_if_or_match_passed_to_a_generic_paramete.md) | Resolve | PeekType | commits | — | open OPEN-46 |
 | [309](309_a_loop_in_the_right_operand_of_or_rebound_an_agg.md) | Lower | Lower | commits | — | violates PASS-9@1 |
 | [315](315_the_scaling_gate_judged_wall_time_growth_on_a_ho.md) | Gates | compile_scaling | commits | — | outside (tooling) |
 | [316](316_browser_lean_the_browser_compiler_root_did_not_b.md) | Tooling | test-parity | commits | — | outside (tooling) |

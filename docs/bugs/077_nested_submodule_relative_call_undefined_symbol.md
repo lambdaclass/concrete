@@ -4,7 +4,7 @@
 summary: a call `util::poke` from `tb.a` into `tb.a.util` lowers to the undefined `@util_poke` (LLVM validation fails); the assumption summary over-resolves the same call
 coverage: relative call into a three-level nested submodule lowers to an undefined symbol (@util_poke); reproducer tests/regressions/bug077_nested_submodule_call/repro.con, fix pending; containment (build refuses it, reports keep reach, no R-0484 case depends on it) gated by check_bug077_contained.sh
 class: 1
-ruling: Spec gap: PASS — a program every rule accepts is compiled: no stage after Check refuses it, crashes on it or emits invalid LLVM IR for it
+ruling: Violates: PASS-12@1
 -->
 
 **Status:** OPEN

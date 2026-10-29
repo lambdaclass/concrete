@@ -3,7 +3,7 @@
 <!-- bug-ledger
 summary: Enum Fields Inside Structs Can Panic Layout Computation
 fixtures: bug_enum_in_struct.con
-ruling: Spec gap: PASS — a program every rule accepts is compiled: no stage after Check refuses it, crashes on it or emits invalid LLVM IR for it
+ruling: Violates: PASS-12@1
 -->
 
 **Status:** Fixed

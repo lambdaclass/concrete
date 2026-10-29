@@ -4,7 +4,7 @@
 summary: Cross-Module Generic Monomorphization Can Fail To Link In Package Builds
 fixtures: bug_cross_module_mut_borrow.con
 area: Mono — fixed in bdb2d7f (Mono.lean), whose subject names no bug
-ruling: Spec gap: PASS — a program every rule accepts is compiled: no stage after Check refuses it, crashes on it or emits invalid LLVM IR for it
+ruling: Violates: PASS-12@1
 -->
 
 Status: fixed

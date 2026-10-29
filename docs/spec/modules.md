@@ -284,3 +284,71 @@ R-0497; separate compilation (V6) reads the same artifacts. `mod X;` loads one m
 (MOD-4). Today the language also accepts an inline submodule (`mod m { ... }` written inside its
 parent's file, as most examples in this specification are); whether that form is compatible with
 "one file per module" is a question for the owner, OPEN-33, and this entry does not settle it.
+<a id="MOD-8"></a>
+### MOD-8. A generated call is bound by identity
+
+**MOD-8@1.** A call the compiler generates, such as the runtime helpers `print`, `println` and `append` desugar into, is bound to its helper by identity and never to a declaration of the program that has the same name.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.Symbols.runtimeFn
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** MOD-1 resolves the names a program writes; a generated call has no written name to resolve, so
+its target is fixed when it is generated. A module that defined its own `print_int` once had every
+`println` in it call that function (bug 165).
+
+```con accept name=generated-call-ignores-same-name exit=42
+fn print_int(x: Int) -> Int {
+    return x + 35;
+}
+
+fn main() with(Console) -> Int {
+    println(7);
+    return print_int(7);
+}
+```
+
+<a id="MOD-9"></a>
+### MOD-9. An import binds the declaration it names
+
+**MOD-9@1.** Importing a `pub` declaration binds that declaration itself, a constant included, and an import alias of a type names the same type, with its methods and impls, in every pass.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.resolveImports
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** MOD-2 says which declarations an import may name; this entry says what the import gives. A
+`pub const` could not be imported (bug 233), and a type imported under an alias was a different
+type, without its methods (bug 223).
+
+```con accept name=import-constant-and-alias exit=42
+mod m {
+    mod shapes {
+        pub const BASE: i64 = 38;
+        pub struct Copy P { pub v: i64 }
+        impl P {
+            pub fn mk(n: i64) -> P { return P { v: n }; }
+        }
+    }
+    mod user {
+        import m.shapes.{P as Q, BASE};
+        pub fn run() -> i64 {
+            let a: Q = Q::mk(4);
+            return a.v + BASE;
+        }
+    }
+    import user.{run};
+    pub fn main() -> i64 { return run(); }
+}
+```
+

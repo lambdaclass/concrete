@@ -235,3 +235,35 @@ fn main() with(Std) -> Int {
 }
 ```
 
+<a id="FFI-6"></a>
+### FFI-6. A compiler intrinsic is not a foreign binding
+
+**FFI-6@1.** A body-less declaration marked `#[intrinsic]` names an operation the compiler implements, so it is not a foreign binding, need not declare its effects, and keeps the `with(...)` it is written with.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.Pipeline.resolve
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** FFI-3's effect declaration exists because C can do anything; an intrinsic is implemented by
+the compiler, which knows what it does. std declares `sizeof` and `alignof` this way, and any
+module may (bug 112: the same declaration outside std was refused as an undeclared foreign
+binding).
+
+```con accept name=user-intrinsic exit=5
+mod foo {
+    #[intrinsic = "sizeof"]
+    pub trusted fn sizeof<T>() -> u64;
+}
+mod bar {
+    import foo.{sizeof};
+    pub fn main() -> u64 {
+        return sizeof::<u8>() + sizeof::<u32>();
+    }
+}
+```
+

@@ -6,7 +6,7 @@ fixtures: regress_302_loop_keeps_addr_taken_slot.con
 class: 8 — a local's storage changed back at a loop exit while an alias to the slot lived on
 silent: yes
 exit: 0b
-ruling: Spec gap: MEM — a raw pointer to a live local keeps denoting that local across control flow, and a write through either the local or the pointer is seen through the other
+ruling: Violates: MEM-7@1
 -->
 
 **Status:** FIXED (branch `wip/bug-302`)

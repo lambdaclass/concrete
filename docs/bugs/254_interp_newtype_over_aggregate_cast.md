@@ -6,7 +6,7 @@ fixtures: regress_254_newtype_over_struct.con regress_254_newtype_over_enum.con
 class: 7 — the interpreter had no case for a newtype's construction or unwrap over a struct or enum, which Core writes as a cast; fixed 2026-10-25
 silent: no
 area: Interp/Interp — the record's Fix (the interpreter's cast); its commits are shared
-ruling: Spec gap: PASS — every consumer gives an accepted program its checked Core behaviour: lowering, emission and the interpreter preserve meaning on every profile (PASS-3 states it for the native profile only)
+ruling: Violates: PASS-13@1
 -->
 
 **Status:** FIXED (2026-10-25, branch `wip/ident-followups`)

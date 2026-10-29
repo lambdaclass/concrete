@@ -5,7 +5,7 @@ summary: an import of a `pub const` was refused as "not public" (E0285; a `pub t
 fixtures: regress_233_import_constant.con regress_233_nested_import_constant.con regress_233_import_constant_scope.con regress_233_nested_alias_constant.con regress_233_constant_type_alias.con regress_233_constant_type_imported_alias.con error_233_imported_initializer_calls_function.con error_233_imported_initializer_extern.con error_233_imported_initializer_via_constant.con error_233_import_constant_collides_local.con error_233_import_trait.con regress_233_shared_spelling_import.con
 class: 12 — which declarations an import may name: the public-name list holds traits and constants, the import rules have no case for them; fixed 2026-10-25, R-0492 step 4: a constant is imported by its `ConstId`, a trait refused with the reason
 silent: no
-ruling: Spec gap: MOD — a pub constant can be imported and used in another module
+ruling: Violates: MOD-9@1
 -->
 
 **Status:** FIXED (2026-10-25, R-0492 step 4, branch `wip/r0492-steps34`; contained 2026-10-24 on

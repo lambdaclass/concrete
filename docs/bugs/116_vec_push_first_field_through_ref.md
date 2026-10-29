@@ -6,7 +6,7 @@ fixtures: regress_116_vec_push_first_field.con
 class: 3
 class: 8
 silent: no
-ruling: Spec gap: PASS — a program every rule accepts is compiled: no stage after Check refuses it, crashes on it or emits invalid LLVM IR for it
+ruling: Violates: PASS-12@1
 -->
 
 **Status:** FIXED (branch `backend-108-116`, commit 595f0fc5, follow-ups 48d813da and 35a39f6c)

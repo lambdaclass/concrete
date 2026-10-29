@@ -401,7 +401,7 @@ fn main() -> Int {
 <a id="TYPE-9"></a>
 ### TYPE-9. Calls match their signatures
 
-**TYPE-9@1.** A call passes exactly as many arguments as the callee has parameters, and a method call names a method of the receiver's named type or of a trait that bounds the receiver's type parameter.
+**TYPE-9@2.** A call passes exactly as many arguments as the callee has parameters and, when it writes a type-argument list, exactly as many type arguments as the callee has type parameters, and a method call names a method of the receiver's named type or of a trait that bounds the receiver's type parameter.
 
 - Kind: refusal
 - Uses: none
@@ -414,7 +414,8 @@ fn main() -> Int {
 
 **Rationale.** There are no default arguments, no variadic functions and no method lookup
 through implicit conversions. A method of a type parameter comes only from its bounds, which is
-what lets a generic body be checked once (TYPE-2, PASS-1).
+what lets a generic body be checked once (TYPE-2, PASS-1). Version 2 states the type-argument count E0322 already enforced (bug 221: an extra type
+argument was dropped silently).
 
 ```con reject name=wrong-arity code=E0262 stage=check pair=right-arity
 fn add(a: Int, b: Int) -> Int {

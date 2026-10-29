@@ -283,3 +283,33 @@ fn main() -> Int {
 }
 ```
 
+<a id="ARITH-7"></a>
+### ARITH-7. A float literal is correctly rounded
+
+**ARITH-7@1.** A float literal denotes its decimal value rounded to nearest, ties to even, at the float type it takes, and every consumer uses that value.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.Pipeline.emit
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** This is ARITH-1's rounding applied to the literal itself: a literal printed with too few digits
+in the emitted IR once changed `0.1` (bug 109). The program below holds only if both literals are
+the correctly rounded binary64 values.
+
+```con accept name=float-literal-rounding exit=42
+fn main() -> Int {
+    let a: f64 = 0.1;
+    let b: f64 = 0.2;
+    let c: f64 = 0.30000000000000004;
+    if a + b == c {
+        return 42;
+    }
+    return 0;
+}
+```
+

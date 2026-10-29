@@ -5,7 +5,7 @@ summary: `--interp` read ALL of standard input before `main` ran (`readBinToEnd`
 fixtures: regress_184_interp_stdin_unread.con regress_184_interp_stdin_read.con
 class: 7 — the interpreter read all of stdin before `main`; the binary reads when the program does
 silent: no
-ruling: Spec gap: PASS — every consumer gives an accepted program its checked Core behaviour: lowering, emission and the interpreter preserve meaning on every profile (PASS-3 states it for the native profile only)
+ruling: Violates: PASS-13@1
 -->
 
 **Status:** FIXED (branch `train3-interp-stdin`, for landing train 3)

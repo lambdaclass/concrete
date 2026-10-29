@@ -3,7 +3,7 @@
 <!-- bug-ledger
 summary: layout made program-wide (own-module priority)
 coverage: enum_generic_payload_layout/src/main.con (project test, exit 0); lowerModule now receives program-wide struct/enum/newtype defs (own-module priority, additive fill)
-ruling: Spec gap: PASS — a program every rule accepts is compiled: no stage after Check refuses it, crashes on it or emits invalid LLVM IR for it
+ruling: Violates: PASS-12@1
 -->
 
 **Status:** Fixed (2026-07-16)

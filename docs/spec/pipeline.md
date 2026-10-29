@@ -387,3 +387,77 @@ mod m {
 **Rationale.** Reports, audits and code generation must not reconstruct facts from LLVM text.
 The boundary is useful even while LLVM is the only emitter.
 
+<a id="PASS-12"></a>
+### PASS-12. An accepted program is compiled
+
+**PASS-12@1.** A program that every rule of this specification accepts is compiled: no stage after Check refuses it, crashes on it or emits LLVM IR that fails validation.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: partial bug-054
+- Enforced by: Concrete.Pipeline.lower, Concrete.Pipeline.emit
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** The front end is where a program is judged; the later stages only translate it. A refusal,
+a crash or invalid IR after Check means the program met no rule and still did not compile, so the
+user gets no diagnostic that names a rule. Bugs 005, 009, 014, 016, 029, 032, 035, 044, 055, 077,
+108 and 116 were such failures. A refusal that a later stage needs (such as E0809, when a generated
+specialization's name is already declared) is a gap in a rule, not a licence: main still refuses
+the program below at monomorphization (bug 054, whose mangling is forgeable).
+
+```con accept name=generic-beside-user-types exit=42
+struct Copy Box<T> { v: T }
+struct Copy Pair { a: Int, b: Int }
+
+fn main() -> Int {
+    let a: Box<Int> = Box::<Int> { v: 40 };
+    let p: Pair = Pair { a: 1, b: 1 };
+    return a.v + p.a + p.b;
+}
+```
+
+```con accept name=user-type-spells-a-specialization exit=42 pending=bug-054 now=reject:E0809:mono
+struct Copy Box<T> { v: T }
+struct Copy Box_Int { v: Int }
+
+fn main() -> Int {
+    let a: Box<Int> = Box::<Int> { v: 40 };
+    let b: Box_Int = Box_Int { v: 2 };
+    return a.v + b.v;
+}
+```
+
+<a id="PASS-13"></a>
+### PASS-13. Every consumer gives the checked Core behaviour
+
+**PASS-13@1.** The interpreter and every compiled profile give an accepted program the behaviour of its checked Core program: the same result, the same output and the same traps.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.Pipeline.lower, Concrete.Pipeline.emit, Concrete.Interp.interpret
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** PASS-3 proves this for the native profile and PASS-4 tests the LLVM profile against the
+interpreter; this entry states the agreement every consumer owes, which the differential gates
+(native against `--interp`) check on every example of this specification. Bugs 004, 006, 019,
+038, 102, 184 and 254 were disagreements between consumers.
+
+```con accept name=consumers-agree exit=42
+fn main() -> Int {
+    let mut s: Int = 0;
+    let mut i: Int = 0;
+    while i < 7 {
+        s = s + i;
+        i = i + 1;
+    }
+    return s + 21;
+}
+```
+

@@ -7,7 +7,7 @@ class: 7
 class: 8
 silent: yes
 exit: 0b
-ruling: Spec gap: PASS — every consumer gives an accepted program its checked Core behaviour: lowering, emission and the interpreter preserve meaning on every profile (PASS-3 states it for the native profile only)
+ruling: Violates: PASS-13@1
 -->
 
 **Status:** FIXED (branch `lowering-bugs`, with bug 126)

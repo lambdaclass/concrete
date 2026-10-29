@@ -4,7 +4,7 @@
 summary: Renamed import of a generic fn was never monomorphized (undefined symbol)
 coverage: regress_044_renamed_generic_import/src/main.con (project test, exit 0); Mono lookupFn tries all alias orientations + specializes under the resolved def's canonical name
 class: 1
-ruling: Spec gap: PASS — a program every rule accepts is compiled: no stage after Check refuses it, crashes on it or emits invalid LLVM IR for it
+ruling: Violates: PASS-12@1
 -->
 
 **Status:** Fixed (2026-07-18)

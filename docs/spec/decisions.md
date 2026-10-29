@@ -1,12 +1,12 @@
 # Open Owner Decisions
 
-This chapter lists the language questions that only the project owner decides: OD1 to OD42 of
+This chapter lists the language questions that only the project owner decides: OD1 to OD46 of
 [ROADMAP.md](../../ROADMAP.md#owner-decisions), exit 2n. Each entry states the question and encodes
 no answer. The rules it bears on are named in its rationale, together with what current main does,
 which stays provisional until the owner answers. The answer, when given, is recorded in ROADMAP and
 turns the entry into the rules it decides; until then no agent picks a side
 ([AGENTS.md](../project/AGENTS.md#rules)). OD1 to OD22 were answered on 2026-10-29 and are listed under
-Decided; OD23 to OD32 were decided the same day; OPEN-33 to OPEN-42, raised while recording them, are open.
+Decided; OD23 to OD32 were decided the same day; OPEN-33 to OPEN-46, raised while recording them, are open.
 
 <a id="OPEN-33"></a>
 ### OPEN-33. Inline submodules under one file per module
@@ -183,6 +183,78 @@ the owner's answer is recorded there.
 
 **Rationale.** Bears on TYPE-6. Current main compares `bool` and `char`, and TYPE-6@2 keeps that
 while this is open. The options and a recommendation are in ROADMAP's row OD42; the owner's answer is
+recorded there.
+
+<a id="OPEN-43"></a>
+### OPEN-43. How a type position resolves a name
+
+**OPEN-43@1.** How a name in a type position resolves (the type namespace alone, a user type against a builtin of the same name, a child module's type declarations) is an open owner decision (OD43).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD43
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on MOD-1. Main, since bug 229: a type position searches the type namespace only, a user `enum Option` is always the builtin `Option`, and a child module's newtypes are known types in its parent. Raised while writing the rules the 2026-10 bug rulings
+found missing. The options and a recommendation are in ROADMAP's row OD43; the owner's answer is
+recorded there.
+
+<a id="OPEN-44"></a>
+### OPEN-44. Two packages with one module name
+
+**OPEN-44@1.** Whether two packages of one program may define the same top-level module name, refused or qualified by package, is an open owner decision (OD44).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD44
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on MOD-1 and MOD-4. Main, since bug 074: loading a project refuses the collision, naming both packages. Raised while writing the rules the 2026-10 bug rulings
+found missing. The options and a recommendation are in ROADMAP's row OD44; the owner's answer is
+recorded there.
+
+<a id="OPEN-45"></a>
+### OPEN-45. Capability-variable inference
+
+**OPEN-45@1.** How a call binds a capability variable (`cap C`) of the callee from its arguments, and when such a variable is refused as uninferable, is an open owner decision (OD45).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD45
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on TRUST-4 and TYPE-1. Main, since bug 063: the variable is bound from the capability set of the argument's function type, whatever expression supplies it (a field read, a call result, an array element). Raised while writing the rules the 2026-10 bug rulings
+found missing. The options and a recommendation are in ROADMAP's row OD45; the owner's answer is
+recorded there.
+
+<a id="OPEN-46"></a>
+### OPEN-46. Generic type-argument inference
+
+**OPEN-46@1.** How a call of a generic function without explicit type arguments binds each type parameter from its arguments is an open owner decision (OD46).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD46
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on TYPE-13 and TYPE-15. Main, since bug 308: each type parameter is bound from the types of the arguments given for it, whatever expression form supplies them (a value `if` or `match` included), and a parameter no argument determines is refused. Raised while writing the rules the 2026-10 bug rulings
+found missing. The options and a recommendation are in ROADMAP's row OD46; the owner's answer is
 recorded there.
 
 ## Decided

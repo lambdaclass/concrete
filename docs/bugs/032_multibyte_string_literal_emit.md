@@ -3,7 +3,7 @@
 <!-- bug-ledger
 summary: multibyte UTF-8 string literals miscompile in emitted LLVM globals
 coverage: regress_032_multibyte_str_literal.con (run_ok 42); EmitSSA byte-based literal sizes+escapes
-ruling: Spec gap: PASS — a program every rule accepts is compiled: no stage after Check refuses it, crashes on it or emits invalid LLVM IR for it
+ruling: Violates: PASS-12@1
 -->
 
 **Status:** Fixed (2026-07-14)

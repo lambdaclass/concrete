@@ -4,7 +4,7 @@
 summary: a project sibling `import a.{x as y}` emitted an undefined callee (2026-10-18 with bug 082)
 coverage: a project sibling-submodule alias is spelled by its definition (a_pick) in Core; regress_082_project_alias_binding/src/main.con (project test, exit 0; previous compiler: undefined @pick at llvm-as) (2026-10-18 with bug 082)
 class: 1
-ruling: Spec gap: PASS — a program every rule accepts is compiled: no stage after Check refuses it, crashes on it or emits invalid LLVM IR for it
+ruling: Violates: PASS-12@1
 -->
 
 **Status:** Fixed 2026-10-18 with [bug 082](082_import_alias_loses_to_same_named_definition.md)

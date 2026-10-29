@@ -5,7 +5,7 @@ summary: `import m.{P as Q}` gave a type `Q` with none of `P`'s methods (Resolve
 fixtures: regress_223_aliased_struct_methods.con regress_223_aliased_enum.con regress_223_aliased_generic_and_bound.con regress_223_aliased_destroy_impl.con regress_223_aliased_self_result.con regress_223_aliased_cap_params.con regress_223_method_core_name_taken.con
 class: 1 — an import alias of a type is a second spelling and so a second type: the alias has none of the type's methods, and the type's values do not match it; fixed 2026-10-25, R-0492 step 3: types compared and methods looked up by `TypeId`
 silent: no
-ruling: Spec gap: MOD — an import alias of a type denotes the imported declaration itself: the same type, with its methods and impls, in every pass
+ruling: Violates: MOD-9@1
 -->
 
 **Status:** FIXED (2026-10-25, R-0492 step 3, branch `wip/r0492-steps34`)

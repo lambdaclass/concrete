@@ -3,7 +3,7 @@
 <!-- bug-ledger
 summary: String Literal In Loop Produced Invalid LLVM IR
 fixtures: test_string_literal_in_loop.con
-ruling: Spec gap: PASS — a program every rule accepts is compiled: no stage after Check refuses it, crashes on it or emits invalid LLVM IR for it
+ruling: Violates: PASS-12@1
 -->
 
 Status: fixed

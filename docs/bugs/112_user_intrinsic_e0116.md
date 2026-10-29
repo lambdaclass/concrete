@@ -6,7 +6,7 @@ fixtures: regress_112_user_intrinsic.con
 class: 11
 class: 12
 silent: no
-ruling: Spec gap: FFI — an `#[intrinsic]` declaration the compiler implements is not a foreign binding and need not declare effects, and a body-less declaration keeps its written `with(...)`
+ruling: Violates: FFI-6@1
 -->
 
 **Status:** FIXED 2026-10-21 (branch `symbols`, with bug 113)

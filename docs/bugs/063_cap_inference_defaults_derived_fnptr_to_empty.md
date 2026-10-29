@@ -5,7 +5,7 @@ summary: cap-variable inference records "unknown argument type" as "no capabilit
 coverage: cap-variable inference recorded "unknown argument type" as "no capabilities", so a fn pointer read from a struct field, call result or array element could not reach a cap C parameter; misreported as E0220 against a with() the program never wrote. The authority check already PASSED on the fabricated empty capset and only expectTy stopped it, so relaxing fn-type comparison to subsetting would have turned a rejected-valid-program into an authority hole. FIX: both inference sites yield Option CapSet and contribute nothing when the type is unknown, letting resolveCaps name the variable. TWO SITES -- Check.lean (function calls) and CheckHelpers.lean (methods); the first fix took only one, and std's cap-polymorphic combinators (Set::fold, for_each, with_value) are METHODS, so real callers reach the one that was missed. Gated by check_cap_inference.sh (10/0), which asserts E0242 and the ABSENCE of E0220 on each path -- a gate that only checked "does it fail" would pass either way; see docs/bugs/063 (both sites 2026-09-19/2026-09-20 (R-0470))
 class: 6
 class: 11
-ruling: Spec gap: TRUST — a capability variable is bound from the capability set of the argument's function type whatever expression supplies that argument, and a variable no argument determines is refused as uninferable
+ruling: Open: OPEN-45
 -->
 
 **Status:** Fixed

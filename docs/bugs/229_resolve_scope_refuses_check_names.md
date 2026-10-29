@@ -5,7 +5,7 @@ summary: Resolve's module scope refused programs Check and Elab accept: a functi
 fixtures: regress_229_value_does_not_hide_type.con regress_229_user_option_does_not_hide_builtin.con regress_229_child_newtype_known.con regress_229_option_named_alias_or_struct.con regress_229_alias_and_enum_literal_precedence.con
 class: 12 — Resolve's module scope: one first-wins map for types and values, its own builtin-`Option` rule, child newtypes missing, against Check's environment
 silent: no
-ruling: Spec gap: MOD — how a type position resolves a name: type-namespace lookup, a user type against a builtin of the same name, and a child module's type declarations
+ruling: Open: OPEN-43
 -->
 
 **Status:** FIXED (branch `wip/bughunt-216-217`)

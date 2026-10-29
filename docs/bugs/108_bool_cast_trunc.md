@@ -8,7 +8,7 @@ class: 8
 class: 12
 class: 13 — `<int> as bool` admitted with no meaning
 silent: no
-ruling: Spec gap: PASS — a program every rule accepts is compiled: no stage after Check refuses it, crashes on it or emits invalid LLVM IR for it
+ruling: Violates: PASS-12@1
 -->
 
 **Status:** FIXED (branch `backend-108-116`, commit 70025ca9)

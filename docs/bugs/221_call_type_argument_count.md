@@ -6,7 +6,7 @@ fixtures: error_221_extra_type_argument.con error_221_type_argument_to_plain_fn.
 class: 13 — a call's type-argument count: a `zip` stood in for the check
 silent: yes
 exit: 0b
-ruling: Spec gap: TYPE — a call's explicit type-argument list has exactly as many types as the callee has type parameters
+ruling: Violates: TYPE-9@2
 -->
 
 **Status:** FIXED (branch `wip/diffhunt-1023`)

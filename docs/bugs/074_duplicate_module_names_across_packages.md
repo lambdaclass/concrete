@@ -4,7 +4,7 @@
 summary: two packages defining the same top-level module name failed only in LLVM validation, and report modes merged their declarations; `loadProject` now refuses the collision naming both packages (2026-10-04)
 coverage: two packages each defining top-level module 'util' passed every frontend check, failed only in LLVM validation (invalid redefinition of function), and report modes silently merged the two packages' declarations. loadProject now refuses the collision before resolution, naming both packages. Regression vehicle is a multi-package fixture, not a tests/programs .con: tests/regressions/bug074_duplicate_module_packages, asserted by check_assumption_summary.sh (build and report mode both refused; disabling the refusal restores the LLVM error and fails the gate); see docs/bugs/074 (2026-10-04)
 class: 1
-ruling: Spec gap: MOD — two packages of one program do not define the same top-level module name (or module paths are qualified by their package)
+ruling: Open: OPEN-44
 -->
 
 **Status:** FIXED 2026-10-04 (branch `r0484-assumptions`) — the collision is now refused

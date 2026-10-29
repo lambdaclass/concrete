@@ -3,7 +3,7 @@
 <!-- bug-ledger
 summary: non-`mut` array indexed writes accepted (at least in trusted fns)
 coverage: error_030_nonmut_array_write.con (run_err E0217); Check arrayIndexAssign mut rule (general (not trusted-only))
-ruling: Spec gap: OWN — assigning an element of a directly named array requires its binding to be declared mut
+ruling: Violates: OWN-10@2
 -->
 
 **Status:** Fixed (2026-07-14)

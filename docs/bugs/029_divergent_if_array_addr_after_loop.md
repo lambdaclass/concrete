@@ -3,7 +3,7 @@
 <!-- bug-ledger
 summary: early-return `if` + `while` + post-loop array address-of miscompiles
 coverage: regress_029_if_merge_array_addr.con + regress_029_loop_exit_array_addr.con in tests/programs (run_ok 42/7) (both sites)
-ruling: Spec gap: PASS — a program every rule accepts is compiled: no stage after Check refuses it, crashes on it or emits invalid LLVM IR for it
+ruling: Violates: PASS-12@1
 -->
 
 **Status:** Fixed (2026-07-14) — both sites; trust battery green

@@ -1869,8 +1869,8 @@ records and the 2026-10 records are backfilled; older records may say `Violates:
 share of those only shrinks. Exit: the gate holds on every record, and no record filed after the gate
 lands says `unrecorded`.
 
-Measured state (2026-10-29, after the owner decided OD1 – OD32): 0 of 146 entries link a
-Lean definition; 131 of 146 have `Evidence: tested`; 10 open entries (OD33 to OD42, raised while
+Measured state (2026-10-29, after the owner decided OD1 – OD32): 0 of 157 entries link a
+Lean definition; 138 of 157 have `Evidence: tested`; 14 open entries (OD33 to OD46, raised while
 recording those answers). `docs/spec/README.md` ("Path to the complete spec") keeps the current figures.
 
 ### Task R-0556
