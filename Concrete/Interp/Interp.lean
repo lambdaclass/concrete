@@ -3458,6 +3458,23 @@ partial def evalStmts (cx : Ctx) (env : Env) (stmts : List CStmt) : IM (Env × F
     `baseLen`, which are kept. -/
 partial def evalWhile (cx : Ctx) (baseLen : Nat) (env : Env) (cond : CExpr) (body : List CStmt) (step : List CStmt) (fuel : Nat) (loopLabel : Option String) : IM (Env × Flow) := do
   let restore := fun (e : Env) => e.drop (e.length - baseLen)
+  -- Bug 306 / OD2 part 5: the step runs after the body's block has run its exit sequence, on every
+  -- path that goes on to the next iteration (fall-through, `continue` of this loop, and `continue`
+  -- out of the condition), and the step's own control flow (a `return`, a `break` or a `continue`
+  -- inside it) is handled the same way on all of them: it leaves or continues the loop as it would
+  -- from the body. One definition, so no path can drop it.
+  let stepThenLoop := fun (e : Env) => do
+    let (stepEnv, stepFlow) ← evalStmts cx e step
+    match stepFlow with
+    | .ret v => return (restore stepEnv, .ret v)
+    | .brk bv brkLabel =>
+      if brkLabel == none || brkLabel == loopLabel then return (restore stepEnv, .val .unit)
+      else return (restore stepEnv, .brk bv brkLabel)
+    | .cont contLabel =>
+      if contLabel == none || contLabel == loopLabel then
+        evalWhile cx baseLen (restore stepEnv) cond body step (fuel - 1) loopLabel
+      else return (restore stepEnv, .cont contLabel)
+    | .val _ => evalWhile cx baseLen (restore stepEnv) cond body step (fuel - 1) loopLabel
   if fuel == 0 then fail s!"{loopBudgetExhausted} (iteration limit reached)"
   else
     -- A `break`/`continue` escaping from the CONDITION belongs to this loop (Lower installs the
@@ -3471,9 +3488,7 @@ partial def evalWhile (cx : Ctx) (baseLen : Nat) (env : Env) (cond : CExpr) (bod
     | .inr (env', .brk bv l) =>
       if l == none || l == loopLabel then return (restore env', .val .unit) else return (restore env', .brk bv l)
     | .inr (env', .cont l) =>
-      if l == none || l == loopLabel then
-        let (stepEnv, _) ← evalStmts cx env' step
-        evalWhile cx baseLen (restore stepEnv) cond body step (fuel - 1) loopLabel
+      if l == none || l == loopLabel then stepThenLoop env'
       else return (restore env', .cont l)
     | .inr (env', f) => return (restore env', f)
     | .inl (env, cv) =>
@@ -3492,25 +3507,11 @@ partial def evalWhile (cx : Ctx) (baseLen : Nat) (env : Env) (cond : CExpr) (bod
         -- otherwise re-propagate so the targeted outer loop breaks.
         if brkLabel == none || brkLabel == loopLabel then return (restore bodyEnv, .val .unit)
         else return (restore bodyEnv, .brk bv brkLabel)
-      | .val _ =>
-        -- The step's own control flow (a `return` or `break` inside it) still leaves the loop, as
-        -- it did when the step was evaluated as part of the body (Codex review of bug 306).
-        let (stepEnv, stepFlow) ← evalStmts cx bodyEnv step
-        match stepFlow with
-        | .ret v => return (restore stepEnv, .ret v)
-        | .brk bv brkLabel =>
-          if brkLabel == none || brkLabel == loopLabel then return (restore stepEnv, .val .unit)
-          else return (restore stepEnv, .brk bv brkLabel)
-        | .cont contLabel =>
-          if contLabel == none || contLabel == loopLabel then
-            evalWhile cx baseLen (restore stepEnv) cond body step (fuel - 1) loopLabel
-          else return (restore stepEnv, .cont contLabel)
-        | .val _ => evalWhile cx baseLen (restore stepEnv) cond body step (fuel - 1) loopLabel
+      | .val _ => stepThenLoop bodyEnv
       | .cont contLabel =>
         if contLabel == none || contLabel == loopLabel then
-          -- Continue skips the rest of body, so run step before looping.
-          let (stepEnv, _) ← evalStmts cx bodyEnv step
-          evalWhile cx baseLen (restore stepEnv) cond body step (fuel - 1) loopLabel
+          -- Continue skips the rest of the body's block (its exit sequence has run), then the step.
+          stepThenLoop bodyEnv
         else
           -- Continue targets an OUTER loop: this loop terminates and the signal
           -- propagates up (the outer loop runs its own next iteration).

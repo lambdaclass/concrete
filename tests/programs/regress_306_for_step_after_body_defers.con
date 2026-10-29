@@ -72,10 +72,31 @@ fn with_return() -> i64 {
     return v * 100 + acc;
 }
 
+// The step's own control flow leaves the loop on every path that reaches the step: here the step
+// returns, reached once by `continue` and once by falling through the body. The body's deferred
+// call has already run (it records 2) when the step's `return` leaves.
+fn step_returns(c: bool, acc: &mut i64) -> i64 {
+    for (let mut k: i64 = 0; k < 5; k = if k == 2 { return k + 100; } else { k + 1 }) {
+        defer record(&k, acc);
+        if c {
+            continue;
+        }
+    }
+    return 0;
+}
+
+fn with_step_return(c: bool) -> i64 {
+    let mut acc: i64 = 0;
+    let v: i64 = step_returns(c, &mut acc);
+    return v * 100 + acc;
+}
+
 fn main() -> Int {
     // Each deferred call records the counter before the step: 0, 1, 2 -> 12 (the digits 0 1 2).
     // fall_through() = 12, with_continue() = 12, with_break() = 12,
-    // labelled_continue() = 120121 (the digits 1 2 0 1 2 1), with_return() = 101 * 100 + 1 = 10101.
-    let t: i64 = fall_through() + with_continue() + with_break() + labelled_continue() + with_return();
-    return (t - 130216) as Int;
+    // labelled_continue() = 120121 (the digits 1 2 0 1 2 1), with_return() = 101 * 100 + 1 = 10101,
+    // with_step_return(true) = with_step_return(false) = 102 * 100 + 12 = 10212.
+    let t: i64 = fall_through() + with_continue() + with_break() + labelled_continue() + with_return()
+        + with_step_return(true) + with_step_return(false);
+    return (t - 150640) as Int;
 }

@@ -32,8 +32,10 @@ fn main() with(Console) { f(); }
 
 On main ea21a2e8 `--interp` prints `1 1 3`, the binary `0 1 2`. Without the `continue` line
 `--interp` prints `1 2 3`, the binary `0 1 2`. `regress_306_for_step_after_body_defers.con`:
-the binary exits 42; `--interp` on main 0bf8350a prints 100474 (the fixture now also covers a
-`break`, a labelled `continue` out of a nested `for` body, and a `return` from the body).
+the binary exits 42; `--interp` on main 0bf8350a stops with `arithmetic overflow (checked *)` (the
+fixture now also covers a `break`, a labelled `continue` out of a nested `for` body, a `return` from the body, and a step
+that itself returns, reached by `continue` and by falling through; main's interpreter dropped the
+step's `return` after a `continue` and ran on, until the recorded digits overflowed).
 
 ## Expected
 
@@ -57,12 +59,14 @@ step after it (Codex confirmation, 2026-10-26).
 ## Fix
 
 `CStmt.whileBodyBlock body step` (Elab/Core.lean) names the body's own block once; Lower and the
-interpreter both use it, and the interpreter runs the step after the block on fall-through as on
-`continue`.
+interpreter both use it. The interpreter runs the step after the block through one local
+definition (`stepThenLoop` in `evalWhile`) on every path that reaches it (fall-through, `continue`
+of the loop, `continue` out of the condition), and handles the step's own control flow the same
+way on each: before, the `continue` paths discarded it, so a step that returns after a `continue`
+looped (Codex review, round 1 of this branch).
 
 This is OD2 part 5 as the owner decided it: the option the record recommended (the body's
-deferred calls before the step on every path). The step's own control flow still leaves the loop
-(Codex review, round 1 of the earlier branch).
+deferred calls before the step on every path).
 
 ## Structural cause
 
