@@ -18,6 +18,7 @@ affected, but the two places where it refuses grammar-derivable programs (`for (
 summary: `scripts/check_ll1.{py,c,rs}` checked only that the alternatives of an alternation have disjoint FIRST sets; none computed FOLLOW, so a choice that may derive nothing (an optional, a repetition, a nullable alternative) entered on a token that may also follow it passed, and `check_grammar_ll1.sh` and SYN-1's LL(1) claim were vacuous for those shapes. All three now compute FOLLOW sets and report FIRST/FOLLOW conflicts; the grammar's eight are listed in `grammar/ll1_known_conflicts.tsv` for the owner, and two planted FIRST/FOLLOW grammars are refused by all three.
 coverage: check_grammar_ll1.sh (the planted follow_optional_* grammars must fail as FIRST/FOLLOW conflicts in all three checkers; the real grammar's conflicts must equal grammar/ll1_known_conflicts.tsv; the canonical dump must carry FOLLOW sets)
 class: 11 — a check that could not see the conflict it names, read as "no conflict"
+ruling: Violates: SYN-1@1
 silent: no
 -->
 
