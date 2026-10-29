@@ -3460,9 +3460,11 @@ partial def evalWhile (cx : Ctx) (baseLen : Nat) (env : Env) (cond : CExpr) (bod
   let restore := fun (e : Env) => e.drop (e.length - baseLen)
   -- Bug 306 / OD2 part 5: the step runs after the body's block has run its exit sequence, on every
   -- path that goes on to the next iteration (fall-through, `continue` of this loop, and `continue`
-  -- out of the condition), and the step's own control flow (a `return`, a `break` or a `continue`
-  -- inside it) is handled the same way on all of them: it leaves or continues the loop as it would
-  -- from the body. One definition, so no path can drop it.
+  -- out of the condition), and the step's own control flow is handled the same way on all of them:
+  -- a `return` or `break` inside it leaves the loop. One definition, so no path can drop it. (A
+  -- `continue` inside the step goes to the next iteration here, while Lower's continue target in
+  -- the step is the step itself; Check refuses every step that could contain one, E0224, so no
+  -- program reaches either.)
   let stepThenLoop := fun (e : Env) => do
     let (stepEnv, stepFlow) ← evalStmts cx e step
     match stepFlow with
