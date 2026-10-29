@@ -1876,7 +1876,7 @@ interface diff being part of the commit, and MOD-7 is `enforced`.
 
 ### Task R-0557
 
-**Phase:** 6
+**Phase:** 4
 
 **Objective:** Global state as Austral-style capabilities (TRUST-8, TRUST-9 and TRUST-10 of
 `docs/spec/trusted.md`; owner decision OD8, decided 2026-10-29). Check refuses a constant that holds
