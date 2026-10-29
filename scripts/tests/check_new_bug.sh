@@ -34,6 +34,10 @@ set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
+# A still-open owner question for the filing legs that need one: the first live OPEN entry of the
+# registry, so the gate does not break when the owner decides a particular question.
+OPEN_Q="$(awk -F'\t' '$1 ~ /^OPEN-[0-9]+@[0-9]+$/ && $2 == "live" { sub(/@.*/, "", $1); print $1; exit }' docs/spec/ids.tsv)"
+[ -n "$OPEN_Q" ] || { echo "FAIL no live OPEN entry in docs/spec/ids.tsv for the --open legs"; exit 1; }
 # A pre-push hook exports GIT_DIR and friends; the scratch repositories must not inherit them.
 unset $(git rev-parse --local-env-vars) 2>/dev/null || true
 PASS=0; FAIL=0
@@ -309,7 +313,7 @@ chmod 444 "$W/ROADMAP.md"
 if [ -w "$W/ROADMAP.md" ]; then
   echo "  skip a failure after the reservation rolls back and resumes (ROADMAP.md stays writable for this user)"
   chmod 644 "$W/ROADMAP.md"
-elif bash "$NB" "Resume control defect" --silent yes --open OPEN-17 --batch "scaffold control hunt" > "$TMP/rs.out" 2>&1; then
+elif bash "$NB" "Resume control defect" --silent yes --open "$OPEN_Q" --batch "scaffold control hunt" > "$TMP/rs.out" 2>&1; then
   chmod 644 "$W/ROADMAP.md"; no "filing succeeded although ROADMAP.md was read-only"
 else
   chmod 644 "$W/ROADMAP.md"
@@ -405,7 +409,7 @@ refuse "--number with --number-only" "--number-only reserves a new one" bash "$N
 
 echo "=== 7. the spec ruling ==="
 refuse "a filing with no spec ruling" "give exactly one spec ruling" bash "$NB" "unruled defect" --silent no "${BN[@]}"
-refuse "a filing with two spec rulings" "give exactly one spec ruling" bash "$NB" "x defect" --silent no --violates OWN-1@2 --open OPEN-17 "${BN[@]}"
+refuse "a filing with two spec rulings" "give exactly one spec ruling" bash "$NB" "x defect" --silent no --violates OWN-1@2 --open "$OPEN_Q" "${BN[@]}"
 refuse "a rule docs/spec/ids.tsv does not have" "not a rule version" bash "$NB" "x defect" --silent no --violates OWN-1@99 "${BN[@]}"
 refuse "a ruling that is not ID@VERSION" "ID@VERSION" bash "$NB" "x defect" --silent no --violates RULE-ID@V "${BN[@]}"
 refuse "an unknown owner question" "not an owner question" bash "$NB" "x defect" --silent no --open OPEN-999 "${BN[@]}"

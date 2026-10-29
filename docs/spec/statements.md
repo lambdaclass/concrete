@@ -438,7 +438,7 @@ fn main() -> Int {
 <a id="STMT-11"></a>
 ### STMT-11. One exit sequence
 
-**STMT-11@1.** Every exit of a scope that does not abort runs the same sequence: the exit value is computed, then the scope's deferred calls run, last registered first and innermost scope first, then the scope's loans end, and then its remaining locals are destroyed.
+**STMT-11@1.** Every exit of a scope that does not abort runs the same sequence: the exit value is computed, then the scope's deferred calls run, last registered first and innermost scope first, then the scope's loans end, and then its remaining locals are destroyed, so a `for` loop's step runs after its body scope's exit sequence.
 
 - Kind: guarantee
 - Uses: none
@@ -451,8 +451,10 @@ fn main() -> Int {
 **Rationale.** Decided by the owner on 2026-10-29 (OD2, part 5). One order on every normal exit
 (falling off the end, `return`, `break`, `continue`) is what lets a deferred call see the exit value
 already computed and the loans it was given still live (OWN-16), and lets the destruction of the
-remaining locals come last. An abort runs none of it (STMT-2; OD10). Bugs 305 and 306 brought the
-borrow block's exits and the interpreter's `for` step into this order; the entry stays pending until
+remaining locals come last. An abort runs none of it (STMT-2; OD10). A `for` loop's body is its own scope and the step belongs to the loop, outside it,
+so the body's deferred calls, loan ends and destructions run, on a fall-through or a `continue`,
+before the step does. Bugs 305 and 306 brought the borrow block's exits and the interpreter's `for`
+step into this order; the entry stays pending until
 R-0496's Core semantics defines the sequence for every exit form.
 
 ## Recoverable failure: explicit `Result` flow
