@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The totality ratchet: the compiler does not grow new non-total declarations (R-0506 totality lint;
-# docs/compiler/VERIFIED_PIPELINE.md principle 8, "semantics, checkers, validators and proved passes
-# are total").
+# R-0553 the ratchet and the conversions; docs/compiler/VERIFIED_PIPELINE.md principle 8,
+# "semantics, checkers, validators and proved passes are total").
 #
 # A `partial def` is opaque to the kernel: no theorem and no `rfl` can say anything about it, so
 # every partial declaration in a stage the verified pipeline proves is a proof that cannot be
