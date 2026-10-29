@@ -39,9 +39,10 @@ three iterations adding 10 each, continuing out of the block in the second: bina
 30), and with a `return` out of the block while an enclosing `defer show(&n)` reads the owner: the
 deferred call prints the owner's value before the block (binary 1, `--interp` 7).
 `regress_305_borrow_block_early_exit.con` (`break`, `continue`, a labelled `break` out of two
-loops, a read of the owner after a conditional `break`, a `return` out of the block under the
-function's `defer`, and a `continue` out of a block in a `for` body): main's binary exits 210 (main 0bf8350a),
-`--interp` 42.
+loops, a labelled `continue` of the outer loop from a block in the inner one, a read of the owner
+after a conditional `break`, a `return` out of the block under the function's `defer`, a `continue`
+out of a block in a `for` body, and a `break` out of a block holding a deferred call that takes its
+reference, under the loop body's own deferred call): main's binary exits 196 (main 0bf8350a), `--interp` 42.
 
 ## Expected
 

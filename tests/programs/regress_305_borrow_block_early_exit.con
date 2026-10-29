@@ -124,10 +124,62 @@ fn for_cont() -> i64 {
     return n;
 }
 
+// A labelled `continue` of the outer loop, from a block in the inner one.
+fn labelled_cont() -> i64 {
+    let mut n: i64 = 0;
+    let mut i: i64 = 0;
+    'outer: while i < 3 {
+        i = i + 1;
+        let mut j: i64 = 0;
+        while j < 3 {
+            j = j + 1;
+            borrow mut n as r in R {
+                *r = *r + 1;
+                if j == 2 {
+                    continue 'outer;
+                }
+            }
+        }
+    }
+    return n;
+}
+
+fn add10(p: &mut i64) {
+    *p = *p + 10;
+}
+
+fn push(v: i64, log: &mut i64) {
+    *log = *log * 100 + v;
+}
+
+// A deferred call takes the block's reference (OD2 part 4: the borrow stays live until the call
+// runs) and the block is left early by `break`. The exit sequence runs the block's deferred call
+// first (innermost scope first), then the loop body's, which reads the owner at the exit (OWN-12)
+// and sees the block's writes, its deferred call's included.
+fn deferred_ref(c: bool) -> i64 {
+    let mut n: i64 = 0;
+    let mut log: i64 = 0;
+    let mut i: i64 = 0;
+    while i < 2 {
+        i = i + 1;
+        defer push(n, &mut log);
+        borrow mut n as r in R {
+            *r = *r + 1;
+            defer add10(r);
+            if c {
+                break;
+            }
+        }
+    }
+    // c: 11 (1, then the block's + 10, read by the body's call); !c: 11, then 22 -> 1122
+    return log;
+}
+
 fn main() -> Int {
     // brk(1) = 2001, brk(9) = 3003, cont() = 30, labelled() = 7, after_exit(true) = 4,
-    // after_exit(false) = 5, ret_defer() = 716, for_cont() = 43
+    // after_exit(false) = 5, ret_defer() = 716, for_cont() = 43, labelled_cont() = 6,
+    // deferred_ref(true) = 11, deferred_ref(false) = 1122
     let t: i64 = brk(1) + brk(9) + cont() + labelled() + after_exit(true) + after_exit(false)
-        + ret_defer() + for_cont();
-    return (t - 5767) as Int;
+        + ret_defer() + for_cont() + labelled_cont() + deferred_ref(true) + deferred_ref(false);
+    return (t - 6906) as Int;
 }
