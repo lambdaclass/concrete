@@ -222,6 +222,10 @@ if not unplaced: ok(f'all {len(active)} tasks have a phase or a recorded disposi
 
 # --- queue rows and phase map ("Phases and releases": one row per phase, a "queue rows" column)
 gm = re.search(r'^## Phases and releases$', road, re.M)
+# A queue row is a number, or a number with the suffix `s` for a row placed directly after it without
+# renumbering the rows that follow (row 0s, the specification, 2026-10-29): `0s` orders as 0.5.
+def rowkey(x):
+    return int(x[:-1]) + 0.5 if x.endswith('s') else int(x)
 row_phase = {}
 if gm:
     lines = road[gm.end():].split('\n')
@@ -236,7 +240,7 @@ if gm:
             spec = cells[col]; p = int(m.group(1))
             for a, b in re.findall(r'(\d+)\s*[–-]\s*(\d+)', spec):
                 for k in range(int(a), int(b) + 1): row_phase[k] = p
-            for k in re.findall(r'(?<![\d–-])(\d+)(?!\s*[–-]|\d)', spec): row_phase.setdefault(int(k), p)
+            for k in re.findall(r'(?<![\d–-])(\d+s?)(?!\s*[–-]|\d)', spec): row_phase.setdefault(rowkey(k), p)
 if not row_phase: no('could not read the queue-row-to-phase map from "Phases and releases"')
 qm = re.search(r'^## The current execution queue$', road, re.M)
 qrows = []
@@ -244,8 +248,8 @@ qexit = {}
 if qm:
     for line in road[qm.end():].splitlines():
         if line.startswith('## '): break
-        m = re.match(r'^\| (\d+) \| (.*?) \| (.*)\|$', line)
-        if m: qrows.append((int(m.group(1)), m.group(2))); qexit.setdefault(int(m.group(1)), m.group(3))
+        m = re.match(r'^\| (\d+s?) \| (.*?) \| (.*)\|$', line)
+        if m: qrows.append((rowkey(m.group(1)), m.group(2))); qexit.setdefault(rowkey(m.group(1)), m.group(3))
 if not qrows: no('no queue rows found')
 # The queue summary in "Phases and releases" (| row | tasks | goal |) restates each row's task IDs; it
 # must list exactly the queue's rows, each naming exactly the tasks its queue row names.
@@ -258,10 +262,10 @@ if gm:
         cells = [c.strip() for c in line.strip().strip('|').split('|')] if line.startswith('|') else []
         if cells[:3] == ['row', 'tasks', 'goal']: in_sum = True; continue
         if not cells: in_sum = False; continue
-        if in_sum and re.fullmatch(r'\d+', cells[0]):
-            if int(cells[0]) in summary:
+        if in_sum and re.fullmatch(r'\d+s?', cells[0]):
+            if rowkey(cells[0]) in summary:
                 no(f'the queue summary lists row {cells[0]} more than once'); sbad_dup = True
-            summary.setdefault(int(cells[0]), set(expand(cells[1])))
+            summary.setdefault(rowkey(cells[0]), set(expand(cells[1])))
 sbad = 0
 for o in sorted(set(o for o, _ in qrows if [x for x, _ in qrows].count(o) > 1)):
     no(f'the queue has more than one row {o}'); sbad += 1
@@ -396,7 +400,7 @@ row_track = {}; exit_track = {}; tracks = []
 for cells in crows:
     cells = cells + [''] * (6 - len(cells))
     name = cells[0]
-    rows_c = [int(x) for x in re.findall(r'\b(\d+)\b', cells[1])]
+    rows_c = [rowkey(x) for x in re.findall(r'\b(\d+s?)\b', cells[1])]
     exits_c = re.findall(r'\b(\d[a-z])\b', cells[2])
     sm = re.fullmatch(r'(at least|at most) (\d+)%', cells[3])
     if not sm:
@@ -841,17 +845,17 @@ PY
     "old='demonstrated enforcement (2l)'; assert s.count(old)==1; s=s.replace(old,'demonstrated enforcement')" \
     "queue row 2 does not name its exit 2l"
   neg continues_exit_blocks \
-    "old='| RocksDB slice 1 (row 5, R-0285) | 0b, 2i, 2n | 0a, 0c, 1a, 2a, 2b, 2c, 2d, 2e, 2f, 2g, 2h, 2j, 2k, 2l, 2m, 2o, 2p |'; assert s.count(old)==1; s=s.replace(old,'| RocksDB slice 1 (row 5, R-0285) | 0b, 2i, 2k, 2n | 0a, 0c, 1a, 2a, 2b, 2c, 2d, 2e, 2f, 2g, 2h, 2j, 2l, 2m, 2o, 2p |')" \
+    "old='| RocksDB slice 1 (row 5, R-0285) | 0b, 2i, 2q | 0a, 0c, 1a, 2a, 2b, 2c, 2d, 2e, 2f, 2g, 2h, 2j, 2k, 2l, 2m, 2n, 2o, 2p |'; assert s.count(old)==1; s=s.replace(old,'| RocksDB slice 1 (row 5, R-0285) | 0b, 2i, 2k, 2q | 0a, 0c, 1a, 2a, 2b, 2c, 2d, 2e, 2f, 2g, 2h, 2j, 2l, 2m, 2n, 2o, 2p |')" \
     "exit 2k is continues alongside but blocks a deliverable"
   neg blocks_exit_unlisted \
     "import re; m=re.search(r'^\| 2c \|[^\n]*$', s, re.M); assert m; c=m.group(0).split(' | '); assert c[4]=='continues alongside'; c[4]='blocks features'; s=s[:m.start()]+' | '.join(c)+s[m.end():]" \
     "exit 2c is blocks features but no deliverable lists it"
   neg prerequisites_drop_exit \
-    "old='| V1a (row 3, R-0511) | 0a, 0b, 2a, 2g, 2h, 2i, 2j, 2n | 0c, 1a, 2b, 2c, 2d, 2e, 2f, 2k, 2l, 2m, 2o, 2p |'; assert s.count(old)==1; s=s.replace(old,'| V1a (row 3, R-0511) | 0a, 0b, 2a, 2g, 2h, 2i, 2j, 2n | 0c, 1a, 2b, 2c, 2d, 2e, 2f, 2k, 2m, 2o, 2p |')" \
+    "old='| V1a (row 3, R-0511) | 0a, 0b, 2a, 2g, 2h, 2i, 2j | 0c, 1a, 2b, 2c, 2d, 2e, 2f, 2k, 2l, 2m, 2n, 2o, 2p, 2q |'; assert s.count(old)==1; s=s.replace(old,'| V1a (row 3, R-0511) | 0a, 0b, 2a, 2g, 2h, 2i, 2j | 0c, 1a, 2b, 2c, 2d, 2e, 2f, 2k, 2m, 2n, 2o, 2p, 2q |')" \
     "prerequisites of \"V1a (row 3, R-0511)\" do not account for exit 2l"
   neg queue_prerequisites_drift \
-    "old='prerequisite exits: 0b, 2i, 2n;'; assert s.count(old)==1; s=s.replace(old,'prerequisite exits: 0b, 2n;')" \
-    "queue row 5 names prerequisite exits \['0b', '2n'\], the prerequisites table says \['0b', '2i', '2n'\]"
+    "old='prerequisite exits: 0b, 2i, 2q;'; assert s.count(old)==1; s=s.replace(old,'prerequisite exits: 0b, 2q;')" \
+    "queue row 5 names prerequisite exits \['0b', '2q'\], the prerequisites table says \['0b', '2i', '2q'\]"
   neg prerequisites_deliverable_deleted \
     "import re; s,n=re.subn(r'^\| V1b \(row 3[^\n]*\n', '', s, flags=re.M); assert n==1" \
     "the prerequisites table has no row for deliverable V1b"
@@ -859,10 +863,10 @@ PY
     "import re; m=re.search(r'^\| V1b \(row 3[^\n]*\n', s, re.M); assert m; s=s[:m.end()]+m.group(0)+s[m.end():]" \
     "deliverable V1b is listed more than once"
   neg prerequisites_one_deliverable_weakened \
-    "old='| V1b (row 3, R-0511 with R-0517) | 0a, 0b, 2a, 2g, 2h, 2i, 2j, 2n | 0c,'; assert s.count(old)==1; s=s.replace(old,'| V1b (row 3, R-0511 with R-0517) | 0b, 2a, 2g, 2h, 2i, 2j, 2n | 0a, 0c,')" \
+    "old='| V1b (row 3, R-0511 with R-0517) | 0a, 0b, 2a, 2g, 2h, 2i, 2j | 0c,'; assert s.count(old)==1; s=s.replace(old,'| V1b (row 3, R-0511 with R-0517) | 0b, 2a, 2g, 2h, 2i, 2j | 0a, 0c,')" \
     "for V1b"
   neg prerequisites_row_relabelled \
-    "old='| V1b (row 3, R-0511 with R-0517) | 0a, 0b, 2a, 2g, 2h, 2i, 2j, 2n | 0c, 1a, 2b, 2c, 2d, 2e, 2f, 2k, 2l, 2m, 2o, 2p |'; assert s.count(old)==1; s=s.replace(old,'| V1b (row 5, R-0511 with R-0517) | 0b, 2i, 2n | 0a, 0c, 1a, 2a, 2b, 2c, 2d, 2e, 2f, 2g, 2h, 2j, 2k, 2l, 2m, 2o, 2p |')" \
+    "old='| V1b (row 3, R-0511 with R-0517) | 0a, 0b, 2a, 2g, 2h, 2i, 2j | 0c, 1a, 2b, 2c, 2d, 2e, 2f, 2k, 2l, 2m, 2n, 2o, 2p, 2q |'; assert s.count(old)==1; s=s.replace(old,'| V1b (row 5, R-0511 with R-0517) | 0b, 2i, 2q | 0a, 0c, 1a, 2a, 2b, 2c, 2d, 2e, 2f, 2g, 2h, 2j, 2k, 2l, 2m, 2n, 2o, 2p |')" \
     "deliverable V1b is labelled row 5, but queue row 3 schedules it"
   # The implemented-table controls do not depend on which candidates are live: each inserts two
   # control rows (bugs 901, 902 and 903, which no ledger record names) into its copy first.

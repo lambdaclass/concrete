@@ -1822,8 +1822,17 @@ this task makes exact. No workstream may choose, encode or implement a side of a
 [owner decision](../../ROADMAP.md#owner-decisions); a question one of them surfaces becomes an `open`
 entry (`docs/spec/decisions.md`) for the owner. Owner: the spec agent, `wip/spec`.
 
-**Queue entry.** Admitted to row 2 by the project owner's request of 2026-10-29, like R-0554; it
-names no reproducer and is charged to track C, and it never preempts a defect repair.
+**Queue entry.** Queue row 0s, the first row after row 0, approved by the project owner on
+2026-10-29 as an explicit exception to the entry rule, like R-0554. It is charged to track A and
+shares the active proof slot (not a third integration slot); it proceeds continuously and is paused
+only for row-0 soundness repairs, and it never preempts tracks B or C. It is not a predecessor of
+rows 1 or 2. Each chapter closes independently: its prose absorbed, then its accept and reject
+examples under rule-ID fixtures, then its Lean definition and `Semantics:` link landed together.
+Absorbing the remaining `docs/language` files and the archived language-scope text completes before
+exit 2q's migration starts. The chapter gates each deliverable waits for are under the ROADMAP's
+feature prerequisites; the spec does not gate R-0496 as a whole (R-0496 lands each Core definition
+with its chapter's links, R-0499 implements the answered rules construct by construct and refuses
+anything unspecified, and the soundness proofs wait for each link).
 
 (a) **Mechanized.** Every entry names the Lean definition of the rule (`Semantics:`), and the spec is
 checked against that formal definition, not only against the implementation. The link becomes
@@ -1841,11 +1850,13 @@ failure semantics. Exit: `docs/language/` holds no document, and each listed are
 refusals all have reject examples.
 
 (c) **Conformance suite.** Accept and reject cases indexed by rule ID, runnable by any implementation
-(today the native compiler and `--interp`), in the style of the WebAssembly spec tests; the per-rule
-fixtures become this suite. Exit: the gate reports every rule that forbids something and has no reject
+(today the native compiler and `--interp`), in the style of the WebAssembly spec tests. The suite is
+the existing rule-ID fixture index, not a second corpus. Exit: the gate reports every rule that forbids something and has no reject
 case, and that list is empty or each entry is an `open` entry.
 
-(d) **The spec decides what is a bug** (owned by a separate agent, not the spec agent). Every bug record names the rule it violates
+(d) **The spec decides what is a bug** (owned by a separate agent, not the spec agent; new bugs cite
+rule IDs now, and older records are backfilled inside the chapter that absorbs their rule, which
+blocks no deliverable). Every bug record names the rule it violates
 (`Violates: <RULE-ID>@<version>`), or records `Spec gap` (no rule decides the behaviour: the fix starts
 by writing the rule, filed as spec work) or `Open: OPEN-n` (the behaviour waits on an owner question:
 the fix is parked until the owner decides, as bugs 305 – 307 and 311 are). A not-a-bug verdict cites
