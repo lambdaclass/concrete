@@ -106,6 +106,7 @@ E0278	rule	return/break/continue inside a call argument, literal element or oper
 E0279	rule	deferred call argument is not a local, a borrow of a local, or a constant (bug 143)
 E0280	rule	break outside loop
 E0281	rule	continue outside loop
+E0245	rule	break or continue in a for step targets that loop
 E0282	rule	defer body must be a function call
 E0283	rule	reserved identifier
 E0284	rule	unknown module

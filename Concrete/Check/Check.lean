@@ -596,6 +596,20 @@ def checkReturnAccountsForAll (span : Option Span) : CheckM Unit := do
           span.toList.map (fun sp => (sp, s!"'{name}' is still unconsumed when this `return` leaves the function"))
         else [])
 
+/-- Bug 330: refuse a `break` or `continue` (`kind`) whose target loop is the `for` loop whose step
+    is being checked (`forStepLoopDepth`). Such an exit has no defined meaning (re-run the step, or go
+    to the condition), and Lower and the interpreter disagreed; the owner decided on 2026-10-29 to
+    remove C-style `for`, and to refuse this until then. The target is the innermost loop, or the
+    labelled one, exactly as `break` / `continue` resolve it, so an exit of a loop nested inside the
+    step is not refused. -/
+def refuseExitInForStep (env : TypeEnv) (lbl : Option String) (kind : String)
+    (span : Option Span) : CheckM Unit := do
+  let target := match lbl with
+    | some l => (env.loopLabelDepths.lookup l).getD env.loopDepth
+    | none => env.loopDepth
+  if env.forStepLoopDepth == some target then
+    throwCheck (.exitInForStep kind) span
+
 /-- Bug 149: after a loop, a binding declared before it keeps its pre-loop state. The only
     consumptions of an outer binding inside the body are on paths that leave the function (the
     loop-depth rule refuses the rest), and the loop may run zero times, so crediting them after
@@ -2750,7 +2764,14 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) (ends : Option EndsTree := none
       setEnv { env with loopDepth := env.loopDepth + 1, loopLabels := labels, loopLabelDepths := labelDepths, inFnExitingBranch := false, rebindingVar := none }
       inBlockScope body (some stmt.getSpan) (checkStmts body retTy)
       match step with
-      | some stepStmt => checkStmt stepStmt retTy
+      | some stepStmt =>
+        -- Bug 330: a `break` or `continue` inside the step that targets this loop is refused
+        -- (E0245, at the `break` / `continue`); a loop nested in the step targets its own depth.
+        let envS ← getEnv
+        setEnv { envS with forStepLoopDepth := some envS.loopDepth }
+        checkStmt stepStmt retTy
+        let envS' ← getEnv
+        setEnv { envS' with forStepLoopDepth := envS.forStepLoopDepth }
       | none => pure ()
       let env' ← getEnv
       setEnv { env' with loopDepth := env.loopDepth, loopLabels := env.loopLabels, loopLabelDepths := env.loopLabelDepths, inFnExitingBranch := env0.inFnExitingBranch, rebindingVar := env0.rebindingVar }
@@ -3034,6 +3055,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) (ends : Option EndsTree := none
       if !env.loopLabels.contains l then
         throwCheck (.unknownLoopLabel l) (some stmt.getSpan)
     | none => pure ()
+    refuseExitInForStep env lbl "break" (some stmt.getSpan)
     -- Check break value if present (for while-as-expression) — BEFORE the
     -- skip check, so `break f;` over a loop-local linear counts as its
     -- consumption.
@@ -3084,6 +3106,7 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) (ends : Option EndsTree := none
       if !env.loopLabels.contains l then
         throwCheck (.unknownLoopLabel l) (some stmt.getSpan)
     | none => pure ()
+    refuseExitInForStep env lbl "continue" (some stmt.getSpan)
     -- Check all linear variables declared in the exited loop bodies are consumed or reserved by
     -- defer. Bug 149: a labelled continue leaves every loop inside the labelled one.
     let targetDepth := match lbl with

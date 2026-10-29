@@ -1,0 +1,71 @@
+// Bug 330: only a `break` or `continue` in a `for` loop's step that targets that same loop is refused
+// (E0245). A `return` in the step, an exit of a loop nested inside the step, a labelled `continue` of
+// an outer loop from an inner loop's step, and the body's own exits stay accepted, and the binary and
+// the interpreter agree on them.
+
+// A labelled `continue` of the outer loop from the inner loop's step: the inner loop ends, the outer
+// step runs. Each outer iteration counts k = 0 and k = 1: 2 * 3 = 6.
+fn outer_from_inner_step() -> i64 {
+    let mut n: i64 = 0;
+    'o: for (let mut i: i64 = 0; i < 3; i = i + 1) {
+        for (let mut k: i64 = 0; k < 5; if k == 1 { continue 'o; } else { k = k + 1; }) {
+            n = n + 1;
+        }
+    }
+    return n;
+}
+
+// A `return` in the step leaves the function: 3 body runs, then 40 + 3.
+fn return_in_step() -> i64 {
+    let mut n: i64 = 0;
+    for (let mut k: i64 = 0; k < 5; if k == 2 { return 40 + n; } else { k = k + 1; }) {
+        n = n + 1;
+    }
+    return n;
+}
+
+// `break` and `continue` of a `while` loop nested inside the step act on that loop.
+fn loop_in_step() -> i64 {
+    let mut n: i64 = 0;
+    for (let mut k: i64 = 0; k < 2; if true {
+        let mut j: i64 = 0;
+        while j < 10 {
+            j = j + 1;
+            if j == 2 {
+                continue;
+            }
+            if j == 4 {
+                break;
+            }
+            n = n + 1;
+        }
+        k = k + 1;
+    } else {
+        k = k + 1;
+    }) {
+        n = n + 10;
+    }
+    return n;
+}
+
+// The body's own `break` and `continue`.
+fn body_exits() -> i64 {
+    let mut n: i64 = 0;
+    for (let mut k: i64 = 0; k < 9; k = k + 1) {
+        if k == 1 {
+            continue;
+        }
+        if k == 6 {
+            break;
+        }
+        n = n + k;
+    }
+    return n;
+}
+
+fn main() -> Int {
+    // outer_from_inner_step() = 6, return_in_step() = 43, loop_in_step() = 24, body_exits() = 14:
+    // 87, binary = --interp
+    let t: i64 = outer_from_inner_step() + return_in_step() + loop_in_step() + body_exits();
+    return (t - 45) as Int;
+}

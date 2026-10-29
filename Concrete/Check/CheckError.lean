@@ -331,6 +331,10 @@ structure TypeEnv where
   -- Bug 149: the loop depth each active label names (a labelled break/continue exits every loop
   -- from the innermost one out to that depth, and must account for all of their locals).
   loopLabelDepths : List (String × Nat) := []
+  -- Bug 330: the loop depth of the `for` loop whose step is being checked, if any. A `break` or
+  -- `continue` there that targets that same loop is refused (E0245): what it would do is not
+  -- defined, Lower and the interpreter disagreed, and the owner removes C-style `for` (2026-10-29).
+  forStepLoopDepth : Option Nat := none
   -- True while checking a branch/arm that EXITS THE FUNCTION (every path
   -- returns): consuming an outer linear there is safe even inside a loop —
   -- the loop can never re-iterate past a return. Reset on entering any new
@@ -529,6 +533,7 @@ inductive CheckError where
   -- Slice 6: Control flow/defer
   | breakOutsideLoop
   | continueOutsideLoop
+  | exitInForStep (kind : String)
   | deferBodyNotCall
   -- Rule (d) (bug 142): a `return`/`break`/`continue` inside a call argument, a literal
   -- element or an operator operand would leave a construct whose evaluated operands were
@@ -754,6 +759,7 @@ def CheckError.message : CheckError → String
   -- Slice 6
   | .breakOutsideLoop => "break outside of loop"
   | .continueOutsideLoop => "continue outside of loop"
+  | .exitInForStep kind => s!"`{kind}` inside a `for` loop's step cannot leave or restart that loop"
   | .deferBodyNotCall => "defer body must be a function call"
   | .exitInOperand kw ctx => s!"`{kw}` may not occur inside {ctx}: an exit there leaves a call or literal whose earlier operands were already evaluated and moved into it"
   | .reservedName name => s!"'{name}' is a reserved identifier"
@@ -803,6 +809,7 @@ def CheckError.message : CheckError → String
     s!"integer literal {value} is out of range for type '{tyName}' ({lo}..={hi})"
 
 def CheckError.hint : CheckError → Option String
+  | .exitInForStep _ => some "move the step's logic into the loop body (C-style `for` is being replaced by `while` and `for i from a until b`, bug 330)"
   | .ambiguousBoundMethod _ _ _ => some "drop the bound the call does not need, or rename one of the trait methods; a qualified call (`Trait::method(x)`) is not available yet (docs/spec/traits.md TRAIT-6)"
   | .nonCopyProjection _ _ => some "borrow it (`&place` / `&mut place`) or destructure the whole owner; Concrete has no partial moves"
   | .cannotOverwriteLinearPlace _ _ => some "consume the old value first, or make the element/pointee type Copy"
@@ -958,6 +965,7 @@ def CheckError.code : CheckError → String
   -- Slice 6: Control flow (E0280–E0289)
   | .breakOutsideLoop => "E0280"
   | .continueOutsideLoop => "E0281"
+  | .exitInForStep _ => "E0245"
   | .deferBodyNotCall => "E0282"
   | .exitInOperand _ _ => "E0278"
   | .reservedName _ => "E0283"

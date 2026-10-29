@@ -1453,6 +1453,12 @@ run_err "$TESTDIR/error_203_append_unsupported_argument.con" "(E0421)"
 # struct literal; the E0001 must name that reading (the accepted language is unchanged).
 run_err "$TESTDIR/error_212_const_in_if_head.con" "\`LIMIT {\` is read as the start of a struct literal"
 run_err "$TESTDIR/error_212_const_in_while_head.con" "\`LIMIT {\` is read as the start of a struct literal"
+# Bug 330: a `break` or `continue` inside a `for` loop's step that targets that loop is refused
+# (E0245); the binary never terminated where --interp went to the condition. The allowed exits
+# (a `return` in the step, a nested loop's own exits, an outer loop's labelled `continue`) agree.
+run_err "$TESTDIR/error_330_continue_in_for_step.con" "(E0245)"
+run_err "$TESTDIR/error_330_break_in_for_step.con" "(E0245)"
+run_ok "$TESTDIR/regress_330_for_step_exits_allowed.con" 42
 run_err "$TESTDIR/error_212_const_in_match_head.con" "\`MODE {\` is read as the start of a struct literal"
 # Negative control: a head that parsed as written is never blamed (the hint follows the parser's
 # actual struct-literal decision, not the token before the brace).

@@ -1,0 +1,13 @@
+// Bug 330: a `break` inside a `for` loop's step that targets that loop, here by its label, is refused
+// (E0245), as a `continue` is.
+fn f() -> i64 {
+    let mut n: i64 = 0;
+    'a: for (let mut k: i64 = 0; k < 5; if k == 2 { break 'a; } else { k = k + 1; }) {
+        n = n + 1;
+    }
+    return n;
+}
+
+fn main() -> Int {
+    return f() as Int;
+}

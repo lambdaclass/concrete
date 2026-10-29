@@ -173,7 +173,7 @@ fn main() -> Int {
 
 - Kind: refusal
 - Uses: none
-- Codes: E0216 (check), E0280 (check), E0281 (check), E0542 (core-check), E0543 (core-check)
+- Codes: E0216 (check), E0245 (check), E0280 (check), E0281 (check), E0542 (core-check), E0543 (core-check)
 - Status: partial bug-323
 - Enforced by: Concrete.checkStmt, Concrete.ccCheckStmt
 - Semantics: none

@@ -507,7 +507,6 @@ open_bug_reproducers() {
 326|bug326_a_field_access_opens_a_heap_or_heaparray_implici/repro.con|runs-exit|42
 327|bug327_an_integer_or_float_literal_with_no_expected_typ/repro.con|runs-exit|42
 328|bug328_a_method_taking_self_or_mut_self_is_called_on_an/repro.con|runs-exit|42
-330|bug330_a_continue_inside_a_for_loop_s_step_the_binary_n/repro.con|compiles|
 TABLE
 }
 if [ -z "$ONLY" ]; then

@@ -1,0 +1,15 @@
+// Bug 330: a `continue` inside a `for` loop's step that targets that loop is refused (E0245). What it
+// would do was not defined (re-run the step, or go to the condition); the binary never terminated
+// while --interp went to the condition. The owner removes C-style `for` (2026-10-29); until then
+// Check refuses it.
+fn f() -> i64 {
+    let mut n: i64 = 0;
+    for (let mut k: i64 = 0; k < 5; if k == 2 { k = 4; continue; } else { k = k + 1; }) {
+        n = n + 1;
+    }
+    return n;
+}
+
+fn main() -> Int {
+    return f() as Int;
+}

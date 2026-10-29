@@ -1,6 +1,6 @@
 # Bug 330 — a continue inside a for loop's step: the binary never terminates and the interpreter goes to the condition
 
-**Status:** OPEN
+**Status:** FIXED (branch `wip/bug-330-fix`): Check refuses the form (E0245), as the owner decided on 2026-10-29
 **Found:** 2026-10-29, by a Kimi review of a spec delta (a `for` step's control flow), then hand
 probes of `break`, `continue` and `return` inside `for` steps on main 71df9c25.
 **Severity:** the compiled program never terminates where `--interp` finishes; which result is
@@ -8,14 +8,15 @@ right is not decided by any rule (the ruling below), so this is not counted as s
 
 <!-- bug-ledger
 summary: a continue inside a for loop's step: the binary never terminates and the interpreter goes to the condition
-coverage: reproducer tests/regressions/bug330_a_continue_inside_a_for_loop_s_step_the_binary_n/repro.con, pinned by `check_example_outputs.sh` (open-bug reproducers leg, `compiles`)
+fixtures: error_330_continue_in_for_step.con error_330_break_in_for_step.con regress_330_for_step_exits_allowed.con
 class: 12
 silent: no
-ruling: Spec gap: STMT — what a `continue` inside a `for` loop's step does (re-run the step, go to the condition, or be refused)
+ruling: Spec gap: STMT — a `break` or `continue` inside a `for` loop's step that targets that loop is refused (the owner's decision of 2026-10-29, until C-style `for` is removed; no STMT entry states it yet)
 -->
 
 ## Reproducer
 
+Now `tests/programs/error_330_continue_in_for_step.con` (refused, E0245); first filed as
 `tests/regressions/bug330_a_continue_inside_a_for_loop_s_step_the_binary_n/repro.con`:
 
 ```
@@ -67,6 +68,24 @@ Two definitions of a step's `continue`:
   step goes to the next iteration's condition. Before bug 306 the interpreter discarded the step's
   control flow on the `continue` paths.
 
+## Fix
+
+The owner decided on 2026-10-29 to remove C-style `for` (loops become `while` and
+`for i from a until b`) and, until then, to refuse the form (option (c)). Check refuses a `break` or
+`continue` inside a `for` loop's step whose target is that loop (E0245, "`continue` inside a `for`
+loop's step cannot leave or restart that loop"): while it checks the step, `forStepLoopDepth` holds
+the loop's depth, and `refuseExitInForStep` resolves the exit's target exactly as `break` and
+`continue` do (the innermost loop, or the labelled one) and refuses it when it is that depth. A
+`return` in the step, the exits of a loop nested inside the step and a labelled `continue` of an
+outer loop from an inner loop's step stay accepted, and the binary and the interpreter agree on them
+(`regress_330_for_step_exits_allowed.con`, total 87, binary = `--interp`). E0245 is registered under
+STMT-6 (`codes.tsv`, the entry's `Codes:` line, `codeRuleTag`). The interpreter's comment in
+`evalWhile` now says the step's own `.brk` / `.cont` arms see only an outer loop's exits.
+
+Regression legs in `run_tests.sh`: `error_330_continue_in_for_step.con` and
+`error_330_break_in_for_step.con` (labelled `break`) refused with E0245, and
+`regress_330_for_step_exits_allowed.con` (binary 42). The open-bug reproducer row is removed.
+
 ## Structural cause
 
 Class 12: one fact kept in two places. What a `for` step's own control flow does is decided
@@ -77,13 +96,7 @@ only the value forms (corrected with this record).
 
 ## Structural owner
 
-The owner's answer to the ruling (what a `continue` in a step does, or a refusal), then one
-definition of a loop step's control flow shared by Lower and the interpreter: R-0496 (S7, the
-interpreter is Core's semantics) and a Core loop form whose body does not contain its step. A
-counted `for i from a to b` (pending simplification) would remove step blocks altogether.
-
-## Containment while open
-
-`check_example_outputs.sh`'s open-bug reproducers leg pins that main accepts the reproducer
-(`compiles`; the binary is not run, since it does not terminate). Meanwhile do not write `continue`
-inside a `for` loop's step; write the step's logic in the body.
+The removal of C-style `for` the owner decided on 2026-10-29 (loops become `while` and
+`for i from a until b`), which removes step blocks and with them this second definition; until then
+the refusal (E0245) keeps any such exit from reaching Lower or the interpreter. Then R-0496 (S7, the
+interpreter is Core's semantics) for one definition of a loop's control flow.
