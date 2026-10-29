@@ -462,12 +462,12 @@ fn main() -> Int { let s: S = S { v: 40 }; let t: S = s.me(); return t.m(2); }
 <a id="TRAIT-10"></a>
 ### TRAIT-10. A bound is satisfied by an impl
 
-**TRAIT-10@1.** A type argument given for a type parameter with a bound satisfies every trait in the bound: `Copy` by being Copy, `Destroy` by being destroyable (Copy, a type with a `Destroy` impl whose type arguments are destroyable, or an array of destroyable elements), and any other trait by an impl of it.
+**TRAIT-10@2.** A type argument given for a type parameter with a bound satisfies every trait in the bound: `Copy` by being Copy, and `Destroy` and any other trait only by an impl of it, so a Copy type is not `Destroy`.
 
 - Kind: refusal
 - Uses: TRAIT-D1
 - Codes: E0241 (check)
-- Status: enforced
+- Status: partial bug-324
 - Enforced by: Concrete.checkTraitBounds
 - Semantics: none
 - Obligation: every bound call has a candidate after specialization (TRAIT-6)
@@ -478,6 +478,12 @@ bound's methods on values of the parameter, and specialization then needs exactl
 (TRAIT-6). A missing impl is refused at the call that gives the type argument. A primitive type
 argument needs an impl too, matched by its canonical type (`Int` and `i64` are one); before bug
 204 it was not checked, and the program ran when the body called no bound method.
+
+Version 2 records the owner's decision of 2026-10-29 (OD28): a `Destroy` bound is satisfied only by
+an impl, and a Copy value is discarded with `discard`. Arrays get one written impl or one language
+impl that is its own entry; which of the two is OPEN-35. Main still counts every Copy type and every
+array of destroyable elements as `Destroy` (bug 324).
+
 
 ```con reject name=bound-unsatisfied code=E0241 stage=check pair=bound-satisfied
 trait Tr { fn m(&self) -> Int; }
@@ -499,3 +505,22 @@ impl Tr for S { fn m(&self) -> Int { return self.v; } }
 fn call<T: Tr>(x: &T) -> Int { return x.m(); }
 fn main() -> Int { let s: S = S { v: 42 }; return call::<S>(&s); }
 ```
+
+```con reject name=copy-type-for-destroy-bound code=E0241 stage=check pair=unbounded-generic pending=bug-324 now=accept:42
+fn id<T: Destroy>(x: T) -> T {
+    return x;
+}
+fn main() -> Int {
+    return id(42);
+}
+```
+
+```con accept name=unbounded-generic exit=42
+fn id<T>(x: T) -> T {
+    return x;
+}
+fn main() -> Int {
+    return id(42);
+}
+```
+

@@ -1,0 +1,17 @@
+// Bug 319 (REF-11, OD23, decided 2026-10-29): the call is refused (E0293): every argument, the receiver included and re-lent `&mut` bindings too, is overlap-checked against its root; the read goes into a `let` first.
+// Observed on main: a call re-lends `r: &mut S` as the receiver while another argument reads `r.step` through it; native and `--interp` return 42.
+struct S { step: Int, acc: Int }
+impl S {
+    fn add(&mut self, n: Int) {
+        self.acc = self.acc + n;
+    }
+}
+fn bump(r: &mut S) {
+    r.add(r.step);
+}
+fn main() -> Int {
+    let mut s: S = S { step: 42, acc: 0 };
+    bump(&mut s);
+    let S { step, acc } = s;
+    return acc;
+}

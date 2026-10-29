@@ -1,0 +1,8 @@
+// Bug 324 (TRAIT-10, OD28, decided 2026-10-29): a `Destroy` bound is satisfied only by an impl; a Copy type is not `Destroy` and is discarded with `discard`.
+// Observed on main: `fn id<T: Destroy>(x: T) -> T` called with `42` compiles and both consumers return 42.
+fn id<T: Destroy>(x: T) -> T {
+    return x;
+}
+fn main() -> Int {
+    return id(42);
+}

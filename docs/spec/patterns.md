@@ -127,12 +127,12 @@ fn main() -> Int {
 <a id="PAT-3"></a>
 ### PAT-3. Every arm fits its scrutinee
 
-**PAT-3@2.** A variant pattern names a variant of the scrutinee's enum and either lists every one of its fields or, written without a field list, ignores them all (which, like `_`, only a Copy field allows), a literal or range pattern appears only over a scrutinee of its type, and no unguarded arm repeats a variant an earlier unguarded arm covers.
+**PAT-3@3.** A variant pattern names a variant of the scrutinee's enum and lists every one of its fields, ignoring one only explicitly (`field: _`, or `Variant { .. }` for all), a bare variant name being legal only for a fieldless variant, a literal or range pattern appears only over a scrutinee of its type, and no unguarded arm repeats a variant an earlier unguarded arm covers.
 
 - Kind: refusal
 - Uses: none
 - Codes: E0304 (check), E0309 (check), E0531 (core-check), E0532 (core-check), E0533 (core-check)
-- Status: enforced
+- Status: partial bug-321
 - Enforced by: Concrete.checkExprCore, Concrete.ccCheckExpr
 - Semantics: none
 - Obligation: a checked match never inspects a value its pattern does not describe (R-0507)
@@ -145,6 +145,12 @@ was not checked: a variant of another enum made the compiler panic, one sharing 
 scrutinee's own was silently taken as it, and a range arm over an enum reached the SSA verifier.
 Check now refuses each with E0309. A bare variant name over a variant with a non-Copy field
 silently dropped the payload until bug 197; that refusal is OWN-5's (E0288).
+
+Version 3 records the owner's decision of 2026-10-29 (OD25): ignoring a payload is always written,
+`Variant { .. }` or `field: _`, and a bare variant name matches only a fieldless variant. Main still
+lets a bare name ignore a Copy payload (bug 321), pinned by the pending example below; the
+`Variant { .. }` form is not parsed yet.
+
 
 ```con reject name=duplicate-arm code=E0532 stage=core-check pair=arms-fit
 enum Copy E { A, B }
@@ -221,6 +227,28 @@ fn main() -> Int {
 }
 ```
 
+```con reject name=bare-variant-with-payload code=new stage=check pair=variant-field-ignored pending=bug-321 now=accept:42
+enum Copy E { A { v: Int }, B }
+fn main() -> Int {
+    let e: E = E::A { v: 1 };
+    match e {
+        E::A => { return 42; },
+        E::B => { return 0; },
+    }
+}
+```
+
+```con accept name=variant-field-ignored exit=42
+enum Copy E { A { v: Int }, B }
+fn main() -> Int {
+    let e: E = E::A { v: 1 };
+    match e {
+        E::A { v: _ } => { return 42; },
+        E::B => { return 0; },
+    }
+}
+```
+
 <a id="PAT-4"></a>
 ### PAT-4. A guard is read-only
 
@@ -281,12 +309,12 @@ fn main() -> Int {
 <a id="PAT-5"></a>
 ### PAT-5. A destructuring `let` binds every field
 
-**PAT-5@2.** A destructuring `let` consumes its scrutinee and binds every field of its pattern (a pattern over a Copy struct may omit fields), a pattern that may fail to match takes an `else` block, and that block diverges on every path (`return`, `break`, `continue` or a call that never returns).
+**PAT-5@3.** A destructuring `let` consumes its scrutinee and names every field of its pattern, ignoring one only explicitly with `field: _`, a pattern that may fail to match takes an `else` block, and that block diverges on every path (`return`, `break`, `continue` or a call that never returns).
 
 - Kind: refusal
 - Uses: none
 - Codes: E0252 (check), E0308 (check)
-- Status: enforced
+- Status: partial bug-321
 - Enforced by: Concrete.checkStmt, Concrete.checkExprCore
 - Semantics: none
 - Obligation: linear conservation (R-0507)
@@ -300,6 +328,10 @@ skipped the rest of the function, or reached the backend, which failed in `llvm-
 `return` is STMT-9. Over a non-Copy enum the
 `else` arm would discard the scrutinee, so `let ... else` there is refused (OWN-5); write a
 `match`.
+
+Version 3 records the owner's decision of 2026-10-29 (OD25): a struct `let` names every field, a
+Copy struct included. Main still lets a pattern over a Copy struct omit fields (bug 321).
+
 
 ```con reject name=struct-field-missing code=E0252 stage=check pair=destructure-all
 struct P { a: Int, b: Int }
@@ -335,6 +367,24 @@ fn main() -> Int {
     let p: P = P { a: 1, b: 2 };
     let P { a, b } = p;
     return get(Option::Some { value: 39 }) + a + b;
+}
+```
+
+```con reject name=struct-let-omits-field code=E0252 stage=check pair=struct-let-ignores-field pending=bug-321 now=accept:42
+struct Copy P { a: Int, b: Int }
+fn main() -> Int {
+    let p: P = P { a: 42, b: 1 };
+    let P { a } = p;
+    return a;
+}
+```
+
+```con accept name=struct-let-ignores-field exit=42
+struct Copy P { a: Int, b: Int }
+fn main() -> Int {
+    let p: P = P { a: 42, b: 1 };
+    let P { a, b: _ } = p;
+    return a;
 }
 ```
 

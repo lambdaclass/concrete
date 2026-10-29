@@ -32,12 +32,12 @@ together with the reference model.
 <a id="ARITH-2"></a>
 ### ARITH-2. An integer literal fits its type
 
-**ARITH-2@1.** An integer literal takes the integer type its position expects, or `Int` where nothing is expected, and a literal whose value, negation included, is outside that type's range is refused rather than truncated.
+**ARITH-2@2.** An integer literal takes the integer type its position expects, a float literal the float type its position expects, a literal with no expected type is refused, and an integer literal whose value, negation included, is outside its type's range is refused rather than truncated.
 
 - Kind: refusal
 - Uses: none
 - Codes: E0227 (check)
-- Status: enforced
+- Status: partial bug-327
 - Enforced by: Concrete.checkExprCore
 - Semantics: none
 - Obligation: one `IntArith` authority for literal ranges (R-0493)
@@ -54,6 +54,12 @@ annotation already covers the need, so a suffix would be pure convenience, revis
 workload finds annotations too noisy. Gated by `scripts/tests/check_numeric_literals.sh` (ROADMAP
 old Phase 6 #6, 2026-06-23).
 
+Version 2 records the owner's decision of 2026-10-29 (OD31): the fallback to `Int` where nothing is
+expected is removed, no suffix is required, and a float literal follows the same principle (its
+context's float type, refused with none). Main still types an unconstrained integer literal `Int` and
+an unconstrained float literal `Float64` (bug 327).
+
+
 ```con reject name=literal-out-of-range code=E0227 stage=check pair=literal-in-range
 fn main() -> Int {
     let a: u8 = 300;
@@ -66,6 +72,25 @@ fn main() -> Int {
     let a: i8 = -128;
     let b: u8 = 0xFF;
     return (a as Int) + (b as Int) - 85;
+}
+```
+
+```con reject name=unconstrained-literal code=new stage=check pair=constrained-literal pending=bug-327 now=accept:42
+fn main() -> Int {
+    if 3 < 4 {
+        return 42;
+    }
+    return 0;
+}
+```
+
+```con accept name=constrained-literal exit=42
+fn main() -> Int {
+    let a: Int = 3;
+    if a < 4 {
+        return 42;
+    }
+    return 0;
 }
 ```
 

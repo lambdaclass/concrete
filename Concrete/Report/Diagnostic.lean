@@ -77,7 +77,7 @@ def codeRuleTag : String → Option String
   | "E0207" => some "OWN-4@2"
   | "E0287" | "E0288" | "E0289" | "E0295" => some "OWN-5@2"
   | "E0286" => some "OWN-6@1"
-  | "E0294" => some "OWN-7@2"
+  | "E0294" => some "OWN-7@3"
   | "E0290" => some "OWN-8@2"
   | "E0219" | "E0291" => some "OWN-9@2"
   | "E0217" | "E0233" => some "OWN-10@2"
@@ -88,7 +88,7 @@ def codeRuleTag : String → Option String
   -- docs/spec/types.md
   | "E0220" | "E0222" | "E0224" | "E0225" | "E0226" | "E0500" | "E0560" => some "TYPE-4@1"
   | "E0223" | "E0504" | "E0505" | "E0508" | "E0540" | "E0541" => some "TYPE-5@1"
-  | "E0228" | "E0229" | "E0501" | "E0502" | "E0503" | "E0506" | "E0507" | "E0509" => some "TYPE-6@1"
+  | "E0228" | "E0229" | "E0501" | "E0502" | "E0503" | "E0506" | "E0507" | "E0509" => some "TYPE-6@2"
   | "E0250" | "E0251" | "E0253" | "E0254" | "E0260" | "E0261" | "E0306" | "E0416" | "E0550"
   | "E0551" | "E0552" => some "TYPE-7@1"
   | "E0221" | "E0554" | "E0555" => some "TYPE-8@1"
@@ -116,16 +116,16 @@ def codeRuleTag : String → Option String
   | "E0311" => some "TRUST-7@1"
   -- docs/spec/statements.md
   | "E0278" => some "STMT-5@1"
-  | "E0216" | "E0280" | "E0281" | "E0542" | "E0543" => some "STMT-6@1"
-  | "E0310" => some "STMT-7@2"
+  | "E0216" | "E0280" | "E0281" | "E0542" | "E0543" => some "STMT-6@2"
+  | "E0310" => some "STMT-7@3"
   | "E0307" => some "STMT-9@1"
   -- docs/spec/arithmetic.md
-  | "E0227" => some "ARITH-2@1"
+  | "E0227" => some "ARITH-2@2"
   | "E0553" => some "ARITH-5@1"
   -- docs/spec/patterns.md
   | "E0530" | "E0534" => some "PAT-2@2"
-  | "E0304" | "E0309" | "E0531" | "E0532" | "E0533" => some "PAT-3@2"
-  | "E0308" => some "PAT-5@2"
+  | "E0304" | "E0309" | "E0531" | "E0532" | "E0533" => some "PAT-3@3"
+  | "E0308" => some "PAT-5@3"
   | "E0300" => some "PAT-4@2"
   -- docs/spec/references.md (codes REF-8 gained when ownership migrated)
   | "E0218" | "E0235" => some "REF-8@1"
@@ -138,7 +138,7 @@ def codeRuleTag : String → Option String
   | "E0595" => some "TRAIT-6@1"
   | "E0579" | "E0580" => some "TRAIT-8@1"
   | "E0581" | "E0582" | "E0586" | "E0587" => some "TRAIT-9@1"
-  | "E0241" => some "TRAIT-10@1"
+  | "E0241" => some "TRAIT-10@2"
   | "E0583" => some "TYPE-16@1"
   -- docs/spec/contracts.md (one rule since bug 203 moved the append() refusal to E0421)
   | "E0420" => some "CON-4@1"
@@ -158,7 +158,7 @@ def codeRuleTag : String → Option String
 /-- The rules of a code that several rules share without a whole-code tag (`codeRuleTag` is `none`
     for it): its sites tag each diagnostic (`CheckError.rule`), and the ledger lists them all. -/
 def codeSharedRules : String → List String
-  | "E0252" => ["PAT-5@2", "TYPE-7@1"]
+  | "E0252" => ["PAT-5@3", "TYPE-7@1"]
   | _ => []
 
 /-- The `rule` and `spec` evidence of a diagnostic whose code has a whole-code rule. -/

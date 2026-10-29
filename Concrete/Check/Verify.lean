@@ -418,7 +418,7 @@ partial def verifyComparisonTypes (modules : List CModule) : Diagnostics :=
     code := "E0229"
   }
 
-/-- The operator rule after monomorphization (bug 211, TYPE-6@1): every arithmetic,
+/-- The operator rule after monomorphization (bug 211, TYPE-6@2): every arithmetic,
     wrapping/saturating and bitwise operator in an instance applies to operands of one numeric type
     (integers for wrapping/saturating and bitwise), or, for arithmetic in trusted or `Unsafe` code, to
     a raw pointer and an integer. CoreCheck defers an operand whose type is a type parameter to the

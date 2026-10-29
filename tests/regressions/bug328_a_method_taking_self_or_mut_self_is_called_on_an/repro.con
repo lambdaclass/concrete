@@ -1,0 +1,12 @@
+// Bug 328 (OWN-15, OD32, decided 2026-10-29): no receiver auto-borrow: the call is written `(&s).get()` (or `(&mut s).m()`); a receiver that is already a reference is unchanged.
+// Observed on main: `s.get()` with `fn get(&self)` on an owned `s` is accepted with an implicit borrow and both consumers return 42.
+struct Copy S { v: Int }
+impl S {
+    fn get(&self) -> Int {
+        return self.v;
+    }
+}
+fn main() -> Int {
+    let s: S = S { v: 42 };
+    return s.get();
+}

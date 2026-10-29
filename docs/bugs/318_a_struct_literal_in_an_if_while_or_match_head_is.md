@@ -11,7 +11,7 @@ silent: no
 **Found:** 2026-10-29, by checking main against the owner's answer to OD16 (SYN-4): struct literals and uppercase constants in `if` and `while` heads, native against `--interp`, on main 0bf8350a.
 **Severity:** loud in one direction and over-strict in the other, never silent: a program SYN-4 refuses is accepted (both consumers agree and run it), and `if n > LIMIT { ... }` or `while n < LIMIT { ... }` with a constant `LIMIT` is refused with E0001.
 
-Codex confirmation 2026-10-29: CONFIRMED — Main's acceptance of an unparenthesized uppercase struct literal in a head conflicts with the decided OD16 rule (the struct-literal branch at Parser.lean:674 checks uppercase spelling with no head restriction); accepting `n < LIMIT {` follows from the uniform rule with no other owner decision; whether a literal inside a call's argument list in a head counts as parenthesized needs the owner (OPEN-24).
+Codex confirmation 2026-10-29: CONFIRMED — Main's acceptance of an unparenthesized uppercase struct literal in a head conflicts with the decided OD16 rule (the struct-literal branch at Parser.lean:674 checks uppercase spelling with no head restriction); accepting `n < LIMIT {` follows from the uniform rule with no other owner decision; whether a literal inside a call's argument list in a head counts as parenthesized needs the owner (OPEN-34).
 
 ## Reproducer
 

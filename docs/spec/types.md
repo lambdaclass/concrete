@@ -222,12 +222,12 @@ fn main() -> Int {
 <a id="TYPE-6"></a>
 ### TYPE-6. Operators take operands of one numeric type
 
-**TYPE-6@1.** Arithmetic operators take two operands of one numeric type, except that trusted or `Unsafe` code may apply them to a raw pointer and an integer, bitwise and shift operators take integers, unary minus takes a number, and comparisons are defined only on integers, floats, `bool`, `char` and, in `Unsafe` code, raw pointers.
+**TYPE-6@2.** Arithmetic operators take two operands of one numeric type, bitwise and shift operators take integers, unary minus takes a number, and comparisons are defined only on integers, floats, `bool` and `char`, so no operator takes a raw pointer.
 
 - Kind: refusal
 - Uses: none
 - Codes: E0228 (check), E0229 (check), E0501 (core-check, post-mono), E0502 (core-check), E0503 (core-check), E0506 (core-check), E0507 (core-check), E0509 (core-check)
-- Status: enforced
+- Status: partial bug-322
 - Enforced by: Concrete.checkExprCore, Concrete.ccCheckExpr
 - Semantics: none
 - Obligation: one `IntArith` authority for operand widths (R-0493)
@@ -238,6 +238,12 @@ are refused rather than promoted. Comparing aggregates would need a definition o
 type, which the language does not have. Comparing raw pointers exposes addresses, so it needs
 `Unsafe` (bugs 134 and 140). Pointer arithmetic written as `p + k` is the form TRUST-1 replaces
 with `ptr::offset` (pending).
+
+Version 2 records the owner's decision of 2026-10-29 (OD26), aligned with TRUST-1: arithmetic,
+shifts and comparisons take numbers only, and pointer offset, difference and ordering are
+`ptr::offset` and named functions. Main still admits pointer arithmetic and comparison in trusted or
+`Unsafe` code (bug 322).
+
 
 ```con reject name=compare-structs code=E0229 stage=check pair=same-type-operands
 struct Copy P { n: Int }
@@ -261,6 +267,30 @@ fn main() -> Int {
     if a.n == b.n {
         return a.n + b.n;
     }
+    return 0;
+}
+```
+
+```con reject name=pointer-comparison code=new stage=check pair=pointee-comparison pending=bug-322 now=accept:42
+trusted fn same(p: *const Int, q: *const Int) -> bool {
+    return p == q;
+}
+fn main() -> Int {
+    let x: Int = 1;
+    let p: *const Int = &x as *const Int;
+    if same(p, p) { return 42; }
+    return 0;
+}
+```
+
+```con accept name=pointee-comparison exit=42
+trusted fn same(p: *const Int, q: *const Int) -> bool {
+    return *p == *q;
+}
+fn main() -> Int {
+    let x: Int = 1;
+    let p: *const Int = &x as *const Int;
+    if same(p, p) { return 42; }
     return 0;
 }
 ```

@@ -1,0 +1,11 @@
+// Bug 322 (TYPE-6, OD26, decided 2026-10-29): arithmetic, shifts and comparisons take numbers only; pointer offset, difference and ordering are `ptr::offset` and named functions (TRUST-1).
+// Observed on main: `p == q` on two `*const Int` in a `trusted fn` compiles and both consumers return 42.
+trusted fn same(p: *const Int, q: *const Int) -> bool {
+    return p == q;
+}
+fn main() -> Int {
+    let x: Int = 1;
+    let p: *const Int = &x as *const Int;
+    if same(p, p) { return 42; }
+    return 0;
+}

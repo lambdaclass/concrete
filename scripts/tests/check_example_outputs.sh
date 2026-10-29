@@ -497,6 +497,16 @@ open_bug_reproducers() {
 216|bug216_field_write_non_mut_binding/repro.con|compiles|
 226|bug226_submodule_imports_private_function/repro.con|compiles|
 318|bug318_a_struct_literal_in_an_if_while_or_match_head_is/repro.con|runs-exit|42
+319|bug319_a_call_that_re_lends_a_mut_binding_is_not_overla/repro.con|runs-exit|42
+320|bug320_main_may_return_int_or_bool_the_native_exit_stat/repro.con|runs-exit|42
+321|bug321_a_bare_variant_name_ignores_a_payload_and_a_stru/repro.con|runs-exit|42
+322|bug322_trusted_code_compares_raw_pointers_with_and_the/repro.con|runs-exit|42
+323|bug323_break_with_a_value_is_accepted_inside_a_while_or/repro.con|runs-exit|1
+324|bug324_a_copy_type_or_an_array_satisfies_a_destroy_boun/repro.con|runs-exit|42
+325|bug325_a_call_statement_whose_result_is_not_unit_discar/repro.con|runs-exit|42
+326|bug326_a_field_access_opens_a_heap_or_heaparray_implici/repro.con|runs-exit|42
+327|bug327_an_integer_or_float_literal_with_no_expected_typ/repro.con|runs-exit|42
+328|bug328_a_method_taking_self_or_mut_self_is_called_on_an/repro.con|runs-exit|42
 TABLE
 }
 if [ -z "$ONLY" ]; then

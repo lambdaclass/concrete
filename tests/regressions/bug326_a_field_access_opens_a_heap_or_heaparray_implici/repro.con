@@ -1,0 +1,9 @@
+// Bug 326 (MEM-4, OD30, decided 2026-10-29): `e.f` requires `e` to be the struct or a reference to it; a `Heap` or `HeapArray` is opened with an explicit non-consuming place form, and `*` stays the consuming move-out.
+// Observed on main: `h.v` on `h: Heap<P>` reads the field through the heap cell and both consumers return 42.
+struct Copy P { v: Int }
+fn main() with(Alloc) -> Int {
+    let h: Heap<P> = alloc(P { v: 42 });
+    let r: Int = h.v;
+    let p: P = *h;
+    return r;
+}

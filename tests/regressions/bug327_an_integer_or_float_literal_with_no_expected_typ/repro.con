@@ -1,0 +1,8 @@
+// Bug 327 (ARITH-2, OD31, decided 2026-10-29): an integer literal takes its type from its context, and one with nothing expected is refused; a float literal follows the same principle.
+// Observed on main: `if 3 < 4` types both literals as `Int` and `if 1.5 < 2.5` both as `Float64`; both consumers return 42.
+fn main() -> Int {
+    if 3 < 4 {
+        return 42;
+    }
+    return 0;
+}

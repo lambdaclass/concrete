@@ -1,0 +1,9 @@
+// Bug 325 (OWN-7, OD29, decided 2026-10-29): a statement expression has type `Unit`; any other unused result is written `discard(e)`, with no syntactic purity heuristic.
+// Observed on main: `f();` where `f` returns `Int` is accepted and both consumers return 42.
+fn f() -> Int {
+    return 1;
+}
+fn main() -> Int {
+    f();
+    return 42;
+}

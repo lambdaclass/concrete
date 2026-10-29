@@ -175,7 +175,7 @@ fresh_copy; cp docs/spec/codes.tsv "$TMP/n/base_codes.tsv"; mutate "$TMP/n/spec/
   && control "N3b: a code newly classified unmigrated" S3 "E0700 newly classified unmigrated" -- history "${SP[@]}" --base ctl --base-codes "$TMP/n/base_codes.tsv"
 fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace(F + "con accept name=write-value exit=42", F + "con accept name=write-value exit=42 pending=R-0500 now=accept:42", 1)' \
   && control "N5: an enforced refusal paired with a pending accepted rewrite" S5 "its pair REF-7/write-value is pending" -- lint "${SP[@]}"
-fresh_copy; mutate "$TMP/n/spec/decisions.md" 's.replace("- Status: open OD17\n- Enforced by: none", "- Status: open OD17\n- Enforced by: Concrete.checkStmt", 1)' \
+fresh_copy; mutate "$TMP/n/spec/decisions.md" 're.sub(r"(- Status: open OD[0-9]+\n)- Enforced by: none", r"\1- Enforced by: Concrete.checkStmt", s, count=1)' \
   && control "N1g: an open entry that names an enforcing declaration" S1 "an open entry names no enforcing" -- lint "${SP[@]}"
 fresh_copy; mutate "$TMP/n/spec/types.md" 's.replace("pending=R-0500 now=accept:42\nmod num", "pending=R-9999 now=accept:42\nmod num", 1)' \
   && control "N8: an unknown tracking ID" S8 "R-9999" -- lint "${SP[@]}"

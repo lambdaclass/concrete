@@ -1,0 +1,10 @@
+// Bug 321 (PAT-3, OD25, decided 2026-10-29): a bare variant name is legal only for a fieldless variant (the payload is ignored with `Variant { .. }` or `field: _`), and a struct `let` names every field or ignores one with `field: _`.
+// Observed on main: `E::A => ...` matches `A { v: Int }` with no field list, and `let P { a } = p;` binds one of two fields of a Copy struct; both consumers return 42.
+enum Copy E { A { v: Int }, B }
+fn main() -> Int {
+    let e: E = E::A { v: 1 };
+    match e {
+        E::A => { return 42; },
+        E::B => { return 0; },
+    }
+}

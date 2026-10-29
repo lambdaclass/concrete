@@ -1,22 +1,22 @@
 # Open Owner Decisions
 
-This chapter lists the language questions that only the project owner decides: OD1 to OD24 of
+This chapter lists the language questions that only the project owner decides: OD1 to OD36 of
 [ROADMAP.md](../../ROADMAP.md#owner-decisions), exit 2n. Each entry states the question and encodes
 no answer. The rules it bears on are named in its rationale, together with what current main does,
 which stays provisional until the owner answers. The answer, when given, is recorded in ROADMAP and
 turns the entry into the rules it decides; until then no agent picks a side
 ([AGENTS.md](../project/AGENTS.md#rules)). OD1 to OD22 were answered on 2026-10-29 and are listed under
-Decided; OPEN-23 and OPEN-24, raised while recording them, are open.
+Decided; OD23 to OD32 were decided the same day; OPEN-33 to OPEN-36, raised while recording them, are open.
 
-<a id="OPEN-23"></a>
-### OPEN-23. Inline submodules under one file per module
+<a id="OPEN-33"></a>
+### OPEN-33. Inline submodules under one file per module
 
-**OPEN-23@1.** Whether an inline submodule (`mod m { ... }` written inside its parent's file) is compatible with OD9's one file per module is an open owner decision (OD23).
+**OPEN-33@1.** Whether an inline submodule (`mod m { ... }` written inside its parent's file) is compatible with OD9's one file per module is an open owner decision (OD33).
 
 - Kind: open
 - Uses: none
 - Codes: none
-- Status: open OD23
+- Status: open OD33
 - Enforced by: none
 - Semantics: none
 - Obligation: none
@@ -24,17 +24,17 @@ Decided; OPEN-23 and OPEN-24, raised while recording them, are open.
 
 **Rationale.** Bears on MOD-4 and MOD-7. Current main: inline submodules are accepted, and most
 examples of this specification use them. Raised while recording OD9 (2026-10-29). The options are in
-ROADMAP's row OD23; the owner's answer is recorded there.
+ROADMAP's row OD33; the owner's answer is recorded there.
 
-<a id="OPEN-24"></a>
-### OPEN-24. A struct literal inside brackets in a condition head
+<a id="OPEN-34"></a>
+### OPEN-34. A struct literal inside brackets in a condition head
 
-**OPEN-24@1.** Whether a struct literal written inside a call's argument list, an index or an array literal within an `if`, `while` or `match` head counts as parenthesized under SYN-4 is an open owner decision (OD24).
+**OPEN-34@1.** Whether a struct literal written inside a call's argument list, an index or an array literal within an `if`, `while` or `match` head counts as parenthesized under SYN-4 is an open owner decision (OD34).
 
 - Kind: open
 - Uses: none
 - Codes: none
-- Status: open OD24
+- Status: open OD34
 - Enforced by: none
 - Semantics: none
 - Obligation: none
@@ -43,13 +43,53 @@ ROADMAP's row OD23; the owner's answer is recorded there.
 **Rationale.** Bears on SYN-4. Current main: `if same(p, P { v: 1 }) { ... }` is accepted (an
 uppercase struct literal is read anywhere in a head). The grammar distinguishes a grouped expression
 `( expr )` from the parentheses of a call's arguments, and OD16's answer does not say which one it
-means. Raised while recording OD16 (2026-10-29). The options are in ROADMAP's row OD24; the owner's
+means. Raised while recording OD16 (2026-10-29). The options are in ROADMAP's row OD34; the owner's
 answer is recorded there.
+
+<a id="OPEN-35"></a>
+### OPEN-35. How an array satisfies a `Destroy` bound
+
+**OPEN-35@1.** Whether arrays satisfy a `Destroy` bound through one impl written in std or through one language impl that is its own entry is an open owner decision (OD35).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD35
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on TRAIT-10. OD28's answer allows either form and does not choose; current main
+counts an array of destroyable elements as `Destroy` with no impl (bug 324). The options and a
+recommendation are in ROADMAP's row OD35; the owner's answer is recorded there.
+
+<a id="OPEN-36"></a>
+### OPEN-36. The explicit place form that opens a heap cell
+
+**OPEN-36@1.** The spelling of the explicit non-consuming place form that opens a `Heap` or `HeapArray` for a field access is an open owner decision (OD36).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD36
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on MEM-4. OD30's answer requires such a form and keeps `*` as the consuming
+move-out, but names no spelling; current main opens one heap layer implicitly (bug 326). The options
+and a recommendation are in ROADMAP's row OD36; the owner's answer is recorded there.
 
 ## Decided
 
 These entries were retired when the owner answered them; their IDs are never reused.
 
+- **OD23 – OD32** (the strictness pass, decided 2026-10-29, never open entries): REF-11@3 (OD23),
+  STMT-7@3 (OD24), PAT-3@3 and PAT-5@3 (OD25), TYPE-6@2 (OD26), STMT-6@2 (OD27), TRAIT-10@2 (OD28),
+  OWN-7@3 (OD29), MEM-4@3 (OD30), ARITH-2@2 (OD31) and OWN-15@3 (OD32), each pending its bug (319 –
+  328); OD28 and OD30 left OPEN-35 and OPEN-36.
 - **OPEN-1** (OD1, references): decided 2026-10-29. Now REF-5 (formation, `&s.f`, no temporary root), REF-1 and REF-3 (second-class), TRUST-3 (the raw-pointer validity premise, pending) and REF-8 (loans keyed by the root variable; the keying waits on OD15).
 - **OPEN-4** (OD4, foreign function values): decided 2026-10-29. Now FFI-1.
 - **OPEN-5** (OD5, generics and Copy): decided 2026-10-29. Now OWN-D1, TYPE-13 and TYPE-14.
@@ -75,7 +115,7 @@ These entries were retired when the owner answered them; their IDs are never reu
   it is proved, and an alias derived from a loan is valid only while the loan lives.
 - **OPEN-16** (OD16, a struct literal in a condition head): decided 2026-10-29, refused unless
   parenthesized, with no exceptions. Now SYN-4 (pending, bug 318); what counts as parenthesized inside
-  a call's arguments is OPEN-24.
+  a call's arguments is OPEN-34.
 - **OPEN-17** (OD17, field writes and `mut`): decided 2026-10-29. Now OWN-10@2 (partial, bug 216).
 - **OPEN-8** (OD8, global state): decided 2026-10-29, constants only and global resources as linear
   tokens. Now TRUST-8, TRUST-9 and TRUST-10 of [trusted.md](trusted.md#TRUST-8) (pending, R-0557).

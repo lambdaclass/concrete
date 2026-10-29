@@ -828,12 +828,12 @@ fn main() -> Int {
 <a id="REF-11"></a>
 ### REF-11. Loans are keyed by root binding
 
-**REF-11@3.** A borrow of any part of a value is a loan on its root binding and freezes the whole owner while it lives, so within one call two arguments that borrow the same root conflict when at least one of them is exclusive, whatever their projections, and lending a reference binding the caller already holds (REF-10) makes no new loan.
+**REF-11@3.** A borrow of any part of a value is a loan on its root binding and freezes the whole owner while it lives, so within one call every argument, the receiver included and a re-lent `&mut` binding included, conflicts with any other argument that borrows the same root when at least one of them is exclusive, whatever their projections.
 
 - Kind: refusal
 - Uses: none
 - Codes: E0293 (check)
-- Status: enforced
+- Status: partial bug-319
 - Enforced by: Concrete.pathsOverlap, Concrete.checkCallRootReads
 - Semantics: none
 - Obligation: INV-REF (R-0500); the loan checker needs no path-overlap analysis
@@ -855,6 +855,12 @@ D2); the measured migration was one std site (`std/src/cli.con:77`) and this fix
 `error_d2_receiver_projection_read.con`, `error_d2_call_field_read_in_branch.con` and
 `error_d2_explicit_mut_receiver_read.con` pin it in run_tests.sh. No pass may assume or exploit this
 exclusivity until it is proved (OD15, part (b), REF-14).
+
+The owner decided OD23 on 2026-10-29: the overlap check covers every argument, the receiver and
+re-lent `&mut` bindings included, so `r.add(r.step)` with `r: &mut S` is refused; the Copy field is
+read into a `let` first. Main still exempts a re-lent reference binding (bug 319), pinned by the
+pending example below.
+
 
 ```con reject name=disjoint-fields-one-call code=E0293 stage=check pair=fields-in-sequence
 struct Copy W { a: Int, b: Int }
@@ -885,6 +891,54 @@ fn main() -> Int {
     return w.a + w.b;
 }
 ```
+
+```con reject name=relend-receiver-read code=E0293 stage=check pair=relend-read-first pending=bug-319 now=accept:42
+struct S { step: Int, acc: Int }
+impl S {
+    fn add(&mut self, n: Int) {
+        self.acc = self.acc + n;
+    }
+}
+fn bump(r: &mut S) {
+    r.add(r.step);
+}
+fn main() -> Int {
+    let mut s: S = S { step: 42, acc: 0 };
+    bump(&mut s);
+    let S { step, acc } = s;
+    return acc;
+}
+```
+
+```con accept name=relend-read-first exit=42
+struct S { step: Int, acc: Int }
+impl S {
+    fn add(&mut self, n: Int) {
+        self.acc = self.acc + n;
+    }
+}
+fn bump(r: &mut S) {
+    let n: Int = r.step;
+    r.add(n);
+}
+fn main() -> Int {
+    let mut s: S = S { step: 42, acc: 0 };
+    bump(&mut s);
+    let S { step, acc } = s;
+    return acc;
+}
+```
+
+**Conformance fixtures.**
+
+| fixture | expected | pair | modes |
+|---|---|---|---|
+| `tests/programs/error_d2_call_disjoint_fields.con` | `reject:E0293:REF-11@3` | `ref11` | `-` |
+| `tests/programs/error_d2_call_field_read.con` | `reject:E0293:REF-11@3` | `ref11` | `-` |
+| `tests/programs/error_d2_receiver_projection_read.con` | `reject:E0293:REF-11@3` | `ref11` | `-` |
+| `tests/programs/error_d2_call_field_read_in_branch.con` | `reject:E0293:REF-11@3` | `ref11` | `-` |
+| `tests/programs/error_d2_explicit_mut_receiver_read.con` | `reject:E0293:REF-11@3` | `ref11` | `-` |
+| `tests/programs/regress_2i_ref8_call_disjoint.con` | `run:42` | `ref11` | `binary,interp` |
 
 <a id="REF-12"></a>
 ### REF-12. Nothing is mutated through a shared reference

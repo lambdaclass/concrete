@@ -169,12 +169,12 @@ fn main() -> Int {
 <a id="STMT-6"></a>
 ### STMT-6. Loops are statements; `break` and `continue` name a loop
 
-**STMT-6@1.** `while` and `for` are statements, and `break` and `continue` act on the innermost enclosing loop or, with a label, on the labeled loop, and appear only inside a loop.
+**STMT-6@2.** `while` and `for` are statements, `break` carries no value, and `break` and `continue` act on the innermost enclosing loop or, with a label, on the labeled loop, and appear only inside a loop.
 
 - Kind: refusal
 - Uses: none
 - Codes: E0216 (check), E0280 (check), E0281 (check), E0542 (core-check), E0543 (core-check)
-- Status: enforced
+- Status: partial bug-323
 - Enforced by: Concrete.checkStmt, Concrete.ccCheckStmt
 - Semantics: none
 - Obligation: none
@@ -209,6 +209,10 @@ Phase 6D item 2 removed the form: a loop result is a mutable local assigned befo
 `scripts/tests/check_loop_control.sh` (fixtures in `tests/programs/loop_control/`; ROADMAP old
 Phase 6 #4, 2026-06-21).
 
+Version 2 records the owner's decision of 2026-10-29 (OD27): `break <expr>` is refused at parse.
+Main still parses a value after `break` inside a `while` or `for` statement and drops it (bug 323).
+
+
 ```con reject name=break-outside-loop code=E0280 stage=check pair=labeled-break
 fn main() -> Int {
     break;
@@ -234,15 +238,37 @@ fn main() -> Int {
 }
 ```
 
+```con reject name=break-with-value code=new stage=parse pair=break-without-value pending=bug-323 now=accept:1
+fn main() -> Int {
+    let mut i: Int = 0;
+    while i < 3 {
+        i = i + 1;
+        break 42;
+    }
+    return i;
+}
+```
+
+```con accept name=break-without-value exit=1
+fn main() -> Int {
+    let mut i: Int = 0;
+    while i < 3 {
+        i = i + 1;
+        break;
+    }
+    return i;
+}
+```
+
 <a id="STMT-7"></a>
 ### STMT-7. `main` takes no parameters and its result is the exit status
 
-**STMT-7@2.** The entry point is a module-level `fn main()` with no parameters, and the process exit status is its result: an integer masked to 0–255, `true` 1 and `false` 0, and 0 for `Unit` or any other result type, with nothing written by the runtime.
+**STMT-7@3.** The entry point is a module-level `fn main()` with no parameters whose result type is `u8` or `Unit`, and the process exit status is that `u8`, or 0 for `Unit`, with nothing written by the runtime.
 
 - Kind: refusal
 - Uses: none
 - Codes: E0310 (check)
-- Status: enforced
+- Status: partial bug-320
 - Enforced by: Concrete.checkModule
 - Semantics: none
 - Obligation: the exit status is the `exit` behaviour of STMT-1 (R-0496)
@@ -258,6 +284,12 @@ The owner decided OD8 on 2026-10-29: `main` will receive the root resource value
 (TRUST-9); this entry changes with R-0557, which lands that parameter, and until then `main` takes
 none.
 
+Version 3 records the owner's decision of 2026-10-29 (OD24): `main` returns `u8` or `Unit`; there
+is no masking, no `bool` mapping and no other result type. Main still accepts any result type, masks
+an integer natively and prints it under `--interp` (bug 320); the examples of this specification
+still declare `fn main() -> Int` and migrate with the rest of the corpus.
+
+
 ```con reject name=main-with-parameter code=E0310 stage=check pair=main-exit-status
 fn main(argc: Int) -> Int {
     return 0;
@@ -266,6 +298,18 @@ fn main(argc: Int) -> Int {
 
 ```con accept name=main-exit-status exit=42
 fn main() -> Int {
+    return 42;
+}
+```
+
+```con reject name=main-returns-int code=new stage=check pair=main-returns-u8 pending=bug-320 now=accept:42
+fn main() -> Int {
+    return 42;
+}
+```
+
+```con accept name=main-returns-u8 exit=42
+fn main() -> u8 {
     return 42;
 }
 ```

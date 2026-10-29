@@ -79,12 +79,12 @@ fn main() -> Int {
 <a id="MEM-4"></a>
 ### MEM-4. Field access dereferences one reference, then one heap layer
 
-**MEM-4@2.** A field access `e.f`, read or written, dereferences at most one reference and then at most one `Heap` layer, in that order, so `e` of type `S`, `&S`, `&mut S`, `Heap<S>`, `&Heap<S>` or `&mut Heap<S>` reaches field `f` of the one struct those denote.
+**MEM-4@3.** A field access `e.f`, read or written, requires `e` to be the struct or a reference to it, dereferencing at most that one reference, and a `Heap` or `HeapArray` is opened by an explicit non-consuming place form, `*` remaining the consuming move-out.
 
 - Kind: guarantee
 - Uses: none
 - Codes: none
-- Status: enforced
+- Status: pending bug-326
 - Enforced by: Concrete.checkExprCore
 - Semantics: none
 - Obligation: one place representation in every consumer (R-0501, R-0504)
@@ -95,6 +95,11 @@ fn main() -> Int {
 `&mut Heap<S>` once corrupted the caller's slot (bug 126). Deeper types (`& &S`,
 `Heap<Heap<S>>`) need an explicit `*`; a `HeapArray<T>` auto-dereferences only directly, not
 through a reference. A field access does not consume a heap pointer.
+
+Version 3 records the owner's decision of 2026-10-29 (OD30): a field access no longer opens a heap
+cell implicitly. The spelling of the explicit non-consuming place form is OPEN-36. Main still reaches
+`f` through one `Heap` layer (`h.f` on `Heap<S>`, bug 326).
+
 
 ```con accept name=one-hop-field-access exit=42
 struct Copy B { v: Int }

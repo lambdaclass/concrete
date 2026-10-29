@@ -80,18 +80,18 @@ fn main() -> Int {
 }
 ```
 
-One disambiguation is lexical, so the productions cannot show it: after an `IDENT`, a `{` begins
-a struct literal's field list (`ident_tail`) only when the name begins with an uppercase letter,
-the type-name convention; after a lowercase name it ends the expression. In the head of an `if`,
-`while` or `match` (and of `if let` / `while let`) the head's block follows the expression, so an
-uppercase name just before that block, typically a module constant, is read as the start of a
-struct literal and the head does not parse. Parenthesizing the head (`if (n > LIMIT) { … }`)
-removes the reading, and the E0001 diagnostic names that form ([bug
-212](../bugs/212_const_before_block_parses_as_struct_literal.md)). `scripts/check_ll1.py` checks
-FIRST/FIRST conflicts only; this one is a FIRST/FOLLOW conflict between `ident_tail` and the block
-after a head, which the case rule resolves. The case rule is provisional: the owner decided OD16 on
-2026-10-29 that a struct literal in a head is refused unless parenthesized, with no exceptions
-(SYN-4, pending bug 318), and when that lands the head below parses and this example is retired.
+One disambiguation is contextual, so the productions alone do not show it. In the head of an
+`if`, `while` or `match` (and of `if let` / `while let`) a `{` ends the head and opens its block,
+whatever name precedes it: there is no case heuristic, and a struct literal in a head is written in
+parentheses (SYN-4, owner decision OD16 of 2026-10-29). Elsewhere, after an `IDENT`, a `{` begins a
+struct literal's field list (`ident_tail`) only when the name begins with an uppercase letter, the
+type-name convention. Main does not implement the head rule yet: it applies the case rule in heads
+too, so an uppercase constant just before a head's block is read as the start of a struct literal
+and the head does not parse, and the E0001 diagnostic suggests parentheses ([bug
+212](../bugs/212_const_before_block_parses_as_struct_literal.md)'s provisional repair). Bug 318
+replaces that with SYN-4, and the reject example below, which pins main's behaviour, is retired when
+it lands. `scripts/check_ll1.py` checks FIRST/FIRST conflicts only; this one is a FIRST/FOLLOW
+conflict between `ident_tail` and the block after a head, which the head context resolves.
 
 ```con reject name=head-constant-struct-literal code=E0001 stage=parse pair=head-constant-parenthesized
 const LIMIT: Int = 16;
@@ -199,7 +199,7 @@ expression, so a `{` after a name in a head opens the block; a struct literal th
 `(P { v: 1 })`. Main still reads an uppercase name followed by `{` in a head as a struct literal: it
 accepts the first program below and refuses `if n > LIMIT { ... }` (bug 318 implements the rule).
 Whether a struct literal inside a call's argument list or an index within a head counts as
-parenthesized is OPEN-24.
+parenthesized is OPEN-34.
 
 ```con reject name=bare-struct-literal-in-head code=E0001 stage=parse pair=parenthesized-struct-literal-in-head pending=bug-318 now=accept:42
 struct Copy P { v: Int }

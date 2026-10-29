@@ -469,12 +469,12 @@ fn main() -> Int {
 <a id="OWN-7"></a>
 ### OWN-7. A pure value is not computed and thrown away
 
-**OWN-7@2.** A statement expression does not discard a pure, trap-free, non-Unit Copy value, that is, one built only from literals, variable and field reads, and arithmetic, comparison, logical, bitwise and shift operators over them.
+**OWN-7@3.** A statement expression has type `Unit`, and a result of any other type is dropped only by writing `discard(e)`.
 
 - Kind: refusal
 - Uses: OWN-D1
 - Codes: E0294 (check)
-- Status: enforced
+- Status: partial bug-325
 - Enforced by: Concrete.checkStmt
 - Semantics: none
 - Obligation: none
@@ -493,6 +493,11 @@ are not flagged either. `discard(e)` acknowledges an intentional discard of a Co
 `exprPureDiscardable`, a local structural purity predicate, in the same `Stmt.expr` check
 (`CheckError.discardedPureValue`).
 
+Version 3 records the owner's decision of 2026-10-29 (OD29): every unused non-Unit result needs
+`discard(e)`, and the syntactic purity heuristic of version 2 is removed. Main refuses only a
+syntactically pure non-Unit Copy value (E0294) and drops a call's result silently (bug 325).
+
+
 ```con reject name=dead-computation code=E0294 stage=check pair=used-computation
 fn main() -> Int {
     let a: Int = 40;
@@ -506,6 +511,26 @@ fn main() -> Int {
     let a: Int = 40;
     discard(a + 1);
     return a + 2;
+}
+```
+
+```con reject name=unused-call-result code=E0294 stage=check pair=discarded-call-result pending=bug-325 now=accept:42
+fn f() -> Int {
+    return 1;
+}
+fn main() -> Int {
+    f();
+    return 42;
+}
+```
+
+```con accept name=discarded-call-result exit=42
+fn f() -> Int {
+    return 1;
+}
+fn main() -> Int {
+    discard(f());
+    return 42;
 }
 ```
 
@@ -944,12 +969,12 @@ fn main() -> Int {
 <a id="OWN-15"></a>
 ### OWN-15. Every surface form has one value-flow behaviour
 
-**OWN-15@2.** Every surface expression, match-arm and statement constructor creates, moves, borrows, copies, overwrites or refuses its operands as its row in this entry's value-flow tables states.
+**OWN-15@3.** Every surface expression, match-arm and statement constructor creates, moves, borrows, copies, overwrites or refuses its operands as its row in this entry's value-flow tables states, and no method call borrows its receiver implicitly.
 
 - Kind: guarantee
 - Uses: OWN-D1
 - Codes: none
-- Status: enforced
+- Status: pending bug-328
 - Enforced by: Concrete.checkExprCore, Concrete.checkStmt
 - Semantics: none
 - Obligation: one value-flow rule per Core constructor in the Core checker (R-0499)
@@ -968,6 +993,13 @@ which named three failure classes, each with its gate: **discard** (a value vani
 `check_linear_conservation.sh`) and **scope** (a value falls out of nested control flow,
 `check_linear_nested_scope.sh`). The cross-cutting ruling H17 (2026-07-05) made parameters owned
 locals, by-value `self` and `Destroy` bodies included.
+
+Version 3 records the owner's decision of 2026-10-29 (OD32): there is no receiver auto-borrow; a
+`&self` or `&mut self` method on an owned place is called as `(&s).m()` or `(&mut s).m()`, and a
+receiver that is already a reference is unchanged. Main still borrows an owned receiver implicitly
+(bug 328), so the receiver rows of the tables below describe main until it lands. `break <expr>`
+is refused at parse (STMT-6, OD27).
+
 
 ```con accept name=flows-move-once exit=42
 struct R { v: Int }

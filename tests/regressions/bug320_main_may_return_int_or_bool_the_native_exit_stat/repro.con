@@ -1,0 +1,5 @@
+// Bug 320 (STMT-7, OD24, decided 2026-10-29): `main` returns `u8` or `Unit` (exit 0); an `Int`, `bool` or other result type is refused, with no masking and no bool mapping.
+// Observed on main: `fn main() -> Int` returning 298 exits 42 natively (masked to 0-255) and `--interp` prints 298; `fn main() -> bool` returning `true` exits 1 and `--interp` prints nothing.
+fn main() -> Int {
+    return 298;
+}

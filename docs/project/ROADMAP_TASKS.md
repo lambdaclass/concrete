@@ -1731,17 +1731,15 @@ prevention gate that no deliverable's acceptance waits for, so exit 2p continues
 **Depends on:** nothing. **Blocks:** the pass proofs of R-0491 – R-0510 for each stage it has not yet
 made total.
 
-1. **Step 1, now: the ratchet gate.** `scripts/tests/check_totality_ratchet.sh` (being built on branch
-   `wip/cleanup-totality-gate`) inventories, from the Lean environment rather than by text search,
-   every `partial`, `unsafe`, `opaque`, `implemented_by` or `extern` declaration in the `Concrete.*`
-   modules, and compares it with a committed baseline, `docs/compiler/totality_baseline.tsv`. CI and
-   the pre-push hook fail on any new entry and on any stale entry (a baseline row whose declaration
-   became total or was removed and was not deleted from the baseline), so the count only goes down.
-   The baseline file is the source of truth for the count; this task does not restate it.
+1. **Step 1, the ratchet gate, has landed** (675871b4; see CHANGELOG.md):
+   `scripts/tests/check_totality_ratchet.sh` inventories, from the Lean environment, every `partial`,
+   `unsafe`, `opaque`, `implemented_by` or `extern` declaration in the `Concrete.*` modules against
+   the committed baseline `docs/compiler/totality_baseline.tsv`, in CI and in the pre-push hook, so the
+   count only goes down. What remains is steps 2 and 3: converting the declarations the baseline lists
+   (664 `partial` definitions when step 1 landed; the baseline file is the current count).
 2. **Step 2: convert the baseline's `partial` definitions in batches.** Batches go in pipeline-stage
    order, closest-to-proven stage first, guided by the per-stage inventory
-   `research/compiler/partial-def-inventory-2026-10.md` (written with the gate on
-   `wip/cleanup-totality-gate`; not yet on main). Each definition falls in one of three classes:
+   `research/compiler/partial-def-inventory-2026-10.md`. Each definition falls in one of three classes:
    - *structural*: the recursion is already structural, and the change is often only deleting the
      keyword;
    - *measure-based*: the parser, worklists and fixpoints, given a `termination_by` measure and its
@@ -1758,9 +1756,8 @@ made total.
    hook. Later, under this task, the same requirement extends to the whole compiler: every remaining
    row is converted or is genuine untrusted search with its reason.
 
-Phase 1 closes on step 1 (exit 2p: the ratchet gate runs in CI and in the pre-push hook with its
-baseline committed); steps 2 and 3 continue through Phases 2 and 4, stage by stage ahead of the pass
-proofs that need them.
+Exit 2p closed on step 1; steps 2 and 3 continue through Phases 2 and 4, stage by stage ahead of the
+pass proofs that need them.
 
 ### Task R-0554
 
@@ -1771,8 +1768,10 @@ thing once and the gates read manifests instead of hand-kept lists (the reposito
 approved 2026-07-28). It is queued in row 2 after R-0553 and has no Phase 1 exit of its own: its
 sub-items continue alongside the queue, each landing on its own branch under the normal promotion
 pipeline, and none may choose, encode or implement a side of an [owner decision](../../ROADMAP.md#owner-decisions).
-Completed sub-items are recorded only in [CHANGELOG.md](../../CHANGELOG.md); this list keeps every
-sub-item with its owner and branch.
+Completed sub-items are recorded only in [CHANGELOG.md](../../CHANGELOG.md): the ROADMAP compaction
+(sub-item 3), the grep benchmark data out of git (part of 12), the grammar three-way cross-check (13)
+and the compile-scaling gate's fix (15, bug 315) have landed. The list below keeps what remains, with
+its owner and branch.
 
 **Queue entry and capacity.** The task names no reproducer and no dependency of RocksDB slice 1 or
 V1a, so the queue's entry rule alone would send it to the backlog. It is in row 2 because the project
@@ -1782,18 +1781,14 @@ integration effort is charged to track C (adversarial validation and gate health
 [capacity allocation](../../ROADMAP.md#capacity-allocation), since most sub-items consolidate gates,
 tests and the documents gates read, and it never preempts a defect repair or weakens an exit.
 
-Owners: the cleanup agent (branches `wip/cleanup-*`), the spec agent (`wip/spec`) and the roadmap
-agent (`wip/roadmap-compaction`).
+Owners: the cleanup agent (branches `wip/cleanup-*`) and the spec agent (`wip/spec`).
 
 1. One normative language specification, `docs/spec/` (kept as chapters rather than one SPEC.md file,
-   so no rule is stated twice): absorb, then delete, the `docs/language/*.md` design documents; a gate
-   (S13) refuses new normative language documents. Its full target is [R-0555](#task-r-0555). Owner:
-   the spec agent, `wip/spec`.
+   so no rule is stated twice), in progress: the S12 and S13 gates and most absorptions have landed;
+   the remaining `docs/language/*.md` files (listed in `docs/spec/unabsorbed.tsv`) are absorbed, then
+   deleted. Its full target is [R-0555](#task-r-0555). Owner: the spec agent, `wip/spec`.
 2. The book's language chapters (`docs/book/src/language/`) teach by example and link to SPEC rule IDs
    instead of restating rules. Owner: the spec agent, `wip/spec`.
-3. ROADMAP compaction to its control plane, and the `tasks/` disposition records reconciled (the
-   queue builder reads them, so they stay, set to `done` where their branch landed). Owner: the roadmap
-   agent, `wip/roadmap-compaction`.
 4. Consolidate `docs/project/` (36 documents) into `PROJECT.md` plus the contributor documents. Owner:
    the cleanup agent, `wip/cleanup-*`.
 5. Consolidate `docs/verification/` (59 documents) into one normative verification specification plus
@@ -1809,16 +1804,10 @@ agent (`wip/roadmap-compaction`).
 10. Replace string-encoded identities (184 `== "literal"` comparisons). Owner: the cleanup agent,
     `wip/cleanup-*`.
 11. A dead-code finder with a ratchet gate. Owner: the cleanup agent, `wip/cleanup-*`.
-12. Generated artifacts out of git: `concrete.wasm` (15 MB) and the grep benchmark data (6 MB). Owner:
-    the cleanup agent, `wip/cleanup-*`.
-13. The grammar checkers turned into a real three-way cross-check. Owner: the cleanup agent,
-    `wip/cleanup-grammar-checker`.
+12. Generated artifacts out of git: `concrete.wasm` (15 MB) remains. Owner: the cleanup agent,
+    `wip/cleanup-*`.
 14. Branch hygiene: merged remote branches are deleted (192 on 2026-10-28), and merged and dead
     worktrees are pruned periodically. Owner: the cleanup agent.
-15. The compile-scaling gate (R-0550, exit 2o) false-fails on hosts without perf instruction counting
-    (the OVH server). The owner chose to change the gate, not the server: on a host that cannot count
-    instructions it reports NOT-JUDGED and defers to CI, and CI fails closed when it cannot count.
-    Owner: a separate agent, fixing it as a filed bug on its own `wip/bug-NNN` branch.
 
 ### Task R-0555
 
@@ -1856,7 +1845,7 @@ refusals all have reject examples.
 fixtures become this suite. Exit: the gate reports every rule that forbids something and has no reject
 case, and that list is empty or each entry is an `open` entry.
 
-(d) **The spec decides what is a bug.** Every bug record names the rule it violates
+(d) **The spec decides what is a bug** (owned by a separate agent, not the spec agent). Every bug record names the rule it violates
 (`Violates: <RULE-ID>@<version>`), or records `Spec gap` (no rule decides the behaviour: the fix starts
 by writing the rule, filed as spec work) or `Open: OPEN-n` (the behaviour waits on an owner question:
 the fix is parked until the owner decides, as bugs 305 – 307 and 311 are). A not-a-bug verdict cites
@@ -1868,8 +1857,8 @@ records and the 2026-10 records are backfilled; older records may say `Violates:
 share of those only shrinks. Exit: the gate holds on every record, and no record filed after the gate
 lands says `unrecorded`.
 
-Measured state (2026-10-29, after the owner answered all of OD1 – OD22): 0 of 138 entries link a
-Lean definition; 131 of 138 have `Evidence: tested`; 2 open entries (OD23 and OD24, raised while
+Measured state (2026-10-29, after the owner decided OD1 – OD32): 0 of 140 entries link a
+Lean definition; 131 of 140 have `Evidence: tested`; 4 open entries (OD33 to OD36, raised while
 recording those answers). `docs/spec/README.md` ("Path to the complete spec") keeps the current figures.
 
 ### Task R-0556

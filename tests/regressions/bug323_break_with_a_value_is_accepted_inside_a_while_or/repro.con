@@ -1,0 +1,10 @@
+// Bug 323 (STMT-6, OD27, decided 2026-10-29): `break <expr>` is refused at parse (E0001).
+// Observed on main: `break 42;` inside a `while` statement is accepted, the value is dropped, and both consumers return 1.
+fn main() -> Int {
+    let mut i: Int = 0;
+    while i < 3 {
+        i = i + 1;
+        break 42;
+    }
+    return i;
+}
