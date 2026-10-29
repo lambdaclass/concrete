@@ -50,14 +50,32 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.a
 GRAMMAR = os.path.join(ROOT, "grammar", "concrete.ebnf")
 SEP = "\n\x1e\n"
 
-# The lexer's reserved words (Concrete/Frontend/Lexer.lean, lookupKeyword). A grammar terminal
-# that is not one of these, such as 'self' or 'Copy', is spelled as an identifier.
-KEYWORDS = {
-    "fn", "let", "mut", "if", "else", "while", "for", "return", "assert", "assume", "true",
-    "false", "mod", "struct", "enum", "match", "pub", "import", "as", "impl", "trait", "const",
-    "type", "extern", "with", "cap", "break", "continue", "defer", "borrow", "in", "newtype",
-    "trusted",
-}
+# The lexer's reserved words, read from Concrete/Frontend/Lexer.lean's lookupKeyword (each
+# `| "word" => some .token` arm), never restated here. A grammar terminal that is not one of them,
+# such as 'self' or 'Copy', is spelled as an identifier.
+LEXER = os.path.join(ROOT, "Concrete", "Frontend", "Lexer.lean")
+
+
+def lexer_keywords(path=LEXER):
+    words = set()
+    inside = False
+    with open(path) as f:
+        for line in f:
+            if re.match(r"^\s*(private |protected )*def lookupKeyword\b", line):
+                inside = True
+                continue
+            if inside:
+                m = re.match(r'^\s*\|\s*"([A-Za-z_][A-Za-z0-9_]*)"\s*=>\s*some\b', line)
+                if m:
+                    words.add(m.group(1))
+                elif words and re.match(r"^\S", line):
+                    break
+    if len(words) < 10:
+        raise SystemExit(f"could not read the reserved words from {path} (found {sorted(words)})")
+    return words
+
+
+KEYWORDS = lexer_keywords()
 CLASS_SAMPLES = {
     "INT": ["0", "1", "42", "0x1F"],
     "FLOAT": ["1.5", "0.25"],
