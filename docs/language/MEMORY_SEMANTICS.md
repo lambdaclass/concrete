@@ -166,7 +166,7 @@ If a reference created by a borrow block is assigned to a variable outside the b
 
 - Borrows do not consume the owner (the owner is frozen, not consumed).
 - The reference type `&T` is Copy — it can be passed to multiple functions within the borrow block.
-- The reference type `&mut T` is linear — see [REF-10](../spec/references.md#REF-10) for the two-kind consumption model (borrow-block refs vs function parameter refs).
+- The reference type `&mut T` is linear, and passing it to a call lends it, in one mode for parameters, borrow-block binders and arm binders alike — see [REF-10](../spec/references.md#REF-10).
 - Borrow blocks do not nest into the same owner (the inner borrow sees the owner as frozen).
 
 ---

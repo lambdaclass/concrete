@@ -110,8 +110,9 @@ loop rule needs an invariant that holds at the loop head.
 
 ### Borrows (example 2)
 
-**B1. Does passing a borrow-block `&mut` to a call consume it?** Today it does
-(REF-10's rationale (the former MUT_REF_SEMANTICS §3)), while parameter references are implicitly reborrowed (§4). The model
+**B1. Does passing a borrow-block `&mut` to a call consume it?** Before 2026-10-23 it did, while
+parameter references were implicitly reborrowed; since then every call argument is lent in one mode
+(REF-10's rationale, the former MUT_REF_SEMANTICS §3 and §4). The model
 treats every call argument as an implicit reborrow scoped to the call. Because references are
 second-class, the callee cannot retain it, and `reborrowEx` passes the same block reference to
 `inc` twice with no unsafety. *Recommendation:* decide this under exit 2i (the plan says the
@@ -128,7 +129,7 @@ control-flow section and REF-10's rationale (the former MUT_REF_SEMANTICS §7) s
 reference is non-duplicable but carries no consumption obligation. *Recommendation:* Core has
 three usage modes: Copy (duplicable, droppable), owned linear (neither), and exclusive
 reference (droppable but not duplicable). Conservation applies to owned values only. This is a
-coordinated change to OWNERSHIP_MODEL, MEMORY_SEMANTICS, REF-10's rationale (the former MUT_REF_SEMANTICS)and VALUE_MODEL, not a
+coordinated change to OWNERSHIP_MODEL, MEMORY_SEMANTICS, REF-10's rationale (the former MUT_REF_SEMANTICS) and VALUE_MODEL, not a
 wording fix in one document.
 
 **B3. Is a borrow an alias of the owner's place or a copy?** Today's codegen copies the owner into
@@ -147,7 +148,7 @@ by emitting LLVM `noalias`. Loans are ghost state for checker soundness only. Ad
 optimization later requires that model and a proof against it.
 
 **B5. Reborrow needs a Core form.** The surface language has no reborrow syntax (`&mut *r` does
-not parse; REF-10's rationale (the former MUT_REF_SEMANTICS §10)), but the plan requires "permitted reborrowing". The model's
+not parse; REF-10's rationale, the former MUT_REF_SEMANTICS §10), but the plan requires "permitted reborrowing". The model's
 `reborrow` is a scoped form: the parent is frozen under an exclusive reborrow and read-only
 under a shared one. *Recommendation:* Core has an explicit scoped reborrow. Elaboration produces
 it for implicit call-argument reborrows (B1). Surface syntax waits for a workload.
