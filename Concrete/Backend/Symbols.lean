@@ -25,6 +25,7 @@ def concreteFn (modulePath name : String) : String :=
 /-- The mangled link symbol of a compiler runtime helper (string, print, conversion and `Vec`
     builtins), in the reserved `_C$rt.` namespace: distinct from every source function's symbol,
     since no module path starts with `$`. -/
+-- spec: MOD-8 (docs/spec/modules.md; this declaration enforces the rule)
 def runtimeFn (name : String) : String :=
   "_C$rt." ++ name
 

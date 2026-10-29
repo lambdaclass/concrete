@@ -2298,6 +2298,7 @@ partial def finishMatchArmBody (guard : Option CExpr) (body : List CStmt) (ty : 
   else
     return (none, (VarMap.empty, "", true))
 
+-- spec: MEM-7 (docs/spec/memory.md; this declaration enforces the rule)
 partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
   match stmt with
   | .letDecl name mutable ty value =>

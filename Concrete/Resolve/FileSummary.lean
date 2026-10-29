@@ -467,6 +467,7 @@ private def declaredByImportSpelling (s : FileSummary) (n : String) : Option Str
     respelled to the declaration's identity spelling (`TypeId.importSpelling`), which the closure
     binds to the declaration, so the importer never reads the definer's spelling in its own
     environment. -/
+-- spec: MOD-9 (docs/spec/modules.md; this declaration enforces the rule)
 def resolveImports (imports : List ImportDecl)
     (summaryTable : List (String × FileSummary))
     (unknownModuleMsg : String → String)

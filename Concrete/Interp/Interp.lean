@@ -3628,6 +3628,7 @@ def evalClosed (cx : Ctx) (e : CExpr) : Except String IVal :=
 
 /-- Interpret a program from its validated Core modules: run `main` with `args` (after
     `argv[0]`) and `stdin`. -/
+-- spec: PASS-13 (docs/spec/pipeline.md; this declaration enforces the rule)
 def interpret (modules : List CModule) (args : List String := []) (stdin : StdinSource := default)
     (argv0 : String := "a.out") (stdoutIsTty : Bool := false) (stdinIsTty : Bool := false) : RunResult :=
   let cx := { mkCtx modules with args, argv0 }
