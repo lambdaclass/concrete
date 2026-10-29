@@ -9,7 +9,7 @@ kinds of type parameters (TYPE-13, TYPE-14), generic arguments (TYPE-15) and fin
 The design records are [VALIDATED_WRAPPERS.md](../language/VALIDATED_WRAPPERS.md) (a library pattern built on
 TYPE-11, not a language rule) and [VALUE_MODEL.md](../language/VALUE_MODEL.md).
 Const generics are not part of the language. Their design is decided, and the build is
-deferred until a workload needs it ([CONST_GENERICS_V1.md](../language/CONST_GENERICS_V1.md)).
+deferred until a workload needs it (see "No const generics" below).
 Layout attributes (`#[repr(C)]`, `packed`, `align`) belong to the FFI chapter.
 
 ## Rules
@@ -921,3 +921,14 @@ workload keeps hitting unit bugs, the first step is a report-only prototype (`ex
 over the mistake classes above) with optional annotations erased only after the audit records the
 conversion: no implicit unit conversion, no dependent numeric refinements.
 
+### No const generics
+
+Designed and deferred (2026-06-21, ROADMAP old Phase 7 #8f). A type is not parameterized by a
+compile-time value (`Buf<T, const N: u64>`). The V1 design is fixed so the feature is unambiguous
+when a workload pulls it: integer parameters only, arguments that are literals or constants the
+existing folder evaluates, one specialization per distinct value with `N` in its mangled name, and
+`N` recorded concretely in the ledger, the layout report and every obligation (`index < 16`, never a
+symbolic `index < N`); type-level arithmetic and dependent constraints are rejected. The forcing
+probe found no workload that needs it, and it is built only when one does. The design, the probe,
+the forcing conditions and the staged build are in
+[research/language/const-generics-v1-decision.md](../../research/language/const-generics-v1-decision.md).

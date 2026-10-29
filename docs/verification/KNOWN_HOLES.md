@@ -1204,7 +1204,7 @@ whole picture is in one place.
   `examples/byte_view/*` + gated by `scripts/tests/check_byte_view.sh`. No open
   hole.
 - **Narrow const generics** (`[T; N]`) — old Phase 7 #8f. DESIGN DECIDED, BUILD
-  DEFERRED (2026-06-21): `docs/language/CONST_GENERICS_V1.md` fixes the V1 boundary
+  DEFERRED (2026-06-21): `research/language/const-generics-v1-decision.md` fixes the V1 boundary
   (`struct Buf<T, const N: u64>`, integer params, literal/const-foldable args,
   per-N monomorphization recording N in name/layout/obligations; type-level
   computation / reflection / comptime / runtime-bound params rejected). A forcing

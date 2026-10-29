@@ -5023,7 +5023,7 @@ tracking to the hash collections.
   wrappers. This is a research escape valve only if real workloads prove
   operation APIs, owned views, and scoped callbacks insufficient.
 - 1f. Pull narrow const generics forward only when fixed-capacity stdlib APIs
-  need reusable capacities. Follow `docs/language/CONST_GENERICS_V1.md`; implementation
+  need reusable capacities. Follow `research/language/const-generics-v1-decision.md`; implementation
   is deferred until a real stdlib-area consumer
   appears (`BoundedVec<T, N>`, `RingBuffer<T, N>`, `PacketBuf<N>`, fixed hash
   table, parser scratch buffer, freestanding reusable buffer, or a

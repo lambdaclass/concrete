@@ -37,14 +37,14 @@ design doc for a deferred part). The handoff gate parses this table.
 | callable-values | stable_for_stdlib | scripts/tests/check_callable_values.sh |
 | capability-callbacks | stable_for_stdlib | scripts/tests/check_capability_polymorphism_design.sh |
 | cli-verbs | stable_for_stdlib | scripts/tests/check_cli_contract.sh |
-| const-generics | provisional_with_gate | docs/language/CONST_GENERICS_V1.md |
+| const-generics | provisional_with_gate | research/language/const-generics-v1-decision.md |
 | iteration | stable_for_stdlib | scripts/tests/check_iteration_protocol.sh |
 | build-profiles | provisional_with_gate | docs/platform/PROFILES.md |
 
 ## Notes on the provisional surfaces
 
 - **const-generics** — narrow const generics for fixed-capacity APIs are
-  *designed and workload-gated* (see [CONST_GENERICS_V1.md](../language/CONST_GENERICS_V1.md)).
+  *designed and workload-gated* (see [CONST_GENERICS_V1.md](../../research/language/const-generics-v1-decision.md)).
   Fixed-capacity stdlib APIs may assume the documented V1 subset only; anything
   beyond it must wait for a real workload to pull it in (ROADMAP #6a).
 - **build-profiles** — debug/release profile behavior and the policy surface are

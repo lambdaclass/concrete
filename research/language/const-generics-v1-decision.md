@@ -1,9 +1,10 @@
 # Narrow Const Generics V1 — decision & scoping (build deferred)
 
-Const generics are not part of the language today; [docs/spec/types.md](../spec/types.md) says so,
+Const generics are not part of the language today; [docs/spec/types.md](../../docs/spec/types.md) says so,
 and this design enters the specification as entries when a workload pulls the build.
 
-Status: DESIGN DECIDED, BUILD DEFERRED (2026-06-21) — ROADMAP old Phase 7 #8f.
+Status: DESIGN DECIDED, BUILD DEFERRED (2026-06-21); moved from docs/language to research, since it
+states no rule of today's language (the specification's types chapter records the absence) — ROADMAP old Phase 7 #8f.
 This doc fixes the V1 boundary so the feature is unambiguous when a workload
 pulls it, and records the forcing probe that says *no current workload pulls it
 yet*. Per the project's workload-driven (not symmetry-driven) discipline, no
