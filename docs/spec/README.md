@@ -387,7 +387,7 @@ Each step lands with the gate green. The steps run in this order:
    and its gate), LANGUAGE_INVARIANTS §2, IGNORED_RESULT and DEFER (the last two since absorbed and deleted). The decided defer and
    exit-order rules (TIGHTENING_DECISIONS §4.5) enter as pending.
 2. **types.md** (`TYPE-`, migrated 2026-10-23): type formation, aliases, generics and const generics, newtypes,
-   construction rights. It replaces TYPE_ALIASES, CONST_GENERICS_V1, CONSTRUCTION_RIGHTS,
+   construction rights. It replaces TYPE_ALIASES, CONST_GENERICS_V1, CONSTRUCTION_RIGHTS (TYPE_ALIASES and CONSTRUCTION_RIGHTS since absorbed and deleted),
    VALIDATED_WRAPPERS and the type sections of VALUE_MODEL. D5 (a bare `T` is Any) enters as
    enforced. D6 (Copy is explicit) entered as pending and was enforced on 2026-10-23 (option (a), TYPE-14@2).
 3. **patterns.md** (`PAT-`, migrated 2026-10-23): exhaustiveness, nested and destructuring

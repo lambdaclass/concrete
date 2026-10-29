@@ -6,8 +6,7 @@ operators (TYPE-4 to TYPE-10), construction rights (TYPE-11), type aliases (TYPE
 kinds of type parameters (TYPE-13, TYPE-14), generic arguments (TYPE-15) and finite size (TYPE-16). Copy itself is defined in the ownership chapter
 (OWN-D1, OWN-14).
 
-The design records are [CONSTRUCTION_RIGHTS.md](../language/CONSTRUCTION_RIGHTS.md),
-[VALIDATED_WRAPPERS.md](../language/VALIDATED_WRAPPERS.md) (a library pattern built on
+The design records are [VALIDATED_WRAPPERS.md](../language/VALIDATED_WRAPPERS.md) (a library pattern built on
 TYPE-11, not a language rule) and [VALUE_MODEL.md](../language/VALUE_MODEL.md).
 Const generics are not part of the language. Their design is decided, and the build is
 deferred until a workload needs it ([CONST_GENERICS_V1.md](../language/CONST_GENERICS_V1.md)).
@@ -498,9 +497,40 @@ fn main() with(Std) -> Int {
 **Rationale.** Smart constructors are only as strong as the construction rules. Without privacy,
 safe code could write `NonZeroU32(0)` and bypass `try_new`. `pub` on a type exports its name,
 not its representation. Privacy protects invariants. It is not secrecy and not proof evidence,
-and it holds in `trusted` callers too. Two follow-on slices are pending
-([CONSTRUCTION_RIGHTS.md](../language/CONSTRUCTION_RIGHTS.md)): private-by-default enum
-variants, and privacy of a newtype's payload.
+and it holds in `trusted` callers too. Two follow-on slices are pending (R-0011): private-by-default
+enum variants, and privacy of a newtype's payload.
+
+Verified 2026-07-18: safe code in another module could write `NonZeroU32(0)`, bypassing
+`try_new`'s zero check, and read and write another module's struct fields (`b.len`,
+`b.len = 999`); pointer-bearing fields were protected only by accident (the integer-to-pointer
+cast needs `Unsafe`). Every invariant a library type kept, the kernel-proved `NonZeroU32`
+non-zero property included, was advisory; representation privacy makes them load-bearing. `pub`
+is the only visibility word: there is no `private`, `sealed`, `opaque`, `transparent` or
+friend-module tier, and a deliberately transparent wrapper exposes public construction and
+access functions. Visibility is per module, Concrete's unit of encapsulation. There is no std
+exemption: std uses constructors, accessors, scoped mutation and audited raw-parts functions like
+any other module. Enforcement is the same in Resolve, Check, Elab, project mode, the interpreter and
+the compiled path (Check refuses; later stages inherit).
+
+| operation | same module | other module |
+|---|---|---|
+| name the type (`let x: T`, a generic argument) | yes | if the type is `pub` |
+| call a `pub fn` or method on it | yes | yes |
+| struct literal `T { f: ... }` | yes | only if every field is `pub` |
+| field read `x.f`, field write `x.f = ...` | yes | only if `f` is `pub` |
+| functional update `T { ..x, f: ... }` | yes | only if every named or required field is `pub` |
+| destructuring `let T { f } = x` | yes | only if every bound field is `pub` (pending: bug 311) |
+| newtype construction `N(v)` | yes | no: use the module's constructor function |
+| newtype unwrap to the inner value | yes | no, once the follow-on lands (R-0011) |
+| construct or match an enum variant | yes | once the follow-on lands, only a `pub` variant (R-0011); names are matchable meanwhile |
+
+The newtype pattern is `pub newtype NonZeroU32 = u32` with `pub fn try_new(v: u32) ->
+Option<NonZeroU32>` and `pub fn get(&self) -> u32`; `NonZeroU32(v)` is private to `numeric.con`.
+Under the enum follow-on, `pub enum T` exports the type name and a variant is constructible and
+matchable outside only when marked `pub` (`pub Ok { value: T }`), the marker governing the whole
+payload; a client that cannot see every variant matches with a wildcard. Slices 1 (newtype
+construction) and 2 (struct literal, read and write: E0297, E0298; std migrated to accessors and
+`from_raw_unchecked`) are implemented (defect queue 0b); gate `scripts/tests/check_construction_rights.sh`.
 
 ```con reject name=construct-foreign-newtype code=E0296 stage=check pair=foreign-constructor
 mod num {

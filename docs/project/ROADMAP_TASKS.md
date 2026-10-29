@@ -4177,7 +4177,7 @@ non-goals here.
 
 **Reconciliation (2026-10-19):** Keep; enforce through authoritative Core/front-end boundaries.
 
-**Objective:** Finish construction rights with private-by-default enum variants Struct-field privacy and direct-newtype construction are historical milestones, recorded in the changelog and `docs/language/CONSTRUCTION_RIGHTS.md`. Finish the same one-keyword model for the still-open construction paths: `pub` remains the only visibility word; exporting a type never implicitly exports its variants or raw representation.
+**Objective:** Finish construction rights with private-by-default enum variants Struct-field privacy and direct-newtype construction are historical milestones, recorded in the changelog and TYPE-11 of `docs/spec/types.md`. Finish the same one-keyword model for the still-open construction paths: `pub` remains the only visibility word; exporting a type never implicitly exports its variants or raw representation.
 
 
 - `pub enum T` exports the type name. A variant is externally constructible and
