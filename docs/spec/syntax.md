@@ -183,7 +183,7 @@ fn main() -> Int {
 <a id="SYN-4"></a>
 ### SYN-4. A struct literal in a condition head is parenthesized
 
-**SYN-4@1.** A struct literal in the head of an `if`, `while` or `match`, or of an `if let` or `while let`, is refused unless it is parenthesized, and a `{` in such a head ends the head and opens its block, whatever name precedes it.
+**SYN-4@1.** A struct literal in the head of an `if`, `while` or `match`, or of an `if let` or `while let`, is refused unless it is parenthesized, and a `{` outside any parentheses or brackets in such a head ends the head and opens its block, whatever name precedes it, while a struct literal inside a call's arguments, an index or an array literal there is OPEN-34's question.
 
 - Kind: refusal
 - Uses: none

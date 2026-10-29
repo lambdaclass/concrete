@@ -454,7 +454,7 @@ TRUST-10@1	pending	e352e0795fc8294fc63da0fb72c18253
 OWN-10@2	live	bb8550835f1bdd3a799e80dc62752515
 OWN-10/field-write-immutable	pending	-
 REF-14@1	pending	143c727ca2cbb602af8406b11b619c09
-SYN-4@1	pending	de04ab2bc79bd6b95b03dfcb1b91c54b
+SYN-4@1	pending	11c3482649e9e55c6073e49633c675cd
 SYN-4/bare-struct-literal-in-head	pending	-
 SYN-4/parenthesized-struct-literal-in-head	live	-
 SYN-4/head-constant-unparenthesized	pending	-
