@@ -7485,7 +7485,7 @@ transitive-use budget before any gate changes program acceptance.
 
 `with(Std)` expands at parse time to every standard capability except `Unsafe`
 (`Concrete/Frontend/Parser.lean` "Expand \"Std\" to the full set";
-`docs/language/SAFETY.md:61`). It is used in `docs/language/DEFER.md`, `docs/language/SAFETY.md`, and
+`docs/language/SAFETY.md:61`). It is used in `docs/language/SAFETY.md` and
 several `adversarial_cap_*` fixtures. The canonical identity docs now list
 `Std` beside the nine capabilities and accurately mark it as an alias over the
 eight non-`Unsafe` capabilities. That documentation repair does not decide the
