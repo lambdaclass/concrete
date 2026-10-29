@@ -389,6 +389,13 @@ for o, delivs in sorted(row_blocked.items()):
         stated = {e for e in want - have if re.search(r'\b' + re.escape(dname) + r' also waits for exit ' + e + r'\b', qexit.get(o, ''))}
         if have != want - stated:
             no(f'queue row {o} names prerequisite exits {sorted(have)}, the prerequisites table says {sorted(want)} for {dname}'); pbad2 += 1
+    # Every extra exit a row names for one deliverable is in that deliverable's blocked-by list.
+    for dn, e in re.findall(r'\b(\S+) also waits for exit (\d[a-z])\b', qexit.get(o, '')):
+        wants = [w for n2, w in delivs if n2 == dn]
+        if not wants:
+            no(f'queue row {o} says {dn} also waits for exit {e}, but {dn} is not a deliverable of that row'); pbad2 += 1
+        elif e not in wants[0]:
+            no(f'queue row {o} says {dn} also waits for exit {e}, but the prerequisites table does not list {e} as blocking {dn}'); pbad2 += 1
 if prows and not pbad2:
     ok(f'{len(prows)} feature deliverables partition the exits; classes agree with the prerequisite lists and queue rows')
 # --- capacity allocation (2026-10-21): every post-Phase-1 queue row and every Phase 1 exit belongs to
@@ -862,6 +869,9 @@ PY
   neg prerequisites_extra_unstated \
     "old='V1c also waits for exit 2q'; assert s.count(old)==1; s=s.replace(old,'V1c also waits for the decided rules')" \
     "queue row 3 names prerequisite exits"
+  neg prerequisites_extra_not_blocking \
+    "old='| V1c (row 3, R-0511) | 0a, 0b, 2a, 2g, 2h, 2i, 2j, 2q | 0c, 1a, 2b, 2c, 2d, 2e, 2f, 2k, 2l, 2m, 2n, 2o, 2p |'; assert s.count(old)==1; s=s.replace(old,'| V1c (row 3, R-0511) | 0a, 0b, 2a, 2g, 2h, 2i, 2j | 0c, 1a, 2b, 2c, 2d, 2e, 2f, 2k, 2l, 2m, 2n, 2o, 2p, 2q |')" \
+    "the prerequisites table does not list 2q as blocking V1c"
   neg prerequisites_deliverable_deleted \
     "import re; s,n=re.subn(r'^\| V1b \(row 3[^\n]*\n', '', s, flags=re.M); assert n==1" \
     "the prerequisites table has no row for deliverable V1b"
