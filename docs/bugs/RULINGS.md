@@ -17,15 +17,15 @@ of [docs/spec/ids.tsv](../spec/ids.tsv), or the generator refuses the record.
 
 <!-- BEGIN GENERATED: spec rulings (scripts/gen/bug_ledger.py; edit the records' ruling lines) -->
 
-281 bug records, 278 of them ruled: violates a rule 140, spec gap 34, open owner question 3, permitted by a rule 0, outside the spec 101; not ruled yet (fixed bugs filed before bug 300) 3. Open bugs are in bold.
+292 bug records, 289 of them ruled: violates a rule 156, spec gap 32, open owner question 0, permitted by a rule 0, outside the spec 101; not ruled yet (fixed bugs filed before bug 300) 3. Open bugs are in bold.
 
 ### By kind
 
 | ruling | bugs | open | silent |
 |---|--:|--:|--:|
-| violates a rule | 140 | 3 | 68 |
-| spec gap | 34 | 2 | 7 |
-| open owner question | 3 | 1 | 1 |
+| violates a rule | 156 | 15 | 81 |
+| spec gap | 32 | 2 | 5 |
+| open owner question | 0 | 0 | 0 |
 | permitted by a rule (not a bug) | 0 | 0 | 0 |
 | outside the spec | 101 | 4 | 16 |
 | not ruled yet | 3 | 0 | 0 |
@@ -38,19 +38,18 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 |---|---|--:|--:|--:|--:|--:|--:|--:|
 | pipeline.md | PASS | 42 | 2 | 6 | 22 | 20 | 0 | 0 |
 | modules.md | MOD | 32 | 1 | 11 | 27 | 5 | 0 | 0 |
-| types.md | TYPE | 19 | 0 | 10 | 17 | 2 | 0 | 0 |
-| ownership.md | OWN | 16 | 0 | 6 | 15 | 1 | 0 | 0 |
+| types.md | TYPE | 20 | 1 | 11 | 18 | 2 | 0 | 0 |
+| ownership.md | OWN | 19 | 3 | 8 | 18 | 1 | 0 | 0 |
 | scope.md | SCOPE | 13 | 0 | 5 | 13 | 0 | 0 | 0 |
-| memory.md | MEM | 12 | 0 | 7 | 11 | 1 | 0 | 0 |
+| memory.md | MEM | 13 | 1 | 8 | 12 | 1 | 0 | 0 |
 | ffi.md | FFI | 11 | 2 | 6 | 10 | 1 | 0 | 0 |
-| references.md | REF | 8 | 0 | 8 | 7 | 1 | 0 | 0 |
-| statements.md | STMT | 8 | 0 | 7 | 7 | 1 | 0 | 0 |
-| arithmetic.md | ARITH | 8 | 0 | 5 | 7 | 1 | 0 | 0 |
-| patterns.md | PAT | 6 | 0 | 4 | 6 | 0 | 0 | 0 |
-| trusted.md | TRUST | 6 | 0 | 4 | 5 | 1 | 0 | 0 |
-| traits.md | TRAIT | 5 | 0 | 3 | 5 | 0 | 0 | 0 |
-| decisions.md | OPEN | 3 | 1 | 1 | 0 | 0 | 3 | 0 |
-| syntax.md | SYN | 1 | 0 | 1 | 1 | 0 | 0 | 0 |
+| statements.md | STMT | 11 | 2 | 10 | 11 | 0 | 0 | 0 |
+| references.md | REF | 9 | 1 | 9 | 9 | 0 | 0 | 0 |
+| arithmetic.md | ARITH | 9 | 1 | 6 | 8 | 1 | 0 | 0 |
+| patterns.md | PAT | 7 | 1 | 5 | 7 | 0 | 0 | 0 |
+| trusted.md | TRUST | 7 | 0 | 5 | 6 | 1 | 0 | 0 |
+| traits.md | TRAIT | 6 | 1 | 4 | 6 | 0 | 0 | 0 |
+| syntax.md | SYN | 3 | 1 | 1 | 3 | 0 | 0 | 0 |
 
 ### By violated rule
 
@@ -89,30 +88,47 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 | PAT-5@2 | patterns.md | 2 | 195, 202 |
 | REF-3@1 | references.md | 2 | 092, 123 |
 | REF-5@1 | references.md | 2 | 123, 182 |
+| STMT-11@1 | statements.md | 2 | 305, 306 |
+| SYN-4@1 | syntax.md | 2 | 212, **318** |
 | TYPE-12@1 | types.md | 2 | 199, 246 |
 | TYPE-15@1 | types.md | 2 | 073, 200 |
 | TYPE-16@1 | types.md | 2 | 024, 205 |
+| ARITH-2@2 | arithmetic.md | 1 | **327** |
 | ARITH-3@1 | arithmetic.md | 1 | 053 |
 | FFI-1@1 | ffi.md | 1 | 166 |
 | FFI-3@1 | ffi.md | 1 | 113 |
 | FFI-4@1 | ffi.md | 1 | 037 |
+| MEM-4@3 | memory.md | 1 | **326** |
+| MOD-6@1 | modules.md | 1 | **226** |
+| OWN-10@2 | ownership.md | 1 | **216** |
 | OWN-12@1 | ownership.md | 1 | 143 |
+| OWN-15@3 | ownership.md | 1 | **328** |
 | OWN-3@2 | ownership.md | 1 | 021 |
 | OWN-4@2 | ownership.md | 1 | 149 |
+| OWN-7@3 | ownership.md | 1 | **325** |
 | PASS-10@1 | pipeline.md | 1 | 025 |
 | PASS-2@2 | pipeline.md | 1 | 181 |
+| PAT-3@3 | patterns.md | 1 | **321** |
+| PAT-5@3 | patterns.md | 1 | **321** |
+| REF-11@3 | references.md | 1 | **319** |
+| REF-13@1 | references.md | 1 | 305 |
 | REF-9@2 | references.md | 1 | 181 |
 | STMT-5@1 | statements.md | 1 | 142 |
+| STMT-6@2 | statements.md | 1 | **323** |
 | STMT-7@2 | statements.md | 1 | 111 |
+| STMT-7@3 | statements.md | 1 | **320** |
 | STMT-9@1 | statements.md | 1 | 194 |
 | SYN-1@1 | syntax.md | 1 | 220 |
+| TRAIT-10@2 | traits.md | 1 | **324** |
 | TRAIT-2@1 | traits.md | 1 | 186 |
 | TRAIT-9@1 | traits.md | 1 | 091 |
+| TRUST-5@2 | trusted.md | 1 | 189 |
 | TRUST-7@1 | trusted.md | 1 | 198 |
 | TYPE-11@1 | types.md | 1 | 253 |
 | TYPE-14@2 | types.md | 1 | 036 |
 | TYPE-2@1 | types.md | 1 | 240 |
 | TYPE-5@1 | types.md | 1 | 192 |
+| TYPE-6@2 | types.md | 1 | **322** |
 | TYPE-7@1 | types.md | 1 | 193 |
 | TYPE-9@1 | types.md | 1 | 239 |
 
@@ -133,8 +149,6 @@ No rule decides these bugs' behaviour. Each fix starts by writing the rule (spec
 | MOD | how a type position resolves a name: type-namespace lookup, a user type against a builtin of the same name, and a child module's type declarations | 229 |
 | MOD | two packages of one program do not define the same top-level module name (or module paths are qualified by their package) | 074 |
 | OWN | assigning an element of a directly named array requires its binding to be declared mut | 030 |
-| REF | a `&mut` refers to the place, and every exit that does not abort runs one exit sequence (OD2 parts 3 and 5, decided 2026-10-29; written as REF-13@1 and STMT-11@1 on wip/spec-od, cited here once they are on main) | 305 |
-| STMT | every exit of a scope that does not abort runs one exit sequence, and a `for` loop's step runs after its body's (OD2 part 5, decided 2026-10-29; written as STMT-11@1 on wip/spec-od, cited here once it is on main) | 306 |
 | TRUST | a capability variable is bound from the capability set of the argument's function type whatever expression supplies that argument, and a variable no argument determines is refused as uninferable | 063 |
 | TYPE | a call of a generic function without explicit type arguments binds each type parameter from the types of the arguments given for it, whatever expression form supplies them | 308 |
 | TYPE | a call's explicit type-argument list has exactly as many types as the callee has type parameters | 221 |
@@ -143,9 +157,7 @@ No rule decides these bugs' behaviour. Each fix starts by writing the rule (spec
 
 | question | bugs |
 |---|---|
-| OPEN-16 | 212 |
-| OPEN-17 | **216** |
-| OPEN-22 | 189 |
+| — | — |
 
 ### Permitted by a rule (not a bug)
 

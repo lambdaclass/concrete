@@ -451,9 +451,9 @@ fn main() -> Int {
 **Rationale.** Decided by the owner on 2026-10-29 (OD2, part 5). One order on every normal exit
 (falling off the end, `return`, `break`, `continue`) is what lets a deferred call see the exit value
 already computed and the loans it was given still live (OWN-16), and lets the destruction of the
-remaining locals come last. An abort runs none of it (STMT-2; OD10). Main does not yet run one
-sequence on every exit form: a `for` loop's step ran before its body's deferred calls in the
-interpreter (bug 306, under repair).
+remaining locals come last. An abort runs none of it (STMT-2; OD10). Bugs 305 and 306 brought the
+borrow block's exits and the interpreter's `for` step into this order; the entry stays pending until
+R-0496's Core semantics defines the sequence for every exit form.
 
 ## Recoverable failure: explicit `Result` flow
 

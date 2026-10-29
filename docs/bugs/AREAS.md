@@ -12,7 +12,7 @@ checker refusal is a Check bug here.
 
 <!-- BEGIN GENERATED: bug areas (scripts/gen/bug_ledger.py; derived from the records, docs/bugs/area_map.tsv and git history, never edited here) -->
 
-281 records: 172 placed by their own fix commits, 37 by the files their record names in commits shared with other bugs, 34 by commits shared with other bugs, 10 by the commit that filed or closed the record, 23 by an `area:` override; 5 open bugs are not fixed yet and 0 fixed bugs have no commit the history can place.
+292 records: 172 placed by their own fix commits, 37 by the files their record names in commits shared with other bugs, 34 by commits shared with other bugs, 11 by the commit that filed or closed the record, 23 by an `area:` override; 15 open bugs are not fixed yet and 0 fixed bugs have no commit the history can place.
 
 ### By stage
 
@@ -27,9 +27,9 @@ checker refusal is a Check bug here.
 | Parse | 11 | 0 | 3 | 0 | Parser 7, Lexer 2, AST 1, LocalId 1 |
 | EmitSSA | 10 | 0 | 1 | 3 | EmitSSA 10 |
 | Mono | 8 | 0 | 1 | 0 | Mono 7, - 1 |
+| Report | 8 | 2 | 3 | 1 | Report 3, AssumptionSummary 2, ModelDiff 2, ReportObligations 1 |
 | Std | 8 | 0 | 0 | 0 | map 4, fs 2, libc 1, net 1 |
 | EmitLLVM | 7 | 0 | 3 | 4 | EmitBuiltins 5, EmitLLVM 1, Symbols 1 |
-| Report | 7 | 1 | 3 | 0 | AssumptionSummary 2, ModelDiff 2, Report 2, ReportObligations 1 |
 | CLI | 6 | 0 | 2 | 1 | Main 4, Pipeline 1, PipelineTest 1 |
 | Tooling | 6 | 0 | 1 | 1 | Makefile 1, dispatch 1, farm 1, new_bug 1 |
 | Gates | 6 | 0 | 0 | 0 | authority_facts 1, check_binder_refs 1, check_gate_lock 1, compile_scaling 1 |
@@ -51,7 +51,7 @@ checker refusal is a Check bug here.
 | 10. Evidence identity computed from a partial subject | 5 | Proof 3, Elab 2 |
 | 11. Absence read as a fact (fail-open defaults) | 13 | Gates 4, Resolve 2, Proof 2, Report 2, Check 1, SSA 1, Tooling 1 |
 | 12. One fact kept in two places | 28 | Resolve 11, Check 5, Elab 3, Interp 3, Parse 2, Proof 1, Std 1, CLI 1, Tooling 1 |
-| 13. Documented rules with no enforcing site | 18 | Check 11, Resolve 4, Parse 1, Elab 1, Lower 1 |
+| 13. Documented rules with no enforcing site | 19 | Check 11, Resolve 4, Parse 1, Elab 1, Lower 1, Report 1 |
 | 14. Trusted `std` and FFI code with no checked contract | 7 | Std 5, Parse 1, Check 1 |
 | 15. Ownership state not modeled along control-flow paths | 7 | Check 7 |
 | 16. Artifacts at paths no run owns | 5 | Tooling 2, Std 1, CLI 1, Gates 1 |
@@ -71,12 +71,12 @@ checker refusal is a Check bug here.
 | violates OWN | 12 | Check 9, Lower 3 |
 | violates PASS | 20 | Lower 9, Mono 3, Check 2, Elab 2, Resolve 1, EmitSSA 1, Interp 1, CLI 1 |
 | violates PAT | 6 | Check 4, Interp 1, CLI 1 |
-| violates REF | 6 | Check 6 |
+| violates REF | 7 | Check 6, Lower 1 |
 | violates SCOPE | 13 | Check 7, Proof 3, Elab 1, Mono 1, CLI 1 |
-| violates STMT | 7 | Check 3, Elab 2, Lower 2 |
-| violates SYN | 1 | Parse 1 |
+| violates STMT | 8 | Check 3, Elab 2, Lower 2, Interp 1 |
+| violates SYN | 3 | Parse 2, Report 1 |
 | violates TRAIT | 4 | Check 3, Resolve 1 |
-| violates TRUST | 3 | Check 2, Proof 1 |
+| violates TRUST | 4 | Check 2, Parse 1, Proof 1 |
 | violates TYPE | 17 | Check 11, Resolve 3, Elab 2, Proof 1 |
 | spec gap ARITH | 1 | EmitLLVM 1 |
 | spec gap FFI | 1 | Resolve 1 |
@@ -84,11 +84,8 @@ checker refusal is a Check bug here.
 | spec gap MOD | 5 | Resolve 3, Elab 1, Report 1 |
 | spec gap OWN | 1 | Check 1 |
 | spec gap PASS | 19 | Lower 8, EmitSSA 3, Interp 3, Mono 2, Elab 1, SSA 1, Report 1 |
-| spec gap REF | 1 | Lower 1 |
-| spec gap STMT | 1 | Interp 1 |
 | spec gap TRUST | 1 | Check 1 |
 | spec gap TYPE | 2 | Resolve 1, Check 1 |
-| open | 2 | Parse 2 |
 | outside (library) | 11 | Std 6, EmitLLVM 5 |
 | outside (performance) | 44 | Check 10, Lower 7, Parse 6, Elab 4, Interp 4, Resolve 3, SSA 3, EmitSSA 3, Proof 2, Mono 1, Report 1 |
 | outside (tooling) | 44 | Proof 12, Tooling 6, Gates 6, Check 4, Report 4, Elab 3, CLI 3, Interp 2, Parse 1, Resolve 1, SSA 1, Std 1 |
@@ -260,7 +257,7 @@ checker refusal is a Check bug here.
 | [185](185_generic_rawptr_compare_loses_authority.md) | Check | Verify | commits | Mono | violates TYPE-6@1, TRUST-4@1 |
 | [186](186_trait_impl_selection_is_a_search.md) | Check | Coherence | commits | — | violates TRAIT-10@1, TRAIT-2@1 |
 | [188](188_capability_variable_entails_everything.md) | Check | Capabilities | commits | Resolve | violates TRUST-4@1 |
-| [189](189_trusted_impl_confers_trust.md) | Parse | AST | commits | Std | open OPEN-22 |
+| [189](189_trusted_impl_confers_trust.md) | Parse | AST | commits | Std | violates TRUST-5@2 |
 | [190](190_array_value_aliases_its_source.md) | Lower | Lower | shared | Check, Elab | violates OWN-15@2 |
 | [191](191_test_scratch_at_fixed_tmp_paths.md) | Std | fs | commits | CLI | outside (tooling) |
 | [192](192_integer_statement_condition.md) | Check | CoreCheck | commits | — | violates TYPE-5@1 |
@@ -282,11 +279,11 @@ checker refusal is a Check bug here.
 | [209](209_codex_review_stale_index_lock.md) | Tooling | review | commits | — | outside (tooling) |
 | [210](210_arithmetic_on_nominal_type.md) | Check | CoreCheck | commits | — | violates TYPE-6@1 |
 | [211](211_generic_arithmetic_post_mono.md) | Check | Verify | commits | — | violates TYPE-6@1 |
-| [212](212_const_before_block_parses_as_struct_literal.md) | Parse | Parser | commits | — | open OPEN-16 |
+| [212](212_const_before_block_parses_as_struct_literal.md) | Parse | Parser | commits | — | violates SYN-4@1 |
 | [213](213_arm_after_catch_all_lowered.md) | Lower | Lower | commits | — | violates PASS-9@1 |
 | [214](214_two_returns_leak_same_diagnostic.md) | Check | Check | shared | Tooling | outside (tooling) |
 | [215](215_unknown_type_in_expression.md) | Resolve | Resolve | commits | — | violates MOD-1@1 |
-| [216](216_field_write_non_mut_binding.md) | — | — | unfixed | — | open OPEN-17 |
+| [216](216_field_write_non_mut_binding.md) | — | — | unfixed | — | violates OWN-10@2 |
 | [217](217_resolve_skips_nested_submodules.md) | Resolve | Resolve | commits | — | violates MOD-1@1 |
 | [218](218_duplicate_declarations_accepted.md) | Check | Check | commits | — | violates MOD-3@2 |
 | [219](219_mutation_31_anchored_on_proof_only_wrapper.md) | Proof | ProofCore | commits | — | outside (tooling) |
@@ -296,7 +293,7 @@ checker refusal is a Check bug here.
 | [223](223_aliased_import_is_a_different_type.md) | Resolve | TypeId | commits | Check, Elab | spec gap (MOD) |
 | [224](224_failed_let_recovered_immutable.md) | Interp | Interp | shared | Check | outside (tooling) |
 | [225](225_bound_refusal_names_type_as_placeholder.md) | Interp | Interp | shared | Check | outside (tooling) |
-| [226](226_submodule_imports_private_function.md) | Resolve | Resolve | shared | — | violates MOD-2@1 |
+| [226](226_submodule_imports_private_function.md) | Resolve | Resolve | shared | — | violates MOD-2@1, MOD-6@1 |
 | [227](227_user_result_captures_builtin_in_other_module.md) | Elab | Elab | commits | Resolve | violates MOD-1@1 |
 | [228](228_interp_loop_env_grows.md) | Interp | Interp | override | — | outside (performance) |
 | [229](229_resolve_scope_refuses_check_names.md) | Resolve | Resolve | commits | — | spec gap (MOD) |
@@ -374,10 +371,21 @@ checker refusal is a Check bug here.
 | [302](302_a_loop_moved_an_address_taken_scalar_back_into_a.md) | Lower | Lower | commits | — | spec gap (MEM) |
 | [303](303_the_value_if_did_not_drop_the_bindings_its_arms.md) | Lower | Lower | commits | — | violates PASS-9@1 |
 | [304](304_a_value_if_or_match_written_as_a_comparison_oper.md) | Elab | Elab | commits | Check | violates PASS-6@1 |
-| [305](305_a_break_continue_or_return_out_of_a_borrow_mut_b.md) | Lower | Lower | commits | — | spec gap (REF) |
-| [306](306_the_interpreter_ran_a_for_loop_s_step_inside_the.md) | Interp | Interp | commits | Tooling | spec gap (STMT) |
+| [305](305_a_break_continue_or_return_out_of_a_borrow_mut_b.md) | Lower | Lower | commits | — | violates REF-13@1, STMT-11@1 |
+| [306](306_the_interpreter_ran_a_for_loop_s_step_inside_the.md) | Interp | Interp | commits | Tooling | violates STMT-11@1 |
 | [308](308_a_value_if_or_match_passed_to_a_generic_paramete.md) | Resolve | PeekType | commits | — | spec gap (TYPE) |
 | [309](309_a_loop_in_the_right_operand_of_or_rebound_an_agg.md) | Lower | Lower | commits | — | violates PASS-9@1 |
 | [315](315_the_scaling_gate_judged_wall_time_growth_on_a_ho.md) | Gates | compile_scaling | commits | — | outside (tooling) |
+| [318](318_a_struct_literal_in_an_if_while_or_match_head_is.md) | Report | Report | record | Check | violates SYN-4@1 |
+| [319](319_a_call_that_re_lends_a_mut_binding_is_not_overla.md) | — | — | unfixed | — | violates REF-11@3 |
+| [320](320_main_may_return_int_or_bool_the_native_exit_stat.md) | — | — | unfixed | — | violates STMT-7@3 |
+| [321](321_a_bare_variant_name_ignores_a_payload_and_a_stru.md) | — | — | unfixed | — | violates PAT-3@3, PAT-5@3 |
+| [322](322_trusted_code_compares_raw_pointers_with_and_the.md) | — | — | unfixed | — | violates TYPE-6@2 |
+| [323](323_break_with_a_value_is_accepted_inside_a_while_or.md) | — | — | unfixed | — | violates STMT-6@2 |
+| [324](324_a_copy_type_or_an_array_satisfies_a_destroy_boun.md) | — | — | unfixed | — | violates TRAIT-10@2 |
+| [325](325_a_call_statement_whose_result_is_not_unit_discar.md) | — | — | unfixed | — | violates OWN-7@3 |
+| [326](326_a_field_access_opens_a_heap_or_heaparray_implici.md) | — | — | unfixed | — | violates MEM-4@3 |
+| [327](327_an_integer_or_float_literal_with_no_expected_typ.md) | — | — | unfixed | — | violates ARITH-2@2 |
+| [328](328_a_method_taking_self_or_mut_self_is_called_on_an.md) | — | — | unfixed | — | violates OWN-15@3 |
 
 <!-- END GENERATED: bug areas -->
