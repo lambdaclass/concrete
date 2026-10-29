@@ -9,7 +9,7 @@ It is intentionally milestone-oriented rather than release-oriented. The project
 For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
-<!-- changelog stamp: aa634fc656d59205b00c1ce55398bd39 (scripts/gen/changelog.py; add a changelog.d/ fragment, never edit this file by hand) -->
+<!-- changelog stamp: d9496e806711570319d24297370fd3fe (scripts/gen/changelog.py; add a changelog.d/ fragment, never edit this file by hand) -->
 
 ### Large Arrays No Longer Make Compilation or `--interp` Quadratic (bugs 027, 248, 249, 250, 2026-10-25)
 
@@ -1547,7 +1547,7 @@ binary then ran wrongly. Fixed here, each with a rejection fixture and a positiv
   call argument, a struct/enum/array literal element or an operator operand (E0278): a `return` in
   a later field after an owned value was moved into the literal leaked that value. Exits stay legal
   in statement position, in a tail and in a let initializer (the let-else idiom). The rule is in
-  [STATEMENT_EXPRESSION_MODEL](docs/language/STATEMENT_EXPRESSION_MODEL.md#exits-in-operand-position).
+  [STATEMENT_EXPRESSION_MODEL](docs/archive/design-records/STATEMENT_EXPRESSION_MODEL.md#exits-in-operand-position).
   Migration: 1 test site (bug 086's `argret`, which existed to show the extractor declines it).
 - **`defer` reserves by place (bug 143).** A deferred call's arguments are locals, borrows of
   locals or constants (E0279). A local passed by value is reserved, a local passed by borrow is

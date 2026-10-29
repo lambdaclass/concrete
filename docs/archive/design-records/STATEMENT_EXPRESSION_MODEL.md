@@ -1,7 +1,9 @@
 # Statement vs Trailing-Expression Model (design)
 
+Archived from docs/language: the design record of the statement and trailing-expression model; the rules are STMT-4, STMT-5 and STMT-8 of docs/spec/statements.md, whose rationale carries what is still live.
+
 **Superseded as the normative text (2026-10-23).** Evaluation order is STMT-4, exits in operands
-STMT-5, and value blocks STMT-8 of [docs/spec/statements.md](../spec/statements.md). This document
+STMT-5, and value blocks STMT-8 of [docs/spec/statements.md](../../spec/statements.md). This document
 is the design record of the statement / trailing-expression model and keeps the per-rule status
 tables of the evaluation-order decision.
 
@@ -168,11 +170,11 @@ These are features, not the bug; keep them out so the fix stays bounded.
 
 ## Evaluation order and assignment
 
-**Status:** normative, decided 2026-10-21 (ROADMAP [Decisions](../../ROADMAP.md#decisions),
+**Status:** normative, decided 2026-10-21 (ROADMAP [Decisions](../../../ROADMAP.md#decisions),
 "Semantics decisions, 2026-10-21"); owner ROADMAP exit 2j (R-0500), which names evaluation order,
 short-circuiting and sequential assignment. This section is the only statement of evaluation
-order. [MEMORY_SEMANTICS.md](MEMORY_SEMANTICS.md) §10 states what an assignment does to the old
-value and cites this section; [ARITHMETIC_POLICY.md](ARITHMETIC_POLICY.md) states what each
+order. [MEMORY_SEMANTICS.md](../../language/MEMORY_SEMANTICS.md) §10 states what an assignment does to the old
+value and cites this section; [ARITHMETIC_POLICY.md](../../language/ARITHMETIC_POLICY.md) states what each
 operation does once its operands are evaluated.
 
 **Rule.** Statements execute in source order. Within an expression, subexpressions are evaluated
@@ -198,7 +200,7 @@ the next begins, and an operation is performed only after all its operands are e
    assignment. Concrete has no compound assignment operators.
 
 A trap ends evaluation: no later operand is evaluated and the operation is not performed (traps
-are terminal, [the spec's "Abort and failure"](../spec/statements.md#abort-and-failure)). An arithmetic trap is checked after both
+are terminal, [the spec's "Abort and failure"](../../spec/statements.md#abort-and-failure)). An arithmetic trap is checked after both
 operands are evaluated (ARITHMETIC_POLICY §1).
 
 **Status on main** (`5b63cd87`; probed with the binary and `--interp` at `b9b3cca9` and
@@ -210,17 +212,17 @@ updated by the bug 127 fix, 2026-10-21):
 | 1. receiver, then arguments left to right | yes | yes | enforced (not yet gated) |
 | 2. operands left to right; `&&` / `||` short-circuit | yes | yes | enforced; short-circuit in `Lower.lean` (`.binOp .and_ / .or_`) and `Interp.lean`, exercised by `regress_034_shortcircuit_borrow_promotion.con` and the differential fuzzer |
 | 3. array-literal elements | yes | yes | enforced (not yet gated) |
-| 4. struct-literal fields in source order | yes | yes | enforced since the [bug 127](../bugs/127_struct_literal_field_order.md) fix (the binary used declaration order: `Lower` reordered the fields); gated in both consumers by `check_evidence_build.sh` (order gate) and `regress_127_struct_literal_source_order.con` |
-| 4. enum-literal fields in source order | **no**: declaration order | **no**: declaration order | **violated** in both consumers (they agree with each other), [bug 137](../bugs/137_enum_literal_field_order.md), exit 0b |
+| 4. struct-literal fields in source order | yes | yes | enforced since the [bug 127](../../bugs/127_struct_literal_field_order.md) fix (the binary used declaration order: `Lower` reordered the fields); gated in both consumers by `check_evidence_build.sh` (order gate) and `regress_127_struct_literal_source_order.con` |
+| 4. enum-literal fields in source order | **no**: declaration order | **no**: declaration order | **violated** in both consumers (they agree with each other), [bug 137](../../bugs/137_enum_literal_field_order.md), exit 0b |
 | 5. base before index | yes | yes | enforced (not yet gated) |
-| 6. functional update: explicit initializers, then the base once | **no** | **no** | **violated** in both: Elab desugars `..base` to one `base.field` read per omitted field, so a call in the base runs once per copied field (twice for two copied fields, each field taken from a different call), [bug 136](../bugs/136_functional_update_base_reevaluated.md), exit 0b. The explicit initializers run first in both consumers since the bug 127 fix (before it, the binary interleaved the base reads with them in declaration order) |
+| 6. functional update: explicit initializers, then the base once | **no** | **no** | **violated** in both: Elab desugars `..base` to one `base.field` read per omitted field, so a call in the base runs once per copied field (twice for two copied fields, each field taken from a different call), [bug 136](../../bugs/136_functional_update_base_reevaluated.md), exit 0b. The explicit initializers run first in both consumers since the bug 127 fix (before it, the binary interleaved the base reads with them in declaration order) |
 | 7. assignment to an indexed place: right-hand side, then the index | yes | yes | enforced (not yet gated) |
-| 7. assignment through a dereference: right-hand side, then the destination operand | **no**: the destination first (`Lower.lean`, deref assignment) | yes | **violated**: `*(&mut a[tick(1)]) = tick(2)` evaluates 1 then 2 natively and 2 then 1 in `--interp`, a silent disagreement, [bug 183](../bugs/183_deref_assign_destination_first.md) (exit 0b) |
+| 7. assignment through a dereference: right-hand side, then the destination operand | **no**: the destination first (`Lower.lean`, deref assignment) | yes | **violated**: `*(&mut a[tick(1)]) = tick(2)` evaluates 1 then 2 natively and 2 then 1 in `--interp`, a silent disagreement, [bug 183](../../bugs/183_deref_assign_destination_first.md) (exit 0b) |
 
 Struct literals follow source order in both consumers since the bug 127 fix (`Lower` no longer
 reorders them). Changing enum literals to source order (bug 137) changes Elab, the positional
 payload in Lower, the interpreter and the extracted model, and Core semantics, so that all agree. Functional update needs Elab to bind the base once to a fresh local
-before reading the omitted fields (the guidance in [PATTERN_ERGONOMICS.md](PATTERN_ERGONOMICS.md)
+before reading the omitted fields (the guidance in [PATTERN_ERGONOMICS.md](../../language/PATTERN_ERGONOMICS.md)
 to use a simple place as the base describes today's behaviour, which this rule replaces), and the
 dereference assignment needs Lower to evaluate the right-hand side first. No source migration is expected: no corpus program was observed to
 depend on declaration-order evaluation of field initializers with effects (a scan of literals
@@ -251,7 +253,7 @@ no implicit destruction). The rule covers `break`/`continue` explicitly although
 branch is typed `()` today, so typing it as diverging later cannot reopen the hole.
 
 **Status on main.** Enforced: `Check.lean` `checkExpr` (`protectedOperands`,
-`firstOperandEscape?`), [bug 142](../bugs/142_exit_in_operand_leaks.md). The proof-model extractor
+`firstOperandEscape?`), [bug 142](../../bugs/142_exit_in_operand_leaks.md). The proof-model extractor
 keeps its narrower subset (bug 086's `cExprNoEscape` declines any non-tail exit, let initializers
 included). The Core form is "an operand already evaluated for a pending construct is a live owned
 temporary until it completes" (R-0499), which accepts everything this rule accepts. Owner: exit 2j

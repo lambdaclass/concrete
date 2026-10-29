@@ -5,7 +5,7 @@ Statements execute in source order. A block's trailing expression without `;` is
 chapter covers how executions end (STMT-1 to STMT-3), evaluation order (STMT-4), where exits may
 appear (STMT-5), loops (STMT-6), `main` (STMT-7), value blocks (STMT-8) and returning a value on
 every path (STMT-9). The design records are
-[STATEMENT_EXPRESSION_MODEL.md](../language/STATEMENT_EXPRESSION_MODEL.md)
+[STATEMENT_EXPRESSION_MODEL.md](../archive/design-records/STATEMENT_EXPRESSION_MODEL.md)
 and [MAIN_EXIT_MODEL.md](../platform/MAIN_EXIT_MODEL.md). [EXECUTION_MODEL.md](../platform/EXECUTION_MODEL.md)
 keeps the runtime and platform description (hosted runtime, startup, allocation, targets).
 
@@ -86,6 +86,20 @@ Three silent violations were fixed on 2026-10-23 (landing train 6), each with it
 enum literal evaluated its fields in declaration order (bug 137), a functional update read its
 base once per copied field (bug 136), and an assignment through a dereference evaluated its
 destination first natively (bug 183).
+
+Statements run in source order, and an operation is performed only after all its operands are
+evaluated, each completely (its calls, effects and traps included). Struct and enum literal fields
+follow the order they are written, not the order the type declares (`P { b: f(), a: g() }` calls
+`f` before `g`); a functional update evaluates its explicit initializers, then its base once, and
+takes every omitted field from that one value. In an assignment the right-hand side comes first,
+then the destination's subexpressions left to right (`arr[i()] = j()` and `*(&mut a[i()]) = j()`
+both call `j` before `i`; Rust's order for simple assignment), and there are no compound assignment
+operators. An arithmetic trap is checked after both operands are evaluated (ARITH-3). The rule was
+decided 2026-10-21 (exit 2j, R-0500); it discharges V1a's evaluation-order obligation, since the
+verified pipeline may not model a looser order than the compiler implements, and the permanent
+differential coverage of literal-field order, functional update and assignment order is exit 2c's
+(R-0491). The per-rule status tables of that decision are kept in the archived design record
+([STATEMENT_EXPRESSION_MODEL.md](../archive/design-records/STATEMENT_EXPRESSION_MODEL.md)).
 
 ```con accept name=source-order exit=42
 struct Copy P { a: Int, b: Int }
@@ -332,6 +346,15 @@ statement `match` whose arms happen to end in expressions is not a value (the fi
 A trailing `if` or `match` inside a value block is itself value-bearing when its branches end in
 values. A braced block as an arbitrary expression (`let x = { ...; v };`) and an implicit trailing
 return in a function body are not in the language.
+
+The parser records the distinction on the statement itself (`Stmt.expr` carries `isValue`, true
+only for a value block's trailing expression with no `;`, set in `parseExprBlock` and for a bare
+`=> expr` arm), and every stage computes a block's type and value the same way: a trailing value
+expression gives its type and value, a final `return` or `break` diverges, and anything else is
+`Unit`. Because every construction site must set the flag, no site can miss it, and Lower's
+`lastExprVal` reads the value only from a value expression, which removed a class of `store void`
+and wrong-slot hazards (ROADMAP #36, 2026-06-20; `regress_stmt_match_arm_unit.con`). The formatter
+prints a value expression without `;` and a statement with one.
 
 ```con accept name=trailing-values exit=42
 fn pick(c: bool, k: Int) -> Int {

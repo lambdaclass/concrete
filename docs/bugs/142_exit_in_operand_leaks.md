@@ -56,7 +56,7 @@ a non-tail expression" was a rule of the proof-model extractor (`cExprNoEscape`)
 ## Fix
 
 Rule (d) (user decision, 2026-10-21; normative text in [STATEMENT_EXPRESSION_MODEL, "Exits in
-operand position"](../language/STATEMENT_EXPRESSION_MODEL.md#exits-in-operand-position)): `return`,
+operand position"](../archive/design-records/STATEMENT_EXPRESSION_MODEL.md#exits-in-operand-position)): `return`,
 `break` and `continue` may not occur inside a call argument (receivers included), a struct, enum or
 array literal element (a functional-update base included), or an operator operand (binary, unary,
 cast, index), unless a `break`/`continue` is bound by a loop entered inside that operand. They stay

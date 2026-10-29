@@ -106,7 +106,7 @@ lowering, and formatter respect it. The spurious **E0225** statement-match-arm c
 gone (`=> { side(); }` is now `Unit` and agrees with a unit arm). Done in 3 staged
 commits (flag threading → semantics flip → formatter); locked by
 `tests/programs/regress_stmt_match_arm_unit.con`. See ROADMAP #36 and
-[STATEMENT_EXPRESSION_MODEL.md](../language/STATEMENT_EXPRESSION_MODEL.md). Deferred follow-ups
+[STATEMENT_EXPRESSION_MODEL.md](design-records/STATEMENT_EXPRESSION_MODEL.md). Deferred follow-ups
 (not the bug): braced block-as-value in arbitrary position (`let x = { …; v }`) is
 still not parsed; and the formatter doesn't round-trip a direct value-arm containing an
 if-expression (block-wraps it). Original report below.

@@ -416,7 +416,7 @@ fold/accumulate rule used by `acc = f(acc, x)`, including inside loops.
 
 An assignment `place = e` evaluates `e` first and then the destination's index expressions, in the
 order stated once in [STATEMENT_EXPRESSION_MODEL.md, "Evaluation order and
-assignment"](STATEMENT_EXPRESSION_MODEL.md#evaluation-order-and-assignment),
+assignment"](../archive/design-records/STATEMENT_EXPRESSION_MODEL.md#evaluation-order-and-assignment),
 which this section does not restate. Then:
 
 - **Copy old value:** overwritten. There is no destruction event.

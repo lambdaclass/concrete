@@ -274,7 +274,7 @@ inductive Stmt where
   -- `;`-terminated expression is a discarded statement (`isValue := false`). Only
   -- the last statement of a value-bearing block may be `true`; statement-only
   -- blocks (fn/loop/if-statement bodies via parseBlock) are always `false`.
-  -- (Phase 5 #42 — docs/language/STATEMENT_EXPRESSION_MODEL.md.)
+  -- (Phase 5 #42 — docs/archive/design-records/STATEMENT_EXPRESSION_MODEL.md.)
   | expr (span : Span) (e : Expr) (isValue : Bool)
   | ifElse (span : Span) (cond : Expr) (then_ : List Stmt) (else_ : Option (List Stmt))
   | while_ (span : Span) (cond : Expr) (body : List Stmt) (label : Option String)

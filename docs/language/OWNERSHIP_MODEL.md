@@ -153,7 +153,7 @@ duplicating one would let it be freed twice. Concretely:
   that return the displaced value) is stated in
   [MEMORY_SEMANTICS.md §10](MEMORY_SEMANTICS.md#10-assignment-rules), and the order in which an
   assignment evaluates its parts (right-hand side first) in
-  [STATEMENT_EXPRESSION_MODEL.md](STATEMENT_EXPRESSION_MODEL.md#evaluation-order-and-assignment)
+  [STATEMENT_EXPRESSION_MODEL.md](../archive/design-records/STATEMENT_EXPRESSION_MODEL.md#evaluation-order-and-assignment)
   (decided 2026-10-21).
 - **Functional update `S { ..base }`** may not *copy* a non-Copy field from `base`
   (**E0220**) — the value would be owned by both `base` and the result. Set each

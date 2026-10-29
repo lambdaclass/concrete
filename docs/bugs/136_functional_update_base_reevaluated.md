@@ -13,7 +13,7 @@ ruling: Violates: STMT-4@1
 **Status:** FIXED (branch `soundness-holes`)
 **Found:** 2026-10-21, while fixing [bug 127](127_struct_literal_field_order.md) (recorded as an
 unfiled disagreement in the evaluation-order section of
-[STATEMENT_EXPRESSION_MODEL](../language/STATEMENT_EXPRESSION_MODEL.md#evaluation-order-and-assignment)
+[STATEMENT_EXPRESSION_MODEL](../archive/design-records/STATEMENT_EXPRESSION_MODEL.md#evaluation-order-and-assignment)
 and in ROADMAP exit 0b).
 **Severity:** silent wrong code. A base expression with effects runs once per field it supplies,
 and each omitted field may come from a different evaluation of it.
