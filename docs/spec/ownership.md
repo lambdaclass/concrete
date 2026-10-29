@@ -1035,7 +1035,7 @@ fn main() -> Int {
 | `arrayLit` | **moves** each element in (H10) | conservation (E0205 rows) |
 | `arrayIndex` | place projection: a Copy element is copied, a non-Copy element read by value is **refused** (**E0290**, OWN-8) | conservation (H11 rows) |
 | `cast` | reads a Copy numeric | — |
-| `methodCall` | the receiver is a place, auto-borrowed for `&self` / `&mut self`; by-value `self` **moves** an ident receiver and **refuses** a projection receiver (**E0290**); ident arguments **move** | conservation (H11 rows) |
+| `methodCall` | the receiver is a place; a `&self` / `&mut self` method takes a reference receiver, written `(&s).m()` / `(&mut s).m()` for an owned place (main still borrows an owned receiver implicitly, bug 328); by-value `self` **moves** an ident receiver and **refuses** a projection receiver (**E0290**); ident arguments **move** | conservation (H11 rows) |
 | `staticMethodCall` | ident arguments **move**; the result is owned | conservation |
 | `fnRef` | creates a Copy function-pointer value | — |
 | heap-shell `.fieldAccess` (the removed `->` form) | heap-interior read: OWN-8 applies (bug 144), so a non-Copy field read by value is **E0290**; a heap store through `fieldAssign` refuses a non-Copy overwrite (**E0219**); a node is taken apart with `let n = *h;` and a pattern | projection |
