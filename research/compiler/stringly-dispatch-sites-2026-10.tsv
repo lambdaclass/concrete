@@ -1,0 +1,459 @@
+file	line	literal	class	disposition	source
+Concrete/Backend/EmitSSA.lean	535	vec_new	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	if fn == "vec_new" then vecElemTy retTy
+Concrete/Backend/EmitSSA.lean	536	vec_get	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	else if fn == "vec_get" then some retTy
+Concrete/Backend/EmitSSA.lean	537	vec_pop	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	else if fn == "vec_pop" then
+Concrete/Backend/EmitSSA.lean	552	vec_pop	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	let name := if fn == "vec_pop" then s!"{fn}_{sz}_{payOff}" else s!"{fn}_{sz}"
+Concrete/Backend/EmitSSA.lean	890	vec_new	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	if fn == "vec_new" then
+Concrete/Backend/EmitSSA.lean	892	vec_get	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	else if fn == "vec_get" then
+Concrete/Backend/EmitSSA.lean	905	vec_push	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	else if fn == "vec_push" then
+Concrete/Backend/EmitSSA.lean	912	vec_set	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	else if fn == "vec_set" then
+Concrete/Backend/EmitSSA.lean	920	vec_pop	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	else if fn == "vec_pop" then
+Concrete/Check/Check.lean	1054		sentinel-empty	Option in the type, where the empty string stands for absent	if ntName == "" then throwCheck (.builtinWrongFirstArg "unwrap" "a newtype argument" (tyToString argTy)) (some e.getSpan)
+Concrete/Check/Check.lean	1132		sentinel-empty	Option in the type, where the empty string stands for absent	if typeName == "" then throwCheck (.destroyRequiresNamed (tyToString argTy)) (some e.getSpan)
+Concrete/Check/Check.lean	1638		sentinel-empty	Option in the type, where the empty string stands for absent	if structName == "" then throwCheck .fieldAccessNonStruct (some e.getSpan)
+Concrete/Check/Check.lean	1769		sentinel-empty	Option in the type, where the empty string stands for absent	if enumName != "" then
+Concrete/Check/Check.lean	1786		sentinel-empty	Option in the type, where the empty string stands for absent	if armEnum != "" && !sameTypeName (← getEnv).typeIdOf armEnum enumName then
+Concrete/Check/Check.lean	1814	_	sentinel-wildcard	one definition (wildcardBinder / isWildcardBinder)	if binding != "_" then
+Concrete/Check/Check.lean	1826	_	sentinel-wildcard	one definition (wildcardBinder / isWildcardBinder)	if fromLet && binding != "_" then
+Concrete/Check/Check.lean	1832	_	sentinel-wildcard	one definition (wildcardBinder / isWildcardBinder)	if binding != "_" then
+Concrete/Check/Check.lean	1855	_	sentinel-wildcard	one definition (wildcardBinder / isWildcardBinder)	if binding != "_" then
+Concrete/Check/Check.lean	1993	_	sentinel-wildcard	one definition (wildcardBinder / isWildcardBinder)	if binding != "_" then
+Concrete/Check/Check.lean	2247		sentinel-empty	Option in the type, where the empty string stands for absent	if typeName == "" then
+Concrete/Check/Check.lean	2482	_	sentinel-wildcard	one definition (wildcardBinder / isWildcardBinder)	if name == "_" then
+Concrete/Check/Check.lean	2790		sentinel-empty	Option in the type, where the empty string stands for absent	if structName == "" then throwCheck .fieldAccessNonStruct (some stmt.getSpan)
+Concrete/Check/Check.lean	3152	_	sentinel-wildcard	one definition (wildcardBinder / isWildcardBinder)	if b != "_" && bindsThroughReference (← resolvedOr valTy) then
+Concrete/Check/Check.lean	3751	_	sentinel-wildcard	one definition (wildcardBinder / isWildcardBinder)	| .mk _ _ _ bs g b => (PatBind.names bs |>.filter (· != "_") |>.map fun n => s!"the pattern binder `{n}`")
+Concrete/Check/Check.lean	3753	_	sentinel-wildcard	one definition (wildcardBinder / isWildcardBinder)	| .varArm _ n g b => (if n == "_" then [] else [s!"the pattern binder `{n}`"])
+Concrete/Check/Check.lean	3823	an extern declaration	message-text-as-key	an enum for the kind; the text is rendered from it	if kind == "an extern declaration" && otherKind == "an extern declaration" then (seen, errs)
+Concrete/Check/Check.lean	3823	an extern declaration	message-text-as-key	an enum for the kind; the text is rendered from it	if kind == "an extern declaration" && otherKind == "an extern declaration" then (seen, errs)
+Concrete/Check/Check.lean	4014	REF-1@1	message-text-as-key	an enum for the kind; the text is rendered from it	let msg := if rule == "REF-1@1"
+Concrete/Check/Check.lean	4464	main	reserved-name	one named definition per reserved spelling	if sibName == m.name || sibName == "main" then acc
+Concrete/Check/CheckError.lean	853	()	builtin-type-name	the builtin TypeId (Coherence already resolves .builtin ids) instead of the spelling	if thenTy == "()" || elseTy == "()" then
+Concrete/Check/CheckError.lean	853	()	builtin-type-name	the builtin TypeId (Coherence already resolves .builtin ids) instead of the spelling	if thenTy == "()" || elseTy == "()" then
+Concrete/Check/CheckHelpers.lean	1198	Vec	builtin-type-name	the builtin TypeId (Coherence already resolves .builtin ids) instead of the spelling	if n == "Vec" || n == "HashMap" || n == "HashSet" || n == "Heap" || n == "HeapArray" then
+Concrete/Check/CheckHelpers.lean	1198	HashMap	builtin-type-name	the builtin TypeId (Coherence already resolves .builtin ids) instead of the spelling	if n == "Vec" || n == "HashMap" || n == "HashSet" || n == "Heap" || n == "HeapArray" then
+Concrete/Check/CheckHelpers.lean	1198	HashSet	builtin-type-name	the builtin TypeId (Coherence already resolves .builtin ids) instead of the spelling	if n == "Vec" || n == "HashMap" || n == "HashSet" || n == "Heap" || n == "HeapArray" then
+Concrete/Check/CheckHelpers.lean	1198	Heap	capability-name	a capability identity type (CapSet still carries strings: owner of CapSet)	if n == "Vec" || n == "HashMap" || n == "HashSet" || n == "Heap" || n == "HeapArray" then
+Concrete/Check/CheckHelpers.lean	1198	HeapArray	capability-name	a capability identity type (CapSet still carries strings: owner of CapSet)	if n == "Vec" || n == "HashMap" || n == "HashSet" || n == "Heap" || n == "HeapArray" then
+Concrete/Check/CheckHelpers.lean	1254	Copy	builtin-trait-name	a builtin-trait identity (TypeId-style) instead of the spelling	if traitName == "Copy" then
+Concrete/Check/CheckHelpers.lean	1257	Destroy	builtin-trait-name	a builtin-trait identity (TypeId-style) instead of the spelling	else if traitName == "Destroy" then
+Concrete/Check/CheckHelpers.lean	1292	String	builtin-type-name	the builtin TypeId (Coherence already resolves .builtin ids) instead of the spelling	return env.traitImpls.any fun (ty, tr) => ty == "String" && tr == "Destroy"
+Concrete/Check/CheckHelpers.lean	1292	Destroy	builtin-trait-name	a builtin-trait identity (TypeId-style) instead of the spelling	return env.traitImpls.any fun (ty, tr) => ty == "String" && tr == "Destroy"
+Concrete/Check/Coherence.lean	219	Option	builtin-type-name	the builtin TypeId (Coherence already resolves .builtin ids) instead of the spelling	if n == "Option" then .decl { id := .builtin .option, arity := 1 } else
+Concrete/Check/Coherence.lean	220	Result	builtin-type-name	the builtin TypeId (Coherence already resolves .builtin ids) instead of the spelling	if n == "Result" then .decl { id := .builtin .result, arity := 2 } else
+Concrete/Check/Coherence.lean	229	Heap	capability-name	a capability identity type (CapSet still carries strings: owner of CapSet)	if n == "Heap" || n == "HeapArray" then .prim n 1 else .unresolved
+Concrete/Check/Coherence.lean	229	HeapArray	capability-name	a capability identity type (CapSet still carries strings: owner of CapSet)	if n == "Heap" || n == "HeapArray" then .prim n 1 else .unresolved
+Concrete/Check/CoreCheck.lean	723	read_owned	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	if helper == "read_owned" then
+Concrete/Check/ElabVerify.lean	98	_	sentinel-wildcard	one definition (wildcardBinder / isWildcardBinder)	if b.name != "_" then v ← introduce fn v b
+Concrete/Check/ElabVerify.lean	101	_	sentinel-wildcard	one definition (wildcardBinder / isWildcardBinder)	let v ← if b.name == "_" then pure vis else introduce fn vis b
+Concrete/Check/Policy.lean	92	true	boundary-parsing	legitimate: parsing a boolean spelling	go rest true { p with predictable := parseValue trimmed == "true" } warns
+Concrete/Check/Policy.lean	94	true	boundary-parsing	legitimate: parsing a boolean spelling	go rest true { p with requireProofs := parseValue trimmed == "true" } warns
+Concrete/Check/Policy.lean	96	true	boundary-parsing	legitimate: parsing a boolean spelling	go rest true { p with forbidAssume := parseValue trimmed == "true" } warns
+Concrete/Check/Policy.lean	102	true	boundary-parsing	legitimate: parsing a boolean spelling	go rest true { p with requireTwoKernels := parseValue trimmed == "true" } warns
+Concrete/Check/Verify.lean	253	post-elab	message-text-as-key	an enum for the kind; the text is rendered from it	code := if pass == "post-elab" then "E0600" else "E0601"
+Concrete/Elab/Elab.lean	592	_	sentinel-wildcard	one definition (wildcardBinder / isWildcardBinder)	if binding == "_" then return { name := binding }
+Concrete/Elab/Elab.lean	1150		sentinel-empty	Option in the type, where the empty string stands for absent	if enumName != "" then
+Concrete/Elab/Elab.lean	1195	_	sentinel-wildcard	one definition (wildcardBinder / isWildcardBinder)	({ owner := owner, field := fb.1.name }, fb.2 != "_")))
+Concrete/Elab/Elab.lean	1218	_	sentinel-wildcard	one definition (wildcardBinder / isWildcardBinder)	.arm (if binding == "_" then .wildcard else .binder) (cGuardEv.map (·.evidence)) (cBodyEv.map (·.evidence))) :: armsRev
+Concrete/Elab/Elab.lean	1257	_	sentinel-wildcard	one definition (wildcardBinder / isWildcardBinder)	.arm (if binding == "_" then .wildcard else .binder) (cGuardEv.map (·.evidence)) (cBodyEv.map (·.evidence))) :: armsRev
+Concrete/Elab/Elab.lean	1303	_	sentinel-wildcard	one definition (wildcardBinder / isWildcardBinder)	.arm (if binding == "_" then .wildcard else .binder) (cGuardEv.map (·.evidence)) (cBodyEv.map (·.evidence))) :: armsRev
+Concrete/Elab/Elab.lean	1460		sentinel-empty	Option in the type, where the empty string stands for absent	if typeName == "" then
+Concrete/Elab/Elab.lean	2030	print	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	if existingFn.isNone && (fnName == "print" || fnName == "println") then
+Concrete/Elab/Elab.lean	2030	println	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	if existingFn.isNone && (fnName == "print" || fnName == "println") then
+Concrete/Elab/Elab.lean	2051	println	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	if fnName == "println" then
+Concrete/Elab/Elab.lean	2058	append	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	else if existingFn.isNone && fnName == "append" then
+Concrete/Elab/Elab.lean	2775	main	reserved-name	one named definition per reserved spelling	else if imp.moduleName == m.name || imp.moduleName == "main" then none
+Concrete/Elab/Elab.lean	2981		sentinel-empty	Option in the type, where the empty string stands for absent	if tn != "" then tn ++ "_" ++ f.name else f.name
+Concrete/Elab/Elab.lean	3008		sentinel-empty	Option in the type, where the empty string stands for absent	if tn != "" then tn ++ "_" ++ f.name else f.name
+Concrete/Elab/Elab.lean	3207		sentinel-empty	Option in the type, where the empty string stands for absent	| some it => let tn := tyName it; if tn != "" then tn ++ "_" ++ f.name else f.name
+Concrete/Elab/Elab.lean	3243		sentinel-empty	Option in the type, where the empty string stands for absent	if tn != "" then tn ++ "_" ++ f.name else f.name
+Concrete/Elab/Elab.lean	3249		sentinel-empty	Option in the type, where the empty string stands for absent	if tn != "" then some tn else none
+Concrete/Elab/Elab.lean	3845	self	reserved-name	one named definition per reserved spelling	if p.name == "self" then
+Concrete/Elab/Elab.lean	4494	main	reserved-name	one named definition per reserved spelling	if sibName == m.name || sibName == "main" then acc
+Concrete/Elab/Elab.lean	4501	main	reserved-name	one named definition per reserved spelling	if sibName == m.name || sibName == "main" then acc
+Concrete/Elab/TypeSpelling.lean	9	P	other	review	`structDefs.find? (·.name == "P")`. Two modules that each declared `struct P`
+Concrete/Frontend/Format.lean	319	self	reserved-name	one named definition per reserved spelling	if p.name == "self" then
+Concrete/Frontend/Format.lean	518	main	reserved-name	one named definition per reserved spelling	if m.name == "main" then
+Concrete/Frontend/Parser.lean	626	Alloc	capability-name	a capability identity type (CapSet still carries strings: owner of CapSet)	if allocName != "Alloc" then
+Concrete/Frontend/Parser.lean	666	Alloc	capability-name	a capability identity type (CapSet still carries strings: owner of CapSet)	if allocName != "Alloc" then
+Concrete/Frontend/Parser.lean	1102	invariant	attribute-name	parse attributes once into a typed attribute record	if key == "invariant" then invs := invs ++ [e]
+Concrete/Frontend/Parser.lean	1103	variant	attribute-name	parse attributes once into a typed attribute record	else if key == "variant" then varE := some e
+Concrete/Frontend/Parser.lean	1781	ensures	attribute-name	parse attributes once into a typed attribute record	if tk == .lparen && (key == "ensures" || key == "requires" || key == "invariant" || key == "variant") then
+Concrete/Frontend/Parser.lean	1781	requires	attribute-name	parse attributes once into a typed attribute record	if tk == .lparen && (key == "ensures" || key == "requires" || key == "invariant" || key == "variant") then
+Concrete/Frontend/Parser.lean	1781	invariant	attribute-name	parse attributes once into a typed attribute record	if tk == .lparen && (key == "ensures" || key == "requires" || key == "invariant" || key == "variant") then
+Concrete/Frontend/Parser.lean	1781	variant	attribute-name	parse attributes once into a typed attribute record	if tk == .lparen && (key == "ensures" || key == "requires" || key == "invariant" || key == "variant") then
+Concrete/Frontend/Parser.lean	1800	repr	attribute-name	parse attributes once into a typed attribute record	else if tk == .lparen && key == "repr" then
+Concrete/Frontend/Parser.lean	1807	C	attribute-name	parse attributes once into a typed attribute record	if arg == "C" then
+Concrete/Frontend/Parser.lean	1809	packed	attribute-name	parse attributes once into a typed attribute record	else if arg == "packed" then
+Concrete/Frontend/Parser.lean	1811	align	attribute-name	parse attributes once into a typed attribute record	else if arg == "align" then
+Concrete/Frontend/Parser.lean	1830	spec	attribute-name	parse attributes once into a typed attribute record	else if tk == .lparen && (key == "spec" || key == "proof_by"
+Concrete/Frontend/Parser.lean	1830	proof_by	attribute-name	parse attributes once into a typed attribute record	else if tk == .lparen && (key == "spec" || key == "proof_by"
+Concrete/Frontend/Parser.lean	1831	ensures_proof	attribute-name	parse attributes once into a typed attribute record	|| key == "ensures_proof" || key == "proof_coverage") then
+Concrete/Frontend/Parser.lean	1831	proof_coverage	attribute-name	parse attributes once into a typed attribute record	|| key == "ensures_proof" || key == "proof_coverage") then
+Concrete/Frontend/Parser.lean	1846	proof_fingerprint	attribute-name	parse attributes once into a typed attribute record	else if tk == .lparen && key == "proof_fingerprint" then
+Concrete/Frontend/Parser.lean	1953	spec	attribute-name	parse attributes once into a typed attribute record	if key == "spec" then mSpec := attrVal
+Concrete/Frontend/Parser.lean	1954	proof_by	attribute-name	parse attributes once into a typed attribute record	else if key == "proof_by" then mProofBy := attrVal
+Concrete/Frontend/Parser.lean	1955	proof_coverage	attribute-name	parse attributes once into a typed attribute record	else if key == "proof_coverage" then mCoverage := attrVal
+Concrete/Frontend/Parser.lean	1956	proof_fingerprint	attribute-name	parse attributes once into a typed attribute record	else if key == "proof_fingerprint" then mFingerprint := attrVal
+Concrete/Frontend/Parser.lean	2402	repr	attribute-name	parse attributes once into a typed attribute record	if key == "repr" then
+Concrete/Frontend/Parser.lean	2404	test	attribute-name	parse attributes once into a typed attribute record	if key == "test" then
+Concrete/Frontend/Parser.lean	2406	overflow_checked	report-vocabulary	typed status / verdict enums; after the report split lands	if key == "overflow_checked" then pendingOverflow := true
+Concrete/Frontend/Parser.lean	2407	intrinsic	attribute-name	parse attributes once into a typed attribute record	if key == "intrinsic" then pendingIntrinsic := attrVal
+Concrete/Frontend/Parser.lean	2408	link_name	attribute-name	parse attributes once into a typed attribute record	if key == "link_name" then
+Concrete/Frontend/Parser.lean	2412	export_name	attribute-name	parse attributes once into a typed attribute record	if key == "export_name" then
+Concrete/Frontend/Parser.lean	2416	spec	attribute-name	parse attributes once into a typed attribute record	if key == "spec" then
+Concrete/Frontend/Parser.lean	2419	proof_by	attribute-name	parse attributes once into a typed attribute record	if key == "proof_by" then
+Concrete/Frontend/Parser.lean	2422	ensures_proof	attribute-name	parse attributes once into a typed attribute record	if key == "ensures_proof" then
+Concrete/Frontend/Parser.lean	2425	proof_coverage	attribute-name	parse attributes once into a typed attribute record	if key == "proof_coverage" then
+Concrete/Frontend/Parser.lean	2428	proof_fingerprint	attribute-name	parse attributes once into a typed attribute record	if key == "proof_fingerprint" then
+Concrete/Frontend/Parser.lean	2432	requires	attribute-name	parse attributes once into a typed attribute record	| some e => if key == "requires" then pendingRequires := pendingRequires ++ [e]
+Concrete/Frontend/Parser.lean	2474	repr	attribute-name	parse attributes once into a typed attribute record	if key == "repr" then
+Concrete/Frontend/Parser.lean	2476	test	attribute-name	parse attributes once into a typed attribute record	if key == "test" then
+Concrete/Frontend/Parser.lean	2478	overflow_checked	report-vocabulary	typed status / verdict enums; after the report split lands	if key == "overflow_checked" then pendingOverflow := true
+Concrete/Frontend/Parser.lean	2479	intrinsic	attribute-name	parse attributes once into a typed attribute record	if key == "intrinsic" then pendingIntrinsic := attrVal
+Concrete/Frontend/Parser.lean	2480	link_name	attribute-name	parse attributes once into a typed attribute record	if key == "link_name" then
+Concrete/Frontend/Parser.lean	2484	export_name	attribute-name	parse attributes once into a typed attribute record	if key == "export_name" then
+Concrete/Frontend/Parser.lean	2488	spec	attribute-name	parse attributes once into a typed attribute record	if key == "spec" then
+Concrete/Frontend/Parser.lean	2491	proof_by	attribute-name	parse attributes once into a typed attribute record	if key == "proof_by" then
+Concrete/Frontend/Parser.lean	2494	ensures_proof	attribute-name	parse attributes once into a typed attribute record	if key == "ensures_proof" then
+Concrete/Frontend/Parser.lean	2497	proof_coverage	attribute-name	parse attributes once into a typed attribute record	if key == "proof_coverage" then
+Concrete/Frontend/Parser.lean	2500	proof_fingerprint	attribute-name	parse attributes once into a typed attribute record	if key == "proof_fingerprint" then
+Concrete/Frontend/Parser.lean	2504	requires	attribute-name	parse attributes once into a typed attribute record	| some e => if key == "requires" then pendingRequires := pendingRequires ++ [e]
+Concrete/IR/Lower.lean	1528	_	sentinel-wildcard	one definition (wildcardBinder / isWildcardBinder)	if bname.name != "_" then
+Concrete/IR/Lower.lean	1556	_	sentinel-wildcard	one definition (wildcardBinder / isWildcardBinder)	if binding.name != "_" then setVar binding.key scrVal
+Concrete/IR/Lower.lean	1671	_	sentinel-wildcard	one definition (wildcardBinder / isWildcardBinder)	if binding.name != "_" then setVar binding.key (if binderIsBorrow _bindTy then scrRef else scrVal)
+Concrete/IR/Lower.lean	2735		sentinel-empty	Option in the type, where the empty string stands for absent	let target := if info.continueTarget != "" then info.continueTarget else info.headerLabel
+Concrete/IR/Lower.lean	2948	String	builtin-type-name	the builtin TypeId (Coherence already resolves .builtin ids) instead of the spelling	!(ownStructNames.contains sd.name) && sd.name != "String"))
+Concrete/IR/Mono.lean	146		sentinel-empty	Option in the type, where the empty string stands for absent	-- A nameless concrete type (`concreteName == ""`, e.g. an array) keeps any other `T$m`:
+Concrete/IR/SSAVerify.lean	496	Vec	builtin-type-name	the builtin TypeId (Coherence already resolves .builtin ids) instead of the spelling	name != "Vec" && name != "HashMap" && name != "HashSet" &&
+Concrete/IR/SSAVerify.lean	496	HashMap	builtin-type-name	the builtin TypeId (Coherence already resolves .builtin ids) instead of the spelling	name != "Vec" && name != "HashMap" && name != "HashSet" &&
+Concrete/IR/SSAVerify.lean	496	HashSet	builtin-type-name	the builtin TypeId (Coherence already resolves .builtin ids) instead of the spelling	name != "Vec" && name != "HashMap" && name != "HashSet" &&
+Concrete/IR/SSAVerify.lean	497	Heap	capability-name	a capability identity type (CapSet still carries strings: owner of CapSet)	name != "Heap" && name != "HeapArray"
+Concrete/IR/SSAVerify.lean	497	HeapArray	capability-name	a capability identity type (CapSet still carries strings: owner of CapSet)	name != "Heap" && name != "HeapArray"
+Concrete/Interp/Interp.lean	893	ptr	builtin-layout-field	named field constants of the builtin Vec/String layout	match fields.find? (·.1 == "ptr"), fields.find? (·.1 == "len"), fields.find? (·.1 == "cap") with
+Concrete/Interp/Interp.lean	893	len	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	match fields.find? (·.1 == "ptr"), fields.find? (·.1 == "len"), fields.find? (·.1 == "cap") with
+Concrete/Interp/Interp.lean	893	cap	builtin-layout-field	named field constants of the builtin Vec/String layout	match fields.find? (·.1 == "ptr"), fields.find? (·.1 == "len"), fields.find? (·.1 == "cap") with
+Concrete/Interp/Interp.lean	1784	abs	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	|| (name == "abs" && what == "the argument") then 4 else 8
+Concrete/Interp/Interp.lean	1784	the argument	message-text-as-key	an enum for the kind; the text is rendered from it	|| (name == "abs" && what == "the argument") then 4 else 8
+Concrete/Interp/Interp.lean	1939	r	boundary-parsing	legitimate: parsing a boolean spelling	if mode != "r" && (hostReadFile rawPath matches .bytes _) && hostMultiLinked path then
+Concrete/Interp/Interp.lean	1951	r	boundary-parsing	legitimate: parsing a boolean spelling	if st.handles.any (fun (_, h) => h.path == path && (h.writable || mode != "r")) then
+Concrete/Interp/Interp.lean	1972	r	boundary-parsing	legitimate: parsing a boolean spelling	| .directory => if mode == "r" then fail s!"interp: fopen of the directory '{path}' for reading is not modelled" else pure none
+Concrete/Interp/Interp.lean	1995	fread	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	if name == "fread" then
+Concrete/Interp/Interp.lean	2081	abs	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	let ty : Ty := if name == "abs" then .i32 else .int
+Concrete/Interp/Interp.lean	2084	abs	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	if v == (if name == "abs" then -(2 ^ 31 : Int) else -(2 ^ 63 : Int)) then
+Concrete/Interp/Interp.lean	2543	clock_monotonic_ns	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	if fnName == "clock_monotonic_ns" then
+Concrete/Interp/Interp.lean	2565	ptr	builtin-layout-field	named field constants of the builtin Vec/String layout	if f == "ptr" then (f, .ptr blk 0) else if f == "cap" then (f, .int newCap .uint) else (f, v))
+Concrete/Interp/Interp.lean	2565	cap	builtin-layout-field	named field constants of the builtin Vec/String layout	if f == "ptr" then (f, .ptr blk 0) else if f == "cap" then (f, .int newCap .uint) else (f, v))
+Concrete/Interp/Interp.lean	2582	len	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	| .struct_ n fs => .struct_ n (fs.map fun (f, v) => if f == "len" then (f, .int needed .uint) else (f, v))
+Concrete/Interp/Interp.lean	3199	_	sentinel-wildcard	one definition (wildcardBinder / isWildcardBinder)	let armEnv := if binding.name == "_" then env else envBind env binding.key bound
+Concrete/Interp/Interp.lean	3636	main	reserved-name	one named definition per reserved spelling	match cx.defs.find? (fun (f, _) => f.name == "main") with
+Concrete/Pipeline/PipelineTest.lean	398	y	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	| s@(.letDecl b m ty _) => if b.name == "y" then .letDecl b m ty wide else s
+Concrete/Pipeline/PipelineTest.lean	401	y	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	| s@(.assign b _) => if b.name == "y" then .assign b wide else s
+Concrete/Pipeline/PipelineTest.lean	405	t	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if b.name == "t" then .letDecl b m ty (.call c tas [wide] rt) else s
+Concrete/Pipeline/PipelineTest.lean	409	p	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if b.name == "p" then .letDecl b m ty (.structLit n tas [(fname, wide)] st) else s
+Concrete/Pipeline/PipelineTest.lean	412	r	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	| s@(.return_ (some (.ident r _)) rt) => if r.name == "r" then .return_ (some wide) rt else s
+Concrete/Pipeline/PipelineTest.lean	416	w	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if b.name == "w" then .letDecl b m ty (.ifExpr c ((t.dropLast) ++ [.expr wide true]) e it) else s
+Concrete/Pipeline/PipelineTest.lean	420	arr	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if b.name == "arr" then .letDecl b m ty (.arrayLit [e0, wide] at_) else s
+Concrete/Pipeline/PipelineTest.lean	426	f	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if b.name == "f" then .letDecl b m ty (.fnRef "loud" (.fn_ [] (.concrete ["Console"]) .int)) else s
+Concrete/Proof/BodyIdentity.lean	191	LoopStep	builtin-trait-name	a builtin-trait identity (TypeId-style) instead of the spelling	private def isLoopCarriedLabel (en v : String) : Bool := en == "LoopStep" && v == "Cont"
+Concrete/Proof/BodyIdentity.lean	191	Cont	report-vocabulary	typed status / verdict enums; after the report split lands	private def isLoopCarriedLabel (en v : String) : Bool := en == "LoopStep" && v == "Cont"
+Concrete/Proof/DefinitionIdentity.lean	228	resolver:bundled-std	report-vocabulary	typed status / verdict enums; after the report split lands	if requester == "resolver:bundled-std" then .ok (PackageScopeIdentity.mk (.toolchain "std") "std")
+Concrete/Proof/DependencyEdge.lean	403	sourceBodyDigestV1	report-vocabulary	typed status / verdict enums; after the report split lands	if stored.schema != "sourceBodyDigestV1" then
+Concrete/Proof/DependencyEdge.lean	405	body_only	report-vocabulary	typed status / verdict enums; after the report split lands	else if stored.scope != "body_only" then
+Concrete/Proof/Digest.lean	39	ba7816bf8f01cfea414140de5dae2223	report-vocabulary	typed status / verdict enums; after the report split lands	#guard shortHash "abc" == "ba7816bf8f01cfea414140de5dae2223"
+Concrete/Proof/Issue.lean	502	stale	report-vocabulary	typed status / verdict enums; after the report split lands	else if status == "stale" then .staleNoHonestValue
+Concrete/Proof/ObligationCore.lean	192	proved_by_lean	report-vocabulary	typed status / verdict enums; after the report split lands	-- filtering `status == "proved_by_lean"` would otherwise count it as
+Concrete/Proof/ObligationCore.lean	266	vacuity	report-vocabulary	typed status / verdict enums; after the report split lands	o.kind == "vacuity" && o.status == "proved_by_kernel_decision"
+Concrete/Proof/ObligationCore.lean	266	proved_by_kernel_decision	report-vocabulary	typed status / verdict enums; after the report split lands	o.kind == "vacuity" && o.status == "proved_by_kernel_decision"
+Concrete/Proof/ObligationCore.lean	272	assume	attribute-name	parse attributes once into a typed attribute record	(obs.filter (·.kind == "assume")).map (·.fn) |>.eraseDups
+Concrete/Proof/ObligationCore.lean	278	solver_trusted	report-vocabulary	typed status / verdict enums; after the report split lands	(obs.filter (·.status == "solver_trusted")).map (·.id) |>.eraseDups
+Concrete/Proof/Proof.lean	1396	_	sentinel-wildcard	one definition (wildcardBinder / isWildcardBinder)	if binding == "_" then some env else some (env.bind binding sv)
+Concrete/Proof/ProofCore.lean	228		sentinel-empty	Option in the type, where the empty string stands for absent	let qualPrefix := if pfx == "" then m.name else pfx ++ "." ++ m.name
+Concrete/Proof/ProofCore.lean	240		sentinel-empty	Option in the type, where the empty string stands for absent	let qualPrefix := if pfx == "" then m.name else pfx ++ "." ++ m.name
+Concrete/Proof/ProofCore.lean	334		sentinel-empty	Option in the type, where the empty string stands for absent	let qualPrefix := if pfx == "" then m.name else pfx ++ "." ++ m.name
+Concrete/Proof/ProofCore.lean	848	LoopStep	builtin-trait-name	a builtin-trait identity (TypeId-style) instead of the spelling	| .enumLit en _ fs => (en == "LoopStep" && fs.any (·.1 == n)) || fs.any (pexprMentions n ·.2)
+Concrete/Proof/ProofCore.lean	3279	none	report-vocabulary	typed status / verdict enums; after the report split lands	(if rec_ != "none" && rec_ != "unclassified" then [s!"recursion ({rec_})"] else []) ++
+Concrete/Proof/ProofCore.lean	3279	unclassified	report-vocabulary	typed status / verdict enums; after the report split lands	(if rec_ != "none" && rec_ != "unclassified" then [s!"recursion ({rec_})"] else []) ++
+Concrete/Proof/ProofCore.lean	3280	unbounded	report-vocabulary	typed status / verdict enums; after the report split lands	(if loopClass == "unbounded" || loopClass == "mixed" then ["unbounded loops"] else []) ++
+Concrete/Proof/ProofCore.lean	3280	mixed	report-vocabulary	typed status / verdict enums; after the report split lands	(if loopClass == "unbounded" || loopClass == "mixed" then ["unbounded loops"] else []) ++
+Concrete/Proof/ProofCore.lean	3281	Alloc	capability-name	a capability identity type (CapSet still carries strings: owner of CapSet)	(if !allocs.isEmpty || concreteCaps.any (· == "Alloc") then ["allocation"] else []) ++
+Concrete/Proof/ProofCore.lean	3284	File	capability-name	a capability identity type (CapSet still carries strings: owner of CapSet)	(if concreteCaps.any fun c => c == "File" || c == "Network" || c == "Process"
+Concrete/Proof/ProofCore.lean	3284	Network	capability-name	a capability identity type (CapSet still carries strings: owner of CapSet)	(if concreteCaps.any fun c => c == "File" || c == "Network" || c == "Process"
+Concrete/Proof/ProofCore.lean	3284	Process	capability-name	a capability identity type (CapSet still carries strings: owner of CapSet)	(if concreteCaps.any fun c => c == "File" || c == "Network" || c == "Process"
+Concrete/Proof/ProofCore.lean	3308		sentinel-empty	Option in the type, where the empty string stands for absent	let qualPrefix := if modulePath == "" then m.name else modulePath ++ "." ++ m.name
+Concrete/Proof/Receipt.lean	453	table	report-vocabulary	typed status / verdict enums; after the report split lands	if key == "table" then
+Concrete/Proof/Receipt.lean	457	boundary	report-vocabulary	typed status / verdict enums; after the report split lands	else if key == "boundary" then
+Concrete/Proof/Receipt.lean	483	true	report-vocabulary	typed status / verdict enums; after the report split lands	if trustTag == "true" then pure true
+Concrete/Proof/Receipt.lean	484	false	report-vocabulary	typed status / verdict enums; after the report split lands	else if trustTag == "false" then pure false
+Concrete/Proof/Replay.lean	806	rechecked	report-vocabulary	typed status / verdict enums; after the report split lands	(t, if rest == "rechecked" then .rechecked
+Concrete/Proof/Replay.lean	807	native	report-vocabulary	typed status / verdict enums; after the report split lands	else if rest == "native" then .native
+Concrete/Proof/Replay.lean	808	unknown	report-vocabulary	typed status / verdict enums; after the report split lands	else if rest == "unknown" then .failed "the theorem is not in the replayed environment"
+Concrete/Proof/SubjectFacts.lean	181	result	report-vocabulary	typed status / verdict enums; after the report split lands	if allowResult && n == "result" then some "q:result"
+Concrete/Report/AssumptionSummary.lean	613	std	reserved-name	one named definition per reserved spelling	if f.id.kind != .foreignBinding || f.id.packageName != "std" then .unaudited
+Concrete/Report/AssumptionSummary.lean	816	p1/src/lib.con	report-vocabulary	typed status / verdict enums; after the report split lands	if f == "p1/src/lib.con" then some ("pkgA", "p1")
+Concrete/Report/AssumptionSummary.lean	817	p2/src/lib.con	report-vocabulary	typed status / verdict enums; after the report split lands	else if f == "p2/src/lib.con" then some ("pkgB", "p2") else none)
+Concrete/Report/AssumptionSummary.lean	820	util.putchar	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	f.id.kind == .foreignBinding && f.id.qualified == "util.putchar").length == 2
+Concrete/Report/AssumptionSummary.lean	821	util.putchar	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	#guard ((packageScopeProbe.facts.toList.filter fun (_, f) => f.id.qualified == "util.putchar").map
+Concrete/Report/Diagnostic.lean	174	rule	report-vocabulary	typed status / verdict enums; after the report split lands	if d.evidence.any (·.1 == "rule") then d.evidence else d.evidence ++ codeRuleEvidence d.code
+Concrete/Report/Diff.lean	103	true	report-vocabulary	typed status / verdict enums; after the report split lands	| "effects", "no_external_authority" => oldV == "true" && newV == "false"
+Concrete/Report/Diff.lean	103	false	report-vocabulary	typed status / verdict enums; after the report split lands	| "effects", "no_external_authority" => oldV == "true" && newV == "false"
+Concrete/Report/Diff.lean	104	false	report-vocabulary	typed status / verdict enums; after the report split lands	| "effects", "is_trusted" => oldV == "false" && newV == "true"
+Concrete/Report/Diff.lean	104	true	report-vocabulary	typed status / verdict enums; after the report split lands	| "effects", "is_trusted" => oldV == "false" && newV == "true"
+Concrete/Report/Diff.lean	105	false	report-vocabulary	typed status / verdict enums; after the report split lands	| "effects", "crosses_ffi" => oldV == "false" && newV == "true"
+Concrete/Report/Diff.lean	105	true	report-vocabulary	typed status / verdict enums; after the report split lands	| "effects", "crosses_ffi" => oldV == "false" && newV == "true"
+Concrete/Report/Diff.lean	106	true	report-vocabulary	typed status / verdict enums; after the report split lands	| "capability", "no_external_authority" => oldV == "true" && newV == "false"
+Concrete/Report/Diff.lean	106	false	report-vocabulary	typed status / verdict enums; after the report split lands	| "capability", "no_external_authority" => oldV == "true" && newV == "false"
+Concrete/Report/Diff.lean	107	false	report-vocabulary	typed status / verdict enums; after the report split lands	| "alloc", "potential_leak" => oldV == "false" && newV == "true"
+Concrete/Report/Diff.lean	107	true	report-vocabulary	typed status / verdict enums; after the report split lands	| "alloc", "potential_leak" => oldV == "false" && newV == "true"
+Concrete/Report/Diff.lean	282	weakened	report-vocabulary	typed status / verdict enums; after the report split lands	let weakened := entries.filter (·.drift == "weakened")
+Concrete/Report/Diff.lean	283	strengthened	report-vocabulary	typed status / verdict enums; after the report split lands	let strengthened := entries.filter (·.drift == "strengthened")
+Concrete/Report/Diff.lean	284	neutral	report-vocabulary	typed status / verdict enums; after the report split lands	let neutral := entries.filter (·.drift == "neutral")
+Concrete/Report/Diff.lean	331	schema_version	report-vocabulary	typed status / verdict enums; after the report split lands	match kvs.find? (fun (k, _) => k == "schema_version") with
+Concrete/Report/Diff.lean	343	facts	report-vocabulary	typed status / verdict enums; after the report split lands	match kvs.find? (fun (k, _) => k == "facts") with
+Concrete/Report/Report.lean	234	dependency	report-vocabulary	typed status / verdict enums; after the report split lands	(modules.foldl (fun acc m => acc ++ allLinkerAliases m) [])).filter (·.kind == "dependency")
+Concrete/Report/Report.lean	312		sentinel-empty	Option in the type, where the empty string stands for absent	let qualPrefix := if pfx == "" then m.name else pfx ++ "." ++ m.name
+Concrete/Report/Report.lean	429		sentinel-empty	Option in the type, where the empty string stands for absent	let qualPrefix := if modulePath == "" then m.name else modulePath ++ "." ++ m.name
+Concrete/Report/Report.lean	456	none	report-vocabulary	typed status / verdict enums; after the report split lands	let hasRecursion := rec_ != "none" || hasIndirect || recUncertain.contains qualName
+Concrete/Report/Report.lean	457	unbounded	report-vocabulary	typed status / verdict enums; after the report split lands	let hasUnboundedLoops := loopClass == "unbounded" || loopClass == "mixed"
+Concrete/Report/Report.lean	457	mixed	report-vocabulary	typed status / verdict enums; after the report split lands	let hasUnboundedLoops := loopClass == "unbounded" || loopClass == "mixed"
+Concrete/Report/Report.lean	458	Alloc	capability-name	a capability identity type (CapSet still carries strings: owner of CapSet)	let hasAllocEvidence := !allocs.isEmpty || concreteCaps.any (· == "Alloc")
+Concrete/Report/Report.lean	461	File	capability-name	a capability identity type (CapSet still carries strings: owner of CapSet)	c == "File" || c == "Network" || c == "Process"
+Concrete/Report/Report.lean	461	Network	capability-name	a capability identity type (CapSet still carries strings: owner of CapSet)	c == "File" || c == "Network" || c == "Process"
+Concrete/Report/Report.lean	461	Process	capability-name	a capability identity type (CapSet still carries strings: owner of CapSet)	c == "File" || c == "Network" || c == "Process"
+Concrete/Report/Report.lean	523	none	report-vocabulary	typed status / verdict enums; after the report split lands	let recursive := (allEffects.filter fun e => e.recursion != "none").length
+Concrete/Report/Report.lean	524	unbounded	report-vocabulary	typed status / verdict enums; after the report split lands	let unboundedLoops := (allEffects.filter fun e => e.loops == "unbounded" || e.loops == "mixed").length
+Concrete/Report/Report.lean	524	mixed	report-vocabulary	typed status / verdict enums; after the report split lands	let unboundedLoops := (allEffects.filter fun e => e.loops == "unbounded" || e.loops == "mixed").length
+Concrete/Report/Report.lean	527	proved	report-vocabulary	typed status / verdict enums; after the report split lands	let proved := (allEffects.filter fun e => e.evidence == "proved").length
+Concrete/Report/Report.lean	529	trusted-assumption	report-vocabulary	typed status / verdict enums; after the report split lands	let trustedAssumption := (allEffects.filter fun e => e.evidence == "trusted-assumption").length
+Concrete/Report/Report.lean	530	reported	report-vocabulary	typed status / verdict enums; after the report split lands	let reported := (allEffects.filter fun e => e.evidence == "reported").length
+Concrete/Report/Report.lean	677		sentinel-empty	Option in the type, where the empty string stands for absent	let qualPrefix := if pfx == "" then m.name else pfx ++ "." ++ m.name
+Concrete/Report/Report.lean	826		sentinel-empty	Option in the type, where the empty string stands for absent	let qualPrefix := if modulePath == "" then m.name else modulePath ++ "." ++ m.name
+Concrete/Report/Report.lean	834		sentinel-empty	Option in the type, where the empty string stands for absent	sp.bind fun s => if fileStr == "" then none else some (fileStr, s.line)
+Concrete/Report/Report.lean	879	unbounded	report-vocabulary	typed status / verdict enums; after the report split lands	if loopClass == "unbounded" then
+Concrete/Report/Report.lean	883	mixed	report-vocabulary	typed status / verdict enums; after the report split lands	else if loopClass == "mixed" then
+Concrete/Report/Report.lean	892	Alloc	capability-name	a capability identity type (CapSet still carries strings: owner of CapSet)	let hasAllocCap := fnCaps.any (· == "Alloc")
+Concrete/Report/Report.lean	1140		sentinel-empty	Option in the type, where the empty string stands for absent	let qualPrefix := if modulePath == "" then m.name else modulePath ++ "." ++ m.name
+Concrete/Report/Report.lean	1178	hardcoded	report-vocabulary	typed status / verdict enums; after the report split lands	| none => if pSrc == "hardcoded" then "hardcoded" else ""
+Concrete/Report/Report.lean	1339	none	report-vocabulary	typed status / verdict enums; after the report split lands	if e.proofSource == "none" && e.proofName.isEmpty then
+Concrete/Report/Report.lean	1549	proved	report-vocabulary	typed status / verdict enums; after the report split lands	let proved := (entries.filter fun e => e.status == "proved").length
+Concrete/Report/Report.lean	1550	stale	report-vocabulary	typed status / verdict enums; after the report split lands	let stale := (entries.filter fun e => e.status == "stale").length
+Concrete/Report/Report.lean	1551	missing	report-vocabulary	typed status / verdict enums; after the report split lands	let missing := (entries.filter fun e => e.status == "missing").length
+Concrete/Report/Report.lean	1552	blocked	report-vocabulary	typed status / verdict enums; after the report split lands	let blockedCnt := (entries.filter fun e => e.status == "blocked").length
+Concrete/Report/Report.lean	1553	ineligible	report-vocabulary	typed status / verdict enums; after the report split lands	let inelig := (entries.filter fun e => e.status == "ineligible").length
+Concrete/Report/Report.lean	1554	trusted	attribute-name	parse attributes once into a typed attribute record	let trusted := (entries.filter fun e => e.status == "trusted").length
+Concrete/Report/Report.lean	2559	NONE	report-vocabulary	typed status / verdict enums; after the report split lands	if owner == "NONE" then "unowned"
+Concrete/Report/Report.lean	2561	NO-SUBJECT	report-vocabulary	typed status / verdict enums; after the report split lands	else if curV2 == "NO-SUBJECT" then "no_subject"
+Concrete/Report/Report.lean	2563	NONE	report-vocabulary	typed status / verdict enums; after the report split lands	(s!"{re.function} | owner={owner} | stored={storedV1} | spec={re.spec} | scope={re.coverage} | current={curV2} | {disp}", owner != "NONE")
+Concrete/Report/Report.lean	3086	closed	report-vocabulary	typed status / verdict enums; after the report split lands	r.verdict == "closed" && r.loweringAgreed
+Concrete/Report/Report.lean	3112	lean	report-vocabulary	typed status / verdict enums; after the report split lands	if attest.any (fun k => k != "lean") then "yes" else "no (lean only)"
+Concrete/Report/Report.lean	3394	O2	report-vocabulary	typed status / verdict enums; after the report split lands	let (profile, mode) := if oid == "O2" then ("operational", "lean") else ("linear", "omega")
+Concrete/Report/Report.lean	3395	O2	report-vocabulary	typed status / verdict enums; after the report split lands	let deps := if oid == "O2" then invDep else []
+Concrete/Report/Report.lean	3485	counterexample	report-vocabulary	typed status / verdict enums; after the report split lands	counterexample := if cls == "counterexample" then model else v.counterexample,
+Concrete/Report/Report.lean	3502	planned	report-vocabulary	typed status / verdict enums; after the report split lands	actsOn := (· == "planned"),
+Concrete/Report/Report.lean	3504	loop_invariant_preservation	report-vocabulary	typed status / verdict enums; after the report split lands	if kind == "loop_invariant_preservation" then "arithmetic_proved"
+Concrete/Report/Report.lean	3511	planned	report-vocabulary	typed status / verdict enums; after the report split lands	actsOn := (· == "planned"), finalize := fun _ _ => "proved_by_kernel_decision" }
+Concrete/Report/Report.lean	3519	unproven	report-vocabulary	typed status / verdict enums; after the report split lands	actsOn := (· == "unproven"), finalize := fun _ raw => raw, setsSolver := true }
+Concrete/Report/Report.lean	3525	solver_trusted	report-vocabulary	typed status / verdict enums; after the report split lands	actsOn := (· == "solver_trusted"), finalize := fun _ _ => "proved_by_lean_replay" }
+Concrete/Report/Report.lean	3533	planned	report-vocabulary	typed status / verdict enums; after the report split lands	actsOn := (· == "planned"), finalize := fun _ raw => raw }
+Concrete/Report/Report.lean	3538	planned	report-vocabulary	typed status / verdict enums; after the report split lands	actsOn := (· == "planned"), finalize := fun _ raw => raw }
+Concrete/Report/Report.lean	3544	planned	report-vocabulary	typed status / verdict enums; after the report split lands	actsOn := (· == "planned"), finalize := fun _ _ => "tested_by_oracle" }
+Concrete/Report/Report.lean	3550	planned	report-vocabulary	typed status / verdict enums; after the report split lands	actsOn := (· == "planned"), finalize := fun _ raw => raw }
+Concrete/Report/Report.lean	3573	proved_by_kernel_decision	report-vocabulary	typed status / verdict enums; after the report split lands	actsOn := fun s => s == "proved_by_kernel_decision" || s == "proved_by_lean"
+Concrete/Report/Report.lean	3573	proved_by_lean	report-vocabulary	typed status / verdict enums; after the report split lands	actsOn := fun s => s == "proved_by_kernel_decision" || s == "proved_by_lean"
+Concrete/Report/Report.lean	3574	proved_by_lean_replay	report-vocabulary	typed status / verdict enums; after the report split lands	|| s == "proved_by_lean_replay",
+Concrete/Report/Report.lean	3654	multi-kernel	report-vocabulary	typed status / verdict enums; after the report split lands	a.engine == "multi-kernel" || a.allowed.all (fun c =>
+Concrete/Report/Report.lean	3655	proved_by_two_kernels	report-vocabulary	typed status / verdict enums; after the report split lands	c != "proved_by_two_kernels" && c != "proved_by_multi_kernel")) = true := rfl
+Concrete/Report/Report.lean	3655	proved_by_multi_kernel	report-vocabulary	typed status / verdict enums; after the report split lands	c != "proved_by_two_kernels" && c != "proved_by_multi_kernel")) = true := rfl
+Concrete/Report/Report.lean	3680	k	report-vocabulary	typed status / verdict enums; after the report split lands	example : (([("k", KernelCell.refused), ("k", KernelCell.closed)].find? (·.1 == "k")).map (·.2))
+Concrete/Report/Report.lean	3703	planned	report-vocabulary	typed status / verdict enums; after the report split lands	afterBv.map fun v => if v.status == "planned" then { v with status := "unproven" } else v
+Concrete/Report/Report.lean	3769	proved_by_kernel_decision	report-vocabulary	typed status / verdict enums; after the report split lands	if v.status == "proved_by_kernel_decision" || v.status == "proved_by_lean"
+Concrete/Report/Report.lean	3769	proved_by_lean	report-vocabulary	typed status / verdict enums; after the report split lands	if v.status == "proved_by_kernel_decision" || v.status == "proved_by_lean"
+Concrete/Report/Report.lean	3770	proved_by_lean_replay	report-vocabulary	typed status / verdict enums; after the report split lands	|| v.status == "proved_by_lean_replay" then
+Concrete/Report/Report.lean	3836	rocq	report-vocabulary	typed status / verdict enums; after the report split lands	if n == "rocq" then rocqVer else if n == "isabelle" then isaVer else leanVer
+Concrete/Report/Report.lean	3836	isabelle	report-vocabulary	typed status / verdict enums; after the report split lands	if n == "rocq" then rocqVer else if n == "isabelle" then isaVer else leanVer
+Concrete/Report/Report.lean	3882	lean	report-vocabulary	typed status / verdict enums; after the report split lands	else "+".intercalate (v.engine :: attest.filter (· != "lean")) }
+Concrete/Report/Report.lean	3920	trusted	attribute-name	parse attributes once into a typed attribute record	if v.status.startsWith "proved" || v.status == "trusted" then some v.id else none)
+Concrete/Report/Report.lean	3987	proved_by_kernel_decision	report-vocabulary	typed status / verdict enums; after the report split lands	let proved := (vcs.filter (·.status == "proved_by_kernel_decision")).length
+Concrete/Report/Report.lean	3988	proved_by_lean	report-vocabulary	typed status / verdict enums; after the report split lands	let lean := (vcs.filter (·.status == "proved_by_lean")).length
+Concrete/Report/Report.lean	3989	arithmetic_proved	report-vocabulary	typed status / verdict enums; after the report split lands	let arith := (vcs.filter (·.status == "arithmetic_proved")).length
+Concrete/Report/Report.lean	3990	counterexample	report-vocabulary	typed status / verdict enums; after the report split lands	let cex := (vcs.filter (·.status == "counterexample")).length
+Concrete/Report/Report.lean	3991	unproven	report-vocabulary	typed status / verdict enums; after the report split lands	let unproven := (vcs.filter (fun v => v.status == "unproven" || v.status == "missing" || v.status == "planned")).length
+Concrete/Report/Report.lean	3991	missing	report-vocabulary	typed status / verdict enums; after the report split lands	let unproven := (vcs.filter (fun v => v.status == "unproven" || v.status == "missing" || v.status == "planned")).length
+Concrete/Report/Report.lean	3991	planned	report-vocabulary	typed status / verdict enums; after the report split lands	let unproven := (vcs.filter (fun v => v.status == "unproven" || v.status == "missing" || v.status == "planned")).length
+Concrete/Report/Report.lean	4002	unproven	report-vocabulary	typed status / verdict enums; after the report split lands	let outstanding := (vcs.filter (fun v => v.status == "unproven" || v.status == "missing" || v.status == "planned")).length
+Concrete/Report/Report.lean	4002	missing	report-vocabulary	typed status / verdict enums; after the report split lands	let outstanding := (vcs.filter (fun v => v.status == "unproven" || v.status == "missing" || v.status == "planned")).length
+Concrete/Report/Report.lean	4002	planned	report-vocabulary	typed status / verdict enums; after the report split lands	let outstanding := (vcs.filter (fun v => v.status == "unproven" || v.status == "missing" || v.status == "planned")).length
+Concrete/Report/Report.lean	4012	solver_trusted	report-vocabulary	typed status / verdict enums; after the report split lands	let trusted := vcs.filter (·.status == "solver_trusted")
+Concrete/Report/Report.lean	4017	counterexample	report-vocabulary	typed status / verdict enums; after the report split lands	let cexs := vcs.filter (·.status == "counterexample")
+Concrete/Report/Report.lean	4131	proved	report-vocabulary	typed status / verdict enums; after the report split lands	s!"  \"evidence_class\": {q (if status == "proved" then "proved_by_lean" else status)},\n",
+Concrete/Report/Report.lean	4205	O2	report-vocabulary	typed status / verdict enums; after the report split lands	let leanOp := oblId == "O2"
+Concrete/Report/Report.lean	4246	O2	report-vocabulary	typed status / verdict enums; after the report split lands	let shape := if oblId == "O2" then (genPreservationShape lc qualName).getD "" else ""
+Concrete/Report/Report.lean	4247	O2	report-vocabulary	typed status / verdict enums; after the report split lands	let kit := if oblId == "O2" then ["Concrete.ProofKit.Loops", "Concrete.ProofKit.Eval"] else ["Concrete.ProofKit.Loops"]
+Concrete/Report/Report.lean	4248	planned	report-vocabulary	typed status / verdict enums; after the report split lands	let na := if status == "planned" || status == "arithmetic_proved" then
+Concrete/Report/Report.lean	4248	arithmetic_proved	report-vocabulary	typed status / verdict enums; after the report split lands	let na := if status == "planned" || status == "arithmetic_proved" then
+Concrete/Report/Report.lean	4537	0	report-vocabulary	typed status / verdict enums; after the report split lands	(if srcLine == "0" then "" else s!"source line: {srcLine}\n"),
+Concrete/Report/Report.lean	4574	missing	report-vocabulary	typed status / verdict enums; after the report split lands	if proveStatus == "missing" || proveStatus == "stale" || proveStatus == "blocked" then
+Concrete/Report/Report.lean	4574	stale	report-vocabulary	typed status / verdict enums; after the report split lands	if proveStatus == "missing" || proveStatus == "stale" || proveStatus == "blocked" then
+Concrete/Report/Report.lean	4574	blocked	report-vocabulary	typed status / verdict enums; after the report split lands	if proveStatus == "missing" || proveStatus == "stale" || proveStatus == "blocked" then
+Concrete/Report/Report.lean	4955	none	report-vocabulary	typed status / verdict enums; after the report split lands	++ (if e.proofSource == "none" then [] else [("source", .str e.proofSource)])
+Concrete/Report/Report.lean	5225		sentinel-empty	Option in the type, where the empty string stands for absent	let qualPrefix := if modulePath == "" then m.name else modulePath ++ "." ++ m.name
+Concrete/Report/Report.lean	5254		sentinel-empty	Option in the type, where the empty string stands for absent	let qualPrefix := if modulePath == "" then m.name else modulePath ++ "." ++ m.name
+Concrete/Report/Report.lean	5309		sentinel-empty	Option in the type, where the empty string stands for absent	let qualPrefix := if modulePath == "" then m.name else modulePath ++ "." ++ m.name
+Concrete/Report/Report.lean	5602	dependency	report-vocabulary	typed status / verdict enums; after the report split lands	let contributors := suppliers.filter (·.kind != "dependency") |>.map (·.callee)
+Concrete/Report/Report.lean	5603	dependency	report-vocabulary	typed status / verdict enums; after the report split lands	let depSteps : List Val := (suppliers.filter (·.kind == "dependency")).foldl (fun acc x =>
+Concrete/Report/Report.lean	5648	origin	attribute-name	parse attributes once into a typed attribute record	match kvs.find? (fun (k, _) => k == "origin") with
+Concrete/Report/Report.lean	5658	origin	attribute-name	parse attributes once into a typed attribute record	match kvs.find? (fun (k, _) => k == "origin") with
+Concrete/Report/Report.lean	5833	origin	attribute-name	parse attributes once into a typed attribute record	match kvs.find? (fun (k, _) => k == "origin") with
+Concrete/Report/Report.lean	5843	origin	attribute-name	parse attributes once into a typed attribute record	match kvs.find? (fun (k, _) => k == "origin") with
+Concrete/Report/ReportBase.lean	36		sentinel-empty	Option in the type, where the empty string stands for absent	let qualPrefix := if pfx == "" then m.name else pfx ++ "." ++ m.name
+Concrete/Report/ReportBase.lean	209		sentinel-empty	Option in the type, where the empty string stands for absent	let qualPrefix := if pfx == "" then m.name else pfx ++ "." ++ m.name
+Concrete/Report/ReportBase.lean	223		sentinel-empty	Option in the type, where the empty string stands for absent	let qualPrefix := if pfx == "" then m.name else pfx ++ "." ++ m.name
+Concrete/Report/ReportInterface.lean	32		sentinel-empty	Option in the type, where the empty string stands for absent	let qualPrefix := if qualPfx == "" then m.name else qualPfx ++ "." ++ m.name
+Concrete/Report/ReportInterface.lean	160		sentinel-empty	Option in the type, where the empty string stands for absent	let qualPrefix := if qualPfx == "" then m.name else qualPfx ++ "." ++ m.name
+Concrete/Report/ReportInterface.lean	200		sentinel-empty	Option in the type, where the empty string stands for absent	let qp := if qualPfx == "" then m.name else qualPfx ++ "." ++ m.name
+Concrete/Report/ReportInterface.lean	339		sentinel-empty	Option in the type, where the empty string stands for absent	let qualPrefix := if modulePath == "" then m.name else modulePath ++ "." ++ m.name
+Concrete/Report/ReportInterface.lean	422	alloc	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	let ops := if callees.any (fun c => c == "alloc" || c == "free") then
+Concrete/Report/ReportInterface.lean	422	free	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	let ops := if callees.any (fun c => c == "alloc" || c == "free") then
+Concrete/Report/ReportObligations.lean	645	unproven	report-vocabulary	typed status / verdict enums; after the report split lands	if o.baseStatus != "unproven" then none
+Concrete/Report/ReportObligations.lean	1962	unproved	report-vocabulary	typed status / verdict enums; after the report split lands	artifactFuzzDriverFor (cases.filter (fun c => c.claim != "unproved")) "artifact_fuzz_all"
+Concrete/Report/ReportObligations.lean	1974	unproved	report-vocabulary	typed status / verdict enums; after the report split lands	artifactFuzzDriverFor (cases.filter (fun c => c.claim == "unproved")) "artifact_fuzz_mechanism"
+Concrete/Report/ReportObligations.lean	2766	iff	report-vocabulary	typed status / verdict enums; after the report split lands	let coverageClaim := (e.coverage == "iff" || e.coverage == "one_direction") && !e.proof.isEmpty
+Concrete/Report/ReportObligations.lean	2766	one_direction	report-vocabulary	typed status / verdict enums; after the report split lands	let coverageClaim := (e.coverage == "iff" || e.coverage == "one_direction") && !e.proof.isEmpty
+Concrete/Resolve/Intrinsic.lean	382	user_main	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	|| name == "user_main"
+Concrete/Resolve/Locals.lean	82	_	sentinel-wildcard	one definition (wildcardBinder / isWildcardBinder)	if name == "_" then
+Concrete/Resolve/Locals.lean	152	_	sentinel-wildcard	one definition (wildcardBinder / isWildcardBinder)	if b.name == "_" then v ← bindArmWild v (siteKey sp b.name)
+Concrete/Resolve/Locals.lean	158	_	sentinel-wildcard	one definition (wildcardBinder / isWildcardBinder)	let v ← if b == "_" then bindArmWild vis (siteKey sp b) else bindLocal vis (siteKey sp b) b sp "pattern binder"
+Concrete/Resolve/PeekType.lean	184	_	sentinel-wildcard	one definition (wildcardBinder / isWildcardBinder)	| .varArm _ binding _ body => (binding != "_", body)
+Concrete/Resolve/PeekType.lean	218		sentinel-empty	Option in the type, where the empty string stands for absent	if structName == "" then return .placeholder
+Concrete/Resolve/PeekType.lean	219	0	other	review	if field == "0" then
+Concrete/Resolve/PeekType.lean	277		sentinel-empty	Option in the type, where the empty string stands for absent	if typeName == "" then return .placeholder
+Concrete/Resolve/Project.lean	55		sentinel-empty	Option in the type, where the empty string stands for absent	let filePath := if baseDir == "" then sub.name ++ ".con"
+Concrete/Resolve/Project.lean	58		sentinel-empty	Option in the type, where the empty string stands for absent	let dirPath := if baseDir == "" then sub.name ++ "/mod.con"
+Concrete/Resolve/Project.lean	70		sentinel-empty	Option in the type, where the empty string stands for absent	if baseDir == "" then sub.name else baseDir ++ "/" ++ sub.name
+Concrete/Resolve/Project.lean	565	native	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if name == "native" || name.startsWith "native." then
+Concrete/Resolve/Project.lean	597	native	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if k == "native" || k.startsWith "native." then
+Concrete/Resolve/Project.lean	705	-pthread	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	else if tok == "-pthread" then
+Concrete/Resolve/Project.lean	707	-framework	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	else if tok == "-framework" then
+Concrete/Resolve/Project.lean	898	std	reserved-name	one named definition per reserved spelling	let hasStdDep := selfName == "std" || userDeps.any fun (name, _) => name == "std"
+Concrete/Resolve/Project.lean	898	std	reserved-name	one named definition per reserved spelling	let hasStdDep := selfName == "std" || userDeps.any fun (name, _) => name == "std"
+Concrete/Resolve/Project.lean	969	std	reserved-name	one named definition per reserved spelling	let scope ← if bundled && depName == "std" then Proof.PackageScopeIdentity.toolchainStd "resolver:bundled-std"
+Concrete/Resolve/Project.lean	1102	std	reserved-name	one named definition per reserved spelling	let scope ← if rootBundled && selfName == "std" then Proof.PackageScopeIdentity.toolchainStd "resolver:bundled-std"
+Concrete/Resolve/Project.lean	1160	core	reserved-name	one named definition per reserved spelling	if oid == "core" then s!"{validCore.coreModules.length} core modules"
+Concrete/Resolve/Project.lean	1161	resolved	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	else if oid == "resolved" then s!"{merged.modules.length} modules ({projModules.length} project, {depNames.length} dep)"
+Concrete/Resolve/Resolve.lean	506	_	sentinel-wildcard	one definition (wildcardBinder / isWildcardBinder)	let ctx := (PatBind.names bindings).foldl (fun ctx b => if b == "_" then ctx else addLocal ctx b (.var none false)) ctx
+Concrete/Resolve/Resolve.lean	735	self	reserved-name	one named definition per reserved spelling	if p.name == "self" then
+Concrete/Resolve/Resolve.lean	804	free	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	&& !(ef.linkName.isNone && (ef.name == "free" || ef.name == "abort")) then
+Concrete/Resolve/Resolve.lean	804	abort	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	&& !(ef.linkName.isNone && (ef.name == "free" || ef.name == "abort")) then
+Concrete/Resolve/Resolve.lean	1121	main	reserved-name	one named definition per reserved spelling	if s.name == "main" then acc
+Concrete/Resolve/Resolve.lean	1201	main	reserved-name	one named definition per reserved spelling	else if sym == "main" then bad "'main' is the process entry the compiler generates"
+Concrete/Semantics/TermIR.lean	428	f	other	review	example : evalInt [] (fun n vs => if n == "f" then some (vs.length) else none)
+Main.lean	136	Darwin	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if os.stdout.trimAscii.toString != "Darwin" then return #[]
+Main.lean	590	core	reserved-name	one named definition per reserved spelling	if mode == "core" then
+Main.lean	603	ssa-unverified	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	let lowerResult := if mode == "ssa-unverified"
+Main.lean	674	traceability	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if parts[0]! == "traceability" then
+Main.lean	952	version	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	match toks.dropWhile (· != "version") with
+Main.lean	990	unsat	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if line == "unsat" then pure ("solver_trusted", ([] : List (String × String)))
+Main.lean	991	sat	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	else if line == "sat" then
+Main.lean	999	unknown	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	else if line == "unknown" then pure ("unknown", [])
+Main.lean	1000	timeout	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	else if line == "timeout" then pure ("timeout", [])
+Main.lean	1049	version	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	match (firstLine.splitOn " ").dropWhile (· != "version") with
+Main.lean	1510	proved_by_two_kernels	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if v.status == "proved_by_two_kernels" || v.status == "proved_by_multi_kernel"
+Main.lean	1510	proved_by_multi_kernel	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if v.status == "proved_by_two_kernels" || v.status == "proved_by_multi_kernel"
+Main.lean	1540	solver_trusted	report-vocabulary	typed status / verdict enums; after the report split lands	let trusted := dvcs.filterMap fun v => if v.status == "solver_trusted" then some v.id else none
+Main.lean	1574	assumed	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	-- This read `v.status == "assumed" && !v.hypDebt.isEmpty`. When enough kernels attest,
+Main.lean	1622	omega	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	let omegaProved := dvcs.filterMap fun v => if v.engine == "omega" then some v.id else none
+Main.lean	1623	bv_decide	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	let bvProved    := dvcs.filterMap fun v => if v.engine == "bv_decide" then some v.id else none
+Main.lean	1690	interface	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "interface" then
+Main.lean	1931	ensures	attribute-name	parse attributes once into a typed attribute record	else if st == "ensures" then "not_discharged"
+Main.lean	1936	proved	report-vocabulary	typed status / verdict enums; after the report split lands	else if st == "proved" then "checked"
+Main.lean	1939	checked	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	let allChecked := results.all (fun (_, _, st) => st == "checked")
+Main.lean	1942	failed	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	else if results.any (fun (_, _, st) => st == "failed") then 4
+Main.lean	1943	missing_theorem	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	else if results.any (fun (_, _, st) => st == "missing_theorem") then 2
+Main.lean	1944	stale	report-vocabulary	typed status / verdict enums; after the report split lands	else if results.any (fun (_, _, st) => st == "stale") then 3
+Main.lean	1946	checked	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	else if results.any (fun (_, _, st) => st != "checked") then 2
+Main.lean	1948	failed	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	let leanErr := if !envFailure && !results.any (fun (_, _, st) => st == "failed" || st == "missing_theorem") then "" else String.ofList (comb
+Main.lean	1948	missing_theorem	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	let leanErr := if !envFailure && !results.any (fun (_, _, st) => st == "failed" || st == "missing_theorem") then "" else String.ofList (comb
+Main.lean	1953	checked	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	", \"discharged\": ", (if st == "checked" then "true" else "false"),
+Main.lean	1960	checked	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	",\n  \"summary\": ", q s!"{results.countP (fun (_,_,s) => s == "checked")} checked, {results.countP (fun (_,_,s) => s != "checked")} not ch
+Main.lean	1960	checked	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	",\n  \"summary\": ", q s!"{results.countP (fun (_,_,s) => s == "checked")} checked, {results.countP (fun (_,_,s) => s != "checked")} not ch
+Main.lean	1965	checked	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	let mark := if st == "checked" then "✓" else "✗"
+Main.lean	1967	not_discharged	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if st == "not_discharged" then
+Main.lean	1970	checked	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	out := out ++ s!"\nSummary: {results.countP (fun (_,_,s) => s == "checked")} checked, {results.countP (fun (_,_,s) => s != "checked")} not c
+Main.lean	1970	checked	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	out := out ++ s!"\nSummary: {results.countP (fun (_,_,s) => s == "checked")} checked, {results.countP (fun (_,_,s) => s != "checked")} not c
+Main.lean	2050	backend-contracts	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "backend-contracts" then
+Main.lean	2057	contracts	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "contracts" then
+Main.lean	2060	obligation-ledger	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "obligation-ledger" then
+Main.lean	2097	vcs	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "vcs" then
+Main.lean	2126	solver_trusted	report-vocabulary	typed status / verdict enums; after the report split lands	let trusted := dvcs.filterMap fun v => if v.status == "solver_trusted" then some v.id else none
+Main.lean	2139	vcgen-diff	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "vcgen-diff" then
+Main.lean	2167	bool-kernel	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "bool-kernel" then
+Main.lean	2281	multi-kernel	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "multi-kernel" then
+Main.lean	2300	assumed	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if v.status == "assumed" && !v.hypDebt.isEmpty then some (v.id, v.hypDebt) else none)
+Main.lean	2332	rocq	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	let validatedOf := fun (name : String) => if name == "rocq" then rocqOk else isaOk
+Main.lean	2442	closed	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if en && (c == "closed" || c == "refused") && !(validatedOf name).contains o.key
+Main.lean	2442	refused	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if en && (c == "closed" || c == "refused") && !(validatedOf name).contains o.key
+Main.lean	2484	bridge-check	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "bridge-check" then
+Main.lean	2520	core-semantics-diff	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "core-semantics-diff" then
+Main.lean	2640	term-ir	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "term-ir" then
+Main.lean	2675	artifact-fuzz	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "artifact-fuzz" then
+Main.lean	2689	arithmetic_proved	report-vocabulary	typed status / verdict enums; after the report split lands	else if mine.all (fun v => v.status.startsWith "proved" || v.status == "arithmetic_proved")
+Main.lean	2722	lowering-agreement	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "lowering-agreement" then
+Main.lean	2747	isabelle:presburger	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	let res ← if label == "isabelle:presburger"
+Main.lean	2810	solver-cert	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "solver-cert" then
+Main.lean	2861	solver_trusted	report-vocabulary	typed status / verdict enums; after the report split lands	if cls == "solver_trusted" && replayCell == "closed" then "solver_replayed"
+Main.lean	2861	closed	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if cls == "solver_trusted" && replayCell == "closed" then "solver_replayed"
+Main.lean	2862	solver_trusted	report-vocabulary	typed status / verdict enums; after the report split lands	else if cls == "solver_trusted" && niaCell == "closed" then "solver_checked"
+Main.lean	2862	closed	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	else if cls == "solver_trusted" && niaCell == "closed" then "solver_checked"
+Main.lean	2876	caps	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "caps" then
+Main.lean	2879	unsafe	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "unsafe" then
+Main.lean	2887	assumptions	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "assumptions" then
+Main.lean	2892	trust-edges	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "trust-edges" then
+Main.lean	2895	layout	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "layout" then
+Main.lean	2898	alloc	intrinsic-name	dispatch on IntrinsicId (resolveIntrinsic / IntrinsicId.ofCanonical?)	if reportType == "alloc" then
+Main.lean	2901	authority	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "authority" then
+Main.lean	2904	proof	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "proof" then
+Main.lean	2907	eligibility	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "eligibility" then
+Main.lean	2910	proof-status	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "proof-status" then
+Main.lean	3059	obligations	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "obligations" then
+Main.lean	3062	proof-deps	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "proof-deps" then
+Main.lean	3065	proof-diagnostics	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "proof-diagnostics" then
+Main.lean	3068	proof-bundle	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "proof-bundle" then
+Main.lean	3074	extraction	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "extraction" then
+Main.lean	3082	attestation-join	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "attestation-join" then
+Main.lean	3085	package-identity	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "package-identity" then
+Main.lean	3089	generated-implementations	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "generated-implementations" then
+Main.lean	3092	impl-manifest	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "impl-manifest" then
+Main.lean	3095	body-bytes	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "body-bytes" then
+Main.lean	3098	migration-manifest	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "migration-manifest" then
+Main.lean	3101	subject-facts	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "subject-facts" then
+Main.lean	3106	model-diff	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "model-diff" then
+Main.lean	3111	lean-stubs	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "lean-stubs" then
+Main.lean	3114	migration	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "migration" then
+Main.lean	3140	receipts	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "receipts" then
+Main.lean	3244	check-proofs	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "check-proofs" then
+Main.lean	3305	proved	report-vocabulary	typed status / verdict enums; after the report split lands	let isRefused := fun (fn : String) => claimStatus fn != "proved"
+Main.lean	3351	proved	report-vocabulary	typed status / verdict enums; after the report split lands	else if oblStatus == "proved" then "checked"
+Main.lean	3356	checked	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	", \"discharged\": ", (if statusOf thm oblStatus == "checked" then "true" else "false"),
+Main.lean	3388	checked	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	&& refStatuses.all (· == "checked")
+Main.lean	3501	diagnostics-json	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "diagnostics-json" then
+Main.lean	3504	schema	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "schema" then
+Main.lean	3507	diagnostic-codes	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "diagnostic-codes" then
+Main.lean	3510	effects	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "effects" then
+Main.lean	3513	arithmetic	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "arithmetic" then
+Main.lean	3516	recursion	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "recursion" then
+Main.lean	3519	stack-depth	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "stack-depth" then
+Main.lean	3522	fingerprints	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "fingerprints" then
+Main.lean	3525	consistency	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "consistency" then
+Main.lean	3529	audit	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "audit" then
+Main.lean	3542	verify	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "verify" then
+Main.lean	3552	traceability	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "traceability" then
+Main.lean	3565	mono	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if reportType == "mono" then
+Main.lean	3578	predictable	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if checkType != "predictable" then
+Main.lean	3935	--json	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	| "trace" :: file :: rest => file :: "--trace-pipeline" :: rest.filter (· != "--json")
+Main.lean	3965	--	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	let userArgs := match args.dropWhile (· != "--") with
+Main.lean	4004	registry	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if d.code == "registry" then IO.eprintln d.message
+Main.lean	4037	registry	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	let hasRegistryErrors := ledger.diagnostics.any (fun d => d.code == "registry" && d.severity == "error")
+Main.lean	4037	error	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	let hasRegistryErrors := ledger.diagnostics.any (fun d => d.code == "registry" && d.severity == "error")
+Main.lean	4066	weakened	report-vocabulary	typed status / verdict enums; after the report split lands	return (if entries.any (·.drift == "weakened") then 1 else 0)
+Main.lean	4096	weakened	report-vocabulary	typed status / verdict enums; after the report split lands	return (if entries.any (·.drift == "weakened") then 1 else 0)
+Main.lean	4256	--verbose	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	let verbose := rest.any (· == "--verbose")
