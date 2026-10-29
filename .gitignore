@@ -190,3 +190,8 @@ tests/regressions/*/*/*
 # CI triage reports (scripts/ci/triage.sh writes .triage/<run>.md and rerun markers)
 /.triage/
 site/content/reference/
+
+# Browser compiler build outputs (scripts/browser/build-site-compiler.sh; the site deployment builds them)
+site/static/compiler/concrete.mjs
+site/static/compiler/concrete.wasm
+site/static/compiler/manifest.json

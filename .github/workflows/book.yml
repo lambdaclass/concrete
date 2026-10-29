@@ -38,6 +38,34 @@ jobs:
           curl -fsSL "$url" | tar -xz --directory=./zola
           echo "$(pwd)/zola" >> "$GITHUB_PATH"
 
+      # The browser compiler (site/static/compiler/concrete.{mjs,wasm}, manifest.json) is a build
+      # output, not a committed file: it is cross-compiled here from this commit's compiler, and the
+      # native/Wasm parity tests run before anything is published.
+      - name: Cache Lean build (.lake/build, the same key as CI)
+        uses: actions/cache@v4
+        with:
+          path: .lake/build
+          key: ${{ runner.os }}-${{ runner.arch }}-lakebuild-${{ hashFiles('Concrete/**', 'Concrete.lean', 'proofs/**', 'Main.lean', 'Browser.lean', 'lakefile.toml', 'lean-toolchain', 'lake-manifest.json') }}
+
+      - name: Install Lean and build the compiler (via lean-action)
+        uses: leanprover/lean-action@v1
+        with:
+          build-args: "--log-level=warning"
+
+      - name: Cache the browser toolchains (Lean runtime source, Emscripten, leanrt)
+        uses: actions/cache@v4
+        with:
+          path: .cache/browser
+          key: ${{ runner.os }}-${{ runner.arch }}-browser-${{ hashFiles('lean-toolchain', 'scripts/browser/lean-runtime.patch', 'scripts/browser/build-site-compiler.sh') }}
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build the browser compiler
+        run: JOBS=4 bash scripts/browser/build-site-compiler.sh
+
       - name: Build Site
         # The language specification pages are generated from docs/spec (docs/spec/README.md §4);
         # base.html links @/spec/_index.md, so a build without this step fails instead of

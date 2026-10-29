@@ -14,34 +14,21 @@ declaration lines (Core and SSA); this is not a complete source-to-IR transforma
 
 ## Build
 
-Prerequisites: the repository's pinned Lean toolchain, Python 3, Node, CMake,
-Git, and Emscripten 4.0.23. Build in separate scratch directories. Commands
-below use paths relative to the repository root; substitute your own paths.
-The Lean checkout must match `lean-toolchain`; upgrading requires reviewing
-the runtime patch and rerunning parity checks.
+The compiler assets in `site/static/compiler/` (`concrete.mjs`, `concrete.wasm`, `manifest.json`)
+are build outputs and are not committed. The site deployment (`.github/workflows/book.yml`) builds
+them from the commit it publishes, and runs the parity tests first, with one script:
 
 ```sh
-git clone --depth 1 --branch v4.34.1 https://github.com/leanprover/lean4 /tmp/concrete-browser-lean
-git clone https://github.com/emscripten-core/emsdk /tmp/concrete-browser-emsdk
-/tmp/concrete-browser-emsdk/emsdk install 4.0.23
-/tmp/concrete-browser-emsdk/emsdk activate 4.0.23
-git -C /tmp/concrete-browser-lean apply --unidiff-zero "$PWD/scripts/browser/lean-runtime.patch"
-/tmp/concrete-browser-emsdk/upstream/emscripten/emcmake cmake \
-  -S /tmp/concrete-browser-lean/src -B /tmp/concrete-browser-runtime \
-  -DSTAGE=0 -DCMAKE_BUILD_TYPE=Release -DUSE_GMP=OFF -DUSE_MIMALLOC=OFF \
-  -DMULTI_THREAD=OFF -DAUTO_THREAD_FINALIZATION=OFF \
-  -DLEAN_VERSION_PATCH=1 -DUSE_GITHASH=OFF
-cmake --build /tmp/concrete-browser-runtime --target leanrt -j 6
-lake build concrete-browser-native
-python3 scripts/browser/build-wasm.py \
-  --lean-source /tmp/concrete-browser-lean \
-  --runtime /tmp/concrete-browser-runtime \
-  --emsdk /tmp/concrete-browser-emsdk --jobs 6
-node scripts/browser/test-parity.mjs
-node scripts/browser/test-loader.mjs
-node scripts/browser/test-ui.mjs
-zola --root site build
+JOBS=6 bash scripts/browser/build-site-compiler.sh
 ```
+
+Prerequisites: the repository's pinned Lean toolchain, Git, CMake, Python 3 and Node. The script
+fetches the rest into `.cache/browser` (override with `BROWSER_CACHE`) and reuses it on later runs:
+the Lean source checkout matching `lean-toolchain` with `lean-runtime.patch` applied, Emscripten
+4.0.23, and the single-threaded Lean runtime built with Emscripten. It then builds
+`concrete-browser-native`, cross-compiles with `build-wasm.py`, and runs `test-parity.mjs`,
+`test-loader.mjs` and `test-ui.mjs`. Upgrading the Lean toolchain requires reviewing the runtime
+patch; the parity tests are the check.
 
 The patch removes pthread requirements for a single-worker runtime (so the
 site needs no cross-origin-isolation headers), fixes two unsupported libuv
@@ -51,16 +38,9 @@ operations still fail; they are not silently implemented as successes.
 
 Generated C comes from `.lake/build/ir` for Concrete and the pinned Lean
 checkout's `stage0/stdlib` for dependencies. Objects are cached in `.lake/browser`.
-The tested compiler snapshot in `site/static/compiler/` is versioned so ordinary
-Zola builds and Pages deployments include a working explorer. Rebuild and run
-parity tests before updating that snapshot. The manifest
-records the baseline commit, compiled-source digest, toolchain, Wasm digest and
-size. The baseline commit alone does not identify uncommitted changes.
-
-To update the compiler snapshot, rebuild assets **before** Zola. The existing
-deployment workflow has not been changed to download and cross-build these
-toolchains. Without assets the explorer reports that the browser compiler is
-unavailable. No site is published by these commands.
+The manifest records the compiler commit, compiled-source digest, toolchain, Wasm digest and
+size. A Zola build without the assets still works: the explorer reports that the browser
+compiler is unavailable.
 
 ## Local preview
 
