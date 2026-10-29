@@ -1,0 +1,13 @@
+// REF-11@3 (OD2, decided 2026-10-29): an exclusive argument overlapping a projection of itself in
+// one call is refused (E0293).
+struct Copy P { f: Int, g: Int }
+
+fn h(a: &mut P, b: &mut Int) {
+    *b = 2;
+}
+
+fn main() -> Int {
+    let mut p: P = P { f: 40, g: 0 };
+    h(&mut p, &mut p.g);
+    return p.f + p.g;
+}

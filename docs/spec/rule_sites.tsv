@@ -24,7 +24,7 @@ REF-8	enforced	E0232	check	Concrete.consumeVar, Concrete.checkCallBorrowConflict
 REF-8	enforced	E0235	check	Concrete.consumeVar, Concrete.checkCallBorrowConflicts, Concrete.checkWriteAccess
 REF-8	enforced	E0293	check	Concrete.consumeVar, Concrete.checkCallBorrowConflicts, Concrete.checkWriteAccess
 REF-8	enforced	E0238	check	Concrete.consumeVar, Concrete.checkCallBorrowConflicts, Concrete.checkWriteAccess
-REF-11	enforced	E0293	check	Concrete.pathsOverlap, Concrete.checkCallRootReads
+REF-11	partial R-0496	E0293	check	Concrete.pathsOverlap, Concrete.checkCallRootReads
 REF-12	enforced	E0237	elab,check	Concrete.checkMutAccess, Concrete.checkWriteAccess
 SCOPE-1	enforced	E0301	check	Concrete.scope1Diagnostics, Concrete.constInitDiagnostics
 SCOPE-1	enforced	E0305	check	Concrete.scope1Diagnostics, Concrete.constInitDiagnostics
@@ -84,6 +84,7 @@ OWN-13	enforced	E0584	core-check	Concrete.ccCheckModuleDecls, Concrete.checkExpr
 OWN-13	enforced	E0272	check	Concrete.ccCheckModuleDecls, Concrete.checkExprCore
 OWN-13	enforced	E0273	check	Concrete.ccCheckModuleDecls, Concrete.checkExprCore
 OWN-14	enforced	E0571	core-check,post-mono	Concrete.ccCheckModuleDecls
+OWN-16	pending R-0496	new	check	-
 TYPE-4	enforced	E0220	check	Concrete.expectTy, Concrete.checkExprCore, Concrete.checkStmt, Concrete.ccCheckExpr, Concrete.ccCheckStmt
 TYPE-4	enforced	E0222	check	Concrete.expectTy, Concrete.checkExprCore, Concrete.checkStmt, Concrete.ccCheckExpr, Concrete.ccCheckStmt
 TYPE-4	enforced	E0224	check	Concrete.expectTy, Concrete.checkExprCore, Concrete.checkStmt, Concrete.ccCheckExpr, Concrete.ccCheckStmt

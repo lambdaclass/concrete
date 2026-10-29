@@ -1012,7 +1012,7 @@ def CheckError.rule : CheckError → Option String
   | .temporaryNotBorrowable _ => some "REF-5@1"
   | .variableFrozenByBorrow _ | .cannotMoveLinearBorrowed _ => some "REF-8@1"
   | .cannotBorrowMutablyBorrowed _ | .cannotMutBorrowAlreadyBorrowed _ => some "REF-8@1"
-  | .conflictingCallBorrows _ byRoot => some (if byRoot then "REF-11@2" else "REF-8@1")
+  | .conflictingCallBorrows _ byRoot => some (if byRoot then "REF-11@3" else "REF-8@1")
   -- E0252 is shared: a destructuring `let` (PAT-5) and a struct literal (TYPE-7)
   | .missingFieldInLiteral _ d => some (if d.startsWith "struct destructure" then "PAT-5@2" else "TYPE-7@1")
   | e => codeRuleTag e.code
@@ -1032,7 +1032,7 @@ def ruleNextAction (rule : String) : Option String :=
   | "REF-7@1" => some "pass the reference down as an argument instead of storing it through `&mut &T`"
   | "TRAIT-6@1" => some "drop the bound the call does not need, or rename one of the two trait methods"
   | "REF-8@1" => some "end the borrow (the borrow block, the arm or the call) before moving, freeing or writing its source, or borrow a different place"
-  | "REF-11@2" => some "make the two borrows in separate calls, or read the other field into a `let` before the call"
+  | "REF-11@3" => some "make the two borrows in separate calls, or read the other field into a `let` before the call"
   | _ => none
 
 /-- The versioned-migration evidence of a rule-tagged diagnostic (§15.5 item 2). -/

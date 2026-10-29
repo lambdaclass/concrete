@@ -762,7 +762,7 @@ fn main() -> Int {
 <a id="REF-10"></a>
 ### REF-10. A `&mut` argument is an implicit reborrow
 
-**REF-10@1.** Every `&mut` argument is an implicit reborrow of the reference it is passed from, so a parameter, borrow-block binder or arm binder of type `&mut T` stays usable after the call.
+**REF-10@2.** Passing a `&mut` reference binding as an argument lends it to the call, the call's use of it ending when the call returns, so a parameter, borrow-block binder or arm binder of type `&mut T` may be passed to any number of calls in sequence.
 
 - Kind: guarantee
 - Uses: none
@@ -773,36 +773,32 @@ fn main() -> Int {
 - Obligation: the reborrow is explicit in Core (R-0496)
 - Evidence: tested
 
-**Rationale.** Decided 2026-10-23 (TIGHTENING_DECISIONS D1). It leaves the formal semantics
-one argument-passing mode for `&mut T` instead of two. A borrow-block binder used to be consumed
-by the call while a parameter was reborrowed. Enforced 2026-10-23, every call form through one
-checker function; it only relaxed the borrow-block case, so no program broke. A deferred call
-keeps the loan of a `&mut` it was given until it runs (OWN-12). The reborrow is implicit in
-the call and not yet a Core form. An exclusive reference that is never used may go unused, because it owns
-nothing. Overlapping exclusive arguments in one call stay refused (REF-8).
+**Rationale.** Decided by the owner on 2026-10-29 (OD2, part 1): passing a `&mut` on is plain
+lending. There is no reborrow concept and no reborrow syntax; a call's use of the reference ends
+when the call returns, which is sound because references are second-class (no reference is
+returned or stored, REF-1, REF-3). Every call form lends the same way (`consumeCallArgIdent`: a free
+function, a method argument, a static method, a function pointer), and a `&mut self` receiver given a
+reference binding is lent too. Before the 2026-10-23 change (TIGHTENING_DECISIONS D1, now this
+decision) a borrow-block binder was consumed by the first call it was passed to while a parameter was
+not; one mode replaced the two, and no program broke. A deferred call keeps the loan of a `&mut` it
+was given until it runs (OWN-16). An exclusive reference that is never used may go unused: it owns
+nothing. Overlapping arguments in one call are REF-11's refusal.
 
 `&mut T` is linear (not Copy: `consumeVar` tracks it like any linear binding), while `&T` is Copy.
-Of the operations on a `&mut T` binding, returning it is REF-1's refusal and rebinding it (`let r2 =
-r;`) is REF-6's; passing it to a call that takes `&mut T`, and calling a `&mut self` method on it,
-reborrow it (this entry); reading or writing through it (`*r`, `*r = v`, `r.f`, `r.f = v`, `r[i]`,
-`r[i] = v`; MEM-4) uses it without consuming it, because a dereference does not go through
-`consumeVar`, an invariant any change to consumption must keep. Branches agree on a `&mut`
-binding as on any linear value (OWN-3), a loop does not consume one declared outside it (OWN-4),
-while a `break` or `continue` may leave one unconsumed: OWN-2's exit checks exempt references, which
-own nothing. A borrow-block binder need not
-be consumed: dereferencing it inside the block is the normal use, and the binder lapses at the
-block's end, when the owner is unfrozen. On current main the block lowers to an entry-block alloca
-holding the owner's value, the binder points at it, and every exit writes it back to the owner
-unconditionally; consumption is a checker notion the lowering does not see. Where that write-back
-sits among the other exit actions is owner decision OD2 (OPEN-2). A `return` inside a `borrow mut`
-block once failed SSA verification (the write-back was emitted as dead code after the return); the
-lowering now skips a terminated block's write-back (`blockTerminated`) and hoists the alloca to the
-entry block (`emitEntryAlloca`), pinned by `adversarial_mut_ref_return_in_borrow.con` and
-`adversarial_mut_ref_return_deref_in_borrow.con`. The earlier gaps of this area are closed: field and
-element writes through `&mut T` work (MEM-4), a `&mut T` stored in a struct is REF-3's refusal, and
-an explicit reborrow `let s = &mut *r` is REF-6's (the reborrow is implicit in the call). Making the
-reborrow an explicit Core form (R-0496, design example B5) would move every function's frozen V1
-fingerprint, so it waits for the V2-only identities.
+Returning a `&mut T` binding is REF-1's refusal and rebinding it (`let r2 = r;`) REF-6's; passing it
+to a call, or calling a `&mut self` method on it, lends it (this entry); reading or writing through
+it (`*r`, `*r = v`, `r.f`, `r.f = v`, `r[i]`, `r[i] = v`; MEM-4) uses it without consuming it, since
+a dereference does not go through `consumeVar`, an invariant any change to consumption must keep.
+Branches agree on a `&mut` binding as on any linear value (OWN-3) and a loop does not consume one
+declared outside it (OWN-4), while a `break` or `continue` may leave one unconsumed: OWN-2's exit
+checks exempt references, which own nothing. A borrow-block binder need not be consumed:
+dereferencing it inside the block is the normal use, and the binder lapses at the block's end, when
+the owner is unfrozen. A write through it is a write to the owner's place at once (REF-13). The
+earlier gaps of this area are closed: field and element writes through `&mut T` work (MEM-4), a
+`&mut T` stored in a struct is REF-3's refusal, and `let s = &mut *r` is REF-6's. A `return` inside a
+`borrow mut` block once failed SSA verification; the lowering skips a terminated block's exit code
+(`blockTerminated`) and hoists the block's storage to the entry block (`emitEntryAlloca`), pinned by
+`adversarial_mut_ref_return_in_borrow.con` and `adversarial_mut_ref_return_deref_in_borrow.con`.
 
 ```con accept name=reborrow-in-borrow-block exit=42
 fn inc(r: &mut Int) {
@@ -822,32 +818,46 @@ fn main() -> Int {
 <a id="REF-11"></a>
 ### REF-11. Loans are keyed by root binding
 
-**REF-11@2.** A borrow through a projection is a loan on the projection's root binding, so within one call two borrows of the same root conflict when at least one is exclusive, and a new exclusive loan conflicts with any other use of its root in the same call, whatever their projections, where passing on a reference binding the caller already holds is an implicit reborrow (REF-10) and makes no new loan.
+**REF-11@3.** A call is refused when one of its exclusive arguments overlaps any other argument, two places overlapping when they have the same root binding and the path of one is a prefix of the path of the other, so `h(r, r)`, `h(&mut x, &x)` and `h(&mut a, &mut a.f)` are refused and `h(&mut a.f, &mut a.g)` is not.
 
 - Kind: refusal
 - Uses: none
 - Codes: E0293 (check)
-- Status: enforced
+- Status: partial R-0496
 - Enforced by: Concrete.pathsOverlap, Concrete.checkCallRootReads
 - Semantics: none
-- Obligation: INV-REF (R-0500); the loan checker needs no path-overlap analysis
+- Obligation: INV-REF (R-0500)
 - Evidence: tested
 
-**Rationale.** Decided 2026-10-23 with the Austral-based core (TIGHTENING_DECISIONS D2). A loan on
-`&s.f` is a loan on `s`, as the whole-owner freeze of a borrow block already is, and the loan
-checker needs no path-overlap analysis. The measured migration: one std site
-(`std/src/cli.con:77`, where a `&mut self` receiver overlaps a read of `self.names`; bind the read
-with `let` first) and this conformance fixture. Both `upd(&mut s.a, &s.b)` and
-`add(&mut s.a, s.b)` are refused (enforced 2026-10-23; the field-disjoint shape of
-`regress_2i_ref8_call_disjoint.con` became `error_d2_call_disjoint_fields.con`). Field-precise
-loans are deferred until a workload needs two simultaneous borrows of different fields of one
-owner and cannot be restructured with a `let` or a borrow block. A conflict between two borrows
-of one place, or of a place and a projection of it, is REF-8's. Version 2 states what version 1
-left out: re-lending a reference the caller already holds (`r.add(r.step)` with `r: &mut S`, or
-`self.sift_up(self.len - 1)` with `self: &mut Self`) makes no new loan on the root, so reading
-through the same reference in another argument is not a second loan.
+**Rationale.** Decided by the owner on 2026-10-29 (OD2, part 2): exclusivity at a call follows
+places, root plus path. An exclusive argument conflicts with an argument whose place is the same
+place, a projection of it, or a place it projects from, and not with a disjoint sibling, so two
+fields of one owner may be lent exclusively to one call. Lending a reference binding the caller
+already holds (`r.add(r.step)` with `r: &mut S`, `self.sift_up(self.len - 1)` with
+`self: &mut Self`) lends that reference (REF-10); reading through it in another argument overlaps
+only if the read place does. A conflict between a borrow and a later use of its place, outside one
+call, is REF-8's. History: the 2026-10-23 proposal (TIGHTENING_DECISIONS D2, under OD1) keyed every
+loan by the root binding, so main still refuses disjoint siblings in one call (E0293), the pending
+example below; `error_d2_call_disjoint_fields.con`, `error_d2_call_field_read.con`,
+`error_d2_receiver_projection_read.con`, `error_d2_call_field_read_in_branch.con` and
+`error_d2_explicit_mut_receiver_read.con` pin that over-refusal in run_tests.sh and flip when the
+repair lands (R-0496). How loans outside a single call are keyed is OPEN-1.
 
-```con reject name=disjoint-fields-one-call code=E0293 stage=check pair=fields-in-sequence
+```con reject name=overlapping-path code=E0293 stage=check pair=fields-in-sequence
+struct Copy P { f: Int, g: Int }
+
+fn h(a: &mut P, b: &mut Int) {
+    *b = 2;
+}
+
+fn main() -> Int {
+    let mut p: P = P { f: 40, g: 0 };
+    h(&mut p, &mut p.g);
+    return p.f + p.g;
+}
+```
+
+```con accept name=disjoint-siblings-one-call exit=2 pending=R-0496 now=reject:E0293:check
 struct Copy W { a: Int, b: Int }
 
 fn two(a: &mut Int, b: &mut Int) {
@@ -881,11 +891,7 @@ fn main() -> Int {
 
 | fixture | expected | pair | modes |
 |---|---|---|---|
-| `tests/programs/error_d2_call_disjoint_fields.con` | `reject:E0293:REF-11@2` | `ref11` | `-` |
-| `tests/programs/error_d2_call_field_read.con` | `reject:E0293:REF-11@2` | `ref11` | `-` |
-| `tests/programs/error_d2_receiver_projection_read.con` | `reject:E0293:REF-11@2` | `ref11` | `-` |
-| `tests/programs/error_d2_call_field_read_in_branch.con` | `reject:E0293:REF-11@2` | `ref11` | `-` |
-| `tests/programs/error_d2_explicit_mut_receiver_read.con` | `reject:E0293:REF-11@2` | `ref11` | `-` |
+| `tests/programs/error_od2_call_overlapping_path.con` | `reject:E0293:REF-11@3` | `ref11` | `-` |
 | `tests/programs/regress_2i_ref8_call_disjoint.con` | `run:42` | `ref11` | `binary,interp` |
 
 <a id="REF-12"></a>
@@ -936,3 +942,22 @@ fn main() -> Int {
     return p.n;
 }
 ```
+<a id="REF-13"></a>
+### REF-13. A `&mut` refers to the place
+
+**REF-13@1.** A `&mut` reference refers to the place it borrows, so a write through it is the write to that place at once, and no copy of the place is made at the borrow and written back at its end.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: pending R-0496
+- Semantics: none
+- Obligation: INV-REF (R-0500)
+- Evidence: tested
+
+**Rationale.** Decided by the owner on 2026-10-29 (OD2, part 3). Copy-in and copy-out is not part
+of the language: a backend may copy only as an optimization proven equivalent, which REF-11's
+exclusivity at a call makes possible. Current main still lowers a borrow block and a `&mut x`
+argument by copying the owner into a slot and writing it back at the exit, and an exit can lose
+those writes (bugs 305 and 307, under repair); the guarantee holds once that lowering is replaced.
+

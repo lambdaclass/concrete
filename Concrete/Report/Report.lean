@@ -6403,7 +6403,7 @@ def diagnosticCodesReport : String :=
     entry "E0290" "check" "error" "non-Copy sub-place read by value (would duplicate)",
     entry "E0291" "check" "error" "non-Copy overwrite would leak the old value",
     entryR "E0292" "check" "error" "shadowing a still-live non-Copy binding (no longer emitted: subsumed by E0301, R-0492)" "SCOPE-1@1",
-    entryR "E0293" "check" "error" "overlapping borrows of one root in a single call" "REF-8@1, REF-11@2",
+    entryR "E0293" "check" "error" "overlapping borrows of one root in a single call" "REF-8@1, REF-11@3",
     entry "E0294" "check" "error" "pure value computed then discarded (dead computation)",
     entry "E0295" "check" "error" "discard() of a non-Copy value (use destroy or consume it)",
     entry "E0296" "check" "error" "newtype constructed outside its defining module (construction rights, 0b)",

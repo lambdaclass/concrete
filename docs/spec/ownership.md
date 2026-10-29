@@ -1054,3 +1054,57 @@ The checker decides consumption by the position an expression is checked in (`Us
 | `deref` | the inner expression is checked as a place (reading through a reference or pointer never consumes the binding); `*heap_ident` explicitly consumes | same | inner as place |
 | `fnRef` | creates a Copy function pointer | same | n/a |
 | `allocCall` | the inner call or allocator is checked; an owned `Heap` result | n/a | n/a |
+
+<a id="OWN-16"></a>
+### OWN-16. A borrow given to a deferred call lives until the call runs
+
+**OWN-16@1.** A borrow passed to a deferred call stays live until the deferred call runs, so a conflicting borrow or use of its place before then is refused.
+
+- Kind: refusal
+- Uses: none
+- Codes: new (check)
+- Status: pending R-0496
+- Semantics: none
+- Obligation: INV-REF (R-0500)
+- Evidence: tested
+
+**Rationale.** Decided by the owner on 2026-10-29 (OD2, part 4), alongside OWN-12, which stands: a
+deferred call's arguments are read at the exit, and a local passed by value is reserved and one
+passed by borrow pinned. This entry adds the loan: after `defer log(&mut x)`, no borrow of `x` that
+conflicts with that exclusive borrow (REF-11's overlap) may be taken before the block exits. Main
+already holds a deferred `&mut` reference binding's loan (`heldByDefer`, `refuseDeferHeldRef`,
+E0206), but it accepts a shared borrow of a local whose exclusive borrow a deferred call holds.
+
+```con reject name=borrow-while-deferred code=new stage=check pair=deferred-borrow-alone pending=R-0496 now=accept:42
+fn log(r: &mut Int) {
+    *r = *r + 1;
+}
+
+fn peek(r: &Int) -> Int {
+    return *r;
+}
+
+fn main() -> Int {
+    let mut x: Int = 41;
+    let mut out: Int = 0;
+    if true {
+        defer log(&mut x);
+        out = peek(&x);
+    }
+    return out + 1;
+}
+```
+
+```con accept name=deferred-borrow-alone exit=42
+fn log(r: &mut Int) {
+    *r = *r + 1;
+}
+
+fn main() -> Int {
+    let mut x: Int = 41;
+    if true {
+        defer log(&mut x);
+    }
+    return x;
+}
+```

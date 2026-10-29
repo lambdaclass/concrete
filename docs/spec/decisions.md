@@ -23,22 +23,6 @@ turns the entry into the rules it decides; until then no agent picks a side
 
 **Rationale.** Bears on REF-5, REF-11. Current main: implemented provisionally in landing train 6 as REF-5 and REF-11. The options and the recommendation are in ROADMAP's row OD1; the owner's answer is recorded there.
 
-<a id="OPEN-2"></a>
-### OPEN-2. `&mut` arguments, deferred loans and exit order
-
-**OPEN-2@1.** How a `&mut` argument is passed on (reborrowed or moved), whether overlapping exclusive arguments are refused, how long a deferred call keeps its loan and in what order cleanup, loan end and write-back happen are an open owner decision (OD2).
-
-- Kind: open
-- Uses: none
-- Codes: none
-- Status: open OD2
-- Enforced by: none
-- Semantics: none
-- Obligation: none
-- Evidence: open
-
-**Rationale.** Bears on REF-10, REF-11, OWN-12. Current main: the reborrow is on main as REF-10; a deferred call already holds the loan of a `&mut` argument until it runs (`heldByDefer`, `refuseDeferHeldRef`, E0206), provisionally; the exit order (cleanup, loan end, write-back) is not implemented (bugs 305 and 306 wait on this item). The options and the recommendation are in ROADMAP's row OD2; the owner's answer is recorded there.
-
 <a id="OPEN-3"></a>
 ### OPEN-3. Pattern binders through a borrowed scrutinee
 
@@ -134,22 +118,6 @@ turns the entry into the rules it decides; until then no agent picks a side
 - Evidence: open
 
 **Rationale.** Bears on TRUST-6. Current main: pending as TRUST-6 (R-0509). The options and the recommendation are in ROADMAP's row OD8; the owner's answer is recorded there.
-
-<a id="OPEN-9"></a>
-### OPEN-9. Modules and interfaces
-
-**OPEN-9@1.** How a module's interface is stated and produced (one file per module, `pub`, generated or handwritten interface artifacts) is an open owner decision (OD9).
-
-- Kind: open
-- Uses: none
-- Codes: none
-- Status: open OD9
-- Enforced by: none
-- Semantics: none
-- Obligation: none
-- Evidence: open
-
-**Rationale.** Bears on MOD-2, MOD-4. Current main: not implemented beyond MOD-2 and MOD-4. The options and the recommendation are in ROADMAP's row OD9; the owner's answer is recorded there.
 
 <a id="OPEN-10"></a>
 ### OPEN-10. Arithmetic
@@ -314,6 +282,11 @@ turns the entry into the rules it decides; until then no agent picks a side
 ## Decided
 
 These entries were retired when the owner answered them; their IDs are never reused.
+
+- **OPEN-2** (OD2, `&mut` arguments, deferred loans and the exit order): decided 2026-10-29. Now
+  REF-10@2 (lending), REF-11@3 (exclusivity at a call by root plus path), REF-13 (a `&mut` refers to the
+  place), OWN-16 (a deferred call's borrow lives until it runs) and STMT-11 (one exit sequence).
+- **OPEN-9** (OD9, modules and interfaces): decided 2026-10-29. Now MOD-7 (pending, R-0556).
 
 - **OPEN-20** (OD20, the visibility of std's `std.libc` bindings): decided 2026-10-29, private to std.
   Now MOD-6 of [modules.md](modules.md#MOD-6) (pending, bug 226).

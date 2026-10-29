@@ -1869,9 +1869,22 @@ share of those only shrinks. Exit: the gate holds on every record, and no record
 lands says `unrecorded`.
 
 Measured state (2026-10-29, `wip/spec-s3`): 0 of 147 entries link a Lean definition; 120 of 147 have
-`Evidence: tested` (the rest are definitions, open entries and pending rules); 22 open entries (OD1 –
-OD22); 17 `docs/language` files remain. `docs/spec/README.md` ("Path to the complete spec") keeps the
+`Evidence: tested` (the rest are definitions, open entries and pending rules); 17 open entries after
+the owner's decisions of 2026-10-29 (OD2, OD9, OD20 – OD22); 17 `docs/language` files remain. `docs/spec/README.md` ("Path to the complete spec") keeps the
 current figures.
+
+### Task R-0556
+
+**Phase:** 2, 4
+
+**Objective:** Generated module interfaces and the interface-diff gate (MOD-7 of
+`docs/spec/modules.md`; owner decision OD9, decided 2026-10-29). The compiler generates each module's
+interface artifact from its `pub` declarations (no handwritten interface file), and a gate diffs every
+module's generated interface between commits, so any change to a module's public API appears in
+review as an explicit interface change. It builds on the interface data of R-0492 and R-0497, and
+separate compilation (V6) reads the same artifacts. Exit: the generator emits one interface per
+module for std and the examples, the gate fails a commit whose public API changed without its
+interface diff being part of the commit, and MOD-7 is `enforced`.
 
 ## Area: Standard Library And Core APIs
 

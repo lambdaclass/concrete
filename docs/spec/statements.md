@@ -389,6 +389,26 @@ fn main() -> Int {
 }
 ```
 
+<a id="STMT-11"></a>
+### STMT-11. One exit sequence
+
+**STMT-11@1.** Every exit of a scope that does not abort runs the same sequence: the exit value is computed, then the scope's deferred calls run, last registered first and innermost scope first, then the scope's loans end, and then its remaining locals are destroyed.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: pending R-0496
+- Semantics: none
+- Obligation: STMT-1 (R-0496)
+- Evidence: tested
+
+**Rationale.** Decided by the owner on 2026-10-29 (OD2, part 5). One order on every normal exit
+(falling off the end, `return`, `break`, `continue`) is what lets a deferred call see the exit value
+already computed and the loans it was given still live (OWN-16), and lets the destruction of the
+remaining locals come last. An abort runs none of it (STMT-2; OD10). Main does not yet run one
+sequence on every exit form: a `for` loop's step ran before its body's deferred calls in the
+interpreter (bug 306, under repair).
+
 ## Recoverable failure: explicit `Result` flow
 
 This section is explanatory; it records a design decision and the shape of programs under it. A

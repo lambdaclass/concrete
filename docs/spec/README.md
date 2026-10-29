@@ -57,10 +57,10 @@ areas exist (§8).
 | `statements.md` | `STMT-` | migrated: STMT-1 to STMT-10 (outcomes, abort only, single-threaded, evaluation order, exits in operands, loops, `main`, value blocks, returning on every path, test functions) |
 | `arithmetic.md` | `ARITH-` | migrated: ARITH-1 to ARITH-6 (floats, literals, checked arithmetic, named operations, conversions, comparisons) |
 | `contracts.md` | `CON-` | migrated: CON-1 to CON-4 (partial correctness, contract claims, the specification judgment pending, ghost code) |
-| `modules.md` | `MOD-` | migrated: MOD-1 to MOD-4 and MOD-6 (name resolution, visibility, one binding per name, module files, the privacy of `std.libc`, pending) |
+| `modules.md` | `MOD-` | migrated: MOD-1 to MOD-4, MOD-6 and MOD-7 (name resolution, visibility, one binding per name, module files, the privacy of `std.libc` and generated interfaces, both pending) |
 | `syntax.md` | `SYN-` | migrated: SYN-1 to SYN-3 (the grammar, operator precedence, reserved spellings) |
 | `traits.md` | `TRAIT-` | migrated: TRAIT-D1, TRAIT-1 to TRAIT-10 (coherence: one impl per trait and type, no overlap, instance locality, impl targets, one method name per type, unambiguous bound calls, order independence; declared traits, impl conformance, satisfied bounds) |
-| `decisions.md` | `OPEN-` | open: OPEN-1 to OPEN-19 (the owner decisions of ROADMAP exit 2n still open, stated as questions with no answer encoded); OPEN-20 to OPEN-22 retired when the owner decided them (2026-10-29) |
+| `decisions.md` | `OPEN-` | open: the owner decisions of ROADMAP exit 2n still open (OPEN-1, OPEN-3 to OPEN-8, OPEN-10 to OPEN-19), stated as questions with no answer encoded; OPEN-2, OPEN-9 and OPEN-20 to OPEN-22 retired when the owner decided them (2026-10-29) |
 
 **pilot**: the chapter is written in this format and checked by the gate. **stub**: the chapter
 holds only the rules the pilot needed, and the rest of its area migrates later.
@@ -257,8 +257,9 @@ the target. Its four workstreams:
   that permits the behaviour; `new_bug.sh` requires one of the three and a gate checks that every
   cited ID resolves in `ids.tsv`.
 
-Measured on 2026-10-29: 0 of 147 entries link a Lean definition; 120 of 147 have `Evidence: tested`;
-22 entries are open (OD1 – OD22); 17 `docs/language` files remain to absorb (`unabsorbed.tsv`).
+Measured on 2026-10-29 (after the owner's decisions on OD2, OD9 and OD20 – OD22): 0 of 147 entries
+link a Lean definition; 125 of 147 have `Evidence: tested`; 17 entries are open; the `docs/language`
+files still to absorb are listed in `unabsorbed.tsv`.
 
 ## 3. The gate: `scripts/tests/check_spec.sh`
 
