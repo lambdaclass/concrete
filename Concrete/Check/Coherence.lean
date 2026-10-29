@@ -399,7 +399,7 @@ partial def allScopes (summaryTable : List (String × FileSummary)) (path : Stri
   -- The same import artifact Check builds; an import error is Check's to report.
   let own := (summaryTable.lookup path).getD (buildFileSummary m)
   let imports := match resolveImports m.imports summaryTable (fun _ => "") (fun _ _ => "")
-      (importerTypeSpellings own) with
+      own with
     | .ok r => r
     | .error _ => {}
   ({ path, module := m, summaryTable, imports, siblings }, file) ::

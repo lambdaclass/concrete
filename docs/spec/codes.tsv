@@ -112,6 +112,7 @@ E0283	rule	reserved identifier
 E0284	rule	unknown module
 E0285	rule	symbol not public in module
 E0323	rule	import of a public trait, which no import binds (traits are module-local; bug 233)
+E0326	rule	import of a std.libc binding outside std (MOD-6; bug 226)
 E0286	rule	fallible result discarded (must use)
 E0287	rule	non-Copy value discarded without consumption
 E0288	rule	wildcard would discard a non-Copy value

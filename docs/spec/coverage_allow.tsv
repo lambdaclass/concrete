@@ -28,7 +28,6 @@ E0267	MOD-1	unreachable:Resolve reports an unknown function value as E0100 first
 E0200	MOD-1	unreachable:Resolve refuses `Self` outside an impl first (E0109)
 E0202	MOD-1	unreachable:Resolve refuses an assignment to an undeclared name first (E0100)
 E0284	MOD-2	unreachable:Resolve refuses an unknown module first (E0110)
-E0285	MOD-2	unreachable:Resolve refuses a private import first (E0111)
 E0323	MOD-2	unreachable:Resolve refuses a trait import first (E0126)
 E0418	MOD-2	unreachable:Resolve refuses an unknown module first (E0110)
 E0419	MOD-2	unreachable:Resolve refuses a private import first (E0111)
@@ -36,3 +35,4 @@ E0423	MOD-2	unreachable:Resolve refuses a trait import first (E0126)
 E0124	MOD-4	od:OD9
 E0238	REF-6	unreachable:the REF-6 re-pointing refusal (recordRefProvenance, reassign) sits behind E0303, which refuses assigning a reference binding first
 E0238	REF-8	unreachable:no site tags an E0238 with REF-8 (CheckError.rule gives REF-8 only to E0203, E0204, E0231, E0232); retire E0238 from REF-8's Codes
+E0326	MOD-6	unreachable:only a project that loads std can import std.libc; MOD-6's reject examples are project examples, which S12 does not compile

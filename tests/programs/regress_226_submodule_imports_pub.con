@@ -1,0 +1,21 @@
+// Bug 226 (MOD-2): a submodule imports `pub` declarations of another module: a function, a foreign
+// binding and a struct. Expected: 42.
+fn main() -> Int {
+    return b::g();
+}
+
+mod a {
+    pub struct Copy Shown { pub v: Int }
+    pub fn mk() -> Shown {
+        return Shown { v: 40 };
+    }
+    pub extern fn abs(x: i32) with() -> i32;
+}
+
+mod b {
+    import a.{Shown, mk, abs};
+    pub fn g() -> Int {
+        let s: Shown = mk();
+        return s.v + 2;
+    }
+}

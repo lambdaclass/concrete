@@ -1,0 +1,16 @@
+// Bug 226 (MOD-2): a submodule imports a foreign binding another module declares without `pub`
+// (E0285, as E0111 from a top-level module).
+fn main() -> Int {
+    return b::g();
+}
+
+mod a {
+    extern fn abs(x: i32) with() -> i32;
+}
+
+mod b {
+    import a.{abs};
+    pub fn g() -> Int {
+        return 42;
+    }
+}

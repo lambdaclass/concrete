@@ -106,6 +106,7 @@ def codeRuleTag : String → Option String
   | "E0109" | "E0112" | "E0125" | "E0200" | "E0201" | "E0202" | "E0263" | "E0267" => some "MOD-1@1"
   | "E0110" | "E0111" | "E0284" | "E0285" | "E0418" | "E0419" => some "MOD-2@1"
   | "E0126" | "E0323" | "E0423" => some "MOD-2@1"
+  | "E0326" => some "MOD-6@1"
   | "E0299" | "E0120" | "E0578" => some "MOD-3@2"
   -- docs/spec/trusted.md and docs/spec/ffi.md
   | "E0121" | "E0240" | "E0242" | "E0520" | "E0521" => some "TRUST-4@1"

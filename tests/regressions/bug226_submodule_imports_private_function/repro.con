@@ -1,8 +1,8 @@
-// Bug 226 (OPEN): MOD-2@1 says a declaration crosses a module boundary only when it is `pub`, and
-// Resolve refuses importing a private function from a top-level module (E0111). A module written
+// Bug 226: MOD-2@1 says a declaration crosses a module boundary only when it is `pub`, and
+// Resolve refused importing a private function from a top-level module (E0111). A module written
 // after `main` is a submodule, whose imports Check and Elab resolve with FileSummary.resolveImports,
-// which admits every function and extern of the exporting module. So this program compiles and
-// returns 42 natively and under --interp; with `main` moved below `b` it is refused (E0111).
+// which admitted every function and extern of the exporting module, so this program returned 42 on
+// both consumers. Expected: refused at check (E0285), as from a top-level module (E0111).
 fn main() -> Int {
     return b::g();
 }

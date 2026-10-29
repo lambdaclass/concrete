@@ -187,22 +187,22 @@ MOD-1	enforced	E0201	check	Concrete.Pipeline.resolve
 MOD-1	enforced	E0202	check	Concrete.Pipeline.resolve
 MOD-1	enforced	E0263	check	Concrete.Pipeline.resolve
 MOD-1	enforced	E0267	check	Concrete.Pipeline.resolve
-MOD-2	partial bug-226	E0110	resolve	Concrete.Pipeline.resolve
-MOD-2	partial bug-226	E0111	resolve	Concrete.Pipeline.resolve
-MOD-2	partial bug-226	E0126	resolve	Concrete.Pipeline.resolve
-MOD-2	partial bug-226	E0284	check	Concrete.Pipeline.resolve
-MOD-2	partial bug-226	E0285	check	Concrete.Pipeline.resolve
-MOD-2	partial bug-226	E0323	check	Concrete.Pipeline.resolve
-MOD-2	partial bug-226	E0418	elab	Concrete.Pipeline.resolve
-MOD-2	partial bug-226	E0419	elab	Concrete.Pipeline.resolve
-MOD-2	partial bug-226	E0423	elab	Concrete.Pipeline.resolve
+MOD-2	enforced	E0110	resolve	Concrete.Pipeline.resolve, Concrete.importRefusal
+MOD-2	enforced	E0111	resolve	Concrete.Pipeline.resolve, Concrete.importRefusal
+MOD-2	enforced	E0126	resolve	Concrete.Pipeline.resolve, Concrete.importRefusal
+MOD-2	enforced	E0284	check	Concrete.Pipeline.resolve, Concrete.importRefusal
+MOD-2	enforced	E0285	check	Concrete.Pipeline.resolve, Concrete.importRefusal
+MOD-2	enforced	E0323	check	Concrete.Pipeline.resolve, Concrete.importRefusal
+MOD-2	enforced	E0418	elab	Concrete.Pipeline.resolve, Concrete.importRefusal
+MOD-2	enforced	E0419	elab	Concrete.Pipeline.resolve, Concrete.importRefusal
+MOD-2	enforced	E0423	elab	Concrete.Pipeline.resolve, Concrete.importRefusal
 MOD-3	enforced	E0299	check	Concrete.checkModule
 MOD-3	enforced	E0120	resolve	Concrete.checkModule
 MOD-3	enforced	E0578	check,core-check	Concrete.checkModule
 MOD-4	enforced	E0122	resolve	Concrete.Pipeline.resolveFiles
 MOD-4	enforced	E0123	resolve	Concrete.Pipeline.resolveFiles
 MOD-4	enforced	E0124	resolve	Concrete.Pipeline.resolveFiles
-MOD-6	pending bug-226	new	resolve	-
+MOD-6	enforced	E0326	resolve,check	Concrete.importRefusal
 SYN-1	enforced	E0001	parse	Concrete.parse
 SYN-3	enforced	E0283	check	Concrete.checkStmt
 SYN-4	pending bug-318	E0001	parse	-

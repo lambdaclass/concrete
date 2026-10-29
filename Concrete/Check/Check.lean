@@ -4455,7 +4455,7 @@ partial def checkSubmodules (m : Module) (summary : FileSummary)
     match resolveImports sub.imports summaryTable
         (fun modName => CheckError.message (.unknownModule modName))
         (fun sym modName => CheckError.message (.notPublicInModule sym modName))
-        (importerTypeSpellings subSummary) (pass := "check") with
+        subSummary (pass := "check") with
     | .error ds => errs ++ (ds.addContext s!"while checking module '{sub.name}'").stampFile sub.sourceFile
     | .ok subImports =>
       -- Inject sibling submodule types (filtered against local names), exactly
@@ -4497,7 +4497,7 @@ def checkProgram (resolved : List ResolvedModule)
     match resolveImports m.imports summaryTable
         (fun modName => CheckError.message (.unknownModule modName))
         (fun sym modName => CheckError.message (.notPublicInModule sym modName))
-        (importerTypeSpellings summary) (pass := "check") with
+        summary (pass := "check") with
     | .error ds => errs ++ ds
     | .ok imports =>
       -- Inject sibling module functions for qualified :: access

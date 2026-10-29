@@ -9003,6 +9003,13 @@ run_err "$TESTDIR/error_215_cast_unknown_type.con" "(E0108)"
 run_err "$TESTDIR/error_215_turbofish_unknown_type.con" "(E0108)"
 run_err "$TESTDIR/error_215_cast_field_spelling.con" "(E0108)"
 run_err "$TESTDIR/error_215_const_cast_unknown_type.con" "(E0108)"
+# Bug 226 (MOD-2, MOD-6): a submodule imported any function, foreign binding, struct or enum of
+# another module, `pub` or not (FileSummary.resolveImports); one import rule (importRefusal) now
+# applies to every module, and std.libc's bindings are importable by std's modules only.
+run_err "tests/regressions/bug226_submodule_imports_private_function/repro.con" "(E0285)"
+run_err "$TESTDIR/error_226_submodule_imports_private_extern.con" "(E0285)"
+run_err "$TESTDIR/error_226_submodule_imports_private_struct.con" "(E0285)"
+run_ok "$TESTDIR/regress_226_submodule_imports_pub.con" 42
 # Bug 217: Resolve walked only the modules of the top-level list, so a nested submodule (two
 # modules deep, a module written after `main`, every `mod x;` file of a project) produced no
 # Resolve diagnostics: the cast reached the backend (panic), and other name errors met Check's

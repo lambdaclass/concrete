@@ -1,0 +1,15 @@
+// Bug 226 (MOD-2): a submodule imports a struct another module declares without `pub` (E0285).
+fn main() -> Int {
+    return b::g();
+}
+
+mod a {
+    struct Copy Hidden { v: Int }
+}
+
+mod b {
+    import a.{Hidden};
+    pub fn g() -> Int {
+        return 42;
+    }
+}

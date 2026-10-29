@@ -2857,7 +2857,7 @@ def summaryTypeBinding (decls : List (String × String)) (d : FileSummary) (n : 
   -- (imports, then own), enums (imports, then own), newtypes (imports, then own).
   let closure? : Option ResolvedImports :=
     match resolveImports d.imports summaryTable (fun _ => "") (fun _ _ => "")
-        (importerTypeSpellings d) (pass := "elab") with
+        d (pass := "elab") with
     | .ok r => some r
     | .error _ => none
   let ordered : List (String × String × String) := match closure? with
@@ -3327,7 +3327,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
       let subImports := match resolveImports sub.imports summaryTable
           (fun modName => ElabError.message (.unknownModule modName))
           (fun sym modName => ElabError.message (.notPublicInModule sym modName))
-          (importerTypeSpellings subSummary) (pass := "elab") with
+          subSummary (pass := "elab") with
         | .ok imp => imp
         | .error _ => {}
       -- Inject sibling module types so submodules can reference each other's types
@@ -3705,7 +3705,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
             -- a TYPE of that spelling, declared or imported (an imported function or constant
             -- named `Result` is in the value namespace and withholds nothing, MOD-3)
             let importedType := match resolveImports d.imports summaryTable (fun _ => "")
-                (fun _ _ => "") (importerTypeSpellings d) (pass := "elab") with
+                (fun _ _ => "") d (pass := "elab") with
               | .ok r => r.structs.any (·.name == n) || r.enums.any (·.name == n)
                   || r.newtypes.any (·.name == n) || r.typeAliases.any (·.1 == n)
               | .error _ => true
@@ -4465,7 +4465,7 @@ def elabProgram (resolved : List ResolvedModule)
     match resolveImports m.imports summaryTable
         (fun modName => ElabError.message (.unknownModule modName))
         (fun sym modName => ElabError.message (.notPublicInModule sym modName))
-        (importerTypeSpellings summary) (pass := "elab") with
+        summary (pass := "elab") with
     | .error ds => (acc, errs ++ ds)
     | .ok imports =>
       -- Inject sibling module functions for qualified :: access

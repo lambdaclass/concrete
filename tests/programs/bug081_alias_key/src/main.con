@@ -19,7 +19,7 @@
 #[spec(Concrete.Proof.checkMagicExpr)]
 #[proof_by(Examples.ElfHeader.Proofs.check_magic_correct)]
 #[proof_fingerprint("v2:a669dd14614bc56a33be35aa10226679")]
-fn check_magic(b0: Int, b1: Int, b2: Int, b3: Int) -> Int {
+pub fn check_magic(b0: Int, b1: Int, b2: Int, b3: Int) -> Int {
     if b0 == 127 {
         if b1 == 69 {
             if b2 == 76 {
@@ -61,7 +61,7 @@ fn check_class_orig(cls: Int) -> Int {
 #[spec(Concrete.Proof.checkDataExpr)]
 #[proof_by(Examples.ElfHeader.Proofs.check_data_correct)]
 #[proof_fingerprint("v2:7ac6fe15f54ef809d5e742d7c5be7dc7")]
-fn check_data(encoding: Int) -> Int {
+pub fn check_data(encoding: Int) -> Int {
     if encoding == 1 {
         return 1;
     } else {
@@ -78,7 +78,7 @@ fn check_data(encoding: Int) -> Int {
 #[spec(Concrete.Proof.checkVersionExpr)]
 #[proof_by(Examples.ElfHeader.Proofs.check_version_correct)]
 #[proof_fingerprint("v2:0d368796ab5dee78d031bac527ddeced")]
-fn check_version(ver: Int) -> Int {
+pub fn check_version(ver: Int) -> Int {
     if ver == 1 {
         return 1;
     } else {

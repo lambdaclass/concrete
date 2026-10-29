@@ -6395,6 +6395,7 @@ def diagnosticCodesReport : String :=
     entry "E0284" "check" "error" "unknown module",
     entry "E0285" "check" "error" "symbol not public in module",
     entry "E0323" "check" "error" "import of a public trait, which no import binds (traits are module-local; bug 233)",
+    entry "E0326" "resolve" "error" "import of a std.libc binding outside std (MOD-6; bug 226)",
     -- Check: discard/linearity one-law (E0286–E0289, Phase 6 #13 + H6)
     entry "E0286" "check" "error" "fallible result discarded (must use)",
     entry "E0287" "check" "error" "non-Copy value discarded without consumption",

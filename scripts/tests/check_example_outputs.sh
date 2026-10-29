@@ -495,7 +495,6 @@ open_bug_reproducers() {
 114|bug114_submodule_intrinsic_links_c_symbol/repro.con|compile-fails|Undefined symbols || undefined reference || undefined symbol: sizeof
 122|bug122_builtin_enum_canonical_layout/repro.con|runs-exit|2
 216|bug216_field_write_non_mut_binding/repro.con|compiles|
-226|bug226_submodule_imports_private_function/repro.con|compiles|
 318|bug318_a_struct_literal_in_an_if_while_or_match_head_is/repro.con|runs-exit|42
 319|bug319_a_call_that_re_lends_a_mut_binding_is_not_overla/repro.con|runs-exit|42
 320|bug320_main_may_return_int_or_bool_the_native_exit_stat/repro.con|runs-exit|42

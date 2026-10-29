@@ -89,6 +89,9 @@ structure FileSummary where
   implMethodSigs : List (String × FnSummary) := []  -- Self preserved (unresolved)
   imports : List ImportDecl := []
   submoduleSummaries : List (String × FileSummary) := []
+  /-- The module's full definition path (`std.string`, `main.b`): which package and module it
+      is, for the import rule's std-private exception (MOD-6, bug 226). -/
+  definitionPath : String := ""
 
 instance : Inhabited FileSummary where
   default := { name := "", functions := [], structs := [], enums := [],
@@ -279,6 +282,7 @@ partial def buildFileSummary (m : Module) (definitionPath : String := "") : File
                      ++ traitImplBlocksToMethodSummaries traitImpls).map fun (n, sig) =>
                      (n, resolveAliasesInSig aliasMap sig)
   { name := m.name
+    definitionPath := thisDefinitionPath
     functions := functions
     -- R-0004 path 1 (local): stamp both definition-site components once.
     -- Import aliases may later change `.name`; they never change these fields.
@@ -458,6 +462,41 @@ private def declaredByImportSpelling (s : FileSummary) (n : String) : Option Str
     | some ed => some ed.name
     | none => (s.newtypes.find? (isN ·.typeId?)).map (·.name)
 
+/-- MOD-6 (OD20, decided 2026-10-29; bug 226): the module whose bindings are private to std. -/
+def stdPrivateModulePath : String := "std.libc"
+
+/-- A definition path inside the std package (its root module `std` and every module under it). -/
+def inStdPackage (path : String) : Bool := path == "std" || path.startsWith "std."
+
+/-- Why an import of `name` from `exporter` into `importer` is refused, if it is. -/
+inductive ImportRefusal where
+  /-- MOD-2: the declaration is not `pub`. -/
+  | notPublic
+  /-- MOD-6: a module outside std names a binding of `std.libc`. -/
+  | stdPrivate
+  deriving BEq
+
+-- spec: MOD-2, spec: MOD-6 (docs/spec/modules.md; this declaration enforces the rule)
+/-- The one import rule (bug 226), applied by Resolve to a top-level module (`summaryImports`) and
+    by `resolveImports` to every module Check and Elab see, submodules included; before, a
+    submodule's imports admitted every function, foreign binding, struct and enum, `pub` or not.
+    A declaration crosses a module boundary only when it is `pub` (MOD-2). The bindings of
+    `std.libc` are private to std (MOD-6): a module of std imports them though they are not `pub`,
+    and a module outside std imports none of them, `pub` or not. `none` admits the import; a name
+    the exporter does not declare is not judged here (its own refusal reports it). -/
+def importRefusal (importer exporter : FileSummary) (name : String) : Option ImportRefusal :=
+  if exporter.definitionPath == stdPrivateModulePath then
+    if inStdPackage importer.definitionPath then none else some .stdPrivate
+  else if exporter.publicNames.contains name then none
+  else
+    let bindable := (exporter.functions ++ exporter.externFnSigs).any (·.1 == name)
+      || exporter.structs.any (·.name == name) || exporter.enums.any (·.name == name)
+    if bindable then some .notPublic else none
+
+/-- The message of a MOD-6 refusal (E0326, every pass). -/
+def stdPrivateImportMsg (name moduleName : String) : String :=
+  s!"'{name}' is a binding of '{moduleName}', which is private to std: a program uses std's wrappers, never std.libc directly"
+
 /-- Resolve a module's imports against the summary table: the declarations each import binds,
     under the importer's spellings, and the import closure (bug 036). `importerTypes` are the
     importer's own type spellings (`importerTypeSpellings`). Bug 242: a type that crosses the
@@ -472,9 +511,10 @@ def resolveImports (imports : List ImportDecl)
     (summaryTable : List (String × FileSummary))
     (unknownModuleMsg : String → String)
     (notPublicMsg : String → String → String)
-    (importerTypes : List (String × Option TypeId))
+    (importer : FileSummary)
     (pass : String := "resolve")
     : Except Diagnostics ResolvedImports := do
+  let importerTypes := importerTypeSpellings importer
   -- Bug 242: the type spellings the explicit imports bind, each with the declaration it names.
   let explicitTypes : List (String × Option TypeId) := imports.flatMap fun imp =>
     match summaryTable.lookup imp.moduleName with
@@ -565,6 +605,13 @@ def resolveImports (imports : List ImportDecl)
       imp.symbols.foldlM (init := (acc, claims)) fun (acc, claims) sym =>
         let origName := sym.name
         let localName := sym.effectiveName
+        -- Bug 226 (MOD-2, MOD-6): the one import rule, before anything is bound.
+        match importRefusal importer summary origName with
+        | some .stdPrivate =>
+          .error [{ severity := .error, message := stdPrivateImportMsg origName imp.moduleName, pass := pass, span := some imp.span, hint := some "import the std module that wraps it (std.string, std.io, std.fs, ...)", code := "E0326" }]
+        | some .notPublic =>
+          .error [{ severity := .error, message := notPublicMsg origName imp.moduleName, pass := pass, span := some imp.span, hint := none, code := importCode pass false }]
+        | none =>
         match pubFns.find? fun (n, _) => n == origName with
         | some (_, sig) =>
           let expanded := resolveAliasesInSig aliasMap sig

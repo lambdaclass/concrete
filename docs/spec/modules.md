@@ -57,8 +57,8 @@ fn main() -> Int {
 - Kind: refusal
 - Uses: none
 - Codes: E0110 (resolve), E0111 (resolve), E0126 (resolve), E0284 (check), E0285 (check), E0323 (check), E0418 (elab), E0419 (elab), E0423 (elab)
-- Status: partial bug-226
-- Enforced by: Concrete.Pipeline.resolve
+- Status: enforced
+- Enforced by: Concrete.Pipeline.resolve, Concrete.importRefusal
 - Semantics: none
 - Obligation: none
 - Evidence: tested
@@ -99,7 +99,7 @@ mod m {
 }
 ```
 
-```con reject name=submodule-imports-private code=E0111 stage=resolve pair=import-public pending=bug-226 now=accept:42
+```con reject name=submodule-imports-private code=E0285 stage=check pair=import-public
 fn main() -> Int {
     return b::g();
 }
@@ -232,19 +232,22 @@ fn main() -> Int {
 
 - Kind: refusal
 - Uses: none
-- Codes: new (resolve)
-- Status: pending bug-226
+- Codes: E0326 (resolve, check)
+- Status: enforced
+- Enforced by: Concrete.importRefusal
 - Semantics: none
 - Obligation: none
 - Evidence: tested
 
 **Rationale.** Decided by the owner on 2026-10-29 (OD20). std reaches the C library through
 `std.libc`, whose `extern` declarations are not `pub`; std's own modules import them, and a program
-uses std's wrappers instead. Today the import rule of a submodule admits a private declaration (bug
-226), which is how std's modules reach `std.libc` and also how a program's submodule could; the
-repair gives MOD-2 back to every program module and keeps `std.libc` visible to std alone.
+uses std's wrappers instead. Until bug 226's fix the import rule of a submodule admitted a private
+declaration, which is how std's modules reached `std.libc` and also how a program's submodule
+could; one import rule (`importRefusal`) now gives MOD-2 to every module and keeps `std.libc`
+visible to std alone, `pub` or not. A module belongs to std by its definition path (`std` and the
+modules under it).
 
-```con reject name=program-imports-libc code=new stage=resolve pair=program-uses-std pending=bug-226 now=accept:42 project=libcuser interp-exempt=project-needs-std
+```con reject name=program-imports-libc code=E0326 stage=check pair=program-uses-std project=libcuser interp-exempt=project-needs-std
 fn main() -> Int {
     return b::g();
 }
@@ -254,6 +257,14 @@ mod b {
     pub fn g() -> Int {
         return 42;
     }
+}
+```
+
+```con reject name=program-root-imports-libc code=E0326 stage=resolve pair=program-uses-std project=libcroot interp-exempt=project-needs-std
+import std.libc.{strlen};
+
+fn main() -> Int {
+    return 42;
 }
 ```
 

@@ -57,6 +57,8 @@ inductive ResolveError where
   | selfOutsideImpl
   | unknownModule (name : String)
   | notPublicInModule (symbol : String) (moduleName : String)
+  -- Bug 226 (MOD-6, OD20): a module outside std imports a binding of std.libc.
+  | stdPrivateImport (symbol : String) (moduleName : String)
   | recursiveTypeAlias (name : String)
   | wrongTypeArgCount (name : String) (expected : Nat) (got : Nat)
   | capArgKindMismatch (name : String) (detail : String)
@@ -86,6 +88,7 @@ def ResolveError.message : ResolveError → String
   | .selfOutsideImpl => "Self can only be used inside impl blocks"
   | .unknownModule name => s!"unknown module '{name}'"
   | .notPublicInModule symbol moduleName => s!"'{symbol}' is not public in module '{moduleName}'"
+  | .stdPrivateImport symbol moduleName => stdPrivateImportMsg symbol moduleName
   | .recursiveTypeAlias name => s!"recursive type alias '{name}' (a type alias may not refer to itself, directly or through other aliases)"
   | .capArgKindMismatch name detail => s!"wrong kind of argument for '{name}': {detail}"
   | .externEffectsUndeclared name =>
@@ -221,6 +224,7 @@ def ResolveError.code : ResolveError → String
   | .selfOutsideImpl => "E0109"
   | .unknownModule _ => "E0110"
   | .notPublicInModule _ _ => "E0111"
+  | .stdPrivateImport _ _ => "E0326"
   | .recursiveTypeAlias _ => "E0112"
   | .wrongTypeArgCount _ _ _ => "E0113"
   | .capArgKindMismatch _ _ => "E0114"
@@ -950,8 +954,8 @@ private def resolveModule (m : Module) (globalScope : Scope) (knownTypeList : Li
     submodule (`checkSubmodules`, E0284/E0285) and does not descend past it, and Resolve, whose
     scope for the submodule would be incomplete, leaves it to Check the same way. -/
 private def importScope (summaryTable : List (String × FileSummary)) (imports : List ImportDecl)
-    (importerTypes : List (String × Option TypeId)) : Option (List (String × SymKind) × List String) :=
-  match resolveImports imports summaryTable (fun _ => "") (fun _ _ => "") importerTypes with
+    (importer : FileSummary) : Option (List (String × SymKind) × List String) :=
+  match resolveImports imports summaryTable (fun _ => "") (fun _ _ => "") importer with
   | .error _ => none
   | .ok ri =>
     let syms : List (String × SymKind) :=
@@ -997,7 +1001,7 @@ private partial def resolveModuleTreeErrors (summaryTable : List (String × File
     let subSummary := match summary.submoduleSummaries.find? fun (n, _) => n == sub.name with
       | some (_, s) => s
       | none => buildFileSummary sub
-    match importScope summaryTable sub.imports (importerTypeSpellings subSummary) with
+    match importScope summaryTable sub.imports subSummary with
     | none => acc
     | some (impSyms, impTys) =>
       -- Its own declarations without its children's (Check's `summary.structs`/`enums`/...).
@@ -1051,7 +1055,15 @@ private def summaryImports (summaryTable : List (String × FileSummary)) (s : Fi
           -- Bug 233: a public trait is in `pubNames` but no import binds it; it was
           -- admitted here, bound nothing, and Check refused it as "not public".
           let unimportable := modSummary.bind fun (_, ms) => unimportableKind ms sym.name
-          if pubNames.contains sym.name && unimportable.isNone then
+          -- Bug 226 (MOD-2, MOD-6): the import rule `resolveImports` applies to every module.
+          -- std.libc's bindings, which are not `pub`, are importable by std's modules only.
+          let refusal := modSummary.bind fun (_, ms) => importRefusal s ms sym.name
+          let stdOwn := modSummary.any fun (_, ms) =>
+            ms.definitionPath == stdPrivateModulePath && inStdPackage s.definitionPath
+              && (ms.functions ++ ms.externFnSigs).any (·.1 == sym.name)
+          if refusal == some .stdPrivate then
+            (errs ++ [mkResolveDiag (.stdPrivateImport sym.name imp.moduleName) (some imp.span)], syms, tys)
+          else if (pubNames.contains sym.name || stdOwn) && unimportable.isNone then
             let localName := sym.effectiveName
             -- Try to bring the symbol into scope from the module summary
             match modSummary with
@@ -1152,7 +1164,7 @@ def resolveShallow (moduleSummaries : List FileSummary)
   -- stand in so the module's other diagnostics are still produced.
   let moduleTypeEnvs := perModule.map fun (s, _, (_, syms, tys)) =>
     let (ownSyms, ownTys) := moduleTypeEnvironment s
-    let (impSyms, impTys) := (importScope summaryTable s.imports (importerTypeSpellings s)).getD (syms, tys)
+    let (impSyms, impTys) := (importScope summaryTable s.imports s).getD (syms, tys)
     (s.name, impSyms.filter (·.2.isType) ++ ownSyms, impTys ++ ownTys)
   let combinedScope := Scope.ofSymbols (combinedScope.symbols ++ importedSymbols)
   let combinedTypes := combinedTypes ++ importedTypes
