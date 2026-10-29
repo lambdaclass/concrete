@@ -598,7 +598,7 @@ an invalid raw-pointer lifetime or alias causes use after free; the mitigation i
 boundary.
 
 On every normal path (including explicit error returns) all deferred calls run, every linear value
-is consumed (OWN-2), every mutable borrow block writes back, and the frame is reclaimed; predictable
+is consumed (OWN-2), each scope's loans end and its remaining locals are destroyed in STMT-11's order, and the frame is reclaimed; predictable
 code has no heap, so the deferred call is its only cleanup. On an abort, the resources of the
 aborting function and of its callers get no language cleanup.
 

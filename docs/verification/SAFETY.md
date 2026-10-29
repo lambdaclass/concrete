@@ -1,8 +1,8 @@
 # Safety Model
 
-Moved from docs/language: the overview of the safety model, its claims, audit reports and the high-integrity profile direction; the rules are TRUST-1 to TRUST-7 of docs/spec/trusted.md and FFI-1 to FFI-5 of docs/spec/ffi.md.
+Moved from docs/language: the overview of the safety model, its claims, audit reports and the high-integrity profile direction; the rules are TRUST-1 to TRUST-10 of docs/spec/trusted.md and FFI-1 to FFI-5 of docs/spec/ffi.md.
 
-The rules are in [docs/spec/trusted.md](../spec/trusted.md) (TRUST-1 to TRUST-6) and
+The rules are in [docs/spec/trusted.md](../spec/trusted.md) (TRUST-1 to TRUST-10) and
 [docs/spec/ffi.md](../spec/ffi.md) (FFI-1 to FFI-5); this document is the design record of the
 safety model and keeps its claims, audit reports and the high-integrity profile direction.
 

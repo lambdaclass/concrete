@@ -222,8 +222,8 @@ compiler-correctness proof.
 
 ## Failure assumptions of proof-backed code
 
-Moved from docs/spec/statements.md ("Abort and failure") (absorbed into the spec's statements chapter, "Abort
-and failure"), whose language half is now there.
+Moved from docs/language/FAILURE_STRATEGY.md, whose language half is now the spec's statements chapter
+("Abort and failure").
 
 ### What proved code may assume
 
