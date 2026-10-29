@@ -1868,9 +1868,9 @@ records and the 2026-10 records are backfilled; older records may say `Violates:
 share of those only shrinks. Exit: the gate holds on every record, and no record filed after the gate
 lands says `unrecorded`.
 
-Measured state (2026-10-29, after the owner's decisions of that day): 0 of 137 entries link a Lean
-definition; 126 of 137 have `Evidence: tested`; 6 open entries (OD3, OD8, OD15, OD16, OD17 and the
-new OD23). `docs/spec/README.md` ("Path to the complete spec") keeps the current figures.
+Measured state (2026-10-29, after the owner's decisions of that day): 0 of 139 entries link a Lean
+definition; 129 of 139 have `Evidence: tested`; 5 open entries (OD3, OD15, OD16, OD17 and the new
+OD23). `docs/spec/README.md` ("Path to the complete spec") keeps the current figures.
 
 ### Task R-0556
 
@@ -1884,6 +1884,20 @@ review as an explicit interface change. It builds on the interface data of R-049
 separate compilation (V6) reads the same artifacts. Exit: the generator emits one interface per
 module for std and the examples, the gate fails a commit whose public API changed without its
 interface diff being part of the commit, and MOD-7 is `enforced`.
+
+### Task R-0557
+
+**Phase:** 6
+
+**Objective:** Global state as Austral-style capabilities (TRUST-8, TRUST-9 and TRUST-10 of
+`docs/spec/trusted.md`; owner decision OD8, decided 2026-10-29). Check refuses a constant that holds
+a capability, token or handle (today a constant of a linear type is accepted, and each use yields a
+fresh copy); `main` receives the root resource value and splits it (STMT-7 changes with it); every
+hardware or runtime singleton (allocator arena, UART and MMIO, panic buffer, `errno`, C libraries with
+internal state) is produced or taken only by a `trusted fn` returning or taking a linear token, and a
+gate lists those wrappers as the inventory of trusted external state, beside R-0509's trusted base.
+Exit: TRUST-8's pending example is refused, the root-token API and the wrapper gate are on main, and
+TRUST-8 to TRUST-10 are `enforced`.
 
 ## Area: Standard Library And Core APIs
 

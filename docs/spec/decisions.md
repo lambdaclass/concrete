@@ -23,22 +23,6 @@ turns the entry into the rules it decides; until then no agent picks a side
 
 **Rationale.** Bears on REF-9, PASS-2. Current main: on main as REF-9 (every such binder has reference type). The options and the recommendation are in ROADMAP's row OD3; the owner's answer is recorded there.
 
-<a id="OPEN-8"></a>
-### OPEN-8. Global state
-
-**OPEN-8@1.** Whether a program may hold mutable global state, and in what form, is an open owner decision (OD8).
-
-- Kind: open
-- Uses: none
-- Codes: none
-- Status: open OD8
-- Enforced by: none
-- Semantics: none
-- Obligation: none
-- Evidence: open
-
-**Rationale.** Bears on TRUST-6. Current main: pending as TRUST-6 (R-0509). The options and the recommendation are in ROADMAP's row OD8; the owner's answer is recorded there.
-
 <a id="OPEN-15"></a>
 ### OPEN-15. Freezing under a shared borrow and `&mut` exclusivity
 
@@ -125,6 +109,8 @@ These entries were retired when the owner answered them; their IDs are never reu
   REF-10@2 (lending), REF-11@3 (exclusivity at a call by root plus path), REF-13 (a `&mut` refers to the
   place), OWN-16 (a deferred call's borrow lives until it runs) and STMT-11 (one exit sequence).
 - **OPEN-9** (OD9, modules and interfaces): decided 2026-10-29. Now MOD-7 (pending, R-0556).
+- **OPEN-8** (OD8, global state): decided 2026-10-29, constants only and global resources as linear
+  tokens. Now TRUST-8, TRUST-9 and TRUST-10 of [trusted.md](trusted.md#TRUST-8) (pending, R-0557).
 
 - **OPEN-20** (OD20, the visibility of std's `std.libc` bindings): decided 2026-10-29, private to std.
   Now MOD-6 of [modules.md](modules.md#MOD-6) (pending, bug 226).

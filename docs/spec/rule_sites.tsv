@@ -153,6 +153,7 @@ TRUST-4	enforced	E0520	core-check	Concrete.ccCheckExpr, Concrete.checkExprCore
 TRUST-4	enforced	E0521	core-check	Concrete.ccCheckExpr, Concrete.checkExprCore
 TRUST-6	pending R-0509	new	check	-
 TRUST-7	enforced	E0311	check	Concrete.checkExprCore
+TRUST-8	pending R-0557	new	check	-
 STMT-5	enforced	E0278	check	Concrete.checkExprCore
 STMT-6	enforced	E0216	check	Concrete.checkStmt, Concrete.ccCheckStmt
 STMT-6	enforced	E0280	check	Concrete.checkStmt, Concrete.ccCheckStmt

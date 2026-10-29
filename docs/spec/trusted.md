@@ -6,7 +6,7 @@ techniques behind a safe API. **`Unsafe`** is the capability for crossing a fore
 boundary, and a `trusted` body absorbs it. No layer is exempt: compiler builtins, `std` and user
 code follow the same rules. This chapter covers raw pointers (TRUST-1, TRUST-3), undefined
 behaviour (TRUST-2), capabilities (TRUST-4), `trusted` (TRUST-5), the trusted-module marker
-(TRUST-6, pending) and moving a value out of raw memory (TRUST-7). Handle capabilities (`Sink<cap C>`) and callable values with capabilities are
+(TRUST-6, pending), moving a value out of raw memory (TRUST-7) and global state (TRUST-8 to TRUST-10). Handle capabilities (`Sink<cap C>`) and callable values with capabilities are
 specified in [HANDLE_CAPABILITIES.md](../language/HANDLE_CAPABILITIES.md) and
 [CALLABLE_VALUES_AND_CAPABILITIES.md](../language/CALLABLE_VALUES_AND_CAPABILITIES.md) until they
 migrate. The design records are [SAFETY.md](../language/SAFETY.md),
@@ -228,10 +228,9 @@ fn main() -> Int {
 
 **Rationale.** Decided by the owner on 2026-10-29 (OD7). The marker puts the trusted base in the
 source, where a reviewer reads it, and a gate lists every marked module; it never confers trust, so
-each function still declares `trusted` (per method, OD22) and its capabilities. Whether and how a
-program holds mutable global state (global cells reached through capabilities, no unrestricted
-`static mut`) is OD8, still open (OPEN-8); the 2026-10-23 proposal (TIGHTENING_DECISIONS D8) is
-recorded there. The compiler's emitted globals (`__concrete_argc`, `__concrete_argv`) and std's
+each function still declares `trusted` (per method, OD22) and its capabilities. Global state is
+OD8's, decided 2026-10-29: constants only, and global resources as linear tokens (TRUST-8 to
+TRUST-10). The compiler's emitted globals (`__concrete_argc`, `__concrete_argv`) and std's
 environment mutation are inventoried as trusted base.
 
 ```con reject name=trusted-outside-marked-module code=new stage=check pair=trusted-in-marked-module pending=R-0509 now=accept:42
@@ -321,3 +320,91 @@ fn main() with(Alloc) -> Int {
 | `tests/programs/error_rawdup_trusted_deref.con` | `reject:E0311:TRUST-7@1` | `trust7` | `-` |
 | `tests/programs/regress_198_read_owned.con` | `run:42` | `trust7` | `binary,interp` |
 
+<a id="TRUST-8"></a>
+### TRUST-8. A program has no mutable global state
+
+**TRUST-8@1.** No module-level declaration holds mutable state: there is no `static mut` and no global cell, and a constant is immutable, has no interior mutability and never contains a capability, a token or a handle.
+
+- Kind: refusal
+- Uses: none
+- Codes: new (check)
+- Status: pending R-0557
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** Decided by the owner on 2026-10-29 (OD8): global state follows Austral's capability
+model, extended. A global that any function can reach is an effect no signature shows, so the only
+module-level values are constants, and a constant is a value with nothing behind it to mutate or
+spend. The grammar has no mutable global (`static mut N: Int = 0;` is a parse error, SYN-1), so
+that half holds today; a constant of a linear type is accepted and each use yields a fresh copy of it, which mints a
+linear value the program never received, and its refusal is pending (R-0557). The proposal of
+2026-10-23 (declared cells in marked modules, reached through capabilities) was rejected after the
+Codex and Grok reviews: interrupt handlers and FFI callbacks re-enter a cell, a cell holding a
+linear value has no owner to destroy it, cells need effect polymorphism to stay visible, and they
+are shared state once threads exist. Global resources are linear tokens instead (TRUST-9).
+
+```con reject name=constant-holds-token code=new stage=check pair=constant pending=R-0557 now=accept:42
+struct Token { v: Int }
+
+const T: Token = Token { v: 42 };
+
+fn main() -> Int {
+    let t: Token = T;
+    let Token { v } = t;
+    return v;
+}
+```
+
+```con accept name=constant exit=42
+struct Copy P { v: Int }
+
+const C: P = P { v: 42 };
+
+fn main() -> Int {
+    return C.v;
+}
+```
+
+<a id="TRUST-9"></a>
+### TRUST-9. Global resources are linear tokens
+
+**TRUST-9@1.** A global resource is reached only through a linear token: `main` receives the root resource value and splits it, and a hardware or runtime singleton is produced or taken only by a `trusted fn` that returns or takes a linear token, each such function listed by a gate.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: pending R-0557
+- Semantics: none
+- Obligation: the trusted external state is the gate's list of token wrappers (R-0557, R-0509)
+- Evidence: tested
+
+**Rationale.** Decided by the owner on 2026-10-29 (OD8). The root value plays the part of Austral's
+`RootCapability`: everything a program may touch outside its own values descends from what `main`
+was given. The singletons are the allocator arena, a UART and memory-mapped I/O, the panic buffer,
+`errno` and C libraries with internal state; each is minted or consumed by a `trusted fn` wrapper,
+and the gate's list of those wrappers is the inventory of trusted external state. Tokens are
+ordinary values: every effect shows as a token parameter, and tokens follow the loan and
+exclusivity rules (REF-8, REF-11, REF-13) with no separate effect system. Nothing runs before `main`
+and there is no cleanup protocol for global state; an abort runs nothing (STMT-1, STMT-2). An
+implicit-context mechanism, if ergonomics later asks for one, is a new owner decision and never a
+hidden global. This changes STMT-7, whose `main` takes no parameters today: the root parameter
+lands with R-0557.
+
+<a id="TRUST-10"></a>
+### TRUST-10. Handlers and callbacks hold only the tokens they are given
+
+**TRUST-10@1.** An interrupt handler, an FFI callback or a thread holds only the tokens explicitly given to it, by installation, by transfer or through a lock that grants a borrow.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: pending R-0557
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** Decided by the owner on 2026-10-29 (OD8). Code that runs outside the call tree of
+`main` cannot reach a resource through a global (TRUST-8), so what it may touch is exactly what was
+handed to it, and the handing-over is visible in the source. Threads do not exist yet; when they do,
+they follow the same rule.

@@ -411,7 +411,7 @@ OPEN-4@1	retired:decided-by-the-owner-2026-10-29	9146f5d5dd8d88696cc2e5702067c76
 OPEN-5@1	retired:decided-by-the-owner-2026-10-29	ccdb9f9251b032c2ca72bedb870a7037
 OPEN-6@1	retired:decided-by-the-owner-2026-10-29	006a90419d6e548332c173be0ad92741
 OPEN-7@1	retired:decided-by-the-owner-2026-10-29	567ea8fc5e20ce2635700c2481d7569c
-OPEN-8@1	live	5875abd96034e0d160f0b4a796519ffb
+OPEN-8@1	retired:decided-by-the-owner-2026-10-29	5875abd96034e0d160f0b4a796519ffb
 OPEN-9@1	retired:decided-by-the-owner-2026-10-29	d41ff25bbb1f18b0e0f180068c31abd1
 OPEN-10@1	retired:decided-by-the-owner-2026-10-29	313c100df3ba41ae29d89bd6580b194e
 OPEN-11@1	retired:decided-by-the-owner-2026-10-29	5803198a265d218a670fdd6f18b4f647
@@ -448,3 +448,8 @@ TRUST-6@2	pending	08f3bb8fb9eb30319d9218ba580d5286
 PAT-9@1	pending	35e2167c3a43ba510434adcfe56ae438
 PAT-9/arm-after-catch-all	pending	-
 PAT-9/catch-all-last	live	-
+TRUST-8@1	pending	2bafe471a5d6b73feffd46d50ff80f49
+TRUST-8/constant-holds-token	pending	-
+TRUST-8/constant	live	-
+TRUST-9@1	pending	093d98fd88fcaa28da96acf9c9d04aad
+TRUST-10@1	pending	e352e0795fc8294fc63da0fb72c18253
