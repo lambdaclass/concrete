@@ -9,7 +9,7 @@ It is intentionally milestone-oriented rather than release-oriented. The project
 For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
-<!-- changelog stamp: 24b97c87f4513032ee18a1ca2225ea26 (scripts/gen/changelog.py; add a changelog.d/ fragment, never edit this file by hand) -->
+<!-- changelog stamp: cb01dffb7b127cc7d9b6fdd481f6f49a (scripts/gen/changelog.py; add a changelog.d/ fragment, never edit this file by hand) -->
 
 ### Large Arrays No Longer Make Compilation or `--interp` Quadratic (bugs 027, 248, 249, 250, 2026-10-25)
 
@@ -1199,7 +1199,7 @@ binary: a program that never reads (21) and a control whose single two-byte read
 
 ### Language Tightening Decisions and a Rule-Impact Scanner (2026-10-23)
 
-[TIGHTENING_DECISIONS.md](docs/language/TIGHTENING_DECISIONS.md) classifies every open language
+[TIGHTENING_DECISIONS.md](docs/project/TIGHTENING_DECISIONS.md) classifies every open language
 gap that could be tightened. The gaps covered are:
 
 - G2, G9, G10, G12, G13, G15, G16, G17 and G19;
