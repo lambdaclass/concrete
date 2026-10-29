@@ -2976,11 +2976,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
   let fnSigPairs : List (String × FnSummary) :=
     userFnSigs ++ implMethodSigs ++ traitImplMethodSigs
   let finalDeclName := fun (f : FnDef) (implTy : Option Ty) =>
-    let localName := match implTy with
-      | some it =>
-        let tn := tyName it
-        if tn != "" then tn ++ "_" ++ f.name else f.name
-      | none => f.name
+    let localName := implLocalName f.name implTy
     if proofFnPrefix.isEmpty then localName else proofFnPrefix ++ "_" ++ localName
   let regularFns := m.functions.map fun f => (f, (none : Option Ty))
   let implMethodPairs := m.implBlocks.foldl (fun acc ib =>
@@ -3003,11 +2999,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
   ) ([] : List (FnDef × Option Ty))
   let allFnPairs := regularFns ++ implMethodPairs ++ traitImplMethodPairs
   let localCallIds : List (String × CallableId) := allFnPairs.map fun (f, implTy) =>
-    let localKey := match implTy with
-      | some it =>
-        let tn := tyName it
-        if tn != "" then tn ++ "_" ++ f.name else f.name
-      | none => f.name
+    let localKey := implLocalName f.name implTy
     (localKey, CallableId.ofUser thisProofPath (finalDeclName f implTy) f.typeParams.length)
   let importedCallIds : List (String × CallableId) := m.imports.flatMap fun imp =>
     let summary? := match summary.submoduleSummaries.find? fun (n, _) => n == imp.moduleName with
@@ -3204,9 +3196,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
   -- free-spelled name and wrong for `x.m()`.
   let localMethodCallIds : List (String × CallableId) := (allFnPairs.filter (·.2.isSome)).map
     fun (f, implTy) =>
-      let localKey := match implTy with
-        | some it => let tn := tyName it; if tn != "" then tn ++ "_" ++ f.name else f.name
-        | none => f.name
+      let localKey := implLocalName f.name implTy
       (localKey, CallableId.ofUser thisProofPath (finalDeclName f implTy) f.typeParams.length)
   let localMethodCallMap := firstWinsMap localMethodCallIds
   let resolveMethodCall : String → Option CallableId := fun name =>
@@ -3238,17 +3228,9 @@ partial def elabModule (m : Module) (summary : FileSummary)
     let env' := { env with currentImplType := implTy, traits := allTraits }
     let result := (do
       let (cfn, bodyIdentityInputs, evidenceBody) ← elabFn f implTy
-      let finalName := match implTy with
-        | some it =>
-          let tn := tyName it
-          if tn != "" then tn ++ "_" ++ f.name else f.name
-        | none => f.name
+      let finalName := implLocalName f.name implTy
       let implOrigin := if cfn.isTrusted then
-        match implTy with
-        | some it =>
-          let tn := tyName it
-          if tn != "" then some tn else none
-        | none => none
+        implTy.bind tyName?
       else none
       pure ({ cfn with name := finalName, trustedImplOrigin := implOrigin, isMethod := implTy.isSome },
              bodyIdentityInputs, evidenceBody)
@@ -3645,9 +3627,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
   -- A method is named `<Type>_<method>` after its receiver type's spelling, so a
   -- respelled type respells its methods' definitions and calls with it.
   let methodNames : List String :=
-    (allFnPairs.filterMap fun (f, implTy) => implTy.bind fun it =>
-      let tn := tyName it
-      if tn.isEmpty then none else some (tn ++ "_" ++ f.name))
+    (allFnPairs.filterMap fun (f, implTy) => (implTy.bind tyName?).map (mangledMethodName · f.name))
     ++ imports.implMethodSigs.map (·.1)
     -- Bug 242: an imported method called through another spelling of its type (`lookupMethodE`)
     ++ localOwners.flatMap (fun (ln, dn, di) => if ln == dn then [] else
@@ -3656,11 +3636,9 @@ partial def elabModule (m : Module) (summary : FileSummary)
   -- A method this module DEFINES is renamed by its own receiver type (known exactly); any
   -- other method spelling by the type that owns it (`methodOwner`).
   let localMethodRenames : List (String × String) :=
-    allFnPairs.filterMap fun (f, implTy) => implTy.bind fun it =>
-      let tn := tyName it
-      if tn.isEmpty then none else
+    allFnPairs.filterMap fun (f, implTy) => (implTy.bind tyName?).bind fun tn =>
       match typeSpellings.lookup tn with
-      | some c => some (tn ++ "_" ++ f.name, c ++ "_" ++ f.name)
+      | some c => some (mangledMethodName tn f.name, mangledMethodName c f.name)
       | none => none
   let renameMethod := fun (n : String) =>
     match localMethodRenames.lookup n with
@@ -3843,7 +3821,7 @@ partial def elabModule (m : Module) (summary : FileSummary)
           -- The parser prepends the receiver as a `self` parameter; read its form back.
           let (selfKind, rest) : Option SelfKind × List Param := match f.params with
             | p :: ps =>
-              if p.name == "self" then
+              if p.name == selfParamName then
                 (some (match p.ty with
                   | .ref _ => SelfKind.ref | .refMut _ => SelfKind.refMut | _ => SelfKind.value), ps)
               else (none, f.params)

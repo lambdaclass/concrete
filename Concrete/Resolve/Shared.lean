@@ -121,6 +121,19 @@ def tyName : Ty → String
   | .named n => n | .generic n _ _ => n
   | _ => ""
 
+/-- The type's name, or `none` for a type that has none (a reference, an array, a type variable…).
+    The one place the empty string of `tyName` is read as "no name". -/
+def tyName? (t : Ty) : Option String :=
+  let n := tyName t
+  if n.isEmpty then none else some n
+
+/-- A function's name inside its module: `Type_method` for a method of an impl on a named type,
+    the bare name otherwise. -/
+def implLocalName (fnName : String) (implTy : Option Ty) : String :=
+  match implTy.bind tyName? with
+  | some tn => mangledMethodName tn fnName
+  | none => fnName
+
 /-- Replace every occurrence of `.named "Self"` with `replacement` inside a Ty. -/
 partial def substSelf (ty : Ty) (replacement : Ty) : Ty :=
   match ty with

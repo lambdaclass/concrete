@@ -1468,7 +1468,7 @@ private def emitMainWrapper (s : EmitSSAState) (retTy : Ty) (entrySym : String) 
     .store .ptr (.reg "argv") (.global "__concrete_argv")
   ]
   let mkMainFn (blk : LLVMBlock) : LLVMFnDef :=
-    { name := "main", retTy := .i32, params := [("argc", .i32), ("argv", .ptr)], blocks := [blk] }
+    { name := cEntrySymbol, retTy := .i32, params := [("argc", .i32), ("argv", .ptr)], blocks := [blk] }
   if retLLTy == .void then
     -- Unit/void return: just call; exit 0 either way
     let instrs : List LLVMInstr := saveArgcArgv ++ [.call none .void (.global entrySym) []]
@@ -1779,7 +1779,7 @@ private def emitTestRunner (s : EmitSSAState) (modules : List SModule) (moduleFi
       .callVariadic none .i32 printfOp [(.ptr, .reg "nl")]
     ]
     let blk : LLVMBlock := ⟨"entry", instrs, .ret .i32 (some (.intLit 0))⟩
-    let mainFn : LLVMFnDef := { name := "main", retTy := .i32, params := [], blocks := [blk] }
+    let mainFn : LLVMFnDef := { name := cEntrySymbol, retTy := .i32, params := [], blocks := [blk] }
     { s with moduleFunctions := s.moduleFunctions.push mainFn }
   else
     -- Emit globals for test name strings
@@ -1844,7 +1844,7 @@ private def emitTestRunner (s : EmitSSAState) (modules : List SModule) (moduleFi
         ⟨"entry", entryInstrs, .condBr (.reg "is_pass.0") "pass.0" "fail.0"⟩
       | [] => ⟨"entry", [], .ret .i32 (some (.intLit 0))⟩  -- unreachable
     let allBlocks := [entryBlock] ++ blocks
-    let mainFn : LLVMFnDef := { name := "main", retTy := .i32, params := [], blocks := allBlocks }
+    let mainFn : LLVMFnDef := { name := cEntrySymbol, retTy := .i32, params := [], blocks := allBlocks }
     { s with moduleFunctions := s.moduleFunctions.push mainFn }
 
 /-- Rename every reference to a runtime helper in an operand. -/

@@ -3633,7 +3633,7 @@ def evalClosed (cx : Ctx) (e : CExpr) : Except String IVal :=
 def interpret (modules : List CModule) (args : List String := []) (stdin : StdinSource := default)
     (argv0 : String := "a.out") (stdoutIsTty : Bool := false) (stdinIsTty : Bool := false) : RunResult :=
   let cx := { mkCtx modules with args, argv0 }
-  match cx.defs.find? (fun (f, _) => f.name == "main") with
+  match cx.defs.find? (fun (f, _) => f.name == mainFnName) with
   | none => { events := #[], outcome := .failed "interp: no 'main' function found" }
   | some (mainFn, mainScope) =>
     let (r, st) := runIM (evalStmts { cx with scope := some mainScope, foreign := mainFn.foreignCalls } {} mainFn.body) stdin stdoutIsTty stdinIsTty

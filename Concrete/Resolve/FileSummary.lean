@@ -132,7 +132,7 @@ private def fnDefToSummary (f : FnDef) : String × FnSummary :=
 def implBlocksToMethodSummaries (blocks : List ImplBlock) : List (String × FnSummary) :=
   blocks.foldl (fun acc ib =>
     acc ++ ib.methods.map fun f =>
-      (ib.typeName ++ "_" ++ f.name,
+      (mangledMethodName ib.typeName f.name,
        { params := f.params.map fun p => (p.name, p.ty)
          retTy := f.retTy
          typeParams := ib.typeParams ++ f.typeParams
@@ -146,7 +146,7 @@ def implBlocksToMethodSummaries (blocks : List ImplBlock) : List (String × FnSu
 def traitImplBlocksToMethodSummaries (blocks : List ImplTraitBlock) : List (String × FnSummary) :=
   blocks.foldl (fun acc tb =>
     acc ++ tb.methods.map fun f =>
-      (tb.typeName ++ "_" ++ f.name,
+      (mangledMethodName tb.typeName f.name,
        { params := f.params.map fun p => (p.name, p.ty)
          retTy := f.retTy
          typeParams := tb.typeParams ++ f.typeParams
@@ -177,13 +177,13 @@ def resolveImplMethodSigs
     let implTy := if ib.typeParams.isEmpty && ib.capParams.isEmpty then Ty.named ib.typeName
                   else Ty.generic ib.typeName (ib.typeParams.map Ty.typeVar)
                          (ib.capParams.map fun c => CapSet.concrete [c])
-    acc ++ ib.methods.map fun f => (ib.typeName ++ "_" ++ f.name, implTy)
+    acc ++ ib.methods.map fun f => (mangledMethodName ib.typeName f.name, implTy)
   ) []
   let tyMap := traitImpls.foldl (fun acc tb =>
     let implTy := if tb.typeParams.isEmpty then Ty.named tb.typeName
                   -- Trait impls take no capability parameters (refused at parse).
                   else Ty.generic tb.typeName (tb.typeParams.map Ty.typeVar) []
-    acc ++ tb.methods.map fun f => (tb.typeName ++ "_" ++ f.name, implTy)
+    acc ++ tb.methods.map fun f => (mangledMethodName tb.typeName f.name, implTy)
   ) tyMap
   sigs.map fun (name, sig) =>
     match tyMap.lookup name with
@@ -237,9 +237,9 @@ partial def buildFileSummary (m : Module) (definitionPath : String := "") : File
   let pubAliases := m.typeAliases.filter (·.isPublic) |>.map (·.name)
   let pubNewtypes := m.newtypes.filter (·.isPublic) |>.map (·.name)
   let pubImplMethods := m.implBlocks.foldl (fun acc ib =>
-    acc ++ (ib.methods.filter (·.isPublic)).map (fun f => ib.typeName ++ "_" ++ f.name)) []
+    acc ++ (ib.methods.filter (·.isPublic)).map (fun f => mangledMethodName ib.typeName f.name)) []
   let pubTraitImplMethods := m.traitImpls.foldl (fun acc ti =>
-    acc ++ (ti.methods.filter (·.isPublic)).map (fun f => ti.typeName ++ "_" ++ f.name)) []
+    acc ++ (ti.methods.filter (·.isPublic)).map (fun f => mangledMethodName ti.typeName f.name)) []
   let publicNames := pubFns ++ pubStructs ++ pubEnums ++ pubTraits ++ pubExterns
                      ++ pubConstants ++ pubAliases ++ pubNewtypes
                      ++ pubImplMethods ++ pubTraitImplMethods
@@ -382,9 +382,9 @@ private def typeImplsOf (summary : FileSummary) (name : String) :
   let impls := summary.implBlocks.filter fun ib => ib.typeName == name
   let traitImpls := summary.traitImpls.filter fun tb => tb.typeName == name
   let mangled := impls.foldl (fun ns ib =>
-    ns ++ (ib.methods.filter (·.isPublic)).map fun f => ib.typeName ++ "_" ++ f.name) []
+    ns ++ (ib.methods.filter (·.isPublic)).map fun f => mangledMethodName ib.typeName f.name) []
     ++ traitImpls.foldl (fun ns tb =>
-    ns ++ (tb.methods.filter (·.isPublic)).map fun f => tb.typeName ++ "_" ++ f.name) []
+    ns ++ (tb.methods.filter (·.isPublic)).map fun f => mangledMethodName tb.typeName f.name) []
   let sigs := summary.implMethodSigs.filter fun (n, _) => mangled.contains n
   (impls, traitImpls, sigs)
 
@@ -654,9 +654,9 @@ def resolveImports (imports : List ImportDecl)
     let builtinImpls := summary.implBlocks.filter fun ib => List.elem ib.typeName builtinNames
     let builtinTraitImpls := summary.traitImpls.filter fun tb => List.elem tb.typeName builtinNames
     let mangledNames := builtinImpls.foldl (fun ns ib =>
-      ns ++ (ib.methods.filter (·.isPublic)).map fun f => ib.typeName ++ "_" ++ f.name) []
+      ns ++ (ib.methods.filter (·.isPublic)).map fun f => mangledMethodName ib.typeName f.name) []
       ++ builtinTraitImpls.foldl (fun ns tb =>
-      ns ++ (tb.methods.filter (·.isPublic)).map fun f => tb.typeName ++ "_" ++ f.name) []
+      ns ++ (tb.methods.filter (·.isPublic)).map fun f => mangledMethodName tb.typeName f.name) []
     let newSigs := summary.implMethodSigs.filter fun (name, _) =>
       mangledNames.contains name && !(acc.implMethodSigs.any fun (n, _) => n == name)
     let newImpls := builtinImpls.filter fun ib =>

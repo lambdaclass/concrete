@@ -5,21 +5,6 @@ import Concrete.Resolve.Intrinsic
 namespace Concrete
 
 -- ============================================================
--- Reserved spellings
--- ============================================================
-
-/-- The binder spelled `_`. It binds nothing: the parser keeps it as an ordinary binder name, so
-    every later stage asks `isWildcardBinder` rather than comparing with the literal. -/
-def wildcardBinder : String := "_"
-
-/-- Whether a binder name is the wildcard `_`. -/
-@[inline] def isWildcardBinder (name : String) : Bool := name == wildcardBinder
-
-/-- The name the parser gives the implicit root module: a file's top-level items outside any
-    `mod` block, and a single bare module without a `mod` wrapper. -/
-def rootModuleName : String := "main"
-
--- ============================================================
 -- Capability Sets
 -- ============================================================
 

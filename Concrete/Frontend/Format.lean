@@ -316,7 +316,7 @@ def fmtExpr (e : Expr) : String := fmtExprAt 0 e
 -- ============================================================
 
 private def fmtParam (p : Param) : String :=
-  if p.name == "self" then
+  if p.name == selfParamName then
     match p.ty with
     | .refMut _ => "&mut self"
     | .ref _ => "&self"

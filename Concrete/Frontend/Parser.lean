@@ -1921,9 +1921,9 @@ partial def parseImplBlock : ParseM (ImplBlock ⊕ ImplTraitBlock) := do
                      -- Trait impls take no capability parameters (refused above).
                      else Ty.generic typeName (typeParams.map Ty.typeVar) []
       let selfParam : List Param := match selfKind with
-        | some .value => [{ name := "self", ty := selfTy }]
-        | some .ref => [{ name := "self", ty := .ref selfTy }]
-        | some .refMut => [{ name := "self", ty := .refMut selfTy }]
+        | some .value => [{ name := selfParamName, ty := selfTy }]
+        | some .ref => [{ name := selfParamName, ty := .ref selfTy }]
+        | some .refMut => [{ name := selfParamName, ty := .refMut selfTy }]
         | none => []
       let f := { f with params := selfParam ++ f.params, isPublic := isPub,
                         isTrusted := f.isTrusted || isTrustedM }
@@ -1982,9 +1982,9 @@ partial def parseImplBlock : ParseM (ImplBlock ⊕ ImplTraitBlock) := do
                      else Ty.generic typeName (typeParams.map Ty.typeVar)
                             (implCapParams.map fun c => CapSet.concrete [c])
       let selfParam : List Param := match selfKind with
-        | some .value => [{ name := "self", ty := selfTy }]
-        | some .ref => [{ name := "self", ty := .ref selfTy }]
-        | some .refMut => [{ name := "self", ty := .refMut selfTy }]
+        | some .value => [{ name := selfParamName, ty := selfTy }]
+        | some .ref => [{ name := selfParamName, ty := .ref selfTy }]
+        | some .refMut => [{ name := selfParamName, ty := .refMut selfTy }]
         | none => []
       let f := { f with params := selfParam ++ f.params, isPublic := isPub,
                         isTrusted := f.isTrusted || isTrustedM }

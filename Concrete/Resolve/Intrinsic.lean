@@ -293,6 +293,27 @@ def errVariantName : String := "Err"
 /-- The user-level entry point function name. -/
 def mainFnName : String := "main"
 
+/-- The C symbol of the process entry the compiler generates; no export may take it. -/
+def cEntrySymbol : String := "main"
+
+/-- The name the parser gives a method's receiver parameter. -/
+def selfParamName : String := "self"
+
+/-- The binder spelled `_`. It binds nothing: the parser keeps it as an ordinary binder name, so
+    every later stage asks `isWildcardBinder` rather than comparing with the literal. -/
+def wildcardBinder : String := "_"
+
+/-- Whether a binder name is the wildcard `_`. -/
+@[inline] def isWildcardBinder (name : String) : Bool := name == wildcardBinder
+
+/-- The name the parser gives the implicit root module: a file's top-level items outside any
+    `mod` block, and a single bare module without a `mod` wrapper. -/
+def rootModuleName : String := "main"
+
+/-- A function name reserved by MOD-3. It was the entry point's symbol before every Concrete
+    function was mangled; the reservation remains in the spec. -/
+def userMainName : String := "user_main"
+
 /-- The `Unsafe` capability name. -/
 def unsafeCapName : String := "Unsafe"
 
@@ -378,7 +399,7 @@ def sizeofSuffix : String := "_sizeof"
     compiler-emitted LLVM symbol (which would otherwise leak as an "LLVM IR
     validation failed"/duplicate-definition error at codegen — bug 028):
       - the named builtins users may call but not redefine (`reservedFnNames`);
-      - `user_main`, the symbol EmitSSA renames the entry point to;
+      - `user_main` (`userMainName`), reserved by MOD-3;
       - the `__` prefix, reserved for all compiler-internal helpers
         (`__cc_*` bounds/overflow checks, `__concrete_*` argc/argv accessors,
         `__destr_*` destructors, …).
@@ -387,7 +408,7 @@ def sizeofSuffix : String := "_sizeof"
     unaffected, so `trusted extern fn __concrete_get_argc()` still works. -/
 def isReservedFnName (name : String) : Bool :=
   reservedFnNames.contains name
-  || name == "user_main"
+  || name == userMainName
   || name.startsWith "__"
 
 /-- Check if a name is any known builtin (intrinsic or extra). -/

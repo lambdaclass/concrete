@@ -732,7 +732,7 @@ private def resolveFnBody (globalScope : Scope) (knownTypes : Std.HashSet String
     -- generic type and no arity is looked up for it (bug 200).
     match implType with
     | some tn =>
-      if p.name == "self" then
+      if p.name == selfParamName then
         let saved := ctx.typeParams
         let ctx := checkTyDeep { ctx with typeParams := tn :: saved } p.ty none
         { ctx with typeParams := saved }
@@ -1200,7 +1200,7 @@ def exportErrors (modules : List Module) : Diagnostics :=
     -- Prepended, reversed once below (the quadratic-append ratchet).
     let bad (reason : String) := mkResolveDiag (.invalidExport f.name sym reason) (some f.span) :: errs
     if !Symbols.isCIdentifier sym then bad "the symbol must be a C identifier (letters, digits and '_', not starting with a digit)"
-    else if sym == "main" then bad "'main' is the process entry the compiler generates"
+    else if sym == cEntrySymbol then bad "'main' is the process entry the compiler generates"
     else if sym.startsWith "__" then bad "the '__' prefix is reserved for the compiler runtime"
     else if Symbols.isRuntimeHelperName sym then
       bad s!"'{sym}' is the name of a compiler runtime helper"
