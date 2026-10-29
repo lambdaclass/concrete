@@ -94,7 +94,7 @@ example coverage, old items 32-34/39) which was folded into the current
 roadmap's flagship/example work.
 
 - Predictable boundaries documented: `docs/platform/PREDICTABLE_BOUNDARIES.md`,
-  `docs/platform/PREDICTABLE_FAILURE_DISCIPLINE.md`, `docs/language/FAILURE_STRATEGY.md`
+  `docs/platform/PREDICTABLE_FAILURE_DISCIPLINE.md`, `docs/spec/statements.md ("Abort and failure")`
 - Stack-depth reporting end-to-end (`--report stack-depth`, 25 trust-gate tests)
 - Bounded-capacity types practical (`fixed_capacity`)
 - Error propagation documented (`parse_validate`, `service_errors`)

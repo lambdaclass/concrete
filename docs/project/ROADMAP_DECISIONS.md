@@ -72,7 +72,7 @@ unspecified unless a `repr` guarantees it, observed only through `sizeof` / `ali
 namespace disjoint from C, with `#[link_name]` for imports and an export attribute for the reverse
 (FFI.md; R-0285, R-0283, R-0286, R-0510); ownership on failure stated by every consuming fallible
 `std` and foreign-boundary API (ERROR_CONVENTIONS; R-0285, R-0283); recoverable versus terminal
-failure restated (FAILURE_STRATEGY). **Adopted, staged:** `Option` and `Result` laid out per
+failure restated (the spec's "Abort and failure" (docs/spec/statements.md)). **Adopted, staged:** `Option` and `Result` laid out per
 instantiation now (bug 122, exit 0b) and referred to only by resolved identity later (R-0492,
 R-0514; LAYOUT_CONTRACT §3.4); lossy numeric `as` casts become **compile errors** — the user's choice
 over a trapping `as` — reached through named operations first (checked conversion returning an error,

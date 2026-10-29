@@ -44,7 +44,7 @@ semantics records the external-event trace together with its outcome (VERIFIED_P
 
 **Rationale.** One failure mode keeps the semantics and the linearity argument small. Cleanup is
 guaranteed on normal and structured exits, and abort promises none
-([FAILURE_STRATEGY.md](../language/FAILURE_STRATEGY.md); TIGHTENING_DECISIONS §4.5, T-ARITH).
+("Abort and failure" below; TIGHTENING_DECISIONS §4.5, T-ARITH).
 Recoverable errors are values (`Result`), not failures.
 
 <a id="STMT-3"></a>
@@ -518,4 +518,70 @@ interpreter, proof extraction, evidence identity) has a propagation path; same-t
 cross-type explicit propagation compile and run; explicit error returns run `defer` cleanup in
 nested scopes; ignored fallible results stay refused (OWN-6); and the documentation, the book, the
 site, tests and examples show the exhaustive match and the explicit return.
+
+## Abort and failure
+
+This section is explanatory: it states the failure model that STMT-1 and STMT-2 (pending, R-0496)
+formalize. Failure is abort only: there is no panic, no stack unwinding, no catch and no exception
+mechanism, permanently. Unwinding needs hidden control flow the predictable profile cannot reason
+about and runtime support (personality functions, LSDA tables) that freestanding targets lack, makes
+every call site a potential exit for proofs, and the model stays small enough to state on one page.
+
+| situation | response | deferred calls run? |
+|---|---|---|
+| a normal `return`, or the end of the body | the function returns | yes, last registered first |
+| an explicit error return (a `Result::Err` arm's `return`) | ordinary control flow, not unwinding | yes, in each returning frame |
+| `break`, `continue`, the end of a block (an `if` branch, a loop body, a borrow block) | control flow | yes, for the scopes left |
+| out of memory | terminal abort | no |
+| stack overflow | the OS guard page, SIGSEGV | no |
+| a hardware signal | the OS ends the process | no |
+| `abort()` | terminal abort | no |
+
+**Terminal failures** abort with no cleanup after the trap. A trap inside cleanup is terminal too,
+and a value is destroyed at most once, so a destructor never runs again after a trap interrupted it
+(the trap helpers and `__concrete_check_oom` call libc `abort()`). The sources are: out of memory
+(`malloc` or `realloc` returning null, through `__concrete_check_oom`); the `abort()` intrinsic
+(user code, needing `Process`); precondition violations in `std.alloc`'s wrappers (needing `Alloc`);
+and the compiler's checked operations: integer overflow, a zero divisor, an invalid shift count and
+`MIN / -1` (ARITH-3), a float-to-integer conversion out of range (ARITH-5), and an index out of
+bounds (MEM-6). The first three cannot be reached from predictable code (no allocation, no
+`Process`); the checked operations can, unless statically discharged. Hosted execution calls libc
+`abort()`, which usually raises SIGABRT (status 134 on POSIX); a freestanding profile calls a declared
+non-returning handler and may not assume an OS that reclaims resources. No deferred call, `Destroy`
+implementation or generated drop glue runs on an abort, and there is no implicit scope-end
+destructor the compiler could have inserted (OWN-13); in a hosted program the OS reclaims the
+process's memory and descriptors, which is an environmental fact, not a language guarantee.
+
+**Recoverable failures** are values (`Result`, `Option`; the recoverable-failure section above and
+the std conventions of [ERROR_CONVENTIONS.md](../stdlib/ERROR_CONVENTIONS.md)). Operations an
+application can reasonably handle get a fallible API, and a consuming fallible API states what
+happens to the resource on failure. Fallible allocation is the missing piece: std has no
+`try_alloc`, `try_reserve` or `try_push`, and `__concrete_check_oom` aborts on null, so allocation
+failure is terminal today; it is a pull-gated backlog item with no owner yet, pulled by a workload
+that needs recovery (RocksDB slice 1 does not), with `research/stdlib/allocator-as-value.md` as design
+background. Lossy numeric `as` conversions are to become compile errors, not traps (ARITH-5).
+
+**Hardware traps** are outside the language model: a null dereference (only in trusted code) and a
+stack overflow raise SIGSEGV, and an illegal instruction (SIGILL) should not come from correct code
+generation. Checked arithmetic and safe indexing are not among them: the compiler inserts a
+language-defined abort before an invalid operation. **Undefined behaviour** needs trusted or
+`Unsafe` code or a dishonest foreign boundary (TRUST-2): a trusted unchecked pointer or index access
+can read or write arbitrary memory, a dishonest `extern` signature can corrupt the ABI or memory, and
+an invalid raw-pointer lifetime or alias causes use after free; the mitigation is a named, audited
+boundary.
+
+On every normal path (including explicit error returns) all deferred calls run, every linear value
+is consumed (OWN-2), every mutable borrow block writes back, and the frame is reclaimed; predictable
+code has no heap, so the deferred call is its only cleanup. On an abort, the resources of the
+aborting function and of its callers get no language cleanup.
+
+At the foreign boundary, a linear value passed by value to an `extern fn` is consumed, a reference
+argument is borrowed for the call, and a return value has its declared type, trusted and not
+verified. Nothing checks that a foreign function follows its declared contract, nothing cleans up
+when it calls `longjmp` or `exit` or raises a signal, raw pointers it returns are not tracked, and it
+is not assumed deterministic or pure. If it aborts or raises a signal, no deferred call runs and the
+linear values in scope are leaked to the OS; `longjmp` across Concrete frames is undefined (no
+setjmp-safe code is emitted). A proved function calls no `extern fn` (the proof-eligibility FFI
+gate), so foreign failure is outside the proof model; what proved code may and may not assume about
+failure is in [PROOF_SEMANTICS_BOUNDARY.md](../verification/PROOF_SEMANTICS_BOUNDARY.md).
 

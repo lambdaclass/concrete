@@ -198,7 +198,7 @@ the next begins, and an operation is performed only after all its operands are e
    assignment. Concrete has no compound assignment operators.
 
 A trap ends evaluation: no later operand is evaluated and the operation is not performed (traps
-are terminal, [FAILURE_STRATEGY.md](FAILURE_STRATEGY.md)). An arithmetic trap is checked after both
+are terminal, [the spec's "Abort and failure"](../spec/statements.md#abort-and-failure)). An arithmetic trap is checked after both
 operands are evaluated (ARITHMETIC_POLICY §1).
 
 **Status on main** (`5b63cd87`; probed with the binary and `--interp` at `b9b3cca9` and

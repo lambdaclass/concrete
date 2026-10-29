@@ -53,7 +53,7 @@ Use these files as the primary reference once a design has moved out of explorat
 - [TRUSTED_COMPUTING_BASE.md](verification/TRUSTED_COMPUTING_BASE.md) — explicit trusted-computing-base accounting for Concrete's strongest current claims
 - [THREAT_MODEL.md](verification/THREAT_MODEL.md) — adversarial and accidental trust-weakening classes, including hostile evidence and checker advisories
 - [PREDICTABLE_BOUNDARIES.md](platform/PREDICTABLE_BOUNDARIES.md) — host calls, cleanup paths, determinism sources, failure paths, and memory/UB boundaries for predictable/proved code
-- [FAILURE_STRATEGY.md](language/FAILURE_STRATEGY.md) — abort-only decision, cleanup guarantees, FFI failure consequences, and proof-backed code failure assumptions
+- [the spec's "Abort and failure"](spec/statements.md#abort-and-failure) — abort-only decision, cleanup guarantees, FFI failure consequences, and proof-backed code failure assumptions
 - [PREDICTABLE_FAILURE_DISCIPLINE.md](platform/PREDICTABLE_FAILURE_DISCIPLINE.md) — allowed and excluded failure forms for predictable-profile code
 - [EXECUTION_MODEL.md](platform/EXECUTION_MODEL.md) — runtime boundary, allocation model, FFI/runtime contract, and execution profiles
 - [ARCHITECTURE.md](compiler/ARCHITECTURE.md) — compiler pipeline, artifact flow, pass boundaries, and architecture phase reference

@@ -2,7 +2,7 @@
 
 Status: reference
 
-This document defines which failure forms are allowed and excluded in code that passes the predictable profile. It builds on [FAILURE_STRATEGY.md](../language/FAILURE_STRATEGY.md) (the language-wide failure model) and narrows it to the predictable subset.
+This document defines which failure forms are allowed and excluded in code that passes the predictable profile. It builds on [the spec's "Abort and failure"](../spec/statements.md#abort-and-failure) (the language-wide failure model) and narrows it to the predictable subset.
 
 For the five predictable gates, see [PROFILES.md](PROFILES.md).
 For runtime boundary details, see [PREDICTABLE_BOUNDARIES.md](PREDICTABLE_BOUNDARIES.md).

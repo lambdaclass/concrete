@@ -380,7 +380,7 @@ Defects are fixed in slice 3 unless noted. None is fixed by this audit.
 - **D2. `argc`/`argv` → `Env`: accepted 2026-10-01.** Counting arguments observes the
   same environment as reading them, so `args::count` requires `Env` like `args::get`.
 - **D3. `abort`: keep the existing distinction (revised 2026-10-01).**
-  `FAILURE_STRATEGY.md` separates *user-requested* abort — the `abort()` intrinsic, which
+  `the spec's "Abort and failure" (docs/spec/statements.md)` separates *user-requested* abort — the `abort()` intrinsic, which
   requires `Process` — from *language-defined* failure (out-of-memory, checked
   arithmetic, bounds, std allocator preconditions), which aborts implicitly. This audit
   keeps that rule and does not propose changing it. std's `abort` binding

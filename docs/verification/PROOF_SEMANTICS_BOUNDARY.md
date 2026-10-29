@@ -219,3 +219,41 @@ compiler-correctness proof.
 | Do proofs compose automatically? | No. Cross-function and whole-program composition require explicit theorems and dependency integrity. |
 | Does a matching fingerprint cover every semantic dependency? | Not yet. Missing fingerprints fail closed, while signatures, contracts, and transitive dependencies remain R-0004 work. |
 | Where does the proof claim end? | At the PExpr theorem plus its attachment. The extraction and compiler chain remain explicit trust boundaries. |
+
+## Failure assumptions of proof-backed code
+
+Moved from docs/spec/statements.md ("Abort and failure") (absorbed into the spec's statements chapter, "Abort
+and failure"), whose language half is now there.
+
+### What proved code may assume
+
+1. **No capability-driven abort or OOM**: proof-eligible functions are
+   authority-free and non-allocating. Checked arithmetic/bounds traps are a
+   separate semantic obligation.
+2. **No trusted hardware UB from safe operations**: proof-eligible functions
+   exclude raw-pointer/FFI behavior; admitted checked operations may still abort
+   outside the theorem's modeled domain.
+3. **Normal control flow only**: proved functions return normally or via explicit `Result` error — no hidden exit paths
+4. **Defer runs if present**: deferred expressions in proved functions always execute (no abort path exists)
+
+### What proved code may NOT assume
+
+1. **Trap-free fixed-width execution**: ordinary arithmetic traps when the
+   machine-width result is invalid, while many ProofCore theorems use unbounded
+   integers. The theorem needs an explicit range/no-overflow obligation to claim
+   normal return for all runtime inputs.
+2. **Static array bounds**: safe indexing traps rather than causing UB, but a
+   functional theorem does not by itself prove the trap unreachable.
+3. **Termination beyond the modeled evaluator/variant**: selected bounded loops
+   are admitted, but proof status alone is not a general language termination
+   theorem.
+4. **No binary correspondence**: the proof is over PExpr (source-level IR), not compiled LLVM IR. Backend transformations are not formally verified.
+
+### Gap summary for proved code
+
+| Property | Proof model | Runtime reality | Gap |
+|----------|------------|-----------------|-----|
+| Integers | Mostly unbounded, with selected width-aware operators | Fixed-width checked or explicitly wrapping/saturating | Normal-return claim needs matching range/width semantics |
+| Array access | Functional get/set for admitted forms | Runtime bounds trap | Trap-unreachability is a separate obligation |
+| Control flow | Selected bounded loops and functional state forms | Compiled with LLVM optimizations | Backend not verified |
+| Failure | Not modeled | abort/signal/UB possible in theory | Proved functions avoid all sources in practice |

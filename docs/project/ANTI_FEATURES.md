@@ -134,7 +134,7 @@ rejected, and the required `Console`/`Alloc` authority remains visible.
 
 **What Concrete does instead:** `Result<T, E>` for all recoverable errors, exhaustive `match`, and
 an explicit `return Result::Err ...` in the failure arm. Abort-only for unrecoverable failures
-(OOM). See [FAILURE_STRATEGY.md](../language/FAILURE_STRATEGY.md).
+(OOM). See [the spec's "Abort and failure"](../spec/statements.md#abort-and-failure).
 
 **Status:** Permanent. The abort-only, no-unwinding model is a load-bearing commitment.
 

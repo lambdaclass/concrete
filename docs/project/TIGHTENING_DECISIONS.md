@@ -733,7 +733,7 @@ the explicit machine operations, so a machine-vs-mathematical distinction is par
 rather than an accident of extraction.
 
 **T-ARITH, abort.** A trap is modelled explicitly as abort: the process ends, and no deferred call,
-destructor or loan ending runs (FAILURE_STRATEGY's abort-only model). Every "exactly once cleanup"
+destructor or loan ending runs (the spec's "Abort and failure" (docs/spec/statements.md)'s abort-only model). Every "exactly once cleanup"
 claim in these rules is therefore qualified: exactly once on every path that does not abort.
 
 **T-CAST, lossless.** Losslessness is defined by **value domains**: a conversion is lossless when

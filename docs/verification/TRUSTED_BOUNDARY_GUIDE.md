@@ -199,4 +199,4 @@ The best trusted boundary is one you don't need.
 - `docs/language/SAFETY.md` — the three-way split (capabilities / trusted / Unsafe)
 - `docs/platform/PREDICTABLE_BOUNDARIES.md` — trusted functions in predictable code
 - `docs/verification/TRUSTED_COMPUTING_BASE.md` — what the compiler trusts vs verifies
-- `docs/language/FAILURE_STRATEGY.md` — cleanup and failure behavior in trusted code
+- `docs/spec/statements.md ("Abort and failure")` — cleanup and failure behavior in trusted code

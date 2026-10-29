@@ -14,7 +14,7 @@ This document defines Concrete's arithmetic overflow policy as a public language
 For the profile definitions, see [PROFILES.md](../platform/PROFILES.md).
 For the current runtime boundary classification, see [PREDICTABLE_BOUNDARIES.md](../platform/PREDICTABLE_BOUNDARIES.md).
 For the proof-vs-runtime integer gap, see [PROOF_SEMANTICS_BOUNDARY.md](../verification/PROOF_SEMANTICS_BOUNDARY.md).
-For the failure strategy (abort-only, no unwinding), see [FAILURE_STRATEGY.md](FAILURE_STRATEGY.md).
+For the failure strategy (abort-only, no unwinding), see [the spec's "Abort and failure"](../spec/statements.md#abort-and-failure).
 
 ---
 
@@ -427,7 +427,7 @@ folder, the interpreter, Lower / EmitSSA, the extracted model, Core) uses it.
 **Why a compile error, not a trap.** A trapping `as` (value-preserving or abort, like Zig's
 `@intCast` with safety on) was the cheaper migration, since sites that never see a lossy value
 would keep compiling. It was not chosen: it turns previously silent results into aborts with no
-cleanup ([FAILURE_STRATEGY.md](FAILURE_STRATEGY.md)) in programs that tolerated them, and it gives
+cleanup ([the spec's "Abort and failure"](../spec/statements.md#abort-and-failure)) in programs that tolerated them, and it gives
 every `as` a value-preservation obligation. With the compile error `as` is total and
 obligation-free, which is the property the verified pipeline benefits from most; the cost is
 rewriting sites that are in fact safe.
