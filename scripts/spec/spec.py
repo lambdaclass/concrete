@@ -873,6 +873,8 @@ def lean_decls(src_dir):
             out.setdefault(name.split(".")[-1], []).append((p, b, j, "\n".join(lines[b:j])))
     return out
 
+LEAN_CHUNK = 50  # names per #eval in the S7 Lean file (see check_sites)
+
 def check_sites(spec, src_dir, lean_out):
     decls = lean_decls(src_dir)
     live = {e.id for e in spec.entries}
@@ -916,8 +918,9 @@ def check_sites(spec, src_dir, lean_out):
                 if m.group(1) not in live:
                     fail("S7", f"{os.path.relpath(p, ROOT)}:{i+1}: `spec: {m.group(1)}` names no live entry"); bad += 1
     with open(lean_out, "w") as f:
-        # One #eval per chunk of names: a single do-block holding every name nests one match per
-        # name, and Lean's elaborator hits its maximum recursion depth past about 240 of them.
+        # One #eval per LEAN_CHUNK names: a single do-block holding every name nests one match per
+        # name, and Lean's elaborator hits its maximum recursion depth past about 240 of them. A chunk
+        # that fails to elaborate prints no result line, which lean_result counts as a shortfall.
         head = ("open Lean Elab Command in\n#eval show CommandElabM Unit from do\n"
                 "  let env ← getEnv\n"
                 "  let all := env.constants.toList.map (·.1)\n"
@@ -929,7 +932,7 @@ def check_sites(spec, src_dir, lean_out):
                 "  let std := #[``propext, ``Classical.choice, ``Quot.sound]\n")
         f.write("import Concrete\n")
         for k, (n, want, rid) in enumerate(names):
-            if k % 50 == 0: f.write(head)
+            if k % LEAN_CHUNK == 0: f.write(head)
             f.write(f"  match find `{n} with\n")
             f.write(f"  | none => logInfo m!\"SPEC-LEAN missing {n} {rid}\"\n")
             if want == "thm":
@@ -948,12 +951,15 @@ def lean_result(out_path, count_path):
     out = open(out_path, encoding="utf-8", errors="replace").read()
     n = int(open(count_path).read())
     oks = len(re.findall(r"SPEC-LEAN ok ", out))
-    for m in re.finditer(r"SPEC-LEAN (missing|notthm|axioms) (\S+) (\S+)", out):
+    bad = list(re.finditer(r"SPEC-LEAN (missing|notthm|axioms) (\S+) (\S+)", out))
+    for m in bad:
         fail("S7", f"{m.group(3)}: Lean name {m.group(2)} {'does not resolve' if m.group(1)=='missing' else 'is not a theorem' if m.group(1)=='notthm' else 'depends on non-standard axioms'}")
-    if n == 0 or oks != n:
-        if not any(c == "S7" for c, _ in FAILS):
-            fail("S7", f"the Lean check resolved {oks} of {n} names (did Lean run?)")
-    else:
+    # Every name prints exactly one result line. Fewer means a chunk did not run (it failed to
+    # elaborate, or Lean stopped), and that is reported even when another name already failed.
+    tags = oks + len(bad)
+    if n == 0 or tags != n:
+        fail("S7", f"the Lean check produced a result for {tags} of {n} names (did Lean run?)")
+    elif oks == n:
         ok(f"S7 Lean: {n} names resolve")
 
 
