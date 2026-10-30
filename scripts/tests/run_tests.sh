@@ -1454,7 +1454,8 @@ run_err "$TESTDIR/error_203_append_unsupported_argument.con" "(E0421)"
 run_err "$TESTDIR/error_212_const_in_if_head.con" "\`LIMIT {\` is read as the start of a struct literal"
 run_err "$TESTDIR/error_212_const_in_while_head.con" "\`LIMIT {\` is read as the start of a struct literal"
 # Bug 330: a `break` or `continue` inside a `for` loop's step that targets that loop is refused
-# (E0245); the binary never terminated where --interp went to the condition. The allowed exits
+# (E0245); for a `continue` the binary never terminated where --interp went to the condition. The
+# allowed exits
 # (a `return` in the step, a nested loop's own exits, an outer loop's labelled `continue`) agree.
 run_err "$TESTDIR/error_330_continue_in_for_step.con" "(E0245)"
 run_err "$TESTDIR/error_330_break_in_for_step.con" "(E0245)"
