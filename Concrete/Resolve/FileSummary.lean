@@ -493,9 +493,8 @@ def importRefusal (importer exporter : FileSummary) (name : String) : Option Imp
   -- binding, then a struct, then an enum; the rest (aliases, newtypes, constants) check their own
   -- `pub` where they are bound.
   let callable := (exporter.functions ++ exporter.externFnSigs).any (·.1 == name)
-  if exporter.definitionPath == stdPrivateModulePath then
-    if !callable then none
-    else if inStdPackage importer.definitionPath then none else some .stdPrivate
+  if callable && exporter.definitionPath == stdPrivateModulePath then
+    if inStdPackage importer.definitionPath then none else some .stdPrivate
   else if callable then
     if exporter.publicCallables.contains name then none else some .notPublic
   else match exporter.structs.find? (·.name == name) with
