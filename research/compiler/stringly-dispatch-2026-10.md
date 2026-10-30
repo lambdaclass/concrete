@@ -126,17 +126,32 @@ budget). The same probes run interleaved on the base and the new binary under th
 over budget for both, so the failures are the host's load, not this change, which does not touch
 the resolver's scopes or lowering.
 
+## Slice 5 (behaviour-preserving)
+
+- **PeekType's empty-name sentinels.** A field access or method call on a type with no name
+  produced `""` and then tested for it; both sites now take an `Option` (`tyName?`, and the
+  field-access shape filtered on a non-empty name, exactly as before).
+- **The std package name** has one definition, `stdPackageName`, used by the resolver (four sites)
+  and the assumption summary. The proof identity module (`DefinitionIdentity`) keeps its literal,
+  as the proof model does, and the `#guard` examples keep theirs as test data.
+
+**Evidence:** at `ce8d2f06` (slices 1–5) against main `14121934`, on OVH:
+`scripts/dev/identity_sweep.sh --all` reports 23254 outputs byte-identical (emit, check and
+interpreter over every program; every report kind over the sample); totality 12/0, identity
+freshness 13/0, fast surface 13/0, hygiene 432/0, golden 54/0.
+
 ## Next slices, in order
 
-1. **Remaining sentinels.** In Resolve, `structName == ""` / `typeName == ""` (PeekType) become
-   `Option`s at the producer. The report-layer sentinels wait
-   for the report split.
-2. **Package names.** `"std"`, `"core"` and `"native"` in Project, each defined once.
-3. **Builtin type, trait and field spellings.** In Check, SSAVerify, Coherence, CheckError, Lower
+1. **Builtin type, trait and field spellings.** In Check, SSAVerify, Coherence, CheckError, Lower
    and Interp, compare against the builtin `TypeId` and not the spelling (see the candidate
-   defect below).
-4. **Attributes.** One typed attribute record parsed once in the parser.
-5. **Report vocabulary.** After the report split lands, statuses and verdicts become enums.
+   defect below). This changes behaviour for a user type that shares a builtin's name, so it
+   waits for that ruling.
+2. **Attributes.** One typed attribute record parsed once in the parser.
+3. **Report vocabulary and the report-layer sentinels.** After the report split lands, statuses
+   and verdicts become enums.
+
+`"native"` in Project is a key of the package manifest's TOML (boundary text), and `"core"` and
+`"resolved"` name compiler-ledger stages in one local table; both stay.
 
 Boundary parsing stays as it is.
 
