@@ -27,7 +27,9 @@ may. That decision belongs to the modules chapter (README §8).
 
 **Rationale.** Visibility is lexical and ignores ownership state. A binding that has been
 consumed, frozen or moved is still visible, so a later binder cannot reuse its name to make
-the old name mean something new.
+the old name mean something new. Under STMT-6@3 (pending, bug 331) a counted loop's index is visible
+in the body only, not in its bounds; this definition gains a version when the counted loop lands,
+since a version now would retag SCOPE-1 to SCOPE-3 while main has only the C-style header.
 
 ## Rules
 

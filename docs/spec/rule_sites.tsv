@@ -165,7 +165,6 @@ STMT-6	partial bug-331	E0543	core-check	Concrete.checkStmt, Concrete.ccCheckStmt
 STMT-7	partial bug-320	E0310	check	Concrete.checkModule
 STMT-9	enforced	E0307	check	Concrete.checkFn
 STMT-10	enforced	E0319	check	Concrete.checkFn
-STMT-12	pending bug-331	new	check	-
 ARITH-2	partial bug-327	E0227	check	Concrete.checkExprCore
 ARITH-5	partial R-0500	E0553	core-check	Concrete.ccCheckExpr
 CON-3	partial R-0473	E0320	check	Concrete.checkModule

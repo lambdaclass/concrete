@@ -183,7 +183,7 @@ fn main() -> Int {
 <a id="STMT-6"></a>
 ### STMT-6. Loops are statements; `break` and `continue` name a loop
 
-**STMT-6@3.** The loops are `while cond { ... }` and the counted loop `for i from a until b { ... }`, both statements, where the counted loop evaluates `a` and then `b` once, both of one integer type, before its first iteration, compares the index with `b` before each iteration and advances it only after the comparison, so the index never passes `b`, and runs its body with `i`, immutable and scoped to the body, bound to each value from `a` up to but not including `b`; `break` carries no value, and `break` and `continue` act on the innermost enclosing loop or, with a label, on the labeled loop and appear only inside a loop, `continue` running the body's exit sequence and then advancing only the loop it names, while `break` and `return` advance nothing.
+**STMT-6@3.** The loops are `while cond { ... }` and the counted loop `for i from a until b { ... }`, both statements, where the counted loop evaluates `a` and then `b` once, both of one integer type, which the index `i` takes, before its first iteration, compares `i` with `b` before each iteration and advances it only after a comparison that succeeded, so it never advances `i` past `b`, and runs its body with `i`, immutable and scoped to the body, bound to each value from `a` up to but not including `b`, none when `a >= b`; `break` carries no value, and `break` and `continue` act on the innermost enclosing loop or, with a label, on the labeled loop and appear only inside a loop, `continue` running the body's exit sequence and then advancing only the loop it names, while `break` and `return` advance nothing.
 
 - Kind: refusal
 - Uses: none
@@ -196,10 +196,13 @@ fn main() -> Int {
 
 **Rationale.** There is no bare `loop`; `while true` is the infinite loop. A loop produces no
 value (the value `while … else` form was removed in Phase 6D); a result is a mutable local
-assigned before `break`. In a `for (init; cond; step)` loop, `continue` still runs `step`. A
+assigned before `break`. In main's `for (init; cond; step)` loop, `continue` still runs `step`, and
+E0245 refuses a `break` or `continue` in the step that targets its own loop (bug 330); E0245 belongs to
+this entry only while main parses the step form, which version 3 removes, and retires with it. A
 `break` or `continue` leaves the loop body's scopes like any exit (OWN-2).
 
-The loop forms are `while cond { ... }`, `for (init; cond; step) { ... }`, whose `init` is a `let`,
+Main still has the earlier loop forms, which version 3 removes (bug 331): `while cond { ... }`,
+`for (init; cond; step) { ... }`, whose `init` is a `let`,
 whose `cond` is the continuation test and whose `step` is an expression or an assignment
 (`for (i = 0; ...)` is a parse error), `for (cond) { ... }` and the unconditional `for { ... }`
 (`regress_176_loop_shadow_restores_outer.con`). An unlabeled `break` or
@@ -264,12 +267,16 @@ fn main() -> Int {
 ```con accept name=labeled-break exit=42
 fn main() -> Int {
     let mut out: Int = 0;
-    'outer: for (let mut i: Int = 0; i < 10; i = i + 1) {
-        for (let mut j: Int = 0; j < 10; j = j + 1) {
-            if j == 2 {
+    let mut i: Int = 0;
+    'outer: while i < 10 {
+        i = i + 1;
+        let mut j: Int = 0;
+        while j < 10 {
+            j = j + 1;
+            if j == 3 {
                 continue 'outer;
             }
-            if i == 7 {
+            if i == 8 {
                 break 'outer;
             }
             out = out + 3;
@@ -665,35 +672,25 @@ R-0496's Core semantics defines the sequence for every exit form.
 <a id="STMT-12"></a>
 ### STMT-12. A counted loop carries its own measure
 
-**STMT-12@1.** A counted loop's termination measure is `b - i`, given by the loop itself, so a `#[variant]` attribute on a counted loop is refused, an `#[invariant]` attribute on it is checked at each entry to the body and never when the loop runs no iteration, and a pass removes a bounds check on its index only where the length of the indexed array cannot change during the loop.
+**STMT-12@1.** In Core a counted loop is the one `while` form, carrying the termination measure `b - i` that the loop gives itself.
 
-- Kind: refusal
+- Kind: guarantee
 - Uses: none
-- Codes: new (check)
+- Codes: none
 - Status: pending bug-331
 - Semantics: none
 - Obligation: the counted loop's measure decreases on every iteration (R-0496)
 - Evidence: tested
 
-**Rationale.** Decided with OD47 on 2026-10-29 and made precise by the reviews of that day. The
-loop's own bounds make it terminate, so a written variant could only disagree with it; an invariant
-is a property of the iterations, of which an empty loop has none. A bounds check over the index is
-removable because `a <= i < b` is known in the body, but only if the array cannot shrink while the
-loop runs: a fixed array never does, a growable one may. How the measure is represented when `b -
-a` does not fit the bounds' type is OPEN-49.
-
-```con reject name=variant-on-counted-loop code=new stage=check pair=counted-loop-own-measure pending=bug-331 now=reject:E0001:parse
-fn main() -> Int {
-    let lo: Int = 0;
-    let hi: Int = 7;
-    let mut s: Int = 0;
-    #[variant(hi - lo)]
-    for i from lo until hi {
-        s = s + i;
-    }
-    return s + 21;
-}
-```
+**Rationale.** Decided with OD47 on 2026-10-29: proofs keep a single loop construct. The measure
+proves only that the number of iterations is finite; the loop terminates when its bounds, its body
+and its cleanup do, and the counted loop's proof rule (zero iterations, `break`, a labelled
+`continue`) is stated over this desugared loop. Whether a `#[variant]` written on a counted loop is
+refused, checked or ignored is OPEN-92, and where its `#[invariant]` is checked is OPEN-93 (CON-2
+checks a loop invariant before the loop and after every iteration). Removing a bounds check over
+the index is an optimization, not a rule of the language: it needs an in-range certificate at the
+access (the bounds against the array's length), not only a length that cannot change. How the
+measure is represented when `b - a` does not fit the bounds' type is OPEN-49.
 
 ```con accept name=counted-loop-own-measure exit=42 pending=bug-331 now=reject:E0001:parse
 fn main() -> Int {

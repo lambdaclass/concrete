@@ -8,3 +8,5 @@ items (empty structs, `()`, SCOPE-4, failure in a deferred call, what "the remai
 destroyed" means). `docs/spec/decisions.md` opens with all 58 open questions in reading order, each
 with Austral's choice and, where given, the coordinator's pick (a recommendation, not a decision), the
 PROJECT.md principle it rests on, its proof impact and what it would delete.
+The review of the OD47 loop rules added OD92 (a `#[variant]` on a counted loop) and OD93 (where its
+`#[invariant]` is checked), which STMT-12 had stated as rules; STMT-12 now states only OD47's desugaring.

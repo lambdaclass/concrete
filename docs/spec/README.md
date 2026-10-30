@@ -61,7 +61,7 @@ areas exist (§8).
 | `modules.md` | `MOD-` | migrated: MOD-1 to MOD-4, MOD-6 and MOD-7 (name resolution, visibility, one binding per name, module files, the privacy of `std.libc` and generated interfaces; MOD-7 pending) |
 | `syntax.md` | `SYN-` | migrated: SYN-1 to SYN-3 (the grammar, operator precedence, reserved spellings) |
 | `traits.md` | `TRAIT-` | migrated: TRAIT-D1, TRAIT-1 to TRAIT-10 (coherence: one impl per trait and type, no overlap, instance locality, impl targets, one method name per type, unambiguous bound calls, order independence; declared traits, impl conformance, satisfied bounds) |
-| `decisions.md` | `OPEN-` | open: the owner decisions of ROADMAP exit 2n still open (OPEN-33 to OPEN-46, OPEN-48 to OPEN-91), stated as questions with no answer encoded; the others were retired when the owner decided them (2026-10-29) |
+| `decisions.md` | `OPEN-` | open: the owner decisions still open (OD1 to OD32 were exit 2n's; the open ones are exit 2q's) (OPEN-33 to OPEN-46, OPEN-48 to OPEN-91), stated as questions with no answer encoded; the others were retired when the owner decided them (2026-10-29) |
 
 **pilot**: the chapter is written in this format and checked by the gate. **stub**: the chapter
 holds only the rules the pilot needed, and the rest of its area migrates later.
@@ -118,7 +118,7 @@ chapter's prefix, written in upper case. A definition's number has a `D` in fron
      - A **guarantee** is a semantic property with no diagnostic of its own.
      - A **definition** fixes a term that rules use. It is as normative as a rule.
      - An **open** entry states a language question that only the project owner decides (the
-       owner decisions of ROADMAP exit 2n). It encodes no answer: it has no codes, no
+       owner decisions of ROADMAP, OD1 to OD32 under exit 2n and the rest under exit 2q). It encodes no answer: it has no codes, no
        examples and no `Enforced by:` names, its `Status:` is `open ODn` and its `Evidence:` is
        `open`. Its rationale names the rules it bears on and what current main does, which stays
        provisional until the owner answers; the answer turns it into the rules it decides.

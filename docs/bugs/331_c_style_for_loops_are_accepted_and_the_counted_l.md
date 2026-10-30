@@ -34,7 +34,8 @@ body's exit sequence.
 ## Cause
 
 `Concrete/Frontend/Parser.lean`, `parseFor`, and `grammar/concrete.ebnf`'s `for_tail` implement the
-C-style design; `Concrete/Frontend/Lexer.lean`, `lookupKeyword`, does not reserve `from` or `until`;
+C-style design; whether `from` and `until` become reserved words is OD50, so the lexer's treatment of them is not
+part of this cause;
 Check, Elab and Lower carry the step.
 
 ## Structural cause
