@@ -113,7 +113,7 @@ Extern functions are the boundary between Concrete and external code. Calling a 
 
 ### Trusted Code
 
-`trusted fn` (functions and methods) and `trusted extern fn` contain pointer-level implementation techniques behind safe APIs. What `trusted` permits is [TRUST-5](../spec/trusted.md#TRUST-5); it relaxes no capability, linearity or borrow rule ([TRUST-12](../spec/trusted.md#TRUST-12)).
+`trusted fn` (functions and methods) and `trusted extern fn` contain pointer-level implementation techniques behind safe APIs. What `trusted` permits is [TRUST-5](../spec/trusted.md#TRUST-5); it relaxes no capability, linearity or borrow rule ([TRUST-12](../spec/trusted.md#TRUST-12)), except two ownership exceptions main allows in trusted code, destroying a value through a reference and `vec_free` on a vector whose elements are not Copy, whose future is [OPEN-113](../spec/decisions.md#OPEN-113).
 
 | Trust state | Proof status | Evidence level |
 |-------------|--------------|----------------|

@@ -1,6 +1,6 @@
 # Open Owner Decisions
 
-This chapter lists the language questions that only the project owner decides: OD1 to OD133 of
+This chapter lists the language questions that only the project owner decides: OD1 to OD134 of
 [ROADMAP.md](../../ROADMAP.md#owner-decisions) (exit 2n for OD1 to OD32, exit 2q for the rest). Each entry states the question and encodes
 no answer. The rules it bears on are named in its rationale, together with what current main does,
 which stays provisional until the owner answers. The answer, when given, is recorded in ROADMAP and
@@ -134,6 +134,7 @@ them); they are not separate entries here
 | 108 | [OPEN-131](#OPEN-131) | absorbing the compiler documents and the grammar comments | `union` declarations | not checked | none given | not assessed | — |
 | 109 | [OPEN-132](#OPEN-132) | absorbing the compiler documents and the grammar comments | Polymorphic recursion | not checked | none given | not assessed | — |
 | 110 | [OPEN-133](#OPEN-133) | absorbing the compiler documents and the grammar comments | User functions named `print`, `println` or `append` | not checked | none given | not assessed | — |
+| 111 | [OPEN-134](#OPEN-134) | reviewing the absorption of docs/stdlib | The capabilities of a container's generated destruction | not checked | none given | not assessed | — |
 
 <a id="OPEN-33"></a>
 ### OPEN-33. Inline submodules under one file per module
@@ -1747,6 +1748,22 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Evidence: open
 
 **Rationale.** Bears on MOD-3, MOD-8 and TYPE-10. Current main: accepted; with `fn print(x: Int) -> Int`, `print(42)` calls it (exit 42 on both consumers), because Elab desugars the variadic builtins only when no function of that name is visible, and MOD-3's reserved names do not include them. MOD-8 already binds the calls the compiler itself generates by identity. Options: (a) reserve the three names (MOD-3); (b) allow the replacement, as main does. Austral: not applicable. Pick: none given (raised by the absorption of docs/compiler, 2026-10-30).
+
+<a id="OPEN-134"></a>
+### OPEN-134. The capabilities of a container's generated destruction
+
+**OPEN-134@1.** Whether the destruction a generic container generates for its elements may require the capabilities of those elements' `Destroy` implementations beyond `Alloc`, or every `Destroy` implementation stays limited to `Alloc`, is an open owner decision (OD134).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD134
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on OWN-13, TYPE-D1 and TRUST-4. Current main: OWN-13 is enforced, so a `Destroy` implementation requires no capability beyond `Alloc`, and a container's generated destruction is `with(Alloc)`. [RUNTIME_COLLECTIONS.md](../stdlib/RUNTIME_COLLECTIONS.md) rule 3 describes a different model, in which the generated destruction requires the union of its element, key and value destructors' capabilities, computed per instantiation, and calls today's limit a first-release restriction. Options: (a) keep OWN-13's limit, so destruction never needs more than `Alloc`; (b) lift it, so a `Destroy` implementation may require further capabilities and a container's destruction requires their union per instantiation. Austral: not assessed. Pick: none given (raised by the review of the absorption of docs/stdlib, 2026-10-30).
 
 ## Decided
 

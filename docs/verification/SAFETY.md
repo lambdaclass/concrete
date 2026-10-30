@@ -70,7 +70,7 @@ impl Vec<T> {
 operations and plain `extern fn` calls without declaring `Unsafe` (since R-0484), and nothing else.
 It does not suppress capabilities, those an `extern fn` declares included
 ([FFI-3](../spec/ffi.md#FFI-3)), and it relaxes no ownership, linearity, borrow or scope-exit rule
-([TRUST-12](../spec/trusted.md#TRUST-12)). Pointer arithmetic is `ptr::offset`, and `as` never
+([TRUST-12](../spec/trusted.md#TRUST-12)), except two ownership exceptions main allows in trusted code, destroying a value through a reference and `vec_free` on a vector whose elements are not Copy, whose future is [OPEN-113](../spec/decisions.md#OPEN-113). Pointer arithmetic is `ptr::offset`, and `as` never
 converts between a pointer and an integer ([TRUST-1](../spec/trusted.md#TRUST-1), pending R-0502;
 main still accepts `p + n` on a pointer). Converting a reference to a raw pointer needs neither
 `trusted` nor `Unsafe` ([TRUST-13](../spec/trusted.md#TRUST-13); its `as` spelling is OPEN-98).

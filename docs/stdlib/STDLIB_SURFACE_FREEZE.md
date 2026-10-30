@@ -553,6 +553,16 @@ record listed here as of 2026-04 has since changed in these places:
   compound assignment, string interpolation, byte and raw strings and `async` have no production
   in the grammar.
 
+The record also held these items, kept here as history; none is a spec rule:
+
+- approved for implementation: elaboration-time generic inference, omitting type parameters when
+  the context provides them ([SYNTAX_FREEZE_REVIEW.md](../archive/design-records/SYNTAX_FREEZE_REVIEW.md) #1, #4);
+  how far type arguments are inferred is [OPEN-46](../spec/decisions.md#OPEN-46);
+- deferred: `pub(pkg)` visibility, until package management
+  ([MOD-2](../spec/modules.md#MOD-2)'s rationale);
+- deferred pending user feedback: unifying `#` with `::`
+  ([SYNTAX_FREEZE_REVIEW.md](../archive/design-records/SYNTAX_FREEZE_REVIEW.md) #10).
+
 ## 4. Type Vocabulary
 
 The scalar types are [TYPE-19](../spec/types.md#TYPE-19) and [TYPE-20](../spec/types.md#TYPE-20)

@@ -103,8 +103,8 @@ These are honest boundaries, not bugs:
 
 - **Raw pointers.** Once a value is behind `*mut T` / `*const T`, the checker does not track it. Raw pointer soundness is the responsibility of `trusted` code and is an audit concern.
 - **Arena/bulk-free patterns.** If an arena is freed while references to its contents exist, the references dangle. The checker cannot see the arena-allocation relationship.
+- **Cross-function reference use.** The checker trusts function signatures. If `fn foo(x: &T)` internally does something unsound with the reference (via `trusted`), the caller's checker does not detect it.
 - **Concurrency.** A program has one thread ([STMT-3](../spec/statements.md#STMT-3)). Shared-memory concurrency would require `Send`/`Sync`-like constraints that do not exist yet. This is an **explicitly deferred boundary**.
-- **Concurrency.** The model assumes single-threaded execution. Shared-memory concurrency would require `Send`/`Sync`-like constraints that do not exist yet. This is an **explicitly deferred boundary**.
 
 ### Not yet proof-backed
 

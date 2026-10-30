@@ -542,7 +542,7 @@ than leaving it to prose.
 
 ### H20. `bv_decide`'s certificate check runs as native code — OPEN
 
-**Rule:** none of the language (trusted evidence, spec README §2.1).
+**Rule:** none of the language (trusted evidence, [MAINTAINERS §2.1](../spec/MAINTAINERS.md#21-entries)).
 
 Bit-blasting proofs extend trust to `Lean.ofReduceBool` / `Lean.trustCompiler`,
 because the LRAT certificate checker executes as compiled Lean rather than by kernel

@@ -103,7 +103,8 @@ Four decisions, each marked permanent or v1:
    generated code). This invariant is non-negotiable.
 4. **v1 glue is `with(Alloc)` — DOCUMENTED V1 RESTRICTION, not the final
    model.** The language rule today is [OWN-13](../spec/ownership.md#OWN-13): a `Destroy`
-   implementation requires no capability beyond `Alloc`; rule 3's model would change it. Under rule 1, every `Destroy` impl the stdlib actually has needs
+   implementation requires no capability beyond `Alloc`; rule 3's model would change it, and which one
+   holds is [OPEN-134](../spec/decisions.md#OPEN-134). Under rule 1, every `Destroy` impl the stdlib actually has needs
    at most `Alloc` (String, Bytes, nested containers — memory cleanup), so
    rule 3 holds degenerately and the front-end machinery for symbolic
    "capabilities of `T`'s destructor" in generic checking (an associated

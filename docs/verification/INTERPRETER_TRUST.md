@@ -52,7 +52,7 @@ The interpreter currently models:
 - the runtime's String/print builtins, each modelled on its `EmitBuiltins`
   implementation over a `String` that is the `{ptr, len, cap}` struct over a heap
   buffer, and the builtin Vec intrinsics;
-- IEEE `f64`/`f32` values: literals, arithmetic (`%` is C `fmod`, [ARITH-12](../spec/arithmetic.md#ARITH-11)), ordered and
+- IEEE `f64`/`f32` values: literals, arithmetic (`%` is C `fmod`, [ARITH-12](../spec/arithmetic.md#ARITH-12)), ordered and
   unordered comparisons, integer → float rounding to nearest-even ([ARITH-1](../spec/arithmetic.md#ARITH-1)), and the
   checked float → integer conversion;
 - module constants, evaluated at each use ([TYPE-22](../spec/types.md#TYPE-22));

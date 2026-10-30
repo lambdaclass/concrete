@@ -10,7 +10,7 @@ Concrete has three levels of trust:
 
 1. **Safe code** (default): no raw-pointer operations, no plain FFI calls, no `trusted`. The checker enforces ownership, linearity, and capability requirements. Evidence level: `enforced`.
 
-2. **Trusted code** (`trusted fn`): may use raw-pointer operations and call a plain `extern fn` without `Unsafe` ([TRUST-5](../spec/trusted.md#TRUST-5)). The checker still enforces every ownership rule ([TRUST-12](../spec/trusted.md#TRUST-12)). Evidence level: `trusted-assumption`.
+2. **Trusted code** (`trusted fn`): may use raw-pointer operations and call a plain `extern fn` without `Unsafe` ([TRUST-5](../spec/trusted.md#TRUST-5)). The checker still enforces the ownership rules ([TRUST-12](../spec/trusted.md#TRUST-12)), except two ownership exceptions main allows in trusted code, destroying a value through a reference and `vec_free` on a vector whose elements are not Copy, whose future is [OPEN-113](../spec/decisions.md#OPEN-113). Evidence level: `trusted-assumption`.
 
 3. **Unsafe/FFI code** (`extern fn`, `trusted extern fn`): foreign function declarations. The compiler trusts the signature but cannot check the implementation; a `trusted extern fn` adds its author's assertion ([FFI-9](../spec/ffi.md#FFI-9)). Evidence level: `trusted-assumption`.
 

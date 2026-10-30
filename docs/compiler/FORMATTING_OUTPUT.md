@@ -89,7 +89,7 @@ A format-string-based API (`format!("hello {}", name)`) is superficially more er
 
 1. Method chaining on `&mut self` requires returning `&mut Self`, which no function may do ([REF-1](../spec/references.md#REF-1)).
 2. The variadic `append(&mut buf, ...)` form gives the same ergonomic win without changing borrow semantics.
-3. If chaining proves desirable later, it can be added as a pure stdlib change; no compiler work is required.
+3. Chaining would need REF-1 to change, which is the project owner's decision, and compiler support for returning a reference; it is not a stdlib-only change.
 
 ---
 
