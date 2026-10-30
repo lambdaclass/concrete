@@ -1,0 +1,13 @@
+// Bug 333 (TYPE-9): `sizeof` has one type parameter, the call passes two. A body-less declaration's
+// type parameters are not recorded (typeParamsUnrecorded), so Check skips E0322: the native binary
+// ignores the extra argument and exits 42, and --interp fails at run time.
+mod foo {
+    #[intrinsic = "sizeof"]
+    pub trusted fn sizeof<T>() -> u64;
+}
+mod bar {
+    import foo.{sizeof};
+    pub fn main() -> u64 {
+        return sizeof::<u8, u32>() + 41;
+    }
+}

@@ -291,15 +291,17 @@ fn main() -> Int {
 - Kind: guarantee
 - Uses: none
 - Codes: none
-- Status: enforced
+- Status: partial bug-332
 - Enforced by: Concrete.Pipeline.emit
 - Semantics: none
 - Obligation: none
 - Evidence: tested
 
 **Rationale.** This is ARITH-1's rounding applied to the literal itself: a literal printed with too few digits
-in the emitted IR once changed `0.1` (bug 109). The program below holds only if both literals are
-the correctly rounded binary64 values.
+in the emitted IR once changed `0.1` (bug 109). The first program below holds only if the literals
+are the correctly rounded binary64 values. Main rounds an `f32` literal twice, through binary64,
+so a literal just above a binary32 midpoint takes the even neighbour (bug 332), pinned by the
+pending example.
 
 ```con accept name=float-literal-rounding exit=42
 fn main() -> Int {
@@ -313,3 +315,13 @@ fn main() -> Int {
 }
 ```
 
+```con accept name=f32-literal-rounded-once exit=42 pending=bug-332 now=accept:0
+fn main() -> Int {
+    let a: f32 = 1.0000000596046447753906250001;
+    let b: f32 = 1.00000011920928955078125;
+    if a == b {
+        return 42;
+    }
+    return 0;
+}
+```

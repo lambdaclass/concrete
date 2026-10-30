@@ -444,8 +444,8 @@ fn main() -> Int {
 - Obligation: none
 - Evidence: tested
 
-**Rationale.** PASS-3 proves this for the native profile and PASS-4 tests the LLVM profile against the
-interpreter; this entry states the agreement every consumer owes, which the differential gates
+**Rationale.** PASS-3 states this for the native profile as a proof obligation (pending, R-0508) and
+PASS-4 tests the LLVM profile against the interpreter; this entry states the agreement every consumer owes, which the differential gates
 (native against `--interp`) check on every example of this specification. Bugs 004, 006, 019,
 038, 102, 184 and 254 were disagreements between consumers.
 

@@ -406,7 +406,7 @@ fn main() -> Int {
 - Kind: refusal
 - Uses: none
 - Codes: E0262 (check), E0264 (check), E0265 (check), E0266 (check), E0522 (core-check), E0313 (check), E0317 (check), E0322 (check)
-- Status: enforced
+- Status: partial bug-333
 - Enforced by: Concrete.checkExprCore
 - Semantics: none
 - Obligation: progress and preservation for the Core type system (R-0507)
@@ -415,7 +415,8 @@ fn main() -> Int {
 **Rationale.** There are no default arguments, no variadic functions and no method lookup
 through implicit conversions. A method of a type parameter comes only from its bounds, which is
 what lets a generic body be checked once (TYPE-2, PASS-1). Version 2 states the type-argument count E0322 already enforced (bug 221: an extra type
-argument was dropped silently).
+argument was dropped silently). A body-less declaration (an `#[intrinsic]`) keeps no type-parameter
+list, so main still skips the count there (bug 333), pinned by the pending example.
 
 ```con reject name=wrong-arity code=E0262 stage=check pair=right-arity
 fn add(a: Int, b: Int) -> Int {
@@ -449,6 +450,32 @@ fn add(a: Int, b: Int) -> Int {
 
 fn main() -> Int {
     return add(40, 2);
+}
+```
+
+```con reject name=type-arguments-to-bodyless-declaration code=E0322 stage=check pair=type-argument-to-bodyless-declaration pending=bug-333 now=accept:42 now-interp=fail:sizeof
+mod foo {
+    #[intrinsic = "sizeof"]
+    pub trusted fn sizeof<T>() -> u64;
+}
+mod bar {
+    import foo.{sizeof};
+    pub fn main() -> u64 {
+        return sizeof::<u8, u32>() + 41;
+    }
+}
+```
+
+```con accept name=type-argument-to-bodyless-declaration exit=42
+mod foo {
+    #[intrinsic = "sizeof"]
+    pub trusted fn sizeof<T>() -> u64;
+}
+mod bar {
+    import foo.{sizeof};
+    pub fn main() -> u64 {
+        return sizeof::<u8>() + 41;
+    }
 }
 ```
 

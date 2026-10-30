@@ -238,7 +238,7 @@ fn main() with(Std) -> Int {
 <a id="FFI-6"></a>
 ### FFI-6. A compiler intrinsic is not a foreign binding
 
-**FFI-6@1.** A body-less declaration marked `#[intrinsic]` names an operation the compiler implements, so it is not a foreign binding, need not declare its effects, and keeps the `with(...)` it is written with.
+**FFI-6@1.** A body-less declaration `#[intrinsic = "n"]` whose name is `n`, a compiler intrinsic, and that has no `#[link_name]` names an operation the compiler implements, so it is not a foreign binding, need not declare its effects, and keeps the `with(...)` it is written with; any other body-less declaration is a foreign binding.
 
 - Kind: guarantee
 - Uses: none

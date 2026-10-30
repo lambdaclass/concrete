@@ -300,23 +300,25 @@ parent's file, as most examples in this specification are); whether that form is
 
 **Rationale.** MOD-1 resolves the names a program writes; a generated call has no written name to resolve, so
 its target is fixed when it is generated. A module that defined its own `print_int` once had every
-`println` in it call that function (bug 165).
+`println` in it call that function (bug 165); in the example below that function divides by zero, so
+binding `println` to it would abort.
 
 ```con accept name=generated-call-ignores-same-name exit=42
 fn print_int(x: Int) -> Int {
-    return x + 35;
+    let z: Int = x - x;
+    return 42 / z;
 }
 
 fn main() with(Console) -> Int {
     println(7);
-    return print_int(7);
+    return 42;
 }
 ```
 
 <a id="MOD-9"></a>
 ### MOD-9. An import binds the declaration it names
 
-**MOD-9@1.** Importing a `pub` declaration binds that declaration itself, a constant included, and an import alias of a type names the same type, with its methods and impls, in every pass.
+**MOD-9@1.** Importing a `pub` function, foreign binding, struct, enum, newtype, type alias or constant binds that declaration itself, and an import alias of a struct or enum names the same type, with its methods and impls, in every pass.
 
 - Kind: guarantee
 - Uses: none
@@ -329,7 +331,8 @@ fn main() with(Console) -> Int {
 
 **Rationale.** MOD-2 says which declarations an import may name; this entry says what the import gives. A
 `pub const` could not be imported (bug 233), and a type imported under an alias was a different
-type, without its methods (bug 223).
+type, without its methods (bug 223). A trait is not importable (traits are module-local, E0323), and
+an alias of an imported newtype is not supported (bug 223's record).
 
 ```con accept name=import-constant-and-alias exit=42
 mod m {

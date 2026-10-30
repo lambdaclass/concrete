@@ -12,7 +12,7 @@ checker refusal is a Check bug here.
 
 <!-- BEGIN GENERATED: bug areas (scripts/gen/bug_ledger.py; derived from the records, docs/bugs/area_map.tsv and git history, never edited here) -->
 
-296 records: 176 placed by their own fix commits, 37 by the files their record names in commits shared with other bugs, 34 by commits shared with other bugs, 11 by the commit that filed or closed the record, 23 by an `area:` override; 15 open bugs are not fixed yet and 0 fixed bugs have no commit the history can place.
+298 records: 176 placed by their own fix commits, 37 by the files their record names in commits shared with other bugs, 34 by commits shared with other bugs, 11 by the commit that filed or closed the record, 23 by an `area:` override; 17 open bugs are not fixed yet and 0 fixed bugs have no commit the history can place.
 
 ### By stage
 
@@ -66,10 +66,10 @@ checker refusal is a Check bug here.
 |--|-:|--|
 | violates ARITH | 7 | Check 3, Interp 2, Elab 1, EmitLLVM 1 |
 | violates FFI | 9 | Resolve 3, Check 2, Mono 1, EmitSSA 1, EmitLLVM 1, Std 1 |
-| violates MEM | 11 | Lower 8, Check 1, Elab 1, Interp 1 |
+| violates MEM | 10 | Lower 7, Check 1, Elab 1, Interp 1 |
 | violates MOD | 29 | Resolve 12, Elab 9, Interp 4, Check 2, Lower 1, EmitSSA 1 |
 | violates OWN | 13 | Check 10, Lower 3 |
-| violates PASS | 39 | Lower 17, Mono 5, EmitSSA 4, Interp 4, Elab 3, Check 2, Resolve 1, SSA 1, Report 1, CLI 1 |
+| violates PASS | 40 | Lower 18, Mono 5, EmitSSA 4, Interp 4, Elab 3, Check 2, Resolve 1, SSA 1, Report 1, CLI 1 |
 | violates PAT | 6 | Check 4, Interp 1, CLI 1 |
 | violates REF | 7 | Check 6, Lower 1 |
 | violates SCOPE | 13 | Check 7, Proof 3, Elab 1, Mono 1, CLI 1 |
@@ -363,7 +363,7 @@ checker refusal is a Check bug here.
 | [299](299_work_queue_dispatcher_fetch_races_agent_pushes.md) | Tooling | dispatch | commits | — | outside (tooling) |
 | [300](300_new_bug_sh_reserves_a_number_then_refuses_the_fi.md) | Tooling | new_bug | commits | — | outside (tooling) |
 | [301](301_lower_s_address_taken_walk_did_not_see_the_root.md) | Lower | Lower | commits | — | violates MEM-3@1 |
-| [302](302_a_loop_moved_an_address_taken_scalar_back_into_a.md) | Lower | Lower | commits | — | violates MEM-7@1 |
+| [302](302_a_loop_moved_an_address_taken_scalar_back_into_a.md) | Lower | Lower | commits | — | violates PASS-13@1 |
 | [303](303_the_value_if_did_not_drop_the_bindings_its_arms.md) | Lower | Lower | commits | — | violates PASS-9@1 |
 | [304](304_a_value_if_or_match_written_as_a_comparison_oper.md) | Elab | Elab | commits | Check | violates PASS-6@1 |
 | [305](305_a_break_continue_or_return_out_of_a_borrow_mut_b.md) | Lower | Lower | commits | — | violates REF-13@1, STMT-11@1 |
@@ -386,5 +386,7 @@ checker refusal is a Check bug here.
 | [328](328_a_method_taking_self_or_mut_self_is_called_on_an.md) | — | — | unfixed | — | violates OWN-15@3 |
 | [329](329_the_ll_1_checkers_never_computed_follow_sets_a_f.md) | Tooling | check_ll1 | commits | — | violates SYN-1@1 |
 | [330](330_a_continue_inside_a_for_loop_s_step_the_binary_n.md) | Interp | Interp | commits | Check | spec gap (STMT) |
+| [332](332_a_float_literal_of_type_f32_is_rounded_twice_thr.md) | — | — | unfixed | — | violates ARITH-7@1 |
+| [333](333_an_extra_type_argument_to_a_body_less_generic_de.md) | — | — | unfixed | — | violates TYPE-9@2 |
 
 <!-- END GENERATED: bug areas -->

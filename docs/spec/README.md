@@ -258,8 +258,8 @@ the target. Its four workstreams:
   that permits the behaviour; `new_bug.sh` requires one of the three and a gate checks that every
   cited ID resolves in `ids.tsv`.
 
-Measured on 2026-10-29 (after the owner decided OD1 – OD32 that day): 0 of 157 entries
-link a Lean definition; 138 of 157 have `Evidence: tested`; 14 entries are open (OPEN-33 to OPEN-46,
+Measured on 2026-10-29 (after the owner decided OD1 – OD32 that day): 0 of 156 entries
+link a Lean definition; 137 of 156 have `Evidence: tested`; 14 entries are open (OPEN-33 to OPEN-46,
 raised while recording those answers); the `docs/language` files still to absorb are
 listed in `unabsorbed.tsv`.
 

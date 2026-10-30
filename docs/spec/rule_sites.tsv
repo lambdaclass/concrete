@@ -123,14 +123,14 @@ TYPE-7	enforced	E0316	check	Concrete.checkExprCore, Concrete.checkStmt, Concrete
 TYPE-8	enforced	E0221	check	Concrete.checkExprCore, Concrete.ccCheckExpr, Concrete.ccCheckStmt
 TYPE-8	enforced	E0554	core-check	Concrete.checkExprCore, Concrete.ccCheckExpr, Concrete.ccCheckStmt
 TYPE-8	enforced	E0555	core-check	Concrete.checkExprCore, Concrete.ccCheckExpr, Concrete.ccCheckStmt
-TYPE-9	enforced	E0262	check	Concrete.checkExprCore
-TYPE-9	enforced	E0264	check	Concrete.checkExprCore
-TYPE-9	enforced	E0265	check	Concrete.checkExprCore
-TYPE-9	enforced	E0266	check	Concrete.checkExprCore
-TYPE-9	enforced	E0522	core-check	Concrete.checkExprCore
-TYPE-9	enforced	E0313	check	Concrete.checkExprCore
-TYPE-9	enforced	E0317	check	Concrete.checkExprCore
-TYPE-9	enforced	E0322	check	Concrete.checkExprCore
+TYPE-9	partial bug-333	E0262	check	Concrete.checkExprCore
+TYPE-9	partial bug-333	E0264	check	Concrete.checkExprCore
+TYPE-9	partial bug-333	E0265	check	Concrete.checkExprCore
+TYPE-9	partial bug-333	E0266	check	Concrete.checkExprCore
+TYPE-9	partial bug-333	E0522	core-check	Concrete.checkExprCore
+TYPE-9	partial bug-333	E0313	check	Concrete.checkExprCore
+TYPE-9	partial bug-333	E0317	check	Concrete.checkExprCore
+TYPE-9	partial bug-333	E0322	check	Concrete.checkExprCore
 TYPE-10	enforced	E0268	check	Concrete.checkExprCore
 TYPE-10	enforced	E0269	check	Concrete.checkExprCore
 TYPE-10	enforced	E0270	check	Concrete.checkExprCore

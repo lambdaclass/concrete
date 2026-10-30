@@ -17,13 +17,13 @@ of [docs/spec/ids.tsv](../spec/ids.tsv), or the generator refuses the record.
 
 <!-- BEGIN GENERATED: spec rulings (scripts/gen/bug_ledger.py; edit the records' ruling lines) -->
 
-296 bug records, 293 of them ruled: violates a rule 185, spec gap 1, open owner question 4, permitted by a rule 1, outside the spec 102; not ruled yet (fixed bugs filed before bug 300) 3. Open bugs are in bold.
+298 bug records, 295 of them ruled: violates a rule 187, spec gap 1, open owner question 4, permitted by a rule 1, outside the spec 102; not ruled yet (fixed bugs filed before bug 300) 3. Open bugs are in bold.
 
 ### By kind
 
 | ruling | bugs | open | silent |
 |---|--:|--:|--:|
-| violates a rule | 185 | 17 | 86 |
+| violates a rule | 187 | 19 | 88 |
 | spec gap | 1 | 0 | 0 |
 | open owner question | 4 | 0 | 0 |
 | permitted by a rule (not a bug) | 1 | 0 | 0 |
@@ -36,16 +36,16 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 
 | chapter | prefix | bugs | open | silent | violates | spec gap | open question | permitted |
 |---|---|--:|--:|--:|--:|--:|--:|--:|
-| pipeline.md | PASS | 42 | 2 | 6 | 42 | 0 | 0 | 0 |
+| pipeline.md | PASS | 43 | 2 | 7 | 43 | 0 | 0 | 0 |
 | modules.md | MOD | 30 | 1 | 11 | 30 | 0 | 0 | 0 |
+| types.md | TYPE | 20 | 2 | 12 | 20 | 0 | 0 | 0 |
 | ownership.md | OWN | 19 | 3 | 8 | 19 | 0 | 0 | 0 |
-| types.md | TYPE | 19 | 1 | 11 | 19 | 0 | 0 | 0 |
 | scope.md | SCOPE | 13 | 0 | 5 | 13 | 0 | 0 | 0 |
-| memory.md | MEM | 13 | 1 | 8 | 13 | 0 | 0 | 0 |
+| memory.md | MEM | 12 | 1 | 7 | 12 | 0 | 0 | 0 |
 | statements.md | STMT | 12 | 2 | 10 | 11 | 1 | 0 | 0 |
 | ffi.md | FFI | 11 | 2 | 6 | 11 | 0 | 0 | 0 |
 | references.md | REF | 10 | 1 | 9 | 9 | 0 | 0 | 1 |
-| arithmetic.md | ARITH | 9 | 1 | 6 | 9 | 0 | 0 | 0 |
+| arithmetic.md | ARITH | 10 | 2 | 7 | 10 | 0 | 0 | 0 |
 | patterns.md | PAT | 7 | 1 | 5 | 7 | 0 | 0 | 0 |
 | trusted.md | TRUST | 6 | 0 | 5 | 6 | 0 | 0 | 0 |
 | traits.md | TRAIT | 6 | 1 | 4 | 6 | 0 | 0 | 0 |
@@ -60,7 +60,7 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 | PASS-12@1 | pipeline.md | 13 | 005, 009, 014, 016, 029, 032, 035, 044, **054**, 055, **077**, 108, 116 |
 | PASS-9@1 | pipeline.md | 10 | 023, 033, 056, 078, 110, 175, 213, 271, 303, 309 |
 | SCOPE-3@1 | scope.md | 9 | 040, 041, 045, 050, 061, 087, 101, 176, 208 |
-| PASS-13@1 | pipeline.md | 7 | 004, 006, 019, 038, 102, 184, 254 |
+| PASS-13@1 | pipeline.md | 8 | 004, 006, 019, 038, 102, 184, 254, 302 |
 | SCOPE-1@1 | scope.md | 6 | 045, 087, 093, 094, 107, 124 |
 | FFI-2@1 | ffi.md | 5 | 037, 051, 057, 121, **122** |
 | MEM-3@1 | memory.md | 5 | 031, 034, 285, 287, 301 |
@@ -79,6 +79,7 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 | ARITH-2@1 | arithmetic.md | 2 | 002, 088 |
 | ARITH-5@1 | arithmetic.md | 2 | 128, 130 |
 | ARITH-6@1 | arithmetic.md | 2 | 140, 150 |
+| ARITH-7@1 | arithmetic.md | 2 | 109, **332** |
 | MEM-5@1 | memory.md | 2 | 144, 146 |
 | MOD-2@1 | modules.md | 2 | **226**, 230 |
 | MOD-9@1 | modules.md | 2 | 223, 233 |
@@ -99,15 +100,14 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 | TYPE-12@1 | types.md | 2 | 199, 246 |
 | TYPE-15@1 | types.md | 2 | 073, 200 |
 | TYPE-16@1 | types.md | 2 | 024, 205 |
+| TYPE-9@2 | types.md | 2 | 221, **333** |
 | ARITH-2@2 | arithmetic.md | 1 | **327** |
 | ARITH-3@1 | arithmetic.md | 1 | 053 |
-| ARITH-7@1 | arithmetic.md | 1 | 109 |
 | FFI-1@1 | ffi.md | 1 | 166 |
 | FFI-3@1 | ffi.md | 1 | 113 |
 | FFI-4@1 | ffi.md | 1 | 037 |
 | FFI-6@1 | ffi.md | 1 | 112 |
 | MEM-4@3 | memory.md | 1 | **326** |
-| MEM-7@1 | memory.md | 1 | 302 |
 | MOD-6@1 | modules.md | 1 | **226** |
 | MOD-8@1 | modules.md | 1 | 165 |
 | OWN-12@1 | ownership.md | 1 | 143 |
@@ -139,7 +139,6 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 | TYPE-6@2 | types.md | 1 | **322** |
 | TYPE-7@1 | types.md | 1 | 193 |
 | TYPE-9@1 | types.md | 1 | 239 |
-| TYPE-9@2 | types.md | 1 | 221 |
 
 ### Spec gaps: rules to write
 

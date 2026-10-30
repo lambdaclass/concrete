@@ -6,7 +6,7 @@ fixtures: regress_302_loop_keeps_addr_taken_slot.con
 class: 8 — a local's storage changed back at a loop exit while an alias to the slot lived on
 silent: yes
 exit: 0b
-ruling: Violates: MEM-7@1
+ruling: Violates: PASS-13@1 — the binary lost a write the interpreter kept: a loop moved an address-taken local back into a register
 -->
 
 **Status:** FIXED (branch `wip/bug-302`)

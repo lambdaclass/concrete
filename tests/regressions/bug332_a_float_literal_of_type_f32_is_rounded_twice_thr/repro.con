@@ -1,0 +1,11 @@
+// Bug 332 (ARITH-7): 1.0000000596046447753906250001 lies just above the binary32 midpoint between
+// 1 and 1 + 2^-23, so rounded once to f32 it is 1 + 2^-23 and `a == b`. Main rounds it to binary64
+// first (exactly the midpoint) and then to binary32 (ties to even: 1.0), so both consumers return 0.
+fn main() -> Int {
+    let a: f32 = 1.0000000596046447753906250001;
+    let b: f32 = 1.00000011920928955078125;
+    if a == b {
+        return 42;
+    }
+    return 0;
+}
