@@ -30,11 +30,11 @@ OUT="$3"
 for tool in timeout xargs sed diff; do
   command -v "$tool" >/dev/null || { echo "identity_sweep: '$tool' is required (run inside nix develop)" >&2; exit 2; }
 done
+case "${JOBS-unset}" in unset) ;; ''|*[!0-9]*|0) echo "identity_sweep: JOBS must be a positive integer, got '$JOBS'" >&2; exit 2 ;; esac
 source "$ROOT/scripts/tests/lib/heavy_slots.sh"
 heavy_slot_acquire "identity_sweep $WHAT" || exit $?
 trap heavy_slot_release EXIT
 JOBS="${JOBS:-$(heavy_jobs_default)}"
-case "$JOBS" in ''|*[!0-9]*|0) echo "identity_sweep: JOBS must be a positive integer, got '$JOBS'" >&2; exit 2 ;; esac
 cd "$ROOT"
 
 KINDS="alloc arithmetic artifact-fuzz assumptions attestation-join audit authority backend-contracts body-bytes bool-kernel bridge-check caps check-proofs consistency contracts core-semantics-diff diagnostic-codes diagnostics-json effects eligibility extraction fingerprints generated-implementations impl-manifest interface layout lean-stubs lowering-agreement migration migration-manifest model-diff mono multi-kernel obligation-ledger obligations package-identity proof proof-bundle proof-deps proof-diagnostics proof-status receipts recursion schema solver-cert stack-depth subject-facts term-ir traceability trust-edges unsafe vcgen-diff vcs verify"
