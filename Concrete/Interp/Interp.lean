@@ -1366,6 +1366,7 @@ def evalUnaryOp (op : UnaryOp) (v : IVal) : Except String IVal :=
 -- Type coercion (integer type conversions only)
 -- ============================================================
 
+-- spec: TYPE-20 (docs/spec/types.md; casts to and from char)
 def evalCast (v : IVal) (targetTy : Ty) (srcTy : Option Ty := none) : Except String IVal :=
   match v with
   -- `as` keeps the low bits (ARITHMETIC_POLICY: silent truncation /
@@ -3248,6 +3249,7 @@ partial def evalStmt (cx : Ctx) (env : Env) (s : CStmt) : IM (Env × Flow) :=
     | .escape env' f => pure (env', f)
     | e => throw e
 
+-- spec: TRUST-11 (docs/spec/trusted.md; a raw store writes memory without reading it)
 partial def evalStmtCore (cx : Ctx) (env : Env) (s : CStmt) : IM (Env × Flow) := do
   match s with
   | .letDecl name _ _ value => do

@@ -5,7 +5,7 @@ traps on a result its type cannot represent, and the trap is an abort (STMT-2). 
 saturating arithmetic are named operations. There is no implicit numeric conversion (TYPE-4), and
 which operand types an operator takes is TYPE-6. The design records are
 [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md) (absorbed into ARITH-8 to
-ARITH-10, TYPE-19 and TYPE-20 on 2026-10-30; it keeps the profile mapping, report classification and
+ARITH-11, TYPE-19 and TYPE-20 on 2026-10-30; it keeps the profile mapping, report classification and
 proof boundaries) and NUMERIC_MODEL.md (absorbed into ARITH-2, ARITH-3 and ARITH-5 and deleted).
 
 ## Rules
@@ -327,34 +327,32 @@ fn main() -> Int {
 ```
 
 <a id="ARITH-8"></a>
-### ARITH-8. Shift fill, division rounding and the remainder's sign
+### ARITH-8. The fill of a right shift
 
-**ARITH-8@1.** A right shift fills the vacated bits with the sign bit on a signed type and with zeros on an unsigned type, an integer division that does not abort truncates its quotient toward zero, and a nonzero remainder has the sign of its dividend.
+**ARITH-8@1.** A right shift that does not abort fills the vacated bits with the sign bit on a signed type and with zeros on an unsigned type.
 
 - Kind: guarantee
 - Uses: none
 - Codes: none
 - Status: enforced
-- Enforced by: Concrete.IntArith.evalIntBinOp, Concrete.IntArith.evalIntShift, Concrete.Pipeline.emit
+- Enforced by: Concrete.IntArith.evalIntShift, Concrete.Pipeline.emit
 - Semantics: none
 - Obligation: the shift and division results are `IntArith`'s, the one arithmetic authority (R-0493)
 - Evidence: tested
 
-**Rationale.** These are the results C99 and LLVM's `ashr`, `lshr`, `sdiv` and `srem` give, so
-`-7 / 2` is `-3`, `-7 % 2` is `-1` and `7 % -2` is `1`. When an operation aborts instead is ARITH-3.
-The interpreter and the constant folder compute them in `IntArith`, and the binary through the
-abort helpers.
+**Rationale.** These are LLVM's `ashr` and `lshr` (the archived ARITHMETIC_POLICY §6). When a shift
+aborts instead (a count outside the width) is ARITH-3. The interpreter and the constant folder
+compute it in `IntArith`, and the binary through the abort helpers. How an integer division rounds
+and which sign a remainder takes is OPEN-114: main truncates toward zero, as C99 does, which the
+archived record did not state as a rule.
 
-```con accept name=shift-and-division exit=42
+```con accept name=shift-fill exit=42
 fn main() -> Int {
     let a: i8 = -128;
     let s: i8 = a >> 7;
     let u: u8 = 128;
     let t: u8 = u >> 7;
-    let q: Int = -7 / 2;
-    let r: Int = -7 % 2;
-    let r2: Int = 7 % -2;
-    return (s as Int) + (t as Int) + q + r + r2 + 45;
+    return (s as Int) + (t as Int) + 42;
 }
 ```
 
@@ -401,10 +399,23 @@ fn main() -> Int {
 }
 ```
 
+```con accept name=named-operations-unchanged exit=42
+#[overflow_checked]
+fn named(a: u8, b: u8) -> Int {
+    let w: u8 = wrapping_add(a, b);
+    let s: u8 = saturating_add(a, b);
+    return (w as Int) + (s as Int);
+}
+
+fn main() -> Int {
+    return named(200, 100) - 257;
+}
+```
+
 <a id="ARITH-10"></a>
 ### ARITH-10. The named conversions' results
 
-**ARITH-10@1.** `truncate::<T>(x)` keeps the low-order bits of `x`'s two's-complement representation, as many as `T`'s width, `reinterpret::<T>(x)` gives the value of `T` with `x`'s bit pattern at the same width, and `try_convert::<T>(x)` returns `Option::Some` of the value of `T` that means the same number as `x`, or `Option::None` when there is none (an integer out of range, a float that is not integral, out of range, NaN or infinite, or a value a target float does not represent exactly).
+**ARITH-10@1.** `truncate::<T>(x)` keeps the low-order bits of `x`'s two's-complement representation, as many as `T`'s width, `reinterpret::<T>(x)` changes the signedness of the integer `x` at the same width and keeps its bit pattern, and `try_convert::<T>(x)` gives the value of `T` that means the same number as `x` when there is one and otherwise reports that there is none (an integer out of range, a float that is not integral, out of range, NaN or infinite, or a value a target float does not represent exactly).
 
 - Kind: guarantee
 - Uses: none
@@ -417,9 +428,9 @@ fn main() -> Int {
 **Rationale.** These are the conversions ARITH-5 sends every lossy `as` to, each with one stated
 result, so that no consumer has to guess what a lossy conversion means (bugs 080 and 128).
 `truncate::<u8>(300)` is 44 and `reinterpret::<u32>(-1)` is 4294967295, what a narrowing or
-sign-changing `as` gives today. The float rounding operations (`trunc`, `round`, `floor`, `ceil`)
-are specified with ARITH-1's reference model. None of these exists on main yet (R-0500), and their
-spellings are OPEN-99.
+sign-changing `as` gives today. Whether `try_convert` reports a failure as `Option::None` or as a
+`Result` error with a reason is OPEN-106; the archived record allowed either. The float conversions
+are ARITH-11. None of these exists on main yet (R-0500), and their spellings are OPEN-99.
 
 ```con accept name=truncate-and-reinterpret exit=42 pending=R-0500 now=reject:E0101:resolve
 fn main() -> Int {
@@ -434,17 +445,34 @@ fn main() -> Int {
 }
 ```
 
-```con accept name=try-convert exit=42 pending=R-0500 now=reject:E0101:resolve
+<a id="ARITH-11"></a>
+### ARITH-11. The named float conversions round as stated
+
+**ARITH-11@1.** A named conversion from an integer to a float, or from `f64` to `f32`, rounds to the nearest representable value with ties to even, and each float-to-integer rounding operation (`trunc`, `round`, `floor`, `ceil`) has a stated result for every input, NaN and the infinities included.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: pending R-0500
+- Semantics: none
+- Obligation: the named conversions are typed operations of the one arithmetic authority (R-0493)
+- Evidence: tested
+
+**Rationale.** These are the conversions ARITH-5 sends a rounding `as` to (`i32` to `f32`, `Int` to
+`f64`, `f64` to `f32`, every float to an integer). Today `as` rounds an integer to a float natively
+and is the identity in `--interp` (bug 128), and a float-to-integer `as` truncates toward zero and
+aborts on NaN, an infinity or a value out of range. Whether a rounding operation gives a value or an
+error for those inputs, and which value, is OPEN-107. None of these exists on main yet (R-0500);
+`to_float` is a placeholder spelling, and the spellings are OPEN-99.
+
+```con accept name=nearest-even exit=42 pending=R-0500 now=reject:E0101:resolve
 fn main() -> Int {
-    let small: Int = 42;
-    let big: Int = 300;
-    let mut out: Int = 0;
-    if let Option::Some { value } = try_convert::<u8>(small) {
-        out = value as Int;
+    let x: Int = 16777217;
+    let f: f32 = to_float::<f32>(x);
+    let back: f64 = f as f64;
+    if back == 16777216.0 {
+        return 42;
     }
-    if let Option::Some { value: v2 } = try_convert::<u8>(big) {
-        out = 0;
-    }
-    return out;
+    return 0;
 }
 ```

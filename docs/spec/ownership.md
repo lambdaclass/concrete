@@ -128,6 +128,23 @@ fn main() -> Int {
 }
 ```
 
+```con reject name=trusted-use-after-move code=E0205 stage=check pair=move-once
+struct R { v: Int }
+
+fn take(r: R) -> Int {
+    let R { v } = r;
+    return v;
+}
+
+trusted fn twice(r: R) -> Int {
+    return take(r) + take(r);
+}
+
+fn main() -> Int {
+    return twice(R { v: 21 });
+}
+```
+
 <a id="OWN-2"></a>
 ### OWN-2. Every owned linear binding is consumed before every exit
 
@@ -196,6 +213,18 @@ fn f(c: bool) -> Int {
 
 fn main() -> Int {
     return f(false);
+}
+```
+
+```con reject name=trusted-never-consumed code=E0208 stage=check pair=consumed-on-every-exit
+struct R { v: Int }
+
+trusted fn drop_it(r: R) -> Int {
+    return 42;
+}
+
+fn main() -> Int {
+    return drop_it(R { v: 1 });
 }
 ```
 

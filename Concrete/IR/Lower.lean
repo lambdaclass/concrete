@@ -1103,6 +1103,7 @@ private def reconcileBranchVars (rules : BranchMergeRules)
 
 mutual
 
+-- spec: TYPE-20 (docs/spec/types.md; casts to and from char)
 partial def lowerExpr (e : CExpr) : LowerM SVal := do
   match e with
   | .intLit v ty => return .intConst v ty
@@ -2298,6 +2299,7 @@ partial def finishMatchArmBody (guard : Option CExpr) (body : List CStmt) (ty : 
   else
     return (none, (VarMap.empty, "", true))
 
+-- spec: TRUST-11 (docs/spec/trusted.md; a raw store is a plain store)
 partial def lowerStmt (stmt : CStmt) : LowerM Unit := do
   match stmt with
   | .letDecl name mutable ty value =>

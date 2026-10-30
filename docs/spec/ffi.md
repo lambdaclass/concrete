@@ -171,7 +171,8 @@ fn main() -> Int {
 - Evidence: tested
 
 **Rationale.** `repr(C)` promises C's layout, which a generic or a non-C field cannot have.
-Over-alignment is refused because code generation does not support it yet (E0585).
+Over-alignment is refused because code generation does not support it yet (E0585). Whether
+`repr(packed)` refuses a field whose alignment exceeds its offset is OPEN-111.
 
 ```con reject name=align-not-power-of-two code=E0577 stage=core-check pair=repr-c
 #[repr(C, align(3))]
@@ -280,17 +281,18 @@ mod bar {
 - Uses: none
 - Codes: none
 - Status: enforced
-- Enforced by: Concrete.Layout.tySize, Concrete.Layout.tyAlign
+- Enforced by: Concrete.Layout.tySize, Concrete.Layout.tyAlign, Concrete.checkExprCore
 - Semantics: none
 - Obligation: layout comes from the one `Layout` authority (FFI-2, R-0502)
 - Evidence: tested
 
 **Rationale.** The promised layout is smaller than the implemented one, so the compiler may change
 an unannotated layout and a program cannot come to depend on it. Safe code has no other window:
-it cannot turn a pointer into an integer (TRUST-1) or read through a raw pointer (TRUST-3). Trusted
+it cannot turn a pointer into an integer (TRUST-1) or read through a raw pointer without `Unsafe`
+(TRUST-4's `raw-deref-needs-unsafe`). Trusted
 code that walks a buffer may also rely on the stride of an array of `T` being `sizeof::<T>()`
-([LAYOUT_CONTRACT.md](../platform/LAYOUT_CONTRACT.md) §3.3). An enum has no `repr` and crosses the
-foreign boundary as an integer.
+([LAYOUT_CONTRACT.md](../platform/LAYOUT_CONTRACT.md) §3.3). An enum takes no `repr`; whether an
+enum may cross the foreign boundary is OPEN-110 (main refuses it, E0574).
 
 ```con accept name=observed-through-sizeof exit=42
 mod m {
@@ -319,14 +321,17 @@ mod m {
 - Uses: none
 - Codes: none
 - Status: enforced
-- Enforced by: Concrete.Layout.tySize, Concrete.Layout.tyAlign
+- Enforced by: Concrete.Layout.tySize, Concrete.Layout.tyAlign, Concrete.Layout.fieldOffset
 - Semantics: none
 - Obligation: layout comes from the one `Layout` authority (FFI-2, R-0502)
 - Evidence: tested
 
 **Rationale.** `repr(C)` is what a struct needs to cross `extern fn` (FFI-3), and `repr(packed)`
 describes wire formats. `#[repr(align(N))]` promises only a minimum alignment, and today only where
-it changes nothing (FFI-4, E0585). Which combinations are well formed is FFI-4.
+it changes nothing (FFI-4, E0585). Which combinations are well formed is FFI-4. Whether a packed
+struct may hold a field whose alignment exceeds its offset, and whether such a field may be
+borrowed, is OPEN-111; main accepts both, and the examples here place every field at an offset
+aligned for its type.
 
 ```con accept name=c-and-packed exit=42
 mod m {
@@ -338,13 +343,37 @@ mod m {
     #[repr(C)]
     struct Copy R { v: u8, l: u32 }
     #[repr(C, packed)]
-    struct Copy H { v: u8, f: u16, l: u32 }
+    struct Copy H { l: u32, f: u16, v: u8 }
     #[repr(packed)]
-    struct Copy P { v: u8, l: u32 }
+    struct Copy P { l: u32, v: u8 }
 
     pub fn main() -> Int {
         if sizeof::<R>() == 8 && alignof::<R>() == 4 && sizeof::<H>() == 7 && alignof::<H>() == 1
             && sizeof::<P>() == 5 && alignof::<P>() == 1 {
+            return 42;
+        }
+        return 0;
+    }
+}
+```
+
+```con accept name=field-offsets exit=42 interp-exempt=byte-reads-not-modelled
+mod m {
+    #[repr(C)]
+    struct Copy R { v: u8, l: u32 }
+    #[repr(packed)]
+    struct Copy P { l: u32, v: u8 }
+
+    trusted fn byte_at<T>(s: &T, i: Int) -> u8 {
+        let p: *const u8 = s as *const T as *const u8;
+        let q: *const u8 = p + i;
+        return *q;
+    }
+
+    pub fn main() -> Int {
+        let r: R = R { v: 7, l: 30 };
+        let p: P = P { l: 9, v: 5 };
+        if byte_at(&r, 0) == 7 && byte_at(&r, 4) == 30 && byte_at(&p, 0) == 9 && byte_at(&p, 4) == 5 {
             return 42;
         }
         return 0;

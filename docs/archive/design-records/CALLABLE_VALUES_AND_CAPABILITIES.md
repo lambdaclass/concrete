@@ -16,7 +16,10 @@ Open questions it raised: the `with(f)` elision shortcut (OPEN-92) and widening 
 collection iteration is OPEN-51), and §5.1's "disjoint fields `&mut w.a` + `&mut w.b` stay legal"
 and its `let r = &mut c` predate REF-11@3 (loans keyed by the root) and REF-6. The std API
 patterns (`for_each_into`, `with_value`, `modify`) are library design, not language rules. Status
-markers below (**[implemented]**, **[specified]**, **[deferred]**) record the state on 2026-06-12.
+markers below (**[implemented]**, **[specified]**, **[deferred]**) record the state on 2026-06-12; a
+marker that names a later date records that date's checkpoint. A name in `with(...)` that is no
+capability is refused by MOD-1, which main does not yet do (bug 337); a capability listed twice is
+OPEN-108.
 
 ## 0. Why this document is the keystone
 
@@ -77,7 +80,7 @@ fn apply<T, U, cap C>(f: fn(T) with(C) -> U, x: T) with(C) -> U {
 }
 ```
 
-- `cap C` declares a capability-set type parameter (`Concrete/Ast.lean`:
+- `cap C` declares a capability-set type parameter (`Concrete/Frontend/AST.lean`:
   `capParams`). `CapSet` supports concrete caps, variables, and union.
 - A function pointer type carries its capset: `fn(T) with(C) -> R`
   (`Ty.fn_ params capSet retTy`). Function pointers are `Copy` and capture
@@ -453,7 +456,8 @@ Examples to add under `examples/callbacks/`:
 ## 10. What this design explicitly does NOT add [decided]
 
 - **No closures / no environment** (TYPE-1).
-- **No local no-capture functions** (TYPE-1's rationale; a parse error).
+- **No local no-capture functions** (the grammar, SYN-1, has no function declaration inside a
+  block, so one is a parse error).
 - **No `BoundFn<…>` first-class callable value** (§4) — deferred until a storage
   workload needs it.
 - **No returned references from these APIs** (§1.6). Scoped access yields a

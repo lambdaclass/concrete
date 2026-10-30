@@ -22,7 +22,7 @@ Layout attributes (`#[repr(C)]`, `packed`, `align`) belong to the FFI chapter.
 <a id="TYPE-D1"></a>
 ### TYPE-D1. Capability set
 
-**TYPE-D1@1.** A capability set is a set of capabilities (TRUST-D1) and capability variables, written as a comma-separated list in `with(...)` and as `{}` or names joined by `+` in a capability argument, and a function or a type declares a capability variable as a parameter `<cap C>`.
+**TYPE-D1@1.** A capability set is a set of capabilities (TRUST-D1) and capability variables, written as a comma-separated list in `with(...)` and as `{}` or names joined by `+` in a capability argument, and a function or a struct declares a capability variable as a parameter `<cap C>`.
 
 - Kind: definition
 - Uses: TRUST-D1
@@ -33,7 +33,8 @@ Layout attributes (`#[repr(C)]`, `packed`, `align`) belong to the FFI chapter.
 - Obligation: none
 - Evidence: by-users
 
-**Rationale.** A set, not a list: order and repetition do not matter, and an alias (`Std`, or one
+**Rationale.** A set, not a list: order does not matter (whether a repeated capability does is
+OPEN-108), and an alias (`Std`, or one
 declared `cap IO = File + Console;`) stands for the capabilities it expands to. Several capability
 variables and concrete capabilities may be joined, `fn f<cap C, cap D>(..) with(C, D, Console)`.
 How a call binds a capability variable from its arguments is OPEN-45; a capability argument in an
@@ -222,6 +223,34 @@ fn inc(x: Int) with(Console) -> Int {
 fn main() with(Console) -> Int {
     let f: fn(Int) -> Int = inc;
     return f(41);
+}
+```
+
+```con reject name=capability-lost-in-argument code=E0220 stage=check pair=same-capabilities
+fn apply(f: fn(Int) -> Int, x: Int) -> Int {
+    return f(x);
+}
+
+fn inc(x: Int) with(Console) -> Int {
+    return x + 1;
+}
+
+fn main() with(Console) -> Int {
+    return apply(inc, 41);
+}
+```
+
+```con reject name=capability-lost-in-field code=E0220 stage=check pair=same-capabilities
+struct Copy Box { f: fn(Int) -> Int }
+
+fn inc(x: Int) with(Console) -> Int {
+    return x + 1;
+}
+
+fn main() with(Console) -> Int {
+    let b: Box = Box { f: inc };
+    let g: fn(Int) -> Int = b.f;
+    return g(41);
 }
 ```
 
@@ -1046,7 +1075,7 @@ fn main() -> Int { let n: Node = Node { v: 40, w: 2 }; return n.v + n.w; }
 <a id="TYPE-17"></a>
 ### TYPE-17. A function type carries its capability set
 
-**TYPE-17@1.** The capability set of a function type `fn(..) with(C) -> R` is part of the type, compared as a set, so a function value keeps its capabilities through every binding, argument, field and combinator.
+**TYPE-17@1.** The capability set of a function type `fn(..) with(C) -> R` is part of the type, compared without regard to the order of its capabilities, so a function value keeps its capabilities through every binding, argument, field and combinator.
 
 - Kind: guarantee
 - Uses: TYPE-D1
@@ -1060,13 +1089,17 @@ fn main() -> Int { let n: Node = Node { v: 40, w: 2 }; return n.v + n.w; }
 **Rationale.** A callback that silently lost the capabilities of the code it runs would hide an
 effect (TRUST-4's smuggling case, `adversarial_neg_cap_fnptr_smuggle.con`). Since the set is part
 of the type, TYPE-4 refuses a `with(Console)` function where a capability-free function type is
-expected (E0220, its example `capabilities-not-erased`), and a combinator that calls its callback
+expected (E0220, its examples `capabilities-not-erased`, `capability-lost-in-argument` and
+`capability-lost-in-field`), and a combinator that calls its callback
 must hold the callback's set, which a capability parameter names: the combinator carries what its
 callback carries, no more and no less. A handle is a struct with capability parameters (TYPE-15)
 whose fields are such function types, so `Sink<{}>` is not a `Sink<Console>` either (TYPE-4).
 Whether a function value converts to a type with a larger set (`fn(Int) -> Int` to
 `fn(Int) with(Console) -> Int`, or `with(File)` to `with(Std)`) is OPEN-93; main refuses it
 (E0220). A combinator spelling that infers its set from its callbacks (`with(f)`) is OPEN-92.
+Main compares two sets after sorting them and keeps a repeated capability, so
+`fn(Int) with(Console, Console) -> Int` is not a `fn(Int) with(Console) -> Int` (E0220); whether it
+should be is OPEN-108.
 
 ```con accept name=set-order exit=42
 fn inc(x: Int) with(Console, File) -> Int {
@@ -1124,7 +1157,7 @@ fn main() with(Console, File) -> Int {
 - Uses: TYPE-D1
 - Codes: none
 - Status: enforced
-- Enforced by: Concrete.Layout.tySize, Concrete.Layout.tyToLLVM
+- Enforced by: Concrete.Layout.tySize, Concrete.Layout.tyAlign, Concrete.Layout.fieldOffset, Concrete.Layout.tyToLLVM
 - Semantics: none
 - Obligation: none
 - Evidence: tested
@@ -1132,12 +1165,15 @@ fn main() with(Console, File) -> Int {
 **Rationale.** A capability is a compile-time permission, checked and then erased; it matters for
 handle types (TYPE-15) and for the C layout of a struct passed across FFI. Whether two capability
 instantiations of one generic function share generated code is an implementation choice, not a
-language rule.
+language rule; whether two instantiations that differ only in a function type's capability set are
+distinct specializations with distinct symbols is OPEN-109 (main makes them one).
 
 ```con accept name=same-layout exit=42
 mod m {
     #[intrinsic = "sizeof"]
     pub trusted fn sizeof<T>() -> u64;
+    #[intrinsic = "alignof"]
+    pub trusted fn alignof<T>() -> u64;
 
     struct Copy Sink<cap C> { f: fn(Int) with(C) -> Int, n: Int }
 
@@ -1146,7 +1182,9 @@ mod m {
         let b: u64 = sizeof::<Sink<Console + File>>();
         let c: u64 = sizeof::<fn(Int) -> Int>();
         let d: u64 = sizeof::<fn(Int) with(Console) -> Int>();
-        if a == b && c == d {
+        let e: u64 = alignof::<Sink<{}>>();
+        let f: u64 = alignof::<Sink<Console + File>>();
+        if a == b && c == d && e == f {
             return 42;
         }
         return 1;
@@ -1154,16 +1192,46 @@ mod m {
 }
 ```
 
+```con accept name=same-field-offsets exit=42 interp-exempt=byte-reads-not-modelled
+mod m {
+    #[intrinsic = "sizeof"]
+    pub trusted fn sizeof<T>() -> u64;
+
+    struct Copy Sink<cap C> { f: fn(Int) with(C) -> Int, n: u8 }
+
+    fn inc(x: Int) with(Console) -> Int {
+        return x + 1;
+    }
+
+    fn dec(x: Int) -> Int {
+        return x - 1;
+    }
+
+    trusted fn byte_at<T>(s: &T, i: u64) -> u8 {
+        let p: *const u8 = s as *const T as *const u8;
+        let q: *const u8 = p + (i as Int);
+        return *q;
+    }
+
+    pub fn main() -> Int {
+        let a: Sink<{}> = Sink { f: dec, n: 40 };
+        let b: Sink<Console> = Sink { f: inc, n: 2 };
+        let at: u64 = sizeof::<fn(Int) -> Int>();
+        return (byte_at(&a, at) as Int) + (byte_at(&b, at) as Int);
+    }
+}
+```
+
 <a id="TYPE-19"></a>
 ### TYPE-19. The primitive numeric types
 
-**TYPE-19@1.** The integer types are `i8`, `i16`, `i32`, `i64`, `u8`, `u16`, `u32` and `u64`, the float types are `f32` and `f64`, and `Int`, `Uint` and `Float64` are other spellings of `i64`, `u64` and `f64`.
+**TYPE-19@1.** The integer types are the signed `i8`, `i16`, `i32` and `i64` and the unsigned `u8`, `u16`, `u32` and `u64`, each as many bits wide as its name says, the float types are `f32` and `f64`, and `Int`, `Uint` and `Float64` are other spellings of `i64`, `u64` and `f64`.
 
 - Kind: guarantee
 - Uses: none
 - Codes: none
 - Status: enforced
-- Enforced by: Concrete.parseType, Concrete.tyFromName
+- Enforced by: Concrete.parseType, Concrete.tyFromName, Concrete.IntArith.intBitWidth
 - Semantics: none
 - Obligation: one `IntArith` authority for widths and signedness (R-0493)
 - Evidence: tested
@@ -1195,6 +1263,25 @@ fn main() -> Int {
 }
 ```
 
+```con accept name=widths-and-signedness exit=42
+fn main() -> Int {
+    let a: i8 = 127;
+    let b: u8 = 255;
+    let c: i16 = 32767;
+    let d: u16 = 65535;
+    let e: i32 = 2147483647;
+    let f: u32 = 4294967295;
+    let g: i64 = 9223372036854775807;
+    let h: u64 = 18446744073709551615;
+    if wrapping_add(a, 1) == -128 && wrapping_add(b, 1) == 0 && wrapping_add(c, 1) == -32768
+        && wrapping_add(d, 1) == 0 && wrapping_add(e, 1) == -2147483648 && wrapping_add(f, 1) == 0
+        && wrapping_add(g, 1) < 0 && wrapping_add(h, 1) == 0 {
+        return 42;
+    }
+    return 0;
+}
+```
+
 <a id="TYPE-20"></a>
 ### TYPE-20. A `char` is one byte
 
@@ -1204,7 +1291,7 @@ fn main() -> Int {
 - Uses: none
 - Codes: none
 - Status: enforced
-- Enforced by: Concrete.Layout.tySize, Concrete.ccCheckExpr
+- Enforced by: Concrete.Layout.tySize, Concrete.ccCheckExpr, Concrete.lowerExpr, Concrete.Interp.evalCast
 - Semantics: none
 - Obligation: none
 - Evidence: tested
@@ -1228,6 +1315,22 @@ mod m {
 }
 ```
 
+```con accept name=every-byte-round-trips exit=42
+fn main() -> Int {
+    let mut i: Int = 0;
+    let mut same: Int = 0;
+    while i < 256 {
+        let b: u8 = i as u8;
+        let c: char = b as char;
+        if (c as u8) == b {
+            same = same + 1;
+        }
+        i = i + 1;
+    }
+    return same - 214;
+}
+```
+
 <a id="TYPE-21"></a>
 ### TYPE-21. A newtype has its inner type's representation
 
@@ -1237,7 +1340,7 @@ mod m {
 - Uses: none
 - Codes: none
 - Status: enforced
-- Enforced by: Concrete.Layout.tySize, Concrete.Layout.tyAlign
+- Enforced by: Concrete.Layout.tySize, Concrete.Layout.tyAlign, Concrete.Layout.resolveNewtype, Concrete.Layout.tyToLLVM
 - Semantics: none
 - Obligation: layout comes from the one `Layout` authority (FFI-2, R-0502)
 - Evidence: tested
@@ -1266,6 +1369,22 @@ mod m {
         }
         return 0;
     }
+}
+```
+
+```con accept name=wrap-and-unwrap exit=42
+newtype Meters = Int;
+
+struct Copy W { a: u8, m: Meters }
+
+fn grow(m: Meters) -> Meters {
+    return Meters(m.0 + 1);
+}
+
+fn main() -> Int {
+    let w: W = W { a: 1, m: Meters(40) };
+    let m: Meters = grow(w.m);
+    return m.0 + (w.a as Int);
 }
 ```
 

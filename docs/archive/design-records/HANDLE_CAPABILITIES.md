@@ -13,12 +13,16 @@ parameters on types (TYPE-D1, TYPE-15), handle types invariant in their capabili
 (TYPE-4, TYPE-17), and capabilities without run-time representation (TYPE-18). Where this document
 and the spec differ, the spec governs. R7's "`C` is inferred at each call site from the handle's
 type" is OPEN-45, an open owner decision, not a rule; R7's widening citation is OPEN-93; §5's
-signature agreement between two bindings of one C symbol is OPEN-96 (main does not check it), and
-its `extern fn ... = "write"` spelling is pseudocode for FFI-5's `#[link_name]`. The descriptor
+signature agreement between two bindings of one C symbol is OPEN-96 (main does not check it),
+its `extern fn ... = "write"` spelling is pseudocode for FFI-5's `#[link_name]`, and its "taking a
+binding as a function value" is stale: FFI-1 refuses a foreign function as a value, and a Concrete
+wrapper function is the value instead. R8's collision-free symbol identity is OPEN-109 (main gives
+instantiations that differ only in a function type's capability set one symbol). The descriptor
 rules (R5), closing a handle (R6), cross-package transport (R9) and the assumption reports (R10) are
 std, FFI-audit and reporting policy, kept here and in
 [HANDLE_CAPABILITIES_AUDIT.md](../../stdlib/HANDLE_CAPABILITIES_AUDIT.md). Status markers
-(**[decided]**, **[current]**, **[open]**) record the state on 2026-10-07.
+(**[decided]**, **[current]**, **[open]**) record the state on 2026-10-07; a marker that names a later date
+records that date's checkpoint.
 
 ## Implementation status (2026-10-07)
 
@@ -277,7 +281,8 @@ required C.** Possession grants nothing; using the descriptor independently requ
 
 - Erasure: now TYPE-18.
 - Symbol identity is correct and collision-free across instantiations. The E0809 history
-  (specialization names colliding) is the failure to avoid.
+  (specialization names colliding) is the failure to avoid. Now OPEN-109: main's symbols keep a
+  struct's capability arguments but drop a function type's capability set.
 - Whether `Writer<Console>` and `Writer<File>` share one generated function is an
   implementation decision that needs its own argument. This design does not prescribe it.
 
@@ -352,7 +357,8 @@ one. The work touches:
   a mismatch is refused with a diagnostic rather than emitted as two declarations.
 - **Linking:** calls emit the C symbol, not the binding name; no new linker inputs.
 - **Function references:** taking a binding as a function value resolves to the C symbol,
-  through the path `linkerAliases` already uses.
+  through the path `linkerAliases` already uses. Stale: FFI-1 refuses a foreign function as a
+  value (OD4); a Concrete wrapper function that calls the binding is the value instead.
 - **Summaries and reports:** dependency summaries carry binding → symbol (R9), and
   reports show both the binding and the symbol.
 

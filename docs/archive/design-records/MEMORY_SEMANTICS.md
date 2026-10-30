@@ -5,9 +5,11 @@ enforced it, and the exit 2i record of the reference and binding rules (§15). T
 specification governs. Its rules are in [memory.md](../../spec/memory.md) (MEM-D1, MEM-1 to MEM-6),
 [ownership.md](../../spec/ownership.md) (OWN-D1, OWN-1 to OWN-16),
 [references.md](../../spec/references.md) (REF-D1 to REF-D3, REF-1 to REF-14),
-[scope.md](../../spec/scope.md) (SCOPE-D1, SCOPE-1 to SCOPE-3) and
+[scope.md](../../spec/scope.md) (SCOPE-D1, SCOPE-1 to SCOPE-3),
+[statements.md](../../spec/statements.md) (STMT-3, STMT-4) and
 [trusted.md](../../spec/trusted.md) (TRUST-5, TRUST-7, TRUST-11, TRUST-12); the open questions it
-raised are OPEN-57, OPEN-58, OPEN-64, OPEN-67 and OPEN-103 in [decisions.md](../../spec/decisions.md).
+bears on are OPEN-36, OPEN-57, OPEN-58, OPEN-64, OPEN-67, OPEN-103, OPEN-112 and OPEN-113 in
+[decisions.md](../../spec/decisions.md).
 This record keeps the reasoning and the history. Where it and the spec differ, the spec governs.
 
 The public guarantee boundary is [MEMORY_GUARANTEES.md](../../verification/MEMORY_GUARANTEES.md),
@@ -27,8 +29,8 @@ and the broader safety model is [SAFETY.md](../../verification/SAFETY.md).
 | §8 heap ownership | MEM-5, OWN-5, OWN-8, OWN-13 |
 | §9 cleanup and `defer` | OWN-12, OWN-13, OWN-16 |
 | §10 assignment | STMT-4 (order), OWN-9, OWN-10, REF-6, REF-8, TRUST-11 (raw stores) |
-| §11 trusted code | TRUST-4, TRUST-5, TRUST-7, TRUST-12 |
-| §12 what the checker does not track | REF-11, REF-12, TYPE-1, STMT-3 |
+| §11 trusted code | TRUST-4, TRUST-5, TRUST-7, TRUST-12; its "does not relax linearity" against main's two trusted exceptions is OPEN-113 |
+| §12 what the checker does not track | REF-11, REF-12, TYPE-1, STMT-3; no interior mutability (no `Cell`, `RefCell` or `UnsafeCell`) is OPEN-112 |
 | §13 hard edge cases | REF-11, OWN-3, REF-8, REF-14, OPEN-64 |
 | §14 invariants | OWN-1, OWN-2, OWN-4, OWN-9, OWN-10, REF-6, REF-8, REF-11 |
 

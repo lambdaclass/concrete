@@ -851,6 +851,31 @@ fn main() with(Std) -> Int {
 }
 ```
 
+```con reject name=trusted-frozen-owner code=E0203 stage=check pair=free-after-block
+struct R { v: Int }
+
+fn peek(r: &R) -> Int {
+    return r.v;
+}
+
+fn take(r: R) -> Int {
+    let R { v } = r;
+    return v;
+}
+
+trusted fn use_frozen(r: R) -> Int {
+    let mut s: Int = 0;
+    borrow r as rr in Reg {
+        s = peek(rr) + take(r);
+    }
+    return s;
+}
+
+fn main() -> Int {
+    return use_frozen(R { v: 21 });
+}
+```
+
 ```con reject name=copy-binder-root-written code=E0232 stage=check pair=free-after-block
 struct Copy P { n: Int }
 

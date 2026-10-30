@@ -596,7 +596,8 @@ fn main() -> Int {
 linearity and lowering are the `match`'s, as for `if let` (PAT-6). Without `else` the `match` has one
 arm, so a pattern that may fail is refused as non-exhaustive, and with it `B` must diverge (PAT-5).
 The `else` block gets no binding for the value that failed to match; a program that needs it writes
-a `match`. A struct destructuring `let` is not a `match`: it always matches and reads each field
+a `match`; a binder of `P` used in `B` is an undeclared name (MOD-1's
+`let-else-binder-out-of-scope`). A struct destructuring `let` is not a `match`: it always matches and reads each field
 (PAT-5, SYN-3). A plain `let x = e else { B };` is a parse error. Whether `let ... else` stays is
 OPEN-52.
 
@@ -626,13 +627,17 @@ fn main() -> Int {
 - Uses: none
 - Codes: none
 - Status: enforced
-- Enforced by: Concrete.parseLet
+- Enforced by: Concrete.checkStmt, Concrete.checkExprCore, Concrete.desugarStmts
 - Semantics: none
 - Obligation: none
 - Evidence: tested
 
 **Rationale.** One `mut` covers the pattern, as one `let` does; a binder cannot be marked on its own.
-What a mutable binding allows is OWN-10.
+What a mutable binding allows is OWN-10. The parser does not keep the `mut`: the checker declares
+every binder of a destructuring `let` mutable (a struct pattern in `checkStmt`, a variant pattern in
+the `match` arm `desugarStmts` makes of it), so on main the binders of a `let` without `mut` are
+assignable too. That is bug 336, which violates OWN-10@2; the examples here show that `let mut`
+binders are assignable, not that the others are not.
 
 ```con accept name=let-mut-pattern exit=42
 struct Copy P { a: Int, b: Int }
@@ -648,6 +653,17 @@ fn main() -> Int {
     };
     value = value + 1;
     return a + b + value - 1;
+}
+```
+
+```con accept name=let-mut-variant-without-else exit=42
+enum Copy One { A { v: Int } }
+
+fn main() -> Int {
+    let o: One = One::A { v: 41 };
+    let mut One::A { v } = o;
+    v = v + 1;
+    return v;
 }
 ```
 

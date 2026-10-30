@@ -1203,7 +1203,6 @@ partial def parseBindingList : ParseM (List PatBind) := do
   expect .rbrace
   return bindings.toList
 
--- spec: PAT-11 (docs/spec/patterns.md; this declaration enforces the rule)
 partial def parseLet (isGhost : Bool := false) : ParseM Stmt := do
   let sp ← peekSpan
   expect .«let»

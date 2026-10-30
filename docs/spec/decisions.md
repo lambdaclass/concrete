@@ -1,12 +1,12 @@
 # Open Owner Decisions
 
-This chapter lists the language questions that only the project owner decides: OD1 to OD105 of
+This chapter lists the language questions that only the project owner decides: OD1 to OD114 of
 [ROADMAP.md](../../ROADMAP.md#owner-decisions) (exit 2n for OD1 to OD32, exit 2q for the rest). Each entry states the question and encodes
 no answer. The rules it bears on are named in its rationale, together with what current main does,
 which stays provisional until the owner answers. The answer, when given, is recorded in ROADMAP and
 turns the entry into the rules it decides; until then no agent picks a side
 ([AGENTS.md](../project/AGENTS.md#rules)). OD1 to OD22 were answered on 2026-10-29 and are listed under
-Decided; OD23 to OD32 were decided the same day; OPEN-33 to OPEN-46 and OPEN-48 to OPEN-51, raised while recording them, are open, and so are OPEN-52 to OPEN-91, allocated on 2026-10-30 for that day's owner picks, OPEN-92 to OPEN-103, raised the same day while absorbing the last docs/language documents, and OPEN-104 and OPEN-105, raised the same day by the review of the loop rules.
+Decided; OD23 to OD32 were decided the same day; OPEN-33 to OPEN-46 and OPEN-48 to OPEN-51, raised while recording them, are open, and so are OPEN-52 to OPEN-91, allocated on 2026-10-30 for that day's owner picks, OPEN-92, OPEN-93 and OPEN-95 to OPEN-103, raised the same day while absorbing the last docs/language documents, OPEN-104 and OPEN-105, raised the same day by the review of the loop rules, and OPEN-106 to OPEN-114, raised the same day by the Codex and Kimi review of the absorption. OPEN-94 was withdrawn the same day: MOD-1 already refuses the name it asked about (bug 337).
 
 ## Decisions to be made, in order
 
@@ -80,18 +80,26 @@ them); they are not separate entries here
 | 58 | [OPEN-51](#OPEN-51) | — | Reverse, stepped and collection iteration | a counted loop and `while` | (a) none now; each a later decision when a workload needs it | neutral | one loop construct in proofs |
 | 59 | [OPEN-92](#OPEN-92) | absorption | A capability set inferred from callbacks | not checked | none given (raised while absorbing CALLABLE_VALUES and HANDLE_CAPABILITIES) | not assessed | — |
 | 60 | [OPEN-93](#OPEN-93) | absorption | Widening a function value's capability set | not checked | none given (raised while absorbing CALLABLE_VALUES and HANDLE_CAPABILITIES) | not assessed | — |
-| 61 | [OPEN-94](#OPEN-94) | absorption | Names in `with(...)` that are not capabilities | not checked | none given (raised while absorbing CALLABLE_VALUES and HANDLE_CAPABILITIES) | not assessed | — |
-| 62 | [OPEN-95](#OPEN-95) | absorption | What `Time`, `Env`, `Process` and `Alloc` mean | not checked | none given (raised while absorbing CALLABLE_VALUES and HANDLE_CAPABILITIES) | not assessed | — |
-| 63 | [OPEN-96](#OPEN-96) | absorption | Two foreign bindings of one C symbol | not checked | none given (raised while absorbing CALLABLE_VALUES and HANDLE_CAPABILITIES) | not assessed | — |
-| 64 | [OPEN-97](#OPEN-97) | absorption | A build profile that omits or demands an overflow check | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
-| 65 | [OPEN-98](#OPEN-98) | absorption | Pointer and reference conversions written with `as` | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
-| 66 | [OPEN-99](#OPEN-99) | absorption | The names of the named conversions | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
-| 67 | [OPEN-100](#OPEN-100) | absorption | Comparisons on a type parameter | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
-| 68 | [OPEN-101](#OPEN-101) | absorption | What a trap writes | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
-| 69 | [OPEN-102](#OPEN-102) | absorption | `Float32` and `Char` as type spellings | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
-| 70 | [OPEN-103](#OPEN-103) | absorption | `as` applied to a reference | not checked | none given (raised while absorbing MEMORY_SEMANTICS) | not assessed | — |
-| 71 | [OPEN-104](#OPEN-104) | s7 review | A `#[variant]` written on a counted loop | not applicable | none given | neutral | — |
-| 72 | [OPEN-105](#OPEN-105) | s7 review | Where a counted loop's `#[invariant]` is checked | not applicable | none given | (b) needs requirement 2 | — |
+| 61 | [OPEN-95](#OPEN-95) | absorption | What `Time`, `Env`, `Process` and `Alloc` mean | not checked | none given (raised while absorbing CALLABLE_VALUES and HANDLE_CAPABILITIES) | not assessed | — |
+| 62 | [OPEN-96](#OPEN-96) | absorption | Two foreign bindings of one C symbol | not checked | none given (raised while absorbing CALLABLE_VALUES and HANDLE_CAPABILITIES) | not assessed | — |
+| 63 | [OPEN-97](#OPEN-97) | absorption | A build profile that omits or demands an overflow check | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
+| 64 | [OPEN-98](#OPEN-98) | absorption | Pointer and reference conversions written with `as` | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
+| 65 | [OPEN-99](#OPEN-99) | absorption | The names of the named conversions | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
+| 66 | [OPEN-100](#OPEN-100) | absorption | Comparisons on a type parameter | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
+| 67 | [OPEN-101](#OPEN-101) | absorption | What a trap writes | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
+| 68 | [OPEN-102](#OPEN-102) | absorption | `Float32` and `Char` as type spellings | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
+| 69 | [OPEN-103](#OPEN-103) | absorption | `as` between reference types | not checked | none given (raised while absorbing MEMORY_SEMANTICS) | not assessed | — |
+| 70 | [OPEN-104](#OPEN-104) | s7 review | A `#[variant]` written on a counted loop | not applicable | none given | neutral | — |
+| 71 | [OPEN-105](#OPEN-105) | s7 review | Where a counted loop's `#[invariant]` is checked | not applicable | none given | (b) needs requirement 2 | — |
+| 72 | [OPEN-106](#OPEN-106) | absorption review | The result type of a checked conversion | not checked | none given (raised by the review of the absorption) | not assessed | — |
+| 73 | [OPEN-107](#OPEN-107) | absorption review | What a float-to-integer rounding gives for NaN, infinities and out-of-range values | not checked | none given (raised by the review of the absorption) | not assessed | — |
+| 74 | [OPEN-108](#OPEN-108) | absorption review | A capability listed twice in a set | not applicable (capabilities are values) | none given (raised by the review of the absorption) | not assessed | — |
+| 75 | [OPEN-109](#OPEN-109) | absorption review | Specializations that differ only in a function type's capabilities | not applicable (capabilities are values) | none given (raised by the review of the absorption) | not assessed | — |
+| 76 | [OPEN-110](#OPEN-110) | absorption review | Enums at the foreign boundary | not checked | none given (raised by the review of the absorption) | not assessed | — |
+| 77 | [OPEN-111](#OPEN-111) | absorption review | Misaligned fields of a packed struct | not checked | none given (raised by the review of the absorption) | not assessed | — |
+| 78 | [OPEN-112](#OPEN-112) | absorption review | Mutation through a shared reference | not checked | none given (raised by the review of the absorption) | not assessed | — |
+| 79 | [OPEN-113](#OPEN-113) | absorption review | The ownership exceptions of trusted code | not checked | none given (raised by the review of the absorption) | not assessed | — |
+| 80 | [OPEN-114](#OPEN-114) | absorption review | How integer division rounds | not checked | none given (raised by the review of the absorption) | not assessed | — |
 
 <a id="OPEN-33"></a>
 ### OPEN-33. Inline submodules under one file per module
@@ -1096,7 +1104,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on TYPE-D1, TYPE-17, TRUST-4. Current main: no such form; `with(f)` reads `f` as a capability name (OPEN-94), so a combinator names a capability parameter (`fn map<T, U, cap C>(.., f: fn(&T) with(C) -> U) with(C)`). The callable-values design (2026-06-12, [CALLABLE_VALUES_AND_CAPABILITIES.md](../archive/design-records/CALLABLE_VALUES_AND_CAPABILITIES.md) §6) recorded the shortcut as specified and not built, after [research/language/capability-polymorphism.md](../../research/language/capability-polymorphism.md); no roadmap item tracks it. Options: (a) no shortcut, combinators name capability parameters; (b) add it, as set propagation and not row unification. Austral: not applicable (capabilities are values). Pick: none given (raised by the absorption of 2026-10-30).
+**Rationale.** Bears on TYPE-D1, TYPE-17, TRUST-4. Current main: no such form; `with(f)` reads `f` as a capability name (an unresolved one, which MOD-1 refuses and main accepts: bug 337), so a combinator names a capability parameter (`fn map<T, U, cap C>(.., f: fn(&T) with(C) -> U) with(C)`). The callable-values design (2026-06-12, [CALLABLE_VALUES_AND_CAPABILITIES.md](../archive/design-records/CALLABLE_VALUES_AND_CAPABILITIES.md) §6) recorded the shortcut as specified and not built, after [research/language/capability-polymorphism.md](../../research/language/capability-polymorphism.md); no roadmap item tracks it. Options: (a) no shortcut, combinators name capability parameters; (b) add it, as set propagation and not row unification. Austral: not applicable (capabilities are values). Pick: none given (raised by the absorption of 2026-10-30).
 
 <a id="OPEN-93"></a>
 ### OPEN-93. Widening a function value's capability set
@@ -1113,22 +1121,6 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Evidence: open
 
 **Rationale.** Bears on TYPE-4, TYPE-17, TRUST-4. Current main: refused (E0220): `fn(Int) -> Int` is not a `fn(Int) with(Console) -> Int`, nor `with(File)` a `with(Std)`, and there is no explicit conversion; a capability-polymorphic parameter accepts either by instantiating its variable. The callable-values design (§10) says there is no implicit widening, and that "widening is explicit or via lattice subsumption only", with a lattice example (`Concurrent ⊇ Async`) whose names are not capabilities; HANDLE_CAPABILITIES R7 keeps handle types invariant, as TYPE-4 does. Options: (a) exact types, as main; (b) subsumption into a larger set; (c) an explicit conversion. Austral: not applicable (capabilities are values). Pick: none given (raised by the absorption of 2026-10-30).
-
-<a id="OPEN-94"></a>
-### OPEN-94. Names in `with(...)` that are not capabilities
-
-**OPEN-94@1.** Whether a name in `with(...)` that is not a capability, a capability alias or a capability variable in scope is refused is an open owner decision (OD94).
-
-- Kind: open
-- Uses: none
-- Codes: none
-- Status: open OD94
-- Enforced by: none
-- Semantics: none
-- Obligation: none
-- Evidence: open
-
-**Rationale.** Bears on TRUST-D1, TYPE-D1, TRUST-4. Current main: accepted as a capability of its own: `fn main() with(Foo) -> Int` compiles and runs, and a call to a function that requires `Foo` is refused only in a caller that does not list it (E0520). The compiler's `validCaps`, TRUST-4's rationale and [SAFETY.md](../verification/SAFETY.md) name nine capabilities. Options: (a) refuse an unknown name; (b) an open vocabulary. Austral: not applicable (capabilities are values). Pick: none given (raised by the absorption of 2026-10-30).
 
 <a id="OPEN-95"></a>
 ### OPEN-95. What `Time`, `Env`, `Process` and `Alloc` mean
@@ -1197,7 +1189,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 <a id="OPEN-99"></a>
 ### OPEN-99. The names of the named conversions
 
-**OPEN-99@1.** The spellings of the named conversions of ARITH-5 and ARITH-10 (`try_convert`, `truncate`, `reinterpret`, and the float roundings `trunc`, `round`, `floor`, `ceil`) are an open owner decision (OD99).
+**OPEN-99@1.** The spellings of the named conversions of ARITH-5, ARITH-10 and ARITH-11 (`try_convert`, `truncate`, `reinterpret`, `to_float`, and the float roundings `trunc`, `round`, `floor`, `ceil`) are an open owner decision (OD99).
 
 - Kind: open
 - Uses: none
@@ -1208,7 +1200,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on ARITH-5, ARITH-10. Current main: none of them exists (E0101). ARITH-5's sentence names `truncate` and `reinterpret`, while the archived [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md) §8.2 calls its spellings indicative, to be fixed by the API's owner. Options: (a) the spellings above, as builtins; (b) other names, or std functions rather than builtins. Austral: not checked. Raised by the absorption of ARITHMETIC_POLICY.md (2026-10-30).
+**Rationale.** Bears on ARITH-5, ARITH-10, ARITH-11. Current main: none of them exists (E0101). ARITH-5's sentence names `truncate` and `reinterpret`, while the archived [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md) §8.2 calls its spellings indicative, to be fixed by the API's owner; it names the integer-to-float and `f64`-to-`f32` conversions by their rounding only, and `to_float` is this specification's placeholder for them. Options: (a) the spellings above, as builtins; (b) other names, or std functions rather than builtins. Austral: not checked. Raised by the absorption of ARITHMETIC_POLICY.md (2026-10-30).
 
 <a id="OPEN-100"></a>
 ### OPEN-100. Comparisons on a type parameter
@@ -1256,12 +1248,12 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on TYPE-19, SYN-3. Current main: the parser maps `Float64` and `Bool` to `f64` and `bool` but not `Float32` or `Char`, so `fn g(x: f32) -> Float32 { return x; }` is refused (E0220) while the resolver's `tyFromName` maps all four. The archived [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md) §1 names `Float32`/`f32` as two spellings. Options: (a) `Float32` and `Char` become spellings of `f32` and `char`; (b) one spelling per primitive type, the capitalized spellings removed. Austral: not checked. Raised by the absorption of ARITHMETIC_POLICY.md (2026-10-30).
+**Rationale.** Bears on TYPE-19, SYN-3. Current main: the parser maps `Float64` and `Bool` to `f64` and `bool` but not `Float32` or `Char`, so `fn g(x: f32) -> Float32 { return x; }` is refused (E0220) while the resolver's `tyFromName` maps all four. The archived [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md) §1 names `Float32`/`f32` as two spellings. Options: (a) `Float32` and `Char` become spellings of `f32` and `char`; (b) neither, keeping main's `Float64` and `Bool`; (c) `Float32` and `Char` decided separately. Whether every capitalized spelling (`Int`, `Uint`, `Float64`, `Bool`) is removed is a separate removal question, not asked here. Austral: not checked. Raised by the absorption of ARITHMETIC_POLICY.md (2026-10-30).
 
 <a id="OPEN-103"></a>
-### OPEN-103. `as` applied to a reference
+### OPEN-103. `as` between reference types
 
-**OPEN-103@1.** Whether `as` may be applied to a reference, given that REF-5 lists borrowing and projecting as the only operations that form a reference, is an open owner decision (OD103).
+**OPEN-103@1.** Whether `as` may convert a reference type to a reference type, given that REF-5 lists borrowing and projecting as the only operations that form a reference, is an open owner decision (OD103).
 
 - Kind: open
 - Uses: none
@@ -1272,7 +1264,151 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on REF-5, REF-6, ARITH-5, TRUST-4. Current main: an identity cast between equal reference types is accepted and denotes the operand's place (`read(r as &Int)` with `r: &Int`, and `read(&v as &Int)`, exit 42 on both consumers); every other cast between reference types, `&mut Int as &Int` included, is E0553 at core-check under ARITH-5's tag, whose sentence covers only numeric, `bool` and `char` conversions; a cast from a reference to a raw pointer is allowed (TRUST-4). The design record (MEMORY_SEMANTICS §15.3) listed a cast of a traced reference binding (`r as &U`) among the reference-forming operations. Options: (a) refuse `as` whenever its operand or target is a reference type; (b) allow the identity cast as a no-op on the operand's place. Austral: not checked. Pick: none given (raised by the MEMORY_SEMANTICS absorption, 2026-10-30).
+**Rationale.** Bears on REF-5, REF-6, ARITH-5, TRUST-4. Current main: an identity cast between equal reference types is accepted and denotes the operand's place (`read(r as &Int)` with `r: &Int`, and `read(&v as &Int)`, exit 42 on both consumers); every other cast between reference types, `&mut Int as &Int` included, is E0553 at core-check under ARITH-5's tag, whose sentence covers only numeric, `bool` and `char` conversions; a cast from a reference to a raw pointer is allowed (TRUST-4). The design record (MEMORY_SEMANTICS §15.3) listed a cast of a traced reference binding (`r as &U`) among the reference-forming operations. Options: (a) refuse `as` between reference types; (b) allow the identity cast as a no-op on the operand's place. Conversions between a reference and a raw pointer are OPEN-98's, not this question's. Austral: not checked. Pick: none given (raised by the MEMORY_SEMANTICS absorption, 2026-10-30).
+
+<a id="OPEN-106"></a>
+### OPEN-106. The result type of a checked conversion
+
+**OPEN-106@1.** Whether a checked conversion (`try_convert`) reports a value it cannot preserve as `Option::None` or as a `Result` error carrying the reason is an open owner decision (OD106).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD106
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on ARITH-5, ARITH-10. Current main: no checked conversion exists (E0101, R-0500). The archived [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md) §8.2 wrote `try_convert::<T>(x) -> Option<T>` "(or a `Result` with a reason)" and left the choice to the API's owner. Options: (a) `Option<T>`; (b) a `Result` whose error names the reason (out of range, not integral, NaN, infinite, not representable). Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
+
+<a id="OPEN-107"></a>
+### OPEN-107. What a float-to-integer rounding gives for NaN, infinities and out-of-range values
+
+**OPEN-107@1.** Whether each float-to-integer rounding operation (`trunc`, `round`, `floor`, `ceil`) gives a value or an error for NaN, an infinity or a result outside the target type's range, and which value is an open owner decision (OD107).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD107
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on ARITH-1, ARITH-11. Current main: the rounding operations do not exist (R-0500); a float-to-integer `as` truncates toward zero and aborts on NaN, an infinity or a value out of range, natively and in `--interp`. The archived [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md) §8.2 required a stated result for every input, "either as a value or as an error". Options: (a) an error, as `try_convert` reports; (b) a value: the nearest value of the type for an out-of-range input or an infinity, and 0 for NaN; (c) a trap, as `as` does today. Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
+
+<a id="OPEN-108"></a>
+### OPEN-108. A capability listed twice in a set
+
+**OPEN-108@1.** Whether a capability set that lists one capability twice (`with(Console, Console)`) is the same set as the one that lists it once, is refused, or is a different set is an open owner decision (OD108).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD108
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on TYPE-D1, TYPE-17, TYPE-4. Current main: accepted where it is written, and a different type: `fn(Int) with(Console) -> Int` is not a `fn(Int) with(Console, Console) -> Int`, in either direction (E0220), because `CapSet.normalize` sorts a set and does not remove a repeated name. The callable-values design ([CALLABLE_VALUES_AND_CAPABILITIES.md](../archive/design-records/CALLABLE_VALUES_AND_CAPABILITIES.md)) calls the capabilities of a function type a set. Options: (a) the same set; (b) refuse a repeated capability where it is written; (c) a different set, as main. Austral: not applicable (capabilities are values). Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
+
+<a id="OPEN-109"></a>
+### OPEN-109. Specializations that differ only in a function type's capabilities
+
+**OPEN-109@1.** Whether two instantiations of a generic function whose type arguments differ only in the capability set of a function type are two specializations with distinct symbols or one is an open owner decision (OD109).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD109
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on TYPE-17, TYPE-18. Current main: one: `pick<T: Copy>` instantiated at `fn(Int) -> Int` and at `fn(Int) with(Console) -> Int` emits the single function `pick_for_Fn_T_Int_to_Int_E`, because Mono's `tyToSuffix` drops a function type's capability set while it keeps a struct's capability arguments (E0809's history), and the program runs correctly since capabilities have no run-time representation (TYPE-18). The archived [HANDLE_CAPABILITIES.md](../archive/design-records/HANDLE_CAPABILITIES.md) R8 required collision-free symbol identity across instantiations and left code sharing to its own argument. Options: (a) two specializations, the set part of the symbol, as for struct capability arguments; (b) one specialization, stated as erasure with its correctness argument. Austral: not applicable (capabilities are values). Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
+
+<a id="OPEN-110"></a>
+### OPEN-110. Enums at the foreign boundary
+
+**OPEN-110@1.** Whether a value of enum type may cross an `extern fn` boundary, and if so in what representation is an open owner decision (OD110).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD110
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on FFI-3, FFI-7. Current main: refused: `extern fn f(x: E)` with `enum Copy E { A, B }` is E0574 (a non-FFI-safe parameter); only scalars, raw pointers and `repr(C)` structs cross. [LAYOUT_CONTRACT.md](../platform/LAYOUT_CONTRACT.md) says both that enums must not cross (§3.2) and that they cross as integers (§3.3). Options: (a) refused, as main; (b) a fieldless enum crosses as an integer of a stated width, which needs a stated discriminant for each variant. Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
+
+<a id="OPEN-111"></a>
+### OPEN-111. Misaligned fields of a packed struct
+
+**OPEN-111@1.** Whether a `#[repr(packed)]` struct may hold a field whose alignment exceeds the alignment of its offset, and whether such a field may be borrowed is an open owner decision (OD111).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD111
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on FFI-4, FFI-8, REF-5. Current main: both accepted: `#[repr(packed)] struct P { v: u8, l: u32 }` places `l` at offset 1, and `&p.l` is accepted and reads the field correctly in the binary and in `--interp`. [LAYOUT_CONTRACT.md](../platform/LAYOUT_CONTRACT.md) §2 restricts a packed struct to fields whose alignment does not exceed their position, without saying what enforces it. Options: (a) refuse such a field; (b) accept it and refuse a reference to it; (c) accept both, as main. Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
+
+<a id="OPEN-112"></a>
+### OPEN-112. Mutation through a shared reference
+
+**OPEN-112@1.** Whether a value reached through a shared reference `&T` may be changed, by a write through a raw pointer derived from the reference or by a cell type is an open owner decision (OD112).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD112
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on REF-10, OWN-10, TRUST-2, TRUST-5. Current main: safe code changes a value only through a `mut` binding or a `&mut` reference, and there is no cell type; a trusted function may convert `r: &Int` to `*mut Int` (`r as *const Int as *mut Int`) and store through it: the binary does the store, and `--interp` stops ("deref-assign through immutable ref"). The archived [MEMORY_SEMANTICS.md](../archive/design-records/MEMORY_SEMANTICS.md) §12 said there is no `Cell`, `RefCell` or `UnsafeCell` equivalent and that mutation flows from `let mut` through `&mut`; the [overview](overview.md) lists no interior mutability in safe code, with a later `UnsafeCell<T>` gated by `Unsafe`. Options: (a) never: a write through a pointer derived from a `&T` is undefined behaviour, a premise trusted code keeps (TRUST-2); (b) as (a), with a cell type gated by `Unsafe` as the one exception; (c) a trusted write through such a pointer is allowed. Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
+
+<a id="OPEN-113"></a>
+### OPEN-113. The ownership exceptions of trusted code
+
+**OPEN-113@1.** Whether trusted code keeps its two exceptions to the ownership rules, destroying a value through a reference and releasing with `vec_free` a vector whose elements are not Copy is an open owner decision (OD113).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD113
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on TRUST-5, TRUST-12, OWN-5, OWN-8. Current main: both are accepted in trusted code only (elsewhere E0290 under OWN-8 and E0287 under OWN-5): std's collections destroy an element through `(p as &T)` in drop glue after its owner was consumed, and a trusted function may free a buffer it has emptied. The archived [MEMORY_SEMANTICS.md](../archive/design-records/MEMORY_SEMANTICS.md) §11 said that `trusted` does not relax linearity, and TRUST-5's rationale says the same. Options: (a) keep both, each a named trusted operation with its premise (the owner was consumed; the vector is empty); (b) remove them, drop glue moving the element out of raw memory instead (TRUST-7). Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
+
+<a id="OPEN-114"></a>
+### OPEN-114. How integer division rounds
+
+**OPEN-114@1.** How an integer division that does not abort rounds its quotient, and which sign a nonzero remainder takes, is an open owner decision (OD114).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD114
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on ARITH-3, ARITH-8. Current main: the quotient is truncated toward zero and a nonzero remainder has the sign of the dividend, as C99 and LLVM's `sdiv` and `srem` give (`-7 / 2` is `-3`, `-7 % 2` is `-1`, `7 % -2` is `1`), in the binary, the interpreter and the constant folder (`IntArith.evalIntBinOp`). The archived [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md) states when division aborts (§5) but not how it rounds. Options: (a) truncation toward zero, as main; (b) floored division, the remainder taking the divisor's sign; (c) Euclidean division, the remainder never negative. Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
 
 ## Decided
 

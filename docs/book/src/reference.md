@@ -23,8 +23,9 @@ Use them when you need exact current direction rather than the book's higher-lev
 
 ## Language And Runtime References
 
-- [`docs/archive/design-records/VALUE_MODEL.md`](../../archive/design-records/VALUE_MODEL.md)
-  The current value and ownership model.
+- [`docs/spec/ownership.md`](../../spec/ownership.md), [`docs/spec/references.md`](../../spec/references.md) and [`docs/spec/types.md`](../../spec/types.md)
+  The value and ownership rules. [`VALUE_MODEL.md`](../../archive/design-records/VALUE_MODEL.md)
+  keeps their design rationale (archived).
 
 - [`docs/spec/overview.md`](../../spec/overview.md)
   The invariants the language and compiler are trying to preserve.

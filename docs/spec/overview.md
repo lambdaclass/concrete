@@ -16,7 +16,7 @@ entries. An invariant with no entry yet is a gap in the specification, tracked b
 | No null | An optional value is an `Option<T>`. | gap: no entry yet |
 | No exceptions | Errors are values, propagated by an exhaustive `match` and an explicit `return`; failure is abort only. | STMT-2, "Recoverable failure" in statements.md |
 | No global mutable state | A program holds no mutable global state; global resources are linear tokens descending from the root value `main` receives (OD8, decided 2026-10-29). | TRUST-8, TRUST-9, TRUST-10 (pending) |
-| No interior mutability in safe code | All mutation flows through `&mut`; a later low-level `UnsafeCell<T>` would be gated by `Unsafe`. | gap: no entry yet |
+| No interior mutability in safe code | All mutation flows through `&mut`; a later low-level `UnsafeCell<T>` would be gated by `Unsafe`. | open: OPEN-112 |
 | Local-only type inference | Signatures are fully annotated; inside a body a local's type may come from its initializer, right to left only, with no cross-statement constraint solving and no broad bidirectional inference. | TYPE-4 (in part); gap |
 | LL(1) grammar | Every parsing decision takes one token of lookahead, with no ambiguity and no backtracking. | SYN-1 |
 | `abort()` is terminal | No deferred call, `Destroy` implementation or drop glue runs after an abort; hosted execution ends the process (usually status 134 on POSIX, so tests check for a nonzero status), and a freestanding profile calls a declared non-returning handler (R-0223, R-0322). | STMT-2, "Abort and failure" in statements.md |

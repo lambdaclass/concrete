@@ -49,6 +49,19 @@ fn main() -> Int {
 }
 ```
 
+```con reject name=let-else-binder-out-of-scope code=E0100 stage=resolve pair=declared-name
+fn get(o: Option<Int>) -> Int {
+    let Option::Some { value } = o else {
+        return value;
+    };
+    return value;
+}
+
+fn main() -> Int {
+    return get(Option::Some { value: 42 });
+}
+```
+
 <a id="MOD-2"></a>
 ### MOD-2. Only `pub` declarations cross a module boundary
 

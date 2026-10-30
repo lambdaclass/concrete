@@ -6,12 +6,14 @@ techniques behind a safe API. **`Unsafe`** is the capability for crossing a fore
 boundary, and a `trusted` body absorbs it. No layer is exempt: compiler builtins, `std` and user
 code follow the same rules. This chapter covers what a capability means (TRUST-D1), raw pointers (TRUST-1, TRUST-3), undefined
 behaviour (TRUST-2), capabilities (TRUST-4), `trusted` (TRUST-5), the trusted-module marker
-(TRUST-6, pending), moving a value out of raw memory (TRUST-7) , global state (TRUST-8 to TRUST-10), storing through a raw pointer (TRUST-11) and the
-ownership rules in trusted code (TRUST-12). Capability sets, capability parameters and the capabilities of function types and
+(TRUST-6, pending), moving a value out of raw memory (TRUST-7), global state (TRUST-8 to TRUST-10), storing through a raw pointer (TRUST-11) and the
+move, cleanup and freeze rules in trusted code (TRUST-12). Capability sets, capability parameters and the capabilities of function types and
 handles (`Sink<cap C>`) are in the types chapter (TYPE-D1, TYPE-15, TYPE-17, TYPE-18); this specification governs them. The design records are [SAFETY.md](../verification/SAFETY.md),
 [CAPABILITY_FACTS.md](../compiler/CAPABILITY_FACTS.md),
-[HANDLE_CAPABILITIES.md](../archive/design-records/HANDLE_CAPABILITIES.md) and
-[CALLABLE_VALUES_AND_CAPABILITIES.md](../archive/design-records/CALLABLE_VALUES_AND_CAPABILITIES.md).
+[HANDLE_CAPABILITIES.md](../archive/design-records/HANDLE_CAPABILITIES.md),
+[CALLABLE_VALUES_AND_CAPABILITIES.md](../archive/design-records/CALLABLE_VALUES_AND_CAPABILITIES.md) and
+[MEMORY_SEMANTICS.md](../archive/design-records/MEMORY_SEMANTICS.md) (§10 and §11, absorbed into
+TRUST-11 and TRUST-12).
 
 ## Definitions
 
@@ -34,8 +36,12 @@ see: a program that never named a file cannot know that its output goes to one, 
 terminals and `/dev/null` look alike from inside. SPARK's `Ada.Text_IO` likewise carries one
 coarse file-system state and excludes redirection rather than modelling it. `with(...)` lists
 capabilities, aliases (`Std`, `cap IO = File + Console;`) and capability variables (TYPE-D1). The
-meanings of `Time`, `Env`, `Process` and `Alloc` are stated nowhere yet (OPEN-95), and main
-accepts a name in `with(...)` that is none of these (OPEN-94). An empty `with()` means no
+meanings of `Time`, `Env`, `Process` and `Alloc` are stated nowhere yet (OPEN-95), and a name in
+`with(...)` that is none of these is an unresolved name, which MOD-1 refuses and main accepts
+(bug 337). The compiler holds only the names (`validCaps`) and checks every use against the declared
+sets (TRUST-4); what a name grants is fixed by the foreign bindings that declare it, since every
+`extern fn` declares its effects (FFI-3), and std's bindings are audited against these meanings.
+That audit is an assumption about std, not a compiler check. An empty `with()` means no
 external authority, not purity: the function may still mutate what it is lent through `&mut`
 (TRUST-4), and it is not by that alone callable from a contract (CON-3). What a capability means
 does not settle a descriptor that is replaced, reused or aliased; std's handles avoid those cases
@@ -473,7 +479,7 @@ they follow the same rule.
 - Uses: OWN-D1
 - Codes: none
 - Status: enforced
-- Enforced by: Concrete.checkStmt
+- Enforced by: Concrete.checkStmt, Concrete.lowerStmt, Concrete.Interp.evalStmtCore
 - Semantics: none
 - Obligation: whether the slot held a live value is a named premise of the store (TRUST-2, R-0506)
 - Evidence: tested
@@ -504,9 +510,9 @@ fn main() with(Alloc) -> Int {
 ```
 
 <a id="TRUST-12"></a>
-### TRUST-12. Trusted code keeps the ownership rules
+### TRUST-12. Trusted code keeps the move, cleanup and freeze rules
 
-**TRUST-12@1.** A `trusted` function is checked by the same ownership, linearity, borrow and scope-exit rules as safe code, so that `trusted` permits only the operations of TRUST-5 and relaxes no rule of the ownership, references and memory chapters.
+**TRUST-12@1.** In a `trusted` function, as in safe code, a moved linear value is not used again, a linear value is consumed on every exit, and an owner frozen by a borrow block is not accessed.
 
 - Kind: guarantee
 - Uses: none
@@ -518,7 +524,13 @@ fn main() with(Alloc) -> Int {
 - Evidence: tested
 
 **Rationale.** A double move, a skipped cleanup or an access to a frozen owner in a `trusted fn` is
-refused with the same code as in safe code (OWN-1, OWN-2, REF-8). The checker's guarantees stop at
+refused with the same code as in safe code: OWN-1's `trusted-use-after-move`, OWN-2's
+`trusted-never-consumed` and REF-8's `trusted-frozen-owner`. These are the rules the design record
+(MEMORY_SEMANTICS §11) listed; it also said that `trusted` relaxes no ownership rule, which main
+contradicts twice: trusted code may destroy a value through a reference (E0290 under OWN-8
+elsewhere) and release with `vec_free` a vector whose elements are not Copy (E0287 under OWN-5
+elsewhere), the drop-glue cases of std's collections. Whether those exceptions stay is OPEN-113.
+The checker's guarantees stop at
 raw pointers: what lies behind `*mut T` or `*const T` is not tracked (OWN-D1), which is why a raw
 store (TRUST-11) and a move out of raw memory (TRUST-7) carry premises. A pointer derived from a
 borrow that outlives the borrow is OPEN-64's question.

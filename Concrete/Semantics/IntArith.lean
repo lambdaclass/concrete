@@ -40,6 +40,7 @@ namespace IntArith
     an arithmetic integer type). This is the SEMANTIC width used for range,
     overflow, and wrap decisions — distinct from `llvmBitWidth`, the total
     codegen width. -/
+-- spec: TYPE-19 (docs/spec/types.md; the width and signedness of each integer type)
 def intBitWidth : Ty → Option (Nat × Bool)
   | .i8 => some (8, true)  | .i16 => some (16, true)  | .i32 => some (32, true)  | .int  => some (64, true)
   | .u8 => some (8, false) | .u16 => some (16, false) | .u32 => some (32, false) | .uint => some (64, false)
@@ -193,7 +194,6 @@ def ArithResult.isTrap : ArithResult → Bool
     (`shiftAmountInRange` for the trap check, `maskWidth` for the shift result,
     `bitwiseAtWidth` for `& | ^`). Keeping them out of the tri-state evaluator
     avoids threading a shift-result formula through `ArithResult` for no gain. -/
--- spec: ARITH-8 (docs/spec/arithmetic.md; this declaration enforces the rule)
 def evalIntBinOp (op : BinOp) (a : Int) (ty : Ty) (b : Int) : ArithResult :=
   match op with
   | .add => match checkedToType ty (a + b) with

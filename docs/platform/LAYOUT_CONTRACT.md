@@ -28,7 +28,7 @@ Exactly four annotations form the stable layout surface. No other `repr` forms a
 |---|---|---|---|
 | *(none)* | struct, enum | **Opaque.** Compiler may change field order, padding, tag size, or discriminant. | — |
 | `#[repr(C)]` | struct | **Guaranteed.** C-compatible in-memory layout: declaration field order, standard padding, alignment. | No type parameters. All fields must be FFI-safe. |
-| `#[repr(packed)]` | struct | **Guaranteed.** Declaration field order, no padding between fields. | Must not contain types whose alignment exceeds the field position. |
+| `#[repr(packed)]` | struct | **Guaranteed.** Declaration field order, no padding between fields. | Must not contain types whose alignment exceeds the field position (not checked on main; open owner decision [OPEN-111](../spec/decisions.md#OPEN-111)). |
 | `#[repr(align(N))]` | struct | **Guaranteed.** Minimum alignment of `N` bytes, where `N` is a power of two. May be combined with `#[repr(C)]`. Nothing about field order or offsets. | `N` a power of two (E0577). Today `N` may not exceed the struct's natural alignment (E0585, bug 037: over-aligned declarations are not yet emitted), so the attribute is accepted only where it is a no-op. |
 
 Any other annotation (`#[repr(transparent)]`, `#[repr(Rust)]`, integer-tagged enums, `u8`-repr enums, etc.) is **not** part of the first-release contract and is not accepted by the checker at freeze. See section 6 for reconsideration triggers.
@@ -71,7 +71,8 @@ layout fact of every other type is unspecified. Safe code observes layout only t
 `sizeof::<T>()` and `alignof::<T>()`. Trusted code that does pointer arithmetic over elements may
 rely on `sizeof` and on one further fact, which the layout authority states and keeps: the stride of
 an array, `HeapArray` or raw buffer of `T` is `sizeof::<T>()`. `#[repr(C)]` on an enum is rejected,
-and enums cross the foreign boundary as integers (section 3.2).
+and whether enums cross the foreign boundary at all (as integers, or not, as section 3.2 says) is
+the open owner decision [OPEN-110](../spec/decisions.md#OPEN-110); main refuses it.
 
 **One authority.** One `Layout` module computes every size, alignment, offset, stride and emitted
 type for every consumer (the checker, `Lower`, the emitter, and every model that states a layout

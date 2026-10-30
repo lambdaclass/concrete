@@ -33,7 +33,7 @@ For FFI and trust boundaries, see [FFI.md](../../platform/FFI.md).
 | Enums | Value | Linear | Opt-in `Copy` via marker |
 | Newtypes | Same as inner type | Inherits | `newtype UserId = Int` is Copy because `Int` is Copy |
 | Function pointers | Value | Copy | No closures |
-| Module constants (`const`) | Value, never a place | — | Copied at each use; never addressable (`&C` is refused like `&42`); their type holds no reference ([MEMORY_SEMANTICS.md §15](MEMORY_SEMANTICS.md) REF-3, decided 2026-10-21) |
+| Module constants (`const`) | Value, never a place | — | Copied at each use; never addressable (`&C` is refused like `&42`); their type holds no reference ([REF-3](../../spec/references.md#REF-3), decided 2026-10-21) |
 
 ## Copy vs Linear
 
@@ -46,8 +46,9 @@ For FFI and trust boundaries, see [FFI.md](../../platform/FFI.md).
 
 ## References are second-class: they flow down, never up through returns
 
-The normative statement of these rules, with each rule's diagnostic, enforcing site, fixtures and
-current enforcement status, is [MEMORY_SEMANTICS.md §15](MEMORY_SEMANTICS.md) (REF-1 to REF-8).
+The normative statement of these rules, with each rule's diagnostic, enforcing site and examples, is
+the references chapter of the specification ([REF-1 to REF-14](../../spec/references.md#REF-1));
+[MEMORY_SEMANTICS.md §15](MEMORY_SEMANTICS.md) keeps their history.
 This section explains the design.
 
 Since the semantics decision of 2026-10-21, a reference exists only as a **parameter**, a **call

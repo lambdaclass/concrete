@@ -73,6 +73,7 @@ partial def ntSubstTy (mapping : List (String × Ty)) : Ty → Ty
 
 /-- If `ty` is a newtype-named or newtype-generic, unwrap it to its inner type.
     Recurses to handle newtype-of-newtype. Returns `ty` unchanged otherwise. -/
+-- spec: TYPE-21 (docs/spec/types.md; this declaration enforces the rule)
 partial def resolveNewtype (ctx : Ctx) : Ty → Ty
   | .named name =>
     match lookupNewtype ctx name with
@@ -242,7 +243,7 @@ private partial def tyAlign_namedOrGeneric (ctx : Ctx) (tyAlignFn : Ctx → Ty �
       panic! s!"Layout.tyAlign: unknown named type '{name}'"
 
 /-- Natural alignment of a type in bytes. -/
--- spec: TYPE-21, spec: FFI-7, spec: FFI-8 (docs/spec/types.md, docs/spec/ffi.md; this declaration enforces the rule)
+-- spec: TYPE-18, spec: TYPE-21, spec: FFI-7, spec: FFI-8 (docs/spec/types.md, docs/spec/ffi.md; this declaration enforces the rule)
 partial def tyAlign (ctx : Ctx) : Ty → Nat
   | .int | .uint | .float64 => 8
   | .i32 | .u32 | .float32 => 4
@@ -329,6 +330,7 @@ partial def tySize (ctx : Ctx) : Ty → Nat
   | .typeVar _ => 8
 
 /-- Byte offset of a field within a struct. Accepts optional type args for generic structs. -/
+-- spec: TYPE-18, spec: FFI-8 (docs/spec/types.md, docs/spec/ffi.md; this declaration enforces the rule)
 def fieldOffset (ctx : Ctx) (structName fieldName : String) (typeArgs : List Ty := []) : Nat :=
   match lookupStruct ctx structName with
   | some sd =>
@@ -421,6 +423,7 @@ partial def isPassByPtr (ctx : Ctx) (ty : Ty) : Bool :=
 
 /-- Map a Concrete type to its LLVM IR type string. Capability arguments do not affect it
     (spec: TYPE-18, docs/spec/types.md). -/
+-- spec: TYPE-21 (docs/spec/types.md; a newtype is emitted as its inner type)
 partial def tyToLLVM (ctx : Ctx) : Ty → String
   | .int => "i64"
   | .uint => "i64"

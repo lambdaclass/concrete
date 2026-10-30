@@ -91,7 +91,7 @@ mod map {
         // `ctx` carries the callback's state explicitly (no closures); `cap C`
         // makes the same accessor usable by a pure compare or an effectful
         // (e.g. printing) callback without a combinatorial API split.
-        // docs/language/CALLABLE_VALUES_AND_CAPABILITIES.md §5; ROADMAP Phase 5 #24.
+        // TYPE-17 (docs/spec/types.md); design record docs/archive/design-records/CALLABLE_VALUES_AND_CAPABILITIES.md §5; ROADMAP Phase 5 #24.
         pub trusted fn with_value<Ctx, R, cap C>(&self, key: &K, ctx: &Ctx, f: fn(&Ctx, &V) with(C) -> R) with(C) -> Option<R> {
             match self.find_live(key) {
                 Option::Some { value } => {

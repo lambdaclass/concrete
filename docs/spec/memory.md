@@ -15,7 +15,7 @@ its boundaries.
 <a id="MEM-D1"></a>
 ### MEM-D1. Ownership state
 
-**MEM-D1@1.** At each program point a local binding is unconsumed, used (read or borrowed), consumed (moved), reserved (passed by value to a pending `defer`) or frozen (the owner of an enclosing borrow block, REF-D3), and a use or move of a Copy binding changes no state.
+**MEM-D1@1.** At each program point a local binding is unconsumed, used (read or borrowed), consumed (moved), reserved (passed by value to a pending `defer`) or frozen (the owner of an enclosing borrow block, REF-D3), and reading or moving a Copy binding leaves its state unchanged, while a borrow block freezes it as any other.
 
 - Kind: definition
 - Uses: none
