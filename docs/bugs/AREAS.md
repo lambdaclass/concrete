@@ -22,7 +22,7 @@ checker refusal is a Check bug here.
 | Lower | 40 | 0 | 13 | 3 | Lower 39, - 1 |
 | Resolve | 27 | 2 | 4 | 8 | Resolve 16, FileSummary 6, PeekType 2, BuiltinEnums 1 |
 | Elab | 26 | 0 | 9 | 7 | Elab 25, TypeSpelling 1 |
-| Interp | 20 | 1 | 5 | 8 | Interp 20 |
+| Interp | 20 | 0 | 5 | 8 | Interp 20 |
 | Proof | 19 | 1 | 8 | 2 | ProofCore 11, Proof 3, CallCollect 2, BodyIdentity 1 |
 | Parse | 11 | 0 | 3 | 0 | Parser 7, Lexer 2, AST 1, LocalId 1 |
 | EmitSSA | 10 | 0 | 1 | 3 | EmitSSA 10 |
@@ -392,6 +392,6 @@ checker refusal is a Check bug here.
 | [327](327_an_integer_or_float_literal_with_no_expected_typ.md) | — | — | unfixed | — | violates ARITH-2@2 |
 | [328](328_a_method_taking_self_or_mut_self_is_called_on_an.md) | — | — | unfixed | — | violates OWN-15@3 |
 | [329](329_the_ll_1_checkers_never_computed_follow_sets_a_f.md) | Tooling | check_ll1 | commits | — | violates SYN-1@1 |
-| [330](330_a_continue_inside_a_for_loop_s_step_the_binary_n.md) | Interp | Interp | commits | — | spec gap (STMT) |
+| [330](330_a_continue_inside_a_for_loop_s_step_the_binary_n.md) | Interp | Interp | commits | Check | spec gap (STMT) |
 
 <!-- END GENERATED: bug areas -->
