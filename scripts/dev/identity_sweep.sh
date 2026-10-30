@@ -9,7 +9,7 @@
 #   --all     both (the default)
 #
 # Outputs are normalised before comparison for what legitimately differs between two builds of one
-# source: the build id, timestamps, the addresses in a crash backtrace line (`bin(+0x..) [0x..]`,
+# source: the build id, timestamps, the addresses in a crash backtrace frame (`bin(sym+0x..) [0x..]`,
 # and nothing else: LLVM text carries float constants as hexadecimal) and the binary's own path.
 # Anything else that differs is printed, and the exit status is 1. A sweep that did not run every
 # comparison on both binaries is an error (exit 2), never "identical".
@@ -72,7 +72,7 @@ find "$OUT/base" "$OUT/new" -name '*.out' -print0 | xargs -0 sed -i.bak -E \
   -e 's/"compiler": *"[^"]*"/"compiler": "X"/g' \
   -e 's/"timestamp": *"[^"]*"/"timestamp": "T"/g' \
   -e 's/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z?/TS/g' \
-  -e 's/\(\+0x[0-9a-f]+\) \[0x[0-9a-f]+\]/(+ADDR) [ADDR]/g' \
+  -e 's/\(([A-Za-z0-9_.$@]*)\+0x[0-9a-f]+\) \[0x[0-9a-f]+\]/(\1+ADDR) [ADDR]/g' \
   -e "s#$BASE#BIN#g; s#$NEW#BIN#g"
 find "$OUT/base" "$OUT/new" -name '*.bak' -delete
 n="$(find "$OUT/base" -name '*.out' | wc -l | tr -d ' ')"
