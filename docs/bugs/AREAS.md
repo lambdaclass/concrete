@@ -12,14 +12,14 @@ checker refusal is a Check bug here.
 
 <!-- BEGIN GENERATED: bug areas (scripts/gen/bug_ledger.py; derived from the records, docs/bugs/area_map.tsv and git history, never edited here) -->
 
-298 records: 176 placed by their own fix commits, 37 by the files their record names in commits shared with other bugs, 34 by commits shared with other bugs, 11 by the commit that filed or closed the record, 23 by an `area:` override; 17 open bugs are not fixed yet and 0 fixed bugs have no commit the history can place.
+298 records: 176 placed by their own fix commits, 37 by the files their record names in commits shared with other bugs, 34 by commits shared with other bugs, 13 by the commit that filed or closed the record, 23 by an `area:` override; 15 open bugs are not fixed yet and 0 fixed bugs have no commit the history can place.
 
 ### By stage
 
 | stage | bugs | open | silent | shared or fallback | top modules |
 |--|-:|-:|-:|-:|--|
 | Check | 72 | 0 | 39 | 5 | Check 33, CoreCheck 13, CheckHelpers 9, Verify 5 |
-| Lower | 40 | 0 | 13 | 3 | Lower 39, - 1 |
+| Lower | 42 | 2 | 15 | 5 | Lower 41, - 1 |
 | Resolve | 27 | 2 | 4 | 8 | Resolve 16, FileSummary 6, PeekType 2, BuiltinEnums 1 |
 | Elab | 26 | 0 | 9 | 7 | Elab 25, TypeSpelling 1 |
 | Interp | 20 | 0 | 5 | 8 | Interp 20 |
@@ -51,7 +51,7 @@ checker refusal is a Check bug here.
 | 10. Evidence identity computed from a partial subject | 5 | Proof 3, Elab 2 |
 | 11. Absence read as a fact (fail-open defaults) | 15 | Gates 4, Tooling 3, Resolve 2, Proof 2, Report 2, Check 1, SSA 1 |
 | 12. One fact kept in two places | 29 | Resolve 11, Check 5, Interp 4, Elab 3, Parse 2, Proof 1, Std 1, CLI 1, Tooling 1 |
-| 13. Documented rules with no enforcing site | 19 | Check 11, Resolve 4, Parse 1, Elab 1, Lower 1, Report 1 |
+| 13. Documented rules with no enforcing site | 21 | Check 11, Resolve 4, Lower 3, Parse 1, Elab 1, Report 1 |
 | 14. Trusted `std` and FFI code with no checked contract | 7 | Std 5, Parse 1, Check 1 |
 | 15. Ownership state not modeled along control-flow paths | 7 | Check 7 |
 | 16. Artifacts at paths no run owns | 5 | Tooling 2, Std 1, CLI 1, Gates 1 |
@@ -64,7 +64,7 @@ checker refusal is a Check bug here.
 
 | ruling | bugs | stages |
 |--|-:|--|
-| violates ARITH | 7 | Check 3, Interp 2, Elab 1, EmitLLVM 1 |
+| violates ARITH | 8 | Check 3, Interp 2, Elab 1, Lower 1, EmitLLVM 1 |
 | violates FFI | 9 | Resolve 3, Check 2, Mono 1, EmitSSA 1, EmitLLVM 1, Std 1 |
 | violates MEM | 10 | Lower 7, Check 1, Elab 1, Interp 1 |
 | violates MOD | 29 | Resolve 12, Elab 9, Interp 4, Check 2, Lower 1, EmitSSA 1 |
@@ -77,7 +77,7 @@ checker refusal is a Check bug here.
 | violates SYN | 4 | Parse 2, Report 1, Tooling 1 |
 | violates TRAIT | 4 | Check 3, Resolve 1 |
 | violates TRUST | 4 | Check 2, Parse 1, Proof 1 |
-| violates TYPE | 18 | Check 12, Resolve 3, Elab 2, Proof 1 |
+| violates TYPE | 19 | Check 12, Resolve 3, Elab 2, Lower 1, Proof 1 |
 | spec gap STMT | 1 | Interp 1 |
 | open | 4 | Resolve 2, Check 1, Report 1 |
 | permitted | 1 | Lower 1 |
@@ -386,7 +386,7 @@ checker refusal is a Check bug here.
 | [328](328_a_method_taking_self_or_mut_self_is_called_on_an.md) | — | — | unfixed | — | violates OWN-15@3 |
 | [329](329_the_ll_1_checkers_never_computed_follow_sets_a_f.md) | Tooling | check_ll1 | commits | — | violates SYN-1@1 |
 | [330](330_a_continue_inside_a_for_loop_s_step_the_binary_n.md) | Interp | Interp | commits | Check | spec gap (STMT) |
-| [332](332_a_float_literal_of_type_f32_is_rounded_twice_thr.md) | — | — | unfixed | — | violates ARITH-7@1 |
-| [333](333_an_extra_type_argument_to_a_body_less_generic_de.md) | — | — | unfixed | — | violates TYPE-9@2 |
+| [332](332_a_float_literal_of_type_f32_is_rounded_twice_thr.md) | Lower | Lower | record | — | violates ARITH-7@1 |
+| [333](333_an_extra_type_argument_to_a_body_less_generic_de.md) | Lower | Lower | record | — | violates TYPE-9@2 |
 
 <!-- END GENERATED: bug areas -->
