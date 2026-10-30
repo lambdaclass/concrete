@@ -3,7 +3,8 @@
 Safe code owns memory through bindings and `Heap<T>` values and reaches other storage only through
 references (the references chapter). Every local binding has an ownership state (MEM-D1). This
 chapter covers initialization (MEM-3), field access through
-references and heap shells (MEM-4), heap ownership (MEM-5), array bounds (MEM-6) and the two
+references and heap shells (MEM-4), heap ownership (MEM-5) and its capability (MEM-7), array bounds (MEM-6), indexing through a
+reference (MEM-8) and the two
 layers of the memory model the Core semantics defines (MEM-1, MEM-2, pending). The checker
 tracks whole owners: a borrow freezes its whole root (REF-8, REF-11), with no field- or
 element-granular borrows. The design records are [MEMORY_SEMANTICS.md](../archive/design-records/MEMORY_SEMANTICS.md)
@@ -210,5 +211,73 @@ fn main() -> Int {
     let mut i: Int = 0;
     i = i + 5;
     return a[i];
+}
+```
+
+<a id="MEM-7"></a>
+### MEM-7. The heap builtins require `Alloc`
+
+**MEM-7@1.** `alloc`, `free`, the move-out `*h` of an owned `Heap`, `vec_new`, `vec_push`, `vec_pop`, `vec_free`, `string_reserve` and `append` require the `Alloc` capability.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.IntrinsicId.capability, Concrete.ccCheckExpr
+- Semantics: none
+- Obligation: capability containment over the call graph after specialization (R-0499, R-0510)
+- Evidence: tested
+
+**Rationale.** Allocation is an effect a signature shows. A function that calls one of these builtins
+without `Alloc` in its `with(...)` set is refused by TRUST-4 (E0520). A field access through a
+reference to a heap shell is not a move-out and needs no capability (MEM-4). Absorbed from
+[EFFECT_PROOF_BOUNDARIES.md](../verification/EFFECT_PROOF_BOUNDARIES.md) §2.
+
+```con accept name=alloc-declares-alloc exit=42
+struct Copy B { v: Int }
+
+fn make(v: Int) with(Alloc) -> Heap<B> {
+    return alloc(B { v: v });
+}
+
+fn main() with(Alloc) -> Int {
+    let h: Heap<B> = make(42);
+    let b: B = free(h);
+    return b.v;
+}
+```
+
+<a id="MEM-8"></a>
+### MEM-8. Indexing dereferences at most one reference
+
+**MEM-8@1.** An index `a[i]`, read or written, whose base `a` is a `&[T; N]` or `&mut [T; N]` indexes the array the reference refers to, dereferencing that one reference.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.checkExprCore, Concrete.ccCheckExpr
+- Semantics: none
+- Obligation: one place representation in every consumer (R-0501, R-0504)
+- Evidence: tested
+
+**Rationale.** This is MEM-4's one-hop rule for an index: the place is the array behind the
+reference, bounds-checked as MEM-6 states, and a write through `&mut [T; N]` writes the caller's
+array (REF-13). TYPE-7's "only an array is indexed" is read with this one dereference. Absorbed
+from [KNOWN_HOLES.md](../verification/KNOWN_HOLES.md) C10.
+
+```con accept name=index-through-reference exit=42
+fn get(a: &[Int; 3]) -> Int {
+    return a[1];
+}
+
+fn set(a: &mut [Int; 3]) {
+    a[2] = 38;
+}
+
+fn main() -> Int {
+    let mut arr: [Int; 3] = [1, 2, 3];
+    set(&mut arr);
+    return get(&arr) + arr[2] + 2;
 }
 ```

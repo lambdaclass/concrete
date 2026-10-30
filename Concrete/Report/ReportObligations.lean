@@ -604,7 +604,7 @@ def assumeFacts (modules : List Module) : List (String × String × List String)
     let-const subst) and the `hyps` in scope at the call so `callPrecondGoals`
     can try to discharge it with `omega` from the caller's `#[requires]` /
     enclosing guards / loop invariants. -/
--- spec: CON-2 (docs/spec/contracts.md; this declaration enforces the rule)
+-- spec: CON-2, spec: CON-8 (docs/spec/contracts.md; this declaration enforces the rule)
 def callSiteObligations (modules : List Module) : List CallObligation := Id.run do
   let fns := modules.flatMap allFunctions
   let reqMap : List (String × (List Param × List Expr)) :=
@@ -2599,7 +2599,7 @@ def loopVCKey (fnQual : String) (line : Nat) (obl : String) : String :=
     shows — it is already valid Lean (`∀ (i : Int), … `) provable by
     `intros; omega`. Preservation (O2) stays hand-linked; exit-link (O3) needs a
     postcondition. -/
--- spec: CON-2 (docs/spec/contracts.md; this declaration enforces the rule)
+-- spec: CON-2, spec: CON-8 (docs/spec/contracts.md; this declaration enforces the rule)
 def loopVCGoals (modules : List Module) : List (String × String) := Id.run do
   let withLoops := (modules.flatMap allFunctions).filter (fun (_, f) => !f.loopContracts.isEmpty)
   let mut out : List (String × String) := []

@@ -159,7 +159,7 @@ The Core IR → SSA → LLVM IR → binary chain is entirely unverified. This is
 
 - `--report unsafe` shows trust boundaries and what each trusted function wraps
 - Capabilities in signatures reveal which functions can reach trust boundaries
-- `trusted extern fn` is a special case: allows calling foreign code without `with(Unsafe)` based on the programmer's assertion that the binding is pure and safe; the compiler does not verify this
+- `trusted extern fn` is a special case: allows calling foreign code without `with(Unsafe)` based on the programmer's assertion that the binding is safe for every argument and has no undeclared effect ([FFI-9](../spec/ffi.md#FFI-9)); the compiler does not verify this
 
 **Concrete's goal is to keep this trust visible and narrow, not to pretend it disappears.**
 

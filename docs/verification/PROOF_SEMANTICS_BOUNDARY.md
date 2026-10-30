@@ -78,9 +78,9 @@ representative evidence, not a blanket callable-identity theorem.
 | Property | Language execution | Proof semantics |
 |---|---|---|
 | Ordinary integers | Fixed-width values | Lean `Int` for width-agnostic operations |
-| Ordinary overflow | Checked terminal failure | Mathematical arithmetic does not overflow |
+| Ordinary overflow | Abort ([ARITH-3](../spec/arithmetic.md#ARITH-3)) | Mathematical arithmetic does not overflow |
 | Explicit wrapping | Modular at the named width | Modeled only for admitted width/operation pairs |
-| Division/modulo | Checked for zero and signed overflow | Modeled for admitted signedness/width pairs; invalid cases evaluate to `none` |
+| Division/modulo | Abort on zero and signed overflow ([ARITH-3](../spec/arithmetic.md#ARITH-3)) | Modeled for admitted signedness/width pairs; invalid cases evaluate to `none` |
 
 A theorem over ordinary mathematical addition does not prove that a
 fixed-width execution returns normally for every mathematical input. It says
@@ -234,10 +234,11 @@ Moved from docs/language/FAILURE_STRATEGY.md, whose language half is now the spe
    exclude raw-pointer/FFI behavior; admitted checked operations may still abort
    outside the theorem's modeled domain.
 3. **No hidden exit paths**: a proved function leaves only by returning (a value or an explicit
-   `Result` error) or by a runtime trap; it has no other exit. Normal return for all inputs still
+   `Result` error) or by a runtime trap ([STMT-1](../spec/statements.md#STMT-1),
+   [STMT-2](../spec/statements.md#STMT-2)); it has no other exit. Normal return for all inputs still
    needs the trap-unreachability and termination obligations below.
 4. **Defer runs on every return**: a deferred call runs whenever the function returns; an abort
-   (a trap) runs none (STMT-1, STMT-2), so "always runs" also needs trap-unreachability.
+   (a trap) runs none ([STMT-2](../spec/statements.md#STMT-2), [STMT-11](../spec/statements.md#STMT-11)), so "always runs" also needs trap-unreachability.
 
 ### What proved code may NOT assume
 
@@ -245,7 +246,8 @@ Moved from docs/language/FAILURE_STRATEGY.md, whose language half is now the spe
    machine-width result is invalid, while many ProofCore theorems use unbounded
    integers. The theorem needs an explicit range/no-overflow obligation to claim
    normal return for all runtime inputs.
-2. **Static array bounds**: safe indexing traps rather than causing UB, but a
+2. **Static array bounds**: safe indexing aborts ([MEM-6](../spec/memory.md#MEM-6)) and safe code
+   has no UB ([TRUST-2](../spec/trusted.md#TRUST-2)), but a
    functional theorem does not by itself prove the trap unreachable.
 3. **Termination beyond the modeled evaluator/variant**: selected bounded loops
    are admitted, but proof status alone is not a general language termination

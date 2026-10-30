@@ -1,9 +1,9 @@
 # Safety Model
 
-Moved from docs/language: the overview of the safety model, its claims, audit reports and the high-integrity profile direction; the rules are TRUST-1 to TRUST-10 of docs/spec/trusted.md and FFI-1 to FFI-5 of docs/spec/ffi.md.
+Moved from docs/language: the overview of the safety model, its claims, audit reports and the high-integrity profile direction.
 
-The rules are in [docs/spec/trusted.md](../spec/trusted.md) (TRUST-1 to TRUST-10) and
-[docs/spec/ffi.md](../spec/ffi.md) (FFI-1 to FFI-5); this document is the design record of the
+The rules are in [docs/spec/trusted.md](../spec/trusted.md) (TRUST-D1, TRUST-1 to TRUST-13) and
+[docs/spec/ffi.md](../spec/ffi.md) (FFI-1 to FFI-9); this document is the design record of the
 safety model and keeps its claims, audit reports and the high-integrity profile direction.
 
 Status: stable reference
@@ -44,29 +44,15 @@ Capabilities are named, compile-time effects declared in function signatures:
 fn serve() with(Network, Alloc) -> Int { ... }
 ```
 
-The nine capabilities are: `File`, `Network`, `Time`, `Env`, `Random`, `Process`, `Console`, `Alloc`, `Unsafe`.
-
-`Random` is authority over **external entropy** (the OS/hardware RNG — a genuine
-nondeterminism source), not permission to run a PRNG: a deterministic PRNG seeded
-from a value is pure and needs no capability; only drawing real entropy requires
-`with(Random)`. (Reserved vocabulary additions — `Device` (MMIO/hardware) only
-when freestanding code needs it, `Thread` with the concurrency model, `Signal`
-deferred — are recorded in `research/language/capability-sandboxing.md` §4a and
-the ROADMAP.)
-
-A function can only call functions whose capabilities are a subset of its own. This is checked at both the surface level (Check) and the Core IR level (CoreCheck). A trait impl method may require only the capabilities its trait method declares, and a call through a trait bound (`x.act()` with `T: Act`) costs the trait method's capabilities; the specialized call graph is re-checked after monomorphization (see [CAPABILITY_FACTS.md](../compiler/CAPABILITY_FACTS.md), bug 091). Capability errors include actionable hints suggesting `with(Cap)` additions or trusted wrapper alternatives.
-
-**Capability aliases** reduce signature repetition:
-
-```
-cap IO = File + Console;
-fn log(msg: &String) with(IO) { ... }
-```
-
-Aliases expand at parse time. The rest of the compiler sees only concrete capability names. See [FFI.md](../platform/FFI.md) for details.
-
-**`Std` capability alias**: `with(Std)` expands to all standard capabilities
-except `Unsafe`. This is not a macro system; it is a fixed capability-set alias.
+What each capability means is [TRUST-D1](../spec/trusted.md#TRUST-D1) (`Random` is external
+entropy; a seeded PRNG needs none), and capability sets, aliases (`cap IO = File + Console;`) and
+`Std` are [TYPE-D1](../spec/types.md#TYPE-D1); the nine capability names and the `Std` alias are
+listed in [TRUST-4](../spec/trusted.md#TRUST-4)'s rationale, with the reserved `Device`, `Thread`
+and `Signal`. The calling rule, at Check and at CoreCheck, is
+[TRUST-4](../spec/trusted.md#TRUST-4), and a trait impl method's capabilities are
+[TRAIT-9](../spec/traits.md#TRAIT-9). The heap builtins need `Alloc`
+([MEM-7](../spec/memory.md#MEM-7)). See [FFI.md](../platform/FFI.md) for capability aliases in
+wrappers.
 
 ### Trusted Boundaries
 
@@ -80,27 +66,21 @@ impl Vec<T> {
 
 **What `trusted` is:** An audited containment boundary for pointer-level implementation techniques. It means "this declaration uses implementation techniques ordinary safe code cannot use directly, and that usage is intentionally concentrated and review-relevant."
 
-**What `trusted` permits** (and nothing else):
-- Pointer arithmetic (`*mut T + offset`)
-- Raw pointer dereference (`*p`)
-- Raw pointer assignment (`*p = value`)
-- Pointer-involving casts (except ref→ptr, which is always safe)
+**What `trusted` permits and does not do** is [TRUST-5](../spec/trusted.md#TRUST-5): raw-pointer
+operations and plain `extern fn` calls without declaring `Unsafe` (since R-0484), and nothing else.
+It does not suppress capabilities, those an `extern fn` declares included
+([FFI-3](../spec/ffi.md#FFI-3)), and it relaxes no ownership, linearity, borrow or scope-exit rule
+([TRUST-12](../spec/trusted.md#TRUST-12)). Pointer arithmetic is `ptr::offset`, and `as` never
+converts between a pointer and an integer ([TRUST-1](../spec/trusted.md#TRUST-1), pending R-0502;
+main still accepts `p + n` on a pointer). Converting a reference to a raw pointer needs neither
+`trusted` nor `Unsafe` ([TRUST-13](../spec/trusted.md#TRUST-13); its `as` spelling is OPEN-98).
+What a `trusted extern fn` asserts is [FFI-9](../spec/ffi.md#FFI-9).
 
-**What `trusted` does not do:**
-- Does **not** suppress capabilities — callers still need the declared capabilities
-- **Does** absorb the `Unsafe` of calling a plain `extern fn` (since R-0484, 2026-10-01): `trusted` vouches for memory safety. It absorbs **nothing else** — the binding's declared effects (`extern fn write(..) with(Console)`) still bind the trusted caller, and every `extern` must declare them (E0116). See [HANDLE_CAPABILITIES.md](../archive/design-records/HANDLE_CAPABILITIES.md) R2–R3
-- Does **not** relax linearity rules — linear values follow the same ownership rules everywhere
-- Does **not** hide any caller-visible semantic fact
-- `trusted extern fn` is a separate, narrower mechanism: a binding safe for every argument its types permit, with no undeclared effects (e.g., `sqrt`). Its declared effects still bind every caller
-
-**Syntactic surfaces** (intentionally narrow):
-- `trusted fn` — a function or a method, each declaring it itself
-- `trusted extern fn` — audited foreign binding
-
-There is no block-level trust: `trusted impl` is refused (bug 189), because a marker on a block
-would confer trust on methods that never declared it. The stdlib demonstrates the pattern
-throughout: `Vec<T>`'s and `HashMap<K, V>`'s raw-storage methods, `TextFile`'s I/O methods,
-`trusted fn print/println`. See [FFI.md](../platform/FFI.md) for wrapper patterns.
+**Syntactic surfaces** (intentionally narrow): `trusted fn` (a function or a method, each declaring
+it itself) and `trusted extern fn` (an audited foreign binding). There is no block-level trust:
+`trusted impl` is refused ([TRUST-5](../spec/trusted.md#TRUST-5), bug 189). The stdlib demonstrates
+the pattern throughout: `Vec<T>`'s and `HashMap<K, V>`'s raw-storage methods, `TextFile`'s I/O
+methods, `trusted fn print/println`. See [FFI.md](../platform/FFI.md) for wrapper patterns.
 
 ### Unsafe-marked modules and global state (decided 2026-10-29: OD7 and OD8)
 
@@ -118,25 +98,20 @@ mutation are inventoried as trusted base.
 
 ### `with(Unsafe)`
 
-`with(Unsafe)` gates the explicit low-level boundary:
-
-- calling `extern fn` (but not `trusted extern fn`) outside a `trusted` body; the binding's declared effects are required in addition, everywhere
-- raw pointer dereference and assignment (outside `trusted` code)
-- pointer-involving casts (outside `trusted` code)
-
-The audit story is simple: `grep with(Unsafe)` finds the boundary.
+`with(Unsafe)` gates raw-pointer operations and plain `extern fn` calls outside a `trusted` body
+([TRUST-4](../spec/trusted.md#TRUST-4), [TRUST-5](../spec/trusted.md#TRUST-5)); a binding's declared
+effects are required everywhere ([FFI-3](../spec/ffi.md#FFI-3)). The audit story is simple:
+`grep with(Unsafe)` finds the boundary.
 
 ## Linearity and Ownership
 
-Concrete uses linear types by default for structs and enums. This provides compile-time resource safety without a garbage collector:
-
-- Linear values must be consumed exactly once
-- Branches must agree on consumption
-- `defer` schedules cleanup that runs when the enclosing scope exits
-- `borrow(x) { ... }` creates scoped references without consuming
-- `Heap<T>` is linear — must be freed, cannot be silently dropped
-
-Primitives, `&T`, raw pointers, and function pointers are Copy. See [VALUE_MODEL.md](../archive/design-records/VALUE_MODEL.md) for the full value category table.
+Structs and enums are linear unless declared `Copy`
+([OWN-D1](../spec/ownership.md#OWN-D1)). The rules are in the ownership chapter: a linear value is
+consumed exactly once ([OWN-1](../spec/ownership.md#OWN-1), [OWN-2](../spec/ownership.md#OWN-2)),
+branches agree ([OWN-3](../spec/ownership.md#OWN-3)), `defer` registers cleanup
+([OWN-12](../spec/ownership.md#OWN-12)), borrow blocks scope references
+([REF-D3](../spec/references.md#REF-D3)), and a `Heap<T>` owns its cell
+([MEM-5](../spec/memory.md#MEM-5)).
 
 ### Current Claim Boundary
 
@@ -196,7 +171,8 @@ proof-eligible fragment from `ValidatedCore`:
 
 **Eligible:** Authority-free functions with no trusted/extern boundary whose
 entire body is admitted by the named ProofCore version. An empty capability set
-does not by itself imply termination or absence of traps.
+is an authority claim, not purity ([TRUST-4](../spec/trusted.md#TRUST-4)): it implies neither
+termination nor absence of traps.
 
 **Excluded:** Functions with capabilities, trusted/unsafe functions, extern functions, entry points.
 
@@ -264,19 +240,19 @@ Trusted ──────── containment of pointer-level unsafety behind sa
      ├── --report unsafe shows trust boundaries
      └── wrapper patterns documented in docs/platform/FFI.md
 
-with(Unsafe) ─── explicit foreign boundary gate
+with(Unsafe) ─── explicit foreign boundary gate (TRUST-4)
      │
-     ├── required for extern fn calls (even inside trusted code)
-     ├── required for raw pointer ops (outside trusted code)
+     ├── required for extern fn calls outside a trusted body (TRUST-5)
+     ├── required for raw pointer ops outside trusted code
      ├── grep with(Unsafe) finds the boundary
      └── --report unsafe shows where and why
 
-Linearity ────── compile-time resource safety
+Linearity ────── compile-time resource safety (OWN-D1, OWN-2)
      │
      ├── structs/enums linear by default, opt-in Copy
-     ├── must consume exactly once
-     ├── defer for cleanup
-     └── borrow blocks for scoped references
+     ├── consumed exactly once
+     ├── defer for cleanup (OWN-12)
+     └── borrow blocks for scoped references (REF-D3)
 
 ProofCore ────── proof-eligible subset of validated Core
      │

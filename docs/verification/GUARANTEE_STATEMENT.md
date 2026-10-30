@@ -19,45 +19,45 @@ For safe Concrete code that passes the checker, the following properties hold at
 
 ### Memory safety (compiler-enforced)
 
-| Property | Mechanism | Evidence level |
+| Property | Rule | Evidence level |
 |----------|-----------|----------------|
-| No use-after-move | Linear variable in `consumed` state cannot be read, borrowed, or moved | Compiler-enforced |
-| No double free | Linear value consumed once; second consumption is use-after-move | Compiler-enforced |
-| No memory leak | Every linear variable consumed or reserved by scope exit | Compiler-enforced |
-| No dangling safe reference | Borrow-block scoping + escape analysis | Compiler-enforced |
-| No borrow conflict | Mutable borrows are exclusive; shared borrows are incompatible with mutable borrows | Compiler-enforced |
-| No frozen-variable access | Owner frozen during borrow block; no read, write, move, or re-borrow | Compiler-enforced |
-| No live linear overwrite | Assignment cannot replace a live linear value; a consumed `mut` place may be rebound | Compiler-enforced |
-| No `&mut T` aliasing | Borrow-block exclusive refs consumed on function call; no double-use | Compiler-enforced |
-| Deterministic cleanup order | `defer` runs LIFO at scope exit | Compiler-enforced |
+| No use-after-move | [OWN-1](../spec/ownership.md#OWN-1) | Compiler-enforced |
+| No double free | [OWN-1](../spec/ownership.md#OWN-1), [MEM-5](../spec/memory.md#MEM-5) | Compiler-enforced |
+| No memory leak | [OWN-2](../spec/ownership.md#OWN-2) | Compiler-enforced |
+| No dangling safe reference | [REF-6](../spec/references.md#REF-6), [REF-8](../spec/references.md#REF-8) | Compiler-enforced |
+| No borrow conflict | [REF-11](../spec/references.md#REF-11) | Compiler-enforced |
+| No frozen-variable access | [REF-8](../spec/references.md#REF-8) | Compiler-enforced |
+| No live linear overwrite | [OWN-9](../spec/ownership.md#OWN-9) | Compiler-enforced |
+| No `&mut T` aliasing | `&mut` is lent per call ([REF-10](../spec/references.md#REF-10)) and exclusive within the call ([REF-11](../spec/references.md#REF-11)) | Compiler-enforced |
+| Deterministic cleanup order | [STMT-11](../spec/statements.md#STMT-11), [OWN-12](../spec/ownership.md#OWN-12) | Compiler-enforced |
 
 ### Capability discipline (compiler-enforced)
 
-| Property | Mechanism | Evidence level |
+| Property | Rule | Evidence level |
 |----------|-----------|----------------|
-| No capability escalation | Callers must declare a superset of callee capabilities | Compiler-enforced |
-| No hidden effects | Capabilities in signatures; `capSet.isEmpty` = pure | Compiler-enforced |
-| No silent FFI | Extern calls require `with(Unsafe)` (except `trusted extern fn`) | Compiler-enforced |
+| No capability escalation | [TRUST-4](../spec/trusted.md#TRUST-4) | Compiler-enforced |
+| No hidden effects | Capabilities in signatures; an empty set is an authority claim, not purity ([TRUST-4](../spec/trusted.md#TRUST-4)) | Compiler-enforced |
+| No silent FFI | Plain `extern fn` calls need `Unsafe` outside a `trusted` body ([TRUST-4](../spec/trusted.md#TRUST-4), [TRUST-5](../spec/trusted.md#TRUST-5)), and every extern declares its effects ([FFI-3](../spec/ffi.md#FFI-3)) | Compiler-enforced |
 
 ### Control-flow safety (compiler-enforced)
 
-| Property | Mechanism | Evidence level |
+| Property | Rule | Evidence level |
 |----------|-----------|----------------|
-| Branch agreement | If/else and match arms agree on linear consumption | Compiler-enforced |
-| No cross-loop consumption | Linear outer-scope variable cannot be consumed in loop body | Compiler-enforced |
-| No skip past linear | Break/continue cannot skip unconsumed linear variables | Compiler-enforced |
-| No defer-body escape | Break/continue forbidden inside defer bodies | Compiler-enforced |
+| Branch agreement | [OWN-3](../spec/ownership.md#OWN-3) | Compiler-enforced |
+| No cross-loop consumption | [OWN-4](../spec/ownership.md#OWN-4) | Compiler-enforced |
+| No skip past linear | `break` and `continue` are scope exits under [OWN-2](../spec/ownership.md#OWN-2) | Compiler-enforced |
+| No escape from a deferred call | `defer` registers one call, not a body ([OWN-12](../spec/ownership.md#OWN-12)) | Compiler-enforced |
 
 ### What safe code does NOT guarantee
 
-- **No static proof that every array index is in range.** Raw safe indexing is
-  runtime-checked and traps on OOB; trusted/unchecked access remains outside the
-  safe guarantee.
-- **No static proof that ordinary arithmetic cannot overflow.** Ordinary
-  integer arithmetic is runtime-checked and traps on overflow in every profile;
-  explicit `wrapping_*` and `saturating_*` retain their named semantics.
-- **No stack overflow protection.** Stack depth depends on the OS guard page. The compiler does not analyze stack usage.
-- **No termination guarantee.** The checker does not verify that loops terminate or that recursion bottoms out.
+- **No static proof that every array index is in range.** Safe indexing is checked at run time and
+  aborts ([MEM-6](../spec/memory.md#MEM-6)); trusted/unchecked access remains outside the safe
+  guarantee.
+- **No static proof that ordinary arithmetic cannot overflow.** Integer arithmetic is checked and
+  aborts ([ARITH-3](../spec/arithmetic.md#ARITH-3)); `wrapping_*` and `saturating_*` keep their named
+  semantics ([ARITH-4](../spec/arithmetic.md#ARITH-4)).
+- **No stack overflow protection.** Stack exhaustion is a failure ([STMT-2](../spec/statements.md#STMT-2)) that depends on the OS guard page. The compiler does not analyze stack usage.
+- **No termination guarantee.** Divergence is a behaviour ([STMT-1](../spec/statements.md#STMT-1)), and a claim implies termination only with checked `decreasing` evidence ([CON-1](../spec/contracts.md#CON-1)).
 
 ---
 
@@ -79,7 +79,7 @@ For proof-backed code, the following additional properties hold:
 
 All of these must hold simultaneously:
 
-1. **Pure** — empty capability set (no effects)
+1. **No capability** — empty capability set (an authority claim, not purity: [TRUST-4](../spec/trusted.md#TRUST-4))
 2. **Not trusted** — no `trusted` marker on the function or method
 3. **Not entry point** — not `main`
 4. **Body extractable** — every construct is in the current `ProvableV1`
@@ -101,20 +101,17 @@ All of these must hold simultaneously:
 
 ## 3. What Trusted Code Invalidates
 
-**Trusted code** = functions or impl blocks marked `trusted`, or functions with `with(Unsafe)`.
+**Trusted code** = functions or methods marked `trusted` (trust is never declared on an `impl`
+block, [TRUST-5](../spec/trusted.md#TRUST-5)), or functions with `with(Unsafe)`.
 
-Trusted code **retains** all of these safe-code guarantees:
-- Linear ownership and consumption rules
-- Capability discipline (capabilities are not suppressed by `trusted`)
-- Borrow-block and escape analysis rules
-- Scope-exit linearity checks
-- Branch agreement and control-flow safety
+Trusted code **retains** the ownership, linearity, borrow, scope-exit and branch-agreement rules of
+safe code ([TRUST-12](../spec/trusted.md#TRUST-12)) and the capability discipline ([TRUST-5](../spec/trusted.md#TRUST-5)).
 
-Trusted code **adds** these permissions:
-- Pointer arithmetic (`*mut T + offset`)
-- Raw pointer dereference (`*p`)
-- Raw pointer assignment (`*p = value`)
-- Pointer-involving casts (except `&x as *const T`, which is always safe)
+Trusted code **adds** exactly the raw-pointer operations and plain `extern fn` calls of
+[TRUST-5](../spec/trusted.md#TRUST-5): raw dereference and assignment ([TRUST-7](../spec/trusted.md#TRUST-7),
+[TRUST-11](../spec/trusted.md#TRUST-11)), pointer arithmetic, written `ptr::offset` ([TRUST-1](../spec/trusted.md#TRUST-1), pending
+R-0502; main still accepts `p + n`), and pointer casts other than a reference to a pointer, which
+needs no trust ([TRUST-13](../spec/trusted.md#TRUST-13)).
 
 Trusted code **invalidates** these guarantees at the trust boundary:
 
@@ -126,9 +123,14 @@ Trusted code **invalidates** these guarantees at the trust boundary:
 | No memory corruption | Raw pointer write to arbitrary memory | Audit responsibility |
 | Proof eligibility | Trusted functions are excluded from proof extraction | By design |
 
-**The trust boundary is contained.** Callers of trusted functions see a safe signature with declared capabilities. The caller is not itself "infected" — a pure function can call a trusted function only if the trusted function has capabilities, which would make the caller non-pure. The trust boundary does not propagate silently.
+**The trust boundary is contained.** Callers of trusted functions see a safe signature with declared
+capabilities, and a trusted function's capabilities bind its callers like any other's
+([TRUST-4](../spec/trusted.md#TRUST-4), [TRUST-5](../spec/trusted.md#TRUST-5)). The trust boundary does not propagate silently.
 
-**`trusted extern fn` is a special case.** It allows calling a foreign function without `with(Unsafe)`, based on the programmer's assertion that the binding is pure and safe (e.g., `sqrt`, `abs`). The compiler does not verify this assertion. If the foreign function has side effects or is unsafe, the trust boundary is silently violated.
+**`trusted extern fn` is a special case.** It is callable without `with(Unsafe)` on its author's
+assertion, which the compiler does not verify ([FFI-9](../spec/ffi.md#FFI-9)): the binding is safe
+for every argument its types permit and has no effect beyond its declared `with(...)` (e.g. `sqrt`,
+`abs`). If the foreign function breaks that, the trust boundary is silently violated.
 
 ---
 
@@ -195,5 +197,5 @@ This document defines what the compiler guarantees today. It does not cover:
 
 - **Future guarantees.** The proof-eligible subset will expand (structs, enums, match, recursion). The predictable profile may become enforced rather than advisory. These are tracked in the [roadmap](../../ROADMAP.md).
 - **Formal proof of the checker.** The checker is tested by adversarial tests and code review. A formal soundness proof is future work.
-- **Concurrency.** The model assumes single-threaded execution. Concurrency interaction is an explicitly deferred boundary.
+- **Concurrency.** A program has one thread ([STMT-3](../spec/statements.md#STMT-3)). Concurrency interaction is an explicitly deferred boundary.
 - **Cross-package guarantees.** The current model is single-compilation-unit. Package-level trust, capability, and proof propagation are future work.

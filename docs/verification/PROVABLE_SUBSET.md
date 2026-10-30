@@ -85,7 +85,8 @@ out-of-bounds functional array access, or insufficient fuel. It is not one
 universal theorem that every corresponding runtime failure has the same
 mechanism.
 
-Runtime ordinary arithmetic and safe indexing are checked terminal failures.
+Ordinary integer arithmetic and safe indexing abort when their check fails
+([ARITH-3](../spec/arithmetic.md#ARITH-3), [MEM-6](../spec/memory.md#MEM-6)).
 Proofs over mathematical integers or partial operations must state the
 range/no-failure hypotheses they need. Explicit fixed-width operations carry
 only the semantics admitted by `ProvableV1`.

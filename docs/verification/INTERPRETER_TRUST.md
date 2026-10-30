@@ -52,10 +52,10 @@ The interpreter currently models:
 - the runtime's String/print builtins, each modelled on its `EmitBuiltins`
   implementation over a `String` that is the `{ptr, len, cap}` struct over a heap
   buffer, and the builtin Vec intrinsics;
-- IEEE `f64`/`f32` values: literals, arithmetic (`%` is C `fmod`), ordered and
-  unordered comparisons, integer → float rounding to nearest-even, and the
+- IEEE `f64`/`f32` values: literals, arithmetic (`%` is C `fmod`, [ARITH-12](../spec/arithmetic.md#ARITH-11)), ordered and
+  unordered comparisons, integer → float rounding to nearest-even ([ARITH-1](../spec/arithmetic.md#ARITH-1)), and the
   checked float → integer conversion;
-- module constants, evaluated at the use in their own frame;
+- module constants, evaluated at each use ([TYPE-22](../spec/types.md#TYPE-22));
 - a typed heap: `alloc`/`free`/`Heap<T>`, `malloc`/`calloc`/`realloc`/`free`,
   raw pointers with element-sized arithmetic, `memcpy`/`memmove`/`memset`/
   `memcmp`/`strlen`, `sizeof`/`alignof` through `Layout` with the running generic
@@ -69,7 +69,8 @@ The interpreter currently models:
 - the C library's stdout buffer: the print builtins, `puts` and `putchar` go
   through stdio (line-buffered on a terminal, else fully buffered), `write(1, ..)`
   does not, and stdout and stderr are replayed in the order they were written;
-  `abort` flushes stdio on Darwin and not on glibc, as the binary's runtime does;
+  `abort` flushes stdio on Darwin and not on glibc, as the binary's runtime does (whether a
+  trap flushes output is OPEN-119 of [decisions.md](../spec/decisions.md#OPEN-119));
 - project mode: `concrete src/main.con --interp -- args` on a project's entry
   point interprets the whole module graph `concrete build` compiles, std
   included, with the program's arguments and standard input;
@@ -97,7 +98,8 @@ checker.
 
 ### Entry observation
 
-The original oracle-vector contract is `fn main() -> Int`, compared through the
+The original oracle-vector contract is `fn main() -> Int`, which STMT-7 replaces with a `u8` or
+`Unit` result ([STMT-7](../spec/statements.md#STMT-7), pending bug-320), compared through the
 program's observable output/exit projection. Additional differential gates
 compare stdout and trap behavior for selected constructs. A new observation
 shape must be added deliberately; it must not be normalized away merely because
@@ -124,7 +126,7 @@ silently approximated. Current important exclusions include:
 | A C function declared with an argument narrower than its C parameter, or a result wider than the C result | explicit refusal |
 | Unsupported borrow/place shape | explicit shape diagnostic |
 | Unsupported print/IO intrinsic reaching Core without required desugaring | explicit desugar/support diagnostic |
-| Loop runaway beyond interpreter fuel | explicit fuel diagnostic |
+| Loop runaway beyond interpreter fuel | explicit fuel diagnostic (an inconclusive result, not a disagreement: [STMT-1](../spec/statements.md#STMT-1)) |
 
 The implementation's exhaustive pattern matches and the differential-position
 gate are the operational source of truth for this list. Adding a new supported
@@ -148,7 +150,7 @@ meaning:
 Raw array indexing is checked on both interpreted and compiled paths and traps
 when the index is negative or outside the declared length. These paths are
 expected to agree on value versus trap and, as the differential infrastructure
-matures, on trap identity. Stack exhaustion remains host-dependent: the
+matures, on trap identity. Stack exhaustion ([STMT-2](../spec/statements.md#STMT-2)) remains host-dependent: the
 interpreter uses Lean's stack while the compiled program uses the target stack,
 so stack-bound claims belong to the compiled/profile evidence.
 

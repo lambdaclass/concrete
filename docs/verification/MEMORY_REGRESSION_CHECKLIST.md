@@ -12,9 +12,9 @@ For the public guarantee statement, see [GUARANTEE_STATEMENT.md](GUARANTEE_STATE
 
 ## 1. Field/Substructure Borrows
 
-**Intended rule:** Borrowing a struct freezes the entire struct. No field-granular borrows. Field access through `&T` or `&mut T` auto-derefs without consuming the reference.
+**Rule:** [REF-11](../spec/references.md#REF-11) (a borrow freezes the whole owner); field access through a reference: [MEM-4](../spec/memory.md#MEM-4).
 
-**Current checker behavior:** Whole-value freeze. `borrow mut x as r in R { ... }` freezes `x` entirely — no field of `x` can be read, written, moved, or re-borrowed inside the block.
+**Current checker behavior:** Whole-value freeze. `borrow mut x as r in R { ... }` ([REF-D3](../spec/references.md#REF-D3)) freezes `x` entirely — no field of `x` can be read, written, moved, or re-borrowed inside the block.
 
 **Test coverage:**
 - `adversarial_memory_edge_field_borrow.con` — field access through borrow
@@ -39,7 +39,7 @@ For the public guarantee statement, see [GUARANTEE_STATEMENT.md](GUARANTEE_STATE
 
 ## 2. Array/Slice Element Borrows
 
-**Intended rule:** Arrays are single linear values. Borrowing an array freezes the entire array. No per-element borrow tracking.
+**Rule:** [REF-11](../spec/references.md#REF-11) (a borrow freezes the whole array); indexing through a reference: [MEM-8](../spec/memory.md#MEM-8).
 
 **Current checker behavior:** Whole-array freeze. Array indexing (`arr[i]`) returns the element type without consuming the array. No per-index ownership.
 
@@ -62,7 +62,7 @@ For the public guarantee statement, see [GUARANTEE_STATEMENT.md](GUARANTEE_STATE
 
 ## 3. Control-Flow Joins
 
-**Intended rule:** Both branches of if/else must agree on consumption of pre-existing linear variables. Match arms must agree. If-without-else cannot consume. Break/continue cannot skip unconsumed linear variables.
+**Rule:** [OWN-3](../spec/ownership.md#OWN-3) (branch agreement); `break` and `continue` are exits under [OWN-2](../spec/ownership.md#OWN-2).
 
 **Current checker behavior:** Fully enforced via `mergeVarStates` (if/else), `mergeMatchStates` (match), `checkNoBranchConsumption` (if-without-else), and break/continue scope-exit checks.
 
@@ -93,7 +93,7 @@ For the public guarantee statement, see [GUARANTEE_STATEMENT.md](GUARANTEE_STATE
 
 ## 4. Owner Invalidation Patterns
 
-**Intended rule:** A variable frozen by a borrow block cannot be read, written, moved, or re-borrowed. A consumed variable cannot be used. A reserved variable cannot be moved. Trusted code does not relax these rules.
+**Rule:** [REF-8](../spec/references.md#REF-8) (frozen owner), [OWN-1](../spec/ownership.md#OWN-1) (use after move), [OWN-12](../spec/ownership.md#OWN-12) (reserved by `defer`); trusted code keeps them: [TRUST-12](../spec/trusted.md#TRUST-12).
 
 **Current checker behavior:** Fully enforced. `variableFrozenByBorrow`, `variableUsedAfterMove`, `variableReservedByDefer`, `cannotMoveLinearBorrowed`, `assignToBorrowed`, `assignToFrozen`.
 
@@ -120,7 +120,7 @@ For the public guarantee statement, see [GUARANTEE_STATEMENT.md](GUARANTEE_STATE
 
 ## 5. `&mut T` Feature Gaps
 
-**Intended rule:** REF-10: every `&mut T` binding (parameter, borrow-block binder, arm binder) is reborrowed when passed to a call (decision D1, 2026-10-23, provisional under OD2). Deref read/write does not consume.
+**Rule:** [REF-10](../spec/references.md#REF-10): every `&mut T` binding (parameter, borrow-block binder, arm binder) is lent to each call (decision D1, 2026-10-23, provisional under OD2). Deref read/write does not consume.
 
 **Current checker behavior:** One mode since D1 (`consumeCallArgIdent`); before it, borrow-block refs (`env.borrowRefs`) were consumed on a call and parameter refs were not.
 
@@ -138,7 +138,7 @@ For the public guarantee statement, see [GUARANTEE_STATEMENT.md](GUARANTEE_STATE
 
 ## 6. Cleanup/Leak-Boundary Cases
 
-**Intended rule:** Every linear variable must be consumed or reserved by scope exit. `defer` marks variables as `reserved` (read-only, cannot move). Defers run LIFO. Break/continue must not skip unconsumed linear variables.
+**Rule:** [OWN-2](../spec/ownership.md#OWN-2) (consumed by scope exit), [OWN-12](../spec/ownership.md#OWN-12) (`defer` reserves its arguments), [STMT-11](../spec/statements.md#STMT-11) (LIFO order).
 
 **Current checker behavior:** Fully enforced. `checkScopeExit` accepts only `.consumed` and `.reserved`. `defer` sets `.reserved`. Break/continue checks enforce scope cleanup.
 
@@ -175,7 +175,7 @@ For the public guarantee statement, see [GUARANTEE_STATEMENT.md](GUARANTEE_STATE
 
 ## 7. Borrow Escape
 
-**Intended rule:** References created by borrow blocks cannot be assigned to variables outside the block.
+**Rule:** [REF-6](../spec/references.md#REF-6) (no `let` binds a reference), [REF-3](../spec/references.md#REF-3) (no reference stored).
 
 **Current checker behavior:** Enforced via `referenceEscapesBorrowBlock` check on assignments.
 
@@ -194,7 +194,7 @@ For the public guarantee statement, see [GUARANTEE_STATEMENT.md](GUARANTEE_STATE
 
 ## 8. Loop Consumption
 
-**Intended rule:** Linear variables from outer scopes cannot be consumed inside loop bodies. Linear variables declared inside loops follow normal scope rules per iteration.
+**Rule:** [OWN-4](../spec/ownership.md#OWN-4).
 
 **Current checker behavior:** Enforced via `loopDepth` tracking in `consumeVar`.
 
@@ -234,7 +234,7 @@ These error kinds were audited and removed from `Check.lean` because they were s
 
 | Error kind | Why removed |
 |------------|-------------|
-| `breakInDefer` | `defer` takes a single call expression (not a block), so `break` cannot appear syntactically inside a defer body. The `inDeferBody` flag was never set to `true`. |
+| `breakInDefer` | `defer` takes a single call expression (not a block, [OWN-12](../spec/ownership.md#OWN-12)), so `break` cannot appear syntactically inside a defer body. The `inDeferBody` flag was never set to `true`. |
 | `continueInDefer` | Same root cause as `breakInDefer`. |
 | `assignToBorrowed` | Inside a borrow block the owner is frozen, so `assignToFrozen` always fires first. Outside a borrow block there are no active borrow refs. The check was shadowed. |
 | `variableAlreadyMutBorrowed` | `mutBorrowed` was never set to `true` anywhere. The freeze check (`variableFrozenByBorrow`) also fires first for nested borrow blocks. |

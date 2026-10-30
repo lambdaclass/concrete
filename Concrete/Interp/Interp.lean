@@ -1211,6 +1211,7 @@ def floatToIntChecked (f : Float) (ty : Ty) : Except String Int :=
     else .error s!"interp: float-to-integer conversion out of range for '{tyToStr ty}' (the binary aborts)"
 
 /-- C `fmod` (LLVM `frem`), exactly: the result has the dividend's sign and is representable. -/
+-- spec: ARITH-12 (docs/spec/arithmetic.md; this declaration enforces the rule)
 def floatRem (x y : Float) : Float :=
   if x.isNaN || y.isNaN || x.isInf || y == 0.0 then 0.0 / 0.0
   else if y.isInf then x
@@ -2249,6 +2250,7 @@ partial def evalBorrowTarget (cx : Ctx) (env : Env) (e : CExpr) (isMut : Bool) :
     let env := envBind env name v
     return (env, { base := name, baseName := toString name, frame := env.length, steps := [], isMut := isMut })
 
+-- spec: TYPE-22 (docs/spec/types.md; this declaration enforces the rule)
 partial def evalExpr (cx : Ctx) (env : Env) (e : CExpr) : IM (Env × Flow) := do
   match e with
   | .intLit val ty => return (env, .val (.int val ty))

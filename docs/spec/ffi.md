@@ -378,5 +378,32 @@ mod m {
         }
         return 0;
     }
+```
+
+<a id="FFI-9"></a>
+### FFI-9. What `trusted extern fn` asserts
+
+**FFI-9@1.** A `trusted extern fn` asserts, as an obligation of its author that the compiler does not check, that the foreign function is safe for every argument its parameter types permit and has no effect beyond those its `with(...)` declares.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.ccCheckExpr
+- Semantics: none
+- Obligation: every trusted operation states its premises (TRUST-2, R-0506, R-0509)
+- Evidence: tested
+
+**Rationale.** The assertion is what makes the binding callable without `Unsafe` (TRUST-5). A
+binding whose safety depends on pointer validity, or that can invalidate a resource another handle
+owns, stays a plain `extern fn`. The effects half is FFI-3: every `extern fn` declares its effects.
+Absorbed from [SAFETY.md](../verification/SAFETY.md), which records the assertion in the trusted
+base ([TRUSTED_COMPUTING_BASE.md](../verification/TRUSTED_COMPUTING_BASE.md) §6).
+
+```con accept name=trusted-extern-without-unsafe exit=42
+trusted extern fn abs(x: i32) with() -> i32;
+
+fn main() -> Int {
+    return abs(-42) as Int;
 }
 ```

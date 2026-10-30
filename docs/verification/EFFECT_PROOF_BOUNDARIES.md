@@ -47,7 +47,7 @@ dimensions.
 
 ### Capabilities
 
-Capabilities (`with(File, Network, Alloc, ...)`) are compile-time effect declarations in function signatures. The compiler enforces that callers possess a superset of callee capabilities (checked in both Check and CoreCheck).
+Capabilities (`with(File, Network, Alloc, ...)`) are compile-time effect declarations in function signatures. A caller holds every capability its callees require ([TRUST-4](../spec/trusted.md#TRUST-4), checked in both Check and CoreCheck).
 
 | Capability state | Proof status | Evidence level |
 |-----------------|--------------|----------------|
@@ -65,7 +65,7 @@ edge while naming its scope and trust boundary.
 
 ### Allocation
 
-Allocation is gated by the `Alloc` capability. Functions that allocate (`alloc`, `vec_new`, etc.) declare `with(Alloc)` and are excluded from proof extraction.
+Allocation is gated by the `Alloc` capability. Functions that allocate declare `with(Alloc)` ([MEM-7](../spec/memory.md#MEM-7)) and are excluded from proof extraction.
 
 | Allocation state | Proof status | Evidence level |
 |-----------------|--------------|----------------|
@@ -78,7 +78,7 @@ boundary. Heap operations (`Heap<T>`, `HeapArray<T>`) are outside the current
 functional proof model; allocation authority and reachability remain valid
 whole-program structural facts.
 
-**What the compiler still guarantees:** Linear ownership of heap pointers. Every `Heap<T>` must be consumed (freed, dereferenced, or passed to an owner). The no-leak guarantee (see [MEMORY_GUARANTEES.md](MEMORY_GUARANTEES.md)) is enforced by the checker, not by the proof pipeline.
+**What the compiler still guarantees:** Linear ownership of heap pointers ([MEM-5](../spec/memory.md#MEM-5), [OWN-2](../spec/ownership.md#OWN-2)). The no-leak guarantee (see [MEMORY_GUARANTEES.md](MEMORY_GUARANTEES.md)) is enforced by the checker, not by the proof pipeline.
 
 ### Blocking and Host Interaction
 
@@ -95,41 +95,41 @@ function with `with(File)` is not currently ProofCore-eligible regardless of
 what it does internally. Its authority/reachability properties remain eligible
 for separately scoped structural evidence.
 
-**What the compiler still guarantees:** Capability containment. A function declared `with(File)` cannot silently also use `Network`. The predictable profile gates (no recursion, bounded loops, no alloc, no FFI, no blocking) are enforced for functions that pass `--check predictable`, but this is a report-level check, not a proof-level one.
+**What the compiler still guarantees:** Capability containment ([TRUST-4](../spec/trusted.md#TRUST-4)). The predictable profile gates (no recursion, bounded loops, no alloc, no FFI, no blocking) are enforced for functions that pass `--check predictable`, but this is a report-level check, not a proof-level one.
 
 ### FFI (Foreign Function Interface)
 
-Extern functions are the boundary between Concrete and external code. Calling an untrusted extern function requires `with(Unsafe)`. `trusted extern fn` exempts specific audited pure foreign bindings (e.g., `sqrt`, `abs`) from the `Unsafe` requirement.
+Extern functions are the boundary between Concrete and external code. Calling a plain `extern fn` requires `Unsafe` outside a `trusted` body ([TRUST-4](../spec/trusted.md#TRUST-4), [TRUST-5](../spec/trusted.md#TRUST-5)). A `trusted extern fn` is callable without it, on its author's assertion ([FFI-9](../spec/ffi.md#FFI-9)) (e.g., `sqrt`, `abs`).
 
 | FFI state | Proof status | Evidence level |
 |-----------|--------------|----------------|
 | No extern calls | **Eligible** if other ProofCore gates pass; not automatically proved | Compiler-enforced boundary fact; optional proof evidence |
-| Calls `trusted extern fn` | **Trusted assumption** — the binding is audited as pure, but the compiler does not verify the foreign implementation | Compiler-reported |
-| Calls untrusted `extern fn` | **Trusted assumption** — requires `with(Unsafe)`; correctness depends entirely on the external code | Compiler-reported |
+| Calls `trusted extern fn` | **Trusted assumption** — the binding is audited ([FFI-9](../spec/ffi.md#FFI-9)), but the compiler does not verify the foreign implementation | Compiler-reported |
+| Calls untrusted `extern fn` | **Trusted assumption** — requires `Unsafe` outside a `trusted` body; correctness depends entirely on the external code | Compiler-reported |
 
 **Where proofs stop:** At any extern call. Even `trusted extern fn` calls prevent proof extraction, because the compiler has no model of the foreign function's behavior. The `--report proof` heuristic additionally flags functions with extern calls in their bodies.
 
-**What the compiler still guarantees:** FFI type safety — only FFI-safe types are allowed in extern function signatures (checked by `Layout.isFFISafe`). Capability discipline — untrusted extern calls require `with(Unsafe)`. `--report unsafe` shows trust boundaries and what trusted functions wrap.
+**What the compiler still guarantees:** FFI type safety ([FFI-3](../spec/ffi.md#FFI-3), checked by `Layout.isFFISafe`). Capability discipline ([TRUST-4](../spec/trusted.md#TRUST-4), [TRUST-5](../spec/trusted.md#TRUST-5)). `--report unsafe` shows trust boundaries and what trusted functions wrap.
 
 ### Trusted Code
 
-`trusted fn` (functions and methods) and `trusted extern fn` contain pointer-level implementation techniques behind safe APIs. `trusted` permits pointer arithmetic, raw pointer dereference, and raw pointer assignment — but does not relax capabilities, linearity, or borrow checking.
+`trusted fn` (functions and methods) and `trusted extern fn` contain pointer-level implementation techniques behind safe APIs. What `trusted` permits is [TRUST-5](../spec/trusted.md#TRUST-5); it relaxes no capability, linearity or borrow rule ([TRUST-12](../spec/trusted.md#TRUST-12)).
 
 | Trust state | Proof status | Evidence level |
 |-------------|--------------|----------------|
 | Not trusted | **Eligible** or **enforced** depending on other gates; never automatically proved | Compiler-enforced (+ separately attached proof evidence where present) |
 | `trusted fn` (functions and methods) | **Trusted assumption** — the code is outside the proof model; correctness depends on audit | Compiler-reported |
-| `trusted extern fn` | **Trusted assumption** — audited pure foreign binding; stronger than untrusted extern but still not verified | Compiler-reported |
+| `trusted extern fn` | **Trusted assumption** — audited foreign binding ([FFI-9](../spec/ffi.md#FFI-9)); stronger than untrusted extern but still not verified | Compiler-reported |
 | Caller of trusted code | **Enforced** — callers see a safe signature; the trust boundary is contained at the declaration site | Compiler-enforced |
 
 **Where functional ProofCore extraction stops:** At the `trusted` marker. A
 trusted function is ineligible regardless of whether it has an empty capability
 set, because its pointer-level behavior is outside the model. A trusted METHOD
 (declared `trusted fn` inside an impl, recorded as `trustedImplOrigin`) is excluded the
-same way; an impl block confers no trust (bug 189).
+same way; an impl block confers no trust ([TRUST-5](../spec/trusted.md#TRUST-5), bug 189).
 
 **What the compiler still guarantees:**
-- Linearity is not relaxed inside trusted code. Linear values follow ownership rules everywhere.
+- Linearity is not relaxed inside trusted code ([TRUST-12](../spec/trusted.md#TRUST-12)).
 - Capability discipline applies inside trusted code. `trusted` does not suppress capability requirements.
 - The `trusted` boundary is contained: callers of trusted code see a normal safe signature and are not themselves excluded from proofs (unless they have other disqualifying properties).
 - `--report unsafe` shows exactly which functions are trusted, what operations they contain, and what extern calls they wrap.
@@ -300,7 +300,7 @@ claim.
 
 ### Trusted code wrapping FFI
 
-The standard pattern is: `extern fn` (requires `Unsafe`) → `trusted fn` wrapper (audited, declares specific capabilities) → safe caller (sees only the declared capabilities). The trust boundary is contained at the wrapper. See [FFI.md](../platform/FFI.md) for wrapper patterns.
+The standard pattern is: `extern fn` (requires `Unsafe` outside a `trusted` body) → `trusted fn` wrapper (audited, declares specific capabilities) → safe caller (sees only the declared capabilities). The trust boundary is contained at the wrapper. See [FFI.md](../platform/FFI.md) for wrapper patterns.
 
 ### Proof-eligible code inside a larger program
 
@@ -367,7 +367,7 @@ A function is either proof-eligible or not. There is no mechanism to prove a pro
 
 ### `trusted extern fn` is audited, not verified
 
-`trusted extern fn` allows calling a foreign function without `with(Unsafe)`, based on the programmer's assertion that the binding is pure. The compiler does not verify this assertion. If the foreign function has side effects or is not safe, the trust boundary is violated silently.
+A `trusted extern fn` is callable without `Unsafe` on its author's assertion, which the compiler does not verify ([FFI-9](../spec/ffi.md#FFI-9)). If the foreign function has an undeclared effect or is not safe for some argument, the trust boundary is violated silently.
 
 ---
 

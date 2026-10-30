@@ -1,12 +1,15 @@
 # Open Owner Decisions
 
-This chapter lists the language questions that only the project owner decides: OD1 to OD114 of
+This chapter lists the language questions that only the project owner decides: OD1 to OD121 of
 [ROADMAP.md](../../ROADMAP.md#owner-decisions) (exit 2n for OD1 to OD32, exit 2q for the rest). Each entry states the question and encodes
 no answer. The rules it bears on are named in its rationale, together with what current main does,
 which stays provisional until the owner answers. The answer, when given, is recorded in ROADMAP and
 turns the entry into the rules it decides; until then no agent picks a side
 ([AGENTS.md](../project/AGENTS.md#rules)). OD1 to OD22 were answered on 2026-10-29 and are listed under
-Decided; OD23 to OD32 were decided the same day; OPEN-33 to OPEN-46 and OPEN-48 to OPEN-51, raised while recording them, are open, and so are OPEN-52 to OPEN-91, allocated on 2026-10-30 for that day's owner picks, OPEN-92, OPEN-93 and OPEN-95 to OPEN-103, raised the same day while absorbing the last docs/language documents, OPEN-104 and OPEN-105, raised the same day by the review of the loop rules, and OPEN-106 to OPEN-114, raised the same day by the Codex and Kimi review of the absorption. OPEN-94 was withdrawn the same day: MOD-1 already refuses the name it asked about (bug 337).
+Decided; OD23 to OD32 were decided the same day. The entries below, OPEN-33 onward, are open:
+raised while recording those answers, allocated for the owner picks of 2026-10-30, or raised since by the
+absorption and its reviews; OD47 is decided and OPEN-94 was withdrawn (MOD-1 already refuses its case, bug 337).
+The table below lists them in reading order.
 
 ## Decisions to be made, in order
 
@@ -100,6 +103,26 @@ them); they are not separate entries here
 | 78 | [OPEN-112](#OPEN-112) | absorption review | Mutation through a shared reference | not checked | none given (raised by the review of the absorption) | not assessed | — |
 | 79 | [OPEN-113](#OPEN-113) | absorption review | The ownership exceptions of trusted code | not checked | none given (raised by the review of the absorption) | not assessed | — |
 | 80 | [OPEN-114](#OPEN-114) | absorption review | How integer division rounds | not checked | none given (raised by the review of the absorption) | not assessed | — |
+
+| 81 | [OPEN-94](#OPEN-94) | absorption | Names in `with(...)` that are not capabilities | not checked | none given (raised while absorbing CALLABLE_VALUES and HANDLE_CAPABILITIES) | not assessed | — |
+| 82 | [OPEN-95](#OPEN-95) | absorption | What `Time`, `Env`, `Process` and `Alloc` mean | not checked | none given (raised while absorbing CALLABLE_VALUES and HANDLE_CAPABILITIES) | not assessed | — |
+| 83 | [OPEN-96](#OPEN-96) | absorption | Two foreign bindings of one C symbol | not checked | none given (raised while absorbing CALLABLE_VALUES and HANDLE_CAPABILITIES) | not assessed | — |
+| 84 | [OPEN-97](#OPEN-97) | absorption | A build profile that omits or demands an overflow check | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
+| 85 | [OPEN-98](#OPEN-98) | absorption | Pointer and reference conversions written with `as` | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
+| 86 | [OPEN-99](#OPEN-99) | absorption | The names of the named conversions | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
+| 87 | [OPEN-100](#OPEN-100) | absorption | Comparisons on a type parameter | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
+| 88 | [OPEN-101](#OPEN-101) | absorption | What a trap writes | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
+| 89 | [OPEN-102](#OPEN-102) | absorption | `Float32` and `Char` as type spellings | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
+| 90 | [OPEN-103](#OPEN-103) | absorption | `as` applied to a reference | not checked | none given (raised while absorbing MEMORY_SEMANTICS) | not assessed | — |
+| 91 | [OPEN-104](#OPEN-104) | s7 review | A `#[variant]` written on a counted loop | not applicable | none given | neutral | — |
+| 92 | [OPEN-105](#OPEN-105) | s7 review | Where a counted loop's `#[invariant]` is checked | not applicable | none given | (b) needs requirement 2 | — |
+| 93 | [OPEN-115](#OPEN-115) | absorption | The body and totality of a specification function | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
+| 94 | [OPEN-116](#OPEN-116) | absorption | A checked total function category | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
+| 95 | [OPEN-117](#OPEN-117) | absorption | `old`, quantifiers and implication in contracts | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
+| 96 | [OPEN-118](#OPEN-118) | absorption | A proven run-time violation in trusted code | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
+| 97 | [OPEN-119](#OPEN-119) | absorption | Buffered output when the process aborts | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
+| 98 | [OPEN-120](#OPEN-120) | absorption | A vacuous contract | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
+| 99 | [OPEN-121](#OPEN-121) | absorption | Projections from a base that is not a traceable place | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
 
 <a id="OPEN-33"></a>
 ### OPEN-33. Inline submodules under one file per module
@@ -1409,6 +1432,118 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Evidence: open
 
 **Rationale.** Bears on ARITH-3, ARITH-8. Current main: the quotient is truncated toward zero and a nonzero remainder has the sign of the dividend, as C99 and LLVM's `sdiv` and `srem` give (`-7 / 2` is `-3`, `-7 % 2` is `-1`, `7 % -2` is `1`), in the binary, the interpreter and the constant folder (`IntArith.evalIntBinOp`). The archived [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md) states when division aborts (§5) but not how it rounds. Options: (a) truncation toward zero, as main; (b) floored division, the remainder taking the divisor's sign; (c) Euclidean division, the remainder never negative. Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
+
+<a id="OPEN-115"></a>
+### OPEN-115. The body and totality of a specification function
+
+**OPEN-115@1.** Whether a `spec fn` may be declared without a body, and whether its body must be shown total, is an open owner decision (OD115).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD115
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on CON-3, CON-5, CON-1. Current main: both `spec fn big(x: Int) -> bool;` and `spec fn big(x: Int) -> bool = x > 10;` are accepted, and so is a recursive body that never terminates (`spec fn loopy(x: Int) -> bool = loopy(x + 1);`), with no check. [CONTRACTS_GUIDE.md](../verification/CONTRACTS_GUIDE.md) calls a `spec fn` "an erased mathematical specification, no body"; contracts.md's examples (CON-3) give it a body; [CONTRACTS_AND_VCS.md](../verification/CONTRACTS_AND_VCS.md) (Soundness Bridge) requires it to be total. Options: (a) a body is required and must be total (structural recursion or a checked measure); (b) a body is optional, a body-less one an uninterpreted function a proof must constrain, and a body must be total; (c) as main, no totality check. Austral: not applicable. Pick: none given (raised by the absorption of docs/verification, 2026-10-30).
+
+<a id="OPEN-116"></a>
+### OPEN-116. A checked total function category
+
+**OPEN-116@1.** Whether the language has a `total fn` category, a runtime function checked to terminate without trapping that contracts may then call, is an open owner decision (OD116).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD116
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on CON-1, CON-3, CON-5. Current main: there is no such category (`total fn f(..)` is a parse error, E0001); a contract clause may still call a capability-free runtime function until CON-3's judgment lands. [CONTRACTS_AND_VCS.md](../verification/CONTRACTS_AND_VCS.md) (Design Principles) distinguishes `spec fn`, a checked `total fn`, ordinary and trusted functions, and admits a `total fn` into contracts once its obligations close. Options: (a) add the category; (b) no category: contracts call only `spec fn` (CON-3's full judgment). Austral: not checked. Pick: none given (raised by the absorption of docs/verification, 2026-10-30).
+
+<a id="OPEN-117"></a>
+### OPEN-117. `old`, quantifiers and implication in contracts
+
+**OPEN-117@1.** Whether contract expressions gain `old(x)`, quantifiers and an implication or equivalence operator, and with what syntax, is an open owner decision (OD117).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD117
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on CON-2, CON-3, SYN-1. Current main: `#[ensures(result == old(x))]` compiles and runs, and `--report contracts` marks the clause `invalid_contract_expression` (unknown function `old`); `forall i: Int, ...` is a parse error (E0001); there is no implication operator. [CONTRACTS_AND_VCS.md](../verification/CONTRACTS_AND_VCS.md) (Contract Expression V1) lists all three as deferred. Options: (a) add each, with a syntax decided per form; (b) keep them out, a claim needing one being a Lean theorem; (c) refuse `old(..)` now as an unknown name, deciding the rest later. Austral: not checked. Pick: none given (raised by the absorption of docs/verification, 2026-10-30).
+
+<a id="OPEN-118"></a>
+### OPEN-118. A proven run-time violation in trusted code
+
+**OPEN-118@1.** Whether an index the compiler proves out of bounds, or a division it proves to be by zero, is refused in `trusted` and `with(Unsafe)` code as in safe code is an open owner decision (OD118).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD118
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on MEM-6, ARITH-3, TRUST-5, TRUST-12. Current main: `a[5]` on a `[Int; 3]`, or `x / 0`, is refused in safe code (E0900, `error[runtime-safety]`) and compiles in a `trusted fn` (the index also in a function declaring `Unsafe`), where it aborts at run time on both consumers. MEM-6 states the refusal with no exemption; [KNOWN_HOLES.md](../verification/KNOWN_HOLES.md) C7 records the exemption as intended. Options: (a) refuse everywhere, as MEM-6 reads; (b) keep the exemption and state it in MEM-6. Austral: not checked. Pick: none given (raised by the absorption of docs/verification, 2026-10-30).
+
+<a id="OPEN-119"></a>
+### OPEN-119. Buffered output when the process aborts
+
+**OPEN-119@1.** Whether output the program wrote before a trap or abort is flushed before the process ends is an open owner decision (OD119).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD119
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on STMT-1, STMT-2, PASS-13, OPEN-101. Current main: print builtins write through C's buffered stdio, and `abort` does not flush it on glibc (a binary that prints `hello` and then traps prints nothing on Linux) while it does on Darwin; the interpreter models the same buffer and the same platform difference. STMT-2 says a failure ends the process at once and is silent on output already written, so the observable trace of a trapping program differs by platform. Recorded by [INTERPRETER_TRUST.md](../verification/INTERPRETER_TRUST.md) §2. Options: (a) everything written before the trap is output (flush on abort, or unbuffered output); (b) what was written is unspecified on a trap, and PASS-13 compares output only for exiting runs. Austral: not checked. Pick: none given (raised by the absorption of docs/verification, 2026-10-30).
+
+<a id="OPEN-120"></a>
+### OPEN-120. A vacuous contract
+
+**OPEN-120@1.** Whether a contract whose precondition is unsatisfiable is refused by the language or only reported, under a project policy, is an open owner decision (OD120).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD120
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on CON-1, CON-2. Current main: `#[requires(x > 5 && x < 3)]` compiles; a decided-unsatisfiable precondition makes the claim `vacuous`, never `proved`, and E0613 refuses it only under the `forbid-vacuous` policy (`Concrete.Policy`), not in a plain build. [CONTRACTS_AND_VCS.md](../verification/CONTRACTS_AND_VCS.md) (Soundness Bridge) states the reporting rule. Options: (a) a language refusal in every build; (b) tooling only: always reported `vacuous`, refused under a policy, as main. Austral: not checked. Pick: none given (raised by the absorption of docs/verification, 2026-10-30).
+
+<a id="OPEN-121"></a>
+### OPEN-121. Projections from a base that is not a traceable place
+
+**OPEN-121@1.** Whether a field access, index or `*` whose base is not a traceable place (an `if` or `match` value, `**r`, a reference read out of storage) is refused, or accepted once the checker can trace it, is an open owner decision (OD121).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD121
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on REF-5, MEM-4, MEM-8, TYPE-7. Current main: refused (E0238, `untraceablePlace`), whether the projection reads a Copy value or forms a reference: `(if c { a } else { b }).f`, `(**r).f`, `*w.r`. No entry states the refusal: REF-5 forbids a branch value or a stored reference as a reference's root, and MEM-4, MEM-8 and TYPE-7 do not restrict a projection's base. [KNOWN_HOLES.md](../verification/KNOWN_HOLES.md) H28 calls it a deliberate restriction until R-0499's checker on Core. Options: (a) state the restriction as a rule (a projection's base is a place: a binding, its fields and elements, or `*` of a named reference); (b) accept such projections of owned values and Copy reads once the checker traces them, refusing only what REF-5 refuses. Austral: not checked. Pick: none given (raised by the absorption of docs/verification, 2026-10-30).
 
 ## Decided
 

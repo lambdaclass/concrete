@@ -26,6 +26,8 @@ contract only after effect freedom, termination, trap obligations, logical
 interpretation, and partial-operation preconditions close. Ordinary,
 diverging, trapping, capability-bearing, or trusted executable functions do
 not become mathematical definitions merely because their syntax is accepted.
+The language has no `total fn` today; whether it gains one is
+[OPEN-116](../spec/decisions.md#OPEN-116), and a contract expression is specified by [CON-3](../spec/contracts.md#CON-3).
 
 1. Contracts live in source.
 2. Contracts create obligations; they are not guarantees by themselves.
@@ -41,7 +43,7 @@ not become mathematical definitions merely because their syntax is accepted.
    `bv_decide`), external SMT only when needed and always as a louder,
    distinct class. See [PROOF_LADDER.md](PROOF_LADDER.md) for the tiers and
    evidence classes.
-10. `assume` is a controlled trapdoor: it taints its obligation to `assumed`
+10. `assume` is a controlled trapdoor ([CON-6](../spec/contracts.md#CON-6)): it taints its obligation to `assumed`
     (never `proved`), flows into the same audit ledger as `assumptions.toml`,
     and is gate-forbiddable in release.
 11. **Every hypothesis taints its conclusion by the strength of its own
@@ -167,13 +169,16 @@ Trusted and assumed boundaries:
 extern fn sha256_compress(state: &mut [u32; 8], block: &[u8; 64]) with(Unsafe);
 ```
 
-Contracts do not insert runtime checks by default. A `requires` clause creates
-a caller obligation. If Concrete later supports runtime-enforced contracts,
+Contracts never execute, and a `requires` clause is a caller obligation
+([CON-2](../spec/contracts.md#CON-2)); stacked clauses are a conjunction ([CON-8](../spec/contracts.md#CON-8)). If Concrete later supports runtime-enforced contracts,
 they should use distinct syntax such as `#[requires_checked(...)]`.
 
 ## Proposed User-Facing Shape
 
-This section is illustrative. The syntax is not implemented or frozen. Its
+This section is illustrative. The syntax is not implemented or frozen: `#[prove_by]`,
+`#[check_runtime]`, `#[assume(..)]`, `#[trusted(..)]`, `#[assumes]`, `#[decreases]` and `set` are not
+in the grammar, and an unknown attribute is refused ([SYN-1](../spec/syntax.md#SYN-1)). A loop
+measure is written `#[variant]` today ([CON-2](../spec/contracts.md#CON-2)); CON-1 calls the evidence `decreasing`. Its
 purpose is to keep the design honest about what users would write, what
 obligations the compiler would generate, and what `concrete audit` would show.
 
@@ -440,7 +445,9 @@ assumed, open, stale, or blocked.
 
 ## Contract Expression V1
 
-The first contract language should be deliberately small.
+What a contract expression may contain is [CON-3](../spec/contracts.md#CON-3), which is stricter than this earlier
+plan (it calls only specification functions, with mathematical arithmetic). The first contract
+language should be deliberately small.
 
 Allowed in v1:
 
@@ -454,7 +461,7 @@ Allowed in v1:
 - array indexing only when a bounds obligation can be generated
 - named pure predicates that are explicitly admitted
 
-Deferred:
+Deferred (whether the first three are added is [OPEN-117](../spec/decisions.md#OPEN-117)):
 
 - `old(x)`
 - quantifiers
@@ -814,12 +821,12 @@ single unchecked implementation.
 Two semantic details the extraction gets right on purpose, and which the test
 enforces:
 
-- **Division truncates toward zero.** Concrete follows `Int.tdiv`/`Int.tmod` (LLVM
+- **Division truncates toward zero on main today**; the rule is open ([OPEN-114](../spec/decisions.md#OPEN-114)). Concrete follows `Int.tdiv`/`Int.tmod` (LLVM
   `sdiv`/`srem`). Coq's `Z.div`/`Z.modulo` are *flooring* and differ on negatives, so
   the extraction emits `Z.quot`/`Z.rem`. Substituting `Z.div` makes `div_safe`
   disagree at `(-7)/2` — the probe set includes negatives for exactly this reason,
   and a gate assertion locks the distinction.
-- **Fixed-width arithmetic traps.** The interpreter traps on overflow as the compiled
+- **Fixed-width arithmetic traps** ([ARITH-3](../spec/arithmetic.md#ARITH-3)). The interpreter traps on overflow as the compiled
   binary does, while Gallina `Z` is unbounded. Rather than model traps, inputs on
   which the interpreter fails are *skipped*, never counted as agreement.
 
@@ -857,7 +864,8 @@ binding constraint.
 Loops would also need care to avoid *false* disagreements: the interpreter's loop fuel
 is 10,000,000, which cannot be encoded as a Coq unary `nat`, so a smaller Gallina fuel
 would report a semantic mismatch where there is only a bound mismatch. Any loop
-support therefore has to distinguish "fuel exhausted, not compared" from "the two
+support therefore has to distinguish "fuel exhausted, not compared" (an inconclusive result,
+[STMT-1](../spec/statements.md#STMT-1)) from "the two
 evaluators disagree" before it can be trusted.
 
 Two caveats on what the badge means, both checkable:
@@ -922,14 +930,16 @@ the theorems prove the relationships the pipeline relies on:
   `∀ env, pre → post` *is* the contract claim; closing it leaves no gap.
 - **R-23 `vacuous_trivializes` / `vacuous_even_proves_false`** — an unsatisfiable
   precondition makes the postcondition VC hold for *any* `post` (even `False`),
-  so a vacuous contract is reported `vacuous`, never `proved` (E0613).
+  so a vacuous contract is reported `vacuous`, never `proved` (E0613 under the `forbid-vacuous`
+  policy; whether vacuity is a language refusal is [OPEN-120](../spec/decisions.md#OPEN-120)).
 - **R-24 `add_requires_strengthens` / `add_requires_can_break`** and
   **R-25 `drop_ensures_compatible` / `drop_ensures_loses_guarantee`** — justify
   the `concrete diff` contract-drift classification: a `requires` conjunct added,
   or an `ensures` conjunct dropped, is a breaking change.
-- **R-26 `spec_total`** — a `spec fn` is modeled as a total Lean function.
+- **R-26 `spec_total`** — a `spec fn` is modeled as a total Lean function. A `spec fn` is erased
+  ([CON-5](../spec/contracts.md#CON-5)); whether the language requires it to be total is [OPEN-115](../spec/decisions.md#OPEN-115).
 - **R-27 `Clause.evalConst_sound` / `const_false_unsat`** — the constant folder
-  (vacuity constant tier, `assert(...)` VIOLATION detector) agrees with the real
+  (vacuity constant tier, `assert(...)` VIOLATION detector, [CON-6](../spec/contracts.md#CON-6)) agrees with the real
   semantics in every environment, so a `some false` verdict is genuinely
   unsatisfiable, never a false alarm.
 - **R-28** — source proof links carrying the same claim class as their registry

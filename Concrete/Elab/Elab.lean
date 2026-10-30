@@ -1976,6 +1976,7 @@ partial def elabCallEv (fnName : String) (typeArgs : List Ty) (args : List Expr)
        | none    => Proof.evUnresolvedCall "call: name has no CallableId")
   | none => throwElab (.undeclaredFunction fnName) span
 
+-- spec: CON-6 (docs/spec/contracts.md; this declaration enforces the rule)
 partial def elabStmtEv (stmt : Stmt) : ElabM ElaboratedStmtV2 := do
   match stmt with
   | .letDecl letSp name mutable ty value isGhost =>
@@ -2905,6 +2906,7 @@ def summaryEntityTypes (d : FileSummary) (sym : String) (withTypes : Bool := tru
     ++ (d.newtypes.filter (·.name == sym)).map (fun nt =>
        (s!"newtype '{nt.name}'", [nt.innerTy], nt.typeParams)))
 
+-- spec: CON-5 (docs/spec/contracts.md; this declaration enforces the rule)
 partial def elabModule (m : Module) (summary : FileSummary)
     (imports : ResolvedImports := {})
     (summaryTable : List (String × FileSummary) := [])

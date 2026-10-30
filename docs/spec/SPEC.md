@@ -51,6 +51,7 @@ the first chapter.
   - [TYPE-19. The primitive numeric types](#TYPE-19)
   - [TYPE-20. A `char` is one byte](#TYPE-20)
   - [TYPE-21. A newtype has its inner type's representation](#TYPE-21)
+  - [TYPE-22. A constant is evaluated where it is used](#TYPE-22)
 - [Arithmetic](#ch-arithmetic)
   - [ARITH-1. Floating point is IEEE-754 with round-to-nearest-even](#ARITH-1)
   - [ARITH-2. An integer literal fits its type](#ARITH-2)
@@ -63,6 +64,7 @@ the first chapter.
   - [ARITH-9. No ambient arithmetic mode](#ARITH-9)
   - [ARITH-10. The named conversions' results](#ARITH-10)
   - [ARITH-11. The named float conversions round as stated](#ARITH-11)
+  - [ARITH-12. Float remainder](#ARITH-12)
 - [Statements, Expressions and Execution](#ch-statements)
   - [STMT-1. Exit, abort and divergence are distinct behaviours](#STMT-1)
   - [STMT-2. Failure is abort only](#STMT-2)
@@ -106,6 +108,7 @@ the first chapter.
   - [OWN-14. A `Copy` declaration has only Copy fields](#OWN-14)
   - [OWN-15. Every surface form has one value-flow behaviour](#OWN-15)
   - [OWN-16. A borrow given to a deferred call lives until the call runs](#OWN-16)
+  - [OWN-17. A deferred call's result is dropped](#OWN-17)
 - [References](#ch-references)
   - [REF-D1. Contains a reference](#REF-D1)
   - [REF-D2. Holds a reference](#REF-D2)
@@ -132,6 +135,8 @@ the first chapter.
   - [MEM-4. Field access dereferences at most one reference](#MEM-4)
   - [MEM-5. A `Heap` value owns one heap cell](#MEM-5)
   - [MEM-6. An array index is checked](#MEM-6)
+  - [MEM-7. The heap builtins require `Alloc`](#MEM-7)
+  - [MEM-8. Indexing dereferences at most one reference](#MEM-8)
 - [Traits](#ch-traits)
   - [TRAIT-D1. Impl target](#TRAIT-D1)
   - [TRAIT-1. One impl of a trait per type](#TRAIT-1)
@@ -149,6 +154,10 @@ the first chapter.
   - [CON-2. What `requires`, `ensures`, `invariant` and `variant` claim](#CON-2)
   - [CON-3. A contract expression is a pure specification](#CON-3)
   - [CON-4. Ghost code stays out of runtime code](#CON-4)
+  - [CON-5. A specification function is erased](#CON-5)
+  - [CON-6. What `assert` and `assume` claim](#CON-6)
+  - [CON-7. `result` is bound only in a postcondition](#CON-7)
+  - [CON-8. Stacked clauses are a conjunction](#CON-8)
 - [Trusted Code and Raw Pointers](#ch-trusted)
   - [TRUST-D1. What a capability means](#TRUST-D1)
   - [TRUST-1. Pointer arithmetic and address exposure are named operations](#TRUST-1)
@@ -163,6 +172,7 @@ the first chapter.
   - [TRUST-10. Handlers and callbacks hold only the tokens they are given](#TRUST-10)
   - [TRUST-11. A raw store neither reads nor destroys the old contents](#TRUST-11)
   - [TRUST-12. Trusted code keeps the move, cleanup and freeze rules](#TRUST-12)
+  - [TRUST-13. Taking a reference's address is safe](#TRUST-13)
 - [Foreign Functions](#ch-ffi)
   - [FFI-1. A foreign function is only called directly](#FFI-1)
   - [FFI-2. One Layout authority for AAPCS64](#FFI-2)
@@ -172,6 +182,7 @@ the first chapter.
   - [FFI-6. A compiler intrinsic is not a foreign binding](#FFI-6)
   - [FFI-7. Layout is unspecified unless a `repr` fixes it](#FFI-7)
   - [FFI-8. What `repr(C)` and `repr(packed)` promise](#FFI-8)
+  - [FFI-9. What `trusted extern fn` asserts](#FFI-9)
 - [Pipeline Preservation](#ch-pipeline)
   - [PASS-1. Specialization preserves meaning](#PASS-1)
   - [PASS-2. Binder modes are fixed before specialization](#PASS-2)
@@ -267,6 +278,13 @@ the first chapter.
   - [OPEN-112. Mutation through a shared reference](#OPEN-112)
   - [OPEN-113. The ownership exceptions of trusted code](#OPEN-113)
   - [OPEN-114. How integer division rounds](#OPEN-114)
+  - [OPEN-115. The body and totality of a specification function](#OPEN-115)
+  - [OPEN-116. A checked total function category](#OPEN-116)
+  - [OPEN-117. `old`, quantifiers and implication in contracts](#OPEN-117)
+  - [OPEN-118. A proven run-time violation in trusted code](#OPEN-118)
+  - [OPEN-119. Buffered output when the process aborts](#OPEN-119)
+  - [OPEN-120. A vacuous contract](#OPEN-120)
+  - [OPEN-121. Projections from a base that is not a traceable place](#OPEN-121)
 
 <a id="ch-overview"></a>
 ## Overview
@@ -2639,6 +2657,41 @@ fn main() -> Int {
     let w: W = W { a: 1, m: Meters(40) };
     let m: Meters = grow(w.m);
     return m.0 + (w.a as Int);
+```
+
+<a id="TYPE-22"></a>
+#### TYPE-22. A constant is evaluated where it is used
+
+**TYPE-22@1.** A module constant's initializer is evaluated at each use of the constant, in a scope of its own that sees no local of the using function, and never at program start, so the initializer of a constant that is not used never runs.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.lowerExpr, Concrete.Interp.evalExpr
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** A constant has no storage: the binary inlines its initializer at each use and the
+interpreter evaluates it there, so a trap in an initializer (ARITH-3) happens at the use. A constant
+is immutable and holds no capability or token (TRUST-8). Absorbed from
+[INTERPRETER_TRUST.md](../verification/INTERPRETER_TRUST.md) §2.
+
+```con accept name=unused-constant-never-runs exit=42
+const BIG: i32 = 2147483647 + 1;
+
+fn main() -> Int {
+    return 42;
+}
+```
+
+```con abort name=constant-traps-at-use trap=overflow
+const BIG: i32 = 2147483647 + 1;
+
+fn main() -> Int {
+    let x: i32 = BIG;
+    return x as Int;
 }
 ```
 
@@ -2814,7 +2867,7 @@ fn main() -> Int {
 the case C leaves undefined. Concrete never emits LLVM's `nsw` or `nuw`: checked operations use
 the overflow intrinsics and branch to an abort helper. This holds in every profile; a profile
 changes reports, never code generation (whether a profile may omit a check is OPEN-97). The
-results of a shift, a division and a remainder that do not abort are ARITH-8. Constant folding may refuse an operation it proves always overflows (E0900),
+fill of a right shift that does not abort is ARITH-8; how a division rounds and a remainder's sign are OPEN-114. Constant folding may refuse an operation it proves always overflows (E0900),
 but it does not see every such operation, so the run-time trap is the guarantee. Array bounds are
 checked the same way, an index out of bounds aborting.
 
@@ -3167,6 +3220,35 @@ aborts on NaN, an infinity or a value out of range. Whether a rounding operation
 error for those inputs, and which value, is OPEN-107. None of these exists on main yet (R-0500);
 The conversion functions are not named yet (OPEN-99), so this entry has no example until they are.
 
+<a id="ARITH-12"></a>
+#### ARITH-12. Float remainder
+
+**ARITH-12@1.** `x % y` on floats is C's `fmod(x, y)`: the exact value `x - n * y` for the integer `n` that is `x / y` truncated toward zero, which has the sign of `x`, and NaN when `y` is zero or `x` is infinite or either is NaN.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.Interp.floatRem, Concrete.Pipeline.emit
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** It is LLVM's `frem`, which the binary emits, and the interpreter computes the same
+value. Unlike IEEE 754's `remainder`, it truncates rather than rounding the quotient to nearest.
+Absorbed from [INTERPRETER_TRUST.md](../verification/INTERPRETER_TRUST.md) §2.
+
+```con accept name=float-remainder exit=42
+fn main() -> Int {
+    let a: f64 = -7.5;
+    let b: f64 = 2.0;
+    let r: f64 = a % b;
+    if r == -1.5 {
+        return 42;
+    }
+    return 1;
+}
+```
 
 
 <a id="ch-statements"></a>
@@ -5152,6 +5234,19 @@ fn main() -> Int {
 }
 ```
 
+```con reject name=defer-drops-linear code=E0287 stage=check pair=account-for-it
+struct R { v: Int }
+
+fn mk() -> R {
+    return R { v: 1 };
+}
+
+fn main() -> Int {
+    defer mk();
+    return 42;
+}
+```
+
 ```con accept name=account-for-it exit=42
 struct R { v: Int }
 
@@ -5918,6 +6013,39 @@ fn main() -> Int {
         defer log(&mut x);
     }
     return x;
+}
+```
+
+<a id="OWN-17"></a>
+#### OWN-17. A deferred call's result is dropped
+
+**OWN-17@1.** The value a deferred call returns is dropped when the call runs, so a `defer` whose call returns a linear value is refused as a discard of that value (OWN-5).
+
+- Kind: guarantee
+- Uses: OWN-D1
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.checkStmt
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** OWN-12 says which call a `defer` registers, not what happens to its result: nothing
+can receive it, so a linear one would be lost. The refusal is OWN-5's E0287 (example
+`defer-drops-linear` there). A Copy result is dropped without `discard`. Absorbed from
+[KNOWN_HOLES.md](../verification/KNOWN_HOLES.md) H6.
+
+```con accept name=defer-unit-call exit=42
+struct R { v: Int }
+
+fn release(r: R) {
+    let R { v } = r;
+}
+
+fn main() -> Int {
+    let r: R = R { v: 1 };
+    defer release(r);
+    return 42;
 }
 ```
 
@@ -7140,7 +7268,8 @@ pending until a gate checks that and the Core semantics defines loan lifetimes (
 Safe code owns memory through bindings and `Heap<T>` values and reaches other storage only through
 references (the references chapter). Every local binding has an ownership state (MEM-D1). This
 chapter covers initialization (MEM-3), field access through
-references and heap shells (MEM-4), heap ownership (MEM-5), array bounds (MEM-6) and the two
+references and heap shells (MEM-4), heap ownership (MEM-5) and its capability (MEM-7), array bounds (MEM-6), indexing through a
+reference (MEM-8) and the two
 layers of the memory model the Core semantics defines (MEM-1, MEM-2, pending). The checker
 tracks whole owners: a borrow freezes its whole root (REF-8, REF-11), with no field- or
 element-granular borrows. The design records are [MEMORY_SEMANTICS.md](../archive/design-records/MEMORY_SEMANTICS.md)
@@ -7347,6 +7476,74 @@ fn main() -> Int {
     let mut i: Int = 0;
     i = i + 5;
     return a[i];
+}
+```
+
+<a id="MEM-7"></a>
+#### MEM-7. The heap builtins require `Alloc`
+
+**MEM-7@1.** `alloc`, `free`, the move-out `*h` of an owned `Heap`, `vec_new`, `vec_push`, `vec_pop`, `vec_free`, `string_reserve` and `append` require the `Alloc` capability.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.IntrinsicId.capability, Concrete.ccCheckExpr
+- Semantics: none
+- Obligation: capability containment over the call graph after specialization (R-0499, R-0510)
+- Evidence: tested
+
+**Rationale.** Allocation is an effect a signature shows. A function that calls one of these builtins
+without `Alloc` in its `with(...)` set is refused by TRUST-4 (E0520). A field access through a
+reference to a heap shell is not a move-out and needs no capability (MEM-4). Absorbed from
+[EFFECT_PROOF_BOUNDARIES.md](../verification/EFFECT_PROOF_BOUNDARIES.md) §2.
+
+```con accept name=alloc-declares-alloc exit=42
+struct Copy B { v: Int }
+
+fn make(v: Int) with(Alloc) -> Heap<B> {
+    return alloc(B { v: v });
+}
+
+fn main() with(Alloc) -> Int {
+    let h: Heap<B> = make(42);
+    let b: B = free(h);
+    return b.v;
+}
+```
+
+<a id="MEM-8"></a>
+#### MEM-8. Indexing dereferences at most one reference
+
+**MEM-8@1.** An index `a[i]`, read or written, whose base `a` is a `&[T; N]` or `&mut [T; N]` indexes the array the reference refers to, dereferencing that one reference.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.checkExprCore, Concrete.ccCheckExpr
+- Semantics: none
+- Obligation: one place representation in every consumer (R-0501, R-0504)
+- Evidence: tested
+
+**Rationale.** This is MEM-4's one-hop rule for an index: the place is the array behind the
+reference, bounds-checked as MEM-6 states, and a write through `&mut [T; N]` writes the caller's
+array (REF-13). TYPE-7's "only an array is indexed" is read with this one dereference. Absorbed
+from [KNOWN_HOLES.md](../verification/KNOWN_HOLES.md) C10.
+
+```con accept name=index-through-reference exit=42
+fn get(a: &[Int; 3]) -> Int {
+    return a[1];
+}
+
+fn set(a: &mut [Int; 3]) {
+    a[2] = 38;
+}
+
+fn main() -> Int {
+    let mut arr: [Int; 3] = [1, 2, 3];
+    set(&mut arr);
+    return get(&arr) + arr[2] + 2;
 }
 ```
 
@@ -7888,7 +8085,8 @@ obligations with stable identities and attaches evidence to each (proved by a Le
 kernel decision procedure, assumed, or still open). Contracts and ghost code are erased before code
 generation and never change what the program does. This chapter states what a contract means
 (CON-1, CON-2), what a contract expression may contain (CON-3, pending its specification
-judgment) and how ghost code is kept apart from runtime code (CON-4). How obligations are
+judgment), how ghost code is kept apart from runtime code (CON-4), specification functions (CON-5),
+`assert` and `assume` (CON-6), the scope of `result` (CON-7) and stacked clauses (CON-8). How obligations are
 discharged and reported is the verification documentation:
 [CONTRACTS_GUIDE.md](../verification/CONTRACTS_GUIDE.md) (now a usage guide),
 [CONTRACTS_AND_VCS.md](../verification/CONTRACTS_AND_VCS.md) and
@@ -8089,6 +8287,134 @@ fn main() -> Int {
 }
 ```
 
+<a id="CON-5"></a>
+#### CON-5. A specification function is erased
+
+**CON-5@1.** A `spec fn` is erased: no code is generated for it, and it is named only by contract expressions and the bodies of other `spec fn` declarations, never by runtime code.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.elabModule, Concrete.checkModule
+- Semantics: none
+- Obligation: ghost erasure preserves runtime behaviour (R-0496)
+- Evidence: tested
+
+**Rationale.** A specification function is a mathematical description that a claim names, as
+`rotr_spec` names the function `rotr` must compute. Runtime code that names one is refused as an
+unknown name (E0101, MOD-1), since only the contract tables resolve it; a `spec fn` body that calls
+runtime code is E0321 (CON-3). Whether a `spec fn` may be declared without a body, and whether it
+must be total, is OPEN-115: main accepts both a body-less declaration and a recursive body.
+Absorbed from [CONTRACTS_GUIDE.md](../verification/CONTRACTS_GUIDE.md) and
+[CONTRACTS_AND_VCS.md](../verification/CONTRACTS_AND_VCS.md).
+
+```con accept name=spec-fn-in-contract exit=42
+spec fn big(x: Int) -> bool = x > 10;
+
+#[requires(big(x))]
+fn f(x: Int) -> Int {
+    return x;
+}
+
+fn main() -> Int {
+    return f(42);
+}
+```
+
+<a id="CON-6"></a>
+#### CON-6. What `assert` and `assume` claim
+
+**CON-6@1.** `assert e` claims that `e` holds where it is written, an obligation of the function, and `assume e` makes `e` a hypothesis of the obligations after it whose own evidence is `assumed`, never `proved`, and neither statement executes.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.checkStmt, Concrete.elabStmtEv, Concrete.Report.renderAssertAssume
+- Semantics: none
+- Obligation: claims are generated against Core semantics with exact contract identity (R-0473, R-0495)
+- Evidence: tested
+
+**Rationale.** `assume` is a proof-only trapdoor: a claim that leans on it is reported as depending
+on an assumption, never as a clean proof, and a project policy may forbid it. An `assert` that is
+never discharged stays `unproven`, and one whose condition is constant-false is reported as a
+violation; neither stops the program, since both are erased (OWN-11 keeps them from changing
+ownership). Whether the grammar has the two statements is OPEN-79 and OPEN-80. Absorbed from
+[CONTRACTS_AND_VCS.md](../verification/CONTRACTS_AND_VCS.md).
+
+```con accept name=assert-and-assume-are-erased exit=42
+fn f(x: Int) -> Int {
+    assume x > 0;
+    assert x > 0;
+    return x;
+}
+
+fn main() -> Int {
+    return f(42);
+}
+```
+
+<a id="CON-7"></a>
+#### CON-7. `result` is bound only in a postcondition
+
+**CON-7@1.** `result` names the returned value in an `#[ensures]` clause and is bound in no other contract clause, so a `requires`, `invariant` or `variant` that names it names an unknown variable.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.checkModule
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** Only a postcondition is evaluated after a return. A precondition that names `result`
+is refused as an undeclared variable (E0201, MOD-1). Outside contracts `result` is an ordinary
+identifier. Absorbed from [KNOWN_HOLES.md](../verification/KNOWN_HOLES.md) H27.
+
+```con accept name=result-in-ensures exit=42
+#[requires(x > 0)]
+#[ensures(result == x)]
+fn f(x: Int) -> Int {
+    let result: Int = x;
+    return result;
+}
+
+fn main() -> Int {
+    return f(42);
+}
+```
+
+<a id="CON-8"></a>
+#### CON-8. Stacked clauses are a conjunction
+
+**CON-8@1.** Several `#[requires]` clauses on one function, or several `#[invariant]` clauses on one loop, claim their conjunction, each clause becoming an obligation of its own.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.Report.callSiteObligations, Concrete.Report.loopVCGoals
+- Semantics: none
+- Obligation: claims are generated against Core semantics with exact contract identity (R-0473, R-0495)
+- Evidence: tested
+
+**Rationale.** CON-2 states one clause; writing two is the same claim as writing their `&&`, with
+separate identities in the report (`R1`, `R2`). Absorbed from
+[CONTRACTS_AND_VCS.md](../verification/CONTRACTS_AND_VCS.md).
+
+```con accept name=stacked-requires exit=42
+#[requires(x > 0)]
+#[requires(x < 100)]
+fn f(x: Int) -> Int {
+    return x;
+}
+
+fn main() -> Int {
+    return f(42);
+}
+```
 
 
 <a id="ch-trusted"></a>
@@ -8100,8 +8426,8 @@ techniques behind a safe API. **`Unsafe`** is the capability for crossing a fore
 boundary, and a `trusted` body absorbs it. No layer is exempt: compiler builtins, `std` and user
 code follow the same rules. This chapter covers what a capability means (TRUST-D1), raw pointers (TRUST-1, TRUST-3), undefined
 behaviour (TRUST-2), capabilities (TRUST-4), `trusted` (TRUST-5), the trusted-module marker
-(TRUST-6, pending), moving a value out of raw memory (TRUST-7), global state (TRUST-8 to TRUST-10), storing through a raw pointer (TRUST-11) and the
-move, cleanup and freeze rules in trusted code (TRUST-12). Capability sets, capability parameters and the capabilities of function types and
+(TRUST-6, pending), moving a value out of raw memory (TRUST-7) , global state (TRUST-8 to TRUST-10), storing through a raw pointer (TRUST-11), the
+ownership rules in trusted code (TRUST-12) and taking a reference's address (TRUST-13). Capability sets, capability parameters and the capabilities of function types and
 handles (`Sink<cap C>`) are in the types chapter (TYPE-D1, TYPE-15, TYPE-17, TYPE-18); this specification governs them. The design records are [SAFETY.md](../verification/SAFETY.md),
 [CAPABILITY_FACTS.md](../compiler/CAPABILITY_FACTS.md),
 [HANDLE_CAPABILITIES.md](../archive/design-records/HANDLE_CAPABILITIES.md),
@@ -8654,6 +8980,37 @@ fn main() -> Int {
 }
 ```
 
+<a id="TRUST-13"></a>
+#### TRUST-13. Taking a reference's address is safe
+
+**TRUST-13@1.** Converting a reference to a raw pointer requires neither `trusted` nor `Unsafe`, while every use of the pointer that reads, writes or offsets through it does (TRUST-4, TRUST-5).
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.ccCheckExpr
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** The conversion only names an address that a live borrow already denotes; the hazard is
+in using the pointer, and that is gated. Which conversions `as` writes, this one included, is
+OPEN-98, and what such a pointer may do after its borrow ends is OPEN-64. Absorbed from
+[SAFETY.md](../verification/SAFETY.md) ("What trusted permits").
+
+```con accept name=reference-to-pointer-in-safe-code exit=42
+trusted fn rd(p: *const Int) -> Int {
+    return *p;
+}
+
+fn main() -> Int {
+    let x: Int = 42;
+    let p: *const Int = &x as *const Int;
+    return rd(p);
+}
+```
+
 ### Absent by decision
 
 This section is explanatory: it records capability features the language does not have, why, and
@@ -9056,6 +9413,33 @@ mod m {
         }
         return 0;
     }
+```
+
+<a id="FFI-9"></a>
+#### FFI-9. What `trusted extern fn` asserts
+
+**FFI-9@1.** A `trusted extern fn` asserts, as an obligation of its author that the compiler does not check, that the foreign function is safe for every argument its parameter types permit and has no effect beyond those its `with(...)` declares.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.ccCheckExpr
+- Semantics: none
+- Obligation: every trusted operation states its premises (TRUST-2, R-0506, R-0509)
+- Evidence: tested
+
+**Rationale.** The assertion is what makes the binding callable without `Unsafe` (TRUST-5). A
+binding whose safety depends on pointer validity, or that can invalidate a resource another handle
+owns, stays a plain `extern fn`. The effects half is FFI-3: every `extern fn` declares its effects.
+Absorbed from [SAFETY.md](../verification/SAFETY.md), which records the assertion in the trusted
+base ([TRUSTED_COMPUTING_BASE.md](../verification/TRUSTED_COMPUTING_BASE.md) §6).
+
+```con accept name=trusted-extern-without-unsafe exit=42
+trusted extern fn abs(x: i32) with() -> i32;
+
+fn main() -> Int {
+    return abs(-42) as Int;
 }
 ```
 
@@ -9529,13 +9913,16 @@ fn main() -> Int {
 <a id="ch-decisions"></a>
 ## Open Owner Decisions
 
-This chapter lists the language questions that only the project owner decides: OD1 to OD114 of
+This chapter lists the language questions that only the project owner decides: OD1 to OD121 of
 [ROADMAP.md](../../ROADMAP.md#owner-decisions) (exit 2n for OD1 to OD32, exit 2q for the rest). Each entry states the question and encodes
 no answer. The rules it bears on are named in its rationale, together with what current main does,
 which stays provisional until the owner answers. The answer, when given, is recorded in ROADMAP and
 turns the entry into the rules it decides; until then no agent picks a side
 ([AGENTS.md](../project/AGENTS.md#rules)). OD1 to OD22 were answered on 2026-10-29 and are listed under
-Decided; OD23 to OD32 were decided the same day; OPEN-33 to OPEN-46 and OPEN-48 to OPEN-51, raised while recording them, are open, and so are OPEN-52 to OPEN-91, allocated on 2026-10-30 for that day's owner picks, OPEN-92, OPEN-93 and OPEN-95 to OPEN-103, raised the same day while absorbing the last docs/language documents, OPEN-104 and OPEN-105, raised the same day by the review of the loop rules, and OPEN-106 to OPEN-114, raised the same day by the Codex and Kimi review of the absorption. OPEN-94 was withdrawn the same day: MOD-1 already refuses the name it asked about (bug 337).
+Decided; OD23 to OD32 were decided the same day. The entries below, OPEN-33 onward, are open:
+raised while recording those answers, allocated for the owner picks of 2026-10-30, or raised since by the
+absorption and its reviews; OD47 is decided and OPEN-94 was withdrawn (MOD-1 already refuses its case, bug 337).
+The table below lists them in reading order.
 
 ### Decisions to be made, in order
 
@@ -9629,6 +10016,26 @@ them); they are not separate entries here
 | 78 | [OPEN-112](#OPEN-112) | absorption review | Mutation through a shared reference | not checked | none given (raised by the review of the absorption) | not assessed | — |
 | 79 | [OPEN-113](#OPEN-113) | absorption review | The ownership exceptions of trusted code | not checked | none given (raised by the review of the absorption) | not assessed | — |
 | 80 | [OPEN-114](#OPEN-114) | absorption review | How integer division rounds | not checked | none given (raised by the review of the absorption) | not assessed | — |
+
+| 81 | [OPEN-94](#OPEN-94) | absorption | Names in `with(...)` that are not capabilities | not checked | none given (raised while absorbing CALLABLE_VALUES and HANDLE_CAPABILITIES) | not assessed | — |
+| 82 | [OPEN-95](#OPEN-95) | absorption | What `Time`, `Env`, `Process` and `Alloc` mean | not checked | none given (raised while absorbing CALLABLE_VALUES and HANDLE_CAPABILITIES) | not assessed | — |
+| 83 | [OPEN-96](#OPEN-96) | absorption | Two foreign bindings of one C symbol | not checked | none given (raised while absorbing CALLABLE_VALUES and HANDLE_CAPABILITIES) | not assessed | — |
+| 84 | [OPEN-97](#OPEN-97) | absorption | A build profile that omits or demands an overflow check | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
+| 85 | [OPEN-98](#OPEN-98) | absorption | Pointer and reference conversions written with `as` | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
+| 86 | [OPEN-99](#OPEN-99) | absorption | The names of the named conversions | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
+| 87 | [OPEN-100](#OPEN-100) | absorption | Comparisons on a type parameter | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
+| 88 | [OPEN-101](#OPEN-101) | absorption | What a trap writes | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
+| 89 | [OPEN-102](#OPEN-102) | absorption | `Float32` and `Char` as type spellings | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
+| 90 | [OPEN-103](#OPEN-103) | absorption | `as` applied to a reference | not checked | none given (raised while absorbing MEMORY_SEMANTICS) | not assessed | — |
+| 91 | [OPEN-104](#OPEN-104) | s7 review | A `#[variant]` written on a counted loop | not applicable | none given | neutral | — |
+| 92 | [OPEN-105](#OPEN-105) | s7 review | Where a counted loop's `#[invariant]` is checked | not applicable | none given | (b) needs requirement 2 | — |
+| 93 | [OPEN-115](#OPEN-115) | absorption | The body and totality of a specification function | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
+| 94 | [OPEN-116](#OPEN-116) | absorption | A checked total function category | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
+| 95 | [OPEN-117](#OPEN-117) | absorption | `old`, quantifiers and implication in contracts | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
+| 96 | [OPEN-118](#OPEN-118) | absorption | A proven run-time violation in trusted code | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
+| 97 | [OPEN-119](#OPEN-119) | absorption | Buffered output when the process aborts | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
+| 98 | [OPEN-120](#OPEN-120) | absorption | A vacuous contract | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
+| 99 | [OPEN-121](#OPEN-121) | absorption | Projections from a base that is not a traceable place | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
 
 <a id="OPEN-33"></a>
 #### OPEN-33. Inline submodules under one file per module
@@ -10938,6 +11345,118 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Evidence: open
 
 **Rationale.** Bears on ARITH-3, ARITH-8. Current main: the quotient is truncated toward zero and a nonzero remainder has the sign of the dividend, as C99 and LLVM's `sdiv` and `srem` give (`-7 / 2` is `-3`, `-7 % 2` is `-1`, `7 % -2` is `1`), in the binary, the interpreter and the constant folder (`IntArith.evalIntBinOp`). The archived [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md) states when division aborts (§5) but not how it rounds. Options: (a) truncation toward zero, as main; (b) floored division, the remainder taking the divisor's sign; (c) Euclidean division, the remainder never negative. Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
+
+<a id="OPEN-115"></a>
+#### OPEN-115. The body and totality of a specification function
+
+**OPEN-115@1.** Whether a `spec fn` may be declared without a body, and whether its body must be shown total, is an open owner decision (OD115).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD115
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on CON-3, CON-5, CON-1. Current main: both `spec fn big(x: Int) -> bool;` and `spec fn big(x: Int) -> bool = x > 10;` are accepted, and so is a recursive body that never terminates (`spec fn loopy(x: Int) -> bool = loopy(x + 1);`), with no check. [CONTRACTS_GUIDE.md](../verification/CONTRACTS_GUIDE.md) calls a `spec fn` "an erased mathematical specification, no body"; contracts.md's examples (CON-3) give it a body; [CONTRACTS_AND_VCS.md](../verification/CONTRACTS_AND_VCS.md) (Soundness Bridge) requires it to be total. Options: (a) a body is required and must be total (structural recursion or a checked measure); (b) a body is optional, a body-less one an uninterpreted function a proof must constrain, and a body must be total; (c) as main, no totality check. Austral: not applicable. Pick: none given (raised by the absorption of docs/verification, 2026-10-30).
+
+<a id="OPEN-116"></a>
+#### OPEN-116. A checked total function category
+
+**OPEN-116@1.** Whether the language has a `total fn` category, a runtime function checked to terminate without trapping that contracts may then call, is an open owner decision (OD116).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD116
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on CON-1, CON-3, CON-5. Current main: there is no such category (`total fn f(..)` is a parse error, E0001); a contract clause may still call a capability-free runtime function until CON-3's judgment lands. [CONTRACTS_AND_VCS.md](../verification/CONTRACTS_AND_VCS.md) (Design Principles) distinguishes `spec fn`, a checked `total fn`, ordinary and trusted functions, and admits a `total fn` into contracts once its obligations close. Options: (a) add the category; (b) no category: contracts call only `spec fn` (CON-3's full judgment). Austral: not checked. Pick: none given (raised by the absorption of docs/verification, 2026-10-30).
+
+<a id="OPEN-117"></a>
+#### OPEN-117. `old`, quantifiers and implication in contracts
+
+**OPEN-117@1.** Whether contract expressions gain `old(x)`, quantifiers and an implication or equivalence operator, and with what syntax, is an open owner decision (OD117).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD117
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on CON-2, CON-3, SYN-1. Current main: `#[ensures(result == old(x))]` compiles and runs, and `--report contracts` marks the clause `invalid_contract_expression` (unknown function `old`); `forall i: Int, ...` is a parse error (E0001); there is no implication operator. [CONTRACTS_AND_VCS.md](../verification/CONTRACTS_AND_VCS.md) (Contract Expression V1) lists all three as deferred. Options: (a) add each, with a syntax decided per form; (b) keep them out, a claim needing one being a Lean theorem; (c) refuse `old(..)` now as an unknown name, deciding the rest later. Austral: not checked. Pick: none given (raised by the absorption of docs/verification, 2026-10-30).
+
+<a id="OPEN-118"></a>
+#### OPEN-118. A proven run-time violation in trusted code
+
+**OPEN-118@1.** Whether an index the compiler proves out of bounds, or a division it proves to be by zero, is refused in `trusted` and `with(Unsafe)` code as in safe code is an open owner decision (OD118).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD118
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on MEM-6, ARITH-3, TRUST-5, TRUST-12. Current main: `a[5]` on a `[Int; 3]`, or `x / 0`, is refused in safe code (E0900, `error[runtime-safety]`) and compiles in a `trusted fn` (the index also in a function declaring `Unsafe`), where it aborts at run time on both consumers. MEM-6 states the refusal with no exemption; [KNOWN_HOLES.md](../verification/KNOWN_HOLES.md) C7 records the exemption as intended. Options: (a) refuse everywhere, as MEM-6 reads; (b) keep the exemption and state it in MEM-6. Austral: not checked. Pick: none given (raised by the absorption of docs/verification, 2026-10-30).
+
+<a id="OPEN-119"></a>
+#### OPEN-119. Buffered output when the process aborts
+
+**OPEN-119@1.** Whether output the program wrote before a trap or abort is flushed before the process ends is an open owner decision (OD119).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD119
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on STMT-1, STMT-2, PASS-13, OPEN-101. Current main: print builtins write through C's buffered stdio, and `abort` does not flush it on glibc (a binary that prints `hello` and then traps prints nothing on Linux) while it does on Darwin; the interpreter models the same buffer and the same platform difference. STMT-2 says a failure ends the process at once and is silent on output already written, so the observable trace of a trapping program differs by platform. Recorded by [INTERPRETER_TRUST.md](../verification/INTERPRETER_TRUST.md) §2. Options: (a) everything written before the trap is output (flush on abort, or unbuffered output); (b) what was written is unspecified on a trap, and PASS-13 compares output only for exiting runs. Austral: not checked. Pick: none given (raised by the absorption of docs/verification, 2026-10-30).
+
+<a id="OPEN-120"></a>
+#### OPEN-120. A vacuous contract
+
+**OPEN-120@1.** Whether a contract whose precondition is unsatisfiable is refused by the language or only reported, under a project policy, is an open owner decision (OD120).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD120
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on CON-1, CON-2. Current main: `#[requires(x > 5 && x < 3)]` compiles; a decided-unsatisfiable precondition makes the claim `vacuous`, never `proved`, and E0613 refuses it only under the `forbid-vacuous` policy (`Concrete.Policy`), not in a plain build. [CONTRACTS_AND_VCS.md](../verification/CONTRACTS_AND_VCS.md) (Soundness Bridge) states the reporting rule. Options: (a) a language refusal in every build; (b) tooling only: always reported `vacuous`, refused under a policy, as main. Austral: not checked. Pick: none given (raised by the absorption of docs/verification, 2026-10-30).
+
+<a id="OPEN-121"></a>
+#### OPEN-121. Projections from a base that is not a traceable place
+
+**OPEN-121@1.** Whether a field access, index or `*` whose base is not a traceable place (an `if` or `match` value, `**r`, a reference read out of storage) is refused, or accepted once the checker can trace it, is an open owner decision (OD121).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD121
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on REF-5, MEM-4, MEM-8, TYPE-7. Current main: refused (E0238, `untraceablePlace`), whether the projection reads a Copy value or forms a reference: `(if c { a } else { b }).f`, `(**r).f`, `*w.r`. No entry states the refusal: REF-5 forbids a branch value or a stored reference as a reference's root, and MEM-4, MEM-8 and TYPE-7 do not restrict a projection's base. [KNOWN_HOLES.md](../verification/KNOWN_HOLES.md) H28 calls it a deliberate restriction until R-0499's checker on Core. Options: (a) state the restriction as a rule (a projection's base is a place: a binding, its fields and elements, or `*` of a named reference); (b) accept such projections of owned values and Copy reads once the checker traces them, refusing only what REF-5 refuses. Austral: not checked. Pick: none given (raised by the absorption of docs/verification, 2026-10-30).
 
 ### Decided
 

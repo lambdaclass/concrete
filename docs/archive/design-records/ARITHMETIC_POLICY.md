@@ -4,8 +4,8 @@ Archived from docs/language on 2026-10-30: the arithmetic design record (the ove
 profile mapping, report classification, proof boundaries, the cast decision's reasoning, staging and
 history). The rules are in [docs/spec/arithmetic.md](../../spec/arithmetic.md): floats (ARITH-1),
 literals (ARITH-2), checked arithmetic (ARITH-3), wrapping and saturating operations (ARITH-4),
-conversions (ARITH-5), comparison semantics (ARITH-6), shift fill, division rounding and the
-remainder's sign (ARITH-8), no ambient arithmetic mode, `#[overflow_checked]` included (ARITH-9), and
+conversions (ARITH-5), comparison semantics (ARITH-6), shift fill (ARITH-8), division rounding and the
+remainder's sign (OPEN-114), no ambient arithmetic mode, `#[overflow_checked]` included (ARITH-9), and
 the named conversions' results (ARITH-10, pending); the numeric types and their spellings are TYPE-19,
 `char` is TYPE-20, comparison typing is TYPE-6, array bounds are MEM-6 and the abort is STMT-2. Where
 this document and the spec differ, the spec governs.

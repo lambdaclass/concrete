@@ -1385,6 +1385,41 @@ fn main() -> Int {
     let w: W = W { a: 1, m: Meters(40) };
     let m: Meters = grow(w.m);
     return m.0 + (w.a as Int);
+```
+
+<a id="TYPE-22"></a>
+### TYPE-22. A constant is evaluated where it is used
+
+**TYPE-22@1.** A module constant's initializer is evaluated at each use of the constant, in a scope of its own that sees no local of the using function, and never at program start, so the initializer of a constant that is not used never runs.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.lowerExpr, Concrete.Interp.evalExpr
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** A constant has no storage: the binary inlines its initializer at each use and the
+interpreter evaluates it there, so a trap in an initializer (ARITH-3) happens at the use. A constant
+is immutable and holds no capability or token (TRUST-8). Absorbed from
+[INTERPRETER_TRUST.md](../verification/INTERPRETER_TRUST.md) §2.
+
+```con accept name=unused-constant-never-runs exit=42
+const BIG: i32 = 2147483647 + 1;
+
+fn main() -> Int {
+    return 42;
+}
+```
+
+```con abort name=constant-traps-at-use trap=overflow
+const BIG: i32 = 2147483647 + 1;
+
+fn main() -> Int {
+    let x: i32 = BIG;
+    return x as Int;
 }
 ```
 

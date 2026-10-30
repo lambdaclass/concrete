@@ -747,6 +747,7 @@ end
     folds to false, else unproven); each `assume` is `assumed` (trust, not
     proof). A function that contains any `assume` is flagged TAINTED — its
     evidence is not a clean proof. -/
+-- spec: CON-6 (docs/spec/contracts.md; this declaration enforces the rule)
 def renderAssertAssume (modules : List Module) (provedAsserts : List String) : String := Id.run do
   let withAA := (modules.flatMap allFunctions).filterMap fun (pfx, f) =>
     let aa := f.body.flatMap collectAssertAssumeS

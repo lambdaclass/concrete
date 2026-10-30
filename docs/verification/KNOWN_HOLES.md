@@ -35,6 +35,8 @@ checked per-bug states.
 
 ### H29. Checker pins can lag upstream soundness fixes — OPEN (controlled)
 
+**Rule:** none of the language; a tooling boundary of `proved:` evidence.
+
 The external re-check (con-leche, nanoda; `check_external_checker.sh`) uses revisions pinned in
 `scripts/tests/external_checker.pins` so that landings are reproducible. A pinned checker does not
 pick up upstream soundness fixes, and an independent checker protects us only while it is current:
@@ -69,6 +71,8 @@ record: [EXTERNAL_CHECKER.md](EXTERNAL_CHECKER.md).
 
 ### H28. Places are checked by a syntactic normalized-place rule — OPEN (deliberate restriction)
 
+**Rule:** [REF-5](../spec/references.md#REF-5) (how a reference is formed), [REF-6](../spec/references.md#REF-6), [REF-7](../spec/references.md#REF-7), [REF-8](../spec/references.md#REF-8), [REF-3](../spec/references.md#REF-3) and [REF-4](../spec/references.md#REF-4). Whether a field access, index or `*` whose base is not a traceable place is refused is [OPEN-121](../spec/decisions.md#OPEN-121).
+
 Borrows, receivers, reference arguments, reference provenance and the call-overlap check all
 run on ONE syntactic normalization of place expressions (bug 091 round 3,
 [docs/bugs/091](../bugs/091_trait_impl_capabilities_hidden_by_generic_dispatch.md)). The rule
@@ -100,7 +104,8 @@ some valid programs are rejected:
 - writing a reference through a reference (`*slot = &local` with `slot: &mut &Int`), since the
   borrow lands in storage the writer does not own and its source is no longer traced;
 - shadowing a name that a live reference records as its source or parent
-  (`let r = &p; let p = q;`), since provenance and reborrow ancestry are recorded by name;
+  (`let r = &p; let p = q;`); since [SCOPE-1](../spec/scope.md#SCOPE-1) every binder that reuses a visible local's spelling is
+  refused anyway (E0301);
 - any use of a reference binding — read, write, call — while a live exclusive alias of its
   storage that is not its own ancestor exists (no non-lexical lifetimes: a reborrow stays live
   to the end of its scope).
@@ -110,6 +115,8 @@ reference with recorded provenance is treated as the whole root (conservative). 
 row 4, R-0499 (the authoritative checker on Core).
 
 ### H27. Contract validation is name-and-sort only, not type checking — OPEN
+
+**Rule:** [CON-3](../spec/contracts.md#CON-3) (the specification judgment, pending R-0473), [CON-7](../spec/contracts.md#CON-7) (`result` only in an `ensures`) and [SCOPE-1](../spec/scope.md#SCOPE-1).
 
 `Concrete/Check/Check.lean` rejects contracts that name identifiers which do not exist, and
 applies a coarse boolean/integer sort check. That closes the observed defect (an unbound name
@@ -219,16 +226,15 @@ is admitted and `later` reaches the VC. This accepts too much and never too litt
 cause a false rejection; it simply fails to catch a name used before its binding. A gate
 assertion pins the behaviour and is written to flip when scope becomes precise.
 
-**Shadowing is the gap unknown-name rejection cannot close.** A local may shadow a parameter
-(measured), so in
+**Shadowing was the gap unknown-name rejection cannot close.** A local could shadow a parameter, so in
 
 ```
 #[ensures(result == x)]
 fn f(x: i32) -> i32 { let x: i32 = 99; return x; }
 ```
 
-every name resolves, no diagnostic fires, and nothing in the pipeline records *which* `x` the
-contract means.
+every name resolved, no diagnostic fired, and nothing in the pipeline recorded *which* `x` the
+contract meant. Since [SCOPE-1](../spec/scope.md#SCOPE-1) the `let x` is refused at its binder (E0301).
 
 **Contained**: a contract naming a parameter that a local shadows is now rejected at check time.
 The earlier pin asserted only that the postcondition was not discharged — which relied on the
@@ -236,8 +242,8 @@ postcondition path being incomplete, the same safety-by-accident shape as H25. R
 establishes the property where the contract is admitted instead of inheriting it from a later
 stage's narrowness.
 
-The restriction is scoped: shadowing itself stays legal, and only shadowing of a name a contract
-mentions is rejected. Two over-rejection controls hold that line (an unshadowed contract is
+The restriction was scoped: shadowing itself stayed legal then, and only shadowing of a name a contract
+mentioned was rejected; [SCOPE-1](../spec/scope.md#SCOPE-1) now refuses all shadowing. Two over-rejection controls hold that line (an unshadowed contract is
 accepted; shadowing in a function with no contract is accepted), and the corpus was swept before
 turning it on. The real fix is
 [H25](#h25-refinement-substitution-is-by-name-not-by-binding-identity--open-contained)'s stable
@@ -245,6 +251,8 @@ binding identities — the two holes share a root cause: contract expressions ca
 identities.
 
 ### H26. A negative fixture's golden file is coupled to the entire stdlib — CLOSED 2026-08-07
+
+**Rule:** none of the language (test tooling).
 
 `check_phase1_contracts.sh` failed one assertion: `--report contracts` on
 `examples/contract_negatives/assume_taint` listed `sha256.rotr`'s preconditions under **Source
@@ -288,6 +296,8 @@ file containing content nobody had accounted for, and no record that a negative 
 the stdlib.
 
 ### H25. Refinement substitution is by NAME, not by binding identity — OPEN (contained)
+
+**Rule:** the obligation identity of [CON-2](../spec/contracts.md#CON-2), for a `spec fn` ([CON-5](../spec/contracts.md#CON-5)) instantiated at a call site.
 
 **Invariant that must hold:** refinement substitution may act only on expressions whose
 free-variable identities are distinguished from all locally bound identities.
@@ -334,6 +344,8 @@ conditions, reliable loop-state reasoning, call-site contract instantiation, and
 predicates with binders.
 
 ### H24. Obligation generation keeps its own weaker copy of the trap rules — CLOSED 2026-08-03 (R-0464)
+
+**Rule:** [ARITH-3](../spec/arithmetic.md#ARITH-3).
 
 `Concrete.Semantics.IntArith` is the single-source trap semantics: it makes `trap` a
 first-class result and defines checked division as trapping on *divide-by-zero, signed
@@ -411,6 +423,8 @@ The fixture still traps, and should: the inputs are genuinely out of range. R-04
 obligations state that in advance. `check_known_wrong_corpus.sh` asserts the fix.
 
 ### H23. An unproven hypothesis launders into a proved obligation — CLOSED 2026-08-03 (R-0461)
+
+**Rule:** [CON-2](../spec/contracts.md#CON-2) (an obligation is green only with its evidence) and [CON-6](../spec/contracts.md#CON-6) (an assumption taints).
 
 **Was the most severe hole in this file: a guaranteed out-of-bounds access reported
 `proved_by_multi_kernel (3: lean, rocq, isabelle)`.** Closed by R-0461. The fixture stays
@@ -492,6 +506,8 @@ its job. R-0461 fixed the *claim* and the *gate*, not the program.
 
 ### H19. The Core→obligation bridge is unproven — OPEN
 
+**Rule:** the obligations of [CON-2](../spec/contracts.md#CON-2) and [ARITH-3](../spec/arithmetic.md#ARITH-3); the bridge is R-0495's.
+
 Every runtime-safety claim, and every `proved_by_two_kernels` badge, rests on the
 lowering that turns a function body into a proposition (`overflowObligations`,
 `boundsObligations`, `divObligations`, `callSiteObligations`). That lowering has no
@@ -526,6 +542,8 @@ than leaving it to prose.
 
 ### H20. `bv_decide`'s certificate check runs as native code — OPEN
 
+**Rule:** none of the language (trusted evidence, spec README §2.1).
+
 Bit-blasting proofs extend trust to `Lean.ofReduceBool` / `Lean.trustCompiler`,
 because the LRAT certificate checker executes as compiled Lean rather than by kernel
 reduction. Six named theorems in the SHA-256 refinement stack rest on this; the list
@@ -545,6 +563,8 @@ AXIOMS.md records as the reason the extension exists.
 
 ### H21. Nonlinear SMT results cannot be certificate-replayed — OPEN (upstream)
 
+**Rule:** none of the language (solver evidence).
+
 `solver_checked` (kernel corroboration) is the ceiling for nonlinear obligations.
 `solver_replayed` requires reconstructing the solver's proof in a kernel, and
 reconstruction is **linear-only**: z3 4.4.0pre, cvc5 and veriT 2021.06.2 each
@@ -559,6 +579,8 @@ Related roadmap work: R-0451 (port a refutation-certificate checker into code th
 project controls).
 
 ### H22. `check_checked_arith.sh` was decorative — CLOSED 2026-07-31
+
+**Rule:** [ARITH-3](../spec/arithmetic.md#ARITH-3).
 
 The gate-mutation harness reported `checked-arith-trap (SURVIVED — gate stayed green)`:
 replacing the checked-arithmetic call in `Concrete/Backend/EmitSSA.lean` with a plain
@@ -601,6 +623,8 @@ load-bearing.
 
 ### Policy (not a hole): HashMap/HashSet traversal is UNORDERED — permanent
 
+**Rule:** none: a std API contract, not a language rule.
+
 `for_each`/`fold` walk raw slot order: reproducible within a build, NOT a
 public ordering contract (and never will be — insertion-order tracking is a
 deliberate NON-goal; lower memory, no accidental semantic promise).
@@ -610,6 +634,8 @@ with collections phase 2). Deterministic internals remain fine for replay.
 ## Recently closed
 
 ### H18. Collection destruction for named element types — CLOSED 2026-07-16; array remainder (bug 052) fixed 2026-10-18
+
+**Rule:** [OWN-13](../spec/ownership.md#OWN-13) (no implicit destruction, E0584) and [TRAIT-10](../spec/traits.md#TRAIT-10) (what is destroyable, E0241); how an array satisfies `Destroy` is [OPEN-35](../spec/decisions.md#OPEN-35).
 
 All collections now carry compiler drop glue for supported named element types:
 Vec (slice 1), HashMap/HashSet/
@@ -660,6 +686,8 @@ implements that explicit action by recursively destroying live owned parts.
 
 ### H13–H17. The 2026-07-05/06 value-flow discharge sweep — ALL CLOSED 2026-07-06
 
+**Rule:** [OWN-15](../spec/ownership.md#OWN-15) (H13), [OWN-1](../spec/ownership.md#OWN-1) (H14), [OWN-9](../spec/ownership.md#OWN-9) and [TRUST-11](../spec/trusted.md#TRUST-11) (H15), [SCOPE-1](../spec/scope.md#SCOPE-1) (H16), [OWN-2](../spec/ownership.md#OWN-2) (H17).
+
 Five holes found by re-running the H11 read-side audit over every
 *write/discharge* site (~20 targeted probes), disclosed first, then fixed in
 one burn-down. Two were duplications (double-free class), three were leaks
@@ -671,7 +699,8 @@ one burn-down. Two were duplications (double-free class), three were leaks
   and `a` both owned the same value. Fixed: the `.assign` case consumes an
   ident RHS exactly like `let g = b;` / `return b;` (self-assign `a = a`
   stays the rebind case). Reuse after `a = b` is now E0205.
-- **H14 (duplication): `break f;` never consumed the break-value** — the
+- **H14 (duplication): `break f;` never consumed the break-value** (under [STMT-6](../spec/statements.md#STMT-6) `break` carries
+  no value; that is pending bug-331, and main still accepts `break f;`) — the
   loop result and the original both owned it. Fixed: `.break_` consumes an
   ident value (mirroring `return f;`); the value check runs BEFORE the
   skip-unconsumed check so a loop-local moved out via break counts as
@@ -689,9 +718,8 @@ one burn-down. Two were duplications (double-free class), three were leaks
   exit resolves locals by name, so `let f = mk(); let f = mk();` masked the
   first obligation. Fixed at the `let` site (**E0292** `shadowsLiveLinear`):
   shadowing a still-live non-Copy binding rejects; `let s = transform(s);`
-  remains accepted by the current checker (the RHS consumed the old value
-  first). The ratified target language rejects that second binding under
-  R-0435; this H16 entry records the already-closed resource-conservation bug,
+  was accepted then (the RHS consumed the old value first). [SCOPE-1](../spec/scope.md#SCOPE-1) (R-0435)
+  now refuses that second binding too (E0301); this H16 entry records the already-closed resource-conservation bug,
   not the pending auditability rule.
   Bug 094 closed the same hole for destructure binders (which now call the
   same check) and match-arm binders (arm-scoped: consuming one consumed the
@@ -723,7 +751,7 @@ one burn-down. Two were duplications (double-free class), three were leaks
   caller's declared bounds.
 
 **Disclosed consequence (expressiveness gap, fails closed):** an owned
-`[linear; N]` cannot be discharged at all — H11 removed the unsound element
+`[linear; N]` cannot be discharged at all ([OWN-2](../spec/ownership.md#OWN-2); how an array is destroyed is [OPEN-35](../spec/decisions.md#OPEN-35)) — H11 removed the unsound element
 copy-out and array destructure patterns do not exist yet — so holding one is
 E0208 (never a silent leak). `adversarial_linear_array.con` and gate rows
 assert the E0208; array destructure is the workload-gated follow-up
@@ -731,6 +759,8 @@ assert the E0208; array destructure is the workload-gated follow-up
 
 
 ### H11. Projecting a non-Copy value out of a place by value duplicated it — CLOSED 2026-07-05
+
+**Rule:** [OWN-8](../spec/ownership.md#OWN-8); `free` is [MEM-5](../spec/memory.md#MEM-5), and which operations consume a `Heap` is [OPEN-59](../spec/decisions.md#OPEN-59).
 
 **Fixed.** A field access `w.f` or an array index `arr[i]` that yields a **non-Copy**
 value in a *move* position (bound with `let`, passed as an argument, returned,
@@ -754,7 +784,8 @@ explicitly **excluded** until 2026-10-21 ("`Heap<T>` interiors are not linearity
 for the `h.next` + `free(h)` destructure). That exclusion was a hole, not a design point: it
 allowed a double free and a silent drop of a linear interior in safe code
 ([bug 144](../bugs/144_heap_interior_untracked.md)). It is **withdrawn**: heap-shell reads
-follow this rule (E0290), `free(h)` of a non-Copy pointee is E0287, and the destructure is
+follow this rule (E0290), `free(h);` as a statement over a non-Copy pointee is E0287 (it would
+drop the value: [OWN-5](../spec/ownership.md#OWN-5), [OWN-15](../spec/ownership.md#OWN-15)), while `let b: B = free(h);` is accepted ([MEM-5](../spec/memory.md#MEM-5)), and the destructure is
 `let n = *h;` plus a pattern. Fallout was 2 std sites (`HashSet.drop`,
 `OrderedSet.drop` — now destructure) and 3 test fixtures.
 
@@ -779,6 +810,8 @@ follow-up (see ROADMAP 13b note).
 rows (borrow, Copy reads, Copy leaf through non-Copy intermediate).
 
 ### H12. Submodule bodies (incl. all of std) were never front-end checked — CLOSED 2026-07-02
+
+**Rule:** every Check rule, for every module, std included ([PASS-5](../spec/pipeline.md#PASS-5)).
 
 **Fixed, fully.** `checkProgram` consumed submodule *signatures* but never checked
 their function *bodies*: every `mod x;` file — user code and the whole stdlib —
@@ -811,6 +844,8 @@ must stay at zero front-end violations.
 
 ### H10. Array literal duplicated linear elements — CLOSED 2026-07-01
 
+**Rule:** [OWN-15](../spec/ownership.md#OWN-15).
+
 **Fixed.** `let arr = [a, b];` did not consume the element idents `a`/`b`, so a linear
 (resource-owning) element stayed live after being moved into the array — it could be
 `destroy()`'d *and* owned by the array: a double-free. Found by a systematic value-flow
@@ -823,6 +858,8 @@ fixed linear struct destructure (was a fail-closed E0208 over-rejection); see
 `docs/archive/design-records/OWNERSHIP_MODEL.md`.
 
 ### H9. Named linear bound in a nested scope, left unconsumed — CLOSED 2026-06-28
+
+**Rule:** [OWN-2](../spec/ownership.md#OWN-2) and [OWN-15](../spec/ownership.md#OWN-15) (`let g = f` moves).
 
 **Fixed.** A non-Copy value bound to a NAMED binding inside a nested scope — an
 `if`/`else` branch (`if c { let r = make(); }`) or a matched payload
@@ -858,6 +895,8 @@ skipped without a silent forget). Gate: `scripts/tests/check_linear_nested_scope
 
 ### H7. Loop after a loop-bearing `if`-branch produces invalid SSA — CLOSED 2026-06-28
 
+**Rule:** [PASS-9](../spec/pipeline.md#PASS-9).
+
 **Fixed.** A `while`-loop following an `if` whose branch contained another loop
 rejected with E0708: a loop counter declared inside the branch leaked into the
 env, so the next loop's header phi referenced the first loop's counter from a
@@ -871,6 +910,8 @@ Regression: `tests/programs/loop_after_branch_loop.con` (oracle vector).
 
 ### H6. `_` / discarded-expression silent drop of a linear value — CLOSED 2026-06-28
 
+**Rule:** [OWN-5](../spec/ownership.md#OWN-5), [OWN-7](../spec/ownership.md#OWN-7) and [OWN-17](../spec/ownership.md#OWN-17) (a deferred call's result).
+
 **Fixed (the `_` / discard half; the named-binding remainder is tracked as H9).**
 The headline rule: **`_` can never silently consume a value that owns a resource,
 at any site, and `let _` is not a discard device.** Closed in `Concrete/Check/Check.lean`:
@@ -883,8 +924,8 @@ at any site, and `let _` is not a discard device.** Closed in `Concrete/Check/Ch
   is **linear**: a non-Copy value must be used exactly once, so `_` may ignore only a
   Copy value. This includes resource-free non-Copy values like `Option<i32>`:
   `match opt_i32 { _ => {} }` is rejected — you must destructure exhaustively
-  (`match opt { Some { _ } => {}, None => {} }`, where the Copy `i32` payload may be
-  `_`-ignored). *(Initially this rule was gated on `ownsResource` — affine, allowing
+  (`match opt { Some { value: _ } => {}, None => {} }`, where the Copy `i32` payload may be
+  `_`-ignored; [PAT-3](../spec/patterns.md#PAT-3) requires `field: _`, pending bug-321, and main still accepts `Some { _ }`). *(Initially this rule was gated on `ownsResource` — affine, allowing
   a non-resource non-Copy value to be dropped by `_`. It was tightened to `isCopy` on
   2026-07-01 to make the language linear, not affine: the one law is "a non-Copy value
   never silently disappears.")*
@@ -892,8 +933,8 @@ at any site, and `let _` is not a discard device.** Closed in `Concrete/Check/Ch
   linear call result) → **E0287**; a deferred linear-returning call
   (`defer make();`) → **E0287**.
 
-`free(box);` is exempt — `free` IS the consumption (it hands back the moved-out
-pointee, idiomatically dropped). There is no catch-all discard escape: to get rid of
+`free(box);` over a Copy pointee is exempt — `free` IS the consumption (it hands back the
+moved-out pointee); over a non-Copy pointee it is E0287 ([OWN-15](../spec/ownership.md#OWN-15)'s `expr` row). There is no catch-all discard escape: to get rid of
 a non-Copy value you account for it — destructure exhaustively and consume/hand off
 the parts (a `_` on a *Copy* payload is fine). Regression gate:
 `scripts/tests/check_linear_discard.sh` (Makefile `test-linear-discard` + CI).
@@ -908,6 +949,8 @@ further down. Deferred *design* items that are not holes are listed under
 "Open design decisions" near the end.
 
 ### H8. Array indexing is not bounds-checked at runtime — CLOSED 2026-06-28
+
+**Rule:** [MEM-6](../spec/memory.md#MEM-6).
 
 **Fixed.** Raw `a[i]` / `a[i] = v` on a fixed array is now runtime bounds-checked:
 `Concrete/IR/Lower.lean` emits a call to the shared `@__cc_bounds_check` helper
@@ -934,7 +977,9 @@ indices and asserts interp-trap ⟺ compiled-trap (so a regression re-opens loud
 
 ### H2. Float→int cast overflow — CLOSED 2026-06-26
 
-**RESOLVED: `f as iN` is now a CHECKED conversion** (profile-invariant), matching
+**Rule:** [ARITH-5](../spec/arithmetic.md#ARITH-5), which moves float-to-integer conversion out of `as` (partial R-0500); the checked `as` described here is main's current behaviour, kept in ARITH-5's rationale.
+
+**RESOLVED: `f as iN` is now a CHECKED conversion (main's current behaviour; [ARITH-5](../spec/arithmetic.md#ARITH-5) moves it to a named conversion)** (profile-invariant), matching
 the integer arithmetic decision — ordinary-looking operations never silently
 poison/wrap/saturate. NaN, ±inf, or a value outside the target integer range
 **aborts**; an in-range value truncates toward zero. Saturating/wrapping
@@ -961,6 +1006,8 @@ trapping. It was the last semantically-dark arithmetic construct after the #10
 checked-integer flip.
 
 ### H1. Returned-reference provenance — CLOSED 2026-06-13
+
+**Rule:** [REF-1](../spec/references.md#REF-1), [REF-2](../spec/references.md#REF-2), [REF-4](../spec/references.md#REF-4) and [REF-11](../spec/references.md#REF-11) (E0293).
 
 **RESOLVED by the language invariant "references are second-class — never
 returned"** (`docs/archive/design-records/VALUE_MODEL.md`): the checker rejects any safe-callable
@@ -1008,6 +1055,8 @@ that compiled in safe code. Affected (all now migrated): `HashMap::get`/`get_mut
 
 ### C9. Address-taken loop variable → lost condition / infinite loop — CLOSED 2026-06-13
 
+**Rule:** [REF-13](../spec/references.md#REF-13) and [PASS-13](../spec/pipeline.md#PASS-13).
+
 A loop variable that was **both** loop-carried and address-taken (e.g. `&i`
 inside a `while i < n { … ; i = i + 1 }`) miscompiled: the variable got both a
 promoted alloca (from `&i`, per C8) **and** an SSA phi, the two diverged, the
@@ -1025,6 +1074,8 @@ that would desync from the alloca).
   verified. Full suite 1553/0; examples 123/0.
 
 ### C10. Indexing an array behind a reference yields `<unknown>` — CLOSED 2026-06-14
+
+**Rule:** [MEM-8](../spec/memory.md#MEM-8).
 
 Indexing an array reached through a `&[T; N]` / `&mut [T; N]` (`arr[i]`,
 `&arr[i]`, `arr[i] = v`) used to resolve the element type to `<unknown>`
@@ -1045,6 +1096,8 @@ array base pointer. Sibling of the #6b `peekExprType` fix.
 
 ### C8. Address-of-local did not alias the local — CLOSED 2026-06-11 (was H5)
 
+**Rule:** [REF-13](../spec/references.md#REF-13).
+
 `&mut x as *mut i64` (and `&mut x` / `&x`) materialized a pointer to a **copy**
 of the local, because local scalars were lowered as SSA register values, not
 addressable stack slots — a store through the pointer did not reach `x`. This
@@ -1060,6 +1113,8 @@ address-take.
   gates unaffected.
 
 ### C7. Proven safety violations not enforced — CLOSED 2026-06-11
+
+**Rule:** [MEM-6](../spec/memory.md#MEM-6) and [ARITH-3](../spec/arithmetic.md#ARITH-3). MEM-6 states the refusal with no exemption; the `trusted` / `with(Unsafe)` exemption below is main's behaviour, and which holds is [OPEN-118](../spec/decisions.md#OPEN-118).
 
 A runtime-safety obligation the compiler discharges to `violation` is a
 compile-time **proof** the access is wrong. Previously `violation` was only
@@ -1077,6 +1132,8 @@ and are NOT swept into the hard-error path.
 
 ### C6. Struct mixed-width field-layout miscompile — CLOSED 2026-06-10
 
+**Rule:** [FFI-2](../spec/ffi.md#FFI-2) and [PASS-13](../spec/pipeline.md#PASS-13).
+
 The struct-literal store packed fields **tightly** (summing `computeTySize`)
 while field reads used `Layout.fieldOffset` (**aligned**). Any struct with a
 sub-word field followed by a wider one read garbage — `{a: u8, b: i64}` stored
@@ -1089,6 +1146,8 @@ each field at the same aligned `Layout.fieldOffset` that reads use.
   all-i64 no-regression). Full suite 1548/0.
 
 ### C5. Nested place-write miscompile — CLOSED 2026-06-10
+
+**Rule:** [REF-13](../spec/references.md#REF-13) and [PASS-13](../spec/pipeline.md#PASS-13).
 
 `o.inner.v = x`, `a[i].x = x`, `m[i][j] = x`, `b.data[i] = x`, triple-nesting,
 and nested writes through a `&mut` parameter were all silently dropped: Lower
@@ -1107,6 +1166,8 @@ base. `.fieldAssign` and `.arrayIndexAssign` now delegate to it.
   to stack allocas.
 
 ### C4. Monomorphization name collision — CLOSED 2026-06-10 (was the most severe)
+
+**Rule:** [PASS-1](../spec/pipeline.md#PASS-1).
 
 Mono mangled a specialization by the **head constructor** of the type argument
 and discarded nested args, so `tag<Hold<Pair<i64>>>` and `tag<Hold<Pair<bool>>>`
@@ -1127,6 +1188,8 @@ instantiations get distinct symbols and struct types. Both the function-name
 
 ### C1. Function-pointer capability escalation — CLOSED 2026-06-09
 
+**Rule:** [TRUST-4](../spec/trusted.md#TRUST-4) and [TYPE-17](../spec/types.md#TYPE-17).
+
 A function with no `with(...)` could accept and call `f: fn(i32) with(Network)
 -> i32` — authority smuggling through a callback. Now calling through a
 function pointer requires the fn type's capability set, enforced in both Check
@@ -1138,6 +1201,8 @@ function pointer requires the fn type's capability set, enforced in both Check
 
 ### C2. Explicit enum discriminants silently discarded — CLOSED 2026-06-10
 
+**Rule:** [SYN-1](../spec/syntax.md#SYN-1): the grammar's enum variant has no discriminant.
+
 `enum Op { Get = 0x01, Set = 0x02 }` parsed the values and **threw them away**,
 assigning positional tags 0/1 — a semantically dark construct that would
 corrupt any FFI/protocol/serialization enum (and made duplicate discriminants
@@ -1148,6 +1213,8 @@ time (E0001) with a hint pointing at the planned feature.
   boundary and reject duplicate discriminants.
 
 ### C3. Unknown attributes silently ignored — CLOSED 2026-06-10
+
+**Rule:** [SYN-1](../spec/syntax.md#SYN-1); `#[overflow_checked]` changes no operation ([ARITH-9](../spec/arithmetic.md#ARITH-9)).
 
 `#[notreal]`, `#[trustedz(foo)]`, and any other unrecognized attribute were
 parsed and silently dropped — so a typo in a proof/capability/test attribute
@@ -1168,6 +1235,8 @@ and rejects unknowns (E0001) with the known list as a hint.
 ## Trust ledger (not a hole, but a tracked trust boundary)
 
 ### T1. Native-code trust under `bv_decide`
+
+**Rule:** none of the language (trusted evidence).
 
 The six HMAC/SHA-256 flagship theorems depend on `Lean.ofReduceBool` /
 `Lean.trustCompiler` because `bv_decide`'s LRAT certificate checker runs as

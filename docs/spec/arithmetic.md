@@ -111,7 +111,7 @@ fn main() -> Int {
 the case C leaves undefined. Concrete never emits LLVM's `nsw` or `nuw`: checked operations use
 the overflow intrinsics and branch to an abort helper. This holds in every profile; a profile
 changes reports, never code generation (whether a profile may omit a check is OPEN-97). The
-results of a shift, a division and a remainder that do not abort are ARITH-8. Constant folding may refuse an operation it proves always overflows (E0900),
+fill of a right shift that does not abort is ARITH-8; how a division rounds and a remainder's sign are OPEN-114. Constant folding may refuse an operation it proves always overflows (E0900),
 but it does not see every such operation, so the run-time trap is the guarantee. Array bounds are
 checked the same way, an index out of bounds aborting.
 
@@ -464,3 +464,32 @@ aborts on NaN, an infinity or a value out of range. Whether a rounding operation
 error for those inputs, and which value, is OPEN-107. None of these exists on main yet (R-0500);
 The conversion functions are not named yet (OPEN-99), so this entry has no example until they are.
 
+<a id="ARITH-12"></a>
+### ARITH-12. Float remainder
+
+**ARITH-12@1.** `x % y` on floats is C's `fmod(x, y)`: the exact value `x - n * y` for the integer `n` that is `x / y` truncated toward zero, which has the sign of `x`, and NaN when `y` is zero or `x` is infinite or either is NaN.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.Interp.floatRem, Concrete.Pipeline.emit
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** It is LLVM's `frem`, which the binary emits, and the interpreter computes the same
+value. Unlike IEEE 754's `remainder`, it truncates rather than rounding the quotient to nearest.
+Absorbed from [INTERPRETER_TRUST.md](../verification/INTERPRETER_TRUST.md) §2.
+
+```con accept name=float-remainder exit=42
+fn main() -> Int {
+    let a: f64 = -7.5;
+    let b: f64 = 2.0;
+    let r: f64 = a % b;
+    if r == -1.5 {
+        return 42;
+    }
+    return 1;
+}
+```

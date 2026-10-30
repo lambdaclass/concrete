@@ -1,9 +1,9 @@
 # Concrete Contracts: A Practical Guide
 
-Moved from docs/language: a usage guide; the contract rules are CON-1 to CON-4 of docs/spec/contracts.md.
+Moved from docs/language: a usage guide; the contract rules are CON-1 to CON-8 of docs/spec/contracts.md.
 
 Status: usage guide for what works **today** (2026-06-03). The language rules for contracts are
-[docs/spec/contracts.md](../spec/contracts.md) (CON-1 to CON-4); this guide shows how to use them.
+[docs/spec/contracts.md](../spec/contracts.md) (CON-1 to CON-8); this guide shows how to use them.
 
 This is the hands-on companion to [CONTRACTS_AND_VCS.md](CONTRACTS_AND_VCS.md)
 (the design/architecture). That document says where contracts are going; this
@@ -45,8 +45,8 @@ the trusted base. See [PROOF_LADDER.md](PROOF_LADDER.md).
 fn rotr(x: u32, n: u32) -> u32 { return (x >> n) | (x << (32 - n)); }
 ```
 
-Inside the function the precondition is `assumed_at_entry`. The obligation is
-pushed to the **callers**: every call site of `rotr` must establish it.
+Inside the function the precondition is `assumed_at_entry`, and every call site of `rotr` must
+establish it ([CON-2](../spec/contracts.md#CON-2)); stacked clauses are a conjunction ([CON-8](../spec/contracts.md#CON-8)).
 
 ## `#[ensures]` — postconditions
 
@@ -55,8 +55,9 @@ pushed to the **callers**: every call site of `rotr` must establish it.
 fn rotr(x: u32, n: u32) -> u32 { ... }
 ```
 
-`result` names the return value; `rotr_spec` is a `spec fn` (an erased
-mathematical specification, no body, no codegen). The postcondition becomes an
+`result` names the return value, in an `ensures` only ([CON-7](../spec/contracts.md#CON-7)); `rotr_spec` is a
+`spec fn`, erased ([CON-5](../spec/contracts.md#CON-5)). Whether a `spec fn` may have no body, and must be total, is
+OPEN-115 of [decisions.md](../spec/decisions.md#OPEN-115). The postcondition becomes an
 obligation discharged by a registered Lean theorem (`proved_by_lean`) or shown
 `missing` until one exists.
 
@@ -102,7 +103,8 @@ let mut i: i32 = 0;
 while i < 8 { i = i + 1; }
 ```
 
-A loop with an invariant (and optional variant) generates **five** obligations.
+What the two attributes claim is [CON-2](../spec/contracts.md#CON-2). A loop with an invariant (and optional
+variant) generates **five** obligations.
 From `examples/loop_invariant` (`--report contracts`):
 
 ```
@@ -133,7 +135,8 @@ kernel-checked. A false invariant produces a goal `omega` rejects, and the
 obligation stays `planned` — the compiler will not claim what it cannot prove.
 
 **The invariant also discharges runtime-safety obligations in the loop body.**
-A body access `a[i]` (or a divisor / `#[overflow_checked]` op) under
+A body access `a[i]` (or a divisor / `#[overflow_checked]` op; the attribute changes no
+operation's result, [ARITH-9](../spec/arithmetic.md#ARITH-9)) under
 `#[invariant(0 <= i && i <= N)]` with guard `i < N` is proved
 `proved_by_kernel_decision (omega)` from the invariant + guard — no `#[requires]`
 needed. This is sound by construction: the invariant is assumed only while it
@@ -161,7 +164,7 @@ the returned state); otherwise it stays conservative.
 
 ## Ghost values: `ghost let`
 
-A `ghost let` is a proof-only binding. It is **erased before codegen** — it never
+A `ghost let` is a proof-only binding ([CON-4](../spec/contracts.md#CON-4)). It is **erased before codegen** — it never
 reaches Core, the body fingerprint, or LLVM — and may be referenced only in
 contracts, VCs, and audit. It lets an invariant name a value the runtime code
 does not keep around.
@@ -177,6 +180,10 @@ fn count_up() -> i32 {
 }
 ```
 
+The C-style `for` is the form main accepts; [STMT-6](../spec/statements.md#STMT-6) replaces it with
+`for i from 0 until 8` (pending bug-331), and where a counted loop's invariant is checked is
+OPEN-105.
+
 Reading a ghost value from runtime code is rejected:
 
 ```
@@ -186,7 +193,7 @@ error[elab]: (E0420) ghost value 'bound' cannot be used in runtime code
 ```
 
 See `examples/ghost_state` (accepted) and its `catches/ghost_runtime_use.con`
-(rejected). Ghost destructuring bindings are not supported yet.
+(rejected). Ghost destructuring bindings are not supported yet (CON-4's rationale).
 
 ## What still requires Lean (today)
 

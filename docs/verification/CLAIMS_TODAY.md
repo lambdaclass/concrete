@@ -27,29 +27,28 @@ Safe code = no `trusted` marker, no `with(Unsafe)` capability.
 
 For safe code that passes the checker, the compiler enforces at compile time:
 
-| Guarantee | Mechanism |
+| Guarantee | Rule |
 |-----------|-----------|
-| No use-after-move | Linear ownership tracking |
-| No double free | Second consumption is use-after-move |
-| No memory leak | Every linear value consumed or reserved by scope exit |
-| No dangling safe reference | References are second-class — never returned (no `&T`/`&mut T` in any safe return, directly/aggregate-wrapped/generic); borrow-block scoping + escape analysis |
-| No borrow conflict | Exclusive mutable; shared precludes mutable |
-| No frozen-variable access | Owner frozen during active borrow block |
-| No live linear overwrite | Assignment cannot replace a live linear value; rebind after consumption is legal |
-| No `&mut T` aliasing | Borrow-block exclusive refs consumed on call |
-| Deterministic cleanup | `defer` runs LIFO at scope exit |
-| No capability escalation | Caller must declare superset of callee capabilities — including calls through function pointers: calling `f: fn(i32) with(Network) -> i32` requires the caller to hold `Network` (E0240; `adversarial_neg_cap_fnptr_smuggle.con`) |
-| No hidden effects | Capabilities visible in signatures |
-| Branch agreement | If/else and match arms agree on linear consumption |
+| No use-after-move | [OWN-1](../spec/ownership.md#OWN-1) |
+| No double free | [OWN-1](../spec/ownership.md#OWN-1), [MEM-5](../spec/memory.md#MEM-5) |
+| No memory leak | [OWN-2](../spec/ownership.md#OWN-2) |
+| No dangling safe reference | References are second-class ([REF-1](../spec/references.md#REF-1), [REF-2](../spec/references.md#REF-2), [REF-3](../spec/references.md#REF-3), [REF-4](../spec/references.md#REF-4)); borrow scoping ([REF-6](../spec/references.md#REF-6), [REF-8](../spec/references.md#REF-8)) |
+| No borrow conflict | [REF-11](../spec/references.md#REF-11) |
+| No frozen-variable access | [REF-8](../spec/references.md#REF-8) |
+| No live linear overwrite | [OWN-9](../spec/ownership.md#OWN-9) |
+| No `&mut T` aliasing | `&mut` is lent per call ([REF-10](../spec/references.md#REF-10)) and exclusive within it ([REF-11](../spec/references.md#REF-11)) |
+| Deterministic cleanup | [STMT-11](../spec/statements.md#STMT-11), [OWN-12](../spec/ownership.md#OWN-12) |
+| No capability escalation | [TRUST-4](../spec/trusted.md#TRUST-4), calls through function pointers included (E0240; `adversarial_neg_cap_fnptr_smuggle.con`) |
+| No hidden effects | Capabilities visible in signatures ([TRUST-4](../spec/trusted.md#TRUST-4)) |
+| Branch agreement | [OWN-3](../spec/ownership.md#OWN-3) |
 
 **Claim class:** Enforced. The program cannot violate these and compile.
 
 **Returned-reference provenance (H1): CLOSED 2026-06-13.** Resolved by
-subtraction — the language invariant *references are second-class, never
-returned*: the checker rejects any safe-callable function or function type that
-returns a reference, directly, nested in an aggregate (`Option<&T>`), or via
-generic instantiation (`Concrete/Check/Check.lean`, `resolveType`; gate
-`scripts/tests/check_returned_ref_provenance.sh`). The former aggregate-ref
+subtraction — references are second-class, never returned
+([REF-1](../spec/references.md#REF-1), [REF-2](../spec/references.md#REF-2), [REF-4](../spec/references.md#REF-4)); checked in
+`Concrete/Check/Check.lean`, `resolveType`; gate
+`scripts/tests/check_returned_ref_provenance.sh`. The former aggregate-ref
 accessors were migrated to the value model: `get -> Option<V>` (Copy),
 `with_value` / `with_at` to borrow (scoped, the `&V` never escapes the callback),
 `remove`/`pop` to move out, capability-polymorphic `fold`/`for_each`/`map` to
@@ -59,14 +58,14 @@ returned reference. (Deferred, evidence-gated: `from(param)`, and the mutable
 scoped callback `with_value_mut` — parked, nothing pulls it.)
 
 **What enforced does NOT cover:**
-- Static proof that every index is in range. Raw safe indexing is runtime-checked
-  and traps on OOB; explicitly trusted/unchecked access remains outside the safe
-  guarantee.
-- Static proof that ordinary arithmetic cannot overflow. Ordinary integer
-  arithmetic is runtime-checked and traps; explicit `wrapping_*` and
-  `saturating_*` have their named meanings.
-- Stack overflow (depends on OS guard page)
-- Termination (no loop/recursion termination analysis)
+- Static proof that every index is in range. Safe indexing is checked at run time
+  and aborts ([MEM-6](../spec/memory.md#MEM-6)); explicitly trusted/unchecked access remains
+  outside the safe guarantee.
+- Static proof that ordinary arithmetic cannot overflow. Integer arithmetic is
+  checked and aborts ([ARITH-3](../spec/arithmetic.md#ARITH-3)); `wrapping_*` and `saturating_*`
+  have their named meanings ([ARITH-4](../spec/arithmetic.md#ARITH-4)).
+- Stack overflow (a failure, [STMT-2](../spec/statements.md#STMT-2); depends on OS guard page)
+- Termination (divergence is a behaviour, [STMT-1](../spec/statements.md#STMT-1); [CON-1](../spec/contracts.md#CON-1))
 - Formal proof of checker soundness (tested adversarially, not mechanized)
 
 Legacy H-series and cross-cutting safety boundaries are indexed in
@@ -300,7 +299,7 @@ Reference: [PROFILES.md](../platform/PROFILES.md)
 | Finished predictable profile | Partially real, still being tightened |
 | Composite compile-time resource certificate | Planned as R-0445; no current composite resource-report command or source-step/space guarantee |
 | Stabilized first public release surface | Still evolving |
-| Concurrency safety | Single-threaded model assumed; concurrency is explicitly deferred. Async/concurrency capabilities, structured scopes, linear task handles, and simulation-backed evidence are research directions, not current claims. |
+| Concurrency safety | A program has one thread ([STMT-3](../spec/statements.md#STMT-3)); concurrency is explicitly deferred. Async/concurrency capabilities, structured scopes, linear task handles, and simulation-backed evidence are research directions, not current claims. |
 | Cross-package guarantees | Single-compilation-unit model today |
 | Proved model-to-source correspondence from identity alone | Scoped implementation identities and freshness checks prevent some substitution/staleness attacks, but a matching identity or digest does not prove that a hand-written or extracted proof model faithfully represents the source implementation |
 | Authoritative model attestations and behavioral package interfaces | The target `ModelIdentity`, explicit relation/correspondence evidence, `ContractIdentity`, and partial package-evidence linker are roadmap architecture, not shipped guarantees |

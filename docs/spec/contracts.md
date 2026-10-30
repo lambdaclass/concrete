@@ -5,7 +5,8 @@ obligations with stable identities and attaches evidence to each (proved by a Le
 kernel decision procedure, assumed, or still open). Contracts and ghost code are erased before code
 generation and never change what the program does. This chapter states what a contract means
 (CON-1, CON-2), what a contract expression may contain (CON-3, pending its specification
-judgment) and how ghost code is kept apart from runtime code (CON-4). How obligations are
+judgment), how ghost code is kept apart from runtime code (CON-4), specification functions (CON-5),
+`assert` and `assume` (CON-6), the scope of `result` (CON-7) and stacked clauses (CON-8). How obligations are
 discharged and reported is the verification documentation:
 [CONTRACTS_GUIDE.md](../verification/CONTRACTS_GUIDE.md) (now a usage guide),
 [CONTRACTS_AND_VCS.md](../verification/CONTRACTS_AND_VCS.md) and
@@ -206,3 +207,131 @@ fn main() -> Int {
 }
 ```
 
+<a id="CON-5"></a>
+### CON-5. A specification function is erased
+
+**CON-5@1.** A `spec fn` is erased: no code is generated for it, and it is named only by contract expressions and the bodies of other `spec fn` declarations, never by runtime code.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.elabModule, Concrete.checkModule
+- Semantics: none
+- Obligation: ghost erasure preserves runtime behaviour (R-0496)
+- Evidence: tested
+
+**Rationale.** A specification function is a mathematical description that a claim names, as
+`rotr_spec` names the function `rotr` must compute. Runtime code that names one is refused as an
+unknown name (E0101, MOD-1), since only the contract tables resolve it; a `spec fn` body that calls
+runtime code is E0321 (CON-3). Whether a `spec fn` may be declared without a body, and whether it
+must be total, is OPEN-115: main accepts both a body-less declaration and a recursive body.
+Absorbed from [CONTRACTS_GUIDE.md](../verification/CONTRACTS_GUIDE.md) and
+[CONTRACTS_AND_VCS.md](../verification/CONTRACTS_AND_VCS.md).
+
+```con accept name=spec-fn-in-contract exit=42
+spec fn big(x: Int) -> bool = x > 10;
+
+#[requires(big(x))]
+fn f(x: Int) -> Int {
+    return x;
+}
+
+fn main() -> Int {
+    return f(42);
+}
+```
+
+<a id="CON-6"></a>
+### CON-6. What `assert` and `assume` claim
+
+**CON-6@1.** `assert e` claims that `e` holds where it is written, an obligation of the function, and `assume e` makes `e` a hypothesis of the obligations after it whose own evidence is `assumed`, never `proved`, and neither statement executes.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.checkStmt, Concrete.elabStmtEv, Concrete.Report.renderAssertAssume
+- Semantics: none
+- Obligation: claims are generated against Core semantics with exact contract identity (R-0473, R-0495)
+- Evidence: tested
+
+**Rationale.** `assume` is a proof-only trapdoor: a claim that leans on it is reported as depending
+on an assumption, never as a clean proof, and a project policy may forbid it. An `assert` that is
+never discharged stays `unproven`, and one whose condition is constant-false is reported as a
+violation; neither stops the program, since both are erased (OWN-11 keeps them from changing
+ownership). Whether the grammar has the two statements is OPEN-79 and OPEN-80. Absorbed from
+[CONTRACTS_AND_VCS.md](../verification/CONTRACTS_AND_VCS.md).
+
+```con accept name=assert-and-assume-are-erased exit=42
+fn f(x: Int) -> Int {
+    assume x > 0;
+    assert x > 0;
+    return x;
+}
+
+fn main() -> Int {
+    return f(42);
+}
+```
+
+<a id="CON-7"></a>
+### CON-7. `result` is bound only in a postcondition
+
+**CON-7@1.** `result` names the returned value in an `#[ensures]` clause and is bound in no other contract clause, so a `requires`, `invariant` or `variant` that names it names an unknown variable.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.checkModule
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** Only a postcondition is evaluated after a return. A precondition that names `result`
+is refused as an undeclared variable (E0201, MOD-1). Outside contracts `result` is an ordinary
+identifier. Absorbed from [KNOWN_HOLES.md](../verification/KNOWN_HOLES.md) H27.
+
+```con accept name=result-in-ensures exit=42
+#[requires(x > 0)]
+#[ensures(result == x)]
+fn f(x: Int) -> Int {
+    let result: Int = x;
+    return result;
+}
+
+fn main() -> Int {
+    return f(42);
+}
+```
+
+<a id="CON-8"></a>
+### CON-8. Stacked clauses are a conjunction
+
+**CON-8@1.** Several `#[requires]` clauses on one function, or several `#[invariant]` clauses on one loop, claim their conjunction, each clause becoming an obligation of its own.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.Report.callSiteObligations, Concrete.Report.loopVCGoals
+- Semantics: none
+- Obligation: claims are generated against Core semantics with exact contract identity (R-0473, R-0495)
+- Evidence: tested
+
+**Rationale.** CON-2 states one clause; writing two is the same claim as writing their `&&`, with
+separate identities in the report (`R1`, `R2`). Absorbed from
+[CONTRACTS_AND_VCS.md](../verification/CONTRACTS_AND_VCS.md).
+
+```con accept name=stacked-requires exit=42
+#[requires(x > 0)]
+#[requires(x < 100)]
+fn f(x: Int) -> Int {
+    return x;
+}
+
+fn main() -> Int {
+    return f(42);
+}
+```

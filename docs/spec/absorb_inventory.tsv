@@ -611,142 +611,23 @@ docs/stdlib/VALIDATED_WRAPPERS.md	2.3; 5	Any holder may read .0 of a validated w
 docs/stdlib/VALIDATED_WRAPPERS.md	8 Resolved 2026-04-25 cast	An as cast is accepted between a newtype and exactly its resolved inner type; any other cast naming a newtype is refused	rule	new	arithmetic	absorb	ARITH-5 covers numeric/bool/char only; also bears on TYPE-11 construction rights
 docs/verification/ASSUMPTION_FILES.md	*	Assumption-file format (tooling); no language rules	-	-	-	keep	-
 docs/verification/AXIOMS.md	*	Proof-layer axioms; no language rules	-	-	-	keep	-
-docs/verification/CLAIMS_TODAY.md	*	Public claims page; enforced table duplicates GUARANTEE_STATEMENT with one stale &mut row; rest is evidence tooling	-	-	-	cite-only	-
-docs/verification/CLAIMS_TODAY.md	§1 table	No reference is ever returned, directly, in an aggregate or through generic instantiation	rule	dup:REF-1	-	cite	REF-2, REF-3, REF-4
-docs/verification/CLAIMS_TODAY.md	§1 table	Calling through a function pointer requires the caller to hold the fn type's capabilities (E0240)	rule	dup:TRUST-4	-	cite	-
-docs/verification/CLAIMS_TODAY.md	§1 table	No &mut aliasing because borrow-block exclusive refs are consumed on call	guarantee	stale	references	cite	superseded by REF-10
-docs/verification/CLAIMS_TODAY.md	§1 table	Use-after-move, leak, borrow conflict, frozen access, overwrite, branch agreement, LIFO defer	guarantee	dup:OWN-2	-	cite	same rows as GUARANTEE_STATEMENT §1
-docs/verification/CLAIMS_TODAY.md	§1 not covered	Indexing and arithmetic trap at run time; stack overflow and termination are not covered	semantics	dup:MEM-6	-	cite	ARITH-3, STMT-2, CON-1
-docs/verification/CLAIMS_TODAY.md	§6	Single-threaded model	guarantee	dup:STMT-3	-	cite	-
+docs/verification/CLAIMS_TODAY.md	*	Public claims page; enforced table duplicates GUARANTEE_STATEMENT with one stale &mut row; rest is evidence tooling	-	-	-	keep	-
 docs/verification/CLAIM_TAXONOMY.md	*	Claim-label taxonomy; no language rules	-	-	-	keep	-
-docs/verification/CONTRACTS_AND_VCS.md	*	Design proposal; language half has contract categories, expression v1, many pseudocode attributes not in the language	-	-	-	design-record	move decided bits into contracts.md, keep the rest as design record
-docs/verification/CONTRACTS_AND_VCS.md	Design Principles	The language distinguishes spec fn, checked total fn, ordinary runtime fn and trusted fn; a total fn enters contracts only after its obligations close	definition	new	contracts	open	`total fn` exists in no spec rule; CON-3 allows only specification functions
-docs/verification/CONTRACTS_AND_VCS.md	Design Principles	`assume` is a proof-only trapdoor whose obligation is `assumed`, never proved, and is forbiddable in release	semantics	new	contracts	absorb	OWN-11 lists assume as proof-only and syntax.md calls it erased; no rule says what it claims
-docs/verification/CONTRACTS_AND_VCS.md	Source Syntax	Several #[requires] or #[invariant] attributes may be stacked on one function or loop	semantics	new	contracts	absorb	CON-2 states a single p; conjunction of stacked clauses is unstated
-docs/verification/CONTRACTS_AND_VCS.md	Source Syntax	Contracts insert no runtime checks; runtime-checked contracts would need distinct syntax	semantics	dup:CON-2	-	cite	CON-2 rationale "contracts never execute"
-docs/verification/CONTRACTS_AND_VCS.md	Proposed User-Facing Shape	Proposed #[prove_by], #[check_runtime], #[assume(..)], #[trusted(reason)], #[assumes], `contract` declarations, #[decreases], `set` statements	grammar	stale	syntax	rationale	not in grammar (unknown attribute refused, SYN-1); mark as pseudocode; note #[decreases] vs CON-1 `decreasing` vs #[variant] naming
-docs/verification/CONTRACTS_AND_VCS.md	Contract Expression V1	Contract expressions admit parameters, result, literals, comparisons, boolean and/or/not, + - *, len(x), indexing with a bounds obligation and admitted pure predicates	rule	dup:CON-3	-	cite	CON-3 is stricter (calls only specification functions, mathematical arithmetic); reconcile len(x) and pure predicates
-docs/verification/CONTRACTS_AND_VCS.md	Contract Expression V1	old(x), quantifiers and dedicated implication/iff syntax are deferred	grammar	new	contracts	open	no OPEN entry records these
-docs/verification/CONTRACTS_AND_VCS.md	Soundness Bridge	A spec fn is total	semantics	new	contracts	absorb	merge with the spec fn definition row (CONTRACTS_GUIDE)
-docs/verification/CONTRACTS_AND_VCS.md	Soundness Bridge	assert(e) is erased; a constant-false assert is detected as a violation	semantics	new	contracts	absorb	syntax.md prose says assert is erased proof evidence; no rule
-docs/verification/CONTRACTS_AND_VCS.md	Core-semantics differential test	Integer division truncates toward zero and the remainder takes the dividend's sign	semantics	new	arithmetic	absorb	stated only in ARITH-3 rationale; promote into ARITH-3 or a new ARITH entry
-docs/verification/CONTRACTS_AND_VCS.md	Core-semantics differential test	Fixed-width arithmetic traps on overflow	semantics	dup:ARITH-3	-	cite	-
-docs/verification/CONTRACTS_AND_VCS.md	Why loops are not next	The interpreter's loop fuel is 10,000,000 iterations	semantics	dup:STMT-1	-	cite	fuel exhaustion is an inconclusive interpreter result, not a disagreement (STMT-1); not a PASS-13 conflict
-docs/verification/CONTRACTS_AND_VCS.md	Soundness Bridge	An unsatisfiable precondition makes the contract vacuous and it is reported `vacuous`, never proved (E0613)	semantics	new	contracts	open	reporting rule; decide whether vacuity is a language refusal or tooling only
+docs/verification/CONTRACTS_AND_VCS.md	*	Design proposal; language half has contract categories, expression v1, many pseudocode attributes not in the language	-	-	-	keep	move decided bits into contracts.md, keep the rest as design record
 docs/verification/CONTRACTS_GUIDE.md	*	Usage guide; ~6 restated CON rules; examples use the removed C-style for; spec fn and proof-link attributes lack spec definitions	-	-	-	cite-only	-
-docs/verification/CONTRACTS_GUIDE.md	#[requires]	A precondition is assumed at entry and is an obligation of every caller	rule	dup:CON-2	-	cite	-
-docs/verification/CONTRACTS_GUIDE.md	#[ensures]	`result` names the returned value in a postcondition	definition	dup:CON-2	-	cite	-
-docs/verification/CONTRACTS_GUIDE.md	#[ensures]	A `spec fn` is an erased mathematical specification with no body and no code generation	definition	new	contracts	absorb	no rule defines spec fn; contracts.md example writes `spec fn f(x) -> bool = expr` (has a body), contradicting "no body"; CONTRACTS_AND_VCS R-26 adds totality
-docs/verification/CONTRACTS_GUIDE.md	Loop invariants	#[invariant] and #[variant] on a loop claim init, preservation, non-negativity and decrease	semantics	dup:CON-2	-	cite	-
-docs/verification/CONTRACTS_GUIDE.md	Loop invariants	`#[overflow_checked]` marks operations for overflow obligations	builtin	new	arithmetic	open	attribute is recognized (syntax.md, KNOWN_HOLES C3) but ARITH-3 checks all integer arithmetic; its language meaning is undefined; also CONTRACTS_AND_VCS
-docs/verification/CONTRACTS_GUIDE.md	Ghost values	A `ghost let` is erased before codegen and may be read only in contracts and ghost code (E0420)	rule	dup:CON-4	-	cite	-
-docs/verification/CONTRACTS_GUIDE.md	Ghost values	Ghost destructuring bindings are not supported	rule	dup:CON-4	-	cite	in CON-4 rationale only; consider making it part of the rule
-docs/verification/CONTRACTS_GUIDE.md	Ghost values	Example loop `for (let mut i: i32 = 0; i < 8; i = i + 1)` with #[invariant]	grammar	stale	statements	cite	STMT-6: loops are while and `for i from a until b`; STMT-12 refuses #[variant] on a counted loop
 docs/verification/CONTRACTS_GUIDE.md	Linking a proof	#[spec], #[proof_by], #[ensures_proof], #[proof_coverage], #[proof_fingerprint] are erased metadata attributes on a function	builtin	new	contracts	absorb	syntax.md lists some as recognized attributes; no rule states they have no runtime effect or what they bind to
-docs/verification/EFFECT_PROOF_BOUNDARIES.md	*	Proof-eligibility boundary doc; restates capability/trusted rules; one new allocation-capability statement	-	-	-	cite-only	-
-docs/verification/EFFECT_PROOF_BOUNDARIES.md	§2 Capabilities	Callers hold a superset of callee capabilities; a with(File) fn cannot also use Network	rule	dup:TRUST-4	-	cite	-
-docs/verification/EFFECT_PROOF_BOUNDARIES.md	§2 Allocation	Allocating builtins (`alloc`, `vec_new`) require with(Alloc)	builtin	new	memory	absorb	MEM-5 defines alloc without its capability; statements.md prose only
-docs/verification/EFFECT_PROOF_BOUNDARIES.md	§2 FFI	Only FFI-safe types appear in extern signatures	rule	dup:FFI-3	-	cite	-
-docs/verification/EFFECT_PROOF_BOUNDARIES.md	§2 Trusted Code	trusted does not relax capabilities, linearity or borrow checking; an impl block confers no trust	guarantee	new	trusted	absorb	same item as SAFETY.md; impl half dup TRUST-5
-docs/verification/EFFECT_PROOF_BOUNDARIES.md	§2 Allocation	Every Heap<T> must be consumed (freed, dereferenced or passed on)	rule	dup:MEM-5	-	cite	OWN-2
+docs/verification/EFFECT_PROOF_BOUNDARIES.md	*	Proof-eligibility boundary doc; restates capability/trusted rules; one new allocation-capability statement	-	-	-	keep	-
 docs/verification/EVIDENCE_ARCHITECTURE.md	*	Evidence data model; no language rules	-	-	-	keep	-
 docs/verification/EVIDENCE_CLASSES.md	*	Evidence-class catalog; no language rules	-	-	-	keep	-
 docs/verification/EVIDENCE_PRODUCER_MATRIX.md	*	R-0004 evidence producer per AST node; compiler internals, no language rules	-	-	-	keep	-
 docs/verification/EXTERNAL_CHECKER.md	*	External proof checker operation; no language rules	-	-	-	keep	-
-docs/verification/GUARANTEE_STATEMENT.md	*	Public guarantee tiers; ~15 restated rules and 6 stale statements (trusted impl, pointer arithmetic, &mut consumed on call, extern Unsafe, defer bodies, purity)	-	-	-	cite-only	-
-docs/verification/GUARANTEE_STATEMENT.md	§1 Memory safety	No use-after-move, double free, leak, dangling safe reference, borrow conflict, frozen access or live linear overwrite	guarantee	dup:OWN-1	-	cite	OWN-2, OWN-9, REF-8, REF-11
-docs/verification/GUARANTEE_STATEMENT.md	§1 Memory safety	No &mut aliasing because borrow-block exclusive refs are consumed on call	guarantee	stale	references	cite	superseded by REF-10
-docs/verification/GUARANTEE_STATEMENT.md	§1 Memory safety	defer runs LIFO at scope exit	semantics	dup:STMT-11	-	cite	-
-docs/verification/GUARANTEE_STATEMENT.md	§1 Capability discipline	Callers must declare a superset of callee capabilities	rule	dup:TRUST-4	-	cite	-
-docs/verification/GUARANTEE_STATEMENT.md	§1 Capability discipline	An empty capability set means pure	definition	stale	trusted	cite	TRUST-4 rationale: empty set is an authority claim, not purity
-docs/verification/GUARANTEE_STATEMENT.md	§1 Capability discipline	Extern calls require with(Unsafe) except trusted extern fn	rule	stale	trusted	cite	omits the trusted-body absorption of TRUST-5
-docs/verification/GUARANTEE_STATEMENT.md	§1 Control-flow safety	Branch agreement, no cross-loop consumption, no skipping unconsumed linear values on break/continue	rule	dup:OWN-3	-	cite	OWN-4, OWN-2
-docs/verification/GUARANTEE_STATEMENT.md	§1 Control-flow safety	break and continue are forbidden inside defer bodies	rule	stale	ownership	cite	defer takes one call (OWN-12), there are no defer bodies; MEMORY_REGRESSION_CHECKLIST §9
-docs/verification/GUARANTEE_STATEMENT.md	§1 Not guaranteed	Safe indexing and ordinary arithmetic are runtime-checked and trap; wrapping_* and saturating_* keep named semantics	semantics	dup:MEM-6	-	cite	ARITH-3, ARITH-4
-docs/verification/GUARANTEE_STATEMENT.md	§1 Not guaranteed	Stack overflow is not prevented; it depends on the OS guard page	semantics	dup:STMT-2	-	cite	only in statements.md explanatory "Abort and failure" table; no rule entry
-docs/verification/GUARANTEE_STATEMENT.md	§1 Not guaranteed	No termination guarantee for loops or recursion	guarantee	dup:CON-1	-	cite	STMT-1 lists divergence
-docs/verification/GUARANTEE_STATEMENT.md	§3 Trusted code	Trusted code is functions or impl blocks marked trusted	definition	stale	trusted	cite	TRUST-5: trust is never declared on an impl block
-docs/verification/GUARANTEE_STATEMENT.md	§3 Trusted code	Trusted code retains linear ownership, capability, borrow, scope-exit and branch-agreement rules	guarantee	new	trusted	absorb	same item as SAFETY.md "trusted does not relax"
-docs/verification/GUARANTEE_STATEMENT.md	§3 Trusted code	Trusted code adds pointer arithmetic (`*mut T + offset`), raw deref, raw assignment and pointer casts	rule	stale	trusted	cite	TRUST-1 (ptr::offset, no pointer/int `as`); deref/assign half is TRUST-5
-docs/verification/GUARANTEE_STATEMENT.md	§3 Trusted code	A pure function can call a trusted function only if the trusted function has capabilities	rule	stale	trusted	cite	garbled; under TRUST-4 a trusted fn with empty with() is callable from any fn
-docs/verification/GUARANTEE_STATEMENT.md	§3 Trusted code	`trusted extern fn` calls need no Unsafe on the programmer's assertion the binding is pure and safe; unverified	semantics	new	ffi	absorb	same item as SAFETY.md trusted extern row
-docs/verification/GUARANTEE_STATEMENT.md	§6	Execution is single-threaded	guarantee	dup:STMT-3	-	cite	-
+docs/verification/GUARANTEE_STATEMENT.md	*	Public guarantee tiers; ~15 restated rules and 6 stale statements (trusted impl, pointer arithmetic, &mut consumed on call, extern Unsafe, defer bodies, purity)	-	-	-	keep	-
 docs/verification/IDENTITY_MIGRATION_PLAN.md	*	Proof identity migration plan; no language rules	-	-	-	keep	-
 docs/verification/IDENTITY_SEPARATION.md	*	Proof identity definitions; no language rules	-	-	-	keep	-
-docs/verification/INTERPRETER_TRUST.md	*	Interpreter trust boundary; mostly internals; a few observable-semantics statements, one stale entry contract	-	-	-	cite-only	-
-docs/verification/INTERPRETER_TRUST.md	§2	Float `%` is C fmod	semantics	new	arithmetic	absorb	no ARITH rule defines float remainder
-docs/verification/INTERPRETER_TRUST.md	§2	Integer-to-float conversion rounds to nearest-even	semantics	dup:ARITH-1	-	cite	-
-docs/verification/INTERPRETER_TRUST.md	§2	Module constants are evaluated at each use in their own frame	semantics	new	types	absorb	TRUST-8 says constants are immutable; evaluation time/order unstated
-docs/verification/INTERPRETER_TRUST.md	§2	Print builtins go through buffered stdio; abort flushes stdio on Darwin but not glibc	semantics	new	statements	open	STMT-2 ("ends at once") is silent on whether buffered output is flushed on a trap; observable output differs by platform
-docs/verification/INTERPRETER_TRUST.md	Entry observation	Oracle entry contract is `fn main() -> Int`	definition	stale	statements	cite	STMT-7: main returns u8 or Unit
-docs/verification/INTERPRETER_TRUST.md	§3	Loop runaway beyond interpreter fuel is an explicit diagnostic	semantics	dup:STMT-1	-	cite	fuel exhaustion is an inconclusive interpreter result, not a disagreement (STMT-1); not a PASS-13 conflict
-docs/verification/INTERPRETER_TRUST.md	§4	Stack exhaustion is host-dependent	semantics	dup:STMT-2	-	cite	explanatory table only
-docs/verification/KNOWN_HOLES.md	*	Hole tracker; ~30 closed/open entries state rules, mostly dup; 7 stale (break value, shadowing, free exemption, Some{_}, float as) and 2 conflicts	-	-	-	cite-only	holes stay; replace rule restatements with IDs
-docs/verification/KNOWN_HOLES.md	H28	A reference from if/match, a call result or a constant is never a receiver/argument/borrow base; no reference stored in or written through storage	rule	dup:REF-5	-	cite	REF-3, REF-6, REF-7
-docs/verification/KNOWN_HOLES.md	H28	A field access, index, `*` or method receiver whose base is not a traceable place (if/match value, `**r`, `*w.r`) is refused (E0238)	rule	new	references	absorb	spec has no place-expression definition; MEM-4/TYPE-7 do not restrict projection bases; H28 calls it a deliberate restriction
-docs/verification/KNOWN_HOLES.md	H28	A reborrow stays live to the end of its scope; no non-lexical lifetimes	rule	dup:REF-8	-	cite	-
-docs/verification/KNOWN_HOLES.md	H28	Instantiating a type parameter with a reference type where it occurs behind a reference or pointer is refused	rule	dup:REF-4	-	cite	-
-docs/verification/KNOWN_HOLES.md	H27	`result` may appear only in an ensures clause	rule	new	contracts	absorb	CON-2/CON-3 name `result` but not its scope
-docs/verification/KNOWN_HOLES.md	H27	A contract naming a parameter that a local shadows is refused; shadowing otherwise stays legal	rule	stale	scope	cite	SCOPE-1 refuses every binder that reuses a visible local's spelling
-docs/verification/KNOWN_HOLES.md	H27	A contract may not call a capability-requiring function; pure executable functions remain callable	rule	dup:CON-3	-	cite	interim state in CON-3 rationale (E0321)
-docs/verification/KNOWN_HOLES.md	H24	Checked division traps on zero and signed MIN / -1; a shift count is checked against the shifted operand's width	semantics	dup:ARITH-3	-	cite	-
-docs/verification/KNOWN_HOLES.md	Policy: HashMap traversal	HashMap/HashSet traversal order is unspecified, never a public contract	guarantee	new	none	none	std API contract, not a language rule
-docs/verification/KNOWN_HOLES.md	H18	No implicit scope-end destruction; a Destroy impl requires no capability beyond Alloc (E0584)	rule	dup:OWN-13	-	cite	-
-docs/verification/KNOWN_HOLES.md	H18	Heap<T>, HeapArray<T>, &mut T and arrays of non-destroyable elements are not destroyable (E0241)	rule	dup:TRAIT-10	-	cite	array half is OPEN-35
-docs/verification/KNOWN_HOLES.md	H13	`a = b` moves a linear b	rule	dup:OWN-15	-	cite	-
-docs/verification/KNOWN_HOLES.md	H14	`break f;` consumes the break value	semantics	stale	statements	cite	STMT-6: break carries no value
-docs/verification/KNOWN_HOLES.md	H15	Assigning into `arr[i]` or `*r` whose target is non-Copy is refused (E0291)	rule	dup:OWN-9	-	cite	-
-docs/verification/KNOWN_HOLES.md	H15	A raw-pointer store `*p = v` does not destroy or require consuming the old pointee	semantics	new	trusted	absorb	exemption from OWN-9 for uninitialized slots; no TRUST rule states it
-docs/verification/KNOWN_HOLES.md	H16	Shadowing a live linear binding is refused (E0292); `let s = transform(s)` is accepted	rule	stale	scope	cite	SCOPE-1 refuses both; entry itself notes R-0435
-docs/verification/KNOWN_HOLES.md	H17	Parameters including by-value self are owned locals that must be consumed; &mut params are borrows, &T is Copy	rule	dup:OWN-2	-	cite	OWN-D1, REF-10
-docs/verification/KNOWN_HOLES.md	H17/H11	An owned array of linear elements cannot be discharged (E0208, no array patterns)	rule	new	ownership	open	relates OPEN-35; H18 bug 052 says arrays now get per-element drop glue; reconcile which holds
-docs/verification/KNOWN_HOLES.md	H11	A non-Copy field, element or heap interior is never read out by value (E0290); a by-value self method on a projection is refused	rule	dup:OWN-8	-	cite	-
-docs/verification/KNOWN_HOLES.md	H11	`free(h)` of a non-Copy pointee is refused (E0287)	rule	conflict:MEM-5	-	open	MEM-5: free(h) frees and returns the value; refusal holds only as a discarded statement (OWN-5); wording disagrees
-docs/verification/KNOWN_HOLES.md	H6	`free(box);` as a statement is exempt from the discard rule	rule	stale	ownership	cite	OWN-7: a non-Unit statement result needs discard(e)
-docs/verification/KNOWN_HOLES.md	H9	`let g = f` moves f; a linear declared in a branch or arm is consumed before the block exits unless its end is unreachable	rule	dup:OWN-2	-	cite	OWN-15
-docs/verification/KNOWN_HOLES.md	H6	`let _` does not exist (E0289); `_` ignores only Copy values (E0288); a statement expression never drops a linear value (E0287)	rule	dup:OWN-5	-	cite	-
-docs/verification/KNOWN_HOLES.md	H6	`defer` of a call that returns a linear value is refused (E0287)	rule	new	ownership	absorb	OWN-12 does not constrain the deferred call's result type
-docs/verification/KNOWN_HOLES.md	H6	Example pattern `Some { _ }`	grammar	stale	patterns	cite	PAT-3 requires `field: _` or `Variant { .. }`
-docs/verification/KNOWN_HOLES.md	H8	a[i] is bounds-checked at run time and aborts; a constant out-of-bounds index is a compile error	semantics	dup:MEM-6	-	cite	-
-docs/verification/KNOWN_HOLES.md	H2	`f as iN` aborts on NaN, infinity or out-of-range and truncates toward zero otherwise	semantics	stale	arithmetic	cite	ARITH-5 (decided) moves float->int to a named conversion; current behaviour kept in its rationale
-docs/verification/KNOWN_HOLES.md	H1	References are never returned; overlapping borrows within one call are refused (E0293)	rule	dup:REF-1	-	cite	REF-11
-docs/verification/KNOWN_HOLES.md	H10	An array literal moves its linear elements	rule	dup:OWN-15	-	cite	-
-docs/verification/KNOWN_HOLES.md	C7	A runtime check proven violated (constant OOB index, literal division by zero) is refused (E0900) in safe code; trusted and with(Unsafe) code are exempt	rule	conflict:MEM-6	-	open	MEM-6 refuses a proven OOB index with no exemption; ARITH-3 rationale on E0900 has none either
-docs/verification/KNOWN_HOLES.md	C10	Indexing through &[T; N] or &mut [T; N] auto-dereferences one reference layer	rule	new	memory	absorb	MEM-4 covers field access only; TYPE-7 says only an array is indexed
-docs/verification/KNOWN_HOLES.md	C8	A pointer formed from &x or &mut x aliases the local itself	semantics	dup:REF-13	-	cite	-
-docs/verification/KNOWN_HOLES.md	C1	Calling through a function pointer requires the fn type's capability set	rule	dup:TRUST-4	-	cite	-
-docs/verification/KNOWN_HOLES.md	C2	Explicit enum discriminants are refused (E0001)	grammar	dup:SYN-1	-	cite	grammar enum_variant has no discriminant
-docs/verification/KNOWN_HOLES.md	C3	Unknown attributes are refused; allowlist repr, test, overflow_checked, spec, proof_by, ensures_proof, proof_coverage, proof_fingerprint, requires, ensures, invariant, variant, intrinsic, langitem	grammar	dup:SYN-1	-	cite	list omits export_name/link_name (FFI-5); `langitem` appears nowhere in spec; no rule enumerates the attribute set
-docs/verification/KNOWN_HOLES.md	Current open-defect index	The vec_get builtin requires a Copy element	builtin	dup:TYPE-10	-	cite	-
-docs/verification/MEMORY_GUARANTEES.md	*	Public claim boundary; restates ~12 OWN/REF rules, one stale &mut rule, one new trusted guarantee	-	-	-	cite-only	keep as public-claim page with citations
-docs/verification/MEMORY_GUARANTEES.md	Checker enforces #1	A consumed linear variable cannot be read, borrowed or moved	rule	dup:OWN-1	-	cite	-
-docs/verification/MEMORY_GUARANTEES.md	Checker enforces #2	Every linear variable is consumed or reserved by defer by scope exit	rule	dup:OWN-2	-	cite	OWN-12 for reservation
-docs/verification/MEMORY_GUARANTEES.md	Checker enforces #3	Mutable borrows are exclusive; shared borrows are incompatible with mutable borrows	rule	dup:REF-11	-	cite	-
-docs/verification/MEMORY_GUARANTEES.md	Checker enforces #4	References created by borrow blocks cannot be assigned to variables that outlive the block	rule	dup:REF-6	-	cite	REF-3 for field storage
-docs/verification/MEMORY_GUARANTEES.md	Checker enforces #5	A variable frozen by an active borrow cannot be read, written, moved or re-borrowed	rule	dup:REF-8	-	cite	REF-11
-docs/verification/MEMORY_GUARANTEES.md	Checker enforces #6	A linear variable from an outer scope cannot be consumed inside a loop body	rule	dup:OWN-4	-	cite	-
-docs/verification/MEMORY_GUARANTEES.md	Checker enforces #7	A live linear value cannot be overwritten; a mut binding may be rebound after consumption	rule	dup:OWN-9	-	cite	-
-docs/verification/MEMORY_GUARANTEES.md	Checker enforces #8	If/else branches and match arms agree on consumption of pre-existing linear variables	rule	dup:OWN-3	-	cite	-
-docs/verification/MEMORY_GUARANTEES.md	Checker enforces #9	break and continue cannot skip unconsumed linear variables	rule	dup:OWN-2	-	cite	-
-docs/verification/MEMORY_GUARANTEES.md	Checker enforces #10	trusted permits pointer operations but does not suppress ownership, borrow or scope-exit rules	guarantee	new	trusted	absorb	same item as SAFETY.md "trusted does not relax"
-docs/verification/MEMORY_GUARANTEES.md	Checker enforces #11	Borrow-block &mut refs are linear and consumed on call; parameter &mut refs are reborrowable	rule	stale	references	cite	superseded by REF-10 (D1: every &mut binding is lent per call); MEMORY_REGRESSION_CHECKLIST §5 confirms
-docs/verification/MEMORY_GUARANTEES.md	Public Claim	No unchecked &mut aliasing because borrow-block &mut refs are consumed on function call	guarantee	stale	references	cite	REF-10 / REF-11 give the current mechanism
-docs/verification/MEMORY_GUARANTEES.md	Public Claim	defer runs cleanup in LIFO order	semantics	dup:STMT-11	-	cite	OWN-12
-docs/verification/MEMORY_GUARANTEES.md	Public Claim	Safe code has no use-after-free, double free, leak or dangling safe reference	guarantee	dup:TRUST-2	-	cite	plus OWN-1/OWN-2/REF-8
-docs/verification/MEMORY_GUARANTEES.md	No-Codegen-Crash Rule	A well-typed safe program either compiles correctly or fails in a front-end phase with a diagnostic, never crashes codegen	guarantee	dup:PASS-12	-	cite	-
-docs/verification/MEMORY_GUARANTEES.md	No-Leak Guarantee Boundary	Strong no-leak covers Heap, HeapArray, String, &mut T, structs and enums; arena, raw-pointer, FFI and cyclic ownership leaks are outside it	guarantee	dup:OWN-2	-	rationale	the exclusions list is rationale for OWN-2/TRUST-2, not a rule
-docs/verification/MEMORY_GUARANTEES.md	Where the Safe Claim Has Boundaries	Borrows freeze the whole struct or array; borrows are scoped, no lifetime inference	rule	dup:REF-11	-	cite	REF-8
-docs/verification/MEMORY_GUARANTEES.md	Outside the checker's reach	Execution is single-threaded	guarantee	dup:STMT-3	-	cite	-
-docs/verification/MEMORY_REGRESSION_CHECKLIST.md	*	Tracking surface; every "intended rule" line restates OWN/REF rules	-	-	-	cite-only	-
-docs/verification/MEMORY_REGRESSION_CHECKLIST.md	§1	Borrowing a struct freezes the whole struct; field access through a reference auto-derefs without consuming it	rule	dup:REF-11	-	cite	MEM-4
-docs/verification/MEMORY_REGRESSION_CHECKLIST.md	§2	Borrowing an array freezes the whole array	rule	dup:REF-11	-	cite	-
-docs/verification/MEMORY_REGRESSION_CHECKLIST.md	§3	Branches and arms agree; if-without-else cannot consume; break/continue cannot skip linear values	rule	dup:OWN-3	-	cite	OWN-2
-docs/verification/MEMORY_REGRESSION_CHECKLIST.md	§4	Frozen, consumed or defer-reserved variables cannot be moved; trusted code does not relax this	rule	dup:REF-8	-	cite	OWN-1, OWN-12; trusted half is the new trusted row
-docs/verification/MEMORY_REGRESSION_CHECKLIST.md	§5	Every &mut binding is reborrowed when passed to a call; deref does not consume	rule	dup:REF-10	-	cite	-
-docs/verification/MEMORY_REGRESSION_CHECKLIST.md	§6	defer reserves its arguments; defers run LIFO	rule	dup:OWN-12	-	cite	STMT-11
-docs/verification/MEMORY_REGRESSION_CHECKLIST.md	§7	Borrow-block references cannot be assigned outside the block	rule	dup:REF-6	-	cite	-
-docs/verification/MEMORY_REGRESSION_CHECKLIST.md	§8	Outer linear values cannot be consumed in a loop body	rule	dup:OWN-4	-	cite	-
-docs/verification/MEMORY_REGRESSION_CHECKLIST.md	§1 / §9	Borrow-block syntax `borrow mut x as r in R { ... }`; defer takes a single call expression	grammar	dup:SYN-1	-	cite	SCOPE-D1, OWN-12
+docs/verification/INTERPRETER_TRUST.md	*	Interpreter trust boundary; mostly internals; a few observable-semantics statements, one stale entry contract	-	-	-	keep	-
+docs/verification/KNOWN_HOLES.md	*	Hole tracker; ~30 closed/open entries state rules, mostly dup; 7 stale (break value, shadowing, free exemption, Some{_}, float as) and 2 conflicts	-	-	-	keep	holes stay; replace rule restatements with IDs
+docs/verification/MEMORY_GUARANTEES.md	*	Public claim boundary; restates ~12 OWN/REF rules, one stale &mut rule, one new trusted guarantee	-	-	-	keep	keep as public-claim page with citations
+docs/verification/MEMORY_REGRESSION_CHECKLIST.md	*	Tracking surface; every "intended rule" line restates OWN/REF rules	-	-	-	keep	-
 docs/verification/OBLIGATION_CORE.md	*	Obligation ledger design; no language rules	-	-	-	keep	-
 docs/verification/PHASE3_OBLIGATION_CORE_AUDIT.md	*	Phase status audit; no language rules	-	-	-	keep	-
 docs/verification/PHASE4_COMPILER_LEDGER_AUDIT.md	*	Phase status audit; no language rules	-	-	-	keep	-
@@ -757,57 +638,23 @@ docs/verification/PROOF_EXTRACTION_GAPS.md	*	Extractor refusal findings; no lang
 docs/verification/PROOF_LADDER.md	*	Discharge tiers; no language rules	-	-	-	keep	-
 docs/verification/PROOF_OBLIGATIONS_REGISTER.md	*	ProofCore per-rule register; no language rules	-	-	-	keep	-
 docs/verification/PROOF_PRESSURE_SET.md	*	Proof pressure set; no language rules	-	-	-	keep	-
-docs/verification/PROOF_SEMANTICS_BOUNDARY.md	*	Proof model vs language; failure assumptions restate STMT/ARITH/MEM rules	-	-	-	cite-only	-
-docs/verification/PROOF_SEMANTICS_BOUNDARY.md	§3	Ordinary integer overflow and invalid division are checked terminal failures	semantics	dup:ARITH-3	-	cite	-
-docs/verification/PROOF_SEMANTICS_BOUNDARY.md	Failure assumptions	A function leaves only by return or trap; deferred calls run on every return and none on abort	semantics	dup:STMT-2	-	cite	STMT-11
-docs/verification/PROOF_SEMANTICS_BOUNDARY.md	Failure assumptions	Safe indexing traps; safe code has no UB	guarantee	dup:TRUST-2	-	cite	MEM-6
+docs/verification/PROOF_SEMANTICS_BOUNDARY.md	*	Proof model vs language; failure assumptions restate STMT/ARITH/MEM rules	-	-	-	keep	-
 docs/verification/PROOF_STATE_MODEL.md	*	ProofCore state model; no language rules	-	-	-	keep	-
 docs/verification/PROOF_STORY_MATRIX.md	*	Per-construct evidence inventory; no language rules	-	-	-	keep	-
 docs/verification/PROOF_SYNTHESIS.md	*	LLM proof synthesis design; no language rules	-	-	-	keep	-
 docs/verification/PROOF_THEOREM_SHAPES.md	*	Theorem shape conventions; no language rules	-	-	-	keep	-
 docs/verification/PROOF_WORKFLOW.md	*	Proof workflow; no language rules	-	-	-	keep	-
 docs/verification/PROVABLE_SUBSET.md	*	Proof-subset architecture; no language rules beyond restating checked failure	-	-	-	keep	-
-docs/verification/PROVABLE_SUBSET.md	Failure Model	Ordinary arithmetic and safe indexing are checked terminal failures at run time	semantics	dup:ARITH-3	-	cite	MEM-6
 docs/verification/PROVABLE_V1.md	*	Proof-subset contract (ProofCore model of operations); no language rules	-	-	-	keep	-
 docs/verification/PROVER_NEUTRAL_OBLIGATIONS.md	*	Prover-neutral obligation architecture; no language rules	-	-	-	keep	-
 docs/verification/PURE_CORE_PROOF_ARC.md	*	Proof arc contract; no language rules	-	-	-	keep	-
 docs/verification/R-0208-closure.md	*	Closure record; no language rules	-	-	-	keep	-
 docs/verification/README.md	*	Index; no language rules	-	-	-	keep	-
-docs/verification/SAFETY.md	*	Design record of the safety model; ~15 restated TRUST/FFI/OWN rules, 4 stale statements on pointer arithmetic, casts and extern+Unsafe, 5 rationale-only definitions to promote	-	-	-	cite-only	already labelled design record; fix stale lines, cite TRUST-4/5
-docs/verification/SAFETY.md	Capabilities	The capabilities are File, Network, Time, Env, Random, Process, Console, Alloc and Unsafe	definition	new	trusted	absorb	only in TRUST-4 rationale; no rule or definition entry enumerates the capability set
-docs/verification/SAFETY.md	Capabilities	Random is authority over external entropy; a deterministic PRNG seeded from a value is pure and needs no capability	semantics	new	trusted	absorb	TRUST-4 rationale only
-docs/verification/SAFETY.md	Capabilities	A function may call only functions whose capabilities are a subset of its own, checked at Check and CoreCheck	rule	dup:TRUST-4	-	cite	-
-docs/verification/SAFETY.md	Capabilities	A trait impl method requires only its trait method's capabilities; a call through a trait bound costs the trait method's capabilities	rule	dup:TRAIT-9	-	cite	also TRUST-4
-docs/verification/SAFETY.md	Capabilities	`cap IO = File + Console;` declares a capability alias that expands at parse time to capability names	grammar	new	trusted	absorb	TRUST-4 rationale only; no rule defines alias declarations, expansion or their scope
-docs/verification/SAFETY.md	Capabilities	`with(Std)` is a fixed alias for every standard capability except Unsafe	definition	new	trusted	absorb	TRUST-4 rationale only
-docs/verification/SAFETY.md	Trusted Boundaries	Trust is declared on each fn or method; a `trusted impl` block is refused	rule	dup:TRUST-5	-	cite	-
-docs/verification/SAFETY.md	What trusted permits	trusted permits pointer arithmetic written `*mut T + offset`	rule	stale	trusted	cite	superseded by TRUST-1 (pointer arithmetic is ptr::offset); also GUARANTEE_STATEMENT §3, TRUSTED_BOUNDARY_GUIDE examples
-docs/verification/SAFETY.md	What trusted permits	trusted permits pointer-involving casts	rule	stale	trusted	cite	TRUST-1: `as` never converts pointer<->integer (ptr::expose/from_exposed)
-docs/verification/SAFETY.md	What trusted permits	A reference-to-pointer cast (`&x as *const T`) is always safe and needs neither trusted nor Unsafe	rule	new	trusted	absorb	stated only in TRUST-4 rationale ("pointer casts other than a reference to a pointer require Unsafe")
-docs/verification/SAFETY.md	What trusted does not do	A trusted body absorbs the Unsafe of calling a plain extern fn, but the extern's declared effects still bind it; every extern declares effects (E0116)	rule	dup:TRUST-5	-	cite	effects-declaration half is FFI-3
-docs/verification/SAFETY.md	What trusted does not do	trusted does not relax ownership, linearity, borrow or scope-exit rules	guarantee	new	trusted	absorb	no TRUST rule says ownership/reference rules apply unchanged in trusted code; repeated in MEMORY_GUARANTEES #10, GUARANTEE_STATEMENT §3, EFFECT_PROOF_BOUNDARIES §2, TRUSTED_BOUNDARY_GUIDE
-docs/verification/SAFETY.md	What trusted does not do	`trusted extern fn` asserts the binding is safe for every argument its types permit with no undeclared effects; the compiler does not verify it	semantics	new	ffi	absorb	TRUST-5 says callable without Unsafe but not what the marker asserts or who discharges it; also GUARANTEE_STATEMENT §3, EFFECT_PROOF_BOUNDARIES §2/§7
-docs/verification/SAFETY.md	Unsafe-marked modules and global state	trusted mod marker confers no trust; no mutable globals; tokens descend from main's root value; handlers hold only given tokens	rule	dup:TRUST-6	-	cite	also TRUST-8, TRUST-9, TRUST-10
-docs/verification/SAFETY.md	with(Unsafe)	with(Unsafe) gates extern calls outside trusted bodies and raw-pointer deref, assignment and casts outside trusted code	rule	dup:TRUST-4	-	cite	TRUST-5 for the trusted absorption
-docs/verification/SAFETY.md	Linearity and Ownership	Structs and enums are linear by default; primitives, &T, raw pointers and function pointers are Copy	definition	dup:OWN-D1	-	cite	-
-docs/verification/SAFETY.md	Linearity and Ownership	Linear values are consumed exactly once, branches agree, defer schedules cleanup, Heap<T> must be freed	rule	dup:OWN-2	-	cite	OWN-1, OWN-3, OWN-12, MEM-5
-docs/verification/SAFETY.md	How The Pieces Fit Together	with(Unsafe) is required for extern fn calls even inside trusted code	rule	stale	trusted	cite	contradicts TRUST-5 and the doc's own §with(Unsafe) (R-0484 absorption)
-docs/verification/SAFETY.md	Proof Boundary	An empty capability set does not imply termination or absence of traps	guarantee	dup:TRUST-4	-	cite	TRUST-4 rationale ("authority claim, not purity")
+docs/verification/SAFETY.md	*	Design record of the safety model; ~15 restated TRUST/FFI/OWN rules, 4 stale statements on pointer arithmetic, casts and extern+Unsafe, 5 rationale-only definitions to promote	-	-	-	keep	already labelled design record; fix stale lines, cite TRUST-4/5
 docs/verification/SMT_SOUNDNESS.md	*	SMT trust model; no language rules	-	-	-	keep	-
 docs/verification/SPARK_CLASS_ASSURANCE.md	*	Design target; proposed annotations explicitly not real syntax; no language rules	-	-	-	keep	-
 docs/verification/THREAT_MODEL.md	*	Evidence threat/accident model; no language rules; one stale loop example	-	-	-	keep	-
-docs/verification/THREAT_MODEL.md	§4 Resource Drift	Example `for (let mut i = 0; i < len; i = i + 1)`	grammar	stale	statements	cite	STMT-6 counted loop `for i from 0 until len`
-docs/verification/THREAT_MODEL.md	§2 Authority Escalation	Callers without File get a compile error when a callee gains with(File)	rule	dup:TRUST-4	-	cite	-
-docs/verification/TRUSTED_BOUNDARY_GUIDE.md	*	Wrapper-pattern guide; restates trusted rules; code examples break 6 current spec rules	-	-	-	cite-only	rewrite the examples
-docs/verification/TRUSTED_BOUNDARY_GUIDE.md	The three-way split	trusted does not suppress capability tracking; a trusted fn needing File declares with(File)	rule	dup:TRUST-5	-	cite	-
-docs/verification/TRUSTED_BOUNDARY_GUIDE.md	The three-way split	Inside trusted code the checker still enforces linearity	guarantee	new	trusted	absorb	same item as SAFETY.md "trusted does not relax"
-docs/verification/TRUSTED_BOUNDARY_GUIDE.md	Pattern 1	Example `*(data + offset)` pointer arithmetic	rule	stale	trusted	cite	TRUST-1 requires ptr::offset
-docs/verification/TRUSTED_BOUNDARY_GUIDE.md	Pattern 2	Example `trusted extern fn fopen/fread/fclose` with no with(...)	rule	stale	ffi	cite	FFI-3 requires with(...) with declared effects; a trusted extern has no undeclared effects
-docs/verification/TRUSTED_BOUNDARY_GUIDE.md	Pattern 2	Example passes "rb" as *const u8 and compares `f == null`	rule	stale	types	cite	TYPE-4 (no implicit conversion), TYPE-6 (no operator takes a raw pointer)
-docs/verification/TRUSTED_BOUNDARY_GUIDE.md	Pattern 2	Example `fclose(f);` drops an i32 result as a statement	rule	stale	ownership	cite	OWN-7 requires discard(e)
-docs/verification/TRUSTED_BOUNDARY_GUIDE.md	Pattern 3	`arr[i]` is bounds-checked but currently an UB gap for out-of-bounds	semantics	stale	memory	cite	MEM-6: out-of-bounds aborts
-docs/verification/TRUSTED_BOUNDARY_GUIDE.md	Patterns 1-4	trusted fns declared in ordinary modules	rule	stale	trusted	cite	TRUST-6 (pending R-0557) requires `trusted mod`
-docs/verification/TRUSTED_BOUNDARY_GUIDE.md	Pattern 3	A `struct Copy` with array fields is passed by value	definition	dup:OWN-D1	-	cite	-
+docs/verification/TRUSTED_BOUNDARY_GUIDE.md	*	Wrapper-pattern guide; restates trusted rules; code examples break 6 current spec rules	-	-	-	keep	rewrite the examples
 docs/verification/TRUSTED_COMPUTING_BASE.md	*	Trust accounting; no language rules	-	-	-	keep	-
 docs/verification/VC_BRIDGE_REGISTER.md	*	Core-to-obligation bridge register; no language rules	-	-	-	keep	-
 docs/verification/VC_GENERATOR_DESIGN.md	*	WP generator design; no language rules	-	-	-	keep	-

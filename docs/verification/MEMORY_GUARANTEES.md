@@ -16,44 +16,30 @@ For the precise public guarantee statement, see [GUARANTEE_STATEMENT.md](GUARANT
 
 ## What the Checker Enforces Today
 
-These properties are mechanically enforced by `Check.lean` and verified by adversarial tests:
+These properties are mechanically enforced by `Check.lean` and verified by adversarial tests. Each
+is a rule of the spec:
 
-1. **No use-after-move.** A linear variable in `consumed` state cannot be read, borrowed, or moved. (Test: `error_memory_edge_use_after_move.con`)
-
-2. **No forgotten linear values.** Every linear variable must be consumed or reserved (via `defer`) by scope exit. (Test: linearity tests across the suite)
-
-3. **No borrow conflict.** Mutable borrows are exclusive; shared borrows are incompatible with mutable borrows. (Tests: `error_borrow_mut_conflict.con`, `error_double_mut_borrow.con`)
-
-4. **No borrow escape.** References created by borrow blocks cannot be assigned to variables that outlive the block. (Tests: `error_borrow_escape.con`, `error_escape_return.con`, `error_escape_field.con`)
-
-5. **No frozen-variable access.** A variable frozen by an active borrow block cannot be read, written, moved, or re-borrowed. (Test: `error_memory_edge_move_while_borrowed.con`)
-
-6. **No cross-loop consumption.** A linear variable from an outer scope cannot be consumed inside a loop body. (Test: `error_memory_edge_loop_consume_outer.con`)
-
-7. **No live linear overwrite.** A linear variable cannot be assigned while its
-   current value is live; a `mut` binding may be rebound after consumption.
-   (Negative: `error_memory_edge_linear_reassign.con`; positive:
-   `linear_rebind_after_drop.con`)
-
-8. **Branch agreement.** If/else branches and match arms must agree on consumption of pre-existing linear variables. (Tests: `error_memory_edge_branch_disagree.con`, `error_memory_edge_if_no_else_consume.con`, `bug_int_match_disagree.con`)
-
-9. **No skip past linear.** Break and continue cannot skip unconsumed linear variables. (Test: `error_break_linear_skip.con`)
-
-10. **Trusted code does not relax linearity.** `trusted` permits pointer arithmetic and raw pointer operations but does not suppress ownership, borrow, or scope-exit rules.
-
-11. **`&mut T` consumption tracking.** Exclusive references created in borrow blocks are linear and consumed on function call or return. Function parameter `&mut T` refs are reborrowable (not consumed on call). Deref read/write does not consume. Branch agreement and loop-consumption restrictions apply. (Tests: `adversarial_mut_ref_*.con`, `error_mut_ref_*.con`) See [REF-10](../spec/references.md#REF-10) for the full two-kind model.
+1. **No use-after-move**: [OWN-1](../spec/ownership.md#OWN-1). (Test: `error_memory_edge_use_after_move.con`)
+2. **No forgotten linear values**: [OWN-2](../spec/ownership.md#OWN-2), with `defer` reservation [OWN-12](../spec/ownership.md#OWN-12).
+3. **No borrow conflict**: [REF-11](../spec/references.md#REF-11). (Tests: `error_borrow_mut_conflict.con`, `error_double_mut_borrow.con`)
+4. **No borrow escape**: [REF-6](../spec/references.md#REF-6), [REF-3](../spec/references.md#REF-3). (Tests: `error_borrow_escape.con`, `error_escape_return.con`, `error_escape_field.con`)
+5. **No frozen-variable access**: [REF-8](../spec/references.md#REF-8). (Test: `error_memory_edge_move_while_borrowed.con`)
+6. **No cross-loop consumption**: [OWN-4](../spec/ownership.md#OWN-4). (Test: `error_memory_edge_loop_consume_outer.con`)
+7. **No live linear overwrite**: [OWN-9](../spec/ownership.md#OWN-9). (Negative: `error_memory_edge_linear_reassign.con`; positive: `linear_rebind_after_drop.con`)
+8. **Branch agreement**: [OWN-3](../spec/ownership.md#OWN-3). (Tests: `error_memory_edge_branch_disagree.con`, `error_memory_edge_if_no_else_consume.con`, `bug_int_match_disagree.con`)
+9. **No skip past linear**: `break` and `continue` are exits under [OWN-2](../spec/ownership.md#OWN-2). (Test: `error_break_linear_skip.con`)
+10. **Trusted code does not relax linearity**: [TRUST-12](../spec/trusted.md#TRUST-12).
+11. **`&mut T` is lent per call**: every `&mut` binding, a borrow-block binder included, is lent to each call and not consumed by it ([REF-10](../spec/references.md#REF-10)); a dereference does not consume it. The older two-kind model (borrow-block refs consumed on call) is superseded.
 
 ## Public Claim That Is Safe Today
 
-**For safe Concrete code (no `trusted`, no `with(Unsafe)`), the checker enforces:**
-
-- No use of a value after it has been moved.
-- No leak of a linear value — every owned resource is consumed or has deferred cleanup.
-- No conflicting borrows — mutable access is exclusive, shared access precludes mutation.
-- No dangling safe references — references cannot escape their borrow block.
-- No silent reassignment of linear resources.
-- No unchecked exclusive-reference aliasing — `&mut T` borrow-block refs are consumed on function call, preventing double-use.
-- Deterministic cleanup ordering via `defer` (LIFO).
+**For safe Concrete code (no `trusted`, no `with(Unsafe)`), the checker enforces:** no use after
+a move ([OWN-1](../spec/ownership.md#OWN-1)); no leak of a linear value ([OWN-2](../spec/ownership.md#OWN-2)); no conflicting borrows
+([REF-11](../spec/references.md#REF-11)); no dangling safe reference ([REF-6](../spec/references.md#REF-6), [REF-8](../spec/references.md#REF-8)); no
+overwrite of a live linear value ([OWN-9](../spec/ownership.md#OWN-9)); no aliasing through `&mut`, which is lent per
+call and exclusive within it ([REF-10](../spec/references.md#REF-10), [REF-11](../spec/references.md#REF-11)); and LIFO cleanup by
+`defer` ([STMT-11](../spec/statements.md#STMT-11)). Together these are
+[TRUST-2](../spec/trusted.md#TRUST-2)'s safe-code claim for memory.
 
 **What this rejects at compile time:**
 
@@ -67,12 +53,9 @@ These properties are mechanically enforced by `Check.lean` and verified by adver
 
 ## No-Codegen-Crash Rule
 
-**Safe-subset ownership mistakes must be checker errors, never codegen crashes.**
-
-A well-typed safe-subset program (no `trusted`, no `with(Unsafe)`) must either:
-1. Compile successfully and produce correct code, or
-2. Fail in a validated earlier phase (Parse, Resolve, Check, Elab, CoreCheck) with an explicit diagnostic.
-
+**Safe-subset ownership mistakes must be checker errors, never codegen crashes.** This is
+[PASS-12](../spec/pipeline.md#PASS-12): a program every rule accepts is compiled, and no stage after
+Check refuses or crashes on it.
 Checker/codegen mismatches — where the checker permits a program but codegen crashes or produces wrong code — are compiler bugs. The discovered `&mut T` return-inside-borrow-block crash (fixed in `3b9a895`) is the template: the checker accepted the program, but lowering emitted dead code that broke SSA verification. The fix was in codegen (skip dead write-back), not in the checker.
 
 This rule applies to:
@@ -88,9 +71,9 @@ Violations of this rule are high-priority bugs. New adversarial tests should tar
 The checker enforces a **strong no-leak guarantee** for safe code within the following boundary:
 
 **Strong no-leak (enforced at compile time):**
-- Every linear variable must be consumed or reserved (via `defer`) by scope exit. Forgetting a linear value is a compile-time error (`linearVariableNeverConsumed`).
-- This covers `Heap<T>`, `HeapArray<T>`, `String`, `&mut T` (borrow-block refs), structs, enums, and all other linear types.
-- `defer destroy(x)` schedules cleanup in LIFO order. The `reserved` state ensures the value cannot be moved away before cleanup runs.
+- Every owned linear binding is consumed before every exit of its scope ([OWN-2](../spec/ownership.md#OWN-2)), or
+  reserved by a `defer` ([OWN-12](../spec/ownership.md#OWN-12)); forgetting one is a compile-time error.
+- This covers `Heap<T>`, `HeapArray<T>`, `String`, structs, enums, and all other linear types.
 
 **What the strong no-leak guarantee does NOT cover:**
 - **Arena/bulk-free patterns.** If an arena allocates many objects and is freed as a unit, the individual objects are not tracked. The arena itself is linear (so it must be freed), but objects obtained from it may not be.
@@ -111,15 +94,16 @@ These are honest boundaries, not bugs:
 
 ### Conservative (safe but restrictive)
 
-- **Whole-value borrows only.** Borrowing a struct freezes the entire struct. Disjoint field borrows are not supported. This prevents some valid programs but never permits an invalid one.
-- **Whole-array borrows only.** No per-element borrow tracking. Same rationale.
-- **Scoped borrows only.** No Rust-style NLL or lifetime inference. References are confined to their borrow block. This is more restrictive than necessary but structurally sound.
+- **Whole-value borrows only.** A borrow of any part freezes the whole owner, struct or array
+  ([REF-11](../spec/references.md#REF-11)). This prevents some valid programs but never permits an invalid one.
+- **Scoped borrows only.** No lifetime inference: a reference lives for its borrow block
+  ([REF-8](../spec/references.md#REF-8), [REF-D3](../spec/references.md#REF-D3)).
 
 ### Outside the checker's reach
 
 - **Raw pointers.** Once a value is behind `*mut T` / `*const T`, the checker does not track it. Raw pointer soundness is the responsibility of `trusted` code and is an audit concern.
 - **Arena/bulk-free patterns.** If an arena is freed while references to its contents exist, the references dangle. The checker cannot see the arena-allocation relationship.
-- **Cross-function reference use.** The checker trusts function signatures. If `fn foo(x: &T)` internally does something unsound with the reference (via `trusted`), the caller's checker does not detect it.
+- **Concurrency.** A program has one thread ([STMT-3](../spec/statements.md#STMT-3)). Shared-memory concurrency would require `Send`/`Sync`-like constraints that do not exist yet. This is an **explicitly deferred boundary**.
 - **Concurrency.** The model assumes single-threaded execution. Shared-memory concurrency would require `Send`/`Sync`-like constraints that do not exist yet. This is an **explicitly deferred boundary**.
 
 ### Not yet proof-backed
@@ -140,7 +124,7 @@ This requires:
 
 - ~~one checker-matching memory/reference semantics document~~ **done** — [MEMORY_SEMANTICS.md](../archive/design-records/MEMORY_SEMANTICS.md)
 - ~~closure on hard edge cases~~ **done** — edge cases documented with status in MEMORY_SEMANTICS.md §13, adversarial tests for each, integer-match consumption bug fixed
-- ~~`&mut T` ownership/consumption closure~~ **done** — two-kind model (borrow-block vs parameter refs), checker enforcement, codegen alignment, 21 adversarial tests, return-in-borrow codegen fix; see [REF-10](../spec/references.md#REF-10) and [REF-10](../spec/references.md#REF-10)
+- ~~`&mut T` ownership/consumption closure~~ **done** — first a two-kind model (borrow-block vs parameter refs), now every `&mut` binding lent per call ([REF-10](../spec/references.md#REF-10)); checker enforcement, codegen alignment, 21 adversarial tests, return-in-borrow codegen fix
 - ~~no-codegen-crash regression rule~~ **done** — documented above; safe-subset programs must either compile or fail with an explicit checker diagnostic
 - ~~no-leak guarantee boundary~~ **done** — strong no-leak for safe code defined above; weaker audit reporting deferred
 - proof-facing articulation of the memory model (future: connect to ProofCore/obligations)

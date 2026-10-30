@@ -1103,7 +1103,7 @@ private def reconcileBranchVars (rules : BranchMergeRules)
 
 mutual
 
--- spec: TYPE-20 (docs/spec/types.md; casts to and from char)
+-- spec: TYPE-20, spec: TYPE-22 (docs/spec/types.md; casts to and from char)
 partial def lowerExpr (e : CExpr) : LowerM SVal := do
   match e with
   | .intLit v ty => return .intConst v ty

@@ -424,6 +424,19 @@ fn main() -> Int {
 }
 ```
 
+```con reject name=defer-drops-linear code=E0287 stage=check pair=account-for-it
+struct R { v: Int }
+
+fn mk() -> R {
+    return R { v: 1 };
+}
+
+fn main() -> Int {
+    defer mk();
+    return 42;
+}
+```
+
 ```con accept name=account-for-it exit=42
 struct R { v: Int }
 
@@ -1190,5 +1203,38 @@ fn main() -> Int {
         defer log(&mut x);
     }
     return x;
+}
+```
+
+<a id="OWN-17"></a>
+### OWN-17. A deferred call's result is dropped
+
+**OWN-17@1.** The value a deferred call returns is dropped when the call runs, so a `defer` whose call returns a linear value is refused as a discard of that value (OWN-5).
+
+- Kind: guarantee
+- Uses: OWN-D1
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.checkStmt
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** OWN-12 says which call a `defer` registers, not what happens to its result: nothing
+can receive it, so a linear one would be lost. The refusal is OWN-5's E0287 (example
+`defer-drops-linear` there). A Copy result is dropped without `discard`. Absorbed from
+[KNOWN_HOLES.md](../verification/KNOWN_HOLES.md) H6.
+
+```con accept name=defer-unit-call exit=42
+struct R { v: Int }
+
+fn release(r: R) {
+    let R { v } = r;
+}
+
+fn main() -> Int {
+    let r: R = R { v: 1 };
+    defer release(r);
+    return 42;
 }
 ```

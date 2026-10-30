@@ -6,8 +6,8 @@ techniques behind a safe API. **`Unsafe`** is the capability for crossing a fore
 boundary, and a `trusted` body absorbs it. No layer is exempt: compiler builtins, `std` and user
 code follow the same rules. This chapter covers what a capability means (TRUST-D1), raw pointers (TRUST-1, TRUST-3), undefined
 behaviour (TRUST-2), capabilities (TRUST-4), `trusted` (TRUST-5), the trusted-module marker
-(TRUST-6, pending), moving a value out of raw memory (TRUST-7), global state (TRUST-8 to TRUST-10), storing through a raw pointer (TRUST-11) and the
-move, cleanup and freeze rules in trusted code (TRUST-12). Capability sets, capability parameters and the capabilities of function types and
+(TRUST-6, pending), moving a value out of raw memory (TRUST-7) , global state (TRUST-8 to TRUST-10), storing through a raw pointer (TRUST-11), the
+ownership rules in trusted code (TRUST-12) and taking a reference's address (TRUST-13). Capability sets, capability parameters and the capabilities of function types and
 handles (`Sink<cap C>`) are in the types chapter (TYPE-D1, TYPE-15, TYPE-17, TYPE-18); this specification governs them. The design records are [SAFETY.md](../verification/SAFETY.md),
 [CAPABILITY_FACTS.md](../compiler/CAPABILITY_FACTS.md),
 [HANDLE_CAPABILITIES.md](../archive/design-records/HANDLE_CAPABILITIES.md),
@@ -557,6 +557,37 @@ trusted fn use_once(r: R) -> Int {
 
 fn main() -> Int {
     return use_once(R { v: 42 });
+}
+```
+
+<a id="TRUST-13"></a>
+### TRUST-13. Taking a reference's address is safe
+
+**TRUST-13@1.** Converting a reference to a raw pointer requires neither `trusted` nor `Unsafe`, while every use of the pointer that reads, writes or offsets through it does (TRUST-4, TRUST-5).
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.ccCheckExpr
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** The conversion only names an address that a live borrow already denotes; the hazard is
+in using the pointer, and that is gated. Which conversions `as` writes, this one included, is
+OPEN-98, and what such a pointer may do after its borrow ends is OPEN-64. Absorbed from
+[SAFETY.md](../verification/SAFETY.md) ("What trusted permits").
+
+```con accept name=reference-to-pointer-in-safe-code exit=42
+trusted fn rd(p: *const Int) -> Int {
+    return *p;
+}
+
+fn main() -> Int {
+    let x: Int = 42;
+    let p: *const Int = &x as *const Int;
+    return rd(p);
 }
 ```
 

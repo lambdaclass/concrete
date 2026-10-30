@@ -69,7 +69,7 @@ control and a mutation through the production consumer.
 **Example:** `validate(data, len) -> Int` (pure, no capabilities) → `validate(data, len) with(File) -> Int`. The function can now read files, but call sites don't change.
 
 **Detection mechanisms:**
-- Capability system: callers without `File` get a compile error
+- Capability system: callers without `File` get a compile error ([TRUST-4](../spec/trusted.md#TRUST-4))
 - `--report effects`: capabilities change `[] → [File]`, `is_pure: true → false`
 - `--report authority`: function appears in the File authority group
 - `concrete diff`: reports `TRUST WEAKENED` with `capability / validate: capabilities [] → [File]`
@@ -96,7 +96,7 @@ control and a mutation through the production consumer.
 
 **What:** A function's resource usage changes: bounded loops become unbounded, allocation appears, or blocking I/O is introduced.
 
-**Example:** `for (let mut i = 0; i < len; i = i + 1)` → `while i < len`. The loop is no longer structurally bounded.
+**Example:** a counted loop `for i from 0 until len` ([STMT-6](../spec/statements.md#STMT-6); pending bug-331, so main still writes the C-style `for (let mut i = 0; i < len; i = i + 1)`) → `while i < len`. The loop is no longer structurally bounded.
 
 **Detection mechanisms:**
 - `--check predictable`: unbounded loop violation

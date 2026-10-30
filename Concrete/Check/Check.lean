@@ -717,7 +717,7 @@ partial def checkExpr (e : Expr) (hint : Option Ty := none) (mode : UseMode := .
   | _ => return t
 
 -- spec: OWN-3, spec: OWN-5, spec: OWN-8, spec: OWN-15, spec: TYPE-4, spec: TYPE-5, spec: TYPE-6, spec: TYPE-7, spec: TYPE-8, spec: TYPE-9, spec: TYPE-10, spec: TYPE-11, spec: OWN-13, spec: PAT-3, spec: ARITH-2, spec: ARITH-6, spec: STMT-5, spec: STMT-8, spec: MEM-4, spec: MEM-5, spec: TRUST-4, spec: TRUST-7 (docs/spec/ownership.md; this declaration enforces the rule)
--- spec: TRAIT-6, spec: PAT-5, spec: PAT-11, spec: FFI-7 (docs/spec/traits.md; this declaration enforces the rule)
+-- spec: TRAIT-6, spec: PAT-5, spec: PAT-11, spec: FFI-7, spec: MEM-8 (docs/spec/traits.md; this declaration enforces the rule)
 partial def checkExprCore (e : Expr) (hint : Option Ty := none) (mode : UseMode := .value)
     (clean : Bool := false) (flex : Option TypeJudgment.FlexTree := none)
     (ends : Option EndsTree := none) : CheckM Ty := do
@@ -2435,7 +2435,7 @@ partial def checkGuard (guard : Option Expr) : CheckM Unit := do
     | some n => throwCheck (.guardMovesLinear n) (some g.getSpan)
     | none => pure ()
 
--- spec: REF-6, spec: REF-7, spec: OWN-2, spec: OWN-5, spec: OWN-6, spec: OWN-7, spec: OWN-9, spec: OWN-10, spec: OWN-12, spec: OWN-15, spec: OWN-1, spec: TYPE-4, spec: TYPE-7, spec: TYPE-11, spec: TYPE-5, spec: PAT-5, spec: STMT-6, spec: SYN-3, spec: PAT-8, spec: REF-D3, spec: TRUST-11, spec: PAT-11 (docs/spec/references.md; this declaration enforces the rule)
+-- spec: REF-6, spec: REF-7, spec: OWN-2, spec: OWN-5, spec: OWN-6, spec: OWN-7, spec: OWN-9, spec: OWN-10, spec: OWN-12, spec: OWN-15, spec: OWN-1, spec: TYPE-4, spec: TYPE-7, spec: TYPE-11, spec: TYPE-5, spec: PAT-5, spec: STMT-6, spec: SYN-3, spec: PAT-8, spec: REF-D3, spec: TRUST-11, spec: PAT-11, spec: CON-6, spec: OWN-17 (docs/spec/references.md; this declaration enforces the rule)
 partial def checkStmt (stmt : Stmt) (retTy : Ty) (ends : Option EndsTree := none) : CheckM Unit := do
   -- Rule (d) (bug 142): an assignment's destination (the indexed array, the index, the
   -- dereferenced target, the projected base) is an operand too; only the assigned value keeps
@@ -3889,7 +3889,7 @@ def declarationCollisions (m : Module) : Diagnostics :=
     errs.reverse
   dupes callables ++ dupes constants ++ dupes types
 
--- spec: REF-3, spec: STMT-7, spec: MOD-3, spec: REF-1, spec: REF-2, spec: CON-3 (docs/spec/references.md; this declaration enforces the rule)
+-- spec: REF-3, spec: STMT-7, spec: MOD-3, spec: REF-1, spec: REF-2, spec: CON-3, spec: CON-5, spec: CON-7 (docs/spec/references.md; this declaration enforces the rule)
 def checkModule (m : Module) (summary : FileSummary)
     (imports : ResolvedImports := {}) : Except Diagnostics Unit :=
   let collisions := declarationCollisions m ++ importBindingCollisions m imports
