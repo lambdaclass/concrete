@@ -484,10 +484,11 @@ inductive ImportRefusal where
 /-- The one import rule (bug 226), applied by Resolve to a top-level module (`summaryImports`) and
     by `resolveImports` to every module Check and Elab see, submodules included; before, a
     submodule's imports admitted every function, foreign binding, struct and enum, `pub` or not.
-    A declaration crosses a module boundary only when it is `pub` (MOD-2). The bindings of
-    `std.libc` are private to std (MOD-6): a module of std imports them though they are not `pub`,
-    and a module outside std imports none of them, `pub` or not. `none` admits the import; a name
-    the exporter does not declare is not judged here (its own refusal reports it). -/
+    A declaration crosses a module boundary only when the declaration the import binds is `pub`
+    (MOD-2). The functions and foreign bindings of `std.libc` are private to std (MOD-6): a module of
+    std imports them though they are not `pub`, and a module outside std imports none of them, `pub`
+    or not; any other declaration of `std.libc` follows MOD-2. `none` admits the import; a name the
+    exporter does not declare is not judged here (its own refusal reports it). -/
 def importRefusal (importer exporter : FileSummary) (name : String) : Option ImportRefusal :=
   -- The declaration an import of `name` binds, in `resolveImports`' order: a function or foreign
   -- binding, then a struct, then an enum; the rest (aliases, newtypes, constants) check their own
