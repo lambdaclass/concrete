@@ -478,8 +478,9 @@ fn main() -> Int {
 - Evidence: tested
 
 **Rationale.** Command-line arguments come from `std.args` (`with(Env)`); a parameterized `main`
-used to read an undefined register (bug 111). There is no `std.process.exit`: an early exit would
-skip cleanup the linear rules promise, so status flows back through `main`. Version 2 masked an integer result to
+used to read an undefined register (bug 111). The language has no exit operation: an early exit would
+skip cleanup the linear rules promise, so status flows back through `main` (std's `process_exit`,
+which does skip it, is OPEN-136). Version 2 masked an integer result to
 0–255 and mapped `bool` (stage 1 of MAIN_EXIT_MODEL); OD24 narrows the result to `u8` or `Unit`, so
 masking is unrepresentable. `--interp` prints the result instead of exiting with it.
 The owner decided OD8 on 2026-10-29: `main` will receive the root resource value and split it
@@ -488,19 +489,20 @@ none.
 
 Version 3 records the owner's decision of 2026-10-29 (OD24): `main` returns `u8` or `Unit`; there
 is no masking, no `bool` mapping and no other result type. Main still accepts any result type, masks
-an integer natively and prints it under `--interp` (bug 320); the examples of this specification
-still declare `fn main() -> Int` and migrate with the rest of the corpus.
+an integer natively and prints it under `--interp` (bug 320). This entry's accepted examples use the
+decided forms; `main-returns-int` pins main's acceptance of `-> Int` as pending. Examples elsewhere in
+this specification that still declare `fn main() -> Int` are being migrated to `u8` or `Unit`.
 
 
 ```con reject name=main-with-parameter code=E0310 stage=check pair=main-exit-status
-fn main(argc: Int) -> Int {
+fn main(argc: Int) -> u8 {
     return 0;
 }
 ```
 
-```con accept name=main-exit-status exit=42
-fn main() -> Int {
-    return 42;
+```con accept name=main-exit-status exit=7
+fn main() -> u8 {
+    return 7;
 }
 ```
 

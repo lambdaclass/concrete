@@ -154,11 +154,11 @@ OWN-14/copy-with-linear-field	live	-
 OWN-14/copy-with-copy-fields	live	-
 OWN-15@1	superseded	5b9961b35b29ce0d859b8900018cbec7
 OWN-15/flows-move-once	live	-
-TYPE-4@1	live	56072a53298325dea589e4594ee833cc
+TYPE-4@1	superseded	56072a53298325dea589e4594ee833cc
 TYPE-4/bool-for-int	live	-
 TYPE-4/branches-disagree	live	-
 TYPE-4/one-type	live	-
-TYPE-5@1	live	d8457494c8c84aa36fbe52525bb229da
+TYPE-5@1	superseded	d8457494c8c84aa36fbe52525bb229da
 TYPE-5/int-condition	live	-
 TYPE-5/bool-condition	live	-
 TYPE-6@1	superseded	80e32c7a2d8f3259f853c9932e95df0e
@@ -751,3 +751,5 @@ OPEN-135@1	live	f7e528dd28fce7bcb42634c00bfba0e1
 OPEN-136@1	live	a8f53fd3ac9243a040ffc0935d91750f
 MOD-3/method-mangled-name	live	-
 MOD-3/method-beside-free-function	live	-
+TYPE-4@2	live	1bf023e5364ce294918536240e22852d
+TYPE-5@2	live	d885538e5151495c81bf0c6cae8395fa

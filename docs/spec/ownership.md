@@ -71,7 +71,7 @@ TYPE-14 states the consequence.
 - Evidence: tested
 
 **Rationale.** Every site a value flows into moves it: `let g = f;`, a by-value argument,
-`return f;`, a match scrutinee, an assignment `a = f;`, `break f;`, a struct, enum or array literal,
+`return f;`, a match scrutinee, an assignment `a = f;`, a struct, enum or array literal,
 and a store `*p = v` or `a[i] = v`. Using the source afterwards would use a value that now has
 another owner.
 
@@ -1049,7 +1049,7 @@ Version 3 records the owner's decision of 2026-10-29 (OD32): there is no receive
 `&self` or `&mut self` method on an owned place is called as `(&s).m()` or `(&mut s).m()`, and a
 receiver that is already a reference is unchanged. Main still borrows an owned receiver implicitly
 (bug 328); the `methodCall` row below states the decided form and notes main's. `break <expr>`
-is refused at parse (STMT-6, OD27).
+is refused at parse by the decided rule (STMT-6, OD27); main still parses it (bug 323).
 
 
 ```con accept name=flows-move-once exit=42
@@ -1097,7 +1097,6 @@ fn main() -> Int {
 | `fnRef` | creates a Copy function-pointer value | — |
 | heap-shell `.fieldAccess` (the removed `->` form) | heap-interior read: OWN-8 applies (bug 144), so a non-Copy field read by value is **E0290**; a heap store through `fieldAssign` refuses a non-Copy overwrite (**E0219**); a node is taken apart with `let n = *h;` and a pattern | projection |
 | `allocCall` | the inner call or allocator is evaluated; creates an owned `Heap<T>` | discard |
-| `whileExpr` | a loop as an expression; `break value;` **moves** the value out as the loop's result (H14) | conservation (H14 rows) |
 | `ifExpr` | branch values **move**; branches must agree on consumption (OWN-3) | conservation |
 
 #### Value flow: MatchArm
@@ -1123,7 +1122,7 @@ fn main() -> Int {
 | `fieldAssign` | an overwrite of a non-Copy field is **refused** (**E0219**); an ident right-hand side **moves**; the object is a place | conservation |
 | `derefAssign` | through `&mut T`: an overwrite of a non-Copy pointee is **refused** (**E0291**, H15); through `*mut T`: a trusted uninitialized-slot store (exempt); an ident right-hand side **moves** | conservation (H15 rows) |
 | `arrayIndexAssign` | an overwrite of a non-Copy element is **refused** (**E0291**, H15); an ident right-hand side **moves**; the array is a place | conservation (H15 rows) |
-| `break_` | may not skip unconsumed loop-local linear values (E0210); `break f;` **moves** an ident value out (H14), with a one-level loop-depth exemption (a break fires at most once per loop entry) | conservation (H14 rows) + scope |
+| `break_` | may not skip unconsumed loop-local linear values (E0210); a move of an outer value next to the `break` is allowed by a one-level loop-depth exemption (a break fires at most once per loop entry, H14); `break` carries no value (STMT-6@3, OD27), and main, which still parses `break <expr>;` (bug 323), evaluates and drops it, refusing a non-Copy one (bug 149) | conservation (H14 rows) + scope |
 | `continue_` | may not skip unconsumed loop-local linear values (E0211) | scope |
 | `defer` | the deferred call **reserves** its operands, consumed at scope exit (OWN-12); a discarded non-Copy or fallible result is refused (E0287 / E0286) | discard |
 | `assert_` | proof-only, erased before Core; must not change the ownership state of a runtime binding (OWN-11) | — |
@@ -1146,7 +1145,7 @@ The checker decides consumption by the position an expression is checked in (`Us
 | `paren` | transparent: propagates the surrounding mode | transparent | transparent |
 | `structLit` `enumLit` `arrayLit` | fields and elements are checked in value mode (moved in); `..base` is checked as a place | same | n/a |
 | `fieldAccess` `arrayIndex` | a Copy read copies; a non-Copy read is refused (E0290); the base is checked as a place | same as value | sub-place; no flow |
-| `match_` `ifExpr` `whileExpr` | scrutinee and arm values in value mode; branch environments merged | n/a | n/a |
+| `match_` `ifExpr` | scrutinee and arm values in value mode; branch environments merged | n/a | n/a |
 | `borrow` `borrowMut` | the inner expression is checked as a place; the result `&T` is Copy and `&mut T` exclusive | same | n/a |
 | `deref` | the inner expression is checked as a place (reading through a reference or pointer never consumes the binding); `*heap_ident` explicitly consumes | same | inner as place |
 | `fnRef` | creates a Copy function pointer | same | n/a |

@@ -1842,7 +1842,7 @@ mod text_owned {
 <a id="TYPE-4"></a>
 #### TYPE-4. One type per expression, no implicit conversion
 
-**TYPE-4@1.** Every expression has exactly one type, and every position a value flows into (a binding, an argument, a return, a field, a branch or arm of a value-producing `if` or `match`, a `break` value) expects that type exactly, with no implicit conversion, except that an expression that never completes (a diverging `return`, `break`, `continue` or call) fits any position other than a condition (TYPE-5).
+**TYPE-4@2.** Every expression has exactly one type, and every position a value flows into (a binding, an argument, a return, a field, a branch or arm of a value-producing `if` or `match`) expects that type exactly, with no implicit conversion, except that an expression that never completes (a diverging `return`, `break`, `continue` or call) fits any position other than a condition (TYPE-5).
 
 - Kind: refusal
 - Uses: none
@@ -1934,7 +1934,7 @@ fn main() with(Console) -> Int {
 <a id="TYPE-5"></a>
 #### TYPE-5. Conditions are `bool`
 
-**TYPE-5@1.** The condition of an `if`, `while` or `for`, a match guard, and the operands of `&&`, `||` and `!` have type `bool`, and a comparison has type `bool`.
+**TYPE-5@2.** The condition of an `if` or `while`, a match guard, and the operands of `&&`, `||` and `!` have type `bool`, and a comparison has type `bool`.
 
 - Kind: refusal
 - Uses: none
@@ -1946,7 +1946,9 @@ fn main() with(Console) -> Int {
 - Evidence: tested
 
 **Rationale.** There is no truthiness: an integer is not a condition. Until bug 192 was fixed, the
-statement forms of `if`, `while` and `for` let an integer through, and the binary ran it with C
+statement forms of `if`, `while` and `for` let an integer through (the counted loop of STMT-6@3 has no
+condition; main's C-style `for (init; cond; step)`, removed by STMT-6@3 and still parsed until bug 331
+is fixed, requires a `bool` `cond` the same way), and the binary ran it with C
 truthiness while `--interp` refused it. This entry's example found the bug.
 
 ```con reject name=int-condition code=E0223 stage=check pair=bool-condition
@@ -4218,8 +4220,9 @@ fn main() -> Int {
 - Evidence: tested
 
 **Rationale.** Command-line arguments come from `std.args` (`with(Env)`); a parameterized `main`
-used to read an undefined register (bug 111). There is no `std.process.exit`: an early exit would
-skip cleanup the linear rules promise, so status flows back through `main`. Version 2 masked an integer result to
+used to read an undefined register (bug 111). The language has no exit operation: an early exit would
+skip cleanup the linear rules promise, so status flows back through `main` (std's `process_exit`,
+which does skip it, is OPEN-136). Version 2 masked an integer result to
 0–255 and mapped `bool` (stage 1 of MAIN_EXIT_MODEL); OD24 narrows the result to `u8` or `Unit`, so
 masking is unrepresentable. `--interp` prints the result instead of exiting with it.
 The owner decided OD8 on 2026-10-29: `main` will receive the root resource value and split it
@@ -4228,19 +4231,20 @@ none.
 
 Version 3 records the owner's decision of 2026-10-29 (OD24): `main` returns `u8` or `Unit`; there
 is no masking, no `bool` mapping and no other result type. Main still accepts any result type, masks
-an integer natively and prints it under `--interp` (bug 320); the examples of this specification
-still declare `fn main() -> Int` and migrate with the rest of the corpus.
+an integer natively and prints it under `--interp` (bug 320). This entry's accepted examples use the
+decided forms; `main-returns-int` pins main's acceptance of `-> Int` as pending. Examples elsewhere in
+this specification that still declare `fn main() -> Int` are being migrated to `u8` or `Unit`.
 
 
 ```con reject name=main-with-parameter code=E0310 stage=check pair=main-exit-status
-fn main(argc: Int) -> Int {
+fn main(argc: Int) -> u8 {
     return 0;
 }
 ```
 
-```con accept name=main-exit-status exit=42
-fn main() -> Int {
-    return 42;
+```con accept name=main-exit-status exit=7
+fn main() -> u8 {
+    return 7;
 }
 ```
 
@@ -5397,7 +5401,7 @@ TYPE-14 states the consequence.
 - Evidence: tested
 
 **Rationale.** Every site a value flows into moves it: `let g = f;`, a by-value argument,
-`return f;`, a match scrutinee, an assignment `a = f;`, `break f;`, a struct, enum or array literal,
+`return f;`, a match scrutinee, an assignment `a = f;`, a struct, enum or array literal,
 and a store `*p = v` or `a[i] = v`. Using the source afterwards would use a value that now has
 another owner.
 
@@ -6375,7 +6379,7 @@ Version 3 records the owner's decision of 2026-10-29 (OD32): there is no receive
 `&self` or `&mut self` method on an owned place is called as `(&s).m()` or `(&mut s).m()`, and a
 receiver that is already a reference is unchanged. Main still borrows an owned receiver implicitly
 (bug 328); the `methodCall` row below states the decided form and notes main's. `break <expr>`
-is refused at parse (STMT-6, OD27).
+is refused at parse by the decided rule (STMT-6, OD27); main still parses it (bug 323).
 
 
 ```con accept name=flows-move-once exit=42
@@ -6423,7 +6427,6 @@ fn main() -> Int {
 | `fnRef` | creates a Copy function-pointer value | — |
 | heap-shell `.fieldAccess` (the removed `->` form) | heap-interior read: OWN-8 applies (bug 144), so a non-Copy field read by value is **E0290**; a heap store through `fieldAssign` refuses a non-Copy overwrite (**E0219**); a node is taken apart with `let n = *h;` and a pattern | projection |
 | `allocCall` | the inner call or allocator is evaluated; creates an owned `Heap<T>` | discard |
-| `whileExpr` | a loop as an expression; `break value;` **moves** the value out as the loop's result (H14) | conservation (H14 rows) |
 | `ifExpr` | branch values **move**; branches must agree on consumption (OWN-3) | conservation |
 
 ##### Value flow: MatchArm
@@ -6449,7 +6452,7 @@ fn main() -> Int {
 | `fieldAssign` | an overwrite of a non-Copy field is **refused** (**E0219**); an ident right-hand side **moves**; the object is a place | conservation |
 | `derefAssign` | through `&mut T`: an overwrite of a non-Copy pointee is **refused** (**E0291**, H15); through `*mut T`: a trusted uninitialized-slot store (exempt); an ident right-hand side **moves** | conservation (H15 rows) |
 | `arrayIndexAssign` | an overwrite of a non-Copy element is **refused** (**E0291**, H15); an ident right-hand side **moves**; the array is a place | conservation (H15 rows) |
-| `break_` | may not skip unconsumed loop-local linear values (E0210); `break f;` **moves** an ident value out (H14), with a one-level loop-depth exemption (a break fires at most once per loop entry) | conservation (H14 rows) + scope |
+| `break_` | may not skip unconsumed loop-local linear values (E0210); a move of an outer value next to the `break` is allowed by a one-level loop-depth exemption (a break fires at most once per loop entry, H14); `break` carries no value (STMT-6@3, OD27), and main, which still parses `break <expr>;` (bug 323), evaluates and drops it, refusing a non-Copy one (bug 149) | conservation (H14 rows) + scope |
 | `continue_` | may not skip unconsumed loop-local linear values (E0211) | scope |
 | `defer` | the deferred call **reserves** its operands, consumed at scope exit (OWN-12); a discarded non-Copy or fallible result is refused (E0287 / E0286) | discard |
 | `assert_` | proof-only, erased before Core; must not change the ownership state of a runtime binding (OWN-11) | — |
@@ -6472,7 +6475,7 @@ The checker decides consumption by the position an expression is checked in (`Us
 | `paren` | transparent: propagates the surrounding mode | transparent | transparent |
 | `structLit` `enumLit` `arrayLit` | fields and elements are checked in value mode (moved in); `..base` is checked as a place | same | n/a |
 | `fieldAccess` `arrayIndex` | a Copy read copies; a non-Copy read is refused (E0290); the base is checked as a place | same as value | sub-place; no flow |
-| `match_` `ifExpr` `whileExpr` | scrutinee and arm values in value mode; branch environments merged | n/a | n/a |
+| `match_` `ifExpr` | scrutinee and arm values in value mode; branch environments merged | n/a | n/a |
 | `borrow` `borrowMut` | the inner expression is checked as a place; the result `&T` is Copy and `&mut T` exclusive | same | n/a |
 | `deref` | the inner expression is checked as a place (reading through a reference or pointer never consumes the binding); `*heap_ident` explicitly consumes | same | inner as place |
 | `fnRef` | creates a Copy function pointer | same | n/a |

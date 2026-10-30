@@ -177,7 +177,7 @@ mod text_owned {
 <a id="TYPE-4"></a>
 ### TYPE-4. One type per expression, no implicit conversion
 
-**TYPE-4@1.** Every expression has exactly one type, and every position a value flows into (a binding, an argument, a return, a field, a branch or arm of a value-producing `if` or `match`, a `break` value) expects that type exactly, with no implicit conversion, except that an expression that never completes (a diverging `return`, `break`, `continue` or call) fits any position other than a condition (TYPE-5).
+**TYPE-4@2.** Every expression has exactly one type, and every position a value flows into (a binding, an argument, a return, a field, a branch or arm of a value-producing `if` or `match`) expects that type exactly, with no implicit conversion, except that an expression that never completes (a diverging `return`, `break`, `continue` or call) fits any position other than a condition (TYPE-5).
 
 - Kind: refusal
 - Uses: none
@@ -269,7 +269,7 @@ fn main() with(Console) -> Int {
 <a id="TYPE-5"></a>
 ### TYPE-5. Conditions are `bool`
 
-**TYPE-5@1.** The condition of an `if`, `while` or `for`, a match guard, and the operands of `&&`, `||` and `!` have type `bool`, and a comparison has type `bool`.
+**TYPE-5@2.** The condition of an `if` or `while`, a match guard, and the operands of `&&`, `||` and `!` have type `bool`, and a comparison has type `bool`.
 
 - Kind: refusal
 - Uses: none
@@ -281,7 +281,9 @@ fn main() with(Console) -> Int {
 - Evidence: tested
 
 **Rationale.** There is no truthiness: an integer is not a condition. Until bug 192 was fixed, the
-statement forms of `if`, `while` and `for` let an integer through, and the binary ran it with C
+statement forms of `if`, `while` and `for` let an integer through (the counted loop of STMT-6@3 has no
+condition; main's C-style `for (init; cond; step)`, removed by STMT-6@3 and still parsed until bug 331
+is fixed, requires a `bool` `cond` the same way), and the binary ran it with C
 truthiness while `--interp` refused it. This entry's example found the bug.
 
 ```con reject name=int-condition code=E0223 stage=check pair=bool-condition
