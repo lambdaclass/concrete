@@ -25,7 +25,7 @@ The open questions are tracked under
 
 Concrete's [design policy](../../docs/project/PROJECT.md#design-policy),
 [anti-features](../../docs/project/ANTI_FEATURES.md),
-[value model](../../docs/language/VALUE_MODEL.md),
+[language specification](../../docs/spec/README.md) (which absorbed the value model),
 [evidence architecture](../../docs/verification/EVIDENCE_ARCHITECTURE.md), and the
 owner's recorded language decisions are authoritative. A candidate idea is
 considered only if it keeps:
