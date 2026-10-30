@@ -440,7 +440,7 @@ REF-13@1	pending	9bc44814b65d2f656ae0a49a4d600e01
 OWN-16@1	pending	8423d8d4f6645181736bb8ebaf2bfd55
 OWN-16/borrow-while-deferred	pending	-
 OWN-16/deferred-borrow-alone	live	-
-STMT-11@1	superseded	a6469983c681d5746be42a0324fa6dbc
+STMT-11@1	retired:replaced-by-version-2-before-it-was-enforced	a6469983c681d5746be42a0324fa6dbc
 MOD-7@1	pending	61f2ddd8f325d560b10239b263992456
 TRUST-6@2	pending	08f3bb8fb9eb30319d9218ba580d5286
 PAT-9@1	pending	35e2167c3a43ba510434adcfe56ae438

@@ -84,12 +84,14 @@ def check_inventory(root, listed):
             fails.append(f"{INVENTORY}:{i}: {len(c)} cells, not 8"); continue
         if c[6] not in ACTIONS:
             fails.append(f"{INVENTORY}:{i}: unknown action '{c[6]}'")
+        if not c[0] or c[0] != c[0].strip() or os.path.isabs(c[0]) or ".." in c[0].split("/"):
+            fails.append(f"{INVENTORY}:{i}: '{c[0]}' is not a repository-relative file path"); continue
         files.add(c[0])
         if c[1] == "*":
             verdicts[c[0]] = verdicts.get(c[0], 0) + 1
     for f in sorted(files):
-        if not os.path.exists(os.path.join(root, f)):
-            fails.append(f"{INVENTORY}: {f} no longer exists (remove its rows in the commit that deletes or moves it)")
+        if not os.path.isfile(os.path.join(root, f)):
+            fails.append(f"{INVENTORY}: {f} is not a file in the tree (remove or re-point its rows in the commit that deletes or moves it)")
         if verdicts.get(f, 0) != 1:
             fails.append(f"{INVENTORY}: {f} has {verdicts.get(f, 0)} `*` verdict rows, not 1")
     for f in sorted(listed):
@@ -132,10 +134,14 @@ def self_test(root):
     def inventory_row_of_gone_file(d):
         open(os.path.join(d, INVENTORY), "a").write(
             "docs/language/GONE.md\t*\tplanted\t-\t-\t-\tkeep\t\n")
+    def inventory_row(path):
+        return lambda d: open(os.path.join(d, INVENTORY), "a").write(f"{path}\t*\tplanted\t-\t-\t-\tkeep\t\n")
     for name, plant, frag in (
             ("a new document under docs/language", lambda d: open(os.path.join(d, "docs/language/NEW_RULES.md"), "w").write("# new\n"), "NEW_RULES.md is a new document"),
             ("a listed document deleted without its row", deleted_with_row, "PLANTED.md no longer exists"),
-            ("an inventory row whose file is gone", inventory_row_of_gone_file, "GONE.md no longer exists")):
+            ("an inventory row whose file is gone", inventory_row_of_gone_file, "GONE.md is not a file"),
+            ("an inventory row with an empty path", inventory_row(""), "'' is not a repository-relative file path"),
+            ("an inventory row naming a directory", inventory_row("docs/language"), "docs/language is not a file")):
         d = scratch(); plant(d)
         fails, _ = check(d)
         if any(frag in f for f in fails): print(f"  ok   control: {name} is refused")
