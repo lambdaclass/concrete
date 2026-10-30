@@ -1482,7 +1482,7 @@ fn main() -> Int {
 <a id="TYPE-24"></a>
 ### TYPE-24. The conversions of a newtype
 
-**TYPE-24@1.** A newtype `N` over `T` converts to `T` by `n.0` or `n as T` and a `T` converts to `N` by `N(v)` or `v as N`, each form only in the modules TYPE-11 allows it, with `N`'s type arguments substituted into `T`, and `as` converts a newtype to or from no other type.
+**TYPE-24@1.** A newtype `N` over `T` converts to `T` by `n.0` or `n as T` and a `T` converts to `N` by `N(v)` or `v as N`, TYPE-11 saying in which modules `N(v)` and `n.0` may be written, with `N`'s type arguments substituted into `T`, and `as` converts a newtype to or from no other type.
 
 - Kind: guarantee
 - Uses: none

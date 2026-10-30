@@ -129,8 +129,10 @@ if select_fixture research "$TMPD/research.paths"; then
   n="$(count research)"
   if [ "$n" -eq 4 ]; then ok "a research-note diff selects exactly the 4 expected gate commands"
   else no "a research-note diff selects $n gate commands (expected exactly 4: the link, hole-status and fast surface gates, plain and --mutate)"; fi
-  if grep -qx "bash scripts/tests/$SURF --mutate" "$TMPD/research.sel"; then ok "the research-note diff selects the fast surface gates with --mutate"
-  else no "the research-note diff does not select the fast surface gates with --mutate"; fi
+  for v in "" " --mutate"; do
+    if grep -qx "bash scripts/tests/$SURF$v" "$TMPD/research.sel"; then ok "the research-note diff selects the fast surface gates${v:+ with$v}"
+    else no "the research-note diff does not select the fast surface gates${v:+ with$v}"; fi
+  done
   heavy="$(grep -E 'run_tests\.sh|check_examples\.sh|test_ssa\.sh|check_example_outputs\.sh' "$TMPD/research.sel" || true)"
   if [ -z "$heavy" ]; then ok "the research-note diff selects no corpus runner"
   else no "the research-note diff selects a corpus runner: $heavy"; fi

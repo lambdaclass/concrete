@@ -538,8 +538,8 @@ fn main() -> Int {
 - Obligation: none
 - Evidence: tested
 
-**Rationale.** Cleanup that can fail is written as a consuming method that returns its outcome (a
-`close(self) -> Result`), which the caller must use; it is a pattern, not a rule. A destructor runs from `destroy(x)`, from a deferred call and from a collection's
+**Rationale.** Cleanup that can fail can be written as a consuming method that returns its outcome
+(a `close(self) -> Result`); that is a library pattern, not part of this rule. A destructor runs from `destroy(x)`, from a deferred call and from a collection's
 drop glue, none of which has a place to put an error, so an error there would be silently dropped
 (OWN-6). An impl whose `destroy` returns anything else is refused by TRAIT-9 (E0582, `expected
 return type ()`). Fallible cleanup, such as closing a file whose final flush can fail, is an

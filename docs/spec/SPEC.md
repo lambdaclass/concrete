@@ -3147,7 +3147,7 @@ fn main() -> Int {
 <a id="TYPE-24"></a>
 #### TYPE-24. The conversions of a newtype
 
-**TYPE-24@1.** A newtype `N` over `T` converts to `T` by `n.0` or `n as T` and a `T` converts to `N` by `N(v)` or `v as N`, each form only in the modules TYPE-11 allows it, with `N`'s type arguments substituted into `T`, and `as` converts a newtype to or from no other type.
+**TYPE-24@1.** A newtype `N` over `T` converts to `T` by `n.0` or `n as T` and a `T` converts to `N` by `N(v)` or `v as N`, TYPE-11 saying in which modules `N(v)` and `n.0` may be written, with `N`'s type arguments substituted into `T`, and `as` converts a newtype to or from no other type.
 
 - Kind: guarantee
 - Uses: none
@@ -8605,8 +8605,8 @@ fn main() -> Int {
 - Obligation: none
 - Evidence: tested
 
-**Rationale.** Cleanup that can fail is written as a consuming method that returns its outcome (a
-`close(self) -> Result`), which the caller must use; it is a pattern, not a rule. A destructor runs from `destroy(x)`, from a deferred call and from a collection's
+**Rationale.** Cleanup that can fail can be written as a consuming method that returns its outcome
+(a `close(self) -> Result`); that is a library pattern, not part of this rule. A destructor runs from `destroy(x)`, from a deferred call and from a collection's
 drop glue, none of which has a place to put an error, so an error there would be silently dropped
 (OWN-6). An impl whose `destroy` returns anything else is refused by TRAIT-9 (E0582, `expected
 return type ()`). Fallible cleanup, such as closing a file whose final flush can fail, is an

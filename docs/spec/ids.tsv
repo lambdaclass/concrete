@@ -696,7 +696,7 @@ SYN-5/literal-bytes	live	-
 SYN-5/escapes	live	-
 TYPE-23@1	live	589601c796b310dc85167c5f93976167
 TYPE-23/option-and-result	live	-
-TYPE-24@1	live	c792c0d9bc7fee2ea73ff0cf68d18fdc
+TYPE-24@1	live	b80120739c4d91c73a9db29d21e1092d
 TYPE-24/newtype-conversions	live	-
 STMT-13@1	live	2834fc630cd244aa872fcd911a47e47f
 STMT-13/abort-with-process	live	-

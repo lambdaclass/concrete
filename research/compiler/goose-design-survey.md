@@ -14,7 +14,7 @@ The observations below come from source and documentation review; benchmark
 results have not been independently reproduced. Concrete's
 [design policy](../../docs/project/PROJECT.md#design-policy),
 [recorded decisions](../../docs/project/PROJECT.md#language-decisions), and
-FFI chapter of the specification (FFI-7 to FFI-12, [ffi.md](../../docs/spec/ffi.md)) remain authoritative; the
+FFI chapter of the specification (FFI-7 to FFI-12, [ffi.md](../../docs/spec/ffi.md)) remains authoritative; the
 [layout contract](../../docs/archive/design-records/LAYOUT_CONTRACT.md) is its design record.
 The investigation is recorded under [roadmap questions](../../docs/project/ROADMAP_TASKS.md#open-research-questions-goose).
 
