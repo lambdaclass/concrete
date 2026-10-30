@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The one reader of the Concrete language specification (docs/spec/, format in docs/spec/README.md).
+"""The one reader of the Concrete language specification (docs/spec/, format in docs/spec/MAINTAINERS.md).
 
 Every consumer of the spec goes through this module, so the format has one parser:
 
@@ -29,7 +29,7 @@ KINDS = {"refusal", "guarantee", "definition", "preservation", "open"}
 OD_RE = re.compile(r"^OD[0-9]+$")
 FIELDS = ["Kind", "Uses", "Codes", "Status", "Enforced by", "Semantics", "Obligation", "Evidence"]
 CODE_CLASSES = ("rule", "internal", "tooling", "retired")  # plus unmigrated:<chapter>
-# Generated acceptance manifests (README §5): name -> (output path, chapters whose tables feed it)
+# Generated acceptance manifests (MAINTAINERS.md §5): name -> (output path, chapters whose tables feed it)
 MANIFESTS = {"exit_2i": ("tests/rules/exit_2i.tsv", ["references", "scope", "patterns"])}
 MANIFEST_HEADER = """# GENERATED from the conformance tables of docs/spec/{chapters} by
 # `python3 scripts/spec/spec.py manifest {name}` -- do not edit; edit the spec (check_spec.sh S9).
@@ -38,6 +38,11 @@ MANIFEST_HEADER = """# GENERATED from the conformance tables of docs/spec/{chapt
 # of its rewritten program), modes. Rows are referenced, not copied: fixtures keep their
 # run_tests.sh rows as well. Rules not enforced yet have pending examples in the spec instead.
 """
+
+# Markdown files of docs/spec that are not chapters: the landing page, the maintainers' document and the
+# generated single-page specification.
+NON_CHAPTERS = ("README", "MAINTAINERS", "SPEC")
+SINGLE_PATH = "docs/spec/SPEC.md"
 
 FAILS = []
 def ok(msg): print(f"  ok   {msg}")
@@ -182,13 +187,21 @@ class Spec:
                 self._parse_chapter(ch, p)
         for p in sorted(glob.glob(os.path.join(spec_dir, "*.md"))):
             b = os.path.basename(p)[:-3]
-            if b != "README" and b not in self.chapters:
-                self.loose.append((b, 0, f"chapter {b}.md is not in the README §1 inventory"))
+            if b not in NON_CHAPTERS and b not in self.chapters:
+                self.loose.append((b, 0, f"chapter {b}.md is not in the chapter map (overview.md)"))
 
     def _read_inventory(self):
-        readme = open(os.path.join(self.dir, "README.md"), encoding="utf-8").read()
-        for m in re.finditer(r"^\| `([a-z]+)\.md` \| `([A-Z]+)-` \|", readme, re.M):
-            self.chapters[m.group(1)] = m.group(2)
+        # The chapter map is overview.md's table (`| [Title](name.md) | `PREFIX-` | ... |`), in reading
+        # order. A revision from before the 2026-10-30 editorial split kept it in README.md
+        # (`| `name.md` | `PREFIX-` | ... |`); history checks read such a revision too.
+        ov = os.path.join(self.dir, "overview.md")
+        text = open(ov, encoding="utf-8").read() if os.path.exists(ov) else ""
+        found = re.findall(r"^\| \[[^\]]*\]\(([a-z]+)\.md\) \| `([A-Z]+)-` \|", text, re.M)
+        if not found:
+            readme = open(os.path.join(self.dir, "README.md"), encoding="utf-8").read()
+            found = re.findall(r"^\| `([a-z]+)\.md` \| `([A-Z]+)-` \|", readme, re.M)
+        for name, prefix in found:
+            self.chapters[name] = prefix
 
     def _parse_chapter(self, ch, path):
         lines = open(path, encoding="utf-8").read().split("\n")
@@ -1034,6 +1047,41 @@ def gen_site(spec, out_dir):
         + "\n".join(rows) + "\n")
     return n
 
+def gen_single(spec):
+    """The specification as one document: the chapters in the chapter map's order under one table of
+    contents, each chapter's headings one level down, links between chapters made local."""
+    order = [ch for ch in spec.chapters if ch in spec.text]
+    titles = {ch: (spec.text[ch].split("\n", 1)[0][2:].strip() if spec.text[ch].startswith("# ") else ch) for ch in order}
+    out = ["# The Concrete Language Specification", "",
+           "<!-- GENERATED from docs/spec/*.md by `python3 scripts/spec/spec.py single`; do not edit: edit the chapters. -->", "",
+           "This is the whole specification as one document, generated from its chapters in reading order. Each",
+           "rule keeps its anchor, so `#REF-3` links here as in its chapter. How to read a rule is in the overview,",
+           "the first chapter.", "", "## Contents", ""]
+    for ch in order:
+        out.append(f"- [{titles[ch]}](#ch-{ch})")
+        for e in spec.entries:
+            if e.chapter == ch:
+                out.append(f"  - [{e.id}. {e.title}](#{e.id})")
+    out.append("")
+    def link(m):
+        text, tgt, frag = m.group(1), m.group(2), m.group(3) or ""
+        if tgt.endswith(".md") and "/" not in tgt and tgt[:-3] in spec.text:
+            return f"[{text}]({frag or '#ch-' + tgt[:-3]})"
+        return m.group(0)
+    for ch in order:
+        body = spec.text[ch].split("\n")
+        res, fence = [f'<a id="ch-{ch}"></a>'], False
+        for ln in body:
+            if ln.startswith("```"):
+                fence = not fence
+            elif not fence and re.match(r"^#{1,5} ", ln):
+                ln = "#" + ln
+            if not fence:
+                ln = re.sub(r"\[([^\]]*)\]\(([^)#\s]*)(#[^)\s]*)?\)", link, ln)
+            res.append(ln)
+        out += res + [""]
+    return "\n".join(out).rstrip("\n") + "\n"
+
 def label(x):
     a = x.attrs
     if x.verdict == "abort":
@@ -1208,7 +1256,9 @@ def main():
     ap.add_argument("--check", action="store_true")
     a = ap.parse_args()
     spec = Spec(a.spec)
-    spec.chapters_planned = set(spec.chapters) | set(re.findall(r"\*\*([a-z]+)\.md\*\*", open(os.path.join(a.spec, "README.md")).read()))
+    plan = os.path.join(a.spec, "MAINTAINERS.md")
+    plan = plan if os.path.exists(plan) else os.path.join(a.spec, "README.md")
+    spec.chapters_planned = set(spec.chapters) | set(re.findall(r"\*\*([a-z]+)\.md\*\*", open(plan).read()))
     c = a.cmd
     if c == "lint":
         check_format(spec, a.root); check_registry(spec); check_coverage(spec); check_tracking(spec, a.root)
@@ -1280,6 +1330,16 @@ def main():
                 for k in sorted(seen, key=lambda k: (k[0], k[1] or "")):
                     f.write(f"{k[0]}\t{k[1] or '-'}\t{len(seen[k])}\t{seen[k][0]}\n")
         check_code_coverage(spec, a.root, seen, n)
+    elif c == "single":
+        txt = gen_single(spec)
+        path = a.out or os.path.join(a.root, SINGLE_PATH)
+        if a.check:
+            cur = open(path, encoding="utf-8").read() if os.path.exists(path) else ""
+            if cur != txt: fail("S9", f"{os.path.relpath(path, a.root)} differs from `spec.py single` (hand edit or stale; regenerate)")
+            else: ok(f"S9 single page: {os.path.relpath(path, a.root)} equals its generator's output ({len(spec.chapters)} chapters, {len(spec.entries)} entries)")
+        else:
+            open(path, "w", encoding="utf-8").write(txt)
+            print(f"wrote {os.path.relpath(path, a.root)}")
     elif c == "site":
         n = gen_site(spec, a.out)
         print(f"wrote {n} chapter pages to {a.out}")

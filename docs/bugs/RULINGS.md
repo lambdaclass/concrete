@@ -44,11 +44,11 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 | statements.md | STMT | 13 | 3 | 10 | 12 | 1 | 0 | 0 |
 | memory.md | MEM | 12 | 1 | 7 | 12 | 0 | 0 | 0 |
 | ffi.md | FFI | 11 | 2 | 6 | 11 | 0 | 0 | 0 |
-| references.md | REF | 10 | 1 | 9 | 9 | 0 | 0 | 1 |
 | arithmetic.md | ARITH | 10 | 2 | 7 | 10 | 0 | 0 | 0 |
+| references.md | REF | 10 | 1 | 9 | 9 | 0 | 0 | 1 |
 | patterns.md | PAT | 7 | 1 | 5 | 7 | 0 | 0 | 0 |
-| trusted.md | TRUST | 6 | 0 | 5 | 6 | 0 | 0 | 0 |
 | traits.md | TRAIT | 6 | 1 | 4 | 6 | 0 | 0 | 0 |
+| trusted.md | TRUST | 6 | 0 | 5 | 6 | 0 | 0 | 0 |
 | syntax.md | SYN | 4 | 1 | 1 | 4 | 0 | 0 | 0 |
 | decisions.md | OPEN | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
 

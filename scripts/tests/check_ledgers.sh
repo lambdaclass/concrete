@@ -66,7 +66,7 @@ cp ROADMAP.md CHANGELOG.md "$BASE/"
 cp -R changelog.d "$BASE/changelog.d"
 cp scripts/gen/bug_ledger.py scripts/gen/bug_areas.py scripts/gen/bug_rulings.py scripts/gen/changelog.py scripts/gen/migrate_ledgers.py "$BASE/scripts/gen/"
 # The rulings resolve against the spec's registry and chapter table (read only).
-mkdir -p "$BASE/docs/spec" && cp docs/spec/ids.tsv docs/spec/README.md "$BASE/docs/spec/"
+mkdir -p "$BASE/docs/spec" && cp docs/spec/ids.tsv docs/spec/README.md docs/spec/overview.md "$BASE/docs/spec/"
 cp scripts/tests/audit_bug_corpus.sh scripts/tests/check_bug_filing_complete.sh \
    scripts/tests/run_tests.sh scripts/tests/run_ci_gates_local.sh "$BASE/scripts/tests/"
 # The copied gates start by sourcing the gate-shell guard from beside themselves.

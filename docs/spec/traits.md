@@ -20,7 +20,7 @@ one trait for one type is in one module, so uniqueness never needs the whole pro
 module that defines neither cannot add an impl that changes what another module's code calls.
 
 A qualified call (`Trait::method(x)`) does not exist. TRAIT-6 therefore refuses an ambiguous
-call instead of asking for qualification; adding the syntax is a follow-up (README §8).
+call instead of asking for qualification; adding the syntax is a follow-up ([MAINTAINERS.md](MAINTAINERS.md) §8).
 
 ## Definitions
 

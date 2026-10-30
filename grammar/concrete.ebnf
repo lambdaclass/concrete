@@ -348,7 +348,7 @@ dot_ident_tail = '::' type_args call_args
 (* (if requires 'else'; match arms provide the value.) In           *)
 (* STATEMENT position the same keywords parse as statements (see    *)
 (* stmt). The dispatch is by position, which the position-blind     *)
-(* FIRST/FIRST checker cannot express, so these alternatives are    *)
+(* LL(1) checkers cannot express, so these alternatives are         *)
 (* deliberately left out of primary_expr.                           *)
 (*                                                                  *)
 (* Phase 6D item 2: value 'while' expr block 'else' block was       *)

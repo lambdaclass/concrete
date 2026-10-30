@@ -1871,7 +1871,7 @@ lands says `unrecorded`.
 
 Measured state (2026-10-29, after the owner decided OD1 – OD32): 0 of 161 entries link a
 Lean definition; 138 of 161 have `Evidence: tested`; 18 open entries (OD33 to OD46 and OD48 to OD51, raised while
-recording those answers). `docs/spec/README.md` ("Path to the complete spec") keeps the current figures.
+recording those answers). `docs/spec/MAINTAINERS.md` ("Path to the complete spec") keeps the current figures.
 
 ### Task R-0556
 

@@ -67,7 +67,7 @@ jobs:
         run: JOBS=4 bash scripts/browser/build-site-compiler.sh
 
       - name: Build Site
-        # The language specification pages are generated from docs/spec (docs/spec/README.md §4);
+        # The language specification pages are generated from docs/spec (docs/spec/MAINTAINERS.md §4);
         # base.html links @/spec/_index.md, so a build without this step fails instead of
         # publishing a site without the spec.
         run: |

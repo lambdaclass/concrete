@@ -202,7 +202,7 @@ if [ -f scripts/gen/bug_rulings.py ] && [ -f docs/spec/ids.tsv ] && [ -n "$LEDGE
   rcheck --num 999 --open-bug "Open: OPEN-999" && no "control: an owner question that does not exist was accepted" \
     || ok "control: an unknown owner question is refused"
   rcheck --num 999 --open-bug "Spec gap: NOPE — a rule" && no "control: a spec gap in an unknown chapter was accepted" \
-    || ok "control: a spec gap names a chapter of docs/spec/README.md"
+    || ok "control: a spec gap names a chapter of the spec's chapter map"
 fi
 
 # UNFILLED SCAFFOLD. scripts/gen/new_bug.sh marks every placeholder it writes with FILL-IN(new_bug.sh).

@@ -35,7 +35,7 @@
 #      negative controls for a hand edit, a stale table and a malformed record.
 #   7. No Markdown file outside docs/spec restates a normative sentence of the language
 #      specification (scripts/spec/spec.py restatements; check_spec.sh S11 owns the check and its
-#      negative control, docs/spec/README.md §6).
+#      negative control, docs/spec/MAINTAINERS.md §6).
 #   6. ROADMAP's "Bug dashboard" equals the one generated from the bug records, the structural
 #      classes, docs/bugs/discovery.tsv and the Phase 1 exits (scripts/gen/bug_dashboard.py
 #      --check), with negative controls for a hand edit, stale inputs, a malformed or incomplete
@@ -322,7 +322,7 @@ else no "control: a silent bug in a tagged batch escaped its own class"; fi
 bug_neg tag_names_no_class "s=s.rstrip('\n')+'\n2099-01-01\tfuzz\tclass 99: control\t8 hours\t-\t-\n'" docs/bugs/discovery.tsv 2
 bug_neg tag_on_attribution_row "s=s.rstrip('\n')+'\n2099-01-01\treview\tclass 2: control\tunrecorded\t-\t-\n'" docs/bugs/discovery.tsv 2
 echo ""
-echo "=== 7. no doc restates a normative sentence of docs/spec (check_spec.sh S11, docs/spec/README.md §6) ==="
+echo "=== 7. no doc restates a normative sentence of docs/spec (check_spec.sh S11, docs/spec/MAINTAINERS.md §6) ==="
 if out="$(python3 scripts/spec/spec.py restatements 2>&1)"; then
   ok "$(grep -m1 'S11' <<<"$out" | sed 's/^  ok   //')"
 else
@@ -331,7 +331,7 @@ else
 fi
 
 echo ""
-echo "=== 8. one specification: no new document under docs/language (S13, docs/spec/README.md §3) ==="
+echo "=== 8. one specification: no new document under docs/language (S13, docs/spec/MAINTAINERS.md §3) ==="
 if out="$(python3 scripts/spec/one_spec.py 2>&1)"; then
   ok "$(grep -m1 'S13' <<<"$out" | sed 's/^  ok   //')"
 else
@@ -344,6 +344,22 @@ else
   printf '%s\n' "$out" | grep 'FAIL' | sed 's/^  FAIL /    /'
   no "an S13 control was not refused"
 fi
+echo ""
+echo "=== 9. the single-page specification is generated (S9, docs/spec/MAINTAINERS.md §1) ==="
+if out="$(python3 scripts/spec/spec.py single --check 2>&1)"; then
+  ok "$(grep -m1 'S9' <<<"$out" | sed 's/^  ok   //')"
+else
+  printf '%s\n' "$out" | grep 'FAIL' | sed 's/^  FAIL /    /'
+  no "docs/spec/SPEC.md differs from its chapters (run python3 scripts/spec/spec.py single)"
+fi
+ctl="$(mktemp)"; cp docs/spec/SPEC.md "$ctl"; printf 'a hand edit\n' >> "$ctl"
+ctl_out="$(python3 scripts/spec/spec.py single --check --out "$ctl" 2>&1 || true)"
+if grep -q 'FAIL \[S9\] .* differs from' <<<"$ctl_out"; then
+  ok "S9 control: a hand edit to the single-page specification is refused"
+else
+  no "S9 control: a hand edit to the single-page specification was not refused"
+fi
+rm -f "$ctl"
 echo ""
 echo "DOCS-DRIFT: PASS=$PASS  FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

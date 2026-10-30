@@ -110,7 +110,7 @@ out/release/
 # Generated paper artifacts
 paper/*.pdf
 site/public/
-# generated from docs/spec by scripts/spec/spec.py site (docs/spec/README.md §4)
+# generated from docs/spec by scripts/spec/spec.py site (docs/spec/MAINTAINERS.md §4)
 site/content/spec/
 tmp/
 .claude/scheduled_tasks.lock

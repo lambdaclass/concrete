@@ -1,4 +1,4 @@
-# Classification of every code in `--report diagnostic-codes` (docs/spec/README.md S6). Classes: rule (named by a
+# Classification of every code in `--report diagnostic-codes` (docs/spec/MAINTAINERS.md S6). Classes: rule (named by a
 # spec entry), unmigrated:<chapter> (only shrinks, S3), internal (compiler invariant), tooling (proof/policy/evidence), retired.
 # code	class	ledger description
 E0001	rule	syntax error

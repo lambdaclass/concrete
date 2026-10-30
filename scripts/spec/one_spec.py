@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""S13 ONE SPECIFICATION (docs/spec/README.md §3): docs/spec is the one normative statement of the
+"""S13 ONE SPECIFICATION (docs/spec/MAINTAINERS.md §3): docs/spec is the one normative statement of the
 language, and docs/language is being absorbed into it.
 
 Every Markdown file under docs/language is a document not yet absorbed, listed in

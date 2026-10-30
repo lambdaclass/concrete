@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The language-specification gate (docs/spec/README.md §3): docs/spec is the one written statement of
+# The language-specification gate (docs/spec/MAINTAINERS.md §3): docs/spec is the one written statement of
 # the language, and this gate checks the compiler, the interpreter, the Lean sources, the acceptance
 # manifests, the website and the other docs against it.
 #

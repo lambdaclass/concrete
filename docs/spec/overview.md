@@ -1,4 +1,55 @@
-# Overview: the language's invariants
+# Overview
+
+Concrete is a small systems language for software that must be reviewed and proved. Its values are
+linear: a value that owns a resource is consumed exactly once, and nothing is destroyed implicitly.
+References are scoped access, never stored or returned. A function's authority is written in its
+signature (`with(File, Console)`), arithmetic is checked, and failure is an abort. Its compiler is
+written in Lean 4 and is being built toward an end-to-end verified pipeline. The design follows
+Austral and departs from it only with a written reason.
+
+## How to read this specification
+
+The specification is a set of entries. An entry has an ID (`REF-3`), a title and one normative
+sentence tagged with its version (`REF-3@1`); a diagnostic cites the same tag. The sentence is the
+rule. The fields after it give the entry's kind (a refusal, which the compiler reports with a code;
+a guarantee about what programs do; a definition; a pipeline stage's contract; or an open question
+only the project owner decides), whether it is enforced, partly enforced or pending, and the compiler
+declarations that enforce it. The rationale explains the rule and is not normative. The examples are
+programs the gate compiles and runs: an accepted example exits with the status it states, a rejected
+one fails at the stated stage with the stated code, and a pending one records what the compiler does
+until the rule is implemented. Text outside entries, like this chapter, states no rule.
+
+Where Core's semantics in Lean defines a rule, that definition governs and the entry names it
+(`Semantics:`); elsewhere the sentence is the rule until the definition lands. The owner's open
+questions are the last chapter, in the order to read them. The whole specification is also one
+generated page, [SPEC.md](SPEC.md), and how it is maintained (format, registry, gates) is
+[MAINTAINERS.md](MAINTAINERS.md).
+
+## Chapters
+
+The chapters in reading order. The prefix is the one their entry IDs carry.
+
+| chapter | prefix | covers |
+|---|---|---|
+| [Overview](overview.md) | `LANG-` | what Concrete is, how to read this specification, the language's invariants |
+| [Syntax](syntax.md) | `SYN-` | the grammar, operator precedence, reserved spellings, struct literals in conditions |
+| [Modules and Names](modules.md) | `MOD-` | name resolution, visibility, module files, imports, interfaces |
+| [Scope and Binding](scope.md) | `SCOPE-` | where a binding is visible, no shadowing |
+| [Types](types.md) | `TYPE-` | the types, typing of expressions and calls, aggregates, generics, capability sets in types |
+| [Arithmetic](arithmetic.md) | `ARITH-` | integers and floats, literals, checked arithmetic, conversions, comparisons |
+| [Statements, Expressions and Execution](statements.md) | `STMT-` | outcomes, evaluation order, loops, `main`, the exit sequence, failure |
+| [Patterns](patterns.md) | `PAT-` | `match`, exhaustiveness, destructuring `let` |
+| [Ownership](ownership.md) | `OWN-` | linearity, Copy, discards, assignment, `defer`, destruction |
+| [References](references.md) | `REF-` | forming, passing and borrowing references, loans |
+| [Memory](memory.md) | `MEM-` | ownership states, initialization, field access, `Heap`, array bounds |
+| [Traits](traits.md) | `TRAIT-` | traits, impls, bounds, coherence |
+| [Contracts](contracts.md) | `CON-` | `requires`, `ensures`, invariants, ghost code |
+| [Trusted Code and Raw Pointers](trusted.md) | `TRUST-` | capabilities, `trusted`, raw pointers, global resources |
+| [Foreign Functions](ffi.md) | `FFI-` | `extern`, layout, symbols |
+| [Pipeline Preservation](pipeline.md) | `PASS-` | what each compiler stage preserves |
+| [Open Owner Decisions](decisions.md) | `OPEN-` | the questions only the project owner decides |
+
+## The language's invariants
 
 This chapter is explanatory: it states the invariants the whole language keeps and names the
 entries of this specification that make each one exact. It states no rule of its own and has no

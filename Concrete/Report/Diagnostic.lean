@@ -40,7 +40,7 @@ structure Diagnostic where
 
 /-- The `spec` evidence of a rule-tagged diagnostic: the rule's anchor in the language
     specification (`docs/spec/<chapter>.md#<ID>`), computed from its versioned tag (`REF-3@1`).
-    The chapter of each ID prefix is the inventory of docs/spec/README.md §1, and
+    The chapter of each ID prefix is the chapter map of docs/spec/overview.md, and
     `scripts/tests/check_rules_2i.sh` compares every tagged diagnostic's evidence with
     `scripts/spec/spec.py anchors`. -/
 def ruleSpecRef (rule : String) : String :=

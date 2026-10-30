@@ -22,7 +22,7 @@ carries one `ruling:` line, in exactly one of these forms:
 
 A `Violates:`, `Open:` or `Permitted by:` form may end in ` — <note>`. A cited `ID@V` must be a key
 of docs/spec/ids.tsv (append-only, so a key once there stays), and its prefix a chapter of the chapter
-table of docs/spec/README.md. An open bug cites only a live or pending version: when the spec
+map of docs/spec/overview.md. An open bug cites only a live or pending version: when the spec
 supersedes or retires a rule an open bug cites, the change that does so re-rules the bug against the
 current version. A fixed bug may cite any registered version, since it was ruled against the rule of
 its time. `Open:` cites an OPEN-n entry with or without a version.
@@ -60,7 +60,8 @@ RULE = r"[A-Z]+-D?\d+"
 KEY = re.compile(r"^(" + RULE + r")@(\d+)$")
 OPEN_ID = re.compile(r"^OPEN-\d+(?:@\d+)?$")
 NOTE = re.compile(r"^(.*?)(?:\s+—\s+(\S.*))?$")
-CHAPTER_ROW = re.compile(r"^\| `([a-z_]+\.md)` \| `([A-Z]+)-` \|")
+CHAPTER_ROW = re.compile(r"^\| `([a-z_]+\.md)` \| `([A-Z]+)-` \|")          # README.md, before 2026-10-30
+MAP_ROW = re.compile(r"^\| \[[^\]]*\]\(([a-z_]+\.md)\) \| `([A-Z]+)-` \|")  # overview.md's chapter map
 KINDS = ("violates", "spec gap", "open", "permitted", "outside", "unrecorded")
 
 
@@ -69,9 +70,11 @@ class RulingError(Exception):
 
 
 def load_spec(root):
-    """({key: state} from docs/spec/ids.tsv, {prefix: chapter file} from docs/spec/README.md)."""
+    """({key: state} from docs/spec/ids.tsv, {prefix: chapter file} from the chapter map of docs/spec/overview.md)."""
     ids_p = os.path.join(root, "docs", "spec", "ids.tsv")
-    readme_p = os.path.join(root, "docs", "spec", "README.md")
+    readme_p = os.path.join(root, "docs", "spec", "overview.md")
+    if not os.path.exists(readme_p):
+        readme_p = os.path.join(root, "docs", "spec", "README.md")
     try:
         ids_text = open(ids_p, encoding="utf-8").read()
         readme = open(readme_p, encoding="utf-8").read()
@@ -83,7 +86,9 @@ def load_spec(root):
             cells = ln.split("\t")
             if len(cells) >= 2 and "@" in cells[0]:
                 ids[cells[0]] = cells[1]
-    chapters = {m.group(2): m.group(1) for m in map(CHAPTER_ROW.match, readme.split("\n")) if m}
+    chapters = {m.group(2): m.group(1) for m in map(MAP_ROW.match, readme.split("\n")) if m}
+    if not chapters:
+        chapters = {m.group(2): m.group(1) for m in map(CHAPTER_ROW.match, readme.split("\n")) if m}
     if not ids or not chapters:
         raise RulingError(f"no rule keys in {ids_p} or no chapter table in {readme_p}")
     return ids, chapters
@@ -162,7 +167,7 @@ def resolve(ruling, spec, name, num, is_open):
             if not known:
                 raise RulingError(f"{name}: '{r}' is not an owner question of docs/spec/ids.tsv")
             if prefix_of(r) not in chapters:
-                raise RulingError(f"{name}: {r}'s prefix is not a chapter of docs/spec/README.md's chapter table")
+                raise RulingError(f"{name}: {r}'s prefix is not a chapter of docs/spec/overview.md's chapter map")
             states = [ids[r]] if "@" in r else [st for key, st in ids.items() if key.split("@")[0] == base]
             if is_open and not any(st in LIVE_STATES for st in states):
                 raise RulingError(f"{name}: {r} is no longer an open question in docs/spec/ids.tsv; an open bug is "
@@ -179,12 +184,12 @@ def resolve(ruling, spec, name, num, is_open):
             raise RulingError(f"{name}: {r} is {ids[r]}; an open bug is ruled against the rule's current version"
                               + (f" ({', '.join(current)})" if current else ""))
         if prefix_of(r) not in chapters:
-            raise RulingError(f"{name}: {r}'s prefix is not a chapter of docs/spec/README.md's chapter table")
+            raise RulingError(f"{name}: {r}'s prefix is not a chapter of docs/spec/overview.md's chapter map")
     if k == "spec gap" and ruling["chapter"] == "OPEN":
         raise RulingError(f"{name}: OPEN holds owner questions, not rules; a gap names the chapter its rule belongs to")
     if k == "spec gap" and ruling["chapter"] not in chapters:
         raise RulingError(f"{name}: spec gap chapter '{ruling['chapter']}' is not a chapter prefix of "
-                          f"docs/spec/README.md ({', '.join(sorted(chapters))})")
+                          f"docs/spec/overview.md ({', '.join(sorted(chapters))})")
     out = dict(ruling)
     if k == "spec gap":
         out["chapters"] = [ruling["chapter"]]
