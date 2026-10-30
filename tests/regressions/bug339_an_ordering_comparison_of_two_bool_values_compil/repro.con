@@ -1,0 +1,9 @@
+// Bug 339 (PASS-13@1; whether bool ordering exists is OPEN-42): `true < false` is accepted. Observed:
+// the binary exits 42 (false), while --interp exits 1 with "interp: unsupported binop on given value
+// types". Expected: one behaviour on both consumers (or, if OPEN-42 refuses bool ordering, a check
+// refusal on both).
+fn main() -> Int {
+    let b: bool = true < false;
+    if (b) { return 1; }
+    return 42;
+}
