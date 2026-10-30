@@ -12,6 +12,16 @@ Moved verbatim from ROADMAP.md on 2026-10-28 (the roadmap compaction); only head
 The dated decisions that shape the queue. Each names the tasks that carry it; none creates another
 queue.
 
+**Specification-first decision, 2026-10-30 (owner):** "the spec is the most important thing to do."
+Row 0s (R-0555) becomes the top priority. Only row-0 silent soundness repairs and the landing of
+already-validated branches continue beside it, and no other row starts until its steps 1 – 6 hold (owner
+decisions, absorption, simplification, one readable document, nothing outside the spec, conformance
+suite). The ordered nine-step plan is at the top of [ROADMAP.md](../../ROADMAP.md). This supersedes the 2026-10-21
+priority decision's ordering for as long as row 0s is open, and the verified-compiler track resumes
+from the spec. The owner's standing preferences apply: strict by default, Austral by default with
+written deviations, verbose code is acceptable when it is clear and safer, the grammar stays LL(1),
+and every language decision is the owner's.
+
 **Priority decision, 2026-10-21:** the verified compiler is the primary engineering track, protected
 by an explicit [capacity allocation](../../ROADMAP.md#capacity-allocation) rather than by queue numbering. Two inputs
 were weighed. An external review asked for exactly that, in the order: close known soundness defects
