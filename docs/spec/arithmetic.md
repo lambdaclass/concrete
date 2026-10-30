@@ -59,7 +59,6 @@ expected is removed, no suffix is required, and a float literal follows the same
 context's float type, refused with none). Main still types an unconstrained integer literal `Int` and
 an unconstrained float literal `Float64` (bug 327).
 
-
 ```con reject name=literal-out-of-range code=E0227 stage=check pair=literal-in-range
 fn main() -> Int {
     let a: u8 = 300;
@@ -463,16 +462,5 @@ fn main() -> Int {
 and is the identity in `--interp` (bug 128), and a float-to-integer `as` truncates toward zero and
 aborts on NaN, an infinity or a value out of range. Whether a rounding operation gives a value or an
 error for those inputs, and which value, is OPEN-107. None of these exists on main yet (R-0500);
-`to_float` is a placeholder spelling, and the spellings are OPEN-99.
+The conversion functions are not named yet (OPEN-99), so this entry has no example until they are.
 
-```con accept name=nearest-even exit=42 pending=R-0500 now=reject:E0101:resolve
-fn main() -> Int {
-    let x: Int = 16777217;
-    let f: f32 = to_float::<f32>(x);
-    let back: f64 = f as f64;
-    if back == 16777216.0 {
-        return 42;
-    }
-    return 0;
-}
-```

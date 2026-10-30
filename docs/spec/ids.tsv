@@ -646,7 +646,6 @@ TRUST-12@1	live	6d9c1326fce6918d8db20cf20521b2ca
 ARITH-9/named-operations-unchanged	live	-
 ARITH-10@1	pending	f9524b87abdc1411e97d13b1351e7e4d
 ARITH-11@1	pending	82417aa587cd3210ec36365c27ebb145
-ARITH-11/nearest-even	pending	-
 MOD-1/let-else-binder-out-of-scope	live	-
 OPEN-99@1	live	52128db7b7a322db2ba81912b31a2809
 OPEN-103@1	live	04e5d7663024c7899e0c878b59c0a2a2
