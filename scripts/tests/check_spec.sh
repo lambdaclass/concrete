@@ -157,6 +157,10 @@ fresh_copy; mutate "$TMP/n/spec/scope.md" 's.replace("### SCOPE-2. What is not a
   && control "N1a: a duplicate rule ID" S1 "duplicate ID" -- lint "${SP[@]}"
 fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("has a return type that contains a reference.", "has a return type that contains a reference. It is refused.", 1)' \
   && control "N1b: a two-sentence normative statement" S1 "exactly one sentence" -- lint "${SP[@]}"
+fresh_copy; mutate "$TMP/n/spec/overview.md" 's.replace("| [Scope and Binding](scope.md) | `SCOPE-` |", "| [Scope and Binding](scope.md) | `REF-` |", 1)' \
+  && control "N1h: two chapters with one prefix in the chapter map" S1 "gives prefix REF-" -- lint "${SP[@]}"
+fresh_copy; mutate "$TMP/n/spec/overview.md" 's.replace("| [Scope and Binding](scope.md) | `SCOPE-` |", "| [Scope and Binding](scope.md) | SCOPE |", 1)' \
+  && control "N1i: a malformed chapter map row" S1 "does not parse" -- lint "${SP[@]}"
 fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("name=return-value exit=42", "name=return-value exit=42 colour=red", 1)' \
   && control "N1c: an unknown example attribute" S1 "unknown attribute 'colour'" -- lint "${SP[@]}"
 fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("- Uses: REF-D1\n- Codes: E0236 (check, post-mono)", "- Uses: REF-D9\n- Codes: E0236 (check, post-mono)", 1)' \

@@ -86,9 +86,21 @@ def load_spec(root):
             cells = ln.split("\t")
             if len(cells) >= 2 and "@" in cells[0]:
                 ids[cells[0]] = cells[1]
-    chapters = {m.group(2): m.group(1) for m in map(MAP_ROW.match, readme.split("\n")) if m}
-    if not chapters:
-        chapters = {m.group(2): m.group(1) for m in map(CHAPTER_ROW.match, readme.split("\n")) if m}
+    # Fail closed on the chapter map: a row that starts like a map row must parse, and a prefix or a
+    # chapter listed twice is refused rather than letting the later row win.
+    lines = readme.split("\n")
+    rows = [ln for ln in lines if re.match(r"^\| \[[^\]]*\]\([^)]*\.md\)", ln)]
+    bad = [ln for ln in rows if not MAP_ROW.match(ln)]
+    if bad:
+        raise RulingError(f"the chapter map in {readme_p} has a row that does not parse: {bad[0][:80]}")
+    pairs = [(m.group(2), m.group(1)) for m in map(MAP_ROW.match, rows)]
+    if not pairs:
+        pairs = [(m.group(2), m.group(1)) for m in map(CHAPTER_ROW.match, lines) if m]
+    for k in (0, 1):
+        dup = sorted({p[k] for p in pairs if [q[k] for q in pairs].count(p[k]) > 1})
+        if dup:
+            raise RulingError(f"the chapter map in {readme_p} lists {', '.join(dup)} more than once")
+    chapters = dict(pairs)
     if not ids or not chapters:
         raise RulingError(f"no rule keys in {ids_p} or no chapter table in {readme_p}")
     return ids, chapters

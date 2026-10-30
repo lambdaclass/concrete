@@ -194,14 +194,32 @@ class Spec:
         # The chapter map is overview.md's table (`| [Title](name.md) | `PREFIX-` | ... |`), in reading
         # order. A revision from before the 2026-10-30 editorial split kept it in README.md
         # (`| `name.md` | `PREFIX-` | ... |`); history checks read such a revision too.
+        # Fail closed: every row that starts like a map row must parse, and no chapter or prefix may
+        # appear twice (a later row would silently replace an earlier one). The README fallback is
+        # read only when overview.md has no map row at all.
         ov = os.path.join(self.dir, "overview.md")
         text = open(ov, encoding="utf-8").read() if os.path.exists(ov) else ""
-        found = re.findall(r"^\| \[[^\]]*\]\(([a-z]+)\.md\) \| `([A-Z]+)-` \|", text, re.M)
-        if not found:
+        found, where = [], "overview.md"
+        for i, ln in enumerate(text.split("\n")):
+            if not re.match(r"^\| \[[^\]]*\]\([^)]*\.md\)", ln):
+                continue
+            m = re.match(r"^\| \[[^\]]*\]\(([a-z]+)\.md\) \| `([A-Z]+)-` \|", ln)
+            if m: found.append((m.group(1), m.group(2)))
+            else: self.loose.append(("overview", i + 1, f"chapter map row does not parse as | [Title](name.md) | `PREFIX-` | ...: {ln[:80]}"))
+        if not found and not any(c == "overview" for c, _, _ in self.loose):
+            where = "README.md"
             readme = open(os.path.join(self.dir, "README.md"), encoding="utf-8").read()
             found = re.findall(r"^\| `([a-z]+)\.md` \| `([A-Z]+)-` \|", readme, re.M)
+        if not found:
+            self.loose.append(("overview", 0, "no chapter map (overview.md's | [Title](name.md) | `PREFIX-` | table)"))
+        seen_p = {}
         for name, prefix in found:
-            self.chapters[name] = prefix
+            if name in self.chapters:
+                self.loose.append(("overview", 0, f"chapter map ({where}) lists {name}.md twice"))
+            if prefix in seen_p:
+                self.loose.append(("overview", 0, f"chapter map ({where}) gives prefix {prefix}- to both {seen_p[prefix]}.md and {name}.md"))
+            seen_p.setdefault(prefix, name)
+            self.chapters.setdefault(name, prefix)
 
     def _parse_chapter(self, ch, path):
         lines = open(path, encoding="utf-8").read().split("\n")
