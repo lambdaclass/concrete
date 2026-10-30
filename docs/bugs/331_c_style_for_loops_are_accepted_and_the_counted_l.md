@@ -27,7 +27,7 @@ at parse (E0001, "expected (, got ident(i)"); `let from: Int = 40;` is accepted.
 ## Expected
 
 [STMT-6@3](../spec/statements.md#STMT-6) (OD47): only `while` and the counted loop `for i from a
-until b`; the C-style forms refused at parse; `from` and `until` reserved. In Core the counted loop
+until b`; the C-style forms refused at parse. Whether `from` and `until` are reserved or contextual is OD50. In Core the counted loop
 desugars to `while` with its termination measure; STMT-11@2 orders the index advance after the
 body's exit sequence.
 
