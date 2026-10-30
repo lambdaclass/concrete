@@ -1,12 +1,12 @@
 # Open Owner Decisions
 
-This chapter lists the language questions that only the project owner decides: OD1 to OD93 of
+This chapter lists the language questions that only the project owner decides: OD1 to OD105 of
 [ROADMAP.md](../../ROADMAP.md#owner-decisions) (exit 2n for OD1 to OD32, exit 2q for the rest). Each entry states the question and encodes
 no answer. The rules it bears on are named in its rationale, together with what current main does,
 which stays provisional until the owner answers. The answer, when given, is recorded in ROADMAP and
 turns the entry into the rules it decides; until then no agent picks a side
 ([AGENTS.md](../project/AGENTS.md#rules)). OD1 to OD22 were answered on 2026-10-29 and are listed under
-Decided; OD23 to OD32 were decided the same day; OPEN-33 to OPEN-46 and OPEN-48 to OPEN-51, raised while recording them, are open, and so are OPEN-52 to OPEN-91, allocated on 2026-10-30 for that day's owner picks, and OPEN-92 and OPEN-93, raised the same day by the review of the loop rules.
+Decided; OD23 to OD32 were decided the same day; OPEN-33 to OPEN-46 and OPEN-48 to OPEN-51, raised while recording them, are open, and so are OPEN-52 to OPEN-91, allocated on 2026-10-30 for that day's owner picks, and OPEN-104 and OPEN-105, raised the same day by the review of the loop rules.
 
 ## Decisions to be made, in order
 
@@ -78,8 +78,8 @@ them); they are not separate entries here
 | 56 | [OPEN-48](#OPEN-48) | — | The index type of a counted loop over two literals | not checked | (a) refused, as OD31 refuses any literal with no expected type; a typed bound supplies the other bound's type, in either order | neutral | — |
 | 57 | [OPEN-49](#OPEN-49) | — | The arithmetic of a counted loop's termination measure | not applicable | (a) a mathematical integer in the proof only, never computed at run time | needs requirement 2 | — |
 | 58 | [OPEN-51](#OPEN-51) | — | Reverse, stepped and collection iteration | a counted loop and `while` | (a) none now; each a later decision when a workload needs it | neutral | one loop construct in proofs |
-| 59 | [OPEN-92](#OPEN-92) | s7 review | A `#[variant]` written on a counted loop | not applicable | none given | neutral | — |
-| 60 | [OPEN-93](#OPEN-93) | s7 review | Where a counted loop's `#[invariant]` is checked | not applicable | none given | (b) needs requirement 2 | — |
+| 59 | [OPEN-104](#OPEN-104) | s7 review | A `#[variant]` written on a counted loop | not applicable | none given | neutral | — |
+| 60 | [OPEN-105](#OPEN-105) | s7 review | Where a counted loop's `#[invariant]` is checked | not applicable | none given | (b) needs requirement 2 | — |
 
 <a id="OPEN-33"></a>
 ### OPEN-33. Inline submodules under one file per module
@@ -1038,37 +1038,37 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 
 **Rationale.** Bears on SYN-1, SYN-2, ARITH-5. Current main: the parser always reads type arguments, so `x as T < y` is refused (grammar/ll1_known_conflicts.tsv, row type|5.2). Options: (a) a cast's type takes no type arguments unless parenthesized (`x as (T<U>)`), so `<` is less-than; (b) the parser's reading: `<` always starts type arguments, so the comparison needs parentheses (`(x as T) < y`); (c) refuse `<` directly after a cast's type and require parentheses either way. Austral: a conversion is the cast expression `e : T`, which takes no type arguments after it, so the conflict does not arise. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): none given (in the LL(1) ledger, not the picks). Proof impact: neutral for Core; the frontend still needs a specified semantics under the source-to-native theorem (V1c, S15). Item LL(1) type|5.2 of grammar/ll1_known_conflicts.tsv; the owner's answer is recorded in ROADMAP's row OD91.
 
-<a id="OPEN-92"></a>
-### OPEN-92. A `#[variant]` written on a counted loop
+<a id="OPEN-104"></a>
+### OPEN-104. A `#[variant]` written on a counted loop
 
-**OPEN-92@1.** Whether a `#[variant]` attribute written on a counted loop is refused, checked like any loop variant, or ignored is an open owner decision (OD92).
+**OPEN-104@1.** Whether a `#[variant]` attribute written on a counted loop is refused, checked like any loop variant, or ignored is an open owner decision (OD104).
 
 - Kind: open
 - Uses: none
 - Codes: none
-- Status: open OD92
+- Status: open OD104
 - Enforced by: none
 - Semantics: none
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on STMT-12 and CON-2. Current main: the counted loop is not on main (bug 331). Options: (a) refused, the loop's own measure `b - i` being its only variant; (b) allowed and checked as a loop variant (CON-2); (c) allowed and ignored. Austral: not applicable (no loop contracts). No pick given. Proof impact: neutral. Raised by the Codex and Kimi review of the OD47 loop rules (2026-10-30), which found the refusal stated as a rule though OD47 did not decide it; the owner's answer is recorded in ROADMAP's row OD92.
+**Rationale.** Bears on STMT-12 and CON-2. Current main: the counted loop is not on main (bug 331). Options: (a) refused, the loop's own measure `b - i` being its only variant; (b) allowed and checked as a loop variant (CON-2); (c) allowed and ignored. Austral: not applicable (no loop contracts). No pick given. Proof impact: neutral. Raised by the Codex and Kimi review of the OD47 loop rules (2026-10-30), which found the refusal stated as a rule though OD47 did not decide it; the owner's answer is recorded in ROADMAP's row OD104.
 
-<a id="OPEN-93"></a>
-### OPEN-93. Where a counted loop's `#[invariant]` is checked
+<a id="OPEN-105"></a>
+### OPEN-105. Where a counted loop's `#[invariant]` is checked
 
-**OPEN-93@1.** Where an `#[invariant]` attribute on a counted loop is checked, given that CON-2 checks a loop invariant before the loop and after every iteration is an open owner decision (OD93).
+**OPEN-105@1.** Where an `#[invariant]` attribute on a counted loop is checked, given that CON-2 checks a loop invariant before the loop and after every iteration is an open owner decision (OD105).
 
 - Kind: open
 - Uses: none
 - Codes: none
-- Status: open OD93
+- Status: open OD105
 - Enforced by: none
 - Semantics: none
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on STMT-12 and CON-2. Current main: the counted loop is not on main (bug 331). Options: (a) as CON-2 says for every loop, before the loop and after every iteration; (b) at each entry to the body, so nothing is checked when the loop runs no iteration. Austral: not applicable. No pick given. Proof impact: (b) needs requirement 2 of the proof-impact review: an invariant checked at body entry establishes nothing after an empty loop. Raised by the same review, which found body-entry checking stated as a rule though OD47 did not decide it; the owner's answer is recorded in ROADMAP's row OD93.
+**Rationale.** Bears on STMT-12 and CON-2. Current main: the counted loop is not on main (bug 331). Options: (a) as CON-2 says for every loop, before the loop and after every iteration; (b) at each entry to the body, so nothing is checked when the loop runs no iteration. Austral: not applicable. No pick given. Proof impact: (b) needs requirement 2 of the proof-impact review: an invariant checked at body entry establishes nothing after an empty loop. Raised by the same review, which found body-entry checking stated as a rule though OD47 did not decide it; the owner's answer is recorded in ROADMAP's row OD105.
 
 ## Decided
 

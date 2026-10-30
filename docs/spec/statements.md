@@ -686,7 +686,7 @@ R-0496's Core semantics defines the sequence for every exit form.
 proves only that the number of iterations is finite; the loop terminates when its bounds, its body
 and its cleanup do, and the counted loop's proof rule (zero iterations, `break`, a labelled
 `continue`) is stated over this desugared loop. Whether a `#[variant]` written on a counted loop is
-refused, checked or ignored is OPEN-92, and where its `#[invariant]` is checked is OPEN-93 (CON-2
+refused, checked or ignored is OPEN-104, and where its `#[invariant]` is checked is OPEN-105 (CON-2
 checks a loop invariant before the loop and after every iteration). Removing a bounds check over
 the index is an optimization, not a rule of the language: it needs an in-range certificate at the
 access (the bounds against the array's length), not only a length that cannot change. How the
