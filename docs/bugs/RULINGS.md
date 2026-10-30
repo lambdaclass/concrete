@@ -17,13 +17,13 @@ of [docs/spec/ids.tsv](../spec/ids.tsv), or the generator refuses the record.
 
 <!-- BEGIN GENERATED: spec rulings (scripts/gen/bug_ledger.py; edit the records' ruling lines) -->
 
-299 bug records, 296 of them ruled: violates a rule 188, spec gap 1, open owner question 4, permitted by a rule 1, outside the spec 102; not ruled yet (fixed bugs filed before bug 300) 3. Open bugs are in bold.
+300 bug records, 297 of them ruled: violates a rule 189, spec gap 1, open owner question 4, permitted by a rule 1, outside the spec 102; not ruled yet (fixed bugs filed before bug 300) 3. Open bugs are in bold.
 
 ### By kind
 
 | ruling | bugs | open | silent |
 |---|--:|--:|--:|
-| violates a rule | 188 | 18 | 89 |
+| violates a rule | 189 | 19 | 90 |
 | spec gap | 1 | 0 | 0 |
 | open owner question | 4 | 0 | 0 |
 | permitted by a rule (not a bug) | 1 | 0 | 0 |
@@ -41,7 +41,7 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 | types.md | TYPE | 21 | 2 | 13 | 21 | 0 | 0 | 0 |
 | ownership.md | OWN | 19 | 3 | 8 | 19 | 0 | 0 | 0 |
 | scope.md | SCOPE | 13 | 0 | 5 | 13 | 0 | 0 | 0 |
-| memory.md | MEM | 12 | 1 | 7 | 12 | 0 | 0 | 0 |
+| memory.md | MEM | 13 | 2 | 8 | 13 | 0 | 0 | 0 |
 | statements.md | STMT | 12 | 2 | 10 | 11 | 1 | 0 | 0 |
 | ffi.md | FFI | 11 | 2 | 6 | 11 | 0 | 0 | 0 |
 | references.md | REF | 10 | 1 | 9 | 9 | 0 | 0 | 1 |
@@ -109,6 +109,7 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 | FFI-4@1 | ffi.md | 1 | 037 |
 | FFI-6@1 | ffi.md | 1 | 112 |
 | MEM-4@3 | memory.md | 1 | **326** |
+| MEM-6@1 | memory.md | 1 | **340** |
 | MOD-6@1 | modules.md | 1 | 226 |
 | MOD-8@1 | modules.md | 1 | 165 |
 | OWN-12@1 | ownership.md | 1 | 143 |

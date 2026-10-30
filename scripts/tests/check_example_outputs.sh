@@ -508,6 +508,7 @@ open_bug_reproducers() {
 328|bug328_a_method_taking_self_or_mut_self_is_called_on_an/repro.con|runs-exit|42
 332|bug332_a_float_literal_of_type_f32_is_rounded_twice_thr/repro.con|runs-exit|0
 333|bug333_an_extra_type_argument_to_a_body_less_generic_de/repro.con|compiles|
+340|bug340_the_interpreter_runs_a_program_the_compiler_refu/repro.con|compile-fails|E0900
 TABLE
 }
 if [ -z "$ONLY" ]; then

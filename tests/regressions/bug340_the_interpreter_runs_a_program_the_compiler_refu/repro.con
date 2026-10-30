@@ -1,0 +1,12 @@
+// Bug 340 (MEM-6@1; the overview's "--interp runs no program the compiler cannot compile"):
+// `a[3]` is proven out of bounds. Observed: the compiler refuses the program with E0900, while
+// --interp prints 42 and exits 0 (the violating index is on a path that does not run).
+// Expected: both consumers refuse it with E0900.
+fn main() -> Int {
+    let a: [Int; 3] = [1, 2, 3];
+    let c: bool = false;
+    if c {
+        return a[3];
+    }
+    return 42;
+}

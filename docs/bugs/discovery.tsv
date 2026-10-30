@@ -123,3 +123,4 @@ date	kind	probe	effort	bugs	silent
 2026-10-29	review	Grok review of grammar/concrete.ebnf (2026-10-29): the C-style for header [ for_init ';' ] expr ';' is not LL(1); planted grammars confirmed the checkers miss it	1 review	329	-
 2026-10-29	spec	Codex and Kimi reviews of the spec-gap rules (wip/spec-s6, 2026-10-30): f32 literal double rounding, native against --interp	1 probe	332	332
 2026-10-29	spec	Codex and Kimi reviews of the spec-gap rules (wip/spec-s6, 2026-10-30): type arguments to a body-less generic declaration, native against --interp	1 probe	333	333
+2026-10-30	spec	outside-reader test of the spec (wip/spec-phase2 d21a4cfd, 2026-10-30): 60 programs written from SPEC.md alone, run native and --interp; a constant out-of-bounds index	60 programs	340	340
