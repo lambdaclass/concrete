@@ -252,7 +252,9 @@ fn main() with(Std) -> Int {
 **Rationale.** FFI-3's effect declaration exists because C can do anything; an intrinsic is implemented by
 the compiler, which knows what it does. std declares `sizeof` and `alignof` this way, and any
 module may (bug 112: the same declaration outside std was refused as an undeclared foreign
-binding).
+binding). The sentence is Resolve's `isCompilerIntrinsic`; the assumption report
+(`Concrete/Report/AssumptionSummary.lean`) classifies more narrowly, as a tooling choice about which
+foreign assumptions to list, not a language rule.
 
 ```con accept name=user-intrinsic exit=5
 mod foo {

@@ -11,6 +11,7 @@ summary: An extra type argument to a body-less generic declaration is ignored na
 coverage: reproducer tests/regressions/bug333_an_extra_type_argument_to_a_body_less_generic_de/repro.con, found by the spec-gap reviews 2026-10-30; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg) and check_spec.sh S4 (TYPE-9's pending example)
 class: 13
 silent: yes
+exit: 0b
 ruling: Violates: TYPE-9@2
 -->
 
@@ -36,7 +37,7 @@ Class 13: a documented rule with an enforcing site that misses one form.
 
 ## Structural owner
 
-R-0493 (one arithmetic authority) for literal values, and R-0499 (the Core checker) for call arity.
+R-0499 (the Core checker), which owns call arity for every callee, body-less or not.
 
 ## Containment while open
 

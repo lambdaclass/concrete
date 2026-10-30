@@ -235,7 +235,7 @@ recorded there.
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on TRUST-4 and TYPE-1. Main, since bug 063: the variable is bound from the capability set of the argument's function type, whatever expression supplies it (a field read, a call result, an array element). Raised while writing the rules the 2026-10 bug rulings
+**Rationale.** Bears on TRUST-4 and TYPE-1. Main binds the variable from the capability set of an argument's function type where its type peek can compute that type without checking the argument, and refuses one no argument determines (E0242). Raised while writing the rules the 2026-10 bug rulings
 found missing. The options and a recommendation are in ROADMAP's row OD45; the owner's answer is
 recorded there.
 
@@ -253,7 +253,7 @@ recorded there.
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on TYPE-13 and TYPE-15. Main, since bug 308: each type parameter is bound from the types of the arguments given for it, whatever expression form supplies them (a value `if` or `match` included), and a parameter no argument determines is refused. Raised while writing the rules the 2026-10 bug rulings
+**Rationale.** Bears on TYPE-13 and TYPE-15. Main binds each type parameter from the types its type peek computes for the arguments given for it (a value `if` or `match` included since bug 308, but not a generic call's result), and refuses a parameter no argument determines. Raised while writing the rules the 2026-10 bug rulings
 found missing. The options and a recommendation are in ROADMAP's row OD46; the owner's answer is
 recorded there.
 

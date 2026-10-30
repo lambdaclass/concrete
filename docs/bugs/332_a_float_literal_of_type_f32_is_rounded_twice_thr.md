@@ -11,6 +11,7 @@ summary: A float literal of type f32 is rounded twice, through binary64, instead
 coverage: reproducer tests/regressions/bug332_a_float_literal_of_type_f32_is_rounded_twice_thr/repro.con, found by the spec-gap reviews 2026-10-30; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg) and check_spec.sh S4 (ARITH-7's pending example)
 class: 13
 silent: yes
+exit: 0b
 ruling: Violates: ARITH-7@1
 -->
 
@@ -36,7 +37,7 @@ Class 13: a documented rule with an enforcing site that misses one form.
 
 ## Structural owner
 
-R-0493 (one arithmetic authority) for literal values, and R-0499 (the Core checker) for call arity.
+R-0493 (one arithmetic authority), which owns the value a literal denotes.
 
 ## Containment while open
 
