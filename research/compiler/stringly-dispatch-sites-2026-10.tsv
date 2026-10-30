@@ -26,7 +26,7 @@ Concrete/Check/Check.lean	3751	_	sentinel-wildcard	one definition (wildcardBinde
 Concrete/Check/Check.lean	3753	_	sentinel-wildcard	one definition (wildcardBinder / isWildcardBinder)	| .varArm _ n g b => (if n == "_" then [] else [s!"the pattern binder `{n}`"])
 Concrete/Check/Check.lean	3823	an extern declaration	message-text-as-key	an enum for the kind; the text is rendered from it	if kind == "an extern declaration" && otherKind == "an extern declaration" then (seen, errs)
 Concrete/Check/Check.lean	3823	an extern declaration	message-text-as-key	an enum for the kind; the text is rendered from it	if kind == "an extern declaration" && otherKind == "an extern declaration" then (seen, errs)
-Concrete/Check/Check.lean	4014	REF-1@1	message-text-as-key	an enum for the kind; the text is rendered from it	let msg := if rule == "REF-1@1"
+Concrete/Check/Check.lean	4014	REF-1@1	spec-rule-id	legitimate: a rule id is the spec identity itself (docs/spec/ids.tsv)	let msg := if rule == "REF-1@1"
 Concrete/Check/Check.lean	4464	main	reserved-name	one named definition per reserved spelling	if sibName == m.name || sibName == "main" then acc
 Concrete/Check/CheckError.lean	853	()	builtin-type-name	the builtin TypeId (Coherence already resolves .builtin ids) instead of the spelling	if thenTy == "()" || elseTy == "()" then
 Concrete/Check/CheckError.lean	853	()	builtin-type-name	the builtin TypeId (Coherence already resolves .builtin ids) instead of the spelling	if thenTy == "()" || elseTy == "()" then
@@ -327,9 +327,9 @@ Concrete/Resolve/PeekType.lean	184	_	sentinel-wildcard	one definition (wildcardB
 Concrete/Resolve/PeekType.lean	218		sentinel-empty	Option in the type, where the empty string stands for absent	if structName == "" then return .placeholder
 Concrete/Resolve/PeekType.lean	219	0	other	review	if field == "0" then
 Concrete/Resolve/PeekType.lean	277		sentinel-empty	Option in the type, where the empty string stands for absent	if typeName == "" then return .placeholder
-Concrete/Resolve/Project.lean	55		sentinel-empty	Option in the type, where the empty string stands for absent	let filePath := if baseDir == "" then sub.name ++ ".con"
-Concrete/Resolve/Project.lean	58		sentinel-empty	Option in the type, where the empty string stands for absent	let dirPath := if baseDir == "" then sub.name ++ "/mod.con"
-Concrete/Resolve/Project.lean	70		sentinel-empty	Option in the type, where the empty string stands for absent	if baseDir == "" then sub.name else baseDir ++ "/" ++ sub.name
+Concrete/Resolve/Project.lean	55		path-join	legitimate: the empty directory is the current one (now one helper, underDir)	let filePath := if baseDir == "" then sub.name ++ ".con"
+Concrete/Resolve/Project.lean	58		path-join	legitimate: the empty directory is the current one (now one helper, underDir)	let dirPath := if baseDir == "" then sub.name ++ "/mod.con"
+Concrete/Resolve/Project.lean	70		path-join	legitimate: the empty directory is the current one (now one helper, underDir)	if baseDir == "" then sub.name else baseDir ++ "/" ++ sub.name
 Concrete/Resolve/Project.lean	565	native	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if name == "native" || name.startsWith "native." then
 Concrete/Resolve/Project.lean	597	native	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	if k == "native" || k.startsWith "native." then
 Concrete/Resolve/Project.lean	705	-pthread	boundary-parsing	legitimate: parsing CLI flags, config or external text at the boundary	else if tok == "-pthread" then

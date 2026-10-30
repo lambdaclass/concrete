@@ -25,7 +25,7 @@ the source column keeps the line as written, so read it with a plain split, not 
 | report-vocabulary | 163 | Report (75), Main (41), Diff (15), ProofCore, ReportObligations, ObligationCore | typed status, verdict and engine enums; waits for the report split, which moves most of these lines |
 | boundary-parsing | 80 | Main (68: report kinds, flags, solver output), Project, Policy, Interp (fopen modes) | legitimate: text read at the boundary. Keep |
 | attribute-name | 51 | Parser (43), Report, ObligationCore, Main | parse attributes once into a typed attribute record |
-| sentinel-empty | 41 | Report, Check, Elab, ProofCore, ReportInterface, ReportBase | `Option` in the type where `""` stands for absent |
+| sentinel-empty | 38 | Report, Check, Elab, ProofCore, ReportInterface, ReportBase | `Option` in the type where `""` stands for absent |
 | sentinel-wildcard | 26 | Check, Elab, Lower, Locals, ElabVerify, Interp, Parser | one definition, `isWildcardBinder` |
 | intrinsic-name | 21 | EmitSSA (9), Elab, AssumptionSummary, ReportInterface, Resolve, CoreCheck, Interp | dispatch on `IntrinsicId` |
 | reserved-name | 18 | Project, Elab, Resolve, Format, Check, Interp | one named definition per reserved spelling |
@@ -33,7 +33,9 @@ the source column keeps the line as written, so read it with a plain split, not 
 | capability-name | 11 | Report, ProofCore, Parser | a capability identity; `CapSet` itself still carries strings |
 | test-harness | 8 | PipelineTest | legitimate: the harness names its own fixture binders |
 | builtin-layout-field | 6 | Interp | named field constants of the builtin `Vec`/`String` layout |
-| message-text-as-key | 5 | Check (`"an extern declaration"` twice, `"REF-1@1"`), Verify (`"post-elab"`), Interp (`"the argument"`) | an enum for the kind, with the text rendered from it |
+| message-text-as-key | 4 | Check (`"an extern declaration"` twice), Verify (`"post-elab"`), Interp (`"the argument"`) | an enum for the kind, with the text rendered from it |
+| path-join | 3 | Project | legitimate: the empty directory is the current one |
+| spec-rule-id | 1 | Check (`"REF-1@1"`) | legitimate: a rule id is the spec identity itself (`docs/spec/ids.tsv`) |
 | foreign-c-name | 4 | Interp (`fread`, `abs`) | legitimate: the interpreter models a C library function by its C symbol |
 | builtin-trait-name | 3 | CheckHelpers | a builtin-trait identity |
 | other | 3 | TypeSpelling (a doc comment), PeekType (tuple field `0`), TermIR (a test `example`) | keep |
@@ -103,19 +105,38 @@ interpreter outputs byte-identical (8850), every report kind byte-identical afte
 a Wasm build reported one failure, unnamed in the tail it printed; the rerun on the same binary
 passed every test), golden 54/0, fast surface 13/0, totality 12/0.
 
+## Slice 4 (behaviour-preserving)
+
+- **Declaration kinds.** The module-level collision check (MOD-3) carried each declaration's kind
+  as the phrase its message prints and exempted two pairs by comparing those phrases
+  (`"an extern declaration"`, `"an impl method"`). The kind is now `DeclKind`, the exemptions
+  compare kinds, and the phrase is rendered from the kind for the message.
+- **Verifier stages.** `violationsToDiagnostics` took the stage as text and picked E0600 or E0601
+  by comparing it with `"post-elab"`. The stage is now `VerifyStage`, which gives both the tag
+  and the code.
+- **Module paths.** Project joined a module's file name to its directory in three copies, each
+  testing for the empty directory; `underDir` is the one copy.
+
+**Evidence:** at `8fcb36ca`, on OVH, against main `22d6bff0`: emitted outputs byte-identical (8850),
+reports byte-identical (14310), golden 54/0, builtin semantics 11/0, fast surface 13/0, totality
+12/0. `run_tests` failed only wall-clock budget probes while the host's load average was 33–35
+(other agents' builds): one run 2882/1, a rerun 2881/2 (bug 282's resolve budget, bug 292's lower
+budget). The same probes run interleaved on the base and the new binary under that load gave
+86–140 ms and 86–163 ms for resolve and 505–1736 ms and 547–1673 ms for lower: the same spread,
+over budget for both, so the failures are the host's load, not this change, which does not touch
+the resolver's scopes or lowering.
+
 ## Next slices, in order
 
-1. **Remaining sentinels.** In Resolve, `baseDir == ""` (Project) and `structName == ""` /
-   `typeName == ""` (PeekType) become `Option`s at the producer. The report-layer sentinels wait
+1. **Remaining sentinels.** In Resolve, `structName == ""` / `typeName == ""` (PeekType) become
+   `Option`s at the producer. The report-layer sentinels wait
    for the report split.
 2. **Package names.** `"std"`, `"core"` and `"native"` in Project, each defined once.
 3. **Builtin type, trait and field spellings.** In Check, SSAVerify, Coherence, CheckError, Lower
    and Interp, compare against the builtin `TypeId` and not the spelling (see the candidate
    defect below).
-4. **Message text as a key.** In Check (`"an extern declaration"`, `"REF-1@1"`) and Verify
-   (`"post-elab"`), carry the kind as data.
-5. **Attributes.** One typed attribute record parsed once in the parser.
-6. **Report vocabulary.** After the report split lands, statuses and verdicts become enums.
+4. **Attributes.** One typed attribute record parsed once in the parser.
+5. **Report vocabulary.** After the report split lands, statuses and verdicts become enums.
 
 Boundary parsing stays as it is.
 
