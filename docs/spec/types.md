@@ -1385,6 +1385,7 @@ fn main() -> Int {
     let w: W = W { a: 1, m: Meters(40) };
     let m: Meters = grow(w.m);
     return m.0 + (w.a as Int);
+}
 ```
 
 <a id="TYPE-22"></a>

@@ -2657,6 +2657,7 @@ fn main() -> Int {
     let w: W = W { a: 1, m: Meters(40) };
     let m: Meters = grow(w.m);
     return m.0 + (w.a as Int);
+}
 ```
 
 <a id="TYPE-22"></a>
@@ -9413,6 +9414,7 @@ mod m {
         }
         return 0;
     }
+}
 ```
 
 <a id="FFI-9"></a>
@@ -10017,25 +10019,24 @@ them); they are not separate entries here
 | 79 | [OPEN-113](#OPEN-113) | absorption review | The ownership exceptions of trusted code | not checked | none given (raised by the review of the absorption) | not assessed | — |
 | 80 | [OPEN-114](#OPEN-114) | absorption review | How integer division rounds | not checked | none given (raised by the review of the absorption) | not assessed | — |
 
-| 81 | [OPEN-94](#OPEN-94) | absorption | Names in `with(...)` that are not capabilities | not checked | none given (raised while absorbing CALLABLE_VALUES and HANDLE_CAPABILITIES) | not assessed | — |
-| 82 | [OPEN-95](#OPEN-95) | absorption | What `Time`, `Env`, `Process` and `Alloc` mean | not checked | none given (raised while absorbing CALLABLE_VALUES and HANDLE_CAPABILITIES) | not assessed | — |
-| 83 | [OPEN-96](#OPEN-96) | absorption | Two foreign bindings of one C symbol | not checked | none given (raised while absorbing CALLABLE_VALUES and HANDLE_CAPABILITIES) | not assessed | — |
-| 84 | [OPEN-97](#OPEN-97) | absorption | A build profile that omits or demands an overflow check | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
-| 85 | [OPEN-98](#OPEN-98) | absorption | Pointer and reference conversions written with `as` | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
-| 86 | [OPEN-99](#OPEN-99) | absorption | The names of the named conversions | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
-| 87 | [OPEN-100](#OPEN-100) | absorption | Comparisons on a type parameter | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
-| 88 | [OPEN-101](#OPEN-101) | absorption | What a trap writes | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
-| 89 | [OPEN-102](#OPEN-102) | absorption | `Float32` and `Char` as type spellings | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
-| 90 | [OPEN-103](#OPEN-103) | absorption | `as` applied to a reference | not checked | none given (raised while absorbing MEMORY_SEMANTICS) | not assessed | — |
-| 91 | [OPEN-104](#OPEN-104) | s7 review | A `#[variant]` written on a counted loop | not applicable | none given | neutral | — |
-| 92 | [OPEN-105](#OPEN-105) | s7 review | Where a counted loop's `#[invariant]` is checked | not applicable | none given | (b) needs requirement 2 | — |
-| 93 | [OPEN-115](#OPEN-115) | absorption | The body and totality of a specification function | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
-| 94 | [OPEN-116](#OPEN-116) | absorption | A checked total function category | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
-| 95 | [OPEN-117](#OPEN-117) | absorption | `old`, quantifiers and implication in contracts | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
-| 96 | [OPEN-118](#OPEN-118) | absorption | A proven run-time violation in trusted code | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
-| 97 | [OPEN-119](#OPEN-119) | absorption | Buffered output when the process aborts | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
-| 98 | [OPEN-120](#OPEN-120) | absorption | A vacuous contract | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
-| 99 | [OPEN-121](#OPEN-121) | absorption | Projections from a base that is not a traceable place | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
+| 81 | [OPEN-95](#OPEN-95) | absorption | What `Time`, `Env`, `Process` and `Alloc` mean | not checked | none given (raised while absorbing CALLABLE_VALUES and HANDLE_CAPABILITIES) | not assessed | — |
+| 82 | [OPEN-96](#OPEN-96) | absorption | Two foreign bindings of one C symbol | not checked | none given (raised while absorbing CALLABLE_VALUES and HANDLE_CAPABILITIES) | not assessed | — |
+| 83 | [OPEN-97](#OPEN-97) | absorption | A build profile that omits or demands an overflow check | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
+| 84 | [OPEN-98](#OPEN-98) | absorption | Pointer and reference conversions written with `as` | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
+| 85 | [OPEN-99](#OPEN-99) | absorption | The names of the named conversions | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
+| 86 | [OPEN-100](#OPEN-100) | absorption | Comparisons on a type parameter | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
+| 87 | [OPEN-101](#OPEN-101) | absorption | What a trap writes | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
+| 88 | [OPEN-102](#OPEN-102) | absorption | `Float32` and `Char` as type spellings | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
+| 89 | [OPEN-103](#OPEN-103) | absorption | `as` applied to a reference | not checked | none given (raised while absorbing MEMORY_SEMANTICS) | not assessed | — |
+| 90 | [OPEN-104](#OPEN-104) | s7 review | A `#[variant]` written on a counted loop | not applicable | none given | neutral | — |
+| 91 | [OPEN-105](#OPEN-105) | s7 review | Where a counted loop's `#[invariant]` is checked | not applicable | none given | (b) needs requirement 2 | — |
+| 92 | [OPEN-115](#OPEN-115) | absorption | The body and totality of a specification function | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
+| 93 | [OPEN-116](#OPEN-116) | absorption | A checked total function category | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
+| 94 | [OPEN-117](#OPEN-117) | absorption | `old`, quantifiers and implication in contracts | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
+| 95 | [OPEN-118](#OPEN-118) | absorption | A proven run-time violation in trusted code | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
+| 96 | [OPEN-119](#OPEN-119) | absorption | Buffered output when the process aborts | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
+| 97 | [OPEN-120](#OPEN-120) | absorption | A vacuous contract | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
+| 98 | [OPEN-121](#OPEN-121) | absorption | Projections from a base that is not a traceable place | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
 
 <a id="OPEN-33"></a>
 #### OPEN-33. Inline submodules under one file per module
