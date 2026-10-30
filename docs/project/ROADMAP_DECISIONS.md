@@ -13,14 +13,16 @@ The dated decisions that shape the queue. Each names the tasks that carry it; no
 queue.
 
 **Specification-first decision, 2026-10-30 (owner):** "the spec is the most important thing to do."
-Row 0s (R-0555) becomes the top priority. Only row-0 silent soundness repairs and the landing of
-already-validated branches continue beside it, and no other row starts until its steps 1 – 6 hold (owner
-decisions, absorption, simplification, one readable document, nothing outside the spec, conformance
-suite). The ordered nine-step plan is at the top of [ROADMAP.md](../../ROADMAP.md). This supersedes the 2026-10-21
-priority decision's ordering for as long as row 0s is open, and the verified-compiler track resumes
-from the spec. The owner's standing preferences apply: strict by default, Austral by default with
-written deviations, verbose code is acceptable when it is clear and safer, the grammar stays LL(1),
-and every language decision is the owner's.
+Row 0s (R-0555) becomes the top priority. Until its steps 1 – 6 hold (owner decisions, absorption with a
+coverage audit, simplification, one readable document, nothing outside the spec, the conformance suite),
+only row-0 silent soundness repairs and the landing of already-validated branches continue beside it, and
+no other row starts. For that period this overrides the 2026-10-21 priority decision's ordering, the
+capacity allocation and every concurrent-work permission in this log and in ROADMAP.md. After that, the
+verified-compiler track resumes under the capacity allocation and carries steps 7 – 9 (migration under
+exit 2q, Lean links with R-0496, the outside-reader test). The nine-step plan with its completion criteria
+is at the top of [ROADMAP.md](../../ROADMAP.md). The owner's standing preferences apply: strict by default,
+Austral by default with written deviations, verbose code is acceptable when it is clear and safer, the
+grammar stays LL(1), and every language design decision is the owner's.
 
 **Priority decision, 2026-10-21:** the verified compiler is the primary engineering track, protected
 by an explicit [capacity allocation](../../ROADMAP.md#capacity-allocation) rather than by queue numbering. Two inputs

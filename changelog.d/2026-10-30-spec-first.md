@@ -2,7 +2,7 @@
 
 The owner decided that the language specification comes first. Row 0s (R-0555) now leads the
 roadmap. Only silent soundness repairs and the landing of already-validated branches run beside it,
-and no other row starts until the spec is complete. The top of `ROADMAP.md` gives the nine steps in order:
+and no other row starts until its first six steps hold. The top of `ROADMAP.md` gives the nine steps in order:
 
 1. answer every open owner decision;
 2. absorb every normative statement into `docs/spec`;
