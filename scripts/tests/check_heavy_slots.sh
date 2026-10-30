@@ -203,7 +203,9 @@ out="$(env -u CONCRETE_HEAVY_SLOTS GITHUB_ACTIONS=true TEST_SUMMARY_FILE="$TMP/p
 out="$(env -u CONCRETE_HEAVY_SLOTS GITHUB_ACTIONS=true TEST_SUMMARY_FILE="$TMP/p4.summary" \
         bash scripts/tests/run_tests.sh --full --no-wait --slot-probe 2>&1)"; rc=$?
 [ "$rc" = 75 ] && ok "in CI --full still takes a slot" || no "in CI --full returned $rc: $out"
-CONCRETE_HEAVY_NO_WAIT=1 bash scripts/dev/identity_sweep.sh /bin/true /bin/true "$TMP/sweep" --emit >"$TMP/sw.out" 2>&1; rc=$?
+# An executable stand-in for both binaries: true lives at /bin/true on Linux and only at /usr/bin/true on macOS.
+TRUE_BIN="$(type -P true)"
+CONCRETE_HEAVY_NO_WAIT=1 bash scripts/dev/identity_sweep.sh "$TRUE_BIN" "$TRUE_BIN" "$TMP/sweep" --emit >"$TMP/sw.out" 2>&1; rc=$?
 [ "$rc" = 75 ] && [ ! -d "$TMP/sweep/base" ] \
   && ok "identity_sweep.sh exits 75 and compares nothing while the slots are full" \
   || no "identity_sweep.sh returned $rc: $(tail -2 "$TMP/sw.out" | tr '\n' ' ')"
