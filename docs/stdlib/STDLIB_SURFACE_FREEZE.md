@@ -189,7 +189,7 @@ Endian-aware byte reading, byte cursor, byte writer. 9 tests pass.
 
 Implemented in `std/src/numeric.con`. ByteCursor and ByteWriter provide typed endian reads/writes. Validated by `examples/packet/` (uses `ByteCursor` for all header reads) and 9 unit tests in the module. Checked arithmetic and narrowing helpers are not yet implemented. Signed variants (`read_i16_be`, etc.) are deferred.
 
-Source: [BYTE_CURSOR_API.md](BYTE_CURSOR_API.md), [ARITHMETIC_POLICY.md](../language/ARITHMETIC_POLICY.md), [STDLIB_TARGET.md](STDLIB_TARGET.md)
+Source: [BYTE_CURSOR_API.md](BYTE_CURSOR_API.md), [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md), [STDLIB_TARGET.md](STDLIB_TARGET.md)
 
 ### 2.2 Alloc Layer (requires malloc/free)
 
@@ -573,9 +573,9 @@ Every syntax construct in the language and its freeze status.
 
 | Form | Description | Design doc |
 |------|-------------|------------|
-| `let Type::Variant { fields } = expr;` | Irrefutable enum destructuring | [PATTERN_DESTRUCTURING.md](../language/PATTERN_DESTRUCTURING.md) |
-| `let StructType { fields } = expr;` | Irrefutable struct destructuring | [PATTERN_DESTRUCTURING.md](../language/PATTERN_DESTRUCTURING.md) |
-| `let Type::Variant { fields } = expr else { diverging_body };` | Refutable destructuring with else | [PATTERN_DESTRUCTURING.md](../language/PATTERN_DESTRUCTURING.md) |
+| `let Type::Variant { fields } = expr;` | Irrefutable enum destructuring | [PATTERN_DESTRUCTURING.md](../archive/design-records/PATTERN_DESTRUCTURING.md) |
+| `let StructType { fields } = expr;` | Irrefutable struct destructuring | [PATTERN_DESTRUCTURING.md](../archive/design-records/PATTERN_DESTRUCTURING.md) |
+| `let Type::Variant { fields } = expr else { diverging_body };` | Refutable destructuring with else | [PATTERN_DESTRUCTURING.md](../archive/design-records/PATTERN_DESTRUCTURING.md) |
 | Elaboration-time generic inference | Omit type params when context provides them | [SYNTAX_FREEZE_REVIEW.md](../compiler/SYNTAX_FREEZE_REVIEW.md) #1, #4 |
 
 These are designed, LL(1)-verified, and approved. They may be implemented before release. Once implemented, they become stable.
@@ -592,9 +592,9 @@ These are designed, LL(1)-verified, and approved. They may be implemented before
 | String interpolation | Requires macros or special parser form; deferred | [SYNTAX_FREEZE_REVIEW.md](../compiler/SYNTAX_FREEZE_REVIEW.md) |
 | `for x in collection` | Requires iterator protocol; deferred | [SYNTAX_FREEZE_REVIEW.md](../compiler/SYNTAX_FREEZE_REVIEW.md) #18 |
 | Compound assignment (`+=`, `-=`) | Low priority sugar; deferred | [SYNTAX_FREEZE_REVIEW.md](../compiler/SYNTAX_FREEZE_REVIEW.md) #20 |
-| Guard clauses in match | Grammar ambiguity with `if`; deferred | [PATTERN_DESTRUCTURING.md](../language/PATTERN_DESTRUCTURING.md) |
-| Nested patterns in match/let | Complexity; deferred | [PATTERN_DESTRUCTURING.md](../language/PATTERN_DESTRUCTURING.md) |
-| `_` wildcard in destructuring | Can be added without grammar changes; deferred | [PATTERN_DESTRUCTURING.md](../language/PATTERN_DESTRUCTURING.md) |
+| Guard clauses in match | Grammar ambiguity with `if`; deferred | [PATTERN_DESTRUCTURING.md](../archive/design-records/PATTERN_DESTRUCTURING.md) |
+| Nested patterns in match/let | Complexity; deferred | [PATTERN_DESTRUCTURING.md](../archive/design-records/PATTERN_DESTRUCTURING.md) |
+| `_` wildcard in destructuring | Can be added without grammar changes; deferred | [PATTERN_DESTRUCTURING.md](../archive/design-records/PATTERN_DESTRUCTURING.md) |
 | Byte-string literals (`b"..."`) | Byte/string boundary not settled; deferred | [SYNTAX_FREEZE_REVIEW.md](../compiler/SYNTAX_FREEZE_REVIEW.md) #8 |
 | Raw strings (`r"..."`) | Deferred | [STRING_TEXT_CONTRACT.md](STRING_TEXT_CONTRACT.md) |
 | Multi-line strings | Deferred | [STRING_TEXT_CONTRACT.md](STRING_TEXT_CONTRACT.md) |
@@ -624,7 +624,7 @@ These are designed, LL(1)-verified, and approved. They may be implemented before
 | `bool` | 1-bit | -- | -- |
 | `char` | 8-bit | -- | Byte-oriented first-release surface; see section 6 |
 
-Source: [ARITHMETIC_POLICY.md](../language/ARITHMETIC_POLICY.md)
+Source: [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md)
 
 ### 4.2 String / text / byte types
 

@@ -98,6 +98,7 @@ def resolveSelfTy : Ty → Ty → Ty
 
 /-- Map a type name string to its primitive Ty, or `.named` for user types.
     Mirrors the parser's type name → Ty mapping. -/
+-- spec: TYPE-19 (docs/spec/types.md; this declaration enforces the rule)
 def tyFromName (name : String) : Ty :=
   match name with
   | "Int" | "i64" => .int

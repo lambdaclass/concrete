@@ -29,11 +29,12 @@ PAGES = {
     "SAFETY.md": ("Safety", "docs/verification/SAFETY.md"),
     "STDLIB.md": ("Stdlib", "docs/stdlib/STDLIB.md"),
     "TESTING.md": ("Testing", "docs/compiler/TESTING.md"),
-    "VALUE_MODEL.md": ("Value Model", "docs/language/VALUE_MODEL.md"),
 }
 # Old page URLs kept alive as Zola redirects to the page that absorbed them (page -> URL paths).
 # docs/project's IDENTITY, DESIGN_POLICY, LANGUAGE_SHAPE and DECISIONS became PROJECT.md on
 # 2026-10-29; their published reference pages redirect there so outside links do not break.
+# VALUE_MODEL.md was absorbed into the specification on 2026-10-30; its old URL redirects to the
+# types chapter (spec.py's SITE_ALIASES), since a redirect lives on the page it points to.
 ALIASES = {
     "PROJECT.md": ["/reference/identity/", "/reference/design-policy/",
                    "/reference/language-shape/", "/reference/decisions/"],

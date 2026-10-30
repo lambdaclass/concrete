@@ -23,7 +23,7 @@ Use them when you need exact current direction rather than the book's higher-lev
 
 ## Language And Runtime References
 
-- [`docs/language/VALUE_MODEL.md`](../../language/VALUE_MODEL.md)
+- [`docs/archive/design-records/VALUE_MODEL.md`](../../archive/design-records/VALUE_MODEL.md)
   The current value and ownership model.
 
 - [`docs/spec/overview.md`](../../spec/overview.md)

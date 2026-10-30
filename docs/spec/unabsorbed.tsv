@@ -2,8 +2,5 @@
 # Each is moved into the chapters named, rules as entries and useful rationale under them, tracking material
 # to ROADMAP, KNOWN_HOLES or research, and is deleted with its row in the same commit. The list only shrinks
 # (S13 against the base revision). Columns: path, target chapters.
-docs/language/ARITHMETIC_POLICY.md	arithmetic
 docs/language/MEMORY_SEMANTICS.md	references,scope,memory
-docs/language/PATTERN_DESTRUCTURING.md	patterns
 docs/language/README.md	README
-docs/language/VALUE_MODEL.md	types,references

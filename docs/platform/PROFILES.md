@@ -34,7 +34,7 @@ admission-strictness axis; the build profiles in ROADMAP #10 (debug / release)
 are an enforcement/optimization axis. Neither axis flips source semantics: a
 reviewer must never need to know the profile to know whether `a + b` wraps.
 Arithmetic meaning is fixed and explicit — checked `+ - *`, explicit
-`wrapping_*` / `saturating_*` — per [ARITHMETIC_POLICY.md](../language/ARITHMETIC_POLICY.md)
+`wrapping_*` / `saturating_*` — per [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md)
 §14. Ordinary arithmetic and raw safe indexing now lower to checked runtime
 paths in every profile; stronger profiles may require static discharge, but may
 not reinterpret the source operation.

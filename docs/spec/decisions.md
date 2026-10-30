@@ -1150,6 +1150,102 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 
 **Rationale.** Bears on FFI-3, FFI-5. Current main: accepted: `abs_a(x: i32) with() -> i32` and `abs_b(x: i64) with() -> i64`, both bound to `abs`, compile and the binary runs, while the interpreter stops at run time on the mismatched width. HANDLE_CAPABILITIES §5 (encoding A, one binding per effect for one C symbol) planned to refuse a mismatch with a diagnostic. Options: (a) refuse; (b) allow, each binding's signature trusted on its own. Austral: not applicable. Pick: none given (raised by the absorption of 2026-10-30).
 
+<a id="OPEN-9X1"></a>
+### OPEN-9X1. A build profile that omits or demands an overflow check
+
+**OPEN-9X1@1.** Whether a build profile may omit the run-time check of an integer operation that no proof discharges, or refuse such an operation at compile time, is an open owner decision (OD9X1).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD9X1
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on ARITH-3, ARITH-9. Current main: every profile emits every check, and no option turns one off; ARITH-3's rationale says a profile changes reports, never code generation, and OD10 decided that arithmetic is checked "by default". The archived [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md) §3.1 instead let a release profile omit a check that is "explicitly configured off and reported", and a provable or high-integrity profile refuse an unproved overflow site. Options: (a) every profile keeps every check that no discharged proof removes; (b) a release profile may turn checks off when configured and reported, never wrapping; (c) as (a), and a profile may also refuse an operation whose no-overflow obligation is not discharged. Austral: not checked. Raised by the absorption of ARITHMETIC_POLICY.md (2026-10-30).
+
+<a id="OPEN-9X2"></a>
+### OPEN-9X2. Pointer and reference conversions written with `as`
+
+**OPEN-9X2@1.** Which conversions between raw pointers and references `as` writes (`&x as *const T`, `p as &T`, `p as &mut T`, `p as *mut U`) is an open owner decision (OD9X2).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD9X2
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on TRUST-1, TRUST-3, REF-5, ARITH-5. Current main: `&x as *const T` is accepted in safe code, `p as &T` from a raw pointer is accepted in trusted or `Unsafe` code (the binary and `--interp` agree), and a reference cast between different pointee types (`a as &Int` with `a: &A`) is refused (E0553). No entry states these: TRUST-3 forms a reference from a raw pointer with `&*p`, and REF-5 lists borrowing and projection as the ways a reference is formed. The archived [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md) §8 kept `as` "the spelling of pointer and reference casts (`as *const T`, `as *mut T`, `as &K`, `as &mut V`)", 281 lines of std. Options: (a) `as` keeps every one of them; (b) `as` converts only a reference to a raw pointer, and a reference is formed from a raw pointer only by `&*p` (TRUST-3); (c) pointer conversions become named functions. Austral: not checked. Raised by the absorption of ARITHMETIC_POLICY.md (2026-10-30).
+
+<a id="OPEN-9X3"></a>
+### OPEN-9X3. The names of the named conversions
+
+**OPEN-9X3@1.** The spellings of the named conversions of ARITH-5 and ARITH-10 (`try_convert`, `truncate`, `reinterpret`, and the float roundings `trunc`, `round`, `floor`, `ceil`) are an open owner decision (OD9X3).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD9X3
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on ARITH-5, ARITH-10. Current main: none of them exists (E0101). ARITH-5's sentence names `truncate` and `reinterpret`, while the archived [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md) §8.2 calls its spellings indicative, to be fixed by the API's owner. Options: (a) the spellings above, as builtins; (b) other names, or std functions rather than builtins. Austral: not checked. Raised by the absorption of ARITHMETIC_POLICY.md (2026-10-30).
+
+<a id="OPEN-9X4"></a>
+### OPEN-9X4. Comparisons on a type parameter
+
+**OPEN-9X4@1.** Whether a comparison on a value of a `Copy`-bounded type parameter is accepted and checked again at each instantiation, or refused in the generic body, is an open owner decision (OD9X4).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD9X4
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on TYPE-6, TYPE-9, PASS-1, OPEN-42. Current main: `a < b` with `a, b: T` and `T: Copy` is accepted, and an instantiation at a type with no comparison is refused after monomorphization (E0229, `post-mono`); without the `Copy` bound it is refused in the body (E0229, `check`). TYPE-9's rationale says a generic body is checked once, from its bounds, which a per-instantiation check departs from. Options: (a) keep main's per-instantiation check; (b) refuse a comparison on a type parameter until a bound states it (a comparison trait); (c) refuse it. Austral: not checked. Raised by the absorption of ARITHMETIC_POLICY.md §8a (2026-10-30).
+
+<a id="OPEN-9X5"></a>
+### OPEN-9X5. What a trap writes
+
+**OPEN-9X5@1.** Whether a run-time trap writes a message naming the operation, its operands and its source location before the process ends, and in what form, is an open owner decision (OD9X5).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD9X5
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on STMT-2, STMT-7, ARITH-3. Current main: the binary writes nothing and ends by `SIGABRT`, and `--interp` reports a run-time error naming the trap (`arithmetic overflow (checked +)`). The archived [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md) §9.2 described a message `concrete: arithmetic overflow in function 'f' at file:line` with the operation, the operands and the policy. Options: (a) the binary writes nothing; (b) it writes one line naming the trap and its location; (c) the §9.2 form. Austral: not checked. Raised by the absorption of ARITHMETIC_POLICY.md (2026-10-30).
+
+<a id="OPEN-9X6"></a>
+### OPEN-9X6. `Float32` and `Char` as type spellings
+
+**OPEN-9X6@1.** Whether `Float32` and `Char` are other spellings of `f32` and `char`, as `Float64` and `Bool` are of `f64` and `bool`, is an open owner decision (OD9X6).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD9X6
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on TYPE-19, SYN-3. Current main: the parser maps `Float64` and `Bool` to `f64` and `bool` but not `Float32` or `Char`, so `fn g(x: f32) -> Float32 { return x; }` is refused (E0220) while the resolver's `tyFromName` maps all four. The archived [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md) §1 names `Float32`/`f32` as two spellings. Options: (a) `Float32` and `Char` become spellings of `f32` and `char`; (b) one spelling per primitive type, the capitalized spellings removed. Austral: not checked. Raised by the absorption of ARITHMETIC_POLICY.md (2026-10-30).
+
 ## Decided
 
 These entries were retired when the owner answered them; their IDs are never reused.

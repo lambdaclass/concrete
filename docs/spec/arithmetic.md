@@ -1,13 +1,12 @@
 # Arithmetic
 
-The integer types are `Int` (`i64`), `Uint` (`u64`), `i32`, `u32`, `i16`, `u16`, `i8` and `u8`;
-the floating-point types are `f64` and `f32`. Every ordinary integer operation is checked: it
+The numeric types are TYPE-19's. Every ordinary integer operation is checked: it
 traps on a result its type cannot represent, and the trap is an abort (STMT-2). Wrapping and
 saturating arithmetic are named operations. There is no implicit numeric conversion (TYPE-4), and
 which operand types an operator takes is TYPE-6. The design records are
-[ARITHMETIC_POLICY.md](../language/ARITHMETIC_POLICY.md) (NUMERIC_MODEL.md was absorbed into
-ARITH-2, ARITH-3 and ARITH-5 and deleted); the profile mapping, report classification and
-proof boundaries stay there.
+[ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md) (absorbed into ARITH-8 to
+ARITH-10, TYPE-19 and TYPE-20 on 2026-10-30; it keeps the profile mapping, report classification and
+proof boundaries) and NUMERIC_MODEL.md (absorbed into ARITH-2, ARITH-3 and ARITH-5 and deleted).
 
 ## Rules
 
@@ -112,9 +111,8 @@ fn main() -> Int {
 **Rationale.** Silent wrapping is a correctness bug in almost all code, and signed overflow is
 the case C leaves undefined. Concrete never emits LLVM's `nsw` or `nuw`: checked operations use
 the overflow intrinsics and branch to an abort helper. This holds in every profile; a profile
-changes reports, never code generation. A right shift is arithmetic for a signed type and logical
-for an unsigned one. Integer division truncates toward zero (`-7 / 2` is `-3`), and a remainder
-has the sign of its dividend. Constant folding may refuse an operation it proves always overflows (E0900),
+changes reports, never code generation (whether a profile may omit a check is OPEN-9X1). The
+results of a shift, a division and a remainder that do not abort are ARITH-8. Constant folding may refuse an operation it proves always overflows (E0900),
 but it does not see every such operation, so the run-time trap is the guarantee. Array bounds are
 checked the same way, an index out of bounds aborting.
 
@@ -212,7 +210,9 @@ of at least 16, `u8` to `char`, an integer to a float that represents every valu
 and sign changes are still accepted and truncate or reinterpret, and float to integer truncates
 toward zero and aborts on NaN, an infinity or a value outside the target's range (a checked
 conversion), until the named operations land and the corpus migrates (about 500 to 700 sites). Pointer and reference casts are not
-numeric conversions (TRUST-1 owns the pointer–integer case).
+numeric conversions (TRUST-1 owns the pointer–integer case; which pointer and reference
+conversions `as` writes is OPEN-9X2). The named operations' results are ARITH-10, and their
+spellings are OPEN-9X3.
 
 Until then, on current main, narrowing truncates silently (`300 as u8` is 44, `-1 as u32` is
 4294967295, `3.9 as i32` is 3). Even a widening needs `as`: `want_u64(my_u8)` is E0220 (TYPE-4),
@@ -323,5 +323,128 @@ fn main() -> Int {
         return 42;
     }
     return 0;
+}
+```
+
+<a id="ARITH-8"></a>
+### ARITH-8. Shift fill, division rounding and the remainder's sign
+
+**ARITH-8@1.** A right shift fills the vacated bits with the sign bit on a signed type and with zeros on an unsigned type, an integer division that does not abort truncates its quotient toward zero, and a nonzero remainder has the sign of its dividend.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.IntArith.evalIntBinOp, Concrete.IntArith.evalIntShift, Concrete.Pipeline.emit
+- Semantics: none
+- Obligation: the shift and division results are `IntArith`'s, the one arithmetic authority (R-0493)
+- Evidence: tested
+
+**Rationale.** These are the results C99 and LLVM's `ashr`, `lshr`, `sdiv` and `srem` give, so
+`-7 / 2` is `-3`, `-7 % 2` is `-1` and `7 % -2` is `1`. When an operation aborts instead is ARITH-3.
+The interpreter and the constant folder compute them in `IntArith`, and the binary through the
+abort helpers.
+
+```con accept name=shift-and-division exit=42
+fn main() -> Int {
+    let a: i8 = -128;
+    let s: i8 = a >> 7;
+    let u: u8 = 128;
+    let t: u8 = u >> 7;
+    let q: Int = -7 / 2;
+    let r: Int = -7 % 2;
+    let r2: Int = 7 % -2;
+    return (s as Int) + (t as Int) + q + r + r2 + 45;
+}
+```
+
+<a id="ARITH-9"></a>
+### ARITH-9. No ambient arithmetic mode
+
+**ARITH-9@1.** No attribute, `#[overflow_checked]` included, and no module or function setting changes what an integer operator or a named arithmetic operation computes, so an operation's mode is given by its spelling alone.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.Pipeline.emit, Concrete.Pipeline.lower
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** A reader of `a + b` knows it is checked (ARITH-3) and of `wrapping_add(a, b)` that it
+wraps (ARITH-4) without looking for an enclosing `#[wrapping]` attribute or module switch; none
+exists. `#[overflow_checked]` asks the proof pipeline for a no-overflow obligation at each
+fixed-width `+`, `-` and `*` of the function, which is evidence, not meaning: the operations still
+abort on overflow. Whether a build profile may omit a check or refuse an unproved operation is
+OPEN-9X1.
+
+```con accept name=overflow-checked-in-range exit=42
+#[overflow_checked]
+fn add(a: u8, b: u8) -> u8 {
+    return a + b;
+}
+
+fn main() -> Int {
+    return add(40, 2) as Int;
+}
+```
+
+```con abort name=overflow-checked-still-traps trap=arithmetic_overflow
+#[overflow_checked]
+fn add(a: u8, b: u8) -> u8 {
+    return a + b;
+}
+
+fn main() -> Int {
+    return add(200, 100) as Int;
+}
+```
+
+<a id="ARITH-10"></a>
+### ARITH-10. The named conversions' results
+
+**ARITH-10@1.** `truncate::<T>(x)` keeps the low-order bits of `x`'s two's-complement representation, as many as `T`'s width, `reinterpret::<T>(x)` gives the value of `T` with `x`'s bit pattern at the same width, and `try_convert::<T>(x)` returns `Option::Some` of the value of `T` that means the same number as `x`, or `Option::None` when there is none (an integer out of range, a float that is not integral, out of range, NaN or infinite, or a value a target float does not represent exactly).
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: pending R-0500
+- Semantics: none
+- Obligation: the named conversions are typed operations of the one arithmetic authority (R-0493)
+- Evidence: tested
+
+**Rationale.** These are the conversions ARITH-5 sends every lossy `as` to, each with one stated
+result, so that no consumer has to guess what a lossy conversion means (bugs 080 and 128).
+`truncate::<u8>(300)` is 44 and `reinterpret::<u32>(-1)` is 4294967295, what a narrowing or
+sign-changing `as` gives today. The float rounding operations (`trunc`, `round`, `floor`, `ceil`)
+are specified with ARITH-1's reference model. None of these exists on main yet (R-0500), and their
+spellings are OPEN-9X3.
+
+```con accept name=truncate-and-reinterpret exit=42 pending=R-0500 now=reject:E0101:resolve
+fn main() -> Int {
+    let x: Int = 300;
+    let t: u8 = truncate::<u8>(x);
+    let m: i32 = -1;
+    let u: u32 = reinterpret::<u32>(m);
+    if u == 4294967295 {
+        return (t as Int) - 2;
+    }
+    return 0;
+}
+```
+
+```con accept name=try-convert exit=42 pending=R-0500 now=reject:E0101:resolve
+fn main() -> Int {
+    let small: Int = 42;
+    let big: Int = 300;
+    let mut out: Int = 0;
+    if let Option::Some { value } = try_convert::<u8>(small) {
+        out = value as Int;
+    }
+    if let Option::Some { value: v2 } = try_convert::<u8>(big) {
+        out = 0;
+    }
+    return out;
 }
 ```

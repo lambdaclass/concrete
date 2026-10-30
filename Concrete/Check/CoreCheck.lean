@@ -603,7 +603,7 @@ private def checkForeignFnValue (name : String) (ty : Ty) : StateM CoreCheckEnv 
 
 mutual
 
--- spec: TYPE-4, spec: TYPE-5, spec: TYPE-6, spec: TYPE-7, spec: TYPE-8, spec: PAT-2, spec: PAT-3, spec: PAT-7, spec: ARITH-5, spec: TRUST-4, spec: TRUST-5 (docs/spec/types.md; this declaration enforces the rule)
+-- spec: TYPE-4, spec: TYPE-5, spec: TYPE-6, spec: TYPE-7, spec: TYPE-8, spec: PAT-2, spec: PAT-3, spec: PAT-7, spec: ARITH-5, spec: TRUST-4, spec: TRUST-5, spec: TYPE-20 (docs/spec/types.md; this declaration enforces the rule)
 partial def ccCheckExpr (e : CExpr) : StateM CoreCheckEnv Unit := do
   match e with
   | .intLit _ _ | .floatLit _ _ | .boolLit _ | .strLit _ | .charLit _ => pure ()

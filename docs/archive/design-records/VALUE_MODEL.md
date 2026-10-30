@@ -1,16 +1,24 @@
 # Value & Reference Model (design record)
 
-**Superseded as the normative text (2026-10-23).** Copy and linearity are
-[docs/spec/ownership.md](../spec/ownership.md) (OWN-D1 to OWN-15), references are
-[docs/spec/references.md](../spec/references.md) (REF-1 to REF-11), newtypes and typing are
-[docs/spec/types.md](../spec/types.md) (TYPE-1 to TYPE-14), and layout attributes belong to the
-FFI chapter. This document keeps the overview and the four-cell value model's reasoning.
+Archived from docs/language on 2026-10-30: the value-model overview, the four-cell value model
+(Copy, Clone, Move, Borrow) and the reasoning for second-class references. The rules are in the
+specification: Copy and linearity are [ownership.md](../../spec/ownership.md) (OWN-D1 to OWN-15),
+references are [references.md](../../spec/references.md), newtypes are TYPE-4, TYPE-11 and, for their
+representation, TYPE-21 of [types.md](../../spec/types.md), and layout is FFI-4, FFI-7 and FFI-8 of
+[ffi.md](../../spec/ffi.md). Where this document and the spec differ, the spec governs.
+
+**Statements the absorption did not carry over (2026-10-30).** Stale: a `&mut T` "consumed on use"
+(REF-10@2: passing a `&mut` binding lends it, so it may be passed to any number of calls in turn);
+`.` reaching fields "through one heap layer" of a `Heap<T>` (MEM-4@3, OD30: a field access does not
+open a heap cell implicitly; the explicit form is OPEN-36); "only a bare `let r = &s` freezes its
+source" (REF-6: no `let` binds a reference). Not rules: `Clone` is a design direction, and
+`get(i) -> Option<T>` being copy-out only for `T: Copy` is a std convention that follows from OWN-8.
 
 Concrete uses a strict value/reference model with linear types by default.
 
-For the full safety model (capabilities, trusted boundaries, `Unsafe`), see [SAFETY.md](../verification/SAFETY.md).
-For the current safe-memory guarantee boundary, see [MEMORY_GUARANTEES.md](../verification/MEMORY_GUARANTEES.md).
-For FFI and trust boundaries, see [FFI.md](../platform/FFI.md).
+For the full safety model (capabilities, trusted boundaries, `Unsafe`), see [SAFETY.md](../../verification/SAFETY.md).
+For the current safe-memory guarantee boundary, see [MEMORY_GUARANTEES.md](../../verification/MEMORY_GUARANTEES.md).
+For FFI and trust boundaries, see [FFI.md](../../platform/FFI.md).
 
 ## Value Categories
 
@@ -20,12 +28,12 @@ For FFI and trust boundaries, see [FFI.md](../platform/FFI.md).
 | `&T` | Shared reference | Copy | Immutable borrow |
 | `&mut T` | Exclusive reference | Linear | Mutable borrow, consumed on use |
 | `*mut T` / `*const T` | Raw pointer | Copy | Requires `Unsafe` capability |
-| `Heap<T>` | Owned heap pointer | Linear | `.` field access through one heap layer ([MEMORY_SEMANTICS.md §5](MEMORY_SEMANTICS.md#5-field-access)), must be freed |
+| `Heap<T>` | Owned heap pointer | Linear | `.` field access through one heap layer ([MEMORY_SEMANTICS.md §5](../../language/MEMORY_SEMANTICS.md#5-field-access)), must be freed |
 | Structs | Value | Linear | Opt-in `Copy` via marker |
 | Enums | Value | Linear | Opt-in `Copy` via marker |
 | Newtypes | Same as inner type | Inherits | `newtype UserId = Int` is Copy because `Int` is Copy |
 | Function pointers | Value | Copy | No closures |
-| Module constants (`const`) | Value, never a place | — | Copied at each use; never addressable (`&C` is refused like `&42`); their type holds no reference ([MEMORY_SEMANTICS.md §15](MEMORY_SEMANTICS.md) REF-3, decided 2026-10-21) |
+| Module constants (`const`) | Value, never a place | — | Copied at each use; never addressable (`&C` is refused like `&42`); their type holds no reference ([MEMORY_SEMANTICS.md §15](../../language/MEMORY_SEMANTICS.md) REF-3, decided 2026-10-21) |
 
 ## Copy vs Linear
 
@@ -39,7 +47,7 @@ For FFI and trust boundaries, see [FFI.md](../platform/FFI.md).
 ## References are second-class: they flow down, never up through returns
 
 The normative statement of these rules, with each rule's diagnostic, enforcing site, fixtures and
-current enforcement status, is [MEMORY_SEMANTICS.md §15](MEMORY_SEMANTICS.md) (REF-1 to REF-8).
+current enforcement status, is [MEMORY_SEMANTICS.md §15](../../language/MEMORY_SEMANTICS.md) (REF-1 to REF-8).
 This section explains the design.
 
 Since the semantics decision of 2026-10-21, a reference exists only as a **parameter**, a **call
@@ -203,7 +211,7 @@ newtype Wrapper<T> = T;     // Inherits from T
 
 Layout is unspecified unless a `repr` attribute below guarantees it, and each attribute guarantees
 only its documented properties; safe code observes layout only through `sizeof` / `alignof`. The
-normative statement is [LAYOUT_CONTRACT.md §3.3](../platform/LAYOUT_CONTRACT.md#33-what-code-may-rely-on-and-who-owns-layout-normative-decided-2026-10-21).
+normative statement is [LAYOUT_CONTRACT.md §3.3](../../platform/LAYOUT_CONTRACT.md#33-what-code-may-rely-on-and-who-owns-layout-normative-decided-2026-10-21).
 
 ### `#[repr(C)]`
 C-compatible struct layout. Required for FFI.

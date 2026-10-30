@@ -62,7 +62,7 @@ struct passed by pointer) produces ill-typed IR. The interpreter has no case for
 ## Fix
 
 The comparison rule (user decision (b), 2026-10-21; [ARITHMETIC_POLICY
-§8a](../language/ARITHMETIC_POLICY.md#8a-comparison-operators)): comparison operators are defined on
+§8a](../archive/design-records/ARITHMETIC_POLICY.md#8a-comparison-operators)): comparison operators are defined on
 integers, floats, `bool` and `char`, and on raw pointers in trusted or `Unsafe` code. Both
 reproducers are now refused at the checker, natively and under `--interp`:
 

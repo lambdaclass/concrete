@@ -6,7 +6,7 @@ Status: reference with follow-up hardening notes (Phase 3 items 51-52 closed)
 
 This document defines the encoding contract for strings and text in Concrete. It exists to prevent drift between the stdlib, docs, codegen, and FFI surfaces before the stable subset freeze.
 
-For ownership and value semantics, see [VALUE_MODEL.md](../language/VALUE_MODEL.md).
+For ownership and value semantics, see [VALUE_MODEL.md](../archive/design-records/VALUE_MODEL.md).
 For stdlib module direction, see [STDLIB.md](STDLIB.md).
 For FFI boundaries, see [FFI.md](../platform/FFI.md).
 For checked indexing, see roadmap item 54 and [STDLIB.md](STDLIB.md) (checked indexing and slice views).

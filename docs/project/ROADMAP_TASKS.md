@@ -7901,7 +7901,7 @@ promises.
 
 **Disposition (2026-10-19):** superseded by R-0493/S6: merge semantic ownership into R-0493.
 
-**Objective:** Freeze arithmetic-site semantics for subset claims. This task is reconciled with historical phase 6 item 10 and `docs/language/ARITHMETIC_POLICY.md`: build/profile names are policy bundles, not arithmetic modes, and the same source expression must not mean wrap in one profile and checked in another. Ordinary `+ - *` are checked in every profile; intentional modular arithmetic is written as `wrapping_*`; intentional clamping is written as `saturating_*`. Subset reports must classify arithmetic sites as `checked`, `proved`, `runtime- checked`, `explicit-wrapping`, or `explicit-saturating`; they must never infer an ambient arithmetic mode from `debug`, `release`, `predictable`, or `proof`.
+**Objective:** Freeze arithmetic-site semantics for subset claims. This task is reconciled with historical phase 6 item 10 and `docs/archive/design-records/ARITHMETIC_POLICY.md`: build/profile names are policy bundles, not arithmetic modes, and the same source expression must not mean wrap in one profile and checked in another. Ordinary `+ - *` are checked in every profile; intentional modular arithmetic is written as `wrapping_*`; intentional clamping is written as `saturating_*`. Subset reports must classify arithmetic sites as `checked`, `proved`, `runtime- checked`, `explicit-wrapping`, or `explicit-saturating`; they must never infer an ambient arithmetic mode from `debug`, `release`, `predictable`, or `proof`.
 
 The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../archive/ROADMAP_RETIRED_TASKS.md#r-0221).
 
@@ -11155,7 +11155,7 @@ Context: [R-0285](#task-r-0285), [R-0440](#task-r-0440),
 - What allocation, copying, growth and peak-memory regressions should workload
   evidence expose, including cleanup cascades and arena lifetime tradeoffs?
 
-Context: [R-0416](#task-r-0416), [value model](../language/VALUE_MODEL.md),
+Context: [R-0416](#task-r-0416), [value model](../archive/design-records/VALUE_MODEL.md),
 [allocator research owner](ROADMAP_BACKLOG.md#task-r-0404), research C14–C16/C23.
 
 ### Representation and optimization

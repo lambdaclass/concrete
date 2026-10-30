@@ -29,7 +29,7 @@ This document specifies the endian-aware byte cursor APIs for Concrete's stdlib.
 
 For the module inventory that lists `std.numeric` as priority 1, see [STDLIB_TARGET.md](STDLIB_TARGET.md).
 For the byte-vs-text separation, see [STRING_TEXT_CONTRACT.md](STRING_TEXT_CONTRACT.md).
-For narrowing/widening cast rules, see [ARITHMETIC_POLICY.md](../language/ARITHMETIC_POLICY.md).
+For narrowing/widening cast rules, see [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md).
 For the existing text cursor, see `std.parse.Cursor`.
 For checked indexing direction, see [STDLIB_TARGET.md](STDLIB_TARGET.md) (item 54).
 
@@ -532,7 +532,7 @@ For fixed-buffer serialization (no allocation):
 The cursor types and endian functions live in `std.numeric`, as specified in [STDLIB_TARGET.md](STDLIB_TARGET.md). The module provides three categories of functionality:
 
 1. **Endian-aware byte reading and writing** (this document): `ByteCursor`, `ByteWriter`, standalone read/write functions.
-2. **Checked arithmetic** (see [ARITHMETIC_POLICY.md](../language/ARITHMETIC_POLICY.md)): `checked_add`, `checked_sub`, `checked_mul`.
+2. **Checked arithmetic** (see [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md)): `checked_add`, `checked_sub`, `checked_mul`.
 3. **Wrapping arithmetic**: `wrapping_add`, `wrapping_sub`, `wrapping_mul` (compiler intrinsics, but `std.numeric` re-exports them for discoverability).
 
 Import:
@@ -545,7 +545,7 @@ import std.numeric.{ByteCursor, ByteWriter, CursorError};
 
 ## 10. Checked Narrowing
 
-The [ARITHMETIC_POLICY.md](../language/ARITHMETIC_POLICY.md) specifies that `as` casts truncate silently and that checked narrowing belongs in a separate stdlib function. The byte cursor API interacts with narrowing in two places:
+The [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md) specifies that `as` casts truncate silently and that checked narrowing belongs in a separate stdlib function. The byte cursor API interacts with narrowing in two places:
 
 1. **Byte assembly.** `read_u32_be` assembles four `u8` values into a `u32`. This is widening (safe). No narrowing occurs inside the cursor.
 2. **Caller downcasts.** After reading a `u16`, the caller may need to store it in an `i32` field (widening, safe) or check that it fits in a `u8` (narrowing, potentially lossy).
@@ -568,7 +568,7 @@ pub fn try_narrow_i64_to_i32(val: i64) -> Option<i32>
 // ... same pattern for other width combinations ...
 ```
 
-These are the `try_narrow<T, U>` functions mentioned in [ARITHMETIC_POLICY.md](../language/ARITHMETIC_POLICY.md) section 8, made concrete with explicit type pairs. Generic `try_narrow<T, U>` depends on trait-based dispatch that Concrete does not have; explicit pairs are the library-first approach.
+These are the `try_narrow<T, U>` functions mentioned in [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md) section 8, made concrete with explicit type pairs. Generic `try_narrow<T, U>` depends on trait-based dispatch that Concrete does not have; explicit pairs are the library-first approach.
 
 ---
 

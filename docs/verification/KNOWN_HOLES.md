@@ -963,7 +963,7 @@ checked-integer flip.
 ### H1. Returned-reference provenance — CLOSED 2026-06-13
 
 **RESOLVED by the language invariant "references are second-class — never
-returned"** (`docs/language/VALUE_MODEL.md`): the checker rejects any safe-callable
+returned"** (`docs/archive/design-records/VALUE_MODEL.md`): the checker rejects any safe-callable
 function or function *type* that returns a reference — directly, nested in an
 aggregate, or via generic instantiation. The accessor surface was migrated to
 the value model: `get -> Option<V>` (Copy cell, `V: Copy`); `with_value` /

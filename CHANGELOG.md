@@ -1540,7 +1540,7 @@ binary then ran wrongly. Fixed here, each with a rejection fixture and a positiv
   compared addresses and leaked both cells), references have no comparison (the binary compared
   addresses, the interpreter refused), and aggregates no longer reach `llvm-as` as an ill-typed
   `icmp`. A `Copy`-bounded generic comparison is re-checked per instantiation after Mono. The rule
-  is [ARITHMETIC_POLICY §8a](docs/language/ARITHMETIC_POLICY.md#8a-comparison-operators).
+  is [ARITHMETIC_POLICY §8a](docs/archive/design-records/ARITHMETIC_POLICY.md#8a-comparison-operators).
   Migration: 2 sites (`examples/hexdump`, `examples/png_chunks` discarded a Copy error through
   `error == error`).
 - **No exit inside an operand (bug 142).** `return`, `break` and `continue` may not occur inside a
@@ -4767,7 +4767,7 @@ Completed Phase 6B semantic-axis items:
   closes residue class 6 in `docs/compiler/COMPILER_BOUNDARY.md` (no class is caught only in
   Check) and resolves returned-reference provenance (H1) by subtraction. The
   `from(param)` escape valve remains deeply deferred and evidence-gated. See
-  `docs/language/VALUE_MODEL.md`.
+  `docs/archive/design-records/VALUE_MODEL.md`.
 - **Differential-sweep soundness/parity fixes.** Interpreter signed left-shift
   now truncates to width; labeled `break`/`continue` now dispatch to the targeted
   loop; `--interp` prints `main`'s return value only for a value-returning `main`.
@@ -6449,7 +6449,7 @@ the full fast suite (1576/0) all green locally.
   a reference — directly, nested in an aggregate, or via generic instantiation.
   This closes the returned-reference-provenance hole (H1) *by subtraction* — no
   lifetimes, no regions, no `from()`. The no-aggregate-ref ban becomes a
-  corollary. (`docs/language/VALUE_MODEL.md`.)
+  corollary. (`docs/archive/design-records/VALUE_MODEL.md`.)
 - Discovered during this work: returning a reference computed from a reference
   *identifier* or `&place` was a silent miscompile (spurious load → wrong
   pointer → segfault even with a live referent), and `with_value`'s generic `R`
@@ -6593,7 +6593,7 @@ the full fast suite (1576/0) all green locally.
     non-Copy reads) — disclosed and frozen, withdrawn when scoped callbacks
     (`with_value`, callable-values doc #24) land.
 - `Clone` recorded as a SEPARATE, deliberate value-model design item, not a
-  soundness patch. Added the four-cell model to `docs/language/VALUE_MODEL.md`: Copy
+  soundness patch. Added the four-cell model to `docs/archive/design-records/VALUE_MODEL.md`: Copy
   (implicit bit-dup), Move (default ownership transfer), Borrow (scoped),
   Clone (explicit, `Alloc`-visible, audit-visible, library-expressible via a
   stdlib trait — not yet built). Sibling `move`/`take` = `swap(i, new) -> V`

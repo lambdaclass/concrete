@@ -1,9 +1,20 @@
-# Pattern Destructuring: LL(1)-Preserving `let` Destructuring and `let...else`
+# Pattern Destructuring: LL(1)-Preserving `let` Destructuring and `let...else` (design record)
 
-**Superseded as the normative text (2026-10-23).** This was the design proposal for destructuring
-`let` and `let ... else`. The rules are PAT-1, PAT-3 and PAT-5 of
-[docs/spec/patterns.md](../spec/patterns.md). The `else` block's divergence requirement below
-is not enforced yet (bug 195).
+Archived from docs/language on 2026-10-30: the design proposal for destructuring `let` and
+`let ... else`, with its LL(1) analysis and the decision that the `else` block gets no binding. The
+rules are in [docs/spec/patterns.md](../../spec/patterns.md): renamed binders (PAT-1), every field
+named (PAT-3, PAT-5), the diverging `else` (PAT-5), `if let` and `while let` (PAT-6), the `match` a
+destructuring `let` means (PAT-10) and `let mut` (PAT-11); bare variant names, parameter patterns,
+nested patterns and tuples are absent by decision. Where this document and the spec differ, the spec
+governs, and whether `let ... else` stays is OPEN-52.
+
+**Statements the absorption did not carry over (2026-10-30).** Stale: "no guard clauses" (guards
+exist, PAT-4); binding a subset of a Copy struct's or variant's fields (OD25: every field is named,
+PAT-3@3 and PAT-5@3, main still lags as bug 321); a linear enum's non-matching value "consumed by the
+diverging else's exit" (a `let ... else` over a non-Copy enum is refused, PAT-5 and OWN-5); a plain
+`let x = e else { ... }` being grammatical (it is a parse error); a function "with return type `!`"
+(there is no never type to write); the `else` block's divergence "not enforced yet" (bug 195 is
+fixed, E0308).
 
 Status: IMPLEMENTED (originally a design document, Phase 3 item 62). Enum-variant destructuring (`let Type::Variant { a, b } = expr;`), `let...else` with a diverging else block, and struct destructuring (`let StructType { a, b } = expr;`) are all shipped: parsed in `Concrete/Frontend/Parser.lean` (`parseLet`), desugared to `match` / field-access lets in `Concrete/Frontend/AST.lean` (`desugarStmts`) before Check and Elab, exactly as section 5 specifies. Tests: `tests/programs/let_else.con`, `tests/programs/struct_destructure.con`. The checker enforces that an arm/destructure binds all variant fields (core-check E0533). Section 11 (future extensions: `if let`, `while let`, `_` wildcards, nested patterns) remains unimplemented design.
 
@@ -12,9 +23,9 @@ This document designs pattern destructuring for Concrete. The goal is to reduce 
 Note: some examples below use older schematic names such as `ParseResult` or `ServiceResult` to isolate the destructuring shape. The shipped canonical examples now use builtin `Result<T, E>` directly.
 
 For the LL(1) grammar commitment, see `research/compiler/ll1-grammar.md`.
-For what Concrete permanently excludes, see [ANTI_FEATURES.md](../project/ANTI_FEATURES.md).
-For the error handling context that motivates this, see [the spec's recoverable-failure section](../spec/statements.md#recoverable-failure-explicit-result-flow).
-For the language gap that first identified this need, see [LANGUAGE_GAPS.md](../archive/LANGUAGE_GAPS.md) (item 9: "No destructuring let").
+For what Concrete permanently excludes, see [ANTI_FEATURES.md](../../project/ANTI_FEATURES.md).
+For the error handling context that motivates this, see [the spec's recoverable-failure section](../../spec/statements.md#recoverable-failure-explicit-result-flow).
+For the language gap that first identified this need, see [LANGUAGE_GAPS.md](../LANGUAGE_GAPS.md) (item 9: "No destructuring let").
 
 ---
 
@@ -702,7 +713,7 @@ fn handle_request(req: Request) -> ServiceResult {
 }
 ```
 
-This is an important boundary: `let...else` does not help when the else block needs to inspect the non-matching variant. The design deliberately does not try to solve this case. Error conversion is addressed by `map_err`-style helpers (see [the spec's recoverable-failure section](../spec/statements.md#recoverable-failure-explicit-result-flow)).
+This is an important boundary: `let...else` does not help when the else block needs to inspect the non-matching variant. The design deliberately does not try to solve this case. Error conversion is addressed by `map_err`-style helpers (see [the spec's recoverable-failure section](../../spec/statements.md#recoverable-failure-explicit-result-flow)).
 
 ### Example 3: Test assertions with expected errors
 

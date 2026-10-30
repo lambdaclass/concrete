@@ -103,6 +103,7 @@ def expectIdent : ParseM String := do
   | .type_ => advance; return "type"
   | other => throwParse s!"expected identifier, got {other}" (span := some sp)
 
+-- spec: TYPE-19 (docs/spec/types.md; this declaration enforces the rule)
 partial def parseType : ParseM Ty := do
   let tk ← peek
   match tk with
@@ -1202,6 +1203,7 @@ partial def parseBindingList : ParseM (List PatBind) := do
   expect .rbrace
   return bindings.toList
 
+-- spec: PAT-11 (docs/spec/patterns.md; this declaration enforces the rule)
 partial def parseLet (isGhost : Bool := false) : ParseM Stmt := do
   let sp ← peekSpan
   expect .«let»

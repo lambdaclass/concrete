@@ -133,7 +133,7 @@ Concrete differs by combining this with:
 - trusted/raw-pointer escape hatches for low-level boundaries, kept outside the
   safe reference model
 
-See [VALUE_MODEL.md](../language/VALUE_MODEL.md) for Concrete's rule and
+See [VALUE_MODEL.md](../archive/design-records/VALUE_MODEL.md) for Concrete's rule and
 [../research/compiler/pipeline-lessons-2026-07.md](../../research/compiler/pipeline-lessons-2026-07.md)
 for the research notes.
 

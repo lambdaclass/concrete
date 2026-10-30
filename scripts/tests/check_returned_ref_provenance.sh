@@ -2,7 +2,7 @@
 # Returned-reference provenance gate (H1) — CLOSED (2026-06-13).
 #
 # H1 is resolved by the language invariant "references are second-class — never
-# returned" (docs/language/VALUE_MODEL.md): no safe-callable function or function TYPE may
+# returned" (docs/archive/design-records/VALUE_MODEL.md): no safe-callable function or function TYPE may
 # return a reference, directly, nested in an aggregate, or via generic
 # instantiation. This is enforced by the checker. The accessor surface was
 # migrated to the value model (get -> Option<V> for Copy; with_value/with_at to

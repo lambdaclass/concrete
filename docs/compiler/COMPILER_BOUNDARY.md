@@ -57,7 +57,7 @@ width residue; it reaches Lower and lowers fine.)
 
 - **Class 6 — returned-reference verifier (`verifyNoReturnedRefs`, E0236).** The
   long-term policy is **Option A**, the strictest form of the second-class-reference
-  rule from `docs/language/VALUE_MODEL.md`: **no function may return `&T` / `&mut T`** —
+  rule from `docs/archive/design-records/VALUE_MODEL.md`: **no function may return `&T` / `&mut T`** —
   not safe, and not trusted — directly or nested in any aggregate/alias/generic
   instantiation. Former `&self -> &T` accessor shapes migrate to scoped access
   (`with_value`, `with_value_mut` / `modify`), value returns for `Copy` data, or

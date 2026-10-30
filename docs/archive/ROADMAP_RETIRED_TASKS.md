@@ -1123,7 +1123,7 @@ resolution, a legal-bound-name inventory that fails when a new builtin bound is
 recognized in code without an entry, and a mutation restoring the primitive
 fallthrough.
 Record the bound vocabulary normatively — `Copy` is described in
-`docs/language/VALUE_MODEL.md`, `Destroy` in `docs/language/RUNTIME_COLLECTIONS.md`, and nothing
+`docs/archive/design-records/VALUE_MODEL.md`, `Destroy` in `docs/language/RUNTIME_COLLECTIONS.md`, and nothing
 states the whole set or what satisfies it, while `docs/project/DECISIONS.md` records
 "no trait objects" without mentioning that `impl Trait for Type` and `T: Trait`
 bounds exist and are load-bearing across the stdlib. Name bounds as a required

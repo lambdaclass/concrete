@@ -10,7 +10,7 @@ Status: stable reference
 
 This document is the central reference for Concrete's safety model. It defines the organizing principles, explains how the pieces fit together, and points to the detailed references for each subsystem.
 
-For ownership and linearity, see [VALUE_MODEL.md](../language/VALUE_MODEL.md).
+For ownership and linearity, see [VALUE_MODEL.md](../archive/design-records/VALUE_MODEL.md).
 For the current safe-memory guarantee boundary, see [MEMORY_GUARANTEES.md](MEMORY_GUARANTEES.md).
 For named profiles (`safe`, `predictable`, `provable`, `high-integrity`), see [PROFILES.md](../platform/PROFILES.md).
 For the short public claim surface, see [CLAIMS_TODAY.md](CLAIMS_TODAY.md).
@@ -136,7 +136,7 @@ Concrete uses linear types by default for structs and enums. This provides compi
 - `borrow(x) { ... }` creates scoped references without consuming
 - `Heap<T>` is linear — must be freed, cannot be silently dropped
 
-Primitives, `&T`, raw pointers, and function pointers are Copy. See [VALUE_MODEL.md](../language/VALUE_MODEL.md) for the full value category table.
+Primitives, `&T`, raw pointers, and function pointers are Copy. See [VALUE_MODEL.md](../archive/design-records/VALUE_MODEL.md) for the full value category table.
 
 ### Current Claim Boundary
 
@@ -301,10 +301,10 @@ High-Integrity ── future profile: same language, stricter rules
 | Capabilities | This document, [FFI.md](../platform/FFI.md) | [PASSES.md](../compiler/PASSES.md), [STDLIB.md](../stdlib/STDLIB.md) |
 | Trusted boundaries | [FFI.md](../platform/FFI.md) | This document, [STDLIB.md](../stdlib/STDLIB.md) |
 | Capability aliases | [FFI.md](../platform/FFI.md) | [PASSES.md](../compiler/PASSES.md) |
-| Linearity / ownership | [VALUE_MODEL.md](../language/VALUE_MODEL.md) | This document |
+| Linearity / ownership | [VALUE_MODEL.md](../archive/design-records/VALUE_MODEL.md) | This document |
 | Error model | [DIAGNOSTICS.md](../compiler/DIAGNOSTICS.md) | [PASSES.md](../compiler/PASSES.md) |
 | Report modes | [PASSES.md](../compiler/PASSES.md) | This document |
 | Proof boundary | [ARCHITECTURE.md](../compiler/ARCHITECTURE.md) | This document, [PASSES.md](../compiler/PASSES.md) |
 | Execution model | [EXECUTION_MODEL.md](../platform/EXECUTION_MODEL.md) | [STDLIB.md](../stdlib/STDLIB.md) |
 | High-integrity profile | This document | [PROJECT.md, Identity](../project/PROJECT.md#identity), [EXECUTION_MODEL.md](../platform/EXECUTION_MODEL.md) |
-| ABI / FFI safety | [ABI.md](../platform/ABI.md) | [FFI.md](../platform/FFI.md), [VALUE_MODEL.md](../language/VALUE_MODEL.md) |
+| ABI / FFI safety | [ABI.md](../platform/ABI.md) | [FFI.md](../platform/FFI.md), [VALUE_MODEL.md](../archive/design-records/VALUE_MODEL.md) |

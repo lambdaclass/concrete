@@ -81,7 +81,7 @@ fn apply<T, U, cap C>(f: fn(T) with(C) -> U, x: T) with(C) -> U {
   `capParams`). `CapSet` supports concrete caps, variables, and union.
 - A function pointer type carries its capset: `fn(T) with(C) -> R`
   (`Ty.fn_ params capSet retTy`). Function pointers are `Copy` and capture
-  nothing (`docs/language/VALUE_MODEL.md`).
+  nothing (`docs/archive/design-records/VALUE_MODEL.md`).
 - Calling through a function pointer **requires the caller to hold the fn type's
   capability set**, in both `Check` and `CoreCheck`. The smuggling hole — a
   pure-looking wrapper accepting `f: fn(i32) with(Network) -> i32` and calling
@@ -492,7 +492,7 @@ Examples to add under `examples/callbacks/`:
 
 - `research/language/capability-polymorphism.md` — the permission-set (not
   effect) polymorphism model this builds on.
-- `docs/language/VALUE_MODEL.md` — Copy / Clone / Move / Borrow; fn pointers are Copy and
+- `docs/archive/design-records/VALUE_MODEL.md` — Copy / Clone / Move / Borrow; fn pointers are Copy and
   capture nothing.
 - `docs/verification/KNOWN_HOLES.md` — H1 (returned-reference provenance), mutable half
   closed, immutable half withdrawn by §5 here.

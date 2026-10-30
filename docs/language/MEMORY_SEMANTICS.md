@@ -9,7 +9,7 @@ the status history (status: was the canonical reference for ownership, borrowing
 This document describes the memory and reference model that the checker (`Check.lean`) enforces for safe Concrete code. Where the checker and this document disagree, one of them must be corrected. Neither is silently authoritative over the other.
 
 For the public guarantee boundary, see [MEMORY_GUARANTEES.md](../verification/MEMORY_GUARANTEES.md).
-For value categories and layout, see [VALUE_MODEL.md](VALUE_MODEL.md).
+For value categories and layout, see [VALUE_MODEL.md](../archive/design-records/VALUE_MODEL.md).
 For the broader safety model, see [SAFETY.md](../verification/SAFETY.md).
 
 ---
@@ -617,7 +617,7 @@ history, the migration counts and the gap analysis (§15.7). Its text below is h
 **Status:** normative specification for ROADMAP exit 2i (owner R-0500, stage S4 of
 [VERIFIED_PIPELINE.md](../compiler/VERIFIED_PIPELINE.md)), written 2026-10-21. This section is the
 single normative statement of the reference and binding rules. The narrative in
-[VALUE_MODEL.md](VALUE_MODEL.md) ("References are second-class"), the summary in
+[VALUE_MODEL.md](../archive/design-records/VALUE_MODEL.md) ("References are second-class"), the summary in
 the book's memory chapter (`docs/book/src/language/memory.md`), and the decision records in
 [the spec's overview](../spec/overview.md) and [language decisions](../project/PROJECT.md#language-decisions)
 ("No lexical value shadowing") explain the rules. Where they disagree with this section, this
@@ -872,7 +872,7 @@ shadows a constant of its name; a constant name defined by two modules is refuse
 (E0602, bug 132) until constants carry their module. It prevents bug 123, gap G1, the constant half of G12 and the consumer
 disagreement of bug 117 (constants as places would need a global storage model in Core). Owners:
 exit 0b for bug 123 (reject the declaration with E0239); exit 2i (R-0500) for REF-3 / G1 and REF-5 /
-G12. [VALUE_MODEL.md](VALUE_MODEL.md) records the value category.
+G12. [VALUE_MODEL.md](../archive/design-records/VALUE_MODEL.md) records the value category.
 
 #### REF-4. Generic instantiation preserves REF-1 and REF-3
 

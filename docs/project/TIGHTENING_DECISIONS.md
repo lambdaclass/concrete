@@ -20,7 +20,7 @@ recommendations stand as recommendations until their owners implement them.
 This document does not restate rules. Each rule is normative in its canonical owner: references and
 binding in [MEMORY_SEMANTICS §15](../language/MEMORY_SEMANTICS.md), evaluation order in
 [STATEMENT_EXPRESSION_MODEL](../archive/design-records/STATEMENT_EXPRESSION_MODEL.md#evaluation-order-and-assignment),
-arithmetic and casts in [ARITHMETIC_POLICY](../language/ARITHMETIC_POLICY.md), the C boundary in
+arithmetic and casts in [ARITHMETIC_POLICY](../archive/design-records/ARITHMETIC_POLICY.md), the C boundary in
 [FFI.md](../platform/FFI.md) and `main` in [MAIN_EXIT_MODEL](../platform/MAIN_EXIT_MODEL.md).
 Sequencing belongs to [ROADMAP.md](../../ROADMAP.md). An adopted item is written into its owner
 and its exit, and this record then points there.

@@ -805,6 +805,7 @@ mutual
     body, a borrow block, a match arm, an if-expression, a `let` initializer, an else body — is
     desugared too; before, only a function's top-level statements were, so a nested one reached
     Check unchanged (skipped; its binders undeclared, E0201) and Elab as an internal error. -/
+-- spec: PAT-10 (docs/spec/patterns.md; this declaration enforces the rule)
 partial def desugarStmts : List Stmt → List Stmt
   | [] => []
   | (.letDestructure sp enumName variant bindings value (some elseBody)) :: rest =>

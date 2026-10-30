@@ -979,6 +979,17 @@ def gen_manifest(spec, name):
 def anchors(spec):
     return {e.id: f"docs/spec/{e.chapter}.md#{e.id}" for e in spec.entries}
 
+# Old site URLs of absorbed reference pages, kept alive as Zola redirects to the chapter that absorbed
+# them (chapter -> URL paths). The reference generator (scripts/gen/site_reference.py) keeps the
+# same kind of list for its own pages.
+SITE_ALIASES = {
+    "types": ["/reference/value-model/"],
+}
+
+def site_aliases(ch):
+    paths = SITE_ALIASES.get(ch)
+    return "aliases = [" + ", ".join(f'"{p}"' for p in paths) + "]\n" if paths else ""
+
 def gen_site(spec, out_dir):
     os.makedirs(out_dir, exist_ok=True)
     for f in glob.glob(os.path.join(out_dir, "*.md")): os.remove(f)
@@ -1005,7 +1016,7 @@ def gen_site(spec, out_dir):
             res.append(ln); i += 1
         txt = rewrite_links("\n".join(res), ch + ".md")
         open(os.path.join(out_dir, ch + ".md"), "w").write(
-            f'+++\ntitle = "{title}"\nweight = {w + 1}\n+++\n\n<!-- GENERATED from docs/spec/{ch}.md by '
+            f'+++\ntitle = "{title}"\nweight = {w + 1}\n{site_aliases(ch)}+++\n\n<!-- GENERATED from docs/spec/{ch}.md by '
             f'scripts/spec/spec.py site -- do not edit -->\n{txt}\n')
         n += 1
     # The rule index: every entry with its chapter, kind, status and codes, one row each, so the

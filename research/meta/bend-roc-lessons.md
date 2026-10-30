@@ -29,7 +29,7 @@ The governing references are [Identity](../../docs/project/PROJECT.md#identity),
 [Design Policy](../../docs/project/PROJECT.md#design-policy),
 [Decisions](../../docs/project/PROJECT.md#language-decisions),
 [Anti-Features](../../docs/project/ANTI_FEATURES.md),
-[Value Model](../../docs/language/VALUE_MODEL.md), and
+[Value Model](../../docs/archive/design-records/VALUE_MODEL.md), and
 [Evidence Architecture](../../docs/verification/EVIDENCE_ARCHITECTURE.md).
 
 Every possible adaptation below is conditional on these constraints:
@@ -338,7 +338,7 @@ connects precise reference counting with storage reuse; [FP2](https://www.micros
 explores stronger in-place guarantees under explicit conditions. This is useful
 prior art, not a proposal to import reference counting into Concrete.
 
-Concrete's [value model](../../docs/language/VALUE_MODEL.md) already permits explicit
+Concrete's [value model](../../docs/archive/design-records/VALUE_MODEL.md) already permits explicit
 in-place mutation through owned values/exclusive scoped access. A possible API
 comparison is borrowed transformation versus consuming transformation versus
 explicit mutation. [Vec.map](../../std/src/vec.con) currently borrows input and
@@ -487,10 +487,10 @@ amendments are identified at the top of this note; all broader questions remain 
 | C11 | Transitive restricted dependency policy | Reject unapproved native/trusted/unsafe additions; accepted foundation explicit | [R-0440](../../docs/project/ROADMAP_TASKS.md#task-r-0440), [trusted-code policy](../language/trusted-code-policy.md) |
 | C12 | Build-time authority controls | Dependency build execution is identified and isolated, including upgrades | [package design](../packages-tooling/package-manager-design.md), [FFI integration](../../docs/platform/FFI_GLUE.md) |
 | C13 | Separate authority, mutation, purity, determinism, totality | No false inference from an empty capability set | [R-0487](../../docs/project/ROADMAP_TASKS.md#task-r-0487), [R-0488](../../docs/project/ROADMAP_TASKS.md#task-r-0488) |
-| C14 | Same-type consuming/mutating collection transforms | Capacity reuse without hidden copy/allocation/cleanup changes | [Vec](../../std/src/vec.con), [Value Model](../../docs/language/VALUE_MODEL.md) |
+| C14 | Same-type consuming/mutating collection transforms | Capacity reuse without hidden copy/allocation/cleanup changes | [Vec](../../std/src/vec.con), [Value Model](../../docs/archive/design-records/VALUE_MODEL.md) |
 | C15 | Allocation/copy/peak-memory regression measurements | Detect extra growth, retained sharing, and abstraction overhead | [R-0416](../../docs/project/ROADMAP_TASKS.md#task-r-0416) |
 | C16 | Ownership-aware lowering and callable specialization | Sound alias facts, scoped borrows, direct calls; no blanket noalias | [SSA](../../Concrete/IR/SSA.lean), [callable model](../../docs/archive/design-records/CALLABLE_VALUES_AND_CAPABILITIES.md) |
-| C17 | Check hoisting, constant tables, intentional wrapping | Same bounds/trap/arithmetic semantics before and after | [Arithmetic Policy](../../docs/language/ARITHMETIC_POLICY.md) |
+| C17 | Check hoisting, constant tables, intentional wrapping | Same bounds/trap/arithmetic semantics before and after | [Arithmetic Policy](../../docs/archive/design-records/ARITHMETIC_POLICY.md) |
 | C18 | Unboxing, tail-call analysis, allocation reuse | Measure applicability and cleanup/stack behavior; ordinary loops remain available | [Execution Model](../../docs/platform/EXECUTION_MODEL.md) |
 | C19 | Immutable snapshots and incremental reuse | Saved downstream work exceeds copying; exact cache identities retained | [compiler research](../compiler/COMPILER_PIPELINE_RESEARCH.md) |
 | C20 | Proof-preserving optimization experiment | Fixed spec, replay, differential tests, runtime and memory measurements | [AI-assisted optimization](ai-assisted-optimization.md), [R-0482](../../docs/project/ROADMAP_TASKS.md#task-r-0482) |

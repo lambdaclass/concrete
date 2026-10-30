@@ -65,7 +65,7 @@ a concrete identity bug, not absence of the language feature.
 
 ### ~~9. No destructuring let~~ — FIXED (enum/struct forms)
 
-**Status:** Fixed for the forms Concrete actually has. Enum-variant destructuring `let Type::Variant { a, b } = expr;` (with optional diverging `else { ... }`) and struct destructuring `let StructType { a, b } = expr;` are implemented in `parseLet` and desugar to `match` / field-access lets before Check and Elab. Tests: `tests/programs/let_else.con`, `tests/programs/struct_destructure.con`. Design: [PATTERN_DESTRUCTURING.md](../language/PATTERN_DESTRUCTURING.md).
+**Status:** Fixed for the forms Concrete actually has. Enum-variant destructuring `let Type::Variant { a, b } = expr;` (with optional diverging `else { ... }`) and struct destructuring `let StructType { a, b } = expr;` are implemented in `parseLet` and desugar to `match` / field-access lets before Check and Elab. Tests: `tests/programs/let_else.con`, `tests/programs/struct_destructure.con`. Design: [PATTERN_DESTRUCTURING.md](../archive/design-records/PATTERN_DESTRUCTURING.md).
 
 Tuple destructuring `let (a, b) = ...;` remains unsupported, but only because Concrete has no tuple types — there is nothing to destructure.
 

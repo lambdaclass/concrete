@@ -62,4 +62,4 @@ Read the stable architecture references:
 - [`docs/compiler/ARCHITECTURE.md`](../../compiler/ARCHITECTURE.md)
 - [`docs/compiler/PASSES.md`](../../compiler/PASSES.md)
 - [`docs/spec/overview.md`](../../spec/overview.md)
-- [`docs/language/VALUE_MODEL.md`](../../language/VALUE_MODEL.md)
+- [`docs/archive/design-records/VALUE_MODEL.md`](../../archive/design-records/VALUE_MODEL.md)

@@ -62,6 +62,8 @@ Opaque does not mean hidden — the compiler will still emit layout facts in rep
 
 ### 3.3 What code may rely on, and who owns layout (normative, decided 2026-10-21)
 
+The language rules are FFI-7 and FFI-8 of [the specification's FFI chapter](../spec/ffi.md#FFI-7).
+
 **Rule.** Each `repr` form guarantees exactly the properties section 2 lists for it and nothing
 else: `#[repr(C)]` C field order, padding and alignment; `#[repr(packed)]` declaration order with no
 padding; `#[repr(align(N))]` a minimum alignment, with no promise about order or offsets. Every other

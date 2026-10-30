@@ -92,7 +92,7 @@ Where ProofCore records a fixed-width operation explicitly—currently the
 width/operation pairs listed in `PROVABLE_V1.md`—the theorem is about that
 fixed-width behavior. Arithmetic-dependent claims must therefore name either
 their range/no-failure assumptions or the explicit modular operation they
-cover. See [ARITHMETIC_POLICY.md](../language/ARITHMETIC_POLICY.md).
+cover. See [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md).
 
 ## 4. Intentionally Excluded Surface
 

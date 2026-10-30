@@ -14,7 +14,7 @@ ruling: Violates: TYPE-6@1, TRUST-4@1
 known limit ("recorded, not contained") in [bug 140's record](140_comparison_consumes_linear.md).
 Numbered and fixed 2026-10-23.
 **Severity:** an authority violation in safe code. Raw pointers compare only in trusted code or a
-function declaring `with(Unsafe)` (bug 140, [ARITHMETIC_POLICY §8a](../language/ARITHMETIC_POLICY.md#8a-comparison-operators)).
+function declaring `with(Unsafe)` (bug 140, [ARITHMETIC_POLICY §8a](../archive/design-records/ARITHMETIC_POLICY.md#8a-comparison-operators)).
 Written directly in a safe function the comparison is E0229; reached through a safe `Copy`-bounded
 generic it compiled. The comparison has no memory effect (it compares addresses), so this is a
 rule bypass, not memory unsafety.

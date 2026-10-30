@@ -11,7 +11,8 @@ inner `match` expresses the same programs ([No nested patterns](#no-nested-patte
 `check_nested_patterns.sh`). **Tuples** do not exist; the named struct is the one product type
 ([types.md, "No anonymous tuples"](types.md#no-anonymous-tuples), `check_no_tuples.sh`). The design records are
 [PATTERN_ERGONOMICS.md](../archive/design-records/PATTERN_ERGONOMICS.md) and
-[PATTERN_DESTRUCTURING.md](../language/PATTERN_DESTRUCTURING.md).
+[PATTERN_DESTRUCTURING.md](../archive/design-records/PATTERN_DESTRUCTURING.md) (absorbed into PAT-10
+and PAT-11 on 2026-10-30).
 
 ## Rules
 
@@ -495,7 +496,7 @@ fn main() -> Int {
 - Evidence: tested
 
 **Rationale.** A `let` over an enum variant is lowered to a `match` over the rest of its block
-(PAT-5); a `for` header has no block of its own to become that match, so the form is refused
+(PAT-10); a `for` header has no block of its own to become that match, so the form is refused
 rather than skipped. A struct destructuring needs no match (it becomes field reads) and is
 accepted there. Destructure the enum before the loop. OD47 removes the C-style `for` and its header (bug 331), and with it the form this entry
 refuses; the entry retires when that lands.
@@ -577,6 +578,79 @@ fn main() -> Int {
 }
 ```
 
+<a id="PAT-10"></a>
+### PAT-10. An enum destructuring `let` is a `match` over the rest of its block
+
+**PAT-10@1.** For an enum variant pattern `P` and the statements `R` that follow in the same block, `let P = e else { B };` means `match e { P => { R }, _ => { B } }` and `let P = e;` means `match e { P => { R } }`, so the binders of `P` are in scope in `R` alone and `B` sees none of them.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.desugarStmts
+- Semantics: none
+- Obligation: the desugaring is part of the elaboration relation (R-0496)
+- Evidence: tested
+
+**Rationale.** Both forms are desugared before checking, so exhaustiveness (PAT-2), binding,
+linearity and lowering are the `match`'s, as for `if let` (PAT-6). Without `else` the `match` has one
+arm, so a pattern that may fail is refused as non-exhaustive, and with it `B` must diverge (PAT-5).
+The `else` block gets no binding for the value that failed to match; a program that needs it writes
+a `match`. A struct destructuring `let` is not a `match`: it always matches and reads each field
+(PAT-5, SYN-3). A plain `let x = e else { B };` is a parse error. Whether `let ... else` stays is
+OPEN-52.
+
+```con accept name=let-else-and-irrefutable exit=42
+enum Copy One { A { v: Int } }
+
+fn get(o: Option<Int>) -> Int {
+    let Option::Some { value } = o else {
+        return 1;
+    };
+    return value;
+}
+
+fn main() -> Int {
+    let one: One = One::A { v: 1 };
+    let One::A { v } = one;
+    return get(Option::Some { value: 39 }) + get(Option::None) + v + 1;
+}
+```
+
+<a id="PAT-11"></a>
+### PAT-11. `let mut` makes every binder of a pattern mutable
+
+**PAT-11@1.** A destructuring `let mut P = e`, with or without `else`, declares every binder of `P` mutable.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.parseLet
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** One `mut` covers the pattern, as one `let` does; a binder cannot be marked on its own.
+What a mutable binding allows is OWN-10.
+
+```con accept name=let-mut-pattern exit=42
+struct Copy P { a: Int, b: Int }
+
+fn main() -> Int {
+    let p: P = P { a: 40, b: 1 };
+    let mut P { a, b } = p;
+    a = a + 1;
+    b = b + 0;
+    let o: Option<Int> = Option::Some { value: 0 };
+    let mut Option::Some { value } = o else {
+        return 0;
+    };
+    value = value + 1;
+    return a + b + value - 1;
+}
+```
+
 ## Absent by decision
 
 This section is explanatory: it records pattern forms the language does not have, why, and what
@@ -615,3 +689,8 @@ workload shows the one-level form untenable (for example deep protocol syntax tr
 inner matches dominate the code), as a recursive pattern type with recursive destructuring in
 check, elaboration and lowering.
 
+### No bare variant names and no parameter patterns
+
+A variant is always written with its enum, `Option::Some { value }`, never `Some(x)`: a bare name
+would make the parser depend on name resolution to know which enum it belongs to. A function
+parameter is a name with a type, never a pattern; the body destructures it.

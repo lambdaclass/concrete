@@ -3,8 +3,10 @@
 The C boundary is explicit: foreign functions are declared `extern fn`, raw pointers are their own
 types, and crossing the boundary needs `Unsafe` outside `trusted` code (TRUST-4, TRUST-5). This
 chapter covers foreign function values (FFI-1), the one layout authority (FFI-2, pending), extern
-declarations (FFI-3), layout attributes (FFI-4) and symbol names (FFI-5). The design record is
-[FFI.md](../platform/FFI.md), which keeps the wrapper patterns and the calling-convention design.
+declarations (FFI-3), layout attributes (FFI-4), symbol names (FFI-5), compiler intrinsics (FFI-6) and
+what layout is promised (FFI-7, FFI-8). The design record is
+[FFI.md](../platform/FFI.md), which keeps the wrapper patterns and the calling-convention design;
+[LAYOUT_CONTRACT.md](../platform/LAYOUT_CONTRACT.md) keeps the layout reasoning.
 
 ## Rules
 
@@ -269,3 +271,83 @@ mod bar {
 }
 ```
 
+<a id="FFI-7"></a>
+### FFI-7. Layout is unspecified unless a `repr` fixes it
+
+**FFI-7@1.** The field order, offsets, padding, size and alignment of a struct or enum are unspecified except as a struct's `#[repr]` attribute fixes them (FFI-8), and safe code observes them only through `sizeof::<T>()` and `alignof::<T>()`, which give `T`'s size and alignment in bytes as a `u64`.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.Layout.tySize, Concrete.Layout.tyAlign
+- Semantics: none
+- Obligation: layout comes from the one `Layout` authority (FFI-2, R-0502)
+- Evidence: tested
+
+**Rationale.** The promised layout is smaller than the implemented one, so the compiler may change
+an unannotated layout and a program cannot come to depend on it. Safe code has no other window:
+it cannot turn a pointer into an integer (TRUST-1) or read through a raw pointer (TRUST-3). Trusted
+code that walks a buffer may also rely on the stride of an array of `T` being `sizeof::<T>()`
+([LAYOUT_CONTRACT.md](../platform/LAYOUT_CONTRACT.md) §3.3). An enum has no `repr` and crosses the
+foreign boundary as an integer.
+
+```con accept name=observed-through-sizeof exit=42
+mod m {
+    #[intrinsic = "sizeof"]
+    pub trusted fn sizeof<T>() -> u64;
+    #[intrinsic = "alignof"]
+    pub trusted fn alignof<T>() -> u64;
+
+    struct Copy S { a: u8, b: u32 }
+
+    pub fn main() -> Int {
+        if sizeof::<S>() >= 5 && alignof::<S>() >= 1 {
+            return 42;
+        }
+        return 0;
+    }
+}
+```
+
+<a id="FFI-8"></a>
+### FFI-8. What `repr(C)` and `repr(packed)` promise
+
+**FFI-8@1.** `#[repr(C)]` lays a struct out as C does, each field in declaration order at the next offset aligned for its type and the size rounded up to the struct's alignment, and `#[repr(packed)]` places the fields in declaration order with no padding and gives the struct alignment 1.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.Layout.tySize, Concrete.Layout.tyAlign
+- Semantics: none
+- Obligation: layout comes from the one `Layout` authority (FFI-2, R-0502)
+- Evidence: tested
+
+**Rationale.** `repr(C)` is what a struct needs to cross `extern fn` (FFI-3), and `repr(packed)`
+describes wire formats. `#[repr(align(N))]` promises only a minimum alignment, and today only where
+it changes nothing (FFI-4, E0585). Which combinations are well formed is FFI-4.
+
+```con accept name=c-and-packed exit=42
+mod m {
+    #[intrinsic = "sizeof"]
+    pub trusted fn sizeof<T>() -> u64;
+    #[intrinsic = "alignof"]
+    pub trusted fn alignof<T>() -> u64;
+
+    #[repr(C)]
+    struct Copy R { v: u8, l: u32 }
+    #[repr(C, packed)]
+    struct Copy H { v: u8, f: u16, l: u32 }
+    #[repr(packed)]
+    struct Copy P { v: u8, l: u32 }
+
+    pub fn main() -> Int {
+        if sizeof::<R>() == 8 && alignof::<R>() == 4 && sizeof::<H>() == 7 && alignof::<H>() == 1
+            && sizeof::<P>() == 5 && alignof::<P>() == 1 {
+            return 42;
+        }
+        return 0;
+    }
+}
+```

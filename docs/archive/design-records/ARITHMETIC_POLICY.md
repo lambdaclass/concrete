@@ -1,20 +1,41 @@
 # Arithmetic Policy (design record)
 
-**Superseded as the normative text (2026-10-23).** The rules are in
-[docs/spec/arithmetic.md](../spec/arithmetic.md): literals (ARITH-2), checked arithmetic, division
-and shifts (ARITH-3), wrapping and saturating operations (ARITH-4), conversions (ARITH-5),
-comparison semantics (ARITH-6) and floats (ARITH-1, pending); comparison typing is TYPE-6. This
-document keeps the profile mapping, report classification, proof boundaries, the cast decision's
-reasoning, staging and migration estimates.
+Archived from docs/language on 2026-10-30: the arithmetic design record (the overflow policy, the
+profile mapping, report classification, proof boundaries, the cast decision's reasoning, staging and
+history). The rules are in [docs/spec/arithmetic.md](../../spec/arithmetic.md): floats (ARITH-1),
+literals (ARITH-2), checked arithmetic (ARITH-3), wrapping and saturating operations (ARITH-4),
+conversions (ARITH-5), comparison semantics (ARITH-6), shift fill, division rounding and the
+remainder's sign (ARITH-8), no ambient arithmetic mode, `#[overflow_checked]` included (ARITH-9), and
+the named conversions' results (ARITH-10, pending); the numeric types and their spellings are TYPE-19,
+`char` is TYPE-20, comparison typing is TYPE-6, array bounds are MEM-6 and the abort is STMT-2. Where
+this document and the spec differ, the spec governs.
+
+**Statements the absorption did not carry over (2026-10-30).**
+
+- Open, not decided: §3.1's release profile that may omit a check "explicitly configured off and
+  reported", and its provable profile that refuses an unproved overflow site (OPEN-9X1); §8's `as` as
+  the spelling of pointer and reference casts (OPEN-9X2); §8.2's indicative spellings of the named
+  conversions (OPEN-9X3); §8a's comparison on a `Copy`-bounded type parameter checked per
+  instantiation (OPEN-9X4); §9.2's trap message, which the binary does not write (OPEN-9X5); §1's
+  `Float32` spelling, which the parser does not map (OPEN-9X6); §8a's comparisons on `bool` and `char`
+  (OPEN-42).
+- Stale: §7's "wrapping mode" results for `-i32::MIN` and `i32::MIN / -1` describe operations the
+  language does not have (there is no wrapping negation or division, ARITH-4); §8a's comparison of
+  raw pointers in trusted or `Unsafe` code was removed by OD26 (TYPE-6@2, pending as bug 322); §8a's
+  "normative home is this section" is superseded by TYPE-6 and ARITH-6.
+- Not language rules: the profile mapping of §3 (which arithmetic the provable subset admits) belongs
+  to [PROVABLE_V1.md](../../verification/PROVABLE_V1.md) and [PROFILES.md](../../platform/PROFILES.md);
+  the reports of §9 to the compiler's report documentation; the proof boundaries of §10 to
+  [PROOF_SEMANTICS_BOUNDARY.md](../../verification/PROOF_SEMANTICS_BOUNDARY.md).
 
 Status: stable policy reference (Phase 3 items 60-61)
 
 This document defines Concrete's arithmetic overflow policy as a public language surface. It specifies what happens on integer overflow, division by zero, shift overflow, and narrowing for each profile, and how the active policy is made visible in source, reports, and proof artifacts.
 
-For the profile definitions, see [PROFILES.md](../platform/PROFILES.md).
-For the current runtime boundary classification, see [PREDICTABLE_BOUNDARIES.md](../platform/PREDICTABLE_BOUNDARIES.md).
-For the proof-vs-runtime integer gap, see [PROOF_SEMANTICS_BOUNDARY.md](../verification/PROOF_SEMANTICS_BOUNDARY.md).
-For the failure strategy (abort-only, no unwinding), see [the spec's "Abort and failure"](../spec/statements.md#abort-and-failure).
+For the profile definitions, see [PROFILES.md](../../platform/PROFILES.md).
+For the current runtime boundary classification, see [PREDICTABLE_BOUNDARIES.md](../../platform/PREDICTABLE_BOUNDARIES.md).
+For the proof-vs-runtime integer gap, see [PROOF_SEMANTICS_BOUNDARY.md](../../verification/PROOF_SEMANTICS_BOUNDARY.md).
+For the failure strategy (abort-only, no unwinding), see [the spec's "Abort and failure"](../../spec/statements.md#abort-and-failure).
 
 ---
 
@@ -427,7 +448,7 @@ folder, the interpreter, Lower / EmitSSA, the extracted model, Core) uses it.
 **Why a compile error, not a trap.** A trapping `as` (value-preserving or abort, like Zig's
 `@intCast` with safety on) was the cheaper migration, since sites that never see a lossy value
 would keep compiling. It was not chosen: it turns previously silent results into aborts with no
-cleanup ([the spec's "Abort and failure"](../spec/statements.md#abort-and-failure)) in programs that tolerated them, and it gives
+cleanup ([the spec's "Abort and failure"](../../spec/statements.md#abort-and-failure)) in programs that tolerated them, and it gives
 every `as` a value-preservation obligation. With the compile error `as` is total and
 obligation-free, which is the property the verified pipeline benefits from most; the cost is
 rewriting sites that are in fact safe.
@@ -439,9 +460,9 @@ rewriting sites that are in fact safe.
 | widening | exact, in both consumers |
 | integer narrowing, sign change | **silent truncation / reinterpretation**: `300 as u8` is 44, `-1 as u32` is 4294967295, `-1 as u64` is 2^64 − 1, in both consumers |
 | float → integer | truncates toward zero (`3.9 as i32` is 3, `-3.9 as i32` is -3) and **traps** when the value is out of the target's range (`1e20 as i32` aborts); the interpreter rejects float literals ("float literals not yet supported"), so only integer-origin floats can be compared |
-| integer → float | IEEE rounding in the binary; **identity in the interpreter**: `(9007199254740993 as f64) as Int` is 9007199254740992 natively and 9007199254740993 in `--interp`, a silent disagreement ([bug 128](../bugs/128_interp_int_to_float_identity.md), exit 0b) |
-| integer → `bool` | refused by the checker (E0553), as §8.1 decides; before the fix it passed the checker and failed in `llvm-as` (`bitcast i64 to i1`) ([bug 130](../bugs/130_int_as_bool_invalid_ir.md), fixed) |
-| `bool` → integer | `false` 0, `true` 1 (zext) in both consumers; it was invalid IR ([bug 108](../bugs/108_bool_cast_trunc.md), fixed) |
+| integer → float | IEEE rounding in the binary; **identity in the interpreter**: `(9007199254740993 as f64) as Int` is 9007199254740992 natively and 9007199254740993 in `--interp`, a silent disagreement ([bug 128](../../bugs/128_interp_int_to_float_identity.md), exit 0b) |
+| integer → `bool` | refused by the checker (E0553), as §8.1 decides; before the fix it passed the checker and failed in `llvm-as` (`bitcast i64 to i1`) ([bug 130](../../bugs/130_int_as_bool_invalid_ir.md), fixed) |
+| `bool` → integer | `false` 0, `true` 1 (zext) in both consumers; it was invalid IR ([bug 108](../../bugs/108_bool_cast_trunc.md), fixed) |
 | `--report arithmetic` | lists checked float → integer casts but **no integer narrowing cast** (`fn n(x: Int) -> u8 { return x as u8; }` is absent), so silent truncation is invisible in the report meant to classify arithmetic sites |
 
 So the rule is **mostly not enforced**: integer → `bool` is refused (E0553), and every other row
@@ -455,7 +476,7 @@ marked "no" in §8.1 is accepted by `as` today.
    and repair `bool as` integer (bugs 130 and 108, exit 2c: done, E0553 and zext); repair the
    interpreter's integer → float identity (bug 128, exit 0b).
 2. **Rejection with versioned migration diagnostics.** The check lands with its diagnostic in the
-   form of [MEMORY_SEMANTICS.md §15.5](MEMORY_SEMANTICS.md#155-versioned-migration-diagnostics): a
+   form of [MEMORY_SEMANTICS.md §15.5](../../language/MEMORY_SEMANTICS.md#155-versioned-migration-diagnostics): a
    stable code, the rule tag (`CAST-1@1`), the conversion class, and the mechanical rewrite
    (`truncate` / `reinterpret` when the program relies on today's bits, `try_convert` when it
    wants detection, a rounding operation for floats). It first runs as the typed inventory: every
@@ -484,7 +505,7 @@ from what every consumer must model.
 
 **Owners.** The rule and its class table: ROADMAP exit 2k (R-0500), "cast semantics per width
 pair". The authority that implements it: exit 2h (R-0493). The defects: bug 128 in exit 0b (R-0482); bugs 130 and 108
-and the permanent differential legs in exit 2c (R-0491). ARITH-5 of [docs/spec/arithmetic.md](../spec/arithmetic.md#ARITH-5) states the cast rule.
+and the permanent differential legs in exit 2c (R-0491). ARITH-5 of [docs/spec/arithmetic.md](../../spec/arithmetic.md#ARITH-5) states the cast rule.
 
 ---
 
@@ -517,8 +538,8 @@ is `Copy`-bounded, and every instantiation is held to the same scalar rule after
   instance's authority, so such a comparison is accepted; bug 140.)
 
 **Status on main.** Enforced: `Check.lean` `.binOp` (E0229 at the source span), and
-`verifyComparisonTypes` after monomorphization. It closes [bug 134](../bugs/134_aggregate_eq_invalid_ir.md)
-(aggregate `==` failed in `llvm-as`) and [bug 140](../bugs/140_comparison_consumes_linear.md) (linear
+`verifyComparisonTypes` after monomorphization. It closes [bug 134](../../bugs/134_aggregate_eq_invalid_ir.md)
+(aggregate `==` failed in `llvm-as`) and [bug 140](../../bugs/140_comparison_consumes_linear.md) (linear
 operands consumed and leaked; references compared by address). Migration: 2 sites (`examples/hexdump`,
 `examples/png_chunks`).
 
@@ -599,7 +620,7 @@ This integrates with the existing trust/evidence reporting pipeline so that arit
 
 Checked arithmetic makes proofs simpler because the proof model (unbounded integers) and the runtime model (fixed-width with overflow trap) agree on all non-overflowing inputs. When a proof shows `f(x) = y` for mathematical integers, and the runtime traps on overflow, the only way the runtime can disagree is by aborting. The proof result is never silently wrong.
 
-This narrows the integer gap documented in [PROOF_SEMANTICS_BOUNDARY.md](../verification/PROOF_SEMANTICS_BOUNDARY.md): instead of "proofs assume no overflow and the runtime wraps silently," the statement becomes "proofs assume no overflow and the runtime aborts on overflow." The proof is still not valid for overflowing inputs, but overflowing inputs are caught rather than producing incorrect results.
+This narrows the integer gap documented in [PROOF_SEMANTICS_BOUNDARY.md](../../verification/PROOF_SEMANTICS_BOUNDARY.md): instead of "proofs assume no overflow and the runtime wraps silently," the statement becomes "proofs assume no overflow and the runtime aborts on overflow." The proof is still not valid for overflowing inputs, but overflowing inputs are caught rather than producing incorrect results.
 
 ### 10.2 Wrapping arithmetic and proofs
 

@@ -259,7 +259,7 @@ check_example() {
   fi
 
   # --- arithmetic.{overflow,divide_by_zero,shift_oversize} ---
-  # The frozen policy (docs/language/ARITHMETIC_POLICY.md): ordinary integer ops are
+  # The frozen policy (docs/archive/design-records/ARITHMETIC_POLICY.md): ordinary integer ops are
   # checked and TRAP on overflow / div-zero / over-width shift; only explicit
   # wrapping_*/saturating_* intrinsics do otherwise. An assumption file is the
   # evidence surface the example's bundle is read under — it must not declare

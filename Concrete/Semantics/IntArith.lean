@@ -193,6 +193,7 @@ def ArithResult.isTrap : ArithResult → Bool
     (`shiftAmountInRange` for the trap check, `maskWidth` for the shift result,
     `bitwiseAtWidth` for `& | ^`). Keeping them out of the tri-state evaluator
     avoids threading a shift-result formula through `ArithResult` for no gain. -/
+-- spec: ARITH-8 (docs/spec/arithmetic.md; this declaration enforces the rule)
 def evalIntBinOp (op : BinOp) (a : Int) (ty : Ty) (b : Int) : ArithResult :=
   match op with
   | .add => match checkedToType ty (a + b) with
@@ -295,6 +296,7 @@ def unaryOpCanTrap (op : UnaryOp) (ty : Ty) : Bool :=
       SIGNED width (`100 << 1` at `i8` is 200), and `maskWidth` only wraps unsigned, which
       would leave a signed overflow untruncated and diverge from the compiled `shl`
       (which truncates 200 to -56). -/
+-- spec: ARITH-8 (docs/spec/arithmetic.md; this declaration enforces the rule)
 def evalIntShift (op : BinOp) (a : Int) (ty : Ty) (b : Int) : ArithResult :=
   match op with
   | .shl =>

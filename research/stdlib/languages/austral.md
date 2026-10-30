@@ -72,7 +72,7 @@ Austral gets ergonomic element/subslice access by **returning** region-tagged
 refs/spans (`Span[T,R]`) — exactly what Concrete's Option A forbids. This is a
 possible *future* valve (region-tagged reborrow/projection) that would buy
 in-place access without raw pointers. The total no-returned-ref ban is more
-provable and is decided (see `docs/language/VALUE_MODEL.md`, "References are second-class").
+provable and is decided (see `docs/archive/design-records/VALUE_MODEL.md`, "References are second-class").
 Record the tradeoff; do not reopen.
 
 ## Concrete Classification

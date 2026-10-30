@@ -39,7 +39,7 @@ toolchain  = "llvm"             # llvm | (future: qbe | wasm)
 runtime    = "hosted-libc"      # hosted-libc | freestanding | (future: wasi)
 
 [arithmetic]
-# Concrete's frozen arithmetic policy. See docs/language/ARITHMETIC_POLICY.md.
+# Concrete's frozen arithmetic policy. See docs/archive/design-records/ARITHMETIC_POLICY.md.
 # Enforced by check_assumptions.sh: the declared values must equal the
 # language's checked/trapping semantics — an assumption file is the surface
 # the example's evidence is read under, so it must not misstate them.

@@ -191,7 +191,7 @@ engineering oracle whose coverage and shared dependencies must stay visible.
 ## See also
 
 - `tests/oracle/README.md` — vector and PENDING/FAIL contract
-- [ARITHMETIC_POLICY.md](../language/ARITHMETIC_POLICY.md) — integer and bounds semantics
+- [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md) — integer and bounds semantics
 - [PREDICTABLE_BOUNDARIES.md](../platform/PREDICTABLE_BOUNDARIES.md) — compiled/profile
   execution boundary
 - [PROOF_SEMANTICS_BOUNDARY.md](PROOF_SEMANTICS_BOUNDARY.md) — separate

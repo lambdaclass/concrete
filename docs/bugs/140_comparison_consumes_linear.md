@@ -56,7 +56,7 @@ linear type; the backend then compared whatever scalar it had (the heap pointer,
 ## Fix
 
 The comparison rule (user decision (b), 2026-10-21; normative text in
-[ARITHMETIC_POLICY §8a](../language/ARITHMETIC_POLICY.md#8a-comparison-operators)):
+[ARITHMETIC_POLICY §8a](../archive/design-records/ARITHMETIC_POLICY.md#8a-comparison-operators)):
 
 - `==`, `!=`, `<`, `<=`, `>`, `>=` are defined on integers, floats, `bool` and `char`, and on raw
   pointers in trusted code or a function declaring `with(Unsafe)`. Every other operand type is

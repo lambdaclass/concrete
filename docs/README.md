@@ -31,7 +31,7 @@ the other.
 | proof status vocabulary | [VERIFICATION_STATUS.md](verification/VERIFICATION_STATUS.md) |
 | threats, hostile artifacts and advisories | [THREAT_MODEL.md](verification/THREAT_MODEL.md) |
 | compiler stages and ownership | [ARCHITECTURE.md](compiler/ARCHITECTURE.md), [PASSES.md](compiler/PASSES.md) |
-| language invariants and value model | [the spec's overview](spec/overview.md), [VALUE_MODEL.md](language/VALUE_MODEL.md) |
+| language invariants and value model | [the spec's overview](spec/overview.md), [VALUE_MODEL.md](archive/design-records/VALUE_MODEL.md) |
 | contracts and verification conditions | [CONTRACTS_AND_VCS.md](verification/CONTRACTS_AND_VCS.md) |
 | active implementation order/status | [../ROADMAP.md](../ROADMAP.md) |
 | completed changes | [../CHANGELOG.md](../CHANGELOG.md) |
@@ -70,7 +70,7 @@ Use these files as the primary reference once a design has moved out of explorat
 - [the spec's overview](spec/overview.md) — the language rules that must hold across every phase
 - [STDLIB.md](stdlib/STDLIB.md) — current stable stdlib direction and module priorities
 - [TESTING.md](compiler/TESTING.md) — current test structure and what each suite is for
-- [VALUE_MODEL.md](language/VALUE_MODEL.md) — value, borrow, ownership, and resource-model rules
+- [VALUE_MODEL.md](archive/design-records/VALUE_MODEL.md) — value, borrow, ownership, and resource-model rules
 
 The `book/` subdirectory is for tutorial-style and user-facing structured documentation.
 

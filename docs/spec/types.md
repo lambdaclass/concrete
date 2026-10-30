@@ -3,13 +3,15 @@
 Every expression has one type, and there are no implicit conversions. This chapter covers
 callable values and dispatch (TYPE-1, TYPE-2), `Text` (TYPE-3), the typing of expressions and
 operators (TYPE-4 to TYPE-10), construction rights (TYPE-11), type aliases (TYPE-12) and the
-kinds of type parameters (TYPE-13, TYPE-14), generic arguments (TYPE-15), finite size (TYPE-16), and
-capability sets in types (TYPE-D1, TYPE-17, TYPE-18). Copy itself is defined in the ownership chapter
+kinds of type parameters (TYPE-13, TYPE-14), generic arguments (TYPE-15), finite size (TYPE-16),
+capability sets in types (TYPE-D1, TYPE-17, TYPE-18), the primitive numeric types (TYPE-19), `char`
+(TYPE-20) and the representation of a newtype (TYPE-21). Copy itself is defined in the ownership chapter
 (OWN-D1, OWN-14). What a capability means and when a function may use one are in the trusted
 chapter (TRUST-D1, TRUST-4).
 
 The design records are [VALIDATED_WRAPPERS.md](../stdlib/VALIDATED_WRAPPERS.md) (a library pattern built on
-TYPE-11, not a language rule), [VALUE_MODEL.md](../language/VALUE_MODEL.md) and
+TYPE-11, not a language rule), [VALUE_MODEL.md](../archive/design-records/VALUE_MODEL.md) (absorbed
+into TYPE-21, FFI-7 and FFI-8 on 2026-10-30) and
 [CALLABLE_VALUES_AND_CAPABILITIES.md](../archive/design-records/CALLABLE_VALUES_AND_CAPABILITIES.md).
 Const generics are not part of the language. Their design is decided, and the build is
 deferred until a workload needs it (see "No const generics" below).
@@ -1148,6 +1150,121 @@ mod m {
             return 42;
         }
         return 1;
+    }
+}
+```
+
+<a id="TYPE-19"></a>
+### TYPE-19. The primitive numeric types
+
+**TYPE-19@1.** The integer types are `i8`, `i16`, `i32`, `i64`, `u8`, `u16`, `u32` and `u64`, the float types are `f32` and `f64`, and `Int`, `Uint` and `Float64` are other spellings of `i64`, `u64` and `f64`.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.parseType, Concrete.tyFromName
+- Semantics: none
+- Obligation: one `IntArith` authority for widths and signedness (R-0493)
+- Evidence: tested
+
+**Rationale.** A type written `Int` and one written `i64` are the same type, so either may flow into
+a position that expects the other without a conversion (TYPE-4). The parser maps each spelling to
+one type. Whether `Float32` is a spelling of `f32` is OPEN-9X6: the parser does not map it (nor
+`Char`), so on main `Float32` in a type position is a different type from `f32`.
+
+```con accept name=two-spellings exit=42
+fn wide(x: Uint) -> u64 {
+    return x;
+}
+
+fn half(x: Float64) -> f64 {
+    return x / 2.0;
+}
+
+fn main() -> Int {
+    let a: i64 = 40;
+    let b: Int = a;
+    let c: u64 = 1;
+    let d: Uint = wide(c);
+    let e: f64 = half(3.0);
+    if e > 1.0 {
+        return b + (d as Int) + 1;
+    }
+    return 0;
+}
+```
+
+<a id="TYPE-20"></a>
+### TYPE-20. A `char` is one byte
+
+**TYPE-20@1.** A `char` is a one-byte code unit, so `sizeof::<char>()` is 1 and every `u8` value converts with `as` to a `char` that converts back to the same `u8`.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.Layout.tySize, Concrete.ccCheckExpr
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** Strings are bytes ([STRING_TEXT_CONTRACT.md](../stdlib/STRING_TEXT_CONTRACT.md) §2),
+and `char` is the type of one of them, which is why ARITH-5 accepts `u8` to `char` and `char` to any
+integer of at least 8 unsigned or 16 signed bits. A Unicode-scalar `char` would be a separate
+proposal with its own conversions.
+
+```con accept name=char-is-a-byte exit=42
+mod m {
+    #[intrinsic = "sizeof"]
+    pub trusted fn sizeof<T>() -> u64;
+
+    pub fn main() -> Int {
+        let b: u8 = 255;
+        let c: char = b as char;
+        let d: u8 = c as u8;
+        return (sizeof::<char>() as Int) + (d as Int) - 214;
+    }
+}
+```
+
+<a id="TYPE-21"></a>
+### TYPE-21. A newtype has its inner type's representation
+
+**TYPE-21@1.** A newtype has the size, alignment and representation of its inner type.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.Layout.tySize, Concrete.Layout.tyAlign
+- Semantics: none
+- Obligation: layout comes from the one `Layout` authority (FFI-2, R-0502)
+- Evidence: tested
+
+**Rationale.** A newtype is a distinct type with no implicit conversion to its inner type (TYPE-4),
+and that distinction costs nothing at run time: wrapping (`N(v)`) and unwrapping (`n.0`) move no
+bits, and a struct field of the newtype is laid out as a field of the inner type. Whether newtypes
+stay in the language is OPEN-54.
+
+```con accept name=newtype-is-erased exit=42
+mod m {
+    #[intrinsic = "sizeof"]
+    pub trusted fn sizeof<T>() -> u64;
+    #[intrinsic = "alignof"]
+    pub trusted fn alignof<T>() -> u64;
+
+    newtype Meters = Int;
+    newtype Small = u8;
+    struct Copy W { a: u8, m: Meters }
+    struct Copy V { a: u8, m: Int }
+
+    pub fn main() -> Int {
+        if sizeof::<Meters>() == sizeof::<Int>() && alignof::<Small>() == alignof::<u8>()
+            && sizeof::<W>() == sizeof::<V>() {
+            return 42;
+        }
+        return 0;
     }
 }
 ```

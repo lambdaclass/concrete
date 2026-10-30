@@ -6,7 +6,7 @@ Status: reference
 
 This document defines Concrete's execution model: how programs start, allocate, fail, and interact with the host environment. It covers the hosted/freestanding distinction, the runtime boundary, the memory/allocation strategy, target support policy, stdlib alignment, execution profiles, performance validation, verified FFI envelopes, and the concurrency direction.
 
-For the value and ownership model, see [VALUE_MODEL.md](../language/VALUE_MODEL.md).
+For the value and ownership model, see [VALUE_MODEL.md](../archive/design-records/VALUE_MODEL.md).
 For the safety model (capabilities, trusted, Unsafe), see [SAFETY.md](../verification/SAFETY.md).
 For ABI and layout details, see [ABI.md](ABI.md).
 For stdlib module inventory, see [STDLIB.md](../stdlib/STDLIB.md).
