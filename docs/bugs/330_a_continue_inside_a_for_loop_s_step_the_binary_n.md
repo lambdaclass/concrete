@@ -8,7 +8,7 @@ right is not decided by any rule (the ruling below), so this is not counted as s
 
 <!-- bug-ledger
 summary: a continue inside a for loop's step: the binary never terminates and the interpreter goes to the condition
-fixtures: error_330_continue_in_for_step.con error_330_break_in_for_step.con regress_330_for_step_exits_allowed.con
+fixtures: error_330_continue_in_for_step.con error_330_break_in_for_step.con error_330_continue_outer_from_nested_step.con error_330_break_outer_from_nested_step.con regress_330_for_step_exits_allowed.con
 class: 12
 silent: no
 ruling: Spec gap: STMT — a `break` or `continue` inside a `for` loop's step that targets that loop is refused (the owner's decision of 2026-10-29, until C-style `for` is removed; no STMT entry states it yet)
@@ -73,9 +73,11 @@ Two definitions of a step's `continue`:
 The owner decided on 2026-10-29 to remove C-style `for` (loops become `while` and
 `for i from a until b`) and, until then, to refuse the form (option (c)). Check refuses a `break` or
 `continue` inside a `for` loop's step whose target is that loop (E0245, "`continue` inside a `for`
-loop's step cannot leave or restart that loop"): while it checks the step, `forStepLoopDepth` holds
-the loop's depth, and `refuseExitInForStep` resolves the exit's target exactly as `break` and
-`continue` do (the innermost loop, or the labelled one) and refuses it when it is that depth. A
+loop's step cannot leave or restart that loop"): while it checks a step, `forStepLoopDepths` holds
+the depth of that loop and of every loop whose step encloses it (a `for` nested in an outer loop's
+step adds its own; Codex review: one tracked depth lost the outer one), restored on every path, an
+error included; `refuseExitInForStep` resolves the exit's target exactly as `break` and `continue` do
+(the innermost loop, or the labelled one) and refuses it when it is one of those depths. A
 `return` in the step, the exits of a loop nested inside the step and a labelled `continue` of an
 outer loop from an inner loop's step stay accepted, and the binary and the interpreter agree on them
 (`regress_330_for_step_exits_allowed.con`, total 87, binary = `--interp`). E0245 is registered under
@@ -83,7 +85,9 @@ STMT-6 (`codes.tsv`, the entry's `Codes:` line, `codeRuleTag`). The interpreter'
 `evalWhile` now says the step's own `.brk` / `.cont` arms see only an outer loop's exits.
 
 Regression legs in `run_tests.sh`: `error_330_continue_in_for_step.con` and
-`error_330_break_in_for_step.con` (labelled `break`) refused with E0245, and
+`error_330_break_in_for_step.con` (labelled `break`), and `error_330_continue_outer_from_nested_step.con`
+and `error_330_break_outer_from_nested_step.con` (an exit of the outer loop from the step of a `for`
+nested in its step) refused with E0245, and
 `regress_330_for_step_exits_allowed.con` (binary 42). The open-bug reproducer row is removed.
 
 ## Structural cause

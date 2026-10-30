@@ -1458,6 +1458,8 @@ run_err "$TESTDIR/error_212_const_in_while_head.con" "\`LIMIT {\` is read as the
 # (a `return` in the step, a nested loop's own exits, an outer loop's labelled `continue`) agree.
 run_err "$TESTDIR/error_330_continue_in_for_step.con" "(E0245)"
 run_err "$TESTDIR/error_330_break_in_for_step.con" "(E0245)"
+run_err "$TESTDIR/error_330_continue_outer_from_nested_step.con" "(E0245)"
+run_err "$TESTDIR/error_330_break_outer_from_nested_step.con" "(E0245)"
 run_ok "$TESTDIR/regress_330_for_step_exits_allowed.con" 42
 run_err "$TESTDIR/error_212_const_in_match_head.con" "\`MODE {\` is read as the start of a struct literal"
 # Negative control: a head that parsed as written is never blamed (the hint follows the parser's

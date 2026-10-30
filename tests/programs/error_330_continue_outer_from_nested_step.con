@@ -1,0 +1,21 @@
+// Bug 330: a `continue` that targets a `for` loop is refused (E0245) also when it sits in the step of
+// another `for` loop nested inside the first loop's step: it is still inside `'a`'s step and leaves
+// or restarts `'a`. Codex review of the fix: one tracked step depth lost the outer one.
+fn f() -> i64 {
+    let mut n: i64 = 0;
+    'a: for (let mut i: i64 = 0; i < 3; if true {
+        for (let mut k: i64 = 0; k < 3; if k == 1 { continue 'a; } else { k = k + 1; }) {
+            n = n + 1;
+        }
+        i = i + 1;
+    } else {
+        i = i + 1;
+    }) {
+        n = n + 10;
+    }
+    return n;
+}
+
+fn main() -> Int {
+    return f() as Int;
+}

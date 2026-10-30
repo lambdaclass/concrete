@@ -331,10 +331,11 @@ structure TypeEnv where
   -- Bug 149: the loop depth each active label names (a labelled break/continue exits every loop
   -- from the innermost one out to that depth, and must account for all of their locals).
   loopLabelDepths : List (String × Nat) := []
-  -- Bug 330: the loop depth of the `for` loop whose step is being checked, if any. A `break` or
-  -- `continue` there that targets that same loop is refused (E0245): what it would do is not
-  -- defined, Lower and the interpreter disagreed, and the owner removes C-style `for` (2026-10-29).
-  forStepLoopDepth : Option Nat := none
+  -- Bug 330: the loop depths of every `for` loop whose step is being checked (a `for` nested inside
+  -- an outer loop's step adds its own). A `break` or `continue` that targets one of them is refused
+  -- (E0245): what it would do is not defined, Lower and the interpreter disagreed, and the owner
+  -- removes C-style `for` (2026-10-29).
+  forStepLoopDepths : List Nat := []
   -- True while checking a branch/arm that EXITS THE FUNCTION (every path
   -- returns): consuming an outer linear there is safe even inside a loop —
   -- the loop can never re-iterate past a return. Reset on entering any new

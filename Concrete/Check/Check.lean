@@ -597,17 +597,17 @@ def checkReturnAccountsForAll (span : Option Span) : CheckM Unit := do
         else [])
 
 /-- Bug 330: refuse a `break` or `continue` (`kind`) whose target loop is the `for` loop whose step
-    is being checked (`forStepLoopDepth`). Such an exit has no defined meaning (re-run the step, or go
-    to the condition), and Lower and the interpreter disagreed; the owner decided on 2026-10-29 to
-    remove C-style `for`, and to refuse this until then. The target is the innermost loop, or the
-    labelled one, exactly as `break` / `continue` resolve it, so an exit of a loop nested inside the
-    step is not refused. -/
+    or the step of a loop enclosing it is being checked (`forStepLoopDepths`). Such an exit has no
+    defined meaning (re-run the step, or go to the condition), and Lower and the interpreter
+    disagreed; the owner decided on 2026-10-29 to remove C-style `for`, and to refuse this until then.
+    The target is the innermost loop, or the labelled one, exactly as `break` / `continue` resolve it,
+    so an exit of a loop nested inside a step, targeting that nested loop, is not refused. -/
 def refuseExitInForStep (env : TypeEnv) (lbl : Option String) (kind : String)
     (span : Option Span) : CheckM Unit := do
   let target := match lbl with
     | some l => (env.loopLabelDepths.lookup l).getD env.loopDepth
     | none => env.loopDepth
-  if env.forStepLoopDepth == some target then
+  if env.forStepLoopDepths.contains target then
     throwCheck (.exitInForStep kind) span
 
 /-- Bug 149: after a loop, a binding declared before it keeps its pre-loop state. The only
@@ -2765,13 +2765,19 @@ partial def checkStmt (stmt : Stmt) (retTy : Ty) (ends : Option EndsTree := none
       inBlockScope body (some stmt.getSpan) (checkStmts body retTy)
       match step with
       | some stepStmt =>
-        -- Bug 330: a `break` or `continue` inside the step that targets this loop is refused
-        -- (E0245, at the `break` / `continue`); a loop nested in the step targets its own depth.
+        -- Bug 330: a `break` or `continue` inside the step that targets this loop, or any loop whose
+        -- step encloses this one, is refused (E0245, at the `break` / `continue`); a loop nested in
+        -- the step that is not itself in a step targets its own depth. The depths are restored on
+        -- every path, an error included.
         let envS ← getEnv
-        setEnv { envS with forStepLoopDepth := some envS.loopDepth }
-        checkStmt stepStmt retTy
+        let saved := envS.forStepLoopDepths
+        setEnv { envS with forStepLoopDepths := envS.loopDepth :: saved }
+        tryCatch (checkStmt stepStmt retTy) fun e => do
+          let envE ← getEnv
+          setEnv { envE with forStepLoopDepths := saved }
+          throw e
         let envS' ← getEnv
-        setEnv { envS' with forStepLoopDepth := envS.forStepLoopDepth }
+        setEnv { envS' with forStepLoopDepths := saved }
       | none => pure ()
       let env' ← getEnv
       setEnv { env' with loopDepth := env.loopDepth, loopLabels := env.loopLabels, loopLabelDepths := env.loopLabelDepths, inFnExitingBranch := env0.inFnExitingBranch, rebindingVar := env0.rebindingVar }
