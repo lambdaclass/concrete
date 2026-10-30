@@ -336,7 +336,7 @@ fn main() -> Int {
 - Status: enforced
 - Enforced by: Concrete.IntArith.evalIntShift, Concrete.Pipeline.emit
 - Semantics: none
-- Obligation: the shift and division results are `IntArith`'s, the one arithmetic authority (R-0493)
+- Obligation: the shift results are `IntArith`'s, the one arithmetic authority (R-0493)
 - Evidence: tested
 
 **Rationale.** These are LLVM's `ashr` and `lshr` (the archived ARITHMETIC_POLICY §6). When a shift
@@ -461,7 +461,7 @@ fn main() -> Int {
 `f64`, `f64` to `f32`, every float to an integer). Today `as` rounds an integer to a float natively
 and is the identity in `--interp` (bug 128), and a float-to-integer `as` truncates toward zero and
 aborts on NaN, an infinity or a value out of range. Whether a rounding operation gives a value or an
-error for those inputs, and which value, is OPEN-107. None of these exists on main yet (R-0500);
+error for those inputs, and which value, is OPEN-107. None of these exists on main yet (R-0500).
 The conversion functions are not named yet (OPEN-99), so this entry has no example until they are.
 
 <a id="ARITH-12"></a>

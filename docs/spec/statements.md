@@ -4,7 +4,8 @@ Statements execute in source order. A block's trailing expression without `;` is
 `e;` is a statement whose value is discarded (OWN-5 to OWN-7 say which values may be). This
 chapter covers how executions end (STMT-1 to STMT-3), evaluation order (STMT-4), where exits may
 appear (STMT-5), loops (STMT-6), `main` (STMT-7), value blocks (STMT-8), returning a value on
-every path (STMT-9) and the capability `abort()` needs (STMT-13). The design records are
+every path (STMT-9), test functions (STMT-10), the value flow of statements (STMT-11), the counted
+loop's measure (STMT-12) and the capability `abort()` needs (STMT-13). The design records are
 [STATEMENT_EXPRESSION_MODEL.md](../archive/design-records/STATEMENT_EXPRESSION_MODEL.md)
 and [MAIN_EXIT_MODEL.md](../platform/MAIN_EXIT_MODEL.md). [EXECUTION_MODEL.md](../platform/EXECUTION_MODEL.md)
 keeps the runtime and platform description (hosted runtime, startup, allocation, targets).

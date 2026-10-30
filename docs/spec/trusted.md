@@ -6,7 +6,7 @@ techniques behind a safe API. **`Unsafe`** is the capability for crossing a fore
 boundary, and a `trusted` body absorbs it. No layer is exempt: compiler builtins, `std` and user
 code follow the same rules. This chapter covers what a capability means (TRUST-D1), raw pointers (TRUST-1, TRUST-3), undefined
 behaviour (TRUST-2), capabilities (TRUST-4), `trusted` (TRUST-5), the trusted-module marker
-(TRUST-6, pending), moving a value out of raw memory (TRUST-7) , global state (TRUST-8 to TRUST-10), storing through a raw pointer (TRUST-11), the
+(TRUST-6, pending), moving a value out of raw memory (TRUST-7), global state (TRUST-8 to TRUST-10), storing through a raw pointer (TRUST-11), the
 ownership rules in trusted code (TRUST-12) and taking a reference's address (TRUST-13). Capability sets, capability parameters and the capabilities of function types and
 handles (`Sink<cap C>`) are in the types chapter (TYPE-D1, TYPE-15, TYPE-17, TYPE-18); this specification governs them. The design records are [SAFETY.md](../verification/SAFETY.md),
 [CAPABILITY_FACTS.md](../compiler/CAPABILITY_FACTS.md),
@@ -37,7 +37,7 @@ terminals and `/dev/null` look alike from inside. SPARK's `Ada.Text_IO` likewise
 coarse file-system state and excludes redirection rather than modelling it. `with(...)` lists
 capabilities, aliases (`Std`, `cap IO = File + Console;`) and capability variables (TYPE-D1). The
 meanings of `Time`, `Env`, `Process` and `Alloc` are stated nowhere yet (OPEN-95), and a name in
-`with(...)` that is none of these is an unresolved name, which MOD-1 refuses and main accepts
+`with(...)` that is not a capability, a capability alias or a capability variable is an unresolved name, which MOD-1 refuses and main accepts
 (bug 337). The compiler holds only the names (`validCaps`) and checks every use against the declared
 sets (TRUST-4); what a name grants is fixed by the foreign bindings that declare it, since every
 `extern fn` declares its effects (FFI-3), and std's bindings are audited against these meanings.

@@ -48,7 +48,9 @@ The OS exit-status contract is 8 bits; `u8` encodes it in the signature so
 truncation is unrepresentable, not silently applied (this is Zig's `main() u8`
 insight — no `ExitCode` wrapper type needed in a language that has `u8`).
 
-**Deliberately absent: `std.process.exit()`.** Zig ships it with a "defers
+**Deliberately absent from the language: an exit operation.** std nevertheless has
+`process_exit` (a `with(Process)` function over libc `exit`, which runs no `defer`); whether it stays
+is [OPEN-136](../spec/decisions.md#OPEN-136). The record's reasoning: Zig ships it with a "defers
 don't run" warning; in a LINEAR language early exit would not be a footgun but
 a hole in a checked guarantee (every non-Copy value provably consumed). Status
 flows back through `main`'s return, so every linear value is consumed before `main` returns

@@ -243,9 +243,9 @@ establishes the property where the contract is admitted instead of inheriting it
 stage's narrowness.
 
 The restriction was scoped: shadowing itself stayed legal then, and only shadowing of a name a contract
-mentioned was rejected; [SCOPE-1](../spec/scope.md#SCOPE-1) now refuses all shadowing. Two over-rejection controls hold that line (an unshadowed contract is
-accepted; shadowing in a function with no contract is accepted), and the corpus was swept before
-turning it on. The real fix is
+mentioned was rejected; [SCOPE-1](../spec/scope.md#SCOPE-1) now refuses all shadowing. Two over-rejection controls held that line then (an unshadowed contract was
+accepted, and so was shadowing in a function with no contract, which SCOPE-1 now refuses), and the
+corpus was swept before turning it on. The real fix is
 [H25](#h25-refinement-substitution-is-by-name-not-by-binding-identity--open-contained)'s stable
 binding identities — the two holes share a root cause: contract expressions carry names, not
 identities.

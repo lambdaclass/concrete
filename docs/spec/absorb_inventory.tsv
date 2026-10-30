@@ -152,12 +152,12 @@ docs/compiler/PASSES.md	*	Pass contracts; ~20 rule restatements, 4 stale or conf
 docs/compiler/PHASE_EXIT_CHECKLISTS.md	*	No language rules: process/tooling/proof infrastructure	rule	-	-	keep	PHASE_EXIT freeze milestone lists syntax features historically only
 docs/compiler/PIPELINE_ARCHITECTURE.md	*	Architecture north-star; 2 semantic statements, both superseded	semantics	-	pipeline	keep	-
 docs/compiler/PIPELINE_CONTRACTS.md	*	Superseded design record; every boundary contract is a PASS entry	guarantee	-	pipeline	keep	header already points to PASS-5..PASS-11
-docs/compiler/README.md	*	Index; says language semantics belong in docs/language	rule	conflict:spec-README	-	keep	docs/spec is the one language spec; repoint
+docs/compiler/README.md	*	Index; names docs/spec as the language specification	-	-	-	keep	repointed to docs/spec in phase 2 (2026-10-30)
 docs/compiler/REDUCER_WORKFLOW.md	*	No language rules: process/tooling/proof infrastructure	rule	-	-	keep	-
 docs/compiler/TESTING.md	*	No language rules: process/tooling/proof infrastructure	rule	-	-	keep	-
 docs/compiler/TRANSFORM_REGISTER.md	*	No language rules: process/tooling/proof infrastructure	rule	-	-	keep	-
 docs/compiler/VERIFIED_PIPELINE.md	*	Verification plan; semantic contract restates STMT/ARITH/REF/TRUST rules	semantics	-	pipeline	keep	-
-docs/platform/ABI.md	*	ABI maturity statement; ~12 language-level layout/FFI claims, some stale (trusted extern needs no capability)	-	-	-	keep	Layout guarantees should move to ffi chapter with LAYOUT_CONTRACT
+docs/platform/ABI.md	*	cites the spec (2026-10-30 citation pass)	-	-	-	keep	statements corrected in phase 2
 docs/platform/ABI_LAYOUT.md	*	Implementation-ownership note for Layout.lean; restates FFI-safety and repr rules; builtin Option/Result section stale	-	-	-	cite-only	-
 docs/platform/ABI_LAYOUT.md	Extern ABI L293-294	Bool lowers to i1 and is promoted/truncated to the C ABI in extern signatures	semantics	new	ffi	absorb	not absorbed: an implementation detail of extern lowering, not a language rule
 docs/platform/EXECUTION_MODEL.md	*	Mixed: ~25 language claims, several stale (Int main, result printing, implicit Destroy, exit()); rest runtime/target/future design	-	-	-	cite-only	Fix stale rows; keep runtime/target/concurrency direction as design record
@@ -181,7 +181,7 @@ docs/platform/PREDICTABLE_BOUNDARIES.md	*	Profile analysis doc; ~6 predictable-p
 docs/platform/PREDICTABLE_BOUNDARIES.md	What bounded means L100-117	A loop is bounded only if a condition variable is stepped toward the bound by a constant; all else is unbounded and refused by predictable	definition	new	profiles (new chapter)	absorb	profile rule: OPEN-124; C-style for examples now marked pending (STMT-6@3, bug 331)
 docs/platform/PREDICTABLE_BOUNDARIES.md	Indirect calls L161-168	A body containing an indirect call is refused by the predictable profile and gets no stack bound; unboundedness propagates to callers	rule	new	profiles (new chapter)	absorb	profile rule: OPEN-124
 docs/platform/PREDICTABLE_BOUNDARIES.md	Admission is transitive L196-221	Predictable admission is transitive over the call graph for all five gates: f is predictable only if everything it can reach is	rule	new	profiles (new chapter)	absorb	profile rule: OPEN-124
-docs/platform/PREDICTABLE_FAILURE_DISCIPLINE.md	*	Profile discipline doc; ~4 claims, mostly dup of statements failure model; one stale exit()	-	-	-	keep	-
+docs/platform/PREDICTABLE_FAILURE_DISCIPLINE.md	*	cites the spec (2026-10-30 citation pass)	-	-	-	keep	statements corrected in phase 2
 docs/platform/PROFILES.md	*	Policy doc; ~6 language-relevant claims (profile never changes meaning, predictable gates) plus one stale &mut claim	-	-	-	cite-only	-
 docs/platform/PROFILES.md	Predictable gates L103-118	Predictable: no direct/mutual recursion, bounded loops, no allocation, no extern calls, no File/Network/Process; policy predictable=true makes violations errors (E0610)	rule	new	profiles (new chapter)	open	profile rules: OPEN-124
 docs/platform/README.md	*	No language rules: index	-	-	-	keep	-
@@ -340,16 +340,16 @@ docs/stdlib/BYTE_CURSOR_API.md	*	No language rules: std API design (signatures s
 docs/stdlib/BYTE_VIEW.md	*	Std API; language content only restated (no stored/returned refs; raw pointers held safely, deref needs Unsafe)	-	-	-	keep	cite REF-1, REF-3, TRUST-4
 docs/stdlib/ERROR_CONVENTIONS.md	*	Std convention; ~6 restated language rules (must-use, no propagation syntax, traps) and stale main masking	-	-	-	keep	-
 docs/stdlib/HANDLE_CAPABILITIES_AUDIT.md	*	Std audit, not language; one restated rule (abort needs Process)	-	-	-	keep	-
-docs/stdlib/HOSTED_STDLIB_SPLIT.md	*	Std layering design; no language rules; Text described as borrowed view (L85)	-	-	-	keep	stale vs TYPE-3
+docs/stdlib/HOSTED_STDLIB_SPLIT.md	*	cites the spec (2026-10-30 citation pass)	-	-	-	keep	statements corrected in phase 2
 docs/stdlib/RUNTIME_COLLECTIONS.md	*	Std collection design; drop-glue rules partly language-level; borrowed-accessor sections historical	-	-	-	cite-only	-
 docs/stdlib/RUNTIME_COLLECTIONS.md	2 Drop-glue rules 2-3	Destroy propagates conditionally (Vec<T>: Destroy iff T: Destroy); glue capabilities are the union of element destructors' capabilities	semantics	dup:OWN-13	ownership	rationale	left as rationale; the v1 rule is OWN-13 (Alloc only)
 docs/stdlib/STDLIB.md	*	No language rules: std direction	-	-	-	keep	-
 docs/stdlib/STDLIB_API_REVIEW.md	*	No language rules: std API review	-	-	-	keep	-
 docs/stdlib/STDLIB_AUDIT.md	*	No language rules: std gap analysis	-	-	-	keep	-
-docs/stdlib/STDLIB_DESIGN_PRINCIPLES.md	*	Std API principles; a few language claims, Text-as-borrow stale	-	-	-	keep	-
-docs/stdlib/STDLIB_DOCUMENTATION_PLAN.md	*	No language rules: doc plan; examples use fn main() -> i32 (stale vs STMT-7) and Text as borrowed view	-	-	-	keep	-
+docs/stdlib/STDLIB_DESIGN_PRINCIPLES.md	*	cites the spec (2026-10-30 citation pass)	-	-	-	keep	statements corrected in phase 2
+docs/stdlib/STDLIB_DOCUMENTATION_PLAN.md	*	cites the spec (2026-10-30 citation pass)	-	-	-	keep	statements corrected in phase 2
 docs/stdlib/STDLIB_FREEZE_LEDGER.md	*	No language rules: evidence ledger	-	-	-	keep	-
-docs/stdlib/STDLIB_HANDOFF.md	*	Process contract; one stale arithmetic claim	-	-	-	keep	-
+docs/stdlib/STDLIB_HANDOFF.md	*	cites the spec (2026-10-30 citation pass)	-	-	-	keep	statements corrected in phase 2
 docs/stdlib/STDLIB_LEADERBOARD.md	*	No language rules: planning ranking	-	-	-	keep	-
 docs/stdlib/STDLIB_SURFACE_FREEZE.md	*	Freeze record; sections 3-5 restate language surface, many items stale against the spec	-	-	-	keep	Replace sections 3-5 with spec citations
 docs/stdlib/STDLIB_TARGET.md	*	No language rules: module target list	-	-	-	keep	-

@@ -644,6 +644,6 @@ See [../research/stdlib/concurrency.md](../../research/stdlib/concurrency.md) fo
 | Execution profiles | Not yet implemented; direction documented | `no_alloc`, `bounded_alloc`, `high_integrity` |
 | Performance | LLVM `-O2`, no custom optimizations | Compile-time baselines, integration timing |
 | FFI ownership | Linear types consumed by-value; raw pointers untracked | Verified FFI envelopes, ownership annotations |
-| FFI calling convention | `#[repr(C)]` struct arguments passed by value (FFI-11) | The `Layout` authority classifies them (R-0502) |
+| FFI calling convention | `#[repr(C)]` struct arguments passed by value (FFI-11, pending R-0502) | The `Layout` authority classifies them (R-0502) |
 | Boundedness | Capability reports show allocation/unsafe usage | Static allocation/stack analysis, `--report boundedness` |
 | Concurrency | Not yet implemented; research documented | OS threads first, structured scopes, capability-gated concurrency, simulation-backed evidence later |

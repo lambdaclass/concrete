@@ -527,7 +527,7 @@ fn main() -> Int {
 <a id="TRAIT-11"></a>
 ### TRAIT-11. Destruction cannot fail
 
-**TRAIT-11@1.** The method `destroy` of the builtin trait `Destroy` returns `Unit`, so destroying a value reports no failure, and cleanup that can fail is a consuming method that returns its outcome.
+**TRAIT-11@1.** The method `destroy` of the builtin trait `Destroy` returns `Unit`, so destroying a value reports no failure.
 
 - Kind: guarantee
 - Uses: none
@@ -538,7 +538,8 @@ fn main() -> Int {
 - Obligation: none
 - Evidence: tested
 
-**Rationale.** A destructor runs from `destroy(x)`, from a deferred call and from a collection's
+**Rationale.** Cleanup that can fail is written as a consuming method that returns its outcome (a
+`close(self) -> Result`), which the caller must use; it is a pattern, not a rule. A destructor runs from `destroy(x)`, from a deferred call and from a collection's
 drop glue, none of which has a place to put an error, so an error there would be silently dropped
 (OWN-6). An impl whose `destroy` returns anything else is refused by TRAIT-9 (E0582, `expected
 return type ()`). Fallible cleanup, such as closing a file whose final flush can fail, is an

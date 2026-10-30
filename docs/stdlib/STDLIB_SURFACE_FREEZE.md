@@ -560,6 +560,7 @@ The record also held these items, kept here as history; none is a spec rule:
   how far type arguments are inferred is [OPEN-46](../spec/decisions.md#OPEN-46);
 - deferred: `pub(pkg)` visibility, until package management
   ([MOD-2](../spec/modules.md#MOD-2)'s rationale);
+- deferred: multi-line strings ([STRING_TEXT_CONTRACT.md](STRING_TEXT_CONTRACT.md));
 - deferred pending user feedback: unifying `#` with `::`
   ([SYNTAX_FREEZE_REVIEW.md](../archive/design-records/SYNTAX_FREEZE_REVIEW.md) #10).
 

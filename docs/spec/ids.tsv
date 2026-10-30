@@ -647,12 +647,12 @@ ARITH-9/named-operations-unchanged	live	-
 ARITH-10@1	pending	f9524b87abdc1411e97d13b1351e7e4d
 ARITH-11@1	pending	82417aa587cd3210ec36365c27ebb145
 MOD-1/let-else-binder-out-of-scope	live	-
-OPEN-99@1	live	52128db7b7a322db2ba81912b31a2809
+OPEN-99@1	live	7d74e38cf57e6e187a29c2469d4af2d0
 OPEN-103@1	live	04e5d7663024c7899e0c878b59c0a2a2
 OPEN-106@1	live	f027d3f856df8ec839d9812e1bef4b67
 OPEN-107@1	live	8df4f09d3907cc52f54ef1e499c5fea0
 OPEN-108@1	live	1f1a3c7ea4690fcff4385cf83ffc4042
-OPEN-109@1	live	9a85ad11d90d46e2ac2c763d5692ccca
+OPEN-109@1	live	0c9ddf056125860ef1ad5d61016b8e71
 OPEN-110@1	live	d0678271a2d7b978e2acc0a5081505da
 OPEN-111@1	live	735a7c18f384c734c8d8da73d7909cef
 OPEN-112@1	live	edaeda36abbf524c5f87e9c60fca5897
@@ -696,11 +696,11 @@ SYN-5/literal-bytes	live	-
 SYN-5/escapes	live	-
 TYPE-23@1	live	589601c796b310dc85167c5f93976167
 TYPE-23/option-and-result	live	-
-TYPE-24@1	live	6c354781f93543041c5e319998668f94
+TYPE-24@1	live	c792c0d9bc7fee2ea73ff0cf68d18fdc
 TYPE-24/newtype-conversions	live	-
 STMT-13@1	live	2834fc630cd244aa872fcd911a47e47f
 STMT-13/abort-with-process	live	-
-TRAIT-11@1	live	94633cd98983f78141b941e81154fa42
+TRAIT-11@1	live	9bb709b36c419e4c07602ed43fc14c40
 TRAIT-11/destroy-returns-unit	live	-
 FFI-10@1	live	9c523b22729058f38fd8799875f9e0ea
 FFI-10/four-forms	live	-
@@ -747,3 +747,7 @@ OPEN-131@1	live	60b9c4b64dbbd468728bea9dc8caafca
 OPEN-132@1	live	875f9ee57b842fdb8ab09ca1d2bd6636
 OPEN-133@1	live	1ac989c12425b91b4669e2c6a62681ef
 OPEN-134@1	live	fd523c9c032e329d7c9ec9151d5bad60
+OPEN-135@1	live	f7e528dd28fce7bcb42634c00bfba0e1
+OPEN-136@1	live	a8f53fd3ac9243a040ffc0935d91750f
+MOD-3/method-mangled-name	live	-
+MOD-3/method-beside-free-function	live	-

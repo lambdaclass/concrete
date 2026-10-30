@@ -583,7 +583,7 @@ their own signatures rather than by a declaration, so each misuse has its own di
 `destroy` of a value whose type has no `Destroy` implementation is an ownership rule (OWN-13).
 The output builtins are the one exception to a fixed argument count: `print` and `println` take
 one or more arguments and `append` a `&mut String` and one or more arguments, each argument a
-`String`, `&String`, `&mut String`, `Int`, `Uint`, `i8` to `u32`, `bool` or `char`, anything else
+`String`, `&String`, `&mut String`, `Int`, `Uint`, `i8`, `i16`, `i32`, `u8`, `u16`, `u32`, `bool` or `char`, anything else
 being E0421; they return `()`, `println` ends with a newline, and the calls they expand into need
 `Console` (print) and `Alloc` (append) under TRUST-4. Whether a program may declare its own
 function of one of these names is OPEN-133.
@@ -1482,7 +1482,7 @@ fn main() -> Int {
 <a id="TYPE-24"></a>
 ### TYPE-24. The conversions of a newtype
 
-**TYPE-24@1.** A newtype `N` over `T` converts to `T` by `n.0` or `n as T` and a `T` converts to `N` by `N(v)` or `v as N`, with `N`'s type arguments substituted into `T`, and `as` converts a newtype to or from no other type.
+**TYPE-24@1.** A newtype `N` over `T` converts to `T` by `n.0` or `n as T` and a `T` converts to `N` by `N(v)` or `v as N`, each form only in the modules TYPE-11 allows it, with `N`'s type arguments substituted into `T`, and `as` converts a newtype to or from no other type.
 
 - Kind: guarantee
 - Uses: none

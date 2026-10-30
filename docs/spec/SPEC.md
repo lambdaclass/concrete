@@ -311,6 +311,8 @@ the first chapter.
   - [OPEN-132. Polymorphic recursion](#OPEN-132)
   - [OPEN-133. User functions named `print`, `println` or `append`](#OPEN-133)
   - [OPEN-134. The capabilities of a container's generated destruction](#OPEN-134)
+  - [OPEN-135. A method's `Type_method` name in its module's namespace](#OPEN-135)
+  - [OPEN-136. std's `process_exit`](#OPEN-136)
 
 <a id="ch-overview"></a>
 ## Overview
@@ -1150,7 +1152,40 @@ the same declaration twice binds the name to one declaration and is accepted. Th
 are the `__` prefix, `user_main` and the builtins a program may call but not redefine; they are
 reserved for functions only, and a `let` spelling the compiler reserves is SYN-3.
 Main also counts an impl method under its definition name `Type_method`, so a free function
-`P_get` beside `impl P { fn get(&self) ... }` in one module is refused with E0299.
+`P_get` beside `impl P { fn get(&self) ... }` in one module is refused with E0299; whether a method
+should occupy that name is OPEN-135.
+
+```con reject name=method-mangled-name code=E0299 stage=check pair=method-beside-free-function
+struct Copy P { x: Int }
+impl P {
+    fn get(&self) -> Int {
+        return self.x;
+    }
+}
+fn P_get(a: Int) -> Int {
+    return a;
+}
+fn main() -> Int {
+    let p: P = P { x: 3 };
+    return p.get() + P_get(4);
+}
+```
+
+```con accept name=method-beside-free-function exit=7
+struct Copy P { x: Int }
+impl P {
+    fn get(&self) -> Int {
+        return self.x;
+    }
+}
+fn get_p(a: Int) -> Int {
+    return a;
+}
+fn main() -> Int {
+    let p: P = P { x: 3 };
+    return p.get() + get_p(4);
+}
+```
 
 ```con reject name=import-clashes-with-local code=E0299 stage=check pair=renamed-import
 mod a {
@@ -2213,7 +2248,7 @@ their own signatures rather than by a declaration, so each misuse has its own di
 `destroy` of a value whose type has no `Destroy` implementation is an ownership rule (OWN-13).
 The output builtins are the one exception to a fixed argument count: `print` and `println` take
 one or more arguments and `append` a `&mut String` and one or more arguments, each argument a
-`String`, `&String`, `&mut String`, `Int`, `Uint`, `i8` to `u32`, `bool` or `char`, anything else
+`String`, `&String`, `&mut String`, `Int`, `Uint`, `i8`, `i16`, `i32`, `u8`, `u16`, `u32`, `bool` or `char`, anything else
 being E0421; they return `()`, `println` ends with a newline, and the calls they expand into need
 `Console` (print) and `Alloc` (append) under TRUST-4. Whether a program may declare its own
 function of one of these names is OPEN-133.
@@ -3112,7 +3147,7 @@ fn main() -> Int {
 <a id="TYPE-24"></a>
 #### TYPE-24. The conversions of a newtype
 
-**TYPE-24@1.** A newtype `N` over `T` converts to `T` by `n.0` or `n as T` and a `T` converts to `N` by `N(v)` or `v as N`, with `N`'s type arguments substituted into `T`, and `as` converts a newtype to or from no other type.
+**TYPE-24@1.** A newtype `N` over `T` converts to `T` by `n.0` or `n as T` and a `T` converts to `N` by `N(v)` or `v as N`, each form only in the modules TYPE-11 allows it, with `N`'s type arguments substituted into `T`, and `as` converts a newtype to or from no other type.
 
 - Kind: guarantee
 - Uses: none
@@ -3543,7 +3578,7 @@ fn main() -> Int {
 - Status: enforced
 - Enforced by: Concrete.IntArith.evalIntShift, Concrete.Pipeline.emit
 - Semantics: none
-- Obligation: the shift and division results are `IntArith`'s, the one arithmetic authority (R-0493)
+- Obligation: the shift results are `IntArith`'s, the one arithmetic authority (R-0493)
 - Evidence: tested
 
 **Rationale.** These are LLVM's `ashr` and `lshr` (the archived ARITHMETIC_POLICY §6). When a shift
@@ -3668,7 +3703,7 @@ fn main() -> Int {
 `f64`, `f64` to `f32`, every float to an integer). Today `as` rounds an integer to a float natively
 and is the identity in `--interp` (bug 128), and a float-to-integer `as` truncates toward zero and
 aborts on NaN, an infinity or a value out of range. Whether a rounding operation gives a value or an
-error for those inputs, and which value, is OPEN-107. None of these exists on main yet (R-0500);
+error for those inputs, and which value, is OPEN-107. None of these exists on main yet (R-0500).
 The conversion functions are not named yet (OPEN-99), so this entry has no example until they are.
 
 <a id="ARITH-12"></a>
@@ -3709,7 +3744,8 @@ Statements execute in source order. A block's trailing expression without `;` is
 `e;` is a statement whose value is discarded (OWN-5 to OWN-7 say which values may be). This
 chapter covers how executions end (STMT-1 to STMT-3), evaluation order (STMT-4), where exits may
 appear (STMT-5), loops (STMT-6), `main` (STMT-7), value blocks (STMT-8), returning a value on
-every path (STMT-9) and the capability `abort()` needs (STMT-13). The design records are
+every path (STMT-9), test functions (STMT-10), the value flow of statements (STMT-11), the counted
+loop's measure (STMT-12) and the capability `abort()` needs (STMT-13). The design records are
 [STATEMENT_EXPRESSION_MODEL.md](../archive/design-records/STATEMENT_EXPRESSION_MODEL.md)
 and [MAIN_EXIT_MODEL.md](../platform/MAIN_EXIT_MODEL.md). [EXECUTION_MODEL.md](../platform/EXECUTION_MODEL.md)
 keeps the runtime and platform description (hosted runtime, startup, allocation, targets).
@@ -8558,7 +8594,7 @@ fn main() -> Int {
 <a id="TRAIT-11"></a>
 #### TRAIT-11. Destruction cannot fail
 
-**TRAIT-11@1.** The method `destroy` of the builtin trait `Destroy` returns `Unit`, so destroying a value reports no failure, and cleanup that can fail is a consuming method that returns its outcome.
+**TRAIT-11@1.** The method `destroy` of the builtin trait `Destroy` returns `Unit`, so destroying a value reports no failure.
 
 - Kind: guarantee
 - Uses: none
@@ -8569,7 +8605,8 @@ fn main() -> Int {
 - Obligation: none
 - Evidence: tested
 
-**Rationale.** A destructor runs from `destroy(x)`, from a deferred call and from a collection's
+**Rationale.** Cleanup that can fail is written as a consuming method that returns its outcome (a
+`close(self) -> Result`), which the caller must use; it is a pattern, not a rule. A destructor runs from `destroy(x)`, from a deferred call and from a collection's
 drop glue, none of which has a place to put an error, so an error there would be silently dropped
 (OWN-6). An impl whose `destroy` returns anything else is refused by TRAIT-9 (E0582, `expected
 return type ()`). Fallible cleanup, such as closing a file whose final flush can fail, is an
@@ -8942,7 +8979,7 @@ techniques behind a safe API. **`Unsafe`** is the capability for crossing a fore
 boundary, and a `trusted` body absorbs it. No layer is exempt: compiler builtins, `std` and user
 code follow the same rules. This chapter covers what a capability means (TRUST-D1), raw pointers (TRUST-1, TRUST-3), undefined
 behaviour (TRUST-2), capabilities (TRUST-4), `trusted` (TRUST-5), the trusted-module marker
-(TRUST-6, pending), moving a value out of raw memory (TRUST-7) , global state (TRUST-8 to TRUST-10), storing through a raw pointer (TRUST-11), the
+(TRUST-6, pending), moving a value out of raw memory (TRUST-7), global state (TRUST-8 to TRUST-10), storing through a raw pointer (TRUST-11), the
 ownership rules in trusted code (TRUST-12) and taking a reference's address (TRUST-13). Capability sets, capability parameters and the capabilities of function types and
 handles (`Sink<cap C>`) are in the types chapter (TYPE-D1, TYPE-15, TYPE-17, TYPE-18); this specification governs them. The design records are [SAFETY.md](../verification/SAFETY.md),
 [CAPABILITY_FACTS.md](../compiler/CAPABILITY_FACTS.md),
@@ -8973,7 +9010,7 @@ terminals and `/dev/null` look alike from inside. SPARK's `Ada.Text_IO` likewise
 coarse file-system state and excludes redirection rather than modelling it. `with(...)` lists
 capabilities, aliases (`Std`, `cap IO = File + Console;`) and capability variables (TYPE-D1). The
 meanings of `Time`, `Env`, `Process` and `Alloc` are stated nowhere yet (OPEN-95), and a name in
-`with(...)` that is none of these is an unresolved name, which MOD-1 refuses and main accepts
+`with(...)` that is not a capability, a capability alias or a capability variable is an unresolved name, which MOD-1 refuses and main accepts
 (bug 337). The compiler holds only the names (`validCaps`) and checks every use against the declared
 sets (TRUST-4); what a name grants is fixed by the foreign bindings that declare it, since every
 `extern fn` declares its effects (FFI-3), and std's bindings are audited against these meanings.
@@ -10573,7 +10610,7 @@ fn main() -> Int {
 <a id="ch-decisions"></a>
 ## Open Owner Decisions
 
-This chapter lists the language questions that only the project owner decides: OD1 to OD134 of
+This chapter lists the language questions that only the project owner decides: OD1 to OD136 of
 [ROADMAP.md](../../ROADMAP.md#owner-decisions) (exit 2n for OD1 to OD32, exit 2q for the rest). Each entry states the question and encodes
 no answer. The rules it bears on are named in its rationale, together with what current main does,
 which stays provisional until the owner answers. The answer, when given, is recorded in ROADMAP and
@@ -10654,10 +10691,10 @@ them); they are not separate entries here
 | 56 | [OPEN-48](#OPEN-48) | — | The index type of a counted loop over two literals | not checked | (a) refused, as OD31 refuses any literal with no expected type; a typed bound supplies the other bound's type, in either order | neutral | — |
 | 57 | [OPEN-49](#OPEN-49) | — | The arithmetic of a counted loop's termination measure | not applicable | (a) a mathematical integer in the proof only, never computed at run time | needs requirement 2 | — |
 | 58 | [OPEN-51](#OPEN-51) | — | Reverse, stepped and collection iteration | a counted loop and `while` | (a) none now; each a later decision when a workload needs it | neutral | one loop construct in proofs |
-| 59 | [OPEN-92](#OPEN-92) | absorption | A capability set inferred from callbacks | not checked | none given (raised while absorbing CALLABLE_VALUES and HANDLE_CAPABILITIES) | not assessed | — |
-| 60 | [OPEN-93](#OPEN-93) | absorption | Widening a function value's capability set | not checked | none given (raised while absorbing CALLABLE_VALUES and HANDLE_CAPABILITIES) | not assessed | — |
-| 61 | [OPEN-95](#OPEN-95) | absorption | What `Time`, `Env`, `Process` and `Alloc` mean | not checked | none given (raised while absorbing CALLABLE_VALUES and HANDLE_CAPABILITIES) | not assessed | — |
-| 62 | [OPEN-96](#OPEN-96) | absorption | Two foreign bindings of one C symbol | not checked | none given (raised while absorbing CALLABLE_VALUES and HANDLE_CAPABILITIES) | not assessed | — |
+| 59 | [OPEN-92](#OPEN-92) | absorption | A capability set inferred from callbacks | not applicable (capabilities are values) | none given (raised while absorbing CALLABLE_VALUES and HANDLE_CAPABILITIES) | not assessed | — |
+| 60 | [OPEN-93](#OPEN-93) | absorption | Widening a function value's capability set | not applicable (capabilities are values) | none given (raised while absorbing CALLABLE_VALUES and HANDLE_CAPABILITIES) | not assessed | — |
+| 61 | [OPEN-95](#OPEN-95) | absorption | What `Time`, `Env`, `Process` and `Alloc` mean | not applicable (capabilities are values) | none given (raised while absorbing CALLABLE_VALUES and HANDLE_CAPABILITIES) | not assessed | — |
+| 62 | [OPEN-96](#OPEN-96) | absorption | Two foreign bindings of one C symbol | not applicable | none given (raised while absorbing CALLABLE_VALUES and HANDLE_CAPABILITIES) | not assessed | — |
 | 63 | [OPEN-97](#OPEN-97) | absorption | A build profile that omits or demands an overflow check | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
 | 64 | [OPEN-98](#OPEN-98) | absorption | Pointer and reference conversions written with `as` | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
 | 65 | [OPEN-99](#OPEN-99) | absorption | The names of the named conversions | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
@@ -10677,37 +10714,28 @@ them); they are not separate entries here
 | 79 | [OPEN-113](#OPEN-113) | absorption review | The ownership exceptions of trusted code | not checked | none given (raised by the review of the absorption) | not assessed | — |
 | 80 | [OPEN-114](#OPEN-114) | absorption review | How integer division rounds | not checked | none given (raised by the review of the absorption) | not assessed | — |
 
-| 81 | [OPEN-95](#OPEN-95) | absorption | What `Time`, `Env`, `Process` and `Alloc` mean | not checked | none given (raised while absorbing CALLABLE_VALUES and HANDLE_CAPABILITIES) | not assessed | — |
-| 82 | [OPEN-96](#OPEN-96) | absorption | Two foreign bindings of one C symbol | not checked | none given (raised while absorbing CALLABLE_VALUES and HANDLE_CAPABILITIES) | not assessed | — |
-| 83 | [OPEN-97](#OPEN-97) | absorption | A build profile that omits or demands an overflow check | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
-| 84 | [OPEN-98](#OPEN-98) | absorption | Pointer and reference conversions written with `as` | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
-| 85 | [OPEN-99](#OPEN-99) | absorption | The names of the named conversions | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
-| 86 | [OPEN-100](#OPEN-100) | absorption | Comparisons on a type parameter | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
-| 87 | [OPEN-101](#OPEN-101) | absorption | What a trap writes | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
-| 88 | [OPEN-102](#OPEN-102) | absorption | `Float32` and `Char` as type spellings | not checked | none given (raised while absorbing ARITHMETIC_POLICY and VALUE_MODEL) | not assessed | — |
-| 89 | [OPEN-103](#OPEN-103) | absorption | `as` applied to a reference | not checked | none given (raised while absorbing MEMORY_SEMANTICS) | not assessed | — |
-| 90 | [OPEN-104](#OPEN-104) | s7 review | A `#[variant]` written on a counted loop | not applicable | none given | neutral | — |
-| 91 | [OPEN-105](#OPEN-105) | s7 review | Where a counted loop's `#[invariant]` is checked | not applicable | none given | (b) needs requirement 2 | — |
-| 92 | [OPEN-115](#OPEN-115) | absorption | The body and totality of a specification function | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
-| 93 | [OPEN-116](#OPEN-116) | absorption | A checked total function category | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
-| 94 | [OPEN-117](#OPEN-117) | absorption | `old`, quantifiers and implication in contracts | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
-| 95 | [OPEN-118](#OPEN-118) | absorption | A proven run-time violation in trusted code | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
-| 96 | [OPEN-119](#OPEN-119) | absorption | Buffered output when the process aborts | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
-| 97 | [OPEN-120](#OPEN-120) | absorption | A vacuous contract | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
-| 98 | [OPEN-121](#OPEN-121) | absorption | Projections from a base that is not a traceable place | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
-| 99 | [OPEN-122](#OPEN-122) | absorbing the platform and stdlib documents | A `repr(C)` struct returned from an extern function | not checked | none given | not assessed | — |
-| 100 | [OPEN-123](#OPEN-123) | absorbing the platform and stdlib documents | `as` on a newtype outside its module | not checked | none given | not assessed | — |
-| 101 | [OPEN-124](#OPEN-124) | absorbing the platform and stdlib documents | Profiles in the specification | not checked | none given | not assessed | — |
-| 102 | [OPEN-125](#OPEN-125) | absorbing the platform and stdlib documents | Contracts at run time | not checked | none given | not assessed | — |
-| 103 | [OPEN-126](#OPEN-126) | absorbing the platform and stdlib documents | Target assumptions | not checked | none given | not assessed | — |
-| 104 | [OPEN-127](#OPEN-127) | absorbing the platform and stdlib documents | UTF-8 in every `String` | not checked | none given | not assessed | — |
-| 105 | [OPEN-128](#OPEN-128) | absorbing the compiler documents and the grammar comments | `->` between a match arm's pattern and body | not checked | none given | not assessed | — |
-| 106 | [OPEN-129](#OPEN-129) | absorbing the compiler documents and the grammar comments | Type arguments of an enum literal taken from its expected type | not checked | none given | not assessed | — |
-| 107 | [OPEN-130](#OPEN-130) | absorbing the compiler documents and the grammar comments | Unlabeled pattern binders: by position or by name | not checked | none given | not assessed | — |
-| 108 | [OPEN-131](#OPEN-131) | absorbing the compiler documents and the grammar comments | `union` declarations | not checked | none given | not assessed | — |
-| 109 | [OPEN-132](#OPEN-132) | absorbing the compiler documents and the grammar comments | Polymorphic recursion | not checked | none given | not assessed | — |
-| 110 | [OPEN-133](#OPEN-133) | absorbing the compiler documents and the grammar comments | User functions named `print`, `println` or `append` | not checked | none given | not assessed | — |
-| 111 | [OPEN-134](#OPEN-134) | reviewing the absorption of docs/stdlib | The capabilities of a container's generated destruction | not checked | none given | not assessed | — |
+| 81 | [OPEN-115](#OPEN-115) | absorption | The body and totality of a specification function | not applicable | none given (raised while absorbing docs/verification) | not assessed | — |
+| 82 | [OPEN-116](#OPEN-116) | absorption | A checked total function category | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
+| 83 | [OPEN-117](#OPEN-117) | absorption | `old`, quantifiers and implication in contracts | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
+| 84 | [OPEN-118](#OPEN-118) | absorption | A proven run-time violation in trusted code | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
+| 85 | [OPEN-119](#OPEN-119) | absorption | Buffered output when the process aborts | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
+| 86 | [OPEN-120](#OPEN-120) | absorption | A vacuous contract | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
+| 87 | [OPEN-121](#OPEN-121) | absorption | Projections from a base that is not a traceable place | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
+| 88 | [OPEN-122](#OPEN-122) | absorbing the platform and stdlib documents | A `repr(C)` struct returned from an extern function | not checked | none given | not assessed | — |
+| 89 | [OPEN-123](#OPEN-123) | absorbing the platform and stdlib documents | `as` on a newtype outside its module | no newtype (OPEN-54's comparison) | none given | not assessed | — |
+| 90 | [OPEN-124](#OPEN-124) | absorbing the platform and stdlib documents | Profiles in the specification | not checked | none given | not assessed | — |
+| 91 | [OPEN-125](#OPEN-125) | absorbing the platform and stdlib documents | Contracts at run time | not checked | none given | not assessed | — |
+| 92 | [OPEN-126](#OPEN-126) | absorbing the platform and stdlib documents | Target assumptions | not checked | none given | not assessed | — |
+| 93 | [OPEN-127](#OPEN-127) | absorbing the platform and stdlib documents | UTF-8 in every `String` | not checked | none given | not assessed | — |
+| 94 | [OPEN-128](#OPEN-128) | absorbing the compiler documents and the grammar comments | `->` between a match arm's pattern and body | not applicable | none given | not assessed | — |
+| 95 | [OPEN-129](#OPEN-129) | absorbing the compiler documents and the grammar comments | Type arguments of an enum literal taken from its expected type | type parameters are inferred from the arguments, and a declaration's type can disambiguate | none given | not assessed | — |
+| 96 | [OPEN-130](#OPEN-130) | absorbing the compiler documents and the grammar comments | Unlabeled pattern binders: by position or by name | not applicable (no punning) | none given | not assessed | — |
+| 97 | [OPEN-131](#OPEN-131) | absorbing the compiler documents and the grammar comments | `union` declarations | no unions | none given | not assessed | — |
+| 98 | [OPEN-132](#OPEN-132) | absorbing the compiler documents and the grammar comments | Polymorphic recursion | not checked | none given | not assessed | — |
+| 99 | [OPEN-133](#OPEN-133) | absorbing the compiler documents and the grammar comments | User functions named `print`, `println` or `append` | not applicable | none given | not assessed | — |
+| 100 | [OPEN-134](#OPEN-134) | reviewing the absorption of docs/stdlib | The capabilities of a container's generated destruction | not assessed | none given | not assessed | — |
+| 101 | [OPEN-135](#OPEN-135) | reviewing the absorption of docs/compiler and docs/platform | A method's `Type_method` name in its module's namespace | not checked | none given | not assessed | — |
+| 102 | [OPEN-136](#OPEN-136) | reviewing the absorption of docs/compiler and docs/platform | std's `process_exit` | not checked | none given | not assessed | — |
 
 <a id="OPEN-33"></a>
 #### OPEN-33. Inline submodules under one file per module
@@ -11797,7 +11825,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 <a id="OPEN-99"></a>
 #### OPEN-99. The names of the named conversions
 
-**OPEN-99@1.** The spellings of the named conversions of ARITH-5, ARITH-10 and ARITH-11 (`try_convert`, `truncate`, `reinterpret`, `to_float`, and the float roundings `trunc`, `round`, `floor`, `ceil`) are an open owner decision (OD99).
+**OPEN-99@1.** The spellings of the named conversions of ARITH-5, ARITH-10 and ARITH-11 (`try_convert`, `truncate`, `reinterpret`, the integer-to-float and `f64`-to-`f32` conversions, and the float roundings `trunc`, `round`, `floor`, `ceil`) are an open owner decision (OD99).
 
 - Kind: open
 - Uses: none
@@ -11808,7 +11836,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on ARITH-5, ARITH-10, ARITH-11. Current main: none of them exists (E0101). ARITH-5's sentence names `truncate` and `reinterpret`, while the archived [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md) §8.2 calls its spellings indicative, to be fixed by the API's owner; it names the integer-to-float and `f64`-to-`f32` conversions by their rounding only, and `to_float` is this specification's placeholder for them. Options: (a) the spellings above, as builtins; (b) other names, or std functions rather than builtins. Austral: not checked. Raised by the absorption of ARITHMETIC_POLICY.md (2026-10-30).
+**Rationale.** Bears on ARITH-5, ARITH-10, ARITH-11. Current main: none of them exists (E0101). ARITH-5's sentence names `truncate` and `reinterpret`, while the archived [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md) §8.2 calls its spellings indicative, to be fixed by the API's owner; it names the integer-to-float and `f64`-to-`f32` conversions by their rounding only. Options: (a) the spellings above, as builtins; (b) other names, or std functions rather than builtins. Austral: not checked. Raised by the absorption of ARITHMETIC_POLICY.md (2026-10-30).
 
 <a id="OPEN-100"></a>
 #### OPEN-100. Comparisons on a type parameter
@@ -11925,7 +11953,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 <a id="OPEN-109"></a>
 #### OPEN-109. Specializations that differ only in a function type's capabilities
 
-**OPEN-109@1.** Whether two instantiations of a generic function whose type arguments differ only in the capability set of a function type are two specializations with distinct symbols or one is an open owner decision (OD109).
+**OPEN-109@1.** Whether the symbol of a generic function's instantiation includes the capability set of a function-type argument, so that two instantiations that differ only in that set have distinct symbols, is an open owner decision (OD109).
 
 - Kind: open
 - Uses: none
@@ -11936,7 +11964,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on TYPE-17, TYPE-18. Current main: one: `pick<T: Copy>` instantiated at `fn(Int) -> Int` and at `fn(Int) with(Console) -> Int` emits the single function `pick_for_Fn_T_Int_to_Int_E`, because Mono's `tyToSuffix` drops a function type's capability set while it keeps a struct's capability arguments (E0809's history), and the program runs correctly since capabilities have no run-time representation (TYPE-18). The archived [HANDLE_CAPABILITIES.md](../archive/design-records/HANDLE_CAPABILITIES.md) R8 required collision-free symbol identity across instantiations and left code sharing to its own argument. Options: (a) two specializations, the set part of the symbol, as for struct capability arguments; (b) one specialization, stated as erasure with its correctness argument. Austral: not applicable (capabilities are values). Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
+**Rationale.** Bears on TYPE-17, TYPE-18. Current main: one: `pick<T: Copy>` instantiated at `fn(Int) -> Int` and at `fn(Int) with(Console) -> Int` emits the single function `pick_for_Fn_T_Int_to_Int_E`, because Mono's `tyToSuffix` drops a function type's capability set while it keeps a struct's capability arguments (E0809's history), and the program runs correctly since capabilities have no run-time representation (TYPE-18). The archived [HANDLE_CAPABILITIES.md](../archive/design-records/HANDLE_CAPABILITIES.md) R8 required collision-free symbol identity across instantiations and left code sharing to its own argument. Options: (a) the set is part of the symbol, as for struct capability arguments; (b) it is not, one symbol serving both, stated as erasure with its correctness argument. Whether two symbols share one body stays an implementation choice (TYPE-18). Austral: not applicable (capabilities are values). Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
 
 <a id="OPEN-110"></a>
 #### OPEN-110. Enums at the foreign boundary
@@ -11952,7 +11980,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on FFI-3, FFI-7. Current main: refused: `extern fn f(x: E)` with `enum Copy E { A, B }` is E0574 (a non-FFI-safe parameter); only scalars, raw pointers and `repr(C)` structs cross. [LAYOUT_CONTRACT.md](../archive/design-records/LAYOUT_CONTRACT.md) says both that enums must not cross (§3.2) and that they cross as integers (§3.3). Options: (a) refused, as main; (b) a fieldless enum crosses as an integer of a stated width, which needs a stated discriminant for each variant. Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
+**Rationale.** Bears on FFI-3, FFI-7. Current main: refused: `extern fn f(x: E)` with `enum Copy E { A, B }` is E0574 (a non-FFI-safe parameter); only scalars, raw pointers and `repr(C)` structs cross. The design record [LAYOUT_CONTRACT.md](../archive/design-records/LAYOUT_CONTRACT.md) says enums must not cross (§3.2); before it was archived it also said they cross as integers. Options: (a) refused, as main; (b) a fieldless enum crosses as an integer of a stated width, which needs a stated discriminant for each variant. Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
 
 <a id="OPEN-111"></a>
 #### OPEN-111. Misaligned fields of a packed struct
@@ -12000,7 +12028,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on TRUST-5, TRUST-12, OWN-5, OWN-8. Current main: both are accepted in trusted code only (elsewhere E0290 under OWN-8 and E0287 under OWN-5): std's collections destroy an element through `(p as &T)` in drop glue after its owner was consumed, and a trusted function may free a buffer it has emptied. The archived [MEMORY_SEMANTICS.md](../archive/design-records/MEMORY_SEMANTICS.md) §11 said that `trusted` does not relax linearity, and TRUST-5's rationale says the same. Options: (a) keep both, each a named trusted operation with its premise (the owner was consumed; the vector is empty); (b) remove them, drop glue moving the element out of raw memory instead (TRUST-7). Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
+**Rationale.** Bears on TRUST-5, TRUST-12, OWN-5, OWN-8. Current main: both are accepted in trusted code only (elsewhere E0290 under OWN-8 and E0287 under OWN-5): std's collections destroy an element through `(p as &T)` in drop glue after its owner was consumed, and a trusted function may free a buffer it has emptied. The archived [MEMORY_SEMANTICS.md](../archive/design-records/MEMORY_SEMANTICS.md) §11 said that `trusted` does not relax linearity, and TRUST-5's rationale says the same. Options: (a) keep both, each a named trusted operation with its premise (the owner was consumed; the vector is empty); (b) remove both, drop glue moving the element out of raw memory instead (TRUST-7); (c) keep only destruction through a reference; (d) keep only `vec_free` of an emptied vector. Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
 
 <a id="OPEN-114"></a>
 #### OPEN-114. How integer division rounds
@@ -12016,7 +12044,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on ARITH-3, ARITH-8. Current main: the quotient is truncated toward zero and a nonzero remainder has the sign of the dividend, as C99 and LLVM's `sdiv` and `srem` give (`-7 / 2` is `-3`, `-7 % 2` is `-1`, `7 % -2` is `1`), in the binary, the interpreter and the constant folder (`IntArith.evalIntBinOp`). The archived [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md) states when division aborts (§5) but not how it rounds. Options: (a) truncation toward zero, as main; (b) floored division, the remainder taking the divisor's sign; (c) Euclidean division, the remainder never negative. Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
+**Rationale.** Bears on ARITH-3. Current main: the quotient is truncated toward zero and a nonzero remainder has the sign of the dividend, as C99 and LLVM's `sdiv` and `srem` give (`-7 / 2` is `-3`, `-7 % 2` is `-1`, `7 % -2` is `1`), in the binary, the interpreter and the constant folder (`IntArith.evalIntBinOp`). The archived [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md) states when division aborts (§5) but not how it rounds. Options: (a) truncation toward zero, as main; (b) floored division, the remainder taking the divisor's sign; (c) Euclidean division, the remainder never negative. Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
 
 <a id="OPEN-115"></a>
 #### OPEN-115. The body and totality of a specification function
@@ -12240,7 +12268,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on SYN-1 and PAT-7. Current main: the parser accepts both (`parseMatchArms`; `2 -> { return 42; }` exits 42 on both consumers), and the grammar's `match_arm` has only `=>`. The syntax freeze review (2026-04, [SYNTAX_FREEZE_REVIEW.md](../archive/design-records/SYNTAX_FREEZE_REVIEW.md) §1.5) recommended `=>` as the canonical form with a warning for `->`, which also spells a return type. Options: (a) `=>` only, `->` refused; (b) both accepted. Austral: not applicable. Pick: none given (raised by the absorption of docs/compiler, 2026-10-30).
+**Rationale.** Bears on SYN-1 and PAT-7. Current main: the parser accepts both (`parseMatchArms`; `2 -> { return 42; }` exits 42 on both consumers), and the grammar's `match_arm` has only `=>`. The syntax freeze review (2026-04, [SYNTAX_FREEZE_REVIEW.md](../archive/design-records/SYNTAX_FREEZE_REVIEW.md) §1.5) recommended `=>` as the canonical form with a warning for `->`, which also spells a return type. Options: (a) `=>` only, `->` refused; (b) both accepted; (c) both accepted, with a warning on `->`, as the freeze review recommended. Austral: not applicable. Pick: none given (raised by the absorption of docs/compiler, 2026-10-30).
 
 <a id="OPEN-129"></a>
 #### OPEN-129. Type arguments of an enum literal taken from its expected type
@@ -12337,6 +12365,38 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Evidence: open
 
 **Rationale.** Bears on OWN-13, TYPE-D1 and TRUST-4. Current main: OWN-13 is enforced, so a `Destroy` implementation requires no capability beyond `Alloc`, and a container's generated destruction is `with(Alloc)`. [RUNTIME_COLLECTIONS.md](../stdlib/RUNTIME_COLLECTIONS.md) rule 3 describes a different model, in which the generated destruction requires the union of its element, key and value destructors' capabilities, computed per instantiation, and calls today's limit a first-release restriction. Options: (a) keep OWN-13's limit, so destruction never needs more than `Alloc`; (b) lift it, so a `Destroy` implementation may require further capabilities and a container's destruction requires their union per instantiation. Austral: not assessed. Pick: none given (raised by the review of the absorption of docs/stdlib, 2026-10-30).
+
+<a id="OPEN-135"></a>
+#### OPEN-135. A method's `Type_method` name in its module's namespace
+
+**OPEN-135@1.** Whether an impl method `m` of a type `T` also occupies the name `T_m` in its module, so that a free function of that name is refused, is an open owner decision (OD135).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD135
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on MOD-3 and MOD-8. Current main: refused: `fn P_get(a: Int) -> Int` beside `impl P { fn get(&self) -> Int }` is E0299 under MOD-3@2 ("a function named 'P_get' is also declared in this module as an impl method"), on both consumers, because the method is entered under its mangled name. MOD-3's reserved names are the `__` prefix, `user_main` and the builtins, which do not include such names. Options: (a) keep it, listing `T_m` among the names MOD-3 reserves; (b) stop entering methods under `T_m`, so the free function is accepted. Austral: not applicable (no methods). Pick: none given (raised by the review of the absorption of docs/compiler, 2026-10-30).
+
+<a id="OPEN-136"></a>
+#### OPEN-136. std's `process_exit`
+
+**OPEN-136@1.** Whether std keeps `process_exit`, which ends the process through libc `exit` without running any deferred call or consuming the caller's owned values, is an open owner decision (OD136).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD136
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on STMT-7, OWN-2 and TRUST-4. Current main: `std.process.process_exit(code: i32) with(Process)` exists and calls libc `exit`; the language itself has no exit operation (STMT-7). The design record [MAIN_EXIT_MODEL.md](../platform/MAIN_EXIT_MODEL.md) calls an exit operation deliberately absent, since in a linear language it would bypass the proof that every owned value is consumed. Options: (a) keep it, stating that it skips cleanup and that `Process` is what grants it; (b) remove it, status flowing back through `main`'s return only. Austral: not checked. Pick: none given (raised by the review of the absorption of docs/platform, 2026-10-30).
 
 ### Decided
 

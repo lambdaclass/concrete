@@ -191,7 +191,40 @@ the same declaration twice binds the name to one declaration and is accepted. Th
 are the `__` prefix, `user_main` and the builtins a program may call but not redefine; they are
 reserved for functions only, and a `let` spelling the compiler reserves is SYN-3.
 Main also counts an impl method under its definition name `Type_method`, so a free function
-`P_get` beside `impl P { fn get(&self) ... }` in one module is refused with E0299.
+`P_get` beside `impl P { fn get(&self) ... }` in one module is refused with E0299; whether a method
+should occupy that name is OPEN-135.
+
+```con reject name=method-mangled-name code=E0299 stage=check pair=method-beside-free-function
+struct Copy P { x: Int }
+impl P {
+    fn get(&self) -> Int {
+        return self.x;
+    }
+}
+fn P_get(a: Int) -> Int {
+    return a;
+}
+fn main() -> Int {
+    let p: P = P { x: 3 };
+    return p.get() + P_get(4);
+}
+```
+
+```con accept name=method-beside-free-function exit=7
+struct Copy P { x: Int }
+impl P {
+    fn get(&self) -> Int {
+        return self.x;
+    }
+}
+fn get_p(a: Int) -> Int {
+    return a;
+}
+fn main() -> Int {
+    let p: P = P { x: 3 };
+    return p.get() + get_p(4);
+}
+```
 
 ```con reject name=import-clashes-with-local code=E0299 stage=check pair=renamed-import
 mod a {

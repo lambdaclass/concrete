@@ -33,7 +33,7 @@ This is the same choice Rust and Go make. It is not the same as C (unspecified e
 - Linear: consumed exactly once, typically via `drop` ([OWN-D1](../spec/ownership.md#OWN-D1), [OWN-2](../spec/ownership.md#OWN-2)).
 - Allocation visible via `with(Alloc)`.
 - Growable. Internal buffer may be reallocated on append.
-- Contents must be valid UTF-8.
+- Contents are meant to be valid UTF-8; main does not enforce it ([OPEN-127](../spec/decisions.md#OPEN-127)).
 
 ### `&String` (borrowed, immutable view of an owned String)
 

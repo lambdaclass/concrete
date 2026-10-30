@@ -39,7 +39,7 @@ Exactly four annotations form the stable layout surface. No other `repr` forms a
 |---|---|---|---|
 | *(none)* | struct, enum | **Opaque.** Compiler may change field order, padding, tag size, or discriminant. | — |
 | `#[repr(C)]` | struct | **Guaranteed.** C-compatible in-memory layout: declaration field order, standard padding, alignment. | No type parameters. All fields must be FFI-safe. |
-| `#[repr(packed)]` | struct | **Guaranteed.** Declaration field order, no padding between fields. | Must not contain types whose alignment exceeds the field position (not checked on main; open owner decision [OPEN-111](../../spec/decisions.md#OPEN-111)). |
+| `#[repr(packed)]` | struct | **Guaranteed.** Declaration field order, no padding between fields. | Whether a field may sit at an offset below its alignment is open ([OPEN-111](../../spec/decisions.md#OPEN-111)); main does not check it. |
 | `#[repr(align(N))]` | struct | **Guaranteed.** Minimum alignment of `N` bytes, where `N` is a power of two. May be combined with `#[repr(C)]`. Nothing about field order or offsets. | `N` a power of two (E0577). Today `N` may not exceed the struct's natural alignment (E0585, bug 037: over-aligned declarations are not yet emitted), so the attribute is accepted only where it is a no-op. |
 
 Any other annotation (`#[repr(transparent)]`, `#[repr(Rust)]`, integer-tagged enums, `u8`-repr enums, etc.) is **not** part of the first-release contract and is not accepted by the checker at freeze. See section 6 for reconsideration triggers.
@@ -71,7 +71,7 @@ Everything else is opaque. Specifically:
 
 Opaque does not mean hidden — the compiler will still emit layout facts in reports (section 5). It means the facts are not promises the language is willing to defend across versions or across targets.
 
-### 3.3 What code may rely on, and who owns layout (normative, decided 2026-10-21)
+### 3.3 What code may rely on, and who owns layout (decided 2026-10-21)
 
 The language rules are FFI-7, FFI-8 and FFI-12 of [the specification's FFI chapter](../../spec/ffi.md#FFI-7).
 
