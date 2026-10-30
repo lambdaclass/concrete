@@ -119,8 +119,12 @@ printf '%s/%s\n' research README.md > "$TMPD/research.paths"
 if select_fixture research "$TMPD/research.paths"; then
   must research check_doc_links.sh
   n="$(count research)"
-  if [ "$n" -le 3 ]; then ok "a research-note diff selects $n gate command(s)"
-  else no "a research-note diff selects $n gate commands (> 3)"; fi
+  # Up to 5: the link gate, the hole-status gate, and the fast surface gates (plain and --mutate), which
+  # run the spec gate. Its S13 check reads docs/spec/absorb_inventory.tsv, and that file names every
+  # documentation file, so editing or deleting any note can change its verdict. Corpus runners must
+  # still never be selected (checked for the docs-only diff above).
+  if [ "$n" -le 5 ]; then ok "a research-note diff selects $n gate command(s)"
+  else no "a research-note diff selects $n gate commands (> 5)"; fi
 fi
 
 echo "=== rules: compiler, shared library, fail-safe ==="
