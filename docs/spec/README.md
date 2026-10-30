@@ -451,6 +451,11 @@ LANGUAGE_GAPS (now `docs/archive/LANGUAGE_GAPS.md`, a historical record) and KNO
 migrated, because they record open problems, not rules. A gap or hole that a rule will close is that rule's `partial` or `pending` tracking ID,
 and the record cites the rule's ID.
 
+`absorb_inventory.tsv` is the plan for the rest of the absorption (R-0555 (b)): every statement about the
+language found outside this directory, in any document, the grammar, the website guide or the paper, with
+its verdict (a duplicate of an entry, missing, or in conflict with one) and its target chapter or owner
+question. It is a plan, not a rule; S13 keeps the files it names in step with the tree.
+
 The migration is complete when no `unmigrated` row remains in `codes.tsv` and every row of
 the inventory above is a chapter in the pilot state. From then on S3 refuses any new
 `unmigrated` row. That an area is covered at all is a property of this inventory, which is

@@ -8,6 +8,11 @@ whose file is gone is refused (delete the row with the file), and a row added re
 revision is refused (the list only shrinks). Absorbing a document moves its rules into entries and
 its useful rationale under them, its tracking material to ROADMAP or KNOWN_HOLES, and deletes it.
 
+docs/spec/absorb_inventory.tsv is the wider plan: every statement about the language found anywhere
+outside docs/spec, with its target. Every file it names must exist, with one `*` verdict row, so a slice
+that deletes or moves a file updates the plan in the same commit, and every unabsorbed docs/language
+file must be in it.
+
 This is a source check with no compiler, run by check_docs_drift.sh on every push. It lives apart
 from spec.py so that the gates which run the compiler do not depend on every docs/language file.
 
@@ -55,7 +60,42 @@ def check(root, base=None):
             for k in listed:
                 if k not in before:
                     fails.append(f"{LIST}: {k} was added relative to {base} (the list only shrinks)")
+    fails += check_inventory(root, listed)
     return fails, len(listed)
+
+
+INVENTORY = "docs/spec/absorb_inventory.tsv"
+ACTIONS = {"cite", "absorb", "open", "rationale", "none", "keep", "cite-only", "design-record", "absorb-delete"}
+
+
+def check_inventory(root, listed):
+    """The absorption inventory (slice 0's plan): every row has eight cells and a known action, every
+    file it names exists (a slice that deletes a file removes its rows in the same commit), every file
+    has exactly one `*` verdict row, and every unabsorbed docs/language file is in it."""
+    p = os.path.join(root, INVENTORY)
+    if not os.path.exists(p):
+        return [f"{INVENTORY} is missing"]
+    fails, verdicts, files = [], {}, set()
+    for i, l in enumerate(open(p, encoding="utf-8").read().split("\n"), 1):
+        if not l.strip() or l.startswith("#") or l.startswith("file\t"):
+            continue
+        c = l.split("\t")
+        if len(c) != 8:
+            fails.append(f"{INVENTORY}:{i}: {len(c)} cells, not 8"); continue
+        if c[6] not in ACTIONS:
+            fails.append(f"{INVENTORY}:{i}: unknown action '{c[6]}'")
+        files.add(c[0])
+        if c[1] == "*":
+            verdicts[c[0]] = verdicts.get(c[0], 0) + 1
+    for f in sorted(files):
+        if not os.path.exists(os.path.join(root, f)):
+            fails.append(f"{INVENTORY}: {f} no longer exists (remove its rows in the commit that deletes or moves it)")
+        if verdicts.get(f, 0) != 1:
+            fails.append(f"{INVENTORY}: {f} has {verdicts.get(f, 0)} `*` verdict rows, not 1")
+    for f in sorted(listed):
+        if f not in files:
+            fails.append(f"{INVENTORY}: {f} is listed in {LIST} but has no inventory rows")
+    return fails
 
 
 def default_base(root):
@@ -74,6 +114,13 @@ def self_test(root):
         # works whatever is left to absorb, an empty list and no docs/language included
         d = tempfile.mkdtemp()
         shutil.copytree(os.path.join(root, "docs/spec"), os.path.join(d, "docs/spec"))
+        # the inventory names files across the repository: keep only the rows the copy can resolve
+        inv = os.path.join(d, INVENTORY)
+        if os.path.exists(inv):
+            keep = [l for l in open(inv, encoding="utf-8").read().split("\n")
+                    if not l.strip() or l.startswith("#") or l.startswith("file\t")
+                    or l.split("\t")[0].startswith(("docs/spec/", "docs/language/"))]
+            open(inv, "w", encoding="utf-8").write("\n".join(keep))
         if os.path.isdir(os.path.join(root, "docs/language")):
             shutil.copytree(os.path.join(root, "docs/language"), os.path.join(d, "docs/language"))
         else:
@@ -82,9 +129,13 @@ def self_test(root):
     def deleted_with_row(d):
         open(os.path.join(d, LIST), "a").write("docs/language/PLANTED.md\tREADME\n")
         # listed, then deleted: the row stays behind
+    def inventory_row_of_gone_file(d):
+        open(os.path.join(d, INVENTORY), "a").write(
+            "docs/language/GONE.md\t*\tplanted\t-\t-\t-\tkeep\t\n")
     for name, plant, frag in (
             ("a new document under docs/language", lambda d: open(os.path.join(d, "docs/language/NEW_RULES.md"), "w").write("# new\n"), "NEW_RULES.md is a new document"),
-            ("a listed document deleted without its row", deleted_with_row, "PLANTED.md no longer exists")):
+            ("a listed document deleted without its row", deleted_with_row, "PLANTED.md no longer exists"),
+            ("an inventory row whose file is gone", inventory_row_of_gone_file, "GONE.md no longer exists")):
         d = scratch(); plant(d)
         fails, _ = check(d)
         if any(frag in f for f in fails): print(f"  ok   control: {name} is refused")
@@ -116,7 +167,7 @@ def main():
     else:
         fails, n = res
     for f in fails: print(f"  FAIL [S13] {f}")
-    if not fails: print(f"  ok   S13 one specification: {n} docs/language files still to absorb, none new")
+    if not fails: print(f"  ok   S13 one specification: {n} docs/language files still to absorb, none new; the absorption inventory names only existing files")
     sys.exit(1 if fails else 0)
 
 

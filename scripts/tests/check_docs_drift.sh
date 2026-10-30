@@ -339,7 +339,7 @@ else
   no "docs/language gained a document, or unabsorbed.tsv is out of step with it"
 fi
 if out="$(python3 scripts/spec/one_spec.py --self-test 2>&1)"; then
-  ok "S13 controls: a new docs/language document and a deleted one with its row kept are refused"
+  ok "S13 controls: a new docs/language document, a deleted one with its row kept and an inventory row of a gone file are refused"
 else
   printf '%s\n' "$out" | grep 'FAIL' | sed 's/^  FAIL /    /'
   no "an S13 control was not refused"
