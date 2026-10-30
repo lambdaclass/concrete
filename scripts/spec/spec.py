@@ -916,7 +916,9 @@ def check_sites(spec, src_dir, lean_out):
                 if m.group(1) not in live:
                     fail("S7", f"{os.path.relpath(p, ROOT)}:{i+1}: `spec: {m.group(1)}` names no live entry"); bad += 1
     with open(lean_out, "w") as f:
-        f.write("import Concrete\nopen Lean Elab Command in\n#eval show CommandElabM Unit from do\n"
+        # One #eval per chunk of names: a single do-block holding every name nests one match per
+        # name, and Lean's elaborator hits its maximum recursion depth past about 240 of them.
+        head = ("open Lean Elab Command in\n#eval show CommandElabM Unit from do\n"
                 "  let env ← getEnv\n"
                 "  let all := env.constants.toList.map (·.1)\n"
                 "  -- a `private` declaration is stored under a mangled name; resolve it by its user name\n"
@@ -925,7 +927,9 @@ def check_sites(spec, src_dir, lean_out):
                 "    | some ci => some ci\n"
                 "    | none => (all.find? (fun m => privateToUserName? m == some n)).bind env.find?\n"
                 "  let std := #[``propext, ``Classical.choice, ``Quot.sound]\n")
-        for n, want, rid in names:
+        f.write("import Concrete\n")
+        for k, (n, want, rid) in enumerate(names):
+            if k % 50 == 0: f.write(head)
             f.write(f"  match find `{n} with\n")
             f.write(f"  | none => logInfo m!\"SPEC-LEAN missing {n} {rid}\"\n")
             if want == "thm":
