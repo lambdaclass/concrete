@@ -4,7 +4,11 @@
 (*                                                                  *)
 (* This grammar is the single source of truth for the language's    *)
 (* syntactic shape.  The hand-written recursive-descent parser in   *)
-(* Concrete/Parser.lean must accept exactly this language.          *)
+(* Concrete/Frontend/Parser.lean must accept exactly this language *)
+(* (SYN-1). Rules the productions do not state are entries of      *)
+(* docs/spec/syntax.md. Where a production below differs from the  *)
+(* parser or the decided language (grammar/conformance_known.tsv),  *)
+(* the resync is OPEN-77 and the missing constructs OPEN-78 to 85.  *)
 (*                                                                  *)
 (* Notation:                                                        *)
 (*   A B       -- sequence                                          *)
@@ -30,6 +34,7 @@
 (* STRING   : '"' ... '"'                                           *)
 (* CHAR     : '\'' ... '\''                                         *)
 (* LABEL    : '\'' IDENT   (e.g. 'outer)                            *)
+(* '//' starts a comment to the end of the line. Tokens: SYN-6.    *)
 
 
 (* ================================================================ *)
@@ -39,6 +44,8 @@
 program = { top_decl } ;
 
 (* The parser reads optional pub/trusted prefix, then dispatches    *)
+(* ('trusted' on an impl is refused, TRUST-5; the parser also reads *)
+(* 'union', OPEN-131, and 'cap' aliases, TRUST-4).                   *)
 (* on the keyword that follows.  Factored so each alt has a         *)
 (* distinct first token.                                            *)
 top_decl = '#' '[' attr_body ']'
@@ -112,7 +119,7 @@ type = '&' [ 'mut' ] type
      | IDENT [ type_args ]
      ;
 
-type_args = '<' type_arg { ',' type_arg } '>' ;    (* parser handles >> splitting *)
+type_args = '<' type_arg { ',' type_arg } '>' ;    (* parser handles >> splitting: SYN-7 *)
 (* A generic argument is a type or a capability argument (R-0484): `{}` is the  *)
 (* empty capability set and `A + B` a union; a lone name is classified by the   *)
 (* declaration's parameter kinds, after parsing.                                *)
@@ -193,7 +200,9 @@ impl_method = [ 'pub' ] 'fn' IDENT [ type_params ] '(' [ method_params ] ')' [ c
 (* 'match' in statement position is a statement; there is NO        *)
 (* postfix/binop continuation after the closing '}'. A match used   *)
 (* as a value appears in a value position (let/assign RHS, or the   *)
-(* trailing expression of a value block).                           *)
+(* trailing expression of a value block). SYN-8.                    *)
+(* 'break' with an expression and the C-style 'for' below are      *)
+(* removed by STMT-6 (bugs 323 and 331; resync OPEN-77).            *)
 stmt = 'let' [ 'mut' ] IDENT [ ':' type ] '=' expr ';'
      | 'return' [ expr ] ';'
      | 'if' if_tail
@@ -219,6 +228,8 @@ while_tail = 'let' enum_pattern '=' expr block
            ;
 
 (* if-let / while-let pattern: an enum variant with field bindings. *)
+(* The parser and SYN-10 spell a variant 'E::V'; '#' is stale here,  *)
+(* in match_pattern_tail and in ident_tail (OPEN-77).               *)
 enum_pattern = IDENT '#' IDENT '{' binding_list '}' ;
 
 else_tail = 'if' if_tail
@@ -251,7 +262,8 @@ block = '{' { stmt } [ expr ] '}' ;
 
 (* An arm may list several '|'-separated patterns (OR), then an       *)
 (* optional 'if' guard, before '=>'. After a pattern, '|' continues   *)
-(* the OR list, 'if' starts the guard, '=>' ends the head.            *)
+(* the OR list, 'if' starts the guard, '=>' ends the head. The      *)
+(* parser also accepts '->' there: OPEN-128.                         *)
 match_arm = match_pattern { '|' match_pattern } [ 'if' expr ] '=>' match_body [ ',' ] ;
 
 (* INT / '-' / 'true' / 'false' / IDENT have distinct first tokens.   *)
@@ -270,6 +282,7 @@ match_pattern_tail = '#' IDENT [ '{' binding_list '}' ]
                    ;
 
 (* '_' in a binding position is a wildcard (positional, not bound). *)
+(* Whether a binder binds by position or by field name: OPEN-130.   *)
 binding_list = IDENT { ',' IDENT } ;
 
 match_body = block | stmt ;
@@ -345,7 +358,7 @@ dot_ident_tail = '::' type_args call_args
 (*   'if' expr block 'else' ( block | if-expression )               *)
 (*   'match' expr '{' { match_arm } '}'                             *)
 (*                                                                  *)
-(* (if requires 'else'; match arms provide the value.) In           *)
+(* (if requires 'else', SYN-9; match arms provide the value.) In    *)
 (* STATEMENT position the same keywords parse as statements (see    *)
 (* stmt). The dispatch is by position, which the position-blind     *)
 (* LL(1) checkers cannot express, so these alternatives are         *)
@@ -373,7 +386,8 @@ primary_expr = INT
 (* with the block after an if/while/match head, which the FIRST/     *)
 (* FIRST checker does not report: in a head, `NAME {` begins a       *)
 (* struct literal, so an uppercase constant before the head's block  *)
-(* must be parenthesized (bug 212; docs/spec/syntax.md SYN-1).       *)
+(* must be parenthesized (bug 212; docs/spec/syntax.md SYN-1). The   *)
+(* decided head rule is SYN-4 (bug 318).                             *)
 ident_tail = '::' type_args [ '::' IDENT call_args ]
            | '#' IDENT [ '{' field_values '}' ]
            | call_args

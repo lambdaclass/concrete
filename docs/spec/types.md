@@ -581,6 +581,12 @@ mod bar {
 **Rationale.** Builtins (`alloc`, `free`, `destroy`, the collection intrinsics) are checked by
 their own signatures rather than by a declaration, so each misuse has its own diagnostic.
 `destroy` of a value whose type has no `Destroy` implementation is an ownership rule (OWN-13).
+The output builtins are the one exception to a fixed argument count: `print` and `println` take
+one or more arguments and `append` a `&mut String` and one or more arguments, each argument a
+`String`, `&String`, `&mut String`, `Int`, `Uint`, `i8` to `u32`, `bool` or `char`, anything else
+being E0421; they return `()`, `println` ends with a newline, and the calls they expand into need
+`Console` (print) and `Alloc` (append) under TRUST-4. Whether a program may declare its own
+function of one of these names is OPEN-133.
 
 ```con reject name=append-unsupported-argument code=E0421 stage=check pair=free-heap
 fn main() with(Alloc) -> Int {
@@ -588,6 +594,24 @@ fn main() with(Alloc) -> Int {
     append(&mut out, 1.5);
     drop_string(out);
     return 0;
+}
+```
+
+```con reject name=println-unsupported-argument code=E0421 stage=check pair=println-supported-arguments
+struct Copy S { x: Int }
+
+fn main() with(Console) -> Int {
+    let s: S = S { x: 1 };
+    println(s);
+    return 42;
+}
+```
+
+```con accept name=println-supported-arguments exit=42
+fn main() with(Console) -> Int {
+    let n: u8 = 7;
+    println("n = ", n, ' ', true);
+    return 42;
 }
 ```
 

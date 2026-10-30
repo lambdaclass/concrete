@@ -1,8 +1,11 @@
 # Capability facts — one source of truth
 
-Moved from docs/language: where the compiler keeps the capability facts; the language rule is TRUST-4 of docs/spec/trusted.md, whose rationale carries the capability-variable rule.
-
-The capability rule is TRUST-4 of [docs/spec/trusted.md](../spec/trusted.md); this document is a design record of the capability facts.
+Status: compiler design record of where the capability facts live. The spec governs the rules it
+mentions: [TRUST-4](../spec/trusted.md#TRUST-4) (requirements, capability variables, E0121),
+[TRUST-5](../spec/trusted.md#TRUST-5) (`trusted`, the two safety axes, extern effects),
+[TRAIT-9](../spec/traits.md#TRAIT-9) (impl methods against their trait, E0586),
+[OWN-13](../spec/ownership.md#OWN-13) (`Destroy` bounded by `Alloc`, E0584) and the absent effect
+system ([trusted.md, "Absent by decision"](../spec/trusted.md#absent-by-decision)).
 
 ROADMAP old Phase 6.5 #4. Capabilities/effects are the second identity-defining
 semantic axis of Concrete (after integer arithmetic, #1). This note records
@@ -207,6 +210,9 @@ effectful C function into `trusted extern`, callable with no capability at all �
 `error_trusted_extern_effect_not_absorbed.con`. Design: `HANDLE_CAPABILITIES.md` R2–R3.
 
 ## Per-method `trusted`, and the two safety axes (2026-09-25)
+
+History: the owner later decided trust is per function only, never on an `impl` block (OD22,
+[TRUST-5@2](../spec/trusted.md#TRUST-5)), so the whole-impl modifier below is gone.
 
 `trusted` was only a whole-impl modifier, so the commonest shape in a systems
 standard library — **safe to call, audited implementation** — was not expressible

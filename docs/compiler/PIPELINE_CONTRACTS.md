@@ -3,7 +3,8 @@
 **Superseded as the normative text (2026-10-23).** The boundary contracts are now preservation
 entries of the language specification, [docs/spec/pipeline.md](../spec/pipeline.md): PASS-5
 (after Check), PASS-6 (after Elab), PASS-7 (after Mono), PASS-8 (after CoreCheck), PASS-9 (after
-Lower), PASS-10 (after Emit) and PASS-11 (BackendIR, planned). Their fixtures are that chapter's
+Lower), PASS-10 (after Emit) and PASS-11 (BackendIR, planned), and PASS-12 that no stage after
+Check refuses or crashes on a program the rules accept. Their fixtures are that chapter's
 examples, run natively and with `--interp` by `scripts/tests/check_spec.sh`, which also refuses a
 lower-layer leak (`llvm-as`, the linker, a panic). `check_pipeline_contracts.sh` is retired. This
 note keeps the original rationale.

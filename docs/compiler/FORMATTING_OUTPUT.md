@@ -45,10 +45,10 @@ Two variadic forms, parallel in shape, distinct in destination:
 ### 2.1 `print(args...)` / `println(args...)` — console output
 Already shipped. Desugars at elaboration into typed `print_string` / `print_int` / `print_char` / `print_bool` calls against the `Console` capability. `println` appends a newline.
 
-Accepted argument types: `String`, `&String`, `&mut String`, `Int`/`Uint`/`i8..i32`/`u8..u32`, `bool`, `char`.
-
-Unsupported types currently emit the placeholder `"<unprintable>"`. This is a
-temporary fallback, not a contract. Phase 7 removes the ambiguity by routing
+The accepted argument types and the capability are stated in the rationale of
+[TYPE-10](../spec/types.md#TYPE-10). An unsupported type is refused at check (E0421), as for
+`append`; the `"<unprintable>"` placeholder this section once described survives only as an
+unreachable fallback in Elab. Phase 7 routes
 formatting through the `Writer` contract: built-ins render directly, and a
 user-defined type renders only if its statically-known type exposes the explicit
 `write_to(&self, w: &mut Writer) -> Result<usize, IoError>` (or `format_into`)
@@ -59,9 +59,9 @@ Shipped (2026-04-20). Variadic buffer append. First argument must be a `&mut Str
 
 Result type: `unit`. No chaining, no return value. Callers hold the buffer explicitly.
 
-Accepted argument types: same as `print`, minus console-only fallback. Unsupported types are a compile error, not a placeholder — `append` is for data construction and must not silently lossy-print.
+Accepted argument types: the same as `print` ([TYPE-10](../spec/types.md#TYPE-10)); an unsupported type is E0421.
 
-This is a compiler elaboration step, not a user-visible free function. It guards on the absence of a user-defined `append` at file scope, mirroring the `print` guard.
+This is a compiler elaboration step, not a user-visible free function. It guards on the absence of a user-defined `append` at file scope, mirroring the `print` guard; whether a program may declare such a function is [OPEN-133](../spec/decisions.md#OPEN-133).
 
 ### 2.3 Method-form alternatives remain available
 - `String::append(&mut self, other: &String)` — existing stdlib method.
@@ -77,7 +77,7 @@ The variadic `append` is a convenience; it does not replace method calls. Progra
 A format-string-based API (`format!("hello {}", name)`) is superficially more ergonomic but imports several hidden properties that Concrete's stable subset rejects:
 
 1. **Hidden allocation.** `format!` allocates a backing buffer whose size depends on runtime values. Concrete requires every allocation to be visible at the call site; a variadic typed-dispatch builtin preserves this by making the buffer argument explicit.
-2. **Parser complexity.** A format-string mini-grammar inside string literals requires either a macro system or a parser extension. Concrete's syntax freeze commits to LL(1) and rejects macros.
+2. **Parser complexity.** A format-string mini-grammar inside string literals requires either a macro system or a parser extension. Concrete's grammar is LL(1) and has no macros ([SYN-1](../spec/syntax.md#SYN-1)).
 3. **Trait-coupling.** Format strings typically drive a `Display`/`Debug` trait dispatch. Concrete's Phase 7 direction avoids that coupling: the sink is `Writer`, and user-defined rendering is an explicit static method convention, not a trait-object display surface.
 4. **Drift of conventions.** `{}`/`{:?}`/`{:x}` specifiers proliferate, and each one implies a stdlib-wide convention. Deferring lets the convention emerge from evidence (item 67) rather than be imposed up front.
 
@@ -87,7 +87,7 @@ A format-string-based API (`format!("hello {}", name)`) is superficially more er
 
 `s.append(&a).append_int(n).append(&b)` would read better than the current 3-line form. We do not pursue it now because:
 
-1. Method chaining on `&mut self` requires returning `&mut Self`. This complicates borrow-checking (the returned borrow aliases the buffer for the duration of the chain) and can mask subtle reborrow bugs.
+1. Method chaining on `&mut self` requires returning `&mut Self`, which no function may do ([REF-1](../spec/references.md#REF-1)).
 2. The variadic `append(&mut buf, ...)` form gives the same ergonomic win without changing borrow semantics.
 3. If chaining proves desirable later, it can be added as a pure stdlib change; no compiler work is required.
 

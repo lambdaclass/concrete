@@ -35,6 +35,8 @@ work only with what a name denotes: Elab and CoreCheck still look some names up 
 R-0492 moves them to identities. Bugs 039 to 045 were names resolved more than once, differently; binders
 are now keyed by identity (SCOPE-1, SCOPE-3), and declarations get the same treatment under R-0492.
 The checker repeats some lookups (E0200 to E0202, E0263, E0267) as defense in depth.
+The builtins include the enums `Option` and `Result`, which a module uses without an import; how
+a user type of the same name resolves is OPEN-43.
 
 ```con reject name=undeclared-name code=E0100 stage=resolve pair=declared-name
 fn main() -> Int {
@@ -98,6 +100,9 @@ pre-package hygiene checklist are the archived
 (several of its first-release choices, such as all fields and variants visible, were since replaced
 by TYPE-11 and R-0011).
 
+An import binds a name in the importing module only and does not make it `pub` there, so a module
+cannot re-export what it imports, and `pub import` is a parse error (SYN-1).
+
 ```con reject name=import-private code=E0111 stage=resolve pair=import-public
 mod a {
     fn hidden() -> Int {
@@ -128,6 +133,27 @@ mod b {
     pub fn g() -> Int {
         return secret();
     }
+}
+```
+
+```con reject name=reexport code=E0111 stage=resolve pair=import-public
+mod a {
+    pub fn f() -> Int {
+        return 42;
+    }
+}
+mod b {
+    import a.{f};
+}
+mod c {
+    import b.{f};
+    pub fn g() -> Int {
+        return f();
+    }
+}
+import c.{g};
+fn main() -> Int {
+    return g();
 }
 ```
 
@@ -164,6 +190,8 @@ lookup met first (bug 082). Renaming on import (`import a.{f as g}`) resolves a 
 the same declaration twice binds the name to one declaration and is accepted. The reserved names
 are the `__` prefix, `user_main` and the builtins a program may call but not redefine; they are
 reserved for functions only, and a `let` spelling the compiler reserves is SYN-3.
+Main also counts an impl method under its definition name `Type_method`, so a free function
+`P_get` beside `impl P { fn get(&self) ... }` in one module is refused with E0299.
 
 ```con reject name=import-clashes-with-local code=E0299 stage=check pair=renamed-import
 mod a {

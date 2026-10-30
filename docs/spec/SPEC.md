@@ -15,6 +15,11 @@ the first chapter.
   - [SYN-3. Compiler spellings are reserved](#SYN-3)
   - [SYN-4. A struct literal in a condition head is parenthesized](#SYN-4)
   - [SYN-5. Source text and string literals are UTF-8](#SYN-5)
+  - [SYN-6. Tokens](#SYN-6)
+  - [SYN-7. `>>` closes two type-argument lists](#SYN-7)
+  - [SYN-8. A `match` that begins a statement is a statement](#SYN-8)
+  - [SYN-9. A value `if` has an `else`](#SYN-9)
+  - [SYN-10. The separators `.` and `::`](#SYN-10)
 - [Modules and Names](#ch-modules)
   - [MOD-1. Every name resolves to one declaration](#MOD-1)
   - [MOD-2. Only `pub` declarations cross a module boundary](#MOD-2)
@@ -299,6 +304,12 @@ the first chapter.
   - [OPEN-125. Contracts at run time](#OPEN-125)
   - [OPEN-126. Target assumptions](#OPEN-126)
   - [OPEN-127. UTF-8 in every `String`](#OPEN-127)
+  - [OPEN-128. `->` between a match arm's pattern and body](#OPEN-128)
+  - [OPEN-129. Type arguments of an enum literal taken from its expected type](#OPEN-129)
+  - [OPEN-130. Unlabeled pattern binders: by position or by name](#OPEN-130)
+  - [OPEN-131. `union` declarations](#OPEN-131)
+  - [OPEN-132. Polymorphic recursion](#OPEN-132)
+  - [OPEN-133. User functions named `print`, `println` or `append`](#OPEN-133)
 
 <a id="ch-overview"></a>
 ## Overview
@@ -408,8 +419,9 @@ choice resolving with one token of lookahead, except for the FIRST/FOLLOW confli
 checkers verify it (`scripts/check_ll1.py`, `.c` and `.rs`; `scripts/tests/check_grammar_ll1.sh`
 requires them to agree and the list to only shrink). This chapter does not copy productions; it cites them
 by name and states what the productions alone do not say: that the parser accepts exactly the
-grammar (SYN-1), how operators group (SYN-2), which spellings the compiler reserves (SYN-3) and
-what a source file and a string literal are made of (SYN-5).
+grammar (SYN-1), how operators group (SYN-2), which spellings the compiler reserves (SYN-3),
+what a source file and a string literal are made of (SYN-5), the tokens (SYN-6), how `>>` closes
+type arguments (SYN-7), what position makes of `match` and `if` (SYN-8, SYN-9) and the separators (SYN-10).
 The trailing-value rule of blocks is STMT-8, and function names the compiler reserves are MOD-3.
 
 The hand-written recursive-descent parser (`Concrete/Frontend/Parser.lean`) follows the grammar
@@ -515,6 +527,109 @@ fn main() -> Int {
     let mut n: Int = 20;
     if (n > LIMIT) { n = LIMIT; }
     return n + 26;
+}
+```
+
+The token forms (SYN-6), the statement `match` (SYN-8), the value `if` (SYN-9) and the separators
+(SYN-10) are refused here when broken:
+
+```con reject name=float-exponent code=E0001 stage=parse pair=float-digits
+fn main() -> Int {
+    let f: f64 = 1e3;
+    return 42;
+}
+```
+
+```con accept name=float-digits exit=42
+fn main() -> Int {
+    let f: f64 = 1000.0;
+    return 42;
+}
+```
+
+```con reject name=block-comment code=E0001 stage=parse pair=line-comment
+/* a block comment */
+fn main() -> Int {
+    return 42;
+}
+```
+
+```con accept name=line-comment exit=42
+// a line comment
+fn main() -> Int {
+    return 42;
+}
+```
+
+```con reject name=statement-match-continued code=E0001 stage=parse pair=value-match-continued
+fn main() -> Int {
+    let x: Int = 1;
+    match x { _ => 40 } + 2;
+    return 42;
+}
+```
+
+```con accept name=value-match-continued exit=42
+fn main() -> Int {
+    let x: Int = 1;
+    let y: Int = match x { _ => 40 } + 2;
+    return y;
+}
+```
+
+```con reject name=value-if-without-else code=E0001 stage=parse pair=value-if-else
+fn main() -> Int {
+    let c: bool = true;
+    let x: Int = if c { 42 };
+    return x;
+}
+```
+
+```con accept name=value-if-else exit=42
+fn main() -> Int {
+    let c: bool = true;
+    let x: Int = if c { 42 } else { 0 };
+    return x;
+}
+```
+
+```con reject name=hash-variant code=E0001 stage=parse pair=colon-variant
+fn main() -> Int {
+    let o: Option<Int> = Option::<Int>#Some { value: 42 };
+    match o {
+        Option::Some { value } => { return value; },
+        Option::None => { return 0; }
+    }
+}
+```
+
+```con accept name=colon-variant exit=42
+fn main() -> Int {
+    let o: Option<Int> = Option::<Int>::Some { value: 42 };
+    match o {
+        Option::Some { value } => { return value; },
+        Option::None => { return 0; }
+    }
+}
+```
+
+Outside a head, a `{` after a lowercase name does not begin a struct literal:
+
+```con reject name=lowercase-struct-literal code=E0001 stage=parse pair=uppercase-struct-literal
+struct Copy p { v: Int }
+
+fn main() -> Int {
+    let q: p = p { v: 42 };
+    return q.v;
+}
+```
+
+```con accept name=uppercase-struct-literal exit=42
+struct Copy P { v: Int }
+
+fn main() -> Int {
+    let q: P = P { v: 42 };
+    return q.v;
 }
 ```
 
@@ -673,6 +788,172 @@ fn main() -> Int {
 }
 ```
 
+<a id="SYN-6"></a>
+#### SYN-6. Tokens
+
+**SYN-6@1.** A token is an identifier (a letter or `_`, then letters, digits and `_`), an integer literal in decimal or with a `0x`, `0b` or `0o` prefix, a float literal written as digits, `.` and digits, a string literal, a char literal, a label (`'` then an identifier), a keyword, or an operator or punctuation mark, and `//` begins a comment that ends at the end of its line.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.tokenize
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** These are the grammar's terminal classes `IDENT`, `INT`, `FLOAT`, `STRING`, `CHAR`
+and `LABEL`. So a float has no exponent and no leading or trailing `.`, a literal has no suffix
+(ARITH-2), and there are no block comments and no byte-string literals (`b"..."`); each of these is
+a parse error (SYN-1). On main the escapes are `\n`, `\t`, `\r`, `\0` and `\\`, with `\"` in a
+string literal and `\'` in a char literal; any other `\` sequence is a parse error.
+
+```con accept name=token-forms exit=42
+// a line comment
+fn main() -> Int {
+    let a: Int = 0o17;
+    let b: Int = 0x1F;
+    let c: Int = 0b101;
+    let q: char = '\'';
+    let f: f64 = 1.5;
+    let mut n: Int = 0;
+    'outer: while n < 1 {
+        n = n + 1;
+        break 'outer;
+    }
+    return a + b + c + n - 10;
+}
+```
+
+<a id="SYN-7"></a>
+#### SYN-7. `>>` closes two type-argument lists
+
+**SYN-7@1.** Where a `>` closes a type-argument or type-parameter list, a `>>` token closes two nested lists, read as two `>`.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.expect
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** The lexer reads `>>` as the shift operator; the grammar's `type_args` and
+`type_params` close with `>`, and the parser splits the token there, so `Option<Option<Int>>`
+needs no space.
+
+```con accept name=nested-type-arguments exit=42
+fn main() -> Int {
+    let o: Option<Option<Int>> = Option::<Option<Int>>::Some { value: Option::<Int>::Some { value: 42 } };
+    match o {
+        Option::Some { value: inner } => {
+            match inner {
+                Option::Some { value } => { return value; },
+                Option::None => { return 1; }
+            }
+        },
+        Option::None => { return 2; }
+    }
+}
+```
+
+<a id="SYN-8"></a>
+#### SYN-8. A `match` that begins a statement is a statement
+
+**SYN-8@1.** A `match` that begins a statement is the whole statement, so no operator or postfix operation continues after its closing brace, while a `match` in a value position (the right-hand side of a `let` or an assignment, or a block's trailing value) is an expression.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.parseMatchStmt
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** The grammar's `stmt` production has a `match` alternative; the value form is
+described in the comment before `primary_expr`, because the dispatch is by position, which the
+LL(1) checkers cannot express. `match x { ... } + 2;` as a statement is a parse error (SYN-1).
+STMT-8 says which expression of a value block is its value.
+
+```con accept name=statement-and-value-match exit=42
+fn main() -> Int {
+    let x: Int = 1;
+    let mut r: Int = 0;
+    match x {
+        1 => { r = 40; },
+        _ => { r = 0; }
+    }
+    let y: Int = match x { _ => 2 } + r;
+    return y;
+}
+```
+
+<a id="SYN-9"></a>
+#### SYN-9. A value `if` has an `else`
+
+**SYN-9@1.** An `if` in a value position has an `else` branch.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.parsePrimary
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** Without an `else` the `if` would have no value when its condition is false. The
+grammar states this in the comment before `primary_expr`; `let x: Int = if c { 42 };` is a parse
+error (SYN-1).
+
+```con accept name=value-if-with-else exit=42
+fn main() -> Int {
+    let c: bool = true;
+    let x: Int = if c { 42 } else { 0 };
+    return x;
+}
+```
+
+<a id="SYN-10"></a>
+#### SYN-10. The separators `.` and `::`
+
+**SYN-10@1.** `.` selects a field or calls a method, `::` qualifies a member of a module, a variant of an enum or an associated function of a type and introduces explicit type arguments, and an import path separates its modules with `.`.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.parsePrimary, Concrete.parsePostfix
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** One qualification separator keeps the type or module visible at every use
+(SYNTAX_FREEZE_REVIEW §1.1, archived). The older `E#V` variant spelling is a parse error on main
+(SYN-1; the grammar's productions still spell it, which OPEN-77 resyncs), and a variant is always
+named through its enum: a bare `Ok(x)` is an unknown function (E0101) and `Option.None` an unknown
+variable (E0100), both under MOD-1.
+
+```con accept name=separators exit=42
+mod m {
+    pub fn base() -> Int { return 40; }
+}
+
+struct Copy P { v: Int }
+
+impl P {
+    fn make() -> P { return P { v: 1 }; }
+    fn get(&self) -> Int { return self.v; }
+}
+
+fn main() -> Int {
+    let p: P = P::make();
+    return m::base() + p.get() + p.v;
+}
+```
+
 
 <a id="ch-modules"></a>
 ## Modules and Names
@@ -712,6 +993,8 @@ work only with what a name denotes: Elab and CoreCheck still look some names up 
 R-0492 moves them to identities. Bugs 039 to 045 were names resolved more than once, differently; binders
 are now keyed by identity (SCOPE-1, SCOPE-3), and declarations get the same treatment under R-0492.
 The checker repeats some lookups (E0200 to E0202, E0263, E0267) as defense in depth.
+The builtins include the enums `Option` and `Result`, which a module uses without an import; how
+a user type of the same name resolves is OPEN-43.
 
 ```con reject name=undeclared-name code=E0100 stage=resolve pair=declared-name
 fn main() -> Int {
@@ -775,6 +1058,9 @@ pre-package hygiene checklist are the archived
 (several of its first-release choices, such as all fields and variants visible, were since replaced
 by TYPE-11 and R-0011).
 
+An import binds a name in the importing module only and does not make it `pub` there, so a module
+cannot re-export what it imports, and `pub import` is a parse error (SYN-1).
+
 ```con reject name=import-private code=E0111 stage=resolve pair=import-public
 mod a {
     fn hidden() -> Int {
@@ -805,6 +1091,27 @@ mod b {
     pub fn g() -> Int {
         return secret();
     }
+}
+```
+
+```con reject name=reexport code=E0111 stage=resolve pair=import-public
+mod a {
+    pub fn f() -> Int {
+        return 42;
+    }
+}
+mod b {
+    import a.{f};
+}
+mod c {
+    import b.{f};
+    pub fn g() -> Int {
+        return f();
+    }
+}
+import c.{g};
+fn main() -> Int {
+    return g();
 }
 ```
 
@@ -841,6 +1148,8 @@ lookup met first (bug 082). Renaming on import (`import a.{f as g}`) resolves a 
 the same declaration twice binds the name to one declaration and is accepted. The reserved names
 are the `__` prefix, `user_main` and the builtins a program may call but not redefine; they are
 reserved for functions only, and a `let` spelling the compiler reserves is SYN-3.
+Main also counts an impl method under its definition name `Type_method`, so a free function
+`P_get` beside `impl P { fn get(&self) ... }` in one module is refused with E0299.
 
 ```con reject name=import-clashes-with-local code=E0299 stage=check pair=renamed-import
 mod a {
@@ -1901,6 +2210,12 @@ mod bar {
 **Rationale.** Builtins (`alloc`, `free`, `destroy`, the collection intrinsics) are checked by
 their own signatures rather than by a declaration, so each misuse has its own diagnostic.
 `destroy` of a value whose type has no `Destroy` implementation is an ownership rule (OWN-13).
+The output builtins are the one exception to a fixed argument count: `print` and `println` take
+one or more arguments and `append` a `&mut String` and one or more arguments, each argument a
+`String`, `&String`, `&mut String`, `Int`, `Uint`, `i8` to `u32`, `bool` or `char`, anything else
+being E0421; they return `()`, `println` ends with a newline, and the calls they expand into need
+`Console` (print) and `Alloc` (append) under TRUST-4. Whether a program may declare its own
+function of one of these names is OPEN-133.
 
 ```con reject name=append-unsupported-argument code=E0421 stage=check pair=free-heap
 fn main() with(Alloc) -> Int {
@@ -1908,6 +2223,24 @@ fn main() with(Alloc) -> Int {
     append(&mut out, 1.5);
     drop_string(out);
     return 0;
+}
+```
+
+```con reject name=println-unsupported-argument code=E0421 stage=check pair=println-supported-arguments
+struct Copy S { x: Int }
+
+fn main() with(Console) -> Int {
+    let s: S = S { x: 1 };
+    println(s);
+    return 42;
+}
+```
+
+```con accept name=println-supported-arguments exit=42
+fn main() with(Console) -> Int {
+    let n: u8 = 7;
+    println("n = ", n, ' ', true);
+    return 42;
 }
 ```
 
@@ -10239,7 +10572,7 @@ fn main() -> Int {
 <a id="ch-decisions"></a>
 ## Open Owner Decisions
 
-This chapter lists the language questions that only the project owner decides: OD1 to OD127 of
+This chapter lists the language questions that only the project owner decides: OD1 to OD133 of
 [ROADMAP.md](../../ROADMAP.md#owner-decisions) (exit 2n for OD1 to OD32, exit 2q for the rest). Each entry states the question and encodes
 no answer. The rules it bears on are named in its rationale, together with what current main does,
 which stays provisional until the owner answers. The answer, when given, is recorded in ROADMAP and
@@ -10367,6 +10700,12 @@ them); they are not separate entries here
 | 102 | [OPEN-125](#OPEN-125) | absorbing the platform and stdlib documents | Contracts at run time | not checked | none given | not assessed | — |
 | 103 | [OPEN-126](#OPEN-126) | absorbing the platform and stdlib documents | Target assumptions | not checked | none given | not assessed | — |
 | 104 | [OPEN-127](#OPEN-127) | absorbing the platform and stdlib documents | UTF-8 in every `String` | not checked | none given | not assessed | — |
+| 105 | [OPEN-128](#OPEN-128) | absorbing the compiler documents and the grammar comments | `->` between a match arm's pattern and body | not checked | none given | not assessed | — |
+| 106 | [OPEN-129](#OPEN-129) | absorbing the compiler documents and the grammar comments | Type arguments of an enum literal taken from its expected type | not checked | none given | not assessed | — |
+| 107 | [OPEN-130](#OPEN-130) | absorbing the compiler documents and the grammar comments | Unlabeled pattern binders: by position or by name | not checked | none given | not assessed | — |
+| 108 | [OPEN-131](#OPEN-131) | absorbing the compiler documents and the grammar comments | `union` declarations | not checked | none given | not assessed | — |
+| 109 | [OPEN-132](#OPEN-132) | absorbing the compiler documents and the grammar comments | Polymorphic recursion | not checked | none given | not assessed | — |
+| 110 | [OPEN-133](#OPEN-133) | absorbing the compiler documents and the grammar comments | User functions named `print`, `println` or `append` | not checked | none given | not assessed | — |
 
 <a id="OPEN-33"></a>
 #### OPEN-33. Inline submodules under one file per module
@@ -11884,6 +12223,102 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Evidence: open
 
 **Rationale.** Bears on TYPE-3, SYN-5, TRUST-2. Current main: literals are UTF-8 (SYN-5), but nothing keeps a `String` valid: `push_char` appends a byte unchecked, `Bytes::to_string` transfers bytes without validation, and std's `read_to_string` does not validate. [STRING_TEXT_CONTRACT.md](../stdlib/STRING_TEXT_CONTRACT.md) §1 states the invariant as a target, and [UNICODE_POLICY.md](../stdlib/UNICODE_POLICY.md) has a validating `Bytes::to_string` returning `Option`. Options: (a) a language guarantee, every safe constructor validating and an unchecked one being a trusted operation with that premise; (b) a std convention only, `String` being bytes to the language. Austral: not checked. Pick: none given (raised by the absorption of docs/platform and docs/stdlib, 2026-10-30).
+
+<a id="OPEN-128"></a>
+#### OPEN-128. `->` between a match arm's pattern and body
+
+**OPEN-128@1.** Whether a match arm may separate its pattern from its body with `->` as well as `=>` is an open owner decision (OD128).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD128
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on SYN-1 and PAT-7. Current main: the parser accepts both (`parseMatchArms`; `2 -> { return 42; }` exits 42 on both consumers), and the grammar's `match_arm` has only `=>`. The syntax freeze review (2026-04, [SYNTAX_FREEZE_REVIEW.md](../archive/design-records/SYNTAX_FREEZE_REVIEW.md) §1.5) recommended `=>` as the canonical form with a warning for `->`, which also spells a return type. Options: (a) `=>` only, `->` refused; (b) both accepted. Austral: not applicable. Pick: none given (raised by the absorption of docs/compiler, 2026-10-30).
+
+<a id="OPEN-129"></a>
+#### OPEN-129. Type arguments of an enum literal taken from its expected type
+
+**OPEN-129@1.** Whether an enum literal or variant written without type arguments (`Option::Some { value: 42 }`, `Option::None`) takes them from the type its position expects, and from which positions, is an open owner decision (OD129).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD129
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on TYPE-7, TYPE-15 and OPEN-46, which asks the same of a generic call's type arguments and whose pick excludes the expected result type. Current main: the type arguments come from the expected type of a `return` (the function's result type), of an annotated `let` and of a call argument (the parameter's type); all three exit 42 on both consumers, and spec examples rely on it (PAT-1). The syntax freeze review (§1.3, kill-list items 1, 4 and 5) proposed this inference for enum literals and for constructor calls such as `Vec::new()`. Options: (a) explicit type arguments always; (b) from the expected type in the positions main uses; (c) the answer to OPEN-46, applied to enum literals. Austral: type parameters are inferred from the arguments, and a declaration's type can disambiguate. Pick: none given (raised by the absorption of docs/compiler, 2026-10-30).
+
+<a id="OPEN-130"></a>
+#### OPEN-130. Unlabeled pattern binders: by position or by name
+
+**OPEN-130@1.** Whether an unlabeled binder in a struct or variant pattern (`E::V { y, x }`) binds the field of its own name or the field at its position is an open owner decision (OD130).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD130
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on PAT-1, PAT-3 and PAT-10. Current main disagrees with itself: with `enum E { V { x: Int, y: Int } }` and `E::V { x: 40, y: 2 }`, the arm `E::V { y, x } => y` gives 40 in `match` and in `if let` (binders zip the variant's fields in declaration order, `Concrete/Elab/Elab.lean` `bindings.zip ev.fields`), while the struct destructuring `let S { y, x } = s; y` gives 2 (by name); both consumers agree. PAT-1's `field: binder` form and the grammar's `binding_list` comment ("positional") point different ways. Options: (a) by name (field punning) everywhere; (b) by position everywhere; (c) refuse an unlabeled list whose order differs from the declaration. Austral: not applicable (no punning). Pick: none given (raised by the absorption of docs/compiler, 2026-10-30; the variant-pattern disagreement may also be filed as a bug).
+
+<a id="OPEN-131"></a>
+#### OPEN-131. `union` declarations
+
+**OPEN-131@1.** Whether the language has `union` declarations, and if so what reading a field other than the one last written means, is an open owner decision (OD131).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD131
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on SYN-1, TYPE-7, FFI-7 and FFI-8. Current main: `union U { a: Int, b: Uint }` parses (`Concrete/Frontend/Parser.lean`, as a struct whose fields share storage) and compiles; a value built as `U { a: 42 }` is linear, and `union` is neither a keyword nor in the grammar. No document specifies it. Options: (a) remove it; (b) keep it, for the foreign boundary only, with its layout and read rules specified. Austral: no unions. Pick: none given (raised by the absorption of docs/compiler, 2026-10-30).
+
+<a id="OPEN-132"></a>
+#### OPEN-132. Polymorphic recursion
+
+**OPEN-132@1.** Whether a generic function that calls itself at a strictly larger type argument (`f::<Box<T>>` inside `f<T>`) is refused, and by which check, is an open owner decision (OD132).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD132
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on TYPE-13, PASS-7 and PASS-12. Current main: such a program is not refused; compilation does not terminate (more than 200 s and 2 GB on 2026-10-30, natively and with `--interp`), since monomorphization specializes without a bound on function instances (the bound `closeInstances` has covers only generic type definitions). [PASSES.md](../compiler/PASSES.md) §7 lists unbounded polymorphic recursion as Mono's error. Options: (a) refuse a call cycle whose type arguments grow, before Mono; (b) refuse at Mono when specialization exceeds a stated limit. Austral: not checked. Pick: none given (raised by the absorption of docs/compiler, 2026-10-30; the non-termination may also be filed as a bug).
+
+<a id="OPEN-133"></a>
+#### OPEN-133. User functions named `print`, `println` or `append`
+
+**OPEN-133@1.** Whether a program may declare a function named `print`, `println` or `append`, which then replaces the builtin of that name in calls the program writes, is an open owner decision (OD133).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD133
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on MOD-3, MOD-8 and TYPE-10. Current main: accepted; with `fn print(x: Int) -> Int`, `print(42)` calls it (exit 42 on both consumers), because Elab desugars the variadic builtins only when no function of that name is visible, and MOD-3's reserved names do not include them. MOD-8 already binds the calls the compiler itself generates by identity. Options: (a) reserve the three names (MOD-3); (b) allow the replacement, as main does. Austral: not applicable. Pick: none given (raised by the absorption of docs/compiler, 2026-10-30).
 
 ### Decided
 

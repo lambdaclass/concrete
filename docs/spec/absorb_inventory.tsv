@@ -82,6 +82,7 @@ docs/archive/design-records/HANDLE_CAPABILITIES.md	*	Design record of R-0484; it
 docs/archive/design-records/LAYOUT_CONTRACT.md	*	Design record: the layout contract; rules are FFI-7 to FFI-12 and TYPE-23	-	-	-	design-record	absorbed 2026-10-30 (phase 2 group 2); open points OPEN-110, OPEN-111, OPEN-43, OPEN-122
 docs/archive/design-records/MEMORY_SEMANTICS.md	*	Design record of the memory, borrowing and cleanup model and the exit 2i reference rules; absorbed 2026-10-30 into MEM-D1, REF-D3, TRUST-11, TRUST-12 and examples of REF-5, REF-6, REF-8; cast question OPEN-103	rule	-	references	design-record	-
 docs/archive/design-records/PATTERN_DESTRUCTURING.md	*	Design record (absorbed 2026-10-30 into PAT-10 and PAT-11); keeps the LL(1) analysis, the else-binding decision and history	rule	-	patterns	design-record	-
+docs/archive/design-records/SYNTAX_FREEZE_REVIEW.md	*	Design record of the Phase 3 syntax freeze review; its rules are SYN-1, SYN-6, SYN-10, MOD-1, MOD-2, TYPE-7, PAT-7, REF-D3, MEM-4, STMT-4, STMT-6 and ARITH-5, its open questions OPEN-128 and OPEN-129 (beside OPEN-46)	grammar	-	syntax	design-record	absorbed 2026-10-30; C-style for, # separator and trusted impl stale
 docs/archive/design-records/VALUE_MODEL.md	*	Design record (absorbed 2026-10-30 into TYPE-21, FFI-7 and FFI-8); keeps the four-cell value model and the second-class reference reasoning	rule	-	types	design-record	-
 docs/book/src/SUMMARY.md	*	No language rules: narrative, tooling or proof workflow	rule	-	-	keep	-
 docs/book/src/architecture.md	*	No language rules: narrative, tooling or proof workflow	rule	-	-	keep	-
@@ -136,142 +137,26 @@ docs/book/src/why_lean4.md	*	No language rules: narrative, tooling or proof work
 docs/book/src/why_not.md	*	Rationale page	rule	-	-	cite-only	-
 docs/book/src/why_not.md	Closures; Trait Objects	No closures; no trait objects	rule	dup:TYPE-1	types	cite	+TYPE-2
 docs/book/src/why_not.md	Why Not Contracts First	Contracts are not part of the core today	rule	stale	contracts	cite	CON-1..CON-4 specify contracts
-docs/compiler/ARCHITECTURE.md	*	Compiler architecture; 3 language restatements	rule	-	-	cite-only	-
-docs/compiler/ARCHITECTURE.md	Pass Definitions 1. Parse	Capability aliases (cap IO = File + Console;) expand at parse time	semantics	dup:TRUST-4	trusted	cite	TRUST-4 rationale
-docs/compiler/ARCHITECTURE.md	4. Elaborate	Postfix '?' is rejected by the parser	rule	dup:statements#recoverable-failure	statements	cite	-
-docs/compiler/ARCHITECTURE.md	Builtin vs stdlib boundary	alloc, free, vec_*, map_* are checker/elaboration intrinsics	builtin	dup:TYPE-10	types	cite	no spec chapter lists the builtins (spec README S-(b)); vec_*/map_* may be stale
-docs/compiler/BINDING_IDENTITY_DESIGN.md	*	Compiler design record; 2 contract-scope statements	rule	-	contracts	design-record	-
-docs/compiler/BINDING_IDENTITY_DESIGN.md	Sequence 1	Contracts naming a shadowed parameter and binder-bearing spec bodies are refused (temporary)	rule	dup:CON-3	contracts	cite	SCOPE-1 forbids shadowing; CON-3 binds no name
-docs/compiler/BINDING_IDENTITY_DESIGN.md	Q6	result is visible only in ensures	rule	dup:CON-2	contracts	cite	-
-docs/compiler/CAPABILITY_FACTS.md	*	Design record; ~15 statements, all restating TRUST-4/TRUST-5/TRAIT-9/OWN-13 or their rationales	rule	-	trusted	design-record	promote cap-variable entailment from TRUST-4 rationale to its normative text
-docs/compiler/CAPABILITY_FACTS.md	L24, L35-53	A requirement is met by a declared concrete capability, or by a capability variable only if its bound entails it; a bare cap parameter entails only itself; unknown fails closed	rule	dup:TRUST-4	trusted	cite	only in TRUST-4 rationale (trusted.md L113-122), not the normative sentence
-docs/compiler/CAPABILITY_FACTS.md	L49-53	Capabilities are checked on the generic definition before monomorphization; a cap-polymorphic call is checked against the instantiated set, Unsafe included	rule	dup:TRUST-4	trusted	cite	-
-docs/compiler/CAPABILITY_FACTS.md	L25, L29-33	Authority for an Unsafe operation is a trusted body or a cap set covering Unsafe; a capability variable never covers Unsafe	rule	dup:TRUST-5	trusted	cite	also TRUST-3/TRUST-7 'trusted or Unsafe code'
-docs/compiler/CAPABILITY_FACTS.md	L27, L197-207	An untrusted extern fn requires Unsafe plus its declared effects; a trusted extern fn requires only its declared effects; undeclared effects are E0116	rule	dup:TRUST-5	trusted	cite	+FFI-3
-docs/compiler/CAPABILITY_FACTS.md	L55-57	A capability parameter may not be spelled like a capability, Std or a capability alias (E0121)	rule	dup:TRUST-4	trusted	cite	rationale-only (trusted.md L113-114)
-docs/compiler/CAPABILITY_FACTS.md	L70-71	No algebraic effects, effect handlers, row-polymorphism syntax or implicit context	rule	new	trusted	rationale	design stance; no 'not in the language' entry for effect systems
-docs/compiler/CAPABILITY_FACTS.md	L101-103	A callback typed fn(T) with(C) -> U makes its caller require C	rule	dup:TRUST-4	trusted	cite	'function-pointer type' clause
-docs/compiler/CAPABILITY_FACTS.md	L145-151	A caller's capability union is normalized before membership, so Alloc + Unsafe covers Alloc, Unsafe	semantics	dup:TRUST-4	trusted	none	cap sets are sets
-docs/compiler/CAPABILITY_FACTS.md	L153-160	Capability requirements bind calls into sibling submodules	rule	dup:TRUST-4	trusted	cite	-
-docs/compiler/CAPABILITY_FACTS.md	L162-178	Imported free functions, imported receiver methods, associated calls and prelude methods (String::drop with(Alloc)) all bind capabilities	rule	dup:TRUST-4	trusted	cite	TRUST-4 is call-form-agnostic; the call-form list is not enumerated in spec
-docs/compiler/CAPABILITY_FACTS.md	L180-191	An impl method requires only capabilities its trait method declares (E0586); a generic caller through a bound must hold the trait method's set	rule	dup:TRAIT-9	traits	cite	caller side is TRUST-4's trait-bound clause
-docs/compiler/CAPABILITY_FACTS.md	L186	A Destroy impl requires no capability beyond Alloc (E0584)	rule	dup:OWN-13	ownership	cite	-
-docs/compiler/CAPABILITY_FACTS.md	L189-191	A post-monomorphization capability violation is an internal error	guarantee	dup:TRUST-4	trusted	none	compiler defense in depth
-docs/compiler/CAPABILITY_FACTS.md	L197-201	trusted absorbs an extern call's Unsafe and nothing else; declared effects bind every caller including trusted bodies	rule	dup:TRUST-5	trusted	cite	-
-docs/compiler/CAPABILITY_FACTS.md	L209-216	trusted is declared per method, not only per impl	rule	dup:TRUST-5	trusted	cite	TRUST-5@2 forbids impl-level trust entirely; doc's history wording is stale
-docs/compiler/CAPABILITY_FACTS.md	L218-228	Two independent axes: trusted means the implementation is audited; with(Unsafe) means the caller owes an invariant the language cannot establish	semantics	new	trusted	rationale	'caller owes an invariant' reading of with(Unsafe) appears in no spec text
-docs/compiler/CAPABILITY_FACTS.md	L230-232	Trust never erases operational authority: a trusted fn with with(Console) is refused to a caller holding none	rule	dup:TRUST-5	trusted	cite	-
-docs/compiler/CAPABILITY_FACTS.md	L250-254	An Unsafe operation without authority is rejected at CoreCheck	rule	dup:TRUST-4	trusted	none	-
+docs/compiler/ARCHITECTURE.md	*	Compiler architecture; 3 language restatements	rule	-	-	keep	-
+docs/compiler/BINDING_IDENTITY_DESIGN.md	*	Compiler design record; 2 contract-scope statements	rule	-	contracts	keep	-
+docs/compiler/CAPABILITY_FACTS.md	*	Design record; ~15 statements, all restating TRUST-4/TRUST-5/TRAIT-9/OWN-13 or their rationales	rule	-	trusted	keep	promote cap-variable entailment from TRUST-4 rationale to its normative text
 docs/compiler/COMPILER_API.md	*	No language rules: process/tooling/proof infrastructure	rule	-	-	keep	-
-docs/compiler/COMPILER_BOUNDARY.md	*	Compiler boundary audit; restates PASS/REF rules; one questionable claim	guarantee	-	pipeline	cite-only	-
-docs/compiler/COMPILER_BOUNDARY.md	Residue class 3	Mixed-width binops are refused at Check (E0228) and CoreCheck (E0502)	rule	dup:TYPE-6	types	cite	-
-docs/compiler/COMPILER_BOUNDARY.md	L49-52	A same-width, different-signedness pair (Int/Uint) produced by a monomorphized generic is not refused and lowers as one SSA op	semantics	conflict:TYPE-6	types	open	TYPE-6/PASS-5 require one numeric type; if reachable, the op's signedness (overflow, division, comparison) is unspecified; verify
-docs/compiler/COMPILER_BOUNDARY.md	Class 6	No function, safe or trusted, returns &T or &mut T, directly or nested; raw pointers are the sole escape	rule	dup:REF-1	references	cite	-
-docs/compiler/COMPILER_BOUNDARY.md	Class 5	A raw-pointer dereference in a safe function is refused	rule	dup:TRUST-4	trusted	cite	-
+docs/compiler/COMPILER_BOUNDARY.md	*	Compiler boundary audit; restates PASS/REF rules; one questionable claim	guarantee	-	pipeline	keep	-
 docs/compiler/COMPILER_PIPELINE.md	*	No language rules: CompilerLedger/IR plan	rule	-	-	keep	-
-docs/compiler/COMPILER_PIPELINE.md	Interpreter Versus Compiled	Every deterministic executable feature gives interpreter result == compiled result	guarantee	dup:PASS-13	pipeline	cite	-
-docs/compiler/DECLARATION_IDENTITY.md	*	Design record; mostly internals, 6 visibility/identity statements, some not in spec	rule	-	modules	design-record	-
-docs/compiler/DECLARATION_IDENTITY.md	Steps 1	A module's type names are its own declarations, its children's newtypes, its imports, nested siblings' types and the builtins; others are E0108	rule	conflict:MOD-2	modules	open	sibling/child type visibility without import is not in MOD-1/MOD-2; OPEN-43 covers 'a child module's type declarations'
-docs/compiler/DECLARATION_IDENTITY.md	Steps 1-2	A module declaring and importing no Result gets the builtin; a user enum Result/Option is a distinct type	rule	new	types	open	OPEN-43 (user type vs builtin of the same name); doc cites LAYOUT_CONTRACT 3.4 as the decision
-docs/compiler/DECLARATION_IDENTITY.md	Step 3	An aliased import names the same type with its methods	rule	dup:MOD-9	modules	cite	-
-docs/compiler/DECLARATION_IDENTITY.md	Step 4	A pub const can be imported	rule	dup:MOD-9	modules	cite	-
-docs/compiler/DECLARATION_IDENTITY.md	Step 4	Two modules of one tree may not define constants of one bare spelling (bug 132)	rule	new	modules	open	per-tree restriction beyond MOD-3's per-module rule
-docs/compiler/DECLARATION_IDENTITY.md	Step 4	An imported constant whose initializer calls or names a function is not inlined across modules	semantics	new	modules	open	outcome (refused or not) unstated; constant initializer rules absent beyond TRUST-8
-docs/compiler/DECLARATION_IDENTITY.md	Methods and free functions	A free function spelled like a method's definition name Type_method is refused (E0299)	rule	new	modules	open	MOD-3 text does not reserve mangled Type_method spellings; exposes mangling to users
-docs/compiler/DECLARATION_IDENTITY.md	Methods and free functions	A trait in a type position is E0108	rule	dup:TYPE-2	types	cite	-
+docs/compiler/DECLARATION_IDENTITY.md	*	Design record; mostly internals, 6 visibility/identity statements, some not in spec	rule	-	modules	keep	-
 docs/compiler/DETERMINISM.md	*	No language rules: compiler output determinism (tooling)	rule	-	-	keep	-
 docs/compiler/DIAGNOSTICS.md	*	No language rules: diagnostics model and roadmap	rule	-	-	keep	-
-docs/compiler/DIAGNOSTICS.md	Current Accumulation Policy	Check and Elab accumulate errors per statement; a failed let binds its declared or placeholder type	semantics	-	-	none	compiler UX, not observable program behaviour
-docs/compiler/DIAGNOSTICS.md	3. Accumulation refinement	Declaration-level isolation statuses (valid, locally_invalid, blocked, parse_unreachable, timed_out)	semantics	-	-	none	tooling/report policy
 docs/compiler/DIAGNOSTIC_UX.md	*	No language rules: diagnostic presentation targets; ownership hints restate OWN-1/OWN-4/OWN-2	rule	-	-	keep	E0207 hint 'consuming a linear value inside a loop' = OWN-4
-docs/compiler/FORMATTING_OUTPUT.md	*	Stdlib/builtin direction; 4 builtin rules the spec lacks	builtin	-	types	cite-only	absorb print/println/append into a builtins chapter (spec README S-(b))
-docs/compiler/FORMATTING_OUTPUT.md	2.1	print(args...) and println(args...) are variadic builtins desugared at elaboration to typed print_* calls requiring Console; println appends a newline	builtin	new	types	absorb	MOD-8 names the helpers; TYPE-10 rationale says 'no variadic functions' without the builtin exception
-docs/compiler/FORMATTING_OUTPUT.md	2.1	print accepts String, &String, &mut String, Int, Uint, i8..i32, u8..u32, bool, char	builtin	new	types	absorb	floats and i64/u64 absent from the list; verify
-docs/compiler/FORMATTING_OUTPUT.md	2.1	print of an unsupported argument type compiles and prints the placeholder <unprintable>	builtin	new	types	open	still in Elab.lean:1625; observable behaviour; append refuses with E0421 (TYPE-10); owner decide refuse vs placeholder
-docs/compiler/FORMATTING_OUTPUT.md	2.2	append(&mut buf, args...) is variadic, first argument &mut String, requires with(Alloc), returns Unit; an unsupported type is a compile error	builtin	dup:TYPE-10	types	absorb	E0421 in TYPE-10; arity and types unstated
-docs/compiler/FORMATTING_OUTPUT.md	2.2	The variadic append desugaring applies only when no user-defined append exists at file scope (same guard as print)	builtin	new	modules	open	interaction with MOD-8 (generated calls bound by identity) and MOD-3 reserved names unspecified
-docs/compiler/FORMATTING_OUTPUT.md	3	No format strings or interpolation	rule	dup:SYN-1	syntax	cite	-
-docs/compiler/FORMATTING_OUTPUT.md	4	Method chaining would require returning &mut Self	semantics	dup:REF-1	references	rationale	REF-1 now forbids it outright
-docs/compiler/FORMATTING_OUTPUT.md	1, 6	No Display/Debug trait objects; formatting dispatch is static	rule	dup:TYPE-2	types	cite	-
-docs/compiler/PASSES.md	*	Pass contracts; ~20 rule restatements, 4 stale or conflicting, 2 new	rule	-	pipeline	cite-only	-
-docs/compiler/PASSES.md	1. Parse	An unknown capability name in a cap alias is a parse error; aliases expand everywhere	rule	dup:TRUST-4	trusted	cite	rationale only
-docs/compiler/PASSES.md	1. Parse	Nested '>>' is split into '> >'	grammar	new	syntax	absorb	same as ebnf L115 row
-docs/compiler/PASSES.md	2. Resolve	Self only inside impl blocks; imports name existing modules and public symbols	rule	dup:MOD-1	modules	cite	+MOD-2
-docs/compiler/PASSES.md	3. Check	Linear values consumed exactly once; a live value is never overwritten; a consumed mut place may be rebound	rule	dup:OWN-9	ownership	cite	+OWN-1/OWN-2
-docs/compiler/PASSES.md	3. Check FFI	FFI-safe types: integers, floats, Bool, Char, (), raw pointers, repr(C) structs; repr(C) structs not generic	rule	dup:FFI-3	ffi	cite	omits FFI-3's 'pointer to a type containing no reference'
-docs/compiler/PASSES.md	3. Check Unsafe	Dereferencing or assigning through a raw pointer requires the Unsafe capability	rule	conflict:TRUST-5	trusted	cite	omits trusted authority (TRUST-5) and the trusted mod requirement (TRUST-6)
-docs/compiler/PASSES.md	3. Check Unsafe	Pointer-to-pointer, pointer-to-integer, integer-to-pointer, array-to-pointer and pointer-to-reference casts need Unsafe	rule	conflict:TRUST-1	trusted	cite	TRUST-1: 'as' never converts pointer/integer (ptr::expose); ptr->ref is &*p (TRUST-3); ptr->ptr and array->ptr 'as' casts unruled in spec
-docs/compiler/PASSES.md	3. Check Unsafe	Reference-to-pointer casts (&x as *const T, &mut x as *mut T) are safe	rule	new	trusted	absorb	used in spec examples (types.md L281, trusted.md L189) but no rule; ARITH-5 covers only numeric/bool/char
-docs/compiler/PASSES.md	4. Elab	Arrow expressions are desugared; for loops desugar to while with iterators	semantics	stale	statements	cite	'->' removed; no iterators; STMT-6@3 counted loop desugars to while
-docs/compiler/PASSES.md	5. CoreCanonicalize	Match arms are sorted: specific constructors before wildcards/variables	semantics	conflict:PAT-9	patterns	open	PAT-9: first matching arm in source order; reordering past a guarded binding arm changes meaning; verify
-docs/compiler/PASSES.md	5. CoreCanonicalize	Struct literal fields are reordered to definition order	semantics	conflict:STMT-4	statements	open	STMT-4: fields evaluate in the order written; verify reordering happens after evaluation order is fixed
-docs/compiler/PASSES.md	6. CoreCheck	Copy/Destroy conflict refused; Copy struct fields must be Copy	rule	dup:OWN-13	ownership	cite	+OWN-14
-docs/compiler/PASSES.md	6. CoreCheck	repr(packed) and repr(align) conflict and power-of-two alignment	rule	dup:FFI-4	ffi	cite	-
-docs/compiler/PASSES.md	6. CoreCheck	The builtin trait Destroy cannot be redeclared	rule	dup:TRAIT-8	traits	cite	-
-docs/compiler/PASSES.md	6. CoreCheck	Reserved function names are refused	rule	dup:MOD-3	modules	cite	-
-docs/compiler/PASSES.md	6. CoreCheck	Trait impl provides all methods with matching return types	rule	dup:TRAIT-9	traits	cite	TRAIT-9 also requires receivers, parameter types and capabilities
-docs/compiler/PASSES.md	6. CoreCheck	break/continue only inside loops; match covers all variants or has a wildcard	rule	dup:STMT-6	statements	cite	+PAT-2
-docs/compiler/PASSES.md	7. Mono	Unbounded polymorphic recursion (infinite specialization) is an error	rule	new	types	absorb	no spec rule; generics chapter is a listed gap
-docs/compiler/PASSES.md	8. Lower	A borrowed string literal &"lit" refers to a global constant without allocation	semantics	dup:REF-5	references	none	-
-docs/compiler/PASSES.md	11. EmitSSA	repr(C) struct arguments to extern calls are ABI-flattened per AArch64	semantics	dup:FFI-2	ffi	none	-
+docs/compiler/FORMATTING_OUTPUT.md	*	Stdlib/builtin direction; 4 builtin rules the spec lacks	builtin	-	types	keep	absorb print/println/append into a builtins chapter (spec README S-(b))
+docs/compiler/PASSES.md	*	Pass contracts; ~20 rule restatements, 4 stale or conflicting, 2 new	rule	-	pipeline	keep	-
 docs/compiler/PHASE_EXIT_CHECKLISTS.md	*	No language rules: process/tooling/proof infrastructure	rule	-	-	keep	PHASE_EXIT freeze milestone lists syntax features historically only
-docs/compiler/PIPELINE_ARCHITECTURE.md	*	Architecture north-star; 2 semantic statements, both superseded	semantics	-	pipeline	design-record	-
-docs/compiler/PIPELINE_ARCHITECTURE.md	Principle 1	The interpreter is the definition of the language's operational meaning	semantics	conflict:PASS-13	pipeline	cite	PASS-13 makes checked Core's behaviour the reference; VERIFIED_PIPELINE makes Core's evaluator normative
-docs/compiler/PIPELINE_ARCHITECTURE.md	Judgment modules	A pure, trap-free non-Unit expression discarded as 'expr;' should be refused with an acknowledgement escape	rule	stale	ownership	cite	OWN-7@3 refuses every non-Unit statement expression; discard(e) is the escape
-docs/compiler/PIPELINE_CONTRACTS.md	*	Superseded design record; every boundary contract is a PASS entry	guarantee	-	pipeline	design-record	header already points to PASS-5..PASS-11
-docs/compiler/PIPELINE_CONTRACTS.md	after Check	No unconsumed owned linear local, parameter or arm local survives Check	guarantee	dup:PASS-5	pipeline	cite	-
-docs/compiler/PIPELINE_CONTRACTS.md	after Check	No mixed-width or mixed-signedness binary operation survives Check	guarantee	dup:PASS-5	pipeline	cite	-
-docs/compiler/PIPELINE_CONTRACTS.md	after Elab/Core	Elaboration adds no impossible type hints, mixed-width binops or hidden capability calls	guarantee	dup:PASS-6	pipeline	cite	-
-docs/compiler/PIPELINE_CONTRACTS.md	after Mono	No unresolved generic or type variable reaches emitted Core	guarantee	dup:PASS-7	pipeline	cite	-
-docs/compiler/PIPELINE_CONTRACTS.md	after CoreCheck	Binops width-compatible, capabilities checked, Copy fields Copy, no infinite-size recursive type	guarantee	dup:PASS-8	pipeline	cite	-
-docs/compiler/PIPELINE_CONTRACTS.md	after Lower	SSA verifies; traps exist for bounds, overflow, div/mod zero and shift range; defer cleanup in the CFG	guarantee	dup:PASS-9	pipeline	cite	-
-docs/compiler/PIPELINE_CONTRACTS.md	after Emit	Checked operations lower through named helpers or proven elisions; an executable has an entry point or fails with error[link]	guarantee	dup:PASS-10	pipeline	cite	-
-docs/compiler/PIPELINE_CONTRACTS.md	after BackendIR (planned)	Runtime checks, spans, layout and capability labels stay structured before LLVM text	guarantee	dup:PASS-11	pipeline	cite	-
-docs/compiler/PIPELINE_CONTRACTS.md	L14-16	Every user-triggerable violation is caught at the first responsible boundary, never leaked to Lower, LLVM, linker or a panic	guarantee	dup:PASS-12	pipeline	cite	-
-docs/compiler/README.md	*	Index; says language semantics belong in docs/language	rule	conflict:spec-README	-	cite-only	docs/spec is the one language spec; repoint
+docs/compiler/PIPELINE_ARCHITECTURE.md	*	Architecture north-star; 2 semantic statements, both superseded	semantics	-	pipeline	keep	-
+docs/compiler/PIPELINE_CONTRACTS.md	*	Superseded design record; every boundary contract is a PASS entry	guarantee	-	pipeline	keep	header already points to PASS-5..PASS-11
+docs/compiler/README.md	*	Index; says language semantics belong in docs/language	rule	conflict:spec-README	-	keep	docs/spec is the one language spec; repoint
 docs/compiler/REDUCER_WORKFLOW.md	*	No language rules: process/tooling/proof infrastructure	rule	-	-	keep	-
-docs/compiler/SYNTAX_FREEZE_REVIEW.md	*	Historical freeze review; ~25 syntax statements, several stale (C-style for, '#' separator) and a few never-specified surface facts	grammar	-	syntax	absorb-delete	absorb separators, bare-variant ban, '->' arm question; mark rest historical
-docs/compiler/SYNTAX_FREEZE_REVIEW.md	1.1 table	'.' is field access and method call; '::' is module qualification, generic instantiation and enum/static qualification	grammar	new	syntax	absorb	imports still use '.' paths (import std.fs.{..}) while calls use '::'; no spec rule names the separators
-docs/compiler/SYNTAX_FREEZE_REVIEW.md	1.1 Decision	Type::Variant and Type::method(...) are the canonical qualification; the '#' separator is gone	grammar	new	syntax	absorb	ebnf still uses '#' (conflict row there)
-docs/compiler/SYNTAX_FREEZE_REVIEW.md	1.1 not allowed	Bare variants (Ok, Err) and Enum.Variant are not accepted spellings	rule	new	syntax	absorb	book examples use 'return Ok(x)'; PAT-3's 'bare variant name' means E::V without braces, a wording clash
-docs/compiler/SYNTAX_FREEZE_REVIEW.md	1.1 L38-41	After Name::, '<' continues a turbofish; a lowercase ident under a lowercase base is a module path; under an uppercase base it is enum/static qualification	grammar	new	syntax	absorb	another case-based disambiguation besides SYN-1/SYN-4's struct-literal rule
-docs/compiler/SYNTAX_FREEZE_REVIEW.md	1.2	Modifier order is [pub] [trusted] struct|enum|fn|impl [Copy] Name; Copy follows the struct/enum keyword	grammar	dup:SYN-1	syntax	cite	listing 'trusted' before impl contradicts TRUST-5@2 (trust per function)
-docs/compiler/SYNTAX_FREEZE_REVIEW.md	1.3, #1, #4, #5	Omitted type arguments on an enum literal or constructor are inferred from the expected type (return type, let annotation, parameter)	rule	new	types	open	proposed CHANGE; spec examples already write Option::Some { value: 42 } without turbofish (PAT-1 example), so some unspecified inference exists; relates to OPEN-46
-docs/compiler/SYNTAX_FREEZE_REVIEW.md	1.4	A variant construction always names its enum; no contextual variant inference	rule	dup:TYPE-7	types	cite	-
-docs/compiler/SYNTAX_FREEZE_REVIEW.md	1.5.1	The comma between match arms is optional, yet forgetting it is said to be a parse error	grammar	stale	syntax	none	self-contradictory; ebnf makes the comma optional
-docs/compiler/SYNTAX_FREEZE_REVIEW.md	1.5.2, #14	Match arms accept both '=>' and '->'	grammar	new	syntax	open	still true (Parser.lean:1447-1448); spec and ebnf silent; doc recommended '=>' canonical plus warning; surface spelling needs owner decision
-docs/compiler/SYNTAX_FREEZE_REVIEW.md	1.5.3	A match arm body is a bare expression or a block	grammar	dup:SYN-1	syntax	cite	ebnf match_body = block | stmt
-docs/compiler/SYNTAX_FREEZE_REVIEW.md	1.5.4	Patterns destructure one level; no nested patterns	rule	dup:patterns#no-nested-patterns	patterns	cite	-
-docs/compiler/SYNTAX_FREEZE_REVIEW.md	1.6	Imports are 'import a.b.{X, Y};' with a braced list even for one symbol	grammar	dup:SYN-1	modules	cite	ebnf import production
-docs/compiler/SYNTAX_FREEZE_REVIEW.md	1.6.2	There are no glob imports	rule	dup:MOD-2	modules	cite	stated in MOD-2 rationale (modules.md L74)
-docs/compiler/SYNTAX_FREEZE_REVIEW.md	1.6.3	A module cannot re-export symbols it imports	rule	new	modules	absorb	no spec text on re-export
-docs/compiler/SYNTAX_FREEZE_REVIEW.md	1.6.1	Builtin Result and Option need no import	builtin	new	modules	absorb	no prelude rule in spec; OPEN-43 covers a user type against a builtin of the same name
-docs/compiler/SYNTAX_FREEZE_REVIEW.md	1.7	Borrow block is 'borrow [mut] x as r in R { }'; the region name only scopes	semantics	dup:SCOPE-D1	references	cite	REF-8 covers the loan
-docs/compiler/SYNTAX_FREEZE_REVIEW.md	1.8.1	A field access on &self auto-dereferences	semantics	dup:MEM-4	memory	cite	-
-docs/compiler/SYNTAX_FREEZE_REVIEW.md	1.8	Turbofish method call v.fold::<i32>(0, f)	grammar	dup:SYN-1	syntax	cite	-
-docs/compiler/SYNTAX_FREEZE_REVIEW.md	1.9, #7	Match supports integer literal patterns	grammar	dup:PAT-7	patterns	cite	-
-docs/compiler/SYNTAX_FREEZE_REVIEW.md	1.10, #9	No string interpolation or format! (no macros)	rule	dup:SYN-1	syntax	cite	SYN-1 rationale bans macros
-docs/compiler/SYNTAX_FREEZE_REVIEW.md	#2, freeze-as-is	Postfix '?' is removed permanently	rule	dup:statements#recoverable-failure	statements	cite	statements.md L717 (no rule ID)
-docs/compiler/SYNTAX_FREEZE_REVIEW.md	#8	Repeat array literal [0; 256] works	grammar	dup:TYPE-7	types	cite	-
-docs/compiler/SYNTAX_FREEZE_REVIEW.md	#8 detail	Byte-string literals (b"..") do not exist	rule	new	syntax	absorb	record as absent syntax with lexical chapter
-docs/compiler/SYNTAX_FREEZE_REVIEW.md	#10 + detail	Three namespace separators '.', '::', '#'; unifying '#' into '::' deferred	grammar	stale	syntax	none	contradicts 1.1 of the same doc and the parser
-docs/compiler/SYNTAX_FREEZE_REVIEW.md	#16	'else if' is supported	grammar	dup:SYN-1	syntax	cite	ebnf else_tail
-docs/compiler/SYNTAX_FREEZE_REVIEW.md	#18 + detail	Loops are C-style for (init; cond; step); for x in collection deferred pending an iterator protocol	rule	conflict:STMT-6	statements	cite	STMT-6@3 (OD47) removes C-style (pending bug 331); collection iteration is OPEN-51
-docs/compiler/SYNTAX_FREEZE_REVIEW.md	#19	A char literal ':' can be cast to u8 or i32	semantics	dup:ARITH-5	arithmetic	cite	-
-docs/compiler/SYNTAX_FREEZE_REVIEW.md	#20	There is no compound assignment (+=, -=)	rule	dup:STMT-4	statements	cite	STMT-4 rationale (statements.md L96)
-docs/compiler/SYNTAX_FREEZE_REVIEW.md	Freeze-as-is table	Both '#' and '.' are accepted in patterns	grammar	stale	syntax	none	parser uses '::'
-docs/compiler/SYNTAX_FREEZE_REVIEW.md	Constraints recap	No closures, macros, implicit trait resolution or global type inference	rule	dup:TYPE-1	types	cite	macros SYN-1; inference OPEN-46
 docs/compiler/TESTING.md	*	No language rules: process/tooling/proof infrastructure	rule	-	-	keep	-
 docs/compiler/TRANSFORM_REGISTER.md	*	No language rules: process/tooling/proof infrastructure	rule	-	-	keep	-
-docs/compiler/VERIFIED_PIPELINE.md	*	Verification plan; semantic contract restates STMT/ARITH/REF/TRUST rules	semantics	-	pipeline	cite-only	-
-docs/compiler/VERIFIED_PIPELINE.md	Semantic contract: Behaviours	Behaviour is an external-event trace ending in return, defined trap, silent divergence or infinite interaction; stuck is distinct	semantics	dup:STMT-1	statements	cite	-
-docs/compiler/VERIFIED_PIPELINE.md	Semantic contract: Resources	Fatal traps and exhaustion promise no cleanup; divergence no eventual release	semantics	dup:STMT-2	statements	cite	-
-docs/compiler/VERIFIED_PIPELINE.md	Semantic contract: Floats	IEEE formats, rounding, no contraction; NaN bits, subnormals, signed zero to be specified	semantics	dup:ARITH-1	arithmetic	cite	ARITH-1 rationale defers NaN bits etc.
-docs/compiler/VERIFIED_PIPELINE.md	Scope	First profile is sequential; closures absent (function pointer plus context)	semantics	dup:STMT-3	statements	cite	+TYPE-1
-docs/compiler/VERIFIED_PIPELINE.md	Language decisions	References are second-class: never stored, never returned	rule	dup:REF-3	references	cite	+REF-1; 'today a reference can be stored (bug 092)' is stale
-docs/compiler/VERIFIED_PIPELINE.md	Language decisions	Pointer arithmetic, int-pointer casts and exposure are distinct operations; quasi-concrete addresses	semantics	dup:MEM-2	memory	cite	+TRUST-1
-docs/compiler/VERIFIED_PIPELINE.md	Language decisions	No implicit destruction; linear conservation at reachable exits	rule	dup:OWN-13	ownership	cite	-
-docs/compiler/VERIFIED_PIPELINE.md	Where each check lives	Bounds, overflow and division are trapping Core operations; a pass removes a trap only with a discharged VC certificate	semantics	dup:PASS-9	pipeline	cite	+ARITH-3, MEM-6
+docs/compiler/VERIFIED_PIPELINE.md	*	Verification plan; semantic contract restates STMT/ARITH/REF/TRUST rules	semantics	-	pipeline	keep	-
 docs/platform/ABI.md	*	ABI maturity statement; ~12 language-level layout/FFI claims, some stale (trusted extern needs no capability)	-	-	-	keep	Layout guarantees should move to ffi chapter with LAYOUT_CONTRACT
 docs/platform/ABI_LAYOUT.md	*	Implementation-ownership note for Layout.lean; restates FFI-safety and repr rules; builtin Option/Result section stale	-	-	-	cite-only	-
 docs/platform/ABI_LAYOUT.md	Extern ABI L293-294	Bool lowers to i1 and is promoted/truncated to the C ABI in extern signatures	semantics	new	ffi	absorb	not absorbed: an implementation detail of extern lowering, not a language rule
@@ -530,40 +415,6 @@ docs/verification/WRONG_CODE_CORPUS.md	*	Wrong-code regression registry; no lang
 docs/verification/identity_migrations/2026-10-04_r0484_f1_f9.md	*	no language rules: proof identity migration record	-	-	-	keep	-
 docs/verification/identity_migrations/2026-10-06_r0484_f6.md	*	no language rules: proof identity migration record	-	-	-	keep	-
 grammar/concrete.ebnf	*	Normative by reference (SYN-1, SYN-2); stale or incomplete in ~14 places versus the parser and spec; 9 comments state rules syntax.md lacks	grammar	-	syntax	keep	repair productions to the parser's language (R-0335 gate); absorb lexical comments into syntax.md
-grammar/concrete.ebnf	(referenced by docs/spec/syntax.md)	syntax.md's first sentence links the ebnf as THE surface grammar; SYN-1@1 makes it normative; SYN-2@1 relies on its precedence comment block	rule	dup:SYN-1	syntax	none	Q1: linked and normative. SYN-1 Obligation 'parser accepts exactly the grammar' is only example-tested (gate pending R-0335); given rows below SYN-1 is currently false as stated
-grammar/concrete.ebnf	L5-7 header	The grammar is the single source of truth; the parser must accept exactly this language	grammar	dup:SYN-1	syntax	cite	names stale path Concrete/Parser.lean (now Concrete/Frontend/Parser.lean)
-grammar/concrete.ebnf	L19-22 header	Every alternation resolves with one token of lookahead (LL(1)), checked mechanically	grammar	dup:SYN-1	syntax	none	syntax.md intro and SYN-1 rationale state it
-grammar/concrete.ebnf	L27 token classes	IDENT is [a-zA-Z_][a-zA-Z0-9_]*	grammar	new	syntax	absorb	no lexical-structure text in spec (spec README S-(b) lists lexical structure as a missing chapter)
-grammar/concrete.ebnf	L28 token classes	INT literal is decimal, 0x hex, 0b binary or 0o octal	grammar	new	syntax	absorb	ARITH-2 rationale mentions hex and binary only, not octal; suffixes are excluded by ARITH-2 rationale
-grammar/concrete.ebnf	L29 token classes	FLOAT literal is digits '.' digits; no exponent, no leading or trailing dot	grammar	new	syntax	absorb	ARITH-7 fixes the value, not the form
-grammar/concrete.ebnf	L30-31 token classes	STRING and CHAR are quote-delimited literals; escape set not given	grammar	new	syntax	absorb	escape set exists only in Lexer.lean messages: \n \t \r \0 \\ \" \' ; line comments // also unstated
-grammar/concrete.ebnf	L32 token classes	LABEL is an apostrophe followed by IDENT ('outer)	grammar	new	syntax	absorb	STMT-6 rationale shows labels only by example
-grammar/concrete.ebnf	L80-94 attributes	repr is a keyword-like identifier dispatched first; repr options are C, packed, align(INT)	grammar	dup:FFI-4	ffi	cite	contextual words repr/C/packed/align/Copy/self/spec/union missing from syntax.md's contextual list
-grammar/concrete.ebnf	L86-89 attr_tail	An attribute argument is only '= STRING', '( IDENT )' or nothing	grammar	conflict:SYN-1	syntax	absorb	the parser accepts a fixed set of 16 attribute names (Concrete/Frontend/Parser.lean:1773-1775); the grammar allows any identifier and no expression arguments
-grammar/concrete.ebnf	L115 type_args comment	The parser splits '>>' into two '>' when closing nested type arguments	grammar	new	syntax	absorb	also stated in PASSES.md Parse
-grammar/concrete.ebnf	L116-121 type_arg	A generic argument is a type or capability argument: '{}' empty set, 'A + B' union; a lone name is classified by the declaration's parameter kinds	grammar	dup:TYPE-15	types	cite	TYPE-15 rationale says the parser classifies 'by position'; wording differs from ebnf ('after parsing, by parameter kinds'); '{}' and '+' spellings are in no spec rule
-grammar/concrete.ebnf	L193-196 stmt comment	A match in statement position is a statement with no postfix or binary-operator continuation after its closing brace; a value match appears only in value positions	grammar	new	statements	absorb	STMT-8 lists value blocks but not this parse rule
-grammar/concrete.ebnf	L211-213 if_tail	if let / while let desugar to a match	semantics	dup:PAT-6	patterns	cite	-
-grammar/concrete.ebnf	L222, L268, L378	An enum variant is written Enum#Variant in patterns and literals	grammar	conflict:SYN-1	syntax	absorb	parser uses '::' (parseIfLet, ident_tail); '#' removed per SYNTAX_FREEZE_REVIEW 1.1; ident_tail '::' admits only a turbofish, so Option::None, m::f() and T::new() are not sentences
-grammar/concrete.ebnf	L229-237 for_tail	for loops are C-style for (init; cond; step), for (cond;) and bare for block	grammar	conflict:STMT-6	statements	absorb	STMT-6@3 (OD47): only while and 'for i from a until b'; C-style removed, pending bug 331; grammar's for(cond;) also differs from parser's for(cond)
-grammar/concrete.ebnf	L203 stmt	break takes an optional LABEL or an expression	grammar	conflict:STMT-6	statements	absorb	STMT-6@2 (OD27): break carries no value, refused at parse; main still parses it (bug 323)
-grammar/concrete.ebnf	L252-255 match_arm	An arm lists '|'-separated patterns, an optional 'if' guard, then '=>'	grammar	dup:PAT-7	patterns	cite	parser also accepts '->' for '=>' (Parser.lean:1447-1448); no spec text; see SYNTAX_FREEZE_REVIEW row
-grammar/concrete.ebnf	L257-266 match_pattern	An integer pattern is INT or '-' INT, optionally a range lo..hi (exclusive) or lo..=hi (inclusive)	grammar	dup:PAT-7	patterns	cite	-
-grammar/concrete.ebnf	L272-273 binding_list	'_' in a binding position is a positional wildcard; a binding list is bare identifiers	semantics	conflict:PAT-1	patterns	absorb	grammar lacks 'field: binder' (PAT-1) and '..' / Variant { .. } (PAT-3); positional mapping confirmed in Elab.lean:831-836 (see next row)
-grammar/concrete.ebnf	L272 + Elab.lean:831	Unlabeled pattern binders bind the variant's fields by position in declaration order, not by name	semantics	new	patterns	open	bindings.zip ev.fields: 'S { y, x }' binds y to the first field; PAT-1 implies name punning; owner must decide positional vs by-name
-grammar/concrete.ebnf	L281-299 precedence comment	Thirteen precedence levels; postfix binds tighter than prefix, prefix tighter than 'as'; casts chain and may be followed by postfix operations	grammar	dup:SYN-2	syntax	cite	SYN-2 cites this comment normatively; 'x as T' followed by postfix ('.f', '[i]') is not in SYN-2
-grammar/concrete.ebnf	L294, L327-329	Postfix '->' member access is removed; '.' auto-derefs one permitted layer, references and heap shells	semantics	conflict:MEM-4	memory	absorb	MEM-4@3: a Heap/HeapArray is opened by an explicit non-consuming place form, not by '.' (OPEN-36 spelling); '->' removal dup SYN-1 rationale
-grammar/concrete.ebnf	L342-352 value forms	In value position 'if' requires 'else'; value if/match dispatch by position, outside primary_expr	grammar	new	statements	absorb	no spec rule says a value 'if' must have 'else'
-grammar/concrete.ebnf	L354-357	'while' is statement-only; the parser rejects it in expression position with a migration hint	grammar	dup:STMT-6	statements	cite	-
-grammar/concrete.ebnf	L369-376 ident_tail	'{' after IDENT starts a struct literal only for an uppercase name, and in a condition head 'NAME {' begins a struct literal	grammar	conflict:SYN-4	syntax	cite	describes main (bug 212 heuristic); SYN-4 (OD16, pending bug 318) makes '{' in a head always open the block; update when 318 lands
-grammar/concrete.ebnf	L386-393 field_values	Struct literal bodies allow field punning { x } and a trailing functional update ..base	grammar	dup:TYPE-7	types	cite	-
-grammar/concrete.ebnf	L395-402 array_body	Array literal forms: [e; N] repeat, [a, b] list, singleton, empty	grammar	dup:TYPE-7	types	none	grammar admits '[]'; TYPE-7 refuses an empty array literal later
-grammar/concrete.ebnf	L44-57, L186 impl_method	impl methods take an optional 'pub' only; 'trusted' attaches to top-level declarations including impl	grammar	conflict:TRUST-5	trusted	absorb	TRUST-5@2: trust is per function, never on impl; parser accepts per-method trusted (CAPABILITY_FACTS)
-grammar/concrete.ebnf	L61, L71 impl/impl_rest	An impl target and a trait-impl target are a bare IDENT without type arguments	grammar	conflict:SYN-1	syntax	absorb	spec examples 'impl Tr for Box<i32>' and 'impl<T> Tr for Box<T>' (traits.md) are not sentences
-grammar/concrete.ebnf	L67 decl_keyword	A module declaration is only the inline 'mod IDENT { ... }'	grammar	conflict:MOD-4	modules	absorb	MOD-4 defines 'mod X;'; parser accepts both; inline form is OPEN-33
-grammar/concrete.ebnf	L197 stmt let	A let binds a single IDENT	grammar	conflict:PAT-5	patterns	absorb	grammar lacks destructuring let (+else, PAT-5), ghost let (CON-4), assert/assume statements, and #[invariant]/#[variant] before loops (CON-2)
-grammar/concrete.ebnf	L57-67 decl_keyword	Top-level declarations are fn, struct, enum, newtype, impl, trait, const, type, import, extern fn, mod	grammar	conflict:SYN-1	syntax	absorb	parser also accepts 'cap NAME = A + B;' aliases (TRUST-4 rationale), 'spec fn' (contracts.md), and 'union'
-grammar/concrete.ebnf	(parser only) union	'union Name<T> { fields }' is accepted and parsed as a struct whose fields share memory	grammar	new	types	open	Parser.lean:2461; no spec text mentions union; owner decides keep (and specify) or remove
 grammar/conformance_keywords_known.tsv	*	`assert` and `assume` are parsed but not in the grammar	grammar	conflict:SYN-1	syntax	cite-only	OD79, OD80
 grammar/conformance_keywords_known.tsv	assert, assume	`assert expr;` and `assume expr;` are parsed but not in the grammar	grammar	conflict:SYN-1	contracts	open	OD79, OD80
 grammar/conformance_known.tsv	*	the parser/grammar divergence ledger: each `owner edit` or `owner decision` row is an owner question (OD70 - OD91)	-	-	syntax	cite-only	cite the OD per row

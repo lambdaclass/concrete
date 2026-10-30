@@ -7,8 +7,9 @@ choice resolving with one token of lookahead, except for the FIRST/FOLLOW confli
 checkers verify it (`scripts/check_ll1.py`, `.c` and `.rs`; `scripts/tests/check_grammar_ll1.sh`
 requires them to agree and the list to only shrink). This chapter does not copy productions; it cites them
 by name and states what the productions alone do not say: that the parser accepts exactly the
-grammar (SYN-1), how operators group (SYN-2), which spellings the compiler reserves (SYN-3) and
-what a source file and a string literal are made of (SYN-5).
+grammar (SYN-1), how operators group (SYN-2), which spellings the compiler reserves (SYN-3),
+what a source file and a string literal are made of (SYN-5), the tokens (SYN-6), how `>>` closes
+type arguments (SYN-7), what position makes of `match` and `if` (SYN-8, SYN-9) and the separators (SYN-10).
 The trailing-value rule of blocks is STMT-8, and function names the compiler reserves are MOD-3.
 
 The hand-written recursive-descent parser (`Concrete/Frontend/Parser.lean`) follows the grammar
@@ -114,6 +115,109 @@ fn main() -> Int {
     let mut n: Int = 20;
     if (n > LIMIT) { n = LIMIT; }
     return n + 26;
+}
+```
+
+The token forms (SYN-6), the statement `match` (SYN-8), the value `if` (SYN-9) and the separators
+(SYN-10) are refused here when broken:
+
+```con reject name=float-exponent code=E0001 stage=parse pair=float-digits
+fn main() -> Int {
+    let f: f64 = 1e3;
+    return 42;
+}
+```
+
+```con accept name=float-digits exit=42
+fn main() -> Int {
+    let f: f64 = 1000.0;
+    return 42;
+}
+```
+
+```con reject name=block-comment code=E0001 stage=parse pair=line-comment
+/* a block comment */
+fn main() -> Int {
+    return 42;
+}
+```
+
+```con accept name=line-comment exit=42
+// a line comment
+fn main() -> Int {
+    return 42;
+}
+```
+
+```con reject name=statement-match-continued code=E0001 stage=parse pair=value-match-continued
+fn main() -> Int {
+    let x: Int = 1;
+    match x { _ => 40 } + 2;
+    return 42;
+}
+```
+
+```con accept name=value-match-continued exit=42
+fn main() -> Int {
+    let x: Int = 1;
+    let y: Int = match x { _ => 40 } + 2;
+    return y;
+}
+```
+
+```con reject name=value-if-without-else code=E0001 stage=parse pair=value-if-else
+fn main() -> Int {
+    let c: bool = true;
+    let x: Int = if c { 42 };
+    return x;
+}
+```
+
+```con accept name=value-if-else exit=42
+fn main() -> Int {
+    let c: bool = true;
+    let x: Int = if c { 42 } else { 0 };
+    return x;
+}
+```
+
+```con reject name=hash-variant code=E0001 stage=parse pair=colon-variant
+fn main() -> Int {
+    let o: Option<Int> = Option::<Int>#Some { value: 42 };
+    match o {
+        Option::Some { value } => { return value; },
+        Option::None => { return 0; }
+    }
+}
+```
+
+```con accept name=colon-variant exit=42
+fn main() -> Int {
+    let o: Option<Int> = Option::<Int>::Some { value: 42 };
+    match o {
+        Option::Some { value } => { return value; },
+        Option::None => { return 0; }
+    }
+}
+```
+
+Outside a head, a `{` after a lowercase name does not begin a struct literal:
+
+```con reject name=lowercase-struct-literal code=E0001 stage=parse pair=uppercase-struct-literal
+struct Copy p { v: Int }
+
+fn main() -> Int {
+    let q: p = p { v: 42 };
+    return q.v;
+}
+```
+
+```con accept name=uppercase-struct-literal exit=42
+struct Copy P { v: Int }
+
+fn main() -> Int {
+    let q: P = P { v: 42 };
+    return q.v;
 }
 ```
 
@@ -269,5 +373,171 @@ fn main() -> Int {
 ```con accept name=escapes exit=7
 fn main() -> Int {
     return string_length(&"a\n\t\r\\\"\0") as Int;
+}
+```
+
+<a id="SYN-6"></a>
+### SYN-6. Tokens
+
+**SYN-6@1.** A token is an identifier (a letter or `_`, then letters, digits and `_`), an integer literal in decimal or with a `0x`, `0b` or `0o` prefix, a float literal written as digits, `.` and digits, a string literal, a char literal, a label (`'` then an identifier), a keyword, or an operator or punctuation mark, and `//` begins a comment that ends at the end of its line.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.tokenize
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** These are the grammar's terminal classes `IDENT`, `INT`, `FLOAT`, `STRING`, `CHAR`
+and `LABEL`. So a float has no exponent and no leading or trailing `.`, a literal has no suffix
+(ARITH-2), and there are no block comments and no byte-string literals (`b"..."`); each of these is
+a parse error (SYN-1). On main the escapes are `\n`, `\t`, `\r`, `\0` and `\\`, with `\"` in a
+string literal and `\'` in a char literal; any other `\` sequence is a parse error.
+
+```con accept name=token-forms exit=42
+// a line comment
+fn main() -> Int {
+    let a: Int = 0o17;
+    let b: Int = 0x1F;
+    let c: Int = 0b101;
+    let q: char = '\'';
+    let f: f64 = 1.5;
+    let mut n: Int = 0;
+    'outer: while n < 1 {
+        n = n + 1;
+        break 'outer;
+    }
+    return a + b + c + n - 10;
+}
+```
+
+<a id="SYN-7"></a>
+### SYN-7. `>>` closes two type-argument lists
+
+**SYN-7@1.** Where a `>` closes a type-argument or type-parameter list, a `>>` token closes two nested lists, read as two `>`.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.expect
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** The lexer reads `>>` as the shift operator; the grammar's `type_args` and
+`type_params` close with `>`, and the parser splits the token there, so `Option<Option<Int>>`
+needs no space.
+
+```con accept name=nested-type-arguments exit=42
+fn main() -> Int {
+    let o: Option<Option<Int>> = Option::<Option<Int>>::Some { value: Option::<Int>::Some { value: 42 } };
+    match o {
+        Option::Some { value: inner } => {
+            match inner {
+                Option::Some { value } => { return value; },
+                Option::None => { return 1; }
+            }
+        },
+        Option::None => { return 2; }
+    }
+}
+```
+
+<a id="SYN-8"></a>
+### SYN-8. A `match` that begins a statement is a statement
+
+**SYN-8@1.** A `match` that begins a statement is the whole statement, so no operator or postfix operation continues after its closing brace, while a `match` in a value position (the right-hand side of a `let` or an assignment, or a block's trailing value) is an expression.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.parseMatchStmt
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** The grammar's `stmt` production has a `match` alternative; the value form is
+described in the comment before `primary_expr`, because the dispatch is by position, which the
+LL(1) checkers cannot express. `match x { ... } + 2;` as a statement is a parse error (SYN-1).
+STMT-8 says which expression of a value block is its value.
+
+```con accept name=statement-and-value-match exit=42
+fn main() -> Int {
+    let x: Int = 1;
+    let mut r: Int = 0;
+    match x {
+        1 => { r = 40; },
+        _ => { r = 0; }
+    }
+    let y: Int = match x { _ => 2 } + r;
+    return y;
+}
+```
+
+<a id="SYN-9"></a>
+### SYN-9. A value `if` has an `else`
+
+**SYN-9@1.** An `if` in a value position has an `else` branch.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.parsePrimary
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** Without an `else` the `if` would have no value when its condition is false. The
+grammar states this in the comment before `primary_expr`; `let x: Int = if c { 42 };` is a parse
+error (SYN-1).
+
+```con accept name=value-if-with-else exit=42
+fn main() -> Int {
+    let c: bool = true;
+    let x: Int = if c { 42 } else { 0 };
+    return x;
+}
+```
+
+<a id="SYN-10"></a>
+### SYN-10. The separators `.` and `::`
+
+**SYN-10@1.** `.` selects a field or calls a method, `::` qualifies a member of a module, a variant of an enum or an associated function of a type and introduces explicit type arguments, and an import path separates its modules with `.`.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.parsePrimary, Concrete.parsePostfix
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** One qualification separator keeps the type or module visible at every use
+(SYNTAX_FREEZE_REVIEW §1.1, archived). The older `E#V` variant spelling is a parse error on main
+(SYN-1; the grammar's productions still spell it, which OPEN-77 resyncs), and a variant is always
+named through its enum: a bare `Ok(x)` is an unknown function (E0101) and `Option.None` an unknown
+variable (E0100), both under MOD-1.
+
+```con accept name=separators exit=42
+mod m {
+    pub fn base() -> Int { return 40; }
+}
+
+struct Copy P { v: Int }
+
+impl P {
+    fn make() -> P { return P { v: 1 }; }
+    fn get(&self) -> Int { return self.v; }
+}
+
+fn main() -> Int {
+    let p: P = P::make();
+    return m::base() + p.get() + p.v;
 }
 ```

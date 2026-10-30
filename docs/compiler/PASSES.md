@@ -104,8 +104,8 @@ Main caution:
 
 **Error conditions:**
 - Unexpected token, unterminated string, mismatched brackets/braces.
-- Nested generic ambiguity handled (`>>` split into `> >`).
-- Unknown capability name in `cap` alias definition.
+- Nested generic ambiguity handled (`>>` split into `> >`, [SYN-7](../spec/syntax.md#SYN-7)).
+- Unknown capability name in `cap` alias definition ([TRUST-4](../spec/trusted.md#TRUST-4)).
 
 **Invariant established:** Syntactically valid AST with all tokens consumed. Capability aliases fully expanded.
 
@@ -124,8 +124,8 @@ Resolve is strictly a shallow/interface validation pass. It operates on `FileSum
 **Postconditions:**
 - All name references validated: function calls, struct/enum literals, static method calls, function references, variable identifiers.
 - Deep type validation: all type names in annotations, parameters, return types, generics, refs, arrays, and function pointer types are known.
-- `Self` only used inside impl/trait-impl blocks.
-- Import validation: imported modules exist, imported symbols are public.
+- `Self` only used inside impl/trait-impl blocks ([MOD-1](../spec/modules.md#MOD-1)).
+- Import validation: imported modules exist, imported symbols are public ([MOD-2](../spec/modules.md#MOD-2)).
 - Submodule definitions registered in global scope.
 
 **What Resolve does NOT check:**
@@ -155,8 +155,8 @@ Resolve is strictly a shallow/interface validation pass. It operates on `FileSum
 
 **Postconditions:**
 - Types are consistent across expressions, statements, and function signatures.
-- Linearity discipline enforced: linear values are consumed exactly once; a
-  live value cannot be overwritten, while a consumed `mut` place may be rebound.
+- Linearity discipline enforced ([OWN-1](../spec/ownership.md#OWN-1),
+  [OWN-2](../spec/ownership.md#OWN-2), [OWN-9](../spec/ownership.md#OWN-9)).
 - Capability discipline validated: callers possess required capabilities.
 - `defer` and borrow blocks are well-formed.
 - Cross-module imports resolved via export tables.
@@ -175,17 +175,14 @@ Resolve is strictly a shallow/interface validation pass. It operates on `FileSum
 
 **Invariant established:** Types consistent, linearity valid, capabilities valid, FFI-safe types at extern boundaries. All names resolve within module scopes.
 
-**FFI safety validation:**
-- `#[repr(C)]` structs cannot have type parameters.
-- All fields of `#[repr(C)]` structs must be FFI-safe types.
-- All `extern fn` parameters and return types must be FFI-safe.
-- FFI-safe types: integer types, float types, Bool, Char, `()`, raw pointers (`*mut T`, `*const T`), and `#[repr(C)]` structs.
+**FFI safety validation:** `#[repr(C)]` structs and `extern fn` signatures
+([FFI-3](../spec/ffi.md#FFI-3), [FFI-4](../spec/ffi.md#FFI-4)).
 
-**Unsafe boundary validation:**
-- Dereferencing raw pointers (`*ptr` on `*mut T` or `*const T`) requires `Unsafe` capability.
-- Assigning through raw pointers (`*ptr = val` on `*mut T`) requires `Unsafe` capability.
-- Pointer-involving casts require `Unsafe` capability: pointer-to-pointer, pointer-to-integer, integer-to-pointer, array-to-pointer, pointer-to-reference.
-- Reference-to-pointer casts (`&x as *const T`, `&mut x as *mut T`) are safe and do not require `Unsafe`, since they preserve compiler-known provenance.
+**Unsafe boundary validation:** raw-pointer reads and writes need `Unsafe` or a `trusted` body
+([TRUST-4](../spec/trusted.md#TRUST-4), [TRUST-5](../spec/trusted.md#TRUST-5)). Pointer
+conversions written with `as` are [TRUST-1](../spec/trusted.md#TRUST-1) and the open
+[OPEN-98](../spec/decisions.md#OPEN-98); a reference-to-pointer cast needs no `Unsafe`
+([TRUST-13](../spec/trusted.md#TRUST-13)).
 
 ---
 
@@ -201,8 +198,7 @@ Resolve is strictly a shallow/interface validation pass. It operates on `FileSum
 - Surface AST desugared to Core IR (`CModule`/`CExpr`/`CStmt`).
 - All expressions carry full type annotations.
 - Method calls desugared to plain function calls.
-- Arrow expressions desugared.
-- `for` loops desugared to `while` with iterators.
+- `for` loops desugared to `while` (the loop forms are [STMT-6](../spec/statements.md#STMT-6); postfix `->` is removed, SYN-1).
 - Trait method resolution applied.
 - Cross-module import resolution via export tables.
 
@@ -214,7 +210,7 @@ Resolve is strictly a shallow/interface validation pass. It operates on `FileSum
 - Across functions/modules: `elabModule` runs each function independently, collecting all per-function errors.
 - Within function bodies: `elabStmts` catches per-statement errors, skips failed statements from the output, and adds placeholder types for failed let-declarations. All accumulated diagnostics are thrown at the end.
 
-**Invariant established:** Fully type-annotated Core IR. Methods/arrows/for desugared. Generic type parameters still present.
+**Invariant established:** Fully type-annotated Core IR. Methods and `for` desugared. Generic type parameters still present.
 
 ---
 
@@ -229,6 +225,10 @@ Resolve is strictly a shallow/interface validation pass. It operates on `FileSum
 - Types normalized: `Ty.generic "Heap" [t]` → `Ty.heap t`, etc.
 - Match arms sorted: specific constructors before wildcards/variables.
 - Struct literal fields reordered to match definition order.
+- Both are internal normal forms with no observable effect: a match still selects the first
+  matching arm in source order ([PAT-9](../spec/patterns.md#PAT-9)) and fields are evaluated in
+  the order written ([STMT-4](../spec/statements.md#STMT-4)); a probe of 2026-10-30 found neither
+  order changed on main.
 - Function signatures and expressions normalized.
 - Submodules recursively canonicalized (trait defs, trait impls, types in submodule declarations are all normalized).
 
@@ -254,17 +254,16 @@ CoreCheck is the post-elaboration semantic authority. It owns all legality rules
 - Core-level capability requirements are enforced for lowered operations, builtins, and extern calls.
 - Return statements agree with the elaborated function return type.
 - Match structure is validated after elaboration, including wrong-enum arms, duplicate variants, and variant field-count agreement.
-- Match expressions cover all enum variants (or have wildcard).
-- `break`/`continue` only inside loops.
+- Match expressions cover all enum variants (or have wildcard) ([PAT-2](../spec/patterns.md#PAT-2)).
+- `break`/`continue` only inside loops ([STMT-6](../spec/statements.md#STMT-6)).
 - Declaration-level checks validated across all modules and submodules:
-  - Copy/Destroy conflict detection.
-  - Copy struct fields must be Copy types.
+  - Copy/Destroy conflict detection and Copy fields ([OWN-13](../spec/ownership.md#OWN-13), [OWN-14](../spec/ownership.md#OWN-14)).
   - `#[repr(C)]` validation (no generics, FFI-safe fields).
-  - `#[repr(packed)]`/`#[repr(align(N))]` conflict and power-of-two checks.
+  - `#[repr(packed)]`/`#[repr(align(N))]` conflict and power-of-two checks ([FFI-4](../spec/ffi.md#FFI-4)).
   - Extern fn parameter and return type FFI safety.
-  - Builtin trait (`Destroy`) redeclaration prevention.
-  - Reserved function name detection.
-  - Trait impl completeness: all required methods provided, return type signatures match trait definition.
+  - Builtin trait (`Destroy`) redeclaration prevention ([TRAIT-8](../spec/traits.md#TRAIT-8)).
+  - Reserved function name detection ([MOD-3](../spec/modules.md#MOD-3)).
+  - Trait impl completeness and signatures ([TRAIT-9](../spec/traits.md#TRAIT-9)).
   - Unknown trait detection.
 
 **Error conditions** (all errors use the structured `CoreCheckError` inductive, rendered to identical strings via `CoreCheckError.message`):
@@ -304,7 +303,8 @@ CoreCheck is the post-elaboration semantic authority. It owns all legality rules
 - Original generic functions retained but unreferenced by concrete code.
 
 **Error conditions:**
-- Unbounded polymorphic recursion (infinite specialization).
+- Unbounded polymorphic recursion (infinite specialization) is meant to be an error, but main does
+  not refuse it: compilation does not terminate ([OPEN-132](../spec/decisions.md#OPEN-132)).
 
 **Invariant established:** All generics fully instantiated. No type variables in emitted code.
 

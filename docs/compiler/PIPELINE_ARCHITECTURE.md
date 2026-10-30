@@ -36,9 +36,11 @@ the thing Concrete trusts most is the thing least structurally guaranteed.
 ### Principle 1 — One reference semantics
 
 The language's operational meaning (integer arithmetic, casts, evaluation rules)
-is defined in exactly one place. The **interpreter is that definition** — the
-oracle by construction, not by coincidence. Every other consumer is derived from
-or checked against it:
+is defined in exactly one place. This note once made the interpreter that definition; the
+spec now gives the authority to Core's semantics ([MAINTAINERS.md](../spec/MAINTAINERS.md),
+"Authority"), and [PASS-13](../spec/pipeline.md#PASS-13) makes the interpreter and every
+compiled profile give a program the behaviour of its checked Core program. Every consumer is
+derived from or checked against that one meaning:
 
 - the constant-folder proves each fold preserves the reference semantics;
 - the backend derives checked-helper selection from the same facts;
@@ -95,12 +97,9 @@ Each judgment module must satisfy the same contract:
   live in `CompilerDB` when that DB is pulled by Phase 6B consumers and becomes
   the persistent incremental driver in Roadmap old Phase 8.5.
 
-The practical purity rule belongs to this same pattern. Once capability
-judgment can prove an expression is pure, trap-free/total, and returns
-non-`Unit`, silently discarding it as `expr;` should be rejected with an explicit
-acknowledgement escape: this is ordinary discard hygiene, not a user-facing
-row-effect system. Pure expressions that may trap are excluded until the trap
-judgment proves they are total, because their traps are observable behavior.
+The practical purity rule belonged to this same pattern; the language rule is now
+[OWN-7](../spec/ownership.md#OWN-7), which refuses every non-`Unit` expression statement, with
+`discard(e)` as the escape.
 
 ### Principle 2 — Facts committed once, read-only downstream
 

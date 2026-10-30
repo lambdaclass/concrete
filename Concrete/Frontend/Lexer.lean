@@ -481,6 +481,7 @@ partial def lexToken (s : LexerState) : LexerState × TokenKind :=
     | none => (s, .eof)
 
 /-- Tokenize entire source string. -/
+-- spec: SYN-6 (docs/spec/syntax.md; this declaration enforces the rule)
 partial def tokenize (source : String) : List Token :=
   -- Accumulate REVERSED (prepend is O(1)) and reverse once at the end. The old
   -- `acc ++ [tok]` appended per token — O(tokens) each, i.e. O(tokens²) to lex the

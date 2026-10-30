@@ -6,7 +6,11 @@ where each guarantee is enforced. The recent judgment unifications (`TypeJudgmen
 `CopyJudgment`, `Shared.unifyTypes`) made the *inputs* to Core single-sourced;
 this boundary is what turns that into a hard phase transition — `Lower` and the
 backend may assume their input is free of frontend / mono / type-policy residue,
-rather than defensively re-deriving it.
+rather than defensively re-deriving it. The language rules behind the residue classes are the
+spec's: [TYPE-6](../spec/types.md#TYPE-6) (operand types), [TRUST-4](../spec/trusted.md#TRUST-4)
+(capabilities and raw-pointer operations), [REF-1](../spec/references.md#REF-1) (no returned
+reference) and the stage contracts [PASS-5](../spec/pipeline.md#PASS-5) to
+[PASS-12](../spec/pipeline.md#PASS-12).
 
 ## Pipeline stages and validation points
 
@@ -48,10 +52,9 @@ independently, at the CoreCheck boundary (E0502, `binaryOperandMismatch`) — so
 even a `Check` hole is caught before Lower. This was confirmed by mutation
 testing: disabling Check's E0228 leaves `i8 + i32` rejected by CoreCheck E0502. A
 speculative post-mono mixed-width verifier was prototyped and then **removed** as
-redundant — CoreCheck already owns this boundary. (Note the width axis: E0715 is a
-*bit-width* mismatch — `Uint`/`Int` are both 64-bit and lower to one SSA op, so a
-same-width/different-signedness pair produced by a monomorphized generic is NOT a
-width residue; it reaches Lower and lowers fine.)
+redundant — CoreCheck already owns this boundary. (A same-width, different-signedness pair produced by a monomorphized generic, `Int` with
+`Uint`, is not a width residue for E0715, but it does not reach Lower either: the post-mono
+operator check refuses it, E0501 under [TYPE-6](../spec/types.md#TYPE-6).)
 
 ## Class 6 — returned-reference boundary (landed)
 

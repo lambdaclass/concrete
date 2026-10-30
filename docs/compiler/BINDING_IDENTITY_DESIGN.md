@@ -62,7 +62,7 @@ They must, for the cases where a contract names something a runtime expression a
 parameter, a ghost binding. That shared resolution is the point: it is what makes "which `x`" a
 question with an answer. Contract-only names (`result`, and later `old(...)`) get identities from
 the contract's own scope model, which is what H27's `result`-is-`ensures`-only rule already
-approximates by name.
+approximates by name (the language rule is [CON-2](../spec/contracts.md#CON-2)).
 
 **7. Serialized?**
 No. See 3 and 4. Not serializing is a design commitment, not an omission: it is what keeps the
@@ -74,7 +74,8 @@ Each step is independently committable and none depends on prover-specific code,
 stays extractable even though it lands on `spike/multi-kernel-theories`.
 
 1. **Containment first** (done): reject contracts naming a shadowed parameter, and binder-bearing
-   spec bodies. Both are temporary and say so in their diagnostics.
+   spec bodies. Both are temporary and say so in their diagnostics; the language rules are
+   [SCOPE-1](../spec/scope.md#SCOPE-1) and [CON-3](../spec/contracts.md#CON-3).
 2. Resolve contract identifiers to lexical binding IDs in the checker; keep names alongside for
    diagnostics.
 3. Carry resolved contract expressions into the typed contract record rather than re-reading AST

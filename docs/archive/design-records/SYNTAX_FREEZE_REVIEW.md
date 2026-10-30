@@ -1,6 +1,19 @@
-# Syntax Freeze Review
+# Syntax Freeze Review (design record)
 
-Status: freeze close-out review (Phase 3, items 76 and 77)
+Archived from docs/compiler: the syntax freeze review of Phase 3 (items 76 and 77). The
+[specification](../../spec/syntax.md) governs; where this record and the spec differ, the spec wins.
+Its surface facts are now stated there: the separators `.` and `::` (SYN-10, `#` refused), the token
+forms with no byte-string literal (SYN-6), no macros and no interpolation (SYN-1), modifier order
+and `else if` (the grammar, SYN-1), imports with no glob imports and no re-exports (MOD-2), builtin
+`Option` and `Result` needing no import (MOD-1), a variant always named through its enum (TYPE-7),
+integer patterns (PAT-7), the borrow block (REF-D3), field access through `&self` (MEM-4), postfix
+`?` removed (statements.md, "Recoverable failure"), no compound assignment (STMT-4) and char casts
+(ARITH-5). Its two undecided surface questions are OPEN-128 (`->` as well as `=>` in a match arm)
+and OPEN-129 (type arguments of an enum literal from the expected type, beside OPEN-46). Stale
+here: the three-separator table (#10) and `#` in patterns, the C-style `for` (#18; STMT-6@3 keeps
+`while` and the counted loop), and `trusted` before `impl` (§1.2; trust is per function, TRUST-5@2).
+
+Status: freeze close-out review (Phase 3, items 76 and 77), historical.
 
 This document covers two items before syntax freeze:
 
@@ -9,10 +22,10 @@ This document covers two items before syntax freeze:
 
 All proposals in this document must preserve LL(1). Anything requiring backtracking, context-sensitivity, or lookahead > 1 is explicitly rejected.
 
-For the LL(1) commitment, see [research/compiler/ll1-grammar.md](../../research/compiler/ll1-grammar.md).
-For what is permanently excluded, see [ANTI_FEATURES.md](../project/ANTI_FEATURES.md).
-For error handling ergonomics, see [the spec's recoverable-failure section](../spec/statements.md#recoverable-failure-explicit-result-flow).
-For stdlib API friction, see [STDLIB_API_REVIEW.md](../stdlib/STDLIB_API_REVIEW.md).
+For the LL(1) commitment, see [research/compiler/ll1-grammar.md](../../../research/compiler/ll1-grammar.md).
+For what is permanently excluded, see [ANTI_FEATURES.md](../../project/ANTI_FEATURES.md).
+For error handling ergonomics, see [the spec's recoverable-failure section](../../spec/statements.md#recoverable-failure-explicit-result-flow).
+For stdlib API friction, see [STDLIB_API_REVIEW.md](../../stdlib/STDLIB_API_REVIEW.md).
 
 ---
 

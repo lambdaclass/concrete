@@ -252,7 +252,7 @@ Main caution:
 **Input:** source text  
 **Output:** surface AST with source spans
 
-Lexing, parsing, syntax error reporting. Preserves user-written structure. LL(1), no semantic reasoning. Expands capability aliases (`cap IO = File + Console;`) at parse time so downstream passes see only concrete capability names.
+Lexing, parsing, syntax error reporting. Preserves user-written structure. LL(1), no semantic reasoning. Expands capability aliases at parse time so downstream passes see only concrete capability names ([TRUST-4](../spec/trusted.md#TRUST-4)).
 
 Does not do:
 - type reasoning
@@ -293,7 +293,7 @@ Accumulates errors at both module level (across functions) and statement level (
 
 This is where surface language ends.
 
-- remove supported surface sugar (`!`); postfix `?` is rejected by the parser
+- remove supported surface sugar (`!`); postfix `?` is rejected by the parser ([recoverable failure](../spec/statements.md#recoverable-failure-explicit-result-flow))
 - lower method calls into explicit function/impl dispatch
 - normalize pattern matching, borrow-region syntax, struct/enum constructors
 - attach concrete types to expressions and bindings
@@ -445,7 +445,7 @@ It should only know syntax.
 | Category | Lives in | Examples |
 |----------|----------|----------|
 | Syntax features | Parser | `if`, `match`, `fn`, `struct`, `enum`, `cap` (alias) |
-| Checker/elaboration intrinsics | Elaborate + Validate | intercepted calls (`alloc`, `free`, `vec_*`, `map_*`), type constructors |
+| Checker/elaboration intrinsics | Elaborate + Validate | intercepted calls (`alloc`, `free`, `vec_*`, `map_*`; their signatures are [TYPE-10](../spec/types.md#TYPE-10)), type constructors |
 | Runtime/codegen intrinsics | Lower + EmitSSA | memory layout, calling conventions, POSIX wrappers |
 | Ordinary library code | `std/` source files | string utilities, I/O wrappers, collection helpers |
 

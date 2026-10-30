@@ -77,6 +77,11 @@ structure, not to individual functions:
 
 ### Semantic contract (fixed first; everything is stated against it)
 
+Its language-level parts are spec rules: behaviours [STMT-1](../spec/statements.md#STMT-1),
+resources and failure [STMT-2](../spec/statements.md#STMT-2), floats
+[ARITH-1](../spec/arithmetic.md#ARITH-1), the sequential scope [STMT-3](../spec/statements.md#STMT-3)
+and no closures [TYPE-1](../spec/types.md#TYPE-1).
+
 - **Behaviours.** Every executable IR has initial/final states and observable behaviours: a trace of
   external events (I/O, FFI calls and returns) ending in *return*, *defined trap*, *silent
   divergence* or *infinite external interaction*. Stuck execution — a violated `Unsafe`
@@ -117,17 +122,16 @@ structure, not to individual functions:
 ### Language decisions this requires
 
 - **References are strictly second-class:** locals and downward parameters only, never stored in
-  aggregates or the heap, never returned. Today a reference can be stored in a struct field
-  (bug 092's reproducer compiles); the language closes that. This restriction simplifies escape
+  aggregates or the heap, never returned ([REF-1](../spec/references.md#REF-1), [REF-3](../spec/references.md#REF-3)). This restriction simplifies escape
   checking. Safe Core's value abstraction additionally relies on linear ownership, valid
   shared/exclusive borrows, and proved or explicitly assumed contracts for raw-memory and foreign
   operations.
 - **Raw pointers** remain under `Unsafe`/`trusted`; authorization does not establish validity.
   Pointer arithmetic, integer↔pointer casts and address exposure are distinct operations with
-  explicit semantics. Quasi-concrete addresses (a block gets an address only when exposed) are the
+  explicit semantics ([MEM-2](../spec/memory.md#MEM-2), [TRUST-1](../spec/trusted.md#TRUST-1)). Quasi-concrete addresses (a block gets an address only when exposed) are the
   candidate, with an explicit finite-address-space policy; address exposure can have semantic
   effects and is not treated as an erasable cast.
-- **No implicit destruction** (OWNERSHIP_MODEL); linear conservation is required at reachable
+- **No implicit destruction** ([OWN-13](../spec/ownership.md#OWN-13)); linear conservation is required at reachable
   exits, not along divergence.
 - Disputed surface rules (shadowing, match binding, statement vs value, literal typing) are fixed
   by writing them down (S4) and then defining them by elaboration into Core.
@@ -169,7 +173,8 @@ lowering.
   cover every possible target and are not the sole authority for imported callbacks.
   Capabilities are not purity: mutation/effect summaries are separate.
 - **Bounds, overflow and division are semantics, not static checks:** trapping operations in Core.
-  A pass may remove a trap only when handed a discharged-VC certificate naming that operation.
+  A pass may remove a trap only when handed a discharged-VC certificate naming that operation
+  ([PASS-9](../spec/pipeline.md#PASS-9)).
 - **Layout/ABI** checking emits representation certificates; each later IR's verifier emits its
   well-formedness artifact.
 - Private constructors are API discipline, not soundness: artifacts bind their exact payload, and
@@ -427,7 +432,7 @@ S11 lands. R-18 – R-20 relabelled shape-only until their proofs exist.
 **Exit:** every in-scope enforcement phrase has a manifest row whose mutation its leg kills in a
 qualified campaign.
 
-**S4 Written language rules (R-0500).** Normative paragraphs in `docs/language/` for block scoping
+**S4 Written language rules (R-0500).** Normative entries in the spec (`docs/spec/`, which absorbed `docs/language/`) for block scoping
 and shadowing, match-binding positions and names, statement vs value position, sequential
 assignment within a loop iteration, literal typing and range (signed minima preserved), cast
 semantics per width pair, evaluation order, short-circuiting, and second-class references; each
@@ -691,7 +696,7 @@ differential fuzzer compares it with the binary; S4's paragraphs link bidirectio
 clauses; the representative lemmas are proved.
 
 **S8 Checker rules, authoritative on Core (R-0499).** Depends on S5, S7. Declarative judgments in
-`docs/language/CHECKER_RULES.md` for use-once, conservation at reachable exits, borrow validity
+the spec's ownership, reference and trusted chapters (formerly `docs/language/CHECKER_RULES.md`) for use-once, conservation at reachable exits, borrow validity
 (a source may not be moved, destroyed or incompatibly mutated while a reference to it is live;
 shared/exclusive aliasing), no escaping or stored reference, capability containment (a call's
 resolved required capabilities, after removing `Unsafe` only at a `trusted` call site, are a subset

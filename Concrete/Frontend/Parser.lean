@@ -83,6 +83,7 @@ def advance : ParseM Unit := do
   else
     modify fun s => { s with pos := s.pos + 1 }
 
+-- spec: SYN-7 (docs/spec/syntax.md; this declaration enforces the rule)
 def expect (expected : TokenKind) : ParseM Unit := do
   let actual ← peek
   let sp ← peekSpan
@@ -517,6 +518,7 @@ private def withCondHeadHint (start : Nat) (act : ParseM α) : ParseM α := do
 
 mutual
 
+-- spec: SYN-9, spec: SYN-10 (docs/spec/syntax.md; this declaration enforces the rule)
 partial def parsePrimary : ParseM Expr := do
   let tk ← peek
   match tk with
@@ -876,6 +878,7 @@ partial def parsePostfixNoAs (e : Expr) : ParseM Expr := do
     tk ← peek
   return result
 
+-- spec: SYN-10 (docs/spec/syntax.md; this declaration enforces the rule)
 partial def parsePostfix (e : Expr) : ParseM Expr := do
   let mut result := e
   let mut tk ← peek
@@ -1483,6 +1486,7 @@ partial def parseExprOrAssignNoSemicolon : ParseM Stmt := do
       throwParse "invalid assignment target" (span := some sp)
   | _ => return .expr e.getSpan e false
 
+-- spec: SYN-8 (docs/spec/syntax.md; this declaration enforces the rule)
 partial def parseMatchStmt : ParseM Stmt := do
   let sp ← peekSpan
   advance  -- consume match_

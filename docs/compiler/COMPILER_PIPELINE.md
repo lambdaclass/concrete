@@ -429,8 +429,9 @@ Every deterministic executable language feature should be testable with:
 interpreter result == compiled result
 ```
 
-This is ordinary compiler validation. It is not proof, but it catches wrong-code
-bugs before they become proof or audit confusion.
+This is ordinary compiler validation of [PASS-13](../spec/pipeline.md#PASS-13), which gives both
+the behaviour of the checked Core program. It is not proof, but it catches wrong-code bugs before
+they become proof or audit confusion.
 
 ## Inspect Commands
 

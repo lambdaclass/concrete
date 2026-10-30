@@ -53,7 +53,9 @@ intended behaviour.
    namespace from that environment alone (`Scope.ofSymbolsTyped`); its value namespace keeps the
    program-wide fallback, because Check injects the other top-level modules' public functions.
    Behaviour: a type name outside the environment is E0108 (MOD-1, MOD-2); a module that declares
-   and imports no `Result` gets the builtin.
+   and imports no `Result` gets the builtin. Which children's and siblings' types a module sees
+   without an import, and a user type against a builtin of the same name, are
+   [OPEN-43](../spec/decisions.md#OPEN-43).
 2. **Core spells a user type apart from a compiler-provided enum (the nested half of 227).**
    Core names a type by the definition it resolved to (`TypeSpelling`, bug 096): a user
    declaration's name, qualified by its module when another declaration shares it. The builtin
@@ -61,8 +63,8 @@ intended behaviour.
    `enum Result` and the builtin were one Core name and `Lower.variantIndex` picked the first. The
    builtin is a declaration too (`TypeId.builtin`): a user type spelled `Option` or `Result` is
    ambiguous with it whenever another module of the program can see the builtin, and is then
-   spelled by its module (`outer_Result`); the builtin keeps its name. Behaviour: none beyond the
-   decided rule ([LAYOUT_CONTRACT](../archive/design-records/LAYOUT_CONTRACT.md) §3.4, a user `Result` is a distinct type); the native build of the
+   spelled by its module (`outer_Result`); the builtin keeps its name. Behaviour: none beyond main's
+   current reading ([OPEN-43](../spec/decisions.md#OPEN-43); [LAYOUT_CONTRACT](../archive/design-records/LAYOUT_CONTRACT.md) §3.4, a user `Result` is a distinct type); the native build of the
    nested reproducer returns what `--interp` already returns.
 3. **Check compares and looks up types by `TypeId` (bug 223).** Check's environment maps a
    spelling to its declaration, an aliased import binds the alias to the imported declaration's
@@ -98,10 +100,12 @@ intended behaviour.
    Lower and the interpreter find it in a program-wide table and inline the initializer with the
    defining tree's constants in scope. The initializer is the defining module's Core, elaborated
    there, so it is not re-elaborated in the importer. Bug 132's refusal remains for two bare
-   spellings within one tree. An initializer that calls or names a function is not inlined
+   spellings within one tree, a containment under MOD-1 until constants carry their module. An initializer that calls or names a function is not inlined
    across modules, directly or through a constant it names (`initReachesCallable`): its callees
    are spellings the using function would
-   resolve; that waits for callable `DefId`s.
+   resolve; that waits for callable `DefId`s. Both refusals are E0602 at Lower today, contained
+   defects against [MOD-9](../spec/modules.md#MOD-9) (a `pub const` can be imported) and
+   [PASS-12](../spec/pipeline.md#PASS-12), not language rules.
 
 Steps 1 and 2 land in this slice. Steps 3 and 4 change the checker's type equality and Core's
 constant references; each is its own slice with its own byte-identity accounting.
@@ -137,7 +141,7 @@ any accepted program relies on:
 - `spellMethodCallsApart` respells a method reference whose spelling a free function defines by
   the method it names, so below Elab the spelling alone still resolves. Other spellings do not move,
   so no V1 fingerprint over a method call moves.
-- A free function spelled like its module's method definition name is MOD-3's E0299 (bug 082 put
+- A free function spelled like its module's method definition name is [MOD-3](../spec/modules.md#MOD-3)'s E0299 (bug 082 put
   method definition names in the module's callable namespace), and a trait in a type position is
   E0108 (TYPE-2).
 
