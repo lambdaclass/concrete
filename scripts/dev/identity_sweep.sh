@@ -30,7 +30,11 @@ OUT="$3"
 for tool in timeout xargs sed diff; do
   command -v "$tool" >/dev/null || { echo "identity_sweep: '$tool' is required (run inside nix develop)" >&2; exit 2; }
 done
-case "${JOBS-unset}" in unset) ;; ''|*[!0-9]*|0) echo "identity_sweep: JOBS must be a positive integer, got '$JOBS'" >&2; exit 2 ;; esac
+case "${JOBS-unset}" in
+  unset) ;;
+  ''|*[!0-9]*) echo "identity_sweep: JOBS must be a positive integer, got '$JOBS'" >&2; exit 2 ;;
+  *) [ "$((10#$JOBS))" -ge 1 ] || { echo "identity_sweep: JOBS must be a positive integer, got '$JOBS'" >&2; exit 2; } ;;
+esac
 source "$ROOT/scripts/tests/lib/heavy_slots.sh"
 heavy_slot_acquire "identity_sweep $WHAT" || exit $?
 trap heavy_slot_release EXIT
@@ -72,7 +76,7 @@ find "$OUT/base" "$OUT/new" -name '*.out' -print0 | xargs -0 sed -i.bak -E \
   -e 's/"compiler": *"[^"]*"/"compiler": "X"/g' \
   -e 's/"timestamp": *"[^"]*"/"timestamp": "T"/g' \
   -e 's/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z?/TS/g' \
-  -e 's/\(([A-Za-z0-9_.$@]*)\+0x[0-9a-f]+\) \[0x[0-9a-f]+\]/(\1+ADDR) [ADDR]/g' \
+  -e 's/^([^ ()]*)\(([A-Za-z0-9_.$@]*)\+0x[0-9a-f]+\) \[0x[0-9a-f]+\]$/\1(\2+ADDR) [ADDR]/' \
   -e "s#$BASE#BIN#g; s#$NEW#BIN#g"
 find "$OUT/base" "$OUT/new" -name '*.bak' -delete
 n="$(find "$OUT/base" -name '*.out' | wc -l | tr -d ' ')"
