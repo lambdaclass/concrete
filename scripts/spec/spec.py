@@ -1099,7 +1099,7 @@ def rewrite_links(txt, here):
     def sub(m):
         text, tgt, frag = m.group(1), m.group(2), m.group(3) or ""
         if re.match(r"[a-z]+:", tgt) or tgt.startswith("#") or tgt.startswith("@"): return m.group(0)
-        if tgt.endswith(".md") and "/" not in tgt and tgt != "README.md":
+        if tgt.endswith(".md") and "/" not in tgt and tgt[:-3] not in NON_CHAPTERS:
             return f"[{text}](@/spec/{tgt}{frag})"
         path = os.path.normpath(os.path.join("docs/spec", tgt))
         return f"[{text}]({REPO_URL}{path}{frag})"
