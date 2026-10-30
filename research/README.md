@@ -162,7 +162,7 @@ If you want the highest-leverage current research first:
 
 ## Compiler
 
-- [compiler/goose-design-survey.md](compiler/goose-design-survey.md) — Goose comparison: open questions on residual checks, validated indices, compact storage, serialization, destination construction, and performance experiments; no adoption commitment (`P2`, `Open`)
+- [compiler/goose-design-survey.md](compiler/goose-design-survey.md) — Goose comparison: open questions on residual checks, validated indices, compact storage, serialization, destination construction, and performance experiments, fixture batching, check-elimination fuzzing and an analysis inventory; no adoption commitment (`P2`, `Open`)
 
 - [compiler/partial-def-inventory-2026-10.md](compiler/partial-def-inventory-2026-10.md) — the 664 partial compiler declarations from the elaborated environment, by stage and reason, which proofs each blocks and the conversion order; the totality ratchet holds the count (`P1`, `Open`)
 - [compiler/stringly-dispatch-2026-10.md](compiler/stringly-dispatch-2026-10.md) — the 458 string-literal comparisons in the compiler by class (a spelling standing in for an identity) with a disposition each, the slices done, and a candidate defect for a ruling (`P1`, `Open`)
@@ -238,6 +238,7 @@ If you want the highest-leverage current research first:
 
 ## Meta And Long-Horizon
 
+- [meta/recent-languages-2026.md](meta/recent-languages-2026.md) — 16 languages and verified toolchains created April–October 2026 (Jacquard, Solidus, LeanCIL, qedsvm, Phil, Valen, zerolang, Dawn and others), pinned commits, admission filter, language-level proposals and rejections; README-level only, re-run every six months (`P2`, `Research`, 2026-10-30)
 - [meta/bend-roc-lessons.md](meta/bend-roc-lessons.md) — full Bend/Roc comparison, video topic map, proof/checking/runtime/GPU findings, authority boundaries, and 27 philosophy-filtered considerations; no adopted work or queue changes (`P2`, `Research`, 2026-10-24)
 - [meta/high-leverage-systems-ideas.md](meta/high-leverage-systems-ideas.md) — recurring high-value systems ideas (`P0`, `Open`)
 - [meta/ten-x-improvements.md](meta/ten-x-improvements.md) — the biggest long-term multipliers for Concrete (`P0`, `Open`)

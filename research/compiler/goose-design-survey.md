@@ -128,6 +128,36 @@ speedups are hypotheses to investigate, not evidence about Concrete.
 Sources: [benchmark design](https://github.com/aardappel/goose/blob/94cc64daeabcae6f072dc1fe2b864acda5a001bc/bench/design.md),
 [results discussion](https://github.com/aardappel/goose/blob/94cc64daeabcae6f072dc1fe2b864acda5a001bc/bench/summary.md).
 
+## Testing And Compiler-Engineering Practice
+
+Three Goose practices concern how the compiler is tested and maintained rather
+than the language:
+
+- **Many fixtures per compiler process.** `goose --multi-test` compiles a batch
+  of files and ends each file's output with a line carrying its exit code, so
+  the runner restores per-fixture results; after a crash, the remaining files
+  rerun one per process so the failure is attributed to the right fixture. Goose
+  reports roughly tenfold fewer compiler-startup costs. Could Concrete's runner
+  batch fixtures the same way without changing what any gate checks, given that
+  Lean process startup dominates small fixtures?
+- **Differential fuzzing of check elimination.** `bench/bce_fuzz.py` generates
+  loop shapes with deliberate off-by-one mutations and runs each program with the
+  elimination pass on and off; an unsound elimination turns an abort into a
+  read past the end, so the outputs differ. If Concrete ever removes bounds
+  checks, this is the matching test; the same pattern applies to any pass that
+  removes a safety check.
+- **An inventory of the compiler's analyses.** `docs/design/analysis_inventory.md`
+  lists every analysis with its size, a quality grade, and churn measured from
+  commits and fixtures, then names structural causes (one root plus side bits
+  that merges lose; facts pushed into state at many call sites instead of derived
+  from the tree; three passes each keeping their own alias and effect model).
+  Would the same read-only inventory of Check, Elab, and Lower locate Concrete's
+  structural bug owners?
+
+Sources: [testing](https://github.com/aardappel/goose/blob/94cc64daeabcae6f072dc1fe2b864acda5a001bc/docs/testing.md),
+[check-elimination fuzzer](https://github.com/aardappel/goose/blob/94cc64daeabcae6f072dc1fe2b864acda5a001bc/bench/bce_fuzz.py),
+[analysis inventory](https://github.com/aardappel/goose/blob/94cc64daeabcae6f072dc1fe2b864acda5a001bc/docs/design/analysis_inventory.md).
+
 ## Compatibility Questions And Existing Constraints
 
 The comparison should record where an idea depends on Goose's wider model:

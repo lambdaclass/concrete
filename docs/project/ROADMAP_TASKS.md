@@ -11216,6 +11216,9 @@ pinned sources, compatibility concerns, and possible experiments.
   without changing evaluation order, aliasing, or linear cleanup?
 - Which benchmark controls and share-nothing concurrency constraints are useful
   to compare without importing Goose's implicit authority or lifetime model?
+- Could the test runner compile many fixtures per compiler process, could a
+  differential fuzzer guard any pass that removes safety checks, and would an
+  analysis inventory of Check, Elab and Lower locate structural bug owners?
 - What evidence would support or rule out each idea under Concrete's
   [design policy](PROJECT.md#design-policy)?
 
@@ -11226,3 +11229,71 @@ Existing arena/index, binary-validation, concurrency, resource-fact, and
 performance-evidence owners remain unchanged. Listing Goose here neither adopts
 its nonlocal returns, automatic reclamation, or stale-slot semantics nor reopens
 standing language decisions. Any adoption requires a separate decision.
+
+
+## Open Research Questions: Recent Languages
+
+These questions remain undecided. They are not planned features, implementation
+tasks, priorities, release requirements, or changes to the current execution queue.
+The [recent-languages survey](../../research/meta/recent-languages-2026.md) records
+the 16 projects reviewed (repositories created 2026-04-24 to 2026-10-24), their
+pinned commits, the admission filter, and what is not imported. Every entry was
+reviewed at README level only; each question below starts with a source review
+at the pinned commit that confirms or corrects the claim.
+
+### Evidence and verified toolchains
+
+- Solidus: how does a single end-to-end `compile_correct` statement, with target
+  semantics kept in a separate pinned repository, compare with the S15 refinement
+  and transport theorems in [VERIFIED_PIPELINE.md](../compiler/VERIFIED_PIPELINE.md)?
+- LeanCIL: do receipts require that regeneration from the recorded identity
+  reproduce the same bytes, and is its trusted-computing-base presentation clearer?
+- qedsvm: could `Concrete.Semantics.TermIR` join the interpreter and compiled
+  binary in differential fuzzing, so proof-model/emitted-code disagreement is
+  found automatically? Owner: [emitted-code research](../../research/compiler/sparkle-emitted-code-validation.md).
+- Phil: does its source-verification/artifact-certification split name a
+  distinction our evidence classes lack?
+
+### Authority and review
+
+- Jacquard: how does its completeness guarantee for effect lists compare with
+  capability checking for FFI, indirect calls and trusted code, and could the
+  capability set of `main` be recorded in the built artifact for release-to-release
+  comparison without a runtime grant layer?
+- Fai, Blorp and FSL: which diagnostics and machine-readable outputs help
+  generate-check-repair loops, independent of their memory models?
+
+### Ownership contrast
+
+- Valen: which workloads does group borrowing accept that second-class
+  references reject, and does Concrete have an explicit answer for each?
+
+### Tooling and backends
+
+- zerolang: could semantic-query results carry a content hash that edit tooling
+  must match, with text remaining the source?
+- Dawn: what cross-backend equality gate should exist once a second backend does?
+- machin and bendc: is byte-identical emitted output across hosts and runs
+  already gated by the [determinism](../compiler/DETERMINISM.md) checks?
+- Rux and Ink: what can bounded explicit optimization passes and proved rewrite
+  laws contribute to the optimization-policy and proof-guided optimization questions?
+- Hale: does channel-only communication between single-owner components inform
+  R-0399 once its prerequisites are met?
+
+### Language and stdlib proposals for the owner
+
+- A function-level "no remaining bounds trap" claim, a grow-only std collection,
+  guaranteed construction into the destination, stored validated indices,
+  owned-only thread transfer with contained worker failure, and validated
+  offset-linked data loading are recorded in the survey as proposals. Each
+  goes to the owner with options before any design or encoding work.
+
+### Periodic refresh
+
+- Every six months, repeat the repository search, append new projects to the
+  survey with pinned commits, and add questions here only for entries that pass
+  the admission filter.
+
+Any adoption needs a forcing workload, bounded evidence and an explicit owner
+decision under the [design policy](PROJECT.md#design-policy) and
+[evidence architecture](../verification/EVIDENCE_ARCHITECTURE.md).
