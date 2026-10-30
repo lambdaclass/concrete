@@ -12,8 +12,8 @@ declarations on every foreign binding and the known-effectful symbol check (FFI-
 parameters on types (TYPE-D1, TYPE-15), handle types invariant in their capability arguments
 (TYPE-4, TYPE-17), and capabilities without run-time representation (TYPE-18). Where this document
 and the spec differ, the spec governs. R7's "`C` is inferred at each call site from the handle's
-type" is OPEN-45, an open owner decision, not a rule; R7's widening citation is OPEN-9X2; §5's
-signature agreement between two bindings of one C symbol is OPEN-9X5 (main does not check it), and
+type" is OPEN-45, an open owner decision, not a rule; R7's widening citation is OPEN-93; §5's
+signature agreement between two bindings of one C symbol is OPEN-96 (main does not check it), and
 its `extern fn ... = "write"` spelling is pseudocode for FFI-5's `#[link_name]`. The descriptor
 rules (R5), closing a handle (R6), cross-package transport (R9) and the assumption reports (R10) are
 std, FFI-audit and reporting policy, kept here and in

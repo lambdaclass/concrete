@@ -11,8 +11,8 @@ context: TYPE-1. Capability sets and `<cap C>`: TYPE-D1. A function type's set i
 never erased through a combinator: TYPE-17 (and TYPE-4's refusal). Calling through a function
 pointer requires its set: TRUST-4. Borrowed and lent contexts: REF-10, REF-11, REF-13; no reference
 stored or returned: REF-1 to REF-3. Where this document and the spec differ, the spec governs.
-Open questions it raised: the `with(f)` elision shortcut (OPEN-9X1) and widening by subsumption
-(OPEN-9X2). Stale: §7's `for x in xs` is not the language (STMT-6: `while` and the counted loop;
+Open questions it raised: the `with(f)` elision shortcut (OPEN-92) and widening by subsumption
+(OPEN-93). Stale: §7's `for x in xs` is not the language (STMT-6: `while` and the counted loop;
 collection iteration is OPEN-51), and §5.1's "disjoint fields `&mut w.a` + `&mut w.b` stay legal"
 and its `let r = &mut c` predate REF-11@3 (loans keyed by the root) and REF-6. The std API
 patterns (`for_each_into`, `with_value`, `modify`) are library design, not language rules. Status
@@ -369,13 +369,13 @@ fn map<T, U, cap C>(xs: &Vec<T>, f: fn(&T) with(C) -> U) with(C) -> Vec<U>
 - If `f` is `with(File)`, `map` requires `with(File)`.
 - A caller satisfies `with(C)` by holding a superset of the instantiated `C`
   (TRUST-4). The lattice example once given here (`Concurrent ⊇ Async`) named
-  capabilities that do not exist; widening by subsumption is OPEN-9X2.
+  capabilities that do not exist; widening by subsumption is OPEN-93.
 
 The base machinery (`cap C`, fn-type capsets, call-site subset check, smuggle
 rejection) is **[implemented]**. The surface work remaining is mechanical:
 giving the stdlib HOF family these signatures and the elision shortcut below.
 
-**Elision shortcut [specified, not built; OPEN-9X1].** Per the research note, the common case should
+**Elision shortcut [specified, not built; OPEN-92].** Per the research note, the common case should
 need no explicit `cap C`. A combinator whose only capability source is its
 callbacks may write the propagated form (e.g. `with(f)` / inferred union) and the
 checker computes the required set as the union of the capsets of all callbacks
@@ -464,7 +464,7 @@ Examples to add under `examples/callbacks/`:
 - **No first-class capability values, no effect handlers, no capability
   subtraction, no row-polymorphic effects** (trusted.md, "Absent by decision").
 - **No implicit capability widening** — main refuses it (TYPE-4, TYPE-17); the
-  "explicit or via lattice subsumption" half is OPEN-9X2.
+  "explicit or via lattice subsumption" half is OPEN-93.
 
 ## 11. Build order
 

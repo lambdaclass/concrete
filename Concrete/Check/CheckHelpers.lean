@@ -208,7 +208,7 @@ def resolveType (ty : Ty) : CheckM Ty := do
     let params' ← params.mapM resolveType
     let retTy' ← resolveType retTy
     -- References are second-class: a function TYPE may not return a reference,
-    -- directly or nested (docs/language/VALUE_MODEL.md). This makes ref-returning
+    -- directly or nested (docs/spec/references.md). This makes ref-returning
     -- callbacks unconstructable, which keeps scoped callbacks (`with_value`)
     -- sound — the callback cannot return the borrowed element it was handed.
     if tyContainsRef retTy' then

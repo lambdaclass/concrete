@@ -111,7 +111,7 @@ fn main() -> Int {
 **Rationale.** Silent wrapping is a correctness bug in almost all code, and signed overflow is
 the case C leaves undefined. Concrete never emits LLVM's `nsw` or `nuw`: checked operations use
 the overflow intrinsics and branch to an abort helper. This holds in every profile; a profile
-changes reports, never code generation (whether a profile may omit a check is OPEN-9X1). The
+changes reports, never code generation (whether a profile may omit a check is OPEN-97). The
 results of a shift, a division and a remainder that do not abort are ARITH-8. Constant folding may refuse an operation it proves always overflows (E0900),
 but it does not see every such operation, so the run-time trap is the guarantee. Array bounds are
 checked the same way, an index out of bounds aborting.
@@ -211,8 +211,8 @@ and sign changes are still accepted and truncate or reinterpret, and float to in
 toward zero and aborts on NaN, an infinity or a value outside the target's range (a checked
 conversion), until the named operations land and the corpus migrates (about 500 to 700 sites). Pointer and reference casts are not
 numeric conversions (TRUST-1 owns the pointer–integer case; which pointer and reference
-conversions `as` writes is OPEN-9X2). The named operations' results are ARITH-10, and their
-spellings are OPEN-9X3.
+conversions `as` writes is OPEN-98). The named operations' results are ARITH-10, and their
+spellings are OPEN-99.
 
 Until then, on current main, narrowing truncates silently (`300 as u8` is 44, `-1 as u32` is
 4294967295, `3.9 as i32` is 3). Even a widening needs `as`: `want_u64(my_u8)` is E0220 (TYPE-4),
@@ -377,7 +377,7 @@ wraps (ARITH-4) without looking for an enclosing `#[wrapping]` attribute or modu
 exists. `#[overflow_checked]` asks the proof pipeline for a no-overflow obligation at each
 fixed-width `+`, `-` and `*` of the function, which is evidence, not meaning: the operations still
 abort on overflow. Whether a build profile may omit a check or refuse an unproved operation is
-OPEN-9X1.
+OPEN-97.
 
 ```con accept name=overflow-checked-in-range exit=42
 #[overflow_checked]
@@ -419,7 +419,7 @@ result, so that no consumer has to guess what a lossy conversion means (bugs 080
 `truncate::<u8>(300)` is 44 and `reinterpret::<u32>(-1)` is 4294967295, what a narrowing or
 sign-changing `as` gives today. The float rounding operations (`trunc`, `round`, `floor`, `ceil`)
 are specified with ARITH-1's reference model. None of these exists on main yet (R-0500), and their
-spellings are OPEN-9X3.
+spellings are OPEN-99.
 
 ```con accept name=truncate-and-reinterpret exit=42 pending=R-0500 now=reject:E0101:resolve
 fn main() -> Int {

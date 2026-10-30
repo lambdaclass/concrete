@@ -1065,8 +1065,8 @@ must hold the callback's set, which a capability parameter names: the combinator
 callback carries, no more and no less. A handle is a struct with capability parameters (TYPE-15)
 whose fields are such function types, so `Sink<{}>` is not a `Sink<Console>` either (TYPE-4).
 Whether a function value converts to a type with a larger set (`fn(Int) -> Int` to
-`fn(Int) with(Console) -> Int`, or `with(File)` to `with(Std)`) is OPEN-9X2; main refuses it
-(E0220). A combinator spelling that infers its set from its callbacks (`with(f)`) is OPEN-9X1.
+`fn(Int) with(Console) -> Int`, or `with(File)` to `with(Std)`) is OPEN-93; main refuses it
+(E0220). A combinator spelling that infers its set from its callbacks (`with(f)`) is OPEN-92.
 
 ```con accept name=set-order exit=42
 fn inc(x: Int) with(Console, File) -> Int {
@@ -1170,7 +1170,7 @@ mod m {
 
 **Rationale.** A type written `Int` and one written `i64` are the same type, so either may flow into
 a position that expects the other without a conversion (TYPE-4). The parser maps each spelling to
-one type. Whether `Float32` is a spelling of `f32` is OPEN-9X6: the parser does not map it (nor
+one type. Whether `Float32` is a spelling of `f32` is OPEN-102: the parser does not map it (nor
 `Char`), so on main `Float32` in a type position is a different type from `f32`.
 
 ```con accept name=two-spellings exit=42

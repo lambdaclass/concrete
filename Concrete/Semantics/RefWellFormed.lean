@@ -12,7 +12,7 @@ namespace Concrete
 
 /-- Does this type contain a reference (`&T`/`&mut T`) anywhere? Used to enforce
     the "references are second-class — never returned" invariant
-    (docs/language/VALUE_MODEL.md). Raw pointers (`*const`/`*mut`) are NOT references and
+    (docs/spec/references.md). Raw pointers (`*const`/`*mut`) are NOT references and
     are allowed in return position (they are the audit-visible unsafe escape). -/
 -- spec: REF-D1 (docs/spec/references.md; this declaration enforces the rule)
 partial def tyContainsRef : Ty → Bool

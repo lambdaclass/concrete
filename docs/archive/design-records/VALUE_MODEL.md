@@ -28,12 +28,12 @@ For FFI and trust boundaries, see [FFI.md](../../platform/FFI.md).
 | `&T` | Shared reference | Copy | Immutable borrow |
 | `&mut T` | Exclusive reference | Linear | Mutable borrow, consumed on use |
 | `*mut T` / `*const T` | Raw pointer | Copy | Requires `Unsafe` capability |
-| `Heap<T>` | Owned heap pointer | Linear | `.` field access through one heap layer ([MEMORY_SEMANTICS.md §5](../../language/MEMORY_SEMANTICS.md#5-field-access)), must be freed |
+| `Heap<T>` | Owned heap pointer | Linear | `.` field access through one heap layer ([MEMORY_SEMANTICS.md §5](../../spec/memory.md#MEM-4)), must be freed |
 | Structs | Value | Linear | Opt-in `Copy` via marker |
 | Enums | Value | Linear | Opt-in `Copy` via marker |
 | Newtypes | Same as inner type | Inherits | `newtype UserId = Int` is Copy because `Int` is Copy |
 | Function pointers | Value | Copy | No closures |
-| Module constants (`const`) | Value, never a place | — | Copied at each use; never addressable (`&C` is refused like `&42`); their type holds no reference ([MEMORY_SEMANTICS.md §15](../../language/MEMORY_SEMANTICS.md) REF-3, decided 2026-10-21) |
+| Module constants (`const`) | Value, never a place | — | Copied at each use; never addressable (`&C` is refused like `&42`); their type holds no reference ([MEMORY_SEMANTICS.md §15](MEMORY_SEMANTICS.md) REF-3, decided 2026-10-21) |
 
 ## Copy vs Linear
 
@@ -47,7 +47,7 @@ For FFI and trust boundaries, see [FFI.md](../../platform/FFI.md).
 ## References are second-class: they flow down, never up through returns
 
 The normative statement of these rules, with each rule's diagnostic, enforcing site, fixtures and
-current enforcement status, is [MEMORY_SEMANTICS.md §15](../../language/MEMORY_SEMANTICS.md) (REF-1 to REF-8).
+current enforcement status, is [MEMORY_SEMANTICS.md §15](MEMORY_SEMANTICS.md) (REF-1 to REF-8).
 This section explains the design.
 
 Since the semantics decision of 2026-10-21, a reference exists only as a **parameter**, a **call

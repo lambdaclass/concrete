@@ -187,7 +187,7 @@ Exit 0b (memory corruption in safe code). The class is owned by R-0501 (S10 Plac
 a heap-shell local and a field projection through it are one place with one representation) and
 R-0504 (S12 validators: a load whose type disagrees with its pointer operand's pointee is
 refused). The meaning the repair must implement was decided on 2026-10-21 as the one-hop rule
-([MEMORY_SEMANTICS §5](../language/MEMORY_SEMANTICS.md), "Field access through a reference or a
+([MEMORY_SEMANTICS §5](../archive/design-records/MEMORY_SEMANTICS.md), "Field access through a reference or a
 heap shell"): `&h` and `&mut h` denote the slot `h`, and `e.f` with `e : &mut Heap<S>`
 dereferences the reference to the slot and then the heap pointer the slot holds. The interim
 repair (the Fix section) makes Elab's heap-shell desugar follow that rule (two dereferences for

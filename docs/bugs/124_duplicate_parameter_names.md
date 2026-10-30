@@ -71,7 +71,7 @@ authority defect is demonstrated.
 
 ## Fix
 
-Exit 2i SCOPE-1@1 ([MEMORY_SEMANTICS.md](../language/MEMORY_SEMANTICS.md) §15.4). `checkFn` runs
+Exit 2i SCOPE-1@1 ([MEMORY_SEMANTICS.md](../archive/design-records/MEMORY_SEMANTICS.md) §15.4). `checkFn` runs
 `scope1Diagnostics` (`Concrete/Check/Check.lean`) before it checks the body: an explicit lexical
 scope chain over every binder kind, starting with the parameters in order, so the second `a` of
 `fn f(a: Int, a: Int)` is E0301 (`shadowsVisibleBinding`), with the versioned migration evidence

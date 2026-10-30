@@ -2435,7 +2435,7 @@ partial def checkGuard (guard : Option Expr) : CheckM Unit := do
     | some n => throwCheck (.guardMovesLinear n) (some g.getSpan)
     | none => pure ()
 
--- spec: REF-6, spec: REF-7, spec: OWN-2, spec: OWN-5, spec: OWN-6, spec: OWN-7, spec: OWN-9, spec: OWN-10, spec: OWN-12, spec: OWN-15, spec: OWN-1, spec: TYPE-4, spec: TYPE-7, spec: TYPE-11, spec: TYPE-5, spec: PAT-5, spec: STMT-6, spec: SYN-3, spec: PAT-8 (docs/spec/references.md; this declaration enforces the rule)
+-- spec: REF-6, spec: REF-7, spec: OWN-2, spec: OWN-5, spec: OWN-6, spec: OWN-7, spec: OWN-9, spec: OWN-10, spec: OWN-12, spec: OWN-15, spec: OWN-1, spec: TYPE-4, spec: TYPE-7, spec: TYPE-11, spec: TYPE-5, spec: PAT-5, spec: STMT-6, spec: SYN-3, spec: PAT-8, spec: REF-D3, spec: TRUST-11 (docs/spec/references.md; this declaration enforces the rule)
 partial def checkStmt (stmt : Stmt) (retTy : Ty) (ends : Option EndsTree := none) : CheckM Unit := do
   -- Rule (d) (bug 142): an assignment's destination (the indexed array, the index, the
   -- dereferenced target, the projected base) is an operand too; only the assigned value keeps
@@ -3460,7 +3460,7 @@ def checkConstInit (c : ConstDef) : CheckM Unit := do
   let vt ← checkExpr c.value (some ty)
   expectTy ty vt s!"constant '{c.name}'" (some c.span)
 
--- spec: REF-1, spec: STMT-9, spec: STMT-10 (docs/spec/references.md; this declaration enforces the rule)
+-- spec: REF-1, spec: STMT-9, spec: STMT-10, spec: TRUST-12 (docs/spec/references.md; this declaration enforces the rule)
 def checkFn (f : FnDef) : CheckM Unit := do
   let f := { f with body := f.body.map unparenStmt }
   -- SCOPE-1@1 first: a binding that reuses a visible name is refused before any check that

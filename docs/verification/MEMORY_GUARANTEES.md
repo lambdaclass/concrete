@@ -8,7 +8,7 @@ keeps what is safe to claim publicly and where the claim stops.
 
 Status: active reference
 
-This document separates what the checker enforces today, what is safe to claim publicly, and what still needs closure. For the full operational semantics, see [MEMORY_SEMANTICS.md](../language/MEMORY_SEMANTICS.md).
+This document separates what the checker enforces today, what is safe to claim publicly, and what still needs closure. For the full operational semantics, see [MEMORY_SEMANTICS.md](../archive/design-records/MEMORY_SEMANTICS.md).
 
 For the value/reference categories, see [VALUE_MODEL.md](../archive/design-records/VALUE_MODEL.md).
 For the broader safety model, see [SAFETY.md](SAFETY.md).
@@ -138,7 +138,7 @@ The goal is to eventually state:
 
 This requires:
 
-- ~~one checker-matching memory/reference semantics document~~ **done** — [MEMORY_SEMANTICS.md](../language/MEMORY_SEMANTICS.md)
+- ~~one checker-matching memory/reference semantics document~~ **done** — [MEMORY_SEMANTICS.md](../archive/design-records/MEMORY_SEMANTICS.md)
 - ~~closure on hard edge cases~~ **done** — edge cases documented with status in MEMORY_SEMANTICS.md §13, adversarial tests for each, integer-match consumption bug fixed
 - ~~`&mut T` ownership/consumption closure~~ **done** — two-kind model (borrow-block vs parameter refs), checker enforcement, codegen alignment, 21 adversarial tests, return-in-borrow codegen fix; see [REF-10](../spec/references.md#REF-10) and [REF-10](../spec/references.md#REF-10)
 - ~~no-codegen-crash regression rule~~ **done** — documented above; safe-subset programs must either compile or fail with an explicit checker diagnostic

@@ -1,15 +1,36 @@
 # Memory
 
 Safe code owns memory through bindings and `Heap<T>` values and reaches other storage only through
-references (the references chapter). A binding's ownership state moves forward only (unconsumed,
-used, consumed; reserved by a pending `defer`; frozen while a borrow block borrows it), and Copy
-bindings are not tracked. This chapter covers initialization (MEM-3), field access through
+references (the references chapter). Every local binding has an ownership state (MEM-D1). This
+chapter covers initialization (MEM-3), field access through
 references and heap shells (MEM-4), heap ownership (MEM-5), array bounds (MEM-6) and the two
 layers of the memory model the Core semantics defines (MEM-1, MEM-2, pending). The checker
 tracks whole owners: a borrow freezes its whole root (REF-8, REF-11), with no field- or
-element-granular borrows. The design records are [MEMORY_SEMANTICS.md](../language/MEMORY_SEMANTICS.md)
+element-granular borrows. The design records are [MEMORY_SEMANTICS.md](../archive/design-records/MEMORY_SEMANTICS.md)
 and [MEMORY_GUARANTEES.md](../verification/MEMORY_GUARANTEES.md), which keeps the public safety claim and
 its boundaries.
+
+## Definitions
+
+<a id="MEM-D1"></a>
+### MEM-D1. Ownership state
+
+**MEM-D1@1.** At each program point a local binding is unconsumed, used (read or borrowed), consumed (moved), reserved (passed by value to a pending `defer`) or frozen (the owner of an enclosing borrow block, REF-D3), and a use or move of a Copy binding changes no state.
+
+- Kind: definition
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.VarState
+- Semantics: none
+- Obligation: none
+- Evidence: by-users
+
+**Rationale.** The rules key on these states: a consumed binding is not used again (OWN-1), a
+linear binding is consumed or reserved before every exit (OWN-2), a reserved one is not moved
+(OWN-12) and a frozen one is not accessed (REF-D3, REF-8). A Copy binding is frozen by a borrow
+block like any other. A local passed by borrow to a pending `defer` is pinned, which is not a
+state of its own: it stays unconsumed or used and may not be moved (OWN-12, OWN-16).
 
 ## Rules
 

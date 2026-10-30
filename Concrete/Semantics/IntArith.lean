@@ -10,7 +10,7 @@ width", "in range?", "does this fold trap?". When those drift, a fold or a
 helper can disagree with the interpreter — which is the oracle for differential
 testing — and a documented trap can silently vanish (three such soundness holes
 were found and fixed when the checked-arithmetic flip landed; see
-`docs/language/ARITHMETIC_POLICY.md`).
+`docs/spec/arithmetic.md`).
 
 This module is the one place that decides:
 * `intBitWidth` — bit width and signedness of each fixed-width integer type;

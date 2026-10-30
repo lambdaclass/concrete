@@ -18,7 +18,7 @@ rules are REF-10, REF-5 and REF-11, REF-9, FFI-1, OWN-D1 and TYPE-14, and TRUST-
 [docs/spec](../spec/README.md). The other
 recommendations stand as recommendations until their owners implement them.
 This document does not restate rules. Each rule is normative in its canonical owner: references and
-binding in [MEMORY_SEMANTICS §15](../language/MEMORY_SEMANTICS.md), evaluation order in
+binding in [MEMORY_SEMANTICS §15](../archive/design-records/MEMORY_SEMANTICS.md), evaluation order in
 [STATEMENT_EXPRESSION_MODEL](../archive/design-records/STATEMENT_EXPRESSION_MODEL.md#evaluation-order-and-assignment),
 arithmetic and casts in [ARITHMETIC_POLICY](../archive/design-records/ARITHMETIC_POLICY.md), the C boundary in
 [FFI.md](../platform/FFI.md) and `main` in [MAIN_EXIT_MODEL](../platform/MAIN_EXIT_MODEL.md).

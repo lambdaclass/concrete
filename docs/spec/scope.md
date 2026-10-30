@@ -3,11 +3,10 @@
 A name inside a function body denotes at most one visible local value binding at every program
 point (INV-SCOPE). A rule keyed by a name is therefore keyed by a binding. The reference rules
 ([references.md](references.md)) rely on this when they say that a reference's root "stays the
-same binding". The design record is [MEMORY_SEMANTICS §15.4](../language/MEMORY_SEMANTICS.md).
+same binding". The design record is [MEMORY_SEMANTICS §15.4](../archive/design-records/MEMORY_SEMANTICS.md).
 
-SCOPE-4, the namespace boundary, is still an open question and is not a rule. It asks whether
-a local may reuse the name of a top-level function, an import alias or an intrinsic. Today it
-may. That decision belongs to the modules chapter (README §8).
+Whether a local may reuse the name of a top-level function, an import alias, an intrinsic or a
+constant (the design record's SCOPE-4) is [OPEN-67](decisions.md#OPEN-67); today it may.
 
 ## Definitions
 
@@ -17,7 +16,7 @@ may. That decision belongs to the modules chapter (README §8).
 **SCOPE-D1@1.** A local binding is visible from its declaration to the end of the block that declares it, nested blocks included and whatever its state, where a parameter's block is the whole body, a pattern binder's is its arm or body, a `for` header binder's is the header and body, and a borrow-block binder's and region name's is the borrow block.
 
 - Kind: definition
-- Uses: none
+- Uses: REF-D3
 - Codes: none
 - Status: enforced
 - Enforced by: Concrete.scope1Diagnostics

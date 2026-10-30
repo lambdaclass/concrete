@@ -8,7 +8,7 @@ lifetime analysis is needed to show this, which is what makes the rules checkabl
 lexical argument (INV-REF, the proof target of R-0500 and V1).
 
 This chapter states the rules. For the design record behind them (probes, status history, gap
-analysis G1 to G19), see [MEMORY_SEMANTICS §15](../language/MEMORY_SEMANTICS.md). For the
+analysis G1 to G19), see [MEMORY_SEMANTICS §15](../archive/design-records/MEMORY_SEMANTICS.md). For the
 decisions of 2026-10-23 (D1 to D4), see
 [TIGHTENING_DECISIONS §4](../project/TIGHTENING_DECISIONS.md#4-decisions-of-2026-10-23). Those decisions enter this
 chapter as pending examples and entries until they are implemented. Raw pointers
@@ -54,6 +54,51 @@ raw pointer or inside a callback's type.
 reference. A named struct or enum can hold a reference only through its type arguments,
 because REF-3 forbids reference fields. For a binding, the outer reference is looked through
 (`tyHoldsRefInAggregate`): `& &T` and `&[Int; 2]` hold no reference in an aggregate.
+
+<a id="REF-D3"></a>
+### REF-D3. Borrow block
+
+**REF-D3@1.** A borrow block `borrow x as r in R { B }` binds `r` to a reference of type `&T` (with `borrow mut`, `&mut T`) to the local binding `x: T` for the block `B`, `x` is frozen (MEM-D1) while `B` runs, so that every access to `x` in `B` conflicts with `r` (REF-8), and when `B` ends, `r` and the locals of `B` go out of scope and `x` returns to the state it had before the block.
+
+- Kind: definition
+- Uses: MEM-D1
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.checkStmt
+- Semantics: none
+- Obligation: none
+- Evidence: by-users
+
+**Rationale.** A borrow block is the one form that holds a reference across statements: Concrete
+scopes borrows by explicit blocks rather than inferring lifetimes, so the reference lives exactly as
+long as `B`. The freeze covers reads as well as writes, moves and other borrows, under a shared
+borrow too: the owner decided on 2026-10-29 that whole-owner freezing under a shared borrow stays
+(OD15, gap G10), so `borrow x as r in R { out = x; }` is E0203 (REF-8). `B`'s own locals must be
+consumed inside it (OWN-2); `r` itself need not be (REF-10). `R`, the region name, is a binder that
+SCOPE-1 covers and has no other use; whether it stays is OPEN-57, and whether borrow blocks stay is
+OPEN-58. The block stated here is main's.
+
+```con accept name=owner-restored exit=42
+struct R { v: Int }
+
+fn take(r: R) -> Int {
+    let R { v } = r;
+    return v;
+}
+
+fn peek(r: &R) -> Int {
+    return r.v;
+}
+
+fn main() -> Int {
+    let r: R = R { v: 42 };
+    let mut seen: Int = 0;
+    borrow r as rr in Reg {
+        seen = peek(rr);
+    }
+    return take(r) + seen * 0;
+}
+```
 
 ## Rules
 
@@ -349,6 +394,15 @@ implicit `&self` receivers alike. Loans are keyed by the root (REF-11).
 
 Decided by the owner on 2026-10-29 (OD1, the Austral model): a reference is formed by borrowing a variable or projecting through a reference, `&s.f` is sugar, and a temporary is never a root. Loans are keyed by the root variable (REF-8, REF-11; OD15 part (a), decided 2026-10-29).
 
+A reference binding is a local binding, so `g(&r)` with `r: &T` passes a `& &T` that denotes `r`'s
+own slot, a place rooted at `r`; the inner reference is never read out of it (this rule) or written
+through it (REF-7). The normalized place behind this rule also refuses a field access, an index or
+a `*` whose base is neither a place nor a fresh owned value, such as `(if c { a } else { b }).f`,
+under this entry's tag and code although its sentence does not name it (a deliberate restriction,
+[KNOWN_HOLES H28](../verification/KNOWN_HOLES.md), which R-0499 may lift): bind the branch result
+first. Whether `as` may be applied to a reference, which main accepts only as an identity cast
+(`r as &T` with `r: &T`) and refuses otherwise (E0553), is OPEN-103.
+
 ```con reject name=borrow-operator code=E0238 stage=check pair=root-plus-projections
 fn read(r: &Int) -> Int {
     return *r;
@@ -424,6 +478,44 @@ fn main() -> Int {
 }
 ```
 
+```con accept name=borrow-reference-binding exit=42
+fn g(rr: & &Int) -> Int {
+    return 42;
+}
+
+fn f(r: &Int) -> Int {
+    return g(&r);
+}
+
+fn main() -> Int {
+    let v: Int = 1;
+    return f(&v);
+}
+```
+
+```con reject name=branch-value-base code=E0238 stage=check pair=bind-branch-first
+struct Copy P { n: Int }
+
+fn main() -> Int {
+    let a: P = P { n: 42 };
+    let b: P = P { n: 1 };
+    let c: bool = true;
+    return (if c { a } else { b }).n;
+}
+```
+
+```con accept name=bind-branch-first exit=42
+struct Copy P { n: Int }
+
+fn main() -> Int {
+    let a: P = P { n: 42 };
+    let b: P = P { n: 1 };
+    let c: bool = true;
+    let w: P = if c { a } else { b };
+    return w.n;
+}
+```
+
 **Conformance fixtures.**
 
 | fixture | expected | pair | modes |
@@ -470,6 +562,13 @@ the flow-sensitive half of the rules disappears. The rewrite is to borrow at eac
 (`f(&w.p); g(&w.p);`) or to borrow the owner in a borrow block. Writing *through* a reference
 (`*r = v`) assigns the referenced place, not the binding (REF-7).
 
+Two refusals are enforced under this entry's tag and code (E0302) although its sentence does not
+name them. A constant initializer is checked as an expression of the constant's type and may not
+borrow at all, a cast to a reference type counting as a borrow (`constBorrows`). A generic
+instantiated inside an `assert`, an `assume` or a ghost initializer may not be instantiated at a
+type that could hold a reference under substitution (`erasedRefInstantiation`), because erased code
+is never monomorphized, so the post-monomorphization half of this rule never sees it.
+
 ```con reject name=let-binds-ref code=E0302 stage=check pair=borrow-each-use
 struct P { n: Int }
 
@@ -511,6 +610,50 @@ fn main() -> Int {
     let out: Int = get(&p) + get(&p);
     let P { n } = p;
     return out + n * 0;
+}
+```
+
+```con reject name=constant-borrows code=E0302 stage=check pair=constant-and-erased-value
+struct Copy P { n: Int }
+
+const X: P = P { n: 42 };
+
+fn read(r: &P) -> Int {
+    return r.n;
+}
+
+const C: Int = read(&X);
+
+fn main() -> Int {
+    return C;
+}
+```
+
+```con reject name=erased-generic-at-ref code=E0302 stage=check pair=constant-and-erased-value
+fn same<T: Copy>(x: T) -> bool {
+    return true;
+}
+
+fn main() -> Int {
+    let v: Int = 42;
+    assert same::<&Int>(&v);
+    return v;
+}
+```
+
+```con accept name=constant-and-erased-value exit=42
+struct Copy P { n: Int }
+
+const X: P = P { n: 42 };
+
+fn same<T: Copy>(x: T) -> bool {
+    return true;
+}
+
+fn main() -> Int {
+    let x: P = X;
+    assert same::<Int>(x.n);
+    return x.n;
 }
 ```
 
@@ -633,7 +776,7 @@ fn main() -> Int {
 **REF-8@1.** While a reference exists (a borrow-block binder for its block, an arm binder for its arm, a borrow argument for its call), its root binding is not moved, consumed, freed or shadowed and is not accessed in a mode that conflicts with the reference, and the borrows a single call makes do not conflict.
 
 - Kind: refusal
-- Uses: none
+- Uses: REF-D3
 - Codes: E0203 (check), E0204 (check), E0218 (check), E0231 (check), E0232 (check), E0235 (check), E0293 (check), E0238 (check)
 - Status: enforced
 - Enforced by: Concrete.consumeVar, Concrete.checkCallBorrowConflicts, Concrete.checkWriteAccess
@@ -661,6 +804,17 @@ fn main() with(Std) -> Int {
     borrow h as r in R {
         free(h);
         out = read(r);
+    }
+    return out;
+}
+```
+
+```con reject name=read-owner-in-borrow-block code=E0203 stage=check pair=free-after-block
+fn main() -> Int {
+    let x: Int = 42;
+    let mut out: Int = 0;
+    borrow x as r in R {
+        out = x;
     }
     return out;
 }

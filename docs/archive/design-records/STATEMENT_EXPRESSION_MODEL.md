@@ -173,7 +173,7 @@ These are features, not the bug; keep them out so the fix stays bounded.
 **Status:** normative, decided 2026-10-21 (ROADMAP [Decisions](../../../ROADMAP.md#decisions),
 "Semantics decisions, 2026-10-21"); owner ROADMAP exit 2j (R-0500), which names evaluation order,
 short-circuiting and sequential assignment. This section is the only statement of evaluation
-order. [MEMORY_SEMANTICS.md](../../language/MEMORY_SEMANTICS.md) §10 states what an assignment does to the old
+order. [MEMORY_SEMANTICS.md](MEMORY_SEMANTICS.md) §10 states what an assignment does to the old
 value and cites this section; [ARITHMETIC_POLICY.md](ARITHMETIC_POLICY.md) states what each
 operation does once its operands are evaluated.
 

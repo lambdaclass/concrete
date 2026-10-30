@@ -153,7 +153,7 @@ duplicating one would let it be freed twice. Concretely:
   collection idiom writes UNINITIALIZED slots. What an assignment does to the old value
   (Copy overwritten with no event; a live non-Copy value never overwritten; the operations
   that return the displaced value) is stated in
-  [MEMORY_SEMANTICS.md §10](../../language/MEMORY_SEMANTICS.md#10-assignment-rules), and the order in which an
+  OWN-9 and TRUST-11 ([ownership.md](../../spec/ownership.md#OWN-9)), and the order in which an
   assignment evaluates its parts (right-hand side first) in
   [STATEMENT_EXPRESSION_MODEL.md](STATEMENT_EXPRESSION_MODEL.md#evaluation-order-and-assignment)
   (decided 2026-10-21).

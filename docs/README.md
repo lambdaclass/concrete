@@ -134,7 +134,7 @@ staged for future additions rather than allowing the root to become flat again:
 
 Current families:
 
-- `docs/language/` — language/value/ownership/contracts semantics;
+- `docs/spec/` — the language specification ([README](spec/README.md));
 - `docs/compiler/` — pipeline, passes, diagnostics and backend boundaries;
 - `docs/verification/` — charter, evidence, VIR, proof workflow and trust model;
 - `docs/platform/` — ABI, FFI, targets, runtime and freestanding boundaries;

@@ -1,625 +1,122 @@
 # Memory and Reference Semantics (design record)
 
-**Superseded as the normative text (2026-10-23).** The rules are in the language specification:
-[memory.md](../spec/memory.md) (MEM-1 to MEM-6), [ownership.md](../spec/ownership.md) (OWN-D1 to
-OWN-15), [references.md](../spec/references.md) (REF-1 to REF-11) and
-[scope.md](../spec/scope.md). This document keeps the operational explanation, the edge cases and
-the status history (status: was the canonical reference for ownership, borrowing and cleanup).
+Archived from docs/language on 2026-10-30: the memory, borrowing and cleanup model as the checker
+enforced it, and the exit 2i record of the reference and binding rules (§15). The language
+specification governs. Its rules are in [memory.md](../../spec/memory.md) (MEM-D1, MEM-1 to MEM-6),
+[ownership.md](../../spec/ownership.md) (OWN-D1, OWN-1 to OWN-16),
+[references.md](../../spec/references.md) (REF-D1 to REF-D3, REF-1 to REF-14),
+[scope.md](../../spec/scope.md) (SCOPE-D1, SCOPE-1 to SCOPE-3) and
+[trusted.md](../../spec/trusted.md) (TRUST-5, TRUST-7, TRUST-11, TRUST-12); the open questions it
+raised are OPEN-57, OPEN-58, OPEN-64, OPEN-67 and OPEN-103 in [decisions.md](../../spec/decisions.md).
+This record keeps the reasoning and the history. Where it and the spec differ, the spec governs.
 
-This document describes the memory and reference model that the checker (`Check.lean`) enforces for safe Concrete code. Where the checker and this document disagree, one of them must be corrected. Neither is silently authoritative over the other.
+The public guarantee boundary is [MEMORY_GUARANTEES.md](../../verification/MEMORY_GUARANTEES.md),
+and the broader safety model is [SAFETY.md](../../verification/SAFETY.md).
 
-For the public guarantee boundary, see [MEMORY_GUARANTEES.md](../verification/MEMORY_GUARANTEES.md).
-For value categories and layout, see [VALUE_MODEL.md](../archive/design-records/VALUE_MODEL.md).
-For the broader safety model, see [SAFETY.md](../verification/SAFETY.md).
+## Where §1 to §14 went
 
----
-
-## 1. Variable Lifecycle
-
-Every variable binding has a **state** that advances monotonically through a lifecycle:
-
-```
-unconsumed → used → consumed
-                  ↗
-unconsumed → reserved  (via defer)
-
-unconsumed → frozen    (via borrow block, temporary)
-```
-
-| State | Meaning | Allowed operations |
-|-------|---------|-------------------|
-| `unconsumed` | Declared but never read or moved | Read, borrow, move, assign-through-ref |
-| `used` | Read or borrowed at least once | Read, borrow, move |
-| `consumed` | Moved by value to a call or binding | Nothing — use-after-move error |
-| `reserved` | Scheduled for deferred cleanup | Read only — cannot move |
-| `frozen` | Inside a borrow block that borrows this variable | Nothing — frozen-by-borrow error |
-
-**Copy types** skip lifecycle tracking entirely. Using a Copy value never changes its state.
-
-### Definite initialization — no uninitialized reads by construction
-
-There is no `unconsumed`-but-uninitialized state, because **a binding cannot be
-declared without a value**. The grammar requires an initializer: `let x: T = e`
-(and `let mut x: T = e`). A declaration with no initializer — `let x: T;` — is a
-*parse error*, not a deferred-initialization form. Reassignment (`let mut x = e0;
-x = e1;`) only ever replaces an already-valid value.
-
-Consequently, safe Concrete has **no uninitialized reads, by construction** —
-there is no uninitialized state for a read to observe, so this needs no
-definite-assignment dataflow analysis; it is a grammar-level guarantee. (The
-only path to indeterminate memory is through `Unsafe`/FFI, where it is an
-explicit, audited assumption — see [SAFETY.md](../verification/SAFETY.md) and [FFI.md](../platform/FFI.md).)
-Locked by `scripts/tests/check_memory_model.sh`.
-
----
-
-## 2. Copy vs Linear
-
-### Copy types (non-linear)
-
-These types can be used any number of times and, when bound `mut`, reassigned freely, except that
-a reference binding is never assigned (§15 REF-6, adopted 2026-10-21; `main` still accepts it):
-
-- All integer types: `Int`, `Uint`, `i8`, `i16`, `i32`, `u8`, `u16`, `u32`
-- `Bool`, `Float64`, `Float32`, `Char`, `()`
-- Shared references: `&T`
-- Raw pointers: `*mut T`, `*const T`
-- Function pointers: `fn(...) -> T`
-- Structs/enums with `Copy` marker
-- Newtypes wrapping a Copy inner type
-- Arrays of Copy element types
-- Type parameters with a `Copy` bound
-
-### Linear types
-
-All other types are linear. Linear values must be consumed exactly once before scope exit:
-
-- Structs and enums (default)
-- `String`
-- `&mut T` (exclusive reference — see [REF-10](../spec/references.md#REF-10) for consumption rules)
-- `Heap<T>`, `HeapArray<T>`
-- Newtypes wrapping a linear inner type
-
-**A live linear value cannot be overwritten.** A `mut` linear place may be
-rebound only after its old value has been consumed; assigning while the old value
-is live is E0219. This makes `acc = f(acc, x)` legal while preserving exactly one
-live owner. One lexical name denotes one binding; a linear place contains at most
-one live resource.
-
----
-
-## 3. Consumption Rules
-
-**Consuming** a value means transferring ownership by passing it as a by-value argument to a function call, returning it, or (for `Heap<T>`) dereferencing with `*`.
-
-### What consumes a linear value
-
-- Passing as a by-value function argument
-- Returning from a function
-- Dereferencing `Heap<T>` with `*` (loads value from heap, frees memory)
-- Passing to `destroy(x)` or `free(x)`
-- Pattern-matching a newtype with `.0` extraction
-
-### What does NOT consume
-
-- Field access with `.` (reads the field, does not move the struct)
-- Field access with `.` on a heap shell (`h.f` with `h: Heap<T>`, `&Heap<T>` or `&mut Heap<T>`; §5): it reads through the heap pointer and does not consume it. The `->` spelling was removed in Phase 6D (2026-07-14)
-- Borrowing with `&x` or `&mut x`
-- Reading a Copy value
-
-### Consumption errors
-
-| Error | Condition |
-|-------|-----------|
-| `variableUsedAfterMove` | Variable already in `consumed` state |
-| `variableReservedByDefer` | Variable in `reserved` state (scheduled for cleanup) |
-| `variableFrozenByBorrow` | Variable in `frozen` state (inside active borrow block) |
-| `cannotConsumeLinearInLoop` | Linear variable declared at a lower loop depth than current |
-| `cannotMoveLinearBorrowed` | Active borrow references exist for this variable |
-| `linearVariableNeverConsumed` | Scope exit with linear variable not consumed or reserved |
-
----
-
-## 4. Borrow Rules
-
-Concrete uses **scoped borrow blocks** rather than Rust-style lifetime inference. A borrow block creates a named reference bound to a named region:
-
-```concrete pseudocode
-borrow owner as ref in Region {
-    // ref is available here; owner is frozen
-}
-// owner is unfrozen; ref no longer exists
-
-borrow mut owner as ref in Region {
-    // ref is &mut T; owner is frozen
-}
-```
-
-### Borrow block semantics
-
-1. **Freeze the owner.** The owner variable's state becomes `frozen` for the duration of the block. No reads, writes, moves, or borrows of the owner are permitted inside the block.
-
-2. **Create the reference.** A new variable `ref` is added with type `&T` (shared) or `&mut T` (exclusive), depending on `is_mut`.
-
-3. **Check the body.** The block body is checked with the owner frozen and the reference in scope.
-
-4. **Unfreeze.** On block exit, the owner's state is restored to its pre-borrow state. The reference binding is removed. The reference is also removed from the escape-analysis list.
-
-### Borrow conflict rules
-
-| Attempting | Owner already has | Result |
-|-----------|-------------------|--------|
-| Shared borrow (`&`) | No active borrow block | Allowed |
-| Shared borrow (`&`) | Owner already frozen by any borrow block | **Error**: `variableFrozenByBorrow` |
-| Mutable borrow (`&mut`) | No active borrow block | Allowed (owner must be `mut`) |
-| Mutable borrow (`&mut`) | Owner already frozen by any borrow block | **Error**: `variableFrozenByBorrow` |
-| Any borrow | Owner is `consumed` | **Error**: `cannotBorrowMoved` |
-| Mutable borrow | Owner is not `mut` | **Error**: `cannotMutBorrowImmutable` |
-
-Because borrow blocks freeze the owner for the entire duration of the block, Concrete does not currently support overlapping borrows of the same owner, even shared-with-shared. The checker uses a whole-owner freeze model rather than a borrow-count model for nested borrow-block composition.
-
-### Borrow escape prevention
-
-If a reference created by a borrow block is assigned to a variable outside the block, the checker rejects it with `referenceEscapesBorrowBlock`. The escape check works by tracking all borrow-created reference names and checking assignments. This is one case of the reference rules in §15 (REF-6), which also cover references made by `let` borrows.
-
-### What borrows do NOT do
-
-- Borrows do not consume the owner (the owner is frozen, not consumed).
-- The reference type `&T` is Copy — it can be passed to multiple functions within the borrow block.
-- The reference type `&mut T` is linear, and passing it to a call lends it, in one mode for parameters, borrow-block binders and arm binders alike — see [REF-10](../spec/references.md#REF-10).
-- Borrow blocks do not nest into the same owner (the inner borrow sees the owner as frozen).
-
----
-
-## 5. Field Access
-
-### Stack struct field access (`.`)
-
-Field access on a struct does **not** consume the struct. The struct remains in its current state. The returned value has the field's declared type.
-
-### Field access through a reference or a heap shell (the one-hop rule; normative, decided 2026-10-21)
-
-**Rule.** A reference to any place, a heap shell included, denotes that place: with `h: Heap<S>`,
-`&h` and `&mut h` denote the slot `h`, which holds the heap pointer. Field access `e.f`, read or
-written, dereferences at most one reference and then at most one heap layer, in that order:
-
-| type of `e` | `e.f` denotes |
+| section | now |
 |---|---|
-| `S` | field `f` of the value `e` |
-| `&S`, `&mut S` | field `f` of the place the reference denotes |
-| `Heap<S>` | field `f` of the heap cell `e` points to |
-| `&Heap<S>`, `&mut Heap<S>` | dereference the reference to the slot, then field `f` of the heap cell that slot points to |
-
-No other type auto-dereferences: `& &S`, `&mut &S` and `Heap<Heap<S>>` need an explicit `*`.
-(`HeapArray<T>` follows the `Heap<S>` row for its element type, as `Check.lean` `.fieldAccess`
-does today.) The heap pointer is not consumed by a field access; only `*h` (load and free) and
-`free(h)` / `destroy(h)` consume it (§3, §8). Writing `e.f = v` requires `e` to be in scope, not
-frozen, and the value to match the field's type; writing a non-Copy field over a live value is
-E0219 / E0291 (§10).
-
-**One meaning in every consumer.** Check, Elab, the interpreter, Lower, the extracted model and
-Core implement this one meaning. A lowering may represent a shared borrow `&h` of a heap shell by
-the heap pointer itself only where that is proved equivalent to passing the slot (R-0504's
-validator checks it); it may not use one representation for `&h` and another for `&mut h` without
-a rule reconciling them. The alternative of making `Heap<T>` an ordinary box with an explicit
-dereference place operator was considered and rejected: it would turn `*h`, which consumes and
-frees the heap (§8), into a place operator, a larger change to `*` than the defect warrants.
-
-**Status.** The surface rule is enforced: `Check.lean` `.fieldAccess` (6D#3) accepts exactly the
-rows above. Elab and Lower agree since the fix of
-[bug 126](../bugs/126_field_write_through_mut_heap_ref.md) (FIXED, 2026-10-21): Elab elaborates a
-field access or assignment through `&Heap<S>` / `&mut Heap<S>` to two dereferences, and Lower
-gives `&h` and `&mut h` the slot `h` (the local is promoted to a stack slot, as any other
-non-array local whose address is taken). No cheaper representation of `&h` is used, so there is
-no equivalence for R-0504 to check yet. Before the fix, `bump(&mut h)` with
-`fn bump(h: &mut Heap<B>) { h.v = h.v + 1; }` corrupted the caller's slot (Elab desugared one
-dereference while the call passed the slot). The interpreter has no heap allocation, so it does
-not yet implement this row.
-
-**Prevents.** Bug 126 and the representation-disagreement half of [structural
-class](../bugs/STRUCTURAL_CLASSES.md) 8 for heap shells.
-
-**Owners.** The interim repair of bug 126: ROADMAP exit 0b (R-0482). The structural repair: R-0501
-(Place MIR: one place representation) with R-0504 (the validator that checks a cheaper physical
-representation is equivalent).
-
-### Newtype unwrap (`.0`)
-
-Accessing `.0` on a newtype **consumes** the newtype (extracts the inner value).
-
-### Current limitation: no partial borrows
-
-The checker does not track field-level borrow granularity. When an owner is frozen by a borrow block, the **entire** owner is frozen — individual fields cannot be separately borrowed. This means:
-
-```concrete pseudocode
-// Borrowing point freezes it entirely, even though the fields are disjoint:
-borrow point as ref in R {
-    // point is entirely frozen here
-    // ref is &Point, not &point.x — cannot borrow fields individually
-}
-```
-
-This is a deliberate conservative choice. The checker does not split struct ownership into per-field ownership slots. Field-granular borrows would require tracking which fields are frozen vs available, which is future work.
-
----
-
-## 6. Array and Slice Semantics
-
-### Array indexing
-
-Array indexing (`arr[i]`) returns the element type. The checker does **not** track per-element ownership or borrows. The array as a whole follows normal ownership rules.
-
-### Current limitation: no per-element borrows
-
-The checker treats an array as a single linear value. There is no mechanism to borrow one element while leaving others available. Borrowing an array freezes the entire array.
-
-This means:
-
-```concrete pseudocode
-// Cannot borrow arr[0] and arr[1] separately
-borrow(arr, ref, r, false) {
-    // entire arr is frozen
-}
-```
-
-Per-element borrow tracking is future work that would require either:
-- Index-based tracking (knowing which elements are borrowed at which indices)
-- Slice/subarray splitting (producing disjoint borrows by splitting the array)
-
----
-
-## 7. Control-Flow Joins
-
-### If/else branches
-
-Both branches of an if/else must **agree** on the consumption state of every pre-existing linear variable:
-
-- If the then-branch consumes a variable, the else-branch must also consume it.
-- If neither consumes it, the merged state is the most-progressed of the two (`used` > `unconsumed`).
-- Disagreement is an error: `linearConsumedOneBranchNotOther`.
-
-### If without else
-
-An if-without-else cannot consume any pre-existing linear variable in the then-branch, because there is no else-branch to match. Error: `linearConsumedNoBranch`.
-
-### Match arms
-
-All match arms must agree on consumption of pre-existing variables, following the same rule as if/else. The first arm establishes the consumption pattern; subsequent arms must match. Disagreement is an error: `matchConsumptionDisagreement`.
-
-After the match, the final state from the first arm is applied (since all arms agree, any arm's state would be equivalent).
-
-### While loops
-
-- The loop body runs at an incremented loop depth.
-- Linear variables declared at a lower loop depth cannot be consumed inside the loop body (`cannotConsumeLinearInLoop`).
-- Linear variables declared inside the loop body follow normal scope rules within each iteration.
-- Break and continue must not skip unconsumed linear variables declared at the current loop depth.
-
-### Break and continue
-
-Before executing a break or continue:
-- All linear variables declared at the current loop depth must be consumed or reserved.
-- Skipping an unconsumed linear variable is an error: `breakSkipsUnconsumedLinear` / `continueSkipsUnconsumedLinear`.
-- Break and continue are forbidden inside defer bodies.
-
----
-
-## 8. Heap Ownership
-
-`Heap<T>` is a linear owned pointer to a heap-allocated value of type `T`. `HeapArray<T>` is the same for heap-allocated arrays.
-
-### Allocation
-
-```concrete pseudocode
-let p: Heap<Point> = alloc(Point { x: 1.0, y: 2.0 }) with(Alloc);
-```
-
-`alloc` consumes its argument (the value moves to the heap) and returns a `Heap<T>`. The `with(Alloc)` capability is required.
-
-### Reading through a heap pointer
-
-- `p.field` on a heap shell auto-derefs and reads without consuming the pointer (spelled `p->field` pre-6D#3). A by-value read of a **non-Copy** field is E0290, as for any owner: heap interiors are linearity-tracked (decided 2026-10-21; [bug 144](../bugs/144_heap_interior_untracked.md)). Borrow it (`&p.field`) or move the whole value out with `*p`.
-- `*p` (full dereference) **consumes** the `Heap<T>` — it loads the value from the heap and frees the memory. After `*p`, the heap pointer is in `consumed` state.
-
-### Freeing
-
-- `free(p)` consumes the `Heap<T>`, frees the memory and hands back the pointee. Discarding it
-  (`free(p);`, `defer free(p);`) is legal only when `T` is Copy; a non-Copy pointee would be
-  dropped without being consumed (E0287, bug 144): bind it (`let v = free(p);`) or use `*p`.
-- `destroy(p)` consumes the value and runs the type's `Destroy` implementation.
-
-### Linearity prevents leaks
-
-Because `Heap<T>` is linear, the checker enforces that every allocated heap pointer is either:
-- Freed with `free(p)` or `destroy(p)`
-- Consumed by `*p` (dereference-and-free)
-- Passed to a function that takes ownership
-- Scheduled for cleanup with `defer`
-
-Forgetting a `Heap<T>` is a compile-time error (`linearVariableNeverConsumed`).
-
----
-
-## 9. Cleanup and Defer
-
-Concrete does **not** have implicit destructors (no RAII drop). Cleanup is explicit.
-
-### `defer` semantics
-
-```concrete pseudocode
-defer destroy(resource);
-```
-
-1. The body of `defer` must be a single function call expression (not a method call, E0282).
-2. Its arguments are local names, borrows of local names (`&x`, `&mut x`) or constants; anything
-   else is E0279 (decided 2026-10-21, "reserve by place"; [OWN-12](../spec/ownership.md#OWN-12)).
-3. Variables passed by value are marked `reserved` instead of `consumed`; variables passed by
-   borrow are **pinned**. Neither may be moved or consumed before the deferred call runs (E0206),
-   by a later `defer` included; both may still be read, borrowed and mutated in place.
-4. At scope exit, `reserved` variables are accepted (the deferred call will handle cleanup); a pin
-   discharges nothing (a borrow-only `defer` leaves its local to be consumed, E0208). When the
-   registering block ends, its reservations become consumptions and its pins end.
-5. Defers execute in LIFO (reverse declaration) order at scope exit, reading their argument places
-   then (a `Copy` argument sees its value at the exit), bound by binding identity.
-
-Status: enforced on main ([bug 143](../bugs/143_defer_borrow_argument_unpinned.md) closed the
-unpinned-borrow use after free).
-
-### Destroy
-
-A type with `impl Destroy for T` provides a `destroy(x)` function that consumes the value and runs cleanup. The convention is `defer destroy(x)` immediately after allocation.
-
-Concrete is linear, not affine: `Destroy` is never an implicit scope-end
-destructor. A live non-`Copy` value that reaches scope exit without being
-consumed or reserved by an explicit `defer` is an error. The compiler may
-generate recursive drop glue only inside an explicit owner-consuming operation
-such as `v.drop()` / `defer v.drop()`: the outer disposal point remains visible
-in source, and the generated code is just the implementation of that explicit
-disposal. Collection drop glue must also expose any capabilities required by
-the element/key/value destructors in the drop path.
-
-### `reserved` state interaction
-
-| Operation | On `reserved` variable | Result |
-|-----------|----------------------|--------|
-| Read (field access, pass to `&T` borrow) | Allowed | State stays `reserved` |
-| Move (pass by value) | **Error** | `variableReservedByDefer` |
-| Consume a **pinned** variable (a pending `defer` borrows it) | **Error** | `variablePinnedByDefer` (E0206) |
-| Borrow block owner | Allowed | Freezes as normal |
-| Scope exit | Accepted | Deferred call runs |
-
----
-
-## 10. Assignment Rules
-
-### Copy variables
-
-Copy variables can be reassigned freely if declared `mut`, except reference bindings: since the
-2026-10-21 decision no reference binding is ever assigned (§15 REF-6; not yet enforced on `main`,
-which accepts the assignment):
-
-```concrete pseudocode
-let mut x: Int = 1;
-x = 2;  // OK
-```
-
-### Linear variables
-
-**A linear variable cannot be overwritten while its current value is live.**
-That case is `assignOverwritesLinear` (E0219), because replacing the value would
-leak its ownership obligation. Once the old value has been consumed, a `mut`
-binding may be assigned a new linear value; the rebound value becomes the
-binding's new live obligation and must itself be consumed. This is the
-fold/accumulate rule used by `acc = f(acc, x)`, including inside loops.
-
-### What an assignment does to the old value (normative, decided 2026-10-21)
-
-An assignment `place = e` evaluates `e` first and then the destination's index expressions, in the
-order stated once in [STATEMENT_EXPRESSION_MODEL.md, "Evaluation order and
-assignment"](../archive/design-records/STATEMENT_EXPRESSION_MODEL.md#evaluation-order-and-assignment),
-which this section does not restate. Then:
-
-- **Copy old value:** overwritten. There is no destruction event.
-- **Non-Copy old value:** never overwritten while live. Assigning over a live linear local or
-  field is E0219 (`assignOverwritesLinear`, `cannotOverwriteLinearField`); over a live non-Copy
-  place through a reference or an index (`*r = v`, `arr[i] = v`) it is E0291
-  (`cannotOverwriteLinearPlace`). Replacing a live resource therefore needs an explicit
-  consumption first (`destroy`, a consuming call, a move out); nothing is destroyed implicitly.
-  Once the old value has been consumed, a `mut` binding may be assigned again (the
-  `acc = f(acc, x)` rule above: the right-hand side consumes `acc`, then the binding receives the
-  result).
-- **Ownership transfer:** the value of `e` moves into the place when the assignment completes.
-- **Operations that return the displaced value:** collections have them (`Vec.replace(at, v) -> T`
-  in `std/src/vec.con`; `HashMap.insert` / `OrderedMap.insert` return the old value and destroy the
-  displaced old key, `K: Destroy`). There is no general `replace` or `swap` for an arbitrary place
-  (`std.mem` has only `sizeof` / `alignof`), so a non-Copy struct field is replaced by
-  destructuring and rebuilding the aggregate. A general place `replace` is a pull-gated
-  language/`std` item with no owner yet; it waits for a workload that needs it.
-
-Status: the refusals are enforced on `main` (E0219, E0291), through every place form: an element
-write through `&mut [T; N]` (EVALUATION2 D1) is the place `(*r)[i]` and is E0291 since bug 091's
-normalized place rule (`error_091_norm_ref_array_overwrite.con`, and the generic form
-`error_091_norm_generic_ref_array_overwrite.con`), and a heap cell's interior is tracked like any
-other owner since bug 144 (no by-value non-Copy field read, no `free` of a live non-Copy pointee).
-So there is no safe store into, or drop of, an initialized non-Copy place without consuming it
-(decided 2026-10-21); the trusted raw store into an uninitialized slot (`*p = v`, `p: *mut T`) stays
-a distinct operation. The order is stated, not yet gated
-(exit 2j). This prevents silent leaks of an overwritten resource; the order rule removes a
-consumer-agreement obligation (interpreter, Core and native must agree on it). Owner: ROADMAP exit
-2j (R-0500); OWNERSHIP_MODEL cites this section.
-
-### Assignment guards
-
-Even for Copy variables, assignment is blocked when:
-
-| Guard | Error |
-|-------|-------|
-| Variable not declared `mut` | `assignToImmutable` |
-| Variable frozen by borrow block | `assignToFrozen` |
-| Active borrow references exist | `assignToBorrowed` |
-| Assigning a borrow reference to an outer variable | `referenceEscapesBorrowBlock` |
-
----
-
-## 11. Trusted Code and the Safe Boundary
-
-The ownership and linearity rules apply uniformly in `trusted` code. `trusted` permits pointer arithmetic, raw pointer dereference, raw pointer assignment, and pointer-involving casts — but does **not** relax linearity, borrow checking, or scope-exit rules.
-
-What `trusted` code can do that safe code cannot:
-
-| Operation | Safe | Trusted |
-|-----------|------|---------|
-| Pointer arithmetic (`*mut T + offset`) | No | Yes |
-| Raw pointer dereference (`*p` on `*mut T`) | No | Yes |
-| Raw pointer assignment (`*p = value`) | No | Yes |
-| Pointer-involving casts | No | Yes |
-| Move a linear variable twice | No | **No** |
-| Skip cleanup of a linear variable | No | **No** |
-| Bypass borrow-block freeze | No | **No** |
-
-This means the safe-memory guarantees (no use-after-move, no leak of linear values, no borrow conflict) hold even inside `trusted fn` bodies.
-
-The boundary where the checker's guarantees stop is at **raw pointers**: once a value is behind a `*mut T` or `*const T`, the checker does not track its ownership. Raw pointers are Copy, and dereferencing them requires `trusted`. The soundness of the safe interface depends on the correctness of the trusted implementation.
-
----
-
-## 12. What the Checker Does NOT Track
-
-These are deliberate boundaries of the current model, not bugs:
-
-### No field-granular borrows
-The checker freezes entire values, not individual fields. Two simultaneous borrows of disjoint fields of the same struct are not supported.
-
-### No per-element array borrows
-The checker treats arrays as single values. There is no per-index ownership tracking.
-
-### No lifetime inference
-Borrows are scoped by explicit borrow blocks. There is no Rust-style NLL or region inference. References cannot outlive their borrow block.
-
-### No automatic destruction
-There is no implicit drop. Resources must be explicitly cleaned up via
-`destroy(x)`, `x.drop()`, `defer destroy(x)`, or `defer x.drop()`. Generated
-drop glue may recursively clean owned fields/elements only after one of those
-explicit consuming operations has been written.
-
-### No interior mutability
-There is no `Cell`/`RefCell`/`UnsafeCell` equivalent. Mutability flows from the binding (`let mut`) through borrows (`&mut T`).
-
-### No closure captures
-Function pointers are Copy and carry no captured environment. There are no closures and therefore no captured-variable ownership complications.
-
-### No concurrency
-The current model is single-threaded. There is no `Send`/`Sync` distinction, no atomics, no shared-memory concurrency. **Concurrency interaction is an explicit deferred boundary** — when concurrency is added, the ownership model will need to address thread-safety explicitly. The current rules are sound under the assumption of single-threaded execution.
-
-### No cross-function borrow tracking
-The checker does not track what a callee does with a borrowed reference. If a function takes `&T`, the checker trusts the signature — it does not verify that the callee respects the immutability of the reference. This is safe as long as the type system is sound (a `&T` parameter cannot be used to mutate the referent without `trusted` or `&mut`).
-
----
-
-## 13. Hard Edge Cases and Their Current Status
-
-### Field/substructure borrows
-
-**Status: conservative — whole-value freeze.**
-
-When a value is borrowed, the entire value is frozen. The checker does not distinguish between borrowing the whole struct and borrowing one field. This prevents all partial-borrow patterns:
-
-```concrete pseudocode
-// Would be useful but is NOT supported:
-struct Pair { a: String, b: String }
-let mut p = Pair { a: owned_a, b: owned_b };
-borrow(p.a, ref_a, r1, false) {  // ← not valid syntax
-    consume(p.b);                  // ← p is entirely frozen
-}
-```
-
-**Assessment:** The conservative choice is correct for now. Field-granular borrows would require per-field state tracking in `VarInfo`, syntax for field-path borrows, and rules for overlapping field paths. This is significant new complexity. The workaround is to structure code so that fields are moved into separate variables before borrowing.
-
-### Array/slice element borrows
-
-**Status: conservative — whole-array treatment.**
-
-Arrays are treated as single linear values. There is no mechanism to borrow a sub-slice or individual element while keeping the rest of the array available.
-
-**Assessment:** Per-element tracking is impractical without dependent types or compile-time index reasoning. The practical path is slice splitting (producing two disjoint borrowed slices from one array), which is future work.
-
-### Control-flow joins
-
-**Status: fully enforced.**
-
-The branch-agreement rule is strict: both branches of an if/else must agree on consumption, match arms must agree, and if-without-else cannot consume. This prevents the "maybe consumed" state that would make resource tracking unsound.
-
-**No known gaps.** The checker correctly handles:
-- Nested if/else
-- Match with arbitrary arm count
-- While loops with break/continue
-- Loop-depth consumption restriction
-
-### Owner invalidation patterns
-
-**Status: enforced within the safe model.**
-
-The checker prevents all forms of owner invalidation while borrows are active:
-- Move: `cannotMoveLinearBorrowed`
-- Reassignment: `assignToBorrowed`
-- Borrow-block freeze: `variableFrozenByBorrow`
-
-The gap is at the `trusted` boundary: if trusted code holds a raw pointer derived from a reference, the checker cannot prevent the original owner from being invalidated after the borrow block ends but before the raw pointer is used. This is a fundamental limitation of the `trusted` escape hatch and is expected — `trusted` code carries audit responsibility.
-
-**Arena/bulk-free patterns:** If an arena provides references to its allocations and then the arena is freed, the references become dangling. The checker cannot prevent this because the relationship between the arena and its allocations is not visible to the type system. This is currently an audit-level concern, not a checker-enforced guarantee.
-
-### Concurrency interaction
-
-**Status: explicitly deferred.**
-
-The ownership model assumes single-threaded execution. When concurrency is added:
-
-1. Linear ownership gives a strong starting point — a linear value has exactly one owner, which maps naturally to "one thread owns this."
-2. Shared borrows (`&T`) are safe under single-threaded assumptions but would need `Send`/`Sync`-like constraints under concurrency.
-3. `Heap<T>` ownership transfer between threads is sound as long as the transfer is linear (one thread gives up ownership, another gains it).
-4. The `frozen` state during borrow blocks is thread-local — concurrent access to a frozen variable from another thread would violate the model.
-
-The concurrency boundary is documented here as a known future interaction point, not a current gap.
-
----
-
-## 14. Invariants the Checker Maintains
-
-These invariants hold for all safe Concrete code that passes the checker:
-
-1. **No use-after-move.** A linear variable in `consumed` state cannot be read, borrowed, or moved.
-2. **No forgotten linear values.** Every linear variable is either consumed, reserved (with deferred cleanup), or an error is reported at scope exit.
-3. **No borrow conflict.** A mutable borrow is exclusive; a shared borrow is incompatible with mutable borrows.
-4. **No borrow escape.** References created by borrow blocks cannot be assigned to variables that outlive the block.
-5. **No frozen-variable access.** A variable frozen by an active borrow block cannot be read, written, moved, or re-borrowed.
-6. **No cross-loop consumption.** A linear variable from an outer scope cannot be consumed inside a loop body.
-7. **No live linear overwrite.** A linear variable cannot be assigned while its
-   current value is live; reassignment after consumption is a legal rebind.
-8. **No skip-past-linear.** Break and continue cannot skip unconsumed linear variables in the current loop scope.
-9. **No defer-body escape.** Break and continue are forbidden inside defer bodies.
-10. **No assign-through-immutable.** Only `mut` variables can be assigned.
-
-Invariant 4 is one case of the reference rules in §15, which state the whole second-class
-discipline and its current enforcement.
-
----
-
-## 15. Second-class references and lexical binding (design record; exit 2i)
-
-**Superseded as the normative text (2026-10-23).** The rules of this section are now stated, with
-stable IDs, runnable examples and the generated acceptance manifest, in the language specification:
-[docs/spec/references.md](../spec/references.md) (REF-D1, REF-D2, REF-1 – REF-11),
-[docs/spec/scope.md](../spec/scope.md) (SCOPE-D1, SCOPE-1 – SCOPE-3) and
-[docs/spec/patterns.md](../spec/patterns.md) (PAT-1, which was gap G4). Where this section and the
-spec differ, the spec governs. This section stays as the design record: the probes, the status
-history, the migration counts and the gap analysis (§15.7). Its text below is historical.
+| §1 variable lifecycle | MEM-D1 (the states); MEM-3 (every binding is initialized) |
+| §2 Copy and linear types | OWN-D1; OWN-9 (no live linear value is overwritten) |
+| §3 consumption | OWN-1, OWN-2, OWN-4, OWN-15, MEM-5; REF-8 (no move while borrowed) |
+| §4 borrow blocks | REF-D3 (the block), REF-8 (the freeze), OWN-10 (`borrow mut` needs `mut`), REF-6 (no escape), REF-10 (lending `&mut`), REF-11 (whole-owner loans) |
+| §5 field access | OWN-8, OWN-15, MEM-4 |
+| §6 arrays | OWN-8, MEM-6, REF-11 |
+| §7 control-flow joins | OWN-2, OWN-3, OWN-4 |
+| §8 heap ownership | MEM-5, OWN-5, OWN-8, OWN-13 |
+| §9 cleanup and `defer` | OWN-12, OWN-13, OWN-16 |
+| §10 assignment | STMT-4 (order), OWN-9, OWN-10, REF-6, REF-8, TRUST-11 (raw stores) |
+| §11 trusted code | TRUST-4, TRUST-5, TRUST-7, TRUST-12 |
+| §12 what the checker does not track | REF-11, REF-12, TYPE-1, STMT-3 |
+| §13 hard edge cases | REF-11, OWN-3, REF-8, REF-14, OPEN-64 |
+| §14 invariants | OWN-1, OWN-2, OWN-4, OWN-9, OWN-10, REF-6, REF-8, REF-11 |
+
+## History and reasoning kept from §1 to §14
+
+**Lifecycle (§1).** This document said a binding's state "advances monotonically". It did not: a
+frozen binding returns to its earlier state when its borrow block ends (`frozenFrom` in
+`Concrete/Check/CheckError.lean`), and a Copy binding, which the document called untracked, is
+frozen by a borrow block like any other (`borrow x as r in R { out = x; }` is E0203 with
+`x: Int`). MEM-D1 states the states as the checker has them. Definite initialization was locked by
+`scripts/tests/check_memory_model.sh`.
+
+**Borrow blocks (§4).** Concrete scopes borrows with explicit blocks instead of inferring
+lifetimes. The checker freezes the whole owner instead of counting borrows, so two borrow blocks
+over one owner do not nest, even shared with shared. §4 and invariant 5 of §14 said that a frozen
+owner cannot even be read; the design examples (B7, gap G10) wanted owner reads beside a shared
+borrow. The owner kept the freeze on 2026-10-29 (OD15), and REF-D3 states it. §4's escape check
+(E0234, `referenceEscapesBorrowBlock`) also "covered references made by `let` borrows"; since
+REF-6 no `let` binds a reference, and E0234 stays as defense in depth.
+
+**Field access through a heap shell (§5).** The one-hop rule, decided 2026-10-21, let `e.f` open
+one reference and then one heap layer (`Heap<S>`, `&Heap<S>`, `&mut Heap<S>`), and rejected an
+explicit place operator because it would make `*h`, which consumes and frees, a place operator
+too. The owner reversed that on 2026-10-29 (OD30): MEM-4@3 opens no heap layer implicitly, and the
+spelling of the explicit form is OPEN-36 (main still opens one layer, bug 326). Before
+[bug 126](../../bugs/126_field_write_through_mut_heap_ref.md)'s fix (2026-10-21), Elab desugared one
+dereference while the call passed the slot, so `bump(&mut h)` with
+`fn bump(h: &mut Heap<B>) { h.v = h.v + 1; }` corrupted the caller's slot (structural class 8).
+The repair's owners are R-0482 (interim) and R-0501 with R-0504 (one place representation).
+
+**No partial borrows (§5, §6, §12, §13).** Whole-owner freezing is deliberate: per-field states
+would need field-path borrow syntax, per-field tracking in `VarInfo` and rules for overlapping
+paths, and per-element borrows would need index reasoning; the practical future path is slice
+splitting into two disjoint borrows. The workaround is to move fields into separate bindings
+before borrowing.
+
+**Control-flow joins (§7).** The diagnostics were `linearConsumedOneBranchNotOther`,
+`linearConsumedNoBranch`, `matchConsumptionDisagreement`, `cannotConsumeLinearInLoop` and
+`breakSkipsUnconsumedLinear` / `continueSkipsUnconsumedLinear`. "Break and continue are forbidden
+inside defer bodies" (§7, invariant 9) is stale: a `defer` takes one call, and `defer { ... }` is a
+parse error (OWN-12).
+
+**Heap and `defer` (§8, §9).** `alloc(v) with(Alloc)` at a call site is stale pseudo-syntax: the
+capability is declared on the function. Discarding the value `free` returns became legal only for
+Copy pointees with [bug 144](../../bugs/144_heap_interior_untracked.md), and a borrow argument of a
+`defer` became pinned with [bug 143](../../bugs/143_defer_borrow_argument_unpinned.md). §9 said a
+pinned local "may still be read, borrowed and mutated in place", which main still accepts for a
+write (`defer peek(&x); x = 42;` runs); the owner decided on 2026-10-29 that a borrow given to a
+deferred call stays live until the call runs (OWN-16, pending R-0496), which refuses a conflicting
+use before then. "Collection drop glue must expose the capabilities required by element
+destructors" is stale: a `Destroy` implementation requires no capability beyond `Alloc` (OWN-13@2).
+
+**Assignment (§10).** Evaluating the right-hand side first removes a consumer-agreement obligation
+(interpreter, Core and native). No general place `replace` or `swap` existed when this was written
+(`Vec.replace`, `HashMap.insert` and `OrderedMap.insert` return the displaced value); the owner's
+OD13 decision of 2026-10-29 names an explicit replace or take through `&mut T` (TRUST-7).
+
+**Trusted code (§11, §13).** §11's table listed pointer arithmetic as `*mut T + offset` and
+"pointer-involving casts"; both are stale: pointer arithmetic is `ptr::offset` and `as` never
+converts between a pointer and an integer (TRUST-1, TYPE-6@2). The trust boundary is the raw
+pointer: if trusted code keeps a raw pointer derived from a reference past its borrow, or an arena
+hands out references and is then freed, the checker cannot see it. That stays an audit concern
+(REF-14, OPEN-64).
+
+**Concurrency (§12, §13).** The model is single-threaded (STMT-3). When threads come, linear
+ownership maps to "one thread owns this", a `Heap<T>` moves between threads linearly, shared
+borrows need `Send`/`Sync`-like constraints, and a frozen binding must not be reachable from
+another thread.
+
+**Cross-function borrows (§12).** A callee is trusted to respect its signature: a `&T` parameter
+cannot mutate its referent without `&mut` or trusted code, so the checker does not look into the
+callee.
+
+## 15. Second-class references and lexical binding (exit 2i record)
+
+The rules of this section are REF-D1 to REF-D3 and REF-1 to REF-14 of
+[references.md](../../spec/references.md), SCOPE-D1 and SCOPE-1 to SCOPE-3 of
+[scope.md](../../spec/scope.md), and PAT-1 of [patterns.md](../../spec/patterns.md) (gap G4). Its
+SCOPE-4 is OPEN-67, and the cast of a reference binding that REF-5 below lists is OPEN-103. The text
+below is historical: the probes, the status history, the migration counts and the gap analysis
+(§15.7), as written for exit 2i on 2026-10-21 and amended until 2026-10-23.
 
 **Status:** normative specification for ROADMAP exit 2i (owner R-0500, stage S4 of
-[VERIFIED_PIPELINE.md](../compiler/VERIFIED_PIPELINE.md)), written 2026-10-21. This section is the
+[VERIFIED_PIPELINE.md](../../compiler/VERIFIED_PIPELINE.md)), written 2026-10-21. This section is the
 single normative statement of the reference and binding rules. The narrative in
-[VALUE_MODEL.md](../archive/design-records/VALUE_MODEL.md) ("References are second-class"), the summary in
+VALUE_MODEL ("References are second-class"), the summary in
 the book's memory chapter (`docs/book/src/language/memory.md`), and the decision records in
-[the spec's overview](../spec/overview.md) and [language decisions](../project/PROJECT.md#language-decisions)
+[the spec's overview](../../spec/overview.md) and [language decisions](../../project/PROJECT.md#language-decisions)
 ("No lexical value shadowing") explain the rules. Where they disagree with this section, this
 section governs and the other text is corrected.
 
@@ -651,7 +148,7 @@ decisions of 2026-10-21 (below) states its status on main at `5b63cd87`; it was 
 `b9b3cca9`, and no checker, elaboration or lowering source those rules touch changed between the
 two (only `Concrete/Check/Layout.lean`, for bug 121).
 
-**Semantics decision of 2026-10-21 (adopted; ROADMAP [Decisions](../../ROADMAP.md#decisions)).**
+**Semantics decision of 2026-10-21 (adopted; ROADMAP [Decisions](../../../ROADMAP.md#decisions)).**
 References exist only as **parameters**, as **call arguments** (`f(&w.p)`, scoped to the call), as
 **borrow-block binders** and as **arm-scoped pattern binders through a borrowed scrutinee**. No
 reference binding is introduced by `let`, and **no reference binding of any kind is ever the target
@@ -704,7 +201,7 @@ positive-control mutations (§15.6); it has no diagnostic of its own.
   `&*h` is accepted and moves the heap, so a later use of `h` fails (E0213 in the probe, an
   `if` without `else` that freed it); on `land2-fix` the borrow itself is E0230, because the
   dereference consumes `h` before the shared-access check sees the consumed root. The **root** of a canonical
-  place is its binding. **Decided 2026-10-23, the Austral model ([TIGHTENING_DECISIONS D2](../project/TIGHTENING_DECISIONS.md#d2-the-austral-model-borrow-a-variable-then-project-q2-ref-5-g12-revised-2026-10-23)),
+  place is its binding. **Decided 2026-10-23, the Austral model ([TIGHTENING_DECISIONS D2](../../project/TIGHTENING_DECISIONS.md#d2-the-austral-model-borrow-a-variable-then-project-q2-ref-5-g12-revised-2026-10-23)),
   not yet enforced:** a reference is a **root plus a sequence of projections**. The root is a
   variable, or a string literal, which is a static, immutable variable-like root (its `String`
   descriptor and bytes are static storage; it can be borrowed shared, never exclusively, and is
@@ -872,7 +369,7 @@ shadows a constant of its name; a constant name defined by two modules is refuse
 (E0602, bug 132) until constants carry their module. It prevents bug 123, gap G1, the constant half of G12 and the consumer
 disagreement of bug 117 (constants as places would need a global storage model in Core). Owners:
 exit 0b for bug 123 (reject the declaration with E0239); exit 2i (R-0500) for REF-3 / G1 and REF-5 /
-G12. [VALUE_MODEL.md](../archive/design-records/VALUE_MODEL.md) records the value category.
+G12. VALUE_MODEL records the value category.
 
 #### REF-4. Generic instantiation preserves REF-1 and REF-3
 
@@ -932,14 +429,14 @@ source of a reference:
   an owned temporary as a `&mut self` receiver (`make().bump()`), and a module constant (`&C`;
   constants are values, REF-3): bind the value to a `let` first. INV-REF's root argument needs
   every reference to have a binding root. **Decided 2026-10-23, the Austral model**
-  ([TIGHTENING_DECISIONS D2](../project/TIGHTENING_DECISIONS.md#d2-the-austral-model-borrow-a-variable-then-project-q2-ref-5-g12-revised-2026-10-23)): the core has exactly two
+  ([TIGHTENING_DECISIONS D2](../../project/TIGHTENING_DECISIONS.md#d2-the-austral-model-borrow-a-variable-then-project-q2-ref-5-g12-revised-2026-10-23)): the core has exactly two
   reference-forming operations, borrowing a **variable** (`&x`, `&mut x`; a string literal is a
   static, immutable variable-like root, so `&"text"` is accepted and `&mut "text"` refused) and
   **projecting through a reference** (field, bounds-checked index, `.0`, nested). `&s.f`,
   `&mut s.f`, `&a[i]` and `&s.inner.x` are sugar the front end rewrites to "borrow `s`, then
   project" before checking; they have no typing or loan rule of their own. Every other operand is
   refused, with no anonymous temporaries in the semantics. Not yet enforced for literals, call
-  results and aggregate literals (gap G12; [bug 182](../bugs/182_borrowed_call_result_temporary.md));
+  results and aggregate literals (gap G12; [bug 182](../../bugs/182_borrowed_call_result_temporary.md));
 - a call whose result is a reference (REF-1 makes this unwritable for user functions; the rule
   covers intrinsics);
 - a read of a reference out of storage: a field, element, heap cell or referenced place whose type
@@ -958,10 +455,10 @@ R-0499 may lift it as REF-5@2.
   `match o { Option::Some { value } => take_ref(value), Option::None => 0 }` with
   `o: &Option<P>` (today a non-Copy payload binds as `&P` and a Copy payload by value: `Check.lean`
   `match` case; both consumers return 42 for this shape). **Decided 2026-10-23**
-  ([TIGHTENING_DECISIONS D3](../project/TIGHTENING_DECISIONS.md#d3-a-binder-through-a-reference-is-a-reference-q3)):
+  ([TIGHTENING_DECISIONS D3](../../project/TIGHTENING_DECISIONS.md#d3-a-binder-through-a-reference-is-a-reference-q3)):
   every binder through a scrutinee of reference type has reference type, Copy or not (a Copy value
   is read with `*value`), so the mode no longer changes under monomorphization
-  ([bug 181](../bugs/181_generic_borrowed_scrutinee_binder_mode.md)). Not yet enforced.
+  ([bug 181](../../bugs/181_generic_borrowed_scrutinee_binder_mode.md)). Not yet enforced.
 - Diagnostic: E0238 (`untraceablePlace`). Sites (`land2-fix`, `Concrete/Check/Check.lean`):
   `checkExpr` (the single entry that refuses a reference-typed call result or storage read),
   `refuseRefValuedBranch`, `checkImplicitReceiverBorrow`, `checkRefArg` and `recordRefProvenance`,
@@ -1063,7 +560,7 @@ reading the owner while a named shared reference lives (G10); see the relaxation
   status quo. Parameters are added to the environment as assignable bindings: a `&T` parameter is
   assignable (`f` above returns 41 in both consumers; `g` builds a binary that reads the dead slot, and the
   interpreter fails "ref path base 'local' not in env"), and a `&mut T` parameter is refused only
-  as E0219, because it is linear ([bug 131](../bugs/131_reference_parameter_repointed.md) is the
+  as E0219, because it is linear ([bug 131](../../bugs/131_reference_parameter_repointed.md) is the
   dead-slot read). `land2-fix` refuses re-pointing at a different source (E0238:
   bug 104's reproducers, a parameter re-pointed at a local) but accepts a same-source reassignment
   and every `let`-bound reference. Borrow-block and arm binders are assignable on `main` too
@@ -1126,7 +623,7 @@ on `land2-fix`, reference arguments by their normalized place) may not overlap w
 is exclusive. Two borrows overlap when they have the same root and one projection path is a prefix
 of the other (`x` and `x.f`; distinct fields are disjoint; every index is the step `[]`, so two
 indexings of one array overlap). **Decided 2026-10-23, not yet enforced** (the Austral model,
-[TIGHTENING_DECISIONS D2](../project/TIGHTENING_DECISIONS.md#d2-the-austral-model-borrow-a-variable-then-project-q2-ref-5-g12-revised-2026-10-23)): loans are keyed by **root variable only**, so any two
+[TIGHTENING_DECISIONS D2](../../project/TIGHTENING_DECISIONS.md#d2-the-austral-model-borrow-a-variable-then-project-q2-ref-5-g12-revised-2026-10-23)): loans are keyed by **root variable only**, so any two
 borrows of one root in one call overlap when one is exclusive, and so do a projection's `&mut`
 loan and a read of a sibling field (`upd(&mut s.a, &s.b)`, `add(&mut s.a, s.b)`,
 `self.offs.push(self.names.len())`). Field-precise loans are deferred until a workload needs them
@@ -1197,7 +694,7 @@ and a Copy binding is protected like a linear one. This is the rule ratified for
   `fn f(a: Int, a: Int)`; `borrow x as x in R { }`.
 - Diagnostic: E0301 (`shadowsVisibleBinding`), with the earlier binding as a related span, from the
   function-wide lexical pre-pass described under Status. Elab's `bindLocal` alpha-renaming (bug 087)
-  stays mandatory as defense in depth ([PRINCIPLES.md](../project/PRINCIPLES.md) #12).
+  stays mandatory as defense in depth ([PRINCIPLES.md](../../project/PRINCIPLES.md) #12).
 - No name-keyed guard stands behind it: E0292 (`checkNoLiveShadow`) and E0238's shadowed-source
   guard were removed by R-0492 slice 1, since the checker keys every binding by the `LocalId` the
   same walk mints, and a spelling that is not visible names a different binding. The
@@ -1478,7 +975,7 @@ fixture is migrated to the REF-6 rewrite and keeps its expected value.
 | REF-6 | `error_2i_ref6_borrow_block_reborrow_escape.con` (new; `out = &*r` where `out` borrowed another place) | reject E0302 REF-6@1 at `out`'s `let` (G14 on `main`) |
 | REF-5 | `error_2i_ref5_borrow_literal.con`, `error_2i_ref5_borrow_call_result.con`, `error_2i_ref5_borrow_aggregate_literal.con` (new; `&42`, `&mk()`, `&P { n: 1 }`) | reject E0238 REF-5@1 (G12) |
 | REF-1 | `error_2i_ref1_trait_decl_returns_ref.con` (new; `trait T { fn get(&self) -> &Int; }`) | reject E0236 REF-1@1 (G13) |
-| REF-1 | `error_2i_ref1_extern_ptr_to_ref.con` (new; `extern fn f() with() -> *const &Int;`) | reject E0575, FFI-3@1 in [ffi.md](../spec/ffi.md#FFI-3) (G15) |
+| REF-1 | `error_2i_ref1_extern_ptr_to_ref.con` (new; `extern fn f() with() -> *const &Int;`) | reject E0575, FFI-3@1 in [ffi.md](../../spec/ffi.md#FFI-3) (G15) |
 | REF-8 / SCOPE-1 / REF-6 | `error_107_shadow_under_live_ref.con` †, `error_107_shadow_in_block_under_live_ref.con` † | reject E0302 REF-6@1 once REF-6 lands (their `let r = &x` precedes the shadowing `let`); otherwise E0301 SCOPE-1@1 once SCOPE-1 lands; E0238 REF-8@1 before both. Bug 107's shadowing half keeps the SCOPE-1 rows |
 | SCOPE-1 | `error_2i_scope1_same_block_let.con`, `error_2i_scope1_block_let.con`, `error_2i_scope1_param_in_block.con`, `error_2i_scope1_consuming_rebind.con`, `error_2i_scope1_for_header.con`, `error_2i_scope1_arm_binder.con`, `error_2i_scope1_if_let.con`, `error_2i_scope1_while_let.con`, `error_2i_scope1_destructure.con`, `error_2i_scope1_duplicate_params.con`, `error_2i_scope1_borrow_ref.con`, `error_2i_scope1_region_name.con` (all new) | reject E0301 SCOPE-1@1 |
 | SCOPE-1 | `regress_2i_scope1_<shape>_renamed.con` (new), the migration twin of each fixture in the row above | run, binary = `--interp` |
@@ -1533,9 +1030,9 @@ manifest row:
 
 | gap | what is missing | proposed owner |
 |---|---|---|
-| G1 | REF-3: a constant of bare reference type is accepted on `main`; its use is silent wrong code (exit 0 for 42) and the interpreter rejects it. Filed as [bug 123](../bugs/123_const_borrow_uninitialized_slot.md), fixed on `land2-fix`: the declaration is E0239 and every borrow rooted at a module constant is E0238 | exit 0b (batch 2 landing) |
+| G1 | REF-3: a constant of bare reference type is accepted on `main`; its use is silent wrong code (exit 0 for 42) and the interpreter rejects it. Filed as [bug 123](../../bugs/123_const_borrow_uninitialized_slot.md), fixed on `land2-fix`: the declaration is E0239 and every borrow rooted at a module constant is E0238 | exit 0b (batch 2 landing) |
 | G2 | **closed 2026-10-23.** One REF-1 judgment (`tyContainsRef`, `Concrete/Semantics/RefWellFormed.lean`) is shared by Check (`checkFn`, the instantiation checks), the FFI rule and the post-mono `verifyNoReturnedRefs` (E0236, pass `post-mono`), which used the weaker `tyExposesRef`; a generic reaching `id::<*const &Int>` only transitively is now refused after specialization (`error_2i_ref1_transitive_generic.con`). Still to do under R-0500: the same constraint inferred on type parameters BEFORE specialization (TIGHTENING_DECISIONS T-G2); today post-mono is the enforcing site for the transitive case | R-0500 |
-| G3 | closed by exit 2i (SCOPE-1@1, E0301). Was: SCOPE-1 is unenforced: same-block, block, parameter, loop-header, arm, destructuring, `if let` and `while let` shadowing and `let s = t(s)` are accepted; duplicate parameters fail in `llvm-as` ([bug 124](../bugs/124_duplicate_parameter_names.md), exit 2c) | R-0500, inheriting R-0435's slices 2 and 3 (the E0301 check and corpus migration; the inventory and mutation gates) |
+| G3 | closed by exit 2i (SCOPE-1@1, E0301). Was: SCOPE-1 is unenforced: same-block, block, parameter, loop-header, arm, destructuring, `if let` and `while let` shadowing and `let s = t(s)` are accepted; duplicate parameters fail in `llvm-as` ([bug 124](../../bugs/124_duplicate_parameter_names.md), exit 2c) | R-0500, inheriting R-0435's slices 2 and 3 (the E0301 check and corpus migration; the inventory and mutation gates) |
 | G4 | closed by exit 2i (`PatBind`, every pattern position). Was: the renamed pattern binder `Variant { value: inner }` does not exist; it is G3's prerequisite | R-0500, R-0435's slice 1 (grammar, parser, formatter, every pattern position) |
 | G5 | the **land2** parts of REF-4 to REF-8 and SCOPE-3 hold only on `land2-fix`; `main` accepts bugs 104, 105 and 107, the write-through-reference shape, a free or move of an owner under a projected borrow (`let r = &h.v; free(h);`, a use after free) and a write under a shared reference (all three recorded in bug 091 on `land2-fix`: the unrecorded projected borrow in its round-3 third pass, writes under a shared reference in the second and third passes, the write-through-reference shape in the integration review; batch 2 rejects the free and the field write under a projected borrow with E0204 and E0232, fixtures `error_091_norm_free_under_projected_borrow.con` and `error_091_norm_field_write_under_projected_borrow.con`), and miscompiles block shadowing (087) | exit 0b (batch 2 landing) |
 | G6 | closed by exit 2i (`CheckError.rule`, `ruleEvidence`, `ruleNextAction`, the ledger's `rules` field, the manifest's diagnostic checks). Was: no rule has a versioned migration diagnostic (§15.5 items 1 to 4: the ledger's rule column, the `rule` evidence, the `migrate` text, the migration pairs) | R-0500, through the existing `Diagnostic.evidence` / `nextAction` fields and a rule column in `Report.lean` |
@@ -1546,9 +1043,9 @@ manifest row:
 | G12 | **closed 2026-10-23 (D2, the Austral model).** Only a variable or a string literal is a reference's root; a temporary and any projection of one is refused at every reference-forming site, explicit `&` and implicit `&self` receivers alike (E0238 REF-5@1, `refuseTemporaryBorrow`); loans are keyed by root (E0293 REF-8@1). Bug 182 closed | R-0500 |
 | G13 | **closed 2026-10-23.** A trait method declaration with a reference result (after alias expansion) is E0236 REF-1@1 at the module check (`error_2i_ref1_trait_decl_returns_ref.con`) | R-0500 |
 | G14 | closed by subtraction with REF-6@1 (exit 2i; fixtures `error_2i_ref6_borrow_block_{copy,paren_copy,cast_copy,reborrow_escape}.con`). Was: REF-6: E0234 sees only a bare identifier. On `main`, `(r)` copies a borrow-block reference out and `out = &*r` re-points an outer reference at the borrowed owner (batch 2 closes both: `unparenDeep` and the re-pointing rule); on both revisions an identity cast `r as &Int` copies it into a new binding inside the block | exit 0b for the `main` spellings; closed by subtraction when REF-6@1 lands (no `let` can receive the copy and no binding can be assigned it), so E0234 needs no cast-aware extension (R-0500) |
-| G15 | **closed 2026-10-23.** E0574 / E0575 look through raw-pointer pointees with the REF-D1 judgment and carry the evidence of their own rule, FFI-3@1 ([ffi.md](../spec/ffi.md#FFI-3)) (`error_2i_ref1_extern_ptr_to_ref.con`, `error_2i_ref1_extern_param_ptr_to_ref.con`) | R-0500, R-0285 |
+| G15 | **closed 2026-10-23.** E0574 / E0575 look through raw-pointer pointees with the REF-D1 judgment and carry the evidence of their own rule, FFI-3@1 ([ffi.md](../../spec/ffi.md#FFI-3)) (`error_2i_ref1_extern_ptr_to_ref.con`, `error_2i_ref1_extern_param_ptr_to_ref.con`) | R-0500, R-0285 |
 | G16 | **closed 2026-10-23.** A function type whose result contains a reference is ill-formed anywhere (`tyHasRefReturningFnType`): after alias expansion (`resolveType`) and in struct, enum, newtype and constant field types, E0236 REF-2@1 (`error_2i_ref2_alias_fn_type_returns_ref.con`, `error_2i_ref2_field_fn_type_returns_ref.con`); a callback whose parameters borrow stays legal there (`regress_2i_ref2_callback_field.con`) | R-0500 |
 | G11 | ROADMAP exit 2i's deliverable read "none stored in an aggregate"; "strictly second-class" also covers REF-6 (design example G8) | closed 2026-10-21: exit 2i's text now names where references may exist, REF-6 and the constants rule |
 | G17 | **moving shapes closed 2026-10-23, not reproduced.** The shape was recorded as compiling on `main` (`match &o { Option::Some { value } => { consume(o); … take_ref(value) … } }`); on main `185d998c` it and its `if let` and heap-freeing forms are refused at the move (E0204, "variable is borrowed"). Fixtures `error_g17_match_borrow_root_moved_in_arm.con`, `error_g17_if_let_borrow_root_moved.con`, `error_g17_match_borrow_heap_freed_in_arm.con` (run_tests.sh). **Copy case closed by D3 (2026-10-23):** the binder is a loan on the root, so reassigning the root in the arm is refused (E0232), also with a guard, nested, in a `while let`, for a whole-value binder and under a pending `defer` (`error_181_root_reassigned_{match,guard,nested,while_let,whole_binder,defer}.con`) | none |
-| G18 | closed by exit 2i (E0302 / E0303 at Check and post-mono). Was: REF-6@1 is unenforced: `let`-bound references and assignments to reference bindings (parameters, borrow-block binders, arm binders) are accepted; a `&T` parameter re-pointed at a block local reads a dead slot. Corpus migration: §15.3 REF-6; assignments to reference parameters still need a scan | the parameter re-pointing hole, [bug 131](../bugs/131_reference_parameter_repointed.md): exit 0b (batch 2 on `land2-fix` rejects its re-pointing at a different source with E0238); the rule, E0302 / E0303 and the corpus migration: R-0500 (exit 2i) |
-| G19 | reference questions the 2026-10-21 decision leaves open besides G9 and G10: no pass may exploit `&mut` exclusivity (for example LLVM `noalias`) before an aliasing model covering raw pointers exists (design example B4); a Core reborrow form that makes the implicit call-argument reborrows explicit after elaboration, with surface syntax waiting for a workload (B5) | B4: a policy sentence owned by [VERIFIED_PIPELINE.md](../compiler/VERIFIED_PIPELINE.md) and R-0505; B5: R-0496 (Core) with R-0500 |
+| G18 | closed by exit 2i (E0302 / E0303 at Check and post-mono). Was: REF-6@1 is unenforced: `let`-bound references and assignments to reference bindings (parameters, borrow-block binders, arm binders) are accepted; a `&T` parameter re-pointed at a block local reads a dead slot. Corpus migration: §15.3 REF-6; assignments to reference parameters still need a scan | the parameter re-pointing hole, [bug 131](../../bugs/131_reference_parameter_repointed.md): exit 0b (batch 2 on `land2-fix` rejects its re-pointing at a different source with E0238); the rule, E0302 / E0303 and the corpus migration: R-0500 (exit 2i) |
+| G19 | reference questions the 2026-10-21 decision leaves open besides G9 and G10: no pass may exploit `&mut` exclusivity (for example LLVM `noalias`) before an aliasing model covering raw pointers exists (design example B4); a Core reborrow form that makes the implicit call-argument reborrows explicit after elaboration, with surface syntax waiting for a workload (B5) | B4: a policy sentence owned by [VERIFIED_PIPELINE.md](../../compiler/VERIFIED_PIPELINE.md) and R-0505; B5: R-0496 (Core) with R-0500 |

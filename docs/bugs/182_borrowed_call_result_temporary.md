@@ -14,7 +14,7 @@ ruling: Violates: REF-5@1
 **Found:** 2026-10-23, by the language-tightening probes (witness programs for
 [TIGHTENING_DECISIONS.md](../project/TIGHTENING_DECISIONS.md), the REF-5 / G12 row).
 **Severity:** memory-unsafe wrong code in safe code, and a silent leak of a linear value. REF-5@1
-([MEMORY_SEMANTICS §15.3](../language/MEMORY_SEMANTICS.md)) refuses a borrow of anything but a
+([MEMORY_SEMANTICS §15.3](../archive/design-records/MEMORY_SEMANTICS.md)) refuses a borrow of anything but a
 canonical place; gap G12 records that a borrow of a literal, call result or aggregate literal is
 accepted. These are the two consequences of that gap for a call result of linear or heap type.
 

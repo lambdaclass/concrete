@@ -53,8 +53,8 @@ areas exist (§8).
 | `ownership.md` | `OWN-` | migrated: OWN-D1, OWN-1 to OWN-15 (linearity, discards, overwrites, mutability, `defer`, destruction, value flow per constructor) |
 | `pipeline.md` | `PASS-` | migrated: PASS-1 to PASS-11 (specialization, binder modes, the native-profile theorem, the trusted LLVM profile, one boundary entry per stage) |
 | `types.md` | `TYPE-` | migrated: TYPE-D1, TYPE-1 to TYPE-21 (capability sets, callable values, dispatch, owned `Text`, typing of expressions and operators, aggregates, calls, builtins, construction rights, aliases, kinds, generic arguments, finite size, capabilities in function types, capability erasure, the primitive numeric types, `char`, newtype representation) |
-| `memory.md` | `MEM-` | migrated: MEM-1 to MEM-6 (two-layer memory and quasi-concrete addresses pending, initialization, field access, heap ownership, array bounds) |
-| `trusted.md` | `TRUST-` | migrated: TRUST-D1, TRUST-1 to TRUST-10 (what a capability means, pointer operations, undefined behaviour, references from raw pointers, capabilities, `trusted`, trusted modules, moving out of raw memory, global state) |
+| `memory.md` | `MEM-` | migrated: MEM-D1, MEM-1 to MEM-6 (ownership states, two-layer memory and quasi-concrete addresses pending, initialization, field access, heap ownership, array bounds) |
+| `trusted.md` | `TRUST-` | migrated: TRUST-D1, TRUST-1 to TRUST-12 (what a capability means, pointer operations, undefined behaviour, references from raw pointers, capabilities, `trusted`, trusted modules, moving out of raw memory, global state, raw stores, ownership rules in trusted code) |
 | `statements.md` | `STMT-` | migrated: STMT-1 to STMT-10 (outcomes, abort only, single-threaded, evaluation order, exits in operands, loops, `main`, value blocks, returning on every path, test functions) |
 | `arithmetic.md` | `ARITH-` | migrated: ARITH-1 to ARITH-10 (floats, literals, checked arithmetic, named operations, conversions, comparisons, float literals, shift and division results, no ambient mode, the named conversions' results) |
 | `contracts.md` | `CON-` | migrated: CON-1 to CON-4 (partial correctness, contract claims, the specification judgment pending, ghost code) |
@@ -110,7 +110,8 @@ chapter's prefix, written in upper case. A definition's number has a `D` in fron
    ignored when sentences are counted. Any other `.`, `!` or `?` followed by a space and a
    capital letter starts a second sentence, which is refused. The version is a positive
    integer. It increases whenever the sentence's meaning changes, and the compiler's
-   diagnostics carry the same versioned tag (`rule: REF-3@1`).
+   diagnostics carry the same versioned tag (`rule: REF-3@1`). There is no language edition and
+   no opt-out: a new version applies to every program.
 4. **The fields.** Each field is one bullet. The fields appear in the order shown and none
    repeats. An unknown field is refused. Values that are lists are separated by `, `.
    - `Kind:` one of `refusal`, `guarantee`, `definition`, `preservation` or `open`:
@@ -372,9 +373,10 @@ that contains a normalized sentence fails.
 change therefore fails fast. Paraphrases are not caught. Turning a migrated area's paraphrases
 into citations is part of that area's migration (§8).
 
-[MEMORY_SEMANTICS §15](../language/MEMORY_SEMANTICS.md) was the normative text for REF and
-SCOPE until this pilot. It is now their design record, keeping the probes, the status history
-and the gap analysis (§15.7). It says at its top that `references.md` and `scope.md` govern.
+[MEMORY_SEMANTICS §15](../archive/design-records/MEMORY_SEMANTICS.md) was the normative text for
+REF and SCOPE until this pilot. It is now their design record in `docs/archive/design-records/`,
+keeping the probes, the status history and the gap analysis (§15.7), and it says at its top which
+entries govern.
 
 ## 7. Existing checks this builds on
 

@@ -5,7 +5,7 @@ A build profile is a POLICY BUNDLE: it selects check *enforcement*, diagnostics,
 optimization assumptions, evidence floors, and reporting. It NEVER changes what a
 source program means — a reviewer must not need to know the profile to know
 whether `a + b` wraps. Arithmetic semantics are fixed and explicit (checked
-`+ - *`, explicit `wrapping_*` / `saturating_*`); see docs/language/ARITHMETIC_POLICY.md
+`+ - *`, explicit `wrapping_*` / `saturating_*`); see docs/spec/arithmetic.md
 §14 and docs/platform/PROFILES.md.
 
 Stage 1 makes the active profile and its bundle VISIBLE (`--profile`,
@@ -107,7 +107,7 @@ def parseProfileName (content : String) : Option String := Id.run do
 
     The `arithmetic` line is identical for every profile — arithmetic meaning is
     profile-invariant — and states what the lowering does in every profile
-    (docs/language/ARITHMETIC_POLICY.md §1, §6). -/
+    (docs/spec/arithmetic.md). -/
 def renderProfileReport (p : BuildProfile) (src : ProfileSource) : String :=
   let arith :=
     "checked semantics for `+ - *`, negation, `/` and `%` (trap on overflow or a zero " ++
@@ -125,6 +125,6 @@ def renderProfileReport (p : BuildProfile) (src : ProfileSource) : String :=
   s!"  optimization:   {p.optimization}\n" ++
   s!"  evidence/proof: {p.evidence}\n" ++
   s!"  note:           a build profile is a policy bundle, never an arithmetic mode " ++
-  "(docs/platform/PROFILES.md, docs/language/ARITHMETIC_POLICY.md §14).\n"
+  "(docs/platform/PROFILES.md, docs/spec/arithmetic.md).\n"
 
 end Concrete

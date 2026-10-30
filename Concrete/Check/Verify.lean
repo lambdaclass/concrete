@@ -307,7 +307,7 @@ def verifyCopyFieldsPostMono (modules : List CModule) : Diagnostics :=
 
 /-- **Returned-reference verifier** (Phase 6.5 #4, class 6). References are
     second-class: NO function may return a reference type, directly or nested in
-    an aggregate/generic instantiation (docs/language/VALUE_MODEL.md). `Check.lean` already
+    an aggregate/generic instantiation (docs/spec/references.md). `Check.lean` already
     rejects this at the front end for every function (the low-level escape is a
     raw pointer `*const`/`*mut`, not a returned reference); this is the post-mono
     re-assertion at the pipeline boundary — the one residue class that was
@@ -327,7 +327,7 @@ partial def verifyNoReturnedRefs : List CModule → Diagnostics
                    message := s!"function '{fn.name}' returns a reference type ({tyToStr fn.retTy}); references are second-class and may not be returned — use a value, an owned view, a scoped accessor (with_value), or a raw pointer for low-level access"
                    pass := "post-mono"
                    span := fn.declSpan
-                   hint := some "see docs/language/VALUE_MODEL.md — references are second-class"
+                   hint := some "see docs/spec/references.md — references are second-class"
                    code := "E0236"
                    evidence := [("rule", "REF-1@1"), ("spec", ruleSpecRef "REF-1@1")]
                    nextAction := some "return a value or an owned view, use a scoped callback (`with_value`), or return a raw pointer from trusted code" } : Diagnostic)]
@@ -541,7 +541,7 @@ partial def verifyNoStoredRefs (modules : List CModule) : Diagnostics :=
     message := s!"{v.fnName}: {v.message}"
     pass := "post-mono"
     span := none
-    hint := some "references are second-class: a generic type parameter instantiated with a reference may not be stored in a struct, enum, array or generic container (docs/language/VALUE_MODEL.md)"
+    hint := some "references are second-class: a generic type parameter instantiated with a reference may not be stored in a struct, enum, array or generic container (docs/spec/references.md)"
     code := "E0239"
     -- exit 2i §15.5: an instantiation storing a reference is REF-4@1 (b); a constant is REF-3@1
     evidence := let r := if v.message.startsWith "a reference stored in an aggregate after monomorphization in constant" then "REF-3@1" else "REF-4@1"

@@ -13,11 +13,11 @@ this document and the spec differ, the spec governs.
 **Statements the absorption did not carry over (2026-10-30).**
 
 - Open, not decided: §3.1's release profile that may omit a check "explicitly configured off and
-  reported", and its provable profile that refuses an unproved overflow site (OPEN-9X1); §8's `as` as
-  the spelling of pointer and reference casts (OPEN-9X2); §8.2's indicative spellings of the named
-  conversions (OPEN-9X3); §8a's comparison on a `Copy`-bounded type parameter checked per
-  instantiation (OPEN-9X4); §9.2's trap message, which the binary does not write (OPEN-9X5); §1's
-  `Float32` spelling, which the parser does not map (OPEN-9X6); §8a's comparisons on `bool` and `char`
+  reported", and its provable profile that refuses an unproved overflow site (OPEN-97); §8's `as` as
+  the spelling of pointer and reference casts (OPEN-98); §8.2's indicative spellings of the named
+  conversions (OPEN-99); §8a's comparison on a `Copy`-bounded type parameter checked per
+  instantiation (OPEN-100); §9.2's trap message, which the binary does not write (OPEN-101); §1's
+  `Float32` spelling, which the parser does not map (OPEN-102); §8a's comparisons on `bool` and `char`
   (OPEN-42).
 - Stale: §7's "wrapping mode" results for `-i32::MIN` and `i32::MIN / -1` describe operations the
   language does not have (there is no wrapping negation or division, ARITH-4); §8a's comparison of
@@ -476,7 +476,7 @@ marked "no" in §8.1 is accepted by `as` today.
    and repair `bool as` integer (bugs 130 and 108, exit 2c: done, E0553 and zext); repair the
    interpreter's integer → float identity (bug 128, exit 0b).
 2. **Rejection with versioned migration diagnostics.** The check lands with its diagnostic in the
-   form of [MEMORY_SEMANTICS.md §15.5](../../language/MEMORY_SEMANTICS.md#155-versioned-migration-diagnostics): a
+   form of [MEMORY_SEMANTICS.md §15.5](MEMORY_SEMANTICS.md#155-versioned-migration-diagnostics): a
    stable code, the rule tag (`CAST-1@1`), the conversion class, and the mechanical rewrite
    (`truncate` / `reinterpret` when the program relies on today's bits, `try_convert` when it
    wants detection, a rounding operation for floats). It first runs as the typed inventory: every

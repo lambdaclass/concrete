@@ -6,7 +6,8 @@ techniques behind a safe API. **`Unsafe`** is the capability for crossing a fore
 boundary, and a `trusted` body absorbs it. No layer is exempt: compiler builtins, `std` and user
 code follow the same rules. This chapter covers what a capability means (TRUST-D1), raw pointers (TRUST-1, TRUST-3), undefined
 behaviour (TRUST-2), capabilities (TRUST-4), `trusted` (TRUST-5), the trusted-module marker
-(TRUST-6, pending), moving a value out of raw memory (TRUST-7) and global state (TRUST-8 to TRUST-10). Capability sets, capability parameters and the capabilities of function types and
+(TRUST-6, pending), moving a value out of raw memory (TRUST-7) , global state (TRUST-8 to TRUST-10), storing through a raw pointer (TRUST-11) and the
+ownership rules in trusted code (TRUST-12). Capability sets, capability parameters and the capabilities of function types and
 handles (`Sink<cap C>`) are in the types chapter (TYPE-D1, TYPE-15, TYPE-17, TYPE-18); this specification governs them. The design records are [SAFETY.md](../verification/SAFETY.md),
 [CAPABILITY_FACTS.md](../compiler/CAPABILITY_FACTS.md),
 [HANDLE_CAPABILITIES.md](../archive/design-records/HANDLE_CAPABILITIES.md) and
@@ -33,8 +34,8 @@ see: a program that never named a file cannot know that its output goes to one, 
 terminals and `/dev/null` look alike from inside. SPARK's `Ada.Text_IO` likewise carries one
 coarse file-system state and excludes redirection rather than modelling it. `with(...)` lists
 capabilities, aliases (`Std`, `cap IO = File + Console;`) and capability variables (TYPE-D1). The
-meanings of `Time`, `Env`, `Process` and `Alloc` are stated nowhere yet (OPEN-9X4), and main
-accepts a name in `with(...)` that is none of these (OPEN-9X3). An empty `with()` means no
+meanings of `Time`, `Env`, `Process` and `Alloc` are stated nowhere yet (OPEN-95), and main
+accepts a name in `with(...)` that is none of these (OPEN-94). An empty `with()` means no
 external authority, not purity: the function may still mutate what it is lent through `&mut`
 (TRUST-4), and it is not by that alone callable from a contract (CON-3). What a capability means
 does not settle a descriptor that is replaced, reused or aliased; std's handles avoid those cases
@@ -462,6 +463,90 @@ lands with R-0557.
 `main` cannot reach a resource through a global (TRUST-8), so what it may touch is exactly what was
 handed to it, and the handing-over is visible in the source. Threads do not exist yet; when they do,
 they follow the same rule.
+
+<a id="TRUST-11"></a>
+### TRUST-11. A raw store neither reads nor destroys the old contents
+
+**TRUST-11@1.** In trusted or `Unsafe` code, a store `*p = v` through a raw pointer `p: *mut T` moves `v` into the slot without reading or destroying what the slot held, whether or not `T` is Copy.
+
+- Kind: guarantee
+- Uses: OWN-D1
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.checkStmt
+- Semantics: none
+- Obligation: whether the slot held a live value is a named premise of the store (TRUST-2, R-0506)
+- Evidence: tested
+
+**Rationale.** This is how trusted collection code writes an uninitialized slot, or refills one that
+`read_owned` emptied (TRUST-7). The same store through `&mut T` over a live non-Copy value is
+refused (OWN-9), because that value would be lost; through a raw pointer the checker cannot know
+whether the slot is live, so overwriting a live linear value leaks it, and avoiding that is the
+trusted code author's premise.
+
+```con accept name=refill-emptied-slot exit=42
+struct Copy B { v: Int }
+
+trusted fn swap_in(slot: &mut Heap<B>, fresh: Heap<B>) -> Heap<B> {
+    let p: *mut Heap<B> = slot as *mut Heap<B>;
+    let old: Heap<B> = read_owned(p);
+    *p = fresh;
+    return old;
+}
+
+fn main() with(Alloc) -> Int {
+    let mut h: Heap<B> = alloc(B { v: 40 });
+    let old: Heap<B> = swap_in(&mut h, alloc(B { v: 2 }));
+    let a: B = free(old);
+    let b: B = free(h);
+    return a.v + b.v;
+}
+```
+
+<a id="TRUST-12"></a>
+### TRUST-12. Trusted code keeps the ownership rules
+
+**TRUST-12@1.** A `trusted` function is checked by the same ownership, linearity, borrow and scope-exit rules as safe code, so that `trusted` permits only the operations of TRUST-5 and relaxes no rule of the ownership, references and memory chapters.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.checkFn
+- Semantics: none
+- Obligation: the trusted body is checked by the same judgment as safe code (R-0499)
+- Evidence: tested
+
+**Rationale.** A double move, a skipped cleanup or an access to a frozen owner in a `trusted fn` is
+refused with the same code as in safe code (OWN-1, OWN-2, REF-8). The checker's guarantees stop at
+raw pointers: what lies behind `*mut T` or `*const T` is not tracked (OWN-D1), which is why a raw
+store (TRUST-11) and a move out of raw memory (TRUST-7) carry premises. A pointer derived from a
+borrow that outlives the borrow is OPEN-64's question.
+
+```con accept name=trusted-consumes-once exit=42
+struct R { v: Int }
+
+fn take(r: R) -> Int {
+    let R { v } = r;
+    return v;
+}
+
+fn peek(r: &R) -> Int {
+    return r.v;
+}
+
+trusted fn use_once(r: R) -> Int {
+    let mut seen: Int = 0;
+    borrow r as rr in Reg {
+        seen = peek(rr);
+    }
+    return take(r) + seen * 0;
+}
+
+fn main() -> Int {
+    return use_once(R { v: 42 });
+}
+```
 
 ## Absent by decision
 

@@ -32,6 +32,7 @@ Linearity rules (matching Concrete/Rust design):
 -- Types and Environment
 -- ============================================================
 
+-- spec: MEM-D1 (docs/spec/memory.md; this declaration enforces the rule)
 inductive VarState where
   | unconsumed  -- never touched
   | used        -- read/borrowed but not moved
@@ -815,7 +816,7 @@ def CheckError.hint : CheckError → Option String
   | .nonCopyProjection _ _ => some "borrow it (`&place` / `&mut place`) or destructure the whole owner; Concrete has no partial moves"
   | .cannotOverwriteLinearPlace _ _ => some "consume the old value first, or make the element/pointee type Copy"
   | .shadowsLiveLinear name => some s!"consume '{name}' before re-binding the name, or use a different name"
-  | .refStoredInAggregate _ _ => some "pass the reference down as a function argument, store an owned value or a raw pointer (trusted), or use a scoped callback (docs/language/VALUE_MODEL.md)"
+  | .refStoredInAggregate _ _ => some "pass the reference down as a function argument, store an owned value or a raw pointer (trusted), or use a scoped callback (docs/spec/references.md)"
   | .guardMovesLinear name => some s!"borrow '{name}' in the guard (`&{name}`), or move it inside the arm body"
   | .mainHasParams _ => some "read command-line arguments through `std.args` (`import std.args.{count, get};`, which need `with(Env)`) and declare `fn main() -> Int`"
   | .conflictingCallBorrows _ _ => some "pass one borrow, or restructure so the exclusive access happens in its own statement"

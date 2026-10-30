@@ -434,7 +434,7 @@ Concrete is an attempt to make systems programming more inspectable by default. 
 
 [4] Standard Library Direction. `docs/stdlib/STDLIB.md`.
 
-[5] Value and Reference Model. `docs/language/VALUE_MODEL.md`.
+[5] Value and Reference Model. `docs/archive/design-records/VALUE_MODEL.md`.
 
 [6] Provable Subset. `docs/verification/PROVABLE_SUBSET.md`.
 

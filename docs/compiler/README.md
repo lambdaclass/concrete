@@ -7,7 +7,7 @@ transformation registers.
 
 Start with [ARCHITECTURE.md](ARCHITECTURE.md), [PASSES.md](PASSES.md), and
 [PIPELINE_CONTRACTS.md](PIPELINE_CONTRACTS.md). Language semantics belong in
-[`../language/`](../language/); proof and evidence architecture belongs in
+[the language specification](../spec/README.md); proof and evidence architecture belongs in
 [`../verification/`](../verification/).
 
 The plan for an end-to-end verified compiler — the target IR chain, semantics contract, checks
