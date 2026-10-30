@@ -62,7 +62,7 @@ intended behaviour.
    builtin is a declaration too (`TypeId.builtin`): a user type spelled `Option` or `Result` is
    ambiguous with it whenever another module of the program can see the builtin, and is then
    spelled by its module (`outer_Result`); the builtin keeps its name. Behaviour: none beyond the
-   decided rule ([LAYOUT_CONTRACT](../platform/LAYOUT_CONTRACT.md) §3.4, a user `Result` is a distinct type); the native build of the
+   decided rule ([LAYOUT_CONTRACT](../archive/design-records/LAYOUT_CONTRACT.md) §3.4, a user `Result` is a distinct type); the native build of the
    nested reproducer returns what `--interp` already returns.
 3. **Check compares and looks up types by `TypeId` (bug 223).** Check's environment maps a
    spelling to its declaration, an aliased import binds the alias to the imported declaration's

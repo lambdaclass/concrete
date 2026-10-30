@@ -31,8 +31,8 @@ an explicit returning error arm.
 
 - Errors are values — they appear in the function signature
 - the returning error arm is ordinary control flow, not an exception throw
-- Callers must handle or propagate — no silent dropping
-- Defer runs normally on explicit error returns
+- Callers must handle or propagate: a `Result` or `Option` is not dropped by a statement ([OWN-6](../spec/ownership.md#OWN-6))
+- Defer runs normally on explicit error returns ([STMT-11](../spec/statements.md#STMT-11))
 
 This is the primary and preferred error mechanism for predictable code.
 
@@ -61,14 +61,14 @@ The five predictable gates exclude all hidden or unbounded failure paths:
 
 | Excluded failure | Why excluded | Which gate |
 |-----------------|-------------|-----------|
-| `abort()` | Requires `Process` capability | No blocking |
+| `abort()` | Requires `Process` ([STMT-13](../spec/statements.md#STMT-13)) | No blocking |
+| std's `process_exit()` | Requires `Process` (a std function over libc `exit`, not a language operation) | No blocking |
 | OOM (`malloc` null) | Requires allocation | No allocation |
 | Stack overflow from recursion | Requires recursion | No recursion |
 | Unbounded stack growth from loops | Loops must be bounded | Bounded loops |
 | Blocking I/O failure | Requires File/Network/Process | No blocking |
 | FFI-triggered abort/signal | Requires extern calls | No blocking (FFI gate) |
 | `longjmp` across frames | Requires FFI | No blocking |
-| `exit()` | Requires Process capability | No blocking |
 
 Checked arithmetic and safe bounds traps are not excluded by the five
 predictable gates. They are deterministic language failure paths, reported as
@@ -89,9 +89,8 @@ wrong values:
 
 ### Integer overflow
 
-Ordinary fixed-width arithmetic is checked and aborts on overflow in every
-profile. Intentional modular or clamping behavior uses the explicit
-`wrapping_*` / `saturating_*` spellings.
+Integer arithmetic is checked in every profile ([ARITH-3](../spec/arithmetic.md#ARITH-3)), with
+`wrapping_*` and `saturating_*` as the named alternatives ([ARITH-4](../spec/arithmetic.md#ARITH-4)).
 
 - **Current status**: runtime checked
 - **Visibility**: arithmetic/obligation reports classify the site
@@ -99,7 +98,7 @@ profile. Intentional modular or clamping behavior uses the explicit
 
 ### Array out-of-bounds
 
-Safe raw indexing (`arr[i]`) checks `0 <= i < len`; an invalid index aborts.
+Safe indexing is checked at run time ([MEM-6](../spec/memory.md#MEM-6)).
 
 - **Current status**: runtime checked
 - **Visibility**: bounds obligations/trap-site reports

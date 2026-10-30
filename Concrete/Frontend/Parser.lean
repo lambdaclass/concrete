@@ -1761,6 +1761,7 @@ structure ReprOpts where
 
 /-- Parse an attribute like #[repr(C, align(16), packed)], #[intrinsic = "sizeof"], or #[foo].
     Returns (key, optional value, optional repr opts). -/
+-- spec: FFI-10 (docs/spec/ffi.md; this declaration enforces the rule: the repr options)
 partial def parseAttribute : ParseM (String × Option String × Option ReprOpts × Option Expr) := do
   expect .hash
   expect .lbracket
@@ -2361,6 +2362,7 @@ partial def skipToTopLevelBoundary (itemStartPos : Nat) (stopToken : TokenKind) 
     advance
     tk ← peek
 
+-- spec: FFI-10 (docs/spec/ffi.md; this declaration enforces the rule: repr only on a struct)
 partial def parseModuleBody (stopToken : TokenKind) : ParseM Module := do
   let mut structs : List StructDef := []
   let mut enums : List EnumDef := []

@@ -128,7 +128,7 @@ policy, formatting triad (no format strings), error ergonomics (Result
 helpers), validated wrappers/newtypes (layout fix, cross-module identity,
 method dispatch, cast exemption narrowed), `Type::Variant` qualification,
 field punning + `let...else` + destructuring, visibility rules, endian APIs,
-layout/ABI contract (`docs/platform/LAYOUT_CONTRACT.md`), module hygiene, canonical
+layout/ABI contract (`docs/archive/design-records/LAYOUT_CONTRACT.md`), module hygiene, canonical
 examples on the intended surface, and the `grep`/`lox` medium-workload
 validation (`docs/stdlib/STDLIB_FREEZE_LEDGER.md`). Changes to the frozen surface
 require explicit unfreezing per `docs/stdlib/STDLIB_SURFACE_FREEZE.md`.

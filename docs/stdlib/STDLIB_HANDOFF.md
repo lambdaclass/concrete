@@ -48,10 +48,9 @@ design doc for a deferred part). The handoff gate parses this table.
   Fixed-capacity stdlib APIs may assume the documented V1 subset only; anything
   beyond it must wait for a real workload to pull it in (ROADMAP #6a).
 - **build-profiles** — debug/release profile behavior and the policy surface are
-  designed ([PROFILES.md](../platform/PROFILES.md)); the remaining work is checked-overflow
-  codegen (ROADMAP #10). Until that lands, stdlib APIs must not depend on
-  checked-overflow *trapping* semantics — overflow is the documented opt-in
-  arithmetic policy, not a guarantee.
+  designed ([PROFILES.md](../platform/PROFILES.md)). Integer arithmetic is checked in every
+  profile ([ARITH-3](../spec/arithmetic.md#ARITH-3)); an API that needs modular or clamping
+  results spells them `wrapping_*` / `saturating_*` ([ARITH-4](../spec/arithmetic.md#ARITH-4)).
 
 ## Phase 7 readiness
 

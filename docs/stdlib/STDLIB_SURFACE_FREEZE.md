@@ -51,7 +51,7 @@ Generic absence type.
 
 | Item | Kind |
 |------|------|
-| `Option<T>` | enum: `Some { value: T }`, `None` |
+| `Option<T>` | the builtin enum ([TYPE-23](../spec/types.md#TYPE-23)) |
 | `is_some(&self) -> bool` | method |
 | `is_none(&self) -> bool` | method |
 | `unwrap_or(self, default: T) -> T` | method |
@@ -65,7 +65,7 @@ Generic success/failure type.
 
 | Item | Kind |
 |------|------|
-| `Result<T, E>` | enum: `Ok { value: T }`, `Err { error: E }` |
+| `Result<T, E>` | the builtin enum ([TYPE-23](../spec/types.md#TYPE-23)) |
 | `is_ok(&self) -> bool` | method |
 | `is_err(&self) -> bool` | method |
 | `unwrap_or(self, default: T) -> T` | method |
@@ -529,109 +529,46 @@ Allocation-free console writer. Flagged for merge into `std.io` in [STDLIB_API_R
 
 ---
 
-## 3. Frozen Syntax Forms
+## 3. Syntax Forms
 
-Every syntax construct in the language and its freeze status.
+The language's syntax is the specification's ([docs/spec/syntax.md](../spec/syntax.md): the grammar
+is SYN-1, operator grouping SYN-2), and the freeze record does not restate it. The first-release
+record listed here as of 2026-04 has since changed in these places:
 
-### 3.1 Stable (frozen, changes require unfreeze)
+- loops are `while` and the counted loop `for i from a until b` ([STMT-6](../spec/statements.md#STMT-6)@3;
+  main still parses only the C-style `for (init; cond; step)`, [bug 331](../bugs/331_c_style_for_loops_are_accepted_and_the_counted_l.md));
+  `for x in collection` is [OPEN-51](../spec/decisions.md#OPEN-51);
+- `as` converts only where every value is preserved ([ARITH-5](../spec/arithmetic.md#ARITH-5)),
+  a newtype and its inner type ([TYPE-24](../spec/types.md#TYPE-24)), and never a pointer to an
+  integer ([TRUST-1](../spec/trusted.md#TRUST-1)); narrowing is a named operation;
+- string literals and their escapes are [SYN-5](../spec/syntax.md#SYN-5); integer literals are
+  `INT` of the grammar (decimal, `0x`, `0b`, `0o`) and [ARITH-2](../spec/arithmetic.md#ARITH-2);
+- destructuring `let` and `let ... else` are implemented ([PAT-5](../spec/patterns.md#PAT-5),
+  [PAT-10](../spec/patterns.md#PAT-10)), match guards exist ([PAT-4](../spec/patterns.md#PAT-4),
+  whose removal is [OPEN-55](../spec/decisions.md#OPEN-55)), and `field: _` ignores a field
+  ([PAT-3](../spec/patterns.md#PAT-3));
+- `#[requires]` / `#[ensures]` exist as contract claims ([CON-2](../spec/contracts.md#CON-2));
+- closures are absent ([TYPE-1](../spec/types.md#TYPE-1)), macros and `comptime` too (SYN-1's
+  rationale), and nested patterns (the patterns chapter); operator overloading, default arguments,
+  compound assignment, string interpolation, byte and raw strings and `async` have no production
+  in the grammar.
 
-| Form | Description |
-|------|-------------|
-| `fn` | Function declaration with explicit parameter types and return type |
-| `struct` / `struct Copy` | Struct declaration with named fields |
-| `enum` / `enum Copy` | Enum declaration with named variants and fields |
-| `impl` | Method implementation block |
-| `trait` | Trait declaration |
-| `match` | Exhaustive pattern matching on enums and integers |
-| `let` / `let mut` | Variable binding with optional type annotation |
-| `if` / `else` / `else if` | Conditional branching (requires `bool` expression) |
-| `while` | Loop with condition |
-| `for` | C-style `for (init; cond; step)` loop |
-| `return` | Explicit function exit |
-| `break` / `continue` | Loop control |
-| `defer` | Deferred execution at scope exit (LIFO order) |
-| `borrow` / `borrow mut` | Explicit borrow block with region and binding name |
-| `import` | Selective named import with braced symbol list |
-| `mod` | Module declaration |
-| `pub` | Public visibility modifier |
-| `trusted` | Trust boundary marker for unsafe internals |
-| `extern fn` / `trusted extern fn` | FFI function declarations |
-| `with(...)` | Capability declaration on function signatures |
-| explicit Result propagation | `match` exposes both arms and the error arm writes the early return |
-| `as` | Explicit type cast (widening, narrowing, reinterpretation) |
-| `::` | Generic instantiation, enum/static qualification (`Type::Variant`, `Type::method(...)`), and module qualification |
-| `.` | Module path, field access, method call |
-| `&` / `&mut` | Borrow and mutable borrow in expressions and types |
-| `*` (dereference) | Pointer/reference dereference |
-| String literals (`"..."`) | UTF-8 string with escape sequences `\n`, `\t`, `\r`, `\\`, `\"`, `\0` |
-| Char literals (`'c'`) | Single-character literal |
-| Integer literals | Decimal, hex (`0x`), binary (`0b`), octal (`0o`) |
-| Array literals (`[init; size]`) | Fixed-size array initialization |
-| `#[test]` | Test function annotation |
+## 4. Type Vocabulary
 
-### 3.2 Approved for implementation (not yet in the compiler)
-
-| Form | Description | Design doc |
-|------|-------------|------------|
-| `let Type::Variant { fields } = expr;` | Irrefutable enum destructuring | [PATTERN_DESTRUCTURING.md](../archive/design-records/PATTERN_DESTRUCTURING.md) |
-| `let StructType { fields } = expr;` | Irrefutable struct destructuring | [PATTERN_DESTRUCTURING.md](../archive/design-records/PATTERN_DESTRUCTURING.md) |
-| `let Type::Variant { fields } = expr else { diverging_body };` | Refutable destructuring with else | [PATTERN_DESTRUCTURING.md](../archive/design-records/PATTERN_DESTRUCTURING.md) |
-| Elaboration-time generic inference | Omit type params when context provides them | [SYNTAX_FREEZE_REVIEW.md](../compiler/SYNTAX_FREEZE_REVIEW.md) #1, #4 |
-
-These are designed, LL(1)-verified, and approved. They may be implemented before release. Once implemented, they become stable.
-
-### 3.3 Explicitly deferred (NOT in the first release)
-
-| Form | Reason | Reference |
-|------|--------|-----------|
-| Closures / anonymous functions | Permanent exclusion: hidden capture, hidden data flow | [ANTI_FEATURES.md](../project/ANTI_FEATURES.md) |
-| `async` / `await` | No async runtime; permanent for hidden runtimes | [ANTI_FEATURES.md](../project/ANTI_FEATURES.md) |
-| Macros | Permanent exclusion: breaks phase separation and auditability | [ANTI_FEATURES.md](../project/ANTI_FEATURES.md) |
-| Operator overloading | Permanent for first release: hidden effects | [ANTI_FEATURES.md](../project/ANTI_FEATURES.md) |
-| Default function arguments | Hidden parameters; deferred | [ANTI_FEATURES.md](../project/ANTI_FEATURES.md) |
-| String interpolation | Requires macros or special parser form; deferred | [SYNTAX_FREEZE_REVIEW.md](../compiler/SYNTAX_FREEZE_REVIEW.md) |
-| `for x in collection` | Requires iterator protocol; deferred | [SYNTAX_FREEZE_REVIEW.md](../compiler/SYNTAX_FREEZE_REVIEW.md) #18 |
-| Compound assignment (`+=`, `-=`) | Low priority sugar; deferred | [SYNTAX_FREEZE_REVIEW.md](../compiler/SYNTAX_FREEZE_REVIEW.md) #20 |
-| Guard clauses in match | Grammar ambiguity with `if`; deferred | [PATTERN_DESTRUCTURING.md](../archive/design-records/PATTERN_DESTRUCTURING.md) |
-| Nested patterns in match/let | Complexity; deferred | [PATTERN_DESTRUCTURING.md](../archive/design-records/PATTERN_DESTRUCTURING.md) |
-| `_` wildcard in destructuring | Can be added without grammar changes; deferred | [PATTERN_DESTRUCTURING.md](../archive/design-records/PATTERN_DESTRUCTURING.md) |
-| Byte-string literals (`b"..."`) | Byte/string boundary not settled; deferred | [SYNTAX_FREEZE_REVIEW.md](../compiler/SYNTAX_FREEZE_REVIEW.md) #8 |
-| Raw strings (`r"..."`) | Deferred | [STRING_TEXT_CONTRACT.md](STRING_TEXT_CONTRACT.md) |
-| Multi-line strings | Deferred | [STRING_TEXT_CONTRACT.md](STRING_TEXT_CONTRACT.md) |
-| Pre/post conditions (`requires`/`ensures`) | Proof pipeline not mature; deferred | [ANTI_FEATURES.md](../project/ANTI_FEATURES.md) |
-| `comptime` evaluation | Blurs parse-time/run-time boundary; deferred | [ANTI_FEATURES.md](../project/ANTI_FEATURES.md) |
-| `pub(pkg)` visibility | Deferred until package management | [VISIBILITY_AND_MODULE_HYGIENE.md](../archive/design-records/VISIBILITY_AND_MODULE_HYGIENE.md) |
-| Unifying `#` with `::` | Deferred pending user feedback | [SYNTAX_FREEZE_REVIEW.md](../compiler/SYNTAX_FREEZE_REVIEW.md) #10 |
-
----
-
-## 4. Frozen Type Vocabulary
-
-### 4.1 Scalar types
-
-| Type | Width | Signedness | Aliases |
-|------|-------|------------|---------|
-| `i8` | 8-bit | signed | -- |
-| `i16` | 16-bit | signed | -- |
-| `i32` | 32-bit | signed | -- |
-| `i64` | 64-bit | signed | `Int` |
-| `u8` | 8-bit | unsigned | -- |
-| `u16` | 16-bit | unsigned | -- |
-| `u32` | 32-bit | unsigned | -- |
-| `u64` | 64-bit | unsigned | `Uint` |
-| `f32` | 32-bit | IEEE 754 | `Float32` |
-| `f64` | 64-bit | IEEE 754 | `Float64` |
-| `bool` | 1-bit | -- | -- |
-| `char` | 8-bit | -- | Byte-oriented first-release surface; see section 6 |
-
-Source: [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md)
+The scalar types are [TYPE-19](../spec/types.md#TYPE-19) and [TYPE-20](../spec/types.md#TYPE-20)
+(`char` is one byte); whether `Float32` and `Char` are spellings is
+[OPEN-102](../spec/decisions.md#OPEN-102). `Option` and `Result` are
+[TYPE-23](../spec/types.md#TYPE-23). References and raw pointers are the references and trusted
+chapters; a function type is a pointer to a named function with no capture
+([TYPE-1](../spec/types.md#TYPE-1)), and it is not a C function pointer: an `extern fn` is never a
+value ([FFI-1](../spec/ffi.md#FFI-1)).
 
 ### 4.2 String / text / byte types
 
 | Type | Encoding | Ownership | Layer |
 |------|----------|-----------|-------|
 | `String` | UTF-8 | Owned, linear | Alloc |
-| `Text` | UTF-8 (borrowed) | Borrowed | Alloc (borrows from String) |
+| `Text` | UTF-8 | Owned, immutable, linear ([TYPE-3](../spec/types.md#TYPE-3)) | Alloc |
 | `Bytes` | Raw bytes | Owned, linear | Alloc |
 | `[u8; N]` | Raw bytes, fixed | Copy, stack | Core |
 
@@ -644,8 +581,8 @@ Source: [STRING_TEXT_CONTRACT.md](STRING_TEXT_CONTRACT.md), [STDLIB_DESIGN_PRINC
 | `Option<T>` | Absence | Core |
 | `Result<T, E>` | Success/failure | Core |
 | `Vec<T>` | Growable array | Alloc |
-| `Slice<T>` | Immutable borrowed view | Core |
-| `MutSlice<T>` | Mutable borrowed view | Core |
+| `Slice<T>` | Immutable view (raw pointer and length) | Core |
+| `MutSlice<T>` | Mutable view (raw pointer and length) | Core |
 | `HashMap<K, V>` | Hash map | Alloc |
 | `HashSet<K>` | Hash set | Alloc |
 | `OrderedMap<K, V>` | Sorted map | Alloc |
@@ -653,27 +590,6 @@ Source: [STRING_TEXT_CONTRACT.md](STRING_TEXT_CONTRACT.md), [STDLIB_DESIGN_PRINC
 | `Deque<T>` | Double-ended queue | Alloc |
 | `BinaryHeap<T>` | Priority queue | Alloc |
 | `BitSet` | Bit array | Alloc |
-
-### 4.4 Fixed-size arrays
-
-| Form | Meaning |
-|------|---------|
-| `[T; N]` | Fixed-size array of `N` elements of type `T` |
-
-### 4.5 Reference and pointer types
-
-| Type | Meaning |
-|------|---------|
-| `&T` | Shared (immutable) reference |
-| `&mut T` | Mutable reference |
-| `*const T` | Raw immutable pointer (FFI, trusted code) |
-| `*mut T` | Raw mutable pointer (FFI, trusted code) |
-
-### 4.6 Function pointer types
-
-| Form | Meaning |
-|------|---------|
-| `fn(T) -> U` | Function pointer (no capture, C-compatible) |
 
 ---
 
@@ -688,14 +604,16 @@ The capability set is fixed. Each capability maps to a class of host resource or
 | `Time` | Time queries, sleep | `std.time` operations |
 | `Env` | Environment variables | `std.env` operations |
 | `Random` | RNG state | `std.rand` operations |
-| `Process` | Fork, spawn, kill, exit | `std.process` operations |
+| `Process` | Fork, spawn, wait, kill, `abort()` ([STMT-13](../spec/statements.md#STMT-13)) | `std.process` operations |
 | `Console` | Stdout/stderr | `std.io` print operations |
 | `Alloc` | Heap allocation | Construction/mutation of Vec, String, Bytes, HashMap, etc. |
-| `Unsafe` | Raw FFI calls | `extern fn` calls (contained in `trusted` wrappers) |
-| `Std` | Convenience alias | Union of all capabilities above |
+| `Unsafe` | Raw FFI calls and raw-pointer operations | `extern fn` calls, absorbed by `trusted` ([TRUST-5](../spec/trusted.md#TRUST-5)) |
+| `Std` | Convenience alias | Every capability above but `Unsafe` ([TRUST-4](../spec/trusted.md#TRUST-4)) |
+
+What each capability means is [TRUST-D1](../spec/trusted.md#TRUST-D1) and [OPEN-95](../spec/decisions.md#OPEN-95).
 
 Rules:
-- A function can only call functions whose capabilities are a subset of its own.
+- A function calls only what its own capabilities cover ([TRUST-4](../spec/trusted.md#TRUST-4)).
 - `--report caps` shows the capability set of every function.
 - `--report authority` shows transitive capability propagation.
 - Core-layer functions have `caps: (pure)` -- no capabilities.
@@ -717,7 +635,7 @@ Phase 3 is closed. The items below are no longer "must resolve before release" b
 ### 6.2 Numeric and arithmetic follow-up
 
 - `std.numeric` is shipped: `ByteCursor`, `ByteWriter`, endian reads/writes, and the parser-facing binary helpers are part of the current surface.
-- Signed cursor helpers, additional narrowing helpers, and any shift from today's arithmetic implementation to fully enforced checked-by-default semantics remain explicit follow-up work around the published arithmetic policy.
+- Signed cursor helpers and additional narrowing helpers remain follow-up work; integer arithmetic is checked in every profile ([ARITH-3](../spec/arithmetic.md#ARITH-3)).
 
 ### 6.3 Collection and slice polish
 
@@ -869,7 +787,7 @@ mod std {
     mod alloc;         // internal: allocation primitives
     mod string;        // stable: String
     mod bytes;         // stable: Bytes
-    mod text;          // experimental: Text (borrowed view)
+    mod text;          // experimental: Text (owned, immutable)
     mod vec;           // stable: Vec<T>
     mod fmt;           // stable: format_int, pad_left
     mod hex;           // stable: encode_bytes

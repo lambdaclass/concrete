@@ -1,6 +1,6 @@
 # FFI and Unsafe Boundary
 
-The rules are FFI-1 to FFI-5 of [docs/spec/ffi.md](../spec/ffi.md) and TRUST-4 / TRUST-5 of
+The rules are FFI-1 to FFI-12 of [docs/spec/ffi.md](../spec/ffi.md) and TRUST-4 / TRUST-5 of
 [docs/spec/trusted.md](../spec/trusted.md); this document is the design record and keeps the
 wrapper patterns and the calling-convention design.
 
@@ -31,40 +31,36 @@ Concrete keeps the foreign boundary explicit:
 
 Extern declarations are the language-level entry point to foreign code:
 
-```con
-extern fn puts(ptr: *const u8) -> i32;
+```con pseudocode
+extern fn puts(ptr: *const u8) with(Console) -> i32;
 ```
 
-Current rules:
-
-- `extern fn` has no Concrete body
-- extern calls require `Unsafe` by default
-- extern parameter and return types must be FFI-safe
+The rules are [FFI-3](../spec/ffi.md#FFI-3) (no body, declared effects, FFI-safe types) and
+[TRUST-4](../spec/trusted.md#TRUST-4) (a call needs `Unsafe`).
 
 ### Trusted Extern Functions
 
 A `trusted extern fn` is an audited foreign binding that callers can use without `with(Unsafe)`:
 
-```con
-trusted extern fn sqrt(x: Float64) -> Float64;
+```con pseudocode
+trusted extern fn sqrt(x: Float64) with() -> Float64;
 ```
 
 This is the right tool for well-known, pure libc functions (math, `abs`, etc.) where requiring `Unsafe` at every call site adds noise without safety value.
 
-Rules:
+The rules are [TRUST-5](../spec/trusted.md#TRUST-5) (callers need no `Unsafe`; its declared
+effects bind them), [FFI-3](../spec/ffi.md#FFI-3) (declared effects, E0116 and E0117, and FFI-safe
+types) and [FFI-6](../spec/ffi.md#FFI-6) (an `#[intrinsic]` the compiler implements is not a foreign
+binding). The declaration is the audit boundary: it asserts the foreign function is safe to call
+with any valid arguments of its declared types.
 
-- `trusted extern fn` uses the existing `trusted` keyword — no new syntax
-- callers do not need `with(Unsafe)`
-- parameter and return types must still be FFI-safe
-- the declaration itself is the audit boundary — it asserts the foreign function is safe to call with any valid arguments of the declared types
-- every `extern` (trusted or not) declares its effects, `with(...)`, and `with()` for none; an undeclared binding is refused (E0116), and a known-effectful C symbol declared `with()` is refused (E0117), in every module, nested submodules included (enforced; bug 113). An `#[intrinsic = "n"]` declaration named `n` that the compiler implements (`resolveIntrinsic`) is not a foreign binding and needs no effect declaration (bug 112); any other `#[intrinsic]` annotation leaves the declaration a foreign binding under every rule. The declared effects bind every caller, trusted bodies included (R-0484)
 - `--report unsafe` shows trusted extern declarations in a separate "Trusted extern functions" section
 
 Keep the category narrow. `trusted extern fn` means "safe for every argument its types permit, with no undeclared effects" — not a general "safe FFI" escape hatch. A foreign function whose safety depends on pointer validity, or that can invalidate a resource another handle owns (`close`), stays a regular `extern fn`; its callers outside `trusted` code need `with(Unsafe)`. Effects are not what decides this: they are declared either way.
 
 ## Symbol Names (normative, decided 2026-10-21)
 
-**Rule.**
+**Rule.** The language rule is [FFI-5](../spec/ffi.md#FFI-5); the text below is its design record.
 
 1. Every **Concrete-defined** function — user-written, `std`, or compiler-generated
    (specializations, synthesized destructors, entry wrappers, runtime helpers such as
@@ -147,7 +143,7 @@ boundary), with R-0510 for generated symbols; the export attribute: R-0286.
 
 ## Foreign Function Values (normative, decided 2026-10-23)
 
-An `extern fn` is never a value. The C calling convention (a `#[repr(C)]` aggregate flattened into
+An `extern fn` is never a value ([FFI-1](../spec/ffi.md#FFI-1)). The C calling convention (a `#[repr(C)]` aggregate flattened into
 registers) and the extern's own authority (`with(Unsafe)` unless `trusted extern`, its declared
 effects) are decided at a direct call. A function type (`fn(A) -> R`) carries neither, so a call
 through a value used the Concrete convention and the function type's capabilities (bug 166).
@@ -162,33 +158,15 @@ It lands with the first workload that passes a C callback or stores a foreign fu
 
 ## FFI-Safe Types
 
-FFI-safe types currently include:
-
-- integer types
-- float types
-- `Bool`
-- `Char`
-- `()`
-- raw pointers (`*const T`, `*mut T`)
-- `#[repr(C)]` structs
-
-The implementation authority for this check is `Layout.isFFISafe`.
+The FFI-safe types are [FFI-3](../spec/ffi.md#FFI-3)'s. The implementation authority for this check is `Layout.isFFISafe`.
 
 ## Unsafe Boundary
 
-Concrete currently requires `Unsafe` for:
-
-- calling `extern fn` (but not `trusted extern fn`)
-- dereferencing raw pointers
-- assigning through raw pointers
-- pointer-involving casts, except reference-to-pointer casts
-
-Safe exception:
-
-- `&x as *const T`
-- `&mut x as *mut T`
-
-These preserve compiler-known provenance and do not invent an address.
+What needs `Unsafe` is [TRUST-4](../spec/trusted.md#TRUST-4): calling an `extern fn` (not a
+`trusted extern fn`), and the raw-pointer operations. On main a reference-to-pointer cast
+(`&x as *const T`, `&mut x as *mut T`) needs none, since it keeps compiler-known provenance; which
+conversions between references and raw pointers `as` writes is
+[OPEN-98](../spec/decisions.md#OPEN-98).
 
 ## Intentional Design Rule
 
@@ -261,14 +239,14 @@ fn serve() with(Host) -> Int { ... }
 fn log(msg: &String) with(IO) { ... }
 ```
 
-An alias expands to its constituent capabilities at parse time — the rest of the compiler sees only concrete capability names. Aliases can use the fixed `Std` capability alias (`cap All = Std;` expands to all standard capabilities except `Unsafe`). This is not a macro system.
-
-Aliases are validated at definition time: all constituent names must be known capabilities. Unknown names produce a parse error.
+An alias expands to its constituent capabilities at parse time, and `Std` is every capability but
+`Unsafe` ([TRUST-4](../spec/trusted.md#TRUST-4)'s rationale). This is not a macro system. Main
+refuses an alias whose constituents are not known capabilities with a parse error.
 
 ## Calling convention in function types (decided 2026-10-23, not implemented)
 
-**Now.** Taking **any** `extern fn` as a value is refused; direct calls are unchanged (decided
-2026-10-23, revised after review; not yet enforced, [bug 166](../bugs/166_foreign_fn_value_abi.md)).
+**Now.** Taking **any** `extern fn` as a value is refused; direct calls are unchanged
+([FFI-1](../spec/ffi.md#FFI-1), enforced; [bug 166](../bugs/166_foreign_fn_value_abi.md)).
 A direct call of an extern with a small aggregate passes it the way C does (in registers), while a
 call through a `fn(..)` value uses the Concrete convention (a pointer to the aggregate), so the
 value would call C with the wrong ABI. Scalar-only externs happen to pass alike under both

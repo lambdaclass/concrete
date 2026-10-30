@@ -4,9 +4,9 @@ The C boundary is explicit: foreign functions are declared `extern fn`, raw poin
 types, and crossing the boundary needs `Unsafe` outside `trusted` code (TRUST-4, TRUST-5). This
 chapter covers foreign function values (FFI-1), the one layout authority (FFI-2, pending), extern
 declarations (FFI-3), layout attributes (FFI-4), symbol names (FFI-5), compiler intrinsics (FFI-6) and
-what layout is promised (FFI-7, FFI-8). The design record is
+what layout is promised (FFI-7 to FFI-12). The design record is
 [FFI.md](../platform/FFI.md), which keeps the wrapper patterns and the calling-convention design;
-[LAYOUT_CONTRACT.md](../platform/LAYOUT_CONTRACT.md) keeps the layout reasoning.
+[LAYOUT_CONTRACT.md](../archive/design-records/LAYOUT_CONTRACT.md) keeps the layout reasoning.
 
 ## Rules
 
@@ -291,7 +291,7 @@ an unannotated layout and a program cannot come to depend on it. Safe code has n
 it cannot turn a pointer into an integer (TRUST-1) or read through a raw pointer without `Unsafe`
 (TRUST-4's `raw-deref-needs-unsafe`). Trusted
 code that walks a buffer may also rely on the stride of an array of `T` being `sizeof::<T>()`
-([LAYOUT_CONTRACT.md](../platform/LAYOUT_CONTRACT.md) §3.3). An enum takes no `repr`; whether an
+(FFI-12). An enum takes no `repr`; whether an
 enum may cross the foreign boundary is OPEN-110 (main refuses it, E0574).
 
 ```con accept name=observed-through-sizeof exit=42
@@ -406,5 +406,148 @@ trusted extern fn abs(x: i32) with() -> i32;
 
 fn main() -> Int {
     return abs(-42) as Int;
+}
+```
+
+<a id="FFI-10"></a>
+### FFI-10. The layout forms
+
+**FFI-10@1.** The only layout attributes are `#[repr(C)]`, `#[repr(packed)]` and `#[repr(align(N))]`, alone or combined as FFI-4 allows and written only on a struct, so every other struct has the unspecified layout of FFI-7, and no other `repr` option, `transparent` included, and no `repr` on an enum is accepted.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.parseAttribute, Concrete.parseModuleBody
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** The promised layout surface stays small: a `transparent` wrapper would promise both
+the layout of its field and that calls pass it as the field, and the project has no workload that
+needs either ([LAYOUT_CONTRACT.md](../archive/design-records/LAYOUT_CONTRACT.md) §4). The parser
+refuses the other forms today with the syntax diagnostic E0001, tagged SYN-1 (`unknown repr option
+'transparent'`, and `#[repr(...)] can only be applied to struct definitions` for an enum), so this
+entry carries no code of its own. Whether an enum may cross the foreign boundary at all is OPEN-110.
+
+```con accept name=four-forms exit=42
+#[repr(C)]
+struct Copy A { v: u8 }
+#[repr(packed)]
+struct Copy B { v: u8 }
+#[repr(C, align(1))]
+struct Copy C { v: u8 }
+struct Copy D { v: u8 }
+
+fn main() -> Int {
+    let a: A = A { v: 10 };
+    let b: B = B { v: 10 };
+    let c: C = C { v: 10 };
+    let d: D = D { v: 12 };
+    return (a.v + b.v + c.v + d.v) as Int;
+}
+```
+
+<a id="FFI-11"></a>
+### FFI-11. A `repr(C)` struct crosses an extern call by value
+
+**FFI-11@1.** A `#[repr(C)]` struct given as an argument to an `extern fn` is passed by value, as the platform's C calling convention passes a C struct of the same layout.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: pending R-0502
+- Semantics: none
+- Obligation: the AAPCS64 classification comes from the one `Layout` authority (FFI-2, R-0502)
+- Evidence: tested
+
+**Rationale.** A C function that takes or returns a struct by value can be bound directly, with no
+pointer wrapper. Internal Concrete calls pass aggregates by pointer, and that set is not promised.
+Whether a returned struct is promised the same is OPEN-122: the design record promised it only up to
+8 bytes. Current main (EmitSSA's extern-call path, not the `Layout` authority) classifies by size alone, as
+AAPCS64 does for structs of integer fields: a struct of at most 8 bytes is passed as one 64-bit
+integer, of 9 to 16 bytes as two, and a larger one by pointer, and a returned struct of at most 8
+bytes comes back as one 64-bit integer while a larger one is returned as an LLVM aggregate. Structs
+of floating-point fields are not classified as AAPCS64's homogeneous aggregates, the same rule is
+applied on x86-64, and a returned struct smaller than 8 bytes is stored as 8 bytes into its slot. The example below runs only natively, since the
+interpreter models no C function that takes or returns a struct.
+
+```con accept name=struct-by-value exit=42 interp-exempt=interp-models-no-struct-c-function
+#[repr(C)]
+struct Copy D { quot: i32, rem: i32 }
+
+trusted extern fn div(n: i32, d: i32) with() -> D;
+
+#[repr(C)]
+struct Copy Addr { s: u32 }
+
+trusted extern fn htonl(x: u32) with() -> u32;
+trusted extern fn inet_lnaof(a: Addr) with() -> u32;
+
+fn main() -> Int {
+    let r: D = div(85, 2);
+    let a: Addr = Addr { s: htonl(167772202) };
+    if r.rem == 1 && inet_lnaof(a) == 42 {
+        return r.quot as Int;
+    }
+    return 0;
+}
+```
+
+<a id="FFI-12"></a>
+### FFI-12. The stride of a buffer is `sizeof`
+
+**FFI-12@1.** Consecutive elements of an array, a `HeapArray` or a raw buffer of `T` lie `sizeof::<T>()` bytes apart, which trusted code doing pointer arithmetic over the elements may rely on.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.Layout.tySize
+- Semantics: none
+- Obligation: layout comes from the one `Layout` authority (FFI-2, R-0502)
+- Evidence: tested
+
+**Rationale.** This is the one layout fact beyond FFI-7 and FFI-8 that trusted code needs to walk a
+buffer, and the `Layout` authority states it: an array of `n` elements of `T` has size `n` times
+`sizeof::<T>()`. The examples use the pointer arithmetic of today's main (`p + 1` and an
+integer added to a `*const u8`), which TYPE-6@2 and TRUST-1 replace with `ptr::offset` (bug 322,
+R-0502). The interpreter stores typed values, not bytes, so the byte-offset example runs only
+natively.
+
+```con accept name=next-element exit=42
+struct Copy S { a: u8, b: u32 }
+
+trusted fn second(arr: &[S; 3]) -> u32 {
+    let p: *const S = arr as *const [S; 3] as *const S;
+    let q: *const S = p + 1;
+    let s: S = *q;
+    return s.b;
+}
+
+fn main() -> Int {
+    let arr: [S; 3] = [S { a: 1, b: 10 }, S { a: 2, b: 42 }, S { a: 3, b: 30 }];
+    return second(&arr) as Int;
+}
+```
+
+```con accept name=byte-stride exit=42 interp-exempt=interp-stores-typed-values-not-bytes
+mod m {
+    #[intrinsic = "sizeof"]
+    pub trusted fn sizeof<T>() -> u64;
+
+    struct Copy S { a: u8, b: u32 }
+
+    trusted fn second(arr: &[S; 3]) -> u32 {
+        let bytes: *const u8 = arr as *const [S; 3] as *const u8;
+        let p: *const S = (bytes + sizeof::<S>()) as *const S;
+        let s: S = *p;
+        return s.b;
+    }
+
+    pub fn main() -> Int {
+        let arr: [S; 3] = [S { a: 1, b: 10 }, S { a: 2, b: 42 }, S { a: 3, b: 30 }];
+        return second(&arr) as Int;
+    }
 }
 ```

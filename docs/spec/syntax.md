@@ -7,7 +7,8 @@ choice resolving with one token of lookahead, except for the FIRST/FOLLOW confli
 checkers verify it (`scripts/check_ll1.py`, `.c` and `.rs`; `scripts/tests/check_grammar_ll1.sh`
 requires them to agree and the list to only shrink). This chapter does not copy productions; it cites them
 by name and states what the productions alone do not say: that the parser accepts exactly the
-grammar (SYN-1), how operators group (SYN-2) and which spellings the compiler reserves (SYN-3).
+grammar (SYN-1), how operators group (SYN-2), which spellings the compiler reserves (SYN-3) and
+what a source file and a string literal are made of (SYN-5).
 The trailing-value rule of blocks is STMT-8, and function names the compiler reserves are MOD-3.
 
 The hand-written recursive-descent parser (`Concrete/Frontend/Parser.lean`) follows the grammar
@@ -235,5 +236,38 @@ fn main() -> Int {
         n = n + 1;
     }
     return n + 39;
+}
+```
+
+<a id="SYN-5"></a>
+### SYN-5. Source text and string literals are UTF-8
+
+**SYN-5@1.** A source file is UTF-8 text, a string literal denotes the UTF-8 encoding of its characters, and its only escapes are `\n`, `\t`, `\r`, `\\`, `\"` and `\0`, so a file that is not valid UTF-8 and any other `\` sequence in a literal are not accepted.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.lexStringLoop
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** One encoding for source and literals means a literal's bytes are known without
+knowing the editor or the platform. Unknown escapes were once read as the character itself; the
+lexer now refuses them, with E0001 tagged SYN-1 (`unknown string escape '\q'`). A file that is not
+valid UTF-8 is refused when it is read, before lexing, but today by an uncaught exception
+(`Tried to read file ... containing non UTF-8 data`) rather than a diagnostic. There is no `\xHH`
+or `\u{...}` escape. Whether every `String` holds valid UTF-8 at run time is OPEN-127.
+
+```con accept name=literal-bytes exit=5
+fn main() -> Int {
+    return string_length(&"é€") as Int;
+}
+```
+
+```con accept name=escapes exit=7
+fn main() -> Int {
+    return string_length(&"a\n\t\r\\\"\0") as Int;
 }
 ```

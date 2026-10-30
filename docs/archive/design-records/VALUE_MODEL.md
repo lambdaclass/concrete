@@ -212,7 +212,7 @@ newtype Wrapper<T> = T;     // Inherits from T
 
 Layout is unspecified unless a `repr` attribute below guarantees it, and each attribute guarantees
 only its documented properties; safe code observes layout only through `sizeof` / `alignof`. The
-normative statement is [LAYOUT_CONTRACT.md §3.3](../../platform/LAYOUT_CONTRACT.md#33-what-code-may-rely-on-and-who-owns-layout-normative-decided-2026-10-21).
+normative statement is [LAYOUT_CONTRACT.md §3.3](LAYOUT_CONTRACT.md#33-what-code-may-rely-on-and-who-owns-layout-normative-decided-2026-10-21).
 
 ### `#[repr(C)]`
 C-compatible struct layout. Required for FFI.

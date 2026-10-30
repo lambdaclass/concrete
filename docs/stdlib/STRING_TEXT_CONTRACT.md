@@ -19,7 +19,7 @@ Concrete strings are UTF-8 encoded byte sequences. A `String` value must contain
 
 This is the same choice Rust and Go make. It is not the same as C (unspecified encoding) or Zig (byte arrays with optional UTF-8 convention).
 
-**Invariant:** Every `String` value reachable through safe code contains valid UTF-8. Code that constructs a `String` from arbitrary bytes must validate or is responsible for maintaining the invariant (see section 6 on boundaries).
+**Invariant (std's target):** Every `String` value reachable through safe code contains valid UTF-8. Whether this is a language guarantee is [OPEN-127](../spec/decisions.md#OPEN-127); main does not enforce it. Code that constructs a `String` from arbitrary bytes must validate or is responsible for maintaining the invariant (see section 6 on boundaries).
 
 **Current reality:** `String` is currently `{ ptr: *mut u8, len: u64, cap: u64 }` and its methods operate at the byte level. `get(index)` returns a byte-oriented `char`, not a Unicode scalar value. `to_lower`/`to_upper` operate on ASCII ranges only. That byte-oriented behavior is the shipped first-release surface; stricter UTF-8 validation and richer text helpers remain follow-up hardening work around it.
 
@@ -30,7 +30,7 @@ This is the same choice Rust and Go make. It is not the same as C (unspecified e
 ### `String` (owned, mutable, heap-allocated)
 
 - Layout: `{ ptr: *mut u8, len: u64, cap: u64 }`
-- Linear by default. Must be consumed exactly once (typically via `drop`).
+- Linear: consumed exactly once, typically via `drop` ([OWN-D1](../spec/ownership.md#OWN-D1), [OWN-2](../spec/ownership.md#OWN-2)).
 - Allocation visible via `with(Alloc)`.
 - Growable. Internal buffer may be reallocated on append.
 - Contents must be valid UTF-8.
@@ -40,9 +40,11 @@ This is the same choice Rust and Go make. It is not the same as C (unspecified e
 - Shared reference to an existing `String`.
 - No allocation, no ownership transfer.
 - Lifetime tied to the borrow scope.
-- `&"literal"` borrows a global constant directly with no heap allocation. The backing `String` struct has `cap = 0` to signal it is not heap-owned.
+- `&"literal"` borrows a global constant directly with no heap allocation ([REF-5](../spec/references.md#REF-5)). The backing `String` struct has `cap = 0` to signal it is not heap-owned.
 
 ### `Text` (owned, immutable, validated UTF-8)
+
+The language rule is [TYPE-3](../spec/types.md#TYPE-3).
 
 - Layout: `{ ptr: *mut u8, len: u64, cap: u64 }`, all fields private (`std/src/text.con`).
 - **Owns its storage.** Every constructor copies: `Text::from_string(&s)` copies the `String`'s
@@ -65,8 +67,7 @@ This is the same choice Rust and Go make. It is not the same as C (unspecified e
 
 ### `char`
 
-- Currently `i8` in LLVM IR (1 byte).
-- Represents the first-release byte-oriented character/code-unit surface, not a Unicode scalar value.
+- One byte, a code unit, not a Unicode scalar value ([TYPE-20](../spec/types.md#TYPE-20)).
 - Renaming or widening it would be a later explicit surface revision, not something left ambient or unresolved.
 
 ---
@@ -97,20 +98,12 @@ Concrete maintains an explicit split between byte-level and text-level types. Th
 
 ### Encoding
 
-String literals in source code are UTF-8. The Lean-based compiler reads the source as a Lean `String` (which is internally a list of Unicode scalar values) and emits the literal as a null-terminated UTF-8 byte array in the LLVM global section.
+Source files and string literals are UTF-8, and the escapes are those of [SYN-5](../spec/syntax.md#SYN-5). The compiler emits a literal as a null-terminated UTF-8 byte array in the LLVM global section.
 
-### Escape sequences (currently supported)
+### Escape sequences
 
-| Escape | Meaning |
-|--------|---------|
-| `\n` | Newline (0x0A) |
-| `\t` | Tab (0x09) |
-| `\r` | Carriage return (0x0D) |
-| `\\` | Backslash |
-| `\"` | Double quote |
-| `\0` | Null byte (0x00) |
-
-Any other `\c` sequence currently passes through as the literal character `c`. This is lenient and should be tightened before freeze: unrecognized escape sequences should be a compile error.
+The escape set is [SYN-5](../spec/syntax.md#SYN-5)'s; any other `\c` is refused by the lexer
+(E0001, it used to read as `c`).
 
 ### Not yet supported
 
@@ -177,7 +170,7 @@ The stdlib should not silently accept invalid UTF-8 into a `String`. If it does,
 
 ### At the source level
 
-The compiler reads source files as Lean strings (Unicode). If a source file contains invalid UTF-8, Lean's parser will reject it before Concrete's lexer runs. This is fine.
+A source file that is not valid UTF-8 is refused before lexing ([SYN-5](../spec/syntax.md#SYN-5)); today the refusal is an uncaught exception from reading the file, not a diagnostic.
 
 ### At runtime
 
@@ -258,10 +251,9 @@ The vocabulary should be consistent across `String`, `Bytes`, `Vec`, `Slice`, an
 
 ### FFI and layout (item 75)
 
-- `String` is not FFI-safe. It cannot be passed directly to C functions.
+- `String` is not FFI-safe, nor is a `#[repr(C)]` struct containing one ([FFI-3](../spec/ffi.md#FFI-3), [FFI-4](../spec/ffi.md#FFI-4)).
 - Passing string data to C requires extracting the pointer (`s.ptr`) and ensuring null termination.
 - An explicit `as_c_str` API should mediate this boundary.
-- `#[repr(C)]` structs containing strings are not FFI-safe (the `String` layout is Concrete-internal, not C-compatible).
 - The `ptr` field of a `String` pointing to a null-terminated buffer is C-compatible, but this is a raw pointer operation under `Unsafe` or `trusted`.
 
 ### Capability model
@@ -308,4 +300,4 @@ The vocabulary should be consistent across `String`, `Bytes`, `Vec`, `Slice`, an
 
 5. **`Text` vs `&str`.** Resolved by R-0483: `Text` is owned, not a borrowed view, so it needs no connection to the borrow checker. The borrowed form is `&String`. A borrowed string slice like Rust's `&str` would be a reference stored in a value, which the second-class reference rules exclude ([references.md](../spec/references.md#REF-3)).
 
-6. **Escape sequence completeness.** `\xHH` and `\u{HHHH}` remain approved additions. Tightening unknown escapes into a compile error is follow-up lexer hardening, not a sign that the frozen surface is undefined.
+6. **Escape sequence completeness.** `\xHH` and `\u{HHHH}` remain approved additions. Unknown escapes are refused (SYN-5).

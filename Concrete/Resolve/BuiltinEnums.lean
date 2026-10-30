@@ -20,6 +20,7 @@ gains a clause. Stated once here, the question stops being askable.
     POLICY. A dedicated module can import AST without cycling and keeps the two
     kinds of fact apart. -/
 
+-- spec: TYPE-23 (docs/spec/types.md; this declaration enforces the rule)
 def builtinOptionEnum : EnumDef := {
   name := optionEnumName, typeParams := ["T"],
   variants := [
@@ -29,6 +30,7 @@ def builtinOptionEnum : EnumDef := {
   ], isCopy := true, builtinId := some .option
 }
 
+-- spec: TYPE-23 (docs/spec/types.md; this declaration enforces the rule)
 def builtinResultEnum : EnumDef := {
   name := resultEnumName, typeParams := ["T", "E"],
   variants := [

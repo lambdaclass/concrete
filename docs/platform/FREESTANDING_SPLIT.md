@@ -30,13 +30,13 @@ This is the target for embedded firmware, kernel modules, WASM libraries, and an
 
 ### Hosted
 
-Full Concrete. The stdlib is available, `pub fn main() -> Int` is the entry point, and the compiler links against libc. Capabilities like `Console`, `File`, `Network`, and `Alloc` are available when declared.
+Full Concrete. The stdlib is available, `main` is the entry point ([STMT-7](../spec/statements.md#STMT-7): it returns `u8` or `Unit`), and the compiler links against libc. Capabilities like `Console`, `File`, `Network`, and `Alloc` are available when declared.
 
 Hosted code:
 
 - may import any stdlib module (core, alloc, or hosted layer)
 - may declare capabilities in function signatures
-- uses `pub fn main() -> Int` as the program entry point
+- uses `main` as the program entry point (STMT-7)
 - links against libc (malloc, free, write, read, etc.)
 - assumes a POSIX-like OS with process model and file descriptors
 
@@ -65,7 +65,7 @@ This is the default target today. All existing examples compile in hosted mode.
 | `with(Alloc)` / heap allocation | No | Yes |
 | `with(Process)` / `abort` | No | Yes |
 | `with(Unsafe)` / FFI | No | Yes |
-| `pub fn main() -> Int` entry point | No | Yes |
+| `main` entry point (STMT-7) | No | Yes |
 | libc linkage | No | Yes |
 
 ---
@@ -74,7 +74,7 @@ This is the default target today. All existing examples compile in hosted mode.
 
 ### `fixed_capacity` — freestanding-ready
 
-The `examples/fixed_capacity/` message validator is already freestanding in its core. The validation functions, ring buffer, and byte readers use no capabilities, no allocation, no FFI, and no stdlib:
+The `examples/fixed_capacity/` message validator is already freestanding in its core. The validation functions, ring buffer, and byte readers use no capabilities, no allocation, no FFI, and no stdlib (the excerpt keeps the C-style `for`, which [STMT-6](../spec/statements.md#STMT-6)@3 replaces with the counted loop, pending bug 331):
 
 ```concrete pseudocode
 fn validate_version(v: i32) -> i32 {
@@ -110,7 +110,7 @@ The compiler would reject `main` and `report` (they use `Console`). The pure val
 
 ### `parse_validate` — hosted
 
-The `examples/parse_validate/` error-flow example uses `pub fn main() -> Int` as its entry point. Its validation core is pure, but the program structure assumes a hosted environment — `main` returns an exit code and the compiler generates the libc-linked wrapper.
+The `examples/parse_validate/` error-flow example uses `pub fn main()` as its entry point. Its validation core is pure, but the program structure assumes a hosted environment — `main` returns an exit code and the compiler generates the libc-linked wrapper.
 
 Its `Concrete.toml` stays as-is (default target is hosted):
 
@@ -142,7 +142,7 @@ When `target = "freestanding"`:
 When `target = "hosted"` (default):
 
 1. Full stdlib is available
-2. `pub fn main() -> Int` is the entry point
+2. `main` is the entry point (STMT-7)
 3. The compiler generates the libc-linked `main` wrapper
 4. All capabilities are available when declared
 

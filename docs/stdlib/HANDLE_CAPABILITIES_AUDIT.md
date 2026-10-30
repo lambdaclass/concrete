@@ -380,9 +380,9 @@ Defects are fixed in slice 3 unless noted. None is fixed by this audit.
 - **D2. `argc`/`argv` → `Env`: accepted 2026-10-01.** Counting arguments observes the
   same environment as reading them, so `args::count` requires `Env` like `args::get`.
 - **D3. `abort`: keep the existing distinction (revised 2026-10-01).**
-  `the spec's "Abort and failure" (docs/spec/statements.md)` separates *user-requested* abort — the `abort()` intrinsic, which
-  requires `Process` — from *language-defined* failure (out-of-memory, checked
-  arithmetic, bounds, std allocator preconditions), which aborts implicitly. This audit
+  [STMT-13](../spec/statements.md#STMT-13) separates *user-requested* abort (the `abort()`
+  intrinsic, which requires `Process`) from *language-defined* failure, which aborts
+  implicitly ([STMT-2](../spec/statements.md#STMT-2)). This audit
   keeps that rule and does not propose changing it. std's `abort` binding
   (`alloc.con:7`) is used only on allocation failure, a language-defined failure, so it
   adds no capability beyond its callers' `Alloc`; that it is called *only* on failure

@@ -14,6 +14,7 @@ the first chapter.
   - [SYN-2. Operators group by a fixed precedence](#SYN-2)
   - [SYN-3. Compiler spellings are reserved](#SYN-3)
   - [SYN-4. A struct literal in a condition head is parenthesized](#SYN-4)
+  - [SYN-5. Source text and string literals are UTF-8](#SYN-5)
 - [Modules and Names](#ch-modules)
   - [MOD-1. Every name resolves to one declaration](#MOD-1)
   - [MOD-2. Only `pub` declarations cross a module boundary](#MOD-2)
@@ -52,6 +53,8 @@ the first chapter.
   - [TYPE-20. A `char` is one byte](#TYPE-20)
   - [TYPE-21. A newtype has its inner type's representation](#TYPE-21)
   - [TYPE-22. A constant is evaluated where it is used](#TYPE-22)
+  - [TYPE-23. The builtin `Option` and `Result`](#TYPE-23)
+  - [TYPE-24. The conversions of a newtype](#TYPE-24)
 - [Arithmetic](#ch-arithmetic)
   - [ARITH-1. Floating point is IEEE-754 with round-to-nearest-even](#ARITH-1)
   - [ARITH-2. An integer literal fits its type](#ARITH-2)
@@ -78,6 +81,7 @@ the first chapter.
   - [STMT-10. A test function is an entry point](#STMT-10)
   - [STMT-11. One exit sequence](#STMT-11)
   - [STMT-12. A counted loop carries its own measure](#STMT-12)
+  - [STMT-13. `abort()` needs `Process`](#STMT-13)
 - [Patterns](#ch-patterns)
   - [PAT-1. A pattern field may be bound under another name](#PAT-1)
   - [PAT-2. A match is exhaustive](#PAT-2)
@@ -149,6 +153,7 @@ the first chapter.
   - [TRAIT-8. An impl names a declared trait](#TRAIT-8)
   - [TRAIT-9. An impl conforms to its trait](#TRAIT-9)
   - [TRAIT-10. A bound is satisfied by an impl](#TRAIT-10)
+  - [TRAIT-11. Destruction cannot fail](#TRAIT-11)
 - [Contracts](#ch-contracts)
   - [CON-1. Claims are partial correctness](#CON-1)
   - [CON-2. What `requires`, `ensures`, `invariant` and `variant` claim](#CON-2)
@@ -183,6 +188,9 @@ the first chapter.
   - [FFI-7. Layout is unspecified unless a `repr` fixes it](#FFI-7)
   - [FFI-8. What `repr(C)` and `repr(packed)` promise](#FFI-8)
   - [FFI-9. What `trusted extern fn` asserts](#FFI-9)
+  - [FFI-10. The layout forms](#FFI-10)
+  - [FFI-11. A `repr(C)` struct crosses an extern call by value](#FFI-11)
+  - [FFI-12. The stride of a buffer is `sizeof`](#FFI-12)
 - [Pipeline Preservation](#ch-pipeline)
   - [PASS-1. Specialization preserves meaning](#PASS-1)
   - [PASS-2. Binder modes are fixed before specialization](#PASS-2)
@@ -285,6 +293,12 @@ the first chapter.
   - [OPEN-119. Buffered output when the process aborts](#OPEN-119)
   - [OPEN-120. A vacuous contract](#OPEN-120)
   - [OPEN-121. Projections from a base that is not a traceable place](#OPEN-121)
+  - [OPEN-122. A `repr(C)` struct returned from an extern function](#OPEN-122)
+  - [OPEN-123. `as` on a newtype outside its module](#OPEN-123)
+  - [OPEN-124. Profiles in the specification](#OPEN-124)
+  - [OPEN-125. Contracts at run time](#OPEN-125)
+  - [OPEN-126. Target assumptions](#OPEN-126)
+  - [OPEN-127. UTF-8 in every `String`](#OPEN-127)
 
 <a id="ch-overview"></a>
 ## Overview
@@ -394,7 +408,8 @@ choice resolving with one token of lookahead, except for the FIRST/FOLLOW confli
 checkers verify it (`scripts/check_ll1.py`, `.c` and `.rs`; `scripts/tests/check_grammar_ll1.sh`
 requires them to agree and the list to only shrink). This chapter does not copy productions; it cites them
 by name and states what the productions alone do not say: that the parser accepts exactly the
-grammar (SYN-1), how operators group (SYN-2) and which spellings the compiler reserves (SYN-3).
+grammar (SYN-1), how operators group (SYN-2), which spellings the compiler reserves (SYN-3) and
+what a source file and a string literal are made of (SYN-5).
 The trailing-value rule of blocks is STMT-8, and function names the compiler reserves are MOD-3.
 
 The hand-written recursive-descent parser (`Concrete/Frontend/Parser.lean`) follows the grammar
@@ -622,6 +637,39 @@ fn main() -> Int {
         n = n + 1;
     }
     return n + 39;
+}
+```
+
+<a id="SYN-5"></a>
+#### SYN-5. Source text and string literals are UTF-8
+
+**SYN-5@1.** A source file is UTF-8 text, a string literal denotes the UTF-8 encoding of its characters, and its only escapes are `\n`, `\t`, `\r`, `\\`, `\"` and `\0`, so a file that is not valid UTF-8 and any other `\` sequence in a literal are not accepted.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.lexStringLoop
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** One encoding for source and literals means a literal's bytes are known without
+knowing the editor or the platform. Unknown escapes were once read as the character itself; the
+lexer now refuses them, with E0001 tagged SYN-1 (`unknown string escape '\q'`). A file that is not
+valid UTF-8 is refused when it is read, before lexing, but today by an uncaught exception
+(`Tried to read file ... containing non UTF-8 data`) rather than a diagnostic. There is no `\xHH`
+or `\u{...}` escape. Whether every `String` holds valid UTF-8 at run time is OPEN-127.
+
+```con accept name=literal-bytes exit=5
+fn main() -> Int {
+    return string_length(&"é€") as Int;
+}
+```
+
+```con accept name=escapes exit=7
+fn main() -> Int {
+    return string_length(&"a\n\t\r\\\"\0") as Int;
 }
 ```
 
@@ -1277,7 +1325,8 @@ callable values and dispatch (TYPE-1, TYPE-2), `Text` (TYPE-3), the typing of ex
 operators (TYPE-4 to TYPE-10), construction rights (TYPE-11), type aliases (TYPE-12) and the
 kinds of type parameters (TYPE-13, TYPE-14), generic arguments (TYPE-15), finite size (TYPE-16),
 capability sets in types (TYPE-D1, TYPE-17, TYPE-18), the primitive numeric types (TYPE-19), `char`
-(TYPE-20) and the representation of a newtype (TYPE-21). Copy itself is defined in the ownership chapter
+(TYPE-20), the representation of a newtype (TYPE-21), the builtin `Option` and `Result` (TYPE-23) and
+the conversions of a newtype (TYPE-24). Copy itself is defined in the ownership chapter
 (OWN-D1, OWN-14). What a capability means and when a function may use one are in the trusted
 chapter (TRUST-D1, TRUST-4).
 
@@ -2696,6 +2745,73 @@ fn main() -> Int {
 }
 ```
 
+<a id="TYPE-23"></a>
+#### TYPE-23. The builtin `Option` and `Result`
+
+**TYPE-23@1.** The compiler provides the generic enums `Option<T>`, whose variants are `Some { value: T }` and `None`, and `Result<T, E>`, whose variants are `Ok { value: T }` and `Err { error: E }`.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.builtinOptionEnum, Concrete.builtinResultEnum
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** Builtins that can fail, such as `vec_pop`, and std's error conventions return these
+two types, so their shape is part of the language rather than of a library module. Both are declared `Copy`, so an instantiation is Copy exactly when its type
+arguments are (TYPE-14). How a user declaration named `Option` or `Result` resolves against them is
+OPEN-43: main withholds the builtin `Result` from a module that declares or imports its own, and
+never withholds `Option`. Their layout is that of any enum (FFI-7).
+
+```con accept name=option-and-result exit=42
+fn main() -> Int {
+    let o: Option<Int> = Option::<Int>::Some { value: 40 };
+    let r: Result<Int, Int> = Result::<Int, Int>::Err { error: 2 };
+    let a: Int = match o { Option::Some { value } => value, Option::None => 0 };
+    let b: Int = match r { Result::Ok { value } => value, Result::Err { error } => error };
+    return a + b;
+}
+```
+
+<a id="TYPE-24"></a>
+#### TYPE-24. The conversions of a newtype
+
+**TYPE-24@1.** A newtype `N` over `T` converts to `T` by `n.0` or `n as T` and a `T` converts to `N` by `N(v)` or `v as N`, with `N`'s type arguments substituted into `T`, and `as` converts a newtype to or from no other type.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.ccCheckExpr
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** Each conversion moves no bits (TYPE-21). A cast between a newtype and any type other
+than its own inner type, one wrapping step at a time, is refused with ARITH-5's E0553, so `as` cannot
+turn a validated wrapper into an unrelated type or build one from one (bug fixed 2026-04-25,
+`error_newtype_cast_to_unrelated.con`). Outside the declaring module, `N(v)` is refused (TYPE-11),
+while `n.0` and `unwrap(n)` are refused only once R-0500 lands; whether `v as N` and `n as T` are
+refused there too is OPEN-123, and main accepts both. Whether newtypes stay is OPEN-54. Main also
+has an intrinsic `unwrap(n)`: Check gives it type `T`, but Core keeps it typed `N`, so `unwrap(k) as
+Int` is refused (E0553) and `j.0 + unwrap(k)` stops natively at the SSA verifier (E0715), a defect
+found while absorbing [VALIDATED_WRAPPERS.md](../stdlib/VALIDATED_WRAPPERS.md), which calls it a
+fallback and prefers `.0`; this entry states `.0` only.
+
+```con accept name=newtype-conversions exit=42
+newtype Id = u8;
+
+fn main() -> Int {
+    let b: u8 = 40;
+    let i: Id = b as Id;
+    let j: Id = Id(1);
+    let a: u8 = i as u8;
+    return (a + j.0 + 1) as Int;
+}
+```
+
 ### Absent by decision
 
 This section is explanatory: it records type-system features the language does not have, why, and
@@ -3258,8 +3374,8 @@ fn main() -> Int {
 Statements execute in source order. A block's trailing expression without `;` is its value, and
 `e;` is a statement whose value is discarded (OWN-5 to OWN-7 say which values may be). This
 chapter covers how executions end (STMT-1 to STMT-3), evaluation order (STMT-4), where exits may
-appear (STMT-5), loops (STMT-6), `main` (STMT-7), value blocks (STMT-8) and returning a value on
-every path (STMT-9). The design records are
+appear (STMT-5), loops (STMT-6), `main` (STMT-7), value blocks (STMT-8), returning a value on
+every path (STMT-9) and the capability `abort()` needs (STMT-13). The design records are
 [STATEMENT_EXPRESSION_MODEL.md](../archive/design-records/STATEMENT_EXPRESSION_MODEL.md)
 and [MAIN_EXIT_MODEL.md](../platform/MAIN_EXIT_MODEL.md). [EXECUTION_MODEL.md](../platform/EXECUTION_MODEL.md)
 keeps the runtime and platform description (hosted runtime, startup, allocation, targets).
@@ -3956,6 +4072,35 @@ fn main() -> Int {
         s = s + i;
     }
     return s + 21;
+}
+```
+
+<a id="STMT-13"></a>
+#### STMT-13. `abort()` needs `Process`
+
+**STMT-13@1.** The builtin `abort()` requires the `Process` capability, and the trap of a checked operation requires no capability.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.IntrinsicId.capability
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** Ending the process on request is an authority over the process, so it is visible in
+the caller's `with(...)` set like any other (TRUST-4): a call without `Process` is refused with
+TRUST-4's E0520. A trap is not a request: the operation that traps needs no capability, so checked
+arithmetic and safe indexing stay available to code that holds none. What `Process` names is
+OPEN-95.
+
+```con accept name=abort-with-process exit=42
+fn main() with(Process) -> Int {
+    if 1 == 2 {
+        abort();
+    }
+    return 42;
 }
 ```
 
@@ -7559,7 +7704,7 @@ any method table (`Concrete.Coherence.checkProgram`). TRAIT-1 to TRAIT-7 are wha
 refuses. They were filed as bug 186 ([record](../bugs/186_trait_impl_selection_is_a_search.md)).
 TRAIT-8 to TRAIT-10 are the per-declaration checks Check and CoreCheck make after it: an impl
 names a declared trait, conforms to its trait's signatures, and every bound a caller instantiates
-is satisfied.
+is satisfied. TRAIT-11 states that destruction cannot fail.
 
 An identity here is never a spelling. A trait is the compiler's builtin `Destroy` or a
 declaration (its defining module and name; traits are module-local, they cannot be imported). An
@@ -8076,6 +8221,42 @@ fn main() -> Int {
 }
 ```
 
+<a id="TRAIT-11"></a>
+#### TRAIT-11. Destruction cannot fail
+
+**TRAIT-11@1.** The method `destroy` of the builtin trait `Destroy` returns `Unit`, so destroying a value reports no failure, and cleanup that can fail is a consuming method that returns its outcome.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.ccCheckModuleDecls
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** A destructor runs from `destroy(x)`, from a deferred call and from a collection's
+drop glue, none of which has a place to put an error, so an error there would be silently dropped
+(OWN-6). An impl whose `destroy` returns anything else is refused by TRAIT-9 (E0582, `expected
+return type ()`). Fallible cleanup, such as closing a file whose final flush can fail, is an
+ordinary consuming method (`close(self) -> Result<Unit, E>`) that the caller matches. The receiver
+form of `destroy` is OPEN-60, and the capabilities it may require are OWN-13's.
+
+```con accept name=destroy-returns-unit exit=42
+struct R { v: Int }
+
+impl Destroy for R {
+    fn destroy(self) {
+        let R { v: x } = self;
+    }
+}
+
+fn main() -> Int {
+    let r: R = R { v: 1 };
+    destroy(r);
+    return 42;
+}
+```
 
 
 <a id="ch-contracts"></a>
@@ -9040,9 +9221,9 @@ The C boundary is explicit: foreign functions are declared `extern fn`, raw poin
 types, and crossing the boundary needs `Unsafe` outside `trusted` code (TRUST-4, TRUST-5). This
 chapter covers foreign function values (FFI-1), the one layout authority (FFI-2, pending), extern
 declarations (FFI-3), layout attributes (FFI-4), symbol names (FFI-5), compiler intrinsics (FFI-6) and
-what layout is promised (FFI-7, FFI-8). The design record is
+what layout is promised (FFI-7 to FFI-12). The design record is
 [FFI.md](../platform/FFI.md), which keeps the wrapper patterns and the calling-convention design;
-[LAYOUT_CONTRACT.md](../platform/LAYOUT_CONTRACT.md) keeps the layout reasoning.
+[LAYOUT_CONTRACT.md](../archive/design-records/LAYOUT_CONTRACT.md) keeps the layout reasoning.
 
 ### Rules
 
@@ -9327,7 +9508,7 @@ an unannotated layout and a program cannot come to depend on it. Safe code has n
 it cannot turn a pointer into an integer (TRUST-1) or read through a raw pointer without `Unsafe`
 (TRUST-4's `raw-deref-needs-unsafe`). Trusted
 code that walks a buffer may also rely on the stride of an array of `T` being `sizeof::<T>()`
-([LAYOUT_CONTRACT.md](../platform/LAYOUT_CONTRACT.md) §3.3). An enum takes no `repr`; whether an
+(FFI-12). An enum takes no `repr`; whether an
 enum may cross the foreign boundary is OPEN-110 (main refuses it, E0574).
 
 ```con accept name=observed-through-sizeof exit=42
@@ -9442,6 +9623,149 @@ trusted extern fn abs(x: i32) with() -> i32;
 
 fn main() -> Int {
     return abs(-42) as Int;
+}
+```
+
+<a id="FFI-10"></a>
+#### FFI-10. The layout forms
+
+**FFI-10@1.** The only layout attributes are `#[repr(C)]`, `#[repr(packed)]` and `#[repr(align(N))]`, alone or combined as FFI-4 allows and written only on a struct, so every other struct has the unspecified layout of FFI-7, and no other `repr` option, `transparent` included, and no `repr` on an enum is accepted.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.parseAttribute, Concrete.parseModuleBody
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** The promised layout surface stays small: a `transparent` wrapper would promise both
+the layout of its field and that calls pass it as the field, and the project has no workload that
+needs either ([LAYOUT_CONTRACT.md](../archive/design-records/LAYOUT_CONTRACT.md) §4). The parser
+refuses the other forms today with the syntax diagnostic E0001, tagged SYN-1 (`unknown repr option
+'transparent'`, and `#[repr(...)] can only be applied to struct definitions` for an enum), so this
+entry carries no code of its own. Whether an enum may cross the foreign boundary at all is OPEN-110.
+
+```con accept name=four-forms exit=42
+#[repr(C)]
+struct Copy A { v: u8 }
+#[repr(packed)]
+struct Copy B { v: u8 }
+#[repr(C, align(1))]
+struct Copy C { v: u8 }
+struct Copy D { v: u8 }
+
+fn main() -> Int {
+    let a: A = A { v: 10 };
+    let b: B = B { v: 10 };
+    let c: C = C { v: 10 };
+    let d: D = D { v: 12 };
+    return (a.v + b.v + c.v + d.v) as Int;
+}
+```
+
+<a id="FFI-11"></a>
+#### FFI-11. A `repr(C)` struct crosses an extern call by value
+
+**FFI-11@1.** A `#[repr(C)]` struct given as an argument to an `extern fn` is passed by value, as the platform's C calling convention passes a C struct of the same layout.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: pending R-0502
+- Semantics: none
+- Obligation: the AAPCS64 classification comes from the one `Layout` authority (FFI-2, R-0502)
+- Evidence: tested
+
+**Rationale.** A C function that takes or returns a struct by value can be bound directly, with no
+pointer wrapper. Internal Concrete calls pass aggregates by pointer, and that set is not promised.
+Whether a returned struct is promised the same is OPEN-122: the design record promised it only up to
+8 bytes. Current main (EmitSSA's extern-call path, not the `Layout` authority) classifies by size alone, as
+AAPCS64 does for structs of integer fields: a struct of at most 8 bytes is passed as one 64-bit
+integer, of 9 to 16 bytes as two, and a larger one by pointer, and a returned struct of at most 8
+bytes comes back as one 64-bit integer while a larger one is returned as an LLVM aggregate. Structs
+of floating-point fields are not classified as AAPCS64's homogeneous aggregates, the same rule is
+applied on x86-64, and a returned struct smaller than 8 bytes is stored as 8 bytes into its slot. The example below runs only natively, since the
+interpreter models no C function that takes or returns a struct.
+
+```con accept name=struct-by-value exit=42 interp-exempt=interp-models-no-struct-c-function
+#[repr(C)]
+struct Copy D { quot: i32, rem: i32 }
+
+trusted extern fn div(n: i32, d: i32) with() -> D;
+
+#[repr(C)]
+struct Copy Addr { s: u32 }
+
+trusted extern fn htonl(x: u32) with() -> u32;
+trusted extern fn inet_lnaof(a: Addr) with() -> u32;
+
+fn main() -> Int {
+    let r: D = div(85, 2);
+    let a: Addr = Addr { s: htonl(167772202) };
+    if r.rem == 1 && inet_lnaof(a) == 42 {
+        return r.quot as Int;
+    }
+    return 0;
+}
+```
+
+<a id="FFI-12"></a>
+#### FFI-12. The stride of a buffer is `sizeof`
+
+**FFI-12@1.** Consecutive elements of an array, a `HeapArray` or a raw buffer of `T` lie `sizeof::<T>()` bytes apart, which trusted code doing pointer arithmetic over the elements may rely on.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.Layout.tySize
+- Semantics: none
+- Obligation: layout comes from the one `Layout` authority (FFI-2, R-0502)
+- Evidence: tested
+
+**Rationale.** This is the one layout fact beyond FFI-7 and FFI-8 that trusted code needs to walk a
+buffer, and the `Layout` authority states it: an array of `n` elements of `T` has size `n` times
+`sizeof::<T>()`. The examples use the pointer arithmetic of today's main (`p + 1` and an
+integer added to a `*const u8`), which TYPE-6@2 and TRUST-1 replace with `ptr::offset` (bug 322,
+R-0502). The interpreter stores typed values, not bytes, so the byte-offset example runs only
+natively.
+
+```con accept name=next-element exit=42
+struct Copy S { a: u8, b: u32 }
+
+trusted fn second(arr: &[S; 3]) -> u32 {
+    let p: *const S = arr as *const [S; 3] as *const S;
+    let q: *const S = p + 1;
+    let s: S = *q;
+    return s.b;
+}
+
+fn main() -> Int {
+    let arr: [S; 3] = [S { a: 1, b: 10 }, S { a: 2, b: 42 }, S { a: 3, b: 30 }];
+    return second(&arr) as Int;
+}
+```
+
+```con accept name=byte-stride exit=42 interp-exempt=interp-stores-typed-values-not-bytes
+mod m {
+    #[intrinsic = "sizeof"]
+    pub trusted fn sizeof<T>() -> u64;
+
+    struct Copy S { a: u8, b: u32 }
+
+    trusted fn second(arr: &[S; 3]) -> u32 {
+        let bytes: *const u8 = arr as *const [S; 3] as *const u8;
+        let p: *const S = (bytes + sizeof::<S>()) as *const S;
+        let s: S = *p;
+        return s.b;
+    }
+
+    pub fn main() -> Int {
+        let arr: [S; 3] = [S { a: 1, b: 10 }, S { a: 2, b: 42 }, S { a: 3, b: 30 }];
+        return second(&arr) as Int;
+    }
 }
 ```
 
@@ -9915,7 +10239,7 @@ fn main() -> Int {
 <a id="ch-decisions"></a>
 ## Open Owner Decisions
 
-This chapter lists the language questions that only the project owner decides: OD1 to OD121 of
+This chapter lists the language questions that only the project owner decides: OD1 to OD127 of
 [ROADMAP.md](../../ROADMAP.md#owner-decisions) (exit 2n for OD1 to OD32, exit 2q for the rest). Each entry states the question and encodes
 no answer. The rules it bears on are named in its rationale, together with what current main does,
 which stays provisional until the owner answers. The answer, when given, is recorded in ROADMAP and
@@ -10037,6 +10361,12 @@ them); they are not separate entries here
 | 96 | [OPEN-119](#OPEN-119) | absorption | Buffered output when the process aborts | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
 | 97 | [OPEN-120](#OPEN-120) | absorption | A vacuous contract | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
 | 98 | [OPEN-121](#OPEN-121) | absorption | Projections from a base that is not a traceable place | not checked | none given (raised while absorbing docs/verification) | not assessed | — |
+| 99 | [OPEN-122](#OPEN-122) | absorbing the platform and stdlib documents | A `repr(C)` struct returned from an extern function | not checked | none given | not assessed | — |
+| 100 | [OPEN-123](#OPEN-123) | absorbing the platform and stdlib documents | `as` on a newtype outside its module | not checked | none given | not assessed | — |
+| 101 | [OPEN-124](#OPEN-124) | absorbing the platform and stdlib documents | Profiles in the specification | not checked | none given | not assessed | — |
+| 102 | [OPEN-125](#OPEN-125) | absorbing the platform and stdlib documents | Contracts at run time | not checked | none given | not assessed | — |
+| 103 | [OPEN-126](#OPEN-126) | absorbing the platform and stdlib documents | Target assumptions | not checked | none given | not assessed | — |
+| 104 | [OPEN-127](#OPEN-127) | absorbing the platform and stdlib documents | UTF-8 in every `String` | not checked | none given | not assessed | — |
 
 <a id="OPEN-33"></a>
 #### OPEN-33. Inline submodules under one file per module
@@ -11281,7 +11611,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on FFI-3, FFI-7. Current main: refused: `extern fn f(x: E)` with `enum Copy E { A, B }` is E0574 (a non-FFI-safe parameter); only scalars, raw pointers and `repr(C)` structs cross. [LAYOUT_CONTRACT.md](../platform/LAYOUT_CONTRACT.md) says both that enums must not cross (§3.2) and that they cross as integers (§3.3). Options: (a) refused, as main; (b) a fieldless enum crosses as an integer of a stated width, which needs a stated discriminant for each variant. Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
+**Rationale.** Bears on FFI-3, FFI-7. Current main: refused: `extern fn f(x: E)` with `enum Copy E { A, B }` is E0574 (a non-FFI-safe parameter); only scalars, raw pointers and `repr(C)` structs cross. [LAYOUT_CONTRACT.md](../archive/design-records/LAYOUT_CONTRACT.md) says both that enums must not cross (§3.2) and that they cross as integers (§3.3). Options: (a) refused, as main; (b) a fieldless enum crosses as an integer of a stated width, which needs a stated discriminant for each variant. Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
 
 <a id="OPEN-111"></a>
 #### OPEN-111. Misaligned fields of a packed struct
@@ -11297,7 +11627,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on FFI-4, FFI-8, REF-5. Current main: both accepted: `#[repr(packed)] struct P { v: u8, l: u32 }` places `l` at offset 1, and `&p.l` is accepted and reads the field correctly in the binary and in `--interp`. [LAYOUT_CONTRACT.md](../platform/LAYOUT_CONTRACT.md) §2 restricts a packed struct to fields whose alignment does not exceed their position, without saying what enforces it. Options: (a) refuse such a field; (b) accept it and refuse a reference to it; (c) accept both, as main. Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
+**Rationale.** Bears on FFI-4, FFI-8, REF-5. Current main: both accepted: `#[repr(packed)] struct P { v: u8, l: u32 }` places `l` at offset 1, and `&p.l` is accepted and reads the field correctly in the binary and in `--interp`. [LAYOUT_CONTRACT.md](../archive/design-records/LAYOUT_CONTRACT.md) §2 restricts a packed struct to fields whose alignment does not exceed their position, without saying what enforces it. Options: (a) refuse such a field; (b) accept it and refuse a reference to it; (c) accept both, as main. Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
 
 <a id="OPEN-112"></a>
 #### OPEN-112. Mutation through a shared reference
@@ -11458,6 +11788,102 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Evidence: open
 
 **Rationale.** Bears on REF-5, MEM-4, MEM-8, TYPE-7. Current main: refused (E0238, `untraceablePlace`), whether the projection reads a Copy value or forms a reference: `(if c { a } else { b }).f`, `(**r).f`, `*w.r`. No entry states the refusal: REF-5 forbids a branch value or a stored reference as a reference's root, and MEM-4, MEM-8 and TYPE-7 do not restrict a projection's base. [KNOWN_HOLES.md](../verification/KNOWN_HOLES.md) H28 calls it a deliberate restriction until R-0499's checker on Core. Options: (a) state the restriction as a rule (a projection's base is a place: a binding, its fields and elements, or `*` of a named reference); (b) accept such projections of owned values and Copy reads once the checker traces them, refusing only what REF-5 refuses. Austral: not checked. Pick: none given (raised by the absorption of docs/verification, 2026-10-30).
+
+<a id="OPEN-122"></a>
+#### OPEN-122. A `repr(C)` struct returned from an extern function
+
+**OPEN-122@1.** Whether a `#[repr(C)]` struct returned from an `extern fn` is returned as the platform's C calling convention returns it, at every size is an open owner decision (OD122).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD122
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on FFI-2, FFI-11. Current main: a returned struct of at most 8 bytes comes back as one 64-bit integer, stored as 8 bytes into the struct's slot even when the struct is smaller (a 4-byte `in_addr` returned by `inet_makeaddr` reads back wrong natively); a larger one is returned as an LLVM aggregate, which matches C on x86-64 and AArch64 only for some layouts. [ABI.md](../platform/ABI.md) promised returns of at most 8 bytes and listed larger ones as not promised. Options: (a) every size, as C, classified by the `Layout` authority (R-0502); (b) at most 8 bytes (or 16), a larger return refused in an `extern fn` signature; (c) none, a returned struct going through an out-pointer the binding declares. Austral: not checked. Pick: none given (raised by the absorption of docs/platform and docs/stdlib, 2026-10-30).
+
+<a id="OPEN-123"></a>
+#### OPEN-123. `as` on a newtype outside its module
+
+**OPEN-123@1.** Whether `v as N` and `n as T`, between a newtype `N` and its inner type `T`, are accepted outside the module that declares `N`, where TYPE-11 refuses `N(v)`, is an open owner decision (OD123).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD123
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on TYPE-11, TYPE-24, ARITH-5, OPEN-54. Current main: both accepted in any module, so `x as Id` builds a foreign newtype that `Id(x)` may not (E0296), and a validated wrapper's smart constructor can be bypassed. [VALIDATED_WRAPPERS.md](../stdlib/VALIDATED_WRAPPERS.md) §8 describes the cast rule as guarding the wrapper contract from an `as` bypass, which holds for casts to unrelated types only. Options: (a) accepted anywhere, as main; (b) accepted only where `N(v)` and `.0` are (TYPE-11, with R-0500's follow-on for `.0`); (c) `as` never names a newtype, the conversions being `N(v)` and `.0`. Austral: no newtype (OPEN-54's comparison). Pick: none given (raised by the absorption of docs/platform and docs/stdlib, 2026-10-30).
+
+<a id="OPEN-124"></a>
+#### OPEN-124. Profiles in the specification
+
+**OPEN-124@1.** Whether the profiles (the admission profiles Safe, Predictable and Proof, and the build profiles) belong to the language specification, in a chapter of their own, and whether a profile may change what an accepted program does is an open owner decision (OD124).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD124
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on ARITH-9, OPEN-97, PASS-3, PASS-4. Current main: a profile only refuses or reports: `--check predictable` reports its five gates (no recursion, bounded loops, no allocation, no extern calls, no `File`, `Network` or `Process`), `[policy] predictable = true` in `Concrete.toml` turns a violation into E0610, and no profile changes the behaviour of a program it accepts; ARITH-9 states that for arithmetic. [PROFILES.md](../platform/PROFILES.md) says a profile never changes what a program means, while OPEN-97 asks whether a build profile may omit a run-time check. Options: (a) no profiles chapter: profiles are tooling, and the spec states only that no profile changes an accepted program's behaviour; (b) a profiles chapter whose entries state each profile's admission rules as refusals, with that same guarantee; (c) as (b), with build profiles allowed to differ as OPEN-97 decides. Austral: not checked. Pick: none given (raised by the absorption of docs/platform and docs/stdlib, 2026-10-30).
+
+<a id="OPEN-125"></a>
+#### OPEN-125. Contracts at run time
+
+**OPEN-125@1.** Whether a `#[requires]`, `#[ensures]` or loop `#[invariant]` that no proof discharges is checked at run time, trapping when it fails, or is only a claim is an open owner decision (OD125).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD125
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on CON-1, CON-2, STMT-2. Current main: contracts are erased metadata: a call that violates `#[requires(x > 0)]` runs normally, in the binary and in `--interp`, and `assert` elaborates to proof evidence only (syntax chapter introduction). [ERROR_CONVENTIONS.md](../stdlib/ERROR_CONVENTIONS.md) lists contract-violation traps among the fatal failures. Options: (a) claims only, never checked at run time, as main; (b) checked at run time and trapping unless discharged; (c) checked under a build profile only (OPEN-97, OPEN-124). Austral: not checked. Pick: none given (raised by the absorption of docs/platform and docs/stdlib, 2026-10-30).
+
+<a id="OPEN-126"></a>
+#### OPEN-126. Target assumptions
+
+**OPEN-126@1.** Which target facts are language rules: 64-bit pointers, little-endian byte order, POSIX hosts, and the sizes of `bool`, `Unit` and pointers, is an open owner decision (OD126).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD126
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on FFI-2, FFI-7, TYPE-19, TYPE-20. Current main: one target profile: `Layout` hardcodes 8-byte pointers and references, `bool` of 1 byte, `Unit` of 0 bytes, an `i32` enum tag, and assumes little-endian POSIX hosts; FFI-2 names AAPCS64 for the native profile, and the integer types' widths follow from their names (TYPE-19). [EXECUTION_MODEL.md](../platform/EXECUTION_MODEL.md) and [ABI.md](../platform/ABI.md) state these as platform facts. Options: (a) language rules, a 32-bit or big-endian target being another language profile; (b) target facts, observable only through `sizeof`, `alignof` (FFI-7) and named target constants; (c) as (b), with the sizes of `bool` and `Unit` fixed by the language. Austral: not checked. Pick: none given (raised by the absorption of docs/platform and docs/stdlib, 2026-10-30).
+
+<a id="OPEN-127"></a>
+#### OPEN-127. UTF-8 in every `String`
+
+**OPEN-127@1.** Whether every `String` value that safe code can reach holds valid UTF-8, as a language guarantee is an open owner decision (OD127).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD127
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on TYPE-3, SYN-5, TRUST-2. Current main: literals are UTF-8 (SYN-5), but nothing keeps a `String` valid: `push_char` appends a byte unchecked, `Bytes::to_string` transfers bytes without validation, and std's `read_to_string` does not validate. [STRING_TEXT_CONTRACT.md](../stdlib/STRING_TEXT_CONTRACT.md) §1 states the invariant as a target, and [UNICODE_POLICY.md](../stdlib/UNICODE_POLICY.md) has a validating `Bytes::to_string` returning `Option`. Options: (a) a language guarantee, every safe constructor validating and an unchecked one being a trusted operation with that premise; (b) a std convention only, `String` being bytes to the language. Austral: not checked. Pick: none given (raised by the absorption of docs/platform and docs/stdlib, 2026-10-30).
 
 ### Decided
 

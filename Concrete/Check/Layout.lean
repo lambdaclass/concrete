@@ -304,7 +304,7 @@ private partial def tySize_namedOrGeneric (ctx : Ctx) (tySizeFn : Ctx → Ty →
 
 /-- Byte size of a type. Used for malloc/alloca sizing and enum layout. Capability arguments
     do not affect it (spec: TYPE-18, docs/spec/types.md). -/
--- spec: TYPE-20, spec: TYPE-21, spec: FFI-7, spec: FFI-8 (docs/spec/types.md, docs/spec/ffi.md; this declaration enforces the rule)
+-- spec: TYPE-20, spec: TYPE-21, spec: FFI-7, spec: FFI-8, spec: FFI-12 (docs/spec/types.md, docs/spec/ffi.md; this declaration enforces the rule)
 partial def tySize (ctx : Ctx) : Ty → Nat
   | .int | .uint | .float64 => 8
   | .i32 | .u32 | .float32 => 4

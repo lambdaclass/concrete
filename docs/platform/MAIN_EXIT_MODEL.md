@@ -1,7 +1,11 @@
 # Main return & process exit model
 
-The rule for `main` is STMT-7 of [docs/spec/statements.md](../spec/statements.md); this record
-keeps the decision history, the stages and the open end-state preference.
+The rule for `main` is [STMT-7](../spec/statements.md#STMT-7) (version 3): `main` takes no
+parameters and returns `u8` or `Unit`, the exit status is that byte or 0, and the runtime writes
+nothing. The owner decided it on 2026-10-29 (OD24), adopting the end state below; the Stage 1
+masking of an `Int` result is superseded, and main still implements it until
+[bug 320](../bugs/320_main_may_return_int_or_bool_the_native_exit_stat.md) is fixed. This record
+keeps the decision history and the stages; where it differs from STMT-7, the specification governs.
 
 **Status:** Stage 1 SHIPPED (2026-07-14). Stage 2 designed, workload-gated.
 **Decision record** — pulled by Phase 7 workload 1 (`examples/base64_cli`,
@@ -9,9 +13,9 @@ FRICTION #4): the old runtime echoed `main`'s return value to stdout and always
 exited 0, so a compiled CLI could neither keep its stdout clean when piped nor
 signal failure to the shell (`&&` / `set -e` never saw errors).
 
-## Decision of 2026-10-21: no parameters now; the return type stays `-> Int`, exit codes are an open question
+## Decision of 2026-10-21: no parameters now (the return type was settled on 2026-10-29)
 
-**Adopted (normative).** `main` takes **no parameters**. Command-line arguments are read only
+**Adopted.** `main` takes **no parameters** (STMT-7). Command-line arguments are read only
 through `std.args` (`std/src/args.con`, `with(Env)`). A parameterized `main` is a compile error.
 Status on main: **enforced** (bug 111, fixed 2026-10-21). Before the fix `fn main(argc: i64)`
 compiled and the parameter read an undefined register (silent wrong code). Enforcing site:
@@ -20,18 +24,18 @@ compiled and the parameter read an undefined register (silent wrong code). Enfor
 `tests/programs/error_111_*.con`. One invalid fixture (`tests/invalid_programs/type.con`) moved its
 parameter to a helper.
 
-**Kept.** `fn main() -> Int` remains the entry signature, with the Stage 1 semantics below (the
+**Kept then, superseded by OD24 (2026-10-29).** `fn main() -> Int` remained the entry signature, with the Stage 1 semantics below (the
 value masked to 0–255; Unit exits 0; the narrower integer widths accepted). The process-exit
 mapping is a separately specified operation of the entry wrapper, not an `as` cast, so the cast
 decision of the same date (ARITHMETIC_POLICY §8) does not change it.
 
-**Open decision, not adopted.** Whether to narrow `main`'s return type to the end state below
+**Open then, decided by OD24 (2026-10-29).** Whether to narrow `main`'s return type to the end state below
 (`fn main()` and `fn main() -> u8`, so truncation is unrepresentable) is deferred to a later
 surface pass. Until it is decided, the end state below is a recorded preference, not the rule, and
 EXECUTION_MODEL states `-> Int` as the signature. The corpus today: `-> Int` / `-> i64` 973
 signatures, `-> i32` 190, Unit 107, `-> u8` 20, `-> u64` 5, `-> u32` 2 (occurrences, 2026-10-21).
 
-## The model (end state, Zig-shaped; a recorded preference, open since 2026-10-21)
+## The model (end state, Zig-shaped; adopted by OD24 on 2026-10-29, STMT-7@3)
 
 Two accepted `main` forms, value = process exit status, runtime writes nothing:
 
@@ -47,7 +51,8 @@ insight — no `ExitCode` wrapper type needed in a language that has `u8`).
 **Deliberately absent: `std.process.exit()`.** Zig ships it with a "defers
 don't run" warning; in a LINEAR language early exit would not be a footgun but
 a hole in a checked guarantee (every non-Copy value provably consumed). Status
-flows back through `main`'s return; destructors always run on the exit path.
+flows back through `main`'s return, so every linear value is consumed before `main` returns
+([OWN-2](../spec/ownership.md#OWN-2)); nothing is destroyed implicitly ([OWN-13](../spec/ownership.md#OWN-13)).
 If a workload ever genuinely cannot be written this way, that is the pull
 evidence to revisit — with the cleanup-bypass semantics stated in the doc.
 
@@ -58,7 +63,7 @@ variant name). Do not build until error-display conventions are exercised by
 real programs; the 13t buckets already tell CLI authors what to do by hand
 (match, `eprintln`, return nonzero) — see `examples/base64_cli`.
 
-## Stage 1 (SHIPPED)
+## Stage 1 (SHIPPED; superseded by STMT-7@3, still on main as bug 320)
 
 `fn main() -> Int` (and the narrower int widths) now maps to the process exit
 code, masked to 0–255 (`-1` exits 255, `257` exits 1 — POSIX masking, stated

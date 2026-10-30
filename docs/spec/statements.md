@@ -3,8 +3,8 @@
 Statements execute in source order. A block's trailing expression without `;` is its value, and
 `e;` is a statement whose value is discarded (OWN-5 to OWN-7 say which values may be). This
 chapter covers how executions end (STMT-1 to STMT-3), evaluation order (STMT-4), where exits may
-appear (STMT-5), loops (STMT-6), `main` (STMT-7), value blocks (STMT-8) and returning a value on
-every path (STMT-9). The design records are
+appear (STMT-5), loops (STMT-6), `main` (STMT-7), value blocks (STMT-8), returning a value on
+every path (STMT-9) and the capability `abort()` needs (STMT-13). The design records are
 [STATEMENT_EXPRESSION_MODEL.md](../archive/design-records/STATEMENT_EXPRESSION_MODEL.md)
 and [MAIN_EXIT_MODEL.md](../platform/MAIN_EXIT_MODEL.md). [EXECUTION_MODEL.md](../platform/EXECUTION_MODEL.md)
 keeps the runtime and platform description (hosted runtime, startup, allocation, targets).
@@ -701,6 +701,35 @@ fn main() -> Int {
         s = s + i;
     }
     return s + 21;
+}
+```
+
+<a id="STMT-13"></a>
+### STMT-13. `abort()` needs `Process`
+
+**STMT-13@1.** The builtin `abort()` requires the `Process` capability, and the trap of a checked operation requires no capability.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.IntrinsicId.capability
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** Ending the process on request is an authority over the process, so it is visible in
+the caller's `with(...)` set like any other (TRUST-4): a call without `Process` is refused with
+TRUST-4's E0520. A trap is not a request: the operation that traps needs no capability, so checked
+arithmetic and safe indexing stay available to code that holds none. What `Process` names is
+OPEN-95.
+
+```con accept name=abort-with-process exit=42
+fn main() with(Process) -> Int {
+    if 1 == 2 {
+        abort();
+    }
+    return 42;
 }
 ```
 

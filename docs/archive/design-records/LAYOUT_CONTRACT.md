@@ -1,14 +1,25 @@
-# Layout and ABI Contract Surface
+# Layout and ABI Contract Surface (design record)
 
-Status: stable reference (Phase 3 item 75 closed)
+Archived from docs/platform on 2026-10-30: the layout contract (the `repr` menu, guaranteed versus
+opaque layout, the stride fact, `Option` and `Result` identity, the reports). **The specification
+governs.** Its rules are in [docs/spec/ffi.md](../../spec/ffi.md): unspecified layout and the
+`sizeof` / `alignof` window (FFI-7), what `repr(C)` and `repr(packed)` promise (FFI-8), the four
+layout forms, with `transparent` and any `repr` on an enum refused (FFI-10), `repr(C)` structs by
+value in extern calls (FFI-11, pending R-0502), the stride of a buffer (FFI-12), the one `Layout`
+authority (FFI-2) and the well-formedness of the attributes (FFI-4). The builtin `Option` and
+`Result` are TYPE-23 in [docs/spec/types.md](../../spec/types.md). Where this record and the
+specification differ, the specification governs. This record keeps the reasoning, the report
+surface (section 6) and the history.
 
-This document is the stable-direction counterpart to the exploratory note at [../research/language/layout-contract-surface.md](../../research/language/layout-contract-surface.md). It settles the question posed by ROADMAP item 75:
+Open questions it raised: whether an enum crosses the foreign boundary (OPEN-110; §3.2 and §3.3
+said both no and "as integers"), misaligned fields of a packed struct (OPEN-111; §2), a user enum
+named `Result` (OPEN-43; §3.4 decided it is a distinct type, main withholds the builtin from such a
+module) and returned `repr(C)` structs (OPEN-122), all in
+[docs/spec/decisions.md](../../spec/decisions.md).
 
-> settle the supported `repr` forms, when layout is guaranteed versus intentionally opaque, transparent-wrapper rules, field-order promises, and what reports must surface for reviewers and package boundaries.
-
-For implementation details, see [ABI_LAYOUT.md](ABI_LAYOUT.md) and `Concrete/Check/Layout.lean`.
-For platform support and sizes, see [ABI.md](ABI.md).
-For FFI rules, see [FFI.md](FFI.md).
+For implementation details, see [ABI_LAYOUT.md](../../platform/ABI_LAYOUT.md) and
+`Concrete/Check/Layout.lean`; for platform support, [ABI.md](../../platform/ABI.md); for FFI,
+[FFI.md](../../platform/FFI.md).
 
 ---
 
@@ -28,7 +39,7 @@ Exactly four annotations form the stable layout surface. No other `repr` forms a
 |---|---|---|---|
 | *(none)* | struct, enum | **Opaque.** Compiler may change field order, padding, tag size, or discriminant. | — |
 | `#[repr(C)]` | struct | **Guaranteed.** C-compatible in-memory layout: declaration field order, standard padding, alignment. | No type parameters. All fields must be FFI-safe. |
-| `#[repr(packed)]` | struct | **Guaranteed.** Declaration field order, no padding between fields. | Must not contain types whose alignment exceeds the field position (not checked on main; open owner decision [OPEN-111](../spec/decisions.md#OPEN-111)). |
+| `#[repr(packed)]` | struct | **Guaranteed.** Declaration field order, no padding between fields. | Must not contain types whose alignment exceeds the field position (not checked on main; open owner decision [OPEN-111](../../spec/decisions.md#OPEN-111)). |
 | `#[repr(align(N))]` | struct | **Guaranteed.** Minimum alignment of `N` bytes, where `N` is a power of two. May be combined with `#[repr(C)]`. Nothing about field order or offsets. | `N` a power of two (E0577). Today `N` may not exceed the struct's natural alignment (E0585, bug 037: over-aligned declarations are not yet emitted), so the attribute is accepted only where it is a no-op. |
 
 Any other annotation (`#[repr(transparent)]`, `#[repr(Rust)]`, integer-tagged enums, `u8`-repr enums, etc.) is **not** part of the first-release contract and is not accepted by the checker at freeze. See section 6 for reconsideration triggers.
@@ -46,7 +57,7 @@ Guaranteed layout applies only to the four forms in section 2, on types that sat
 - each field's `offset`
 - field declaration order
 
-These facts are the same across every supported target in [ABI.md](ABI.md#platform-assumptions) unless explicitly noted.
+These facts are the same across every supported target in [ABI.md](../../platform/ABI.md#platform-assumptions) unless explicitly noted.
 
 ### 3.2 Opaque
 
@@ -55,14 +66,14 @@ Everything else is opaque. Specifically:
 - **Unannotated structs.** Field order, padding, and offsets are implementation-defined and may change between compiler versions. Unannotated structs must not cross `extern fn` boundaries.
 - **All enums** (user-defined or builtin: `Option`, `Result`). Tag size, tag position, payload packing, and discriminant assignment are implementation-defined. Enums must not cross `extern fn` boundaries.
 - **Generic struct instantiations.** Even if the generic has all FFI-safe type arguments, layout is not guaranteed — `#[repr(C)]` rejects type parameters precisely to avoid this ambiguity.
-- **Builtin compound types** (`String`, `Vec<T>`, `HashMap<K, V>`). Sizes are documented in [ABI.md](ABI.md) as an implementation reference, not as a stability promise. Do not pattern-match on layout through FFI.
+- **Builtin compound types** (`String`, `Vec<T>`, `HashMap<K, V>`). Sizes are documented in [ABI.md](../../platform/ABI.md) as an implementation reference, not as a stability promise. Do not pattern-match on layout through FFI.
 - **Function pointer layout, vtable layout, trait object layout.** None exist in the stable surface; reserved for later design.
 
 Opaque does not mean hidden — the compiler will still emit layout facts in reports (section 5). It means the facts are not promises the language is willing to defend across versions or across targets.
 
 ### 3.3 What code may rely on, and who owns layout (normative, decided 2026-10-21)
 
-The language rules are FFI-7 and FFI-8 of [the specification's FFI chapter](../spec/ffi.md#FFI-7).
+The language rules are FFI-7, FFI-8 and FFI-12 of [the specification's FFI chapter](../../spec/ffi.md#FFI-7).
 
 **Rule.** Each `repr` form guarantees exactly the properties section 2 lists for it and nothing
 else: `#[repr(C)]` C field order, padding and alignment; `#[repr(packed)]` declaration order with no
@@ -72,7 +83,7 @@ layout fact of every other type is unspecified. Safe code observes layout only t
 rely on `sizeof` and on one further fact, which the layout authority states and keeps: the stride of
 an array, `HeapArray` or raw buffer of `T` is `sizeof::<T>()`. `#[repr(C)]` on an enum is rejected,
 and whether enums cross the foreign boundary at all (as integers, or not, as section 3.2 says) is
-the open owner decision [OPEN-110](../spec/decisions.md#OPEN-110); main refuses it.
+the open owner decision [OPEN-110](../../spec/decisions.md#OPEN-110); main refuses it.
 
 **One authority.** One `Layout` module computes every size, alignment, offset, stride and emitted
 type for every consumer (the checker, `Lower`, the emitter, and every model that states a layout
@@ -184,4 +195,4 @@ The section-2 menu is the frozen surface. It is reconsidered only on explicit ev
 - A validated-wrapper workload (item 72) that crosses FFI in a way opaque newtypes cannot express.
 - A concrete cross-target portability bug that the current target caveats do not describe.
 
-Any such finding is recorded in [STDLIB.md](../stdlib/STDLIB.md) gap ledger and triggers a scoped design revision. Growth is by evidence, not by precedent from other languages.
+Any such finding is recorded in [STDLIB.md](../../stdlib/STDLIB.md) gap ledger and triggers a scoped design revision. Growth is by evidence, not by precedent from other languages.

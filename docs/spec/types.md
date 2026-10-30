@@ -5,7 +5,8 @@ callable values and dispatch (TYPE-1, TYPE-2), `Text` (TYPE-3), the typing of ex
 operators (TYPE-4 to TYPE-10), construction rights (TYPE-11), type aliases (TYPE-12) and the
 kinds of type parameters (TYPE-13, TYPE-14), generic arguments (TYPE-15), finite size (TYPE-16),
 capability sets in types (TYPE-D1, TYPE-17, TYPE-18), the primitive numeric types (TYPE-19), `char`
-(TYPE-20) and the representation of a newtype (TYPE-21). Copy itself is defined in the ownership chapter
+(TYPE-20), the representation of a newtype (TYPE-21), the builtin `Option` and `Result` (TYPE-23) and
+the conversions of a newtype (TYPE-24). Copy itself is defined in the ownership chapter
 (OWN-D1, OWN-14). What a capability means and when a function may use one are in the trusted
 chapter (TRUST-D1, TRUST-4).
 
@@ -1421,6 +1422,73 @@ const BIG: i32 = 2147483647 + 1;
 fn main() -> Int {
     let x: i32 = BIG;
     return x as Int;
+}
+```
+
+<a id="TYPE-23"></a>
+### TYPE-23. The builtin `Option` and `Result`
+
+**TYPE-23@1.** The compiler provides the generic enums `Option<T>`, whose variants are `Some { value: T }` and `None`, and `Result<T, E>`, whose variants are `Ok { value: T }` and `Err { error: E }`.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.builtinOptionEnum, Concrete.builtinResultEnum
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** Builtins that can fail, such as `vec_pop`, and std's error conventions return these
+two types, so their shape is part of the language rather than of a library module. Both are declared `Copy`, so an instantiation is Copy exactly when its type
+arguments are (TYPE-14). How a user declaration named `Option` or `Result` resolves against them is
+OPEN-43: main withholds the builtin `Result` from a module that declares or imports its own, and
+never withholds `Option`. Their layout is that of any enum (FFI-7).
+
+```con accept name=option-and-result exit=42
+fn main() -> Int {
+    let o: Option<Int> = Option::<Int>::Some { value: 40 };
+    let r: Result<Int, Int> = Result::<Int, Int>::Err { error: 2 };
+    let a: Int = match o { Option::Some { value } => value, Option::None => 0 };
+    let b: Int = match r { Result::Ok { value } => value, Result::Err { error } => error };
+    return a + b;
+}
+```
+
+<a id="TYPE-24"></a>
+### TYPE-24. The conversions of a newtype
+
+**TYPE-24@1.** A newtype `N` over `T` converts to `T` by `n.0` or `n as T` and a `T` converts to `N` by `N(v)` or `v as N`, with `N`'s type arguments substituted into `T`, and `as` converts a newtype to or from no other type.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.ccCheckExpr
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** Each conversion moves no bits (TYPE-21). A cast between a newtype and any type other
+than its own inner type, one wrapping step at a time, is refused with ARITH-5's E0553, so `as` cannot
+turn a validated wrapper into an unrelated type or build one from one (bug fixed 2026-04-25,
+`error_newtype_cast_to_unrelated.con`). Outside the declaring module, `N(v)` is refused (TYPE-11),
+while `n.0` and `unwrap(n)` are refused only once R-0500 lands; whether `v as N` and `n as T` are
+refused there too is OPEN-123, and main accepts both. Whether newtypes stay is OPEN-54. Main also
+has an intrinsic `unwrap(n)`: Check gives it type `T`, but Core keeps it typed `N`, so `unwrap(k) as
+Int` is refused (E0553) and `j.0 + unwrap(k)` stops natively at the SSA verifier (E0715), a defect
+found while absorbing [VALIDATED_WRAPPERS.md](../stdlib/VALIDATED_WRAPPERS.md), which calls it a
+fallback and prefers `.0`; this entry states `.0` only.
+
+```con accept name=newtype-conversions exit=42
+newtype Id = u8;
+
+fn main() -> Int {
+    let b: u8 = 40;
+    let i: Id = b as Id;
+    let j: Id = Id(1);
+    let a: u8 = i as u8;
+    return (a + j.0 + 1) as Int;
 }
 ```
 

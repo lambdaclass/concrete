@@ -27,20 +27,15 @@ Concrete currently targets a **hosted** environment only. All programs assume:
 The compiler generates a C `main` function that calls the user's `main`, which is emitted under its mangled symbol like every Concrete function (`_C.main.main` for a top-level `main`; FFI.md "Symbol Names"). The generated `main`:
 
 1. Calls the user's `main`
-2. Returns the result as the PROCESS EXIT CODE, masked to the OS's 8-bit
-   status range (`-1` exits 255, `257` exits 1). Unit `main` exits 0.
-   Nothing is written to stdout — stdout belongs to the program.
+2. Returns its result as the process exit status; nothing is written to stdout.
 
-`fn main() -> Int` is the entry signature and stays so (decided 2026-10-21); `main` takes no
-parameters, and arguments come only from `std.args`. Narrowing the return type to
-`fn main() -> u8 | Unit`, so the 8-bit contract lives in the type, is a recorded preference and an
-open decision, not adopted (see
-`docs/platform/MAIN_EXIT_MODEL.md` for the full decision record, including why there
-is deliberately no `process.exit()` in a linear language; the transitional
-harness echo knob was deleted when stage 2 completed — the exit-code
-semantics above are the only behavior).
+The entry signature and the exit status are [STMT-7](../spec/statements.md#STMT-7): `main` takes no
+parameters and returns `u8` or `Unit` (decided 2026-10-29, OD24). Main still accepts any integer
+result and masks it to 8 bits ([bug 320](../bugs/320_main_may_return_int_or_bool_the_native_exit_stat.md)). Arguments come from `std.args`, and the
+language has no `exit` operation (std's `process_exit` binds libc `exit`) ([MAIN_EXIT_MODEL.md](MAIN_EXIT_MODEL.md) keeps the decision record).
 
-There is no Concrete runtime initialization. No global constructors, no GC setup, no thread-local storage initialization, no allocator setup. The program starts in `main`, calls libc functions directly, and exits when `main` returns.
+There is no Concrete runtime initialization (module-level state is immutable,
+[TRUST-8](../spec/trusted.md#TRUST-8)). No global constructors, no GC setup, no thread-local storage initialization, no allocator setup. The program starts in `main`, calls libc functions directly, and exits when `main` returns.
 
 ### What "freestanding" would mean (future)
 
@@ -86,23 +81,23 @@ Concrete does not have a runtime in the traditional sense (no GC, no green threa
 ### Shutdown
 
 1. the user's `main` returns
-2. `main` returns the (8-bit masked) value as the process exit status
+2. `main` returns the process exit status ([STMT-7](../spec/statements.md#STMT-7))
 3. OS reclaims process resources
 
-There is no cleanup hook, no `atexit` registration, no destructor ordering. Linear ownership and `defer` handle resource cleanup within function scope. When the process exits, the OS reclaims everything.
+There is no cleanup hook, no `atexit` registration, no destructor ordering. Linear ownership and `defer` handle resource cleanup within function scope ([STMT-11](../spec/statements.md#STMT-11), [OWN-13](../spec/ownership.md#OWN-13)). When the process exits, the OS reclaims everything.
 
 ### Failure
 
-Concrete has no panic/unwind mechanism. Failure modes:
+Concrete has no panic/unwind mechanism ([STMT-2](../spec/statements.md#STMT-2)). Failure modes:
 
 | Failure | What happens | Who handles it |
 |---------|-------------|----------------|
 | Explicit error return | `Result<T, E>` matched and returned by an explicit arm | User code |
-| `exit(code)` | libc `exit()` terminates process | OS |
+| std's `process_exit(code)` (libc `exit`, `with(Process)`; the language itself has no exit operation, STMT-7) | libc terminates the process, running no `defer` | OS |
 | Out-of-memory | `malloc` returns null → `abort()` (see allocation section) | Process terminates |
 | Null pointer dereference | Hardware trap (SIGSEGV) | OS kills process |
-| Integer overflow/div-zero/invalid shift | Checked operation aborts; explicit `wrapping_*`/`saturating_*` opt out by name | Runtime trap or named arithmetic |
-| Safe raw array out-of-bounds | Runtime bounds check aborts | Runtime trap |
+| Integer overflow/div-zero/invalid shift | Checked operation aborts ([ARITH-3](../spec/arithmetic.md#ARITH-3), [ARITH-4](../spec/arithmetic.md#ARITH-4)) | Runtime trap or named arithmetic |
+| Safe raw array out-of-bounds | Runtime bounds check aborts ([MEM-6](../spec/memory.md#MEM-6)) | Runtime trap |
 | Stack overflow | OS stack guard page, SIGSEGV | OS kills process |
 
 There is no structured panic. No stack unwinding. No catch mechanism. This is intentional — it keeps the execution model simple and compatible with freestanding targets in the future. Error handling is explicit through return types.
@@ -121,7 +116,7 @@ Every compiled Concrete program links against these categories of external symbo
 | `memcpy` / `llvm.memcpy.p0.p0.i64` | libc / LLVM intrinsic | Vec operations, string operations |
 | `memset` | libc | Vec pop (Option zero-init) |
 | `memcmp` | libc | `string_eq`, `string_contains` |
-| `printf` | libc | Main wrapper (result printing) |
+| `printf` | libc | `concrete test` runner output (the main wrapper writes nothing, STMT-7) |
 | `snprintf` | libc | `int_to_string`, `float_to_string` |
 | `strtol` | libc | `string_to_int` |
 | `llvm.smax.i64` / `llvm.smin.i64` | LLVM intrinsics | `string_slice` |
@@ -143,7 +138,7 @@ Every compiled Concrete program links against these categories of external symbo
 
 ### Test mode
 
-In test mode (`concrete file.con --test`), the compiler generates a test runner `main` instead of the normal main wrapper. The test runner:
+In test mode (`concrete file.con --test`), the compiler generates a test runner `main` instead of the normal main wrapper (a test function's shape is [STMT-10](../spec/statements.md#STMT-10)). The test runner:
 
 1. Calls each `#[test]` function in order
 2. Prints `PASS: <name>` or `FAIL: <name>` for each
@@ -163,7 +158,7 @@ All heap allocation goes through libc `malloc`/`realloc`/`free`. There is no cus
 
 ### Allocation is capability-tracked
 
-The `Alloc` capability marks functions that allocate. This is enforced by `CoreCheck` — a function calling `heap_new`, `Vec::new`, or `String::concat` must declare `with(Alloc)` or be called by a function that does. This makes allocation visible in:
+The `Alloc` capability marks functions that allocate; a caller of an allocating function declares it ([TRUST-4](../spec/trusted.md#TRUST-4)). This makes allocation visible in:
 
 - `--report caps`: shows which functions require `Alloc` and why
 - `--report alloc`: shows allocation/cleanup patterns and warns about functions that allocate without cleanup
@@ -188,11 +183,11 @@ Future directions beyond abort-on-OOM:
 
 Concrete uses linear ownership + `defer` for deterministic deallocation:
 
-- **Linear types**: structs and enums must be consumed exactly once. The compiler enforces this at check time.
+- **Linear types**: a value that is not Copy is consumed exactly once ([OWN-D1](../spec/ownership.md#OWN-D1), [OWN-2](../spec/ownership.md#OWN-2)).
 - **`defer`**: schedules cleanup at scope exit. The standard pattern is `defer vec.free();` or `defer string.drop();`.
-- **`Destroy` trait**: types implementing `Destroy` get their `destroy()` method called when they go out of scope (not yet automatic — users must call it or use `defer`).
+- **`Destroy` trait**: `destroy(x)` is an explicit consuming call, written directly or deferred; the compiler never inserts one at scope exit ([OWN-13](../spec/ownership.md#OWN-13)), and a destructor cannot fail ([TRAIT-11](../spec/traits.md#TRAIT-11)).
 
-There is no automatic destructor insertion (RAII). Resource cleanup is explicit. This is intentional — it keeps the execution model transparent and avoids hidden control flow.
+Resource cleanup is explicit, which keeps the execution model transparent and avoids hidden control flow.
 
 ### Stack allocation
 
@@ -206,13 +201,12 @@ Stack size is not bounded or checked by the compiler. Stack overflow is caught b
 
 ### Memory layout
 
-All memory layout decisions are centralized in `Concrete/Check/Layout.lean`:
-
-- Type sizes and alignments follow platform conventions (i8=1, i16=2, i32=4, i64=8, f64=8, ptr=8, bool=1)
-- Structs use C-like field layout with natural alignment padding (unless `#[repr(packed)]`)
-- Enums use tag + padded payload (i32 tag, payload aligned to max variant alignment)
-- `#[repr(C)]` provides C-compatible layout for FFI structs
-- `#[repr(align(N))]` sets minimum alignment
+All memory layout decisions are centralized in `Concrete/Check/Layout.lean`. What the language
+promises is [FFI-7](../spec/ffi.md#FFI-7) to [FFI-12](../spec/ffi.md#FFI-12): unannotated layout is
+unspecified, and only the `repr` forms fix it. Today `Layout` gives scalars their natural sizes
+(i8=1 to i64=8, f64=8, ptr=8, bool=1; which of these are language facts is
+[OPEN-126](../spec/decisions.md#OPEN-126)), lays structs out in declaration order with natural
+padding, and gives enums an i32 tag and a padded payload.
 
 See [ABI.md](ABI.md) for full details.
 
@@ -234,7 +228,7 @@ This section documents how ownership, capabilities, and resource tracking intera
 
 ### Capability model at the FFI boundary
 
-Extern functions participate in the capability system:
+Extern functions participate in the capability system ([TRUST-4](../spec/trusted.md#TRUST-4), [TRUST-5](../spec/trusted.md#TRUST-5), [FFI-3](../spec/ffi.md#FFI-3)):
 
 | Declaration | Capability requirement | Use case |
 |------------|----------------------|----------|
@@ -258,7 +252,7 @@ calls.
 
 ### Ownership across FFI calls
 
-The linearity checker tracks ownership at the Concrete level:
+The linearity checker tracks ownership at the Concrete level ([OWN-15](../spec/ownership.md#OWN-15)):
 
 - **By-value arguments to extern fn consume the variable.** If you pass a linear type by value, it is marked consumed. The compiler assumes the foreign function took ownership.
 - **By-reference arguments (`&T`, `&mut T`) borrow without consuming.** The original variable remains usable after the call.
@@ -283,7 +277,7 @@ These gaps are intentional — they match the cost model of C FFI in Rust, Zig, 
 
 ### What is NOT allowed at the FFI boundary
 
-The compiler enforces that only FFI-safe types appear in `extern fn` signatures:
+The compiler enforces that only FFI-safe types appear in `extern fn` signatures ([FFI-3](../spec/ffi.md#FFI-3)):
 
 - **Allowed**: integers, floats, bool, char, `()`, raw pointers (`*mut T`, `*const T`), `#[repr(C)]` structs
 - **Rejected at compile time**: `String`, `Vec<T>`, `HashMap<K,V>`, non-repr(C) structs, enums, arrays, references
@@ -292,7 +286,7 @@ This prevents accidentally passing a managed Concrete type to C code that doesn'
 
 ### Calling convention
 
-`#[repr(C)]` structs in `extern fn` signatures are passed by value following the platform C ABI. LLVM handles the register/stack lowering for the target architecture. Internal Concrete function calls use pointer-based passing for all aggregates.
+`#[repr(C)]` struct arguments of an `extern fn` are passed by value ([FFI-11](../spec/ffi.md#FFI-11), pending R-0502; returns are [OPEN-122](../spec/decisions.md#OPEN-122)). Internal Concrete function calls use pointer-based passing for all aggregates.
 
 For full calling convention details, see [ABI.md](ABI.md).
 
@@ -308,7 +302,8 @@ For full calling convention details, see [ABI.md](ABI.md).
 
 ## Target and Platform Support Policy
 
-Concrete currently supports a single target profile:
+Concrete currently supports a single target profile (which of these facts are language rules is
+[OPEN-126](../spec/decisions.md#OPEN-126)):
 
 | Property | Value |
 |----------|-------|
@@ -423,6 +418,9 @@ described in [PROFILES.md](PROFILES.md). The additional resource-sensitive
 profiles below remain design directions; R-0445 first exposes source-scoped
 resource facts, and later profile tasks decide which facts become enforceable
 budgets.
+
+Whether profiles belong in the language specification, and whether one may change what an accepted
+program does, is [OPEN-124](../spec/decisions.md#OPEN-124).
 
 ### What execution profiles would provide
 
@@ -639,13 +637,13 @@ See [../research/stdlib/concurrency.md](../../research/stdlib/concurrency.md) fo
 | Shutdown | Return from `main`, OS cleanup | No change needed |
 | Failure | No panic, no unwind, explicit errors, abort-on-OOM | Allocator traits |
 | Allocation | libc malloc/realloc/free, abort-on-OOM | Allocator traits, arenas |
-| Deallocation | Linear ownership + explicit `defer` | Automatic `Destroy` insertion possible |
+| Deallocation | Linear ownership + explicit `defer` | No implicit destruction, permanently (OWN-13) |
 | Stack | Unbounded, OS guard page | Bounded stack analysis for high-integrity |
 | Capability tracking | `Alloc` tracks allocation, `Unsafe` tracks pointers | Authority budgets, sandboxing |
 | Stdlib layers | Core/Alloc/Hosted classification documented | Compiler-enforced layer boundaries |
 | Execution profiles | Not yet implemented; direction documented | `no_alloc`, `bounded_alloc`, `high_integrity` |
 | Performance | LLVM `-O2`, no custom optimizations | Compile-time baselines, integration timing |
 | FFI ownership | Linear types consumed by-value; raw pointers untracked | Verified FFI envelopes, ownership annotations |
-| FFI calling convention | `#[repr(C)]` structs passed by value for extern fn | Already implemented |
+| FFI calling convention | `#[repr(C)]` struct arguments passed by value (FFI-11) | The `Layout` authority classifies them (R-0502) |
 | Boundedness | Capability reports show allocation/unsafe usage | Static allocation/stack analysis, `--report boundedness` |
 | Concurrency | Not yet implemented; research documented | OS threads first, structured scopes, capability-gated concurrency, simulation-backed evidence later |

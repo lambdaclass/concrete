@@ -746,7 +746,7 @@ Owns the shared raw-memory specification with S7, block–offset/provenance memo
 **Semantics decisions (2026-10-21):** layout is unspecified unless a `repr` guarantees it, each `repr`
 guarantees only its documented properties, code relies on nothing but `sizeof`, `alignof` and array
 stride = `sizeof`, and one `Layout` owns every fact; `Option` and `Result` are laid out per
-instantiation like every generic enum ([LAYOUT_CONTRACT §3.3 – §3.4](../platform/LAYOUT_CONTRACT.md)).
+instantiation like every generic enum ([LAYOUT_CONTRACT §3.3 – §3.4](../archive/design-records/LAYOUT_CONTRACT.md)).
 Bug 122's per-instantiation repair is not deferred to this task; it lands under exit 0b.
 
 **Exit:** Memory CFG has executable semantics and a verifier; `Layout` emits checked

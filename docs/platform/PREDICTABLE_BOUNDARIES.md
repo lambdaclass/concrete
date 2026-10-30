@@ -31,7 +31,7 @@ Predictable functions cannot allocate, call FFI, or use blocking I/O capabilitie
 | `free` | No | Blocked by no-allocation gate | |
 | `realloc` | No | Blocked by no-allocation gate | |
 | `abort` | No | `abort` requires Process capability | Blocked by no-blocking gate |
-| `printf` | Only from `main` wrapper | Compiler-emitted, not user code | `main` wrapper prints return value |
+| `printf` | No | Declared, never called by the `main` wrapper | The runtime writes nothing ([STMT-7](../spec/statements.md#STMT-7)) |
 | `write` | Via Console capability | Console is allowed in predictable | `print`/`println` use write(2) |
 | `strlen` | No | String operations imply Alloc | |
 | `memcpy` | No | Vec/String operations imply Alloc | |
@@ -98,7 +98,10 @@ The only resources predictable code may hold are file descriptors from Console (
 ### What "bounded" means (and what it does not)
 
 A loop is classified `bounded` only when a variable appearing in its condition is stepped
-**toward** the bound by a constant:
+**toward** the bound by a constant. The examples use the C-style `for`, which
+[STMT-6](../spec/statements.md#STMT-6)@3 removes in favour of the counted loop
+`for i from a until b`, whose termination measure is `b - i` ([STMT-12](../spec/statements.md#STMT-12));
+both are pending ([bug 331](../bugs/331_c_style_for_loops_are_accepted_and_the_counted_l.md)), and main still parses only the C-style form:
 
 ```
 for (let mut i = 0; i < n; i = i + 1)     bounded    -- i increases toward n
@@ -304,29 +307,25 @@ bridges and measurements.
 |-------------|-----------|-----------|-------------|
 | Explicit error return | Yes | `Result<T, E>` propagation | Normal control flow, caller handles |
 | OOM (malloc null) | No | No allocation in predictable code | |
-| Null pointer deref | Only in trusted | Safe code has no raw pointers | SIGSEGV if triggered |
-| Integer overflow | Trap (abort) | Ordinary `+ - *` are checked (ROADMAP #10 Stage 2.3) | Aborts on overflow; `wrapping_*` for intentional modular |
-| Array out-of-bounds | Trap (abort) | Safe `arr[i]` is runtime-checked | See below |
+| Null pointer deref | Only in trusted | Safe code cannot dereference a raw pointer ([TRUST-4](../spec/trusted.md#TRUST-4)) | SIGSEGV if triggered |
+| Integer overflow | Trap (abort) | [ARITH-3](../spec/arithmetic.md#ARITH-3) | `wrapping_*` for intentional modular ([ARITH-4](../spec/arithmetic.md#ARITH-4)) |
+| Array out-of-bounds | Trap (abort) | [MEM-6](../spec/memory.md#MEM-6) | See below |
 | Stack overflow | Possible | Deep (but bounded) call chains | OS guard page → SIGSEGV |
 | abort() | No | Requires Process capability | |
 
 ### Array bounds checking
 
-Safe array indexing (`arr[i]`) inserts a runtime check and aborts when the index
-is negative or outside the declared length. Constant OOB is rejected earlier,
-and a statically discharged in-range obligation may remove the redundant check.
-Trusted/explicitly unchecked pointer access remains outside this guarantee.
+Safe array indexing is [MEM-6](../spec/memory.md#MEM-6); a statically discharged in-range
+obligation may remove the redundant check. Trusted or explicitly unchecked pointer access remains
+outside this guarantee.
 
 ### Integer overflow
 
-Ordinary `+ - *` on fixed-width integers are **checked** (ROADMAP #10 Stage 2.3): on
-signed or unsigned overflow they **trap (abort)**, in every profile. Intentional
-modular arithmetic is the explicit `wrapping_*`; clamping is `saturating_*`. This
-narrows the proof-vs-runtime integer gap: a proof over unbounded integers and the
-checked runtime can only disagree by the runtime *aborting* — never by silently
-producing a wrong (wrapped) value. Division/modulo zero and signed `MIN / -1`,
-invalid shifts, and checked negation follow the same defined trap policy. See
-ARITHMETIC_POLICY.md and PROOF_SEMANTICS_BOUNDARY.md.
+Integer arithmetic is checked in every profile ([ARITH-3](../spec/arithmetic.md#ARITH-3)), with
+`wrapping_*` and `saturating_*` as the named alternatives ([ARITH-4](../spec/arithmetic.md#ARITH-4)).
+This narrows the proof-vs-runtime integer gap: a proof over unbounded integers and the checked
+runtime can only disagree by the runtime *aborting*, never by a wrapped value. See
+PROOF_SEMANTICS_BOUNDARY.md.
 
 ---
 
@@ -359,15 +358,19 @@ negation, and safe array OOB are defined aborts, not UB.
 |-------------|-----|
 | Use-after-free | No allocation, no free |
 | Double free | No allocation |
-| Null pointer deref | No raw pointers in safe code |
+| Null pointer deref | Safe code cannot dereference a raw pointer ([TRUST-4](../spec/trusted.md#TRUST-4)) |
 | Dangling reference | Borrow checker prevents escape |
-| Data race | Single-threaded execution model |
+| Data race | Single-threaded execution model ([STMT-3](../spec/statements.md#STMT-3)) |
 | Uninitialized memory | All variables initialized at declaration |
-| Type confusion | Static type system, no casts in safe code (except numeric) |
+| Type confusion | Static type system; `as` converts numbers ([ARITH-5](../spec/arithmetic.md#ARITH-5)), a newtype and its inner type ([TYPE-24](../spec/types.md#TYPE-24)) and, on main, a reference to a raw pointer ([OPEN-98](../spec/decisions.md#OPEN-98)) |
 
 ### Trusted functions in predictable code
 
-Functions marked `trusted fn` bypass the checker. A predictable program may call trusted functions — they pass the five gates (no recursion, bounded loops, no allocation, no FFI, no blocking) but their bodies are not ownership-checked.
+A `trusted fn` may perform raw-pointer operations and call `extern fn`s without `Unsafe`
+([TRUST-5](../spec/trusted.md#TRUST-5)), and its body is ownership-checked like safe code
+([TRUST-12](../spec/trusted.md#TRUST-12); its two exceptions are
+[OPEN-113](../spec/decisions.md#OPEN-113)); what it does with raw pointers is trusted, not checked.
+A predictable program may call trusted functions that pass the five gates.
 
 `--report effects` classifies trusted functions as `evidence: trusted-assumption`. This means the compiler verifies the function's signature and gate properties but trusts the implementation.
 

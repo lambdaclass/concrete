@@ -38,35 +38,12 @@ Both `CoreCheck` and `EmitSSA` delegate to `Layout` rather than carrying separat
 
 ### `#[repr(C)]`
 
-`#[repr(C)]` gives a C-facing struct layout with explicit validation at extern boundaries.
-
-Current rules:
-
-- `#[repr(C)]` structs cannot have type parameters
-- all `#[repr(C)]` struct fields must be FFI-safe
-- `extern fn` parameters and return types must be FFI-safe
-
-FFI-safe today includes:
-
-- integer types
-- float types
-- `Bool`
-- `Char`
-- `()`
-- raw pointers (`*mut T`, `*const T`)
-- `#[repr(C)]` structs
-
-### `#[repr(packed)]`
-
-`#[repr(packed)]` suppresses normal alignment padding.
-
-It exists for low-level layout control, but should be treated as an ABI-sensitive feature and used carefully.
-
-### `#[repr(align(N))]`
-
-`#[repr(align(N))]` raises alignment.
-
-Current validation ensures alignment requests are coherent and use valid power-of-two values.
+The rules are the specification's: which types are FFI-safe and the `#[repr(C)]` restrictions
+([FFI-3](../spec/ffi.md#FFI-3), [FFI-4](../spec/ffi.md#FFI-4)), what `#[repr(C)]` and
+`#[repr(packed)]` promise ([FFI-8](../spec/ffi.md#FFI-8)), the four layout forms
+([FFI-10](../spec/ffi.md#FFI-10)) and the limits of `#[repr(align(N))]` (FFI-4). `Layout.lean`
+implements them; `#[repr(packed)]` is ABI-sensitive and its misaligned fields are
+[OPEN-111](../spec/decisions.md#OPEN-111).
 
 ## Enum Layout
 
@@ -87,11 +64,11 @@ Builtin `Option` and `Result` currently use a whole-program monomorphic ABI choi
 - it emits one `%enum.Option` and one `%enum.Result`
 - those LLVM types are sized for the largest payload seen across all instantiations
 
-This is correct for the current implementation, but can waste space when small and large payload instantiations coexist in one program.
-
-Future refinement:
-
-- emit distinct LLVM types per concrete instantiation if the additional complexity becomes worthwhile
+This disagrees with the per-instantiation size `Layout.tySize` computes, so aggregate copies can
+move or overrun fields ([bug 122](../bugs/122_builtin_enum_canonical_layout.md)); the fix lays each
+instantiation out on its own, like every generic enum. The two enums' definitions are
+[TYPE-23](../spec/types.md#TYPE-23), and their layout is unspecified like any enum's
+([FFI-7](../spec/ffi.md#FFI-7)).
 
 ## Extern ABI Boundary
 

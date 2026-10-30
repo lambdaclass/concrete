@@ -12,8 +12,7 @@ Date: 2026-06-20 (core), 2026-06-21 (Text/UTF-8 composition)
 Parsers want to store "this field is bytes [off, off+len) of the input" without
 copying. In a language with lifetimes that is a `&[u8]` field; Concrete has **no
 lifetimes**, and references are **second-class — never stored in an aggregate and
-never returned from safe code** (the H1 resolution, see VALUE_MODEL.md /
-references-second-class). So a stored `&Bytes`/`&[u8]` field is not expressible.
+never returned** ([REF-1](../spec/references.md#REF-1), [REF-3](../spec/references.md#REF-3)). So a stored `&Bytes`/`&[u8]` field is not expressible.
 
 Today the only options for a stored parse result are: copy the bytes into an owned
 `Bytes` (allocates, defeats zero-copy), or read through a scoped callback
@@ -129,7 +128,7 @@ remains for the owned-ASCII-newtype case.
 | no mutation, reallocation or destruction while bound | the owner is a private field — **static** (E0298); the view is linear and must be `release`d — **static** (E0208) |
 | survives moves, transfer and package boundaries | the owner travels inside the view |
 | coordinates came from this owner's content | **not established**: `bind`/`of_view` re-validate bounds only |
-| raw pointers (`BytesRaw.ptr`, `RawCursor`) | safe code may hold a pointer value; reading through it needs `Unsafe` — **audited assumption** |
+| raw pointers (`BytesRaw.ptr`, `RawCursor`) | safe code may hold a pointer value; reading through it needs `Unsafe` ([TRUST-4](../spec/trusted.md#TRUST-4)) — **audited assumption** |
 
 Runtime owner identity was considered and not taken: safe code has no global state to mint
 durable ids from, and an address or a length is not identity. Measured on

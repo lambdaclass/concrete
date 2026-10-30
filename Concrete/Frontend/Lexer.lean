@@ -315,6 +315,7 @@ where
 
 /-- Lex a string literal (after opening quote). Only the escapes listed here
     exist; anything else after `\` is an error token (never silently dropped). -/
+-- spec: SYN-5 (docs/spec/syntax.md; this declaration enforces the rule)
 partial def lexStringLoop (s : LexerState) (acc : String) : LexerState × TokenKind :=
   match s.peek with
   | some '"' => (s.advance, .strLit acc)

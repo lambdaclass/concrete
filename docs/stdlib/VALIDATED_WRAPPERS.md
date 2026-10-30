@@ -3,7 +3,8 @@
 Moved from docs/language: a library pattern built on TYPE-11 (construction rights), not a language rule.
 
 The language rules this library pattern relies on are in the specification: newtypes and
-construction rights (TYPE-11), type aliases (TYPE-12) and owned `Text` (TYPE-3) of
+construction rights (TYPE-11), a newtype's representation and conversions (TYPE-21, TYPE-24), type
+aliases (TYPE-12) and owned `Text` (TYPE-3) of
 [docs/spec/types.md](../spec/types.md). This document describes the pattern, not the rules.
 
 Status: stable reference (Phase 3 item 72 closed)
@@ -12,7 +13,7 @@ This document is the stable-direction counterpart to [../research/language/opaqu
 
 > add opaque/newtype validated wrapper types and canonical fallible conversion conventions: zero-cost domain wrappers, smart constructors, checked narrowing/parsing, and explicit `try_from`-style paths should make validated values easy to carry without implicit coercions or ambient convention.
 
-For the underlying layout story, see [LAYOUT_CONTRACT.md](../platform/LAYOUT_CONTRACT.md).
+For the underlying layout story, see [LAYOUT_CONTRACT.md](../archive/design-records/LAYOUT_CONTRACT.md).
 For the broader stdlib direction, see [STDLIB.md](STDLIB.md).
 
 ---
@@ -28,10 +29,8 @@ newtype UserId = Int;
 newtype Wrapper<T> = T;
 ```
 
-- One-field wrapper; the inner type is held positionally as field `.0`.
-- Generics work: `newtype Wrapper<T> = T;`.
-- Inner linearity is preserved: a `newtype` over a linear type is itself linear.
-- Zero-cost: lowers to the inner type in SSA; no runtime indirection.
+A newtype is Copy exactly when its inner type is ([OWN-D1](../spec/ownership.md#OWN-D1)), has its
+inner type's representation ([TYPE-21](../spec/types.md#TYPE-21)) and may be generic.
 
 ### 1.2 Construction
 
@@ -39,7 +38,11 @@ newtype Wrapper<T> = T;
 let id: UserId = UserId(42);
 ```
 
-- `TypeName(value)` is the constructor form. No other construction path; no implicit coercion from the inner type.
+- `TypeName(value)` is the idiomatic constructor, with no implicit coercion from the inner type
+  ([TYPE-4](../spec/types.md#TYPE-4)). `value as TypeName` also constructs one
+  ([TYPE-24](../spec/types.md#TYPE-24)), outside the declaring module too on main, where
+  `TypeName(value)` is refused ([TYPE-11](../spec/types.md#TYPE-11)); whether it should be is
+  [OPEN-123](../spec/decisions.md#OPEN-123).
 
 ### 1.3 Inner access
 
@@ -47,8 +50,10 @@ let id: UserId = UserId(42);
 let raw: Int = id.0;
 ```
 
-- `.0` is the only inner-access path in idiomatic code.
-- `unwrap(id)` exists as an intrinsic fallback but is not the recommended user-facing path; prefer `.0`.
+- `.0` is the idiomatic inner-access path ([TYPE-24](../spec/types.md#TYPE-24)); outside the
+  declaring module it is refused once R-0500 lands ([TYPE-11](../spec/types.md#TYPE-11)).
+- `unwrap(id)` exists as an intrinsic fallback; prefer `.0` (its Core typing is defective, see
+  TYPE-24's rationale).
 
 ### 1.4 Non-coercion
 
@@ -119,7 +124,7 @@ impl Port {
 }
 ```
 
-After construction, the wrapper is trusted: holders can call `.0` directly without re-checking. The validation story is "validate once at the edge, trust after."
+After construction, the wrapper is trusted: code that may read `.0` (the declaring module, and today every holder, until R-0500 lands; [TYPE-11](../spec/types.md#TYPE-11)) reads it without re-checking. The validation story is "validate once at the edge, trust after."
 
 ### 2.4 Error types
 
@@ -147,7 +152,7 @@ Module-local error enums are preferred over shared vocabularies so wrappers stay
 
 ## 3. Interaction with Layout
 
-Validated wrappers do **not** make layout guarantees. See [LAYOUT_CONTRACT.md](../platform/LAYOUT_CONTRACT.md) section 4.
+Validated wrappers do **not** make layout guarantees. See [LAYOUT_CONTRACT.md](../archive/design-records/LAYOUT_CONTRACT.md) section 4.
 
 - A validated wrapper is not `#[repr(transparent)]`. It is not guaranteed to cross FFI boundaries as its inner type.
 - For FFI values that also need domain meaning, the recommended shape is: extern boundary uses the raw inner type, and the first thing the callee does is `Type::try_from_*`.
@@ -220,4 +225,4 @@ No known compiler-level gaps remain against the convention. Each was tracked, fi
 
 **Resolved (2026-04-25):** instance-method dispatch on newtypes. `p.value()` where `p: Port` now resolves against `Port`'s inherent impl; previously the type was erased to `u16` in elaboration so dispatch landed on the inner type. `resolveTypeE` no longer erases newtypes; the newtype constructor and `.0` field access carry the wrapper name through as a representation no-op cast (Layout sees the same LLVM type either way). Demo: `tests/programs/newtype_method_dispatch.con`.
 
-**Resolved (2026-04-25):** narrow cast exemption — guards the wrapper contract from `as`-bypass. The first cut of the dispatch fix exempted *any* cast where either side named a newtype, which made `p as bool` and `b as Port` compile and bypass the smart-constructor contract in §2. The exemption is now precise: a cast is allowed past the validity table only when one side is a newtype `N` and the other side equals `N`'s resolved inner type (after generic substitution) — i.e., exactly the wrap/unwrap representation cast that Elab inserts. The previously-overbroad `hasTypeVar` check (which treated every `.named _` as a type parameter) is also tightened to recognise concrete user-defined struct/enum/newtype names. Negative regressions: `tests/programs/error_newtype_cast_to_unrelated.con`, `tests/programs/error_newtype_cast_from_unrelated.con`.
+**Resolved (2026-04-25):** narrow cast exemption — guards the wrapper contract from an `as` to or from an unrelated type ([TYPE-24](../spec/types.md#TYPE-24); `as` to and from the inner type outside the declaring module is [OPEN-123](../spec/decisions.md#OPEN-123)). The first cut of the dispatch fix exempted *any* cast where either side named a newtype, which made `p as bool` and `b as Port` compile and bypass the smart-constructor contract in §2. The exemption is now precise: a cast is allowed past the validity table only when one side is a newtype `N` and the other side equals `N`'s resolved inner type (after generic substitution) — i.e., exactly the wrap/unwrap representation cast that Elab inserts. The previously-overbroad `hasTypeVar` check (which treated every `.named _` as a type parameter) is also tightened to recognise concrete user-defined struct/enum/newtype names. Negative regressions: `tests/programs/error_newtype_cast_to_unrelated.con`, `tests/programs/error_newtype_cast_from_unrelated.con`.

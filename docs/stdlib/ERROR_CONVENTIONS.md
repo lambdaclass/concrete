@@ -26,15 +26,13 @@ meaningfully branch on.
 Conventions:
 - `Option` when absence needs no explanation; `Result` when the caller may need
   to distinguish causes. Never `Result<T, Unit>` — use `Option`.
-- Error payloads follow linearity like any value: non-Copy error types must be
-  consumed on every path (the checker enforces this; see `ok_or`'s `E: Copy`
-  bound in `std/src/option.con` for the pattern when a payload may be dropped).
-- Propagation matches `Result`/`Option` exhaustively and writes the returning arm.
-  That ordinary early return runs `defer` for exited scopes. There is no postfix
-  propagation syntax, throw/catch, exception table, or hidden unwinding.
-- Ignored results are NOT silent: discarding a must-use value is E0286; a bare
-  pure non-Unit Copy expression statement is E0294 with the `discard(expr)`
-  escape. New stdlib `Result`-returning APIs are must-use by default.
+- Error payloads follow linearity like any value ([OWN-2](../spec/ownership.md#OWN-2)); see `ok_or`'s `E: Copy`
+  bound in `std/src/option.con` for the pattern when a payload may be dropped.
+- Propagation matches `Result`/`Option` exhaustively and writes the returning arm, an ordinary
+  return that runs `defer` ([STMT-11](../spec/statements.md#STMT-11)); there is no unwinding
+  ([STMT-2](../spec/statements.md#STMT-2)) and no propagation syntax.
+- Ignored results are not silent ([OWN-6](../spec/ownership.md#OWN-6),
+  [OWN-7](../spec/ownership.md#OWN-7)).
 
 ```concrete reject:E0294
 mod m {
@@ -50,12 +48,15 @@ mod m {
 For INVARIANT failures: states a correct program never reaches, where limping
 on would corrupt memory or silently produce wrong values.
 
-- checked arithmetic: `+ - * / %` trap on overflow/div-zero in every profile
-  (wrapping_*/saturating_* are the explicit opt-outs)
-- array bounds: raw `a[i]` is runtime-checked; OOB read/write traps
-- OOM on the global allocator path
-- explicit `assert_` failure; contract-violation traps
-- checked float→int casts (NaN/inf/out-of-range abort)
+- checked arithmetic ([ARITH-3](../spec/arithmetic.md#ARITH-3); `wrapping_*` / `saturating_*`
+  are the named alternatives, [ARITH-4](../spec/arithmetic.md#ARITH-4))
+- array bounds ([MEM-6](../spec/memory.md#MEM-6))
+- OOM on the global allocator path ([STMT-2](../spec/statements.md#STMT-2))
+- an explicit `abort()` ([STMT-13](../spec/statements.md#STMT-13)); whether a violated contract
+  traps at run time is [OPEN-125](../spec/decisions.md#OPEN-125) (main does not check contracts
+  at run time)
+- float-to-integer conversions ([ARITH-5](../spec/arithmetic.md#ARITH-5),
+  [OPEN-107](../spec/decisions.md#OPEN-107))
 
 Conventions:
 - A fatal path never ALSO gets a `Result` spelling in the same API. If a caller
@@ -84,11 +85,10 @@ see which bucket every public API's failure modes fall into.
 ## Process exit (the CLI projection of bucket 1)
 
 A program-level recoverable failure maps to the process boundary as: message
-to STDERR, nonzero EXIT CODE, stdout untouched. Compiled `main`'s return value
-IS the process exit code (8-bit masked; Unit main exits 0; nothing is echoed —
-see `docs/platform/MAIN_EXIT_MODEL.md`). The idiom, per `examples/base64_cli`:
+to STDERR, nonzero EXIT CODE, stdout untouched. Compiled `main`'s result is the
+process exit status ([STMT-7](../spec/statements.md#STMT-7)). The idiom, per `examples/base64_cli`:
 match the `Result`/`Option`, `eprintln` the message, return nonzero. Traps
-(bucket 2) surface as abnormal termination (signal), which shells already
+(bucket 2) surface as abnormal termination ([STMT-2](../spec/statements.md#STMT-2)), which shells already
 distinguish from status codes — do not convert a trap into a status.
 
 ## Classification checklist for a new stdlib API

@@ -7,7 +7,7 @@ any method table (`Concrete.Coherence.checkProgram`). TRAIT-1 to TRAIT-7 are wha
 refuses. They were filed as bug 186 ([record](../bugs/186_trait_impl_selection_is_a_search.md)).
 TRAIT-8 to TRAIT-10 are the per-declaration checks Check and CoreCheck make after it: an impl
 names a declared trait, conforms to its trait's signatures, and every bound a caller instantiates
-is satisfied.
+is satisfied. TRAIT-11 states that destruction cannot fail.
 
 An identity here is never a spelling. A trait is the compiler's builtin `Destroy` or a
 declaration (its defining module and name; traits are module-local, they cannot be imported). An
@@ -524,3 +524,39 @@ fn main() -> Int {
 }
 ```
 
+<a id="TRAIT-11"></a>
+### TRAIT-11. Destruction cannot fail
+
+**TRAIT-11@1.** The method `destroy` of the builtin trait `Destroy` returns `Unit`, so destroying a value reports no failure, and cleanup that can fail is a consuming method that returns its outcome.
+
+- Kind: guarantee
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.ccCheckModuleDecls
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** A destructor runs from `destroy(x)`, from a deferred call and from a collection's
+drop glue, none of which has a place to put an error, so an error there would be silently dropped
+(OWN-6). An impl whose `destroy` returns anything else is refused by TRAIT-9 (E0582, `expected
+return type ()`). Fallible cleanup, such as closing a file whose final flush can fail, is an
+ordinary consuming method (`close(self) -> Result<Unit, E>`) that the caller matches. The receiver
+form of `destroy` is OPEN-60, and the capabilities it may require are OWN-13's.
+
+```con accept name=destroy-returns-unit exit=42
+struct R { v: Int }
+
+impl Destroy for R {
+    fn destroy(self) {
+        let R { v: x } = self;
+    }
+}
+
+fn main() -> Int {
+    let r: R = R { v: 1 };
+    destroy(r);
+    return 42;
+}
+```

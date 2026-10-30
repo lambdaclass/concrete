@@ -113,12 +113,12 @@ Every stdlib type has one clear ownership story. The story is visible from the t
 
 **The ownership rules**:
 - **Allocating types** (`String`, `Vec`, `Bytes`, `HashMap`, etc.) are linear. They must be explicitly dropped. They are constructed with `new` and destroyed with `drop`. `defer x.drop()` at the declaration site is the canonical cleanup pattern.
-- **No implicit auto-drop**. Stdlib APIs must not rely on scope-end destruction
+- **No implicit auto-drop** ([OWN-13](../spec/ownership.md#OWN-13)). Stdlib APIs must not rely on scope-end destruction
   that the user did not write. `drop()` may recursively destroy live owned
   fields/elements after the user explicitly consumes the owner, but the owner
   boundary is always visible as `x.drop()` or `defer x.drop()`.
-- **Copy types** (`Option<T>` where T is Copy, numeric results, small structs) are Copy. They can be used multiple times without consumption.
-- **Borrowed types** (`Slice<T>`, `Text`, `&String`, `&Vec<T>`) do not own their data. They cannot outlive the owner. They are created from an owner and carry no cleanup obligation.
+- **Copy types** (`Option<T>` where T is Copy, numeric results, small structs declared `Copy`; [TYPE-14](../spec/types.md#TYPE-14)) are Copy. They can be used multiple times without consumption.
+- **Borrowed types** (`&String`, `&Vec<T>`) do not own their data and carry no cleanup obligation. `Text` owns an immutable copy of its bytes ([TYPE-3](../spec/types.md#TYPE-3)); a `Slice<T>` is a library view holding a raw pointer, and nothing checks that it does not outlive its owner.
 
 **The borrowing rules for APIs**:
 - Methods that read take `&self`.
@@ -192,7 +192,7 @@ displace a value is listed here (audit 2026-10-21, from
 | `map.HashMap::update`, `ordered_map.OrderedMap::update` | `(&mut self, key: &K, f: fn(V) -> V) -> bool` | **Displaced value handed to `f`**, which owns it and returns the replacement. A missing key returns `false` without calling `f`; nothing changes hands. |
 | `vec.Vec::set`, `slice.MutSlice::set` | `(&mut self, at, value: T) -> bool` | Out of range returns `false`; `T: Copy`, so nothing owned is lost. |
 | `vec.Vec::set_unchecked`, `slice.MutSlice::set_unchecked` | `(&mut self, at, value: T)` | Overwrites without returning or destroying the old element, so it is **`T: Copy` only**. *Changed 2026-10-21*: it accepted any `T` and silently lost a displaced linear element. Linear elements use `Vec::replace`. |
-| builtin `vec_get`, `vec_set` (legacy free functions) | `(&Vec<T>, i) -> T`, `(&mut Vec<T>, i, value: T)` | **`T: Copy` only.** *Changed 2026-10-21* (bug 115): `vec_get` copied a linear element out while the `Vec` kept it (a `String` taken twice double-freed), and `vec_set` overwrote one without returning it. Linear elements leave through `vec_pop`, `Vec::pop` / `swap_remove` / `replace`, or are read in place with `Vec::with_at`. |
+| builtin `vec_get`, `vec_set` (legacy free functions) | `(&Vec<T>, i) -> T`, `(&mut Vec<T>, i, value: T)` | **`T: Copy` only**: a linear element is refused by [OWN-8](../spec/ownership.md#OWN-8) (`vec_get`, E0290) and [OWN-9](../spec/ownership.md#OWN-9) (`vec_set`, E0291). *Changed 2026-10-21* (bug 115): `vec_get` copied a linear element out while the `Vec` kept it (a `String` taken twice double-freed), and `vec_set` overwrote one without returning it. Linear elements leave through `vec_pop`, `Vec::pop` / `swap_remove` / `replace`, or are read in place with `Vec::with_at`. |
 | `test.assert_*`, `test.expect_sink` | `(.., message: String) -> bool` | **Consumed**: the diagnostic message is consumed on both outcomes; `false` reports a failed assertion, not a failed resource operation. |
 
 Outside the table, because they report no failure of their own: the
@@ -235,7 +235,7 @@ The stdlib has exactly three representations for sequential data, and their boun
 
 **Borrowed views**:
 - `Slice<u8>` borrows into `Bytes` or `[u8; N]`
-- `Text` borrows into `String`
+- `Text` is an owned copy, not a view ([TYPE-3](../spec/types.md#TYPE-3))
 - `&[u8; N]` borrows a fixed array
 
 **The boundary rules**:
@@ -317,7 +317,7 @@ When there is a choice between a shorter API that hides behavior and a longer AP
 
 - **Checked vs. unchecked access**: both exist, both are named. `get` is checked. `get_unchecked` is unchecked. The name carries the cost.
 - **Allocation vs. no-allocation**: `new()` does not allocate (returns empty container with null pointer). `with_capacity(n)` allocates. The difference is visible in the function name and the capability requirement.
-- **Owned vs. borrowed**: `String` is owned. `&String` is borrowed. `Text` is a borrowed view. The type name tells you the ownership story.
+- **Owned vs. borrowed**: `String` is owned. `&String` is borrowed. `Text` owns an immutable copy ([TYPE-3](../spec/types.md#TYPE-3)). The type name tells you the ownership story.
 - **Error handling**: `Result<T, E>` is explicit about failure modes. `Option<T>` is explicit about absence. There is no sentinel value or magic return code.
 - **Drop is explicit**: `defer s.drop()` is not hidden by a destructor. The cleanup point is visible in the source. Recursive cleanup of fields or collection elements is allowed only as the implementation of that explicit drop.
 
@@ -358,7 +358,7 @@ All fallible stdlib operations use the same error pattern:
 - Recoverable errors propagate through exhaustive `match` and an explicit returning arm.
 
 **The rules**:
-- No module invents its own result type. All use the canonical builtin `Result<T, E>`.
+- No module invents its own result type. All use the builtin `Result<T, E>` ([TYPE-23](../spec/types.md#TYPE-23)).
 - Error enums are small, flat, and named by module. `FsError` has variants like `NotFound`, `PermissionDenied`, `IoFailed`. Not `Error(String)`.
 - Conversion between error types is explicit. `ServiceError::from_auth_error(e)` is a function call, not an implicit trait implementation.
 

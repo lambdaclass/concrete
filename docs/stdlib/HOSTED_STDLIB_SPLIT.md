@@ -82,7 +82,7 @@ This split may require `fmt` to expose both a core buffer-writing API and an all
 | `vec` | `Vec<T>` — growable array | Heap-backed, realloc on growth |
 | `string` | `String` — owned mutable UTF-8 | Heap-backed buffer |
 | `bytes` | `Bytes` — owned byte buffer | Heap-backed buffer |
-| `text` | Borrowed text views over `String` | Borrows from alloc-layer types |
+| `text` | Owned immutable UTF-8 text ([TYPE-3](../spec/types.md#TYPE-3)) | Copies from alloc-layer types |
 | `path` | Path manipulation, owned path buffer | String-backed, no filesystem access |
 | `deque` | Double-ended queue | Heap-backed ring buffer |
 | `heap` | Priority queue (binary heap) | Heap-backed array |

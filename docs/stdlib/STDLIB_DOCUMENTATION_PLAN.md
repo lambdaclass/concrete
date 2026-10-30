@@ -54,10 +54,10 @@ Every public function and method must have:
 Example:
 
 ```
-/// Return the element at the given index, or None if out of bounds.
+/// Return a copy of the element at the given index, or None if out of bounds.
 ///
-/// The returned reference borrows from the Vec and must not outlive it.
-pub fn get(&self, at: u64) -> Option<&T> { ... }
+/// No function returns a reference (REF-1); a non-Copy element is read in place with `with_at`.
+pub fn get(&self, at: u64) -> Option<T> { ... }
 ```
 
 Functions that are obvious from name and signature (e.g., `len`, `is_empty`, `clear`) need only a one-line summary or can rely on the naming convention documented in STDLIB_DESIGN_PRINCIPLES.md.
@@ -106,7 +106,7 @@ Every module documentation should include at least one **standalone example** th
 ```
 import std.vec.{Vec};
 
-fn main() with(Alloc) -> i32 {
+fn main() with(Alloc) -> u8 {
     let mut v: Vec<i32> = Vec::<i32>::new();
     defer v.drop();
 
@@ -134,7 +134,7 @@ fn main() with(Alloc) -> i32 {
 import std.fs.{read_to_string, FsError};
 import std.io.{println};
 
-fn main() with(Unsafe, Alloc, Console) -> i32 {
+fn main() with(Unsafe, Alloc, Console) -> u8 {
     let path: String = "example.txt";
     let result: Result<String, FsError> = read_to_string(&path);
     path.drop();
@@ -318,7 +318,7 @@ A newcomer to Concrete should learn these five modules first, in this order.
 ```
 import std.io.{println};
 
-fn main() with(Console, Alloc) -> i32 {
+fn main() with(Console, Alloc) -> u8 {
     let msg: String = "Hello, Concrete!";
     println(&msg);
     msg.drop();
@@ -342,7 +342,7 @@ fn main() with(Console, Alloc) -> i32 {
 
 **What to learn**: `Vec::<T>::new()`, `push`, `pop`, `get` (returns `Option`), `len`, `drop`.
 
-**Key concept**: `Option<&T>` return from `get` -- introduces checked access and the match pattern.
+**Key concept**: `Option<T>` return from `get` (no function returns a reference, REF-1) -- introduces checked access and the match pattern.
 
 ### 4. `std.option` and `std.result` -- Error handling
 

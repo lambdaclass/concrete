@@ -1,6 +1,6 @@
 # ABI and FFI Maturity Statement
 
-This document describes Concrete's current ABI stability, FFI safety model, platform assumptions, and what is intentionally left unstable.
+This document describes Concrete's current ABI stability, FFI safety model, platform assumptions, and what is intentionally left unstable. The language rules are in the specification's [FFI chapter](../spec/ffi.md) (FFI-1 to FFI-12) and [trusted chapter](../spec/trusted.md) (TRUST-4, TRUST-5); this document describes the implementation and cites them.
 
 For the exploratory design direction behind the source-facing `repr` surface, see [../research/language/layout-contract-surface.md](../../research/language/layout-contract-surface.md).
 
@@ -13,10 +13,10 @@ For the exploratory design direction behind the source-facing `repr` surface, se
 | `#[repr(packed)]` struct layout | Implemented, tested | **Yes** — no padding between fields |
 | `#[repr(align(N)]` minimum alignment | Implemented, tested | **Yes** — power-of-two enforced |
 | `extern fn` declarations (scalar params) | Implemented, tested | **Yes** — scalars passed by value, C-compatible |
-| `extern fn` declarations (`#[repr(C)]` struct params) | Implemented, tested | **Yes** — `#[repr(C)]` structs passed by value per C ABI |
-| `trusted extern fn` declarations | Implemented, tested | **Yes** — no capability required |
+| `extern fn` declarations (`#[repr(C)]` struct params) | Implemented for structs of integer fields | Pending: [FFI-11](../spec/ffi.md#FFI-11) (R-0502); returns are [OPEN-122](../spec/decisions.md#OPEN-122) |
+| `trusted extern fn` declarations | Implemented, tested | **Yes** — callers need no `Unsafe`, and its declared effects bind them ([TRUST-5](../spec/trusted.md#TRUST-5)) |
 | FFI safety validation | Implemented, tested | **Yes** — CoreCheck enforces at compile time |
-| Non-repr struct layout | Implemented | **No** — compiler may change field ordering or padding |
+| Non-repr struct layout | Implemented | **No** — unspecified ([FFI-7](../spec/ffi.md#FFI-7)) |
 | Enum representation | Implemented | **No** — i32 tag + payload is an implementation detail |
 | Pass-by-pointer convention | Implemented | **No** — which types are passed by pointer may change |
 | Calling convention | LLVM default | **No** — no explicit calling convention annotation |
@@ -36,7 +36,7 @@ Concrete currently targets **64-bit platforms only**. The following sizes are ha
 | `f64` | 8 | 8 | |
 | `f32` | 4 | 4 | |
 | `Bool` | 1 | 1 | LLVM `i1`, stored as `i8` in aggregates |
-| `Char` | 1 | 1 | ASCII byte |
+| `Char` | 1 | 1 | one byte ([TYPE-20](../spec/types.md#TYPE-20)) |
 | `()` (unit) | 0 | 1 | Zero-sized |
 | Pointers (`&T`, `*mut T`, etc.) | 8 | 8 | 64-bit pointers |
 | `String` | 24 | 8 | `ptr + i64 len + i64 cap` |
@@ -44,7 +44,7 @@ Concrete currently targets **64-bit platforms only**. The following sizes are ha
 | `HashMap<K,V>` | 40 | 8 | 5 × 8-byte fields |
 | Enum tag | 4 | 4 | Always `i32` discriminant |
 
-**No 32-bit support.** There is no conditional compilation, no target triple awareness, and no platform-dependent layout logic. All layout decisions are compile-time constants in Lean.
+**No 32-bit support.** There is no conditional compilation, no target triple awareness, and no platform-dependent layout logic. All layout decisions are compile-time constants in Lean. Which of these target facts are language rules is [OPEN-126](../spec/decisions.md#OPEN-126); a program observes sizes only through `sizeof` and `alignof` ([FFI-7](../spec/ffi.md#FFI-7)).
 
 ### Supported targets
 
@@ -59,51 +59,27 @@ Concrete currently targets **64-bit platforms only**. The following sizes are ha
 
 ## FFI Safety Model
 
-### What is FFI-safe
-
-A type is FFI-safe (can appear in `extern fn` signatures and `#[repr(C)]` struct fields) if it is one of:
-
-- Integer types: `i8`, `i16`, `i32`, `Int` (i64), `u8`, `u16`, `u32`, `Uint` (u64)
-- Float types: `f32`, `f64`
-- `Bool`, `Char`, `()` (unit)
-- Raw pointers: `*mut T`, `*const T`
-- `#[repr(C)]` structs (recursively: all fields must also be FFI-safe) — layout-compatible and passed by value in `extern fn` calls
-
-### What is NOT FFI-safe
-
-- `String`, `Vec<T>`, `HashMap<K,V>` — opaque managed types
-- References: `&T`, `&mut T` — not raw pointers
-- Enums — even with all-FFI-safe variant fields
-- Non-`#[repr(C)]` structs
-- Generic types (type parameters)
-- `Heap<T>`, `HeapArray<T>` — managed heap types
-
-### Validation
-
-FFI safety is enforced at compile time by `CoreCheck`:
-
-- `extern fn` parameters and return types must be FFI-safe
-- `#[repr(C)]` struct fields must be FFI-safe
-- `#[repr(C)]` structs cannot have type parameters (no generic repr(C))
-- `#[repr(packed)]` and `#[repr(align(N))]` cannot be combined
-- `#[repr(align(N))]` requires `N` to be a power of two
-- `#[repr(C)]` cannot be applied to enums
-
-Violations are compile errors — there is no way to bypass FFI safety without modifying the compiler.
+Which types may appear in an `extern fn` signature and in a `#[repr(C)]` struct is
+[FFI-3](../spec/ffi.md#FFI-3) and [FFI-4](../spec/ffi.md#FFI-4): `String`, `Vec`, `HashMap`,
+references, enums ([OPEN-110](../spec/decisions.md#OPEN-110)), unannotated structs, type
+parameters, `Heap` and `HeapArray` are not FFI-safe. CoreCheck enforces both at compile time; which
+`repr` forms exist, and that none applies to an enum, is [FFI-10](../spec/ffi.md#FFI-10).
 
 ### Capability requirements
 
-- `extern fn` calls require the `Unsafe` capability
-- `trusted extern fn` calls require no capability (the compiler author vouches for safety)
-- A method is trusted only when it declares `trusted fn` itself; an impl block confers no trust (`trusted impl` is refused, bug 189)
+Calling an `extern fn` needs `Unsafe` ([TRUST-4](../spec/trusted.md#TRUST-4)); a `trusted fn` or a
+`trusted extern fn` waives only that `Unsafe`, never the effects an extern declares, and trust is
+declared per function, never on an `impl` block (`trusted impl` is refused, bug 189;
+[TRUST-5](../spec/trusted.md#TRUST-5)).
 
 ## Struct Layout Rules
 
 ### `#[repr(C)]` structs
 
-Fields are laid out in declaration order with natural alignment padding, matching the C struct layout convention. Struct size is rounded up to the struct's alignment.
-
-**Calling convention:** `#[repr(C)]` structs are passed **by value** in `extern fn` calls, matching the standard C ABI. The compiler detects extern fn calls and emits by-value parameters for `#[repr(C)]` struct arguments instead of the pointer indirection used for internal Concrete calls. This means `extern fn` declarations that take `#[repr(C)]` struct parameters interoperate correctly with C code that expects by-value structs. Non-repr(C) structs are still passed by pointer in all contexts (see Pass-by-Pointer Convention below).
+The layout `#[repr(C)]` promises is [FFI-8](../spec/ffi.md#FFI-8), and passing such a struct by
+value to an `extern fn` is [FFI-11](../spec/ffi.md#FFI-11) (pending R-0502). The compiler detects
+extern calls and emits by-value parameters for `#[repr(C)]` struct arguments instead of the pointer
+indirection used for internal Concrete calls (see Pass-by-Pointer Convention below).
 
 Example: `#[repr(C)] struct Packet { tag: i8, payload: i32, flags: i16 }`
 - `tag` at offset 0, size 1
@@ -113,19 +89,15 @@ Example: `#[repr(C)] struct Packet { tag: i8, payload: i32, flags: i16 }`
 - 2 bytes tail padding (align struct to 4)
 - Total size: 12, alignment: 4
 
-### `#[repr(packed)]` structs
+### `#[repr(packed)]` and `#[repr(align(N))]` structs
 
-No padding between fields. Alignment is 1. Fields at consecutive byte offsets.
-
-Same example packed: size 7 (1 + 4 + 2), alignment 1.
-
-### `#[repr(align(N))]` structs
-
-Minimum alignment of `N` bytes (must be power of two). Combines with natural field layout — `align` increases but never decreases alignment.
+What `#[repr(packed)]` promises is [FFI-8](../spec/ffi.md#FFI-8) (the example packed: size 7,
+alignment 1); `#[repr(align(N))]` and its limits are [FFI-4](../spec/ffi.md#FFI-4).
 
 ### Non-repr structs
 
-Compiler-controlled layout. Currently follows declaration order with natural alignment, but this is **not guaranteed** and may change.
+Compiler-controlled layout ([FFI-7](../spec/ffi.md#FFI-7)). Currently follows declaration order
+with natural alignment.
 
 ## Enum Layout
 
@@ -144,13 +116,13 @@ Enums use a tagged-union representation:
   raises the alignment without adding bytes (bug 121; `check_enum_union_layout.sh` leg 5 compares
   LLVM's layout of every emitted type with the compiler's)
 
-This representation is **not stable** and should not be relied upon across FFI boundaries. Enums are not FFI-safe.
+This representation is unspecified ([FFI-7](../spec/ffi.md#FFI-7)); enums are not FFI-safe ([OPEN-110](../spec/decisions.md#OPEN-110)).
 
 ## Pass-by-Pointer Convention
 
 Aggregate types (structs, enums, arrays, `String`, `Vec`, `HashMap`) are passed by pointer in **internal** Concrete function calls. The caller allocates stack space, stores the value, and passes a pointer. Scalar types (integers, floats, bool, char) are passed by value.
 
-**Exception for extern fn:** `#[repr(C)]` struct arguments in `extern fn` calls are flattened to integer registers per the platform C ABI. On ARM64: structs ≤ 8 bytes are passed as one `i64`, structs 9-16 bytes as two `i64`s, structs > 16 bytes by pointer. Return values from extern fns follow the same flattening for ≤ 8 byte structs. This matches clang's calling convention and enables correct interoperability with C code.
+**Exception for extern fn:** `#[repr(C)]` struct arguments in `extern fn` calls are flattened to integer registers per the platform C ABI. On ARM64: structs ≤ 8 bytes are passed as one `i64`, structs 9-16 bytes as two `i64`s, structs > 16 bytes by pointer. Return values from extern fns follow the same flattening for ≤ 8 byte structs. This is AAPCS64's rule for structs of integer fields, applied on every target; structs of float fields are not classified as homogeneous aggregates ([FFI-11](../spec/ffi.md#FFI-11), pending R-0502).
 
 Non-repr(C) structs in extern fn calls still use pointer passing (but non-repr(C) structs are rejected in extern fn signatures by the FFI type checker, so this case should not arise in practice).
 
@@ -162,7 +134,7 @@ These are not hypothetical — they are current implementation gaps that affect 
 
 1. **No empirical cross-platform validation.** Layout is verified by Lean unit tests and by cross-target IR compilation (25 programs verified against x86_64 via clang). There are no runtime cross-platform tests — only same-platform Concrete↔C interop validation (sizeof/offsetof/by-value passing on ARM64).
 
-2. **Struct return flattening limited to ≤ 8 bytes.** Extern fns returning repr(C) structs ≤ 8 bytes have the return value correctly flattened to i64. Larger struct returns still use pointer indirection, which may not match the C ABI for 9-16 byte structs.
+2. **Struct return flattening limited to ≤ 8 bytes.** Extern fns returning repr(C) structs ≤ 8 bytes have the return value flattened to i64 (stored as 8 bytes even into a smaller struct's slot). Larger struct returns may not match the C ABI. Whether returns are promised is [OPEN-122](../spec/decisions.md#OPEN-122).
 
 ## Desired Source-Level Contract Surface
 
@@ -182,7 +154,7 @@ The language should not promise a large Rust-style menu of representation tricks
 
 1. **ABI compatibility across compiler versions.** Recompile everything when the compiler changes.
 2. **Stable symbol names.** Mangled symbols live in the `_C` namespace, but their spelling may change (it moves to `DefId`s with R-0492); a C caller uses `#[export_name]`.
-3. **Non-repr struct layout.** Only `#[repr(C)]` and `#[repr(packed)]` have guaranteed layout.
+3. **Non-repr struct layout.** See [FFI-7](../spec/ffi.md#FFI-7) and [FFI-8](../spec/ffi.md#FFI-8).
 4. **Enum representation.** Tag size, payload offset, and discriminant values may change.
 5. **32-bit support.** Not planned for the near term.
 6. **Cross-language enum interop.** Enums are not FFI-safe.
@@ -191,7 +163,7 @@ The language should not promise a large Rust-style menu of representation tricks
 
 ## Layout Verification
 
-The layout module (`Concrete/Check/Layout.lean`) is meant to be the single source of truth for all type sizes, alignments, field offsets, pass-by-pointer decisions, and LLVM type mappings, and `Lower.lean` and `EmitSSA.lean` delegate to it. One exception remains on main: the builtin `Option` / `Result` union is computed program-wide by `EmitSSA.scanBuiltinEnumArgs` (bug 122). The normative rule (one authority; code relies only on `sizeof` / `alignof` and array stride) is [LAYOUT_CONTRACT.md §3.3 – §3.4](LAYOUT_CONTRACT.md#33-what-code-may-rely-on-and-who-owns-layout-normative-decided-2026-10-21).
+The layout module (`Concrete/Check/Layout.lean`) is meant to be the single source of truth for all type sizes, alignments, field offsets, pass-by-pointer decisions, and LLVM type mappings, and `Lower.lean` and `EmitSSA.lean` delegate to it. One exception remains on main: the builtin `Option` / `Result` union is computed program-wide by `EmitSSA.scanBuiltinEnumArgs` (bug 122). The rules are [FFI-2](../spec/ffi.md#FFI-2) (one authority, pending R-0502), [FFI-7](../spec/ffi.md#FFI-7) (`sizeof` / `alignof`) and [FFI-12](../spec/ffi.md#FFI-12) (stride); the reasoning is the design record [LAYOUT_CONTRACT.md](../archive/design-records/LAYOUT_CONTRACT.md).
 
 Layout properties are verified by:
 

@@ -5,7 +5,7 @@ Status: stable reference index
 ABI, FFI, data layout, targets, runtime boundaries, profiles, freestanding operation, and
 predictable-platform constraints.
 
-Start with [ABI.md](ABI.md), [FFI.md](FFI.md), [LAYOUT_CONTRACT.md](LAYOUT_CONTRACT.md), and
+Start with [ABI.md](ABI.md), [FFI.md](FFI.md), [LAYOUT_CONTRACT.md](../archive/design-records/LAYOUT_CONTRACT.md) (design record; the rules are in the spec's FFI chapter), and
 [PROFILES.md](PROFILES.md).
 
 RocksDB slice 1 (R-0285) groundwork, its acceptance gate and the gaps blocking it:

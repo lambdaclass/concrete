@@ -14,7 +14,7 @@ The observations below come from source and documentation review; benchmark
 results have not been independently reproduced. Concrete's
 [design policy](../../docs/project/PROJECT.md#design-policy),
 [recorded decisions](../../docs/project/PROJECT.md#language-decisions), and
-[layout contract](../../docs/platform/LAYOUT_CONTRACT.md) remain authoritative.
+[layout contract](../../docs/archive/design-records/LAYOUT_CONTRACT.md) remain authoritative.
 The investigation is recorded under [roadmap questions](../../docs/project/ROADMAP_TASKS.md#open-research-questions-goose).
 
 ## Remaining Runtime Checks

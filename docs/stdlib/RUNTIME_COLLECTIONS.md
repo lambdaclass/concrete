@@ -77,7 +77,7 @@ sound because the checker won't let you forget.
 Four decisions, each marked permanent or v1:
 
 1. **`Destroy` is infallible-only — PERMANENT semantic rule, not a v1
-   restriction.** A destructor cannot return `Result` (what would a
+   restriction** ([TRAIT-11](../spec/traits.md#TRAIT-11)). A destructor cannot return `Result` (what would a
    container's drop do with 50 close errors?), so any type whose cleanup can
    fail must NOT implement `Destroy`. Fallible cleanup stays an explicit
    linear consumer — `close(self) -> Result` — exactly as `io.Writer`/
@@ -102,7 +102,8 @@ Four decisions, each marked permanent or v1:
    capability-laundering path (the fs.con leak class, arriving through
    generated code). This invariant is non-negotiable.
 4. **v1 glue is `with(Alloc)` — DOCUMENTED V1 RESTRICTION, not the final
-   model.** Under rule 1, every `Destroy` impl the stdlib actually has needs
+   model.** The language rule today is [OWN-13](../spec/ownership.md#OWN-13): a `Destroy`
+   implementation requires no capability beyond `Alloc`; rule 3's model would change it. Under rule 1, every `Destroy` impl the stdlib actually has needs
    at most `Alloc` (String, Bytes, nested containers — memory cleanup), so
    rule 3 holds degenerately and the front-end machinery for symbolic
    "capabilities of `T`'s destructor" in generic checking (an associated
@@ -122,7 +123,7 @@ Four decisions, each marked permanent or v1:
 
 Two adjacent rules pinned at the same time:
 
-- **Disposal stays forced-explicit — PERMANENT.** The generated glue runs
+- **Disposal stays forced-explicit — PERMANENT** ([OWN-13](../spec/ownership.md#OWN-13)). The generated glue runs
   only inside an explicit `.drop()` / `defer x.drop()`; the compiler never
   inserts destruction at scope end. E0208 (linear value not consumed) remains
   the error. Implicit scope-end auto-drop is the precise step that would turn

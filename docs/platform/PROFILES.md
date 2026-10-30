@@ -28,14 +28,16 @@ Those should not blur together. Profiles make the boundaries explicit.
 ## Profiles are policy bundles, not arithmetic modes
 
 A profile selects *enforcement, diagnostics, optimization assumptions, evidence
-floors, and reporting* — it never changes what a source program means. The
+floors, and reporting*; on main no profile changes what an accepted program does. Whether profiles
+belong in the language specification, and whether one may change behaviour (OPEN-97 asks it for a
+build profile omitting a check), is [OPEN-124](../spec/decisions.md#OPEN-124); for arithmetic the
+rule is [ARITH-9](../spec/arithmetic.md#ARITH-9). The
 trust profiles below (Safe / Predictable / Proof / high-integrity) are an
 admission-strictness axis; the build profiles in ROADMAP #10 (debug / release)
 are an enforcement/optimization axis. Neither axis flips source semantics: a
 reviewer must never need to know the profile to know whether `a + b` wraps.
-Arithmetic meaning is fixed and explicit — checked `+ - *`, explicit
-`wrapping_*` / `saturating_*` — per [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md)
-§14. Ordinary arithmetic and raw safe indexing now lower to checked runtime
+Arithmetic meaning is fixed by its spelling ([ARITH-3](../spec/arithmetic.md#ARITH-3),
+[ARITH-4](../spec/arithmetic.md#ARITH-4), [ARITH-9](../spec/arithmetic.md#ARITH-9)). Ordinary arithmetic and raw safe indexing now lower to checked runtime
 paths in every profile; stronger profiles may require static discharge, but may
 not reinterpret the source operation.
 
@@ -43,19 +45,19 @@ not reinterpret the source operation.
 
 **Status: real, enforced today.**
 
-This is the ordinary checked Concrete surface. All compiled code gets these guarantees unless it opts into `trusted` or `with(Unsafe)`.
+This is the ordinary checked Concrete surface. All compiled code gets these guarantees; `trusted` and `with(Unsafe)` permit only the raw operations of [TRUST-5](../spec/trusted.md#TRUST-5) and relax no ownership rule ([TRUST-12](../spec/trusted.md#TRUST-12); its exceptions are [OPEN-113](../spec/decisions.md#OPEN-113)).
 
 ### Gates (compiler-enforced)
 
 | Gate | What it rejects |
 |------|----------------|
-| Ownership tracking | Use-after-move, double free, forgotten linear values |
-| Borrow checking | Borrow conflicts, borrow escape, frozen-variable access |
-| Linearity | Overwrite of a live linear value, cross-loop consumption, skip past linear |
-| Capability containment | Callers must declare superset of callee capabilities |
-| Control flow agreement | Branches must agree on linear variable consumption |
-| `&mut T` tracking | Borrow-block exclusive refs consumed on call; no aliasing |
-| Cleanup ordering | `defer` runs LIFO at scope exit |
+| Ownership tracking | Use-after-move, forgotten linear values ([OWN-1](../spec/ownership.md#OWN-1), [OWN-2](../spec/ownership.md#OWN-2)) |
+| Borrow checking | Borrow conflicts, borrow escape ([REF-8](../spec/references.md#REF-8), the references chapter) |
+| Linearity | Overwrite of a live linear value, cross-loop consumption ([OWN-9](../spec/ownership.md#OWN-9), [OWN-4](../spec/ownership.md#OWN-4)) |
+| Capability containment | [TRUST-4](../spec/trusted.md#TRUST-4) |
+| Control flow agreement | [OWN-3](../spec/ownership.md#OWN-3) |
+| `&mut T` tracking | Passing a `&mut` lends it for the call, and it may be passed again ([REF-10](../spec/references.md#REF-10)); no aliasing |
+| Cleanup ordering | [STMT-11](../spec/statements.md#STMT-11) |
 
 All gates are hard errors. The program cannot compile and violate them.
 
@@ -101,6 +103,8 @@ References: [MEMORY_GUARANTEES.md](../verification/MEMORY_GUARANTEES.md), [GUARA
 This is the restricted execution-oriented profile aimed at code that should be easier to audit for execution shape: no unbounded allocation, no recursion, no hidden blocking.
 
 ### Gates (five gates, reporting + optional enforcement)
+
+Whether these gates are rules of the language is [OPEN-124](../spec/decisions.md#OPEN-124).
 
 | Gate | What it checks | Violation reason |
 |------|---------------|-----------------|
