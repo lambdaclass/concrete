@@ -57,8 +57,8 @@ def aliasImports : List ImportDecl :=
 def resolveAlias : Except Diagnostics ResolvedImports :=
   resolveImports aliasImports [("lib", buildFileSummary libModule)]
     (fun m => "unknown " ++ m) (fun s m => s ++ " not public in " ++ m)
-    -- the importer declares no types of its own (bug 242's `importerTypes`)
-    []
+    -- the importer declares no types of its own (bug 242's `importerTypes`; bug 226: the importer's summary)
+    (default : FileSummary)
 
 def aliasKeepsDefinitionSite : Bool :=
   match resolveAlias with
@@ -89,7 +89,7 @@ def transitiveImports : List ImportDecl :=
 def transitiveKeepsDefinitionSite : Bool :=
   match resolveImports transitiveImports
       [("transitive", buildFileSummary transitiveModule)]
-      (fun m => "unknown " ++ m) (fun s m => s ++ " not public in " ++ m) [] with
+      (fun m => "unknown " ++ m) (fun s m => s ++ " not public in " ++ m) (default : FileSummary) with
   | .error _ => false
   | .ok ri =>
       match ri.structs.find? (fun sd => sd.name == "Leaf") with

@@ -1061,11 +1061,7 @@ private def summaryImports (summaryTable : List (String × FileSummary)) (s : Fi
           let stdOwn := modSummary.any fun (_, ms) =>
             ms.definitionPath == stdPrivateModulePath && inStdPackage s.definitionPath
               && (ms.functions ++ ms.externFnSigs).any (·.1 == sym.name)
-          if refusal == some .stdPrivate then
-            (errs ++ [mkResolveDiag (.stdPrivateImport sym.name imp.moduleName) (some imp.span)], syms, tys)
-          else if refusal == some .notPublic then
-            (errs ++ [mkResolveDiag (.notPublicInModule sym.name imp.moduleName) (some imp.span)], syms, tys)
-          else if (pubNames.contains sym.name || stdOwn) && unimportable.isNone then
+          if refusal.isNone && (pubNames.contains sym.name || stdOwn) && unimportable.isNone then
             let localName := sym.effectiveName
             -- Try to bring the symbol into scope from the module summary
             match modSummary with
@@ -1112,7 +1108,8 @@ private def summaryImports (summaryTable : List (String × FileSummary)) (s : Fi
               | none => (errs, syms, tys)
             | none => (errs, syms, tys)
           else
-            let err := match unimportable with
+            let err := if refusal == some .stdPrivate then ResolveError.stdPrivateImport sym.name imp.moduleName
+              else match unimportable with
               | some kind => ResolveError.unimportable kind sym.name imp.moduleName
               | none => .notPublicInModule sym.name imp.moduleName
             (errs ++ [mkResolveDiag err (some imp.span)], syms, tys)
