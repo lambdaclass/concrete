@@ -36,8 +36,8 @@ ROADMAP.md	OD16	decided: a struct literal in an if/while/match head is refused u
 ROADMAP.md	OD17	decided: a field write requires a mut binding	rule	dup:OWN-10	ownership	cite	OPEN-17 retired; OWN-10@2 partial bug 216
 ROADMAP.md	OD18	decided: first matching arm in source order wins; an unreachable arm is refused (replaces CoreCanonicalize catch-all reordering)	rule	dup:PAT-9	patterns	cite	OPEN-18 retired; PAT-9 pending R-0500
 ROADMAP.md	OD19	decided: the provable subset admits discarded statements, guards and ranges as their Core semantics land	rule	-	-	none	not a language rule: retired into the PROVABLE_V1 scope
-ROADMAP.md	OD20	decided: std's internal std.libc bindings are private to std; programs cannot see them	rule	dup:MOD-6	modules	cite	OPEN-20 retired; MOD-6 pending bug 226
-ROADMAP.md	OD21	decided: only the declaring module constructs a newtype or touches private fields; a parent gets no rights over its child	rule	dup:TYPE-11	types	cite	OPEN-21 retired; parent case pending R-0011
+ROADMAP.md	OD20	decided: std's internal std.libc bindings are private to std; programs cannot see them	rule	dup:MOD-6	modules	cite	OPEN-20 retired; MOD-6 enforced since bug 226 was fixed (E0326)
+ROADMAP.md	OD21	decided: only the declaring module constructs a newtype or touches private fields; a parent gets no rights over its child	rule	dup:TYPE-11	types	cite	OPEN-21 retired; parent case enforced since bug 311 was fixed (E0296, E0298); newtype unwrap outside the module still pending R-0011
 ROADMAP.md	OD22	decided: trust is per method (trusted fn only); trusted impl stays refused	rule	dup:TRUST-5	trusted	cite	OPEN-22 retired; TRUST-5@2
 ROADMAP.md	OD23	decided: every call argument incl. receiver and re-lent &mut bindings is overlap-checked against its root; r.add(r.step) refused	rule	dup:REF-11	references	cite	never an OPEN entry (strictness pass); REF-11@3 partial bug 319
 ROADMAP.md	OD24	decided: main returns u8 or Unit (exit 0); no masking, no bool mapping, no other result type	rule	dup:STMT-7	statements	cite	STMT-7@3 partial bug 320; never OPEN

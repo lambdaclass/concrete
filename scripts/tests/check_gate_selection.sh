@@ -119,12 +119,16 @@ printf '%s/%s\n' research README.md > "$TMPD/research.paths"
 if select_fixture research "$TMPD/research.paths"; then
   must research check_doc_links.sh
   n="$(count research)"
-  # Up to 5: the link gate, the hole-status gate, and the fast surface gates (plain and --mutate), which
-  # run the spec gate. Its S13 check reads docs/spec/absorb_inventory.tsv, and that file names every
-  # documentation file, so editing or deleting any note can change its verdict. Corpus runners must
-  # still never be selected (checked for the docs-only diff above).
+  # Four today: the link gate, the hole-status gate, and the fast surface gates (plain and --mutate),
+  # which run the spec gate. Its S13 check reads docs/spec/absorb_inventory.tsv, and that file names
+  # documentation files, so editing or deleting a note can change its verdict. The cap of 5 leaves one
+  # command of slack; corpus runners are refused for this diff explicitly below.
   if [ "$n" -le 5 ]; then ok "a research-note diff selects $n gate command(s)"
   else no "a research-note diff selects $n gate commands (> 5)"; fi
+  heavy="$(grep -E 'run_tests\.sh|check_examples\.sh|test_ssa\.sh|check_example_outputs\.sh' "$TMPD/research.sel" || true)"
+  if [ -z "$heavy" ]; then ok "the research-note diff selects no corpus runner"
+  else no "the research-note diff selects a corpus runner: $heavy"; fi
+  sed 's/^/         /' "$TMPD/research.sel"
 fi
 
 echo "=== rules: compiler, shared library, fail-safe ==="
