@@ -171,8 +171,17 @@ TEST_SUMMARY_FILE="$TMP/summary" bash scripts/tests/run_tests.sh --full --no-wai
   || no "run_tests.sh --full --no-wait returned $rc: $(tail -3 "$TMP/full.out" | tr '\n' ' ')"
 
 echo "=== C13: the default suite mode and identity sweeps take a slot ==="
+# With the slots free, a heavy probe acquires, reports heavy=1, and its exit releases the slot.
+kill "${PIDS[@]: -2}" 2>/dev/null; sleep 0.5
+rm -rf "$CONCRETE_HEAVY_DIR"; mkdir -p "$CONCRETE_HEAVY_DIR"
+out="$(TEST_SUMMARY_FILE="$TMP/p0.summary" bash scripts/tests/run_tests.sh --no-wait --slot-probe 2>&1)"; rc=$?
+[ "$rc" = 0 ] && grep -q "slot-probe: mode=fast heavy=1" <<<"$out" && [ "$(live_slots)" = 0 ] \
+  && ok "with a free slot the default mode acquires one (heavy=1) and releases it on exit" \
+  || no "free-slot probe returned $rc ($out), $(live_slots) slots left"
+holder F; holder G
+wait_for "$TMP/F.acq" 10; wait_for "$TMP/G.acq" 10
 # --slot-probe takes (or skips) the slot exactly as the mode would, prints the decision and stops,
-# so no suite runs here. D and E still hold both slots.
+# so no suite runs here. F and G hold both slots.
 TEST_SUMMARY_FILE="$TMP/p1.summary" bash scripts/tests/run_tests.sh --no-wait --slot-probe >"$TMP/p1.out" 2>&1; rc=$?
 [ "$rc" = 75 ] && grep -q "no heavy slot" "$TMP/p1.out" \
   && ok "the default mode with --no-wait exits 75 while both slots are held" \
