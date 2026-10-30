@@ -117,14 +117,20 @@ fi
 # maps no file, so the fail-safe below is untouched. Assembled at run time, like the unmapped path.
 printf '%s/%s\n' research README.md > "$TMPD/research.paths"
 if select_fixture research "$TMPD/research.paths"; then
-  must research check_doc_links.sh
+  # Exactly these four, and nothing else. The selector reads a data file's path cells as dependency
+  # edges, and the spec's absorption inventory names the research index, so the gate that reads the
+  # inventory (the docs-drift gate's S13) is selected, through the fast surface gates, plain and
+  # --mutate. The link and hole-status gates read Markdown. An exact set rather than a cap: a cap
+  # would let a new selection, a corpus runner included, hide in its slack. (No path is spelled in
+  # this comment: the selector reads a spelled path as a use, class 19.) The two gate names below are
+  # assembled at run time for the same reason: naming a gate makes this check read what that gate reads.
+  HOLES="$(printf '%s_%s' check_hole_status consistency.sh)"; SURF="$(printf '%s_%s' run_fast_surface gates.sh)"
+  must research check_doc_links.sh "$HOLES" "$SURF"
   n="$(count research)"
-  # Four today: the link gate, the hole-status gate, and the fast surface gates (plain and --mutate),
-  # which run the spec gate. Its S13 check reads docs/spec/absorb_inventory.tsv, and that file names
-  # documentation files, so editing or deleting a note can change its verdict. The cap of 5 leaves one
-  # command of slack; corpus runners are refused for this diff explicitly below.
-  if [ "$n" -le 5 ]; then ok "a research-note diff selects $n gate command(s)"
-  else no "a research-note diff selects $n gate commands (> 5)"; fi
+  if [ "$n" -eq 4 ]; then ok "a research-note diff selects exactly the 4 expected gate commands"
+  else no "a research-note diff selects $n gate commands (expected exactly 4: the link, hole-status and fast surface gates, plain and --mutate)"; fi
+  if grep -qx "bash scripts/tests/$SURF --mutate" "$TMPD/research.sel"; then ok "the research-note diff selects the fast surface gates with --mutate"
+  else no "the research-note diff does not select the fast surface gates with --mutate"; fi
   heavy="$(grep -E 'run_tests\.sh|check_examples\.sh|test_ssa\.sh|check_example_outputs\.sh' "$TMPD/research.sel" || true)"
   if [ -z "$heavy" ]; then ok "the research-note diff selects no corpus runner"
   else no "the research-note diff selects a corpus runner: $heavy"; fi
