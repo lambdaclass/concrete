@@ -10,7 +10,7 @@ Status: stable reference (Phase 3, items 73 and 78)
 
 This document defines Concrete's visibility model and the module hygiene guarantees that must hold before stdlib freeze and package management. It covers the current state, the target rules, what the compiler must enforce, and how to validate that modules expose clean, stable interfaces.
 
-For the language identity, see [IDENTITY.md](../../project/IDENTITY.md).
+For the language identity, see [PROJECT.md, Identity](../../project/PROJECT.md#identity).
 For anti-features, see [ANTI_FEATURES.md](../../project/ANTI_FEATURES.md).
 For the stdlib design principles, see [STDLIB_DESIGN_PRINCIPLES.md](../../stdlib/STDLIB_DESIGN_PRINCIPLES.md).
 For the core/hosted boundary, see [HOSTED_STDLIB_SPLIT.md](../../stdlib/HOSTED_STDLIB_SPLIT.md).

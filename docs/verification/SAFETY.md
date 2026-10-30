@@ -306,5 +306,5 @@ High-Integrity ── future profile: same language, stricter rules
 | Report modes | [PASSES.md](../compiler/PASSES.md) | This document |
 | Proof boundary | [ARCHITECTURE.md](../compiler/ARCHITECTURE.md) | This document, [PASSES.md](../compiler/PASSES.md) |
 | Execution model | [EXECUTION_MODEL.md](../platform/EXECUTION_MODEL.md) | [STDLIB.md](../stdlib/STDLIB.md) |
-| High-integrity profile | This document | [IDENTITY.md](../project/IDENTITY.md), [EXECUTION_MODEL.md](../platform/EXECUTION_MODEL.md) |
+| High-integrity profile | This document | [PROJECT.md, Identity](../project/PROJECT.md#identity), [EXECUTION_MODEL.md](../platform/EXECUTION_MODEL.md) |
 | ABI / FFI safety | [ABI.md](../platform/ABI.md) | [FFI.md](../platform/FFI.md), [VALUE_MODEL.md](../language/VALUE_MODEL.md) |

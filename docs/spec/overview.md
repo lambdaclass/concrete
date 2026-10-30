@@ -28,7 +28,7 @@ entries. An invariant with no entry yet is a gap in the specification, tracked b
   behaviour raises audit cost and is a correctness concern, not style.
 - **New features justify their cost** in grammar, audit and proof; one that makes the language
   harder to parse, review or prove without a correspondingly large benefit is rejected or delayed
-  ([DESIGN_POLICY.md](../project/DESIGN_POLICY.md)).
+  ([design policy](../project/PROJECT.md#design-policy)).
 - **Reproducible builds.** The same source and compiler give the same binary: no timestamps, random
   seeds or environment-dependent output.
 - **Diagnostics stay structured** through the main pipeline; the compiler may report several errors
