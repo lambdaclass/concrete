@@ -17,13 +17,13 @@ of [docs/spec/ids.tsv](../spec/ids.tsv), or the generator refuses the record.
 
 <!-- BEGIN GENERATED: spec rulings (scripts/gen/bug_ledger.py; edit the records' ruling lines) -->
 
-299 bug records, 296 of them ruled: violates a rule 188, spec gap 1, open owner question 4, permitted by a rule 1, outside the spec 102; not ruled yet (fixed bugs filed before bug 300) 3. Open bugs are in bold.
+300 bug records, 297 of them ruled: violates a rule 189, spec gap 1, open owner question 4, permitted by a rule 1, outside the spec 102; not ruled yet (fixed bugs filed before bug 300) 3. Open bugs are in bold.
 
 ### By kind
 
 | ruling | bugs | open | silent |
 |---|--:|--:|--:|
-| violates a rule | 188 | 18 | 89 |
+| violates a rule | 189 | 19 | 90 |
 | spec gap | 1 | 0 | 0 |
 | open owner question | 4 | 0 | 0 |
 | permitted by a rule (not a bug) | 1 | 0 | 0 |
@@ -39,7 +39,7 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 | pipeline.md | PASS | 43 | 2 | 7 | 43 | 0 | 0 | 0 |
 | modules.md | MOD | 30 | 0 | 11 | 30 | 0 | 0 | 0 |
 | types.md | TYPE | 21 | 2 | 13 | 21 | 0 | 0 | 0 |
-| ownership.md | OWN | 19 | 3 | 8 | 19 | 0 | 0 | 0 |
+| ownership.md | OWN | 20 | 4 | 9 | 20 | 0 | 0 | 0 |
 | scope.md | SCOPE | 13 | 0 | 5 | 13 | 0 | 0 | 0 |
 | memory.md | MEM | 12 | 1 | 7 | 12 | 0 | 0 | 0 |
 | statements.md | STMT | 12 | 2 | 10 | 11 | 1 | 0 | 0 |
@@ -74,6 +74,7 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 | TRUST-4@1 | trusted.md | 4 | 071, 091, 185, 188 |
 | FFI-5@1 | ffi.md | 3 | 103, **114**, 129 |
 | MOD-3@2 | modules.md | 3 | 028, 082, 218 |
+| OWN-10@2 | ownership.md | 3 | 030, **216**, **338** |
 | OWN-15@2 | ownership.md | 3 | 003, 018, 190 |
 | REF-6@1 | references.md | 3 | 104, 107, 131 |
 | ARITH-2@1 | arithmetic.md | 2 | 002, 088 |
@@ -83,7 +84,6 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 | MEM-5@1 | memory.md | 2 | 144, 146 |
 | MOD-2@1 | modules.md | 2 | 226, 230 |
 | MOD-9@1 | modules.md | 2 | 223, 233 |
-| OWN-10@2 | ownership.md | 2 | 030, **216** |
 | OWN-11@1 | ownership.md | 2 | 147, 148 |
 | OWN-5@2 | ownership.md | 2 | 145, 197 |
 | OWN-8@2 | ownership.md | 2 | 115, 144 |

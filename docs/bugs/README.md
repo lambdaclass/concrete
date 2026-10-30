@@ -501,6 +501,7 @@ the report counts those bugs as ambiguous.
 - [328_a_method_taking_self_or_mut_self_is_called_on_an.md](328_a_method_taking_self_or_mut_self_is_called_on_an.md) — A method taking &self or &mut self is called on an owned place with an implicit borrow, which OWN-15 refuses as the owner decided OD32 on 2026-10-29
 - [332_a_float_literal_of_type_f32_is_rounded_twice_thr.md](332_a_float_literal_of_type_f32_is_rounded_twice_thr.md) — A float literal of type f32 is rounded twice, through binary64, instead of once
 - [333_an_extra_type_argument_to_a_body_less_generic_de.md](333_an_extra_type_argument_to_a_body_less_generic_de.md) — An extra type argument to a body-less generic declaration is ignored natively and fails at run time under --interp
+- [338_a_borrow_mut_block_borrows_a_binding_not_declare.md](338_a_borrow_mut_block_borrows_a_binding_not_declare.md) — A borrow mut block borrows a binding not declared mut, so the block writes to an immutable binding
 
 <!-- END GENERATED: bug list -->
 
