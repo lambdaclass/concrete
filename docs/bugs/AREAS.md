@@ -12,13 +12,13 @@ checker refusal is a Check bug here.
 
 <!-- BEGIN GENERATED: bug areas (scripts/gen/bug_ledger.py; derived from the records, docs/bugs/area_map.tsv and git history, never edited here) -->
 
-298 records: 177 placed by their own fix commits, 37 by the files their record names in commits shared with other bugs, 33 by commits shared with other bugs, 13 by the commit that filed or closed the record, 23 by an `area:` override; 15 open bugs are not fixed yet and 0 fixed bugs have no commit the history can place.
+299 records: 178 placed by their own fix commits, 37 by the files their record names in commits shared with other bugs, 33 by commits shared with other bugs, 13 by the commit that filed or closed the record, 23 by an `area:` override; 15 open bugs are not fixed yet and 0 fixed bugs have no commit the history can place.
 
 ### By stage
 
 | stage | bugs | open | silent | shared or fallback | top modules |
 |--|-:|-:|-:|-:|--|
-| Check | 72 | 0 | 39 | 5 | Check 33, CoreCheck 13, CheckHelpers 9, Verify 5 |
+| Check | 73 | 0 | 40 | 5 | Check 34, CoreCheck 13, CheckHelpers 9, Verify 5 |
 | Lower | 42 | 2 | 15 | 5 | Lower 41, - 1 |
 | Resolve | 27 | 1 | 4 | 7 | Resolve 15, FileSummary 7, PeekType 2, BuiltinEnums 1 |
 | Elab | 26 | 0 | 9 | 7 | Elab 25, TypeSpelling 1 |
@@ -51,7 +51,7 @@ checker refusal is a Check bug here.
 | 10. Evidence identity computed from a partial subject | 5 | Proof 3, Elab 2 |
 | 11. Absence read as a fact (fail-open defaults) | 15 | Gates 4, Tooling 3, Resolve 2, Proof 2, Report 2, Check 1, SSA 1 |
 | 12. One fact kept in two places | 29 | Resolve 11, Check 5, Interp 4, Elab 3, Parse 2, Proof 1, Std 1, CLI 1, Tooling 1 |
-| 13. Documented rules with no enforcing site | 21 | Check 11, Resolve 4, Lower 3, Parse 1, Elab 1, Report 1 |
+| 13. Documented rules with no enforcing site | 22 | Check 12, Resolve 4, Lower 3, Parse 1, Elab 1, Report 1 |
 | 14. Trusted `std` and FFI code with no checked contract | 7 | Std 5, Parse 1, Check 1 |
 | 15. Ownership state not modeled along control-flow paths | 7 | Check 7 |
 | 16. Artifacts at paths no run owns | 5 | Tooling 2, Std 1, CLI 1, Gates 1 |
@@ -77,7 +77,7 @@ checker refusal is a Check bug here.
 | violates SYN | 4 | Parse 2, Report 1, Tooling 1 |
 | violates TRAIT | 4 | Check 3, Resolve 1 |
 | violates TRUST | 4 | Check 2, Parse 1, Proof 1 |
-| violates TYPE | 19 | Check 12, Resolve 3, Elab 2, Lower 1, Proof 1 |
+| violates TYPE | 20 | Check 13, Resolve 3, Elab 2, Lower 1, Proof 1 |
 | spec gap STMT | 1 | Interp 1 |
 | open | 4 | Resolve 2, Check 1, Report 1 |
 | permitted | 1 | Lower 1 |
@@ -371,6 +371,7 @@ checker refusal is a Check bug here.
 | [307](307_a_call_argument_mut_x_passed_a_temporary_copy_of.md) | Lower | Lower | commits | — | permitted by REF-14@1 |
 | [308](308_a_value_if_or_match_passed_to_a_generic_paramete.md) | Resolve | PeekType | commits | — | open OPEN-46 |
 | [309](309_a_loop_in_the_right_operand_of_or_rebound_an_agg.md) | Lower | Lower | commits | — | violates PASS-9@1 |
+| [311](311_a_destructuring_let_in_another_module_binds_a_st.md) | Check | Check | commits | — | violates TYPE-11@1 |
 | [315](315_the_scaling_gate_judged_wall_time_growth_on_a_ho.md) | Gates | compile_scaling | commits | — | outside (tooling) |
 | [316](316_browser_lean_the_browser_compiler_root_did_not_b.md) | Tooling | test-parity | commits | — | outside (tooling) |
 | [318](318_a_struct_literal_in_an_if_while_or_match_head_is.md) | Report | Report | record | Check | violates SYN-4@1 |
