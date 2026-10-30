@@ -337,8 +337,9 @@ postfix_expr = primary_expr { postfix_op } ;
 (* After '.': IDENT or INT have distinct first tokens.              *)
 (* After '. IDENT': peek for '::' (turbofish), '(' (call),         *)
 (* or neither (field access).                                       *)
-(* 6D#3: postfix '->' IDENT (member access) was REMOVED; '->' remains only  *)
-(* in fn return types. What '.' reaches through a reference or a heap cell  *)
+(* 6D#3: postfix '->' IDENT (member access) was REMOVED; this grammar uses *)
+(* '->' only in fn return types (main also accepts it in a match arm,      *)
+(* OPEN-128). What '.' reaches through a reference or a heap cell          *)
 (* is MEM-4 (docs/spec/memory.md); the heap form's spelling is OPEN-36.     *)
 postfix_op = '.' postfix_dot
            | '[' expr ']'

@@ -161,6 +161,8 @@ fresh_copy; mutate "$TMP/n/spec/overview.md" 's.replace("| [Scope and Binding](s
   && control "N1h: two chapters with one prefix in the chapter map" S1 "gives prefix REF-" -- lint "${SP[@]}"
 fresh_copy; mutate "$TMP/n/spec/overview.md" 's.replace("| [Scope and Binding](scope.md) | `SCOPE-` |", "| [Scope and Binding](scope.md) | SCOPE |", 1)' \
   && control "N1i: a malformed chapter map row" S1 "does not parse" -- lint "${SP[@]}"
+fresh_copy; mutate "$TMP/n/spec/overview.md" 's.replace("| [Scope and Binding](scope.md) | `SCOPE-` |", "| [Scope and Binding](scope.md | `SCOPE-` |", 1)' \
+  && control "N1j: a chapter map row with a broken link" S1 "does not parse" -- lint "${SP[@]}"
 fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("name=return-value exit=42", "name=return-value exit=42 colour=red", 1)' \
   && control "N1c: an unknown example attribute" S1 "unknown attribute 'colour'" -- lint "${SP[@]}"
 fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("- Uses: REF-D1\n- Codes: E0236 (check, post-mono)", "- Uses: REF-D9\n- Codes: E0236 (check, post-mono)", 1)' \

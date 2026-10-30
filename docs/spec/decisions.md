@@ -124,7 +124,7 @@ them); they are not separate entries here
 | 98 | [OPEN-132](#OPEN-132) | absorbing the compiler documents and the grammar comments | Polymorphic recursion | not checked | none given | not assessed | — |
 | 99 | [OPEN-133](#OPEN-133) | absorbing the compiler documents and the grammar comments | User functions named `print`, `println` or `append` | not applicable | none given | not assessed | — |
 | 100 | [OPEN-134](#OPEN-134) | reviewing the absorption of docs/stdlib | The capabilities of a container's generated destruction | not assessed | none given | not assessed | — |
-| 101 | [OPEN-135](#OPEN-135) | reviewing the absorption of docs/compiler and docs/platform | A method's `Type_method` name in its module's namespace | not checked | none given | not assessed | — |
+| 101 | [OPEN-135](#OPEN-135) | reviewing the absorption of docs/compiler and docs/platform | A method's `Type_method` name in its module's namespace | not applicable (no methods) | none given | not assessed | — |
 | 102 | [OPEN-136](#OPEN-136) | reviewing the absorption of docs/compiler and docs/platform | std's `process_exit` | not checked | none given | not assessed | — |
 
 <a id="OPEN-33"></a>

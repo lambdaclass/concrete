@@ -89,7 +89,7 @@ def load_spec(root):
     # Fail closed on the chapter map: a row that starts like a map row must parse, and a prefix or a
     # chapter listed twice is refused rather than letting the later row win.
     lines = readme.split("\n")
-    rows = [ln for ln in lines if re.match(r"^\| \[[^\]]*\]\([^)]*\.md\)", ln)]
+    rows = [ln for ln in lines if ln.startswith("| [")]
     bad = [ln for ln in rows if not MAP_ROW.match(ln)]
     if bad:
         raise RulingError(f"the chapter map in {readme_p} has a row that does not parse: {bad[0][:80]}")

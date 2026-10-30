@@ -192,6 +192,19 @@ if [ -f scripts/gen/bug_rulings.py ] && [ -f docs/spec/ids.tsv ] && [ -n "$LEDGE
     || ok "control: a ruling with a line break is refused"
   rcheck --num 100 --open-bug "Violates: unrecorded" && no "control: an open bug was allowed 'Violates: unrecorded'" \
     || ok "control: an open bug cannot be unruled"
+  # The chapter map fails closed: a prefix given to two chapters, or a row that does not parse, is
+  # refused rather than letting another row win (a baseline copy must resolve first).
+  RT="$(mktemp -d)"; mkdir -p "$RT/docs"; cp -R docs/spec "$RT/docs/spec"
+  rcheck --root "$RT" --num 999 --open-bug "Violates: OWN-1@2" && ok "control: the copied chapter map resolves" \
+    || no "control: the unmodified copy of the chapter map was refused"
+  sed -i 's/^| \[Scope and Binding\](scope.md) | `SCOPE-` |/| [Scope and Binding](scope.md) | `REF-` |/' "$RT/docs/spec/overview.md"
+  rcheck --root "$RT" --num 999 --open-bug "Violates: OWN-1@2" && no "control: a chapter map giving one prefix to two chapters was accepted" \
+    || ok "control: a chapter map giving one prefix to two chapters is refused"
+  rm -rf "$RT/docs/spec"; cp -R docs/spec "$RT/docs/spec"
+  sed -i 's/^| \[Scope and Binding\](scope.md) | `SCOPE-` |/| [Scope and Binding](scope.md | `SCOPE-` |/' "$RT/docs/spec/overview.md"
+  rcheck --root "$RT" --num 999 --open-bug "Violates: OWN-1@2" && no "control: a malformed chapter map row was accepted" \
+    || ok "control: a malformed chapter map row is refused"
+  rm -rf "$RT"
   first_listed="$(python3 -I -c 'import sys; sys.path.insert(0, "scripts/gen"); import bug_rulings as b; print(min(b.UNRULED, default=""))')"
   if [ -n "$first_listed" ]; then
     rcheck --num "$first_listed" --fixed "Violates: unrecorded" && ok "control: a fixed bug listed in UNRULED ($first_listed) may still be unruled" \

@@ -342,7 +342,7 @@ docs/stdlib/ERROR_CONVENTIONS.md	*	Std convention; ~6 restated language rules (m
 docs/stdlib/HANDLE_CAPABILITIES_AUDIT.md	*	Std audit, not language; one restated rule (abort needs Process)	-	-	-	keep	-
 docs/stdlib/HOSTED_STDLIB_SPLIT.md	*	cites the spec (2026-10-30 citation pass)	-	-	-	keep	statements corrected in phase 2
 docs/stdlib/RUNTIME_COLLECTIONS.md	*	Std collection design; drop-glue rules partly language-level; borrowed-accessor sections historical	-	-	-	cite-only	-
-docs/stdlib/RUNTIME_COLLECTIONS.md	2 Drop-glue rules 2-3	Destroy propagates conditionally (Vec<T>: Destroy iff T: Destroy); glue capabilities are the union of element destructors' capabilities	semantics	dup:OWN-13	ownership	rationale	left as rationale; the v1 rule is OWN-13 (Alloc only)
+docs/stdlib/RUNTIME_COLLECTIONS.md	2 Drop-glue rules 2-3	Destroy propagates conditionally (Vec<T>: Destroy iff T: Destroy); glue capabilities are the union of element destructors' capabilities	semantics	open:OPEN-134	ownership	open	OWN-13 states the Alloc-only limit main enforces; the capability-union model is OPEN-134 (OD134)
 docs/stdlib/STDLIB.md	*	No language rules: std direction	-	-	-	keep	-
 docs/stdlib/STDLIB_API_REVIEW.md	*	No language rules: std API review	-	-	-	keep	-
 docs/stdlib/STDLIB_AUDIT.md	*	No language rules: std gap analysis	-	-	-	keep	-

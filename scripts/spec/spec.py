@@ -196,12 +196,13 @@ class Spec:
         # (`| `name.md` | `PREFIX-` | ... |`); history checks read such a revision too.
         # Fail closed: every row that starts like a map row must parse, and no chapter or prefix may
         # appear twice (a later row would silently replace an earlier one). The README fallback is
-        # read only when overview.md has no map row at all.
+        # read only when overview.md has no map row at all, and only for revisions from before the
+        # 2026-10-30 split (history checks); those are fixed, so it is not re-validated here.
         ov = os.path.join(self.dir, "overview.md")
         text = open(ov, encoding="utf-8").read() if os.path.exists(ov) else ""
         found, where = [], "overview.md"
         for i, ln in enumerate(text.split("\n")):
-            if not re.match(r"^\| \[[^\]]*\]\([^)]*\.md\)", ln):
+            if not ln.startswith("| ["):
                 continue
             m = re.match(r"^\| \[[^\]]*\]\(([a-z]+)\.md\) \| `([A-Z]+)-` \|", ln)
             if m: found.append((m.group(1), m.group(2)))
