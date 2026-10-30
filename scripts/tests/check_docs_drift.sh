@@ -345,7 +345,7 @@ else
   no "an S13 control was not refused"
 fi
 echo ""
-echo "=== 9. the single-page specification is generated (S9, docs/spec/MAINTAINERS.md §1) ==="
+echo "=== 9. the single-page specification is generated (S9, docs/spec/MAINTAINERS.md §3) ==="
 if out="$(python3 scripts/spec/spec.py single --check 2>&1)"; then
   ok "$(grep -m1 'S9' <<<"$out" | sed 's/^  ok   //')"
 else

@@ -95,7 +95,10 @@ def load_spec(root):
         raise RulingError(f"the chapter map in {readme_p} has a row that does not parse: {bad[0][:80]}")
     pairs = [(m.group(2), m.group(1)) for m in map(MAP_ROW.match, rows)]
     if not pairs:
-        pairs = [(m.group(2), m.group(1)) for m in map(CHAPTER_ROW.match, lines) if m]
+        # a revision from before the 2026-10-30 split kept the table in README.md
+        legacy_p = os.path.join(root, "docs", "spec", "README.md")
+        legacy = open(legacy_p, encoding="utf-8").read() if os.path.exists(legacy_p) else ""
+        pairs = [(m.group(2), m.group(1)) for m in map(CHAPTER_ROW.match, legacy.split("\n")) if m]
     for k in (0, 1):
         dup = sorted({p[k] for p in pairs if [q[k] for q in pairs].count(p[k]) > 1})
         if dup:

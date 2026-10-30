@@ -204,13 +204,13 @@ class Spec:
         for i, ln in enumerate(text.split("\n")):
             if not ln.startswith("| ["):
                 continue
-            m = re.match(r"^\| \[[^\]]*\]\(([a-z]+)\.md\) \| `([A-Z]+)-` \|", ln)
+            m = re.match(r"^\| \[[^\]]*\]\(([a-z_]+)\.md\) \| `([A-Z]+)-` \|", ln)
             if m: found.append((m.group(1), m.group(2)))
             else: self.loose.append(("overview", i + 1, f"chapter map row does not parse as | [Title](name.md) | `PREFIX-` | ...: {ln[:80]}"))
         if not found and not any(c == "overview" for c, _, _ in self.loose):
             where = "README.md"
             readme = open(os.path.join(self.dir, "README.md"), encoding="utf-8").read()
-            found = re.findall(r"^\| `([a-z]+)\.md` \| `([A-Z]+)-` \|", readme, re.M)
+            found = re.findall(r"^\| `([a-z_]+)\.md` \| `([A-Z]+)-` \|", readme, re.M)
         if not found:
             self.loose.append(("overview", 0, "no chapter map (overview.md's | [Title](name.md) | `PREFIX-` | table)"))
         seen_p = {}
@@ -1350,6 +1350,11 @@ def main():
                     f.write(f"{k[0]}\t{k[1] or '-'}\t{len(seen[k])}\t{seen[k][0]}\n")
         check_code_coverage(spec, a.root, seen, n)
     elif c == "single":
+        # A broken chapter map would generate a hollow page that then matches itself: refuse it.
+        bad_map = [why for ch, _, why in spec.loose if ch == "overview"]
+        if not spec.chapters or bad_map:
+            fail("S9", "the chapter map is broken, so the single page is not generated: " + ("; ".join(bad_map) or "no chapters"))
+            sys.exit(1)
         txt = gen_single(spec)
         path = a.out or os.path.join(a.root, SINGLE_PATH)
         if a.check:

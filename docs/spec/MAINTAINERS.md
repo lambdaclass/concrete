@@ -371,7 +371,7 @@ them.
 | `VALUE_FLOW_SPEC.md` and `check_value_flow_spec.sh` | Migrated (step 1): the per-constructor tables are OWN-15 in `ownership.md`. `check_value_flow_spec.sh` stays the owner of constructor coverage and now reads `ownership.md`; it is a fast source gate, so it stays out of `check_spec.sh`, which needs a compiler. VALUE_FLOW_SPEC.md was absorbed into OWN-15's rationale and deleted (S13). |
 | `check_constructor_coverage.sh` | It checks that every compiler walker handles every constructor. That is a fact about the compiler, not the language, so it stays separate. |
 | `check_doc_snippets.sh` (13r: `con`, `con reject:E…`, `con pseudocode`) | It owns snippets in other documents, at the bar of `--emit-core`. Spec examples are stricter: they run, compare both consumers and pin the stage. `docs/spec/` is outside its glob. |
-| `check_docs_drift.sh` | It runs S11 (§6). |
+| `check_docs_drift.sh` | It runs S11 (§6), S13 and the S9 byte check of `SPEC.md`. |
 
 ## 8. Coverage inventory and migration plan
 
@@ -439,6 +439,6 @@ its verdict (a duplicate of an entry, missing, stale, in conflict with one, or a
 question. It is a plan, not a rule; S13 keeps the files it names in step with the tree.
 
 The migration is complete when no `unmigrated` row remains in `codes.tsv` and every row of
-the inventory above is a chapter in the pilot state. From then on S3 refuses any new
+the inventory above is covered by a chapter in the chapter map. From then on S3 refuses any new
 `unmigrated` row. That an area is covered at all is a property of this inventory, which is
 reviewed. Diagnostics alone cannot show that a semantics without a diagnostic has a rule.

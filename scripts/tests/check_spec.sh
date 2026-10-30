@@ -165,6 +165,8 @@ fresh_copy; mutate "$TMP/n/spec/overview.md" 's.replace("| [Scope and Binding](s
   && control "N1j: a chapter map row with a broken link" S1 "does not parse" -- lint "${SP[@]}"
 fresh_copy; mutate "$TMP/n/spec/overview.md" 's.replace("| [Scope and Binding](scope.md) | `SCOPE-` |", "| [Scope and Binding](types.md) | `SCOPE-` |", 1)' \
   && control "N1k: one chapter listed twice in the chapter map" S1 "lists types.md twice" -- lint "${SP[@]}"
+fresh_copy; mutate "$TMP/n/spec/overview.md" 's.replace("| [Scope and Binding](scope.md) | `SCOPE-` |", "| [Scope and Binding](scope.md | `SCOPE-` |", 1)' \
+  && control "N9b: a broken chapter map does not regenerate the single page" S9 "chapter map is broken" -- single --spec "$TMP/n/spec" --out "$TMP/n/single.md"
 fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("name=return-value exit=42", "name=return-value exit=42 colour=red", 1)' \
   && control "N1c: an unknown example attribute" S1 "unknown attribute 'colour'" -- lint "${SP[@]}"
 fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("- Uses: REF-D1\n- Codes: E0236 (check, post-mono)", "- Uses: REF-D9\n- Codes: E0236 (check, post-mono)", 1)' \
