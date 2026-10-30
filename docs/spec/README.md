@@ -61,7 +61,7 @@ areas exist (§8).
 | `modules.md` | `MOD-` | migrated: MOD-1 to MOD-4, MOD-6 and MOD-7 (name resolution, visibility, one binding per name, module files, the privacy of `std.libc` and generated interfaces; MOD-7 pending) |
 | `syntax.md` | `SYN-` | migrated: SYN-1 to SYN-3 (the grammar, operator precedence, reserved spellings) |
 | `traits.md` | `TRAIT-` | migrated: TRAIT-D1, TRAIT-1 to TRAIT-10 (coherence: one impl per trait and type, no overlap, instance locality, impl targets, one method name per type, unambiguous bound calls, order independence; declared traits, impl conformance, satisfied bounds) |
-| `decisions.md` | `OPEN-` | open: the owner decisions of ROADMAP exit 2n still open (OPEN-33 to OPEN-46, OPEN-48 to OPEN-90), stated as questions with no answer encoded; the others were retired when the owner decided them (2026-10-29) |
+| `decisions.md` | `OPEN-` | open: the owner decisions of ROADMAP exit 2n still open (OPEN-33 to OPEN-46, OPEN-48 to OPEN-91), stated as questions with no answer encoded; the others were retired when the owner decided them (2026-10-29) |
 
 **pilot**: the chapter is written in this format and checked by the gate. **stub**: the chapter
 holds only the rules the pilot needed, and the rest of its area migrates later.
