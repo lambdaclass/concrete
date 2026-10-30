@@ -80,7 +80,8 @@ Modes:
 
 Options:
   -j N                Override parallelism (default: number of CPU cores; --full: fair share, R-0543)
-  --no-wait           --full only: exit 75 instead of waiting for a machine-wide heavy slot
+  --no-wait           exit 75 instead of waiting for a machine-wide heavy slot (every suite mode)
+  --slot-probe        take (or skip) the heavy slot as the mode would, print the decision, exit 0
   -h, --help          Show this help
 
 Environment:
@@ -105,6 +106,7 @@ USAGE
 
 TEST_JOBS_EXPLICIT=0; [ -n "${TEST_JOBS:-}" ] && TEST_JOBS_EXPLICIT=1
 HEAVY_NO_WAIT="${CONCRETE_HEAVY_NO_WAIT:-0}"
+SLOT_PROBE=0          # --slot-probe: report the heavy-slot decision and stop (check_heavy_slots.sh)
 # Auto-detect CPU count for default parallelism
 if [ -z "${TEST_JOBS:-}" ]; then
     if command -v nproc &>/dev/null; then
@@ -150,27 +152,45 @@ while [ $# -gt 0 ]; do
         --manifest) MODE="manifest"; shift ;;
         -j)        TEST_JOBS="$2"; TEST_JOBS_EXPLICIT=1; shift 2 ;;
         --no-wait) HEAVY_NO_WAIT=1; shift ;;
+        --slot-probe) SLOT_PROBE=1; shift ;;
         -h|--help) usage ;;
         *)         echo "Unknown option: $1"; usage ;;
     esac
 done
 
 # --- Machine-wide load control (R-0543, scripts/tests/lib/heavy_slots.sh) ---
-# --full is a heavy run: it waits for one of CONCRETE_HEAVY_SLOTS machine-wide slots (default 2), or
-# with --no-wait exits 75. Every other mode is unaffected. A killed run's slot is reclaimed by the
-# next waiter because its pid is dead; on_exit releases it on every normal path.
-if [ "$MODE" = "full" ]; then
+# Every suite mode is a heavy run: it waits for one of CONCRETE_HEAVY_SLOTS machine-wide slots
+# (default 2), or with --no-wait exits 75. Only the listing (--manifest) and a single stdlib module
+# (--stdlib-module) are light. A killed run's slot is reclaimed by the next waiter because its pid
+# is dead; on_exit releases it on every normal path.
+#
+# The default mode took no slot until 2026-10-30, so agents running it in parallel on one host
+# pushed the load average past 30 and wall-clock budget probes (bugs 265, 282, 292) failed for
+# reasons unrelated to any change. In CI the runner count already bounds concurrency, so the modes
+# other than --full take no slot there (GITHUB_ACTIONS=true), unless CONCRETE_HEAVY_SLOTS is set.
+case "$MODE" in
+    manifest|stdlib-module) HEAVY_RUN=0 ;;
+    full) HEAVY_RUN=1 ;;
+    *) if [ "${GITHUB_ACTIONS:-}" = "true" ] && [ -z "${CONCRETE_HEAVY_SLOTS:-}" ]; then HEAVY_RUN=0
+       else HEAVY_RUN=1; fi ;;
+esac
+if [ "$HEAVY_RUN" = "1" ]; then
     source "$ROOT_DIR/scripts/tests/lib/heavy_slots.sh"
     _hargs=(); [ "$HEAVY_NO_WAIT" = "1" ] && _hargs=(--no-wait)
-    _hrc=0; heavy_slot_acquire "run_tests.sh --full" ${_hargs[@]+"${_hargs[@]}"} || _hrc=$?
+    _hrc=0; heavy_slot_acquire "run_tests.sh --$MODE" ${_hargs[@]+"${_hargs[@]}"} || _hrc=$?
     if [ "$_hrc" -ne 0 ]; then
         SUMMARY_WRITTEN=1   # not an aborted suite: it never started
-        echo "run_tests.sh --full: no heavy slot (exit $_hrc); nothing was run." >&2
+        echo "run_tests.sh --$MODE: no heavy slot (exit $_hrc); nothing was run." >&2
         exit "$_hrc"
     fi
     if [ "$TEST_JOBS_EXPLICIT" = "0" ] && [ "$(heavy_slots_n)" -gt 1 ]; then
         TEST_JOBS="$(heavy_jobs_default)"
     fi
+fi
+if [ "$SLOT_PROBE" = "1" ]; then
+    echo "slot-probe: mode=$MODE heavy=$HEAVY_RUN"
+    SUMMARY_WRITTEN=1   # a probe, not a suite
+    exit 0
 fi
 
 # --- Manifest mode: list all tests and exit ---
