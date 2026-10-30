@@ -350,7 +350,7 @@ a recommendation are in ROADMAP's row OD48; the owner's answer is recorded there
 <a id="OPEN-49"></a>
 ### OPEN-49. The arithmetic of a counted loop's termination measure
 
-**OPEN-49@1.** Whether the termination measure `b - i` of a counted loop is a mathematical integer, is computed in a wider type, or makes the loop refused when it does not fit the bounds' type (a signed type with `a` near its minimum and `b` near its maximum) is an open owner decision (OD49).
+**OPEN-49@1.** Whether the termination measure `b - i` of a counted loop is a mathematical integer, is computed in the unsigned type of the bounds' width, or makes the loop refused when it does not fit the bounds' type (a signed type with `a` near its minimum and `b` near its maximum) is an open owner decision (OD49).
 
 - Kind: open
 - Uses: none

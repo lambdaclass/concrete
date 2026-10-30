@@ -201,7 +201,7 @@ E0245 refuses a `break` or `continue` in the step that targets its own loop (bug
 this entry only while main parses the step form, which version 3 removes, and retires with it. A
 `break` or `continue` leaves the loop body's scopes like any exit (OWN-2).
 
-Main still has the earlier loop forms, which version 3 removes (bug 331): `while cond { ... }`,
+Main's loop forms are `while cond { ... }` and the C-style forms that version 3 removes (bug 331):
 `for (init; cond; step) { ... }`, whose `init` is a `let`,
 whose `cond` is the continuation test and whose `step` is an expression or an assignment
 (`for (i = 0; ...)` is a parse error), `for (cond) { ... }` and the unconditional `for { ... }`
