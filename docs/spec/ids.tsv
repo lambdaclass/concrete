@@ -519,7 +519,7 @@ TYPE-9/type-argument-to-bodyless-declaration	live	-
 ARITH-7/f32-literal-rounded-once	pending	-
 MOD-6/program-root-imports-libc	live	-
 TYPE-11/destructure-private-field	live	-
-STMT-6@3	live	0c9223940629174aed8d2044818a62c8
+STMT-6@3	live	93af5d7c01ec7e39946424d609dc1bf7
 STMT-11@2	pending	dee873ea922bb34d9bae01c461ab5733
 STMT-6/c-style-for	pending	-
 STMT-6/for-condition-only	pending	-
@@ -527,6 +527,16 @@ STMT-6/unconditional-for	pending	-
 STMT-6/while-loop	live	-
 STMT-6/counted-loop	pending	-
 STMT-6/counted-loop-empty	pending	-
-STMT-6/from-is-reserved	pending	-
 OPEN-48@1	live	44427cd3e7f7fa38ff70d0bd4267a8bd
 OPEN-49@1	live	00da166e4d90bcb667262461e9e72912
+STMT-6/counted-loop-bounds-once	pending	-
+STMT-6/counted-loop-at-type-max	pending	-
+STMT-6/counted-loop-reversed-bounds-empty	pending	-
+STMT-6/counted-loop-continue-and-break	pending	-
+STMT-6/counted-loop-labeled-continue	pending	-
+STMT-6/counted-loop-index-is-immutable	pending	-
+STMT-12@1	pending	6271dc587c1ca1448d30aa98fa81d43a
+STMT-12/variant-on-counted-loop	pending	-
+OPEN-50@1	live	b7d0e2eb5fa31b4ce8a049a422968bf2
+OPEN-51@1	live	6166d8073a06d1e03621d6fbbdb615ea
+STMT-12/counted-loop-own-measure	pending	-

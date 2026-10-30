@@ -183,7 +183,7 @@ fn main() -> Int {
 <a id="STMT-6"></a>
 ### STMT-6. Loops are statements; `break` and `continue` name a loop
 
-**STMT-6@3.** The loops are `while cond { ... }` and the counted loop `for i from a until b { ... }`, both statements, where the counted loop evaluates `a` and `b` once before its first iteration and runs its body with `i` bound, immutably, to each value from `a` up to but not including `b` at the integer type both bounds share; `break` carries no value, and `break` and `continue` act on the innermost enclosing loop or, with a label, on the labeled loop and appear only inside a loop, `continue` advancing a counted loop to its next index.
+**STMT-6@3.** The loops are `while cond { ... }` and the counted loop `for i from a until b { ... }`, both statements, where the counted loop evaluates `a` and then `b` once, both of one integer type, before its first iteration, compares the index with `b` before each iteration and advances it only after the comparison, so the index never passes `b`, and runs its body with `i`, immutable and scoped to the body, bound to each value from `a` up to but not including `b`; `break` carries no value, and `break` and `continue` act on the innermost enclosing loop or, with a label, on the labeled loop and appear only inside a loop, `continue` running the body's exit sequence and then advancing only the loop it names, while `break` and `return` advance nothing.
 
 - Kind: refusal
 - Uses: none
@@ -231,8 +231,8 @@ Version 3 records the owner's decision of 2026-10-29 (OD47): the loops are `whil
 range loop, and the C-style `for` is removed in every form (`for (init; cond; step)`,
 `for (cond)` and the unconditional `for`). The counted loop is half-open, `for i from a until b`
 running `a`, `a + 1`, ..., `b - 1` and nothing when `a >= b`; its index cannot be assigned in the
-body; both bounds must have one integer type, which the index takes; and `from` and `until` become
-reserved words. The grammar is LL(1): `for` IDENT `from` expr `until` expr block, the upper bound
+body, and its scope is the body; both bounds must have one integer type, which the index takes.
+Whether `from` and `until` are reserved words or contextual keywords is OPEN-50. The grammar is LL(1): `for` IDENT `from` expr `until` expr block, the upper bound
 being a restricted head expression so that `{` ends the head (SYN-4, OD16). In Core the counted loop
 desugars to the one `while` form, so proofs keep a single loop construct, and the counted form
 carries its termination measure, `b - i`. Why: a counted loop terminates without a proof and gives
@@ -241,8 +241,17 @@ which bugs 306 and 330 got wrong; and the old header was an LL(1) conflict. Aust
 counted loop (inclusive), and Swift removed the C-style loop (SE-0007); `until` is half-open to avoid
 off-by-one errors and because `to` reads as exclusive to some and inclusive to others. Main still has
 only the C-style forms (bug 331 implements the decision and migrates the corpus under exit 2q). The
-index type when both bounds are untyped literals is OPEN-48, and the arithmetic of the termination
-measure is OPEN-49. The examples of this specification that use the C-style form migrate with the
+index type when both bounds are untyped literals is OPEN-48, the arithmetic of the termination
+measure is OPEN-49, and whether reverse, stepped or collection iteration stays out of the language
+is OPEN-51.
+
+The reviews of 2026-10-29 (Codex, Kimi and Grok) fixed the details this version states: the bounds
+are evaluated once, left to right, before the first iteration, so a side effect in `b` happens
+once; the comparison comes before the increment, so a loop whose `b` is its type's maximum never
+increments past it and cannot overflow; `continue` runs the body's exit sequence (STMT-11) and then
+advances, a labeled `continue` advancing only the loop it names, while `break` and `return` leave
+without advancing; and the index cannot be assigned and is not visible after the loop. STMT-12
+gives the counted loop its termination measure. The examples of this specification that use the C-style form migrate with the
 corpus.
 
 ```con reject name=break-outside-loop code=E0280 stage=check pair=labeled-break
@@ -357,10 +366,92 @@ fn main() -> Int {
 }
 ```
 
-```con reject name=from-is-reserved code=new stage=parse pair=while-loop pending=bug-331 now=accept:42
+```con accept name=counted-loop-bounds-once exit=42 pending=bug-331 now=reject:E0001:parse
+fn bump(c: &mut Int) -> Int {
+    *c = *c + 1;
+    return 3;
+}
+
 fn main() -> Int {
-    let from: Int = 40;
-    return from + 2;
+    let mut calls: Int = 0;
+    let lo: Int = 0;
+    let mut s: Int = 0;
+    for i from lo until bump(&mut calls) {
+        s = s + 10;
+    }
+    return s + calls + 11;
+}
+```
+
+```con accept name=counted-loop-at-type-max exit=5 pending=bug-331 now=reject:E0001:parse
+fn main() -> Int {
+    let lo: u8 = 250;
+    let hi: u8 = 255;
+    let mut n: Int = 0;
+    for i from lo until hi {
+        n = n + 1;
+    }
+    return n;
+}
+```
+
+```con accept name=counted-loop-reversed-bounds-empty exit=42 pending=bug-331 now=reject:E0001:parse
+fn main() -> Int {
+    let lo: Int = 9;
+    let hi: Int = 3;
+    let mut s: Int = 42;
+    for i from lo until hi {
+        s = 0;
+    }
+    return s;
+}
+```
+
+```con accept name=counted-loop-continue-and-break exit=42 pending=bug-331 now=reject:E0001:parse
+fn main() -> Int {
+    let lo: Int = 0;
+    let hi: Int = 100;
+    let mut s: Int = 0;
+    for i from lo until hi {
+        if i == 2 {
+            continue;
+        }
+        if i == 10 {
+            break;
+        }
+        s = s + i;
+    }
+    return s - 1;
+}
+```
+
+```con accept name=counted-loop-labeled-continue exit=42 pending=bug-331 now=reject:E0001:parse
+fn main() -> Int {
+    let zero: Int = 0;
+    let three: Int = 3;
+    let mut s: Int = 0;
+    'outer: for i from zero until three {
+        for j from zero until three {
+            if j == 1 {
+                continue 'outer;
+            }
+            s = s + 14;
+        }
+    }
+    return s;
+}
+```
+
+```con reject name=counted-loop-index-is-immutable code=new stage=check pair=counted-loop pending=bug-331 now=reject:E0001:parse
+fn main() -> Int {
+    let lo: Int = 0;
+    let hi: Int = 3;
+    let mut s: Int = 0;
+    for i from lo until hi {
+        i = 5;
+        s = s + i;
+    }
+    return s;
 }
 ```
 
@@ -570,6 +661,51 @@ outside it, so the body's deferred calls, loan ends and destructions run, on a f
 said of the C-style `for` step, which OD47 removes. Bugs 305 and 306 brought the borrow block's exits and the interpreter's `for`
 step into this order; the entry stays pending until
 R-0496's Core semantics defines the sequence for every exit form.
+
+<a id="STMT-12"></a>
+### STMT-12. A counted loop carries its own measure
+
+**STMT-12@1.** A counted loop's termination measure is `b - i`, given by the loop itself, so a `#[variant]` attribute on a counted loop is refused, an `#[invariant]` attribute on it is checked at each entry to the body and never when the loop runs no iteration, and a pass removes a bounds check on its index only where the length of the indexed array cannot change during the loop.
+
+- Kind: refusal
+- Uses: none
+- Codes: new (check)
+- Status: pending bug-331
+- Semantics: none
+- Obligation: the counted loop's measure decreases on every iteration (R-0496)
+- Evidence: tested
+
+**Rationale.** Decided with OD47 on 2026-10-29 and made precise by the reviews of that day. The
+loop's own bounds make it terminate, so a written variant could only disagree with it; an invariant
+is a property of the iterations, of which an empty loop has none. A bounds check over the index is
+removable because `a <= i < b` is known in the body, but only if the array cannot shrink while the
+loop runs: a fixed array never does, a growable one may. How the measure is represented when `b -
+a` does not fit the bounds' type is OPEN-49.
+
+```con reject name=variant-on-counted-loop code=new stage=check pair=counted-loop-own-measure pending=bug-331 now=reject:E0001:parse
+fn main() -> Int {
+    let lo: Int = 0;
+    let hi: Int = 7;
+    let mut s: Int = 0;
+    #[variant(hi - lo)]
+    for i from lo until hi {
+        s = s + i;
+    }
+    return s + 21;
+}
+```
+
+```con accept name=counted-loop-own-measure exit=42 pending=bug-331 now=reject:E0001:parse
+fn main() -> Int {
+    let lo: Int = 0;
+    let hi: Int = 7;
+    let mut s: Int = 0;
+    for i from lo until hi {
+        s = s + i;
+    }
+    return s + 21;
+}
+```
 
 ## Recoverable failure: explicit `Result` flow
 

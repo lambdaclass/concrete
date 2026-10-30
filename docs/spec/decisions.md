@@ -1,12 +1,12 @@
 # Open Owner Decisions
 
-This chapter lists the language questions that only the project owner decides: OD1 to OD49 of
+This chapter lists the language questions that only the project owner decides: OD1 to OD51 of
 [ROADMAP.md](../../ROADMAP.md#owner-decisions), exit 2n. Each entry states the question and encodes
 no answer. The rules it bears on are named in its rationale, together with what current main does,
 which stays provisional until the owner answers. The answer, when given, is recorded in ROADMAP and
 turns the entry into the rules it decides; until then no agent picks a side
 ([AGENTS.md](../project/AGENTS.md#rules)). OD1 to OD22 were answered on 2026-10-29 and are listed under
-Decided; OD23 to OD32 were decided the same day; OPEN-33 to OPEN-46 and OPEN-48 to OPEN-49, raised while recording them, are open.
+Decided; OD23 to OD32 were decided the same day; OPEN-33 to OPEN-46 and OPEN-48 to OPEN-51, raised while recording them, are open.
 
 <a id="OPEN-33"></a>
 ### OPEN-33. Inline submodules under one file per module
@@ -291,13 +291,47 @@ a recommendation are in ROADMAP's row OD48; the owner's answer is recorded there
 **Rationale.** Bears on STMT-6, ARITH-3 and the loop variant of the contracts chapter. OD47 says the counted form carries the measure `b - i` and desugars to `while`; ARITH-3 checks ordinary arithmetic, and silently choosing wrapping, a wider type or a mathematical integer would add a rule. Raised while recording OD47 (2026-10-29). The options and
 a recommendation are in ROADMAP's row OD49; the owner's answer is recorded there.
 
+<a id="OPEN-50"></a>
+### OPEN-50. Reserved or contextual `from` and `until`
+
+**OPEN-50@1.** Whether `from` and `until` are reserved words or keywords only in a counted loop's head is an open owner decision (OD50).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD50
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on STMT-6, SYN-1 and SYN-3. OD47 named them reserved; the reviews of 2026-10-29 raised the contextual alternative, under which `let from: Int` stays legal. Main has neither word (bug 331). The options and a recommendation are in ROADMAP's row
+OD50; the owner's answer is recorded there.
+
+<a id="OPEN-51"></a>
+### OPEN-51. Reverse, stepped and collection iteration
+
+**OPEN-51@1.** Whether reverse, stepped or collection iteration stays out of the language, the counted loop covering only an ascending range by one, is an open owner decision (OD51).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD51
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on STMT-6. OD47 adds the ascending half-open loop only; the reviews of 2026-10-29 asked whether counting down, a step other than 1 and iterating a collection stay with `while`. The options and a recommendation are in ROADMAP's row
+OD51; the owner's answer is recorded there.
+
 ## Decided
 
 These entries were retired when the owner answered them; their IDs are never reused.
 
 - **OD47** (loops, decided 2026-10-29, never an open entry): `while` and the counted loop `for i from a
-  until b`, the C-style `for` removed. Now STMT-6@3 and STMT-11@2 (pending, bug 331); OD47 left OPEN-48
-  and OPEN-49.
+  until b`, the C-style `for` removed. Now STMT-6@3, STMT-11@2 and STMT-12 (pending, bug 331); OD47 left OPEN-48 to
+  OPEN-51.
 - **OD23 – OD32** (the strictness pass, decided 2026-10-29, never open entries): REF-11@3 (OD23),
   STMT-7@3 (OD24), PAT-3@3 and PAT-5@3 (OD25), TYPE-6@2 (OD26), STMT-6@2 (OD27), TRAIT-10@2 (OD28),
   OWN-7@3 (OD29), MEM-4@3 (OD30), ARITH-2@2 (OD31) and OWN-15@3 (OD32), each pending its bug (319 –
