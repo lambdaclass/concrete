@@ -610,7 +610,7 @@ inductive DescriptorCoverage where
   deriving BEq, Repr
 
 def Facts.descriptorCoverage (f : Facts) : DescriptorCoverage :=
-  if f.id.kind != .foreignBinding || f.id.packageName != "std" then .unaudited
+  if f.id.kind != .foreignBinding || f.id.packageName != stdPackageName then .unaudited
   else if descriptorAuditedBindings.contains f.id.name then .auditedDescriptor
   else if auditedNoDescriptorBindings.contains f.id.name then .auditedNoDescriptor
   else .unaudited

@@ -211,11 +211,12 @@ partial def peekExprTypeIn (ctx : PeekCtx m) (e : Expr) : m Ty := do
       | .ref (.heap t) | .refMut (.heap t) | .heap t | .heapArray t => t
       | .ref t | .refMut t => t
       | t => t
-    let (structName, typeArgs, capArgs) := match innerTy with
-      | .named n => (n, ([] : List Ty), ([] : List CapSet))
-      | .generic n args caps => (n, args, caps)
-      | _ => ("", [], [])
-    if structName == "" then return .placeholder
+    -- A field is read off a named type; anything else (or an empty name) has no fields here.
+    let named? : Option (String × List Ty × List CapSet) := match innerTy with
+      | .named n => some (n, [], [])
+      | .generic n args caps => some (n, args, caps)
+      | _ => none
+    let some (structName, typeArgs, capArgs) := named?.filter (!·.1.isEmpty) | return .placeholder
     if field == "0" then
       if let some nt ← ctx.newtype structName then
         return ctx.subst (nt.typeParams.zip typeArgs) nt.innerTy
@@ -273,8 +274,7 @@ partial def peekExprTypeIn (ctx : PeekCtx m) (e : Expr) : m Ty := do
       | some sig => return substSelf sig.retTy (.typeVar n)
       | none => return .placeholder
     | _ =>
-      let typeName := tyName innerTy
-      if typeName == "" then return .placeholder
+      let some typeName := tyName? innerTy | return .placeholder
       match ← ctx.method typeName methodName with
       | some sig =>
         let objTypeArgs := match innerTy with | .generic _ targs _ => targs | _ => []

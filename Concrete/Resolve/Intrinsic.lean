@@ -310,6 +310,10 @@ def wildcardBinder : String := "_"
     `mod` block, and a single bare module without a `mod` wrapper. -/
 def rootModuleName : String := "main"
 
+/-- The standard library's package name: the dependency the resolver adds when a project names
+    none, and the package whose bundled copy gets the toolchain's scope identity. -/
+def stdPackageName : String := "std"
+
 /-- A function name reserved by MOD-3. It was the entry point's symbol before every Concrete
     function was mangled; the reservation remains in the spec. -/
 def userMainName : String := "user_main"

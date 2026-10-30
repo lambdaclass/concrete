@@ -897,12 +897,12 @@ partial def loadProject (projectRoot : String) (stripTestFns : Bool := false) : 
   -- package shadowing itself. Measured on `std` 2026-08-16, which resolved 79 modules and reported
   -- zero of them.
   let selfName := (Concrete.Proof.packageField tomlContent "name").getD ""
-  let hasStdDep := selfName == "std" || userDeps.any fun (name, _) => name == "std"
+  let hasStdDep := selfName == stdPackageName || userDeps.any fun (name, _) => name == stdPackageName
   let deps ← if hasStdDep then
     pure userDeps
   else
     match ← findBuiltinStd with
-    | some stdPath => pure (("std", stdPath) :: userDeps)
+    | some stdPath => pure ((stdPackageName, stdPath) :: userDeps)
     | none =>
       IO.eprintln "warning: builtin std not found\nhint: set CONCRETE_STD=/path/to/std or add std = { path = \"...\" } to [dependencies]"
       pure userDeps
@@ -968,7 +968,7 @@ partial def loadProject (projectRoot : String) (stripTestFns : Bool := false) : 
       let ident : Except Proof.IdentityRefusal (Proof.PackageScopeIdentity × Proof.PackageArtifactIdentity) := do
         let paired ← Proof.pairSources (resolvedPath ++ "/src/lib.con") srcMap
         let art ← Proof.PackageArtifactIdentity.of? paired
-        let scope ← if bundled && depName == "std" then Proof.PackageScopeIdentity.toolchainStd "resolver:bundled-std"
+        let scope ← if bundled && depName == stdPackageName then Proof.PackageScopeIdentity.toolchainStd "resolver:bundled-std"
           else match depToml with
             | none => pure (Proof.PackageScopeIdentity.standalone art)
             | some t =>
@@ -1101,7 +1101,7 @@ partial def loadProject (projectRoot : String) (stripTestFns : Bool := false) : 
     let identity : Except Proof.IdentityRefusal Proof.ResolvedIdentity := do
       let paired ← Proof.pairSources mainPath ([(mainPath, source)] ++ subSrcMap)
       let art ← Proof.PackageArtifactIdentity.of? paired
-      let scope ← if rootBundled && selfName == "std" then Proof.PackageScopeIdentity.toolchainStd "resolver:bundled-std"
+      let scope ← if rootBundled && selfName == stdPackageName then Proof.PackageScopeIdentity.toolchainStd "resolver:bundled-std"
         else Proof.PackageScopeIdentity.ofManifest selfName (Proof.packageFieldRaw tomlContent "origin")
       -- D1 at the resolver: two distinct `undeclared` scopes of one name in one resolved graph.
       Proof.refuseAmbiguousUndeclared ((scope, art) :: depIdentities.map (·.2))
