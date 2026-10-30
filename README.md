@@ -143,7 +143,7 @@ Foreign declarations are audited claims. A `trusted` body can discharge
 `Unsafe` obligations, but must still declare its external authority. The
 compiler checks callers against those declarations; it cannot prove a dishonest
 C binding honest. Read the [FFI rules](docs/platform/FFI.md) and
-[handle capability design](docs/language/HANDLE_CAPABILITIES.md) for the boundary.
+[handle capability design](docs/archive/design-records/HANDLE_CAPABILITIES.md) for the boundary.
 
 ## Contracts and Evidence
 

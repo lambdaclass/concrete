@@ -1070,6 +1070,86 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 
 **Rationale.** Bears on STMT-12 and CON-2. Current main: the counted loop is not on main (bug 331). Options: (a) as CON-2 says for every loop, before the loop and after every iteration; (b) at each entry to the body, so nothing is checked when the loop runs no iteration. Austral: not applicable. No pick given. Proof impact: (b) needs requirement 2 of the proof-impact review: an invariant checked at body entry establishes nothing after an empty loop. Raised by the same review, which found body-entry checking stated as a rule though OD47 did not decide it; the owner's answer is recorded in ROADMAP's row OD105.
 
+<a id="OPEN-9X1"></a>
+### OPEN-9X1. A capability set inferred from callbacks
+
+**OPEN-9X1@1.** Whether a combinator may write its capability set as that of its callbacks (`with(f)`), the checker computing the union of the sets of the callbacks its body calls, is an open owner decision (OD9X1).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD9X1
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on TYPE-D1, TYPE-17, TRUST-4. Current main: no such form; `with(f)` reads `f` as a capability name (OPEN-9X3), so a combinator names a capability parameter (`fn map<T, U, cap C>(.., f: fn(&T) with(C) -> U) with(C)`). The callable-values design (2026-06-12, [CALLABLE_VALUES_AND_CAPABILITIES.md](../archive/design-records/CALLABLE_VALUES_AND_CAPABILITIES.md) §6) recorded the shortcut as specified and not built, after [research/language/capability-polymorphism.md](../../research/language/capability-polymorphism.md); no roadmap item tracks it. Options: (a) no shortcut, combinators name capability parameters; (b) add it, as set propagation and not row unification. Austral: not applicable (capabilities are values). Pick: none given (raised by the absorption of 2026-10-30).
+
+<a id="OPEN-9X2"></a>
+### OPEN-9X2. Widening a function value's capability set
+
+**OPEN-9X2@1.** Whether a function value converts to a function type whose capability set contains its own, implicitly by subset or by an explicit conversion, is an open owner decision (OD9X2).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD9X2
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on TYPE-4, TYPE-17, TRUST-4. Current main: refused (E0220): `fn(Int) -> Int` is not a `fn(Int) with(Console) -> Int`, nor `with(File)` a `with(Std)`, and there is no explicit conversion; a capability-polymorphic parameter accepts either by instantiating its variable. The callable-values design (§10) says there is no implicit widening, and that "widening is explicit or via lattice subsumption only", with a lattice example (`Concurrent ⊇ Async`) whose names are not capabilities; HANDLE_CAPABILITIES R7 keeps handle types invariant, as TYPE-4 does. Options: (a) exact types, as main; (b) subsumption into a larger set; (c) an explicit conversion. Austral: not applicable (capabilities are values). Pick: none given (raised by the absorption of 2026-10-30).
+
+<a id="OPEN-9X3"></a>
+### OPEN-9X3. Names in `with(...)` that are not capabilities
+
+**OPEN-9X3@1.** Whether a name in `with(...)` that is not a capability, a capability alias or a capability variable in scope is refused is an open owner decision (OD9X3).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD9X3
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on TRUST-D1, TYPE-D1, TRUST-4. Current main: accepted as a capability of its own: `fn main() with(Foo) -> Int` compiles and runs, and a call to a function that requires `Foo` is refused only in a caller that does not list it (E0520). The compiler's `validCaps`, TRUST-4's rationale and [SAFETY.md](../verification/SAFETY.md) name nine capabilities. Options: (a) refuse an unknown name; (b) an open vocabulary. Austral: not applicable (capabilities are values). Pick: none given (raised by the absorption of 2026-10-30).
+
+<a id="OPEN-9X4"></a>
+### OPEN-9X4. What `Time`, `Env`, `Process` and `Alloc` mean
+
+**OPEN-9X4@1.** What authority each of `Time`, `Env`, `Process` and `Alloc` names is an open owner decision (OD9X4).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD9X4
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on TRUST-D1, TRUST-4. Current main: no document states them; HANDLE_CAPABILITIES §2 defined `Console`, `File` and `Network`, and SAFETY.md `Random` (TRUST-D1). std requires `Time` for its clock and sleep functions, `Env` for environment variables and for `std.net`'s `bind` and `connect`, `Process` for exit, spawn, wait and kill, and `Alloc` for heap allocation. Options: state each as std uses it, or narrow or split it (std's `Env` on socket functions is the case to settle). Austral: not applicable (capabilities are values). Pick: none given (raised by the absorption of 2026-10-30).
+
+<a id="OPEN-9X5"></a>
+### OPEN-9X5. Two foreign bindings of one C symbol
+
+**OPEN-9X5@1.** Whether two foreign bindings of one C symbol (`#[link_name]`) must agree on its C signature is an open owner decision (OD9X5).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD9X5
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on FFI-3, FFI-5. Current main: accepted: `abs_a(x: i32) with() -> i32` and `abs_b(x: i64) with() -> i64`, both bound to `abs`, compile and the binary runs, while the interpreter stops at run time on the mismatched width. HANDLE_CAPABILITIES §5 (encoding A, one binding per effect for one C symbol) planned to refuse a mismatch with a diagnostic. Options: (a) refuse; (b) allow, each binding's signature trusted on its own. Austral: not applicable. Pick: none given (raised by the absorption of 2026-10-30).
+
 ## Decided
 
 These entries were retired when the owner answered them; their IDs are never reused.

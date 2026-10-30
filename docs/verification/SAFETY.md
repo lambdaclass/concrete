@@ -88,7 +88,7 @@ impl Vec<T> {
 
 **What `trusted` does not do:**
 - Does **not** suppress capabilities — callers still need the declared capabilities
-- **Does** absorb the `Unsafe` of calling a plain `extern fn` (since R-0484, 2026-10-01): `trusted` vouches for memory safety. It absorbs **nothing else** — the binding's declared effects (`extern fn write(..) with(Console)`) still bind the trusted caller, and every `extern` must declare them (E0116). See [HANDLE_CAPABILITIES.md](../language/HANDLE_CAPABILITIES.md) R2–R3
+- **Does** absorb the `Unsafe` of calling a plain `extern fn` (since R-0484, 2026-10-01): `trusted` vouches for memory safety. It absorbs **nothing else** — the binding's declared effects (`extern fn write(..) with(Console)`) still bind the trusted caller, and every `extern` must declare them (E0116). See [HANDLE_CAPABILITIES.md](../archive/design-records/HANDLE_CAPABILITIES.md) R2–R3
 - Does **not** relax linearity rules — linear values follow the same ownership rules everywhere
 - Does **not** hide any caller-visible semantic fact
 - `trusted extern fn` is a separate, narrower mechanism: a binding safe for every argument its types permit, with no undeclared effects (e.g., `sqrt`). Its declared effects still bind every caller

@@ -7,7 +7,7 @@ H12/H17-scale burn-down; deciding now is the point).
 Related packets: `arena-allocation.md` (the Arena value + `&mut` threading is
 already allocator-identity-as-value), `allocation-budgets.md`,
 `no-std-freestanding.md`, `languages/zig.md` (allocator-first precedent),
-`docs/language/CALLABLE_VALUES_AND_CAPABILITIES.md` (fn ptr + explicit context = the
+`docs/archive/design-records/CALLABLE_VALUES_AND_CAPABILITIES.md` (fn ptr + explicit context = the
 dispatch mechanism a polymorphic allocator needs).
 
 ## The split this decides

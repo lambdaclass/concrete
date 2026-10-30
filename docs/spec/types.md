@@ -3,14 +3,39 @@
 Every expression has one type, and there are no implicit conversions. This chapter covers
 callable values and dispatch (TYPE-1, TYPE-2), `Text` (TYPE-3), the typing of expressions and
 operators (TYPE-4 to TYPE-10), construction rights (TYPE-11), type aliases (TYPE-12) and the
-kinds of type parameters (TYPE-13, TYPE-14), generic arguments (TYPE-15) and finite size (TYPE-16). Copy itself is defined in the ownership chapter
-(OWN-D1, OWN-14).
+kinds of type parameters (TYPE-13, TYPE-14), generic arguments (TYPE-15), finite size (TYPE-16), and
+capability sets in types (TYPE-D1, TYPE-17, TYPE-18). Copy itself is defined in the ownership chapter
+(OWN-D1, OWN-14). What a capability means and when a function may use one are in the trusted
+chapter (TRUST-D1, TRUST-4).
 
 The design records are [VALIDATED_WRAPPERS.md](../stdlib/VALIDATED_WRAPPERS.md) (a library pattern built on
-TYPE-11, not a language rule) and [VALUE_MODEL.md](../language/VALUE_MODEL.md).
+TYPE-11, not a language rule), [VALUE_MODEL.md](../language/VALUE_MODEL.md) and
+[CALLABLE_VALUES_AND_CAPABILITIES.md](../archive/design-records/CALLABLE_VALUES_AND_CAPABILITIES.md).
 Const generics are not part of the language. Their design is decided, and the build is
 deferred until a workload needs it (see "No const generics" below).
 Layout attributes (`#[repr(C)]`, `packed`, `align`) belong to the FFI chapter.
+
+## Definitions
+
+<a id="TYPE-D1"></a>
+### TYPE-D1. Capability set
+
+**TYPE-D1@1.** A capability set is a set of capabilities (TRUST-D1) and capability variables, written as a comma-separated list in `with(...)` and as `{}` or names joined by `+` in a capability argument, and a function or a type declares a capability variable as a parameter `<cap C>`.
+
+- Kind: definition
+- Uses: TRUST-D1
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.CapSet
+- Semantics: none
+- Obligation: none
+- Evidence: by-users
+
+**Rationale.** A set, not a list: order and repetition do not matter, and an alias (`Std`, or one
+declared `cap IO = File + Console;`) stands for the capabilities it expands to. Several capability
+variables and concrete capabilities may be joined, `fn f<cap C, cap D>(..) with(C, D, Console)`.
+How a call binds a capability variable from its arguments is OPEN-45; a capability argument in an
+expression turbofish is OPEN-87.
 
 ## Rules
 
@@ -32,9 +57,15 @@ Layout attributes (`#[repr(C)]`, `packed`, `align`) belong to the FFI chapter.
 which REF-3 forbids, and capturing an owned value would need its own ownership and conversion
 rules. A function pointer plus an explicit context argument keeps both in view: the context is an
 ordinary parameter, borrowed or owned under the ordinary rules, and its capabilities are visible
-at the call site ([CALLABLE_VALUES_AND_CAPABILITIES.md](../language/CALLABLE_VALUES_AND_CAPABILITIES.md)).
-VERIFIED_PIPELINE's first verified profile excludes closures for the same reason. The type
-grammar (`Ty`) has function-pointer types and no closure type.
+at the call site (TYPE-17). VERIFIED_PIPELINE's first verified profile excludes closures for the
+same reason. The type grammar (`Ty`) has function-pointer types and no closure type, and a nested
+`fn` declaration is a parse error: it would add locality but no expressive power, and invite the
+expectation that it captures. A function pointer is Copy (OWN-D1); its context is borrowed shared,
+lent `&mut` for each call (REF-10) or moved into a single call (OWN-1). A callback cannot reach a
+container its caller has borrowed for the call: a context cannot hold a reference (REF-3), and one
+call's borrows of a root conflict (REF-11). A first-class value pairing a context with a function
+is deferred until a workload needs to store one
+([CALLABLE_VALUES_AND_CAPABILITIES.md](../archive/design-records/CALLABLE_VALUES_AND_CAPABILITIES.md) §4).
 
 ```con accept name=explicit-context exit=42
 struct Ctx { add: Int }
@@ -178,6 +209,28 @@ fn main() -> Int {
     let c: bool = true;
     let x: Int = if c { 42 } else { 0 };
     return x;
+}
+```
+
+```con reject name=capabilities-not-erased code=E0220 stage=check pair=same-capabilities
+fn inc(x: Int) with(Console) -> Int {
+    return x + 1;
+}
+
+fn main() with(Console) -> Int {
+    let f: fn(Int) -> Int = inc;
+    return f(41);
+}
+```
+
+```con accept name=same-capabilities exit=42
+fn inc(x: Int) with(Console) -> Int {
+    return x + 1;
+}
+
+fn main() with(Console) -> Int {
+    let f: fn(Int) with(Console) -> Int = inc;
+    return f(41);
 }
 ```
 
@@ -986,6 +1039,117 @@ fn main() -> Int { return 42; }
 ```con accept name=finite-struct exit=42
 struct Copy Node { v: Int, w: Int }
 fn main() -> Int { let n: Node = Node { v: 40, w: 2 }; return n.v + n.w; }
+```
+
+<a id="TYPE-17"></a>
+### TYPE-17. A function type carries its capability set
+
+**TYPE-17@1.** The capability set of a function type `fn(..) with(C) -> R` is part of the type, compared as a set, so a function value keeps its capabilities through every binding, argument, field and combinator.
+
+- Kind: guarantee
+- Uses: TYPE-D1
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.Ty, Concrete.expectTy
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** A callback that silently lost the capabilities of the code it runs would hide an
+effect (TRUST-4's smuggling case, `adversarial_neg_cap_fnptr_smuggle.con`). Since the set is part
+of the type, TYPE-4 refuses a `with(Console)` function where a capability-free function type is
+expected (E0220, its example `capabilities-not-erased`), and a combinator that calls its callback
+must hold the callback's set, which a capability parameter names: the combinator carries what its
+callback carries, no more and no less. A handle is a struct with capability parameters (TYPE-15)
+whose fields are such function types, so `Sink<{}>` is not a `Sink<Console>` either (TYPE-4).
+Whether a function value converts to a type with a larger set (`fn(Int) -> Int` to
+`fn(Int) with(Console) -> Int`, or `with(File)` to `with(Std)`) is OPEN-9X2; main refuses it
+(E0220). A combinator spelling that infers its set from its callbacks (`with(f)`) is OPEN-9X1.
+
+```con accept name=set-order exit=42
+fn inc(x: Int) with(Console, File) -> Int {
+    return x + 1;
+}
+
+fn main() with(Console, File) -> Int {
+    let f: fn(Int) with(File, Console) -> Int = inc;
+    return f(41);
+}
+```
+
+```con accept name=combinator-carries-capabilities exit=42
+fn both<cap C, cap D>(f: fn(Int) with(C) -> Int, g: fn(Int) with(D) -> Int) with(C, D) -> Int {
+    return f(g(40));
+}
+
+fn inc(x: Int) with(Console) -> Int {
+    return x + 1;
+}
+
+fn inc2(x: Int) with(File) -> Int {
+    return x + 1;
+}
+
+fn main() with(Console, File) -> Int {
+    return both(inc, inc2);
+}
+```
+
+```con accept name=field-keeps-capabilities exit=42
+struct Copy Sink<cap C> { f: fn(Int) with(C) -> Int }
+
+fn inc(x: Int) with(Console, File) -> Int {
+    return x + 1;
+}
+
+fn use_it(s: Sink<File + Console>) with(Console, File) -> Int {
+    let g: fn(Int) with(File, Console) -> Int = s.f;
+    return g(41);
+}
+
+fn main() with(Console, File) -> Int {
+    let s: Sink<Console + File> = Sink { f: inc };
+    return use_it(s);
+}
+```
+
+<a id="TYPE-18"></a>
+### TYPE-18. Capabilities have no run-time representation
+
+**TYPE-18@1.** A capability set or capability argument has no run-time representation, so types that differ only in their capability sets or capability arguments have the same size and layout.
+
+- Kind: guarantee
+- Uses: TYPE-D1
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.Layout.tySize, Concrete.Layout.tyToLLVM
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** A capability is a compile-time permission, checked and then erased; it matters for
+handle types (TYPE-15) and for the C layout of a struct passed across FFI. Whether two capability
+instantiations of one generic function share generated code is an implementation choice, not a
+language rule.
+
+```con accept name=same-layout exit=42
+mod m {
+    #[intrinsic = "sizeof"]
+    pub trusted fn sizeof<T>() -> u64;
+
+    struct Copy Sink<cap C> { f: fn(Int) with(C) -> Int, n: Int }
+
+    pub fn main() -> Int {
+        let a: u64 = sizeof::<Sink<{}>>();
+        let b: u64 = sizeof::<Sink<Console + File>>();
+        let c: u64 = sizeof::<fn(Int) -> Int>();
+        let d: u64 = sizeof::<fn(Int) with(Console) -> Int>();
+        if a == b && c == d {
+            return 42;
+        }
+        return 1;
+    }
+}
 ```
 
 ## Absent by decision

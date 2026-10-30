@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Callable-values gate (ROADMAP Phase 5 #24 — docs/language/CALLABLE_VALUES_AND_CAPABILITIES.md §9).
+# Callable-values gate (ROADMAP Phase 5 #24 — docs/archive/design-records/CALLABLE_VALUES_AND_CAPABILITIES.md §9).
 #
 # STEP 1 (bound-callback context threading) is implemented and checked here:
 #   - the three context modes (shared &Ctx / mutable &mut Ctx / consuming Ctx)

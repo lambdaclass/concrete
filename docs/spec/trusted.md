@@ -4,13 +4,41 @@ Concrete's safety model has three parts. **Capabilities** (`with(File, Alloc)`) 
 function may exercise, visible in its signature. **`trusted`** contains pointer-level implementation
 techniques behind a safe API. **`Unsafe`** is the capability for crossing a foreign or raw-memory
 boundary, and a `trusted` body absorbs it. No layer is exempt: compiler builtins, `std` and user
-code follow the same rules. This chapter covers raw pointers (TRUST-1, TRUST-3), undefined
+code follow the same rules. This chapter covers what a capability means (TRUST-D1), raw pointers (TRUST-1, TRUST-3), undefined
 behaviour (TRUST-2), capabilities (TRUST-4), `trusted` (TRUST-5), the trusted-module marker
-(TRUST-6, pending), moving a value out of raw memory (TRUST-7) and global state (TRUST-8 to TRUST-10). Handle capabilities (`Sink<cap C>`) and callable values with capabilities are
-specified in [HANDLE_CAPABILITIES.md](../language/HANDLE_CAPABILITIES.md) and
-[CALLABLE_VALUES_AND_CAPABILITIES.md](../language/CALLABLE_VALUES_AND_CAPABILITIES.md) until they
-migrate. The design records are [SAFETY.md](../verification/SAFETY.md),
-[CAPABILITY_FACTS.md](../compiler/CAPABILITY_FACTS.md).
+(TRUST-6, pending), moving a value out of raw memory (TRUST-7) and global state (TRUST-8 to TRUST-10). Capability sets, capability parameters and the capabilities of function types and
+handles (`Sink<cap C>`) are in the types chapter (TYPE-D1, TYPE-15, TYPE-17, TYPE-18); this specification governs them. The design records are [SAFETY.md](../verification/SAFETY.md),
+[CAPABILITY_FACTS.md](../compiler/CAPABILITY_FACTS.md),
+[HANDLE_CAPABILITIES.md](../archive/design-records/HANDLE_CAPABILITIES.md) and
+[CALLABLE_VALUES_AND_CAPABILITIES.md](../archive/design-records/CALLABLE_VALUES_AND_CAPABILITIES.md).
+
+## Definitions
+
+<a id="TRUST-D1"></a>
+### TRUST-D1. What a capability means
+
+**TRUST-D1@1.** A capability names logical authority, not where data goes: `Console` is authority over the standard streams the environment handed the process, so a redirected standard output is still `Console`, `File` is authority to name and open filesystem paths, `Network` is authority to create and use sockets, `Random` is authority over external entropy, which running a seeded pseudo-random generator does not need, and `Unsafe` is the authority for the raw-memory and foreign operations TRUST-4 lists.
+
+- Kind: definition
+- Uses: none
+- Codes: none
+- Status: enforced
+- Enforced by: Concrete.validCaps
+- Semantics: none
+- Obligation: none
+- Evidence: by-users
+
+**Rationale.** A meaning by destination would depend on run-time conditions the compiler cannot
+see: a program that never named a file cannot know that its output goes to one, and pipes,
+terminals and `/dev/null` look alike from inside. SPARK's `Ada.Text_IO` likewise carries one
+coarse file-system state and excludes redirection rather than modelling it. `with(...)` lists
+capabilities, aliases (`Std`, `cap IO = File + Console;`) and capability variables (TYPE-D1). The
+meanings of `Time`, `Env`, `Process` and `Alloc` are stated nowhere yet (OPEN-9X4), and main
+accepts a name in `with(...)` that is none of these (OPEN-9X3). An empty `with()` means no
+external authority, not purity: the function may still mutate what it is lent through `&mut`
+(TRUST-4), and it is not by that alone callable from a contract (CON-3). What a capability means
+does not settle a descriptor that is replaced, reused or aliased; std's handles avoid those cases
+([HANDLE_CAPABILITIES_AUDIT.md](../stdlib/HANDLE_CAPABILITIES_AUDIT.md)).
 
 ## Rules
 
@@ -131,9 +159,7 @@ capability-polymorphic function has neither. One rule, `Capabilities.missingCaps
 calls through a trait bound and the raw-operation gate; where the capability facts live in the
 compiler is [docs/compiler/CAPABILITY_FACTS.md](../compiler/CAPABILITY_FACTS.md).
 
-`Random` is authority over external entropy (the OS or hardware generator), not permission to run
-a pseudo-random generator: a deterministic generator seeded from a value is pure and needs no
-capability. Reserved for later: `Device` (memory-mapped hardware, when freestanding code needs
+What each capability means is TRUST-D1. Reserved for later: `Device` (memory-mapped hardware, when freestanding code needs
 it), `Thread` (with the concurrency model) and `Signal` (deferred), recorded in
 `research/language/capability-sandboxing.md` §4a. A capability alias expands at parse time, so the
 rest of the compiler sees only capability names; `Std` is a fixed alias, not a macro system.
@@ -436,3 +462,23 @@ lands with R-0557.
 `main` cannot reach a resource through a global (TRUST-8), so what it may touch is exactly what was
 handed to it, and the handing-over is visible in the source. Threads do not exist yet; when they do,
 they follow the same rule.
+
+## Absent by decision
+
+This section is explanatory: it records capability features the language does not have, why, and
+what would reopen them. The grammar (SYN-1) is what refuses them.
+
+### No capability-set bounds, subtraction or capability values
+
+Decided with the callable-values design (2026-06-12,
+[CALLABLE_VALUES_AND_CAPABILITIES.md](../archive/design-records/CALLABLE_VALUES_AND_CAPABILITIES.md)
+§6 and §10, after
+[research/language/capability-polymorphism.md](../../research/language/capability-polymorphism.md)).
+A capability parameter takes no bound (`where C ⊆ {File, Console}`), a capability set is never
+written as a difference, and a capability is not a value that can be stored, passed or returned:
+capabilities are permissions the checker compares as sets (TYPE-D1), not effects. So there are no
+effect handlers and no row-polymorphic effect types either; a combinator's set is its callbacks'
+sets, named by capability parameters (TYPE-17). None of these is needed by the higher-order std
+surface. A bound would be reconsidered only if a workload needs a combinator that refuses some
+capability its callback could carry; global resources as values are linear tokens (TRUST-9), not
+capability values.

@@ -1,11 +1,22 @@
-# Callable Values and Capability-Polymorphic Callbacks
+# Callable Values and Capability-Polymorphic Callbacks (design record)
 
-Status: design checkpoint (ROADMAP old Phase 6 #18) — the single model that
-must exist before the Phase 7 stdlib iteration/HOF surface, scoped collection
-callbacks, and the V1.1 immutable-read withdrawal land. This document records
-the *decided* design. Items marked **[implemented]** already hold today; items
-marked **[specified]** are settled design that is not yet built; items marked
-**[deferred]** are explicitly out of scope for v1.
+Archived from docs/language: the callable-values design (ROADMAP old Phase 6 #18, 2026-06-12): the
+three context modes of bound callbacks, the use-site binding decision, scoped collection callbacks,
+the proof story and the build order. Its language rules are TYPE-1, TYPE-D1, TYPE-17 and TYPE-18 of
+[docs/spec/types.md](../../spec/types.md) and TRUST-4 of [docs/spec/trusted.md](../../spec/trusted.md),
+with the capability absences under "Absent by decision" in trusted.md.
+
+**Superseded as the normative text (2026-10-30).** No closures, function pointer plus explicit
+context: TYPE-1. Capability sets and `<cap C>`: TYPE-D1. A function type's set is part of its type,
+never erased through a combinator: TYPE-17 (and TYPE-4's refusal). Calling through a function
+pointer requires its set: TRUST-4. Borrowed and lent contexts: REF-10, REF-11, REF-13; no reference
+stored or returned: REF-1 to REF-3. Where this document and the spec differ, the spec governs.
+Open questions it raised: the `with(f)` elision shortcut (OPEN-9X1) and widening by subsumption
+(OPEN-9X2). Stale: §7's `for x in xs` is not the language (STMT-6: `while` and the counted loop;
+collection iteration is OPEN-51), and §5.1's "disjoint fields `&mut w.a` + `&mut w.b` stay legal"
+and its `let r = &mut c` predate REF-11@3 (loans keyed by the root) and REF-6. The std API
+patterns (`for_each_into`, `with_value`, `modify`) are library design, not language rules. Status
+markers below (**[implemented]**, **[specified]**, **[deferred]**) record the state on 2026-06-12.
 
 ## 0. Why this document is the keystone
 
@@ -34,28 +45,21 @@ construct.
 These are the design calls this document encodes. They are deliberate and
 constrain everything below.
 
-1. **Bound callbacks are an explicit function pointer + context.** There are no
-   closures and no hidden captures. A "bound callback" is the explicit pairing
-   of (a) a function pointer whose first parameter is the context and (b) a
-   context value the caller supplies. The combinator takes both, by separate
-   parameters. Nothing is captured implicitly.
+1. **Bound callbacks are an explicit function pointer + context** (now TYPE-1). A
+   "bound callback" pairs a function pointer whose first parameter is the context
+   with a context value the caller supplies, passed by separate parameters.
 2. **There are exactly three context modes:** shared `&Ctx`, mutable `&mut Ctx`,
    and consuming `Ctx`. These correspond to the read / mutate / one-shot shapes.
 3. **Capabilities live on the callback function type and are required at the
-   call site.** A callback typed `fn(&Ctx, A) with(C) -> R` may exercise exactly
-   the authority in `C`; the combinator that calls it must itself hold `C` (via
-   capability polymorphism, `cap C`). Capabilities are never erased by passing a
-   function through a combinator.
-4. **No hidden captures.** All state a callback touches arrives either as its
-   context parameter or as an ordinary argument. There is no environment.
+   call site** (now TYPE-17 and TRUST-4), named by a capability parameter `cap C`.
+4. **No hidden captures** (TYPE-1).
 5. **Scoped collection callbacks cannot receive a context that can reach the
    borrowed container** (the *container-not-in-context* invariant). This is the
    soundness keystone that makes `with_value` sound *without* a provenance /
    lifetime system.
-6. **No references are returned from these APIs.** A scoped callback yields a
-   borrowed `&V` / `&mut V` *into* the callback for the duration of the call; the
-   combinator returns only owned values (`Option<R>`, counts, etc.). This is the
-   same no-aggregate-ref subtraction that fixes H1 (ROADMAP #8a).
+6. **No references are returned from these APIs** (REF-1 to REF-3). A scoped
+   callback yields a borrowed `&V` / `&mut V` *into* the callback for the duration
+   of the call; the combinator returns only owned values.
 7. **`from(param)` returned references stay deeply deferred** (ROADMAP old Phase 7
    #8e). They are not this design's job, not the H1 fix, and not planned unless
    real workloads prove scoped callbacks / owned views insufficient.
@@ -363,24 +367,24 @@ fn map<T, U, cap C>(xs: &Vec<T>, f: fn(&T) with(C) -> U) with(C) -> Vec<U>
 
 - If `f` is pure, `C = {}` and `map` is pure.
 - If `f` is `with(File)`, `map` requires `with(File)`.
-- A caller satisfies `with(C)` by holding a superset of the instantiated `C`,
-  expanded through the capability lattice (`Concurrent ⊇ Async`, etc.).
+- A caller satisfies `with(C)` by holding a superset of the instantiated `C`
+  (TRUST-4). The lattice example once given here (`Concurrent ⊇ Async`) named
+  capabilities that do not exist; widening by subsumption is OPEN-9X2.
 
 The base machinery (`cap C`, fn-type capsets, call-site subset check, smuggle
 rejection) is **[implemented]**. The surface work remaining is mechanical:
 giving the stdlib HOF family these signatures and the elision shortcut below.
 
-**Elision shortcut [specified].** Per the research note, the common case should
+**Elision shortcut [specified, not built; OPEN-9X1].** Per the research note, the common case should
 need no explicit `cap C`. A combinator whose only capability source is its
 callbacks may write the propagated form (e.g. `with(f)` / inferred union) and the
 checker computes the required set as the union of the capsets of all callbacks
 invoked in the body. This is set propagation, not row unification.
 
-**Out of scope for v1** (per research note "what can wait"): capability-set
-bounds (`where C ⊆ {…}`), capability subtraction, and first-class capability
-values. None are needed for the HOF surface.
+**Out of scope for v1**: capability-set bounds, capability subtraction and
+first-class capability values (trusted.md, "Absent by decision").
 
-## 7. How `for x in …` desugars [decided]
+## 7. How `for x in …` desugars [stale: not the language; STMT-6, OPEN-51]
 
 `for` is a **loop construct, lowered directly to a bounded loop — not a bound
 callback.** A `for x in xs { … }` body that reads or mutates outer locals does so
@@ -448,10 +452,8 @@ Examples to add under `examples/callbacks/`:
 
 ## 10. What this design explicitly does NOT add [decided]
 
-- **No closures / no environment.** Captures are always explicit context.
-- **No local no-capture functions.** They add locality but no expressive power,
-  and create capture-by-expectation confusion. Use top-level helpers and
-  explicit context structs.
+- **No closures / no environment** (TYPE-1).
+- **No local no-capture functions** (TYPE-1's rationale; a parse error).
 - **No `BoundFn<…>` first-class callable value** (§4) — deferred until a storage
   workload needs it.
 - **No returned references from these APIs** (§1.6). Scoped access yields a
@@ -460,9 +462,9 @@ Examples to add under `examples/callbacks/`:
   deferred). Not the H1 fix; H1 is fixed by subtraction + scoped callbacks.
 - **No `view struct … from(Bytes)`** (deferred with the above).
 - **No first-class capability values, no effect handlers, no capability
-  subtraction, no row-polymorphic effects** (research note "what not to add").
-- **No implicit capability widening** — widening is explicit or via lattice
-  subsumption only.
+  subtraction, no row-polymorphic effects** (trusted.md, "Absent by decision").
+- **No implicit capability widening** — main refuses it (TYPE-4, TYPE-17); the
+  "explicit or via lattice subsumption" half is OPEN-9X2.
 
 ## 11. Build order
 

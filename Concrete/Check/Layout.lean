@@ -300,7 +300,8 @@ private partial def tySize_namedOrGeneric (ctx : Ctx) (tySizeFn : Ctx → Ty →
     | none =>
       panic! s!"Layout.tySize: unknown named type '{name}'"
 
-/-- Byte size of a type. Used for malloc/alloca sizing and enum layout. -/
+/-- Byte size of a type. Used for malloc/alloca sizing and enum layout. Capability arguments
+    do not affect it (spec: TYPE-18, docs/spec/types.md). -/
 partial def tySize (ctx : Ctx) : Ty → Nat
   | .int | .uint | .float64 => 8
   | .i32 | .u32 | .float32 => 4
@@ -416,7 +417,8 @@ partial def isPassByPtr (ctx : Ctx) (ty : Ty) : Bool :=
 -- Ty → LLVM type string
 -- ============================================================
 
-/-- Map a Concrete type to its LLVM IR type string. -/
+/-- Map a Concrete type to its LLVM IR type string. Capability arguments do not affect it
+    (spec: TYPE-18, docs/spec/types.md). -/
 partial def tyToLLVM (ctx : Ctx) : Ty → String
   | .int => "i64"
   | .uint => "i64"

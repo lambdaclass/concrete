@@ -1,9 +1,24 @@
-# Handle Capabilities and the Foreign Boundary
+# Handle Capabilities and the Foreign Boundary (design record)
 
-Status: rules R1–R10 decided and implemented; R-0484 remains OPEN. This page records the
-design (items marked **[decided]**), what the compiler does today (**[current]**), and what is
-still open (**[open]**). Which commits carry which part, and what has reached `main`, is in the
-status section below and in ROADMAP R-0484; nothing here is a release claim.
+Archived from docs/language: the R-0484 design (closed 2026-10-08 at `245cd51c`): handles that carry
+their capability, `trusted` absorbing only `Unsafe`, effect declarations on foreign bindings, the
+descriptor classification invariant, the encoding choice, the rejected alternatives, SPARK prior
+art, the acceptance cases and the slice plan.
+
+**Superseded as the normative text (2026-10-30).** The language rules are in the specification:
+what a capability means (TRUST-D1), the `with(...)` promise and capability containment (TRUST-4),
+`trusted` absorbing `Unsafe` and nothing else, and the `trusted extern` criterion (TRUST-5), effect
+declarations on every foreign binding and the known-effectful symbol check (FFI-3), capability
+parameters on types (TYPE-D1, TYPE-15), handle types invariant in their capability arguments
+(TYPE-4, TYPE-17), and capabilities without run-time representation (TYPE-18). Where this document
+and the spec differ, the spec governs. R7's "`C` is inferred at each call site from the handle's
+type" is OPEN-45, an open owner decision, not a rule; R7's widening citation is OPEN-9X2; §5's
+signature agreement between two bindings of one C symbol is OPEN-9X5 (main does not check it), and
+its `extern fn ... = "write"` spelling is pseudocode for FFI-5's `#[link_name]`. The descriptor
+rules (R5), closing a handle (R6), cross-package transport (R9) and the assumption reports (R10) are
+std, FFI-audit and reporting policy, kept here and in
+[HANDLE_CAPABILITIES_AUDIT.md](../../stdlib/HANDLE_CAPABILITIES_AUDIT.md). Status markers
+(**[decided]**, **[current]**, **[open]**) record the state on 2026-10-07.
 
 ## Implementation status (2026-10-07)
 
@@ -24,7 +39,7 @@ What each surface establishes:
 | | |
 |---|---|
 | **Checked by the compiler** | every function's `with(...)` covers what it reaches, through handles, trusted bodies, externs and dependencies; externs declare effects; proof admission refuses any function whose summary is missing, ambiguous, has an unresolved edge (indirect call, type-parameter dispatch, unloaded callee) or reaches a foreign binding; a compiler intrinsic is recognized only with its exact name, attribute and signature |
-| **Human assumptions, named in reports** | each foreign binding's declared effects; each trusted function's memory safety (named, with the raw operations and foreign calls it absorbs and what relies on it); which descriptor each binding receives (covered only by [HANDLE_CAPABILITIES_AUDIT.md](../stdlib/HANDLE_CAPABILITIES_AUDIT.md), which `check_descriptor_coverage.sh` keeps complete over std's bindings but does not re-verify) |
+| **Human assumptions, named in reports** | each foreign binding's declared effects; each trusted function's memory safety (named, with the raw operations and foreign calls it absorbs and what relies on it); which descriptor each binding receives (covered only by [HANDLE_CAPABILITIES_AUDIT.md](../../stdlib/HANDLE_CAPABILITIES_AUDIT.md), which `check_descriptor_coverage.sh` keeps complete over std's bindings but does not re-verify) |
 | **Incomplete coverage, reported as such** | indirect calls, type-parameter dispatch and unloaded callees make a summary incomplete and block "no external authority" and admission; single-file mode and `--query` say dependencies were not analysed, and `--query` refuses a project file it cannot resolve without them |
 | **Unsupported or open** | typed descriptors (second step, §10); a bodiless user `fn` declaration cannot declare effects, so user code cannot itself declare an intrinsic; bug 077 (relative call into a third-level submodule fails LLVM validation) is separately owned — the build refuses it, the summary keeps what such a call reaches, and no R-0484 acceptance case depends on it (`check_bug077_contained.sh`); the reports still compute the older indirect-call analysis beside the summary and treat a function as opaque if either says so |
 
@@ -65,9 +80,8 @@ boundary (bug 076).
 
 ## 1. The promise
 
-**[decided]** A function's `with(...)` is the complete list of the **external authority**
-it may exercise, however it came by that authority: directly, through a handle, through
-a `trusted` body, or through a dependency.
+**[decided]** A function's `with(...)` covers all the external authority it may exercise,
+directly, through a handle, a `trusted` body or a dependency (now TRUST-4, TRUST-5).
 
 What that promise does and does not say:
 
@@ -93,8 +107,7 @@ What that promise does and does not say:
 
 ## 2. What a capability means
 
-**[decided]** A capability names **logical authority**, not the eventual destination of
-the bytes.
+**[decided]** Now TRUST-D1: logical authority, not the destination of the bytes.
 
 - `Console` is authority over the standard streams the environment handed the process.
   `File` is authority to name and open filesystem paths. `Network` is authority to create
@@ -233,7 +246,7 @@ required C.** Possession grants nothing; using the descriptor independently requ
   answered by types. `Reader` and `Writer` are already separate; a read-only socket would
   be its own type exposing only reads, not a second capability parameter.
 - **Closing requires `C`.** The argument differs by handle type (from the audit, §2 of
-  [HANDLE_CAPABILITIES_AUDIT.md](../stdlib/HANDLE_CAPABILITIES_AUDIT.md)):
+  [HANDLE_CAPABILITIES_AUDIT.md](../../stdlib/HANDLE_CAPABILITIES_AUDIT.md)):
 
   | handle | what `close` does | why it requires `C` |
   |---|---|---|
@@ -248,7 +261,8 @@ required C.** Possession grants nothing; using the descriptor independently requ
 
 ### R7. Composition **[decided]**
 
-- `C` is inferred at each call site from the handle's type.
+- `C` is inferred at each call site from the handle's type. (Not a rule: how a call binds a
+  capability variable is OPEN-45.)
 - **No implicit widening:** the existing rule in
   `CALLABLE_VALUES_AND_CAPABILITIES.md` ("widening is explicit or via lattice subsumption
   only") and the subset check at every call (`tests/programs/adversarial_cap_subset.con`)
@@ -261,7 +275,7 @@ required C.** Possession grants nothing; using the descriptor independently requ
 
 ### R8. Erasure and identity **[decided]**
 
-- Capabilities carry no runtime data and do not change layout.
+- Erasure: now TYPE-18.
 - Symbol identity is correct and collision-free across instantiations. The E0809 history
   (specialization names colliding) is the failure to avoid.
 - Whether `Writer<Console>` and `Writer<File>` share one generated function is an
@@ -385,7 +399,7 @@ extern fn write<cap C>(fd: Fd<C>, buf: *const u8, n: u64) with(C) -> i64;
 
 SPARK is the closest precedent and is summarized, with citations and with verified facts
 kept separate from interpretation, in
-[research/stdlib/languages/spark.md](../../research/stdlib/languages/spark.md)
+[research/stdlib/languages/spark.md](../../../research/stdlib/languages/spark.md)
 ("Flow Analysis, External State and Foreign Code"). Three findings shaped this design:
 
 - SPARK's I/O documentation describes wrapping output in a `Global => null` procedure
@@ -484,7 +498,7 @@ and for cross-classification aliasing.
 
 - **When, if ever, to move to B** (§5), once duplicate bindings can be measured.
 - **The construction/caller audit** (R5, §10): taken 2026-09-30 in
-  [HANDLE_CAPABILITIES_AUDIT.md](../stdlib/HANDLE_CAPABILITIES_AUDIT.md), revised 2026-10-01. Its
+  [HANDLE_CAPABILITIES_AUDIT.md](../../stdlib/HANDLE_CAPABILITIES_AUDIT.md), revised 2026-10-01. Its
   classification decisions are settled (D1–D2 accepted, D3–D4 revised); its findings
   F1–F10 are the slice 3 work list, and its remaining assumptions are listed in §1 there.
 - **Replacement and cross-classification aliasing** (R5), for the second step: binding

@@ -162,7 +162,7 @@ environment.
 ### What is deliberately excluded
 
 - **No closures.** Callbacks are top-level/`fn` values; state is threaded via
-  `_ctx`. (See [CALLABLE_VALUES_AND_CAPABILITIES.md](../language/CALLABLE_VALUES_AND_CAPABILITIES.md).)
+  `_ctx`. (See [CALLABLE_VALUES_AND_CAPABILITIES.md](../archive/design-records/CALLABLE_VALUES_AND_CAPABILITIES.md).)
 - **No `Iterator` trait / no `dyn` trait-object iterators.** There is no lazy
   universal protocol; pick the concrete form above.
 - **No hidden allocation.** Any traversal that allocates says so in its

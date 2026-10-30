@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Callable-values / capability-polymorphism design gate (ROADMAP Phase 5 #24a).
 #
-# Two invariants until docs/language/CALLABLE_VALUES_AND_CAPABILITIES.md exists:
+# Two invariants until the callable-values design exists (now the design record
+# docs/archive/design-records/CALLABLE_VALUES_AND_CAPABILITIES.md; its rules are in docs/spec):
 #   1. The fn-pointer smuggling hole stays CLOSED: calling through a
 #      capability-bearing fn type requires the caller to hold those caps.
 #   2. The stdlib's higher-order-function surface is FROZEN at the recorded
@@ -36,7 +37,7 @@ grep <<<"$OUT" -q "requires capability 'Network' but 'smuggle' does not declare 
 rm -f tests/programs/cap_fnptr_declared
 
 echo "=== stdlib HOF surface frozen until the design doc lands ==="
-if [ -f docs/language/CALLABLE_VALUES_AND_CAPABILITIES.md ]; then
+if [ -f docs/archive/design-records/CALLABLE_VALUES_AND_CAPABILITIES.md ]; then
   ok "callable-values design doc exists — HOF freeze lifted (doc governs new surface)"
 else
   CURRENT=$(mktemp)
@@ -46,7 +47,7 @@ else
   if diff -u scripts/tests/stdlib_hof_baseline.txt "$CURRENT" > /dev/null; then
     ok "no new fn-pointer-taking public stdlib API beyond the baseline"
   else
-    no "stdlib HOF surface changed without docs/language/CALLABLE_VALUES_AND_CAPABILITIES.md:"
+    no "stdlib HOF surface changed without docs/archive/design-records/CALLABLE_VALUES_AND_CAPABILITIES.md:"
     diff -u scripts/tests/stdlib_hof_baseline.txt "$CURRENT" | sed 's/^/       /'
   fi
   rm -f "$CURRENT"

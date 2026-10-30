@@ -79,7 +79,7 @@ This section answers a different question from the packet above: not "what makes
 provable" but "how does SPARK keep effect declarations honest across pointers, hidden state
 and foreign code". It is split into verified facts, our interpretation, and the Concrete
 decisions they informed, which are recorded in
-[docs/language/HANDLE_CAPABILITIES.md](../../../docs/language/HANDLE_CAPABILITIES.md).
+[docs/archive/design-records/HANDLE_CAPABILITIES.md](../../../docs/archive/design-records/HANDLE_CAPABILITIES.md).
 
 **Sources and versions.** User's Guide and Reference Manual pages as served on 2026-09-30,
 labelled 27.0w; release notes for SPARK 24 and 25 (their own labels); one claim from GNAT's

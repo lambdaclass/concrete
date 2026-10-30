@@ -7,7 +7,7 @@ Status: audited design inventory (ROADMAP R-0484, slice 1), taken 2026-09-30 aga
 `_exit`, added by the bug 072 fix, audited in §3.2; every std binding now appears in exactly
 one of §3.1–§3.3, checked by `check_descriptor_coverage.sh`). It records
 std as it is today, measured against the rules in
-[HANDLE_CAPABILITIES.md](../language/HANDLE_CAPABILITIES.md). It is evidence for the design and a
+[HANDLE_CAPABILITIES.md](../archive/design-records/HANDLE_CAPABILITIES.md). It is evidence for the design and a
 work list for slice 3, not a claim that anything is fixed. Line numbers refer to that
 commit.
 

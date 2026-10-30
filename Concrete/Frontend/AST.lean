@@ -8,6 +8,7 @@ namespace Concrete
 -- Capability Sets
 -- ============================================================
 
+-- spec: TYPE-D1 (docs/spec/types.md; the capability-set syntax: concrete names, variables and unions)
 inductive CapSet where
   | empty                              -- no capabilities (pure)
   | concrete (caps : List String)      -- concrete set, e.g., ["File", "Network"]
@@ -19,7 +20,8 @@ inductive CapSet where
 def stdCaps : List String :=
   ["File", "Network", "Time", "Env", "Random", "Process", "Console", "Alloc"]
 
-/-- All valid capability names. (`Device` for MMIO/hardware is a planned future
+/-- spec: TRUST-D1 (docs/spec/trusted.md; the capability names whose meanings TRUST-D1 states).
+    All valid capability names. (`Device` for MMIO/hardware is a planned future
     addition — deferred until the freestanding/embedded path needs it; see
     ROADMAP and research/language/capability-sandboxing.md §4a.) -/
 def validCaps : List String :=
@@ -84,7 +86,7 @@ def CapSet.expandAliases (aliases : List (String × List String)) : CapSet → C
   | .var n => .var n
   | .union a b => .union (a.expandAliases aliases) (b.expandAliases aliases)
 
--- spec: TYPE-1, spec: TYPE-2 (docs/spec/types.md; the type grammar has function-pointer types and no closure or trait-object type)
+-- spec: TYPE-1, spec: TYPE-2, spec: TYPE-17 (docs/spec/types.md; the type grammar has function-pointer types, which carry a capability set, and no closure or trait-object type)
 inductive Ty where
   | int          -- Int or i64
   | uint         -- Uint or u64

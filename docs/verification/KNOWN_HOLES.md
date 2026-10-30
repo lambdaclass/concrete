@@ -1190,7 +1190,7 @@ land before the relevant freeze. Full text in ROADMAP; listed here so the
 whole picture is in one place.
 
 - **Callable values + capability-polymorphic callbacks** — ROADMAP old Phase 6
-  #18. DESIGN DONE (2026-06-12): `docs/language/CALLABLE_VALUES_AND_CAPABILITIES.md`
+  #18. DESIGN DONE (2026-06-12): `docs/archive/design-records/CALLABLE_VALUES_AND_CAPABILITIES.md`
   now exists and records the decided model; the HOF freeze is lifted (doc
   governs). What remains is implementation only when workloads pull it:
   `with_value_mut`/`modify` need the container-not-in-context gate, stored

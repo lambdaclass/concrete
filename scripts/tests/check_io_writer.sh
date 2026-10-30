@@ -28,7 +28,7 @@ echo "$row" | awk -F'\t' '$3=="no"' | has_match . && ok "fixed_writer allocates:
 # function can do. Now the handle carries its capability in its TYPE (`Writer<C>`) and using
 # it requires `with(C)`: every method declares the handle's capability VARIABLE `C`, which a
 # caller instantiates (`Writer<Console>` makes `write` cost Console; `Writer<{}>` costs
-# nothing). Design: docs/language/HANDLE_CAPABILITIES.md.
+# nothing). Design: docs/archive/design-records/HANDLE_CAPABILITIES.md.
 #
 # SELECTED BY RECEIVER AND EXACT SIGNATURE, not by name. A name matches several rows (`write`
 # is also `TextFile`'s method, `with(File)`), and this section once passed on whichever row of

@@ -488,7 +488,7 @@ def normalizeTyForCmp : Ty → Ty
   | .array t n => .array (normalizeTyForCmp t) n
   | t => t
 
--- spec: TYPE-4 (docs/spec/types.md; this declaration enforces the rule)
+-- spec: TYPE-4, spec: TYPE-17 (docs/spec/types.md; this declaration enforces the rule)
 def expectTy (expected actual : Ty) (ctx : String) (span : Option Span := none) : CheckM Unit := do
   if expected == actual then return ()
   -- Never type is compatible with anything (bottom type)

@@ -1942,7 +1942,7 @@ what external authority it can use, in one place, however it came by that author
 does not say which file is touched, what is mutated through arguments, whether the
 function terminates, or which inputs influence which outputs — those need separate
 contracts. The canonical statement is
-[docs/language/HANDLE_CAPABILITIES.md](../language/HANDLE_CAPABILITIES.md) (rules R1–R10);
+[docs/archive/design-records/HANDLE_CAPABILITIES.md](../archive/design-records/HANDLE_CAPABILITIES.md) (rules R1–R10);
 the summary below is the original three rules plus the 2026-09-30 additions.
 
 1. **Handles carry their capability in their type.** `Writer<C>` and `Reader<C>`, with `C`
@@ -1994,7 +1994,7 @@ The cost grows where handles are stored in long-lived structs (`App<C>`), one ca
 name per method.
 
 **Slices (revised 2026-09-30):** (1) design doc — drafted as
-[docs/language/HANDLE_CAPABILITIES.md](../language/HANDLE_CAPABILITIES.md); encoding A
+[docs/archive/design-records/HANDLE_CAPABILITIES.md](../archive/design-records/HANDLE_CAPABILITIES.md); encoding A
 selected for the first implementation (B a later option); construction/caller audit
 taken 2026-09-30 in
 [HANDLE_CAPABILITIES_AUDIT.md](../stdlib/HANDLE_CAPABILITIES_AUDIT.md); classification

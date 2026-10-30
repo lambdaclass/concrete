@@ -142,7 +142,7 @@ def trustedDischarges (inTrusted : Bool) (cap : String) : Bool :=
     binding must declare them (Resolve, E0116), so trust can never absorb an
     unclassified effect. Fixtures: `trusted_absorbs_extern_unsafe.con` and
     `error_trusted_extern_effect_not_absorbed.con`. Design:
-    `docs/language/HANDLE_CAPABILITIES.md` R2. -/
+    `docs/archive/design-records/HANDLE_CAPABILITIES.md` R2. -/
 def trustedGrantsUnsafeOnCalls : Bool := true
 
 /-- C symbols known to have external effects (R-0484 R3). Binding one of them with an

@@ -15,7 +15,7 @@ shape — this is the pull ROADMAP item 2 asked for.
 
 Related: `docs/stdlib/ERROR_CONVENTIONS.md` (13t buckets — usage errors exit 2),
 `docs/platform/MAIN_EXIT_MODEL.md` (u8 main), `std.args` (raw access layer, stays),
-`docs/language/CALLABLE_VALUES_AND_CAPABILITIES.md` (no callback registration in
+`docs/archive/design-records/CALLABLE_VALUES_AND_CAPABILITIES.md` (no callback registration in
 v1, so none of its machinery is needed here).
 
 ## What v1 is

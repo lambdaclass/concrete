@@ -5652,7 +5652,7 @@ coverage complete over std (audit F6 carried out, `_exit` audited, inventory dri
 gated), cross-dependency capability explanations, `std.mem.sizeof` classified as a
 compiler intrinsic, and the docs/authority audit. Per-surface status (checked, human
 assumption, incomplete coverage, unsupported) is in
-[HANDLE_CAPABILITIES.md](../language/HANDLE_CAPABILITIES.md#implementation-status-2026-10-07).
+[HANDLE_CAPABILITIES.md](../archive/design-records/HANDLE_CAPABILITIES.md#implementation-status-2026-10-07).
 
 **Accepted limits, each gated rather than hidden:**
 

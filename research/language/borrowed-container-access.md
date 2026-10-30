@@ -1,6 +1,6 @@
 # Borrowed Container Access Without Lifetimes
 
-Status: research note, design input for `docs/language/CALLABLE_VALUES_AND_CAPABILITIES.md`
+Status: research note, design input for `docs/archive/design-records/CALLABLE_VALUES_AND_CAPABILITIES.md`
 and ROADMAP old Phase 7 #8a / old Phase 6 #18.
 
 ## Question
