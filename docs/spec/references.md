@@ -1055,6 +1055,13 @@ one is exclusive. Since REF-11 the key is the root alone. Because REF-9 makes ev
 through a reference a reference, a Copy payload binder is a loan too, and writing its root
 inside the arm is refused (the G17 Copy case, closed 2026-10-23).
 
+**Codes by case** (the compiler's ledger descriptions). E0203: the root is used while a borrow
+block has frozen it (read, freed or moved inside the block). E0204: a linear root is moved while it
+is borrowed. E0218: a frozen root is assigned. E0231: a root already mutably borrowed is borrowed
+again. E0232: a root already borrowed is mutably borrowed. E0235: a root already immutably borrowed
+is mutably borrowed. E0293: two borrows that one call makes overlap on one root. E0238: a borrow's
+source does not normalize to a traceable place, so its root cannot be tracked.
+
 ```con reject name=free-in-borrow-block code=E0203 stage=check pair=free-after-block
 struct B { v: Int }
 

@@ -109,6 +109,14 @@ export a helper by accident. `pub` on a type exports its name, not its represent
 There is one public level today; a package-internal `pub(pkg)` is designed for when packages
 depend on packages. Resolve, Check and Elab each verify imports (E0111, E0285, E0419).
 
+**Codes by case.** Each of the three refusals has one code per pass that can report it, Resolve
+first and Check or Elab when they meet the import again (`importCode` and `unimportableCode` in
+`Concrete/Resolve/FileSummary.lean`): an unknown module is E0110 (resolve), E0284 (check) or E0418
+(elab); a declaration that is not `pub` is E0111, E0285 or E0419; and an import naming a public
+trait, which no import binds, is E0126, E0323 or E0423. On a single file the import refusals are
+reported at resolve (E0110, E0111, E0126); a qualified call to a private function there is E0101
+(unknown function).
+
 Visibility has two levels, `pub` and private, and private is the default, so a module's public
 surface is explicit and nothing is exported by accident; a `pub(pkg)` level is deferred until
 packages need it, and `pub(super)` or `pub(in path)` will not be added (restructure the modules

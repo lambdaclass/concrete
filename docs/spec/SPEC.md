@@ -1260,6 +1260,14 @@ export a helper by accident. `pub` on a type exports its name, not its represent
 There is one public level today; a package-internal `pub(pkg)` is designed for when packages
 depend on packages. Resolve, Check and Elab each verify imports (E0111, E0285, E0419).
 
+**Codes by case.** Each of the three refusals has one code per pass that can report it, Resolve
+first and Check or Elab when they meet the import again (`importCode` and `unimportableCode` in
+`Concrete/Resolve/FileSummary.lean`): an unknown module is E0110 (resolve), E0284 (check) or E0418
+(elab); a declaration that is not `pub` is E0111, E0285 or E0419; and an import naming a public
+trait, which no import binds, is E0126, E0323 or E0423. On a single file the import refusals are
+reported at resolve (E0110, E0111, E0126); a qualified call to a private function there is E0101
+(unknown function).
+
 Visibility has two levels, `pub` and private, and private is the default, so a module's public
 surface is explicit and nothing is exported by accident; a `pub(pkg)` level is deferred until
 packages need it, and `pub(super)` or `pub(in path)` will not be added (restructure the modules
@@ -2367,6 +2375,10 @@ truthiness while `--interp` refused it. This entry's example found the bug.
 The counted loop of STMT-6@3 has no condition. Until bug 331 is fixed, main still parses the C-style
 `for (init; cond; step)` that STMT-6@3 removes, and its `cond` must be `bool` like a `while` condition.
 
+**Codes by case.** Check reports a non-`bool` `if` condition as E0223. CoreCheck refuses the same in
+Core as a backstop: E0541 (`if` condition), E0540 (`while` condition), E0504 (a comparison whose
+result is not `bool`), E0505 (`&&` or `||` on a non-`bool`) and E0508 (`!` on a non-`bool`).
+
 ```con reject name=int-condition code=E0223 stage=check pair=bool-condition
 fn main() -> u8 {
     let n: Int = 1;
@@ -2406,6 +2418,13 @@ are refused rather than promoted. Comparing aggregates would need a definition o
 type, which the language does not have. Version 1 admitted raw-pointer comparison
 and `p + k` in trusted or `Unsafe` code (bugs 134 and 140); OD26 removes both, pointer arithmetic
 becoming `ptr::offset` (TRUST-1).
+
+**Codes by case.** Check reports first: E0228, the two operands of a binary operator have different
+types; E0229, a comparison on a type that has none. CoreCheck refuses the same violations in Core
+if they reach it (a backstop for elaboration and specialization): E0501, arithmetic on a
+non-numeric type (also after monomorphization); E0502, mismatched binary operands; E0503,
+mismatched comparison operands; E0506, a bitwise operator on a non-integer; E0507, negation of a
+non-number; E0509, bitwise not on a non-integer.
 
 Version 2 records the owner's decision of 2026-10-29 (OD26), aligned with TRUST-1: arithmetic,
 shifts and comparisons take numbers only, and pointer offset, difference and ordering are
@@ -2452,7 +2471,7 @@ fn main() -> u8 {
 }
 ```
 
-```con reject name=pointer-comparison code=new stage=check pair=pointee-comparison pending=bug-322 now=accept:42
+```con reject name=pointer-comparison code=E0229 stage=check pair=pointee-comparison pending=bug-322 now=accept:42
 trusted fn same(p: *const Int, q: *const Int) -> bool {
     return p == q;
 }
@@ -9268,6 +9287,13 @@ caller frame, where the caller's call borrow protects it. Two borrows conflict w
 one is exclusive. Since REF-11 the key is the root alone. Because REF-9 makes every arm binder
 through a reference a reference, a Copy payload binder is a loan too, and writing its root
 inside the arm is refused (the G17 Copy case, closed 2026-10-23).
+
+**Codes by case** (the compiler's ledger descriptions). E0203: the root is used while a borrow
+block has frozen it (read, freed or moved inside the block). E0204: a linear root is moved while it
+is borrowed. E0218: a frozen root is assigned. E0231: a root already mutably borrowed is borrowed
+again. E0232: a root already borrowed is mutably borrowed. E0235: a root already immutably borrowed
+is mutably borrowed. E0293: two borrows that one call makes overlap on one root. E0238: a borrow's
+source does not normalize to a traceable place, so its root cannot be tracked.
 
 ```con reject name=free-in-borrow-block code=E0203 stage=check pair=free-after-block
 struct B { v: Int }

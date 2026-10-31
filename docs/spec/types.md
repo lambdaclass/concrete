@@ -384,6 +384,10 @@ truthiness while `--interp` refused it. This entry's example found the bug.
 The counted loop of STMT-6@3 has no condition. Until bug 331 is fixed, main still parses the C-style
 `for (init; cond; step)` that STMT-6@3 removes, and its `cond` must be `bool` like a `while` condition.
 
+**Codes by case.** Check reports a non-`bool` `if` condition as E0223. CoreCheck refuses the same in
+Core as a backstop: E0541 (`if` condition), E0540 (`while` condition), E0504 (a comparison whose
+result is not `bool`), E0505 (`&&` or `||` on a non-`bool`) and E0508 (`!` on a non-`bool`).
+
 ```con reject name=int-condition code=E0223 stage=check pair=bool-condition
 fn main() -> u8 {
     let n: Int = 1;
@@ -423,6 +427,13 @@ are refused rather than promoted. Comparing aggregates would need a definition o
 type, which the language does not have. Version 1 admitted raw-pointer comparison
 and `p + k` in trusted or `Unsafe` code (bugs 134 and 140); OD26 removes both, pointer arithmetic
 becoming `ptr::offset` (TRUST-1).
+
+**Codes by case.** Check reports first: E0228, the two operands of a binary operator have different
+types; E0229, a comparison on a type that has none. CoreCheck refuses the same violations in Core
+if they reach it (a backstop for elaboration and specialization): E0501, arithmetic on a
+non-numeric type (also after monomorphization); E0502, mismatched binary operands; E0503,
+mismatched comparison operands; E0506, a bitwise operator on a non-integer; E0507, negation of a
+non-number; E0509, bitwise not on a non-integer.
 
 Version 2 records the owner's decision of 2026-10-29 (OD26), aligned with TRUST-1: arithmetic,
 shifts and comparisons take numbers only, and pointer offset, difference and ordering are
@@ -469,7 +480,7 @@ fn main() -> u8 {
 }
 ```
 
-```con reject name=pointer-comparison code=new stage=check pair=pointee-comparison pending=bug-322 now=accept:42
+```con reject name=pointer-comparison code=E0229 stage=check pair=pointee-comparison pending=bug-322 now=accept:42
 trusted fn same(p: *const Int, q: *const Int) -> bool {
     return p == q;
 }
