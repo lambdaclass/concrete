@@ -1,0 +1,12 @@
+// Bug 350 (outside: tooling): under #[overflow_checked], an operation that always overflows is
+// never refused at compile time: the folder needs literal-only operands and the type lookup needs a
+// typed one. Expected: the proven-overflow diagnostic fires, or the documentation stops promising it.
+mod m {
+    #[overflow_checked]
+    pub fn f() -> i32 {
+        return (2147483647 as i32) + (1 as i32);
+    }
+}
+fn main() -> u8 {
+    return 0;
+}

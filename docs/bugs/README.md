@@ -513,6 +513,7 @@ the report counts those bugs as ambiguous.
 - [347_get_args_has_a_check_signature_and_no_implementa.md](347_get_args_has_a_check_signature_and_no_implementa.md) — get_args has a Check signature and no implementation, so a program whose emitted code calls it fails LLVM validation on an undefined @get_args
 - [348_float_to_string_runs_natively_and_interp_stops_w.md](348_float_to_string_runs_natively_and_interp_stops_w.md) — float_to_string runs natively and --interp stops with undefined function float_to_string
 - [349_append_is_accepted_in_a_function_that_does_not_d.md](349_append_is_accepted_in_a_function_that_does_not_d.md) — append is accepted in a function that does not declare Alloc, because Elab desugars it into string_append calls that carry no capability
+- [350_the_proven_overflow_arm_of_the_compile_time_safe.md](350_the_proven_overflow_arm_of_the_compile_time_safe.md) — the proven-overflow arm of the compile-time safety diagnostics can never fire, so the documented refusal of a proven overflow never happens
 
 <!-- END GENERATED: bug list -->
 
