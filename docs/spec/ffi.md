@@ -108,7 +108,7 @@ pointer to a value type stays FFI-safe.
 ```con reject name=undeclared-effects code=E0116 stage=resolve pair=declared-extern
 extern fn abs(x: i32) -> i32;
 
-fn main() -> Int {
+fn main() -> u8 {
     return 0;
 }
 ```
@@ -118,7 +118,7 @@ struct S { v: Int }
 
 extern fn f(s: S) with() -> i32;
 
-fn main() -> Int {
+fn main() -> u8 {
     return 0;
 }
 ```
@@ -126,15 +126,27 @@ fn main() -> Int {
 ```con accept name=declared-extern exit=42
 trusted extern fn abs(x: i32) with() -> i32;
 
-fn main() -> Int {
+fn example_value() -> Int {
     return abs(0 - 42) as Int;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
 ```con reject name=returns-pointer-to-ref code=E0575 stage=core-check pair=pointer-to-value
 trusted extern fn f() with() -> *const &Int;
 
-fn main() -> Int {
+fn main() -> u8 {
     return 0;
 }
 ```
@@ -142,7 +154,7 @@ fn main() -> Int {
 ```con reject name=param-pointer-to-ref code=E0574 stage=core-check pair=pointer-to-value
 trusted extern fn keep(p: *const &Int) with();
 
-fn main() -> Int {
+fn main() -> u8 {
     return 0;
 }
 ```
@@ -151,7 +163,7 @@ fn main() -> Int {
 trusted extern fn f() with() -> *const Int;
 trusted extern fn keep(p: *const Int) with();
 
-fn main() -> Int {
+fn main() -> u8 {
     return 42;
 }
 ```
@@ -178,7 +190,7 @@ Over-alignment is refused because code generation does not support it yet (E0585
 #[repr(C, align(3))]
 struct S { v: Int }
 
-fn main() -> Int {
+fn main() -> u8 {
     return 0;
 }
 ```
@@ -187,9 +199,21 @@ fn main() -> Int {
 #[repr(C)]
 struct Copy S { a: i32, b: i32 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let s: S = S { a: 40, b: 2 };
     return (s.a + s.b) as Int;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -219,7 +243,7 @@ fn entry() -> i32 {
     return 0;
 }
 
-fn main() -> Int {
+fn main() -> u8 {
     return 0;
 }
 ```
@@ -231,10 +255,22 @@ fn malloc(n: Int) -> Int {
     return n;
 }
 
-fn main() with(Std) -> Int {
+fn example_value() with(Std) -> Int {
     let h: Heap<B> = alloc(B { v: 40 });
     let b: B = *h;
     return b.v + malloc(2);
+}
+
+fn main() with(Std) -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -303,7 +339,7 @@ mod m {
 
     struct Copy S { a: u8, b: u32 }
 
-    pub fn main() -> Int {
+    pub fn main() -> u8 {
         if sizeof::<S>() >= 5 && alignof::<S>() >= 1 {
             return 42;
         }
@@ -347,7 +383,7 @@ mod m {
     #[repr(packed)]
     struct Copy P { l: u32, v: u8 }
 
-    pub fn main() -> Int {
+    pub fn main() -> u8 {
         if sizeof::<R>() == 8 && alignof::<R>() == 4 && sizeof::<H>() == 7 && alignof::<H>() == 1
             && sizeof::<P>() == 5 && alignof::<P>() == 1 {
             return 42;
@@ -370,7 +406,7 @@ mod m {
         return *q;
     }
 
-    pub fn main() -> Int {
+    pub fn main() -> u8 {
         let r: R = R { v: 7, l: 30 };
         let p: P = P { l: 9, v: 5 };
         if byte_at(&r, 0) == 7 && byte_at(&r, 4) == 30 && byte_at(&p, 0) == 9 && byte_at(&p, 4) == 5 {
@@ -404,8 +440,20 @@ base ([TRUSTED_COMPUTING_BASE.md](../verification/TRUSTED_COMPUTING_BASE.md) §6
 ```con accept name=trusted-extern-without-unsafe exit=42
 trusted extern fn abs(x: i32) with() -> i32;
 
-fn main() -> Int {
+fn example_value() -> Int {
     return abs(-42) as Int;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -439,12 +487,24 @@ struct Copy B { v: u8 }
 struct Copy C { v: u8 }
 struct Copy D { v: u8 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let a: A = A { v: 10 };
     let b: B = B { v: 10 };
     let c: C = C { v: 10 };
     let d: D = D { v: 12 };
     return (a.v + b.v + c.v + d.v) as Int;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -484,13 +544,25 @@ struct Copy Addr { s: u32 }
 trusted extern fn htonl(x: u32) with() -> u32;
 trusted extern fn inet_lnaof(a: Addr) with() -> u32;
 
-fn main() -> Int {
+fn example_value() -> Int {
     let r: D = div(85, 2);
     let a: Addr = Addr { s: htonl(167772202) };
     if r.rem == 1 && inet_lnaof(a) == 42 {
         return r.quot as Int;
     }
     return 0;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -525,9 +597,21 @@ trusted fn second(arr: &[S; 3]) -> u32 {
     return s.b;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let arr: [S; 3] = [S { a: 1, b: 10 }, S { a: 2, b: 42 }, S { a: 3, b: 30 }];
     return second(&arr) as Int;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -545,9 +629,21 @@ mod m {
         return s.b;
     }
 
-    pub fn main() -> Int {
+    fn example_value() -> Int {
         let arr: [S; 3] = [S { a: 1, b: 10 }, S { a: 2, b: 42 }, S { a: 3, b: 30 }];
         return second(&arr) as Int;
+    }
+
+    pub fn main() -> u8 {
+
+        if example_value() == 42 {
+
+            return 42;
+
+        }
+
+        return 1;
+
     }
 }
 ```

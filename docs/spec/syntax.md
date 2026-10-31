@@ -74,14 +74,26 @@ first; reopening language macros is a thesis-level decision, not a roadmap item.
 `scripts/tests/check_no_macros.sh` pins the refusals.
 
 ```con reject name=unbalanced-parenthesis code=E0001 stage=parse pair=balanced-parenthesis
-fn main() -> Int {
+fn example_value() -> Int {
     return (40 + 2;
+}
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
 }
 ```
 
 ```con accept name=balanced-parenthesis exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     return (40 + 2);
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -101,20 +113,44 @@ the head context resolves; the checkers report it, and `grammar/ll1_known_confli
 ```con reject name=head-constant-struct-literal code=E0001 stage=parse pair=head-constant-parenthesized
 const LIMIT: Int = 16;
 
-fn main() -> Int {
+fn example_value() -> Int {
     let mut n: Int = 20;
     if n > LIMIT { n = LIMIT; }
     return n + 26;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
 ```con accept name=head-constant-parenthesized exit=42
 const LIMIT: Int = 16;
 
-fn main() -> Int {
+fn example_value() -> Int {
     let mut n: Int = 20;
     if (n > LIMIT) { n = LIMIT; }
     return n + 26;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -122,14 +158,14 @@ The token forms (SYN-6), the statement `match` (SYN-8), the value `if` (SYN-9) a
 (SYN-10) are refused here when broken:
 
 ```con reject name=float-exponent code=E0001 stage=parse pair=float-digits
-fn main() -> Int {
+fn main() -> u8 {
     let f: f64 = 1e3;
     return 42;
 }
 ```
 
 ```con accept name=float-digits exit=42
-fn main() -> Int {
+fn main() -> u8 {
     let f: f64 = 1000.0;
     return 42;
 }
@@ -137,20 +173,20 @@ fn main() -> Int {
 
 ```con reject name=block-comment code=E0001 stage=parse pair=line-comment
 /* a block comment */
-fn main() -> Int {
+fn main() -> u8 {
     return 42;
 }
 ```
 
 ```con accept name=line-comment exit=42
 // a line comment
-fn main() -> Int {
+fn main() -> u8 {
     return 42;
 }
 ```
 
 ```con reject name=statement-match-continued code=E0001 stage=parse pair=value-match-continued
-fn main() -> Int {
+fn main() -> u8 {
     let x: Int = 1;
     match x { _ => 40 } + 2;
     return 42;
@@ -158,46 +194,76 @@ fn main() -> Int {
 ```
 
 ```con accept name=value-match-continued exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let x: Int = 1;
     let y: Int = match x { _ => 40 } + 2;
     return y;
 }
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 ```con reject name=value-if-without-else code=E0001 stage=parse pair=value-if-else
-fn main() -> Int {
+fn example_value() -> Int {
     let c: bool = true;
     let x: Int = if c { 42 };
     return x;
 }
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
+}
 ```
 
 ```con accept name=value-if-else exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let c: bool = true;
     let x: Int = if c { 42 } else { 0 };
     return x;
 }
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 ```con reject name=hash-variant code=E0001 stage=parse pair=colon-variant
-fn main() -> Int {
+fn example_value() -> Int {
     let o: Option<Int> = Option::<Int>#Some { value: 42 };
     match o {
         Option::Some { value } => { return value; },
         Option::None => { return 0; }
     }
 }
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
+}
 ```
 
 ```con accept name=colon-variant exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let o: Option<Int> = Option::<Int>::Some { value: 42 };
     match o {
         Option::Some { value } => { return value; },
         Option::None => { return 0; }
     }
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -206,18 +272,42 @@ Outside a head, a `{` after a lowercase name does not begin a struct literal:
 ```con reject name=lowercase-struct-literal code=E0001 stage=parse pair=uppercase-struct-literal
 struct Copy p { v: Int }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let q: p = p { v: 42 };
     return q.v;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
 ```con accept name=uppercase-struct-literal exit=42
 struct Copy P { v: Int }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let q: P = P { v: 42 };
     return q.v;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -243,7 +333,7 @@ prefix operator binds tighter than a cast, so `-x as i32` is `(-x) as i32`.
 ```con accept name=precedence-levels exit=42
 struct Copy C { n: Int }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let c: C = C { n: 2 };
     let a: Int = -c.n * 3 + 50;
     let s: Int = 1 << 2 + 1;
@@ -252,6 +342,18 @@ fn main() -> Int {
         return a + s - 10;
     }
     return 0;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -275,16 +377,28 @@ the exemption. Function names the compiler reserves (`__` names, `user_main` and
 are refused by MOD-3.
 
 ```con reject name=compiler-spelling code=E0283 stage=check pair=ordinary-spelling
-fn main() -> Int {
+fn example_value() -> Int {
     let __destr_x: Int = 42;
     return __destr_x;
+}
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
 }
 ```
 
 ```con accept name=ordinary-spelling exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let destr_x: Int = 42;
     return destr_x;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -312,7 +426,7 @@ parenthesized is OPEN-34.
 ```con reject name=bare-struct-literal-in-head code=E0001 stage=parse pair=parenthesized-struct-literal-in-head pending=bug-318 now=accept:42
 struct Copy P { v: Int }
 
-fn main() -> Int {
+fn main() -> u8 {
     if P { v: 1 }.v == 1 {
         return 42;
     }
@@ -323,7 +437,7 @@ fn main() -> Int {
 ```con accept name=parenthesized-struct-literal-in-head exit=42
 struct Copy P { v: Int }
 
-fn main() -> Int {
+fn main() -> u8 {
     if (P { v: 1 }).v == 1 {
         return 42;
     }
@@ -334,12 +448,24 @@ fn main() -> Int {
 ```con accept name=head-constant-unparenthesized exit=42 pending=bug-318 now=reject:E0001:parse
 const LIMIT: Int = 3;
 
-fn main() -> Int {
+fn example_value() -> Int {
     let mut n: Int = 0;
     while n < LIMIT {
         n = n + 1;
     }
     return n + 39;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -365,14 +491,26 @@ valid UTF-8 is refused when it is read, before lexing, but today by an uncaught 
 or `\u{...}` escape. Whether every `String` holds valid UTF-8 at run time is OPEN-127.
 
 ```con accept name=literal-bytes exit=5
-fn main() -> Int {
+fn example_value() -> Int {
     return string_length(&"é€") as Int;
+}
+fn main() -> u8 {
+    if example_value() == 5 {
+        return 5;
+    }
+    return 1;
 }
 ```
 
 ```con accept name=escapes exit=7
-fn main() -> Int {
+fn example_value() -> Int {
     return string_length(&"a\n\t\r\\\"\0") as Int;
+}
+fn main() -> u8 {
+    if example_value() == 7 {
+        return 7;
+    }
+    return 1;
 }
 ```
 
@@ -398,7 +536,7 @@ string literal and `\'` in a char literal; any other `\` sequence is a parse err
 
 ```con accept name=token-forms exit=42
 // a line comment
-fn main() -> Int {
+fn example_value() -> Int {
     let a: Int = 0o17;
     let b: Int = 0x1F;
     let c: Int = 0b101;
@@ -410,6 +548,12 @@ fn main() -> Int {
         break 'outer;
     }
     return a + b + c + n - 10;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -432,7 +576,7 @@ fn main() -> Int {
 needs no space.
 
 ```con accept name=nested-type-arguments exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let o: Option<Option<Int>> = Option::<Option<Int>>::Some { value: Option::<Int>::Some { value: 42 } };
     match o {
         Option::Some { value: inner } => {
@@ -443,6 +587,12 @@ fn main() -> Int {
         },
         Option::None => { return 2; }
     }
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -466,7 +616,7 @@ LL(1) checkers cannot express. `match x { ... } + 2;` as a statement is a parse 
 STMT-8 says which expression of a value block is its value.
 
 ```con accept name=statement-and-value-match exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let x: Int = 1;
     let mut r: Int = 0;
     match x {
@@ -475,6 +625,12 @@ fn main() -> Int {
     }
     let y: Int = match x { _ => 2 } + r;
     return y;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -497,10 +653,16 @@ grammar states this in the comment before `primary_expr`; `let x: Int = if c { 4
 error (SYN-1).
 
 ```con accept name=value-if-with-else exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let c: bool = true;
     let x: Int = if c { 42 } else { 0 };
     return x;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -536,8 +698,20 @@ impl P {
     fn get(&self) -> Int { return self.v; }
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let p: P = P::make();
     return m::base() + p.get() + p.v;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```

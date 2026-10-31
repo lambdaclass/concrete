@@ -60,22 +60,34 @@ context's float type, refused with none). Main still types an unconstrained inte
 an unconstrained float literal `Float64` (bug 327).
 
 ```con reject name=literal-out-of-range code=E0227 stage=check pair=literal-in-range
-fn main() -> Int {
+fn example_value() -> Int {
     let a: u8 = 300;
     return a as Int;
+}
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
 }
 ```
 
 ```con accept name=literal-in-range exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let a: i8 = -128;
     let b: u8 = 0xFF;
     return (a as Int) + (b as Int) - 85;
 }
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 ```con reject name=unconstrained-literal code=new stage=check pair=constrained-literal pending=bug-327 now=accept:42
-fn main() -> Int {
+fn main() -> u8 {
     if 3 < 4 {
         return 42;
     }
@@ -84,7 +96,7 @@ fn main() -> Int {
 ```
 
 ```con accept name=constrained-literal exit=42
-fn main() -> Int {
+fn main() -> u8 {
     let a: Int = 3;
     if a < 4 {
         return 42;
@@ -122,37 +134,61 @@ same path as a proven out-of-bounds index or zero divisor); completing the folde
 Decided by the owner on 2026-10-29 (OD10): integer arithmetic is checked by default and the shift count is checked; wrapping and saturating arithmetic are named operations (ARITH-4), and an abort runs no deferred call (STMT-2).
 
 ```con accept name=checked-in-range exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let a: u8 = 200;
     let s: u8 = a << 1;
     let q: Int = -7 / 2;
     return (s as Int) - 99 + q;
 }
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 ```con abort name=unsigned-overflow trap=arithmetic_overflow
-fn main() -> Int {
+fn example_value() -> Int {
     let a: u8 = 200;
     let b: u8 = 100;
     let c: u8 = a + b;
     return c as Int;
 }
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
+}
 ```
 
 ```con abort name=divide-by-zero trap=division_by_zero
-fn main() -> Int {
+fn example_value() -> Int {
     let a: Int = 42;
     let z: Int = a - 42;
     return a / z;
 }
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
+}
 ```
 
 ```con abort name=shift-count-too-large trap=shift_amount_out_of_range
-fn main() -> Int {
+fn example_value() -> Int {
     let a: u8 = 1;
     let n: u8 = 8;
     let s: u8 = a << n;
     return s as Int;
+}
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
 }
 ```
 
@@ -176,12 +212,18 @@ saturating division and no wrapping shift; division has no modular meaning, and 
 `n mod width` has had no use.
 
 ```con accept name=wrap-and-saturate exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let a: u8 = 200;
     let w: u8 = wrapping_add(a, 98);
     let s: u8 = saturating_add(a, 100);
     let t: i8 = saturating_sub(-100, 100);
     return (w as Int) + (s as Int) - 255 + (t as Int) + 128;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -220,7 +262,7 @@ so every conversion is visible at the call site.
 Decided by the owner on 2026-10-29 (OD11): `as` only when lossless by value domain, and every lossy conversion a named function.
 
 ```con reject name=int-to-bool code=E0553 stage=core-check pair=widening
-fn main() -> Int {
+fn main() -> u8 {
     let x: Int = 1;
     let b: bool = x as bool;
     if b {
@@ -231,19 +273,31 @@ fn main() -> Int {
 ```
 
 ```con accept name=widening exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let a: u8 = 41;
     let b: i32 = a as i32;
     let t: bool = true;
     return (b as Int) + (t as Int);
 }
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 ```con reject name=narrowing code=E0553 stage=core-check pair=widening pending=R-0500 now=accept:44
-fn main() -> Int {
+fn example_value() -> Int {
     let x: Int = 300;
     let t: u8 = x as u8;
     return t as Int;
+}
+fn main() -> u8 {
+    if example_value() == 44 {
+        return 44;
+    }
+    return 1;
 }
 ```
 
@@ -266,7 +320,7 @@ comparison. A comparison between a signed and an unsigned type is refused (TYPE-
 reinterprets. Which types have comparisons at all is TYPE-6.
 
 ```con accept name=unsigned-comparison exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let a: u8 = 200;
     let b: u8 = 100;
     let c: i8 = -1;
@@ -279,6 +333,12 @@ fn main() -> Int {
         out = out + 2;
     }
     return out;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -303,7 +363,7 @@ so a literal just above a binary32 midpoint takes the even neighbour (bug 332), 
 pending example.
 
 ```con accept name=float-literal-rounding exit=42
-fn main() -> Int {
+fn main() -> u8 {
     let a: f64 = 0.1;
     let b: f64 = 0.2;
     let c: f64 = 0.30000000000000004;
@@ -315,7 +375,7 @@ fn main() -> Int {
 ```
 
 ```con accept name=f32-literal-rounded-once exit=42 pending=bug-332 now=accept:0
-fn main() -> Int {
+fn main() -> u8 {
     let a: f32 = 1.0000000596046447753906250001;
     let b: f32 = 1.00000011920928955078125;
     if a == b {
@@ -346,12 +406,18 @@ and which sign a remainder takes is OPEN-114: main truncates toward zero, as C99
 archived record did not state as a rule.
 
 ```con accept name=shift-fill exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let a: i8 = -128;
     let s: i8 = a >> 7;
     let u: u8 = 128;
     let t: u8 = u >> 7;
     return (s as Int) + (t as Int) + 42;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -382,8 +448,20 @@ fn add(a: u8, b: u8) -> u8 {
     return a + b;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return add(40, 2) as Int;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -393,8 +471,20 @@ fn add(a: u8, b: u8) -> u8 {
     return a + b;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return add(200, 100) as Int;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -406,8 +496,20 @@ fn named(a: u8, b: u8) -> Int {
     return (w as Int) + (s as Int);
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return named(200, 100) - 257;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -432,7 +534,7 @@ sign-changing `as` gives today. Whether `try_convert` reports a failure as `Opti
 are ARITH-11. None of these exists on main yet (R-0500), and their spellings are OPEN-99.
 
 ```con accept name=truncate-and-reinterpret exit=42 pending=R-0500 now=reject:E0101:resolve
-fn main() -> Int {
+fn example_value() -> Int {
     let x: Int = 300;
     let t: u8 = truncate::<u8>(x);
     let m: i32 = -1;
@@ -441,6 +543,12 @@ fn main() -> Int {
         return (t as Int) - 2;
     }
     return 0;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -483,7 +591,7 @@ value. Unlike IEEE 754's `remainder`, it truncates rather than rounding the quot
 Absorbed from [INTERPRETER_TRUST.md](../verification/INTERPRETER_TRUST.md) §2.
 
 ```con accept name=float-remainder exit=42
-fn main() -> Int {
+fn main() -> u8 {
     let a: f64 = -7.5;
     let b: f64 = 2.0;
     let r: f64 = a % b;

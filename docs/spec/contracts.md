@@ -64,8 +64,20 @@ fn count(n: Int) -> Int {
     return i;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return count(42);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -102,8 +114,20 @@ fn f(x: i32) -> i32 {
     return x;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return f(42) as Int;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -113,8 +137,20 @@ fn f(x: i32) -> i32 {
     return x;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return f(42) as Int;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -125,7 +161,7 @@ fn twice(x: i32) -> i32 {
 
 spec fn big(x: i32) -> bool = twice(x) > 10;
 
-fn main() -> Int {
+fn main() -> u8 {
     return 42;
 }
 ```
@@ -136,8 +172,20 @@ fn f(x: i32) -> i32 {
     return x;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return f(42) as Int;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -167,8 +215,20 @@ fn f() -> Int {
     return bound;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return f();
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -184,8 +244,20 @@ fn f() -> Int {
     return acc;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return f();
+}
+
+fn main() -> u8 {
+
+    if example_value() == 28 {
+
+        return 28;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -202,8 +274,20 @@ fn f() -> Int {
     return acc;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return f();
+}
+
+fn main() -> u8 {
+
+    if example_value() == 28 {
+
+        return 28;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -237,8 +321,20 @@ fn f(x: Int) -> Int {
     return x;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return f(42);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -270,8 +366,20 @@ fn f(x: Int) -> Int {
     return x;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return f(42);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -301,8 +409,20 @@ fn f(x: Int) -> Int {
     return result;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return f(42);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -331,7 +451,19 @@ fn f(x: Int) -> Int {
     return x;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return f(42);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```

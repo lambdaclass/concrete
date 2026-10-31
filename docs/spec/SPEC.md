@@ -503,14 +503,26 @@ first; reopening language macros is a thesis-level decision, not a roadmap item.
 `scripts/tests/check_no_macros.sh` pins the refusals.
 
 ```con reject name=unbalanced-parenthesis code=E0001 stage=parse pair=balanced-parenthesis
-fn main() -> Int {
+fn example_value() -> Int {
     return (40 + 2;
+}
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
 }
 ```
 
 ```con accept name=balanced-parenthesis exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     return (40 + 2);
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -530,20 +542,44 @@ the head context resolves; the checkers report it, and `grammar/ll1_known_confli
 ```con reject name=head-constant-struct-literal code=E0001 stage=parse pair=head-constant-parenthesized
 const LIMIT: Int = 16;
 
-fn main() -> Int {
+fn example_value() -> Int {
     let mut n: Int = 20;
     if n > LIMIT { n = LIMIT; }
     return n + 26;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
 ```con accept name=head-constant-parenthesized exit=42
 const LIMIT: Int = 16;
 
-fn main() -> Int {
+fn example_value() -> Int {
     let mut n: Int = 20;
     if (n > LIMIT) { n = LIMIT; }
     return n + 26;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -551,14 +587,14 @@ The token forms (SYN-6), the statement `match` (SYN-8), the value `if` (SYN-9) a
 (SYN-10) are refused here when broken:
 
 ```con reject name=float-exponent code=E0001 stage=parse pair=float-digits
-fn main() -> Int {
+fn main() -> u8 {
     let f: f64 = 1e3;
     return 42;
 }
 ```
 
 ```con accept name=float-digits exit=42
-fn main() -> Int {
+fn main() -> u8 {
     let f: f64 = 1000.0;
     return 42;
 }
@@ -566,20 +602,20 @@ fn main() -> Int {
 
 ```con reject name=block-comment code=E0001 stage=parse pair=line-comment
 /* a block comment */
-fn main() -> Int {
+fn main() -> u8 {
     return 42;
 }
 ```
 
 ```con accept name=line-comment exit=42
 // a line comment
-fn main() -> Int {
+fn main() -> u8 {
     return 42;
 }
 ```
 
 ```con reject name=statement-match-continued code=E0001 stage=parse pair=value-match-continued
-fn main() -> Int {
+fn main() -> u8 {
     let x: Int = 1;
     match x { _ => 40 } + 2;
     return 42;
@@ -587,46 +623,76 @@ fn main() -> Int {
 ```
 
 ```con accept name=value-match-continued exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let x: Int = 1;
     let y: Int = match x { _ => 40 } + 2;
     return y;
 }
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 ```con reject name=value-if-without-else code=E0001 stage=parse pair=value-if-else
-fn main() -> Int {
+fn example_value() -> Int {
     let c: bool = true;
     let x: Int = if c { 42 };
     return x;
 }
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
+}
 ```
 
 ```con accept name=value-if-else exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let c: bool = true;
     let x: Int = if c { 42 } else { 0 };
     return x;
 }
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 ```con reject name=hash-variant code=E0001 stage=parse pair=colon-variant
-fn main() -> Int {
+fn example_value() -> Int {
     let o: Option<Int> = Option::<Int>#Some { value: 42 };
     match o {
         Option::Some { value } => { return value; },
         Option::None => { return 0; }
     }
 }
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
+}
 ```
 
 ```con accept name=colon-variant exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let o: Option<Int> = Option::<Int>::Some { value: 42 };
     match o {
         Option::Some { value } => { return value; },
         Option::None => { return 0; }
     }
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -635,18 +701,42 @@ Outside a head, a `{` after a lowercase name does not begin a struct literal:
 ```con reject name=lowercase-struct-literal code=E0001 stage=parse pair=uppercase-struct-literal
 struct Copy p { v: Int }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let q: p = p { v: 42 };
     return q.v;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
 ```con accept name=uppercase-struct-literal exit=42
 struct Copy P { v: Int }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let q: P = P { v: 42 };
     return q.v;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -672,7 +762,7 @@ prefix operator binds tighter than a cast, so `-x as i32` is `(-x) as i32`.
 ```con accept name=precedence-levels exit=42
 struct Copy C { n: Int }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let c: C = C { n: 2 };
     let a: Int = -c.n * 3 + 50;
     let s: Int = 1 << 2 + 1;
@@ -681,6 +771,18 @@ fn main() -> Int {
         return a + s - 10;
     }
     return 0;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -704,16 +806,28 @@ the exemption. Function names the compiler reserves (`__` names, `user_main` and
 are refused by MOD-3.
 
 ```con reject name=compiler-spelling code=E0283 stage=check pair=ordinary-spelling
-fn main() -> Int {
+fn example_value() -> Int {
     let __destr_x: Int = 42;
     return __destr_x;
+}
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
 }
 ```
 
 ```con accept name=ordinary-spelling exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let destr_x: Int = 42;
     return destr_x;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -741,7 +855,7 @@ parenthesized is OPEN-34.
 ```con reject name=bare-struct-literal-in-head code=E0001 stage=parse pair=parenthesized-struct-literal-in-head pending=bug-318 now=accept:42
 struct Copy P { v: Int }
 
-fn main() -> Int {
+fn main() -> u8 {
     if P { v: 1 }.v == 1 {
         return 42;
     }
@@ -752,7 +866,7 @@ fn main() -> Int {
 ```con accept name=parenthesized-struct-literal-in-head exit=42
 struct Copy P { v: Int }
 
-fn main() -> Int {
+fn main() -> u8 {
     if (P { v: 1 }).v == 1 {
         return 42;
     }
@@ -763,12 +877,24 @@ fn main() -> Int {
 ```con accept name=head-constant-unparenthesized exit=42 pending=bug-318 now=reject:E0001:parse
 const LIMIT: Int = 3;
 
-fn main() -> Int {
+fn example_value() -> Int {
     let mut n: Int = 0;
     while n < LIMIT {
         n = n + 1;
     }
     return n + 39;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -794,14 +920,26 @@ valid UTF-8 is refused when it is read, before lexing, but today by an uncaught 
 or `\u{...}` escape. Whether every `String` holds valid UTF-8 at run time is OPEN-127.
 
 ```con accept name=literal-bytes exit=5
-fn main() -> Int {
+fn example_value() -> Int {
     return string_length(&"é€") as Int;
+}
+fn main() -> u8 {
+    if example_value() == 5 {
+        return 5;
+    }
+    return 1;
 }
 ```
 
 ```con accept name=escapes exit=7
-fn main() -> Int {
+fn example_value() -> Int {
     return string_length(&"a\n\t\r\\\"\0") as Int;
+}
+fn main() -> u8 {
+    if example_value() == 7 {
+        return 7;
+    }
+    return 1;
 }
 ```
 
@@ -827,7 +965,7 @@ string literal and `\'` in a char literal; any other `\` sequence is a parse err
 
 ```con accept name=token-forms exit=42
 // a line comment
-fn main() -> Int {
+fn example_value() -> Int {
     let a: Int = 0o17;
     let b: Int = 0x1F;
     let c: Int = 0b101;
@@ -839,6 +977,12 @@ fn main() -> Int {
         break 'outer;
     }
     return a + b + c + n - 10;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -861,7 +1005,7 @@ fn main() -> Int {
 needs no space.
 
 ```con accept name=nested-type-arguments exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let o: Option<Option<Int>> = Option::<Option<Int>>::Some { value: Option::<Int>::Some { value: 42 } };
     match o {
         Option::Some { value: inner } => {
@@ -872,6 +1016,12 @@ fn main() -> Int {
         },
         Option::None => { return 2; }
     }
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -895,7 +1045,7 @@ LL(1) checkers cannot express. `match x { ... } + 2;` as a statement is a parse 
 STMT-8 says which expression of a value block is its value.
 
 ```con accept name=statement-and-value-match exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let x: Int = 1;
     let mut r: Int = 0;
     match x {
@@ -904,6 +1054,12 @@ fn main() -> Int {
     }
     let y: Int = match x { _ => 2 } + r;
     return y;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -926,10 +1082,16 @@ grammar states this in the comment before `primary_expr`; `let x: Int = if c { 4
 error (SYN-1).
 
 ```con accept name=value-if-with-else exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let c: bool = true;
     let x: Int = if c { 42 } else { 0 };
     return x;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -965,9 +1127,21 @@ impl P {
     fn get(&self) -> Int { return self.v; }
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let p: P = P::make();
     return m::base() + p.get() + p.v;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -1014,15 +1188,27 @@ The builtins include the enums `Option` and `Result`, which a module uses withou
 a user type of the same name resolves is OPEN-43.
 
 ```con reject name=undeclared-name code=E0100 stage=resolve pair=declared-name
-fn main() -> Int {
+fn example_value() -> Int {
     return missing + 1;
+}
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
 }
 ```
 
 ```con accept name=declared-name exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let present: Int = 41;
     return present + 1;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -1034,8 +1220,20 @@ fn get(o: Option<Int>) -> Int {
     return value;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return get(Option::Some { value: 42 });
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -1086,15 +1284,27 @@ mod a {
 }
 mod m {
     import a.{hidden};
-    pub fn main() -> Int {
+    fn example_value() -> Int {
         return hidden();
+    }
+    pub fn main() -> u8 {
+        if example_value() == 0 {
+            return 0;
+        }
+        return 1;
     }
 }
 ```
 
 ```con reject name=submodule-imports-private code=E0285 stage=check pair=import-public
-fn main() -> Int {
+fn example_value() -> Int {
     return b::g();
+}
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
 }
 
 mod a {
@@ -1127,8 +1337,14 @@ mod c {
     }
 }
 import c.{g};
-fn main() -> Int {
+fn example_value() -> Int {
     return g();
+}
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
 }
 ```
 
@@ -1140,8 +1356,14 @@ mod a {
 }
 mod m {
     import a.{shown};
-    pub fn main() -> Int {
+    fn example_value() -> Int {
         return shown();
+    }
+    pub fn main() -> u8 {
+        if example_value() == 42 {
+            return 42;
+        }
+        return 1;
     }
 }
 ```
@@ -1179,9 +1401,15 @@ impl P {
 fn P_get(a: Int) -> Int {
     return a;
 }
-fn main() -> Int {
+fn example_value() -> Int {
     let p: P = P { x: 3 };
     return p.get() + P_get(4);
+}
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
 }
 ```
 
@@ -1195,9 +1423,15 @@ impl P {
 fn get_p(a: Int) -> Int {
     return a;
 }
-fn main() -> Int {
+fn example_value() -> Int {
     let p: P = P { x: 3 };
     return p.get() + get_p(4);
+}
+fn main() -> u8 {
+    if example_value() == 7 {
+        return 7;
+    }
+    return 1;
 }
 ```
 
@@ -1212,8 +1446,14 @@ mod m {
     fn f() -> Int {
         return 2;
     }
-    pub fn main() -> Int {
+    fn example_value() -> Int {
         return f();
+    }
+    pub fn main() -> u8 {
+        if example_value() == 0 {
+            return 0;
+        }
+        return 1;
     }
 }
 ```
@@ -1229,8 +1469,14 @@ mod m {
     fn f() -> Int {
         return 2;
     }
-    pub fn main() -> Int {
+    fn example_value() -> Int {
         return g() + f();
+    }
+    pub fn main() -> u8 {
+        if example_value() == 42 {
+            return 42;
+        }
+        return 1;
     }
 }
 ```
@@ -1257,7 +1503,7 @@ SYN-1 diagnostic (E0001), reported with the file's path, not a loading failure (
 ```con reject name=missing-module-file code=E0122 stage=resolve pair=inline-module
 mod missing;
 
-fn main() -> Int {
+fn main() -> u8 {
     return 42;
 }
 ```
@@ -1269,8 +1515,20 @@ mod present {
     }
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return present::answer();
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -1297,8 +1555,14 @@ visible to std alone, `pub` or not. A module belongs to std by its definition pa
 modules under it).
 
 ```con reject name=program-imports-libc code=E0326 stage=check pair=program-uses-std project=libcuser interp-exempt=project-needs-std
-fn main() -> Int {
+fn example_value() -> Int {
     return b::g();
+}
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
 }
 
 mod b {
@@ -1312,7 +1576,7 @@ mod b {
 ```con reject name=program-root-imports-libc code=E0326 stage=resolve pair=program-uses-std project=libcroot interp-exempt=project-needs-std
 import std.libc.{strlen};
 
-fn main() -> Int {
+fn main() -> u8 {
     return 42;
 }
 ```
@@ -1320,7 +1584,7 @@ fn main() -> Int {
 ```con accept name=program-uses-std exit=42 project=stduser interp-exempt=project-needs-std
 import std.string.{String};
 
-fn main() -> Int {
+fn main() -> u8 {
     return 42;
 }
 ```
@@ -1369,7 +1633,7 @@ fn print_int(x: Int) -> Int {
     return 42 / z;
 }
 
-fn main() with(Console) -> Int {
+fn main() with(Console) -> u8 {
     println(7);
     return 42;
 }
@@ -1477,7 +1741,7 @@ them; E0238's shadowed-source guard is gone too. Binding identity is minted by t
 (R-0492), so a spelling that is not visible names a different binding.
 
 ```con reject name=block-let code=E0301 stage=check pair=block-let-renamed
-fn main() -> Int {
+fn example_value() -> Int {
     let x: Int = 1;
     if true {
         let x: Int = 100;
@@ -1485,16 +1749,28 @@ fn main() -> Int {
     }
     return x + 41;
 }
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
+}
 ```
 
 ```con accept name=block-let-renamed exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let x: Int = 1;
     if true {
         let inner_x: Int = 100;
         if inner_x != 100 { return 0; }
     }
     return x + 41;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -1602,13 +1878,25 @@ fn pick(c: bool) -> Int {
     return out;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return pick(true) + pick(false);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
 ```con accept name=loop-body-let exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let mut total: Int = 0;
     let mut k: Int = 0;
     while k < 6 {
@@ -1617,6 +1905,12 @@ fn main() -> Int {
         k = k + 1;
     }
     return total;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -1654,7 +1948,7 @@ or borrow block miscompiled (bug 087): `let x: Int = 1; if true { let x: Int = 1
 stays as defense in depth. One conformance row also checks the extracted model.
 
 ```con accept name=sibling-reuse-after-block exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let mut out: Int = 0;
     if true {
         let x: Int = 100;
@@ -1665,6 +1959,12 @@ fn main() -> Int {
         out = out + x;
     }
     return out;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -1761,11 +2061,23 @@ fn plus(c: &Ctx, x: Int) -> Int {
     return c.add + x;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let c: Ctx = Ctx { add: 40 };
     let r: Int = apply(&c, 2, plus);
     let Ctx { add } = c;
     return r + add * 0;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -1804,9 +2116,21 @@ fn total<T: Area>(x: &T) -> Int {
     return x.area();
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let q: Sq = Sq { s: 6 };
     return total::<Sq>(&q) + 6;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -1838,7 +2162,7 @@ form of a string is `&String`.
 mod text_owned {
     import std.string.{String};
     import std.text.{Text};
-    fn main() with(Alloc) -> Int {
+    fn example_value() with(Alloc) -> Int {
         let mut s: String = String::new();
         s.push_char(42);
         let t: Text = Text::from_string(&s);
@@ -1849,6 +2173,12 @@ mod text_owned {
         }
         t.drop();
         return out;
+    }
+    fn main() with(Alloc) -> u8 {
+        if example_value() == 42 {
+            return 42;
+        }
+        return 1;
     }
 }
 ```
@@ -1875,25 +2205,43 @@ Version 2 drops the `break` value from the list of positions: a `break` carries 
 Main still parses `break <expr>;`, evaluating and dropping the value (bug 323).
 
 ```con reject name=bool-for-int code=E0220 stage=check pair=one-type
-fn main() -> Int {
+fn example_value() -> Int {
     let x: Int = true;
     return x;
+}
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
 }
 ```
 
 ```con reject name=branches-disagree code=E0224 stage=check pair=one-type
-fn main() -> Int {
+fn example_value() -> Int {
     let c: bool = true;
     let x: Int = if c { 1 } else { false };
     return x;
 }
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
+}
 ```
 
 ```con accept name=one-type exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let c: bool = true;
     let x: Int = if c { 42 } else { 0 };
     return x;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -1902,9 +2250,21 @@ fn inc(x: Int) with(Console) -> Int {
     return x + 1;
 }
 
-fn main() with(Console) -> Int {
+fn example_value() with(Console) -> Int {
     let f: fn(Int) -> Int = inc;
     return f(41);
+}
+
+fn main() with(Console) -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -1917,8 +2277,20 @@ fn inc(x: Int) with(Console) -> Int {
     return x + 1;
 }
 
-fn main() with(Console) -> Int {
+fn example_value() with(Console) -> Int {
     return apply(inc, 41);
+}
+
+fn main() with(Console) -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -1929,10 +2301,22 @@ fn inc(x: Int) with(Console) -> Int {
     return x + 1;
 }
 
-fn main() with(Console) -> Int {
+fn example_value() with(Console) -> Int {
     let b: Box = Box { f: inc };
     let g: fn(Int) -> Int = b.f;
     return g(41);
+}
+
+fn main() with(Console) -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -1941,9 +2325,21 @@ fn inc(x: Int) with(Console) -> Int {
     return x + 1;
 }
 
-fn main() with(Console) -> Int {
+fn example_value() with(Console) -> Int {
     let f: fn(Int) with(Console) -> Int = inc;
     return f(41);
+}
+
+fn main() with(Console) -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -1968,7 +2364,7 @@ The counted loop of STMT-6@3 has no condition. Until bug 331 is fixed, main stil
 `for (init; cond; step)` that STMT-6@3 removes, and its `cond` must be `bool` like a `while` condition.
 
 ```con reject name=int-condition code=E0223 stage=check pair=bool-condition
-fn main() -> Int {
+fn main() -> u8 {
     let n: Int = 1;
     if n {
         return 42;
@@ -1978,7 +2374,7 @@ fn main() -> Int {
 ```
 
 ```con accept name=bool-condition exit=42
-fn main() -> Int {
+fn main() -> u8 {
     let n: Int = 1;
     if n != 0 {
         return 42;
@@ -2017,7 +2413,7 @@ shifts and comparisons take numbers only, and pointer offset, difference and ord
 ```con reject name=compare-structs code=E0229 stage=check pair=same-type-operands
 struct Copy P { n: Int }
 
-fn main() -> Int {
+fn main() -> u8 {
     let a: P = P { n: 1 };
     let b: P = P { n: 1 };
     if a == b {
@@ -2030,7 +2426,7 @@ fn main() -> Int {
 ```con accept name=same-type-operands exit=42
 struct Copy P { n: Int }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let a: P = P { n: 21 };
     let b: P = P { n: 21 };
     if a.n == b.n {
@@ -2038,13 +2434,25 @@ fn main() -> Int {
     }
     return 0;
 }
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
+}
 ```
 
 ```con reject name=pointer-comparison code=new stage=check pair=pointee-comparison pending=bug-322 now=accept:42
 trusted fn same(p: *const Int, q: *const Int) -> bool {
     return p == q;
 }
-fn main() -> Int {
+fn main() -> u8 {
     let x: Int = 1;
     let p: *const Int = &x as *const Int;
     if same(p, p) { return 42; }
@@ -2056,7 +2464,7 @@ fn main() -> Int {
 trusted fn same(p: *const Int, q: *const Int) -> bool {
     return *p == *q;
 }
-fn main() -> Int {
+fn main() -> u8 {
     let x: Int = 1;
     let p: *const Int = &x as *const Int;
     if same(p, p) { return 42; }
@@ -2087,46 +2495,106 @@ the last (bug 193).
 ```con reject name=missing-field code=E0252 stage=check pair=every-field
 struct Copy P { a: Int, b: Int }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let p: P = P { a: 42 };
     return p.a;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
 ```con reject name=unknown-field code=E0253 stage=check pair=every-field
 struct Copy P { a: Int, b: Int }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let p: P = P { a: 42, b: 0, c: 1 };
     return p.a;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
 ```con reject name=duplicate-field code=E0306 stage=check pair=every-field
 struct Copy P { a: Int, b: Int }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let p: P = P { a: 1, b: 2, a: 40 };
     return p.a + p.b;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
 ```con reject name=newtype-field-other-than-zero code=E0316 stage=check pair=every-field
 newtype Meters = Int;
 
-fn main() -> Int {
+fn example_value() -> Int {
     let m: Meters = Meters(42);
     return m.1;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
 ```con accept name=every-field exit=42
 struct Copy P { a: Int, b: Int }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let p: P = P { a: 40, b: 2 };
     let arr: [Int; 2] = [p.a, p.b];
     return arr[0] + arr[1];
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -2149,9 +2617,15 @@ raw-pointer dereference also needs trusted or `Unsafe` code (TRUST-3). `*h` of a
 `Heap` moves the value out of its cell (OWN-15, `deref`).
 
 ```con reject name=deref-int code=E0221 stage=check pair=deref-ref
-fn main() -> Int {
+fn example_value() -> Int {
     let x: Int = 42;
     return *x;
+}
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
 }
 ```
 
@@ -2160,9 +2634,21 @@ fn read(r: &Int) -> Int {
     return *r;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let x: Int = 42;
     return read(&x);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -2191,24 +2677,48 @@ fn add(a: Int, b: Int) -> Int {
     return a + b;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return add(42);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
 ```con reject name=newtype-constructor-arity code=E0313 stage=check pair=right-arity
 newtype Meters = Int;
 
-fn main() -> Int {
+fn example_value() -> Int {
     let m: Meters = Meters(40, 2);
     return m.0;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
 ```con reject name=receiverless-trait-method code=E0317 stage=check pair=right-arity
 trait Make { fn make() -> Int; }
 fn call<T: Make>(x: &T) -> Int { return x.make(); }
-fn main() -> Int { return 0; }
+fn main() -> u8 { return 0; }
 ```
 
 ```con accept name=right-arity exit=42
@@ -2216,8 +2726,20 @@ fn add(a: Int, b: Int) -> Int {
     return a + b;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return add(40, 2);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -2272,7 +2794,7 @@ being E0421; they return `()`, `println` ends with a newline, and the calls they
 function of one of these names is OPEN-133.
 
 ```con reject name=append-unsupported-argument code=E0421 stage=check pair=free-heap
-fn main() with(Alloc) -> Int {
+fn main() with(Alloc) -> u8 {
     let mut out: String = "";
     append(&mut out, 1.5);
     drop_string(out);
@@ -2283,7 +2805,7 @@ fn main() with(Alloc) -> Int {
 ```con reject name=println-unsupported-argument code=E0421 stage=check pair=println-supported-arguments
 struct Copy S { x: Int }
 
-fn main() with(Console) -> Int {
+fn main() with(Console) -> u8 {
     let s: S = S { x: 1 };
     println(s);
     return 42;
@@ -2291,7 +2813,7 @@ fn main() with(Console) -> Int {
 ```
 
 ```con accept name=println-supported-arguments exit=42
-fn main() with(Console) -> Int {
+fn main() with(Console) -> u8 {
     let n: u8 = 7;
     println("n = ", n, ' ', true);
     return 42;
@@ -2299,7 +2821,7 @@ fn main() with(Console) -> Int {
 ```
 
 ```con reject name=free-non-heap code=E0274 stage=check pair=free-heap
-fn main() with(Std) -> Int {
+fn main() with(Std) -> u8 {
     let x: Int = 42;
     free(x);
     return 0;
@@ -2307,14 +2829,14 @@ fn main() with(Std) -> Int {
 ```
 
 ```con reject name=wrapping-on-non-integers code=E0314 stage=check pair=free-heap
-fn main() -> Int {
+fn main() -> u8 {
     let b: bool = wrapping_add(true, false);
     return 0;
 }
 ```
 
 ```con reject name=print-without-arguments code=E0315 stage=check pair=free-heap
-fn main() with(Std) -> Int {
+fn main() with(Std) -> u8 {
     print();
     return 0;
 }
@@ -2323,11 +2845,23 @@ fn main() with(Std) -> Int {
 ```con accept name=free-heap exit=42
 struct Copy B { v: Int }
 
-fn main() with(Std) -> Int {
+fn example_value() with(Std) -> Int {
     let h: Heap<B> = alloc(B { v: 42 });
     let out: Int = h.v;
     free(h);
     return out;
+}
+
+fn main() with(Std) -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -2400,7 +2934,7 @@ mod num {
 }
 mod m {
     import num.{NonZero};
-    pub fn main() -> Int {
+    pub fn main() -> u8 {
         let n: NonZero = NonZero(0);
         return 0;
     }
@@ -2416,9 +2950,15 @@ mod box {
 }
 mod m {
     import box.{Bx, mk};
-    pub fn main() -> Int {
+    fn example_value() -> Int {
         let b: Bx = mk();
         return b.v;
+    }
+    pub fn main() -> u8 {
+        if example_value() == 0 {
+            return 0;
+        }
+        return 1;
     }
 }
 ```
@@ -2432,10 +2972,16 @@ mod box {
 }
 mod m {
     import box.{Bx, mk};
-    pub fn main() -> Int {
+    fn example_value() -> Int {
         let b: Bx = mk();
         let Bx { v } = b;
         return v;
+    }
+    pub fn main() -> u8 {
+        if example_value() == 0 {
+            return 0;
+        }
+        return 1;
     }
 }
 ```
@@ -2455,13 +3001,19 @@ mod num {
 }
 mod m {
     import num.{NonZero, try_new, get};
-    pub fn main() -> Int {
+    fn example_value() -> Int {
         let mut out: Int = 0;
         match try_new(42) {
             Option::Some { value } => { out = get(value); },
             Option::None => {}
         }
         return out;
+    }
+    pub fn main() -> u8 {
+        if example_value() == 42 {
+            return 42;
+        }
+        return 1;
     }
 }
 ```
@@ -2475,9 +3027,15 @@ mod outer {
         }
     }
     import kids.{K, get};
-    pub fn main() -> Int {
+    fn example_value() -> Int {
         let k: K = K(42);
         return get(k);
+    }
+    pub fn main() -> u8 {
+        if example_value() == 0 {
+            return 0;
+        }
+        return 1;
     }
 }
 ```
@@ -2491,9 +3049,15 @@ mod outer {
         }
     }
     import kids.{Box, mk};
-    pub fn main() -> Int {
+    fn example_value() -> Int {
         let b: Box = mk();
         return b.v;
+    }
+    pub fn main() -> u8 {
+        if example_value() == 0 {
+            return 0;
+        }
+        return 1;
     }
 }
 ```
@@ -2510,13 +3074,19 @@ mod num {
 }
 mod m {
     import num.{NonZero, try_new};
-    pub fn main() -> Int {
+    fn example_value() -> Int {
         let mut out: Int = 0;
         match try_new(42) {
             Option::Some { value } => { out = value.0; },
             Option::None => {}
         }
         return out;
+    }
+    pub fn main() -> u8 {
+        if example_value() == 42 {
+            return 42;
+        }
+        return 1;
     }
 }
 ```
@@ -2562,12 +3132,18 @@ mod m {
     type Id = i32;
     fn want_underlying(x: i32) -> i32 { return x; }
     fn want_alias(x: Id) -> Id { return x; }
-    fn main() -> Int {
+    fn example_value() -> Int {
         let a: Id = 5;
         let b: i32 = a;
         let c: Id = want_underlying(b);
         let d: i32 = want_alias(7);
         return (c + d) as Int;
+    }
+    fn main() -> u8 {
+        if example_value() == 12 {
+            return 12;
+        }
+        return 1;
     }
 }
 ```
@@ -2608,10 +3184,22 @@ fn half(n: Int) -> Int {
     return n / 2;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let r: R = pass::<R>(R { v: 0 });
     let R { v } = r;
     return twice::<Int>(42, half) + v;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -2642,20 +3230,44 @@ Decided by the owner on 2026-10-29 (OD5): Copy for a generic struct or enum is d
 ```con accept name=copy-over-bare-parameter-at-copy exit=42
 struct Copy Bx<T> { v: T }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let b: Bx<Int> = Bx::<Int> { v: 21 };
     let c: Bx<Int> = b;
     return b.v + c.v;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
 ```con accept name=copy-over-copy-parameter exit=42
 struct Copy Bx<T: Copy> { v: T }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let b: Bx<Int> = Bx::<Int> { v: 42 };
     let c: Bx<Int> = b;
     return b.v + c.v * 0;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -2684,27 +3296,63 @@ too (bug 200).
 ```con reject name=extra-type-argument code=E0113 stage=resolve pair=declared-type-arguments
 struct Copy Box1<T> { v: T }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let b: Box1<Int, bool> = Box1::<Int, bool> { v: 42 };
     return b.v;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
 ```con accept name=declared-type-arguments exit=42
 struct Copy Box1<T> { v: T }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let b: Box1<Int> = Box1::<Int> { v: 42 };
     return b.v;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
 ```con reject name=bare-generic-type code=E0113 stage=resolve pair=declared-type-arguments
 struct Copy Box1<T> { v: Int }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let b: Box1 = Box1 { v: 42 };
     return b.v;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -2715,7 +3363,7 @@ fn take(s: Sink<Int>) -> Int {
     return 0;
 }
 
-fn main() -> Int {
+fn main() -> u8 {
     return 42;
 }
 ```
@@ -2727,7 +3375,7 @@ fn take(s: Sink<{}, {}>) -> Int {
     return 0;
 }
 
-fn main() -> Int {
+fn main() -> u8 {
     return 42;
 }
 ```
@@ -2739,7 +3387,7 @@ fn take(s: Sink<{}>) -> Int {
     return 0;
 }
 
-fn main() -> Int {
+fn main() -> u8 {
     return 42;
 }
 ```
@@ -2766,18 +3414,24 @@ inside `Node` is refused too (bug 205; it used to reach `llvm-as` while `--inter
 
 ```con reject name=struct-contains-itself code=E0583 stage=core-check pair=finite-struct
 struct Copy Node { v: Int, next: Node }
-fn main() -> Int { return 0; }
+fn main() -> u8 { return 0; }
 ```
 
 ```con reject name=through-instantiation code=E0583 stage=core-check pair=finite-struct
 struct Copy W<T> { v: T }
 struct Copy Node { a: Int, w: W<Node> }
-fn main() -> Int { return 42; }
+fn main() -> u8 { return 42; }
 ```
 
 ```con accept name=finite-struct exit=42
 struct Copy Node { v: Int, w: Int }
-fn main() -> Int { let n: Node = Node { v: 40, w: 2 }; return n.v + n.w; }
+fn example_value() -> Int { let n: Node = Node { v: 40, w: 2 }; return n.v + n.w; }
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 <a id="TYPE-17"></a>
@@ -2814,9 +3468,21 @@ fn inc(x: Int) with(Console, File) -> Int {
     return x + 1;
 }
 
-fn main() with(Console, File) -> Int {
+fn example_value() with(Console, File) -> Int {
     let f: fn(Int) with(File, Console) -> Int = inc;
     return f(41);
+}
+
+fn main() with(Console, File) -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -2833,8 +3499,20 @@ fn inc2(x: Int) with(File) -> Int {
     return x + 1;
 }
 
-fn main() with(Console, File) -> Int {
+fn example_value() with(Console, File) -> Int {
     return both(inc, inc2);
+}
+
+fn main() with(Console, File) -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -2850,9 +3528,21 @@ fn use_it(s: Sink<File + Console>) with(Console, File) -> Int {
     return g(41);
 }
 
-fn main() with(Console, File) -> Int {
+fn example_value() with(Console, File) -> Int {
     let s: Sink<Console + File> = Sink { f: inc };
     return use_it(s);
+}
+
+fn main() with(Console, File) -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -2885,7 +3575,7 @@ mod m {
 
     struct Copy Sink<cap C> { f: fn(Int) with(C) -> Int, n: Int }
 
-    pub fn main() -> Int {
+    pub fn main() -> u8 {
         let a: u64 = sizeof::<Sink<{}>>();
         let b: u64 = sizeof::<Sink<Console + File>>();
         let c: u64 = sizeof::<fn(Int) -> Int>();
@@ -2921,11 +3611,23 @@ mod m {
         return *q;
     }
 
-    pub fn main() -> Int {
+    fn example_value() -> Int {
         let a: Sink<{}> = Sink { f: dec, n: 40 };
         let b: Sink<Console> = Sink { f: inc, n: 2 };
         let at: u64 = sizeof::<fn(Int) -> Int>();
         return (byte_at(&a, at) as Int) + (byte_at(&b, at) as Int);
+    }
+
+    pub fn main() -> u8 {
+
+        if example_value() == 42 {
+
+            return 42;
+
+        }
+
+        return 1;
+
     }
 }
 ```
@@ -2958,7 +3660,7 @@ fn half(x: Float64) -> f64 {
     return x / 2.0;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let a: i64 = 40;
     let b: Int = a;
     let c: u64 = 1;
@@ -2969,10 +3671,22 @@ fn main() -> Int {
     }
     return 0;
 }
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
+}
 ```
 
 ```con accept name=widths-and-signedness exit=42
-fn main() -> Int {
+fn main() -> u8 {
     let a: i8 = 127;
     let b: u8 = 255;
     let c: i16 = 32767;
@@ -3014,17 +3728,29 @@ mod m {
     #[intrinsic = "sizeof"]
     pub trusted fn sizeof<T>() -> u64;
 
-    pub fn main() -> Int {
+    fn example_value() -> Int {
         let b: u8 = 255;
         let c: char = b as char;
         let d: u8 = c as u8;
         return (sizeof::<char>() as Int) + (d as Int) - 214;
     }
+
+    pub fn main() -> u8 {
+
+        if example_value() == 42 {
+
+            return 42;
+
+        }
+
+        return 1;
+
+    }
 }
 ```
 
 ```con accept name=every-byte-round-trips exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let mut i: Int = 0;
     let mut same: Int = 0;
     while i < 256 {
@@ -3036,6 +3762,12 @@ fn main() -> Int {
         i = i + 1;
     }
     return same - 214;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -3070,7 +3802,7 @@ mod m {
     struct Copy W { a: u8, m: Meters }
     struct Copy V { a: u8, m: Int }
 
-    pub fn main() -> Int {
+    pub fn main() -> u8 {
         if sizeof::<Meters>() == sizeof::<Int>() && alignof::<Small>() == alignof::<u8>()
             && sizeof::<W>() == sizeof::<V>() {
             return 42;
@@ -3089,10 +3821,22 @@ fn grow(m: Meters) -> Meters {
     return Meters(m.0 + 1);
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let w: W = W { a: 1, m: Meters(40) };
     let m: Meters = grow(w.m);
     return m.0 + (w.a as Int);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -3118,7 +3862,7 @@ is immutable and holds no capability or token (TRUST-8). Absorbed from
 ```con accept name=unused-constant-never-runs exit=42
 const BIG: i32 = 2147483647 + 1;
 
-fn main() -> Int {
+fn main() -> u8 {
     return 42;
 }
 ```
@@ -3126,9 +3870,21 @@ fn main() -> Int {
 ```con abort name=constant-traps-at-use trap=overflow
 const BIG: i32 = 2147483647 + 1;
 
-fn main() -> Int {
+fn example_value() -> Int {
     let x: i32 = BIG;
     return x as Int;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -3153,12 +3909,18 @@ OPEN-43: main withholds the builtin `Result` from a module that declares or impo
 never withholds `Option`. Their layout is that of any enum (FFI-7).
 
 ```con accept name=option-and-result exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let o: Option<Int> = Option::<Int>::Some { value: 40 };
     let r: Result<Int, Int> = Result::<Int, Int>::Err { error: 2 };
     let a: Int = match o { Option::Some { value } => value, Option::None => 0 };
     let b: Int = match r { Result::Ok { value } => value, Result::Err { error } => error };
     return a + b;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -3190,12 +3952,24 @@ fallback and prefers `.0`; this entry states `.0` only.
 ```con accept name=newtype-conversions exit=42
 newtype Id = u8;
 
-fn main() -> Int {
+fn example_value() -> Int {
     let b: u8 = 40;
     let i: Id = b as Id;
     let j: Id = Id(1);
     let a: u8 = i as u8;
     return (a + j.0 + 1) as Int;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -3320,22 +4094,34 @@ context's float type, refused with none). Main still types an unconstrained inte
 an unconstrained float literal `Float64` (bug 327).
 
 ```con reject name=literal-out-of-range code=E0227 stage=check pair=literal-in-range
-fn main() -> Int {
+fn example_value() -> Int {
     let a: u8 = 300;
     return a as Int;
+}
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
 }
 ```
 
 ```con accept name=literal-in-range exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let a: i8 = -128;
     let b: u8 = 0xFF;
     return (a as Int) + (b as Int) - 85;
 }
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 ```con reject name=unconstrained-literal code=new stage=check pair=constrained-literal pending=bug-327 now=accept:42
-fn main() -> Int {
+fn main() -> u8 {
     if 3 < 4 {
         return 42;
     }
@@ -3344,7 +4130,7 @@ fn main() -> Int {
 ```
 
 ```con accept name=constrained-literal exit=42
-fn main() -> Int {
+fn main() -> u8 {
     let a: Int = 3;
     if a < 4 {
         return 42;
@@ -3382,37 +4168,61 @@ same path as a proven out-of-bounds index or zero divisor); completing the folde
 Decided by the owner on 2026-10-29 (OD10): integer arithmetic is checked by default and the shift count is checked; wrapping and saturating arithmetic are named operations (ARITH-4), and an abort runs no deferred call (STMT-2).
 
 ```con accept name=checked-in-range exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let a: u8 = 200;
     let s: u8 = a << 1;
     let q: Int = -7 / 2;
     return (s as Int) - 99 + q;
 }
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 ```con abort name=unsigned-overflow trap=arithmetic_overflow
-fn main() -> Int {
+fn example_value() -> Int {
     let a: u8 = 200;
     let b: u8 = 100;
     let c: u8 = a + b;
     return c as Int;
 }
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
+}
 ```
 
 ```con abort name=divide-by-zero trap=division_by_zero
-fn main() -> Int {
+fn example_value() -> Int {
     let a: Int = 42;
     let z: Int = a - 42;
     return a / z;
 }
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
+}
 ```
 
 ```con abort name=shift-count-too-large trap=shift_amount_out_of_range
-fn main() -> Int {
+fn example_value() -> Int {
     let a: u8 = 1;
     let n: u8 = 8;
     let s: u8 = a << n;
     return s as Int;
+}
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
 }
 ```
 
@@ -3436,12 +4246,18 @@ saturating division and no wrapping shift; division has no modular meaning, and 
 `n mod width` has had no use.
 
 ```con accept name=wrap-and-saturate exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let a: u8 = 200;
     let w: u8 = wrapping_add(a, 98);
     let s: u8 = saturating_add(a, 100);
     let t: i8 = saturating_sub(-100, 100);
     return (w as Int) + (s as Int) - 255 + (t as Int) + 128;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -3480,7 +4296,7 @@ so every conversion is visible at the call site.
 Decided by the owner on 2026-10-29 (OD11): `as` only when lossless by value domain, and every lossy conversion a named function.
 
 ```con reject name=int-to-bool code=E0553 stage=core-check pair=widening
-fn main() -> Int {
+fn main() -> u8 {
     let x: Int = 1;
     let b: bool = x as bool;
     if b {
@@ -3491,19 +4307,31 @@ fn main() -> Int {
 ```
 
 ```con accept name=widening exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let a: u8 = 41;
     let b: i32 = a as i32;
     let t: bool = true;
     return (b as Int) + (t as Int);
 }
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 ```con reject name=narrowing code=E0553 stage=core-check pair=widening pending=R-0500 now=accept:44
-fn main() -> Int {
+fn example_value() -> Int {
     let x: Int = 300;
     let t: u8 = x as u8;
     return t as Int;
+}
+fn main() -> u8 {
+    if example_value() == 44 {
+        return 44;
+    }
+    return 1;
 }
 ```
 
@@ -3526,7 +4354,7 @@ comparison. A comparison between a signed and an unsigned type is refused (TYPE-
 reinterprets. Which types have comparisons at all is TYPE-6.
 
 ```con accept name=unsigned-comparison exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let a: u8 = 200;
     let b: u8 = 100;
     let c: i8 = -1;
@@ -3539,6 +4367,12 @@ fn main() -> Int {
         out = out + 2;
     }
     return out;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -3563,7 +4397,7 @@ so a literal just above a binary32 midpoint takes the even neighbour (bug 332), 
 pending example.
 
 ```con accept name=float-literal-rounding exit=42
-fn main() -> Int {
+fn main() -> u8 {
     let a: f64 = 0.1;
     let b: f64 = 0.2;
     let c: f64 = 0.30000000000000004;
@@ -3575,7 +4409,7 @@ fn main() -> Int {
 ```
 
 ```con accept name=f32-literal-rounded-once exit=42 pending=bug-332 now=accept:0
-fn main() -> Int {
+fn main() -> u8 {
     let a: f32 = 1.0000000596046447753906250001;
     let b: f32 = 1.00000011920928955078125;
     if a == b {
@@ -3606,12 +4440,18 @@ and which sign a remainder takes is OPEN-114: main truncates toward zero, as C99
 archived record did not state as a rule.
 
 ```con accept name=shift-fill exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let a: i8 = -128;
     let s: i8 = a >> 7;
     let u: u8 = 128;
     let t: u8 = u >> 7;
     return (s as Int) + (t as Int) + 42;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -3642,8 +4482,20 @@ fn add(a: u8, b: u8) -> u8 {
     return a + b;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return add(40, 2) as Int;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -3653,8 +4505,20 @@ fn add(a: u8, b: u8) -> u8 {
     return a + b;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return add(200, 100) as Int;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -3666,8 +4530,20 @@ fn named(a: u8, b: u8) -> Int {
     return (w as Int) + (s as Int);
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return named(200, 100) - 257;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -3692,7 +4568,7 @@ sign-changing `as` gives today. Whether `try_convert` reports a failure as `Opti
 are ARITH-11. None of these exists on main yet (R-0500), and their spellings are OPEN-99.
 
 ```con accept name=truncate-and-reinterpret exit=42 pending=R-0500 now=reject:E0101:resolve
-fn main() -> Int {
+fn example_value() -> Int {
     let x: Int = 300;
     let t: u8 = truncate::<u8>(x);
     let m: i32 = -1;
@@ -3701,6 +4577,12 @@ fn main() -> Int {
         return (t as Int) - 2;
     }
     return 0;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -3743,7 +4625,7 @@ value. Unlike IEEE 754's `remainder`, it truncates rather than rounding the quot
 Absorbed from [INTERPRETER_TRUST.md](../verification/INTERPRETER_TRUST.md) §2.
 
 ```con accept name=float-remainder exit=42
-fn main() -> Int {
+fn main() -> u8 {
     let a: f64 = -7.5;
     let b: f64 = 2.0;
     let r: f64 = a % b;
@@ -3868,11 +4750,23 @@ fn tick(acc: &mut Int, k: Int) -> Int {
     return k;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let mut acc: Int = 0;
     let p: P = P { b: tick(&mut acc, 2), a: tick(&mut acc, 1) };
     let s: Int = tick(&mut acc, 1) + tick(&mut acc, 2);
     return acc - 2112 + p.a + p.b + s * 0 + 39;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -3884,10 +4778,22 @@ fn tick(acc: &mut Int, k: Int) -> Int {
     return k;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let mut acc: Int = 0;
     let e: E = E::V { b: tick(&mut acc, 2), a: tick(&mut acc, 1) };
     return acc;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 21 {
+
+        return 21;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -3920,8 +4826,20 @@ fn f(c: bool) -> Int {
     return add(1, if c { return 42; } else { 2 });
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return f(true);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -3934,8 +4852,20 @@ fn f(o: Option<Int>) -> Int {
     return v;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return f(Option::None);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -4017,14 +4947,14 @@ gives the counted loop its termination measure. The examples of this specificati
 corpus.
 
 ```con reject name=break-outside-loop code=E0280 stage=check pair=labeled-break
-fn main() -> Int {
+fn main() -> u8 {
     break;
     return 0;
 }
 ```
 
 ```con accept name=labeled-break exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let mut out: Int = 0;
     let mut i: Int = 0;
     'outer: while i < 10 {
@@ -4043,10 +4973,16 @@ fn main() -> Int {
     }
     return out;
 }
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 ```con reject name=break-with-value code=new stage=parse pair=break-without-value pending=bug-323 now=accept:1
-fn main() -> Int {
+fn example_value() -> Int {
     let mut i: Int = 0;
     while i < 3 {
         i = i + 1;
@@ -4054,10 +4990,16 @@ fn main() -> Int {
     }
     return i;
 }
+fn main() -> u8 {
+    if example_value() == 1 {
+        return 1;
+    }
+    return 2;
+}
 ```
 
 ```con accept name=break-without-value exit=1
-fn main() -> Int {
+fn example_value() -> Int {
     let mut i: Int = 0;
     while i < 3 {
         i = i + 1;
@@ -4065,30 +5007,48 @@ fn main() -> Int {
     }
     return i;
 }
+fn main() -> u8 {
+    if example_value() == 1 {
+        return 1;
+    }
+    return 2;
+}
 ```
 
 ```con reject name=c-style-for code=new stage=parse pair=counted-loop pending=bug-331 now=accept:42
-fn main() -> Int {
+fn example_value() -> Int {
     let mut s: Int = 0;
     for (let mut i: Int = 0; i < 7; i = i + 1) {
         s = s + i;
     }
     return s + 21;
 }
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 ```con reject name=for-condition-only code=new stage=parse pair=while-loop pending=bug-331 now=accept:42
-fn main() -> Int {
+fn example_value() -> Int {
     let mut i: Int = 0;
     for (i < 42) {
         i = i + 1;
     }
     return i;
 }
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 ```con reject name=unconditional-for code=new stage=parse pair=while-loop pending=bug-331 now=accept:42
-fn main() -> Int {
+fn example_value() -> Int {
     let mut i: Int = 0;
     for {
         i = i + 1;
@@ -4096,20 +5056,32 @@ fn main() -> Int {
     }
     return i;
 }
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 ```con accept name=while-loop exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let mut i: Int = 0;
     while i < 42 {
         i = i + 1;
     }
     return i;
 }
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 ```con accept name=counted-loop exit=42 pending=bug-331 now=reject:E0001:parse
-fn main() -> Int {
+fn example_value() -> Int {
     let lo: Int = 0;
     let hi: Int = 7;
     let mut s: Int = 0;
@@ -4118,10 +5090,16 @@ fn main() -> Int {
     }
     return s + 21;
 }
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 ```con accept name=counted-loop-empty exit=42 pending=bug-331 now=reject:E0001:parse
-fn main() -> Int {
+fn example_value() -> Int {
     let lo: Int = 5;
     let hi: Int = 5;
     let mut s: Int = 42;
@@ -4129,6 +5107,12 @@ fn main() -> Int {
         s = 0;
     }
     return s;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -4138,7 +5122,7 @@ fn bump(c: &mut Int) -> Int {
     return 3;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let mut calls: Int = 0;
     let lo: Int = 0;
     let mut s: Int = 0;
@@ -4147,10 +5131,22 @@ fn main() -> Int {
     }
     return s + calls + 11;
 }
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
+}
 ```
 
 ```con accept name=counted-loop-at-type-max exit=5 pending=bug-331 now=reject:E0001:parse
-fn main() -> Int {
+fn example_value() -> Int {
     let lo: u8 = 250;
     let hi: u8 = 255;
     let mut n: Int = 0;
@@ -4159,10 +5155,16 @@ fn main() -> Int {
     }
     return n;
 }
+fn main() -> u8 {
+    if example_value() == 5 {
+        return 5;
+    }
+    return 1;
+}
 ```
 
 ```con accept name=counted-loop-reversed-bounds-empty exit=42 pending=bug-331 now=reject:E0001:parse
-fn main() -> Int {
+fn example_value() -> Int {
     let lo: Int = 9;
     let hi: Int = 3;
     let mut s: Int = 42;
@@ -4171,10 +5173,16 @@ fn main() -> Int {
     }
     return s;
 }
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 ```con accept name=counted-loop-continue-and-break exit=42 pending=bug-331 now=reject:E0001:parse
-fn main() -> Int {
+fn example_value() -> Int {
     let lo: Int = 0;
     let hi: Int = 100;
     let mut s: Int = 0;
@@ -4189,10 +5197,16 @@ fn main() -> Int {
     }
     return s - 1;
 }
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 ```con accept name=counted-loop-labeled-continue exit=42 pending=bug-331 now=reject:E0001:parse
-fn main() -> Int {
+fn example_value() -> Int {
     let zero: Int = 0;
     let three: Int = 3;
     let mut s: Int = 0;
@@ -4206,10 +5220,16 @@ fn main() -> Int {
     }
     return s;
 }
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 ```con reject name=counted-loop-index-is-immutable code=new stage=check pair=counted-loop pending=bug-331 now=reject:E0001:parse
-fn main() -> Int {
+fn example_value() -> Int {
     let lo: Int = 0;
     let hi: Int = 3;
     let mut s: Int = 0;
@@ -4218,6 +5238,12 @@ fn main() -> Int {
         s = s + i;
     }
     return s;
+}
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
 }
 ```
 
@@ -4247,9 +5273,10 @@ none.
 
 Version 3 records the owner's decision of 2026-10-29 (OD24): `main` returns `u8` or `Unit`; there
 is no masking, no `bool` mapping and no other result type. Main still accepts any result type, masks
-an integer natively and prints it under `--interp` (bug 320). This entry's accepted examples use the
-decided forms; `main-returns-int` pins main's acceptance of `-> Int` as pending. Examples elsewhere in
-this specification that still declare `fn main() -> Int` are being migrated to `u8` or `Unit`.
+an integer natively and prints it under `--interp` (bug 320). Every example of this specification
+uses the decided form, `fn main() -> u8`; an example whose value is computed as an `Int` keeps that
+computation in `example_value()` and has `main` compare it with the expected exit status.
+`main-returns-int` pins main's acceptance of `-> Int` as pending.
 
 
 ```con reject name=main-with-parameter code=E0310 stage=check pair=main-exit-status
@@ -4319,8 +5346,20 @@ fn pick(c: bool, k: Int) -> Int {
     return v;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return pick(true, 21);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -4350,8 +5389,20 @@ fn f(c: bool) -> Int {
     }
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return f(true) + 41;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -4363,8 +5414,20 @@ fn f(c: bool) -> Int {
     return 0;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return f(true) + 41;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -4391,7 +5454,7 @@ fn t(x: i32) -> i32 {
     return x;
 }
 
-fn main() -> Int {
+fn main() -> u8 {
     return 42;
 }
 ```
@@ -4402,7 +5465,7 @@ fn t() -> i32 {
     return 0;
 }
 
-fn main() -> Int {
+fn main() -> u8 {
     return 42;
 }
 ```
@@ -4456,7 +5519,7 @@ access (the bounds against the array's length), not only a length that cannot ch
 measure is represented when `b - a` does not fit the bounds' type is OPEN-49.
 
 ```con accept name=counted-loop-own-measure exit=42 pending=bug-331 now=reject:E0001:parse
-fn main() -> Int {
+fn example_value() -> Int {
     let lo: Int = 0;
     let hi: Int = 7;
     let mut s: Int = 0;
@@ -4464,6 +5527,12 @@ fn main() -> Int {
         s = s + i;
     }
     return s + 21;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -4488,7 +5557,7 @@ arithmetic and safe indexing stay available to code that holds none. What `Proce
 OPEN-95.
 
 ```con accept name=abort-with-process exit=42
-fn main() with(Process) -> Int {
+fn main() with(Process) -> u8 {
     if 1 == 2 {
         abort();
     }
@@ -4682,8 +5751,20 @@ fn nested(o: Option<Option<Int>>) -> Int {
     }
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return nested(Option::Some { value: Option::Some { value: 42 } });
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -4720,13 +5801,25 @@ fn f(e: E) -> Int {
     }
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return f(E::A);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
 ```con reject name=no-default-arm code=E0534 stage=core-check pair=every-variant
-fn main() -> Int {
+fn main() -> u8 {
     let k: Int = 3;
     match k {
         1 => { return 1; },
@@ -4746,7 +5839,7 @@ fn f(e: E) -> Int {
     }
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let k: Int = 3;
     let mut out: Int = f(E::A);
     match k {
@@ -4755,6 +5848,18 @@ fn main() -> Int {
         _ => {}
     }
     return out;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -4789,7 +5894,7 @@ lets a bare name ignore a Copy payload (bug 321), pinned by the pending example 
 ```con reject name=duplicate-arm code=E0532 stage=core-check pair=arms-fit
 enum Copy E { A, B }
 
-fn main() -> Int {
+fn main() -> u8 {
     let e: E = E::A;
     match e {
         E::A => { return 1; },
@@ -4802,12 +5907,24 @@ fn main() -> Int {
 ```con reject name=missing-payload-field code=E0533 stage=core-check pair=arms-fit
 enum Copy E { A { x: Int, y: Int }, B }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let e: E = E::A { x: 1, y: 2 };
     match e {
         E::A { x } => { return x; },
         E::B => { return 0; }
     }
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -4815,7 +5932,7 @@ fn main() -> Int {
 enum Copy E { A, B }
 enum Copy F { X, Y }
 
-fn main() -> Int {
+fn main() -> u8 {
     let e: E = E::A;
     match e {
         F::X => { return 1; },
@@ -4827,7 +5944,7 @@ fn main() -> Int {
 ```con reject name=range-over-enum code=E0309 stage=check pair=arms-fit
 enum Copy E { A, B }
 
-fn main() -> Int {
+fn main() -> u8 {
     let e: E = E::B;
     match e {
         0..=9 => { return 1; },
@@ -4840,7 +5957,7 @@ fn main() -> Int {
 enum Copy E { A, B }
 enum Copy F { A, X }
 
-fn main() -> Int {
+fn main() -> u8 {
     let e: E = E::B;
     match e {
         F::A => { return 1; },
@@ -4852,18 +5969,30 @@ fn main() -> Int {
 ```con accept name=arms-fit exit=42
 enum Copy E { A { x: Int, y: Int }, B }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let e: E = E::A { x: 40, y: 2 };
     match e {
         E::A { x, y } => { return x + y; },
         E::B => { return 0; }
     }
 }
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
+}
 ```
 
 ```con reject name=bare-variant-with-payload code=new stage=check pair=variant-field-ignored pending=bug-321 now=accept:42
 enum Copy E { A { v: Int }, B }
-fn main() -> Int {
+fn main() -> u8 {
     let e: E = E::A { v: 1 };
     match e {
         E::A => { return 42; },
@@ -4874,7 +6003,7 @@ fn main() -> Int {
 
 ```con accept name=variant-field-ignored exit=42
 enum Copy E { A { v: Int }, B }
-fn main() -> Int {
+fn main() -> u8 {
     let e: E = E::A { v: 1 };
     match e {
         E::A { v: _ } => { return 42; },
@@ -4908,13 +6037,25 @@ fn take(r: R) -> Int {
     return v;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let r: R = R { v: 42 };
     let k: Int = 1;
     match k {
         1 if take(r) > 0 => { return 1; },
         _ => { return take(r); }
     }
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -4930,13 +6071,25 @@ fn peek(r: &R) -> Int {
     return r.v;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let r: R = R { v: 42 };
     let k: Int = 1;
     match k {
         1 if peek(&r) > 100 => { return take(r) * 0; },
         _ => { return take(r); }
     }
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -4978,20 +6131,38 @@ implementation history is the archived
 ```con reject name=struct-field-missing code=E0252 stage=check pair=destructure-all
 struct P { a: Int, b: Int }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let p: P = P { a: 1, b: 2 };
     let P { a } = p;
     return a;
 }
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
+}
 ```
 
 ```con reject name=else-falls-through code=E0308 stage=check pair=destructure-all
-fn main() -> Int {
+fn example_value() -> Int {
     let o: Option<Int> = Option::Some { value: 42 };
     let Option::Some { value } = o else {
         let z: Int = 0;
     };
     return value;
+}
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
 }
 ```
 
@@ -5005,28 +6176,52 @@ fn get(o: Option<Int>) -> Int {
     return value;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let p: P = P { a: 1, b: 2 };
     let P { a, b } = p;
     return get(Option::Some { value: 39 }) + a + b;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
 ```con reject name=struct-let-omits-field code=E0252 stage=check pair=struct-let-ignores-field pending=bug-321 now=accept:42
 struct Copy P { a: Int, b: Int }
-fn main() -> Int {
+fn example_value() -> Int {
     let p: P = P { a: 42, b: 1 };
     let P { a } = p;
     return a;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
 ```con accept name=struct-let-ignores-field exit=42
 struct Copy P { a: Int, b: Int }
-fn main() -> Int {
+fn example_value() -> Int {
     let p: P = P { a: 42, b: 1 };
     let P { a, b: _ } = p;
     return a;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -5049,7 +6244,7 @@ lowering are exactly those of the `match`. In particular the catch-all is a `_`,
 enum both forms are refused (OWN-5).
 
 ```con accept name=if-let-and-while-let exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let mut total: Int = 0;
     let mut k: Int = 3;
     let mut cur: Option<Int> = Option::Some { value: k };
@@ -5069,6 +6264,12 @@ fn main() -> Int {
         total = 0;
     }
     return total;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -5103,7 +6304,7 @@ fn classify(b: u8) -> Int {
     return out;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let k: Int = 7;
     let mut extra: Int = 0;
     match k {
@@ -5111,6 +6312,18 @@ fn main() -> Int {
         _ => {}
     }
     return classify(200) + extra;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -5137,7 +6350,7 @@ refuses; the entry retires when that lands.
 ```con reject name=destructure-in-for-header code=E0318 stage=check pair=destructure-before-loop
 enum Copy E { A { v: Int } }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let e: E = E::A { v: 0 };
     let mut out: Int = 0;
     for (let E::A { v } = e; v < 1; v = v + 1) {
@@ -5145,12 +6358,24 @@ fn main() -> Int {
     }
     return out;
 }
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
+}
 ```
 
 ```con accept name=destructure-before-loop exit=42
 enum Copy E { A { v: Int } }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let e: E = E::A { v: 0 };
     let E::A { v } = e;
     let mut out: Int = 0;
@@ -5158,6 +6383,18 @@ fn main() -> Int {
         out = 42;
     }
     return out;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -5184,7 +6421,7 @@ unguarded arm covers is already PAT-3's refusal. Two readings are open for the o
 ranges that span the scrutinee's type is unreachable (OPEN-41).
 
 ```con reject name=arm-after-catch-all code=new stage=check pair=catch-all-last pending=R-0500 now=accept:42
-fn main() -> Int {
+fn main() -> u8 {
     let x: Int = 1;
     match x {
         _ => {
@@ -5198,7 +6435,7 @@ fn main() -> Int {
 ```
 
 ```con accept name=catch-all-last exit=42
-fn main() -> Int {
+fn main() -> u8 {
     let x: Int = 1;
     match x {
         1 => {
@@ -5244,10 +6481,22 @@ fn get(o: Option<Int>) -> Int {
     return value;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let one: One = One::A { v: 1 };
     let One::A { v } = one;
     return get(Option::Some { value: 39 }) + get(Option::None) + v + 1;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -5275,7 +6524,7 @@ binders are assignable, not that the others are not.
 ```con accept name=let-mut-pattern exit=42
 struct Copy P { a: Int, b: Int }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let p: P = P { a: 40, b: 1 };
     let mut P { a, b } = p;
     a = a + 1;
@@ -5287,16 +6536,40 @@ fn main() -> Int {
     value = value + 1;
     return a + b + value - 1;
 }
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
+}
 ```
 
 ```con accept name=let-mut-variant-without-else exit=42
 enum Copy One { A { v: Int } }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let o: One = One::A { v: 41 };
     let mut One::A { v } = o;
     v = v + 1;
     return v;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -5432,10 +6705,22 @@ fn take(r: R) -> Int {
     return v;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let r: R = R { v: 21 };
     let a: Int = take(r);
     return a + take(r);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -5447,7 +6732,7 @@ fn take(r: R) -> Int {
     return v;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let r: R = R { v: 21 };
     let a: Int = take(r);
     let mut out: Int = 0;
@@ -5455,6 +6740,18 @@ fn main() -> Int {
         out = rr.v;
     }
     return a + out;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -5470,10 +6767,22 @@ fn peek(r: &R) -> Int {
     return r.v;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let r: R = R { v: 21 };
     let a: Int = peek(&r);
     return a + take(r);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -5489,8 +6798,20 @@ trusted fn twice(r: R) -> Int {
     return take(r) + take(r);
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return twice(R { v: 21 });
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -5517,7 +6838,7 @@ consumption (OWN-12).
 ```con reject name=never-consumed code=E0208 stage=check pair=consumed-on-every-exit
 struct R { v: Int }
 
-fn main() -> Int {
+fn main() -> u8 {
     let r: R = R { v: 42 };
     return 0;
 }
@@ -5539,8 +6860,20 @@ fn f(c: bool) -> Int {
     return take(r);
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return f(false);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -5560,8 +6893,20 @@ fn f(c: bool) -> Int {
     return take(r);
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return f(false);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -5572,8 +6917,20 @@ trusted fn drop_it(r: R) -> Int {
     return 42;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return drop_it(R { v: 1 });
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -5604,7 +6961,7 @@ fn take(r: R) -> Int {
     return v;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let r: R = R { v: 42 };
     let mut out: Int = 0;
     if out == 0 {
@@ -5613,6 +6970,18 @@ fn main() -> Int {
         out = 1;
     }
     return out;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -5624,7 +6993,7 @@ fn take(r: R) -> Int {
     return v;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let r: R = R { v: 42 };
     let mut out: Int = 0;
     if out == 0 {
@@ -5633,6 +7002,18 @@ fn main() -> Int {
         out = take(r) * 0 + 1;
     }
     return out;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -5664,7 +7045,7 @@ fn take(r: R) -> Int {
     return v;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let r: R = R { v: 42 };
     let mut out: Int = 0;
     let mut i: Int = 0;
@@ -5673,6 +7054,18 @@ fn main() -> Int {
         i = i + 1;
     }
     return out;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -5684,7 +7077,7 @@ fn take(r: R) -> Int {
     return v;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let r: R = R { v: 40 };
     let mut out: Int = 0;
     let mut i: Int = 0;
@@ -5693,6 +7086,18 @@ fn main() -> Int {
         i = i + 1;
     }
     return out + take(r);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -5728,7 +7133,7 @@ resource is consumed or `destroy`ed, never discarded, since dropping it would le
 ```con reject name=wildcard-drops-linear code=E0288 stage=check pair=account-for-it
 struct R { v: Int }
 
-fn main() -> Int {
+fn main() -> u8 {
     let o: Option<R> = Option::Some { value: R { v: 42 } };
     match o {
         _ => {}
@@ -5744,7 +7149,7 @@ fn mk() -> R {
     return R { v: 42 };
 }
 
-fn main() -> Int {
+fn main() -> u8 {
     mk();
     return 0;
 }
@@ -5754,7 +7159,7 @@ fn main() -> Int {
 struct R { v: Int }
 enum E { A { r: R }, B }
 
-fn main() -> Int {
+fn main() -> u8 {
     let e: E = E::A { r: R { v: 42 } };
     match e {
         E::A => { return 1; },
@@ -5766,7 +7171,7 @@ fn main() -> Int {
 ```con reject name=discard-linear code=E0295 stage=check pair=account-for-it
 struct R { v: Int }
 
-fn main() -> Int {
+fn main() -> u8 {
     let r: R = R { v: 42 };
     discard(r);
     return 0;
@@ -5780,7 +7185,7 @@ fn mk() -> R {
     return R { v: 1 };
 }
 
-fn main() -> Int {
+fn main() -> u8 {
     defer mk();
     return 42;
 }
@@ -5789,7 +7194,7 @@ fn main() -> Int {
 ```con accept name=account-for-it exit=42
 struct R { v: Int }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let o: Option<R> = Option::Some { value: R { v: 42 } };
     let k: Int = 3;
     discard(k);
@@ -5802,6 +7207,18 @@ fn main() -> Int {
         Option::None => {}
     }
     return out;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -5848,7 +7265,7 @@ fn find(k: Int) -> Option<Int> {
     return Option::None;
 }
 
-fn main() -> Int {
+fn main() -> u8 {
     find(42);
     return 0;
 }
@@ -5862,13 +7279,25 @@ fn find(k: Int) -> Option<Int> {
     return Option::None;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let mut out: Int = 0;
     match find(42) {
         Option::Some { value } => { out = value; },
         Option::None => {}
     }
     return out;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -5899,18 +7328,30 @@ syntactically pure non-Unit Copy value (E0294) and drops a call's result silentl
 
 
 ```con reject name=dead-computation code=E0294 stage=check pair=used-computation
-fn main() -> Int {
+fn example_value() -> Int {
     let a: Int = 40;
     a + 2;
     return a;
 }
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
+}
 ```
 
 ```con accept name=used-computation exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let a: Int = 40;
     discard(a + 1);
     return a + 2;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -5918,7 +7359,7 @@ fn main() -> Int {
 fn f() -> Int {
     return 1;
 }
-fn main() -> Int {
+fn main() -> u8 {
     f();
     return 42;
 }
@@ -5928,7 +7369,7 @@ fn main() -> Int {
 fn f() -> Int {
     return 1;
 }
-fn main() -> Int {
+fn main() -> u8 {
     discard(f());
     return 42;
 }
@@ -5958,11 +7399,23 @@ it.
 struct R { v: Int }
 struct W { r: R }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let w: W = W { r: R { v: 42 } };
     let g: R = w.r;
     let R { v } = g;
     return v;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -5970,11 +7423,23 @@ fn main() -> Int {
 struct R { v: Int }
 struct W { r: R }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let w: W = W { r: R { v: 42 } };
     let W { r } = w;
     let R { v } = r;
     return v;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -6006,10 +7471,22 @@ fn take(r: R) -> Int {
     return v;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let mut r: R = R { v: 1 };
     r = R { v: 42 };
     return take(r);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -6020,7 +7497,7 @@ fn replace(slot: &mut R, v: R) {
     *slot = v;
 }
 
-fn main() -> Int {
+fn main() -> u8 {
     return 0;
 }
 ```
@@ -6038,10 +7515,22 @@ fn bump(r: R) -> R {
     return R { v: v + 41 };
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let mut r: R = R { v: 1 };
     r = bump(r);
     return take(r);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -6067,10 +7556,16 @@ element or a heap cell of a binding not declared `mut` (bug 216, which implement
 by the pending example below.
 
 ```con reject name=assign-immutable code=E0217 stage=check pair=assign-mut
-fn main() -> Int {
+fn example_value() -> Int {
     let x: Int = 1;
     x = 42;
     return x;
+}
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
 }
 ```
 
@@ -6079,20 +7574,44 @@ fn set(r: &mut Int) {
     *r = 42;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let x: Int = 1;
     set(&mut x);
     return x;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
 ```con reject name=field-write-immutable code=E0217 stage=check pair=assign-mut pending=bug-216 now=accept:21
 struct Copy P { x: Int, y: Int }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let s: P = P { x: 1, y: 1 };
     s.y = 20;
     return s.x + s.y;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 21 {
+
+        return 21;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -6101,11 +7620,23 @@ fn set(r: &mut Int) {
     *r = 41;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let mut x: Int = 1;
     set(&mut x);
     x = x + 1;
     return x;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -6137,7 +7668,7 @@ fn take(r: R) -> bool {
     return v > 0;
 }
 
-fn main() -> Int {
+fn main() -> u8 {
     let r: R = R { v: 42 };
     let c: bool = true;
     if c && take(r) {
@@ -6155,7 +7686,7 @@ fn take(r: R) -> bool {
     return v > 0;
 }
 
-fn main() -> Int {
+fn main() -> u8 {
     let r: R = R { v: 42 };
     let t: bool = take(r);
     let c: bool = true;
@@ -6232,10 +7763,22 @@ fn release(r: R) {
     let R { v } = r;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let r: R = R { v: 42 };
     defer release(r);
     return take(r);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -6245,7 +7788,7 @@ struct Copy P { n: Int }
 fn show(n: Int) {
 }
 
-fn main() -> Int {
+fn main() -> u8 {
     let p: P = P { n: 42 };
     defer show(p.n);
     return 0;
@@ -6263,10 +7806,22 @@ fn peek(r: &R) -> Int {
     return r.v;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let r: R = R { v: 42 };
     defer release(r);
     return peek(&r);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -6299,7 +7854,7 @@ impl Destroy for C {
     }
 }
 
-fn main() -> Int {
+fn main() -> u8 {
     return 0;
 }
 ```
@@ -6312,11 +7867,23 @@ impl Destroy for R {
     }
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let r: R = R { v: 42 };
     let out: Int = r.v;
     destroy(r);
     return out;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -6343,7 +7910,7 @@ version 1 checked each instantiation and made a non-qualifying one linear).
 struct S { x: Int }
 struct Copy T { s: S }
 
-fn main() -> Int {
+fn main() -> u8 {
     return 0;
 }
 ```
@@ -6352,17 +7919,29 @@ fn main() -> Int {
 struct Copy S { x: Int }
 struct Copy T { s: S }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let t: T = T { s: S { x: 21 } };
     let u: T = t;
     return t.s.x + u.s.x;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
 ```con reject name=generic-with-linear-field code=E0571 stage=core-check pair=copy-with-copy-fields
 struct Copy S<T> { a: T, s: String }
 
-fn main() -> Int {
+fn main() -> u8 {
     return 0;
 }
 ```
@@ -6412,12 +7991,24 @@ fn take(r: R) -> Int {
 
 struct Two { a: R, b: R }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let a: R = R { v: 20 };
     let b: R = R { v: 22 };
     let two: Two = Two { a: a, b: b };
     let Two { a: x, b: y } = two;
     return take(x) + take(y);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -6530,7 +8121,7 @@ fn peek(r: &Int) -> Int {
     return *r;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let mut x: Int = 41;
     let mut out: Int = 0;
     if true {
@@ -6539,6 +8130,18 @@ fn main() -> Int {
     }
     return out + 1;
 }
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
+}
 ```
 
 ```con accept name=deferred-borrow-alone exit=42
@@ -6546,12 +8149,24 @@ fn log(r: &mut Int) {
     *r = *r + 1;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let mut x: Int = 41;
     if true {
         defer log(&mut x);
     }
     return x;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -6581,7 +8196,7 @@ fn release(r: R) {
     let R { v } = r;
 }
 
-fn main() -> Int {
+fn main() -> u8 {
     let r: R = R { v: 1 };
     defer release(r);
     return 42;
@@ -6682,13 +8297,25 @@ fn peek(r: &R) -> Int {
     return r.v;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let r: R = R { v: 42 };
     let mut seen: Int = 0;
     borrow r as rr in Reg {
         seen = peek(rr);
     }
     return take(r) + seen * 0;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -6723,7 +8350,7 @@ fn id(x: &Int) -> &Int {
     return x;
 }
 
-fn main() -> Int {
+fn main() -> u8 {
     let v: Int = 42;
     return 0;
 }
@@ -6734,9 +8361,21 @@ fn get(x: &Int) -> Int {
     return *x;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let v: Int = 42;
     return get(&v);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -6745,7 +8384,7 @@ trait Get {
     fn get(&self) -> &Int;
 }
 
-fn main() -> Int {
+fn main() -> u8 {
     return 42;
 }
 ```
@@ -6791,7 +8430,7 @@ fn apply(x: &Int, f: fn(&Int) -> &Int) -> Int {
     return 0;
 }
 
-fn main() -> Int {
+fn main() -> u8 {
     return 0;
 }
 ```
@@ -6805,9 +8444,21 @@ fn read(r: &Int) -> Int {
     return *r;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let v: Int = 42;
     return apply(&v, read);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -6818,7 +8469,7 @@ fn apply(x: &Int, f: Cb) -> Int {
     return 0;
 }
 
-fn main() -> Int {
+fn main() -> u8 {
     return 0;
 }
 ```
@@ -6857,7 +8508,7 @@ well.
 ```con reject name=struct-field code=E0239 stage=check pair=fn-pointer-field
 struct W { t: &Int }
 
-fn main() -> Int {
+fn main() -> u8 {
     return 0;
 }
 ```
@@ -6869,11 +8520,23 @@ fn g(r: &Int) -> Int {
     return *r + 1;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let h: H = H { f: g };
     let H { f } = h;
     let x: Int = 41;
     return f(&x);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -6918,10 +8581,22 @@ fn wrap<R>(r: R) -> R {
     return r;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let x: Int = 42;
     let y: Int = *wrap::<&Int>(&x);
     return y;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -6938,9 +8613,21 @@ fn read(r: &Int) -> Int {
     return *r;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let v: Int = 21;
     return ignore::<&Int>(&v, 21) + apply::<&Int>(&v, read);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -7000,8 +8687,20 @@ fn read(r: &Int) -> Int {
     return *r;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return read(&(40 + 2));
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -7021,13 +8720,25 @@ fn through(r: &W) -> Int {
     return get(&r.p) + read(&r.p.n);
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let w: W = W { p: P { n: 10 } };
     let a: [Int; 2] = [0, 12];
     let out: Int = get(&w.p) + read(&a[1]) + through(&w);
     let W { p } = w;
     let P { n } = p;
     return out + n * 0;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -7036,8 +8747,20 @@ fn read(r: &Int) -> Int {
     return *r;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return read(&42);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -7050,8 +8773,20 @@ fn read(r: &Int) -> Int {
     return *r;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return read(&mk());
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -7064,9 +8799,21 @@ fn read(r: &Int) -> Int {
     return *r;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let v: Int = mk();
     return read(&v);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -7079,32 +8826,68 @@ fn f(r: &Int) -> Int {
     return g(&r);
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let v: Int = 1;
     return f(&v);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
 ```con reject name=branch-value-base code=E0238 stage=check pair=bind-branch-first
 struct Copy P { n: Int }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let a: P = P { n: 42 };
     let b: P = P { n: 1 };
     let c: bool = true;
     return (if c { a } else { b }).n;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
 ```con accept name=bind-branch-first exit=42
 struct Copy P { n: Int }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let a: P = P { n: 42 };
     let b: P = P { n: 1 };
     let c: bool = true;
     let w: P = if c { a } else { b };
     return w.n;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -7168,12 +8951,24 @@ fn get(r: &P) -> Int {
     return r.n;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let p: P = P { n: 21 };
     let r: &P = &p;
     let out: Int = get(r) + get(r);
     let P { n } = p;
     return out + n * 0;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -7183,10 +8978,22 @@ fn f(r: &Int, q: &Int) -> Int {
     return *r;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let a: Int = 1;
     let b: Int = 42;
     return f(&a, &b);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -7197,11 +9004,23 @@ fn get(r: &P) -> Int {
     return r.n;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let p: P = P { n: 21 };
     let out: Int = get(&p) + get(&p);
     let P { n } = p;
     return out + n * 0;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -7216,8 +9035,20 @@ fn read(r: &P) -> Int {
 
 const C: Int = read(&X);
 
-fn main() -> Int {
+fn example_value() -> Int {
     return C;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -7226,10 +9057,22 @@ fn same<T: Copy>(x: T) -> bool {
     return true;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let v: Int = 42;
     assert same::<&Int>(&v);
     return v;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -7242,10 +9085,22 @@ fn same<T: Copy>(x: T) -> bool {
     return true;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let x: P = X;
     assert same::<Int>(x.n);
     return x.n;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -7334,12 +9189,24 @@ fn replace(slot: &mut &Int) {
     *slot = &local;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let original: Int = 0;
     borrow original as r in R {
         replace(&mut r);
     }
     return original;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -7348,10 +9215,22 @@ fn set(slot: &mut Int) {
     *slot = 42;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let mut x: Int = 0;
     set(&mut x);
     return x;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -7390,7 +9269,7 @@ fn read(r: &Heap<B>) -> Int {
     return 0;
 }
 
-fn main() with(Std) -> Int {
+fn example_value() with(Std) -> Int {
     let h: Heap<B> = alloc(B { v: 42 });
     let mut out: Int = 0;
     borrow h as r in R {
@@ -7399,16 +9278,34 @@ fn main() with(Std) -> Int {
     }
     return out;
 }
+
+fn main() with(Std) -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
+}
 ```
 
 ```con reject name=read-owner-in-borrow-block code=E0203 stage=check pair=free-after-block
-fn main() -> Int {
+fn example_value() -> Int {
     let x: Int = 42;
     let mut out: Int = 0;
     borrow x as r in R {
         out = x;
     }
     return out;
+}
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
 }
 ```
 
@@ -7418,9 +9315,21 @@ fn mix(a: &Int, b: &mut Int) -> Int {
     return *a;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let mut x: Int = 42;
     return mix(&x, &mut x);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -7431,7 +9340,7 @@ fn read(r: &Int) -> Int {
     return *r;
 }
 
-fn main() with(Std) -> Int {
+fn example_value() with(Std) -> Int {
     let h: Heap<B> = alloc(B { v: 42 });
     let mut out: Int = 0;
     borrow h as r in R {
@@ -7440,6 +9349,18 @@ fn main() with(Std) -> Int {
     out = read(&h.v) * 0 + out;
     free(h);
     return out;
+}
+
+fn main() with(Std) -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -7463,15 +9384,27 @@ trusted fn use_frozen(r: R) -> Int {
     return s;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return use_frozen(R { v: 21 });
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
 ```con reject name=copy-binder-root-written code=E0232 stage=check pair=free-after-block
 struct Copy P { n: Int }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let mut o: Option<P> = Option::Some { value: P { n: 42 } };
     let mut out: Int = 0;
     match &o {
@@ -7482,6 +9415,18 @@ fn main() -> Int {
         Option::None => {}
     }
     return out;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -7531,12 +9476,18 @@ always a reference (this rule), its mode is stored in Core as its type (PASS-2),
 reassigned while the binder's loan lives (REF-8).
 
 ```con accept name=copy-payload-is-ref exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let o: Option<Int> = Option::Some { value: 42 };
     match &o {
         Option::Some { value } => { return *value; },
         Option::None => { return 0; }
     }
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -7586,13 +9537,25 @@ fn inc(r: &mut Int) {
     *r = *r + 21;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let mut x: Int = 0;
     borrow mut x as r in R {
         inc(r);
         inc(r);
     }
     return x;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -7638,10 +9601,22 @@ fn two(a: &mut Int, b: &mut Int) {
     *b = 1;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let mut w: W = W { a: 0, b: 0 };
     two(&mut w.a, &mut w.b);
     return w.a + w.b;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -7652,11 +9627,23 @@ fn one(a: &mut Int) {
     *a = 1;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let mut w: W = W { a: 0, b: 0 };
     one(&mut w.a);
     one(&mut w.b);
     return w.a + w.b;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 2 {
+
+        return 2;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -7670,11 +9657,17 @@ impl S {
 fn bump(r: &mut S) {
     r.add(r.step);
 }
-fn main() -> Int {
+fn example_value() -> Int {
     let mut s: S = S { step: 42, acc: 0 };
     bump(&mut s);
     let S { step, acc } = s;
     return acc;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -7689,11 +9682,17 @@ fn bump(r: &mut S) {
     let n: Int = r.step;
     r.add(n);
 }
-fn main() -> Int {
+fn example_value() -> Int {
     let mut s: S = S { step: 42, acc: 0 };
     bump(&mut s);
     let S { step, acc } = s;
     return acc;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -7736,10 +9735,22 @@ fn set(p: &P) {
     p.n = 42;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let p: P = P { n: 0 };
     set(&p);
     return p.n;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -7750,10 +9761,22 @@ fn set(p: &mut P) {
     p.n = 42;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let mut p: P = P { n: 0 };
     set(&mut p);
     return p.n;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 <a id="REF-13"></a>
@@ -7895,10 +9918,16 @@ Indeterminate memory exists only behind trusted or `Unsafe` operations, as a nam
 (TRUST-2).
 
 ```con accept name=initialized-bindings exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let mut x: Int = 1;
     x = 42;
     return x;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -7938,12 +9967,24 @@ fn get(h: &Heap<B>) -> Int {
     return h.v;
 }
 
-fn main() with(Std) -> Int {
+fn example_value() with(Std) -> Int {
     let mut h: Heap<B> = alloc(B { v: 40 });
     bump(&mut h);
     let out: Int = get(&h) + 1;
     free(h);
     return out;
+}
+
+fn main() with(Std) -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -7969,12 +10010,24 @@ value is refused (OWN-8, bug 144). A node is taken apart with `let n = *h;` and 
 ```con accept name=heap-ownership exit=42
 struct Copy B { v: Int }
 
-fn main() with(Std) -> Int {
+fn example_value() with(Std) -> Int {
     let h: Heap<B> = alloc(B { v: 40 });
     let g: Heap<B> = alloc(B { v: 2 });
     let b: B = *h;
     let c: B = free(g);
     return b.v + c.v;
+}
+
+fn main() with(Std) -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -7997,7 +10050,7 @@ abort is the same as an arithmetic trap (ARITH-3). There is no global way to tur
 off; an unchecked access would be a trusted operation with a named premise (TRUST-2).
 
 ```con accept name=index-in-bounds exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let a: [Int; 3] = [10, 30, 2];
     let mut i: Int = 0;
     let mut total: Int = 0;
@@ -8007,14 +10060,26 @@ fn main() -> Int {
     }
     return total;
 }
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 ```con abort name=index-out-of-bounds trap=out_of_bounds
-fn main() -> Int {
+fn example_value() -> Int {
     let a: [Int; 3] = [1, 2, 3];
     let mut i: Int = 0;
     i = i + 5;
     return a[i];
+}
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
 }
 ```
 
@@ -8044,10 +10109,22 @@ fn make(v: Int) with(Alloc) -> Heap<B> {
     return alloc(B { v: v });
 }
 
-fn main() with(Alloc) -> Int {
+fn example_value() with(Alloc) -> Int {
     let h: Heap<B> = make(42);
     let b: B = free(h);
     return b.v;
+}
+
+fn main() with(Alloc) -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -8079,10 +10156,22 @@ fn set(a: &mut [Int; 3]) {
     a[2] = 38;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let mut arr: [Int; 3] = [1, 2, 3];
     set(&mut arr);
     return get(&arr) + arr[2] + 2;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -8167,7 +10256,13 @@ struct Copy Foo { a: Int }
 impl Tr for Foo { fn m(&self) -> Int { return 42; } }
 impl Tr for Foo { fn m(&self) -> Int { return 2; } }
 fn call<T: Tr>(x: &T) -> Int { return x.m(); }
-pub fn main() -> Int { let f: Foo = Foo { a: 0 }; return call::<Foo>(&f); }
+fn example_value() -> Int { let f: Foo = Foo { a: 0 }; return call::<Foo>(&f); }
+pub fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
+}
 ```
 
 ```con accept name=once exit=42
@@ -8175,7 +10270,13 @@ trait Tr { fn m(&self) -> Int; }
 struct Copy Foo { a: Int }
 impl Tr for Foo { fn m(&self) -> Int { return 42; } }
 fn call<T: Tr>(x: &T) -> Int { return x.m(); }
-pub fn main() -> Int { let f: Foo = Foo { a: 0 }; return call::<Foo>(&f); }
+fn example_value() -> Int { let f: Foo = Foo { a: 0 }; return call::<Foo>(&f); }
+pub fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 **Conformance fixtures.**
@@ -8213,14 +10314,26 @@ trait Tr { fn m(&self) -> Int; }
 struct Copy Box2<T> { v: T }
 impl<T> Tr for Box2<T> { fn m(&self) -> Int { return 42; } }
 impl Tr for Box2<i32> { fn m(&self) -> Int { return 2; } }
-pub fn main() -> Int { let b: Box2<i32> = Box2::<i32> { v: 0 }; return b.m(); }
+fn example_value() -> Int { let b: Box2<i32> = Box2::<i32> { v: 0 }; return b.m(); }
+pub fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
+}
 ```
 
 ```con accept name=generic-only exit=42
 trait Tr { fn m(&self) -> Int; }
 struct Copy Box2<T> { v: T }
 impl<T> Tr for Box2<T> { fn m(&self) -> Int { return 42; } }
-pub fn main() -> Int { let b: Box2<i32> = Box2::<i32> { v: 0 }; return b.m(); }
+fn example_value() -> Int { let b: Box2<i32> = Box2::<i32> { v: 0 }; return b.m(); }
+pub fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 **Conformance fixtures.**
@@ -8257,7 +10370,7 @@ mod defs {
 mod main {
     import defs.{Foo, make};
     impl Destroy for Foo { fn destroy(self) { let Foo { a } = self; } }
-    pub fn main() -> Int { let f: Foo = make(); f.destroy(); return 42; }
+    pub fn main() -> u8 { let f: Foo = make(); f.destroy(); return 42; }
 }
 ```
 
@@ -8269,7 +10382,7 @@ mod defs {
 }
 mod main {
     import defs.{Foo, make};
-    pub fn main() -> Int { let f: Foo = make(); f.destroy(); return 42; }
+    pub fn main() -> u8 { let f: Foo = make(); f.destroy(); return 42; }
 }
 ```
 
@@ -8305,7 +10418,13 @@ trait Tr { fn m(&self) -> Int; }
 struct Copy Box2<T> { v: Int }
 impl Tr for Box2<i32> { fn m(&self) -> Int { return 42; } }
 fn call<T: Tr>(x: &T) -> Int { return x.m(); }
-pub fn main() -> Int { let b: Box2<bool> = Box2::<bool> { v: 0 }; return call::<Box2<bool>>(&b); }
+fn example_value() -> Int { let b: Box2<bool> = Box2::<bool> { v: 0 }; return call::<Box2<bool>>(&b); }
+pub fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
+}
 ```
 
 ```con accept name=generic exit=42
@@ -8313,7 +10432,13 @@ trait Tr { fn m(&self) -> Int; }
 struct Copy Box2<T> { v: Int }
 impl<T> Tr for Box2<T> { fn m(&self) -> Int { return 42; } }
 fn call<T: Tr>(x: &T) -> Int { return x.m(); }
-pub fn main() -> Int { let b: Box2<bool> = Box2::<bool> { v: 0 }; return call::<Box2<bool>>(&b); }
+fn example_value() -> Int { let b: Box2<bool> = Box2::<bool> { v: 0 }; return call::<Box2<bool>>(&b); }
+pub fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 **Conformance fixtures.**
@@ -8351,7 +10476,13 @@ struct Copy Foo { a: Int }
 impl A for Foo { fn m(&self) -> Int { return 40; } }
 impl B for Foo { fn m(&self) -> Int { return 2; } }
 fn call<T: A>(x: &T) -> Int { return x.m(); }
-pub fn main() -> Int { let f: Foo = Foo { a: 0 }; return call::<Foo>(&f) + 2; }
+fn example_value() -> Int { let f: Foo = Foo { a: 0 }; return call::<Foo>(&f) + 2; }
+pub fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
+}
 ```
 
 ```con accept name=renamed exit=42
@@ -8361,7 +10492,13 @@ struct Copy Foo { a: Int }
 impl A for Foo { fn m(&self) -> Int { return 40; } }
 impl B for Foo { fn n(&self) -> Int { return 2; } }
 fn call<T: A + B>(x: &T) -> Int { return x.m() + x.n(); }
-pub fn main() -> Int { let f: Foo = Foo { a: 0 }; return call::<Foo>(&f); }
+fn example_value() -> Int { let f: Foo = Foo { a: 0 }; return call::<Foo>(&f); }
+pub fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 **Conformance fixtures.**
@@ -8393,14 +10530,14 @@ but the generic function itself must not depend on the order of its bounds eithe
 trait A { fn m(&self) -> Int; }
 trait B { fn m(&self) -> Int; }
 fn call<T: A + B>(x: &T) -> Int { return x.m(); }
-pub fn main() -> Int { return 42; }
+pub fn main() -> u8 { return 42; }
 ```
 
 ```con accept name=one-bound exit=42
 trait A { fn m(&self) -> Int; }
 trait B { fn m(&self) -> Int; }
 fn call<T: A>(x: &T) -> Int { return x.m(); }
-pub fn main() -> Int { return 42; }
+pub fn main() -> u8 { return 42; }
 ```
 
 **Conformance fixtures.**
@@ -8434,7 +10571,13 @@ struct Copy Foo { a: Int }
 impl A for Foo { fn m(&self) -> Int { return 40; } }
 impl B for Foo { fn n(&self) -> Int { return 2; } }
 fn call<T: A + B>(x: &T) -> Int { return x.m() + x.n(); }
-pub fn main() -> Int { let f: Foo = Foo { a: 0 }; return call::<Foo>(&f); }
+fn example_value() -> Int { let f: Foo = Foo { a: 0 }; return call::<Foo>(&f); }
+pub fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 ```con accept name=reversed exit=42
@@ -8444,7 +10587,13 @@ impl A for Foo { fn m(&self) -> Int { return 40; } }
 struct Copy Foo { a: Int }
 trait B { fn n(&self) -> Int; }
 trait A { fn m(&self) -> Int; }
-pub fn main() -> Int { let f: Foo = Foo { a: 0 }; return call::<Foo>(&f); }
+fn example_value() -> Int { let f: Foo = Foo { a: 0 }; return call::<Foo>(&f); }
+pub fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 **Conformance fixtures.**
@@ -8475,19 +10624,25 @@ destructor machinery takes for the builtin.
 ```con reject name=unknown-trait code=E0580 stage=core-check pair=declared-trait
 struct Copy S { v: Int }
 impl Missing for S { fn m(&self) -> Int { return 1; } }
-fn main() -> Int { return 0; }
+fn main() -> u8 { return 0; }
 ```
 
 ```con reject name=destroy-redeclared code=E0579 stage=core-check pair=declared-trait
 trait Destroy { fn destroy(&self); }
-fn main() -> Int { return 0; }
+fn main() -> u8 { return 0; }
 ```
 
 ```con accept name=declared-trait exit=42
 trait Tr { fn m(&self) -> Int; }
 struct Copy S { v: Int }
 impl Tr for S { fn m(&self) -> Int { return self.v; } }
-fn main() -> Int { let s: S = S { v: 42 }; return s.m(); }
+fn example_value() -> Int { let s: S = S { v: 42 }; return s.m(); }
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 <a id="TRAIT-9"></a>
@@ -8515,28 +10670,28 @@ is OWN-13's (E0584).
 trait Tr { fn m(&self) -> Int; fn n(&self) -> Int; }
 struct Copy S { v: Int }
 impl Tr for S { fn m(&self) -> Int { return 1; } }
-fn main() -> Int { return 0; }
+fn main() -> u8 { return 0; }
 ```
 
 ```con reject name=return-type-differs code=E0582 stage=core-check pair=conforming-impl
 trait Tr { fn m(&self) -> Int; }
 struct Copy S { v: Int }
 impl Tr for S { fn m(&self) -> bool { return true; } }
-fn main() -> Int { return 0; }
+fn main() -> u8 { return 0; }
 ```
 
 ```con reject name=receiver-differs code=E0587 stage=core-check pair=conforming-impl
 trait Tr { fn m(&self, n: Int) -> Int; }
 struct Copy S { v: Int }
 impl Tr for S { fn m(&mut self, n: Int) -> Int { return n; } }
-fn main() -> Int { return 0; }
+fn main() -> u8 { return 0; }
 ```
 
 ```con reject name=capabilities-exceed-trait code=E0586 stage=core-check pair=conforming-impl
 trait Tr { fn m(&self) -> Int; }
 struct Copy S { v: Int }
 impl Tr for S { fn m(&self) with(Console) -> Int { return self.v; } }
-fn main() -> Int { return 0; }
+fn main() -> u8 { return 0; }
 ```
 
 ```con accept name=conforming-impl exit=42
@@ -8546,7 +10701,13 @@ impl Tr for S {
     fn m(&self, n: Int) -> Int { return self.v + n; }
     fn me(&self) -> S { return S { v: self.v }; }
 }
-fn main() -> Int { let s: S = S { v: 40 }; let t: S = s.me(); return t.m(2); }
+fn example_value() -> Int { let s: S = S { v: 40 }; let t: S = s.me(); return t.m(2); }
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 <a id="TRAIT-10"></a>
@@ -8579,13 +10740,25 @@ array of destroyable elements as `Destroy` (bug 324).
 trait Tr { fn m(&self) -> Int; }
 struct Copy S { v: Int }
 fn call<T: Tr>(x: &T) -> Int { return x.m(); }
-fn main() -> Int { let s: S = S { v: 42 }; return call::<S>(&s); }
+fn example_value() -> Int { let s: S = S { v: 42 }; return call::<S>(&s); }
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
+}
 ```
 
 ```con reject name=primitive-bound-unsatisfied code=E0241 stage=check pair=bound-satisfied
 trait Tr { fn m(&self) -> Int; }
 fn call<T: Tr>(x: &T) -> Int { return x.m(); }
-fn main() -> Int { let n: Int = 42; return call::<Int>(&n); }
+fn example_value() -> Int { let n: Int = 42; return call::<Int>(&n); }
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
+}
 ```
 
 ```con accept name=bound-satisfied exit=42
@@ -8593,15 +10766,27 @@ trait Tr { fn m(&self) -> Int; }
 struct Copy S { v: Int }
 impl Tr for S { fn m(&self) -> Int { return self.v; } }
 fn call<T: Tr>(x: &T) -> Int { return x.m(); }
-fn main() -> Int { let s: S = S { v: 42 }; return call::<S>(&s); }
+fn example_value() -> Int { let s: S = S { v: 42 }; return call::<S>(&s); }
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 ```con reject name=copy-type-for-destroy-bound code=E0241 stage=check pair=unbounded-generic pending=bug-324 now=accept:42
 fn id<T: Destroy>(x: T) -> T {
     return x;
 }
-fn main() -> Int {
+fn example_value() -> Int {
     return id(42);
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -8609,8 +10794,14 @@ fn main() -> Int {
 fn id<T>(x: T) -> T {
     return x;
 }
-fn main() -> Int {
+fn example_value() -> Int {
     return id(42);
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -8645,7 +10836,7 @@ impl Destroy for R {
     }
 }
 
-fn main() -> Int {
+fn main() -> u8 {
     let r: R = R { v: 1 };
     destroy(r);
     return 42;
@@ -8720,8 +10911,20 @@ fn count(n: Int) -> Int {
     return i;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return count(42);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -8758,8 +10961,20 @@ fn f(x: i32) -> i32 {
     return x;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return f(42) as Int;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -8769,8 +10984,20 @@ fn f(x: i32) -> i32 {
     return x;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return f(42) as Int;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -8781,7 +11008,7 @@ fn twice(x: i32) -> i32 {
 
 spec fn big(x: i32) -> bool = twice(x) > 10;
 
-fn main() -> Int {
+fn main() -> u8 {
     return 42;
 }
 ```
@@ -8792,8 +11019,20 @@ fn f(x: i32) -> i32 {
     return x;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return f(42) as Int;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -8823,8 +11062,20 @@ fn f() -> Int {
     return bound;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return f();
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -8840,8 +11091,20 @@ fn f() -> Int {
     return acc;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return f();
+}
+
+fn main() -> u8 {
+
+    if example_value() == 28 {
+
+        return 28;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -8858,8 +11121,20 @@ fn f() -> Int {
     return acc;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return f();
+}
+
+fn main() -> u8 {
+
+    if example_value() == 28 {
+
+        return 28;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -8893,8 +11168,20 @@ fn f(x: Int) -> Int {
     return x;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return f(42);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -8926,8 +11213,20 @@ fn f(x: Int) -> Int {
     return x;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return f(42);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -8957,8 +11256,20 @@ fn f(x: Int) -> Int {
     return result;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return f(42);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -8987,8 +11298,20 @@ fn f(x: Int) -> Int {
     return x;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return f(42);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -9069,13 +11392,13 @@ trusted fn addr(p: *const Int) -> u64 {
     return p as u64;
 }
 
-fn main() -> Int {
+fn main() -> u8 {
     return 0;
 }
 ```
 
 ```con accept name=no-pointer-cast exit=0
-fn main() -> Int {
+fn main() -> u8 {
     return 0;
 }
 ```
@@ -9175,8 +11498,20 @@ fn needs() with(File) -> Int {
     return 1;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return needs();
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -9185,7 +11520,7 @@ fn rd(p: *const Int) -> Int {
     return *p;
 }
 
-fn main() -> Int {
+fn main() -> u8 {
     return 0;
 }
 ```
@@ -9199,8 +11534,20 @@ fn add_one(x: Int) -> Int {
     return x + 1;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return apply(add_one);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -9213,9 +11560,21 @@ fn rd(p: *const Int) with(Unsafe) -> Int {
     return *p;
 }
 
-fn main() with(File, Unsafe) -> Int {
+fn example_value() with(File, Unsafe) -> Int {
     let x: Int = 1;
     return needs() + rd(&x as *const Int);
+}
+
+fn main() with(File, Unsafe) -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -9264,9 +11623,21 @@ trusted fn rd(p: *const Int) -> Int {
     return *p;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let x: Int = 42;
     return rd(&x as *const Int);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -9295,18 +11666,30 @@ mod m {
     trusted fn rd(p: *const Int) -> Int {
         return *p;
     }
-    fn main() -> Int {
+    fn example_value() -> Int {
         let x: Int = 42;
         return rd(&x as *const Int);
+    }
+    fn main() -> u8 {
+        if example_value() == 42 {
+            return 42;
+        }
+        return 1;
     }
 }
 ```
 
 ```con accept name=trusted-in-marked-module exit=42
 mod m {
-    fn main() -> Int {
+    fn example_value() -> Int {
         let x: Int = 42;
         return x;
+    }
+    fn main() -> u8 {
+        if example_value() == 42 {
+            return 42;
+        }
+        return 1;
     }
 }
 ```
@@ -9342,7 +11725,7 @@ trusted fn dup<K>(x: &mut K) -> K {
     return *p;
 }
 
-fn main() with(Alloc) -> Int {
+fn main() with(Alloc) -> u8 {
     let mut h: Heap<B> = alloc(B { v: 42 });
     let h2: Heap<B> = dup::<Heap<B>>(&mut h);
     free(h2);
@@ -9361,12 +11744,24 @@ trusted fn take_and_replace(slot: &mut Heap<B>, fresh: Heap<B>) -> Heap<B> {
     return old;
 }
 
-fn main() with(Alloc) -> Int {
+fn example_value() with(Alloc) -> Int {
     let mut h: Heap<B> = alloc(B { v: 40 });
     let old: Heap<B> = take_and_replace(&mut h, alloc(B { v: 2 }));
     let a: B = free(old);
     let b: B = free(h);
     return a.v + b.v;
+}
+
+fn main() with(Alloc) -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -9406,10 +11801,22 @@ struct Token { v: Int }
 
 const T: Token = Token { v: 42 };
 
-fn main() -> Int {
+fn example_value() -> Int {
     let t: Token = T;
     let Token { v } = t;
     return v;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -9418,8 +11825,20 @@ struct Copy P { v: Int }
 
 const C: P = P { v: 42 };
 
-fn main() -> Int {
+fn example_value() -> Int {
     return C.v;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -9496,12 +11915,24 @@ trusted fn swap_in(slot: &mut Heap<B>, fresh: Heap<B>) -> Heap<B> {
     return old;
 }
 
-fn main() with(Alloc) -> Int {
+fn example_value() with(Alloc) -> Int {
     let mut h: Heap<B> = alloc(B { v: 40 });
     let old: Heap<B> = swap_in(&mut h, alloc(B { v: 2 }));
     let a: B = free(old);
     let b: B = free(h);
     return a.v + b.v;
+}
+
+fn main() with(Alloc) -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -9551,8 +11982,20 @@ trusted fn use_once(r: R) -> Int {
     return take(r) + seen * 0;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return use_once(R { v: 42 });
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -9580,10 +12023,22 @@ trusted fn rd(p: *const Int) -> Int {
     return *p;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let x: Int = 42;
     let p: *const Int = &x as *const Int;
     return rd(p);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -9719,7 +12174,7 @@ pointer to a value type stays FFI-safe.
 ```con reject name=undeclared-effects code=E0116 stage=resolve pair=declared-extern
 extern fn abs(x: i32) -> i32;
 
-fn main() -> Int {
+fn main() -> u8 {
     return 0;
 }
 ```
@@ -9729,7 +12184,7 @@ struct S { v: Int }
 
 extern fn f(s: S) with() -> i32;
 
-fn main() -> Int {
+fn main() -> u8 {
     return 0;
 }
 ```
@@ -9737,15 +12192,27 @@ fn main() -> Int {
 ```con accept name=declared-extern exit=42
 trusted extern fn abs(x: i32) with() -> i32;
 
-fn main() -> Int {
+fn example_value() -> Int {
     return abs(0 - 42) as Int;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
 ```con reject name=returns-pointer-to-ref code=E0575 stage=core-check pair=pointer-to-value
 trusted extern fn f() with() -> *const &Int;
 
-fn main() -> Int {
+fn main() -> u8 {
     return 0;
 }
 ```
@@ -9753,7 +12220,7 @@ fn main() -> Int {
 ```con reject name=param-pointer-to-ref code=E0574 stage=core-check pair=pointer-to-value
 trusted extern fn keep(p: *const &Int) with();
 
-fn main() -> Int {
+fn main() -> u8 {
     return 0;
 }
 ```
@@ -9762,7 +12229,7 @@ fn main() -> Int {
 trusted extern fn f() with() -> *const Int;
 trusted extern fn keep(p: *const Int) with();
 
-fn main() -> Int {
+fn main() -> u8 {
     return 42;
 }
 ```
@@ -9789,7 +12256,7 @@ Over-alignment is refused because code generation does not support it yet (E0585
 #[repr(C, align(3))]
 struct S { v: Int }
 
-fn main() -> Int {
+fn main() -> u8 {
     return 0;
 }
 ```
@@ -9798,9 +12265,21 @@ fn main() -> Int {
 #[repr(C)]
 struct Copy S { a: i32, b: i32 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let s: S = S { a: 40, b: 2 };
     return (s.a + s.b) as Int;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -9830,7 +12309,7 @@ fn entry() -> i32 {
     return 0;
 }
 
-fn main() -> Int {
+fn main() -> u8 {
     return 0;
 }
 ```
@@ -9842,10 +12321,22 @@ fn malloc(n: Int) -> Int {
     return n;
 }
 
-fn main() with(Std) -> Int {
+fn example_value() with(Std) -> Int {
     let h: Heap<B> = alloc(B { v: 40 });
     let b: B = *h;
     return b.v + malloc(2);
+}
+
+fn main() with(Std) -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -9914,7 +12405,7 @@ mod m {
 
     struct Copy S { a: u8, b: u32 }
 
-    pub fn main() -> Int {
+    pub fn main() -> u8 {
         if sizeof::<S>() >= 5 && alignof::<S>() >= 1 {
             return 42;
         }
@@ -9958,7 +12449,7 @@ mod m {
     #[repr(packed)]
     struct Copy P { l: u32, v: u8 }
 
-    pub fn main() -> Int {
+    pub fn main() -> u8 {
         if sizeof::<R>() == 8 && alignof::<R>() == 4 && sizeof::<H>() == 7 && alignof::<H>() == 1
             && sizeof::<P>() == 5 && alignof::<P>() == 1 {
             return 42;
@@ -9981,7 +12472,7 @@ mod m {
         return *q;
     }
 
-    pub fn main() -> Int {
+    pub fn main() -> u8 {
         let r: R = R { v: 7, l: 30 };
         let p: P = P { l: 9, v: 5 };
         if byte_at(&r, 0) == 7 && byte_at(&r, 4) == 30 && byte_at(&p, 0) == 9 && byte_at(&p, 4) == 5 {
@@ -10015,8 +12506,20 @@ base ([TRUSTED_COMPUTING_BASE.md](../verification/TRUSTED_COMPUTING_BASE.md) §6
 ```con accept name=trusted-extern-without-unsafe exit=42
 trusted extern fn abs(x: i32) with() -> i32;
 
-fn main() -> Int {
+fn example_value() -> Int {
     return abs(-42) as Int;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -10050,12 +12553,24 @@ struct Copy B { v: u8 }
 struct Copy C { v: u8 }
 struct Copy D { v: u8 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let a: A = A { v: 10 };
     let b: B = B { v: 10 };
     let c: C = C { v: 10 };
     let d: D = D { v: 12 };
     return (a.v + b.v + c.v + d.v) as Int;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -10095,13 +12610,25 @@ struct Copy Addr { s: u32 }
 trusted extern fn htonl(x: u32) with() -> u32;
 trusted extern fn inet_lnaof(a: Addr) with() -> u32;
 
-fn main() -> Int {
+fn example_value() -> Int {
     let r: D = div(85, 2);
     let a: Addr = Addr { s: htonl(167772202) };
     if r.rem == 1 && inet_lnaof(a) == 42 {
         return r.quot as Int;
     }
     return 0;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -10136,9 +12663,21 @@ trusted fn second(arr: &[S; 3]) -> u32 {
     return s.b;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let arr: [S; 3] = [S { a: 1, b: 10 }, S { a: 2, b: 42 }, S { a: 3, b: 30 }];
     return second(&arr) as Int;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -10156,9 +12695,21 @@ mod m {
         return s.b;
     }
 
-    pub fn main() -> Int {
+    fn example_value() -> Int {
         let arr: [S; 3] = [S { a: 1, b: 10 }, S { a: 2, b: 42 }, S { a: 3, b: 30 }];
         return second(&arr) as Int;
+    }
+
+    pub fn main() -> u8 {
+
+        if example_value() == 42 {
+
+            return 42;
+
+        }
+
+        return 1;
+
     }
 }
 ```
@@ -10215,8 +12766,20 @@ fn half(n: Int) -> Int {
     return n / 2;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return twice::<Int>(42, half);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -10258,9 +12821,21 @@ fn read(p: &Int) -> Int {
     return *p;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let o: Option<Int> = Option::Some { value: 42 };
     return get::<Int>(&o, read);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -10321,16 +12896,22 @@ notice.
 mod m {
     struct R { x: i32 }
     fn f() { let r: R = R { x: 1 }; }
-    fn main() -> Int { return 0; }
+    fn main() -> u8 { return 0; }
 }
 ```
 
 ```con reject name=mixed-width-binop code=E0228 stage=check pair=linear-local-consumed
 mod m {
-    fn main() -> Int {
+    fn example_value() -> Int {
         let a: i32 = 1;
         let b: i64 = 2;
         return (a + b) as Int;
+    }
+    fn main() -> u8 {
+        if example_value() == 0 {
+            return 0;
+        }
+        return 1;
     }
 }
 ```
@@ -10343,10 +12924,16 @@ mod m {
         let R { x } = r;
         return x;
     }
-    fn main() -> Int {
+    fn example_value() -> Int {
         let a: i64 = 1;
         let b: i64 = f() as i64;
         return (a + b) as Int;
+    }
+    fn main() -> u8 {
+        if example_value() == 42 {
+            return 42;
+        }
+        return 1;
     }
 }
 ```
@@ -10376,7 +12963,7 @@ fn get(p: &P) -> Int {
     return p.a + p.b;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let base: P = P { a: 20, b: 2 };
     let q: P = P { a: 40, ..base };
     let mut total: Int = 0;
@@ -10384,6 +12971,18 @@ fn main() -> Int {
         total = total + get(&q);
     }
     return total;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -10416,9 +13015,21 @@ fn id(x: Int) -> Int {
     return x;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let p: Pair<Int> = Pair::<Int> { a: 40, b: 2 };
     return sum::<Int>(p, id);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -10443,7 +13054,13 @@ regression that moves a check later fails here even when the program is still re
 ```con reject name=undeclared-capability code=E0520 stage=core-check pair=valid-core
 mod m {
     fn needs() with(Network) -> Int { return 0; }
-    fn main() -> Int { return needs(); }
+    fn example_value() -> Int { return needs(); }
+    fn main() -> u8 {
+        if example_value() == 0 {
+            return 0;
+        }
+        return 1;
+    }
 }
 ```
 
@@ -10451,14 +13068,14 @@ mod m {
 mod m {
     struct S { x: i32 }
     struct Copy T { s: S }
-    fn main() -> Int { return 0; }
+    fn main() -> u8 { return 0; }
 }
 ```
 
 ```con reject name=infinite-size-type code=E0583 stage=core-check pair=valid-core
 mod m {
     struct S { x: S }
-    fn main() -> Int { return 0; }
+    fn main() -> u8 { return 0; }
 }
 ```
 
@@ -10467,9 +13084,15 @@ mod m {
     fn needs() with(Network) -> Int { return 42; }
     struct Copy S { x: i32 }
     struct Copy T { s: S }
-    fn main() with(Network) -> Int {
+    fn example_value() with(Network) -> Int {
         let t: T = T { s: S { x: 0 } };
         return needs() + (t.s.x as Int);
+    }
+    fn main() with(Network) -> u8 {
+        if example_value() == 42 {
+            return 42;
+        }
+        return 1;
     }
 }
 ```
@@ -10494,7 +13117,7 @@ that operation (VERIFIED_PIPELINE, "Where each check lives"). The verifier runs 
 SSA cleanup.
 
 ```con accept name=checked-operations-pass exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let a: [Int; 4] = [10, 20, 5, 7];
     let mut total: Int = 0;
     let mut i: Int = 0;
@@ -10503,6 +13126,12 @@ fn main() -> Int {
         i = i + 1;
     }
     return total / 1;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -10534,7 +13163,13 @@ mod m {
 ```con accept name=entry-point exit=42
 mod m {
     fn helper() -> i32 { return 41; }
-    fn main() -> Int { return (helper() + 1) as Int; }
+    fn example_value() -> Int { return (helper() + 1) as Int; }
+    fn main() -> u8 {
+        if example_value() == 42 {
+            return 42;
+        }
+        return 1;
+    }
 }
 ```
 
@@ -10579,10 +13214,22 @@ the program below at monomorphization (bug 054, whose mangling is forgeable).
 struct Copy Box<T> { v: T }
 struct Copy Pair { a: Int, b: Int }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let a: Box<Int> = Box::<Int> { v: 40 };
     let p: Pair = Pair { a: 1, b: 1 };
     return a.v + p.a + p.b;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -10590,10 +13237,22 @@ fn main() -> Int {
 struct Copy Box<T> { v: T }
 struct Copy Box_Int { v: Int }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let a: Box<Int> = Box::<Int> { v: 40 };
     let b: Box_Int = Box_Int { v: 2 };
     return a.v + b.v;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -10617,7 +13276,7 @@ PASS-4 tests the LLVM profile against the interpreter; this entry states the agr
 038, 102, 184 and 254 were disagreements between consumers.
 
 ```con accept name=consumers-agree exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let mut s: Int = 0;
     let mut i: Int = 0;
     while i < 7 {
@@ -10625,6 +13284,12 @@ fn main() -> Int {
         i = i + 1;
     }
     return s + 21;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 

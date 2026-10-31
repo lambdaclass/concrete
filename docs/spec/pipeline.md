@@ -48,8 +48,20 @@ fn half(n: Int) -> Int {
     return n / 2;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return twice::<Int>(42, half);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -91,9 +103,21 @@ fn read(p: &Int) -> Int {
     return *p;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let o: Option<Int> = Option::Some { value: 42 };
     return get::<Int>(&o, read);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -154,16 +178,22 @@ notice.
 mod m {
     struct R { x: i32 }
     fn f() { let r: R = R { x: 1 }; }
-    fn main() -> Int { return 0; }
+    fn main() -> u8 { return 0; }
 }
 ```
 
 ```con reject name=mixed-width-binop code=E0228 stage=check pair=linear-local-consumed
 mod m {
-    fn main() -> Int {
+    fn example_value() -> Int {
         let a: i32 = 1;
         let b: i64 = 2;
         return (a + b) as Int;
+    }
+    fn main() -> u8 {
+        if example_value() == 0 {
+            return 0;
+        }
+        return 1;
     }
 }
 ```
@@ -176,10 +206,16 @@ mod m {
         let R { x } = r;
         return x;
     }
-    fn main() -> Int {
+    fn example_value() -> Int {
         let a: i64 = 1;
         let b: i64 = f() as i64;
         return (a + b) as Int;
+    }
+    fn main() -> u8 {
+        if example_value() == 42 {
+            return 42;
+        }
+        return 1;
     }
 }
 ```
@@ -209,7 +245,7 @@ fn get(p: &P) -> Int {
     return p.a + p.b;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let base: P = P { a: 20, b: 2 };
     let q: P = P { a: 40, ..base };
     let mut total: Int = 0;
@@ -217,6 +253,18 @@ fn main() -> Int {
         total = total + get(&q);
     }
     return total;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -249,9 +297,21 @@ fn id(x: Int) -> Int {
     return x;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let p: Pair<Int> = Pair::<Int> { a: 40, b: 2 };
     return sum::<Int>(p, id);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -276,7 +336,13 @@ regression that moves a check later fails here even when the program is still re
 ```con reject name=undeclared-capability code=E0520 stage=core-check pair=valid-core
 mod m {
     fn needs() with(Network) -> Int { return 0; }
-    fn main() -> Int { return needs(); }
+    fn example_value() -> Int { return needs(); }
+    fn main() -> u8 {
+        if example_value() == 0 {
+            return 0;
+        }
+        return 1;
+    }
 }
 ```
 
@@ -284,14 +350,14 @@ mod m {
 mod m {
     struct S { x: i32 }
     struct Copy T { s: S }
-    fn main() -> Int { return 0; }
+    fn main() -> u8 { return 0; }
 }
 ```
 
 ```con reject name=infinite-size-type code=E0583 stage=core-check pair=valid-core
 mod m {
     struct S { x: S }
-    fn main() -> Int { return 0; }
+    fn main() -> u8 { return 0; }
 }
 ```
 
@@ -300,9 +366,15 @@ mod m {
     fn needs() with(Network) -> Int { return 42; }
     struct Copy S { x: i32 }
     struct Copy T { s: S }
-    fn main() with(Network) -> Int {
+    fn example_value() with(Network) -> Int {
         let t: T = T { s: S { x: 0 } };
         return needs() + (t.s.x as Int);
+    }
+    fn main() with(Network) -> u8 {
+        if example_value() == 42 {
+            return 42;
+        }
+        return 1;
     }
 }
 ```
@@ -327,7 +399,7 @@ that operation (VERIFIED_PIPELINE, "Where each check lives"). The verifier runs 
 SSA cleanup.
 
 ```con accept name=checked-operations-pass exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let a: [Int; 4] = [10, 20, 5, 7];
     let mut total: Int = 0;
     let mut i: Int = 0;
@@ -336,6 +408,12 @@ fn main() -> Int {
         i = i + 1;
     }
     return total / 1;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -367,7 +445,13 @@ mod m {
 ```con accept name=entry-point exit=42
 mod m {
     fn helper() -> i32 { return 41; }
-    fn main() -> Int { return (helper() + 1) as Int; }
+    fn example_value() -> Int { return (helper() + 1) as Int; }
+    fn main() -> u8 {
+        if example_value() == 42 {
+            return 42;
+        }
+        return 1;
+    }
 }
 ```
 
@@ -412,10 +496,22 @@ the program below at monomorphization (bug 054, whose mangling is forgeable).
 struct Copy Box<T> { v: T }
 struct Copy Pair { a: Int, b: Int }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let a: Box<Int> = Box::<Int> { v: 40 };
     let p: Pair = Pair { a: 1, b: 1 };
     return a.v + p.a + p.b;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -423,10 +519,22 @@ fn main() -> Int {
 struct Copy Box<T> { v: T }
 struct Copy Box_Int { v: Int }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let a: Box<Int> = Box::<Int> { v: 40 };
     let b: Box_Int = Box_Int { v: 2 };
     return a.v + b.v;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -450,7 +558,7 @@ PASS-4 tests the LLVM profile against the interpreter; this entry states the agr
 038, 102, 184 and 254 were disagreements between consumers.
 
 ```con accept name=consumers-agree exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let mut s: Int = 0;
     let mut i: Int = 0;
     while i < 7 {
@@ -458,6 +566,12 @@ fn main() -> Int {
         i = i + 1;
     }
     return s + 21;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 

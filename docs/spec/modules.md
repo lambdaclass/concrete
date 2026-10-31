@@ -39,15 +39,27 @@ The builtins include the enums `Option` and `Result`, which a module uses withou
 a user type of the same name resolves is OPEN-43.
 
 ```con reject name=undeclared-name code=E0100 stage=resolve pair=declared-name
-fn main() -> Int {
+fn example_value() -> Int {
     return missing + 1;
+}
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
 }
 ```
 
 ```con accept name=declared-name exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let present: Int = 41;
     return present + 1;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -59,8 +71,20 @@ fn get(o: Option<Int>) -> Int {
     return value;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return get(Option::Some { value: 42 });
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -111,15 +135,27 @@ mod a {
 }
 mod m {
     import a.{hidden};
-    pub fn main() -> Int {
+    fn example_value() -> Int {
         return hidden();
+    }
+    pub fn main() -> u8 {
+        if example_value() == 0 {
+            return 0;
+        }
+        return 1;
     }
 }
 ```
 
 ```con reject name=submodule-imports-private code=E0285 stage=check pair=import-public
-fn main() -> Int {
+fn example_value() -> Int {
     return b::g();
+}
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
 }
 
 mod a {
@@ -152,8 +188,14 @@ mod c {
     }
 }
 import c.{g};
-fn main() -> Int {
+fn example_value() -> Int {
     return g();
+}
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
 }
 ```
 
@@ -165,8 +207,14 @@ mod a {
 }
 mod m {
     import a.{shown};
-    pub fn main() -> Int {
+    fn example_value() -> Int {
         return shown();
+    }
+    pub fn main() -> u8 {
+        if example_value() == 42 {
+            return 42;
+        }
+        return 1;
     }
 }
 ```
@@ -204,9 +252,15 @@ impl P {
 fn P_get(a: Int) -> Int {
     return a;
 }
-fn main() -> Int {
+fn example_value() -> Int {
     let p: P = P { x: 3 };
     return p.get() + P_get(4);
+}
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
 }
 ```
 
@@ -220,9 +274,15 @@ impl P {
 fn get_p(a: Int) -> Int {
     return a;
 }
-fn main() -> Int {
+fn example_value() -> Int {
     let p: P = P { x: 3 };
     return p.get() + get_p(4);
+}
+fn main() -> u8 {
+    if example_value() == 7 {
+        return 7;
+    }
+    return 1;
 }
 ```
 
@@ -237,8 +297,14 @@ mod m {
     fn f() -> Int {
         return 2;
     }
-    pub fn main() -> Int {
+    fn example_value() -> Int {
         return f();
+    }
+    pub fn main() -> u8 {
+        if example_value() == 0 {
+            return 0;
+        }
+        return 1;
     }
 }
 ```
@@ -254,8 +320,14 @@ mod m {
     fn f() -> Int {
         return 2;
     }
-    pub fn main() -> Int {
+    fn example_value() -> Int {
         return g() + f();
+    }
+    pub fn main() -> u8 {
+        if example_value() == 42 {
+            return 42;
+        }
+        return 1;
     }
 }
 ```
@@ -282,7 +354,7 @@ SYN-1 diagnostic (E0001), reported with the file's path, not a loading failure (
 ```con reject name=missing-module-file code=E0122 stage=resolve pair=inline-module
 mod missing;
 
-fn main() -> Int {
+fn main() -> u8 {
     return 42;
 }
 ```
@@ -294,8 +366,20 @@ mod present {
     }
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return present::answer();
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -322,8 +406,14 @@ visible to std alone, `pub` or not. A module belongs to std by its definition pa
 modules under it).
 
 ```con reject name=program-imports-libc code=E0326 stage=check pair=program-uses-std project=libcuser interp-exempt=project-needs-std
-fn main() -> Int {
+fn example_value() -> Int {
     return b::g();
+}
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
 }
 
 mod b {
@@ -337,7 +427,7 @@ mod b {
 ```con reject name=program-root-imports-libc code=E0326 stage=resolve pair=program-uses-std project=libcroot interp-exempt=project-needs-std
 import std.libc.{strlen};
 
-fn main() -> Int {
+fn main() -> u8 {
     return 42;
 }
 ```
@@ -345,7 +435,7 @@ fn main() -> Int {
 ```con accept name=program-uses-std exit=42 project=stduser interp-exempt=project-needs-std
 import std.string.{String};
 
-fn main() -> Int {
+fn main() -> u8 {
     return 42;
 }
 ```
@@ -394,7 +484,7 @@ fn print_int(x: Int) -> Int {
     return 42 / z;
 }
 
-fn main() with(Console) -> Int {
+fn main() with(Console) -> u8 {
     println(7);
     return 42;
 }

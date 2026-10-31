@@ -90,13 +90,25 @@ fn peek(r: &R) -> Int {
     return r.v;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let r: R = R { v: 42 };
     let mut seen: Int = 0;
     borrow r as rr in Reg {
         seen = peek(rr);
     }
     return take(r) + seen * 0;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -131,7 +143,7 @@ fn id(x: &Int) -> &Int {
     return x;
 }
 
-fn main() -> Int {
+fn main() -> u8 {
     let v: Int = 42;
     return 0;
 }
@@ -142,9 +154,21 @@ fn get(x: &Int) -> Int {
     return *x;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let v: Int = 42;
     return get(&v);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -153,7 +177,7 @@ trait Get {
     fn get(&self) -> &Int;
 }
 
-fn main() -> Int {
+fn main() -> u8 {
     return 42;
 }
 ```
@@ -199,7 +223,7 @@ fn apply(x: &Int, f: fn(&Int) -> &Int) -> Int {
     return 0;
 }
 
-fn main() -> Int {
+fn main() -> u8 {
     return 0;
 }
 ```
@@ -213,9 +237,21 @@ fn read(r: &Int) -> Int {
     return *r;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let v: Int = 42;
     return apply(&v, read);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -226,7 +262,7 @@ fn apply(x: &Int, f: Cb) -> Int {
     return 0;
 }
 
-fn main() -> Int {
+fn main() -> u8 {
     return 0;
 }
 ```
@@ -265,7 +301,7 @@ well.
 ```con reject name=struct-field code=E0239 stage=check pair=fn-pointer-field
 struct W { t: &Int }
 
-fn main() -> Int {
+fn main() -> u8 {
     return 0;
 }
 ```
@@ -277,11 +313,23 @@ fn g(r: &Int) -> Int {
     return *r + 1;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let h: H = H { f: g };
     let H { f } = h;
     let x: Int = 41;
     return f(&x);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -326,10 +374,22 @@ fn wrap<R>(r: R) -> R {
     return r;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let x: Int = 42;
     let y: Int = *wrap::<&Int>(&x);
     return y;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -346,9 +406,21 @@ fn read(r: &Int) -> Int {
     return *r;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let v: Int = 21;
     return ignore::<&Int>(&v, 21) + apply::<&Int>(&v, read);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -408,8 +480,20 @@ fn read(r: &Int) -> Int {
     return *r;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return read(&(40 + 2));
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -429,13 +513,25 @@ fn through(r: &W) -> Int {
     return get(&r.p) + read(&r.p.n);
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let w: W = W { p: P { n: 10 } };
     let a: [Int; 2] = [0, 12];
     let out: Int = get(&w.p) + read(&a[1]) + through(&w);
     let W { p } = w;
     let P { n } = p;
     return out + n * 0;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -444,8 +540,20 @@ fn read(r: &Int) -> Int {
     return *r;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return read(&42);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -458,8 +566,20 @@ fn read(r: &Int) -> Int {
     return *r;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return read(&mk());
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -472,9 +592,21 @@ fn read(r: &Int) -> Int {
     return *r;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let v: Int = mk();
     return read(&v);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -487,32 +619,68 @@ fn f(r: &Int) -> Int {
     return g(&r);
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let v: Int = 1;
     return f(&v);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
 ```con reject name=branch-value-base code=E0238 stage=check pair=bind-branch-first
 struct Copy P { n: Int }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let a: P = P { n: 42 };
     let b: P = P { n: 1 };
     let c: bool = true;
     return (if c { a } else { b }).n;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
 ```con accept name=bind-branch-first exit=42
 struct Copy P { n: Int }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let a: P = P { n: 42 };
     let b: P = P { n: 1 };
     let c: bool = true;
     let w: P = if c { a } else { b };
     return w.n;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -576,12 +744,24 @@ fn get(r: &P) -> Int {
     return r.n;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let p: P = P { n: 21 };
     let r: &P = &p;
     let out: Int = get(r) + get(r);
     let P { n } = p;
     return out + n * 0;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -591,10 +771,22 @@ fn f(r: &Int, q: &Int) -> Int {
     return *r;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let a: Int = 1;
     let b: Int = 42;
     return f(&a, &b);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -605,11 +797,23 @@ fn get(r: &P) -> Int {
     return r.n;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let p: P = P { n: 21 };
     let out: Int = get(&p) + get(&p);
     let P { n } = p;
     return out + n * 0;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -624,8 +828,20 @@ fn read(r: &P) -> Int {
 
 const C: Int = read(&X);
 
-fn main() -> Int {
+fn example_value() -> Int {
     return C;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -634,10 +850,22 @@ fn same<T: Copy>(x: T) -> bool {
     return true;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let v: Int = 42;
     assert same::<&Int>(&v);
     return v;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -650,10 +878,22 @@ fn same<T: Copy>(x: T) -> bool {
     return true;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let x: P = X;
     assert same::<Int>(x.n);
     return x.n;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -742,12 +982,24 @@ fn replace(slot: &mut &Int) {
     *slot = &local;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let original: Int = 0;
     borrow original as r in R {
         replace(&mut r);
     }
     return original;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -756,10 +1008,22 @@ fn set(slot: &mut Int) {
     *slot = 42;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let mut x: Int = 0;
     set(&mut x);
     return x;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -798,7 +1062,7 @@ fn read(r: &Heap<B>) -> Int {
     return 0;
 }
 
-fn main() with(Std) -> Int {
+fn example_value() with(Std) -> Int {
     let h: Heap<B> = alloc(B { v: 42 });
     let mut out: Int = 0;
     borrow h as r in R {
@@ -807,16 +1071,34 @@ fn main() with(Std) -> Int {
     }
     return out;
 }
+
+fn main() with(Std) -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
+}
 ```
 
 ```con reject name=read-owner-in-borrow-block code=E0203 stage=check pair=free-after-block
-fn main() -> Int {
+fn example_value() -> Int {
     let x: Int = 42;
     let mut out: Int = 0;
     borrow x as r in R {
         out = x;
     }
     return out;
+}
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
 }
 ```
 
@@ -826,9 +1108,21 @@ fn mix(a: &Int, b: &mut Int) -> Int {
     return *a;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let mut x: Int = 42;
     return mix(&x, &mut x);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -839,7 +1133,7 @@ fn read(r: &Int) -> Int {
     return *r;
 }
 
-fn main() with(Std) -> Int {
+fn example_value() with(Std) -> Int {
     let h: Heap<B> = alloc(B { v: 42 });
     let mut out: Int = 0;
     borrow h as r in R {
@@ -848,6 +1142,18 @@ fn main() with(Std) -> Int {
     out = read(&h.v) * 0 + out;
     free(h);
     return out;
+}
+
+fn main() with(Std) -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -871,15 +1177,27 @@ trusted fn use_frozen(r: R) -> Int {
     return s;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return use_frozen(R { v: 21 });
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
 ```con reject name=copy-binder-root-written code=E0232 stage=check pair=free-after-block
 struct Copy P { n: Int }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let mut o: Option<P> = Option::Some { value: P { n: 42 } };
     let mut out: Int = 0;
     match &o {
@@ -890,6 +1208,18 @@ fn main() -> Int {
         Option::None => {}
     }
     return out;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -939,12 +1269,18 @@ always a reference (this rule), its mode is stored in Core as its type (PASS-2),
 reassigned while the binder's loan lives (REF-8).
 
 ```con accept name=copy-payload-is-ref exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let o: Option<Int> = Option::Some { value: 42 };
     match &o {
         Option::Some { value } => { return *value; },
         Option::None => { return 0; }
     }
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -994,13 +1330,25 @@ fn inc(r: &mut Int) {
     *r = *r + 21;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let mut x: Int = 0;
     borrow mut x as r in R {
         inc(r);
         inc(r);
     }
     return x;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -1046,10 +1394,22 @@ fn two(a: &mut Int, b: &mut Int) {
     *b = 1;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let mut w: W = W { a: 0, b: 0 };
     two(&mut w.a, &mut w.b);
     return w.a + w.b;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -1060,11 +1420,23 @@ fn one(a: &mut Int) {
     *a = 1;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let mut w: W = W { a: 0, b: 0 };
     one(&mut w.a);
     one(&mut w.b);
     return w.a + w.b;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 2 {
+
+        return 2;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -1078,11 +1450,17 @@ impl S {
 fn bump(r: &mut S) {
     r.add(r.step);
 }
-fn main() -> Int {
+fn example_value() -> Int {
     let mut s: S = S { step: 42, acc: 0 };
     bump(&mut s);
     let S { step, acc } = s;
     return acc;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -1097,11 +1475,17 @@ fn bump(r: &mut S) {
     let n: Int = r.step;
     r.add(n);
 }
-fn main() -> Int {
+fn example_value() -> Int {
     let mut s: S = S { step: 42, acc: 0 };
     bump(&mut s);
     let S { step, acc } = s;
     return acc;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -1144,10 +1528,22 @@ fn set(p: &P) {
     p.n = 42;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let p: P = P { n: 0 };
     set(&p);
     return p.n;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -1158,10 +1554,22 @@ fn set(p: &mut P) {
     p.n = 42;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let mut p: P = P { n: 0 };
     set(&mut p);
     return p.n;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 <a id="REF-13"></a>

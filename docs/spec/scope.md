@@ -57,7 +57,7 @@ them; E0238's shadowed-source guard is gone too. Binding identity is minted by t
 (R-0492), so a spelling that is not visible names a different binding.
 
 ```con reject name=block-let code=E0301 stage=check pair=block-let-renamed
-fn main() -> Int {
+fn example_value() -> Int {
     let x: Int = 1;
     if true {
         let x: Int = 100;
@@ -65,16 +65,28 @@ fn main() -> Int {
     }
     return x + 41;
 }
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
+}
 ```
 
 ```con accept name=block-let-renamed exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let x: Int = 1;
     if true {
         let inner_x: Int = 100;
         if inner_x != 100 { return 0; }
     }
     return x + 41;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -182,13 +194,25 @@ fn pick(c: bool) -> Int {
     return out;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return pick(true) + pick(false);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
 ```con accept name=loop-body-let exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let mut total: Int = 0;
     let mut k: Int = 0;
     while k < 6 {
@@ -197,6 +221,12 @@ fn main() -> Int {
         k = k + 1;
     }
     return total;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -234,7 +264,7 @@ or borrow block miscompiled (bug 087): `let x: Int = 1; if true { let x: Int = 1
 stays as defense in depth. One conformance row also checks the extracted model.
 
 ```con accept name=sibling-reuse-after-block exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let mut out: Int = 0;
     if true {
         let x: Int = 100;
@@ -245,6 +275,12 @@ fn main() -> Int {
         out = out + x;
     }
     return out;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 

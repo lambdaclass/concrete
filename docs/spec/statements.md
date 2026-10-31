@@ -110,11 +110,23 @@ fn tick(acc: &mut Int, k: Int) -> Int {
     return k;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let mut acc: Int = 0;
     let p: P = P { b: tick(&mut acc, 2), a: tick(&mut acc, 1) };
     let s: Int = tick(&mut acc, 1) + tick(&mut acc, 2);
     return acc - 2112 + p.a + p.b + s * 0 + 39;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -126,10 +138,22 @@ fn tick(acc: &mut Int, k: Int) -> Int {
     return k;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let mut acc: Int = 0;
     let e: E = E::V { b: tick(&mut acc, 2), a: tick(&mut acc, 1) };
     return acc;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 21 {
+
+        return 21;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -162,8 +186,20 @@ fn f(c: bool) -> Int {
     return add(1, if c { return 42; } else { 2 });
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return f(true);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -176,8 +212,20 @@ fn f(o: Option<Int>) -> Int {
     return v;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return f(Option::None);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -259,14 +307,14 @@ gives the counted loop its termination measure. The examples of this specificati
 corpus.
 
 ```con reject name=break-outside-loop code=E0280 stage=check pair=labeled-break
-fn main() -> Int {
+fn main() -> u8 {
     break;
     return 0;
 }
 ```
 
 ```con accept name=labeled-break exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let mut out: Int = 0;
     let mut i: Int = 0;
     'outer: while i < 10 {
@@ -285,10 +333,16 @@ fn main() -> Int {
     }
     return out;
 }
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 ```con reject name=break-with-value code=new stage=parse pair=break-without-value pending=bug-323 now=accept:1
-fn main() -> Int {
+fn example_value() -> Int {
     let mut i: Int = 0;
     while i < 3 {
         i = i + 1;
@@ -296,10 +350,16 @@ fn main() -> Int {
     }
     return i;
 }
+fn main() -> u8 {
+    if example_value() == 1 {
+        return 1;
+    }
+    return 2;
+}
 ```
 
 ```con accept name=break-without-value exit=1
-fn main() -> Int {
+fn example_value() -> Int {
     let mut i: Int = 0;
     while i < 3 {
         i = i + 1;
@@ -307,30 +367,48 @@ fn main() -> Int {
     }
     return i;
 }
+fn main() -> u8 {
+    if example_value() == 1 {
+        return 1;
+    }
+    return 2;
+}
 ```
 
 ```con reject name=c-style-for code=new stage=parse pair=counted-loop pending=bug-331 now=accept:42
-fn main() -> Int {
+fn example_value() -> Int {
     let mut s: Int = 0;
     for (let mut i: Int = 0; i < 7; i = i + 1) {
         s = s + i;
     }
     return s + 21;
 }
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 ```con reject name=for-condition-only code=new stage=parse pair=while-loop pending=bug-331 now=accept:42
-fn main() -> Int {
+fn example_value() -> Int {
     let mut i: Int = 0;
     for (i < 42) {
         i = i + 1;
     }
     return i;
 }
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 ```con reject name=unconditional-for code=new stage=parse pair=while-loop pending=bug-331 now=accept:42
-fn main() -> Int {
+fn example_value() -> Int {
     let mut i: Int = 0;
     for {
         i = i + 1;
@@ -338,20 +416,32 @@ fn main() -> Int {
     }
     return i;
 }
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 ```con accept name=while-loop exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let mut i: Int = 0;
     while i < 42 {
         i = i + 1;
     }
     return i;
 }
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 ```con accept name=counted-loop exit=42 pending=bug-331 now=reject:E0001:parse
-fn main() -> Int {
+fn example_value() -> Int {
     let lo: Int = 0;
     let hi: Int = 7;
     let mut s: Int = 0;
@@ -360,10 +450,16 @@ fn main() -> Int {
     }
     return s + 21;
 }
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 ```con accept name=counted-loop-empty exit=42 pending=bug-331 now=reject:E0001:parse
-fn main() -> Int {
+fn example_value() -> Int {
     let lo: Int = 5;
     let hi: Int = 5;
     let mut s: Int = 42;
@@ -371,6 +467,12 @@ fn main() -> Int {
         s = 0;
     }
     return s;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -380,7 +482,7 @@ fn bump(c: &mut Int) -> Int {
     return 3;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let mut calls: Int = 0;
     let lo: Int = 0;
     let mut s: Int = 0;
@@ -389,10 +491,22 @@ fn main() -> Int {
     }
     return s + calls + 11;
 }
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
+}
 ```
 
 ```con accept name=counted-loop-at-type-max exit=5 pending=bug-331 now=reject:E0001:parse
-fn main() -> Int {
+fn example_value() -> Int {
     let lo: u8 = 250;
     let hi: u8 = 255;
     let mut n: Int = 0;
@@ -401,10 +515,16 @@ fn main() -> Int {
     }
     return n;
 }
+fn main() -> u8 {
+    if example_value() == 5 {
+        return 5;
+    }
+    return 1;
+}
 ```
 
 ```con accept name=counted-loop-reversed-bounds-empty exit=42 pending=bug-331 now=reject:E0001:parse
-fn main() -> Int {
+fn example_value() -> Int {
     let lo: Int = 9;
     let hi: Int = 3;
     let mut s: Int = 42;
@@ -413,10 +533,16 @@ fn main() -> Int {
     }
     return s;
 }
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 ```con accept name=counted-loop-continue-and-break exit=42 pending=bug-331 now=reject:E0001:parse
-fn main() -> Int {
+fn example_value() -> Int {
     let lo: Int = 0;
     let hi: Int = 100;
     let mut s: Int = 0;
@@ -431,10 +557,16 @@ fn main() -> Int {
     }
     return s - 1;
 }
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 ```con accept name=counted-loop-labeled-continue exit=42 pending=bug-331 now=reject:E0001:parse
-fn main() -> Int {
+fn example_value() -> Int {
     let zero: Int = 0;
     let three: Int = 3;
     let mut s: Int = 0;
@@ -448,10 +580,16 @@ fn main() -> Int {
     }
     return s;
 }
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 ```con reject name=counted-loop-index-is-immutable code=new stage=check pair=counted-loop pending=bug-331 now=reject:E0001:parse
-fn main() -> Int {
+fn example_value() -> Int {
     let lo: Int = 0;
     let hi: Int = 3;
     let mut s: Int = 0;
@@ -460,6 +598,12 @@ fn main() -> Int {
         s = s + i;
     }
     return s;
+}
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
 }
 ```
 
@@ -489,9 +633,10 @@ none.
 
 Version 3 records the owner's decision of 2026-10-29 (OD24): `main` returns `u8` or `Unit`; there
 is no masking, no `bool` mapping and no other result type. Main still accepts any result type, masks
-an integer natively and prints it under `--interp` (bug 320). This entry's accepted examples use the
-decided forms; `main-returns-int` pins main's acceptance of `-> Int` as pending. Examples elsewhere in
-this specification that still declare `fn main() -> Int` are being migrated to `u8` or `Unit`.
+an integer natively and prints it under `--interp` (bug 320). Every example of this specification
+uses the decided form, `fn main() -> u8`; an example whose value is computed as an `Int` keeps that
+computation in `example_value()` and has `main` compare it with the expected exit status.
+`main-returns-int` pins main's acceptance of `-> Int` as pending.
 
 
 ```con reject name=main-with-parameter code=E0310 stage=check pair=main-exit-status
@@ -561,8 +706,20 @@ fn pick(c: bool, k: Int) -> Int {
     return v;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return pick(true, 21);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -592,8 +749,20 @@ fn f(c: bool) -> Int {
     }
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return f(true) + 41;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -605,8 +774,20 @@ fn f(c: bool) -> Int {
     return 0;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return f(true) + 41;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -633,7 +814,7 @@ fn t(x: i32) -> i32 {
     return x;
 }
 
-fn main() -> Int {
+fn main() -> u8 {
     return 42;
 }
 ```
@@ -644,7 +825,7 @@ fn t() -> i32 {
     return 0;
 }
 
-fn main() -> Int {
+fn main() -> u8 {
     return 42;
 }
 ```
@@ -698,7 +879,7 @@ access (the bounds against the array's length), not only a length that cannot ch
 measure is represented when `b - a` does not fit the bounds' type is OPEN-49.
 
 ```con accept name=counted-loop-own-measure exit=42 pending=bug-331 now=reject:E0001:parse
-fn main() -> Int {
+fn example_value() -> Int {
     let lo: Int = 0;
     let hi: Int = 7;
     let mut s: Int = 0;
@@ -706,6 +887,12 @@ fn main() -> Int {
         s = s + i;
     }
     return s + 21;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -730,7 +917,7 @@ arithmetic and safe indexing stay available to code that holds none. What `Proce
 OPEN-95.
 
 ```con accept name=abort-with-process exit=42
-fn main() with(Process) -> Int {
+fn main() with(Process) -> u8 {
     if 1 == 2 {
         abort();
     }

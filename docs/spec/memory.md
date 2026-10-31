@@ -91,10 +91,16 @@ Indeterminate memory exists only behind trusted or `Unsafe` operations, as a nam
 (TRUST-2).
 
 ```con accept name=initialized-bindings exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let mut x: Int = 1;
     x = 42;
     return x;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -134,12 +140,24 @@ fn get(h: &Heap<B>) -> Int {
     return h.v;
 }
 
-fn main() with(Std) -> Int {
+fn example_value() with(Std) -> Int {
     let mut h: Heap<B> = alloc(B { v: 40 });
     bump(&mut h);
     let out: Int = get(&h) + 1;
     free(h);
     return out;
+}
+
+fn main() with(Std) -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -165,12 +183,24 @@ value is refused (OWN-8, bug 144). A node is taken apart with `let n = *h;` and 
 ```con accept name=heap-ownership exit=42
 struct Copy B { v: Int }
 
-fn main() with(Std) -> Int {
+fn example_value() with(Std) -> Int {
     let h: Heap<B> = alloc(B { v: 40 });
     let g: Heap<B> = alloc(B { v: 2 });
     let b: B = *h;
     let c: B = free(g);
     return b.v + c.v;
+}
+
+fn main() with(Std) -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -193,7 +223,7 @@ abort is the same as an arithmetic trap (ARITH-3). There is no global way to tur
 off; an unchecked access would be a trusted operation with a named premise (TRUST-2).
 
 ```con accept name=index-in-bounds exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let a: [Int; 3] = [10, 30, 2];
     let mut i: Int = 0;
     let mut total: Int = 0;
@@ -203,14 +233,26 @@ fn main() -> Int {
     }
     return total;
 }
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 ```con abort name=index-out-of-bounds trap=out_of_bounds
-fn main() -> Int {
+fn example_value() -> Int {
     let a: [Int; 3] = [1, 2, 3];
     let mut i: Int = 0;
     i = i + 5;
     return a[i];
+}
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
 }
 ```
 
@@ -240,10 +282,22 @@ fn make(v: Int) with(Alloc) -> Heap<B> {
     return alloc(B { v: v });
 }
 
-fn main() with(Alloc) -> Int {
+fn example_value() with(Alloc) -> Int {
     let h: Heap<B> = make(42);
     let b: B = free(h);
     return b.v;
+}
+
+fn main() with(Alloc) -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -275,9 +329,21 @@ fn set(a: &mut [Int; 3]) {
     a[2] = 38;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let mut arr: [Int; 3] = [1, 2, 3];
     set(&mut arr);
     return get(&arr) + arr[2] + 2;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```

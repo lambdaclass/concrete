@@ -73,13 +73,13 @@ trusted fn addr(p: *const Int) -> u64 {
     return p as u64;
 }
 
-fn main() -> Int {
+fn main() -> u8 {
     return 0;
 }
 ```
 
 ```con accept name=no-pointer-cast exit=0
-fn main() -> Int {
+fn main() -> u8 {
     return 0;
 }
 ```
@@ -179,8 +179,20 @@ fn needs() with(File) -> Int {
     return 1;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return needs();
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -189,7 +201,7 @@ fn rd(p: *const Int) -> Int {
     return *p;
 }
 
-fn main() -> Int {
+fn main() -> u8 {
     return 0;
 }
 ```
@@ -203,8 +215,20 @@ fn add_one(x: Int) -> Int {
     return x + 1;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return apply(add_one);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -217,9 +241,21 @@ fn rd(p: *const Int) with(Unsafe) -> Int {
     return *p;
 }
 
-fn main() with(File, Unsafe) -> Int {
+fn example_value() with(File, Unsafe) -> Int {
     let x: Int = 1;
     return needs() + rd(&x as *const Int);
+}
+
+fn main() with(File, Unsafe) -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -268,9 +304,21 @@ trusted fn rd(p: *const Int) -> Int {
     return *p;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let x: Int = 42;
     return rd(&x as *const Int);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -299,18 +347,30 @@ mod m {
     trusted fn rd(p: *const Int) -> Int {
         return *p;
     }
-    fn main() -> Int {
+    fn example_value() -> Int {
         let x: Int = 42;
         return rd(&x as *const Int);
+    }
+    fn main() -> u8 {
+        if example_value() == 42 {
+            return 42;
+        }
+        return 1;
     }
 }
 ```
 
 ```con accept name=trusted-in-marked-module exit=42
 mod m {
-    fn main() -> Int {
+    fn example_value() -> Int {
         let x: Int = 42;
         return x;
+    }
+    fn main() -> u8 {
+        if example_value() == 42 {
+            return 42;
+        }
+        return 1;
     }
 }
 ```
@@ -346,7 +406,7 @@ trusted fn dup<K>(x: &mut K) -> K {
     return *p;
 }
 
-fn main() with(Alloc) -> Int {
+fn main() with(Alloc) -> u8 {
     let mut h: Heap<B> = alloc(B { v: 42 });
     let h2: Heap<B> = dup::<Heap<B>>(&mut h);
     free(h2);
@@ -365,12 +425,24 @@ trusted fn take_and_replace(slot: &mut Heap<B>, fresh: Heap<B>) -> Heap<B> {
     return old;
 }
 
-fn main() with(Alloc) -> Int {
+fn example_value() with(Alloc) -> Int {
     let mut h: Heap<B> = alloc(B { v: 40 });
     let old: Heap<B> = take_and_replace(&mut h, alloc(B { v: 2 }));
     let a: B = free(old);
     let b: B = free(h);
     return a.v + b.v;
+}
+
+fn main() with(Alloc) -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -410,10 +482,22 @@ struct Token { v: Int }
 
 const T: Token = Token { v: 42 };
 
-fn main() -> Int {
+fn example_value() -> Int {
     let t: Token = T;
     let Token { v } = t;
     return v;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -422,8 +506,20 @@ struct Copy P { v: Int }
 
 const C: P = P { v: 42 };
 
-fn main() -> Int {
+fn example_value() -> Int {
     return C.v;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -500,12 +596,24 @@ trusted fn swap_in(slot: &mut Heap<B>, fresh: Heap<B>) -> Heap<B> {
     return old;
 }
 
-fn main() with(Alloc) -> Int {
+fn example_value() with(Alloc) -> Int {
     let mut h: Heap<B> = alloc(B { v: 40 });
     let old: Heap<B> = swap_in(&mut h, alloc(B { v: 2 }));
     let a: B = free(old);
     let b: B = free(h);
     return a.v + b.v;
+}
+
+fn main() with(Alloc) -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -555,8 +663,20 @@ trusted fn use_once(r: R) -> Int {
     return take(r) + seen * 0;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return use_once(R { v: 42 });
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -584,10 +704,22 @@ trusted fn rd(p: *const Int) -> Int {
     return *p;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let x: Int = 42;
     let p: *const Int = &x as *const Int;
     return rd(p);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 

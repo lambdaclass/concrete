@@ -49,8 +49,20 @@ fn nested(o: Option<Option<Int>>) -> Int {
     }
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return nested(Option::Some { value: Option::Some { value: 42 } });
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -87,13 +99,25 @@ fn f(e: E) -> Int {
     }
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     return f(E::A);
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
 ```con reject name=no-default-arm code=E0534 stage=core-check pair=every-variant
-fn main() -> Int {
+fn main() -> u8 {
     let k: Int = 3;
     match k {
         1 => { return 1; },
@@ -113,7 +137,7 @@ fn f(e: E) -> Int {
     }
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let k: Int = 3;
     let mut out: Int = f(E::A);
     match k {
@@ -122,6 +146,18 @@ fn main() -> Int {
         _ => {}
     }
     return out;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -156,7 +192,7 @@ lets a bare name ignore a Copy payload (bug 321), pinned by the pending example 
 ```con reject name=duplicate-arm code=E0532 stage=core-check pair=arms-fit
 enum Copy E { A, B }
 
-fn main() -> Int {
+fn main() -> u8 {
     let e: E = E::A;
     match e {
         E::A => { return 1; },
@@ -169,12 +205,24 @@ fn main() -> Int {
 ```con reject name=missing-payload-field code=E0533 stage=core-check pair=arms-fit
 enum Copy E { A { x: Int, y: Int }, B }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let e: E = E::A { x: 1, y: 2 };
     match e {
         E::A { x } => { return x; },
         E::B => { return 0; }
     }
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -182,7 +230,7 @@ fn main() -> Int {
 enum Copy E { A, B }
 enum Copy F { X, Y }
 
-fn main() -> Int {
+fn main() -> u8 {
     let e: E = E::A;
     match e {
         F::X => { return 1; },
@@ -194,7 +242,7 @@ fn main() -> Int {
 ```con reject name=range-over-enum code=E0309 stage=check pair=arms-fit
 enum Copy E { A, B }
 
-fn main() -> Int {
+fn main() -> u8 {
     let e: E = E::B;
     match e {
         0..=9 => { return 1; },
@@ -207,7 +255,7 @@ fn main() -> Int {
 enum Copy E { A, B }
 enum Copy F { A, X }
 
-fn main() -> Int {
+fn main() -> u8 {
     let e: E = E::B;
     match e {
         F::A => { return 1; },
@@ -219,18 +267,30 @@ fn main() -> Int {
 ```con accept name=arms-fit exit=42
 enum Copy E { A { x: Int, y: Int }, B }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let e: E = E::A { x: 40, y: 2 };
     match e {
         E::A { x, y } => { return x + y; },
         E::B => { return 0; }
     }
 }
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
+}
 ```
 
 ```con reject name=bare-variant-with-payload code=new stage=check pair=variant-field-ignored pending=bug-321 now=accept:42
 enum Copy E { A { v: Int }, B }
-fn main() -> Int {
+fn main() -> u8 {
     let e: E = E::A { v: 1 };
     match e {
         E::A => { return 42; },
@@ -241,7 +301,7 @@ fn main() -> Int {
 
 ```con accept name=variant-field-ignored exit=42
 enum Copy E { A { v: Int }, B }
-fn main() -> Int {
+fn main() -> u8 {
     let e: E = E::A { v: 1 };
     match e {
         E::A { v: _ } => { return 42; },
@@ -275,13 +335,25 @@ fn take(r: R) -> Int {
     return v;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let r: R = R { v: 42 };
     let k: Int = 1;
     match k {
         1 if take(r) > 0 => { return 1; },
         _ => { return take(r); }
     }
+}
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -297,13 +369,25 @@ fn peek(r: &R) -> Int {
     return r.v;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let r: R = R { v: 42 };
     let k: Int = 1;
     match k {
         1 if peek(&r) > 100 => { return take(r) * 0; },
         _ => { return take(r); }
     }
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -345,20 +429,38 @@ implementation history is the archived
 ```con reject name=struct-field-missing code=E0252 stage=check pair=destructure-all
 struct P { a: Int, b: Int }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let p: P = P { a: 1, b: 2 };
     let P { a } = p;
     return a;
 }
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
+}
 ```
 
 ```con reject name=else-falls-through code=E0308 stage=check pair=destructure-all
-fn main() -> Int {
+fn example_value() -> Int {
     let o: Option<Int> = Option::Some { value: 42 };
     let Option::Some { value } = o else {
         let z: Int = 0;
     };
     return value;
+}
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
 }
 ```
 
@@ -372,28 +474,52 @@ fn get(o: Option<Int>) -> Int {
     return value;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let p: P = P { a: 1, b: 2 };
     let P { a, b } = p;
     return get(Option::Some { value: 39 }) + a + b;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
 ```con reject name=struct-let-omits-field code=E0252 stage=check pair=struct-let-ignores-field pending=bug-321 now=accept:42
 struct Copy P { a: Int, b: Int }
-fn main() -> Int {
+fn example_value() -> Int {
     let p: P = P { a: 42, b: 1 };
     let P { a } = p;
     return a;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
 ```con accept name=struct-let-ignores-field exit=42
 struct Copy P { a: Int, b: Int }
-fn main() -> Int {
+fn example_value() -> Int {
     let p: P = P { a: 42, b: 1 };
     let P { a, b: _ } = p;
     return a;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -416,7 +542,7 @@ lowering are exactly those of the `match`. In particular the catch-all is a `_`,
 enum both forms are refused (OWN-5).
 
 ```con accept name=if-let-and-while-let exit=42
-fn main() -> Int {
+fn example_value() -> Int {
     let mut total: Int = 0;
     let mut k: Int = 3;
     let mut cur: Option<Int> = Option::Some { value: k };
@@ -436,6 +562,12 @@ fn main() -> Int {
         total = 0;
     }
     return total;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -470,7 +602,7 @@ fn classify(b: u8) -> Int {
     return out;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let k: Int = 7;
     let mut extra: Int = 0;
     match k {
@@ -478,6 +610,18 @@ fn main() -> Int {
         _ => {}
     }
     return classify(200) + extra;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -504,7 +648,7 @@ refuses; the entry retires when that lands.
 ```con reject name=destructure-in-for-header code=E0318 stage=check pair=destructure-before-loop
 enum Copy E { A { v: Int } }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let e: E = E::A { v: 0 };
     let mut out: Int = 0;
     for (let E::A { v } = e; v < 1; v = v + 1) {
@@ -512,12 +656,24 @@ fn main() -> Int {
     }
     return out;
 }
+
+fn main() -> u8 {
+
+    if example_value() == 0 {
+
+        return 0;
+
+    }
+
+    return 1;
+
+}
 ```
 
 ```con accept name=destructure-before-loop exit=42
 enum Copy E { A { v: Int } }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let e: E = E::A { v: 0 };
     let E::A { v } = e;
     let mut out: Int = 0;
@@ -525,6 +681,18 @@ fn main() -> Int {
         out = 42;
     }
     return out;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -551,7 +719,7 @@ unguarded arm covers is already PAT-3's refusal. Two readings are open for the o
 ranges that span the scrutinee's type is unreachable (OPEN-41).
 
 ```con reject name=arm-after-catch-all code=new stage=check pair=catch-all-last pending=R-0500 now=accept:42
-fn main() -> Int {
+fn main() -> u8 {
     let x: Int = 1;
     match x {
         _ => {
@@ -565,7 +733,7 @@ fn main() -> Int {
 ```
 
 ```con accept name=catch-all-last exit=42
-fn main() -> Int {
+fn main() -> u8 {
     let x: Int = 1;
     match x {
         1 => {
@@ -611,10 +779,22 @@ fn get(o: Option<Int>) -> Int {
     return value;
 }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let one: One = One::A { v: 1 };
     let One::A { v } = one;
     return get(Option::Some { value: 39 }) + get(Option::None) + v + 1;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 
@@ -642,7 +822,7 @@ binders are assignable, not that the others are not.
 ```con accept name=let-mut-pattern exit=42
 struct Copy P { a: Int, b: Int }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let p: P = P { a: 40, b: 1 };
     let mut P { a, b } = p;
     a = a + 1;
@@ -654,16 +834,40 @@ fn main() -> Int {
     value = value + 1;
     return a + b + value - 1;
 }
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
+}
 ```
 
 ```con accept name=let-mut-variant-without-else exit=42
 enum Copy One { A { v: Int } }
 
-fn main() -> Int {
+fn example_value() -> Int {
     let o: One = One::A { v: 41 };
     let mut One::A { v } = o;
     v = v + 1;
     return v;
+}
+
+fn main() -> u8 {
+
+    if example_value() == 42 {
+
+        return 42;
+
+    }
+
+    return 1;
+
 }
 ```
 

@@ -77,7 +77,13 @@ struct Copy Foo { a: Int }
 impl Tr for Foo { fn m(&self) -> Int { return 42; } }
 impl Tr for Foo { fn m(&self) -> Int { return 2; } }
 fn call<T: Tr>(x: &T) -> Int { return x.m(); }
-pub fn main() -> Int { let f: Foo = Foo { a: 0 }; return call::<Foo>(&f); }
+fn example_value() -> Int { let f: Foo = Foo { a: 0 }; return call::<Foo>(&f); }
+pub fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
+}
 ```
 
 ```con accept name=once exit=42
@@ -85,7 +91,13 @@ trait Tr { fn m(&self) -> Int; }
 struct Copy Foo { a: Int }
 impl Tr for Foo { fn m(&self) -> Int { return 42; } }
 fn call<T: Tr>(x: &T) -> Int { return x.m(); }
-pub fn main() -> Int { let f: Foo = Foo { a: 0 }; return call::<Foo>(&f); }
+fn example_value() -> Int { let f: Foo = Foo { a: 0 }; return call::<Foo>(&f); }
+pub fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 **Conformance fixtures.**
@@ -123,14 +135,26 @@ trait Tr { fn m(&self) -> Int; }
 struct Copy Box2<T> { v: T }
 impl<T> Tr for Box2<T> { fn m(&self) -> Int { return 42; } }
 impl Tr for Box2<i32> { fn m(&self) -> Int { return 2; } }
-pub fn main() -> Int { let b: Box2<i32> = Box2::<i32> { v: 0 }; return b.m(); }
+fn example_value() -> Int { let b: Box2<i32> = Box2::<i32> { v: 0 }; return b.m(); }
+pub fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
+}
 ```
 
 ```con accept name=generic-only exit=42
 trait Tr { fn m(&self) -> Int; }
 struct Copy Box2<T> { v: T }
 impl<T> Tr for Box2<T> { fn m(&self) -> Int { return 42; } }
-pub fn main() -> Int { let b: Box2<i32> = Box2::<i32> { v: 0 }; return b.m(); }
+fn example_value() -> Int { let b: Box2<i32> = Box2::<i32> { v: 0 }; return b.m(); }
+pub fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 **Conformance fixtures.**
@@ -167,7 +191,7 @@ mod defs {
 mod main {
     import defs.{Foo, make};
     impl Destroy for Foo { fn destroy(self) { let Foo { a } = self; } }
-    pub fn main() -> Int { let f: Foo = make(); f.destroy(); return 42; }
+    pub fn main() -> u8 { let f: Foo = make(); f.destroy(); return 42; }
 }
 ```
 
@@ -179,7 +203,7 @@ mod defs {
 }
 mod main {
     import defs.{Foo, make};
-    pub fn main() -> Int { let f: Foo = make(); f.destroy(); return 42; }
+    pub fn main() -> u8 { let f: Foo = make(); f.destroy(); return 42; }
 }
 ```
 
@@ -215,7 +239,13 @@ trait Tr { fn m(&self) -> Int; }
 struct Copy Box2<T> { v: Int }
 impl Tr for Box2<i32> { fn m(&self) -> Int { return 42; } }
 fn call<T: Tr>(x: &T) -> Int { return x.m(); }
-pub fn main() -> Int { let b: Box2<bool> = Box2::<bool> { v: 0 }; return call::<Box2<bool>>(&b); }
+fn example_value() -> Int { let b: Box2<bool> = Box2::<bool> { v: 0 }; return call::<Box2<bool>>(&b); }
+pub fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
+}
 ```
 
 ```con accept name=generic exit=42
@@ -223,7 +253,13 @@ trait Tr { fn m(&self) -> Int; }
 struct Copy Box2<T> { v: Int }
 impl<T> Tr for Box2<T> { fn m(&self) -> Int { return 42; } }
 fn call<T: Tr>(x: &T) -> Int { return x.m(); }
-pub fn main() -> Int { let b: Box2<bool> = Box2::<bool> { v: 0 }; return call::<Box2<bool>>(&b); }
+fn example_value() -> Int { let b: Box2<bool> = Box2::<bool> { v: 0 }; return call::<Box2<bool>>(&b); }
+pub fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 **Conformance fixtures.**
@@ -261,7 +297,13 @@ struct Copy Foo { a: Int }
 impl A for Foo { fn m(&self) -> Int { return 40; } }
 impl B for Foo { fn m(&self) -> Int { return 2; } }
 fn call<T: A>(x: &T) -> Int { return x.m(); }
-pub fn main() -> Int { let f: Foo = Foo { a: 0 }; return call::<Foo>(&f) + 2; }
+fn example_value() -> Int { let f: Foo = Foo { a: 0 }; return call::<Foo>(&f) + 2; }
+pub fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
+}
 ```
 
 ```con accept name=renamed exit=42
@@ -271,7 +313,13 @@ struct Copy Foo { a: Int }
 impl A for Foo { fn m(&self) -> Int { return 40; } }
 impl B for Foo { fn n(&self) -> Int { return 2; } }
 fn call<T: A + B>(x: &T) -> Int { return x.m() + x.n(); }
-pub fn main() -> Int { let f: Foo = Foo { a: 0 }; return call::<Foo>(&f); }
+fn example_value() -> Int { let f: Foo = Foo { a: 0 }; return call::<Foo>(&f); }
+pub fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 **Conformance fixtures.**
@@ -303,14 +351,14 @@ but the generic function itself must not depend on the order of its bounds eithe
 trait A { fn m(&self) -> Int; }
 trait B { fn m(&self) -> Int; }
 fn call<T: A + B>(x: &T) -> Int { return x.m(); }
-pub fn main() -> Int { return 42; }
+pub fn main() -> u8 { return 42; }
 ```
 
 ```con accept name=one-bound exit=42
 trait A { fn m(&self) -> Int; }
 trait B { fn m(&self) -> Int; }
 fn call<T: A>(x: &T) -> Int { return x.m(); }
-pub fn main() -> Int { return 42; }
+pub fn main() -> u8 { return 42; }
 ```
 
 **Conformance fixtures.**
@@ -344,7 +392,13 @@ struct Copy Foo { a: Int }
 impl A for Foo { fn m(&self) -> Int { return 40; } }
 impl B for Foo { fn n(&self) -> Int { return 2; } }
 fn call<T: A + B>(x: &T) -> Int { return x.m() + x.n(); }
-pub fn main() -> Int { let f: Foo = Foo { a: 0 }; return call::<Foo>(&f); }
+fn example_value() -> Int { let f: Foo = Foo { a: 0 }; return call::<Foo>(&f); }
+pub fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 ```con accept name=reversed exit=42
@@ -354,7 +408,13 @@ impl A for Foo { fn m(&self) -> Int { return 40; } }
 struct Copy Foo { a: Int }
 trait B { fn n(&self) -> Int; }
 trait A { fn m(&self) -> Int; }
-pub fn main() -> Int { let f: Foo = Foo { a: 0 }; return call::<Foo>(&f); }
+fn example_value() -> Int { let f: Foo = Foo { a: 0 }; return call::<Foo>(&f); }
+pub fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 **Conformance fixtures.**
@@ -385,19 +445,25 @@ destructor machinery takes for the builtin.
 ```con reject name=unknown-trait code=E0580 stage=core-check pair=declared-trait
 struct Copy S { v: Int }
 impl Missing for S { fn m(&self) -> Int { return 1; } }
-fn main() -> Int { return 0; }
+fn main() -> u8 { return 0; }
 ```
 
 ```con reject name=destroy-redeclared code=E0579 stage=core-check pair=declared-trait
 trait Destroy { fn destroy(&self); }
-fn main() -> Int { return 0; }
+fn main() -> u8 { return 0; }
 ```
 
 ```con accept name=declared-trait exit=42
 trait Tr { fn m(&self) -> Int; }
 struct Copy S { v: Int }
 impl Tr for S { fn m(&self) -> Int { return self.v; } }
-fn main() -> Int { let s: S = S { v: 42 }; return s.m(); }
+fn example_value() -> Int { let s: S = S { v: 42 }; return s.m(); }
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 <a id="TRAIT-9"></a>
@@ -425,28 +491,28 @@ is OWN-13's (E0584).
 trait Tr { fn m(&self) -> Int; fn n(&self) -> Int; }
 struct Copy S { v: Int }
 impl Tr for S { fn m(&self) -> Int { return 1; } }
-fn main() -> Int { return 0; }
+fn main() -> u8 { return 0; }
 ```
 
 ```con reject name=return-type-differs code=E0582 stage=core-check pair=conforming-impl
 trait Tr { fn m(&self) -> Int; }
 struct Copy S { v: Int }
 impl Tr for S { fn m(&self) -> bool { return true; } }
-fn main() -> Int { return 0; }
+fn main() -> u8 { return 0; }
 ```
 
 ```con reject name=receiver-differs code=E0587 stage=core-check pair=conforming-impl
 trait Tr { fn m(&self, n: Int) -> Int; }
 struct Copy S { v: Int }
 impl Tr for S { fn m(&mut self, n: Int) -> Int { return n; } }
-fn main() -> Int { return 0; }
+fn main() -> u8 { return 0; }
 ```
 
 ```con reject name=capabilities-exceed-trait code=E0586 stage=core-check pair=conforming-impl
 trait Tr { fn m(&self) -> Int; }
 struct Copy S { v: Int }
 impl Tr for S { fn m(&self) with(Console) -> Int { return self.v; } }
-fn main() -> Int { return 0; }
+fn main() -> u8 { return 0; }
 ```
 
 ```con accept name=conforming-impl exit=42
@@ -456,7 +522,13 @@ impl Tr for S {
     fn m(&self, n: Int) -> Int { return self.v + n; }
     fn me(&self) -> S { return S { v: self.v }; }
 }
-fn main() -> Int { let s: S = S { v: 40 }; let t: S = s.me(); return t.m(2); }
+fn example_value() -> Int { let s: S = S { v: 40 }; let t: S = s.me(); return t.m(2); }
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 <a id="TRAIT-10"></a>
@@ -489,13 +561,25 @@ array of destroyable elements as `Destroy` (bug 324).
 trait Tr { fn m(&self) -> Int; }
 struct Copy S { v: Int }
 fn call<T: Tr>(x: &T) -> Int { return x.m(); }
-fn main() -> Int { let s: S = S { v: 42 }; return call::<S>(&s); }
+fn example_value() -> Int { let s: S = S { v: 42 }; return call::<S>(&s); }
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
+}
 ```
 
 ```con reject name=primitive-bound-unsatisfied code=E0241 stage=check pair=bound-satisfied
 trait Tr { fn m(&self) -> Int; }
 fn call<T: Tr>(x: &T) -> Int { return x.m(); }
-fn main() -> Int { let n: Int = 42; return call::<Int>(&n); }
+fn example_value() -> Int { let n: Int = 42; return call::<Int>(&n); }
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
+    }
+    return 1;
+}
 ```
 
 ```con accept name=bound-satisfied exit=42
@@ -503,15 +587,27 @@ trait Tr { fn m(&self) -> Int; }
 struct Copy S { v: Int }
 impl Tr for S { fn m(&self) -> Int { return self.v; } }
 fn call<T: Tr>(x: &T) -> Int { return x.m(); }
-fn main() -> Int { let s: S = S { v: 42 }; return call::<S>(&s); }
+fn example_value() -> Int { let s: S = S { v: 42 }; return call::<S>(&s); }
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
 ```
 
 ```con reject name=copy-type-for-destroy-bound code=E0241 stage=check pair=unbounded-generic pending=bug-324 now=accept:42
 fn id<T: Destroy>(x: T) -> T {
     return x;
 }
-fn main() -> Int {
+fn example_value() -> Int {
     return id(42);
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -519,8 +615,14 @@ fn main() -> Int {
 fn id<T>(x: T) -> T {
     return x;
 }
-fn main() -> Int {
+fn example_value() -> Int {
     return id(42);
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -555,7 +657,7 @@ impl Destroy for R {
     }
 }
 
-fn main() -> Int {
+fn main() -> u8 {
     let r: R = R { v: 1 };
     destroy(r);
     return 42;
