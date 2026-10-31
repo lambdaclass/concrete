@@ -123,7 +123,7 @@ partial def Module.mapTypes (f : Ty → Ty) (m : Module) (callee : String → St
     once Resolve has accepted the program (and refused every qualified path whose flat spelling
     names anything else, `checkQualifiedPath`), each qualified path is respelled flat here.
     Structural owner of the flat spelling: R-0492 (S5 `DefId`). -/
-partial def Module.flattenQualifiedPaths (m : Module) : Module :=
+def Module.flattenQualifiedPaths (m : Module) : Module :=
   m.mapTypes id flattenQualifiedPath
 
 end Concrete

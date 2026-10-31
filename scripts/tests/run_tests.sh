@@ -10533,13 +10533,13 @@ run_err "$TESTDIR/error_151_nested_name_flattening.con" "(E0299)"
 # `fn m_f`, a local, another module's `m_f`, a nested `z.m.f` or a builtin of that spelling ran
 # instead (E0299 until qualified paths resolve by identity, R-0492); and an undeclared `m_f()`
 # reached `m.f` (E0101). Positive control, --interp == binary: the r343 block.
-run_err "tests/regressions/bug343_a_qualified_call_m_f_runs_a_parent_function_name/repro.con" "(E0299)"
-run_err "$TESTDIR/error_343_parent_fn_captures_qualified_call.con" "(E0299)"
-run_err "$TESTDIR/error_343_local_captures_qualified_call.con" "(E0299)"
-run_err "$TESTDIR/error_343_other_module_fn_captures_qualified_call.con" "(E0299)"
-run_err "$TESTDIR/error_343_nested_module_captures_qualified_call.con" "(E0299)"
-run_err "$TESTDIR/error_343_nested_parent_fn_captures_qualified_call.con" "(E0299)"
-run_err "$TESTDIR/error_343_builtin_captures_qualified_call.con" "(E0299)"
+run_err "tests/regressions/bug343_a_qualified_call_m_f_runs_a_parent_function_name/repro.con" "(E0299) qualified path"
+run_err "$TESTDIR/error_343_parent_fn_captures_qualified_call.con" "(E0299) qualified path"
+run_err "$TESTDIR/error_343_local_captures_qualified_call.con" "(E0299) qualified path"
+run_err "$TESTDIR/error_343_other_module_fn_captures_qualified_call.con" "(E0299) qualified path"
+run_err "$TESTDIR/error_343_nested_module_captures_qualified_call.con" "(E0299) qualified path"
+run_err "$TESTDIR/error_343_nested_parent_fn_captures_qualified_call.con" "(E0299) qualified path"
+run_err "$TESTDIR/error_343_builtin_captures_qualified_call.con" "(E0299) qualified path"
 run_err "$TESTDIR/error_343_flat_spelling_reaches_module_fn.con" "(E0101)"
 run_err "$TESTDIR/error_343_nested_flat_spelling_reaches_child_fn.con" "(E0101)"
 run_ok "$TESTDIR/regress_343_qualified_paths.con" 42

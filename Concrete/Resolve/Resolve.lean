@@ -135,6 +135,10 @@ structure Scope where
       denotes below Resolve, by Core name or as `<module>_<name>` (`flatSpellingOwners`). A
       qualified path whose flat spelling has two owners is refused (`checkQualifiedPath`). -/
   flatOwners : Std.HashMap String (Array String) := ∅
+  /-- Bug 343: every name the scope binds in the value namespace (functions, externs, constants,
+      impl methods, imports), whichever kind `symbolMap` keeps first for it: a type spelled `m_f`
+      does not answer a call `m_f`, so it does not capture `m::f` (MOD-3, bug 218). -/
+  valueNames : Std.HashSet String := ∅
 
 /-- A declaration in the type namespace. -/
 def SymKind.isType : SymKind → Bool
@@ -147,6 +151,7 @@ def SymKind.isType : SymKind → Bool
 def Scope.ofSymbols (symbols : List (String × SymKind)) : Scope :=
   { symbols := symbols,
     symbolMap := symbols.foldl (fun m (n, k) => if m.contains n then m else m.insert n k) ∅,
+    valueNames := symbols.foldl (fun m (n, k) => if k.isType then m else m.insert n) ∅,
     typeKinds := symbols.foldl (fun m (n, k) =>
       if !k.isType then m else m.insert n ((m.getD n #[]).push k)) ∅ }
 
@@ -492,7 +497,7 @@ private def checkQualifiedPath (ctx : ResolveCtx) (name : String) (sp : Span) : 
         ("several definitions: " ++ ", ".intercalate (owners.map fun o => s!"'{o}'"))) (some sp)
     else if ctx.visibleLocals.contains flat then
       addError ctx (.qualifiedPathCaptured name flat s!"the local binding '{flat}'") (some sp)
-    else if ctx.globalScope.symbolMap.contains flat then
+    else if ctx.globalScope.valueNames.contains flat then
       addError ctx (.qualifiedPathCaptured name flat s!"the declaration or import '{flat}'") (some sp)
     else if isKnownBuiltinFn flat then
       addError ctx (.qualifiedPathCaptured name flat s!"the builtin function '{flat}'") (some sp)
@@ -1066,7 +1071,7 @@ private partial def resolveModuleTreeErrors (summaryTable : List (String × File
     Core name (a top-level module's bare, a nested module's prefixed by its submodule chain, as
     `prefixModuleFnNames` spells it; a foreign binding's always bare) and under the flat spelling
     `<module>_<name>` a qualified path to it is compiled through. -/
-private partial def flatSpellingOwners (pfx path : String) (s : FileSummary) :
+private def flatSpellingOwners (pfx path : String) (s : FileSummary) :
     List (String × String) :=
   let spell := fun (n : String) => if pfx.isEmpty then n else pfx ++ "_" ++ n
   let modName := (path.splitOn ".").getLastD path
@@ -1075,8 +1080,15 @@ private partial def flatSpellingOwners (pfx path : String) (s : FileSummary) :
   fnNames.map (fun n => (spell n, path ++ "." ++ n))
     ++ externNames.map (fun n => (n, path ++ "." ++ n))
     ++ (fnNames ++ externNames).map (fun n => (modName ++ "_" ++ n, path ++ "." ++ n))
-    ++ s.submoduleSummaries.flatMap fun (sn, ss) =>
+    ++ s.submoduleSummaries.attach.flatMap fun ⟨(sn, ss), _⟩ =>
       flatSpellingOwners (spell sn) (path ++ "." ++ sn) ss
+termination_by sizeOf s
+decreasing_by
+  rename_i h
+  have := List.sizeOf_lt_of_mem h
+  cases s
+  simp +arith at this ⊢
+  omega
 
 /-- Bug 343: `flatSpellingOwners` of every top-level module, by spelling, without repeats. -/
 private def flatOwnersOf (moduleSummaries : List FileSummary) : Std.HashMap String (Array String) :=
