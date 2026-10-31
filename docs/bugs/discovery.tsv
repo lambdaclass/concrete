@@ -124,3 +124,4 @@ date	kind	probe	effort	bugs	silent
 2026-10-29	spec	Codex and Kimi reviews of the spec-gap rules (wip/spec-s6, 2026-10-30): f32 literal double rounding, native against --interp	1 probe	332	332
 2026-10-29	spec	Codex and Kimi reviews of the spec-gap rules (wip/spec-s6, 2026-10-30): type arguments to a body-less generic declaration, native against --interp	1 probe	333	333
 2026-10-29	spec	OD47 (decided 2026-10-29) check: the three C-style for forms, the counted loop and from/until as names, native against --interp, on main ae896787 (wip/spec-s7)	5 probes	331	-
+2026-10-31	spec	spec audit 2026-10-31: probes of the SYNTAX_FREEZE_REVIEW §1.1 qualification rule (qualified paths by base-name case, nested paths, flattened names), native against --interp, on fb8946c6c	6 probes	343	343

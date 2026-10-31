@@ -149,11 +149,11 @@ a link failure, an interpreter refusal or an unrejected leak.
 
 <!-- BEGIN GENERATED: bug dashboard (scripts/gen/bug_dashboard.py; edit docs/bugs records and docs/bugs/discovery.tsv) -->
 
-**Open bugs: 23** (13 silent, 5 loud, 5 filed before the discovery record) of 300 bug records.
+**Open bugs: 24** (14 silent, 5 loud, 5 filed before the discovery record) of 301 bug records.
 
 | open bugs by primary structural class | open | silent | bugs |
 |---|---|---|---|
-| 1. Declaration identity by spelled name, not a resolved `DefId` | 4 | 1 | 054, 077, 114, 122 |
+| 1. Declaration identity by spelled name, not a resolved `DefId` | 5 | 2 | 054, 077, 114, 122, 343 |
 | 5. Borrow tracking by syntax instead of normalized places | 1 | 0 | 216 |
 | 11. Absence read as a fact (fail-open defaults) | 2 | 0 | 049, 058 |
 | 12. One fact kept in two places | 1 | 0 | 064 |
@@ -165,7 +165,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 | exit 0b | 3 | 3 | 122, 332, 333 |
 | exit 2c | 1 | 0 | 114 |
 | exit 2q | 13 | 10 | 216, 318, 319, 320, 321, 322, 323, 324, 325, 326, 327, 328, 331 |
-| no exit names it | 6 | 0 | 049, 054, 058, 064, 077, 270 |
+| no exit names it | 7 | 1 | 049, 054, 058, 064, 077, 270, 343 |
 
 | open bugs by spec ruling ([RULINGS.md](docs/bugs/RULINGS.md)) | open | silent | bugs |
 |---|---|---|---|
@@ -174,6 +174,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 | violates FFI-2@1 | 1 | 1 | 122 |
 | violates FFI-5@1 | 1 | 0 | 114 |
 | violates MEM-4@3 | 1 | 1 | 326 |
+| violates MOD-1@1 | 1 | 1 | 343 |
 | violates OWN-10@2 | 1 | 0 | 216 |
 | violates OWN-15@3 | 1 | 1 | 328 |
 | violates OWN-7@3 | 1 | 1 | 325 |
@@ -191,16 +192,16 @@ a link failure, an interpreter refusal or an unrejected leak.
 
 | discovery rate: counting probe batch | date | effort | found | silent | loud | signal |
 |---|---|---|---|---|---|---|
-| spec: class-13 audit: one forbidden program per clause of each normative rule in docs/spec (125 entries), native against --interp (wip/class13-audit) | 2026-10-28 | 207 probes | 1 | 1 | 0 | found bugs |
 | spec: OD16 (decided 2026-10-29) check: struct literals and uppercase constants in if and while heads, native against --interp, on main 0bf8350a (wip/spec-od) | 2026-10-29 | 5 probes | 1 | 0 | 1 | token (does not count) |
 | spec: OD23-OD32 (decided 2026-10-29, strict across the board) check: one program per tightening, native against --interp, on main 0bf8350a (wip/spec-od) | 2026-10-29 | 13 probes | 10 | 10 | 0 | found bugs |
 | spec: Codex and Kimi reviews of the spec-gap rules (wip/spec-s6, 2026-10-30): f32 literal double rounding, native against --interp | 2026-10-29 | 1 probe | 1 | 1 | 0 | found bugs |
 | spec: Codex and Kimi reviews of the spec-gap rules (wip/spec-s6, 2026-10-30): type arguments to a body-less generic declaration, native against --interp | 2026-10-29 | 1 probe | 1 | 1 | 0 | found bugs |
 | spec: OD47 (decided 2026-10-29) check: the three C-style for forms, the counted loop and from/until as names, native against --interp, on main ae896787 (wip/spec-s7) | 2026-10-29 | 5 probes | 1 | 0 | 1 | token (does not count) |
+| spec: spec audit 2026-10-31: probes of the SYNTAX_FREEZE_REVIEW §1.1 qualification rule (qualified paths by base-name case, nested paths, flattened names), native against --interp, on fb8946c6c | 2026-10-31 | 6 probes | 1 | 1 | 0 | found bugs |
 
 | discovery rate by primary structural class | quiet counting batches in a row | holds |
 |---|---|---|
-| 1. Declaration identity by spelled name, not a resolved `DefId` | 6 | yes |
+| 1. Declaration identity by spelled name, not a resolved `DefId` | 0 | no |
 | 2. Binder identity by name, not a `LocalId` | 11 | yes |
 | 3. Destruction dispatched by synthesized `<Type>_destroy` names | 12 | yes |
 | 4. No reference-provenance model in the source checker | 12 | yes |
@@ -221,7 +222,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 | 19. A mention read as a use (tool facts inferred from where a name is spelled) | 12 | yes |
 | no class yet | 12 | yes |
 
-Discovery signal (exit 2m): 18 of 20 classes have 3 consecutive eligible quiet counting batches (for a class: no silent bug of that class, at most one loud, effort at least 4 hours or 10 programs); the exit needs every class. 24 counting batches recorded, 2 of them token batches. 74 attribution-only batches (reviews, follow-ons, CI, controls, development) found 120 further bugs.
+Discovery signal (exit 2m): 17 of 20 classes have 3 consecutive eligible quiet counting batches (for a class: no silent bug of that class, at most one loud, effort at least 4 hours or 10 programs); the exit needs every class. 25 counting batches recorded, 2 of them token batches. 74 attribution-only batches (reviews, follow-ons, CI, controls, development) found 120 further bugs.
 
 <!-- END GENERATED: bug dashboard -->
 

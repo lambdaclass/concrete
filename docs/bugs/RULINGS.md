@@ -17,13 +17,13 @@ of [docs/spec/ids.tsv](../spec/ids.tsv), or the generator refuses the record.
 
 <!-- BEGIN GENERATED: spec rulings (scripts/gen/bug_ledger.py; edit the records' ruling lines) -->
 
-300 bug records, 297 of them ruled: violates a rule 189, spec gap 1, open owner question 4, permitted by a rule 1, outside the spec 102; not ruled yet (fixed bugs filed before bug 300) 3. Open bugs are in bold.
+301 bug records, 298 of them ruled: violates a rule 190, spec gap 1, open owner question 4, permitted by a rule 1, outside the spec 102; not ruled yet (fixed bugs filed before bug 300) 3. Open bugs are in bold.
 
 ### By kind
 
 | ruling | bugs | open | silent |
 |---|--:|--:|--:|
-| violates a rule | 189 | 19 | 89 |
+| violates a rule | 190 | 20 | 90 |
 | spec gap | 1 | 0 | 0 |
 | open owner question | 4 | 0 | 0 |
 | permitted by a rule (not a bug) | 1 | 0 | 0 |
@@ -37,7 +37,7 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 | chapter | prefix | bugs | open | silent | violates | spec gap | open question | permitted |
 |---|---|--:|--:|--:|--:|--:|--:|--:|
 | pipeline.md | PASS | 43 | 2 | 7 | 43 | 0 | 0 | 0 |
-| modules.md | MOD | 30 | 0 | 11 | 30 | 0 | 0 | 0 |
+| modules.md | MOD | 31 | 1 | 12 | 31 | 0 | 0 | 0 |
 | types.md | TYPE | 21 | 2 | 13 | 21 | 0 | 0 | 0 |
 | ownership.md | OWN | 19 | 3 | 8 | 19 | 0 | 0 | 0 |
 | scope.md | SCOPE | 13 | 0 | 5 | 13 | 0 | 0 | 0 |
@@ -56,7 +56,7 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 
 | rule | chapter | bugs | which |
 |---|---|--:|---|
-| MOD-1@1 | modules.md | 24 | 022, 039, 042, 069, 082, 096, 097, 098, 117, 118, 132, 151, 215, 217, 227, 230, 231, 238, 239, 241, 242, 243, 245, 262 |
+| MOD-1@1 | modules.md | 25 | 022, 039, 042, 069, 082, 096, 097, 098, 117, 118, 132, 151, 215, 217, 227, 230, 231, 238, 239, 241, 242, 243, 245, 262, **343** |
 | PASS-12@1 | pipeline.md | 13 | 005, 009, 014, 016, 029, 032, 035, 044, **054**, 055, **077**, 108, 116 |
 | PASS-9@1 | pipeline.md | 10 | 023, 033, 056, 078, 110, 175, 213, 271, 303, 309 |
 | SCOPE-3@1 | scope.md | 9 | 040, 041, 045, 050, 061, 087, 101, 176, 208 |

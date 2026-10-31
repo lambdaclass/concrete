@@ -502,6 +502,7 @@ the report counts those bugs as ambiguous.
 - [331_c_style_for_loops_are_accepted_and_the_counted_l.md](331_c_style_for_loops_are_accepted_and_the_counted_l.md) — C-style for loops are accepted and the counted loop for i from a until b is not (OD47)
 - [332_a_float_literal_of_type_f32_is_rounded_twice_thr.md](332_a_float_literal_of_type_f32_is_rounded_twice_thr.md) — A float literal of type f32 is rounded twice, through binary64, instead of once
 - [333_an_extra_type_argument_to_a_body_less_generic_de.md](333_an_extra_type_argument_to_a_body_less_generic_de.md) — An extra type argument to a body-less generic declaration is ignored natively and fails at run time under --interp
+- [343_a_qualified_call_m_f_runs_a_parent_function_name.md](343_a_qualified_call_m_f_runs_a_parent_function_name.md) — A qualified call m::f() runs a parent function named m_f, and an undeclared m_f() reaches the submodule function m.f
 
 <!-- END GENERATED: bug list -->
 
