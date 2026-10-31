@@ -390,6 +390,6 @@ checker refusal is a Check bug here.
 | [331](331_c_style_for_loops_are_accepted_and_the_counted_l.md) | — | — | unfixed | — | violates STMT-6@3 |
 | [332](332_a_float_literal_of_type_f32_is_rounded_twice_thr.md) | Lower | Lower | record | — | violates ARITH-7@1 |
 | [333](333_an_extra_type_argument_to_a_body_less_generic_de.md) | Lower | Lower | record | — | violates TYPE-9@2 |
-| [343](343_a_qualified_call_m_f_runs_a_parent_function_name.md) | Resolve | Resolve | override | — | violates MOD-1@1 |
+| [343](343_a_qualified_call_m_f_runs_a_parent_function_name.md) | Resolve | Resolve | override | Parse | violates MOD-1@1 |
 
 <!-- END GENERATED: bug areas -->
