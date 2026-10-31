@@ -189,7 +189,7 @@ fresh_copy; mutate "$TMP/n/spec/decisions.md" 're.sub(r"(- Status: open OD[0-9]+
   && control "N1g: an open entry that names an enforcing declaration" S1 "an open entry names no enforcing" -- lint "${SP[@]}"
 fresh_copy; mutate "$TMP/n/spec/types.md" 's.replace("pending=R-0500 now=accept:42\nmod num", "pending=R-9999 now=accept:42\nmod num", 1)' \
   && control "N8: an unknown tracking ID" S8 "R-9999" -- lint "${SP[@]}"
-mkdir -p "$TMP/n11"; printf 'Some prose.\n\n%s\n' "$(grep -m1 '^\*\*REF-6@1\.\*\*' docs/spec/$REF | sed 's/^\*\*REF-6@1\.\*\* //')" > "$TMP/n11/planted.md"
+mkdir -p "$TMP/n11"; printf 'Some prose.\n\n%s\n' "$(grep -m1 '^\*\*REF-6@[0-9]*\.\*\*' docs/spec/$REF | sed 's/^\*\*REF-6@[0-9]*\.\*\* //')" > "$TMP/n11/planted.md"
 control "N11: a normative sentence copied into another doc" S11 "planted.md restates the normative sentence of REF-6" -- restatements --scan-root "$TMP/n11"
 
 # S4: wrong expectations on real examples (run only the mutated example)
