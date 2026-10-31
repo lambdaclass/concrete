@@ -10,8 +10,8 @@ generated interfaces (MOD-7, pending), calls the compiler generates (MOD-8) and 
 ([MAINTAINERS.md](MAINTAINERS.md) §2.1). Representation privacy (which fields and constructors another module
 may use) is TYPE-11, and trait coherence is the traits chapter.
 
-Two decisions are recorded without an entry yet. SCOPE-4, whether a local may reuse the name of a
-top-level function, an import alias or an intrinsic, is still open: today it may. TIGHTENING_DECISIONS
+One question is recorded without an entry yet: SCOPE-4, whether a local may reuse the name of a
+top-level function, an import alias or an intrinsic, is still open; today it may. TIGHTENING_DECISIONS
 D9 (one source file per module with `pub` as its interface, and interface artifacts the compiler
 generates and checks) is decided and scheduled late; it is MOD-7, pending R-0556. The design record is
 [VISIBILITY_AND_MODULE_HYGIENE.md](../archive/design-records/VISIBILITY_AND_MODULE_HYGIENE.md).

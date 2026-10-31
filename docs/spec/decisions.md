@@ -1821,7 +1821,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 <a id="OPEN-138"></a>
 ### OPEN-138. Which positions give a literal its expected type
 
-**OPEN-138@1.** Which positions give an integer or float literal operand its expected type under ARITH-2 is an open owner decision (OD138).
+**OPEN-138@1.** Which positions give an integer literal operand its expected type under ARITH-2@3 (and a float literal's, should OPEN-63 give floats the same rule) is an open owner decision (OD138).
 
 - Kind: open
 - Uses: none
@@ -1832,7 +1832,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on ARITH-2, TYPE-4 and TYPE-6. Current main: an unconstrained integer literal is typed `Int` and a float literal `Float64` (bug 327); with `x: u8`, a literal beside `x` takes `u8` in arithmetic, comparison, bitwise and shift-count position alike: `x + 300`, `x < 300`, `x & 300` and `x >> 300` are each refused with E0227 (`integer literal 300 is out of range for type 'u8'`), and `300 as Int` is accepted, whether through `as` or the `Int` default the probe does not show. ARITH-2 refuses a literal with no expected type but does not list the positions that supply one. Options: (a) declared positions (an annotated binding, a parameter, a return, a field) and the other operand of a binary operator, as the probe shows main doing for `+`, `<`, `&` and a shift count (other operators were not probed); (b) declared positions only, so a literal beside a typed operand needs a typed binding; (c) option (a), plus the target type of an `as` for its literal operand. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
+**Rationale.** Bears on ARITH-2, TYPE-4 and TYPE-6. Current main: an unconstrained integer literal is typed `Int` and a float literal `Float64` (bug 327); with `x: u8`, a literal beside `x` takes `u8` as the other operand of `+`, `<` and `&` and as the count of `>>`: `x + 300`, `x < 300`, `x & 300` and `x >> 300` are each refused natively with E0227 (`integer literal 300 is out of range for type 'u8'`), and `300 as Int` is accepted, whether through `as` or the `Int` default the probe does not show. ARITH-2@3 refuses an integer literal with no expected type but does not list the positions that supply one. Options: (a) declared positions (an annotated binding, a parameter, a return, a field) and the other operand of a binary operator, as the probe shows main doing for `+`, `<`, `&` and a shift count (other operators were not probed); (b) declared positions only, so a literal beside a typed operand needs a typed binding; (c) option (a), plus the target type of an `as` for its literal operand. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
 
 <a id="OPEN-139"></a>
 ### OPEN-139. A qualified call to a function that is not imported

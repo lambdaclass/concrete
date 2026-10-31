@@ -24,6 +24,9 @@ On main 0bf8350a (built on OVH): `if 3 < 4` types both literals as `Int` and `if
 
 ## Expected
 
+Since ARITH-2@3 (2026-10-30) the rule covers integer literals only: the integer default to `Int`
+violates it, and the float default to `Float64` is the open owner question OPEN-63.
+
 [ARITH-2](../spec/arithmetic.md#ARITH-2) (OD31): an integer literal takes its type from its context, and one with nothing expected is refused; a float literal follows the same principle.
 
 ## Cause
