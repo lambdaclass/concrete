@@ -438,7 +438,7 @@ fn main() -> u8 {
 <a id="REF-5"></a>
 ### REF-5. A reference is a root binding plus projections
 
-**REF-5@1.** In safe code, a reference is formed only by borrowing a local binding (`&x`, `&mut x`), by a shared borrow of a string literal, or by projecting a field, index or newtype through a reference, where `&s.f` abbreviates the projection `f` of `&s`, so no temporary, constant, call result, branch value or reference read out of storage is ever a reference's root.
+**REF-5@2.** In safe code, a reference is formed only by borrowing a local binding (`&x`, `&mut x`), by a shared borrow of a string literal, or by projecting a field, index or newtype through a reference, where `&s.f` abbreviates the projection `f` of `&s`, so no temporary, constant, call result, branch value or reference read out of storage is ever a reference's root, and a field access, an index or a `*` is refused when its base is neither a place nor a fresh owned value.
 
 - Kind: refusal
 - Uses: none
@@ -713,7 +713,7 @@ fn main() -> u8 {
 <a id="REF-6"></a>
 ### REF-6. Reference bindings are never introduced by `let` and never assigned
 
-**REF-6@1.** No `let` binds a reference, and no reference binding (a parameter, a borrow-block binder or an arm-scoped pattern binder) is ever the target of an assignment.
+**REF-6@2.** No `let` binds a reference, no reference binding (a parameter, a borrow-block binder or an arm-scoped pattern binder) is ever the target of an assignment, no constant initializer borrows (a cast to a reference type counting as a borrow), and no generic instantiated inside an `assert`, an `assume` or a ghost initializer is instantiated at a type that could hold a reference.
 
 - Kind: refusal
 - Uses: none
@@ -730,8 +730,8 @@ the flow-sensitive half of the rules disappears. The rewrite is to borrow at eac
 (`f(&w.p); g(&w.p);`) or to borrow the owner in a borrow block. Writing *through* a reference
 (`*r = v`) assigns the referenced place, not the binding (REF-7).
 
-Two refusals are enforced under this entry's tag and code (E0302) although its sentence does not
-name them. A constant initializer is checked as an expression of the constant's type and may not
+Version 2 states two refusals main already enforced under this entry's tag and code (E0302). A
+constant initializer is checked as an expression of the constant's type and may not
 borrow at all, a cast to a reference type counting as a borrow (`constBorrows`). A generic
 instantiated inside an `assert`, an `assume` or a ghost initializer may not be instantiated at a
 type that could hold a reference under substitution (`erasedRefInstantiation`), because erased code
@@ -1294,7 +1294,7 @@ fn main() -> u8 {
 <a id="REF-10"></a>
 ### REF-10. A `&mut` argument is an implicit reborrow
 
-**REF-10@2.** Passing a `&mut` reference binding as an argument lends it to the call, the call's use of it ending when the call returns, so a parameter, borrow-block binder or arm binder of type `&mut T` may be passed to any number of calls in sequence.
+**REF-10@3.** Passing a `&mut` reference binding as an argument lends it to the call, the call's use of it ending when the call returns, so a parameter, borrow-block binder or arm binder of type `&mut T` may be passed to any number of calls in sequence, and such a binding, which owns nothing, may also go unused, since OWN-2's exit checks do not apply to it.
 
 - Kind: guarantee
 - Uses: none

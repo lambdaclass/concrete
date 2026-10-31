@@ -231,7 +231,7 @@ fn main() -> u8 {
 <a id="ARITH-5"></a>
 ### ARITH-5. `as` converts without loss
 
-**ARITH-5@1.** A numeric, `bool` or `char` conversion written with `as` is accepted only when every value of the source type converts to a value of the target type that means the same number, `bool` or byte, and every other such conversion is written with a named operation (a checked conversion returning an error, `truncate`, `reinterpret`, or a named float rounding).
+**ARITH-5@2.** A numeric, `bool` or `char` conversion written with `as` is accepted only when every value of the source type converts to a value of the target type that means the same number, `bool` or byte, namely a type to itself, an integer to a wider integer of the same signedness, an unsigned integer to a wider signed one, `bool` to an integer, `char` to an unsigned integer of at least 8 bits or a signed one of at least 16, `u8` to `char`, an integer to a float that represents every value exactly, and `f32` to `f64`, and every other such conversion is written with a named operation (a checked conversion returning an error, `truncate`, `reinterpret`, or a named float rounding).
 
 - Kind: refusal
 - Uses: none
@@ -243,11 +243,8 @@ fn main() -> u8 {
 - Evidence: tested
 
 **Rationale.** Decided 2026-10-21 (ARITHMETIC_POLICY §8, exit 2k): `as` is total and
-obligation-free, and each lossy conversion names what it does. The accepted conversions are a type
-to itself, an integer to a wider integer of the same signedness, an unsigned integer to a wider
-signed one, `bool` to an integer, `char` to an unsigned integer of at least 8 bits or a signed one
-of at least 16, `u8` to `char`, an integer to a float that represents every value exactly, and
-`f32` to `f64`. Today `as` refuses conversions to and from `bool` other than `bool` to an integer
+obligation-free, and each lossy conversion names what it does. Version 2 lists the accepted
+conversions in the sentence; version 1 gave them here. Today `as` refuses conversions to and from `bool` other than `bool` to an integer
 (integer, float and `char` to `bool`, and `bool` to `char`: E0553, bugs 108 and 130). Narrowing
 and sign changes are still accepted and truncate or reinterpret, and float to integer truncates
 toward zero and aborts on NaN, an infinity or a value outside the target's range (a checked

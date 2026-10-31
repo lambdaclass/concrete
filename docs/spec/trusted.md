@@ -126,7 +126,7 @@ Decided by the owner on 2026-10-29 (OD1): a raw-pointer dereference needs a trus
 <a id="TRUST-4"></a>
 ### TRUST-4. A function exercises only the capabilities it declares
 
-**TRUST-4@1.** A function may call a function or perform an operation that requires a capability only if the capability is in its own `with(...)` set, whether the requirement comes from a direct call, a call through a trait bound, a function-pointer type or a specialization, and `Unsafe` is such a capability.
+**TRUST-4@2.** A function may call a function or perform an operation that requires a capability only if the capability is in its own `with(...)` set, whether the requirement comes from a direct call, a call through a trait bound, a function-pointer type or a specialization, and `Unsafe` is such a capability; the capabilities are `File`, `Network`, `Time`, `Env`, `Random`, `Process`, `Console`, `Alloc` and `Unsafe`, `Std` stands for every one of them but `Unsafe`, and a raw-pointer dereference or assignment, pointer arithmetic, a pointer cast other than a reference to a pointer, and a call of an `extern fn` require `Unsafe`.
 
 - Kind: refusal
 - Uses: none

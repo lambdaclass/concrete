@@ -4288,7 +4288,7 @@ fn main() -> u8 {
 <a id="ARITH-5"></a>
 #### ARITH-5. `as` converts without loss
 
-**ARITH-5@1.** A numeric, `bool` or `char` conversion written with `as` is accepted only when every value of the source type converts to a value of the target type that means the same number, `bool` or byte, and every other such conversion is written with a named operation (a checked conversion returning an error, `truncate`, `reinterpret`, or a named float rounding).
+**ARITH-5@2.** A numeric, `bool` or `char` conversion written with `as` is accepted only when every value of the source type converts to a value of the target type that means the same number, `bool` or byte, namely a type to itself, an integer to a wider integer of the same signedness, an unsigned integer to a wider signed one, `bool` to an integer, `char` to an unsigned integer of at least 8 bits or a signed one of at least 16, `u8` to `char`, an integer to a float that represents every value exactly, and `f32` to `f64`, and every other such conversion is written with a named operation (a checked conversion returning an error, `truncate`, `reinterpret`, or a named float rounding).
 
 - Kind: refusal
 - Uses: none
@@ -4300,11 +4300,8 @@ fn main() -> u8 {
 - Evidence: tested
 
 **Rationale.** Decided 2026-10-21 (ARITHMETIC_POLICY §8, exit 2k): `as` is total and
-obligation-free, and each lossy conversion names what it does. The accepted conversions are a type
-to itself, an integer to a wider integer of the same signedness, an unsigned integer to a wider
-signed one, `bool` to an integer, `char` to an unsigned integer of at least 8 bits or a signed one
-of at least 16, `u8` to `char`, an integer to a float that represents every value exactly, and
-`f32` to `f64`. Today `as` refuses conversions to and from `bool` other than `bool` to an integer
+obligation-free, and each lossy conversion names what it does. Version 2 lists the accepted
+conversions in the sentence; version 1 gave them here. Today `as` refuses conversions to and from `bool` other than `bool` to an integer
 (integer, float and `char` to `bool`, and `bool` to `char`: E0553, bugs 108 and 130). Narrowing
 and sign changes are still accepted and truncate or reinterpret, and float to integer truncates
 toward zero and aborts on NaN, an infinity or a value outside the target's range (a checked
@@ -8671,7 +8668,7 @@ fn main() -> u8 {
 <a id="REF-5"></a>
 #### REF-5. A reference is a root binding plus projections
 
-**REF-5@1.** In safe code, a reference is formed only by borrowing a local binding (`&x`, `&mut x`), by a shared borrow of a string literal, or by projecting a field, index or newtype through a reference, where `&s.f` abbreviates the projection `f` of `&s`, so no temporary, constant, call result, branch value or reference read out of storage is ever a reference's root.
+**REF-5@2.** In safe code, a reference is formed only by borrowing a local binding (`&x`, `&mut x`), by a shared borrow of a string literal, or by projecting a field, index or newtype through a reference, where `&s.f` abbreviates the projection `f` of `&s`, so no temporary, constant, call result, branch value or reference read out of storage is ever a reference's root, and a field access, an index or a `*` is refused when its base is neither a place nor a fresh owned value.
 
 - Kind: refusal
 - Uses: none
@@ -8946,7 +8943,7 @@ fn main() -> u8 {
 <a id="REF-6"></a>
 #### REF-6. Reference bindings are never introduced by `let` and never assigned
 
-**REF-6@1.** No `let` binds a reference, and no reference binding (a parameter, a borrow-block binder or an arm-scoped pattern binder) is ever the target of an assignment.
+**REF-6@2.** No `let` binds a reference, no reference binding (a parameter, a borrow-block binder or an arm-scoped pattern binder) is ever the target of an assignment, no constant initializer borrows (a cast to a reference type counting as a borrow), and no generic instantiated inside an `assert`, an `assume` or a ghost initializer is instantiated at a type that could hold a reference.
 
 - Kind: refusal
 - Uses: none
@@ -8963,8 +8960,8 @@ the flow-sensitive half of the rules disappears. The rewrite is to borrow at eac
 (`f(&w.p); g(&w.p);`) or to borrow the owner in a borrow block. Writing *through* a reference
 (`*r = v`) assigns the referenced place, not the binding (REF-7).
 
-Two refusals are enforced under this entry's tag and code (E0302) although its sentence does not
-name them. A constant initializer is checked as an expression of the constant's type and may not
+Version 2 states two refusals main already enforced under this entry's tag and code (E0302). A
+constant initializer is checked as an expression of the constant's type and may not
 borrow at all, a cast to a reference type counting as a borrow (`constBorrows`). A generic
 instantiated inside an `assert`, an `assume` or a ghost initializer may not be instantiated at a
 type that could hold a reference under substitution (`erasedRefInstantiation`), because erased code
@@ -9527,7 +9524,7 @@ fn main() -> u8 {
 <a id="REF-10"></a>
 #### REF-10. A `&mut` argument is an implicit reborrow
 
-**REF-10@2.** Passing a `&mut` reference binding as an argument lends it to the call, the call's use of it ending when the call returns, so a parameter, borrow-block binder or arm binder of type `&mut T` may be passed to any number of calls in sequence.
+**REF-10@3.** Passing a `&mut` reference binding as an argument lends it to the call, the call's use of it ending when the call returns, so a parameter, borrow-block binder or arm binder of type `&mut T` may be passed to any number of calls in sequence, and such a binding, which owns nothing, may also go unused, since OWN-2's exit checks do not apply to it.
 
 - Kind: guarantee
 - Uses: none
@@ -11478,7 +11475,7 @@ Decided by the owner on 2026-10-29 (OD1): a raw-pointer dereference needs a trus
 <a id="TRUST-4"></a>
 #### TRUST-4. A function exercises only the capabilities it declares
 
-**TRUST-4@1.** A function may call a function or perform an operation that requires a capability only if the capability is in its own `with(...)` set, whether the requirement comes from a direct call, a call through a trait bound, a function-pointer type or a specialization, and `Unsafe` is such a capability.
+**TRUST-4@2.** A function may call a function or perform an operation that requires a capability only if the capability is in its own `with(...)` set, whether the requirement comes from a direct call, a call through a trait bound, a function-pointer type or a specialization, and `Unsafe` is such a capability; the capabilities are `File`, `Network`, `Time`, `Env`, `Random`, `Process`, `Console`, `Alloc` and `Unsafe`, `Std` stands for every one of them but `Unsafe`, and a raw-pointer dereference or assignment, pointer arithmetic, a pointer cast other than a reference to a pointer, and a call of an `extern fn` require `Unsafe`.
 
 - Kind: refusal
 - Uses: none

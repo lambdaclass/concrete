@@ -109,7 +109,7 @@ def codeRuleTag : String → Option String
   | "E0326" => some "MOD-6@1"
   | "E0299" | "E0120" | "E0578" => some "MOD-3@2"
   -- docs/spec/trusted.md and docs/spec/ffi.md
-  | "E0121" | "E0240" | "E0242" | "E0520" | "E0521" => some "TRUST-4@1"
+  | "E0121" | "E0240" | "E0242" | "E0520" | "E0521" => some "TRUST-4@2"
   | "E0116" | "E0117" | "E0574" | "E0575" => some "FFI-3@1"
   | "E0572" | "E0573" | "E0576" | "E0577" | "E0585" => some "FFI-4@1"
   | "E0118" | "E0119" => some "FFI-5@1"
@@ -122,7 +122,7 @@ def codeRuleTag : String → Option String
   | "E0307" => some "STMT-9@1"
   -- docs/spec/arithmetic.md
   | "E0227" => some "ARITH-2@3"
-  | "E0553" => some "ARITH-5@1"
+  | "E0553" => some "ARITH-5@2"
   -- docs/spec/patterns.md
   | "E0530" | "E0534" => some "PAT-2@2"
   | "E0304" | "E0309" | "E0531" | "E0532" | "E0533" => some "PAT-3@3"

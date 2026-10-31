@@ -19,13 +19,13 @@ REF-3/fn-pointer-field	live	-
 REF-4@1	live	f6d7d30ec8e401837a45c79b7886dbc4
 REF-4/generic-return	live	-
 REF-4/top-level-ref-arg	live	-
-REF-5@1	live	a6856fca91f18c45c2279e48b072f6f8
+REF-5@1	superseded	a6856fca91f18c45c2279e48b072f6f8
 REF-5/borrow-operator	live	-
 REF-5/root-plus-projections	live	-
 REF-5/borrow-int-literal	live	-
 REF-5/borrow-call-result	live	-
 REF-5/borrow-let-first	live	-
-REF-6@1	live	82c22347ea1fef23adc272391fec2cac
+REF-6@1	superseded	82c22347ea1fef23adc272391fec2cac
 REF-6/let-binds-ref	live	-
 REF-6/param-assigned	live	-
 REF-6/borrow-each-use	live	-
@@ -250,7 +250,7 @@ ARITH-3/divide-by-zero	live	-
 ARITH-3/shift-count-too-large	live	-
 ARITH-4@1	live	4a4c76d09fac235887ed2ede637e3938
 ARITH-4/wrap-and-saturate	live	-
-ARITH-5@1	live	1dbd34444551dcadc59b8207c9e466e4
+ARITH-5@1	superseded	1dbd34444551dcadc59b8207c9e466e4
 ARITH-5/int-to-bool	live	-
 ARITH-5/widening	live	-
 ARITH-5/narrowing	pending	-
@@ -294,7 +294,7 @@ FFI-4/repr-c	live	-
 FFI-5@1	live	215b5940db2fc6d4e258d589f501c2ec
 FFI-5/bad-export-name	live	-
 FFI-5/concrete-malloc	live	-
-TRUST-4@1	live	2520571bfac95b39fa6cbc22eb456ddc
+TRUST-4@1	superseded	2520571bfac95b39fa6cbc22eb456ddc
 TRUST-4/undeclared-capability	live	-
 TRUST-4/raw-deref-needs-unsafe	live	-
 TRUST-4/declared-capability	live	-
@@ -433,7 +433,7 @@ MOD-2/submodule-imports-private	live	-
 MOD-6@1	live	35dc776904350d27ff4ae2817d973b0a
 MOD-6/program-imports-libc	live	-
 MOD-6/program-uses-std	live	-
-REF-10@2	live	0285af262ac5b919230f34e331d870a3
+REF-10@2	superseded	0285af262ac5b919230f34e331d870a3
 REF-11@3	live	babcbb4d1ad4d1fdc4425c6651a1fc7f
 REF-11/overlapping-path	retired:refused-by-ref-8	-
 REF-13@1	pending	9bc44814b65d2f656ae0a49a4d600e01
@@ -770,3 +770,8 @@ OPEN-150@1	live	7a5a4cf06859fcd6866fdab42f4a3aee
 ARITH-2@3	live	5283cc0812dd064339ad33e71dccd7ec
 MEM-4@4	pending	efd60f16aa7955424c3a01a5fc06cd8c
 SYN-6@2	live	940df99b82bca6cc1c5c55d0eced1de0
+REF-5@2	live	47dfe6d469639f5f89772fc6fa88b04d
+REF-6@2	live	ffd1f1374f3bd7d508a872c18839eeac
+REF-10@3	live	917f3df08fee9c2bded9ebd75f5819a1
+ARITH-5@2	live	68eac25c860c401b488935b8cf308694
+TRUST-4@2	live	fd62a94061672763facc650983f32b78
