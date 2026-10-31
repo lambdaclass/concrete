@@ -1,0 +1,14 @@
+// Bug 341 (PASS-12@1): two modules each declare `main`. Check accepts the program; the native build
+// fails in clang on a second definition of @__concrete_argc, and --interp prints 7 (the first main).
+// Expected: the program compiles, or Check refuses it with a diagnostic once the owner decides which
+// main is the entry point; never invalid LLVM IR.
+mod a {
+    pub fn main() -> u8 {
+        return 7;
+    }
+}
+mod b {
+    pub fn main() -> u8 {
+        return 9;
+    }
+}
