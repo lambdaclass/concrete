@@ -935,7 +935,8 @@ fn main() -> Int {
 - Obligation: ownership instrumentation with a proved erasure theorem (R-0496, R-0507)
 - Evidence: tested
 
-**Rationale.** Rust is affine with an implicit `Drop`. Concrete makes cleanup explicit, so it
+**Rationale.** How this reads with STMT-11's last exit step ("the remaining locals are destroyed") is
+OPEN-69. Rust is affine with an implicit `Drop`. Concrete makes cleanup explicit, so it
 refuses silent disappearance (OWN-5) rather than inserting a destructor. Drop glue does not
 change this: when source code explicitly consumes an owner, that operation may destroy the owner's
 fields or elements recursively, but the decision stays visible in the source. A Copy value can be

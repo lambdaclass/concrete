@@ -662,7 +662,9 @@ fn main() -> Int {
 - Obligation: STMT-1 (R-0496)
 - Evidence: tested
 
-**Rationale.** Decided by the owner on 2026-10-29 (OD2, part 5). One order on every normal exit
+**Rationale.** Decided by the owner on 2026-10-29 (OD2, part 5). Whether the last step, "the remaining
+locals are destroyed", is storage teardown only or a call of `Destroy`, which OWN-13 forbids implicitly,
+is OPEN-69. One order on every normal exit
 (falling off the end, `return`, `break`, `continue`) is what lets a deferred call see the exit value
 already computed and the loans it was given still live (OWN-16), and lets the destruction of the
 remaining locals come last. An abort runs none of it (STMT-2; OD10). A counted loop's body is its own scope and advancing the index belongs to the loop,

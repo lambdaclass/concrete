@@ -313,6 +313,20 @@ the first chapter.
   - [OPEN-134. The capabilities of a container's generated destruction](#OPEN-134)
   - [OPEN-135. A method's `Type_method` name in its module's namespace](#OPEN-135)
   - [OPEN-136. std's `process_exit`](#OPEN-136)
+  - [OPEN-137. Character literals outside ASCII](#OPEN-137)
+  - [OPEN-138. Which positions give a literal its expected type](#OPEN-138)
+  - [OPEN-139. A qualified call to a function that is not imported](#OPEN-139)
+  - [OPEN-140. Implicitly dropped results of `free` and of a deferred call](#OPEN-140)
+  - [OPEN-141. More than one `main` in a program](#OPEN-141)
+  - [OPEN-142. `X.con` beside `X/mod.con`](#OPEN-142)
+  - [OPEN-143. What a contract may read](#OPEN-143)
+  - [OPEN-144. Postconditions and deferred calls](#OPEN-144)
+  - [OPEN-145. How a contract names machine arithmetic](#OPEN-145)
+  - [OPEN-146. The result type of a test function](#OPEN-146)
+  - [OPEN-147. `repr(C, packed)` together](#OPEN-147)
+  - [OPEN-148. Type parameters on a trait](#OPEN-148)
+  - [OPEN-149. How `[e; N]` evaluates `e`](#OPEN-149)
+  - [OPEN-150. Which text governs the grammar until it is resynchronized](#OPEN-150)
 
 <a id="ch-overview"></a>
 ## Overview
@@ -4404,7 +4418,9 @@ fn main() -> Int {
 - Obligation: STMT-1 (R-0496)
 - Evidence: tested
 
-**Rationale.** Decided by the owner on 2026-10-29 (OD2, part 5). One order on every normal exit
+**Rationale.** Decided by the owner on 2026-10-29 (OD2, part 5). Whether the last step, "the remaining
+locals are destroyed", is storage teardown only or a call of `Destroy`, which OWN-13 forbids implicitly,
+is OPEN-69. One order on every normal exit
 (falling off the end, `return`, `break`, `continue`) is what lets a deferred call see the exit value
 already computed and the loans it was given still live (OWN-16), and lets the destruction of the
 remaining locals come last. An abort runs none of it (STMT-2; OD10). A counted loop's body is its own scope and advancing the index belongs to the loop,
@@ -6265,7 +6281,8 @@ fn main() -> Int {
 - Obligation: ownership instrumentation with a proved erasure theorem (R-0496, R-0507)
 - Evidence: tested
 
-**Rationale.** Rust is affine with an implicit `Drop`. Concrete makes cleanup explicit, so it
+**Rationale.** How this reads with STMT-11's last exit step ("the remaining locals are destroyed") is
+OPEN-69. Rust is affine with an implicit `Drop`. Concrete makes cleanup explicit, so it
 refuses silent disappearance (OWN-5) rather than inserting a destructor. Drop glue does not
 change this: when source code explicitly consumes an owner, that operation may destroy the owner's
 fields or elements recursively, but the decision stays visible in the source. A Copy value can be
@@ -10613,7 +10630,7 @@ fn main() -> Int {
 <a id="ch-decisions"></a>
 ## Open Owner Decisions
 
-This chapter lists the language questions that only the project owner decides: OD1 to OD136 of
+This chapter lists the language questions that only the project owner decides: OD1 to OD150 of
 [ROADMAP.md](../../ROADMAP.md#owner-decisions) (exit 2n for OD1 to OD32, exit 2q for the rest). Each entry states the question and encodes
 no answer. The rules it bears on are named in its rationale, together with what current main does,
 which stays provisional until the owner answers. The answer, when given, is recorded in ROADMAP and
@@ -10621,7 +10638,7 @@ turns the entry into the rules it decides; until then no agent picks a side
 ([AGENTS.md](../project/AGENTS.md#rules)). OD1 to OD22 were answered on 2026-10-29 and are listed under
 Decided; OD23 to OD32 were decided the same day. The entries below, OPEN-33 onward, are open:
 raised while recording those answers, allocated for the owner picks of 2026-10-30, or raised since by the
-absorption and its reviews; OD47 is decided and OPEN-94 was withdrawn (MOD-1 already refuses its case, bug 337).
+absorption and its reviews, and by the spec quality audit of 2026-10-30; OD47 is decided and OPEN-94 was withdrawn (MOD-1 already refuses its case, bug 337).
 The table below lists them in reading order.
 
 ### Decisions to be made, in order
@@ -10739,6 +10756,20 @@ them); they are not separate entries here
 | 100 | [OPEN-134](#OPEN-134) | reviewing the absorption of docs/stdlib | The capabilities of a container's generated destruction | not assessed | none given | not assessed | — |
 | 101 | [OPEN-135](#OPEN-135) | reviewing the absorption of docs/compiler and docs/platform | A method's `Type_method` name in its module's namespace | not applicable (no methods) | none given | not assessed | — |
 | 102 | [OPEN-136](#OPEN-136) | reviewing the absorption of docs/compiler and docs/platform | std's `process_exit` | not checked | none given | not assessed | — |
+| 103 | [OPEN-137](#OPEN-137) | the spec quality audit of 2026-10-30 | Character literals outside ASCII | not checked | none given | not assessed | — |
+| 104 | [OPEN-138](#OPEN-138) | the spec quality audit of 2026-10-30 | Which positions give a literal its expected type | not checked | none given | not assessed | — |
+| 105 | [OPEN-139](#OPEN-139) | the spec quality audit of 2026-10-30 | A qualified call to a function that is not imported | not checked | none given | not assessed | — |
+| 106 | [OPEN-140](#OPEN-140) | the spec quality audit of 2026-10-30 | Implicitly dropped results of `free` and of a deferred call | not checked | none given | not assessed | — |
+| 107 | [OPEN-141](#OPEN-141) | the spec quality audit of 2026-10-30 | More than one `main` in a program | not checked | none given | not assessed | — |
+| 108 | [OPEN-142](#OPEN-142) | the spec quality audit of 2026-10-30 | `X.con` beside `X/mod.con` | not checked | none given | not assessed | — |
+| 109 | [OPEN-143](#OPEN-143) | the spec quality audit of 2026-10-30 | What a contract may read | not checked | none given | not assessed | — |
+| 110 | [OPEN-144](#OPEN-144) | the spec quality audit of 2026-10-30 | Postconditions and deferred calls | not checked | none given | not assessed | — |
+| 111 | [OPEN-145](#OPEN-145) | the spec quality audit of 2026-10-30 | How a contract names machine arithmetic | not checked | none given | not assessed | — |
+| 112 | [OPEN-146](#OPEN-146) | the spec quality audit of 2026-10-30 | The result type of a test function | not checked | none given | not assessed | — |
+| 113 | [OPEN-147](#OPEN-147) | the spec quality audit of 2026-10-30 | `repr(C, packed)` together | not checked | none given | not assessed | — |
+| 114 | [OPEN-148](#OPEN-148) | the spec quality audit of 2026-10-30 | Type parameters on a trait | not checked | none given | not assessed | — |
+| 115 | [OPEN-149](#OPEN-149) | the spec quality audit of 2026-10-30 | How `[e; N]` evaluates `e` | not checked | none given | not assessed | — |
+| 116 | [OPEN-150](#OPEN-150) | the spec quality audit of 2026-10-30 | Which text governs the grammar until it is resynchronized | not checked | none given | not assessed | — |
 
 <a id="OPEN-33"></a>
 #### OPEN-33. Inline submodules under one file per module
@@ -12400,6 +12431,230 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Evidence: open
 
 **Rationale.** Bears on STMT-7, OWN-2 and TRUST-4. Current main: `std.process.process_exit(code: i32) with(Process)` exists and calls libc `exit`; the language itself has no exit operation (STMT-7). The design record [MAIN_EXIT_MODEL.md](../platform/MAIN_EXIT_MODEL.md) calls an exit operation deliberately absent, since in a linear language it would bypass the proof that every owned value is consumed. Options: (a) keep it, stating that it skips cleanup and that `Process` is what grants it; (b) remove it, status flowing back through `main`'s return only. Austral: not checked. Pick: none given (raised by the review of the absorption of docs/platform, 2026-10-30).
+
+<a id="OPEN-137"></a>
+#### OPEN-137. Character literals outside ASCII
+
+**OPEN-137@1.** Which byte a char literal denotes when its character is not ASCII is an open owner decision (OD137).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD137
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on SYN-6, TYPE-20 and SYN-5. Current main: the literal silently takes the low byte of the character's code point: `let c: char = 'é'; return c as u8;` exits 233 (U+00E9) on both consumers, and SYN-6 says only that a char literal is a token. Options: (a) refuse a char literal whose character is not ASCII, so the value is that one-byte UTF-8 encoding; (b) accept U+0000 to U+00FF as that byte (Latin-1) and refuse anything above; (c) make `char` a Unicode scalar value, which changes TYPE-20's one-byte `char`. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
+
+<a id="OPEN-138"></a>
+#### OPEN-138. Which positions give a literal its expected type
+
+**OPEN-138@1.** Which positions give an integer or float literal operand its expected type under ARITH-2 is an open owner decision (OD138).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD138
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on ARITH-2, TYPE-4 and TYPE-6. Current main: an unconstrained integer literal is typed `Int` and a float literal `Float64` (bug 327), and in `x + 1` with `x: u8` the literal takes `u8` from the other operand; ARITH-2 refuses a literal with no expected type but does not list the positions that supply one. Options: (a) declared positions (an annotated binding, a parameter, a return, a field) and the other operand of an arithmetic, comparison or bitwise operator, as main reads it; (b) declared positions only, so a literal beside a typed operand needs a typed binding; (c) option (a), plus the target of `as` and the left operand's type for a shift count. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
+
+<a id="OPEN-139"></a>
+#### OPEN-139. A qualified call to a function that is not imported
+
+**OPEN-139@1.** Whether `a::f()` may call a `pub` function of another module that the caller has not imported is an open owner decision (OD139).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD139
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on MOD-2, SYN-10 and MOD-4. Current main: accepted: `mod a { pub fn answer() -> u8 { return 42; } }` and `a::answer()` in `main` exits 42 with no import, as MOD-4's and SYN-10's accepted examples also do, while MOD-2's sentence says another module uses a declaration only by importing it. Options: (a) a qualified path to a `pub` declaration is a use in its own right, and MOD-2 says so; (b) an import is required, and the unimported qualified call is refused. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
+
+<a id="OPEN-140"></a>
+#### OPEN-140. Implicitly dropped results of `free` and of a deferred call
+
+**OPEN-140@1.** Whether the Copy result of `free(h);` and of a deferred call are dropped without `discard`, as exceptions to OWN-7@3 (OD29) is an open owner decision (OD140).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD140
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on OWN-7, OWN-17, MEM-5 and OWN-15. Current main: both accepted: `free(h);` on a `Heap<Int>` and `defer f();` with `fn f() -> u8` compile and run, while OWN-7@3 (decided OD29) drops a non-Unit result only through `discard(e)`. OWN-17 already drops a deferred call's Copy result, and MEM-5 and OWN-15 describe `free(h);` as a statement. Options: (a) both are exceptions, stated in OWN-7; (b) neither is, so each needs `discard`; (c) `free` is an exception and a deferred call's result is not. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
+
+<a id="OPEN-141"></a>
+#### OPEN-141. More than one `main` in a program
+
+**OPEN-141@1.** Which function is the entry point when more than one module of a program declares `main` is an open owner decision (OD141).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD141
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on STMT-7, MOD-3 and PASS-10. Current main: `mod a { pub fn main() -> u8 { return 1; } }` beside `mod b { pub fn main() -> u8 { return 2; } }` fails natively inside LLVM (`redefinition of global '@__concrete_argc'`) and exits 1 under `--interp`, which runs the first; MOD-3 makes a name unique within one module only. Options: (a) only the root module's `main` is the entry point, and others are ordinary functions; (b) a program with more than one `main` is refused; (c) a `main` outside the root module is refused. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
+
+<a id="OPEN-142"></a>
+#### OPEN-142. `X.con` beside `X/mod.con`
+
+**OPEN-142@1.** Which file `mod X;` loads when both `X.con` and `X/mod.con` exist is an open owner decision (OD142).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD142
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on MOD-4. Current main: `X.con` is loaded and `X/mod.con` is ignored without a diagnostic (a probe whose two files return 1 and 2 exits 1). MOD-4 says one module is loaded from either file. Options: (a) refuse the pair; (b) `X.con` takes precedence, as main does; (c) `X/mod.con` takes precedence. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
+
+<a id="OPEN-143"></a>
+#### OPEN-143. What a contract may read
+
+**OPEN-143@1.** Which names each contract position (`requires`, `ensures`, `invariant`, `variant`) may read is an open owner decision (OD143).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD143
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on CON-2, CON-3 and CON-4. Current main: CON-3 says a contract reads parameters and `result`, CON-4 lets contracts read `ghost let` bindings, and CON-2's accepted loop invariant reads the local `i`; the checker accepts all three. Options: (a) per position: `requires` the parameters, `ensures` the parameters, `result` and ghost bindings, and a loop's `invariant` and `variant` every binding in scope, with CON-3 amended; (b) every position reads every binding in scope at that point; (c) CON-3 as written, with loop contracts and ghost reads refused. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
+
+<a id="OPEN-144"></a>
+#### OPEN-144. Postconditions and deferred calls
+
+**OPEN-144@1.** Whether an `ensures` clause is about the state before or after the function's deferred calls run is an open owner decision (OD144).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD144
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on CON-2 and STMT-11. Current main: contracts are erased at run time, so `#[ensures(result == *r)]` on a function whose `defer inc(r)` runs after the result is computed compiles and runs; no rule says which state the postcondition's proof obligation reads, while STMT-11 computes the result before the deferred calls run. Options: (a) after every deferred call, the state the caller sees; (b) when the result is computed, before deferred calls; (c) refuse an `ensures` in a function with a deferred call that may write what the clause reads. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
+
+<a id="OPEN-145"></a>
+#### OPEN-145. How a contract names machine arithmetic
+
+**OPEN-145@1.** How a contract expression names machine arithmetic, which CON-3 allows in place of its default mathematical arithmetic is an open owner decision (OD145).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD145
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on CON-3 and ARITH-4. Current main: CON-3 says a contract's integer arithmetic is mathematical unless it names a machine operation, and no rule or example names one. Options: (a) the named operations of ARITH-4 (`wrapping_add`, `saturating_add` and the rest) are the machine operations in a contract; (b) a contract-only spelling; (c) contracts have only mathematical arithmetic, and CON-3 drops the exception. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
+
+<a id="OPEN-146"></a>
+#### OPEN-146. The result type of a test function
+
+**OPEN-146@1.** Whether a `#[test]` function returns `i32` (STMT-10) or follows `main`'s decided `u8` or `Unit` (OD24) is an open owner decision (OD146).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD146
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on STMT-10 and STMT-7. Current main: `#[test] fn t() -> Int` is refused with E0319 (`#[test] function 't' must return i32`), and a test's result is its exit status under `concrete test`. Options: (a) keep `i32`; (b) `u8` or `Unit`, as `main` (STMT-7@3); (c) `Unit` only, a failing test aborting. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
+
+<a id="OPEN-147"></a>
+#### OPEN-147. `repr(C, packed)` together
+
+**OPEN-147@1.** Whether `#[repr(C, packed)]` is accepted, and what layout it gives is an open owner decision (OD147).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD147
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on FFI-4 and FFI-8. Current main: accepted: `#[repr(C, packed)] struct Copy P { a: u8, b: u32 }` has size 5, so packing overrides C alignment. FFI-4 refuses only `packed` with `align(N)`, and FFI-8 states C layout and packed layout separately. Options: (a) refuse the combination; (b) accept it as C field order with no padding and alignment 1, as main does, and FFI-8 says so. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
+
+<a id="OPEN-148"></a>
+#### OPEN-148. Type parameters on a trait
+
+**OPEN-148@1.** Whether a trait declaration may have type parameters, and if so what binds them at a bound and an impl is an open owner decision (OD148).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD148
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on TRAIT-1, TRAIT-9 and SYN-1. Current main: `trait Tr<T> { fn get(&self, x: T) -> T; }` parses, but no bound or impl head can supply `T`, so `impl Tr for S { fn get(&self, x: u8) -> u8 ... }` is refused with E0582 and E0587 (`expected return type T, got u8`). OPEN-77 already lists generic trait methods among the grammar's stale items. Options: (a) refuse type parameters on a trait declaration; (b) allow them, with type arguments at bounds and impl heads (`impl Tr<u8> for S`). Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
+
+<a id="OPEN-149"></a>
+#### OPEN-149. How `[e; N]` evaluates `e`
+
+**OPEN-149@1.** How many times an array repetition `[e; N]` evaluates `e`, and which `e` it accepts is an open owner decision (OD149).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD149
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on STMT-4, OWN-15 and TYPE-7. Current main: `e` is evaluated once per element: `[bump(&mut n); 2]` leaves `n` at 2 (exit 2 on both consumers). OWN-15 says only that an array literal moves each element in, and STMT-4 orders written elements. Options: (a) `e` is evaluated once and copied, so it must be Copy; (b) `e` is evaluated `N` times in index order, as main does; (c) `e` must be a constant expression. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
+
+<a id="OPEN-150"></a>
+#### OPEN-150. Which text governs the grammar until it is resynchronized
+
+**OPEN-150@1.** Whether, until OPEN-77's resynchronization, `grammar/concrete.ebnf` or the rule entries govern where they disagree is an open owner decision (OD150).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD150
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on SYN-1 and OPEN-77. Current main: the parser accepts forms the EBNF does not derive (`import a.{f};`, `m::f()`, `f::<T>(x)`, value `if` and `match`, `pub` fields, bodyless declarations) and the EBNF keeps forms the entries removed (`E#V`, the C-style `for`, `break <expr>`); SYN-1 calls the EBNF the grammar, and the LL(1) checkers read it. Options: (a) the rule entries govern, and the EBNF is descriptive until the resync; (b) the EBNF governs, and an entry that disagrees is pending; (c) neither: each disagreement is decided one by one under OPEN-77. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
 
 ### Decided
 
