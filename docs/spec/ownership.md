@@ -702,7 +702,7 @@ that can trap (`/`, `%`). That is still the current compiler's behaviour: its si
 structural purity predicate in the `Stmt.expr` check (`CheckError.discardedPureValue`).
 
 Version 3 records the owner's decision of 2026-10-29 (OD29): every unused non-Unit result needs
-`discard(e)`, and the syntactic purity heuristic of version 2 is removed. Main refuses only a
+`discard(e)`, and the syntactic purity heuristic of version 2 is removed. The current compiler refuses only a
 syntactically pure non-Unit Copy value (E0294) and drops a call's result silently (bug 325).
 
 
@@ -930,7 +930,7 @@ fn main() -> u8 {
 **Rationale.** Mutation is visible at the declaration. A `&mut` parameter is already a mutable
 place, so writing through it needs no `mut` on the parameter. Version 2 records the owner's
 decision of 2026-10-29 (OD17): a field write requires a `mut` binding, as `&mut` of the field and a
-direct array element write already did. Main still accepts a write into a field, a nested array
+direct array element write already did. The current compiler still accepts a write into a field, a nested array
 element or a heap cell of a binding not declared `mut` (bug 216, which implements the rule), pinned
 by the pending example below.
 
@@ -1355,8 +1355,8 @@ locals, by-value `self` and `Destroy` bodies included.
 
 Version 3 records the owner's decision of 2026-10-29 (OD32): there is no receiver auto-borrow; a
 `&self` or `&mut self` method on an owned place is called as `(&s).m()` or `(&mut s).m()`, and a
-receiver that is already a reference is unchanged. Main still borrows an owned receiver implicitly
-(bug 328); the `methodCall` row below states the decided form and notes the current compiler's. `break <expr>`
+receiver that is already a reference is unchanged. The current compiler still borrows an owned receiver implicitly
+(bug 328); the `methodCall` row below states the decided form and notes the current compiler's behaviour. `break <expr>`
 is refused at parse by the decided rule (STMT-6, OD27); the current compiler still parses it (bug 323).
 
 
@@ -1487,7 +1487,7 @@ The checker decides consumption by the position an expression is checked in (`Us
 **Rationale.** Decided by the owner on 2026-10-29 (OD2, part 4), alongside OWN-12, which stands: a
 deferred call's arguments are read at the exit, and a local passed by value is reserved and one
 passed by borrow pinned. This entry adds the loan: after `defer log(&mut x)`, no borrow of `x` that
-conflicts with that exclusive borrow (any borrow of the same root, REF-11) may be taken before the block exits. Main
+conflicts with that exclusive borrow (any borrow of the same root, REF-11) may be taken before the block exits. The current compiler
 already holds a deferred `&mut` reference binding's loan (`heldByDefer`, `refuseDeferHeldRef`,
 E0206), but it accepts a shared borrow of a local whose exclusive borrow a deferred call holds.
 

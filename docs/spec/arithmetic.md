@@ -57,7 +57,7 @@ old Phase 6 #6, 2026-06-23).
 Version 2 records the owner's decision of 2026-10-29 (OD31): the fallback to `Int` where nothing is
 expected is removed and no suffix is required. Whether a float literal follows the same principle
 (its context's float type, refused with none), as OD31's note says, is OPEN-63; which positions supply
-an expected type is OPEN-138. Main still types an unconstrained integer literal `Int` and
+an expected type is OPEN-138. The current compiler still types an unconstrained integer literal `Int` and
 an unconstrained float literal `Float64` (bug 327).
 
 ```con reject name=literal-out-of-range code=E0227 stage=check pair=literal-in-range
@@ -360,7 +360,7 @@ fn main() -> u8 {
 
 **Rationale.** This is ARITH-1's rounding applied to the literal itself: a literal printed with too few digits
 in the emitted IR once changed `0.1` (bug 109). The first program below holds only if the literals
-are the correctly rounded binary64 values. Main rounds an `f32` literal twice, through binary64,
+are the correctly rounded binary64 values. The current compiler rounds an `f32` literal twice, through binary64,
 so a literal just above a binary32 midpoint takes the even neighbour (bug 332), pinned by the
 pending example.
 

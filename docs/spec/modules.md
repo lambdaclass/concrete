@@ -248,7 +248,7 @@ lookup met first (bug 082). Renaming on import (`import a.{f as g}`) resolves a 
 the same declaration twice binds the name to one declaration and is accepted. The reserved names
 are the `__` prefix, `user_main` and the builtins a program may call but not redefine; they are
 reserved for functions only, and a `let` spelling the compiler reserves is SYN-3.
-Main also counts an impl method under its definition name `Type_method`, so a free function
+The current compiler also counts an impl method under its definition name `Type_method`, so a free function
 `P_get` beside `impl P { fn get(&self) ... }` in one module is refused with E0299; whether a method
 should occupy that name is OPEN-135.
 

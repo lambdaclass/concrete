@@ -250,7 +250,7 @@ E0245 refuses a `break` or `continue` in the step that targets its own loop (bug
 this entry only while the current compiler parses the step form, which version 3 removes, and retires with it. A
 `break` or `continue` leaves the loop body's scopes like any exit (OWN-2).
 
-Main's loop forms are `while cond { ... }` and the C-style forms that version 3 removes (bug 331):
+The current compiler's loop forms are `while cond { ... }` and the C-style forms that version 3 removes (bug 331):
 `for (init; cond; step) { ... }`, whose `init` is a `let`,
 whose `cond` is the continuation test and whose `step` is an expression or an assignment
 (`for (i = 0; ...)` is a parse error), `for (cond) { ... }` and the unconditional `for { ... }`
@@ -276,7 +276,7 @@ Phase 6D item 2 removed the form: a loop result is a mutable local assigned befo
 Phase 6 #4, 2026-06-21).
 
 Version 2 records the owner's decision of 2026-10-29 (OD27): `break <expr>` is refused at parse.
-Main still parses a value after `break` inside a `while` or `for` statement and drops it (bug 323).
+The current compiler still parses a value after `break` inside a `while` or `for` statement and drops it (bug 323).
 
 
 Version 3 records the owner's decision of 2026-10-29 (OD47): the loops are `while` and a counted
@@ -291,7 +291,7 @@ carries its termination measure, `b - i`. Why: a counted loop terminates without
 a bounds check over its index something to eliminate; the C-style step had its own control flow,
 which bugs 306 and 330 got wrong; and the old header was an LL(1) conflict. Austral and Ada have a
 counted loop (inclusive), and Swift removed the C-style loop (SE-0007); `until` is half-open to avoid
-off-by-one errors and because `to` reads as exclusive to some and inclusive to others. Main still has
+off-by-one errors and because `to` reads as exclusive to some and inclusive to others. The current compiler still has
 only the C-style forms (bug 331 implements the decision and migrates the corpus under exit 2q). The
 index type when both bounds are untyped literals is OPEN-48, the arithmetic of the termination
 measure is OPEN-49, and whether reverse, stepped or collection iteration stays out of the language
@@ -632,7 +632,7 @@ The owner decided OD8 on 2026-10-29: `main` will receive the root resource value
 none.
 
 Version 3 records the owner's decision of 2026-10-29 (OD24): `main` returns `u8` or `Unit`; there
-is no masking, no `bool` mapping and no other result type. Main still accepts any result type, masks
+is no masking, no `bool` mapping and no other result type. The current compiler still accepts any result type, masks
 an integer natively and prints it under `--interp` (bug 320). Every example of this specification
 uses the decided form, `fn main() -> u8`; an example whose value is computed as an `Int` keeps that
 computation in `example_value()` and has `main` compare it with the expected exit status.

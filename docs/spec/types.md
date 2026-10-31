@@ -223,7 +223,7 @@ so the type of every value is visible in the source. An integer literal takes th
 position expects. A literal that does not fit that type is an arithmetic rule. CoreCheck repeats
 the variable and return checks on Core as defense in depth.
 Version 2 drops the `break` value from the list of positions: a `break` carries no value (STMT-6@3, OD27).
-Main still parses `break <expr>;`, evaluating and dropping the value (bug 323).
+The current compiler still parses `break <expr>;`, evaluating and dropping the value (bug 323).
 
 ```con reject name=bool-for-int code=E0220 stage=check pair=one-type
 fn example_value() -> Int {
@@ -440,7 +440,7 @@ bitwise not on a non-integer (`~f` with `f: f64`).
 Version 2 records the owner's decision of 2026-10-29 (OD26), aligned with TRUST-1: arithmetic,
 shifts and comparisons take numbers only, and pointer offset, difference and ordering are
 `ptr::offset` and named functions. Whether "numbers only" also removes comparisons on `bool` and
-`char` is OPEN-42; the current compiler compares them today, and this entry does not decide it. Main still admits pointer arithmetic and comparison in trusted or
+`char` is OPEN-42; the current compiler compares them today, and this entry does not decide it. The current compiler still admits pointer arithmetic and comparison in trusted or
 `Unsafe` code (bug 322).
 
 
@@ -1493,7 +1493,7 @@ whose fields are such function types, so `Sink<{}>` is not a `Sink<Console>` eit
 Whether a function value converts to a type with a larger set (`fn(Int) -> Int` to
 `fn(Int) with(Console) -> Int`, or `with(File)` to `with(Std)`) is OPEN-93; the current compiler refuses it
 (E0220). A combinator spelling that infers its set from its callbacks (`with(f)`) is OPEN-92.
-Main compares two sets after sorting them and keeps a repeated capability, so
+The current compiler compares two sets after sorting them and keeps a repeated capability, so
 `fn(Int) with(Console, Console) -> Int` is not a `fn(Int) with(Console) -> Int` (E0220); whether it
 should be is OPEN-108.
 
@@ -1977,7 +1977,7 @@ than its own inner type, one wrapping step at a time, is refused with ARITH-5's 
 turn a validated wrapper into an unrelated type or build one from one (bug fixed 2026-04-25,
 `error_newtype_cast_to_unrelated.con`). Outside the declaring module, `N(v)` is refused (TYPE-11),
 while `n.0` and `unwrap(n)` are refused only once R-0500 lands; whether `v as N` and `n as T` are
-refused there too is OPEN-123, and the current compiler accepts both. Whether newtypes stay is OPEN-54. Main also
+refused there too is OPEN-123, and the current compiler accepts both. Whether newtypes stay is OPEN-54. The current compiler also
 has an intrinsic `unwrap(n)`: Check gives it type `T`, but Core keeps it typed `N`, so `unwrap(k) as
 Int` is refused (E0553) and `j.0 + unwrap(k)` stops natively at the SSA verifier (E0715), a defect
 found while absorbing [VALIDATED_WRAPPERS.md](../stdlib/VALIDATED_WRAPPERS.md), which calls it a

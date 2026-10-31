@@ -102,7 +102,7 @@ One disambiguation is contextual, so the productions alone do not show it. In th
 whatever name precedes it: there is no case heuristic, and a struct literal in a head is written in
 parentheses (SYN-4, owner decision OD16 of 2026-10-29). Elsewhere, after an `IDENT`, a `{` begins a
 struct literal's field list (`ident_tail`) only when the name begins with an uppercase letter, the
-type-name convention. Main does not implement the head rule yet: it applies the case rule in heads
+type-name convention. The current compiler does not implement the head rule yet: it applies the case rule in heads
 too, so an uppercase constant just before a head's block is read as the start of a struct literal
 and the head does not parse, and the E0001 diagnostic suggests parentheses ([bug
 212](../bugs/212_const_before_block_parses_as_struct_literal.md)'s provisional repair). Bug 318
@@ -418,7 +418,7 @@ fn main() -> u8 {
 **Rationale.** Decided by the owner on 2026-10-29 (OD16): one uniform rule, with no exceptions,
 replaces the uppercase-name heuristic of SYN-1 (bug 212, provisional). The head's block follows its
 expression, so a `{` after a name in a head opens the block; a struct literal there is written
-`(P { v: 1 })`. Main still reads an uppercase name followed by `{` in a head as a struct literal: it
+`(P { v: 1 })`. The current compiler still reads an uppercase name followed by `{` in a head as a struct literal: it
 accepts the first program below and refuses `if n > LIMIT { ... }` (bug 318 implements the rule).
 Whether a struct literal inside a call's argument list or an index within a head counts as
 parenthesized is OPEN-34.

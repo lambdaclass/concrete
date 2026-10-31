@@ -342,7 +342,7 @@ docs/stdlib/ERROR_CONVENTIONS.md	*	Std convention; ~6 restated language rules (m
 docs/stdlib/HANDLE_CAPABILITIES_AUDIT.md	*	Std audit, not language; one restated rule (abort needs Process)	-	-	-	keep	-
 docs/stdlib/HOSTED_STDLIB_SPLIT.md	*	cites the spec (2026-10-30 citation pass)	-	-	-	keep	statements corrected in phase 2
 docs/stdlib/RUNTIME_COLLECTIONS.md	*	Std collection design; drop-glue rules partly language-level; borrowed-accessor sections historical	-	-	-	cite-only	-
-docs/stdlib/RUNTIME_COLLECTIONS.md	2 Drop-glue rules 2-3	Destroy propagates conditionally (Vec<T>: Destroy iff T: Destroy); glue capabilities are the union of element destructors' capabilities	semantics	open:OPEN-134	ownership	open	OWN-13 states the Alloc-only limit main enforces; the capability-union model is OPEN-134 (OD134)
+docs/stdlib/RUNTIME_COLLECTIONS.md	2 Drop-glue rules 2-3	Destroy propagates conditionally (Vec<T>: Destroy iff T: Destroy); glue capabilities are the union of element destructors' capabilities	semantics	open:OPEN-134	ownership	open	OWN-13 states the Alloc-only limit the current compiler enforces; the capability-union model is OPEN-134 (OD134)
 docs/stdlib/STDLIB.md	*	No language rules: std direction	-	-	-	keep	-
 docs/stdlib/STDLIB_API_REVIEW.md	*	No language rules: std API review	-	-	-	keep	-
 docs/stdlib/STDLIB_AUDIT.md	*	No language rules: std gap analysis	-	-	-	keep	-
@@ -730,7 +730,7 @@ site/content/guide/language/functions.md	Generics	Generic fn with explicit type 
 site/content/guide/language/functions.md	Methods And `Self`	Methods in `impl` blocks take `self`, `&self` or `&mut self`	grammar	dup:OWN-15	ownership	cite	receiver forms in OWN-15 table (methodCall row)
 site/content/guide/language/functions.md	Trust Boundaries	Function kinds: ordinary, `trusted fn`, `extern fn`, `trusted extern fn`	definition	dup:TRUST-5	trusted	cite	also FFI-3, TRUST-6
 site/content/guide/language/intro.md	*	tour intro; example uses implicit receiver borrow and Ok(...) shorthand	-	-	-	cite-only	-
-site/content/guide/language/intro.md	A Small Example	`counter.inc()` calls a `&mut self` method on an owned `let mut counter` (implicit receiver borrow)	rule	conflict:OWN-15	ownership	cite	OWN-15@3 "no method call borrows its receiver implicitly"; write `(&mut counter).inc()` (OD32; main still accepts, bug 328). FIX example
+site/content/guide/language/intro.md	A Small Example	`counter.inc()` calls a `&mut self` method on an owned `let mut counter` (implicit receiver borrow)	rule	conflict:OWN-15	ownership	cite	OWN-15@3 "no method call borrows its receiver implicitly"; write `(&mut counter).inc()` (OD32; the current compiler still accepts, bug 328). FIX example
 site/content/guide/language/intro.md	A Small Example	`return Ok(counter.value);` constructs a variant by call shorthand	grammar	conflict:TYPE-7	types	cite	TYPE-7@1 enum literal names a variant of a declared enum (`Result::Ok { value: v }`); no `Ok(...)` constructor form in spec. FIX example
 site/content/guide/language/intro.md	What Exists Today	Language has structs, enums, generics, trait dispatch, borrows, linear ownership, `with(...)` capabilities, `Unsafe`, FFI, `defer`, `Destroy`, layout attributes	definition	dup:OWN-D1	overview	cite	feature list; link spec overview
 site/content/guide/language/memory.md	*	tour; ~8 restatements, call-site allocator binding syntax not in grammar	-	-	-	cite-only	-

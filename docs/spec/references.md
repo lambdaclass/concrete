@@ -76,7 +76,7 @@ borrow too: the owner decided on 2026-10-29 that whole-owner freezing under a sh
 (OD15, gap G10), so `borrow x as r in R { out = x; }` is E0203 (REF-8). `B`'s own locals must be
 consumed inside it (OWN-2); `r` itself need not be (REF-10). `R`, the region name, is a binder that
 SCOPE-1 covers and has no other use; whether it stays is OPEN-57, and whether borrow blocks stay is
-OPEN-58. The block stated here is the current compiler's.
+OPEN-58. The block stated here is the current compiler's block.
 
 ```con accept name=owner-restored exit=42
 struct R { v: Int }
@@ -1390,7 +1390,7 @@ exclusivity until it is proved (OD15, part (b), REF-14).
 
 The owner decided OD23 on 2026-10-29: the overlap check covers every argument, the receiver and
 re-lent `&mut` bindings included, so `r.add(r.step)` with `r: &mut S` is refused; the Copy field is
-read into a `let` first. Main still exempts a re-lent reference binding (bug 319), pinned by the
+read into a `let` first. The current compiler still exempts a re-lent reference binding (bug 319), pinned by the
 pending example below.
 
 
@@ -1620,6 +1620,6 @@ miscompile, so none may until the guarantee is a theorem (R-0499 with R-0496's C
 then the operational loan rules are the definition: a loan starts at its borrow and ends with the
 borrow block, the arm or the call that holds it (REF-8), and a raw pointer or other alias derived
 from it (G19) is valid only while it lives; using one afterwards is outside safe code's guarantee
-(TRUST-3). Main emits no alias assumption today (no `noalias` or alias metadata); the rule is
+(TRUST-3). The current compiler emits no alias assumption today (no `noalias` or alias metadata); the rule is
 pending until a gate checks that and the Core semantics defines loan lifetimes (R-0496).
 

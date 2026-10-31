@@ -184,7 +184,7 @@ Check now refuses each with E0309. A bare variant name over a variant with a non
 silently dropped the payload until bug 197; that refusal is OWN-5's (E0288).
 
 Version 3 records the owner's decision of 2026-10-29 (OD25): ignoring a payload is always written,
-`Variant { .. }` or `field: _`, and a bare variant name matches only a fieldless variant. Main still
+`Variant { .. }` or `field: _`, and a bare variant name matches only a fieldless variant. The current compiler still
 lets a bare name ignore a Copy payload (bug 321), pinned by the pending example below; the
 `Variant { .. }` form is not parsed yet.
 
@@ -415,7 +415,7 @@ skipped the rest of the function, or reached the backend, which failed in `llvm-
 `match`.
 
 Version 3 records the owner's decision of 2026-10-29 (OD25): a struct `let` names every field, a
-Copy struct included. Main still lets a pattern over a Copy struct omit fields (bug 321).
+Copy struct included. The current compiler still lets a pattern over a Copy struct omit fields (bug 321).
 
 A field binding written `_` in a variant or destructuring pattern holds its field's position, so
 the other binders still bind the right fields, but it adds no name (reading `_` is E0100) and its
@@ -712,7 +712,7 @@ fn main() -> u8 {
 **Rationale.** Decided by the owner on 2026-10-29 (OD18). Whether the refusal applies to the fallback
 arm the parser adds for `if let`, `let ... else` and `while let` is OPEN-40, and whether a catch-all
 after ranges that span the whole type is unreachable is OPEN-41. Source order is the order a reader sees,
-so the arm that runs is the first one written that matches. This changes the current compiler: CoreCanonicalize
+so the arm that runs is the first one written that matches. This differs from the current compiler: CoreCanonicalize
 moves unguarded catch-all arms after the others (bug 213's provisional repair), so a specific arm
 written after `_` is reached and the program below returns 42 on both consumers; under this rule the
 catch-all wins and the later arm is unreachable, a refusal. Repeating a variant an earlier

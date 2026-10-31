@@ -553,7 +553,7 @@ argument needs an impl too, matched by its canonical type (`Int` and `i64` are o
 
 Version 2 records the owner's decision of 2026-10-29 (OD28): a `Destroy` bound is satisfied only by
 an impl, and a Copy value is discarded with `discard`. Arrays get one written impl or one language
-impl that is its own entry; which of the two is OPEN-35. Main still counts every Copy type and every
+impl that is its own entry; which of the two is OPEN-35. The current compiler still counts every Copy type and every
 array of destroyable elements as `Destroy` (bug 324).
 
 

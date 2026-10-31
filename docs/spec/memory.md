@@ -125,7 +125,7 @@ need an explicit `*`. Version 2, still the current compiler's behaviour, also op
 `HeapArray<T>` only directly, not through a reference), without consuming the heap pointer.
 
 Version 3 records the owner's decision of 2026-10-29 (OD30): a field access no longer opens a heap
-cell implicitly. The spelling of the explicit non-consuming place form is OPEN-36. Main still reaches
+cell implicitly. The spelling of the explicit non-consuming place form is OPEN-36. The current compiler still reaches
 `f` through one `Heap` layer (`h.f` on `Heap<S>`, bug 326).
 
 
