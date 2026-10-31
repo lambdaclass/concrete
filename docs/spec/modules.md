@@ -38,9 +38,9 @@ R-0492 moves them to identities. Bugs 039 to 045 were names resolved more than o
 are now keyed by identity (SCOPE-1, SCOPE-3), and declarations get the same treatment under R-0492.
 The checker repeats some lookups (E0200 to E0202, E0263, E0267) as defense in depth.
 The builtins include the enums `Option` and `Result`, which a module uses without an import; how
-a user type of the same name resolves is OPEN-43. Every builtin function, with its current
-signature, capability and the names the compiler reserves, is listed in the types chapter's
-[builtin catalog](types.md#builtin-functions).
+a user type of the same name resolves is OPEN-43. The types chapter's
+[builtin catalog](types.md#builtin-functions) records the current compiler's builtin functions,
+their signatures, the capabilities it checks and how it handles their names.
 
 ```con reject name=undeclared-name code=E0100 stage=resolve pair=declared-name
 fn example_value() -> Int {
@@ -248,8 +248,11 @@ mod m {
 **Rationale.** A name bound twice in a module made the meaning of a call depend on which binding a
 lookup met first (bug 082). Renaming on import (`import a.{f as g}`) resolves a clash. Importing
 the same declaration twice binds the name to one declaration and is accepted. The reserved names
-are the `__` prefix, `user_main` and the builtins a program may call but not redefine (listed in the
-[builtin catalog](types.md#builtin-functions)); they are reserved for functions only, and a `let` spelling the compiler reserves is SYN-3.
+are the `__` prefix, `user_main` and the builtins a program may call but not redefine; they are
+reserved for functions only, and a `let` spelling the compiler reserves is SYN-3. The
+[builtin catalog](types.md#builtin-functions) records which builtin names the current compiler
+reserves and which it accepts as program functions; whether a program may declare a function named
+like a builtin is OPEN-133 for `print`, `println` and `append` and OPEN-153 for the others.
 The current compiler also counts an impl method under its definition name `Type_method`, so a free function
 `P_get` beside `impl P { fn get(&self) ... }` in one module is refused with E0299; whether a method
 should occupy that name is OPEN-135.

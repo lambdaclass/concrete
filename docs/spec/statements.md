@@ -10,7 +10,7 @@ loop's measure (STMT-12) and the capability `abort()` needs (STMT-13). The desig
 and [MAIN_EXIT_MODEL.md](../platform/MAIN_EXIT_MODEL.md). [EXECUTION_MODEL.md](../platform/EXECUTION_MODEL.md)
 keeps the runtime and platform description (hosted runtime, startup, allocation, targets).
 The section "Program execution" at the end follows a program from its source files to a running
-process, and what `--interp` does differently.
+process and records what `--interp` does differently today.
 
 ## Rules
 
@@ -1089,44 +1089,49 @@ failure is in [PROOF_SEMANTICS_BOUNDARY.md](../verification/PROOF_SEMANTICS_BOUN
 ## Program execution
 
 This section is explanatory and states no rule. It follows a program from its source files to a
-running process and names the entry that governs each step. The runtime and platform side (the
-generated C entry, libc, targets) is described in
-[EXECUTION_MODEL.md](../platform/EXECUTION_MODEL.md).
+running process and names, for each step, the entries that govern it; what those entries say is in
+the entries, not here. Where this section reports what the current compiler does, it says so and
+names the probe. The runtime and platform side (the generated C entry, libc, targets) is described
+in [EXECUTION_MODEL.md](../platform/EXECUTION_MODEL.md).
 
-| step | what happens | entries |
+| step | governing entries and what this section records | entries |
 |---|---|---|
-| source | A program is a root file and the module files its `mod` declarations load. Each file is UTF-8 and must parse as a `program` of the grammar. | MOD-4, SYN-5, SYN-1 |
-| names | Every name resolves once, before checking; builtins resolve without an import (the [builtin catalog](types.md#builtin-functions)). | MOD-1, MOD-3 |
-| compilation | The stages run in order: Parse, Resolve, Check, Elab, CoreCheck, Mono, Lower, Emit and link. Each stage's contract is a preservation entry, and an accepted program reaches a binary. | [pipeline.md](pipeline.md), PASS-5 to PASS-13 |
-| entry point | The program's `main` is the entry point. A build with no entry point is refused before the system linker runs. | STMT-7, PASS-10 |
-| start | The generated C `main` calls the program's `main`. No module-level state is initialized, because a module declares none; a constant's initializer runs where the constant is used. | TRUST-8 (pending), TYPE-22 |
-| authority | `main` uses only the capabilities in its own `with(...)` set, as every function does. Global resources are to reach `main` as a root resource value it splits; today `main` takes no parameters, and the parameter lands with R-0557. | TRUST-4, TRUST-9 (pending), TRUST-10 (pending), OPEN-38 |
-| running | One thread runs the program; subexpressions are evaluated left to right; every execution has one behaviour. | STMT-3, STMT-4, STMT-1 (pending) |
-| normal exit | When `main` returns, its body scope runs the exit sequence (deferred calls, then loan ends, then the remaining locals), and its result becomes the process exit status. | STMT-11 (pending), STMT-7 |
-| failure | A trap, running out of memory or a call of `abort()` ends the process at once, with no exit sequence. | STMT-2 (pending), STMT-13, "Abort and failure" above |
-| tests | Under `concrete test`, each `#[test]` function is called as an entry point and its result is its status. | STMT-10 |
+| source | MOD-4 covers how `mod` declarations load module files, SYN-5 the encoding of source text and SYN-1 the grammar a program is a sentence of. | MOD-4, SYN-5, SYN-1 |
+| names | MOD-1 and MOD-3 cover name resolution and the names a module binds. Builtins need no import in the current compiler; the [builtin catalog](types.md#builtin-functions) lists them. | MOD-1, MOD-3 |
+| compilation | [pipeline.md](pipeline.md) describes the stages: Parse, Resolve, Check, Elab, CoreCheck, Mono, Lower, Emit and link. PASS-5 to PASS-10 are the per-stage preservation entries, and PASS-12 (partial) covers the compiling of an accepted program. The current compiler can fail after Check on a checked program: the builtin catalog records such failures for `unwrap`, `abort` and `get_args` (bugs 345 to 347). | pipeline.md, PASS-5 to PASS-10, PASS-12 (partial) |
+| entry point | STMT-7 (partial) covers `main` and its exit status, and PASS-10 an executable's entry point. | STMT-7 (partial), PASS-10 |
+| start | In the current compiler the generated C `main` calls the program's `main`. TRUST-8 (pending) covers module-level state and TYPE-22 the evaluation of constants. This section records no probe of start-up or of constant evaluation. | TRUST-8 (pending), TYPE-22 |
+| authority | TRUST-4 covers the capabilities of `main` as of every function. TRUST-9 and TRUST-10 are pending, and OPEN-38 is the open question of the root resource value. The current compiler's `main` takes no parameters. | TRUST-4, TRUST-9 (pending), TRUST-10 (pending), OPEN-38 |
+| running | STMT-3 and STMT-4 cover threads and evaluation order, and STMT-1 (pending) what a behaviour is. | STMT-3, STMT-4, STMT-1 (pending) |
+| normal exit | STMT-11 (pending) covers the exit sequence of a scope, and STMT-7 (partial) the exit status. The paragraph below records the status the current compiler produces; the order of the exit sequence was not probed for this section. | STMT-11 (pending), STMT-7 (partial) |
+| failure | STMT-2 (pending) covers failure, and STMT-13 `abort()`. "Abort and failure" above records the current compiler's traps and abort paths, and the table below what `--interp` does instead. | STMT-2 (pending), STMT-13 |
+| tests | STMT-10 covers `#[test]` functions under `concrete test`. This section records no probe of `concrete test`. | STMT-10 |
 
-**The exit status today.** STMT-7 is partial: its pending example records that the current compiler
-still accepts other result types for `main`. Probes on 2026-10-31 (f17645a13): `fn main() -> u8`
-returning 7 exits with status 7; `fn main()` with no result type exits with 0; `fn main() -> Int`
-returning 300 exits with 44 natively; `fn main() -> bool` returning `true` exits with 1 natively.
+**The exit status today.** STMT-7 is partial (bug 320): its pending example records that the
+current compiler still accepts result types other than those STMT-7 names. Probes of the native
+binary on Linux x86-64, at f17645a13 on 2026-10-31 and again at 904c7cc87: a `main` declared
+`-> u8` that returns 7 exits with status 7; a `main` with no result type exits with status 0; a
+`main` declared `-> Int` that returns 300 exits with status 44; a `main` declared `-> bool` that
+returns `true` exits with status 1.
 
-**What `--interp` does differently today.** The interpreter is a consumer of the same checked
-program (PASS-13), and it reports the end of a run in its own way. Each row was probed on
-2026-10-31 at f17645a13.
+**What `--interp` does differently today.** PASS-13 is the entry for what every consumer gives a
+checked program. The rows below are probes of single-file programs, run on 2026-10-31 at f17645a13
+and again at 904c7cc87. "Status" is the process exit status as the shell
+reported it on Linux x86-64, where a process ended by SIGABRT is reported as 134.
 
 | situation | native binary | `--interp` |
 |---|---|---|
-| `main` returns a `u8` (7, after printing `hello`) | prints `hello`, exit status 7 | prints `hello`, then `7` as the last line, exit status 0 |
-| `main` returns `Int` 300 | exit status 44 | prints `300`, exit status 0 |
-| `main` returns `bool` | exit status 1 for `true` | prints nothing, exit status 0 |
-| a trap (`7 / 0` on `i32`) | SIGABRT, status 134 | stops with the run-time error `interp: division by zero`, exit status 1 |
-| a call of `abort()` that runs | SIGABRT, status 134 | stops with `interp: undefined function 'abort'` |
-| `clock_monotonic_ns()` | runs | stops: the interpreter cannot know the system clock |
-| `float_to_string(1.5)` | runs | stops with `interp: undefined function 'float_to_string'` |
+| `main` returns a `u8` (7, after printing `hello`) | prints `hello`, status 7 | prints `hello`, then `7` as the last line, status 0 |
+| `main` returns `Int` 300 | status 44 | prints `300`, status 0 |
+| `main` returns `bool` `true` | status 1 | prints nothing, status 0 |
+| a division by zero at `i32`: `main` calls `fn d(a: i32, b: i32) -> i32 { return a / b; }` as `d(7, 0)` | ended by SIGABRT, status 134 | prints `interp: division by zero`, status 1 |
+| `abort();` as a statement in a `main` declared `with(Process)` | ended by SIGABRT, status 134 | prints `interp: undefined function 'abort'`, status 1 |
+| `clock_monotonic_ns()` in a `main` declared `with(Time)` | runs, status 42 | prints `interp: clock_monotonic_ns reads the system clock, a value the interpreter cannot know; run the compiled binary`, status 1 |
+| `float_to_string(1.5)` | runs, status 42 | prints `interp: undefined function 'float_to_string'`, status 1 (bug 348) |
 
-The interpreter runs one file; a project with dependencies is built natively (`concrete build`).
-The traps the interpreter names are listed under "Traps in the current compiler" above.
+Whether `--interp` runs a program of several files or a project with dependencies was not probed
+for this section. The traps the current compiler reports are listed under "Traps in the current
+compiler" above.
 
 ## Version history
 

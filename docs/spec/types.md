@@ -2007,61 +2007,72 @@ fn main() -> u8 {
 ## Builtin functions
 
 This section is explanatory and states no rule. It lists the builtin functions of the current
-compiler with the signatures Check gives them, the capability each needs and the entries that
-govern it. The sources are `builtinFnSigs` (Concrete/Resolve/BuiltinSigs.lean), `resolveIntrinsic`,
+compiler with the signatures Check gives them, the capability the current compiler checks for each
+and the entries that govern it. The entries state the requirements; that the current compiler
+accepts a call does not show that the call meets them. The sources are `builtinFnSigs` (Concrete/Resolve/BuiltinSigs.lean), `resolveIntrinsic`,
 `IntrinsicId.capability`, `reservedFnNames`, `extraBuiltinFnNames` and `builtinTypeNames`
 (Concrete/Resolve/Intrinsic.lean), and the special cases in `checkExprCore` (Concrete/Check/Check.lean).
-Where a signature is not written as a table there, it was read from Check and confirmed with a probe
-program on the native binary and `--interp` (2026-10-31, at f17645a13). An entry, not this table,
-is the rule: TYPE-10 governs the argument counts and types, TRUST-4 governs the capabilities (E0520
-when a caller lacks one), and the column "entries" names the rest.
+Where a signature is not written as a table there, it was read from Check. The column "observed"
+reports selected probes run on 2026-10-31 at f17645a13 (some again at 904c7cc87, as marked); an
+empty cell means no probe is recorded here, and a probe of one call does not establish how every
+call of that builtin behaves on both consumers. "Result 42" means the probe's `main` returned 42 as
+a `u8`: the native binary exited with status 42 and `--interp` printed `42` (how each consumer
+reports a `main` result is under "Program execution" in [statements.md](statements.md)). An entry,
+not this table, is the rule: TYPE-10 governs the argument counts and types, TRUST-4 governs the
+capabilities (E0520 when a caller lacks one), and the column "entries" names the rest.
 
-Types are written in their source spelling: `Int` is `i64` and `Uint` is `u64` (TYPE-19). "Unit"
-is this catalog's name for the type of a call that gives no value; a function with no result type gives
-no value, and whether the type has a spelling in type positions is OPEN-157. A
-"diverging" result fits any position other than a condition (TYPE-4). "Consumes" means the argument
-is moved (OWN-15).
+Types other than Unit are written in their source spelling: `Int` is `i64` and `Uint` is `u64`
+(TYPE-19). The tables write `bool` and `f64`; `builtinTypeNames` (last table) also lists `Bool`,
+`Float64`, `Float32` and `Char`, and `Float32` and `Char` as spellings are OPEN-102. "Unit" is this catalog's descriptive name for the result of a call that gives no value;
+the probes used functions with no declared result type, and how the type is written in source is
+OPEN-157. "Diverging" marks a result that Check gives no ordinary value; TYPE-4 is the entry for
+where an expression's value may appear, and the `abort` row records what the native backend does
+with one today. "Consumes" marks an argument passed by value; OWN-15 and the Copy rules (OWN-D1)
+govern what that does to the caller's binding.
 
 **Memory and values.**
 
-| builtin | parameters | result | capability | entries | observed |
+| builtin | parameters | result | capability checked today | entries | observed |
 |---|---|---|---|---|---|
-| `alloc` | `(v: T)`, consumes `v` | `Heap<T>` | `Alloc` | MEM-5, MEM-7 | exit 42 on both consumers; without `Alloc`, E0520 at core-check |
-| `free` | `(h: Heap<T>)`, consumes `h` | `T` | `Alloc` | MEM-5, MEM-7, TYPE-10 (E0274 for a non-`Heap`) | exit 42 on both consumers |
-| `destroy` | `(x: N)`, `N` a struct or enum (or an instance of one) with a `Destroy` impl, consumes `x` | Unit | none of its own; the impl's method declares its own | OWN-13 (E0272 for a type that is not named, E0273 without an impl), TRAIT-11 | `destroy(5)` is E0272 |
+| `alloc` | `(v: T)`, consumes `v` | `Heap<T>` | `Alloc` | MEM-5, MEM-7 | result 42 on both consumers; without `Alloc`, E0520 at core-check |
+| `free` | `(h: Heap<T>)`, consumes `h` | `T` | `Alloc` | MEM-5, MEM-7, TYPE-10 (E0274 for a non-`Heap`) | result 42 on both consumers |
+| `destroy` | `(x: N)`, `N` a struct or enum with a `Destroy` impl, consumes `x` | Unit | none of its own; the impl's method declares its own | OWN-13 (E0272 for a type that is not named, E0273 without an impl), TRAIT-11 | `destroy(5)` is E0272 |
 | `discard` | `(e: T)`, `T` Copy | Unit | none | OWN-5 (E0295 for a non-Copy value), OWN-7 | `discard(s)` with `s: String` is E0295 |
-| `read_owned` | `(p: *mut T)` or `(p: *const T)`; one spelling, no alias | `T` | `Unsafe`, which a `trusted fn` absorbs (TRUST-5) | TRUST-7, TRUST-4 (E0240 at check in a function that is neither) | both pointer kinds exit 42 in a `trusted fn` |
+| `read_owned` | `(p: *mut T)` or `(p: *const T)`; one spelling, no alias | `T` | `Unsafe`, which a `trusted fn` absorbs (TRUST-5) | TRUST-7, TRUST-4 (E0240 at check in a function that is neither) | result 42 in a `trusted fn`, for each pointer kind |
 | `sizeof::<T>()` | none, exactly one type argument; alias `_sizeof` | `Uint` | none | FFI-7, TYPE-20, TYPE-10 (E0268, E0269) | `sizeof::<Int>()` is 8, `_sizeof::<Int>()` too |
 | `alignof::<T>()` | none, exactly one type argument | `Uint` | none | FFI-7, TYPE-10 | `alignof::<i32>()` is 4 |
-| `unwrap` | `(n: N)`, `N` a newtype | `N`'s inner type | none | TYPE-10 (E0270 for an argument that is not a newtype); TYPE-24 lists the conversions of a newtype, and `unwrap` is not among them (OPEN-155) | `return unwrap(m);` exits 42 on both consumers; `let x: Int = unwrap(m); if x == 42 ...` runs under `--interp` (42) and fails the native build at SSA verification (E0715, bug 345) |
-| `abort` | none | diverging | `Process` | STMT-13, STMT-2 | native status 134; `--interp` stops with `undefined function 'abort'`; `let y: Int = abort();` fails the native build in LLVM (`value doesn't match function result type`), while `abort();` as a statement compiles (bug 346) |
+| `unwrap` | `(n: N)`, `N` a newtype | `N`'s inner type | none | TYPE-10 (E0270 for an argument that is not a newtype); TYPE-24 is the newtype-conversion entry, and how the current compiler's `unwrap` relates to it is OPEN-155 | `return unwrap(m);` gives result 42 on both consumers; `let x: Int = unwrap(m); if x == 42 ...` runs under `--interp` (42) and fails the native build at SSA verification (E0715, bug 345) |
+| `abort` | none | diverging | `Process` | STMT-13, STMT-2 | `abort();` as a statement: the native process is ended by SIGABRT (status 134 on Linux x86-64), and `--interp` stops with `interp: undefined function 'abort'` (at 904c7cc87); `let y: Int = abort();` fails the native build in LLVM (`value doesn't match function result type`), while `abort();` as a statement compiles (bug 346) |
 
-**`Vec`.** Each has the alias spelled `Vec_` with a capital (`Vec_new`, `Vec_push`, ...), and every
-alias was probed.
+**`Vec`.** The current compiler also accepts each under the alias spelled `Vec_` with a capital
+(`Vec_new`, `Vec_push`, ...); the probes of those aliases checked that each is accepted, not how it
+runs.
 
-| builtin | parameters | result | capability | entries | observed |
+| builtin | parameters | result | capability checked today | entries | observed |
 |---|---|---|---|---|---|
-| `vec_new::<T>()` | none, exactly one type argument | `Vec<T>` | `Alloc` | MEM-7, TYPE-10 (E0268, E0269) | exit 42 on both consumers |
+| `vec_new::<T>()` | none, exactly one type argument | `Vec<T>` | `Alloc` | MEM-7, TYPE-10 (E0268, E0269) | result 42 on both consumers |
 | `vec_push` | `(v: &mut Vec<T>, x: T)`, consumes `x` | Unit | `Alloc` | MEM-7, TYPE-10 (E0270) | without `Alloc`, E0520 at core-check |
 | `vec_get` | `(v: &Vec<T>` or `&mut Vec<T>, i: Int)`, `T` Copy | `T` | none | OWN-8 (E0290 for a non-Copy `T`), TYPE-10 | with a `String` element, E0290 |
-| `vec_set` | `(v: &mut Vec<T>, i: Int, x: T)`, `T` Copy | Unit | none | OWN-9 (E0291 for a non-Copy `T`), TYPE-10 | exit 42 in a function without capabilities |
-| `vec_len` | `(v: &Vec<T>` or `&mut Vec<T>)` | `Int` | none | TYPE-10 | exit 42 in a function without capabilities |
-| `vec_pop` | `(v: &mut Vec<T>)` | `Option<T>` | `Alloc` | MEM-7, TYPE-23 | exit 42 on both consumers |
-| `vec_free` | `(v: Vec<T>)`, consumes `v`; a non-Copy `T` only in a `trusted fn` | Unit | `Alloc` | MEM-7, OWN-5 (E0287 for a non-Copy `T`) | `Vec<String>` is E0287 |
+| `vec_set` | `(v: &mut Vec<T>, i: Int, x: T)`, `T` Copy | Unit | none | OWN-9 (E0291 for a non-Copy `T`), TYPE-10 | result 42 on both consumers, called from a function with no `with(...)` set (at 904c7cc87) |
+| `vec_len` | `(v: &Vec<T>` or `&mut Vec<T>)` | `Int` | none | TYPE-10 | result 42 on both consumers, called from a function with no `with(...)` set (at 904c7cc87) |
+| `vec_pop` | `(v: &mut Vec<T>)` | `Option<T>` | `Alloc` | MEM-7, TYPE-23 | result 42 on both consumers |
+| `vec_free` | `(v: Vec<T>)`, consumes `v` | Unit | `Alloc` | MEM-7, OWN-5 (E0287 for a non-Copy `T`) | `Vec<String>` is E0287 outside a `trusted fn`; in a `trusted fn`, `vec_free` of an empty `Vec<String>` gives result 42 (at 904c7cc87) |
 
-**Strings, conversions, output, time and arguments.** The capability column states the current
-compiler; whether the allocating string builtins require `Alloc` is OPEN-154. These have a table signature in
+**Strings, conversions, output, time and arguments.** The capability column states what the
+current compiler checks; whether the allocating string builtins require `Alloc` is OPEN-154, and a
+"none" there decides nothing. These have a table signature in
 `builtinFnSigs`, so Check looks them up by their canonical name only. `resolveIntrinsic` also maps
 the aliases `string_len`, `String_len`, `String_concat`, `String_eq`, `String_slice`,
 `String_char_at`, `String_contains`, `String_trim`, `String_drop` and `String_substr` to these
 builtins, and the current compiler refuses each of those spellings with E0263 at check (MOD-1);
-every one was probed. `string_reserve` is checked by a special case before the table, so its alias
-`String_reserve` is accepted.
+every one was probed. `string_reserve` is checked by a special case before the table, and its alias
+`String_reserve` is accepted: on `"ab"` with `Alloc`, `String_reserve(&mut s, 10)` leaves length 2
+(result 42 on both consumers, at 904c7cc87).
 
-| builtin | parameters | result | capability | entries | observed |
+| builtin | parameters | result | capability checked today | entries | observed |
 |---|---|---|---|---|---|
-| `string_length` | `(s: &String)` | `Int` | none | TYPE-10 | exit 42 on both consumers |
-| `string_concat` | `(a: String, b: String)`, consumes both | `String` | none | TYPE-10 | exit 42 in a function without capabilities |
+| `string_length` | `(s: &String)` | `Int` | none | TYPE-10 | result 42 on both consumers |
+| `string_concat` | `(a: String, b: String)`, consumes both | `String` | none | TYPE-10 | result 42 on both consumers, called from a function with no `with(...)` set (at 904c7cc87) |
 | `drop_string` | `(s: String)`, consumes `s` | Unit | none | TYPE-10 | |
 | `string_slice` | `(s: &String, start: Int, end_: Int)` | `String` | none | TYPE-10 | |
 | `string_substr` | `(s: &String, start: Int, len: Int)` | `String` | none | TYPE-10 | |
@@ -2072,47 +2083,50 @@ every one was probed. `string_reserve` is checked by a special case before the t
 | `int_to_string` | `(n: Int)` | `String` | none | TYPE-10 | |
 | `string_to_int` | `(s: &String)` | `Result<Int, Int>` | none | TYPE-10, TYPE-23 | `"12"` gives `Ok` 12 |
 | `bool_to_string` | `(b: bool)` | `String` | none | TYPE-10 | |
-| `float_to_string` | `(f: f64)` | `String` | none | TYPE-10 | native exit 42; `--interp` stops with `undefined function 'float_to_string'` (bug 348) |
+| `float_to_string` | `(f: f64)` | `String` | none | TYPE-10 | native status 42; `--interp` stops with `interp: undefined function 'float_to_string'` (bug 348) |
 | `string_reserve` | `(s: &mut String, cap: Int)`; alias `String_reserve` | Unit | `Alloc` | MEM-7 | without `Alloc`, E0520 at core-check |
 | `print_string` | `(s: &String)` | Unit | `Console` | TRUST-4 | |
 | `print_int` | `(n: Int)` | Unit | `Console` | TRUST-4 | without `Console`, E0520 at core-check |
 | `print_char` | `(c: Int)` | Unit | `Console` | TRUST-4 | `print_char(10)` writes a newline |
 | `print_bool` | `(b: bool)` | Unit | `Console` | TRUST-4 | |
-| `clock_monotonic_ns` | none | `Int` | `Time` | TRUST-4 | native exit 42; `--interp` stops: it cannot know the system clock |
-| `get_args` | none | `HeapArray<String>` | `Process` | TRUST-4, OPEN-156 | with `Env` only, E0520; with `Process`, a function that returns `get_args()` passes core-check and the native build then fails in LLVM (`use of undefined value '@get_args'`), even when nothing calls it (bug 347) |
+| `clock_monotonic_ns` | none | `Int` | `Time` | TRUST-4 | native status 42; `--interp` stops with `interp: clock_monotonic_ns reads the system clock, a value the interpreter cannot know; run the compiled binary` (at 904c7cc87) |
+| `get_args` | none | `HeapArray<String>` | `Process` in the current compiler; no entry names it, and the capability is OPEN-156 | TRUST-4, OPEN-156 | with `Env` only, E0520; with `Process`, a function that returns `get_args()` passes core-check and the native build then fails in LLVM (`use of undefined value '@get_args'`), even when nothing calls it (bug 347); no run is recorded on either consumer |
 
-Four string operations are checked by special cases and are not in the table. Each has the alias
-spelled `String_` (`String_push_char`, ...), and every alias was probed.
+Four string operations are checked by special cases and are not in the table. The current compiler
+also accepts each under the alias spelled `String_` (`String_push_char`, ...); the probes of those
+aliases checked that each is accepted.
 
-| builtin | parameters | result | capability | entries |
-|---|---|---|---|---|
-| `string_push_char` | `(s: &mut String, c: Int)` | Unit | none | TYPE-10 (E0270) |
-| `string_append` | `(s: &mut String, other: &String)` | Unit | none | TYPE-10 (E0270) |
-| `string_append_int` | `(s: &mut String, n: Int)` | Unit | none | TYPE-10 (E0270) |
-| `string_append_bool` | `(s: &mut String, b: bool)` | Unit | none | TYPE-10 (E0270) |
+| builtin | parameters | result | capability checked today | entries | observed |
+|---|---|---|---|---|---|
+| `string_push_char` | `(s: &mut String, c: Int)` | Unit | none | TYPE-10 (E0270); OPEN-154 | on `"ab"`, `String_push_char(&mut s, 99)` then `string_push_char(&mut s, 100)` leave length 4 (result 42 on both consumers, at 904c7cc87) |
+| `string_append` | `(s: &mut String, other: &String)` | Unit | none | TYPE-10 (E0270); OPEN-154 | |
+| `string_append_int` | `(s: &mut String, n: Int)` | Unit | none | TYPE-10 (E0270); OPEN-154 | reached through `append` (below) |
+| `string_append_bool` | `(s: &mut String, b: bool)` | Unit | none | TYPE-10 (E0270); OPEN-154 | |
 
 **Variadic output.** TYPE-10's rationale lists the accepted argument types; Elab expands a call in
 statement position into the calls named here, bound by identity (MOD-8). Whether a program may
 declare its own function of these names is OPEN-133.
 
-| builtin | parameters | result | capability | expands into | entries |
+| builtin | parameters | result | capability checked today | expands into | entries |
 |---|---|---|---|---|---|
 | `print` | one or more values; a `String` local is read, not moved | Unit | `Console` | `print_string`, `print_int`, `print_char`, `print_bool` | TYPE-10 (E0315, E0421), MOD-8 |
 | `println` | as `print` | Unit | `Console` | as `print`, then `print_char(10)` | TYPE-10 (E0315, E0421), MOD-8 |
-| `append` | `(buf: &mut String, ...)`, one or more values after `buf`; an owned `String` value is moved | Unit | `Alloc` in `IntrinsicId.capability` | `string_append`, `string_append_int`, `string_append_bool`, `string_push_char` | TYPE-10 (E0270, E0315, E0421), MOD-8, MEM-7; accepted without `Alloc` today (bug 349); whether the string builtins it expands into need `Alloc` is OPEN-154 |
+| `append` | `(buf: &mut String, ...)`, one or more values after `buf`; an owned `String` value is moved | Unit | none checked today (bug 349); `IntrinsicId.capability` records `Alloc` | `string_append`, `string_append_int`, `string_append_bool`, `string_push_char` | TYPE-10 (E0270, E0315, E0421), MOD-8, MEM-7; accepted without `Alloc` today (bug 349); whether the string builtins it expands into need `Alloc` is OPEN-154 |
 
-Observed: `append(&mut s, 1)` in a function with no `with(...)` set compiles and runs (exit 42 on
-both consumers), because the calls it expands into need no capability. MEM-7 lists `append` among
-the builtins that require `Alloc`.
+Observed at f17645a13, and again at 904c7cc87: `append(&mut s, 1)` in a function with no
+`with(...)` set compiles and runs (result 42 on both consumers); Elab expands that call into
+`string_append_int`, for which the current compiler checks no capability. MEM-7 lists `append`
+among the builtins that require `Alloc`, so this acceptance is bug 349; whether the string builtins
+`append` expands into require `Alloc` is OPEN-154.
 
 **Arithmetic.**
 
-| builtin | parameters | result | capability | entries |
+| builtin | parameters | result | capability checked today | entries |
 |---|---|---|---|---|
 | `wrapping_add`, `wrapping_sub`, `wrapping_mul` | `(a: I, b: I)`, one integer type `I` | `I` | none | ARITH-4, TYPE-10 (E0268, E0314) |
 | `saturating_add`, `saturating_sub`, `saturating_mul` | `(a: I, b: I)`, one integer type `I` | `I` | none | ARITH-4, TYPE-10 (E0268, E0314) |
 
-A probe gave `wrapping_add(250, 10)` at `u8` as 4, `wrapping_sub(0, 1)` at `i32` as -1,
+Probes at f17645a13 gave `wrapping_add(250, 10)` at `u8` as 4, `wrapping_sub(0, 1)` at `i32` as -1,
 `saturating_mul(300, 300)` at `u16` as 65535 and `wrapping_mul(2, 21)` at `Int` as 42, on both
 consumers.
 
@@ -2122,7 +2136,7 @@ consumers.
 |---|---|---|
 | `alloc_array`, `free_array`, `realloc_array` | in `reservedFnNames` with the five builtins `destroy`, `discard`, `abort`, `alloc` and `free`; a definition is E0578, a call is E0101 at resolve | MOD-3, MOD-1 |
 | `to_string`, `deref`, `deref_mut`, `add` | in `extraBuiltinFnNames`, so resolution accepts a call; Check then refuses it with E0263 | MOD-1 |
-| a builtin name not reserved, such as `string_length` | a program function of that name is accepted, and the program's calls reach it (exit 42 on both consumers); for `print`, `println` and `append` this is OPEN-133, and for the others OPEN-153 | MOD-3, OPEN-133, OPEN-153 |
+| a builtin name not reserved, such as `string_length` | for `string_length`, the current compiler accepts a program function of that name and the program's calls reach it (result 42 on both consumers); no other name was probed. Whether a program may do this is OPEN-133 for `print`, `println` and `append` and OPEN-153 for the others | MOD-3, OPEN-133, OPEN-153 |
 | `Int`, `Uint`, `Bool`, `String`, `Float64`, `Float32`, `Char`, `i8`, `i16`, `i32`, `u8`, `u16`, `u32`, `Heap`, `HeapArray`, `Vec`, `Option`, `Result` | `builtinTypeNames`: in scope in every module without an import | TYPE-19, TYPE-20, TYPE-23, OPEN-43, OPEN-102 |
 
 ## Absent by decision

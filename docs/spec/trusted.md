@@ -728,20 +728,20 @@ fn main() -> u8 {
 ## Trusted premises
 
 This section is explanatory and states no rule. It lists each place where the language relies on a
-premise that the compiler does not check, who states it, and the entry that names it. A premise
-stated here is the entry's; the table only collects them. TRUST-2 (pending) is the rule that every
+premise that the compiler does not check, who states it, and the entry that names it. Where an
+entry states a premise, the table only collects it; where no entry states it yet, the row says so. TRUST-2 (pending) is the rule that every
 undefined behaviour is such a named premise, and
 [TRUSTED_COMPUTING_BASE.md](../verification/TRUSTED_COMPUTING_BASE.md) records the trusted base of
 the compiler and toolchain.
 
 | place | premise the compiler does not check | stated by | entries |
 |---|---|---|---|
-| a `trusted fn`, or a function with `Unsafe` in its `with(...)` set | the premises of every raw-pointer operation and foreign call in its body | the function's author, by writing `trusted` or `with(Unsafe)` | TRUST-5, TRUST-4, TRUST-2 (pending), TRUST-6 (pending) |
-| a raw-pointer read `*p`, a write `*p = v` or an offset (`ptr::offset`) | the validity premises of the operation, which TRUST-2 requires to be named and R-0506 is to state | the author of the trusted or `Unsafe` code | TRUST-4, TRUST-1, TRUST-2 (pending); element stride: FFI-12 |
+| a `trusted fn`, or a function with `Unsafe` in its `with(...)` set | the premises of every raw-pointer operation and foreign call in its body | the function's author, by writing `trusted` or `with(Unsafe)` | TRUST-5, TRUST-4, TRUST-2 (pending) |
+| a raw-pointer read `*p`, a write `*p = v` or an offset (`ptr::offset`) | the validity premises of the operation; TRUST-1 names the operations, TRUST-2 (pending) is the rule that each undefined behaviour be a named premise, and no entry lists these premises yet (registry item R-0506) | the author of the trusted or `Unsafe` code | TRUST-4, TRUST-1, TRUST-2 (pending); element stride: FFI-12 |
 | `&*p` and `&mut *p` | `p` is aligned, live and initialized for its type | the author of the trusted or `Unsafe` code | TRUST-3 (pending) |
-| `read_owned(p)` | the slot holds an initialized value, and it is treated as uninitialized until a value is stored back | the author of the trusted or `Unsafe` code | TRUST-7 |
+| `read_owned(p)` | what the slot holds before and after the move-out; TRUST-7 makes the move-out explicit, and no entry states this premise yet | the author of the trusted or `Unsafe` code | TRUST-7 |
 | a raw store `*p = v` | whether the slot held a live value, which the store does not destroy | the author of the trusted or `Unsafe` code | TRUST-11 |
-| a raw pointer taken from a reference | the pointer is used only while the loan it came from lives | the code that uses the pointer | TRUST-13, REF-14; after the borrow ends: OPEN-64 |
+| a raw pointer taken from a reference | what the pointer may be used for and for how long; REF-14 (pending) is the entry for an alias derived from a loan, and what a raw pointer derived from a borrow may do is OPEN-64 | the code that uses the pointer | TRUST-13, REF-14 (pending), OPEN-64 |
 | an `extern fn` | the declared parameter types, result type and `with(...)` set match the C symbol | the declaration's author | FFI-3, FFI-5; "Abort and failure" in [statements.md](statements.md) |
 | a `trusted extern fn` | the foreign function is safe for every argument its types permit and has no effect beyond its `with(...)` set | the declaration's author | FFI-9, TRUST-5 |
 | a singleton token wrapper | what the wrapper asserts about the external state it mints or takes a token for; the gate's list of wrappers is the inventory of trusted external state | the wrapper's author; a gate lists the wrappers | TRUST-9 (pending), TRUST-10 (pending) |
@@ -750,8 +750,9 @@ the compiler and toolchain.
 | the native profile | the stated premises of the trusted base under which the forward simulation is proved | the proof of PASS-3 | PASS-3 (pending) |
 | the LLVM profile | the BIR-to-LLVM printer, LLVM and the linker are correct; the results are differential-tested, not proved | the compiler | PASS-4 (pending) |
 
-Ownership is not among the premises: inside a `trusted fn` the move, cleanup and freeze rules are
-checked as in safe code (TRUST-12). Which ownership exceptions trusted code should have is OPEN-113.
+TRUST-12 is the entry for the move, cleanup and freeze rules inside a `trusted fn`. The raw-memory
+premises listed above (`read_owned`, raw stores) remain separate from those rules. Which ownership
+exceptions trusted code should have is OPEN-113.
 
 ## Absent by decision
 

@@ -103,39 +103,39 @@ it; where an entry defines the term, that entry is the definition and this table
 
 | term | meaning in this specification | defined or governed by |
 |---|---|---|
-| entry | a rule or definition with an ID, a versioned normative sentence and fields | "How to read this specification" above, [MAINTAINERS.md](MAINTAINERS.md) §2.1 |
-| refusal, guarantee, definition, preservation | the kinds of entry: a rule the compiler reports with a code, a property of programs with no code, a fixed term, a pipeline stage's contract | MAINTAINERS.md §2.1 (`Kind:`) |
+| entry | an item with an ID, a versioned normative sentence and fields, of one of the kinds below | "How to read this specification" above, [MAINTAINERS.md](MAINTAINERS.md) §2.1 |
+| refusal, guarantee, definition, preservation, open | the kinds an entry may have; the `Kind:` field of MAINTAINERS.md §2.1 defines each | MAINTAINERS.md §2.1 (`Kind:`) |
 | open entry | an entry of kind `open`: a question only the project owner decides; it encodes no answer | [decisions.md](decisions.md), MAINTAINERS.md §2.1 |
-| enforced, partial, pending | an entry's status: implemented; holding for its non-pending examples with the rest tracked; decided and not implemented | MAINTAINERS.md §2.1 (`Status:`) |
+| enforced, partial, pending | an entry's status: implemented; holding on its examples that are not pending examples, with the pending examples tracked separately; decided and not implemented | MAINTAINERS.md §2.1 (`Status:`) |
 | pending example | an example of an entry not yet implemented, run with `now=` recording what the compiler does today; it never counts as a pass | MAINTAINERS.md §2.2 |
 | consumer | a program that runs a checked program: the native binary, `--interp`, and Core's executable semantics once it exists | MAINTAINERS.md §2.2, PASS-13 |
 | profile | a way the compiler produces an executable: the native profile and the LLVM profile | PASS-3, PASS-4, OPEN-124 |
-| Core | the compiler's internal language after elaboration; its semantics in Lean is the normative definition where it exists | MAINTAINERS.md ("Authority"), [pipeline.md](pipeline.md) |
+| Core | the compiler's internal language after elaboration; MAINTAINERS.md ("Authority") states the standing of its Lean semantics | MAINTAINERS.md ("Authority"), [pipeline.md](pipeline.md) |
 | Check | the stage that checks the surface program: types, ownership, references, capabilities | PASS-5 |
 | Elab | elaboration: the stage that turns the checked program into Core, desugaring as it goes | PASS-6 |
 | CoreCheck | the stage that checks Core before it proceeds | PASS-8 |
 | Mono | monomorphization: the stage that specializes every generic at its type arguments | PASS-1, PASS-2, PASS-7 |
 | Lower, Emit | the stages that turn Core into verified SSA and SSA into LLVM IR | PASS-9, PASS-10, PASS-11 |
-| builtin | a function, type or enum the compiler provides with no declaration in the program | the [builtin catalog](types.md#builtin-functions), TYPE-10, TYPE-23, MOD-1 |
+| builtin | a function, type or enum the compiler provides with no declaration in the program | functions: the [builtin catalog](types.md#builtin-functions), TYPE-10; primitive types: TYPE-19, TYPE-20; `Option` and `Result`: TYPE-23; names: MOD-1 |
 | intrinsic | an operation the compiler implements, named by a builtin or by `#[intrinsic = "n"]` | FFI-6, the builtin catalog |
 | place | a root binding followed by field, index or newtype projections | REF-5 |
-| owned value | a value a local binding holds by value rather than through a reference; its states are those of MEM-D1 | MEM-D1, MEM-5 |
+| owned value | a value a local binding holds by value rather than through a reference; MEM-D1 names its states | MEM-D1 |
 | Copy | a type whose values may be duplicated | OWN-D1, TYPE-14, OWN-14 |
-| linear | a type that is not Copy; its values are used exactly once | OWN-D1, OWN-1, OWN-2 |
-| consume, move | to use a value so that its binding may not be used again: passing it by value, returning it, moving it into a field, destructuring it, and the other forms OWN-15 lists | OWN-15, MEM-D1, OWN-1 |
-| reserved, frozen | the states of a binding passed by value to a pending `defer`, or owning an enclosing borrow block | MEM-D1, OWN-12, REF-D3 |
-| reference | a value of type `&T` or `&mut T`; it is never stored or returned | REF-D1, REF-D2, REF-1, REF-3, REF-5 |
+| linear | a type that is not Copy (OWN-D1); OWN-1 and OWN-2 govern how its values are used | OWN-D1, OWN-1, OWN-2 |
+| consume, move | the uses of a value that OWN-15 lists as moves (passing it by value, returning it, moving it into a field, destructuring it and others); MEM-D1 and OWN-1 govern the binding's state afterwards, and a Copy value's state is unchanged by them (MEM-D1) | OWN-15, MEM-D1, OWN-1 |
+| reserved, frozen | two binding states MEM-D1 names: reserved is a binding passed by value to a pending `defer` (OWN-12), frozen is the owner of an enclosing borrow block (REF-D3) | MEM-D1, OWN-12, REF-D3 |
+| reference | a value of type `&T` or `&mut T`; the entries cited govern where it may flow | REF-D1, REF-D2, REF-1, REF-3, REF-5 |
 | borrow | forming a reference to a place (`&x`, `&mut x`), or a borrow block | REF-5, REF-D3 |
 | borrow block | `borrow x as r in R { B }`, which lends `x` to `r` for `B` | REF-D3 |
-| loan | a borrow seen from its root binding, which it freezes while it lives | REF-11, REF-8, STMT-11 |
+| loan | a borrow seen from its root binding | REF-11, REF-8, STMT-11 |
 | capability | a named logical authority, such as `Console` or `Alloc` | TRUST-D1, TRUST-4 |
 | capability set | the capabilities and capability variables of a `with(...)` or a capability argument | TYPE-D1, TYPE-17, TYPE-18 |
 | `Unsafe` | the capability for raw-memory and foreign operations | TRUST-D1, TRUST-4 |
-| trusted | a function declared `trusted fn`, whose body may use raw pointers and foreign calls without `Unsafe` | TRUST-5, TRUST-6, TRUST-12; "Trusted premises" in [trusted.md](trusted.md) |
-| premise | a fact the compiler relies on and does not check, stated by the author of trusted code | TRUST-2, "Trusted premises" in trusted.md |
-| abort, trap | ending the process at once with no cleanup; a trap is the abort a checked operation performs | STMT-2, STMT-13, ARITH-3, MEM-6 |
+| trusted | a `trusted fn` (TRUST-5, TRUST-12) or a `trusted mod` (TRUST-6, pending); "Trusted premises" collects what they leave unchecked | TRUST-5, TRUST-6, TRUST-12; "Trusted premises" in [trusted.md](trusted.md) |
+| premise | a fact the compiler relies on and does not check; "Trusted premises" lists each and who states it | TRUST-2, "Trusted premises" in trusted.md |
+| abort, trap | the ending of a process by `abort()` or by a failed run-time check; the entries cited govern both | STMT-2, STMT-13, ARITH-3, MEM-6 |
 | behaviour | the trace of external events of one execution with its ending | STMT-1 |
-| exit sequence | what every non-aborting scope exit runs, in order | STMT-11 |
+| exit sequence | the sequence STMT-11 (pending) describes for a scope exit that does not abort | STMT-11 |
 | visible | where a local binding may be named | SCOPE-D1 |
 | impl target | the type an impl is for | TRAIT-D1 |
 | ghost | code and bindings for contracts only, erased before code generation | CON-4, CON-5 |
@@ -148,7 +148,7 @@ chapters; an entry not listed here can still bear on a construct.
 
 | construct | entries |
 |---|---|
-| `let x: T = e` | MEM-3, TYPE-4, SCOPE-1, SCOPE-D1, REF-6, OWN-5, SYN-3 |
+| `let x: T = e` | MEM-3, TYPE-4, SCOPE-1, SCOPE-D1, REF-6, OWN-5 |
 | destructuring `let`, `let ... else` | PAT-5, PAT-8, PAT-10, PAT-11, PAT-1, OPEN-52 |
 | `mut` | OWN-10, PAT-11 |
 | assignment `p = e` | OWN-9, OWN-10, OWN-4, REF-6, REF-7, REF-12, STMT-4 |
@@ -164,7 +164,7 @@ chapters; an entry not listed here can still bear on a construct.
 | `break`, `continue` | STMT-6, STMT-5, STMT-11 |
 | `return` | STMT-9, STMT-5, STMT-11, REF-1 |
 | `defer` | OWN-12, OWN-16, OWN-17, STMT-11 |
-| `fn main` | STMT-7, STMT-11, TRUST-9, PASS-10; "Program execution" in [statements.md](statements.md) |
+| `fn main` | STMT-7, STMT-11, TRUST-9, PASS-10 |
 | `#[test]` | STMT-10 |
 | function call `f(a, b)` | TYPE-9, TYPE-4, STMT-4, STMT-5, REF-10, REF-11, OWN-15 |
 | method call `x.m()` | TYPE-9, TRAIT-5, TRAIT-6, OWN-15, SYN-10 |
@@ -178,7 +178,8 @@ chapters; an entry not listed here can still bear on a construct.
 | `struct` declaration | TYPE-16, TYPE-14, OWN-14, REF-3, FFI-7, OPEN-65 |
 | struct literal `S { f: e }` | TYPE-7, TYPE-11, SYN-4, STMT-4, STMT-5, OPEN-53 |
 | field access `e.f` | MEM-4, TYPE-7, TYPE-11, OWN-8 |
-| `enum` declaration, variant literal | TYPE-7, TYPE-23, OWN-14, PAT-3 |
+| `enum` declaration, variant literal | TYPE-7, OWN-14, PAT-3 |
+| `Option`, `Result` | TYPE-23 |
 | `newtype`, `.0` | TYPE-21, TYPE-24, TYPE-11, OPEN-54 |
 | `type A = T` | TYPE-12 |
 | `const` | TYPE-22, TRUST-8, REF-6 |
@@ -188,7 +189,7 @@ chapters; an entry not listed here can still bear on a construct.
 | array index `a[i]` | MEM-6, MEM-8, TYPE-7, OWN-8, STMT-4 |
 | `&x`, `&mut x` | REF-5, REF-8, REF-11, REF-12, REF-13, OWN-10 |
 | `borrow x as r in R { B }` | REF-D3, REF-8, OPEN-57, OPEN-58 |
-| `*e` | TYPE-8, MEM-5, MEM-7, TRUST-3, TRUST-7, TRUST-11 |
+| `*e` | TYPE-8, TRUST-3, TRUST-7, TRUST-11; of an owned `Heap`: MEM-5, MEM-7 |
 | raw pointers `*mut T`, `*const T` | TRUST-1, TRUST-4, TRUST-13, TRUST-7, TRUST-11 |
 | `as` | ARITH-5, TYPE-24, TRUST-1, OPEN-98 |
 | `+`, `-`, `*`, `/`, `%` | ARITH-3, TYPE-6, SYN-2, ARITH-1, ARITH-12, OPEN-114 |
@@ -203,9 +204,12 @@ chapters; an entry not listed here can still bear on a construct.
 | `destroy`, `Destroy` | OWN-13, TRAIT-8, TRAIT-11 |
 | `discard(e)` | OWN-5, OWN-7 |
 | `abort()` | STMT-13, STMT-2 |
-| other builtins | TYPE-10; the [builtin catalog](types.md#builtin-functions) |
+| other builtins | TYPE-10 for argument checking; the [builtin catalog](types.md#builtin-functions) names the governing entries of each |
 | `mod`, `import`, `pub` | MOD-2, MOD-4, MOD-7, MOD-9 |
 | names and `::`, `.` | MOD-1, MOD-3, SYN-10, SCOPE-1 to SCOPE-3 |
 | `#[requires]`, `#[ensures]`, `#[invariant]`, `#[variant]` | CON-1, CON-2, CON-3, CON-7, CON-8 |
 | `assert`, `assume` | CON-6 |
 | `ghost let`, `spec fn` | CON-4, CON-5 |
+
+The explanatory section "Program execution" in [statements.md](statements.md) follows `fn main`
+from source files to process exit and names the entries for each step.
