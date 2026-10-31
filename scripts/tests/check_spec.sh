@@ -187,6 +187,8 @@ fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace(F + "con accept name=write-valu
   && control "N5: an enforced refusal paired with a pending accepted rewrite" S5 "its pair REF-7/write-value is pending" -- lint "${SP[@]}"
 fresh_copy; mutate "$TMP/n/spec/decisions.md" 're.sub(r"(- Status: open OD[0-9]+\n)- Enforced by: none", r"\1- Enforced by: Concrete.checkStmt", s, count=1)' \
   && control "N1g: an open entry that names an enforcing declaration" S1 "an open entry names no enforcing" -- lint "${SP[@]}"
+fresh_copy; mutate "$TMP/n/spec/$REF" 're.sub(r"(\| `reject:E[0-9]{4}:REF-1)@[0-9]+`", r"\1@99`", s, count=1)' \
+  && control "N1l: a conformance row that expects a version other than its entry's current one" S1 "conformance row expects REF-1@99" -- lint "${SP[@]}"
 fresh_copy; mutate "$TMP/n/spec/types.md" 's.replace("pending=R-0500 now=accept:42\nmod num", "pending=R-9999 now=accept:42\nmod num", 1)' \
   && control "N8: an unknown tracking ID" S8 "R-9999" -- lint "${SP[@]}"
 mkdir -p "$TMP/n11"; printf 'Some prose.\n\n%s\n' "$(grep -m1 '^\*\*REF-6@[0-9]*\.\*\*' docs/spec/$REF | sed 's/^\*\*REF-6@[0-9]*\.\*\* //')" > "$TMP/n11/planted.md"

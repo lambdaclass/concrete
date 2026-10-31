@@ -266,6 +266,11 @@ class Spec:
                         cur.errors.append(f"line {j+1}: conformance row needs 4 cells")
                     else:
                         cur.rows.append(cells)
+                        # a reject row names the entry's current version: a version bump that leaves
+                        # its conformance rows behind is refused here, not by the manifest gate later
+                        m = re.fullmatch(r"reject:E[0-9]{4}:(\S+)", cells[1])
+                        if m and cur.version is not None and m.group(1) != cur.tag:
+                            cur.errors.append(f"line {j+1}: conformance row expects {m.group(1)}, not the entry's current {cur.tag}")
                     j += 1
                 i = j; continue
             i += 1
