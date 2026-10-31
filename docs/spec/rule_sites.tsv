@@ -179,7 +179,6 @@ REF-8	enforced	E0231	check	Concrete.consumeVar, Concrete.checkCallBorrowConflict
 REF-8	enforced	E0232	check	Concrete.consumeVar, Concrete.checkCallBorrowConflicts, Concrete.checkWriteAccess
 REF-8	enforced	E0235	check	Concrete.consumeVar, Concrete.checkCallBorrowConflicts, Concrete.checkWriteAccess
 REF-8	enforced	E0293	check	Concrete.consumeVar, Concrete.checkCallBorrowConflicts, Concrete.checkWriteAccess
-REF-8	enforced	E0238	check	Concrete.consumeVar, Concrete.checkCallBorrowConflicts, Concrete.checkWriteAccess
 REF-11	partial bug-319	E0293	check	Concrete.pathsOverlap, Concrete.checkCallRootReads
 REF-12	enforced	E0237	elab,check	Concrete.checkMutAccess, Concrete.checkWriteAccess
 TRAIT-1	enforced	E0590	check	Concrete.Coherence.pairwise

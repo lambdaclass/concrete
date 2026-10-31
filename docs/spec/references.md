@@ -713,7 +713,7 @@ fn main() -> u8 {
 <a id="REF-6"></a>
 ### REF-6. Reference bindings are never introduced by `let` and never assigned
 
-**REF-6@2.** No `let` binds a reference, no reference binding (a parameter, a borrow-block binder or an arm-scoped pattern binder) is ever the target of an assignment, no constant initializer borrows (a cast to a reference type counting as a borrow), and no generic instantiated inside an `assert`, an `assume` or a ghost initializer is instantiated at a type that could hold a reference.
+**REF-6@2.** No `let` binds a reference, no reference binding (a parameter, a borrow-block binder or an arm-scoped pattern binder) is ever the target of an assignment, no constant initializer borrows (a cast to a reference type counting as a borrow), and no generic instantiated inside an `assert`, an `assume` or a ghost initializer is instantiated at a type that could hold a reference under substitution.
 
 - Kind: refusal
 - Uses: none
@@ -1041,7 +1041,7 @@ fn main() -> u8 {
 
 - Kind: refusal
 - Uses: REF-D3
-- Codes: E0203 (check), E0204 (check), E0218 (check), E0231 (check), E0232 (check), E0235 (check), E0293 (check), E0238 (check)
+- Codes: E0203 (check), E0204 (check), E0218 (check), E0231 (check), E0232 (check), E0235 (check), E0293 (check)
 - Status: enforced
 - Enforced by: Concrete.consumeVar, Concrete.checkCallBorrowConflicts, Concrete.checkWriteAccess
 - Semantics: none
@@ -1059,8 +1059,9 @@ inside the arm is refused (the G17 Copy case, closed 2026-10-23).
 block has frozen it (read, freed or moved inside the block). E0204: a linear root is moved while it
 is borrowed. E0218: a frozen root is assigned. E0231: a root already mutably borrowed is borrowed
 again. E0232: a root already borrowed is mutably borrowed. E0235: a root already immutably borrowed
-is mutably borrowed. E0293: two borrows that one call makes overlap on one root. E0238: a borrow's
-source does not normalize to a traceable place, so its root cannot be tracked.
+is mutably borrowed. E0293: two borrows that one call makes, at least one `&mut`, overlap as places,
+one path a prefix of the other (`&mut w` with `&mut w.f`); disjoint projections that conflict only
+through their root are E0293 under REF-11 (`checkCallBorrowConflicts`).
 
 ```con reject name=free-in-borrow-block code=E0203 stage=check pair=free-after-block
 struct B { v: Int }

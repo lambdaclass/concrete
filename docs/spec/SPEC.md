@@ -2375,9 +2375,10 @@ truthiness while `--interp` refused it. This entry's example found the bug.
 The counted loop of STMT-6@3 has no condition. Until bug 331 is fixed, main still parses the C-style
 `for (init; cond; step)` that STMT-6@3 removes, and its `cond` must be `bool` like a `while` condition.
 
-**Codes by case.** Check reports a non-`bool` `if` condition as E0223. CoreCheck refuses the same in
-Core as a backstop: E0541 (`if` condition), E0540 (`while` condition), E0504 (a comparison whose
-result is not `bool`), E0505 (`&&` or `||` on a non-`bool`) and E0508 (`!` on a non-`bool`).
+**Codes by case** (probed on main). Check reports a non-`bool` `if` or `while` condition as E0223.
+CoreCheck reports `&&` or `||` on a non-`bool` as E0505 and `!` on a non-`bool` as E0508, which Check
+lets through, and refuses in Core, as the backstop of E0223, a non-`bool` `if` condition (E0541),
+`while` condition (E0540) and a comparison whose result is not `bool` (E0504).
 
 ```con reject name=int-condition code=E0223 stage=check pair=bool-condition
 fn main() -> u8 {
@@ -2419,12 +2420,12 @@ type, which the language does not have. Version 1 admitted raw-pointer compariso
 and `p + k` in trusted or `Unsafe` code (bugs 134 and 140); OD26 removes both, pointer arithmetic
 becoming `ptr::offset` (TRUST-1).
 
-**Codes by case.** Check reports first: E0228, the two operands of a binary operator have different
-types; E0229, a comparison on a type that has none. CoreCheck refuses the same violations in Core
-if they reach it (a backstop for elaboration and specialization): E0501, arithmetic on a
-non-numeric type (also after monomorphization); E0502, mismatched binary operands; E0503,
-mismatched comparison operands; E0506, a bitwise operator on a non-integer; E0507, negation of a
-non-number; E0509, bitwise not on a non-integer.
+**Codes by case** (probed on main). Check: E0228, the two operands of a binary operator have
+different types; E0229, a comparison on a type that has none (`a < a` on a struct). CoreCheck, which
+is where main first refuses these: E0501, arithmetic on a non-numeric type (`b + b` on `bool`; also
+after monomorphization); E0506, a bitwise operator on a non-integer (`f & f` on `f64`); E0507,
+negation of a non-number (`-b`); E0509, bitwise not on a non-integer (`~f`). CoreCheck's E0502 and
+E0503 refuse mismatched binary and comparison operands in Core, the backstop of E0228.
 
 Version 2 records the owner's decision of 2026-10-29 (OD26), aligned with TRUST-1: arithmetic,
 shifts and comparisons take numbers only, and pointer offset, difference and ordering are
@@ -4288,7 +4289,8 @@ fn main() -> u8 {
 <a id="ARITH-5"></a>
 #### ARITH-5. `as` converts without loss
 
-**ARITH-5@2.** A numeric, `bool` or `char` conversion written with `as` is accepted only when every value of the source type converts to a value of the target type that means the same number, `bool` or byte, namely a type to itself, an integer to a wider integer of the same signedness, an unsigned integer to a wider signed one, `bool` to an integer, `char` to an unsigned integer of at least 8 bits or a signed one of at least 16, `u8` to `char`, an integer to a float that represents every value exactly, and `f32` to `f64`, and every other such conversion is written with a named operation (a checked conversion returning an error, `truncate`, `reinterpret`, or a named float rounding).
+**ARITH-5@2.** A numeric, `bool` or `char` conversion written with `as` is accepted only when every value of the source type converts to a value of the target type that means the same number, `bool` or byte, namely a type to itself, an integer to a wider integer of the same signedness, an unsigned integer to a wider signed one, `bool` to an integer, `char` to an unsigned integer of at least 8 bits or a signed one of at least 16, `u8` to `char`, an integer to a float that represents every value exactly, and `f32` to `f64` (narrowing, sign-changing and float-to-integer `as`, which main still accepts,
+are refused once R-0500 lands), and every other such conversion is written with a named operation (a checked conversion returning an error, `truncate`, `reinterpret`, or a named float rounding).
 
 - Kind: refusal
 - Uses: none
@@ -8943,7 +8945,7 @@ fn main() -> u8 {
 <a id="REF-6"></a>
 #### REF-6. Reference bindings are never introduced by `let` and never assigned
 
-**REF-6@2.** No `let` binds a reference, no reference binding (a parameter, a borrow-block binder or an arm-scoped pattern binder) is ever the target of an assignment, no constant initializer borrows (a cast to a reference type counting as a borrow), and no generic instantiated inside an `assert`, an `assume` or a ghost initializer is instantiated at a type that could hold a reference.
+**REF-6@2.** No `let` binds a reference, no reference binding (a parameter, a borrow-block binder or an arm-scoped pattern binder) is ever the target of an assignment, no constant initializer borrows (a cast to a reference type counting as a borrow), and no generic instantiated inside an `assert`, an `assume` or a ghost initializer is instantiated at a type that could hold a reference under substitution.
 
 - Kind: refusal
 - Uses: none
@@ -9271,7 +9273,7 @@ fn main() -> u8 {
 
 - Kind: refusal
 - Uses: REF-D3
-- Codes: E0203 (check), E0204 (check), E0218 (check), E0231 (check), E0232 (check), E0235 (check), E0293 (check), E0238 (check)
+- Codes: E0203 (check), E0204 (check), E0218 (check), E0231 (check), E0232 (check), E0235 (check), E0293 (check)
 - Status: enforced
 - Enforced by: Concrete.consumeVar, Concrete.checkCallBorrowConflicts, Concrete.checkWriteAccess
 - Semantics: none
@@ -9289,8 +9291,9 @@ inside the arm is refused (the G17 Copy case, closed 2026-10-23).
 block has frozen it (read, freed or moved inside the block). E0204: a linear root is moved while it
 is borrowed. E0218: a frozen root is assigned. E0231: a root already mutably borrowed is borrowed
 again. E0232: a root already borrowed is mutably borrowed. E0235: a root already immutably borrowed
-is mutably borrowed. E0293: two borrows that one call makes overlap on one root. E0238: a borrow's
-source does not normalize to a traceable place, so its root cannot be tracked.
+is mutably borrowed. E0293: two borrows that one call makes, at least one `&mut`, overlap as places,
+one path a prefix of the other (`&mut w` with `&mut w.f`); disjoint projections that conflict only
+through their root are E0293 under REF-11 (`checkCallBorrowConflicts`).
 
 ```con reject name=free-in-borrow-block code=E0203 stage=check pair=free-after-block
 struct B { v: Int }

@@ -6347,7 +6347,7 @@ def diagnosticCodesReport : String :=
     entry "E0235" "check" "error" "cannot mutably borrow: already immutably borrowed",
     entryR "E0239" "check" "error" "a reference stored in an aggregate (struct/enum field, array, Heap, generic argument; bug 092)" "REF-3@1, REF-4@1",
     entry "E0237" "check" "error" "mutable borrow (explicit or `&mut self` receiver) through a shared reference",
-    entryR "E0238" "check" "error" "place or reference source that does not normalize to a traceable place" "REF-4@1, REF-5@2, REF-6@2, REF-7@1, REF-8@1",
+    entryR "E0238" "check" "error" "place or reference source that does not normalize to a traceable place" "REF-4@1, REF-5@2, REF-6@2, REF-7@1",
     -- Check: capability (E0240–E0242)
     entry "E0240" "check" "error" "missing capability",
     entry "E0241" "check" "error" "trait bound not satisfied",
