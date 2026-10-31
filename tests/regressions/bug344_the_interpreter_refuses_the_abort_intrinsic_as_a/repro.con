@@ -1,0 +1,7 @@
+// Bug 344 (PASS-13@1): the intrinsic abort() aborts the binary (SIGABRT, status 134), but
+// --interp refuses it: "interp: undefined function 'abort'" (exit 1).
+// Expected: --interp reports the abort (STMT-2, STMT-13), as it does for a declared extern abort.
+fn main() with(Process) -> u8 {
+    abort();
+    return 0;
+}

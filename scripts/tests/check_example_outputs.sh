@@ -509,6 +509,7 @@ open_bug_reproducers() {
 332|bug332_a_float_literal_of_type_f32_is_rounded_twice_thr/repro.con|runs-exit|0
 333|bug333_an_extra_type_argument_to_a_body_less_generic_de/repro.con|compiles|
 331|bug331_c_style_for_loops_are_accepted_and_the_counted_l/repro.con|runs-exit|42
+344|bug344_the_interpreter_refuses_the_abort_intrinsic_as_a/repro.con|interp-fails|undefined function 'abort'
 TABLE
 }
 if [ -z "$ONLY" ]; then

@@ -12,7 +12,7 @@ checker refusal is a Check bug here.
 
 <!-- BEGIN GENERATED: bug areas (scripts/gen/bug_ledger.py; derived from the records, docs/bugs/area_map.tsv and git history, never edited here) -->
 
-300 records: 178 placed by their own fix commits, 37 by the files their record names in commits shared with other bugs, 33 by commits shared with other bugs, 13 by the commit that filed or closed the record, 23 by an `area:` override; 16 open bugs are not fixed yet and 0 fixed bugs have no commit the history can place.
+301 records: 178 placed by their own fix commits, 37 by the files their record names in commits shared with other bugs, 33 by commits shared with other bugs, 13 by the commit that filed or closed the record, 23 by an `area:` override; 17 open bugs are not fixed yet and 0 fixed bugs have no commit the history can place.
 
 ### By stage
 
@@ -390,5 +390,6 @@ checker refusal is a Check bug here.
 | [331](331_c_style_for_loops_are_accepted_and_the_counted_l.md) | — | — | unfixed | — | violates STMT-6@3 |
 | [332](332_a_float_literal_of_type_f32_is_rounded_twice_thr.md) | Lower | Lower | record | — | violates ARITH-7@1 |
 | [333](333_an_extra_type_argument_to_a_body_less_generic_de.md) | Lower | Lower | record | — | violates TYPE-9@2 |
+| [344](344_the_interpreter_refuses_the_abort_intrinsic_as_a.md) | — | — | unfixed | — | violates PASS-13@1 |
 
 <!-- END GENERATED: bug areas -->

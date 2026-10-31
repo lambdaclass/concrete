@@ -17,13 +17,13 @@ of [docs/spec/ids.tsv](../spec/ids.tsv), or the generator refuses the record.
 
 <!-- BEGIN GENERATED: spec rulings (scripts/gen/bug_ledger.py; edit the records' ruling lines) -->
 
-300 bug records, 297 of them ruled: violates a rule 189, spec gap 1, open owner question 4, permitted by a rule 1, outside the spec 102; not ruled yet (fixed bugs filed before bug 300) 3. Open bugs are in bold.
+301 bug records, 298 of them ruled: violates a rule 190, spec gap 1, open owner question 4, permitted by a rule 1, outside the spec 102; not ruled yet (fixed bugs filed before bug 300) 3. Open bugs are in bold.
 
 ### By kind
 
 | ruling | bugs | open | silent |
 |---|--:|--:|--:|
-| violates a rule | 189 | 19 | 89 |
+| violates a rule | 190 | 20 | 89 |
 | spec gap | 1 | 0 | 0 |
 | open owner question | 4 | 0 | 0 |
 | permitted by a rule (not a bug) | 1 | 0 | 0 |
@@ -36,7 +36,7 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 
 | chapter | prefix | bugs | open | silent | violates | spec gap | open question | permitted |
 |---|---|--:|--:|--:|--:|--:|--:|--:|
-| pipeline.md | PASS | 43 | 2 | 7 | 43 | 0 | 0 | 0 |
+| pipeline.md | PASS | 44 | 3 | 7 | 44 | 0 | 0 | 0 |
 | modules.md | MOD | 30 | 0 | 11 | 30 | 0 | 0 | 0 |
 | types.md | TYPE | 21 | 2 | 13 | 21 | 0 | 0 | 0 |
 | ownership.md | OWN | 19 | 3 | 8 | 19 | 0 | 0 | 0 |
@@ -59,8 +59,8 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 | MOD-1@1 | modules.md | 24 | 022, 039, 042, 069, 082, 096, 097, 098, 117, 118, 132, 151, 215, 217, 227, 230, 231, 238, 239, 241, 242, 243, 245, 262 |
 | PASS-12@1 | pipeline.md | 13 | 005, 009, 014, 016, 029, 032, 035, 044, **054**, 055, **077**, 108, 116 |
 | PASS-9@1 | pipeline.md | 10 | 023, 033, 056, 078, 110, 175, 213, 271, 303, 309 |
+| PASS-13@1 | pipeline.md | 9 | 004, 006, 019, 038, 102, 184, 254, 302, **344** |
 | SCOPE-3@1 | scope.md | 9 | 040, 041, 045, 050, 061, 087, 101, 176, 208 |
-| PASS-13@1 | pipeline.md | 8 | 004, 006, 019, 038, 102, 184, 254, 302 |
 | SCOPE-1@1 | scope.md | 6 | 045, 087, 093, 094, 107, 124 |
 | FFI-2@1 | ffi.md | 5 | 037, 051, 057, 121, **122** |
 | MEM-3@1 | memory.md | 5 | 031, 034, 285, 287, 301 |
