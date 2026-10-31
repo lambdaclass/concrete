@@ -133,12 +133,9 @@ structure Scope where
   typeKinds : Std.HashMap String (Array SymKind) := ∅
   /-- Bug 343: flat spelling → every definition of the program (`module.path.name`) that spelling
       denotes below Resolve, by Core name or as `<module>_<name>` (`flatSpellingOwners`). A
-      qualified path whose flat spelling has two owners is refused (`checkQualifiedPath`). -/
-  flatOwners : Std.HashMap String (Array String) := ∅
-  /-- Bug 343: every name the scope binds in the value namespace (functions, externs, constants,
-      impl methods, imports), whichever kind `symbolMap` keeps first for it: a type spelled `m_f`
-      does not answer a call `m_f`, so it does not capture `m::f` (MOD-3, bug 218). -/
-  valueNames : Std.HashSet String := ∅
+      qualified path whose flat spelling has two owners is refused (`checkQualifiedPath`). Built
+      on the first qualified path checked, so a program that writes none pays nothing (R-0550). -/
+  flatOwners : Thunk (Std.HashMap String (Array String)) := Thunk.pure ∅
 
 /-- A declaration in the type namespace. -/
 def SymKind.isType : SymKind → Bool
@@ -151,7 +148,6 @@ def SymKind.isType : SymKind → Bool
 def Scope.ofSymbols (symbols : List (String × SymKind)) : Scope :=
   { symbols := symbols,
     symbolMap := symbols.foldl (fun m (n, k) => if m.contains n then m else m.insert n k) ∅,
-    valueNames := symbols.foldl (fun m (n, k) => if k.isType then m else m.insert n) ∅,
     typeKinds := symbols.foldl (fun m (n, k) =>
       if !k.isType then m else m.insert n ((m.getD n #[]).push k)) ∅ }
 
@@ -491,13 +487,18 @@ private def checkQualifiedPath (ctx : ResolveCtx) (name : String) (sp : Span) : 
   | none => ctx
   | some _ =>
     let flat := flattenQualifiedPath name
-    let owners := (ctx.globalScope.flatOwners.getD flat #[]).toList
+    let owners := (ctx.globalScope.flatOwners.get.getD flat #[]).toList
+    -- The value namespace only: a type spelled `m_f` answers no call (MOD-3, bug 218). Every value
+    -- binding of that spelling counts, not only the kind `symbolMap` kept first.
+    let valueBound := match ctx.globalScope.symbolMap.get? flat with
+      | none => false
+      | some k => !k.isType || ctx.globalScope.symbols.any fun (n, k) => n == flat && !k.isType
     if owners.length > 1 then
       addError ctx (.qualifiedPathCaptured name flat
         ("several definitions: " ++ ", ".intercalate (owners.map fun o => s!"'{o}'"))) (some sp)
     else if ctx.visibleLocals.contains flat then
       addError ctx (.qualifiedPathCaptured name flat s!"the local binding '{flat}'") (some sp)
-    else if ctx.globalScope.valueNames.contains flat then
+    else if valueBound then
       addError ctx (.qualifiedPathCaptured name flat s!"the declaration or import '{flat}'") (some sp)
     else if isKnownBuiltinFn flat then
       addError ctx (.qualifiedPathCaptured name flat s!"the builtin function '{flat}'") (some sp)
@@ -1216,7 +1217,7 @@ def resolveShallow (moduleSummaries : List FileSummary)
       acc ++ qualFns ++ qualExterns ++ qualImpls
   ) []
   let combinedScope : Scope := { Scope.ofSymbols (combinedScope.symbols ++ siblingQualified) with
-    flatOwners := flatOwnersOf moduleSummaries }
+    flatOwners := Thunk.mk fun _ => flatOwnersOf moduleSummaries }
   -- Collect trait methods and trait impls from all summaries
   let traitMethods := moduleSummaries.foldl (fun acc s =>
     acc ++ s.traits.map fun t => (t.name, t.methods.map (·.name))) []
