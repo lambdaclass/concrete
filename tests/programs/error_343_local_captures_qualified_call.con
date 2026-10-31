@@ -1,0 +1,16 @@
+// Bug 343 (MOD-1): a local function value spelled m_f captured the qualified call m::f() (exit 7).
+// Contained: refused (E0299).
+mod m {
+    pub fn f() -> u8 {
+        return 42;
+    }
+}
+
+fn seven() -> u8 {
+    return 7;
+}
+
+fn main() -> u8 {
+    let m_f: fn() -> u8 = seven;
+    return m::f();
+}

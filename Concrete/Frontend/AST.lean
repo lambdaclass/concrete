@@ -874,6 +874,24 @@ partial def desugarArm : MatchArm → MatchArm
   | .rangeArm sp lo hi inc g b => .rangeArm sp lo hi inc (g.map desugarExpr) (desugarStmts b)
 end
 
+/-- Bug 343 (MOD-1): the spelling the parser gives a qualified path `m::f` to a module's function:
+    the module name and the function name joined by `::`, which no identifier can contain, so the
+    path never shares a spelling with a declaration. -/
+def qualifiedPathName (moduleName name : String) : String :=
+  moduleName ++ "::" ++ name
+
+/-- The module and function names of a qualified-path spelling (`qualifiedPathName`). -/
+def qualifiedPathParts? (s : String) : Option (String × String) :=
+  match s.splitOn "::" with
+  | [m, n] => if m.isEmpty || n.isEmpty then none else some (m, n)
+  | _ => none
+
+/-- The flat spelling Check, Elab and Core still give a qualified path: `m::f` is `m_f`. -/
+def flattenQualifiedPath (s : String) : String :=
+  match qualifiedPathParts? s with
+  | some (m, n) => m ++ "_" ++ n
+  | none => s
+
 /-- Apply desugaring to all function bodies in a module. -/
 partial def desugarModule (m : Module) : Module :=
   { m with

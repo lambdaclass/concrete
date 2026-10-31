@@ -1,0 +1,26 @@
+// Bug 343 (MOD-1): a nested z.m.f has the Core name m_f, the flat spelling of main's m::f(), so
+// main's call ran z.m.f (exit 7). Contained: refused (E0299).
+mod m {
+    pub fn f() -> u8 {
+        return 42;
+    }
+}
+
+mod z {
+    mod m {
+        pub fn f() -> u8 {
+            return 7;
+        }
+    }
+
+    pub fn g() -> u8 {
+        return m::f();
+    }
+}
+
+fn main() -> u8 {
+    if z::g() != 7 {
+        return 1;
+    }
+    return m::f();
+}

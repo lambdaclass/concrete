@@ -476,6 +476,7 @@ the report counts those bugs as ambiguous.
 - [316_browser_lean_the_browser_compiler_root_did_not_b.md](316_browser_lean_the_browser_compiler_root_did_not_b.md) — `Browser.lean`, the root of the `concrete-browser-native` executable (the native twin of the site's Wasm compiler), still called `Pipeline.desugar` after `6269002b` folded desugaring into `Pipeline.resolve`, so the browser compiler could not be built from source; nothing noticed for a week because the root sat outside `lakefile.toml`'s `defaultTargets` and no `lake build`, CI job or hook compiled it. The call is removed (resolve already desugars) and the executable is a default target, run by `check_browser_native.sh`.
 - [329_the_ll_1_checkers_never_computed_follow_sets_a_f.md](329_the_ll_1_checkers_never_computed_follow_sets_a_f.md) — `scripts/check_ll1.{py,c,rs}` checked only that the alternatives of an alternation have disjoint FIRST sets; none computed FOLLOW, so a choice that may derive nothing (an optional, a repetition, a nullable alternative) entered on a token that may also follow it passed, and `check_grammar_ll1.sh` and SYN-1's LL(1) claim were vacuous for those shapes. All three now compute FOLLOW sets and report FIRST/FOLLOW conflicts; the grammar's eight are listed in `grammar/ll1_known_conflicts.tsv` for the owner, and two planted FIRST/FOLLOW grammars are refused by all three.
 - [330_a_continue_inside_a_for_loop_s_step_the_binary_n.md](330_a_continue_inside_a_for_loop_s_step_the_binary_n.md) — a continue inside a for loop's step: the binary never terminates and the interpreter goes to the condition
+- [343_a_qualified_call_m_f_runs_a_parent_function_name.md](343_a_qualified_call_m_f_runs_a_parent_function_name.md) — A qualified call m::f() runs a parent function named m_f, and an undeclared m_f() reaches the submodule function m.f
 
 ## Open Numbered Bugs
 
@@ -502,7 +503,6 @@ the report counts those bugs as ambiguous.
 - [331_c_style_for_loops_are_accepted_and_the_counted_l.md](331_c_style_for_loops_are_accepted_and_the_counted_l.md) — C-style for loops are accepted and the counted loop for i from a until b is not (OD47)
 - [332_a_float_literal_of_type_f32_is_rounded_twice_thr.md](332_a_float_literal_of_type_f32_is_rounded_twice_thr.md) — A float literal of type f32 is rounded twice, through binary64, instead of once
 - [333_an_extra_type_argument_to_a_body_less_generic_de.md](333_an_extra_type_argument_to_a_body_less_generic_de.md) — An extra type argument to a body-less generic declaration is ignored natively and fails at run time under --interp
-- [343_a_qualified_call_m_f_runs_a_parent_function_name.md](343_a_qualified_call_m_f_runs_a_parent_function_name.md) — A qualified call m::f() runs a parent function named m_f, and an undeclared m_f() reaches the submodule function m.f
 
 <!-- END GENERATED: bug list -->
 

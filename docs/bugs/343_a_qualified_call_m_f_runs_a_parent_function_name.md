@@ -1,12 +1,12 @@
 # Bug 343 — A qualified call m::f() runs a parent function named m_f, and an undeclared m_f() reaches the submodule function m.f
 
-**Status:** OPEN
+**Status:** FIXED 2026-10-31 (contained, branch `wip/fix-343-qualified-call-identity`): a qualified path resolves among qualified paths only, so an undeclared `m_f()` is E0101; a qualified path whose flat spelling also names anything else is refused (E0299) until qualified paths are resolved by identity (R-0492)
 **Found:** 2026-10-31, by probes of the qualification rule of SYNTAX_FREEZE_REVIEW §1.1 while absorbing it into SYN-10 (spec audit, wip/spec-audit-3); confirmed by Codex and Grok (both: real bug, one bug with two directions, not covered by bug 151's E0299 containment)
 **Severity:** silent wrong code in safe code: a qualified call `m::f()` runs a different function, the parent's own `m_f`, with no diagnostic on either consumer; and a name the program never declares (`m_f`) is accepted and calls `m.f`
 
 <!-- bug-ledger
 summary: A qualified call m::f() runs a parent function named m_f, and an undeclared m_f() reaches the submodule function m.f
-coverage: reproducer tests/regressions/bug343_a_qualified_call_m_f_runs_a_parent_function_name/repro.con, pinned by check_example_outputs.sh (open-bug reproducers leg: the binary builds and exits 7, the wrong status)
+fixtures: error_343_parent_fn_captures_qualified_call.con error_343_local_captures_qualified_call.con error_343_other_module_fn_captures_qualified_call.con error_343_nested_module_captures_qualified_call.con error_343_nested_parent_fn_captures_qualified_call.con error_343_builtin_captures_qualified_call.con error_343_flat_spelling_reaches_module_fn.con error_343_nested_flat_spelling_reaches_child_fn.con regress_343_qualified_paths.con
 class: 1
 silent: yes
 ruling: Violates: MOD-1@1
@@ -36,6 +36,32 @@ Class 1 ([STRUCTURAL_CLASSES.md](STRUCTURAL_CLASSES.md)): declaration identity b
 
 R-0492 (S5 `DefId`), applied to the shared front end by R-0514: a qualified path resolves to a `DefId` and is never respelled, so no user spelling can capture or reach it.
 
-## Containment while open
+## Fix (containment)
 
-`check_example_outputs.sh` (open-bug reproducers leg) pins the wrong exit status 7. This defect is silent, so the disposition rule asks for repair or fail-closed containment at once; neither is in this filing. A candidate containment, for the owner of the repair to choose: extend E0299 to refuse a declaration whose spelling equals any flattened `<module>_<name>` of a function the program can reach, and refuse an unqualified call that resolves only through a flattened name. Meanwhile a user avoids top-level names of the form `<submodule>_<name>`, and calls submodule functions only through `m::f`.
+The parser spells a qualified path `m::f` as `m::f` (`qualifiedPathName`, `Concrete/Frontend/AST.lean`),
+a spelling no identifier can have, instead of `m_f`, and Resolve registers every qualified-path entry
+under that spelling (the submodule, child and sibling-module keys of `Concrete/Resolve/Resolve.lean`).
+So the second direction is repaired: `m_f()` names nothing the program declares and is E0101, and
+`fmt` now prints `m::f` back instead of rewriting it to `m_f`.
+
+Check, Elab, the interpreter and the backend still name a submodule function by the flat spelling,
+so once Resolve accepts the program, `Module.flattenQualifiedPaths` (`Concrete/Frontend/TypeMap.lean`,
+run first in `Pipeline.finishResolve`) respells each resolved path `m_f`. Before that, Resolve refuses
+(E0299, `checkQualifiedPath`) every qualified path whose flat spelling would denote anything besides the
+path's own definition: a declaration, import or constant in scope spelled `m_f`, a local or parameter
+of that spelling, a builtin of that spelling (`string::length` against the builtin `string_length`,
+which the interpreter called), or a second definition program-wide whose Core name or
+`<module>_<name>` spelling it is (a private `m_f` of another module, or a nested `z.m.f`, whose Core
+name is `m_f`). Probes of the last three shapes on the filing's main all ran the wrong function
+(exit 7), outside the probes the filing recorded; they are the same defect.
+
+Regression fixtures (`run_tests.sh`): the reproducer and six `error_343_*` captures (parent, local,
+another module, a nested module, a nested parent function, a builtin) are E0299; the two directions
+of an unqualified flat spelling reaching a function, top level and nested, are E0101; and
+`regress_343_qualified_paths.con` (one-level paths to a top-level module and a nested child, a path
+inside a nested module, a path as a function value, a parent function whose name merely starts with a
+module name) exits 42 natively and under `--interp` (the r343 block checks they agree). The
+reproducer left the open-bug leg of `check_example_outputs.sh`.
+
+The refusal is containment, not the semantics MOD-1 gives these programs (`m::f()` should call `m.f`);
+the repair is the structural owner's.

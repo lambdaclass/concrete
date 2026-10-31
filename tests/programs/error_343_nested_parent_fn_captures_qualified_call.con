@@ -1,0 +1,21 @@
+// Bug 343 (MOD-1): inside module a, a sibling fn b_f shares the flat spelling of the qualified call
+// b::f(). Refused (E0299; bug 151's elaboration refusal also covers this shape).
+mod a {
+    pub mod b {
+        pub fn f() -> u8 {
+            return 42;
+        }
+    }
+
+    pub fn b_f() -> u8 {
+        return 7;
+    }
+
+    pub fn g() -> u8 {
+        return b::f();
+    }
+}
+
+fn main() -> u8 {
+    return a::g();
+}
