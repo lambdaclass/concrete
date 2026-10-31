@@ -49,7 +49,7 @@ Check, Elab, the interpreter and the backend still name a submodule function by 
 so once Resolve accepts the program, `Module.flattenQualifiedPaths` (`Concrete/Frontend/TypeMap.lean`,
 run first in `Pipeline.finishResolve`) respells each resolved path `m_f`. Before that, Resolve refuses
 (E0299, `checkQualifiedPath`) every qualified path whose flat spelling would denote anything besides the
-path's own definition: a declaration, import or constant in scope spelled `m_f`, a local or parameter
+path's own definition: a function, foreign binding, import or constant in scope spelled `m_f` (the value namespace: a type of that spelling answers no call and is not refused), a local or parameter
 of that spelling, a builtin of that spelling (`string::length` against the builtin `string_length`,
 which the interpreter called), or a second definition program-wide whose Core name or
 `<module>_<name>` spelling it is (a private `m_f` of another module, or a nested `z.m.f`, whose Core
