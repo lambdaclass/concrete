@@ -17,17 +17,17 @@ of [docs/spec/ids.tsv](../spec/ids.tsv), or the generator refuses the record.
 
 <!-- BEGIN GENERATED: spec rulings (scripts/gen/bug_ledger.py; edit the records' ruling lines) -->
 
-304 bug records, 301 of them ruled: violates a rule 192, spec gap 1, open owner question 4, permitted by a rule 1, outside the spec 103; not ruled yet (fixed bugs filed before bug 300) 3. Open bugs are in bold.
+311 bug records, 308 of them ruled: violates a rule 198, spec gap 1, open owner question 4, permitted by a rule 1, outside the spec 104; not ruled yet (fixed bugs filed before bug 300) 3. Open bugs are in bold.
 
 ### By kind
 
 | ruling | bugs | open | silent |
 |---|--:|--:|--:|
-| violates a rule | 192 | 21 | 90 |
+| violates a rule | 198 | 27 | 92 |
 | spec gap | 1 | 0 | 0 |
 | open owner question | 4 | 0 | 0 |
 | permitted by a rule (not a bug) | 1 | 0 | 0 |
-| outside the spec | 103 | 5 | 17 |
+| outside the spec | 104 | 5 | 17 |
 | not ruled yet | 3 | 0 | 0 |
 
 ### By chapter
@@ -36,13 +36,13 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 
 | chapter | prefix | bugs | open | silent | violates | spec gap | open question | permitted |
 |---|---|--:|--:|--:|--:|--:|--:|--:|
-| pipeline.md | PASS | 45 | 4 | 7 | 45 | 0 | 0 | 0 |
+| pipeline.md | PASS | 49 | 8 | 7 | 49 | 0 | 0 | 0 |
 | modules.md | MOD | 31 | 0 | 12 | 31 | 0 | 0 | 0 |
 | types.md | TYPE | 21 | 2 | 13 | 21 | 0 | 0 | 0 |
 | ownership.md | OWN | 19 | 3 | 8 | 19 | 0 | 0 | 0 |
+| memory.md | MEM | 14 | 3 | 9 | 14 | 0 | 0 | 0 |
 | scope.md | SCOPE | 13 | 0 | 5 | 13 | 0 | 0 | 0 |
 | statements.md | STMT | 13 | 3 | 10 | 12 | 1 | 0 | 0 |
-| memory.md | MEM | 12 | 1 | 7 | 12 | 0 | 0 | 0 |
 | ffi.md | FFI | 11 | 2 | 6 | 11 | 0 | 0 | 0 |
 | arithmetic.md | ARITH | 10 | 2 | 7 | 10 | 0 | 0 | 0 |
 | references.md | REF | 10 | 1 | 9 | 9 | 0 | 0 | 1 |
@@ -57,9 +57,9 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 | rule | chapter | bugs | which |
 |---|---|--:|---|
 | MOD-1@1 | modules.md | 25 | 022, 039, 042, 069, 082, 096, 097, 098, 117, 118, 132, 151, 215, 217, 227, 230, 231, 238, 239, 241, 242, 243, 245, 262, 343 |
-| PASS-12@1 | pipeline.md | 14 | 005, 009, 014, 016, 029, 032, 035, 044, **054**, 055, **077**, 108, 116, **341** |
+| PASS-12@1 | pipeline.md | 17 | 005, 009, 014, 016, 029, 032, 035, 044, **054**, 055, **077**, 108, 116, **341**, **345**, **346**, **347** |
+| PASS-13@1 | pipeline.md | 10 | 004, 006, 019, 038, 102, 184, 254, 302, **344**, **348** |
 | PASS-9@1 | pipeline.md | 10 | 023, 033, 056, 078, 110, 175, 213, 271, 303, 309 |
-| PASS-13@1 | pipeline.md | 9 | 004, 006, 019, 038, 102, 184, 254, 302, **344** |
 | SCOPE-3@1 | scope.md | 9 | 040, 041, 045, 050, 061, 087, 101, 176, 208 |
 | SCOPE-1@1 | scope.md | 6 | 045, 087, 093, 094, 107, 124 |
 | FFI-2@1 | ffi.md | 5 | 037, 051, 057, 121, **122** |
@@ -110,6 +110,8 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 | FFI-4@1 | ffi.md | 1 | 037 |
 | FFI-6@1 | ffi.md | 1 | 112 |
 | MEM-4@4 | memory.md | 1 | **326** |
+| MEM-7@1 | memory.md | 1 | **349** |
+| MEM-9@1 | memory.md | 1 | **340** |
 | MOD-6@1 | modules.md | 1 | 226 |
 | MOD-8@1 | modules.md | 1 | 165 |
 | OWN-12@1 | ownership.md | 1 | 143 |
@@ -167,7 +169,7 @@ No rule decides these bugs' behaviour. Each fix starts by writing the rule (spec
 
 | reason | bugs |
 |---|---|
-| tooling | **049**, **058**, 059, 060, 062, **064**, 065, 067, 068, 075, 076, 079, 080, 081, 083, 084, 085, 086, 089, 106, 135, 179, 180, 191, 203, 206, 207, 209, 214, 219, 224, 225, 232, 237, 244, 247, 252, 263, 268, 272, 283, 284, 294, 299, 300, 315, 316, **342** |
+| tooling | **049**, **058**, 059, 060, 062, **064**, 065, 067, 068, 075, 076, 079, 080, 081, 083, 084, 085, 086, 089, 106, 135, 179, 180, 191, 203, 206, 207, 209, 214, 219, 224, 225, 232, 237, 244, 247, 252, 263, 268, 272, 283, 284, 294, 299, 300, 315, 316, 342, **350** |
 | performance | 015, 026, 027, 178, 228, 234, 235, 236, 248, 249, 250, 255, 256, 257, 258, 259, 260, 261, 265, 266, 267, 269, **270**, 273, 274, 275, 276, 277, 278, 279, 280, 281, 282, 286, 288, 289, 290, 291, 292, 293, 295, 296, 297, 298 |
 | library | 007, 010, 011, 012, 017, 043, 046, 047, 048, 072, 152 |
 

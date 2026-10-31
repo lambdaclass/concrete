@@ -12,7 +12,7 @@ checker refusal is a Check bug here.
 
 <!-- BEGIN GENERATED: bug areas (scripts/gen/bug_ledger.py; derived from the records, docs/bugs/area_map.tsv and git history, never edited here) -->
 
-304 records: 178 placed by their own fix commits, 37 by the files their record names in commits shared with other bugs, 37 by commits shared with other bugs, 13 by the commit that filed or closed the record, 24 by an `area:` override; 15 open bugs are not fixed yet and 0 fixed bugs have no commit the history can place.
+311 records: 179 placed by their own fix commits, 37 by the files their record names in commits shared with other bugs, 37 by commits shared with other bugs, 13 by the commit that filed or closed the record, 24 by an `area:` override; 21 open bugs are not fixed yet and 0 fixed bugs have no commit the history can place.
 
 ### By stage
 
@@ -24,7 +24,7 @@ checker refusal is a Check bug here.
 | Elab | 26 | 0 | 9 | 7 | Elab 25, TypeSpelling 1 |
 | Interp | 20 | 0 | 5 | 8 | Interp 20 |
 | Proof | 19 | 1 | 8 | 2 | ProofCore 11, Proof 3, CallCollect 2, BodyIdentity 1 |
-| Report | 12 | 6 | 6 | 5 | Diagnostic 4, Report 3, AssumptionSummary 2, ModelDiff 2 |
+| Report | 13 | 6 | 7 | 5 | Diagnostic 4, Report 4, AssumptionSummary 2, ModelDiff 2 |
 | Parse | 11 | 0 | 3 | 0 | Parser 7, Lexer 2, AST 1, LocalId 1 |
 | EmitSSA | 10 | 0 | 1 | 3 | EmitSSA 10 |
 | Mono | 8 | 0 | 1 | 0 | Mono 7, - 1 |
@@ -49,7 +49,7 @@ checker refusal is a Check bug here.
 | 8. Storage, places and control flow decided ad hoc in `Lower` | 17 | Lower 14, Check 2, Elab 1 |
 | 9. Evidence verdicts computed per surface and joined to their subject by name | 4 | Proof 2, CLI 2 |
 | 10. Evidence identity computed from a partial subject | 5 | Proof 3, Elab 2 |
-| 11. Absence read as a fact (fail-open defaults) | 15 | Gates 4, Tooling 3, Resolve 2, Proof 2, Report 2, Check 1, SSA 1 |
+| 11. Absence read as a fact (fail-open defaults) | 16 | Gates 4, Report 3, Tooling 3, Resolve 2, Proof 2, Check 1, SSA 1 |
 | 12. One fact kept in two places | 29 | Resolve 11, Check 5, Interp 4, Elab 3, Parse 2, Proof 1, Std 1, CLI 1, Tooling 1 |
 | 13. Documented rules with no enforcing site | 26 | Check 12, Report 5, Resolve 4, Lower 3, Parse 1, Elab 1 |
 | 14. Trusted `std` and FFI code with no checked contract | 7 | Std 5, Parse 1, Check 1 |
@@ -83,7 +83,7 @@ checker refusal is a Check bug here.
 | permitted | 1 | Lower 1 |
 | outside (library) | 11 | Std 6, EmitLLVM 5 |
 | outside (performance) | 44 | Check 10, Lower 7, Parse 6, Elab 4, Interp 4, Resolve 3, SSA 3, EmitSSA 3, Proof 2, Mono 1, Report 1 |
-| outside (tooling) | 45 | Proof 12, Tooling 7, Gates 6, Check 4, Report 4, Elab 3, CLI 3, Interp 2, Parse 1, Resolve 1, SSA 1, Std 1 |
+| outside (tooling) | 46 | Proof 12, Tooling 7, Gates 6, Report 5, Check 4, Elab 3, CLI 3, Interp 2, Parse 1, Resolve 1, SSA 1, Std 1 |
 | unrecorded | 3 | Parse 1, Resolve 1, EmitSSA 1 |
 
 ### Every bug
@@ -390,9 +390,16 @@ checker refusal is a Check bug here.
 | [331](331_c_style_for_loops_are_accepted_and_the_counted_l.md) | Report | Diagnostic | shared | — | violates STMT-6@3 |
 | [332](332_a_float_literal_of_type_f32_is_rounded_twice_thr.md) | Lower | Lower | record | — | violates ARITH-7@1 |
 | [333](333_an_extra_type_argument_to_a_body_less_generic_de.md) | Lower | Lower | record | — | violates TYPE-9@2 |
+| [340](340_the_interpreter_runs_a_program_the_compiler_refu.md) | — | — | unfixed | — | violates MEM-9@1 |
 | [341](341_two_modules_that_each_declare_main_pass_check_an.md) | — | — | unfixed | — | violates PASS-12@1 |
-| [342](342_the_diagnostic_code_completeness_gate_scans_a_fi.md) | — | — | unfixed | — | outside (tooling) |
+| [342](342_the_diagnostic_code_completeness_gate_scans_a_fi.md) | Report | Report | commits | Tooling | outside (tooling) |
 | [343](343_a_qualified_call_m_f_runs_a_parent_function_name.md) | Resolve | Resolve | override | Parse | violates MOD-1@1 |
 | [344](344_the_interpreter_refuses_the_abort_intrinsic_as_a.md) | — | — | unfixed | — | violates PASS-13@1 |
+| [345](345_a_newtype_unwrap_bound_to_a_let_of_the_inner_typ.md) | — | — | unfixed | — | violates PASS-12@1 |
+| [346](346_a_diverging_abort_bound_to_a_typed_let_that_is_r.md) | — | — | unfixed | — | violates PASS-12@1 |
+| [347](347_get_args_has_a_check_signature_and_no_implementa.md) | — | — | unfixed | — | violates PASS-12@1 |
+| [348](348_float_to_string_runs_natively_and_interp_stops_w.md) | — | — | unfixed | — | violates PASS-13@1 |
+| [349](349_append_is_accepted_in_a_function_that_does_not_d.md) | — | — | unfixed | — | violates MEM-7@1 |
+| [350](350_the_proven_overflow_arm_of_the_compile_time_safe.md) | — | — | unfixed | — | outside (tooling) |
 
 <!-- END GENERATED: bug areas -->
