@@ -1,0 +1,11 @@
+// Bug 348 (PASS-13@1): float_to_string(1.5) runs natively (exit 42) and --interp stops with
+// `undefined function 'float_to_string'`. Expected: both consumers exit 42.
+fn main() with(Alloc) -> u8 {
+    let s: String = float_to_string(1.5);
+    let n: Int = string_length(&s);
+    drop_string(s);
+    if n == 3 {
+        return 42;
+    }
+    return 1;
+}

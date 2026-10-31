@@ -511,6 +511,7 @@ the report counts those bugs as ambiguous.
 - [345_a_newtype_unwrap_bound_to_a_let_of_the_inner_typ.md](345_a_newtype_unwrap_bound_to_a_let_of_the_inner_typ.md) — a newtype unwrap bound to a let of the inner type passes Check and the native build stops at the SSA verifier
 - [346_a_diverging_abort_bound_to_a_typed_let_that_is_r.md](346_a_diverging_abort_bound_to_a_typed_let_that_is_r.md) — a diverging abort() bound to a typed let that is returned, or returned directly, emits ret void in a function with a result and fails LLVM validation
 - [347_get_args_has_a_check_signature_and_no_implementa.md](347_get_args_has_a_check_signature_and_no_implementa.md) — get_args has a Check signature and no implementation, so a program whose emitted code calls it fails LLVM validation on an undefined @get_args
+- [348_float_to_string_runs_natively_and_interp_stops_w.md](348_float_to_string_runs_natively_and_interp_stops_w.md) — float_to_string runs natively and --interp stops with undefined function float_to_string
 
 <!-- END GENERATED: bug list -->
 
