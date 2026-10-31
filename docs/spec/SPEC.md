@@ -329,6 +329,8 @@ the first chapter.
   - [OPEN-148. Type parameters on a trait](#OPEN-148)
   - [OPEN-149. How `[e; N]` evaluates `e`](#OPEN-149)
   - [OPEN-150. Which text governs the grammar until it is resynchronized](#OPEN-150)
+  - [OPEN-151. Module paths of more than one level](#OPEN-151)
+  - [OPEN-152. Whether a path's first letter decides between a type and a module](#OPEN-152)
 
 <a id="ch-overview"></a>
 ## Overview
@@ -1118,6 +1120,19 @@ fn main() -> u8 {
 (SYN-1; the grammar's productions still spell it, which OPEN-77 resyncs), and a variant is always
 named through its enum: a bare `Ok(x)` is an unknown function (E0101) and `Option.None` an unknown
 variable (E0100), both under MOD-1.
+
+The current compiler reads a path by the qualification rule of SYNTAX_FREEZE_REVIEW §1.1. After
+`X::`, a `<` begins explicit type arguments. After `X::y`, when `X` begins with an uppercase letter,
+the path names a member of a type: an enum variant (`E::V`, `E::V { ... }`) or an associated
+function (`T::f(...)`). When `X` begins with a lowercase letter, it names a member of the module
+`X`. The case of the first letter decides, so the parser needs one token of lookahead. A module
+whose name begins with an uppercase letter is read as a type: `M::f()` on `mod M { pub fn f() ... }`
+is parsed as an associated-function call, which the current compiler resolves to `M.f` (it builds
+and runs on both consumers). A module path has one level: `a::b::f()` is a parse error on both
+consumers (E0001, `expected <`). A lowercase qualified call is resolved through the flattened name
+`m_f`, which a declaration of that spelling captures (bug 343). Whether a qualified call needs an
+import is OPEN-139, whether a module path may have more than one level is OPEN-151, and whether the
+case of the first segment decides between a type and a module is OPEN-152.
 
 ```con accept name=separators exit=42
 mod m {
@@ -13478,7 +13493,7 @@ fn main() -> u8 {
 <a id="ch-decisions"></a>
 ## Open Owner Decisions
 
-This chapter lists the language questions that only the project owner decides: OD1 to OD150 of
+This chapter lists the language questions that only the project owner decides: OD1 to OD152 of
 [ROADMAP.md](../../ROADMAP.md#owner-decisions) (exit 2n for OD1 to OD32, exit 2q for the rest). Each entry states the question and encodes
 no answer. The rules it bears on are named in its rationale, together with what current main does,
 which stays provisional until the owner answers. The answer, when given, is recorded in ROADMAP and
@@ -13486,7 +13501,7 @@ turns the entry into the rules it decides; until then no agent picks a side
 ([AGENTS.md](../project/AGENTS.md#rules)). OD1 to OD22 were answered on 2026-10-29 and are listed under
 Decided; OD23 to OD32 were decided the same day. The entries below, OPEN-33 onward, are open:
 raised while recording those answers, allocated for the owner picks of 2026-10-30, or raised since by the
-absorption and its reviews, and by the spec quality audit of 2026-10-30; OD47 is decided and OPEN-94 was withdrawn (MOD-1 already refuses its case, bug 337).
+absorption and its reviews, by the spec quality audit of 2026-10-30, and by the absorption of the qualification rule (2026-10-31); OD47 is decided and OPEN-94 was withdrawn (MOD-1 already refuses its case, bug 337).
 The table below lists them in reading order.
 
 ### Decisions to be made, in order
@@ -13618,6 +13633,8 @@ them); they are not separate entries here
 | 114 | [OPEN-148](#OPEN-148) | the spec quality audit of 2026-10-30 | Type parameters on a trait | not checked | none given | not assessed | — |
 | 115 | [OPEN-149](#OPEN-149) | the spec quality audit of 2026-10-30 | How `[e; N]` evaluates `e` | not checked | none given | not assessed | — |
 | 116 | [OPEN-150](#OPEN-150) | the spec quality audit of 2026-10-30 | Which text governs the grammar until it is resynchronized | not checked | none given | not assessed | — |
+| 117 | [OPEN-151](#OPEN-151) | the absorption of SYNTAX_FREEZE_REVIEW §1.1 (2026-10-31) | Module paths of more than one level | not checked | none given | not assessed | — |
+| 118 | [OPEN-152](#OPEN-152) | the absorption of SYNTAX_FREEZE_REVIEW §1.1 (2026-10-31) | Whether a path's first letter decides between a type and a module | not checked | none given | not assessed | — |
 
 <a id="OPEN-33"></a>
 #### OPEN-33. Inline submodules under one file per module
@@ -15503,6 +15520,38 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Evidence: open
 
 **Rationale.** Bears on SYN-1 and OPEN-77. Current main: the parser accepts forms the EBNF does not derive (`import a.{f};`, `m::f()`, `f::<T>(x)`, value `if` and `match`, `pub` fields, bodyless declarations) and the EBNF keeps forms the entries removed (`E#V`, the C-style `for`, `break <expr>`); SYN-1 calls the EBNF the grammar, and the LL(1) checkers read it. Options: (a) the rule entries govern, and the EBNF is descriptive until the resync; (b) the EBNF governs, and an entry that disagrees is pending; (c) neither: each disagreement is decided one by one under OPEN-77. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
+
+<a id="OPEN-151"></a>
+#### OPEN-151. Module paths of more than one level
+
+**OPEN-151@1.** Whether a qualified path may name a member of a module nested more than one level deep (`a::b::f()`) is an open owner decision (OD151).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD151
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on SYN-10, MOD-4 and OPEN-139. The current compiler: one level only: `a::b::f()`, with `f` in `mod b` inside `mod a`, is a parse error on both consumers (E0001, `expected <, got ident(f)`), because after `a::b` the parser accepts only `::<` (explicit type arguments). SYNTAX_FREEZE_REVIEW §1.1 gives `std::fs::read_to_string` as an example of module qualification, which this parser does not accept. Options: (a) one level, as in the current compiler, and SYN-10 says so; (b) any depth, every segment before the last naming a module. Austral: not checked. Pick: none given (raised while absorbing SYNTAX_FREEZE_REVIEW §1.1, 2026-10-31).
+
+<a id="OPEN-152"></a>
+#### OPEN-152. Whether a path's first letter decides between a type and a module
+
+**OPEN-152@1.** Whether the case of the first letter of a path's first segment decides whether `X::y` names a member of a type or of a module is an open owner decision (OD152).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD152
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on SYN-10, SYN-1 and MOD-1. The current compiler: the case decides: `X::y` with an uppercase `X` is a type member (enum variant or associated function) and with a lowercase `X` a module member, resolved through the flattened name `X_y` (bug 343); a module named with an uppercase letter is reached through the associated-function form (`M::f()` on `mod M` builds and runs on both consumers). SYNTAX_FREEZE_REVIEW §1.1 gives the case rule as what keeps the parse LL(1). Options: (a) the case decides, as in the current compiler, and SYN-10 states it; (b) the parser reads `X::y` as one path, which is also LL(1), and name resolution decides by what `X` denotes. Austral: not checked. Pick: none given (raised while absorbing SYNTAX_FREEZE_REVIEW §1.1, 2026-10-31).
 
 ### Decided
 

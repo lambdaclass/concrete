@@ -687,6 +687,19 @@ fn main() -> u8 {
 named through its enum: a bare `Ok(x)` is an unknown function (E0101) and `Option.None` an unknown
 variable (E0100), both under MOD-1.
 
+The current compiler reads a path by the qualification rule of SYNTAX_FREEZE_REVIEW §1.1. After
+`X::`, a `<` begins explicit type arguments. After `X::y`, when `X` begins with an uppercase letter,
+the path names a member of a type: an enum variant (`E::V`, `E::V { ... }`) or an associated
+function (`T::f(...)`). When `X` begins with a lowercase letter, it names a member of the module
+`X`. The case of the first letter decides, so the parser needs one token of lookahead. A module
+whose name begins with an uppercase letter is read as a type: `M::f()` on `mod M { pub fn f() ... }`
+is parsed as an associated-function call, which the current compiler resolves to `M.f` (it builds
+and runs on both consumers). A module path has one level: `a::b::f()` is a parse error on both
+consumers (E0001, `expected <`). A lowercase qualified call is resolved through the flattened name
+`m_f`, which a declaration of that spelling captures (bug 343). Whether a qualified call needs an
+import is OPEN-139, whether a module path may have more than one level is OPEN-151, and whether the
+case of the first segment decides between a type and a module is OPEN-152.
+
 ```con accept name=separators exit=42
 mod m {
     pub fn base() -> Int { return 40; }

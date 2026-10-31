@@ -100,7 +100,7 @@ docs/book/src/landing.md	*	No language rules: narrative, tooling or proof workfl
 docs/book/src/language/control_flow.md	*	Tutorial; loop section stale	rule	-	-	cite-only	-
 docs/book/src/language/control_flow.md	Loops	Counting loop for (let mut n = 1; n <= limit; n = n + 1) and while-style for (cond)	grammar	conflict:STMT-6	statements	cite	STMT-6@3 (OD47): while and 'for i from a until b'; rewrite after bug 331
 docs/book/src/language/enums.md	*	Tutorial; enum basics	rule	-	-	cite-only	-
-docs/book/src/language/enums.md	Familiar Example	Variants are named Type::Variant	grammar	new	syntax	cite	cite once SYNTAX_FREEZE 1.1 is absorbed; example redeclares enum Option (OPEN-43)
+docs/book/src/language/enums.md	Familiar Example	Variants are named Type::Variant	grammar	new	syntax	cite	SYNTAX_FREEZE 1.1 is absorbed into SYN-10 (2026-10-31; OPEN-151, OPEN-152); example redeclares enum Option (OPEN-43)
 docs/book/src/language/enums.md	Matching	Match over enum variants with one arm per variant	rule	dup:PAT-2	patterns	cite	-
 docs/book/src/language/functions.md	*	Tutorial; one bad example	rule	-	-	cite-only	-
 docs/book/src/language/functions.md	More Concrete Example	Example returns 'Ok(counter.value)' and leaves linear Counter unconsumed	rule	conflict:TYPE-7	types	cite	same defects as intro.md
@@ -117,7 +117,7 @@ docs/book/src/language/memory.md	What Safe Concrete Guarantees	No uninitialized 
 docs/book/src/language/memory.md	L278-280	Raw pointers and FFI need Unsafe or a trusted function	rule	dup:TRUST-5	trusted	cite	omits TRUST-6 trusted mod
 docs/book/src/language/modules.md	*	Tutorial; main signature and inline modules	rule	-	-	cite-only	-
 docs/book/src/language/modules.md	Small Module	fn main() with(Std) -> Int	rule	conflict:STMT-7	statements	cite	STMT-7@3: main returns u8 or Unit (pending bug 320); TRUST-9 root resource
-docs/book/src/language/modules.md	Small Module	A submodule function is called module::name(args)	grammar	new	syntax	cite	'::' module qualification (SYNTAX_FREEZE 1.1 row)
+docs/book/src/language/modules.md	Small Module	A submodule function is called module::name(args)	grammar	new	syntax	cite	'::' module qualification: SYN-10, absorbed from SYNTAX_FREEZE 1.1 (2026-10-31); the one-level path is OPEN-151
 docs/book/src/language/modules.md	Nested Modules	Inline nested modules mod net { mod tcp { .. } }	grammar	dup:OPEN-33	modules	open	inline submodules vs one file per module is OD33
 docs/book/src/language/structs.md	*	Tutorial; no rules beyond TYPE-7 examples	rule	-	-	keep	-
 docs/book/src/language/variables.md	*	Tutorial; restates OWN basics	rule	-	-	cite-only	-
