@@ -134,7 +134,7 @@ structure Scope where
   /-- Bug 343: flat spelling → every definition of the program (`module.path.name`) that spelling
       denotes below Resolve, by Core name or as `<module>_<name>` (`flatSpellingOwners`). A
       qualified path whose flat spelling has two owners is refused (`checkQualifiedPath`). -/
-  flatOwners : Std.HashMap String (List String) := ∅
+  flatOwners : Std.HashMap String (Array String) := ∅
 
 /-- A declaration in the type namespace. -/
 def SymKind.isType : SymKind → Bool
@@ -486,7 +486,7 @@ private def checkQualifiedPath (ctx : ResolveCtx) (name : String) (sp : Span) : 
   | none => ctx
   | some _ =>
     let flat := flattenQualifiedPath name
-    let owners := ctx.globalScope.flatOwners.getD flat []
+    let owners := (ctx.globalScope.flatOwners.getD flat #[]).toList
     if owners.length > 1 then
       addError ctx (.qualifiedPathCaptured name flat
         ("several definitions: " ++ ", ".intercalate (owners.map fun o => s!"'{o}'"))) (some sp)
@@ -1079,11 +1079,11 @@ private partial def flatSpellingOwners (pfx path : String) (s : FileSummary) :
       flatSpellingOwners (spell sn) (path ++ "." ++ sn) ss
 
 /-- Bug 343: `flatSpellingOwners` of every top-level module, by spelling, without repeats. -/
-private def flatOwnersOf (moduleSummaries : List FileSummary) : Std.HashMap String (List String) :=
+private def flatOwnersOf (moduleSummaries : List FileSummary) : Std.HashMap String (Array String) :=
   (moduleSummaries.flatMap fun s => flatSpellingOwners "" s.name s).foldl
-    (fun (m : Std.HashMap String (List String)) (sp, o) =>
-      let cur := m.getD sp []
-      if cur.contains o then m else m.insert sp (cur ++ [o])) ∅
+    (fun (m : Std.HashMap String (Array String)) (sp, o) =>
+      let cur := m.getD sp #[]
+      if cur.contains o then m else m.insert sp (cur.push o)) ∅
 
 -- ============================================================
 -- Shallow (declaration-level) resolution

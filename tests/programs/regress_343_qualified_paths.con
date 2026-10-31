@@ -1,7 +1,14 @@
 // Bug 343 (MOD-1): qualified paths resolve to the function they name. Positive control for the
 // containment: one-level paths to a sibling top-level module and to a nested submodule, a path
 // inside a nested module to its own child, a path used as a function value, and a parent function
-// whose name merely contains a module name. --interp must agree with the binary (exit 42).
+// whose name merely contains a module name, and two top-level modules defining one function name
+// (Core respells them apart; Codex review). --interp must agree with the binary (exit 42).
+mod z {
+    pub fn f() -> u8 {
+        return 7;
+    }
+}
+
 mod m {
     pub fn f() -> u8 {
         return 20;
@@ -25,6 +32,9 @@ fn m_helper() -> u8 {
 }
 
 fn main() -> u8 {
+    if z::f() != 7 {
+        return 1;
+    }
     let h: fn() -> u8 = m::f;
     return m::f() + outer::g() + h() - m_helper() - 7;
 }
