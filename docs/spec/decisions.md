@@ -1,6 +1,6 @@
 # Open Owner Decisions
 
-This chapter lists the language questions that only the project owner decides: OD1 to OD152 of
+This chapter lists the language questions that only the project owner decides: OD1 to OD157 of
 [ROADMAP.md](../../ROADMAP.md#owner-decisions) (exit 2n for OD1 to OD32, exit 2q for the rest). Each entry states the question and encodes
 no answer. The rules it bears on are named in its rationale, together with what the current compiler does,
 which stays provisional until the owner answers. The answer, when given, is recorded in ROADMAP and
@@ -8,7 +8,7 @@ turns the entry into the rules it decides; until then no agent picks a side
 ([AGENTS.md](../project/AGENTS.md#rules)). OD1 to OD22 were answered on 2026-10-29 and are listed under
 Decided; OD23 to OD32 were decided the same day. The entries below, OPEN-33 onward, are open:
 raised while recording those answers, allocated for the owner picks of 2026-10-30, or raised since by the
-absorption and its reviews, by the spec quality audit of 2026-10-30, and by the absorption of the qualification rule (2026-10-31); OD47 is decided and OPEN-94 was withdrawn (MOD-1 already refuses its case, bug 337).
+absorption and its reviews, by the spec quality audit of 2026-10-30, by the absorption of the qualification rule (2026-10-31), and by the review of the builtins catalog (2026-10-31); OD47 is decided and OPEN-94 was withdrawn (MOD-1 already refuses its case, bug 337).
 The table below lists them in reading order.
 
 ## Decisions to be made, in order
@@ -142,6 +142,11 @@ them); they are not separate entries here
 | 116 | [OPEN-150](#OPEN-150) | the spec quality audit of 2026-10-30 | Which text governs the grammar until it is resynchronized | not checked | none given | not assessed | — |
 | 117 | [OPEN-151](#OPEN-151) | the absorption of SYNTAX_FREEZE_REVIEW §1.1 (2026-10-31) | Module paths of more than one level | not checked | none given | not assessed | — |
 | 118 | [OPEN-152](#OPEN-152) | the absorption of SYNTAX_FREEZE_REVIEW §1.1 (2026-10-31) | Whether a path's first letter decides its syntactic form | not checked | none given | not assessed | — |
+| 119 | [OPEN-153](#OPEN-153) | the review of the builtins catalog (2026-10-31) | Program functions named like a builtin | not checked | none given | not assessed | — |
+| 120 | [OPEN-154](#OPEN-154) | the review of the builtins catalog (2026-10-31) | Whether the string builtins require `Alloc` | not checked | none given | not assessed | — |
+| 121 | [OPEN-155](#OPEN-155) | the review of the builtins catalog (2026-10-31) | `unwrap` beside TYPE-24's conversions | not checked | none given | not assessed | — |
+| 122 | [OPEN-156](#OPEN-156) | the review of the builtins catalog (2026-10-31) | The capability of `get_args` | not checked | none given | not assessed | — |
+| 123 | [OPEN-157](#OPEN-157) | the review of the builtins catalog (2026-10-31) | How the type `Unit` is written | not checked | none given | not assessed | — |
 
 <a id="OPEN-33"></a>
 ### OPEN-33. Inline submodules under one file per module
@@ -698,7 +703,7 @@ OD51; the owner's answer is recorded there. The current compiler has no counted 
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on SYN-1, TYPE-4. The current compiler: the grammar has no production for `()`. Options: (a) add `()` to the grammar; (b) no unit literal, Unit produced only by a statement or a Unit call. Austral: the unit value is written `nil`. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): none given (raised by the review). Proof impact: neutral: syntax for the existing Unit value. Item review new 2 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD66.
+**Rationale.** Bears on SYN-1, TYPE-4. The current compiler: the grammar has no production for `()`. Options: (a) add `()` to the grammar; (b) no unit literal, Unit produced only by a statement or a Unit call. How the type is written in type positions is OPEN-157. Austral: the unit value is written `nil`. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): none given (raised by the review). Proof impact: neutral: syntax for the existing Unit value. Item review new 2 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD66.
 
 <a id="OPEN-67"></a>
 ### OPEN-67. Locals that reuse a top-level name
@@ -2059,6 +2064,86 @@ OD51; the owner's answer is recorded there. The current compiler has no counted 
 - Evidence: open
 
 **Rationale.** Bears on SYN-10, SYN-1 and MOD-1. The current compiler: the parser chooses by the first letter of `X`: an uppercase `X` gives an associated-function call or an enum literal, and a lowercase `X` the flattened name `X_y`, which name resolution looks up as one identifier (bug 343); a module named with an uppercase letter goes through the associated-function form, and `M::f()` on `mod M` builds and runs on both consumers. SYNTAX_FREEZE_REVIEW §1.1 presents the case split as how the parse stays LL(1). Options: (a) the first letter decides the syntactic form, as in the current compiler, and SYN-10 states it; (b) the parser reads `X::y` as one path form, which is also LL(1), and name resolution decides whether `X` is a type or a module. Austral: not checked. Pick: none given (raised while absorbing SYNTAX_FREEZE_REVIEW §1.1, 2026-10-31).
+
+<a id="OPEN-153"></a>
+### OPEN-153. Program functions named like a builtin
+
+**OPEN-153@1.** Whether a program may declare a function whose name is a builtin's, other than `print`, `println` and `append` (OPEN-133) and the names MOD-3 reserves, and which function the program's calls of that name reach is an open owner decision (OD153).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD153
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on MOD-3, MOD-1, MOD-8 and OPEN-133. The current compiler: a program function `string_length` is called by the program's calls on both consumers, and so are program functions named `string_len` and `String_len` (`string_len` returns 7 and `String_len` returns 9; a program that calls both exits 79 on both consumers), while `destroy`, `discard`, `abort`, `alloc`, `free`, `alloc_array`, `free_array` and `realloc_array` are reserved (E0578). The calls the compiler itself generates are bound by identity (MOD-8), so only the program's own calls change. Options: (a) reserve every remaining builtin's name, aliases included, and MOD-3 lists them (`print`, `println` and `append` stay with OPEN-133); (b) allow the declaration, and the program's own calls reach it, as the current compiler does, and MOD-3 says so; (c) allow the declaration, and a program reaches the builtin by a qualified name. Austral: not checked. Pick: none given (raised while reviewing the builtins catalog of spec readability 2, 2026-10-31).
+
+<a id="OPEN-154"></a>
+### OPEN-154. Whether the string builtins require `Alloc`
+
+**OPEN-154@1.** Whether `string_concat`, `string_slice`, `string_substr`, `string_trim`, `int_to_string`, `bool_to_string`, `float_to_string`, `string_push_char`, `string_append`, `string_append_int` and `string_append_bool` require the `Alloc` capability is an open owner decision (OD154).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD154
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on MEM-7, TRUST-4 and OPEN-133. The current compiler: Check gives none of these builtins a capability, and a function with no capabilities calls `string_concat` and `string_append_int` and exits 42 on both consumers (the other names were not probed). MEM-7@1 lists `string_reserve` and `append` among the builtins that require `Alloc`; `append` is accepted without `Alloc` (bug 349), and it expands into `string_append`, `string_append_int`, `string_append_bool` and `string_push_char`. MEM-7's rationale says allocation is an effect a signature shows. Options: (a) each builtin named above requires `Alloc`, and MEM-7 lists it; (b) a stated subset of them requires `Alloc`, and MEM-7 lists that subset; (c) only the builtins MEM-7 already lists require `Alloc`, so `string_reserve` and `append` do and the names above do not, and MEM-7 says so; (d) no string builtin requires `Alloc`, `string_reserve` and `append` included, and MEM-7 drops those two. Austral: not checked. Pick: none given (raised while reviewing the builtins catalog of spec readability 2, 2026-10-31).
+
+<a id="OPEN-155"></a>
+### OPEN-155. `unwrap` beside TYPE-24's conversions
+
+**OPEN-155@1.** Whether `unwrap` stays an intrinsic beside the conversions TYPE-24 lists (`n.0` and `n as T`), becomes one of those conversions, or is removed is an open owner decision (OD155).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD155
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on TYPE-24, TYPE-11, TYPE-10 and OPEN-54. The current compiler: Check gives `unwrap(m)` the newtype's inner type (E0270 when the argument is not a newtype); `return unwrap(m);` exits 42 on both consumers, and `let x: Int = unwrap(m);` followed by `if x == 42` fails the native build at SSA verification (E0715, bug 345). TYPE-24 lists `n.0` and `n as T` and does not list `unwrap`. OPEN-54 decides this only if its answer removes newtypes; while newtypes stay, this question stays. Options: (a) keep `unwrap` as an intrinsic and leave it off TYPE-24's list, as the current compiler and TYPE-24 do; (b) `unwrap(n)` is a conversion, TYPE-24 lists it, and TYPE-11 restricts it as it restricts `n.0`; (c) remove `unwrap`, leaving `n.0` and `n as T`. Austral: not checked. Pick: none given (raised while reviewing the builtins catalog of spec readability 2, 2026-10-31).
+
+<a id="OPEN-156"></a>
+### OPEN-156. The capability of `get_args`
+
+**OPEN-156@1.** Which capability the builtin `get_args` requires, or whether the builtin is removed, is an open owner decision (OD156).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD156
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on TRUST-4, STMT-7, TRUST-9 and OPEN-136. The current compiler: Check gives `get_args()` the result `HeapArray<String>` and requires `Process` (E0520 with `Env` only); the builtin has no implementation on either consumer (bug 347). STMT-7's rationale says command-line arguments come from `std.args` with `Env`, and OD8 gives `main` the root resource value (TRUST-9). Options: (a) `Env`, as `std.args` requires; (b) `Process`, as the current compiler's signature says; (c) another capability, or none; (d) remove the builtin, and command-line arguments come from `std.args`. Austral: not checked. Pick: none given (raised while reviewing the builtins catalog of spec readability 2, 2026-10-31).
+
+<a id="OPEN-157"></a>
+### OPEN-157. How the type `Unit` is written
+
+**OPEN-157@1.** Whether the type `Unit`, which STMT-7 names as a result type of `main` and which other rules and the builtins catalog also name, has a spelling in type positions, and which spelling, is an open owner decision (OD157).
+
+- Kind: open
+- Uses: none
+- Codes: none
+- Status: open OD157
+- Enforced by: none
+- Semantics: none
+- Obligation: none
+- Evidence: open
+
+**Rationale.** Bears on STMT-7, TYPE-4, SYN-1 and OPEN-66. The current compiler: a function with no result type returns no value, and `fn main() { return; }` exits 0; `fn main() -> Unit` and `let x: Unit = f();` are refused at resolve (E0108, unknown type 'Unit'); `fn main() -> ()` is a parse error (E0001, `expected type`). STMT-7@3 says `main`'s result type is `u8` or `Unit`. OPEN-66 concerns the unit value's literal; this entry concerns the type in type positions, and the two cross-reference each other. Options: (a) no spelling: the type is written only by omitting the result type, and STMT-7 says so; (b) `Unit` is a builtin type name, accepted wherever a type is; (c) `()` is the type's spelling; (d) both `Unit` and `()` are accepted. Austral: not checked. Pick: none given (raised while reviewing the builtins catalog of spec readability 2, 2026-10-31).
 
 ## Decided
 
