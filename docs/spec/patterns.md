@@ -923,4 +923,5 @@ This appendix is not normative. It records what earlier versions of this chapter
 or why they changed, so that each rationale explains the current version only. The registry,
 [ids.tsv](ids.tsv), keeps every version's state and sentence hash.
 
-- PAT-3@3 and PAT-5@3 record OD25 (2026-10-29): ignoring a payload is always written, and a struct `let` names every field.
+- PAT-3@3 records OD25 (2026-10-29): ignoring a payload is always written.
+- PAT-5@3 records OD25 (2026-10-29): a struct `let` names every field.

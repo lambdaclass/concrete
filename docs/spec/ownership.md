@@ -48,7 +48,7 @@ Every claim of "exactly once" here holds on every path that does not abort (STMT
 **Rationale.** Copy answers "may this be duplicated", not "may this be dropped". A generic
 declared `Copy` is Copy exactly at the instantiations whose type arguments are Copy:
 `Option<i32>` is, `Option<String>` is not. An instantiation that does not qualify is linear, not
-an error. This is decided from the declaration alone, as a derived `Copy` is (TIGHTENING_DECISIONS D6, option (a), 2026-10-23), so a parameter no field mentions cannot make an instantiation Copy and Mono needs no fixpoint over the type graph. The declaration itself is checked once (OWN-14), and
+an error. TIGHTENING_DECISIONS D6, option (a) (2026-10-23), decides this from the declaration alone, as a derived `Copy` is, so Mono needs no fixpoint over the type graph. The declaration itself is checked once (OWN-14), and
 TYPE-14 states the consequence.
 
 ## Rules
@@ -694,7 +694,7 @@ fn main() -> u8 {
 **Rationale.** `2 + 3;` or `f();` with a result is either a dead computation or a deliberate
 discard, and the reader cannot tell which; `discard(e)` says it.
 
-The owner decided on 2026-10-29 (OD29) that every unused non-Unit result needs `discard(e)`, with no purity heuristic. The current compiler still applies version 2's heuristic: it refuses only a syntactically pure non-Unit Copy value (E0294), skipping calls and operations that can trap (`/`, `%`), and drops a call's result silently (bug 325). Its site is `exprPureDiscardable`, a local structural purity predicate in the `Stmt.expr` check (`CheckError.discardedPureValue`).
+The owner decided on 2026-10-29 (OD29) that every unused non-Unit result needs `discard(e)`, with no syntactic purity heuristic. The current compiler still applies that heuristic: it refuses only a syntactically pure non-Unit Copy value (E0294), skipping calls and operations that can trap (`/`, `%`), and drops a call's result silently (bug 325). Its site is `exprPureDiscardable`, a local structural purity predicate in the `Stmt.expr` check (`CheckError.discardedPureValue`).
 
 
 ```con reject name=dead-computation code=E0294 stage=check pair=used-computation

@@ -700,7 +700,7 @@ fn main() -> u8 {
 
 **Rationale.** There are no default arguments, no variadic functions and no method lookup
 through implicit conversions. A method of a type parameter comes only from its bounds, which is
-what lets a generic body be checked once (TYPE-2, PASS-1). The type-argument count is E0322's (bug 221: an extra type argument was once dropped silently). A body-less declaration (an `#[intrinsic]`) keeps no type-parameter
+what lets a generic body be checked once (TYPE-2, PASS-1). E0322 enforces the type-argument count (bug 221: an extra type argument was dropped silently). A body-less declaration (an `#[intrinsic]`) keeps no type-parameter
 list, so the current compiler still skips the count there (bug 333), pinned by the pending example.
 
 ```con reject name=wrong-arity code=E0262 stage=check pair=right-arity
@@ -2066,7 +2066,7 @@ This appendix is not normative. It records what earlier versions of this chapter
 or why they changed, so that each rationale explains the current version only. The registry,
 [ids.tsv](ids.tsv), keeps every version's state and sentence hash.
 
-- TYPE-4@2 drops the `break` value from the positions a literal or expression takes its type from, since a `break` carries no value (OD27).
+- TYPE-4@2 drops the `break` value from the list of positions a value flows into, since a `break` carries no value (OD27).
 - TYPE-6@1 admitted raw-pointer comparison and `p + k` in trusted or `Unsafe` code (bugs 134 and 140). TYPE-6@2 records OD26 (2026-10-29), which removes both, pointer arithmetic becoming `ptr::offset` (TRUST-1).
 - TYPE-9@2 states the type-argument count that E0322 already enforced (bug 221: an extra type argument was dropped silently).
-- TYPE-14@1 (pending, never enforced) required a `T: Copy` bound instead; TIGHTENING_DECISIONS D6 option (a) retired it.
+- TYPE-14@1 (pending, never enforced) required a `T: Copy` bound instead and was retired by the option (a) decision (TIGHTENING_DECISIONS D6, 2026-10-23).

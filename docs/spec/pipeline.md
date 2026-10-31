@@ -582,4 +582,4 @@ This appendix is not normative. It records what earlier versions of this chapter
 or why they changed, so that each rationale explains the current version only. The registry,
 [ids.tsv](ids.tsv), keeps every version's state and sentence hash.
 
-- PASS-2@1 (retired before it was enforced) did not name the case where the carried type changes under substitution; PASS-2@2, the first enforced version, names it (a whole-value binder over a scrutinee of type `T` at `T := &Int`).
+- PASS-2@1 was retired before it was enforced (the registry: the whole-value binder exception is stated in version 2); PASS-2@2, the first enforced version, names the one case where the carried type changes under substitution (a whole-value binder over a scrutinee of type `T` at `T := &Int`).

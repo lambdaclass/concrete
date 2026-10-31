@@ -730,7 +730,7 @@ the flow-sensitive half of the rules disappears. The rewrite is to borrow at eac
 (`f(&w.p); g(&w.p);`) or to borrow the owner in a borrow block. Writing *through* a reference
 (`*r = v`) assigns the referenced place, not the binding (REF-7).
 
-Two refusals besides the post-monomorphization one carry this entry's tag and code (E0302). A
+This entry also states two refusals under its tag and code (E0302). A
 constant initializer is checked as an expression of the constant's type and may not
 borrow at all, a cast to a reference type counting as a borrow (`constBorrows`). A generic
 instantiated inside an `assert`, an `assume` or a ghost initializer may not be instantiated at a

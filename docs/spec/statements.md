@@ -1062,4 +1062,4 @@ or why they changed, so that each rationale explains the current version only. T
 
 - STMT-6@2 records OD27 (2026-10-29): `break <expr>` is refused at parse. STMT-6@3 records OD47 (2026-10-29): the loops are `while` and the counted loop, and the C-style `for` is removed.
 - STMT-7@2 masked an integer result to 0–255 and mapped `bool` (stage 1 of MAIN_EXIT_MODEL). STMT-7@3 records OD24 (2026-10-29): `main` returns `u8` or `Unit`.
-- STMT-11@1 (pending, retired before it was enforced) said of the C-style `for` step what STMT-11@2 says of the counted loop of OD47.
+- STMT-11@1 (retired before it was enforced, as the registry records) said of the C-style `for` step, which OD47 removes, what STMT-11@2 says of the counted loop of OD47.

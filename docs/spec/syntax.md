@@ -723,4 +723,4 @@ This appendix is not normative. It records what earlier versions of this chapter
 or why they changed, so that each rationale explains the current version only. The registry,
 [ids.tsv](ids.tsv), keeps every version's state and sentence hash.
 
-- SYN-6@2 (spec audit 6, 2026-10-30) adds the char-literal escapes to the sentence; the compiler accepted them before.
+- SYN-6@2 (spec audits 6 and 10, 2026-10-30) adds the char-literal escapes to the sentence; the compiler accepted them before.
