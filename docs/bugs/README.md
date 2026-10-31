@@ -503,6 +503,7 @@ the report counts those bugs as ambiguous.
 - [332_a_float_literal_of_type_f32_is_rounded_twice_thr.md](332_a_float_literal_of_type_f32_is_rounded_twice_thr.md) — A float literal of type f32 is rounded twice, through binary64, instead of once
 - [333_an_extra_type_argument_to_a_body_less_generic_de.md](333_an_extra_type_argument_to_a_body_less_generic_de.md) — An extra type argument to a body-less generic declaration is ignored natively and fails at run time under --interp
 - [341_two_modules_that_each_declare_main_pass_check_an.md](341_two_modules_that_each_declare_main_pass_check_an.md) — two modules that each declare main pass Check and the native build fails in clang on a duplicate @__concrete_argc
+- [342_the_diagnostic_code_completeness_gate_scans_a_fi.md](342_the_diagnostic_code_completeness_gate_scans_a_fi.md) — the diagnostic-code completeness gate scans a fixed file list, so eleven emitted codes (E0900 among them) have no ledger row and no spec classification
 
 <!-- END GENERATED: bug list -->
 

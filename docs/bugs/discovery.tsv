@@ -125,3 +125,4 @@ date	kind	probe	effort	bugs	silent
 2026-10-29	spec	Codex and Kimi reviews of the spec-gap rules (wip/spec-s6, 2026-10-30): type arguments to a body-less generic declaration, native against --interp	1 probe	333	333
 2026-10-29	spec	OD47 (decided 2026-10-29) check: the three C-style for forms, the counted loop and from/until as names, native against --interp, on main ae896787 (wip/spec-s7)	5 probes	331	-
 2026-10-31	review	spec quality audit of 2026-10-30 (Codex, Grok): hand probes of the open questions it raised, native against --interp, on main 71e3e804	16 probes	341	-
+2026-10-31	review	spec quality audit of 2026-10-30 follow-up: why MEM-6 cannot name E0900; a whole-tree scan of emitted codes against --report diagnostic-codes on main 71e3e804	1 probes	342	342

@@ -1,0 +1,7 @@
+// Bug 342 (tooling): this refusal's code, E0900, is emitted but has no row in
+// `--report diagnostic-codes`, the ledger of every code; ten other emitted codes are missing too.
+// The program is refused (correctly); the defect is the ledger and its completeness gate.
+fn main() -> u8 {
+    let a: [u8; 3] = [1, 2, 3];
+    return a[5];
+}
