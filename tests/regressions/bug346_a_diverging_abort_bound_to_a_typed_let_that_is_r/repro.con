@@ -1,0 +1,7 @@
+// Bug 346 (PASS-12@1): `let y: u8 = abort(); return y;` passes Check; the native build fails LLVM
+// validation (`ret void` in a function returning i8). Expected: compiled to a binary that aborts
+// (status 134), as `abort();` as a statement does.
+fn main() with(Process) -> u8 {
+    let y: u8 = abort();
+    return y;
+}

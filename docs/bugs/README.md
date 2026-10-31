@@ -509,6 +509,7 @@ the report counts those bugs as ambiguous.
 - [342_the_diagnostic_code_completeness_gate_scans_a_fi.md](342_the_diagnostic_code_completeness_gate_scans_a_fi.md) — the diagnostic-code completeness gate scans a fixed file list, so eleven emitted codes (E0900 among them) have no ledger row and no spec classification
 - [344_the_interpreter_refuses_the_abort_intrinsic_as_a.md](344_the_interpreter_refuses_the_abort_intrinsic_as_a.md) — The interpreter refuses the abort() intrinsic as an undefined function while the binary aborts
 - [345_a_newtype_unwrap_bound_to_a_let_of_the_inner_typ.md](345_a_newtype_unwrap_bound_to_a_let_of_the_inner_typ.md) — a newtype unwrap bound to a let of the inner type passes Check and the native build stops at the SSA verifier
+- [346_a_diverging_abort_bound_to_a_typed_let_that_is_r.md](346_a_diverging_abort_bound_to_a_typed_let_that_is_r.md) — a diverging abort() bound to a typed let that is returned, or returned directly, emits ret void in a function with a result and fails LLVM validation
 
 <!-- END GENERATED: bug list -->
 

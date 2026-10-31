@@ -514,6 +514,7 @@ open_bug_reproducers() {
 344|bug344_the_interpreter_refuses_the_abort_intrinsic_as_a/repro.con|interp-fails|undefined function 'abort'
 340|bug340_the_interpreter_runs_a_program_the_compiler_refu/repro.con|compile-fails|E0900
 345|bug345_a_newtype_unwrap_bound_to_a_let_of_the_inner_typ/repro.con|compile-fails|(E0715)
+346|bug346_a_diverging_abort_bound_to_a_typed_let_that_is_r/repro.con|compile-fails|value doesn't match function result type
 TABLE
 }
 if [ -z "$ONLY" ]; then
