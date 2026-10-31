@@ -2114,8 +2114,9 @@ declare its own function of these names is OPEN-133.
 | `append` | `(buf: &mut String, ...)`, one or more values after `buf`; an owned `String` value is moved | Unit | none checked today (bug 349); `IntrinsicId.capability` records `Alloc` | `string_append`, `string_append_int`, `string_append_bool`, `string_push_char` | TYPE-10 (E0270, E0315, E0421), MOD-8, MEM-7; accepted without `Alloc` today (bug 349); whether the string builtins it expands into need `Alloc` is OPEN-154 |
 
 Observed at f17645a13, and again at 904c7cc87: `append(&mut s, 1)` in a function with no
-`with(...)` set compiles and runs (result 42 on both consumers). The column "expands into" names
-`string_append_int` for that call, and the current compiler checks no capability for it. MEM-7 lists `append`
+`with(...)` set compiles and runs (result 42 on both consumers). The column "expands into" lists the intrinsics an
+`append` call can become; this paragraph records no probe of which one that call becomes or of its
+capability check. MEM-7 lists `append`
 among the builtins that require `Alloc`, so this acceptance is bug 349; whether the string builtins
 `append` expands into require `Alloc` is OPEN-154.
 

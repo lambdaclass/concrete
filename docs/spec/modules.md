@@ -251,9 +251,10 @@ the same declaration twice binds the name to one declaration and is accepted. Th
 are the `__` prefix, `user_main` and the builtins a program may call but not redefine; they are
 reserved for functions only, and a `let` spelling the compiler reserves is SYN-3. The
 [builtin catalog](types.md#builtin-functions) records which builtin names the current compiler
-reserves, and a probe of a program function named like a builtin only for `string_length`. Whether
-a program may declare a function of a builtin name the compiler does not reserve is OPEN-133 for
-`print`, `println` and `append` and OPEN-153 for every other such name.
+reserves. A probe of a program function with a builtin's name is recorded there only for
+`string_length`. Whether a program may declare a function named `print`, `println` or `append` is
+OPEN-133; whether it may declare one whose name is another builtin's, other than the names MOD-3
+reserves, and which function the program's calls of that name reach, is OPEN-153.
 The current compiler also counts an impl method under its definition name `Type_method`, so a free function
 `P_get` beside `impl P { fn get(&self) ... }` in one module is refused with E0299; whether a method
 should occupy that name is OPEN-135.
