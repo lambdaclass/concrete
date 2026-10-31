@@ -23,7 +23,7 @@ of [docs/spec/ids.tsv](../spec/ids.tsv), or the generator refuses the record.
 
 | ruling | bugs | open | silent |
 |---|--:|--:|--:|
-| violates a rule | 191 | 21 | 90 |
+| violates a rule | 191 | 20 | 90 |
 | spec gap | 1 | 0 | 0 |
 | open owner question | 4 | 0 | 0 |
 | permitted by a rule (not a bug) | 1 | 0 | 0 |
@@ -37,7 +37,7 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 | chapter | prefix | bugs | open | silent | violates | spec gap | open question | permitted |
 |---|---|--:|--:|--:|--:|--:|--:|--:|
 | pipeline.md | PASS | 44 | 3 | 7 | 44 | 0 | 0 | 0 |
-| modules.md | MOD | 31 | 1 | 12 | 31 | 0 | 0 | 0 |
+| modules.md | MOD | 31 | 0 | 12 | 31 | 0 | 0 | 0 |
 | types.md | TYPE | 21 | 2 | 13 | 21 | 0 | 0 | 0 |
 | ownership.md | OWN | 19 | 3 | 8 | 19 | 0 | 0 | 0 |
 | scope.md | SCOPE | 13 | 0 | 5 | 13 | 0 | 0 | 0 |
@@ -56,7 +56,7 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 
 | rule | chapter | bugs | which |
 |---|---|--:|---|
-| MOD-1@1 | modules.md | 25 | 022, 039, 042, 069, 082, 096, 097, 098, 117, 118, 132, 151, 215, 217, 227, 230, 231, 238, 239, 241, 242, 243, 245, 262, **343** |
+| MOD-1@1 | modules.md | 25 | 022, 039, 042, 069, 082, 096, 097, 098, 117, 118, 132, 151, 215, 217, 227, 230, 231, 238, 239, 241, 242, 243, 245, 262, 343 |
 | PASS-12@1 | pipeline.md | 14 | 005, 009, 014, 016, 029, 032, 035, 044, **054**, 055, **077**, 108, 116, **341** |
 | PASS-9@1 | pipeline.md | 10 | 023, 033, 056, 078, 110, 175, 213, 271, 303, 309 |
 | SCOPE-3@1 | scope.md | 9 | 040, 041, 045, 050, 061, 087, 101, 176, 208 |

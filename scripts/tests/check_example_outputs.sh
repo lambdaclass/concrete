@@ -508,7 +508,6 @@ open_bug_reproducers() {
 328|bug328_a_method_taking_self_or_mut_self_is_called_on_an/repro.con|runs-exit|42
 332|bug332_a_float_literal_of_type_f32_is_rounded_twice_thr/repro.con|runs-exit|0
 333|bug333_an_extra_type_argument_to_a_body_less_generic_de/repro.con|compiles|
-343|bug343_a_qualified_call_m_f_runs_a_parent_function_name/repro.con|runs-exit|7
 331|bug331_c_style_for_loops_are_accepted_and_the_counted_l/repro.con|runs-exit|42
 341|bug341_two_modules_that_each_declare_main_pass_check_an/repro.con|compile-fails|redefinition of global '@__concrete_argc'
 342|bug342_the_diagnostic_code_completeness_gate_scans_a_fi/repro.con|compile-fails|(E0900)

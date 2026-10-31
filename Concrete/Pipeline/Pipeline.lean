@@ -162,9 +162,10 @@ def buildSummary (prog : ParsedProgram) : SummaryTable :=
     binder table. Part of resolution, not a separate step, so no path can reach Check with a
     body it skipped. Bug 202: `desugar` was a step each caller had to remember; the project,
     debug-bundle, reducer and test paths did not, so a project's `let … else` reached Check
-    undesugared and was refused. -/
+    undesugared and was refused. First, every qualified path Resolve resolved (`m::f`) is given
+    the flat spelling Check and Elab still use (`m_f`; bug 343, `Module.flattenQualifiedPaths`). -/
 private def finishResolve (rm : ResolvedModule) : ResolvedModule :=
-  { rm with module := resolveModuleLocals (desugarModule rm.module) }
+  { rm with module := resolveModuleLocals (desugarModule rm.module.flattenQualifiedPaths) }
 
 /-- Name-resolution pass: validates all identifiers and imports. -/
 -- spec: FFI-6, spec: MOD-1, spec: MOD-2 (docs/spec/modules.md; names resolve once, before checking)

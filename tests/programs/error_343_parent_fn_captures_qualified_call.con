@@ -1,0 +1,16 @@
+// Bug 343 (MOD-1): m::f() was compiled as a call of the flat spelling m_f, so the parent's own
+// fn m_f ran instead of m.f (exit 7, silent). Contained: refused (E0299) until qualified paths
+// resolve by identity (R-0492).
+mod m {
+    pub fn f() -> u8 {
+        return 42;
+    }
+}
+
+fn m_f() -> u8 {
+    return 7;
+}
+
+fn main() -> u8 {
+    return m::f();
+}

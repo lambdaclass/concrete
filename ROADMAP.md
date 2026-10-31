@@ -149,11 +149,11 @@ a link failure, an interpreter refusal or an unrejected leak.
 
 <!-- BEGIN GENERATED: bug dashboard (scripts/gen/bug_dashboard.py; edit docs/bugs records and docs/bugs/discovery.tsv) -->
 
-**Open bugs: 26** (15 silent, 6 loud, 5 filed before the discovery record) of 303 bug records.
+**Open bugs: 25** (14 silent, 6 loud, 5 filed before the discovery record) of 303 bug records.
 
 | open bugs by primary structural class | open | silent | bugs |
 |---|---|---|---|
-| 1. Declaration identity by spelled name, not a resolved `DefId` | 6 | 2 | 054, 077, 114, 122, 341, 343 |
+| 1. Declaration identity by spelled name, not a resolved `DefId` | 5 | 1 | 054, 077, 114, 122, 341 |
 | 5. Borrow tracking by syntax instead of normalized places | 1 | 0 | 216 |
 | 11. Absence read as a fact (fail-open defaults) | 3 | 1 | 049, 058, 342 |
 | 12. One fact kept in two places | 1 | 0 | 064 |
@@ -165,7 +165,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 | exit 0b | 3 | 3 | 122, 332, 333 |
 | exit 2c | 1 | 0 | 114 |
 | exit 2q | 13 | 10 | 216, 318, 319, 320, 321, 322, 323, 324, 325, 326, 327, 328, 331 |
-| no exit names it | 9 | 2 | 049, 054, 058, 064, 077, 270, 341, 342, 343 |
+| no exit names it | 8 | 1 | 049, 054, 058, 064, 077, 270, 341, 342 |
 
 | open bugs by spec ruling ([RULINGS.md](docs/bugs/RULINGS.md)) | open | silent | bugs |
 |---|---|---|---|
@@ -174,7 +174,6 @@ a link failure, an interpreter refusal or an unrejected leak.
 | violates FFI-2@1 | 1 | 1 | 122 |
 | violates FFI-5@1 | 1 | 0 | 114 |
 | violates MEM-4@4 | 1 | 1 | 326 |
-| violates MOD-1@1 | 1 | 1 | 343 |
 | violates OWN-10@2 | 1 | 0 | 216 |
 | violates OWN-15@3 | 1 | 1 | 328 |
 | violates OWN-7@3 | 1 | 1 | 325 |

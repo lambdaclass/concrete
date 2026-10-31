@@ -1840,6 +1840,22 @@ r179_leg regress_179_concurrent_compile 5 8 42 \
     "$ROOT_DIR/$COMPILER" "$ROOT_DIR/$TESTDIR/regress_179_concurrent_compile.con" -o
 r179_build() { cd "$ROOT_DIR/$TESTDIR/regress_179_concurrent_build" && "$ROOT_DIR/$COMPILER" build -o "$1"; }
 r179_leg regress_179_concurrent_build 3 4 0 r179_build
+# Bug 343: qualified paths (one level, nested, as a function value) call the function they name,
+# and --interp agrees with the binary.
+r343_src="$TESTDIR/regress_343_qualified_paths.con"
+r343_i=$($COMPILER "$r343_src" --interp 2>&1 || true)
+r343_n=""
+if $COMPILER "$r343_src" -o "$TESTDIR/.r343_bin" >/dev/null 2>&1; then
+    "$TESTDIR/.r343_bin" >/dev/null 2>&1 && r343_n=0 || r343_n=$?
+fi
+rm -f "$TESTDIR/.r343_bin"
+if [ "$r343_n" = "42" ] && [ "$r343_i" = "42" ]; then
+    echo "  ok  regress_343_qualified_paths: --interp == binary (42)"
+    PASS=$((PASS + 1))
+else
+    echo "FAIL  regress_343_qualified_paths: binary exit '$r343_n', --interp '$r343_i' (want 42 from both)"
+    FAIL=$((FAIL + 1))
+fi
 # Bug 165: println/print/append desugared into helper calls that bound by spelling, so a
 # module's own `fn print_int` was called by `println`. The interpreter prints the program's
 # stdout then its result; the binary must print the same stdout and exit with that result.
@@ -10513,6 +10529,20 @@ run_ok "$TESTDIR/regress_150_float_self_compare.con" 1
 run_ok "$TESTDIR/regress_152_string_trim_empty.con" 0
 # Bug 151 (contained): two nested modules' functions with one flattened name are refused (E0299).
 run_err "$TESTDIR/error_151_nested_name_flattening.con" "(E0299)"
+# Bug 343 (silent, contained): `m::f()` was compiled as the flat spelling `m_f`, so a parent
+# `fn m_f`, a local, another module's `m_f`, a nested `z.m.f` or a builtin of that spelling ran
+# instead (E0299 until qualified paths resolve by identity, R-0492); and an undeclared `m_f()`
+# reached `m.f` (E0101). Positive control, --interp == binary: the r343 block.
+run_err "tests/regressions/bug343_a_qualified_call_m_f_runs_a_parent_function_name/repro.con" "(E0299)"
+run_err "$TESTDIR/error_343_parent_fn_captures_qualified_call.con" "(E0299)"
+run_err "$TESTDIR/error_343_local_captures_qualified_call.con" "(E0299)"
+run_err "$TESTDIR/error_343_other_module_fn_captures_qualified_call.con" "(E0299)"
+run_err "$TESTDIR/error_343_nested_module_captures_qualified_call.con" "(E0299)"
+run_err "$TESTDIR/error_343_nested_parent_fn_captures_qualified_call.con" "(E0299)"
+run_err "$TESTDIR/error_343_builtin_captures_qualified_call.con" "(E0299)"
+run_err "$TESTDIR/error_343_flat_spelling_reaches_module_fn.con" "(E0101)"
+run_err "$TESTDIR/error_343_nested_flat_spelling_reaches_child_fn.con" "(E0101)"
+run_ok "$TESTDIR/regress_343_qualified_paths.con" 42
 # Bug 165 (silent): a module defining `fn print_int` got it called by every `println`; the
 # reproducer aborted. --interp agreement: the r165 block.
 run_ok "$TESTDIR/regress_165_generated_helper_call.con" "7 hi true x n=hi ok" 42

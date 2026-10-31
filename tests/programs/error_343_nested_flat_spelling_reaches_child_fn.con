@@ -1,0 +1,17 @@
+// Bug 343 (MOD-1): inside a nested module, the undeclared name b_f reached its child's b.f.
+// A name the program does not declare or import is E0101.
+mod a {
+    mod b {
+        pub fn f() -> u8 {
+            return 42;
+        }
+    }
+
+    pub fn g() -> u8 {
+        return b_f();
+    }
+}
+
+fn main() -> u8 {
+    return a::g();
+}

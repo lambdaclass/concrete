@@ -72,6 +72,9 @@ inductive ResolveError where
   | unknownBoundTrait (traitName : String) (param : String) (owner : String)
   | unimportable (kind : String) (symbol : String) (moduleName : String)
   | traitIsNotAType (name : String)
+  /-- Bug 343 (MOD-1): a qualified path whose flat spelling (the one Check, Elab and Core still
+      use) also names another definition or binding, which would be called instead. -/
+  | qualifiedPathCaptured (path : String) (flat : String) (others : String)
 
 def ResolveError.message : ResolveError → String
   | .undeclaredVariable name => s!"undeclared variable '{name}'"
@@ -110,6 +113,8 @@ def ResolveError.message : ResolveError → String
     s!"'{name}' takes {expected} capability argument{if expected == 1 then "" else "s"}, but {got} {if got == 1 then "was" else "were"} given"
   | .wrongTypeArgCount name expected got =>
     s!"'{name}' takes {expected} type argument{if expected == 1 then "" else "s"}, but {got} {if got == 1 then "was" else "were"} given"
+  | .qualifiedPathCaptured path flat others =>
+    s!"qualified path '{path}' is compiled through the flat spelling '{flat}', which also names {others}; the call could reach the wrong definition, so it is refused until qualified paths are resolved by identity (bug 343, R-0492): rename the declaration, binding or module"
 
 structure Scope where
   symbols : List (String × SymKind)
@@ -126,6 +131,10 @@ structure Scope where
       Check and Elab consult aliases, structs and enums in separate tables, so which declaration
       answers depends on the position, not on scope order alone (bug 229). -/
   typeKinds : Std.HashMap String (Array SymKind) := ∅
+  /-- Bug 343: flat spelling → every definition of the program (`module.path.name`) that spelling
+      denotes below Resolve, by Core name or as `<module>_<name>` (`flatSpellingOwners`). A
+      qualified path whose flat spelling has two owners is refused (`checkQualifiedPath`). -/
+  flatOwners : Std.HashMap String (List String) := ∅
 
 /-- A declaration in the type namespace. -/
 def SymKind.isType : SymKind → Bool
@@ -238,6 +247,7 @@ def ResolveError.code : ResolveError → String
   | .unknownBoundTrait _ _ _ => "E0125"
   | .unimportable _ _ _ => "E0126"
   | .traitIsNotAType _ => "E0108"
+  | .qualifiedPathCaptured _ _ _ => "E0299"
 
 private def addError (ctx : ResolveCtx) (err : ResolveError) (span : Option Span := none) : ResolveCtx :=
   { ctx with errors := ctx.errors ++ [{ severity := .error, message := err.message, pass := "resolve", span := span, hint := none, code := err.code }] }
@@ -464,19 +474,43 @@ private def checkWrittenTys (ctx : ResolveCtx) (tys : List Ty) (sp : Span) : Res
 -- Walk expressions and statements
 -- ============================================================
 
+/-- Bug 343 (MOD-1): a qualified path `m::f` resolved, but Check, Elab and every Core consumer
+    still call it by its flat spelling `m_f` (`Module.flattenQualifiedPaths`), and resolve that
+    spelling against everything of the program. Refused when that spelling denotes more than the
+    path's own definition: another definition whose Core name or `<module>_<name>` spelling it
+    is (a top-level `fn m_f`, a nested `z.m.f`, a function of another module), a local or
+    parameter, an import, a constant, or a builtin. Containment until R-0492 (S5 `DefId`) gives
+    qualified paths their declaration's identity. -/
+private def checkQualifiedPath (ctx : ResolveCtx) (name : String) (sp : Span) : ResolveCtx :=
+  match qualifiedPathParts? name with
+  | none => ctx
+  | some _ =>
+    let flat := flattenQualifiedPath name
+    let owners := ctx.globalScope.flatOwners.getD flat []
+    if owners.length > 1 then
+      addError ctx (.qualifiedPathCaptured name flat
+        ("several definitions: " ++ ", ".intercalate (owners.map fun o => s!"'{o}'"))) (some sp)
+    else if ctx.visibleLocals.contains flat then
+      addError ctx (.qualifiedPathCaptured name flat s!"the local binding '{flat}'") (some sp)
+    else if ctx.globalScope.symbolMap.contains flat then
+      addError ctx (.qualifiedPathCaptured name flat s!"the declaration or import '{flat}'") (some sp)
+    else if isKnownBuiltinFn flat then
+      addError ctx (.qualifiedPathCaptured name flat s!"the builtin function '{flat}'") (some sp)
+    else ctx
+
 mutual
 /-- Walk an expression, checking all name references. -/
 partial def resolveExpr (ctx : ResolveCtx) (e : Expr) : ResolveCtx :=
   match e with
   | .ident sp name =>
     -- Only flag identifiers that aren't in any scope and aren't known functions
-    if lookupName ctx name || isKnownBuiltinFn name then ctx
+    if lookupName ctx name || isKnownBuiltinFn name then checkQualifiedPath ctx name sp
     else addError ctx (.undeclaredVariable name) (some sp)
   | .intLit _ _ | .floatLit _ _ | .boolLit _ _ | .strLit _ _ | .charLit _ _ => ctx
   | .binOp _ _ lhs rhs => resolveExpr (resolveExpr ctx lhs) rhs
   | .unaryOp _ _ operand => resolveExpr ctx operand
   | .call sp fn typeArgs args =>
-    let ctx := if lookupName ctx fn || isKnownBuiltinFn fn then ctx
+    let ctx := if lookupName ctx fn || isKnownBuiltinFn fn then checkQualifiedPath ctx fn sp
                else addError ctx (.unknownFunction fn) (some sp)
     let ctx := checkWrittenTys ctx typeArgs sp
     args.foldl resolveExpr ctx
@@ -544,7 +578,7 @@ partial def resolveExpr (ctx : ResolveCtx) (e : Expr) : ResolveCtx :=
                else addError ctx (.unknownStaticMethod typeName method) (some sp)
     args.foldl resolveExpr ctx
   | .fnRef sp name =>
-    if lookupName ctx name || isKnownBuiltinFn name then ctx
+    if lookupName ctx name || isKnownBuiltinFn name then checkQualifiedPath ctx name sp
     else addError ctx (.unknownFunctionRef name) (some sp)
   | .allocCall _ inner allocExpr =>
     resolveExpr (resolveExpr ctx inner) allocExpr
@@ -677,10 +711,10 @@ private def buildGlobalScopeFromSummary (s : FileSummary) : Scope × List String
   -- Submodule definitions (via submoduleSummaries)
   let symbols := symbols ++ s.submoduleSummaries.flatMap fun (subName, subS) =>
     (subS.functions.map fun (name, fs) =>
-      (s!"{subName}_{name}", SymKind.fn (fs.params.map fun (n, ty) => { name := n, ty := ty }) fs.retTy))
+      (qualifiedPathName subName name, SymKind.fn (fs.params.map fun (n, ty) => { name := n, ty := ty }) fs.retTy))
     ++ (subS.structs.map fun st => (st.name, SymKind.struct st))
     ++ (subS.enums.map fun e => (e.name, SymKind.enum e))
-    ++ (subS.externFns.map fun ef => (s!"{subName}_{ef.name}", SymKind.externFn ef.params ef.retTy))
+    ++ (subS.externFns.map fun ef => (qualifiedPathName subName ef.name, SymKind.externFn ef.params ef.retTy))
     ++ (subS.constants.map fun c => (c.name, SymKind.const c.ty))
     ++ (subS.newtypes.map fun nt => (nt.name, SymKind.newtype nt))
     ++ (implSigsToSymbols (subS.implMethodSigs.filter fun (name, _) =>
@@ -1010,9 +1044,9 @@ private partial def resolveModuleTreeErrors (summaryTable : List (String × File
       -- Its children's functions and foreign bindings by qualified name (Check's `submoduleNames`).
       let childFns : List (String × SymKind) := subSummary.submoduleSummaries.foldl
         (fun acc (childName, c) => acc
-          ++ c.functions.map (fun (n, fs) => (s!"{childName}_{n}",
+          ++ c.functions.map (fun (n, fs) => (qualifiedPathName childName n,
               SymKind.fn (fs.params.map fun (pn, ty) => { name := pn, ty := ty }) fs.retTy))
-          ++ c.externFns.map (fun ef => (s!"{childName}_{ef.name}",
+          ++ c.externFns.map (fun ef => (qualifiedPathName childName ef.name,
               SymKind.externFn ef.params ef.retTy))
           -- and its children's newtypes, which Check's `allNewtypes` includes (bug 229).
           ++ c.newtypes.map (fun nt => (nt.name, SymKind.newtype nt))) []
@@ -1022,9 +1056,34 @@ private partial def resolveModuleTreeErrors (summaryTable : List (String × File
       -- module's let `outer`'s `type Nope` pass in `inner`, where Check cannot expand it, and the
       -- cast reached the backend again).
       let subTypes := ownTypes ++ impTys ++ siblingTypes
-      let sErrs := resolveModuleTreeErrors summaryTable sub subSummary (Scope.ofSymbols subSyms)
+      let sErrs := resolveModuleTreeErrors summaryTable sub subSummary
+        { Scope.ofSymbols subSyms with flatOwners := scope.flatOwners }
         subTypes traitMethods traitImpls_
       acc ++ sErrs.stampFile sub.sourceFile) errs
+
+/-- Bug 343: the definitions a flat spelling can denote below Resolve, for one module tree:
+    `(spelling, module.path.name)` for each function, impl method and foreign binding, under its
+    Core name (a top-level module's bare, a nested module's prefixed by its submodule chain, as
+    `prefixModuleFnNames` spells it; a foreign binding's always bare) and under the flat spelling
+    `<module>_<name>` a qualified path to it is compiled through. -/
+private partial def flatSpellingOwners (pfx path : String) (s : FileSummary) :
+    List (String × String) :=
+  let spell := fun (n : String) => if pfx.isEmpty then n else pfx ++ "_" ++ n
+  let modName := (path.splitOn ".").getLastD path
+  let fnNames := s.functions.map (·.1) ++ s.implMethodSigs.map (·.1)
+  let externNames := s.externFns.map (·.name)
+  fnNames.map (fun n => (spell n, path ++ "." ++ n))
+    ++ externNames.map (fun n => (n, path ++ "." ++ n))
+    ++ (fnNames ++ externNames).map (fun n => (modName ++ "_" ++ n, path ++ "." ++ n))
+    ++ s.submoduleSummaries.flatMap fun (sn, ss) =>
+      flatSpellingOwners (spell sn) (path ++ "." ++ sn) ss
+
+/-- Bug 343: `flatSpellingOwners` of every top-level module, by spelling, without repeats. -/
+private def flatOwnersOf (moduleSummaries : List FileSummary) : Std.HashMap String (List String) :=
+  (moduleSummaries.flatMap fun s => flatSpellingOwners "" s.name s).foldl
+    (fun (m : Std.HashMap String (List String)) (sp, o) =>
+      let cur := m.getD sp []
+      if cur.contains o then m else m.insert sp (cur ++ [o])) ∅
 
 -- ============================================================
 -- Shallow (declaration-level) resolution
@@ -1128,23 +1187,24 @@ def resolveShallow (moduleSummaries : List FileSummary)
   let (combinedScope, combinedTypes) := declScopes.foldl (fun (scope, types) (_, sScope, sTypes) =>
     (Scope.ofSymbols (scope.symbols ++ sScope.symbols), types ++ sTypes)
   ) (Scope.ofSymbols [], ([] : List String))
-  -- For inline sibling modules (mod A {} mod B {}), register qualified names (A_fn)
-  -- so that B can use A::fn() syntax (parsed as A_fn).
+  -- For inline sibling modules (mod A {} mod B {}), register qualified names (A::fn)
+  -- so that B can use A::fn() syntax (bug 343: spelled `A::fn`, never `A_fn`).
   let siblingQualified : List (String × SymKind) := moduleSummaries.foldl (fun acc s =>
     if s.name == rootModuleName then acc
     else
       let qualFns : List (String × SymKind) :=
         (s.functions.filter fun (name, _) => s.publicNames.contains name).map fun (name, fs) =>
-          (s.name ++ "_" ++ name, SymKind.fn (fs.params.map fun (n, ty) => { name := n, ty := ty }) fs.retTy)
+          (qualifiedPathName s.name name, SymKind.fn (fs.params.map fun (n, ty) => { name := n, ty := ty }) fs.retTy)
       let qualExterns : List (String × SymKind) :=
         (s.externFns.filter fun ef => s.publicNames.contains ef.name).map fun ef =>
-          (s.name ++ "_" ++ ef.name, SymKind.externFn ef.params ef.retTy)
+          (qualifiedPathName s.name ef.name, SymKind.externFn ef.params ef.retTy)
       let qualImpls : List (String × SymKind) :=
         (s.implMethodSigs.filter fun (name, _) => s.publicNames.contains name).map fun (name, fs) =>
-          (s.name ++ "_" ++ name, SymKind.fn (fs.params.map fun (n, ty) => { name := n, ty := ty }) fs.retTy)
+          (qualifiedPathName s.name name, SymKind.fn (fs.params.map fun (n, ty) => { name := n, ty := ty }) fs.retTy)
       acc ++ qualFns ++ qualExterns ++ qualImpls
   ) []
-  let combinedScope : Scope := Scope.ofSymbols (combinedScope.symbols ++ siblingQualified)
+  let combinedScope : Scope := { Scope.ofSymbols (combinedScope.symbols ++ siblingQualified) with
+    flatOwners := flatOwnersOf moduleSummaries }
   -- Collect trait methods and trait impls from all summaries
   let traitMethods := moduleSummaries.foldl (fun acc s =>
     acc ++ s.traits.map fun t => (t.name, t.methods.map (·.name))) []
@@ -1165,7 +1225,8 @@ def resolveShallow (moduleSummaries : List FileSummary)
     let (ownSyms, ownTys) := moduleTypeEnvironment s
     let (impSyms, impTys) := (importScope summaryTable s.imports s).getD (syms, tys)
     (s.name, impSyms.filter (·.2.isType) ++ ownSyms, impTys ++ ownTys)
-  let combinedScope := Scope.ofSymbols (combinedScope.symbols ++ importedSymbols)
+  let combinedScope := { Scope.ofSymbols (combinedScope.symbols ++ importedSymbols) with
+    flatOwners := combinedScope.flatOwners }
   let combinedTypes := combinedTypes ++ importedTypes
   { globalScope := combinedScope
   , knownTypes := combinedTypes
@@ -1257,8 +1318,10 @@ def resolveBodiesPartial (modules : List Module) (shallow : ShallowResult) : (Li
     let typeEnv := shallow.moduleTypeEnvs.lookup m.name
     let scope := match shallow.moduleScopes.lookup m.name, typeEnv with
       | some own, some (typeSyms, _) =>
-        Scope.ofSymbolsTyped (own ++ shallow.globalScope.symbols) typeSyms
-      | some own, none => Scope.ofSymbols (own ++ shallow.globalScope.symbols)
+        { Scope.ofSymbolsTyped (own ++ shallow.globalScope.symbols) typeSyms with
+          flatOwners := shallow.globalScope.flatOwners }
+      | some own, none => { Scope.ofSymbols (own ++ shallow.globalScope.symbols) with
+          flatOwners := shallow.globalScope.flatOwners }
       | none, _ => shallow.globalScope
     let knownTypes := match typeEnv with
       | some (_, tys) => tys

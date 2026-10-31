@@ -1,0 +1,12 @@
+// Bug 343 (MOD-1): the flat spelling string_length of string::length() is a builtin, which
+// answered the call instead of the module's function (--interp: 'expected a String value').
+// Contained: refused (E0299).
+mod string {
+    pub fn length(n: u8) -> u8 {
+        return n;
+    }
+}
+
+fn main() -> u8 {
+    return string::length(42);
+}

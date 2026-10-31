@@ -1,4 +1,4 @@
 ### Bug 343: A qualified call m::f() runs a parent function named m_f, and an undeclared m_f() reaches the submodule function m.f (2026-10-31)
 
-Filed, not fixed: a qualified call `m::f()` is lowered to the flat name `m_f`, so a top-level function of that spelling captures it (silent wrong code, exit 7 instead of 42) and an undeclared `m_f()` reaches `m.f`. Pinned by `check_example_outputs.sh` (open-bug reproducers leg); the structural owner is R-0492 (`DefId`) through R-0514
+Contained: a qualified path `m::f` is now spelled apart from every identifier until Resolve has resolved it, so an undeclared `m_f()` is refused (E0101, it reached `m.f`), and a qualified path whose flat spelling `m_f` also names a parent or other-module function, a nested module's function, a local, an import or a builtin is refused (E0299; it ran that function instead, silently). Pinned by eight `error_343_*` fixtures and `regress_343_qualified_paths.con` (native and `--interp` agree on 42); the repair, qualified paths resolved by identity, is R-0492 (`DefId`) through R-0514
 ([bug 343](docs/bugs/343_a_qualified_call_m_f_runs_a_parent_function_name.md)).

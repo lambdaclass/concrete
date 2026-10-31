@@ -609,7 +609,9 @@ partial def parsePrimary : ParseM Expr := do
             else
               return .enumLit sp name nextName [] []
           else
-            let qualName := name ++ "_" ++ nextName
+            -- Bug 343: spelled apart from every identifier (`m::f`, not `m_f`); Resolve looks
+            -- it up among qualified paths and `Module.flattenQualifiedPaths` respells it after.
+            let qualName := qualifiedPathName name nextName
             let mut qualTypeArgs : List Ty := []
             if next2 == .doubleColon then
               advance

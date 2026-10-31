@@ -1,0 +1,11 @@
+// Bug 343 (MOD-1): the undeclared name m_f reached the submodule function m.f (exit 42). A name the
+// program does not declare or import is E0101.
+mod m {
+    pub fn f() -> u8 {
+        return 42;
+    }
+}
+
+fn main() -> u8 {
+    return m_f();
+}
