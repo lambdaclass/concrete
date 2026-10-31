@@ -86,8 +86,7 @@ address. The decision was made in one place and recomputed in another, and nothi
 the two. REF-9 removes the Copy dependence from the rule. This entry requires the mode to be
 data in Core rather than recomputed: since 2026-10-23 a binder's Core type is its mode (a
 reference type is a borrowed binder), decided once from the scrutinee's type, and Lower and the
-interpreter read it from there. The re-check after Mono is the open obligation. Version 2 (the
-first enforced one) names the one case where the carried type changes under substitution: a
+interpreter read it from there. The re-check after Mono is the open obligation. The carried type changes under substitution in one case: a
 whole-value binder `n` over a scrutinee of type `T` at `T := &Int` gets a reference type, and
 Lower and the interpreter bind the scrutinee itself in both modes.
 
@@ -577,3 +576,10 @@ fn main() -> u8 {
 }
 ```
 
+## Version history
+
+This appendix is not normative. It records what earlier versions of this chapter's entries said
+or why they changed, so that each rationale explains the current version only. The registry,
+[ids.tsv](ids.tsv), keeps every version's state and sentence hash.
+
+- PASS-2@1 (retired before it was enforced) did not name the case where the carried type changes under substitution; PASS-2@2, the first enforced version, names it (a whole-value binder over a scrutinee of type `T` at `T := &Int`).

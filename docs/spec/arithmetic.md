@@ -47,15 +47,13 @@ be 44. The negated value is what is range-checked, so `let a: i8 = -128` is acce
 `-129` is not. Hex (`0xFF`) and binary (`0b1010`) literals are accepted; suffixes such as `7u8`
 are not part of the language (an annotation or a conversion says the type).
 
-A hint (an annotation, a parameter, a field, an arm) gives a literal the hinted type; version 1
-typed a literal with no expected type `Int` (`i64`), which is still the current compiler's behaviour. Suffixes are
+A hint (an annotation, a parameter, a field, an arm) gives a literal the hinted type. Suffixes are
 workload-gated: an
 annotation already covers the need, so a suffix would be pure convenience, revisited if a real
 workload finds annotations too noisy. Gated by `scripts/tests/check_numeric_literals.sh` (ROADMAP
 old Phase 6 #6, 2026-06-23).
 
-Version 2 records the owner's decision of 2026-10-29 (OD31): the fallback to `Int` where nothing is
-expected is removed and no suffix is required. Whether a float literal follows the same principle
+The owner decided on 2026-10-29 (OD31) that there is no fallback to `Int` where nothing is expected and that no suffix is required. Whether a float literal follows the same principle
 (its context's float type, refused with none), as OD31's note says, is OPEN-63; which positions supply
 an expected type is OPEN-138. The current compiler still types an unconstrained integer literal `Int` and
 an unconstrained float literal `Float64` (bug 327).
@@ -247,8 +245,7 @@ refused once R-0500 lands), and every other such conversion is written with a na
 - Evidence: tested
 
 **Rationale.** Decided 2026-10-21 (ARITHMETIC_POLICY §8, exit 2k): `as` is total and
-obligation-free, and each lossy conversion names what it does. Version 2 lists the accepted
-conversions in the sentence; version 1 gave them here. Today `as` refuses conversions to and from `bool` other than `bool` to an integer
+obligation-free, and each lossy conversion names what it does. Today `as` refuses conversions to and from `bool` other than `bool` to an integer
 (integer, float and `char` to `bool`, and `bool` to `char`: E0553, bugs 108 and 130). Narrowing
 and sign changes are still accepted and truncate or reinterpret, and float to integer truncates
 toward zero and aborts on NaN, an infinity or a value outside the target's range (a checked
@@ -672,3 +669,11 @@ fn main() -> u8 {
     return 1;
 }
 ```
+## Version history
+
+This appendix is not normative. It records what earlier versions of this chapter's entries said
+or why they changed, so that each rationale explains the current version only. The registry,
+[ids.tsv](ids.tsv), keeps every version's state and sentence hash.
+
+- ARITH-2@1 typed a literal with no expected type `Int` (`i64`), which the current compiler still does. ARITH-2@2 recorded OD31 (2026-10-29) for integer and float literals. ARITH-2@3 (spec audit 8, 2026-10-30) states the integer-literal rule only, the float literal being OPEN-63 and the positions OPEN-138.
+- ARITH-5@1 listed the accepted conversions in its rationale; ARITH-5@2 (spec audit 12, 2026-10-30) lists them in the sentence.

@@ -183,7 +183,7 @@ scrutinee's own was silently taken as it, and a range arm over an enum reached t
 Check now refuses each with E0309. A bare variant name over a variant with a non-Copy field
 silently dropped the payload until bug 197; that refusal is OWN-5's (E0288).
 
-Version 3 records the owner's decision of 2026-10-29 (OD25): ignoring a payload is always written,
+The owner decided on 2026-10-29 (OD25) that ignoring a payload is always written,
 `Variant { .. }` or `field: _`, and a bare variant name matches only a fieldless variant. The current compiler still
 lets a bare name ignore a Copy payload (bug 321), pinned by the pending example below; the
 `Variant { .. }` form is not parsed yet.
@@ -414,7 +414,7 @@ skipped the rest of the function, or reached the backend, which failed in `llvm-
 `else` arm would discard the scrutinee, so `let ... else` there is refused (OWN-5); write a
 `match`.
 
-Version 3 records the owner's decision of 2026-10-29 (OD25): a struct `let` names every field, a
+The owner decided on 2026-10-29 (OD25) that a struct `let` names every field, a
 Copy struct included. The current compiler still lets a pattern over a Copy struct omit fields (bug 321).
 
 A field binding written `_` in a variant or destructuring pattern holds its field's position, so
@@ -916,3 +916,11 @@ check, elaboration and lowering.
 A variant is always written with its enum, `Option::Some { value }`, never `Some(x)`: a bare name
 would make the parser depend on name resolution to know which enum it belongs to. A function
 parameter is a name with a type, never a pattern; the body destructures it.
+
+## Version history
+
+This appendix is not normative. It records what earlier versions of this chapter's entries said
+or why they changed, so that each rationale explains the current version only. The registry,
+[ids.tsv](ids.tsv), keeps every version's state and sentence hash.
+
+- PAT-3@3 and PAT-5@3 record OD25 (2026-10-29): ignoring a payload is always written, and a struct `let` names every field.

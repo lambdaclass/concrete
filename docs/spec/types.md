@@ -222,7 +222,7 @@ mod text_owned {
 so the type of every value is visible in the source. An integer literal takes the type its
 position expects. A literal that does not fit that type is an arithmetic rule. CoreCheck repeats
 the variable and return checks on Core as defense in depth.
-Version 2 drops the `break` value from the list of positions: a `break` carries no value (STMT-6@3, OD27).
+A `break` carries no value (STMT-6@3, OD27), so it is not one of the positions.
 The current compiler still parses `break <expr>;`, evaluating and dropping the value (bug 323).
 
 ```con reject name=bool-for-int code=E0220 stage=check pair=one-type
@@ -425,9 +425,7 @@ fn main() -> u8 {
 
 **Rationale.** Mixed widths and signedness are a classic source of silent conversion bugs, so they
 are refused rather than promoted. Comparing aggregates would need a definition of equality per
-type, which the language does not have. Version 1 admitted raw-pointer comparison
-and `p + k` in trusted or `Unsafe` code (bugs 134 and 140); OD26 removes both, pointer arithmetic
-becoming `ptr::offset` (TRUST-1).
+type, which the language does not have.
 
 **Codes by case** (probed against the current compiler). Check refuses first, as E0228, two operands of a binary operator
 of different types, and as E0229 a comparison on a type that has none (`a < a` on a struct);
@@ -437,7 +435,7 @@ non-numeric type (`b + b` with `b: bool`; also after monomorphization); E0506, a
 a non-integer (`f & f` with `f: f64`); E0507, negation of a non-number (`-b` with `b: bool`); E0509,
 bitwise not on a non-integer (`~f` with `f: f64`).
 
-Version 2 records the owner's decision of 2026-10-29 (OD26), aligned with TRUST-1: arithmetic,
+The owner decided on 2026-10-29 (OD26), aligned with TRUST-1, that arithmetic,
 shifts and comparisons take numbers only, and pointer offset, difference and ordering are
 `ptr::offset` and named functions. Whether "numbers only" also removes comparisons on `bool` and
 `char` is OPEN-42; the current compiler compares them today, and this entry does not decide it. The current compiler still admits pointer arithmetic and comparison in trusted or
@@ -702,8 +700,7 @@ fn main() -> u8 {
 
 **Rationale.** There are no default arguments, no variadic functions and no method lookup
 through implicit conversions. A method of a type parameter comes only from its bounds, which is
-what lets a generic body be checked once (TYPE-2, PASS-1). Version 2 states the type-argument count E0322 already enforced (bug 221: an extra type
-argument was dropped silently). A body-less declaration (an `#[intrinsic]`) keeps no type-parameter
+what lets a generic body be checked once (TYPE-2, PASS-1). The type-argument count is E0322's (bug 221: an extra type argument was once dropped silently). A body-less declaration (an `#[intrinsic]`) keeps no type-parameter
 list, so the current compiler still skips the count there (bug 333), pinned by the pending example.
 
 ```con reject name=wrong-arity code=E0262 stage=check pair=right-arity
@@ -1256,8 +1253,7 @@ day. Copy used to be derived from an instantiation's fields, which Mono computed
 over the type graph; the fixpoint is gone. A generic declared `Copy` behaves like a derived
 `Copy`: `struct Copy Bx<T> { v: T }` is accepted, its declaration checked once with `T` taken
 as Copy (OWN-14), and `Bx<Int>` is Copy while `Bx<String>` is linear. A parameter no field
-mentions still counts. A generic not declared `Copy` is never Copy. Version 1 (pending, never
-enforced) required a `T: Copy` bound instead and was retired by the option (a) decision.
+mentions still counts. A generic not declared `Copy` is never Copy.
 
 Decided by the owner on 2026-10-29 (OD5): Copy for a generic struct or enum is declared and checked, never derived, and a generic declared Copy is Copy when every argument is.
 
@@ -2063,3 +2059,14 @@ symbolic `index < N`); type-level arithmetic and dependent constraints are rejec
 probe found no workload that needs it, and it is built only when one does. The design, the probe,
 the forcing conditions and the staged build are in
 [research/language/const-generics-v1-decision.md](../../research/language/const-generics-v1-decision.md).
+
+## Version history
+
+This appendix is not normative. It records what earlier versions of this chapter's entries said
+or why they changed, so that each rationale explains the current version only. The registry,
+[ids.tsv](ids.tsv), keeps every version's state and sentence hash.
+
+- TYPE-4@2 drops the `break` value from the positions a literal or expression takes its type from, since a `break` carries no value (OD27).
+- TYPE-6@1 admitted raw-pointer comparison and `p + k` in trusted or `Unsafe` code (bugs 134 and 140). TYPE-6@2 records OD26 (2026-10-29), which removes both, pointer arithmetic becoming `ptr::offset` (TRUST-1).
+- TYPE-9@2 states the type-argument count that E0322 already enforced (bug 221: an extra type argument was dropped silently).
+- TYPE-14@1 (pending, never enforced) required a `T: Copy` bound instead; TIGHTENING_DECISIONS D6 option (a) retired it.

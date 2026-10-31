@@ -142,7 +142,9 @@ chapter's prefix, written in upper case. A definition's number has a `D` in fron
      axioms; that the theorem's statement establishes the entry is a reviewed claim. A
      definition's evidence is `by-users`: it is exercised only through the entries that use
      it, and S1 refuses a definition no entry uses.
-5. `**Rationale.**` explains the entry. It is not normative.
+5. `**Rationale.**` explains the entry. It is not normative. It explains the current version only: what an earlier
+   version said, and why it changed, goes in the chapter's closing `## Version history` appendix,
+   which is not normative either.
 6. **Examples** (§2.2).
 7. **Conformance fixtures** (optional). Each row names a file under `tests/`, and the
    `expected`, `pair` and `modes` columns follow the contract of `check_rules_2i.sh`. The rows

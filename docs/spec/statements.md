@@ -247,10 +247,10 @@ fn main() -> u8 {
 value (the value `while … else` form was removed in Phase 6D); a result is a mutable local
 assigned before `break`. In the current compiler's `for (init; cond; step)` loop, `continue` still runs `step`, and
 E0245 refuses a `break` or `continue` in the step that targets its own loop (bug 330); E0245 belongs to
-this entry only while the current compiler parses the step form, which version 3 removes, and retires with it. A
+this entry only while the current compiler parses the step form, which this entry removes (OD47), and retires with it. A
 `break` or `continue` leaves the loop body's scopes like any exit (OWN-2).
 
-The current compiler's loop forms are `while cond { ... }` and the C-style forms that version 3 removes (bug 331):
+The current compiler's loop forms are `while cond { ... }` and the C-style forms that this entry removes (OD47, bug 331):
 `for (init; cond; step) { ... }`, whose `init` is a `let`,
 whose `cond` is the continuation test and whose `step` is an expression or an assignment
 (`for (i = 0; ...)` is a parse error), `for (cond) { ... }` and the unconditional `for { ... }`
@@ -275,11 +275,11 @@ Phase 6D item 2 removed the form: a loop result is a mutable local assigned befo
 `scripts/tests/check_loop_control.sh` (fixtures in `tests/programs/loop_control/`; ROADMAP old
 Phase 6 #4, 2026-06-21).
 
-Version 2 records the owner's decision of 2026-10-29 (OD27): `break <expr>` is refused at parse.
+The owner decided on 2026-10-29 (OD27) that `break <expr>` is refused at parse.
 The current compiler still parses a value after `break` inside a `while` or `for` statement and drops it (bug 323).
 
 
-Version 3 records the owner's decision of 2026-10-29 (OD47): the loops are `while` and a counted
+The owner decided on 2026-10-29 (OD47) that the loops are `while` and a counted
 range loop, and the C-style `for` is removed in every form (`for (init; cond; step)`,
 `for (cond)` and the unconditional `for`). The counted loop is half-open, `for i from a until b`
 running `a`, `a + 1`, ..., `b - 1` and nothing when `a >= b`; its index cannot be assigned in the
@@ -624,14 +624,12 @@ fn main() -> u8 {
 **Rationale.** Command-line arguments come from `std.args` (`with(Env)`); a parameterized `main`
 used to read an undefined register (bug 111). The language has no exit operation: an early exit would
 skip cleanup the linear rules promise, so status flows back through `main` (std's `process_exit`,
-which does skip it, is OPEN-136). Version 2 masked an integer result to
-0–255 and mapped `bool` (stage 1 of MAIN_EXIT_MODEL); OD24 narrows the result to `u8` or `Unit`, so
-masking is unrepresentable. `--interp` prints the result instead of exiting with it.
+which does skip it, is OPEN-136). The result is `u8` or `Unit` (OD24), so masking is unrepresentable. `--interp` prints the result instead of exiting with it.
 The owner decided OD8 on 2026-10-29: `main` will receive the root resource value and split it
 (TRUST-9); this entry changes with R-0557, which lands that parameter, and until then `main` takes
 none.
 
-Version 3 records the owner's decision of 2026-10-29 (OD24): `main` returns `u8` or `Unit`; there
+The owner decided on 2026-10-29 (OD24) that `main` returns `u8` or `Unit`; there
 is no masking, no `bool` mapping and no other result type. The current compiler still accepts any result type, masks
 an integer natively and prints it under `--interp` (bug 320). Every example of this specification
 uses the decided form, `fn main() -> u8`; an example whose value is computed as an `Int` keeps that
@@ -850,8 +848,7 @@ is destroyed implicitly, is OPEN-69. One order on every normal exit
 already computed and the loans it was given still live (OWN-16), and lets the destruction of the
 remaining locals come last. An abort runs none of it (STMT-2; OD10). A counted loop's body is its own scope and advancing the index belongs to the loop,
 outside it, so the body's deferred calls, loan ends and destructions run, on a fall-through or a
-`continue`, before the index advances. Version 2 restates for the counted loop of OD47 what version 1
-said of the C-style `for` step, which OD47 removes. Bugs 305 and 306 brought the borrow block's exits and the interpreter's `for`
+`continue`, before the index advances. Bugs 305 and 306 brought the borrow block's exits and the interpreter's `for`
 step into this order; the entry stays pending until
 R-0496's Core semantics defines the sequence for every exit form.
 
@@ -1057,3 +1054,12 @@ setjmp-safe code is emitted). A proved function calls no `extern fn` (the proof-
 gate), so foreign failure is outside the proof model; what proved code may and may not assume about
 failure is in [PROOF_SEMANTICS_BOUNDARY.md](../verification/PROOF_SEMANTICS_BOUNDARY.md).
 
+## Version history
+
+This appendix is not normative. It records what earlier versions of this chapter's entries said
+or why they changed, so that each rationale explains the current version only. The registry,
+[ids.tsv](ids.tsv), keeps every version's state and sentence hash.
+
+- STMT-6@2 records OD27 (2026-10-29): `break <expr>` is refused at parse. STMT-6@3 records OD47 (2026-10-29): the loops are `while` and the counted loop, and the C-style `for` is removed.
+- STMT-7@2 masked an integer result to 0–255 and mapped `bool` (stage 1 of MAIN_EXIT_MODEL). STMT-7@3 records OD24 (2026-10-29): `main` returns `u8` or `Unit`.
+- STMT-11@1 (pending, retired before it was enforced) said of the C-style `for` step what STMT-11@2 says of the counted loop of OD47.

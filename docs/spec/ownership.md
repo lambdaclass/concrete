@@ -48,10 +48,7 @@ Every claim of "exactly once" here holds on every path that does not abort (STMT
 **Rationale.** Copy answers "may this be duplicated", not "may this be dropped". A generic
 declared `Copy` is Copy exactly at the instantiations whose type arguments are Copy:
 `Option<i32>` is, `Option<String>` is not. An instantiation that does not qualify is linear, not
-an error. Version 2 (TIGHTENING_DECISIONS D6, option (a), 2026-10-23) decides this from the
-declaration alone, as a derived `Copy` is: version 1 looked at the fields after substitution, so
-a parameter no field mentions (`struct Copy P<T> { n: Int }`) made every instantiation Copy, and
-Mono needed a fixpoint over the type graph. The declaration itself is checked once (OWN-14), and
+an error. This is decided from the declaration alone, as a derived `Copy` is (TIGHTENING_DECISIONS D6, option (a), 2026-10-23), so a parameter no field mentions cannot make an instantiation Copy and Mono needs no fixpoint over the type graph. The declaration itself is checked once (OWN-14), and
 TYPE-14 states the consequence.
 
 ## Rules
@@ -695,15 +692,9 @@ fn main() -> u8 {
 - Evidence: tested
 
 **Rationale.** `2 + 3;` or `f();` with a result is either a dead computation or a deliberate
-discard, and the reader cannot tell which; `discard(e)` says it. Version 2 (CapabilityJudgment slice
-5) flagged only syntactically pure values: it skipped calls, because an empty capability set does not
-prove a call pure (mutation through `&mut` and foreign effects are not capabilities), and operations
-that can trap (`/`, `%`). That is still the current compiler's behaviour: its site is `exprPureDiscardable`, a local
-structural purity predicate in the `Stmt.expr` check (`CheckError.discardedPureValue`).
+discard, and the reader cannot tell which; `discard(e)` says it.
 
-Version 3 records the owner's decision of 2026-10-29 (OD29): every unused non-Unit result needs
-`discard(e)`, and the syntactic purity heuristic of version 2 is removed. The current compiler refuses only a
-syntactically pure non-Unit Copy value (E0294) and drops a call's result silently (bug 325).
+The owner decided on 2026-10-29 (OD29) that every unused non-Unit result needs `discard(e)`, with no purity heuristic. The current compiler still applies version 2's heuristic: it refuses only a syntactically pure non-Unit Copy value (E0294), skipping calls and operations that can trap (`/`, `%`), and drops a call's result silently (bug 325). Its site is `exprPureDiscardable`, a local structural purity predicate in the `Stmt.expr` check (`CheckError.discardedPureValue`).
 
 
 ```con reject name=dead-computation code=E0294 stage=check pair=used-computation
@@ -928,8 +919,7 @@ fn main() -> u8 {
 - Evidence: tested
 
 **Rationale.** Mutation is visible at the declaration. A `&mut` parameter is already a mutable
-place, so writing through it needs no `mut` on the parameter. Version 2 records the owner's
-decision of 2026-10-29 (OD17): a field write requires a `mut` binding, as `&mut` of the field and a
+place, so writing through it needs no `mut` on the parameter. The owner decided on 2026-10-29 (OD17) that a field write requires a `mut` binding, as `&mut` of the field and a
 direct array element write already did. The current compiler still accepts a write into a field, a nested array
 element or a heap cell of a binding not declared `mut` (bug 216, which implements the rule), pinned
 by the pending example below.
@@ -1282,8 +1272,7 @@ fn main() -> u8 {
 
 **Rationale.** A Copy value is duplicated freely, so a linear field inside it would be duplicated
 with it. A generic declaration is checked once, with its type parameters taken as Copy, so a
-field that is linear whatever the arguments (`String`) is refused at the declaration (version 2;
-version 1 checked each instantiation and made a non-qualifying one linear).
+field that is linear whatever the arguments (`String`) is refused at the declaration.
 
 ```con reject name=copy-with-linear-field code=E0571 stage=core-check pair=copy-with-copy-fields
 struct S { x: Int }
@@ -1353,7 +1342,7 @@ which named three failure classes, each with its gate: **discard** (a value vani
 `check_linear_nested_scope.sh`). The cross-cutting ruling H17 (2026-07-05) made parameters owned
 locals, by-value `self` and `Destroy` bodies included.
 
-Version 3 records the owner's decision of 2026-10-29 (OD32): there is no receiver auto-borrow; a
+The owner decided on 2026-10-29 (OD32) that there is no receiver auto-borrow; a
 `&self` or `&mut self` method on an owned place is called as `(&s).m()` or `(&mut s).m()`, and a
 receiver that is already a reference is unchanged. The current compiler still borrows an owned receiver implicitly
 (bug 328); the `methodCall` row below states the decided form and notes the current compiler's behaviour. `break <expr>`
@@ -1581,3 +1570,15 @@ fn main() -> u8 {
     return 42;
 }
 ```
+
+## Version history
+
+This appendix is not normative. It records what earlier versions of this chapter's entries said
+or why they changed, so that each rationale explains the current version only. The registry,
+[ids.tsv](ids.tsv), keeps every version's state and sentence hash.
+
+- OWN-D1@1 looked at the fields after substitution, so a parameter no field mentions (`struct Copy P<T> { n: Int }`) made every instantiation Copy, and Mono needed a fixpoint over the type graph. OWN-D1@2 (TIGHTENING_DECISIONS D6, option (a), 2026-10-23) decides from the declaration alone.
+- OWN-7@2 (CapabilityJudgment slice 5) flagged only syntactically pure values: it skipped calls, because an empty capability set does not prove a call pure (mutation through `&mut` and foreign effects are not capabilities), and operations that can trap (`/`, `%`). OWN-7@3 records OD29 (2026-10-29), which removes the heuristic.
+- OWN-10@2 records OD17 (2026-10-29): a field write requires a `mut` binding.
+- OWN-14@1 checked each instantiation and made a non-qualifying one linear; OWN-14@2 refuses the declaration.
+- OWN-15@3 records OD32 (2026-10-29): no receiver auto-borrow.

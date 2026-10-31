@@ -121,12 +121,9 @@ fn main() -> u8 {
 **Rationale.** A reference to any place, a heap shell included, denotes that place: `&h` and
 `&mut h` denote the slot `h`. Every consumer gives `e.f` this one meaning; a write through
 `&mut Heap<S>` once corrupted the caller's slot (bug 126). Deeper types (`& &S`)
-need an explicit `*`. Version 2, still the current compiler's behaviour, also opened one `Heap` layer implicitly (a
-`HeapArray<T>` only directly, not through a reference), without consuming the heap pointer.
+need an explicit `*`.
 
-Version 3 records the owner's decision of 2026-10-29 (OD30): a field access no longer opens a heap
-cell implicitly. The spelling of the explicit non-consuming place form is OPEN-36. The current compiler still reaches
-`f` through one `Heap` layer (`h.f` on `Heap<S>`, bug 326).
+The owner decided on 2026-10-29 (OD30) that a field access does not open a heap cell implicitly. The spelling of the explicit non-consuming place form is OPEN-36. The current compiler still opens one `Heap` layer implicitly (a `HeapArray<T>` only directly, not through a reference), without consuming the heap pointer, so it reaches `f` through one `Heap` layer (`h.f` on `Heap<S>`, bug 326).
 
 
 ```con accept name=one-hop-field-access exit=42
@@ -416,3 +413,10 @@ fn main() -> u8 {
     return 1;
 }
 ```
+## Version history
+
+This appendix is not normative. It records what earlier versions of this chapter's entries said
+or why they changed, so that each rationale explains the current version only. The registry,
+[ids.tsv](ids.tsv), keeps every version's state and sentence hash.
+
+- MEM-4@2 opened one `Heap` layer implicitly in a field access (a `HeapArray<T>` only directly, not through a reference), without consuming the heap pointer. MEM-4@3 recorded OD30 (2026-10-29) and was retired before it was enforced; MEM-4@4 (spec audit 8, 2026-10-30) states the same decision and names OPEN-36 for the spelling of the explicit form.

@@ -551,7 +551,7 @@ bound's methods on values of the parameter, and specialization then needs exactl
 argument needs an impl too, matched by its canonical type (`Int` and `i64` are one); before bug
 204 it was not checked, and the program ran when the body called no bound method.
 
-Version 2 records the owner's decision of 2026-10-29 (OD28): a `Destroy` bound is satisfied only by
+The owner decided on 2026-10-29 (OD28) that a `Destroy` bound is satisfied only by
 an impl, and a Copy value is discarded with `discard`. Arrays get one written impl or one language
 impl that is its own entry; which of the two is OPEN-35. The current compiler still counts every Copy type and every
 array of destroyable elements as `Destroy` (bug 324).
@@ -663,3 +663,11 @@ fn main() -> u8 {
     return 42;
 }
 ```
+
+## Version history
+
+This appendix is not normative. It records what earlier versions of this chapter's entries said
+or why they changed, so that each rationale explains the current version only. The registry,
+[ids.tsv](ids.tsv), keeps every version's state and sentence hash.
+
+- TRAIT-10@2 records OD28 (2026-10-29): a `Destroy` bound is satisfied only by an impl.

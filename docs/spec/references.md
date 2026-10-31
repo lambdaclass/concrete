@@ -730,7 +730,7 @@ the flow-sensitive half of the rules disappears. The rewrite is to borrow at eac
 (`f(&w.p); g(&w.p);`) or to borrow the owner in a borrow block. Writing *through* a reference
 (`*r = v`) assigns the referenced place, not the binding (REF-7).
 
-Version 2 states two refusals the current compiler already enforced under this entry's tag and code (E0302). A
+Two refusals besides the post-monomorphization one carry this entry's tag and code (E0302). A
 constant initializer is checked as an expression of the constant's type and may not
 borrow at all, a cast to a reference type counting as a borrow (`constBorrows`). A generic
 instantiated inside an `assert`, an `assume` or a ghost initializer may not be instantiated at a
@@ -1268,8 +1268,7 @@ fn main() -> u8 {
 mode used to depend on whether the payload is Copy, and monomorphization can change that
 property. Check and Elab disagreed about it (bug 181: a segfault in safe code at `T := Int`). With
 one mode that substitution cannot change, the class of bugs is gone. A whole-value binder (`n`
-in `match r { n => .. }`) is the scrutinee reference itself, so over `&mut T` it is `&mut T`
-(version 2; version 1 said `&T` for it too). A Copy payload is read with `*value`.
+in `match r { n => .. }`) is the scrutinee reference itself, so over `&mut T` it is `&mut T`. A Copy payload is read with `*value`.
 Literal and range patterns still compare the referenced value. The binder is a loan on the
 scrutinee's root for its arm (REF-8).
 The owner decided OD3 on 2026-10-29 as enforced here: the binder through a borrowed scrutinee is
@@ -1623,3 +1622,11 @@ from it (G19) is valid only while it lives; using one afterwards is outside safe
 (TRUST-3). The current compiler emits no alias assumption today (no `noalias` or alias metadata); the rule is
 pending until a gate checks that and the Core semantics defines loan lifetimes (R-0496).
 
+## Version history
+
+This appendix is not normative. It records what earlier versions of this chapter's entries said
+or why they changed, so that each rationale explains the current version only. The registry,
+[ids.tsv](ids.tsv), keeps every version's state and sentence hash.
+
+- REF-6@2 (spec audit 12, 2026-10-30) states two refusals the compiler already enforced under this entry's tag and code (E0302): a borrowing constant initializer and an erased generic instantiated at a type that could hold a reference.
+- REF-9@1 said a whole-value binder over `&mut T` is `&T` too; REF-9@2 makes it `&mut T`, the scrutinee reference itself.
