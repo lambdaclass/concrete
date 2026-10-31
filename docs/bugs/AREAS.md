@@ -12,7 +12,7 @@ checker refusal is a Check bug here.
 
 <!-- BEGIN GENERATED: bug areas (scripts/gen/bug_ledger.py; derived from the records, docs/bugs/area_map.tsv and git history, never edited here) -->
 
-303 records: 179 placed by their own fix commits, 37 by the files their record names in commits shared with other bugs, 37 by commits shared with other bugs, 13 by the commit that filed or closed the record, 23 by an `area:` override; 14 open bugs are not fixed yet and 0 fixed bugs have no commit the history can place.
+303 records: 178 placed by their own fix commits, 37 by the files their record names in commits shared with other bugs, 37 by commits shared with other bugs, 13 by the commit that filed or closed the record, 24 by an `area:` override; 14 open bugs are not fixed yet and 0 fixed bugs have no commit the history can place.
 
 ### By stage
 
@@ -20,7 +20,7 @@ checker refusal is a Check bug here.
 |--|-:|-:|-:|-:|--|
 | Check | 73 | 0 | 40 | 5 | Check 34, CoreCheck 13, CheckHelpers 9, Verify 5 |
 | Lower | 42 | 2 | 15 | 5 | Lower 41, - 1 |
-| Resolve | 27 | 1 | 4 | 7 | Resolve 15, FileSummary 7, PeekType 2, BuiltinEnums 1 |
+| Resolve | 28 | 1 | 5 | 7 | Resolve 16, FileSummary 7, PeekType 2, BuiltinEnums 1 |
 | Elab | 26 | 0 | 9 | 7 | Elab 25, TypeSpelling 1 |
 | Interp | 20 | 0 | 5 | 8 | Interp 20 |
 | Proof | 19 | 1 | 8 | 2 | ProofCore 11, Proof 3, CallCollect 2, BodyIdentity 1 |
@@ -31,15 +31,15 @@ checker refusal is a Check bug here.
 | Std | 8 | 0 | 0 | 0 | map 4, fs 2, libc 1, net 1 |
 | Tooling | 8 | 0 | 1 | 1 | Makefile 1, check_ll1 1, dispatch 1, farm 1 |
 | EmitLLVM | 7 | 0 | 3 | 4 | EmitBuiltins 5, EmitLLVM 1, Symbols 1 |
-| Gates | 7 | 0 | 1 | 0 | authority_facts 1, check_binder_refs 1, check_example_outputs 1, check_gate_lock 1 |
 | CLI | 6 | 0 | 2 | 1 | Main 4, Pipeline 1, PipelineTest 1 |
+| Gates | 6 | 0 | 0 | 0 | authority_facts 1, check_binder_refs 1, check_gate_lock 1, compile_scaling 1 |
 | SSA | 5 | 1 | 0 | 2 | SSACleanup 4, SSAVerify 1 |
 
 ### Structural class by stage (primary class)
 
 | class | bugs | stages |
 |--|-:|--|
-| 1. Declaration identity by spelled name, not a resolved `DefId` | 37 | Elab 10, Check 5, Resolve 4, Mono 3, Interp 3, Proof 3, Lower 2, EmitSSA 2, Report 2, EmitLLVM 1, CLI 1, Gates 1 |
+| 1. Declaration identity by spelled name, not a resolved `DefId` | 37 | Elab 10, Resolve 5, Check 5, Mono 3, Interp 3, Proof 3, Lower 2, EmitSSA 2, Report 2, EmitLLVM 1, CLI 1 |
 | 2. Binder identity by name, not a `LocalId` | 9 | Check 7, Elab 1, Proof 1 |
 | 3. Destruction dispatched by synthesized `<Type>_destroy` names | 6 | Mono 3, Resolve 1, Check 1, SSA 1 |
 | 4. No reference-provenance model in the source checker | 4 | Check 4 |
@@ -67,7 +67,7 @@ checker refusal is a Check bug here.
 | violates ARITH | 9 | Check 3, Interp 2, Elab 1, Lower 1, EmitLLVM 1, Report 1 |
 | violates FFI | 9 | Resolve 3, Check 2, Mono 1, EmitSSA 1, EmitLLVM 1, Std 1 |
 | violates MEM | 11 | Lower 7, Check 1, Elab 1, Interp 1, Report 1 |
-| violates MOD | 30 | Resolve 12, Elab 9, Interp 4, Check 2, Lower 1, EmitSSA 1, Gates 1 |
+| violates MOD | 30 | Resolve 13, Elab 9, Interp 4, Check 2, Lower 1, EmitSSA 1 |
 | violates OWN | 13 | Check 10, Lower 3 |
 | violates PASS | 40 | Lower 18, Mono 5, EmitSSA 4, Interp 4, Elab 3, Check 2, Resolve 1, SSA 1, Report 1, CLI 1 |
 | violates PAT | 6 | Check 4, Interp 1, CLI 1 |
@@ -392,6 +392,6 @@ checker refusal is a Check bug here.
 | [333](333_an_extra_type_argument_to_a_body_less_generic_de.md) | Lower | Lower | record | — | violates TYPE-9@2 |
 | [341](341_two_modules_that_each_declare_main_pass_check_an.md) | — | — | unfixed | — | violates PASS-12@1 |
 | [342](342_the_diagnostic_code_completeness_gate_scans_a_fi.md) | — | — | unfixed | — | outside (tooling) |
-| [343](343_a_qualified_call_m_f_runs_a_parent_function_name.md) | Gates | check_example_outputs | commits | — | violates MOD-1@1 |
+| [343](343_a_qualified_call_m_f_runs_a_parent_function_name.md) | Resolve | Resolve | override | — | violates MOD-1@1 |
 
 <!-- END GENERATED: bug areas -->

@@ -9,6 +9,7 @@ summary: A qualified call m::f() runs a parent function named m_f, and an undecl
 fixtures: error_343_parent_fn_captures_qualified_call.con error_343_local_captures_qualified_call.con error_343_other_module_fn_captures_qualified_call.con error_343_nested_module_captures_qualified_call.con error_343_nested_parent_fn_captures_qualified_call.con error_343_builtin_captures_qualified_call.con error_343_flat_spelling_reaches_module_fn.con error_343_nested_flat_spelling_reaches_child_fn.con regress_343_qualified_paths.con
 class: 1
 silent: yes
+area: Resolve/Resolve — the qualified-path namespace and the E0299 refusal live in Resolve; the parser only respells the path and TypeMap only flattens it after
 ruling: Violates: MOD-1@1
 -->
 
