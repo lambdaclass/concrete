@@ -1021,30 +1021,35 @@ implementation or generated drop glue runs on an abort, and there is no implicit
 destructor the compiler could have inserted (OWN-13); in a hosted program the OS reclaims the
 process's memory and descriptors, which is an environmental fact, not a language guarantee.
 
-**Traps in the current compiler.** The run-time checks that end a program, as the current compiler
-implements them. Each was probed with operands the compiler cannot see at compile time (a function
-parameter), on the native binary and under `--interp`, on 2026-10-31. Every native trap here calls libc
-`abort()`, so a hosted binary ends with SIGABRT (status 134); the interpreter stops with the run-time
-error shown (it prints `interp: ` before it). The `trap=` attribute of an abort example (§2.2 of
-[MAINTAINERS.md](MAINTAINERS.md)) names the trap the same way.
+**Traps in the current compiler.** These are non-normative observations of the run-time checks that
+ended a program, on the native binary and under `--interp`, on 2026-10-31. In each probe the operands
+reached the operation through a function parameter, so the compiler could not evaluate them. Every
+native run below exited with status 134 (SIGABRT on Linux), which agrees with the paragraph above:
+the trap helpers call libc `abort()`. The interpreter stops with a run-time error whose first line is
+shown, without its `interp: ` prefix; the `trap=` attribute of an abort example (§2.2 of
+[MAINTAINERS.md](MAINTAINERS.md)) is matched against that line.
 
-| operation | condition | rule | native | `--interp` stops with |
+| operation probed | operands | related rule | native | `--interp` stops with |
 |---|---|---|---|---|
-| integer `+`, `-`, `*` | the result is outside the type (`2147483647 + 1` on `i32`, `16 * 16` on `u8`, `0 - x` at `i32`'s minimum) | ARITH-3 | SIGABRT | `arithmetic overflow (checked +)`, naming the operator |
-| integer `/` | the divisor is 0 | ARITH-3 | SIGABRT | `division by zero` |
-| integer `/` | the minimum value divided by -1 | ARITH-3 | SIGABRT | `arithmetic overflow (checked /)` |
-| integer `%` | the divisor is 0 | ARITH-3 | SIGABRT | `modulo by zero` |
-| `<<`, `>>` | the count is negative or at least the bit width (`1 << 8` on `u8`) | ARITH-3 | SIGABRT | `shift amount out of range` |
-| float `as` integer | the value is NaN or an infinity | ARITH-5 | SIGABRT | `float-to-integer conversion of an infinity or NaN (the binary aborts)` |
-| float `as` integer | the value is outside the target's range (`100000000000.0 as i32`) | ARITH-5 | SIGABRT | `float-to-integer conversion out of range for 'i32' (the binary aborts)` |
-| `a[i]` | `i` is outside the array (`a[5]` on `[u8; 3]` with `i` a variable) | MEM-6 | SIGABRT | `array index 5 out of bounds (size 3)` |
-| `abort()` | always (needs `Process`) | STMT-2 | SIGABRT | `undefined function 'abort'`: the interpreter has no `abort` |
-| allocation | `malloc` or `realloc` returns null (`__concrete_check_oom`) | STMT-2 | SIGABRT | not probed |
+| `+` on `i32` | 2147483647 and 1 | ARITH-3 | status 134 | `arithmetic overflow (checked +)` |
+| `*` on `u8` | 16 and 16 | ARITH-3 | status 134 | `arithmetic overflow (checked *)` |
+| `-` on `i32` | 0 and the minimum, -2147483648 | ARITH-3 | status 134 | `arithmetic overflow (checked -)` |
+| `/` on `i32` | 7 and 0 | ARITH-3 | status 134 | `division by zero` |
+| `/` on `i32` | -2147483648 and -1 | ARITH-3 | status 134 | `arithmetic overflow (checked /)` |
+| `%` on `i32` | 7 and 0 | ARITH-3 | status 134 | `modulo by zero` |
+| `<<` on `i32` | 1 and -1 | ARITH-3 | status 134 | `shift amount out of range` |
+| `<<` on `u8` | 1 and 8 | ARITH-3 | status 134 | `shift amount out of range` |
+| `f64` `as i32` | NaN (0.0 / 0.0) | ARITH-5 | status 134 | `float-to-integer conversion of an infinity or NaN (the binary aborts)` |
+| `f64` `as i32` | 100000000000.0 | ARITH-5 | status 134 | `float-to-integer conversion out of range for 'i32' (the binary aborts)` |
+| `a[i]` on `[u8; 3]` | `i` = 5 | MEM-6 | status 134 | `array index 5 out of bounds (size 3)` |
+| `abort()` in a `main` declared `with(Process)` | none | STMT-2 | status 134 | `undefined function 'abort'` |
 
-An operation whose operands the compiler can evaluate is not a trap: a constant index proven out of
-bounds is refused at compile time (E0900, `proven runtime-safety violation`), and an overflowing
-constant traps where it is used (TYPE-22's `constant-traps-at-use` example). Which of these checks a
-profile may remove, and how, is ARITH-9's and OPEN-97's.
+Not probed: `>>`, an infinity converted to an integer, and running out of memory (the paragraph above
+says `__concrete_check_oom` aborts when `malloc` or `realloc` returns null). With operands the compiler
+can see, the outcome differs: a constant index out of bounds (`a[5]` on `[u8; 3]`) is refused at compile
+time with E0900 (`proven runtime-safety violation`), and an overflowing constant traps where it is used
+(TYPE-22's `constant-traps-at-use` example). Whether a profile may omit or demand a check is discussed
+in ARITH-9 and OPEN-97.
 
 **Recoverable failures** are values (`Result`, `Option`; the recoverable-failure section above and
 the std conventions of [ERROR_CONVENTIONS.md](../stdlib/ERROR_CONVENTIONS.md)). Operations an
