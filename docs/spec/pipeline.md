@@ -485,7 +485,9 @@ The boundary is useful even while LLVM is the only emitter.
 - Obligation: none
 - Evidence: tested
 
-**Rationale.** The front end is where a program is judged; the later stages only translate it. A refusal,
+**Rationale.** The front end is where a program is judged; the later stages only translate it. A
+generic function that calls itself at a growing type argument does not finish monomorphizing on main;
+whether Check refuses it, and how, is OPEN-132. A refusal,
 a crash or invalid IR after Check means the program met no rule and still did not compile, so the
 user gets no diagnostic that names a rule. Bugs 005, 009, 014, 016, 029, 032, 035, 044, 055, 077,
 108 and 116 were such failures. A refusal that a later stage needs (such as E0809, when a generated

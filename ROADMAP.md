@@ -169,11 +169,11 @@ a link failure, an interpreter refusal or an unrejected leak.
 
 | open bugs by spec ruling ([RULINGS.md](docs/bugs/RULINGS.md)) | open | silent | bugs |
 |---|---|---|---|
-| violates ARITH-2@2 | 1 | 1 | 327 |
+| violates ARITH-2@3 | 1 | 1 | 327 |
 | violates ARITH-7@1 | 1 | 1 | 332 |
 | violates FFI-2@1 | 1 | 1 | 122 |
 | violates FFI-5@1 | 1 | 0 | 114 |
-| violates MEM-4@3 | 1 | 1 | 326 |
+| violates MEM-4@4 | 1 | 1 | 326 |
 | violates OWN-10@2 | 1 | 0 | 216 |
 | violates OWN-15@3 | 1 | 1 | 328 |
 | violates OWN-7@3 | 1 | 1 | 325 |

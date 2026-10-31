@@ -468,8 +468,8 @@ STMT-6@2	superseded	f6e78d06ececcd819785130eb28f2eb8
 OWN-15@3	pending	b9f6e9809b07136091724cc2c949033e
 TRAIT-10@2	live	4f26631978d7ce3d57d130f9eabd9c46
 OWN-7@3	live	9b660e344bc29c542287266bfb5fcd7d
-MEM-4@3	pending	0f77c79a784830c01f7dceb524af31d3
-ARITH-2@2	live	8ff15fd82cc35c4c4b6efcefc777a433
+MEM-4@3	retired:replaced-by-version-4-before-it-was-enforced	0f77c79a784830c01f7dceb524af31d3
+ARITH-2@2	superseded	8ff15fd82cc35c4c4b6efcefc777a433
 REF-11/relend-receiver-read	pending	-
 REF-11/relend-read-first	live	-
 PAT-3/bare-variant-with-payload	pending	-
@@ -767,3 +767,5 @@ OPEN-147@1	live	00d7047ffc4ac87010ee17f765d8ecd7
 OPEN-148@1	live	8d9dcf26bba2bb35af731f87cdce45c8
 OPEN-149@1	live	6a27b61361735c06c77eaabc8a96f0fb
 OPEN-150@1	live	7a5a4cf06859fcd6866fdab42f4a3aee
+ARITH-2@3	live	5283cc0812dd064339ad33e71dccd7ec
+MEM-4@4	pending	efd60f16aa7955424c3a01a5fc06cd8c

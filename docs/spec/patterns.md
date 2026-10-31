@@ -709,7 +709,9 @@ fn main() -> u8 {
 - Obligation: none
 - Evidence: tested
 
-**Rationale.** Decided by the owner on 2026-10-29 (OD18). Source order is the order a reader sees,
+**Rationale.** Decided by the owner on 2026-10-29 (OD18). Whether the refusal applies to the fallback
+arm the parser adds for `if let`, `let ... else` and `while let` is OPEN-40, and whether a catch-all
+after ranges that span the whole type is unreachable is OPEN-41. Source order is the order a reader sees,
 so the arm that runs is the first one written that matches. This changes main: CoreCanonicalize
 moves unguarded catch-all arms after the others (bug 213's provisional repair), so a specific arm
 written after `_` is reached and the program below returns 42 on both consumers; under this rule the

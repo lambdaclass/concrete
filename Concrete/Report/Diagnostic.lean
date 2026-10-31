@@ -121,7 +121,7 @@ def codeRuleTag : String → Option String
   | "E0310" => some "STMT-7@3"
   | "E0307" => some "STMT-9@1"
   -- docs/spec/arithmetic.md
-  | "E0227" => some "ARITH-2@2"
+  | "E0227" => some "ARITH-2@3"
   | "E0553" => some "ARITH-5@1"
   -- docs/spec/patterns.md
   | "E0530" | "E0534" => some "PAT-2@2"

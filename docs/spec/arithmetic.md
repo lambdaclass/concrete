@@ -31,7 +31,7 @@ together with the reference model.
 <a id="ARITH-2"></a>
 ### ARITH-2. An integer literal fits its type
 
-**ARITH-2@2.** An integer literal takes the integer type its position expects, a float literal the float type its position expects, a literal with no expected type is refused, and an integer literal whose value, negation included, is outside its type's range is refused rather than truncated.
+**ARITH-2@3.** An integer literal takes the integer type its position expects, an integer literal with no expected type is refused, and an integer literal whose value, negation included, is outside its type's range is refused rather than truncated.
 
 - Kind: refusal
 - Uses: none
@@ -55,8 +55,9 @@ workload finds annotations too noisy. Gated by `scripts/tests/check_numeric_lite
 old Phase 6 #6, 2026-06-23).
 
 Version 2 records the owner's decision of 2026-10-29 (OD31): the fallback to `Int` where nothing is
-expected is removed, no suffix is required, and a float literal follows the same principle (its
-context's float type, refused with none). Main still types an unconstrained integer literal `Int` and
+expected is removed and no suffix is required. Whether a float literal follows the same principle
+(its context's float type, refused with none), as OD31's note says, is OPEN-63; which positions supply
+an expected type is OPEN-138. Main still types an unconstrained integer literal `Int` and
 an unconstrained float literal `Float64` (bug 327).
 
 ```con reject name=literal-out-of-range code=E0227 stage=check pair=literal-in-range

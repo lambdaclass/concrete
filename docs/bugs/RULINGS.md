@@ -103,13 +103,13 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 | TYPE-15@1 | types.md | 2 | 073, 200 |
 | TYPE-16@1 | types.md | 2 | 024, 205 |
 | TYPE-9@2 | types.md | 2 | 221, **333** |
-| ARITH-2@2 | arithmetic.md | 1 | **327** |
+| ARITH-2@3 | arithmetic.md | 1 | **327** |
 | ARITH-3@1 | arithmetic.md | 1 | 053 |
 | FFI-1@1 | ffi.md | 1 | 166 |
 | FFI-3@1 | ffi.md | 1 | 113 |
 | FFI-4@1 | ffi.md | 1 | 037 |
 | FFI-6@1 | ffi.md | 1 | 112 |
-| MEM-4@3 | memory.md | 1 | **326** |
+| MEM-4@4 | memory.md | 1 | **326** |
 | MOD-6@1 | modules.md | 1 | 226 |
 | MOD-8@1 | modules.md | 1 | 165 |
 | OWN-12@1 | ownership.md | 1 | 143 |

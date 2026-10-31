@@ -536,7 +536,8 @@ fn main() -> u8 {
 - Obligation: the trusted external state is the gate's list of token wrappers (R-0557, R-0509)
 - Evidence: tested
 
-**Rationale.** Decided by the owner on 2026-10-29 (OD8). The root value plays the part of Austral's
+**Rationale.** Decided by the owner on 2026-10-29 (OD8); the root value's type, how it splits and the
+signature `main` declares to receive it are OPEN-38. The root value plays the part of Austral's
 `RootCapability`: everything a program may touch outside its own values descends from what `main`
 was given. The singletons are the allocator arena, a UART and memory-mapped I/O, the panic buffer,
 `errno` and C libraries with internal state; each is minted or consumed by a `trusted fn` wrapper,

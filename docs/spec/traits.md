@@ -484,8 +484,8 @@ fn main() -> u8 {
 signature and then specialized to the impl's body without a second check, so any way an impl's
 signature exceeds its trait's would pass something the generic caller never agreed to (bug 091).
 Capabilities are the load-bearing case: a trait method with no `with(...)` admits only impls with
-none (TRUST-4). The builtin `Destroy::destroy` takes `&self` or `self`, and its capability bound
-is OWN-13's (E0584).
+none (TRUST-4). The builtin `Destroy::destroy` takes `&self` or `self` on main; whether one consuming receiver form only
+remains is OPEN-60. Its capability bound is OWN-13's (E0584).
 
 ```con reject name=missing-method code=E0581 stage=core-check pair=conforming-impl
 trait Tr { fn m(&self) -> Int; fn n(&self) -> Int; }

@@ -107,7 +107,7 @@ fn main() -> u8 {
 <a id="MEM-4"></a>
 ### MEM-4. Field access dereferences at most one reference
 
-**MEM-4@3.** A field access `e.f`, read or written, requires `e` to be the struct or a reference to it, dereferencing at most that one reference, and a `Heap` or `HeapArray` is opened by an explicit non-consuming place form, `*` remaining the consuming move-out.
+**MEM-4@4.** A field access `e.f`, read or written, requires `e` to be the struct or a reference to it, dereferencing at most that one reference, and a `Heap` or `HeapArray` is opened by an explicit non-consuming place form, whose spelling is OPEN-36, `*` remaining the consuming move-out.
 
 - Kind: guarantee
 - Uses: none

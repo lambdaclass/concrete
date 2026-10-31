@@ -4068,7 +4068,7 @@ together with the reference model.
 <a id="ARITH-2"></a>
 #### ARITH-2. An integer literal fits its type
 
-**ARITH-2@2.** An integer literal takes the integer type its position expects, a float literal the float type its position expects, a literal with no expected type is refused, and an integer literal whose value, negation included, is outside its type's range is refused rather than truncated.
+**ARITH-2@3.** An integer literal takes the integer type its position expects, an integer literal with no expected type is refused, and an integer literal whose value, negation included, is outside its type's range is refused rather than truncated.
 
 - Kind: refusal
 - Uses: none
@@ -4092,8 +4092,9 @@ workload finds annotations too noisy. Gated by `scripts/tests/check_numeric_lite
 old Phase 6 #6, 2026-06-23).
 
 Version 2 records the owner's decision of 2026-10-29 (OD31): the fallback to `Int` where nothing is
-expected is removed, no suffix is required, and a float literal follows the same principle (its
-context's float type, refused with none). Main still types an unconstrained integer literal `Int` and
+expected is removed and no suffix is required. Whether a float literal follows the same principle
+(its context's float type, refused with none), as OD31's note says, is OPEN-63; which positions supply
+an expected type is OPEN-138. Main still types an unconstrained integer literal `Int` and
 an unconstrained float literal `Float64` (bug 327).
 
 ```con reject name=literal-out-of-range code=E0227 stage=check pair=literal-in-range
@@ -6414,7 +6415,9 @@ fn main() -> u8 {
 - Obligation: none
 - Evidence: tested
 
-**Rationale.** Decided by the owner on 2026-10-29 (OD18). Source order is the order a reader sees,
+**Rationale.** Decided by the owner on 2026-10-29 (OD18). Whether the refusal applies to the fallback
+arm the parser adds for `if let`, `let ... else` and `while let` is OPEN-40, and whether a catch-all
+after ranges that span the whole type is unreachable is OPEN-41. Source order is the order a reader sees,
 so the arm that runs is the first one written that matches. This changes main: CoreCanonicalize
 moves unguarded catch-all arms after the others (bug 213's provisional repair), so a specific arm
 written after `_` is reached and the program below returns 42 on both consumers; under this rule the
@@ -9937,7 +9940,7 @@ fn main() -> u8 {
 <a id="MEM-4"></a>
 #### MEM-4. Field access dereferences at most one reference
 
-**MEM-4@3.** A field access `e.f`, read or written, requires `e` to be the struct or a reference to it, dereferencing at most that one reference, and a `Heap` or `HeapArray` is opened by an explicit non-consuming place form, `*` remaining the consuming move-out.
+**MEM-4@4.** A field access `e.f`, read or written, requires `e` to be the struct or a reference to it, dereferencing at most that one reference, and a `Heap` or `HeapArray` is opened by an explicit non-consuming place form, whose spelling is OPEN-36, `*` remaining the consuming move-out.
 
 - Kind: guarantee
 - Uses: none
@@ -10666,8 +10669,8 @@ fn main() -> u8 {
 signature and then specialized to the impl's body without a second check, so any way an impl's
 signature exceeds its trait's would pass something the generic caller never agreed to (bug 091).
 Capabilities are the load-bearing case: a trait method with no `with(...)` admits only impls with
-none (TRUST-4). The builtin `Destroy::destroy` takes `&self` or `self`, and its capability bound
-is OWN-13's (E0584).
+none (TRUST-4). The builtin `Destroy::destroy` takes `&self` or `self` on main; whether one consuming receiver form only
+remains is OPEN-60. Its capability bound is OWN-13's (E0584).
 
 ```con reject name=missing-method code=E0581 stage=core-check pair=conforming-impl
 trait Tr { fn m(&self) -> Int; fn n(&self) -> Int; }
@@ -11858,7 +11861,8 @@ fn main() -> u8 {
 - Obligation: the trusted external state is the gate's list of token wrappers (R-0557, R-0509)
 - Evidence: tested
 
-**Rationale.** Decided by the owner on 2026-10-29 (OD8). The root value plays the part of Austral's
+**Rationale.** Decided by the owner on 2026-10-29 (OD8); the root value's type, how it splits and the
+signature `main` declares to receive it are OPEN-38. The root value plays the part of Austral's
 `RootCapability`: everything a program may touch outside its own values descends from what `main`
 was given. The singletons are the allocator arena, a UART and memory-mapped I/O, the panic buffer,
 `errno` and C libraries with internal state; each is minted or consumed by a `trusted fn` wrapper,
@@ -13206,7 +13210,9 @@ The boundary is useful even while LLVM is the only emitter.
 - Obligation: none
 - Evidence: tested
 
-**Rationale.** The front end is where a program is judged; the later stages only translate it. A refusal,
+**Rationale.** The front end is where a program is judged; the later stages only translate it. A
+generic function that calls itself at a growing type argument does not finish monomorphizing on main;
+whether Check refuses it, and how, is OPEN-132. A refusal,
 a crash or invalid IR after Check means the program met no rule and still did not compile, so the
 user gets no diagnostic that names a rule. Bugs 005, 009, 014, 016, 029, 032, 035, 044, 055, 077,
 108 and 116 were such failures. A refusal that a later stage needs (such as E0809, when a generated
