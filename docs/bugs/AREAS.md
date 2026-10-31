@@ -12,7 +12,7 @@ checker refusal is a Check bug here.
 
 <!-- BEGIN GENERATED: bug areas (scripts/gen/bug_ledger.py; derived from the records, docs/bugs/area_map.tsv and git history, never edited here) -->
 
-300 records: 178 placed by their own fix commits, 37 by the files their record names in commits shared with other bugs, 35 by commits shared with other bugs, 13 by the commit that filed or closed the record, 23 by an `area:` override; 14 open bugs are not fixed yet and 0 fixed bugs have no commit the history can place.
+300 records: 178 placed by their own fix commits, 37 by the files their record names in commits shared with other bugs, 37 by commits shared with other bugs, 13 by the commit that filed or closed the record, 23 by an `area:` override; 12 open bugs are not fixed yet and 0 fixed bugs have no commit the history can place.
 
 ### By stage
 
@@ -24,9 +24,9 @@ checker refusal is a Check bug here.
 | Elab | 26 | 0 | 9 | 7 | Elab 25, TypeSpelling 1 |
 | Interp | 20 | 0 | 5 | 8 | Interp 20 |
 | Proof | 19 | 1 | 8 | 2 | ProofCore 11, Proof 3, CallCollect 2, BodyIdentity 1 |
+| Report | 12 | 6 | 6 | 5 | Diagnostic 4, Report 3, AssumptionSummary 2, ModelDiff 2 |
 | Parse | 11 | 0 | 3 | 0 | Parser 7, Lexer 2, AST 1, LocalId 1 |
 | EmitSSA | 10 | 0 | 1 | 3 | EmitSSA 10 |
-| Report | 10 | 4 | 4 | 3 | Report 3, AssumptionSummary 2, Diagnostic 2, ModelDiff 2 |
 | Mono | 8 | 0 | 1 | 0 | Mono 7, - 1 |
 | Std | 8 | 0 | 0 | 0 | map 4, fs 2, libc 1, net 1 |
 | Tooling | 8 | 0 | 1 | 1 | Makefile 1, check_ll1 1, dispatch 1, farm 1 |
@@ -51,7 +51,7 @@ checker refusal is a Check bug here.
 | 10. Evidence identity computed from a partial subject | 5 | Proof 3, Elab 2 |
 | 11. Absence read as a fact (fail-open defaults) | 15 | Gates 4, Tooling 3, Resolve 2, Proof 2, Report 2, Check 1, SSA 1 |
 | 12. One fact kept in two places | 29 | Resolve 11, Check 5, Interp 4, Elab 3, Parse 2, Proof 1, Std 1, CLI 1, Tooling 1 |
-| 13. Documented rules with no enforcing site | 24 | Check 12, Resolve 4, Lower 3, Report 3, Parse 1, Elab 1 |
+| 13. Documented rules with no enforcing site | 26 | Check 12, Report 5, Resolve 4, Lower 3, Parse 1, Elab 1 |
 | 14. Trusted `std` and FFI code with no checked contract | 7 | Std 5, Parse 1, Check 1 |
 | 15. Ownership state not modeled along control-flow paths | 7 | Check 7 |
 | 16. Artifacts at paths no run owns | 5 | Tooling 2, Std 1, CLI 1, Gates 1 |
@@ -64,9 +64,9 @@ checker refusal is a Check bug here.
 
 | ruling | bugs | stages |
 |--|-:|--|
-| violates ARITH | 8 | Check 3, Interp 2, Elab 1, Lower 1, EmitLLVM 1 |
+| violates ARITH | 9 | Check 3, Interp 2, Elab 1, Lower 1, EmitLLVM 1, Report 1 |
 | violates FFI | 9 | Resolve 3, Check 2, Mono 1, EmitSSA 1, EmitLLVM 1, Std 1 |
-| violates MEM | 10 | Lower 7, Check 1, Elab 1, Interp 1 |
+| violates MEM | 11 | Lower 7, Check 1, Elab 1, Interp 1, Report 1 |
 | violates MOD | 29 | Resolve 12, Elab 9, Interp 4, Check 2, Lower 1, EmitSSA 1 |
 | violates OWN | 13 | Check 10, Lower 3 |
 | violates PASS | 40 | Lower 18, Mono 5, EmitSSA 4, Interp 4, Elab 3, Check 2, Resolve 1, SSA 1, Report 1, CLI 1 |
@@ -382,8 +382,8 @@ checker refusal is a Check bug here.
 | [323](323_break_with_a_value_is_accepted_inside_a_while_or.md) | Report | Diagnostic | shared | — | violates STMT-6@3 |
 | [324](324_a_copy_type_or_an_array_satisfies_a_destroy_boun.md) | — | — | unfixed | — | violates TRAIT-10@2 |
 | [325](325_a_call_statement_whose_result_is_not_unit_discar.md) | — | — | unfixed | — | violates OWN-7@3 |
-| [326](326_a_field_access_opens_a_heap_or_heaparray_implici.md) | — | — | unfixed | — | violates MEM-4@4 |
-| [327](327_an_integer_or_float_literal_with_no_expected_typ.md) | — | — | unfixed | — | violates ARITH-2@3 |
+| [326](326_a_field_access_opens_a_heap_or_heaparray_implici.md) | Report | Diagnostic | shared | — | violates MEM-4@4 |
+| [327](327_an_integer_or_float_literal_with_no_expected_typ.md) | Report | Diagnostic | shared | — | violates ARITH-2@3 |
 | [328](328_a_method_taking_self_or_mut_self_is_called_on_an.md) | — | — | unfixed | — | violates OWN-15@3 |
 | [329](329_the_ll_1_checkers_never_computed_follow_sets_a_f.md) | Tooling | check_ll1 | commits | — | violates SYN-1@1 |
 | [330](330_a_continue_inside_a_for_loop_s_step_the_binary_n.md) | Interp | Interp | commits | Check | spec gap (STMT) |
