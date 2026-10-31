@@ -1,0 +1,10 @@
+// Bug 347 (PASS-12@1): an uncalled function returning get_args() passes Check; the native build
+// fails LLVM validation (`use of undefined value '@get_args'`), --interp prints 42.
+// Expected: compiled (exit 42), or the name refused at Check; never invalid LLVM IR.
+fn args() with(Process) -> HeapArray<String> {
+    return get_args();
+}
+
+fn main() -> u8 {
+    return 42;
+}

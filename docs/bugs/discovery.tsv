@@ -131,3 +131,4 @@ date	kind	probe	effort	bugs	silent
 2026-10-31	spec	spec audit 2026-10-31: probes of the trap rules (ARITH-3, ARITH-5, MEM-6, STMT-2, STMT-13), one program per trap, native against --interp, on main dee500ee	12 probes	344	-
 2026-10-31	review	spec readability 2 builtins catalog review (2026-10-31): unwrap(n) bound to a let of the inner type, native against --interp, on 1bd42718	2 probes	345	-
 2026-10-31	review	spec readability 2 builtins catalog review (2026-10-31): abort() in a value position, native against --interp, on 1bd42718	4 probes	346	-
+2026-10-31	review	spec readability 2 builtins catalog review (2026-10-31): get_args with Process and Env, native against --interp, on 1bd42718	2 probes	347	-
