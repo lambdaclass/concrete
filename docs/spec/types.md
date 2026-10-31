@@ -2042,7 +2042,7 @@ govern what that does to the caller's binding.
 | `sizeof::<T>()` | none, exactly one type argument; alias `_sizeof` | `Uint` | none | FFI-7, TYPE-20, TYPE-10 (E0268, E0269) | `sizeof::<Int>()` is 8, `_sizeof::<Int>()` too |
 | `alignof::<T>()` | none, exactly one type argument | `Uint` | none | FFI-7, TYPE-10 | `alignof::<i32>()` is 4 |
 | `unwrap` | `(n: N)`, `N` a newtype | `N`'s inner type | none | TYPE-10 (E0270 for an argument that is not a newtype); TYPE-24 is the newtype-conversion entry, and how the current compiler's `unwrap` relates to it is OPEN-155 | `return unwrap(m);` gives result 42 on both consumers; `let x: Int = unwrap(m); if x == 42 ...` runs under `--interp` (42) and fails the native build at SSA verification (E0715, bug 345) |
-| `abort` | none | diverging | `Process` | STMT-13, STMT-2 | `abort();` as a statement: the native process is ended by SIGABRT (status 134 on Linux x86-64), and `--interp` stops with `interp: undefined function 'abort'` (at 904c7cc87); `let y: Int = abort();` fails the native build in LLVM (`value doesn't match function result type`), while `abort();` as a statement compiles (bug 346) |
+| `abort` | none | diverging | `Process` | STMT-13, STMT-2 | `abort();` as a statement: the native process is ended by SIGABRT (status 134 on Linux x86-64), and `--interp` stops with `interp: undefined function 'abort'` (bug 344; at 904c7cc87); `let y: Int = abort();` fails the native build in LLVM (`value doesn't match function result type`), while `abort();` as a statement compiles (bug 346) |
 
 **`Vec`.** The current compiler also accepts each under the alias spelled `Vec_` with a capital
 (`Vec_new`, `Vec_push`, ...); the probes of those aliases checked that each is accepted, not how it
@@ -2056,7 +2056,7 @@ runs.
 | `vec_set` | `(v: &mut Vec<T>, i: Int, x: T)`, `T` Copy | Unit | none | OWN-9 (E0291 for a non-Copy `T`), TYPE-10 | result 42 on both consumers, called from a function with no `with(...)` set (at 904c7cc87) |
 | `vec_len` | `(v: &Vec<T>` or `&mut Vec<T>)` | `Int` | none | TYPE-10 | result 42 on both consumers, called from a function with no `with(...)` set (at 904c7cc87) |
 | `vec_pop` | `(v: &mut Vec<T>)` | `Option<T>` | `Alloc` | MEM-7, TYPE-23 | result 42 on both consumers |
-| `vec_free` | `(v: Vec<T>)`, consumes `v` | Unit | `Alloc` | MEM-7, OWN-5 (E0287 for a non-Copy `T`) | `Vec<String>` is E0287 outside a `trusted fn`; in a `trusted fn`, `vec_free` of an empty `Vec<String>` gives result 42 (at 904c7cc87) |
+| `vec_free` | `(v: Vec<T>)`, consumes `v` | Unit | `Alloc` | MEM-7, OWN-5 (E0287 for a non-Copy `T`), OPEN-113 | `Vec<String>` is E0287 outside a `trusted fn`; in a `trusted fn`, `vec_free` of an empty `Vec<String>` gives result 42 (at 904c7cc87); which ownership exceptions trusted code has is OPEN-113 |
 
 **Strings, conversions, output, time and arguments.** The capability column states what the
 current compiler checks; whether the allocating string builtins require `Alloc` is OPEN-154, and a
@@ -2114,8 +2114,8 @@ declare its own function of these names is OPEN-133.
 | `append` | `(buf: &mut String, ...)`, one or more values after `buf`; an owned `String` value is moved | Unit | none checked today (bug 349); `IntrinsicId.capability` records `Alloc` | `string_append`, `string_append_int`, `string_append_bool`, `string_push_char` | TYPE-10 (E0270, E0315, E0421), MOD-8, MEM-7; accepted without `Alloc` today (bug 349); whether the string builtins it expands into need `Alloc` is OPEN-154 |
 
 Observed at f17645a13, and again at 904c7cc87: `append(&mut s, 1)` in a function with no
-`with(...)` set compiles and runs (result 42 on both consumers); Elab expands that call into
-`string_append_int`, for which the current compiler checks no capability. MEM-7 lists `append`
+`with(...)` set compiles and runs (result 42 on both consumers). The column "expands into" names
+`string_append_int` for that call, and the current compiler checks no capability for it. MEM-7 lists `append`
 among the builtins that require `Alloc`, so this acceptance is bug 349; whether the string builtins
 `append` expands into require `Alloc` is OPEN-154.
 

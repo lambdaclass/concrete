@@ -122,7 +122,7 @@ it; where an entry defines the term, that entry is the definition and this table
 | owned value | a value a local binding holds by value rather than through a reference; MEM-D1 names its states | MEM-D1 |
 | Copy | a type whose values may be duplicated | OWN-D1, TYPE-14, OWN-14 |
 | linear | a type that is not Copy (OWN-D1); OWN-1 and OWN-2 govern how its values are used | OWN-D1, OWN-1, OWN-2 |
-| consume, move | the uses of a value that OWN-15 lists as moves (passing it by value, returning it, moving it into a field, destructuring it and others); MEM-D1 and OWN-1 govern the binding's state afterwards, and a Copy value's state is unchanged by them (MEM-D1) | OWN-15, MEM-D1, OWN-1 |
+| consume, move | the uses of a value that OWN-15 lists as moves (passing it by value, returning it, moving it into a field, destructuring it and others); MEM-D1 and OWN-1 govern the binding's state afterwards, and reading or moving a Copy binding leaves that binding's state unchanged (MEM-D1) | OWN-15, MEM-D1, OWN-1 |
 | reserved, frozen | two binding states MEM-D1 names: reserved is a binding passed by value to a pending `defer` (OWN-12), frozen is the owner of an enclosing borrow block (REF-D3) | MEM-D1, OWN-12, REF-D3 |
 | reference | a value of type `&T` or `&mut T`; the entries cited govern where it may flow | REF-D1, REF-D2, REF-1, REF-3, REF-5 |
 | borrow | forming a reference to a place (`&x`, `&mut x`), or a borrow block | REF-5, REF-D3 |

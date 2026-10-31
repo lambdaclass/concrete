@@ -1097,11 +1097,11 @@ in [EXECUTION_MODEL.md](../platform/EXECUTION_MODEL.md).
 | step | governing entries and what this section records | entries |
 |---|---|---|
 | source | MOD-4 covers how `mod` declarations load module files, SYN-5 the encoding of source text and SYN-1 the grammar a program is a sentence of. | MOD-4, SYN-5, SYN-1 |
-| names | MOD-1 and MOD-3 cover name resolution and the names a module binds. Builtins need no import in the current compiler; the [builtin catalog](types.md#builtin-functions) lists them. | MOD-1, MOD-3 |
-| compilation | [pipeline.md](pipeline.md) describes the stages: Parse, Resolve, Check, Elab, CoreCheck, Mono, Lower, Emit and link. PASS-5 to PASS-10 are the per-stage preservation entries, and PASS-12 (partial) covers the compiling of an accepted program. The current compiler can fail after Check on a checked program: the builtin catalog records such failures for `unwrap`, `abort` and `get_args` (bugs 345 to 347). | pipeline.md, PASS-5 to PASS-10, PASS-12 (partial) |
+| names | MOD-1 and MOD-3 cover name resolution and the names a module binds. The [builtin catalog](types.md#builtin-functions) lists the current compiler's builtin functions, with the sources and probes of its observations; every probe there calls builtins with no import, and this section records no other probe of name resolution. | MOD-1, MOD-3 |
+| compilation | [pipeline.md](pipeline.md) describes the stages: Parse, Resolve, Check, Elab, CoreCheck, Mono, Lower, Emit and link. PASS-5 to PASS-10 are the entries for the program after Check, Elab, Mono, CoreCheck, Lower and Emit; PASS-1 and PASS-2 cover specialization and PASS-11 the backend IR. PASS-12 (partial) covers the compiling of a program every rule accepts. The current compiler can fail after Check on a checked program: the builtin catalog records such failures for `unwrap`, `abort` and `get_args` (bugs 345 to 347). | pipeline.md, PASS-1, PASS-2, PASS-5 to PASS-11, PASS-12 (partial) |
 | entry point | STMT-7 (partial) covers `main` and its exit status, and PASS-10 an executable's entry point. | STMT-7 (partial), PASS-10 |
-| start | In the current compiler the generated C `main` calls the program's `main`. TRUST-8 (pending) covers module-level state and TYPE-22 the evaluation of constants. This section records no probe of start-up or of constant evaluation. | TRUST-8 (pending), TYPE-22 |
-| authority | TRUST-4 covers the capabilities of `main` as of every function. TRUST-9 and TRUST-10 are pending, and OPEN-38 is the open question of the root resource value. The current compiler's `main` takes no parameters. | TRUST-4, TRUST-9 (pending), TRUST-10 (pending), OPEN-38 |
+| start | TRUST-8 (pending) covers module-level state and TYPE-22 the evaluation of constants. [EXECUTION_MODEL.md](../platform/EXECUTION_MODEL.md) describes the generated C entry. This section records no probe of start-up, of the generated C entry or of constant evaluation. | TRUST-8 (pending), TYPE-22 |
+| authority | TRUST-4 covers the capabilities of `main` on the same terms as every other function. TRUST-9 and TRUST-10 are pending, and OPEN-38 is the open question of the root resource value and the signature by which `main` receives it. STMT-7 (partial) states the entry-point signature. Every probe below uses a `main` with no parameters; this section records no probe of a `main` that declares parameters. | TRUST-4, TRUST-9 (pending), TRUST-10 (pending), OPEN-38, STMT-7 (partial) |
 | running | STMT-3 and STMT-4 cover threads and evaluation order, and STMT-1 (pending) what a behaviour is. | STMT-3, STMT-4, STMT-1 (pending) |
 | normal exit | STMT-11 (pending) covers the exit sequence of a scope, and STMT-7 (partial) the exit status. The paragraph below records the status the current compiler produces; the order of the exit sequence was not probed for this section. | STMT-11 (pending), STMT-7 (partial) |
 | failure | STMT-2 (pending) covers failure, and STMT-13 `abort()`. "Abort and failure" above records the current compiler's traps and abort paths, and the table below what `--interp` does instead. | STMT-2 (pending), STMT-13 |
@@ -1121,11 +1121,11 @@ reported it on Linux x86-64, where a process ended by SIGABRT is reported as 134
 
 | situation | native binary | `--interp` |
 |---|---|---|
-| `main` returns a `u8` (7, after printing `hello`) | prints `hello`, status 7 | prints `hello`, then `7` as the last line, status 0 |
-| `main` returns `Int` 300 | status 44 | prints `300`, status 0 |
-| `main` returns `bool` `true` | status 1 | prints nothing, status 0 |
+| `main` returns a `u8` (7, after printing `hello`) | prints `hello`, status 7 | prints `hello`, then `7` as the last line, status 0; STMT-7 and PASS-13 name status 7 and no output written by the runtime, and bug 320 records the interpreter printing `main`'s result |
+| `main` returns `Int` 300 | status 44 | prints `300`, status 0 (bug 320) |
+| `main` returns `bool` `true` | status 1 | prints nothing, status 0 (bug 320) |
 | a division by zero at `i32`: `main` calls `fn d(a: i32, b: i32) -> i32 { return a / b; }` as `d(7, 0)` | ended by SIGABRT, status 134 | prints `interp: division by zero`, status 1 |
-| `abort();` as a statement in a `main` declared `with(Process)` | ended by SIGABRT, status 134 | prints `interp: undefined function 'abort'`, status 1 |
+| `abort();` as a statement in a `main` declared `with(Process)` | ended by SIGABRT, status 134 | prints `interp: undefined function 'abort'`, status 1 (bug 344) |
 | `clock_monotonic_ns()` in a `main` declared `with(Time)` | runs, status 42 | prints `interp: clock_monotonic_ns reads the system clock, a value the interpreter cannot know; run the compiled binary`, status 1 |
 | `float_to_string(1.5)` | runs, status 42 | prints `interp: undefined function 'float_to_string'`, status 1 (bug 348) |
 

@@ -737,7 +737,7 @@ the compiler and toolchain.
 | place | premise the compiler does not check | stated by | entries |
 |---|---|---|---|
 | a `trusted fn`, or a function with `Unsafe` in its `with(...)` set | the premises of every raw-pointer operation and foreign call in its body | the function's author, by writing `trusted` or `with(Unsafe)` | TRUST-5, TRUST-4, TRUST-2 (pending) |
-| a raw-pointer read `*p`, a write `*p = v` or an offset (`ptr::offset`) | the validity premises of the operation; TRUST-1 names the operations, TRUST-2 (pending) is the rule that each undefined behaviour be a named premise, and no entry lists these premises yet (registry item R-0506) | the author of the trusted or `Unsafe` code | TRUST-4, TRUST-1, TRUST-2 (pending); element stride: FFI-12 |
+| a raw-pointer read `*p`, a write `*p = v` or an offset (`ptr::offset`) | the validity premises of `*p`, `*p = v` and `ptr::offset`; TRUST-1 names `ptr::offset`, TRUST-2 (pending) is the rule that each undefined behaviour be a named premise, and no entry lists these premises yet (registry item R-0506) | the author of the trusted or `Unsafe` code | TRUST-4, TRUST-1, TRUST-2 (pending); element stride: FFI-12 |
 | `&*p` and `&mut *p` | `p` is aligned, live and initialized for its type | the author of the trusted or `Unsafe` code | TRUST-3 (pending) |
 | `read_owned(p)` | what the slot holds before and after the move-out; TRUST-7 makes the move-out explicit, and no entry states this premise yet | the author of the trusted or `Unsafe` code | TRUST-7 |
 | a raw store `*p = v` | whether the slot held a live value, which the store does not destroy | the author of the trusted or `Unsafe` code | TRUST-11 |

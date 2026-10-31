@@ -251,8 +251,9 @@ the same declaration twice binds the name to one declaration and is accepted. Th
 are the `__` prefix, `user_main` and the builtins a program may call but not redefine; they are
 reserved for functions only, and a `let` spelling the compiler reserves is SYN-3. The
 [builtin catalog](types.md#builtin-functions) records which builtin names the current compiler
-reserves and which it accepts as program functions; whether a program may declare a function named
-like a builtin is OPEN-133 for `print`, `println` and `append` and OPEN-153 for the others.
+reserves, and a probe of a program function named like a builtin only for `string_length`. Whether
+a program may declare a function of a builtin name the compiler does not reserve is OPEN-133 for
+`print`, `println` and `append` and OPEN-153 for every other such name.
 The current compiler also counts an impl method under its definition name `Type_method`, so a free function
 `P_get` beside `impl P { fn get(&self) ... }` in one module is refused with E0299; whether a method
 should occupy that name is OPEN-135.
