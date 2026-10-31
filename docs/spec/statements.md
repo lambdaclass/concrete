@@ -245,9 +245,9 @@ fn main() -> u8 {
 
 **Rationale.** There is no bare `loop`; `while true` is the infinite loop. A loop produces no
 value (the value `while … else` form was removed in Phase 6D); a result is a mutable local
-assigned before `break`. In main's `for (init; cond; step)` loop, `continue` still runs `step`, and
+assigned before `break`. In the current compiler's `for (init; cond; step)` loop, `continue` still runs `step`, and
 E0245 refuses a `break` or `continue` in the step that targets its own loop (bug 330); E0245 belongs to
-this entry only while main parses the step form, which version 3 removes, and retires with it. A
+this entry only while the current compiler parses the step form, which version 3 removes, and retires with it. A
 `break` or `continue` leaves the loop body's scopes like any exit (OWN-2).
 
 Main's loop forms are `while cond { ... }` and the C-style forms that version 3 removes (bug 331):
@@ -636,7 +636,7 @@ is no masking, no `bool` mapping and no other result type. Main still accepts an
 an integer natively and prints it under `--interp` (bug 320). Every example of this specification
 uses the decided form, `fn main() -> u8`; an example whose value is computed as an `Int` keeps that
 computation in `example_value()` and has `main` compare it with the expected exit status.
-`main-returns-int` pins main's acceptance of `-> Int` as pending.
+`main-returns-int` pins the current compiler's acceptance of `-> Int` as pending.
 
 
 ```con reject name=main-with-parameter code=E0310 stage=check pair=main-exit-status

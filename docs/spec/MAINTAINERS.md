@@ -101,7 +101,7 @@ chapter's prefix, written in upper case. A definition's number has a `D` in fron
      - An **open** entry states a language question that only the project owner decides (the
        owner decisions of ROADMAP, OD1 to OD32 under exit 2n and the rest under exit 2q). It encodes no answer: it has no codes, no
        examples and no `Enforced by:` names, its `Status:` is `open ODn` and its `Evidence:` is
-       `open`. Its rationale names the rules it bears on and what current main does, which stays
+       `open`. Its rationale names the rules it bears on and what the current compiler does, which stays
        provisional until the owner answers; the answer turns it into the rules it decides.
      - A **preservation** statement is one pipeline stage's contract: the relation between its
        input and its output (for example, Mono's output refines its input, with binder modes

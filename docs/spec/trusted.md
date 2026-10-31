@@ -37,7 +37,7 @@ terminals and `/dev/null` look alike from inside. SPARK's `Ada.Text_IO` likewise
 coarse file-system state and excludes redirection rather than modelling it. `with(...)` lists
 capabilities, aliases (`Std`, `cap IO = File + Console;`) and capability variables (TYPE-D1). The
 meanings of `Time`, `Env`, `Process` and `Alloc` are stated nowhere yet (OPEN-95), and a name in
-`with(...)` that is not a capability, a capability alias or a capability variable is an unresolved name, which MOD-1 refuses and main accepts
+`with(...)` that is not a capability, a capability alias or a capability variable is an unresolved name, which MOD-1 refuses and the current compiler accepts
 (bug 337). The compiler holds only the names (`validCaps`) and checks every use against the declared
 sets (TRUST-4); what a name grants is fixed by the foreign bindings that declare it, since every
 `extern fn` declares its effects (FFI-3), and std's bindings are audited against these meanings.
@@ -635,7 +635,7 @@ fn main() with(Alloc) -> u8 {
 **Rationale.** A double move, a skipped cleanup or an access to a frozen owner in a `trusted fn` is
 refused with the same code as in safe code: OWN-1's `trusted-use-after-move`, OWN-2's
 `trusted-never-consumed` and REF-8's `trusted-frozen-owner`. These are the rules the design record
-(MEMORY_SEMANTICS §11) listed; it also said that `trusted` relaxes no ownership rule, which main
+(MEMORY_SEMANTICS §11) listed; it also said that `trusted` relaxes no ownership rule, which the current compiler
 contradicts twice: trusted code may destroy a value through a reference (E0290 under OWN-8
 elsewhere) and release with `vec_free` a vector whose elements are not Copy (E0287 under OWN-5
 elsewhere), the drop-glue cases of std's collections. Whether those exceptions stay is OPEN-113.

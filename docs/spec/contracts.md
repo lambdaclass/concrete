@@ -309,7 +309,7 @@ fn main() -> u8 {
 `rotr_spec` names the function `rotr` must compute. Runtime code that names one is refused as an
 unknown name (E0101, MOD-1), since only the contract tables resolve it; a `spec fn` body that calls
 runtime code is E0321 (CON-3). Whether a `spec fn` may be declared without a body, and whether it
-must be total, is OPEN-115: main accepts both a body-less declaration and a recursive body.
+must be total, is OPEN-115: the current compiler accepts both a body-less declaration and a recursive body.
 Absorbed from [CONTRACTS_GUIDE.md](../verification/CONTRACTS_GUIDE.md) and
 [CONTRACTS_AND_VCS.md](../verification/CONTRACTS_AND_VCS.md).
 

@@ -328,7 +328,7 @@ it cannot turn a pointer into an integer (TRUST-1) or read through a raw pointer
 (TRUST-4's `raw-deref-needs-unsafe`). Trusted
 code that walks a buffer may also rely on the stride of an array of `T` being `sizeof::<T>()`
 (FFI-12). An enum takes no `repr`; whether an
-enum may cross the foreign boundary is OPEN-110 (main refuses it, E0574).
+enum may cross the foreign boundary is OPEN-110 (the current compiler refuses it, E0574).
 
 ```con accept name=observed-through-sizeof exit=42
 mod m {
@@ -366,7 +366,7 @@ mod m {
 describes wire formats. `#[repr(align(N))]` promises only a minimum alignment, and today only where
 it changes nothing (FFI-4, E0585). Which combinations are well formed is FFI-4. Whether a packed
 struct may hold a field whose alignment exceeds its offset, and whether such a field may be
-borrowed, is OPEN-111; main accepts both, and the examples here place every field at an offset
+borrowed, is OPEN-111; the current compiler accepts both, and the examples here place every field at an offset
 aligned for its type.
 
 ```con accept name=c-and-packed exit=42
@@ -524,7 +524,7 @@ fn main() -> u8 {
 **Rationale.** A C function that takes or returns a struct by value can be bound directly, with no
 pointer wrapper. Internal Concrete calls pass aggregates by pointer, and that set is not promised.
 Whether a returned struct is promised the same is OPEN-122: the design record promised it only up to
-8 bytes. Current main (EmitSSA's extern-call path, not the `Layout` authority) classifies by size alone, as
+8 bytes. The current compiler (EmitSSA's extern-call path, not the `Layout` authority) classifies by size alone, as
 AAPCS64 does for structs of integer fields: a struct of at most 8 bytes is passed as one 64-bit
 integer, of 9 to 16 bytes as two, and a larger one by pointer, and a returned struct of at most 8
 bytes comes back as one 64-bit integer while a larger one is returned as an LLVM aggregate. Structs
@@ -582,7 +582,7 @@ fn main() -> u8 {
 
 **Rationale.** This is the one layout fact beyond FFI-7 and FFI-8 that trusted code needs to walk a
 buffer, and the `Layout` authority states it: an array of `n` elements of `T` has size `n` times
-`sizeof::<T>()`. The examples use the pointer arithmetic of today's main (`p + 1` and an
+`sizeof::<T>()`. The examples use the pointer arithmetic of the current compiler (`p + 1` and an
 integer added to a `*const u8`), which TYPE-6@2 and TRUST-1 replace with `ptr::offset` (bug 322,
 R-0502). The interpreter stores typed values, not bytes, so the byte-offset example runs only
 natively.

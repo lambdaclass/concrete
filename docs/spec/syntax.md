@@ -106,7 +106,7 @@ type-name convention. Main does not implement the head rule yet: it applies the 
 too, so an uppercase constant just before a head's block is read as the start of a struct literal
 and the head does not parse, and the E0001 diagnostic suggests parentheses ([bug
 212](../bugs/212_const_before_block_parses_as_struct_literal.md)'s provisional repair). Bug 318
-replaces that with SYN-4, and the reject example below, which pins main's behaviour, is retired when
+replaces that with SYN-4, and the reject example below, which pins the current compiler's behaviour, is retired when
 it lands. This is a FIRST/FOLLOW conflict between `ident_tail` and the block after a head, which
 the head context resolves; the checkers report it, and `grammar/ll1_known_conflicts.tsv` lists it.
 
@@ -533,7 +533,7 @@ and `LABEL`. So a float has no exponent and no leading or trailing `.`, a litera
 (ARITH-2), and there are no block comments and no byte-string literals (`b"..."`); each of these is
 a parse error (SYN-1). The escapes are `\n`, `\t`, `\r`, `\0` and `\\`, with `\"` in a string literal (SYN-5)
 and `\'` in a char literal; any other `\` sequence is a parse error. Which byte a char literal holds
-when its character is not ASCII is OPEN-137. Version 2 adds the char-literal escapes to the sentence; main
+when its character is not ASCII is OPEN-137. Version 2 adds the char-literal escapes to the sentence; the current compiler
 accepted them before.
 
 ```con accept name=token-forms exit=42
@@ -683,7 +683,7 @@ fn main() -> u8 {
 - Evidence: tested
 
 **Rationale.** One qualification separator keeps the type or module visible at every use
-(SYNTAX_FREEZE_REVIEW §1.1, archived). The older `E#V` variant spelling is a parse error on main
+(SYNTAX_FREEZE_REVIEW §1.1, archived). The older `E#V` variant spelling is a parse error in the current compiler
 (SYN-1; the grammar's productions still spell it, which OPEN-77 resyncs), and a variant is always
 named through its enum: a bare `Ok(x)` is an unknown function (E0101) and `Option.None` an unknown
 variable (E0100), both under MOD-1.

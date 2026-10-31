@@ -76,7 +76,7 @@ borrow too: the owner decided on 2026-10-29 that whole-owner freezing under a sh
 (OD15, gap G10), so `borrow x as r in R { out = x; }` is E0203 (REF-8). `B`'s own locals must be
 consumed inside it (OWN-2); `r` itself need not be (REF-10). `R`, the region name, is a binder that
 SCOPE-1 covers and has no other use; whether it stays is OPEN-57, and whether borrow blocks stay is
-OPEN-58. The block stated here is main's.
+OPEN-58. The block stated here is the current compiler's.
 
 ```con accept name=owner-restored exit=42
 struct R { v: Int }
@@ -472,7 +472,7 @@ through it (REF-7). The normalized place behind this rule also refuses a field a
 a `*` whose base is neither a place nor a fresh owned value, such as `(if c { a } else { b }).f`,
 under this entry's tag and code although its sentence does not name it (a deliberate restriction,
 [KNOWN_HOLES H28](../verification/KNOWN_HOLES.md), which R-0499 may lift): bind the branch result
-first. Whether `as` may be applied to a reference, which main accepts only as an identity cast
+first. Whether `as` may be applied to a reference, which the current compiler accepts only as an identity cast
 (`r as &T` with `r: &T`) and refuses otherwise (E0553), is OPEN-103.
 
 ```con reject name=borrow-operator code=E0238 stage=check pair=root-plus-projections
@@ -730,7 +730,7 @@ the flow-sensitive half of the rules disappears. The rewrite is to borrow at eac
 (`f(&w.p); g(&w.p);`) or to borrow the owner in a borrow block. Writing *through* a reference
 (`*r = v`) assigns the referenced place, not the binding (REF-7).
 
-Version 2 states two refusals main already enforced under this entry's tag and code (E0302). A
+Version 2 states two refusals the current compiler already enforced under this entry's tag and code (E0302). A
 constant initializer is checked as an expression of the constant's type and may not
 borrow at all, a cast to a reference type counting as a borrow (`constBorrows`). A generic
 instantiated inside an `assert`, an `assume` or a ghost initializer may not be instantiated at a
@@ -1375,7 +1375,7 @@ fn main() -> u8 {
 - Evidence: tested
 
 **Rationale.** Decided by the owner on 2026-10-29 (OD15, part (a)): a live borrow of any part of a
-value freezes the whole owner, and loans are keyed by the root binding, as OD1 put it and as main
+value freezes the whole owner, and loans are keyed by the root binding, as OD1 put it and as the current compiler
 already enforces. This tightens OD2's part 2 as first recorded the same day: an exclusive argument
 conflicts with any other argument that borrows the same root, so even disjoint fields conflict and
 `h(&mut a.f, &mut a.g)` is refused, as are `upd(&mut s.a, &s.b)` and `add(&mut s.a, s.b)` (E0293);
@@ -1596,7 +1596,7 @@ fn main() -> u8 {
 **Rationale.** Decided by the owner on 2026-10-29 (OD2, part 3). Copy-in and copy-out is not part
 of the language: a backend may copy only as an optimization proven equivalent, which REF-11's
 exclusivity at a call makes possible. A borrow block's reference is the owner's own storage since
-bug 305's fix, with no copy and no write-back on any exit; main still lowers a `&mut x` argument by
+bug 305's fix, with no copy and no write-back on any exit; the current compiler still lowers a `&mut x` argument by
 copying the owner into a slot and writing it back (bug 307, under repair), and the guarantee holds
 once that lowering is replaced.
 

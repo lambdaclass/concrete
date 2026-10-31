@@ -72,7 +72,7 @@ TYPE-14 states the consequence.
 
 **Rationale.** Every site a value flows into moves it: `let g = f;`, a by-value argument,
 `return f;`, a match scrutinee, an assignment `a = f;`, a struct, enum or array literal,
-(a `break` operand, which main still parses, is the `break_` row below)
+(a `break` operand, which the current compiler still parses, is the `break_` row below)
 and a store `*p = v` or `a[i] = v`. Using the source afterwards would use a value that now has
 another owner.
 
@@ -698,7 +698,7 @@ fn main() -> u8 {
 discard, and the reader cannot tell which; `discard(e)` says it. Version 2 (CapabilityJudgment slice
 5) flagged only syntactically pure values: it skipped calls, because an empty capability set does not
 prove a call pure (mutation through `&mut` and foreign effects are not capabilities), and operations
-that can trap (`/`, `%`). That is still main's behaviour: its site is `exprPureDiscardable`, a local
+that can trap (`/`, `%`). That is still the current compiler's behaviour: its site is `exprPureDiscardable`, a local
 structural purity predicate in the `Stmt.expr` check (`CheckError.discardedPureValue`).
 
 Version 3 records the owner's decision of 2026-10-29 (OD29): every unused non-Unit result needs
@@ -1356,8 +1356,8 @@ locals, by-value `self` and `Destroy` bodies included.
 Version 3 records the owner's decision of 2026-10-29 (OD32): there is no receiver auto-borrow; a
 `&self` or `&mut self` method on an owned place is called as `(&s).m()` or `(&mut s).m()`, and a
 receiver that is already a reference is unchanged. Main still borrows an owned receiver implicitly
-(bug 328); the `methodCall` row below states the decided form and notes main's. `break <expr>`
-is refused at parse by the decided rule (STMT-6, OD27); main still parses it (bug 323).
+(bug 328); the `methodCall` row below states the decided form and notes the current compiler's. `break <expr>`
+is refused at parse by the decided rule (STMT-6, OD27); the current compiler still parses it (bug 323).
 
 
 ```con accept name=flows-move-once exit=42
@@ -1412,7 +1412,7 @@ fn main() -> u8 {
 | `arrayLit` | **moves** each element in (H10) | conservation (E0205 rows) |
 | `arrayIndex` | place projection: a Copy element is copied, a non-Copy element read by value is **refused** (**E0290**, OWN-8) | conservation (H11 rows) |
 | `cast` | reads a Copy numeric | — |
-| `methodCall` | the receiver is a place; a `&self` / `&mut self` method takes a reference receiver, written `(&s).m()` / `(&mut s).m()` for an owned place (main still borrows an owned receiver implicitly, bug 328); by-value `self` **moves** an ident receiver and **refuses** a projection receiver (**E0290**); ident arguments **move** | conservation (H11 rows) |
+| `methodCall` | the receiver is a place; a `&self` / `&mut self` method takes a reference receiver, written `(&s).m()` / `(&mut s).m()` for an owned place (the current compiler still borrows an owned receiver implicitly, bug 328); by-value `self` **moves** an ident receiver and **refuses** a projection receiver (**E0290**); ident arguments **move** | conservation (H11 rows) |
 | `staticMethodCall` | ident arguments **move**; the result is owned | conservation |
 | `fnRef` | creates a Copy function-pointer value | — |
 | heap-shell `.fieldAccess` (the removed `->` form) | heap-interior read: OWN-8 applies (bug 144), so a non-Copy field read by value is **E0290**; a heap store through `fieldAssign` refuses a non-Copy overwrite (**E0219**); a node is taken apart with `let n = *h;` and a pattern | projection |
@@ -1442,7 +1442,7 @@ fn main() -> u8 {
 | `fieldAssign` | an overwrite of a non-Copy field is **refused** (**E0219**); an ident right-hand side **moves**; the object is a place | conservation |
 | `derefAssign` | through `&mut T`: an overwrite of a non-Copy pointee is **refused** (**E0291**, H15); through `*mut T`: a trusted uninitialized-slot store (exempt); an ident right-hand side **moves** | conservation (H15 rows) |
 | `arrayIndexAssign` | an overwrite of a non-Copy element is **refused** (**E0291**, H15); an ident right-hand side **moves**; the array is a place | conservation (H15 rows) |
-| `break_` | may not skip unconsumed loop-local linear values (E0210); the H14 one-level loop-depth exemption of the `while_` row applies (a break fires at most once per loop entry); `break` carries no value (STMT-6@3, OD27), and main, which still parses `break <expr>;` (bug 323), evaluates and drops it, refusing a non-Copy one (bug 149) | conservation (H14 rows) + scope |
+| `break_` | may not skip unconsumed loop-local linear values (E0210); the H14 one-level loop-depth exemption of the `while_` row applies (a break fires at most once per loop entry); `break` carries no value (STMT-6@3, OD27), and the current compiler, which still parses `break <expr>;` (bug 323), evaluates and drops it, refusing a non-Copy one (bug 149) | conservation (H14 rows) + scope |
 | `continue_` | may not skip unconsumed loop-local linear values (E0211) | scope |
 | `defer` | the deferred call **reserves** its operands, consumed at scope exit (OWN-12); a discarded non-Copy or fallible result is refused (E0287 / E0286) | discard |
 | `assert_` | proof-only, erased before Core; must not change the ownership state of a runtime binding (OWN-11) | — |

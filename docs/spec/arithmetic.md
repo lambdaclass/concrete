@@ -48,7 +48,7 @@ be 44. The negated value is what is range-checked, so `let a: i8 = -128` is acce
 are not part of the language (an annotation or a conversion says the type).
 
 A hint (an annotation, a parameter, a field, an arm) gives a literal the hinted type; version 1
-typed a literal with no expected type `Int` (`i64`), which is still main's behaviour. Suffixes are
+typed a literal with no expected type `Int` (`i64`), which is still the current compiler's behaviour. Suffixes are
 workload-gated: an
 annotation already covers the need, so a suffix would be pure convenience, revisited if a real
 workload finds annotations too noisy. Gated by `scripts/tests/check_numeric_literals.sh` (ROADMAP
@@ -257,7 +257,7 @@ numeric conversions (TRUST-1 owns the pointer–integer case; which pointer and 
 conversions `as` writes is OPEN-98). The named operations' results are ARITH-10, and their
 spellings are OPEN-99.
 
-Until then, on current main, narrowing truncates silently (`300 as u8` is 44, `-1 as u32` is
+Until then, in the current compiler, narrowing truncates silently (`300 as u8` is 44, `-1 as u32` is
 4294967295, `3.9 as i32` is 3). Even a widening needs `as`: `want_u64(my_u8)` is E0220 (TYPE-4),
 so every conversion is visible at the call site.
 
@@ -404,7 +404,7 @@ fn main() -> u8 {
 **Rationale.** These are LLVM's `ashr` and `lshr` (the archived ARITHMETIC_POLICY §6). When a shift
 aborts instead (a count outside the width) is ARITH-3. The interpreter and the constant folder
 compute it in `IntArith`, and the binary through the abort helpers. How an integer division rounds
-and which sign a remainder takes is OPEN-114: main truncates toward zero, as C99 does, which the
+and which sign a remainder takes is OPEN-114: the current compiler truncates toward zero, as C99 does, which the
 archived record did not state as a rule.
 
 ```con accept name=shift-fill exit=42
@@ -533,7 +533,7 @@ result, so that no consumer has to guess what a lossy conversion means (bugs 080
 `truncate::<u8>(300)` is 44 and `reinterpret::<u32>(-1)` is 4294967295, what a narrowing or
 sign-changing `as` gives today. Whether `try_convert` reports a failure as `Option::None` or as a
 `Result` error with a reason is OPEN-106; the archived record allowed either. The float conversions
-are ARITH-11. None of these exists on main yet (R-0500), and their spellings are OPEN-99.
+are ARITH-11. None of these exists in the current compiler yet (R-0500), and their spellings are OPEN-99.
 
 ```con accept name=truncate-and-reinterpret exit=42 pending=R-0500 now=reject:E0101:resolve
 fn example_value() -> Int {
@@ -571,7 +571,7 @@ fn main() -> u8 {
 `f64`, `f64` to `f32`, every float to an integer). Today `as` rounds an integer to a float natively
 and is the identity in `--interp` (bug 128), and a float-to-integer `as` truncates toward zero and
 aborts on NaN, an infinity or a value out of range. Whether a rounding operation gives a value or an
-error for those inputs, and which value, is OPEN-107. None of these exists on main yet (R-0500).
+error for those inputs, and which value, is OPEN-107. None of these exists in the current compiler yet (R-0500).
 The conversion functions are not named yet (OPEN-99), so this entry has no example until they are.
 
 <a id="ARITH-12"></a>

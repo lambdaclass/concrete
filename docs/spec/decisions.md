@@ -2,7 +2,7 @@
 
 This chapter lists the language questions that only the project owner decides: OD1 to OD150 of
 [ROADMAP.md](../../ROADMAP.md#owner-decisions) (exit 2n for OD1 to OD32, exit 2q for the rest). Each entry states the question and encodes
-no answer. The rules it bears on are named in its rationale, together with what current main does,
+no answer. The rules it bears on are named in its rationale, together with what the current compiler does,
 which stays provisional until the owner answers. The answer, when given, is recorded in ROADMAP and
 turns the entry into the rules it decides; until then no agent picks a side
 ([AGENTS.md](../project/AGENTS.md#rules)). OD1 to OD22 were answered on 2026-10-29 and are listed under
@@ -16,7 +16,7 @@ The table below lists them in reading order.
 Every open question of this chapter, in the order the owner is asked to read them: the removals first,
 because they make other questions moot, then the questions grouped by area. Each row names the item's
 label in the owner picks of 2026-10-30 and the coordinator's pick after that day's review, which is a
-recommendation and not a decision; the entry below states the question, the options and what main does.
+recommendation and not a decision; the entry below states the question, the options and what the current compiler does.
 The picks mark Q1, Q2, Q8, Q9 and S14 as already agreed by the owner (ROADMAP records no dated answer for
 them); they are not separate entries here
 (OPEN-37 and OPEN-61 cite Q8 and S14).
@@ -155,7 +155,7 @@ them); they are not separate entries here
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on MOD-4 and MOD-7. Current main: inline submodules are accepted, and most
+**Rationale.** Bears on MOD-4 and MOD-7. The current compiler: inline submodules are accepted, and most
 examples of this specification use them. Raised while recording OD9 (2026-10-29). The options are in
 ROADMAP's row OD33; the owner's answer is recorded there. Austral: one module per file pair, no inline modules. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): no inline `mod m { }`: one file per module. The pick rests on principle 10 and admission check 4 (PROJECT.md, [principles](../project/PROJECT.md#principles) and [admission checks](../project/PROJECT.md#design-policy)). Proof impact: helps: module boundaries and declaration identities kept.
 
@@ -173,7 +173,7 @@ ROADMAP's row OD33; the owner's answer is recorded there. Austral: one module pe
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on SYN-4. Current main: `if same(p, P { v: 1 }) { ... }` is accepted (an
+**Rationale.** Bears on SYN-4. The current compiler: `if same(p, P { v: 1 }) { ... }` is accepted (an
 uppercase struct literal is read anywhere in a head). The grammar distinguishes a grouped expression
 `( expr )` from the parentheses of a call's arguments, and OD16's answer does not say which one it
 means. Raised while recording OD16 (2026-10-29). The options are in ROADMAP's row OD34; the owner's
@@ -193,7 +193,7 @@ answer is recorded there. Austral: not applicable (records are built with `R(f =
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on TRAIT-10. OD28's answer allows either form and does not choose; current main
+**Rationale.** Bears on TRAIT-10. OD28's answer allows either form and does not choose; the current compiler
 counts an array of destroyable elements as `Destroy` with no impl (bug 324). The options and a
 recommendation are in ROADMAP's row OD35; the owner's answer is recorded there. Austral: no destructor trait. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): a language impl `[T; N]: Destroy` when `T: Destroy`, elements destroyed in index order, with its own identity in coherence. The pick rests on admission check 1 (PROJECT.md, [admission checks](../project/PROJECT.md#design-policy)). Proof impact: neutral with conditions: elements destroyed in index order, effects kept, stopping on trap or divergence; identity, bounds and capabilities survive specialization. Item Q6 of the owner picks of 2026-10-30.
 
@@ -212,7 +212,7 @@ recommendation are in ROADMAP's row OD35; the owner's answer is recorded there. 
 - Evidence: open
 
 **Rationale.** Bears on MEM-4. OD30's answer requires such a form and keeps `*` as the consuming
-move-out, but names no spelling; current main opens one heap layer implicitly (bug 326). The options
+move-out, but names no spelling; the current compiler opens one heap layer implicitly (bug 326). The options
 and a recommendation are in ROADMAP's row OD36; the owner's answer is recorded there. Austral: the borrow statement. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): only through a borrow block (`borrow h as r { r.f }`), no `(&h).f`; specify the result type for `Heap<T>`, `&Heap<T>` and `&mut Heap<T>`, one heap layer per block (MEM-4), and `HeapArray` elements. The pick rests on principle 4 and admission check 2 (behaviour visible) (PROJECT.md, [principles](../project/PROJECT.md#principles) and [admission checks](../project/PROJECT.md#design-policy)). Proof impact: helps, and needs the opening types specified (Heap shells and HeapArray projection are outside Borrow.lean's model). Item Q7 of the owner picks of 2026-10-30.
 
 <a id="OPEN-37"></a>
@@ -230,7 +230,7 @@ and a recommendation are in ROADMAP's row OD36; the owner's answer is recorded t
 - Evidence: open
 
 **Rationale.** Bears on TYPE-6 and TRUST-1. OD26 removes the operators and asks for named functions without naming them; TRUST-1 already names `ptr::offset`, `ptr::expose` and `ptr::from_exposed`. The options and a recommendation are in ROADMAP's row OD37;
-the owner's answer is recorded there. Current main: trusted code compares raw pointers with `==` and `<` (bug 322). Austral: no named difference or ordering functions; its `Pointer` and `Address` types are compared with the ordering operators. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): one trusted `ptr::diff` (same-allocation premise), ordering read from its sign, no `ptr::cmp`; specify the representability of its result, one-past pointers included (Q8 is marked agreed in the picks; ROADMAP records no owner answer for it). The pick rests on principle 11 (honest trust boundaries) and principle 10 (PROJECT.md, [principles](../project/PROJECT.md#principles)). Proof impact: needs the trusted pointer operations specified and preserved across memory lowering, with the same-allocation and representability premises (one-past included) in their contracts. Item Q8 of the owner picks of 2026-10-30.
+the owner's answer is recorded there. The current compiler: trusted code compares raw pointers with `==` and `<` (bug 322). Austral: no named difference or ordering functions; its `Pointer` and `Address` types are compared with the ordering operators. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): one trusted `ptr::diff` (same-allocation premise), ordering read from its sign, no `ptr::cmp`; specify the representability of its result, one-past pointers included (Q8 is marked agreed in the picks; ROADMAP records no owner answer for it). The pick rests on principle 11 (honest trust boundaries) and principle 10 (PROJECT.md, [principles](../project/PROJECT.md#principles)). Proof impact: needs the trusted pointer operations specified and preserved across memory lowering, with the same-allocation and representability premises (one-past included) in their contracts. Item Q8 of the owner picks of 2026-10-30.
 
 <a id="OPEN-38"></a>
 ### OPEN-38. The root resource API
@@ -247,7 +247,7 @@ the owner's answer is recorded there. Current main: trusted code compares raw po
 - Evidence: open
 
 **Rationale.** Bears on TRUST-9 and STMT-7. OD8 decides that `main` receives a root value and splits it, in the spirit of Austral's `RootCapability`, without naming its type or the splitting functions. The options and a recommendation are in ROADMAP's row OD38;
-the owner's answer is recorded there. Current main: `main` takes no parameters (STMT-7). Austral: `main(root: RootCapability)`. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): `fn main(root: Root) -> u8` (or Unit), `Root` split into linear tokens by trusted functions; specify the split functions and how leftover authority is consumed. The pick rests on principle 5 (capabilities visible) (PROJECT.md, [principles](../project/PROJECT.md#principles)). Proof impact: needs requirement 1: unforgeable token construction (an empty exported struct is not constructible by users), contracts relating split outputs and residual authority to the input, one acquisition of each exclusive resource, and a startup relation that supplies the authorized Root; TRUST-4's capability containment kept.
+the owner's answer is recorded there. The current compiler: `main` takes no parameters (STMT-7). Austral: `main(root: RootCapability)`. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): `fn main(root: Root) -> u8` (or Unit), `Root` split into linear tokens by trusted functions; specify the split functions and how leftover authority is consumed. The pick rests on principle 5 (capabilities visible) (PROJECT.md, [principles](../project/PROJECT.md#principles)). Proof impact: needs requirement 1: unforgeable token construction (an empty exported struct is not constructible by users), contracts relating split outputs and residual authority to the input, one acquisition of each exclusive resource, and a startup relation that supplies the authorized Root; TRUST-4's capability containment kept.
 
 <a id="OPEN-39"></a>
 ### OPEN-39. The interface artifact format
@@ -264,7 +264,7 @@ the owner's answer is recorded there. Current main: `main` takes no parameters (
 - Evidence: open
 
 **Rationale.** Bears on MOD-7. OD9 decides that the compiler generates the artifact and a gate diffs it, without fixing its format. The options and a recommendation are in ROADMAP's row OD39;
-the owner's answer is recorded there. Current main: the compiler has the declaration-level `FileSummary` and `--report interface`, but no persisted per-module interface artifact and no API-diff gate of the proposed form. Austral: interface files are written by hand. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): the `pub` declarations rendered as Concrete source without bodies, generated by the compiler, with an API-diff gate; it also carries private layout, impl methods, attributes, constants, capabilities and generic bodies, and is not read as FFI-6 bodyless foreign bindings. The pick rests on principle 8 (artifact-first auditability) (PROJECT.md, [principles](../project/PROJECT.md#principles)). Proof impact: needs requirement 5: the interface, the checked module, its dependencies and the linked object are bound together; private layout stays metadata and grants no construction rights; imported contracts are checked.
+the owner's answer is recorded there. The current compiler: the compiler has the declaration-level `FileSummary` and `--report interface`, but no persisted per-module interface artifact and no API-diff gate of the proposed form. Austral: interface files are written by hand. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): the `pub` declarations rendered as Concrete source without bodies, generated by the compiler, with an API-diff gate; it also carries private layout, impl methods, attributes, constants, capabilities and generic bodies, and is not read as FFI-6 bodyless foreign bindings. The pick rests on principle 8 (artifact-first auditability) (PROJECT.md, [principles](../project/PROJECT.md#principles)). Proof impact: needs requirement 5: the interface, the checked module, its dependencies and the linked object are bound together; private layout stays metadata and grants no construction rights; imported contracts are checked.
 
 <a id="OPEN-40"></a>
 ### OPEN-40. PAT-9 and the fallback arm of a desugared form
@@ -281,7 +281,7 @@ the owner's answer is recorded there. Current main: the compiler has the declara
 - Evidence: open
 
 **Rationale.** Bears on PAT-9. OD18 is stated for a `match`; over a one-variant enum the fallback arm of `if let` can never run, and refusing it would refuse `if let` there. Bug 317's fix, unlanded, does not judge that arm. The options and a recommendation are in ROADMAP's row OD40;
-the owner's answer is recorded there. Current main: `if let` over a one-variant enum is accepted. Austral: not applicable (no `if let`). Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): moot if OD52 removes the desugared forms. The pick follows OD52. Proof impact: helps: no synthetic fallback arm.
+the owner's answer is recorded there. The current compiler: `if let` over a one-variant enum is accepted. Austral: not applicable (no `if let`). Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): moot if OD52 removes the desugared forms. The pick follows OD52. Proof impact: helps: no synthetic fallback arm.
 
 <a id="OPEN-41"></a>
 ### OPEN-41. PAT-9 and integer ranges that span their type
@@ -298,7 +298,7 @@ the owner's answer is recorded there. Current main: `if let` over a one-variant 
 - Evidence: open
 
 **Rationale.** Bears on PAT-9 and PAT-2. PAT-2 requires a catch-all over an integer scrutinee, so refusing it there would make such a match impossible to write. Bug 317's fix, unlanded, does not count the type's range as covered. The options and a recommendation are in ROADMAP's row OD41;
-the owner's answer is recorded there. Current main: a catch-all after ranges that span the type is accepted. Austral: not applicable (no range patterns). Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): close as range-specific under OD56, recording in PAT-2 and PAT-9 that an integer match still needs a catch-all and that listing every literal is not coverage. The pick rests on admission check 1 (PROJECT.md, [admission checks](../project/PROJECT.md#design-policy)). Proof impact: helps: the integer catch-all is never unreachable.
+the owner's answer is recorded there. The current compiler: a catch-all after ranges that span the type is accepted. Austral: not applicable (no range patterns). Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): close as range-specific under OD56, recording in PAT-2 and PAT-9 that an integer match still needs a catch-all and that listing every literal is not coverage. The pick rests on admission check 1 (PROJECT.md, [admission checks](../project/PROJECT.md#design-policy)). Proof impact: helps: the integer catch-all is never unreachable.
 
 <a id="OPEN-42"></a>
 ### OPEN-42. Comparisons on `bool` and `char`
@@ -314,7 +314,7 @@ the owner's answer is recorded there. Current main: a catch-all after ranges tha
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on TYPE-6. Current main compares `bool` and `char`, and TYPE-6@2 keeps that
+**Rationale.** Bears on TYPE-6. The current compiler compares `bool` and `char`, and TYPE-6@2 keeps that
 while this is open. The options and a recommendation are in ROADMAP's row OD42; the owner's answer is
 recorded there. Austral: not checked. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): keep `==` and `!=` on `bool` and `char` and ordering on `char`, refuse ordering on `bool`; amend TYPE-6 and OD26 explicitly. The pick rests on admission check 1 (PROJECT.md, [admission checks](../project/PROJECT.md#design-policy)). Proof impact: neutral (char comparisons are not thereby admitted to the proof subset).
 
@@ -404,7 +404,7 @@ recorded there. Austral: type parameters are inferred from the arguments, and a 
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on STMT-6 and ARITH-2. OD47 gives the index the bounds' shared integer type, and OD31 removes the `Int` fallback for a literal with no expected type, so two literal bounds leave the index's type open: the loop could be refused, as OD31 refuses an unconstrained literal, or the index could take a type such as `Int`. The counted loop is not on main yet (bug 331). Raised while recording OD47 (2026-10-29). The options and
+**Rationale.** Bears on STMT-6 and ARITH-2. OD47 gives the index the bounds' shared integer type, and OD31 removes the `Int` fallback for a literal with no expected type, so two literal bounds leave the index's type open: the loop could be refused, as OD31 refuses an unconstrained literal, or the index could take a type such as `Int`. The counted loop is not in the current compiler yet (bug 331). Raised while recording OD47 (2026-10-29). The options and
 a recommendation are in ROADMAP's row OD48; the owner's answer is recorded there. Austral: not checked. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a) refused, as OD31 refuses any literal with no expected type; a typed bound supplies the other bound's type, in either order. The pick rests on admission check 1 (OD31's principle) (PROJECT.md, [principles](../project/PROJECT.md#principles) and [admission checks](../project/PROJECT.md#design-policy)). Proof impact: neutral: type discovery does not reorder the bounds' evaluation.
 
 <a id="OPEN-49"></a>
@@ -422,7 +422,7 @@ a recommendation are in ROADMAP's row OD48; the owner's answer is recorded there
 - Evidence: open
 
 **Rationale.** Bears on STMT-6, ARITH-3 and the loop variant of the contracts chapter. OD47 says the counted form carries the measure `b - i` and desugars to `while`; ARITH-3 checks ordinary arithmetic, and silently choosing wrapping, a wider type or a mathematical integer would add a rule. Raised while recording OD47 (2026-10-29). The options and
-a recommendation are in ROADMAP's row OD49; the owner's answer is recorded there. Current main: the counted loop is not on main (bug 331). Austral: not applicable. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a) a mathematical integer in the proof only, never computed at run time. The pick rests on principle 9 (proofs attach to real code) and admission check 9 (PROJECT.md, [principles](../project/PROJECT.md#principles) and [admission checks](../project/PROJECT.md#design-policy)). Proof impact: needs requirement 2: the measure proves only that the iteration count is finite, so termination also needs the bounds, the body and cleanup to terminate; the counted-loop proof rule (zero iterations, `break`, labelled `continue`) bound to the exact desugared loop; an invariant checked at body entry establishes nothing after an empty loop; bounds-check removal needs an in-range certificate, not only an immutable length.
+a recommendation are in ROADMAP's row OD49; the owner's answer is recorded there. The current compiler has no counted loop (bug 331). Austral: not applicable. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a) a mathematical integer in the proof only, never computed at run time. The pick rests on principle 9 (proofs attach to real code) and admission check 9 (PROJECT.md, [principles](../project/PROJECT.md#principles) and [admission checks](../project/PROJECT.md#design-policy)). Proof impact: needs requirement 2: the measure proves only that the iteration count is finite, so termination also needs the bounds, the body and cleanup to terminate; the counted-loop proof rule (zero iterations, `break`, labelled `continue`) bound to the exact desugared loop; an invariant checked at body entry establishes nothing after an empty loop; bounds-check removal needs an in-range certificate, not only an immutable length.
 
 <a id="OPEN-50"></a>
 ### OPEN-50. Reserved or contextual `from` and `until`
@@ -456,7 +456,7 @@ OD50; the owner's answer is recorded there. Austral: its loop words are reserved
 - Evidence: open
 
 **Rationale.** Bears on STMT-6. OD47 adds the ascending half-open loop only; the reviews of 2026-10-29 asked whether counting down, a step other than 1 and iterating a collection stay with `while`. The options and a recommendation are in ROADMAP's row
-OD51; the owner's answer is recorded there. Current main: main has no counted loop (bug 331). Austral: a counted loop and `while`. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a) none now; each a later decision when a workload needs it. The pick rests on principle 10 and admission check 9 (PROJECT.md, [principles](../project/PROJECT.md#principles) and [admission checks](../project/PROJECT.md#design-policy)). Proof impact: neutral.
+OD51; the owner's answer is recorded there. The current compiler has no counted loop (bug 331). Austral: a counted loop and `while`. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a) none now; each a later decision when a workload needs it. The pick rests on principle 10 and admission check 9 (PROJECT.md, [principles](../project/PROJECT.md#principles) and [admission checks](../project/PROJECT.md#design-policy)). Proof impact: neutral.
 
 <a id="OPEN-52"></a>
 ### OPEN-52. `if let`, `while let` and `let ... else`
@@ -472,7 +472,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on PAT-6, PAT-8, PAT-9, OPEN-40, SYN-1. Current main: all three are accepted and desugar to a `match` with a catch-all arm (PAT-6). Options: (a) keep the three forms (PAT-6, their desugaring to `match`); (b) remove them, `match` being the only refutable pattern form. Austral: none of the three; `case` is the only refutable form. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (b) remove. The pick rests on principle 10 (small analyzable core) and admission check 1 (a simple invariant) (PROJECT.md, [principles](../project/PROJECT.md#principles) and [admission checks](../project/PROJECT.md#design-policy)). Proof impact: helps: fewer desugarings; match ownership and branch accounting kept. Item S1 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD52.
+**Rationale.** Bears on PAT-6, PAT-8, PAT-9, OPEN-40, SYN-1. The current compiler: all three are accepted and desugar to a `match` with a catch-all arm (PAT-6). Options: (a) keep the three forms (PAT-6, their desugaring to `match`); (b) remove them, `match` being the only refutable pattern form. Austral: none of the three; `case` is the only refutable form. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (b) remove. The pick rests on principle 10 (small analyzable core) and admission check 1 (a simple invariant) (PROJECT.md, [principles](../project/PROJECT.md#principles) and [admission checks](../project/PROJECT.md#design-policy)). Proof impact: helps: fewer desugarings; match ownership and branch accounting kept. Item S1 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD52.
 
 <a id="OPEN-53"></a>
 ### OPEN-53. Struct update `..base`
@@ -488,7 +488,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on TYPE-7, OWN-15. Current main: accepted (TYPE-7, OWN-15's value flow for `..base`). Options: (a) keep it; (b) remove it, every field written. Austral: no struct update; every field is written. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (b) remove. The pick rests on principle 10 and admission check 2 (behaviour visible: every field written) (PROJECT.md, [principles](../project/PROJECT.md#principles) and [admission checks](../project/PROJECT.md#design-policy)). Proof impact: helps: removes the explicit-fields-then-base evaluation case. Item S2 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD53.
+**Rationale.** Bears on TYPE-7, OWN-15. The current compiler: accepted (TYPE-7, OWN-15's value flow for `..base`). Options: (a) keep it; (b) remove it, every field written. Austral: no struct update; every field is written. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (b) remove. The pick rests on principle 10 and admission check 2 (behaviour visible: every field written) (PROJECT.md, [principles](../project/PROJECT.md#principles) and [admission checks](../project/PROJECT.md#design-policy)). Proof impact: helps: removes the explicit-fields-then-base evaluation case. Item S2 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD53.
 
 <a id="OPEN-54"></a>
 ### OPEN-54. `newtype` and `.0`
@@ -504,7 +504,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on TYPE-7, TYPE-11, ARITH-5. Current main: `newtype` declarations and `.0` are accepted; `unwrap(id)` is an intrinsic. Options: (a) keep `newtype` and `.0`; (b) remove both, using a one-field struct whose field is private to its module. Austral: no newtype; a type is made opaque by the module interface hiding its definition (a record being one possible definition). Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (b) remove. The pick rests on principle 10 and admission check 1 (PROJECT.md, [principles](../project/PROJECT.md#principles) and [admission checks](../project/PROJECT.md#design-policy)). Proof impact: helps, with migration care: the one-field struct's Copy declaration and private construction keep the invariant (TYPE-11's private-destructuring gap). Item S3 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD54.
+**Rationale.** Bears on TYPE-7, TYPE-11, ARITH-5. The current compiler: `newtype` declarations and `.0` are accepted; `unwrap(id)` is an intrinsic. Options: (a) keep `newtype` and `.0`; (b) remove both, using a one-field struct whose field is private to its module. Austral: no newtype; a type is made opaque by the module interface hiding its definition (a record being one possible definition). Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (b) remove. The pick rests on principle 10 and admission check 1 (PROJECT.md, [principles](../project/PROJECT.md#principles) and [admission checks](../project/PROJECT.md#design-policy)). Proof impact: helps, with migration care: the one-field struct's Copy declaration and private construction keep the invariant (TYPE-11's private-destructuring gap). Item S3 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD54.
 
 <a id="OPEN-55"></a>
 ### OPEN-55. Match guards
@@ -520,7 +520,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on PAT-4, PAT-2, PAT-9. Current main: guards are accepted and read-only (PAT-4). Options: (a) keep them (PAT-4); (b) remove them, the condition written inside the arm. Austral: no guards. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (b) remove. The pick rests on principle 10 and admission check 9 (the proof story: coverage without guards) (PROJECT.md, [principles](../project/PROJECT.md#principles) and [admission checks](../project/PROJECT.md#design-policy)). Proof impact: helps, and needs requirement 4: it narrows PROVABLE_V1's OD19 admission of guards and ranges, which is amended explicitly with a compatibility record and any affected evidence migrated. Item S10 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD55.
+**Rationale.** Bears on PAT-4, PAT-2, PAT-9. The current compiler: guards are accepted and read-only (PAT-4). Options: (a) keep them (PAT-4); (b) remove them, the condition written inside the arm. Austral: no guards. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (b) remove. The pick rests on principle 10 and admission check 9 (the proof story: coverage without guards) (PROJECT.md, [principles](../project/PROJECT.md#principles) and [admission checks](../project/PROJECT.md#design-policy)). Proof impact: helps, and needs requirement 4: it narrows PROVABLE_V1's OD19 admission of guards and ranges, which is amended explicitly with a compatibility record and any affected evidence migrated. Item S10 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD55.
 
 <a id="OPEN-56"></a>
 ### OPEN-56. Range patterns
@@ -536,7 +536,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on PAT-7, PAT-2, PAT-9, OPEN-41, OD19. Current main: range patterns are accepted (PAT-7). Options: (a) keep them (PAT-7); (b) remove them, the comparison written in the arm or an `if` chain. Austral: no range patterns. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (b) remove; then close OPEN-41 as range-specific, recording in PAT-2 and PAT-9 that an integer match still needs a catch-all and that listing every literal is not coverage, so that catch-all is never unreachable. The pick rests on principle 10 and admission check 1 (PROJECT.md, [principles](../project/PROJECT.md#principles) and [admission checks](../project/PROJECT.md#design-policy)). Proof impact: helps, and needs requirement 4: it narrows PROVABLE_V1's OD19 admission of guards and ranges, which is amended explicitly with a compatibility record and any affected evidence migrated. Item S11 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD56.
+**Rationale.** Bears on PAT-7, PAT-2, PAT-9, OPEN-41, OD19. The current compiler: range patterns are accepted (PAT-7). Options: (a) keep them (PAT-7); (b) remove them, the comparison written in the arm or an `if` chain. Austral: no range patterns. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (b) remove; then close OPEN-41 as range-specific, recording in PAT-2 and PAT-9 that an integer match still needs a catch-all and that listing every literal is not coverage, so that catch-all is never unreachable. The pick rests on principle 10 and admission check 1 (PROJECT.md, [principles](../project/PROJECT.md#principles) and [admission checks](../project/PROJECT.md#design-policy)). Proof impact: helps, and needs requirement 4: it narrows PROVABLE_V1's OD19 admission of guards and ranges, which is amended explicitly with a compatibility record and any affected evidence migrated. Item S11 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD56.
 
 <a id="OPEN-57"></a>
 ### OPEN-57. The region name of a borrow block
@@ -552,7 +552,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on REF-8, REF-11, SCOPE-D1. Current main: the region name is written and has no other use in the language. Options: (a) keep `in R`; (b) drop it, the block itself being the region. Austral: the borrow statement names its region (`borrow x as r in R do ... end`); anonymous borrows `&x` in call arguments name none. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (b) drop `in R`. The pick rests on principle 10 and admission check 1 (PROJECT.md, [principles](../project/PROJECT.md#principles) and [admission checks](../project/PROJECT.md#design-policy)). Proof impact: helps if the internal loan and scope identities stay. Item S12b of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD57.
+**Rationale.** Bears on REF-8, REF-11, SCOPE-D1. The current compiler: the region name is written and has no other use in the language. Options: (a) keep `in R`; (b) drop it, the block itself being the region. Austral: the borrow statement names its region (`borrow x as r in R do ... end`); anonymous borrows `&x` in call arguments name none. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (b) drop `in R`. The pick rests on principle 10 and admission check 1 (PROJECT.md, [principles](../project/PROJECT.md#principles) and [admission checks](../project/PROJECT.md#design-policy)). Proof impact: helps if the internal loan and scope identities stay. Item S12b of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD57.
 
 <a id="OPEN-58"></a>
 ### OPEN-58. Borrow blocks stay
@@ -568,7 +568,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on REF-6, REF-8, REF-11, OPEN-36. Current main: borrow blocks are accepted (REF-8, REF-11). Options: (a) keep them; (b) remove them, references living only within one call's arguments. Austral: the borrow statement is the way to hold a reference across statements. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a) keep (recorded as already agreed in the picks; no owner record yet). The pick rests on principle 4 (references are scoped access, not ordinary values) (PROJECT.md, [principles](../project/PROJECT.md#principles)). Proof impact: helps: lexical loan boundaries kept. Item S12 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD58.
+**Rationale.** Bears on REF-6, REF-8, REF-11, OPEN-36. The current compiler: borrow blocks are accepted (REF-8, REF-11). Options: (a) keep them; (b) remove them, references living only within one call's arguments. Austral: the borrow statement is the way to hold a reference across statements. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a) keep (recorded as already agreed in the picks; no owner record yet). The pick rests on principle 4 (references are scoped access, not ordinary values) (PROJECT.md, [principles](../project/PROJECT.md#principles)). Proof impact: helps: lexical loan boundaries kept. Item S12 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD58.
 
 <a id="OPEN-59"></a>
 ### OPEN-59. One way to consume a `Heap`
@@ -584,7 +584,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on MEM-5, OWN-13, OPEN-36. Current main: `*h` moves out and frees and `free(h)` frees the cell and returns its value (MEM-5); `destroy(h)` on a Heap is refused (E0272: destroy() requires a named type). Options: (a) keep `*h` and `free(h)` as today; (b) `*h` as move-out-and-free and `destroy(h)` extended to a Heap, `free` deleted, no `take`; (c) `take(h)` replaces `*h` as the move-out, `destroy(h)` extended to a Heap, `free` deleted. Austral: not checked. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (b): `*h` and a `destroy(h)` extended to a Heap, no `free`, no `take` (a `take` would be another spelling of `*h`). The pick rests on principle 10 and admission check 1 (one spelling per operation) (PROJECT.md, [principles](../project/PROJECT.md#principles) and [admission checks](../project/PROJECT.md#design-policy)). Proof impact: helps: `*h` (move out and free) and `destroy(h)` stay two distinct effects. Item S7 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD59.
+**Rationale.** Bears on MEM-5, OWN-13, OPEN-36. The current compiler: `*h` moves out and frees and `free(h)` frees the cell and returns its value (MEM-5); `destroy(h)` on a Heap is refused (E0272: destroy() requires a named type). Options: (a) keep `*h` and `free(h)` as today; (b) `*h` as move-out-and-free and `destroy(h)` extended to a Heap, `free` deleted, no `take`; (c) `take(h)` replaces `*h` as the move-out, `destroy(h)` extended to a Heap, `free` deleted. Austral: not checked. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (b): `*h` and a `destroy(h)` extended to a Heap, no `free`, no `take` (a `take` would be another spelling of `*h`). The pick rests on principle 10 and admission check 1 (one spelling per operation) (PROJECT.md, [principles](../project/PROJECT.md#principles) and [admission checks](../project/PROJECT.md#design-policy)). Proof impact: helps: `*h` (move out and free) and `destroy(h)` stay two distinct effects. Item S7 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD59.
 
 <a id="OPEN-60"></a>
 ### OPEN-60. One consuming receiver form for `Destroy`
@@ -600,7 +600,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on OWN-13, TRAIT-9, TRAIT-10. Current main: a `Destroy` impl may take `self` or `&self`; `&mut self` is refused (E0587). Options: (a) keep the receiver forms main accepts; (b) one consuming form (`fn destroy(self)`) only. Austral: no destructor trait; a linear type's module exports an ordinary consuming function. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (b) one consuming form. The pick rests on principle 10 and admission check 1 (PROJECT.md, [principles](../project/PROJECT.md#principles) and [admission checks](../project/PROJECT.md#design-policy)). Proof impact: helps: the destructor body still accounts for every field. Item S8 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD60.
+**Rationale.** Bears on OWN-13, TRAIT-9, TRAIT-10. The current compiler: a `Destroy` impl may take `self` or `&self`; `&mut self` is refused (E0587). Options: (a) keep the receiver forms the current compiler accepts; (b) one consuming form (`fn destroy(self)`) only. Austral: no destructor trait; a linear type's module exports an ordinary consuming function. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (b) one consuming form. The pick rests on principle 10 and admission check 1 (PROJECT.md, [principles](../project/PROJECT.md#principles) and [admission checks](../project/PROJECT.md#design-policy)). Proof impact: helps: the destructor body still accounts for every field. Item S8 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD60.
 
 <a id="OPEN-61"></a>
 ### OPEN-61. One coordinated removal list
@@ -616,7 +616,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on TRUST-6, STMT-6, PAT-6, PAT-7, PAT-4, TYPE-7, MOD-4, SYN-1. Current main: TRUST-6 (pending) still requires the `trusted mod` marker, which S14's pick would drop (no owner answer is recorded for S14). Options: (a) one list, migrated in exit 2q's single transition; (b) each removal on its own schedule. Austral: not applicable. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a) one list, including dropping TRUST-6's `trusted mod` marker, which S14 removes (S14 is marked agreed in the picks; ROADMAP records no owner answer for it). The pick rests on principle 10 (one migration, one transition) (PROJECT.md, [principles](../project/PROJECT.md#principles)). Proof impact: neutral: affected rules and fixtures are retired or versioned, never silently deleted. Item review new 7 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD61.
+**Rationale.** Bears on TRUST-6, STMT-6, PAT-6, PAT-7, PAT-4, TYPE-7, MOD-4, SYN-1. The current compiler: TRUST-6 (pending) still requires the `trusted mod` marker, which S14's pick would drop (no owner answer is recorded for S14). Options: (a) one list, migrated in exit 2q's single transition; (b) each removal on its own schedule. Austral: not applicable. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a) one list, including dropping TRUST-6's `trusted mod` marker, which S14 removes (S14 is marked agreed in the picks; ROADMAP records no owner answer for it). The pick rests on principle 10 (one migration, one transition) (PROJECT.md, [principles](../project/PROJECT.md#principles)). Proof impact: neutral: affected rules and fixtures are retired or versioned, never silently deleted. Item review new 7 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD61.
 
 <a id="OPEN-62"></a>
 ### OPEN-62. Unused values and variables
@@ -632,7 +632,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on OWN-5, OWN-6, OWN-7, REF-10. Current main: unused Copy locals and parameters are accepted; OWN-6 refuses an unused fallible result. Options: (a) refuse only an unused `Result` or `Option` (OWN-6); (b) Go's rule: any unused local or parameter is refused (an intentionally unused parameter is named `_`), and `discard` refuses `Result` and `Option`. Austral: not checked. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (b), stated as one invariant: every name a body binds is used or is `_` (a bodyless declaration has no body, so needs no exception); `discard` and wildcard drops refuse `Result` and `Option`, Copy or not; to clarify: `_` as a loop index, and an unused `&mut` binding under REF-10. The pick rests on admission check 1 (one invariant) (PROJECT.md, [admission checks](../project/PROJECT.md#design-policy)). Proof impact: needs requirement 3: `_` waives only the unused-name check, never ownership: `fn sink(_: Heap<T>) {}` stays refused (OWN-2). Item Q3 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD62.
+**Rationale.** Bears on OWN-5, OWN-6, OWN-7, REF-10. The current compiler: unused Copy locals and parameters are accepted; OWN-6 refuses an unused fallible result. Options: (a) refuse only an unused `Result` or `Option` (OWN-6); (b) Go's rule: any unused local or parameter is refused (an intentionally unused parameter is named `_`), and `discard` refuses `Result` and `Option`. Austral: not checked. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (b), stated as one invariant: every name a body binds is used or is `_` (a bodyless declaration has no body, so needs no exception); `discard` and wildcard drops refuse `Result` and `Option`, Copy or not; to clarify: `_` as a loop index, and an unused `&mut` binding under REF-10. The pick rests on admission check 1 (one invariant) (PROJECT.md, [admission checks](../project/PROJECT.md#design-policy)). Proof impact: needs requirement 3: `_` waives only the unused-name check, never ownership: `fn sink(_: Heap<T>) {}` stays refused (OWN-2). Item Q3 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD62.
 
 <a id="OPEN-63"></a>
 ### OPEN-63. Float literals take their expected type
@@ -648,7 +648,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on ARITH-2, ARITH-7. Current main: `let x = 1.5;` is accepted as `Float64` (ARITH-2@2 is partial, bug 327). Options: (a) yes, as ARITH-2@2 states for integers and floats alike; (b) a float literal defaults to `f64`. Austral: not checked. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a). The pick rests on admission check 1 (OD31's principle, one literal rule) (PROJECT.md, [principles](../project/PROJECT.md#principles) and [admission checks](../project/PROJECT.md#design-policy)). Proof impact: needs a specified semantics: the context chooses the float format and so the literal's value (ARITH-7). Item Q4 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD63.
+**Rationale.** Bears on ARITH-2, ARITH-7. The current compiler: `let x = 1.5;` is accepted as `Float64` (ARITH-2@2 is partial, bug 327). Options: (a) yes, as ARITH-2@2 states for integers and floats alike; (b) a float literal defaults to `f64`. Austral: not checked. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a). The pick rests on admission check 1 (OD31's principle, one literal rule) (PROJECT.md, [principles](../project/PROJECT.md#principles) and [admission checks](../project/PROJECT.md#design-policy)). Proof impact: needs a specified semantics: the context chooses the float format and so the literal's value (ARITH-7). Item Q4 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD63.
 
 <a id="OPEN-64"></a>
 ### OPEN-64. Raw pointers derived from a borrow
@@ -664,7 +664,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on REF-14, TRUST-1, TRUST-3, FFI-3, OWN-12. Current main: no pass assumes `&mut` exclusivity (OD15); REF-14 bounds aliases by their loan. Options: (a) valid only while the borrow lives and never escaping it; (b) the operational loan rules of REF-14 only. Austral: not checked. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a): no returning, no escaping storage (a local `let` inside the block stays allowed), no converting to an integer and no capturing in an outer `defer`; borrow-derived pointers go only to call-only `extern` parameters; C uses it only during a call (memory C keeps must come from an allocation with its own owner); `extern` parameters say call-only (the default) or kept; field pointers come from the same borrow of the whole owner; deferred calls in the block run before the borrow ends; provenance survives copies, offsets, field pointers, helpers and indirect calls; a shared borrow never yields write access; `ptr::expose` is refused on such a pointer; the annotation's syntax gets an LL(1) check. The pick rests on principle 11 (honest trust boundaries) and principle 4 (PROJECT.md, [principles](../project/PROJECT.md#principles)). Proof impact: needs: the escape and provenance restrictions are premises of checker soundness; call-only foreign use is a recorded contract; raw accesses respect the current loan's permissions, not only its lifetime. Item G19 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD64.
+**Rationale.** Bears on REF-14, TRUST-1, TRUST-3, FFI-3, OWN-12. The current compiler: no pass assumes `&mut` exclusivity (OD15); REF-14 bounds aliases by their loan. Options: (a) valid only while the borrow lives and never escaping it; (b) the operational loan rules of REF-14 only. Austral: not checked. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a): no returning, no escaping storage (a local `let` inside the block stays allowed), no converting to an integer and no capturing in an outer `defer`; borrow-derived pointers go only to call-only `extern` parameters; C uses it only during a call (memory C keeps must come from an allocation with its own owner); `extern` parameters say call-only (the default) or kept; field pointers come from the same borrow of the whole owner; deferred calls in the block run before the borrow ends; provenance survives copies, offsets, field pointers, helpers and indirect calls; a shared borrow never yields write access; `ptr::expose` is refused on such a pointer; the annotation's syntax gets an LL(1) check. The pick rests on principle 11 (honest trust boundaries) and principle 4 (PROJECT.md, [principles](../project/PROJECT.md#principles)). Proof impact: needs: the escape and provenance restrictions are premises of checker soundness; call-only foreign use is a recorded contract; raw accesses respect the current loan's permissions, not only its lifetime. Item G19 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD64.
 
 <a id="OPEN-65"></a>
 ### OPEN-65. Empty structs
@@ -680,7 +680,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on TYPE-7, TYPE-16, TRUST-9, OPEN-38. Current main: the parser accepts `struct S {}` and `S {}`; the grammar requires at least one field. Options: (a) allowed; (b) refused. Austral: not checked. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): none given (raised by the review). Proof impact: needs requirement 6: a full representation contract (size, alignment, arrays, heap, ABI), with distinct logical ownership even at size 0. Item review new 1 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD65.
+**Rationale.** Bears on TYPE-7, TYPE-16, TRUST-9, OPEN-38. The current compiler: the parser accepts `struct S {}` and `S {}`; the grammar requires at least one field. Options: (a) allowed; (b) refused. Austral: not checked. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): none given (raised by the review). Proof impact: needs requirement 6: a full representation contract (size, alignment, arrays, heap, ABI), with distinct logical ownership even at size 0. Item review new 1 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD65.
 
 <a id="OPEN-66"></a>
 ### OPEN-66. The unit literal `()`
@@ -696,7 +696,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on SYN-1, TYPE-4. Current main: the grammar has no production for `()`. Options: (a) add `()` to the grammar; (b) no unit literal, Unit produced only by a statement or a Unit call. Austral: the unit value is written `nil`. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): none given (raised by the review). Proof impact: neutral: syntax for the existing Unit value. Item review new 2 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD66.
+**Rationale.** Bears on SYN-1, TYPE-4. The current compiler: the grammar has no production for `()`. Options: (a) add `()` to the grammar; (b) no unit literal, Unit produced only by a statement or a Unit call. Austral: the unit value is written `nil`. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): none given (raised by the review). Proof impact: neutral: syntax for the existing Unit value. Item review new 2 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD66.
 
 <a id="OPEN-67"></a>
 ### OPEN-67. Locals that reuse a top-level name
@@ -712,7 +712,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on SCOPE-1, SCOPE-2, MOD-1. Current main: allowed. Options: (a) allowed, as today; (b) refused, as SCOPE-1 refuses shadowing a local. Austral: not checked. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): none given (raised by the review). Proof impact: depends on the option: (b) would remove resolution cases; (a) keeps them. Item review new 4 (SCOPE-4) of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD67.
+**Rationale.** Bears on SCOPE-1, SCOPE-2, MOD-1. The current compiler: allowed. Options: (a) allowed, as today; (b) refused, as SCOPE-1 refuses shadowing a local. Austral: not checked. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): none given (raised by the review). Proof impact: depends on the option: (b) would remove resolution cases; (a) keeps them. Item review new 4 (SCOPE-4) of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD67.
 
 <a id="OPEN-68"></a>
 ### OPEN-68. Failure inside a deferred call
@@ -728,7 +728,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on OWN-12, STMT-1, STMT-2, STMT-11. Current main: failure is abort only (STMT-2); OWN-12's rationale leaves the case open. Options: (a) OWN-12 states that a trap inside a deferred call ends the program and runs no further deferred call, as STMT-2 and OD10 say for every abort; (b) the remaining deferred calls still run after a trapping one, which would amend STMT-2 and OD10. Austral: not checked. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): none given (raised by the review). Proof impact: depends on the option: (a) matches the proved cleanup model (a trapping deferred call stops later cleanup); (b) would need cleanup after a trap specified and proved. Item review new 5 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD68.
+**Rationale.** Bears on OWN-12, STMT-1, STMT-2, STMT-11. The current compiler: failure is abort only (STMT-2); OWN-12's rationale leaves the case open. Options: (a) OWN-12 states that a trap inside a deferred call ends the program and runs no further deferred call, as STMT-2 and OD10 say for every abort; (b) the remaining deferred calls still run after a trapping one, which would amend STMT-2 and OD10. Austral: not checked. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): none given (raised by the review). Proof impact: depends on the option: (a) matches the proved cleanup model (a trapping deferred call stops later cleanup); (b) would need cleanup after a trap specified and proved. Item review new 5 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD68.
 
 <a id="OPEN-69"></a>
 ### OPEN-69. What "the remaining locals are destroyed" means
@@ -744,7 +744,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on STMT-11, OWN-13. Current main: nothing is destroyed implicitly (OWN-13). Options: (a) storage teardown only, no call, as OWN-13 requires; (b) a remaining local whose type implements `Destroy` is destroyed by a synthesized call, which would amend OWN-13. Austral: no implicit destruction. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): none given (raised by the review). Proof impact: depends on the option: (a) keeps teardown free of synthesized Destroy calls, as the proved linear model assumes; (b) would add them to the model. Item review new 6 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD69.
+**Rationale.** Bears on STMT-11, OWN-13. The current compiler: nothing is destroyed implicitly (OWN-13). Options: (a) storage teardown only, no call, as OWN-13 requires; (b) a remaining local whose type implements `Destroy` is destroyed by a synthesized call, which would amend OWN-13. Austral: no implicit destruction. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): none given (raised by the review). Proof impact: depends on the option: (a) keeps teardown free of synthesized Destroy calls, as the proved linear model assumes; (b) would add them to the model. Item review new 6 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD69.
 
 <a id="OPEN-70"></a>
 ### OPEN-70. Struct fields with no comma
@@ -760,7 +760,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on SYN-1. Current main: the parser accepts it. Options: (a) refused, the grammar wins; (b) the grammar adds the form. Austral: separators are required. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a) refuse. The pick rests on admission check 1 (the grammar and the parser state one language) (PROJECT.md, [admission checks](../project/PROJECT.md#design-policy)). Proof impact: neutral. Item P2 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD70.
+**Rationale.** Bears on SYN-1. The current compiler: the parser accepts it. Options: (a) refused, the grammar wins; (b) the grammar adds the form. Austral: separators are required. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a) refuse. The pick rests on admission check 1 (the grammar and the parser state one language) (PROJECT.md, [admission checks](../project/PROJECT.md#design-policy)). Proof impact: neutral. Item P2 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD70.
 
 <a id="OPEN-71"></a>
 ### OPEN-71. Enum variants with no comma
@@ -776,7 +776,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on SYN-1. Current main: the parser accepts it. Options: (a) refused; (b) the grammar adds the form. Austral: separators are required. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a) refuse. The pick rests on admission check 1 (PROJECT.md, [admission checks](../project/PROJECT.md#design-policy)). Proof impact: neutral. Item P3 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD71.
+**Rationale.** Bears on SYN-1. The current compiler: the parser accepts it. Options: (a) refused; (b) the grammar adds the form. Austral: separators are required. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a) refuse. The pick rests on admission check 1 (PROJECT.md, [admission checks](../project/PROJECT.md#design-policy)). Proof impact: neutral. Item P3 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD71.
 
 <a id="OPEN-72"></a>
 ### OPEN-72. An enum with no variants
@@ -792,7 +792,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on SYN-1, PAT-2. Current main: the parser accepts it. Options: (a) refused; (b) the grammar adds it as the uninhabited type. Austral: not checked. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a) refuse until a workload needs an uninhabited type. The pick rests on principle 10 (until a workload needs it) (PROJECT.md, [principles](../project/PROJECT.md#principles)). Proof impact: neutral: no uninhabited-type case. Item P4 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD72.
+**Rationale.** Bears on SYN-1, PAT-2. The current compiler: the parser accepts it. Options: (a) refused; (b) the grammar adds it as the uninhabited type. Austral: not checked. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a) refuse until a workload needs an uninhabited type. The pick rests on principle 10 (until a workload needs it) (PROJECT.md, [principles](../project/PROJECT.md#principles)). Proof impact: neutral: no uninhabited-type case. Item P4 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD72.
 
 <a id="OPEN-73"></a>
 ### OPEN-73. Reserved words used as identifiers
@@ -808,7 +808,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on SYN-1. Current main: `expectIdent` accepts `cap` (and `type`) as a variant name. Options: (a) refused, reserved words stay reserved; (b) the grammar lets them through there. Austral: keywords are reserved. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a) refuse. The pick rests on admission check 1 (one lexical rule) (PROJECT.md, [admission checks](../project/PROJECT.md#design-policy)). Proof impact: neutral. Item P5 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD73.
+**Rationale.** Bears on SYN-1. The current compiler: `expectIdent` accepts `cap` (and `type`) as a variant name. Options: (a) refused, reserved words stay reserved; (b) the grammar lets them through there. Austral: keywords are reserved. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a) refuse. The pick rests on admission check 1 (one lexical rule) (PROJECT.md, [admission checks](../project/PROJECT.md#design-policy)). Proof impact: neutral. Item P5 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD73.
 
 <a id="OPEN-74"></a>
 ### OPEN-74. A raw pointer type with no qualifier
@@ -824,7 +824,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on SYN-1, TRUST-1. Current main: the parser reads `*T` as `*mut T`. Options: (a) refused, `*const` or `*mut` required; (b) the grammar adds `*T` as `*mut T`. Austral: not applicable. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a) refuse; the qualifier is the safety-relevant part. The pick rests on principle 5 (trust boundaries visible: the qualifier is the safety-relevant part) (PROJECT.md, [principles](../project/PROJECT.md#principles)). Proof impact: neutral. Item P6 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD74.
+**Rationale.** Bears on SYN-1, TRUST-1. The current compiler: the parser reads `*T` as `*mut T`. Options: (a) refused, `*const` or `*mut` required; (b) the grammar adds `*T` as `*mut T`. Austral: not applicable. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a) refuse; the qualifier is the safety-relevant part. The pick rests on principle 5 (trust boundaries visible: the qualifier is the safety-relevant part) (PROJECT.md, [principles](../project/PROJECT.md#principles)). Proof impact: neutral. Item P6 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD74.
 
 <a id="OPEN-75"></a>
 ### OPEN-75. An empty type parameter list
@@ -840,7 +840,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on SYN-1. Current main: the parser accepts it. Options: (a) refused; (b) the grammar adds it. Austral: not applicable. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a) refuse. The pick rests on admission check 1 (PROJECT.md, [admission checks](../project/PROJECT.md#design-policy)). Proof impact: neutral. Item P7 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD75.
+**Rationale.** Bears on SYN-1. The current compiler: the parser accepts it. Options: (a) refused; (b) the grammar adds it. Austral: not applicable. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a) refuse. The pick rests on admission check 1 (PROJECT.md, [admission checks](../project/PROJECT.md#design-policy)). Proof impact: neutral. Item P7 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD75.
 
 <a id="OPEN-76"></a>
 ### OPEN-76. Unqualified struct patterns in `match`
@@ -856,7 +856,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on PAT-1, PAT-5, SYN-1. Current main: the parser refuses it in `match` and `if let` and accepts it in `let`. Options: (a) refused in `match`, PAT-1's wording fixed to say so; (b) allowed. Austral: not checked. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a) refuse in `match`; fix PAT-1's wording. The pick rests on principle 10 and admission check 1 (PROJECT.md, [principles](../project/PROJECT.md#principles) and [admission checks](../project/PROJECT.md#design-policy)). Proof impact: neutral. Item G1-b of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD76.
+**Rationale.** Bears on PAT-1, PAT-5, SYN-1. The current compiler: the parser refuses it in `match` and `if let` and accepts it in `let`. Options: (a) refused in `match`, PAT-1's wording fixed to say so; (b) allowed. Austral: not checked. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a) refuse in `match`; fix PAT-1's wording. The pick rests on principle 10 and admission check 1 (PROJECT.md, [principles](../project/PROJECT.md#principles) and [admission checks](../project/PROJECT.md#design-policy)). Proof impact: neutral. Item G1-b of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD76.
 
 <a id="OPEN-77"></a>
 ### OPEN-77. Resync the grammar to the decided language
@@ -872,7 +872,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on SYN-1, PAT-1, STMT-6, STMT-8, OWN-8, FFI-6. Current main: the grammar is stale on these items (grammar/conformance_known.tsv). Options: (a) approve the resync, as actual productions with a factored `place` prefix for assignment; (b) defer it, the divergences staying recorded in grammar/conformance_known.tsv (the decided language does not change either way). Austral: not applicable. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a) approve, with actual productions, a `place` prefix and `break <expr>` removed. The pick rests on admission check 1 (the grammar and the parser state one language) (PROJECT.md, [admission checks](../project/PROJECT.md#design-policy)). Proof impact: needs: place assignment and the function-body forms correspond to STMT-4, STMT-8 and STMT-9; neutral for Core; the frontend still needs a specified semantics under the source-to-native theorem (V1c, S15). Item B of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD77.
+**Rationale.** Bears on SYN-1, PAT-1, STMT-6, STMT-8, OWN-8, FFI-6. The current compiler: the grammar is stale on these items (grammar/conformance_known.tsv). Options: (a) approve the resync, as actual productions with a factored `place` prefix for assignment; (b) defer it, the divergences staying recorded in grammar/conformance_known.tsv (the decided language does not change either way). Austral: not applicable. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a) approve, with actual productions, a `place` prefix and `break <expr>` removed. The pick rests on admission check 1 (the grammar and the parser state one language) (PROJECT.md, [admission checks](../project/PROJECT.md#design-policy)). Proof impact: needs: place assignment and the function-body forms correspond to STMT-4, STMT-8 and STMT-9; neutral for Core; the frontend still needs a specified semantics under the source-to-native theorem (V1c, S15). Item B of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD77.
 
 <a id="OPEN-78"></a>
 ### OPEN-78. `mod X;` in the grammar
@@ -888,7 +888,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on MOD-4, OPEN-33, SYN-1. Current main: the parser accepts it; the grammar lacks it. Options: (a) add it to the grammar; (b) keep the recorded divergence for now. Austral: each module is its own pair of files. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a) add, item by item. The pick rests on admission check 4 (cross-file dependencies declaration-level only) (PROJECT.md, [admission checks](../project/PROJECT.md#design-policy)). Proof impact: neutral for Core (loading stays frontend correspondence). Item C1 (review new 3) of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD78.
+**Rationale.** Bears on MOD-4, OPEN-33, SYN-1. The current compiler: the parser accepts it; the grammar lacks it. Options: (a) add it to the grammar; (b) keep the recorded divergence for now. Austral: each module is its own pair of files. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a) add, item by item. The pick rests on admission check 4 (cross-file dependencies declaration-level only) (PROJECT.md, [admission checks](../project/PROJECT.md#design-policy)). Proof impact: neutral for Core (loading stays frontend correspondence). Item C1 (review new 3) of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD78.
 
 <a id="OPEN-79"></a>
 ### OPEN-79. `assert` in the grammar
@@ -904,7 +904,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on CON-2, CON-3, SYN-1. Current main: the parser accepts it. Options: (a) add it to the grammar; (b) remove it from the parser, so the language loses the form; (c) keep the recorded divergence for now. Austral: not checked. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): individual review required; no pick recorded. Proof impact: needs the production reviewed on its own (no blanket neutrality). Item C2 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD79.
+**Rationale.** Bears on CON-2, CON-3, SYN-1. The current compiler: the parser accepts it. Options: (a) add it to the grammar; (b) remove it from the parser, so the language loses the form; (c) keep the recorded divergence for now. Austral: not checked. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): individual review required; no pick recorded. Proof impact: needs the production reviewed on its own (no blanket neutrality). Item C2 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD79.
 
 <a id="OPEN-80"></a>
 ### OPEN-80. `assume` in the grammar
@@ -920,7 +920,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on CON-2, CON-3, SYN-1. Current main: the parser accepts it. Options: (a) add it to the grammar; (b) remove it from the parser, so the language loses the form; (c) keep the recorded divergence for now. Austral: not checked. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): individual review required; no pick recorded. Proof impact: needs the production reviewed on its own (no blanket neutrality). Item C3 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD80.
+**Rationale.** Bears on CON-2, CON-3, SYN-1. The current compiler: the parser accepts it. Options: (a) add it to the grammar; (b) remove it from the parser, so the language loses the form; (c) keep the recorded divergence for now. Austral: not checked. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): individual review required; no pick recorded. Proof impact: needs the production reviewed on its own (no blanket neutrality). Item C3 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD80.
 
 <a id="OPEN-81"></a>
 ### OPEN-81. `ghost let` in the grammar
@@ -936,7 +936,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on CON-4, SYN-1. Current main: the parser accepts it. Options: (a) add it to the grammar; (b) remove it from the parser, so the language loses the form; (c) keep the recorded divergence for now. Austral: not applicable. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): individual review required; no pick recorded. Proof impact: needs the production reviewed on its own (no blanket neutrality). Item C4 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD81.
+**Rationale.** Bears on CON-4, SYN-1. The current compiler: the parser accepts it. Options: (a) add it to the grammar; (b) remove it from the parser, so the language loses the form; (c) keep the recorded divergence for now. Austral: not applicable. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): individual review required; no pick recorded. Proof impact: needs the production reviewed on its own (no blanket neutrality). Item C4 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD81.
 
 <a id="OPEN-82"></a>
 ### OPEN-82. Loop contract attributes and where attributes attach
@@ -952,7 +952,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on CON-2, STMT-12, SYN-1. Current main: the parser accepts them. Options: (a) add them to the grammar and attach attributes by kind; (b) remove them from the parser; (c) keep the recorded divergence for now. Austral: not checked. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a): attach by kind, declaration attributes to the next declaration, `#[invariant]` and `#[variant]` to the next loop. The pick rests on admission check 1 (attributes attach by kind) (PROJECT.md, [admission checks](../project/PROJECT.md#design-policy)). Proof impact: needs review: where an attribute attaches decides which proposition is proved. Item C5 (R7) of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD82.
+**Rationale.** Bears on CON-2, STMT-12, SYN-1. The current compiler: the parser accepts them. Options: (a) add them to the grammar and attach attributes by kind; (b) remove them from the parser; (c) keep the recorded divergence for now. Austral: not checked. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a): attach by kind, declaration attributes to the next declaration, `#[invariant]` and `#[variant]` to the next loop. The pick rests on admission check 1 (attributes attach by kind) (PROJECT.md, [admission checks](../project/PROJECT.md#design-policy)). Proof impact: needs review: where an attribute attaches decides which proposition is proved. Item C5 (R7) of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD82.
 
 <a id="OPEN-83"></a>
 ### OPEN-83. The call-site allocator binding in the grammar
@@ -968,7 +968,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on TRUST-4, MEM-5, SYN-1. Current main: the parser accepts it. Options: (a) add it to the grammar; (b) remove it from the parser, so the language loses the form; (c) keep the recorded divergence for now. Austral: not checked. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): individual review required; no pick recorded. Proof impact: needs the production reviewed on its own (no blanket neutrality). Item C6 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD83.
+**Rationale.** Bears on TRUST-4, MEM-5, SYN-1. The current compiler: the parser accepts it. Options: (a) add it to the grammar; (b) remove it from the parser, so the language loses the form; (c) keep the recorded divergence for now. Austral: not checked. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): individual review required; no pick recorded. Proof impact: needs the production reviewed on its own (no blanket neutrality). Item C6 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD83.
 
 <a id="OPEN-84"></a>
 ### OPEN-84. Struct destructuring `let` in the grammar
@@ -984,7 +984,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on PAT-5, SYN-1. Current main: the parser accepts it (PAT-5). Options: (a) add it to the grammar; (b) remove it from the parser, so the language loses the form; (c) keep the recorded divergence for now. Austral: destructuring `let` of records exists (not checked). Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): individual review required; no pick recorded. Proof impact: needs the production reviewed on its own (no blanket neutrality). Item C7 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD84.
+**Rationale.** Bears on PAT-5, SYN-1. The current compiler: the parser accepts it (PAT-5). Options: (a) add it to the grammar; (b) remove it from the parser, so the language loses the form; (c) keep the recorded divergence for now. Austral: destructuring `let` of records exists (not checked). Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): individual review required; no pick recorded. Proof impact: needs the production reviewed on its own (no blanket neutrality). Item C7 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD84.
 
 <a id="OPEN-85"></a>
 ### OPEN-85. Variant destructuring with `else` in the grammar
@@ -1000,7 +1000,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on PAT-8, OPEN-52, SYN-1. Current main: the parser accepts it (PAT-8). Options: (a) add it to the grammar; (b) remove it from the parser, so the language loses the form; (c) keep the recorded divergence for now. Austral: no `let ... else`. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): follows OD52 (removed under its pick). The pick follows OD52. Proof impact: follows OD52. Item C8 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD85.
+**Rationale.** Bears on PAT-8, OPEN-52, SYN-1. The current compiler: the parser accepts it (PAT-8). Options: (a) add it to the grammar; (b) remove it from the parser, so the language loses the form; (c) keep the recorded divergence for now. Austral: no `let ... else`. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): follows OD52 (removed under its pick). The pick follows OD52. Proof impact: follows OD52. Item C8 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD85.
 
 <a id="OPEN-86"></a>
 ### OPEN-86. The body of an unbraced match arm
@@ -1016,7 +1016,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on SYN-1, PAT-3. Current main: the parser accepts an expression, a block or `return` as an unbraced arm body and refuses other statements. Options: (a) narrow the grammar; (b) widen the parser. Austral: not applicable. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a) narrow. The pick rests on admission check 1 (PROJECT.md, [admission checks](../project/PROJECT.md#design-policy)). Proof impact: neutral. Item R1 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD86.
+**Rationale.** Bears on SYN-1, PAT-3. The current compiler: the parser accepts an expression, a block or `return` as an unbraced arm body and refuses other statements. Options: (a) narrow the grammar; (b) widen the parser. Austral: not applicable. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a) narrow. The pick rests on admission check 1 (PROJECT.md, [admission checks](../project/PROJECT.md#design-policy)). Proof impact: neutral. Item R1 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD86.
 
 <a id="OPEN-87"></a>
 ### OPEN-87. Capability arguments in an expression turbofish
@@ -1032,7 +1032,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on SYN-1, TRUST-4, OPEN-45. Current main: the parser refuses them; the grammar derives them. Options: (a) the grammar narrows to type arguments there until a workload needs them; (b) the parser adds them. Austral: not applicable. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a) narrow. The pick rests on principle 10 (until a workload needs it) (PROJECT.md, [principles](../project/PROJECT.md#principles)). Proof impact: neutral. Item R2/R3 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD87.
+**Rationale.** Bears on SYN-1, TRUST-4, OPEN-45. The current compiler: the parser refuses them; the grammar derives them. Options: (a) the grammar narrows to type arguments there until a workload needs them; (b) the parser adds them. Austral: not applicable. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a) narrow. The pick rests on principle 10 (until a workload needs it) (PROJECT.md, [principles](../project/PROJECT.md#principles)). Proof impact: neutral. Item R2/R3 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD87.
 
 <a id="OPEN-88"></a>
 ### OPEN-88. The shape of capability arguments
@@ -1048,7 +1048,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on SYN-1, TRUST-4. Current main: the parser checks them; the grammar does not. Options: (a) state them in the grammar; (b) leave them to the parser. Austral: not applicable. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a). The pick rests on admission check 1 (PROJECT.md, [admission checks](../project/PROJECT.md#design-policy)). Proof impact: neutral. Item R8 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD88.
+**Rationale.** Bears on SYN-1, TRUST-4. The current compiler: the parser checks them; the grammar does not. Options: (a) state them in the grammar; (b) leave them to the parser. Austral: not applicable. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a). The pick rests on admission check 1 (PROJECT.md, [admission checks](../project/PROJECT.md#design-policy)). Proof impact: neutral. Item R8 of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD88.
 
 <a id="OPEN-89"></a>
 ### OPEN-89. Capability parameters on a trait impl
@@ -1064,7 +1064,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on SYN-1, TRAIT-9, TRUST-4. Current main: the parser refuses them (declare them on an inherent impl). Options: (a) refused, the grammar narrowed; (b) allowed. Austral: not applicable. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): none given (in the divergence report, not the picks). Proof impact: neutral. Item R9 of the parser/grammar divergence report of 2026-10; the owner's answer is recorded in ROADMAP's row OD89.
+**Rationale.** Bears on SYN-1, TRAIT-9, TRUST-4. The current compiler: the parser refuses them (declare them on an inherent impl). Options: (a) refused, the grammar narrowed; (b) allowed. Austral: not applicable. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): none given (in the divergence report, not the picks). Proof impact: neutral. Item R9 of the parser/grammar divergence report of 2026-10; the owner's answer is recorded in ROADMAP's row OD89.
 
 <a id="OPEN-90"></a>
 ### OPEN-90. `struct Copy <T>` and contextual keywords
@@ -1080,7 +1080,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on SYN-1, OWN-D1. Current main: contextual; the `struct Copy <T>` conflict is invisible to the checkers' token model. Options: (a) reserve `Copy` as a keyword, refusing it as an identifier; (b) keep it contextual, the LL(1) checkers taught to model a quoted unreserved terminal as also IDENT, each conflict found listed for the owner (letters as in the divergence report). Austral: its keywords are reserved. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a) reserve `Copy`: one lexical rule, consistent with OD50 (reserved `from` and `until`) and OD43 (builtin names refused as user names). The pick rests on admission checks 1 (a simple invariant) and 3 (no phase coupling) (PROJECT.md, [admission checks](../project/PROJECT.md#design-policy)). Proof impact: neutral: conditional Copy semantics unchanged. Item Copy of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD90.
+**Rationale.** Bears on SYN-1, OWN-D1. The current compiler: contextual; the `struct Copy <T>` conflict is invisible to the checkers' token model. Options: (a) reserve `Copy` as a keyword, refusing it as an identifier; (b) keep it contextual, the LL(1) checkers taught to model a quoted unreserved terminal as also IDENT, each conflict found listed for the owner (letters as in the divergence report). Austral: its keywords are reserved. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a) reserve `Copy`: one lexical rule, consistent with OD50 (reserved `from` and `until`) and OD43 (builtin names refused as user names). The pick rests on admission checks 1 (a simple invariant) and 3 (no phase coupling) (PROJECT.md, [admission checks](../project/PROJECT.md#design-policy)). Proof impact: neutral: conditional Copy semantics unchanged. Item Copy of the owner picks of 2026-10-30; the owner's answer is recorded in ROADMAP's row OD90.
 
 <a id="OPEN-91"></a>
 ### OPEN-91. A cast followed by `<`
@@ -1096,7 +1096,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on SYN-1, SYN-2, ARITH-5. Current main: the parser always reads type arguments, so `x as T < y` is refused (grammar/ll1_known_conflicts.tsv, row type|5.2). Options: (a) a cast's type takes no type arguments unless parenthesized (`x as (T<U>)`), so `<` is less-than; (b) the parser's reading: `<` always starts type arguments, so the comparison needs parentheses (`(x as T) < y`); (c) refuse `<` directly after a cast's type and require parentheses either way. Austral: a conversion is the cast expression `e : T`, which takes no type arguments after it, so the conflict does not arise. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): none given (in the LL(1) ledger, not the picks). Proof impact: neutral for Core; the frontend still needs a specified semantics under the source-to-native theorem (V1c, S15). Item LL(1) type|5.2 of grammar/ll1_known_conflicts.tsv; the owner's answer is recorded in ROADMAP's row OD91.
+**Rationale.** Bears on SYN-1, SYN-2, ARITH-5. The current compiler: the parser always reads type arguments, so `x as T < y` is refused (grammar/ll1_known_conflicts.tsv, row type|5.2). Options: (a) a cast's type takes no type arguments unless parenthesized (`x as (T<U>)`), so `<` is less-than; (b) the parser's reading: `<` always starts type arguments, so the comparison needs parentheses (`(x as T) < y`); (c) refuse `<` directly after a cast's type and require parentheses either way. Austral: a conversion is the cast expression `e : T`, which takes no type arguments after it, so the conflict does not arise. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): none given (in the LL(1) ledger, not the picks). Proof impact: neutral for Core; the frontend still needs a specified semantics under the source-to-native theorem (V1c, S15). Item LL(1) type|5.2 of grammar/ll1_known_conflicts.tsv; the owner's answer is recorded in ROADMAP's row OD91.
 
 <a id="OPEN-104"></a>
 ### OPEN-104. A `#[variant]` written on a counted loop
@@ -1112,7 +1112,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on STMT-12 and CON-2. Current main: the counted loop is not on main (bug 331). Options: (a) refused, the loop's own measure `b - i` being its only variant; (b) allowed and checked as a loop variant (CON-2); (c) allowed and ignored. Austral: not applicable (no loop contracts). No pick given. Proof impact: neutral. Raised by the Codex and Kimi review of the OD47 loop rules (2026-10-30), which found the refusal stated as a rule though OD47 did not decide it; the owner's answer is recorded in ROADMAP's row OD104.
+**Rationale.** Bears on STMT-12 and CON-2. The current compiler has no counted loop (bug 331). Options: (a) refused, the loop's own measure `b - i` being its only variant; (b) allowed and checked as a loop variant (CON-2); (c) allowed and ignored. Austral: not applicable (no loop contracts). No pick given. Proof impact: neutral. Raised by the Codex and Kimi review of the OD47 loop rules (2026-10-30), which found the refusal stated as a rule though OD47 did not decide it; the owner's answer is recorded in ROADMAP's row OD104.
 
 <a id="OPEN-105"></a>
 ### OPEN-105. Where a counted loop's `#[invariant]` is checked
@@ -1128,7 +1128,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on STMT-12 and CON-2. Current main: the counted loop is not on main (bug 331). Options: (a) as CON-2 says for every loop, before the loop and after every iteration; (b) at each entry to the body, so nothing is checked when the loop runs no iteration. Austral: not applicable. No pick given. Proof impact: (b) needs requirement 2 of the proof-impact review: an invariant checked at body entry establishes nothing after an empty loop. Raised by the same review, which found body-entry checking stated as a rule though OD47 did not decide it; the owner's answer is recorded in ROADMAP's row OD105.
+**Rationale.** Bears on STMT-12 and CON-2. The current compiler has no counted loop (bug 331). Options: (a) as CON-2 says for every loop, before the loop and after every iteration; (b) at each entry to the body, so nothing is checked when the loop runs no iteration. Austral: not applicable. No pick given. Proof impact: (b) needs requirement 2 of the proof-impact review: an invariant checked at body entry establishes nothing after an empty loop. Raised by the same review, which found body-entry checking stated as a rule though OD47 did not decide it; the owner's answer is recorded in ROADMAP's row OD105.
 
 <a id="OPEN-92"></a>
 ### OPEN-92. A capability set inferred from callbacks
@@ -1144,7 +1144,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on TYPE-D1, TYPE-17, TRUST-4. Current main: no such form; `with(f)` reads `f` as a capability name (an unresolved one, which MOD-1 refuses and main accepts: bug 337), so a combinator names a capability parameter (`fn map<T, U, cap C>(.., f: fn(&T) with(C) -> U) with(C)`). The callable-values design (2026-06-12, [CALLABLE_VALUES_AND_CAPABILITIES.md](../archive/design-records/CALLABLE_VALUES_AND_CAPABILITIES.md) §6) recorded the shortcut as specified and not built, after [research/language/capability-polymorphism.md](../../research/language/capability-polymorphism.md); no roadmap item tracks it. Options: (a) no shortcut, combinators name capability parameters; (b) add it, as set propagation and not row unification. Austral: not applicable (capabilities are values). Pick: none given (raised by the absorption of 2026-10-30).
+**Rationale.** Bears on TYPE-D1, TYPE-17, TRUST-4. The current compiler: no such form; `with(f)` reads `f` as a capability name (an unresolved one, which MOD-1 refuses and the current compiler accepts: bug 337), so a combinator names a capability parameter (`fn map<T, U, cap C>(.., f: fn(&T) with(C) -> U) with(C)`). The callable-values design (2026-06-12, [CALLABLE_VALUES_AND_CAPABILITIES.md](../archive/design-records/CALLABLE_VALUES_AND_CAPABILITIES.md) §6) recorded the shortcut as specified and not built, after [research/language/capability-polymorphism.md](../../research/language/capability-polymorphism.md); no roadmap item tracks it. Options: (a) no shortcut, combinators name capability parameters; (b) add it, as set propagation and not row unification. Austral: not applicable (capabilities are values). Pick: none given (raised by the absorption of 2026-10-30).
 
 <a id="OPEN-93"></a>
 ### OPEN-93. Widening a function value's capability set
@@ -1160,7 +1160,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on TYPE-4, TYPE-17, TRUST-4. Current main: refused (E0220): `fn(Int) -> Int` is not a `fn(Int) with(Console) -> Int`, nor `with(File)` a `with(Std)`, and there is no explicit conversion; a capability-polymorphic parameter accepts either by instantiating its variable. The callable-values design (§10) says there is no implicit widening, and that "widening is explicit or via lattice subsumption only", with a lattice example (`Concurrent ⊇ Async`) whose names are not capabilities; HANDLE_CAPABILITIES R7 keeps handle types invariant, as TYPE-4 does. Options: (a) exact types, as main; (b) subsumption into a larger set; (c) an explicit conversion. Austral: not applicable (capabilities are values). Pick: none given (raised by the absorption of 2026-10-30).
+**Rationale.** Bears on TYPE-4, TYPE-17, TRUST-4. The current compiler: refused (E0220): `fn(Int) -> Int` is not a `fn(Int) with(Console) -> Int`, nor `with(File)` a `with(Std)`, and there is no explicit conversion; a capability-polymorphic parameter accepts either by instantiating its variable. The callable-values design (§10) says there is no implicit widening, and that "widening is explicit or via lattice subsumption only", with a lattice example (`Concurrent ⊇ Async`) whose names are not capabilities; HANDLE_CAPABILITIES R7 keeps handle types invariant, as TYPE-4 does. Options: (a) exact types, as in the current compiler; (b) subsumption into a larger set; (c) an explicit conversion. Austral: not applicable (capabilities are values). Pick: none given (raised by the absorption of 2026-10-30).
 
 <a id="OPEN-95"></a>
 ### OPEN-95. What `Time`, `Env`, `Process` and `Alloc` mean
@@ -1176,7 +1176,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on TRUST-D1, TRUST-4. Current main: no document states them; HANDLE_CAPABILITIES §2 defined `Console`, `File` and `Network`, and SAFETY.md `Random` (TRUST-D1). std requires `Time` for its clock and sleep functions, `Env` for environment variables and for `std.net`'s `bind` and `connect`, `Process` for exit, spawn, wait and kill, and `Alloc` for heap allocation. Options: state each as std uses it, or narrow or split it (std's `Env` on socket functions is the case to settle). Austral: not applicable (capabilities are values). Pick: none given (raised by the absorption of 2026-10-30).
+**Rationale.** Bears on TRUST-D1, TRUST-4. The current compiler: no document states them; HANDLE_CAPABILITIES §2 defined `Console`, `File` and `Network`, and SAFETY.md `Random` (TRUST-D1). std requires `Time` for its clock and sleep functions, `Env` for environment variables and for `std.net`'s `bind` and `connect`, `Process` for exit, spawn, wait and kill, and `Alloc` for heap allocation. Options: state each as std uses it, or narrow or split it (std's `Env` on socket functions is the case to settle). Austral: not applicable (capabilities are values). Pick: none given (raised by the absorption of 2026-10-30).
 
 <a id="OPEN-96"></a>
 ### OPEN-96. Two foreign bindings of one C symbol
@@ -1192,7 +1192,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on FFI-3, FFI-5. Current main: accepted: `abs_a(x: i32) with() -> i32` and `abs_b(x: i64) with() -> i64`, both bound to `abs`, compile and the binary runs, while the interpreter stops at run time on the mismatched width. HANDLE_CAPABILITIES §5 (encoding A, one binding per effect for one C symbol) planned to refuse a mismatch with a diagnostic. Options: (a) refuse; (b) allow, each binding's signature trusted on its own. Austral: not applicable. Pick: none given (raised by the absorption of 2026-10-30).
+**Rationale.** Bears on FFI-3, FFI-5. The current compiler: accepted: `abs_a(x: i32) with() -> i32` and `abs_b(x: i64) with() -> i64`, both bound to `abs`, compile and the binary runs, while the interpreter stops at run time on the mismatched width. HANDLE_CAPABILITIES §5 (encoding A, one binding per effect for one C symbol) planned to refuse a mismatch with a diagnostic. Options: (a) refuse; (b) allow, each binding's signature trusted on its own. Austral: not applicable. Pick: none given (raised by the absorption of 2026-10-30).
 
 <a id="OPEN-97"></a>
 ### OPEN-97. A build profile that omits or demands an overflow check
@@ -1208,7 +1208,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on ARITH-3, ARITH-9. Current main: every profile emits every check, and no option turns one off; ARITH-3's rationale says a profile changes reports, never code generation, and OD10 decided that arithmetic is checked "by default". The archived [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md) §3.1 instead let a release profile omit a check that is "explicitly configured off and reported", and a provable or high-integrity profile refuse an unproved overflow site. Options: (a) every profile keeps every check that no discharged proof removes; (b) a release profile may turn checks off when configured and reported, never wrapping; (c) as (a), and a profile may also refuse an operation whose no-overflow obligation is not discharged. Austral: not checked. Raised by the absorption of ARITHMETIC_POLICY.md (2026-10-30).
+**Rationale.** Bears on ARITH-3, ARITH-9. The current compiler: every profile emits every check, and no option turns one off; ARITH-3's rationale says a profile changes reports, never code generation, and OD10 decided that arithmetic is checked "by default". The archived [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md) §3.1 instead let a release profile omit a check that is "explicitly configured off and reported", and a provable or high-integrity profile refuse an unproved overflow site. Options: (a) every profile keeps every check that no discharged proof removes; (b) a release profile may turn checks off when configured and reported, never wrapping; (c) as (a), and a profile may also refuse an operation whose no-overflow obligation is not discharged. Austral: not checked. Raised by the absorption of ARITHMETIC_POLICY.md (2026-10-30).
 
 <a id="OPEN-98"></a>
 ### OPEN-98. Pointer and reference conversions written with `as`
@@ -1224,7 +1224,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on TRUST-1, TRUST-3, REF-5, ARITH-5. Current main: `&x as *const T` is accepted in safe code, `p as &T` from a raw pointer is accepted in trusted or `Unsafe` code (the binary and `--interp` agree), and a reference cast between different pointee types (`a as &Int` with `a: &A`) is refused (E0553). No entry states these: TRUST-3 forms a reference from a raw pointer with `&*p`, and REF-5 lists borrowing and projection as the ways a reference is formed. The archived [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md) §8 kept `as` "the spelling of pointer and reference casts (`as *const T`, `as *mut T`, `as &K`, `as &mut V`)", 281 lines of std. Options: (a) `as` keeps every one of them; (b) `as` converts only a reference to a raw pointer, and a reference is formed from a raw pointer only by `&*p` (TRUST-3); (c) pointer conversions become named functions. Austral: not checked. Raised by the absorption of ARITHMETIC_POLICY.md (2026-10-30).
+**Rationale.** Bears on TRUST-1, TRUST-3, REF-5, ARITH-5. The current compiler: `&x as *const T` is accepted in safe code, `p as &T` from a raw pointer is accepted in trusted or `Unsafe` code (the binary and `--interp` agree), and a reference cast between different pointee types (`a as &Int` with `a: &A`) is refused (E0553). No entry states these: TRUST-3 forms a reference from a raw pointer with `&*p`, and REF-5 lists borrowing and projection as the ways a reference is formed. The archived [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md) §8 kept `as` "the spelling of pointer and reference casts (`as *const T`, `as *mut T`, `as &K`, `as &mut V`)", 281 lines of std. Options: (a) `as` keeps every one of them; (b) `as` converts only a reference to a raw pointer, and a reference is formed from a raw pointer only by `&*p` (TRUST-3); (c) pointer conversions become named functions. Austral: not checked. Raised by the absorption of ARITHMETIC_POLICY.md (2026-10-30).
 
 <a id="OPEN-99"></a>
 ### OPEN-99. The names of the named conversions
@@ -1240,7 +1240,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on ARITH-5, ARITH-10, ARITH-11. Current main: none of them exists (E0101). ARITH-5's sentence names `truncate` and `reinterpret`, while the archived [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md) §8.2 calls its spellings indicative, to be fixed by the API's owner; it names the integer-to-float and `f64`-to-`f32` conversions by their rounding only. Options: (a) the spellings above, as builtins; (b) other names, or std functions rather than builtins. Austral: not checked. Raised by the absorption of ARITHMETIC_POLICY.md (2026-10-30).
+**Rationale.** Bears on ARITH-5, ARITH-10, ARITH-11. The current compiler: none of them exists (E0101). ARITH-5's sentence names `truncate` and `reinterpret`, while the archived [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md) §8.2 calls its spellings indicative, to be fixed by the API's owner; it names the integer-to-float and `f64`-to-`f32` conversions by their rounding only. Options: (a) the spellings above, as builtins; (b) other names, or std functions rather than builtins. Austral: not checked. Raised by the absorption of ARITHMETIC_POLICY.md (2026-10-30).
 
 <a id="OPEN-100"></a>
 ### OPEN-100. Comparisons on a type parameter
@@ -1256,7 +1256,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on TYPE-6, TYPE-9, PASS-1, OPEN-42. Current main: `a < b` with `a, b: T` and `T: Copy` is accepted, and an instantiation at a type with no comparison is refused after monomorphization (E0229, `post-mono`); without the `Copy` bound it is refused in the body (E0229, `check`). TYPE-9's rationale says a generic body is checked once, from its bounds, which a per-instantiation check departs from. Options: (a) keep main's per-instantiation check; (b) refuse a comparison on a type parameter until a bound states it (a comparison trait); (c) refuse it. Austral: not checked. Raised by the absorption of ARITHMETIC_POLICY.md §8a (2026-10-30).
+**Rationale.** Bears on TYPE-6, TYPE-9, PASS-1, OPEN-42. The current compiler: `a < b` with `a, b: T` and `T: Copy` is accepted, and an instantiation at a type with no comparison is refused after monomorphization (E0229, `post-mono`); without the `Copy` bound it is refused in the body (E0229, `check`). TYPE-9's rationale says a generic body is checked once, from its bounds, which a per-instantiation check departs from. Options: (a) keep the current compiler's per-instantiation check; (b) refuse a comparison on a type parameter until a bound states it (a comparison trait); (c) refuse it. Austral: not checked. Raised by the absorption of ARITHMETIC_POLICY.md §8a (2026-10-30).
 
 <a id="OPEN-101"></a>
 ### OPEN-101. What a trap writes
@@ -1272,7 +1272,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on STMT-2, STMT-7, ARITH-3. Current main: the binary writes nothing and ends by `SIGABRT`, and `--interp` reports a run-time error naming the trap (`arithmetic overflow (checked +)`). The archived [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md) §9.2 described a message `concrete: arithmetic overflow in function 'f' at file:line` with the operation, the operands and the policy. Options: (a) the binary writes nothing; (b) it writes one line naming the trap and its location; (c) the §9.2 form. Austral: not checked. Raised by the absorption of ARITHMETIC_POLICY.md (2026-10-30).
+**Rationale.** Bears on STMT-2, STMT-7, ARITH-3. The current compiler: the binary writes nothing and ends by `SIGABRT`, and `--interp` reports a run-time error naming the trap (`arithmetic overflow (checked +)`). The archived [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md) §9.2 described a message `concrete: arithmetic overflow in function 'f' at file:line` with the operation, the operands and the policy. Options: (a) the binary writes nothing; (b) it writes one line naming the trap and its location; (c) the §9.2 form. Austral: not checked. Raised by the absorption of ARITHMETIC_POLICY.md (2026-10-30).
 
 <a id="OPEN-102"></a>
 ### OPEN-102. `Float32` and `Char` as type spellings
@@ -1288,7 +1288,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on TYPE-19, SYN-3. Current main: the parser maps `Float64` and `Bool` to `f64` and `bool` but not `Float32` or `Char`, so `fn g(x: f32) -> Float32 { return x; }` is refused (E0220) while the resolver's `tyFromName` maps all four. The archived [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md) §1 names `Float32`/`f32` as two spellings. Options: (a) `Float32` and `Char` become spellings of `f32` and `char`; (b) neither, keeping main's `Float64` and `Bool`; (c) `Float32` and `Char` decided separately. Whether every capitalized spelling (`Int`, `Uint`, `Float64`, `Bool`) is removed is a separate removal question, not asked here. Austral: not checked. Raised by the absorption of ARITHMETIC_POLICY.md (2026-10-30).
+**Rationale.** Bears on TYPE-19, SYN-3. The current compiler: the parser maps `Float64` and `Bool` to `f64` and `bool` but not `Float32` or `Char`, so `fn g(x: f32) -> Float32 { return x; }` is refused (E0220) while the resolver's `tyFromName` maps all four. The archived [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md) §1 names `Float32`/`f32` as two spellings. Options: (a) `Float32` and `Char` become spellings of `f32` and `char`; (b) neither, keeping the current compiler's `Float64` and `Bool`; (c) `Float32` and `Char` decided separately. Whether every capitalized spelling (`Int`, `Uint`, `Float64`, `Bool`) is removed is a separate removal question, not asked here. Austral: not checked. Raised by the absorption of ARITHMETIC_POLICY.md (2026-10-30).
 
 <a id="OPEN-103"></a>
 ### OPEN-103. `as` between reference types
@@ -1304,7 +1304,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on REF-5, REF-6, ARITH-5, TRUST-4. Current main: an identity cast between equal reference types is accepted and denotes the operand's place (`read(r as &Int)` with `r: &Int`, and `read(&v as &Int)`, exit 42 on both consumers); every other cast between reference types, `&mut Int as &Int` included, is E0553 at core-check under ARITH-5's tag, whose sentence covers only numeric, `bool` and `char` conversions; a cast from a reference to a raw pointer is allowed (TRUST-4). The design record (MEMORY_SEMANTICS §15.3) listed a cast of a traced reference binding (`r as &U`) among the reference-forming operations. Options: (a) refuse `as` between reference types; (b) allow the identity cast as a no-op on the operand's place. Conversions between a reference and a raw pointer are OPEN-98's, not this question's. Austral: not checked. Pick: none given (raised by the MEMORY_SEMANTICS absorption, 2026-10-30).
+**Rationale.** Bears on REF-5, REF-6, ARITH-5, TRUST-4. The current compiler: an identity cast between equal reference types is accepted and denotes the operand's place (`read(r as &Int)` with `r: &Int`, and `read(&v as &Int)`, exit 42 on both consumers); every other cast between reference types, `&mut Int as &Int` included, is E0553 at core-check under ARITH-5's tag, whose sentence covers only numeric, `bool` and `char` conversions; a cast from a reference to a raw pointer is allowed (TRUST-4). The design record (MEMORY_SEMANTICS §15.3) listed a cast of a traced reference binding (`r as &U`) among the reference-forming operations. Options: (a) refuse `as` between reference types; (b) allow the identity cast as a no-op on the operand's place. Conversions between a reference and a raw pointer are OPEN-98's, not this question's. Austral: not checked. Pick: none given (raised by the MEMORY_SEMANTICS absorption, 2026-10-30).
 
 <a id="OPEN-106"></a>
 ### OPEN-106. The result type of a checked conversion
@@ -1320,7 +1320,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on ARITH-5, ARITH-10. Current main: no checked conversion exists (E0101, R-0500). The archived [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md) §8.2 wrote `try_convert::<T>(x) -> Option<T>` "(or a `Result` with a reason)" and left the choice to the API's owner. Options: (a) `Option<T>`; (b) a `Result` whose error names the reason (out of range, not integral, NaN, infinite, not representable). Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
+**Rationale.** Bears on ARITH-5, ARITH-10. The current compiler: no checked conversion exists (E0101, R-0500). The archived [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md) §8.2 wrote `try_convert::<T>(x) -> Option<T>` "(or a `Result` with a reason)" and left the choice to the API's owner. Options: (a) `Option<T>`; (b) a `Result` whose error names the reason (out of range, not integral, NaN, infinite, not representable). Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
 
 <a id="OPEN-107"></a>
 ### OPEN-107. What a float-to-integer rounding gives for NaN, infinities and out-of-range values
@@ -1336,7 +1336,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on ARITH-1, ARITH-11. Current main: the rounding operations do not exist (R-0500); a float-to-integer `as` truncates toward zero and aborts on NaN, an infinity or a value out of range, natively and in `--interp`. The archived [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md) §8.2 required a stated result for every input, "either as a value or as an error". Options: (a) an error, as `try_convert` reports; (b) a value: the nearest value of the type for an out-of-range input or an infinity, and 0 for NaN; (c) a trap, as `as` does today. Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
+**Rationale.** Bears on ARITH-1, ARITH-11. The current compiler: the rounding operations do not exist (R-0500); a float-to-integer `as` truncates toward zero and aborts on NaN, an infinity or a value out of range, natively and in `--interp`. The archived [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md) §8.2 required a stated result for every input, "either as a value or as an error". Options: (a) an error, as `try_convert` reports; (b) a value: the nearest value of the type for an out-of-range input or an infinity, and 0 for NaN; (c) a trap, as `as` does today. Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
 
 <a id="OPEN-108"></a>
 ### OPEN-108. A capability listed twice in a set
@@ -1352,7 +1352,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on TYPE-D1, TYPE-17, TYPE-4. Current main: accepted where it is written, and a different type: `fn(Int) with(Console) -> Int` is not a `fn(Int) with(Console, Console) -> Int`, in either direction (E0220), because `CapSet.normalize` sorts a set and does not remove a repeated name. The callable-values design ([CALLABLE_VALUES_AND_CAPABILITIES.md](../archive/design-records/CALLABLE_VALUES_AND_CAPABILITIES.md)) calls the capabilities of a function type a set. Options: (a) the same set; (b) refuse a repeated capability where it is written; (c) a different set, as main. Austral: not applicable (capabilities are values). Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
+**Rationale.** Bears on TYPE-D1, TYPE-17, TYPE-4. The current compiler: accepted where it is written, and a different type: `fn(Int) with(Console) -> Int` is not a `fn(Int) with(Console, Console) -> Int`, in either direction (E0220), because `CapSet.normalize` sorts a set and does not remove a repeated name. The callable-values design ([CALLABLE_VALUES_AND_CAPABILITIES.md](../archive/design-records/CALLABLE_VALUES_AND_CAPABILITIES.md)) calls the capabilities of a function type a set. Options: (a) the same set; (b) refuse a repeated capability where it is written; (c) a different set, as in the current compiler. Austral: not applicable (capabilities are values). Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
 
 <a id="OPEN-109"></a>
 ### OPEN-109. Specializations that differ only in a function type's capabilities
@@ -1368,7 +1368,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on TYPE-17, TYPE-18. Current main: one: `pick<T: Copy>` instantiated at `fn(Int) -> Int` and at `fn(Int) with(Console) -> Int` emits the single function `pick_for_Fn_T_Int_to_Int_E`, because Mono's `tyToSuffix` drops a function type's capability set while it keeps a struct's capability arguments (E0809's history), and the program runs correctly since capabilities have no run-time representation (TYPE-18). The archived [HANDLE_CAPABILITIES.md](../archive/design-records/HANDLE_CAPABILITIES.md) R8 required collision-free symbol identity across instantiations and left code sharing to its own argument. Options: (a) the set is part of the symbol, as for struct capability arguments; (b) it is not, one symbol serving both, stated as erasure with its correctness argument. Whether two symbols share one body stays an implementation choice (TYPE-18). Austral: not applicable (capabilities are values). Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
+**Rationale.** Bears on TYPE-17, TYPE-18. The current compiler: one: `pick<T: Copy>` instantiated at `fn(Int) -> Int` and at `fn(Int) with(Console) -> Int` emits the single function `pick_for_Fn_T_Int_to_Int_E`, because Mono's `tyToSuffix` drops a function type's capability set while it keeps a struct's capability arguments (E0809's history), and the program runs correctly since capabilities have no run-time representation (TYPE-18). The archived [HANDLE_CAPABILITIES.md](../archive/design-records/HANDLE_CAPABILITIES.md) R8 required collision-free symbol identity across instantiations and left code sharing to its own argument. Options: (a) the set is part of the symbol, as for struct capability arguments; (b) it is not, one symbol serving both, stated as erasure with its correctness argument. Whether two symbols share one body stays an implementation choice (TYPE-18). Austral: not applicable (capabilities are values). Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
 
 <a id="OPEN-110"></a>
 ### OPEN-110. Enums at the foreign boundary
@@ -1384,7 +1384,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on FFI-3, FFI-7. Current main: refused: `extern fn f(x: E)` with `enum Copy E { A, B }` is E0574 (a non-FFI-safe parameter); only scalars, raw pointers and `repr(C)` structs cross. The design record [LAYOUT_CONTRACT.md](../archive/design-records/LAYOUT_CONTRACT.md) says enums must not cross (§3.2); before it was archived it also said they cross as integers. Options: (a) refused, as main; (b) a fieldless enum crosses as an integer of a stated width, which needs a stated discriminant for each variant. Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
+**Rationale.** Bears on FFI-3, FFI-7. The current compiler: refused: `extern fn f(x: E)` with `enum Copy E { A, B }` is E0574 (a non-FFI-safe parameter); only scalars, raw pointers and `repr(C)` structs cross. The design record [LAYOUT_CONTRACT.md](../archive/design-records/LAYOUT_CONTRACT.md) says enums must not cross (§3.2); before it was archived it also said they cross as integers. Options: (a) refused, as in the current compiler; (b) a fieldless enum crosses as an integer of a stated width, which needs a stated discriminant for each variant. Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
 
 <a id="OPEN-111"></a>
 ### OPEN-111. Misaligned fields of a packed struct
@@ -1400,7 +1400,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on FFI-4, FFI-8, REF-5. Current main: both accepted: `#[repr(packed)] struct P { v: u8, l: u32 }` places `l` at offset 1, and `&p.l` is accepted and reads the field correctly in the binary and in `--interp`. [LAYOUT_CONTRACT.md](../archive/design-records/LAYOUT_CONTRACT.md) §2 restricts a packed struct to fields whose alignment does not exceed their position, without saying what enforces it. Options: (a) refuse such a field; (b) accept it and refuse a reference to it; (c) accept both, as main. Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
+**Rationale.** Bears on FFI-4, FFI-8, REF-5. The current compiler: both accepted: `#[repr(packed)] struct P { v: u8, l: u32 }` places `l` at offset 1, and `&p.l` is accepted and reads the field correctly in the binary and in `--interp`. [LAYOUT_CONTRACT.md](../archive/design-records/LAYOUT_CONTRACT.md) §2 restricts a packed struct to fields whose alignment does not exceed their position, without saying what enforces it. Options: (a) refuse such a field; (b) accept it and refuse a reference to it; (c) accept both, as in the current compiler. Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
 
 <a id="OPEN-112"></a>
 ### OPEN-112. Mutation through a shared reference
@@ -1416,7 +1416,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on REF-10, OWN-10, TRUST-2, TRUST-5. Current main: safe code changes a value only through a `mut` binding or a `&mut` reference, and there is no cell type; a trusted function may convert `r: &Int` to `*mut Int` (`r as *const Int as *mut Int`) and store through it: the binary does the store, and `--interp` stops ("deref-assign through immutable ref"). The archived [MEMORY_SEMANTICS.md](../archive/design-records/MEMORY_SEMANTICS.md) §12 said there is no `Cell`, `RefCell` or `UnsafeCell` equivalent and that mutation flows from `let mut` through `&mut`; the [overview](overview.md) lists no interior mutability in safe code, with a later `UnsafeCell<T>` gated by `Unsafe`. Options: (a) never: a write through a pointer derived from a `&T` is undefined behaviour, a premise trusted code keeps (TRUST-2); (b) as (a), with a cell type gated by `Unsafe` as the one exception; (c) a trusted write through such a pointer is allowed. Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
+**Rationale.** Bears on REF-10, OWN-10, TRUST-2, TRUST-5. The current compiler: safe code changes a value only through a `mut` binding or a `&mut` reference, and there is no cell type; a trusted function may convert `r: &Int` to `*mut Int` (`r as *const Int as *mut Int`) and store through it: the binary does the store, and `--interp` stops ("deref-assign through immutable ref"). The archived [MEMORY_SEMANTICS.md](../archive/design-records/MEMORY_SEMANTICS.md) §12 said there is no `Cell`, `RefCell` or `UnsafeCell` equivalent and that mutation flows from `let mut` through `&mut`; the [overview](overview.md) lists no interior mutability in safe code, with a later `UnsafeCell<T>` gated by `Unsafe`. Options: (a) never: a write through a pointer derived from a `&T` is undefined behaviour, a premise trusted code keeps (TRUST-2); (b) as (a), with a cell type gated by `Unsafe` as the one exception; (c) a trusted write through such a pointer is allowed. Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
 
 <a id="OPEN-113"></a>
 ### OPEN-113. The ownership exceptions of trusted code
@@ -1432,7 +1432,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on TRUST-5, TRUST-12, OWN-5, OWN-8. Current main: both are accepted in trusted code only (elsewhere E0290 under OWN-8 and E0287 under OWN-5): std's collections destroy an element through `(p as &T)` in drop glue after its owner was consumed, and a trusted function may free a buffer it has emptied. The archived [MEMORY_SEMANTICS.md](../archive/design-records/MEMORY_SEMANTICS.md) §11 said that `trusted` does not relax linearity, and TRUST-5's rationale says the same. Options: (a) keep both, each a named trusted operation with its premise (the owner was consumed; the vector is empty); (b) remove both, drop glue moving the element out of raw memory instead (TRUST-7); (c) keep only destruction through a reference; (d) keep only `vec_free` of an emptied vector. Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
+**Rationale.** Bears on TRUST-5, TRUST-12, OWN-5, OWN-8. The current compiler: both are accepted in trusted code only (elsewhere E0290 under OWN-8 and E0287 under OWN-5): std's collections destroy an element through `(p as &T)` in drop glue after its owner was consumed, and a trusted function may free a buffer it has emptied. The archived [MEMORY_SEMANTICS.md](../archive/design-records/MEMORY_SEMANTICS.md) §11 said that `trusted` does not relax linearity, and TRUST-5's rationale says the same. Options: (a) keep both, each a named trusted operation with its premise (the owner was consumed; the vector is empty); (b) remove both, drop glue moving the element out of raw memory instead (TRUST-7); (c) keep only destruction through a reference; (d) keep only `vec_free` of an emptied vector. Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
 
 <a id="OPEN-114"></a>
 ### OPEN-114. How integer division rounds
@@ -1448,7 +1448,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on ARITH-3. Current main: the quotient is truncated toward zero and a nonzero remainder has the sign of the dividend, as C99 and LLVM's `sdiv` and `srem` give (`-7 / 2` is `-3`, `-7 % 2` is `-1`, `7 % -2` is `1`), in the binary, the interpreter and the constant folder (`IntArith.evalIntBinOp`). The archived [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md) states when division aborts (§5) but not how it rounds. Options: (a) truncation toward zero, as main; (b) floored division, the remainder taking the divisor's sign; (c) Euclidean division, the remainder never negative. Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
+**Rationale.** Bears on ARITH-3. The current compiler: the quotient is truncated toward zero and a nonzero remainder has the sign of the dividend, as C99 and LLVM's `sdiv` and `srem` give (`-7 / 2` is `-3`, `-7 % 2` is `-1`, `7 % -2` is `1`), in the binary, the interpreter and the constant folder (`IntArith.evalIntBinOp`). The archived [ARITHMETIC_POLICY.md](../archive/design-records/ARITHMETIC_POLICY.md) states when division aborts (§5) but not how it rounds. Options: (a) truncation toward zero, as in the current compiler; (b) floored division, the remainder taking the divisor's sign; (c) Euclidean division, the remainder never negative. Austral: not checked. Pick: none given (raised by the Codex and Kimi review of the absorption, 2026-10-30).
 
 <a id="OPEN-115"></a>
 ### OPEN-115. The body and totality of a specification function
@@ -1464,7 +1464,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on CON-3, CON-5, CON-1. Current main: both `spec fn big(x: Int) -> bool;` and `spec fn big(x: Int) -> bool = x > 10;` are accepted, and so is a recursive body that never terminates (`spec fn loopy(x: Int) -> bool = loopy(x + 1);`), with no check. [CONTRACTS_GUIDE.md](../verification/CONTRACTS_GUIDE.md) calls a `spec fn` "an erased mathematical specification, no body"; contracts.md's examples (CON-3) give it a body; [CONTRACTS_AND_VCS.md](../verification/CONTRACTS_AND_VCS.md) (Soundness Bridge) requires it to be total. Options: (a) a body is required and must be total (structural recursion or a checked measure); (b) a body is optional, a body-less one an uninterpreted function a proof must constrain, and a body must be total; (c) as main, no totality check. Austral: not applicable. Pick: none given (raised by the absorption of docs/verification, 2026-10-30).
+**Rationale.** Bears on CON-3, CON-5, CON-1. The current compiler: both `spec fn big(x: Int) -> bool;` and `spec fn big(x: Int) -> bool = x > 10;` are accepted, and so is a recursive body that never terminates (`spec fn loopy(x: Int) -> bool = loopy(x + 1);`), with no check. [CONTRACTS_GUIDE.md](../verification/CONTRACTS_GUIDE.md) calls a `spec fn` "an erased mathematical specification, no body"; contracts.md's examples (CON-3) give it a body; [CONTRACTS_AND_VCS.md](../verification/CONTRACTS_AND_VCS.md) (Soundness Bridge) requires it to be total. Options: (a) a body is required and must be total (structural recursion or a checked measure); (b) a body is optional, a body-less one an uninterpreted function a proof must constrain, and a body must be total; (c) as in the current compiler, no totality check. Austral: not applicable. Pick: none given (raised by the absorption of docs/verification, 2026-10-30).
 
 <a id="OPEN-116"></a>
 ### OPEN-116. A checked total function category
@@ -1480,7 +1480,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on CON-1, CON-3, CON-5. Current main: there is no such category (`total fn f(..)` is a parse error, E0001); a contract clause may still call a capability-free runtime function until CON-3's judgment lands. [CONTRACTS_AND_VCS.md](../verification/CONTRACTS_AND_VCS.md) (Design Principles) distinguishes `spec fn`, a checked `total fn`, ordinary and trusted functions, and admits a `total fn` into contracts once its obligations close. Options: (a) add the category; (b) no category: contracts call only `spec fn` (CON-3's full judgment). Austral: not checked. Pick: none given (raised by the absorption of docs/verification, 2026-10-30).
+**Rationale.** Bears on CON-1, CON-3, CON-5. The current compiler: there is no such category (`total fn f(..)` is a parse error, E0001); a contract clause may still call a capability-free runtime function until CON-3's judgment lands. [CONTRACTS_AND_VCS.md](../verification/CONTRACTS_AND_VCS.md) (Design Principles) distinguishes `spec fn`, a checked `total fn`, ordinary and trusted functions, and admits a `total fn` into contracts once its obligations close. Options: (a) add the category; (b) no category: contracts call only `spec fn` (CON-3's full judgment). Austral: not checked. Pick: none given (raised by the absorption of docs/verification, 2026-10-30).
 
 <a id="OPEN-117"></a>
 ### OPEN-117. `old`, quantifiers and implication in contracts
@@ -1496,7 +1496,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on CON-2, CON-3, SYN-1. Current main: `#[ensures(result == old(x))]` compiles and runs, and `--report contracts` marks the clause `invalid_contract_expression` (unknown function `old`); `forall i: Int, ...` is a parse error (E0001); there is no implication operator. [CONTRACTS_AND_VCS.md](../verification/CONTRACTS_AND_VCS.md) (Contract Expression V1) lists all three as deferred. Options: (a) add each, with a syntax decided per form; (b) keep them out, a claim needing one being a Lean theorem; (c) refuse `old(..)` now as an unknown name, deciding the rest later. Austral: not checked. Pick: none given (raised by the absorption of docs/verification, 2026-10-30).
+**Rationale.** Bears on CON-2, CON-3, SYN-1. The current compiler: `#[ensures(result == old(x))]` compiles and runs, and `--report contracts` marks the clause `invalid_contract_expression` (unknown function `old`); `forall i: Int, ...` is a parse error (E0001); there is no implication operator. [CONTRACTS_AND_VCS.md](../verification/CONTRACTS_AND_VCS.md) (Contract Expression V1) lists all three as deferred. Options: (a) add each, with a syntax decided per form; (b) keep them out, a claim needing one being a Lean theorem; (c) refuse `old(..)` now as an unknown name, deciding the rest later. Austral: not checked. Pick: none given (raised by the absorption of docs/verification, 2026-10-30).
 
 <a id="OPEN-118"></a>
 ### OPEN-118. A proven run-time violation in trusted code
@@ -1512,7 +1512,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on MEM-9, ARITH-13, TRUST-5, TRUST-12. Current main: `a[5]` on a `[Int; 3]`, or `x / 0`, is refused in safe code (E0900 for the index, E0901 for the divisor, `error[runtime-safety]`) and compiles in a `trusted fn` and in a function declaring `Unsafe`, where it aborts at run time on both consumers. MEM-9 and ARITH-13 state the refusal in a function that neither is marked `trusted` nor declares `Unsafe`, and name this question for a function marked `trusted` or declaring `Unsafe`; [KNOWN_HOLES.md](../verification/KNOWN_HOLES.md) C7 records the exemption as intended. Options: (a) refuse everywhere, and MEM-9 and ARITH-13 say so; (b) keep the exemption, and MEM-9 and ARITH-13 state it as the rule. Austral: not checked. Pick: none given (raised by the absorption of docs/verification, 2026-10-30).
+**Rationale.** Bears on MEM-9, ARITH-13, TRUST-5, TRUST-12. The current compiler: `a[5]` on a `[Int; 3]`, or `x / 0`, is refused in safe code (E0900 for the index, E0901 for the divisor, `error[runtime-safety]`) and compiles in a `trusted fn` and in a function declaring `Unsafe`, where it aborts at run time on both consumers. MEM-9 and ARITH-13 state the refusal in a function that neither is marked `trusted` nor declares `Unsafe`, and name this question for a function marked `trusted` or declaring `Unsafe`; [KNOWN_HOLES.md](../verification/KNOWN_HOLES.md) C7 records the exemption as intended. Options: (a) refuse everywhere, and MEM-9 and ARITH-13 say so; (b) keep the exemption, and MEM-9 and ARITH-13 state it as the rule. Austral: not checked. Pick: none given (raised by the absorption of docs/verification, 2026-10-30).
 
 <a id="OPEN-119"></a>
 ### OPEN-119. Buffered output when the process aborts
@@ -1528,7 +1528,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on STMT-1, STMT-2, PASS-13, OPEN-101. Current main: print builtins write through C's buffered stdio, and `abort` does not flush it on glibc (a binary that prints `hello` and then traps prints nothing on Linux) while it does on Darwin; the interpreter models the same buffer and the same platform difference. STMT-2 says a failure ends the process at once and is silent on output already written, so the observable trace of a trapping program differs by platform. Recorded by [INTERPRETER_TRUST.md](../verification/INTERPRETER_TRUST.md) §2. Options: (a) everything written before the trap is output (flush on abort, or unbuffered output); (b) what was written is unspecified on a trap, and PASS-13 compares output only for exiting runs. Austral: not checked. Pick: none given (raised by the absorption of docs/verification, 2026-10-30).
+**Rationale.** Bears on STMT-1, STMT-2, PASS-13, OPEN-101. The current compiler: print builtins write through C's buffered stdio, and `abort` does not flush it on glibc (a binary that prints `hello` and then traps prints nothing on Linux) while it does on Darwin; the interpreter models the same buffer and the same platform difference. STMT-2 says a failure ends the process at once and is silent on output already written, so the observable trace of a trapping program differs by platform. Recorded by [INTERPRETER_TRUST.md](../verification/INTERPRETER_TRUST.md) §2. Options: (a) everything written before the trap is output (flush on abort, or unbuffered output); (b) what was written is unspecified on a trap, and PASS-13 compares output only for exiting runs. Austral: not checked. Pick: none given (raised by the absorption of docs/verification, 2026-10-30).
 
 <a id="OPEN-120"></a>
 ### OPEN-120. A vacuous contract
@@ -1544,7 +1544,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on CON-1, CON-2. Current main: `#[requires(x > 5 && x < 3)]` compiles; a decided-unsatisfiable precondition makes the claim `vacuous`, never `proved`, and E0613 refuses it only under the `forbid-vacuous` policy (`Concrete.Policy`), not in a plain build. [CONTRACTS_AND_VCS.md](../verification/CONTRACTS_AND_VCS.md) (Soundness Bridge) states the reporting rule. Options: (a) a language refusal in every build; (b) tooling only: always reported `vacuous`, refused under a policy, as main. Austral: not checked. Pick: none given (raised by the absorption of docs/verification, 2026-10-30).
+**Rationale.** Bears on CON-1, CON-2. The current compiler: `#[requires(x > 5 && x < 3)]` compiles; a decided-unsatisfiable precondition makes the claim `vacuous`, never `proved`, and E0613 refuses it only under the `forbid-vacuous` policy (`Concrete.Policy`), not in a plain build. [CONTRACTS_AND_VCS.md](../verification/CONTRACTS_AND_VCS.md) (Soundness Bridge) states the reporting rule. Options: (a) a language refusal in every build; (b) tooling only: always reported `vacuous`, refused under a policy, as in the current compiler. Austral: not checked. Pick: none given (raised by the absorption of docs/verification, 2026-10-30).
 
 <a id="OPEN-121"></a>
 ### OPEN-121. Projections from a base that is not a traceable place
@@ -1560,7 +1560,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on REF-5, MEM-4, MEM-8, TYPE-7. Current main: refused (E0238, `untraceablePlace`), whether the projection reads a Copy value or forms a reference: `(if c { a } else { b }).f`, `(**r).f`, `*w.r`. No entry states the refusal: REF-5 forbids a branch value or a stored reference as a reference's root, and MEM-4, MEM-8 and TYPE-7 do not restrict a projection's base. [KNOWN_HOLES.md](../verification/KNOWN_HOLES.md) H28 calls it a deliberate restriction until R-0499's checker on Core. Options: (a) state the restriction as a rule (a projection's base is a place: a binding, its fields and elements, or `*` of a named reference); (b) accept such projections of owned values and Copy reads once the checker traces them, refusing only what REF-5 refuses. Austral: not checked. Pick: none given (raised by the absorption of docs/verification, 2026-10-30).
+**Rationale.** Bears on REF-5, MEM-4, MEM-8, TYPE-7. The current compiler: refused (E0238, `untraceablePlace`), whether the projection reads a Copy value or forms a reference: `(if c { a } else { b }).f`, `(**r).f`, `*w.r`. No entry states the refusal: REF-5 forbids a branch value or a stored reference as a reference's root, and MEM-4, MEM-8 and TYPE-7 do not restrict a projection's base. [KNOWN_HOLES.md](../verification/KNOWN_HOLES.md) H28 calls it a deliberate restriction until R-0499's checker on Core. Options: (a) state the restriction as a rule (a projection's base is a place: a binding, its fields and elements, or `*` of a named reference); (b) accept such projections of owned values and Copy reads once the checker traces them, refusing only what REF-5 refuses. Austral: not checked. Pick: none given (raised by the absorption of docs/verification, 2026-10-30).
 
 <a id="OPEN-122"></a>
 ### OPEN-122. A `repr(C)` struct returned from an extern function
@@ -1576,7 +1576,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on FFI-2, FFI-11. Current main: a returned struct of at most 8 bytes comes back as one 64-bit integer, stored as 8 bytes into the struct's slot even when the struct is smaller (a 4-byte `in_addr` returned by `inet_makeaddr` reads back wrong natively); a larger one is returned as an LLVM aggregate, which matches C on x86-64 and AArch64 only for some layouts. [ABI.md](../platform/ABI.md) promised returns of at most 8 bytes and listed larger ones as not promised. Options: (a) every size, as C, classified by the `Layout` authority (R-0502); (b) at most 8 bytes (or 16), a larger return refused in an `extern fn` signature; (c) none, a returned struct going through an out-pointer the binding declares. Austral: not checked. Pick: none given (raised by the absorption of docs/platform and docs/stdlib, 2026-10-30).
+**Rationale.** Bears on FFI-2, FFI-11. The current compiler: a returned struct of at most 8 bytes comes back as one 64-bit integer, stored as 8 bytes into the struct's slot even when the struct is smaller (a 4-byte `in_addr` returned by `inet_makeaddr` reads back wrong natively); a larger one is returned as an LLVM aggregate, which matches C on x86-64 and AArch64 only for some layouts. [ABI.md](../platform/ABI.md) promised returns of at most 8 bytes and listed larger ones as not promised. Options: (a) every size, as C, classified by the `Layout` authority (R-0502); (b) at most 8 bytes (or 16), a larger return refused in an `extern fn` signature; (c) none, a returned struct going through an out-pointer the binding declares. Austral: not checked. Pick: none given (raised by the absorption of docs/platform and docs/stdlib, 2026-10-30).
 
 <a id="OPEN-123"></a>
 ### OPEN-123. `as` on a newtype outside its module
@@ -1592,7 +1592,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on TYPE-11, TYPE-24, ARITH-5, OPEN-54. Current main: both accepted in any module, so `x as Id` builds a foreign newtype that `Id(x)` may not (E0296), and a validated wrapper's smart constructor can be bypassed. [VALIDATED_WRAPPERS.md](../stdlib/VALIDATED_WRAPPERS.md) §8 describes the cast rule as guarding the wrapper contract from an `as` bypass, which holds for casts to unrelated types only. Options: (a) accepted anywhere, as main; (b) accepted only where `N(v)` and `.0` are (TYPE-11, with R-0500's follow-on for `.0`); (c) `as` never names a newtype, the conversions being `N(v)` and `.0`. Austral: no newtype (OPEN-54's comparison). Pick: none given (raised by the absorption of docs/platform and docs/stdlib, 2026-10-30).
+**Rationale.** Bears on TYPE-11, TYPE-24, ARITH-5, OPEN-54. The current compiler: both accepted in any module, so `x as Id` builds a foreign newtype that `Id(x)` may not (E0296), and a validated wrapper's smart constructor can be bypassed. [VALIDATED_WRAPPERS.md](../stdlib/VALIDATED_WRAPPERS.md) §8 describes the cast rule as guarding the wrapper contract from an `as` bypass, which holds for casts to unrelated types only. Options: (a) accepted anywhere, as in the current compiler; (b) accepted only where `N(v)` and `.0` are (TYPE-11, with R-0500's follow-on for `.0`); (c) `as` never names a newtype, the conversions being `N(v)` and `.0`. Austral: no newtype (OPEN-54's comparison). Pick: none given (raised by the absorption of docs/platform and docs/stdlib, 2026-10-30).
 
 <a id="OPEN-124"></a>
 ### OPEN-124. Profiles in the specification
@@ -1608,7 +1608,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on ARITH-9, OPEN-97, PASS-3, PASS-4. Current main: a profile only refuses or reports: `--check predictable` reports its five gates (no recursion, bounded loops, no allocation, no extern calls, no `File`, `Network` or `Process`), `[policy] predictable = true` in `Concrete.toml` turns a violation into E0610, and no profile changes the behaviour of a program it accepts; ARITH-9 states that for arithmetic. [PROFILES.md](../platform/PROFILES.md) says a profile never changes what a program means, while OPEN-97 asks whether a build profile may omit a run-time check. Options: (a) no profiles chapter: profiles are tooling, and the spec states only that no profile changes an accepted program's behaviour; (b) a profiles chapter whose entries state each profile's admission rules as refusals, with that same guarantee; (c) as (b), with build profiles allowed to differ as OPEN-97 decides. Austral: not checked. Pick: none given (raised by the absorption of docs/platform and docs/stdlib, 2026-10-30).
+**Rationale.** Bears on ARITH-9, OPEN-97, PASS-3, PASS-4. The current compiler: a profile only refuses or reports: `--check predictable` reports its five gates (no recursion, bounded loops, no allocation, no extern calls, no `File`, `Network` or `Process`), `[policy] predictable = true` in `Concrete.toml` turns a violation into E0610, and no profile changes the behaviour of a program it accepts; ARITH-9 states that for arithmetic. [PROFILES.md](../platform/PROFILES.md) says a profile never changes what a program means, while OPEN-97 asks whether a build profile may omit a run-time check. Options: (a) no profiles chapter: profiles are tooling, and the spec states only that no profile changes an accepted program's behaviour; (b) a profiles chapter whose entries state each profile's admission rules as refusals, with that same guarantee; (c) as (b), with build profiles allowed to differ as OPEN-97 decides. Austral: not checked. Pick: none given (raised by the absorption of docs/platform and docs/stdlib, 2026-10-30).
 
 <a id="OPEN-125"></a>
 ### OPEN-125. Contracts at run time
@@ -1624,7 +1624,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on CON-1, CON-2, STMT-2. Current main: contracts are erased metadata: a call that violates `#[requires(x > 0)]` runs normally, in the binary and in `--interp`, and `assert` elaborates to proof evidence only (syntax chapter introduction). [ERROR_CONVENTIONS.md](../stdlib/ERROR_CONVENTIONS.md) lists contract-violation traps among the fatal failures. Options: (a) claims only, never checked at run time, as main; (b) checked at run time and trapping unless discharged; (c) checked under a build profile only (OPEN-97, OPEN-124). Austral: not checked. Pick: none given (raised by the absorption of docs/platform and docs/stdlib, 2026-10-30).
+**Rationale.** Bears on CON-1, CON-2, STMT-2. The current compiler: contracts are erased metadata: a call that violates `#[requires(x > 0)]` runs normally, in the binary and in `--interp`, and `assert` elaborates to proof evidence only (syntax chapter introduction). [ERROR_CONVENTIONS.md](../stdlib/ERROR_CONVENTIONS.md) lists contract-violation traps among the fatal failures. Options: (a) claims only, never checked at run time, as in the current compiler; (b) checked at run time and trapping unless discharged; (c) checked under a build profile only (OPEN-97, OPEN-124). Austral: not checked. Pick: none given (raised by the absorption of docs/platform and docs/stdlib, 2026-10-30).
 
 <a id="OPEN-126"></a>
 ### OPEN-126. Target assumptions
@@ -1640,7 +1640,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on FFI-2, FFI-7, TYPE-19, TYPE-20. Current main: one target profile: `Layout` hardcodes 8-byte pointers and references, `bool` of 1 byte, `Unit` of 0 bytes, an `i32` enum tag, and assumes little-endian POSIX hosts; FFI-2 names AAPCS64 for the native profile, and the integer types' widths follow from their names (TYPE-19). [EXECUTION_MODEL.md](../platform/EXECUTION_MODEL.md) and [ABI.md](../platform/ABI.md) state these as platform facts. Options: (a) language rules, a 32-bit or big-endian target being another language profile; (b) target facts, observable only through `sizeof`, `alignof` (FFI-7) and named target constants; (c) as (b), with the sizes of `bool` and `Unit` fixed by the language. Austral: not checked. Pick: none given (raised by the absorption of docs/platform and docs/stdlib, 2026-10-30).
+**Rationale.** Bears on FFI-2, FFI-7, TYPE-19, TYPE-20. The current compiler: one target profile: `Layout` hardcodes 8-byte pointers and references, `bool` of 1 byte, `Unit` of 0 bytes, an `i32` enum tag, and assumes little-endian POSIX hosts; FFI-2 names AAPCS64 for the native profile, and the integer types' widths follow from their names (TYPE-19). [EXECUTION_MODEL.md](../platform/EXECUTION_MODEL.md) and [ABI.md](../platform/ABI.md) state these as platform facts. Options: (a) language rules, a 32-bit or big-endian target being another language profile; (b) target facts, observable only through `sizeof`, `alignof` (FFI-7) and named target constants; (c) as (b), with the sizes of `bool` and `Unit` fixed by the language. Austral: not checked. Pick: none given (raised by the absorption of docs/platform and docs/stdlib, 2026-10-30).
 
 <a id="OPEN-127"></a>
 ### OPEN-127. UTF-8 in every `String`
@@ -1656,7 +1656,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on TYPE-3, SYN-5, TRUST-2. Current main: literals are UTF-8 (SYN-5), but nothing keeps a `String` valid: `push_char` appends a byte unchecked, `Bytes::to_string` transfers bytes without validation, and std's `read_to_string` does not validate. [STRING_TEXT_CONTRACT.md](../stdlib/STRING_TEXT_CONTRACT.md) §1 states the invariant as a target, and [UNICODE_POLICY.md](../stdlib/UNICODE_POLICY.md) has a validating `Bytes::to_string` returning `Option`. Options: (a) a language guarantee, every safe constructor validating and an unchecked one being a trusted operation with that premise; (b) a std convention only, `String` being bytes to the language. Austral: not checked. Pick: none given (raised by the absorption of docs/platform and docs/stdlib, 2026-10-30).
+**Rationale.** Bears on TYPE-3, SYN-5, TRUST-2. The current compiler: literals are UTF-8 (SYN-5), but nothing keeps a `String` valid: `push_char` appends a byte unchecked, `Bytes::to_string` transfers bytes without validation, and std's `read_to_string` does not validate. [STRING_TEXT_CONTRACT.md](../stdlib/STRING_TEXT_CONTRACT.md) §1 states the invariant as a target, and [UNICODE_POLICY.md](../stdlib/UNICODE_POLICY.md) has a validating `Bytes::to_string` returning `Option`. Options: (a) a language guarantee, every safe constructor validating and an unchecked one being a trusted operation with that premise; (b) a std convention only, `String` being bytes to the language. Austral: not checked. Pick: none given (raised by the absorption of docs/platform and docs/stdlib, 2026-10-30).
 
 <a id="OPEN-128"></a>
 ### OPEN-128. `->` between a match arm's pattern and body
@@ -1672,7 +1672,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on SYN-1 and PAT-7. Current main: the parser accepts both (`parseMatchArms`; `2 -> { return 42; }` exits 42 on both consumers), and the grammar's `match_arm` has only `=>`. The syntax freeze review (2026-04, [SYNTAX_FREEZE_REVIEW.md](../archive/design-records/SYNTAX_FREEZE_REVIEW.md) §1.5) recommended `=>` as the canonical form with a warning for `->`, which also spells a return type. Options: (a) `=>` only, `->` refused; (b) both accepted; (c) both accepted, with a warning on `->`, as the freeze review recommended. Austral: not applicable. Pick: none given (raised by the absorption of docs/compiler, 2026-10-30).
+**Rationale.** Bears on SYN-1 and PAT-7. The current compiler: the parser accepts both (`parseMatchArms`; `2 -> { return 42; }` exits 42 on both consumers), and the grammar's `match_arm` has only `=>`. The syntax freeze review (2026-04, [SYNTAX_FREEZE_REVIEW.md](../archive/design-records/SYNTAX_FREEZE_REVIEW.md) §1.5) recommended `=>` as the canonical form with a warning for `->`, which also spells a return type. Options: (a) `=>` only, `->` refused; (b) both accepted; (c) both accepted, with a warning on `->`, as the freeze review recommended. Austral: not applicable. Pick: none given (raised by the absorption of docs/compiler, 2026-10-30).
 
 <a id="OPEN-129"></a>
 ### OPEN-129. Type arguments of an enum literal taken from its expected type
@@ -1688,7 +1688,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on TYPE-7, TYPE-15 and OPEN-46, which asks the same of a generic call's type arguments and whose pick excludes the expected result type. Current main: the type arguments come from the expected type of a `return` (the function's result type), of an annotated `let` and of a call argument (the parameter's type); all three exit 42 on both consumers, and spec examples rely on it (PAT-1). The syntax freeze review (§1.3, kill-list items 1, 4 and 5) proposed this inference for enum literals and for constructor calls such as `Vec::new()`. Options: (a) explicit type arguments always; (b) from the expected type in the positions main uses; (c) the answer to OPEN-46, applied to enum literals. Austral: type parameters are inferred from the arguments, and a declaration's type can disambiguate. Pick: none given (raised by the absorption of docs/compiler, 2026-10-30).
+**Rationale.** Bears on TYPE-7, TYPE-15 and OPEN-46, which asks the same of a generic call's type arguments and whose pick excludes the expected result type. The current compiler: the type arguments come from the expected type of a `return` (the function's result type), of an annotated `let` and of a call argument (the parameter's type); all three exit 42 on both consumers, and spec examples rely on it (PAT-1). The syntax freeze review (§1.3, kill-list items 1, 4 and 5) proposed this inference for enum literals and for constructor calls such as `Vec::new()`. Options: (a) explicit type arguments always; (b) from the expected type in the positions the current compiler uses; (c) the answer to OPEN-46, applied to enum literals. Austral: type parameters are inferred from the arguments, and a declaration's type can disambiguate. Pick: none given (raised by the absorption of docs/compiler, 2026-10-30).
 
 <a id="OPEN-130"></a>
 ### OPEN-130. Unlabeled pattern binders: by position or by name
@@ -1704,7 +1704,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on PAT-1, PAT-3 and PAT-10. Current main disagrees with itself: with `enum E { V { x: Int, y: Int } }` and `E::V { x: 40, y: 2 }`, the arm `E::V { y, x } => y` gives 40 in `match` and in `if let` (binders zip the variant's fields in declaration order, `Concrete/Elab/Elab.lean` `bindings.zip ev.fields`), while the struct destructuring `let S { y, x } = s; y` gives 2 (by name); both consumers agree. PAT-1's `field: binder` form and the grammar's `binding_list` comment ("positional") point different ways. Options: (a) by name (field punning) everywhere; (b) by position everywhere; (c) refuse an unlabeled list whose order differs from the declaration. Austral: not applicable (no punning). Pick: none given (raised by the absorption of docs/compiler, 2026-10-30; the variant-pattern disagreement may also be filed as a bug).
+**Rationale.** Bears on PAT-1, PAT-3 and PAT-10. The current compiler disagrees with itself: with `enum E { V { x: Int, y: Int } }` and `E::V { x: 40, y: 2 }`, the arm `E::V { y, x } => y` gives 40 in `match` and in `if let` (binders zip the variant's fields in declaration order, `Concrete/Elab/Elab.lean` `bindings.zip ev.fields`), while the struct destructuring `let S { y, x } = s; y` gives 2 (by name); both consumers agree. PAT-1's `field: binder` form and the grammar's `binding_list` comment ("positional") point different ways. Options: (a) by name (field punning) everywhere; (b) by position everywhere; (c) refuse an unlabeled list whose order differs from the declaration. Austral: not applicable (no punning). Pick: none given (raised by the absorption of docs/compiler, 2026-10-30; the variant-pattern disagreement may also be filed as a bug).
 
 <a id="OPEN-131"></a>
 ### OPEN-131. `union` declarations
@@ -1720,7 +1720,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on SYN-1, TYPE-7, FFI-7 and FFI-8. Current main: `union U { a: Int, b: Uint }` parses (`Concrete/Frontend/Parser.lean`, as a struct whose fields share storage) and compiles; a value built as `U { a: 42 }` is linear, and `union` is neither a keyword nor in the grammar. No document specifies it. Options: (a) remove it; (b) keep it, for the foreign boundary only, with its layout and read rules specified. Austral: no unions. Pick: none given (raised by the absorption of docs/compiler, 2026-10-30).
+**Rationale.** Bears on SYN-1, TYPE-7, FFI-7 and FFI-8. The current compiler: `union U { a: Int, b: Uint }` parses (`Concrete/Frontend/Parser.lean`, as a struct whose fields share storage) and compiles; a value built as `U { a: 42 }` is linear, and `union` is neither a keyword nor in the grammar. No document specifies it. Options: (a) remove it; (b) keep it, for the foreign boundary only, with its layout and read rules specified. Austral: no unions. Pick: none given (raised by the absorption of docs/compiler, 2026-10-30).
 
 <a id="OPEN-132"></a>
 ### OPEN-132. Polymorphic recursion
@@ -1736,7 +1736,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on TYPE-13, PASS-7 and PASS-12. Current main: such a program is not refused; compilation does not terminate (more than 200 s and 2 GB on 2026-10-30, natively and with `--interp`), since monomorphization specializes without a bound on function instances (the bound `closeInstances` has covers only generic type definitions). [PASSES.md](../compiler/PASSES.md) §7 lists unbounded polymorphic recursion as Mono's error. Options: (a) refuse a call cycle whose type arguments grow, before Mono; (b) refuse at Mono when specialization exceeds a stated limit. Austral: not checked. Pick: none given (raised by the absorption of docs/compiler, 2026-10-30; the non-termination may also be filed as a bug).
+**Rationale.** Bears on TYPE-13, PASS-7 and PASS-12. The current compiler: such a program is not refused; compilation does not terminate (more than 200 s and 2 GB on 2026-10-30, natively and with `--interp`), since monomorphization specializes without a bound on function instances (the bound `closeInstances` has covers only generic type definitions). [PASSES.md](../compiler/PASSES.md) §7 lists unbounded polymorphic recursion as Mono's error. Options: (a) refuse a call cycle whose type arguments grow, before Mono; (b) refuse at Mono when specialization exceeds a stated limit. Austral: not checked. Pick: none given (raised by the absorption of docs/compiler, 2026-10-30; the non-termination may also be filed as a bug).
 
 <a id="OPEN-133"></a>
 ### OPEN-133. User functions named `print`, `println` or `append`
@@ -1752,7 +1752,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on MOD-3, MOD-8 and TYPE-10. Current main: accepted; with `fn print(x: Int) -> Int`, `print(42)` calls it (exit 42 on both consumers), because Elab desugars the variadic builtins only when no function of that name is visible, and MOD-3's reserved names do not include them. MOD-8 already binds the calls the compiler itself generates by identity. Options: (a) reserve the three names (MOD-3); (b) allow the replacement, as main does. Austral: not applicable. Pick: none given (raised by the absorption of docs/compiler, 2026-10-30).
+**Rationale.** Bears on MOD-3, MOD-8 and TYPE-10. The current compiler: accepted; with `fn print(x: Int) -> Int`, `print(42)` calls it (exit 42 on both consumers), because Elab desugars the variadic builtins only when no function of that name is visible, and MOD-3's reserved names do not include them. MOD-8 already binds the calls the compiler itself generates by identity. Options: (a) reserve the three names (MOD-3); (b) allow the replacement, as the current compiler does. Austral: not applicable. Pick: none given (raised by the absorption of docs/compiler, 2026-10-30).
 
 <a id="OPEN-134"></a>
 ### OPEN-134. The capabilities of a container's generated destruction
@@ -1768,7 +1768,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on OWN-13, TYPE-D1 and TRUST-4. Current main: OWN-13 is enforced, so a `Destroy` implementation requires no capability beyond `Alloc`, and a container's generated destruction is `with(Alloc)`. [RUNTIME_COLLECTIONS.md](../stdlib/RUNTIME_COLLECTIONS.md) rule 3 describes a different model, in which the generated destruction requires the union of its element, key and value destructors' capabilities, computed per instantiation, and calls today's limit a first-release restriction. Options: (a) keep OWN-13's limit, so destruction never needs more than `Alloc`; (b) lift it, so a `Destroy` implementation may require further capabilities and a container's destruction requires their union per instantiation. Austral: not assessed. Pick: none given (raised by the review of the absorption of docs/stdlib, 2026-10-30).
+**Rationale.** Bears on OWN-13, TYPE-D1 and TRUST-4. The current compiler: OWN-13 is enforced, so a `Destroy` implementation requires no capability beyond `Alloc`, and a container's generated destruction is `with(Alloc)`. [RUNTIME_COLLECTIONS.md](../stdlib/RUNTIME_COLLECTIONS.md) rule 3 describes a different model, in which the generated destruction requires the union of its element, key and value destructors' capabilities, computed per instantiation, and calls today's limit a first-release restriction. Options: (a) keep OWN-13's limit, so destruction never needs more than `Alloc`; (b) lift it, so a `Destroy` implementation may require further capabilities and a container's destruction requires their union per instantiation. Austral: not assessed. Pick: none given (raised by the review of the absorption of docs/stdlib, 2026-10-30).
 
 <a id="OPEN-135"></a>
 ### OPEN-135. A method's `Type_method` name in its module's namespace
@@ -1784,7 +1784,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on MOD-3 and MOD-8. Current main: refused: `fn P_get(a: Int) -> Int` beside `impl P { fn get(&self) -> Int }` is E0299 under MOD-3@2 ("a function named 'P_get' is also declared in this module as an impl method"), on both consumers, because the method is entered under its mangled name. MOD-3's reserved names are the `__` prefix, `user_main` and the builtins, which do not include such names. Options: (a) keep it, listing `T_m` among the names MOD-3 reserves; (b) stop entering methods under `T_m`, so the free function is accepted. Austral: not applicable (no methods). Pick: none given (raised by the review of the absorption of docs/compiler, 2026-10-30).
+**Rationale.** Bears on MOD-3 and MOD-8. The current compiler: refused: `fn P_get(a: Int) -> Int` beside `impl P { fn get(&self) -> Int }` is E0299 under MOD-3@2 ("a function named 'P_get' is also declared in this module as an impl method"), on both consumers, because the method is entered under its mangled name. MOD-3's reserved names are the `__` prefix, `user_main` and the builtins, which do not include such names. Options: (a) keep it, listing `T_m` among the names MOD-3 reserves; (b) stop entering methods under `T_m`, so the free function is accepted. Austral: not applicable (no methods). Pick: none given (raised by the review of the absorption of docs/compiler, 2026-10-30).
 
 <a id="OPEN-136"></a>
 ### OPEN-136. std's `process_exit`
@@ -1800,7 +1800,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on STMT-7, OWN-2 and TRUST-4. Current main: `std.process.process_exit(code: i32) with(Process)` exists and calls libc `exit`; the language itself has no exit operation (STMT-7). The design record [MAIN_EXIT_MODEL.md](../platform/MAIN_EXIT_MODEL.md) calls an exit operation deliberately absent, since in a linear language it would bypass the proof that every owned value is consumed. Options: (a) keep it, stating that it skips cleanup and that `Process` is what grants it; (b) remove it, status flowing back through `main`'s return only. Austral: not checked. Pick: none given (raised by the review of the absorption of docs/platform, 2026-10-30).
+**Rationale.** Bears on STMT-7, OWN-2 and TRUST-4. The current compiler: `std.process.process_exit(code: i32) with(Process)` exists and calls libc `exit`; the language itself has no exit operation (STMT-7). The design record [MAIN_EXIT_MODEL.md](../platform/MAIN_EXIT_MODEL.md) calls an exit operation deliberately absent, since in a linear language it would bypass the proof that every owned value is consumed. Options: (a) keep it, stating that it skips cleanup and that `Process` is what grants it; (b) remove it, status flowing back through `main`'s return only. Austral: not checked. Pick: none given (raised by the review of the absorption of docs/platform, 2026-10-30).
 
 <a id="OPEN-137"></a>
 ### OPEN-137. Character literals outside ASCII
@@ -1816,7 +1816,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on SYN-6, TYPE-20 and SYN-5. Current main: the literal silently takes the low byte of the character's code point: `'é'` (U+00E9) is 233, `'ā'` (U+0101) is 1 and `'€'` (U+20AC) is 172 as `u8`, on both consumers, and SYN-6 says only that a char literal is a token. Options: (a) refuse a char literal whose character is not ASCII, so every accepted literal is the one byte of its ASCII character; (b) accept U+0000 to U+00FF as that byte (Latin-1) and refuse anything above; (c) make `char` a Unicode scalar value, which changes TYPE-20's one-byte `char`. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
+**Rationale.** Bears on SYN-6, TYPE-20 and SYN-5. The current compiler: the literal silently takes the low byte of the character's code point: `'é'` (U+00E9) is 233, `'ā'` (U+0101) is 1 and `'€'` (U+20AC) is 172 as `u8`, on both consumers, and SYN-6 says only that a char literal is a token. Options: (a) refuse a char literal whose character is not ASCII, so every accepted literal is the one byte of its ASCII character; (b) accept U+0000 to U+00FF as that byte (Latin-1) and refuse anything above; (c) make `char` a Unicode scalar value, which changes TYPE-20's one-byte `char`. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
 
 <a id="OPEN-138"></a>
 ### OPEN-138. Which positions give a literal its expected type
@@ -1832,7 +1832,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on ARITH-2, TYPE-4 and TYPE-6. Current main: an unconstrained integer literal is typed `Int` and a float literal `Float64` (bug 327); with `x: u8`, a literal beside `x` takes `u8` as the other operand of `+`, `<` and `&` and as the count of `>>`: `x + 300`, `x < 300`, `x & 300` and `x >> 300` are each refused natively with E0227 (`integer literal 300 is out of range for type 'u8'`), and `300 as Int` is accepted, whether through `as` or the `Int` default the probe does not show. ARITH-2@3 refuses an integer literal with no expected type but does not list the positions that supply one. Options: (a) declared positions (an annotated binding, a parameter, a return, a field) and the other operand of a binary operator, as the probe shows main doing for `+`, `<`, `&` and a shift count (other operators were not probed); (b) declared positions only, so a literal beside a typed operand needs a typed binding; (c) option (a), plus the target type of an `as` for its literal operand. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
+**Rationale.** Bears on ARITH-2, TYPE-4 and TYPE-6. The current compiler: an unconstrained integer literal is typed `Int` and a float literal `Float64` (bug 327); with `x: u8`, a literal beside `x` takes `u8` as the other operand of `+`, `<` and `&` and as the count of `>>`: `x + 300`, `x < 300`, `x & 300` and `x >> 300` are each refused natively with E0227 (`integer literal 300 is out of range for type 'u8'`), and `300 as Int` is accepted, whether through `as` or the `Int` default the probe does not show. ARITH-2@3 refuses an integer literal with no expected type but does not list the positions that supply one. Options: (a) declared positions (an annotated binding, a parameter, a return, a field) and the other operand of a binary operator, as the probe shows the current compiler doing for `+`, `<`, `&` and a shift count (other operators were not probed); (b) declared positions only, so a literal beside a typed operand needs a typed binding; (c) option (a), plus the target type of an `as` for its literal operand. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
 
 <a id="OPEN-139"></a>
 ### OPEN-139. A qualified call to a function that is not imported
@@ -1848,7 +1848,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on MOD-2, SYN-10 and MOD-4. Current main: accepted: `mod a { pub fn answer() -> u8 { return 42; } }` and `a::answer()` in `main` exits 42 with no import, as MOD-4's and SYN-10's accepted examples also do, while MOD-2's sentence says another module uses a declaration only by importing it. Options: (a) a qualified path to a `pub` declaration is a use in its own right, and MOD-2 says so; (b) an import is required, and the unimported qualified call is refused. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
+**Rationale.** Bears on MOD-2, SYN-10 and MOD-4. The current compiler: accepted: `mod a { pub fn answer() -> u8 { return 42; } }` and `a::answer()` in `main` exits 42 with no import, as MOD-4's and SYN-10's accepted examples also do, while MOD-2's sentence says another module uses a declaration only by importing it. Options: (a) a qualified path to a `pub` declaration is a use in its own right, and MOD-2 says so; (b) an import is required, and the unimported qualified call is refused. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
 
 <a id="OPEN-140"></a>
 ### OPEN-140. Implicitly dropped results of `free` and of a deferred call
@@ -1864,7 +1864,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on OWN-7, OWN-17, MEM-5 and OWN-15. Current main: both accepted: `free(h);` on a `Heap<Int>` (whose result is the `Int` moved out of the cell: `let v: Int = free(h);` after `alloc(42)` gives 42 on both consumers) and `defer f();` with `fn f() -> u8` compile and run, while OWN-7@3 (decided OD29) drops a non-Unit result only through `discard(e)`. OWN-17 states main's drop of a deferred call's result, and MEM-5 and OWN-15 describe `free(h);` as a statement; neither is named as an exception in OWN-7. Options: (a) both are exceptions, stated in OWN-7; (b) neither is, so each needs `discard`; (c) `free` is an exception and a deferred call's result is not. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
+**Rationale.** Bears on OWN-7, OWN-17, MEM-5 and OWN-15. The current compiler: both accepted: `free(h);` on a `Heap<Int>` (whose result is the `Int` moved out of the cell: `let v: Int = free(h);` after `alloc(42)` gives 42 on both consumers) and `defer f();` with `fn f() -> u8` compile and run, while OWN-7@3 (decided OD29) drops a non-Unit result only through `discard(e)`. OWN-17 states the current compiler's drop of a deferred call's result, and MEM-5 and OWN-15 describe `free(h);` as a statement; neither is named as an exception in OWN-7. Options: (a) both are exceptions, stated in OWN-7; (b) neither is, so each needs `discard`; (c) `free` is an exception and a deferred call's result is not. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
 
 <a id="OPEN-141"></a>
 ### OPEN-141. More than one `main` in a program
@@ -1880,7 +1880,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on STMT-7, MOD-3 and PASS-10. Current main: `mod a { pub fn main() -> u8 { return 7; } }` beside `mod b { pub fn main() -> u8 { return 9; } }` fails natively inside LLVM (`redefinition of global '@__concrete_argc'`) and prints 7 under `--interp`, which runs the first, also when the second `main` is the root module's; MOD-3 makes a name unique within one module only. Options: (a) only the root module's `main` is the entry point, and others are ordinary functions; (b) a program with more than one `main` is refused; (c) a `main` outside the root module is refused. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
+**Rationale.** Bears on STMT-7, MOD-3 and PASS-10. The current compiler: `mod a { pub fn main() -> u8 { return 7; } }` beside `mod b { pub fn main() -> u8 { return 9; } }` fails natively inside LLVM (`redefinition of global '@__concrete_argc'`) and prints 7 under `--interp`, which runs the first, also when the second `main` is the root module's; MOD-3 makes a name unique within one module only. Options: (a) only the root module's `main` is the entry point, and others are ordinary functions; (b) a program with more than one `main` is refused; (c) a `main` outside the root module is refused. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
 
 <a id="OPEN-142"></a>
 ### OPEN-142. `X.con` beside `X/mod.con`
@@ -1896,7 +1896,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on MOD-4. Current main: `X.con` is loaded and `X/mod.con` is ignored without a diagnostic (with `X.con` returning 7 and `X/mod.con` 9, the program exits 7 on both consumers). MOD-4 says one module is loaded from either file. Options: (a) refuse the pair; (b) `X.con` takes precedence, as main does; (c) `X/mod.con` takes precedence. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
+**Rationale.** Bears on MOD-4. The current compiler: `X.con` is loaded and `X/mod.con` is ignored without a diagnostic (with `X.con` returning 7 and `X/mod.con` 9, the program exits 7 on both consumers). MOD-4 says one module is loaded from either file. Options: (a) refuse the pair; (b) `X.con` takes precedence, as the current compiler does; (c) `X/mod.con` takes precedence. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
 
 <a id="OPEN-143"></a>
 ### OPEN-143. What a contract may read
@@ -1912,7 +1912,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on CON-2, CON-3 and CON-4. Current main: CON-3 says a contract reads parameters and `result`, CON-4 lets contracts read `ghost let` bindings, and CON-2's accepted loop invariant reads the local `i`; the checker accepts all three. Options: (a) per position: `requires` the parameters, `ensures` the parameters, `result` and ghost bindings, and a loop's `invariant` and `variant` every binding in scope, with CON-3 amended; (b) every position reads every binding in scope at that point; (c) CON-3 as written, with loop contracts and ghost reads refused. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
+**Rationale.** Bears on CON-2, CON-3 and CON-4. The current compiler: CON-3 says a contract reads parameters and `result`, CON-4 lets contracts read `ghost let` bindings, and CON-2's accepted loop invariant reads the local `i`; the checker accepts all three. Options: (a) per position: `requires` the parameters, `ensures` the parameters, `result` and ghost bindings, and a loop's `invariant` and `variant` every binding in scope, with CON-3 amended; (b) every position reads every binding in scope at that point; (c) CON-3 as written, with loop contracts and ghost reads refused. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
 
 <a id="OPEN-144"></a>
 ### OPEN-144. Postconditions and deferred calls
@@ -1928,7 +1928,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on CON-2 and STMT-11. Current main: `#[ensures(result == *r)]` on a function whose `defer inc(r)` runs after the result is computed is accepted and runs (contracts are erased at run time); the probe does not show which state the postcondition's proof obligation reads, no rule says, and STMT-11 computes the result before the deferred calls run. Options: (a) after every deferred call, the state the caller sees; (b) when the result is computed, before deferred calls; (c) refuse an `ensures` in a function with a deferred call that may write what the clause reads. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
+**Rationale.** Bears on CON-2 and STMT-11. The current compiler: `#[ensures(result == *r)]` on a function whose `defer inc(r)` runs after the result is computed is accepted and runs (contracts are erased at run time); the probe does not show which state the postcondition's proof obligation reads, no rule says, and STMT-11 computes the result before the deferred calls run. Options: (a) after every deferred call, the state the caller sees; (b) when the result is computed, before deferred calls; (c) refuse an `ensures` in a function with a deferred call that may write what the clause reads. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
 
 <a id="OPEN-145"></a>
 ### OPEN-145. How a contract names machine arithmetic
@@ -1944,7 +1944,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on CON-3 and ARITH-4. Current main: `#[ensures(result == wrapping_add(x, 1))]` is accepted and the program runs (contracts are erased at run time); what the proof pipeline makes of the named operation was not probed. CON-3 says a contract's integer arithmetic is mathematical unless it names a machine operation, and no rule or example names one. Options: (a) the named operations of ARITH-4 (`wrapping_add`, `saturating_add` and the rest) are the machine operations in a contract; (b) a contract-only spelling; (c) contracts have only mathematical arithmetic, and CON-3 drops the exception. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
+**Rationale.** Bears on CON-3 and ARITH-4. The current compiler: `#[ensures(result == wrapping_add(x, 1))]` is accepted and the program runs (contracts are erased at run time); what the proof pipeline makes of the named operation was not probed. CON-3 says a contract's integer arithmetic is mathematical unless it names a machine operation, and no rule or example names one. Options: (a) the named operations of ARITH-4 (`wrapping_add`, `saturating_add` and the rest) are the machine operations in a contract; (b) a contract-only spelling; (c) contracts have only mathematical arithmetic, and CON-3 drops the exception. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
 
 <a id="OPEN-146"></a>
 ### OPEN-146. The result type of a test function
@@ -1960,7 +1960,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on STMT-10 and STMT-7. Current main: `#[test] fn t() -> Int` is refused with E0319 (`#[test] function 't' must return i32`), and a test's result is its exit status under `concrete test`. Options: (a) keep `i32`; (b) `u8` or `Unit`, as `main` (STMT-7@3); (c) `Unit` only, a failing test aborting. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
+**Rationale.** Bears on STMT-10 and STMT-7. The current compiler: `#[test] fn t() -> Int` is refused with E0319 (`#[test] function 't' must return i32`), and a test's result is its exit status under `concrete test`. Options: (a) keep `i32`; (b) `u8` or `Unit`, as `main` (STMT-7@3); (c) `Unit` only, a failing test aborting. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
 
 <a id="OPEN-147"></a>
 ### OPEN-147. `repr(C, packed)` together
@@ -1976,7 +1976,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on FFI-4 and FFI-8. Current main: accepted: `#[repr(C, packed)] struct Copy P { a: u8, b: u32 }` has size 5, so packing overrides C alignment. FFI-4 refuses only `packed` with `align(N)`, and FFI-8 states C layout and packed layout separately. Options: (a) refuse the combination; (b) accept it as C field order with no padding and alignment 1, as main does, and FFI-8 says so. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
+**Rationale.** Bears on FFI-4 and FFI-8. The current compiler: accepted: `#[repr(C, packed)] struct Copy P { a: u8, b: u32 }` has size 5, so packing overrides C alignment. FFI-4 refuses only `packed` with `align(N)`, and FFI-8 states C layout and packed layout separately. Options: (a) refuse the combination; (b) accept it as C field order with no padding and alignment 1, as the current compiler does, and FFI-8 says so. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
 
 <a id="OPEN-148"></a>
 ### OPEN-148. Type parameters on a trait
@@ -1992,7 +1992,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on TRAIT-1, TRAIT-9 and SYN-1. Current main: `trait Tr<T> { fn get(&self, x: T) -> T; }` parses, but no bound or impl head can supply `T`, so `impl Tr for S { fn get(&self, x: u8) -> u8 ... }` is refused with E0582 and E0587 (`expected return type T, got u8`). OPEN-77 lists generic trait methods among the grammar's stale items; it covers only the productions, while this entry covers what the parameters mean and what binds them. Options: (a) refuse type parameters on a trait declaration; (b) allow them, with type arguments at bounds and impl heads (`impl Tr<u8> for S`). Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
+**Rationale.** Bears on TRAIT-1, TRAIT-9 and SYN-1. The current compiler: `trait Tr<T> { fn get(&self, x: T) -> T; }` parses, but no bound or impl head can supply `T`, so `impl Tr for S { fn get(&self, x: u8) -> u8 ... }` is refused with E0582 and E0587 (`expected return type T, got u8`). OPEN-77 lists generic trait methods among the grammar's stale items; it covers only the productions, while this entry covers what the parameters mean and what binds them. Options: (a) refuse type parameters on a trait declaration; (b) allow them, with type arguments at bounds and impl heads (`impl Tr<u8> for S`). Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
 
 <a id="OPEN-149"></a>
 ### OPEN-149. How `[e; N]` evaluates `e`
@@ -2008,7 +2008,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on STMT-4, OWN-15 and TYPE-7. Current main: `e` is evaluated once per element, in index order (`[bump(&mut n); 3]` gives `[1, 2, 3]` on both consumers), and whether a linear `e` is accepted was not shown (an array of a linear type that is never consumed is refused with E0208 either way). OWN-15 says only that an array literal moves each element in, and STMT-4 orders written elements. Options: (a) `e` is evaluated once and copied, so it must be Copy; (b) `e` is evaluated `N` times in index order, as main does; (c) `e` must be a constant expression. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
+**Rationale.** Bears on STMT-4, OWN-15 and TYPE-7. The current compiler: `e` is evaluated once per element, in index order (`[bump(&mut n); 3]` gives `[1, 2, 3]` on both consumers), and whether a linear `e` is accepted was not shown (an array of a linear type that is never consumed is refused with E0208 either way). OWN-15 says only that an array literal moves each element in, and STMT-4 orders written elements. Options: (a) `e` is evaluated once and copied, so it must be Copy; (b) `e` is evaluated `N` times in index order, as the current compiler does; (c) `e` must be a constant expression. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
 
 <a id="OPEN-150"></a>
 ### OPEN-150. Which text governs the grammar until it is resynchronized
@@ -2024,7 +2024,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on SYN-1 and OPEN-77. Current main: the parser accepts forms the EBNF does not derive (`import a.{f};`, `m::f()`, `f::<T>(x)`, value `if` and `match`, `pub` fields, bodyless declarations) and the EBNF keeps forms the entries removed (`E#V`, the C-style `for`, `break <expr>`); SYN-1 calls the EBNF the grammar, and the LL(1) checkers read it. Options: (a) the rule entries govern, and the EBNF is descriptive until the resync; (b) the EBNF governs, and an entry that disagrees is pending; (c) neither: each disagreement is decided one by one under OPEN-77. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
+**Rationale.** Bears on SYN-1 and OPEN-77. The current compiler: the parser accepts forms the EBNF does not derive (`import a.{f};`, `m::f()`, `f::<T>(x)`, value `if` and `match`, `pub` fields, bodyless declarations) and the EBNF keeps forms the entries removed (`E#V`, the C-style `for`, `break <expr>`); SYN-1 calls the EBNF the grammar, and the LL(1) checkers read it. Options: (a) the rule entries govern, and the EBNF is descriptive until the resync; (b) the EBNF governs, and an entry that disagrees is pending; (c) neither: each disagreement is decided one by one under OPEN-77. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
 
 ## Decided
 

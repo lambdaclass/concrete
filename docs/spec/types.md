@@ -381,10 +381,10 @@ fn main() with(Console) -> u8 {
 **Rationale.** There is no truthiness: an integer is not a condition. Until bug 192 was fixed, the
 statement forms of `if`, `while` and `for` let an integer through, and the binary ran it with C
 truthiness while `--interp` refused it. This entry's example found the bug.
-The counted loop of STMT-6@3 has no condition. Until bug 331 is fixed, main still parses the C-style
+The counted loop of STMT-6@3 has no condition. Until bug 331 is fixed, the current compiler still parses the C-style
 `for (init; cond; step)` that STMT-6@3 removes, and its `cond` must be `bool` like a `while` condition.
 
-**Codes by case** (probed on main). Check reports a non-`bool` `if` or `while` condition as E0223.
+**Codes by case** (probed against the current compiler). Check reports a non-`bool` `if` or `while` condition as E0223.
 CoreCheck reports `&&` or `||` on a non-`bool` as E0505 and `!` on a non-`bool` as E0508, which Check
 lets through, and refuses in Core, as the backstop of E0223, a non-`bool` `if` condition (E0541),
 `while` condition (E0540) and a comparison whose result is not `bool` (E0504).
@@ -429,7 +429,7 @@ type, which the language does not have. Version 1 admitted raw-pointer compariso
 and `p + k` in trusted or `Unsafe` code (bugs 134 and 140); OD26 removes both, pointer arithmetic
 becoming `ptr::offset` (TRUST-1).
 
-**Codes by case** (probed on main). Check refuses first, as E0228, two operands of a binary operator
+**Codes by case** (probed against the current compiler). Check refuses first, as E0228, two operands of a binary operator
 of different types, and as E0229 a comparison on a type that has none (`a < a` on a struct);
 CoreCheck's E0502 and E0503 refuse mismatched binary and comparison operands in Core as the
 backstop of E0228. Check lets these through and CoreCheck refuses them first: E0501, arithmetic on a
@@ -440,7 +440,7 @@ bitwise not on a non-integer (`~f` with `f: f64`).
 Version 2 records the owner's decision of 2026-10-29 (OD26), aligned with TRUST-1: arithmetic,
 shifts and comparisons take numbers only, and pointer offset, difference and ordering are
 `ptr::offset` and named functions. Whether "numbers only" also removes comparisons on `bool` and
-`char` is OPEN-42; main compares them today, and this entry does not decide it. Main still admits pointer arithmetic and comparison in trusted or
+`char` is OPEN-42; the current compiler compares them today, and this entry does not decide it. Main still admits pointer arithmetic and comparison in trusted or
 `Unsafe` code (bug 322).
 
 
@@ -704,7 +704,7 @@ fn main() -> u8 {
 through implicit conversions. A method of a type parameter comes only from its bounds, which is
 what lets a generic body be checked once (TYPE-2, PASS-1). Version 2 states the type-argument count E0322 already enforced (bug 221: an extra type
 argument was dropped silently). A body-less declaration (an `#[intrinsic]`) keeps no type-parameter
-list, so main still skips the count there (bug 333), pinned by the pending example.
+list, so the current compiler still skips the count there (bug 333), pinned by the pending example.
 
 ```con reject name=wrong-arity code=E0262 stage=check pair=right-arity
 fn add(a: Int, b: Int) -> Int {
@@ -1491,7 +1491,7 @@ must hold the callback's set, which a capability parameter names: the combinator
 callback carries, no more and no less. A handle is a struct with capability parameters (TYPE-15)
 whose fields are such function types, so `Sink<{}>` is not a `Sink<Console>` either (TYPE-4).
 Whether a function value converts to a type with a larger set (`fn(Int) -> Int` to
-`fn(Int) with(Console) -> Int`, or `with(File)` to `with(Std)`) is OPEN-93; main refuses it
+`fn(Int) with(Console) -> Int`, or `with(File)` to `with(Std)`) is OPEN-93; the current compiler refuses it
 (E0220). A combinator spelling that infers its set from its callbacks (`with(f)`) is OPEN-92.
 Main compares two sets after sorting them and keeps a repeated capability, so
 `fn(Int) with(Console, Console) -> Int` is not a `fn(Int) with(Console) -> Int` (E0220); whether it
@@ -1598,7 +1598,7 @@ fn main() with(Console, File) -> u8 {
 handle types (TYPE-15) and for the C layout of a struct passed across FFI. Whether two capability
 instantiations of one generic function share generated code is an implementation choice, not a
 language rule; whether two instantiations that differ only in a function type's capability set are
-distinct specializations with distinct symbols is OPEN-109 (main makes them one).
+distinct specializations with distinct symbols is OPEN-109 (the current compiler makes them one).
 
 ```con accept name=same-layout exit=42
 mod m {
@@ -1683,7 +1683,7 @@ mod m {
 **Rationale.** A type written `Int` and one written `i64` are the same type, so either may flow into
 a position that expects the other without a conversion (TYPE-4). The parser maps each spelling to
 one type. Whether `Float32` is a spelling of `f32` is OPEN-102: the parser does not map it (nor
-`Char`), so on main `Float32` in a type position is a different type from `f32`.
+`Char`), so in the current compiler `Float32` in a type position is a different type from `f32`.
 
 ```con accept name=two-spellings exit=42
 fn wide(x: Uint) -> u64 {
@@ -1939,7 +1939,7 @@ fn main() -> u8 {
 **Rationale.** Builtins that can fail, such as `vec_pop`, and std's error conventions return these
 two types, so their shape is part of the language rather than of a library module. Both are declared `Copy`, so an instantiation is Copy exactly when its type
 arguments are (TYPE-14). How a user declaration named `Option` or `Result` resolves against them is
-OPEN-43: main withholds the builtin `Result` from a module that declares or imports its own, and
+OPEN-43: the current compiler withholds the builtin `Result` from a module that declares or imports its own, and
 never withholds `Option`. Their layout is that of any enum (FFI-7).
 
 ```con accept name=option-and-result exit=42
@@ -1977,7 +1977,7 @@ than its own inner type, one wrapping step at a time, is refused with ARITH-5's 
 turn a validated wrapper into an unrelated type or build one from one (bug fixed 2026-04-25,
 `error_newtype_cast_to_unrelated.con`). Outside the declaring module, `N(v)` is refused (TYPE-11),
 while `n.0` and `unwrap(n)` are refused only once R-0500 lands; whether `v as N` and `n as T` are
-refused there too is OPEN-123, and main accepts both. Whether newtypes stay is OPEN-54. Main also
+refused there too is OPEN-123, and the current compiler accepts both. Whether newtypes stay is OPEN-54. Main also
 has an intrinsic `unwrap(n)`: Check gives it type `T`, but Core keeps it typed `N`, so `unwrap(k) as
 Int` is refused (E0553) and `j.0 + unwrap(k)` stops natively at the SSA verifier (E0715), a defect
 found while absorbing [VALIDATED_WRAPPERS.md](../stdlib/VALIDATED_WRAPPERS.md), which calls it a

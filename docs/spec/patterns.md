@@ -712,7 +712,7 @@ fn main() -> u8 {
 **Rationale.** Decided by the owner on 2026-10-29 (OD18). Whether the refusal applies to the fallback
 arm the parser adds for `if let`, `let ... else` and `while let` is OPEN-40, and whether a catch-all
 after ranges that span the whole type is unreachable is OPEN-41. Source order is the order a reader sees,
-so the arm that runs is the first one written that matches. This changes main: CoreCanonicalize
+so the arm that runs is the first one written that matches. This changes the current compiler: CoreCanonicalize
 moves unguarded catch-all arms after the others (bug 213's provisional repair), so a specific arm
 written after `_` is reached and the program below returns 42 on both consumers; under this rule the
 catch-all wins and the later arm is unreachable, a refusal. Repeating a variant an earlier
@@ -817,7 +817,7 @@ fn main() -> u8 {
 **Rationale.** One `mut` covers the pattern, as one `let` does; a binder cannot be marked on its own.
 What a mutable binding allows is OWN-10. The parser does not keep the `mut`: the checker declares
 every binder of a destructuring `let` mutable (a struct pattern in `checkStmt`, a variant pattern in
-the `match` arm `desugarStmts` makes of it), so on main the binders of a `let` without `mut` are
+the `match` arm `desugarStmts` makes of it), so in the current compiler the binders of a `let` without `mut` are
 assignable too. That is bug 336, which violates OWN-10@2; the examples here show that `let mut`
 binders are assignable, not that the others are not.
 
