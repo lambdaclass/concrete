@@ -727,7 +727,7 @@ SYN-1/hash-variant	live	-
 SYN-1/colon-variant	live	-
 SYN-1/lowercase-struct-literal	live	-
 SYN-1/uppercase-struct-literal	live	-
-SYN-6@1	live	a90ee61dc74d455d47fbce966bb52cc9
+SYN-6@1	live	940df99b82bca6cc1c5c55d0eced1de0
 SYN-6/token-forms	live	-
 SYN-7@1	live	30dbcb928c55a772d1bb28f7023ac79f
 SYN-7/nested-type-arguments	live	-

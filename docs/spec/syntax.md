@@ -517,7 +517,7 @@ fn main() -> u8 {
 <a id="SYN-6"></a>
 ### SYN-6. Tokens
 
-**SYN-6@1.** A token is an identifier (a letter or `_`, then letters, digits and `_`), an integer literal in decimal or with a `0x`, `0b` or `0o` prefix, a float literal written as digits, `.` and digits, a string literal, a char literal, a label (`'` then an identifier), a keyword, or an operator or punctuation mark, and `//` begins a comment that ends at the end of its line.
+**SYN-6@1.** A token is an identifier (a letter or `_`, then letters, digits and `_`), an integer literal in decimal or with a `0x`, `0b` or `0o` prefix, a float literal written as digits, `.` and digits, a string literal, a char literal (one character, or one of the escapes `\n`, `\t`, `\r`, `\0`, `\\` and `\'`, between single quotes), a label (`'` then an identifier), a keyword, or an operator or punctuation mark, and `//` begins a comment that ends at the end of its line.
 
 - Kind: guarantee
 - Uses: none
@@ -531,8 +531,9 @@ fn main() -> u8 {
 **Rationale.** These are the grammar's terminal classes `IDENT`, `INT`, `FLOAT`, `STRING`, `CHAR`
 and `LABEL`. So a float has no exponent and no leading or trailing `.`, a literal has no suffix
 (ARITH-2), and there are no block comments and no byte-string literals (`b"..."`); each of these is
-a parse error (SYN-1). On main the escapes are `\n`, `\t`, `\r`, `\0` and `\\`, with `\"` in a
-string literal and `\'` in a char literal; any other `\` sequence is a parse error.
+a parse error (SYN-1). The escapes are `\n`, `\t`, `\r`, `\0` and `\\`, with `\"` in a string literal (SYN-5)
+and `\'` in a char literal; any other `\` sequence is a parse error. Which byte a char literal holds
+when its character is not ASCII is OPEN-137.
 
 ```con accept name=token-forms exit=42
 // a line comment

@@ -4,14 +4,16 @@ A program is a tree of modules (`mod name { ... }`, or one file per module in a 
 declaration is private to its module unless it is declared `pub`, and another module reaches it
 only by importing it (`import a.{f, T as U};`). Names resolve once, before checking, to exactly
 one declaration. This chapter covers name resolution (MOD-1), visibility (MOD-2), one binding
-per name in a module (MOD-3) and loading module files (MOD-4). Representation privacy (which fields and constructors another module
+per name in a module (MOD-3), loading module files (MOD-4), the privacy of `std.libc` (MOD-6),
+generated interfaces (MOD-7, pending), calls the compiler generates (MOD-8) and what an import binds
+(MOD-9). There is no MOD-5: the number was never allocated, and IDs are not renumbered
+([MAINTAINERS.md](MAINTAINERS.md) §2.1). Representation privacy (which fields and constructors another module
 may use) is TYPE-11, and trait coherence is the traits chapter.
 
 Two decisions are recorded without an entry yet. SCOPE-4, whether a local may reuse the name of a
 top-level function, an import alias or an intrinsic, is still open: today it may. TIGHTENING_DECISIONS
 D9 (one source file per module with `pub` as its interface, and interface artifacts the compiler
-generates and checks) is decided and scheduled late; it enters as an entry with its owner when that
-work starts. The design record is
+generates and checks) is decided and scheduled late; it is MOD-7, pending R-0556. The design record is
 [VISIBILITY_AND_MODULE_HYGIENE.md](../archive/design-records/VISIBILITY_AND_MODULE_HYGIENE.md).
 
 ## Rules

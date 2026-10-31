@@ -946,7 +946,7 @@ fn main() -> u8 {
 <a id="SYN-6"></a>
 #### SYN-6. Tokens
 
-**SYN-6@1.** A token is an identifier (a letter or `_`, then letters, digits and `_`), an integer literal in decimal or with a `0x`, `0b` or `0o` prefix, a float literal written as digits, `.` and digits, a string literal, a char literal, a label (`'` then an identifier), a keyword, or an operator or punctuation mark, and `//` begins a comment that ends at the end of its line.
+**SYN-6@1.** A token is an identifier (a letter or `_`, then letters, digits and `_`), an integer literal in decimal or with a `0x`, `0b` or `0o` prefix, a float literal written as digits, `.` and digits, a string literal, a char literal (one character, or one of the escapes `\n`, `\t`, `\r`, `\0`, `\\` and `\'`, between single quotes), a label (`'` then an identifier), a keyword, or an operator or punctuation mark, and `//` begins a comment that ends at the end of its line.
 
 - Kind: guarantee
 - Uses: none
@@ -960,8 +960,9 @@ fn main() -> u8 {
 **Rationale.** These are the grammar's terminal classes `IDENT`, `INT`, `FLOAT`, `STRING`, `CHAR`
 and `LABEL`. So a float has no exponent and no leading or trailing `.`, a literal has no suffix
 (ARITH-2), and there are no block comments and no byte-string literals (`b"..."`); each of these is
-a parse error (SYN-1). On main the escapes are `\n`, `\t`, `\r`, `\0` and `\\`, with `\"` in a
-string literal and `\'` in a char literal; any other `\` sequence is a parse error.
+a parse error (SYN-1). The escapes are `\n`, `\t`, `\r`, `\0` and `\\`, with `\"` in a string literal (SYN-5)
+and `\'` in a char literal; any other `\` sequence is a parse error. Which byte a char literal holds
+when its character is not ASCII is OPEN-137.
 
 ```con accept name=token-forms exit=42
 // a line comment
@@ -1153,14 +1154,16 @@ A program is a tree of modules (`mod name { ... }`, or one file per module in a 
 declaration is private to its module unless it is declared `pub`, and another module reaches it
 only by importing it (`import a.{f, T as U};`). Names resolve once, before checking, to exactly
 one declaration. This chapter covers name resolution (MOD-1), visibility (MOD-2), one binding
-per name in a module (MOD-3) and loading module files (MOD-4). Representation privacy (which fields and constructors another module
+per name in a module (MOD-3), loading module files (MOD-4), the privacy of `std.libc` (MOD-6),
+generated interfaces (MOD-7, pending), calls the compiler generates (MOD-8) and what an import binds
+(MOD-9). There is no MOD-5: the number was never allocated, and IDs are not renumbered
+([MAINTAINERS.md](MAINTAINERS.md) §2.1). Representation privacy (which fields and constructors another module
 may use) is TYPE-11, and trait coherence is the traits chapter.
 
 Two decisions are recorded without an entry yet. SCOPE-4, whether a local may reuse the name of a
 top-level function, an import alias or an intrinsic, is still open: today it may. TIGHTENING_DECISIONS
 D9 (one source file per module with `pub` as its interface, and interface artifacts the compiler
-generates and checks) is decided and scheduled late; it enters as an entry with its owner when that
-work starts. The design record is
+generates and checks) is decided and scheduled late; it is MOD-7, pending R-0556. The design record is
 [VISIBILITY_AND_MODULE_HYGIENE.md](../archive/design-records/VISIBILITY_AND_MODULE_HYGIENE.md).
 
 ### Rules
@@ -15130,7 +15133,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on ARITH-2, TYPE-4 and TYPE-6. Current main: an unconstrained integer literal is typed `Int` and a float literal `Float64` (bug 327); with `x: u8`, the literals in `x + 1`, `x < 250`, `x & 15` and the shift count of `x >> 3` all take `u8` (a probe returning `b + s` exits 33 on both consumers), and `300 as Int` is accepted, whether through `as` or the `Int` default the probe does not show. ARITH-2 refuses a literal with no expected type but does not list the positions that supply one. Options: (a) declared positions (an annotated binding, a parameter, a return, a field) and the other operand of a binary operator, a shift count included, as the probe shows main doing; (b) declared positions only, so a literal beside a typed operand needs a typed binding; (c) option (a), plus the target type of an `as` for its literal operand. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
+**Rationale.** Bears on ARITH-2, TYPE-4 and TYPE-6. Current main: an unconstrained integer literal is typed `Int` and a float literal `Float64` (bug 327); with `x: u8`, a literal beside `x` takes `u8` in arithmetic, comparison, bitwise and shift-count position alike: `x + 300`, `x < 300`, `x & 300` and `x >> 300` are each refused with E0227 (`integer literal 300 is out of range for type 'u8'`), and `300 as Int` is accepted, whether through `as` or the `Int` default the probe does not show. ARITH-2 refuses a literal with no expected type but does not list the positions that supply one. Options: (a) declared positions (an annotated binding, a parameter, a return, a field) and the other operand of a binary operator, a shift count included, as the probe shows main doing; (b) declared positions only, so a literal beside a typed operand needs a typed binding; (c) option (a), plus the target type of an `as` for its literal operand. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
 
 <a id="OPEN-139"></a>
 #### OPEN-139. A qualified call to a function that is not imported
