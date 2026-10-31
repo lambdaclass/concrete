@@ -141,7 +141,7 @@ them); they are not separate entries here
 | 115 | [OPEN-149](#OPEN-149) | the spec quality audit of 2026-10-30 | How `[e; N]` evaluates `e` | not checked | none given | not assessed | — |
 | 116 | [OPEN-150](#OPEN-150) | the spec quality audit of 2026-10-30 | Which text governs the grammar until it is resynchronized | not checked | none given | not assessed | — |
 | 117 | [OPEN-151](#OPEN-151) | the absorption of SYNTAX_FREEZE_REVIEW §1.1 (2026-10-31) | Module paths of more than one level | not checked | none given | not assessed | — |
-| 118 | [OPEN-152](#OPEN-152) | the absorption of SYNTAX_FREEZE_REVIEW §1.1 (2026-10-31) | Whether a path's first letter decides between a type and a module | not checked | none given | not assessed | — |
+| 118 | [OPEN-152](#OPEN-152) | the absorption of SYNTAX_FREEZE_REVIEW §1.1 (2026-10-31) | Whether a path's first letter decides its syntactic form | not checked | none given | not assessed | — |
 
 <a id="OPEN-33"></a>
 ### OPEN-33. Inline submodules under one file per module
@@ -2042,12 +2042,12 @@ OD51; the owner's answer is recorded there. The current compiler has no counted 
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on SYN-10, MOD-4 and OPEN-139. The current compiler: one level only: `a::b::f()`, with `f` in `mod b` inside `mod a`, is a parse error on both consumers (E0001, `expected <, got ident(f)`), because after `a::b` the parser accepts only `::<` (explicit type arguments). SYNTAX_FREEZE_REVIEW §1.1 gives `std::fs::read_to_string` as an example of module qualification, which this parser does not accept. Options: (a) one level, as in the current compiler, and SYN-10 says so; (b) any depth, every segment before the last naming a module. Austral: not checked. Pick: none given (raised while absorbing SYNTAX_FREEZE_REVIEW §1.1, 2026-10-31).
+**Rationale.** Bears on SYN-10, MOD-4 and OPEN-139. The current compiler: the parser's lowercase module-path branch accepts one qualification pair: `a::b::f()`, with `f` in `mod b` inside `mod a`, is a parse error on both consumers (E0001, `expected <, got ident(f)`), because after `a::b` it accepts only `::<` (explicit type arguments). SYNTAX_FREEZE_REVIEW §1.1 gives `std::fs::read_to_string` as an example of module qualification, which this parser does not accept. Options: (a) one qualification pair, as in the current compiler, and SYN-10 says so; (b) any depth, every segment before the last naming a module (a repetition, which stays LL(1)). Austral: not checked. Pick: none given (raised while absorbing SYNTAX_FREEZE_REVIEW §1.1, 2026-10-31).
 
 <a id="OPEN-152"></a>
-### OPEN-152. Whether a path's first letter decides between a type and a module
+### OPEN-152. Whether a path's first letter decides its syntactic form
 
-**OPEN-152@1.** Whether the case of the first letter of a path's first segment decides whether `X::y` names a member of a type or of a module is an open owner decision (OD152).
+**OPEN-152@1.** Whether the first letter of a path's first segment decides the syntactic form of `X::y`, or one path form leaves to name resolution whether `X` is a type or a module, is an open owner decision (OD152).
 
 - Kind: open
 - Uses: none
@@ -2058,7 +2058,7 @@ OD51; the owner's answer is recorded there. The current compiler has no counted 
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on SYN-10, SYN-1 and MOD-1. The current compiler: the case decides: `X::y` with an uppercase `X` is a type member (enum variant or associated function) and with a lowercase `X` a module member, resolved through the flattened name `X_y` (bug 343); a module named with an uppercase letter is reached through the associated-function form (`M::f()` on `mod M` builds and runs on both consumers). SYNTAX_FREEZE_REVIEW §1.1 gives the case rule as what keeps the parse LL(1). Options: (a) the case decides, as in the current compiler, and SYN-10 states it; (b) the parser reads `X::y` as one path, which is also LL(1), and name resolution decides by what `X` denotes. Austral: not checked. Pick: none given (raised while absorbing SYNTAX_FREEZE_REVIEW §1.1, 2026-10-31).
+**Rationale.** Bears on SYN-10, SYN-1 and MOD-1. The current compiler: the parser chooses by the first letter of `X`: an uppercase `X` gives an associated-function call or an enum literal, and a lowercase `X` the flattened name `X_y`, which name resolution looks up as one identifier (bug 343); a module named with an uppercase letter goes through the associated-function form, and `M::f()` on `mod M` builds and runs on both consumers. SYNTAX_FREEZE_REVIEW §1.1 presents the case split as how the parse stays LL(1). Options: (a) the first letter decides the syntactic form, as in the current compiler, and SYN-10 states it; (b) the parser reads `X::y` as one path form, which is also LL(1), and name resolution decides whether `X` is a type or a module. Austral: not checked. Pick: none given (raised while absorbing SYNTAX_FREEZE_REVIEW §1.1, 2026-10-31).
 
 ## Decided
 

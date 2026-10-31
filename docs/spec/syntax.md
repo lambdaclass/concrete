@@ -687,18 +687,18 @@ fn main() -> u8 {
 named through its enum: a bare `Ok(x)` is an unknown function (E0101) and `Option.None` an unknown
 variable (E0100), both under MOD-1.
 
-The current compiler reads a path by the qualification rule of SYNTAX_FREEZE_REVIEW §1.1. After
-`X::`, a `<` begins explicit type arguments. After `X::y`, when `X` begins with an uppercase letter,
-the path names a member of a type: an enum variant (`E::V`, `E::V { ... }`) or an associated
-function (`T::f(...)`). When `X` begins with a lowercase letter, it names a member of the module
-`X`. The case of the first letter decides, so the parser needs one token of lookahead. A module
-whose name begins with an uppercase letter is read as a type: `M::f()` on `mod M { pub fn f() ... }`
-is parsed as an associated-function call, which the current compiler resolves to `M.f` (it builds
-and runs on both consumers). A module path has one level: `a::b::f()` is a parse error on both
-consumers (E0001, `expected <`). A lowercase qualified call is resolved through the flattened name
-`m_f`, which a declaration of that spelling captures (bug 343). Whether a qualified call needs an
-import is OPEN-139, whether a module path may have more than one level is OPEN-151, and whether the
-case of the first segment decides between a type and a module is OPEN-152.
+The current compiler's parser follows the qualification rule of SYNTAX_FREEZE_REVIEW §1.1 only in
+part. After `X::`, a `<` begins explicit type arguments. When an identifier `y` follows, the branch is
+chosen by the first letter of `X`, the name already read: an uppercase `X` makes `X::y` an
+associated-function call (`X::y(...)`) or an enum literal (`X::y`, `X::y { ... }`), and a lowercase
+`X` makes it a call of, or a reference to, the flattened name `X_y`, after which only `::<` may
+follow. Name resolution then looks the result up: `M::f()` on `mod M { pub fn f() -> u8 ... }`
+builds and runs on both consumers, and a declaration spelled `m_f` captures `m::f()` (bug 343). The
+lowercase branch accepts one qualification pair, so `a::b::f()` is a parse error on both consumers
+(E0001, `expected <`), although §1.1's example `std::fs::read_to_string` has two. Whether a qualified
+call needs an import is OPEN-139, whether a module path may have more than one level is OPEN-151, and
+whether the first letter should decide the syntactic form, or one path form should leave the choice
+to name resolution, is OPEN-152; the options of both keep the grammar LL(1).
 
 ```con accept name=separators exit=42
 mod m {
