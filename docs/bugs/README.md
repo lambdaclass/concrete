@@ -508,6 +508,7 @@ the report counts those bugs as ambiguous.
 - [341_two_modules_that_each_declare_main_pass_check_an.md](341_two_modules_that_each_declare_main_pass_check_an.md) — two modules that each declare main pass Check and the native build fails in clang on a duplicate @__concrete_argc
 - [342_the_diagnostic_code_completeness_gate_scans_a_fi.md](342_the_diagnostic_code_completeness_gate_scans_a_fi.md) — the diagnostic-code completeness gate scans a fixed file list, so eleven emitted codes (E0900 among them) have no ledger row and no spec classification
 - [344_the_interpreter_refuses_the_abort_intrinsic_as_a.md](344_the_interpreter_refuses_the_abort_intrinsic_as_a.md) — The interpreter refuses the abort() intrinsic as an undefined function while the binary aborts
+- [345_a_newtype_unwrap_bound_to_a_let_of_the_inner_typ.md](345_a_newtype_unwrap_bound_to_a_let_of_the_inner_typ.md) — a newtype unwrap bound to a let of the inner type passes Check and the native build stops at the SSA verifier
 
 <!-- END GENERATED: bug list -->
 

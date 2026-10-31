@@ -1,0 +1,13 @@
+// Bug 345 (PASS-12@1): `unwrap(m)` bound to `let x: Int` passes Check; the native build stops at the
+// SSA verifier (E0715: a binop over `Id` and `Int`) while --interp prints 42.
+// Expected: compiled (exit 42), or refused at Check if `unwrap` is removed; never an SSA verifier failure.
+newtype Id = Int;
+
+fn main() -> u8 {
+    let m: Id = Id(42);
+    let x: Int = unwrap(m);
+    if x == 42 {
+        return 42;
+    }
+    return 1;
+}

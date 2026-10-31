@@ -157,7 +157,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 | 5. Borrow tracking by syntax instead of normalized places | 1 | 0 | 216 |
 | 7. Semantics implemented several times (interpreter, proof model, folder, backend disagree) | 1 | 0 | 344 |
 | 11. Absence read as a fact (fail-open defaults) | 3 | 1 | 049, 058, 342 |
-| 12. One fact kept in two places | 1 | 0 | 064 |
+| 12. One fact kept in two places | 2 | 0 | 064, 345 |
 | 13. Documented rules with no enforcing site | 14 | 12 | 318, 319, 320, 321, 322, 323, 324, 325, 326, 327, 328, 331, 332, 333 |
 | 17. Pass state in association lists and per-query recomputation (superlinear compile time) | 1 | 0 | 270 |
 | 18. Pipeline artifacts not bound to their payload | 1 | 1 | 340 |
