@@ -392,6 +392,6 @@ checker refusal is a Check bug here.
 | [333](333_an_extra_type_argument_to_a_body_less_generic_de.md) | Lower | Lower | record | — | violates TYPE-9@2 |
 | [341](341_two_modules_that_each_declare_main_pass_check_an.md) | — | — | unfixed | — | violates PASS-12@1 |
 | [342](342_the_diagnostic_code_completeness_gate_scans_a_fi.md) | — | — | unfixed | — | outside (tooling) |
-| [343](343_a_qualified_call_m_f_runs_a_parent_function_name.md) | Resolve | Resolve | override | — | violates MOD-1@1 |
+| [343](343_a_qualified_call_m_f_runs_a_parent_function_name.md) | Resolve | Resolve | override | Parse | violates MOD-1@1 |
 
 <!-- END GENERATED: bug areas -->
