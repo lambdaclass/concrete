@@ -12,7 +12,7 @@ checker refusal is a Check bug here.
 
 <!-- BEGIN GENERATED: bug areas (scripts/gen/bug_ledger.py; derived from the records, docs/bugs/area_map.tsv and git history, never edited here) -->
 
-303 records: 178 placed by their own fix commits, 37 by the files their record names in commits shared with other bugs, 37 by commits shared with other bugs, 13 by the commit that filed or closed the record, 24 by an `area:` override; 14 open bugs are not fixed yet and 0 fixed bugs have no commit the history can place.
+304 records: 178 placed by their own fix commits, 37 by the files their record names in commits shared with other bugs, 37 by commits shared with other bugs, 13 by the commit that filed or closed the record, 24 by an `area:` override; 15 open bugs are not fixed yet and 0 fixed bugs have no commit the history can place.
 
 ### By stage
 
@@ -393,5 +393,6 @@ checker refusal is a Check bug here.
 | [341](341_two_modules_that_each_declare_main_pass_check_an.md) | — | — | unfixed | — | violates PASS-12@1 |
 | [342](342_the_diagnostic_code_completeness_gate_scans_a_fi.md) | — | — | unfixed | — | outside (tooling) |
 | [343](343_a_qualified_call_m_f_runs_a_parent_function_name.md) | Resolve | Resolve | override | Parse | violates MOD-1@1 |
+| [344](344_the_interpreter_refuses_the_abort_intrinsic_as_a.md) | — | — | unfixed | — | violates PASS-13@1 |
 
 <!-- END GENERATED: bug areas -->
