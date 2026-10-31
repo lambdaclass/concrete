@@ -628,7 +628,9 @@ risky() { ... }`), propagating it by matching and returning the error arm, bindi
 risky();`, after which OWN-2 requires `r` be used) and a trailing value expression (the block's
 value, not a discard) never trip E0286. The deliberate acknowledgement is an exhaustive match that
 ignores only Copy payloads (`Option::Some { _ } => {}`): a catch-all `_` arm over the non-Copy value
-is E0288 and `let _ = e;` is E0289 (OWN-5). The future error-set report (`--report error-sets`,
+is E0288 and `let _ = e;` is E0289 (OWN-5). The current compiler also accepts `discard(e)` over a Copy `Result` or `Option`: with `get() -> Option<i32>`, `discard(get());` builds and runs on both consumers. Whether `discard` may drop a `Result` or an `Option` is OPEN-62.
+
+This entry and OWN-7 overlap: a `Result` or `Option` statement expression is also a non-`Unit` result under OWN-7. This entry is that case, and Check reports it as E0286 rather than OWN-7's E0294, whether or not the expression is a call (`get();` above is E0286). They stay two entries, with two codes, statuses and sets of examples; merging them would change which rule and code a diagnostic names. The future error-set report (`--report error-sets`,
 ROADMAP old Phase 6 #14) must keep these diagnostics firing. Site: `mustUseEnumName?` and the
 `Stmt.expr` discard check of `checkStmt` (`CheckError.discardedMustUse`); fixtures in
 `tests/programs/ignored_result/`, gate `scripts/tests/check_ignored_result.sh`.
@@ -692,7 +694,7 @@ fn main() -> u8 {
 - Evidence: tested
 
 **Rationale.** `2 + 3;` or `f();` with a result is either a dead computation or a deliberate
-discard, and the reader cannot tell which; `discard(e)` says it.
+discard, and the reader cannot tell which; `discard(e)` says it. A discarded `Result` or `Option` is OWN-6's case, reported as E0286 rather than E0294.
 
 The owner decided on 2026-10-29 (OD29) that every unused non-Unit result needs `discard(e)`, with no syntactic purity heuristic. The current compiler still applies that heuristic: it refuses only a syntactically pure non-Unit Copy value (E0294), skipping calls and operations that can trap (`/`, `%`), and drops a call's result silently (bug 325). Its site is `exprPureDiscardable`, a local structural purity predicate in the `Stmt.expr` check (`CheckError.discardedPureValue`).
 

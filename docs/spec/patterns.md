@@ -414,6 +414,8 @@ skipped the rest of the function, or reached the backend, which failed in `llvm-
 `else` arm would discard the scrutinee, so `let ... else` there is refused (OWN-5); write a
 `match`.
 
+Three entries cover the destructuring `let`. This one states what it must write: every field, an `else` where the pattern may fail, and an `else` that diverges. PAT-10 states what an enum destructuring `let` means, and PAT-8 where one may appear. The `else` requirement is checked through PAT-10's desugaring: an enum `let` with no `else` over a pattern that may fail becomes a one-arm `match` and is refused as non-exhaustive, E0530 at core-check under PAT-2 (`let E::A { v } = e;` with a variant `B` left out); E0252 and E0308 are this entry's own codes. They stay separate entries because their kinds differ (PAT-10 is a guarantee, PAT-8 and this entry are refusals) and PAT-8 retires with the C-style `for` (OD47).
+
 The owner decided on 2026-10-29 (OD25) that a struct `let` names every field, a
 Copy struct included. The current compiler still lets a pattern over a Copy struct omit fields (bug 321).
 
@@ -640,8 +642,7 @@ fn main() -> u8 {
 - Evidence: tested
 
 **Rationale.** A `let` over an enum variant is lowered to a `match` over the rest of its block
-(PAT-10); a `for` header has no block of its own to become that match, so the form is refused
-rather than skipped. A struct destructuring needs no match (it becomes field reads) and is
+(PAT-10); a `for` header has no block of its own to become that match, so the form is refused rather than skipped. PAT-5 states what a destructuring `let` must write wherever it appears. A struct destructuring needs no match (it becomes field reads) and is
 accepted there. Destructure the enum before the loop. OD47 removes the C-style `for` and its header (bug 331), and with it the form this entry
 refuses; the entry retires when that lands.
 
