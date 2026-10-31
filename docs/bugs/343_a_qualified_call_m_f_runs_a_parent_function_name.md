@@ -60,7 +60,7 @@ another module, a nested module, a nested parent function, a builtin) are E0299;
 of an unqualified flat spelling reaching a function, top level and nested, are E0101; and
 `regress_343_qualified_paths.con` (one-level paths to a top-level module and a nested child, a path
 inside a nested module, a path as a function value, a parent function whose name merely starts with a
-module name) exits 42 natively and under `--interp` (the r343 block checks they agree). The
+module name, two top-level modules defining one function name) exits 42 natively and under `--interp` (the r343 block checks they agree). The
 reproducer left the open-bug leg of `check_example_outputs.sh`.
 
 The refusal is containment, not the semantics MOD-1 gives these programs (`m::f()` should call `m.f`);
