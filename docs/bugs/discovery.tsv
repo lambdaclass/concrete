@@ -126,3 +126,4 @@ date	kind	probe	effort	bugs	silent
 2026-10-29	spec	OD47 (decided 2026-10-29) check: the three C-style for forms, the counted loop and from/until as names, native against --interp, on main ae896787 (wip/spec-s7)	5 probes	331	-
 2026-10-31	review	spec quality audit of 2026-10-30 (Codex, Grok): hand probes of the open questions it raised, native against --interp, on main 71e3e804	16 probes	341	-
 2026-10-31	review	spec quality audit of 2026-10-30 follow-up: why MEM-6 cannot name E0900; a whole-tree scan of emitted codes against --report diagnostic-codes on main 71e3e804	1 probes	342	342
+2026-10-31	spec	spec audit 2026-10-31: probes of the SYNTAX_FREEZE_REVIEW §1.1 qualification rule (qualified paths by base-name case, nested paths, flattened names), native against --interp, on fb8946c6c	6 probes	343	343

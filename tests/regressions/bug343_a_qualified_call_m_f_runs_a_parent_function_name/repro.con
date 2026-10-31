@@ -1,0 +1,17 @@
+// Bug 343 (MOD-1@1): `m::f()` is lowered to the flat name `m_f`, so it runs the parent's own
+// `m_f` (exit 7) instead of `m.f` (42), on both consumers and with no diagnostic. The other
+// direction: with no top-level `m_f`, an undeclared `m_f()` reaches `m.f`.
+// Expected: exit 42 (or a refusal, if OPEN-139 requires an import for a qualified call); never 7.
+mod m {
+    pub fn f() -> u8 {
+        return 42;
+    }
+}
+
+fn m_f() -> u8 {
+    return 7;
+}
+
+fn main() -> u8 {
+    return m::f();
+}
