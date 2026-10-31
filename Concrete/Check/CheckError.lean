@@ -658,8 +658,8 @@ inductive CheckError where
   -- only a bare `let r = &s` froze `s`. The aggregate is now not expressible.
   | refStoredInAggregate (desc : String) (tyName : String)
   -- Bug 111: the entry wrapper calls `main` with no arguments, so a parameter on
-  -- `main` read an undefined register. The entry point takes no parameters, and its
-  -- result is `u8` or `Unit` (STMT-7@3, OD24); arguments come from `std.args`.
+  -- `main` read an undefined register. The entry point takes no parameters (STMT-7@3);
+  -- arguments come from `std.args`. Its decided result type (OD24) is bug 320's, not this check's.
   | mainHasParams (count : Nat)
   -- Slices 7-9: Module-level validation (Copy/Destroy, repr, FFI, traits) moved to CoreCheck
 
@@ -818,7 +818,7 @@ def CheckError.hint : CheckError → Option String
   | .shadowsLiveLinear name => some s!"consume '{name}' before re-binding the name, or use a different name"
   | .refStoredInAggregate _ _ => some "pass the reference down as a function argument, store an owned value or a raw pointer (trusted), or use a scoped callback (docs/spec/references.md)"
   | .guardMovesLinear name => some s!"borrow '{name}' in the guard (`&{name}`), or move it inside the arm body"
-  | .mainHasParams _ => some "read command-line arguments through `std.args` (`import std.args.{count, get};`, which need `with(Env)`) and declare `main` with no parameters, returning `u8` or `Unit` (STMT-7)"
+  | .mainHasParams _ => some "read command-line arguments through `std.args` (`import std.args.{count, get};`, which need `with(Env)`) and declare `main` with no parameters"
   | .conflictingCallBorrows _ _ => some "pass one borrow, or restructure so the exclusive access happens in its own statement"
   | .variableUsedAfterMove _ => some "consider cloning or restructuring to avoid the move"
   | .linearVariableNeverConsumed _ => some "pass it to a function, return it, or use destroy()"
