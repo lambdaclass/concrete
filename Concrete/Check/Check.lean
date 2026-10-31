@@ -133,7 +133,7 @@ def recordRefProvenance (r : LocalRef) (ty : Ty) (value : Expr) (span : Option S
       | none => none
     let curPath := ((← getEnv).vars.lookup r).map (fun i => (i.borrowedPath, i.borrowedExact))
     if reassign && (newSrc != current || (newSrc.isSome && curPath != some (path, exact))) then
-      throwCheck (.untraceablePlace subject "a reassignment may not re-point a reference at different storage (provenance is not joined across branches); use a new binding") span (rule := some "REF-6@1")
+      throwCheck (.untraceablePlace subject "a reassignment may not re-point a reference at different storage (provenance is not joined across branches); use a new binding") span (rule := some "REF-6@2")
     let parent := match parent? with | some q => if q != r then some q else none | none => none
     -- this binding only (binding identity, bug 094; R-0492)
     modify fun env =>

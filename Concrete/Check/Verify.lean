@@ -716,7 +716,7 @@ partial def verifyNoRefBindingsPostMono : List CModule → Diagnostics
            span := fn.declSpan
            hint := some "references are second-class: a type parameter instantiated to a reference may not be bound by `let` or assigned (docs/spec/references.md#REF-6)"
            code := code
-           evidence := [("rule", "REF-6@1"), ("spec", ruleSpecRef "REF-6@1")]
+           evidence := [("rule", "REF-6@2"), ("spec", ruleSpecRef "REF-6@2")]
            nextAction := some "instantiate the generic at a value type, or restructure the generic so it passes its `T` argument on instead of binding or assigning it" } : Diagnostic)) ([] : Diagnostics)
     here ++ verifyNoRefBindingsPostMono m.submodules ++ verifyNoRefBindingsPostMono ms
 
