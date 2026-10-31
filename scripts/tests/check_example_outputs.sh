@@ -517,6 +517,7 @@ open_bug_reproducers() {
 346|bug346_a_diverging_abort_bound_to_a_typed_let_that_is_r/repro.con|compile-fails|value doesn't match function result type
 347|bug347_get_args_has_a_check_signature_and_no_implementa/repro.con|compile-fails|use of undefined value '@get_args'
 348|bug348_float_to_string_runs_natively_and_interp_stops_w/repro.con|interp-fails|undefined function 'float_to_string'
+349|bug349_append_is_accepted_in_a_function_that_does_not_d/repro.con|runs-exit|42
 TABLE
 }
 if [ -z "$ONLY" ]; then

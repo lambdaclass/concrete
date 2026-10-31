@@ -133,3 +133,4 @@ date	kind	probe	effort	bugs	silent
 2026-10-31	review	spec readability 2 builtins catalog review (2026-10-31): abort() in a value position, native against --interp, on 1bd42718	4 probes	346	-
 2026-10-31	review	spec readability 2 builtins catalog review (2026-10-31): get_args with Process and Env, native against --interp, on 1bd42718	2 probes	347	-
 2026-10-31	review	spec readability 2 builtins catalog review (2026-10-31): float_to_string, native against --interp, on 1bd42718	1 probe	348	-
+2026-10-31	review	spec readability 2 builtins catalog review (2026-10-31): append and string_append_int without Alloc, native against --interp, on 1bd42718	3 probes	349	349

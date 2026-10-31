@@ -1,0 +1,16 @@
+// Bug 349 (MEM-7@1): append(&mut s, ...) in a function without Alloc is accepted, and both
+// consumers exit 42. Expected: refused (E0520), since MEM-7 makes append require Alloc.
+fn build() -> Int {
+    let mut s: String = "ab";
+    append(&mut s, 7, "cd", true);
+    let n: Int = string_length(&s);
+    drop_string(s);
+    return n;
+}
+
+fn main() -> u8 {
+    if build() == 9 {
+        return 42;
+    }
+    return 1;
+}
