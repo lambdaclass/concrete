@@ -5777,6 +5777,31 @@ implementation or generated drop glue runs on an abort, and there is no implicit
 destructor the compiler could have inserted (OWN-13); in a hosted program the OS reclaims the
 process's memory and descriptors, which is an environmental fact, not a language guarantee.
 
+**Traps in the current compiler.** The run-time checks that end a program, as the current compiler
+implements them. Each was probed with operands the compiler cannot see at compile time (a function
+parameter), on the native binary and under `--interp`, on 2026-10-31. Every native trap here calls libc
+`abort()`, so a hosted binary ends with SIGABRT (status 134); the interpreter stops with the run-time
+error shown (it prints `interp: ` before it). The `trap=` attribute of an abort example (§2.2 of
+[MAINTAINERS.md](MAINTAINERS.md)) names the trap the same way.
+
+| operation | condition | rule | native | `--interp` stops with |
+|---|---|---|---|---|
+| integer `+`, `-`, `*` | the result is outside the type (`2147483647 + 1` on `i32`, `16 * 16` on `u8`, `0 - x` at `i32`'s minimum) | ARITH-3 | SIGABRT | `arithmetic overflow (checked +)`, naming the operator |
+| integer `/` | the divisor is 0 | ARITH-3 | SIGABRT | `division by zero` |
+| integer `/` | the minimum value divided by -1 | ARITH-3 | SIGABRT | `arithmetic overflow (checked /)` |
+| integer `%` | the divisor is 0 | ARITH-3 | SIGABRT | `modulo by zero` |
+| `<<`, `>>` | the count is negative or at least the bit width (`1 << 8` on `u8`) | ARITH-3 | SIGABRT | `shift amount out of range` |
+| float `as` integer | the value is NaN or an infinity | ARITH-5 | SIGABRT | `float-to-integer conversion of an infinity or NaN (the binary aborts)` |
+| float `as` integer | the value is outside the target's range (`100000000000.0 as i32`) | ARITH-5 | SIGABRT | `float-to-integer conversion out of range for 'i32' (the binary aborts)` |
+| `a[i]` | `i` is outside the array (`a[5]` on `[u8; 3]` with `i` a variable) | MEM-6 | SIGABRT | `array index 5 out of bounds (size 3)` |
+| `abort()` | always (needs `Process`) | STMT-2 | SIGABRT | `undefined function 'abort'`: the interpreter has no `abort` |
+| allocation | `malloc` or `realloc` returns null (`__concrete_check_oom`) | STMT-2 | SIGABRT | not probed |
+
+An operation whose operands the compiler can evaluate is not a trap: a constant index proven out of
+bounds is refused at compile time (E0900, `proven runtime-safety violation`), and an overflowing
+constant traps where it is used (TYPE-22's `constant-traps-at-use` example). Which of these checks a
+profile may remove, and how, is ARITH-9's and OPEN-97's.
+
 **Recoverable failures** are values (`Result`, `Option`; the recoverable-failure section above and
 the std conventions of [ERROR_CONVENTIONS.md](../stdlib/ERROR_CONVENTIONS.md)). Operations an
 application can reasonably handle get a fallible API, and a consuming fallible API states what
