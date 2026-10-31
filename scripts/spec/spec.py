@@ -22,7 +22,11 @@ import argparse, concurrent.futures, glob, hashlib, json, os, re, subprocess, sy
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 REPO_URL = "https://github.com/unbalancedparentheses/concrete2/blob/main/"
-STAGES = {"parse", "resolve", "check", "elab", "mono", "post-mono", "core-check", "ssa-verify", "link"}
+# The stages that judge the program against the language, as the ledger's `pass` field names them;
+# a code they report is a language refusal (S6). Mono, verify, ssa-verify, lower, proof and policy
+# are not among them.
+LANGUAGE_STAGES = {"parse", "resolve", "check", "elab", "core-check", "runtime-safety"}
+STAGES = {"parse", "resolve", "check", "elab", "mono", "post-mono", "core-check", "runtime-safety", "ssa-verify", "link"}
 KINDS = {"refusal", "guarantee", "definition", "preservation", "open"}
 # An `open` entry records a language question only the project owner decides (ROADMAP "Owner
 # decisions", OD1 - OD22). It states the question, encodes no answer, and has Status `open ODn`.
@@ -820,12 +824,13 @@ def check_codes(spec, ledger_path):
         fail("S6", f"cannot read the diagnostic-codes ledger: {ex}"); return
     if len(rows) < 50:
         fail("S6", f"the ledger lists only {len(rows)} codes (refusing a vacuous ledger)"); return
-    cls = {}
+    cls, reasons = {}, {}
     bad = 0
     for r in read_tsv(os.path.join(spec.dir, "codes.tsv")) or []:
         if len(r) < 2: fail("S6", f"codes.tsv row {r} is malformed"); bad += 1; continue
         if r[0] in cls: fail("S6", f"codes.tsv: {r[0]} classified twice"); bad += 1
         cls[r[0]] = r[1]
+        if len(r) >= 4 and r[3].strip(): reasons[r[0]] = r[3].strip()
         if not (r[1] in CODE_CLASSES or (r[1].startswith("unmigrated:") and r[1][11:] in spec.chapters_planned)):
             fail("S6", f"codes.tsv: {r[0]} has unknown class '{r[1]}'"); bad += 1
     cmap = code_map(spec)
@@ -836,6 +841,13 @@ def check_codes(spec, ledger_path):
         named = c in cmap
         if (cls[c] == "rule") != named:
             fail("S6", f"{c}: class {cls[c]} but {'some' if named else 'no'} entry names it"); bad += 1
+        # Nothing outside the spec: a code a language stage reports refuses a program, so it maps to
+        # a rule. The exceptions are a retired code and an internal one whose codes.tsv row gives,
+        # in its fourth column, the reason it is a compiler invariant rather than a refusal.
+        if rows[c].get("pass") in LANGUAGE_STAGES and cls[c] not in ("rule", "retired") \
+                and not (cls[c] == "internal" and reasons.get(c)):
+            fail("S6", f"{c} ({rows[c].get('pass')}: {rows[c].get('description','')}) is a language refusal with no rule "
+                       f"(class {cls[c]}; map it to an entry, or classify it internal with a reason)"); bad += 1
         want = ", ".join(sorted(cmap.get(c, [])))
         got = ", ".join(sorted(t.strip() for t in rows[c].get("rules", "").split(",") if t.strip()))
         if want != got:

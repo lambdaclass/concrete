@@ -5,7 +5,7 @@
 # A runtime-safety obligation the compiler discharges to `violation` is a
 # compile-time PROOF the program is wrong (constant index proven OOB, constant
 # zero divisor), categorically different from an `unproven` obligation. In SAFE
-# code these now FAIL the build (E0900); `trusted`/`with(Unsafe)` code is
+# code these now FAIL the build (E0900 an index, E0901 a divisor, E0902 an overflow); `trusted`/`with(Unsafe)` code is
 # exempt; `unproven` obligations are NOT swept in.
 
 set -uo pipefail
@@ -32,8 +32,8 @@ else
   no "constant OOB no longer rejected — H2 enforcement regressed"
 fi
 OUT="$("$COMPILER" "$DIV" -o "$TMP/div" 2>&1)"
-if grep -q <<<"$OUT" "E0900" && grep -qi <<<"$OUT" "zero"; then
-  ok "literal divide-by-zero 10/0 is rejected (E0900)"
+if grep -q <<<"$OUT" "E0901" && grep -qi <<<"$OUT" "zero"; then
+  ok "literal divide-by-zero 10/0 is rejected (E0901)"
 else
   no "literal div-by-zero no longer rejected — H2 enforcement regressed"
 fi

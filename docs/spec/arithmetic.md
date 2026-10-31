@@ -124,13 +124,15 @@ fn main() -> u8 {
 the case C leaves undefined. Concrete never emits LLVM's `nsw` or `nuw`: checked operations use
 the overflow intrinsics and branch to an abort helper. This holds in every profile; a profile
 changes reports, never code generation (whether a profile may omit a check is OPEN-97). The
-fill of a right shift that does not abort is ARITH-8; how a division rounds and a remainder's sign are OPEN-114. Constant folding may refuse an operation it proves always overflows (E0900),
-but it does not see every such operation, so the run-time trap is the guarantee. Array bounds are
+fill of a right shift that does not abort is ARITH-8; how a division rounds and a remainder's sign are OPEN-114. ARITH-13 refuses an operation the compiler proves always overflows (E0902), but in the current
+compiler no operation reaches that proof (bug 350), so E0902 currently provides no compile-time
+refusal; the run-time overflow check is the guarantee. Array bounds are
 checked the same way, an index out of bounds aborting.
 
-For example `let c: u8 = 200 + 100` compiles and traps at run time: the folder proves overflow
-only for what it recognizes, so E0900 is a partial guarantee (`provenViolationDiagnostics`, the
-same path as a proven out-of-bounds index or zero divisor); completing the folder is ROADMAP #10.
+For example `let c: u8 = 200 + 100` compiles and traps at run time: E0902 is never reported
+(`provenViolationDiagnostics`, the path that also reports a proven out-of-bounds index, E0900, and
+a proven zero divisor, E0901), so this proof path currently refuses no program for overflow; completing the folder
+is ROADMAP #10.
 
 Decided by the owner on 2026-10-29 (OD10): integer arithmetic is checked by default and the shift count is checked; wrapping and saturating arithmetic are named operations (ARITH-4), and an abort runs no deferred call (STMT-2).
 
@@ -596,6 +598,75 @@ fn main() -> u8 {
     let b: f64 = 2.0;
     let r: f64 = a % b;
     if r == -1.5 {
+        return 42;
+    }
+    return 1;
+}
+```
+
+<a id="ARITH-13"></a>
+### ARITH-13. A division by a proven zero or a proven overflow is refused
+
+**ARITH-13@1.** An integer `/` or `%` whose divisor the compiler proves zero, and an integer operation the compiler proves always overflows its type, are refused in a function that neither is marked `trusted` nor declares `Unsafe`; whether they are also refused in a function marked `trusted` or declaring `Unsafe` is OPEN-118.
+
+- Kind: refusal
+- Uses: none
+- Codes: E0901 (runtime-safety), E0902 (runtime-safety)
+- Status: partial bug-340
+- Enforced by: Concrete.Report.provenViolationDiagnostics
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** These are the compile-time half of ARITH-3's traps: what the compiler can decide
+is refused, and everything else traps at run time. E0901 is a divisor that evaluates to the
+constant zero. E0902 is never reported. The folder takes only an operation whose operands are all literals, and
+the type lookup takes only an identifier or a cast leaf, so no operation reaches the proof (bug 350).
+Probed: `return (2147483647 as i32) + 1;` in an `#[overflow_checked]` function compiles, and `let c:
+u8 = 200 + 100` traps at run time (ARITH-3). Inside a `trusted` function or one declaring `Unsafe`,
+the current compiler compiles a proven zero divisor, and it aborts at run time; the sentence leaves
+that case to OPEN-118. The native build refuses both reject examples below. `--interp` runs them, the same divergence as
+bug 340's: it stops at the division in the first, so that example is checked natively only, and it
+exits 42 in the second, whose division is on a path that does not run, so that example is pending
+until the bug is fixed.
+
+```con accept name=divisor-not-zero exit=42
+fn example_value() -> Int {
+    let n: Int = 84;
+    return n / 2;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
+```
+
+```con reject name=divisor-proven-zero code=E0901 stage=runtime-safety pair=divisor-not-zero interp-exempt=interp-runs-proven-violations
+fn example_value() -> Int {
+    let n: Int = 84;
+    return n / 0;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
+```
+
+```con reject name=divisor-proven-zero-unrun code=E0901 stage=runtime-safety pair=divisor-not-zero pending=bug-340 now=reject:E0901:runtime-safety now-interp=accept:42
+fn example_value() -> Int {
+    let n: Int = 84;
+    let c: bool = false;
+    if c {
+        return n / 0;
+    }
+    return 42;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
         return 42;
     }
     return 1;

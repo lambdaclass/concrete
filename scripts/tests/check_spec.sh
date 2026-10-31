@@ -222,6 +222,10 @@ UNM="$(awk -F'\t' '$2 == "internal" {print $1; exit}' docs/spec/codes.tsv)"
 [ -n "$UNM" ] || no "N6b: codes.tsv has no internal code left to plant; update this control"
 fresh_copy; mutate "$TMP/n/spec/codes.tsv" "re.sub(r'^$UNM\t[^\t\n]*', '$UNM\trule', s, flags=re.M)" \
   && control "N6b: a rule-class code that no entry names" S6 "$UNM: class rule but no entry names it" -- codes "${SP[@]}" --ledger "$TMP/ledger.json"
+# an internal code a language stage reports (E0510, core-check), with its reason column dropped: a
+# language refusal that maps to no rule and says nothing about why
+fresh_copy; mutate "$TMP/n/spec/codes.tsv" "re.sub(r'^(E0510\tinternal\t[^\t\n]*)\t[^\n]*', r'\1', s, flags=re.M)" \
+  && control "N6c: a language-stage code that is neither a rule nor a reasoned internal code" S6 "E0510 (core-check:" -- codes "${SP[@]}" --ledger "$TMP/ledger.json"
 
 # S7: a declaration without its comment, a comment naming an unknown ID, a name that does not resolve
 rm -rf "$TMP/nsrc"; cp -R Concrete "$TMP/nsrc"

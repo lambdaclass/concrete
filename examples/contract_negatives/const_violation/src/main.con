@@ -8,7 +8,7 @@
 // verdicts with `decide (k == k)`, always true — because no fixture reached the
 // branch with a violating constant.
 //
-// Kept OUT of obligation_redteam deliberately: a proven violation is E0900, a hard
+// Kept OUT of obligation_redteam deliberately: a proven violation (E0900 - E0902) is a hard
 // compile error, and that would stop `concrete build` before the policy stage where
 // that gate asserts E0613/E0614/E0615.
 mod cv {

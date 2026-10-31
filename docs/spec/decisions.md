@@ -1512,7 +1512,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on MEM-6, ARITH-3, TRUST-5, TRUST-12. Current main: `a[5]` on a `[Int; 3]`, or `x / 0`, is refused in safe code (E0900, `error[runtime-safety]`) and compiles in a `trusted fn` (the index also in a function declaring `Unsafe`), where it aborts at run time on both consumers. MEM-6 states the refusal with no exemption; [KNOWN_HOLES.md](../verification/KNOWN_HOLES.md) C7 records the exemption as intended. Options: (a) refuse everywhere, as MEM-6 reads; (b) keep the exemption and state it in MEM-6. Austral: not checked. Pick: none given (raised by the absorption of docs/verification, 2026-10-30).
+**Rationale.** Bears on MEM-9, ARITH-13, TRUST-5, TRUST-12. Current main: `a[5]` on a `[Int; 3]`, or `x / 0`, is refused in safe code (E0900 for the index, E0901 for the divisor, `error[runtime-safety]`) and compiles in a `trusted fn` and in a function declaring `Unsafe`, where it aborts at run time on both consumers. MEM-9 and ARITH-13 state the refusal in a function that neither is marked `trusted` nor declares `Unsafe`, and name this question for a function marked `trusted` or declaring `Unsafe`; [KNOWN_HOLES.md](../verification/KNOWN_HOLES.md) C7 records the exemption as intended. Options: (a) refuse everywhere, and MEM-9 and ARITH-13 say so; (b) keep the exemption, and MEM-9 and ARITH-13 state it as the rule. Austral: not checked. Pick: none given (raised by the absorption of docs/verification, 2026-10-30).
 
 <a id="OPEN-119"></a>
 ### OPEN-119. Buffered output when the process aborts

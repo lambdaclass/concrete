@@ -176,7 +176,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 | violates FFI-2@1 | 1 | 1 | 122 |
 | violates FFI-5@1 | 1 | 0 | 114 |
 | violates MEM-4@4 | 1 | 1 | 326 |
-| violates MEM-6@1 | 1 | 1 | 340 |
+| violates MEM-9@1 | 1 | 1 | 340 |
 | violates OWN-10@2 | 1 | 0 | 216 |
 | violates OWN-15@3 | 1 | 1 | 328 |
 | violates OWN-7@3 | 1 | 1 | 325 |
@@ -191,7 +191,7 @@ a link failure, an interpreter refusal or an unrejected leak.
 | violates TYPE-6@2 | 1 | 1 | 322 |
 | violates TYPE-9@2 | 1 | 1 | 333 |
 | outside the spec (performance) | 1 | 0 | 270 |
-| outside the spec (tooling) | 4 | 1 | 049, 058, 064, 342 |
+| outside the spec (tooling) | 3 | 0 | 049, 058, 064 |
 
 | discovery rate: counting probe batch | date | effort | found | silent | loud | signal |
 |---|---|---|---|---|---|---|

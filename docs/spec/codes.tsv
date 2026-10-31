@@ -1,6 +1,6 @@
 # Classification of every code in `--report diagnostic-codes` (docs/spec/MAINTAINERS.md S6). Classes: rule (named by a
 # spec entry), unmigrated:<chapter> (only shrinks, S3), internal (compiler invariant), tooling (proof/policy/evidence), retired.
-# code	class	ledger description
+# code	class	ledger description	reason (an internal code a language stage reports: why it is not a refusal, S6)
 E0001	rule	syntax error
 E0100	rule	undeclared variable
 E0101	rule	unknown function
@@ -139,7 +139,7 @@ E0308	rule	the else block of a let ... else can fall through (bug 195)
 E0309	rule	a match arm's pattern does not fit the scrutinee's type (bug 196)
 E0310	rule	`main` declares parameters (the entry point is `fn main() -> Int`; arguments come from std.args; bug 111)
 E0311	rule	`*p` moves a non-Copy value out of raw memory (use the `read_owned` intrinsic; T-RAWDUP)
-E0312	internal	internal: a declaration or binder reached the checker without its local binder table (R-0492; bug 206)
+E0312	internal	internal: a declaration or binder reached the checker without its local binder table (R-0492; bug 206)	Check reached a declaration without its binder table, which Resolve and Elab always build; a compiler invariant
 E0313	rule	newtype constructor called with other than one argument or with type arguments (bug 206)
 E0314	rule	wrapping_/saturating_ operation on non-integer operands or operands of different types (bug 206)
 E0315	rule	builtin called with fewer arguments than its minimum (print, println, append; bug 206)
@@ -150,30 +150,30 @@ E0319	rule	#[test] function with parameters, type parameters or a result other t
 E0320	rule	contract clause or spec function body of the wrong sort (bug 206)
 E0321	rule	contract or spec function body calls a non-spec or capability-requiring function (bug 206)
 E0322	rule	an explicit type-argument list at a call does not match the callee's type parameters (bug 221)
-E0400	internal	Self outside impl block
-E0401	internal	undeclared variable
-E0402	internal	undeclared function
-E0403	internal	unknown function reference
-E0404	internal	assignment to undeclared variable
-E0405	internal	borrow of undeclared variable
-E0406	internal	unknown struct type
-E0407	internal	arrow access on unknown struct
-E0408	internal	struct has no field
-E0409	internal	field access on non-struct
-E0410	internal	unknown enum type
-E0411	internal	unknown variant
-E0412	internal	missing field in variant
-E0413	internal	no method on type variable
-E0414	internal	no method on type
-E0415	internal	method call on non-named type
+E0400	internal	Self outside impl block	Resolve refuses `Self` outside an impl first (probe: `fn f() -> Self` is E0109 at resolve), so Elab never meets it; a compiler invariant
+E0401	internal	undeclared variable	Resolve refuses an undeclared variable first (probe: `return y;` is E0100 at resolve), so Elab never meets one; a compiler invariant
+E0402	internal	undeclared function	Resolve refuses a call of an undeclared function first (probe: `return g();` is E0101 at resolve), so Elab never meets one; a compiler invariant
+E0403	internal	unknown function reference	Resolve refuses a reference to an undeclared function first (probe: `let h: fn() -> u8 = g;` is E0100 at resolve), so Elab never meets one; a compiler invariant
+E0404	internal	assignment to undeclared variable	Resolve refuses an assignment to an undeclared variable first (probe: `y = 1;` is E0100 at resolve), so Elab never meets one; a compiler invariant
+E0405	internal	borrow of undeclared variable	Resolve refuses a borrow of an undeclared variable first (probe: `&y` is E0100 at resolve), so Elab never meets one; a compiler invariant
+E0406	internal	unknown struct type	Resolve refuses a struct literal of an undeclared type first (probe: `S { a: 1 }` with no `S` is E0102 at resolve), so Elab never meets one; a compiler invariant
+E0407	internal	arrow access on unknown struct	no compiler module emits it (`ElabError.code` has no case for it; the ledger row is its only occurrence), and the access it described, postfix `->`, is refused at parse (probe: `p->a` is E0001); a compiler invariant
+E0408	internal	struct has no field	Check refuses a field the struct does not have first (probe: `s.b` on `struct S { a: u8 }` is E0251 at check), so Elab never meets one; a compiler invariant
+E0409	internal	field access on non-struct	Check refuses a field access on a value that is not a struct first (probe: `x.a` with `x: u8` is E0254 at check), so Elab never meets one; a compiler invariant
+E0410	internal	unknown enum type	Resolve refuses an undeclared enum first (probe: `E::A` with no `E` is E0105 at resolve), so Elab never meets one; a compiler invariant
+E0411	internal	unknown variant	Resolve refuses a variant the enum does not have first (probe: `E::C` on `enum E { A, B }` is E0103 at resolve), so Elab never meets one; a compiler invariant
+E0412	internal	missing field in variant	Check refuses a variant literal whose fields do not match the variant first (probes: `E::A {}` and `E::A { y: 1 }` on `A { x: u8 }` are both E0252, missing field 'x', at check), so Elab never meets one; a compiler invariant
+E0413	internal	no method on type variable	Check refuses a method call on a type variable with no such method first (probe: `x.go()` with `x: T` is E0265 at check), so Elab never meets one; a compiler invariant
+E0414	internal	no method on type	Check refuses a call of a method the type does not have first (probe: `s.go()` on a struct without `go` is E0264 at check), so Elab never meets one; a compiler invariant
+E0415	internal	method call on non-named type	Check refuses a method call on a value of a type that is not named first (probe: `x.go()` with `x: u8` is E0264 at check), so Elab never meets one; a compiler invariant
 E0416	rule	empty array literal
-E0417	internal	submodule elaboration error
+E0417	internal	submodule elaboration error	no compiler module raises it (`ElabError.inSubmodule` is declared, rendered and given this code, and never constructed), so no program reaches it; a compiler invariant
 E0418	rule	unknown module
 E0419	rule	symbol not public in module
 E0423	rule	import of a public trait, which no import binds (traits are module-local; bug 233)
 E0420	rule	ghost value used in runtime code
 E0421	rule	append() or print() argument of an unsupported type (bug 203; it had no code in Check and E0420 in Elab)
-E0422	internal	internal: a binder or function reached elaboration without its local binder table (R-0492; train 8 merge of bug 206 with R-0492 step 2)
+E0422	internal	internal: a binder or function reached elaboration without its local binder table (R-0492; train 8 merge of bug 206 with R-0492 step 2)	a binding-identity invariant of Elab; Resolve and Check refuse the programs that could break it first
 E0500	rule	variable type mismatch
 E0501	rule	arithmetic on non-numeric type
 E0502	rule	binary operand type mismatch
@@ -184,7 +184,7 @@ E0506	rule	bitwise operator on non-integer
 E0507	rule	negation on non-numeric type
 E0508	rule	logical not on non-Bool
 E0509	rule	bitwise not on non-integer
-E0510	internal	binding type mismatch (let, assignment, argument, field or store)
+E0510	internal	binding type mismatch (let, assignment, argument, field or store)	CoreCheck repeats the type checks Check performs (TYPE-4) on Core; a checked program never reaches it
 E0520	rule	insufficient capabilities
 E0521	rule	missing capability
 E0522	rule	argument count mismatch
@@ -262,3 +262,16 @@ E0807	tooling	lean check failure: Lean kernel rejected proof
 E0808	internal	user-defined generic enum reached codegen un-monomorphized — would corrupt memory; rejected fail-closed (bug 051)
 E0809	internal	a monomorphized specialization's name is already declared in the program — one name cannot carry two layouts (R-0001)
 E0810	tooling	proof link unbound: no stored proof-subject digest, so freshness cannot be checked and the claim is not proved (R-0004, bug 058)
+E0613	tooling	vacuous (unsatisfiable) contract: the postcondition holds trivially and is not genuinely proved
+E0614	tooling	assume(...) used while [policy] forbid-assume = true
+E0615	tooling	verification condition discharged only by an external solver (solver_trusted)
+E0616	tooling	obligation has no independent-kernel evidence while [policy] require-two-kernels is set
+E0617	tooling	proved only under hypotheses that are themselves unproved while [policy] forbid-assume = true
+E0811	tooling	a reachable dependency is not current, so the claim contributes no proved_by_lean evidence
+E0812	tooling	the dependency closure has no validated per-edge justification
+E0813	tooling	the claim's body is not shown to be the specification its theorem evaluates
+E0814	internal	a destructor call Mono cannot resolve without a silent no-op
+E0815	internal	trait method call on a type name that several types share: Core cannot tell which one it is
+E0900	rule	proven runtime-safety violation: an index always out of bounds
+E0901	rule	proven runtime-safety violation: a divisor always zero
+E0902	rule	proven runtime-safety violation: an integer operation that always overflows

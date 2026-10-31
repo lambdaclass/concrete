@@ -6528,10 +6528,15 @@ def diagnosticCodesReport : String :=
     entry "E0600" "verify" "error" "post-elab: placeholder type survived elaboration",
     entry "E0601" "verify" "error" "post-mono: type variable survived monomorphization",
     entry "E0602" "lower" "error" "lowering failure",
-    -- Policy (E0610–E0612)
+    -- Policy (E0610–E0617)
     entry "E0610" "policy" "error" "predictable profile violation",
     entry "E0611" "policy" "error" "denied capability used",
     entry "E0612" "policy" "error" "proof-eligible function unproved",
+    entry "E0613" "policy" "error" "vacuous (unsatisfiable) contract: the postcondition holds trivially and is not genuinely proved",
+    entry "E0614" "policy" "error" "assume(...) used while [policy] forbid-assume = true",
+    entry "E0615" "policy" "error" "verification condition discharged only by an external solver (solver_trusted)",
+    entry "E0616" "policy" "error" "obligation has no independent-kernel evidence while [policy] require-two-kernels is set",
+    entry "E0617" "policy" "error" "proved only under hypotheses that are themselves unproved while [policy] forbid-assume = true",
     -- SSA-verify (E0700–E0715)
     entry "E0700" "ssa-verify" "error" "duplicate register definition",
     entry "E0701" "ssa-verify" "error" "function has no blocks",
@@ -6560,7 +6565,16 @@ def diagnosticCodesReport : String :=
     entry "E0807" "proof" "error" "lean check failure: Lean kernel rejected proof",
     entry "E0808" "mono" "error" "user-defined generic enum reached codegen un-monomorphized — would corrupt memory; rejected fail-closed (bug 051)",
     entry "E0809" "mono" "error" "a monomorphized specialization's name is already declared in the program — one name cannot carry two layouts (R-0001)",
-    entry "E0810" "proof" "error" "proof link unbound: no stored proof-subject digest, so freshness cannot be checked and the claim is not proved (R-0004, bug 058)"
+    entry "E0810" "proof" "error" "proof link unbound: no stored proof-subject digest, so freshness cannot be checked and the claim is not proved (R-0004, bug 058)",
+    entry "E0811" "proof" "error" "a reachable dependency is not current, so the claim contributes no proved_by_lean evidence",
+    entry "E0812" "proof" "error" "the dependency closure has no validated per-edge justification",
+    entry "E0813" "proof" "error" "the claim's body is not shown to be the specification its theorem evaluates",
+    entry "E0814" "mono" "error" "a destructor call Mono cannot resolve without a silent no-op",
+    entry "E0815" "mono" "error" "trait method call on a type name that several types share: Core cannot tell which one it is",
+    -- Proven runtime-safety violations in safe code (E0900–E0902), one code per case
+    entry "E0900" "runtime-safety" "error" "proven runtime-safety violation: an index always out of bounds",
+    entry "E0901" "runtime-safety" "error" "proven runtime-safety violation: a divisor always zero",
+    entry "E0902" "runtime-safety" "error" "proven runtime-safety violation: an integer operation that always overflows"
   ]
   (Val.obj [
     ("schema_version", .num (Int.ofNat schemaVersion)),

@@ -2542,7 +2542,10 @@ def renderOverflow (obls : List OverflowObl) (provedKeys : List String)
 /-- Runtime-safety obligations that have already been discharged to FALSE.
     These are compile-time proofs that the safe program is wrong, not merely
     `unproven` obligations. Build/check paths use this as a hard-error gate;
-    report paths still render the obligations so users can inspect them. -/
+    report paths still render the obligations so users can inspect them.
+    One code per case: E0900 an index proven out of bounds, E0901 a divisor proven zero,
+    E0902 an operation proven to overflow. -/
+-- spec: MEM-9, spec: ARITH-13 (docs/spec/memory.md, docs/spec/arithmetic.md; this declaration enforces the rule)
 def provenViolationDiagnostics (modules : List Module) : Diagnostics := Id.run do
   -- Safe-code only: functions marked `trusted` or holding the `Unsafe`
   -- capability carry audit responsibility and are exempt (ROADMAP Phase 12 #0).
@@ -2570,7 +2573,7 @@ def provenViolationDiagnostics (modules : List Module) : Diagnostics := Id.run d
         pass := "runtime-safety",
         span := some o.divExpr.getSpan,
         hint := some "require/prove a nonzero divisor, use a checked API, or move this behind an explicit trusted/Unsafe boundary",
-        code := "E0900",
+        code := "E0901",
         evidence := [("obligation", o.key), ("status", "violation"), ("kind", "division_nonzero")]
       }
       ds := ds ++ [d]
@@ -2582,7 +2585,7 @@ def provenViolationDiagnostics (modules : List Module) : Diagnostics := Id.run d
         pass := "runtime-safety",
         span := some o.opExpr.getSpan,
         hint := some "widen the type, bound the operands, or use an explicit wrapping/checked arithmetic profile",
-        code := "E0900",
+        code := "E0902",
         evidence := [("obligation", o.key), ("status", "violation"), ("kind", "integer_overflow")]
       }
       ds := ds ++ [d]

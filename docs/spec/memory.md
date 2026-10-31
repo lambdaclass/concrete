@@ -3,7 +3,7 @@
 Safe code owns memory through bindings and `Heap<T>` values and reaches other storage only through
 references (the references chapter). Every local binding has an ownership state (MEM-D1). This
 chapter covers initialization (MEM-3), field access through
-references and heap shells (MEM-4), heap ownership (MEM-5) and its capability (MEM-7), array bounds (MEM-6), indexing through a
+references and heap shells (MEM-4), heap ownership (MEM-5) and its capability (MEM-7), array bounds (MEM-6) and an index proven out of bounds (MEM-9), indexing through a
 reference (MEM-8) and the two
 layers of the memory model the Core semantics defines (MEM-1, MEM-2, pending). The checker
 tracks whole owners: a borrow freezes its whole root (REF-8, REF-11), with no field- or
@@ -207,7 +207,7 @@ fn main() with(Std) -> u8 {
 <a id="MEM-6"></a>
 ### MEM-6. An array index is checked
 
-**MEM-6@1.** Reading or writing `a[i]` aborts when `i` is negative or at least the array's length, and an index the compiler proves out of bounds is refused.
+**MEM-6@2.** Reading or writing `a[i]` aborts when `i` is negative or at least the array's length.
 
 - Kind: guarantee
 - Uses: none
@@ -221,6 +221,8 @@ fn main() with(Std) -> u8 {
 **Rationale.** One unsigned comparison catches both a negative index and one past the end, and the
 abort is the same as an arithmetic trap (ARITH-3). There is no global way to turn bounds checks
 off; an unchecked access would be a trusted operation with a named premise (TRUST-2).
+Version 2 leaves the refusal of an index the compiler proves out of bounds to MEM-9, which names its
+code (E0900).
 
 ```con accept name=index-in-bounds exit=42
 fn example_value() -> Int {
@@ -345,5 +347,72 @@ fn main() -> u8 {
 
     return 1;
 
+}
+```
+
+<a id="MEM-9"></a>
+### MEM-9. An index proven out of bounds is refused
+
+**MEM-9@1.** An index `a[i]` that the compiler proves always out of bounds for the array's length is refused in a function that neither is marked `trusted` nor declares `Unsafe`; whether it is also refused in a function marked `trusted` or declaring `Unsafe` is OPEN-118.
+
+- Kind: refusal
+- Uses: none
+- Codes: E0900 (runtime-safety)
+- Status: partial bug-340
+- Enforced by: Concrete.Report.provenViolationDiagnostics
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** MEM-6@1 stated this refusal as the second half of its sentence; it is its own
+entry so that the refusal names its code, since only a refusal names codes. The compiler proves
+an index out of bounds when the index and the array's length are constants it evaluates; any other
+index is checked at run time (MEM-6). Inside a `trusted` function or one declaring `Unsafe`, the
+current compiler compiles such an index, and it aborts at run time; the sentence leaves that case to
+OPEN-118. The native build
+refuses both reject examples below. `--interp` runs them (bug 340): it stops at the out-of-bounds
+index in the first, so that example is checked natively only, and it exits 42 in the second, whose
+index is on a path that does not run, so that example is pending until the bug is fixed.
+
+```con accept name=index-proven-in-bounds exit=42
+fn example_value() -> Int {
+    let a: [Int; 3] = [10, 30, 2];
+    return a[0] + a[1] + a[2];
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
+```
+
+```con reject name=index-proven-out-of-bounds code=E0900 stage=runtime-safety pair=index-proven-in-bounds interp-exempt=interp-runs-proven-violations
+fn example_value() -> Int {
+    let a: [Int; 3] = [10, 30, 2];
+    return a[5];
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
+```
+
+```con reject name=index-proven-out-of-bounds-unrun code=E0900 stage=runtime-safety pair=index-proven-in-bounds pending=bug-340 now=reject:E0900:runtime-safety now-interp=accept:42
+fn example_value() -> Int {
+    let a: [Int; 3] = [10, 30, 2];
+    let c: bool = false;
+    if c {
+        return a[5];
+    }
+    return 42;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```

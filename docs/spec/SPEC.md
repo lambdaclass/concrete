@@ -73,6 +73,7 @@ the first chapter.
   - [ARITH-10. The named conversions' results](#ARITH-10)
   - [ARITH-11. The named float conversions round as stated](#ARITH-11)
   - [ARITH-12. Float remainder](#ARITH-12)
+  - [ARITH-13. A division by a proven zero or a proven overflow is refused](#ARITH-13)
 - [Statements, Expressions and Execution](#ch-statements)
   - [STMT-1. Exit, abort and divergence are distinct behaviours](#STMT-1)
   - [STMT-2. Failure is abort only](#STMT-2)
@@ -146,6 +147,7 @@ the first chapter.
   - [MEM-6. An array index is checked](#MEM-6)
   - [MEM-7. The heap builtins require `Alloc`](#MEM-7)
   - [MEM-8. Indexing dereferences at most one reference](#MEM-8)
+  - [MEM-9. An index proven out of bounds is refused](#MEM-9)
 - [Traits](#ch-traits)
   - [TRAIT-D1. Impl target](#TRAIT-D1)
   - [TRAIT-1. One impl of a trait per type](#TRAIT-1)
@@ -4183,13 +4185,15 @@ fn main() -> u8 {
 the case C leaves undefined. Concrete never emits LLVM's `nsw` or `nuw`: checked operations use
 the overflow intrinsics and branch to an abort helper. This holds in every profile; a profile
 changes reports, never code generation (whether a profile may omit a check is OPEN-97). The
-fill of a right shift that does not abort is ARITH-8; how a division rounds and a remainder's sign are OPEN-114. Constant folding may refuse an operation it proves always overflows (E0900),
-but it does not see every such operation, so the run-time trap is the guarantee. Array bounds are
+fill of a right shift that does not abort is ARITH-8; how a division rounds and a remainder's sign are OPEN-114. ARITH-13 refuses an operation the compiler proves always overflows (E0902), but in the current
+compiler no operation reaches that proof (bug 350), so E0902 currently provides no compile-time
+refusal; the run-time overflow check is the guarantee. Array bounds are
 checked the same way, an index out of bounds aborting.
 
-For example `let c: u8 = 200 + 100` compiles and traps at run time: the folder proves overflow
-only for what it recognizes, so E0900 is a partial guarantee (`provenViolationDiagnostics`, the
-same path as a proven out-of-bounds index or zero divisor); completing the folder is ROADMAP #10.
+For example `let c: u8 = 200 + 100` compiles and traps at run time: E0902 is never reported
+(`provenViolationDiagnostics`, the path that also reports a proven out-of-bounds index, E0900, and
+a proven zero divisor, E0901), so this proof path currently refuses no program for overflow; completing the folder
+is ROADMAP #10.
 
 Decided by the owner on 2026-10-29 (OD10): integer arithmetic is checked by default and the shift count is checked; wrapping and saturating arithmetic are named operations (ARITH-4), and an abort runs no deferred call (STMT-2).
 
@@ -4655,6 +4659,75 @@ fn main() -> u8 {
     let b: f64 = 2.0;
     let r: f64 = a % b;
     if r == -1.5 {
+        return 42;
+    }
+    return 1;
+}
+```
+
+<a id="ARITH-13"></a>
+#### ARITH-13. A division by a proven zero or a proven overflow is refused
+
+**ARITH-13@1.** An integer `/` or `%` whose divisor the compiler proves zero, and an integer operation the compiler proves always overflows its type, are refused in a function that neither is marked `trusted` nor declares `Unsafe`; whether they are also refused in a function marked `trusted` or declaring `Unsafe` is OPEN-118.
+
+- Kind: refusal
+- Uses: none
+- Codes: E0901 (runtime-safety), E0902 (runtime-safety)
+- Status: partial bug-340
+- Enforced by: Concrete.Report.provenViolationDiagnostics
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** These are the compile-time half of ARITH-3's traps: what the compiler can decide
+is refused, and everything else traps at run time. E0901 is a divisor that evaluates to the
+constant zero. E0902 is never reported. The folder takes only an operation whose operands are all literals, and
+the type lookup takes only an identifier or a cast leaf, so no operation reaches the proof (bug 350).
+Probed: `return (2147483647 as i32) + 1;` in an `#[overflow_checked]` function compiles, and `let c:
+u8 = 200 + 100` traps at run time (ARITH-3). Inside a `trusted` function or one declaring `Unsafe`,
+the current compiler compiles a proven zero divisor, and it aborts at run time; the sentence leaves
+that case to OPEN-118. The native build refuses both reject examples below. `--interp` runs them, the same divergence as
+bug 340's: it stops at the division in the first, so that example is checked natively only, and it
+exits 42 in the second, whose division is on a path that does not run, so that example is pending
+until the bug is fixed.
+
+```con accept name=divisor-not-zero exit=42
+fn example_value() -> Int {
+    let n: Int = 84;
+    return n / 2;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
+```
+
+```con reject name=divisor-proven-zero code=E0901 stage=runtime-safety pair=divisor-not-zero interp-exempt=interp-runs-proven-violations
+fn example_value() -> Int {
+    let n: Int = 84;
+    return n / 0;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
+```
+
+```con reject name=divisor-proven-zero-unrun code=E0901 stage=runtime-safety pair=divisor-not-zero pending=bug-340 now=reject:E0901:runtime-safety now-interp=accept:42
+fn example_value() -> Int {
+    let n: Int = 84;
+    let c: bool = false;
+    if c {
+        return n / 0;
+    }
+    return 42;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
         return 42;
     }
     return 1;
@@ -9865,7 +9938,7 @@ pending until a gate checks that and the Core semantics defines loan lifetimes (
 Safe code owns memory through bindings and `Heap<T>` values and reaches other storage only through
 references (the references chapter). Every local binding has an ownership state (MEM-D1). This
 chapter covers initialization (MEM-3), field access through
-references and heap shells (MEM-4), heap ownership (MEM-5) and its capability (MEM-7), array bounds (MEM-6), indexing through a
+references and heap shells (MEM-4), heap ownership (MEM-5) and its capability (MEM-7), array bounds (MEM-6) and an index proven out of bounds (MEM-9), indexing through a
 reference (MEM-8) and the two
 layers of the memory model the Core semantics defines (MEM-1, MEM-2, pending). The checker
 tracks whole owners: a borrow freezes its whole root (REF-8, REF-11), with no field- or
@@ -10069,7 +10142,7 @@ fn main() with(Std) -> u8 {
 <a id="MEM-6"></a>
 #### MEM-6. An array index is checked
 
-**MEM-6@1.** Reading or writing `a[i]` aborts when `i` is negative or at least the array's length, and an index the compiler proves out of bounds is refused.
+**MEM-6@2.** Reading or writing `a[i]` aborts when `i` is negative or at least the array's length.
 
 - Kind: guarantee
 - Uses: none
@@ -10083,6 +10156,8 @@ fn main() with(Std) -> u8 {
 **Rationale.** One unsigned comparison catches both a negative index and one past the end, and the
 abort is the same as an arithmetic trap (ARITH-3). There is no global way to turn bounds checks
 off; an unchecked access would be a trusted operation with a named premise (TRUST-2).
+Version 2 leaves the refusal of an index the compiler proves out of bounds to MEM-9, which names its
+code (E0900).
 
 ```con accept name=index-in-bounds exit=42
 fn example_value() -> Int {
@@ -10207,6 +10282,73 @@ fn main() -> u8 {
 
     return 1;
 
+}
+```
+
+<a id="MEM-9"></a>
+#### MEM-9. An index proven out of bounds is refused
+
+**MEM-9@1.** An index `a[i]` that the compiler proves always out of bounds for the array's length is refused in a function that neither is marked `trusted` nor declares `Unsafe`; whether it is also refused in a function marked `trusted` or declaring `Unsafe` is OPEN-118.
+
+- Kind: refusal
+- Uses: none
+- Codes: E0900 (runtime-safety)
+- Status: partial bug-340
+- Enforced by: Concrete.Report.provenViolationDiagnostics
+- Semantics: none
+- Obligation: none
+- Evidence: tested
+
+**Rationale.** MEM-6@1 stated this refusal as the second half of its sentence; it is its own
+entry so that the refusal names its code, since only a refusal names codes. The compiler proves
+an index out of bounds when the index and the array's length are constants it evaluates; any other
+index is checked at run time (MEM-6). Inside a `trusted` function or one declaring `Unsafe`, the
+current compiler compiles such an index, and it aborts at run time; the sentence leaves that case to
+OPEN-118. The native build
+refuses both reject examples below. `--interp` runs them (bug 340): it stops at the out-of-bounds
+index in the first, so that example is checked natively only, and it exits 42 in the second, whose
+index is on a path that does not run, so that example is pending until the bug is fixed.
+
+```con accept name=index-proven-in-bounds exit=42
+fn example_value() -> Int {
+    let a: [Int; 3] = [10, 30, 2];
+    return a[0] + a[1] + a[2];
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
+```
+
+```con reject name=index-proven-out-of-bounds code=E0900 stage=runtime-safety pair=index-proven-in-bounds interp-exempt=interp-runs-proven-violations
+fn example_value() -> Int {
+    let a: [Int; 3] = [10, 30, 2];
+    return a[5];
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
+}
+```
+
+```con reject name=index-proven-out-of-bounds-unrun code=E0900 stage=runtime-safety pair=index-proven-in-bounds pending=bug-340 now=reject:E0900:runtime-safety now-interp=accept:42
+fn example_value() -> Int {
+    let a: [Int; 3] = [10, 30, 2];
+    let c: bool = false;
+    if c {
+        return a[5];
+    }
+    return 42;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
+    }
+    return 1;
 }
 ```
 
@@ -14848,7 +14990,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on MEM-6, ARITH-3, TRUST-5, TRUST-12. Current main: `a[5]` on a `[Int; 3]`, or `x / 0`, is refused in safe code (E0900, `error[runtime-safety]`) and compiles in a `trusted fn` (the index also in a function declaring `Unsafe`), where it aborts at run time on both consumers. MEM-6 states the refusal with no exemption; [KNOWN_HOLES.md](../verification/KNOWN_HOLES.md) C7 records the exemption as intended. Options: (a) refuse everywhere, as MEM-6 reads; (b) keep the exemption and state it in MEM-6. Austral: not checked. Pick: none given (raised by the absorption of docs/verification, 2026-10-30).
+**Rationale.** Bears on MEM-9, ARITH-13, TRUST-5, TRUST-12. Current main: `a[5]` on a `[Int; 3]`, or `x / 0`, is refused in safe code (E0900 for the index, E0901 for the divisor, `error[runtime-safety]`) and compiles in a `trusted fn` and in a function declaring `Unsafe`, where it aborts at run time on both consumers. MEM-9 and ARITH-13 state the refusal in a function that neither is marked `trusted` nor declares `Unsafe`, and name this question for a function marked `trusted` or declaring `Unsafe`; [KNOWN_HOLES.md](../verification/KNOWN_HOLES.md) C7 records the exemption as intended. Options: (a) refuse everywhere, and MEM-9 and ARITH-13 say so; (b) keep the exemption, and MEM-9 and ARITH-13 state it as the rule. Austral: not checked. Pick: none given (raised by the absorption of docs/verification, 2026-10-30).
 
 <a id="OPEN-119"></a>
 #### OPEN-119. Buffered output when the process aborts

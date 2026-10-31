@@ -12,7 +12,7 @@ coverage: reproducer tests/regressions/bug340_the_interpreter_runs_a_program_the
 class: 18
 silent: yes
 exit: 0b
-ruling: Violates: MEM-6@1
+ruling: Violates: MEM-9@1
 -->
 
 ## Reproducer
@@ -39,7 +39,9 @@ a[3] is always out of bounds for array size 3". `concrete repro.con --interp` pr
 
 ## Expected
 
-[MEM-6@1](../spec/memory.md#MEM-6): "an index the compiler proves out of bounds is refused", and
+[MEM-9@1](../spec/memory.md#MEM-9): an index the compiler proves always out of bounds is refused
+(the refusal was the second half of MEM-6@1's sentence when this bug was filed, and bug 342 moved it
+to its own entry), and
 the specification's overview commits that "`--interp` runs no program the compiler cannot
 compile". Both consumers refuse the program with E0900 before it runs.
 

@@ -43,7 +43,7 @@ ck "division by possibly-zero divisor → unproven"  "st('rt.divzero#div0')=='un
 # survived a full campaign on that gap, replacing both constant verdicts with `decide (k == k)`.
 #
 # The violating constants live in their own fixture, `contract_negatives/const_violation`, and NOT
-# here: a decidable violation is E0900, a hard compile error, which would stop `concrete build`
+# here: a decidable violation (E0901 for a divisor proven zero) is a hard compile error, which would stop `concrete build`
 # before the policy stage this gate asserts E0613/E0614/E0615 at. Measured — adding them here turned
 # 13/0 into 13/5.
 #
@@ -61,9 +61,9 @@ cvck "LITERAL out-of-range index → counterexample"  "st('cv.oob_const#bounds0'
 # ...and the violation is REPORTED as a hard error, not merely recorded in the ledger. Without this
 # the mutation could leave the ledger honest while the compiler shipped the program.
 cv_out="$("$COMPILER" examples/contract_negatives/const_violation/src/main.con -o /dev/null 2>&1 || true)"
-grep -qF 'E0900' <<<"$cv_out" && grep -qF 'divisor 0 is always zero' <<<"$cv_out" \
-  && ok "a decidable violation is refused at compile time with E0900" \
-  || no "no E0900 for a literal-zero divisor — a proven violation would compile"
+grep -qF 'E0901' <<<"$cv_out" && grep -qF 'divisor 0 is always zero' <<<"$cv_out" \
+  && ok "a decidable violation is refused at compile time with E0901" \
+  || no "no E0901 for a literal-zero divisor — a proven violation would compile"
 ck "assume-laundered assert → unproven (not proof)" "st('rt.launder#aa1')=='unproven'"
 ck "assume is 'assumed', never a proof class"       "st('rt.launder#aa0')=='assumed'"
 ck "vacuous postcondition → NOT proved_by_lean"     "st('rt.vacuous_green#ensures0') in ('missing','vacuous','unproven')"

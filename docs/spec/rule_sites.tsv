@@ -107,6 +107,8 @@ TYPE-15	enforced	E0115	resolve	Concrete.resolveProgram
 TYPE-16	enforced	E0583	core-check	Concrete.ccCheckModuleDecls
 ARITH-2	partial bug-327	E0227	check	Concrete.checkExprCore
 ARITH-5	partial R-0500	E0553	core-check	Concrete.ccCheckExpr
+ARITH-13	partial bug-340	E0901	runtime-safety	Concrete.Report.provenViolationDiagnostics
+ARITH-13	partial bug-340	E0902	runtime-safety	Concrete.Report.provenViolationDiagnostics
 STMT-5	enforced	E0278	check	Concrete.checkExprCore
 STMT-6	partial bug-331	E0216	check	Concrete.checkStmt, Concrete.ccCheckStmt
 STMT-6	partial bug-331	E0245	check	Concrete.checkStmt, Concrete.ccCheckStmt
@@ -181,6 +183,7 @@ REF-8	enforced	E0235	check	Concrete.consumeVar, Concrete.checkCallBorrowConflict
 REF-8	enforced	E0293	check	Concrete.consumeVar, Concrete.checkCallBorrowConflicts, Concrete.checkWriteAccess
 REF-11	partial bug-319	E0293	check	Concrete.pathsOverlap, Concrete.checkCallRootReads
 REF-12	enforced	E0237	elab,check	Concrete.checkMutAccess, Concrete.checkWriteAccess
+MEM-9	partial bug-340	E0900	runtime-safety	Concrete.Report.provenViolationDiagnostics
 TRAIT-1	enforced	E0590	check	Concrete.Coherence.pairwise
 TRAIT-2	enforced	E0591	check	Concrete.Coherence.pairwise, Concrete.Coherence.unify
 TRAIT-3	enforced	E0592	check	Concrete.Coherence.moduleImpls

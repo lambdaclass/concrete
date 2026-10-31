@@ -477,6 +477,7 @@ the report counts those bugs as ambiguous.
 - [329_the_ll_1_checkers_never_computed_follow_sets_a_f.md](329_the_ll_1_checkers_never_computed_follow_sets_a_f.md) — `scripts/check_ll1.{py,c,rs}` checked only that the alternatives of an alternation have disjoint FIRST sets; none computed FOLLOW, so a choice that may derive nothing (an optional, a repetition, a nullable alternative) entered on a token that may also follow it passed, and `check_grammar_ll1.sh` and SYN-1's LL(1) claim were vacuous for those shapes. All three now compute FOLLOW sets and report FIRST/FOLLOW conflicts; the grammar's eight are listed in `grammar/ll1_known_conflicts.tsv` for the owner, and two planted FIRST/FOLLOW grammars are refused by all three.
 - [330_a_continue_inside_a_for_loop_s_step_the_binary_n.md](330_a_continue_inside_a_for_loop_s_step_the_binary_n.md) — a continue inside a for loop's step: the binary never terminates and the interpreter goes to the condition
 - [343_a_qualified_call_m_f_runs_a_parent_function_name.md](343_a_qualified_call_m_f_runs_a_parent_function_name.md) — A qualified call m::f() runs a parent function named m_f, and an undeclared m_f() reaches the submodule function m.f
+- [342_the_diagnostic_code_completeness_gate_scans_a_fi.md](342_the_diagnostic_code_completeness_gate_scans_a_fi.md) — the diagnostic-code completeness gate scans a fixed file list, so eleven emitted codes (E0900 among them) have no ledger row and no spec classification
 
 ## Open Numbered Bugs
 

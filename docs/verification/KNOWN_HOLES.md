@@ -1114,13 +1114,15 @@ address-take.
 
 ### C7. Proven safety violations not enforced — CLOSED 2026-06-11
 
-**Rule:** [MEM-6](../spec/memory.md#MEM-6) and [ARITH-3](../spec/arithmetic.md#ARITH-3). MEM-6 states the refusal with no exemption; the `trusted` / `with(Unsafe)` exemption below is main's behaviour, and which holds is [OPEN-118](../spec/decisions.md#OPEN-118).
+**Rule:** [MEM-9](../spec/memory.md#MEM-9) and [ARITH-13](../spec/arithmetic.md#ARITH-13). MEM-9 and ARITH-13 state the refusals for functions that are neither `trusted` nor `with(Unsafe)`, and leave `trusted` and `with(Unsafe)` functions to [OPEN-118](../spec/decisions.md#OPEN-118); the exemption below is main's behaviour.
 
 A runtime-safety obligation the compiler discharges to `violation` is a
 compile-time **proof** the access is wrong. Previously `violation` was only
 reported, so safe code with `a[5]` on `[i64; 3]` or `10 / 0` still built and
-shipped UB. Fixed: safe code with a proven runtime-safety violation now fails
-the build with E0900; `trusted` / `with(Unsafe)` code remains an explicit
+shipped UB. Fixed: safe code with a proven out-of-bounds index or zero divisor
+now fails the build with E0900 (an index) or E0901 (a divisor). E0902 (an overflow) is never
+reported, because no operation reaches the overflow proof (bug 350), so an overflow traps at run
+time instead; `trusted` / `with(Unsafe)` code remains an explicit
 audit-responsibility escape hatch; `unproven` obligations remain reportable
 and are NOT swept into the hard-error path.
 - **Locked by:** `scripts/tests/check_proven_violation_enforcement.sh` —

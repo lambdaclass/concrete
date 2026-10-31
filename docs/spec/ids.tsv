@@ -279,7 +279,7 @@ MEM-4@1	superseded	d3ca42138342faea35dcdc9b305ed0d0
 MEM-4/one-hop-field-access	live	-
 MEM-5@1	live	634e85340fc2862e9b71d25aa73985e2
 MEM-5/heap-ownership	live	-
-MEM-6@1	live	3e364363e82e7bd2fb5ad9764032a77f
+MEM-6@1	superseded	3e364363e82e7bd2fb5ad9764032a77f
 MEM-6/index-in-bounds	live	-
 MEM-6/index-out-of-bounds	live	-
 MEM-4@2	superseded	603aac6676929f9ebdef7f3dd982c089
@@ -775,3 +775,12 @@ REF-6@2	live	5dfa12f11e610cf6200a90c30c5dfd55
 REF-10@3	live	917f3df08fee9c2bded9ebd75f5819a1
 ARITH-5@2	live	796f9d44e2861971ae92241a2926b71e
 TRUST-4@2	live	fd62a94061672763facc650983f32b78
+ARITH-13@1	live	8a76283d717bc7cc8af178b10f459cda
+ARITH-13/divisor-not-zero	live	-
+ARITH-13/divisor-proven-zero	live	-
+MEM-6@2	live	16cf5c37ce64fb779da6b26e9ae04f0e
+MEM-9@1	live	ec18dfbf9f6837a4f7674743864153d4
+MEM-9/index-proven-in-bounds	live	-
+MEM-9/index-proven-out-of-bounds	live	-
+MEM-9/index-proven-out-of-bounds-unrun	pending	-
+ARITH-13/divisor-proven-zero-unrun	pending	-

@@ -35,3 +35,4 @@ E0423	MOD-2	unreachable:Resolve refuses a trait import first (E0126)
 E0124	MOD-4	od:OD9
 E0238	REF-6	unreachable:the REF-6 re-pointing refusal (recordRefProvenance, reassign) sits behind E0303, which refuses assigning a reference binding first
 E0326	MOD-6	unreachable:only a project that loads std can import std.libc; MOD-6's reject examples are project examples, which S12 does not compile
+E0902	ARITH-13	unreachable:overflowObligations decides a constant verdict only for an operation whose operands are all literals, and exprIntTy gives such an operation no integer type, so no program is refused with E0902 today (ARITH-13 rationale)
