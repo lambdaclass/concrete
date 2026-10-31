@@ -18,19 +18,21 @@ into the types or traits entry that defines it, `for i from a until b` into STMT
 fenced `ebnf` block. `grammar/concrete.ebnf` becomes a generated file, assembled from those blocks in
 chapter order by `spec.py`, and checked byte for byte like `SPEC.md` (S9). The LL(1) checkers read the
 generated file unchanged. A production with no owning entry is a gate failure, as is an entry whose
-example uses a form no production derives (the parser already reports which productions an example
-exercises, so the check is mechanical).
+example uses a form no production derives. That second check needs an EBNF recognizer run over every
+example (new work: the parser cannot serve, since it accepts forms the EBNF does not derive).
 
 **Fixes.** The audit's grammar findings are all one kind: an entry states a form the grammar lacks
 (qualified calls `m::f()`, `import a.{f}`, `pub` fields, value `if`/`match`, bodyless declarations), or
 the grammar keeps a removed form (C-style `for`, `break <expr>`, `E#V`). Today nothing ties the two.
 With the production inside the entry, changing a rule changes its production in the same diff, and
-OPEN-77 (the resync) stops being a separate standing task.
+OPEN-77 (the resync) stops being a separate standing task. It keeps the productions and the
+generated file in step; agreement between a production and its entry's sentence still rests on review.
 
 **Cost.** One-time: about 3 – 5 days. Placing 61 productions (some shared, such as `expr` and `type`,
 which get a home in the syntax chapter), the generator and its byte check (about 150 lines of
 `spec.py`, modelled on `single`), the "every production has an owner" and "every example is derivable"
-checks, and the resync of the productions the audit found missing or stale, which has to happen anyway
+checks, an EBNF recognizer for the derivation check (about 1 – 2 days of the estimate), and the
+resync of the productions the audit found missing or stale, which has to happen anyway
 (OPEN-77) and is most of the work. Ongoing: none beyond today's; an entry edit that changes syntax
 edits one more block. Risk: the shared non-terminals need one clear owner, or ownership becomes
 arbitrary; the proposal gives them to SYN-1.
@@ -63,9 +65,10 @@ entries (a mechanical edit of `Concrete/Report/Diagnostic.lean` and the `spec:` 
 restated sentence needs review, since splitting a sentence is where meaning slips; budget one Codex
 and one Grok pass per chapter. Ongoing: new entries are written in the split form.
 
-**Leaves open.** Whether a refusal that only exists to forbid a run-time behaviour (for example a
-trap the checker can prove) is stated under validation or execution; the proposal says validation,
-with the execution part naming the trap it prevents.
+A refusal that only exists to forbid a run-time behaviour (for example a trap the checker can prove)
+would be stated under validation, with the execution part naming the trap it prevents.
+
+**Leaves open.** Whether that default for such refusals is right.
 
 ## 3. A separate conformance suite with typed assertions
 
@@ -76,13 +79,17 @@ trap kind; today's `abort`), `assert_invalid` (code and stage; today's `reject`)
 `assert_malformed` (a parse refusal, today a `reject` at stage `parse`). The suite is the
 specification's test of an implementation: a second implementation, or the Lean model, runs it without
 reading the chapters. Each entry lists its conformance files; S4 runs the suite instead of the inline
-examples, and an entry with no conformance file fails as an entry with no example does today.
+examples, and an entry with no conformance file fails as an entry with no example does today. A file pinning
+today's behaviour against a decided rule (a `now=` example such as `main-returns-int`) carries a
+`pending` status naming its tracking item, is run as a regression pin, and is not part of the normative
+suite.
 
 **Fixes.** The audit found examples doing two jobs badly: illustrations carrying test scaffolding (the
 `main` migration to `u8` wraps 272 examples in a comparison), pending examples whose `now=` pins
 current behaviour inside normative text, placeholder codes (`code=new`, `code=none`) in a document
 meant to read as the language, and long fixture inventories in rationales. With a suite, an
-illustration can be minimal, pending pins and fixture lists move to the suite and the registry, and
+illustration can be minimal, pending pins (as `pending` files, outside the normative suite) and
+fixture lists move to the suite and the registry, and
 the suite can grow to the edge cases (one per clause, as the class-13 audit did by hand) without
 lengthening the chapters.
 

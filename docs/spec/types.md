@@ -192,6 +192,8 @@ mod text_owned {
 so the type of every value is visible in the source. An integer literal takes the type its
 position expects. A literal that does not fit that type is an arithmetic rule. CoreCheck repeats
 the variable and return checks on Core as defense in depth.
+Version 2 drops the `break` value from the list of positions: a `break` carries no value (STMT-6@3, OD27).
+Main still parses `break <expr>;`, evaluating and dropping the value (bug 323).
 
 ```con reject name=bool-for-int code=E0220 stage=check pair=one-type
 fn main() -> Int {
@@ -281,10 +283,10 @@ fn main() with(Console) -> Int {
 - Evidence: tested
 
 **Rationale.** There is no truthiness: an integer is not a condition. Until bug 192 was fixed, the
-statement forms of `if`, `while` and `for` let an integer through (the counted loop of STMT-6@3 has no
-condition; main's C-style `for (init; cond; step)`, removed by STMT-6@3 and still parsed until bug 331
-is fixed, requires a `bool` `cond` the same way), and the binary ran it with C
+statement forms of `if`, `while` and `for` let an integer through, and the binary ran it with C
 truthiness while `--interp` refused it. This entry's example found the bug.
+The counted loop of STMT-6@3 has no condition. Until bug 331 is fixed, main still parses the C-style
+`for (init; cond; step)` that STMT-6@3 removes, and its `cond` must be `bool` like a `while` condition.
 
 ```con reject name=int-condition code=E0223 stage=check pair=bool-condition
 fn main() -> Int {

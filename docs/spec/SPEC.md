@@ -1871,6 +1871,8 @@ mod text_owned {
 so the type of every value is visible in the source. An integer literal takes the type its
 position expects. A literal that does not fit that type is an arithmetic rule. CoreCheck repeats
 the variable and return checks on Core as defense in depth.
+Version 2 drops the `break` value from the list of positions: a `break` carries no value (STMT-6@3, OD27).
+Main still parses `break <expr>;`, evaluating and dropping the value (bug 323).
 
 ```con reject name=bool-for-int code=E0220 stage=check pair=one-type
 fn main() -> Int {
@@ -1960,10 +1962,10 @@ fn main() with(Console) -> Int {
 - Evidence: tested
 
 **Rationale.** There is no truthiness: an integer is not a condition. Until bug 192 was fixed, the
-statement forms of `if`, `while` and `for` let an integer through (the counted loop of STMT-6@3 has no
-condition; main's C-style `for (init; cond; step)`, removed by STMT-6@3 and still parsed until bug 331
-is fixed, requires a `bool` `cond` the same way), and the binary ran it with C
+statement forms of `if`, `while` and `for` let an integer through, and the binary ran it with C
 truthiness while `--interp` refused it. This entry's example found the bug.
+The counted loop of STMT-6@3 has no condition. Until bug 331 is fixed, main still parses the C-style
+`for (init; cond; step)` that STMT-6@3 removes, and its `cond` must be `bool` like a `while` condition.
 
 ```con reject name=int-condition code=E0223 stage=check pair=bool-condition
 fn main() -> Int {
@@ -4419,8 +4421,8 @@ fn main() -> Int {
 - Evidence: tested
 
 **Rationale.** Decided by the owner on 2026-10-29 (OD2, part 5). Whether the last step, "the remaining
-locals are destroyed", is storage teardown only or a call of `Destroy`, which OWN-13 forbids implicitly,
-is OPEN-69. One order on every normal exit
+locals are destroyed", is storage teardown only or a call of `Destroy`, a reading in conflict with OWN-13's rule that nothing
+is destroyed implicitly, is OPEN-69. One order on every normal exit
 (falling off the end, `return`, `break`, `continue`) is what lets a deferred call see the exit value
 already computed and the loans it was given still live (OWN-16), and lets the destruction of the
 remaining locals come last. An abort runs none of it (STMT-2; OD10). A counted loop's body is its own scope and advancing the index belongs to the loop,
@@ -5418,6 +5420,7 @@ TYPE-14 states the consequence.
 
 **Rationale.** Every site a value flows into moves it: `let g = f;`, a by-value argument,
 `return f;`, a match scrutinee, an assignment `a = f;`, a struct, enum or array literal,
+(a `break` operand, which main still parses, is the `break_` row below)
 and a store `*p = v` or `a[i] = v`. Using the source afterwards would use a value that now has
 another owner.
 
@@ -6469,7 +6472,7 @@ fn main() -> Int {
 | `fieldAssign` | an overwrite of a non-Copy field is **refused** (**E0219**); an ident right-hand side **moves**; the object is a place | conservation |
 | `derefAssign` | through `&mut T`: an overwrite of a non-Copy pointee is **refused** (**E0291**, H15); through `*mut T`: a trusted uninitialized-slot store (exempt); an ident right-hand side **moves** | conservation (H15 rows) |
 | `arrayIndexAssign` | an overwrite of a non-Copy element is **refused** (**E0291**, H15); an ident right-hand side **moves**; the array is a place | conservation (H15 rows) |
-| `break_` | may not skip unconsumed loop-local linear values (E0210); a move of an outer value next to the `break` is allowed by a one-level loop-depth exemption (a break fires at most once per loop entry, H14); `break` carries no value (STMT-6@3, OD27), and main, which still parses `break <expr>;` (bug 323), evaluates and drops it, refusing a non-Copy one (bug 149) | conservation (H14 rows) + scope |
+| `break_` | may not skip unconsumed loop-local linear values (E0210); the H14 one-level loop-depth exemption of the `while_` row applies (a break fires at most once per loop entry); `break` carries no value (STMT-6@3, OD27), and main, which still parses `break <expr>;` (bug 323), evaluates and drops it, refusing a non-Copy one (bug 149) | conservation (H14 rows) + scope |
 | `continue_` | may not skip unconsumed loop-local linear values (E0211) | scope |
 | `defer` | the deferred call **reserves** its operands, consumed at scope exit (OWN-12); a discarded non-Copy or fallible result is refused (E0287 / E0286) | discard |
 | `assert_` | proof-only, erased before Core; must not change the ownership state of a runtime binding (OWN-11) | — |
@@ -12446,7 +12449,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on SYN-6, TYPE-20 and SYN-5. Current main: the literal silently takes the low byte of the character's code point: `let c: char = 'é'; return c as u8;` exits 233 (U+00E9) on both consumers, and SYN-6 says only that a char literal is a token. Options: (a) refuse a char literal whose character is not ASCII, so the value is that one-byte UTF-8 encoding; (b) accept U+0000 to U+00FF as that byte (Latin-1) and refuse anything above; (c) make `char` a Unicode scalar value, which changes TYPE-20's one-byte `char`. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
+**Rationale.** Bears on SYN-6, TYPE-20 and SYN-5. Current main: the literal silently takes the low byte of the character's code point: `'é'` (U+00E9) is 233, `'ā'` (U+0101) is 1 and `'€'` (U+20AC) is 172 as `u8`, on both consumers, and SYN-6 says only that a char literal is a token. Options: (a) refuse a char literal whose character is not ASCII, so every accepted literal is the one byte of its ASCII character; (b) accept U+0000 to U+00FF as that byte (Latin-1) and refuse anything above; (c) make `char` a Unicode scalar value, which changes TYPE-20's one-byte `char`. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
 
 <a id="OPEN-138"></a>
 #### OPEN-138. Which positions give a literal its expected type
@@ -12462,7 +12465,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on ARITH-2, TYPE-4 and TYPE-6. Current main: an unconstrained integer literal is typed `Int` and a float literal `Float64` (bug 327), and in `x + 1` with `x: u8` the literal takes `u8` from the other operand; ARITH-2 refuses a literal with no expected type but does not list the positions that supply one. Options: (a) declared positions (an annotated binding, a parameter, a return, a field) and the other operand of an arithmetic, comparison or bitwise operator, as main reads it; (b) declared positions only, so a literal beside a typed operand needs a typed binding; (c) option (a), plus the target of `as` and the left operand's type for a shift count. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
+**Rationale.** Bears on ARITH-2, TYPE-4 and TYPE-6. Current main: an unconstrained integer literal is typed `Int` and a float literal `Float64` (bug 327); with `x: u8`, the literals in `x + 1`, `x < 250`, `x & 15` and the shift count of `x >> 3` all take `u8` (a probe returning `b + s` exits 33 on both consumers), and `300 as Int` is accepted, whether through `as` or the `Int` default the probe does not show. ARITH-2 refuses a literal with no expected type but does not list the positions that supply one. Options: (a) declared positions (an annotated binding, a parameter, a return, a field) and the other operand of a binary operator, a shift count included, as the probe shows main doing; (b) declared positions only, so a literal beside a typed operand needs a typed binding; (c) option (a), plus the target type of an `as` for its literal operand. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
 
 <a id="OPEN-139"></a>
 #### OPEN-139. A qualified call to a function that is not imported
@@ -12483,7 +12486,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 <a id="OPEN-140"></a>
 #### OPEN-140. Implicitly dropped results of `free` and of a deferred call
 
-**OPEN-140@1.** Whether the Copy result of `free(h);` and of a deferred call are dropped without `discard`, as exceptions to OWN-7@3 (OD29) is an open owner decision (OD140).
+**OPEN-140@1.** Whether the result of `free(h)` (the pointee, of type `T`) when `T` is Copy, and a deferred call's Copy result, may be dropped without `discard`, as exceptions to OWN-7@3 (OD29) is an open owner decision (OD140).
 
 - Kind: open
 - Uses: none
@@ -12494,7 +12497,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on OWN-7, OWN-17, MEM-5 and OWN-15. Current main: both accepted: `free(h);` on a `Heap<Int>` and `defer f();` with `fn f() -> u8` compile and run, while OWN-7@3 (decided OD29) drops a non-Unit result only through `discard(e)`. OWN-17 already drops a deferred call's Copy result, and MEM-5 and OWN-15 describe `free(h);` as a statement. Options: (a) both are exceptions, stated in OWN-7; (b) neither is, so each needs `discard`; (c) `free` is an exception and a deferred call's result is not. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
+**Rationale.** Bears on OWN-7, OWN-17, MEM-5 and OWN-15. Current main: both accepted: `free(h);` on a `Heap<Int>` (whose result is the `Int` moved out of the cell) and `defer f();` with `fn f() -> u8` compile and run, while OWN-7@3 (decided OD29) drops a non-Unit result only through `discard(e)`. OWN-17 states main's drop of a deferred call's result, and MEM-5 and OWN-15 describe `free(h);` as a statement; neither is named as an exception in OWN-7. Options: (a) both are exceptions, stated in OWN-7; (b) neither is, so each needs `discard`; (c) `free` is an exception and a deferred call's result is not. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
 
 <a id="OPEN-141"></a>
 #### OPEN-141. More than one `main` in a program
@@ -12510,7 +12513,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on STMT-7, MOD-3 and PASS-10. Current main: `mod a { pub fn main() -> u8 { return 1; } }` beside `mod b { pub fn main() -> u8 { return 2; } }` fails natively inside LLVM (`redefinition of global '@__concrete_argc'`) and exits 1 under `--interp`, which runs the first; MOD-3 makes a name unique within one module only. Options: (a) only the root module's `main` is the entry point, and others are ordinary functions; (b) a program with more than one `main` is refused; (c) a `main` outside the root module is refused. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
+**Rationale.** Bears on STMT-7, MOD-3 and PASS-10. Current main: `mod a { pub fn main() -> u8 { return 7; } }` beside `mod b { pub fn main() -> u8 { return 9; } }` fails natively inside LLVM (`redefinition of global '@__concrete_argc'`) and prints 7 under `--interp`, which runs the first, also when the second `main` is the root module's; MOD-3 makes a name unique within one module only. Options: (a) only the root module's `main` is the entry point, and others are ordinary functions; (b) a program with more than one `main` is refused; (c) a `main` outside the root module is refused. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
 
 <a id="OPEN-142"></a>
 #### OPEN-142. `X.con` beside `X/mod.con`
@@ -12526,7 +12529,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on MOD-4. Current main: `X.con` is loaded and `X/mod.con` is ignored without a diagnostic (a probe whose two files return 1 and 2 exits 1). MOD-4 says one module is loaded from either file. Options: (a) refuse the pair; (b) `X.con` takes precedence, as main does; (c) `X/mod.con` takes precedence. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
+**Rationale.** Bears on MOD-4. Current main: `X.con` is loaded and `X/mod.con` is ignored without a diagnostic (with `X.con` returning 7 and `X/mod.con` 9, the program exits 7 on both consumers). MOD-4 says one module is loaded from either file. Options: (a) refuse the pair; (b) `X.con` takes precedence, as main does; (c) `X/mod.con` takes precedence. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
 
 <a id="OPEN-143"></a>
 #### OPEN-143. What a contract may read
@@ -12558,7 +12561,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on CON-2 and STMT-11. Current main: contracts are erased at run time, so `#[ensures(result == *r)]` on a function whose `defer inc(r)` runs after the result is computed compiles and runs; no rule says which state the postcondition's proof obligation reads, while STMT-11 computes the result before the deferred calls run. Options: (a) after every deferred call, the state the caller sees; (b) when the result is computed, before deferred calls; (c) refuse an `ensures` in a function with a deferred call that may write what the clause reads. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
+**Rationale.** Bears on CON-2 and STMT-11. Current main: `#[ensures(result == *r)]` on a function whose `defer inc(r)` runs after the result is computed is accepted and runs (contracts are erased at run time); the probe does not show which state the postcondition's proof obligation reads, no rule says, and STMT-11 computes the result before the deferred calls run. Options: (a) after every deferred call, the state the caller sees; (b) when the result is computed, before deferred calls; (c) refuse an `ensures` in a function with a deferred call that may write what the clause reads. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
 
 <a id="OPEN-145"></a>
 #### OPEN-145. How a contract names machine arithmetic
@@ -12574,7 +12577,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on CON-3 and ARITH-4. Current main: CON-3 says a contract's integer arithmetic is mathematical unless it names a machine operation, and no rule or example names one. Options: (a) the named operations of ARITH-4 (`wrapping_add`, `saturating_add` and the rest) are the machine operations in a contract; (b) a contract-only spelling; (c) contracts have only mathematical arithmetic, and CON-3 drops the exception. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
+**Rationale.** Bears on CON-3 and ARITH-4. Current main: `#[ensures(result == wrapping_add(x, 1))]` is accepted and the program runs (contracts are erased at run time); what the proof pipeline makes of the named operation was not probed. CON-3 says a contract's integer arithmetic is mathematical unless it names a machine operation, and no rule or example names one. Options: (a) the named operations of ARITH-4 (`wrapping_add`, `saturating_add` and the rest) are the machine operations in a contract; (b) a contract-only spelling; (c) contracts have only mathematical arithmetic, and CON-3 drops the exception. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
 
 <a id="OPEN-146"></a>
 #### OPEN-146. The result type of a test function
@@ -12622,7 +12625,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on TRAIT-1, TRAIT-9 and SYN-1. Current main: `trait Tr<T> { fn get(&self, x: T) -> T; }` parses, but no bound or impl head can supply `T`, so `impl Tr for S { fn get(&self, x: u8) -> u8 ... }` is refused with E0582 and E0587 (`expected return type T, got u8`). OPEN-77 already lists generic trait methods among the grammar's stale items. Options: (a) refuse type parameters on a trait declaration; (b) allow them, with type arguments at bounds and impl heads (`impl Tr<u8> for S`). Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
+**Rationale.** Bears on TRAIT-1, TRAIT-9 and SYN-1. Current main: `trait Tr<T> { fn get(&self, x: T) -> T; }` parses, but no bound or impl head can supply `T`, so `impl Tr for S { fn get(&self, x: u8) -> u8 ... }` is refused with E0582 and E0587 (`expected return type T, got u8`). OPEN-77 lists generic trait methods among the grammar's stale items; it covers only the productions, while this entry covers what the parameters mean and what binds them. Options: (a) refuse type parameters on a trait declaration; (b) allow them, with type arguments at bounds and impl heads (`impl Tr<u8> for S`). Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
 
 <a id="OPEN-149"></a>
 #### OPEN-149. How `[e; N]` evaluates `e`
@@ -12638,7 +12641,7 @@ OD51; the owner's answer is recorded there. Current main: main has no counted lo
 - Obligation: none
 - Evidence: open
 
-**Rationale.** Bears on STMT-4, OWN-15 and TYPE-7. Current main: `e` is evaluated once per element: `[bump(&mut n); 2]` leaves `n` at 2 (exit 2 on both consumers). OWN-15 says only that an array literal moves each element in, and STMT-4 orders written elements. Options: (a) `e` is evaluated once and copied, so it must be Copy; (b) `e` is evaluated `N` times in index order, as main does; (c) `e` must be a constant expression. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
+**Rationale.** Bears on STMT-4, OWN-15 and TYPE-7. Current main: `e` is evaluated once per element, in index order (`[bump(&mut n); 3]` gives `[1, 2, 3]` on both consumers), and a non-Copy `e` is accepted (`[mk(); 2]` with a linear `R` is refused only if the array is never consumed, E0208). OWN-15 says only that an array literal moves each element in, and STMT-4 orders written elements. Options: (a) `e` is evaluated once and copied, so it must be Copy; (b) `e` is evaluated `N` times in index order, as main does; (c) `e` must be a constant expression. Austral: not checked. Pick: none given (raised by the spec quality audit, 2026-10-30).
 
 <a id="OPEN-150"></a>
 #### OPEN-150. Which text governs the grammar until it is resynchronized
