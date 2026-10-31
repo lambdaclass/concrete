@@ -6423,7 +6423,7 @@ def diagnosticCodesReport : String :=
     entry "E0308" "check" "error" "the else block of a let ... else can fall through (bug 195)",
     entry "E0309" "check" "error" "a match arm's pattern does not fit the scrutinee's type (bug 196)",
     entry "E0306" "check" "error" "a struct or enum literal gives a field more than once (bug 193)",
-    entry "E0310" "check" "error" "`main` declares parameters (the entry point is `fn main() -> Int`; arguments come from std.args; bug 111)",
+    entry "E0310" "check" "error" "`main` declares parameters (the entry point takes none; arguments come from std.args; bug 111)",
     entry "E0311" "check" "error" "`*p` moves a non-Copy value out of raw memory (use the `read_owned` intrinsic; T-RAWDUP)",
     entry "E0312" "check" "error" "internal: a declaration or binder reached the checker without its local binder table (R-0492; bug 206)",
     entry "E0313" "check" "error" "newtype constructor called with other than one argument or with type arguments (bug 206)",

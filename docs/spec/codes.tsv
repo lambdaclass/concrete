@@ -137,7 +137,7 @@ E0306	rule	a struct or enum literal gives a field more than once (bug 193)
 E0307	rule	the end of a function with a result type is reachable without a return (bug 194)
 E0308	rule	the else block of a let ... else can fall through (bug 195)
 E0309	rule	a match arm's pattern does not fit the scrutinee's type (bug 196)
-E0310	rule	`main` declares parameters (the entry point is `fn main() -> Int`; arguments come from std.args; bug 111)
+E0310	rule	`main` declares parameters (the entry point takes none; arguments come from std.args; bug 111)
 E0311	rule	`*p` moves a non-Copy value out of raw memory (use the `read_owned` intrinsic; T-RAWDUP)
 E0312	internal	internal: a declaration or binder reached the checker without its local binder table (R-0492; bug 206)	Check reached a declaration without its binder table, which Resolve and Elab always build; a compiler invariant
 E0313	rule	newtype constructor called with other than one argument or with type arguments (bug 206)
