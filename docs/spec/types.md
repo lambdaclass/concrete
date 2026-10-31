@@ -429,12 +429,13 @@ type, which the language does not have. Version 1 admitted raw-pointer compariso
 and `p + k` in trusted or `Unsafe` code (bugs 134 and 140); OD26 removes both, pointer arithmetic
 becoming `ptr::offset` (TRUST-1).
 
-**Codes by case** (probed on main). Check: E0228, the two operands of a binary operator have
-different types; E0229, a comparison on a type that has none (`a < a` on a struct). CoreCheck, which
-is where main first refuses these: E0501, arithmetic on a non-numeric type (`b + b` on `bool`; also
-after monomorphization); E0506, a bitwise operator on a non-integer (`f & f` on `f64`); E0507,
-negation of a non-number (`-b`); E0509, bitwise not on a non-integer (`~f`). CoreCheck's E0502 and
-E0503 refuse mismatched binary and comparison operands in Core, the backstop of E0228.
+**Codes by case** (probed on main). Check refuses first, as E0228, two operands of a binary operator
+of different types, and as E0229 a comparison on a type that has none (`a < a` on a struct);
+CoreCheck's E0502 and E0503 refuse mismatched binary and comparison operands in Core as the
+backstop of E0228. Check lets these through and CoreCheck refuses them first: E0501, arithmetic on a
+non-numeric type (`b + b` with `b: bool`; also after monomorphization); E0506, a bitwise operator on
+a non-integer (`f & f` with `f: f64`); E0507, negation of a non-number (`-b` with `b: bool`); E0509,
+bitwise not on a non-integer (`~f` with `f: f64`).
 
 Version 2 records the owner's decision of 2026-10-29 (OD26), aligned with TRUST-1: arithmetic,
 shifts and comparisons take numbers only, and pointer offset, difference and ordering are

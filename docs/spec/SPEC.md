@@ -2420,12 +2420,13 @@ type, which the language does not have. Version 1 admitted raw-pointer compariso
 and `p + k` in trusted or `Unsafe` code (bugs 134 and 140); OD26 removes both, pointer arithmetic
 becoming `ptr::offset` (TRUST-1).
 
-**Codes by case** (probed on main). Check: E0228, the two operands of a binary operator have
-different types; E0229, a comparison on a type that has none (`a < a` on a struct). CoreCheck, which
-is where main first refuses these: E0501, arithmetic on a non-numeric type (`b + b` on `bool`; also
-after monomorphization); E0506, a bitwise operator on a non-integer (`f & f` on `f64`); E0507,
-negation of a non-number (`-b`); E0509, bitwise not on a non-integer (`~f`). CoreCheck's E0502 and
-E0503 refuse mismatched binary and comparison operands in Core, the backstop of E0228.
+**Codes by case** (probed on main). Check refuses first, as E0228, two operands of a binary operator
+of different types, and as E0229 a comparison on a type that has none (`a < a` on a struct);
+CoreCheck's E0502 and E0503 refuse mismatched binary and comparison operands in Core as the
+backstop of E0228. Check lets these through and CoreCheck refuses them first: E0501, arithmetic on a
+non-numeric type (`b + b` with `b: bool`; also after monomorphization); E0506, a bitwise operator on
+a non-integer (`f & f` with `f: f64`); E0507, negation of a non-number (`-b` with `b: bool`); E0509,
+bitwise not on a non-integer (`~f` with `f: f64`).
 
 Version 2 records the owner's decision of 2026-10-29 (OD26), aligned with TRUST-1: arithmetic,
 shifts and comparisons take numbers only, and pointer offset, difference and ordering are
@@ -4289,8 +4290,9 @@ fn main() -> u8 {
 <a id="ARITH-5"></a>
 #### ARITH-5. `as` converts without loss
 
-**ARITH-5@2.** A numeric, `bool` or `char` conversion written with `as` is accepted only when every value of the source type converts to a value of the target type that means the same number, `bool` or byte, namely a type to itself, an integer to a wider integer of the same signedness, an unsigned integer to a wider signed one, `bool` to an integer, `char` to an unsigned integer of at least 8 bits or a signed one of at least 16, `u8` to `char`, an integer to a float that represents every value exactly, and `f32` to `f64` (narrowing, sign-changing and float-to-integer `as`, which main still accepts,
-are refused once R-0500 lands), and every other such conversion is written with a named operation (a checked conversion returning an error, `truncate`, `reinterpret`, or a named float rounding).
+**ARITH-5@2.** A numeric, `bool` or `char` conversion written with `as` is accepted only when every value of the source type converts to a value of the target type that means the same number, `bool` or byte, namely a type to itself, an integer to a wider integer of the same signedness, an unsigned integer to a wider signed one, `bool` to an integer, `char` to an unsigned integer of at least 8 bits or a signed one of at least 16, `u8` to `char`, an integer to a float that represents every value exactly, and `f32` to `f64` (the conversions outside this list that main still accepts, narrowing, a
+sign change other than unsigned to wider signed, and float to integer, are this entry's partial part,
+refused once R-0500 lands), and every other such conversion is written with a named operation (a checked conversion returning an error, `truncate`, `reinterpret`, or a named float rounding).
 
 - Kind: refusal
 - Uses: none
