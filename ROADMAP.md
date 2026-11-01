@@ -48,6 +48,26 @@ is the one normative, simple and checkable statement of the language. In order:
 9. **Outside-reader test.** Someone new to Concrete writes a working program from the spec alone,
    and whatever confused them is fixed.
 
+**The spec is rewritten around one formal source (owner decision, 2026-11-01).** This is the most
+important work in row 0s, and steps 3, 4, 6 and 8 are done through it, not as separate passes:
+
+- **A small Core, everything else as desugaring.** The normative language is a small Core, roughly
+  20 – 30 constructs, defined precisely. Every surface feature (counted loops, method calls, `defer`,
+  pattern forms, and so on) is specified as its rewrite into Core, not with semantics of its own. The
+  spec becomes "Core semantics plus a desugaring table", the proofs cover Core only, and a new feature
+  costs one rewrite rule. Rules stated on surface syntax today, such as the ownership checks, move to
+  Core rules (R-0499's checker on Core).
+- **One source for spec, interpreter, tests and proofs** (the WebAssembly SpecTec model). Each Core rule
+  is written once, in Lean (R-0496's Core semantics). The spec's formal parts, the reference interpreter,
+  the conformance oracle and the proof definitions are generated from that one definition, so the spec
+  and the implementation cannot drift apart by construction. The prose stays the readable explanation,
+  checked against the definition.
+- **Order.** First record the owner decisions (step 1). Then define Core and its desugaring table, and
+  rewrite the chapters against them. Then generate the formal parts and the reference interpreter from
+  the Lean definition, chapter by chapter. Proposals 1 and 3 of
+  [SPEC_STRUCTURE_PROPOSALS.md](docs/project/SPEC_STRUCTURE_PROPOSALS.md) (grammar productions in the
+  entries; the conformance suite) are folded into this rewrite.
+
 **Where we are (2026-10-21).** Phase 1 (Stabilize) is in progress: the soundness repairs for bugs
 079 – 101 are landing (queue row 0) and R-0482's P1 closures follow (row 1). Probes added since
 2026-10-19 found bugs 102 – 120 in about two days, nearly all of them new instances of the recurring

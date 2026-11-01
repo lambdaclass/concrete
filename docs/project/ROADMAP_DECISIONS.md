@@ -12,6 +12,13 @@ Moved verbatim from ROADMAP.md on 2026-10-28 (the roadmap compaction); only head
 The dated decisions that shape the queue. Each names the tasks that carry it; none creates another
 queue.
 
+**Spec rewrite decision, 2026-11-01 (owner):** the owner chose to rewrite the specification around
+one formal source: a small Core whose surface features are defined by desugaring, and a single Lean
+definition from which the spec's formal parts, the reference interpreter, the conformance oracle and the
+proof definitions are generated (the WebAssembly SpecTec model). This is the most important work in row 0s.
+Steps 3, 4, 6 and 8 of the spec plan are carried out through it. The plan is at the top of
+[ROADMAP.md](../../ROADMAP.md).
+
 **Specification-first decision, 2026-10-30 (owner):** "the spec is the most important thing to do."
 Row 0s (R-0555) becomes the top priority. Until its steps 1 – 6 hold (owner decisions, absorption with a
 coverage audit, simplification, one readable document, nothing outside the spec, the conformance suite),
