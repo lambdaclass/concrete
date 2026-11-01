@@ -75,25 +75,73 @@ language facts) is updated to cite the new spec and lose any statement it now co
 absorption inventory and the doc-links and docs-drift gates track this: no document may restate a rule
 the spec owns, or describe a removed feature as current.
 
-**The spec is rewritten around one formal source (owner decision, 2026-11-01).** This is the most
-important work in row 0s, and steps 3, 4, 6 and 8 are done through it, not as separate passes:
+**Lean is the only source of the language (owner decision, 2026-11-01).** This is the most
+important work in row 0s. It changes how steps 3, 4, 6 and 8 are carried out, not what they require:
+every done-when criterion of steps 1 – 9 still holds. It supersedes the rewrite plan recorded earlier the
+same day, which kept a prose source beside Lean.
 
-- **A small Core, everything else as desugaring.** The normative language is a small Core, roughly
-  20 – 30 constructs, defined precisely. Every surface feature (counted loops, method calls, `defer`,
-  pattern forms, and so on) is specified as its rewrite into Core, not with semantics of its own. The
-  spec becomes "Core semantics plus a desugaring table", the proofs cover Core only, and a new feature
-  costs one rewrite rule. Rules stated on surface syntax today, such as the ownership checks, move to
-  Core rules (R-0499's checker on Core).
-- **One source for spec, interpreter, tests and proofs** (the WebAssembly SpecTec model). Each Core rule
-  is written once, in Lean (R-0496's Core semantics). The spec's formal parts, the reference interpreter,
-  the conformance oracle and the proof definitions are generated from that one definition, so the spec
-  and the implementation cannot drift apart by construction. The prose stays the readable explanation,
-  checked against the definition.
-- **Order.** First record the owner decisions (step 1). Then define Core and its desugaring table, and
-  rewrite the chapters against them. Then generate the formal parts and the reference interpreter from
-  the Lean definition, chapter by chapter. Proposals 1 and 3 of
-  [SPEC_STRUCTURE_PROPOSALS.md](docs/project/SPEC_STRUCTURE_PROPOSALS.md) (grammar productions in the
-  entries; the conformance suite) are folded into this rewrite.
+- **Core in Lean from the start.** The normative language is a small Core, roughly 20 – 30
+  constructs. Its syntax, its typing, ownership and effect rules, and its execution semantics are Lean
+  definitions, each carrying its rule ID and a doc comment. There is no Markdown-first draft: existing
+  chapter text is rewritten as Lean, not edited as prose. Rules stated on surface syntax today, such as
+  the ownership checks, become Core rules (R-0499's checker on Core).
+- **Desugaring in Lean.** Every surface feature (counted loops, method calls, `defer`, pattern forms,
+  and so on) is defined by its lowering into Core, written as Lean functions, with no semantics of its
+  own. Core's metatheory is shared by every feature, and each lowering carries its own correctness
+  obligation.
+- **Everything else is generated from Lean** (the WebAssembly SpecTec model). A Lean program generates
+  `SPEC.md`, the chapters and the rule registry; a blocking gate fails when they are stale. The
+  reference interpreter is the Lean semantics itself, compiled and run. It replaces `--interp` once it
+  passes the existing interpreter-versus-compiled differential corpus. The conformance
+  examples live next to their rule and run through both the Lean semantics and the compiler.
+- **The compiler is proved against the same definitions.** R-0496's Core semantics is this Lean Core,
+  so the spec, the reference interpreter, the conformance oracle and the verified-compiler theorems
+  share one semantic definition. What remains are explicit correctness obligations at the translation
+  and generation boundaries: desugaring, the generator, the compiler and linking.
+- **Documentation follows from Lean.** The book, the site, the README and the compiler and platform
+  docs cite the generated spec and state no rule of their own.
+- **Implementation sequence**, one step at a time:
+  1. record the owner decisions (step 1);
+  2. Core in Lean: syntax, typing, ownership and effects, execution semantics;
+  3. the desugaring of each surface feature in Lean;
+  4. the generator and its staleness gate;
+  5. retire the old chapters area by area, each replaced by its generated output;
+  6. the documentation follows ("Then the documentation follows the spec", above), area by area as
+     each chapter is replaced;
+  7. the exit 2q migration of std, examples and tests (step 7).
+
+  Proposals 1 and 3 of [SPEC_STRUCTURE_PROPOSALS.md](docs/project/SPEC_STRUCTURE_PROPOSALS.md)
+  (grammar productions in the entries; the conformance suite) are folded into steps 2 – 4.
+
+**How the compiler proof is built (research review, 2026-11-01).** A survey of verified-language and
+verified-compiler projects, reviewed by Codex (adopt with changes), fixes the order in which the
+[verified-compiler plan](docs/compiler/VERIFIED_PIPELINE.md) is carried out:
+
+1. **The semantic contract first.** The final theorem is stated before any pass is proved: which
+   outcomes a program has (return, abort, observable I/O, divergence), what a trace is, how authority
+   and resources appear in it, and the memory abstraction. Values-to-bytes is a named proof boundary,
+   not an implicit step.
+2. **Executable Core semantics.** The planned form is a step function, so it runs as the reference
+   interpreter. Running out of fuel is an execution-budget result of the interpreter, distinct from
+   every program outcome; its relation to divergence is stated with the theorem. Type, ownership and effect
+   soundness are proved over it.
+3. **One minimal end-to-end path.** Each pass preserves behaviour and re-establishes the next IR's
+   ownership and authority invariants, so no later pass relies on a check an earlier one skipped.
+4. **Functional models for safe code**, in the style of Aeneas: a supported safe function is
+   translated to a pure Lean function, with `&mut` arguments passed in and returned, and failure,
+   non-termination and effects explicit. Either the translator is verified or every model carries its
+   own proof. Contracts are stated over these models. This replaces ProofCore, which R-0495 already
+   retires, once the existing proofs transfer.
+5. **Open-module correctness and the C boundary**, in the style of CompCertO: per-module theorems
+   that compose into a whole-program theorem, with explicit contracts for C code.
+6. **Ghost permissions for trusted code**, in the style of Verus, so selected `trusted` functions
+   discharge their trust assumptions instead of carrying them.
+7. **SMT-checked lowering rules** where they pay off, later.
+
+The plan also covers the front end (parsing and desugaring into Core) and the final linked artifact,
+and the spec is tested independently of the compiler, through the conformance suite run on the Lean
+semantics. Items 4 – 7 are the adopted direction; their supported subsets, representations and
+residual assumptions are proposed to the owner before each is built.
 
 **Where we are (2026-10-21).** Phase 1 (Stabilize) is in progress: the soundness repairs for bugs
 079 – 101 are landing (queue row 0) and R-0482's P1 closures follow (row 1). Probes added since

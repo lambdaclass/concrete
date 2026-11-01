@@ -19,6 +19,16 @@ could not run. The resulting rules are listed at the top of [ROADMAP.md](../../R
 Root-token readings of OD38 and OD156. OD8's singletons remain, as linear values that the runtime creates and
 hands to `main`.
 
+**Lean-only source decision, 2026-11-01 (owner):** Lean is the only source of the language. Core, its
+typing, ownership and effect rules, its execution semantics and the desugaring of every surface feature are
+Lean definitions, written in Lean from the start. The spec, its rule registry and the conformance oracle are
+generated from them, the reference interpreter is the Lean semantics itself (replacing `--interp`), and every other document
+cites the generated spec. This supersedes the prose-plus-Lean reading of the spec rewrite decision below.
+The same day, a research review (Codex: adopt with changes) set the order of the compiler proof: semantic
+contract, executable Core semantics, one end-to-end path, functional models replacing ProofCore,
+open-module correctness, ghost permissions for trusted code, SMT-checked lowering. Both are at the top of
+[ROADMAP.md](../../ROADMAP.md).
+
 **Spec rewrite decision, 2026-11-01 (owner):** the owner chose to rewrite the specification around
 one formal source: a small Core whose surface features are defined by desugaring, and a single Lean
 definition from which the spec's formal parts, the reference interpreter, the conformance oracle and the
