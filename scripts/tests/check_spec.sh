@@ -185,7 +185,8 @@ fresh_copy; cp docs/spec/codes.tsv "$TMP/n/base_codes.tsv"; mutate "$TMP/n/spec/
   && control "N3b: a code newly classified unmigrated" S3 "E0700 newly classified unmigrated" -- history "${SP[@]}" --base ctl --base-codes "$TMP/n/base_codes.tsv"
 fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace(F + "con accept name=write-value exit=42", F + "con accept name=write-value exit=42 pending=R-0500 now=accept:42", 1)' \
   && control "N5: an enforced refusal paired with a pending accepted rewrite" S5 "its pair REF-7/write-value is pending" -- lint "${SP[@]}"
-fresh_copy; mutate "$TMP/n/spec/decisions.md" 're.sub(r"(- Status: open OD[0-9]+\n)- Enforced by: none", r"\1- Enforced by: Concrete.checkStmt", s, count=1)' \
+# Every owner decision is answered (2026-11-01), so the control plants its own open entry.
+fresh_copy; mutate "$TMP/n/spec/decisions.md" 's.replace("\n## Decided\n", "\n<a id=\"OPEN-999\"></a>\n### OPEN-999. A planted open entry\n\n**OPEN-999@1.** Whether a planted control question holds is an open owner decision (OD999).\n\n- Kind: open\n- Uses: none\n- Codes: none\n- Status: open OD999\n- Enforced by: Concrete.checkStmt\n- Semantics: none\n- Obligation: none\n- Evidence: open\n\n## Decided\n", 1)' \
   && control "N1g: an open entry that names an enforcing declaration" S1 "an open entry names no enforcing" -- lint "${SP[@]}"
 fresh_copy; mutate "$TMP/n/spec/$REF" 're.sub(r"(\| `reject:E[0-9]{4}:REF-1)@[0-9]+`", r"\1@99`", s, count=1)' \
   && control "N1l: a conformance row that expects a version other than its entry's current one" S1 "conformance row expects REF-1@99" -- lint "${SP[@]}"
