@@ -114,6 +114,56 @@ same day, which kept a prose source beside Lean.
   Proposals 1 and 3 of [SPEC_STRUCTURE_PROPOSALS.md](docs/project/SPEC_STRUCTURE_PROPOSALS.md)
   (grammar productions in the entries; the conformance suite) are folded into steps 2 – 4.
 
+**A new compiler, written from the Lean spec (owner decision, 2026-11-01).** The current compiler
+is not migrated. It implements the language before the decisions of 2026-10-29 – 11-01, and its
+recurring defect classes (spelling-based names, places mixed with values, checks spread across
+passes) are structural. A new compiler is written from the Lean definition, proof-first, and the
+current one is retired. The owner: "i don't care about the current pipeline, we could remove it and start
+from scratch", then approved the transition below (freeze, tag, oracle, deletion after slice 1, the target
+Core proposal first). This changes the implementation strategy only: the Lean-only source decision above
+still governs, and no pending language question is settled by it. The architecture of `ConcreteSpec` and
+the new compiler (the next two items) is the reviewed design proposal, pending the owner's approval.
+
+- **The current compiler is to be frozen and tagged** `legacy-compiler-final`. It then gets no further
+  work; its open defects are recorded against the tag (bug 349 among them) and not repaired. It has two
+  uses until it is retired: CI builds it from the tag as a differential oracle on the programs both
+  compilers support, and the site's browser compiler keeps running from it.
+- **`ConcreteSpec`** is a new Lean library that imports nothing from any compiler. It holds the
+  grammar as data (with its LL(1) check), Core with identities from the start, the semantic contract
+  sized to each slice, the statics as inductive judgments (the only normative form; a decision
+  procedure is an implementation, proved equivalent once a subset's rules stop changing), the one
+  elaborator from surface to Core, the clock-indexed evaluator (the reference interpreter, which
+  replaces `--interp`), the conformance examples and the generator of `SPEC.md`. The rule text is
+  rendered from the judgment clause; doc comments are commentary and examples.
+- **The new compiler** imports `ConcreteSpec` and calls its elaborator. Below Core it is a new
+  lowering chain, built pass by pass with its proofs. A simple BIR → LLVM printer, labelled
+  unverified, gives native code from the first slice; the Lean Compiler Backend follows. A
+  conformance package above both runs every example through the spec and through the compiler.
+- **First deliverables, in order:** the target Core proposal, decided by the owner in one session
+  (the whole shape of Core at once, agreed before the new compiler is implemented); the end-to-end theorem
+  stated in Lean with its holes, each step marked proved, validated or tested, beside the trusted
+  base; then slice 1. The surface language is to be frozen before slice 1: the pending owner answers
+  are obtained and the 12 authority rules confirmed first.
+- **Slices.** Each slice implements owner-approved rules; it does not decide them. Slice 1 is tiny: scalars, `let`, one move and one use-after-move refusal, one checked
+  operation, return or a defined trap, through parsing, elaboration, statics, reference execution,
+  native execution, its generated chapter and one theorem. Later slices follow the dependencies of an
+  example program the owner chooses. A slice is done when its rules are judgments, its examples pass
+  through the spec and the native build, its theorem is proved, its prose chapter is retired and the
+  outside-reader test passes.
+- **When slice 1 works end to end, the old pipeline is deleted from main** in one change, together
+  with the gates that test its internals. Kept: the test programs and bug regressions (re-run as
+  slices cover them), examples and std (migrated to the decided language), the CI and gate framework,
+  the docs and research, and the external native backend. Dropped: the old Core, checker,
+  elaborator, lowering, SSA and LLVM emission, the old interpreter, the `PExpr`/ProofCore proofs, and
+  the evidence, receipt and report subsystems, which are rebuilt on the new Core when proofs need
+  them. The browser compiler keeps running from the tag until the new compiler covers it.
+- **What it supersedes:** the in-place migration of the current compiler in
+  [VERIFIED_PIPELINE.md](docs/compiler/VERIFIED_PIPELINE.md) (its target architecture, semantic contract
+  and proof strategy still apply, now to the new compiler); exit 2q's migration of the compiler,
+  which becomes its retirement (std, examples and tests still migrate); the old-pipeline items of
+  "What is next" below; and the unlanded cleanup branches of the old pipeline, which are to be
+  closed. The proof order in the next paragraph applies to the new compiler.
+
 **How the compiler proof is built (research review, 2026-11-01).** A survey of verified-language and
 verified-compiler projects, reviewed by Codex (adopt with changes), fixes the order in which the
 [verified-compiler plan](docs/compiler/VERIFIED_PIPELINE.md) is carried out:

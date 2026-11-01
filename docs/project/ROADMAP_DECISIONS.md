@@ -19,6 +19,18 @@ could not run. The resulting rules are listed at the top of [ROADMAP.md](../../R
 Root-token readings of OD38 and OD156. OD8's singletons remain, as linear values that the runtime creates and
 hands to `main`.
 
+**New compiler decision, 2026-11-01 (owner):** the current compiler is not migrated to the decided
+language. A new compiler is written from the Lean definition, proof-first: a `ConcreteSpec` library
+(grammar, Core, semantic contract, judgments, elaborator, reference evaluator, examples, generator) and
+a new lowering chain below Core. The current compiler is to be frozen and tagged `legacy-compiler-final`,
+used as a differential oracle (and, until replaced, by the site's browser compiler), and deleted from
+main when slice 1 works end to end. This changes the implementation strategy only; the Lean-only
+source decision still governs and no language question is settled by it. The architecture of the
+library and the new compiler is a reviewed proposal pending the owner's approval. The first
+deliverable is the target Core proposal for the owner. The owner: "i don't care about the current
+pipeline, we could remove it and start from scratch". The plan is at the top of
+[ROADMAP.md](../../ROADMAP.md).
+
 **Lean-only source decision, 2026-11-01 (owner):** Lean is the only source of the language. Core, its
 typing, ownership and effect rules, its execution semantics and the desugaring of every surface feature are
 Lean definitions, written in Lean from the start. The spec, its rule registry and the conformance oracle are
