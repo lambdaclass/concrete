@@ -12,6 +12,13 @@ Moved verbatim from ROADMAP.md on 2026-10-28 (the roadmap compaction); only head
 The dated decisions that shape the queue. Each names the tasks that carry it; none creates another
 queue.
 
+**Authority decision, 2026-11-01 (owner):** `with(...)` is the only permission mechanism, and linear values
+are the only resource mechanism. An operation needs both, and the permission-token concept is dropped. `Std`
+is removed as a capability. This follows a Codex and Grok review, which concluded "adopt with changes"; Kimi
+could not run. The resulting rules are listed at the top of [ROADMAP.md](../../ROADMAP.md). It supersedes the
+Root-token readings of OD38 and OD156. OD8's singletons remain, as linear values that the runtime creates and
+hands to `main`.
+
 **Spec rewrite decision, 2026-11-01 (owner):** the owner chose to rewrite the specification around
 one formal source: a small Core whose surface features are defined by desugaring, and a single Lean
 definition from which the spec's formal parts, the reference interpreter, the conformance oracle and the

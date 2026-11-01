@@ -48,6 +48,33 @@ is the one normative, simple and checkable statement of the language. In order:
 9. **Outside-reader test.** Someone new to Concrete writes a working program from the spec alone,
    and whatever confused them is fixed.
 
+**Authority design (owner decision, 2026-11-01).** Permission and resources are two questions with one
+mechanism each. `with(...)` is the only permission mechanism; it is compile-time information, not a
+resource. Linear values (`File`, `Socket`, `Heap<T>`, and the target's singletons such as `Uart` or `Arena`)
+are the only resource mechanism, and the notion of a permission "token" is dropped. An operation needs
+both: the value says which thing, and `with` says what is allowed. `Std` is removed as a capability,
+so every signature, `main` included, lists its real capabilities. The rules are:
+- effects enter only through a fixed primitive table;
+- capability variables are bounded and every instance is rechecked;
+- function-pointer types keep their exact `with`;
+- `trusted` and `Unsafe` never grant an operational capability;
+- there are no umbrella capabilities;
+- cleanup is explicit, and `Destroy` needs at most `Alloc`;
+- data returned from an effect carries no permission;
+- each target has one allocator form;
+- there is no `Root` type: `main`'s parameters are the target's singletons;
+- capability names differ from resource type names (`with(Fs)` against a `File` value).
+
+The full statement is in the owner's decision set of 2026-11-01; recording it is part of step 1. The spec's
+trusted, types and ownership chapters (TRUST-4 and the capability entries, OD38, OD156) are rewritten to it,
+and std, examples and tests migrate under exit 2q.
+
+**Then the documentation follows the spec.** Once the spec is rewritten, every other document (the
+book, the site, the README, the project, compiler and platform docs, and the research notes that state
+language facts) is updated to cite the new spec and lose any statement it now contradicts. The
+absorption inventory and the doc-links and docs-drift gates track this: no document may restate a rule
+the spec owns, or describe a removed feature as current.
+
 **The spec is rewritten around one formal source (owner decision, 2026-11-01).** This is the most
 important work in row 0s, and steps 3, 4, 6 and 8 are done through it, not as separate passes:
 
