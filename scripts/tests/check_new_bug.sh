@@ -35,9 +35,12 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
 # A still-open owner question for the filing legs that need one: the first live OPEN entry of the
-# registry, so the gate does not break when the owner decides a particular question.
+# registry, so the gate does not break when the owner decides a particular question. When every
+# question is answered (as on 2026-11-01), the gate plants one, OPEN-998, in its scratch copy of the
+# registry only.
 OPEN_Q="$(awk -F'\t' '$1 ~ /^OPEN-[0-9]+@[0-9]+$/ && $2 == "live" { sub(/@.*/, "", $1); print $1; exit }' docs/spec/ids.tsv)"
-[ -n "$OPEN_Q" ] || { echo "FAIL no live OPEN entry in docs/spec/ids.tsv for the --open legs"; exit 1; }
+PLANT_OPEN=0
+[ -n "$OPEN_Q" ] || { OPEN_Q=OPEN-998; PLANT_OPEN=1; }
 # A pre-push hook exports GIT_DIR and friends; the scratch repositories must not inherit them.
 unset $(git rev-parse --local-env-vars) 2>/dev/null || true
 PASS=0; FAIL=0
@@ -62,6 +65,7 @@ cp scripts/gen/bug_ledger.py scripts/gen/bug_areas.py scripts/gen/bug_dashboard.
    scripts/gen/migrate_ledgers.py scripts/gen/new_bug.sh "$W/scripts/gen/"
 # The spec registry and chapter table the rulings resolve against (read only).
 mkdir -p "$W/docs/spec" && cp docs/spec/ids.tsv docs/spec/README.md docs/spec/overview.md "$W/docs/spec/"
+[ "$PLANT_OPEN" = 0 ] || printf 'OPEN-998@1\tlive\t%s\n' 00000000000000000000000000000000 >> "$W/docs/spec/ids.tsv"
 cp scripts/tests/audit_bug_corpus.sh scripts/tests/check_bug_filing_complete.sh \
    scripts/tests/run_tests.sh scripts/tests/run_ci_gates_local.sh "$W/scripts/tests/"
 # The copied gates start by sourcing the gate-shell guard from beside themselves.
