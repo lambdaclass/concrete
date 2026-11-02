@@ -9,4 +9,9 @@ devices) are grants handed to `main`, which consumes them; allocation takes an `
 every target, is fallible and conserves its input, and allocations carry their allocator's identity;
 filesystem access goes through `Directory` values confined at lookup. The new compiler's architecture
 is approved with conditions, 0.1 comes from the new compiler, and RocksDB, ethlambda and usability work
-is paused until the new compiler can run it.
+is paused until the new compiler can run it. The questions the spec audit raised are
+answered too: allocator reset is allowed when nothing allocated from it is alive; any library may
+declare externs in trusted code, only the compiler introduces intrinsics and only the target runtime
+mints grants; `abort()` needs no capability; `main` declares the grants it wants; ambiguous trait calls
+are written `Trait::method(&x)`; `defer` takes a call returning `Unit`; user capability aliases are
+removed.

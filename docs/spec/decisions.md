@@ -12,9 +12,8 @@ Each becomes rule text when its chapter is rewritten as Lean, the only source of
 ([ROADMAP.md](../../ROADMAP.md#concrete-roadmap), row 0s); until then, where a chapter still describes
 the earlier behaviour, the answer below governs, and the code is to follow under exit 2q.
 
-Still open with the owner: whether an allocator may be reset (as opposed to given up when nothing
-allocated from it is alive), who may introduce externs, intrinsics and minting wrappers, and the shape
-of Core, which the owner decides in one session on the
+Still open with the owner: whether a trait can be imported into another module (which decides where
+a qualified call `Trait::method(&x)` can be written), and the shape of Core, which the owner decides in one session on the
 target Core proposal ([ROADMAP.md](../../ROADMAP.md#concrete-roadmap)).
 
 ## Decided
@@ -103,7 +102,7 @@ in summary on 2026-11-01):
 11. **Resources are introduced only by checked acquisition or unforgeable constructors**, and each
     grant the target creates is minted once. Every extern, intrinsic and minting wrapper is listed in
     the trusted base, with its identity preserved through interfaces, specialization and linking.
-    Who may introduce them is still open with the owner.
+    Who may introduce them is decided [below](#decided-2026-11-02-audit).
 12. **`main` receives the target's grants and consumes them.** There is no `Root` type. The target
     declares the grants it offers (its allocator, directories, environment, clock, devices); `main`'s
     parameters and `with(...)` must be within them, checked at compile time. `main` consumes every
@@ -162,6 +161,61 @@ the former authority rule 9 of 2026-11-01 on `get_args`, and OD156):
   grant naming the endpoint, each plus `with(Network)`; accepting takes the listener, and communicating
   takes the connected socket, still with `with(Network)` (holding a socket supplies no permission).
   Name resolution (DNS) needs its own stated authority contract.
+
+<a id="decided-2026-11-02-audit"></a>**Decided 2026-11-02, the questions the spec audit raised** (same rule: Claude's proposal
+and Codex's review agreed, Codex's refinement adopted where it gave one):
+
+- **Allocator reset** is allowed under the condition for giving an allocator up: it consumes the
+  allocator, requires `with(Alloc)` and no live allocation or conflicting loan from it, and returns an
+  allocator whose identity the operation generates fresh (never chosen by the caller). How fresh
+  identities are introduced and scoped in Core, including repeated resets in a loop, is part of the
+  target Core proposal.
+- **Who introduces primitives.** Any library may declare externs, in trusted code, each listed in the
+  trusted base with an accurate primitive contract. Only the compiler introduces intrinsics. Only the
+  target runtime mints the initial grants; ordinary libraries may acquire or narrow authority only
+  from grants they already hold, and an extern never bypasses this.
+- **What "every operation" covers** (authority rule 2): the operations on resources. Pure computation
+  and checked traps need neither a value nor a permission. `abort()` is the same terminal trap and
+  needs neither (this revises STMT-13, which required `Process`). The target's diagnostics and output
+  flushing stay accounted for in traces and target assumptions, and `Unsafe` keeps its own validity
+  requirements.
+- **`main` declares the grants it wants**, as parameters, out of those the target offers; a grant it
+  does not declare is never minted, and it consumes every grant it declares.
+- **Opening a heap.** `&h` gives `&Heap<T, A>`, a reference to the heap's shell. A borrow block opens
+  exactly one heap layer; opening mutably needs exclusive access, and opening through a shell
+  reference keeps that reference's root and lifetime and never upgrades shared access. A `HeapArray`
+  exposes a bounded element view, never an element `&T` or an extra heap layer; the view's exact type
+  is part of the target Core proposal.
+- **Qualified trait calls** (completes OD6): an ambiguous method call is written `Trait::method(&x, ...)`,
+  a path call resolved by the trait's identity, and is refused otherwise; qualification never relaxes
+  coherence.
+- **Mounts and name resolution.** A lookup that crosses a mount point is refused. Name resolution
+  (DNS) takes a resolver grant naming the permitted service, query scope and transport, plus
+  `with(Network)`, and an allocator when it allocates; resolving grants no connection, and connecting
+  to a returned address still needs the destination grant.
+- **`defer` takes a call whose result is `Unit`** (revises OD140). Any other call is wrapped in a named
+  function that returns `Unit` and consumes a linear result, handles a `Result` or `Option`, or
+  discards an eligible Copy result; there is no discard form inside `defer`.
+- **A projection base is a place**: a local, or a projection through a place. A call result is bound
+  with `let` before it is projected.
+- **Deferred arguments.** A by-value argument of a deferred call is reserved and read when the call runs
+  (OWN-12, kept by OD2); a borrowed argument is a loan held until the call runs (OWN-16). Both
+  restrictions apply together. Allocator dependencies are checked when the deferred call runs: an
+  allocation may still be alive at registration only if the cleanup removes it before its allocator is
+  consumed.
+- **`_` names an unused binding.** It never discards a linear value or a `Result` or `Option` (OD62);
+  those are consumed or handled explicitly.
+- **Postconditions are partial correctness over normal returns.** A trap is not a return, so `ensures`
+  says nothing about trapping or diverging executions, and a proved postcondition is never reported as
+  freedom from traps.
+- **What a function contract sees.** `requires` and `ensures` see the function's parameters, `result`
+  (in `ensures` only) and the declarations they may name, such as specification functions; never the
+  body's locals. `requires` reads the parameters at entry; `ensures` reads the parameters' surviving
+  state after every deferred call (OD144), with no implicit entry snapshot, and a parameter the body
+  consumed is not visible. Loop clauses and body assertions use their own lexical scope, permitted
+  ghost locals included.
+- **User capability aliases** (`cap IO = ...`) are removed: they are umbrella capabilities by another
+  name. Capability parameters remain.
 
 **Decided 2026-10-31 by the owner's rule** (every reviewer agreed, and the answer is as strict as
 Austral or stricter):
@@ -276,7 +330,7 @@ against Austral and the no-duplication rule):
 - <a id="OPEN-134"></a>**OPEN-134** (OD134, The capabilities of a container's generated destruction): Keep `Alloc` limit.
 - <a id="OPEN-135"></a>**OPEN-135** (OD135, A method's `Type_method` name in its module's namespace): Stop entering methods under `T_m`.
 - <a id="OPEN-138"></a>**OPEN-138** (OD138, Which positions give a literal its expected type): Declared positions + other operand of a binary op.
-- <a id="OPEN-140"></a>**OPEN-140** (OD140, Implicitly dropped results of `free` and of a deferred call): Neither; each needs `discard`. Clarified 2026-11-02: `free` no longer exists (OD59); a deferred call's Copy result is dropped with `discard`, while a `Result` or `Option` cannot be discarded (OD62) and is handled by a named function that returns `Unit` ([authority rule 9](#decided-2026-11-02-authority)).
+- <a id="OPEN-140"></a>**OPEN-140** (OD140, Implicitly dropped results of `free` and of a deferred call): Neither; each needs `discard`. Revised 2026-11-02: `defer` takes a call whose result is `Unit` ([below](#decided-2026-11-02-audit)). Earlier clarification of the same day: `free` no longer exists (OD59); a deferred call's Copy result is dropped with `discard`, while a `Result` or `Option` cannot be discarded (OD62) and is handled by a named function that returns `Unit` ([authority rule 9](#decided-2026-11-02-authority)).
 - <a id="OPEN-141"></a>**OPEN-141** (OD141, More than one `main` in a program): A `main` outside the root module is refused.
 - <a id="OPEN-142"></a>**OPEN-142** (OD142, `X.con` beside `X/mod.con`): One module layout: `X.con`, children in directory `X/`; no `mod.con`.
 - <a id="OPEN-143"></a>**OPEN-143** (OD143, What a contract may read): A contract reads exactly the names in scope at its position, plus `result` in `ensures`.
