@@ -7,13 +7,13 @@
                               hand-edited); check_docs_drift.sh runs this
 
 Inputs, each the single owner of its fact:
-  docs/bugs/NNN_*.md                 status: the first word of the record's first **Status:** (or
+  docs/bugs/NNN_*.md                 compiler field and status: the first word of the record's first **Status:** (or
                                      legacy `Status:`) line: OPEN/Open, CONTAINED, Half (closed) and
                                      Partially (fixed) are open; FIXED/Fixed/fixed is closed; anything
                                      else, or no status line, is refused
   docs/bugs/STRUCTURAL_CLASSES.md    the summary table's classes; a bug's primary class is the first
                                      class row, in table order, that lists it
-  docs/bugs/discovery.tsv            which probe batch found each bug from 079 on, and which are silent
+  docs/bugs/discovery.tsv            compiler-scoped probe batches: which found each bug from 079 on, and which are silent
   the records' `ruling:` lines       each open bug's spec ruling (scripts/gen/bug_rulings.py; read for
                                      their form only: bug_ledger.py resolves them against docs/spec)
 

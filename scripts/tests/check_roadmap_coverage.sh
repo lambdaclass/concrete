@@ -486,6 +486,15 @@ PY
   neg lost_task "s=re.sub(r'^### Task R-0548$.*?(?=^### |^## |\Z)','',s,flags=re.M|re.S)" 'R-0548 is lost' backlog
   neg backlog_near "s=s.replace('**Phase:** D','**Phase:** A',1)" 'is in the backlog but' backlog
   neg register_later "s=s.replace('**Phase:** T','**Phase:** G',1)" 'lives in the task register but' tasks
+  neg queued_task_in_backlog \
+    "m=re.search(r'^### Task R-0553$.*?(?=^### |^## |\\Z)',s,re.M|re.S);assert m;b+='\n'+m[0].replace('**Phase:**','**Pull trigger:** control: queued task moved to backlog.\n\n**Phase:**',1);s=s[:m.start()]+s[m.end():]" \
+    'names R-0553, which lives in the backlog' both
+  neg stub_names_other_body \
+    "old='ROADMAP_RETIRED_TASKS.md#r-0004).';assert old in s;s=s.replace(old,'ROADMAP_RETIRED_TASKS.md#r-0007).',1)" \
+    'R-0004: its stub sentence names the archived body of R-0007' tasks
+  neg candidate_column_dropped \
+    "old='| candidate | bugs |';assert old in s;s=s.replace(old,'| candidate | bug list |',1)" \
+    'has no "bugs" column'
   neg archive_missing_stub "s=s.replace('archived in [ROADMAP_RETIRED_TASKS.md](../archive/ROADMAP_RETIRED_TASKS.md#r-0004).','archived.')" 'has no stub' tasks
   neg stub_missing_archive "s=s.replace('## R-0004','## R-9999',1)" 'links an archived body that does not exist' archive
   neg inheritance_missing "s=re.sub(r'^- \*\*R-[0-9]{4}\*\*[^\n]*\n','',s,count=1,flags=re.M)" 'lacks inherited obligations' tasks
@@ -520,6 +529,15 @@ FIXEDCONTROL
       ok "a candidate fixed in $spelling refuses"
     else no "the $spelling candidate control failed for an unexpected reason"; fi
   done
+  # An explicitly OPEN entry under Fixed Bugs remains eligible as a candidate.
+  d="$TMPD/open-entry"; mkdir -p "$d"
+  printf '## Fixed Bugs\n\n- [901_control.md](901_control.md) — OPEN control\n' > "$d/README.md"
+  cp "$TMPD/fixed-readme/road.md" "$d/road.md"
+  if BUG_LEDGER_DIR="$d" run_on "$d/road.md"; then
+    ok "positive control open_readme_entry passes (OPEN under Fixed Bugs)"
+  else
+    no "positive control open_readme_entry: an explicitly OPEN ledger entry was read as fixed"
+  fi
   saved_checker="$(declare -f check_file)"
   check_file() { return 1; }
   if run_on "$TARGET"; then no "a crashed checker passed"; else ok "a crashed checker refuses"; fi

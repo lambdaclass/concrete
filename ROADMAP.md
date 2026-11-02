@@ -201,7 +201,7 @@ R-0515 owns the outside-reader test as workloads become supported.
 
 ## Where we are
 
-2026-11-02: the legacy compiler is frozen at `legacy-compiler-final`. The language decisions
+2026-11-02: the legacy compiler is frozen at `legacy-compiler-final` at commit 066c9d9b8. The language decisions
 are recorded; the shape of Core is open for the owner's target Core proposal decision.
 
 **Where things live.** The [task register](docs/project/ROADMAP_TASKS.md) holds A, B and T tasks;
@@ -232,7 +232,7 @@ The [direction](docs/project/ROADMAP_DIRECTION.md) holds standing reference and 
 | A3 | State the semantic contract and theorem in Lean | R-0496, R-0500, R-0502, R-0506, R-0508, R-0509, R-0511, R-0480, R-0211, R-0223, R-0227, R-0230, R-0242, R-0464, R-0266 | The theorem with its holes, named values-to-bytes boundary and trusted-base inventory is on main. |
 | B1 | Build ConcreteSpec and slice 1 with its theorem | R-0491, R-0492, R-0493, R-0497, R-0498, R-0499, R-0501, R-0503, R-0504, R-0507, R-0514, R-0552, R-0521, R-0528, R-0004, R-0435, R-0440, R-0058, R-0073, R-0074, R-0075, R-0076, R-0077, R-0079, R-0080, R-0082, R-0085, R-0090, R-0107, R-0114, R-0115, R-0116, R-0191, R-0203, R-0205, R-0207, R-0210, R-0217, R-0221, R-0222, R-0231, R-0260, R-0272, R-0273, R-0274, R-0278, R-0279, R-0280, R-0288, R-0290, R-0302, R-0421, R-0422, R-0446 | The phase B slice passes from parsing to native execution with independent judgments, correspondence proofs, explicit obligations and minimal proof provenance. |
 | B2 | Generate the chapter and qualify slice 1 | R-0479, R-0471, R-0009, R-0438, R-0092, R-0093, R-0094, R-0095, R-0105, R-0106, R-0118, R-0550, R-0551, R-0425, R-0355 | Conformance and native examples pass; refusal, differential and gate-integrity controls hold; the outside-reader test passes. |
-| B3 | Prove compiler totality and delete the old pipeline under the retention contract | R-0553 | The end-to-end slice is accepted, the new compiler's totality and fuel-budget distinctions are established, and the old pipeline and its internal gates are deleted together; retained programs, regressions, examples, std, evidence replay and browser service follow the retention contract above. |
+| B3 | Prove compiler totality and delete the old pipeline under the retention contract | R-0553 | The end-to-end slice is accepted, the new compiler's totality and fuel-budget distinctions are established, and the old pipeline and its internal gates are deleted together; retained programs, regressions, examples, std, evidence replay and browser service follow the retention contract above; CI builds `legacy-compiler-final` as the differential oracle and the site's browser compiler is built from that tag until the new compiler covers it. |
 
 Phase C: file-copy dependencies and the 0.1 candidate.
 

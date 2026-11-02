@@ -58,9 +58,10 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
   `scripts/gen/refresh_generated.sh` and commit the regenerated AREAS.md. Add an `area:` line to a
   record only when the record shows the derived area is wrong
   ([README.md](../bugs/README.md#bug-areas)); never fill areas in by hand otherwise.
-- A silent defect (wrong code, unsound claim) is stopped at once by repair or fail-closed
-  containment; a loud one is filed, pinned and owned (the defect disposition rule in
-  [ROADMAP.md](../../ROADMAP.md#defect-disposition-rule)).
+- For `compiler: new`, a silent defect (wrong code, unsound claim) is stopped at once by repair
+  or fail-closed containment; a loud one is filed, pinned and owned. Legacy-compiler defects
+  are recorded against `legacy-compiler-final`, never repaired, under
+  [ROADMAP's defect disposition and frozen-compiler rule](../../ROADMAP.md#defect-disposition-rule).
 
 **Branches.**
 - One bug or one rule per branch, in its own worktree (`scripts/worktree-new.sh`,
