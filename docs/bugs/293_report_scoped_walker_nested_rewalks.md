@@ -1,6 +1,7 @@
 # Bug 293 — the Report safety gate every compile runs re-walked nested branches at every level
 
 <!-- bug-ledger
+compiler: legacy
 summary: every compile (`-o`, `--emit-llvm`) runs Report's safety gate (provenViolationDiagnostics: the bounds, division and overflow obligation walks), whose shared scoped walker asked for the scalars each statement assigns by walking the statement's whole subtree, filtered the whole hypothesis list after every statement, and copied the hypothesis scope at every nesting level, so a function nested n deep took time n² to compile even with no obligation in it (10000 nested ifs: --emit-llvm 9.5 s with bug 286 fixed, of which the stages through lower 0.25 s). Found re-measuring the R-0550 nesting shapes with whole compiles. Class 17.
 coverage: run_tests.sh
 class: 17 — the scoped obligation walker re-walked and re-copied per level

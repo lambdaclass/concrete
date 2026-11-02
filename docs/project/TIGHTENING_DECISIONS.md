@@ -3,7 +3,7 @@
 Moved from docs/language: a decision record (paused, owner decisions OD1 to OD22); the rules on main are stated in docs/spec, and the open questions are OPEN-1 to OPEN-22 of docs/spec/decisions.md.
 
 **Paused (2026-10-25).** After this record was written, the project owner paused its decisions for
-negotiation. Each is now an [owner decision](../../ROADMAP.md#owner-decisions) (exit 2n): it stays
+negotiation. Each is now an [owner decision](../spec/decisions.md#owner-decisions) (exit 2n): it stays
 proposed until the owner agrees to it again, explicitly, and only the owner decides it. The words
 "decided" and "implemented" below record what was proposed and landed on 2026-10-23; they are not
 the owner's current answer. Rules already on main stay as they are until the owner answers. The

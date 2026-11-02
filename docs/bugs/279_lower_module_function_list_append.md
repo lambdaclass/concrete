@@ -1,6 +1,7 @@
 # Bug 279 — Lower appends each lowered function to a list and filters types by list search (quadratic in declarations)
 
 <!-- bug-ledger
+compiler: legacy
 summary: Lower appended each lowered function of a module to the list built so far, filtered the program's types against the module's own by a list search per type, and checked each call's callee against a list of defined functions, so a module of n declarations took time n² to lower (10000 functions: 279 ms). Found by the R-0550 scaling gate. Class 17.
 coverage: `check_compile_scaling.sh` judges the `functions`, `call-chain`, `structs` and `enums` shapes' `lower` stage against its budget and near-linear growth (this fix removes the exclusions; the gate fails the pre-fix compiler on call-chain, structs and enums), and `run_tests.sh` times the `lower` stage of 20000 generated functions, which the gate's sizes cannot resolve
 class: 17 — Lower appends each lowered function to a list and filters types by list search

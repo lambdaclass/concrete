@@ -2,7 +2,7 @@
 # File a new bug: allocate its number race-safely, write the record, the reproducer skeleton, the
 # changelog fragment and its discovery attribution, regenerate the views, and print what is left.
 #
-#   scripts/gen/new_bug.sh "<title>" RULING --silent yes|no --batch <text> [--class N]
+#   scripts/gen/new_bug.sh "<title>" [--compiler new|legacy] RULING --silent yes|no --batch <text> [--class N]
 #   scripts/gen/new_bug.sh "<title>" RULING --silent yes|no --new-batch <kind> --probe <text> --effort <size> [--class N]
 #   scripts/gen/new_bug.sh --number NNN "<title>" ...  file under NNN, already reserved and unfiled
 #   scripts/gen/new_bug.sh --number-only "<title>"     allocate and reserve a number, write nothing
@@ -75,12 +75,14 @@ REMOTE="${CONCRETE_BUG_REMOTE:-origin}"
 TODAY="${NEW_BUG_DATE:-$(date +%Y-%m-%d)}"
 TOKEN="FILL-IN(new_bug.sh)"
 
+COMPILER="new"
 TITLE=""; CLASS=""; SILENT=""; NUMBER_ONLY=0; NUMBER=""
 RULING_ARGS=(); N_RULING=0
 BATCH=""; NEW_KIND=""; NEW_PROBE=""; NEW_EFFORT=""; HAVE_BATCH=0; HAVE_NEW=0; HAVE_PROBE=0; HAVE_EFFORT=0
 ARGS=("$@")
 while [ $# -gt 0 ]; do
   case "$1" in
+    --compiler) [ $# -ge 2 ] || usage; COMPILER="$2"; shift 2 ;;
     --class) [ $# -ge 2 ] || usage; CLASS="$2"; shift 2 ;;
     --silent) [ $# -ge 2 ] || usage; SILENT="$2"; shift 2 ;;
     --violates|--spec-gap|--open|--outside) [ $# -ge 2 ] || usage; RULING_ARGS+=("$1" "$2"); N_RULING=$((N_RULING + 1)); shift 2 ;;
@@ -96,6 +98,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ -n "$TITLE" ] || usage
+case "$COMPILER" in legacy|new) ;; *) die "--compiler takes legacy or new" ;; esac
 case "$REMOTE" in fork) die "the remote 'fork' is divergent and never used for coordination" ;; esac
 git remote get-url "$REMOTE" >/dev/null 2>&1 || die "no remote '$REMOTE' (set CONCRETE_BUG_REMOTE)"
 [[ "$TODAY" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || die "NEW_BUG_DATE must be YYYY-MM-DD"
@@ -145,9 +148,9 @@ no_op_in_progress
 # undoes only that edit (NNN out of every row, and the --new-batch row it inserted), so a rollback
 # never clobbers another filing's row written meanwhile, as restoring a whole copy would.
 discovery() {
-  python3 -I - "$ROOT" "$DISC" "$1" "${2:-}" "$SILENT" "$HAVE_BATCH" "$BATCH" "$NEW_KIND" "$NEW_PROBE" "$NEW_EFFORT" "$TODAY" <<'PY'
+  python3 -I - "$ROOT" "$DISC" "$1" "${2:-}" "$SILENT" "$HAVE_BATCH" "$BATCH" "$NEW_KIND" "$NEW_PROBE" "$NEW_EFFORT" "$TODAY" "$COMPILER" <<'PY'
 import os, sys
-root, rel, mode, num, silent, have_batch, batch, kind, probe, effort, today = sys.argv[1:12]
+root, rel, mode, num, silent, have_batch, batch, kind, probe, effort, today, compiler = sys.argv[1:13]
 sys.path.insert(0, os.path.join(root, "scripts", "gen"))
 import bug_dashboard as d
 def refuse(m):
@@ -177,7 +180,7 @@ if mode == "revert":
     def drop(v):
         rest = [b for b in v.strip().split(",") if b and b != num]
         return ",".join(rest) or "-"
-    mine = "\t".join([today, kind, probe, effort, "-", "-"])
+    mine = "\t".join([today, kind, probe, effort, "-", "-", compiler])
     keep = []
     for i, ln in enumerate(lines):
         if i in rows and len(ln.split("\t")) == len(d.COLS):
@@ -201,6 +204,8 @@ if have_batch == "1":
         refuse(f"--batch '{batch}' matches {len(hits)} rows of {rel}, not one{':' if hits else ''}{shown}\n"
                "give text only the batch that found the bug has, or add its row with --new-batch")
     target = hits[0]
+    if cell(target, "compiler") != compiler:
+        refuse("--batch compiler differs from --compiler")
 else:
     for name, v in (("--new-batch", kind), ("--probe", probe), ("--effort", effort)):
         if not v.strip() or any(c in v for c in "\t\n\r"):
@@ -230,7 +235,7 @@ else:
     for i in rows:
         if cell(i, "date") <= today:
             pos = i
-    lines.insert(pos + 1, "\t".join([today, kind, probe, effort, num, num if silent == "yes" else "-"]))
+    lines.insert(pos + 1, "\t".join([today, kind, probe, effort, num, num if silent == "yes" else "-", compiler]))
 save()
 PY
 }
@@ -430,7 +435,7 @@ mkdir -p "$REPRO_DIR"
   printf '**Status:** OPEN\n'
   printf '**Found:** %s, %s by what (workload, probe, review, example)\n' "$TODAY" "$TOKEN"
   printf '**Severity:** %s what goes wrong for a user (silent wrong code, unsound claim, crash, refusal)\n\n' "$TOKEN"
-  printf '<!-- bug-ledger\nsummary: %s\n' "$TITLE"
+  printf '<!-- bug-ledger\ncompiler: %s\nsummary: %s\n' "$COMPILER" "$TITLE"
   printf 'coverage: reproducer %s, pinned by %s the gate leg that pins it (for example check_example_outputs.sh, open-bug reproducers leg)\n' "$REPRO" "$TOKEN"
   [ -z "$CLASS" ] || printf 'class: %s\n' "$CLASS"
   [ -z "$SILENT" ] || printf 'silent: %s\n' "$SILENT"
@@ -446,8 +451,8 @@ mkdir -p "$REPRO_DIR"
   printf '## Structural owner\n\n%s the roadmap task, exit or verified-pipeline stage that removes the\n' "$TOKEN"
   printf 'cause for the whole class, not only this spelling.\n\n'
   printf '## Containment while open\n\n%s the gate leg that pins the current behaviour, and what a user\n' "$TOKEN"
-  printf 'does meanwhile. A silent defect is stopped at once by repair or fail-closed containment\n'
-  printf '([defect disposition rule](../../ROADMAP.md#the-current-execution-queue)).\n'
+  printf 'does meanwhile. Follow the compiler-scoped disposition policy\n'
+  printf '([defect disposition rule](../../ROADMAP.md#defect-disposition-rule)).\n'
 } > "$REC"
 {
   printf '// Bug %s: %s\n' "$num" "$TITLE"

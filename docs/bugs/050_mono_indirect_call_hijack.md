@@ -1,6 +1,7 @@
 # Bug 050: Mono rewrites indirect fn-pointer calls to direct calls when the local's name matches a generic fn
 
 <!-- bug-ledger
+compiler: legacy
 summary: Mono rewrites indirect fn-pointer calls to direct calls when the local's name matches a generic fn (fixed by R-0002)
 fixtures: regress_050_indirect_call_shadow.con regress_050_generic_f_std_io/src/main.con
 class: 1

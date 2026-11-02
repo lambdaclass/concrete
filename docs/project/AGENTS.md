@@ -31,14 +31,14 @@ rule changes in one place.
 
 ## Rules
 
-**Owner decisions: never decide one.** The language decisions OD1 – OD22
-([ROADMAP.md](../../ROADMAP.md#owner-decisions), exit 2n) are decided only by the project owner. No
+**Owner decisions: never decide one.** The language decisions OD1 – OD157
+([decisions.md](../spec/decisions.md#owner-decisions)) are decided only by the project owner. No
 agent, orchestrator or reviewer chooses, encodes, implements or provisionally ships any side of any
 of them, inside a bug fix or anywhere else. Agents present options and a recommendation to the owner
 and wait for an explicit answer. Behaviour already on main that took a side stays as it is, recorded
 as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
 - The Codex review of every fix (`scripts/review/review.sh` asks it) also answers: "does this fix
-  pick a side on any OD in ROADMAP exit 2n?" If yes, or if the fix cannot be made without picking
+  pick a side on any OD in docs/spec/decisions.md?" If yes, or if the fix cannot be made without picking
   one, stop and report to the owner; do not land it.
 
 **Bugs.**
@@ -48,7 +48,7 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
 - To file a bug, run `scripts/gen/new_bug.sh`, which writes its record and runs the ledger
   generator. To log a change, add a `changelog.d/` fragment
   ([changelog.d/README.md](../../changelog.d/README.md)). Never hand-edit a generated view (the bug
-  lists, the class table's bugs column, ROADMAP's generated spans, `CHANGELOG.md`,
+  lists, the class table's bugs column, the generated bug dashboard, `CHANGELOG.md`,
   `Concrete/BuildIdentity.lean`); see [scripts/tests/README.md](../../scripts/tests/README.md),
   "Shared ledgers".
 - Each bug's compiler area is derived from its fix commits ([AREAS.md](../bugs/AREAS.md);
@@ -60,7 +60,7 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
   ([README.md](../bugs/README.md#bug-areas)); never fill areas in by hand otherwise.
 - A silent defect (wrong code, unsound claim) is stopped at once by repair or fail-closed
   containment; a loud one is filed, pinned and owned (the defect disposition rule in
-  [ROADMAP.md](../../ROADMAP.md#the-current-execution-queue)).
+  [ROADMAP.md](../../ROADMAP.md#defect-disposition-rule)).
 
 **Branches.**
 - One bug or one rule per branch, in its own worktree (`scripts/worktree-new.sh`,

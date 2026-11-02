@@ -5,6 +5,7 @@
 **Severity:** loud: a program Check accepts fails to build natively at the SSA verifier (E0715), an internal stage after Check, while `--interp` runs it
 
 <!-- bug-ledger
+compiler: legacy
 summary: a newtype unwrap bound to a let of the inner type passes Check and the native build stops at the SSA verifier
 coverage: reproducer tests/regressions/bug345_a_newtype_unwrap_bound_to_a_let_of_the_inner_typ/repro.con, pinned by check_example_outputs.sh (open-bug reproducers leg, compile-fails on E0715)
 class: 12

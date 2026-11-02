@@ -7,6 +7,7 @@
 Codex confirmation 2026-10-30: CONFIRMED.
 
 <!-- bug-ledger
+compiler: legacy
 summary: An extra type argument to a body-less generic declaration is ignored natively and fails at run time under --interp
 coverage: reproducer tests/regressions/bug333_an_extra_type_argument_to_a_body_less_generic_de/repro.con, found by the spec-gap reviews 2026-10-30; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg) and check_spec.sh S4 (TYPE-9's pending example)
 class: 13

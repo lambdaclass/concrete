@@ -1,6 +1,7 @@
 # Bug 266 — every branch merge in Lower visited every binding in scope
 
 <!-- bug-ledger
+compiler: legacy
 summary: every branch merge in Lower visited every binding in scope and walked the branch bodies once per binding (lets interleaved with ifs or matches were cubic to lower)
 fixtures: regress_266_branch_merges.con
 class: 17 — Lower's branch merges

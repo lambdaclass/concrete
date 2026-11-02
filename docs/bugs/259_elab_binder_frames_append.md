@@ -1,6 +1,7 @@
 # Bug 259 — Elab grows binder frames by append and rebuilds them at every block exit
 
 <!-- bug-ledger
+compiler: legacy
 summary: Elab appended every binder's spelling to its lexical frame, rebuilt every frame with tombstones at each block exit and searched a list of bound locals per use (40000 `let`s: 31 s; 4000 `let`s each with an `if`: 48.6 s; now 188 ms and 34 ms). Frames are kept as their shape, which is all a binder position needs (no reference resolves by spelling since R-0492), and bound locals in a map; positions are unchanged. Pinned by `regress_259_binder_positions.con`, the proof and identity gates and the long-function leg. Found with bug 255. Class 17.
 fixtures: regress_259_binder_positions.con
 class: 17 — one function of many statements: the parser's statement lists, the local binder table, the resolver's scopes, the checker's bindings, Elab's binder frames, ElabVerify's and CoreCheck's scopes, each a list appended or searched per statement

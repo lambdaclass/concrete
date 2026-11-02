@@ -1,6 +1,7 @@
 # Bug 032: multibyte UTF-8 string literals miscompile in emitted LLVM globals
 
 <!-- bug-ledger
+compiler: legacy
 summary: multibyte UTF-8 string literals miscompile in emitted LLVM globals
 coverage: regress_032_multibyte_str_literal.con (run_ok 42); EmitSSA byte-based literal sizes+escapes
 ruling: Violates: PASS-12@1

@@ -1,6 +1,7 @@
 # Bug 111 — `main` may declare parameters, and the wrapper calls it with none
 
 <!-- bug-ledger
+compiler: legacy
 summary: `main` could declare parameters, and the entry wrapper called it with none, so `fn main(argc: i64)` read an undefined register; a parameter on any module-level `main` is now E0310 (the hint names `std.args`); pinned by `error_111_main_params.con`, `error_111_main_params_unit.con`, `error_111_submodule_main_params.con` and the reproducer
 fixtures: error_111_main_params.con error_111_main_params_unit.con error_111_submodule_main_params.con
 class: 13

@@ -1,6 +1,7 @@
 # Bug 213 — a match arm after an unguarded catch-all arm failed SSA verification
 
 <!-- bug-ledger
+compiler: legacy
 summary: a match arm following an unguarded binding or `_` arm in Core order (after CoreCanonicalize moves unguarded catch-alls last) was lowered into a predecessor-less block, so its uses of earlier values failed SSA verification natively (E0703) while `--interp` ran the program. Lower stops at the first unguarded catch-all arm. Pinned by `regress_213_arm_after_binding_arm.con` (binary and --interp). Found by the fuzz farm's mutation generator
 fixtures: regress_213_arm_after_binding_arm.con
 class: 8 — an arm after an unguarded catch-all lowered into a block no edge reaches

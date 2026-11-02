@@ -1,6 +1,7 @@
 # Bug 030: non-`mut` array indexed writes accepted (at least in trusted fns)
 
 <!-- bug-ledger
+compiler: legacy
 summary: non-`mut` array indexed writes accepted (at least in trusted fns)
 coverage: error_030_nonmut_array_write.con (run_err E0217); Check arrayIndexAssign mut rule (general (not trusted-only))
 ruling: Violates: OWN-10@2

@@ -1,6 +1,7 @@
 # Bug 025: No `main` in an executable build leaks a linker error
 
 <!-- bug-ledger
+compiler: legacy
 summary: no `main` in an executable build → clean `error[link]` instead of an ld leak
 coverage: no-main linker leak -- covered by check_error_leaks.sh (no_main, empty_file cases)
 ruling: Violates: PASS-10@1

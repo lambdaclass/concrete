@@ -1,6 +1,7 @@
 # Bug 010: No String Substring Extraction Path
 
 <!-- bug-ledger
+compiler: legacy
 summary: No String Substring Extraction Path
 coverage: missing string_substr -- stdlib addition
 ruling: Outside the spec: library — no substring operation (string_slice/string_substr added)

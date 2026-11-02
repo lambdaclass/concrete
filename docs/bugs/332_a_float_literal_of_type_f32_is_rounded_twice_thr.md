@@ -7,6 +7,7 @@
 Codex confirmation 2026-10-30: CONFIRMED.
 
 <!-- bug-ledger
+compiler: legacy
 summary: A float literal of type f32 is rounded twice, through binary64, instead of once
 coverage: reproducer tests/regressions/bug332_a_float_literal_of_type_f32_is_rounded_twice_thr/repro.con, found by the spec-gap reviews 2026-10-30; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg) and check_spec.sh S4 (ARITH-7's pending example)
 class: 13

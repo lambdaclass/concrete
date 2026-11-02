@@ -26,6 +26,7 @@ ONE OWNER PER FACT. A bug's facts live in its record, docs/bugs/NNN_*.md, and no
   everything else, in one ledger block anywhere in the record (it renders as nothing on GitHub):
 
       <!-- bug-ledger
+      compiler: legacy | new                          (required; frozen tag or new compiler)
       summary: one line for the bug list (required)
       fixtures: regress_175_x.con dir/src/main.con   (paths relative to tests/programs/)
       coverage: the rationale naming the gate or fixture that covers it, when there is no fixture
@@ -33,7 +34,7 @@ ONE OWNER PER FACT. A bug's facts live in its record, docs/bugs/NNN_*.md, and no
       class: 8 — optional note shown beside the bug in STRUCTURAL_CLASSES.md's summary table
       class: 12                                       (one line per class; table order picks primary)
       silent: yes | no                                (silent wrong code / unsound claim vs loud)
-      exit: 0b                                        (ROADMAP exits whose generated bug list names it)
+      exit: 0b                                        (historical exit membership, preserved)
       area: Lower/Lower — why the derivation is wrong (optional: replaces the derived primary area;
                                                       an unknown stage is refused, see bug_areas.py)
       ruling: Violates: OWN-1@2                       (required: the spec ruling, see bug_rulings.py)
@@ -49,8 +50,6 @@ THE GENERATED VIEWS (each between BEGIN/END GENERATED markers; never edit inside
   docs/bugs/README.md              the "## Fixed Bugs" and "## Open Numbered Bugs" lists
   docs/bugs/STRUCTURAL_CLASSES.md  the summary table's bugs column (the class name and owner cells
                                    are owned by the class and kept as written)
-  ROADMAP.md                       each `<!-- BEGIN GENERATED: exit X bugs ... -->` span: the bugs
-                                   whose record names exit X, ranges compacted
   docs/bugs/RULINGS.md             the spec rulings: counts by kind and by spec chapter, every violated
                                    rule with its bugs, the spec gaps (rules to write) and the open owner
                                    questions (scripts/gen/bug_rulings.py)
@@ -68,7 +67,7 @@ coverage source. Once any record carries a block, every record must (a mixed led
 
 FAIL-CLOSED (exit 2, nothing written): two records for one number, a malformed or duplicated block,
 an unknown key, a missing summary, both or neither of fixtures/coverage, a class the summary table
-does not have, an exit with no generated span, a bad silent value, missing or duplicated markers, a
+does not have, a bad silent value, missing or duplicated markers, a
 structural row whose cells disagree between the two sides of a conflict, or a silent value that
 disagrees with docs/bugs/discovery.tsv (when that file exists, its `silent` column must name exactly
 the records marked `silent: yes` among the bugs it lists); an `area:` that names an unknown stage, a malformed
@@ -87,7 +86,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bug_areas  # noqa: E402  (beside this file; -I leaves the script's directory off sys.path)
 import bug_rulings  # noqa: E402
 
-KEYS = {"summary", "fixtures", "coverage", "class", "silent", "exit", "area", "ruling"}
+KEYS = {"compiler", "summary", "fixtures", "coverage", "class", "silent", "exit", "area", "ruling"}
 REPEATABLE = {"class"}
 OPEN_WORDS = {"open", "contained", "half", "partially"}
 CLOSED_WORDS = {"fixed"}
@@ -99,9 +98,6 @@ README_END = "<!-- END GENERATED: bug list -->"
 CLASS_BEGIN = ("<!-- BEGIN GENERATED: class table bugs column (scripts/gen/bug_ledger.py; a bug joins a "
                "class in its record's ledger block; the class name and owner cells are edited here) -->")
 CLASS_END = "<!-- END GENERATED: class table -->"
-EXIT_SPAN = re.compile(r"<!-- BEGIN GENERATED: exit (\w+) bugs[^>]*-->(.*?)<!-- END GENERATED: exit \1 bugs -->", re.S)
-EXIT_BEGIN = "<!-- BEGIN GENERATED: exit {x} bugs (scripts/gen/bug_ledger.py; edit the records' exit lines) -->"
-EXIT_END = "<!-- END GENERATED: exit {x} bugs -->"
 # A status, in the ledger's vocabulary, outside the **Status:** line: an upper-case status word anywhere,
 # or a leading status phrase in any case ("Fixed -- ...", "contained: ...").
 STATUS_UPPER = re.compile(r"\b(FIXED|OPEN|CONTAINED|HALF CLOSED|PARTIALLY FIXED|PARTIAL)\b")
@@ -172,6 +168,8 @@ def parse_block(body, name):
         if k in facts:
             die(f"{name}: ledger key '{k}' given twice")
         facts[k] = v
+    if facts.get("compiler") not in ("legacy", "new"):
+        die(f"{name}: compiler must be legacy or new")
     if "summary" not in facts:
         die(f"{name}: the ledger block has no summary")
     if ("fixtures" in facts) == ("coverage" in facts):
@@ -298,6 +296,9 @@ def render_readme(recs):
     return "\n".join(out)
 
 
+HUNK = re.compile(r"^<{7}[^\n]*\n(.*?)(?:^\|{7}[^\n]*\n.*?)?^={7}\n(.*?)^>{7}[^\n]*\n", re.M | re.S)
+
+
 def side(text, k):
     """`text` with every conflict hunk replaced by its side k (1 ours, 2 theirs)."""
     return HUNK.sub(lambda m: m.group(k), text)
@@ -356,21 +357,6 @@ def splice(text, begin, end, new, path):
     return text[:i] + new + text[j:], text[i:j]
 
 
-HUNK = re.compile(r"^<{7}[^\n]*\n(.*?)(?:^\|{7}[^\n]*\n.*?)?^={7}\n(.*?)^>{7}[^\n]*\n", re.M | re.S)
-
-
-def resolve_span_conflicts(text):
-    """A rebase conflict whose two sides differ only inside generated exit spans (a ROADMAP table row,
-    regenerated on both sides) collapses to one side; the spans are regenerated next. Any other hunk is
-    left as it is, for a human."""
-    blank = lambda t: EXIT_SPAN.sub(lambda m: m.group(0)[:m.start(2) - m.start(0)] + m.group(0)[m.end(2) - m.start(0):], t)  # noqa: E731
-    return HUNK.sub(lambda m: m.group(1) if blank(m.group(1)) == blank(m.group(2)) else m.group(0), text)
-
-
-def exit_text(recs, x):
-    return compact(r["num"] for r in recs.values() if x in r["facts"]["exit"]) or "—"
-
-
 def class_names(root):
     p = os.path.join(root, "docs", "bugs", "STRUCTURAL_CLASSES.md")
     _, block = splice(read(p), CLASS_BEGIN, CLASS_END, "", p)
@@ -408,20 +394,6 @@ def views(root, recs, chapters, areas=None):
     cur = read(p)
     _, old_block = splice(cur, CLASS_BEGIN, CLASS_END, "", p)
     new, _ = splice(cur, CLASS_BEGIN, CLASS_END, render_classes(recs, class_rows(old_block, p)), p)
-    out.append((p, cur, new))
-    p = os.path.join(root, "ROADMAP.md")
-    cur = read(p)
-    base = resolve_span_conflicts(cur)
-    spans = [m.group(1) for m in EXIT_SPAN.finditer(base)]
-    if len(set(spans)) != len(spans):
-        die(f"{p}: an exit has two generated bug spans: {sorted(x for x in spans if spans.count(x) > 1)}")
-    if base.count("<!-- BEGIN GENERATED: exit ") != len(spans) or base.count("<!-- END GENERATED: exit ") != len(spans):
-        die(f"{p}: an exit bug span's BEGIN/END markers do not pair up (a missing, duplicated or orphan marker)")
-    named = {x for r in recs.values() for x in r["facts"]["exit"]}
-    if named - set(spans):
-        die(f"records name exits with no generated bug span in ROADMAP.md: {', '.join(sorted(named - set(spans)))}")
-    new = EXIT_SPAN.sub(lambda m: EXIT_BEGIN.format(x=m.group(1)) + exit_text(recs, m.group(1))
-                        + EXIT_END.format(x=m.group(1)), base)
     out.append((p, cur, new))
     if areas is not None:
         p = os.path.join(root, "docs", "bugs", "AREAS.md")

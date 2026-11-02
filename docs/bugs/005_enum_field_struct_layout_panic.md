@@ -1,6 +1,7 @@
 # Bug 005: Enum Fields Inside Structs Can Panic Layout Computation
 
 <!-- bug-ledger
+compiler: legacy
 summary: Enum Fields Inside Structs Can Panic Layout Computation
 fixtures: bug_enum_in_struct.con
 ruling: Violates: PASS-12@1

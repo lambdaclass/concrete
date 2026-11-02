@@ -1,6 +1,7 @@
 # Bug 301 — Lower's address-taken walk did not see the root local of a field or element borrow
 
 <!-- bug-ledger
+compiler: legacy
 summary: Lower's address-taken walk (`cexprAddrTaken`) recorded a local only for a bare `&x` / `&mut x`, while `placeAddr` lowers a field or element borrow (`&s.x`, `&q.p.y`, `&w.a[1]`, a method call on a field) by promoting the place's root local; when the root was not already slot-backed (an immutable struct local or a struct parameter), a branch or `&&` site did not pre-promote it, the root was promoted inside the branch that borrows it, and the other path read a never-stored slot (silent wrong code)
 fixtures: regress_301_place_borrow_root.con
 class: 8 — the address-taken walk and `placeAddr` decided separately which local a borrow promotes

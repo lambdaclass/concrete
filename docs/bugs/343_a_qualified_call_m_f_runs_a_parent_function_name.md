@@ -5,6 +5,7 @@
 **Severity:** silent wrong code in safe code: a qualified call `m::f()` runs a different function, the parent's own `m_f`, with no diagnostic on either consumer; and a name the program never declares (`m_f`) is accepted and calls `m.f`
 
 <!-- bug-ledger
+compiler: legacy
 summary: A qualified call m::f() runs a parent function named m_f, and an undeclared m_f() reaches the submodule function m.f
 fixtures: error_343_parent_fn_captures_qualified_call.con error_343_local_captures_qualified_call.con error_343_other_module_fn_captures_qualified_call.con error_343_nested_module_captures_qualified_call.con error_343_nested_parent_fn_captures_qualified_call.con error_343_builtin_captures_qualified_call.con error_343_flat_spelling_reaches_module_fn.con error_343_nested_flat_spelling_reaches_child_fn.con regress_343_qualified_paths.con
 class: 1

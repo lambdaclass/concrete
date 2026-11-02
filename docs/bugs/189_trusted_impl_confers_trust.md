@@ -1,6 +1,7 @@
 # Bug 189: `trusted impl` conferred trust on every method of the block
 
 <!-- bug-ledger
+compiler: legacy
 summary: `trusted impl` made every method of the block trusted whether or not it declared it (99 blocks, 326 methods; only 175 needed trust). A block never confers trust now: the parser refuses `trusted impl` (E0001) and each method declares `trusted fn` itself; std and the corpus were migrated by compiling and marking exactly the methods the compiler refused. Pinned by `error_189_trusted_impl_refused.con` and `check_trusted_method.sh` (both impl forms refused; an untrusted sibling method keeps its E0521) ((silent trust widening))
 fixtures: error_189_trusted_impl_refused.con
 class: 14 — `trusted impl` made every method trusted without declaring it

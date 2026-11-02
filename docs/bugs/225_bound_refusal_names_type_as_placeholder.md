@@ -1,6 +1,7 @@
 # Bug 225 — a refused bound names a builtin type `<type>`, and no E0241 has a position
 
 <!-- bug-ledger
+compiler: legacy
 summary: a refused `Copy` bound named every builtin type `<type>` (`v.get_unchecked(0)` on a `Vec<String>`), and no E0241 carried a position: each branch of `checkTraitBounds` rendered the type itself and none had the call's span. One rendering and the call's span for every refusal. Pinned by `error_225_bound_names_builtin_type.con`. Found by the probe programs of Phase 7 workload 10 (stackvm)
 fixtures: error_225_bound_names_builtin_type.con
 class: 12 — the type a refused bound names, rendered per branch; one copy printed `<type>`

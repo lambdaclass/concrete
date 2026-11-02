@@ -1,6 +1,7 @@
 # Bug 224 — a failed `let mut` is recovered as an immutable binding
 
 <!-- bug-ledger
+compiler: legacy
 summary: a `let mut` whose initializer failed to check was recovered as an immutable binding, so every later assignment to it got a false E0217 next to the real error; the recovered binding now keeps the declaration's mutability. Pinned by `error_224_failed_let_keeps_mutability.con`. Found by the bug 222 reproducer on main (Phase 7 workload 10)
 fixtures: error_224_failed_let_keeps_mutability.con
 class: 12 — a recovered `let` restated by hand with its mutability fixed to false

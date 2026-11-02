@@ -1,6 +1,7 @@
 # Bug 107 — a reference to a shadowed binding reads the shadowing binding's storage
 
 <!-- bug-ledger
+compiler: legacy
 summary: `let x = 1; let r = &x; let x = 2; *r` was 1 interpreted and 2 compiled; shadowing a binding a live reference borrows is refused (E0238), and a shadowing `let` gets a fresh Core name (bug 087 `bindLocal`). Fixtures `error_107_shadow_{under_live_ref,in_block_under_live_ref}.con` ((bug 091 normalized place rule))
 fixtures: error_107_shadow_under_live_ref.con error_107_shadow_in_block_under_live_ref.con
 class: 2

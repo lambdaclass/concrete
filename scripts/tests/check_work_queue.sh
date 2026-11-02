@@ -81,13 +81,15 @@ mkdir -p "$SRC/docs/bugs" "$SRC/Concrete/Backend" "$SRC/tasks" "$TMP/fuzz"
 for m in Lower Elab Interp Resolve Mono; do echo "-- $m" > "$SRC/Concrete/$m.lean"; done
 echo "-- EmitSSA" > "$SRC/Concrete/Backend/EmitSSA.lean"
 bug() { # num status severity owner-text [extra]
-  printf '# Bug %s — fixture bug %s\n\n**Status:** %s\n**Severity:** %s\n\n%s## Structural cause\n\nclass 13.\n\n## Structural owner\n\n%s\n' \
+  printf '# Bug %s — fixture bug %s\n\n**Status:** %s\ncompiler: new\n**Severity:** %s\n\n%s## Structural cause\n\nclass 13.\n\n## Structural owner\n\n%s\n' \
     "$1" "$1" "$2" "$3" "${5:-}" "$4" > "$SRC/docs/bugs/$1_fixture.md"
 }
 bug 201 OPEN "silent wrong code." "R-0501 (the Lower pass)."
 bug 202 OPEN "silent wrong code in safe code." "R-0502, in Lower."
 bug 203 OPEN "compiler crash (panic in Elab)." "R-0492 for Elab."
 bug 204 OPEN "loud failure: a valid program is rejected." "R-0499 in Resolve."
+bug 207 OPEN "silent wrong code in frozen compiler." "R-0501 Lower."
+sed -i 's/compiler: new/compiler: legacy/' "$SRC/docs/bugs/207_fixture.md"
 bug 205 FIXED "silent wrong code." "R-0501 in Lower."
 bug 206 "CONTAINED (2026-10-01)" "loud failure at link time." "R-0510 in Interp." \
   $'<!-- bug-ledger\nsummary: fixture\ncoverage: fixture\nsilent: yes\n-->\n\n'
@@ -104,14 +106,14 @@ cat > "$SRC/ROADMAP.md" <<'EOF'
 | 1 | Measurement: stage timestamps | R-0547 | recorded | — |
 | 2 | Landing trains: one CI per train | R-0539 | three trains | 1 |
 
-## The current execution queue
+## The queue
 
-| order | work | exit before advancing |
+| row | goal | owning tasks | done when |
 |---|---|---|
-| 0 | **Soundness repairs (R-0500)** | close it |
-| 1 | **Place MIR (R-0501, R-0600, R-0601)** | shadow paths |
+| A1 | Soundness rules | R-0500 | close it with its acceptance controls |
+| B1 | Place MIR | R-0501, R-0600, R-0601 | shadow paths have acceptance controls |
 
-### Phase 1 exits
+## Later phases
 
 Not a row: R-0999.
 EOF
@@ -185,7 +187,9 @@ EOF
 }
 [ "$(qget bug-206 tier)" = silent ] && ok "a ledger 'silent: yes' outranks the severity prose" || no "bug 206 tier: $(qget bug-206 tier)"
 [ "$(qget bug-203 tier)" = crash ] && ok "a crash severity is the crash tier" || no "bug 203 tier: $(qget bug-203 tier)"
-case " $order " in *" bug-205 "*|*" fuzz-f2 "*|*" fuzz-f3 "*|*" R-0999 "*) no "a fixed bug, a refusal, a promoted finding or a non-row R-id was queued" ;;
+case " $order " in *" bug-207 "*) no "frozen legacy bug was dispatched" ;;
+  *) ok "a silent legacy defect is never dispatched" ;; esac
+case " $order " in *" bug-207 "*|*" bug-205 "*|*" fuzz-f2 "*|*" fuzz-f3 "*|*" R-0999 "*) no "a legacy/fixed bug, a refusal, a promoted finding or a non-row R-id was queued" ;;
   *) ok "fixed bugs, refusals, promoted findings and R-ids outside the rows are not tasks" ;; esac
 [ "$(qget R-0539 depends)" = R-0547 ] && ok "the throughput table's 'depends on' column" || no "R-0539 depends: $(qget R-0539 depends)"
 [ "$(qget R-0501 depends)" = "" ] && ok "'Depends on: nothing. **Blocks:** R-0600' adds no dependency" || no "R-0501 depends: $(qget R-0501 depends)"
@@ -193,6 +197,24 @@ case " $order " in *" bug-205 "*|*" fuzz-f2 "*|*" fuzz-f3 "*|*" R-0999 "*) no "a
 [ "$(qget R-0501 disposition)" = in-flight ] && ok "tasks/R-0501.md marks the sourced task in flight" || no "disposition not applied"
 [ "$(qget bug-201 areas)" = "mod:Lower rule:R-0501" ] && ok "bug areas come from the structural owner" || no "bug-201 areas: $(qget bug-201 areas)"
 [ "$(qget R-0500 areas)" = "mod:Mono rule:R-0500" ] && ok "roadmap areas: the task's rule and the modules its body names" || no "R-0500 areas: $(qget R-0500 areas)"
+mkdir -p "$TMP/legacy-override"; cp -R "$SRC/." "$TMP/legacy-override/"
+printf -- '---\nid: bug-207\n---\n/fix-bug 207\n' > "$TMP/legacy-override/tasks/legacy.md"
+rc=0; python3 "$QD/build_queue.py" --root "$TMP/legacy-override" >/dev/null 2> "$TMP/legacy.err" || rc=$?
+if [ "$rc" = 2 ] && grep -q 'cannot dispatch a legacy compiler bug' "$TMP/legacy.err"; then
+  ok "an explicit task cannot reintroduce a legacy bug"
+else no "an explicit task reintroduced a legacy bug (exit $rc)"; fi
+for bad in missing unknown; do
+  mkdir -p "$TMP/compiler-$bad"; cp -R "$SRC/." "$TMP/compiler-$bad/"
+  if [ "$bad" = missing ]; then
+    sed 's/compiler: new//' "$SRC/docs/bugs/201_fixture.md" > "$TMP/compiler-$bad/docs/bugs/201_fixture.md"
+  else
+    sed 's/compiler: new/compiler: unknown/' "$SRC/docs/bugs/201_fixture.md" > "$TMP/compiler-$bad/docs/bugs/201_fixture.md"
+  fi
+  rc=0; python3 "$QD/build_queue.py" --root "$TMP/compiler-$bad" >/dev/null 2> "$TMP/compiler.err" || rc=$?
+  if [ "$rc" = 2 ] && grep -q 'compiler must be legacy or new' "$TMP/compiler.err"; then
+    ok "a $bad compiler field refuses dispatch"
+  else no "a $bad compiler field did not refuse dispatch (exit $rc)"; fi
+done
 mkdir -p "$TMP/noreg"; cp -R "$SRC/." "$TMP/noreg/"; rm "$TMP/noreg/docs/project/ROADMAP_TASKS.md"
 rc=0; python3 "$QD/build_queue.py" --root "$TMP/noreg" > /dev/null 2> "$TMP/noreg.err" || rc=$?
 [ "$rc" = 2 ] && grep -q 'ROADMAP_TASKS.md is missing' "$TMP/noreg.err" \

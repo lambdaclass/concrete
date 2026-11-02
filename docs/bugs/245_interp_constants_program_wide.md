@@ -1,6 +1,7 @@
 # Bug 245 — the interpreter refuses two modules' private constants of one spelling
 
 <!-- bug-ledger
+compiler: legacy
 summary: `--interp` refused two top-level modules' private constants of one spelling ("defined by more than one module") that the binary keeps apart: the interpreter resolved a bare constant spelling program-wide, Lower within the using function's top-level tree. Both now take that scope from one definition, `CModule.treeConstants`. Found by the Codex review of bug 233's fix, 2026-10-25. Fixtures `regress_245_*`. Class 1.
 fixtures: regress_245_toplevel_private_constants.con regress_245_nested_private_constants.con
 class: 1 — a constant reference is its spelling, scoped program-wide by the interpreter and per tree by Lower; fixed 2026-10-25: both scope it by one definition, `CModule.treeConstants`

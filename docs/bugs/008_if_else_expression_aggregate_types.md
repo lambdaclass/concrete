@@ -1,6 +1,7 @@
 # Bug 008: If-Else Expression Does Not Parse for Aggregate Types
 
 <!-- bug-ledger
+compiler: legacy
 summary: If-Else Expression Does Not Parse for Aggregate Types
 fixtures: bug_if_expression.con
 ruling: Violates: unrecorded

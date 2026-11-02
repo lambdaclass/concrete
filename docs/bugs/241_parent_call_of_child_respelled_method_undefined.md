@@ -1,6 +1,7 @@
 # Bug 241 — a parent calling its submodule's respelled type's method names an undefined function
 
 <!-- bug-ledger
+compiler: legacy
 summary: a parent module calling a method of its submodule's respelled type had the call renamed `<sub>_<Type>_<method>` by the prefix rename before the type respelling could reach it, naming a function nothing defines (undefined LLVM symbol; `--interp`: undefined function). Found reproducing bug 238, 2026-10-25. Fixtures `regress_241_*`. Class 1.
 fixtures: regress_241_parent_calls_child_respelled_method.con regress_241_parent_names_child_respelled_method.con
 class: 1 — a method call renamed by two passes that each recompute its definition's spelling

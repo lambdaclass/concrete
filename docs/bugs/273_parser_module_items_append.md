@@ -1,6 +1,7 @@
 # Bug 273 — the parser appends each struct, enum, constant, newtype, import and submodule of a module to the list built so far (quadratic in declarations)
 
 <!-- bug-ledger
+compiler: legacy
 summary: the parser appended each struct, enum, constant, newtype, import and submodule of a module to the list built so far (`structs := structs ++ [s]`), so a module of n such declarations took time n² to parse (10000 structs: 684 ms). Found by the R-0550 scaling gate. Class 17.
 coverage: `check_compile_scaling.sh` judges the `structs` and `enums` shapes' `parse` stage against its budget and near-linear growth: this fix removes the stage's exclusion under this bug, and the gate fails the pre-fix compiler
 class: 17 — the parser appends each struct, enum, constant, newtype, import and submodule of a module to the list built so far

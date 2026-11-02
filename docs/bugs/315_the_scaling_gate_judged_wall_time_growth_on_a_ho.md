@@ -9,6 +9,7 @@ not be pushed from the dev host while it was busy. The inverse was latent: nothi
 counters, so a CI runner that lost them would have judged by the method this bug shows is unsound.
 
 <!-- bug-ledger
+compiler: legacy
 summary: on a host whose perf cannot count instructions:u (the dev host, perf_event_paranoid 4), the R-0550 scaling gate fell back to judging each stage's wall-time growth between sizes against the x63 bound and its wall budget unnormalized; its own record (bug 294) shows a wall ratio measures the caches and the host's load, so under load a linear stage failed (enums/lower x80, 2 ms at 10^4, while CI counted its run growing linearly), and no CI step required counters, so a CI host without them would have judged the same way. Class 11.
 coverage: check_compile_scaling.sh
 class: 11 — a host without instruction counters read as licence to judge by wall time

@@ -1,6 +1,7 @@
 # Bug 270 — Lower gives every loop a header phi for every binding in scope
 
 <!-- bug-ledger
+compiler: legacy
 summary: Lower gives every loop a header phi for every binding in scope, so n loops in a function of n bindings emit n² phis that the cleanup then removes (quadratic to lower)
 coverage: the `let`-then-`while` shape of the long-function measurement in this record; no gate bounds it yet (a time leg fails until it is fixed)
 class: 17 — Lower's loop phis

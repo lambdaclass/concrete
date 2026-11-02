@@ -1,6 +1,7 @@
 # Bug 152 — `string_trim("")` returns a one-byte string
 
 <!-- bug-ledger
+compiler: legacy
 summary: `string_trim("")` returned a one-byte string holding the byte past the end of its source (the runtime's right-end phi was 0 instead of -1 when the left scan consumed everything); found when the interpreter began modelling `String` over memory. `regress_152_string_trim_empty.con`, interp-vs-native leg ((interpreter-coverage pass))
 fixtures: regress_152_string_trim_empty.con
 class: 7 — a runtime string builtin's empty-input edge

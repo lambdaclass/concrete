@@ -5,6 +5,7 @@
 **Severity:** loud: a program Check accepts fails to build natively in LLVM IR validation (`use of undefined value '@get_args'`), even when nothing calls the function that mentions it
 
 <!-- bug-ledger
+compiler: legacy
 summary: get_args has a Check signature and no implementation, so a program whose emitted code calls it fails LLVM validation on an undefined @get_args
 coverage: reproducer tests/regressions/bug347_get_args_has_a_check_signature_and_no_implementa/repro.con, pinned by check_example_outputs.sh (open-bug reproducers leg, compile-fails on the undefined @get_args)
 class: 12

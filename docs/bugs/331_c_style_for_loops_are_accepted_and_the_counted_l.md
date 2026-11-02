@@ -7,6 +7,7 @@
 Codex confirmation 2026-10-29: CONFIRMED (all five measurements): `parseFor` (Concrete/Frontend/Parser.lean) accepts `for (let ...; cond; step)`, `for (cond)` and `for { ... }` and demands `(` after `for`, so `for i from a until b` is E0001; `lookupKeyword` (Concrete/Frontend/Lexer.lean) has no `from` or `until`; `grammar/concrete.ebnf`'s `for_tail` keeps the removed forms; Check, Elab (`.while_` with the step appended, no variant) and Lower implement the C-style design.
 
 <!-- bug-ledger
+compiler: legacy
 summary: C-style for loops are accepted and the counted loop for i from a until b is not (OD47)
 coverage: reproducer tests/regressions/bug331_c_style_for_loops_are_accepted_and_the_counted_l/repro.con, found checking main against OD47 on 2026-10-29; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, runs-exit 42) and check_spec.sh S4 (STMT-6's pending examples)
 class: 13

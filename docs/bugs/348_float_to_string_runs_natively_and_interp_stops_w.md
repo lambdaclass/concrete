@@ -5,6 +5,7 @@
 **Severity:** loud: the native binary runs and `--interp` stops with `undefined function 'float_to_string'`, so the two consumers disagree on an accepted program
 
 <!-- bug-ledger
+compiler: legacy
 summary: float_to_string runs natively and --interp stops with undefined function float_to_string
 coverage: reproducer tests/regressions/bug348_float_to_string_runs_natively_and_interp_stops_w/repro.con, pinned by check_example_outputs.sh (open-bug reproducers leg, interp-fails on the undefined function)
 class: 7

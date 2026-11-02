@@ -1,6 +1,7 @@
 # Bug 262 — a child's newtype constructor is bound in its parent by Check but not by Elab
 
 <!-- bug-ledger
+compiler: legacy
 summary: a parent calling its child's newtype constructor without importing it (`K(30)` beside `mod kids { pub newtype K = i64; }`) passed Check, whose environment holds the children's newtypes as types and took them for bound constructors, and was refused by Elab as an undeclared function (E0402, an internal code), natively and under `--interp`. Check and Elab now bind newtype constructors from one definition (the module's own and its imports'), so Check refuses it (E0263, MOD-2), and a call of an imported function sharing a child newtype's spelling, which Check had refused as that newtype's constructor (E0220), is accepted. Found by the identity follow-up probes, 2026-10-25. Fixtures `error_262_*`, `regress_262_own_rights_beside_child.con`. Class 12.
 fixtures: error_262_parent_constructs_child_newtype.con error_262_sibling_constructs_newtype.con error_262_child_constructs_parent_newtype.con regress_262_own_rights_beside_child.con regress_262_imported_fn_beside_child_newtype.con
 class: 12 — which newtype constructors a module binds: Check's environment includes its children's newtypes, Elab's does not; fixed 2026-10-25: one definition, the module's own and its imports'

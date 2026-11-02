@@ -1,6 +1,7 @@
 # Bug 006: Cross-Module String Literal Name Collisions
 
 <!-- bug-ledger
+compiler: legacy
 summary: Cross-Module String Literal Name Collisions
 coverage: string literal collision -- fixed in EmitSSA, covered by cross-module tests
 ruling: Violates: PASS-13@1

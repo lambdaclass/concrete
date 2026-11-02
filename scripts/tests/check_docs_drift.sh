@@ -20,13 +20,12 @@
 #      no parallel queue/task headings.
 #   4. Every ROADMAP task has a phase or a recorded disposition, the
 #      reconciliation ledger and queue rows name real tasks in consistent phases,
-#      and every archived task body has its roadmap stub; every Phase 1 exit has an
-#      owner, an acceptance test and a class that agrees with the feature
-#      prerequisites, and no bug listed as implemented-but-not-accepted is already
+#      and every archived task body has its roadmap stub; every queue row has an owning task
+#      and a done-when, and no bug listed as implemented-but-not-accepted is already
 #      recorded fixed in docs/bugs (check_roadmap_coverage.sh, with its own
 #      negative controls).
 #   4b. One owner per fact: the bug lists in docs/bugs/README.md, the bugs column of
-#      STRUCTURAL_CLASSES.md's table and ROADMAP's exit bug spans equal the ones generated from the
+#      STRUCTURAL_CLASSES.md's table equal the ones generated from the
 #      bug records (scripts/gen/bug_ledger.py --check), CHANGELOG.md matches its stamp and every
 #      changelog.d/ fragment is well-formed (scripts/gen/changelog.py --check), with negative and
 #      positive controls on a migrated copy (scripts/tests/check_ledgers.sh).
@@ -36,8 +35,8 @@
 #   7. No Markdown file outside docs/spec restates a normative sentence of the language
 #      specification (scripts/spec/spec.py restatements; check_spec.sh S11 owns the check and its
 #      negative control, docs/spec/MAINTAINERS.md §6).
-#   6. ROADMAP's "Bug dashboard" equals the one generated from the bug records, the structural
-#      classes, docs/bugs/discovery.tsv and the Phase 1 exits (scripts/gen/bug_dashboard.py
+#   6. docs/bugs/DASHBOARD.md equals the one generated from the bug records, the structural
+#      classes, docs/bugs/discovery.tsv and compiler-scoped batches (scripts/gen/bug_dashboard.py
 #      --check), with negative controls for a hand edit, stale inputs, a malformed or incomplete
 #      discovery record and a bad class tag, and controls that the per-class discovery signal
 #      (exit 2m) moves only the classes a batch counts toward.
@@ -217,7 +216,7 @@ BGEN=scripts/gen/bug_dashboard.py
 if python3 -I "$BGEN" --check; then ok "the bug dashboard matches the bug records"
 else no "the bug dashboard differs from the bug records (run python3 $BGEN --write)"; fi
 BTMP="$CTMP/bugs"
-bug_copy() { rm -rf "$BTMP"; mkdir -p "$BTMP/docs"; cp ROADMAP.md "$BTMP/"; cp -R docs/bugs "$BTMP/docs/bugs"; }
+bug_copy() { rm -rf "$BTMP"; mkdir -p "$BTMP/docs"; cp -R docs/bugs "$BTMP/docs/bugs"; }
 bug_neg() { # name, python edit over s, target file (relative to the copy root), expected exit
   bug_copy
   if ! python3 -I - "$BTMP/$3" "$2" <<'PY'
@@ -231,21 +230,31 @@ PY
   python3 -I "$BGEN" --check --root "$BTMP" >/dev/null 2>&1 || rc=$?
   [ "$rc" = "$4" ] && ok "bug-dashboard control $1 is refused (exit $rc)" || no "bug-dashboard control $1: exit $rc, expected $4"
 }
-bug_neg hand_edited "import re; s,n=re.subn(r'\*\*Open bugs: (\d+)\*\*', lambda m: '**Open bugs: '+str(int(m.group(1))+1)+'**', s); assert n==1" ROADMAP.md 1
-bug_neg markers_missing "old='<!-- END GENERATED: bug dashboard -->'; assert s.count(old)==1; s=s.replace(old,'')" ROADMAP.md 2
+bug_neg hand_edited "import re; s,n=re.subn(r'\*\*Open bugs: (\d+)\*\*', lambda m: '**Open bugs: '+str(int(m.group(1))+1)+'**', s, count=1); assert n==1" docs/bugs/DASHBOARD.md 1
+bug_neg markers_missing "old='<!-- END GENERATED: bug dashboard -->'; assert s.count(old)==1; s=s.replace(old,'')" docs/bugs/DASHBOARD.md 2
 bug_neg bug_fixed_not_regenerated "import re; s,n=re.subn(r'^\*\*Status:\*\* OPEN', '**Status:** FIXED', s, count=1, flags=re.M); assert n==1" docs/bugs/122_builtin_enum_canonical_layout.md 1
 # The dashboard lists only the most recent counting batches, so the control edits the newest one
 # (a fixed row scrolls out of the table as batches are added, and its edit then changes nothing).
 bug_neg batch_changed_not_regenerated "C={'hunt','examples','workload','design-proofs','semantics','spec','fuzz','interp-coverage'}; L=s.split(chr(10)); i=max(j for j,l in enumerate(L) if len(l.split(chr(9)))>1 and l.split(chr(9))[1] in C); f=L[i].split(chr(9)); f[1]='fuzz' if f[1]=='hunt' else 'hunt'; L[i]=chr(9).join(f); s=chr(10).join(L)" docs/bugs/discovery.tsv 1
-bug_neg unattributed_bug "import re; s,n=re.subn(r',137\t', '\t', s); assert n==1; s,n=re.subn(r',137$', '', s, flags=re.M); assert n==1" docs/bugs/discovery.tsv 2
+bug_neg unattributed_bug "L=s.split(chr(10)); n=0
+for i,l in enumerate(L):
+ c=l.split(chr(9))
+ if len(c)==7 and '137' in c[4].split(','):
+  c[4]=','.join(b for b in c[4].split(',') if b!='137') or '-'; c[5]=','.join(b for b in c[5].split(',') if b!='137') or '-';L[i]=chr(9).join(c);n+=1
+assert n==1
+s=chr(10).join(L)" docs/bugs/discovery.tsv 2
 bug_neg bug_in_two_batches "old='\t134\t-'; assert s.count(old)==1; s=s.replace(old,'\t134,136\t-')" docs/bugs/discovery.tsv 2
 bug_neg silent_not_found "old='\t134\t-'; assert s.count(old)==1; s=s.replace(old,'\t134\t133')" docs/bugs/discovery.tsv 2
 bug_neg unknown_kind "old='\tsemantics\tsemantics probes'; assert s.count(old)==1; s=s.replace(old,'\tvibes\tsemantics probes')" docs/bugs/discovery.tsv 2
 bug_neg bug_without_record "old='\t134\t-'; assert s.count(old)==1; s=s.replace(old,'\t134,999\t-')" docs/bugs/discovery.tsv 2
 bug_neg status_malformed "import re; s,n=re.subn(r'^\*\*Status:\*\* OPEN', '**Status:** OPNE', s, count=1, flags=re.M); assert n==1" docs/bugs/122_builtin_enum_canonical_layout.md 2
 bug_neg status_missing "import re; s,n=re.subn(r'^\*\*Status:\*\*[^\n]*\n', '', s, count=1, flags=re.M); assert n==1" docs/bugs/122_builtin_enum_canonical_layout.md 2
-bug_neg counting_batch_effort_unrecorded "s=s.rstrip('\n')+'\n2099-01-01\tfuzz\tcontrol campaign\tunrecorded\t-\t-\n'" docs/bugs/discovery.tsv 2
+bug_neg counting_batch_effort_unrecorded "s=s.rstrip('\n')+'\n2099-01-01\tfuzz\tcontrol campaign\tunrecorded\t-\t-\tlegacy\n'" docs/bugs/discovery.tsv 2
 bug_neg empty_cell "old='\tunrecorded\t134\t'; assert s.count(old)==1; s=s.replace(old,'\t\t134\t')" docs/bugs/discovery.tsv 2
+bug_neg compiler_missing "s=s.replace('compiler: legacy\n','',1)" docs/bugs/122_builtin_enum_canonical_layout.md 2
+bug_neg compiler_invalid "s=s.replace('compiler: legacy','compiler: other',1)" docs/bugs/122_builtin_enum_canonical_layout.md 2
+bug_neg compiler_mixed_batch "s=s.replace('compiler: legacy','compiler: new',1)" docs/bugs/122_builtin_enum_canonical_layout.md 2
+bug_neg batch_compiler_invalid "s=s.replace('\tlegacy','\tother',1)" docs/bugs/discovery.tsv 2
 # Bug 232: the controls below are relative to the record's own streaks. They pinned "1 consecutive"
 # and "0 consecutive", true only while the last counting batch was not quiet, so recording a quiet
 # batch (the event the signal exists to count) failed this gate. Since 2026-10-25 the signal is kept
@@ -254,46 +263,46 @@ streak_of() { # file, class label prefix ("1." or "no class yet") -> that row's 
   awk -F' \\| ' -v want="$2" 'index($1, "| " want) == 1 && NF == 3 { print $2; exit }' "$1"
 }
 bug_copy
-rm -f "$BTMP/ROADMAP.md.gen"
+rm -f "$BTMP/docs/bugs/DASHBOARD.md.gen"
 S1=""; S2=""; SN=""
-if python3 -I "$BGEN" --root "$BTMP" > "$BTMP/ROADMAP.md.gen" 2>/dev/null; then
-  S1="$(streak_of "$BTMP/ROADMAP.md.gen" "1.")"; S2="$(streak_of "$BTMP/ROADMAP.md.gen" "2.")"
-  SN="$(streak_of "$BTMP/ROADMAP.md.gen" "no class yet")"
+if python3 -I "$BGEN" --root "$BTMP" > "$BTMP/docs/bugs/DASHBOARD.md.gen" 2>/dev/null; then
+  S1="$(streak_of "$BTMP/docs/bugs/DASHBOARD.md.gen" "1.")"; S2="$(streak_of "$BTMP/docs/bugs/DASHBOARD.md.gen" "2.")"
+  SN="$(streak_of "$BTMP/docs/bugs/DASHBOARD.md.gen" "no class yet")"
 fi
 for v in "$S1" "$S2" "$SN"; do
   case "$v" in ''|*[!0-9]*) no "the per-class discovery streaks could not be generated from the record (baseline for the controls below)"; S1=-99; S2=-99; SN=-99; break ;; esac
 done
 regen() { python3 -I "$BGEN" --write --root "$BTMP" >/dev/null 2>&1 && python3 -I "$BGEN" --check --root "$BTMP" >/dev/null 2>&1; }
-has() { [ "$(streak_of "$BTMP/ROADMAP.md" "$1")" = "$2" ]; }
+has() { [ "$(streak_of "$BTMP/docs/bugs/DASHBOARD.md" "$1")" = "$2" ]; }
 add_control_bugs() { # fixed records outside every class (numbers as arguments, default 998 999)
-  for n in ${@:-998 999}; do printf '# Bug %s — control\n\n**Status:** FIXED\n' "$n" > "$BTMP/docs/bugs/${n}_control.md"; done
+  for n in ${@:-998 999}; do printf '# Bug %s — control\n\n**Status:** FIXED\n\n<!-- bug-ledger\ncompiler: legacy\n-->\n' "$n" > "$BTMP/docs/bugs/${n}_control.md"; done
 }
 # Positive control: a new quiet counting batch, regenerated, passes and moves every class by one.
 bug_copy
-printf '2099-01-01\tfuzz\tcontrol campaign\t8 hours\t-\t-\n' >> "$BTMP/docs/bugs/discovery.tsv"
+printf '2099-01-01\tfuzz\tcontrol campaign\t8 hours\t-\t-\tlegacy\n' >> "$BTMP/docs/bugs/discovery.tsv"
 if regen && has "1." "$((S1 + 1))" && has "no class yet" "$((SN + 1))"; then
   ok "positive control: a recorded quiet probe batch regenerates, checks and counts toward every class"
 else no "positive control: a well-formed probe batch failed to regenerate, check or count"; fi
 # A token batch (zero or too little effort) is recorded but does not move the signal.
 for eff in "0 hours" "3 hours" "2 programs"; do
   bug_copy
-  printf '2099-01-01\tfuzz\tcontrol campaign\t%s\t-\t-\n' "$eff" >> "$BTMP/docs/bugs/discovery.tsv"
+  printf '2099-01-01\tfuzz\tcontrol campaign\t%s\t-\t-\tlegacy\n' "$eff" >> "$BTMP/docs/bugs/discovery.tsv"
   if python3 -I "$BGEN" --write --root "$BTMP" >/dev/null 2>&1 && has "1." "$S1" \
-     && grep -qF 'token (does not count)' "$BTMP/ROADMAP.md"; then
+     && grep -qF 'token (does not count)' "$BTMP/docs/bugs/DASHBOARD.md"; then
     ok "control: a token batch ($eff) is shown but does not count toward the signal"
   else no "control: a token batch ($eff) moved the discovery signal"; fi
 done
 # A batch tagged with one migration's class counts toward that class only.
 bug_copy
-printf '2099-01-01\tfuzz\tclass 2: control probes of a migration\t8 hours\t-\t-\n' >> "$BTMP/docs/bugs/discovery.tsv"
+printf '2099-01-01\tfuzz\tclass 2: control probes of a migration\t8 hours\t-\t-\tlegacy\n' >> "$BTMP/docs/bugs/discovery.tsv"
 if regen && has "2." "$((S2 + 1))" && has "1." "$S1"; then
   ok "control: a quiet batch tagged class 2 moves class 2 only"
 else no "control: a quiet batch tagged class 2 did not move class 2 alone"; fi
 # Its loud bugs count against the tagged class, not against their own.
 bug_copy; add_control_bugs
 # (a quiet batch first, so the streak this control ends is not already 0)
-printf '2099-01-01\tfuzz\tcontrol campaign\t8 hours\t-\t-\n' >> "$BTMP/docs/bugs/discovery.tsv"
-printf '2099-01-01\tfuzz\tclass 2: control probes of a migration\t8 hours\t998,999\t-\n' >> "$BTMP/docs/bugs/discovery.tsv"
+printf '2099-01-01\tfuzz\tcontrol campaign\t8 hours\t-\t-\tlegacy\n' >> "$BTMP/docs/bugs/discovery.tsv"
+printf '2099-01-01\tfuzz\tclass 2: control probes of a migration\t8 hours\t998,999\t-\tlegacy\n' >> "$BTMP/docs/bugs/discovery.tsv"
 if regen && has "2." "0" && has "no class yet" "$((SN + 1))" && has "1." "$((S1 + 1))"; then
   ok "control: two loud bugs in a class-2 batch end class 2's streak and no other"
 else no "control: a class-2 batch's loud bugs were not counted against class 2 alone"; fi
@@ -306,21 +315,27 @@ p = sys.argv[1]; s = open(p, encoding='utf-8').read()
 s, n = re.subn(r'^(\| 1\. [^|]+\| )', lambda m: m.group(1) + '998, 999, ', s, count=1, flags=re.M); assert n == 1
 open(p, 'w', encoding='utf-8').write(s)
 PY
-printf '2099-01-01\tfuzz\tcontrol campaign\t8 hours\t-\t-\n' >> "$BTMP/docs/bugs/discovery.tsv"
-printf '2099-01-01\tfuzz\tcontrol campaign\t8 hours\t998,999\t-\n' >> "$BTMP/docs/bugs/discovery.tsv"
+printf '2099-01-01\tfuzz\tcontrol campaign\t8 hours\t-\t-\tlegacy\n' >> "$BTMP/docs/bugs/discovery.tsv"
+printf '2099-01-01\tfuzz\tcontrol campaign\t8 hours\t998,999\t-\tlegacy\n' >> "$BTMP/docs/bugs/discovery.tsv"
 if regen && has "1." "0" && has "no class yet" "$((SN + 2))" && has "2." "$((S2 + 2))"; then
   ok "control: an untagged batch's class-1 bugs end class 1's streak and no other class's"
 else no "control: an untagged batch's bugs were counted against a class they are not in"; fi
 # A silent bug always counts against its own class, whichever batch found it.
 bug_copy; add_control_bugs 999
 # (a quiet batch first, so the streak this control ends is not already 0)
-printf '2099-01-01\tfuzz\tcontrol campaign\t8 hours\t-\t-\n' >> "$BTMP/docs/bugs/discovery.tsv"
-printf '2099-01-01\tfuzz\tclass 2: control probes of a migration\t8 hours\t999\t999\n' >> "$BTMP/docs/bugs/discovery.tsv"
+printf '2099-01-01\tfuzz\tcontrol campaign\t8 hours\t-\t-\tlegacy\n' >> "$BTMP/docs/bugs/discovery.tsv"
+printf '2099-01-01\tfuzz\tclass 2: control probes of a migration\t8 hours\t999\t999\tlegacy\n' >> "$BTMP/docs/bugs/discovery.tsv"
 if regen && has "2." "0" && has "no class yet" "0"; then
   ok "control: a silent bug in a class-2 batch also ends its own class's streak"
 else no "control: a silent bug in a tagged batch escaped its own class"; fi
-bug_neg tag_names_no_class "s=s.rstrip('\n')+'\n2099-01-01\tfuzz\tclass 99: control\t8 hours\t-\t-\n'" docs/bugs/discovery.tsv 2
-bug_neg tag_on_attribution_row "s=s.rstrip('\n')+'\n2099-01-01\treview\tclass 2: control\tunrecorded\t-\t-\n'" docs/bugs/discovery.tsv 2
+# A quiet new-compiler batch must not move any legacy discovery streak.
+bug_copy
+printf '2099-01-01\tfuzz\tnew compiler quiet campaign\t8 hours\t-\t-\tnew\n' >> "$BTMP/docs/bugs/discovery.tsv"
+if regen && has "1." "$S1" && has "no class yet" "$SN"; then
+  ok "compiler isolation: a new-compiler batch leaves legacy streaks unchanged"
+else no "compiler isolation: a new-compiler batch changed a legacy streak"; fi
+bug_neg tag_names_no_class "s=s.rstrip('\n')+'\n2099-01-01\tfuzz\tclass 99: control\t8 hours\t-\t-\tlegacy\n'" docs/bugs/discovery.tsv 2
+bug_neg tag_on_attribution_row "s=s.rstrip('\n')+'\n2099-01-01\treview\tclass 2: control\tunrecorded\t-\t-\tlegacy\n'" docs/bugs/discovery.tsv 2
 echo ""
 echo "=== 7. no doc restates a normative sentence of docs/spec (check_spec.sh S11, docs/spec/MAINTAINERS.md §6) ==="
 if out="$(python3 scripts/spec/spec.py restatements 2>&1)"; then

@@ -1,6 +1,7 @@
 # Bug 001: Cross-Module Struct Field Offset
 
 <!-- bug-ledger
+compiler: legacy
 summary: Cross-Module Struct Field Offset
 fixtures: bug_cross_module_struct_field.con
 ruling: Violates: MEM-4@2

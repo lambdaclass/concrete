@@ -1,6 +1,7 @@
 # Bug 199: a cast to a type alias crashed the compiler
 
 <!-- bug-ledger
+compiler: legacy
 summary: a cast to a type alias (`x as IP`) reached the backend unexpanded and the compiler panicked; Elab resolves the cast target through aliases. Pinned by `regress_199_cast_to_alias.con` (`--interp == binary`, 42)
 fixtures: regress_199_cast_to_alias.con
 class: 12 — a cast target was not resolved through type aliases

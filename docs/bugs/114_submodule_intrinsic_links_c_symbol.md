@@ -1,6 +1,7 @@
 # Bug 114 — an intrinsic declared in a nested submodule and called by path lowers to a C call
 
 <!-- bug-ledger
+compiler: legacy
 summary: an intrinsic declared in a nested submodule and called by path lowers to a C call (examples-health, 2026-10-20)
 coverage: an intrinsic declared in a nested submodule and called by path lowers to a C call; reproducer tests/regressions/bug114_submodule_intrinsic_links_c_symbol/repro.con, found by the examples-health pass 2026-10-20; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg)
 class: 1

@@ -1,6 +1,7 @@
 # Bug 295 — the parser appended each match arm, parameter and argument to the list built so far
 
 <!-- bug-ledger
+compiler: legacy
 summary: the parser built its lists by appending one element at a time to the list built so far (`xs ++ [x]` in a loop): match arms, OR-pattern heads, parameters, call arguments, type arguments, bounds, capabilities, struct-literal and declaration fields, enum variants and their fields, pattern bindings, impl and trait methods, import symbols and union fields, so a list of n took n² to parse (a match of 20000 arms: parse 2082 ms; a function of 20000 parameters called with 20000 arguments: 3581 ms). Found probing the front end with scaling shapes after R-0550 (task: Resolve/Check/Elab quadratics). Class 17.
 coverage: run_tests.sh
 class: 17 — the parser's per-element list appends

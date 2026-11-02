@@ -9,7 +9,7 @@ It is intentionally milestone-oriented rather than release-oriented. The project
 For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
-<!-- changelog stamp: d68b09a3fb8b018c35f4e40a1886b56d (scripts/gen/changelog.py; add a changelog.d/ fragment, never edit this file by hand) -->
+<!-- changelog stamp: 4ecb1fc021d31df57015875b872ad148 (scripts/gen/changelog.py; add a changelog.d/ fragment, never edit this file by hand) -->
 
 ### Large Arrays No Longer Make Compilation or `--interp` Quadratic (bugs 027, 248, 249, 250, 2026-10-25)
 
@@ -145,7 +145,7 @@ reviewed sources, benchmark scripts, code, and Concrete design references.
 
 The note filters every possible adaptation through Concrete's explicit ownership,
 authority, execution, and evidence philosophy. Its 27 considerations remain research
-while the owner is deciding. The roadmap ends with [open research questions](docs/project/ROADMAP_TASKS.md#open-research-questions-bend-and-roc),
+while the owner is deciding. The roadmap ends with [open research questions](docs/project/ROADMAP_BACKLOG.md#open-research-questions-bend-and-roc),
 not planned features or implementation tasks. This records completed research,
 not adopted work. The current queue and existing task requirements are unchanged;
 upstream performance measurements were not independently reproduced.
@@ -1840,7 +1840,7 @@ shift and §14 contradictions, the removed `->` heap syntax, and `--report profi
 ### The Verified Compiler Is The Primary Track, With A Gated Capacity Allocation (2026-10-21)
 
 The roadmap now protects the verified compiler by capacity, not only by queue order. A new
-[capacity allocation](ROADMAP.md#capacity-allocation) gives the verified compiler at least 55% of each
+[capacity allocation](docs/archive/ROADMAP_LEGACY_PLAN.md#capacity-allocation) gives the verified compiler at least 55% of each
 planning cycle and two integration slots. Evidence integrity gets at least 15% and adversarial
 validation at least 10%. Interop, application, usability and release work are capped at 20% and share
 one slot. `check_roadmap_coverage.sh` gates the table with thirteen negative controls (78 checks). A

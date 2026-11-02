@@ -1,6 +1,7 @@
 # Bug 261 — CoreCheck searches a list of local bindings per reference (quadratic in function size)
 
 <!-- bug-ledger
+compiler: legacy
 summary: CoreCheck looked up every reference to a local in a list of the bindings introduced so far, so a function whose statements read an early binding took time n² to validate (40000 `let`s each with an `if` reading one: 16 s of `--emit-core`, now 3.7 s). Persistent maps by identity and by Core name. Pinned by `regress_261_corecheck_far_reads.con` and the long-function leg. Found timing bug 255's leg. Class 17.
 fixtures: regress_261_corecheck_far_reads.con
 class: 17 — one function of many statements: the parser's statement lists, the local binder table, the resolver's scopes, the checker's bindings, Elab's binder frames, ElabVerify's and CoreCheck's scopes, each a list appended or searched per statement

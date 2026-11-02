@@ -5,6 +5,7 @@
 **Severity:** silent, in tooling only: eleven diagnostic codes the compiler emits are missing from `--report diagnostic-codes`, the ledger that claims to list every one, while the gate that enforces it passes; the spec's code classification (S6) and coverage checks never see them. No compiler output changes
 
 <!-- bug-ledger
+compiler: legacy
 summary: the diagnostic-code completeness gate scans a fixed file list, so eleven emitted codes (E0900 among them) have no ledger row and no spec classification
 coverage: check_diagnostic_codes_complete.sh (whole-tree scan; controls N1 a code from an unlisted module, N2 a removed ledger row, N3 a commented code); check_spec.sh S6 (control N6c) and S4 (MEM-9/index-proven-out-of-bounds E0900, ARITH-13/divisor-proven-zero E0901); check_proven_violation_enforcement.sh and check_obligation_redteam.sh pin E0900 and E0901
 class: 11

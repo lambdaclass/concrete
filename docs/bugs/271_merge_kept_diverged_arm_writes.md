@@ -1,6 +1,7 @@
 # Bug 271 — after a branch whose last-lowered arm diverged, Lower kept that arm's writes
 
 <!-- bug-ledger
+compiler: legacy
 summary: after an if, a value if or a match whose last-lowered arm diverged, Lower continued from that arm's variable table, so a binding only the diverged arm wrote kept its value there (silent wrong code, or E0703)
 fixtures: regress_271_diverged_arm_writes.con
 class: 8 — the merge's starting table

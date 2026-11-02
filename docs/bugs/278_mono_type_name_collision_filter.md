@@ -1,6 +1,7 @@
 # Bug 278 — Mono finds colliding type names by filtering the whole name list per name (quadratic in types)
 
 <!-- bug-ledger
+compiler: legacy
 summary: Mono computed the program's ambiguous type names by filtering the whole list of type names once per name, then deduplicating it with `eraseDups`, so a program of n structs or enums took time n² to monomorphize (10000 structs: 688 ms). Found by the R-0550 scaling gate. Class 17.
 coverage: `check_compile_scaling.sh` judges the `structs` and `enums` shapes' `monomorphize` stage against its budget and near-linear growth: this fix removes the stage's exclusions under this bug, and the gate fails the pre-fix compiler
 class: 17 — Mono finds colliding type names by filtering the whole name list per name

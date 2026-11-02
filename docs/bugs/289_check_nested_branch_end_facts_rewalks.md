@@ -1,6 +1,7 @@
 # Bug 289 — Check re-walked nested branches for their end facts and re-collected nested binder names at every level
 
 <!-- bug-ledger
+compiler: legacy
 summary: Check asked whether a branch's block diverges, never terminates or exits the function (`blockDiverges`, `blockNonTerminating`, `blockExitsFunction`, each a walk down the block's last statements through every nested `if`/`else` and `match`) at every level of a nest, and its contract binder collector (`specBindersStmt`) copied every nested block's binder names into each enclosing level's list, so a nest n deep took n² to check (depth 8000: `if`/`else` 2133 ms, `match` 3253 ms, blocks with `let`s 681 ms). Class 17.
 coverage: run_tests.sh, the bug 289 leg: the check stage of an if/else, a match and a let-block nest 8000 deep, each within 250 ms (retry 500)
 class: 17 — Check re-walked a nest's subtree at every level

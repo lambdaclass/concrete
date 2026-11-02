@@ -1,6 +1,7 @@
 # Bug 285 — Lower's address-taken walk skipped enum literal payloads
 
 <!-- bug-ledger
+compiler: legacy
 summary: the walk that tells Lower's branch and loop sites which locals have their address taken (`cexprAddrTaken`) had no case for an enum literal and fell to a wildcard, so `&x` inside an enum payload was invisible: a pre-branch local was promoted lazily inside the branch and the other path loaded a never-stored slot, and a loop variable was phi-carried and promoted mid-body (the loop never ended)
 fixtures: regress_285_enum_payload_addr_taken.con
 class: 8 — the address-taken walk had a wildcard case

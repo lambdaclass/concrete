@@ -1,6 +1,7 @@
 # Bug 192 — an integer condition of an `if`, `while` or `for` statement, or a match guard, compiled
 
 <!-- bug-ledger
+compiler: legacy
 summary: an integer condition of an `if`, `while` or `for` statement compiled: `checkStmt` discarded the condition's type and CoreCheck admitted integers as truthiness, so the binary ran it (non-zero is true) while `--interp` failed at run time. Silent. Found by the specification's TYPE-5 example (`docs/spec/types.md`, run on both consumers by `check_spec.sh`); refused with E0223; a match guard had the same hole (the `bool` hint was not checked); pinned by `error_192_int_{if,while,for}_condition.con` and `error_192_int_match_guard.con`
 fixtures: error_192_int_if_condition.con error_192_int_while_condition.con error_192_int_for_condition.con error_192_int_match_guard.con
 class: 13 — an `if` / `while` / `for` statement condition: Check discarded its type, CoreCheck admitted integers

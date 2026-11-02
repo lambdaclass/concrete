@@ -1,6 +1,7 @@
 # Bug 277 — CoreCheck looks up every callee in a list of all function signatures (calls times functions)
 
 <!-- bug-ledger
+compiler: legacy
 summary: CoreCheck looked up every callee's signature and capabilities in a list of all the program's function signatures, so a program of n functions with a call each took time n² to validate (a 10000-function call chain: 649 ms). Found by the R-0550 scaling gate. Class 17.
 coverage: `check_compile_scaling.sh` judges the `call-chain` shape's `coreCheck` stage against its budget and near-linear growth: this fix removes the stage's exclusion under this bug, and the gate fails the pre-fix compiler
 class: 17 — CoreCheck looks up every callee in a list of all function signatures

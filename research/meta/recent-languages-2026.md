@@ -19,7 +19,7 @@ work in a new repository (Valen revives Vale). Each entry is a question to
 answer by a later source review, not a finding about the project.
 
 The open questions are tracked under
-[Open Research Questions: Recent Languages](../../docs/project/ROADMAP_TASKS.md#open-research-questions-recent-languages).
+[Open Research Questions: Recent Languages](../../docs/project/ROADMAP_BACKLOG.md#open-research-questions-recent-languages).
 
 ## 1. Admission Filter
 

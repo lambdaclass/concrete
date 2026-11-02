@@ -1,6 +1,7 @@
 # Bug 296 — the callee walk appended each statement's callees to the list built so far
 
 <!-- bug-ledger
+compiler: legacy
 summary: the one callee walk (Proof/CallCollect.lean: collectCallees*, and the function-value and method-value walks beside it) built each list by appending a statement's, argument's, field's, arm's or element's items to the list built so far, and the post-mono capability verifier deduplicated a function's callees with List.eraseDups (pairwise), so a function of n calls took n² in Elab (which collects every body twice) and in the monomorphize stage (20000 calls: elaborate 2681 ms, monomorphize 2440 ms). Found probing the front end after R-0550 (task: Resolve/Check/Elab quadratics). Class 17.
 coverage: run_tests.sh
 class: 17 — the callee walk's per-statement list appends

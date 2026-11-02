@@ -1,6 +1,7 @@
 # Bug 002: i32 Literal Type Mismatch in Binary Operations
 
 <!-- bug-ledger
+compiler: legacy
 summary: i32 Literal Type Mismatch in Binary Operations
 fixtures: bug_i32_literal_type.con
 ruling: Violates: ARITH-2@1, PASS-6@1

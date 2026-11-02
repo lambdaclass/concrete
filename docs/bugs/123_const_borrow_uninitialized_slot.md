@@ -1,6 +1,7 @@
 # Bug 123 — a borrow of a module constant reads a stack slot that is never initialized
 
 <!-- bug-ledger
+compiler: legacy
 summary: `const R: &Int = &X;` was accepted and `&X` lowered to a stack slot nothing initialized (exit 0 for 42); a reference-typed constant is now E0239, and every borrow rooted at a module constant (`&X`, `&K.v`, `&A[i]`, the implicit `&self` of `K.get()`) is E0238 ((batch 2))
 fixtures: error_123_const_ref_type.con error_123_const_borrow_in_body.con error_123_const_field_borrow.con error_123_const_receiver_borrow.con error_123_const_index_borrow.con error_123_const_initializer_borrow.con error_123_const_initializer_array_borrow.con error_123_const_initializer_mut_arg.con error_123_const_initializer_elab_error.con
 class: 7

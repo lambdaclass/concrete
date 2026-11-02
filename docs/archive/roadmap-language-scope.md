@@ -5,7 +5,7 @@ sections stated language and standard-library design rules inside ROADMAP.md. A 
 *what happens next, in what order*, so they moved here verbatim on 2026-10-28 (only heading levels and
 relative links were adjusted). Until the specification absorbs them, each keeps the authority it had in
 the roadmap; once a section is absorbed, it is replaced here by a link to its specification entry.
-Nothing here schedules work, and nothing here answers an [owner decision](../../ROADMAP.md#owner-decisions)
+Nothing here schedules work, and nothing here answers an [owner decision](../spec/decisions.md#owner-decisions)
 (OD1 – OD22): where a section and an open owner decision overlap, the owner decision governs.
 
 ## From "Product north star"

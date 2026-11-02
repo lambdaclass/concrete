@@ -1,6 +1,7 @@
 # Bug 031: lazy address-of promotion inside a branch leaves the alloca uninitialized on sibling paths
 
 <!-- bug-ledger
+compiler: legacy
 summary: found by workload 1 (base64_cli)
 coverage: regress_031_if_branch_borrow.con + regress_031_ifexpr_branch_borrow.con + regress_031_match_arm_borrow.con (run_ok 101/107/8); Lower prePromoteAddrTaken (all 3 sites)
 ruling: Violates: MEM-3@1

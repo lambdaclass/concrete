@@ -1,6 +1,7 @@
 # Bug 049: `concrete reduce --predicate crash` is vacuous
 
 <!-- bug-ledger
+compiler: legacy
 summary: `concrete reduce --predicate crash` reduces anything to an empty program (reducer audit 2026-07-18)
 coverage: reduce --predicate crash is vacuous (parse-only); reduces any program to ~empty, fix pending
 class: 11

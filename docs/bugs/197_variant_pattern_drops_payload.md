@@ -1,6 +1,7 @@
 # Bug 197 — a variant pattern without a field list silently dropped a non-Copy payload
 
 <!-- bug-ledger
+compiler: legacy
 summary: a variant pattern written without a field list (`E::A =>`) over an owned scrutinee silently dropped a non-Copy payload (both consumers; the discard rule lived on `_` binders and CoreCheck's field count skips an empty list). Refused with E0288; pinned by `error_197_variant_pattern_drops_payload.con` and `regress_197_variant_pattern_ignores_copy.con`. Found by the Codex review of the specification's patterns chapter
 fixtures: error_197_variant_pattern_drops_payload.con regress_197_variant_pattern_ignores_copy.con
 class: 15 — a variant pattern with no field list ignored a non-Copy payload

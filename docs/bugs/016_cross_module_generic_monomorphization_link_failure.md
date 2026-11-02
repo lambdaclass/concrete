@@ -1,6 +1,7 @@
 # Bug 016: Cross-Module Generic Monomorphization Can Fail To Link In Package Builds
 
 <!-- bug-ledger
+compiler: legacy
 summary: Cross-Module Generic Monomorphization Can Fail To Link In Package Builds
 fixtures: bug_cross_module_mut_borrow.con
 area: Mono — fixed in bdb2d7f (Mono.lean), whose subject names no bug

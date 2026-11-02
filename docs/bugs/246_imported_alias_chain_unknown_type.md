@@ -1,6 +1,7 @@
 # Bug 246 — an imported alias whose target is another alias of its module names an unknown type
 
 <!-- bug-ledger
+compiler: legacy
 summary: an imported `pub type N = M` whose target `M` is a private alias of its module arrived as `M`, a type the importer cannot name (E0220 on a valid value); the target is now expanded through the exporter's aliases at the import. Found while writing a fixture for the Codex review of bug 233's fix, 2026-10-25. Fixture `regress_246_imported_alias_chain.con`. Class 1.
 fixtures: regress_246_imported_alias_chain.con regress_246_imported_alias_chain_across_imports.con regress_246_imported_alias_chain_long.con
 class: 1 — an imported alias's target crossed as the exporter's spelling; fixed 2026-10-25 by expanding it at the import

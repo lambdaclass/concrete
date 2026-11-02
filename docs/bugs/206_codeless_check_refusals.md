@@ -1,6 +1,7 @@
 # Bug 206 — Check refusals built from a bare message carried no diagnostic code
 
 <!-- bug-ledger
+compiler: legacy
 summary: twenty Check refusals built from a bare message (`throwCheckMsg`) and eleven literal diagnostics carried no code, so no rule or specification link could be attached to them. `Diagnostic.code` has no default and the helper is gone; each refusal names its rule's code (new: E0122 – E0124, E0312 – E0321). `check_diagnostic_codes_present.sh` and the `run_err` output check keep it so. Found while splitting E0420 (bug 203)
 fixtures: error_206_newtype_field_other_than_zero.con error_206_newtype_constructor_arity.con error_206_receiverless_trait_method.con error_206_wrapping_on_non_integers.con error_206_print_without_arguments.con error_206_destructure_in_for_header.con error_206_test_with_parameter.con error_206_integer_requires.con error_206_spec_fn_calls_runtime_code.con
 class: 11 — an empty diagnostic code was a valid value

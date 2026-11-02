@@ -1,6 +1,7 @@
 # Bug 203 — E0420 named two unrelated errors
 
 <!-- bug-ledger
+compiler: legacy
 summary: an `append()` / `print()` argument of an unsupported type was refused with no code by Check, and Elab's copy used E0420, the ghost-read code (CON-4), so neither identified the rule; both are now E0421 (TYPE-10). Pinned by `error_203_append_unsupported_argument.con`, `error_203_print_unsupported_argument.con` and `error_203_ghost_read_at_runtime.con`. Found while migrating the specification's contracts chapter
 fixtures: error_203_append_unsupported_argument.con error_203_ghost_read_at_runtime.con error_203_print_unsupported_argument.con
 class: 12 — one diagnostic code, E0420, for two unrelated errors

@@ -1,6 +1,7 @@
 # Bug 012: No Easy Timing Path For Standalone Benchmark Programs
 
 <!-- bug-ledger
+compiler: legacy
 summary: No Easy Timing Path For Standalone Benchmark Programs
 fixtures: bug_clock_builtin.con
 ruling: Outside the spec: library — no standalone timing builtin (clock_monotonic_ns added); a missing library feature

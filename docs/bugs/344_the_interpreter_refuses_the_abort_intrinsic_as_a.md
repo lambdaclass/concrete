@@ -5,6 +5,7 @@
 **Severity:** loud: an accepted program's explicit `abort()` is refused by `--interp` as an undefined function (exit 1), where the binary aborts (SIGABRT, status 134); the interpreter never reports the abort, so a differential run of any program that aborts on purpose fails for the wrong reason
 
 <!-- bug-ledger
+compiler: legacy
 summary: The interpreter refuses the abort() intrinsic as an undefined function while the binary aborts
 coverage: reproducer tests/regressions/bug344_the_interpreter_refuses_the_abort_intrinsic_as_a/repro.con, pinned by check_example_outputs.sh (open-bug reproducers leg, interp-fails: the binary builds and --interp still says "undefined function 'abort'")
 class: 7
@@ -49,6 +50,6 @@ intrinsics, `abort_basic.con` among them (native aborts, `--interp` reports the 
 
 `check_example_outputs.sh` (open-bug reproducers leg, `interp-fails`) pins the refusal. The defect
 is loud (no program is accepted with a wrong result), so no containment is required by the
-[defect disposition rule](../../ROADMAP.md#the-current-execution-queue). Meanwhile a user runs a
+[defect disposition rule](../../ROADMAP.md#the-queue). Meanwhile a user runs a
 program that aborts on purpose natively, or reads the interpreter's "undefined function 'abort'" as
 the abort.

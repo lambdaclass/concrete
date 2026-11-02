@@ -28,8 +28,8 @@ REPO_URL = "https://github.com/unbalancedparentheses/concrete2/blob/main/"
 LANGUAGE_STAGES = {"parse", "resolve", "check", "elab", "core-check", "runtime-safety"}
 STAGES = {"parse", "resolve", "check", "elab", "mono", "post-mono", "core-check", "runtime-safety", "ssa-verify", "link"}
 KINDS = {"refusal", "guarantee", "definition", "preservation", "open"}
-# An `open` entry records a language question only the project owner decides (ROADMAP "Owner
-# decisions", OD1 - OD22). It states the question, encodes no answer, and has Status `open ODn`.
+# An `open` entry records a language question only the project owner decides (docs/spec/decisions.md "Owner
+# decisions", OD1 - OD157). It states the question, encodes no answer, and has Status `open ODn`.
 OD_RE = re.compile(r"^OD[0-9]+$")
 FIELDS = ["Kind", "Uses", "Codes", "Status", "Enforced by", "Semantics", "Obligation", "Evidence"]
 CODE_CLASSES = ("rule", "internal", "tooling", "retired")  # plus unmigrated:<chapter>
@@ -349,7 +349,7 @@ def read_tsv(path):
 
 def tracking_exists(t, root):
     if OD_RE.match(t):
-        p = os.path.join(root, "ROADMAP.md")
+        p = os.path.join(root, "docs", "spec", "decisions.md")
         return os.path.exists(p) and re.search(r"^\| " + re.escape(t) + r" \|", open(p, encoding="utf-8").read(), re.M) is not None
     if t.startswith("R-"):
         for f in ("ROADMAP.md", "docs/project/ROADMAP_TASKS.md", "docs/project/ROADMAP_BACKLOG.md"):

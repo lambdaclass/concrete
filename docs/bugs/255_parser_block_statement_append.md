@@ -1,6 +1,7 @@
 # Bug 255 — the parser appends each statement of a block to the list built so far (quadratic)
 
 <!-- bug-ledger
+compiler: legacy
 summary: the parser appended each statement of a block to the list built so far, so a block of n statements took time n² to parse (40000 statements: 9.4 s, now 0.11 s). Accumulated in an `Array`. Pinned by `regress_255_block_statement_order.con` and the long-function leg (functions of 80000 statements, 80000 `let`s and 20000 `let`s with an `if`, `while` or `match` each, through `--emit-core` within 10 s). Found measuring the long-function quadratic the previous perf agent reported. Class 17.
 fixtures: regress_255_block_statement_order.con
 class: 17 — one function of many statements: the parser's statement lists, the local binder table, the resolver's scopes, the checker's bindings, Elab's binder frames, ElabVerify's and CoreCheck's scopes, each a list appended or searched per statement

@@ -1,6 +1,7 @@
 # Bug 103 — an extern whose name ends in `_destroy` is replaced by an empty body
 
 <!-- bug-ledger
+compiler: legacy
 summary: destruction is dispatched by the reserved `$destroy` callee and the argument type, never by a `_destroy` name suffix, so an `extern fn foo_destroy` stays a `declare`. Verified 2026-10-21; fixture `regress_103_extern_destroy.con` linked with a counting C stub (rc 42) (on main by `0c507fb9` (2026-10-18, before it was filed from an older base))
 fixtures: regress_103_extern_destroy.con
 class: 3

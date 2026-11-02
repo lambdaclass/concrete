@@ -1,6 +1,7 @@
 # Bug 319 — A call that re-lends a &mut binding is not overlap-checked, so r.add(r.step) is accepted
 
 <!-- bug-ledger
+compiler: legacy
 summary: A call that re-lends a &mut binding is not overlap-checked, so r.add(r.step) is accepted, which REF-11 refuses as the owner decided OD23 on 2026-10-29
 coverage: reproducer tests/regressions/bug319_a_call_that_re_lends_a_mut_binding_is_not_overla/repro.con, found checking main against OD23 on 2026-10-29; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, runs-exit 42) and check_spec.sh S4 (the pending REF-11 example)
 class: 13

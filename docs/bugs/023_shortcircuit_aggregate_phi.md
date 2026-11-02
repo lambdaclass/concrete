@@ -1,6 +1,7 @@
 # Bug 023: Short-circuit `&&`/`||` lowering emits an aggregate phi (invalid IR)
 
 <!-- bug-ledger
+compiler: legacy
 summary: found by #35 conlog workload
 fixtures: scand_aggregate_in_scope/src/main.con
 ruling: Violates: PASS-9@1

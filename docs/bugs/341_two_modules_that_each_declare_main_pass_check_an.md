@@ -5,6 +5,7 @@
 **Severity:** loud: a program Check accepts fails to build natively, inside clang, with no Concrete diagnostic
 
 <!-- bug-ledger
+compiler: legacy
 summary: two modules that each declare main pass Check and the native build fails in clang on a duplicate @__concrete_argc
 coverage: reproducer tests/regressions/bug341_two_modules_that_each_declare_main_pass_check_an/repro.con, pinned by check_example_outputs.sh (open-bug reproducers leg, compile-fails on the duplicate global)
 class: 1

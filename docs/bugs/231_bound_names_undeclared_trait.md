@@ -1,6 +1,7 @@
 # Bug 231 — a bound naming an undeclared trait is accepted
 
 <!-- bug-ledger
+compiler: legacy
 summary: a bound naming an undeclared trait was accepted (no pass resolved a bound's trait names): an unused `fn id<A: NoSuchTrait>` compiled, a call met only E0241, and in a nested module a bound on the enclosing module's trait was satisfied by spelling at the call while its methods were unknown in the body (E0265). Resolve refuses a bound that is not `Copy`, `Destroy` or a trait of its module (E0125, MOD-1). Found by the differential hunt of 2026-10-24. The parser also refuses a bound where the declaration keeps none (a trait's, a union's or a bodiless declaration's type parameters), which it dropped unread. Fixtures `error_231_*`, `regress_231_bounds_name_module_traits.con`. Class 13.
 fixtures: error_231_unknown_bound_trait.con error_231_enclosing_trait_bound.con error_231_trait_param_bound.con error_231_union_param_bound.con error_231_bodiless_decl_bound.con regress_231_bounds_name_module_traits.con
 class: 13 — MOD-1 for a bound's trait names: no pass resolved them, later reads matched spellings

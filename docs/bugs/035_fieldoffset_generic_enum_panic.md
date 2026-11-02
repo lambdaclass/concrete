@@ -1,6 +1,7 @@
 # Bug 035: Layout.fieldOffset PANIC — user enum with generic-container struct payload
 
 <!-- bug-ledger
+compiler: legacy
 summary: layout made program-wide (own-module priority)
 coverage: enum_generic_payload_layout/src/main.con (project test, exit 0); lowerModule now receives program-wide struct/enum/newtype defs (own-module priority, additive fill)
 ruling: Violates: PASS-12@1

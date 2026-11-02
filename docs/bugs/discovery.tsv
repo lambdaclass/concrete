@@ -25,113 +25,114 @@
 #            wrong code or wrong value, false proof or claim, authority violation, a gate passing
 #            vacuously), or "-"; the rest are loud (rejected valid programs, invalid IR, link
 #            failures, interpreter refusals, leaks the checker should reject)
-date	kind	probe	effort	bugs	silent
-2026-10-17	controls	R-0482 P1 negative controls	unrecorded	079	079
-2026-10-18	hunt	name-resolution, collision, model-vs-runtime, scope, literal, checker-ownership and red-team hunts; type-identity and generic-destroy review probes	unrecorded	081,082,083,084,085,086,087,088,089,090,091,092,093,094,096,097,098,099,100	081,082,083,084,085,086,087,088,089,090,091,092,096,097,098
-2026-10-18	review	R-0460 scoping review (Bridge B); Codex review of the bug 085 change	unrecorded	080,101	080,101
-2026-10-20	workload	RocksDB slice 1 groundwork	unrecorded	102,103	102,103
-2026-10-20	design-proofs	V1 design examples (design question B6)	unrecorded	104	104
-2026-10-20	follow-on	testing the bug 091 round 3 fix; fixing bug 109	unrecorded	105,106,135	105,106,135
-2026-10-20	review	Codex review of batch 4	unrecorded	107	107
-2026-10-20	examples	examples-health pass: port and output-test every example	unrecorded	108,109,110,111,112,113,114,115,116,117,118,119,120	109,111,113,115
-2026-10-20	ci	CI run 39494484959 (ubuntu x86_64)	unrecorded	121	121
-2026-10-20	follow-on	bug 121's layout probe	unrecorded	122	122
-2026-10-21	spec	exit 2i specification (MEMORY_SEMANTICS section 15)	unrecorded	123,124,126	123,126
-2026-10-21	semantics	semantics probes N1-N4 and reference rules	unrecorded	127,128,129,130,131	127,128,129,131
-2026-10-21	review	Codex reviews of the bug 123 and bug 116 fixes	unrecorded	132,133	132,133
-2026-10-21	development	std ownership-on-failure work	unrecorded	134	-
-2026-10-21	follow-on	fixing bug 127	unrecorded	136,137	136,137
-2026-10-21	semantics	second semantics evaluation (EVALUATION2 D2, D3, D5, D10, D11; c, d, e, h and v probes)	unrecorded	140,142,143,144	140,143,144
-2026-10-21	interp-coverage	interpreter-coverage pass (typed heap, String over memory, IEEE floats) compared with the binary	unrecorded	150,152	150,152
-2026-10-21	review	Codex review of the interpreter-coverage pass	unrecorded	151	151
-2026-10-21	review	Codex review of the bug 140 comparison rule (a known limit, numbered 2026-10-23)	unrecorded	185	185
-2026-10-21	follow-on	writing the evaluation-order rule (2026-10-21 semantics decisions)	unrecorded	183	183
-2026-10-22	review	Codex reviews (rounds 4 and 5) of the symbol-name work (bug 129)	unrecorded	165,166	165,166
-2026-10-22	development	safety-eval2 work (a pre-existing limitation noted while fixing it)	unrecorded	175	-
-2026-10-22	review	Codex reviews of safety-eval2 (rule (c), bug 144 migration, bug 146, operand and exit-path checks)	unrecorded	145,146,147,148,149	149
-2026-10-22	fuzz	fuzz farm differential generator (interpreter vs binary) at 34f19e97; effort is the diff generator's day count in /srv/fuzz-farm/fuzz-status.json at 20:46Z	269145 programs	176	176
-2026-10-22	follow-on	bug 176 fix (its defence-in-depth follow-up: CoreCheck re-check of binder types)	unrecorded	177	177
-2026-10-22	development	devshell toolchain change (Nix clang ahead on PATH) exposing a run_tests race	unrecorded	179	-
-2026-10-22	development	compiler perf tracking (scripts/perf synthetic growth families)	unrecorded	178	-
-2026-10-23	development	landing train 3 integration (a --interp run fed by an open pipe did not return)	unrecorded	184	-
-2026-10-23	semantics	language-tightening witness programs (TIGHTENING_DECISIONS.md) on main, train1 and train3	47 programs	181,182	181,182
-2026-10-23	development	landing train 3 pre-push hook run as a second user on the OVH server (fixed /tmp test paths owned by dev)	unrecorded	191	-
-2026-10-23	spec	language-specification examples, statements and patterns chapters (docs/spec/statements.md and patterns.md, both consumers, and their reviews)	29 programs	194,195,196,197	194,195,196,197
-2026-10-23	review	Codex review of Concrete/Semantics/Capabilities.lean (capability variables) and trusted impl inheritance, confirmed by a second review	unrecorded	188,189	188,189
-2026-10-23	review	Codex audit of trait resolution (coherence), confirmed by probes on wip/train3 1df4cf48	unrecorded	186	186
-2026-10-23	development	verified-pipeline R-0497 slice 1 (sealing the pipeline artifacts refused a record update that replaced a certificate's payload)	unrecorded	180	180
-2026-10-23	spec	language-specification examples (docs/spec: pilot, pipeline, ownership and types chapters, both consumers, and their reviews)	116 programs	192,193	192,193
-2026-10-23	review	language-specification migration, contracts chapter (docs/spec/contracts.md: E0420 could not be mapped to one rule)	unrecorded	203	-
-2026-10-23	review	Codex review of the specification chapters trusted, ffi, contracts, modules, syntax and TYPE-15 (docs/spec), confirmed by probes on wip/train4 a4a9c05d	unrecorded	200	200
-2026-10-23	development	R-0492 slice 1 (moving binding identity to Resolve required one desugared body on every path into Check)	unrecorded	202	-
-2026-10-23	review	Codex review of the bug 136/137 evaluation-order fix	unrecorded	190	190
-2026-10-23	follow-on	raw-pointer generic leak (TIGHTENING_DECISIONS T-RAWDUP), numbered while implementing	unrecorded	198	198
-2026-10-23	review	Codex review of the bug 198 fix	unrecorded	199	-
-2026-10-23	review	bug 203's E0420 split (the append() refusal had no code at all in Check)	unrecorded	206	-
-2026-10-23	review	Codex review of the specification's traits chapter (TRAIT-8 to TRAIT-10, TYPE-16), confirmed by probes on spec-t6 c170057d	unrecorded	204,205	204,205
-2026-10-23	development	R-0492 step 3 (Codex review: ElabVerify flagged the import-rename pass renaming an identified local; bug 050's recorded remaining gap)	unrecorded	208	208
-2026-10-23	development	R-0492 step 2 mutation runs (families 55-57 gave no verdict, also on the slice-1 base)	unrecorded	207	-
-2026-10-23	review	Codex review of bug 215 (a nested-module constant escaped the new check; Resolve never walks nested submodules)	unrecorded	217	-
-2026-10-23	development	Hetzner gate-host and checker-cause work (stale empty index.lock in the agent worktree after Codex reviews; reproduced with a polling watcher)	unrecorded	209	-
-2026-10-23	development	R-0492 step 4 Codex delta review (mutation 31 anchor followed the explicit .name; it targeted the proof-only wrapper and survived on main)	unrecorded	219	-
-2026-10-23	workload	Phase 7 workload 9 lzpack (LZSS + PackBits codec, CRC container) and nine probe programs on its shapes (fixed-array hash chains through &mut, ring buffer, Huffman tree, trait codecs, fn values in structs, shift and cast edges, nested linear Result/Option, borrow and defer forms), plus a 400-case corrupt-stream fuzz against a Python reference	10 programs	212,214	-
-2026-10-23	fuzz	fuzz farm mutation generator findings open at eb122a01 (13 crash signatures re-run on the OVH server, interpreter vs binary) plus about 100 hand probes after R-0492 steps 1-3 (shadowing, fn-pointer locals, generics, match through references, defer exits, nested modules, diagnostics)	113 programs	210,211,213,215,216,218,220,221	210,215,218,220,221
-2026-10-23	workload	Phase 7 workload 10 stackvm (assembler, bytecode codec and load-time verifier, interpreter and disassembler over a 23-variant enum, a generic bounded stack, two traits and defer cleanup) with a differential gate against an independent Python implementation, and 25 probe programs on its shapes (imported enums with impls and trait bounds through each import path, import aliases, linear values in loops, Destroy impls, temporaries as receivers, borrow conflicts, diagnostics)	26 programs	222,223,224,225,228	-
-2026-10-24	development	bug 217 fix (walking std's submodules with Resolve's import rule refused std.string's import of std.libc's private externs, which Check's rule admits) and its Codex reviews (an enclosing enum Result hiding the builtin)	unrecorded	226,227	-
-2026-10-24	review	Codex reviews r3 and r4 of bug 217's fix (Resolve scope rules that refuse names Check admits, at top level and now nested; program-wide known types at top level)	unrecorded	229,230	-
-2026-10-24	hunt	differential hunt (interpreter vs native binary) on main 9622f7e0: 3500 fuzz_differential.py cases (seeds 102501, 102502) and hand probes on module constants, enum payloads across modules, generics and traits across module boundaries, nested submodules, defer and loops under --interp	60 programs	231,233,234,235,236	-
-2026-10-24	development	recording the differential hunt batch (check_docs_drift.sh discovery-signal controls)	unrecorded	232	-
-2026-10-24	ci	train 16 CI: the gate-selection gate's docs-only precision control failed after a bug-corpus note named a gate script	unrecorded	237	-
-2026-10-25	review	Codex review of bug 227's fix (R-0492 slice 6), the follow-up reproductions on the train-17 candidate 593dc100 (method spellings beside free functions, trait names in type positions, a parent calling its child's respelled type's method) and the Codex reviews of their fix	unrecorded	238,239,240,241,247	238,239,247
-2026-10-25	development	R-0492 step 3 (bug 223's fix): probes of the alias form of each importable type kind beside local types (struct, enum, generic, Destroy, newtype; a local type of the definition's spelling)	8 programs	242,243	-
-2026-10-25	review	Codex reviews rounds 2-3 of R-0492 steps 3-4 (an imported initializer calling another module's function under --interp; constant types through imported aliases)	unrecorded	245,246	-
-2026-10-25	development	operating the pre-push hook on the dev host (a gate run killed mid-run left orphaned gate processes and a repository lock that refused every later run)	unrecorded	244	-
-2026-10-25	review	orchestrator review of documentation links on main 032d8e12 (stale roadmap anchors in a research note; correct changelog fragment links reported broken)	unrecorded	252	-
-2026-10-25	development	bug 027 measurement (array literals of 1000 to 200000 elements, repeated and explicit, natively and per stage), the interpreter array-write note of bug 235's record, and bug 248's regression program compiled natively	unrecorded	248,249,250	-
-2026-10-25	review	Codex reviews of the fixes of bugs 245 and 243 (a generic of another tree reading a private constant; a child type sharing an imported type spelling)	unrecorded	251,253	251,253
-2026-10-25	development	bug 242's fix: the bug 096 fixtures that became valid programs, run under --interp	unrecorded	254	-
-2026-10-25	development	the identity follow-up fixes of bugs 242 to 254: newtype construction probed across parent, child and sibling modules	unrecorded	262	-
-2026-10-25	development	R-0507 roadmap landing validation: fuzz-farm fake-compiler campaigns missed required cases under short wall-clock budgets, reproduced on standalone retry	unrecorded	263	-
-2026-10-25	development	long-function measurement per front-end stage (1000 to 80000 statements: flat assignments, long if/while bodies, chained lets, lets interleaved with if/while/match reading an early binding; stage probe linked against the compiler)	unrecorded	255,256,257,258,259,260,261	-
-2026-10-25	development	long-function measurement per back-end stage (1000 to 80000 statements: chained lets, lets interleaved with if/match/while, lets then assignments; lower and monomorphize stages from --emit-trace-json, callgrind instruction counts)	unrecorded	265,266,267,269,270	-
-2026-10-25	development	reading Lower's merge code for bug 266 (the scope cleanup after an if takes the current table, which is the else arm's), then probes of if, value if and match whose last arm writes and diverges	4 programs	271	271
-2026-10-25	development	repointing mutation 56 to Elab's frame shape (front-end perf branch): the faithful eager-frames mutation survived check_binder_refs.sh	unrecorded	268	-
-2026-10-25	development	the name-capture fixes of bugs 238-247: CoreCheck judges an FFI edge against its own module tree's extern names; reproduced with an imported extern under --report trust-edges	unrecorded	272	272
-2026-10-26	development	R-0550 compile-time scaling gate: 15 generated shapes (array literals, long functions, many locals, lets with blocks, many functions, structs and enums, deep nesting) timed per stage at 1000 to 160000 elements	unrecorded	273,274,275,276,277,278,279,280,281,282,286	-
-2026-10-26	ci	gates-shell branch CI (run 40269354812): a transform-register leg failed on printf: write error: Broken pipe with its pattern present	unrecorded	283	283
-2026-10-26	follow-on	checking an earlier observation that binder references in literal match arms were missing from the R-0004 evidence producer: literal, range and bool match probes under --report subject-facts and migration-manifest	6 programs	284	284
-2026-10-26	development	designing the nested-branch lowering fix (R-0550 nested-ifs): Lower's address-taken walk read against Core's expression constructors, then probes of each site with an address-take in an enum payload	6 programs	285	285
-2026-10-26	development	writing a fixture for the nested-branch lowering fix: deferred calls that borrow a local, emitted at returns, breaks and continues inside branches	4 programs	287	287
-2026-10-26	development	R-0550 follow-up: the declaration and nesting shapes re-measured at 10^4 and 10^5 with whole compiles (--emit-llvm, -o), then callgrind attribution	10 programs	288	-
-2026-10-26	development	scaling probes of Check (task 3 of the R-0550 follow-up): nested if/else, match and let-block nests at 2000 and 8000, per-stage trace and callgrind	3 programs	289	-
-2026-10-26	development	scaling probes of Check and Lower over matched enums (task 3 of the R-0550 follow-up): n enum types, each built and matched once in main, at 2000 and 8000, per-stage trace and callgrind	1 program	290	-
-2026-10-26	development	many struct types each constructed and read once, beyond the R-0550 declaration shapes, timed per stage at 2000 and 8000 and profiled with callgrind	1 shape	291	-
-2026-10-26	development	nested while loops beyond the R-0550 shapes, timed per stage at 2000 and 8000 levels and profiled with callgrind after the bug 286 fix	1 shape	292	-
-2026-10-26	development	R-0550 follow-up: whole compiles (--emit-llvm) of the nested-ifs shape after bug 286, attributed by callgrind to Report's safety gate	4 programs	293	-
-2026-10-26	development	R-0550 follow-up, task 3: scaling probes of Resolve, Check and Elab beyond the gate shapes (calls, parameters, wide match, value if and match chains, struct fields) on main 1bcb7c36	11 shapes	295,296,297,298	-
-2026-10-26	ci	CI run 40377660985 (wip/bug-298): check_work_queue.sh budgets leg missed budget_exhausted; the leg then repeated on OVH under load	1400 cases	299	-
-2026-10-26	development	bug filing with scripts/gen/new_bug.sh (bugs 284 and 299 aborted after reserving their numbers)	2 filings	300	-
-2026-10-26	ci	train 37 candidate CI (run 40289036334): assignments/monomorphize over its wall budget at an unchanged instruction count; re-measured on concrete-ci-2 under load with perf instruction counts	unrecorded	294	-
-2026-10-26	hunt	Lower borrows and address-taken locals: hand probes of every CExpr and CStmt constructor, and the differential fuzzer's borrow mode (fuzz_differential.py --mode borrow)	3000 programs	301,302,303,304,305,307,308,309	301,302,305
-2026-10-27	hunt	the differential fuzzer's borrow mode with for loops (fuzz_differential.py --mode borrow) on a build with bugs 301 - 305 fixed: every remaining mismatch	1000 programs	306	306
-2026-10-28	development	pre-push hook on the OVH dev host (perf_event_paranoid=4, load 15-26): check_compile_scaling.sh enums/lower wall growth x80	unrecorded	315	-
-2026-10-28	development	cleanup pass 2026-10-28: the totality ratchet's environment walk imported every executable root (lake build Browser)	1 build	316	-
-2026-10-28	spec	class-13 audit: one forbidden program per clause of each normative rule in docs/spec (125 entries), native against --interp (wip/class13-audit)	207 probes	311	311
-2026-10-29	spec	OD16 (decided 2026-10-29) check: struct literals and uppercase constants in if and while heads, native against --interp, on main 0bf8350a (wip/spec-od)	5 probes	318	-
-2026-10-29	spec	OD23-OD32 (decided 2026-10-29, strict across the board) check: one program per tightening, native against --interp, on main 0bf8350a (wip/spec-od)	13 probes	319,320,321,322,323,324,325,326,327,328	319,320,321,322,323,324,325,326,327,328
-2026-10-29	review	Kimi review of a spec delta (a for step's control flow), then hand probes of break, continue and return inside for steps on main 71df9c25	17 programs	330	-
-2026-10-29	review	Grok review of grammar/concrete.ebnf (2026-10-29): the C-style for header [ for_init ';' ] expr ';' is not LL(1); planted grammars confirmed the checkers miss it	1 review	329	-
-2026-10-29	spec	Codex and Kimi reviews of the spec-gap rules (wip/spec-s6, 2026-10-30): f32 literal double rounding, native against --interp	1 probe	332	332
-2026-10-29	spec	Codex and Kimi reviews of the spec-gap rules (wip/spec-s6, 2026-10-30): type arguments to a body-less generic declaration, native against --interp	1 probe	333	333
-2026-10-29	spec	OD47 (decided 2026-10-29) check: the three C-style for forms, the counted loop and from/until as names, native against --interp, on main ae896787 (wip/spec-s7)	5 probes	331	-
-2026-10-30	spec	outside-reader test of the spec (wip/spec-phase2 d21a4cfd, 2026-10-30): 60 programs written from SPEC.md alone, run native and --interp; a constant out-of-bounds index	60 programs	340	340
-2026-10-31	review	spec quality audit of 2026-10-30 (Codex, Grok): hand probes of the open questions it raised, native against --interp, on main 71e3e804	16 probes	341	-
-2026-10-31	review	spec quality audit of 2026-10-30 follow-up: why MEM-6 cannot name E0900; a whole-tree scan of emitted codes against --report diagnostic-codes on main 71e3e804	1 probes	342	342
-2026-10-31	spec	spec audit 2026-10-31: probes of the SYNTAX_FREEZE_REVIEW §1.1 qualification rule (qualified paths by base-name case, nested paths, flattened names), native against --interp, on fb8946c6c	6 probes	343	343
-2026-10-31	spec	spec audit 2026-10-31: probes of the trap rules (ARITH-3, ARITH-5, MEM-6, STMT-2, STMT-13), one program per trap, native against --interp, on main dee500ee	12 probes	344	-
-2026-10-31	review	spec readability 2 builtins catalog review (2026-10-31): unwrap(n) bound to a let of the inner type, native against --interp, on 1bd42718	2 probes	345	-
-2026-10-31	review	spec readability 2 builtins catalog review (2026-10-31): abort() in a value position, native against --interp, on 1bd42718	4 probes	346	-
-2026-10-31	review	spec readability 2 builtins catalog review (2026-10-31): get_args with Process and Env, native against --interp, on 1bd42718	2 probes	347	-
-2026-10-31	review	spec readability 2 builtins catalog review (2026-10-31): float_to_string, native against --interp, on 1bd42718	1 probe	348	-
-2026-10-31	review	spec readability 2 builtins catalog review (2026-10-31): append and string_append_int without Alloc, native against --interp, on 1bd42718	3 probes	349	349
-2026-10-31	review	proven-violation diagnostics read while splitting E0900 (2026-10-31): three overflow_checked probes and the folder and type-lookup definitions, on 1bd42718	3 probes	350	-
+#   compiler legacy or new; a batch belongs to exactly one compiler, even when quiet
+date	kind	probe	effort	bugs	silent	compiler
+2026-10-17	controls	R-0482 P1 negative controls	unrecorded	079	079	legacy
+2026-10-18	hunt	name-resolution, collision, model-vs-runtime, scope, literal, checker-ownership and red-team hunts; type-identity and generic-destroy review probes	unrecorded	081,082,083,084,085,086,087,088,089,090,091,092,093,094,096,097,098,099,100	081,082,083,084,085,086,087,088,089,090,091,092,096,097,098	legacy
+2026-10-18	review	R-0460 scoping review (Bridge B); Codex review of the bug 085 change	unrecorded	080,101	080,101	legacy
+2026-10-20	workload	RocksDB slice 1 groundwork	unrecorded	102,103	102,103	legacy
+2026-10-20	design-proofs	V1 design examples (design question B6)	unrecorded	104	104	legacy
+2026-10-20	follow-on	testing the bug 091 round 3 fix; fixing bug 109	unrecorded	105,106,135	105,106,135	legacy
+2026-10-20	review	Codex review of batch 4	unrecorded	107	107	legacy
+2026-10-20	examples	examples-health pass: port and output-test every example	unrecorded	108,109,110,111,112,113,114,115,116,117,118,119,120	109,111,113,115	legacy
+2026-10-20	ci	CI run 39494484959 (ubuntu x86_64)	unrecorded	121	121	legacy
+2026-10-20	follow-on	bug 121's layout probe	unrecorded	122	122	legacy
+2026-10-21	spec	exit 2i specification (MEMORY_SEMANTICS section 15)	unrecorded	123,124,126	123,126	legacy
+2026-10-21	semantics	semantics probes N1-N4 and reference rules	unrecorded	127,128,129,130,131	127,128,129,131	legacy
+2026-10-21	review	Codex reviews of the bug 123 and bug 116 fixes	unrecorded	132,133	132,133	legacy
+2026-10-21	development	std ownership-on-failure work	unrecorded	134	-	legacy
+2026-10-21	follow-on	fixing bug 127	unrecorded	136,137	136,137	legacy
+2026-10-21	semantics	second semantics evaluation (EVALUATION2 D2, D3, D5, D10, D11; c, d, e, h and v probes)	unrecorded	140,142,143,144	140,143,144	legacy
+2026-10-21	interp-coverage	interpreter-coverage pass (typed heap, String over memory, IEEE floats) compared with the binary	unrecorded	150,152	150,152	legacy
+2026-10-21	review	Codex review of the interpreter-coverage pass	unrecorded	151	151	legacy
+2026-10-21	review	Codex review of the bug 140 comparison rule (a known limit, numbered 2026-10-23)	unrecorded	185	185	legacy
+2026-10-21	follow-on	writing the evaluation-order rule (2026-10-21 semantics decisions)	unrecorded	183	183	legacy
+2026-10-22	review	Codex reviews (rounds 4 and 5) of the symbol-name work (bug 129)	unrecorded	165,166	165,166	legacy
+2026-10-22	development	safety-eval2 work (a pre-existing limitation noted while fixing it)	unrecorded	175	-	legacy
+2026-10-22	review	Codex reviews of safety-eval2 (rule (c), bug 144 migration, bug 146, operand and exit-path checks)	unrecorded	145,146,147,148,149	149	legacy
+2026-10-22	fuzz	fuzz farm differential generator (interpreter vs binary) at 34f19e97; effort is the diff generator's day count in /srv/fuzz-farm/fuzz-status.json at 20:46Z	269145 programs	176	176	legacy
+2026-10-22	follow-on	bug 176 fix (its defence-in-depth follow-up: CoreCheck re-check of binder types)	unrecorded	177	177	legacy
+2026-10-22	development	devshell toolchain change (Nix clang ahead on PATH) exposing a run_tests race	unrecorded	179	-	legacy
+2026-10-22	development	compiler perf tracking (scripts/perf synthetic growth families)	unrecorded	178	-	legacy
+2026-10-23	development	landing train 3 integration (a --interp run fed by an open pipe did not return)	unrecorded	184	-	legacy
+2026-10-23	semantics	language-tightening witness programs (TIGHTENING_DECISIONS.md) on main, train1 and train3	47 programs	181,182	181,182	legacy
+2026-10-23	development	landing train 3 pre-push hook run as a second user on the OVH server (fixed /tmp test paths owned by dev)	unrecorded	191	-	legacy
+2026-10-23	spec	language-specification examples, statements and patterns chapters (docs/spec/statements.md and patterns.md, both consumers, and their reviews)	29 programs	194,195,196,197	194,195,196,197	legacy
+2026-10-23	review	Codex review of Concrete/Semantics/Capabilities.lean (capability variables) and trusted impl inheritance, confirmed by a second review	unrecorded	188,189	188,189	legacy
+2026-10-23	review	Codex audit of trait resolution (coherence), confirmed by probes on wip/train3 1df4cf48	unrecorded	186	186	legacy
+2026-10-23	development	verified-pipeline R-0497 slice 1 (sealing the pipeline artifacts refused a record update that replaced a certificate's payload)	unrecorded	180	180	legacy
+2026-10-23	spec	language-specification examples (docs/spec: pilot, pipeline, ownership and types chapters, both consumers, and their reviews)	116 programs	192,193	192,193	legacy
+2026-10-23	review	language-specification migration, contracts chapter (docs/spec/contracts.md: E0420 could not be mapped to one rule)	unrecorded	203	-	legacy
+2026-10-23	review	Codex review of the specification chapters trusted, ffi, contracts, modules, syntax and TYPE-15 (docs/spec), confirmed by probes on wip/train4 a4a9c05d	unrecorded	200	200	legacy
+2026-10-23	development	R-0492 slice 1 (moving binding identity to Resolve required one desugared body on every path into Check)	unrecorded	202	-	legacy
+2026-10-23	review	Codex review of the bug 136/137 evaluation-order fix	unrecorded	190	190	legacy
+2026-10-23	follow-on	raw-pointer generic leak (TIGHTENING_DECISIONS T-RAWDUP), numbered while implementing	unrecorded	198	198	legacy
+2026-10-23	review	Codex review of the bug 198 fix	unrecorded	199	-	legacy
+2026-10-23	review	bug 203's E0420 split (the append() refusal had no code at all in Check)	unrecorded	206	-	legacy
+2026-10-23	review	Codex review of the specification's traits chapter (TRAIT-8 to TRAIT-10, TYPE-16), confirmed by probes on spec-t6 c170057d	unrecorded	204,205	204,205	legacy
+2026-10-23	development	R-0492 step 3 (Codex review: ElabVerify flagged the import-rename pass renaming an identified local; bug 050's recorded remaining gap)	unrecorded	208	208	legacy
+2026-10-23	development	R-0492 step 2 mutation runs (families 55-57 gave no verdict, also on the slice-1 base)	unrecorded	207	-	legacy
+2026-10-23	review	Codex review of bug 215 (a nested-module constant escaped the new check; Resolve never walks nested submodules)	unrecorded	217	-	legacy
+2026-10-23	development	Hetzner gate-host and checker-cause work (stale empty index.lock in the agent worktree after Codex reviews; reproduced with a polling watcher)	unrecorded	209	-	legacy
+2026-10-23	development	R-0492 step 4 Codex delta review (mutation 31 anchor followed the explicit .name; it targeted the proof-only wrapper and survived on main)	unrecorded	219	-	legacy
+2026-10-23	workload	Phase 7 workload 9 lzpack (LZSS + PackBits codec, CRC container) and nine probe programs on its shapes (fixed-array hash chains through &mut, ring buffer, Huffman tree, trait codecs, fn values in structs, shift and cast edges, nested linear Result/Option, borrow and defer forms), plus a 400-case corrupt-stream fuzz against a Python reference	10 programs	212,214	-	legacy
+2026-10-23	fuzz	fuzz farm mutation generator findings open at eb122a01 (13 crash signatures re-run on the OVH server, interpreter vs binary) plus about 100 hand probes after R-0492 steps 1-3 (shadowing, fn-pointer locals, generics, match through references, defer exits, nested modules, diagnostics)	113 programs	210,211,213,215,216,218,220,221	210,215,218,220,221	legacy
+2026-10-23	workload	Phase 7 workload 10 stackvm (assembler, bytecode codec and load-time verifier, interpreter and disassembler over a 23-variant enum, a generic bounded stack, two traits and defer cleanup) with a differential gate against an independent Python implementation, and 25 probe programs on its shapes (imported enums with impls and trait bounds through each import path, import aliases, linear values in loops, Destroy impls, temporaries as receivers, borrow conflicts, diagnostics)	26 programs	222,223,224,225,228	-	legacy
+2026-10-24	development	bug 217 fix (walking std's submodules with Resolve's import rule refused std.string's import of std.libc's private externs, which Check's rule admits) and its Codex reviews (an enclosing enum Result hiding the builtin)	unrecorded	226,227	-	legacy
+2026-10-24	review	Codex reviews r3 and r4 of bug 217's fix (Resolve scope rules that refuse names Check admits, at top level and now nested; program-wide known types at top level)	unrecorded	229,230	-	legacy
+2026-10-24	hunt	differential hunt (interpreter vs native binary) on main 9622f7e0: 3500 fuzz_differential.py cases (seeds 102501, 102502) and hand probes on module constants, enum payloads across modules, generics and traits across module boundaries, nested submodules, defer and loops under --interp	60 programs	231,233,234,235,236	-	legacy
+2026-10-24	development	recording the differential hunt batch (check_docs_drift.sh discovery-signal controls)	unrecorded	232	-	legacy
+2026-10-24	ci	train 16 CI: the gate-selection gate's docs-only precision control failed after a bug-corpus note named a gate script	unrecorded	237	-	legacy
+2026-10-25	review	Codex review of bug 227's fix (R-0492 slice 6), the follow-up reproductions on the train-17 candidate 593dc100 (method spellings beside free functions, trait names in type positions, a parent calling its child's respelled type's method) and the Codex reviews of their fix	unrecorded	238,239,240,241,247	238,239,247	legacy
+2026-10-25	development	R-0492 step 3 (bug 223's fix): probes of the alias form of each importable type kind beside local types (struct, enum, generic, Destroy, newtype; a local type of the definition's spelling)	8 programs	242,243	-	legacy
+2026-10-25	review	Codex reviews rounds 2-3 of R-0492 steps 3-4 (an imported initializer calling another module's function under --interp; constant types through imported aliases)	unrecorded	245,246	-	legacy
+2026-10-25	development	operating the pre-push hook on the dev host (a gate run killed mid-run left orphaned gate processes and a repository lock that refused every later run)	unrecorded	244	-	legacy
+2026-10-25	review	orchestrator review of documentation links on main 032d8e12 (stale roadmap anchors in a research note; correct changelog fragment links reported broken)	unrecorded	252	-	legacy
+2026-10-25	development	bug 027 measurement (array literals of 1000 to 200000 elements, repeated and explicit, natively and per stage), the interpreter array-write note of bug 235's record, and bug 248's regression program compiled natively	unrecorded	248,249,250	-	legacy
+2026-10-25	review	Codex reviews of the fixes of bugs 245 and 243 (a generic of another tree reading a private constant; a child type sharing an imported type spelling)	unrecorded	251,253	251,253	legacy
+2026-10-25	development	bug 242's fix: the bug 096 fixtures that became valid programs, run under --interp	unrecorded	254	-	legacy
+2026-10-25	development	the identity follow-up fixes of bugs 242 to 254: newtype construction probed across parent, child and sibling modules	unrecorded	262	-	legacy
+2026-10-25	development	R-0507 roadmap landing validation: fuzz-farm fake-compiler campaigns missed required cases under short wall-clock budgets, reproduced on standalone retry	unrecorded	263	-	legacy
+2026-10-25	development	long-function measurement per front-end stage (1000 to 80000 statements: flat assignments, long if/while bodies, chained lets, lets interleaved with if/while/match reading an early binding; stage probe linked against the compiler)	unrecorded	255,256,257,258,259,260,261	-	legacy
+2026-10-25	development	long-function measurement per back-end stage (1000 to 80000 statements: chained lets, lets interleaved with if/match/while, lets then assignments; lower and monomorphize stages from --emit-trace-json, callgrind instruction counts)	unrecorded	265,266,267,269,270	-	legacy
+2026-10-25	development	reading Lower's merge code for bug 266 (the scope cleanup after an if takes the current table, which is the else arm's), then probes of if, value if and match whose last arm writes and diverges	4 programs	271	271	legacy
+2026-10-25	development	repointing mutation 56 to Elab's frame shape (front-end perf branch): the faithful eager-frames mutation survived check_binder_refs.sh	unrecorded	268	-	legacy
+2026-10-25	development	the name-capture fixes of bugs 238-247: CoreCheck judges an FFI edge against its own module tree's extern names; reproduced with an imported extern under --report trust-edges	unrecorded	272	272	legacy
+2026-10-26	development	R-0550 compile-time scaling gate: 15 generated shapes (array literals, long functions, many locals, lets with blocks, many functions, structs and enums, deep nesting) timed per stage at 1000 to 160000 elements	unrecorded	273,274,275,276,277,278,279,280,281,282,286	-	legacy
+2026-10-26	ci	gates-shell branch CI (run 40269354812): a transform-register leg failed on printf: write error: Broken pipe with its pattern present	unrecorded	283	283	legacy
+2026-10-26	follow-on	checking an earlier observation that binder references in literal match arms were missing from the R-0004 evidence producer: literal, range and bool match probes under --report subject-facts and migration-manifest	6 programs	284	284	legacy
+2026-10-26	development	designing the nested-branch lowering fix (R-0550 nested-ifs): Lower's address-taken walk read against Core's expression constructors, then probes of each site with an address-take in an enum payload	6 programs	285	285	legacy
+2026-10-26	development	writing a fixture for the nested-branch lowering fix: deferred calls that borrow a local, emitted at returns, breaks and continues inside branches	4 programs	287	287	legacy
+2026-10-26	development	R-0550 follow-up: the declaration and nesting shapes re-measured at 10^4 and 10^5 with whole compiles (--emit-llvm, -o), then callgrind attribution	10 programs	288	-	legacy
+2026-10-26	development	scaling probes of Check (task 3 of the R-0550 follow-up): nested if/else, match and let-block nests at 2000 and 8000, per-stage trace and callgrind	3 programs	289	-	legacy
+2026-10-26	development	scaling probes of Check and Lower over matched enums (task 3 of the R-0550 follow-up): n enum types, each built and matched once in main, at 2000 and 8000, per-stage trace and callgrind	1 program	290	-	legacy
+2026-10-26	development	many struct types each constructed and read once, beyond the R-0550 declaration shapes, timed per stage at 2000 and 8000 and profiled with callgrind	1 shape	291	-	legacy
+2026-10-26	development	nested while loops beyond the R-0550 shapes, timed per stage at 2000 and 8000 levels and profiled with callgrind after the bug 286 fix	1 shape	292	-	legacy
+2026-10-26	development	R-0550 follow-up: whole compiles (--emit-llvm) of the nested-ifs shape after bug 286, attributed by callgrind to Report's safety gate	4 programs	293	-	legacy
+2026-10-26	development	R-0550 follow-up, task 3: scaling probes of Resolve, Check and Elab beyond the gate shapes (calls, parameters, wide match, value if and match chains, struct fields) on main 1bcb7c36	11 shapes	295,296,297,298	-	legacy
+2026-10-26	ci	CI run 40377660985 (wip/bug-298): check_work_queue.sh budgets leg missed budget_exhausted; the leg then repeated on OVH under load	1400 cases	299	-	legacy
+2026-10-26	development	bug filing with scripts/gen/new_bug.sh (bugs 284 and 299 aborted after reserving their numbers)	2 filings	300	-	legacy
+2026-10-26	ci	train 37 candidate CI (run 40289036334): assignments/monomorphize over its wall budget at an unchanged instruction count; re-measured on concrete-ci-2 under load with perf instruction counts	unrecorded	294	-	legacy
+2026-10-26	hunt	Lower borrows and address-taken locals: hand probes of every CExpr and CStmt constructor, and the differential fuzzer's borrow mode (fuzz_differential.py --mode borrow)	3000 programs	301,302,303,304,305,307,308,309	301,302,305	legacy
+2026-10-27	hunt	the differential fuzzer's borrow mode with for loops (fuzz_differential.py --mode borrow) on a build with bugs 301 - 305 fixed: every remaining mismatch	1000 programs	306	306	legacy
+2026-10-28	development	pre-push hook on the OVH dev host (perf_event_paranoid=4, load 15-26): check_compile_scaling.sh enums/lower wall growth x80	unrecorded	315	-	legacy
+2026-10-28	development	cleanup pass 2026-10-28: the totality ratchet's environment walk imported every executable root (lake build Browser)	1 build	316	-	legacy
+2026-10-28	spec	class-13 audit: one forbidden program per clause of each normative rule in docs/spec (125 entries), native against --interp (wip/class13-audit)	207 probes	311	311	legacy
+2026-10-29	spec	OD16 (decided 2026-10-29) check: struct literals and uppercase constants in if and while heads, native against --interp, on main 0bf8350a (wip/spec-od)	5 probes	318	-	legacy
+2026-10-29	spec	OD23-OD32 (decided 2026-10-29, strict across the board) check: one program per tightening, native against --interp, on main 0bf8350a (wip/spec-od)	13 probes	319,320,321,322,323,324,325,326,327,328	319,320,321,322,323,324,325,326,327,328	legacy
+2026-10-29	review	Kimi review of a spec delta (a for step's control flow), then hand probes of break, continue and return inside for steps on main 71df9c25	17 programs	330	-	legacy
+2026-10-29	review	Grok review of grammar/concrete.ebnf (2026-10-29): the C-style for header [ for_init ';' ] expr ';' is not LL(1); planted grammars confirmed the checkers miss it	1 review	329	-	legacy
+2026-10-29	spec	Codex and Kimi reviews of the spec-gap rules (wip/spec-s6, 2026-10-30): f32 literal double rounding, native against --interp	1 probe	332	332	legacy
+2026-10-29	spec	Codex and Kimi reviews of the spec-gap rules (wip/spec-s6, 2026-10-30): type arguments to a body-less generic declaration, native against --interp	1 probe	333	333	legacy
+2026-10-29	spec	OD47 (decided 2026-10-29) check: the three C-style for forms, the counted loop and from/until as names, native against --interp, on main ae896787 (wip/spec-s7)	5 probes	331	-	legacy
+2026-10-30	spec	outside-reader test of the spec (wip/spec-phase2 d21a4cfd, 2026-10-30): 60 programs written from SPEC.md alone, run native and --interp; a constant out-of-bounds index	60 programs	340	340	legacy
+2026-10-31	review	spec quality audit of 2026-10-30 (Codex, Grok): hand probes of the open questions it raised, native against --interp, on main 71e3e804	16 probes	341	-	legacy
+2026-10-31	review	spec quality audit of 2026-10-30 follow-up: why MEM-6 cannot name E0900; a whole-tree scan of emitted codes against --report diagnostic-codes on main 71e3e804	1 probes	342	342	legacy
+2026-10-31	spec	spec audit 2026-10-31: probes of the SYNTAX_FREEZE_REVIEW §1.1 qualification rule (qualified paths by base-name case, nested paths, flattened names), native against --interp, on fb8946c6c	6 probes	343	343	legacy
+2026-10-31	spec	spec audit 2026-10-31: probes of the trap rules (ARITH-3, ARITH-5, MEM-6, STMT-2, STMT-13), one program per trap, native against --interp, on main dee500ee	12 probes	344	-	legacy
+2026-10-31	review	spec readability 2 builtins catalog review (2026-10-31): unwrap(n) bound to a let of the inner type, native against --interp, on 1bd42718	2 probes	345	-	legacy
+2026-10-31	review	spec readability 2 builtins catalog review (2026-10-31): abort() in a value position, native against --interp, on 1bd42718	4 probes	346	-	legacy
+2026-10-31	review	spec readability 2 builtins catalog review (2026-10-31): get_args with Process and Env, native against --interp, on 1bd42718	2 probes	347	-	legacy
+2026-10-31	review	spec readability 2 builtins catalog review (2026-10-31): float_to_string, native against --interp, on 1bd42718	1 probe	348	-	legacy
+2026-10-31	review	spec readability 2 builtins catalog review (2026-10-31): append and string_append_int without Alloc, native against --interp, on 1bd42718	3 probes	349	349	legacy
+2026-10-31	review	proven-violation diagnostics read while splitting E0900 (2026-10-31): three overflow_checked probes and the folder and type-lookup definitions, on 1bd42718	3 probes	350	-	legacy

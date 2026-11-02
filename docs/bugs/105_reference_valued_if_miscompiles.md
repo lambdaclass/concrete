@@ -1,6 +1,7 @@
 # Bug 105 — an `if` yielding a reference is miscompiled
 
 <!-- bug-ledger
+compiler: legacy
 summary: a reference-valued `if`/`match` segfaulted natively; the E0238 containment missed generics instantiated at a reference type, and the defect was EmitSSA storing a reference register as the aggregate it points at (a memcpy of the referent's first 8 bytes); `regress_105_ref_valued_branch_generic.con` with an `--interp == binary` leg, the E0238 fixtures stay
 fixtures: regress_105_ref_valued_branch_generic.con error_105_ref_valued_if_arg.con error_105_ref_valued_if_field.con
 class: 4 — checker containment

@@ -1,6 +1,7 @@
 # Bug 303 — the value if did not drop the bindings its arms declare, so a later loop's phi took a value defined on one arm's path
 
 <!-- bug-ledger
+compiler: legacy
 summary: the value `if` (lowerExpr's `.ifExpr`) kept the bindings its arms declare in Lower's variable table after its merge, while the statement `if` and `match` dropped them; a loop counter or `let` declared in an arm stayed bound to a register defined on that arm's path, and the next loop's header phi took it as a pre-loop value, so a valid program was refused (E0708)
 fixtures: regress_303_value_if_arm_scope.con
 class: 8 — each branch merge site did its own scope cleanup, and one did not

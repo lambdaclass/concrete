@@ -1,6 +1,7 @@
 # Bug 318 — A struct literal in an if, while or match head is accepted without parentheses when its name is uppercase (OD16)
 
 <!-- bug-ledger
+compiler: legacy
 summary: A struct literal in an if, while or match head is accepted without parentheses when its name is uppercase, and an uppercase constant before the head's block is refused (E0001), where SYN-4 (OD16, decided 2026-10-29) refuses every unparenthesized struct literal in a head and reads a name before `{` as a value
 coverage: reproducer tests/regressions/bug318_a_struct_literal_in_an_if_while_or_match_head_is/repro.con, found checking main against OD16 on 2026-10-29; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, runs-exit 42) and check_spec.sh S4 (the pending SYN-4 examples)
 class: 13

@@ -1,6 +1,7 @@
 # Bug 041: Match merge kept arm binders — stale Copy binder poisons a later same-named linear binder
 
 <!-- bug-ledger
+compiler: legacy
 summary: Match merge kept arm binders — stale Copy binder poisons a later same-named linear binder
 coverage: regress_041_match_binder_states.con (run_ok 42) + error_041_match_leak_still_caught.con (run_err E0208); Check post-match merges rebuild from envBefore (arm binders arm-scoped)
 class: 2

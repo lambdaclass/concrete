@@ -1,6 +1,7 @@
 # Bug 113 — R-0484 R3 (every foreign binding declares its effects) is not enforced in nested submodules
 
 <!-- bug-ledger
+compiler: legacy
 summary: R-0484 R3 (every foreign binding declares its effects) was not enforced in nested submodules; Resolve now walks every submodule (E0116 and E0117 fixtures `error_113_*`)
 fixtures: error_113_submodule_extern_undeclared.con error_113_submodule_extern_effectful_pure.con
 class: 13

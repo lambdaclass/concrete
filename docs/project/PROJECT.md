@@ -1129,7 +1129,7 @@ proof.
 #### Source-level resource certificates land early; hardware time stays scoped
 
 **Status:** Decided (2026-07-25); implementation pending
-[ROADMAP R-0445](ROADMAP_TASKS.md#task-r-0445).
+[ROADMAP R-0445](ROADMAP_BACKLOG.md#task-r-0445).
 
 Concrete will expose conservative per-function source-resource bounds before
 broad stdlib expansion. The first certificate covers symbolic source steps,
@@ -1151,7 +1151,7 @@ cannot silently preserve old evidence.
 #### Predictable generated-code performance is an affirmative project claim
 
 **Status:** Decided (2026-07-25); evidence machinery pending
-[ROADMAP R-0416–R-0419](ROADMAP_TASKS.md#task-r-0416).
+[ROADMAP R-0416–R-0419](ROADMAP_BACKLOG.md#task-r-0416).
 
 Concrete intends to make workload-scoped, replayable claims about generated-code
 time, size, memory, and optimization stability. That commitment does not
@@ -1178,7 +1178,7 @@ These are not rejected. They are explicitly sequenced as "not yet" to avoid prem
 
 #### `with(Std)` in high-integrity profiles — pending
 
-**Status:** Pending; owned by [ROADMAP R-0441](ROADMAP_TASKS.md#task-r-0441).
+**Status:** Pending; owned by [ROADMAP R-0441](ROADMAP_BACKLOG.md#task-r-0441).
 
 Current profiles accept `with(Std)`. Rejecting the broad alias in a
 high-integrity profile is the preferred proposal, but it is not yet a language

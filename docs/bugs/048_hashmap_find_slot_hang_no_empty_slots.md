@@ -1,6 +1,7 @@
 # Bug 048: HashMap find_slot infinite-loops when the table has no empty slots
 
 <!-- bug-ledger
+compiler: legacy
 summary: HashMap find_slot infinite-loops when the table has no empty slots (fixed by R-0003)
 fixtures: regress_047_048_hashmap_probe/src/main.con
 class: 14

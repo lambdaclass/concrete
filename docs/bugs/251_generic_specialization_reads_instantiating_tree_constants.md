@@ -1,6 +1,7 @@
 # Bug 251 — a generic's specialization reads the constants of the tree that instantiates it
 
 <!-- bug-ledger
+compiler: legacy
 summary: a generic function's specialization, which Mono emits into the module tree that first instantiates it, had its bare constant spellings resolved by Lower in that tree: the binary read the instantiating tree's constant of that spelling (a wrong value, where `--interp` read the generic's own) or, with none there, an undefined register (E0704); likewise a call to the tree's own function spelled like an intrinsic (`sizeof`) was taken for the intrinsic, and a call bound the instantiating module's `extern` of its spelling. A specialization keeps its generic's defining tree (`CFnDef.sourceTree`, `SFnDef.sourceTree`), whose constants and function names Lower uses and whose call context EmitSSA uses. Found by the Codex review of bug 245's fix, 2026-10-25. Fixtures `regress_251_*`. Class 1.
 fixtures: regress_251_generic_reads_defining_tree_constant.con regress_251_generic_constant_absent_in_instantiating_tree.con regress_251_nested_generic_constants.con regress_251_generic_calls_shadowed_intrinsic.con regress_251_generic_constant_calls_shadowed_intrinsic.con regress_251_generic_call_beside_destination_extern.con regress_251_generic_calls_source_extern.con regress_251_generic_calls_source_import_alias.con
 class: 1 — a generic's specialization moved to the instantiating tree, whose constants and function names then answered its spellings; fixed 2026-10-25: a specialization keeps its defining tree

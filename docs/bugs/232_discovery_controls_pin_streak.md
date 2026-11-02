@@ -1,6 +1,7 @@
 # Bug 232 — the discovery-signal controls assume the quiet streak is zero
 
 <!-- bug-ledger
+compiler: legacy
 summary: `check_docs_drift.sh`'s discovery-signal controls grepped the regenerated dashboard for a literal streak ("1 consecutive" after a quiet batch, "0" after a token one), true only while the last counting batch was not quiet, so recording a quiet batch failed the gate; the controls now read the record's own streak and expect one more, or none. Covered by `check_docs_drift.sh` itself. Class 12.
 coverage: the docs-drift gate pinned the discovery signal's streak as a literal (1 after a quiet batch, 0 after a token batch), so recording a quiet batch failed the gate. Regression vehicle is the docs-drift gate itself (its controls now read the record's streak and expect +1 / +0) (2026-10-24)
 class: 12 — the discovery signal's streak: computed by the dashboard generator, restated as a literal by the docs-drift controls

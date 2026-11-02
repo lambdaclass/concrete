@@ -1,6 +1,7 @@
 # Bug 115 — the builtin `vec_get` returns a non-Copy element by value, duplicating a linear value
 
 <!-- bug-ledger
+compiler: legacy
 summary: the builtin `vec_get` copied a non-Copy element out (a String taken twice double-freed); it and `vec_set` (which leaked the overwritten element) now require a Copy element (E0290 / E0291). Fixtures `error_115_*.con`
 fixtures: error_115_vec_get_non_copy.con error_115_vec_get_generic_unbounded.con error_115_vec_set_non_copy.con
 class: 13

@@ -923,7 +923,7 @@ prevented it; if none would, the plan gains one.
 - **Capacity and priority.** Known authority and memory-safety defects preempt planned work and are
   repaired or contained fail-closed before affected releases, under the roadmap's defect disposition
   rule. Effort and integration slots are divided by the roadmap's
-  [capacity allocation](../../ROADMAP.md#capacity-allocation): this pipeline holds the majority share
+  [capacity allocation](../archive/ROADMAP_LEGACY_PLAN.md#capacity-allocation): this pipeline holds the majority share
   and two slots (one shared-compiler migration checkpoint, one proof checkpoint); evidence integrity and
   adversarial validation have protected minimums; interop, application, usability and release work
   share one capped slot. The next checkpoint, its accountable maintainer

@@ -1,6 +1,7 @@
 # Bug 267 — SSACleanup settled one constant branch of a chain per run of its whole pass sequence
 
 <!-- bug-ledger
+compiler: legacy
 summary: SSACleanup settled one link of a chain of constant branches per run of its whole-function pass sequence (n chained constant branches took n runs)
 fixtures: regress_267_constant_branch_chains.con
 class: 17 — SSACleanup's whole-function fixpoint

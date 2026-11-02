@@ -1,6 +1,7 @@
 # Bug 321 — A bare variant name ignores a payload and a struct let over a Copy struct may omit fields
 
 <!-- bug-ledger
+compiler: legacy
 summary: A bare variant name ignores a payload and a struct let over a Copy struct may omit fields, which PAT-3 refuses as the owner decided OD25 on 2026-10-29
 coverage: reproducer tests/regressions/bug321_a_bare_variant_name_ignores_a_payload_and_a_stru/repro.con, found checking main against OD25 on 2026-10-29; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, runs-exit 42) and check_spec.sh S4 (the pending PAT-3 example)
 class: 13

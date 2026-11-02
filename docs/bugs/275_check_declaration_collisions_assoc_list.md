@@ -1,6 +1,7 @@
 # Bug 275 — Check finds duplicate declarations by searching an association list per declaration, and looks up each callee in a list (quadratic in declarations)
 
 <!-- bug-ledger
+compiler: legacy
 summary: Check's duplicate-declaration rule (bug 218) searched an association list of the declarations seen so far for every declaration, and a call looked its callee up in a list of the module's functions, so a module of n declarations took time n² to check (10000 functions: 159 ms). Found by the R-0550 scaling gate. Class 17.
 fixtures: error_275_collision_order.con
 class: 17 — Check finds duplicate declarations by searching an association list per declaration, and looks up each callee in a list

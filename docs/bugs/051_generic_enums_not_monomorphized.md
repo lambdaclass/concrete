@@ -1,6 +1,7 @@
 # Bug 051: user-defined generic enums are never monomorphized — mixed instantiations corrupt memory
 
 <!-- bug-ledger
+compiler: legacy
 summary: user-defined generic enums are never monomorphized — mixed instantiations corrupt memory (fixed by R-0001)
 fixtures: regress_generic_enum_051.con adversarial_mono_generic_enum.con
 class: 1

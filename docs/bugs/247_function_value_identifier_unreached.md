@@ -1,6 +1,7 @@
 # Bug 247 — the assumption summary misses a function value written as an identifier
 
 <!-- bug-ledger
+compiler: legacy
 summary: the assumption summary read function values only in their `fnRef` form, so `--report caps` called a function returning a value that reaches an extern "(no external authority)" with a complete call graph; and free calls and values were attributed to unrelated externs of their spelling. Function values written as identifiers are followed, and a free reference names a foreign binding only when its function binds the spelling to one. Found by the Codex review of bugs 238 – 241, 2026-10-25. Fixtures `regress_247_*`. Class 12.
 fixtures: regress_247_function_value_reaches_foreign.con regress_247_free_value_beside_unrelated_extern.con regress_247_free_call_beside_unrelated_extern.con
 class: 12 — a function value has two Core forms, `fnRef` and an identifier; the assumption summary's value walk read one

@@ -5,6 +5,7 @@
 **Severity:** silent: an unsound acceptance. Another module reads a private field, so a module cannot rely on privacy to keep an invariant (a `NonZero` built only by its smart constructor is read and, for a Copy struct, its fields copied out freely).
 
 <!-- bug-ledger
+compiler: legacy
 summary: a destructuring let in another module binds a struct's private fields (TYPE-11 enforced only for literals, reads and writes)
 coverage: reproducer tests/regressions/bug311_a_destructuring_let_in_another_module_binds_a_st/repro.con, pinned by run_tests.sh (`run_err` legs for the reproducer, `error_311_destructure_private_linear.con` and `error_311_destructure_private_copy_partial.con`; `error_311_parent_constructs_child_newtype.con`, `error_311_parent_reads_child_private_field.con` and `error_311_parent_destructures_child_private_field.con`; `run_ok` for `regress_311_destructure_pub_fields.con`) and check_spec.sh S4 (`TYPE-11/destructure-private-field`, `TYPE-11/parent-constructs-child-newtype`, `TYPE-11/parent-reads-child-private-field`)
 class: 13

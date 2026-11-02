@@ -1,6 +1,7 @@
 # Bug 204 — a trait bound on a primitive type argument was never checked
 
 <!-- bug-ledger
+compiler: legacy
 summary: a trait bound on a primitive type argument (`call::<Int>` with `T: Tr`) was never checked: with the bound's method unused the program ran on both consumers, and with it called it failed in `llvm-as` / as an undefined function under `--interp`. `checkTraitBounds` now needs an impl of the canonical type (E0241). Pinned by `error_204_primitive_bound_unchecked.con`, `error_204_primitive_bound_unused.con` and `regress_204_primitive_bound_satisfied.con`. Found by the Codex review of the specification's traits chapter (TRAIT-10)
 fixtures: error_204_primitive_bound_unchecked.con error_204_primitive_bound_unused.con regress_204_primitive_bound_satisfied.con
 class: 13 — a bound on a primitive type argument: `checkTraitBounds` skipped every unnamed shape

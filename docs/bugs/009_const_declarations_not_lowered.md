@@ -1,6 +1,7 @@
 # Bug 009: Const Declarations Parsed But Not Lowered
 
 <!-- bug-ledger
+compiler: legacy
 summary: Const Declarations Parsed But Not Lowered
 coverage: const decls not lowered -- fixed in Lower.lean, no standalone repro needed
 ruling: Violates: PASS-12@1

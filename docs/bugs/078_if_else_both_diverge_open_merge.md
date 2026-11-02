@@ -1,6 +1,7 @@
 # Bug 078: an if/else whose arms both diverge left its merge block open
 
 <!-- bug-ledger
+compiler: legacy
 summary: an if/else (statement or expression) whose arms both diverge left its merge block open, so an enclosing branch used the unreachable block as a phi source and SSA verification rejected a valid program (E0703)
 coverage: an if/else (statement or expression) whose arms both diverge left its merge block open, so an enclosing branch used the unreachable block as a phi source and SSA verification rejected a valid program (E0703). Regression vehicle is a gate, not a tests/programs .con: check_divergence_detection.sh compiles, runs and compares with --interp four bug 078 shapes plus the nested-divergence row that found it; those five rows fail with E0703 on the previous compiler; see docs/bugs/078 (2026-10-10)
 class: 8

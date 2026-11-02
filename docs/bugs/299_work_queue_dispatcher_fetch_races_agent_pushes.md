@@ -1,6 +1,7 @@
 # Bug 299 — work-queue dispatcher fetch races agent pushes on shared remote-tracking refs
 
 <!-- bug-ledger
+compiler: legacy
 summary: the work-queue dispatcher fetched with `git fetch --prune origin` into refs/remotes/origin/*, the namespace every agent worktree of the same clone also writes (a push updates its remote-tracking ref); an agent push landing mid-fetch failed the fetch ("incorrect old value provided"), the tick reported source_error and skipped dispatch, so check_work_queue.sh's budgets leg intermittently saw no budget_exhausted event. The dispatcher now fetches only into its own namespace refs/queue/remote/<remote>/* and reads its base and resume points from there.
 coverage: tooling-only defect pinned by scripts/tests/check_work_queue.sh leg "the dispatcher's fetch writes only its own refs" (an agent's diverged and pruned-on-remote refs/remotes/ entries survive a tick; the fetch lands in refs/queue/remote/ and prunes there; a QUEUE_BASE outside <remote>/<branch> is refused) and its budgets leg; no compiler fixture applies.
 class: 16

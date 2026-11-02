@@ -1,6 +1,7 @@
 # Bug 306 — the interpreter ran a for loop's step inside the body's scope, before the body's deferred calls
 
 <!-- bug-ledger
+compiler: legacy
 summary: Elab desugars `for (init; cond; step) { body }` to a `.while_` whose body list ends with the step and which also carries the step separately; the interpreter evaluated the whole list as the body's block, so on fall-through the step ran before the body's deferred calls (a deferred call reading the counter saw the stepped value), while on `continue` it ran after them; the binary runs the body's block, then the step, on both (silent divergence: the differential reference was wrong)
 fixtures: regress_306_for_step_after_body_defers.con
 class: 12 — the step is kept twice in Core's `.while_`, and each consumer cut the body's block out of it on its own

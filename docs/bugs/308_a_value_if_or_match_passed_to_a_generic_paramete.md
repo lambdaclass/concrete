@@ -1,6 +1,7 @@
 # Bug 308 — a value if or match passed to a generic parameter left its type variable uninferred, so Check refused the call
 
 <!-- bug-ledger
+compiler: legacy
 summary: generic inference types each argument with a side-effect-free peek (`peekExprTypeIn`, shared by Check and Elab) before checking it; the peek had no case for a value `if` or `match` and answered `.placeholder`, so a bare type parameter given only such an argument stayed unbound and Check refused the call (`gid(if c { 1 } else { 2 })`: E0220, "expected <unknown>, got i64")
 fixtures: regress_308_generic_arg_value_if.con
 class: 12 — an expression's type answered twice, by the full checker and by the inference peek, and the peek lacked two forms

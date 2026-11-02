@@ -169,10 +169,13 @@ if python3 -I "$W/scripts/gen/bug_ledger.py" --check --root "$W" >/dev/null 2>&1
    && python3 -I "$W/scripts/gen/changelog.py" --check --root "$W" >/dev/null 2>&1; then
   ok "the generated views and the changelog agree with the records after filing"
 else no "the generated views or the changelog disagree with the records after filing"; fi
-if [ "$(awk -F'\t' -v n="$NEXT" '$2 == "hunt" && $3 == "scaffold control hunt" && $4 == "12 programs" && $5 == n && $6 == n' "$DISC" | wc -l | tr -d ' ')" = 1 ] \
+if [ "$(awk -F'\t' -v n="$NEXT" '$2 == "hunt" && $3 == "scaffold control hunt" && $4 == "12 programs" && $5 == n && $6 == n && $7 == "new"' "$DISC" | wc -l | tr -d ' ')" = 1 ] \
    && dash_ok; then
   ok "the scaffold wrote the new batch's discovery row (bug $NEXT, silent) and the dashboard accepts the filing"
 else no "no discovery row 'hunt / scaffold control hunt / 12 programs / $NEXT / $NEXT', or bug_dashboard.py --check refuses the filing"; fi
+if [ -n "$REC" ] && grep -qx 'compiler: new' "$REC"; then
+  ok "the scaffold defaults to compiler: new"
+else no "the scaffold did not record its compiler"; fi
 grep -qF "[$(basename "${REC:-x}")]" "$W/docs/bugs/README.md" && ok "the README's generated list names the new bug" \
   || no "the README's generated list does not name the new bug"
 grep -qE "^\| 1\. [^|]*\|[^|]*\b$NEXT\b" "$W/docs/bugs/STRUCTURAL_CLASSES.md" && ok "class 1's row lists the new bug" \
@@ -290,6 +293,8 @@ hook "refs/x $E refs/bug-reservations/904 $Z"$'\n'"refs/heads/w $T refs/heads/wi
 echo "=== 6. the discovery attribution (bug 300) ==="
 refuse "a filing that names no discovery batch" "no discovery batch given" bash "$NB" "unattributed defect" --silent no
 refuse "a batch without --silent" "--silent yes|no is required" bash "$NB" "unattributed defect" "${BN[@]}"
+refuse "an unknown compiler" "--compiler takes legacy or new" bash "$NB" "x defect" --compiler other "${BA[@]}"
+refuse "joining the other compiler's batch" "--batch compiler differs" bash "$NB" "x defect" --compiler legacy --silent no --outside "tooling — gate control" --batch "scaffold control hunt"
 refuse "--batch text no row has" "matches 0 rows" bash "$NB" "x defect" --silent no --outside "tooling — gate control" --batch "no batch has this probe text"
 refuse "--batch text several rows have" "not one" bash "$NB" "x defect" --silent no --outside "tooling — gate control" --batch "e"
 refuse "--batch and --new-batch together" "both given" bash "$NB" "x defect" --silent no --batch "scaffold control hunt" "${BN[@]}"
@@ -298,10 +303,10 @@ refuse "--new-batch without --effort" "needs --probe and --effort" bash "$NB" "x
 refuse "a counting batch from 2026-10-22 on without an effort size" "records its effort" \
   env NEW_BUG_DATE=2026-10-26 bash "$NB" "x defect" --silent no --outside "tooling — gate control" --new-batch hunt --probe p --effort unrecorded
 refuse "a class tag on an attribution-only batch" "marks a counting batch" bash "$NB" "x defect" --silent no --outside "tooling — gate control" --new-batch review --probe "class 1: p" --effort "1 probe"
-cp "$W/ROADMAP.md" "$TMP/roadmap.bak"
-awk '{ print } /BEGIN GENERATED: bug dashboard/ { print "a hand edit" }' "$TMP/roadmap.bak" > "$W/ROADMAP.md"
+cp "$W/docs/bugs/DASHBOARD.md" "$TMP/dashboard.bak"
+awk '{ print } /BEGIN GENERATED: bug dashboard/ { print "a hand edit" }' "$TMP/dashboard.bak" > "$W/docs/bugs/DASHBOARD.md"
 refuse "a stale bug dashboard" "stale or refuses" bash "$NB" "x defect" "${BA[@]}"
-cat "$TMP/roadmap.bak" > "$W/ROADMAP.md"
+cat "$TMP/dashboard.bak" > "$W/docs/bugs/DASHBOARD.md"
 # --batch joins an existing row: the number goes in its bugs cell, and in its silent cell only when silent.
 if bash "$NB" "Joined control defect" --silent no --outside "tooling — control" --batch "scaffold control hunt" > "$TMP/join.out" 2>&1; then
   J="$(sed -nE 's/^new_bug: filed bug ([0-9]{3})$/\1/p' "$TMP/join.out")"
@@ -309,18 +314,18 @@ if bash "$NB" "Joined control defect" --silent no --outside "tooling — control
     ok "--batch added loud bug $J to the existing row's bugs cell only, and the dashboard accepts it"
   else no "--batch did not add bug ${J:-?} to the row 'scaffold control hunt' as '$NEXT,${J:-?}' (silent '$NEXT'), or the dashboard refuses it"; fi
 else no "filing with --batch failed: $(tr '\n' ' ' < "$TMP/join.out" | cut -c1-240)"; fi
-# A failure after the reservation (here the dashboard cannot write ROADMAP.md): every file and the
+# A failure after the reservation (here the dashboard cannot write DASHBOARD.md): every file and the
 # discovery row are rolled back, and the printed --number command files the same bug under the held
 # number with no second reservation. Root ignores the permission bits, so the leg reports itself skipped.
 disc_before="$(cksum < "$DISC")"
-chmod 444 "$W/ROADMAP.md"
-if [ -w "$W/ROADMAP.md" ]; then
-  echo "  skip a failure after the reservation rolls back and resumes (ROADMAP.md stays writable for this user)"
-  chmod 644 "$W/ROADMAP.md"
+chmod 444 "$W/docs/bugs/DASHBOARD.md"
+if [ -w "$W/docs/bugs/DASHBOARD.md" ]; then
+  echo "  skip a failure after the reservation rolls back and resumes (DASHBOARD.md stays writable for this user)"
+  chmod 644 "$W/docs/bugs/DASHBOARD.md"
 elif bash "$NB" "Resume control defect" --silent yes --open "$OPEN_Q" --batch "scaffold control hunt" > "$TMP/rs.out" 2>&1; then
-  chmod 644 "$W/ROADMAP.md"; no "filing succeeded although ROADMAP.md was read-only"
+  chmod 644 "$W/docs/bugs/DASHBOARD.md"; no "filing succeeded although DASHBOARD.md was read-only"
 else
-  chmod 644 "$W/ROADMAP.md"
+  chmod 644 "$W/docs/bugs/DASHBOARD.md"
   R="$(sed -nE 's/^new_bug: bug ([0-9]{3}) stays reserved and unfiled.*/\1/p' "$TMP/rs.out")"
   CMD="$(sed -nE 's/^  (scripts\/gen\/new_bug\.sh --number .*)$/\1/p' "$TMP/rs.out")"
   if [ -n "$R" ] && [ "$(cksum < "$DISC")" = "$disc_before" ] && ! ls "$W/docs/bugs/${R}_"* >/dev/null 2>&1 \
@@ -427,6 +432,13 @@ if [ -n "$G2" ] && grep -qx 'ruling: Spec gap: OWN — a control rule' "$W/docs/
    && grep -qF "| OWN | a control rule |" "$W/docs/bugs/RULINGS.md"; then
   ok "--spec-gap files bug $G2 with its gap, which RULINGS.md lists among the rules to write"
 else no "--spec-gap did not file a bug carrying its gap: $(tr '\n' ' ' < "$TMP/gap.out" | cut -c1-240)"; fi
+
+if bash "$NB" "Frozen compiler control defect" --compiler legacy "${BA[@]}" > "$TMP/legacy.out" 2>&1; then
+  LREC="$(find "$W/docs/bugs" -name '*_frozen_compiler_control_defect.md' -print)"
+  if [ -n "$LREC" ] && grep -qx 'compiler: legacy' "$LREC" && dash_ok; then
+    ok "an explicit legacy filing records its compiler and regenerates the scoped dashboard"
+  else no "an explicit legacy filing lost its compiler or dashboard"; fi
+else no "an explicit legacy filing failed: $(tail -3 "$TMP/legacy.out")"; fi
 
 echo "NEW-BUG: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ] || exit 1

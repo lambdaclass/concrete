@@ -1,6 +1,7 @@
 # Bug 328 — A method taking &self or &mut self is called on an owned place with an implicit borrow
 
 <!-- bug-ledger
+compiler: legacy
 summary: A method taking &self or &mut self is called on an owned place with an implicit borrow, which OWN-15 refuses as the owner decided OD32 on 2026-10-29
 coverage: reproducer tests/regressions/bug328_a_method_taking_self_or_mut_self_is_called_on_an/repro.con, found checking main against OD32 on 2026-10-29; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, runs-exit 42) and check_spec.sh S4 (the pending OWN-15 example)
 class: 13

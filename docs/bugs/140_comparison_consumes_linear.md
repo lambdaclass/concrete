@@ -1,6 +1,7 @@
 # Bug 140 — a comparison operator consumed its linear operands, and `==` on references compared addresses
 
 <!-- bug-ledger
+compiler: legacy
 summary: a comparison consumed its linear operands (`Heap == Heap` compared addresses and leaked both cells) and `==` on references compared addresses natively while `--interp` refused it (EVALUATION2 D10/D11). Refused with E0229; a `Copy`-bounded generic comparison is re-checked per instantiation after Mono. `error_140_*.con`, `regress_140_scalar_comparisons.con`. Joins exit 0b. ((`safety-eval2`))
 fixtures: error_140_heap_eq.con error_140_linear_eq.con error_140_ref_eq.con error_140_string_eq.con error_140_generic_unbounded_eq.con error_140_generic_copy_at_struct.con error_140_rawptr_eq_safe.con error_140_generic_self_compare.con regress_140_scalar_comparisons.con
 class: 7

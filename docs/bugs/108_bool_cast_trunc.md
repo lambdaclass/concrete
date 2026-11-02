@@ -1,6 +1,7 @@
 # Bug 108 — a `bool` cast to a wider integer is emitted as `trunc i1`
 
 <!-- bug-ledger
+compiler: legacy
 summary: `bool as <int>` was emitted as `trunc i1` (LLVM rejects it); `bool` is now the 1-bit unsigned width (zext), and `<int> as bool`, which neither backend ever gave a meaning, is refused (E0553); pinned by `regress_108_bool_cast_widen.con` and `check_cast_matrix.sh`
 fixtures: regress_108_bool_cast_widen.con error_108_int_as_bool.con
 class: 7

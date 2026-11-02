@@ -1,6 +1,7 @@
 # Bug 272 — a call of an imported extern has no calls-ffi trust edge
 
 <!-- bug-ledger
+compiler: legacy
 summary: CoreCheck recorded the `calls-ffi` trust edge only when the callee's spelling was one of its own module tree's `extern` names, so a call of an extern imported from another module (`import c.{abs}`) had none, plainly, trusted or under an alias: `--report trust-edges` under-reported where a program leaves the language. The edge now comes from the call's binding to a foreign declaration (the function's `foreignCalls`, own or imported), the binding its trust and capabilities were already decided by. Reporting only: no capability, trust or refusal changes. Found by the name-capture work on bugs 238-247; confirmed real by Codex review 2026-10-25. Fixture `regress_272_imported_extern_ffi_edge.con`. Class 1.
 fixtures: regress_272_imported_extern_ffi_edge.con
 class: 1 — the FFI edge asked whether an extern of the call's spelling is declared in this module tree, not whether the call is bound to a foreign declaration; fixed 2026-10-25: the resolver's binding

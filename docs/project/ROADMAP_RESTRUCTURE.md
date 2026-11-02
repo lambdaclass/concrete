@@ -1,7 +1,7 @@
 # Roadmap restructure around the new compiler
 
 Status: approved by the owner on 2026-11-02, after Codex's review. This is the plan for item 1 of
-[the interim queue](../../ROADMAP.md#the-interim-queue). It describes the migration once it has
+[the interim queue](../../ROADMAP.md#the-queue). It describes the migration once it has
 landed and schedules nothing beside the interim queue.
 
 ## Why

@@ -1,6 +1,7 @@
 # Bug 003: Cross-Module &mut Borrow Consumed as Move
 
 <!-- bug-ledger
+compiler: legacy
 summary: Cross-Module &mut Borrow Consumed as Move
 fixtures: bug_cross_module_mut_borrow.con
 ruling: Violates: OWN-15@2

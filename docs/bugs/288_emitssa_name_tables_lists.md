@@ -1,6 +1,7 @@
 # Bug 288 — EmitSSA's program-wide name and type tables were lists searched per function and per type
 
 <!-- bug-ledger
+compiler: legacy
 summary: EmitSSA kept its program-wide tables (names defined under two module paths, defined and method names, link-symbol ambiguity, emitted type names, string-literal lengths, deduplicated declarations) as lists and searched them per function, per call, per type or per literal, so emitting a program of n functions or n types took time n² (100000 functions: --emit-llvm 220 s, of which the in-compiler stages through lower 5.5 s). Found re-measuring the R-0550 declaration shapes at 10^5 with whole compiles. Class 17.
 coverage: run_tests.sh
 class: 17 — EmitSSA's program-wide tables were lists

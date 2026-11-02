@@ -11,6 +11,9 @@ FAIL-CLOSED: a malformed record (wrong header, wrong column count, an empty cell
 stage (b) pass, a row naming neither bugs nor a deliverable, a duplicate id or bug) refuses with exit
 2 and generates nothing. Missing markers, or more than one pair, also refuse.
 
+Disposed candidates stay visible: their dated disposition is recorded in the remaining field,
+with the original SHA and validation history preserved. Disposition does not mark acceptance.
+
 --record / --roadmap override the inputs (test seams for the gate's negative controls).
 """
 import argparse

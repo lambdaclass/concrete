@@ -7,6 +7,7 @@
 Codex confirmation 2026-10-30: REAL-BUG. "MEM-6 requires that 'an index the compiler proves out of bounds is refused,' and the compiler's E0900 demonstrates that proof for this program. The overview additionally states that '`--interp` runs no program the compiler cannot compile,' directly ruling out the observed execution followed by a trap. PASS-13 alone would be insufficient here because it speaks of accepted programs."
 
 <!-- bug-ledger
+compiler: legacy
 summary: The interpreter runs a program the compiler refuses as a proven runtime-safety violation (E0900)
 coverage: reproducer tests/regressions/bug340_the_interpreter_runs_a_program_the_compiler_refu/repro.con, found by the outside-reader spec test 2026-10-30; the native refusal pinned by check_example_outputs.sh (open-bug reproducers leg, compile-fails E0900)
 class: 18

@@ -8,7 +8,7 @@
 #   the CI gate inventory                                            scripts/tests/ci_gate_inventory.txt
 #
 # and the views generated from them: the bug lists in docs/bugs/README.md, the bugs column of
-# STRUCTURAL_CLASSES.md's summary table and the exit bug spans in ROADMAP.md (scripts/gen/bug_ledger.py),
+# STRUCTURAL_CLASSES.md's summary table  (scripts/gen/bug_ledger.py),
 # the coverage maps of audit_bug_corpus.sh (built at run time, never committed) and CHANGELOG.md
 # (fragments folded by scripts/gen/changelog.py --fold, stamped so a hand edit is visible).
 #
@@ -20,7 +20,7 @@
 #      a hand edit of each view, a record changed without regenerating, malformed records and missing
 #      markers must each be refused, with the exit code that distinguishes stale (1) from malformed (2);
 #   3. positive controls: a new record regenerates and checks; a rebase conflict inside a generated
-#      block, or one confined to a ROADMAP exit span, is resolved by --write; fragments fold newest
+#      block is resolved by --write; fragments fold newest
 #      first and the folded file checks;
 #   4. the copy's audit_bug_corpus.sh and check_bug_filing_complete.sh read coverage from the records:
 #      they pass, and fail on a record whose fixture is missing or on a legacy inline entry left behind.
@@ -90,8 +90,6 @@ else
   no "the migration does not run cleanly on this tree (log below); scripts/gen/migrate_ledgers.sh would fail"
   sed 's/^/      /' "$TMP/migrate.log" | awk 'NR<=40'
 fi
-# The first generated exit span, if the roadmap has one; exit-span controls need it.
-EXIT_ID="$(grep -oE 'BEGIN GENERATED: exit [0-9][a-z] bugs' "$BASE/ROADMAP.md" | awk 'NR==1 {print $4}')"
 cat > "$BASE/docs/bugs/997_ledger_control.md" <<'EOF'
 # Bug 997 — the ledger gate's control record (scripts/tests/check_ledgers.sh)
 
@@ -100,6 +98,7 @@ summary: control record
 coverage: control record, covered by scripts/tests/check_ledgers.sh
 class: 1 — control note
 silent: no
+compiler: new
 ruling: Violates: OWN-1@2
 -->
 
@@ -157,7 +156,10 @@ neg record_without_block "$R" "import re; s,n=re.subn(r'^<!-- bug-ledger\n.*?^--
 neg unclosed_block "$R" "import re; s,n=re.subn(r'^-->\n', '', s, count=1, flags=re.M); assert n==1" 2
 neg two_blocks "$R" "s = s + '\n<!-- bug-ledger\nsummary: x\ncoverage: OPEN -- y.sh\n-->\n'" 2
 neg class_not_in_table "$R" "$(add 'class: 999')" 2
-neg exit_without_span "$R" "$(add 'exit: 9z')" 2
+neg exit_malformed "$R" "$(add 'exit: invalid')" 2
+neg compiler_bad_value "$R" "s=s.replace('compiler: new','compiler: unknown')" 2
+neg compiler_missing "$R" "s=s.replace('compiler: new\n','')" 2
+neg compiler_duplicate "$R" "$(add 'compiler: legacy')" 2
 neg silent_bad_value "$R" "import re; s,n=re.subn(r'^silent: no', 'silent: maybe', s, count=1, flags=re.M); assert n==1" 2
 neg status_word_unknown "$R" "import re; s,n=re.subn(r'^\*\*Status:\*\* OPEN', '**Status:** OPNE', s, count=1, flags=re.M); assert n==1" 2
 neg readme_markers_missing docs/bugs/README.md "old='<!-- END GENERATED: bug list -->'; assert s.count(old)==1; s=s.replace(old,'')" 2
@@ -183,14 +185,7 @@ neg ruling_unknown_question "$R" "old='ruling: Violates: OWN-1@2'; assert s.coun
 neg rulings_markers_missing docs/bugs/RULINGS.md "old='<!-- END GENERATED: spec rulings -->'; assert s.count(old)==1; s=s.replace(old,'')" 2
 neg rulings_view_hand_edit docs/bugs/RULINGS.md "old='### By violated rule'; assert s.count(old)==1; s=s.replace(old, old+' (edited)')" 1
 neg duplicate_number "$R" "import shutil, os; d=os.path.dirname(p); shutil.copy(p, os.path.join(d, '997_duplicate.md'))" 2
-if [ -n "$EXIT_ID" ]; then
-  neg exit_span_hand_edit ROADMAP.md "import re; s,n=re.subn(r'(<!-- BEGIN GENERATED: exit $EXIT_ID bugs[^>]*-->)', r'\g<1>999, ', s); assert n==1" 1
-  neg exit_added_not_regenerated "$R" "$(add "exit: $EXIT_ID")" 1
-  neg exit_span_orphan_end ROADMAP.md "old='<!-- END GENERATED: exit $EXIT_ID bugs -->'; assert s.count(old)==1; s=s.replace(old, old+' x '+old)" 2
-  neg exit_span_unclosed ROADMAP.md "old='<!-- END GENERATED: exit $EXIT_ID bugs -->'; assert s.count(old)==1; s=s.replace(old,'')" 2
-else
-  ok "ROADMAP.md has no generated exit bug span; the exit-span controls have nothing to mutate"
-fi
+
 
 echo "=== 3. regeneration: a new record, rebase conflicts, fragments ==="
 make_copy
@@ -202,18 +197,17 @@ summary: control: a new open bug
 coverage: control record, covered by scripts/tests/check_ledgers.sh
 class: 1 — the control's note
 silent: yes
+compiler: new
 ruling: Spec gap: OWN — a control rule
-${EXIT_ID:+exit: $EXIT_ID}
 -->
 
 **Status:** OPEN
 EOF
 if python3 -I "$BL" --write --root "$C" >/dev/null 2>&1 && python3 -I "$BL" --check --root "$C" >/dev/null 2>&1 \
    && grep -qF '[998_control_bug.md](998_control_bug.md) — control: a new open bug' "$C/docs/bugs/README.md" \
-   && grep -qE '^\| 1\. .*998 \(the control.s note\)' "$C/docs/bugs/STRUCTURAL_CLASSES.md" \
-   && { [ -z "$EXIT_ID" ] || grep -qE "BEGIN GENERATED: exit $EXIT_ID bugs[^>]*-->[^<]*998" "$C/ROADMAP.md"; }; then
+   && grep -qE '^\| 1\. .*998 \(the control.s note\)' "$C/docs/bugs/STRUCTURAL_CLASSES.md"; then
   ok "positive control: a new record regenerates into every view and checks"
-else no "positive control: a new record did not regenerate into the README, class table and exit span"; fi
+else no "positive control: a new record did not regenerate into the README, class table "; fi
 # A rebase conflict inside the README block: both sides regenerated the list.
 make_copy
 edit docs/bugs/README.md "old='## Open Numbered Bugs\n\n'; assert s.count(old)==1; s=s.replace(old, old+'<<<<<<< HEAD\n- [997_a.md](997_a.md) — ours\n=======\n- [996_b.md](996_b.md) — theirs\n>>>>>>> theirs\n')"
@@ -222,28 +216,7 @@ if python3 -I "$BL" --write --root "$C" >/dev/null 2>&1 && python3 -I "$BL" --ch
    && ! grep -qE '^(<{7}|>{7})' "$C/docs/bugs/README.md"; then
   ok "positive control: --write resolves a conflict inside the README's generated block"
 else no "positive control: --write left a README block conflict unresolved"; fi
-if [ -n "$EXIT_ID" ]; then
-  # A conflict confined to a ROADMAP exit span: the whole table row conflicts, the sides differ only there.
-  make_copy
-  edit ROADMAP.md "import re
-m = re.search(r'^.*BEGIN GENERATED: exit $EXIT_ID bugs.*\n', s, re.M); row = m.group(0)
-ours = re.sub(r'(BEGIN GENERATED: exit $EXIT_ID bugs[^>]*-->)', r'\g<1>997, ', row); theirs = re.sub(r'(BEGIN GENERATED: exit $EXIT_ID bugs[^>]*-->)', r'\g<1>996, ', row)
-s = s[:m.start()] + '<<<<<<< HEAD\n' + ours + '=======\n' + theirs + '>>>>>>> theirs\n' + s[m.end():]"
-  if python3 -I "$BL" --write --root "$C" >/dev/null 2>&1 && python3 -I "$BL" --check --root "$C" >/dev/null 2>&1 \
-     && ! grep -qE '^(<{7}|>{7})' "$C/ROADMAP.md"; then
-    ok "positive control: --write resolves a conflict confined to a ROADMAP exit span"
-  else no "positive control: --write left an exit-span conflict unresolved"; fi
-  # ...but a conflict that also differs OUTSIDE the span is a real one and is left for a human.
-  make_copy
-  edit ROADMAP.md "import re
-m = re.search(r'^.*BEGIN GENERATED: exit $EXIT_ID bugs.*\n', s, re.M); row = m.group(0)
-other = row.replace('BEGIN GENERATED', 'OUTSIDE EDIT -->X<!-- BEGIN GENERATED', 1)
-s = s[:m.start()] + '<<<<<<< HEAD\n' + row + '=======\n' + other + '>>>>>>> theirs\n' + s[m.end():]"
-  python3 -I "$BL" --write --root "$C" >/dev/null 2>&1 || true
-  if grep -qE '^<{7}' "$C/ROADMAP.md"; then
-    ok "control: a conflict outside the generated span is left in place for a human"
-  else no "control: --write silently resolved a conflict outside a generated span"; fi
-fi
+
 # A conflict in the class table whose sides disagree on a class-owned cell (one side drops the last
 # class row) is a real conflict: --write must refuse, not union the rows back.
 make_copy
@@ -412,6 +385,7 @@ fp_git() { ( unset $(git rev-parse --local-env-vars) 2>/dev/null; export GIT_CON
 if ( unset $(git rev-parse --local-env-vars) 2>/dev/null; git clone -q --shared --no-checkout "$ROOT_DIR" "$FP" \
        && git -C "$FP" checkout -q --detach "$(git -C "$ROOT_DIR" rev-parse HEAD)" ) >/dev/null 2>&1 \
    && cp scripts/gen/bug_ledger.py scripts/gen/bug_areas.py scripts/gen/bug_rulings.py "$FP/scripts/gen/" \
+   && cp docs/bugs/[0-9][0-9][0-9]_*.md "$FP/docs/bugs/" \
    && cp docs/bugs/area_map.tsv docs/bugs/AREAS.md docs/bugs/RULINGS.md "$BASE/$R" "$FP/docs/bugs/" \
    && fp_git add -A && fp_git commit -q --allow-empty -m "gate: this checkout's generator and views" \
    && python3 -I "$FP/scripts/gen/bug_ledger.py" --write --root "$FP" >/dev/null 2>&1 \

@@ -1,6 +1,7 @@
 # Bug 280 — Check and Elab re-walk a nested expression's whole operand tree at every level (quadratic in nesting depth)
 
 <!-- bug-ledger
+compiler: legacy
 summary: Check and Elab asked whole-subtree questions (does an operand contain an escaping `return`/`break`; is it a literal-only tree) at every level of a nested expression, each a walk of the subtree below, so an expression n levels deep took time n² to check and elaborate (depth 10000: check 1007 ms). Found by the R-0550 scaling gate. Class 17.
 fixtures: regress_280_nested_operand_exits.con error_280_exit_deep_operand.con
 class: 17 — Check and Elab re-walk a nested expression's whole operand tree at every level

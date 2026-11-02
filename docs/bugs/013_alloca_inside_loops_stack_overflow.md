@@ -1,6 +1,7 @@
 # Bug 013: Alloca Inside Loops Caused Stack Overflow
 
 <!-- bug-ledger
+compiler: legacy
 summary: Alloca Inside Loops Caused Stack Overflow
 fixtures: test_string_literal_in_loop.con
 ruling: Violates: unrecorded

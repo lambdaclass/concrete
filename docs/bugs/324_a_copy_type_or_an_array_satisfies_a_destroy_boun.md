@@ -1,6 +1,7 @@
 # Bug 324 — A Copy type or an array satisfies a Destroy bound without a Destroy impl
 
 <!-- bug-ledger
+compiler: legacy
 summary: A Copy type or an array satisfies a Destroy bound without a Destroy impl, which TRAIT-10 refuses as the owner decided OD28 on 2026-10-29
 coverage: reproducer tests/regressions/bug324_a_copy_type_or_an_array_satisfies_a_destroy_boun/repro.con, found checking main against OD28 on 2026-10-29; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, runs-exit 42) and check_spec.sh S4 (the pending TRAIT-10 example)
 class: 13

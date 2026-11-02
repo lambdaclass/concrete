@@ -1,6 +1,7 @@
 # Bug 198: `*p` through a raw pointer duplicated a non-Copy pointee
 
 <!-- bug-ledger
+compiler: legacy
 summary: `*p` read by value of a non-Copy pointee through a raw pointer duplicated it (a double free in trusted code). Refused (E0311); the transfer is the intrinsic `read_owned(p)`, which leaves the slot logically uninitialized; 26 std sites migrated. Pinned by `error_rawdup_trusted_deref.con` and `regress_198_read_owned.con` ((T-RAWDUP, the raw-pointer generic leak))
 fixtures: error_rawdup_trusted_deref.con regress_198_read_owned.con
 class: 13 — `trusted` does not relax linearity, unenforced at `*p`

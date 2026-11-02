@@ -1,6 +1,7 @@
 # Bug 221 — a call with the wrong number of explicit type arguments was accepted
 
 <!-- bug-ledger
+compiler: legacy
 summary: an explicit type-argument list at a function, method, function-pointer or trait-bound call was zipped with the callee's type parameters, so `g::<Int, Int>(1)` and `g::<Int>(1)` on a non-generic function compiled with the extra arguments dropped, and a short list left parameters unbound. Refused with E0322 (TYPE-9). Pinned by six `error_221_*.con` fixtures and `regress_221_exact_type_arguments.con`. Found by the diagnostics probes of the post-R-0492 differential hunt
 fixtures: error_221_extra_type_argument.con error_221_type_argument_to_plain_fn.con error_221_method_extra_type_argument.con error_221_short_type_argument_list.con error_221_fn_pointer_type_argument.con error_221_bound_method_type_argument.con regress_221_exact_type_arguments.con
 class: 13 — a call's type-argument count: a `zip` stood in for the check

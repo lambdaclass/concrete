@@ -1,6 +1,7 @@
 # Bug 029: early-return `if` + `while` + post-loop array address-of miscompiles
 
 <!-- bug-ledger
+compiler: legacy
 summary: early-return `if` + `while` + post-loop array address-of miscompiles
 coverage: regress_029_if_merge_array_addr.con + regress_029_loop_exit_array_addr.con in tests/programs (run_ok 42/7) (both sites)
 ruling: Violates: PASS-12@1

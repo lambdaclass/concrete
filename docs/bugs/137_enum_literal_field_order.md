@@ -1,6 +1,7 @@
 # Bug 137 — enum-variant literal fields are evaluated in declaration order
 
 <!-- bug-ledger
+compiler: legacy
 summary: enum-variant literal fields ran in declaration order in both consumers (65 instead of 56). Elab elaborates them in source order and, when that differs from declaration order, evaluates them into temporaries before building the declaration-ordered payload; pinned by `regress_136_137_literal_eval_order.con` and the reproducer's `run_ok` (56)
 fixtures: regress_136_137_literal_eval_order.con
 class: 7 — the payload list is both evaluation order and positional identity

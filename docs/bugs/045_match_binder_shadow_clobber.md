@@ -1,6 +1,7 @@
 # Bug 045: Nested same-named match binders shared one runtime slot (silent wrong values)
 
 <!-- bug-ledger
+compiler: legacy
 summary: Nested same-named match binders shared one runtime slot (silent wrong values)
 coverage: regress_045_match_binder_shadow.con (run_ok 42); Elab alpha-renames match binders (value -> value.bN), retiring the name-scoping class below Elab
 class: 2

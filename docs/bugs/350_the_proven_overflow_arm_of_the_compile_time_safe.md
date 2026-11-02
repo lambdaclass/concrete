@@ -5,6 +5,7 @@
 **Severity:** no wrong program behaviour: the run-time overflow trap still fires; the compile-time refusal of a proven overflow that the documentation describes can never happen, and the report's constant tier is dead code
 
 <!-- bug-ledger
+compiler: legacy
 summary: the proven-overflow arm of the compile-time safety diagnostics can never fire, so the documented refusal of a proven overflow never happens
 coverage: reproducer tests/regressions/bug350_the_proven_overflow_arm_of_the_compile_time_safe/repro.con, pinned by check_example_outputs.sh (open-bug reproducers leg, compiles)
 class: 13

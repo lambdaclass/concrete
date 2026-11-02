@@ -1,6 +1,7 @@
 # Bug 128 — the interpreter models an integer-to-float cast as the identity
 
 <!-- bug-ledger
+compiler: legacy
 summary: the interpreter modelled `<int> as f64` as the identity (2^53 + 1 stayed 2^53 + 1); it now has IEEE float values, rounds integer → float to nearest-even exactly, and performs the checked float → integer conversion. Interp-vs-native leg on the reproducer; `tests/codegen/float_semantics.con` ((interpreter-coverage pass))
 coverage: the interpreter has IEEE float values; int -> float rounds to nearest-even exactly, float -> int is the checked conversion. Regression vehicle: run_tests.sh interp-vs-native leg on tests/regressions/bug128_interp_int_to_float_identity/repro.con and tests/codegen/float_semantics.con in check_codegen_differential.sh (2026-10-21 (interpreter-coverage pass))
 class: 7

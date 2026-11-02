@@ -1,6 +1,7 @@
 # Bug 290 — Check walked every non-Copy binding at every match arm, and Check and Lower looked enums up in a list
 
 <!-- bug-ledger
+compiler: legacy
 summary: at every arm of every `match`, Check's H9 block-local check (`checkBlockLocalsConsumed`) walked every non-Copy binding in scope and the arms' agreement check walked every pre-existing one, and Check (`lookupEnum`, `isCopyType`) and Lower (`variantIndex`, `variantFields`, enum construction and enum-match arms) found each enum by searching the list of all enums, so a function matching n enum values of n enum types took n² to check and to lower (8000: check 10088 ms, lower 2807 ms). Class 17.
 coverage: run_tests.sh, the bug 290 leg: the check stage of a main that builds and matches 8000 enum values of 8000 enum types within 600 ms (retry 1200)
 class: 17 — per-arm walks of the binding environment and per-use enum list searches

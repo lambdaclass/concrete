@@ -1,6 +1,7 @@
 # Bug 214 — a linear binding left unconsumed by two returns is refused twice with the same text and span, naming neither return
 
 <!-- bug-ledger
+compiler: legacy
 summary: a linear binding left unconsumed by two `return`s got two byte-identical E0208 refusals at its declaration, naming neither exit; each refusal now carries a related span naming its `return`. Pinned by `error_214_two_returns_leak.con` (two `run_tests.sh` legs). Found by the probe programs of Phase 7 workload 9 (lzpack)
 fixtures: error_214_two_returns_leak.con
 class: 15 — a per-exit refusal named the binding but not the exit

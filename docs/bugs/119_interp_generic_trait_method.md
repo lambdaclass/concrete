@@ -1,6 +1,7 @@
 # Bug 119 — the interpreter cannot call a trait method on a type parameter
 
 <!-- bug-ledger
+compiler: legacy
 summary: the interpreter could not call a trait method on a type parameter (`undefined function 'U_v'`); `T$m` now dispatches through the trait-impl table on the runtime receiver. Interp-vs-native leg on the reproducer ((batch 2))
 coverage: interp dispatch of a trait method on a type parameter through the trait-impl table. Regression vehicle: run_tests.sh interp-vs-native leg on tests/regressions/bug119_interp_generic_trait_method/repro.con (a regression dir, not a tests/programs fixture) (2026-10-20 (batch 2))
 class: 7

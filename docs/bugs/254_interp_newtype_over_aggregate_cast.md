@@ -1,6 +1,7 @@
 # Bug 254 — the interpreter refuses a newtype's construction or unwrap over a struct or enum
 
 <!-- bug-ledger
+compiler: legacy
 summary: `--interp` refused constructing or unwrapping a newtype over a struct or enum ("unsupported cast") that the binary runs: Core writes `N(v)` and `n.0` as a cast between the newtype and its inner type, and the interpreter's cast had no case for an aggregate. A cast between two types that normalize to one is the value itself. Found fixing bug 242, 2026-10-25. Fixtures `regress_254_*`. Class 7.
 fixtures: regress_254_newtype_over_struct.con regress_254_newtype_over_enum.con
 class: 7 — the interpreter had no case for a newtype's construction or unwrap over a struct or enum, which Core writes as a cast; fixed 2026-10-25

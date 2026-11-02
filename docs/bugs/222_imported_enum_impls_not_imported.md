@@ -1,6 +1,7 @@
 # Bug 222 — an imported enum's impl blocks and trait impls are not imported
 
 <!-- bug-ledger
+compiler: legacy
 summary: an imported enum's impl blocks and trait impls were not imported (the struct and newtype import paths each selected them; the enum paths, by name and through the transitive closure, did not), so every bound needing a trait impl on an imported enum was E0241 outside its module (`encode_all<T: Encode>` over `Vec<Instr>`, a `Destroy` bound on a linear enum). One helper (`typeImplsOf`) serves every imported type kind. Pinned by `regress_222_imported_enum_impls.con` (binary and --interp). Found by Phase 7 workload 10 (stackvm)
 fixtures: regress_222_imported_enum_impls.con
 class: 12 — what travels with an imported type, selected once per type kind; the enum paths did not select it

@@ -1,6 +1,7 @@
 # Bug 142 — a `return` inside a call argument or literal field leaked the values already moved into it
 
 <!-- bug-ledger
+compiler: legacy
 summary: a `return` inside a call argument or a struct/enum/array literal field, after an owned value was moved into the pending construct, was accepted and the value never destroyed (EVALUATION2 D3; `--interp` refused the shape at run time, D4's native half). Rule (d): no `return`/`break`/`continue` inside a call argument, literal element or operator operand (E0278). `error_142_*.con`, `regress_142_exits_allowed.con`. Joins exit 0b. ((`safety-eval2`))
 fixtures: error_142_struct_field_return.con error_142_call_arg_return.con error_142_array_elem_return.con error_142_enum_field_return.con error_142_operand_return.con error_142_method_arg_return.con error_142_break_in_arg.con error_142_deref_operand_return.con error_142_for_cond_break.con error_142_assign_index_return.con regress_142_exits_allowed.con
 class: 15 — a value moved into a construct an exit left incomplete

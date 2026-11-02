@@ -1,6 +1,7 @@
 # Bug 077: a relative call into a nested submodule lowers to an undefined symbol
 
 <!-- bug-ledger
+compiler: legacy
 summary: a call `util::poke` from `tb.a` into `tb.a.util` lowers to the undefined `@util_poke` (LLVM validation fails); the assumption summary over-resolves the same call
 coverage: relative call into a three-level nested submodule lowers to an undefined symbol (@util_poke); reproducer tests/regressions/bug077_nested_submodule_call/repro.con, fix pending; containment (build refuses it, reports keep reach, no R-0484 case depends on it) gated by check_bug077_contained.sh
 class: 1

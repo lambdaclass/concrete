@@ -1,6 +1,7 @@
 # Bug 240 — a trait name in a type position passes Resolve and crashes the backend
 
 <!-- bug-ledger
+compiler: legacy
 summary: a trait name in a type position (`x as Marker`, a field, a payload, a parameter, a type argument, a trait or extern signature) passed Resolve and crashed the native backend (`unknown named type`) while `--interp` ran it; refused at Resolve, E0108 (MOD-1, TYPE-2). Found during R-0492 slice 6, 2026-10-25. Fixtures `error_240_*`, `regress_240_*`. Class 13.
 fixtures: error_240_trait_cast_target.con error_240_trait_struct_field.con error_240_trait_enum_payload.con error_240_trait_parameter.con error_240_trait_type_argument.con error_240_trait_let_annotation.con error_240_trait_in_trait_signature.con error_240_trait_in_extern_signature.con regress_240_trait_bounds_and_type_param_shadow.con
 class: 13 — TYPE-2 at the source level: a trait in a type position was taken for a type

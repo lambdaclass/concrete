@@ -1,6 +1,7 @@
 # Bug 007: No Print Path for Standalone Programs
 
 <!-- bug-ledger
+compiler: legacy
 summary: No Print Path for Standalone Programs
 fixtures: bug_print_builtins.con
 ruling: Outside the spec: library — no print builtin for standalone files (print_string/print_int/print_char added)

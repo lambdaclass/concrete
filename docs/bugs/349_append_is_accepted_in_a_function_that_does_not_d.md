@@ -5,6 +5,7 @@
 **Severity:** silent under the decided rule: a program MEM-7 refuses is accepted, and both consumers agree on its result
 
 <!-- bug-ledger
+compiler: legacy
 summary: append is accepted in a function that does not declare Alloc, because Elab desugars it into string_append calls that carry no capability
 coverage: reproducer tests/regressions/bug349_append_is_accepted_in_a_function_that_does_not_d/repro.con, pinned by check_example_outputs.sh (open-bug reproducers leg, runs-exit 42)
 class: 6

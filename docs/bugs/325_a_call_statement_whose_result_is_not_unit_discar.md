@@ -1,6 +1,7 @@
 # Bug 325 — A call statement whose result is not Unit discards the result without discard()
 
 <!-- bug-ledger
+compiler: legacy
 summary: A call statement whose result is not Unit discards the result without discard(), which OWN-7 refuses as the owner decided OD29 on 2026-10-29
 coverage: reproducer tests/regressions/bug325_a_call_statement_whose_result_is_not_unit_discar/repro.con, found checking main against OD29 on 2026-10-29; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, runs-exit 42) and check_spec.sh S4 (the pending OWN-7 example)
 class: 13

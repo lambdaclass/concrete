@@ -1,6 +1,7 @@
 # Bug 056: reassigning a fn-pointer local across control flow emits invalid SSA
 
 <!-- bug-ledger
+compiler: legacy
 summary: a function reference became `SVal.fnRef` and a call target became `SCallee`, retiring both string encodings (in R-0436)
 coverage: a function reference became SVal.fnRef and a call target became SCallee.direct/.indirect, retiring both string encodings; gated by check_fnptr_values.sh (17 checks: rebinding across if/loop, phi mixing loaded register with known global, devirtualization preserved, verifier still refusing undefined phi operands AND undefined indirect targets) with mutations #28-#30 ((R-0436))
 class: 1

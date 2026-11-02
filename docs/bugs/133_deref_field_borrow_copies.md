@@ -1,6 +1,7 @@
 # Bug 133 — a borrow of a field through an explicit dereference, `&mut (*p).f`, borrows a copy
 
 <!-- bug-ledger
+compiler: legacy
 summary: `&mut (*p).f` borrowed the field of a COPY of `*p` (`Lower.placeAddr` had no dereference case), so a write through it was silently lost in the binary while `--interp` performed it; `*r` as a place is now the storage `r` points at; pinned by `regress_133_deref_field_borrow.con` (found by the Codex review of bug 116)
 fixtures: regress_133_deref_field_borrow.con
 class: 7

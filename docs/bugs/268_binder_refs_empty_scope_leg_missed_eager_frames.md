@@ -1,6 +1,7 @@
 # Bug 268 — check_binder_refs.sh's empty-scope leg did not detect eagerly opened binder frames
 
 <!-- bug-ledger
+compiler: legacy
 summary: check_binder_refs.sh's empty-scope leg read only an `if`, which never enters a frame scope, so binder frames opened eagerly on scope entry passed it; mutation 56 modeled another defect
 coverage: check_binder_refs.sh leg "a match arm that binds nothing does not shift framesOut", and test_mutation.sh mutation 56 (frames open eagerly, on scope entry) is KILLED by it
 class: 11 — a gate that could not see the defect it names

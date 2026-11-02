@@ -1,6 +1,7 @@
 # Bug 046: HashMap keys()/values() and HashSet elements() duplicated linear payloads
 
 <!-- bug-ledger
+compiler: legacy
 summary: HashMap keys()/values() and HashSet elements() duplicated linear payloads
 coverage: error_046_map_values_linear/src/main.con (negative project fixture, must FAIL) + std-compiled-coverage bug-046 legs (E0241 + Copy positive); keys/values/elements Copy-bounded
 class: 14

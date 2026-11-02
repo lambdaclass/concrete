@@ -1,6 +1,7 @@
 # Bug 112 — the declaration std.mem uses for `sizeof` is rejected (E0116 at 0:0) outside std
 
 <!-- bug-ledger
+compiler: legacy
 summary: the declaration std.mem uses for `sizeof` was refused outside std (E0116); an `#[intrinsic]` declaration is not a foreign binding, so R-0484 R3 skips it. Fixture `regress_112_user_intrinsic.con` (exit 5) ((with 113))
 fixtures: regress_112_user_intrinsic.con
 class: 11

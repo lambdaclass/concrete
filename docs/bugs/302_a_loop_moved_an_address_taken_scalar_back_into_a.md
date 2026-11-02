@@ -1,6 +1,7 @@
 # Bug 302 — a loop moved an address-taken scalar back into a register at its exit, splitting it from a raw pointer to its slot
 
 <!-- bug-ledger
+compiler: legacy
 summary: a loop promotes to a slot every scalar local its body or condition takes the address of, and at its exit Lower loaded the slot into a register and dropped the promotion, so later reads and writes of the local used the register while a raw pointer taken in the loop (`&mut x as *mut i64`) still pointed at the slot: a write on either side was not seen on the other (silent wrong code)
 fixtures: regress_302_loop_keeps_addr_taken_slot.con
 class: 8 — a local's storage changed back at a loop exit while an alias to the slot lived on

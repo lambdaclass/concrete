@@ -1,6 +1,7 @@
 # Bug 146 — `*h` on a `Heap<T>` loaded the value but never freed the cell
 
 <!-- bug-ledger
+compiler: legacy
 summary: `*h` on an owned `Heap<T>` loaded the value but never freed the cell, although the checker consumes `h` and MEMORY_SEMANTICS says it frees (a leak; found by Codex reviewing bug 144's migration). Elab now lowers it to the `free` intrinsic. `regress_146_heap_deref_frees.con` plus an emitted-SSA leg. Joins exit 0b. ((`safety-eval2`))
 fixtures: regress_146_heap_deref_frees.con regress_146_heap_deref_cast.con error_146_deref_heap_place_write.con error_146_deref_heap_field_read.con
 class: 8 — `*h` lowered as a load only

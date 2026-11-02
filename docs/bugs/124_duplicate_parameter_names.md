@@ -1,6 +1,7 @@
 # Bug 124 — duplicate parameter names pass the checker and fail in `llvm-as`
 
 <!-- bug-ledger
+compiler: legacy
 summary: `fn f(a: Int, a: Int)` passed the checker and failed in `llvm-as` ("redefinition of argument"), while `--interp` ran it. Fixture `error_2i_scope1_duplicate_params.con`. (2026-10-21 (exit 2i SCOPE-1@1, E0301))
 fixtures: error_2i_scope1_duplicate_params.con regress_2i_scope1_duplicate_params_renamed.con
 class: 2

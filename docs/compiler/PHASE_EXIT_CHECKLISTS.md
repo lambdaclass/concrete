@@ -1,5 +1,8 @@
 # Phase Exit Checklists
 
+Status: historical. These checklists describe the [legacy execution plan](../archive/ROADMAP_LEGACY_PLAN.md).
+They schedule nothing and are not acceptance criteria for phases A–G of the new compiler.
+
 Status: canonical reference — **re-keyed 2026-06-09 to the current ROADMAP
 phase structure.** The roadmap was restructured in 2026-06 (obligation/compiler
 pipeline consolidation moved ahead of language/stdlib broadening); this file

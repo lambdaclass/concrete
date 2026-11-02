@@ -1,6 +1,7 @@
 # Bug 298 — Check searched a value if or match nested as an operand again at every level
 
 <!-- bug-ledger
+compiler: legacy
 summary: bug 142's rule (no return/break/continue inside an operand, E0278) is enforced by a search of the operand's subtree at every protected expression; bug 280 handed the answer down through parentheses and operators but a value `if` or `match` dropped it, so an operand chain n deep through nested value ifs or matches was searched again at every level, time n² (8000 deep on main 1bcb7c36: check 2721 ms through ifs, 2806 ms through matches). Found probing the R-0550 shapes for Check quadratics. Class 17.
 fixtures: regress_298_value_branch_operand_exits.con error_298_exit_nested_value_if.con error_298_exit_nested_value_match.con
 class: 17 — the operand-escape search restarted at every value if or match

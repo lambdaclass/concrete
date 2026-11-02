@@ -1,6 +1,7 @@
 # Bug 297 — Elab and Lower appended each call argument, and Lower each arm's merge input, to the list built so far
 
 <!-- bug-ledger
+compiler: legacy
 summary: Elab (elabCallEv and the method, static-method, trait-bound and indirect call cases of elabExprEv) and Lower (lowerExpr's call case, its `&mut` write-backs, and reconcileBranchVars' per-arm incoming list) built their lists with `xs := xs ++ [x]` per argument or per arm, so one call of n arguments took time n² to elaborate and lower (8000 arguments: elaborate 145 ms, lower 126 ms) and one match of n arms took n² to merge each binding it changes (8000 arms: lower 583 ms, half of it the dominator residue of bug 178). Found by scaling probes beyond the R-0550 shapes. Class 17.
 fixtures: regress_297_argument_order.con
 class: 17 — call arguments and merge inputs appended one at a time

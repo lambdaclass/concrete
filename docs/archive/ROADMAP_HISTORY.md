@@ -5,7 +5,7 @@ Source: `ROADMAP.md` at commit `a159c489` (2026-10-19), moved verbatim; only hea
 links were adjusted for this location.
 
 Nothing here schedules work, states current status or overrides the
-[current execution queue](../../ROADMAP.md#the-current-execution-queue). `ACTIVE`, `OPEN`,
+[current execution queue](ROADMAP_LEGACY_PLAN.md#the-current-execution-queue). `ACTIVE`, `OPEN`,
 `PENDING`, "remaining" and "next" describe the date each record was written. The 2026-10-19
 [reconciliation](../project/ROADMAP_RECONCILIATION.md) mapped every live item in these sections to an
 owning task in the roadmap (its prose inventory cites these sections by their line numbers at
@@ -1016,7 +1016,7 @@ on hole status; this table is a reference to it and
 
 **Not an ordering.** The numbered order in this note was argued from the 2026-07-31 audit of
 `spike/multi-prover-evidence` and is superseded by [the current execution
-queue](../../ROADMAP.md#the-current-execution-queue), which is the only ordering in this file. The
+queue](ROADMAP_LEGACY_PLAN.md#the-current-execution-queue), which is the only ordering in this file. The
 per-task reasoning is retained because these tasks are entangled enough that picking one
 without reading the others has produced rework; it moves to `docs/archive/` with the
 other historical material.
@@ -3607,7 +3607,7 @@ physical neatness is not completion of the authority audit.
 
 ## R-0473: the embedded R-0004 Slice-6 record (2026-08-07 – 2026-09-02)
 
-_Moved from the body of [R-0473](../project/ROADMAP_TASKS.md#task-r-0473); the task keeps its objective, current status, exit and a summary of this record._
+_Moved from the body of [R-0473](../project/ROADMAP_BACKLOG.md#task-r-0473); the task keeps its objective, current status, exit and a summary of this record._
 
 **STEP 1 CLOSED (2026-08-09).** `check_migration_manifest.sh` reports **44/44 links accounted,
 0 unowned, 0 non-deterministic, 0 without a subject** — the closure gate is CLOSED and
@@ -4025,7 +4025,7 @@ before the freeze.
 
 ## R-0475: exposure audit and shipped snapshot fix (2026-08-07)
 
-_Moved from the body of [R-0475](../project/ROADMAP_TASKS.md#task-r-0475); the task keeps its objective, current status, exit and a summary of this record._
+_Moved from the body of [R-0475](../project/ROADMAP_BACKLOG.md#task-r-0475); the task keeps its objective, current status, exit and a summary of this record._
 
 **Exposure audited 2026-08-07, and it is exactly one snapshot.** The audit is recorded because
 "the other project-mode fixtures probably have this too" was the natural assumption and it was

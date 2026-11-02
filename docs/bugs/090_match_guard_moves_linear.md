@@ -1,6 +1,7 @@
 # Bug 090: a match guard could move a linear value that a later arm moves again
 
 <!-- bug-ledger
+compiler: legacy
 summary: a match guard could move a linear value; when the guard was false, a later arm moved it again (use after free, double free). Guards are read-only (E0300)
 fixtures: error_090_guard_moves_linear.con error_090_guard_moves_binder.con error_090_guard_defer_moves.con error_090_guard_move_then_reassign.con regress_090_guard_reads.con
 class: 15

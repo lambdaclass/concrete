@@ -1,6 +1,7 @@
 # Bug 257 — resolve-stage visible bindings are lists searched by spelling (quadratic in bindings)
 
 <!-- bug-ledger
+compiler: legacy
 summary: the resolve stage's visible bindings (the local walk's chain and Resolve's local scopes) were lists searched by spelling per binder and per use (40000 `let`s: 221 s to resolve, now 63 ms). Persistent maps. Pinned by `regress_257_scope_visibility.con`, `error_257_*` and the long-function leg. Found with bug 255. Class 17.
 fixtures: regress_257_scope_visibility.con error_257_read_after_block.con error_257_rebind_visible.con
 class: 17 — one function of many statements: the parser's statement lists, the local binder table, the resolver's scopes, the checker's bindings, Elab's binder frames, ElabVerify's and CoreCheck's scopes, each a list appended or searched per statement

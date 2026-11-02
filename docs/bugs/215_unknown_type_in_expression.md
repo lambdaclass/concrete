@@ -1,6 +1,7 @@
 # Bug 215 — an unknown type written in a cast or a type-argument list was not refused
 
 <!-- bug-ledger
+compiler: legacy
 summary: Resolve did not check the types written inside expressions (cast targets, type-argument lists of calls, method calls, static method calls, struct and enum literals) or a constant's initializer, so `x as Nope` made the backend panic while `--interp` ran it, and an unused unknown type argument compiled on both backends. Every such type now goes through `checkTyDeep` (E0108). Pinned by four `error_215_*.con` fixtures. Found by the fuzz farm's mutation generator
 fixtures: error_215_cast_unknown_type.con error_215_turbofish_unknown_type.con error_215_cast_field_spelling.con error_215_const_cast_unknown_type.con
 class: 12 — a type written inside an expression was not checked to name a declared type

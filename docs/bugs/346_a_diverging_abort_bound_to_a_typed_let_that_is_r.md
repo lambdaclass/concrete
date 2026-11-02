@@ -5,6 +5,7 @@
 **Severity:** loud: a program Check accepts fails to build natively in LLVM IR validation (`ret void` in a function with a result), with no Concrete diagnostic
 
 <!-- bug-ledger
+compiler: legacy
 summary: a diverging abort() bound to a typed let that is returned, or returned directly, emits ret void in a function with a result and fails LLVM validation
 coverage: reproducer tests/regressions/bug346_a_diverging_abort_bound_to_a_typed_let_that_is_r/repro.con, pinned by check_example_outputs.sh (open-bug reproducers leg, compile-fails on the LLVM validation error)
 class: 8

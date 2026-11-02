@@ -22,12 +22,14 @@ A finished agent leaves a branch with clean review and gate notes, and the landi
 `queue.json` is regenerated on every tick from the source checkout, which is the queue's own
 worktree, detached at `origin/main`. Each fact has one owner:
 
-- **Open bugs.** These are the `docs/bugs/NNN_*.md` records whose first Status line is OPEN,
+- **Open bugs.** Only records with `compiler: new` can be dispatched. Frozen `compiler: legacy`
+  defects are recorded against `legacy-compiler-final` and never dispatched, regardless of severity.
+  Missing or invalid compiler fields refuse queue generation. These are the `docs/bugs/NNN_*.md` records whose first Status line is OPEN,
   CONTAINED, Half closed or Partially fixed. This is the vocabulary that `scripts/gen/bug_ledger.py`
   reads. The prompt is `/fix-bug N`.
 - **ROADMAP.** First come the rows of the development-throughput table (R-0539 – R-0547 and R-0513),
   in table order. The table's "depends on" column becomes dependencies. Then come the R-ids named in
-  the execution queue's rows, in row order. A task body's `**Depends on:**` line adds dependencies,
+  `The queue` table's owning-task cells (A1, A2, …), in row order. A task body's `**Depends on:**` line adds dependencies,
   and text after `**Blocks:**` is ignored. The prompt is `/roadmap-item R-NNNN`.
 - **Fuzz-farm findings.** These are the files in `$QUEUE_FUZZ_DIR/*.json`. The interface the fuzz
   farm writes is `{"id", "class", "summary", "areas"?, "owner"?, "module"?, "bug"?}`. Only the classes
@@ -70,7 +72,7 @@ or file name.
    Fuzz findings of class silent or unsoundness also go here.
 3. **crash**: crashes, panics and aborts, and fuzz findings of class crash.
 4. **explicit**: `tasks/*.md` with no tier.
-5. **roadmap**: the execution-queue rows.
+5. **roadmap**: the new compiler queue rows.
 6. **loud**: every other open bug. Under the ROADMAP's defect disposition rule, a loud defect waits
    for its structural owner, so these come after the roadmap.
 

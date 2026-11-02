@@ -1,6 +1,7 @@
 # Bug 274 — Resolve folds every enum's variant symbols onto the list built so far (quadratic in enums)
 
 <!-- bug-ledger
+compiler: legacy
 summary: Resolve built a module's global scope by folding each enum's variant symbols onto the list built so far (`acc ++ e.variants.map ...`), once per scope build, so a module of n enums took time n² to resolve (10000 enums: 1222 ms). Found by the R-0550 scaling gate. Class 17.
 coverage: `check_compile_scaling.sh` judges the `enums` shape's `resolve` stage against its budget and near-linear growth: this fix removes the stage's exclusion under this bug, and the gate fails the pre-fix compiler
 class: 17 — Resolve folds every enum's variant symbols onto the list built so far

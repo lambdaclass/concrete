@@ -1,6 +1,7 @@
 # Bug 286 — Lower re-walked every nested branch region for address-takes (quadratic in nesting depth)
 
 <!-- bug-ledger
+compiler: legacy
 summary: every branch and loop site in Lower (statement and value `if`, `match`, the `&&`/`||` right operand, `while`) walked its whole region for the locals whose address it takes, so a site at depth d re-walked the n - d nested levels below it and lowering n nested branches took time n² (nested `if` depth 8000: lower 1275 ms). Found by the R-0550 scaling gate (`nested-ifs`, excluded until now). Class 17.
 fixtures: regress_286_nested_region_addr_taken.con
 class: 17 — every branch site re-walked its region for address-takes

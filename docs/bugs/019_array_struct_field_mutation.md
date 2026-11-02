@@ -1,6 +1,7 @@
 # Bug 019: Array Extracted From Struct Field Cannot Be Mutated
 
 <!-- bug-ledger
+compiler: legacy
 summary: Array Extracted From Struct Field Cannot Be Mutated
 fixtures: bug_array_struct_field_mutation.con
 area: Lower — the record's Fix section: a fresh alloca in lowering; no commit names the bug

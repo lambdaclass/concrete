@@ -23,6 +23,25 @@ set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
+# OD tracking has one authority: decisions.md. These controls need no compiler and run before
+# the compiler precondition, so a resolver regression stays visible in documentation-only checkouts.
+if ! python3 -I - "$ROOT_DIR" <<'ODCONTROL'
+import os, runpy, tempfile, pathlib, sys
+module = runpy.run_path(os.path.join(sys.argv[1], "scripts/spec/spec.py"), run_name="spec_control")
+exists = module["tracking_exists"]
+with tempfile.TemporaryDirectory() as root:
+    p = pathlib.Path(root)
+    (p / "docs/spec").mkdir(parents=True)
+    (p / "docs/spec/decisions.md").write_text("| OD998 | decided control |\n")
+    assert exists("OD998", root), "OD in decisions.md did not resolve"
+    assert not exists("OD999", root), "unknown OD resolved"
+    (p / "ROADMAP.md").write_text("| OD999 | stale control |\n")
+    assert not exists("OD999", root), "ROADMAP must not resolve an OD"
+    (p / "docs/spec/decisions.md").unlink()
+    assert not exists("OD998", root), "missing decision record resolved"
+print("  ok   OD resolver: decisions.md is authoritative; unknown, missing and stale ROADMAP-only ODs refuse")
+ODCONTROL
+then echo "SPEC: FAIL OD resolver controls"; exit 1; fi
 source "$ROOT_DIR/scripts/tests/lib/fresh.sh"
 require_fresh_binary || exit 1
 CC="$ROOT_DIR/.lake/build/bin/concrete"

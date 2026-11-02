@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Generate ROADMAP.md's bug dashboard from the bug records.
+"""Generate docs/bugs/DASHBOARD.md's bug dashboard from the bug records.
 
   bug_dashboard.py            print the generated dashboard
-  bug_dashboard.py --write    replace the dashboard between the markers in ROADMAP.md
-  bug_dashboard.py --check    exit 1 when ROADMAP.md's dashboard differs from the records (stale or
+  bug_dashboard.py --write    replace the dashboard between the markers in docs/bugs/DASHBOARD.md
+  bug_dashboard.py --check    exit 1 when docs/bugs/DASHBOARD.md's dashboard differs from the records (stale or
                               hand-edited); check_docs_drift.sh runs this
 
 Inputs, each the single owner of its fact:
@@ -16,9 +16,8 @@ Inputs, each the single owner of its fact:
   docs/bugs/discovery.tsv            which probe batch found each bug from 079 on, and which are silent
   the records' `ruling:` lines       each open bug's spec ruling (scripts/gen/bug_rulings.py; read for
                                      their form only: bug_ledger.py resolves them against docs/spec)
-  ROADMAP.md "Phase 1 exits"         which exits name each bug in their completion condition
 
-The discovery-rate signal (Phase 1 exit 2m) is kept PER STRUCTURAL CLASS (a bug's primary class, as
+The discovery-rate signal is kept per compiler and PER STRUCTURAL CLASS (a bug's primary class, as
 above; bugs in no class form one more bucket, "no class yet"). For a class K, a COUNTING batch (an
 independent probe kind) is quiet when it found no silent bug of class K and at most one loud bug of
 class K. A quiet batch moves K's streak only when its recorded effort reaches the minimum (MIN_HOURS
@@ -26,7 +25,7 @@ hours, or MIN_UNITS probe programs, examples or cases); a smaller one is a token
 batch that found more is never skipped: it ends K's streak. A batch whose probe cell starts with
 "class N: " probed a structural migration's own new code: it is a batch of class N only, and every
 bug it found counts against class N; for any other class it is skipped, except that a silent bug it
-found still ends the streak of that bug's own primary class. Exit 2m holds when every class (and the
+found still ends the streak of that bug's own primary class. The historical exit 2m held when every class (and the
 "no class yet" bucket) has QUIET_RUN_NEEDED consecutive eligible quiet batches. A counting batch
 dated EFFORT_REQUIRED_FROM or later must record its effort in those units.
 
@@ -34,7 +33,7 @@ FAIL-CLOSED (exit 2, nothing generated): a malformed discovery record (wrong hea
 count, an empty cell, a bad date or kind, a malformed bug list, a silent bug the row does not list,
 dates out of order), a bug from 079 on with a record but no batch, a bug in two batches or in a batch
 with no record, a class tag on an attribution-only batch or naming no class, a structural-class
-table that cannot be read, or a missing Phase 1 exits table. Missing markers, or more than one pair,
+table that cannot be read, or a malformed compiler field. Missing markers, or more than one pair,
 also refuse.
 
 --root overrides the repository root (a test seam for the gate's negative controls).
@@ -51,7 +50,7 @@ import bug_rulings  # noqa: E402  (beside this file; -I leaves the script's dire
 BEGIN = "<!-- BEGIN GENERATED: bug dashboard (scripts/gen/bug_dashboard.py; edit docs/bugs records and docs/bugs/discovery.tsv) -->"
 END = "<!-- END GENERATED: bug dashboard -->"
 CLASS_TAG = re.compile(r"^class (\d+): ")
-COLS = ["date", "kind", "probe", "effort", "bugs", "silent"]
+COLS = ["date", "kind", "probe", "effort", "bugs", "silent", "compiler"]
 COUNTING = {"hunt", "examples", "workload", "design-proofs", "semantics", "spec", "fuzz", "interp-coverage"}
 ATTRIBUTION = {"ci", "review", "follow-on", "controls", "development"}
 FIRST_ATTRIBUTED = 79
@@ -136,6 +135,7 @@ def load_discovery(root, recs):
     if not body or body[0].split("\t") != COLS:
         die(f"{path}: header must be exactly: {' '.join(COLS)} (tab-separated)")
     rows, seen, last_date = [], {}, ""
+    compilers = load_compilers(root)
     for n, ln in enumerate(body[1:], 2):
         cells = ln.split("\t")
         if len(cells) != len(COLS):
@@ -168,6 +168,11 @@ def load_discovery(root, recs):
         if r["kind"] in COUNTING and r["date"] >= EFFORT_REQUIRED_FROM and not EFFORT.match(r["effort"]):
             die(f"{path} data row {n}: a counting batch from {EFFORT_REQUIRED_FROM} on records its effort as "
                 f"'<N> hours|programs|probes|examples|cases', got '{r['effort']}'")
+        if r["compiler"] not in ("legacy", "new"):
+            die(f"{path} data row {n}: compiler must be legacy or new")
+        for b in r["bugs"]:
+            if compilers[b] != r["compiler"]:
+                die(f"{path} data row {n}: compiler disagrees with bug {b}")
         rows.append(r)
     missing = sorted(b for b in recs if int(b) >= FIRST_ATTRIBUTED and b not in seen)
     if missing:
@@ -192,38 +197,11 @@ def load_classes(root):
     return classes
 
 
-def load_exits(root, road):
-    exits = []
-    in_table = False
-    for ln in road.split("\n"):
-        if ln.startswith("| exit | owner | closes when |"):
-            in_table = True
-            continue
-        if in_table:
-            if not ln.startswith("|"):
-                break
-            cells = [c.strip() for c in ln.strip().strip("|").split("|")]
-            if not re.fullmatch(r"\d[a-z]", cells[0]):
-                continue
-            exits.append((cells[0], bug_numbers(cells[2])))
-    if not exits:
-        die("ROADMAP.md has no Phase 1 exits table (| exit | owner | closes when | ...)")
-    return exits
-
-
-def bug_numbers(text):
-    nums = set()
-    for a, b in re.findall(r"\b(\d{3})\s*[–-]\s*(\d{3})\b", text):
-        nums.update(f"{i:03d}" for i in range(int(a), int(b) + 1))
-    nums.update(re.findall(r"\b(\d{3})\b", text))
-    return nums
-
-
 def joined(bs):
     return ", ".join(sorted(bs)) if bs else "—"
 
 
-def render(recs, disc, classes, exits, rulings=None):
+def render_view(recs, disc, classes, rulings=None):
     silent = {b for r in disc for b in r["silent"]}
     attributed = {b for r in disc for b in r["bugs"]}
     open_bugs = sorted(b for b, o in recs.items() if o)
@@ -234,7 +212,7 @@ def render(recs, disc, classes, exits, rulings=None):
     n_sil = sum(1 for b in open_bugs if kind(b) == "silent")
     n_loud = sum(1 for b in open_bugs if kind(b) == "loud")
     n_unrec = len(open_bugs) - n_sil - n_loud
-    out = [BEGIN, ""]
+    out = []
     head = (f"**Open bugs: {len(open_bugs)}** ({n_sil} silent, {n_loud} loud"
             + (f", {n_unrec} filed before the discovery record" if n_unrec else "")
             + f") of {len(recs)} bug records.")
@@ -253,26 +231,13 @@ def render(recs, disc, classes, exits, rulings=None):
     if rest:
         out.append(f"| no class yet | {len(rest)} | {sum(1 for b in rest if kind(b) == 'silent')} | {joined(rest)} |")
     out.append("")
-    out.append("| open bugs by Phase 1 exit | open | silent | bugs |")
-    out.append("|---|---|---|---|")
-    in_exit = set()
-    for eid, nums in exits:
-        mine = [b for b in open_bugs if b in nums]
-        if not mine:
-            continue
-        in_exit.update(mine)
-        out.append(f"| exit {eid} | {len(mine)} | {sum(1 for b in mine if kind(b) == 'silent')} | {joined(mine)} |")
-    rest = [b for b in open_bugs if b not in in_exit]
-    if rest:
-        out.append(f"| no exit names it | {len(rest)} | {sum(1 for b in rest if kind(b) == 'silent')} | {joined(rest)} |")
-    out.append("")
     if rulings is not None:
         groups = {}
         for b in open_bugs:
             r = rulings.get(b)
             groups.setdefault(bug_rulings.label(r) if r else "no ruling", []).append(b)
         order = {k: i for i, k in enumerate(bug_rulings.KINDS)}
-        out.append("| open bugs by spec ruling ([RULINGS.md](docs/bugs/RULINGS.md)) | open | silent | bugs |")
+        out.append("| open bugs by spec ruling ([RULINGS.md](RULINGS.md)) | open | silent | bugs |")
         out.append("|---|---|---|---|")
         for lab in sorted(groups, key=lambda g: (order.get(rulings[groups[g][0]]["kind"], 99) if rulings.get(groups[g][0]) else 99, g)):
             mine = groups[lab]
@@ -331,17 +296,39 @@ def render(recs, disc, classes, exits, rulings=None):
     out.append("")
     other = [r for r in disc if r["kind"] not in COUNTING]
     tagged = sum(1 for r in counting if r["tag"] is not None)
-    out.append(f"Discovery signal (exit 2m): {len(held)} of {len(buckets)} classes have {QUIET_RUN_NEEDED} consecutive "
+    out.append(f"Discovery signal: {len(held)} of {len(buckets)} classes have {QUIET_RUN_NEEDED} consecutive "
                f"eligible quiet counting batches (for a class: no silent bug of that class, at most one loud, "
-               f"effort at least {MIN_HOURS} hours or {MIN_UNITS} programs); the exit needs every class. "
+               f"effort at least {MIN_HOURS} hours or {MIN_UNITS} programs). "
                f"{len(counting)} counting batches recorded"
                + (f", {tokens} of them token batches" if tokens else "")
                + (f", {tagged} of them probing one class's migration" if tagged else "") + ". "
                f"{len(other)} attribution-only batches (reviews, follow-ons, CI, controls, development) "
                f"found {sum(len(r['bugs']) for r in other)} further bugs.")
     out.append("")
-    out.append(END)
     return "\n".join(out)
+
+
+def load_compilers(root):
+    out = {}
+    for p in sorted(glob.glob(os.path.join(root, "docs", "bugs", "[0-9][0-9][0-9]_*.md"))):
+        block = LEDGER_BLOCK.search(read(p))
+        values = re.findall(r"^compiler: (.*)$", block[1] if block else "", re.M)
+        if len(values) != 1 or values[0] not in ("legacy", "new"):
+            die(f"{p}: compiler must be legacy or new, exactly once")
+        out[os.path.basename(p)[:3]] = values[0]
+    return out
+
+
+def render(recs, disc, classes, compilers, rulings):
+    out = [BEGIN]
+    for compiler in ("legacy", "new"):
+        scope = {b: o for b, o in recs.items() if compilers[b] == compiler}
+        batches = [r for r in disc if r["compiler"] == compiler]
+        out += ["", "### " + compiler.capitalize() + " compiler", ""]
+        if compiler == "legacy":
+            out += ["Historical discovery signal for `legacy-compiler-final`; these defects are never dispatched.", ""]
+        out.append(render_view(scope, batches, classes, rulings))
+    return "\n".join(out + [END])
 
 
 def main():
@@ -351,7 +338,7 @@ def main():
     g.add_argument("--write", action="store_true")
     g.add_argument("--check", action="store_true")
     a = ap.parse_args()
-    roadmap = os.path.join(a.root, "ROADMAP.md")
+    roadmap = os.path.join(a.root, "docs", "bugs", "DASHBOARD.md")
     road = read(roadmap)
     recs = load_records(a.root)
     disc = load_discovery(a.root, recs)
@@ -360,7 +347,7 @@ def main():
     for r in disc:
         if r["tag"] is not None and r["tag"] not in known:
             die(f"discovery batch '{r['probe'][:60]}' is tagged class {r['tag']}, which STRUCTURAL_CLASSES.md does not have")
-    table = render(recs, disc, classes, load_exits(a.root, road), load_rulings(a.root, recs))
+    table = render(recs, disc, classes, load_compilers(a.root), load_rulings(a.root, recs))
     if not (a.write or a.check):
         print(table)
         return 0
@@ -374,7 +361,7 @@ def main():
                   "records and run scripts/gen/bug_dashboard.py --write (the dashboard is generated, never hand-edited)",
                   file=sys.stderr)
             return 1
-        print("bug dashboard: the roadmap dashboard matches the records")
+        print("bug dashboard: the compiler-scoped dashboard matches the records")
         return 0
     with open(roadmap, "w", encoding="utf-8") as fh:
         fh.write(new)

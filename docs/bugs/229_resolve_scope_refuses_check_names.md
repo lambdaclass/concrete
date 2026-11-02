@@ -1,6 +1,7 @@
 # Bug 229 — Resolve's module scope refuses names Check admits
 
 <!-- bug-ledger
+compiler: legacy
 summary: Resolve's module scope refused programs Check and Elab accept: a function registered before a same-named enum made `E::A` "not an enum" (E0104), a user `enum Option` answered `Option<i32>` (E0113) though the builtin is never withheld, and a child module's newtype was an unknown type (E0108). Type positions now search the type namespace only, an enum named `Option` is always the builtin (as in Check's enum table), and children's newtypes are known types. Found by the Codex reviews of bug 217's fix, 2026-10-24. Fixtures `regress_229_*`. Class 12.
 fixtures: regress_229_value_does_not_hide_type.con regress_229_user_option_does_not_hide_builtin.con regress_229_child_newtype_known.con regress_229_option_named_alias_or_struct.con regress_229_alias_and_enum_literal_precedence.con
 class: 12 — Resolve's module scope: one first-wins map for types and values, its own builtin-`Option` rule, child newtypes missing, against Check's environment

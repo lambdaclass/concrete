@@ -1,77 +1,8 @@
 #!/usr/bin/env bash
 # EVERY ROADMAP TASK HAS A PLACE IN THE PLAN, AND THE QUEUE AGREES WITH IT.
-#
-# The 2026-10-19 reconciliation found tasks filed in an area whose schedule did not describe them,
-# superseded tasks that still read as live, and open work stated only in prose. Its repair gave every
-# `### Task R-NNNN` a **Phase:** line (the execution phases 1-7 were called "stages" until the same
-# day's rename), recorded every non-live task in the reconciliation ledger with the owner that
-# replaces it, and named the owning task in every queue row. This gate keeps that true:
-#
-#   1. every task has a **Phase:** line naming a phase (1-7 or after-1.0/research), or a ledger row,
-#      or a **Disposition** line giving its retirement/merge reason;
-#   2. every row of the task-disposition table in docs/project/ROADMAP_RECONCILIATION.md (the moved
-#      ledger, linked from ROADMAP's "Reconciliation record") names an existing task (ROADMAP heading
-#      or CHANGELOG `Completed Task`), and every owner it names exists;
-#   3. every queue row names at least one owning task, and every task it names exists, ranges such
-#      as `R-0491–R-0510` included;
-#   4. a task named by a queue row lists that row's phase (from the "queue rows" column of "Phases and
-#      releases") in its Phase line — the queue cannot schedule a task in a phase its own record
-#      contradicts;
-#   5. every task body archived in docs/archive/ROADMAP_RETIRED_TASKS.md (a bare `## R-NNNN` section)
-#      has its `### Task R-NNNN` stub in ROADMAP with a **Disposition** line and a link to that
-#      section, and every such link resolves to its own task's archived section.
-#   6. every transfer the ledger records (followed through superseded owners to a live one), plus the
-#      three explicit residuals of done tasks, appears as an entry in that live owner's
-#      **Inherited obligations** block, and no block lists a transfer the ledger does not record.
-#   7. (backlog split, 2026-10-19; task register, 2026-10-28) scheduled tasks live in
-#      docs/project/ROADMAP_TASKS.md (the task register; ROADMAP.md itself keeps the control plane and
-#      declares no task) and unscheduled ones in docs/project/ROADMAP_BACKLOG.md, each in exactly one, and no ID between R-0001 and the highest declared one is missing from both files and
-#      CHANGELOG (except the IDs recorded as never allocated); every task a queue row names lives in
-#      the task register. The register holds none of the control-plane sections.
-#   8. ROADMAP.md names its **Active phases:** and **Next phases:**, each a phase of the "Phases and
-#      releases" table; a ROADMAP.md task is scheduled in one of them or named by a queue row; a backlog
-#      task is not, unless it carries a **Kept in backlog:** reason.
-#   9. every backlog task has a **Pull trigger:** line, no two live backlog tasks share one trigger
-#      text, and the backlog's latest review-log row names the current active phases.
-#  10. the queue summary table in "Phases and releases" lists exactly the queue's rows, each with the
-#      same task IDs as its queue row.
-#  11. (2026-10-20) the "Phase 1 exits" table gives every exit of rows 0-2 an ID (`2a`), an owner among
-#      its queue row's tasks, a completion condition, an acceptance test, a class ("blocks features" or
-#      "continues alongside") and a reason; each Phase 1 queue row names each of its exits and no other.
-#  12. the "Feature prerequisites" table partitions every exit into blocked-by / not-blocked-by for each
-#      deliverable; every "blocks features" exit blocks some deliverable and no "continues alongside"
-#      exit blocks any; a queue row's "prerequisite exits:" list equals its deliverables' blocked-by set.
-#  13. every bug in the "Implemented, not yet accepted" table is not recorded fixed in the bug ledger
-#      (docs/bugs: its README's Fixed list or its file's Status line), and every row names a branch and
-#      a remaining acceptance step. The table is generated from docs/project/candidates.tsv
-#      (check_docs_drift.sh checks freshness); columns are found by header name, and a row names
-#      bugs or a feature deliverable.
-#  14. (2026-10-21) the "Capacity allocation" table assigns every queue row after Phase 1 and every
-#      Phase 1 exit to exactly one track; exactly one track is primary, with an "at least N%" share
-#      above 50% and larger than every other track's, two integration slots, and the rows of V1a/V1b/V1c
-#      and R-0514; evidence integrity and adversarial validation have positive minimums; the shares add
-#      up to 100%; every capped ("at most") track has one integration slot, and RocksDB
-#      slice 1's row is in one. V1c joins RocksDB slice 1, V1a and V1b as a required deliverable.
-#
-# Run with no argument it checks ROADMAP.md and the backlog with the reconciliation record and then runs
-# its negative controls against temporary copies: a removed Phase line, a bogus ledger id, a queue row
-# naming a missing task or no task, a phase that contradicts its queue row, an archived body without its
-# stub, a stub without its archived body, a removed inheritance entry and a fabricated one, a dropped pull
-# trigger, a task in both files, a lost task, a bad or missing Active phases value, a misplaced task in
-# either direction, a queued task in the backlog, a stale review log and a drifted or incomplete queue
-# summary must each fail; so must an exit missing its class or acceptance test, an exit owned outside
-# its row, a queue row that omits an exit, a continues-alongside exit that blocks a deliverable, a
-# blocks-features exit that blocks none, a prerequisite list that drops an exit or drifts from its queue
-# row (or a deliverable deleted, duplicated, weakened alone or relabelled to another row), and an
-# implemented-bug row that lists a fixed bug (fixed in the ledger README alone, or by a bold or a plain
-# Status line alone) or lacks its branch or remaining step; so must a dropped V1c deliverable, and a
-# capacity table that is missing, leaves a row or an exit unallocated, allocates a row twice, gives the
-# primary track a minority, fewer or more than two slots or loses V1's row from it, leaves evidence
-# integrity or adversarial validation without a positive minimum, does not add up to 100%, gives the
-# capped track two slots or leaves RocksDB slice 1 uncapped; a crashed or silent checker must fail too.
-# With arguments `ROADMAP [LEDGER [ARCHIVE [BACKLOG [TASKS]]]]` it checks those files only. The checker
-# reads every control-plane section and line from ROADMAP.md alone and the task bodies from the task
-# register alone.
+# Checks 1–10 and 13: task identity, phases, reconciliation transfers, archive/stub parity,
+# placement, pull reviews, queue ownership/acceptance and candidate integrity. Legacy exits,
+# feature prerequisites and capacity shares are historical and are not scheduling inputs.
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -109,8 +40,7 @@ def ok(m): out.append('OK ' + m)
 def no(m): out.append('FAIL ' + m)
 # ROADMAP.md is the control plane and the task register holds the task bodies. Neither may take over
 # the other's part.
-PLANE_SECTIONS = ('Phases and releases', 'The current execution queue', 'Implemented, not yet accepted',
-                  'Phase 1 exits', 'Owner decisions', 'Feature prerequisites', 'Capacity allocation',
+PLANE_SECTIONS = ('Phases', 'The queue', 'Implemented, not yet accepted', 'Owner decisions',
                   'Reconciliation record', 'Release map')
 for t in re.findall(r'^#+ (?:Completed )?Task (R-\d{4})$', plane, re.M):
     no(f'ROADMAP.md declares task {t}; task bodies live in the task register (docs/project/ROADMAP_TASKS.md)')
@@ -179,9 +109,11 @@ def phases_of(body):
     m = re.search(r'^\*\*Phase:\*\* (.*)$', body, re.M)
     if not m: return None
     head = m.group(1).split(' — ')[0]
-    st = set(int(d) for d in re.findall(r'(?<![\d.])([1-7])(?![\d.])', head))
-    research = 'research' in head
-    return st, research
+    vals = {v.strip() for v in head.split(',')}
+    allowed = set('ABCDEFGT') | {'after-1.0', 'research', 'after-1.0/research', '-'}
+    if not vals <= allowed:
+        no('invalid task phase: ' + head)
+    return vals & set('ABCDEFGT'), bool(vals & {'after-1.0', 'research', 'after-1.0/research'})
 
 # --- ledger (moved out of ROADMAP into the reconciliation record)
 ledger = {}
@@ -220,68 +152,36 @@ for tid in active:
         no(f'{tid} has no phase assignment, ledger disposition or retirement/merge reason'); unplaced += 1
 if not unplaced: ok(f'all {len(active)} tasks have a phase or a recorded disposition')
 
-# --- queue rows and phase map ("Phases and releases": one row per phase, a "queue rows" column)
-gm = re.search(r'^## Phases and releases$', road, re.M)
-# A queue row is a number, or a number with the suffix `s` for a row placed directly after it without
-# renumbering the rows that follow (row 0s, the specification, 2026-10-29): `0s` orders as 0.5.
-def rowkey(x):
-    return int(x[:-1]) + 0.5 if x.endswith('s') else int(x)
-row_phase = {}
+# --- one queue; phase membership is encoded by its stable row ID, never duplicated in a summary.
+gm = re.search(r'^## Phases$', road, re.M)
+phase_rows = set()
 if gm:
-    lines = road[gm.end():].split('\n')
-    end = next((k for k, l in enumerate(lines) if l.startswith('## ')), len(lines))
-    col = None
-    for line in lines[:end]:
-        cells = [c.strip() for c in line.strip().strip('|').split('|')] if line.startswith('|') else []
-        if cells and 'queue rows' in cells:
-            col = cells.index('queue rows'); continue
-        m = re.match(r'^\*\*Phase (\d)\b', cells[0]) if cells else None
-        if m and col is not None and col < len(cells):
-            spec = cells[col]; p = int(m.group(1))
-            for a, b in re.findall(r'(\d+)\s*[–-]\s*(\d+)', spec):
-                for k in range(int(a), int(b) + 1): row_phase[k] = p
-            for k in re.findall(r'(?<![\d–-])(\d+s?)(?!\s*[–-]|\d)', spec): row_phase.setdefault(rowkey(k), p)
-if not row_phase: no('could not read the queue-row-to-phase map from "Phases and releases"')
-qm = re.search(r'^## The current execution queue$', road, re.M)
-qrows = []
-qexit = {}
+    section = road[gm.end():].split('\n## ', 1)[0]
+    phase_rows = set(re.findall(r'^\| ([A-GT])\. ', section, re.M))
+if phase_rows != set('ABCDEFGT'):
+    no('Phases table must name A–G and T exactly once')
+if gm and len(re.findall(r'^\| [A-GT]\. ',section,re.M)) != len(phase_rows):
+    no('duplicate phase in Phases table')
+qm = re.search(r'^## The queue$', road, re.M)
+qrows = []; row_phase = {}; seen_rows = set()
 if qm:
     for line in road[qm.end():].splitlines():
         if line.startswith('## '): break
-        m = re.match(r'^\| (\d+s?) \| (.*?) \| (.*)\|$', line)
-        if m: qrows.append((rowkey(m.group(1)), m.group(2))); qexit.setdefault(rowkey(m.group(1)), m.group(3))
-if not qrows: no('no queue rows found')
-# The queue summary in "Phases and releases" (| row | tasks | goal |) restates each row's task IDs; it
-# must list exactly the queue's rows, each naming exactly the tasks its queue row names.
-summary = {}
-sbad_dup = False
-if gm:
-    in_sum = False
-    for line in road[gm.end():].split('\n'):
-        if line.startswith('## '): break
         cells = [c.strip() for c in line.strip().strip('|').split('|')] if line.startswith('|') else []
-        if cells[:3] == ['row', 'tasks', 'goal']: in_sum = True; continue
-        if not cells: in_sum = False; continue
-        if in_sum and re.fullmatch(r'\d+s?', cells[0]):
-            if rowkey(cells[0]) in summary:
-                no(f'the queue summary lists row {cells[0]} more than once'); sbad_dup = True
-            summary.setdefault(rowkey(cells[0]), set(expand(cells[1])))
-sbad = 0
-for o in sorted(set(o for o, _ in qrows if [x for x, _ in qrows].count(o) > 1)):
-    no(f'the queue has more than one row {o}'); sbad += 1
-if not summary:
-    no('"Phases and releases" has no queue summary table (| row | tasks | goal |)'); sbad += 1
-else:
-    qmap = {o: set(expand(w)) for o, w in qrows}
-    for o in sorted(set(qmap) | set(summary)):
-        if o not in summary:
-            no(f'queue row {o} is missing from the queue summary'); sbad += 1
-        elif o not in qmap:
-            no(f'the queue summary lists row {o}, which the queue does not have'); sbad += 1
-        elif qmap[o] != summary[o]:
-            no(f'queue summary row {o} names {sorted(summary[o])}, the queue row names {sorted(qmap[o])}'); sbad += 1
-    if not sbad and not sbad_dup: ok(f'the queue summary lists the {len(summary)} queue rows with the same task IDs')
-# --- Phase 1 exits, feature prerequisites, and implemented-but-not-accepted bugs (2026-10-20)
+        if not cells or cells[0] == 'row' or set(cells[0]) <= set('-:'): continue
+        row = cells[0]
+        if not re.fullmatch(r'[A-GT][1-9][0-9]*', row):
+            no(f'invalid queue row {row}'); continue
+        if row in seen_rows: no(f'duplicate queue row {row}')
+        seen_rows.add(row)
+        if len(cells) != 4 or not cells[1] or len(cells[3]) < 20:
+            no(f'queue row {row} has no goal or done-when')
+        work = cells[2] if len(cells) > 2 else ''
+        qrows.append((row, work)); row_phase[row] = row[0]
+        if row[0] not in phase_rows: no(f'queue row {row} names a phase absent from Phases')
+if not qrows: no('no queue rows found')
+else: ok(f'{len(qrows)} queue rows have a goal and done-when; their phase is read from each row ID')
+
 def table_rows(heading, first):
     m = re.search(r'^#+ ' + re.escape(heading) + r'$', road, re.M)
     if not m: return None
@@ -294,187 +194,6 @@ def table_rows(heading, first):
             if started and cells[0] and not set(cells[0]) <= set('-:'): rows.append(cells)
         elif started and rows: break
     return rows
-CLASSES = ('blocks features', 'continues alongside')
-qtasks = {o: set(expand(w)) for o, w in qrows}
-phase1_rows = sorted(o for o in qtasks if row_phase.get(o) == 1)
-exits = {}
-xrows = table_rows('Phase 1 exits', 'exit')
-ebad = 0
-if xrows is None or not xrows:
-    no('ROADMAP.md has no "### Phase 1 exits" table (| exit | owner | closes when | acceptance test | class | why this class |)'); ebad += 1
-    xrows = []
-for cells in xrows:
-    eid = cells[0]
-    if not re.fullmatch(r'\d[a-z]', eid):
-        no(f'Phase 1 exit "{eid}" is not an ID like 2a'); ebad += 1; continue
-    if eid in exits:
-        no(f'Phase 1 exit {eid} is listed more than once'); ebad += 1; continue
-    cells = cells + [''] * (6 - len(cells))
-    row = int(eid[0]); exits[eid] = cells[4]
-    if row not in phase1_rows:
-        no(f'exit {eid} belongs to queue row {row}, which is not a Phase 1 row'); ebad += 1
-    owners = expand(cells[1])
-    if not owners:
-        no(f'exit {eid} names no owning task'); ebad += 1
-    for t in owners:
-        if t not in qtasks.get(row, set()):
-            no(f"exit {eid}'s owner {t} is not a task of queue row {row}"); ebad += 1
-    if len(cells[2]) < 20: no(f'exit {eid} has no completion condition'); ebad += 1
-    if len(cells[3]) < 20: no(f'exit {eid} has no acceptance test'); ebad += 1
-    if cells[4] not in CLASSES: no(f'exit {eid} has no class (blocks features / continues alongside)'); ebad += 1
-    if len(cells[5]) < 10: no(f'exit {eid} gives no reason for its class'); ebad += 1
-for o in phase1_rows:
-    mine = sorted(e for e in exits if int(e[0]) == o)
-    if not mine:
-        no(f'Phase 1 queue row {o} has no exit in "Phase 1 exits"'); ebad += 1; continue
-    named = set(re.findall(r'\b(' + str(o) + r'[a-z])\b', qexit.get(o, '')))
-    for e in mine:
-        if e not in named: no(f'queue row {o} does not name its exit {e}'); ebad += 1
-    for e in sorted(named - set(mine)):
-        no(f'queue row {o} names exit {e}, which "Phase 1 exits" does not list'); ebad += 1
-if exits and not ebad:
-    ok(f'{len(exits)} Phase 1 exits each have an owner from their row, a completion condition, an acceptance test and a class, and their queue rows name them')
-prows = table_rows('Feature prerequisites', 'deliverable')
-pbad2 = 0
-blocked_any = set(); row_blocked = {}
-# The first feature deliverables, each with its own row in the table and its own comparison against its
-# queue row's "prerequisite exits:" list: a union per row would let one deliverable mask another.
-# Each is bound to the queue row that schedules it, so relabelling a row cannot borrow another's list.
-REQUIRED_DELIVERABLES = {'RocksDB slice 1': 5, 'V1a': 3, 'V1b': 3, 'V1c': 3}
-seen_deliv = set()
-if not prows:
-    no('ROADMAP.md has no "### Feature prerequisites" table (| deliverable | blocked by | not blocked by |)'); pbad2 += 1
-    prows = []
-for cells in prows:
-    cells = cells + [''] * (3 - len(cells))
-    d = cells[0]
-    dname = d.split(' (')[0].strip()
-    if dname in seen_deliv:
-        no(f'deliverable {dname} is listed more than once in the prerequisites'); pbad2 += 1
-    seen_deliv.add(dname)
-    b = re.findall(r'\b(\d[a-z])\b', cells[1]); n = re.findall(r'\b(\d[a-z])\b', cells[2])
-    for e in sorted(set(b + n) - set(exits)):
-        no(f'prerequisites of "{d}" name exit {e}, which does not exist'); pbad2 += 1
-    for e in sorted(set(b) & set(n)):
-        no(f'prerequisites of "{d}" list exit {e} as both blocking and not blocking'); pbad2 += 1
-    for e in sorted(set(exits) - set(b) - set(n)):
-        no(f'prerequisites of "{d}" do not account for exit {e}'); pbad2 += 1
-    blocked_any |= set(b)
-    rm = re.search(r'\(row (\d+)', d)
-    if not rm:
-        no(f'deliverable "{d}" names no queue row'); pbad2 += 1
-    else:
-        drow = int(rm.group(1))
-        if dname in REQUIRED_DELIVERABLES and drow != REQUIRED_DELIVERABLES[dname]:
-            no(f'deliverable {dname} is labelled row {drow}, but queue row {REQUIRED_DELIVERABLES[dname]} schedules it'); pbad2 += 1
-            drow = REQUIRED_DELIVERABLES[dname]
-        row_blocked.setdefault(drow, []).append((dname, set(b)))
-for e, cls in sorted(exits.items()):
-    if cls == 'blocks features' and e not in blocked_any:
-        no(f'exit {e} is blocks features but no deliverable lists it as a prerequisite'); pbad2 += 1
-    if cls == 'continues alongside' and e in blocked_any:
-        no(f'exit {e} is continues alongside but blocks a deliverable'); pbad2 += 1
-for dname in REQUIRED_DELIVERABLES:
-    if dname not in seen_deliv:
-        no(f'the prerequisites table has no row for deliverable {dname}'); pbad2 += 1
-for o, delivs in sorted(row_blocked.items()):
-    m = re.search(r'prerequisite exits: ([0-9a-z, ]+)', qexit.get(o, ''))
-    if not m:
-        no(f'queue row {o} has a deliverable but no "prerequisite exits:" list'); pbad2 += 1
-        continue
-    have = set(re.findall(r'\b(\d[a-z])\b', m.group(1)))
-    for dname, want in delivs:
-        # One deliverable of a row may wait for more than the row's shared list only when the row says
-        # so by name ("V1c also waits for exit 2q"), so an extra exit is never silent.
-        stated = {e for e in want - have if re.search(r'\b' + re.escape(dname) + r' also waits for exit ' + e + r'\b', qexit.get(o, ''))}
-        if have != want - stated:
-            no(f'queue row {o} names prerequisite exits {sorted(have)}, the prerequisites table says {sorted(want)} for {dname}'); pbad2 += 1
-    # Every extra exit a row names for one deliverable is in that deliverable's blocked-by list.
-    for pre, e in re.findall(r'([^;:(]*?) also waits for exit (\d[a-z])\b', qexit.get(o, '')):
-        named = [n2 for n2 in REQUIRED_DELIVERABLES if re.search(r'(^|\s)' + re.escape(n2) + r'$', pre.strip())]
-        dn = max(named, key=len) if named else pre.strip().split(' ')[-1]
-        wants = [w for n2, w in delivs if n2 == dn]
-        if not wants:
-            no(f'queue row {o} says {dn} also waits for exit {e}, but {dn} is not a deliverable of that row'); pbad2 += 1
-        elif e not in wants[0]:
-            no(f'queue row {o} says {dn} also waits for exit {e}, but the prerequisites table does not list {e} as blocking {dn}'); pbad2 += 1
-if prows and not pbad2:
-    ok(f'{len(prows)} feature deliverables partition the exits; classes agree with the prerequisite lists and queue rows')
-# --- capacity allocation (2026-10-21): every post-Phase-1 queue row and every Phase 1 exit belongs to
-# exactly one track; the primary track holds the majority and the rows of V1 and the shared compiler
-# structure; the capped feature track has one slot and holds RocksDB slice 1's row.
-crows = table_rows('Capacity allocation', 'track')
-cbad = 0
-if not crows:
-    no('ROADMAP.md has no "### Capacity allocation" table (| track | queue rows | Phase 1 exits | share per cycle | integration slots | scope |)'); cbad += 1
-    crows = []
-row_track = {}; exit_track = {}; tracks = []
-for cells in crows:
-    cells = cells + [''] * (6 - len(cells))
-    name = cells[0]
-    rows_c = [rowkey(x) for x in re.findall(r'\b(\d+s?)\b', cells[1])]
-    exits_c = re.findall(r'\b(\d[a-z])\b', cells[2])
-    sm = re.fullmatch(r'(at least|at most) (\d+)%', cells[3])
-    if not sm:
-        no(f'capacity track "{name}" has no share "at least N%" or "at most N%"'); cbad += 1; continue
-    slm = re.match(r'(\d+)\b', cells[4])
-    if not slm:
-        no(f'capacity track "{name}" names no integration slot count'); cbad += 1; continue
-    if not rows_c and not exits_c:
-        no(f'capacity track "{name}" owns no queue row and no exit'); cbad += 1
-    tracks.append((name, sm.group(1), int(sm.group(2)), int(slm.group(1)), rows_c))
-    for r in rows_c:
-        if r in phase1_rows:
-            no(f'capacity track "{name}" lists Phase 1 row {r}; Phase 1 rows are allocated by exit'); cbad += 1
-        elif r not in qtasks:
-            no(f'capacity track "{name}" lists queue row {r}, which the queue does not have'); cbad += 1
-        elif r in row_track:
-            no(f'queue row {r} is in more than one capacity track'); cbad += 1
-        row_track.setdefault(r, name)
-    for e in exits_c:
-        if e not in exits:
-            no(f'capacity track "{name}" lists exit {e}, which does not exist'); cbad += 1
-        elif e in exit_track:
-            no(f'exit {e} is in more than one capacity track'); cbad += 1
-        exit_track.setdefault(e, name)
-if tracks:
-    for r in sorted(set(qtasks) - set(phase1_rows) - set(row_track)):
-        no(f'queue row {r} is in no capacity track'); cbad += 1
-    for e in sorted(set(exits) - set(exit_track)):
-        no(f'exit {e} is in no capacity track'); cbad += 1
-    prim = [t for t in tracks if '(primary)' in t[0]]
-    if len(prim) != 1:
-        no(f'the capacity allocation has {len(prim)} tracks marked (primary), not one'); cbad += 1
-    else:
-        pn, pk, pv, ps, prow = prim[0]
-        if pk != 'at least' or pv <= 50:
-            no(f'the primary track "{pn}" has share {pk} {pv}%, not a majority minimum'); cbad += 1
-        for t in tracks:
-            if t is not prim[0] and t[2] >= pv:
-                no(f'capacity track "{t[0]}" ({t[2]}%) is not smaller than the primary track ({pv}%)'); cbad += 1
-        if ps != 2:
-            no('the primary track must have two integration slots'); cbad += 1
-        must = {o for d, o in REQUIRED_DELIVERABLES.items() if d.startswith('V1')}
-        must |= {o for o, ts in qtasks.items() if 'R-0514' in ts}
-        for o in sorted(must - set(prow)):
-            no(f'queue row {o} (V1 or the shared compiler structure) is not in the primary track'); cbad += 1
-    for marker in ('**B. Evidence integrity**', '**C. Adversarial validation and gate health**'):
-        protected = [t for t in tracks if t[0].startswith(marker)]
-        if len(protected) != 1 or protected[0][1] != 'at least' or protected[0][2] <= 0:
-            no(f'{marker} must have a positive protected minimum'); cbad += 1
-    if sum(t[2] for t in tracks) != 100:
-        no(f'the capacity shares add up to {sum(t[2] for t in tracks)}%, not 100%'); cbad += 1
-    capped = [t for t in tracks if t[1] == 'at most']
-    if not capped:
-        no('the capacity allocation has no capped ("at most") track'); cbad += 1
-    for t in capped:
-        if t[3] != 1:
-            no(f'capped capacity track "{t[0]}" has {t[3]} integration slots, not one'); cbad += 1
-    rk = REQUIRED_DELIVERABLES['RocksDB slice 1']
-    if rk not in {r for t in capped for r in t[4]}:
-        no(f'queue row {rk} (RocksDB slice 1) is not in a capped capacity track'); cbad += 1
-if crows and not cbad:
-    ok(f'{len(tracks)} capacity tracks partition the post-Phase-1 queue rows and the Phase 1 exits; the primary track holds the majority, V1 and the shared compiler structure; the feature track is capped with one slot')
 irows = table_rows('Implemented, not yet accepted', 'candidate')
 # Columns are located by header name: the table is generated from docs/project/candidates.tsv
 # (scripts/gen/candidate_table.py), and a row names bugs or a deliverable ("—" for none).
@@ -541,7 +260,7 @@ for order, work in qrows:
             no(f'queue row {order} names {tid}, which lives in the backlog; a queued task lives in the task register'); qbad += 1
     phase = row_phase.get(order)
     if phase is None:
-        no(f'queue row {order} has no phase in "Phases and releases"'); qbad += 1; continue
+        no(f'queue row {order} has no phase in "Phases"'); qbad += 1; continue
     tids = expand(work)
     if not tids:
         no(f'queue row {order} names no owning task')
@@ -592,22 +311,16 @@ for tid in active:
 if sections and not abad: ok(f'{len(set(sections))} archived task bodies each have a linked stub with a disposition, and every stub link resolves')
 
 # --- active/next phases, placement, pull triggers and the backlog review log
-phase_rows = set()
-if gm:
-    for line in road[gm.end():].split('\n'):
-        if line.startswith('## '): break
-        m = re.match(r'^\| \*\*Phase (\d)\b', line)
-        if m: phase_rows.add(int(m.group(1)))
 def phase_line(label):
     ms = re.findall(r'^\*\*' + label + r':\*\* (.*)$', road, re.M)
     if len(ms) != 1:
         no(f'ROADMAP.md must have exactly one "**{label}:**" line (found {len(ms)})'); return None
     vals = [v.strip() for v in re.split(r',', re.split(r' — | \(', ms[0])[0])]
-    if not vals or not all(re.fullmatch(r'\d', v) for v in vals):
-        no(f'"**{label}:**" must list phase numbers, found "{ms[0]}"'); return None
-    nums = set(int(v) for v in vals)
+    if not vals or not all(re.fullmatch(r'[A-GT]', v) for v in vals):
+        no(f'"**{label}:**" must list phase letters, found "{ms[0]}"'); return None
+    nums = set(vals)
     for n in sorted(nums - phase_rows):
-        no(f'"**{label}:**" names Phase {n}, which is not in the "Phases and releases" table')
+        no(f'"**{label}:**" names Phase {n}, which is not in the "Phases" table')
     return nums if nums <= phase_rows else None
 act_ph = phase_line('Active phases')
 next_ph = phase_line('Next phases')
@@ -615,7 +328,7 @@ pbad = 0
 if act_ph is not None and next_ph is not None:
     if act_ph & next_ph:
         no(f'phases {sorted(act_ph & next_ph)} are listed as both active and next'); pbad += 1
-    near = act_ph | next_ph
+    near = act_ph | next_ph | {'T'}
     queued = set()
     for _, work in qrows: queued |= set(expand(work))
     for tid, body in road_tasks:
@@ -653,7 +366,7 @@ if rl:
 if not rows:
     no('the backlog has no "### Review log" table with a dated row')
 elif act_ph is not None:
-    last = set(int(d) for d in re.findall(r'\d', rows[-1][2]))
+    last = set(re.findall(r'\b[A-GT]\b', rows[-1][2]))
     if last != act_ph:
         no(f'the latest backlog review ({rows[-1][0]}) was for active phases {sorted(last)}, not the current {sorted(act_ph)}; run the phase entry review')
     else:
@@ -745,274 +458,75 @@ PY
     if [ "$?" -ne 0 ]; then no "control $1: could not build its mutated copy"; return; fi
     if run_on "$f" "$l" "$a" "$k" "$t"; then
       no "control $1: the mutated roadmap passed"
-    elif has_match -- "$3" <<<"$RESULT"; then
+    elif has_match -F -- "$3" <<<"$RESULT"; then
       ok "control $1 is rejected ($3)"
     else
       no "control $1 failed for an unexpected reason"
     fi
   }
-  neg removed_phase \
-    "h='### Task R-0494\n\n'; i=s.index(h)+len(h); j=s.index('\n\n',i); assert s[i:j].startswith('**Phase:**'); s=s[:i]+s[j+2:]" \
-    "R-0494 has no phase assignment" tasks
-  neg removed_phase_unscheduled \
-    "h='### Task R-0522\n\n'; i=s.index(h)+len(h); j=s.index('\n\n',i); assert s[i:j].startswith('**Phase:**'); s=s[:i]+s[j+2:]" \
-    "R-0522 has no phase assignment" backlog
-  neg dropped_pull_trigger \
-    "import re; m=re.search(r'^\*\*Pull trigger:\*\*[^\n]*\n\n', s[s.index('### Task R-0305\n'):], re.M); assert m; i=s.index('### Task R-0305\n')+m.start(); s=s[:i]+s[i+len(m.group(0)):]" \
-    "backlog task R-0305 has no" backlog
-  neg backlog_stub_link_removed \
-    "old='archived in [ROADMAP_RETIRED_TASKS.md](../archive/ROADMAP_RETIRED_TASKS.md#r-0072).'; assert old in s; s=s.replace(old,'archived.')" \
-    "archived body R-0072 has no stub" backlog
-  neg shared_pull_trigger \
-    "import re; m=re.search(r'^\*\*Pull trigger:\*\* ([^\n]*)$', s[s.index('### Task R-0306\n'):], re.M); t=m.group(1); i=s.index('### Task R-0307\n'); m2=re.search(r'^\*\*Pull trigger:\*\* [^\n]*$', s[i:], re.M); s=s[:i+m2.start()]+'**Pull trigger:** '+t+s[i+m2.end():]" \
-    "share one pull trigger" backlog
-  neg task_in_both_files \
-    "i=b.index('### Task R-0305\n'); j=b.index('\n### ',i+1); s=s.rstrip('\n')+'\n\n'+b[i:j]+'\n'" \
-    "R-0305 is declared in both ROADMAP_TASKS.md and the backlog" both
-  neg lost_task \
-    "i=s.index('### Task R-0305\n'); j=s.index('\n### ',i+1); s=s[:i]+s[j+1:]" \
-    "R-0305 is lost" backlog
-  neg task_in_control_plane \
-    "s=s.rstrip('\\n')+'\\n\\n### Task R-0494\\n\\n**Phase:** 2\\n'" \
-    "ROADMAP.md declares task R-0494"
-  neg plane_section_in_register \
-    "s=s.rstrip('\\n')+'\\n\\n## The current execution queue\\n\\n| 0 | **ctl (R-0482)** | ctl |\\n'" \
-    "the task register declares the control-plane section" tasks
-  neg phases_line_in_register \
-    "s=s.rstrip('\\n')+'\\n\\n**Active phases:** 1\\n'" \
-    "the task register declares" tasks
-  neg bad_active_phases \
-    "old='**Active phases:** 1'; assert s.count(old)==1; s=s.replace(old,'**Active phases:** 9')" \
-    "names Phase 9, which is not in"
-  neg missing_active_phases \
-    "import re; s,n=re.subn(r'^\*\*Active phases:\*\*[^\n]*\n', '', s, flags=re.M); assert n==1" \
-    "exactly one \"\*\*Active phases:\*\*\" line"
-  neg backlog_task_in_near_phase \
-    "h='### Task R-0305\n\n**Phase:** after-1.0/research'; assert h in s; s=s.replace(h,'### Task R-0305\n\n**Phase:** 2')" \
-    "R-0305 is in the backlog but its Phase line schedules it in active/next Phase \[2\]" backlog
-  neg roadmap_task_only_later \
-    "h='### Task R-0518\n\n**Phase:** '; i=s.index(h)+len(h); j=s.index('\n',i); s=s[:i]+'7'+s[j:]" \
-    "R-0518 lives in the task register but is scheduled in no active or next phase" tasks
-  neg queued_task_in_backlog \
-    "i=s.index('### Task R-0521\n'); j=s.index('\n### ',i+1); b=b.rstrip('\n')+'\n\n'+s[i:j].replace('**Phase:**','**Pull trigger:** control: a queued task moved to the backlog.\n\n**Phase:**',1)+'\n'; s=s[:i]+s[j+1:]" \
-    "queue row 9 names R-0521, which lives in the backlog" both
-  neg stale_review_log \
-    "old='**Active phases:** 1'; assert s.count(old)==1; s=s.replace(old,'**Active phases:** 2').replace('**Next phases:** 2, 3','**Next phases:** 3, 4')" \
-    "the latest backlog review (2026-10-19) was for active phases \[1\], not the current \[2\]"
-  neg bogus_ledger_id \
-    "h='|---|---|---|---|\n| R-'; i=s.index(h)+len('|---|---|---|---|\n'); s=s[:i]+'| R-9999 | merged | R-0494 | control |\n'+s[i:]" \
-    "ledger row names missing task R-9999" ledger
-  neg queue_missing_task \
-    "old='| 9 | **Compiler provenance and canonical \`VerificationTask\` (R-0521)** |'; assert old in s; s=s.replace(old,'| 9 | **Compiler provenance and canonical \`VerificationTask\` (R-9998)** |')" \
-    "names nonexistent task R-9998"
-  neg phase_contradicts_queue \
-    "h='### Task R-0511\n\n**Phase:** 2'; assert h in s; s=s.replace(h,'### Task R-0511\n\n**Phase:** 6')" \
-    "R-0511: queue row 3 schedules it in Phase 2" tasks
-  neg phase_table_row_moved \
-    "old='| 0s, 3 – 4 | V1a and V1b'; assert old in s; s=s.replace(old,'| 0s, 4 | V1a and V1b')" \
-    "queue row 3 has no phase"
-  neg queue_summary_drift \
-    "old='| 9 | R-0521 | Compiler provenance'; assert old in s; s=s.replace(old,'| 9 | R-0522 | Compiler provenance')" \
-    "queue summary row 9 names \['R-0522'\], the queue row names \['R-0521'\]"
-  neg queue_summary_duplicate_row \
-    "old='| 9 | R-0521 | Compiler provenance'; assert old in s; s=s.replace(old,'| 9 | R-0522 | Wrong owner |\n'+old)" \
-    "the queue summary lists row 9 more than once"
-  neg queue_duplicate_row \
-    "old='| 9 | **Compiler provenance and canonical \`VerificationTask\` (R-0521)** |'; assert old in s; s=s.replace(old,'| 9 | **Wrong owner (R-0522)** | control |\n'+old)" \
-    "the queue has more than one row 9"
-  neg queue_summary_missing_row \
-    "import re; s,n=re.subn(r'^\| 17 \| R-0440 \| [^\n]*\n', '', s, flags=re.M); assert n==1" \
-    "queue row 17 is missing from the queue summary"
-  neg queue_row_no_owner \
-    "old='| 9 | **Compiler provenance and canonical \`VerificationTask\` (R-0521)** |'; assert old in s; s=s.replace(old,'| 9 | **Compiler provenance and canonical \`VerificationTask\`** |')" \
-    "queue row 9 names no owning task"
-  neg archived_body_without_stub \
-    "s=s.rstrip('\n')+'\n\n## R-0491\n\nAn archived body whose task is live and links nothing here.\n'" \
-    "archived body R-0491 has no stub" archive
-  neg stub_without_archived_body \
-    "i=s.index('\n## R-0007\n'); j=s.index('\n## ',i+1); s=s[:i]+s[j:]" \
-    "R-0007 links an archived body that does not exist" archive
-  neg stub_names_other_body \
-    "old='archived in [ROADMAP_RETIRED_TASKS.md](../archive/ROADMAP_RETIRED_TASKS.md#r-0007).'; assert old in s; s=s.replace(old,'archived in [ROADMAP_RETIRED_TASKS.md](../archive/ROADMAP_RETIRED_TASKS.md#r-0019).')" \
-    "R-0007: its stub sentence names the archived body of R-0019" tasks
-  neg stub_link_removed \
-    "old='archived in [ROADMAP_RETIRED_TASKS.md](../archive/ROADMAP_RETIRED_TASKS.md#r-0007).'; assert old in s; s=s.replace(old,'archived.')" \
-    "archived body R-0007 has no stub" tasks
-  neg inheritance_entry_removed \
-    "import re; m=re.search(r'^- \*\*R-0007\*\* \(superseded\)[^\n]*\n', s, re.M); assert m; i=s.index('### Task R-0492\n'); assert m.start()>i; s=s[:m.start()]+s[m.end():]" \
-    "R-0492 lacks inherited obligations from R-0007" tasks
-  neg inheritance_entry_fabricated \
-    "old='- **R-0008** (superseded):'; assert s.count(old)==1; s=s.replace(old,'- **R-0019** (merged): fabricated transfer.\n'+old)" \
-    "R-0492 has unexplained inherited obligations from R-0019" tasks
-  neg exit_missing_class \
-    "old='| blocks features | known false proofs and unsound claims |'; assert s.count(old)==1; s=s.replace(old,'|  | known false proofs and unsound claims |')" \
-    "exit 0a has no class"
-  neg exit_missing_acceptance \
-    "import re; m=re.search(r'^\| 2d \|[^\n]*$', s, re.M); assert m; c=m.group(0).split(' | '); c[3]=''; s=s[:m.start()]+' | '.join(c)+s[m.end():]" \
-    "exit 2d has no acceptance test"
-  neg exit_owner_outside_row \
-    "old='| 2a | R-0494 |'; assert s.count(old)==1; s=s.replace(old,'| 2a | R-0511 |')" \
-    "exit 2a's owner R-0511 is not a task of queue row 2"
-  neg queue_row_omits_exit \
-    "old='demonstrated enforcement (2l)'; assert s.count(old)==1; s=s.replace(old,'demonstrated enforcement')" \
-    "queue row 2 does not name its exit 2l"
-  neg continues_exit_blocks \
-    "old='| RocksDB slice 1 (row 5, R-0285) | 0b, 2i, 2q | 0a, 0c, 1a, 2a, 2b, 2c, 2d, 2e, 2f, 2g, 2h, 2j, 2k, 2l, 2m, 2n, 2o, 2p |'; assert s.count(old)==1; s=s.replace(old,'| RocksDB slice 1 (row 5, R-0285) | 0b, 2i, 2k, 2q | 0a, 0c, 1a, 2a, 2b, 2c, 2d, 2e, 2f, 2g, 2h, 2j, 2l, 2m, 2n, 2o, 2p |')" \
-    "exit 2k is continues alongside but blocks a deliverable"
-  neg blocks_exit_unlisted \
-    "import re; m=re.search(r'^\| 2c \|[^\n]*$', s, re.M); assert m; c=m.group(0).split(' | '); assert c[4]=='continues alongside'; c[4]='blocks features'; s=s[:m.start()]+' | '.join(c)+s[m.end():]" \
-    "exit 2c is blocks features but no deliverable lists it"
-  neg prerequisites_drop_exit \
-    "old='| V1a (row 3, R-0511) | 0a, 0b, 2a, 2g, 2h, 2i, 2j | 0c, 1a, 2b, 2c, 2d, 2e, 2f, 2k, 2l, 2m, 2n, 2o, 2p, 2q |'; assert s.count(old)==1; s=s.replace(old,'| V1a (row 3, R-0511) | 0a, 0b, 2a, 2g, 2h, 2i, 2j | 0c, 1a, 2b, 2c, 2d, 2e, 2f, 2k, 2m, 2n, 2o, 2p, 2q |')" \
-    "prerequisites of \"V1a (row 3, R-0511)\" do not account for exit 2l"
-  neg queue_prerequisites_drift \
-    "old='prerequisite exits: 0b, 2i, 2q;'; assert s.count(old)==1; s=s.replace(old,'prerequisite exits: 0b, 2q;')" \
-    "queue row 5 names prerequisite exits \['0b', '2q'\], the prerequisites table says \['0b', '2i', '2q'\]"
-  neg prerequisites_extra_unstated \
-    "old='V1c also waits for exit 2q'; assert s.count(old)==1; s=s.replace(old,'V1c also waits for the decided rules')" \
-    "queue row 3 names prerequisite exits"
-  neg prerequisites_extra_not_blocking \
-    "old='| V1c (row 3, R-0511) | 0a, 0b, 2a, 2g, 2h, 2i, 2j, 2q | 0c, 1a, 2b, 2c, 2d, 2e, 2f, 2k, 2l, 2m, 2n, 2o, 2p |'; assert s.count(old)==1; s=s.replace(old,'| V1c (row 3, R-0511) | 0a, 0b, 2a, 2g, 2h, 2i, 2j | 0c, 1a, 2b, 2c, 2d, 2e, 2f, 2k, 2l, 2m, 2n, 2o, 2p, 2q |')" \
-    "the prerequisites table does not list 2q as blocking V1c"
-  neg prerequisites_deliverable_deleted \
-    "import re; s,n=re.subn(r'^\| V1b \(row 3[^\n]*\n', '', s, flags=re.M); assert n==1" \
-    "the prerequisites table has no row for deliverable V1b"
-  neg prerequisites_deliverable_duplicated \
-    "import re; m=re.search(r'^\| V1b \(row 3[^\n]*\n', s, re.M); assert m; s=s[:m.end()]+m.group(0)+s[m.end():]" \
-    "deliverable V1b is listed more than once"
-  neg prerequisites_one_deliverable_weakened \
-    "old='| V1b (row 3, R-0511 with R-0517) | 0a, 0b, 2a, 2g, 2h, 2i, 2j | 0c,'; assert s.count(old)==1; s=s.replace(old,'| V1b (row 3, R-0511 with R-0517) | 0b, 2a, 2g, 2h, 2i, 2j | 0a, 0c,')" \
-    "for V1b"
-  neg prerequisites_row_relabelled \
-    "old='| V1b (row 3, R-0511 with R-0517) | 0a, 0b, 2a, 2g, 2h, 2i, 2j | 0c, 1a, 2b, 2c, 2d, 2e, 2f, 2k, 2l, 2m, 2n, 2o, 2p, 2q |'; assert s.count(old)==1; s=s.replace(old,'| V1b (row 5, R-0511 with R-0517) | 0b, 2i, 2q | 0a, 0c, 1a, 2a, 2b, 2c, 2d, 2e, 2f, 2g, 2h, 2j, 2k, 2l, 2m, 2n, 2o, 2p |')" \
-    "deliverable V1b is labelled row 5, but queue row 3 schedules it"
-  # The implemented-table controls do not depend on which candidates are live: each inserts two
-  # control rows (bugs 901, 902 and 903, which no ledger record names) into its copy first.
-  CTL_ROWS="hdr='| candidate | bugs | deliverable | branch | candidate SHA | exits | stage (a) | stage (b) | stage (c) | unlocks | remaining acceptance step |\n|---|---|---|---|---|---|---|---|---|---|---|\n'; assert s.count(hdr)==1; s=s.replace(hdr, hdr+'| ctl-a | 901, 902 | — | \`ctl-a-branch\` | \`cccccccccccc\` | 0b | not run | not run | not run | exit 0b progress | control row |\n| ctl-b | 903 | — | \`ctl-b-branch\` | \`dddddddddddd\` | 0b | not run | not run | not run | exit 0b progress | control row |\n');"
-  neg implemented_bug_already_fixed \
-    "$CTL_ROWS old='| ctl-a | 901,'; assert s.count(old)==1; s=s.replace(old,'| ctl-a | 080, 901,')" \
-    "bug 080 is listed as not yet accepted but the bug ledger records it fixed"
-  neg implemented_bug_no_branch \
-    "$CTL_ROWS old='| \`ctl-a-branch\` |'; assert s.count(old)==1; s=s.replace(old,'| none |')" \
-    "implemented-bug row \"ctl-a\" names no branch"
-  neg implemented_bug_no_step \
-    "$CTL_ROWS import re; s,n=re.subn(r'^(\| ctl-b \|.*\|) [^|]+ \|$', r'\\1  |', s, flags=re.M); assert n==1" \
-    "implemented-bug row \"ctl-b\" has no remaining acceptance step"
-  neg implemented_row_no_bug_no_deliverable \
-    "old='| rocksdb-slice1 | — | RocksDB slice 1 groundwork (R-0285) |'; assert s.count(old)==1; s=s.replace(old,'| rocksdb-slice1 | — | — |')" \
-    "implemented-bug row \"rocksdb-slice1\" names no bug number and no deliverable"
-  neg implemented_table_column_dropped \
-    "old='| candidate | bugs | deliverable | branch |'; assert s.count(old)==1; s=s.replace(old,'| candidate | bug list | deliverable | branch |')" \
-    "has no \"bugs\" column"
-  neg v1c_deliverable_dropped \
-    "old='| V1c (row 3, R-0511) |'; assert s.count(old)==1; i=s.index(old); j=s.index('\n',i); s=s[:i]+s[j+1:]" \
-    "no row for deliverable V1c"
-  neg capacity_table_removed \
-    "old='### Capacity allocation\n'; assert s.count(old)==1; s=s.replace(old,'### Capacity notes\n')" \
-    "has no \"### Capacity allocation\" table"
-  neg capacity_row_unallocated \
-    "old='| **B. Evidence integrity** (protected) | 9, 10, 11, 12,'; assert s.count(old)==1; s=s.replace(old,'| **B. Evidence integrity** (protected) | 10, 11, 12,')" \
-    "queue row 9 is in no capacity track"
-  neg capacity_row_twice \
-    "old='| **D. Bounded features** (capped) | 5, 7, 8, 16 |'; assert s.count(old)==1; s=s.replace(old,'| **D. Bounded features** (capped) | 3, 5, 7, 8, 16 |')" \
-    "queue row 3 is in more than one capacity track"
-  neg capacity_exit_unallocated \
-    "old='| 0c, 2b, 2c, 2d, 2e, 2f, 2l, 2m, 2o | at least 10%'; assert s.count(old)==1; s=s.replace(old,'| 0c, 2b, 2d, 2e, 2f, 2l, 2m, 2o | at least 10%')" \
-    "exit 2c is in no capacity track"
-  neg capacity_primary_minority \
-    "old='| at least 55% |'; assert s.count(old)==1; s=s.replace(old,'| at least 45% |').replace('| at most 20% |','| at most 30% |')" \
-    "not a majority minimum"
-  neg capacity_v1_not_primary \
-    "old='| **A. Verified compiler** (primary) | 0s, 3, 4, 6 |'; assert s.count(old)==1; s=s.replace(old,'| **A. Verified compiler** (primary) | 0s, 4, 6 |').replace('| **D. Bounded features** (capped) | 5, 7, 8, 16 |','| **D. Bounded features** (capped) | 3, 5, 7, 8, 16 |')" \
-    "queue row 3 (V1 or the shared compiler structure) is not in the primary track"
-  neg capacity_shares_not_100 \
-    "old='| at least 15% |'; assert s.count(old)==1; s=s.replace(old,'| at least 25% |')" \
-    "add up to 110%"
-  neg capacity_feature_slots \
-    "old='| at most 20% | 1 |'; assert s.count(old)==1; s=s.replace(old,'| at most 20% | 2 |')" \
-    "has 2 integration slots, not one"
-  neg capacity_primary_slots \
-    "old='| 2: one shared-compiler migration checkpoint'; assert s.count(old)==1; s=s.replace(old,'| 1: one shared-compiler migration checkpoint')" \
-    "the primary track must have two integration slots"
-  neg capacity_evidence_unprotected \
-    "old='| at least 15% |'; assert s.count(old)==1; s=s.replace(old,'| at least 0% |').replace('| at least 55% |','| at least 70% |')" \
-    "B. Evidence integrity\*\* must have a positive protected minimum"
-  neg capacity_validation_unprotected \
-    "old='| at least 10% |'; assert s.count(old)==1; s=s.replace(old,'| at least 0% |').replace('| at least 55% |','| at least 65% |')" \
-    "C. Adversarial validation and gate health\*\* must have a positive protected minimum"
-  neg capacity_rocksdb_uncapped \
-    "old='| **D. Bounded features** (capped) | 5, 7, 8, 16 |'; assert s.count(old)==1; s=s.replace(old,'| **D. Bounded features** (capped) | 7, 8, 16 |').replace('| **A. Verified compiler** (primary) | 3, 4, 6 |','| **A. Verified compiler** (primary) | 3, 4, 5, 6 |')" \
-    "queue row 5 (RocksDB slice 1) is not in a capped capacity track"
-  # Bug-ledger controls: the same roadmap against a mutated copy of docs/bugs, one way of recording a
-  # fix at a time (README's Fixed list alone, a bold Status line alone, a plain Status line alone).
-  bugneg() { # name, python-edit over s (file named in $3, relative to docs/bugs), file, expected-substring
-    local d="$TMPD/$1.bugs"
-    cp -R docs/bugs "$d"
-    if ! python3 - "$d/$3" "$2" <<'PY'
-import sys, re
-p = sys.argv[1]; s = open(p, encoding='utf-8').read()
-exec(sys.argv[2])
-open(p, 'w', encoding='utf-8').write(s)
-PY
-    then no "control $1: could not build its mutated ledger"; return; fi
-    python3 - "$TARGET" "$TMPD/$1.ctl.md" "$CTL_ROWS" <<'PY' || { no "control $1: could not build its roadmap copy"; return; }
+  neg task_in_control_plane "s+='\n### Task R-0494\n'" 'declares task R-0494'
+  neg plane_section_in_register "s+='\n## The queue\n'" 'control-plane section' tasks
+  neg phases_in_register "s+='\n**Active phases:** A\n'" 'the task register declares' tasks
+  neg missing_phase "s=s.replace('**Phase:** B','**Phase removed:** B',1)" 'has no phase assignment' tasks
+  neg invalid_phase "s=s.replace('**Phase:** B','**Phase:** Z',1)" 'invalid task phase' tasks
+  neg ledger_id "s=s.replace('| R-0007 |','| R-9999 |',1)" 'ledger row names missing task' ledger
+  neg ledger_owner "s=s.replace('| R-0007 | superseded | R-0492, R-0510 |','| R-0007 | superseded | R-9999 |',1)" 'names missing owner' ledger
+  neg missing_owner "s=s.replace('| R-0555, R-0481, R-0010, R-0447, R-0554 |','| — |',1)" 'names no owning task'
+  neg nonexistent_owner "s=s.replace('| R-0555, R-0481, R-0010, R-0447, R-0554 |','| R-9999 |',1)" 'nonexistent task'
+  neg phase_mismatch "s=s.replace('| A1 |','| B4 |',1)" 'schedules it in Phase B'
+  neg missing_done_when "s=re.sub(r'(^\| A1 \|.*?\|.*?\|)[^\n]*',r'\1 |',s,flags=re.M)" 'has no goal or done-when'
+  neg duplicate_row "m=re.search(r'^\| A1 \|.*$',s,re.M);s+='\n'+m[0]+'\n';s=s.replace('## Owner decisions',''+m[0]+'\n\n## Owner decisions',1)" 'duplicate queue row'
+  neg bad_active "s=s.replace('**Active phases:** A','**Active phases:** Z')" 'must list phase letters'
+  neg missing_active "s=s.replace('**Active phases:** A','')" 'exactly one'
+  neg absent_phase "s=s.replace('| A. Core and theorem |','| Z. Core and theorem |')" 'not in the'
+  neg overlapping_phases "s=s.replace('**Next phases:** B','**Next phases:** A')" 'both active and next'
+  neg stale_review "s=s.replace('| phase A entry: reviewed all 546 classifications | A |','| phase A entry: reviewed all 546 classifications | B |')" 'latest backlog review' backlog
+  neg missing_trigger "s=re.sub(r'^\*\*Pull trigger:\*\*[^\n]*\n','',s,count=1,flags=re.M)" 'has no **Pull trigger:**' backlog
+  neg duplicate_task "m=re.search(r'^### Task R-0548$.*?(?=^### |^## |\Z)',b,re.M|re.S);s+='\n'+m[0]" 'declared in both' both
+  neg lost_task "s=re.sub(r'^### Task R-0548$.*?(?=^### |^## |\Z)','',s,flags=re.M|re.S)" 'R-0548 is lost' backlog
+  neg backlog_near "s=s.replace('**Phase:** D','**Phase:** A',1)" 'is in the backlog but' backlog
+  neg register_later "s=s.replace('**Phase:** T','**Phase:** G',1)" 'lives in the task register but' tasks
+  neg archive_missing_stub "s=s.replace('archived in [ROADMAP_RETIRED_TASKS.md](../archive/ROADMAP_RETIRED_TASKS.md#r-0004).','archived.')" 'has no stub' tasks
+  neg stub_missing_archive "s=s.replace('## R-0004','## R-9999',1)" 'links an archived body that does not exist' archive
+  neg inheritance_missing "s=re.sub(r'^- \*\*R-[0-9]{4}\*\*[^\n]*\n','',s,count=1,flags=re.M)" 'lacks inherited obligations' tasks
+  neg inheritance_invented "s=s.replace('**Inherited obligations','**Inherited obligations\n- **R-9999** invented\n',1)" 'unexplained inherited obligations' tasks
+  neg shared_trigger "M=list(re.finditer(r'^### Task R-[0-9]{4}$.*?(?=^### |^## |\\Z)',s,re.M|re.S));M=[m for m in M if '**Disposition' not in m[0]];a,b=M[:2];t=re.search(r'^\\*\\*Pull trigger:\\*\\* (.*)$',a[0],re.M)[1];n=re.sub(r'^\\*\\*Pull trigger:\\*\\* .*$',lambda m:'**Pull trigger:** '+t,b[0],flags=re.M);s=s[:b.start()]+n+s[b.end():]" 'share one pull trigger' backlog
+  neg archive_disposition_missing "i=s.index('### Task R-0004');j=s.index('### Task ',i+1);b=s[i:j];b=re.sub(r'^\\*\\*Disposition[^\\n]*\\n','',b,flags=re.M);s=s[:i]+b+s[j:]" 'its ROADMAP stub has no Disposition' tasks
+  neg duplicate_phase "s=s.replace('| A. Core and theorem |','| B. Core and theorem |')" 'duplicate phase'
+  neg candidate_bad_bugs "L=s.split(chr(10)); i=next(i for i,l in enumerate(L) if l.startswith('| rocksdb-slice1 |'));c=L[i].split('|');c[2]=' nonsense ';L[i]='|'.join(c);s=chr(10).join(L)" 'bugs cell with no bug number'
+  neg candidate_fixed_bug "L=s.split(chr(10)); i=next(i for i,l in enumerate(L) if l.startswith('| rocksdb-slice1 |')); c=L[i].split('|');c[2]=' 001 ';L[i]='|'.join(c);s=chr(10).join(L)" 'bug 001 is listed as not yet accepted'
+  neg candidate_no_branch "s=s.replace(chr(96)+'rocksdb-slice1'+chr(96),'—',1)" 'names no branch'
+  neg candidate_no_remaining "L=s.split(chr(10)); i=next(i for i,l in enumerate(L) if l.startswith('| rocksdb-slice1 |')); c=L[i].split('|');c[-2]=' ';L[i]='|'.join(c);s=chr(10).join(L)" 'has no remaining acceptance step'
+  neg candidate_no_deliverable "L=s.split(chr(10)); i=next(i for i,l in enumerate(L) if l.startswith('| rocksdb-slice1 |'));c=L[i].split('|');c[3]=' — ';L[i]='|'.join(c);s=chr(10).join(L)" 'names no bug number and no deliverable'
+  # Independently exercise both fixed-status spellings and the README-only fixed list.
+  for spelling in readme bold plain; do
+    d="$TMPD/fixed-$spelling"; mkdir -p "$d"
+    printf '## Fixed Bugs\n\n' > "$d/README.md"
+    case "$spelling" in
+      readme) printf -- '- [901_control.md](901_control.md) — fixed control\n' >> "$d/README.md" ;;
+      bold) printf '**Status:** FIXED\n' > "$d/901_control.md" ;;
+      plain) printf 'Status: fixed\n' > "$d/901_control.md" ;;
+    esac
+    python3 - "$TARGET" "$d/road.md" <<'FIXEDCONTROL'
 import sys
-s = open(sys.argv[1], encoding='utf-8').read()
-exec(sys.argv[3])
-open(sys.argv[2], 'w', encoding='utf-8').write(s)
-PY
-    if BUG_LEDGER_DIR="$d" run_on "$TMPD/$1.ctl.md"; then
-      no "control $1: the mutated ledger passed"
-    elif has_match -- "$4" <<<"$RESULT"; then
-      ok "control $1 is rejected ($4)"
-    else
-      no "control $1 failed for an unexpected reason"
-    fi
-  }
-  # The controls use the control rows' bugs (901 - 903), which have no record file, so the Status
-  # controls create one in the copied ledger.
-  bugneg ledger_fixed_in_readme_only \
-    "old='## Fixed Bugs\n\n'; assert s.count(old)==1; s=s.replace(old, old+'- [901_control.md](901_control.md)\n')" \
-    README.md "bug 901 is listed as not yet accepted but the bug ledger records it fixed"
-  bugneg ledger_fixed_bold_status \
-    "import os; open(os.path.join(os.path.dirname(p), '902_control.md'), 'w').write('# Bug 902\n\n**Status:** FIXED 2026-10-20\n')" \
-    README.md "bug 902 is listed as not yet accepted but the bug ledger records it fixed"
-  bugneg ledger_fixed_plain_status \
-    "import os; open(os.path.join(os.path.dirname(p), '903_control.md'), 'w').write('# Bug 903\n\nStatus: fixed\n')" \
-    README.md "bug 903 is listed as not yet accepted but the bug ledger records it fixed"
-  # Positive control: a bug whose README entry sits under "Fixed Bugs" but says OPEN (077) is open.
-  cp "$TARGET" "$TMPD/open_entry.md"
-  if python3 - "$TMPD/open_entry.md" "$CTL_ROWS" <<'PY'
-import sys
-p = sys.argv[1]; s = open(p, encoding='utf-8').read()
-exec(sys.argv[2])
-old = '| ctl-a | 901,'
-assert s.count(old) == 1
-s = s.replace(old, '| ctl-a | 077, 901,')
-open(p, 'w', encoding='utf-8').write(s)
-PY
-  then
-    if run_on "$TMPD/open_entry.md"; then
-      ok "positive control open_readme_entry passes (077 says OPEN under Fixed Bugs)"
-    else
-      no "positive control open_readme_entry: an explicitly OPEN ledger entry was read as fixed"
-    fi
-  else
-    no "positive control open_readme_entry: could not build its copy"
-  fi
-  # The wrapper itself must not read a crashed or silent checker as a pass.
-  if ( check_file() { return 17; }; run_on "$TARGET" ); then
-    no "control checker_exit_failure: a nonzero checker exit passed"
-  else
-    ok "control checker_exit_failure is rejected (checker execution failed)"
-  fi
-  if ( check_file() { :; }; run_on "$TARGET" ); then
-    no "control checker_empty_output: a checker with no output passed"
-  else
-    ok "control checker_empty_output is rejected (checker produced no results)"
-  fi
+s=open(sys.argv[1]).read();lines=s.splitlines()
+i=next(i for i,l in enumerate(lines) if l.startswith('| rocksdb-slice1 |'))
+c=lines[i].split('|');c[2]=' 901 ';lines[i]='|'.join(c)
+open(sys.argv[2],'w').write('\n'.join(lines)+'\n')
+FIXEDCONTROL
+    if BUG_LEDGER_DIR="$d" run_on "$d/road.md"; then
+      no "a candidate fixed in $spelling passed"
+    elif has_match -F 'bug 901 is listed as not yet accepted' <<<"$RESULT"; then
+      ok "a candidate fixed in $spelling refuses"
+    else no "the $spelling candidate control failed for an unexpected reason"; fi
+  done
+  saved_checker="$(declare -f check_file)"
+  check_file() { return 1; }
+  if run_on "$TARGET"; then no "a crashed checker passed"; else ok "a crashed checker refuses"; fi
+  check_file() { return 0; }
+  if run_on "$TARGET"; then no "a silent checker passed"; else ok "a silent checker refuses"; fi
+  eval "$saved_checker"
 fi
-
-echo ""
+rm -f "$CHANGELOG"
 echo "ROADMAP-COVERAGE: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

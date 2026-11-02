@@ -1,6 +1,7 @@
 # Bug 044: Renamed import of a generic fn was never monomorphized (undefined symbol)
 
 <!-- bug-ledger
+compiler: legacy
 summary: Renamed import of a generic fn was never monomorphized (undefined symbol)
 coverage: regress_044_renamed_generic_import/src/main.con (project test, exit 0); Mono lookupFn tries all alias orientations + specializes under the resolved def's canonical name
 class: 1

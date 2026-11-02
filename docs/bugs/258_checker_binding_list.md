@@ -1,6 +1,7 @@
 # Bug 258 — the checker keeps a function's bindings in a list walked per use, per binding and per block
 
 <!-- bug-ledger
+compiler: legacy
 summary: the checker kept a function's bindings in a list filtered per binding, walked per lookup, rebuilt per state change and scanned whole at every block, branch, arm, loop, `defer` scope and exit (40000 `let`s: 52.8 s; 20000 `let`s each with an `if`, `while` or `match`: over 120 s for the front end; now 166 ms and 2.6 s). `VarEnv` iterates in the old newest-first order, with logarithmic lookups and updates, subsets of the non-Copy, reference and defer-marked bindings, and change ticks for what a block changed. Pinned by `regress_258_checker_binding_states.con`, `error_258_*` (first refusal unchanged) and the long-function leg. Found with bug 255. Class 17.
 fixtures: regress_258_checker_binding_states.con error_258_branch_disagreement_order.con error_258_block_leak_order.con
 class: 17 — one function of many statements: the parser's statement lists, the local binder table, the resolver's scopes, the checker's bindings, Elab's binder frames, ElabVerify's and CoreCheck's scopes, each a list appended or searched per statement

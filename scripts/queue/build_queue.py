@@ -127,6 +127,11 @@ def bug_tasks(root, mods):
         name = os.path.basename(path)
         num = name[:3]
         text = read(path)
+        comp = re.findall(r"^compiler: (.*)$", text, re.M)
+        if len(comp) != 1 or comp[0] not in ("legacy", "new"):
+            die(f"{path}: compiler must be legacy or new")
+        if comp[0] == "legacy":
+            continue
         m = re.search(r"^(?:\*\*Status:\*\*|Status:)\s*(.*)$", text, re.M)
         if not m:
             continue
@@ -210,12 +215,12 @@ def roadmap_tasks(root, mods):
             deps = [by_order[o] for o in re.findall(r"\d+", r[4]) if o in by_order]
             add(r[2], "throughput", r[1].split(":")[0], deps)
 
-    sec = re.search(r"^## The current execution queue\s*\n(.*?)(?=^## |^### Phase 1 exits)", rm, re.M | re.S)
+    sec = re.search(r"^## The queue\s*\n(.*?)(?=^## |\Z)", rm, re.M | re.S)
     if sec:
         for line in sec.group(1).split("\n"):
             cells = [c.strip() for c in line.strip().strip("|").split("|")]
-            if len(cells) >= 3 and cells[0].isdigit():
-                for rid in RID.findall(cells[1] + " " + cells[2]):
+            if len(cells) == 4 and re.fullmatch(r"[A-GT][1-9][0-9]*", cells[0]):
+                for rid in RID.findall(cells[2]):
                     add(rid, "roadmap", "", [])
     return tasks
 
@@ -292,11 +297,21 @@ def build(root, fuzz_dir):
     by_id = {}
     for t in sourced:
         by_id.setdefault(t["id"], t)
+    legacy_ids = {
+        "bug-" + os.path.basename(p)[:3]
+        for p in glob.glob(os.path.join(root, "docs", "bugs", "[0-9][0-9][0-9]_*.md"))
+        if re.search(r"^compiler: legacy$", read(p), re.M)
+    }
     explicit, unmatched = [], []
     for path in sorted(glob.glob(os.path.join(root, "tasks", "*.md"))):
         if os.path.basename(path).upper() == "README.MD":
             continue
         meta = parse_task_file(path, root)
+        if meta["id"] in legacy_ids:
+            if meta.get("prompt"):
+                die(f"{meta['source']}: cannot dispatch a legacy compiler bug")
+            unmatched.append(meta["source"])
+            continue
         if meta["id"] in by_id:
             t = by_id[meta["id"]]
             for k in ("areas", "depends", "tier", "prompt", "title", "disposition", "branch"):

@@ -1,6 +1,7 @@
 # Bug 047: HashMap::insert duplicates a key that lives past a tombstone
 
 <!-- bug-ledger
+compiler: legacy
 summary: HashMap::insert duplicates a key that lives past a tombstone (fixed by R-0003)
 fixtures: regress_047_048_hashmap_probe/src/main.con
 class: 14

@@ -1,6 +1,7 @@
 # Bug 104 — a reference assigned to an outer variable outlives its block-local source
 
 <!-- bug-ledger
+compiler: legacy
 summary: `leaked = &h` from an inner block recorded no borrow, so `h` was freed or left scope while the outer reference was read (use after free); provenance is now recorded on assignment and re-pointing a reference binding at different storage is refused (E0238). Fixtures `error_104_assigned_ref_{heap,stack}_block.con` ((bug 091 normalized place rule))
 fixtures: error_104_assigned_ref_heap_block.con error_104_assigned_ref_stack_block.con
 class: 4

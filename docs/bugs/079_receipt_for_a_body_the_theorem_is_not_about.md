@@ -1,6 +1,7 @@
 # Bug 079 — a receipt was minted for a body the linked theorem says nothing about
 
 <!-- bug-ledger
+compiler: legacy
 summary: a body was compared with a specification only when its source name keyed a side table, so `fn always_seven() { return 7; }` linked to `check_nonce_correct` was proved and minted a receipt; one subject binding (body and parameters ARE the specification the theorem evaluates) now governs proved, issuance and consumption
 coverage: a body was compared with a specification only when its source name keyed Concrete.Proof.specs, so a claim borrowing any theorem by naming that theorem's spec was proved and minted a receipt (always_seven + check_nonce_correct on b87152ba). Regression vehicle is a gate: check_subject_binding.sh mints nothing for always_seven, rejects the receipt b87152ba issued for it (scripts/tests/fixtures/bug079/always_seven.b87152ba.store), and refuses the changed-together, attested-wrong-model and permuted-parameter shapes; see docs/bugs/079 (2026-10-17)
 class: 9

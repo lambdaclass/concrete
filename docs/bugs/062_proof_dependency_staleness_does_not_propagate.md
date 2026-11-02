@@ -1,6 +1,7 @@
 # Bug 062: a stale proof does not invalidate the proofs that depend on it
 
 <!-- bug-ledger
+compiler: legacy
 summary: a reachable non-current dependency downgrades its dependent to `deps_not_current`, at one hop and transitively (in R-0004 slice 3)
 coverage: dependency containment: a reachable dependency that is not current downgrades its dependent to deps_not_current, at one hop and transitively; gated by check_proof_freshness.sh with mutations #34-#36 ((R-0004 slice 3))
 class: 10

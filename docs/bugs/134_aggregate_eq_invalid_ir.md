@@ -1,6 +1,7 @@
 # Bug 134 — `==` on an enum or struct passes the checker and fails in `llvm-as`
 
 <!-- bug-ledger
+compiler: legacy
 summary: `==` on an enum or struct passed the checker and failed in `llvm-as` (`icmp eq i64` on an aggregate) while `--interp` refused it; now E0229 at the checker (comparisons are defined on integers, floats, `bool`, `char`, and raw pointers in trusted/`Unsafe` code). `error_134_enum_eq.con`, `error_134_struct_eq.con`. ((`safety-eval2`, with 140))
 fixtures: error_134_enum_eq.con error_134_struct_eq.con
 class: 7

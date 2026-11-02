@@ -1,6 +1,7 @@
 # Bug 070 — `builtinEnumList` is constructed in two places
 
 <!-- bug-ledger
+compiler: legacy
 summary: `builtinEnumList` built twice and `hasUserResult` computed from different inputs, so Elab and Check held different beliefs about a user `Result` (fixed 2026-08-02; **renumbered from 065**, which a second, unrelated bug already held)
 coverage: builtinEnumList built twice AND hasUserResult computed from different inputs (Elab consults imports, Check does not), so the passes hold different beliefs about a user Result; code divergence measured, no wrong-behaviour witness yet; gated by check_builtin_enum_owner.sh (four Result arrival paths: absent, local, imported-unaliased, imported-aliased) (2026-08-02 (renumbered from 065))
 class: 12

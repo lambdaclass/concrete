@@ -1,6 +1,7 @@
 # Bug 249 — the parser appends an explicit array literal's elements one by one (quadratic)
 
 <!-- bug-ledger
+compiler: legacy
 summary: the parser appended each element of an explicit array literal to the list built so far, so `[e1, …, en]` took time n² to parse (40000 elements: 7 s, now 0.03 s). Pushed onto an `Array` and converted once. Pinned by `regress_249_explicit_array_literal.con` and a generated 2 x 100000-element literal. Found measuring bug 027. Class 17.
 fixtures: regress_249_explicit_array_literal.con
 class: 17 — the parser appended an explicit array literal's elements one at a time

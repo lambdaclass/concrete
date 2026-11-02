@@ -1,6 +1,7 @@
 # Bug 185: a raw-pointer comparison through a safe generic escaped the authority rule
 
 <!-- bug-ledger
+compiler: legacy
 summary: a raw-pointer comparison reached through a safe `Copy`-bounded generic (`same<T: Copy>` at `*const Int`) compiled in safe code, where the same comparison written directly is E0229, because Mono's instances dropped their definition's `trusted` flag and the post-mono re-check accepted every pointer comparison; instances now carry the authority and the re-check applies it. Pinned by `error_185_generic_rawptr_eq_safe.con` (E0229) and `regress_185_generic_rawptr_eq_authority.con` (trusted and `Unsafe` generics at pointers, exit 42)
 fixtures: error_185_generic_rawptr_eq_safe.con regress_185_generic_rawptr_eq_authority.con
 class: 6 — a monomorphized instance dropped its definition's `trusted` flag

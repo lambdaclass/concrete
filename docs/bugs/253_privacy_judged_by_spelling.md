@@ -1,6 +1,7 @@
 # Bug 253 — construction and field rights are judged by spelling, so a child's type grants an import's
 
 <!-- bug-ledger
+compiler: legacy
 summary: newtype construction rights and struct field privacy were judged by spelling (is a type of that name defined here?), so a module importing another module's newtype or struct and having a child that declares a type of the same spelling could construct the imported newtype and build, read and write the imported struct's private fields (E0296 / E0297 / E0298 bypassed; with an import alias too). Judged by the declaration's identity. Found by the Codex review of bug 243's fix, 2026-10-25. Fixtures `error_253_*`, `regress_253_local_rights_beside_imports.con`. Class 1.
 fixtures: error_253_child_newtype_decoy.con error_253_aliased_newtype_decoy.con error_253_child_struct_decoy_literal.con error_253_child_struct_decoy_field_read.con error_253_child_struct_decoy_field_write.con regress_253_local_rights_beside_imports.con
 class: 1 — construction and field rights asked whether a type of the spelling is defined here, not whether the declaration the spelling resolved to is; fixed 2026-10-25: judged by identity

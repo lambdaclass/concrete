@@ -1,6 +1,7 @@
 # Bug 260 — ElabVerify searches a list of visible binders per binder and reference
 
 <!-- bug-ledger
+compiler: legacy
 summary: ElabVerify searched a list of the visible binders for every binder and reference (40000 `let`s: about 6 s, now 64 ms). Two persistent maps answer its two questions. Pinned by `regress_260_elabverify_scopes.con` and the long-function leg. Found with bug 255. Class 17.
 fixtures: regress_260_elabverify_scopes.con
 class: 17 — one function of many statements: the parser's statement lists, the local binder table, the resolver's scopes, the checker's bindings, Elab's binder frames, ElabVerify's and CoreCheck's scopes, each a list appended or searched per statement

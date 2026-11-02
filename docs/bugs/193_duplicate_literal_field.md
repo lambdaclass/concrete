@@ -1,6 +1,7 @@
 # Bug 193 — a struct or enum literal could give a field twice, and the consumers chose differently
 
 <!-- bug-ledger
+compiler: legacy
 summary: a struct or enum literal could give a field twice (`P { n: 1, n: 41 }`); the checker type-checked the first occurrence, the binary stored the last (41) and `--interp` used the first (1). Silent. Found by the Codex review of TYPE-7; refused with E0306; pinned by `error_193_duplicate_{struct,variant}_field.con`
 fixtures: error_193_duplicate_struct_field.con error_193_duplicate_variant_field.con
 class: 7 — which occurrence of a repeated literal field counts

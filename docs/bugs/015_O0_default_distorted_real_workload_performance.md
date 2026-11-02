@@ -1,6 +1,7 @@
 # Bug 015: Default `-O0` Distorted Real-Workload Performance
 
 <!-- bug-ledger
+compiler: legacy
 summary: Default `-O0` Distorted Real-Workload Performance
 coverage: O0 default perf -- compiler flag default change, not a .con test
 ruling: Outside the spec: performance — clang was invoked at -O0 by default

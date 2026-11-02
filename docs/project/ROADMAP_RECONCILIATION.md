@@ -86,7 +86,7 @@ their scope).
 | R-0109 | superseded | R-0503, R-0146 | superseded by R-0503/R-0146: merge; remove assumption helpers must be C. |
 | R-0110 | merged | R-0075, R-0333 | merged — profile naming and evidence attribution join R-0075/R-0333; the profiles are `llvm` and the LCB-native `verified` profile. |
 | R-0111 | superseded | R-0511, R-0137 | superseded by R-0511/R-0137: merge reusable exits; retire required QBE showcase. |
-| R-0112 | superseded | R-0512 | superseded by R-0512: merge; retirement requires compatibility and rollback, not parity alone. |
+| R-0112 | superseded | R-0512 | superseded by R-0512: merge; retirement requires compatibility and rollback, not parity alone.  Retired legacy machinery on 2026-11-02 with `legacy-compiler-final`; prior transfers remain historical. |
 | R-0114 | superseded | R-0492 | superseded by R-0492: merge; distinguish compilation-local IDs from persistent evidence identity. |
 | R-0116 | superseded | R-0497, R-0510, R-0514 | superseded by R-0497/R-0510/R-0514: merge; use payload binding and new IR chain. |
 | R-0123 | superseded | R-0495, R-0512 | superseded by R-0495/R-0512: retire new legacy-model semantics; add admitted Core features/proof lemmas instead. |
@@ -123,24 +123,24 @@ their scope).
 | R-0255 | merged | R-0460 | duplicate of R-0460: merge into R-0460. |
 | R-0260 | superseded | R-0506 | superseded by R-0506/S12a: merge into pass/validator obligation ledger; preserve legacy historical view. |
 | R-0261 | merged | R-0496, R-0460 | duplicate of R-0496/R-0460: merge; already explicitly reconciled. |
-| R-0262 | superseded | R-0495, R-0512 | superseded by R-0495/R-0512: retire blanket legacy bridge; retain only migration-pulled bridges. |
+| R-0262 | superseded | R-0495, R-0512 | superseded by R-0495/R-0512: retire blanket legacy bridge; retain only migration-pulled bridges.  Retired legacy machinery on 2026-11-02 with `legacy-compiler-final`; prior transfers remain historical. |
 | R-0263 | superseded | R-0511, R-0512 | superseded by R-0511/R-0512: merge into V1–V7 slice ordering. |
 | R-0264 | superseded | R-0494, R-0509 | superseded by R-0494/R-0509: merge implementation into R-0494, soundness proof into S16. |
 | R-0265 | superseded | R-0495, R-0509 | superseded by R-0495/R-0509: merge into statement/binding/aggregation soundness. |
 | R-0266 | superseded | R-0509 | superseded by R-0509/S16: merge; distinguish trusted assumptions from ordinary proof dependencies. |
 | R-0267 | superseded | R-0499, R-0507, R-0495 | superseded by R-0499/R-0507/R-0495: merge; capabilities and purity remain distinct. |
-| R-0268 | superseded | R-0496 | superseded by S5–S8: retire undecided architecture question; plan has chosen the chain. |
+| R-0268 | superseded | R-0496 | superseded by S5–S8: retire undecided architecture question; plan has chosen the chain.  Retired legacy machinery on 2026-11-02 with `legacy-compiler-final`; prior transfers remain historical. |
 | R-0269 | superseded | R-0495 | superseded by R-0495: merge composition needs into R-0164; retire PExpr table architecture. |
 | R-0271 | superseded | R-0510 | superseded by R-0510/S8a, V5: merge into R-0510, retaining explicit law-evidence acceptance. |
 | R-0273 | superseded | R-0491, R-0498 | superseded by R-0491/R-0498: merge; map every listed family to a retained control. |
 | R-0274 | superseded | R-0499, R-0514 | superseded by R-0499/R-0514: retire source-checker/CompilerDB authority prescription. |
-| R-0276 | superseded | R-0506, R-0496 | superseded by R-0506/R-0496: retire general legacy rewrite; retain migration-needed wrappers only. |
+| R-0276 | superseded | R-0506, R-0496 | superseded by R-0506/R-0496: retire general legacy rewrite; retain migration-needed wrappers only.  Retired legacy machinery on 2026-11-02 with `legacy-compiler-final`; prior transfers remain historical. |
 | R-0277 | superseded | R-0511, R-0512 | superseded by R-0511/R-0512: merge into each slice’s cumulative acceptance. |
 | R-0278 | superseded | R-0503 | Superseded by R-0503/S11: merge into R-0503; BIR replaces this architecture. |
 | R-0280 | merged | R-0421 | Duplicate of R-0421: merge into R-0421; connect certificate obligations to R-0504. |
 | R-0288 | superseded | R-0503 | Superseded by R-0503/S11: merge inspection, verification and parity requirements into R-0503. |
 | R-0290 | merged | R-0491 | Duplicate of R-0491: merge into R-0491, retaining backend/profile matrix. |
-| R-0295 | superseded | R-0501 | Superseded by R-0501/S10: retire workload gate; MIR is already an architectural decision. |
+| R-0295 | superseded | R-0501 | Superseded by R-0501/S10: retire workload gate; MIR is already an architectural decision.  Retired legacy machinery on 2026-11-02 with `legacy-compiler-final`; prior transfers remain historical. |
 | R-0296 | retired | R-0517, R-0505 | retired — see the disposition in the task body. |
 | R-0297 | delegated | R-0517, R-0505 | delegated — see the disposition in the task body. |
 | R-0348 | merged | R-0349 | merged — the formatting decision is settled; residual documentation cleanup moves to R-0349. |
@@ -160,6 +160,7 @@ their scope).
 | R-0484 | done | — | done — closed 2026-10-08 at `245cd51c`; the body is retained for its accepted limits; the typed-descriptor second step is R-0530. |
 | R-0467 | done | — | done — moved to CHANGELOG.md 2026-10-19: the multi-kernel job runs on pushes to `main` (`lean_action_ci.yml`, `multi-kernel` job). |
 | R-0470 | done | — | done — moved to CHANGELOG.md 2026-10-19: both capability-inference sites fixed and gated (`check_cap_inference.sh`). |
+| R-0522 | retired | — | retired with `legacy-compiler-final` on 2026-11-02: The task only consolidates duplicated batch and single-goal paths in the old Isabelle evidence builder. |
 
 ## Prose open-work dispositions
 
@@ -1110,3 +1111,18 @@ Existing regression cases and acceptance obligations survive unless explicitly r
 
 R-0460, R-0299/R-0300 and R-0353 are not redundant with compiler correctness: VC soundness,
 LLVM-profile validation and independent evidence consumption retain distinct obligations.
+
+## New-compiler supersessions (2026-11-02)
+
+The immutable [classification record](roadmap_restructure_2026-11-02.tsv) governs task phases and
+legacy retirements. A split task's dated surviving requirement governs over older legacy implementation
+instructions. Existing transfers retain only those surviving requirements and regression duties.
+
+- R-0512 and S9: legacy evidence migration and issuance instructions are retired. Issuance ends at
+  `legacy-compiler-final`; retained evidence replays from the tag and is never migrated. New claims
+  use new Core statements and explicit assumptions.
+- R-0482: repair, qualification and P1 migration instructions for the old pipeline are retired with
+  the tag. Retained programs and regressions resume only as their new-compiler constructs land.
+- S1–S16 and V1–V7: old module relocation, old checker replacement and in-place pass cutovers no
+  longer bind. Their target semantic contracts, independent judgment correspondence, new-pass proofs
+  and the explicit split-task regression duties survive under phases A–G.

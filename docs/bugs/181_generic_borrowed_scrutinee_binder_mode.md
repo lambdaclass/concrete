@@ -1,6 +1,7 @@
 # Bug 181 — a payload binder through a borrowed scrutinee of generic type is `&T` to Check and `T` to Elab
 
 <!-- bug-ledger
+compiler: legacy
 summary: a payload binder through a borrowed scrutinee was `&T` to Check and `T` to Elab, so a generic specialized at `Int` passed an integer as a pointer (SIGSEGV in safe code). Every binder through a reference is now `&T` (one function, `BindingMode.lean`, for Check and Elab; stored in Core and preserved by Mono), and the root stays frozen while it lives (E0232). Pinned by the reproducer, `regress_181_borrowed_binders.con` and six `error_181_root_reassigned_*.con` ((D3))
 fixtures: regress_181_borrowed_binders.con error_181_root_reassigned_match.con error_181_root_reassigned_while_let.con error_181_root_reassigned_guard.con error_181_root_reassigned_nested.con error_181_root_reassigned_whole_binder.con error_181_root_reassigned_defer.con
 class: 12 — an arm binder through a borrowed scrutinee: `&T` in Check, `T` in Elab

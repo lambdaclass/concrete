@@ -1,6 +1,7 @@
 # Bug 265 — Lower kept its variable table in an association list: a lookup or write cost the bindings in scope
 
 <!-- bug-ledger
+compiler: legacy
 summary: Lower's variable table was an association list searched per read and searched and rebuilt or appended per write (quadratic in a function's bindings)
 fixtures: regress_265_variable_table.con
 class: 17 — Lower's per-function variable table

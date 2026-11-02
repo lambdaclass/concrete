@@ -1,9 +1,9 @@
 # Roadmap Decision Log
 
 Status: reference — the dated decisions that shape [the current execution
-queue](../../ROADMAP.md#the-current-execution-queue). None creates another queue. Decisions on the
+queue](../../ROADMAP.md#the-queue). None creates another queue. Decisions on the
 language rules that the project owner reserved are listed under
-[owner decisions](../../ROADMAP.md#owner-decisions) in ROADMAP.md and recorded in
+[owner decisions](../spec/decisions.md#owner-decisions) in ROADMAP.md and recorded in
 [decisions.md](../spec/decisions.md); nothing here answers one of them.
 
 Moved verbatim from ROADMAP.md on 2026-10-28 (the roadmap compaction); only heading levels and relative links were adjusted.
@@ -80,7 +80,7 @@ Austral by default with written deviations, verbose code is acceptable when it i
 grammar stays LL(1), and every language design decision is the owner's.
 
 **Priority decision, 2026-10-21:** the verified compiler is the primary engineering track, protected
-by an explicit [capacity allocation](../../ROADMAP.md#capacity-allocation) rather than by queue numbering. Two inputs
+by an explicit [capacity allocation](../archive/ROADMAP_LEGACY_PLAN.md#capacity-allocation) rather than by queue numbering. Two inputs
 were weighed. An external review asked for exactly that, in the order: close known soundness defects
 and fix the semantics proofs rely on; make the Core checker authoritative with explicit identities and
 ownership/capability rules; V1a; V1b through the backend to the native image; then grow the subset
@@ -89,7 +89,7 @@ protected track. Separately, point repairs are not converging: probes found bugs
 two days, nearly all of them new instances of [structural classes](../bugs/STRUCTURAL_CLASSES.md)
 whose owners are verified-pipeline Part 1 stages. Adopted: the capacity table (verified compiler at
 least 55%, evidence integrity at least 15%, adversarial validation at least 10%, features at most 20%
-in a single slot); the [defect disposition rule](../../ROADMAP.md#the-current-execution-queue); Part 1's structure as
+in a single slot); the [defect disposition rule](../../ROADMAP.md#the-queue); Part 1's structure as
 row 4's migration track once row 0's in-flight candidates are accepted, extended from identities and
 the checker to one `Layout` (R-0502) and Place MIR (R-0501) in the existing profile, because classes 8
 and 12 produce wrong code in the profile users run today; V1c as a named deliverable, so that a
@@ -179,13 +179,13 @@ D3's checker rules and exit 0b the bug repairs.
 **Owner decisions, 2026-10-25:** the project owner paused the 2026-10-23 tightening decisions for
 negotiation, together with further language questions raised since (eighteen in all, OD21 from bug 262 and OD22 from bug 189), the
 PROVABLE_V1 scope and bug 226's std visibility question. They are listed under
-[owner decisions](../../ROADMAP.md#owner-decisions) and held by exit 2n. Only the owner decides them: agents analyse,
+[owner decisions](../spec/decisions.md#owner-decisions) and held by exit 2n. Only the owner decides them: agents analyse,
 recommend and ask, and do not choose, encode or implement an answer. The entry above and
 TIGHTENING_DECISIONS.md stay as the record of what was proposed and landed; the owner's new answer
 governs. Rules already on main stay as they are until the owner answers, and the answer decides
 whether they stay.
 
-**Delivery decision, 2026-10-17** (amended 2026-10-19: interop runs alongside the verified-pipeline track after the immediate protections; see the vertical-slice decision below; amended 2026-10-20: RocksDB slice 1's work proceeds now and is accepted once its [prerequisite exits](../../ROADMAP.md#feature-prerequisites) hold, not after all of rows 0 – 2)**:** comfortable C/Rust/Zig interop is the next delivery investment
+**Delivery decision, 2026-10-17** (amended 2026-10-19: interop runs alongside the verified-pipeline track after the immediate protections; see the vertical-slice decision below; amended 2026-10-20: RocksDB slice 1's work proceeds now and is accepted once its [prerequisite exits](../archive/ROADMAP_LEGACY_PLAN.md#feature-prerequisites) hold, not after all of rows 0 – 2)**:** comfortable C/Rust/Zig interop is the next delivery investment
 after the active soundness/identity work. R-0285 owns the integration workflow; the existing ABI
 and export tasks supply the tested subset it needs. R-0490 then uses a complete ethlambda port
 to find language, library and tooling gaps through execution. Bound the interop checkpoint to
@@ -245,7 +245,7 @@ verdict authority and claims-on-Core land, and the fixes for 081 – 101 land fi
 **Usability decision, 2026-10-19:** a great language needs real users, good errors, tooling, a
 reliable `std` and published performance, not only a sound compiler. Usability moves from the end of
 the queue to a track beside the proofs (row 8, R-0515), in waves under the capacity rule (since 2026-10-21 the
-feature track of the [capacity allocation](../../ROADMAP.md#capacity-allocation)); the external
+feature track of the [capacity allocation](../archive/ROADMAP_LEGACY_PLAN.md#capacity-allocation)); the external
 user pilot that row 16 required at the end now starts after rows 0–2 qualify and the onboarding path is ready.
 
 **Vertical-slice decision, 2026-10-19:** deliver the verified compiler as cumulative proved subsets
@@ -257,8 +257,8 @@ admitted language. One converging compiler architecture carries distinct assuran
 and the existing one), and the LLVM profile stays supported for production use. The proof track, the
 shared front end (row 4), and the bounded interop and application-feedback tracks proceed alongside one
 another after the immediate protections (amended 2026-10-20: each first deliverable waits only for its
-[prerequisite exits](../../ROADMAP.md#feature-prerequisites), not for all of rows 0 – 2), with explicit capacity for each
-(amended 2026-10-21: the [capacity allocation](../../ROADMAP.md#capacity-allocation));
+[prerequisite exits](../archive/ROADMAP_LEGACY_PLAN.md#feature-prerequisites), not for all of rows 0 – 2), with explicit capacity for each
+(amended 2026-10-21: the [capacity allocation](../archive/ROADMAP_LEGACY_PLAN.md#capacity-allocation));
 new authority defects take priority. Legacy claims migrate when their Core semantics and evidence boundaries are ready, preserving
 supported replay and exact assurance labels. Property gates replace brittle corpus cardinalities while
 keeping independent coverage inventories and minimum completed comparisons. No multi-year proof
@@ -266,7 +266,7 @@ milestone suspends supported releases or external-user feedback. The [plan](../c
 holds the milestones and the discipline (proof engineering, Lean scalability, compiler-execution trust,
 ownership and specialist review, specification validation, release strategy).
 
-**Implementation and feedback decision, 2026-10-17** (amended 2026-10-19 and 2026-10-20)**:** once RocksDB slice 1's prerequisite exits hold ([feature prerequisites](../../ROADMAP.md#feature-prerequisites); the rest of rows 0 – 2 continues alongside), start R-0285 with a working RocksDB C-API consumer and the
+**Implementation and feedback decision, 2026-10-17** (amended 2026-10-19 and 2026-10-20)**:** once RocksDB slice 1's prerequisite exits hold ([feature prerequisites](../archive/ROADMAP_LEGACY_PLAN.md#feature-prerequisites); the rest of rows 0 – 2 continues alongside), start R-0285 with a working RocksDB C-API consumer and the
 minimal integrated package/build code it needs. Prepare concrete manifest/lockfile
 examples and only the resolution decisions needed by that slice, then implement,
 run and measure it. Each later adapter repeats that feedback loop. Full registry,

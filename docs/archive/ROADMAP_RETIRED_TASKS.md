@@ -925,7 +925,7 @@ boundaries close.
 
 ## R-0478
 
-_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0478) · disposition: merged · owner(s): R-0481, R-0474_
+_Stub: [ROADMAP.md](../project/ROADMAP_BACKLOG.md#task-r-0478) · disposition: merged · owner(s): R-0481, R-0474_
 
 **Scheduling: opportunistic.** No queue position and nothing blocks on it. Do either half when
 already working in the affected file; the `substExpr` rename is the one with a deadline, since it
@@ -958,7 +958,7 @@ enforces.
 
 ## R-0007
 
-_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0007) · disposition: superseded · owner(s): R-0492, R-0510_
+_Stub: [ROADMAP.md](../project/ROADMAP_BACKLOG.md#task-r-0007) · disposition: superseded · owner(s): R-0492, R-0510_
 
    The TYPE-name half of "first fail closed" already landed with R-0001 (E0809:
    a specialization whose mangled name is declared, or two instantiations
@@ -989,7 +989,7 @@ _Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0007) · disposition: sup
 
 ## R-0434
 
-_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0434) · disposition: superseded · owner(s): R-0502_
+_Stub: [ROADMAP.md](../project/ROADMAP_BACKLOG.md#task-r-0434) · disposition: superseded · owner(s): R-0502_
 
    The gate for R-0001 asserts this structurally for its own programs (distinct
    declarations, differing footprints) and mutation #19 proves those programs are
@@ -1074,7 +1074,7 @@ Land the cross-cutting migration in a worktree and merge once green.
 
 ## R-0437
 
-_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0437) · disposition: superseded · owner(s): R-0514, R-0510_
+_Stub: [ROADMAP.md](../project/ROADMAP_BACKLOG.md#task-r-0437) · disposition: superseded · owner(s): R-0514, R-0510_
 
 Verified 2026-07-25 against the built compiler: `fn ident<T: Nonsense>(x: T) -> T`
 instantiated at `T = i64` compiles, runs, and returns its argument — the
@@ -1573,7 +1573,7 @@ a global hand-maintained registry.
 
 ## R-0019
 
-_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0019) · disposition: merged · owner(s): R-0031_
+_Stub: [ROADMAP.md](../project/ROADMAP_BACKLOG.md#task-r-0019) · disposition: merged · owner(s): R-0031_
 
 Then:
 
@@ -1624,7 +1624,7 @@ Do not duplicate compiler-command cleanup here.
 
 ## R-0051
 
-_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0051) · disposition: merged · owner(s): R-0014_
+_Stub: [ROADMAP.md](../project/ROADMAP_BACKLOG.md#task-r-0051) · disposition: merged · owner(s): R-0014_
 
  Add an explicit **boundary-module pattern**, borrowing the useful part of
  Elm's ports without copying Elm's web-application architecture: authority
@@ -1644,7 +1644,7 @@ _Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0051) · disposition: mer
 
 ## R-0483
 
-_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0483) · disposition: done · owner(s): —_
+_Stub: [ROADMAP.md](../project/ROADMAP_BACKLOG.md#task-r-0483) · disposition: done · owner(s): —_
 
 **Earlier status (2026-09-16): REPAIRED AND GATED.** The three properties are fixed by
 structure rather than by checks, the attestation migration is done and validated, and
@@ -1861,7 +1861,7 @@ heap proofs or emitted-binary correctness.
 
 ## R-0484
 
-_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0484) · disposition: done · owner(s): —_
+_Stub: [ROADMAP.md](../project/ROADMAP_BACKLOG.md#task-r-0484) · disposition: done · owner(s): —_
 
 The record below is the pre-closure inventory, kept for its commit trail.
 
@@ -2466,7 +2466,7 @@ tool/target; never fall back to LLVM after the user selects QBE.
 
 ## R-0086
 
-_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0086) · disposition: superseded · owner(s): R-0511, R-0517_
+_Stub: [ROADMAP.md](../project/ROADMAP_BACKLOG.md#task-r-0086) · disposition: superseded · owner(s): R-0511, R-0517_
 
 Gate negative, wide, shift, division/remainder, overflow, NaN, signed-zero,
 and exit-code edge cases rather than accepting scalar happy paths alone.
@@ -2518,7 +2518,7 @@ _Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0093) · disposition: mer
 
 ## R-0097
 
-_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0097) · disposition: superseded · owner(s): R-0511, R-0512_
+_Stub: [ROADMAP.md](../project/ROADMAP_BACKLOG.md#task-r-0097) · disposition: superseded · owner(s): R-0511, R-0512_
 
  `concrete agent features --json`, help, audit output, and documentation list
  supported targets/features and `qbe_pending` cases. A program outside the
@@ -2527,7 +2527,7 @@ _Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0097) · disposition: sup
 
 ## R-0098
 
-_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0098) · disposition: merged · owner(s): R-0137_
+_Stub: [ROADMAP.md](../project/ROADMAP_BACKLOG.md#task-r-0098) · disposition: merged · owner(s): R-0137_
 
  exclusions require a named missing feature and roadmap owner. Record bugs
  found by the backend/differential suite in the bug corpus with the disagreement classification
@@ -2580,7 +2580,7 @@ _Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0107) · disposition: mer
 
 ## R-0108
 
-_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0108) · disposition: merged · owner(s): R-0416, R-0515_
+_Stub: [ROADMAP.md](../project/ROADMAP_BACKLOG.md#task-r-0108) · disposition: merged · owner(s): R-0416, R-0515_
 
  Phase 7.5 fails on unbounded or accidental regressions, not on a fixed
  QBE-versus-LLVM speed ratio. Performance results are benchmark facts only;
@@ -2588,7 +2588,7 @@ _Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0108) · disposition: mer
 
 ## R-0110
 
-_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0110) · disposition: merged · owner(s): R-0075, R-0333_
+_Stub: [ROADMAP.md](../project/ROADMAP_BACKLOG.md#task-r-0110) · disposition: merged · owner(s): R-0075, R-0333_
 
  reserve backend names and project-manifest schema, define `.qbe` artifact
  naming without colliding with Concrete's own SSA dumps, keep LLVM as the
@@ -2600,7 +2600,7 @@ _Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0110) · disposition: mer
 
 ## R-0111
 
-_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0111) · disposition: superseded · owner(s): R-0511, R-0137_
+_Stub: [ROADMAP.md](../project/ROADMAP_BACKLOG.md#task-r-0111) · disposition: superseded · owner(s): R-0511, R-0137_
 
  `examples/qbe_backend_validation/` plus
  `scripts/tests/check_phase7_5_qbe.sh`. It must exercise every supported
@@ -2616,7 +2616,7 @@ _Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0111) · disposition: sup
 
 ## R-0112
 
-_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0112) · disposition: superseded · owner(s): R-0512_
+_Stub: [ROADMAP.md](../project/ROADMAP_BACKLOG.md#task-r-0112) · disposition: superseded · owner(s): R-0512_
 
  the compatibility window must have a named removal commit and mutation-
  sensitive parity gate.
@@ -2644,7 +2644,7 @@ each boundary lands. Do not introduce a universal pass monad.
 
 ## R-0171
 
-_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0171) · disposition: superseded · owner(s): R-0494_
+_Stub: [ROADMAP.md](../project/ROADMAP_BACKLOG.md#task-r-0171) · disposition: superseded · owner(s): R-0494_
 
  Any auto-discharge, generated proof, solver route, cache hit, replay helper,
  agent suggestion, or future MCP proof tool must emit a replayable artifact,
@@ -2675,7 +2675,7 @@ reports stale/spec-drift rather than silently accepting the old proof.
 
 ## R-0208
 
-_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0208) · disposition: done · owner(s): —_
+_Stub: [ROADMAP.md](../project/ROADMAP_BACKLOG.md#task-r-0208) · disposition: done · owner(s): —_
 
 **Lean #14576 fire drill:** the repository's currently pinned `leanprover/lean4:v4.28.0` predates
 the upstream fix and must be treated as not accepted for new high-assurance claims until an exact
@@ -2865,7 +2865,7 @@ _Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0221) · disposition: sup
 
 ## R-0228
 
-_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0228) · disposition: superseded · owner(s): R-0499_
+_Stub: [ROADMAP.md](../project/ROADMAP_BACKLOG.md#task-r-0228) · disposition: superseded · owner(s): R-0499_
 
  accepted.
 
@@ -2989,7 +2989,7 @@ one pipeline and they are easy to mistake for overlapping work:
 
 ## R-0465
 
-_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0465) · disposition: done · owner(s): —_
+_Stub: [ROADMAP.md](../project/ROADMAP_BACKLOG.md#task-r-0465) · disposition: done · owner(s): —_
 
 `DischargeAdapter` is the right shape and is genuinely well built: one choke point, a
 declared `actsOn` precondition, a declared `allowed` output set, and compile-time
@@ -3170,7 +3170,7 @@ _Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0274) · disposition: sup
 
 ## R-0276
 
-_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0276) · disposition: superseded · owner(s): R-0506, R-0496_
+_Stub: [ROADMAP.md](../project/ROADMAP_BACKLOG.md#task-r-0276) · disposition: superseded · owner(s): R-0506, R-0496_
 
  (Rehomed from Phase 6B: its trigger is here, not there.) ProofCore still
  contains many `partial def` walkers/wrappers, which are opaque to the kernel.
@@ -3274,7 +3274,7 @@ itself, and this investigation does not block R-0299/R-0300 or interop delivery.
 
 ## R-0348
 
-_Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0348) · disposition: merged · owner(s): R-0349_
+_Stub: [ROADMAP.md](../project/ROADMAP_BACKLOG.md#task-r-0348) · disposition: merged · owner(s): R-0349_
 
 
   Required cleanup: remove or close the stale `LANGUAGE_GAPS.md` and
@@ -3283,3 +3283,41 @@ _Stub: [ROADMAP.md](../project/ROADMAP_TASKS.md#task-r-0348) · disposition: mer
   Writer path insufficient, add a new design note that preserves the same
   evidence: visible allocation, no macros, no hidden dynamic dispatch, and a
   gate proving fixed-buffer formatting remains allocation-free.
+
+## R-0268
+
+Moved on 2026-11-02; retired with `legacy-compiler-final`.
+
+**Phase:** 2
+
+**Disposition (2026-10-19):** superseded by S5–S8: retire undecided architecture question; plan has chosen the chain.
+
+**Objective:** Decide whether deeper source-semantics proofs require a normalized Core layer. Add the layer only if the direct rule proofs show repeated semantic duplication across at least two forcing examples.
+
+
+## R-0295
+
+Moved on 2026-11-02; retired with `legacy-compiler-final`.
+
+**Phase:** 2, 4
+
+**Disposition (2026-10-19):** Superseded by R-0501/S10: retire workload gate; MIR is already an architectural decision.
+
+**Objective:** Evaluate a normalized mid-level IR only when traceability/backend-contract reports expose a concrete gap.
+
+
+## R-0522
+
+Moved on 2026-11-02; retired with `legacy-compiler-final`.
+
+**Phase:** 5
+
+**Pull trigger:** Phase 5 entry, or earlier when an Isabelle batch-vs-single-goal divergence or a change that has to be made twice in the builder is reported.
+
+**Objective:** Collapse the Isabelle builder's duplicated batch and single-goal paths into one
+implementation with both entry points.
+
+**Status (2026-10-19): planned; bounded cleanup recorded twice in prose without an owner.**
+
+**Exit:** one builder path; batch and single runs produce identical theories for a shared fixture
+set; a mutation in the shared path fails both entry points.

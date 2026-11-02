@@ -1,6 +1,7 @@
 # Bug 284 — the evidence producer dropped every arm of a non-enum match, so subject and implementation identity ignored arm bodies
 
 <!-- bug-ledger
+compiler: legacy
 summary: Elab built each match arm's Core and its evidence in two accumulators and pushed evidence only for the enum branch's variant, literal and variable arms; a match on an Int, Bool, Char or String, a match whose enum lookup failed, and every range arm became `matchExpr scrutinee []` with no gap, so the V2 subject digest, the implementation digest and `DefinitionIdentity` ignored every arm body and a v2 pin read current after an arm edit
 coverage: reproducer tests/regressions/bug284_match_arm_evidence_dropped/repro.con, pinned by check_binder_refs.sh legs "a literal arm's body references reach evidence", "a body edit inside a literal arm changes the body bytes", "bug 284: an edit inside a literal arm moves the subject digest" and "bug 284: each match arm's Core and evidence are pushed as one entry"
 class: 10

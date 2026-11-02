@@ -1,6 +1,7 @@
 # Bug 011: Linear String Building Is Awkward Inside Loops
 
 <!-- bug-ledger
+compiler: legacy
 summary: Linear String Building Is Awkward Inside Loops
 fixtures: bug_string_building.con
 ruling: Outside the spec: library — no in-place string append (string_push_char/string_append added)

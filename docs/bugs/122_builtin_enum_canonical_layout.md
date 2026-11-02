@@ -1,6 +1,7 @@
 # Bug 122 — the canonical builtin Option/Result union disagrees with each instantiation's layout
 
 <!-- bug-ledger
+compiler: legacy
 summary: the builtin `Option`/`Result` are one LLVM union sized for the largest instantiation while the compiler lays out each instantiation (and a user enum named `Option`/`Result`) by its own size, so aggregate copies move or overrun fields (bug 121's layout probe, 2026-10-20)
 coverage: the builtin Option/Result are emitted as one canonical LLVM union sized for the program's largest instantiation while the compiler lays out each instantiation (and a user enum named Option/Result) by its own size, so aggregate copies move or overrun fields (wrong code; a stack overflow in tests/programs/match_expr_linear.con); reproducer tests/regressions/bug122_builtin_enum_canonical_layout/repro.con, found by bug 121's layout probe 2026-10-20; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, runs-exit) and check_enum_union_layout.sh leg 5 (KNOWN_122)
 class: 1 — the builtin/user `Option`/`Result` name join

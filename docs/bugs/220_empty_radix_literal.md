@@ -1,6 +1,7 @@
 # Bug 220 — a `0x`, `0b` or `0o` prefix with no digits lexed as the literal 0
 
 <!-- bug-ledger
+compiler: legacy
 summary: `0x`, `0b` and `0o` with no digit of their radix lexed as the literal 0 (`return 0x;` returned 0 on both backends). The lexer now reports a lexical error (E0001). Pinned by `error_220_empty_hex_literal.con`, `error_220_empty_binary_literal.con`, `error_220_empty_octal_literal.con` and `regress_220_radix_literals.con`. Found by the diagnostics probes of the post-R-0492 differential hunt
 fixtures: error_220_empty_hex_literal.con error_220_empty_binary_literal.con error_220_empty_octal_literal.con regress_220_radix_literals.con
 class: 13 — the grammar's radix literal needs a digit; the lexer read none as 0

@@ -1,6 +1,7 @@
 # Bug 322 — Trusted code compares raw pointers with ==, < and the other comparison operators
 
 <!-- bug-ledger
+compiler: legacy
 summary: Trusted code compares raw pointers with ==, < and the other comparison operators, which TYPE-6 refuses as the owner decided OD26 on 2026-10-29
 coverage: reproducer tests/regressions/bug322_trusted_code_compares_raw_pointers_with_and_the/repro.con, found checking main against OD26 on 2026-10-29; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, runs-exit 42) and check_spec.sh S4 (the pending TYPE-6 example)
 class: 13

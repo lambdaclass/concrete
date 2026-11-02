@@ -1,6 +1,7 @@
 # Bug 307 — a call argument &mut x passed a temporary copy of x and wrote it back after the call, a lowering correct only under the checker's unproven exclusivity guarantee
 
 <!-- bug-ledger
+compiler: legacy
 summary: Lower lowered a call argument `&mut x` whose local was not yet slot-backed by copying `x` into a temporary `mutref.` slot, passing the temporary and loading it back into `x` after the call; no defined counterexample was found under G19 (OD15, 2026-10-29: a pointer derived from a loan is valid only while the loan lives), but the copy agrees with `x`'s own slot only because the checker refuses an argument that overlaps the `&mut` one (E0293), the exclusivity guarantee OD15(b) forbids a pass to rely on until it is proven; reclassified 2026-10-29 from silent wrong code (the raw-pointer reproducers dereference a pointer after its loan ended)
 fixtures: regress_307_call_arg_mut_is_place.con regress_307_call_arg_owner_types.con
 class: 8 — a call argument's `&mut x` had its own storage scheme beside `addrOfLocal`'s, kept in agreement with it by the checker's exclusivity guarantee

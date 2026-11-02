@@ -1,6 +1,7 @@
 # Bug 276 — Elab's program-level declaration analyses scan lists per declaration (quadratic in declarations)
 
 <!-- bug-ledger
+compiler: legacy
 summary: Elab's program-level declaration analyses (top-level function collisions, ambiguous type names, import spellings) scanned or deduplicated lists per declaration, its per-function results were appended to the list built so far, and a call looked its callee up in a list, so a program of n declarations took time n² to elaborate (10000 functions: 3689 ms). Found by the R-0550 scaling gate. Class 17.
 coverage: `check_compile_scaling.sh` judges the `functions`, `call-chain`, `structs` and `enums` shapes' `elaborate` stage against its budget and near-linear growth: this fix removes the stage's exclusions under this bug, and the gate fails the pre-fix compiler on all four
 class: 17 — Elab's program-level declaration analyses scan lists per declaration

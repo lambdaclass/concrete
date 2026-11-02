@@ -54,7 +54,7 @@ hand-edited or stale.
   workflow, once that file exists (sorted, one command per line). `run_ci_gates_local.sh` compares
   it with the workflow, by content.
 - **Never edit a generated view**: the bug lists in `docs/bugs/README.md`, the bugs column of
-  `docs/bugs/STRUCTURAL_CLASSES.md`'s table, ROADMAP's generated exit bug spans and dashboards,
+  `docs/bugs/STRUCTURAL_CLASSES.md`'s table, the compiler-scoped dashboard in `docs/bugs/DASHBOARD.md`,
   and `Concrete/BuildIdentity.lean`. After a rebase that conflicts in one of them, run
   `bash scripts/gen/refresh_generated.sh` and `git add` the result.
 

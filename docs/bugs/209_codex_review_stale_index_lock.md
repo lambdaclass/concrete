@@ -1,6 +1,7 @@
 # Bug 209: a Codex review left a stale `index.lock` in the agent's worktree
 
 <!-- bug-ledger
+compiler: legacy
 summary: a `codex exec --sandbox read-only` review ran `git status` in the caller's worktree, which took `index.lock` for an index refresh; stopped mid-refresh it left the lock behind, 0 bytes, and the next commit there failed. `scripts/review/review.sh` and the `/creview` commands run Codex with `GIT_OPTIONAL_LOCKS=0`; pinned by two `check_review_tool.sh` legs. Found during the Hetzner gate-host work
 coverage: a read-only Codex review left a stale index.lock in the caller's worktree. Regression vehicle is check_review_tool.sh (every reviewer call runs with GIT_OPTIONAL_LOCKS=0), not a tests/programs fixture (2026-10-23)
 class: 16 — a read-only review's git left the caller's `index.lock` behind

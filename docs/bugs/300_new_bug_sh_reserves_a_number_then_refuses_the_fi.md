@@ -12,6 +12,7 @@ and unfiled, and the author had to write the record, fragment and discovery row 
 compiler output or claim is affected.
 
 <!-- bug-ledger
+compiler: legacy
 summary: `new_bug.sh` reserved a bug number and then failed in `bug_dashboard.py`, which refuses a record from 079 on with no `docs/bugs/discovery.tsv` row; the row has to name the number, which does not exist before the reservation, and the scaffold neither wrote the row nor offered a way to name it, so every filing left a reserved, unfiled number. The scaffold now writes the attribution itself (`--batch` joins an existing row, `--new-batch` adds one), checks it and the dashboard before reserving, undoes its `discovery.tsv` edit on a later failure, and prints a `--number NNN` command that files the same bug under the held number.
 coverage: `check_new_bug.sh` leg 3 (the scaffold runs through `bug_dashboard.py`, which its scratch copy now includes, and writes the new batch's row) and leg 6 (the discovery attribution: refusals before any reservation, `--batch` on an existing row, rollback of `discovery.tsv` after a failure past the reservation, and the printed `--number` rerun with no second reservation)
 class: 12

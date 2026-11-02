@@ -1,6 +1,7 @@
 # Bug 075 — the policy and assumption-file authority checks never saw a capability
 
 <!-- bug-ledger
+compiler: legacy
 summary: `check_policy`/`check_assumptions` scraped only parenthesised report tokens and never saw a capability (and `Net` was not a capability); now read structured facts, validate names, and carry fail/pass controls (2026-10-06)
 coverage: check_policy.sh and check_assumptions.sh scraped only parenthesised --report caps tokens while capability headlines print bare, so their authority checks never saw a capability; Net (not a capability) sat in ten policy files. Regression vehicle is the gates themselves: fail/pass controls in both (forbidden Console fails, allowed passes, Std expands, unknown name fails, unavailable facts fail); see docs/bugs/075 (2026-10-06)
 class: 11

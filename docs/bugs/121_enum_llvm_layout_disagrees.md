@@ -1,6 +1,7 @@
 # Bug 121 — enum LLVM types disagree with the compiler's layout, so an enum field moves the fields after it
 
 <!-- bug-ledger
+compiler: legacy
 summary: a payload-less enum was 8 bytes in LLVM and 4 to the compiler, and an align-8 payload enum 4-aligned in LLVM, so a struct holding one was laid out twice and every aggregate copy moved its fields; `examples/conlog` freed a String pointer rebuilt from padding (SIGSEGV on CI, intermittent on x86_64) and miscounted errors; `check_enum_union_layout.sh` leg 5 now compares LLVM's layout of every emitted type with the compiler's ((branch `bug121-conlog-segv`))
 fixtures: regress_bug121_enum_field_layout.con
 class: 12

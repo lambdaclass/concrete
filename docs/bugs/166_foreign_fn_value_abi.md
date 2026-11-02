@@ -1,6 +1,7 @@
 # Bug 166 — a foreign function taken as a value is called with the Concrete ABI
 
 <!-- bug-ledger
+compiler: legacy
 summary: a foreign function taken as a value was called with the Concrete ABI, so a small `#[repr(C)]` struct reached C as a pointer (silent wrong code at the C boundary). An `extern fn` is never a value (E0588, D4, FFI.md "Foreign Function Values"); pass a Concrete wrapper. Pinned by four `error_166_*.con` fixtures (E0588), the reproducer, and `regress_166_wrapper_value.con` (by containment)
 fixtures: error_166_foreign_fn_value_repr_c.con error_166_foreign_fn_value_repr_c_let.con error_166_foreign_fn_value_scalar.con error_166_imported_extern_value.con error_166_extern_value_in_const.con error_166_extern_value_after_scope.con regress_166_wrapper_value.con
 class: 14 — a foreign fn value called with the Concrete ABI

@@ -1,6 +1,7 @@
 # Bug 287 — a deferred call that borrows a local promoted it at its first emission, not where it registers
 
 <!-- bug-ledger
+compiler: legacy
 summary: a deferred call that borrows a local (`defer copy(sink, &x);`) is emitted at every exit of its scope, and the first emission Lower lowered (a `return`, `break` or `continue` inside a branch) promoted the local lazily there, so the slot's initializing store was on that exit's path only and every other exit read a never-stored slot (silent wrong code)
 fixtures: regress_287_defer_borrow_promoted_at_registration.con
 class: 8 — where a deferred call's borrowed local gets its slot

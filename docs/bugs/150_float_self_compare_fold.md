@@ -1,6 +1,7 @@
 # Bug 150 — SSA cleanup folds `x != x` to false (and `x == x` to true) for a float `x`
 
 <!-- bug-ledger
+compiler: legacy
 summary: SSA cleanup folded `x != x` to false and `x == x` to true for a float `x` (its guard tested the comparison's bool result type), so a NaN passed every `x != x` check in the binary; found when `--interp` first ran floats. `regress_150_float_self_compare.con`, interp-vs-native leg, `float_semantics.con` ((interpreter-coverage pass))
 fixtures: regress_150_float_self_compare.con
 class: 7 — the folder's float self-comparison

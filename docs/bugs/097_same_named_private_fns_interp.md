@@ -1,6 +1,7 @@
 # Bug 097 — the interpreter runs another module's same-named private function
 
 <!-- bug-ledger
+compiler: legacy
 summary: the interpreter ran another top-level module's same-named private function; colliding top-level functions are spelled `<module>_<name>` in Core ((`land5`))
 fixtures: regress_097_098_same_named_private_fns.con regress_097_param_named_like_colliding_fn.con regress_097_free_fn_named_like_method.con error_097_canonical_fn_spelling_clash.con regress_097_let_shadows_colliding_fn.con regress_097_colliding_fn_in_const.con
 class: 1

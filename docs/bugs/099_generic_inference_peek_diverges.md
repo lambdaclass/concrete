@@ -1,6 +1,7 @@
 # Bug 099 — Check and Elab infer a generic call's type arguments from two different argument-type peeks
 
 <!-- bug-ledger
+compiler: legacy
 summary: Check and Elab inferred a generic call's type arguments from two argument-type peeks; Elab's could not see through a field, an index or a call (Core instantiated `pick<Placeholder>`: invalid IR, or bug 052's E0814 refusal) and Check's could not type a method call (false E0220). One shared peek, `Resolve/PeekType.lean` ((`land5`))
 fixtures: regress_099_generic_infer_field_index.con regress_099_generic_infer_call_results.con regress_099_generic_infer_cap_method.con
 class: 3

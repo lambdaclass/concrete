@@ -1,6 +1,7 @@
 # Bug 037: repr(align(N>8)) changes Layout but not the declared LLVM type
 
 <!-- bug-ledger
+compiler: legacy
 summary: repr(align(N>natural)) → E0585 fail-closed; found by the audit-3/3 enum work
 coverage: error_repr_align_exceeds_natural.con (run_err E0585); repr_align.con moved to the legal no-op case (run_ok 8); CoreCheck reprAlignExceedsNatural
 ruling: Violates: FFI-4@1, FFI-2@1

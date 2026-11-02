@@ -1,6 +1,7 @@
 # Bug 294 — the scaling gate judged absolute wall budgets, so a loaded CI host failed unchanged work
 
 <!-- bug-ledger
+compiler: legacy
 summary: the R-0550 scaling gate compared each stage's fastest-of-three wall time with an absolute budget (4 x the median on a quieter CI host); under sustained load the shared CI host runs the same instructions several times slower, so a stage whose work was unchanged failed its budget (assignments/monomorphize at 10^5: 418 ms against 412 in train 37's CI, at an unchanged instruction count; main itself over budget in 4 of 8 runs at load 16-28). The verdict depended on host load, not on the compiler. Class 11.
 coverage: check_compile_scaling.sh
 class: 11 — the host's speed at judgment, never measured, read as its speed at --measure

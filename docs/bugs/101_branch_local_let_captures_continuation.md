@@ -1,6 +1,7 @@
 # Bug 101 — a branch- or body-local `let` captured the code after its scope in the model
 
 <!-- bug-ledger
+compiler: legacy
 summary: a branch-local `let` was nested over the code after its branch (and a loop body's own `let` written back through `Cont`), so `scoped(1)` was 10 in the model vs 1; a block's locals may not be named by its continuation; pinned by `check_model_diff.sh` leg S
 coverage: a branch- or body-local let was nested over the code after its scope in the proof model (scoped(1): model 10, runtime 1); branches composing with a continuation refuse when their locals reach it. Regression vehicle: tests/regressions/bug085_loop_step/repro.con scoped/reloop + check_model_diff.sh leg S (2026-10-19)
 class: 7

@@ -1,6 +1,7 @@
 # Bug 004: Array Variable-Index Assignment Produces Wrong Code
 
 <!-- bug-ledger
+compiler: legacy
 summary: Array Variable-Index Assignment Produces Wrong Code
 fixtures: bug_array_var_index_assign.con
 ruling: Violates: PASS-13@1

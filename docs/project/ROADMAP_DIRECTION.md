@@ -2,7 +2,7 @@
 
 Status: reference — direction, standing rules and vocabulary that frame the roadmap. It schedules
 nothing: [ROADMAP.md](../../ROADMAP.md) owns what happens next and in what order, through
-[the current execution queue](../../ROADMAP.md#the-current-execution-queue). Where this file and the
+[the current execution queue](../../ROADMAP.md#the-queue). Where this file and the
 queue disagree, the queue decides *when*.
 
 Moved verbatim from ROADMAP.md on 2026-10-28 (the roadmap compaction); only heading levels and relative links were adjusted. Language rules that stood in the same
@@ -1007,7 +1007,7 @@ The charter means:
 4. unsupported constructs, observations and proof fragments remain named rather than silently
    disappearing.
 
-This section does not own execution order. The [current execution queue](../../ROADMAP.md#the-current-execution-queue)
+This section does not own execution order. The [current execution queue](../../ROADMAP.md#the-queue)
 does; the [capability unlock map](#capability-unlocks--the-stable-product-map) states the durable
 dependency chain and exit artifacts. The rung material below remains a feasibility record for
 multi-kernel theory coverage, not a second priority list.
@@ -1043,7 +1043,7 @@ changelog does not erase a still-relevant condition:
 The current execution queue is the sole scheduling authority. Task IDs identify
 obligations; file order and area headings do not schedule them. Phases summarize
 dependencies and permitted overlap, not additional integration capacity. The
-[capacity allocation](../../ROADMAP.md#capacity-allocation) divides effort and integration slots between
+[capacity allocation](../archive/ROADMAP_LEGACY_PLAN.md#capacity-allocation) divides effort and integration slots between
 the tracks: the verified compiler holds the majority and two slots, evidence integrity and
 adversarial validation have protected minimums, and usability, interop, application,
 incremental-driver and release work share one capped feature slot.

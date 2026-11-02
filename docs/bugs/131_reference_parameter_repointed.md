@@ -1,6 +1,7 @@
 # Bug 131 — a reference parameter can be re-pointed at a block-local value that dies before it is read
 
 <!-- bug-ledger
+compiler: legacy
 summary: a reference parameter re-pointed at a block-local value (`r = &local`) read a dead slot; batch 2's re-pointing rule refuses any reassignment of a reference binding, parameters included (E0238) ((batch 2))
 fixtures: error_131_param_repointed_block_local.con error_131_param_repointed_param.con
 class: 4

@@ -1,6 +1,7 @@
 # Bug 292 — Lower added each loop header's phis by mapping every finished block (quadratic in loop nesting)
 
 <!-- bug-ledger
+compiler: legacy
 summary: Lower added a loop header's phis (`prependInstsToBlock`) and an aggregate merge's stores (`insertStoresBeforeTerm`) to already-finished blocks by mapping the whole finished-block list, so n nested `while` loops took time n² to lower (depth 8000: lower 3011 ms on main). Class 17.
 fixtures: regress_292_loop_header_patches.con
 class: 17 — every loop header patched by a map over all finished blocks

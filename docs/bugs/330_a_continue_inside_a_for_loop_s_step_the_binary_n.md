@@ -7,6 +7,7 @@ probes of `break`, `continue` and `return` inside `for` steps on main 71df9c25.
 right is not decided by any rule (the ruling below), so this is not counted as silent wrong code.
 
 <!-- bug-ledger
+compiler: legacy
 summary: a continue inside a for loop's step: the binary never terminates and the interpreter goes to the condition
 fixtures: error_330_continue_in_for_step.con error_330_break_in_for_step.con error_330_continue_outer_from_nested_step.con error_330_break_outer_from_nested_step.con regress_330_for_step_exits_allowed.con
 class: 12

@@ -3,7 +3,7 @@
 The queue now says plainly that nineteen language decisions (OD21, a parent's rights over its
 child's imported declarations, from bug 262), the PROVABLE_V1 scope and bug 226's
 std visibility question are decided only by the project owner. They are listed as OD1 – OD21 under
-[owner decisions](ROADMAP.md#owner-decisions), each with the exits, deliverables and tasks it gates,
+[owner decisions](docs/spec/decisions.md#owner-decisions), each with the exits, deliverables and tasks it gates,
 and held by the new Phase 1 exit 2n, which blocks RocksDB slice 1, V1a, V1b and V1c. Agents may
 analyse, recommend and ask; they do not choose, encode or implement an answer. The 2026-10-23
 tightening record is kept as written; the owner's new answer governs, and decides whether a rule

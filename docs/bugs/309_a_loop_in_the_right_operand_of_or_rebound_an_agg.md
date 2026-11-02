@@ -1,6 +1,7 @@
 # Bug 309 — a loop in the right operand of && or || rebound an aggregate that the short-circuit merge did not reconcile (E0703)
 
 <!-- bug-ledger
+compiler: legacy
 summary: the short-circuit lowering of `&&` / `||` merged only the scalars its right operand changed and skipped every aggregate, on the assumption that a boolean operand cannot change one; a loop inside the right operand (in a value `match` or `if`) promotes every aggregate in scope and un-promotes it at its exit, rebinding it to a load made on the right operand's path, so after the merge the aggregate named a register that does not dominate its later uses and the program was refused (E0703)
 fixtures: regress_309_shortcircuit_aggregate_merge.con
 class: 8 — the short-circuit merge was a fourth, hand-written branch merge with its own rule for aggregates

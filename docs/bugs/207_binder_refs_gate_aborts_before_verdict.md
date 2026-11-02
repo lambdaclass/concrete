@@ -1,6 +1,7 @@
 # Bug 207 — check_binder_refs.sh aborted on a failed assertion, so its mutations had no verdict
 
 <!-- bug-ledger
+compiler: legacy
 summary: `check_binder_refs.sh`'s Lean probe threw on its first failed check, so the gate exited before its verdict line and the mutation harness read families 55 – 57 as "no verdict"; the probe now reports each check and the gate counts every outcome. Regression vehicle: the mutation harness (families 55 – 57 KILLED)
 coverage: check_binder_refs.sh aborted before its verdict on a failed assertion. Regression vehicle is the mutation harness (families 55-57 KILLED), not a tests/programs fixture (2026-10-23)
 class: 11 — a gate that died on its first failed check gave the mutation harness no verdict

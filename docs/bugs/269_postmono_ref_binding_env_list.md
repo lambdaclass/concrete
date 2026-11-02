@@ -1,6 +1,7 @@
 # Bug 269 — the post-mono reference-binding verifier searched an environment list per assignment
 
 <!-- bug-ledger
+compiler: legacy
 summary: the post-mono reference-binding verifier (REF-6@1) kept its environment in an association list searched per assignment (bindings × assignments per function)
 fixtures: error_269_far_binding_assigned.con regress_269_generic_bindings_at_value.con
 class: 17 — the post-mono verifier's environment

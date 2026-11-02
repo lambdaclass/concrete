@@ -1,6 +1,7 @@
 # Bug 291 — every stage found a type declaration by name with a list search per use
 
 <!-- bug-ledger
+compiler: legacy
 summary: Resolve (`isKnownType`), Check (`lookupStruct`/`lookupEnum`/`lookupNewtype`, the Copy judgment's callback, `typeIdOf`, `structIsLocal`), Elab (`lookupStruct`, `nominalTypeId?`, `typeIdOfSpelling`), CoreCheck (`lookupStruct`, `isOpaqueOperandTy`, `findNewtype`) and Lower (`Layout.lookupStruct` through `fieldOffset`, enum lookups) found a struct, enum or newtype declaration by searching a list per use, so a program of n types each used once took time n² in five stages (8000 types: check 548 ms, elaborate 343 ms, lower 504 ms). Class 17.
 fixtures: regress_291_type_lookups_by_name.con
 class: 17 — type declarations found by a list search per use

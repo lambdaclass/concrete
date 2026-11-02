@@ -1,6 +1,7 @@
 # Bug 145 — `vec_set` and `vec_free` lost non-Copy elements without destroying them
 
 <!-- bug-ledger
+compiler: legacy
 summary: the raw `vec_set` intrinsic overwrote an initialized non-Copy element and `vec_free` released a buffer still holding non-Copy elements, both without destroying anything (found by Codex reviewing rule (c)). Contained: `vec_free` is E0287 unless the element type is Copy (`error_145_vec_free_linear.con`); the `vec_set` half is bug 115's fix (E0291, on main). Joins exit 0b. ((`safety-eval2`))
 fixtures: error_145_vec_free_linear.con regress_145_vec_free_copy_param.con regress_145_vec_free_nested_copy_param.con
 class: 13 — raw collection intrinsics outside rule (c)

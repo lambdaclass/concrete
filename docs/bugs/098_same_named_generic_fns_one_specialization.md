@@ -1,6 +1,7 @@
 # Bug 098 — two modules' same-named generic functions share one specialization
 
 <!-- bug-ledger
+compiler: legacy
 summary: two modules' same-named generic functions shared one Mono specialization (silent wrong code in both engines); fixed by 097's spelling ((`land5`))
 fixtures: regress_097_098_same_named_private_fns.con error_098_nested_generic_collision.con error_098_nested_collision_same_tree.con
 class: 1

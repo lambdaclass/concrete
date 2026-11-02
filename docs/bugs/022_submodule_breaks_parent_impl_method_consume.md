@@ -1,6 +1,7 @@
 # Bug 022: A submodule declaration breaks impl-method consumption in the parent
 
 <!-- bug-ledger
+compiler: legacy
 summary: found by #35 conlog workload
 fixtures: submodule_linear_consume/src/main.con
 ruling: Violates: MOD-1@1

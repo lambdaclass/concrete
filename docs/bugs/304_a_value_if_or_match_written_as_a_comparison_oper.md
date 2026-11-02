@@ -1,6 +1,7 @@
 # Bug 304 — a value if or match written as a comparison operand took the comparison's Bool hint as its type, so CoreCheck refused a program Check accepted
 
 <!-- bug-ledger
+compiler: legacy
 summary: a comparison passed its own type hint (its result type, Bool, from a `return` of a `bool` function, a `bool` binding or an `if` condition) on to the operand it types first; Elab's value `if` and `match` take a hint as their type unconditionally, so `(if c { 1 } else { 2 }) >= 2` was stamped Bool in Core, and CoreCheck refused the program Check had accepted (E0510, E0503)
 fixtures: regress_304_comparison_operand_hint.con
 class: 12 — the operand hint of a binary operator decided separately in Check and Elab, and the comparison's result type taken for its operands' type

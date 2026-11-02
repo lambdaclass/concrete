@@ -1,6 +1,7 @@
 # Bug 282 — Resolve looks a name up through one scope per nesting level (quadratic in nesting depth)
 
 <!-- bug-ledger
+compiler: legacy
 summary: Resolve kept one local scope per block on a stack and looked a name up by walking the stack from the innermost scope, so reading or assigning a binding declared at the top of a body nested n deep cost n per use and the whole nest n² (depth 5000: 40 ms). Found by the R-0550 scaling gate. Class 17.
 fixtures: regress_282_nested_scope_visibility.con error_282_read_after_nested_block.con
 class: 17 — Resolve looks a name up through one scope per nesting level
