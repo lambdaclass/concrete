@@ -12,8 +12,7 @@ Each becomes rule text when its chapter is rewritten as Lean, the only source of
 ([ROADMAP.md](../../ROADMAP.md#concrete-roadmap), row 0s); until then, where a chapter still describes
 the earlier behaviour, the answer below governs, and the code is to follow under exit 2q.
 
-Still open with the owner: whether a trait can be imported into another module (which decides where
-a qualified call `Trait::method(&x)` can be written), and the shape of Core, which the owner decides in one session on the
+Still open with the owner: the shape of Core, which the owner decides in one session on the
 target Core proposal ([ROADMAP.md](../../ROADMAP.md#concrete-roadmap)).
 
 <a id="rules-a-decision-changed"></a>
@@ -241,6 +240,9 @@ and Codex's review agreed, Codex's refinement adopted where it gave one):
 - **Qualified trait calls** (completes OD6): an ambiguous method call is written `Trait::method(&x, ...)`,
   a path call resolved by the trait's identity, and is refused otherwise; qualification never relaxes
   coherence.
+- **Traits cross modules like any other declaration** (owner, 2026-11-02): a `pub` trait is exported,
+  and another module imports it explicitly (OD139) to implement it, bound by it or call
+  it qualified as `Trait::method(&x, ...)`.
 - **Mounts and name resolution.** A lookup that crosses a mount point is refused. Name resolution
   (DNS) takes a resolver grant naming the permitted service, query scope and transport, plus
   `with(Network)`, and an allocator when it allocates; resolving grants no connection, and connecting

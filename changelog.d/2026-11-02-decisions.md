@@ -14,4 +14,4 @@ answered too: allocator reset is allowed when nothing allocated from it is alive
 declare externs in trusted code, only the compiler introduces intrinsics and only the target runtime
 mints grants; `abort()` needs no capability; `main` declares the grants it wants; ambiguous trait calls
 are written `Trait::method(&x)`; `defer` takes a call returning `Unit`; user capability aliases are
-removed.
+removed. Traits are exported and imported like any other declaration.
