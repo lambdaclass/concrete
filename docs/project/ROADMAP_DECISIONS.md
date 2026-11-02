@@ -2,8 +2,9 @@
 
 Status: reference — the dated decisions that shape [the current execution
 queue](../../ROADMAP.md#the-current-execution-queue). None creates another queue. Decisions on the
-language rules that the project owner reserved are listed, unanswered, under
-[owner decisions](../../ROADMAP.md#owner-decisions) in ROADMAP.md; nothing here answers one of them.
+language rules that the project owner reserved are listed under
+[owner decisions](../../ROADMAP.md#owner-decisions) in ROADMAP.md and recorded in
+[decisions.md](../spec/decisions.md); nothing here answers one of them.
 
 Moved verbatim from ROADMAP.md on 2026-10-28 (the roadmap compaction); only heading levels and relative links were adjusted.
 
@@ -19,6 +20,14 @@ could not run. The resulting rules are listed at the top of [ROADMAP.md](../../R
 Root-token readings of OD38 and OD156. OD8's singletons remain, as linear values that the runtime creates and
 hands to `main`.
 
+**Decisions of 2026-11-02 (owner, and the owner's rule):** the owner paused RocksDB slice 1, the
+ethlambda workloads and the usability track until the new compiler can run them, and set the rule
+"anything where you and codex agree that is the best decision, record the solution". Under it: the
+new-compiler architecture is approved with three conditions, 0.1 is cut from the new compiler, slice
+1's move test uses an empty struct without `Copy`, a file-copy program orders the later slices, and the
+roadmap is restructured around the new compiler. The language answers of the same day are in
+[decisions.md](../spec/decisions.md#decided-2026-11-02).
+
 **New compiler decision, 2026-11-01 (owner):** the current compiler is not migrated to the decided
 language. A new compiler is written from the Lean definition, proof-first: a `ConcreteSpec` library
 (grammar, Core, semantic contract, judgments, elaborator, reference evaluator, examples, generator) and
@@ -26,7 +35,7 @@ a new lowering chain below Core. The current compiler is to be frozen and tagged
 used as a differential oracle (and, until replaced, by the site's browser compiler), and deleted from
 main when slice 1 works end to end. This changes the implementation strategy only; the Lean-only
 source decision still governs and no language question is settled by it. The architecture of the
-library and the new compiler is a reviewed proposal pending the owner's approval. The first
+library and the new compiler, a reviewed proposal at the time, was approved on 2026-11-02 (entry above). The first
 deliverable is the target Core proposal for the owner. The owner: "i don't care about the current
 pipeline, we could remove it and start from scratch". The plan is at the top of
 [ROADMAP.md](../../ROADMAP.md).

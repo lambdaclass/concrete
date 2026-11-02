@@ -3,62 +3,171 @@
 This chapter records the language questions that only the project owner decides, OD1 to OD157 of
 [ROADMAP.md](../../ROADMAP.md#owner-decisions), and how each was answered. Every one is answered:
 OD1 to OD32 and OD47 on 2026-10-29, the entries OPEN-33 to OPEN-157 on 2026-10-31 and 2026-11-01
-(OD94 was withdrawn: MOD-1 already refuses its case, bug 337). The entry IDs are retired and never
+(OD94 was withdrawn: MOD-1 already refuses its case, bug 337), and the questions raised while
+recording them on 2026-11-02. The entry IDs are retired and never
 reused; their anchors stay, so links to them land on the answer.
 
-The answers of 2026-10-31 and 2026-11-01 are recorded here before the rules that carry them are written.
+The answers of 2026-10-31, 2026-11-01 and 2026-11-02 are recorded here before the rules that carry them are written.
 Each becomes rule text when its chapter is rewritten as Lean, the only source of the language
 ([ROADMAP.md](../../ROADMAP.md#concrete-roadmap), row 0s); until then, where a chapter still describes
 the earlier behaviour, the answer below governs, and the code is to follow under exit 2q.
 
-Still open with the owner, raised while recording these answers:
-- whether the existing type-name aliases are removed (it follows OD102);
-- whether `main`'s result, `u8` or `Unit` under OD24, becomes `u8` only;
-- the type-versus-value lookup and child-module parts of OD43.
+Still open with the owner: whether an allocator may be reset (as opposed to given up when nothing
+allocated from it is alive), who may introduce externs, intrinsics and minting wrappers, and the shape
+of Core, which the owner decides in one session on the
+target Core proposal ([ROADMAP.md](../../ROADMAP.md#concrete-roadmap)).
 
 ## Decided
 
 These entries were retired when the owner answered them; their IDs are never reused.
 
 - **The authority design** (decided 2026-11-01, after a Codex and Grok review that concluded "adopt
-  with changes"). `with(...)` is the only permission mechanism; it is compile-time information, not a
-  resource. Linear values are the only resource mechanism: `File`, `Socket`, `Heap<T>`, and the
-  target's singletons (`Uart`, `Arena`, ...). The concept "token" is dropped; these values are called
-  singleton resources. An operation needs both the resource parameter (which thing) and the permission
+  with changes"; its rules confirmed and completed on 2026-11-02, see
+  [the authority rules](#decided-2026-11-02-authority)). `with(...)` is the only permission
+  mechanism; it is compile-time information, not a resource. Linear values are the only resource
+  mechanism: `File`, `Socket`, `Heap<T, A>`, and the grants the target hands to `main`. The concept
+  "token" is dropped. An operation needs both the resource value (which thing) and the permission
   (what is allowed); in the owner's words, "one is the parameter to modify, the other the permission",
   and this is not duplication. `Std` is removed as a capability: every signature, `main` included,
   lists its real capabilities; std, examples and tests are to migrate under exit 2q, with the compiler
-  suggesting the exact set needed. The owner approved the following rules in summary the same day; each
-  awaits the owner's explicit confirmation before it becomes rule text:
-  1. holding a value never satisfies a `with` requirement, and holding a permission never supplies a
-     required value;
-  2. capability variables are bounded by what they are bound to, and every instantiation is rechecked;
-  3. function-pointer types are invariant in their capability set: no cast changes it, a wrapper
-     declares its callback's effects, and a context value adds no authority;
-  4. `trusted` and `with(Unsafe)` never discharge an operational capability (`Fs`, `Net`, `Env`,
-     `Alloc`, `Device`, ...), and no capability hiding is allowed;
-  5. there are no umbrella capabilities (`Std`, `Io`, `Block`); behavioural classes such as "may block"
-     are a fixed table on the existing capabilities;
-  6. cleanup with effects is explicit (`close(f) with(Fs)`), and `Destroy` requires at most `Alloc`;
-  7. effects are introduced only by the primitive table (externs, intrinsics, the runtime mint), which
-     is what makes effect soundness a theorem;
-  8. data returned from an effect is inert;
-  9. `get_args` requires `with(Env)`, plus `with(Alloc)` if it allocates;
-  10. one allocator form per target: hosted, `with(Alloc)` and no allocator value; freestanding, an
-      `Arena` parameter plus `with(Alloc)`;
-  11. there is no `Root` type; `main`'s parameters are the target's singletons: hosted
-      `fn main() with(...) -> u8`, freestanding `fn main(uart: Uart, arena: Arena) with(Device, Alloc) -> u8`;
-  12. a capability is named differently from a resource type (`with(Fs)` against a `File` value).
+  suggesting the exact set needed. It supersedes OD38's and OD156's readings through a `Root` value
+  and OD83's allocator token. OD8 stands except where this supersedes it: its root value and
+  its split (item 2) give way to the grants the target hands to `main`, and its "every effect shows as a
+  token parameter, with no separate effect system" (item 3) gives way to `with(...)` plus resource
+  values. Its "no life before `main`" (item 5) stands: the target's startup and shutdown only create
+  the grants, run no user code and do nothing else a program could observe beyond what the target's
+  table states.
 
-  It supersedes OD38's and OD156's readings through a `Root` value and OD83's allocator token. OD8's
-  global resources remain, as singleton resources the runtime creates and hands to a freestanding
-  `main`.
+<a id="decided-2026-11-02"></a>
+**Decided 2026-11-02 by the owner's rule** (the owner: "anything where you and codex agree that is the
+best decision, record the solution"; each answer below is the one Claude and Codex both judged the best
+long-term answer, Codex having read the repository; the owner answered the first four directly on
+2026-11-01):
+
+- <a id="decided-2026-11-02-aliases"></a>**Type-name aliases** (after OD102): the aliases `Int`,
+  `Uint`, `Float64` and `Bool` are removed. A builtin type has one spelling (`i64`, `u64`, `f64`,
+  `bool`, ...). Owner's answer, 2026-11-01.
+- <a id="decided-2026-11-02-main"></a>**`main`'s result** (revises OD24): `main` returns `u8`, and
+  only `u8`. Owner's answer, 2026-11-01. A test function's result follows it (revises OD146): `u8`
+  only.
+- <a id="decided-2026-11-02-namespace"></a>**One namespace per module** (completes OD43): a type and a
+  value (a function or constant) in one module may not share a name. A struct literal `S { ... }` and
+  a variant path `E::V` name the type itself and are not collisions. Owner's answer, 2026-11-01.
+- <a id="decided-2026-11-02-child"></a>**A child module's declarations** (completes OD43) are not
+  visible in its parent by bare name: the parent writes `child::T` or imports it. Owner's answer,
+  2026-11-01.
+
+<a id="decided-2026-11-02-authority"></a>**The authority rules** (they replace the twelve rules approved
+in summary on 2026-11-01):
+
+1. **A value is not a permission, and a permission is not a value.** Holding a value never satisfies
+   a `with` requirement, and holding a permission never supplies a required value.
+2. **Every operation needs both a resource value and a permission.** There are no permission-only
+   operations: the target's services are values too (an `Allocator<A>`, a `Directory`, an
+   `Environment`, a `Clock`, network endpoint grants, devices), each selecting what the operation may
+   reach.
+3. **Capability variables range over sets** of capabilities, the empty set included. A generic body is
+   checked parametrically; at each instantiation the exact sets are substituted into its types and
+   requirements and the instantiation is rechecked. Inconsistent bindings are refused, never merged
+   into a union. No set-bound syntax is added.
+4. **Function-pointer types keep their exact capability set.** No conversion changes it. A function
+   that calls a callback declares the callback's set plus its own effects, and a context value adds no
+   authority. Foreign function values stay refused (OD4); the permissions of foreign callbacks are
+   decided when they are admitted.
+5. **`trusted` and `with(Unsafe)` never discharge an operational capability** (`Fs`, `Network`, `Env`,
+   `Time`, `Alloc`, `Device`, `Process`). Effect checking applies inside trusted bodies and at foreign
+   calls; no capability can be hidden. What native code actually does is a named assumption of the
+   theorem, never an exemption.
+6. **There are no umbrella capabilities** (`Std`, `Io`, `Block`). Behavioural classes such as "may
+   block" are a conservative table over the capabilities, which also covers allocation, destruction
+   and foreign calls; unknown foreign behaviour counts as "may block". The table never claims that a
+   particular call does not block.
+7. **Primitive effects come from one exhaustive table** (externs, intrinsics, compiler-generated
+   operations, runtime entry, startup and shutdown); compound effects follow checked composition. A
+   declaration may never understate the effects of what it calls. A body uses only its declared
+   permissions, and a call requires the callee's set to be included in the caller's (TRUST-4), across
+   trait dispatch, generic methods and generated cleanup alike; one Lean judgment states this.
+8. **Returned values never supply permissions.** A returned `File` or function value still carries its
+   ownership and its effect requirements, but no permission.
+9. **Cleanup returns what survives it.** Cleanup with effects is explicit (`close(f) with(Fs)`), and
+   `Destroy` requires at most `Alloc`. On every returning path, a consuming operation releases its
+   input or returns every ownership obligation that remains: a cleanup that can leave a resource live
+   returns it in its error. `close` on a `File` consumes the handle in every outcome only through a
+   platform adapter that guarantees the descriptor is released (POSIX alone does not); a handle whose
+   number may have been reused is never handed back. `defer close(f)` is written with a named function
+   that returns `Unit` and handles the error (OD62, OD140); there is no new syntax for errors of
+   deferred calls.
+10. **Ownership on failure and exit.** Error branches and early returns keep every linear obligation.
+    Abort runs no cleanup and a trapping deferred call stops the sequence (OD68, OD69); these are the
+    only exceptions.
+11. **Resources are introduced only by checked acquisition or unforgeable constructors**, and each
+    grant the target creates is minted once. Every extern, intrinsic and minting wrapper is listed in
+    the trusted base, with its identity preserved through interfaces, specialization and linking.
+    Who may introduce them is still open with the owner.
+12. **`main` receives the target's grants and consumes them.** There is no `Root` type. The target
+    declares the grants it offers (its allocator, directories, environment, clock, devices); `main`'s
+    parameters and `with(...)` must be within them, checked at compile time. `main` consumes every
+    grant explicitly before it returns; abort is the exception. Effects outside ordinary calls (the
+    trap message, flushing output, startup, shutdown) come from the target's table and appear in the
+    semantics and its traces; no source code gains a hidden `Console` or `Alloc`.
+13. **Capability names are reserved and differ from resource type names**: `with(Fs)` against a
+    `File` value. The reserved set is `Fs`, `Network`, `Env`, `Time`, `Alloc`, `Device`, `Process` and
+    `Unsafe` (meanings per OD95; there is no `Net` spelling and no alias). They are reserved everywhere,
+    including import aliases, capability parameters and other binders.
+14. **What the theorem claims.** Effect containment, resource safety and information-flow security are
+    separate claims with separate assumptions; none implies another. The trusted base is an explicit
+    list of assumptions, and being listed proves nothing.
+
+<a id="decided-2026-11-02-allocation"></a>**Allocation** (revises OD83, the former authority rule 10
+of 2026-11-01 "one allocator form per target", and the terminal out-of-memory failure of STMT-2):
+
+- **One allocation form on every target**: an allocator value plus `with(Alloc)`. A hosted target hands
+  `main` the system allocator; a freestanding target hands it its arenas. There is no allocation by
+  permission alone.
+- **The common type is `Allocator<A>`**, whose parameter `A` is a fresh, unforgeable identity of one
+  allocator domain (`Sys` for the system allocator); an arena is one kind of allocator.
+- **Allocations carry their allocator's identity in their type**: `Heap<T, A>`, `Vec<T, A>`, `String<A>`.
+  Each records how to release its storage (never a reference to the allocator), so `*h` and
+  `destroy(h)` (OD59) need no allocator argument and `Destroy` still requires at most `Alloc`.
+  Moving a value to another allocator allocates there explicitly.
+- **An allocator can be given up only when nothing allocated from it is alive.** This dependency is a
+  language rule that holds across function boundaries, generics, containers and callbacks, and it is
+  not implemented by reference counting.
+- **Allocation is fallible and conserves its input**:
+  `alloc(a: &mut Allocator<A>, v: T) with(Alloc) -> Result<Heap<T, A>, AllocFailure<T>>` returns the
+  value on failure. The failure value itself never allocates, and the allocator stays valid after a
+  failure. A container whose growth fails is unchanged and returns the rejected element; a failed
+  reserve keeps the original storage; an operation that allocates several times accounts for what it
+  had already built; a consuming container operation returns the container when an obligation
+  survives. Running out of memory is an ordinary error, not a terminal failure. Allocating string operations
+  (OD154) take an allocator and report failure; static text needs no allocation.
+
+<a id="decided-2026-11-02-filesystem"></a>**Filesystem, environment, time and network** (revises
+the former authority rule 9 of 2026-11-01 on `get_args`, and OD156):
+
+- **Every filesystem namespace operation takes a `Directory` value plus `with(Fs)`**: opening,
+  creating, listing, probing, removing, renaming, linking and metadata lookup. Renaming and linking need
+  the authority of both directories involved. A file that is opened owns its own handle, which borrows
+  nothing from the directory; operations on an open file take that file. `main` receives the
+  directories the target grants; a directory value can be narrowed (for example to read-only) and
+  handed to a library alone.
+- **A path stays inside its directory**, enforced during lookup: absolute paths, `..` components and
+  symbolic links anywhere in the path are refused, confinement is enforced by the lookup primitive
+  itself (never by checking a path and then opening it), and the mount-crossing policy is stated. A
+  target without such a primitive refuses filesystem access.
+- **The environment and the clock are grants**: an `Environment` value selects which variables and
+  arguments are visible, a `Clock` value which clock and what precision. `get_args` takes the
+  `Environment` and `with(Env)`, and an allocator when it allocates.
+- **Network**: connecting needs a grant naming the permitted destinations, and binding or listening a
+  grant naming the endpoint, each plus `with(Network)`; accepting takes the listener, and communicating
+  takes the connected socket, still with `with(Network)` (holding a socket supplies no permission).
+  Name resolution (DNS) needs its own stated authority contract.
 
 **Decided 2026-10-31 by the owner's rule** (every reviewer agreed, and the answer is as strict as
 Austral or stricter):
 
 - <a id="OPEN-33"></a>**OPEN-33** (OD33, Inline submodules under one file per module): No inline `mod`; one file per module.
-- <a id="OPEN-43"></a>**OPEN-43** (OD43, How a type position resolves a name): Refuse builtin-name collisions, publish reserved set. Its type-versus-value lookup and child-module questions are still open.
+- <a id="OPEN-43"></a>**OPEN-43** (OD43, How a type position resolves a name): Refuse builtin-name collisions, publish reserved set. Completed 2026-11-02: [one namespace per module](#decided-2026-11-02-namespace) and [explicit child access](#decided-2026-11-02-child).
 - <a id="OPEN-44"></a>**OPEN-44** (OD44, Two packages with one module name): Refuse at load, naming both, until R-0440.
 - <a id="OPEN-46"></a>**OPEN-46** (OD46, Generic type-argument inference): From checked argument types only.
 - <a id="OPEN-48"></a>**OPEN-48** (OD48, The index type of a counted loop over two literals): Refused, as OD31.
@@ -111,7 +220,7 @@ against Austral and the no-duplication rule):
 - <a id="OPEN-35"></a>**OPEN-35** (OD35, How an array satisfies a `Destroy` bound): Language impl `[T; N]: Destroy` when `T: Destroy`, index order.
 - <a id="OPEN-36"></a>**OPEN-36** (OD36, The explicit place form that opens a heap cell): Only through a borrow block; no `(&h).f`.
 - <a id="OPEN-37"></a>**OPEN-37** (OD37, The names of the pointer difference and ordering functions): One trusted `ptr::diff`, ordering from its sign, no `ptr::cmp`.
-- <a id="OPEN-38"></a>**OPEN-38** (OD38, The root resource API): Superseded by the authority decision of 2026-11-01: there is no `Root` type; `main`'s parameters are the target's singletons, hosted `fn main() with(...) -> u8` and freestanding `fn main(uart: Uart, arena: Arena) with(Device, Alloc) -> u8` (whether `main` may also return `Unit`, OD24, is still open).
+- <a id="OPEN-38"></a>**OPEN-38** (OD38, The root resource API): Superseded by the authority decision of 2026-11-01: there is no `Root` type; `main`'s parameters are the target's singletons, hosted `fn main() with(...) -> u8` and freestanding `fn main(uart: Uart, arena: Arena) with(Device, Alloc) -> u8`. Revised 2026-11-02: [`main` receives the target's grants](#decided-2026-11-02-authority) (rule 12), `-> u8` only.
 - <a id="OPEN-39"></a>**OPEN-39** (OD39, The interface artifact format): `pub` decls rendered as Concrete source, compiler-generated, API-diff gate.
 - <a id="OPEN-40"></a>**OPEN-40** (OD40, PAT-9 and the fallback arm of a desugared form): Moot: OD52 removed `if let`/`while let`/`let...else`.
 - <a id="OPEN-41"></a>**OPEN-41** (OD41, PAT-9 and integer ranges that span their type): Close as range-specific; integer matches keep a required catch-all, listing every literal is not coverage.
@@ -131,7 +240,7 @@ against Austral and the no-duplication rule):
 - <a id="OPEN-80"></a>**OPEN-80** (OD80, `assume` in the grammar): Keep `assume`, tracked: every claim depending on it is marked assumed.
 - <a id="OPEN-81"></a>**OPEN-81** (OD81, `ghost let` in the grammar): Add, with `ghost` reserved.
 - <a id="OPEN-82"></a>**OPEN-82** (OD82, Loop contract attributes and where attributes attach): Add; attributes attach by kind.
-- <a id="OPEN-83"></a>**OPEN-83** (OD83, The call-site allocator binding in the grammar): No call-site binding `f(...) with(Alloc = e)`. Under the authority decision, one allocator form per target: hosted, `with(Alloc)` and no allocator value; freestanding, an `Arena` parameter plus `with(Alloc)`.
+- <a id="OPEN-83"></a>**OPEN-83** (OD83, The call-site allocator binding in the grammar): No call-site binding `f(...) with(Alloc = e)`. Under the authority decision, one allocator form per target: hosted, `with(Alloc)` and no allocator value; freestanding, an `Arena` parameter plus `with(Alloc)`. Revised 2026-11-02: [one allocation form on every target](#decided-2026-11-02-allocation).
 - <a id="OPEN-86"></a>**OPEN-86** (OD86, The body of an unbraced match arm): Narrow.
 - <a id="OPEN-87"></a>**OPEN-87** (OD87, Capability arguments in an expression turbofish): Accept explicit capability arguments in a turbofish (inference fills omitted ones).
 - <a id="OPEN-88"></a>**OPEN-88** (OD88, The shape of capability arguments): State in grammar.
@@ -144,7 +253,7 @@ against Austral and the no-duplication rule):
 - <a id="OPEN-97"></a>**OPEN-97** (OD97, A build profile that omits or demands an overflow check): Keep every check; a profile may refuse undischarged ops.
 - <a id="OPEN-98"></a>**OPEN-98** (OD98, Pointer and reference conversions written with `as`): Reference to raw pointer conversion only in trusted/Unsafe code (equal to Austral).
 - <a id="OPEN-99"></a>**OPEN-99** (OD99, The names of the named conversions): These spellings, as builtins.
-- <a id="OPEN-102"></a>**OPEN-102** (OD102, `Float32` and `Char` as type spellings): No `Float32` or `Char` aliases; whether the existing type-name aliases are also removed is a separate question, still open with the owner.
+- <a id="OPEN-102"></a>**OPEN-102** (OD102, `Float32` and `Char` as type spellings): No `Float32` or `Char` aliases. Completed 2026-11-02: [the existing aliases are removed too](#decided-2026-11-02-aliases).
 - <a id="OPEN-104"></a>**OPEN-104** (OD104, A `#[variant]` written on a counted loop): Refuse.
 - <a id="OPEN-105"></a>**OPEN-105** (OD105, Where a counted loop's `#[invariant]` is checked): As CON-2: before the loop and after every iteration.
 - <a id="OPEN-106"></a>**OPEN-106** (OD106, The result type of a checked conversion): `Result<T, OutOfRange>` (failure, not absence).
@@ -167,13 +276,13 @@ against Austral and the no-duplication rule):
 - <a id="OPEN-134"></a>**OPEN-134** (OD134, The capabilities of a container's generated destruction): Keep `Alloc` limit.
 - <a id="OPEN-135"></a>**OPEN-135** (OD135, A method's `Type_method` name in its module's namespace): Stop entering methods under `T_m`.
 - <a id="OPEN-138"></a>**OPEN-138** (OD138, Which positions give a literal its expected type): Declared positions + other operand of a binary op.
-- <a id="OPEN-140"></a>**OPEN-140** (OD140, Implicitly dropped results of `free` and of a deferred call): Neither; each needs `discard`.
+- <a id="OPEN-140"></a>**OPEN-140** (OD140, Implicitly dropped results of `free` and of a deferred call): Neither; each needs `discard`. Clarified 2026-11-02: `free` no longer exists (OD59); a deferred call's Copy result is dropped with `discard`, while a `Result` or `Option` cannot be discarded (OD62) and is handled by a named function that returns `Unit` ([authority rule 9](#decided-2026-11-02-authority)).
 - <a id="OPEN-141"></a>**OPEN-141** (OD141, More than one `main` in a program): A `main` outside the root module is refused.
 - <a id="OPEN-142"></a>**OPEN-142** (OD142, `X.con` beside `X/mod.con`): One module layout: `X.con`, children in directory `X/`; no `mod.con`.
 - <a id="OPEN-143"></a>**OPEN-143** (OD143, What a contract may read): A contract reads exactly the names in scope at its position, plus `result` in `ensures`.
 - <a id="OPEN-144"></a>**OPEN-144** (OD144, Postconditions and deferred calls): After every deferred call.
 - <a id="OPEN-145"></a>**OPEN-145** (OD145, How a contract names machine arithmetic): ARITH-4 named operations.
-- <a id="OPEN-146"></a>**OPEN-146** (OD146, The result type of a test function): `u8` or `Unit`, as `main`.
+- <a id="OPEN-146"></a>**OPEN-146** (OD146, The result type of a test function): `u8` or `Unit`, as `main`. Revised 2026-11-02: [`u8` only](#decided-2026-11-02-main).
 - <a id="OPEN-147"></a>**OPEN-147** (OD147, `repr(C, packed)` together): Accept: C order, no padding, align 1, stated in FFI-8.
 - <a id="OPEN-149"></a>**OPEN-149** (OD149, How `[e; N]` evaluates `e`): Evaluated once, must be Copy.
 - <a id="OPEN-150"></a>**OPEN-150** (OD150, Which text governs the grammar until it is resynchronized): Rule entries govern.
@@ -182,7 +291,7 @@ against Austral and the no-duplication rule):
 - <a id="OPEN-153"></a>**OPEN-153** (OD153, Program functions named like a builtin): Refuse program functions named like builtins.
 - <a id="OPEN-154"></a>**OPEN-154** (OD154, Whether the string builtins require `Alloc`): Allocating string builtins need `Alloc` (MEM-7; closes bug 349).
 - <a id="OPEN-155"></a>**OPEN-155** (OD155, `unwrap` beside TYPE-24's conversions): No builtin `unwrap`; use `match`.
-- <a id="OPEN-156"></a>**OPEN-156** (OD156, The capability of `get_args`): Superseded by the authority decision of 2026-11-01: `get_args` requires `with(Env)`, and `with(Alloc)` when it allocates.
+- <a id="OPEN-156"></a>**OPEN-156** (OD156, The capability of `get_args`): Superseded by the authority decision of 2026-11-01: `get_args` requires `with(Env)`, and `with(Alloc)` when it allocates. Revised 2026-11-02: [`get_args` takes the `Environment` grant](#decided-2026-11-02-filesystem).
 - <a id="OPEN-157"></a>**OPEN-157** (OD157, How the type `Unit` is written): The type is written `Unit`, its value `()`.
 
 **Decided 2026-10-29:**
@@ -191,7 +300,7 @@ against Austral and the no-duplication rule):
   until b`, the C-style `for` removed. Now STMT-6@3, STMT-11@2 and STMT-12 (pending, bug 331); OD47 left OPEN-48 to
   OPEN-51.
 - **OD23 – OD32** (the strictness pass, decided 2026-10-29, never open entries): REF-11@3 (OD23),
-  STMT-7@3 (OD24), PAT-3@3 and PAT-5@3 (OD25), TYPE-6@2 (OD26), STMT-6@2 (OD27), TRAIT-10@2 (OD28),
+  STMT-7@3 (OD24, revised 2026-11-02 to [`u8` only](#decided-2026-11-02-main)), PAT-3@3 and PAT-5@3 (OD25), TYPE-6@2 (OD26), STMT-6@2 (OD27), TRAIT-10@2 (OD28),
   OWN-7@3 (OD29), MEM-4@3 (OD30), ARITH-2@2 (OD31) and OWN-15@3 (OD32), each pending its bug (319 –
   328); OD28 and OD30 left OPEN-35 and OPEN-36.
 - **OPEN-1** (OD1, references): decided 2026-10-29. Now REF-5 (formation, `&s.f`, no temporary root), REF-1 and REF-3 (second-class), TRUST-3 (the raw-pointer validity premise, pending) and REF-8 (loans keyed by the root variable, as OD15 (a) confirmed).
