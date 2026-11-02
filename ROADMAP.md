@@ -171,7 +171,9 @@ the only queue. From "Where we are" to the end of this file, the execution plan 
 it stood before 2026-11-01 is kept for reference: its rows, exits, prerequisites, capacity shares,
 estimates and release criteria are not in force, while the owner decisions recorded there are. In order:
 
-1. the roadmap restructured around the new compiler, replacing those sections;
+1. the roadmap restructured around the new compiler, replacing those sections, by the plan the owner
+   approved on 2026-11-02 ([ROADMAP_RESTRUCTURE.md](docs/project/ROADMAP_RESTRUCTURE.md): phases A – G,
+   0.1 at the end of the file-copy phase, one home for owner decisions, the legacy bug record);
 2. the spec audit of 2026-11-02 disposed of: every chapter rule a decision changed is listed with its
    governing decision ([the list](docs/spec/decisions.md#rules-a-decision-changed)), and the gaps and
    duplications it found are carried into the target Core proposal, which assigns each to the part

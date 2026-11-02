@@ -20,6 +20,16 @@ could not run. The resulting rules are listed at the top of [ROADMAP.md](../../R
 Root-token readings of OD38 and OD156. OD8's singletons remain, as linear values that the runtime creates and
 hands to `main`.
 
+**Roadmap restructure, 2026-11-02 (owner):** the roadmap is rebuilt around the new compiler in
+phases A (Core and theorem), B (slice 1, then the old pipeline deleted), C (the file-copy program;
+0.1 is cut here from the new compiler), D (the whole language; paused workloads resume as their
+constructs are supported), E (verified growth), F (evidence as a product) and G (release and
+ecosystem), with development throughput beside them. The old execution plan is archived verbatim; the
+owner-decision answers have one home, [decisions.md](../spec/decisions.md); the bug dashboard moves to
+`docs/bugs/` and legacy defects are recorded, never dispatched for repair; the capacity shares are
+replaced by one compiler sequence. The tag `legacy-compiler-final` makes the freeze real. Codex reviewed
+the plan and its corrections are adopted. The plan: [ROADMAP_RESTRUCTURE.md](ROADMAP_RESTRUCTURE.md).
+
 **Decisions of 2026-11-02 (owner, and the owner's rule):** the owner paused RocksDB slice 1, the
 ethlambda workloads and the usability track until the new compiler can run them, and set the rule
 "anything where you and codex agree that is the best decision, record the solution". Under it: the
