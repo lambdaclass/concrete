@@ -8,13 +8,13 @@ Its evidence (proofs, receipts, trust and assumptions) is to be compositional, t
 independently replayable ([verified-compiler decision](docs/project/ROADMAP_DECISIONS.md#decisions), [product north star](docs/project/ROADMAP_DIRECTION.md#product-north-star-compositional-transferable-evidence)).
 
 **The specification comes first (owner decision, 2026-10-30).** Row 0s, the language specification,
-is the top priority. Until its steps 1 – 6 below hold, only row-0 silent soundness repairs and the
-landing of already-validated branches run beside it, and no other row starts. This overrides, for that
+is the top priority. Until its steps 1 – 6 below hold, only the landing of already-validated
+branches runs beside it, and no other row starts; the current compiler is frozen, so no repair goes
+into it. This overrides, for that
 period, the ordering in "What is next", the [capacity allocation](#capacity-allocation)'s shares and
 slots, and the concurrent-work permissions elsewhere in this file and in the
-[decision log](docs/project/ROADMAP_DECISIONS.md#decisions). Steps 7 and 8 need implementation work
-(row 4's Core checker for exit 2q, R-0496's Core semantics), so when steps 1 – 6 hold the verified-compiler
-track resumes under the capacity allocation, carrying steps 7 – 9 with it. The spec is complete when it
+[decision log](docs/project/ROADMAP_DECISIONS.md#decisions). Steps 7 and 8 are carried out by `ConcreteSpec` and
+the new compiler ([the interim queue](#the-interim-queue)). The spec is complete when it
 is the one normative, simple and checkable statement of the language. In order:
 
 1. **Owner decisions.** Every open question is answered. They are the OPEN entries in
@@ -152,8 +152,9 @@ native-image obligations kept explicit.
   the docs and research, and the external native backend. Dropped: the old Core, checker,
   elaborator, lowering, SSA and LLVM emission, the old interpreter, the `PExpr`/ProofCore proofs, and
   the evidence, receipt and report subsystems, which are rebuilt on the new Core when proofs need
-  them. Evidence the old compiler produced stays replayable from the tag, and
-  its compatibility obligations end with it. The browser compiler keeps running from the tag until the new compiler covers it.
+  them. Evidence the old compiler produced stays replayable from the tag; its
+  issuance ends at the freeze and none of it is migrated (the
+  [verified-compiler plan](docs/compiler/VERIFIED_PIPELINE.md)'s supersession notice). The browser compiler keeps running from the tag until the new compiler covers it.
 - **What it supersedes:** the in-place migration of the current compiler in
   [VERIFIED_PIPELINE.md](docs/compiler/VERIFIED_PIPELINE.md) (its target architecture, semantic contract
   and proof strategy still apply, now to the new compiler); exit 2q's migration of the compiler,
@@ -163,6 +164,24 @@ native-image obligations kept explicit.
 - **Paused** (owner, 2026-11-02): RocksDB slice 1, the ethlambda workloads and the usability track wait
   until the new compiler can run them; their tasks and examples are kept. The first release, 0.1, is
   cut from the new compiler. The rest of this file is to be restructured around the new compiler. The proof order in the next paragraph applies to the new compiler.
+
+<a id="the-interim-queue"></a>
+**The interim queue (2026-11-02).** Until the roadmap is restructured around the new compiler, this is
+the only queue. Everything from "Where we are" to the end of this file describes the plan for the
+current compiler as it stood before 2026-11-01: it is kept for reference, and its rows, exits,
+prerequisites, capacity shares, estimates and release criteria are not in force. In order:
+
+1. the roadmap restructured around the new compiler, replacing those sections;
+2. the prose spec made consistent with the recorded decisions: every contradiction and gap the spec
+   audit of 2026-11-02 found is resolved, the decisions chapter governing meanwhile;
+3. the target Core proposal, decided by the owner;
+4. the end-to-end theorem stated in Lean with its holes, beside the trusted base;
+5. `ConcreteSpec` and slice 1 of the new compiler, the prose chapters retired as Lean replaces them;
+6. the old pipeline deleted from main.
+
+Beside it run only the [development-throughput](#development-throughput) process work and the landing
+of already-validated branches. A defect found in the frozen compiler, silent or loud, is recorded
+against the tag and not repaired.
 
 **How the compiler proof is built (research reviews, 2026-11-01).** Two surveys of verified-language and
 verified-compiler projects, the first reviewed by Codex (adopt with changes), fix the order in which the
@@ -219,6 +238,10 @@ The plan also covers the front end (parsing and desugaring into Core) and the fi
 and the spec is tested independently of the compiler, through the conformance suite run on the Lean
 semantics. Items 4 – 7 are the adopted direction; their supported subsets, representations and
 residual assumptions are proposed to the owner before each is built.
+
+> **Not in force (2026-11-02).** From here to the end of this file, the text describes the plan for
+> the current compiler before the new-compiler decision. It is kept for reference until the
+> restructure replaces it; [the interim queue](#the-interim-queue) is the only queue.
 
 **Where we are (2026-10-21).** Phase 1 (Stabilize) is in progress: the soundness repairs for bugs
 079 – 101 are landing (queue row 0) and R-0482's P1 closures follow (row 1). Probes added since

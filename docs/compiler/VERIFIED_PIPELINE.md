@@ -3,7 +3,11 @@
 **Superseded in part (2026-11-01).** The current compiler is not migrated: a new compiler is written
 from the Lean spec ([ROADMAP.md](../../ROADMAP.md#concrete-roadmap)). The goal, target architecture,
 semantic contract and proof obligations below apply to the new compiler; the instructions for
-migrating the current compiler stage by stage do not.
+migrating the current compiler stage by stage do not. In particular, the current compiler's evidence
+is not migrated: R-0512's maintenance, inventory and claim migration and S9's legacy issuance and
+replay-retirement conditions do not apply to it. Its evidence stays replayable from the
+`legacy-compiler-final` tag, its issuance ends at the freeze, and claims about programs compiled by
+the new compiler are proved afresh on the new Core.
 
 Status: planned, 2026-10-18. Owners: R-0491 – R-0514 in [ROADMAP.md](../../ROADMAP.md), with
 R-0299, R-0300, R-0353, R-0413 and R-0460 linked where named. The architecture reconciles two
