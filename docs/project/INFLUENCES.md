@@ -137,6 +137,14 @@ See [VALUE_MODEL.md](../archive/design-records/VALUE_MODEL.md) for Concrete's ru
 [../research/compiler/pipeline-lessons-2026-07.md](../../research/compiler/pipeline-lessons-2026-07.md)
 for the research notes.
 
+Because Concrete never returns a reference, a safe function can be modelled as a pure function that
+takes its `&mut` arguments in and hands them back; this is what makes simple functional models
+possible (see Aeneas below).
+
+**References:** [Hylo](https://www.hylo-lang.org);
+[Racordon et al., Native Implementation of Mutable Value Semantics](https://arxiv.org/abs/2106.12678);
+[Hylo specification](https://github.com/hylo-lang/specification).
+
 ### Austral
 
 **Status:** Copied + adapted
@@ -153,6 +161,15 @@ Concrete differs by pushing harder on:
 - proof/evidence artifacts
 - predictable execution reporting and enforcement
 - Lean-backed proof direction
+
+Austral is the default reference for language decisions: a Concrete rule is as strict as Austral's or
+stricter, and every deviation is written down. One deliberate deviation is authority: Austral passes
+capabilities as linear values minted from a `RootCapability`, while Concrete separates permission from
+resources and has no root value ([the authority rules](../spec/decisions.md#decided-2026-11-02-authority)).
+
+**References:** [Austral](https://austral-lang.org);
+[Austral specification](https://austral-lang.org/spec/spec.html);
+[LambdaClass interview with Fernando Borretti](https://lambdaclass.github.io/lambdaclass_blog/tags/programming-languages).
 
 ### Wirth Languages / Oberon
 
@@ -492,6 +509,171 @@ Concrete can learn from CompCert:
 CompCert is not a surface-language influence. It is a reminder that if
 Concrete's thesis depends on compiler-reported evidence, the compiler and
 backend contracts themselves eventually matter.
+
+**References:** [CompCert](https://compcert.org);
+[Leroy, A formally verified compiler back-end](https://arxiv.org/abs/0902.2137).
+
+## Verification and Compiler Influences (research of 2026-11-01)
+
+These shape the new compiler written from the Lean definition (ROADMAP, owner decision of
+2026-11-01) and the order of its proof. Each is a source of technique, not of surface syntax.
+
+### Aeneas
+
+**Status:** Adapted
+
+Aeneas translates safe Rust into pure functions in a proof assistant, using Rust's borrow discipline
+to avoid memory reasoning. It models how borrows end across calls with "backward functions", which
+carry updated values back to the lender. Concrete takes the functional-translation idea; its
+second-class references (never returned or stored) simplify it: a `&mut` argument goes in and comes
+back out, and the supported subset may need no backward functions. That each model is exact is still a
+theorem to prove. These functional models are the planned basis for proofs about Concrete programs,
+replacing ProofCore.
+
+**References:** [Ho and Protzenko, Aeneas: Rust Verification by Functional Translation (ICFP 2022)](https://arxiv.org/abs/2206.07185).
+
+### Effekt
+
+**Status:** Adapted
+
+Effekt reads effect types as the capabilities a computation needs from its context, keeps functions
+second-class by default (they can be boxed into first-class values) so capabilities do not escape
+unnoticed, and links capability scopes to regions for compilation. Concrete takes the
+effects-as-capabilities idea with one difference: Effekt's capabilities are values passed to
+computations, while Concrete's `with(...)` is compile-time permission and the resources it governs are
+separate linear values.
+
+**References:** [Brachthäuser et al., Effects as Capabilities (OOPSLA 2020)](https://se.cs.uni-tuebingen.de/publications/brachthaeuser20effects/);
+[Lexical effect handlers](https://se.cs.uni-tuebingen.de/research/handlers/);
+[Müller et al., From Capabilities to Regions (OOPSLA 2023)](https://se.informatik.uni-tuebingen.de/publications/mueller23capabilities-preprint.pdf).
+
+### Scala capture checking (System Capless)
+
+**Status:** Reference for the metatheory
+
+Scala 3's capture checking tracks which capabilities a value may hold, including capabilities held
+inside generic containers ("reach capabilities"); its calculus, System Capless, has type soundness
+and scope safety mechanized in Lean. Concrete uses it as the metatheory reference for its capability
+variables ([authority rule 3](../spec/decisions.md#decided-2026-11-02-authority)) and, once foreign
+function values are admitted, for callbacks that carry capabilities.
+
+**References:** [Xu, Bračevac, Pham and Odersky, What's in the Box (OOPSLA 2025)](https://www.arxiv.org/abs/2509.07609).
+
+### Linear Core
+
+**Status:** Adapted as a compiler lesson
+
+Linear Core shows that optimising transformations can break syntactic linearity while preserving
+semantic linearity, and gives an IR type system that accepts them. Concrete takes the lesson that
+every pass must re-establish the next IR's ownership and authority invariants, not only preserve
+behaviour.
+
+**References:** [Mesquita and Toninho, Lazy Linearity for a Core Functional Language (POPL 2026)](https://arxiv.org/abs/2511.10361).
+
+### Owlang
+
+**Status:** Adapted as a proof structure
+
+Owlang is a Rust-inspired ownership language compiled through CompCertO, in Rocq. Its ownership
+checker is proved to rule out temporal memory errors (partial safety), and the verified compiler
+carries that safety to assembly. Concrete takes the split: the checker proves the ownership
+invariant and compilation preserves it, the ownership conditions at module boundaries are stated as
+interface contracts, and every check runs before optimization.
+
+**References:** [End-to-end Compositional Verification of Program Safety through Verified and Verifying Compilation](https://arxiv.org/abs/2510.10015).
+
+### CompCertO
+
+**Status:** Adapted
+
+CompCertO extends CompCert's theorem to open components that interact through explicit calling
+conventions, so separately compiled modules and C code compose. Concrete takes it as the model for
+per-module correctness that composes into a whole-program theorem, with explicit contracts at the C
+boundary.
+
+**References:** [Koenig and Shao, CompCertO: Compiling Certified Open C Components (PLDI 2021)](https://flint.cs.yale.edu/flint/publications/compcerto.pdf).
+
+### CakeML and Pancake
+
+**Status:** Adapted as a compiler-trust influence
+
+CakeML is an end-to-end verified compiler through several intermediate languages to machine code;
+Pancake is a verification-friendly systems language built on CakeML's verified backend, whose
+verified device driver performs close to C. Concrete takes the proof-first compiler structure and the
+evidence, on its device-driver workload, that a verification-friendly systems language can perform
+close to C.
+
+**References:** [CakeML](https://cakeml.org); [Pancake](https://cakeml.org/pancake);
+[Verifying Device Drivers with Pancake](https://arxiv.org/abs/2501.08249).
+
+### Verus
+
+**Status:** Adapted, later
+
+Verus verifies Rust with specifications and proofs written in Rust, and uses linear ghost types
+(ghost permissions) that the borrow checker tracks. Concrete plans ghost permissions to discharge the
+trust assumptions of selected `trusted` functions instead of carrying them.
+
+**References:** [Lattuada et al., Verus: Verifying Rust Programs using Linear Ghost Types (OOPSLA 2023)](https://arxiv.org/abs/2303.05491).
+
+### WebAssembly SpecTec
+
+**Status:** Adapted
+
+SpecTec writes the WebAssembly semantics once and generates the specification document and an
+interpreter from it; the Wasm community adopted it in 2025. Concrete takes the single-source idea and
+writes the source directly in Lean, which already gives the proof assistant, instead of a separate
+specification language.
+
+**References:** [SpecTec has been adopted](https://webassembly.org/news/2025-03-27-spectec/);
+[Engineering a Formal Language Specification (ECOOP 2025)](https://2025.ecoop.org/details/plss-2025-papers/1/Engineering-a-Formal-Language-Specification).
+
+### Vermillion (verified LL(1) parsing)
+
+**Status:** Planned
+
+Vermillion is an LL(1) parser generator in Coq whose table generator and parser are proved sound,
+complete and terminating. Concrete's grammar is to be Lean data that must pass the LL(1) check, so
+the same approach can generate its parser; the lexer, the semantic actions and running the generated
+parser are further obligations before the parser leaves the trusted base.
+
+**References:** [Lasser et al., A Verified LL(1) Parser Generator (ITP 2019)](https://drops.dagstuhl.de/storage/00lipics/lipics-vol141-itp2019/LIPIcs.ITP.2019.24/LIPIcs.ITP.2019.24.pdf);
+[Isabelle AFP LL1_Parser](https://isa-afp.org/entries/LL1_Parser.html).
+
+### Lean program verification (`Std.Do`, `mvcgen`, `grind`)
+
+**Status:** Planned
+
+Lean 4.22 added `grind`, an SMT-style tactic, and `Std.Do`, a Hoare logic for monadic programs with
+the `mvcgen` verification-condition generator. Concrete plans to state contracts over its functional
+models and discharge them with these, instead of maintaining its own verification-condition generator.
+
+**References:** [Lean 4.22 release notes](https://lean-lang.org/doc/reference/stable/releases/v4.22.0/).
+
+### Equality saturation with proved rules (egg, AMO-Lean)
+
+**Status:** Later
+
+An e-graph searches for rewrites whose rules are proved theorems. For the search and the extraction
+to stay outside the trusted base, each result also needs a kernel-checked proof that the output equals
+the input: the Lean egg tactic reconstructs such proofs, and AMO-Lean reports e-graph compositional
+correctness as work in progress. Concrete takes this as the shape of a later optimizer.
+
+**References:** [egg tactic in Lean](https://www.arxiv.org/abs/2405.10188);
+[AMO-Lean (LambdaClass)](https://blog.lambdaclass.com/amo-lean-towards-formally-verified-optimization-via-equality-saturation-in-lean-4/).
+
+### Axon and LLM-assisted verification
+
+**Status:** Workflow reference
+
+Axon reports a verified compiler built by a coding agent with Lean 4, combining testing, translation
+validation and verification; Trivet uses LLMs with Lean for LLVM translation validation. Concrete takes
+the working mode: agents write proofs and the Lean kernel checks them. Trivet validates LLVM's own
+optimization passes; a similar agent-written validation could cover a named edge of Concrete's
+unverified LLVM path, such as the BIR → LLVM printer.
+
+**References:** [Axon](https://arxiv.org/abs/2605.01660);
+[LLVM Translation Validation Automated with Large Language Models and Lean](https://arxiv.org/abs/2609.19583).
 
 ## Secondary Influences
 

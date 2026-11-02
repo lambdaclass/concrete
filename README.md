@@ -208,7 +208,9 @@ The full suite is substantial. For a focused change, consult the
 [test guide](scripts/tests/README.md) for the relevant checks. Documentation code
 blocks are checked too, including the project example in this README.
 
-For the design rationale, read [Why Concrete?](docs/project/PROJECT.md#why-concrete).
+For the design rationale, read [Why Concrete?](docs/project/PROJECT.md#why-concrete). Concrete builds on
+Austral, Hylo, Aeneas, Effekt, CompCert, CakeML and others; [Influences](docs/project/INFLUENCES.md) lists
+each with what Concrete takes from it and its references.
 For current priorities and release plans, use the [roadmap](ROADMAP.md).
 Questions and discussion are welcome in [Telegram][tg-url].
 

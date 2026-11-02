@@ -152,7 +152,8 @@ native-image obligations kept explicit.
   the docs and research, and the external native backend. Dropped: the old Core, checker,
   elaborator, lowering, SSA and LLVM emission, the old interpreter, the `PExpr`/ProofCore proofs, and
   the evidence, receipt and report subsystems, which are rebuilt on the new Core when proofs need
-  them. The browser compiler keeps running from the tag until the new compiler covers it.
+  them. Evidence the old compiler produced stays replayable from the tag, and
+  its compatibility obligations end with it. The browser compiler keeps running from the tag until the new compiler covers it.
 - **What it supersedes:** the in-place migration of the current compiler in
   [VERIFIED_PIPELINE.md](docs/compiler/VERIFIED_PIPELINE.md) (its target architecture, semantic contract
   and proof strategy still apply, now to the new compiler); exit 2q's migration of the compiler,
@@ -163,9 +164,10 @@ native-image obligations kept explicit.
   until the new compiler can run them; their tasks and examples are kept. The first release, 0.1, is
   cut from the new compiler. The rest of this file is to be restructured around the new compiler. The proof order in the next paragraph applies to the new compiler.
 
-**How the compiler proof is built (research review, 2026-11-01).** A survey of verified-language and
-verified-compiler projects, reviewed by Codex (adopt with changes), fixes the order in which the
-[verified-compiler plan](docs/compiler/VERIFIED_PIPELINE.md) is carried out:
+**How the compiler proof is built (research reviews, 2026-11-01).** Two surveys of verified-language and
+verified-compiler projects, the first reviewed by Codex (adopt with changes), fix the order in which the
+[verified-compiler plan](docs/compiler/VERIFIED_PIPELINE.md) is carried out for the new compiler. Every
+source is in [INFLUENCES.md](docs/project/INFLUENCES.md#verification-and-compiler-influences-research-of-2026-11-01):
 
 1. **The semantic contract first.** The final theorem is stated before any pass is proved: which
    outcomes a program has (return, abort, observable I/O, divergence), what a trace is, how authority
@@ -176,17 +178,42 @@ verified-compiler projects, reviewed by Codex (adopt with changes), fixes the or
    every program outcome; its relation to divergence is stated with the theorem. Type, ownership and effect
    soundness are proved over it.
 3. **One minimal end-to-end path.** Each pass preserves behaviour and re-establishes the next IR's
-   ownership and authority invariants, so no later pass relies on a check an earlier one skipped.
+   ownership and authority invariants, so no later pass relies on a check an earlier one skipped
+   (Linear Core). Safety is split as in Owlang: the checker proves the ownership invariant and
+   compilation preserves it, the ownership conditions at module boundaries are stated as interface
+   contracts, and every check runs before optimization.
 4. **Functional models for safe code**, in the style of Aeneas: a supported safe function is
    translated to a pure Lean function, with `&mut` arguments passed in and returned, and failure,
-   non-termination and effects explicit. Either the translator is verified or every model carries its
-   own proof. Contracts are stated over these models. This replaces ProofCore, which R-0495 already
-   retires, once the existing proofs transfer.
+   non-termination and effects explicit. Because a Concrete reference is never returned or stored
+   (Hylo's mutable value semantics), the translation is simpler, and the supported subset may need
+   none of Aeneas's backward functions; that each model is exact (effects, divergence, allocation
+   failure and trusted boundaries included) is a theorem to prove. Either the translator is verified
+   or every model carries its own proof. Contracts are stated over these models; the plan is to
+   discharge them with Lean's own program-verification tools (`Std.Do`, `mvcgen`, `grind`) instead of
+   building a project verification-condition generator (the old TermIR generator retires with the old
+   compiler). This replaces ProofCore.
 5. **Open-module correctness and the C boundary**, in the style of CompCertO: per-module theorems
    that compose into a whole-program theorem, with explicit contracts for C code.
 6. **Ghost permissions for trusted code**, in the style of Verus, so selected `trusted` functions
    discharge their trust assumptions instead of carrying them.
 7. **SMT-checked lowering rules** where they pay off, later.
+8. **Later, an optimizer by equality saturation**: an e-graph search whose rewrite rules are proved Lean
+   theorems and whose every result carries a kernel-checked proof that the output equals its input
+   (as the Lean egg tactic reconstructs), so the search and the extraction stay outside the trusted
+   base.
+
+Three more choices follow from the surveys:
+- **The parser is generated from the grammar** (Lean data, which must pass the LL(1) check) by a
+  verified LL(1) generator in the style of Vermillion. The lexer, the semantic actions and running the
+  generated parser remain obligations before the parser leaves the trusted base.
+- **Capability variables** ([authority rule 3](docs/spec/decisions.md#decided-2026-11-02-authority))
+  take Scala's System Capless, whose metatheory is mechanized in Lean, and Effekt's
+  effects-as-capabilities as metatheory references; callbacks that carry capabilities follow once
+  foreign function values are admitted (OD4).
+- **Agent-written proofs, kernel-checked**, as in Axon: agents may write proofs and translation-
+  validation certificates, and only the Lean kernel's check counts. Trivet does this for LLVM's own
+  optimization passes; for Concrete it could cover a named edge such as the BIR → LLVM printer, with
+  LLVM, the backend and the linker still assumptions.
 
 The plan also covers the front end (parsing and desugaring into Core) and the final linked artifact,
 and the spec is tested independently of the compiler, through the conformance suite run on the Lean

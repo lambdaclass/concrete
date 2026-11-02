@@ -1,5 +1,10 @@
 # Verified-compiler pipeline
 
+**Superseded in part (2026-11-01).** The current compiler is not migrated: a new compiler is written
+from the Lean spec ([ROADMAP.md](../../ROADMAP.md#concrete-roadmap)). The goal, target architecture,
+semantic contract and proof obligations below apply to the new compiler; the instructions for
+migrating the current compiler stage by stage do not.
+
 Status: planned, 2026-10-18. Owners: R-0491 – R-0514 in [ROADMAP.md](../../ROADMAP.md), with
 R-0299, R-0300, R-0353, R-0413 and R-0460 linked where named. The architecture reconciles two
 independent designs (a Claude design agent and Codex) and four Codex reviews of earlier drafts (42
@@ -206,7 +211,9 @@ target-memory validity invariant is preserved alongside.
 embedded in the generated Lean file as data with its digest; ProofKit supplies a simp set that
 evaluates the semantics symbolically, so no extraction or correspondence layer exists to drift.
 Statements are generated from a typed `ClaimSpec` (domain, preconditions, postconditions, trace and
-trap clauses, termination, coverage form). VC generation (TermIR) is proved sound against Core
+trap clauses, termination, coverage form). For the new compiler (ROADMAP, 2026-11-01) the plan
+is to state claims over functional models of the checked Core, whose exactness is proved, and to
+discharge them with Lean's `Std.Do`, `mvcgen` and `grind` instead of a project VC generator. Formerly: VC generation (TermIR) is proved sound against Core
 (R-0460). Evidence distinguishes **Core-proved** from **binary-transported**: a claim transports
 to a binary only through the compiler-correctness theorem for the profile that built it *and* a
 theorem that its particular proposition is preserved by the refinement relation (refinement
@@ -847,7 +854,8 @@ native-to-Core refinement for executions satisfying the stated contracts, compos
 compilation and linking; state the resource relation and prove the sufficient-resource theorem.
 Prove frontend correspondence: source bytes and import roots → HIR → `CheckedCore` against
 independently specified syntax, resolution and elaboration judgments (a relation defined as
-"whatever the elaborator produces" does not count). Prove VC generation against Core (R-0460).
+"whatever the elaborator produces" does not count). Prove the functional-model translation against
+Core (it replaces R-0460's VC generation).
 Each binary-transported claim cites a theorem that its proposition is preserved by the refinement
 relation; receipts record the theorem, profile and compiler build.
 **Exit:** the composed source-bytes-and-import-roots-to-native-image theorem, including
