@@ -16,6 +16,58 @@ Still open with the owner: whether a trait can be imported into another module (
 a qualified call `Trait::method(&x)` can be written), and the shape of Core, which the owner decides in one session on the
 target Core proposal ([ROADMAP.md](../../ROADMAP.md#concrete-roadmap)).
 
+<a id="rules-a-decision-changed"></a>
+## Rules a decision has changed
+
+The spec audit of 2026-11-02 listed every chapter rule whose text states behaviour a recorded decision
+has since changed. Those rules are not edited as prose: each is rewritten once, as Lean, when its
+chapter is (the Lean-only source decision). Until then the decision on the right governs, and so do
+the decisions below wherever another chapter sentence disagrees with them. The conformance examples
+of every chapter still use forms these decisions removed and migrate with their chapters.
+
+| Rules | What they still say | Governing decision |
+|---|---|---|
+| TRUST-9 | `main` receives a root resource, splits it, and resources descend from it. | authority rule 12; revised OD8/38 |
+| TRUST-8/9/10 | Tokens model resources, effects appear as token parameters, and there is no separate effect system. | Authority introduction and rules 1–2, 8, 11 |
+| TRUST-D1/4 | Capabilities include `File`, `Console`, and `Random`. | authority rule 13 |
+| TRUST-4, TYPE-D1 rationale | `Std` expands to all operational capabilities. | authority rule 6 and introduction |
+| Syntax introduction | Capability names are contextual; `ghost` is contextual. | authority rule 13; OD73/81/90; OD50 |
+| MEM-5, OWN-15 tables | `alloc(v)` directly returns an owned heap value. | Allocation decision |
+| MEM-5 and resource descriptions | Heap/container types have no allocator identity: `Heap<T>`, `Vec<T>`, `String`. | Allocation decision |
+| STMT-2 | OOM is terminal; recovery is a workload-gated backlog item. | Allocation decision |
+| MEM-5/7, TYPE-10, OWN-15 | `free(h)` releases storage and returns its payload; a Copy result can disappear as part of consumption. | OD59; clarified OD140 |
+| STMT-7 | `main` takes no parameters until an implementation task lands. | authority rule 12; revised OD38 |
+| STMT-7 | `main` returns `u8` or `Unit`, with `Unit` mapped to zero. | 2026-11-02 main decision |
+| STMT-10 | Tests return `i32`. | Revised OD146 |
+| SCOPE-2 | Types, traits, and modules are categorically “another namespace” and therefore not collisions. | Completed OD43; OD67 |
+| TRAIT-D1 rationale | Impl target lookup includes a sibling submodule’s declarations as an implicit fallback. | Explicit-child decision, completed OD43 |
+| Modules introduction and MOD-7 rationale; accepted examples throughout modules/types/FFI | Inline `mod m { … }` is an available module form. | OD33/61 |
+| MOD-4 | Loads `X.con` or `X/mod.con`. | OD142 |
+| TRUST-6 | Trusted functions, externs, and raw operations require `trusted mod`. | OD61 |
+| PAT-1/6, SYN-4, scope introduction | `if let` and `while let` are supported forms with specified semantics. | OD52 |
+| PAT-5/10/11, OWN-5/15 | Refutable destructuring uses `let … else`; rules explain its fallback and mutability. | OD52/85 |
+| PAT-2/3/4/7/9, TYPE-5, OWN-15 | Guards affect matching, coverage, commitment, and moves. | OD55 |
+| PAT-3/7, OWN-15, REF-9 rationale | Range patterns match integer intervals. | OD56/41 |
+| TYPE-7/11, STMT-4/5, OWN-15;  | Struct update `..base` supplies fields, has evaluation order, and copies fields. | OD53 |
+| TYPE-11/21/24, OWN-D1/15, REF-3/5, MOD-9;  | Newtypes exist, have representation rules, constructors, `.0`, casts, and imports. | OD54/123/155 |
+| REF-D3, SCOPE-D1;  | Borrow blocks bind a region via `in R`. | OD57 |
+| OWN-8 rationale; REF-5/12 rationale | Auto-borrowed receivers are ordinary supported places; elaboration builds implicit receiver borrows. | OD32 |
+| MEM-4 accepted example; OWN-15 heap-field row | `h.f` works directly through `&Heap<S>`/`&mut Heap<S>`. | OD30/36 |
+| TRUST-13, TRUST-4 exception; accepted example  | Reference-to-pointer conversion is safe and needs neither trust nor `Unsafe`. | OD98 |
+| MEM-9, ARITH-13 | Proven runtime violations are refused only outside trusted/`Unsafe` functions. | OD118 |
+| CON-3 | Contracts read parameters and `result`. | OD143 |
+| STMT-11 and execution prose; OWN-13 rationale | Remaining locals “are destroyed”; storage teardown versus `Destroy` remains open. | OD69 |
+| OWN-17 | Deferred Copy results are implicitly dropped. | OD140; authority rule 9 |
+| OWN-5; catalog | `discard` accepts any Copy value. | OD62 |
+| REF-10 | An exclusive-reference binding may go unused. | OD62 |
+| SYN-1 and introduction | The external EBNF governs acceptance exactly. | OD150/77 |
+| SYN-6 | A char literal is any one character; non-ASCII behavior is left open. | OD137 |
+| TYPE-6 | Comparisons take numbers only; bool/char support is unresolved. | OD42 |
+| TRAIT-6 and introduction; rationale  | Ambiguous bound-method calls are refused and qualification does not exist. | OD6, completed 2026-11-02 by the qualified call `Trait::method(&x, ...)` |
+| PAT-8 and accepted examples; PASS-6; CON-4 | Rules/examples still accept or regulate C-style `for` headers. | OD47/61 |
+| Conformance examples across all 15 rule chapters; e.g. | Unqualified accepted fixtures use removed aliases/forms, wrong `main` results, or unused named bindings. | Alias/main decisions; OD33/52–57/62 and others above |
+| README and overview authority description | Markdown sentences are normative except where semantics later lands; the written directory is the language source. | the Lean-only source decision (ROADMAP) |
+
 ## Decided
 
 These entries were retired when the owner answered them; their IDs are never reused.

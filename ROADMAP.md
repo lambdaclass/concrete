@@ -8,9 +8,9 @@ Its evidence (proofs, receipts, trust and assumptions) is to be compositional, t
 independently replayable ([verified-compiler decision](docs/project/ROADMAP_DECISIONS.md#decisions), [product north star](docs/project/ROADMAP_DIRECTION.md#product-north-star-compositional-transferable-evidence)).
 
 **The specification comes first (owner decision, 2026-10-30).** Row 0s, the language specification,
-is the top priority. Until its steps 1 – 6 below hold, only the landing of already-validated
-branches runs beside it, and no other row starts; the current compiler is frozen, so no repair goes
-into it. This overrides, for that
+is the top priority. Until its steps 1 – 6 below hold, only what [the interim queue](#the-interim-queue)
+allows runs beside it (the landing of already-validated branches and the development-throughput
+process work), and no other row starts; the current compiler is frozen, so no repair goes into it. This overrides, for that
 period, the ordering in "What is next", the [capacity allocation](#capacity-allocation)'s shares and
 slots, and the concurrent-work permissions elsewhere in this file and in the
 [decision log](docs/project/ROADMAP_DECISIONS.md#decisions). Steps 7 and 8 are carried out by `ConcreteSpec` and
@@ -167,13 +167,15 @@ native-image obligations kept explicit.
 
 <a id="the-interim-queue"></a>
 **The interim queue (2026-11-02).** Until the roadmap is restructured around the new compiler, this is
-the only queue. Everything from "Where we are" to the end of this file describes the plan for the
-current compiler as it stood before 2026-11-01: it is kept for reference, and its rows, exits,
-prerequisites, capacity shares, estimates and release criteria are not in force. In order:
+the only queue. From "Where we are" to the end of this file, the execution plan for the current compiler as
+it stood before 2026-11-01 is kept for reference: its rows, exits, prerequisites, capacity shares,
+estimates and release criteria are not in force, while the owner decisions recorded there are. In order:
 
 1. the roadmap restructured around the new compiler, replacing those sections;
-2. the prose spec made consistent with the recorded decisions: every contradiction and gap the spec
-   audit of 2026-11-02 found is resolved, the decisions chapter governing meanwhile;
+2. the spec audit of 2026-11-02 disposed of: every chapter rule a decision changed is listed with its
+   governing decision ([the list](docs/spec/decisions.md#rules-a-decision-changed)), and the gaps and
+   duplications it found are carried into the target Core proposal, which assigns each to the part
+   that owns it; the chapters themselves are rewritten only as Lean (item 5);
 3. the target Core proposal, decided by the owner;
 4. the end-to-end theorem stated in Lean with its holes, beside the trusted base;
 5. `ConcreteSpec` and slice 1 of the new compiler, the prose chapters retired as Lean replaces them;
@@ -239,9 +241,12 @@ and the spec is tested independently of the compiler, through the conformance su
 semantics. Items 4 – 7 are the adopted direction; their supported subsets, representations and
 residual assumptions are proposed to the owner before each is built.
 
-> **Not in force (2026-11-02).** From here to the end of this file, the text describes the plan for
-> the current compiler before the new-compiler decision. It is kept for reference until the
-> restructure replaces it; [the interim queue](#the-interim-queue) is the only queue.
+> **Not in force (2026-11-02).** From here to the end of this file, the execution plan for the
+> current compiler (where we are, what is next, phases, queue rows and their exits, feature
+> prerequisites, capacity, estimates and releases) is kept for reference until the restructure
+> replaces it; [the interim queue](#the-interim-queue) is the only queue. Still in force here: the
+> [owner decisions](#owner-decisions) and their rule, the [bug dashboard](#bug-dashboard) as a record,
+> and the [development throughput](#development-throughput) process work.
 
 **Where we are (2026-10-21).** Phase 1 (Stabilize) is in progress: the soundness repairs for bugs
 079 – 101 are landing (queue row 0) and R-0482's P1 closures follow (row 1). Probes added since

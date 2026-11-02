@@ -526,9 +526,8 @@ Aeneas translates safe Rust into pure functions in a proof assistant, using Rust
 to avoid memory reasoning. It models how borrows end across calls with "backward functions", which
 carry updated values back to the lender. Concrete takes the functional-translation idea; its
 second-class references (never returned or stored) simplify it: a `&mut` argument goes in and comes
-back out, and the supported subset may need no backward functions. That each model is exact is still a
-theorem to prove. These functional models are the planned basis for proofs about Concrete programs,
-replacing ProofCore.
+back out, and the supported subset may need no backward functions. The plan that builds on it is
+item 4 of the proof order in [ROADMAP.md](../../ROADMAP.md#concrete-roadmap).
 
 **References:** [Ho and Protzenko, Aeneas: Rust Verification by Functional Translation (ICFP 2022)](https://arxiv.org/abs/2206.07185).
 
@@ -564,9 +563,8 @@ function values are admitted, for callbacks that carry capabilities.
 **Status:** Adapted as a compiler lesson
 
 Linear Core shows that optimising transformations can break syntactic linearity while preserving
-semantic linearity, and gives an IR type system that accepts them. Concrete takes the lesson that
-every pass must re-establish the next IR's ownership and authority invariants, not only preserve
-behaviour.
+semantic linearity, and gives an IR type system that accepts them. How Concrete uses the lesson is item 3 of the proof order in
+[ROADMAP.md](../../ROADMAP.md#concrete-roadmap).
 
 **References:** [Mesquita and Toninho, Lazy Linearity for a Core Functional Language (POPL 2026)](https://arxiv.org/abs/2511.10361).
 
@@ -576,9 +574,8 @@ behaviour.
 
 Owlang is a Rust-inspired ownership language compiled through CompCertO, in Rocq. Its ownership
 checker is proved to rule out temporal memory errors (partial safety), and the verified compiler
-carries that safety to assembly. Concrete takes the split: the checker proves the ownership
-invariant and compilation preserves it, the ownership conditions at module boundaries are stated as
-interface contracts, and every check runs before optimization.
+carries that safety to assembly. How Concrete uses the
+split is item 3 of the proof order in [ROADMAP.md](../../ROADMAP.md#concrete-roadmap).
 
 **References:** [End-to-end Compositional Verification of Program Safety through Verified and Verifying Compilation](https://arxiv.org/abs/2510.10015).
 
