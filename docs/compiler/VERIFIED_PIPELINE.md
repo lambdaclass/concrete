@@ -94,8 +94,9 @@ and no closures [TYPE-1](../spec/types.md#TYPE-1).
 - **Behaviours.** Every executable IR has initial/final states and observable behaviours: a trace of
   external events (I/O, FFI calls and returns) ending in *return*, *defined trap*, *silent
   divergence* or *infinite external interaction*. Stuck execution — a violated `Unsafe`
-  precondition — is distinct from a defined trap. Resource exhaustion (stack, OOM) is an explicit
-  behaviour with stated premises, never a silent mismatch.
+  precondition — is distinct from a defined trap. Program allocation failure is an ordinary conserving error under the
+  [Allocation decision](../spec/decisions.md#decided-2026-11-02-allocation); stack, runtime and
+  environment exhaustion are separate explicit premises, never an allocation-abort shortcut.
 - **Style.** Each IR has a total clock-indexed evaluator, deterministic for a fixed admissible
   environment and allocation oracle; behaviours quantify over admissible oracles. Prove stability
   of completed evaluations under clock extension, monotonicity of partial traces, and adequacy for
@@ -114,13 +115,18 @@ and no closures [TYPE-1](../spec/types.md#TYPE-1).
   observability are specified with a total formal reference model; the floating-point environment
   required across FFI boundaries is stated and enforced. Float correctness is proved for the profile
   or explicitly labelled trusted. **Traps** carry a ghost kind; the binary only aborts.
-- **Resources and failure.** Linear conservation is required for resources whose scopes end through
-  normal return or structured control flow, after explicit deferred cleanup. Fatal traps, process
-  termination and resource-exhaustion aborts promise no cleanup or reclamation; divergence carries no
-  eventual-release guarantee. A resource relation and a sufficient-resource theorem govern
-  exhaustion: it may extend behaviours only through that relation, so a compiler that always reports
-  out-of-memory does not satisfy the theorem. Stack overflow is a defined outcome only where generated
-  checks or explicit environment premises justify it.
+- **Resources and failure.** Linear conservation holds on normal returns, structured exits and
+  allocation-error paths, after explicit deferred cleanup: allocation failure returns the input,
+  preserves allocator validity and retains every surviving ownership obligation. It is an ordinary
+  error, never an OOM abort. Fatal traps and explicit abort promise no cleanup; divergence promises
+  no eventual release. Stack, runtime and environment exhaustion have separately stated premises;
+  stack overflow is defined only where checks or explicit environment premises justify it.
+  A resource relation and sufficient-resource theorem must preserve successful allocation when
+  related source and target states have adequate resources: the adequacy predicate is independent
+  of an allocator's reported success, has inhabited sufficient states for finite demands, and
+  requires success for requests within those demands, so an allocator that always fails cannot
+  satisfy the theorem. The exact oracle and relation remain
+  [undecided: see the target Core proposal](../spec/decisions.md#core-semantic-contract).
 - **Scope of the first verified profile:** sequential. Foreign threads, asynchronous shared-memory
   mutation, signals and reentrant callbacks are excluded unless covered by the environment model;
   concurrency requires an explicit memory model, ownership-transfer rules and new refinement
@@ -920,15 +926,11 @@ prevented it; if none would, the plan gains one.
   recorded remote runner, including the claim-inventory step; local reproduction remains supported.
   Qualified slices receive review and are published to both remotes before dependent releases rely on
   them. New boundaries arrive as shadow paths with disagreement gates.
-- **Capacity and priority.** Known authority and memory-safety defects preempt planned work and are
-  repaired or contained fail-closed before affected releases, under the roadmap's defect disposition
-  rule. Effort and integration slots are divided by the roadmap's
-  [capacity allocation](../archive/ROADMAP_LEGACY_PLAN.md#capacity-allocation): this pipeline holds the majority share
-  and two slots (one shared-compiler migration checkpoint, one proof checkpoint); evidence integrity and
-  adversarial validation have protected minimums; interop, application, usability and release work
-  share one capped slot. The next checkpoint, its accountable maintainer
-  and its required reviewer are recorded before it starts. Agents assist implementation and
-  investigation but do not replace independent semantic review.
+- **Scheduling and review.** [ROADMAP's scheduling rule](../../ROADMAP.md#scheduling-rule)
+  governs: one compiler sequence, superseding the historical capacity shares and integration slots
+  (2026-11-03). Known authority and memory-safety defects follow its defect-disposition rule.
+  Each checkpoint still records its accountable maintainer and required reviewer before it starts;
+  agents do not replace independent semantic review, and all technical obligations remain binding.
 - **Stage completion.** A stage closes when its stated proof obligations, compatibility requirements and
   qualified regression gates pass. Hunts and mutations supplement these exits; a hunt that finds nothing
   is not proof of completeness.
