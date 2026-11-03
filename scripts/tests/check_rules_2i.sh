@@ -310,8 +310,10 @@ PY
 )"
   want="$(tr ',' '\n' <<<"${SPEC_RULES[$c]}" | sed 's/^ *//' | sort | paste -sd, - | sed 's/,/, /g')"
   if [ -n "${LEGACY[$c]:-}" ]; then
-    # pinned: the frozen compiler must name exactly its recorded tags (S6 fails a pin that already holds)
-    if [ "$got" = "${LEGACY[$c]}" ]; then ok "$c: ledger rules = frozen pin (${LEGACY[$c]}; spec: $want)"
+    # pinned: the frozen compiler must name exactly its recorded tags, and a pin that already holds is
+    # obsolete (S6's rule: remove it), not a pass
+    if [ "$got" = "$want" ]; then no "$c: legacy pin already holds (ledger = spec = $want); remove it from legacy_codes.tsv"
+    elif [ "$got" = "${LEGACY[$c]}" ]; then ok "$c: ledger rules = frozen pin (${LEGACY[$c]}; spec: $want)"
     else no "$c: ledger rules '$got', the frozen pin says '${LEGACY[$c]}' (spec: '$want')"; fi
   elif [ "$got" = "$want" ]; then ok "$c: ledger rules = spec ($want)"; else no "$c: ledger rules '$got', the spec says '$want'"; fi
 done
@@ -375,7 +377,11 @@ check_reject SCOPE-1 tests/programs/regress_2i_scope1_block_let_renamed.con E030
   && no "N7: a program that compiles passed as a rejection" || ok "N7: an accepted twin cannot pass as its own rejection"
 check_run SCOPE-1 tests/programs/regress_2i_scope1_block_let_renamed.con 41 binary,interp > /dev/null \
   && no "N8: a wrong run value was accepted" || ok "N8: a run row with the wrong value fails in binary and interp"
-python3 - "$TMP/ledger.json" E0301 "$REF5" <<'PY' && no "N9: the ledger check accepted a rule E0301 does not enforce" || ok "N9: the ledger check refuses a rule the code does not enforce"
+# N9 asks whether E0301's row names a REF-5 tag; the tag must be one the frozen compiler can emit (its
+# pinned REF-5 version when one is pinned), or a corrupted row holding the historical tag would pass.
+FREF5="$REF5"
+for _c in "${!LEGACY[@]}"; do for _t in ${LEGACY[$_c]//,/ }; do [ "${_t%@*}" = REF-5 ] && FREF5="$_t"; done; done
+python3 - "$TMP/ledger.json" E0301 "$FREF5" <<'PY' && no "N9: the ledger check accepted a rule E0301 does not enforce" || ok "N9: the ledger check refuses a rule the code does not enforce"
 import json, sys
 p, code, tag = sys.argv[1:]
 d = json.load(open(p))
