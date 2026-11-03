@@ -70,6 +70,23 @@ printf '%s' "$LEDGER" > "$TMP/ledger.json"
 declare -A SPEC_RULES=()
 while IFS=$'\t' read -r code rules; do SPEC_RULES[$code]="$rules"; done < <(python3 "$SPECPY" codes)
 [ "${#SPEC_RULES[@]}" -ge 10 ] || { echo "FATAL: spec.py codes gave only ${#SPEC_RULES[@]} codes" >&2; exit 2; }
+# The frozen compiler's diagnostic tags (docs/spec/legacy_codes.tsv, MAINTAINERS "Frozen compiler
+# ledger"): where the decided-language rewrite moved a rule to a new version, the frozen compiler still
+# tags the old one. That table is the one disagreement record; check_spec.sh S6 reads it for the ledger,
+# and this gate reads the same table, so a pinned code is judged against its pinned tags, never against
+# a version the frozen compiler cannot emit, and an unpinned code still needs the current version.
+declare -A LEGACY=()
+while IFS=$'\t' read -r code tags _; do
+  case "$code" in ''|\#*) continue ;; esac
+  LEGACY[$code]="$(tr ',' '\n' <<<"$tags" | sed 's/^ *//;/^$/d' | sort | paste -sd, - | sed 's/,/, /g')"
+done < docs/spec/legacy_codes.tsv
+# emitted_tag CODE TAG: the tag the frozen compiler reports for TAG's rule under CODE (TAG when unpinned)
+emitted_tag() {
+  local p="${LEGACY[$1]:-}" t
+  [ -n "$p" ] || { echo "$2"; return; }
+  for t in ${p//,/ }; do [ "${t%@*}" = "${2%@*}" ] && { echo "$t"; return; }; done
+  echo "$2"
+}
 
 # ---------------------------------------------------------------------------
 # Structure: returns 0 when the manifest is well formed (prints each defect).
@@ -261,8 +278,10 @@ run_manifest_rows() {  # execute every row of manifest $1; prints FAIL lines; re
     case "$expected" in
       reject:*)
         code="$(cut -d: -f2 <<<"$expected")"; tag="$(cut -d: -f3 <<<"$expected")"
-        if check_reject "$rule" "$fixture" "$code" "$tag" "$modes"; then ok "$rule reject $fixture ($code $tag)"
-        else no "$rule reject $fixture ($code $tag)"; n=$((n+1)); fi ;;
+        local etag; etag="$(emitted_tag "$code" "$tag")"
+        local shown="$code $tag"; [ "$etag" = "$tag" ] || shown="$code $tag; frozen compiler tags $etag (legacy_codes.tsv)"
+        if check_reject "$rule" "$fixture" "$code" "$etag" "$modes"; then ok "$rule reject $fixture ($shown)"
+        else no "$rule reject $fixture ($shown)"; n=$((n+1)); fi ;;
       run:*)
         if check_run "$rule" "$fixture" "${expected#run:}" "$modes"; then ok "$rule run $fixture = ${expected#run:} [$modes]"
         else no "$rule run $fixture = ${expected#run:} [$modes]"; n=$((n+1)); fi ;;
@@ -290,7 +309,11 @@ for r in d.get("codes", []):
 PY
 )"
   want="$(tr ',' '\n' <<<"${SPEC_RULES[$c]}" | sed 's/^ *//' | sort | paste -sd, - | sed 's/,/, /g')"
-  if [ "$got" = "$want" ]; then ok "$c: ledger rules = spec ($want)"; else no "$c: ledger rules '$got', the spec says '$want'"; fi
+  if [ -n "${LEGACY[$c]:-}" ]; then
+    # pinned: the frozen compiler must name exactly its recorded tags (S6 fails a pin that already holds)
+    if [ "$got" = "${LEGACY[$c]}" ]; then ok "$c: ledger rules = frozen pin (${LEGACY[$c]}; spec: $want)"
+    else no "$c: ledger rules '$got', the frozen pin says '${LEGACY[$c]}' (spec: '$want')"; fi
+  elif [ "$got" = "$want" ]; then ok "$c: ledger rules = spec ($want)"; else no "$c: ledger rules '$got', the spec says '$want'"; fi
 done
 
 echo ""
