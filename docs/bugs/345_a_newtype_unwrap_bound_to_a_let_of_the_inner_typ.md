@@ -10,7 +10,7 @@ summary: a newtype unwrap bound to a let of the inner type passes Check and the 
 coverage: reproducer tests/regressions/bug345_a_newtype_unwrap_bound_to_a_let_of_the_inner_typ/repro.con, pinned by check_example_outputs.sh (open-bug reproducers leg, compile-fails on E0715)
 class: 12
 silent: no
-ruling: Violates: PASS-12@1
+ruling: Violates: PASS-12@2
 -->
 
 ## Reproducer

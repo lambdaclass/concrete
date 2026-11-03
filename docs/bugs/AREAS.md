@@ -143,7 +143,7 @@ checker refusal is a Check bug here.
 | [051](051_generic_enums_not_monomorphized.md) | Mono | Mono | commits | — | violates PASS-7@1, FFI-2@1 |
 | [052](052_array_element_destroy_noop.md) | Mono | Mono | commits | Interp, Std | violates PASS-1@1, TRAIT-10@1 |
 | [053](053_dce_deletes_checked_negation.md) | Check | IntArith | commits | Interp, SSA | violates ARITH-3@1 |
-| [054](054_struct_mono_name_collision.md) | — | — | unfixed | — | violates PASS-12@1 |
+| [054](054_struct_mono_name_collision.md) | — | — | unfixed | — | violates PASS-12@2 |
 | [055](055_sibling_import_alias_unusable.md) | Elab | Elab | record | Check | violates PASS-12@1 |
 | [056](056_fnptr_reassign_phi_undefined_register.md) | Lower | Lower | commits | EmitSSA, SSA | violates PASS-9@1 |
 | [057](057_hashmap_builtin_size_undercount.md) | Std | map | named | — | violates FFI-2@1 |
@@ -166,7 +166,7 @@ checker refusal is a Check bug here.
 | [074](074_duplicate_module_names_across_packages.md) | Report | AssumptionSummary | commits | Resolve | open OPEN-44 |
 | [075](075_policy_assumption_authority_checks_vacuous.md) | Gates | authority_facts | commits | — | outside (tooling) |
 | [076](076_proof_admission_blind_to_dependencies.md) | Proof | ProofCore | commits | — | outside (tooling) |
-| [077](077_nested_submodule_relative_call_undefined_symbol.md) | Report | AssumptionSummary | commits | Parse | violates PASS-12@1 |
+| [077](077_nested_submodule_relative_call_undefined_symbol.md) | Report | AssumptionSummary | commits | Parse | violates PASS-12@2 |
 | [078](078_if_else_both_diverge_open_merge.md) | Lower | Lower | commits | Tooling | violates PASS-9@1 |
 | [079](079_receipt_for_a_body_the_theorem_is_not_about.md) | Proof | ProofCore | commits | — | outside (tooling) |
 | [080](080_narrowing_cast_modeled_as_identity.md) | Report | ModelDiff | commits | Proof | outside (tooling) |
@@ -278,7 +278,7 @@ checker refusal is a Check bug here.
 | [213](213_arm_after_catch_all_lowered.md) | Lower | Lower | commits | — | violates PASS-9@1 |
 | [214](214_two_returns_leak_same_diagnostic.md) | Check | Check | shared | Tooling | outside (tooling) |
 | [215](215_unknown_type_in_expression.md) | Resolve | Resolve | commits | — | violates MOD-1@1 |
-| [216](216_field_write_non_mut_binding.md) | — | — | unfixed | — | violates OWN-10@2 |
+| [216](216_field_write_non_mut_binding.md) | — | — | unfixed | — | violates OWN-10@3 |
 | [217](217_resolve_skips_nested_submodules.md) | Resolve | Resolve | commits | — | violates MOD-1@1 |
 | [218](218_duplicate_declarations_accepted.md) | Check | Check | commits | — | violates MOD-3@2 |
 | [219](219_mutation_31_anchored_on_proof_only_wrapper.md) | Proof | ProofCore | commits | — | outside (tooling) |
@@ -372,46 +372,46 @@ checker refusal is a Check bug here.
 | [307](307_a_call_argument_mut_x_passed_a_temporary_copy_of.md) | Lower | Lower | commits | — | permitted by REF-14@1 |
 | [308](308_a_value_if_or_match_passed_to_a_generic_paramete.md) | Resolve | PeekType | commits | — | open OPEN-46 |
 | [309](309_a_loop_in_the_right_operand_of_or_rebound_an_agg.md) | Lower | Lower | commits | — | violates PASS-9@1 |
-| [310](310_a_generic_main_is_accepted_by_check_the_native_b.md) | — | — | unfixed | — | violates STMT-7@3 |
+| [310](310_a_generic_main_is_accepted_by_check_the_native_b.md) | — | — | unfixed | — | violates STMT-7@4 |
 | [311](311_a_destructuring_let_in_another_module_binds_a_st.md) | Check | Check | commits | — | violates TYPE-11@1 |
 | [312](312_a_destructuring_let_binds_a_name_with_the_compil.md) | Check | - | override | — | violates SYN-3@1 |
 | [313](313_duplicate_member_names_inside_one_declaration_re.md) | — | — | unfixed | — | spec gap (MOD) |
 | [314](314_a_for_loop_whose_body_always_breaks_fails_ssa_ve.md) | — | — | unfixed | — | violates PASS-9@1 |
 | [315](315_the_scaling_gate_judged_wall_time_growth_on_a_ho.md) | Gates | compile_scaling | commits | — | outside (tooling) |
 | [316](316_browser_lean_the_browser_compiler_root_did_not_b.md) | Tooling | test-parity | commits | — | outside (tooling) |
-| [317](317_a_match_ran_a_specific_arm_written_after_an_ungu.md) | — | — | unfixed | — | violates PAT-9@1 |
-| [318](318_a_struct_literal_in_an_if_while_or_match_head_is.md) | Report | Report | record | Check | violates SYN-4@1 |
-| [319](319_a_call_that_re_lends_a_mut_binding_is_not_overla.md) | — | — | unfixed | — | violates REF-11@3 |
-| [320](320_main_may_return_int_or_bool_the_native_exit_stat.md) | — | — | unfixed | — | violates STMT-7@3 |
-| [321](321_a_bare_variant_name_ignores_a_payload_and_a_stru.md) | — | — | unfixed | — | violates PAT-3@3, PAT-5@3 |
-| [322](322_trusted_code_compares_raw_pointers_with_and_the.md) | — | — | unfixed | — | violates TYPE-6@2 |
-| [323](323_break_with_a_value_is_accepted_inside_a_while_or.md) | Report | Diagnostic | shared | — | violates STMT-6@3 |
-| [324](324_a_copy_type_or_an_array_satisfies_a_destroy_boun.md) | — | — | unfixed | — | violates TRAIT-10@2 |
-| [325](325_a_call_statement_whose_result_is_not_unit_discar.md) | — | — | unfixed | — | violates OWN-7@3 |
-| [326](326_a_field_access_opens_a_heap_or_heaparray_implici.md) | Report | Diagnostic | shared | — | violates MEM-4@4 |
-| [327](327_an_integer_or_float_literal_with_no_expected_typ.md) | Report | Diagnostic | shared | — | violates ARITH-2@3 |
-| [328](328_a_method_taking_self_or_mut_self_is_called_on_an.md) | — | — | unfixed | — | violates OWN-15@3 |
+| [317](317_a_match_ran_a_specific_arm_written_after_an_ungu.md) | — | — | unfixed | — | violates PAT-9@2 |
+| [318](318_a_struct_literal_in_an_if_while_or_match_head_is.md) | Report | Report | record | Check | violates SYN-4@2 |
+| [319](319_a_call_that_re_lends_a_mut_binding_is_not_overla.md) | — | — | unfixed | — | violates REF-11@4 |
+| [320](320_main_may_return_int_or_bool_the_native_exit_stat.md) | — | — | unfixed | — | violates STMT-7@4 |
+| [321](321_a_bare_variant_name_ignores_a_payload_and_a_stru.md) | — | — | unfixed | — | violates PAT-3@4, PAT-5@4 |
+| [322](322_trusted_code_compares_raw_pointers_with_and_the.md) | — | — | unfixed | — | violates TYPE-6@3 |
+| [323](323_break_with_a_value_is_accepted_inside_a_while_or.md) | Report | Diagnostic | shared | — | violates STMT-6@4 |
+| [324](324_a_copy_type_or_an_array_satisfies_a_destroy_boun.md) | — | — | unfixed | — | violates TRAIT-10@3 |
+| [325](325_a_call_statement_whose_result_is_not_unit_discar.md) | — | — | unfixed | — | violates OWN-7@4 |
+| [326](326_a_field_access_opens_a_heap_or_heaparray_implici.md) | Report | Diagnostic | shared | — | violates MEM-4@5 |
+| [327](327_an_integer_or_float_literal_with_no_expected_typ.md) | Report | Diagnostic | shared | — | violates ARITH-2@4 |
+| [328](328_a_method_taking_self_or_mut_self_is_called_on_an.md) | — | — | unfixed | — | violates OWN-15@5 |
 | [329](329_the_ll_1_checkers_never_computed_follow_sets_a_f.md) | Tooling | check_ll1 | commits | — | violates SYN-1@1 |
 | [330](330_a_continue_inside_a_for_loop_s_step_the_binary_n.md) | Interp | Interp | commits | Check | spec gap (STMT) |
-| [331](331_c_style_for_loops_are_accepted_and_the_counted_l.md) | Report | Diagnostic | shared | — | violates STMT-6@3 |
-| [332](332_a_float_literal_of_type_f32_is_rounded_twice_thr.md) | Lower | Lower | record | — | violates ARITH-7@1 |
+| [331](331_c_style_for_loops_are_accepted_and_the_counted_l.md) | Report | Diagnostic | shared | — | violates STMT-6@4 |
+| [332](332_a_float_literal_of_type_f32_is_rounded_twice_thr.md) | Lower | Lower | record | — | violates ARITH-7@2 |
 | [333](333_an_extra_type_argument_to_a_body_less_generic_de.md) | Lower | Lower | record | — | violates TYPE-9@2 |
 | [334](334_compiler_ledger_emitted_files_is_never_written_r.md) | — | — | unfixed | — | outside (tooling) |
 | [335](335_the_layout_and_stack_depth_reports_panic_on_a_pr.md) | — | — | unfixed | — | outside (tooling) |
-| [336](336_a_destructuring_let_without_mut_binds_assignable.md) | Check | Check | named | Parse | violates OWN-10@2 |
+| [336](336_a_destructuring_let_without_mut_binds_assignable.md) | Check | Check | named | Parse | violates OWN-10@3 |
 | [337](337_a_name_in_with_that_is_no_capability_alias_or_ca.md) | Parse | Parser | named | Check | violates MOD-1@1 |
-| [338](338_a_borrow_mut_block_borrows_a_binding_not_declare.md) | — | — | unfixed | — | violates OWN-10@2 |
+| [338](338_a_borrow_mut_block_borrows_a_binding_not_declare.md) | — | — | unfixed | — | violates OWN-10@3 |
 | [339](339_an_ordering_comparison_of_two_bool_values_compil.md) | — | — | unfixed | — | violates PASS-13@1 |
-| [340](340_the_interpreter_runs_a_program_the_compiler_refu.md) | — | — | unfixed | — | violates MEM-9@1 |
-| [341](341_two_modules_that_each_declare_main_pass_check_an.md) | — | — | unfixed | — | violates PASS-12@1 |
+| [340](340_the_interpreter_runs_a_program_the_compiler_refu.md) | — | — | unfixed | — | violates MEM-9@2 |
+| [341](341_two_modules_that_each_declare_main_pass_check_an.md) | — | — | unfixed | — | violates PASS-12@2 |
 | [342](342_the_diagnostic_code_completeness_gate_scans_a_fi.md) | Report | Report | commits | Tooling | outside (tooling) |
 | [343](343_a_qualified_call_m_f_runs_a_parent_function_name.md) | Resolve | Resolve | override | Parse | violates MOD-1@1 |
 | [344](344_the_interpreter_refuses_the_abort_intrinsic_as_a.md) | — | — | unfixed | — | violates PASS-13@1 |
-| [345](345_a_newtype_unwrap_bound_to_a_let_of_the_inner_typ.md) | — | — | unfixed | — | violates PASS-12@1 |
-| [346](346_a_diverging_abort_bound_to_a_typed_let_that_is_r.md) | — | — | unfixed | — | violates PASS-12@1 |
-| [347](347_get_args_has_a_check_signature_and_no_implementa.md) | — | — | unfixed | — | violates PASS-12@1 |
+| [345](345_a_newtype_unwrap_bound_to_a_let_of_the_inner_typ.md) | — | — | unfixed | — | violates PASS-12@2 |
+| [346](346_a_diverging_abort_bound_to_a_typed_let_that_is_r.md) | — | — | unfixed | — | violates PASS-12@2 |
+| [347](347_get_args_has_a_check_signature_and_no_implementa.md) | — | — | unfixed | — | violates PASS-12@2 |
 | [348](348_float_to_string_runs_natively_and_interp_stops_w.md) | — | — | unfixed | — | violates PASS-13@1 |
-| [349](349_append_is_accepted_in_a_function_that_does_not_d.md) | — | — | unfixed | — | violates MEM-7@1 |
+| [349](349_append_is_accepted_in_a_function_that_does_not_d.md) | — | — | unfixed | — | violates MEM-7@2 |
 | [350](350_the_proven_overflow_arm_of_the_compile_time_safe.md) | — | — | unfixed | — | outside (tooling) |
 
 <!-- END GENERATED: bug areas -->

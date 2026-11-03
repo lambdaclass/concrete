@@ -4,7 +4,7 @@ This document is for those who change the specification: the entry format, the r
 and the migration plan. It states no language rules. Readers start with the [overview](overview.md);
 the landing page is [README.md](README.md).
 
-`docs/spec/` is the one written statement of the Concrete language. It has one chapter per
+`docs/spec/` is the readable statement of the decided Concrete language rules until Lean generates it. It has one chapter per
 area, and every rule and every definition in it has a stable, versioned ID. Other documents, the
 website and the compiler cite a rule by its ID and do not restate it. The compiler, the
 interpreter and the test corpus are checked against this directory by
@@ -13,21 +13,13 @@ interpreter and the test corpus are checked against this directory by
 This follows Austral's discipline: the language should fit in one document that a reader can
 audit.
 
-**Authority.** The normative definition of the language is Core's semantics in Lean: Core's
-executable semantics and the checker judgments on Core (R-0496 and R-0499 in
-[VERIFIED_PIPELINE.md](../compiler/VERIFIED_PIPELINE.md)). `docs/spec/` is the checked, readable
-view of that definition. It is not a second definition. Each entry links the Lean definition it
-describes (`Semantics:`). Where that definition exists, it governs, and the entry's sentence and
-examples are checked against it. Where it does not exist yet, the sentence is a provisional
-statement and the missing link is tracked debt, which closes as the Core semantics lands. The
-link is optional today and becomes required area by area (§2.1, S7). Once an entry has a link,
-it never loses it (S3).
-
-Authority moves one chapter at a time (TIGHTENING_DECISIONS D11). When an area's chapter is in
-this directory and checked, the chapter replaces the area's old prose home, and the old document
-becomes a design record (§6). The rules' Lean definitions then govern, and a disagreement
-between them and the chapter fails the gate, because every example runs against the
-implementation. Until an area's chapter migrates, its old prose home stays normative.
+**Authority.** Lean is the only normative source as it lands: executable semantics and independent
+checker judgments, with readable chapters generated from Lean, not a second definition. Until then,
+the chapters state the decided rules and [decisions.md](decisions.md) governs wherever a chapter
+still disagrees. The owner's 2026-11-03 cleanup decision authorizes correcting these prose chapters
+now, superseding for this cleanup the earlier instruction to wait for the Lean rewrite. Old prose
+homes are historical design records, never an alternative normative source. `Semantics:` links the
+Lean definition as it lands; missing links are tracked debt and a link once present is never lost.
 
 ## 1. Layout
 
@@ -176,7 +168,11 @@ attr     := "name=" NAME                 required; [a-z0-9-]+, unique within the
 OUTCOME  := "accept:" N | "reject:" CODE ":" STAGE | "fail:" TEXT   (TEXT: no spaces; `_` reads as a space)
 ```
 
-An unknown or repeated attribute is refused. Every example is a complete program. Its ID is
+An unknown or repeated attribute is refused. Every example is a complete program. A multi-file example begins with
+`// spec-file: main.con` and separates further source files with `// spec-file: X.con`.
+These are runner delimiters, not Concrete syntax; names must be distinct local `.con` filenames
+without directories, and the runner writes each example into its own private directory.
+Each module is declared with `mod X;` and lives in its own file, on both consumers. Its ID is
 `<entry>/<name>` (`REF-6/let-binds-ref`).
 
 Examples run on every available **consumer**: the native binary, `--interp`, and Core's
@@ -241,10 +237,10 @@ the target. Its four workstreams:
   that permits the behaviour; `new_bug.sh` requires one of the three and a gate checks that every
   cited ID resolves in `ids.tsv`.
 
-Measured on 2026-10-29 (after the owner decided OD1 – OD32 that day): 0 of 161 entries
-link a Lean definition; 138 of 161 have `Evidence: tested`; 18 entries are open (OPEN-33 to OPEN-46 and OPEN-48 to OPEN-51,
-raised while recording those answers); the `docs/language` files still to absorb are
-listed in `unabsorbed.tsv`.
+As of 2026-11-03, all OD1–OD157 are answered or withdrawn; there are no open OD entries.
+Undesigned details are tracked in the [target Core proposal items](decisions.md#target-core-proposal),
+not answered by this cleanup. Missing Lean links remain tracked debt; the remaining source inventory
+is `unabsorbed.tsv`.
 
 ## 3. The gate: `scripts/tests/check_spec.sh`
 
@@ -271,7 +267,7 @@ and it is counted in SKIPPED.
 | S10 site | The site generator (§4) writes one page per chapter with every entry's anchor and the rule index, `scripts/gen/site_reference.py` writes the reference pages, and `zola build` succeeds on a scratch copy of `site/`. `check_site_generated.sh` keeps both sections generated: no tracked copy, every site build runs both generators first, and every site link resolves. Without `zola` the check fails, unless `SPEC_SKIP_SITE=1` is set outside CI, which counts it as SKIPPED. CI installs the pinned Zola that `book.yml` uses. |
 | S11 restatement | No normative sentence occurs in a Markdown file outside `docs/spec/` (§6). |
 | S12 witnesses | `rule_sites.tsv` is byte-equal to `spec.py inventory`: one row per (refusal, code) with its stages and `Enforced by:` declarations. Every row of an enforced or partial refusal has a negative witness: a spec reject example, or a program under `tests/` outside a package, which S12 compiles itself on every run (so S12 is the gate that executes its witnesses), on which the compiler exits with a failure status, without crashing or leaking a lower layer, and reports that code tagged with that rule (`rule: ID@n`); an untagged diagnostic witnesses only a code that one rule alone names. A row with none is named in `coverage_allow.tsv` with a reason (`od:ODn`, `R-NNNN`, `bug-NNN` or `unreachable:<why>`), and an allow row whose code gained a witness fails, so the list only shrinks. S12 is evidence at the level of a rule's code, not of each `Enforced by:` declaration: deleting the only site that reports a rule's code makes S12 fail, while a rule with several sites for one code needs the mutation harness to show that each is load-bearing. |
-| S13 one specification | `docs/spec` is the one normative statement of the language. Every Markdown file under `docs/language` is listed in `unabsorbed.tsv` with the chapters that will absorb it; a file not listed is refused, a row whose file is gone is refused, and a row added relative to the base is refused, so the list only shrinks. `scripts/spec/one_spec.py` owns this source check and `check_docs_drift.sh` runs it on every push, apart from `check_spec.sh`, so that the gates which run the compiler do not depend on every `docs/language` file. Absorbing a document moves its rules into entries and its useful rationale under them, moves tracking material to ROADMAP or KNOWN_HOLES, and deletes the file and its row in one commit. Every file `absorb_inventory.tsv` names is a file in the tree with exactly one verdict row, and every unabsorbed `docs/language` file is in it. |
+| S13 one specification | Lean is the only normative source as it lands; until then chapters state decided rules, with decisions.md governing disagreements. Every Markdown file under `docs/language` is listed in `unabsorbed.tsv` with the chapters that will absorb it; a file not listed is refused, a row whose file is gone is refused, and a row added relative to the base is refused, so the list only shrinks. `scripts/spec/one_spec.py` owns this source check and `check_docs_drift.sh` runs it on every push, apart from `check_spec.sh`, so that the gates which run the compiler do not depend on every `docs/language` file. Absorbing a document moves its rules into entries and its useful rationale under them, moves tracking material to ROADMAP or KNOWN_HOLES, and deletes the file and its row in one commit. Every file `absorb_inventory.tsv` names is a file in the tree with exactly one verdict row, and every unabsorbed `docs/language` file is in it. |
 
 Code-to-rule mapping (S6), behaviour (S4) and coverage (S5) are mechanical. The association
 in `Enforced by:` and the placement of a `spec:` comment (S7) are reviewed claims: the gate
@@ -444,3 +440,13 @@ The migration is complete when no `unmigrated` row remains in `codes.tsv` and ev
 the inventory above is covered by a chapter in the chapter map. From then on S3 refuses any new
 `unmigrated` row. That an area is covered at all is a property of this inventory, which is
 reviewed. Diagnostics alone cannot show that a semantics without a diagnostic has a rule.
+
+
+### Frozen compiler ledger (2026-11-03 cleanup)
+
+`legacy_codes.tsv` pins exact diagnostic-ledger tag sets from the frozen compiler at 119512948,
+tracked by R-0555. S6 still checks every code classification and registered tag; for an explicit
+legacy row it reports PENDING and demands the exact historical tag set, failing on any change or
+when the current set already holds. Removed features' diagnostic codes are retired, not reused.
+This is a compiler disagreement record, never a second language definition. Examples independently
+pin their actual diagnostic outcomes with `now=`; no compiler source is retagged by this cleanup.

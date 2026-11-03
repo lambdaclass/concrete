@@ -10,7 +10,7 @@ summary: A match ran a specific arm written after an unguarded catch-all arm ins
 coverage: archived reproducer(s) for bug 317; see Reproducer and Archive disposition below; no required passing regression against the frozen compiler
 class: 13
 silent: yes
-ruling: Violates: PAT-9@1
+ruling: Violates: PAT-9@2
 -->
 
 ## Reproducer

@@ -40,16 +40,16 @@ Copy, breaks this (bug 105's class, and bug 181, PASS-2). Today this is tested o
 substitution example.
 
 ```con accept name=generic-at-int exit=42
-fn twice<T: Copy>(x: T, f: fn(T) -> Int) -> Int {
+fn twice<T: Copy>(x: T, f: fn(T) -> i64) -> i64 {
     return f(x) + f(x);
 }
 
-fn half(n: Int) -> Int {
+fn half(n: i64) -> i64 {
     return n / 2;
 }
 
-fn example_value() -> Int {
-    return twice::<Int>(42, half);
+fn example_value() -> i64 {
+    return twice::<i64>(42, half);
 }
 
 fn main() -> u8 {
@@ -81,30 +81,30 @@ fn main() -> u8 {
 - Evidence: tested
 
 **Rationale.** Bug 181: Check gave a payload binder through a reference the type `&T`, Elab
-gave it `T`, and after specialization at `T := Int` the binary dereferenced the payload as an
+gave it `T`, and after specialization at `T := i64` the binary dereferenced the payload as an
 address. The decision was made in one place and recomputed in another, and nothing compared
 the two. REF-9 removes the Copy dependence from the rule. This entry requires the mode to be
 data in Core rather than recomputed: since 2026-10-23 a binder's Core type is its mode (a
 reference type is a borrowed binder), decided once from the scrutinee's type, and Lower and the
 interpreter read it from there. The re-check after Mono is the open obligation. The carried type changes under substitution in one case: a
-whole-value binder `n` over a scrutinee of type `T` at `T := &Int` gets a reference type, and
+whole-value binder `n` over a scrutinee of type `T` at `T := &i64` gets a reference type, and
 Lower and the interpreter bind the scrutinee itself in both modes.
 
 ```con accept name=binder-mode-survives-mono exit=42
-fn get<T>(o: &Option<T>, k: fn(&T) -> Int) -> Int {
+fn get<T>(o: &Option<T>, k: fn(&T) -> i64) -> i64 {
     match o {
         Option::Some { value } => { return k(value); },
         Option::None => { return 0; }
     }
 }
 
-fn read(p: &Int) -> Int {
+fn read(p: &i64) -> i64 {
     return *p;
 }
 
-fn example_value() -> Int {
-    let o: Option<Int> = Option::Some { value: 42 };
-    return get::<Int>(&o, read);
+fn example_value() -> i64 {
+    let o: Option<i64> = Option::Some { value: 42 };
+    return get::<i64>(&o, read);
 }
 
 fn main() -> u8 {
@@ -158,12 +158,12 @@ an unsupported mapping fails explicitly (VERIFIED_PIPELINE, "IR chain").
 <a id="PASS-5"></a>
 ### PASS-5. After Check: linearity resolved, operand types agree
 
-**PASS-5@1.** A program that Check accepts has every owned linear local, parameter and branch or arm local consumed on every normal exit and every arithmetic, bitwise or comparison operation on numeric operands at one numeric type, so no later stage receives either violation.
+**PASS-5@2.** A program that Check accepts has every owned linear local, parameter and branch or arm local consumed on every normal exit and every arithmetic, bitwise or comparison operation on numeric operands at one numeric type, so no later stage receives either violation.
 
 - Kind: preservation
 - Uses: none
 - Codes: none
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.Pipeline.check
 - Semantics: none
 - Obligation: Check's judgment is the Core checker's (R-0499); width agreement comes from the one `IntArith` authority (R-0493)
@@ -173,49 +173,43 @@ an unsupported mapping fails explicitly (VERIFIED_PIPELINE, "IR chain").
 SSA-verify says no" cannot happen. A leak caught by Check is never left for a later pass to
 notice.
 
-```con reject name=unconsumed-linear-local code=E0208 stage=check pair=linear-local-consumed
-mod m {
-    struct R { x: i32 }
-    fn f() { let r: R = R { x: 1 }; }
-    fn main() -> u8 { return 0; }
-}
+```con reject name=unconsumed-linear-local-decided code=E0208 stage=check pair=linear-local-consumed pending=R-0555 now=reject:E0108:resolve
+struct R { x: i32 }
+fn f() -> Unit { let r: R = R { x: 1 }; }
+fn main() -> u8 { return 0; }
 ```
 
-```con reject name=mixed-width-binop code=E0228 stage=check pair=linear-local-consumed
-mod m {
-    fn example_value() -> Int {
-        let a: i32 = 1;
-        let b: i64 = 2;
-        return (a + b) as Int;
+```con reject name=mixed-width-binop-decided code=E0228 stage=check pair=linear-local-consumed
+fn example_value() -> i64 {
+    let a: i32 = 1;
+    let b: i64 = 2;
+    return (a + b) as i64;
+}
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
     }
-    fn main() -> u8 {
-        if example_value() == 0 {
-            return 0;
-        }
-        return 1;
-    }
+    return 1;
 }
 ```
 
 ```con accept name=linear-local-consumed exit=42
-mod m {
-    struct R { x: i32 }
-    fn f() -> i32 {
-        let r: R = R { x: 41 };
-        let R { x } = r;
-        return x;
+struct R { x: i32 }
+fn f() -> i32 {
+    let r: R = R { x: 41 };
+    let R { x } = r;
+    return x;
+}
+fn example_value() -> i64 {
+    let a: i64 = 1;
+    let b: i64 = f() as i64;
+    return (a + b) as i64;
+}
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
     }
-    fn example_value() -> Int {
-        let a: i64 = 1;
-        let b: i64 = f() as i64;
-        return (a + b) as Int;
-    }
-    fn main() -> u8 {
-        if example_value() == 42 {
-            return 42;
-        }
-        return 1;
-    }
+    return 1;
 }
 ```
 
@@ -238,44 +232,25 @@ CoreCheck re-checks the result, so a desugaring that introduced a capability cal
 mixed-width operation is refused there, not compiled.
 
 ```con accept name=sugar-elaborates exit=42
-struct Copy P { a: Int, b: Int }
-
-fn get(p: &P) -> Int {
-    return p.a + p.b;
-}
-
-fn example_value() -> Int {
-    let base: P = P { a: 20, b: 2 };
-    let q: P = P { a: 40, ..base };
-    let mut total: Int = 0;
-    for (let mut i: Int = 0; i < 1; i = i + 1) {
-        total = total + get(&q);
-    }
-    return total;
-}
-
+struct Copy P { a: i64, b: i64 }
 fn main() -> u8 {
-
-    if example_value() == 42 {
-
-        return 42;
-
-    }
-
-    return 1;
-
+ let p: P = P { a: 40, b: 0 };
+ let q: P = P { a: p.a, b: 2 };
+ let mut i: i64 = 0; let mut out: i64 = q.a;
+ while i < q.b { out = out + 1; i = i + 1; }
+ if out == 42 { return 42; } return 1;
 }
 ```
 
 <a id="PASS-7"></a>
 ### PASS-7. After Mono: no type variable survives
 
-**PASS-7@1.** After monomorphization no type variable and no unresolved generic declaration remains in the Core that later stages compile, and every Copy type's fields are Copy in each specialization.
+**PASS-7@2.** After monomorphization no type variable and no unresolved generic declaration remains in the Core that later stages compile, and every Copy type's fields are Copy in each specialization, with growing polymorphic call cycles refused before Mono.
 
 - Kind: preservation
 - Uses: none
 - Codes: none
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.Pipeline.monomorphize, Concrete.verifyPostMono
 - Semantics: none
 - Obligation: specialization validated by S8a's total validator (R-0510)
@@ -288,17 +263,17 @@ the pipeline instead of reaching the backend.
 ```con accept name=generic-specialized exit=42
 struct Copy Pair<T> { a: T, b: T }
 
-fn sum<T: Copy>(p: Pair<T>, f: fn(T) -> Int) -> Int {
+fn sum<T: Copy>(p: Pair<T>, f: fn(T) -> i64) -> i64 {
     return f(p.a) + f(p.b);
 }
 
-fn id(x: Int) -> Int {
+fn id(x: i64) -> i64 {
     return x;
 }
 
-fn example_value() -> Int {
-    let p: Pair<Int> = Pair::<Int> { a: 40, b: 2 };
-    return sum::<Int>(p, id);
+fn example_value() -> i64 {
+    let p: Pair<i64> = Pair::<i64> { a: 40, b: 2 };
+    return sum::<i64>(p, id);
 }
 
 fn main() -> u8 {
@@ -333,48 +308,40 @@ used to reach `llvm-as` (bug 024). Each reject example pins the `core-check` bou
 regression that moves a check later fails here even when the program is still refused.
 
 ```con reject name=undeclared-capability code=E0520 stage=core-check pair=valid-core
-mod m {
-    fn needs() with(Network) -> Int { return 0; }
-    fn example_value() -> Int { return needs(); }
-    fn main() -> u8 {
-        if example_value() == 0 {
-            return 0;
-        }
-        return 1;
+fn needs() with(Network) -> i64 { return 0; }
+fn example_value() -> i64 { return needs(); }
+fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
     }
+    return 1;
 }
 ```
 
 ```con reject name=copy-struct-non-copy-field code=E0571 stage=core-check pair=valid-core
-mod m {
-    struct S { x: i32 }
-    struct Copy T { s: S }
-    fn main() -> u8 { return 0; }
-}
+struct S { x: i32 }
+struct Copy T { s: S }
+fn main() -> u8 { return 0; }
 ```
 
 ```con reject name=infinite-size-type code=E0583 stage=core-check pair=valid-core
-mod m {
-    struct S { x: S }
-    fn main() -> u8 { return 0; }
-}
+struct S { x: S }
+fn main() -> u8 { return 0; }
 ```
 
 ```con accept name=valid-core exit=42
-mod m {
-    fn needs() with(Network) -> Int { return 42; }
-    struct Copy S { x: i32 }
-    struct Copy T { s: S }
-    fn example_value() with(Network) -> Int {
-        let t: T = T { s: S { x: 0 } };
-        return needs() + (t.s.x as Int);
+fn needs() with(Network) -> i64 { return 42; }
+struct Copy S { x: i32 }
+struct Copy T { s: S }
+fn example_value() with(Network) -> i64 {
+    let t: T = T { s: S { x: 0 } };
+    return needs() + (t.s.x as i64);
+}
+fn main() with(Network) -> u8 {
+    if example_value() == 42 {
+        return 42;
     }
-    fn main() with(Network) -> u8 {
-        if example_value() == 42 {
-            return 42;
-        }
-        return 1;
-    }
+    return 1;
 }
 ```
 
@@ -398,10 +365,10 @@ that operation (VERIFIED_PIPELINE, "Where each check lives"). The verifier runs 
 SSA cleanup.
 
 ```con accept name=checked-operations-pass exit=42
-fn example_value() -> Int {
-    let a: [Int; 4] = [10, 20, 5, 7];
-    let mut total: Int = 0;
-    let mut i: Int = 0;
+fn example_value() -> i64 {
+    let a: [i64; 4] = [10, 20, 5, 7];
+    let mut total: i64 = 0;
+    let mut i: i64 = 0;
     while i < 4 {
         total = total + a[i];
         i = i + 1;
@@ -436,21 +403,23 @@ not to plain `add` with undefined wrap. A missing `main` used to leak from the s
 interpreter reports a missing `main` its own way.
 
 ```con reject name=no-entry-point code=none stage=link pair=entry-point interp-exempt=no-link-stage-in-the-interpreter
-mod m {
-    fn helper() -> Int { return 1; }
-}
+// spec-file: main.con
+mod m;
+
+
+// spec-file: m.con
+fn helper() -> i64 { return 1; }
+
 ```
 
 ```con accept name=entry-point exit=42
-mod m {
-    fn helper() -> i32 { return 41; }
-    fn example_value() -> Int { return (helper() + 1) as Int; }
-    fn main() -> u8 {
-        if example_value() == 42 {
-            return 42;
-        }
-        return 1;
+fn helper() -> i32 { return 41; }
+fn example_value() -> i64 { return (helper() + 1) as i64; }
+fn main() -> u8 {
+    if example_value() == 42 {
+        return 42;
     }
+    return 1;
 }
 ```
 
@@ -473,12 +442,12 @@ The boundary is useful even while LLVM is the only emitter.
 <a id="PASS-12"></a>
 ### PASS-12. An accepted program is compiled
 
-**PASS-12@1.** A program that every rule of this specification accepts is compiled: no stage after Check refuses it, crashes on it or emits LLVM IR that fails validation.
+**PASS-12@2.** A program that every rule of this specification accepts is compiled: no stage after Check refuses it, crashes on it or emits LLVM IR that fails validation.
 
 - Kind: guarantee
 - Uses: none
 - Codes: none
-- Status: partial bug-054
+- Status: pending R-0555
 - Enforced by: Concrete.Pipeline.lower, Concrete.Pipeline.emit
 - Semantics: none
 - Obligation: none
@@ -486,7 +455,7 @@ The boundary is useful even while LLVM is the only emitter.
 
 **Rationale.** The front end is where a program is judged; the later stages only translate it. A
 generic function that calls itself at a growing type argument does not finish monomorphizing in the current compiler;
-whether Check refuses it, and how, is OPEN-132. A refusal,
+OD132 refuses growing call cycles before Mono. A refusal,
 a crash or invalid IR after Check means the program met no rule and still did not compile, so the
 user gets no diagnostic that names a rule. Bugs 005, 009, 014, 016, 029, 032, 035, 044, 055, 077,
 108 and 116 were such failures. A refusal that a later stage needs (such as E0809, when a generated
@@ -495,10 +464,10 @@ the program below at monomorphization (bug 054, whose mangling is forgeable).
 
 ```con accept name=generic-beside-user-types exit=42
 struct Copy Box<T> { v: T }
-struct Copy Pair { a: Int, b: Int }
+struct Copy Pair { a: i64, b: i64 }
 
-fn example_value() -> Int {
-    let a: Box<Int> = Box::<Int> { v: 40 };
+fn example_value() -> i64 {
+    let a: Box<i64> = Box::<i64> { v: 40 };
     let p: Pair = Pair { a: 1, b: 1 };
     return a.v + p.a + p.b;
 }
@@ -518,10 +487,10 @@ fn main() -> u8 {
 
 ```con accept name=user-type-spells-a-specialization exit=42 pending=bug-054 now=reject:E0809:mono
 struct Copy Box<T> { v: T }
-struct Copy Box_Int { v: Int }
+struct Copy Box_Int { v: i64 }
 
-fn example_value() -> Int {
-    let a: Box<Int> = Box::<Int> { v: 40 };
+fn example_value() -> i64 {
+    let a: Box<i64> = Box::<i64> { v: 40 };
     let b: Box_Int = Box_Int { v: 2 };
     return a.v + b.v;
 }
@@ -559,9 +528,9 @@ PASS-4 tests the LLVM profile against the interpreter; this entry states the agr
 038, 102, 184 and 254 were disagreements between consumers.
 
 ```con accept name=consumers-agree exit=42
-fn example_value() -> Int {
-    let mut s: Int = 0;
-    let mut i: Int = 0;
+fn example_value() -> i64 {
+    let mut s: i64 = 0;
+    let mut i: i64 = 0;
     while i < 7 {
         s = s + i;
         i = i + 1;
@@ -583,3 +552,7 @@ or why they changed, so that each rationale explains the current version only. T
 [ids.tsv](ids.tsv), keeps every version's state and sentence hash.
 
 - PASS-2@1 was retired before it was enforced (the registry: the whole-value binder exception is stated in version 2); PASS-2@2, the first enforced version, names the one case where the carried type changes under substitution (a whole-value binder over a scrutinee of type `T` at `T := &Int`).
+
+- PASS-5@2 (2026-11-03) supersedes PASS-5@1; pending legacy conformance is explicit.
+
+- PASS-12@2 (2026-11-03) supersedes PASS-12@1; pending legacy conformance is explicit.

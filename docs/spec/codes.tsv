@@ -1,6 +1,3 @@
-# Classification of every code in `--report diagnostic-codes` (docs/spec/MAINTAINERS.md S6). Classes: rule (named by a
-# spec entry), unmigrated:<chapter> (only shrinks, S3), internal (compiler invariant), tooling (proof/policy/evidence), retired.
-# code	class	ledger description	reason (an internal code a language stage reports: why it is not a refusal, S6)
 E0001	rule	syntax error
 E0100	rule	undeclared variable
 E0101	rule	unknown function
@@ -127,7 +124,7 @@ E0296	rule	newtype constructed outside its defining module (construction rights,
 E0297	rule	struct literal touches a field private to its defining module (0b)
 E0298	rule	read/write of a struct field private to its defining module (0b)
 E0299	rule	a module binds one name twice (two declarations, an import vs a local definition, or two imports)
-E0300	rule	a match guard moves a non-Copy value (guards are read-only; bug 090)
+E0300	retired	a match guard moves a non-Copy value (guards are read-only; bug 090)
 E0301	rule	a binding reuses the name of a visible local binding (one lexical name, one binding; exit 2i)
 E0302	rule	a `let` binding holds a reference (references are scoped; exit 2i)
 E0303	rule	a reference binding is assigned (references are never re-pointed; exit 2i)
@@ -145,7 +142,7 @@ E0314	rule	wrapping_/saturating_ operation on non-integer operands or operands o
 E0315	rule	builtin called with fewer arguments than its minimum (print, println, append; bug 206)
 E0316	rule	newtype field access other than .0 (bug 206)
 E0317	rule	trait method without a self receiver called as a method (bug 206)
-E0318	rule	enum destructuring let in a for header (bug 206)
+E0318	retired	enum destructuring let in a for header (bug 206)
 E0319	rule	#[test] function with parameters, type parameters or a result other than i32 (bug 206)
 E0320	rule	contract clause or spec function body of the wrong sort (bug 206)
 E0321	rule	contract or spec function body calls a non-spec or capability-requiring function (bug 206)

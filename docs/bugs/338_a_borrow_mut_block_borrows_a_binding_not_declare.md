@@ -13,7 +13,7 @@ coverage: archived reproducer(s) for bug 338; see Reproducer and Archive disposi
 class: 5
 silent: yes
 exit: 0b
-ruling: Violates: OWN-10@2
+ruling: Violates: OWN-10@3
 -->
 
 ## Reproducer

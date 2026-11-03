@@ -33,22 +33,19 @@ semantics records the external-event trace together with its outcome (VERIFIED_P
 "Semantic contract"). Clock exhaustion in the evaluator is inconclusive, not divergence.
 
 <a id="STMT-2"></a>
-### STMT-2. Failure is abort only
+### STMT-2. Allocation errors conserve; traps abort
 
-**STMT-2@1.** A failure (a trap, running out of memory, or an explicit abort) ends the process at once, with no unwinding and no deferred calls, destructors or loan endings run.
+**STMT-2@2.** A trap or explicit abort ends the process immediately without unwinding, deferred calls, destructors or loan endings, while program allocation failure is an ordinary error that conserves inputs and ownership obligations.
 
 - Kind: guarantee
 - Uses: none
 - Codes: none
-- Status: pending R-0496
+- Status: pending R-0555
 - Semantics: none
 - Obligation: abort is a behaviour of Core semantics and every "exactly once" cleanup claim is qualified by "on every path that does not abort" (R-0496)
 - Evidence: tested
 
-**Rationale.** One failure mode keeps the semantics and the linearity argument small. Cleanup is
-guaranteed on normal and structured exits, and abort promises none
-("Abort and failure" below; TIGHTENING_DECISIONS §4.5, T-ARITH).
-Recoverable errors are values (`Result`), not failures.
+**Rationale.** The Allocation decision distinguishes ordinary conserving allocation errors from terminal traps. Stack, runtime and environment exhaustion remain separately stated premises of VERIFIED_PIPELINE, not program OOM aborts.
 
 <a id="STMT-3"></a>
 ### STMT-3. Programs are single-threaded
@@ -72,50 +69,31 @@ programs, not threads.
 <a id="STMT-4"></a>
 ### STMT-4. Evaluation is left to right, assignment evaluates its value first
 
-**STMT-4@1.** Subexpressions are evaluated left to right in source order, each completely before the next begins (a call's receiver, then its arguments; a binary operator's left operand, then its right, with `&&` and `||` short-circuiting; literal elements and fields in the order written; a base before its index; a functional update's explicit fields, then its base exactly once), except that an assignment evaluates its right-hand side before its destination's subexpressions.
+**STMT-4@2.** Subexpressions are evaluated left to right in source order, each completely before the next begins (a call's receiver, then its arguments; a binary operator's left operand, then its right, with `&&` and `||` short-circuiting; literal elements and fields in the order written; a base before its index), except that an assignment evaluates its right-hand side before its destination's subexpressions.
 
 - Kind: guarantee
 - Uses: none
 - Codes: none
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.Pipeline.lower
 - Semantics: none
 - Obligation: V1a's evaluation-order obligation; the verified pipeline may not model a looser order than the compiler implements (R-0500, R-0496)
 - Evidence: tested
 
-**Rationale.** A fixed order makes effects predictable and lets every consumer agree. A trap ends
-evaluation: no later operand is evaluated. Struct literals follow source order since bug 127.
-Three silent violations were fixed on 2026-10-23 (landing train 6), each with its own record: an
-enum literal evaluated its fields in declaration order (bug 137), a functional update read its
-base once per copied field (bug 136), and an assignment through a dereference evaluated its
-destination first natively (bug 183).
-
-Statements run in source order, and an operation is performed only after all its operands are
-evaluated, each completely (its calls, effects and traps included). Struct and enum literal fields
-follow the order they are written, not the order the type declares (`P { b: f(), a: g() }` calls
-`f` before `g`); a functional update evaluates its explicit initializers, then its base once, and
-takes every omitted field from that one value. In an assignment the right-hand side comes first,
-then the destination's subexpressions left to right (`arr[i()] = j()` and `*(&mut a[i()]) = j()`
-both call `j` before `i`; Rust's order for simple assignment), and there are no compound assignment
-operators. An arithmetic trap is checked after both operands are evaluated (ARITH-3). The rule was
-decided 2026-10-21 (exit 2j, R-0500); it discharges V1a's evaluation-order obligation, since the
-verified pipeline may not model a looser order than the compiler implements, and the permanent
-differential coverage of literal-field order, functional update and assignment order is exit 2c's
-(R-0491). The per-rule status tables of that decision are kept in the archived design record
-([STATEMENT_EXPRESSION_MODEL.md](../archive/design-records/STATEMENT_EXPRESSION_MODEL.md)).
+**Rationale.** Evaluation remains left to right except that assignment computes its value before its destination; OD53 removes the functional-update evaluation case.
 
 ```con accept name=source-order exit=42
-struct Copy P { a: Int, b: Int }
+struct Copy P { a: i64, b: i64 }
 
-fn tick(acc: &mut Int, k: Int) -> Int {
+fn tick(acc: &mut i64, k: i64) -> i64 {
     *acc = *acc * 10 + k;
     return k;
 }
 
-fn example_value() -> Int {
-    let mut acc: Int = 0;
+fn example_value() -> i64 {
+    let mut acc: i64 = 0;
     let p: P = P { b: tick(&mut acc, 2), a: tick(&mut acc, 1) };
-    let s: Int = tick(&mut acc, 1) + tick(&mut acc, 2);
+    let s: i64 = tick(&mut acc, 1) + tick(&mut acc, 2);
     return acc - 2112 + p.a + p.b + s * 0 + 39;
 }
 
@@ -133,16 +111,17 @@ fn main() -> u8 {
 ```
 
 ```con accept name=enum-literal-source-order exit=21
-enum Copy E { V { a: Int, b: Int }, W }
+enum Copy E { V { a: i64, b: i64 }, W }
 
-fn tick(acc: &mut Int, k: Int) -> Int {
+fn tick(acc: &mut i64, k: i64) -> i64 {
     *acc = *acc * 10 + k;
     return k;
 }
 
-fn example_value() -> Int {
-    let mut acc: Int = 0;
+fn example_value() -> i64 {
+    let mut acc: i64 = 0;
     let e: E = E::V { b: tick(&mut acc, 2), a: tick(&mut acc, 1) };
+    discard(e);
     return acc;
 }
 
@@ -162,33 +141,29 @@ fn main() -> u8 {
 <a id="STMT-5"></a>
 ### STMT-5. No exit inside an operand
 
-**STMT-5@1.** `return`, `break` and `continue` do not occur inside a call argument or receiver, a struct, enum or array literal element (a functional-update base included), or an operator operand, unless a `break` or `continue` belongs to a loop entered inside that operand.
+**STMT-5@2.** `return`, `break` and `continue` do not occur inside a call argument or receiver, a struct, enum or array literal element, or an operator operand, unless a `break` or `continue` belongs to a loop entered inside that operand.
 
 - Kind: refusal
 - Uses: none
 - Codes: E0278 (check)
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.checkExprCore
 - Semantics: none
 - Obligation: an operand already evaluated for a pending construct is a live owned temporary until it completes (R-0499)
 - Evidence: tested
 
-**Rationale.** An exit inside an operand leaves a call or literal whose earlier operands were
-already evaluated and moved into it; the construct never completes and, with no implicit
-destruction, nothing destroys them (bug 142). An exit stays legal in statement position, in a
-tail, and in a `let` or assignment initializer's branch chain (the `let ... else` idiom written as a
-`match`).
+**Rationale.** Operand exits cannot bypass the surrounding operation; OD53 removes functional update and its former base-operand case.
 
-```con reject name=return-in-argument code=E0278 stage=check pair=exit-in-branch
-fn add(a: Int, b: Int) -> Int {
+```con reject name=return-in-argument-decided code=E0278 stage=check pair=exit-in-branch pending=R-0555 now=reject:E0278:check
+fn add(a: i64, b: i64) -> i64 {
     return a + b;
 }
 
-fn f(c: bool) -> Int {
+fn f(c: bool) -> i64 {
     return add(1, if c { return 42; } else { 2 });
 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     return f(true);
 }
 
@@ -206,15 +181,15 @@ fn main() -> u8 {
 ```
 
 ```con accept name=exit-in-branch exit=42
-fn f(o: Option<Int>) -> Int {
-    let v: Int = match o {
+fn f(o: Option<i64>) -> i64 {
+    let v: i64 = match o {
         Option::Some { value } => value,
         Option::None => { return 42; }
     };
     return v;
 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     return f(Option::None);
 }
 
@@ -234,12 +209,12 @@ fn main() -> u8 {
 <a id="STMT-6"></a>
 ### STMT-6. Loops are statements; `break` and `continue` name a loop
 
-**STMT-6@3.** The loops are `while cond { ... }` and the counted loop `for i from a until b { ... }`, both statements, where the counted loop evaluates `a` and then `b` once, both of one integer type, which the index `i` takes, before its first iteration, compares `i` with `b` before each iteration and advances it only after a comparison that succeeded, so it never advances `i` past `b`, and runs its body with `i`, immutable and scoped to the body, bound to each value from `a` up to but not including `b`, none when `a >= b`; `break` carries no value, and `break` and `continue` act on the innermost enclosing loop or, with a label, on the labeled loop and appear only inside a loop, `continue` running the body's exit sequence and then advancing only the loop it names, while `break` and `return` advance nothing.
+**STMT-6@4.** The loops are `while cond { ... }` and the counted loop `for i from a until b { ... }`, both statements, where the counted loop evaluates `a` and then `b` once, both of one integer type, which the index `i` takes, before its first iteration, compares `i` with `b` before each iteration and advances it only after a comparison that succeeded, so it never advances `i` past `b`, and runs its body with `i`, immutable and scoped to the body, bound to each value from `a` up to but not including `b`, none when `a >= b`; `break` carries no value, and `break` and `continue` act on the innermost enclosing loop or, with a label, on the labeled loop and appear only inside a loop, `continue` running the body's exit sequence and then advancing only the loop it names, while `break` and `return` advance nothing.
 
 - Kind: refusal
 - Uses: none
 - Codes: E0216 (check), E0245 (check), E0280 (check), E0281 (check), E0542 (core-check), E0543 (core-check)
-- Status: partial bug-331
+- Status: pending R-0555
 - Enforced by: Concrete.checkStmt, Concrete.ccCheckStmt
 - Semantics: none
 - Obligation: none
@@ -286,7 +261,7 @@ range loop, and the C-style `for` is removed in every form (`for (init; cond; st
 `for (cond)` and the unconditional `for`). The counted loop is half-open, `for i from a until b`
 running `a`, `a + 1`, ..., `b - 1` and nothing when `a >= b`; its index cannot be assigned in the
 body, and its scope is the body; both bounds must have one integer type, which the index takes.
-Whether `from` and `until` are reserved words or contextual keywords is OPEN-50. The grammar is LL(1): `for` IDENT `from` expr `until` expr block, the upper bound
+`from` and `until` are reserved (OD50). The grammar is LL(1): `for` IDENT `from` expr `until` expr block, the upper bound
 being a restricted head expression so that `{` ends the head (SYN-4, OD16). In Core the counted loop
 desugars to the one `while` form, so proofs keep a single loop construct, and the counted form
 carries its termination measure, `b - i`. Why: a counted loop terminates without a proof and gives
@@ -295,9 +270,7 @@ which bugs 306 and 330 got wrong; and the old header was an LL(1) conflict. Aust
 counted loop (inclusive), and Swift removed the C-style loop (SE-0007); `until` is half-open to avoid
 off-by-one errors and because `to` reads as exclusive to some and inclusive to others. The current compiler still has
 only the C-style forms (bug 331 implements the decision and migrates the corpus under exit 2q). The
-index type when both bounds are untyped literals is OPEN-48, the arithmetic of the termination
-measure is OPEN-49, and whether reverse, stepped or collection iteration stays out of the language
-is OPEN-51.
+two-untyped-literal bounds are refused (OD48), the termination measure is mathematical (OD49), and reverse, stepped and collection iteration remain absent (OD51).
 
 The reviews of 2026-10-29 (Codex, Kimi and Grok) fixed the details this version states: the bounds
 are evaluated once, left to right, before the first iteration, so a side effect in `b` happens
@@ -308,7 +281,7 @@ without advancing; and the index cannot be assigned and is not visible after the
 gives the counted loop its termination measure. The examples of this specification that use the C-style form migrate with the
 corpus.
 
-```con reject name=break-outside-loop code=E0280 stage=check pair=labeled-break
+```con reject name=break-outside-loop-decided code=E0280 stage=check pair=labeled-break pending=R-0555 now=reject:E0280:check
 fn main() -> u8 {
     break;
     return 0;
@@ -316,12 +289,12 @@ fn main() -> u8 {
 ```
 
 ```con accept name=labeled-break exit=42
-fn example_value() -> Int {
-    let mut out: Int = 0;
-    let mut i: Int = 0;
+fn example_value() -> i64 {
+    let mut out: i64 = 0;
+    let mut i: i64 = 0;
     'outer: while i < 10 {
         i = i + 1;
-        let mut j: Int = 0;
+        let mut j: i64 = 0;
         while j < 10 {
             j = j + 1;
             if j == 3 {
@@ -344,8 +317,8 @@ fn main() -> u8 {
 ```
 
 ```con reject name=break-with-value code=new stage=parse pair=break-without-value pending=bug-323 now=accept:1
-fn example_value() -> Int {
-    let mut i: Int = 0;
+fn example_value() -> i64 {
+    let mut i: i64 = 0;
     while i < 3 {
         i = i + 1;
         break 42;
@@ -361,8 +334,8 @@ fn main() -> u8 {
 ```
 
 ```con accept name=break-without-value exit=1
-fn example_value() -> Int {
-    let mut i: Int = 0;
+fn example_value() -> i64 {
+    let mut i: i64 = 0;
     while i < 3 {
         i = i + 1;
         break;
@@ -378,9 +351,9 @@ fn main() -> u8 {
 ```
 
 ```con reject name=c-style-for code=new stage=parse pair=counted-loop pending=bug-331 now=accept:42
-fn example_value() -> Int {
-    let mut s: Int = 0;
-    for (let mut i: Int = 0; i < 7; i = i + 1) {
+fn example_value() -> i64 {
+    let mut s: i64 = 0;
+    for (let mut i: i64 = 0; i < 7; i = i + 1) {
         s = s + i;
     }
     return s + 21;
@@ -394,8 +367,8 @@ fn main() -> u8 {
 ```
 
 ```con reject name=for-condition-only code=new stage=parse pair=while-loop pending=bug-331 now=accept:42
-fn example_value() -> Int {
-    let mut i: Int = 0;
+fn example_value() -> i64 {
+    let mut i: i64 = 0;
     for (i < 42) {
         i = i + 1;
     }
@@ -410,8 +383,8 @@ fn main() -> u8 {
 ```
 
 ```con reject name=unconditional-for code=new stage=parse pair=while-loop pending=bug-331 now=accept:42
-fn example_value() -> Int {
-    let mut i: Int = 0;
+fn example_value() -> i64 {
+    let mut i: i64 = 0;
     for {
         i = i + 1;
         if i == 42 { break; }
@@ -427,8 +400,8 @@ fn main() -> u8 {
 ```
 
 ```con accept name=while-loop exit=42
-fn example_value() -> Int {
-    let mut i: Int = 0;
+fn example_value() -> i64 {
+    let mut i: i64 = 0;
     while i < 42 {
         i = i + 1;
     }
@@ -443,10 +416,10 @@ fn main() -> u8 {
 ```
 
 ```con accept name=counted-loop exit=42 pending=bug-331 now=reject:E0001:parse
-fn example_value() -> Int {
-    let lo: Int = 0;
-    let hi: Int = 7;
-    let mut s: Int = 0;
+fn example_value() -> i64 {
+    let lo: i64 = 0;
+    let hi: i64 = 7;
+    let mut s: i64 = 0;
     for i from lo until hi {
         s = s + i;
     }
@@ -461,10 +434,10 @@ fn main() -> u8 {
 ```
 
 ```con accept name=counted-loop-empty exit=42 pending=bug-331 now=reject:E0001:parse
-fn example_value() -> Int {
-    let lo: Int = 5;
-    let hi: Int = 5;
-    let mut s: Int = 42;
+fn example_value() -> i64 {
+    let lo: i64 = 5;
+    let hi: i64 = 5;
+    let mut s: i64 = 42;
     for i from lo until hi {
         s = 0;
     }
@@ -479,15 +452,15 @@ fn main() -> u8 {
 ```
 
 ```con accept name=counted-loop-bounds-once exit=42 pending=bug-331 now=reject:E0001:parse
-fn bump(c: &mut Int) -> Int {
+fn bump(c: &mut i64) -> i64 {
     *c = *c + 1;
     return 3;
 }
 
-fn example_value() -> Int {
-    let mut calls: Int = 0;
-    let lo: Int = 0;
-    let mut s: Int = 0;
+fn example_value() -> i64 {
+    let mut calls: i64 = 0;
+    let lo: i64 = 0;
+    let mut s: i64 = 0;
     for i from lo until bump(&mut calls) {
         s = s + 10;
     }
@@ -508,10 +481,10 @@ fn main() -> u8 {
 ```
 
 ```con accept name=counted-loop-at-type-max exit=5 pending=bug-331 now=reject:E0001:parse
-fn example_value() -> Int {
+fn example_value() -> i64 {
     let lo: u8 = 250;
     let hi: u8 = 255;
-    let mut n: Int = 0;
+    let mut n: i64 = 0;
     for i from lo until hi {
         n = n + 1;
     }
@@ -526,10 +499,10 @@ fn main() -> u8 {
 ```
 
 ```con accept name=counted-loop-reversed-bounds-empty exit=42 pending=bug-331 now=reject:E0001:parse
-fn example_value() -> Int {
-    let lo: Int = 9;
-    let hi: Int = 3;
-    let mut s: Int = 42;
+fn example_value() -> i64 {
+    let lo: i64 = 9;
+    let hi: i64 = 3;
+    let mut s: i64 = 42;
     for i from lo until hi {
         s = 0;
     }
@@ -544,10 +517,10 @@ fn main() -> u8 {
 ```
 
 ```con accept name=counted-loop-continue-and-break exit=42 pending=bug-331 now=reject:E0001:parse
-fn example_value() -> Int {
-    let lo: Int = 0;
-    let hi: Int = 100;
-    let mut s: Int = 0;
+fn example_value() -> i64 {
+    let lo: i64 = 0;
+    let hi: i64 = 100;
+    let mut s: i64 = 0;
     for i from lo until hi {
         if i == 2 {
             continue;
@@ -568,10 +541,10 @@ fn main() -> u8 {
 ```
 
 ```con accept name=counted-loop-labeled-continue exit=42 pending=bug-331 now=reject:E0001:parse
-fn example_value() -> Int {
-    let zero: Int = 0;
-    let three: Int = 3;
-    let mut s: Int = 0;
+fn example_value() -> i64 {
+    let zero: i64 = 0;
+    let three: i64 = 3;
+    let mut s: i64 = 0;
     'outer: for i from zero until three {
         for j from zero until three {
             if j == 1 {
@@ -591,10 +564,10 @@ fn main() -> u8 {
 ```
 
 ```con reject name=counted-loop-index-is-immutable code=new stage=check pair=counted-loop pending=bug-331 now=reject:E0001:parse
-fn example_value() -> Int {
-    let lo: Int = 0;
-    let hi: Int = 3;
-    let mut s: Int = 0;
+fn example_value() -> i64 {
+    let lo: i64 = 0;
+    let hi: i64 = 3;
+    let mut s: i64 = 0;
     for i from lo until hi {
         i = 5;
         s = s + i;
@@ -610,37 +583,23 @@ fn main() -> u8 {
 ```
 
 <a id="STMT-7"></a>
-### STMT-7. `main` takes no parameters and its result is the exit status
+### STMT-7. `main` declares target grants and returns u8
 
-**STMT-7@3.** The entry point is a module-level `fn main()` with no parameters whose result type is `u8` or `Unit`, and the process exit status is that `u8`, or 0 for `Unit`, with nothing written by the runtime.
+**STMT-7@4.** The entry point is one module-level `main` returning only `u8`, whose parameters declare a subset of the target grants and whose `with(...)` declares permitted effects, every declared grant being explicitly consumed before normal return and the returned `u8` being the process exit status.
 
 - Kind: refusal
 - Uses: none
 - Codes: E0310 (check)
-- Status: partial bug-320
+- Status: pending R-0555
 - Enforced by: Concrete.checkModule
 - Semantics: none
 - Obligation: the exit status is the `exit` behaviour of STMT-1 (R-0496)
 - Evidence: tested
 
-**Rationale.** Command-line arguments come from `std.args` (`with(Env)`); a parameterized `main`
-used to read an undefined register (bug 111). The language has no exit operation: an early exit would
-skip cleanup the linear rules promise, so status flows back through `main` (std's `process_exit`,
-which does skip it, is OPEN-136). The result is `u8` or `Unit` (OD24), so masking is unrepresentable. `--interp` prints the result instead of exiting with it.
-The owner decided OD8 on 2026-10-29: `main` will receive the root resource value and split it
-(TRUST-9); this entry changes with R-0557, which lands that parameter, and until then `main` takes
-none.
+**Rationale.** The main-result decision fixes `u8` only. Authority rule 12 and the audit permit only declared target grants and require their explicit consumption; undeclared grants are never minted. Target grant schemas and lifecycle APIs are [undecided: see the target Core proposal](decisions.md#core-grants).
 
-The owner decided on 2026-10-29 (OD24) that `main` returns `u8` or `Unit`; there
-is no masking, no `bool` mapping and no other result type. The current compiler still accepts any result type, masks
-an integer natively and prints it under `--interp` (bug 320). Every example of this specification
-uses the decided form, `fn main() -> u8`; an example whose value is computed as an `Int` keeps that
-computation in `example_value()` and has `main` compare it with the expected exit status.
-`main-returns-int` pins the current compiler's acceptance of `-> Int` as pending.
-
-
-```con reject name=main-with-parameter code=E0310 stage=check pair=main-exit-status
-fn main(argc: Int) -> u8 {
+```con reject name=main-with-parameter-decided code=E0310 stage=check pair=main-exit-status pending=R-0555 now=reject:E0310:check
+fn main(argc: i64) -> u8 {
     return 0;
 }
 ```
@@ -651,9 +610,9 @@ fn main() -> u8 {
 }
 ```
 
-```con reject name=main-returns-int code=new stage=check pair=main-returns-u8 pending=bug-320 now=accept:42
-fn main() -> Int {
-    return 42;
+```con reject name=main-returns-int code=new stage=check pair=main-returns-u8 pending=bug-320 now=accept:1
+fn main() -> i64 {
+    if 42 == 0 { return 0; } return 1;
 }
 ```
 
@@ -693,9 +652,9 @@ and wrong-slot hazards (ROADMAP #36, 2026-06-20; `regress_stmt_match_arm_unit.co
 prints a value expression without `;` and a statement with one.
 
 ```con accept name=trailing-values exit=42
-fn pick(c: bool, k: Int) -> Int {
-    let v: Int = if c {
-        let t: Int = k * 2;
+fn pick(c: bool, k: i64) -> i64 {
+    let v: i64 = if c {
+        let t: i64 = k * 2;
         match k {
             0 => 1,
             _ => t
@@ -706,7 +665,7 @@ fn pick(c: bool, k: Int) -> Int {
     return v;
 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     return pick(true, 21);
 }
 
@@ -743,13 +702,13 @@ void` in a non-void function) while `--interp` ran the program. Check now refuse
 using a reachability analysis over every statement of a block.
 
 ```con reject name=one-branch-returns code=E0307 stage=check pair=every-path-returns
-fn f(c: bool) -> Int {
+fn f(c: bool) -> i64 {
     if c {
         return 1;
     }
 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     return f(true) + 41;
 }
 
@@ -767,14 +726,14 @@ fn main() -> u8 {
 ```
 
 ```con accept name=every-path-returns exit=42
-fn f(c: bool) -> Int {
+fn f(c: bool) -> i64 {
     if c {
         return 1;
     }
     return 0;
 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     return f(true) + 41;
 }
 
@@ -794,23 +753,22 @@ fn main() -> u8 {
 <a id="STMT-10"></a>
 ### STMT-10. A test function is an entry point
 
-**STMT-10@1.** A `#[test]` function takes no parameters, has no type parameters and returns `i32`, its exit status under `concrete test`.
+**STMT-10@2.** A test function marked `#[test]` returns only `u8`, with zero denoting success and a nonzero result denoting failure.
 
 - Kind: refusal
 - Uses: none
 - Codes: E0319 (check)
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.checkFn
 - Semantics: none
 - Obligation: none
 - Evidence: tested
 
-**Rationale.** The test runner calls each test as it calls `main` (STMT-7): with nothing to pass and
-a status to read, so a test has the same shape.
+**Rationale.** Revised OD146 follows `main`: tests return only `u8`.
 
-```con reject name=test-with-parameter code=E0319 stage=check pair=test-shape
+```con reject name=test-with-parameter-decided code=E0319 stage=check pair=test-shape-decided pending=R-0555 now=reject:E0319:check
 #[test]
-fn t(x: i32) -> i32 {
+fn t(x: u8) -> u8 {
     return x;
 }
 
@@ -819,9 +777,9 @@ fn main() -> u8 {
 }
 ```
 
-```con accept name=test-shape exit=42
+```con accept name=test-shape-decided exit=42 pending=R-0555 now=reject:E0319:check
 #[test]
-fn t() -> i32 {
+fn t() -> u8 {
     return 0;
 }
 
@@ -833,36 +791,27 @@ fn main() -> u8 {
 <a id="STMT-11"></a>
 ### STMT-11. One exit sequence
 
-**STMT-11@2.** Every exit of a scope that does not abort runs the same sequence: the exit value is computed, then the scope's deferred calls run, last registered first and innermost scope first, then the scope's loans end, and then its remaining locals are destroyed, so a counted loop advances its index only after its body scope's exit sequence.
+**STMT-11@3.** Every non-abort scope exit first evaluates its exit value, then runs deferred calls in reverse registration order from innermost scope outward, then ends the loans and tears down local storage without invoking an implicit `Destroy`, while a trapping deferred call stops the sequence.
 
 - Kind: guarantee
 - Uses: none
 - Codes: none
-- Status: pending R-0496
+- Status: pending R-0555
 - Semantics: none
 - Obligation: STMT-1 (R-0496)
 - Evidence: tested
 
-**Rationale.** Decided by the owner on 2026-10-29 (OD2, part 5). Whether the last step, "the remaining
-locals are destroyed", is storage teardown only or a call of `Destroy`, a reading in conflict with OWN-13's rule that nothing
-is destroyed implicitly, is OPEN-69. One order on every normal exit
-(falling off the end, `return`, `break`, `continue`) is what lets a deferred call see the exit value
-already computed and the loans it was given still live (OWN-16), and lets the destruction of the
-remaining locals come last. An abort runs none of it (STMT-2; OD10). A counted loop's body is its own scope and advancing the index belongs to the loop,
-outside it, so the body's deferred calls, loan ends and destructions run, on a fall-through or a
-`continue`, before the index advances. Bugs 305 and 306 brought the borrow block's exits and the interpreter's `for`
-step into this order; the entry stays pending until
-R-0496's Core semantics defines the sequence for every exit form.
+**Rationale.** OD2 fixes the exit order, OD68 stops cleanup after a trapping deferred call, and OD69 makes the final step storage teardown rather than an implicit Destroy; all linear obligations were explicitly discharged already.
 
 <a id="STMT-12"></a>
 ### STMT-12. A counted loop carries its own measure
 
-**STMT-12@1.** In Core a counted loop is the one `while` form, carrying the termination measure `b - i` that the loop gives itself.
+**STMT-12@2.** In Core a counted loop is the one `while` form, carrying the proof-only mathematical-integer termination measure `b - i` that the loop gives itself, refusing an explicit `#[variant]` and checking its invariant before the loop and after each iteration.
 
 - Kind: guarantee
 - Uses: none
 - Codes: none
-- Status: pending bug-331
+- Status: pending R-0555
 - Semantics: none
 - Obligation: the counted loop's measure decreases on every iteration (R-0496)
 - Evidence: tested
@@ -870,18 +819,13 @@ R-0496's Core semantics defines the sequence for every exit form.
 **Rationale.** Decided with OD47 on 2026-10-29: proofs keep a single loop construct. The measure
 proves only that the number of iterations is finite; the loop terminates when its bounds, its body
 and its cleanup do, and the counted loop's proof rule (zero iterations, `break`, a labelled
-`continue`) is stated over this desugared loop. Whether a `#[variant]` written on a counted loop is
-refused, checked or ignored is OPEN-104, and where its `#[invariant]` is checked is OPEN-105 (CON-2
-checks a loop invariant before the loop and after every iteration). Removing a bounds check over
-the index is an optimization, not a rule of the language: it needs an in-range certificate at the
-access (the bounds against the array's length), not only a length that cannot change. How the
-measure is represented when `b - a` does not fit the bounds' type is OPEN-49.
+`continue`) is stated over this desugared loop. OD104 refuses an explicit variant; OD105 checks invariants before the loop and after every iteration. Removing a bounds check needs an in-range certificate at the access (the bounds against the array's length), not only a length that cannot change. OD49 makes the measure a mathematical integer in the proof only, never computed at runtime.
 
 ```con accept name=counted-loop-own-measure exit=42 pending=bug-331 now=reject:E0001:parse
-fn example_value() -> Int {
-    let lo: Int = 0;
-    let hi: Int = 7;
-    let mut s: Int = 0;
+fn example_value() -> i64 {
+    let lo: i64 = 0;
+    let hi: i64 = 7;
+    let mut s: i64 = 0;
     for i from lo until hi {
         s = s + i;
     }
@@ -898,25 +842,21 @@ fn main() -> u8 {
 <a id="STMT-13"></a>
 ### STMT-13. `abort()` needs `Process`
 
-**STMT-13@1.** The builtin `abort()` requires the `Process` capability, and the trap of a checked operation requires no capability.
+**STMT-13@2.** The builtin `abort()` and checked traps need neither a resource value nor a permission, while target diagnostics and output flushing are recorded in traces and target assumptions.
 
 - Kind: guarantee
 - Uses: none
 - Codes: none
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.IntrinsicId.capability
 - Semantics: none
 - Obligation: none
 - Evidence: tested
 
-**Rationale.** Ending the process on request is an authority over the process, so it is visible in
-the caller's `with(...)` set like any other (TRUST-4): a call without `Process` is refused with
-TRUST-4's E0520. A trap is not a request: the operation that traps needs no capability, so checked
-arithmetic and safe indexing stay available to code that holds none. What `Process` names is
-OPEN-95.
+**Rationale.** The 2026-11-02 audit clarifies that pure computation and terminal traps are outside the resource-operation requirement; target-side observable effects remain accounted for.
 
-```con accept name=abort-with-process exit=42
-fn main() with(Process) -> u8 {
+```con accept name=abort-without-permission exit=42 pending=R-0555 now=reject:E0520:core-check
+fn main() -> u8 {
     if 1 == 2 {
         abort();
     }
@@ -988,40 +928,22 @@ site, tests and examples show the exhaustive match and the explicit return.
 
 ## Abort and failure
 
-This section is explanatory: it states the failure model that STMT-1 and STMT-2 (pending, R-0496)
-formalize. Failure is abort only: there is no panic, no stack unwinding, no catch and no exception
-mechanism, permanently. Unwinding needs hidden control flow the predictable profile cannot reason
-about and runtime support (personality functions, LSDA tables) that freestanding targets lack, makes
-every call site a potential exit for proofs, and the model stays small enough to state on one page.
+STMT-2 distinguishes ordinary error returns from terminal traps. There is no exception unwinding.
 
 | situation | response | deferred calls run? |
 |---|---|---|
-| a normal `return`, or the end of the body | the function returns | yes, last registered first |
-| an explicit error return (a `Result::Err` arm's `return`) | ordinary control flow, not unwinding | yes, in each returning frame |
-| `break`, `continue`, the end of a block (an `if` branch, a loop body, a borrow block) | control flow | yes, for the scopes left |
-| out of memory | terminal abort | no |
-| stack overflow | the OS guard page, SIGSEGV | no |
-| a hardware signal | the OS ends the process | no |
-| `abort()` | terminal abort | no |
+| normal return or explicit error return | ordinary control flow, preserving every ownership obligation | yes |
+| break, continue or end of a block | exit the scopes left | yes |
+| program allocation failure | ordinary conserving error; allocator valid and inputs returned | on subsequent structured exit |
+| checked trap or explicit abort | terminal, no cleanup | no |
+| stack, runtime or environment exhaustion | separately stated target premises | no language cleanup promise |
 
-Every non-abort exit runs one sequence (STMT-11): the exit value, then the scope's deferred calls,
-then its loans end, then the remaining locals are destroyed. There is no write-back step: a `&mut`
-refers to the place it borrows, so a write through it is already the write to that place (REF-13).
-
-**Terminal failures** abort with no cleanup after the trap. A trap inside cleanup is terminal too,
-and a value is destroyed at most once, so a destructor never runs again after a trap interrupted it
-(the trap helpers and `__concrete_check_oom` call libc `abort()`). The sources are: out of memory
-(`malloc` or `realloc` returning null, through `__concrete_check_oom`); the `abort()` intrinsic
-(user code, needing `Process`); precondition violations in `std.alloc`'s wrappers (needing `Alloc`);
-and the compiler's checked operations: integer overflow, a zero divisor, an invalid shift count and
-`MIN / -1` (ARITH-3), a float-to-integer conversion out of range (ARITH-5), and an index out of
-bounds (MEM-6). The first three cannot be reached from predictable code (no allocation, no
-`Process`); the checked operations can, unless statically discharged. Hosted execution calls libc
-`abort()`, which usually raises SIGABRT (status 134 on POSIX); a freestanding profile calls a declared
-non-returning handler and may not assume an OS that reclaims resources. No deferred call, `Destroy`
-implementation or generated drop glue runs on an abort, and there is no implicit scope-end
-destructor the compiler could have inserted (OWN-13); in a hosted program the OS reclaims the
-process's memory and descriptors, which is an environmental fact, not a language guarantee.
+Every non-abort exit follows STMT-11: evaluate the exit value, run deferred calls innermost first
+and last registered first, end loans, then tear down storage without implicit Destroy (OD69).
+A trapping deferred call stops the sequence (OD68). A write through `&mut` already changes its
+place, so there is no write-back step (REF-13). `abort()` needs no permission (STMT-13).
+The legacy runtime's null-allocation abort is a disagreement with the Allocation decision, not
+an alternative language rule or a workload-gated recovery feature.
 
 **Traps in the current compiler.** These are non-normative observations of the run-time checks that
 ended a program, on the native binary and under `--interp`, on 2026-10-31. In each probe the operands
@@ -1046,21 +968,12 @@ shown, without its `interp: ` prefix; the `trap=` attribute of an abort example 
 | `a[i]` on `[u8; 3]` | `i` = 5 | MEM-6 | status 134 | `array index 5 out of bounds (size 3)` |
 | `abort()` in a `main` declared `with(Process)` | none | STMT-2 | status 134 | `undefined function 'abort'` |
 
-Not probed: `>>`, an infinity converted to an integer, and running out of memory (the paragraph above
-says `__concrete_check_oom` aborts when `malloc` or `realloc` returns null). With operands the compiler
-can see, the outcome differs: a constant index out of bounds (`a[5]` on `[u8; 3]`) is refused at compile
-time with E0900 (`proven runtime-safety violation`), and an overflowing constant traps where it is used
-(TYPE-22's `constant-traps-at-use` example). Whether a profile may omit or demand a check is discussed
-in ARITH-9 and OPEN-97.
+The recorded answers in [OD97](decisions.md#od97) govern this subject; the frozen compiler’s earlier behavior is not an alternative rule.
 
-**Recoverable failures** are values (`Result`, `Option`; the recoverable-failure section above and
-the std conventions of [ERROR_CONVENTIONS.md](../stdlib/ERROR_CONVENTIONS.md)). Operations an
-application can reasonably handle get a fallible API, and a consuming fallible API states what
-happens to the resource on failure. Fallible allocation is the missing piece: std has no
-`try_alloc`, `try_reserve` or `try_push`, and `__concrete_check_oom` aborts on null, so allocation
-failure is terminal today; it is a pull-gated backlog item with no owner yet, pulled by a workload
-that needs recovery (RocksDB slice 1 does not), with `research/stdlib/allocator-as-value.md` as design
-background. Lossy numeric `as` conversions are to become compile errors, not traps (ARITH-5).
+**Recoverable failures** use values and exhaustive matching. Allocation failure conserves its
+input, failed growth preserves the container and returns the rejected element, and release retains
+every surviving obligation. Exact failure payloads are
+[undecided: see the target Core proposal](decisions.md#core-allocation-contracts).
 
 **Hardware traps** are outside the language model: a null dereference (only in trusted code) and a
 stack overflow raise SIGSEGV, and an illegal instruction (SIGILL) should not come from correct code
@@ -1072,7 +985,7 @@ an invalid raw-pointer lifetime or alias causes use after free; the mitigation i
 boundary.
 
 On every normal path (including explicit error returns) all deferred calls run, every linear value
-is consumed (OWN-2), each scope's loans end and its remaining locals are destroyed in STMT-11's order, and the frame is reclaimed; predictable
+is consumed (OWN-2), each scope's loans end and its local storage is torn down without implicit Destroy in STMT-11's order, and the frame is reclaimed; predictable
 code has no heap, so the deferred call is its only cleanup. On an abort, the resources of the
 aborting function and of its callers get no language cleanup.
 
@@ -1101,7 +1014,7 @@ in [EXECUTION_MODEL.md](../platform/EXECUTION_MODEL.md).
 | compilation | [pipeline.md](pipeline.md) describes the stages: Parse, Resolve, Check, Elab, CoreCheck, Mono, Lower, Emit and link. The entries for the program after a stage are PASS-5 (Check), PASS-6 (Elab), PASS-7 (Mono), PASS-8 (CoreCheck), PASS-9 (Lower) and PASS-10 (Emit); PASS-1 and PASS-2 cover specialization and PASS-11 the backend IR. PASS-12 (partial) covers the compiling of a program every rule accepts. The current compiler can fail after Check on a checked program: the builtin catalog records such failures for `unwrap`, `abort` and `get_args` (bugs 345 to 347). | pipeline.md, PASS-1, PASS-2, PASS-5 to PASS-11, PASS-12 (partial) |
 | entry point | STMT-7 (partial) covers `main` and its exit status, and PASS-10 an executable's entry point. | STMT-7 (partial), PASS-10 |
 | start | TRUST-8 (pending) covers module-level state and TYPE-22 the evaluation of constants. [EXECUTION_MODEL.md](../platform/EXECUTION_MODEL.md) describes the generated C entry. This section records no probe of start-up, of the generated C entry or of constant evaluation. | TRUST-8 (pending), TYPE-22 |
-| authority | TRUST-4 covers the capabilities of `main` on the same terms as every other function. TRUST-9 and TRUST-10 are pending, and OPEN-38 is the open question of the root resource value and the signature by which `main` receives it. STMT-7 (partial) states the entry-point signature. Every probe below uses a `main` with no parameters; this section records no probe of a `main` that declares parameters. | TRUST-4, TRUST-9 (pending), TRUST-10 (pending), OPEN-38, STMT-7 (partial) |
+| authority | TRUST-4 covers the capabilities of `main` on the same terms as every other function. TRUST-9 and TRUST-10 are pending, and authority rule 12 governs the target grants `main` declares and consumes; no Root type exists. STMT-7 (partial) states the entry-point signature. Every probe below uses a `main` with no parameters; this section records no probe of a `main` that declares parameters. | TRUST-4, TRUST-9 (pending), TRUST-10 (pending), OPEN-38, STMT-7 (partial) |
 | running | STMT-3 and STMT-4 cover threads and evaluation order, and STMT-1 (pending) what a behaviour is. | STMT-3, STMT-4, STMT-1 (pending) |
 | normal exit | STMT-11 (pending) covers the exit sequence of a scope, and STMT-7 (partial) the exit status. The paragraph below records the status the current compiler produces; the order of the exit sequence was not probed for this section. | STMT-11 (pending), STMT-7 (partial) |
 | failure | STMT-2 (pending) covers failure, and STMT-13 `abort()`. "Abort and failure" above records the current compiler's traps and abort paths, and the table below what `--interp` does instead. | STMT-2 (pending), STMT-13 |
@@ -1111,7 +1024,7 @@ in [EXECUTION_MODEL.md](../platform/EXECUTION_MODEL.md).
 current compiler still accepts result types other than those STMT-7 names. Probes of the native
 binary on Linux x86-64, at f17645a13 on 2026-10-31 and again at 904c7cc87: a `main` declared
 `-> u8` that returns 7 exits with status 7; a `main` with no result type exits with status 0; a
-`main` declared `-> Int` that returns 300 exits with status 44; a `main` declared `-> bool` that
+`main` declared `-> i64` that returns 300 exits with status 44; a `main` declared `-> bool` that
 returns `true` exits with status 1.
 
 **What `--interp` does differently today.** PASS-13 is the entry for what every consumer gives a
@@ -1121,8 +1034,8 @@ reported it on Linux x86-64, where a process ended by SIGABRT is reported as 134
 
 | situation | native binary | `--interp` |
 |---|---|---|
-| `main` returns a `u8` (7, after printing `hello`) | prints `hello`, status 7 | prints `hello`, then `7` as the last line, status 0; STMT-7 states that the exit status is that `u8`, with nothing written by the runtime, and PASS-13 that every consumer gives the same result, output and traps; no bug record covers the `u8` case, and bug 320 records the same printing for an `Int` result and names `Interp.interpret` as its site |
-| `main` returns `Int` 300 | status 44 (bug 320) | prints `300`, status 0 (bug 320) |
+| `main` returns a `u8` (7, after printing `hello`) | prints `hello`, status 7 | prints `hello`, then `7` as the last line, status 0; STMT-7 states that the exit status is that `u8`, with nothing written by the runtime, and PASS-13 that every consumer gives the same result, output and traps; no bug record covers the `u8` case, and bug 320 records the same printing for an `i64` result and names `Interp.interpret` as its site |
+| `main` returns `i64` 300 | status 44 (bug 320) | prints `300`, status 0 (bug 320) |
 | `main` returns `bool` `true` | status 1 (bug 320) | prints nothing (as bug 320's record reports for a `bool` result), status 0 |
 | a division by zero at `i32`: `main` calls `fn d(a: i32, b: i32) -> i32 { return a / b; }` as `d(7, 0)` | ended by SIGABRT, status 134 | prints `interp: division by zero`, status 1 |
 | `abort();` as a statement in a `main` declared `with(Process)` | ended by SIGABRT, status 134 | prints `interp: undefined function 'abort'`, status 1 (bug 344) |
@@ -1142,3 +1055,14 @@ or why they changed, so that each rationale explains the current version only. T
 - STMT-6@2 records OD27 (2026-10-29): `break <expr>` is refused at parse. STMT-6@3 records OD47 (2026-10-29): the loops are `while` and the counted loop, and the C-style `for` is removed.
 - STMT-7@2 masked an integer result to 0–255 and mapped `bool` (stage 1 of MAIN_EXIT_MODEL). STMT-7@3 records OD24 (2026-10-29): `main` returns `u8` or `Unit`.
 - STMT-11@1 (retired before it was enforced, as the registry records) said of the C-style `for` step, which OD47 removes, what STMT-11@2 says of the counted loop of OD47.
+
+- STMT-2@2 (2026-11-03) brings the chapter into line with the recorded owner decisions; STMT-2@1 is superseded by version.
+- STMT-4@2 (2026-11-03) brings the chapter into line with the recorded owner decisions; STMT-4@1 is superseded by version.
+- STMT-5@2 (2026-11-03) brings the chapter into line with the recorded owner decisions; STMT-5@1 is superseded by version.
+- STMT-7@4 (2026-11-03) brings the chapter into line with the recorded owner decisions; STMT-7@3 is superseded by version.
+- STMT-10@2 (2026-11-03) brings the chapter into line with the recorded owner decisions; STMT-10@1 is superseded by version.
+- STMT-11@3 (2026-11-03) brings the chapter into line with the recorded owner decisions; STMT-11@2 is superseded by version.
+
+- STMT-13@2 (2026-11-03) supersedes STMT-13@1 to state the recorded decision.
+
+- STMT-6@4 (2026-11-03) supersedes STMT-6@3; pending legacy conformance is explicit.

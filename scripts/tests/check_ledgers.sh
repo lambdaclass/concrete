@@ -99,7 +99,7 @@ coverage: control record, covered by scripts/tests/check_ledgers.sh
 class: 1 — control note
 silent: no
 compiler: new
-ruling: Violates: OWN-1@2
+ruling: Violates: OWN-1@3
 -->
 
 **Status:** OPEN
@@ -174,14 +174,14 @@ neg class_row_unreadable docs/bugs/STRUCTURAL_CLASSES.md "import re; s,n=re.subn
 neg summary_status_no_punctuation "$R" "old='summary: control record'; assert s.count(old)==1; s=s.replace(old, 'summary: Fixed in R-1234')" 2
 neg value_closes_comment "$R" "old='summary: control record'; assert s.count(old)==1; s=s.replace(old, 'summary: control --> visible')" 2
 neg class_block_prose docs/bugs/STRUCTURAL_CLASSES.md "old='<!-- END GENERATED: class table -->'; assert s.count(old)==1; s=s.replace(old, 'prose inside the block\n'+old)" 2
-neg ruling_changed_not_regenerated "$R" "old='ruling: Violates: OWN-1@2'; assert s.count(old)==1; s=s.replace(old, 'ruling: Violates: OWN-2@2')" 1
+neg ruling_changed_not_regenerated "$R" "old='ruling: Violates: OWN-1@3'; assert s.count(old)==1; s=s.replace(old, 'ruling: Violates: OWN-2@3')" 1
 neg no_ruling "$R" "import re; s,n=re.subn(r'^ruling: .*\n', '', s, count=1, flags=re.M); assert n==1" 2
-neg ruling_unknown_rule "$R" "old='ruling: Violates: OWN-1@2'; assert s.count(old)==1; s=s.replace(old, 'ruling: Violates: NOPE-1@1')" 2
-neg ruling_unknown_version "$R" "old='ruling: Violates: OWN-1@2'; assert s.count(old)==1; s=s.replace(old, 'ruling: Violates: OWN-1@99')" 2
-neg ruling_malformed "$R" "old='ruling: Violates: OWN-1@2'; assert s.count(old)==1; s=s.replace(old, 'ruling: breaks ownership')" 2
-neg ruling_unrecorded_on_new_record "$R" "old='ruling: Violates: OWN-1@2'; assert s.count(old)==1; s=s.replace(old, 'ruling: Violates: unrecorded')" 2
-neg ruling_superseded_on_open_bug "$R" "old='ruling: Violates: OWN-1@2'; assert s.count(old)==1; s=s.replace(old, 'ruling: Violates: OWN-1@1')" 2
-neg ruling_unknown_question "$R" "old='ruling: Violates: OWN-1@2'; assert s.count(old)==1; s=s.replace(old, 'ruling: Open: OPEN-999')" 2
+neg ruling_unknown_rule "$R" "old='ruling: Violates: OWN-1@3'; assert s.count(old)==1; s=s.replace(old, 'ruling: Violates: NOPE-1@1')" 2
+neg ruling_unknown_version "$R" "old='ruling: Violates: OWN-1@3'; assert s.count(old)==1; s=s.replace(old, 'ruling: Violates: OWN-1@99')" 2
+neg ruling_malformed "$R" "old='ruling: Violates: OWN-1@3'; assert s.count(old)==1; s=s.replace(old, 'ruling: breaks ownership')" 2
+neg ruling_unrecorded_on_new_record "$R" "old='ruling: Violates: OWN-1@3'; assert s.count(old)==1; s=s.replace(old, 'ruling: Violates: unrecorded')" 2
+neg ruling_superseded_on_open_bug "$R" "old='ruling: Violates: OWN-1@3'; assert s.count(old)==1; s=s.replace(old, 'ruling: Violates: OWN-1@1')" 2
+neg ruling_unknown_question "$R" "old='ruling: Violates: OWN-1@3'; assert s.count(old)==1; s=s.replace(old, 'ruling: Open: OPEN-999')" 2
 neg rulings_markers_missing docs/bugs/RULINGS.md "old='<!-- END GENERATED: spec rulings -->'; assert s.count(old)==1; s=s.replace(old,'')" 2
 neg rulings_view_hand_edit docs/bugs/RULINGS.md "old='### By violated rule'; assert s.count(old)==1; s=s.replace(old, old+' (edited)')" 1
 neg duplicate_number "$R" "import shutil, os; d=os.path.dirname(p); shutil.copy(p, os.path.join(d, '997_duplicate.md'))" 2

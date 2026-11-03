@@ -89,6 +89,11 @@ git init -q -b main "$W" && G config user.email gate@example.invalid && G config
 # A single-branch refspec, as a `clone --single-branch` has: the scaffold must fetch every head anyway.
 G config remote.origin.fetch '+refs/heads/main:refs/remotes/origin/main'
 NB="$W/scripts/gen/new_bug.sh"
+# The rule the scaffold controls rule against: OWN-1 at its CURRENT version, read from the registry. A
+# hard-coded version broke this gate when the decided-language rewrite superseded OWN-1@2 (2026-11-03):
+# new_bug.sh rightly refuses a superseded rule for an open bug.
+RV="$(awk -F'\t' '$1 ~ /^OWN-1@[0-9]+$/ && $2 !~ /^(superseded|retired)/ {r=$1} END {print r}' "$ROOT_DIR/docs/spec/ids.tsv")"
+[ -n "$RV" ] || { echo "check_new_bug: no current OWN-1 version in docs/spec/ids.tsv" >&2; exit 2; }
 # Every full filing names its discovery batch (bug 300); refusal legs pass one so they reach the
 # refusal they are about.
 BN=(--new-batch development --probe "gate control batch" --effort "1 probe")
@@ -143,7 +148,7 @@ else no "concurrent allocations collided or failed: $(echo $got) (exit status $r
 echo "=== 3. the scaffold files a bug and the generated views agree ==="
 before="$(git -C "$W" ls-remote origin 'refs/bug-reservations/*' | wc -l | tr -d ' ')"
 NEXT="$(printf '%03d' $((M + 41 + 6 + 1)))"
-if bash "$NB" "Scaffold control: a placeholder defect" --class 1 --silent yes --violates OWN-1@2 \
+if bash "$NB" "Scaffold control: a placeholder defect" --class 1 --silent yes --violates "$RV" \
      --new-batch hunt --probe "scaffold control hunt" --effort "12 programs" > "$TMP/file.out" 2>&1; then
   ok "new_bug.sh filed a bug"
 else no "new_bug.sh failed:"; sed 's/^/      /' "$TMP/file.out" | awk 'NR<=15'; fi
@@ -158,9 +163,9 @@ done
 [ -z "$missing" ] && ok "the record has every section" || no "the record lacks sections:$missing"
 grep -qx 'class: 1' "${REC:-/dev/null}" && grep -qx 'silent: yes' "${REC:-/dev/null}" \
   && ok "the ledger block carries the requested class and silent values" || no "the ledger block lost --class or --silent"
-grep -qx 'ruling: Violates: OWN-1@2' "${REC:-/dev/null}" && grep -qF "| OWN-1@2 |" "$W/docs/bugs/RULINGS.md" \
-  && ok "the ledger block carries the --violates ruling, and RULINGS.md lists the bug under OWN-1@2" \
-  || no "the ledger block lost --violates, or docs/bugs/RULINGS.md does not list OWN-1@2"
+grep -qx "ruling: Violates: $RV" "${REC:-/dev/null}" && grep -qF "| $RV |" "$W/docs/bugs/RULINGS.md" \
+  && ok "the ledger block carries the --violates ruling, and RULINGS.md lists the bug under $RV" \
+  || no "the ledger block lost --violates, or docs/bugs/RULINGS.md does not list $RV"
 [ -f "$W/tests/regressions/bug${NEXT}_scaffold_control_a_placeholder_defect/repro.con" ] \
   && ok "the reproducer skeleton exists" || no "no reproducer skeleton under tests/regressions/bug${NEXT}_*"
 FRAG="$(ls "$W/changelog.d/2026-01-02-bug${NEXT}-"*.md 2>/dev/null | head -1)"
@@ -375,19 +380,19 @@ else no "two concurrent --number runs on bug $RACE: exit statuses $ra and $rb, n
 # Its ruling placeholder (RULE-ID@V) is the filer's to replace, as CI triage's SILENT is: as printed it
 # is refused before any reservation, and with a rule in its place it files.
 FC0="$(sed -n 's/^\(scripts\/gen\/new_bug\.sh .*--new-batch .*\)$/\1/p' "$ROOT_DIR/tests/fixtures/fuzz_farm/promote.golden")"
-FC="${FC0/RULE-ID@V/OWN-1@2}"
+FC="${FC0/RULE-ID@V/$RV}"
 refuse "the fuzz farm's command with its ruling placeholder left in" "ID@VERSION" \
   bash -c 'cd "$1" && eval "bash $2"' _ "$W" "$FC0"
 if [ -n "$FC0" ] && [ "$FC" != "$FC0" ] && (cd "$W" && eval "bash $FC") > "$TMP/farm.out" 2>&1; then
   ok "the fuzz farm's printed new_bug.sh command files a bug as printed"
 else no "the fuzz farm's printed new_bug.sh command was refused or not found: $(tr '\n' ' ' < "$TMP/farm.out" 2>/dev/null | cut -c1-240)"; fi
-TC="$(python3 -I - "$ROOT_DIR" <<'PY'
+TC="$(python3 -I - "$ROOT_DIR" "$RV" <<'PY'
 import os, re, sys
 src = open(os.path.join(sys.argv[1], "scripts", "ci", "triage.py")).read()
 m = re.search(r"f'bash (scripts/gen/new_bug\.sh .*?)'\s*\n\s*f'(--new-batch .*?)'", src)
 cmd = (m.group(1) + m.group(2)) if m else ""
 for k, v in (('{r["gate"]}', "check_x.sh"), ("{first}", "a failing leg"), ('{run.get("databaseId")}', "1"),
-             ("--silent SILENT", "--silent no"), ("--violates RULE-ID@V", "--violates OWN-1@2")):
+             ("--silent SILENT", "--silent no"), ("--violates RULE-ID@V", "--violates " + sys.argv[2])):
     cmd = cmd.replace(k, v)
 print(cmd if "{" not in cmd else "")
 PY
@@ -418,12 +423,12 @@ refuse "--number with --number-only" "--number-only reserves a new one" bash "$N
 
 echo "=== 7. the spec ruling ==="
 refuse "a filing with no spec ruling" "give exactly one spec ruling" bash "$NB" "unruled defect" --silent no "${BN[@]}"
-refuse "a filing with two spec rulings" "give exactly one spec ruling" bash "$NB" "x defect" --silent no --violates OWN-1@2 --open "$OPEN_Q" "${BN[@]}"
+refuse "a filing with two spec rulings" "give exactly one spec ruling" bash "$NB" "x defect" --silent no --violates "$RV" --open "$OPEN_Q" "${BN[@]}"
 refuse "a rule docs/spec/ids.tsv does not have" "not a rule version" bash "$NB" "x defect" --silent no --violates OWN-1@99 "${BN[@]}"
 refuse "a ruling that is not ID@VERSION" "ID@VERSION" bash "$NB" "x defect" --silent no --violates RULE-ID@V "${BN[@]}"
 refuse "an unknown owner question" "not an owner question" bash "$NB" "x defect" --silent no --open OPEN-999 "${BN[@]}"
 refuse "a spec gap with no chapter" "Spec gap: PREFIX" bash "$NB" "x defect" --silent no --spec-gap "a rule" "${BN[@]}"
-refuse "--number-only with a ruling" "takes no ruling" bash "$NB" --number-only --violates OWN-1@2 "x defect"
+refuse "--number-only with a ruling" "takes no ruling" bash "$NB" --number-only --violates "$RV" "x defect"
 G2=""
 if bash "$NB" "Spec gap control defect" --silent no --spec-gap "OWN — a control rule" "${BN[@]}" > "$TMP/gap.out" 2>&1; then
   G2="$(sed -nE 's/^new_bug: filed bug ([0-9]{3})$/\1/p' "$TMP/gap.out")"

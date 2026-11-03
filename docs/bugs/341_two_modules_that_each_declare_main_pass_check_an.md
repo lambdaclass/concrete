@@ -10,7 +10,7 @@ summary: two modules that each declare main pass Check and the native build fail
 coverage: reproducer tests/regressions/bug341_two_modules_that_each_declare_main_pass_check_an/repro.con, pinned by check_example_outputs.sh (open-bug reproducers leg, compile-fails on the duplicate global)
 class: 1
 silent: no
-ruling: Violates: PASS-12@1
+ruling: Violates: PASS-12@2
 -->
 
 ## Reproducer

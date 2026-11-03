@@ -1,11 +1,11 @@
 # Trusted Code and Raw Pointers
 
-Concrete's safety model has three parts. **Capabilities** (`with(File, Alloc)`) are the effects a
+Concrete's safety model has three parts. **Capabilities** (`with(Fs, Alloc)`) are the effects a
 function may exercise, visible in its signature. **`trusted`** contains pointer-level implementation
 techniques behind a safe API. **`Unsafe`** is the capability for crossing a foreign or raw-memory
 boundary, and a `trusted` body absorbs it. No layer is exempt: compiler builtins, `std` and user
 code follow the same rules. This chapter covers what a capability means (TRUST-D1), raw pointers (TRUST-1, TRUST-3), undefined
-behaviour (TRUST-2), capabilities (TRUST-4), `trusted` (TRUST-5), the trusted-module marker
+behaviour (TRUST-2), capabilities (TRUST-4), `trusted` (TRUST-5), the refusal of the trusted-module marker
 (TRUST-6, pending), moving a value out of raw memory (TRUST-7), global state (TRUST-8 to TRUST-10), storing through a raw pointer (TRUST-11), the
 ownership rules in trusted code (TRUST-12) and taking a reference's address (TRUST-13). The section
 "Trusted premises" lists every premise the compiler relies on and does not check. Capability sets, capability parameters and the capabilities of function types and
@@ -21,32 +21,18 @@ TRUST-11 and TRUST-12).
 <a id="TRUST-D1"></a>
 ### TRUST-D1. What a capability means
 
-**TRUST-D1@1.** A capability names logical authority, not where data goes: `Console` is authority over the standard streams the environment handed the process, so a redirected standard output is still `Console`, `File` is authority to name and open filesystem paths, `Network` is authority to create and use sockets, `Random` is authority over external entropy, which running a seeded pseudo-random generator does not need, and `Unsafe` is the authority for the raw-memory and foreign operations TRUST-4 lists.
+**TRUST-D1@2.** Capabilities are compile-time permissions with the reserved names `Fs`, `Network`, `Env`, `Time`, `Alloc`, `Device`, `Process` and `Unsafe`, distinct from resource values and never supplied by holding or returning a value, with no aliases or umbrella capabilities.
 
 - Kind: definition
 - Uses: none
 - Codes: none
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.validCaps
 - Semantics: none
 - Obligation: none
 - Evidence: by-users
 
-**Rationale.** A meaning by destination would depend on run-time conditions the compiler cannot
-see: a program that never named a file cannot know that its output goes to one, and pipes,
-terminals and `/dev/null` look alike from inside. SPARK's `Ada.Text_IO` likewise carries one
-coarse file-system state and excludes redirection rather than modelling it. `with(...)` lists
-capabilities, aliases (`Std`, `cap IO = File + Console;`) and capability variables (TYPE-D1). The
-meanings of `Time`, `Env`, `Process` and `Alloc` are stated nowhere yet (OPEN-95), and a name in
-`with(...)` that is not a capability, a capability alias or a capability variable is an unresolved name, which MOD-1 refuses and the current compiler accepts
-(bug 337). The compiler holds only the names (`validCaps`) and checks every use against the declared
-sets (TRUST-4); what a name grants is fixed by the foreign bindings that declare it, since every
-`extern fn` declares its effects (FFI-3), and std's bindings are audited against these meanings.
-That audit is an assumption about std, not a compiler check. An empty `with()` means no
-external authority, not purity: the function may still mutate what it is lent through `&mut`
-(TRUST-4), and it is not by that alone callable from a contract (CON-3). What a capability means
-does not settle a descriptor that is replaced, reused or aliased; std's handles avoid those cases
-([HANDLE_CAPABILITIES_AUDIT.md](../stdlib/HANDLE_CAPABILITIES_AUDIT.md)).
+**Rationale.** Authority rules 1–2 and 13 distinguish permission sets from resource values. Fs covers filesystem operations on Directory/File, Network covers network grants and sockets, Env the Environment grant, Time the Clock grant, Alloc allocator operations, Device device access, Process process services, and Unsafe raw and foreign validity obligations. Holding a value grants no permission; exact target service contracts are [undecided: see the target Core proposal](decisions.md#core-grants).
 
 ## Rules
 
@@ -58,7 +44,7 @@ does not settle a descriptor that is replaced, reused or aliased; std's handles 
 - Kind: refusal
 - Uses: none
 - Codes: new (check)
-- Status: pending R-0502
+- Status: pending R-0555
 - Semantics: none
 - Obligation: offset, expose and from_exposed have their MEM-2 semantics (R-0502)
 - Evidence: tested
@@ -70,7 +56,7 @@ the cast form today (`std/src/text.con`, `dst as u64 + i`), so the migration is 
 raw-pointer helpers.
 
 ```con reject name=pointer-to-integer-cast code=new stage=check pair=no-pointer-cast pending=R-0502 now=accept:0
-trusted fn addr(p: *const Int) -> u64 {
+trusted fn addr(p: *const i64) -> u64 {
     return p as u64;
 }
 
@@ -127,60 +113,25 @@ Decided by the owner on 2026-10-29 (OD1): a raw-pointer dereference needs a trus
 <a id="TRUST-4"></a>
 ### TRUST-4. A function exercises only the capabilities it declares
 
-**TRUST-4@2.** A function may call a function or perform an operation that requires a capability only if the capability is in its own `with(...)` set, whether the requirement comes from a direct call, a call through a trait bound, a function-pointer type or a specialization, and `Unsafe` is such a capability; the capabilities are `File`, `Network`, `Time`, `Env`, `Random`, `Process`, `Console`, `Alloc` and `Unsafe`, `Std` stands for every one of them but `Unsafe`, and a raw-pointer dereference or assignment, pointer arithmetic, a pointer cast other than a reference to a pointer, and a call of an `extern fn` require `Unsafe`.
+**TRUST-4@3.** Every body uses only its declared `with(...)` permissions and every call requires the callee’s set to be included in the caller’s across trait dispatch, specialization and cleanup, with `trusted` absorbing only `Unsafe` and all raw operations and reference-to-pointer conversions requiring `trusted` or `Unsafe`.
 
 - Kind: refusal
 - Uses: none
 - Codes: E0121 (resolve), E0240 (check), E0242 (check), E0520 (core-check), E0521 (core-check)
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.ccCheckExpr, Concrete.checkExprCore
 - Semantics: none
 - Obligation: capability containment over the call graph after specialization (R-0499, R-0510)
 - Evidence: tested
 
-**Rationale.** Effects stay visible at every call site: a function with an empty capability set
-cannot reach the file system or the network. That is an authority claim, not purity (OWN-7):
-mutation through `&mut` and foreign effects are not capabilities. The nine capabilities are
-`File`, `Network`, `Time`, `Env`, `Random`, `Process`, `Console`, `Alloc` and `Unsafe`; `Std` is
-every one but `Unsafe`, and `cap IO = File + Console;` declares an alias. A trait implementation's
-method may require only the capabilities its trait method declares, and the specialized call graph
-is re-checked after monomorphization. Raw-pointer dereference and assignment, pointer arithmetic,
-pointer casts other than a reference to a pointer, and calls to an `extern fn` require `Unsafe`.
-A capability variable (`<cap C>`) entails only itself, so it may not be spelled like a capability:
-`<cap Unsafe>` would hold the real `Unsafe` by name without being granted it (bug 188, E0121).
+**Rationale.** Authority rules 5–7 require effect containment even inside trusted bodies; no Std or user umbrella alias exists. Intrinsic effects come from the primitive table (FFI-6); reference-to-pointer conversion is gated by OD98.
 
-Until bug 188 a caller holding any capability variable was treated as covering every requirement,
-`Unsafe` included, on the theory that the variable is resolved at instantiation; nothing re-checked
-the generic body there, so `fn f<cap C>(g: fn(i32) with(C) -> i32) with(C)` could print, call
-`with(Process)`, call an untrusted `extern` or dereference a raw pointer, and `main` instantiated
-`C := {}` and ran it with no authority. Now a requirement is satisfied by a concrete capability the
-caller declares, or by a capability variable only when the variable's declared bound entails it;
-a capability parameter declares no bound, so it entails exactly itself, and an unknown variable
-fails closed. The decision is made on the generic definition, before monomorphization: CoreCheck
-checks a call against the callee's declared concrete set, and Check checks a call to a
-capability-polymorphic callee against the instantiated set, `Unsafe` included, with the trusted-body
-discharge (TRUST-5); the post-monomorphization re-check stays as defence in depth. Two questions
-about `Unsafe` stay distinct: authority (`trusted`, or a set that covers `Unsafe`) gates the raw
-operations, while literal membership (the set lists `Unsafe`) is what reports count, and a
-capability-polymorphic function has neither. One rule, `Capabilities.missingCaps` (with
-`capsContain` its boolean view), serves direct calls, calls through a function pointer, method calls,
-calls through a trait bound and the raw-operation gate; where the capability facts live in the
-compiler is [docs/compiler/CAPABILITY_FACTS.md](../compiler/CAPABILITY_FACTS.md).
-
-What each capability means is TRUST-D1. Reserved for later: `Device` (memory-mapped hardware, when freestanding code needs
-it), `Thread` (with the concurrency model) and `Signal` (deferred), recorded in
-`research/language/capability-sandboxing.md` §4a. A capability alias expands at parse time, so the
-rest of the compiler sees only capability names; `Std` is a fixed alias, not a macro system.
-The safety model as a whole (capabilities, `trusted`, `Unsafe`, the audit reports, the proof
-boundary and the high-integrity profile direction) is described in
-[docs/verification/SAFETY.md](../verification/SAFETY.md).
-
-```con reject name=undeclared-capability code=E0520 stage=core-check pair=declared-capability
-fn needs() with(File) -> Int {
+```con reject name=undeclared-capability-decided code=E0520 stage=core-check pair=declared-capability pending=R-0555 now=reject:E0520:core-check
+fn needs() with(Network) -> i64 {
     return 1;
 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     return needs();
 }
 
@@ -197,8 +148,8 @@ fn main() -> u8 {
 }
 ```
 
-```con reject name=raw-deref-needs-unsafe code=E0521 stage=core-check pair=declared-capability
-fn rd(p: *const Int) -> Int {
+```con reject name=raw-deref-needs-unsafe-decided code=E0521 stage=core-check pair=declared-capability pending=R-0555 now=reject:E0521:core-check
+fn rd(p: *const i64) -> i64 {
     return *p;
 }
 
@@ -207,16 +158,16 @@ fn main() -> u8 {
 }
 ```
 
-```con reject name=capability-variable-named-unsafe code=E0121 stage=resolve pair=declared-capability
-fn apply<cap Unsafe>(f: fn(Int) with(Unsafe) -> Int) with(Unsafe) -> Int {
+```con reject name=capability-variable-named-unsafe-decided code=E0121 stage=resolve pair=declared-capability pending=R-0555 now=reject:E0121:resolve
+fn apply<cap Unsafe>(f: fn(i64) with(Unsafe) -> i64) with(Unsafe) -> i64 {
     return f(41);
 }
 
-fn add_one(x: Int) -> Int {
+fn add_one(x: i64) -> i64 {
     return x + 1;
 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     return apply(add_one);
 }
 
@@ -234,20 +185,20 @@ fn main() -> u8 {
 ```
 
 ```con accept name=declared-capability exit=42
-fn needs() with(File) -> Int {
+fn needs() with(Network) -> i64 {
     return 41;
 }
 
-fn rd(p: *const Int) with(Unsafe) -> Int {
+fn rd(p: *const i64) with(Unsafe) -> i64 {
     return *p;
 }
 
-fn example_value() with(File, Unsafe) -> Int {
-    let x: Int = 1;
-    return needs() + rd(&x as *const Int);
+fn example_value() with(Network, Unsafe) -> i64 {
+    let x: i64 = 1;
+    return needs() + rd(&x as *const i64);
 }
 
-fn main() with(File, Unsafe) -> u8 {
+fn main() with(Network, Unsafe) -> u8 {
 
     if example_value() == 42 {
 
@@ -301,13 +252,13 @@ and declare no obligation (`String::from_raw_unchecked` the worst), recorded wit
 in [research/language/two-axis-safety-migration.md](../../research/language/two-axis-safety-migration.md).
 
 ```con accept name=trusted-absorbs-unsafe exit=42
-trusted fn rd(p: *const Int) -> Int {
+trusted fn rd(p: *const i64) -> i64 {
     return *p;
 }
 
-fn example_value() -> Int {
-    let x: Int = 42;
-    return rd(&x as *const Int);
+trusted fn example_value() -> i64 {
+    let x: i64 = 42;
+    return rd(&x as *const i64);
 }
 
 fn main() -> u8 {
@@ -324,67 +275,42 @@ fn main() -> u8 {
 ```
 
 <a id="TRUST-6"></a>
-### TRUST-6. Trusted code lives in marked modules
+### TRUST-6. Trust is inventoried per declaration
 
-**TRUST-6@2.** Only a module declared `trusted mod` may contain `trusted` functions, `extern` declarations and raw-pointer operations, and the marker confers no trust by itself.
+**TRUST-6@3.** The `trusted mod` marker is refused; trust is declared per function and externs, intrinsics and minting wrappers are individually inventoried in the trusted base.
 
 - Kind: refusal
 - Uses: none
-- Codes: new (check)
-- Status: pending R-0509
+- Codes: E0001 (parse)
+- Status: pending R-0555
 - Semantics: none
-- Obligation: the trusted base is the list of marked modules (R-0509)
+- Obligation: the trusted base inventories primitive and minting identities (R-0509)
 - Evidence: tested
 
-**Rationale.** Decided by the owner on 2026-10-29 (OD7). The marker puts the trusted base in the
-source, where a reviewer reads it, and a gate lists every marked module; it never confers trust, so
-each function still declares `trusted` (per method, OD22) and its capabilities. Global state is
-OD8's, decided 2026-10-29: constants only, and global resources as linear tokens (TRUST-8 to
-TRUST-10). The compiler's emitted globals (`__concrete_argc`, `__concrete_argv`) and std's
-environment mutation are inventoried as trusted base.
+**Rationale.** OD61 supersedes OD7’s historical marker. Libraries may declare inventoried externs, only the compiler introduces intrinsics, and only the target runtime mints initial grants.
 
-```con reject name=trusted-outside-marked-module code=new stage=check pair=trusted-in-marked-module pending=R-0509 now=accept:42
-mod m {
-    trusted fn rd(p: *const Int) -> Int {
-        return *p;
-    }
-    fn example_value() -> Int {
-        let x: Int = 42;
-        return rd(&x as *const Int);
-    }
-    fn main() -> u8 {
-        if example_value() == 42 {
-            return 42;
-        }
-        return 1;
-    }
-}
+
+
+
+
+```con reject name=marker-removed code=E0001 stage=parse pair=per-function-trust pending=R-0555 now=reject:E0001:parse
+trusted mod m { fn main() -> u8 { return 42; } }
 ```
 
-```con accept name=trusted-in-marked-module exit=42
-mod m {
-    fn example_value() -> Int {
-        let x: Int = 42;
-        return x;
-    }
-    fn main() -> u8 {
-        if example_value() == 42 {
-            return 42;
-        }
-        return 1;
-    }
-}
+```con accept name=per-function-trust exit=42
+trusted fn id(n: u8) -> u8 { return n; }
+fn main() -> u8 { return id(42); }
 ```
 
 <a id="TRUST-7"></a>
 ### TRUST-7. Moving a value out of raw memory is explicit
 
-**TRUST-7@1.** In trusted or `Unsafe` code, `*p` through a raw pointer `p` reads by value only a Copy pointee, and a non-Copy value is moved out of raw memory only by `read_owned(p)`.
+**TRUST-7@2.** In trusted or `Unsafe` code, `*p` through a raw pointer `p` reads by value only a Copy pointee, and a non-Copy value is moved out of raw memory only by `read_owned(p)`.
 
 - Kind: refusal
 - Uses: OWN-D1
 - Codes: E0311 (check)
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.checkExprCore
 - Semantics: none
 - Obligation: the slot's ownership transfer is a named premise of `read_owned` (TRUST-2, R-0506)
@@ -399,91 +325,48 @@ discharges (TRUST-2), which no checker tracks yet. Place uses
 
 Decided by the owner on 2026-10-29 (OD13): a value moves out of raw memory only through `read_owned(p)` or an explicit replace or take through `&mut T`, and a raw address carries a trusted ownership obligation; bug 198's repair is final.
 
-```con reject name=raw-deref-moves-linear code=E0311 stage=check pair=read-owned-moves
-struct Copy B { v: Int }
-
-trusted fn dup<K>(x: &mut K) -> K {
-    let p: *mut K = x as *mut K;
-    return *p;
-}
-
-fn main() with(Alloc) -> u8 {
-    let mut h: Heap<B> = alloc(B { v: 42 });
-    let h2: Heap<B> = dup::<Heap<B>>(&mut h);
-    free(h2);
-    free(h);
-    return 0;
-}
+```con reject name=raw-deref-moves-linear-decided code=E0311 stage=check pair=read-owned-moves pending=R-0555 now=reject:E0311:check
+struct R { v: u8 }
+trusted fn dup<K>(x: &mut K) -> K { let p: *mut K = x as *mut K; return *p; }
+fn main() -> u8 { let mut r: R = R { v: 40 }; let r2: R = dup::<R>(&mut r); let R { v: a } = r2; let R { v: b } = r; return a + b; }
 ```
 
 ```con accept name=read-owned-moves exit=42
-struct Copy B { v: Int }
-
-trusted fn take_and_replace(slot: &mut Heap<B>, fresh: Heap<B>) -> Heap<B> {
-    let p: *mut Heap<B> = slot as *mut Heap<B>;
-    let old: Heap<B> = read_owned(p);
-    *p = fresh;
-    return old;
+struct R { v: u8 }
+trusted fn swap(slot: &mut R, fresh: R) -> R {
+ let p: *mut R = slot as *mut R; let old: R = read_owned(p); *p = fresh; return old;
 }
-
-fn example_value() with(Alloc) -> Int {
-    let mut h: Heap<B> = alloc(B { v: 40 });
-    let old: Heap<B> = take_and_replace(&mut h, alloc(B { v: 2 }));
-    let a: B = free(old);
-    let b: B = free(h);
-    return a.v + b.v;
-}
-
-fn main() with(Alloc) -> u8 {
-
-    if example_value() == 42 {
-
-        return 42;
-
-    }
-
-    return 1;
-
-}
+fn main() -> u8 { let mut r: R = R { v: 40 }; let old: R = swap(&mut r, R { v: 2 }); let R { v: a } = old; let R { v: b } = r; return a + b; }
 ```
 
 **Conformance fixtures.**
 
 | fixture | expected | pair | modes |
 |---|---|---|---|
-| `tests/programs/error_rawdup_trusted_deref.con` | `reject:E0311:TRUST-7@1` | `trust7` | `-` |
+| `tests/programs/error_rawdup_trusted_deref.con` | `reject:E0311:TRUST-7@2` | `trust7` | `-` |
 | `tests/programs/regress_198_read_owned.con` | `run:42` | `trust7` | `binary,interp` |
 
 <a id="TRUST-8"></a>
 ### TRUST-8. A program has no mutable global state
 
-**TRUST-8@1.** No module-level declaration holds mutable state: there is no `static mut` and no global cell, and a constant is immutable, has no interior mutability and never contains a capability, a token or a handle.
+**TRUST-8@2.** No module-level declaration holds mutable state: there is no `static mut` or global cell, and a constant is immutable, has no interior mutability and never contains a resource or handle, while effects are checked independently through `with(...)`.
 
 - Kind: refusal
 - Uses: none
 - Codes: new (check)
-- Status: pending R-0557
+- Status: pending R-0555
 - Semantics: none
 - Obligation: none
 - Evidence: tested
 
-**Rationale.** Decided by the owner on 2026-10-29 (OD8): global state follows Austral's capability
-model, extended. A global that any function can reach is an effect no signature shows, so the only
-module-level values are constants, and a constant is a value with nothing behind it to mutate or
-spend. The grammar has no mutable global (`static mut N: Int = 0;` is a parse error, SYN-1), so
-that half holds today; a constant of a linear type is accepted and each use yields a fresh copy of it, which mints a
-linear value the program never received, and its refusal is pending (R-0557). The proposal of
-2026-10-23 (declared cells in marked modules, reached through capabilities) was rejected after the
-Codex and Grok reviews: interrupt handlers and FFI callbacks re-enter a cell, a cell holding a
-linear value has no owner to destroy it, cells need effect polymorphism to stay visible, and they
-are shared state once threads exist. Global resources are linear tokens instead (TRUST-9).
+**Rationale.** OD8’s constants-only rule survives; authority rules replace its token-only effect model with resource values plus independent permissions.
 
 ```con reject name=constant-holds-token code=new stage=check pair=constant pending=R-0557 now=accept:42
-struct Token { v: Int }
+struct Token { v: i64 }
 
 const T: Token = Token { v: 42 };
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     let t: Token = T;
     let Token { v } = t;
     return v;
@@ -503,11 +386,11 @@ fn main() -> u8 {
 ```
 
 ```con accept name=constant exit=42
-struct Copy P { v: Int }
+struct Copy P { v: i64 }
 
 const C: P = P { v: 42 };
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     return C.v;
 }
 
@@ -525,58 +408,44 @@ fn main() -> u8 {
 ```
 
 <a id="TRUST-9"></a>
-### TRUST-9. Global resources are linear tokens
+### TRUST-9. Resources originate in target grants
 
-**TRUST-9@1.** A global resource is reached only through a linear token: `main` receives the root resource value and splits it, and a hardware or runtime singleton is produced or taken only by a `trusted fn` that returns or takes a linear token, each such function listed by a gate.
+**TRUST-9@2.** Only the target runtime mints initial grants, `main` declares and consumes the offered grants it needs without a `Root` type or split, and subsequent resources arise only by checked acquisition or unforgeable constructors from existing grants, with every extern, compiler intrinsic and minting wrapper inventoried by identity.
 
 - Kind: guarantee
 - Uses: none
 - Codes: none
-- Status: pending R-0557
+- Status: pending R-0555
 - Semantics: none
-- Obligation: the trusted external state is the gate's list of token wrappers (R-0557, R-0509)
+- Obligation: target grants and acquisition contracts (R-0557, R-0509)
 - Evidence: tested
 
-**Rationale.** Decided by the owner on 2026-10-29 (OD8); the root value's type, how it splits and the
-signature `main` declares to receive it are OPEN-38. The root value plays the part of Austral's
-`RootCapability`: everything a program may touch outside its own values descends from what `main`
-was given. The singletons are the allocator arena, a UART and memory-mapped I/O, the panic buffer,
-`errno` and C libraries with internal state; each is minted or consumed by a `trusted fn` wrapper,
-and the gate's list of those wrappers is the inventory of trusted external state. Tokens are
-ordinary values: every effect shows as a token parameter, and tokens follow the loan and
-exclusivity rules (REF-8, REF-11, REF-13) with no separate effect system. Nothing runs before `main`
-and there is no cleanup protocol for global state; an abort runs nothing (STMT-1, STMT-2). An
-implicit-context mechanism, if ergonomics later asks for one, is a new owner decision and never a
-hidden global. This changes STMT-7, whose `main` takes no parameters today: the root parameter
-lands with R-0557.
+**Rationale.** Authority rules 11–12 replace the root-token model: a grant not declared by main is never minted, no user code runs at startup, and target startup/shutdown effects are explicit. Target grant schemas are [undecided: see the target Core proposal](decisions.md#core-grants).
 
 <a id="TRUST-10"></a>
-### TRUST-10. Handlers and callbacks hold only the tokens they are given
+### TRUST-10. Explicit resources and exact callback permissions
 
-**TRUST-10@1.** An interrupt handler, an FFI callback or a thread holds only the tokens explicitly given to it, by installation, by transfer or through a lock that grants a borrow.
+**TRUST-10@2.** Handlers and callbacks receive resource values only by explicit installation, transfer or a lock granting a borrow, and function values retain exact capability sets without conveying permissions, while permissions for future foreign function values remain undecided: see the target Core proposal.
 
 - Kind: guarantee
 - Uses: none
 - Codes: none
-- Status: pending R-0557
+- Status: pending R-0555
 - Semantics: none
 - Obligation: none
 - Evidence: tested
 
-**Rationale.** Decided by the owner on 2026-10-29 (OD8). Code that runs outside the call tree of
-`main` cannot reach a resource through a global (TRUST-8), so what it may touch is exactly what was
-handed to it, and the handing-over is visible in the source. Threads do not exist yet; when they do,
-they follow the same rule.
+**Rationale.** Authority rules separate explicit resource transfer from compile-time permission sets; the canonical exact callback-set rule is authority rule 4. Future foreign callback permissions are [undecided: see the target Core proposal](decisions.md#core-grants).
 
 <a id="TRUST-11"></a>
 ### TRUST-11. A raw store neither reads nor destroys the old contents
 
-**TRUST-11@1.** In trusted or `Unsafe` code, a store `*p = v` through a raw pointer `p: *mut T` moves `v` into the slot without reading or destroying what the slot held, whether or not `T` is Copy.
+**TRUST-11@2.** In trusted or `Unsafe` code, a store `*p = v` through a raw pointer `p: *mut T` moves `v` into the slot without reading or destroying what the slot held, whether or not `T` is Copy.
 
 - Kind: guarantee
 - Uses: OWN-D1
 - Codes: none
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.checkStmt, Concrete.lowerStmt, Concrete.Interp.evalStmtCore
 - Semantics: none
 - Obligation: whether the slot held a live value is a named premise of the store (TRUST-2, R-0506)
@@ -589,45 +458,22 @@ whether the slot is live, so overwriting a live linear value leaks it, and avoid
 trusted code author's premise.
 
 ```con accept name=refill-emptied-slot exit=42
-struct Copy B { v: Int }
-
-trusted fn swap_in(slot: &mut Heap<B>, fresh: Heap<B>) -> Heap<B> {
-    let p: *mut Heap<B> = slot as *mut Heap<B>;
-    let old: Heap<B> = read_owned(p);
-    *p = fresh;
-    return old;
+struct R { v: u8 }
+trusted fn swap(slot: &mut R, fresh: R) -> R {
+ let p: *mut R = slot as *mut R; let old: R = read_owned(p); *p = fresh; return old;
 }
-
-fn example_value() with(Alloc) -> Int {
-    let mut h: Heap<B> = alloc(B { v: 40 });
-    let old: Heap<B> = swap_in(&mut h, alloc(B { v: 2 }));
-    let a: B = free(old);
-    let b: B = free(h);
-    return a.v + b.v;
-}
-
-fn main() with(Alloc) -> u8 {
-
-    if example_value() == 42 {
-
-        return 42;
-
-    }
-
-    return 1;
-
-}
+fn main() -> u8 { let mut r: R = R { v: 40 }; let old: R = swap(&mut r, R { v: 2 }); let R { v: a } = old; let R { v: b } = r; return a + b; }
 ```
 
 <a id="TRUST-12"></a>
 ### TRUST-12. Trusted code keeps the move, cleanup and freeze rules
 
-**TRUST-12@1.** In a `trusted` function, as in safe code, a moved linear value is not used again, a linear value is consumed on every exit, and an owner frozen by a borrow block is not accessed.
+**TRUST-12@2.** In a `trusted` function, as in safe code, a moved linear value is not used again, a linear value is consumed on every exit, and an owner frozen by a borrow block is not accessed.
 
 - Kind: guarantee
 - Uses: none
 - Codes: none
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.checkFn
 - Semantics: none
 - Obligation: the trusted body is checked by the same judgment as safe code (R-0499)
@@ -639,33 +485,32 @@ refused with the same code as in safe code: OWN-1's `trusted-use-after-move`, OW
 (MEMORY_SEMANTICS §11) listed; it also said that `trusted` relaxes no ownership rule, which the current compiler
 contradicts twice: trusted code may destroy a value through a reference (E0290 under OWN-8
 elsewhere) and release with `vec_free` a vector whose elements are not Copy (E0287 under OWN-5
-elsewhere), the drop-glue cases of std's collections. Whether those exceptions stay is OPEN-113.
+elsewhere), the drop-glue cases of std's collections. OD113 refuses these ownership exceptions.
 The checker's guarantees stop at
 raw pointers: what lies behind `*mut T` or `*const T` is not tracked (OWN-D1), which is why a raw
-store (TRUST-11) and a move out of raw memory (TRUST-7) carry premises. A pointer derived from a
-borrow that outlives the borrow is OPEN-64's question.
+store (TRUST-11) and a move out of raw memory (TRUST-7) carry premises. OD64 confines borrow-derived pointers to their borrow.
 
-```con accept name=trusted-consumes-once exit=42
-struct R { v: Int }
+```con accept name=trusted-consumes-once-decided exit=42 pending=R-0555 now=reject:E0001:parse
+struct R { v: i64 }
 
-fn take(r: R) -> Int {
+fn take(r: R) -> i64 {
     let R { v } = r;
     return v;
 }
 
-fn peek(r: &R) -> Int {
+fn peek(r: &R) -> i64 {
     return r.v;
 }
 
-trusted fn use_once(r: R) -> Int {
-    let mut seen: Int = 0;
-    borrow r as rr in Reg {
+trusted fn use_once(r: R) -> i64 {
+    let mut seen: i64 = 0;
+    borrow r as rr {
         seen = peek(rr);
     }
     return take(r) + seen * 0;
 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     return use_once(R { v: 42 });
 }
 
@@ -683,33 +528,29 @@ fn main() -> u8 {
 ```
 
 <a id="TRUST-13"></a>
-### TRUST-13. Taking a reference's address is safe
+### TRUST-13. Reference-to-pointer conversion is gated
 
-**TRUST-13@1.** Converting a reference to a raw pointer requires neither `trusted` nor `Unsafe`, while every use of the pointer that reads, writes or offsets through it does (TRUST-4, TRUST-5).
+**TRUST-13@2.** Reference-to-pointer conversions require `trusted` or `Unsafe`, and a pointer derived from a borrow stays inside that borrow, never escapes or is exposed as an integer, and is passed to externs only through call-only parameters.
 
 - Kind: guarantee
 - Uses: none
 - Codes: none
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.ccCheckExpr
 - Semantics: none
 - Obligation: none
 - Evidence: tested
 
-**Rationale.** The conversion only names an address that a live borrow already denotes; the hazard is
-in using the pointer, and that is gated. Which conversions `as` writes, this one included, is
-OPEN-98, and what such a pointer may do after its borrow ends is OPEN-64. Absorbed from
-[SAFETY.md](../verification/SAFETY.md) ("What trusted permits").
+**Rationale.** OD98 gates the conversion, and OD64 confines the derived pointer to its borrow, including copies, offsets and helper calls; shared provenance never yields writes. Call-only extern annotation syntax and complete unsafe contracts are [undecided: see the target Core proposal](decisions.md#core-unsafe-premises).
 
 ```con accept name=reference-to-pointer-in-safe-code exit=42
-trusted fn rd(p: *const Int) -> Int {
+trusted fn rd(p: *const i64) -> i64 {
     return *p;
 }
 
-fn example_value() -> Int {
-    let x: Int = 42;
-    let p: *const Int = &x as *const Int;
-    return rd(p);
+trusted fn example_value() -> i64 {
+    let x: i64 = 42;
+    return rd(&x as *const i64);
 }
 
 fn main() -> u8 {
@@ -741,18 +582,17 @@ the compiler and toolchain.
 | `&*p` and `&mut *p` | `p` is aligned, live and initialized for its type | the author of the trusted or `Unsafe` code | TRUST-3 (pending) |
 | `read_owned(p)` | what the slot holds before and after the move-out; TRUST-7 makes the move-out explicit, and no entry states this premise yet | the author of the trusted or `Unsafe` code | TRUST-7 |
 | a raw store `*p = v` | whether the slot held a live value, which the store does not destroy | the author of the trusted or `Unsafe` code | TRUST-11 |
-| a raw pointer taken from a reference | what the pointer may be used for and for how long; REF-14 (pending) is the entry for an alias derived from a loan, and what a raw pointer derived from a borrow may do is OPEN-64 | the code that uses the pointer | TRUST-13, REF-14 (pending), OPEN-64 |
+| a raw pointer taken from a reference | what the pointer may be used for and for how long; REF-14 (pending) is the entry for an alias derived from a loan, and OD64 confines it to its borrow with call-only extern use | the code that uses the pointer | TRUST-13, REF-14 (pending), OPEN-64 |
 | an `extern fn` | the declared parameter types, result type and `with(...)` set match the C symbol | the declaration's author | FFI-3, FFI-5; "Abort and failure" in [statements.md](statements.md) |
 | a `trusted extern fn` | the foreign function is safe for every argument its types permit and has no effect beyond its `with(...)` set | the declaration's author | FFI-9, TRUST-5 |
-| a singleton token wrapper | what the wrapper asserts about the external state it mints or takes a token for; the gate's list of wrappers is the inventory of trusted external state | the wrapper's author; a gate lists the wrappers | TRUST-9 (pending), TRUST-10 (pending) |
+| a resource acquisition or minting wrapper | its external-state and authority contract; listing it proves nothing | the wrapper's author; a gate lists the wrappers | TRUST-9 (pending), TRUST-10 (pending) |
 | `assume e` in a contract | `e` holds, as a hypothesis whose evidence is `assumed` | the programmer | CON-6 |
 | an entry whose `Evidence:` is `trusted: <ID>` | the assumption that ID names in TRUSTED_COMPUTING_BASE.md | the specification ([MAINTAINERS.md](MAINTAINERS.md) §2.1); no entry uses it today | MAINTAINERS.md §2.1 |
 | the native profile | the stated premises of the trusted base under which the forward simulation is proved | the proof of PASS-3 | PASS-3 (pending) |
 | the LLVM profile | the BIR-to-LLVM printer, LLVM and the linker are correct; the results are differential-tested, not proved | the compiler | PASS-4 (pending) |
 
 TRUST-12 is the entry for the move, cleanup and freeze rules inside a `trusted fn`. The raw-memory
-premises listed above (`read_owned`, raw stores) remain separate from those rules. Which ownership
-exceptions trusted code should have is OPEN-113.
+premises listed above (`read_owned`, raw stores) remain separate from those rules. OD113 grants no ownership exceptions to trusted code.
 
 ## Absent by decision
 
@@ -771,5 +611,20 @@ capabilities are permissions the checker compares as sets (TYPE-D1), not effects
 effect handlers and no row-polymorphic effect types either; a combinator's set is its callbacks'
 sets, named by capability parameters (TYPE-17). None of these is needed by the higher-order std
 surface. A bound would be reconsidered only if a workload needs a combinator that refuses some
-capability its callback could carry; global resources as values are linear tokens (TRUST-9), not
-capability values.
+capability its callback could carry; global resources are values (TRUST-9), distinct from permissions.
+
+## Version history
+
+This appendix records superseded versions and is not normative.
+
+- TRUST-D1@2 (2026-11-03) brings the chapter into line with the recorded owner decisions; TRUST-D1@1 is superseded by version.
+- TRUST-4@3 (2026-11-03) brings the chapter into line with the recorded owner decisions; TRUST-4@2 is superseded by version.
+- TRUST-6@3 (2026-11-03) brings the chapter into line with the recorded owner decisions; TRUST-6@2 is superseded by version.
+- TRUST-7@2 (2026-11-03) brings the chapter into line with the recorded owner decisions; TRUST-7@1 is superseded by version.
+- TRUST-8@2 (2026-11-03) brings the chapter into line with the recorded owner decisions; TRUST-8@1 is superseded by version.
+- TRUST-9@2 (2026-11-03) brings the chapter into line with the recorded owner decisions; TRUST-9@1 is superseded by version.
+- TRUST-10@2 (2026-11-03) brings the chapter into line with the recorded owner decisions; TRUST-10@1 is superseded by version.
+- TRUST-11@2 (2026-11-03) brings the chapter into line with the recorded owner decisions; TRUST-11@1 is superseded by version.
+- TRUST-13@2 (2026-11-03) brings the chapter into line with the recorded owner decisions; TRUST-13@1 is superseded by version.
+
+- TRUST-12@2 (2026-11-03) supersedes TRUST-12@1; pending legacy conformance is explicit.

@@ -10,7 +10,7 @@ summary: get_args has a Check signature and no implementation, so a program whos
 coverage: reproducer tests/regressions/bug347_get_args_has_a_check_signature_and_no_implementa/repro.con, pinned by check_example_outputs.sh (open-bug reproducers leg, compile-fails on the undefined @get_args)
 class: 12
 silent: no
-ruling: Violates: PASS-12@1
+ruling: Violates: PASS-12@2
 -->
 
 ## Reproducer

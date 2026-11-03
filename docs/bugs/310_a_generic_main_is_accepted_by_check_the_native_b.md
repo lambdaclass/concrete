@@ -10,7 +10,7 @@ summary: a generic main is accepted by Check: the native build loses its entry p
 coverage: archived reproducer(s) for bug 310; see Reproducer and Archive disposition below; no required passing regression against the frozen compiler
 class: 13
 silent: no
-ruling: Violates: STMT-7@3
+ruling: Violates: STMT-7@4
 -->
 
 ## Reproducer

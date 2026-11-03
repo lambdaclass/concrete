@@ -1,6 +1,6 @@
 # Memory
 
-Safe code owns memory through bindings and `Heap<T>` values and reaches other storage only through
+Safe code owns memory through bindings and `Heap<T, A>` values and reaches other storage only through
 references (the references chapter). Every local binding has an ownership state (MEM-D1). This
 chapter covers initialization (MEM-3), field access through
 references and heap shells (MEM-4), heap ownership (MEM-5) and its capability (MEM-7), array bounds (MEM-6) and an index proven out of bounds (MEM-9), indexing through a
@@ -91,8 +91,8 @@ Indeterminate memory exists only behind trusted or `Unsafe` operations, as a nam
 (TRUST-2).
 
 ```con accept name=initialized-bindings exit=42
-fn example_value() -> Int {
-    let mut x: Int = 1;
+fn example_value() -> i64 {
+    let mut x: i64 = 1;
     x = 42;
     return x;
 }
@@ -107,99 +107,38 @@ fn main() -> u8 {
 <a id="MEM-4"></a>
 ### MEM-4. Field access dereferences at most one reference
 
-**MEM-4@4.** A field access `e.f`, read or written, requires `e` to be the struct or a reference to it, dereferencing at most that one reference, and a `Heap` or `HeapArray` is opened by an explicit non-consuming place form, whose spelling is OPEN-36, `*` remaining the consuming move-out.
+**MEM-4@5.** A field access requires a struct or one reference to it and dereferences at most that reference; a borrow block opens exactly one heap layer without consuming it, preserving the root and lifetime and never upgrading shared access, while a `HeapArray` exposes only a bounded element view whose exact type is undecided: see the target Core proposal.
 
 - Kind: guarantee
 - Uses: none
 - Codes: none
-- Status: pending bug-326
+- Status: pending R-0555
 - Enforced by: Concrete.checkExprCore
 - Semantics: none
 - Obligation: one place representation in every consumer (R-0501, R-0504)
 - Evidence: tested
 
-**Rationale.** A reference to any place, a heap shell included, denotes that place: `&h` and
-`&mut h` denote the slot `h`. Every consumer gives `e.f` this one meaning; a write through
-`&mut Heap<S>` once corrupted the caller's slot (bug 126). Deeper types (`& &S`)
-need an explicit `*`.
-
-The owner decided on 2026-10-29 (OD30) that a field access does not open a heap cell implicitly. The spelling of the explicit non-consuming place form is OPEN-36. The current compiler still opens one `Heap` layer implicitly (a `HeapArray<T>` only directly, not through a reference), without consuming the heap pointer, and reaches `f` through one `Heap` layer (`h.f` on `Heap<S>`, bug 326).
+**Rationale.** OD30 and OD36 require explicit heap opening by borrow block, including through a shell reference; the exact HeapArray view is [undecided: see the target Core proposal](decisions.md#core-heap-array-view).
 
 
-```con accept name=one-hop-field-access exit=42
-struct Copy B { v: Int }
-
-fn bump(h: &mut Heap<B>) {
-    h.v = h.v + 1;
-}
-
-fn get(h: &Heap<B>) -> Int {
-    return h.v;
-}
-
-fn example_value() with(Std) -> Int {
-    let mut h: Heap<B> = alloc(B { v: 40 });
-    bump(&mut h);
-    let out: Int = get(&h) + 1;
-    free(h);
-    return out;
-}
-
-fn main() with(Std) -> u8 {
-
-    if example_value() == 42 {
-
-        return 42;
-
-    }
-
-    return 1;
-
-}
-```
 
 <a id="MEM-5"></a>
 ### MEM-5. A `Heap` value owns one heap cell
 
-**MEM-5@1.** `alloc(v)` moves `v` into a new heap cell and returns the linear `Heap<T>` that owns it, `*h` moves the value out and frees the cell, `free(h)` frees the cell and returns its value, and a heap cell's interior is tracked like any other owner.
+**MEM-5@2.** `alloc(a: &mut Allocator<A>, v: T) with(Alloc)` returns `Result<Heap<T, A>, AllocFailure<T>>`, conserving `v` on failure and allocator validity in every outcome, while `*h` consumes a heap and releases its storage returning the payload, `destroy(h)` destroys it explicitly, and `free` is refused.
 
 - Kind: guarantee
 - Uses: OWN-D1
 - Codes: none
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.checkExprCore
 - Semantics: none
 - Obligation: allocation identities of Core's safe layer (MEM-1, R-0496)
 - Evidence: tested
 
-**Rationale.** Because `Heap<T>` is linear, every allocation is freed, moved out of, passed on or
-destroyed exactly once (OWN-2), and allocation needs `with(Alloc)`. Discarding the value `free`
-returns is allowed only when it is Copy (OWN-5), and reading a non-Copy field out of a cell by
-value is refused (OWN-8, bug 144). A node is taken apart with `let n = *h;` and a pattern.
+**Rationale.** The Allocation decision preserves inputs on failure, records allocator identity and release information without storing a safe allocator reference, and forbids giving up an allocator with live allocations; OD59 leaves consuming extraction and explicit destruction instead of `free`. Brand binders, dependency discipline and release metadata are [undecided: see the target Core proposal](decisions.md#core-allocator-identities), and failure payloads are [undecided: see the target Core proposal](decisions.md#core-allocation-contracts).
 
-```con accept name=heap-ownership exit=42
-struct Copy B { v: Int }
 
-fn example_value() with(Std) -> Int {
-    let h: Heap<B> = alloc(B { v: 40 });
-    let g: Heap<B> = alloc(B { v: 2 });
-    let b: B = *h;
-    let c: B = free(g);
-    return b.v + c.v;
-}
-
-fn main() with(Std) -> u8 {
-
-    if example_value() == 42 {
-
-        return 42;
-
-    }
-
-    return 1;
-
-}
-```
 
 <a id="MEM-6"></a>
 ### MEM-6. An array index is checked
@@ -222,10 +161,10 @@ Version 2 leaves the refusal of an index the compiler proves out of bounds to ME
 code (E0900).
 
 ```con accept name=index-in-bounds exit=42
-fn example_value() -> Int {
-    let a: [Int; 3] = [10, 30, 2];
-    let mut i: Int = 0;
-    let mut total: Int = 0;
+fn example_value() -> i64 {
+    let a: [i64; 3] = [10, 30, 2];
+    let mut i: i64 = 0;
+    let mut total: i64 = 0;
     while i < 3 {
         total = total + a[i];
         i = i + 1;
@@ -241,9 +180,9 @@ fn main() -> u8 {
 ```
 
 ```con abort name=index-out-of-bounds trap=out_of_bounds
-fn example_value() -> Int {
-    let a: [Int; 3] = [1, 2, 3];
-    let mut i: Int = 0;
+fn example_value() -> i64 {
+    let a: [i64; 3] = [1, 2, 3];
+    let mut i: i64 = 0;
     i = i + 5;
     return a[i];
 }
@@ -258,57 +197,30 @@ fn main() -> u8 {
 <a id="MEM-7"></a>
 ### MEM-7. The heap builtins require `Alloc`
 
-**MEM-7@1.** `alloc`, `free`, the move-out `*h` of an owned `Heap`, `vec_new`, `vec_push`, `vec_pop`, `vec_free`, `string_reserve` and `append` require the `Alloc` capability.
+**MEM-7@2.** Allocation and allocating container or string operations require both an `Allocator<A>` value and `with(Alloc)` and report conserving failure, allocations retain their allocator identity in `Heap<T, A>`, `Vec<T, A>` or `String<A>`, and release through `*h` or `destroy` requires at most `Alloc` without an allocator argument.
 
 - Kind: guarantee
 - Uses: none
 - Codes: none
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.IntrinsicId.capability, Concrete.ccCheckExpr
 - Semantics: none
 - Obligation: capability containment over the call graph after specialization (R-0499, R-0510)
 - Evidence: tested
 
-**Rationale.** Allocation is an effect a signature shows. A function that calls one of these builtins
-without `Alloc` in its `with(...)` set is refused by TRUST-4 (E0520). A field access through a
-reference to a heap shell is not a move-out and needs no capability (MEM-4). Absorbed from
-[EFFECT_PROOF_BOUNDARIES.md](../verification/EFFECT_PROOF_BOUNDARIES.md) §2.
+**Rationale.** OD154 requires allocating string operations to declare Alloc; the Allocation decision also requires an allocator and conserving failure, and static text allocates nothing. Allocator reset consumes the old allocator with no live allocation or conflicting loan and returns a fresh identity; the discipline is [undecided: see the target Core proposal](decisions.md#core-allocator-identities).
 
-```con accept name=alloc-declares-alloc exit=42
-struct Copy B { v: Int }
 
-fn make(v: Int) with(Alloc) -> Heap<B> {
-    return alloc(B { v: v });
-}
-
-fn example_value() with(Alloc) -> Int {
-    let h: Heap<B> = make(42);
-    let b: B = free(h);
-    return b.v;
-}
-
-fn main() with(Alloc) -> u8 {
-
-    if example_value() == 42 {
-
-        return 42;
-
-    }
-
-    return 1;
-
-}
-```
 
 <a id="MEM-8"></a>
 ### MEM-8. Indexing dereferences at most one reference
 
-**MEM-8@1.** An index `a[i]`, read or written, whose base `a` is a `&[T; N]` or `&mut [T; N]` indexes the array the reference refers to, dereferencing that one reference.
+**MEM-8@2.** An index `a[i]`, read or written, whose base `a` is a `&[T; N]` or `&mut [T; N]` indexes the array the reference refers to, dereferencing that one reference.
 
 - Kind: guarantee
 - Uses: none
 - Codes: none
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.checkExprCore, Concrete.ccCheckExpr
 - Semantics: none
 - Obligation: one place representation in every consumer (R-0501, R-0504)
@@ -319,17 +231,17 @@ reference, bounds-checked as MEM-6 states, and a write through `&mut [T; N]` wri
 array (REF-13). TYPE-7's "only an array is indexed" is read with this one dereference. Absorbed
 from [KNOWN_HOLES.md](../verification/KNOWN_HOLES.md) C10.
 
-```con accept name=index-through-reference exit=42
-fn get(a: &[Int; 3]) -> Int {
+```con accept name=index-through-reference-decided exit=42 pending=R-0555 now=reject:E0108:resolve
+fn get(a: &[i64; 3]) -> i64 {
     return a[1];
 }
 
-fn set(a: &mut [Int; 3]) {
+fn set(a: &mut [i64; 3]) -> Unit {
     a[2] = 38;
 }
 
-fn example_value() -> Int {
-    let mut arr: [Int; 3] = [1, 2, 3];
+fn example_value() -> i64 {
+    let mut arr: [i64; 3] = [1, 2, 3];
     set(&mut arr);
     return get(&arr) + arr[2] + 2;
 }
@@ -350,30 +262,22 @@ fn main() -> u8 {
 <a id="MEM-9"></a>
 ### MEM-9. An index proven out of bounds is refused
 
-**MEM-9@1.** An index `a[i]` that the compiler proves always out of bounds for the array's length is refused in a function that neither is marked `trusted` nor declares `Unsafe`; whether it is also refused in a function marked `trusted` or declaring `Unsafe` is OPEN-118.
+**MEM-9@2.** An index that the compiler proves always out of bounds is refused in every function, including a `trusted` function or one declaring `Unsafe`.
 
 - Kind: refusal
 - Uses: none
 - Codes: E0900 (runtime-safety)
-- Status: partial bug-340
+- Status: pending R-0555
 - Enforced by: Concrete.Report.provenViolationDiagnostics
 - Semantics: none
 - Obligation: none
 - Evidence: tested
 
-**Rationale.** MEM-6@1 stated this refusal as the second half of its sentence; it is its own
-entry so that the refusal names its code, since only a refusal names codes. The compiler proves
-an index out of bounds when the index and the array's length are constants it evaluates; any other
-index is checked at run time (MEM-6). Inside a `trusted` function or one declaring `Unsafe`, the
-current compiler compiles such an index, and it aborts at run time; the sentence leaves that case to
-OPEN-118. The native build
-refuses both reject examples below. `--interp` runs them (bug 340): it stops at the out-of-bounds
-index in the first, so that example is checked natively only, and it exits 42 in the second, whose
-index is on a path that does not run, so that example is pending until the bug is fixed.
+**Rationale.** OD118 applies the same proven-violation refusal in trusted and Unsafe functions. The proof criterion is [undecided: see the target Core proposal](decisions.md#core-static-refusal); legacy interpreter behavior remains pinned where recorded.
 
 ```con accept name=index-proven-in-bounds exit=42
-fn example_value() -> Int {
-    let a: [Int; 3] = [10, 30, 2];
+fn example_value() -> i64 {
+    let a: [i64; 3] = [10, 30, 2];
     return a[0] + a[1] + a[2];
 }
 fn main() -> u8 {
@@ -384,9 +288,9 @@ fn main() -> u8 {
 }
 ```
 
-```con reject name=index-proven-out-of-bounds code=E0900 stage=runtime-safety pair=index-proven-in-bounds interp-exempt=interp-runs-proven-violations
-fn example_value() -> Int {
-    let a: [Int; 3] = [10, 30, 2];
+```con reject name=index-proven-out-of-bounds-decided code=E0900 stage=runtime-safety pair=index-proven-in-bounds interp-exempt=interp-runs-proven-violations pending=R-0555 now=reject:E0900:runtime-safety
+fn example_value() -> i64 {
+    let a: [i64; 3] = [10, 30, 2];
     return a[5];
 }
 fn main() -> u8 {
@@ -398,8 +302,8 @@ fn main() -> u8 {
 ```
 
 ```con reject name=index-proven-out-of-bounds-unrun code=E0900 stage=runtime-safety pair=index-proven-in-bounds pending=bug-340 now=reject:E0900:runtime-safety now-interp=accept:42
-fn example_value() -> Int {
-    let a: [Int; 3] = [10, 30, 2];
+fn example_value() -> i64 {
+    let a: [i64; 3] = [10, 30, 2];
     let c: bool = false;
     if c {
         return a[5];
@@ -420,3 +324,10 @@ or why they changed, so that each rationale explains the current version only. T
 [ids.tsv](ids.tsv), keeps every version's state and sentence hash.
 
 - MEM-4@2 opened one `Heap` layer implicitly in a field access (a `HeapArray<T>` only directly, not through a reference), without consuming the heap pointer. MEM-4@3 recorded OD30 (2026-10-29) and was retired before it was enforced, as the registry records; MEM-4@4 (spec audit 8, 2026-10-30) states the same decision and names OPEN-36 for the spelling of the explicit form.
+
+- MEM-4@5 (2026-11-03) brings the chapter into line with the recorded owner decisions; MEM-4@4 is superseded by version.
+- MEM-5@2 (2026-11-03) brings the chapter into line with the recorded owner decisions; MEM-5@1 is superseded by version.
+- MEM-7@2 (2026-11-03) brings the chapter into line with the recorded owner decisions; MEM-7@1 is superseded by version.
+- MEM-9@2 (2026-11-03) brings the chapter into line with the recorded owner decisions; MEM-9@1 is superseded by version.
+
+- MEM-8@2 (2026-11-03) supersedes MEM-8@1; pending legacy conformance is explicit.

@@ -197,19 +197,19 @@ fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("<!-- CONFORMANCE", F + "con ps
 fresh_copy; mutate "$TMP/n/spec/$REF" 're.sub(F + r"con accept name=fn-pointer-field.*?" + F + r"\n", "", s, count=1, flags=re.S)' \
   && control "N2a: an example deleted while still registered" S2 "REF-3/fn-pointer-field is registered live" -- lint "${SP[@]}"
 fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("No assignment through a reference stores", "No assignment through a reference ever stores", 1)' \
-  && control "N2b: a sentence edited without a version bump" S2 "REF-7@1: the sentence changed without a new version" -- lint "${SP[@]}"
-fresh_copy; cp docs/spec/ids.tsv "$TMP/n/base_ids.tsv"; mutate "$TMP/n/spec/ids.tsv" 's.replace("REF-7/write-value\tlive\t-\n", "")' \
-  && control "N3a: a registry row deleted relative to the base" S3 "ids.tsv row REF-7/write-value was removed" -- history "${SP[@]}" --base ctl --base-ids "$TMP/n/base_ids.tsv"
+  && control "N2b: a sentence edited without a version bump" S2 "REF-7@2: the sentence changed without a new version" -- lint "${SP[@]}"
+fresh_copy; cp docs/spec/ids.tsv "$TMP/n/base_ids.tsv"; mutate "$TMP/n/spec/ids.tsv" 's.replace("REF-7/write-value-decided\tpending\t-\n", "")' \
+  && control "N3a: a registry row deleted relative to the base" S3 "ids.tsv row REF-7/write-value-decided was removed" -- history "${SP[@]}" --base ctl --base-ids "$TMP/n/base_ids.tsv"
 fresh_copy; cp docs/spec/codes.tsv "$TMP/n/base_codes.tsv"; mutate "$TMP/n/spec/codes.tsv" 's.replace("E0700\tinternal", "E0700\tunmigrated:statements")' \
   && control "N3b: a code newly classified unmigrated" S3 "E0700 newly classified unmigrated" -- history "${SP[@]}" --base ctl --base-codes "$TMP/n/base_codes.tsv"
-fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace(F + "con accept name=write-value exit=42", F + "con accept name=write-value exit=42 pending=R-0500 now=accept:42", 1)' \
-  && control "N5: an enforced refusal paired with a pending accepted rewrite" S5 "its pair REF-7/write-value is pending" -- lint "${SP[@]}"
+fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace(F + "con accept name=borrow-each-use exit=42", F + "con accept name=borrow-each-use exit=42 pending=R-0500 now=accept:42", 1)' \
+  && control "N5: an enforced refusal paired with a pending accepted rewrite" S5 "its pair REF-6/borrow-each-use is pending" -- lint "${SP[@]}"
 # Every owner decision is answered (2026-11-01), so the control plants its own open entry.
 fresh_copy; mutate "$TMP/n/spec/decisions.md" 's.replace("\n## Decided\n", "\n<a id=\"OPEN-999\"></a>\n### OPEN-999. A planted open entry\n\n**OPEN-999@1.** Whether a planted control question holds is an open owner decision (OD999).\n\n- Kind: open\n- Uses: none\n- Codes: none\n- Status: open OD999\n- Enforced by: Concrete.checkStmt\n- Semantics: none\n- Obligation: none\n- Evidence: open\n\n## Decided\n", 1)' \
   && control "N1g: an open entry that names an enforcing declaration" S1 "an open entry names no enforcing" -- lint "${SP[@]}"
 fresh_copy; mutate "$TMP/n/spec/$REF" 're.sub(r"(\| `reject:E[0-9]{4}:REF-1)@[0-9]+`", r"\1@99`", s, count=1)' \
   && control "N1l: a conformance row that expects a version other than its entry's current one" S1 "conformance row expects REF-1@99" -- lint "${SP[@]}"
-fresh_copy; mutate "$TMP/n/spec/types.md" 's.replace("pending=R-0500 now=accept:42\nmod num", "pending=R-9999 now=accept:42\nmod num", 1)' \
+fresh_copy; mutate "$TMP/n/spec/types.md" 's.replace("pending=R-0555 now=reject:E0298:check", "pending=R-9999 now=reject:E0298:check", 1)' \
   && control "N8: an unknown tracking ID" S8 "R-9999" -- lint "${SP[@]}"
 mkdir -p "$TMP/n11"; printf 'Some prose.\n\n%s\n' "$(grep -m1 '^\*\*REF-6@[0-9]*\.\*\*' docs/spec/$REF | sed 's/^\*\*REF-6@[0-9]*\.\*\* //')" > "$TMP/n11/planted.md"
 control "N11: a normative sentence copied into another doc" S11 "planted.md restates the normative sentence of REF-6" -- restatements --scan-root "$TMP/n11"
@@ -219,8 +219,8 @@ fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("name=return-value exit=42", "n
   && control "N4a: a wrong exit code" S4 "REF-1/return-value" -- run-examples "${SP[@]}" --compiler "$CC" --work "$TMP/n/ex" --only REF-1/return-value
 fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("name=let-binds-ref code=E0302", "name=let-binds-ref code=E0303", 1)' \
   && control "N4b: a wrong error code" S4 "REF-6/let-binds-ref" -- run-examples "${SP[@]}" --compiler "$CC" --work "$TMP/n/ex" --only REF-6/let-binds-ref
-fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("name=struct-field code=E0239 stage=check", "name=struct-field code=E0239 stage=post-mono", 1)' \
-  && control "N4c: a wrong stage" S4 "REF-3/struct-field" -- run-examples "${SP[@]}" --compiler "$CC" --work "$TMP/n/ex" --only REF-3/struct-field
+fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("name=struct-field-decided code=E0239 stage=check", "name=struct-field-decided code=E0239 stage=post-mono", 1).replace(" pending=R-0555 now=reject:E0239:check", "", 1)' \
+  && control "N4c: a wrong stage" S4 "REF-3/struct-field" -- run-examples "${SP[@]}" --compiler "$CC" --work "$TMP/n/ex" --only REF-3/struct-field-decided
 fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("**REF-1@1.**", "**REF-1@2.**", 1)' \
   && control "N4d: a reject example whose diagnostic carries another rule version" S4 "REF-1/return-param" -- run-examples "${SP[@]}" --compiler "$CC" --work "$TMP/n/ex" --only REF-1/return-param
 # the Lean semantics leg: the model value of `add` is perturbed (TEST-ONLY hook of --report
@@ -230,8 +230,8 @@ CONCRETE_MODEL_DIFF_PERTURB=main.add control "N4m: the Lean model disagrees with
 CONCRETE_MODEL_DIFF_PERTURB=main.main control "N4n: the Lean model of an entry point disagrees" S4 "the Lean model disagrees" -- run-examples --compiler "$CC" --work "$TMP/n4n" --only SYN-1/balanced-parenthesis
 fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("name=borrow-each-use exit=42", "name=borrow-each-use exit=42 pending=R-0500 now=accept:42", 1)' \
   && control "N4e: a pending example that already holds" S4 "pending example already holds" -- run-examples "${SP[@]}" --compiler "$CC" --work "$TMP/n/ex" --only REF-6/borrow-each-use
-fresh_copy; mutate "$TMP/n/spec/types.md" 's.replace("pending=R-0500 now=accept:42\nmod num", "pending=R-0500 now=accept:41\nmod num", 1)' \
-  && control "N4f: a pending example whose now= is wrong" S4 "pending example changed behaviour" -- run-examples "${SP[@]}" --compiler "$CC" --work "$TMP/n/ex" --only TYPE-11/foreign-newtype-unwrap
+fresh_copy; mutate "$TMP/n/spec/types.md" 's.replace("pending=R-0555 now=reject:E0298:check", "pending=R-0555 now=reject:E0001:parse", 1)' \
+  && control "N4f: a pending example whose now= is wrong" S4 "pending example changed behaviour" -- run-examples "${SP[@]}" --compiler "$CC" --work "$TMP/n/ex" --only TYPE-11/read-private-field-decided
 
 # S6: an orphan code, and a rule-class code no entry names
 fresh_copy; mutate "$TMP/n/spec/codes.tsv" 're.sub(r"^E0216\t[^\n]*\n", "", s, flags=re.M)' \
@@ -249,8 +249,8 @@ fresh_copy; mutate "$TMP/n/spec/codes.tsv" "re.sub(r'^(E0510\tinternal\t[^\t\n]*
 
 # S7: a declaration without its comment, a comment naming an unknown ID, a name that does not resolve
 rm -rf "$TMP/nsrc"; cp -R Concrete "$TMP/nsrc"
-mutate "$TMP/nsrc/Check/Check.lean" 's.replace("-- spec: REF-5 (docs/spec/references.md; this declaration enforces the rule)\ndef refuseRefValuedBranch", "def refuseRefValuedBranch", 1)' \
-  && control "N7a: an Enforced by: declaration without its spec: comment" S7 "Concrete.refuseRefValuedBranch has no \`spec: REF-5\`" -- sites --src "$TMP/nsrc" --out "$TMP/n7.lean"
+mutate "$TMP/nsrc/Check/Check.lean" 's.replace("-- spec: REF-1, spec: STMT-9", "-- spec: STMT-9", 1)' \
+  && control "N7a: an Enforced by: declaration without its spec: comment" S7 "Concrete.checkFn has no \`spec: REF-1\`" -- sites --src "$TMP/nsrc" --out "$TMP/n7.lean"
 rm -rf "$TMP/nsrc"; cp -R Concrete "$TMP/nsrc"; printf '\n-- spec: REF-99\n' >> "$TMP/nsrc/Check/Check.lean"
 control "N7b: a spec: comment naming no live entry" S7 "spec: REF-99" -- sites --src "$TMP/nsrc" --out "$TMP/n7.lean"
 fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("- Enforced by: Concrete.checkFn, ", "- Enforced by: Concrete.noSuchCheckFn, Concrete.checkFn, ", 1)' \
@@ -260,11 +260,11 @@ fresh_copy; mutate "$TMP/n/spec/$REF" 's.replace("- Enforced by: Concrete.checkF
 
 # S12: a rule code whose only witness is gone; an allow row naming a code that is witnessed
 if [ -s "$TMP/s12.observed" ]; then
-  grep -v '^E0310'$'\t' "$TMP/s12.observed" > "$TMP/s12.n1"
-  control "N12a: a rule code with no negative witness" S12 "STMT-7 names E0310" -- code-coverage --observed "$TMP/s12.n1"
+  grep -v '^E0302'$'\t' "$TMP/s12.observed" > "$TMP/s12.n1"
+  control "N12a: a rule code with no negative witness" S12 "REF-6 names E0302" -- code-coverage --observed "$TMP/s12.n1"
   mkdir -p "$TMP/n12/docs/spec"; cp -R docs/spec/. "$TMP/n12/docs/spec/"
-  printf 'E0310\tSTMT-7\tunreachable:planted\n' >> "$TMP/n12/docs/spec/coverage_allow.tsv"
-  control "N12b: an allow row for a witnessed code" S12 "E0310 STMT-7 is allow-listed" -- code-coverage --observed "$TMP/s12.observed" --root "$TMP/n12" --spec "$TMP/n12/docs/spec"
+  printf 'E0302\tREF-6\tunreachable:planted\n' >> "$TMP/n12/docs/spec/coverage_allow.tsv"
+  control "N12b: an allow row for a witnessed code" S12 "E0302 REF-6 is allow-listed" -- code-coverage --observed "$TMP/s12.observed" --root "$TMP/n12" --spec "$TMP/n12/docs/spec"
   mkdir -p "$TMP/n12d/docs/spec" "$TMP/n12d/docs/project"; cp -R docs/spec/. "$TMP/n12d/docs/spec/"; cp ROADMAP.md "$TMP/n12d/"; cp docs/project/ROADMAP_*.md "$TMP/n12d/docs/project/"
   printf 'E9999\tSTMT-7\tR-9999\n' >> "$TMP/n12d/docs/spec/coverage_allow.tsv"
   control "N12d: an allow row whose reason names no tracking ID" S12 "reason 'R-9999' names a tracking ID that does not exist" -- code-coverage --observed "$TMP/s12.observed" --root "$TMP/n12d" --spec "$TMP/n12d/docs/spec"

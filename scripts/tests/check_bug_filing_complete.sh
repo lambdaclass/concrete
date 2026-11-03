@@ -151,7 +151,7 @@ printf '# Bug 999\n\n## Structural cause\nnames\n\n## Structural owner\nrow 4\n'
   || no "control: a complete record was refused"
 
 # SPEC RULINGS (docs/bugs/RULINGS.md, scripts/gen/bug_rulings.py). The spec decides what is a bug: every
-# record's ledger block names the rule the implementation violates (`ruling: Violates: OWN-1@2`), a spec
+# record's ledger block names the rule the implementation violates (`ruling: Violates: OWN-1@3`), a spec
 # gap, an open owner question, the rule that permits it, or why it is outside the spec. bug_ledger.py
 # refuses a record with no ruling, a malformed one, or a cited rule that is not a key of
 # docs/spec/ids.tsv, and allows `Violates: unrecorded` only on a FIXED bug listed in
@@ -176,8 +176,8 @@ if [ -f scripts/gen/bug_rulings.py ] && [ -f docs/spec/ids.tsv ] && [ -n "$LEDGE
   rm -f "$RERR"
   # Controls: the resolver itself (the same function bug_ledger.py and new_bug.sh call).
   rcheck() { python3 -I scripts/gen/bug_rulings.py check "$@" >/dev/null 2>&1; }
-  rcheck --num 999 --open-bug "Violates: OWN-1@2" && ok "control: a registered rule version is accepted" \
-    || no "control: 'Violates: OWN-1@2' was refused (is OWN-1@2 still in docs/spec/ids.tsv?)"
+  rcheck --num 999 --open-bug "Violates: OWN-1@3" && ok "control: a registered rule version is accepted" \
+    || no "control: 'Violates: OWN-1@3' was refused (is OWN-1@3 still in docs/spec/ids.tsv?)"
   rcheck --num 999 --open-bug "Violates: NOPE-1@1" && no "control: a rule that is not in docs/spec/ids.tsv was accepted" \
     || ok "control: a rule that does not resolve in docs/spec/ids.tsv is refused"
   rcheck --num 999 --open-bug "Violates: OWN-1@99" && no "control: an unregistered version of a real rule was accepted" \
@@ -195,14 +195,14 @@ if [ -f scripts/gen/bug_rulings.py ] && [ -f docs/spec/ids.tsv ] && [ -n "$LEDGE
   # The chapter map fails closed: a prefix given to two chapters, or a row that does not parse, is
   # refused rather than letting another row win (a baseline copy must resolve first).
   RT="$(mktemp -d)"; mkdir -p "$RT/docs"; cp -R docs/spec "$RT/docs/spec"
-  rcheck --root "$RT" --num 999 --open-bug "Violates: OWN-1@2" && ok "control: the copied chapter map resolves" \
+  rcheck --root "$RT" --num 999 --open-bug "Violates: OWN-1@3" && ok "control: the copied chapter map resolves" \
     || no "control: the unmodified copy of the chapter map was refused"
   sed -i 's/^| \[Scope and Binding\](scope.md) | `SCOPE-` |/| [Scope and Binding](scope.md) | `REF-` |/' "$RT/docs/spec/overview.md"
-  rcheck --root "$RT" --num 999 --open-bug "Violates: OWN-1@2" && no "control: a chapter map giving one prefix to two chapters was accepted" \
+  rcheck --root "$RT" --num 999 --open-bug "Violates: OWN-1@3" && no "control: a chapter map giving one prefix to two chapters was accepted" \
     || ok "control: a chapter map giving one prefix to two chapters is refused"
   rm -rf "$RT/docs/spec"; cp -R docs/spec "$RT/docs/spec"
   sed -i 's/^| \[Scope and Binding\](scope.md) | `SCOPE-` |/| [Scope and Binding](scope.md | `SCOPE-` |/' "$RT/docs/spec/overview.md"
-  rcheck --root "$RT" --num 999 --open-bug "Violates: OWN-1@2" && no "control: a malformed chapter map row was accepted" \
+  rcheck --root "$RT" --num 999 --open-bug "Violates: OWN-1@3" && no "control: a malformed chapter map row was accepted" \
     || ok "control: a malformed chapter map row is refused"
   rm -rf "$RT"
   first_listed="$(python3 -I -c 'import sys; sys.path.insert(0, "scripts/gen"); import bug_rulings as b; print(min(b.UNRULED, default=""))')"

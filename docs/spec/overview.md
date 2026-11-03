@@ -3,7 +3,7 @@
 Concrete is a small systems language for software that must be reviewed and proved. Its values are
 linear: a value that owns a resource is consumed exactly once, and nothing is destroyed implicitly.
 References are scoped access, never stored or returned. A function's authority is written in its
-signature (`with(File, Console)`), arithmetic is checked, and failure is an abort. Its compiler is
+signature (`with(Fs, Alloc)`), arithmetic is checked, traps abort, and allocation failure is an ordinary conserving error. Its compiler is
 written in Lean 4 and is being built toward an end-to-end verified pipeline. The design follows
 Austral and departs from it only with a written reason.
 
@@ -20,7 +20,8 @@ one fails at the stated stage with the stated code, and a pending one records wh
 until the rule is implemented. Text outside entries, like this chapter, states no rule.
 
 Where Core's semantics in Lean defines a rule, that definition governs and the entry names it
-(`Semantics:`); elsewhere the sentence is the rule until the definition lands. The owner's open
+(`Semantics:`); Lean is the only normative source as it lands; until then chapters state decided rules and
+[decisions.md](decisions.md) governs any remaining disagreement, under the 2026-11-03 prose cleanup decision. The owner's open
 questions are the last chapter, in the order to read them. The whole specification is also one
 generated page, [SPEC.md](SPEC.md), and how it is maintained (format, registry, gates) is
 [MAINTAINERS.md](MAINTAINERS.md).
@@ -67,9 +68,9 @@ entries. An invariant with no entry yet is a gap in the specification, tracked b
 | No operator overloading | The operators are built in on the primitive types; a user type uses named functions. | TYPE-6, TYPE-2 |
 | No implicit conversions | No silent coercion; every conversion is written. | TYPE-4, ARITH-5 |
 | No null | An optional value is an `Option<T>`. | gap: no entry yet |
-| No exceptions | Errors are values, propagated by an exhaustive `match` and an explicit `return`; failure is abort only. | STMT-2, "Recoverable failure" in statements.md |
-| No global mutable state | A program holds no mutable global state; global resources are linear tokens descending from the root value `main` receives (OD8, decided 2026-10-29). | TRUST-8, TRUST-9, TRUST-10 (pending) |
-| No interior mutability in safe code | All mutation flows through `&mut`; a later low-level `UnsafeCell<T>` would be gated by `Unsafe`. | open: OPEN-112 |
+| No exceptions | Errors are values, propagated by an exhaustive `match` and an explicit `return`; allocation failure conserves inputs and returns an ordinary error; traps abort. | STMT-2, "Recoverable failure" in statements.md |
+| No global mutable state | A program holds no mutable global state; resource values originate in the target grants `main` declares and consumes, with permissions checked separately (authority rules). | TRUST-8, TRUST-9, TRUST-10 (pending) |
+| No interior mutability in safe code | All mutation flows through `&mut`; a later low-level `UnsafeCell<T>` would be gated by `Unsafe`. | decided: OD112; no safe interior mutability |
 | Local-only type inference | Signatures are fully annotated; inside a body a local's type may come from its initializer, right to left only, with no cross-statement constraint solving and no broad bidirectional inference. | TYPE-4 (in part); gap |
 | LL(1) grammar | Every parsing decision takes one token of lookahead, with no ambiguity and no backtracking. | SYN-1 |
 | `abort()` is terminal | No deferred call, `Destroy` implementation or drop glue runs after an abort; hosted execution ends the process (usually status 134 on POSIX, so tests check for a nonzero status), and a freestanding profile calls a declared non-returning handler (R-0223, R-0322). | STMT-2, "Abort and failure" in statements.md |
@@ -117,8 +118,8 @@ it; where an entry defines the term, that entry is the definition and this table
 | Mono | monomorphization: the stage that specializes every generic at its type arguments | PASS-1, PASS-2, PASS-7 |
 | Lower, Emit | the stages that turn Core into verified SSA and SSA into LLVM IR | PASS-9, PASS-10, PASS-11 |
 | builtin | a function, type or enum the compiler provides with no declaration in the program | functions: the [builtin catalog](types.md#builtin-functions), TYPE-10; primitive types: TYPE-19, TYPE-20; `Option` and `Result`: TYPE-23; names: MOD-1 |
-| intrinsic | an operation the compiler implements, named by a builtin or by `#[intrinsic = "n"]` | FFI-6, the builtin catalog |
-| place | a root binding followed by field, index or newtype projections | REF-5 |
+| intrinsic | an operation the compiler implements, identified by compiler identity with fixed effects; source annotations do not grant intrinsic identity | FFI-6, the builtin catalog |
+| place | a root binding followed by field or index projections | REF-5 |
 | owned value | a value a local binding holds by value rather than through a reference; MEM-D1 names its states | MEM-D1 |
 | Copy | a type whose values may be duplicated | OWN-D1, TYPE-14, OWN-14 |
 | linear | a type that is not Copy (OWN-D1); OWN-1 and OWN-2 govern how its values are used | OWN-D1, OWN-1, OWN-2 |
@@ -126,9 +127,9 @@ it; where an entry defines the term, that entry is the definition and this table
 | reserved, frozen | two binding states MEM-D1 names: reserved is a binding passed by value to a pending `defer` (OWN-12), frozen is the owner of an enclosing borrow block (REF-D3) | MEM-D1, OWN-12, REF-D3 |
 | reference | a value of type `&T` or `&mut T`; the entries cited govern where it may flow | REF-D1, REF-D2, REF-1, REF-3, REF-5 |
 | borrow | forming a reference to a place (`&x`, `&mut x`), or a borrow block | REF-5, REF-D3 |
-| borrow block | `borrow x as r in R { B }`, which lends `x` to `r` for `B` | REF-D3 |
+| borrow block | `borrow x as r { B }`, which lends `x` to `r` for `B` | REF-D3 |
 | loan | a borrow seen from its root binding | REF-11, REF-8, STMT-11 |
-| capability | a named logical authority, such as `Console` or `Alloc` | TRUST-D1, TRUST-4 |
+| capability | a named logical authority, such as `Fs` or `Alloc` | TRUST-D1, TRUST-4 |
 | capability set | the capabilities and capability variables of a `with(...)` or a capability argument | TYPE-D1, TYPE-17, TYPE-18 |
 | `Unsafe` | the capability for raw-memory and foreign operations | TRUST-D1, TRUST-4 |
 | trusted | a `trusted fn` (TRUST-5, TRUST-12) or a `trusted mod` (TRUST-6, pending); "Trusted premises" collects what they leave unchecked | TRUST-5, TRUST-6, TRUST-12; "Trusted premises" in [trusted.md](trusted.md) |
@@ -188,7 +189,7 @@ chapters; an entry not listed here can still bear on a construct.
 | array literal `[a, b]`, `[e; N]` | TYPE-7, STMT-4, OPEN-149 |
 | array index `a[i]` | MEM-6, MEM-8, TYPE-7, OWN-8, STMT-4 |
 | `&x`, `&mut x` | REF-5, REF-8, REF-11, REF-12, REF-13, OWN-10 |
-| `borrow x as r in R { B }` | REF-D3, REF-8, OPEN-57, OPEN-58 |
+| `borrow x as r { B }` | REF-D3, REF-8, OPEN-57, OPEN-58 |
 | `*e` | TYPE-8, TRUST-3, TRUST-7, TRUST-11; of an owned `Heap`: MEM-5, MEM-7 |
 | raw pointers `*mut T`, `*const T` | TRUST-1, TRUST-4, TRUST-13, TRUST-7, TRUST-11 |
 | `as` | ARITH-5, TYPE-24, TRUST-1, OPEN-98 |
@@ -200,7 +201,7 @@ chapters; an entry not listed here can still bear on a construct.
 | float literal | ARITH-7, OPEN-63 |
 | string and char literals | SYN-5, SYN-6, TYPE-20, OPEN-137 |
 | `wrapping_*`, `saturating_*` | ARITH-4 |
-| `alloc`, `free`, `Heap<T>` | MEM-5, MEM-7 |
+| `alloc`, consuming `*h`, `Heap<T, A>` | MEM-5, MEM-7 |
 | `destroy`, `Destroy` | OWN-13, TRAIT-8, TRAIT-11 |
 | `discard(e)` | OWN-5, OWN-7 |
 | `abort()` | STMT-13, STMT-2 |

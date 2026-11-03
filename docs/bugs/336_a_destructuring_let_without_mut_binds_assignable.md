@@ -10,7 +10,7 @@ summary: a destructuring let without mut binds assignable names
 coverage: archived reproducer(s) for bug 336; see Reproducer and Archive disposition below; no required passing regression against the frozen compiler
 class: 12
 silent: yes
-ruling: Violates: OWN-10@2
+ruling: Violates: OWN-10@3
 -->
 
 ## Reproducer

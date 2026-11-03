@@ -10,7 +10,7 @@ summary: a diverging abort() bound to a typed let that is returned, or returned 
 coverage: reproducer tests/regressions/bug346_a_diverging_abort_bound_to_a_typed_let_that_is_r/repro.con, pinned by check_example_outputs.sh (open-bug reproducers leg, compile-fails on the LLVM validation error)
 class: 8
 silent: no
-ruling: Violates: PASS-12@1
+ruling: Violates: PASS-12@2
 -->
 
 ## Reproducer

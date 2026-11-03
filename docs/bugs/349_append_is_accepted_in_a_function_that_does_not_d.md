@@ -10,7 +10,7 @@ summary: append is accepted in a function that does not declare Alloc, because E
 coverage: reproducer tests/regressions/bug349_append_is_accepted_in_a_function_that_does_not_d/repro.con, pinned by check_example_outputs.sh (open-bug reproducers leg, runs-exit 42)
 class: 6
 silent: yes
-ruling: Violates: MEM-7@1
+ruling: Violates: MEM-7@2
 -->
 
 ## Reproducer
