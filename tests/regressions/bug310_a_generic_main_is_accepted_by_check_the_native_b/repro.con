@@ -1,0 +1,6 @@
+// Bug 310: `main` with a type parameter. Nothing instantiates a generic entry point: before the
+// fix Check accepted it, the native build failed at `link` ("no `main` function found", no rule)
+// and `--interp` ran the generic body and printed 42. Expected: refused at check, E0310 (STMT-7).
+fn main<T>() -> Int {
+    return 42;
+}

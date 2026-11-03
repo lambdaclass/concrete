@@ -1,0 +1,13 @@
+// Archived legacy reproducer: intended expectation only; not registered as a required pass.
+// Bug 317 (PAT-9): an arm after an unguarded catch-all is never selected even with a guard (E0325).
+fn main() -> Int {
+    let x: Int = 1;
+    match x {
+        n => {
+            return n;
+        },
+        1 if x == 1 => {
+            return 42;
+        },
+    }
+}

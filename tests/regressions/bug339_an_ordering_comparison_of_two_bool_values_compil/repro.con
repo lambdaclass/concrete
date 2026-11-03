@@ -1,0 +1,9 @@
+// Bug 339 (PASS-13@1): `true < false` is accepted. Observed on the legacy compiler: the binary exits
+// 42 (false), while --interp exits 1 with "interp: unsupported binop on given value types". OD42
+// (decided 2026-11-01) refuses ordering comparisons of bool, so the decided outcome is a check refusal;
+// the native/interpreter divergence stays recorded against legacy-compiler-final.
+fn main() -> Int {
+    let b: bool = true < false;
+    if (b) { return 1; }
+    return 42;
+}

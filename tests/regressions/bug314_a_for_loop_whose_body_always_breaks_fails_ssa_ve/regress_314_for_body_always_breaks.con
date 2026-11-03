@@ -1,0 +1,23 @@
+// Archived legacy reproducer: intended expectation only; not registered as a required pass.
+// Archived legacy reproducer: intended expectation only; not registered as a required pass.
+// Bug 314: `for` loops whose body never reaches the step. A bare `break;`, a `break` after work,
+// and a nested `for` whose body breaks; the counts prove each body ran once. Exit 42, binary and
+// --interp alike.
+fn main() -> Int {
+    let mut n: Int = 0;
+    for (let mut i: Int = 0; i < 3; i = i + 1) {
+        n = n + 10;
+        break;
+    }
+    for (let mut j: Int = 5; j < 9; j = j + 1) {
+        n = n + j;
+        break;
+    }
+    for (let mut a: Int = 0; a < 2; a = a + 1) {
+        for (let mut b: Int = 0; b < 2; b = b + 1) {
+            n = n + 1;
+            break;
+        }
+    }
+    return n + 25;
+}

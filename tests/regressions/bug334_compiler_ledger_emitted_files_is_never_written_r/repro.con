@@ -1,0 +1,7 @@
+// Bug 334: the compiler ledger's emitted_files is never written. Build this file as the only
+// source of a project (`concrete build -o probe`), then run `concrete --report compiler-ledger
+// --json`: `emitted_files` is [] (Observed), though the build wrote `probe`; it should name the
+// emitted file, or say the field was not recorded (Expected).
+fn main() -> Int {
+    return 0;
+}

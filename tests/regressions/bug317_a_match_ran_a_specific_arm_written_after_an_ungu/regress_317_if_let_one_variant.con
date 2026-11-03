@@ -1,0 +1,25 @@
+// Archived legacy reproducer: intended expectation only; not registered as a required pass.
+// Bug 317 (PAT-9): PAT-9 judges a written `match`. `if let`, `let ... else` and `while let` over a
+// one-variant enum desugar to a variant arm and a fallback `_` arm the source never wrote, and stay
+// accepted. Expected: 42.
+enum Copy One { Only { v: i32 } }
+
+fn via_if_let(o: One) -> i32 {
+    if let One::Only { v } = o {
+        return v;
+    } else {
+        return 0;
+    }
+}
+
+fn via_let_else(o: One) -> i32 {
+    let One::Only { v } = o else {
+        return 0;
+    };
+    return v;
+}
+
+fn main() -> Int {
+    let o: One = One::Only { v: 21 };
+    return (via_if_let(o) + via_let_else(o)) as Int;
+}

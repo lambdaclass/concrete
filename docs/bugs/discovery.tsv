@@ -98,6 +98,7 @@ date	kind	probe	effort	bugs	silent	compiler
 2026-10-25	development	reading Lower's merge code for bug 266 (the scope cleanup after an if takes the current table, which is the else arm's), then probes of if, value if and match whose last arm writes and diverges	4 programs	271	271	legacy
 2026-10-25	development	repointing mutation 56 to Elab's frame shape (front-end perf branch): the faithful eager-frames mutation survived check_binder_refs.sh	unrecorded	268	-	legacy
 2026-10-25	development	the name-capture fixes of bugs 238-247: CoreCheck judges an FFI edge against its own module tree's extern names; reproduced with an imported extern under --report trust-edges	unrecorded	272	272	legacy
+2026-10-25	development	Sequential landing check after bug 263: work-queue lifecycle test permitted unrelated dispatch to occupy its only worker slot	unrecorded	264	-	legacy
 2026-10-26	development	R-0550 compile-time scaling gate: 15 generated shapes (array literals, long functions, many locals, lets with blocks, many functions, structs and enums, deep nesting) timed per stage at 1000 to 160000 elements	unrecorded	273,274,275,276,277,278,279,280,281,282,286	-	legacy
 2026-10-26	ci	gates-shell branch CI (run 40269354812): a transform-register leg failed on printf: write error: Broken pipe with its pattern present	unrecorded	283	283	legacy
 2026-10-26	follow-on	checking an earlier observation that binder references in literal match arms were missing from the R-0004 evidence producer: literal, range and bool match probes under --report subject-facts and migration-manifest	6 programs	284	284	legacy
@@ -117,7 +118,8 @@ date	kind	probe	effort	bugs	silent	compiler
 2026-10-27	hunt	the differential fuzzer's borrow mode with for loops (fuzz_differential.py --mode borrow) on a build with bugs 301 - 305 fixed: every remaining mismatch	1000 programs	306	306	legacy
 2026-10-28	development	pre-push hook on the OVH dev host (perf_event_paranoid=4, load 15-26): check_compile_scaling.sh enums/lower wall growth x80	unrecorded	315	-	legacy
 2026-10-28	development	cleanup pass 2026-10-28: the totality ratchet's environment walk imported every executable root (lake build Browser)	1 build	316	-	legacy
-2026-10-28	spec	class-13 audit: one forbidden program per clause of each normative rule in docs/spec (125 entries), native against --interp (wip/class13-audit)	207 probes	311	311	legacy
+2026-10-28	spec	class-13 audit: one forbidden program per clause of each normative rule in docs/spec (125 entries), native against --interp (wip/class13-audit)	207 probes	310,311,312,313	311,312	legacy
+2026-10-28	spec	class-13 audit follow-up: break with and without a value in while and for loops, native against --interp (wip/class13-audit probes5)	6 probes	314	-	legacy
 2026-10-29	spec	OD16 (decided 2026-10-29) check: struct literals and uppercase constants in if and while heads, native against --interp, on main 0bf8350a (wip/spec-od)	5 probes	318	-	legacy
 2026-10-29	spec	OD23-OD32 (decided 2026-10-29, strict across the board) check: one program per tightening, native against --interp, on main 0bf8350a (wip/spec-od)	13 probes	319,320,321,322,323,324,325,326,327,328	319,320,321,322,323,324,325,326,327,328	legacy
 2026-10-29	review	Kimi review of a spec delta (a for step's control flow), then hand probes of break, continue and return inside for steps on main 71df9c25	17 programs	330	-	legacy
@@ -125,7 +127,14 @@ date	kind	probe	effort	bugs	silent	compiler
 2026-10-29	spec	Codex and Kimi reviews of the spec-gap rules (wip/spec-s6, 2026-10-30): f32 literal double rounding, native against --interp	1 probe	332	332	legacy
 2026-10-29	spec	Codex and Kimi reviews of the spec-gap rules (wip/spec-s6, 2026-10-30): type arguments to a body-less generic declaration, native against --interp	1 probe	333	333	legacy
 2026-10-29	spec	OD47 (decided 2026-10-29) check: the three C-style for forms, the counted loop and from/until as names, native against --interp, on main ae896787 (wip/spec-s7)	5 probes	331	-	legacy
+2026-10-29	spec	OD18 (decided 2026-10-29) check: an Int match whose unguarded catch-all arm precedes a literal arm, native against --interp, on main 0bf8350a (wip/bug-317)	2 probes	317	317	legacy
 2026-10-30	spec	outside-reader test of the spec (wip/spec-phase2 d21a4cfd, 2026-10-30): 60 programs written from SPEC.md alone, run native and --interp; a constant out-of-bounds index	60 programs	340	340	legacy
+2026-10-30	development	cleanup pass 2026-10-30: the dead-code finder's reachability walk (recordEmitted has no caller; Codex review)	1 probes	334	-	legacy
+2026-10-30	review	cleanup pass 2026-10-30: identity sweeps of every report kind over the examples (cli_tool's layout and stack-depth panicked on both binaries); Codex confirmation	1 probes	335	335	legacy
+2026-10-30	spec	absorbing PATTERN_DESTRUCTURING into the spec (wip/spec-absorb-2): let and let mut over a struct pattern, then an assignment to a binder, native against --interp, on main cc876322	2 probes	336	336	legacy
+2026-10-30	spec	absorbing CALLABLE_VALUES_AND_CAPABILITIES and HANDLE_CAPABILITIES into the spec (wip/spec-absorb-3): names in with(...) that are no capability, native against --interp, on main cc876322	2 probes	337	337	legacy
+2026-10-30	spec	outside-reader test of the spec (wip/spec-phase2 d21a4cfd, 2026-10-30): 60 programs written from SPEC.md alone, run native and --interp; borrow mut of a non-mut binding	60 programs	338	338	legacy
+2026-10-30	spec	outside-reader test of the spec (wip/spec-phase2 d21a4cfd, 2026-10-30): 60 programs written from SPEC.md alone, run native and --interp; bool ordering	60 programs	339	-	legacy
 2026-10-31	review	spec quality audit of 2026-10-30 (Codex, Grok): hand probes of the open questions it raised, native against --interp, on main 71e3e804	16 probes	341	-	legacy
 2026-10-31	review	spec quality audit of 2026-10-30 follow-up: why MEM-6 cannot name E0900; a whole-tree scan of emitted codes against --report diagnostic-codes on main 71e3e804	1 probes	342	342	legacy
 2026-10-31	spec	spec audit 2026-10-31: probes of the SYNTAX_FREEZE_REVIEW §1.1 qualification rule (qualified paths by base-name case, nested paths, flattened names), native against --interp, on fb8946c6c	6 probes	343	343	legacy

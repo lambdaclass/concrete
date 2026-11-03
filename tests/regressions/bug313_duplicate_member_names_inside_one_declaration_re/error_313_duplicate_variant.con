@@ -1,0 +1,10 @@
+// Archived legacy reproducer: an observational probe of the archived MOD-5 proposal, which never
+// landed. It decides no rejection and expects no diagnostic; see bug 313's owner-question note.
+// Bug 313 (MOD-5): two variants of one name reached llvm-as natively and ran under --interp (E0324).
+enum E { A, A }
+fn main() -> Int {
+    let e: E = E::A;
+    match e {
+        E::A => { return 42; }
+    }
+}

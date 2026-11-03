@@ -1,0 +1,9 @@
+// Bug 337 (MOD-1): `Foo` in `with(Foo)` resolves to no capability, alias or capability variable, so it must be
+// refused. Observed on main cc876322: accepted; the binary exits 42 and --interp prints 42.
+fn helper() with(Foo) -> i64 {
+    return 42;
+}
+
+fn main() with(Foo) -> i64 {
+    return helper();
+}

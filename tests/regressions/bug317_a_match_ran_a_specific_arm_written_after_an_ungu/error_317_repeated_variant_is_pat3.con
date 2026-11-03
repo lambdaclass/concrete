@@ -1,0 +1,19 @@
+// Archived legacy reproducer: intended expectation only; not registered as a required pass.
+// Bug 317 (PAT-9): an unguarded arm repeating a variant stays PAT-3's refusal (E0532), even after
+// the arms before it cover every variant.
+enum Copy One { A, B }
+
+fn main() -> Int {
+    let o: One = One::A;
+    match o {
+        One::A => {
+            return 42;
+        },
+        One::B => {
+            return 1;
+        },
+        One::A => {
+            return 0;
+        },
+    }
+}
