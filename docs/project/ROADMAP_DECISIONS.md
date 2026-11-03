@@ -305,3 +305,260 @@ R-0484 (closed 2026-10-08 at `245cd51c`), R-0483 (closed 2026-10-09 at `4f005715
 
 `ProofCache` remains performance-pulled. A second proof-producing kernel remains research-gated and
 is not part of this strict queue. Why3 remains comparative prior art, never a backend.
+
+## Roadmap opening records
+
+The following blocks are preserved verbatim from ROADMAP.md. They are literal Markdown records, so their original relative links retain the
+repository-root context. The live roadmap supplies navigable summaries and current pointers.
+
+<a id="2026-10-30--specification-first"></a>
+
+### 2026-10-30 — Specification first
+
+```markdown
+**The specification comes first (owner decision, 2026-10-30).** The criteria below are delivered in phases A–D under [the scheduling rule](#scheduling-rule). The spec is complete when it
+is the one normative, simple and checkable statement of the language. In order:
+
+1. **Owner decisions.** Every open question is answered. They are the OPEN entries in
+   [docs/spec/decisions.md](docs/spec/decisions.md), and the ones the spec work has raised since land
+   with it. Each carries a reviewed recommendation, the principle it rests on and its proof impact.
+   Until it is answered, the spec says "undecided" there. **Done when:** no OPEN entry remains, except
+   ones the owner defers explicitly.
+2. **Absorb and audit.** Every language-normative statement in the repository moves into `docs/spec`,
+   tracked by the absorption inventory, so there is one source. Coverage is then audited against the
+   implementation, because absorbing only finds rules someone wrote down: every construct the parser
+   and checker accept has a rule. Project policy, process and research stay where they are.
+   **Done when:** the inventory has no unabsorbed row, and the coverage audit lists no construct
+   without a rule.
+3. **Simplify.** The decided removals are applied to the text, and the rules they make obsolete
+   are retired by version, not silently deleted.
+4. **Read as one document.** One generated single-page spec, a short overview, one shape for every
+   rule (statement and examples, plus its diagnostic code where the rule is a refusal), the grammar
+   in the spec, a glossary, and an index from diagnostic codes to rules.
+5. **Nothing outside the spec.** Every diagnostic code that reports a language refusal maps to a rule,
+   and every compiler site that enforces one cites it. A blocking gate, defined over the diagnostic
+   ledger and the rule-site table, fails on an unmapped language refusal. Semantic guarantees and
+   operational failures are classified separately, as `docs/spec/README.md` already does.
+6. **Conformance suite.** Every rule's examples state their expected outcome: accepted with a result,
+   refused with a code, or trapping. They are published as a suite another implementation could run.
+   **Done when:** every rule has its examples. Pending rules are expected to fail until step 7.
+7. **The code matches the spec.** Std, examples and tests migrate as their constructs land, with an owning task for every pending rule.
+8. **Lean links.** Each chapter's rules link their Lean definition (`Semantics:`), and the definition
+   governs. They arrive chapter by chapter with the Core semantics (R-0496), each together with its
+   implementation, and prose, Lean and the implementation must agree on the chapter's examples.
+9. **Outside-reader test.** Someone new to Concrete writes a working program from the spec alone,
+   and whatever confused them is fixed.
+```
+
+<a id="2026-11-01-and-2026-11-02--authority-design"></a>
+
+### 2026-11-01 and 2026-11-02 — Authority design
+
+```markdown
+**Authority design (owner decision, 2026-11-01; rules completed 2026-11-02).** `with(...)` is the
+only permission mechanism; it is compile-time information, not a resource. Linear values are the only
+resource mechanism. Every operation needs both: the value says which thing, and `with` says what is
+allowed. The target's services are values too: `main` receives the target's grants (its allocator,
+directories, environment, clock, devices) and consumes them. There is no `Root` type, no permission
+token and no `Std` capability; every signature lists its real capabilities. Allocation takes an
+`Allocator<A>` value on every target and is fallible; allocations carry their allocator's identity;
+filesystem access goes through `Directory` values confined at lookup. The fourteen authority rules and
+the allocation, filesystem, environment, time and network decisions are in
+[docs/spec/decisions.md](docs/spec/decisions.md#decided-2026-11-02). The spec's trusted, types, memory
+and ownership chapters are to be rewritten to them in Lean, and std, examples and tests are to
+migrate to them.
+```
+
+<a id="2026-10-30--documentation-follows-the-spec"></a>
+
+### 2026-10-30 — Documentation follows the spec
+
+```markdown
+**Then the documentation follows the spec.** Once the spec is rewritten, every other document (the
+book, the site, the README, the project, compiler and platform docs, and the research notes that state
+language facts) is updated to cite the new spec and lose any statement it now contradicts. The
+absorption inventory and the doc-links and docs-drift gates track this: no document may restate a rule
+the spec owns, or describe a removed feature as current.
+```
+
+<a id="2026-11-01--lean-as-the-only-source"></a>
+
+### 2026-11-01 — Lean as the only source
+
+```markdown
+**Lean is the only source of the language (owner decision, 2026-11-01).** This is the governing rule for phases A–D. It changes how steps 3, 4, 6 and 8 are carried out, not what they require:
+every done-when criterion of steps 1 – 9 still holds. It supersedes the rewrite plan recorded earlier the
+same day, which kept a prose source beside Lean.
+
+- **Core in Lean from the start.** The normative language is a small Core, roughly 20 – 30
+  constructs. Its syntax, its typing, ownership and effect rules, and its execution semantics are Lean
+  definitions, each carrying its rule ID and a doc comment. There is no Markdown-first draft: existing
+  chapter text is rewritten as Lean, not edited as prose. Rules stated on surface syntax today, such as
+  the ownership checks, become Core rules (R-0499's checker on Core).
+- **Desugaring in Lean.** Every surface feature (counted loops, method calls, `defer`, pattern forms,
+  and so on) is defined by its lowering into Core, written as Lean functions, with no semantics of its
+  own. Core's metatheory is shared by every feature, and each lowering carries its own correctness
+  obligation.
+- **Everything else is generated from Lean** (the WebAssembly SpecTec model). A Lean program generates
+  `SPEC.md`, the chapters and the rule registry; a blocking gate fails when they are stale. The
+  reference interpreter is the Lean semantics itself, compiled and run. It replaces `--interp` once it
+  passes the existing interpreter-versus-compiled differential corpus. The conformance
+  examples live next to their rule and run through both the Lean semantics and the compiler.
+- **The compiler is proved against the same definitions.** R-0496's Core semantics is this Lean Core,
+  so the spec, the reference interpreter, the conformance oracle and the verified-compiler theorems
+  share one semantic definition. What remains are explicit correctness obligations at the translation
+  and generation boundaries: desugaring, the generator, the compiler and linking.
+- **Documentation follows from Lean.** The book, the site, the README and the compiler and platform
+  docs cite the generated spec and state no rule of their own.
+- **Implementation sequence**, one step at a time:
+  1. record the owner decisions (step 1);
+  2. Core in Lean: syntax, typing, ownership and effects, execution semantics;
+  3. the desugaring of each surface feature in Lean;
+  4. the generator and its staleness gate;
+  5. retire the old chapters area by area, each replaced by its generated output;
+  6. the documentation follows ("Then the documentation follows the spec", above), area by area as
+     each chapter is replaced;
+  7. the migration of std, examples and tests (step 7).
+
+  Proposals 1 and 3 of [SPEC_STRUCTURE_PROPOSALS.md](docs/project/SPEC_STRUCTURE_PROPOSALS.md)
+  (grammar productions in the entries; the conformance suite) are folded into steps 2 – 4.
+```
+
+<a id="2026-11-01-and-2026-11-02--new-compiler-and-retention-contract"></a>
+
+### 2026-11-01 and 2026-11-02 — New compiler and retention contract
+
+```markdown
+**A new compiler, written from the Lean spec (owner decision, 2026-11-01).** The current compiler
+is not migrated. It implements the language before the decisions of 2026-10-29 – 11-01, and its
+recurring defect classes (spelling-based names, places mixed with values, checks spread across
+passes) are structural. A new compiler is written from the Lean definition, proof-first, and the
+current one is retired. The owner: "i don't care about the current pipeline, we could remove it and start
+from scratch", then approved the transition below (freeze, tag, oracle, deletion after slice 1, the target
+Core proposal first). This changes the implementation strategy only: the Lean-only source decision above
+still governs, and no pending language question is settled by it. The architecture of `ConcreteSpec` and
+the new compiler (below) was approved on 2026-11-02 under the owner's rule of that day
+(Claude and Codex agreeing); the conditions are in phase B's done-when.
+
+- **`ConcreteSpec`** is a new Lean library that imports nothing from any compiler. It holds the
+  grammar as data (with its LL(1) check), Core with identities from the start, the semantic contract
+  sized to each slice, the statics as inductive judgments (the only normative form; a decision
+  procedure is an implementation, proved equivalent once a subset's rules stop changing), the one
+  elaborator from surface to Core, the clock-indexed evaluator (the reference interpreter, which
+  replaces `--interp`), the conformance examples and the generator of `SPEC.md`. The rule text is
+  rendered from the judgment clause; doc comments are commentary and examples.
+- **The new compiler** imports `ConcreteSpec` and calls its elaborator. Below Core it is a new
+  lowering chain, built pass by pass with its proofs. A simple BIR → LLVM printer, labelled
+  unverified, gives native code from the first slice; the Lean Compiler Backend follows. A
+  conformance package above both runs every example through the spec and through the compiler.
+- **When slice 1 works end to end, the old pipeline is deleted from main** in one change, together
+  with the gates that test its internals. Kept: the test programs and bug regressions (re-run as
+  slices cover them), examples and std (migrated to the decided language), the CI and gate framework,
+  the docs and research, and the external native backend. Dropped: the old Core, checker,
+  elaborator, lowering, SSA and LLVM emission, the old interpreter, the `PExpr`/ProofCore proofs, and
+  the evidence, receipt and report subsystems, which are rebuilt on the new Core when proofs need
+  them. Evidence the old compiler produced stays replayable from the tag; its
+  issuance ends at the freeze and none of it is migrated (the
+  [verified-compiler plan](docs/compiler/VERIFIED_PIPELINE.md)'s supersession notice). The browser compiler keeps running from the tag until the new compiler covers it.
+- **What it supersedes:** the in-place migration of the current compiler in
+  [VERIFIED_PIPELINE.md](docs/compiler/VERIFIED_PIPELINE.md) (its target architecture, semantic contract
+  and proof strategy still apply, now to the new compiler); the migration of the compiler,
+  which becomes its retirement (std, examples and tests still migrate); the old-pipeline items of
+  the [legacy plan](docs/archive/ROADMAP_LEGACY_PLAN.md); and the unlanded cleanup branches of the old pipeline, which are to be
+  closed.
+```
+
+<a id="2026-11-01--compiler-proof-order"></a>
+
+### 2026-11-01 — Compiler proof order
+
+```markdown
+**How the compiler proof is built (research reviews, 2026-11-01).** Two surveys of verified-language and
+verified-compiler projects, the first reviewed by Codex (adopt with changes), fix the order in which the
+[verified-compiler plan](docs/compiler/VERIFIED_PIPELINE.md) is carried out for the new compiler. Every
+source is in [INFLUENCES.md](docs/project/INFLUENCES.md#verification-and-compiler-influences-research-of-2026-11-01):
+
+1. **The semantic contract first.** The final theorem is stated before any pass is proved: which
+   outcomes a program has (return, abort, observable I/O, divergence), what a trace is, how authority
+   and resources appear in it, and the memory abstraction. Values-to-bytes is a named proof boundary,
+   not an implicit step.
+2. **Executable Core semantics.** The planned form is a step function, so it runs as the reference
+   interpreter. Running out of fuel is an execution-budget result of the interpreter, distinct from
+   every program outcome; its relation to divergence is stated with the theorem. Type, ownership and effect
+   soundness are proved over it.
+3. **One minimal end-to-end path.** Each pass preserves behaviour and re-establishes the next IR's
+   ownership and authority invariants, so no later pass relies on a check an earlier one skipped
+   (Linear Core). Safety is split as in Owlang: the checker proves the ownership invariant and
+   compilation preserves it, the ownership conditions at module boundaries are stated as interface
+   contracts, and every check runs before optimization.
+4. **Functional models for safe code**, in the style of Aeneas: a supported safe function is
+   translated to a pure Lean function, with `&mut` arguments passed in and returned, and failure,
+   non-termination and effects explicit. Because a Concrete reference is never returned or stored
+   (Hylo's mutable value semantics), the translation is simpler, and the supported subset may need
+   none of Aeneas's backward functions; that each model is exact (effects, divergence, allocation
+   failure and trusted boundaries included) is a theorem to prove. Either the translator is verified
+   or every model carries its own proof. Contracts are stated over these models; the plan is to
+   discharge them with Lean's own program-verification tools (`Std.Do`, `mvcgen`, `grind`) instead of
+   building a project verification-condition generator (the old TermIR generator retires with the old
+   compiler). This replaces ProofCore.
+5. **Open-module correctness and the C boundary**, in the style of CompCertO: per-module theorems
+   that compose into a whole-program theorem, with explicit contracts for C code.
+6. **Ghost permissions for trusted code**, in the style of Verus, so selected `trusted` functions
+   discharge their trust assumptions instead of carrying them.
+7. **SMT-checked lowering rules** where they pay off, later.
+8. **Later, an optimizer by equality saturation**: an e-graph search whose rewrite rules are proved Lean
+   theorems and whose every result carries a kernel-checked proof that the output equals its input
+   (as the Lean egg tactic reconstructs), so the search and the extraction stay outside the trusted
+   base.
+
+Three more choices follow from the surveys:
+- **The parser is generated from the grammar** (Lean data, which must pass the LL(1) check) by a
+  verified LL(1) generator in the style of Vermillion. The lexer, the semantic actions and running the
+  generated parser remain obligations before the parser leaves the trusted base.
+- **Capability variables** ([authority rule 3](docs/spec/decisions.md#decided-2026-11-02-authority))
+  take Scala's System Capless, whose metatheory is mechanized in Lean, and Effekt's
+  effects-as-capabilities as metatheory references; callbacks that carry capabilities follow once
+  foreign function values are admitted (OD4).
+- **Agent-written proofs, kernel-checked**, as in Axon: agents may write proofs and translation-
+  validation certificates, and only the Lean kernel's check counts. Trivet does this for LLVM's own
+  optimization passes; for Concrete it could cover a named edge such as the BIR → LLVM printer, with
+  LLVM, the backend and the linker still assumptions.
+
+The plan also covers the front end (parsing and desugaring into Core) and the final linked artifact,
+and the spec is tested independently of the compiler, through the conformance suite run on the Lean
+semantics. Items 4 – 7 are the adopted direction; their supported subsets, representations and
+residual assumptions are proposed to the owner before each is built.
+
+The criteria above map to acceptance artifacts as follows. R-0555 owns the spec criteria;
+R-0515 owns the outside-reader test as workloads become supported.
+
+| criteria | phases | acceptance artifact |
+|---|---|---|
+| 1–2: decisions, absorption and audit | A | decisions and audit disposition in the target Core proposal |
+| 3–6: simplification, one document, refusal coverage and conformance | B–D | generated chapters, rule-site inventory and conformance examples per slice |
+| 7–8: matching code and Lean links | B–D | migrated corpus and correspondence proofs per slice |
+| 9: outside-reader test | B–D | recorded reader program and resolved confusion per slice |
+```
+
+### 2026-10-22 — Development throughput priority
+
+```markdown
+**Decision (2026-10-22): the development cycle's feedback loop is a priority track.**
+```
+
+### 2026-11-02 — Owner recording rule
+
+```markdown
+The owner, 2026-11-02: "anything where you and codex agree that is the
+best decision, record the solution". The [decision record](docs/spec/decisions.md#owner-decisions)
+holds all OD answers, dates, revision notes and rationale.
+```
+
+### 2026-11-03 — Editorial supersession of legacy task directions
+
+The approved new-compiler and restructure decisions supersede in-place repairs, shadow
+cutovers and migration of frozen compiler internals. The A/B task bodies moved to
+[the legacy archive](../archive/ROADMAP_LEGACY_PLAN.md#task-directions-before-the-coherent-plan)
+retain historical detail and regression obligations. Their approved surviving requirements
+remain live in the task register; the archive creates no legacy repair work. No language
+answer, regression duty or acceptance control is retired by this editorial change.
