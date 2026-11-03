@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # R-0544 — one review procedure for every agent. See docs/project/REVIEW.md.
 #
-#   scripts/review/review.sh [--base <ref>] [--max-rounds 5] [--pieces auto|N]
-#                            [--prompt-extra "..."]
+#   scripts/review/review.sh [--base <ref>] [--head <ref>] [--max-rounds 5]
+#                            [--pieces auto|N] [--prompt-extra "..."]
+#
+# --head names the commit the caller means to review (train.sh and ready.sh pass it); it must be
+# the checkout's HEAD, or nothing runs (exit 2): the review always reads HEAD's tree.
 #
 # Runs ONE review round on HEAD and records the result as a git note on HEAD
 # under refs/notes/concrete-review, which it then pushes.
@@ -55,12 +58,13 @@ MAX_ROUNDS=5
 PIECES="auto"
 EXTRA=""
 
-usage() { sed -n '2,34p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { awk 'NR > 1 { if (!/^#/) exit; sub(/^# ?/, ""); print }' "${BASH_SOURCE[0]}"; }  # the header, whatever its length
 die() { echo "review: $*" >&2; exit 2; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --base) [ $# -ge 2 ] || die "--base needs a ref"; BASE="$2"; shift 2 ;;
+    --head) [ $# -ge 2 ] || die "--head needs a ref"; WANT_HEAD="$2"; shift 2 ;;
     --max-rounds) [ $# -ge 2 ] || die "--max-rounds needs a number"; MAX_ROUNDS="$2"; shift 2 ;;
     --pieces) [ $# -ge 2 ] || die "--pieces needs auto or a number"; PIECES="$2"; shift 2 ;;
     --prompt-extra) [ $# -ge 2 ] || die "--prompt-extra needs text"; EXTRA="$2"; shift 2 ;;
@@ -70,6 +74,10 @@ while [ $# -gt 0 ]; do
 done
 [[ "$MAX_ROUNDS" =~ ^[1-9][0-9]*$ ]] || die "--max-rounds must be a positive integer"
 [[ "$PIECES" == auto || "$PIECES" =~ ^[1-9][0-9]*$ ]] || die "--pieces must be auto or a positive integer"
+if [ -n "${WANT_HEAD:-}" ]; then
+  want="$(git rev-parse -q --verify "$WANT_HEAD^{commit}")" || die "--head $WANT_HEAD is not a commit"
+  [ "$want" = "$(git rev-parse HEAD)" ] || die "--head $WANT_HEAD is ${want:0:12}, but the checkout is at $(git rev-parse --short=12 HEAD)"
+fi
 [[ "$PIECE_BYTES" =~ ^[1-9][0-9]*$ ]] || die "REVIEW_PIECE_BYTES must be a positive integer"
 command -v "$CODEX_BIN" >/dev/null 2>&1 || die "reviewer binary not found: $CODEX_BIN"
 

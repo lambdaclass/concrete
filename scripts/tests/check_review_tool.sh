@@ -168,6 +168,16 @@ review >/dev/null 2>&1; rc=$?
 check "re-review of a reviewed HEAD exits 4 (got $rc)" test "$rc" -eq 4
 check "and calls no reviewer" test "$(calls)" -eq 1
 
+echo "=== --head: the callers' contract (train.sh, ready.sh pass --base --head) ==="
+review --head HEAD >/dev/null 2>&1; rc=$?
+check "--head at the checkout's HEAD is accepted (reviewed HEAD exits 4, got $rc)" test "$rc" -eq 4
+review --base main --head "$(g rev-parse HEAD)" >/dev/null 2>&1; rc=$?
+check "--base --head <sha> as train.sh calls it is accepted (got $rc)" test "$rc" -eq 4
+review --head main >"$T/out-head" 2>&1; rc=$?
+check "--head other than the checkout refuses (exit 2, got $rc)" test "$rc" -eq 2
+check "and says why" grep -q "but the checkout is at" "$T/out-head"
+check "and calls no reviewer" test "$(calls)" -eq 1
+
 echo "=== round 2: only the delta, with the previous findings ==="
 commit_file old.txt "fixed" "fix the counter"
 commit_file new.txt "a second change" "second change"
