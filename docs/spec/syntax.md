@@ -18,7 +18,7 @@ show its rejection; accepted examples use its decided replacement.
 ## Rules
 
 <a id="SYN-1"></a>
-### SYN-1. A program is a sentence of the grammar
+### SYN-1. Decided syntax governs the derived grammar
 
 **SYN-1@2.** A source file is parsed according to the decided language recorded in decisions.md, with grammar/concrete.ebnf a derived grammar awaiting resynchronization under OD77 rather than an independent authority over acceptance.
 

@@ -1104,7 +1104,7 @@ fn take(r: R) -> i64 {
 }
 
 fn release(r: R) -> Unit {
-    let R { v } = r;
+    let R { v: _ } = r;
 }
 
 fn example_value() -> i64 {
@@ -1143,7 +1143,7 @@ fn main() -> u8 {
 struct R { v: i64 }
 
 fn release(r: R) -> Unit {
-    let R { v } = r;
+    let R { v: _ } = r;
 }
 
 fn peek(r: &R) -> i64 {
@@ -1530,7 +1530,7 @@ fn main() -> u8 {
 struct R { v: i64 }
 
 fn release(r: R) -> Unit {
-    let R { v } = r;
+    let R { v: _ } = r;
 }
 
 fn main() -> u8 {

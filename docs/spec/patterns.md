@@ -251,7 +251,7 @@ fn main() -> u8 {
 ```
 
 <a id="PAT-4"></a>
-### PAT-4. A guard is read-only
+### PAT-4. Match guards are refused
 
 **PAT-4@3.** Match guards are refused; a conditional test is written inside the matching arm or in an `if` chain.
 
@@ -364,7 +364,7 @@ fn main() -> u8 { let o: Option<u8> = Option::Some { value: 42 }; let Option::So
 ```
 
 <a id="PAT-6"></a>
-### PAT-6. `if let` and `while let` are matches with a catch-all
+### PAT-6. Conditional destructuring sugar is refused
 
 **PAT-6@3.** `if let` and `while let` are refused; conditional destructuring uses an explicit `match` and repetition uses `while`.
 
@@ -389,7 +389,7 @@ fn main() -> u8 { let o: Option<u8> = Option::Some { value: 42 }; match o { Opti
 ```
 
 <a id="PAT-7"></a>
-### PAT-7. Literal, range and alternative patterns
+### PAT-7. Alternatives remain; ranges and guards are refused
 
 **PAT-7@2.** Alternative patterns `P1 | P2 => body` mean consecutive arms `P1 => body` and `P2 => body` in that order, while integer range patterns and match guards are refused.
 
@@ -409,7 +409,7 @@ fn main() -> u8 { let k: u8 = 7; match k { 1 | 7 => { return 42; }, _ => { retur
 ```
 
 <a id="PAT-8"></a>
-### PAT-8. An enum destructuring `let` is a block statement
+### PAT-8. C-style loop headers are refused
 
 **PAT-8@2.** C-style `for` headers, including destructuring initializers, are refused; a counted loop binds its immutable index only in its body.
 
@@ -483,7 +483,7 @@ fn main() -> u8 {
 ```
 
 <a id="PAT-10"></a>
-### PAT-10. An enum destructuring `let` is a `match` over the rest of its block
+### PAT-10. Irrefutable enum destructuring matches the rest of its block
 
 **PAT-10@2.** An irrefutable enum destructuring `let P = e;` means a one-arm `match` over the rest of its block, with binders visible only there, while a refutable pattern or `let ... else` is refused.
 

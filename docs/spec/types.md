@@ -1475,7 +1475,7 @@ fn main() -> u8 {
 ```
 
 <a id="TYPE-21"></a>
-### TYPE-21. A newtype has its inner type's representation
+### TYPE-21. Newtype declarations are refused
 
 **TYPE-21@2.** Newtype declarations are refused; a named struct is the product type and has the layout specified by FFI-7 and FFI-8.
 
@@ -1589,7 +1589,7 @@ fn main() -> u8 {
 ```
 
 <a id="TYPE-24"></a>
-### TYPE-24. The conversions of a newtype
+### TYPE-24. Newtype conversions are refused
 
 **TYPE-24@2.** Newtype constructors, newtype `.0` projections, newtype `as` conversions and the builtin `unwrap` are refused; destructuring uses `match` or an irrefutable pattern.
 

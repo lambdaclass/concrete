@@ -275,7 +275,7 @@ fn main() -> u8 {
 ```
 
 <a id="TRUST-6"></a>
-### TRUST-6. Trusted code lives in marked modules
+### TRUST-6. Trust is inventoried per declaration
 
 **TRUST-6@3.** The `trusted mod` marker is refused; trust is declared per function and externs, intrinsics and minting wrappers are individually inventoried in the trusted base.
 

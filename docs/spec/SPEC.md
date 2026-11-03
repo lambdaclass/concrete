@@ -10,7 +10,7 @@ the first chapter.
 
 - [Overview](#ch-overview)
 - [Syntax](#ch-syntax)
-  - [SYN-1. A program is a sentence of the grammar](#SYN-1)
+  - [SYN-1. Decided syntax governs the derived grammar](#SYN-1)
   - [SYN-2. Operators group by a fixed precedence](#SYN-2)
   - [SYN-3. Compiler spellings are reserved](#SYN-3)
   - [SYN-4. A struct literal in a condition head is parenthesized](#SYN-4)
@@ -56,10 +56,10 @@ the first chapter.
   - [TYPE-18. Capabilities have no run-time representation](#TYPE-18)
   - [TYPE-19. The primitive numeric types](#TYPE-19)
   - [TYPE-20. A `char` is one byte](#TYPE-20)
-  - [TYPE-21. A newtype has its inner type's representation](#TYPE-21)
+  - [TYPE-21. Newtype declarations are refused](#TYPE-21)
   - [TYPE-22. A constant is evaluated where it is used](#TYPE-22)
   - [TYPE-23. The builtin `Option` and `Result`](#TYPE-23)
-  - [TYPE-24. The conversions of a newtype](#TYPE-24)
+  - [TYPE-24. Newtype conversions are refused](#TYPE-24)
 - [Arithmetic](#ch-arithmetic)
   - [ARITH-1. Floating point is IEEE-754 with round-to-nearest-even](#ARITH-1)
   - [ARITH-2. An integer literal fits its type](#ARITH-2)
@@ -92,13 +92,13 @@ the first chapter.
   - [PAT-1. A pattern field may be bound under another name](#PAT-1)
   - [PAT-2. A match is exhaustive](#PAT-2)
   - [PAT-3. Every arm fits its scrutinee](#PAT-3)
-  - [PAT-4. A guard is read-only](#PAT-4)
+  - [PAT-4. Match guards are refused](#PAT-4)
   - [PAT-5. A destructuring `let` binds every field](#PAT-5)
-  - [PAT-6. `if let` and `while let` are matches with a catch-all](#PAT-6)
-  - [PAT-7. Literal, range and alternative patterns](#PAT-7)
-  - [PAT-8. An enum destructuring `let` is a block statement](#PAT-8)
+  - [PAT-6. Conditional destructuring sugar is refused](#PAT-6)
+  - [PAT-7. Alternatives remain; ranges and guards are refused](#PAT-7)
+  - [PAT-8. C-style loop headers are refused](#PAT-8)
   - [PAT-9. The first matching arm wins](#PAT-9)
-  - [PAT-10. An enum destructuring `let` is a `match` over the rest of its block](#PAT-10)
+  - [PAT-10. Irrefutable enum destructuring matches the rest of its block](#PAT-10)
   - [PAT-11. `let mut` makes every binder of a pattern mutable](#PAT-11)
 - [Ownership](#ch-ownership)
   - [OWN-D1. Copy](#OWN-D1)
@@ -177,7 +177,7 @@ the first chapter.
   - [TRUST-3. A reference from a raw pointer carries a premise](#TRUST-3)
   - [TRUST-4. A function exercises only the capabilities it declares](#TRUST-4)
   - [TRUST-5. `trusted` absorbs `Unsafe` and nothing else](#TRUST-5)
-  - [TRUST-6. Trusted code lives in marked modules](#TRUST-6)
+  - [TRUST-6. Trust is inventoried per declaration](#TRUST-6)
   - [TRUST-7. Moving a value out of raw memory is explicit](#TRUST-7)
   - [TRUST-8. A program has no mutable global state](#TRUST-8)
   - [TRUST-9. Resources originate in target grants](#TRUST-9)
@@ -454,7 +454,7 @@ show its rejection; accepted examples use its decided replacement.
 ### Rules
 
 <a id="SYN-1"></a>
-#### SYN-1. A program is a sentence of the grammar
+#### SYN-1. Decided syntax governs the derived grammar
 
 **SYN-1@2.** A source file is parsed according to the decided language recorded in decisions.md, with grammar/concrete.ebnf a derived grammar awaiting resynchronization under OD77 rather than an independent authority over acceptance.
 
@@ -3423,7 +3423,7 @@ fn main() -> u8 {
 ```
 
 <a id="TYPE-21"></a>
-#### TYPE-21. A newtype has its inner type's representation
+#### TYPE-21. Newtype declarations are refused
 
 **TYPE-21@2.** Newtype declarations are refused; a named struct is the product type and has the layout specified by FFI-7 and FFI-8.
 
@@ -3537,7 +3537,7 @@ fn main() -> u8 {
 ```
 
 <a id="TYPE-24"></a>
-#### TYPE-24. The conversions of a newtype
+#### TYPE-24. Newtype conversions are refused
 
 **TYPE-24@2.** Newtype constructors, newtype `.0` projections, newtype `as` conversions and the builtin `unwrap` are refused; destructuring uses `match` or an irrefutable pattern.
 
@@ -5682,7 +5682,7 @@ fn main() -> u8 {
 ```
 
 <a id="PAT-4"></a>
-#### PAT-4. A guard is read-only
+#### PAT-4. Match guards are refused
 
 **PAT-4@3.** Match guards are refused; a conditional test is written inside the matching arm or in an `if` chain.
 
@@ -5795,7 +5795,7 @@ fn main() -> u8 { let o: Option<u8> = Option::Some { value: 42 }; let Option::So
 ```
 
 <a id="PAT-6"></a>
-#### PAT-6. `if let` and `while let` are matches with a catch-all
+#### PAT-6. Conditional destructuring sugar is refused
 
 **PAT-6@3.** `if let` and `while let` are refused; conditional destructuring uses an explicit `match` and repetition uses `while`.
 
@@ -5820,7 +5820,7 @@ fn main() -> u8 { let o: Option<u8> = Option::Some { value: 42 }; match o { Opti
 ```
 
 <a id="PAT-7"></a>
-#### PAT-7. Literal, range and alternative patterns
+#### PAT-7. Alternatives remain; ranges and guards are refused
 
 **PAT-7@2.** Alternative patterns `P1 | P2 => body` mean consecutive arms `P1 => body` and `P2 => body` in that order, while integer range patterns and match guards are refused.
 
@@ -5840,7 +5840,7 @@ fn main() -> u8 { let k: u8 = 7; match k { 1 | 7 => { return 42; }, _ => { retur
 ```
 
 <a id="PAT-8"></a>
-#### PAT-8. An enum destructuring `let` is a block statement
+#### PAT-8. C-style loop headers are refused
 
 **PAT-8@2.** C-style `for` headers, including destructuring initializers, are refused; a counted loop binds its immutable index only in its body.
 
@@ -5914,7 +5914,7 @@ fn main() -> u8 {
 ```
 
 <a id="PAT-10"></a>
-#### PAT-10. An enum destructuring `let` is a `match` over the rest of its block
+#### PAT-10. Irrefutable enum destructuring matches the rest of its block
 
 **PAT-10@2.** An irrefutable enum destructuring `let P = e;` means a one-arm `match` over the rest of its block, with binders visible only there, while a refutable pattern or `let ... else` is refused.
 
@@ -7150,7 +7150,7 @@ fn take(r: R) -> i64 {
 }
 
 fn release(r: R) -> Unit {
-    let R { v } = r;
+    let R { v: _ } = r;
 }
 
 fn example_value() -> i64 {
@@ -7189,7 +7189,7 @@ fn main() -> u8 {
 struct R { v: i64 }
 
 fn release(r: R) -> Unit {
-    let R { v } = r;
+    let R { v: _ } = r;
 }
 
 fn peek(r: &R) -> i64 {
@@ -7576,7 +7576,7 @@ fn main() -> u8 {
 struct R { v: i64 }
 
 fn release(r: R) -> Unit {
-    let R { v } = r;
+    let R { v: _ } = r;
 }
 
 fn main() -> u8 {
@@ -10896,7 +10896,7 @@ fn main() -> u8 {
 ```
 
 <a id="TRUST-6"></a>
-#### TRUST-6. Trusted code lives in marked modules
+#### TRUST-6. Trust is inventoried per declaration
 
 **TRUST-6@3.** The `trusted mod` marker is refused; trust is declared per function and externs, intrinsics and minting wrappers are individually inventoried in the trusted base.
 
