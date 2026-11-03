@@ -15,3 +15,7 @@ its and R-0555's obsolete slot schedules with ROADMAP's one compiler sequence.
 Validation uses the gates Nix shell and static spec/document checks, plus source-bundle isolation
 and invalid-path tests. The compiler conformance run is reserved for the orchestrator; no Lean
 build is performed by this cleanup.
+
+`check_new_bug.sh` now rules its scaffold controls against OWN-1's current version, read from
+`docs/spec/ids.tsv`, instead of a hard-coded `OWN-1@2`: the decided-language rewrite superseded that
+version, and `new_bug.sh` rightly refuses a superseded rule for an open bug.
