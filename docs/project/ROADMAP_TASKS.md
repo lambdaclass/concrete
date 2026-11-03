@@ -1247,10 +1247,10 @@ weaken the complete task exit.
 
 **Deliverables and acceptance:**
 
-Owners: the cleanup agent (`wip/cleanup-*`) and spec agent (`wip/spec`). The owner's 2026-10-28
-cleanup request is the explicit queue-entry exception; integration effort is charged to adversarial
-validation/gate-health capacity (track C), with no independent early-phase exit. Each sub-item lands
-independently, never preempts defect work or weakens an exit, and chooses no owner language decision.
+Owners: the cleanup agent (`wip/cleanup-*`) and spec agent (`wip/spec`). It is scheduled by its queue
+row under the [scheduling rule](../../ROADMAP.md#scheduling-rule), with no independent early-phase exit.
+Each sub-item lands independently, never preempts defect work or weakens an exit, and chooses no owner
+language decision.
 
 - Spec agent: absorb remaining `docs/language/*.md` from `docs/spec/unabsorbed.tsv` into the one
   normative specification and delete absorbed files (R-0555); book language chapters teach by
@@ -1290,10 +1290,9 @@ weaken the complete task exit.
 **Deliverables and acceptance:**
 
 Owner: spec agent (`wip/spec`) for specification completion; a separate agent owns bug-rule
-integration and backfill. The owner's 2026-10-29 request is its explicit queue-entry exception;
-charge it to track A and the shared active proof slot, never a third integration slot.
-Work remains continuous within that slot, paused for
-soundness repairs, without preempting other tracks or becoming a predecessor for unrelated work.
+integration and backfill. It is scheduled by its queue row under the
+[scheduling rule](../../ROADMAP.md#scheduling-rule). Work is paused for soundness repairs and never
+becomes a predecessor for unrelated work.
 No workstream answers an owner question: unresolved behaviour becomes an `open` decision entry.
 
 Each chapter closes independently with absorbed prose/rationale, rule-ID accept/reject fixtures,
