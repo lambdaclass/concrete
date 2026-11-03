@@ -1,0 +1,8 @@
+// Archived legacy reproducer: intended expectation only; not registered as a required pass.
+// Bug 313 (MOD-5): two capability parameters of one name were accepted (E0324).
+fn f<cap C, cap C>() with(C) -> Int {
+    return 42;
+}
+fn main() -> Int {
+    return 42;
+}

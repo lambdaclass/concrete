@@ -1,0 +1,14 @@
+// Bug 338 (OWN-10@2, REF-D3@1): `borrow mut x` takes a `&mut Int` loan on `x`, which is not
+// declared `mut`. Observed: accepted; the binary exits 42 and --interp prints 42 (the write through
+// `r` reaches the immutable `x`). Expected: refused at check with E0233, as `inc(&mut x)` is.
+fn inc(r: &mut Int) {
+    *r = *r + 1;
+}
+
+fn main() -> Int {
+    let x: Int = 41;
+    borrow mut x as r in R {
+        inc(r);
+    }
+    return x;
+}

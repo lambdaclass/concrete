@@ -1,0 +1,6 @@
+// Archived legacy reproducer: intended expectation only; not registered as a required pass.
+// Bug 313 (MOD-5): two fields of one name in a variant were accepted (E0324).
+enum E { A { x: Int, x: Int } }
+fn main() -> Int {
+    return 42;
+}

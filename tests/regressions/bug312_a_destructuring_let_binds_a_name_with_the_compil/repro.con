@@ -1,0 +1,12 @@
+// Bug 312: a destructuring `let` binds `__destr_S`, the spelling of the temporary Elab introduces
+// for `let S { .. } = s` and that Verify's post-mono REF-6 check exempts. Before the fix both
+// consumers accepted it (42); a plain `let __destr_S` was refused. Expected: refused at check,
+// E0283 (SYN-3).
+struct S { a: Int }
+fn main() -> Int {
+    let s: S = S { a: 40 };
+    let S { a: __destr_S } = s;
+    let t: S = S { a: 2 };
+    let S { a } = t;
+    return __destr_S + a;
+}

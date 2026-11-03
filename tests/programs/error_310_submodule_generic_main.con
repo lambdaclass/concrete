@@ -1,0 +1,7 @@
+// Archived legacy reproducer: intended expectation only; not registered as a required pass.
+// Bug 310 (STMT-7): a submodule's `main` is an entry point too, so it takes no type parameter (E0310).
+mod app {
+    pub fn main<T>() -> Int {
+        return 42;
+    }
+}

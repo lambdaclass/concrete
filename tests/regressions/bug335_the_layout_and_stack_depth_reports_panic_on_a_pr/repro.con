@@ -1,0 +1,24 @@
+// Bug 335: build this as the main of a project (src/main.con with a Concrete.toml), then run
+// `concrete main.con --report layout` (or --report stack-depth) in src/. Observed: Lean PANIC lines
+// for the unknown type 'Bytes' (std.cli's Cli has a Bytes field), sizes computed with 0, exit 0.
+// Expected: correct layouts for std's types, or a diagnostic and a failure status.
+mod repro {
+    import std.cli.{Cli, CliResult};
+    import std.vec.{Vec};
+
+    fn main() with(Std) -> Int {
+        let cli: Cli = Cli::new();
+        match cli.parse(0, 8) {
+            CliResult::Err { error } => {
+                discard(error);
+                return 1;
+            },
+            CliResult::Ok { flags, positionals } => {
+                flags.drop();
+                let ps: Vec<String> = positionals;
+                ps.drop();
+                return 0;
+            },
+        }
+    }
+}

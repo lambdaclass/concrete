@@ -1,0 +1,20 @@
+// Archived legacy reproducer: intended expectation only; not registered as a required pass.
+// Bug 317 (PAT-9): a range every value of which earlier unguarded literals and ranges already
+// match is never selected (E0325): 0..=3 and 4..8 cover 2..=6.
+fn main() -> Int {
+    let x: i32 = 5;
+    match x {
+        0..=3 => {
+            return 1;
+        },
+        4..8 => {
+            return 42;
+        },
+        2..=6 => {
+            return 2;
+        },
+        _ => {
+            return 0;
+        },
+    }
+}

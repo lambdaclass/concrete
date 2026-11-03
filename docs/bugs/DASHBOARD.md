@@ -16,20 +16,21 @@ a link failure, an interpreter refusal or an unrejected leak.
 
 Historical discovery signal for `legacy-compiler-final`; these defects are never dispatched.
 
-**Open bugs: 32** (15 silent, 12 loud, 5 filed before the discovery record) of 311 bug records.
+**Open bugs: 44** (21 silent, 18 loud, 5 filed before the discovery record) of 323 bug records.
 
 | open bugs by primary structural class | open | silent | bugs |
 |---|---|---|---|
 | 1. Declaration identity by spelled name, not a resolved `DefId` | 5 | 1 | 054, 077, 114, 122, 341 |
-| 5. Borrow tracking by syntax instead of normalized places | 1 | 0 | 216 |
+| 5. Borrow tracking by syntax instead of normalized places | 2 | 1 | 216, 338 |
 | 6. Capability facts not carried across dispatch, specialization or package boundaries | 1 | 1 | 349 |
-| 7. Semantics implemented several times (interpreter, proof model, folder, backend disagree) | 2 | 0 | 344, 348 |
-| 8. Storage, places and control flow decided ad hoc in `Lower` | 1 | 0 | 346 |
-| 11. Absence read as a fact (fail-open defaults) | 2 | 0 | 049, 058 |
-| 12. One fact kept in two places | 3 | 0 | 064, 345, 347 |
-| 13. Documented rules with no enforcing site | 15 | 12 | 318, 319, 320, 321, 322, 323, 324, 325, 326, 327, 328, 331, 332, 333, 350 |
+| 7. Semantics implemented several times (interpreter, proof model, folder, backend disagree) | 3 | 0 | 339, 344, 348 |
+| 8. Storage, places and control flow decided ad hoc in `Lower` | 2 | 0 | 314, 346 |
+| 11. Absence read as a fact (fail-open defaults) | 4 | 1 | 049, 058, 334, 335 |
+| 12. One fact kept in two places | 4 | 1 | 064, 336, 345, 347 |
+| 13. Documented rules with no enforcing site | 20 | 15 | 310, 312, 313, 317, 318, 319, 320, 321, 322, 323, 324, 325, 326, 327, 328, 331, 332, 333, 337, 350 |
 | 17. Pass state in association lists and per-query recomputation (superlinear compile time) | 1 | 0 | 270 |
 | 18. Pipeline artifacts not bound to their payload | 1 | 1 | 340 |
+| no class yet | 1 | 0 | 264 |
 
 | open bugs by spec ruling ([RULINGS.md](RULINGS.md)) | open | silent | bugs |
 |---|---|---|---|
@@ -40,55 +41,60 @@ Historical discovery signal for `legacy-compiler-final`; these defects are never
 | violates MEM-4@4 | 1 | 1 | 326 |
 | violates MEM-7@1 | 1 | 1 | 349 |
 | violates MEM-9@1 | 1 | 1 | 340 |
-| violates OWN-10@2 | 1 | 0 | 216 |
+| violates MOD-1@1 | 1 | 1 | 337 |
+| violates OWN-10@2 | 3 | 2 | 216, 336, 338 |
 | violates OWN-15@3 | 1 | 1 | 328 |
 | violates OWN-7@3 | 1 | 1 | 325 |
 | violates PASS-12@1 | 6 | 0 | 054, 077, 341, 345, 346, 347 |
-| violates PASS-13@1 | 2 | 0 | 344, 348 |
+| violates PASS-13@1 | 3 | 0 | 339, 344, 348 |
+| violates PASS-9@1 | 1 | 0 | 314 |
 | violates PAT-3@3, PAT-5@3 | 1 | 1 | 321 |
+| violates PAT-9@1 | 1 | 1 | 317 |
 | violates REF-11@3 | 1 | 1 | 319 |
 | violates STMT-6@3 | 2 | 1 | 323, 331 |
-| violates STMT-7@3 | 1 | 1 | 320 |
+| violates STMT-7@3 | 2 | 1 | 310, 320 |
+| violates SYN-3@1 | 1 | 1 | 312 |
 | violates SYN-4@1 | 1 | 0 | 318 |
 | violates TRAIT-10@2 | 1 | 1 | 324 |
 | violates TYPE-6@2 | 1 | 1 | 322 |
 | violates TYPE-9@2 | 1 | 1 | 333 |
+| spec gap (MOD) | 1 | 0 | 313 |
 | outside the spec (performance) | 1 | 0 | 270 |
-| outside the spec (tooling) | 4 | 0 | 049, 058, 064, 350 |
+| outside the spec (tooling) | 7 | 1 | 049, 058, 064, 264, 334, 335, 350 |
 
 | discovery rate: counting probe batch | date | effort | found | silent | loud | signal |
 |---|---|---|---|---|---|---|
-| spec: Codex and Kimi reviews of the spec-gap rules (wip/spec-s6, 2026-10-30): f32 literal double rounding, native against --interp | 2026-10-29 | 1 probe | 1 | 1 | 0 | found bugs |
-| spec: Codex and Kimi reviews of the spec-gap rules (wip/spec-s6, 2026-10-30): type arguments to a body-less generic declaration, native against --interp | 2026-10-29 | 1 probe | 1 | 1 | 0 | found bugs |
-| spec: OD47 (decided 2026-10-29) check: the three C-style for forms, the counted loop and from/until as names, native against --interp, on main ae896787 (wip/spec-s7) | 2026-10-29 | 5 probes | 1 | 0 | 1 | token (does not count) |
-| spec: outside-reader test of the spec (wip/spec-phase2 d21a4cfd, 2026-10-30): 60 programs written from SPEC.md alone, run native and --interp; a constant out-of-bounds index | 2026-10-30 | 60 programs | 1 | 1 | 0 | found bugs |
+| spec: absorbing PATTERN_DESTRUCTURING into the spec (wip/spec-absorb-2): let and let mut over a struct pattern, then an assignment to a binder, native against --interp, on main cc876322 | 2026-10-30 | 2 probes | 1 | 1 | 0 | found bugs |
+| spec: absorbing CALLABLE_VALUES_AND_CAPABILITIES and HANDLE_CAPABILITIES into the spec (wip/spec-absorb-3): names in with(...) that are no capability, native against --interp, on main cc876322 | 2026-10-30 | 2 probes | 1 | 1 | 0 | found bugs |
+| spec: outside-reader test of the spec (wip/spec-phase2 d21a4cfd, 2026-10-30): 60 programs written from SPEC.md alone, run native and --interp; borrow mut of a non-mut binding | 2026-10-30 | 60 programs | 1 | 1 | 0 | found bugs |
+| spec: outside-reader test of the spec (wip/spec-phase2 d21a4cfd, 2026-10-30): 60 programs written from SPEC.md alone, run native and --interp; bool ordering | 2026-10-30 | 60 programs | 1 | 0 | 1 | quiet |
 | spec: spec audit 2026-10-31: probes of the SYNTAX_FREEZE_REVIEW §1.1 qualification rule (qualified paths by base-name case, nested paths, flattened names), native against --interp, on fb8946c6c | 2026-10-31 | 6 probes | 1 | 1 | 0 | found bugs |
 | spec: spec audit 2026-10-31: probes of the trap rules (ARITH-3, ARITH-5, MEM-6, STMT-2, STMT-13), one program per trap, native against --interp, on main dee500ee | 2026-10-31 | 12 probes | 1 | 0 | 1 | quiet |
 
 | discovery rate by primary structural class | quiet counting batches in a row | holds |
 |---|---|---|
 | 1. Declaration identity by spelled name, not a resolved `DefId` | 1 | no |
-| 2. Binder identity by name, not a `LocalId` | 13 | yes |
-| 3. Destruction dispatched by synthesized `<Type>_destroy` names | 14 | yes |
-| 4. No reference-provenance model in the source checker | 14 | yes |
-| 5. Borrow tracking by syntax instead of normalized places | 14 | yes |
-| 6. Capability facts not carried across dispatch, specialization or package boundaries | 14 | yes |
-| 7. Semantics implemented several times (interpreter, proof model, folder, backend disagree) | 10 | yes |
-| 8. Storage, places and control flow decided ad hoc in `Lower` | 5 | yes |
-| 9. Evidence verdicts computed per surface and joined to their subject by name | 14 | yes |
-| 10. Evidence identity computed from a partial subject | 14 | yes |
-| 11. Absence read as a fact (fail-open defaults) | 14 | yes |
-| 12. One fact kept in two places | 4 | yes |
-| 13. Documented rules with no enforcing site | 2 | no |
-| 14. Trusted `std` and FFI code with no checked contract | 14 | yes |
-| 15. Ownership state not modeled along control-flow paths | 11 | yes |
-| 16. Artifacts at paths no run owns | 14 | yes |
-| 17. Pass state in association lists and per-query recomputation (superlinear compile time) | 6 | yes |
-| 18. Pipeline artifacts not bound to their payload | 1 | no |
-| 19. A mention read as a use (tool facts inferred from where a name is spelled) | 14 | yes |
-| no class yet | 14 | yes |
+| 2. Binder identity by name, not a `LocalId` | 15 | yes |
+| 3. Destruction dispatched by synthesized `<Type>_destroy` names | 16 | yes |
+| 4. No reference-provenance model in the source checker | 16 | yes |
+| 5. Borrow tracking by syntax instead of normalized places | 2 | no |
+| 6. Capability facts not carried across dispatch, specialization or package boundaries | 16 | yes |
+| 7. Semantics implemented several times (interpreter, proof model, folder, backend disagree) | 12 | yes |
+| 8. Storage, places and control flow decided ad hoc in `Lower` | 7 | yes |
+| 9. Evidence verdicts computed per surface and joined to their subject by name | 16 | yes |
+| 10. Evidence identity computed from a partial subject | 16 | yes |
+| 11. Absence read as a fact (fail-open defaults) | 16 | yes |
+| 12. One fact kept in two places | 3 | yes |
+| 13. Documented rules with no enforcing site | 3 | yes |
+| 14. Trusted `std` and FFI code with no checked contract | 16 | yes |
+| 15. Ownership state not modeled along control-flow paths | 13 | yes |
+| 16. Artifacts at paths no run owns | 16 | yes |
+| 17. Pass state in association lists and per-query recomputation (superlinear compile time) | 8 | yes |
+| 18. Pipeline artifacts not bound to their payload | 3 | yes |
+| 19. A mention read as a use (tool facts inferred from where a name is spelled) | 16 | yes |
+| no class yet | 16 | yes |
 
-Discovery signal: 17 of 20 classes have 3 consecutive eligible quiet counting batches (for a class: no silent bug of that class, at most one loud, effort at least 4 hours or 10 programs). 27 counting batches recorded, 2 of them token batches. 82 attribution-only batches (reviews, follow-ons, CI, controls, development) found 128 further bugs.
+Discovery signal: 18 of 20 classes have 3 consecutive eligible quiet counting batches (for a class: no silent bug of that class, at most one loud, effort at least 4 hours or 10 programs). 33 counting batches recorded, 3 of them token batches. 85 attribution-only batches (reviews, follow-ons, CI, controls, development) found 131 further bugs.
 
 
 ### New compiler

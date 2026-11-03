@@ -1,0 +1,15 @@
+// Bug 317 (PAT-9, OD18): the first arm in source order that matches runs, so the `1` arm below,
+// written after the unguarded catch-all `_`, can never be selected. Observed before the fix: both
+// consumers returned 42 (CoreCanonicalize moved `_` after the `1` arm). Expected: refused at check
+// with E0325, `rule: PAT-9@1`.
+fn main() -> Int {
+    let x: Int = 1;
+    match x {
+        _ => {
+            return 1;
+        },
+        1 => {
+            return 42;
+        },
+    }
+}

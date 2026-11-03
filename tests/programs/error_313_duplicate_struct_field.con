@@ -1,0 +1,7 @@
+// Archived legacy reproducer: intended expectation only; not registered as a required pass.
+// Bug 313 (MOD-5): two fields of one name in a struct were accepted (E0324).
+struct Copy S { a: Int, a: Int }
+fn main() -> Int {
+    let s: S = S { a: 42 };
+    return s.a;
+}

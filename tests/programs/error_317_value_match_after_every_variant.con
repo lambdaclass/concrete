@@ -1,0 +1,10 @@
+// Archived legacy reproducer: intended expectation only; not registered as a required pass.
+// Bug 317 (PAT-9): in a value `match` over an enum, `_` after an unguarded arm for every variant is
+// never selected (E0325).
+enum Copy E { A { v: i32 }, B { w: i32 } }
+
+fn main() -> Int {
+    let e: E = E::A { v: 42 };
+    let r: i32 = match e { E::A { v } => v, E::B { w } => w, _ => 0 };
+    return r as Int;
+}

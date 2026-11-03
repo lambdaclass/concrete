@@ -1,0 +1,14 @@
+// Archived legacy reproducer: intended expectation only; not registered as a required pass.
+// Bug 313 (MOD-5): a trait impl that defines one method twice reached llvm-as (E0324).
+trait T {
+    fn g(&self) -> Int;
+}
+struct Copy S { a: Int }
+impl T for S {
+    fn g(&self) -> Int { return 1; }
+    fn g(&self) -> Int { return 42; }
+}
+fn main() -> Int {
+    let s: S = S { a: 1 };
+    return s.g();
+}

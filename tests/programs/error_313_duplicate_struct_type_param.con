@@ -1,0 +1,6 @@
+// Archived legacy reproducer: intended expectation only; not registered as a required pass.
+// Bug 313 (MOD-5): two type parameters of one name on a struct were accepted (E0324).
+struct W<T, T> { a: T }
+fn main() -> Int {
+    return 42;
+}

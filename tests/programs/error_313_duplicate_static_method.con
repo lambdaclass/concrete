@@ -1,0 +1,10 @@
+// Archived legacy reproducer: intended expectation only; not registered as a required pass.
+// Bug 313 (MOD-5): two static methods of one name in one impl reached llvm-as (E0324).
+struct Copy S { a: Int }
+impl S {
+    fn mk() -> Int { return 1; }
+    fn mk() -> Int { return 42; }
+}
+fn main() -> Int {
+    return S::mk();
+}

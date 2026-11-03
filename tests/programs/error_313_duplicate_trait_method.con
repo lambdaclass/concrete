@@ -1,0 +1,10 @@
+// Archived legacy reproducer: intended expectation only; not registered as a required pass.
+// Archived legacy reproducer: intended expectation only; not registered as a required pass.
+// Bug 313 (MOD-5): a trait that declares one method twice was accepted (E0324).
+trait T {
+    fn g(&self) -> Int;
+    fn g(&self) -> Int;
+}
+fn main() -> Int {
+    return 42;
+}
