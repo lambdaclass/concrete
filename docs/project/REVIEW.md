@@ -27,7 +27,7 @@ it the same way every time, and its note is the record the landing bot checks.
 ## Usage
 
 ```sh
-scripts/review/review.sh [--base <ref>] [--max-rounds 5] [--pieces auto|N] [--prompt-extra "..."]
+scripts/review/review.sh [--base <ref>] [--head <ref>] [--max-rounds 5] [--pieces auto|N] [--prompt-extra "..."]
 scripts/review/verify.sh [--fetch] <commit>
 ```
 
@@ -37,6 +37,7 @@ uncommitted tree is never reviewed, and the script warns when it is dirty.
 | option | meaning |
 | --- | --- |
 | `--base <ref>` | base of round 1. Default: the merge-base of `HEAD` with `origin/main`. |
+| `--head <ref>` | the commit the caller means to review; it must be the checkout's HEAD, or nothing runs (exit 2). `train.sh` and `ready.sh` pass it. |
 | `--max-rounds N` | the round cap (default 5). |
 | `--pieces auto\|N` | `auto` splits at 60000 bytes per piece (`REVIEW_PIECE_BYTES`); `N` aims for N pieces. File groups are never merged, so a diff touching more groups than N still gets one piece per group. |
 | `--prompt-extra "..."` | text appended to every prompt, such as what the branch is for. |
