@@ -58,7 +58,9 @@ GH="${LAND_GH:-gh}"
 REMOTE="${LAND_REMOTE:-origin}"
 MIRROR="${LAND_MIRROR-lambdaclass}"
 HOOK="${LAND_HOOK:-.githooks/pre-push}"
-CAMPAIGN_RE="${LAND_CAMPAIGN_JOBS:-^(Gate mutation|Weekly clean-checkout proof replay|Nightly differential fuzz)}"
+# Must name exactly the workflow's campaign jobs (an `if:` on `inputs.campaign`, and the jobs that `needs:`
+# one): check_landing_script.sh derives that set from lean_action_ci.yml and fails on any difference.
+CAMPAIGN_RE="${LAND_CAMPAIGN_JOBS:-^(Gate mutation|Weekly clean-checkout proof replay|Nightly differential fuzz|Checker pin freshness \(campaign finding\))}"
 
 # --- invariants ----------------------------------------------------------------------------------
 

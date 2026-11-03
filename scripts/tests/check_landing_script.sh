@@ -401,6 +401,36 @@ echo "=== report ==="
 out="$(bash "$REPORT" 2>&1)"; rc=$?
 [ "$rc" = 0 ] && has "$out" "median time to land" && has "$out" "landed: 2" && ok "report prints the median time to land" || { no "report: exit $rc"; echo "$out" | sed 's/^/      /'; }
 
+echo "=== the campaign tier train.sh assumes is the workflow's campaign tier ==="
+# watch treats a skipped campaign job as fine and a skipped landing job as no verdict, so a campaign job
+# missing from CAMPAIGN_RE makes every ordinary run "incomplete" and no train can land (2026-11-03:
+# "Checker pin freshness (campaign finding)"); a landing job wrongly listed would let a skip land.
+re_default="$(sed -n 's/^CAMPAIGN_RE="\${LAND_CAMPAIGN_JOBS:-\(.*\)}"$/\1/p' "$ROOT_DIR/scripts/land/train.sh")"
+out="$(python3 -I - "$ROOT_DIR/.github/workflows/lean_action_ci.yml" "$re_default" <<'PY'
+import re, sys, yaml
+jobs = yaml.safe_load(open(sys.argv[1]))["jobs"]
+rx = re.compile(sys.argv[2])
+camp = {k for k, j in jobs.items() if "inputs.campaign" in str(j.get("if", ""))}
+grew = True
+while grew:  # a job that needs a campaign job runs only in the campaign tier too
+    grew = False
+    for k, j in jobs.items():
+        needs = j.get("needs", [])
+        needs = [needs] if isinstance(needs, str) else needs
+        if k not in camp and camp.intersection(needs):
+            camp.add(k); grew = True
+if not camp:
+    print("no campaign job found in the workflow (the derivation is broken)")
+for k, j in jobs.items():
+    name = str(j.get("name", k))
+    if (k in camp) != bool(rx.search(name)):
+        print(("campaign job not in CAMPAIGN_RE: " if k in camp else "landing job matched by CAMPAIGN_RE: ") + name)
+PY
+)"; rc=$?
+[ "$rc" = 0 ] && [ -n "$re_default" ] && [ -z "$out" ] \
+  && ok "CAMPAIGN_RE names exactly the workflow's campaign jobs" \
+  || { no "CAMPAIGN_RE disagrees with the workflow (rc=$rc, regex '${re_default}')"; echo "$out" | sed 's/^/      /'; }
+
 echo
 echo "check_landing_script: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

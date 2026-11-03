@@ -402,7 +402,7 @@ publishing decision are in docs/project/STATUS_PAGE.md.
 | `LAND_REPO` | `unbalancedparentheses/concrete2` | repository for `gh` |
 | `LAND_REMOTE` | `origin` | primary remote |
 | `LAND_MIRROR` | `lambdaclass` | required mirror, pushed after the primary; a missing remote is refused; empty (or `--no-mirror`) skips it deliberately |
-| `LAND_CAMPAIGN_JOBS` | `^(Gate mutation\|Weekly clean-checkout proof replay\|Nightly differential fuzz)` | job names in the campaign tier |
+| `LAND_CAMPAIGN_JOBS` | `^(Gate mutation\|Weekly clean-checkout proof replay\|Nightly differential fuzz\|Checker pin freshness \(campaign finding\))` | job names in the campaign tier; the default must match exactly the workflow's campaign jobs (`check_landing_script.sh`) |
 | `LAND_STATE_DIR`, `LAND_LOG_DIR` | under the git common directory | state and log location |
 | `LAND_NO_NIX` | unset | `1` never re-enters `nix develop` |
 | `LAND_GH`, `LAND_HOOK` | `gh`, `.githooks/pre-push` | test seams |
