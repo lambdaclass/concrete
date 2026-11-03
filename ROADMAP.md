@@ -227,12 +227,36 @@ The [direction](docs/project/ROADMAP_DIRECTION.md) holds standing reference and 
 
 | row | goal | owning tasks | done when |
 |---|---|---|---|
-| A1 | Dispose of the spec audit and repository control obligations | R-0555, R-0481, R-0010, R-0447, R-0554 | Each changed rule, gap and duplication has an owner and acceptance artifact in the Core proposal; defect views distinguish compilers. |
-| A2 | Decide the whole target Core shape before implementation | R-0312, R-0316 | The owner approves the target Core proposal, including identities, memory and interface boundaries. |
-| A3 | State the semantic contract and theorem in Lean | R-0496, R-0500, R-0502, R-0506, R-0508, R-0509, R-0511, R-0480, R-0211, R-0223, R-0227, R-0230, R-0242, R-0464, R-0266 | The theorem with its holes, named values-to-bytes boundary and trusted-base inventory is on main. |
-| B1 | Build ConcreteSpec and slice 1 with its theorem | R-0491, R-0492, R-0493, R-0497, R-0498, R-0499, R-0501, R-0503, R-0504, R-0507, R-0514, R-0552, R-0521, R-0528, R-0004, R-0435, R-0440, R-0058, R-0073, R-0074, R-0075, R-0076, R-0077, R-0079, R-0080, R-0082, R-0085, R-0090, R-0107, R-0114, R-0115, R-0116, R-0191, R-0203, R-0205, R-0207, R-0210, R-0217, R-0221, R-0222, R-0231, R-0260, R-0272, R-0273, R-0274, R-0278, R-0279, R-0280, R-0288, R-0290, R-0302, R-0421, R-0422, R-0446 | The phase B slice passes from parsing to native execution with independent judgments, correspondence proofs, explicit obligations and minimal proof provenance. |
+| A1 | Dispose of the spec audit and draft the boundaries Core must satisfy | R-0555, R-0481, R-0010, R-0447, R-0554, R-0511, R-0211, R-0230 | Each changed rule, gap and duplication has an owner and acceptance artifact; defect views distinguish compilers; drafts exist of the semantic contract's objects (outcomes, events and their payloads, resource and grant identities, admissible environments and allocation behaviour, observation equivalence, stuckness, trap erasure), the theorem's signature (acceptance and coverage premises so that refusing every program proves nothing, frontend correspondence, initial and final state relations, exact artifact binding), the assumption and trusted-base inventory, and slice 1's manifest (admitted syntax and Core forms, the checked operation, an accepted trap witness, observations, the proof endpoint and the LLVM assumption). |
+| A2 | Decide the whole target Core shape before implementation | R-0312, R-0316 | The owner approves the target Core proposal, drafted against A1's artifacts, including identities, memory and interface boundaries; before Core is frozen, representative design proofs are checked in Lean for allocator dependencies with reset generativity, deferred cleanup with allocators and loans, heap opening and mutable lending, and one values-to-bytes lemma. If A3 exposes a substantive change, A2 is revisited. |
+| A3 | Formalize the approved semantic contract and theorem in Lean | R-0496, R-0500, R-0502, R-0506, R-0508, R-0509, R-0480, R-0223, R-0227, R-0242, R-0464, R-0266 | The theorem with its holes, named values-to-bytes boundary and trusted-base inventory is on main. |
+| B1 | Build ConcreteSpec and slice 1 with its theorem | R-0491, R-0492, R-0493, R-0497, R-0498, R-0499, R-0501, R-0503, R-0504, R-0507, R-0514, R-0552, R-0521, R-0528, R-0004, R-0435, R-0440, R-0058, R-0073, R-0074, R-0075, R-0076, R-0077, R-0079, R-0080, R-0082, R-0085, R-0090, R-0107, R-0114, R-0115, R-0116, R-0191, R-0203, R-0205, R-0207, R-0210, R-0217, R-0221, R-0222, R-0231, R-0260, R-0272, R-0273, R-0274, R-0278, R-0279, R-0280, R-0288, R-0290, R-0302, R-0421, R-0422, R-0446 | The phase B slice passes from parsing to native execution with independent judgments, correspondence proofs, explicit obligations and minimal proof provenance; every judgment, semantics and pass is total as it lands. |
 | B2 | Generate the chapter and qualify slice 1 | R-0479, R-0471, R-0009, R-0438, R-0092, R-0093, R-0094, R-0095, R-0105, R-0106, R-0118, R-0550, R-0551, R-0425, R-0355 | Conformance and native examples pass; refusal, differential and gate-integrity controls hold; the outside-reader test passes. |
-| B3 | Prove compiler totality and delete the old pipeline under the retention contract | R-0553 | The end-to-end slice is accepted, the new compiler's totality and fuel-budget distinctions are established, and the old pipeline and its internal gates are deleted together; retained programs, regressions, examples, std, evidence replay and browser service follow the retention contract above; CI builds `legacy-compiler-final` as the differential oracle and the site's browser compiler is built from that tag until the new compiler covers it. |
+| B3 | Audit compiler totality and delete the old pipeline under the retention contract | R-0553 | The end-to-end slice is accepted, the totality audit finds no partial definition, the fuel-budget distinctions are established, and the old pipeline and its internal gates are deleted together; retained programs, regressions, examples, std, evidence replay and browser service follow the retention contract above; CI builds `legacy-compiler-final` as the differential oracle and the site's browser compiler is built from that tag until the new compiler covers it. |
+
+<a id="questions-for-the-core-session"></a>
+**Questions for the Core session (design review, 2026-11-03).** The
+[design review](research/process/design-review-2026-11-03.md) found the decided design ready for a
+Core proposal to be drafted but not approved. These are decided by the owner in the session of A2;
+the proposal brings each with options and a recommendation, and no work encodes an answer first:
+
+1. allocator discipline: what a brand is, fresh identities and reset in a loop, how a dependency on
+   an allocator is tracked through nested containers, returned values and callbacks, where a heap
+   records how to release its storage, and what `AllocFailure<T>` holds and "unchanged" means;
+2. `destroy` bounds: storage release, payload destruction and resource cleanup told apart, and which
+   containers implement `Destroy`;
+3. the `HeapArray` element view's type and operations, and the raw-memory taxonomy (validity,
+   provenance, aliasing, ownership transfer);
+4. the type of static text now that `String<A>` carries an allocator;
+5. capability inference with several solutions, and when explicit arguments are required;
+6. which runtime violations are refused statically and how that relates to traps, including slice
+   1's trap witness;
+7. target grant schemas and narrowing rules;
+8. slice 1's assurance scope: proved source → BIR with native differential qualification, or a
+   native theorem conditional on the LLVM assumption;
+9. the whole Core interface: constructs, binders, places and operands, borrow and view operations,
+   allocation and release, exits, primitive calls, contracts and ghost state, and whether `defer`
+   survives in Core.
 
 Phase C: file-copy dependencies and the 0.1 candidate.
 
