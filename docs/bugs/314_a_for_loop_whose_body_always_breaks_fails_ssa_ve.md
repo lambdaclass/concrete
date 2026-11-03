@@ -66,5 +66,5 @@ Historical gate claims above describe the source branch; they do not register th
 
 Preserved reproducer files:
 
-- `tests/programs/regress_314_for_body_always_breaks.con`
+- `tests/regressions/bug314_a_for_loop_whose_body_always_breaks_fails_ssa_ve/regress_314_for_body_always_breaks.con`
 - `tests/regressions/bug314_a_for_loop_whose_body_always_breaks_fails_ssa_ve/repro.con`

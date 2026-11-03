@@ -78,10 +78,10 @@ Historical gate claims above describe the source branch; they do not register th
 
 Preserved reproducer files:
 
-- `tests/programs/error_317_guarded_after_catch_all.con`
-- `tests/programs/error_317_range_inside_ranges.con`
-- `tests/programs/error_317_repeated_variant_is_pat3.con`
-- `tests/programs/error_317_value_match_after_every_variant.con`
-- `tests/programs/regress_317_if_let_one_variant.con`
-- `tests/programs/regress_317_partial_range_coverage.con`
+- `tests/regressions/bug317_a_match_ran_a_specific_arm_written_after_an_ungu/error_317_guarded_after_catch_all.con`
+- `tests/regressions/bug317_a_match_ran_a_specific_arm_written_after_an_ungu/error_317_range_inside_ranges.con`
+- `tests/regressions/bug317_a_match_ran_a_specific_arm_written_after_an_ungu/error_317_repeated_variant_is_pat3.con`
+- `tests/regressions/bug317_a_match_ran_a_specific_arm_written_after_an_ungu/error_317_value_match_after_every_variant.con`
+- `tests/regressions/bug317_a_match_ran_a_specific_arm_written_after_an_ungu/regress_317_if_let_one_variant.con`
+- `tests/regressions/bug317_a_match_ran_a_specific_arm_written_after_an_ungu/regress_317_partial_range_coverage.con`
 - `tests/regressions/bug317_a_match_ran_a_specific_arm_written_after_an_ungu/repro.con`

@@ -68,7 +68,7 @@ Historical gate claims above describe the source branch; they do not register th
 
 Preserved reproducer files:
 
-- `tests/programs/error_312_enum_destructure_reserved_binder.con`
+- `tests/regressions/bug312_a_destructuring_let_binds_a_name_with_the_compil/error_312_enum_destructure_reserved_binder.con`
 - `tests/regressions/bug312_a_destructuring_let_binds_a_name_with_the_compil/repro.con`
 
 The original unlanded fix attempt is preserved at `refs/archive/branches/wip/syn3-destructure`.

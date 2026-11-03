@@ -77,15 +77,15 @@ Historical gate claims above describe the source branch; they do not register th
 
 Preserved reproducer files:
 
-- `tests/programs/error_313_duplicate_cap_param.con`
-- `tests/programs/error_313_duplicate_static_method.con`
-- `tests/programs/error_313_duplicate_struct_field.con`
-- `tests/programs/error_313_duplicate_struct_type_param.con`
-- `tests/programs/error_313_duplicate_trait_impl_method.con`
-- `tests/programs/error_313_duplicate_trait_method.con`
-- `tests/programs/error_313_duplicate_type_param.con`
-- `tests/programs/error_313_duplicate_variant.con`
-- `tests/programs/error_313_duplicate_variant_field.con`
+- `tests/regressions/bug313_duplicate_member_names_inside_one_declaration_re/error_313_duplicate_cap_param.con`
+- `tests/regressions/bug313_duplicate_member_names_inside_one_declaration_re/error_313_duplicate_static_method.con`
+- `tests/regressions/bug313_duplicate_member_names_inside_one_declaration_re/error_313_duplicate_struct_field.con`
+- `tests/regressions/bug313_duplicate_member_names_inside_one_declaration_re/error_313_duplicate_struct_type_param.con`
+- `tests/regressions/bug313_duplicate_member_names_inside_one_declaration_re/error_313_duplicate_trait_impl_method.con`
+- `tests/regressions/bug313_duplicate_member_names_inside_one_declaration_re/error_313_duplicate_trait_method.con`
+- `tests/regressions/bug313_duplicate_member_names_inside_one_declaration_re/error_313_duplicate_type_param.con`
+- `tests/regressions/bug313_duplicate_member_names_inside_one_declaration_re/error_313_duplicate_variant.con`
+- `tests/regressions/bug313_duplicate_member_names_inside_one_declaration_re/error_313_duplicate_variant_field.con`
 - `tests/regressions/bug313_duplicate_member_names_inside_one_declaration_re/repro.con`
 
 The proposed MOD-5@1 rule is absent from main. Its historical rule links and E0324 expectations describe the archived proposal, not a current spec ruling. The additional duplicate-field/type/capability/trait fixtures preserve the broader attempt on `refs/archive/branches/wip/bug-313`; their scope exceeds the narrower original attempt on `refs/archive/branches/wip/member-collisions`. They do not settle an owner question.

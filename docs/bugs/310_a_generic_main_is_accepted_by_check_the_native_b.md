@@ -63,8 +63,8 @@ Historical gate claims above describe the source branch; they do not register th
 
 Preserved reproducer files:
 
-- `tests/programs/error_310_generic_main_bounded.con`
-- `tests/programs/error_310_submodule_generic_main.con`
+- `tests/regressions/bug310_a_generic_main_is_accepted_by_check_the_native_b/error_310_generic_main_bounded.con`
+- `tests/regressions/bug310_a_generic_main_is_accepted_by_check_the_native_b/error_310_submodule_generic_main.con`
 - `tests/regressions/bug310_a_generic_main_is_accepted_by_check_the_native_b/repro.con`
 
 The original unlanded fix attempt is preserved at `refs/archive/branches/wip/stmt7-generic-main`.
