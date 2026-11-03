@@ -12,7 +12,7 @@ summary: C-style for loops are accepted and the counted loop for i from a until 
 coverage: reproducer tests/regressions/bug331_c_style_for_loops_are_accepted_and_the_counted_l/repro.con, found checking main against OD47 on 2026-10-29; reproduction pinned by check_example_outputs.sh (open-bug reproducers leg, runs-exit 42) and check_spec.sh S4 (STMT-6's pending examples)
 class: 13
 silent: no
-ruling: Violates: STMT-6@3
+ruling: Violates: STMT-6@4
 -->
 
 ## Reproducer

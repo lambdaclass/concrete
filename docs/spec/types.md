@@ -5,8 +5,8 @@ callable values and dispatch (TYPE-1, TYPE-2), `Text` (TYPE-3), the typing of ex
 operators (TYPE-4 to TYPE-10), construction rights (TYPE-11), type aliases (TYPE-12) and the
 kinds of type parameters (TYPE-13, TYPE-14), generic arguments (TYPE-15), finite size (TYPE-16),
 capability sets in types (TYPE-D1, TYPE-17, TYPE-18), the primitive numeric types (TYPE-19), `char`
-(TYPE-20), the representation of a newtype (TYPE-21), the builtin `Option` and `Result` (TYPE-23) and
-the conversions of a newtype (TYPE-24). Copy itself is defined in the ownership chapter
+(TYPE-20), the refusal of newtypes (TYPE-21), the builtin `Option` and `Result` (TYPE-23) and
+the refusal of newtype conversions (TYPE-24). Copy itself is defined in the ownership chapter
 (OWN-D1, OWN-14). What a capability means and when a function may use one are in the trusted
 chapter (TRUST-D1, TRUST-4). The section "Builtin functions" below lists every builtin function
 with its current signature.
@@ -24,23 +24,18 @@ Layout attributes (`#[repr(C)]`, `packed`, `align`) belong to the FFI chapter.
 <a id="TYPE-D1"></a>
 ### TYPE-D1. Capability set
 
-**TYPE-D1@1.** A capability set is a set of capabilities (TRUST-D1) and capability variables, written as a comma-separated list in `with(...)` and as `{}` or names joined by `+` in a capability argument, and a function or a struct declares a capability variable as a parameter `<cap C>`.
+**TYPE-D1@2.** A capability set is a set of capabilities (TRUST-D1) and capability variables, written as a comma-separated list in `with(...)` and as `{}` or names joined by `+` in a capability argument, and a function or a struct declares a capability variable as a parameter `<cap C>`.
 
 - Kind: definition
 - Uses: TRUST-D1
 - Codes: none
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.CapSet
 - Semantics: none
 - Obligation: none
 - Evidence: by-users
 
-**Rationale.** A set, not a list: order does not matter (whether a repeated capability does is
-OPEN-108), and an alias (`Std`, or one
-declared `cap IO = File + Console;`) stands for the capabilities it expands to. Several capability
-variables and concrete capabilities may be joined, `fn f<cap C, cap D>(..) with(C, D, Console)`.
-How a call binds a capability variable from its arguments is OPEN-45; a capability argument in an
-expression turbofish is OPEN-87.
+**Rationale.** Capability sets are extensional and duplicate members are refused (OD108); capability aliases, including `Std`, are removed, and set variables are substituted exactly rather than unioned on inconsistency (authority rules 3–4). Ambiguous inference is [undecided: see the target Core proposal](decisions.md#core-capability-inference).
 
 ## Rules
 
@@ -73,19 +68,19 @@ is deferred until a workload needs to store one
 ([CALLABLE_VALUES_AND_CAPABILITIES.md](../archive/design-records/CALLABLE_VALUES_AND_CAPABILITIES.md) §4).
 
 ```con accept name=explicit-context exit=42
-struct Ctx { add: Int }
+struct Ctx { add: i64 }
 
-fn apply(ctx: &Ctx, x: Int, f: fn(&Ctx, Int) -> Int) -> Int {
+fn apply(ctx: &Ctx, x: i64, f: fn(&Ctx, i64) -> i64) -> i64 {
     return f(ctx, x);
 }
 
-fn plus(c: &Ctx, x: Int) -> Int {
+fn plus(c: &Ctx, x: i64) -> i64 {
     return c.add + x;
 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     let c: Ctx = Ctx { add: 40 };
-    let r: Int = apply(&c, 2, plus);
+    let r: i64 = apply(&c, 2, plus);
     let Ctx { add } = c;
     return r + add * 0;
 }
@@ -125,20 +120,20 @@ chapter.
 
 ```con accept name=static-dispatch exit=42
 trait Area {
-    fn area(&self) -> Int;
+    fn area(&self) -> i64;
 }
 
-struct Copy Sq { s: Int }
+struct Copy Sq { s: i64 }
 
 impl Area for Sq {
-    fn area(&self) -> Int { return self.s * self.s; }
+    fn area(&self) -> i64 { return self.s * self.s; }
 }
 
-fn total<T: Area>(x: &T) -> Int {
+fn total<T: Area>(x: &T) -> i64 {
     return x.area();
 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     let q: Sq = Sq { s: 6 };
     return total::<Sq>(&q) + 6;
 }
@@ -159,51 +154,20 @@ fn main() -> u8 {
 <a id="TYPE-3"></a>
 ### TYPE-3. `Text` is owned
 
-**TYPE-3@1.** A `Text` owns an immutable copy of its bytes, never aliases another value's buffer, and is linear.
+**TYPE-3@2.** A `Text` owns an immutable copy of its bytes, never aliases another value's buffer, and is linear.
 
 - Kind: guarantee
 - Uses: none
 - Codes: none
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: std/src/text.con#Text
 - Semantics: none
 - Obligation: none
 - Evidence: tested
 
-**Rationale.** R-0483 (closed 2026-10-09) replaced the borrowed `Text` view with an owned value.
-The old `Copy` pointer-and-length pair could outlive the buffer it pointed into, and its UTF-8
-validation went stale when the source was mutated. Every constructor now copies, the fields are
-private, and there is no `&mut` access, so the property established at construction holds for the
-value's whole life. UTF-8 validity is checked by `Text::copy_from_raw`; `Text::from_string`
-relies on `String`'s own UTF-8 invariant, which `String::push_char` does not check today (STRING_TEXT_CONTRACT
-§6 and §12), so this entry claims ownership, not validity. The borrowed
-form of a string is `&String`.
-[STRING_TEXT_CONTRACT.md](../stdlib/STRING_TEXT_CONTRACT.md) is the library contract.
-
-```con accept name=outlives-its-source exit=42 project=text_owned interp-exempt=project-needs-std
-mod text_owned {
-    import std.string.{String};
-    import std.text.{Text};
-    fn example_value() with(Alloc) -> Int {
-        let mut s: String = String::new();
-        s.push_char(42);
-        let t: Text = Text::from_string(&s);
-        s.drop();
-        let mut out: Int = 0;
-        if let Option::Some { value } = t.byte(0) {
-            out = value as Int;
-        }
-        t.drop();
-        return out;
-    }
-    fn main() with(Alloc) -> u8 {
-        if example_value() == 42 {
-            return 42;
-        }
-        return 1;
-    }
-}
-```
+**Rationale.** Ownership of immutable text remains required, but the literal/static-text type and
+its conversion to allocating strings are [undecided: see the target Core proposal](decisions.md#core-static-text).
+The old allocating library example is retired until it can be stated without choosing that API.
 
 <a id="TYPE-4"></a>
 ### TYPE-4. One type per expression, no implicit conversion
@@ -227,8 +191,8 @@ A `break` carries no value (STMT-6@3, OD27), so it is not one of the positions.
 The current compiler still parses `break <expr>;`, evaluating and dropping the value (bug 323).
 
 ```con reject name=bool-for-int code=E0220 stage=check pair=one-type
-fn example_value() -> Int {
-    let x: Int = true;
+fn example_value() -> i64 {
+    let x: i64 = true;
     return x;
 }
 fn main() -> u8 {
@@ -240,9 +204,9 @@ fn main() -> u8 {
 ```
 
 ```con reject name=branches-disagree code=E0224 stage=check pair=one-type
-fn example_value() -> Int {
+fn example_value() -> i64 {
     let c: bool = true;
-    let x: Int = if c { 1 } else { false };
+    let x: i64 = if c { 1 } else { false };
     return x;
 }
 fn main() -> u8 {
@@ -254,9 +218,9 @@ fn main() -> u8 {
 ```
 
 ```con accept name=one-type exit=42
-fn example_value() -> Int {
+fn example_value() -> i64 {
     let c: bool = true;
-    let x: Int = if c { 42 } else { 0 };
+    let x: i64 = if c { 42 } else { 0 };
     return x;
 }
 fn main() -> u8 {
@@ -268,16 +232,16 @@ fn main() -> u8 {
 ```
 
 ```con reject name=capabilities-not-erased code=E0220 stage=check pair=same-capabilities
-fn inc(x: Int) with(Console) -> Int {
+fn inc(x: i64) with(Fs) -> i64 {
     return x + 1;
 }
 
-fn example_value() with(Console) -> Int {
-    let f: fn(Int) -> Int = inc;
+fn example_value() with(Fs) -> i64 {
+    let f: fn(i64) -> i64 = inc;
     return f(41);
 }
 
-fn main() with(Console) -> u8 {
+fn main() with(Fs) -> u8 {
 
     if example_value() == 0 {
 
@@ -291,19 +255,19 @@ fn main() with(Console) -> u8 {
 ```
 
 ```con reject name=capability-lost-in-argument code=E0220 stage=check pair=same-capabilities
-fn apply(f: fn(Int) -> Int, x: Int) -> Int {
+fn apply(f: fn(i64) -> i64, x: i64) -> i64 {
     return f(x);
 }
 
-fn inc(x: Int) with(Console) -> Int {
+fn inc(x: i64) with(Fs) -> i64 {
     return x + 1;
 }
 
-fn example_value() with(Console) -> Int {
+fn example_value() with(Fs) -> i64 {
     return apply(inc, 41);
 }
 
-fn main() with(Console) -> u8 {
+fn main() with(Fs) -> u8 {
 
     if example_value() == 0 {
 
@@ -317,19 +281,19 @@ fn main() with(Console) -> u8 {
 ```
 
 ```con reject name=capability-lost-in-field code=E0220 stage=check pair=same-capabilities
-struct Copy Box { f: fn(Int) -> Int }
+struct Copy Box { f: fn(i64) -> i64 }
 
-fn inc(x: Int) with(Console) -> Int {
+fn inc(x: i64) with(Fs) -> i64 {
     return x + 1;
 }
 
-fn example_value() with(Console) -> Int {
+fn example_value() with(Fs) -> i64 {
     let b: Box = Box { f: inc };
-    let g: fn(Int) -> Int = b.f;
+    let g: fn(i64) -> i64 = b.f;
     return g(41);
 }
 
-fn main() with(Console) -> u8 {
+fn main() with(Fs) -> u8 {
 
     if example_value() == 0 {
 
@@ -343,16 +307,16 @@ fn main() with(Console) -> u8 {
 ```
 
 ```con accept name=same-capabilities exit=42
-fn inc(x: Int) with(Console) -> Int {
+fn inc(x: i64) with(Fs) -> i64 {
     return x + 1;
 }
 
-fn example_value() with(Console) -> Int {
-    let f: fn(Int) with(Console) -> Int = inc;
+fn example_value() with(Fs) -> i64 {
+    let f: fn(i64) with(Fs) -> i64 = inc;
     return f(41);
 }
 
-fn main() with(Console) -> u8 {
+fn main() with(Fs) -> u8 {
 
     if example_value() == 42 {
 
@@ -368,31 +332,22 @@ fn main() with(Console) -> u8 {
 <a id="TYPE-5"></a>
 ### TYPE-5. Conditions are `bool`
 
-**TYPE-5@2.** The condition of an `if` or `while`, a match guard, and the operands of `&&`, `||` and `!` have type `bool`, and a comparison has type `bool`.
+**TYPE-5@3.** The condition of an `if` or `while` and the operands of `&&`, `||` and `!` have type `bool`, and a comparison has type `bool`.
 
 - Kind: refusal
 - Uses: none
 - Codes: E0223 (check), E0504 (core-check), E0505 (core-check), E0508 (core-check), E0540 (core-check), E0541 (core-check)
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.checkExprCore, Concrete.checkStmt, Concrete.ccCheckExpr, Concrete.ccCheckStmt
 - Semantics: none
 - Obligation: progress and preservation for the Core type system (R-0507)
 - Evidence: tested
 
-**Rationale.** There is no truthiness: an integer is not a condition. Until bug 192 was fixed, the
-statement forms of `if`, `while` and `for` let an integer through, and the binary ran it with C
-truthiness while `--interp` refused it. This entry's example found the bug.
-The counted loop of STMT-6@3 has no condition. Until bug 331 is fixed, the current compiler still parses the C-style
-`for (init; cond; step)` that STMT-6@3 removes, and its `cond` must be `bool` like a `while` condition.
+**Rationale.** OD55 removes guards; conditions and logical operands remain boolean.
 
-**Codes by case** (probed against the current compiler). Check reports a non-`bool` `if` or `while` condition as E0223.
-CoreCheck reports `&&` or `||` on a non-`bool` as E0505 and `!` on a non-`bool` as E0508, which Check
-lets through, and refuses in Core, as the backstop of E0223, a non-`bool` `if` condition (E0541),
-`while` condition (E0540) and a comparison whose result is not `bool` (E0504).
-
-```con reject name=int-condition code=E0223 stage=check pair=bool-condition
+```con reject name=int-condition-decided code=E0223 stage=check pair=bool-condition pending=R-0555 now=reject:E0223:check
 fn main() -> u8 {
-    let n: Int = 1;
+    let n: i64 = 1;
     if n {
         return 42;
     }
@@ -402,7 +357,7 @@ fn main() -> u8 {
 
 ```con accept name=bool-condition exit=42
 fn main() -> u8 {
-    let n: Int = 1;
+    let n: i64 = 1;
     if n != 0 {
         return 42;
     }
@@ -411,40 +366,23 @@ fn main() -> u8 {
 ```
 
 <a id="TYPE-6"></a>
-### TYPE-6. Operators take operands of one numeric type
+### TYPE-6. Operators take their declared primitive types
 
-**TYPE-6@2.** Arithmetic operators take two operands of one numeric type, bitwise and shift operators take integers, unary minus takes a number, comparisons take numbers, and no operator takes a raw pointer; whether comparisons also take `bool` and `char` is OPEN-42.
+**TYPE-6@3.** Arithmetic operators take two operands of one numeric type, bitwise and shift operators take integers, unary minus takes a number, comparisons take two operands of one numeric type or two `bool` or two `char` operands, and no operator takes a raw pointer.
 
 - Kind: refusal
 - Uses: none
 - Codes: E0228 (check), E0229 (check), E0501 (core-check, post-mono), E0502 (core-check), E0503 (core-check), E0506 (core-check), E0507 (core-check), E0509 (core-check)
-- Status: partial bug-322
+- Status: pending R-0555
 - Enforced by: Concrete.checkExprCore, Concrete.ccCheckExpr
 - Semantics: none
 - Obligation: one `IntArith` authority for operand widths (R-0493)
 - Evidence: tested
 
-**Rationale.** Mixed widths and signedness are a classic source of silent conversion bugs, so they
-are refused rather than promoted. Comparing aggregates would need a definition of equality per
-type, which the language does not have.
+**Rationale.** OD42 admits bool and char comparisons; numeric operands still agree in type and raw-pointer operators remain refused.
 
-**Codes by case** (probed against the current compiler). Check refuses first, as E0228, two operands of a binary operator
-of different types, and as E0229 a comparison on a type that has none (`a < a` on a struct);
-CoreCheck's E0502 and E0503 refuse mismatched binary and comparison operands in Core as the
-backstop of E0228. Check lets these through and CoreCheck refuses them first: E0501, arithmetic on a
-non-numeric type (`b + b` with `b: bool`; also after monomorphization); E0506, a bitwise operator on
-a non-integer (`f & f` with `f: f64`); E0507, negation of a non-number (`-b` with `b: bool`); E0509,
-bitwise not on a non-integer (`~f` with `f: f64`).
-
-The owner decided on 2026-10-29 (OD26), aligned with TRUST-1, that arithmetic,
-shifts and comparisons take numbers only, and pointer offset, difference and ordering are
-`ptr::offset` and named functions. Whether "numbers only" also removes comparisons on `bool` and
-`char` is OPEN-42; the current compiler compares them today, and this entry does not decide it. The current compiler still admits pointer arithmetic and comparison in trusted or
-`Unsafe` code (bug 322).
-
-
-```con reject name=compare-structs code=E0229 stage=check pair=same-type-operands
-struct Copy P { n: Int }
+```con reject name=compare-structs-decided code=E0229 stage=check pair=same-type-operands pending=R-0555 now=reject:E0229:check
+struct Copy P { n: i64 }
 
 fn main() -> u8 {
     let a: P = P { n: 1 };
@@ -457,9 +395,9 @@ fn main() -> u8 {
 ```
 
 ```con accept name=same-type-operands exit=42
-struct Copy P { n: Int }
+struct Copy P { n: i64 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     let a: P = P { n: 21 };
     let b: P = P { n: 21 };
     if a.n == b.n {
@@ -482,25 +420,24 @@ fn main() -> u8 {
 ```
 
 ```con reject name=pointer-comparison code=E0229 stage=check pair=pointee-comparison pending=bug-322 now=accept:42
-trusted fn same(p: *const Int, q: *const Int) -> bool {
+trusted fn same(p: *const i64, q: *const i64) -> bool {
     return p == q;
 }
 fn main() -> u8 {
-    let x: Int = 1;
-    let p: *const Int = &x as *const Int;
+    let x: i64 = 1;
+    let p: *const i64 = &x as *const i64;
     if same(p, p) { return 42; }
     return 0;
 }
 ```
 
 ```con accept name=pointee-comparison exit=42
-trusted fn same(p: *const Int, q: *const Int) -> bool {
+trusted fn same(p: *const i64, q: *const i64) -> bool {
     return *p == *q;
 }
-fn main() -> u8 {
-    let x: Int = 1;
-    let p: *const Int = &x as *const Int;
-    if same(p, p) { return 42; }
+fn main() with(Unsafe) -> u8 {
+    let x: i64 = 1;
+    if same(&x as *const i64, &x as *const i64) { return 42; }
     return 0;
 }
 ```
@@ -508,27 +445,23 @@ fn main() -> u8 {
 <a id="TYPE-7"></a>
 ### TYPE-7. Aggregates are built and read by their declarations
 
-**TYPE-7@1.** A struct literal names a declared struct and gives each of its fields exactly once (directly or, for the fields it does not name, from a `..base`), a field access names a field of a struct, an enum literal or pattern names a variant of a declared enum, an array literal has at least one element, and only an array is indexed, by an integer.
+**TYPE-7@2.** A struct literal names a declared struct and gives each of its fields exactly once explicitly, with no struct update `..base`, a field access names a field of a struct, an enum literal or pattern names a variant of a declared enum, an array literal has at least one element, and only an array is indexed, by an integer.
 
 - Kind: refusal
 - Uses: none
-- Codes: E0250 (check), E0251 (check), E0252 (check), E0253 (check), E0254 (check), E0260 (check), E0261 (check), E0306 (check), E0416 (elab), E0550 (core-check), E0551 (core-check), E0552 (core-check), E0316 (check)
-- Status: enforced
+- Codes: new (parse), E0250 (check), E0251 (check), E0252 (check), E0253 (check), E0254 (check), E0260 (check), E0261 (check), E0306 (check), E0416 (elab), E0550 (core-check), E0551 (core-check), E0552 (core-check), E0316 (check)
+- Status: pending R-0555
 - Enforced by: Concrete.checkExprCore, Concrete.checkStmt, Concrete.ccCheckExpr
 - Semantics: none
 - Obligation: progress and preservation for the Core type system (R-0507)
 - Evidence: tested
 
-**Rationale.** A missing field would leave part of a value uninitialized, and a field given
-twice would make the literal ambiguous. A destructuring `let` binds every field (`field: _`
-ignores a Copy one, OWN-5). An empty array literal has no element type to infer. A field given
-twice used to be accepted, with the checker reading the first occurrence and the binary storing
-the last (bug 193).
+**Rationale.** OD53 removes functional update: every struct field is explicit. Patterns are governed by the patterns chapter and private representation by TYPE-11.
 
-```con reject name=missing-field code=E0252 stage=check pair=every-field
-struct Copy P { a: Int, b: Int }
+```con reject name=missing-field-decided code=E0252 stage=check pair=every-field pending=R-0555 now=reject:E0252:check
+struct Copy P { a: i64, b: i64 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     let p: P = P { a: 42 };
     return p.a;
 }
@@ -546,10 +479,10 @@ fn main() -> u8 {
 }
 ```
 
-```con reject name=unknown-field code=E0253 stage=check pair=every-field
-struct Copy P { a: Int, b: Int }
+```con reject name=unknown-field-decided code=E0253 stage=check pair=every-field pending=R-0555 now=reject:E0253:check
+struct Copy P { a: i64, b: i64 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     let p: P = P { a: 42, b: 0, c: 1 };
     return p.a;
 }
@@ -567,10 +500,10 @@ fn main() -> u8 {
 }
 ```
 
-```con reject name=duplicate-field code=E0306 stage=check pair=every-field
-struct Copy P { a: Int, b: Int }
+```con reject name=duplicate-field-decided code=E0306 stage=check pair=every-field pending=R-0555 now=reject:E0306:check
+struct Copy P { a: i64, b: i64 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     let p: P = P { a: 1, b: 2, a: 40 };
     return p.a + p.b;
 }
@@ -588,33 +521,14 @@ fn main() -> u8 {
 }
 ```
 
-```con reject name=newtype-field-other-than-zero code=E0316 stage=check pair=every-field
-newtype Meters = Int;
 
-fn example_value() -> Int {
-    let m: Meters = Meters(42);
-    return m.1;
-}
-
-fn main() -> u8 {
-
-    if example_value() == 0 {
-
-        return 0;
-
-    }
-
-    return 1;
-
-}
-```
 
 ```con accept name=every-field exit=42
-struct Copy P { a: Int, b: Int }
+struct Copy P { a: i64, b: i64 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     let p: P = P { a: 40, b: 2 };
-    let arr: [Int; 2] = [p.a, p.b];
+    let arr: [i64; 2] = [p.a, p.b];
     return arr[0] + arr[1];
 }
 
@@ -629,6 +543,11 @@ fn main() -> u8 {
     return 1;
 
 }
+```
+
+```con reject name=struct-update-removed code=new stage=parse pair=every-field pending=R-0555 now=accept:42
+struct Copy P { a: u8, b: u8 }
+fn main() -> u8 { let p: P = P { a: 1, b: 2 }; let q: P = P { a: 40, ..p }; return q.a + q.b; }
 ```
 
 <a id="TYPE-8"></a>
@@ -650,8 +569,8 @@ raw-pointer dereference also needs trusted or `Unsafe` code (TRUST-3). `*h` of a
 `Heap` moves the value out of its cell (OWN-15, `deref`).
 
 ```con reject name=deref-int code=E0221 stage=check pair=deref-ref
-fn example_value() -> Int {
-    let x: Int = 42;
+fn example_value() -> i64 {
+    let x: i64 = 42;
     return *x;
 }
 fn main() -> u8 {
@@ -663,12 +582,12 @@ fn main() -> u8 {
 ```
 
 ```con accept name=deref-ref exit=42
-fn read(r: &Int) -> Int {
+fn read(r: &i64) -> i64 {
     return *r;
 }
 
-fn example_value() -> Int {
-    let x: Int = 42;
+fn example_value() -> i64 {
+    let x: i64 = 42;
     return read(&x);
 }
 
@@ -693,7 +612,7 @@ fn main() -> u8 {
 - Kind: refusal
 - Uses: none
 - Codes: E0262 (check), E0264 (check), E0265 (check), E0266 (check), E0522 (core-check), E0313 (check), E0317 (check), E0322 (check)
-- Status: partial bug-333
+- Status: enforced
 - Enforced by: Concrete.checkExprCore
 - Semantics: none
 - Obligation: progress and preservation for the Core type system (R-0507)
@@ -705,11 +624,11 @@ what lets a generic body be checked once (TYPE-2, PASS-1). E0322 enforces the ty
 list, so the current compiler still skips the count there (bug 333), pinned by the pending example.
 
 ```con reject name=wrong-arity code=E0262 stage=check pair=right-arity
-fn add(a: Int, b: Int) -> Int {
+fn add(a: i64, b: i64) -> i64 {
     return a + b;
 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     return add(42);
 }
 
@@ -726,39 +645,20 @@ fn main() -> u8 {
 }
 ```
 
-```con reject name=newtype-constructor-arity code=E0313 stage=check pair=right-arity
-newtype Meters = Int;
 
-fn example_value() -> Int {
-    let m: Meters = Meters(40, 2);
-    return m.0;
-}
-
-fn main() -> u8 {
-
-    if example_value() == 0 {
-
-        return 0;
-
-    }
-
-    return 1;
-
-}
-```
 
 ```con reject name=receiverless-trait-method code=E0317 stage=check pair=right-arity
-trait Make { fn make() -> Int; }
-fn call<T: Make>(x: &T) -> Int { return x.make(); }
+trait Make { fn make() -> i64; }
+fn call<T: Make>(x: &T) -> i64 { return x.make(); }
 fn main() -> u8 { return 0; }
 ```
 
 ```con accept name=right-arity exit=42
-fn add(a: Int, b: Int) -> Int {
+fn add(a: i64, b: i64) -> i64 {
     return a + b;
 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     return add(40, 2);
 }
 
@@ -775,57 +675,27 @@ fn main() -> u8 {
 }
 ```
 
-```con reject name=type-arguments-to-bodyless-declaration code=E0322 stage=check pair=type-argument-to-bodyless-declaration pending=bug-333 now=accept:42 now-interp=fail:sizeof
-mod foo {
-    #[intrinsic = "sizeof"]
-    pub trusted fn sizeof<T>() -> u64;
-}
-mod bar {
-    import foo.{sizeof};
-    pub fn main() -> u64 {
-        return sizeof::<u8, u32>() + 41;
-    }
-}
-```
 
-```con accept name=type-argument-to-bodyless-declaration exit=42
-mod foo {
-    #[intrinsic = "sizeof"]
-    pub trusted fn sizeof<T>() -> u64;
-}
-mod bar {
-    import foo.{sizeof};
-    pub fn main() -> u64 {
-        return sizeof::<u8>() + 41;
-    }
-}
-```
+
+
 
 <a id="TYPE-10"></a>
 ### TYPE-10. Builtins have fixed signatures
 
-**TYPE-10@1.** A builtin function is called with the argument count, type-argument count and argument types of its fixed signature, and `free` takes a `Heap`.
+**TYPE-10@2.** A builtin is called with the argument count, type-argument count and argument types of its fixed signature, allocation takes an allocator and reports conserving failure, and the removed `free` and `unwrap` forms are refused.
 
 - Kind: refusal
 - Uses: none
 - Codes: E0268 (check), E0269 (check), E0270 (check), E0271 (check), E0274 (check), E0421 (check, elab), E0314 (check), E0315 (check)
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.checkExprCore
 - Semantics: none
 - Obligation: none
 - Evidence: tested
 
-**Rationale.** Builtins (`alloc`, `free`, `destroy`, the collection intrinsics) are checked by
-their own signatures rather than by a declaration, so each misuse has its own diagnostic.
-`destroy` of a value whose type has no `Destroy` implementation is an ownership rule (OWN-13).
-The output builtins are the one exception to a fixed argument count: `print` and `println` take
-one or more arguments and `append` a `&mut String` and one or more arguments, each argument a
-`String`, `&String`, `&mut String`, `Int`, `Uint`, `i8`, `i16`, `i32`, `u8`, `u16`, `u32`, `bool` or `char`, anything else
-being E0421; they return `()`, `println` ends with a newline, and the calls they expand into need
-`Console` (print) and `Alloc` (append) under TRUST-4. Whether a program may declare its own
-function of one of these names is OPEN-133.
+**Rationale.** Signatures and primitive effects are fixed by identity, not by declarations. MEM-5 and MEM-7 govern conserving allocation; OD59 removes `free` and OD155 removes `unwrap`. Complete failure payload contracts are [undecided: see the target Core proposal](decisions.md#core-allocation-contracts).
 
-```con reject name=append-unsupported-argument code=E0421 stage=check pair=free-heap
+```con reject name=append-unsupported-argument-decided code=E0421 stage=check pair=free-heap pending=R-0555 now=reject:E0421:check
 fn main() with(Alloc) -> u8 {
     let mut out: String = "";
     append(&mut out, 1.5);
@@ -834,10 +704,10 @@ fn main() with(Alloc) -> u8 {
 }
 ```
 
-```con reject name=println-unsupported-argument code=E0421 stage=check pair=println-supported-arguments
-struct Copy S { x: Int }
+```con reject name=println-unsupported-argument-decided code=E0421 stage=check pair=println-supported-arguments pending=R-0555 now=reject:E0421:check
+struct Copy S { x: i64 }
 
-fn main() with(Console) -> u8 {
+fn main() with(Fs) -> u8 {
     let s: S = S { x: 1 };
     println(s);
     return 42;
@@ -845,282 +715,143 @@ fn main() with(Console) -> u8 {
 ```
 
 ```con accept name=println-supported-arguments exit=42
-fn main() with(Console) -> u8 {
+fn main() with(Fs) -> u8 {
     let n: u8 = 7;
     println("n = ", n, ' ', true);
     return 42;
 }
 ```
 
-```con reject name=free-non-heap code=E0274 stage=check pair=free-heap
-fn main() with(Std) -> u8 {
-    let x: Int = 42;
+```con reject name=free-non-heap-decided code=E0274 stage=check pair=free-heap pending=R-0555 now=reject:E0274:check
+fn main() with(Alloc) -> u8 {
+    let x: i64 = 42;
     free(x);
     return 0;
 }
 ```
 
-```con reject name=wrapping-on-non-integers code=E0314 stage=check pair=free-heap
+```con reject name=wrapping-on-non-integers-decided code=E0314 stage=check pair=free-heap pending=R-0555 now=reject:E0314:check
 fn main() -> u8 {
     let b: bool = wrapping_add(true, false);
     return 0;
 }
 ```
 
-```con reject name=print-without-arguments code=E0315 stage=check pair=free-heap
-fn main() with(Std) -> u8 {
+```con reject name=print-without-arguments-decided code=E0315 stage=check pair=free-heap pending=R-0555 now=reject:E0315:check
+fn main() with(Alloc) -> u8 {
     print();
     return 0;
 }
 ```
 
 ```con accept name=free-heap exit=42
-struct Copy B { v: Int }
-
-fn example_value() with(Std) -> Int {
-    let h: Heap<B> = alloc(B { v: 42 });
-    let out: Int = h.v;
-    free(h);
-    return out;
-}
-
-fn main() with(Std) -> u8 {
-
-    if example_value() == 42 {
-
-        return 42;
-
-    }
-
-    return 1;
-
-}
+fn main() -> u8 { let n: u64 = sizeof::<u8>(); if n == 1 { return 42; } return 1; }
 ```
 
 <a id="TYPE-11"></a>
 ### TYPE-11. A module keeps its types' representation
 
-**TYPE-11@1.** Outside the module that declares it, a newtype is not constructed directly, and a struct field that is not marked `pub` is not named in a struct literal, read or written.
+**TYPE-11@2.** A struct field not marked `pub` is not named in a struct literal, read or written outside its declaring module, including by a parent module, and newtype declarations and conversions are refused.
 
 - Kind: refusal
 - Uses: none
 - Codes: E0296 (check), E0297 (check), E0298 (check)
-- Status: partial R-0500
+- Status: pending R-0555
 - Enforced by: Concrete.checkExprCore, Concrete.checkStmt
 - Semantics: none
 - Obligation: none
 - Evidence: tested
 
-**Rationale.** Smart constructors are only as strong as the construction rules. Without privacy,
-safe code could write `NonZeroU32(0)` and bypass `try_new`. `pub` on a type exports its name,
-not its representation. Privacy protects invariants. It is not secrecy and not proof evidence,
-and it holds in `trusted` callers too. Two follow-on slices are pending (R-0011): private-by-default
-enum variants, and privacy of a newtype's payload.
+**Rationale.** OD21 protects representation even from a parent module; OD54 removes newtypes rather than introducing conversion exceptions.
 
-Verified 2026-07-18: safe code in another module could write `NonZeroU32(0)`, bypassing
-`try_new`'s zero check, and read and write another module's struct fields (`b.len`,
-`b.len = 999`); pointer-bearing fields were protected only by accident (the integer-to-pointer
-cast needs `Unsafe`). Every invariant a library type kept, the kernel-proved `NonZeroU32`
-non-zero property included, was advisory; representation privacy makes them load-bearing. `pub`
-is the only visibility word: there is no `private`, `sealed`, `opaque`, `transparent` or
-friend-module tier, and a deliberately transparent wrapper exposes public construction and
-access functions. Visibility is per module, Concrete's unit of encapsulation. There is no std
-exemption: std uses constructors, accessors, scoped mutation and audited raw-parts functions like
-any other module. Enforcement is the same in Resolve, Check, Elab, project mode, the interpreter and
-the compiled path (Check refuses; later stages inherit).
 
-The owner decided on 2026-10-29 (OD21) that only the declaring module has these rights: a parent
-module gets none over its child's declarations. Until bug 311's fix a parent still had them over
-the declarations it imported from its children (bug 262's record); the `parent-*` examples below
-pin the refusal.
 
-| operation | same module | other module |
-|---|---|---|
-| name the type (`let x: T`, a generic argument) | yes | if the type is `pub` |
-| call a `pub fn` or method on it | yes | yes |
-| struct literal `T { f: ... }` | yes | only if every field is `pub` |
-| field read `x.f`, field write `x.f = ...` | yes | only if `f` is `pub` |
-| functional update `T { ..x, f: ... }` | yes | only if every named or required field is `pub` |
-| destructuring `let T { f } = x` | yes | only if every bound field is `pub` |
-| newtype construction `N(v)` | yes | no: use the module's constructor function |
-| newtype unwrap to the inner value | yes | no, once the follow-on lands (R-0011) |
-| construct or match an enum variant | yes | once the follow-on lands, only a `pub` variant (R-0011); names are matchable meanwhile |
-
-The newtype pattern is `pub newtype NonZeroU32 = u32` with `pub fn try_new(v: u32) ->
-Option<NonZeroU32>` and `pub fn get(&self) -> u32`; `NonZeroU32(v)` is private to `numeric.con`.
-Under the enum follow-on, `pub enum T` exports the type name and a variant is constructible and
-matchable outside only when marked `pub` (`pub Ok { value: T }`), the marker governing the whole
-payload; a client that cannot see every variant matches with a wildcard. Slices 1 (newtype
-construction) and 2 (struct literal, read and write: E0297, E0298; std migrated to accessors and
-`from_raw_unchecked`) are implemented (defect queue 0b); gate `scripts/tests/check_construction_rights.sh`.
-
-```con reject name=construct-foreign-newtype code=E0296 stage=check pair=foreign-constructor
-mod num {
-    pub newtype NonZero = Int;
-    pub fn try_new(v: Int) -> Option<NonZero> {
-        if v == 0 {
-            return Option::None;
-        }
-        return Option::Some { value: NonZero(v) };
-    }
+```con reject name=read-private-field-decided code=E0298 stage=check pair=public-constructor pending=R-0555 now=reject:E0298:check
+// spec-file: main.con
+mod box;
+import box.{Bx, mk};
+fn example_value() -> i64 {
+    let b: Bx = mk();
+    return b.v;
 }
-mod m {
-    import num.{NonZero};
-    pub fn main() -> u8 {
-        let n: NonZero = NonZero(0);
+pub fn main() -> u8 {
+    if example_value() == 0 {
         return 0;
     }
+    return 1;
 }
+
+// spec-file: box.con
+pub struct Copy Bx { v: i64 }
+pub fn mk() -> Bx {
+    return Bx { v: 42 };
+}
+
 ```
 
-```con reject name=read-private-field code=E0298 stage=check pair=foreign-constructor
-mod box {
-    pub struct Copy Bx { v: Int }
-    pub fn mk() -> Bx {
-        return Bx { v: 42 };
-    }
+```con reject name=destructure-private-field-decided code=E0298 stage=check pair=public-constructor pending=R-0555 now=reject:E0298:check
+// spec-file: main.con
+mod box;
+import box.{Bx, mk};
+fn example_value() -> i64 {
+    let b: Bx = mk();
+    let Bx { v } = b;
+    return v;
 }
-mod m {
-    import box.{Bx, mk};
-    fn example_value() -> Int {
-        let b: Bx = mk();
-        return b.v;
+pub fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
     }
-    pub fn main() -> u8 {
-        if example_value() == 0 {
-            return 0;
-        }
-        return 1;
-    }
+    return 1;
 }
+
+// spec-file: box.con
+pub struct Copy Bx { v: i64 }
+pub fn mk() -> Bx {
+    return Bx { v: 42 };
+}
+
 ```
 
-```con reject name=destructure-private-field code=E0298 stage=check pair=foreign-constructor
-mod box {
-    pub struct Copy Bx { v: Int }
-    pub fn mk() -> Bx {
-        return Bx { v: 42 };
-    }
+
+
+
+
+```con reject name=parent-reads-child-private-field-decided code=E0298 stage=check pair=public-constructor pending=R-0555 now=reject:E0298:check
+// spec-file: main.con
+mod kids;
+import kids.{Box, mk};
+fn example_value() -> i64 {
+    let b: Box = mk();
+    return b.v;
 }
-mod m {
-    import box.{Bx, mk};
-    fn example_value() -> Int {
-        let b: Bx = mk();
-        let Bx { v } = b;
-        return v;
+pub fn main() -> u8 {
+    if example_value() == 0 {
+        return 0;
     }
-    pub fn main() -> u8 {
-        if example_value() == 0 {
-            return 0;
-        }
-        return 1;
-    }
+    return 1;
 }
+
+// spec-file: kids.con
+pub struct Copy Box { v: i64 }
+pub fn mk() -> Box {
+    return Box { v: 42 };
+}
+
 ```
 
-```con accept name=foreign-constructor exit=42
-mod num {
-    pub newtype NonZero = Int;
-    pub fn try_new(v: Int) -> Option<NonZero> {
-        if v == 0 {
-            return Option::None;
-        }
-        return Option::Some { value: NonZero(v) };
-    }
-    pub fn get(n: NonZero) -> Int {
-        return n.0;
-    }
-}
-mod m {
-    import num.{NonZero, try_new, get};
-    fn example_value() -> Int {
-        let mut out: Int = 0;
-        match try_new(42) {
-            Option::Some { value } => { out = get(value); },
-            Option::None => {}
-        }
-        return out;
-    }
-    pub fn main() -> u8 {
-        if example_value() == 42 {
-            return 42;
-        }
-        return 1;
-    }
-}
-```
 
-```con reject name=parent-constructs-child-newtype code=E0296 stage=check pair=foreign-constructor
-mod outer {
-    mod kids {
-        pub newtype K = Int;
-        pub fn get(k: K) -> Int {
-            return k.0;
-        }
-    }
-    import kids.{K, get};
-    fn example_value() -> Int {
-        let k: K = K(42);
-        return get(k);
-    }
-    pub fn main() -> u8 {
-        if example_value() == 0 {
-            return 0;
-        }
-        return 1;
-    }
-}
-```
 
-```con reject name=parent-reads-child-private-field code=E0298 stage=check pair=foreign-constructor
-mod outer {
-    mod kids {
-        pub struct Copy Box { v: Int }
-        pub fn mk() -> Box {
-            return Box { v: 42 };
-        }
-    }
-    import kids.{Box, mk};
-    fn example_value() -> Int {
-        let b: Box = mk();
-        return b.v;
-    }
-    pub fn main() -> u8 {
-        if example_value() == 0 {
-            return 0;
-        }
-        return 1;
-    }
-}
-```
 
-```con reject name=foreign-newtype-unwrap code=new stage=check pair=foreign-constructor pending=R-0500 now=accept:42
-mod num {
-    pub newtype NonZero = Int;
-    pub fn try_new(v: Int) -> Option<NonZero> {
-        if v == 0 {
-            return Option::None;
-        }
-        return Option::Some { value: NonZero(v) };
-    }
-}
-mod m {
-    import num.{NonZero, try_new};
-    fn example_value() -> Int {
-        let mut out: Int = 0;
-        match try_new(42) {
-            Option::Some { value } => { out = value.0; },
-            Option::None => {}
-        }
-        return out;
-    }
-    pub fn main() -> u8 {
-        if example_value() == 42 {
-            return 42;
-        }
-        return 1;
-    }
-}
+```con accept name=public-constructor exit=42
+// spec-file: main.con
+mod box;
+import box.{Bx, mk, get};
+fn main() -> u8 { let b: Bx = mk(); return get(b); }
+// spec-file: box.con
+pub struct Copy Bx { v: u8 }
+pub fn mk() -> Bx { return Bx { v: 42 }; }
+pub fn get(b: Bx) -> u8 { return b.v; }
 ```
 
 <a id="TYPE-12"></a>
@@ -1160,35 +891,33 @@ concrete instantiation instead) and opaque or distinct aliases (a newtype gives 
 identity). Implemented as ROADMAP old Phase 6 #3 (2026-06-22).
 
 ```con accept name=alias-is-transparent exit=12
-mod m {
-    type Id = i32;
-    fn want_underlying(x: i32) -> i32 { return x; }
-    fn want_alias(x: Id) -> Id { return x; }
-    fn example_value() -> Int {
-        let a: Id = 5;
-        let b: i32 = a;
-        let c: Id = want_underlying(b);
-        let d: i32 = want_alias(7);
-        return (c + d) as Int;
+type Id = i32;
+fn want_underlying(x: i32) -> i32 { return x; }
+fn want_alias(x: Id) -> Id { return x; }
+fn example_value() -> i64 {
+    let a: Id = 5;
+    let b: i32 = a;
+    let c: Id = want_underlying(b);
+    let d: i32 = want_alias(7);
+    return (c + d) as i64;
+}
+fn main() -> u8 {
+    if example_value() == 12 {
+        return 12;
     }
-    fn main() -> u8 {
-        if example_value() == 12 {
-            return 12;
-        }
-        return 1;
-    }
+    return 1;
 }
 ```
 
 <a id="TYPE-13"></a>
 ### TYPE-13. A bare type parameter is linear-capable
 
-**TYPE-13@2.** A type parameter without a bound may be instantiated at any type, linear ones included, so a generic body uses each value of that parameter exactly once, and `T: Copy` is the only bound that lets a body duplicate one.
+**TYPE-13@3.** A type parameter without a bound may be instantiated at any type, linear ones included, so a generic body uses each value of that parameter exactly once, and `T: Copy` is the only bound that lets a body duplicate one.
 
 - Kind: guarantee
 - Uses: OWN-D1
 - Codes: none
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.isCopyType
 - Semantics: none
 - Obligation: binder and kind facts survive specialization (PASS-1, PASS-2)
@@ -1202,24 +931,24 @@ linear-only kind. Duplicating a value of a bare `T` is a use after move (OWN-1).
 Decided by the owner on 2026-10-29 (OD5): a bare `<T>` means Any, and `T: Copy` is explicit.
 
 ```con accept name=bare-and-copy-parameters exit=42
-struct R { v: Int }
+struct R { v: i64 }
 
 fn pass<T>(x: T) -> T {
     return x;
 }
 
-fn twice<T: Copy>(x: T, f: fn(T) -> Int) -> Int {
+fn twice<T: Copy>(x: T, f: fn(T) -> i64) -> i64 {
     return f(x) + f(x);
 }
 
-fn half(n: Int) -> Int {
+fn half(n: i64) -> i64 {
     return n / 2;
 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     let r: R = pass::<R>(R { v: 0 });
     let R { v } = r;
-    return twice::<Int>(42, half) + v;
+    return twice::<i64>(42, half) + v;
 }
 
 fn main() -> u8 {
@@ -1238,12 +967,12 @@ fn main() -> u8 {
 <a id="TYPE-14"></a>
 ### TYPE-14. Copy is declared, never derived
 
-**TYPE-14@2.** Whether an instantiation of a struct or enum is Copy is decided from its declaration alone, so it is Copy exactly when the struct or enum is declared `Copy` and every type argument is Copy.
+**TYPE-14@3.** Whether an instantiation of a struct or enum is Copy is decided from its declaration alone, so it is Copy exactly when the struct or enum is declared `Copy` and every type argument is Copy.
 
 - Kind: guarantee
 - Uses: OWN-D1
 - Codes: none
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.Layout.isCopyTyGeneric
 - Semantics: none
 - Obligation: Copy is decided from the declaration and the type arguments alone, with no fixpoint over the type graph (R-0510)
@@ -1261,9 +990,9 @@ Decided by the owner on 2026-10-29 (OD5): Copy for a generic struct or enum is d
 ```con accept name=copy-over-bare-parameter-at-copy exit=42
 struct Copy Bx<T> { v: T }
 
-fn example_value() -> Int {
-    let b: Bx<Int> = Bx::<Int> { v: 21 };
-    let c: Bx<Int> = b;
+fn example_value() -> i64 {
+    let b: Bx<i64> = Bx::<i64> { v: 21 };
+    let c: Bx<i64> = b;
     return b.v + c.v;
 }
 
@@ -1283,9 +1012,9 @@ fn main() -> u8 {
 ```con accept name=copy-over-copy-parameter exit=42
 struct Copy Bx<T: Copy> { v: T }
 
-fn example_value() -> Int {
-    let b: Bx<Int> = Bx::<Int> { v: 42 };
-    let c: Bx<Int> = b;
+fn example_value() -> i64 {
+    let b: Bx<i64> = Bx::<i64> { v: 42 };
+    let c: Bx<i64> = b;
     return b.v + c.v * 0;
 }
 
@@ -1327,8 +1056,8 @@ too (bug 200).
 ```con reject name=extra-type-argument code=E0113 stage=resolve pair=declared-type-arguments
 struct Copy Box1<T> { v: T }
 
-fn example_value() -> Int {
-    let b: Box1<Int, bool> = Box1::<Int, bool> { v: 42 };
+fn example_value() -> i64 {
+    let b: Box1<i64, bool> = Box1::<i64, bool> { v: 42 };
     return b.v;
 }
 
@@ -1348,8 +1077,8 @@ fn main() -> u8 {
 ```con accept name=declared-type-arguments exit=42
 struct Copy Box1<T> { v: T }
 
-fn example_value() -> Int {
-    let b: Box1<Int> = Box1::<Int> { v: 42 };
+fn example_value() -> i64 {
+    let b: Box1<i64> = Box1::<i64> { v: 42 };
     return b.v;
 }
 
@@ -1367,9 +1096,9 @@ fn main() -> u8 {
 ```
 
 ```con reject name=bare-generic-type code=E0113 stage=resolve pair=declared-type-arguments
-struct Copy Box1<T> { v: Int }
+struct Copy Box1<T> { v: i64 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     let b: Box1 = Box1 { v: 42 };
     return b.v;
 }
@@ -1388,9 +1117,9 @@ fn main() -> u8 {
 ```
 
 ```con reject name=type-where-capability code=E0114 stage=resolve pair=capability-argument
-struct Copy Sink<cap C> { f: fn(Int) with(C) -> Int }
+struct Copy Sink<cap C> { f: fn(i64) with(C) -> i64 }
 
-fn take(s: Sink<Int>) -> Int {
+fn take(s: Sink<i64>) -> i64 {
     return 0;
 }
 
@@ -1400,9 +1129,9 @@ fn main() -> u8 {
 ```
 
 ```con reject name=capability-arity code=E0115 stage=resolve pair=capability-argument
-struct Copy Sink<cap C> { f: fn(Int) with(C) -> Int }
+struct Copy Sink<cap C> { f: fn(i64) with(C) -> i64 }
 
-fn take(s: Sink<{}, {}>) -> Int {
+fn take(s: Sink<{}, {}>) -> i64 {
     return 0;
 }
 
@@ -1412,9 +1141,10 @@ fn main() -> u8 {
 ```
 
 ```con accept name=capability-argument exit=42
-struct Copy Sink<cap C> { f: fn(Int) with(C) -> Int }
+struct Copy Sink<cap C> { f: fn(i64) with(C) -> i64 }
 
-fn take(s: Sink<{}>) -> Int {
+fn take(s: Sink<{}>) -> i64 {
+    discard(s);
     return 0;
 }
 
@@ -1444,19 +1174,19 @@ cycle. A generic instantiation is followed with its type arguments substituted, 
 inside `Node` is refused too (bug 205; it used to reach `llvm-as` while `--interp` ran it).
 
 ```con reject name=struct-contains-itself code=E0583 stage=core-check pair=finite-struct
-struct Copy Node { v: Int, next: Node }
+struct Copy Node { v: i64, next: Node }
 fn main() -> u8 { return 0; }
 ```
 
 ```con reject name=through-instantiation code=E0583 stage=core-check pair=finite-struct
 struct Copy W<T> { v: T }
-struct Copy Node { a: Int, w: W<Node> }
+struct Copy Node { a: i64, w: W<Node> }
 fn main() -> u8 { return 42; }
 ```
 
 ```con accept name=finite-struct exit=42
-struct Copy Node { v: Int, w: Int }
-fn example_value() -> Int { let n: Node = Node { v: 40, w: 2 }; return n.v + n.w; }
+struct Copy Node { v: i64, w: i64 }
+fn example_value() -> i64 { let n: Node = Node { v: 40, w: 2 }; return n.v + n.w; }
 fn main() -> u8 {
     if example_value() == 42 {
         return 42;
@@ -1468,43 +1198,34 @@ fn main() -> u8 {
 <a id="TYPE-17"></a>
 ### TYPE-17. A function type carries its capability set
 
-**TYPE-17@1.** The capability set of a function type `fn(..) with(C) -> R` is part of the type, compared without regard to the order of its capabilities, so a function value keeps its capabilities through every binding, argument, field and combinator.
+**TYPE-17@2.** The capability set of a function type `fn(..) with(C) -> R` is part of the type, compared without regard to the order of its capabilities, so a function value keeps its capabilities through every binding, argument, field and combinator.
 
 - Kind: guarantee
 - Uses: TYPE-D1
 - Codes: none
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.Ty, Concrete.expectTy
 - Semantics: none
 - Obligation: none
 - Evidence: tested
 
-**Rationale.** A callback that silently lost the capabilities of the code it runs would hide an
-effect (TRUST-4's smuggling case, `adversarial_neg_cap_fnptr_smuggle.con`). Since the set is part
-of the type, TYPE-4 refuses a `with(Console)` function where a capability-free function type is
-expected (E0220, its examples `capabilities-not-erased`, `capability-lost-in-argument` and
-`capability-lost-in-field`), and a combinator that calls its callback
-must hold the callback's set, which a capability parameter names: the combinator carries what its
-callback carries, no more and no less. A handle is a struct with capability parameters (TYPE-15)
-whose fields are such function types, so `Sink<{}>` is not a `Sink<Console>` either (TYPE-4).
-Whether a function value converts to a type with a larger set (`fn(Int) -> Int` to
-`fn(Int) with(Console) -> Int`, or `with(File)` to `with(Std)`) is OPEN-93; the current compiler refuses it
-(E0220). A combinator spelling that infers its set from its callbacks (`with(f)`) is OPEN-92.
-The current compiler compares two sets after sorting them and keeps a repeated capability, so
-`fn(Int) with(Console, Console) -> Int` is not a `fn(Int) with(Console) -> Int` (E0220); whether it
-should be is OPEN-108.
+**Rationale.** Authority rule 4 is the canonical current rule (OD93 refers to it): function values
+keep exact capability sets without widening. A combinator declares its callback's set plus its own
+effects; capability arguments come from checked argument types, not result context (OD45), and
+duplicate capabilities are refused (OD108). Ambiguous set inference is
+[undecided: see the target Core proposal](decisions.md#core-capability-inference).
 
 ```con accept name=set-order exit=42
-fn inc(x: Int) with(Console, File) -> Int {
+fn inc(x: i64) with(Fs, Network) -> i64 {
     return x + 1;
 }
 
-fn example_value() with(Console, File) -> Int {
-    let f: fn(Int) with(File, Console) -> Int = inc;
+fn example_value() with(Fs, Network) -> i64 {
+    let f: fn(i64) with(Network, Fs) -> i64 = inc;
     return f(41);
 }
 
-fn main() with(Console, File) -> u8 {
+fn main() with(Fs, Network) -> u8 {
 
     if example_value() == 42 {
 
@@ -1518,23 +1239,23 @@ fn main() with(Console, File) -> u8 {
 ```
 
 ```con accept name=combinator-carries-capabilities exit=42
-fn both<cap C, cap D>(f: fn(Int) with(C) -> Int, g: fn(Int) with(D) -> Int) with(C, D) -> Int {
+fn both<cap C, cap D>(f: fn(i64) with(C) -> i64, g: fn(i64) with(D) -> i64) with(C, D) -> i64 {
     return f(g(40));
 }
 
-fn inc(x: Int) with(Console) -> Int {
+fn inc(x: i64) with(Fs) -> i64 {
     return x + 1;
 }
 
-fn inc2(x: Int) with(File) -> Int {
+fn inc2(x: i64) with(Network) -> i64 {
     return x + 1;
 }
 
-fn example_value() with(Console, File) -> Int {
+fn example_value() with(Fs, Network) -> i64 {
     return both(inc, inc2);
 }
 
-fn main() with(Console, File) -> u8 {
+fn main() with(Fs, Network) -> u8 {
 
     if example_value() == 42 {
 
@@ -1548,23 +1269,23 @@ fn main() with(Console, File) -> u8 {
 ```
 
 ```con accept name=field-keeps-capabilities exit=42
-struct Copy Sink<cap C> { f: fn(Int) with(C) -> Int }
+struct Copy Sink<cap C> { f: fn(i64) with(C) -> i64 }
 
-fn inc(x: Int) with(Console, File) -> Int {
+fn inc(x: i64) with(Fs, Network) -> i64 {
     return x + 1;
 }
 
-fn use_it(s: Sink<File + Console>) with(Console, File) -> Int {
-    let g: fn(Int) with(File, Console) -> Int = s.f;
+fn use_it(s: Sink<Network + Fs>) with(Fs, Network) -> i64 {
+    let g: fn(i64) with(Network, Fs) -> i64 = s.f;
     return g(41);
 }
 
-fn example_value() with(Console, File) -> Int {
-    let s: Sink<Console + File> = Sink { f: inc };
+fn example_value() with(Fs, Network) -> i64 {
+    let s: Sink<Fs + Network> = Sink { f: inc };
     return use_it(s);
 }
 
-fn main() with(Console, File) -> u8 {
+fn main() with(Fs, Network) -> u8 {
 
     if example_value() == 42 {
 
@@ -1580,12 +1301,12 @@ fn main() with(Console, File) -> u8 {
 <a id="TYPE-18"></a>
 ### TYPE-18. Capabilities have no run-time representation
 
-**TYPE-18@1.** A capability set or capability argument has no run-time representation, so types that differ only in their capability sets or capability arguments have the same size and layout.
+**TYPE-18@2.** A capability set or capability argument has no run-time representation, so types that differ only in their capability sets or capability arguments have the same size and layout.
 
 - Kind: guarantee
 - Uses: TYPE-D1
 - Codes: none
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.Layout.tySize, Concrete.Layout.tyAlign, Concrete.Layout.fieldOffset, Concrete.Layout.tyToLLVM
 - Semantics: none
 - Obligation: none
@@ -1598,107 +1319,60 @@ language rule; whether two instantiations that differ only in a function type's 
 distinct specializations with distinct symbols is OPEN-109 (the current compiler makes them one).
 
 ```con accept name=same-layout exit=42
-mod m {
-    #[intrinsic = "sizeof"]
-    pub trusted fn sizeof<T>() -> u64;
-    #[intrinsic = "alignof"]
-    pub trusted fn alignof<T>() -> u64;
 
-    struct Copy Sink<cap C> { f: fn(Int) with(C) -> Int, n: Int }
 
-    pub fn main() -> u8 {
-        let a: u64 = sizeof::<Sink<{}>>();
-        let b: u64 = sizeof::<Sink<Console + File>>();
-        let c: u64 = sizeof::<fn(Int) -> Int>();
-        let d: u64 = sizeof::<fn(Int) with(Console) -> Int>();
-        let e: u64 = alignof::<Sink<{}>>();
-        let f: u64 = alignof::<Sink<Console + File>>();
-        if a == b && c == d && e == f {
-            return 42;
-        }
-        return 1;
+
+struct Copy Sink<cap C> { f: fn(i64) with(C) -> i64, n: i64 }
+
+pub fn main() -> u8 {
+    let a: u64 = sizeof::<Sink<{}>>();
+    let b: u64 = sizeof::<Sink<Fs + Network>>();
+    let c: u64 = sizeof::<fn(i64) -> i64>();
+    let d: u64 = sizeof::<fn(i64) with(Fs) -> i64>();
+    let e: u64 = alignof::<Sink<{}>>();
+    let f: u64 = alignof::<Sink<Fs + Network>>();
+    if a == b && c == d && e == f {
+        return 42;
     }
+    return 1;
 }
 ```
 
-```con accept name=same-field-offsets exit=42 interp-exempt=byte-reads-not-modelled
-mod m {
-    #[intrinsic = "sizeof"]
-    pub trusted fn sizeof<T>() -> u64;
 
-    struct Copy Sink<cap C> { f: fn(Int) with(C) -> Int, n: u8 }
-
-    fn inc(x: Int) with(Console) -> Int {
-        return x + 1;
-    }
-
-    fn dec(x: Int) -> Int {
-        return x - 1;
-    }
-
-    trusted fn byte_at<T>(s: &T, i: u64) -> u8 {
-        let p: *const u8 = s as *const T as *const u8;
-        let q: *const u8 = p + (i as Int);
-        return *q;
-    }
-
-    fn example_value() -> Int {
-        let a: Sink<{}> = Sink { f: dec, n: 40 };
-        let b: Sink<Console> = Sink { f: inc, n: 2 };
-        let at: u64 = sizeof::<fn(Int) -> Int>();
-        return (byte_at(&a, at) as Int) + (byte_at(&b, at) as Int);
-    }
-
-    pub fn main() -> u8 {
-
-        if example_value() == 42 {
-
-            return 42;
-
-        }
-
-        return 1;
-
-    }
-}
-```
 
 <a id="TYPE-19"></a>
 ### TYPE-19. The primitive numeric types
 
-**TYPE-19@1.** The integer types are the signed `i8`, `i16`, `i32` and `i64` and the unsigned `u8`, `u16`, `u32` and `u64`, each as many bits wide as its name says, the float types are `f32` and `f64`, and `Int`, `Uint` and `Float64` are other spellings of `i64`, `u64` and `f64`.
+**TYPE-19@2.** The integer types are the signed `i8`, `i16`, `i32` and `i64` and unsigned `u8`, `u16`, `u32` and `u64`, each as many bits wide as its name says, the float types are `f32` and `f64`, and builtin types have only their canonical spellings, with `Int`, `Uint`, `Float64`, `Float32`, `Bool` and `Char` refused.
 
 - Kind: guarantee
 - Uses: none
 - Codes: none
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.parseType, Concrete.tyFromName, Concrete.IntArith.intBitWidth
 - Semantics: none
 - Obligation: one `IntArith` authority for widths and signedness (R-0493)
 - Evidence: tested
 
-**Rationale.** A type written `Int` and one written `i64` are the same type, so either may flow into
-a position that expects the other without a conversion (TYPE-4). The parser maps each spelling to
-one type. Whether `Float32` is a spelling of `f32` is OPEN-102: the parser does not map it (nor
-`Char`), so in the current compiler `Float32` in a type position is a different type from `f32`.
+**Rationale.** The alias decision and OD102 give each primitive exactly one spelling; source examples use canonical names.
 
 ```con accept name=two-spellings exit=42
-fn wide(x: Uint) -> u64 {
+fn wide(x: u64) -> u64 {
     return x;
 }
 
-fn half(x: Float64) -> f64 {
+fn half(x: f64) -> f64 {
     return x / 2.0;
 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     let a: i64 = 40;
-    let b: Int = a;
+    let b: i64 = a;
     let c: u64 = 1;
-    let d: Uint = wide(c);
+    let d: u64 = wide(c);
     let e: f64 = half(3.0);
     if e > 1.0 {
-        return b + (d as Int) + 1;
+        return b + (d as i64) + 1;
     }
     return 0;
 }
@@ -1743,7 +1417,7 @@ fn main() -> u8 {
 - Kind: guarantee
 - Uses: none
 - Codes: none
-- Status: enforced
+- Status: partial R-0555
 - Enforced by: Concrete.Layout.tySize, Concrete.ccCheckExpr, Concrete.lowerExpr, Concrete.Interp.evalCast
 - Semantics: none
 - Obligation: none
@@ -1755,37 +1429,35 @@ integer of at least 8 unsigned or 16 signed bits. A Unicode-scalar `char` would 
 proposal with its own conversions.
 
 ```con accept name=char-is-a-byte exit=42
-mod m {
-    #[intrinsic = "sizeof"]
-    pub trusted fn sizeof<T>() -> u64;
 
-    fn example_value() -> Int {
-        let b: u8 = 255;
-        let c: char = b as char;
-        let d: u8 = c as u8;
-        return (sizeof::<char>() as Int) + (d as Int) - 214;
-    }
 
-    pub fn main() -> u8 {
+fn example_value() -> i64 {
+    let b: u8 = 255;
+    let c: char = b as char;
+    let d: u8 = c as u8;
+    if sizeof::<char>() == 1 { return (d as i64) - 213; }
+    return 0;
+}
 
-        if example_value() == 42 {
+pub fn main() -> u8 {
 
-            return 42;
+    if example_value() == 42 {
 
-        }
-
-        return 1;
+        return 42;
 
     }
+
+    return 1;
+
 }
 ```
 
-```con accept name=every-byte-round-trips exit=42
-fn example_value() -> Int {
-    let mut i: Int = 0;
-    let mut same: Int = 0;
+```con accept name=every-byte-round-trips-decided exit=42 pending=R-0555 now=reject:E0101:resolve
+fn example_value() -> i64 {
+    let mut i: i64 = 0;
+    let mut same: i64 = 0;
     while i < 256 {
-        let b: u8 = i as u8;
+        let b: u8 = truncate::<u8>(i);
         let c: char = b as char;
         if (c as u8) == b {
             same = same + 1;
@@ -1805,70 +1477,31 @@ fn main() -> u8 {
 <a id="TYPE-21"></a>
 ### TYPE-21. A newtype has its inner type's representation
 
-**TYPE-21@1.** A newtype has the size, alignment and representation of its inner type.
+**TYPE-21@2.** Newtype declarations are refused; a named struct is the product type and has the layout specified by FFI-7 and FFI-8.
 
-- Kind: guarantee
+- Kind: refusal
 - Uses: none
-- Codes: none
-- Status: enforced
+- Codes: new (parse)
+- Status: pending R-0555
 - Enforced by: Concrete.Layout.tySize, Concrete.Layout.tyAlign, Concrete.Layout.resolveNewtype, Concrete.Layout.tyToLLVM
 - Semantics: none
 - Obligation: layout comes from the one `Layout` authority (FFI-2, R-0502)
 - Evidence: tested
 
-**Rationale.** A newtype is a distinct type with no implicit conversion to its inner type (TYPE-4),
-and that distinction costs nothing at run time: wrapping (`N(v)`) and unwrapping (`n.0`) move no
-bits, and a struct field of the newtype is laid out as a field of the inner type. Whether newtypes
-stay in the language is OPEN-54.
+**Rationale.** OD54 removes newtypes; nominal wrappers use named structs and explicit field destructuring.
 
-```con accept name=newtype-is-erased exit=42
-mod m {
-    #[intrinsic = "sizeof"]
-    pub trusted fn sizeof<T>() -> u64;
-    #[intrinsic = "alignof"]
-    pub trusted fn alignof<T>() -> u64;
 
-    newtype Meters = Int;
-    newtype Small = u8;
-    struct Copy W { a: u8, m: Meters }
-    struct Copy V { a: u8, m: Int }
 
-    pub fn main() -> u8 {
-        if sizeof::<Meters>() == sizeof::<Int>() && alignof::<Small>() == alignof::<u8>()
-            && sizeof::<W>() == sizeof::<V>() {
-            return 42;
-        }
-        return 0;
-    }
-}
+
+
+```con reject name=newtype-removed code=new stage=parse pair=struct-wrapper pending=R-0555 now=accept:42
+newtype N = u8;
+fn main() -> u8 { return 42; }
 ```
 
-```con accept name=wrap-and-unwrap exit=42
-newtype Meters = Int;
-
-struct Copy W { a: u8, m: Meters }
-
-fn grow(m: Meters) -> Meters {
-    return Meters(m.0 + 1);
-}
-
-fn example_value() -> Int {
-    let w: W = W { a: 1, m: Meters(40) };
-    let m: Meters = grow(w.m);
-    return m.0 + (w.a as Int);
-}
-
-fn main() -> u8 {
-
-    if example_value() == 42 {
-
-        return 42;
-
-    }
-
-    return 1;
-
-}
+```con accept name=struct-wrapper exit=42
+struct N { v: u8 }
+fn main() -> u8 { let n: N = N { v: 42 }; let N { v } = n; return v; }
 ```
 
 <a id="TYPE-22"></a>
@@ -1901,9 +1534,9 @@ fn main() -> u8 {
 ```con abort name=constant-traps-at-use trap=overflow
 const BIG: i32 = 2147483647 + 1;
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     let x: i32 = BIG;
-    return x as Int;
+    return x as i64;
 }
 
 fn main() -> u8 {
@@ -1940,11 +1573,11 @@ OPEN-43: the current compiler withholds the builtin `Result` from a module that 
 never withholds `Option`. Their layout is that of any enum (FFI-7).
 
 ```con accept name=option-and-result exit=42
-fn example_value() -> Int {
-    let o: Option<Int> = Option::<Int>::Some { value: 40 };
-    let r: Result<Int, Int> = Result::<Int, Int>::Err { error: 2 };
-    let a: Int = match o { Option::Some { value } => value, Option::None => 0 };
-    let b: Int = match r { Result::Ok { value } => value, Result::Err { error } => error };
+fn example_value() -> i64 {
+    let o: Option<i64> = Option::<i64>::Some { value: 40 };
+    let r: Result<i64, i64> = Result::<i64, i64>::Err { error: 2 };
+    let a: i64 = match o { Option::Some { value } => value, Option::None => 0 };
+    let b: i64 = match r { Result::Ok { value } => value, Result::Err { error } => error };
     return a + b;
 }
 fn main() -> u8 {
@@ -1958,187 +1591,56 @@ fn main() -> u8 {
 <a id="TYPE-24"></a>
 ### TYPE-24. The conversions of a newtype
 
-**TYPE-24@1.** A newtype `N` over `T` converts to `T` by `n.0` or `n as T` and a `T` converts to `N` by `N(v)` or `v as N`, TYPE-11 saying in which modules `N(v)` and `n.0` may be written, with `N`'s type arguments substituted into `T`, and `as` converts a newtype to or from no other type.
+**TYPE-24@2.** Newtype constructors, newtype `.0` projections, newtype `as` conversions and the builtin `unwrap` are refused; destructuring uses `match` or an irrefutable pattern.
 
-- Kind: guarantee
+- Kind: refusal
 - Uses: none
-- Codes: none
-- Status: enforced
+- Codes: new (parse)
+- Status: pending R-0555
 - Enforced by: Concrete.ccCheckExpr
 - Semantics: none
 - Obligation: none
 - Evidence: tested
 
-**Rationale.** Each conversion moves no bits (TYPE-21). A cast between a newtype and any type other
-than its own inner type, one wrapping step at a time, is refused with ARITH-5's E0553, so `as` cannot
-turn a validated wrapper into an unrelated type or build one from one (bug fixed 2026-04-25,
-`error_newtype_cast_to_unrelated.con`). Outside the declaring module, `N(v)` is refused (TYPE-11),
-while `n.0` and `unwrap(n)` are refused only once R-0500 lands; whether `v as N` and `n as T` are
-refused there too is OPEN-123, and the current compiler accepts both. Whether newtypes stay is OPEN-54. The current compiler also
-has an intrinsic `unwrap(n)`: Check gives it type `T`, but Core keeps it typed `N`, so `unwrap(k) as
-Int` is refused (E0553) and `j.0 + unwrap(k)` stops natively at the SSA verifier (E0715), a defect
-found while absorbing [VALIDATED_WRAPPERS.md](../stdlib/VALIDATED_WRAPPERS.md), which calls it a
-fallback and prefers `.0`; this entry states `.0` only.
+**Rationale.** OD54, OD123 and OD155 remove the feature and its associated conversions rather than retaining representation-changing aliases.
 
-```con accept name=newtype-conversions exit=42
-newtype Id = u8;
 
-fn example_value() -> Int {
-    let b: u8 = 40;
-    let i: Id = b as Id;
-    let j: Id = Id(1);
-    let a: u8 = i as u8;
-    return (a + j.0 + 1) as Int;
-}
 
-fn main() -> u8 {
+```con reject name=unwrap-removed code=new stage=parse pair=match-wrapper pending=R-0555 now=accept:42
+newtype N = u8;
+fn main() -> u8 { let n: N = N(42); return unwrap(n); }
+```
 
-    if example_value() == 42 {
-
-        return 42;
-
-    }
-
-    return 1;
-
-}
+```con accept name=match-wrapper exit=42
+struct N { v: u8 }
+fn main() -> u8 { let n: N = N { v: 42 }; let N { v } = n; return v; }
 ```
 
 ## Builtin functions
 
-This section is explanatory and states no rule. It lists the builtin functions of the current
-compiler with the signatures Check gives them, the capability the current compiler checks for each
-and the entries that govern it. The entries state the requirements; that the current compiler
-accepts a call does not show that the call meets them. The sources are `builtinFnSigs` (Concrete/Resolve/BuiltinSigs.lean), `resolveIntrinsic`,
-`IntrinsicId.capability`, `reservedFnNames`, `extraBuiltinFnNames` and `builtinTypeNames`
-(Concrete/Resolve/Intrinsic.lean), and the special cases in `checkExprCore` (Concrete/Check/Check.lean).
-Where a signature is not written as a table there, it was read from Check. The column "observed"
-reports selected probes run on 2026-10-31 at f17645a13 (some again at 904c7cc87, as marked); an
-empty cell means no probe is recorded here, and a probe of one call does not establish how every
-call of that builtin behaves on both consumers. "Result 42" means the probe's `main` returned 42 as
-a `u8`: the native binary exited with status 42 and `--interp` printed `42` (how each consumer
-reports a `main` result is under "Program execution" in [statements.md](statements.md)). An entry,
-not this table, is the rule: TYPE-10 governs the argument counts and types, TRUST-4 governs the
-capabilities (E0520 when a caller lacks one), and the column "entries" names the rest.
+This catalog describes decided requirements, not the frozen compiler's builtin table. TYPE-10
+checks signatures, TRUST-4 checks permissions, and FFI-6 fixes primitive effects by identity.
 
-Types other than Unit are written in their source spelling: `Int` is `i64` and `Uint` is `u64`
-(TYPE-19). The tables write `bool` and `f64`; `builtinTypeNames` (last table) also lists `Bool`,
-`Float64`, `Float32` and `Char`, and `Float32` and `Char` as spellings are OPEN-102. "Unit" is this catalog's descriptive name for the result of a call that gives no value;
-the probes used functions with no declared result type, and how the type is written in source is
-OPEN-157. "Diverging" marks a result that Check gives no ordinary value; TYPE-4 is the entry for
-where an expression's value may appear, and the `abort` row records what the native backend does
-with one today. "Consumes" marks an argument passed by value; OWN-15 and the Copy rules (OWN-D1)
-govern what that does to the caller's binding.
-
-**Memory and values.**
-
-| builtin | parameters | result | capability checked today | entries | observed |
-|---|---|---|---|---|---|
-| `alloc` | `(v: T)`, consumes `v` | `Heap<T>` | `Alloc` | MEM-5, MEM-7 | result 42 on both consumers; without `Alloc`, E0520 at core-check |
-| `free` | `(h: Heap<T>)`, consumes `h` | `T` | `Alloc` | MEM-5, MEM-7, TYPE-10 (E0274 for a non-`Heap`) | result 42 on both consumers |
-| `destroy` | `(x: N)`, `N` a struct or enum with a `Destroy` impl, consumes `x` | Unit | none of its own; the impl's method declares its own | OWN-13 (E0272 for a type that is not named, E0273 without an impl), TRAIT-11 | `destroy(5)` is E0272 |
-| `discard` | `(e: T)`, `T` Copy | Unit | none | OWN-5 (E0295 for a non-Copy value), OWN-7 | `discard(s)` with `s: String` is E0295 |
-| `read_owned` | `(p: *mut T)` or `(p: *const T)`; one spelling, no alias | `T` | `Unsafe`, which a `trusted fn` absorbs (TRUST-5) | TRUST-7, TRUST-4 (E0240 at check in a function that is neither) | result 42 in a `trusted fn`, for each pointer kind |
-| `sizeof::<T>()` | none, exactly one type argument; alias `_sizeof` | `Uint` | none | FFI-7, TYPE-20, TYPE-10 (E0268, E0269) | `sizeof::<Int>()` is 8, `_sizeof::<Int>()` too |
-| `alignof::<T>()` | none, exactly one type argument | `Uint` | none | FFI-7, TYPE-10 | `alignof::<i32>()` is 4 |
-| `unwrap` | `(n: N)`, `N` a newtype | `N`'s inner type | none | TYPE-10 (E0270 for an argument that is not a newtype); TYPE-24 is the newtype-conversion entry, and how the current compiler's `unwrap` relates to it is OPEN-155 | `return unwrap(m);` gives result 42 on both consumers; `let x: Int = unwrap(m); if x == 42 ...` runs under `--interp` (42) and fails the native build at SSA verification (E0715, bug 345) |
-| `abort` | none | diverging | `Process` | STMT-13, STMT-2 | `abort();` as a statement: the native process is ended by SIGABRT (status 134 on Linux x86-64), and `--interp` stops with `interp: undefined function 'abort'` (bug 344; at 904c7cc87); `let y: Int = abort();` fails the native build in LLVM (`value doesn't match function result type`), while `abort();` as a statement compiles (bug 346) |
-
-**`Vec`.** The current compiler also accepts each under the alias spelled `Vec_` with a capital
-(`Vec_new`, `Vec_push`, ...); the probes of those aliases checked that each is accepted, not how it
-runs.
-
-| builtin | parameters | result | capability checked today | entries | observed |
-|---|---|---|---|---|---|
-| `vec_new::<T>()` | none, exactly one type argument | `Vec<T>` | `Alloc` | MEM-7, TYPE-10 (E0268, E0269) | result 42 on both consumers |
-| `vec_push` | `(v: &mut Vec<T>, x: T)`, consumes `x` | Unit | `Alloc` | MEM-7, TYPE-10 (E0270) | without `Alloc`, E0520 at core-check |
-| `vec_get` | `(v: &Vec<T>` or `&mut Vec<T>, i: Int)`, `T` Copy | `T` | none | OWN-8 (E0290 for a non-Copy `T`), TYPE-10 | with a `String` element, E0290 |
-| `vec_set` | `(v: &mut Vec<T>, i: Int, x: T)`, `T` Copy | Unit | none | OWN-9 (E0291 for a non-Copy `T`), TYPE-10 | result 42 on both consumers, called from a function with no `with(...)` set (at 904c7cc87) |
-| `vec_len` | `(v: &Vec<T>` or `&mut Vec<T>)` | `Int` | none | TYPE-10 | result 42 on both consumers, called from a function with no `with(...)` set (at 904c7cc87) |
-| `vec_pop` | `(v: &mut Vec<T>)` | `Option<T>` | `Alloc` | MEM-7, TYPE-23 | result 42 on both consumers |
-| `vec_free` | `(v: Vec<T>)`, consumes `v` | Unit | `Alloc` | MEM-7, OWN-5 (E0287 for a non-Copy `T`), OPEN-113 | `Vec<String>` is E0287 outside a `trusted fn`; in a `trusted fn`, `vec_free` of an empty `Vec<String>` gives result 42 (at 904c7cc87); which ownership exceptions trusted code has is OPEN-113 |
-
-**Strings, conversions, output, time and arguments.** The capability column states what the
-current compiler checks; whether the allocating string builtins require `Alloc` is OPEN-154, and a
-"none" there decides nothing. These have a table signature in
-`builtinFnSigs`, so Check looks them up by their canonical name only. `resolveIntrinsic` also maps
-the aliases `string_len`, `String_len`, `String_concat`, `String_eq`, `String_slice`,
-`String_char_at`, `String_contains`, `String_trim`, `String_drop` and `String_substr` to these
-builtins, and the current compiler refuses each of those spellings with E0263 at check (MOD-1);
-every one was probed. `string_reserve` is checked by a special case before the table, and its alias
-`String_reserve` is accepted: on `"ab"` with `Alloc`, `String_reserve(&mut s, 10)` leaves length 2
-(result 42 on both consumers, at 904c7cc87).
-
-| builtin | parameters | result | capability checked today | entries | observed |
-|---|---|---|---|---|---|
-| `string_length` | `(s: &String)` | `Int` | none | TYPE-10 | result 42 on both consumers |
-| `string_concat` | `(a: String, b: String)`, consumes both | `String` | none | TYPE-10 | result 42 on both consumers, called from a function with no `with(...)` set (at 904c7cc87) |
-| `drop_string` | `(s: String)`, consumes `s` | Unit | none | TYPE-10 | |
-| `string_slice` | `(s: &String, start: Int, end_: Int)` | `String` | none | TYPE-10 | |
-| `string_substr` | `(s: &String, start: Int, len: Int)` | `String` | none | TYPE-10 | |
-| `string_char_at` | `(s: &String, index: Int)` | `Int` | none | TYPE-10 | `string_char_at(&"hello world", 0)` is 104 |
-| `string_contains` | `(haystack: &String, needle: &String)` | `bool` | none | TYPE-10 | |
-| `string_eq` | `(a: &String, b: &String)` | `bool` | none | TYPE-10 | |
-| `string_trim` | `(s: &String)` | `String` | none | TYPE-10 | |
-| `int_to_string` | `(n: Int)` | `String` | none | TYPE-10 | |
-| `string_to_int` | `(s: &String)` | `Result<Int, Int>` | none | TYPE-10, TYPE-23 | `"12"` gives `Ok` 12 |
-| `bool_to_string` | `(b: bool)` | `String` | none | TYPE-10 | |
-| `float_to_string` | `(f: f64)` | `String` | none | TYPE-10 | native status 42; `--interp` stops with `interp: undefined function 'float_to_string'` (bug 348) |
-| `string_reserve` | `(s: &mut String, cap: Int)`; alias `String_reserve` | Unit | `Alloc` | MEM-7 | without `Alloc`, E0520 at core-check |
-| `print_string` | `(s: &String)` | Unit | `Console` | TRUST-4 | |
-| `print_int` | `(n: Int)` | Unit | `Console` | TRUST-4 | without `Console`, E0520 at core-check |
-| `print_char` | `(c: Int)` | Unit | `Console` | TRUST-4 | `print_char(10)` writes a newline |
-| `print_bool` | `(b: bool)` | Unit | `Console` | TRUST-4 | |
-| `clock_monotonic_ns` | none | `Int` | `Time` | TRUST-4 | native status 42; `--interp` stops with `interp: clock_monotonic_ns reads the system clock, a value the interpreter cannot know; run the compiled binary` (at 904c7cc87) |
-| `get_args` | none | `HeapArray<String>` | `Process` in the current compiler; no entry names it, and the capability is OPEN-156 | TRUST-4, OPEN-156 | with `Env` only, E0520; with `Process`, a function that returns `get_args()` passes core-check and the native build then fails in LLVM (`use of undefined value '@get_args'`), even when nothing calls it (bug 347); no run is recorded on either consumer |
-
-Four string operations are checked by special cases and are not in the table. The current compiler
-also accepts each under the alias spelled `String_` (`String_push_char`, ...); the probes of those
-aliases checked that each is accepted.
-
-| builtin | parameters | result | capability checked today | entries | observed |
-|---|---|---|---|---|---|
-| `string_push_char` | `(s: &mut String, c: Int)` | Unit | none | TYPE-10 (E0270); OPEN-154 | on `"ab"`, `String_push_char(&mut s, 99)` then `string_push_char(&mut s, 100)` leave length 4 (result 42 on both consumers, at 904c7cc87) |
-| `string_append` | `(s: &mut String, other: &String)` | Unit | none | TYPE-10 (E0270); OPEN-154 | |
-| `string_append_int` | `(s: &mut String, n: Int)` | Unit | none | TYPE-10 (E0270); OPEN-154 | reached through `append` (below) |
-| `string_append_bool` | `(s: &mut String, b: bool)` | Unit | none | TYPE-10 (E0270); OPEN-154 | |
-
-**Variadic output.** TYPE-10's rationale lists the accepted argument types; Elab expands a call in
-statement position into the calls named here, bound by identity (MOD-8). Whether a program may
-declare its own function of these names is OPEN-133.
-
-| builtin | parameters | result | capability checked today | expands into | entries |
-|---|---|---|---|---|---|
-| `print` | one or more values; a `String` local is read, not moved | Unit | `Console` | `print_string`, `print_int`, `print_char`, `print_bool` | TYPE-10 (E0315, E0421), MOD-8 |
-| `println` | as `print` | Unit | `Console` | as `print`, then `print_char(10)` | TYPE-10 (E0315, E0421), MOD-8 |
-| `append` | `(buf: &mut String, ...)`, one or more values after `buf`; an owned `String` value is moved | Unit | none checked today (bug 349); `IntrinsicId.capability` records `Alloc` | `string_append`, `string_append_int`, `string_append_bool`, `string_push_char` | TYPE-10 (E0270, E0315, E0421), MOD-8, MEM-7; accepted without `Alloc` today (bug 349); whether the string builtins it expands into need `Alloc` is OPEN-154 |
-
-Observed at f17645a13, and again at 904c7cc87: `append(&mut s, 1)` in a function with no
-`with(...)` set compiles and runs (result 42 on both consumers). The column "expands into" lists the intrinsics an
-`append` call can become; this paragraph records no probe of which one that call becomes or of its
-capability check. MEM-7 lists `append`
-among the builtins that require `Alloc`, so this acceptance is bug 349; whether the string builtins
-`append` expands into require `Alloc` is OPEN-154.
-
-**Arithmetic.**
-
-| builtin | parameters | result | capability checked today | entries |
-|---|---|---|---|---|
-| `wrapping_add`, `wrapping_sub`, `wrapping_mul` | `(a: I, b: I)`, one integer type `I` | `I` | none | ARITH-4, TYPE-10 (E0268, E0314) |
-| `saturating_add`, `saturating_sub`, `saturating_mul` | `(a: I, b: I)`, one integer type `I` | `I` | none | ARITH-4, TYPE-10 (E0268, E0314) |
-
-Probes at f17645a13 gave `wrapping_add(250, 10)` at `u8` as 4, `wrapping_sub(0, 1)` at `i32` as -1,
-`saturating_mul(300, 300)` at `u16` as 65535 and `wrapping_mul(2, 21)` at `Int` as 42, on both
-consumers.
-
-**Other names the compiler knows.**
-
-| name | what the current compiler does | entries |
+| operation | decided contract | governing rules |
 |---|---|---|
-| `alloc_array`, `free_array`, `realloc_array` | in `reservedFnNames` with the five builtins `destroy`, `discard`, `abort`, `alloc` and `free`; a definition is E0578, a call is E0101 at resolve | MOD-3, MOD-1 |
-| `to_string`, `deref`, `deref_mut`, `add` | in `extraBuiltinFnNames`, so resolution accepts a call; Check then refuses it with E0263 | MOD-1 |
-| a builtin name not reserved, such as `string_length` | for `string_length`, the current compiler accepts a program function of that name and the program's calls reach it (result 42 on both consumers); no other name was probed. Whether a program may do this is OPEN-133 for `print`, `println` and `append` and OPEN-153 for the others | MOD-3, OPEN-133, OPEN-153 |
-| `Int`, `Uint`, `Bool`, `String`, `Float64`, `Float32`, `Char`, `i8`, `i16`, `i32`, `u8`, `u16`, `u32`, `Heap`, `HeapArray`, `Vec`, `Option`, `Result` | `builtinTypeNames`: in scope in every module without an import | TYPE-19, TYPE-20, TYPE-23, OPEN-43, OPEN-102 |
+| `alloc` | allocator plus input and `with(Alloc)`, returning `Result<Heap<T, A>, AllocFailure<T>>` without losing the input on failure | MEM-5, MEM-7 |
+| `*h` | consumes `Heap<T, A>`, returns its payload and releases storage using recorded release information | MEM-5 |
+| `destroy` | explicit consuming cleanup returning Unit, requiring at most Alloc; never implicit | OWN-13, TRAIT-11 |
+| `discard` | eligible Copy values only, never Result or Option | OWN-5, OWN-7 |
+| `free`, `unwrap` | refused | OD59, OD155, TYPE-10, TYPE-24 |
+| `sizeof`, `alignof` | size and alignment in bytes as `u64` | FFI-7 |
+| `read_owned` | explicit raw ownership transfer with trusted premises | TRUST-7 |
+| `abort` | terminal trap with no permission or resource requirement | STMT-13 |
+| allocating strings and containers | allocator value plus Alloc, conserving fallible result; `Vec<T, A>` and `String<A>` retain allocator identity | MEM-7 |
+| filesystem operations | Directory/File resource plus Fs; lookup stays inside the directory and crosses no mount | authority and filesystem decisions |
+| network operations | destination/endpoint/resolver grant or socket plus Network; DNS grants no connection | authority and filesystem decisions |
+| `get_args` | Environment plus Env and an allocator plus Alloc when allocating | revised OD156 |
+| clock operations | Clock grant plus Time | authority decision |
+
+Complete operation contracts, failure payloads and container Destroy applicability are
+[undecided: see the target Core proposal](decisions.md#core-allocation-contracts). Static-text
+literal typing and conversion are [undecided: see the target Core proposal](decisions.md#core-static-text).
+Target service schemas are [undecided: see the target Core proposal](decisions.md#core-grants).
 
 ## Absent by decision
 
@@ -2207,3 +1709,19 @@ or why they changed, so that each rationale explains the current version only. T
 - TYPE-6@1 admitted raw-pointer comparison and `p + k` in trusted or `Unsafe` code (bugs 134 and 140). TYPE-6@2 records OD26 (2026-10-29), which removes both, pointer arithmetic becoming `ptr::offset` (TRUST-1).
 - TYPE-9@2 states the type-argument count that E0322 already enforced (bug 221: an extra type argument was dropped silently).
 - TYPE-14@1 (pending, never enforced) required a `T: Copy` bound instead and was retired by the option (a) decision (TIGHTENING_DECISIONS D6, 2026-10-23).
+
+- TYPE-D1@2 (2026-11-03) brings the chapter into line with the recorded owner decisions; TYPE-D1@1 is superseded by version.
+- TYPE-5@3 (2026-11-03) brings the chapter into line with the recorded owner decisions; TYPE-5@2 is superseded by version.
+- TYPE-6@3 (2026-11-03) brings the chapter into line with the recorded owner decisions; TYPE-6@2 is superseded by version.
+- TYPE-7@2 (2026-11-03) brings the chapter into line with the recorded owner decisions; TYPE-7@1 is superseded by version.
+- TYPE-10@2 (2026-11-03) brings the chapter into line with the recorded owner decisions; TYPE-10@1 is superseded by version.
+- TYPE-11@2 (2026-11-03) brings the chapter into line with the recorded owner decisions; TYPE-11@1 is superseded by version.
+- TYPE-13@3 (2026-11-03) brings the chapter into line with the recorded owner decisions; TYPE-13@2 is superseded by version.
+- TYPE-14@3 (2026-11-03) brings the chapter into line with the recorded owner decisions; TYPE-14@2 is superseded by version.
+- TYPE-17@2 (2026-11-03) brings the chapter into line with the recorded owner decisions; TYPE-17@1 is superseded by version.
+- TYPE-18@2 (2026-11-03) brings the chapter into line with the recorded owner decisions; TYPE-18@1 is superseded by version.
+- TYPE-19@2 (2026-11-03) brings the chapter into line with the recorded owner decisions; TYPE-19@1 is superseded by version.
+- TYPE-21@2 (2026-11-03) brings the chapter into line with the recorded owner decisions; TYPE-21@1 is superseded by version.
+- TYPE-24@2 (2026-11-03) brings the chapter into line with the recorded owner decisions; TYPE-24@1 is superseded by version.
+
+- TYPE-3@2 (2026-11-03) supersedes TYPE-3@1; pending legacy conformance is explicit.

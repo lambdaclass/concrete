@@ -13,7 +13,7 @@ coverage: reproducer tests/regressions/bug332_a_float_literal_of_type_f32_is_rou
 class: 13
 silent: yes
 exit: 0b
-ruling: Violates: ARITH-7@1
+ruling: Violates: ARITH-7@2
 -->
 
 ## Reproducer

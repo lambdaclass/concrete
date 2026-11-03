@@ -53,47 +53,40 @@ raw pointer or inside a callback's type.
 `fn(&T) -> U` value stores no reference, so a struct may hold a callback that takes a
 reference. A named struct or enum can hold a reference only through its type arguments,
 because REF-3 forbids reference fields. For a binding, the outer reference is looked through
-(`tyHoldsRefInAggregate`): `& &T` and `&[Int; 2]` hold no reference in an aggregate.
+(`tyHoldsRefInAggregate`): `& &T` and `&[i64; 2]` hold no reference in an aggregate.
 
 <a id="REF-D3"></a>
 ### REF-D3. Borrow block
 
-**REF-D3@1.** A borrow block `borrow x as r in R { B }` binds `r` to a reference of type `&T` (with `borrow mut`, `&mut T`) to the local binding `x: T` for the block `B`, `x` is frozen (MEM-D1) while `B` runs, so that every access to `x` in `B` conflicts with `r` (REF-8), and when `B` ends, `r` and the locals of `B` go out of scope and `x` returns to the state it had before the block.
+**REF-D3@2.** A borrow block `borrow x as r { B }` binds `r` to a reference of type `&T` (with `borrow mut`, `&mut T`) to the local binding `x: T` for the block `B`, `x` is frozen (MEM-D1) while `B` runs, so that every access to `x` in `B` conflicts with `r` (REF-8), and when `B` ends, `r` and the locals of `B` go out of scope and `x` returns to the state it had before the block.
 
 - Kind: definition
 - Uses: MEM-D1
 - Codes: none
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.checkStmt
 - Semantics: none
 - Obligation: none
 - Evidence: by-users
 
-**Rationale.** A borrow block is the one form that holds a reference across statements: Concrete
-scopes borrows by explicit blocks rather than inferring lifetimes, so the reference lives exactly as
-long as `B`. The freeze covers reads as well as writes, moves and other borrows, under a shared
-borrow too: the owner decided on 2026-10-29 that whole-owner freezing under a shared borrow stays
-(OD15, gap G10), so `borrow x as r in R { out = x; }` is E0203 (REF-8). `B`'s own locals must be
-consumed inside it (OWN-2); `r` itself need not be (REF-10). `R`, the region name, is a binder that
-SCOPE-1 covers and has no other use; whether it stays is OPEN-57, and whether borrow blocks stay is
-OPEN-58. The block stated here is the current compiler's block.
+**Rationale.** OD58 retains borrow blocks and OD57 removes the named `in R` region annotation; references retain the source root and block lifetime. Heap opening follows MEM-4. The exact heap-array view is [undecided: see the target Core proposal](decisions.md#core-heap-array-view).
 
-```con accept name=owner-restored exit=42
-struct R { v: Int }
+```con accept name=owner-restored-decided exit=42 pending=R-0555 now=reject:E0001:parse
+struct R { v: i64 }
 
-fn take(r: R) -> Int {
+fn take(r: R) -> i64 {
     let R { v } = r;
     return v;
 }
 
-fn peek(r: &R) -> Int {
+fn peek(r: &R) -> i64 {
     return r.v;
 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     let r: R = R { v: 42 };
-    let mut seen: Int = 0;
-    borrow r as rr in Reg {
+    let mut seen: i64 = 0;
+    borrow r as rr {
         seen = peek(rr);
     }
     return take(r) + seen * 0;
@@ -139,23 +132,23 @@ monomorphization by the same judgment (gap G2).
 Decided by the owner on 2026-10-29 (OD1): references are second-class, never returned (this entry) or stored (REF-3).
 
 ```con reject name=return-param code=E0236 stage=check pair=return-value
-fn id(x: &Int) -> &Int {
+fn id(x: &i64) -> &i64 {
     return x;
 }
 
 fn main() -> u8 {
-    let v: Int = 42;
+    let v: i64 = 42;
     return 0;
 }
 ```
 
 ```con accept name=return-value exit=42
-fn get(x: &Int) -> Int {
+fn get(x: &i64) -> i64 {
     return *x;
 }
 
-fn example_value() -> Int {
-    let v: Int = 42;
+fn example_value() -> i64 {
+    let v: i64 = 42;
     return get(&v);
 }
 
@@ -174,7 +167,7 @@ fn main() -> u8 {
 
 ```con reject name=trait-declaration code=E0236 stage=check pair=return-value
 trait Get {
-    fn get(&self) -> &Int;
+    fn get(&self) -> &i64;
 }
 
 fn main() -> u8 {
@@ -219,7 +212,7 @@ safe code, because every function that could inhabit it is refused by REF-1.
 Decided by the owner on 2026-10-29 (OD14): function types that return a reference are refused everywhere, and one structural well-formedness judgment runs before specialization (R-0499).
 
 ```con reject name=param-fn-type code=E0236 stage=check pair=callback-takes-ref
-fn apply(x: &Int, f: fn(&Int) -> &Int) -> Int {
+fn apply(x: &i64, f: fn(&i64) -> &i64) -> i64 {
     return 0;
 }
 
@@ -229,16 +222,16 @@ fn main() -> u8 {
 ```
 
 ```con accept name=callback-takes-ref exit=42
-fn apply(x: &Int, f: fn(&Int) -> Int) -> Int {
+fn apply(x: &i64, f: fn(&i64) -> i64) -> i64 {
     return f(x);
 }
 
-fn read(r: &Int) -> Int {
+fn read(r: &i64) -> i64 {
     return *r;
 }
 
-fn example_value() -> Int {
-    let v: Int = 42;
+fn example_value() -> i64 {
+    let v: i64 = 42;
     return apply(&v, read);
 }
 
@@ -256,9 +249,9 @@ fn main() -> u8 {
 ```
 
 ```con reject name=through-alias code=E0236 stage=check pair=callback-takes-ref
-type Cb = fn(&Int) -> &Int;
+type Cb = fn(&i64) -> &i64;
 
-fn apply(x: &Int, f: Cb) -> Int {
+fn apply(x: &i64, f: Cb) -> i64 {
     return 0;
 }
 
@@ -282,24 +275,21 @@ fn main() -> u8 {
 <a id="REF-3"></a>
 ### REF-3. No reference is stored
 
-**REF-3@1.** No struct or enum field, newtype, struct or enum literal payload, array element, binding, parameter or constant has a type that holds a reference anywhere except as the bare outer type of a binding or parameter.
+**REF-3@2.** No struct or enum field, struct or enum literal payload, array element, binding, parameter or constant has a type that holds a reference anywhere except as the bare outer type of a binding or parameter.
 
 - Kind: refusal
 - Uses: REF-D2
 - Codes: E0239 (check, post-mono)
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.checkModule, Concrete.verifyNoStoredRefs
 - Semantics: none
 - Obligation: INV-REF (R-0500)
 - Evidence: tested
 
-**Rationale.** The only storage a reference occupies is a reference binding's own slot, or an
-argument slot during a call. A reference in storage would outlive the lexical scope of its
-root. Constants are values and never places, so a constant of reference type is refused as
-well.
+**Rationale.** References remain second-class; OD54 removes newtypes, so they are no longer an aggregate case.
 
-```con reject name=struct-field code=E0239 stage=check pair=fn-pointer-field
-struct W { t: &Int }
+```con reject name=struct-field-decided code=E0239 stage=check pair=fn-pointer-field pending=R-0555 now=reject:E0239:check
+struct W { t: &i64 }
 
 fn main() -> u8 {
     return 0;
@@ -307,16 +297,16 @@ fn main() -> u8 {
 ```
 
 ```con accept name=fn-pointer-field exit=42
-struct H { f: fn(&Int) -> Int }
+struct H { f: fn(&i64) -> i64 }
 
-fn g(r: &Int) -> Int {
+fn g(r: &i64) -> i64 {
     return *r + 1;
 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     let h: H = H { f: g };
     let H { f } = h;
-    let x: Int = 41;
+    let x: i64 = 41;
     return f(&x);
 }
 
@@ -337,15 +327,15 @@ fn main() -> u8 {
 
 | fixture | expected | pair | modes |
 |---|---|---|---|
-| `tests/programs/error_092_ref_struct_field.con` | `reject:E0239:REF-3@1` | `ref3` | `-` |
-| `tests/programs/error_092_ref_in_option.con` | `reject:E0239:REF-3@1` | `ref3` | `-` |
-| `tests/programs/error_092_ref_in_array.con` | `reject:E0239:REF-3@1` | `ref3` | `-` |
-| `tests/programs/error_092_newtype_ref.con` | `reject:E0239:REF-3@1` | `ref3` | `-` |
-| `tests/programs/error_092_alias_newtype_ref.con` | `reject:E0239:REF-3@1` | `ref3` | `-` |
-| `tests/programs/error_092_alias_struct_field_ref.con` | `reject:E0239:REF-3@1` | `ref3` | `-` |
-| `tests/programs/error_092_const_ref_array.con` | `reject:E0239:REF-3@1` | `ref3` | `-` |
-| `tests/programs/error_escape_field.con` | `reject:E0239:REF-3@1` | `ref3` | `-` |
-| `tests/programs/error_123_const_ref_type.con` | `reject:E0239:REF-3@1` | `ref3` | `-` |
+| `tests/programs/error_092_ref_struct_field.con` | `reject:E0239:REF-3@2` | `ref3` | `-` |
+| `tests/programs/error_092_ref_in_option.con` | `reject:E0239:REF-3@2` | `ref3` | `-` |
+| `tests/programs/error_092_ref_in_array.con` | `reject:E0239:REF-3@2` | `ref3` | `-` |
+| `tests/programs/error_092_newtype_ref.con` | `reject:E0239:REF-3@2` | `ref3` | `-` |
+| `tests/programs/error_092_alias_newtype_ref.con` | `reject:E0239:REF-3@2` | `ref3` | `-` |
+| `tests/programs/error_092_alias_struct_field_ref.con` | `reject:E0239:REF-3@2` | `ref3` | `-` |
+| `tests/programs/error_092_const_ref_array.con` | `reject:E0239:REF-3@2` | `ref3` | `-` |
+| `tests/programs/error_escape_field.con` | `reject:E0239:REF-3@2` | `ref3` | `-` |
+| `tests/programs/error_123_const_ref_type.con` | `reject:E0239:REF-3@2` | `ref3` | `-` |
 | `tests/programs/regress_2i_ref3_fnptr_field.con` | `run:42` | `ref3` | `binary,interp` |
 | `tests/programs/regress_092_refs_flow_down.con` | `run:42` | `ref3-heap` | `binary,interp-exempt:no-heap-allocation-in-the-interpreter` |
 
@@ -366,17 +356,17 @@ fn main() -> u8 {
 **Rationale.** A generic body is checked once, at its opaque type parameter. Instantiating that
 parameter at a reference type must not create a returned or stored reference that the check of
 the body never saw. A top-level `x: T` parameter and a by-value callback `fn(T) -> U` are not
-nested positions, so `ignore::<&Int>(&v, k)` and `apply::<&Int>(&v, read)` with
-`f: fn(T) -> Int` are allowed, while `f: fn(&mut T)` puts `T` behind a reference and is refused.
+nested positions, so `ignore::<&i64>(&v, k)` and `apply::<&i64>(&v, read)` with
+`f: fn(T) -> i64` are allowed, while `f: fn(&mut T)` puts `T` behind a reference and is refused.
 
 ```con reject name=generic-return code=E0236 stage=check pair=top-level-ref-arg
 fn wrap<R>(r: R) -> R {
     return r;
 }
 
-fn example_value() -> Int {
-    let x: Int = 42;
-    let y: Int = *wrap::<&Int>(&x);
+fn example_value() -> i64 {
+    let x: i64 = 42;
+    let y: i64 = *wrap::<&i64>(&x);
     return y;
 }
 
@@ -394,21 +384,22 @@ fn main() -> u8 {
 ```
 
 ```con accept name=top-level-ref-arg exit=42
-fn ignore<T: Copy>(x: T, k: Int) -> Int {
+fn ignore<T: Copy>(x: T, k: i64) -> i64 {
+    discard(x);
     return k;
 }
 
-fn apply<T>(x: T, f: fn(T) -> Int) -> Int {
+fn apply<T>(x: T, f: fn(T) -> i64) -> i64 {
     return f(x);
 }
 
-fn read(r: &Int) -> Int {
+fn read(r: &i64) -> i64 {
     return *r;
 }
 
-fn example_value() -> Int {
-    let v: Int = 21;
-    return ignore::<&Int>(&v, 21) + apply::<&Int>(&v, read);
+fn example_value() -> i64 {
+    let v: i64 = 21;
+    return ignore::<&i64>(&v, 21) + apply::<&i64>(&v, read);
 }
 
 fn main() -> u8 {
@@ -438,49 +429,25 @@ fn main() -> u8 {
 <a id="REF-5"></a>
 ### REF-5. A reference is a root binding plus projections
 
-**REF-5@2.** In safe code, a reference is formed only by borrowing a local binding (`&x`, `&mut x`), by a shared borrow of a string literal, or by projecting a field, index or newtype through a reference, where `&s.f` abbreviates the projection `f` of `&s`, so no temporary, constant, call result, branch value or reference read out of storage is ever a reference's root, and a field access, an index or a `*` is refused when its base is neither a place nor a fresh owned value.
+**REF-5@3.** In safe code a reference is formed only by borrowing a local or projecting a field or index through a reference, with `&s.f` abbreviating the projection of `&s` and every projection base a local or projection through a place, while temporaries and call results are bound before projection and the type and borrowing of static text are undecided: see the target Core proposal.
 
 - Kind: refusal
 - Uses: none
 - Codes: E0238 (check)
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.normPlace, Concrete.refuseRefValuedBranch, Concrete.checkRefArg, Concrete.recordRefProvenance, Concrete.refuseTemporaryBorrow
 - Semantics: none
 - Obligation: INV-REF (R-0500): every reference has a binding root
 - Evidence: tested
 
-**Rationale.** Decided 2026-10-23 (TIGHTENING_DECISIONS D2). The core follows Austral, whose
-borrows take only a variable and whose references to parts are paths that start in a reference.
-The core language has two operations that form a reference: borrowing a variable, and
-projecting a field, index or newtype through a reference. Concrete has no `->` (removed
-2026-07-14). Projection through a reference `r` is written `&r.f` or `&r[i]`, and a field read
-through it is written `r.f`, which auto-dereferences one layer. `&s.f`, `&a[i]` and `&s.inner.x`
-are Concrete's own surface sugar, which Austral does not have. Before checking, they are
-rewritten to "borrow the root variable, then project", and they add no semantic case and no
-typing or loan rule of their own. A string literal is a static, immutable root, its `String`
-descriptor included: `&"text"` is allowed, and `&mut "text"`, moving out of a literal and
-destroying one are not. A raw-pointer dereference is neither of the two operations: in trusted
-or `Unsafe` code, `&*p` forms a reference only under that code's validity premise (TRUST-3). Borrowing a temporary was gap G12 (bug 182: a borrowed call result
-miscompiled or leaked), closed 2026-10-23 at every reference-forming site, explicit borrows and
-implicit `&self` receivers alike. Loans are keyed by the root (REF-11).
+**Rationale.** OD32 removes auto-borrow receivers and OD121 requires projection bases to be places. Static-text typing and borrowing are [undecided: see the target Core proposal](decisions.md#core-static-text).
 
-Decided by the owner on 2026-10-29 (OD1, the Austral model): a reference is formed by borrowing a variable or projecting through a reference, `&s.f` is sugar, and a temporary is never a root. Loans are keyed by the root variable (REF-8, REF-11; OD15 part (a), decided 2026-10-29).
-
-A reference binding is a local binding, so `g(&r)` with `r: &T` passes a `& &T` that denotes `r`'s
-own slot, a place rooted at `r`; the inner reference is never read out of it (this rule) or written
-through it (REF-7). The normalized place behind this rule also refuses a field access, an index or
-a `*` whose base is neither a place nor a fresh owned value, such as `(if c { a } else { b }).f`,
-under this entry's tag and code although its sentence does not name it (a deliberate restriction,
-[KNOWN_HOLES H28](../verification/KNOWN_HOLES.md), which R-0499 may lift): bind the branch result
-first. Whether `as` may be applied to a reference, which the current compiler accepts only as an identity cast
-(`r as &T` with `r: &T`) and refuses otherwise (E0553), is OPEN-103.
-
-```con reject name=borrow-operator code=E0238 stage=check pair=root-plus-projections
-fn read(r: &Int) -> Int {
+```con reject name=borrow-operator-decided code=E0238 stage=check pair=root-plus-projections pending=R-0555 now=reject:E0238:check
+fn read(r: &i64) -> i64 {
     return *r;
 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     return read(&(40 + 2));
 }
 
@@ -498,25 +465,25 @@ fn main() -> u8 {
 ```
 
 ```con accept name=root-plus-projections exit=42
-struct P { n: Int }
+struct P { n: i64 }
 struct W { p: P }
 
-fn get(r: &P) -> Int {
+fn get(r: &P) -> i64 {
     return r.n;
 }
 
-fn read(r: &Int) -> Int {
+fn read(r: &i64) -> i64 {
     return *r;
 }
 
-fn through(r: &W) -> Int {
+fn through(r: &W) -> i64 {
     return get(&r.p) + read(&r.p.n);
 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     let w: W = W { p: P { n: 10 } };
-    let a: [Int; 2] = [0, 12];
-    let out: Int = get(&w.p) + read(&a[1]) + through(&w);
+    let a: [i64; 2] = [0, 12];
+    let out: i64 = get(&w.p) + read(&a[1]) + through(&w);
     let W { p } = w;
     let P { n } = p;
     return out + n * 0;
@@ -535,12 +502,12 @@ fn main() -> u8 {
 }
 ```
 
-```con reject name=borrow-int-literal code=E0238 stage=check pair=borrow-let-first
-fn read(r: &Int) -> Int {
+```con reject name=borrow-int-literal-decided code=E0238 stage=check pair=borrow-let-first pending=R-0555 now=reject:E0238:check
+fn read(r: &i64) -> i64 {
     return *r;
 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     return read(&42);
 }
 
@@ -557,16 +524,16 @@ fn main() -> u8 {
 }
 ```
 
-```con reject name=borrow-call-result code=E0238 stage=check pair=borrow-let-first
-fn mk() -> Int {
+```con reject name=borrow-call-result-decided code=E0238 stage=check pair=borrow-let-first pending=R-0555 now=reject:E0238:check
+fn mk() -> i64 {
     return 42;
 }
 
-fn read(r: &Int) -> Int {
+fn read(r: &i64) -> i64 {
     return *r;
 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     return read(&mk());
 }
 
@@ -584,16 +551,16 @@ fn main() -> u8 {
 ```
 
 ```con accept name=borrow-let-first exit=42
-fn mk() -> Int {
+fn mk() -> i64 {
     return 42;
 }
 
-fn read(r: &Int) -> Int {
+fn read(r: &i64) -> i64 {
     return *r;
 }
 
-fn example_value() -> Int {
-    let v: Int = mk();
+fn example_value() -> i64 {
+    let v: i64 = mk();
     return read(&v);
 }
 
@@ -611,16 +578,16 @@ fn main() -> u8 {
 ```
 
 ```con accept name=borrow-reference-binding exit=42
-fn g(rr: & &Int) -> Int {
+fn g(rr: & &i64) -> i64 { discard(rr);
     return 42;
 }
 
-fn f(r: &Int) -> Int {
+fn f(r: &i64) -> i64 {
     return g(&r);
 }
 
-fn example_value() -> Int {
-    let v: Int = 1;
+fn example_value() -> i64 {
+    let v: i64 = 1;
     return f(&v);
 }
 
@@ -637,10 +604,10 @@ fn main() -> u8 {
 }
 ```
 
-```con reject name=branch-value-base code=E0238 stage=check pair=bind-branch-first
-struct Copy P { n: Int }
+```con reject name=branch-value-base-decided code=E0238 stage=check pair=bind-branch-first pending=R-0555 now=reject:E0238:check
+struct Copy P { n: i64 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     let a: P = P { n: 42 };
     let b: P = P { n: 1 };
     let c: bool = true;
@@ -661,9 +628,9 @@ fn main() -> u8 {
 ```
 
 ```con accept name=bind-branch-first exit=42
-struct Copy P { n: Int }
+struct Copy P { n: i64 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     let a: P = P { n: 42 };
     let b: P = P { n: 1 };
     let c: bool = true;
@@ -688,26 +655,26 @@ fn main() -> u8 {
 
 | fixture | expected | pair | modes |
 |---|---|---|---|
-| `tests/programs/error_105_ref_valued_if_arg.con` | `reject:E0238:REF-5@2` | `ref5` | `-` |
-| `tests/programs/error_105_ref_valued_if_field.con` | `reject:E0238:REF-5@2` | `ref5` | `-` |
-| `tests/programs/error_091_norm_temporaries.con` | `reject:E0238:REF-5@2` | `ref5` | `-` |
-| `tests/programs/error_091_norm_if_local_binding.con` | `reject:E0238:REF-5@2` | `ref5` | `-` |
-| `tests/programs/error_091_norm_double_deref_read.con` | `reject:E0238:REF-5@2` | `ref5` | `-` |
-| `tests/programs/error_091_norm_nested_ref_binder.con` | `reject:E0238:REF-5@2` | `ref5` | `-` |
-| `tests/programs/error_2i_ref5_borrow_temporary.con` | `reject:E0238:REF-5@2` | `ref5` | `-` |
-| `tests/programs/error_123_const_borrow_in_body.con` | `reject:E0238:REF-5@2` | `ref5` | `-` |
+| `tests/programs/error_105_ref_valued_if_arg.con` | `reject:E0238:REF-5@3` | `ref5` | `-` |
+| `tests/programs/error_105_ref_valued_if_field.con` | `reject:E0238:REF-5@3` | `ref5` | `-` |
+| `tests/programs/error_091_norm_temporaries.con` | `reject:E0238:REF-5@3` | `ref5` | `-` |
+| `tests/programs/error_091_norm_if_local_binding.con` | `reject:E0238:REF-5@3` | `ref5` | `-` |
+| `tests/programs/error_091_norm_double_deref_read.con` | `reject:E0238:REF-5@3` | `ref5` | `-` |
+| `tests/programs/error_091_norm_nested_ref_binder.con` | `reject:E0238:REF-5@3` | `ref5` | `-` |
+| `tests/programs/error_2i_ref5_borrow_temporary.con` | `reject:E0238:REF-5@3` | `ref5` | `-` |
+| `tests/programs/error_123_const_borrow_in_body.con` | `reject:E0238:REF-5@3` | `ref5` | `-` |
 | `tests/programs/regress_2i_ref5_canonical_places.con` | `run:42` | `ref5` | `binary,interp` |
-| `tests/programs/error_091_norm_if_projection.con` | `reject:E0238:REF-5@2` | `ref5-branch` | `-` |
+| `tests/programs/error_091_norm_if_projection.con` | `reject:E0238:REF-5@3` | `ref5-branch` | `-` |
 | `tests/programs/regress_2i_ref5_bind_branch_first.con` | `run:42` | `ref5-branch` | `binary,interp` |
 | `tests/programs/regress_2i_ref5_heap_field_borrow.con` | `run:42` | `ref5-heap` | `binary,interp-exempt:no-heap-allocation-in-the-interpreter` |
-| `tests/programs/error_2i_ref5_const_ref_through_raw_ptr.con` | `reject:E0238:REF-5@2` | `ref5` | `-` |
-| `tests/programs/error_d2_borrow_literal.con` | `reject:E0238:REF-5@2` | `ref5d2` | `-` |
-| `tests/programs/error_d2_borrow_field_of_temporary.con` | `reject:E0238:REF-5@2` | `ref5d2` | `-` |
-| `tests/programs/error_d2_temporary_receiver.con` | `reject:E0238:REF-5@2` | `ref5d2` | `-` |
-| `tests/programs/error_d2_mut_borrow_string_literal.con` | `reject:E0238:REF-5@2` | `ref5d2` | `-` |
-| `tests/programs/error_d2_branch_receiver.con` | `reject:E0238:REF-5@2` | `ref5d2` | `-` |
-| `tests/regressions/bug182_borrowed_call_result_temporary/repro.con` | `reject:E0238:REF-5@2` | `ref5d2` | `-` |
-| `tests/regressions/bug182_borrowed_call_result_temporary/repro_linear_leak.con` | `reject:E0238:REF-5@2` | `ref5d2` | `-` |
+| `tests/programs/error_2i_ref5_const_ref_through_raw_ptr.con` | `reject:E0238:REF-5@3` | `ref5` | `-` |
+| `tests/programs/error_d2_borrow_literal.con` | `reject:E0238:REF-5@3` | `ref5d2` | `-` |
+| `tests/programs/error_d2_borrow_field_of_temporary.con` | `reject:E0238:REF-5@3` | `ref5d2` | `-` |
+| `tests/programs/error_d2_temporary_receiver.con` | `reject:E0238:REF-5@3` | `ref5d2` | `-` |
+| `tests/programs/error_d2_mut_borrow_string_literal.con` | `reject:E0238:REF-5@3` | `ref5d2` | `-` |
+| `tests/programs/error_d2_branch_receiver.con` | `reject:E0238:REF-5@3` | `ref5d2` | `-` |
+| `tests/regressions/bug182_borrowed_call_result_temporary/repro.con` | `reject:E0238:REF-5@3` | `ref5d2` | `-` |
+| `tests/regressions/bug182_borrowed_call_result_temporary/repro_linear_leak.con` | `reject:E0238:REF-5@3` | `ref5d2` | `-` |
 | `tests/programs/regress_d2_roots_and_projections.con` | `run:42` | `ref5d2` | `binary,interp` |
 
 <a id="REF-6"></a>
@@ -738,16 +705,16 @@ type that could hold a reference under substitution (`erasedRefInstantiation`), 
 is never monomorphized, so the post-monomorphization half of this rule never sees it.
 
 ```con reject name=let-binds-ref code=E0302 stage=check pair=borrow-each-use
-struct P { n: Int }
+struct P { n: i64 }
 
-fn get(r: &P) -> Int {
+fn get(r: &P) -> i64 {
     return r.n;
 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     let p: P = P { n: 21 };
     let r: &P = &p;
-    let out: Int = get(r) + get(r);
+    let out: i64 = get(r) + get(r);
     let P { n } = p;
     return out + n * 0;
 }
@@ -766,14 +733,14 @@ fn main() -> u8 {
 ```
 
 ```con reject name=param-assigned code=E0303 stage=check pair=borrow-each-use
-fn f(r: &Int, q: &Int) -> Int {
+fn f(r: &i64, q: &i64) -> i64 {
     r = q;
     return *r;
 }
 
-fn example_value() -> Int {
-    let a: Int = 1;
-    let b: Int = 42;
+fn example_value() -> i64 {
+    let a: i64 = 1;
+    let b: i64 = 42;
     return f(&a, &b);
 }
 
@@ -791,15 +758,15 @@ fn main() -> u8 {
 ```
 
 ```con accept name=borrow-each-use exit=42
-struct P { n: Int }
+struct P { n: i64 }
 
-fn get(r: &P) -> Int {
+fn get(r: &P) -> i64 {
     return r.n;
 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     let p: P = P { n: 21 };
-    let out: Int = get(&p) + get(&p);
+    let out: i64 = get(&p) + get(&p);
     let P { n } = p;
     return out + n * 0;
 }
@@ -818,17 +785,17 @@ fn main() -> u8 {
 ```
 
 ```con reject name=constant-borrows code=E0302 stage=check pair=constant-and-erased-value
-struct Copy P { n: Int }
+struct Copy P { n: i64 }
 
 const X: P = P { n: 42 };
 
-fn read(r: &P) -> Int {
+fn read(r: &P) -> i64 {
     return r.n;
 }
 
-const C: Int = read(&X);
+const C: i64 = read(&X);
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     return C;
 }
 
@@ -846,13 +813,9 @@ fn main() -> u8 {
 ```
 
 ```con reject name=erased-generic-at-ref code=E0302 stage=check pair=constant-and-erased-value
-fn same<T: Copy>(x: T) -> bool {
-    return true;
-}
-
-fn example_value() -> Int {
-    let v: Int = 42;
-    assert same::<&Int>(&v);
+fn example_value() -> i64 {
+    let v: i64 = 42;
+    assert same::<&i64>(&v);
     return v;
 }
 
@@ -870,17 +833,13 @@ fn main() -> u8 {
 ```
 
 ```con accept name=constant-and-erased-value exit=42
-struct Copy P { n: Int }
+struct Copy P { n: i64 }
 
 const X: P = P { n: 42 };
 
-fn same<T: Copy>(x: T) -> bool {
-    return true;
-}
-
-fn example_value() -> Int {
+fn example_value() -> i64 {
     let x: P = X;
-    assert same::<Int>(x.n);
+    assert x.n == 42;
     return x.n;
 }
 
@@ -961,12 +920,12 @@ fn main() -> u8 {
 <a id="REF-7"></a>
 ### REF-7. No reference is written through a reference
 
-**REF-7@1.** No assignment through a reference stores a value whose type holds a reference.
+**REF-7@2.** No assignment through a reference stores a value whose type holds a reference.
 
 - Kind: refusal
 - Uses: REF-D2
 - Codes: E0238 (check)
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.checkStmt
 - Semantics: none
 - Obligation: INV-REF (R-0500)
@@ -976,15 +935,15 @@ fn main() -> u8 {
 to the callee's local. A reference behind a reference (`& &T`) can exist as an argument, but
 the inner reference is never read out of it (REF-5) and never written through it (this rule).
 
-```con reject name=store-through-ref code=E0238 stage=check pair=write-value
-fn replace(slot: &mut &Int) {
-    let local: Int = 42;
+```con reject name=store-through-ref-decided code=E0238 stage=check pair=write-value-decided pending=R-0555 now=reject:E0001:parse
+fn replace(slot: &mut &i64) -> Unit {
+    let local: i64 = 42;
     *slot = &local;
 }
 
-fn example_value() -> Int {
-    let original: Int = 0;
-    borrow original as r in R {
+fn example_value() -> i64 {
+    let original: i64 = 0;
+    borrow original as r {
         replace(&mut r);
     }
     return original;
@@ -1003,13 +962,13 @@ fn main() -> u8 {
 }
 ```
 
-```con accept name=write-value exit=42
-fn set(slot: &mut Int) {
+```con accept name=write-value-decided exit=42 pending=R-0555 now=reject:E0108:resolve
+fn set(slot: &mut i64) -> Unit {
     *slot = 42;
 }
 
-fn example_value() -> Int {
-    let mut x: Int = 0;
+fn example_value() -> i64 {
+    let mut x: i64 = 0;
     set(&mut x);
     return x;
 }
@@ -1031,18 +990,18 @@ fn main() -> u8 {
 
 | fixture | expected | pair | modes |
 |---|---|---|---|
-| `tests/programs/error_091_norm_ref_write_through_ref.con` | `reject:E0238:REF-7@1` | `ref7` | `-` |
+| `tests/programs/error_091_norm_ref_write_through_ref.con` | `reject:E0238:REF-7@2` | `ref7` | `-` |
 | `tests/programs/regress_2i_ref7_write_value_through_mut_ref.con` | `run:42` | `ref7` | `binary,interp` |
 
 <a id="REF-8"></a>
 ### REF-8. A reference's root stays the same live binding
 
-**REF-8@1.** While a reference exists (a borrow-block binder for its block, an arm binder for its arm, a borrow argument for its call), its root binding is not moved, consumed, freed or shadowed and is not accessed in a mode that conflicts with the reference, and the borrows a single call makes do not conflict.
+**REF-8@2.** While a reference exists (a borrow-block binder for its block, an arm binder for its arm, a borrow argument for its call), its root binding is not moved, consumed, freed or shadowed and is not accessed in a mode that conflicts with the reference, and the borrows a single call makes do not conflict.
 
 - Kind: refusal
 - Uses: REF-D3
 - Codes: E0203 (check), E0204 (check), E0218 (check), E0231 (check), E0232 (check), E0235 (check), E0293 (check)
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.consumeVar, Concrete.checkCallBorrowConflicts, Concrete.checkWriteAccess
 - Semantics: none
 - Obligation: INV-REF (R-0500): the root is the same live binding while the reference lives
@@ -1063,41 +1022,17 @@ is mutably borrowed. E0293: two borrows that one call makes, at least one `&mut`
 one path a prefix of the other (`&mut w` with `&mut w.f`); disjoint projections that conflict only
 through their root are E0293 under REF-11 (`checkCallBorrowConflicts`).
 
-```con reject name=free-in-borrow-block code=E0203 stage=check pair=free-after-block
-struct B { v: Int }
-
-fn read(r: &Heap<B>) -> Int {
-    return 0;
-}
-
-fn example_value() with(Std) -> Int {
-    let h: Heap<B> = alloc(B { v: 42 });
-    let mut out: Int = 0;
-    borrow h as r in R {
-        free(h);
-        out = read(r);
-    }
-    return out;
-}
-
-fn main() with(Std) -> u8 {
-
-    if example_value() == 0 {
-
-        return 0;
-
-    }
-
-    return 1;
-
-}
+```con reject name=free-in-borrow-block-decided code=E0203 stage=check pair=free-after-block-decided pending=R-0555 now=reject:E0001:parse
+struct R { v: u8 }
+fn take(r: R) -> u8 { let R { v } = r; return v; }
+fn main() -> u8 { let r: R = R { v: 42 }; let mut out: u8 = 0; borrow r as rr { out = take(r) + rr.v; } return out; }
 ```
 
-```con reject name=read-owner-in-borrow-block code=E0203 stage=check pair=free-after-block
-fn example_value() -> Int {
-    let x: Int = 42;
-    let mut out: Int = 0;
-    borrow x as r in R {
+```con reject name=read-owner-in-borrow-block-decided code=E0203 stage=check pair=free-after-block-decided pending=R-0555 now=reject:E0001:parse
+fn example_value() -> i64 {
+    let x: i64 = 42;
+    let mut out: i64 = 0;
+    borrow x as r {
         out = x;
     }
     return out;
@@ -1110,14 +1045,14 @@ fn main() -> u8 {
 }
 ```
 
-```con reject name=call-overlap code=E0293 stage=check pair=free-after-block
-fn mix(a: &Int, b: &mut Int) -> Int {
+```con reject name=call-overlap-decided code=E0293 stage=check pair=free-after-block-decided pending=R-0555 now=reject:E0293:check
+fn mix(a: &i64, b: &mut i64) -> i64 {
     *b = 1;
     return *a;
 }
 
-fn example_value() -> Int {
-    let mut x: Int = 42;
+fn example_value() -> i64 {
+    let mut x: i64 = 42;
     return mix(&x, &mut x);
 }
 
@@ -1134,58 +1069,37 @@ fn main() -> u8 {
 }
 ```
 
-```con accept name=free-after-block exit=42
-struct Copy B { v: Int }
-
-fn read(r: &Int) -> Int {
-    return *r;
-}
-
-fn example_value() with(Std) -> Int {
-    let h: Heap<B> = alloc(B { v: 42 });
-    let mut out: Int = 0;
-    borrow h as r in R {
-        out = 42;
-    }
-    out = read(&h.v) * 0 + out;
-    free(h);
-    return out;
-}
-
-fn main() with(Std) -> u8 {
-
-    if example_value() == 42 {
-
-        return 42;
-
-    }
-
-    return 1;
-
+```con accept name=free-after-block-decided exit=42 pending=R-0555 now=reject:E0001:parse
+struct R { v: u8 }
+fn main() -> u8 {
+ let r: R = R { v: 42 }; let mut out: u8 = 0;
+ borrow r as rr { out = rr.v; }
+ let R { v: _ } = r;
+ return out;
 }
 ```
 
-```con reject name=trusted-frozen-owner code=E0203 stage=check pair=free-after-block
-struct R { v: Int }
+```con reject name=trusted-frozen-owner-decided code=E0203 stage=check pair=free-after-block-decided pending=R-0555 now=reject:E0001:parse
+struct R { v: i64 }
 
-fn peek(r: &R) -> Int {
+fn peek(r: &R) -> i64 {
     return r.v;
 }
 
-fn take(r: R) -> Int {
+fn take(r: R) -> i64 {
     let R { v } = r;
     return v;
 }
 
-trusted fn use_frozen(r: R) -> Int {
-    let mut s: Int = 0;
-    borrow r as rr in Reg {
+trusted fn use_frozen(r: R) -> i64 {
+    let mut s: i64 = 0;
+    borrow r as rr {
         s = peek(rr) + take(r);
     }
     return s;
 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     return use_frozen(R { v: 21 });
 }
 
@@ -1202,12 +1116,12 @@ fn main() -> u8 {
 }
 ```
 
-```con reject name=copy-binder-root-written code=E0232 stage=check pair=free-after-block
-struct Copy P { n: Int }
+```con reject name=copy-binder-root-written-decided code=E0232 stage=check pair=free-after-block-decided pending=R-0555 now=reject:E0232:check
+struct Copy P { n: i64 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     let mut o: Option<P> = Option::Some { value: P { n: 42 } };
-    let mut out: Int = 0;
+    let mut out: i64 = 0;
     match &o {
         Option::Some { value } => {
             o = Option::None;
@@ -1235,19 +1149,19 @@ fn main() -> u8 {
 
 | fixture | expected | pair | modes |
 |---|---|---|---|
-| `tests/programs/error_borrow_frozen.con` | `reject:E0203:REF-8@1` | `ref8-block` | `-` |
-| `tests/programs/error_2i_ref8_free_in_borrow_block.con` | `reject:E0203:REF-8@1` | `ref8-block` | `-` |
+| `tests/programs/error_borrow_frozen.con` | `reject:E0203:REF-8@2` | `ref8-block` | `-` |
+| `tests/programs/error_2i_ref8_free_in_borrow_block.con` | `reject:E0203:REF-8@2` | `ref8-block` | `-` |
 | `tests/programs/regress_2i_ref8_free_after_ref_block.con` | `run:42` | `ref8-block` | `binary,interp-exempt:no-heap-allocation-in-the-interpreter` |
-| `tests/programs/error_2i_ref8_call_overlap.con` | `reject:E0293:REF-8@1` | `ref8-call` | `-` |
-| `tests/programs/error_091_norm_cast_arg_overlap.con` | `reject:E0293:REF-8@1` | `ref8-call` | `-` |
-| `tests/programs/error_od2_call_overlapping_path.con` | `reject:E0293:REF-8@1` | `ref8-call` | `-` |
+| `tests/programs/error_2i_ref8_call_overlap.con` | `reject:E0293:REF-8@2` | `ref8-call` | `-` |
+| `tests/programs/error_091_norm_cast_arg_overlap.con` | `reject:E0293:REF-8@2` | `ref8-call` | `-` |
+| `tests/programs/error_od2_call_overlapping_path.con` | `reject:E0293:REF-8@2` | `ref8-call` | `-` |
 | `tests/programs/regress_2i_ref8_call_disjoint.con` | `run:42` | `ref8-call` | `binary,interp` |
 | `tests/programs/regress_2i_ref8_match_borrow_scrutinee.con` | `run:42` | `-` | `binary,interp` |
-| `tests/programs/error_181_root_reassigned_match.con` | `reject:E0232:REF-8@1` | `ref8-arm` | `-` |
-| `tests/programs/error_181_root_reassigned_guard.con` | `reject:E0232:REF-8@1` | `ref8-arm` | `-` |
-| `tests/programs/error_181_root_reassigned_nested.con` | `reject:E0232:REF-8@1` | `ref8-arm` | `-` |
-| `tests/programs/error_181_root_reassigned_while_let.con` | `reject:E0232:REF-8@1` | `ref8-arm` | `-` |
-| `tests/programs/error_181_root_reassigned_whole_binder.con` | `reject:E0232:REF-8@1` | `ref8-arm` | `-` |
+| `tests/programs/error_181_root_reassigned_match.con` | `reject:E0232:REF-8@2` | `ref8-arm` | `-` |
+| `tests/programs/error_181_root_reassigned_guard.con` | `reject:E0232:REF-8@2` | `ref8-arm` | `-` |
+| `tests/programs/error_181_root_reassigned_nested.con` | `reject:E0232:REF-8@2` | `ref8-arm` | `-` |
+| `tests/programs/error_181_root_reassigned_while_let.con` | `reject:E0232:REF-8@2` | `ref8-arm` | `-` |
+| `tests/programs/error_181_root_reassigned_whole_binder.con` | `reject:E0232:REF-8@2` | `ref8-arm` | `-` |
 | `tests/programs/regress_181_borrowed_binders.con` | `run:42` | `ref8-arm` | `binary,interp` |
 
 <a id="REF-9"></a>
@@ -1264,20 +1178,11 @@ fn main() -> u8 {
 - Obligation: binder modes are fixed before specialization (PASS-2)
 - Evidence: tested
 
-**Rationale.** Decided 2026-10-23 (TIGHTENING_DECISIONS D3), enforced the same day. The binding
-mode used to depend on whether the payload is Copy, and monomorphization can change that
-property. Check and Elab disagreed about it (bug 181: a segfault in safe code at `T := Int`). With
-one mode that substitution cannot change, the class of bugs is gone. A whole-value binder (`n`
-in `match r { n => .. }`) is the scrutinee reference itself, so over `&mut T` it is `&mut T`. A Copy payload is read with `*value`.
-Literal and range patterns still compare the referenced value. The binder is a loan on the
-scrutinee's root for its arm (REF-8).
-The owner decided OD3 on 2026-10-29 as enforced here: the binder through a borrowed scrutinee is
-always a reference (this rule), its mode is stored in Core as its type (PASS-2), and the root is not
-reassigned while the binder's loan lives (REF-8).
+**Rationale.** Borrowed scrutinees bind references without moving their payloads; OD56 removes range patterns.
 
 ```con accept name=copy-payload-is-ref exit=42
-fn example_value() -> Int {
-    let o: Option<Int> = Option::Some { value: 42 };
+fn example_value() -> i64 {
+    let o: Option<i64> = Option::Some { value: 42 };
     match &o {
         Option::Some { value } => { return *value; },
         Option::None => { return 0; }
@@ -1294,52 +1199,27 @@ fn main() -> u8 {
 <a id="REF-10"></a>
 ### REF-10. A `&mut` argument is an implicit reborrow
 
-**REF-10@3.** Passing a `&mut` reference binding as an argument lends it to the call, the call's use of it ending when the call returns, so a parameter, borrow-block binder or arm binder of type `&mut T` may be passed to any number of calls in sequence, and such a binding, which owns nothing, may also go unused, since OWN-2's exit checks do not apply to it.
+**REF-10@4.** An exclusive-reference binding is lent to a call until that call returns without a reborrow operation or copy-in/copy-out, retains its root and lifetime, and like every binding is used or named `_`.
 
 - Kind: guarantee
 - Uses: none
 - Codes: none
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.consumeCallArgIdent
 - Semantics: none
 - Obligation: the reborrow is explicit in Core (R-0496)
 - Evidence: tested
 
-**Rationale.** Decided by the owner on 2026-10-29 (OD2, part 1): passing a `&mut` on is plain
-lending. There is no reborrow concept and no reborrow syntax; a call's use of the reference ends
-when the call returns, which is sound because references are second-class (no reference is
-returned or stored, REF-1, REF-3). Every call form lends the same way (`consumeCallArgIdent`: a free
-function, a method argument, a static method, a function pointer), and a `&mut self` receiver given a
-reference binding is lent too. Before the 2026-10-23 change (TIGHTENING_DECISIONS D1, now this
-decision) a borrow-block binder was consumed by the first call it was passed to while a parameter was
-not; one mode replaced the two, and no program broke. A deferred call keeps the loan of a `&mut` it
-was given until it runs (OWN-16). An exclusive reference that is never used may go unused: it owns
-nothing. Overlapping arguments in one call are REF-11's refusal.
+**Rationale.** OD2 gives lending without reborrow or write-back, and OD62 requires an exclusive-reference name to be used or `_` even though it owns no resource.
 
-`&mut T` is linear (not Copy: `consumeVar` tracks it like any linear binding), while `&T` is Copy.
-Returning a `&mut T` binding is REF-1's refusal and rebinding it (`let r2 = r;`) REF-6's; passing it
-to a call, or calling a `&mut self` method on it, lends it (this entry); reading or writing through
-it (`*r`, `*r = v`, `r.f`, `r.f = v`, `r[i]`, `r[i] = v`; MEM-4) uses it without consuming it, since
-a dereference does not go through `consumeVar`, an invariant any change to consumption must keep.
-Branches agree on a `&mut` binding as on any linear value (OWN-3) and a loop does not consume one
-declared outside it (OWN-4), while a `break` or `continue` may leave one unconsumed: OWN-2's exit
-checks exempt references, which own nothing. A borrow-block binder need not be consumed:
-dereferencing it inside the block is the normal use, and the binder lapses at the block's end, when
-the owner is unfrozen. A write through it is a write to the owner's place at once (REF-13). The
-earlier gaps of this area are closed: field and element writes through `&mut T` work (MEM-4), a
-`&mut T` stored in a struct is REF-3's refusal, and `let s = &mut *r` is REF-6's. A `return` inside a
-`borrow mut` block once failed SSA verification; the lowering skips a terminated block's exit code
-(`blockTerminated`) and hoists the block's storage to the entry block (`emitEntryAlloca`), pinned by
-`adversarial_mut_ref_return_in_borrow.con` and `adversarial_mut_ref_return_deref_in_borrow.con`.
-
-```con accept name=reborrow-in-borrow-block exit=42
-fn inc(r: &mut Int) {
+```con accept name=reborrow-in-borrow-block-decided exit=42 pending=R-0555 now=reject:E0001:parse
+fn inc(r: &mut i64) -> Unit {
     *r = *r + 21;
 }
 
-fn example_value() -> Int {
-    let mut x: Int = 0;
-    borrow mut x as r in R {
+fn example_value() -> i64 {
+    let mut x: i64 = 0;
+    borrow mut x as r {
         inc(r);
         inc(r);
     }
@@ -1362,12 +1242,12 @@ fn main() -> u8 {
 <a id="REF-11"></a>
 ### REF-11. Loans are keyed by root binding
 
-**REF-11@3.** A borrow of any part of a value is a loan on its root binding and freezes the whole owner while it lives, so within one call every argument, the receiver included and a re-lent `&mut` binding included, conflicts with any other argument that reads or borrows the same root when at least one of them is exclusive, whatever their projections.
+**REF-11@4.** A borrow of any part of a value is a loan on its root binding and freezes the whole owner while it lives, so within one call every argument, the receiver included and a re-lent `&mut` binding included, conflicts with any other argument that reads or borrows the same root when at least one of them is exclusive, whatever their projections.
 
 - Kind: refusal
 - Uses: none
 - Codes: E0293 (check)
-- Status: partial bug-319
+- Status: pending R-0555
 - Enforced by: Concrete.pathsOverlap, Concrete.checkCallRootReads
 - Semantics: none
 - Obligation: INV-REF (R-0500); the loan checker needs no path-overlap analysis
@@ -1393,15 +1273,15 @@ read into a `let` first. The current compiler still exempts a re-lent reference 
 pending example below.
 
 
-```con reject name=disjoint-fields-one-call code=E0293 stage=check pair=fields-in-sequence
-struct Copy W { a: Int, b: Int }
+```con reject name=disjoint-fields-one-call-decided code=E0293 stage=check pair=fields-in-sequence-decided pending=R-0555 now=reject:E0108:resolve
+struct Copy W { a: i64, b: i64 }
 
-fn two(a: &mut Int, b: &mut Int) {
+fn two(a: &mut i64, b: &mut i64) -> Unit {
     *a = 1;
     *b = 1;
 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     let mut w: W = W { a: 0, b: 0 };
     two(&mut w.a, &mut w.b);
     return w.a + w.b;
@@ -1420,14 +1300,14 @@ fn main() -> u8 {
 }
 ```
 
-```con accept name=fields-in-sequence exit=2
-struct Copy W { a: Int, b: Int }
+```con accept name=fields-in-sequence-decided exit=2 pending=R-0555 now=reject:E0108:resolve
+struct Copy W { a: i64, b: i64 }
 
-fn one(a: &mut Int) {
+fn one(a: &mut i64) -> Unit {
     *a = 1;
 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     let mut w: W = W { a: 0, b: 0 };
     one(&mut w.a);
     one(&mut w.b);
@@ -1447,17 +1327,17 @@ fn main() -> u8 {
 }
 ```
 
-```con reject name=relend-receiver-read code=E0293 stage=check pair=relend-read-first pending=bug-319 now=accept:42
-struct S { step: Int, acc: Int }
+```con reject name=relend-receiver-read code=E0293 stage=check pair=relend-read-first-decided pending=R-0555 now=reject:E0108:resolve
+struct S { step: i64, acc: i64 }
 impl S {
-    fn add(&mut self, n: Int) {
+    fn add(&mut self, n: i64) -> Unit {
         self.acc = self.acc + n;
     }
 }
-fn bump(r: &mut S) {
+fn bump(r: &mut S) -> Unit {
     r.add(r.step);
 }
-fn example_value() -> Int {
+fn example_value() -> i64 {
     let mut s: S = S { step: 42, acc: 0 };
     bump(&mut s);
     let S { step, acc } = s;
@@ -1471,18 +1351,18 @@ fn main() -> u8 {
 }
 ```
 
-```con accept name=relend-read-first exit=42
-struct S { step: Int, acc: Int }
+```con accept name=relend-read-first-decided exit=42 pending=R-0555 now=reject:E0108:resolve
+struct S { step: i64, acc: i64 }
 impl S {
-    fn add(&mut self, n: Int) {
+    fn add(&mut self, n: i64) -> Unit {
         self.acc = self.acc + n;
     }
 }
-fn bump(r: &mut S) {
-    let n: Int = r.step;
+fn bump(r: &mut S) -> Unit {
+    let n: i64 = r.step;
     r.add(n);
 }
-fn example_value() -> Int {
+fn example_value() -> i64 {
     let mut s: S = S { step: 42, acc: 0 };
     bump(&mut s);
     let S { step, acc } = s;
@@ -1500,42 +1380,37 @@ fn main() -> u8 {
 
 | fixture | expected | pair | modes |
 |---|---|---|---|
-| `tests/programs/error_d2_call_disjoint_fields.con` | `reject:E0293:REF-11@3` | `ref11` | `-` |
-| `tests/programs/error_d2_call_field_read.con` | `reject:E0293:REF-11@3` | `ref11` | `-` |
-| `tests/programs/error_d2_receiver_projection_read.con` | `reject:E0293:REF-11@3` | `ref11` | `-` |
-| `tests/programs/error_d2_call_field_read_in_branch.con` | `reject:E0293:REF-11@3` | `ref11` | `-` |
-| `tests/programs/error_d2_explicit_mut_receiver_read.con` | `reject:E0293:REF-11@3` | `ref11` | `-` |
+| `tests/programs/error_d2_call_disjoint_fields.con` | `reject:E0293:REF-11@4` | `ref11` | `-` |
+| `tests/programs/error_d2_call_field_read.con` | `reject:E0293:REF-11@4` | `ref11` | `-` |
+| `tests/programs/error_d2_receiver_projection_read.con` | `reject:E0293:REF-11@4` | `ref11` | `-` |
+| `tests/programs/error_d2_call_field_read_in_branch.con` | `reject:E0293:REF-11@4` | `ref11` | `-` |
+| `tests/programs/error_d2_explicit_mut_receiver_read.con` | `reject:E0293:REF-11@4` | `ref11` | `-` |
 | `tests/programs/regress_2i_ref8_call_disjoint.con` | `run:42` | `ref11` | `binary,interp` |
 
 <a id="REF-12"></a>
 ### REF-12. Nothing is mutated through a shared reference
 
-**REF-12@1.** No place reached through a shared reference is mutated: it is not borrowed with `&mut`, not the receiver of a `&mut self` method and not assigned.
+**REF-12@2.** No place reached through a shared reference is mutated: it is not borrowed with `&mut`, not the receiver of a `&mut self` method and not assigned.
 
 - Kind: refusal
 - Uses: REF-D1
 - Codes: E0237 (elab, check)
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.checkMutAccess, Concrete.checkWriteAccess
 - Semantics: none
 - Obligation: INV-REF (R-0500): a shared reference's target is not written while it lives
 - Evidence: tested
 
-**Rationale.** A shared reference may be one of several aliases of the same value, so a write
-through it would change what the other aliases read. Exclusivity comes only from `&mut`
-(REF-8). Elab refuses a `&mut self` call on a receiver of type `&T` before it builds the
-implicit borrow; Check refuses the rest on the normalized place, so `(*r).f`, `r.f.g` and a
-receiver reached through a conditional all count. A place Check cannot normalize is refused
-(E0238), never assumed to be owned.
+**Rationale.** Shared access is never upgraded to mutable access; OD32 requires explicit reference receivers.
 
-```con reject name=assign-through-shared code=E0237 stage=check pair=assign-through-exclusive
-struct Copy P { n: Int }
+```con reject name=assign-through-shared-decided code=E0237 stage=check pair=assign-through-exclusive-decided pending=R-0555 now=reject:E0108:resolve
+struct Copy P { n: i64 }
 
-fn set(p: &P) {
+fn set(p: &P) -> Unit {
     p.n = 42;
 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     let p: P = P { n: 0 };
     set(&p);
     return p.n;
@@ -1554,14 +1429,14 @@ fn main() -> u8 {
 }
 ```
 
-```con accept name=assign-through-exclusive exit=42
-struct Copy P { n: Int }
+```con accept name=assign-through-exclusive-decided exit=42 pending=R-0555 now=reject:E0108:resolve
+struct Copy P { n: i64 }
 
-fn set(p: &mut P) {
+fn set(p: &mut P) -> Unit {
     p.n = 42;
 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     let mut p: P = P { n: 0 };
     set(&mut p);
     return p.n;
@@ -1630,3 +1505,17 @@ or why they changed, so that each rationale explains the current version only. T
 
 - REF-6@2 (spec audit 12, 2026-10-30) states two refusals the compiler already enforced under this entry's tag and code (E0302): a borrowing constant initializer and an erased generic instantiated at a type that could hold a reference.
 - REF-9@1 said a whole-value binder over `&mut T` is `&T` too; REF-9@2 makes it `&mut T`, the scrutinee reference itself.
+
+- REF-D3@2 (2026-11-03) brings the chapter into line with the recorded owner decisions; REF-D3@1 is superseded by version.
+- REF-8@2 (2026-11-03) brings the chapter into line with the recorded owner decisions; REF-8@1 is superseded by version.
+- REF-10@4 (2026-11-03) brings the chapter into line with the recorded owner decisions; REF-10@3 is superseded by version.
+
+- REF-3@2 (2026-11-03) supersedes REF-3@1 to state the recorded decision.
+
+- REF-5@3 (2026-11-03) supersedes REF-5@2 to state the recorded decision.
+
+- REF-7@2 (2026-11-03) supersedes REF-7@1; pending legacy conformance is explicit.
+
+- REF-11@4 (2026-11-03) supersedes REF-11@3; pending legacy conformance is explicit.
+
+- REF-12@2 (2026-11-03) supersedes REF-12@1; pending legacy conformance is explicit.

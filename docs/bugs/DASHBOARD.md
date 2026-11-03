@@ -33,25 +33,25 @@ Historical discovery signal for `legacy-compiler-final`; these defects are never
 
 | open bugs by spec ruling ([RULINGS.md](RULINGS.md)) | open | silent | bugs |
 |---|---|---|---|
-| violates ARITH-2@3 | 1 | 1 | 327 |
-| violates ARITH-7@1 | 1 | 1 | 332 |
+| violates ARITH-2@4 | 1 | 1 | 327 |
+| violates ARITH-7@2 | 1 | 1 | 332 |
 | violates FFI-2@1 | 1 | 1 | 122 |
 | violates FFI-5@1 | 1 | 0 | 114 |
-| violates MEM-4@4 | 1 | 1 | 326 |
-| violates MEM-7@1 | 1 | 1 | 349 |
-| violates MEM-9@1 | 1 | 1 | 340 |
-| violates OWN-10@2 | 1 | 0 | 216 |
-| violates OWN-15@3 | 1 | 1 | 328 |
-| violates OWN-7@3 | 1 | 1 | 325 |
-| violates PASS-12@1 | 6 | 0 | 054, 077, 341, 345, 346, 347 |
+| violates MEM-4@5 | 1 | 1 | 326 |
+| violates MEM-7@2 | 1 | 1 | 349 |
+| violates MEM-9@2 | 1 | 1 | 340 |
+| violates OWN-10@3 | 1 | 0 | 216 |
+| violates OWN-15@4 | 1 | 1 | 328 |
+| violates OWN-7@4 | 1 | 1 | 325 |
+| violates PASS-12@2 | 6 | 0 | 054, 077, 341, 345, 346, 347 |
 | violates PASS-13@1 | 2 | 0 | 344, 348 |
-| violates PAT-3@3, PAT-5@3 | 1 | 1 | 321 |
-| violates REF-11@3 | 1 | 1 | 319 |
-| violates STMT-6@3 | 2 | 1 | 323, 331 |
-| violates STMT-7@3 | 1 | 1 | 320 |
-| violates SYN-4@1 | 1 | 0 | 318 |
-| violates TRAIT-10@2 | 1 | 1 | 324 |
-| violates TYPE-6@2 | 1 | 1 | 322 |
+| violates PAT-3@4, PAT-5@4 | 1 | 1 | 321 |
+| violates REF-11@4 | 1 | 1 | 319 |
+| violates STMT-6@4 | 2 | 1 | 323, 331 |
+| violates STMT-7@4 | 1 | 1 | 320 |
+| violates SYN-4@2 | 1 | 0 | 318 |
+| violates TRAIT-10@3 | 1 | 1 | 324 |
+| violates TYPE-6@3 | 1 | 1 | 322 |
 | violates TYPE-9@2 | 1 | 1 | 333 |
 | outside the spec (performance) | 1 | 0 | 270 |
 | outside the spec (tooling) | 4 | 0 | 049, 058, 064, 350 |

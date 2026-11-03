@@ -57,10 +57,11 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 | rule | chapter | bugs | which |
 |---|---|--:|---|
 | MOD-1@1 | modules.md | 25 | 022, 039, 042, 069, 082, 096, 097, 098, 117, 118, 132, 151, 215, 217, 227, 230, 231, 238, 239, 241, 242, 243, 245, 262, 343 |
-| PASS-12@1 | pipeline.md | 17 | 005, 009, 014, 016, 029, 032, 035, 044, **054**, 055, **077**, 108, 116, **341**, **345**, **346**, **347** |
+| PASS-12@1 | pipeline.md | 11 | 005, 009, 014, 016, 029, 032, 035, 044, 055, 108, 116 |
 | PASS-13@1 | pipeline.md | 10 | 004, 006, 019, 038, 102, 184, 254, 302, **344**, **348** |
 | PASS-9@1 | pipeline.md | 10 | 023, 033, 056, 078, 110, 175, 213, 271, 303, 309 |
 | SCOPE-3@1 | scope.md | 9 | 040, 041, 045, 050, 061, 087, 101, 176, 208 |
+| PASS-12@2 | pipeline.md | 6 | **054**, **077**, **341**, **345**, **346**, **347** |
 | SCOPE-1@1 | scope.md | 6 | 045, 087, 093, 094, 107, 124 |
 | FFI-2@1 | ffi.md | 5 | 037, 051, 057, 121, **122** |
 | MEM-3@1 | memory.md | 5 | 031, 034, 285, 287, 301 |
@@ -79,11 +80,9 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 | ARITH-2@1 | arithmetic.md | 2 | 002, 088 |
 | ARITH-5@1 | arithmetic.md | 2 | 128, 130 |
 | ARITH-6@1 | arithmetic.md | 2 | 140, 150 |
-| ARITH-7@1 | arithmetic.md | 2 | 109, **332** |
 | MEM-5@1 | memory.md | 2 | 144, 146 |
 | MOD-2@1 | modules.md | 2 | 226, 230 |
 | MOD-9@1 | modules.md | 2 | 223, 233 |
-| OWN-10@2 | ownership.md | 2 | 030, **216** |
 | OWN-11@1 | ownership.md | 2 | 147, 148 |
 | OWN-5@2 | ownership.md | 2 | 145, 197 |
 | OWN-8@2 | ownership.md | 2 | 115, 144 |
@@ -95,42 +94,47 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 | REF-3@1 | references.md | 2 | 092, 123 |
 | REF-5@1 | references.md | 2 | 123, 182 |
 | STMT-11@1 | statements.md | 2 | 305, 306 |
-| STMT-6@3 | statements.md | 2 | **323**, **331** |
+| STMT-6@4 | statements.md | 2 | **323**, **331** |
 | SYN-1@1 | syntax.md | 2 | 220, 329 |
-| SYN-4@1 | syntax.md | 2 | 212, **318** |
 | TYPE-11@1 | types.md | 2 | 253, 311 |
 | TYPE-12@1 | types.md | 2 | 199, 246 |
 | TYPE-15@1 | types.md | 2 | 073, 200 |
 | TYPE-16@1 | types.md | 2 | 024, 205 |
 | TYPE-9@2 | types.md | 2 | 221, **333** |
-| ARITH-2@3 | arithmetic.md | 1 | **327** |
+| ARITH-2@4 | arithmetic.md | 1 | **327** |
 | ARITH-3@1 | arithmetic.md | 1 | 053 |
+| ARITH-7@1 | arithmetic.md | 1 | 109 |
+| ARITH-7@2 | arithmetic.md | 1 | **332** |
 | FFI-1@1 | ffi.md | 1 | 166 |
 | FFI-3@1 | ffi.md | 1 | 113 |
 | FFI-4@1 | ffi.md | 1 | 037 |
 | FFI-6@1 | ffi.md | 1 | 112 |
-| MEM-4@4 | memory.md | 1 | **326** |
-| MEM-7@1 | memory.md | 1 | **349** |
-| MEM-9@1 | memory.md | 1 | **340** |
+| MEM-4@5 | memory.md | 1 | **326** |
+| MEM-7@2 | memory.md | 1 | **349** |
+| MEM-9@2 | memory.md | 1 | **340** |
 | MOD-6@1 | modules.md | 1 | 226 |
 | MOD-8@1 | modules.md | 1 | 165 |
+| OWN-10@2 | ownership.md | 1 | 030 |
+| OWN-10@3 | ownership.md | 1 | **216** |
 | OWN-12@1 | ownership.md | 1 | 143 |
-| OWN-15@3 | ownership.md | 1 | **328** |
+| OWN-15@4 | ownership.md | 1 | **328** |
 | OWN-3@2 | ownership.md | 1 | 021 |
 | OWN-4@2 | ownership.md | 1 | 149 |
-| OWN-7@3 | ownership.md | 1 | **325** |
+| OWN-7@4 | ownership.md | 1 | **325** |
 | PASS-10@1 | pipeline.md | 1 | 025 |
 | PASS-2@2 | pipeline.md | 1 | 181 |
-| PAT-3@3 | patterns.md | 1 | **321** |
-| PAT-5@3 | patterns.md | 1 | **321** |
-| REF-11@3 | references.md | 1 | **319** |
+| PAT-3@4 | patterns.md | 1 | **321** |
+| PAT-5@4 | patterns.md | 1 | **321** |
+| REF-11@4 | references.md | 1 | **319** |
 | REF-13@1 | references.md | 1 | 305 |
 | REF-9@2 | references.md | 1 | 181 |
 | STMT-5@1 | statements.md | 1 | 142 |
 | STMT-7@2 | statements.md | 1 | 111 |
-| STMT-7@3 | statements.md | 1 | **320** |
+| STMT-7@4 | statements.md | 1 | **320** |
 | STMT-9@1 | statements.md | 1 | 194 |
-| TRAIT-10@2 | traits.md | 1 | **324** |
+| SYN-4@1 | syntax.md | 1 | 212 |
+| SYN-4@2 | syntax.md | 1 | **318** |
+| TRAIT-10@3 | traits.md | 1 | **324** |
 | TRAIT-2@1 | traits.md | 1 | 186 |
 | TRAIT-9@1 | traits.md | 1 | 091 |
 | TRUST-5@2 | trusted.md | 1 | 189 |
@@ -138,7 +142,7 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 | TYPE-14@2 | types.md | 1 | 036 |
 | TYPE-2@1 | types.md | 1 | 240 |
 | TYPE-5@1 | types.md | 1 | 192 |
-| TYPE-6@2 | types.md | 1 | **322** |
+| TYPE-6@3 | types.md | 1 | **322** |
 | TYPE-7@1 | types.md | 1 | 193 |
 | TYPE-9@1 | types.md | 1 | 239 |
 

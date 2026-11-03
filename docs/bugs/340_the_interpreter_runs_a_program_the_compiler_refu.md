@@ -13,7 +13,7 @@ coverage: reproducer tests/regressions/bug340_the_interpreter_runs_a_program_the
 class: 18
 silent: yes
 exit: 0b
-ruling: Violates: MEM-9@1
+ruling: Violates: MEM-9@2
 -->
 
 ## Reproducer

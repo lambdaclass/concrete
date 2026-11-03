@@ -54,8 +54,9 @@ question that `--report contracts` answers.
 ```con accept name=contracts-are-erased exit=42
 #[requires(n >= 0)]
 #[ensures(result == n)]
-fn count(n: Int) -> Int {
-    let mut i: Int = 0;
+fn count(n: i64) -> i64 {
+    let mut i: i64 = 0;
+    let mut i: i64 = 0;
     #[invariant(0 <= i && i <= n)]
     #[variant(n - i)]
     while i < n {
@@ -64,7 +65,7 @@ fn count(n: Int) -> Int {
     return i;
 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     return count(42);
 }
 
@@ -84,29 +85,18 @@ fn main() -> u8 {
 <a id="CON-3"></a>
 ### CON-3. A contract expression is a pure specification
 
-**CON-3@1.** A contract expression is checked by its own specification judgment: it binds no name, moves and mutably borrows nothing, calls only specification functions, reads parameters and `result`, and its integer arithmetic is mathematical unless it names a machine operation.
+**CON-3@2.** Contract expressions are pure non-consuming specifications with mathematical integer arithmetic unless a machine operation is named; function clauses see parameters, permitted declarations and `result` only in `ensures`, postconditions read surviving parameter state after deferred cleanup without an implicit entry snapshot, and loop clauses and assertions use their own lexical scope including permitted ghost locals.
 
 - Kind: refusal
 - Uses: none
 - Codes: E0320 (check), E0321 (check)
-- Status: partial R-0473
+- Status: pending R-0555
 - Enforced by: Concrete.checkModule
 - Semantics: none
 - Obligation: the specification judgment of contract expressions (R-0473)
 - Evidence: tested
 
-**Rationale.** Decided 2026-10-23 (TIGHTENING_DECISIONS, T-H27). Today a contract expression is
-checked like runtime code, so machine types leak into a claim (`#[requires(x < 9999999999)]` on an
-`i32`), and an ill-typed contract such as `(x > 0) + 1 > 0` is accepted (KNOWN_HOLES H27). The
-binder-free part is already enforced as SCOPE-1 (E0305). Two more parts are enforced: a clause or
-spec function body of the wrong sort (an integer `requires`, a boolean `variant`) is E0320, and a
-call that the clause may not make is E0321: from a spec function body, a call to anything but a
-spec function; from a contract clause, a call to a function that requires a capability (a
-capability-free runtime function is still callable there until the full judgment lands).
-Under the full judgment, operand sorts must agree inside an expression too and literals are
-mathematical.
-
-Decided by the owner on 2026-10-29 (OD12): a contract is a pure, non-consuming specification judgment, with machine and mathematical arithmetic kept distinct.
+**Rationale.** OD143 and OD144 restrict function contracts to their specification scope and post-cleanup surviving state; the audit distinguishes loop and assertion lexical scope. No implicit old snapshot is introduced (OD117).
 
 ```con reject name=ill-typed-contract code=new stage=check pair=well-typed-contract pending=R-0473 now=accept:42
 #[requires((x > 0) + 1 > 0)]
@@ -114,8 +104,8 @@ fn f(x: i32) -> i32 {
     return x;
 }
 
-fn example_value() -> Int {
-    return f(42) as Int;
+fn example_value() -> i64 {
+    return f(42) as i64;
 }
 
 fn main() -> u8 {
@@ -131,14 +121,14 @@ fn main() -> u8 {
 }
 ```
 
-```con reject name=integer-requires code=E0320 stage=check pair=well-typed-contract
+```con reject name=integer-requires-decided code=E0320 stage=check pair=well-typed-contract pending=R-0555 now=reject:E0320:check
 #[requires(x + 1)]
 fn f(x: i32) -> i32 {
     return x;
 }
 
-fn example_value() -> Int {
-    return f(42) as Int;
+fn example_value() -> i64 {
+    return f(42) as i64;
 }
 
 fn main() -> u8 {
@@ -154,7 +144,7 @@ fn main() -> u8 {
 }
 ```
 
-```con reject name=spec-fn-calls-runtime-code code=E0321 stage=check pair=well-typed-contract
+```con reject name=spec-fn-calls-runtime-code-decided code=E0321 stage=check pair=well-typed-contract pending=R-0555 now=reject:E0321:check
 fn twice(x: i32) -> i32 {
     return x + x;
 }
@@ -172,8 +162,8 @@ fn f(x: i32) -> i32 {
     return x;
 }
 
-fn example_value() -> Int {
-    return f(42) as Int;
+fn example_value() -> i64 {
+    return f(42) as i64;
 }
 
 fn main() -> u8 {
@@ -192,12 +182,12 @@ fn main() -> u8 {
 <a id="CON-4"></a>
 ### CON-4. Ghost code stays out of runtime code
 
-**CON-4@1.** A `ghost let` binding is erased before code generation and may be read only by contracts and other ghost code, never by runtime code.
+**CON-4@2.** A `ghost let` binding is erased before code generation and may be read only by contracts and other ghost code, never by runtime code.
 
 - Kind: refusal
 - Uses: none
 - Codes: E0420 (elab)
-- Status: partial R-0499
+- Status: pending R-0555
 - Enforced by: Concrete.throwElab
 - Semantics: none
 - Obligation: ghost erasure preserves runtime behaviour (R-0496)
@@ -209,13 +199,13 @@ bindings are not supported. A ghost initializer is elaborated as runtime code to
 read another ghost binding yet (the pending example below). E0420 names only this refusal; the
 `append()` argument refusal that shared it is E0421 (TYPE-10, bug 203).
 
-```con reject name=ghost-read-at-runtime code=E0420 stage=elab pair=ghost-in-contract
-fn f() -> Int {
-    ghost let bound: Int = 8;
+```con reject name=ghost-read-at-runtime-decided code=E0420 stage=elab pair=ghost-in-contract pending=R-0555 now=reject:E0420:elab
+fn f() -> i64 {
+    ghost let bound: i64 = 8;
     return bound;
 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     return f();
 }
 
@@ -233,18 +223,20 @@ fn main() -> u8 {
 ```
 
 ```con accept name=ghost-in-contract exit=28
-fn f() -> Int {
-    ghost let bound: Int = 8;
-    let mut acc: Int = 0;
+fn f() -> i64 {
+    ghost let bound: i64 = 8;
+    let mut acc: i64 = 0;
+    let mut i: i64 = 0;
     #[invariant(0 <= i && i <= bound)]
     #[variant(bound - i)]
-    for (let mut i: Int = 0; i < 8; i = i + 1) {
+    while i < 8 {
         acc = acc + i;
+        i = i + 1;
     }
     return acc;
 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     return f();
 }
 
@@ -262,19 +254,21 @@ fn main() -> u8 {
 ```
 
 ```con accept name=ghost-reads-ghost exit=28 pending=R-0499 now=reject:E0420:elab
-fn f() -> Int {
-    ghost let bound: Int = 8;
-    ghost let limit: Int = bound;
-    let mut acc: Int = 0;
+fn f() -> i64 {
+    ghost let bound: i64 = 8;
+    ghost let limit: i64 = bound;
+    let mut acc: i64 = 0;
+    let mut i: i64 = 0;
     #[invariant(0 <= i && i <= limit)]
     #[variant(limit - i)]
-    for (let mut i: Int = 0; i < 8; i = i + 1) {
+    while i < 8 {
         acc = acc + i;
+        i = i + 1;
     }
     return acc;
 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     return f();
 }
 
@@ -314,14 +308,14 @@ Absorbed from [CONTRACTS_GUIDE.md](../verification/CONTRACTS_GUIDE.md) and
 [CONTRACTS_AND_VCS.md](../verification/CONTRACTS_AND_VCS.md).
 
 ```con accept name=spec-fn-in-contract exit=42
-spec fn big(x: Int) -> bool = x > 10;
+spec fn big(x: i64) -> bool = x > 10;
 
 #[requires(big(x))]
-fn f(x: Int) -> Int {
+fn f(x: i64) -> i64 {
     return x;
 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     return f(42);
 }
 
@@ -360,13 +354,13 @@ ownership). Whether the grammar has the two statements is OPEN-79 and OPEN-80. A
 [CONTRACTS_AND_VCS.md](../verification/CONTRACTS_AND_VCS.md).
 
 ```con accept name=assert-and-assume-are-erased exit=42
-fn f(x: Int) -> Int {
+fn f(x: i64) -> i64 {
     assume x > 0;
     assert x > 0;
     return x;
 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     return f(42);
 }
 
@@ -404,12 +398,12 @@ identifier. Absorbed from [KNOWN_HOLES.md](../verification/KNOWN_HOLES.md) H27.
 ```con accept name=result-in-ensures exit=42
 #[requires(x > 0)]
 #[ensures(result == x)]
-fn f(x: Int) -> Int {
-    let result: Int = x;
+fn f(x: i64) -> i64 {
+    let result: i64 = x;
     return result;
 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     return f(42);
 }
 
@@ -447,11 +441,11 @@ separate identities in the report (`R1`, `R2`). Absorbed from
 ```con accept name=stacked-requires exit=42
 #[requires(x > 0)]
 #[requires(x < 100)]
-fn f(x: Int) -> Int {
+fn f(x: i64) -> i64 {
     return x;
 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     return f(42);
 }
 
@@ -467,3 +461,7 @@ fn main() -> u8 {
 
 }
 ```
+
+- CON-3@2 (2026-11-03) supersedes CON-3@1 to state the recorded decision.
+
+- CON-4@2 (2026-11-03) supersedes CON-4@1; pending legacy conformance is explicit.

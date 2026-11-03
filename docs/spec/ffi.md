@@ -37,32 +37,14 @@ shadowing local are all decided right; CoreCheck re-checks it.
 Decided by the owner on 2026-10-29 (OD4): every foreign function value is refused now; typed `extern "C" fn` types may come later.
 
 ```con reject name=extern-as-value code=E0588 stage=elab pair=wrapper-as-value
-mod c {
-    pub trusted extern fn abs(x: i32) with() -> i32;
-}
-mod m {
-    import c.{abs};
-    pub fn main() -> i32 {
-        let f: fn(i32) -> i32 = abs;
-        return f(0 - 5);
-    }
-}
+trusted extern fn abs(x: i32) with() -> i32;
+fn main() -> u8 { let f: fn(i32) -> i32 = abs; if f(0 - 5) == 5 { return 5; } return 1; }
 ```
 
 ```con accept name=wrapper-as-value exit=5
-mod c {
-    pub trusted extern fn abs(x: i32) with() -> i32;
-}
-mod m {
-    import c.{abs};
-    fn abs_wrapper(x: i32) -> i32 {
-        return abs(x);
-    }
-    pub fn main() -> i32 {
-        let f: fn(i32) -> i32 = abs_wrapper;
-        return f(0 - 5);
-    }
-}
+trusted extern fn abs(x: i32) with() -> i32;
+fn abs_wrapper(x: i32) -> i32 { return abs(x); }
+fn main() -> u8 { let f: fn(i32) -> i32 = abs_wrapper; if f(0 - 5) == 5 { return 5; } return 1; }
 ```
 
 <a id="FFI-2"></a>
@@ -114,7 +96,7 @@ fn main() -> u8 {
 ```
 
 ```con reject name=non-ffi-safe-parameter code=E0574 stage=core-check pair=declared-extern
-struct S { v: Int }
+struct S { v: i64 }
 
 extern fn f(s: S) with() -> i32;
 
@@ -126,8 +108,8 @@ fn main() -> u8 {
 ```con accept name=declared-extern exit=42
 trusted extern fn abs(x: i32) with() -> i32;
 
-fn example_value() -> Int {
-    return abs(0 - 42) as Int;
+fn example_value() -> i64 {
+    return abs(0 - 42) as i64;
 }
 
 fn main() -> u8 {
@@ -144,7 +126,7 @@ fn main() -> u8 {
 ```
 
 ```con reject name=returns-pointer-to-ref code=E0575 stage=core-check pair=pointer-to-value
-trusted extern fn f() with() -> *const &Int;
+trusted extern fn f() with() -> *const &i64;
 
 fn main() -> u8 {
     return 0;
@@ -152,7 +134,7 @@ fn main() -> u8 {
 ```
 
 ```con reject name=param-pointer-to-ref code=E0574 stage=core-check pair=pointer-to-value
-trusted extern fn keep(p: *const &Int) with();
+trusted extern fn keep(p: *const &i64) with();
 
 fn main() -> u8 {
     return 0;
@@ -160,8 +142,8 @@ fn main() -> u8 {
 ```
 
 ```con accept name=pointer-to-value exit=42
-trusted extern fn f() with() -> *const Int;
-trusted extern fn keep(p: *const Int) with();
+trusted extern fn f() with() -> *const i64;
+trusted extern fn keep(p: *const i64) with();
 
 fn main() -> u8 {
     return 42;
@@ -188,7 +170,7 @@ Over-alignment is refused because code generation does not support it yet (E0585
 
 ```con reject name=align-not-power-of-two code=E0577 stage=core-check pair=repr-c
 #[repr(C, align(3))]
-struct S { v: Int }
+struct S { v: i64 }
 
 fn main() -> u8 {
     return 0;
@@ -199,9 +181,9 @@ fn main() -> u8 {
 #[repr(C)]
 struct Copy S { a: i32, b: i32 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     let s: S = S { a: 40, b: 2 };
-    return (s.a + s.b) as Int;
+    return (s.a + s.b) as i64;
 }
 
 fn main() -> u8 {
@@ -249,63 +231,40 @@ fn main() -> u8 {
 ```
 
 ```con accept name=concrete-malloc exit=42
-struct Copy B { v: Int }
-
-fn malloc(n: Int) -> Int {
-    return n;
-}
-
-fn example_value() with(Std) -> Int {
-    let h: Heap<B> = alloc(B { v: 40 });
-    let b: B = *h;
-    return b.v + malloc(2);
-}
-
-fn main() with(Std) -> u8 {
-
-    if example_value() == 42 {
-
-        return 42;
-
-    }
-
-    return 1;
-
-}
+fn malloc(n: u8) -> u8 { return n; }
+fn main() -> u8 { return malloc(42); }
 ```
 
 <a id="FFI-6"></a>
 ### FFI-6. A compiler intrinsic is not a foreign binding
 
-**FFI-6@1.** A body-less declaration `#[intrinsic = "n"]` whose name is `n`, a compiler intrinsic, and that has no `#[link_name]` names an operation the compiler implements, so it is not a foreign binding, need not declare its effects, and keeps the `with(...)` it is written with; any other body-less declaration is a foreign binding.
+**FFI-6@2.** Only the compiler introduces an intrinsic, identified by its primitive identity rather than a foreign symbol, and its effects are fixed by the exhaustive primitive table rather than chosen by its declaration, with compound effects checked by composition.
 
-- Kind: guarantee
+- Kind: refusal
 - Uses: none
-- Codes: none
-- Status: enforced
+- Codes: new (check)
+- Status: pending R-0555
 - Enforced by: Concrete.Pipeline.resolve
 - Semantics: none
 - Obligation: none
 - Evidence: tested
 
-**Rationale.** FFI-3's effect declaration exists because C can do anything; an intrinsic is implemented by
-the compiler, which knows what it does. std declares `sizeof` and `alignof` this way, and any
-module may (bug 112: the same declaration outside std was refused as an undeclared foreign
-binding). The sentence is Resolve's `isCompilerIntrinsic`; the assumption report
-(`Concrete/Report/AssumptionSummary.lean`) classifies more narrowly, as a tooling choice about which
-foreign assumptions to list, not a language rule.
+**Rationale.** Authority rule 7 and the primitive-introduction audit require compiler-only intrinsic identity and an exhaustive effect table covering externs, generated operations, runtime entry, startup and shutdown. A source declaration cannot invent an intrinsic or understate its effects.
 
-```con accept name=user-intrinsic exit=5
-mod foo {
-    #[intrinsic = "sizeof"]
-    pub trusted fn sizeof<T>() -> u64;
-}
-mod bar {
-    import foo.{sizeof};
-    pub fn main() -> u64 {
-        return sizeof::<u8>() + sizeof::<u32>();
-    }
-}
+
+
+```con reject name=library-intrinsic-removed code=new stage=check pair=compiler-primitive pending=R-0555 now=accept:42
+// spec-file: main.con
+mod foo;
+import foo.{sizeof};
+fn main() -> u8 { if sizeof::<u8>() + sizeof::<u32>() == 5 { return 42; } return 0; }
+// spec-file: foo.con
+#[intrinsic = "sizeof"]
+pub trusted fn sizeof<T>() -> u64;
+```
+
+```con accept name=compiler-primitive exit=42
+fn main() -> u8 { if sizeof::<u8>() == 1 { return 42; } return 0; }
 ```
 
 <a id="FFI-7"></a>
@@ -331,20 +290,16 @@ code that walks a buffer may also rely on the stride of an array of `T` being `s
 enum may cross the foreign boundary is OPEN-110 (the current compiler refuses it, E0574).
 
 ```con accept name=observed-through-sizeof exit=42
-mod m {
-    #[intrinsic = "sizeof"]
-    pub trusted fn sizeof<T>() -> u64;
-    #[intrinsic = "alignof"]
-    pub trusted fn alignof<T>() -> u64;
 
-    struct Copy S { a: u8, b: u32 }
 
-    pub fn main() -> u8 {
-        if sizeof::<S>() >= 5 && alignof::<S>() >= 1 {
-            return 42;
-        }
-        return 0;
+
+struct Copy S { a: u8, b: u32 }
+
+pub fn main() -> u8 {
+    if sizeof::<S>() >= 5 && alignof::<S>() >= 1 {
+        return 42;
     }
+    return 0;
 }
 ```
 
@@ -370,52 +325,26 @@ borrowed, is OPEN-111; the current compiler accepts both, and the examples here 
 aligned for its type.
 
 ```con accept name=c-and-packed exit=42
-mod m {
-    #[intrinsic = "sizeof"]
-    pub trusted fn sizeof<T>() -> u64;
-    #[intrinsic = "alignof"]
-    pub trusted fn alignof<T>() -> u64;
 
-    #[repr(C)]
-    struct Copy R { v: u8, l: u32 }
-    #[repr(C, packed)]
-    struct Copy H { l: u32, f: u16, v: u8 }
-    #[repr(packed)]
-    struct Copy P { l: u32, v: u8 }
 
-    pub fn main() -> u8 {
-        if sizeof::<R>() == 8 && alignof::<R>() == 4 && sizeof::<H>() == 7 && alignof::<H>() == 1
-            && sizeof::<P>() == 5 && alignof::<P>() == 1 {
-            return 42;
-        }
-        return 0;
+
+#[repr(C)]
+struct Copy R { v: u8, l: u32 }
+#[repr(C, packed)]
+struct Copy H { l: u32, f: u16, v: u8 }
+#[repr(packed)]
+struct Copy P { l: u32, v: u8 }
+
+pub fn main() -> u8 {
+    if sizeof::<R>() == 8 && alignof::<R>() == 4 && sizeof::<H>() == 7 && alignof::<H>() == 1
+        && sizeof::<P>() == 5 && alignof::<P>() == 1 {
+        return 42;
     }
+    return 0;
 }
 ```
 
-```con accept name=field-offsets exit=42 interp-exempt=byte-reads-not-modelled
-mod m {
-    #[repr(C)]
-    struct Copy R { v: u8, l: u32 }
-    #[repr(packed)]
-    struct Copy P { l: u32, v: u8 }
 
-    trusted fn byte_at<T>(s: &T, i: Int) -> u8 {
-        let p: *const u8 = s as *const T as *const u8;
-        let q: *const u8 = p + i;
-        return *q;
-    }
-
-    pub fn main() -> u8 {
-        let r: R = R { v: 7, l: 30 };
-        let p: P = P { l: 9, v: 5 };
-        if byte_at(&r, 0) == 7 && byte_at(&r, 4) == 30 && byte_at(&p, 0) == 9 && byte_at(&p, 4) == 5 {
-            return 42;
-        }
-        return 0;
-    }
-}
-```
 
 <a id="FFI-9"></a>
 ### FFI-9. What `trusted extern fn` asserts
@@ -440,8 +369,8 @@ base ([TRUSTED_COMPUTING_BASE.md](../verification/TRUSTED_COMPUTING_BASE.md) §6
 ```con accept name=trusted-extern-without-unsafe exit=42
 trusted extern fn abs(x: i32) with() -> i32;
 
-fn example_value() -> Int {
-    return abs(-42) as Int;
+fn example_value() -> i64 {
+    return abs(-42) as i64;
 }
 
 fn main() -> u8 {
@@ -487,12 +416,12 @@ struct Copy B { v: u8 }
 struct Copy C { v: u8 }
 struct Copy D { v: u8 }
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     let a: A = A { v: 10 };
     let b: B = B { v: 10 };
     let c: C = C { v: 10 };
     let d: D = D { v: 12 };
-    return (a.v + b.v + c.v + d.v) as Int;
+    return (a.v + b.v + c.v + d.v) as i64;
 }
 
 fn main() -> u8 {
@@ -544,11 +473,11 @@ struct Copy Addr { s: u32 }
 trusted extern fn htonl(x: u32) with() -> u32;
 trusted extern fn inet_lnaof(a: Addr) with() -> u32;
 
-fn example_value() -> Int {
+fn example_value() -> i64 {
     let r: D = div(85, 2);
     let a: Addr = Addr { s: htonl(167772202) };
     if r.rem == 1 && inet_lnaof(a) == 42 {
-        return r.quot as Int;
+        return r.quot as i64;
     }
     return 0;
 }
@@ -569,81 +498,34 @@ fn main() -> u8 {
 <a id="FFI-12"></a>
 ### FFI-12. The stride of a buffer is `sizeof`
 
-**FFI-12@1.** Consecutive elements of an array, a `HeapArray` or a raw buffer of `T` lie `sizeof::<T>()` bytes apart, which trusted code doing pointer arithmetic over the elements may rely on.
+**FFI-12@2.** Consecutive elements of an array, a `HeapArray` or a raw buffer of `T` lie `sizeof::<T>()` bytes apart, which trusted code doing pointer arithmetic over the elements may rely on.
 
 - Kind: guarantee
 - Uses: none
 - Codes: none
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.Layout.tySize
 - Semantics: none
 - Obligation: layout comes from the one `Layout` authority (FFI-2, R-0502)
 - Evidence: tested
 
-**Rationale.** This is the one layout fact beyond FFI-7 and FFI-8 that trusted code needs to walk a
+**Rationale.** The complete raw offset contracts are [undecided: see the target Core proposal](decisions.md#core-unsafe-premises); the legacy pointer-arithmetic examples are retired until they can use the decided named operations.
+
+ This is the one layout fact beyond FFI-7 and FFI-8 that trusted code needs to walk a
 buffer, and the `Layout` authority states it: an array of `n` elements of `T` has size `n` times
 `sizeof::<T>()`. The examples use the pointer arithmetic of the current compiler (`p + 1` and an
 integer added to a `*const u8`), which TYPE-6@2 and TRUST-1 replace with `ptr::offset` (bug 322,
 R-0502). The interpreter stores typed values, not bytes, so the byte-offset example runs only
 natively.
 
-```con accept name=next-element exit=42
-struct Copy S { a: u8, b: u32 }
 
-trusted fn second(arr: &[S; 3]) -> u32 {
-    let p: *const S = arr as *const [S; 3] as *const S;
-    let q: *const S = p + 1;
-    let s: S = *q;
-    return s.b;
-}
 
-fn example_value() -> Int {
-    let arr: [S; 3] = [S { a: 1, b: 10 }, S { a: 2, b: 42 }, S { a: 3, b: 30 }];
-    return second(&arr) as Int;
-}
 
-fn main() -> u8 {
 
-    if example_value() == 42 {
+## Version history
 
-        return 42;
+This appendix records superseded versions and is not normative.
 
-    }
+- FFI-6@2 (2026-11-03) brings the chapter into line with the recorded owner decisions; FFI-6@1 is superseded by version.
 
-    return 1;
-
-}
-```
-
-```con accept name=byte-stride exit=42 interp-exempt=interp-stores-typed-values-not-bytes
-mod m {
-    #[intrinsic = "sizeof"]
-    pub trusted fn sizeof<T>() -> u64;
-
-    struct Copy S { a: u8, b: u32 }
-
-    trusted fn second(arr: &[S; 3]) -> u32 {
-        let bytes: *const u8 = arr as *const [S; 3] as *const u8;
-        let p: *const S = (bytes + sizeof::<S>()) as *const S;
-        let s: S = *p;
-        return s.b;
-    }
-
-    fn example_value() -> Int {
-        let arr: [S; 3] = [S { a: 1, b: 10 }, S { a: 2, b: 42 }, S { a: 3, b: 30 }];
-        return second(&arr) as Int;
-    }
-
-    pub fn main() -> u8 {
-
-        if example_value() == 42 {
-
-            return 42;
-
-        }
-
-        return 1;
-
-    }
-}
-```
+- FFI-12@2 (2026-11-03) supersedes FFI-12@1 for decided-language conformance.

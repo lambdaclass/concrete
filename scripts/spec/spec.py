@@ -67,10 +67,43 @@ TRACK_RE = re.compile(r"^(R-[0-9]{4}|bug-[0-9]{3})$")
 ATTR_RE = re.compile(r"^([a-z-]+)=(\S+)$")
 
 
+def example_files(body):
+    """Split a source bundle; names are local .con files, never paths outside the example."""
+    marker = re.compile(r"^// spec-file: (.+)$", re.M)
+    marks = list(marker.finditer(body))
+    if not marks:
+        return {"main.con": body}
+    if body[:marks[0].start()].strip():
+        raise ValueError("source bundle must start with // spec-file: main.con")
+    files = {}
+    for i, m in enumerate(marks):
+        name = m[1]
+        if not re.fullmatch(r"[a-zA-Z_][a-zA-Z_0-9]*\.con", name):
+            raise ValueError("source bundle needs a local .con filename")
+        if name in files:
+            raise ValueError("duplicate source bundle filename " + name)
+        files[name] = body[m.end() + 1:marks[i+1].start() if i+1 < len(marks) else len(body)]
+    if marks[0][1] != "main.con":
+        raise ValueError("source bundle must start with // spec-file: main.con")
+    return files
+
+
+def write_example_source(body, directory):
+    os.makedirs(directory, exist_ok=True)
+    for name, source in example_files(body).items():
+        with open(os.path.join(directory, name), "w") as f:
+            f.write(source)
+    return os.path.join(directory, "main.con")
+
+
 class Example:
     def __init__(self, entry, info, body, line, chapter):
         self.entry, self.info, self.body, self.line, self.chapter = entry, info, body, line, chapter
         self.attrs, self.verdict, self.errors = {}, None, []
+        try:
+            example_files(body)
+        except ValueError as exc:
+            self.errors.append(str(exc))
         words = info.split()
         if len(words) < 2 or words[0] != "con" or words[1] not in ("accept", "reject", "abort"):
             self.errors.append(f"info string '{info}' is not `con accept|reject|abort ...`")
@@ -669,7 +702,8 @@ def outcome_native(cc, src, workdir, project=None):
         d = src[:-4] + ".proj"
         os.makedirs(os.path.join(d, "src"), exist_ok=True)
         open(os.path.join(d, "Concrete.toml"), "w").write(f'[package]\nname = "{project}"\nversion = "0.1.0"\n')
-        os.replace(src, os.path.join(d, "src", "main.con"))
+        for companion in glob.glob(os.path.join(os.path.dirname(src), "*.con")):
+            os.replace(companion, os.path.join(d, "src", os.path.basename(companion)))
         rc, out, _ = run([cc, "build", "-o", binp], cwd=d, env=dict(os.environ, CONCRETE_STD=os.path.join(ROOT, "std")))
     else:
         rc, out, _ = run([cc, src, "-o", binp])
@@ -776,8 +810,8 @@ def run_examples(spec, cc, jobs, workdir, only=None):
     os.makedirs(workdir, exist_ok=True)
     def one(ix):
         i, x = ix
-        src = os.path.join(workdir, f"ex{i:04d}.con")
-        open(src, "w").write(x.body)
+        example_dir = os.path.join(workdir, f"ex{i:04d}")
+        src = write_example_source(x.body, example_dir)
         # the Lean semantics, before outcome_native (a project example moves its source)
         mdl = None
         if x.verdict in ("accept", "abort") and not x.pending and not x.attrs.get("project"):
@@ -812,7 +846,7 @@ def code_map(spec):
     m = {}
     for e in spec.entries:
         for c, _ in e.codes():
-            if c and c != "new" and e.version is not None and e.status()[0] != "pending":
+            if c and c != "new" and e.version is not None:
                 m.setdefault(c, set()).add(e.tag)
     return m
 
@@ -834,6 +868,16 @@ def check_codes(spec, ledger_path):
         if not (r[1] in CODE_CLASSES or (r[1].startswith("unmigrated:") and r[1][11:] in spec.chapters_planned)):
             fail("S6", f"codes.tsv: {r[0]} has unknown class '{r[1]}'"); bad += 1
     cmap = code_map(spec)
+    legacy = {}
+    registry = {r[0]: r[1] for r in (read_tsv(os.path.join(spec.dir, "ids.tsv")) or [])}
+    for r in read_tsv(os.path.join(spec.dir, "legacy_codes.tsv")) or []:
+        if len(r) != 3 or not tracking_exists(r[2], ROOT):
+            fail("S6", "malformed or untracked legacy ledger expectation: " + str(r)); bad += 1
+            continue
+        tags = [t.strip() for t in r[1].split(",") if t.strip()]
+        if any(t not in registry for t in tags):
+            fail("S6", r[0] + ": unregistered legacy rule tag"); bad += 1
+        legacy[r[0]] = ", ".join(sorted(tags))
     for c in sorted(rows):
         if c not in cls:
             fail("S6", f"{c} ({rows[c].get('description','')}) is in the ledger but not classified in codes.tsv (orphan code)"); bad += 1
@@ -850,7 +894,14 @@ def check_codes(spec, ledger_path):
                        f"(class {cls[c]}; map it to an entry, or classify it internal with a reason)"); bad += 1
         want = ", ".join(sorted(cmap.get(c, [])))
         got = ", ".join(sorted(t.strip() for t in rows[c].get("rules", "").split(",") if t.strip()))
-        if want != got:
+        if c in legacy:
+            if want == got:
+                fail("S6", f"{c}: legacy ledger marker already holds; remove it"); bad += 1
+            elif got != legacy[c]:
+                fail("S6", f"{c}: legacy ledger changed: '{got}', expected '{legacy[c]}'"); bad += 1
+            else:
+                print(f"  PENDING S6 {c}: R-0555 legacy tags '{got}', decided tags '{want}'")
+        elif want != got:
             fail("S6", f"{c}: the compiler's ledger names rules '{got}', the spec says '{want}'"); bad += 1
     for c in sorted(set(cls) - set(rows)):
         fail("S6", f"codes.tsv classifies {c}, which is not in the ledger"); bad += 1
@@ -1207,8 +1258,7 @@ def observe_codes(spec, cc, jobs, workdir, root):
                 srcs.append((rel, f))
     for i, x in enumerate(x for e in spec.entries for x in e.examples
                           if not x.errors and x.verdict == "reject" and not x.attrs.get("project")):
-        p = os.path.join(workdir, f"rej{i:04d}.con")
-        open(p, "w").write(x.body)
+        p = write_example_source(x.body, os.path.join(workdir, f"rej{i:04d}"))
         srcs.append((f"spec:{x.key}", p))
     def one(item):
         # a refusal counts only when the compiler exits normally with a failure status; each error is
