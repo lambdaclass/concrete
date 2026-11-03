@@ -176,10 +176,10 @@ REF-4	enforced	E0236	check	Concrete.refuseNestedRefInstantiation, Concrete.refus
 REF-4	enforced	E0239	post-mono	Concrete.refuseNestedRefInstantiation, Concrete.refuseNestedRefSpecialization, Concrete.verifyNoStoredRefs
 REF-4	enforced	E0238	check,mono	Concrete.refuseNestedRefInstantiation, Concrete.refuseNestedRefSpecialization, Concrete.verifyNoStoredRefs
 REF-5	pending R-0555	E0238	check	Concrete.normPlace, Concrete.refuseRefValuedBranch, Concrete.checkRefArg, Concrete.recordRefProvenance, Concrete.refuseTemporaryBorrow
-REF-6	enforced	E0302	check,post-mono	Concrete.checkStmt, Concrete.verifyNoRefBindingsPostMono
-REF-6	enforced	E0303	check,post-mono	Concrete.checkStmt, Concrete.verifyNoRefBindingsPostMono
-REF-6	enforced	E0234	check	Concrete.checkStmt, Concrete.verifyNoRefBindingsPostMono
-REF-6	enforced	E0238	check	Concrete.checkStmt, Concrete.verifyNoRefBindingsPostMono
+REF-6	partial R-0555	E0302	check,post-mono	Concrete.checkStmt, Concrete.verifyNoRefBindingsPostMono
+REF-6	partial R-0555	E0303	check,post-mono	Concrete.checkStmt, Concrete.verifyNoRefBindingsPostMono
+REF-6	partial R-0555	E0234	check	Concrete.checkStmt, Concrete.verifyNoRefBindingsPostMono
+REF-6	partial R-0555	E0238	check	Concrete.checkStmt, Concrete.verifyNoRefBindingsPostMono
 REF-7	pending R-0555	E0238	check	Concrete.checkStmt
 REF-8	pending R-0555	E0203	check	Concrete.consumeVar, Concrete.checkCallBorrowConflicts, Concrete.checkWriteAccess
 REF-8	pending R-0555	E0204	check	Concrete.consumeVar, Concrete.checkCallBorrowConflicts, Concrete.checkWriteAccess

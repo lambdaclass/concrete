@@ -179,7 +179,7 @@ fn f() -> Unit { let r: R = R { x: 1 }; }
 fn main() -> u8 { return 0; }
 ```
 
-```con reject name=mixed-width-binop-decided code=E0228 stage=check pair=linear-local-consumed pending=R-0555 now=reject:E0228:check
+```con reject name=mixed-width-binop-decided code=E0228 stage=check pair=linear-local-consumed
 fn example_value() -> i64 {
     let a: i32 = 1;
     let b: i64 = 2;

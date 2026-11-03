@@ -476,28 +476,28 @@ signature exceeds its trait's would pass something the generic caller never agre
 Capabilities are the load-bearing case: a trait method with no `with(...)` admits only impls with
 none (TRUST-4). OD60 requires the one consuming receiver form `fn destroy(self)`. Its capability bound is OWN-13's (E0584).
 
-```con reject name=missing-method code=E0581 stage=core-check pair=conforming-impl
+```con reject name=missing-method-decided code=E0581 stage=core-check pair=conforming-impl pending=R-0555 now=reject:E0581:core-check
 trait Tr { fn m(&self) -> i64; fn n(&self) -> i64; }
 struct Copy S { v: i64 }
 impl Tr for S { fn m(&self) -> i64 { discard(self); return 1; } }
 fn main() -> u8 { return 0; }
 ```
 
-```con reject name=return-type-differs code=E0582 stage=core-check pair=conforming-impl
+```con reject name=return-type-differs-decided code=E0582 stage=core-check pair=conforming-impl pending=R-0555 now=reject:E0582:core-check
 trait Tr { fn m(&self) -> i64; }
 struct Copy S { v: i64 }
 impl Tr for S { fn m(&self) -> bool { return true; } }
 fn main() -> u8 { return 0; }
 ```
 
-```con reject name=receiver-differs code=E0587 stage=core-check pair=conforming-impl
+```con reject name=receiver-differs-decided code=E0587 stage=core-check pair=conforming-impl pending=R-0555 now=reject:E0587:core-check
 trait Tr { fn m(&self, n: i64) -> i64; }
 struct Copy S { v: i64 }
 impl Tr for S { fn m(&mut self, n: i64) -> i64 { return n; } }
 fn main() -> u8 { return 0; }
 ```
 
-```con reject name=capabilities-exceed-trait code=E0586 stage=core-check pair=conforming-impl
+```con reject name=capabilities-exceed-trait-decided code=E0586 stage=core-check pair=conforming-impl pending=R-0555 now=reject:E0586:core-check
 trait Tr { fn m(&self) -> i64; }
 struct Copy S { v: i64 }
 impl Tr for S { fn m(&self) with(Fs) -> i64 { return self.v; } }

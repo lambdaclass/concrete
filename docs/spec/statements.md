@@ -610,7 +610,7 @@ fn main() -> u8 {
 }
 ```
 
-```con reject name=main-returns-int code=new stage=check pair=main-returns-u8 pending=bug-320 now=accept:42
+```con reject name=main-returns-int code=new stage=check pair=main-returns-u8 pending=bug-320 now=accept:1
 fn main() -> i64 {
     if 42 == 0 { return 0; } return 1;
 }

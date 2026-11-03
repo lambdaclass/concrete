@@ -695,13 +695,13 @@ fn main() -> u8 {
 
 **Rationale.** Signatures and primitive effects are fixed by identity, not by declarations. MEM-5 and MEM-7 govern conserving allocation; OD59 removes `free` and OD155 removes `unwrap`. Complete failure payload contracts are [undecided: see the target Core proposal](decisions.md#core-allocation-contracts).
 
-```con reject name=wrapping-wrong-arity code=E0268 stage=check pair=wrapping-valid-arguments
+```con reject name=wrapping-wrong-arity-decided code=E0268 stage=check pair=wrapping-valid-arguments pending=R-0555 now=reject:E0268:check
 fn main() -> u8 {
     return wrapping_add(42);
 }
 ```
 
-```con reject name=wrapping-wrong-type code=E0314 stage=check pair=wrapping-valid-arguments
+```con reject name=wrapping-wrong-type-decided code=E0314 stage=check pair=wrapping-valid-arguments pending=R-0555 now=reject:E0314:check
 fn main() -> u8 {
     return wrapping_add(true, false);
 }

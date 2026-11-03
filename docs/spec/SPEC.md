@@ -1270,7 +1270,7 @@ pub fn g() -> i64 {
 
 ```
 
-```con reject name=reexport code=E0111 stage=resolve pair=import-public
+```con reject name=reexport code=E0285 stage=check pair=import-public
 // spec-file: main.con
 mod c;
 mod b;
@@ -1389,7 +1389,7 @@ fn main() -> u8 {
 }
 ```
 
-```con reject name=import-clashes-with-local code=E0299 stage=check pair=renamed-import
+```con reject name=import-clashes-with-local-decided code=E0299 stage=check pair=renamed-import pending=R-0555 now=reject:E0299:check
 // spec-file: main.con
 mod a;
 import a.{f};
@@ -2626,13 +2626,13 @@ fn main() -> u8 {
 
 **Rationale.** Signatures and primitive effects are fixed by identity, not by declarations. MEM-5 and MEM-7 govern conserving allocation; OD59 removes `free` and OD155 removes `unwrap`. Complete failure payload contracts are [undecided: see the target Core proposal](#core-allocation-contracts).
 
-```con reject name=wrapping-wrong-arity code=E0268 stage=check pair=wrapping-valid-arguments
+```con reject name=wrapping-wrong-arity-decided code=E0268 stage=check pair=wrapping-valid-arguments pending=R-0555 now=reject:E0268:check
 fn main() -> u8 {
     return wrapping_add(42);
 }
 ```
 
-```con reject name=wrapping-wrong-type code=E0314 stage=check pair=wrapping-valid-arguments
+```con reject name=wrapping-wrong-type-decided code=E0314 stage=check pair=wrapping-valid-arguments pending=R-0555 now=reject:E0314:check
 fn main() -> u8 {
     return wrapping_add(true, false);
 }
@@ -4191,7 +4191,7 @@ fn main() -> u8 {
 }
 ```
 
-```con accept name=checked-conversion-result exit=42 pending=R-0500 now=reject:E0101:resolve
+```con accept name=checked-conversion-result exit=42 pending=R-0500 now=reject:E0108:resolve
 fn convert(x: i64) -> Result<u8, OutOfRange> {
     return try_convert::<u8>(x);
 }
@@ -4216,7 +4216,7 @@ fn main() -> u8 { return 42; }
 and is the identity in `--interp` (bug 128), and a float-to-integer `as` truncates toward zero and
 aborts on NaN, an infinity or a value out of range. OD107 instead requires an error as `try_convert`; OD99 fixes the builtin spellings `trunc`, `round`, `floor`, `ceil`. Implementation remains pending R-0500.
 
-```con accept name=round-result exit=42 pending=R-0500 now=reject:E0101:resolve
+```con accept name=round-result exit=42 pending=R-0500 now=reject:E0108:resolve
 fn convert(x: f64) -> Result<u8, OutOfRange> {
     return trunc::<u8>(x);
 }
@@ -4942,7 +4942,7 @@ fn main() -> u8 {
 }
 ```
 
-```con reject name=main-returns-int code=new stage=check pair=main-returns-u8 pending=bug-320 now=accept:42
+```con reject name=main-returns-int code=new stage=check pair=main-returns-u8 pending=bug-320 now=accept:1
 fn main() -> i64 {
     if 42 == 0 { return 0; } return 1;
 }
@@ -8275,7 +8275,7 @@ fn main() -> u8 {
 - Kind: refusal
 - Uses: none
 - Codes: E0302 (check, post-mono), E0303 (check, post-mono), E0234 (check), E0238 (check)
-- Status: enforced
+- Status: partial R-0555
 - Enforced by: Concrete.checkStmt, Concrete.verifyNoRefBindingsPostMono
 - Semantics: none
 - Obligation: INV-REF (R-0500): a reference binding's source is fixed at its introduction
@@ -8402,7 +8402,7 @@ fn main() -> u8 {
 }
 ```
 
-```con reject name=erased-generic-at-ref code=E0302 stage=check pair=constant-and-erased-value
+```con reject name=erased-generic-at-ref-decided code=E0302 stage=check pair=constant-and-erased-value pending=R-0555 now=reject:E0101:resolve
 fn example_value() -> i64 {
     let v: i64 = 42;
     assert same::<&i64>(&v);
@@ -9926,28 +9926,28 @@ signature exceeds its trait's would pass something the generic caller never agre
 Capabilities are the load-bearing case: a trait method with no `with(...)` admits only impls with
 none (TRUST-4). OD60 requires the one consuming receiver form `fn destroy(self)`. Its capability bound is OWN-13's (E0584).
 
-```con reject name=missing-method code=E0581 stage=core-check pair=conforming-impl
+```con reject name=missing-method-decided code=E0581 stage=core-check pair=conforming-impl pending=R-0555 now=reject:E0581:core-check
 trait Tr { fn m(&self) -> i64; fn n(&self) -> i64; }
 struct Copy S { v: i64 }
 impl Tr for S { fn m(&self) -> i64 { discard(self); return 1; } }
 fn main() -> u8 { return 0; }
 ```
 
-```con reject name=return-type-differs code=E0582 stage=core-check pair=conforming-impl
+```con reject name=return-type-differs-decided code=E0582 stage=core-check pair=conforming-impl pending=R-0555 now=reject:E0582:core-check
 trait Tr { fn m(&self) -> i64; }
 struct Copy S { v: i64 }
 impl Tr for S { fn m(&self) -> bool { return true; } }
 fn main() -> u8 { return 0; }
 ```
 
-```con reject name=receiver-differs code=E0587 stage=core-check pair=conforming-impl
+```con reject name=receiver-differs-decided code=E0587 stage=core-check pair=conforming-impl pending=R-0555 now=reject:E0587:core-check
 trait Tr { fn m(&self, n: i64) -> i64; }
 struct Copy S { v: i64 }
 impl Tr for S { fn m(&mut self, n: i64) -> i64 { return n; } }
 fn main() -> u8 { return 0; }
 ```
 
-```con reject name=capabilities-exceed-trait code=E0586 stage=core-check pair=conforming-impl
+```con reject name=capabilities-exceed-trait-decided code=E0586 stage=core-check pair=conforming-impl pending=R-0555 now=reject:E0586:core-check
 trait Tr { fn m(&self) -> i64; }
 struct Copy S { v: i64 }
 impl Tr for S { fn m(&self) with(Fs) -> i64 { return self.v; } }
@@ -10175,7 +10175,6 @@ question that `--report contracts` answers.
 #[requires(n >= 0)]
 #[ensures(result == n)]
 fn count(n: i64) -> i64 {
-    let mut i: i64 = 0;
     let mut i: i64 = 0;
     #[invariant(0 <= i && i <= n)]
     #[variant(n - i)]
@@ -11939,7 +11938,7 @@ fn f() -> Unit { let r: R = R { x: 1 }; }
 fn main() -> u8 { return 0; }
 ```
 
-```con reject name=mixed-width-binop-decided code=E0228 stage=check pair=linear-local-consumed pending=R-0555 now=reject:E0228:check
+```con reject name=mixed-width-binop-decided code=E0228 stage=check pair=linear-local-consumed
 fn example_value() -> i64 {
     let a: i32 = 1;
     let b: i64 = 2;

@@ -313,7 +313,7 @@ MOD-2@1	live	05636d529019c2bc87b42ff7b165954c
 MOD-2/import-private	live	-
 MOD-2/import-public	live	-
 MOD-3@1	superseded	b95cc81afcc076c2826fa4b3edbe2068
-MOD-3/import-clashes-with-local	live	-
+MOD-3/import-clashes-with-local	retired:2026-11-03-frozen-compiler-conformance	-
 MOD-3/renamed-import	live	-
 REF-12@1	superseded	059bcabd15b038011f31128911765406
 REF-12/assign-through-shared	retired:2026-11-03-decided-language	-
@@ -345,10 +345,10 @@ TRAIT-8/unknown-trait	live	-
 TRAIT-8/destroy-redeclared	live	-
 TRAIT-8/declared-trait	live	-
 TRAIT-9@1	superseded	4c34a6fc633457d2d785f77629b9558d
-TRAIT-9/missing-method	live	-
-TRAIT-9/return-type-differs	live	-
-TRAIT-9/receiver-differs	live	-
-TRAIT-9/capabilities-exceed-trait	live	-
+TRAIT-9/missing-method	retired:2026-11-03-frozen-compiler-conformance	-
+TRAIT-9/return-type-differs	retired:2026-11-03-frozen-compiler-conformance	-
+TRAIT-9/receiver-differs	retired:2026-11-03-frozen-compiler-conformance	-
+TRAIT-9/capabilities-exceed-trait	retired:2026-11-03-frozen-compiler-conformance	-
 TRAIT-9/conforming-impl	live	-
 TRAIT-10@1	superseded	b611d670436c8f855c8fee9532b9aecf
 TRAIT-10/bound-unsatisfied	retired:2026-11-03-decided-language	-
@@ -607,7 +607,7 @@ REF-5/borrow-reference-binding	live	-
 REF-5/branch-value-base	retired:2026-11-03-decided-language	-
 REF-5/bind-branch-first	live	-
 REF-6/constant-borrows	live	-
-REF-6/erased-generic-at-ref	live	-
+REF-6/erased-generic-at-ref	retired:2026-11-03-frozen-compiler-conformance	-
 REF-6/constant-and-erased-value	live	-
 REF-8/read-owner-in-borrow-block	retired:2026-11-03-decided-language	-
 TRUST-11@1	superseded	a40f5b568fa77f7dfec54870fe968cd6
@@ -1008,7 +1008,7 @@ FFI-6/compiler-primitive	live	-
 FFI-12@2	pending	d822ecb9090a71f5fabad64facb4c158
 PASS-5@2	pending	a175b4e10609cd9c40ff8b4db488fdb8
 PASS-5/unconsumed-linear-local-decided	pending	-
-PASS-5/mixed-width-binop-decided	pending	-
+PASS-5/mixed-width-binop-decided	live	-
 PASS-12@2	pending	d89ac39af9e4586a86e8ada3e7ccb403
 ARITH-10@2	pending	8d0c55a6ec34ecfe2b8b0f0f3129a72e
 ARITH-11@2	pending	ede31137e3af09b7da18f36e57888613
@@ -1017,8 +1017,8 @@ REF-D3@3	pending	399101cd67f71d85bc0bb8876b17a0d8
 CON-5@2	pending	b4dfa5a2161131c77982a8c722fdc0df
 FFI-8@2	pending	5eac5187f69cb465ec71938ee5c31db3
 FFI-11@2	pending	13fe8fe7fac41fc6d82b05cd939675a7
-TYPE-10/wrapping-wrong-arity	live	-
-TYPE-10/wrapping-wrong-type	live	-
+TYPE-10/wrapping-wrong-arity	retired:2026-11-03-frozen-compiler-conformance	-
+TYPE-10/wrapping-wrong-type	retired:2026-11-03-frozen-compiler-conformance	-
 TYPE-10/wrapping-valid-arguments	live	-
 OWN-15@5	pending	b9f6e9809b07136091724cc2c949033e
 ARITH-11/round-result	pending	-
@@ -1036,3 +1036,11 @@ ARITH-10/checked-conversion-result	pending	-
 FFI-8/misaligned-packed-field-value	live	-
 PASS-7@2	pending	349ad520945dcb7ccdd0afe8f10cf588
 SYN-5@3	pending	e915afa0d11b3a57e37ed11a81d42759
+MOD-3/import-clashes-with-local-decided	pending	-
+TYPE-10/wrapping-wrong-arity-decided	pending	-
+TYPE-10/wrapping-wrong-type-decided	pending	-
+TRAIT-9/missing-method-decided	pending	-
+TRAIT-9/return-type-differs-decided	pending	-
+TRAIT-9/receiver-differs-decided	pending	-
+TRAIT-9/capabilities-exceed-trait-decided	pending	-
+REF-6/erased-generic-at-ref-decided	pending	-

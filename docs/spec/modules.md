@@ -162,7 +162,7 @@ pub fn g() -> i64 {
 
 ```
 
-```con reject name=reexport code=E0111 stage=resolve pair=import-public
+```con reject name=reexport code=E0285 stage=check pair=import-public
 // spec-file: main.con
 mod c;
 mod b;
@@ -281,7 +281,7 @@ fn main() -> u8 {
 }
 ```
 
-```con reject name=import-clashes-with-local code=E0299 stage=check pair=renamed-import
+```con reject name=import-clashes-with-local-decided code=E0299 stage=check pair=renamed-import pending=R-0555 now=reject:E0299:check
 // spec-file: main.con
 mod a;
 import a.{f};

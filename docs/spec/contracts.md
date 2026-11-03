@@ -56,7 +56,6 @@ question that `--report contracts` answers.
 #[ensures(result == n)]
 fn count(n: i64) -> i64 {
     let mut i: i64 = 0;
-    let mut i: i64 = 0;
     #[invariant(0 <= i && i <= n)]
     #[variant(n - i)]
     while i < n {
