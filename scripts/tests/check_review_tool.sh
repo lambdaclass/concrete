@@ -176,6 +176,8 @@ check "--base --head <sha> as train.sh calls it is accepted (got $rc)" test "$rc
 review --head main >"$T/out-head" 2>&1; rc=$?
 check "--head other than the checkout refuses (exit 2, got $rc)" test "$rc" -eq 2
 check "and says why" grep -q "but the checkout is at" "$T/out-head"
+review --head "" >/dev/null 2>&1; rc=$?
+check "an empty --head refuses (exit 2, got $rc)" test "$rc" -eq 2
 check "and calls no reviewer" test "$(calls)" -eq 1
 
 echo "=== round 2: only the delta, with the previous findings ==="

@@ -64,7 +64,7 @@ die() { echo "review: $*" >&2; exit 2; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --base) [ $# -ge 2 ] || die "--base needs a ref"; BASE="$2"; shift 2 ;;
-    --head) [ $# -ge 2 ] || die "--head needs a ref"; WANT_HEAD="$2"; shift 2 ;;
+    --head) [ $# -ge 2 ] && [ -n "$2" ] || die "--head needs a ref"; WANT_HEAD="$2"; shift 2 ;;
     --max-rounds) [ $# -ge 2 ] || die "--max-rounds needs a number"; MAX_ROUNDS="$2"; shift 2 ;;
     --pieces) [ $# -ge 2 ] || die "--pieces needs auto or a number"; PIECES="$2"; shift 2 ;;
     --prompt-extra) [ $# -ge 2 ] || die "--prompt-extra needs text"; EXTRA="$2"; shift 2 ;;
