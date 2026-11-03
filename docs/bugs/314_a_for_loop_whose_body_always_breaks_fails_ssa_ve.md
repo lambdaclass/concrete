@@ -23,7 +23,10 @@ On main ca49fada the native build fails: `error[ssa-verify]: (E0703) main: block
 
 ## Expected
 
-The program is valid: [STMT-6](../spec/statements.md#STMT-6) admits `break` in a loop, and a `break` value is evaluated and discarded (bug 149). [PASS-9](../spec/pipeline.md#PASS-9) requires lowering to produce SSA that passes the verifier. It builds and exits 42 on both consumers.
+Historical expectation, recorded when the bug was filed; the decided language has since changed it.
+Under [OD27](../spec/decisions.md) a valued `break` is refused, and under [OD47](../spec/decisions.md) C-style `for`
+headers are removed, so today this program is refused. The SSA defect it exposed stays recorded
+against `legacy-compiler-final`. At filing time the program was valid: [STMT-6](../spec/statements.md#STMT-6) admits `break` in a loop, and a `break` value is evaluated and discarded (bug 149). [PASS-9](../spec/pipeline.md#PASS-9) requires lowering to produce SSA that passes the verifier. It builds and exits 42 on both consumers.
 
 ## Cause
 

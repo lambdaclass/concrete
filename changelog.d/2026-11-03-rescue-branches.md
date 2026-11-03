@@ -55,7 +55,8 @@ Number collisions are reported, not overwritten or silently renumbered:
 - 064: `docs/bugs/064_aliased_imported_type_unresolvable.md` concerns imported type aliases;
   main's 064 concerns contradictory `--query` diagnostics.
 - 065: `docs/bugs/065_builtin_enum_list_built_twice.md` concerns duplicated builtin-enum
-  construction; main's 065 concerns stack-depth unboundedness. Both 064 and 065 are preserved
+  construction; main's 065 concerns stack-depth unboundedness. Main already preserves both defects
+  under other numbers (064 → 069, 065 → 070, documented in those records). Both are also preserved
   on `refs/archive/branches/codex/evidence-architecture-docs`,
   `refs/archive/branches/vcgen/calculus`, and the three
   `refs/archive/branches/wip/archive/docs/r0448-{roadmap-only,spike-disposition,spike-integrated}`
