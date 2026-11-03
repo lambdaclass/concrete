@@ -450,7 +450,10 @@ if [ $# -eq 0 ]; then
 import sys, re
 s = open(sys.argv[1], encoding='utf-8').read()
 b = open(sys.argv[5], encoding='utf-8').read()
+s0, b0 = s, b
 exec(sys.argv[3])
+if s == s0 and b == b0:
+    sys.exit(3)  # the edit matched nothing: a control that mutates nothing proves nothing
 open(sys.argv[2], 'w', encoding='utf-8').write(s)
 if sys.argv[4] == 'both':
     open(sys.argv[6], 'w', encoding='utf-8').write(b)
@@ -471,8 +474,8 @@ PY
   neg invalid_phase "s=s.replace('**Phase:** B','**Phase:** Z',1)" 'invalid task phase' tasks
   neg ledger_id "s=s.replace('| R-0007 |','| R-9999 |',1)" 'ledger row names missing task' ledger
   neg ledger_owner "s=s.replace('| R-0007 | superseded | R-0492, R-0510 |','| R-0007 | superseded | R-9999 |',1)" 'names missing owner' ledger
-  neg missing_owner "s=s.replace('| R-0555, R-0481, R-0010, R-0447, R-0554 |','| — |',1)" 'names no owning task'
-  neg nonexistent_owner "s=s.replace('| R-0555, R-0481, R-0010, R-0447, R-0554 |','| R-9999 |',1)" 'nonexistent task'
+  neg missing_owner "s=re.sub(r'^(\\| A1 \\|[^|]*\\|)[^|]*\\|',r'\\1 — |',s,count=1,flags=re.M)" 'names no owning task'
+  neg nonexistent_owner "s=re.sub(r'^(\\| A1 \\|[^|]*\\|)[^|]*\\|',r'\\1 R-9999 |',s,count=1,flags=re.M)" 'nonexistent task'
   neg phase_mismatch "s=s.replace('| A1 |','| B4 |',1)" 'schedules it in Phase B'
   neg missing_done_when "s=re.sub(r'(^\| A1 \|.*?\|.*?\|)[^\n]*',r'\1 |',s,flags=re.M)" 'has no goal or done-when'
   neg duplicate_row "m=re.search(r'^\| A1 \|.*$',s,re.M);s+='\n'+m[0]+'\n';s=s.replace('## Owner decisions',''+m[0]+'\n\n## Owner decisions',1)" 'duplicate queue row'

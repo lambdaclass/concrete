@@ -7,3 +7,7 @@ contract's objects, the theorem's signature, the trusted-base inventory and slic
 is proposed against them; A2's approval requires representative design proofs in Lean before Core is
 frozen; A3 formalizes the approved result; totality is required as each phase B pass lands and audited at
 B3. The nine questions for the Core session are listed in the roadmap.
+
+`check_roadmap_coverage.sh`'s negative controls now fail when their edit matches nothing: two of them
+had matched the old row A1 by its literal owner list and would have passed silently once the row
+changed. They now find row A1 by its structure.
