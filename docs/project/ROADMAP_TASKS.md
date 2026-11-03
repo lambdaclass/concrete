@@ -249,10 +249,77 @@ until 2026-10-19; their queue rows, not this position, schedule them.
 
 **Work:** Build this boundary in `ConcreteSpec` and the new compiler for slice 1, then extend it as constructs land. Independent judgments, correspondence proofs, total definitions and explicit assumptions accompany the implementation. Acceptance feeds B1–B2; B3 deletes the old pipeline after the end-to-end slice is accepted.
 
-**Acceptance:** The objective holds for the supported slice, with the retained regression duties
-and discriminating controls from the [prior task body](../archive/ROADMAP_LEGACY_PLAN.md#coherent-plan-r-0491).
-Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded by the
-[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract).
+**Deliverables and acceptance:**
+
+The three-way oracle is specified Core semantics / LLVM profile / LCB-native, with
+independently justified expected outcomes; disagreement labels are hypotheses, not proof of the
+faulty component. Cover loop-body sequencing, `let` after assignment, returns in loops,
+if-without-else fall-through, discarded expressions, shadowing, renamed match binders, boundary
+literals at 2^63/2^64 and every cast-width pair. Classify value, trap, rejection, unsupported,
+exhaustion and crash without skipping outcomes. Compare zero-argument, boolean and aggregate
+signatures and native binaries, with a pinned claimed-function inventory.
+
+Keep the permanent defect inventory through 101. Every bug from 102 on names structural cause,
+class and owning task/pipeline stage in `docs/bugs/STRUCTURAL_CLASSES.md`; filing gates reject
+missing causes/owners. A newly reproduced class without a scheduled owner enters the queue under
+the entry rule. Before each release candidate run the four 2026-10-18 hunts and checker hunt.
+
+Acceptance: bugs 080–095 have records, reproducers, expected outcomes and pre-fix/fixed SHA pairs.
+The deterministic differential detects 080 and 084–088; name-binding controls detect 081–082;
+evidence/cross-surface controls detect 083/089; checker mutants detect 090–094; the binary leg detects
+095. Each assigned control fails on its historical pre-fix SHA and passes at its fix. Missing
+inventory entries fail; generated features meet pinned minimum completed-comparison counts.
+Retain hand/reference/metamorphic, debug/release, sanitizer and backend/profile matrix controls.
+Historical comparison does not authorize a legacy repair.
+
+Every `@run` in `scripts/tests/example_manifest.txt` names an oracle: `interp` only with
+`interp=yes`, a recorded `spec:<path>[#anchor]` derivation/reference result in
+[GOLDEN_ORACLES.md](GOLDEN_ORACLES.md), or `unverified:<reason>` only if the interpreter cannot
+run it. `check_example_outputs.sh` enforces this with negative controls and prints/lists unverified
+goldens as tracked gaps. Retire each gap with supported interpreter coverage or a recorded derivation;
+a compiler-produced golden alone is insufficient. This rule covers every new/adversarial expected result.
+
+Retain the following hand-targeted suite under `examples/adversarial/`, with a separate leg in
+`scripts/tests/check_adversarial_examples.sh` as each construct becomes supported:
+
+| Example | Required coverage |
+|---|---|
+| `linear_flow` | Moves/destruction across branches/matches, early return, break/continue with live handles, consume-then-exit; reject arm leaks and guard moves (078/087/090/093) |
+| `generic_destroy` | Trait-bounded Destroy, arrays/generic structs and nested collections; reject hidden generic capabilities (052/091/099/100) |
+| `nested_names` | Nested/sibling type/function/method names, generated specialization names, type arity, relative submodule calls, builtin versus user Result (054/070/073/077/096–098) |
+| `import_aliases` | Function/type/method/sibling aliases, local collisions, order permutations and collision rejection (039/055/069/082/E0264) |
+| `casts_widths` | Every narrowing/widening/sign-change width pair, min/max literals, checked negation and claims (053/080/088) |
+| `mut_receivers` | Mutable parameters/fields/array elements and branches; raw-borrowed stack storage, extracted arrays and RHS short-circuit borrowing with observed mutation (018/019/031/034) |
+| `match_and_fnptrs` | Effectful guards, renamed/positional binders, branch-reassigned and field-stored function pointers with capabilities (056/063/066/084/090) |
+| `statement_sequencing` | Discarded expressions, assignment followed by let, loop steps, branch-local let and if fall-through, with claims (085/086/101) |
+
+Bug 063 runs derived-pointer cases through function and method call paths and retains generic-return
+E0242 controls. Historical unresolved 054/055/077/E0264 cases keep separate fixtures pinning the
+recorded collision/rejection/containment outcome until their new-compiler construct is admitted;
+runnable cases require semantic-interpreter/native/expected agreement. Reconcile provisional
+082/087/088/090–100 shape mappings against checked-in records. Every leg preserves exit status and
+trap identity; rejection legs assert diagnostic codes; claim legs compare functional models and
+assert claim status. Missing examples/legs and perturbed expected results fail. Preserve existing
+controls for evidence/report cases 058–062/064/065/067/068/075/076/079/081/083/089, capability 071
+(`check_cross_package_caps.sh`, `check_cap_sibling_module.sh`), runtime 072 (`check_spawn_exit.sh`),
+package collision 074, collection 057, reference case 092, and checker/binary 094–095. Newly
+reproduced authority/safety defects enter the queue as immediate exits and keep their reproducer leg.
+
+Nightly seed rotation keeps 2,000 depth-3 and 500 depth-4 differential programs plus 400 linearity
+programs per date-derived seed. Once the third side is available, run campaigns at least 100 times
+those counts, sharded by seed range, first on short-lived remote servers (R-0513); no provider
+credentials enter the repository. Keep nightly counts meanwhile. Each campaign records SHA,
+toolchain, seeds, classified outcomes and per-feature completed comparisons against pinned minima;
+automatically minimize failures into reproducers and queue them. Accept this separate campaign
+when one run meets scale and all minima, then repeat before each release candidate; smaller suite
+acceptance does not wait for it.
+
+**Supersession scope:** Only frozen-compiler repairs, legacy shadow cutovers and in-place
+migration mechanisms are superseded by the
+[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
+and its [editorial scope](ROADMAP_DECISIONS.md#2026-11-03--editorial-supersession-of-legacy-task-directions).
+The requirements above apply to the new compiler as their constructs land; this staging does not
+weaken the complete task exit.
 
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
@@ -275,10 +342,34 @@ regression cases and controls of these tasks transfer here unless the reason ret
 
 **Work:** Build this boundary in `ConcreteSpec` and the new compiler for slice 1, then extend it as constructs land. Independent judgments, correspondence proofs, total definitions and explicit assumptions accompany the implementation. Acceptance feeds B1–B2; B3 deletes the old pipeline after the end-to-end slice is accepted.
 
-**Acceptance:** The objective holds for the supported slice, with the retained regression duties
-and discriminating controls from the [prior task body](../archive/ROADMAP_LEGACY_PLAN.md#coherent-plan-r-0492).
-Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded by the
-[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract).
+**Deliverables and acceptance:**
+
+Allocate `LocalId` in the lexical resolution walk for every binder; checker and elaboration
+consume that same identity. Allocate compilation-scoped `DefId` before body elaboration,
+preserving callable namespaces, specialization arguments and extern/intrinsic distinctions;
+validate the `DefId → DefinitionIdentity` mapping at evidence boundaries. Use owner-checked
+`FieldIdx`/`VariantIdx` and register/block identities in lowered IRs. No `String → identity`
+coercions: checked adapters obtain identities from scope-aware environments. Perform
+capture-preserving alpha-canonicalization before hashing; preserve frozen identity bytes or
+explicitly version them. Distinguish lexical handles from persistent evidence identities.
+
+Refer to builtin `Option`/`Result` by resolved identity; a user `Result` remains distinct.
+Concrete-defined symbols derive their disambiguator from `DefId`. Preserve the recorded scoping,
+import-alias collision and match-binder rules without answering an open owner question.
+
+Acceptance: `check_ir_no_string_identity.sh` covers resolved tables, checker environments,
+Core, lowered IRs and proof expressions. Bugs 081, 082, 087, 093 and 094 reject or bind correctly;
+alias permutations, imported aliased-method calls, function-symbol and metamorphic fixtures pass.
+Targeted mutations prove checker consumption, block-local accounting, elaboration correspondence
+and theorem-table identity checks load-bearing. Compile-fail controls reject artifact forgery
+and diagnostic-path bypass.
+
+**Supersession scope:** Only frozen-compiler repairs, legacy shadow cutovers and in-place
+migration mechanisms are superseded by the
+[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
+and its [editorial scope](ROADMAP_DECISIONS.md#2026-11-03--editorial-supersession-of-legacy-task-directions).
+The requirements above apply to the new compiler as their constructs land; this staging does not
+weaken the complete task exit.
 
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
@@ -299,10 +390,25 @@ regression cases and controls of these tasks transfer here unless the reason ret
 
 **Work:** Build this boundary in `ConcreteSpec` and the new compiler for slice 1, then extend it as constructs land. Independent judgments, correspondence proofs, total definitions and explicit assumptions accompany the implementation. Acceptance feeds B1–B2; B3 deletes the old pipeline after the end-to-end slice is accepted.
 
-**Acceptance:** The objective holds for the supported slice, with the retained regression duties
-and discriminating controls from the [prior task body](../archive/ROADMAP_LEGACY_PLAN.md#coherent-plan-r-0493).
-Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded by the
-[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract).
+**Deliverables and acceptance:**
+
+Integer operations carry `IntTy`, width and signedness; checked, wrapping and saturating
+operations are distinct kinds. Pointer arithmetic is its own operation; boolean, float and
+pointer operations remain distinct. Canonicalize signed literals before range checking, resolve
+contextual literal types before constructing operations, and revalidate after specialization.
+Casts are typed. One specified arithmetic semantics supplies evaluation, folding, model generation
+and emitted-operation checks; `check_single_arithmetic.sh` enforces that single authority.
+
+Acceptance: every integer operation in Core and lowered IR carries kind and width; the arithmetic
+lint passes. Differential controls cover every supported width, operation family, cast and defined
+trap. Signed-minimum fixtures pass and bug 088's reproducers agree on every side.
+
+**Supersession scope:** Only frozen-compiler repairs, legacy shadow cutovers and in-place
+migration mechanisms are superseded by the
+[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
+and its [editorial scope](ROADMAP_DECISIONS.md#2026-11-03--editorial-supersession-of-legacy-task-directions).
+The requirements above apply to the new compiler as their constructs land; this staging does not
+weaken the complete task exit.
 
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
@@ -319,10 +425,29 @@ regression cases and controls of these tasks transfer here unless the reason ret
 
 **Work:** Dispose of the audit and draft the whole Core interface for owner approval before implementation. State the approved semantic contract, theorem holes and trusted base in Lean; implementation and proofs grow with the supported slices.
 
-**Acceptance:** The objective holds for the supported slice, with the retained regression duties
-and discriminating controls from the [prior task body](../archive/ROADMAP_LEGACY_PLAN.md#coherent-plan-r-0496).
-Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded by the
-[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract).
+**Deliverables and acceptance:**
+
+Specify value semantics with allocation identities, capability-tagged external events,
+defined traps, behaviours from clocks, and ghost instrumentation for moved places, loans,
+frames and capability use. FFI and OS interactions have external-call contracts. The new
+interpreter is the specified semantics plus an IO driver and serves as the differential oracle.
+Language rules must be recorded before their semantic interfaces freeze.
+
+Before Core freezes, specify the raw-memory interface jointly with S11 / R-0502: initialization,
+alignment, pointer fragments, allocation lifetime, address exposure and foreign mutation.
+Prove a representative typed-value/raw-memory abstraction lemma, clock stability and partial-trace
+monotonicity with the evaluator.
+
+Acceptance: semantics covers every construct the checker accepts; the differential fuzzer compares
+it with the binary; each language rule and semantic clause link bidirectionally; the representative
+lemmas are proved. Record implementation coverage separately from proved-subset coverage.
+
+**Supersession scope:** Only frozen-compiler repairs, legacy shadow cutovers and in-place
+migration mechanisms are superseded by the
+[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
+and its [editorial scope](ROADMAP_DECISIONS.md#2026-11-03--editorial-supersession-of-legacy-task-directions).
+The requirements above apply to the new compiler as their constructs land; this staging does not
+weaken the complete task exit.
 
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
@@ -345,10 +470,25 @@ regression cases and controls of these tasks transfer here unless the reason ret
 
 **Work:** Build this boundary in `ConcreteSpec` and the new compiler for slice 1, then extend it as constructs land. Independent judgments, correspondence proofs, total definitions and explicit assumptions accompany the implementation. Acceptance feeds B1–B2; B3 deletes the old pipeline after the end-to-end slice is accepted.
 
-**Acceptance:** The objective holds for the supported slice, with the retained regression duties
-and discriminating controls from the [prior task body](../archive/ROADMAP_LEGACY_PLAN.md#coherent-plan-r-0497).
-Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded by the
-[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract).
+**Deliverables and acceptance:**
+
+Each stage artifact is immutable, bound by its certificate to the exact payload, and constructible
+only by its producer/verifier. Mutation yields an unverified artifact. Diagnostic/subset artifacts
+have separate uncertified types rejected by downstream stages and evidence APIs. Bind elaborated
+output to its input and evidence records to their payloads. Extend typed stages along HIR → Core →
+`CheckedCore` → `CheckedMonoCore` → Place MIR → Memory CFG → BIR → LLVM printer or Machine IR.
+Private constructors provide API discipline; stated soundness theorems provide assurance.
+
+Acceptance: pipeline APIs expose only typed stages; compile-fail controls reject artifact forgery,
+certificate reuse after mutation and diagnostic-path bypass, including report-driven payload
+substitution before specialization.
+
+**Supersession scope:** Only frozen-compiler repairs, legacy shadow cutovers and in-place
+migration mechanisms are superseded by the
+[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
+and its [editorial scope](ROADMAP_DECISIONS.md#2026-11-03--editorial-supersession-of-legacy-task-directions).
+The requirements above apply to the new compiler as their constructs land; this staging does not
+weaken the complete task exit.
 
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
@@ -365,10 +505,22 @@ regression cases and controls of these tasks transfer here unless the reason ret
 
 **Work:** Build this boundary in `ConcreteSpec` and the new compiler for slice 1, then extend it as constructs land. Independent judgments, correspondence proofs, total definitions and explicit assumptions accompany the implementation. Acceptance feeds B1–B2; B3 deletes the old pipeline after the end-to-end slice is accepted.
 
-**Acceptance:** The objective holds for the supported slice, with the retained regression duties
-and discriminating controls from the [prior task body](../archive/ROADMAP_LEGACY_PLAN.md#coherent-plan-r-0498).
-Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded by the
-[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract).
+**Deliverables and acceptance:**
+
+Maintain a claim → production gate-leg → targeted-mutation manifest for verification and
+language documentation, enforcement-bearing comments in the new proof, checker and backend code,
+and emitted contract text. Generate the backend contract from BIR operation semantics when S11
+lands. R-18–R-20 remain labelled shape-only until their proofs exist.
+
+Acceptance: every in-scope enforcement phrase has a manifest row and its production leg kills the
+specified mutation in a qualified campaign; inherited wrong-code families each name their control.
+
+**Supersession scope:** Only frozen-compiler repairs, legacy shadow cutovers and in-place
+migration mechanisms are superseded by the
+[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
+and its [editorial scope](ROADMAP_DECISIONS.md#2026-11-03--editorial-supersession-of-legacy-task-directions).
+The requirements above apply to the new compiler as their constructs land; this staging does not
+weaken the complete task exit.
 
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
@@ -383,10 +535,38 @@ regression cases and controls of these tasks transfer here unless the reason ret
 
 **Work:** Build this boundary in `ConcreteSpec` and the new compiler for slice 1, then extend it as constructs land. Independent judgments, correspondence proofs, total definitions and explicit assumptions accompany the implementation. Acceptance feeds B1–B2; B3 deletes the old pipeline after the end-to-end slice is accepted.
 
-**Acceptance:** The objective holds for the supported slice, with the retained regression duties
-and discriminating controls from the [prior task body](../archive/ROADMAP_LEGACY_PLAN.md#coherent-plan-r-0499).
-Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded by the
-[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract).
+**Deliverables and acceptance:**
+
+Define independent declarative Core judgments for use-once, conservation at reachable exits,
+borrow validity (no move, destruction or incompatible mutation of a live reference's source;
+shared/exclusive aliasing), no escaping/stored references, capability containment through pointers,
+generics and FFI, raw-dereference authority and bounds. Apply the recorded rules: only `Unsafe` is
+absorbed at a `trusted` call site; the remaining required set must fit the caller's declared set;
+raw dereference requires `trusted` or `Unsafe`; an access establishes range or executes its bounds
+trap. This restates recorded requirements, without resolving any owner question.
+
+The authoritative checker emits exact-payload `CheckedCore` plus derivation; recheck capabilities
+after specialization. The source checker retains no ownership, borrow, reference, capability or
+Unsafe rule. A rule-violation fuzzer makes one rule-breaking mutation to accepted programs, including
+source destruction with live local/downward reference, conflicting borrows, pointer/generic hidden
+capabilities and unauthorized raw dereference. Valid programs required to trap are not rejections.
+Accept trusted raw-pointer operations and trusted Unsafe absorption as positive controls; reject
+absorption of any other effect. Instrumented semantics supplies the runtime witness.
+
+Acceptance: every rule has an enforcing site, R-0498 manifest row and mutation class. Qualified CI
+seeds reject every mutant and accept every well-formed positive control with minimum completed
+counts per rule/feature combination; the instrumented corpus/fuzzer runs have zero violations.
+Reject 090–094 and 087's borrow-block case. Pin normative expected rejection of historical 092/095
+aggregate-reference programs, versioned historical binary witnesses, and an accepted loop-mutation /
+downward-borrow fixture detecting stale storage. Explicitly record intended acceptance changes
+against the normative rules.
+
+**Supersession scope:** Only frozen-compiler repairs, legacy shadow cutovers and in-place
+migration mechanisms are superseded by the
+[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
+and its [editorial scope](ROADMAP_DECISIONS.md#2026-11-03--editorial-supersession-of-legacy-task-directions).
+The requirements above apply to the new compiler as their constructs land; this staging does not
+weaken the complete task exit.
 
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
@@ -404,10 +584,26 @@ regression cases and controls of these tasks transfer here unless the reason ret
 
 **Work:** Dispose of the audit and draft the whole Core interface for owner approval before implementation. State the approved semantic contract, theorem holes and trusted base in Lean; implementation and proofs grow with the supported slices.
 
-**Acceptance:** The objective holds for the supported slice, with the retained regression duties
-and discriminating controls from the [prior task body](../archive/ROADMAP_LEGACY_PLAN.md#coherent-plan-r-0500).
-Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded by the
-[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract).
+**Deliverables and acceptance:**
+
+For block scope/shadowing, match-binder positions/names, statement versus value position,
+sequential assignment in loop iterations, contextual literal types/ranges including signed minima,
+every cast-width pair, evaluation order, short-circuiting and second-class references, provide the
+Lean judgment/semantic clause, generated normative paragraph, accept/reject/trap examples and cited
+fixtures. Generator coverage meets pinned minima before dependent implementation advances; language
+rules link bidirectionally to semantic clauses as those clauses land.
+
+Use the recorded reference/scoping, evaluation/assignment and arithmetic policy decisions, including
+renamed-pattern syntax and versioned diagnostics. Preserve SCOPE-1 and REF-6 controls, E0302/E0303
+for forbidden reference bindings/assignment, constant-value treatment, the cast lossless-class table,
+three named-operation families and three stages. Open questions remain for the owner.
+
+**Supersession scope:** Only frozen-compiler repairs, legacy shadow cutovers and in-place
+migration mechanisms are superseded by the
+[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
+and its [editorial scope](ROADMAP_DECISIONS.md#2026-11-03--editorial-supersession-of-legacy-task-directions).
+The requirements above apply to the new compiler as their constructs land; this staging does not
+weaken the complete task exit.
 
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
@@ -422,10 +618,21 @@ regression cases and controls of these tasks transfer here unless the reason ret
 
 **Work:** Build this boundary in `ConcreteSpec` and the new compiler for slice 1, then extend it as constructs land. Independent judgments, correspondence proofs, total definitions and explicit assumptions accompany the implementation. Acceptance feeds B1–B2; B3 deletes the old pipeline after the end-to-end slice is accepted.
 
-**Acceptance:** The objective holds for the supported slice, with the retained regression duties
-and discriminating controls from the [prior task body](../archive/ROADMAP_LEGACY_PLAN.md#coherent-plan-r-0501).
-Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded by the
-[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract).
+**Deliverables and acceptance:**
+
+Implement sequencing, match compilation, cleanup/defer edges and check expansion as separate
+Core → Place MIR passes consuming `CheckedMonoCore`. Give Place MIR executable semantics and each
+pass a differential against Core, with pinned minimum counts. Each pass is total. Prove cleanup
+expansion for a representative function with early exits and `defer`; retain early-exit, sequencing,
+matching and trap/check-expansion regression controls. These jobs have one owner each in the new
+pipeline, with no duplicate lowering implementation.
+
+**Supersession scope:** Only frozen-compiler repairs, legacy shadow cutovers and in-place
+migration mechanisms are superseded by the
+[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
+and its [editorial scope](ROADMAP_DECISIONS.md#2026-11-03--editorial-supersession-of-legacy-task-directions).
+The requirements above apply to the new compiler as their constructs land; this staging does not
+weaken the complete task exit.
 
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
@@ -442,10 +649,26 @@ regression cases and controls of these tasks transfer here unless the reason ret
 
 **Work:** Dispose of the audit and draft the whole Core interface for owner approval before implementation. State the approved semantic contract, theorem holes and trusted base in Lean; implementation and proofs grow with the supported slices.
 
-**Acceptance:** The objective holds for the supported slice, with the retained regression duties
-and discriminating controls from the [prior task body](../archive/ROADMAP_LEGACY_PLAN.md#coherent-plan-r-0502).
-Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded by the
-[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract).
+**Deliverables and acceptance:**
+
+Jointly own the raw-memory specification with S7 / R-0496, including block–offset/provenance
+memory, initialization, alignment, pointer fragments, allocation lifetime, address exposure and
+foreign mutation. One `Layout` authority supplies all size, alignment, offset and enum-representation
+facts. Layout remains unspecified except for documented `repr` guarantees; programs rely only on
+`sizeof`, `alignof` and array stride = `sizeof`; generic `Option` and `Result` use per-instantiation
+layout as recorded in [LAYOUT_CONTRACT](../archive/design-records/LAYOUT_CONTRACT.md).
+
+Acceptance: Memory CFG has executable semantics and a verifier; `Layout` emits checked representation
+certificates. Place MIR → Memory CFG comparisons cover related values and stores, traces, traps,
+allocation and alignment. Prove a representative memory-injection lemma. Gate agreement between
+`Layout` and emitted types in the new pipeline.
+
+**Supersession scope:** Only frozen-compiler repairs, legacy shadow cutovers and in-place
+migration mechanisms are superseded by the
+[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
+and its [editorial scope](ROADMAP_DECISIONS.md#2026-11-03--editorial-supersession-of-legacy-task-directions).
+The requirements above apply to the new compiler as their constructs land; this staging does not
+weaken the complete task exit.
 
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
@@ -463,10 +686,24 @@ regression cases and controls of these tasks transfer here unless the reason ret
 
 **Work:** Build this boundary in `ConcreteSpec` and the new compiler for slice 1, then extend it as constructs land. Independent judgments, correspondence proofs, total definitions and explicit assumptions accompany the implementation. Acceptance feeds B1–B2; B3 deletes the old pipeline after the end-to-end slice is accepted.
 
-**Acceptance:** The objective holds for the supported slice, with the retained regression duties
-and discriminating controls from the [prior task body](../archive/ROADMAP_LEGACY_PLAN.md#coherent-plan-r-0503).
-Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded by the
-[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract).
+**Deliverables and acceptance:**
+
+Own Memory CFG → BIR, executable BIR semantics and verification, LLVM adapter legalization,
+Concrete `rt` semantics/contracts, generated backend contracts and complete replacement-path
+qualification. Use Concrete runtime helpers with named libc FFI, without requiring helpers to be C.
+
+Acceptance: LLVM is emitted only from exact-payload validated BIR under the adapter contract;
+BIR semantics/differential gates run, support inventory and profile labels are emitted, and runtime
+helpers use the specified `rt` boundary. Preserve inspection, verification and parity controls,
+backend/profile capability coverage and trust accounting. The LLVM path remains explicitly
+unverified at its trusted native edges; old-pipeline deletion waits for the complete new path's gates.
+
+**Supersession scope:** Only frozen-compiler repairs, legacy shadow cutovers and in-place
+migration mechanisms are superseded by the
+[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
+and its [editorial scope](ROADMAP_DECISIONS.md#2026-11-03--editorial-supersession-of-legacy-task-directions).
+The requirements above apply to the new compiler as their constructs land; this staging does not
+weaken the complete task exit.
 
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
@@ -489,10 +726,27 @@ regression cases and controls of these tasks transfer here unless the reason ret
 
 **Work:** Build this boundary in `ConcreteSpec` and the new compiler for slice 1, then extend it as constructs land. Independent judgments, correspondence proofs, total definitions and explicit assumptions accompany the implementation. Acceptance feeds B1–B2; B3 deletes the old pipeline after the end-to-end slice is accepted.
 
-**Acceptance:** The objective holds for the supported slice, with the retained regression duties
-and discriminating controls from the [prior task body](../archive/ROADMAP_LEGACY_PLAN.md#coherent-plan-r-0504).
-Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded by the
-[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract).
+**Deliverables and acceptance:**
+
+Deliver the validator interface and validators for SSA construction and optimization certificates.
+Each validator kind has a stated soundness `Prop` and one representative proved soundness instance.
+Pin the proved-function inventory, recording validation status per semantic edge and call closure.
+Unsupported closures stay `translation_trusted`/`blocked`; mismatches are `translation_mismatch`
+and never grant native-code evidence.
+
+Acceptance: SSA and optimization validators reject targeted semantic substitutions and unsupported
+certificates. R-0299's admitted BIR validation and R-0300's independent replay pass admitted-subset,
+mismatch, unsupported and substitution controls; retain debug/release and sanitizer controls.
+The emitted-LLVM profile checks exact retained `.ll` bytes, including helper bodies. LLVM
+optimization, emission, linking and runtime/ABI behaviour remain explicitly trusted for that
+profile; emitted-IR checking cannot claim native assurance.
+
+**Supersession scope:** Only frozen-compiler repairs, legacy shadow cutovers and in-place
+migration mechanisms are superseded by the
+[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
+and its [editorial scope](ROADMAP_DECISIONS.md#2026-11-03--editorial-supersession-of-legacy-task-directions).
+The requirements above apply to the new compiler as their constructs land; this staging does not
+weaken the complete task exit.
 
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
@@ -507,10 +761,27 @@ regression cases and controls of these tasks transfer here unless the reason ret
 
 **Work:** Dispose of the audit and draft the whole Core interface for owner approval before implementation. State the approved semantic contract, theorem holes and trusted base in Lean; implementation and proofs grow with the supported slices.
 
-**Acceptance:** The objective holds for the supported slice, with the retained regression duties
-and discriminating controls from the [prior task body](../archive/ROADMAP_LEGACY_PLAN.md#coherent-plan-r-0506).
-Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded by the
-[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract).
+**Deliverables and acceptance:**
+
+As each boundary lands, state every pass's `Refines` and validator's soundness as type-checked
+Lean `Prop`s with explicit premises and a ledger status of stated / differentially tested / proved.
+Include native backend, encoding and linking. Reject transitive `sorryAx` and unregistered axioms;
+kernel-only evidence permits only `propext`, `Classical.choice` and `Quot.sound`; registered native
+and float axioms require separate labels. Enforce this at status, issuance and consumption with
+positive controls and forbidden-transitive-dependency mutations.
+
+Acceptance: every boundary's obligation and status are recorded; dependencies pass the axiom policy.
+Semantics, checkers, validators and proved passes pass totality (untrusted search may remain partial
+behind a total validator). Before freezing each boundary, its relations/obligations type-check and
+a representative preservation or validator-soundness lemma is proved for the motivating feature,
+including native encoding and linking. R-0553 supplies the environment inventory and ratchet.
+
+**Supersession scope:** Only frozen-compiler repairs, legacy shadow cutovers and in-place
+migration mechanisms are superseded by the
+[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
+and its [editorial scope](ROADMAP_DECISIONS.md#2026-11-03--editorial-supersession-of-legacy-task-directions).
+The requirements above apply to the new compiler as their constructs land; this staging does not
+weaken the complete task exit.
 
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
@@ -585,10 +856,31 @@ regression cases and controls of these tasks transfer here unless the reason ret
 
 **Work:** Dispose of the audit and draft the whole Core interface for owner approval before implementation. State the approved semantic contract, theorem holes and trusted base in Lean; implementation and proofs grow with the supported slices.
 
-**Acceptance:** The objective holds for the supported slice, with the retained regression duties
-and discriminating controls from the [prior task body](../archive/ROADMAP_LEGACY_PLAN.md#coherent-plan-r-0508).
-Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded by the
-[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract).
+**Deliverables and acceptance:**
+
+Prove every ledger
+obligation by simulation or validator soundness. Define refinement over maximal behaviours under
+related initial states and admissible environments, with the explicit observation relation for
+values, external memory and ghost erasure, and a preserved target-memory validity invariant; prove
+native-to-Core refinement for executions satisfying the stated contracts, composed across separate
+compilation and linking; state the resource relation and prove the sufficient-resource theorem.
+Prove frontend correspondence: source bytes and import roots → HIR → `CheckedCore` against
+independently specified syntax, resolution and elaboration judgments (a relation defined as
+"whatever the elaborator produces" does not count). Prove functional-model / obligation generation against the new Core semantics (R-0460).
+Each binary-transported claim cites a theorem that its proposition is preserved by the refinement
+relation; receipts record the theorem, profile and compiler build.
+
+**Exit:** the composed source-bytes-and-import-roots-to-native-image theorem, including
+independently specified frontend correspondence, is proved and re-checked by con-leche and nanoda.
+HIR-only and `CheckedCore`-only theorems are intermediate milestones. Every binary-transported claim
+cites its preservation theorem.
+
+**Supersession scope:** Only frozen-compiler repairs, legacy shadow cutovers and in-place
+migration mechanisms are superseded by the
+[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
+and its [editorial scope](ROADMAP_DECISIONS.md#2026-11-03--editorial-supersession-of-legacy-task-directions).
+The requirements above apply to the new compiler as their constructs land; this staging does not
+weaken the complete task exit.
 
 ### Task R-0509
 
@@ -598,10 +890,52 @@ Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded 
 
 **Work:** Dispose of the audit and draft the whole Core interface for owner approval before implementation. State the approved semantic contract, theorem holes and trusted base in Lean; implementation and proofs grow with the supported slices.
 
-**Acceptance:** The objective holds for the supported slice, with the retained regression duties
-and discriminating controls from the [prior task body](../archive/ROADMAP_LEGACY_PLAN.md#coherent-plan-r-0509).
-Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded by the
-[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract).
+**Deliverables and acceptance:**
+
+Start the published trusted-base inventory immediately. It is non-increasing for a fixed supported
+scope; additions for newly admitted scope are recorded and reviewed separately. Record a separate
+compiler/checker execution-trust reduction plan with milestones; R-0413 explores only the
+Concrete-hosted path. Verify `std` trusted implementations against contracts or list them with an
+audit; the fixed-scope unaudited/unverified list only shrinks.
+
+R-0353 independently checks retained evidence: decoding, authenticated roots, subject/dependency
+binding, exact propositions, replay and policy, without trusting stored verdicts. Envelope or replay
+success never upgrades unchecked source/model/native semantic edges. Require a minimal independent
+retained-artifact consumer for every publicly authoritative first-slice claim; codec/hostile-input
+prototypes need not wait for the later complete cross-profile consumer.
+
+Prove soundness of `ClaimSpec` statement generation, evidence-to-subject/proposition binding,
+authoritative verdict aggregation and retained-artifact checking. Audit transitive elaborated axioms:
+kernel-only verdicts admit only named standard logical axioms; native-evaluation and float axioms
+remain separately labelled.
+
+Acceptance: every remaining assumption has an explicit owner; R-0353's acceptance criteria pass,
+with every 079–095 fixture pinning its expected result vector. The four soundness proofs pass the
+transitive axiom-policy gate. Independent checking and hostile-consumer controls exercise the
+production path, without laundering semantic assumptions.
+
+The inventory must name these trust entries and mitigations (with current state):
+
+| Assumption | Required mitigation | Owner |
+|---|---|---|
+| Lean code generator/runtime and C compiler building Lean output | Kernel-checked per-compilation certificates; pin Lean/C toolchain until discharged; development execution remains trusted | R-0552 |
+| `implemented_by` / `extern` replacements reachable from proved code | Inventory each replacement; prove correspondence or label it trusted; callable-identity controls also reject unchecked `csimp` replacement | R-0509 with R-0506 |
+| Native-evaluation axioms (`bv_decide`, `native_decide`) | Register and label each use; replace with kernel proofs where feasible | R-0506 |
+| Lean kernel | Recheck with both nanoda and con-leche | R-0509 |
+| Assembler/linker | Named native-theorem premises until LCB encoding/composition discharges them; check final image | R-0517, R-0505 |
+| Machine/ISA model | Named native-claim premise and model/hardware differential testing | R-0517 |
+| Semantics fidelity to intent | Outside expert review, independent source judgments and semantics/interpreter/binary differential tests | R-0511 |
+| libc, OS, FFI and trusted code | Every foreign call has a stated contract; audit or verify trusted implementations; formalize trusted-code obligations | R-0509, R-0514 |
+| LLVM profile's BIR → LLVM printer, LLVM and system toolchain | Explicit profile trust accounting and final-artifact checks | R-0505 |
+
+The inventory records decided behaviour and flags remaining owner questions; it cannot settle them.
+
+**Supersession scope:** Only frozen-compiler repairs, legacy shadow cutovers and in-place
+migration mechanisms are superseded by the
+[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
+and its [editorial scope](ROADMAP_DECISIONS.md#2026-11-03--editorial-supersession-of-legacy-task-directions).
+The requirements above apply to the new compiler as their constructs land; this staging does not
+weaken the complete task exit.
 
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
@@ -622,10 +956,53 @@ regression cases and controls of these tasks transfer here unless the reason ret
 
 **Work:** Dispose of the audit and draft the whole Core interface for owner approval before implementation. State the approved semantic contract, theorem holes and trusted base in Lean; implementation and proofs grow with the supported slices.
 
-**Acceptance:** The objective holds for the supported slice, with the retained regression duties
-and discriminating controls from the [prior task body](../archive/ROADMAP_LEGACY_PLAN.md#coherent-plan-r-0511).
-Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded by the
-[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract).
+**Deliverables and acceptance:**
+
+Record bounded proof-library deliverables with every slice increment: refinement, clock,
+memory-injection, substitution and ownership libraries. Before Core interfaces freeze, land
+machine-checked design examples for move/destroy, downward exclusive/shared borrows, reborrowing,
+structured cleanup and typed-value representation in byte/provenance memory. Record an outside
+expert review of the semantics and design examples.
+
+Deliver the first checked-Core → executable-BIR refinement for `i64`, `u64`, `bool`, locals,
+assignment, conditionals, general loops with structured exits, non-recursive direct calls,
+comparisons, checked `+ - *` and capability-authorized `print_int`, covering termination, traps and
+divergence. Add remaining widths, casts, division, shifts, recursion and loop forms cumulatively.
+Native AArch64 uses the proved BIR → LCB adapter and an applicable pinned preservation theorem
+(R-0517). C01–C03 certify typed assembly only; rendering, encoding, assembler, linker, loader and
+ISA assumptions remain named until discharged. R-0505 supplies final-image correspondence and
+R-0508 proves composition through the exact image, runtime and startup; mutation-tested checks
+alone do not prove validator soundness. Restricted-source correspondence uses independently
+specified syntax, resolution and elaboration judgments, proved or certificate-checked. Each
+published slice claim has canonical task identity and an independent retained-artifact consumer.
+
+Acceptance: under related initial states, admissible environments and recorded resource premises,
+prove maximal-behaviour refinement to the identified native image, the explicit observation
+relation, target-memory validity invariant and sufficient-resource theorem. Prove subset checker
+soundness and capability containment and every used pass/validator. Transport at least one
+nontrivial Core claim to its binary. Recheck the closure with both con-leche and nanoda, bound to
+exact retained artifacts. Publish a `CheckedCore`-origin theorem until frontend correspondence is
+proved; source-to-native wording requires that proof. Admission and profile selection never
+silently fall back.
+
+Retain `sum_to`, `max3`, `checked_trap`, `counter_u64` and `diverge` under `examples/v1a/` as
+acceptance/regression targets. The first four carry source-linked proved claims: a Lean-reference
+sum, maximum membership/order, non-trapping checked arithmetic, and final counter value.
+`checked_trap` also pins overflow/underflow behaviour. `diverge` checks a `print_int` prefix and
+bounded exhaustion, carries no claim, and does not claim finite observation proves divergence.
+`scripts/tests/check_v1a_targets.sh` gives every target a leg: interpreter/native/independently
+justified expected outcomes agree (including trap identity); functional-model comparisons agree
+on every claimed function and claims read proved; checked-Core → BIR preserves recorded behaviour.
+A subset control rejects another width, cast, division, shift, recursion, other loop form, aggregate
+or reference before admission. Targets do not expand the theorem scope. Retain adapter semantic
+vectors and cumulative, orthogonal slice/profile admission matrices.
+
+**Supersession scope:** Only frozen-compiler repairs, legacy shadow cutovers and in-place
+migration mechanisms are superseded by the
+[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
+and its [editorial scope](ROADMAP_DECISIONS.md#2026-11-03--editorial-supersession-of-legacy-task-directions).
+The requirements above apply to the new compiler as their constructs land; this staging does not
+weaken the complete task exit.
 
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
@@ -687,10 +1064,29 @@ regression cases and controls of these tasks transfer here unless the reason ret
 
 **Work:** Build this boundary in `ConcreteSpec` and the new compiler for slice 1, then extend it as constructs land. Independent judgments, correspondence proofs, total definitions and explicit assumptions accompany the implementation. Acceptance feeds B1–B2; B3 deletes the old pipeline after the end-to-end slice is accepted.
 
-**Acceptance:** The objective holds for the supported slice, with the retained regression duties
-and discriminating controls from the [prior task body](../archive/ROADMAP_LEGACY_PLAN.md#coherent-plan-r-0514).
-Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded by the
-[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract).
+**Deliverables and acceptance:**
+
+New compilation consumes exactly the identity-resolved payload checked against independent Core
+judgments. Use R-0492 identities, R-0497 immutable certificates and R-0499's single rule implementation
+through the supported language. Both profiles consume exact `CheckedCore`; specialization produces
+payload-bound `CheckedMonoCore`, the only lowering input, with R-0510 specialization validation and
+post-specialization capability checks. Each slice uses the same checker/artifact interfaces and
+restricted admission predicate, proving the trivial specialization instance where applicable.
+
+Acceptance: string-identity lint covers the front end/checker; Core checking is authoritative for
+every supported construct; the source checker holds no ownership, borrow, reference, capability or
+Unsafe rule. Reject or correctly compile 087's borrow-block case, 090–094 and 096–098. Reject every
+qualified rule-breaking fuzzer mutant and accept well-formed positives at pinned completed counts
+per rule and feature combination. Explicitly record normative expected outcomes and reject
+artifact/capability substitutions; checker implementation coverage and subset soundness proof
+coverage remain separate. Checker rollout does not wait for whole-language compiler proofs.
+
+**Supersession scope:** Only frozen-compiler repairs, legacy shadow cutovers and in-place
+migration mechanisms are superseded by the
+[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
+and its [editorial scope](ROADMAP_DECISIONS.md#2026-11-03--editorial-supersession-of-legacy-task-directions).
+The requirements above apply to the new compiler as their constructs land; this staging does not
+weaken the complete task exit.
 
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
@@ -814,10 +1210,32 @@ refused with a stable diagnostic; inputs at the limit are accepted.
 
 **Work:** Build this boundary in `ConcreteSpec` and the new compiler for slice 1, then extend it as constructs land. Independent judgments, correspondence proofs, total definitions and explicit assumptions accompany the implementation. Acceptance feeds B1–B2; B3 deletes the old pipeline after the end-to-end slice is accepted.
 
-**Acceptance:** The objective holds for the supported slice, with the retained regression duties
-and discriminating controls from the [prior task body](../archive/ROADMAP_LEGACY_PLAN.md#coherent-plan-r-0553).
-Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded by the
-[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract).
+**Deliverables and acceptance:**
+
+R-0506 owns the totality requirement; R-0553 owns the environment inventory, ratchet and total
+implementations. Inventory every `partial`, `unsafe`, `opaque`, `implemented_by` and `extern`
+declaration reachable from the new pipeline. The first three hide proof-visible bodies; the latter
+two require executed-replacement correspondence even when the Lean body unfolds. Include `csimp`
+replacement controls. CI and pre-push ratchet the inventory so gaps only shrink for fixed scope.
+
+Use structural recursion, proved decreasing measures for worklists/fixpoints, and explicit fuel
+with a distinct exhaustion outcome for possibly divergent evaluation. Remove execution replacements
+or record why they remain and how correspondence is checked. Each conversion updates its baseline
+rows in the same commit. Work stage by stage ahead of dependent pass proofs; a prevention-gate
+milestone cannot stand in for total implementations.
+
+Acceptance: semantics, checker, validator and proved-pass stages contain no non-total baseline row;
+only genuine untrusted search checked by a total validator may remain, each with its reason. The
+gate then refuses other non-total declarations there. Extend this requirement to the whole new
+compiler: convert every remaining row or justify genuine untrusted search. Do not port the frozen
+compiler's 664-definition conversion programme.
+
+**Supersession scope:** Only frozen-compiler repairs, legacy shadow cutovers and in-place
+migration mechanisms are superseded by the
+[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
+and its [editorial scope](ROADMAP_DECISIONS.md#2026-11-03--editorial-supersession-of-legacy-task-directions).
+The requirements above apply to the new compiler as their constructs land; this staging does not
+weaken the complete task exit.
 
 ### Task R-0554
 
@@ -827,10 +1245,39 @@ Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded 
 
 **Work:** Dispose of the audit and draft the whole Core interface for owner approval before implementation. State the approved semantic contract, theorem holes and trusted base in Lean; implementation and proofs grow with the supported slices.
 
-**Acceptance:** The objective holds for the supported slice, with the retained regression duties
-and discriminating controls from the [prior task body](../archive/ROADMAP_LEGACY_PLAN.md#coherent-plan-r-0554).
-Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded by the
-[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract).
+**Deliverables and acceptance:**
+
+Owners: the cleanup agent (`wip/cleanup-*`) and spec agent (`wip/spec`). The owner's 2026-10-28
+cleanup request is the explicit queue-entry exception; integration effort is charged to adversarial
+validation/gate-health capacity (track C), with no independent early-phase exit. Each sub-item lands
+independently, never preempts defect work or weakens an exit, and chooses no owner language decision.
+
+- Spec agent: absorb remaining `docs/language/*.md` from `docs/spec/unabsorbed.tsv` into the one
+  normative specification and delete absorbed files (R-0555); book language chapters teach by
+  example and link rule IDs rather than duplicate rules.
+- Cleanup agent: finish `docs/project/` consolidation into `PROJECT.md` plus contributor documents;
+  finish `docs/verification/` consolidation into one normative verification specification plus rationale.
+- Cleanup agent: retain the `docs/NOTES/` → `research/` move and canonical ownership of moved notes.
+- Cleanup agent: make gates, `run_tests.sh`, CI and Makefile manifest-driven, merge duplicates and
+  establish the `tests/` taxonomy.
+- Cleanup agent: build a dead-code finder with a ratchet gate.
+- Cleanup agent: keep generated artifacts out of git; `concrete.wasm` is built from the published
+  commit by the site workflow, with one generated-artifact authority.
+- Cleanup agent: delete merged remote branches and periodically prune merged/dead worktrees.
+  Execution follows explicit session publication constraints.
+
+Report splitting, the old Proof/ProofCore overlap audit and old string-identity repairs are
+specifically superseded by the [new-compiler retention decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract).
+The new report/evidence and identity boundaries remain required under R-0481/R-0492; this does not
+schedule repair of frozen compiler code. Acceptance requires the named consolidation, manifest,
+ratchet, artifact and hygiene deliverables, not merely a general cleanup survey.
+
+**Supersession scope:** Only frozen-compiler repairs, legacy shadow cutovers and in-place
+migration mechanisms are superseded by the
+[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
+and its [editorial scope](ROADMAP_DECISIONS.md#2026-11-03--editorial-supersession-of-legacy-task-directions).
+The requirements above apply to the new compiler as their constructs land; this staging does not
+weaken the complete task exit.
 
 ### Task R-0555
 
@@ -840,10 +1287,47 @@ Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded 
 
 **Work:** Dispose of the audit and draft the whole Core interface for owner approval before implementation. State the approved semantic contract, theorem holes and trusted base in Lean; implementation and proofs grow with the supported slices.
 
-**Acceptance:** The objective holds for the supported slice, with the retained regression duties
-and discriminating controls from the [prior task body](../archive/ROADMAP_LEGACY_PLAN.md#coherent-plan-r-0555).
-Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded by the
-[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract).
+**Deliverables and acceptance:**
+
+Owner: spec agent (`wip/spec`) for specification completion; a separate agent owns bug-rule
+integration and backfill. The owner's 2026-10-29 request is its explicit queue-entry exception;
+charge it to track A and the shared active proof slot, never a third integration slot.
+Work remains continuous within that slot, paused for
+soundness repairs, without preempting other tracks or becoming a predecessor for unrelated work.
+No workstream answers an owner question: unresolved behaviour becomes an `open` decision entry.
+
+Each chapter closes independently with absorbed prose/rationale, rule-ID accept/reject fixtures,
+its Lean definition and generated `Semantics:` link. Every chapter must have a required mechanized
+link to an independent formal definition; linked chapters cannot regress. Preserve arithmetic,
+typing, reference well-formedness, pattern binding, capabilities and trust rule coverage in
+`ConcreteSpec`, rather than copying legacy implementation as semantics. Absorb all remaining
+`docs/language/*.md` and archived language-scope text before dependent migration; tracking moves to
+roadmap, holes or research and absorbed files are deleted. Cover expression evaluation, generics /
+specialization, lexical structure, compiler-special builtins and abort/failure semantics; every
+refusal has a reject example. Soundness proofs wait for their chapter links, not whole-spec completion.
+
+Use the existing rule-ID fixture index, not a second conformance corpus. It runs on every supported
+implementation, including native and interpreter. Report every forbidding rule without a reject
+case; that list must be empty or each entry explicitly `open`.
+
+Bug filing requires `Violates: <RULE-ID>@<version>`, `Spec gap`, or `Open: OPEN-n`;
+`scripts/gen/new_bug.sh` requires `--violates RULE-ID`, `--spec-gap` or `--open OPEN-n`.
+A spec-gap fix starts by writing the rule as spec work; an open-question fix stays parked until
+the owner answers. Not-a-bug verdicts cite the permitting rule. Validate IDs against
+`docs/spec/ids.tsv`; ledger/dashboard counts cover violated rule, spec gap and open disposition.
+Backfill all open records and 2026-10 records, and older records within their absorbing chapter,
+without blocking unrelated deliverables. Older records may say `Violates: unrecorded`, but that
+allowance's share only shrinks; no record filed after the gate lands may use it. Acceptance: the
+rule-reference gate holds on every record, every chapter is linked and complete, `docs/language/`
+holds no document, and the conformance reject-gap list meets the empty-or-open rule. Current
+measurement belongs in `docs/spec/MAINTAINERS.md`, not a copied status count here.
+
+**Supersession scope:** Only frozen-compiler repairs, legacy shadow cutovers and in-place
+migration mechanisms are superseded by the
+[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
+and its [editorial scope](ROADMAP_DECISIONS.md#2026-11-03--editorial-supersession-of-legacy-task-directions).
+The requirements above apply to the new compiler as their constructs land; this staging does not
+weaken the complete task exit.
 
 ## Area: Standard Library And Core APIs
 
@@ -1274,10 +1758,195 @@ normative hierarchy. For every moved family:
 
 **Work:** Dispose of the audit and draft the whole Core interface for owner approval before implementation. State the approved semantic contract, theorem holes and trusted base in Lean; implementation and proofs grow with the supported slices.
 
-**Acceptance:** The objective holds for the supported slice, with the retained regression duties
-and discriminating controls from the [prior task body](../archive/ROADMAP_LEGACY_PLAN.md#coherent-plan-r-0481).
-Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded by the
+**Deliverables and acceptance:**
+
+#### Axis 1 — subject location and temporal authority are separate
+
+Do NOT replace the subject hierarchy with `docs/normative/` and `docs/reference/`. A file's subject
+determines its directory; its lifecycle and authority are typed metadata. Otherwise all normative
+material becomes a second flat miscellaneous directory and cross-subject navigation degrades.
+
+Every maintained document uses a visible lifecycle from R-0480 and, where it is not itself the
+owner, names the canonical owner. The intended header model is:
+
+```text
+Status: normative contract | stable reference | active design | historical
+Owner: docs/<subject>/<owner>.md
+Current implementation: ROADMAP R-NNNN
+Historical record: journal/<class>/<dated-entry>.md
+```
+
+`CLAIMS_TODAY.md` owns shipped public claims. Normative design documents own semantics and trust
+contracts. `ROADMAP.md` owns active sequencing and qualitative transition state. `CHANGELOG.md`
+owns landed milestone history. Research is never normative merely because an idea was adopted.
+
+#### Axis 2 — journal for dated narrative
+
+Create `journal/` for material whose value is historical context rather than current authority:
+
+- `journal/incidents/` — failures, regressions, security advisories and fire drills;
+- `journal/audits/` — dated corpus measurements, red-team reports and architecture reviews;
+- `journal/decisions/` — dated decision rationale and supersession records;
+- `journal/milestones/` — implementation narratives and release retrospectives.
+
+Migrate dated roadmap narratives and bug write-ups selectively, not mechanically. (The four
+`docs/NOTES/` notes already moved to `research/proof-evidence/` on 2026-10-29; they are research
+records, not journal entries.)
+An active reproducible defect specification remains in `docs/bugs/`; an incident narrative moves
+to the journal and links the living bug/contract. A journal entry records date, commit, toolchain,
+denominator, conclusion-at-the-time, current normative owner and supersession state.
+
+"Append-only" means historical claims are never silently rewritten to appear prescient. It does
+NOT forbid correction: an erratum or superseding entry explicitly preserves the original record
+and links the correction. Journal text cannot define current status, policy or shipped claims.
+
+#### Axis 3 — canonical generated status and artifacts
+
+Add an `artifacts/` ownership layer. Canonical machine data does not live conceptually inside docs;
+human documentation and CI render projections of it.
+
+At minimum, generate and schema-version:
+
+- `artifacts/status/corpus.json` — every discovered example/test/proof input, its stable identity,
+  classification, eligibility, measured/unmeasured disposition and named refusal;
+- `artifacts/status/verification.json` — subjects, stored links, current digests, correspondence,
+  dependency roots, receipts, assumptions, trust and multidimensional evidence state;
+- `artifacts/status/mutations.json` — mutation families, attacked invariant, production consumer,
+  killing gate, positive control, last verified commit and toolchain;
+- `artifacts/manifests/` — package, proof-link, implementation, theorem, table and dependency
+  inventories consumed by migration/replay tooling;
+- `artifacts/schemas/` — canonical wire/status schemas and compatibility/revocation rules.
+
+`make status` (or its eventual equivalent) reads authoritative compiler/gate outputs and emits the
+canonical structured facts plus an optional generated Markdown view. It never scrapes decorative
+report prose when typed or structured facts exist. Generation must fail on missing denominators,
+duplicate identities, unknown classifications, partial joins, failed producer commands and schema
+mismatch.
+
+Generated counts replace hand-copied numbers in status summaries: discovered files, measurable
+files, proof subjects, stored links, root coverage, correspondence coverage, receipt migration and
+mutation coverage each have one denominator-owning producer. A dashboard with an incomplete input
+inventory is a refusal, not a smaller confident number.
+
+The roadmap keeps qualitative status that cannot be safely inferred from counts: shadow-only,
+blocked on a decision, implemented without a production consumer, acceptance condition open, or
+authority transition forbidden. It LINKS generated quantitative facts rather than copying them.
+
+#### Axis 4 — one gate assertion library and one mutation registry
+
+Consolidate gate helpers into `scripts/tests/lib/`. The shared vocabulary must encode the failure
+shapes repeatedly found in this repository, including:
+
+- presence before content checks;
+- absence only after proving the anchor exists;
+- universal assertions only with an explicit non-empty witness/denominator;
+- exact denominator and exact join checks;
+- paired moving/non-moving controls;
+- positive controls for negative validators;
+- producer exit-status validation before stdout interpretation;
+- typed/named refusal preservation;
+- mutation registration and killed/survived/inconclusive dispositions.
+
+Required conceptual helpers include `assert_present`, `assert_absent_after_anchor`,
+`assert_nonempty_then_all`, `assert_exact_denominator`, `assert_join_complete`,
+`assert_positive_and_negative_control`, `assert_command_succeeded`, and
+`assert_mutation_killed`; exact names may follow existing shell conventions. Private copies retire
+only after the shared helper has discriminating self-tests, including deliberate vacuity attacks.
+
+Create one machine-readable mutation registry. Every security/evidence mutation records its stable
+family ID, invariant, subsystem, production path, killing gate, positive control, authority state,
+and last execution identity. "Which boundaries lack negative controls?" and "which mutations were
+not run under this toolchain?" become queries, not manual audits. A registered-but-never-run or
+synthetic-only mutation cannot be reported as production coverage.
+
+#### Axis 5 — one corpus manifest
+
+Generate a repository corpus manifest spanning `examples/`, `tests/`, `proofs/`, proof tables and
+stored proof links. Each row has a stable owner and classification such as positive fixture,
+negative fixture, showcase, workload, oracle, performance case, migration link or hostile input.
+The manifest records whether the item reached the relevant phase and, if not, its typed refusal.
+
+The manifest is also the prerequisite for reducing `examples/`. Classify before moving or deleting:
+
+- `examples/` ultimately contains the three public flagships, one deliberately small onboarding
+  sequence and only complete user-facing workflows; prefer documentation snippets over another
+  standalone tutorial project;
+- minimal compiler/language regressions belong under `tests/fixtures/` or the existing equivalent;
+- hostile and substitution inputs belong under `tests/adversarial/`;
+- performance inputs belong with benchmarks; and
+- larger compatibility/porting programs are workloads, not additional flagships.
+
+Existing paths are not renamed merely to make the tree look tidy. A shallow example moves only
+after its regression value has a manifest row, an owning gate and—when needed—a replacement fixture.
+This keeps fewer examples from becoming fewer tests.
+
+This manifest owns denominators such as discovered/measured/unmeasured files and prevents two gates
+from using identical-looking but independently maintained regexes. Per-file and per-subject joins
+must be explicit; equal totals are not evidence that two inventories describe the same population.
+
+#### Producer/consumer boundaries in the new compiler
+
+Proof produces candidates; Evidence owns typed subjects, domain-separated identities/digests,
+contracts, dependencies, correspondence, roots, receipts and policy inputs. Report renders validated
+objects only: it cannot mint receipts, recompute roots, classify dependencies, reconstruct identities
+from strings or independently derive evidence. Evidence must not import Report. The evidence ownership targets are Identity, Subject, Attestation, Contract, Dependency,
+Receipt and Policy: package/definition/model/contract/proposition identities and typed digest
+domains; implementation/proof-subject preimages; implementation/model/relation/scope attestations;
+exported behaviour/effect/frame/resource interfaces; typed dependency edges, classifications,
+table bindings, correspondence and roots; replay/environment/envelope serialization; and
+assumption/trust/advisory acceptance. Do not collapse proof production into portable Evidence.
+The proposition language has one semantics, canonical codec and domain-separated proposition identity; its structural consumer imports
+neither frontend parsing/loading, reporting nor ambient prover elaboration. The standalone verifier
+shares canonical schemas/semantics, not compiler/report implementation, and does not establish
+source-to-proposition correspondence. Unknown constructors/imports/schema fields/dispositions fail
+non-current; success is enumerated. Enforce import directions, closed constructors and production
+mutations/compile-fail probes. Moving modules preserves behaviour, acyclic imports and updates every
+code/comment/gate reference in one commit after the new identity boundary is stable.
+
+The old Proof/Evidence relocation and TermIR-to-VIR promotion are specifically superseded by the
 [new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract).
+Build those semantic ownership boundaries directly in the new architecture; do not duplicate the
+proposition language. Its declared closed fragment, total structural evaluator, canonical
+serialization, hostile parsing and Farkas/linear and DRAT/bitvector certificate bindings remain
+explicit deliverables. Exclude ambient metaprogramming and irrelevant proof-kernel machinery;
+review any extension's semantics, codec, evaluator, negative controls, compatibility/versioning,
+trust surface and independent-parser implications together. Keep proof-production and portable-evidence
+responsibilities separate; never pass raw string digests where typed domains exist.
+
+#### Sequencing and completion
+
+Preserve subject-based documentation; do not introduce flat normative/reference directories.
+Pilot one dated audit/incident migration with explicit errata/supersession. Establish canonical
+schemas and identity-complete old/new status comparisons before removing hand-kept counts; migrate
+one gate family at a time after helper self-tests. Do not delete a count producer until the
+replacement is denominator-complete and mutation-tested. Do not mix semantic edits with broad path
+moves or create empty directory scaffolding for deferred work. Keep the conventional root entry
+points, existing research/paper/site/std and corpus locations unless semantic ownership requires a
+move; no second repository or decorative renaming programme.
+
+Acceptance requires lifecycle/owner metadata on every maintained doc, adopted research naming its
+normative owner, dated forward-linked journal entries and non-vacuous link/owner/contradiction /
+journal-authority controls. Corpus/status/mutation artifacts reproduce across checkout paths and
+reject missing, duplicate, partial, unknown and failed-producer inputs. Each canonical denominator
+has one generated owner or is explicitly historical with SHA/toolchain. Shared assertion helpers
+replace private copies after vacuity self-tests; the mutation registry answers coverage by invariant
+and production consumer without counting unexecuted/synthetic-only controls as killed.
+Import gates enforce the boundaries above. Removing report-side reconstruction cannot change
+authoritative evidence, while mutation of the owning object changes all projections consistently.
+The roadmap retains capability map, order, acceptance, blockers and qualitative authority transitions
+(shadow-only, decision-blocked, no production consumer, open acceptance, forbidden authority), while
+linking generated quantitative facts instead of duplicating status boards. Build, docs drift, local
+links, roadmap linearity, import direction, corpus/status generation, gate vacuity and mutation-registry
+gates pass from a clean checkout. Each begun component has its semantic ownership layout; deferred
+components remain named targets. Journal, generated Markdown, changelog and research cannot become
+competing current authorities; quantitative generators cannot replace qualitative owner decisions.
+
+**Supersession scope:** Only frozen-compiler repairs, legacy shadow cutovers and in-place
+migration mechanisms are superseded by the
+[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
+and its [editorial scope](ROADMAP_DECISIONS.md#2026-11-03--editorial-supersession-of-legacy-task-directions).
+The requirements above apply to the new compiler as their constructs land; this staging does not
+weaken the complete task exit.
 
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
@@ -1293,10 +1962,32 @@ regression cases and controls of these tasks transfer here unless the reason ret
 
 **Work:** Build this boundary in `ConcreteSpec` and the new compiler for slice 1, then extend it as constructs land. Independent judgments, correspondence proofs, total definitions and explicit assumptions accompany the implementation. Acceptance feeds B1–B2; B3 deletes the old pipeline after the end-to-end slice is accepted.
 
-**Acceptance:** The objective holds for the supported slice, with the retained regression duties
-and discriminating controls from the [prior task body](../archive/ROADMAP_LEGACY_PLAN.md#coherent-plan-r-0479).
-Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded by the
-[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract).
+**Deliverables and acceptance:**
+
+Survey new report/diagnostic defaults, including `.getD`, string catch-alls and empty strings,
+for claims not established by a failed lookup. Return a distinct absent/not-computed constructor
+or `Option`, rather than an in-domain fact such as provenance `transitive` or an existing-record
+`missing` status. Known honest markers (ABSENT, NO-SUBJECT, UNPINNED, no call-graph entry) stay honest.
+A computed missing result is allowed; a failed read may use a ladder's bottom only with a per-type
+allowlist reason establishing that it asserts no unsupported fact. Never rename a value to evade
+the ratchet.
+
+Preserve the distinction through typed results, text, JSON/artifact dispositions and process exit
+codes. Unknown/new refusals default to non-success; success is enumerated. Gates check producer
+exit status before interpreting stdout. Extend the ratchet per discovered closed vocabulary with
+a non-vacuity probe on its actual assertion path.
+
+Acceptance: every converted site uses an honest marker or justified per-type bottom; a production
+report control proves an uncomputed fact cannot render as a valid fact. Count/ratchet suspect
+catch-all and in-domain-default patterns so they cannot silently grow. Evidence cases join R-0494;
+the broader diagnostic audit remains owned here.
+
+**Supersession scope:** Only frozen-compiler repairs, legacy shadow cutovers and in-place
+migration mechanisms are superseded by the
+[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
+and its [editorial scope](ROADMAP_DECISIONS.md#2026-11-03--editorial-supersession-of-legacy-task-directions).
+The requirements above apply to the new compiler as their constructs land; this staging does not
+weaken the complete task exit.
 
 ### Task R-0476
 
@@ -1354,10 +2045,25 @@ four stale-binary incidents happened in a single session.
 
 **Work:** Build this boundary in `ConcreteSpec` and the new compiler for slice 1, then extend it as constructs land. Independent judgments, correspondence proofs, total definitions and explicit assumptions accompany the implementation. Acceptance feeds B1–B2; B3 deletes the old pipeline after the end-to-end slice is accepted.
 
-**Acceptance:** The objective holds for the supported slice, with the retained regression duties
-and discriminating controls from the [prior task body](../archive/ROADMAP_LEGACY_PLAN.md#coherent-plan-r-0471).
-Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded by the
-[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract).
+**Deliverables and acceptance:**
+
+Under R-0137/R-0515, distinguish invalid command arity/form from unknown spelling; cover every
+known query kind in bare and argument forms and never list the rejected token as known for that
+same form. Disambiguate a query name that serves incompatible fact-filter/backend meanings. Measure
+the corpus of retired syntax before fixing instances; diagnostics name retirement and the recorded
+replacement syntax, including the retired `#` enum separator, without changing a language rule.
+
+Populate hints where candidates already exist: unknown names, fields and variants give in-scope
+candidates and a valid next action in text and diagnostics JSON. Acceptance: class-level query and
+retired-form fixtures, every diagnostic code reached by the corpus has a nonempty next action, and
+a mutation blanking a hint fails. This bounded increment does not narrow R-0137's full bar.
+
+**Supersession scope:** Only frozen-compiler repairs, legacy shadow cutovers and in-place
+migration mechanisms are superseded by the
+[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
+and its [editorial scope](ROADMAP_DECISIONS.md#2026-11-03--editorial-supersession-of-legacy-task-directions).
+The requirements above apply to the new compiler as their constructs land; this staging does not
+weaken the complete task exit.
 
 ### Task R-0009
 
@@ -1367,10 +2073,23 @@ Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded 
 
 **Work:** Build this boundary in `ConcreteSpec` and the new compiler for slice 1, then extend it as constructs land. Independent judgments, correspondence proofs, total definitions and explicit assumptions accompany the implementation. Acceptance feeds B1–B2; B3 deletes the old pipeline after the end-to-end slice is accepted.
 
-**Acceptance:** The objective holds for the supported slice, with the retained regression duties
-and discriminating controls from the [prior task body](../archive/ROADMAP_LEGACY_PLAN.md#coherent-plan-r-0009).
-Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded by the
-[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract).
+**Deliverables and acceptance:**
+
+Do not expose `reduce --predicate crash` in help/CLI until it evaluates candidates in an isolated
+subprocess with bounded time, memory and output and preserves the original crash boundary/class.
+Parse success is never a crash predicate. Verify the final candidate still satisfies the predicate;
+report stage/error-class drift and unsupported multi-module reductions explicitly.
+
+Acceptance: controls cover a healthy program (cannot reduce as crash), signal/tool/compiler/runtime
+crashes, timeout, changed failure class, empty candidate and reducer self-failure. Share backend
+predicates and reduction machinery with R-0491.
+
+**Supersession scope:** Only frozen-compiler repairs, legacy shadow cutovers and in-place
+migration mechanisms are superseded by the
+[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
+and its [editorial scope](ROADMAP_DECISIONS.md#2026-11-03--editorial-supersession-of-legacy-task-directions).
+The requirements above apply to the new compiler as their constructs land; this staging does not
+weaken the complete task exit.
 
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
@@ -1505,10 +2224,43 @@ The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](
 
 **Work:** Build this boundary in `ConcreteSpec` and the new compiler for slice 1, then extend it as constructs land. Independent judgments, correspondence proofs, total definitions and explicit assumptions accompany the implementation. Acceptance feeds B1–B2; B3 deletes the old pipeline after the end-to-end slice is accepted.
 
-**Acceptance:** The objective holds for the supported slice, with the retained regression duties
-and discriminating controls from the [prior task body](../archive/ROADMAP_LEGACY_PLAN.md#coherent-plan-r-0440).
-Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded by the
-[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract).
+**Deliverables and acceptance:**
+
+Represent subject binding, claim kind, semantic scope, evidence method, status, assumptions,
+producer, validator, trusted dependencies, freshness and replay receipt as orthogonal facts.
+`SourceCorrespondence`, `LogicalValidity`, `DependencyClosure`, immutable `ReplayReceipt` and
+time-relative `PolicyDecision` use shared envelopes with typed variants and authority-state
+constructors, not a bag of optional fields. CLI/package reports project those objects. Friendly
+names such as `proved_by_lean` cannot inflate scope. A policy preference may compare only equivalent
+subjects/scopes; unlike scopes/methods are not a universal ladder. Remove residual total-ladder
+claims and reconcile evidence-class/taxonomy documentation with the implemented architecture.
+
+Use domain-separated `SubjectDigest`, `ImplementationDigest`, `ContractDigest`, `PropositionDigest`,
+`TheoremArtifactDigest`, `CertificateDigest`, `DependencyRoot` and `ReceiptDigest`; swapping two
+well-formed digest families must fail at compile time. Inventory raw string/tuple evidence boundaries.
+Receipts bind checker, rule set, artifact and environment; current advisory disposition is computed
+later from advisory registry, authentication and policy. A retained policy attestation separately
+binds policy/advisory-registry identities.
+
+As approved authorship modes land, certificate, proof-object, trusted-proof and assumption forms
+select distinct variants; existing `proof_by` cannot silently acquire the strongest class. Exercise
+each mode through production report, receipt, package and policy consumers. Source-to-model trust
+remains separate from independent proof-term validity; compiler enforcement depends on compiler
+correctness until soundness and artifact production are independently established. Proof callables
+keep the direct-call/value distinction and resolved identity, never source-spelling recovery.
+
+Acceptance: one fixture per existing scope × method cell; reject ordering incomparable claims,
+missing method-required producer/validator/trust accounting, and weaker-scope rendering under a
+stronger name. Revoking a checker changes logical validity/policy while preserving independently
+established source binding and dependency closure. Reject any renderer collapsing those dimensions
+to stored `proved`. Compile-time digest-swap and production trust-laundering controls fail.
+
+**Supersession scope:** Only frozen-compiler repairs, legacy shadow cutovers and in-place
+migration mechanisms are superseded by the
+[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
+and its [editorial scope](ROADMAP_DECISIONS.md#2026-11-03--editorial-supersession-of-legacy-task-directions).
+The requirements above apply to the new compiler as their constructs land; this staging does not
+weaken the complete task exit.
 
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
@@ -1536,10 +2288,38 @@ The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](
 
 **Work:** Build this boundary in `ConcreteSpec` and the new compiler for slice 1, then extend it as constructs land. Independent judgments, correspondence proofs, total definitions and explicit assumptions accompany the implementation. Acceptance feeds B1–B2; B3 deletes the old pipeline after the end-to-end slice is accepted.
 
-**Acceptance:** The objective holds for the supported slice, with the retained regression duties
-and discriminating controls from the [prior task body](../archive/ROADMAP_LEGACY_PLAN.md#coherent-plan-r-0438).
-Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded by the
-[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract).
+**Deliverables and acceptance:**
+
+Share one generated coverage inventory with R-0118 and enforcement rows with R-0498. Derive its
+construct set from AST, Core, resolution and project models, including modules, imports/aliases,
+manifests and target/module selection. Until generation covers them, explicitly list defer,
+newtypes, generics, specialization, function-pointer values and indirect calls with current status,
+evidence, gap and owner; temporary rows are replaced, not duplicated.
+
+Keep structured claim checking separate from constructor coverage. Each claim record names ID,
+current/planned status, stable owning gate ID, fixture, supporting compiler fact and last-verified
+commit. Consume the shared ownership manifest (R-0447/R-0481) and registered gate verdict/liveness;
+resolve artifact/test/document references by stable IDs without copying ownership facts. Check gated
+`docs/` claims, not English by heuristic; research remains non-normative under its recorded convention.
+
+Correct arithmetic/bounds and proof-eligibility claims; describe semantics independence/differential
+testing honestly; make KNOWN_HOLES an index over numbered defects; remove stale defer, language-gap,
+identity, error-convention and anti-feature claims. Replace hand-counted theorem totals by generated
+coverage, distinguish authority-free from purity and use R-0440 evidence dimensions. Stable-reference
+claims cite backing gates/fixtures; planned behaviour cannot masquerade as a current guarantee.
+
+Acceptance: new constructors without a declared story fail in each AST/Core/resolve/project inventory;
+missing rows or claim records fail. Reproduce stale-claim controls for unenforced language invariants,
+false empty open-hole lists, already-shipped remaining findings, defer rules falsely unspecified,
+contradictory linear-rebind rules and false no-destructor claims; the claim gate rejects each.
+Reject planned records stated as current and invalid/dead backing gates.
+
+**Supersession scope:** Only frozen-compiler repairs, legacy shadow cutovers and in-place
+migration mechanisms are superseded by the
+[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
+and its [editorial scope](ROADMAP_DECISIONS.md#2026-11-03--editorial-supersession-of-legacy-task-directions).
+The requirements above apply to the new compiler as their constructs land; this staging does not
+weaken the complete task exit.
 
 ### Stdlib Area Completion Contract
 
@@ -1731,10 +2511,23 @@ The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](
 
 **Work:** Build this boundary in `ConcreteSpec` and the new compiler for slice 1, then extend it as constructs land. Independent judgments, correspondence proofs, total definitions and explicit assumptions accompany the implementation. Acceptance feeds B1–B2; B3 deletes the old pipeline after the end-to-end slice is accepted.
 
-**Acceptance:** The objective holds for the supported slice, with the retained regression duties
-and discriminating controls from the [prior task body](../archive/ROADMAP_LEGACY_PLAN.md#coherent-plan-r-0075).
-Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded by the
-[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract).
+**Deliverables and acceptance:**
+
+Provide one backend-neutral driver for file/build/test compilation:
+`prepare → emit → verify → assemble/codegen → link`. Backend profiles supply extensions,
+verifier/tool invocations, target flags and link inputs; shared CLI policy owns structured
+diagnostics, artifact retention and process handling. LCB-native is the forcing consumer alongside
+LLVM. Native test-mode entry generation, explicit profile names and evidence attribution use it.
+Bound external tools in time/memory/output and preserve their failure classes. Acceptance: inject
+failures at every boundary for both profiles; neither profile takes a less structured failure path,
+and retained artifacts and diagnostics identify the actual selected profile.
+
+**Supersession scope:** Only frozen-compiler repairs, legacy shadow cutovers and in-place
+migration mechanisms are superseded by the
+[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
+and its [editorial scope](ROADMAP_DECISIONS.md#2026-11-03--editorial-supersession-of-legacy-task-directions).
+The requirements above apply to the new compiler as their constructs land; this staging does not
+weaken the complete task exit.
 
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
@@ -1986,10 +2779,24 @@ The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](
 
 **Work:** Build this boundary in `ConcreteSpec` and the new compiler for slice 1, then extend it as constructs land. Independent judgments, correspondence proofs, total definitions and explicit assumptions accompany the implementation. Acceptance feeds B1–B2; B3 deletes the old pipeline after the end-to-end slice is accepted.
 
-**Acceptance:** The objective holds for the supported slice, with the retained regression duties
-and discriminating controls from the [prior task body](../archive/ROADMAP_LEGACY_PLAN.md#coherent-plan-r-0115).
-Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded by the
-[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract).
+**Deliverables and acceptance:**
+
+Derive one immutable indexed `ProgramFacts` store containing module/definition indexes,
+signatures, layouts, builtin identities, aliases, target/runtime facts, call relationships and
+source/semantic identity, once per program. Share indexes with R-0140. Passes query typed keys,
+without rescanning lists or making private first-match tables. Facts stay immutable within a
+compilation; transformations produce a new version with an explicit invalidation boundary.
+
+Acceptance: fail on duplicate/missing keys and conflicting values from two consumers; record
+deterministic hashes and construction cost and demonstrate linear-time builders. Compare canonical
+facts with independently justified corpus expectations in the new compiler.
+
+**Supersession scope:** Only frozen-compiler repairs, legacy shadow cutovers and in-place
+migration mechanisms are superseded by the
+[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
+and its [editorial scope](ROADMAP_DECISIONS.md#2026-11-03--editorial-supersession-of-legacy-task-directions).
+The requirements above apply to the new compiler as their constructs land; this staging does not
+weaken the complete task exit.
 
 ### Task R-0116
 
@@ -2011,10 +2818,25 @@ The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](
 
 **Work:** Build this boundary in `ConcreteSpec` and the new compiler for slice 1, then extend it as constructs land. Independent judgments, correspondence proofs, total definitions and explicit assumptions accompany the implementation. Acceptance feeds B1–B2; B3 deletes the old pipeline after the end-to-end slice is accepted.
 
-**Acceptance:** The objective holds for the supported slice, with the retained regression duties
-and discriminating controls from the [prior task body](../archive/ROADMAP_LEGACY_PLAN.md#coherent-plan-r-0118).
-Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded by the
-[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract).
+**Deliverables and acceptance:**
+
+Generate a single exhaustive matrix from new compiler constructors and interface facts across
+source checking, Core checking, interpreter, lowering, validation, cleanup, LLVM and LCB-native
+profiles, reports, source identity, obligations/proofs and tests. Include backend/profile dimensions
+and minimum completed differential comparisons; share the inventory with R-0438 and later slices.
+Every constructor is explicitly classified as implemented, intentionally no-op, rejected-before-here,
+runtime-helper, pending or not-applicable; catch-all matches earn no coverage.
+
+Acceptance: a synthetic constructor or deleted consumer row makes the gate fail; each row links its
+implementation and discriminating test. Publish the matrix through debug/agent artifacts. Delete
+manual inventories or reduce them to generated snapshots.
+
+**Supersession scope:** Only frozen-compiler repairs, legacy shadow cutovers and in-place
+migration mechanisms are superseded by the
+[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
+and its [editorial scope](ROADMAP_DECISIONS.md#2026-11-03--editorial-supersession-of-legacy-task-directions).
+The requirements above apply to the new compiler as their constructs land; this staging does not
+weaken the complete task exit.
 
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
@@ -2212,10 +3034,25 @@ The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](
 
 **Work:** Build this boundary in `ConcreteSpec` and the new compiler for slice 1, then extend it as constructs land. Independent judgments, correspondence proofs, total definitions and explicit assumptions accompany the implementation. Acceptance feeds B1–B2; B3 deletes the old pipeline after the end-to-end slice is accepted.
 
-**Acceptance:** The objective holds for the supported slice, with the retained regression duties
-and discriminating controls from the [prior task body](../archive/ROADMAP_LEGACY_PLAN.md#coherent-plan-r-0222).
-Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded by the
-[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract).
+**Deliverables and acceptance:**
+
+Carry explicit arithmetic-site facts into diagnostics, reports, assumptions, proof obligations,
+release bundles and backend contracts. Every checked/wrapping/saturating operation is classified;
+modular operations need explicit modular-model proofs, and not-yet-modelled forms stay outside the
+default proof subset. A checked theorem cannot certify wrapping arithmetic.
+
+Deliver arithmetic-site evidence documentation, checked/wrapping/saturating/profile-invariant
+example cases and `scripts/tests/check_arithmetic_site_evidence.sh`. Acceptance: the same expression
+has identical semantics across build profiles, every site is classified, and claims confusing checked
+and wrapping semantics are rejected or downgraded. Replace the old width/operator snapshot with
+actual new-compiler model coverage.
+
+**Supersession scope:** Only frozen-compiler repairs, legacy shadow cutovers and in-place
+migration mechanisms are superseded by the
+[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
+and its [editorial scope](ROADMAP_DECISIONS.md#2026-11-03--editorial-supersession-of-legacy-task-directions).
+The requirements above apply to the new compiler as their constructs land; this staging does not
+weaken the complete task exit.
 
 ### Task R-0223
 
@@ -2392,10 +3229,41 @@ The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](
 
 **Work:** Build this boundary in `ConcreteSpec` and the new compiler for slice 1, then extend it as constructs land. Independent judgments, correspondence proofs, total definitions and explicit assumptions accompany the implementation. Acceptance feeds B1–B2; B3 deletes the old pipeline after the end-to-end slice is accepted.
 
-**Acceptance:** The objective holds for the supported slice, with the retained regression duties
-and discriminating controls from the [prior task body](../archive/ROADMAP_LEGACY_PLAN.md#coherent-plan-r-0272).
-Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded by the
-[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract).
+**Deliverables and acceptance:**
+
+- extend the differential generator with string, heap/allocation,
+   linear-value, effectful-I/O, generic-function, generic-struct, and
+   multi-instantiation shapes; generate division/modulo including `MIN / -1`,
+   shifts at and around the width boundary, and arithmetic that can actually
+   reach checked overflow rather than bounding every expression back into a
+   safe range. Preserve the rule that an E07xx/panic on a generated well-typed
+   program is a compiler bug, and compare the identity of traps rather than
+   treating any trap as equivalent to every other trap;
+ - rotate seeds in a nightly CI campaign and automatically minimize
+   failures rather than relying only on the fixed presubmit seeds; and
+ - preserve accepted trusted raw-pointer (`*const`/`*mut`) return fixtures separately
+   from historical rejected reference-return witnesses; the frozen dead-path extra-load
+   repair is superseded by the new-compiler decision linked below;
+ - scale R-0007's metamorphic identity oracle across generated and corpus
+   programs. Its strict alpha leg performs capture-avoiding fresh renames in
+   the correct lexical namespace and requires identical acceptance, exit,
+   output, trap identity, interpreter behavior, and compiled behavior modulo
+   honest display/span facts. Its distinct hostile-spelling leg pressures
+   generated mangles, builtin/intrinsic names, import aliases, and
+   local/global collisions; that transform may preserve behavior or fail
+   closed with an allowed collision diagnostic, but may never silently
+   diverge or trigger an internal error. Bugs 044/050/051/054 were
+   collision-sensitive, so random fresh renaming alone is not coverage.
+   Seed the historical witnesses as fixed legs, and keep IR-only spellings
+   such as `@fnref.*` in lowering mutation fixtures rather than the source
+   renamer.
+
+**Supersession scope:** Only frozen-compiler repairs, legacy shadow cutovers and in-place
+migration mechanisms are superseded by the
+[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
+and its [editorial scope](ROADMAP_DECISIONS.md#2026-11-03--editorial-supersession-of-legacy-task-directions).
+The requirements above apply to the new compiler as their constructs land; this staging does not
+weaken the complete task exit.
 
 ### Task R-0273
 
@@ -2485,10 +3353,26 @@ The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](
 
 **Work:** Build this boundary in `ConcreteSpec` and the new compiler for slice 1, then extend it as constructs land. Independent judgments, correspondence proofs, total definitions and explicit assumptions accompany the implementation. Acceptance feeds B1–B2; B3 deletes the old pipeline after the end-to-end slice is accepted.
 
-**Acceptance:** The objective holds for the supported slice, with the retained regression duties
-and discriminating controls from the [prior task body](../archive/ROADMAP_LEGACY_PLAN.md#coherent-plan-r-0302).
-Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded by the
-[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract).
+**Deliverables and acceptance:**
+
+Declare a supported LLVM/clang version or narrow tested range in the backend contract; connect
+candidate/toolchain identity to R-0357. Refuse or warn on unsupported versions through
+`scripts/tests/check_backend_contracts.sh`. Every version bump reruns the wrong-code corpus,
+backend-contract gate and IR goldens before being declared supported.
+
+The hand-written LLVM bitcode serializer, without LLVM C++ API linkage, remains deferred and
+below translation validation (R-0299) in priority: reproducibility/decoupling does not establish
+correctness. Pull it into scheduled work only when either a freestanding/no-`clang` target is
+pursued or recurring LLVM churn becomes intolerable despite pinning. It is a backend-contract
+subcomponent that blocks nothing downstream; it consumes the new validated BIR adapter boundary,
+not a resurrected legacy emitter.
+
+**Supersession scope:** Only frozen-compiler repairs, legacy shadow cutovers and in-place
+migration mechanisms are superseded by the
+[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
+and its [editorial scope](ROADMAP_DECISIONS.md#2026-11-03--editorial-supersession-of-legacy-task-directions).
+The requirements above apply to the new compiler as their constructs land; this staging does not
+weaken the complete task exit.
 
 ## Area: Unsafe Concrete And Trusted Systems Profile
 
@@ -2607,10 +3491,25 @@ release budgets consume the same ledger.
 
 **Work:** Build this boundary in `ConcreteSpec` and the new compiler for slice 1, then extend it as constructs land. Independent judgments, correspondence proofs, total definitions and explicit assumptions accompany the implementation. Acceptance feeds B1–B2; B3 deletes the old pipeline after the end-to-end slice is accepted.
 
-**Acceptance:** The objective holds for the supported slice, with the retained regression duties
-and discriminating controls from the [prior task body](../archive/ROADMAP_LEGACY_PLAN.md#coherent-plan-r-0421).
-Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded by the
-[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract).
+**Deliverables and acceptance:**
+
+Every optimization has a named owner, semantic preconditions, affected operations/failure
+semantics, debug/source-identity policy, verifier before and after, interpreter/differential/mutation
+coverage, performance witness and applicable R-0504 certificate obligation. Apply this ownership
+map across the new IR chain, LLVM and LCB-native. Prefer target-neutral canonicalization/legalization
+only where semantics requires it; target instruction selection stays backend-specific. Do not add
+a pass merely because another compiler has it.
+
+Acceptance: optimization levels select documented pass sets and cannot change observable checked
+arithmetic, traps, capabilities, ownership or evidence status. The named verification and performance
+controls demonstrate each pass's contract.
+
+**Supersession scope:** Only frozen-compiler repairs, legacy shadow cutovers and in-place
+migration mechanisms are superseded by the
+[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
+and its [editorial scope](ROADMAP_DECISIONS.md#2026-11-03--editorial-supersession-of-legacy-task-directions).
+The requirements above apply to the new compiler as their constructs land; this staging does not
+weaken the complete task exit.
 
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
@@ -2625,10 +3524,21 @@ regression cases and controls of these tasks transfer here unless the reason ret
 
 **Work:** Build this boundary in `ConcreteSpec` and the new compiler for slice 1, then extend it as constructs land. Independent judgments, correspondence proofs, total definitions and explicit assumptions accompany the implementation. Acceptance feeds B1–B2; B3 deletes the old pipeline after the end-to-end slice is accepted.
 
-**Acceptance:** The objective holds for the supported slice, with the retained regression duties
-and discriminating controls from the [prior task body](../archive/ROADMAP_LEGACY_PLAN.md#coherent-plan-r-0422).
-Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded by the
-[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract).
+**Deliverables and acceptance:**
+
+Profile before refactoring; retain adversarial scaling inputs, measure time and peak memory over
+increasing program sizes, record expected complexity envelopes and gate the structural class,
+not one file. Adopt typed emitter fragments only when profiles justify them; another backend's
+fragment model does not prove this emitter fixed. Keep compiler-throughput measurements distinct
+from generated-program runtime measurements in reports and release claims. R-0422 owns performance
+repairs; R-0550 owns the class scaling gate and R-0551 continuous profiling.
+
+**Supersession scope:** Only frozen-compiler repairs, legacy shadow cutovers and in-place
+migration mechanisms are superseded by the
+[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
+and its [editorial scope](ROADMAP_DECISIONS.md#2026-11-03--editorial-supersession-of-legacy-task-directions).
+The requirements above apply to the new compiler as their constructs land; this staging does not
+weaken the complete task exit.
 
 ### Task R-0550
 
@@ -2638,10 +3548,35 @@ Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded 
 
 **Work:** Build this boundary in `ConcreteSpec` and the new compiler for slice 1, then extend it as constructs land. Independent judgments, correspondence proofs, total definitions and explicit assumptions accompany the implementation. Acceptance feeds B1–B2; B3 deletes the old pipeline after the end-to-end slice is accepted.
 
-**Acceptance:** The objective holds for the supported slice, with the retained regression duties
-and discriminating controls from the [prior task body](../archive/ROADMAP_LEGACY_PLAN.md#coherent-plan-r-0550).
-Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded by the
-[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract).
+**Deliverables and acceptance:**
+
+The gate generates inputs of 10^4 to 10^5 elements or statements in each shape (array literals, long
+functions, many locals, many declarations, deep nesting), compiles them, and times each front-end and
+back-end stage. It fails when a stage exceeds its recorded budget, or when the ratio between two sizes
+is above the recorded near-linear bound. The budgets are measured on the CI host and recorded with the
+SHA they were measured at. A retry budget keeps host noise from failing the gate; it never lets the
+pre-fix code pass. Since bug 294 the gate separates the compiler's work from the host's speed: where
+the CI host can count retired instructions (perf), each run's instruction count and each stage's
+allocations are held to exact budgets, growth between sizes is judged on the instruction counts
+against the linear expectation (a wall-time ratio between 10^4 and 10^5 measures the caches as much
+as the work: linear stages grew x45 – x60, close to the bound a quadratic had to exceed), and wall
+time is judged only against budgets normalized to the host speed measured at `--measure` (capped
+at 2x); a host that cannot count keeps the wall bounds. **Exit:** `scripts/tests/check_compile_scaling.sh` (new, in the full gate set) passes
+at the closing commit, and each reproducer's pre-fix commit fails it.
+
+R-0550 owns the scaling gate with R-0422 owning repairs and R-0551 profiles. Apply the corpus to
+supported new-compiler stages as constructs land; report every unsupported/excluded shape by name.
+Remove exclusions when its construct is supported, and grow declaration/nesting shapes to the same
+10^4–10^5 scale. Retain bug 027, 248–250, 265–282 and long-function workload witnesses as historical
+controls; no exclusion may hide a newly supported superlinear stage. Host noise retry never turns
+the deliberately quadratic control into a pass.
+
+**Supersession scope:** Only frozen-compiler repairs, legacy shadow cutovers and in-place
+migration mechanisms are superseded by the
+[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
+and its [editorial scope](ROADMAP_DECISIONS.md#2026-11-03--editorial-supersession-of-legacy-task-directions).
+The requirements above apply to the new compiler as their constructs land; this staging does not
+weaken the complete task exit.
 
 ### Task R-0551
 
@@ -2651,10 +3586,25 @@ Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded 
 
 **Work:** Build this boundary in `ConcreteSpec` and the new compiler for slice 1, then extend it as constructs land. Independent judgments, correspondence proofs, total definitions and explicit assumptions accompany the implementation. Acceptance feeds B1–B2; B3 deletes the old pipeline after the end-to-end slice is accepted.
 
-**Acceptance:** The objective holds for the supported slice, with the retained regression duties
-and discriminating controls from the [prior task body](../archive/ROADMAP_LEGACY_PLAN.md#coherent-plan-r-0551).
-Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded by the
-[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract).
+**Deliverables and acceptance:**
+
+Use leanprof, the owner's Lean profiler, under R-0422 and the performance track. A scheduled CI
+server job profiles fixed supported new-compiler workloads at every landed main SHA: supported
+large examples, R-0550's scaling corpus and the supported std build. Grow the workload set as its
+constructs land. Publish top hotspots and per-stage times, compare with the previous landed commit,
+and open a tracked finding when a hotspot grows or appears above a recorded threshold.
+
+This complements rather than replaces instruction-count tracking and its approximately 1.5% alarm
+([PERF_TRACKING.md](PERF_TRACKING.md)). Keep server provisioning in the owner's private dotfiles;
+only portable scripts belong here. Acceptance: profiles and comparisons at exact SHAs for ten
+consecutive landed commits, and a deliberately introduced quadratic hotspot opens a finding.
+
+**Supersession scope:** Only frozen-compiler repairs, legacy shadow cutovers and in-place
+migration mechanisms are superseded by the
+[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
+and its [editorial scope](ROADMAP_DECISIONS.md#2026-11-03--editorial-supersession-of-legacy-task-directions).
+The requirements above apply to the new compiler as their constructs land; this staging does not
+weaken the complete task exit.
 
 ## Area: Public Release Bar
 
@@ -2768,10 +3718,32 @@ language version with an unexplained conformance failure.
 
 **Work:** Build this boundary in `ConcreteSpec` and the new compiler for slice 1, then extend it as constructs land. Independent judgments, correspondence proofs, total definitions and explicit assumptions accompany the implementation. Acceptance feeds B1–B2; B3 deletes the old pipeline after the end-to-end slice is accepted.
 
-**Acceptance:** The objective holds for the supported slice, with the retained regression duties
-and discriminating controls from the [prior task body](../archive/ROADMAP_LEGACY_PLAN.md#coherent-plan-r-0355).
-Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded by the
-[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract).
+**Deliverables and acceptance:**
+
+`scripts/tests/check_release_performance.sh` measures compiler startup, cold small-project and
+stdlib builds, warm incremental no-op, private-leaf and public-interface edits, proof-query and
+object-cache hits, relinking, `concrete test`, audit/report generation, proof-check latency and
+independent bundle-verification latency against `release/perf-baseline.json`. Include proof
+scalability budgets before broad proof expansion: elaboration/recheck memory, proof-term size,
+artifact size and validator scaling.
+
+Establish the development-speed baseline before structural implementation of the new compiler,
+using a named corpus in `release/dev-speed-corpus.txt`: compiler, supported std, one large example
+and one multi-module program. Measure compiler/program clean builds, one-function compiler and
+Concrete-program edit rebuilds, peak compiler memory, and fast-push turnaround (R-0513). Record each
+measurement with exact main SHA, host class and toolchain; every budget declares noise tolerance.
+`scripts/tests/check_dev_speed.sh` fails beyond-tolerance regressions; raising a budget requires a
+commit stating the reason. A deliberately injected regression must fail, and the series records
+each structural change's effect. As new constructs land, extend this corpus to the full named scope.
+Acceptance remains the full release budgets: release CI blocks unexplained regressions and prints
+the regressed command.
+
+**Supersession scope:** Only frozen-compiler repairs, legacy shadow cutovers and in-place
+migration mechanisms are superseded by the
+[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
+and its [editorial scope](ROADMAP_DECISIONS.md#2026-11-03--editorial-supersession-of-legacy-task-directions).
+The requirements above apply to the new compiler as their constructs land; this staging does not
+weaken the complete task exit.
 
 ## Area: Post-Release Operations And Stewardship
 
@@ -2872,10 +3844,22 @@ forcing example, explicitly deferred, or rejected.
 
 **Work:** Build this boundary in `ConcreteSpec` and the new compiler for slice 1, then extend it as constructs land. Independent judgments, correspondence proofs, total definitions and explicit assumptions accompany the implementation. Acceptance feeds B1–B2; B3 deletes the old pipeline after the end-to-end slice is accepted.
 
-**Acceptance:** The objective holds for the supported slice, with the retained regression duties
-and discriminating controls from the [prior task body](../archive/ROADMAP_LEGACY_PLAN.md#coherent-plan-r-0446).
-Frozen-compiler repairs, shadow cutovers and in-place migrations are superseded by the
-[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract).
+**Deliverables and acceptance:**
+
+Generate operation semantics and trap inventory from the new Core constructors. Folding, dead-code
+elimination, interpreter and retained backends consume one backend-neutral semantic artifact, with
+emitter independence. Extend consumers to fuzz generation and the capability matrix.
+
+Acceptance: adding a new trapping constructor produces generated trapping fuzz cases without
+editing the generator; prove every declared consumer reads the generated artifact, not a local copy.
+Retain the trap-inventory gate and unary/binary trap mutation controls corresponding to #25–#27.
+
+**Supersession scope:** Only frozen-compiler repairs, legacy shadow cutovers and in-place
+migration mechanisms are superseded by the
+[new-compiler decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
+and its [editorial scope](ROADMAP_DECISIONS.md#2026-11-03--editorial-supersession-of-legacy-task-directions).
+The requirements above apply to the new compiler as their constructs land; this staging does not
+weaken the complete task exit.
 
 ## Area: WebAssembly Portability And Sandbox Backend (provisional)
 
