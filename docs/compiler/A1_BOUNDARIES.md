@@ -28,7 +28,7 @@ Fatal aborts promise no reclamation; divergence promises no eventual release.
 Sources: `docs/compiler/VERIFIED_PIPELINE.md:94–123`;
 `docs/project/ROADMAP_TASKS.md:469–481`.
 
-**Events and payloads.** Propose `Event := request CallId OpId GrantId ResourceId
+**Events and payloads.** As provisional representations under Q7/Q9, propose `Event := request CallId OpId GrantId ResourceId
 Args | response CallId Result ExternalDelta | terminal TerminalPayload`.
 `Args` and `Result` are operation-indexed typed values, including byte strings,
 lengths, error results and ownership transfers; `ExternalDelta` describes changes
@@ -42,7 +42,13 @@ Sources: `docs/project/ROADMAP_TASKS.md:469–472`;
 `research/process/design-review-2026-11-03.md:18–20`.
 
 Event granularity is open under Q7/Q9: atomic completed calls versus split requests
-and responses. Recommend split events to express blocking and foreign interaction.
+and responses. Recommend split events to express blocking and foreign interaction (Q7/Q9).
+For this sketch, pending admissible responses take silent environment-wait steps
+in the combined program/environment transition system; response steps deliver the
+contracted result. Waiting forever is silent divergence, with no fairness assumed.
+Prove that waiting preserves validity and always enables a wait or response step,
+so legitimate blocking is neither unsafe stuckness nor a finite maximal execution.
+This representation remains a Q7/Q9 proposal.
 For terminal output, Q7 options are logical writes with a terminal-flush contract,
 or externally delivered bytes with explicit device/failure premises; recommend the
 former distinction. No delivery guarantee is invented here. Terminal actions are
@@ -51,13 +57,13 @@ Source: `research/process/design-review-2026-11-03.md:20`.
 
 **Identities.** Let `ResourceId` name an allocation or external resource,
 `GrantId` name authority over resources, and `AllocId` name an allocator domain.
-A state contains a live-resource map, an ownership map and a grant-provenance graph;
+Under Q1/Q7/Q9, a provisional state contains a live-resource map, an ownership map and a grant-provenance graph;
 identity equality is independent of source spelling and physical address.
 `Depends(v,a)` is transitive through aggregates, outputs and pending cleanup.
 Release requires that no live value depends on the allocator. Q1 options are
 scoped generative brand binders with existential packaging, or explicit generation
 indices carried through interfaces; recommend scoped binders with checked packaging.
-Neither identifies repeated reset executions by their syntactic site. Release
+Neither identifies repeated reset executions by their syntactic site. Q1 release
 metadata options are stable allocator state with a release context, or a proved
 relocatable representation; recommend stable state, never a stored safe reference.
 Q7 options are target-specific grant records with an explicit policy order, or
@@ -87,7 +93,7 @@ leaves the allocator valid. Failed growth preserves the container and returns th
 rejected element; failed reserve preserves original storage; partial construction
 accounts for every acquired obligation. OOM here is an ordinary conserving error,
 never `exhaust`. Q1 options for `Failure` are operation-specific records or a common
-sum with typed recovery payloads; recommend operation-specific contracts. Options
+sum with typed recovery payloads; recommend operation-specific contracts. Q1 options
 for “unchanged” are logical contents/ownership or full observable representation
 including capacity and allocator state; recommend an explicit per-operation frame
 covering all observables. This does not select the observable set.
@@ -112,19 +118,27 @@ allocation rule. Sources: `docs/compiler/VERIFIED_PIPELINE.md:117–123`;
 `docs/project/ROADMAP_TASKS.md:866–871`;
 `research/process/design-review-2026-11-03.md:26`.
 
-**Observation equivalence and trap erasure.** Define `observe P` from behaviours
-to profile observations and `b ≈P c := observe P b = observe P c`, allowing identity
-renaming through a resource bijection and related external memories. It preserves
-observable return values, event order and payloads, abort, and infinite interaction
-versus silent divergence. `eraseTrap (abort k) = abort`; ghost ownership, permissions
-and trap kinds disappear only through proved erasure. A property distinguishing
-ghost trap reasons needs its own transport lemma. Q7/Q9 options for observations
-are logical external operations or physical byte delivery; recommend explicit
-logical events plus a separate realization relation. Sources:
+**Observation equivalence and trap erasure.** For the observation profile approved
+under Q7/Q9, define `ObsEq P rho b c` by relating the entire event sequence and
+endpoints under a coherent identity bijection `rho` and related external memories.
+The bijection covers resource, grant and allocator identities, preserves provenance
+and aliasing, extends consistently on fresh identities, and frames unaffected
+memory. Released identities cannot be inconsistently remapped in later events.
+Payloads, external-memory deltas and endpoint values use the same correspondence;
+observable order, abort and infinite interaction versus silent divergence agree.
+Define `b ≈P c := ∃ rho, ObsEq P rho b c`, not literal equality of independently
+renamed traces. `eraseTrap (abort k) = abort`; ghost ownership, permissions and trap
+kinds disappear only through proved erasure. A property distinguishing ghost trap
+reasons needs its own transport lemma. Q7/Q9 options for observations are logical
+external operations or physical byte delivery; recommend explicit logical events
+plus a separate realization relation. The theorem's `ObsRel` below instantiates
+this judgment with its initial correspondence and endpoint obligations; it is not
+an independently selectable relation. Sources:
 `docs/compiler/VERIFIED_PIPELINE.md:108–116`;
 `research/process/design-review-2026-11-03.md:20,25`.
 
-**Stuckness.** `Stuck s := ¬ Final s ∧ ¬ ∃ e s', Step s e s'`. Model failed
+**Stuckness.** `Stuck s := ¬ Final s ∧ ¬ ∃ e s', Step s e s'`, using the combined
+program/environment steps (including silent waiting) above. Model failed
 unsafe preconditions explicitly, rather than giving undefined execution arbitrary
 observable permission. Under valid primitive/FFI contracts safe accepted states
 cannot reach `Stuck`. A stuck source run cannot justify a successful native claim.
@@ -179,12 +193,30 @@ proved. Sources: `docs/project/ROADMAP_TASKS.md:856–883,948–978`.
    Source: `docs/project/ROADMAP_TASKS.md:872–875`.
 4. **Initial relation.** `InitRel P c image envC envT sC sT` includes entry ABI,
    related arguments/grants, startup, imports, memory representation and resource
-   relation. Initial-state existence must be shown for supported test inputs.
+   relation. Define supported configurations/inputs independently of `InitRel` and
+   `EnvRel`. For every such configuration/input, every successful compilation from
+   parts 1–3, and every admissible target environment, require a source environment
+   and initial states satisfying `Admissible P envC`, `EnvRel P envC envT` and
+   `InitRel P c image envC envT sC sT`, with the same resource premises used in
+   part 6. Thus `EnvRel` is total over admissible target environments in scope,
+   not merely inhabited on fixtures. Exhibit admissible target environments for
+   every supported configuration, and realizable resource witnesses as in §1.
+   For every related initialization under these premises, prove nonempty sets of
+   maximal source and target executions (including infinite executions where
+   appropriate). Neither an empty environment relation nor absent executions can
+   discharge refinement.
 5. **Final relation.** `FinalRel P resultC memC resultT memT` relates returned
    values and externally reachable memory, conservation at ordinary exits, and
    erased traps. Fatal exits require only their stated observations; they do not
    promise cleanup. Preserve target-memory validity throughout, not only at exit.
-6. **Behaviour refinement.** For related initial states and admissible related
+6. **Behaviour refinement.** Define `ObsRel P bc bt` as §1's approved
+   `ObsEq P rho bc bt` for a coherent bijection extending the initial identity and
+   memory correspondence in `InitRel`. Its endpoint clause requires returning
+   executions to satisfy `FinalRel` on their results and external memories;
+   abort/exhaustion and divergence obey §1's endpoint and resource rules.
+   Checker safety (progress/preservation), resource adequacy, translation refinement
+   and claim transport remain separately named obligations, each to be discharged.
+   Translation refinement states: For related initial states and admissible related
    environments, `∀ bt ∈ MaxTarget image sT, ∃ bc ∈ MaxCore c sC, ObsRel P bc bt`,
    subject to the separately stated resource theorem. Relate every finite observed
    prefix as well; finite target prefixes must extend compatible source executions,
@@ -240,7 +272,7 @@ hyperproperties. Sources: `docs/project/ROADMAP_TASKS.md:3365–3373,3457–3463
 Inventory sources: `docs/compiler/VERIFIED_PIPELINE.md:175–185,230–254,795–818,820–842,947–952`;
 `docs/project/ROADMAP_TASKS.md:889–942`. Research rationale: parser execution is
 separate in `docs/project/INFLUENCES.md:628–635`; compiler execution and certificates
-in `docs/project/INFLUENCES.md:593–604,662–670`; compositional foreign contracts in
+in `docs/compiler/VERIFIED_PIPELINE.md:947–952`; compositional foreign contracts in
 `docs/project/INFLUENCES.md:582–589`. The current planned native profile is AArch64,
 Apple ARM64 ABI, macOS, Mach-O, not an ISA-only assertion
 (`docs/compiler/VERIFIED_PIPELINE.md:232–242`).
@@ -253,7 +285,7 @@ loops, printing and larger scalar set are not silently imported into this smalle
 slice. Sources: `ROADMAP.md:218,110–120`;
 `docs/project/ROADMAP_TASKS.md:948–962`.
 
-**Exact proposed surface subset (Q9, unapproved).** One source unit, no imports;
+**Exact proposed surface component subset (Q9, unapproved).** One source unit, no imports;
 one empty declaration `struct S {}` without Copy; one function
 `fn entry(x: u8) -> u8 { statements }`. Statements are exactly `let n = e;`,
 `let S {} = n;`, and a final `return e;`. Expressions are exactly a local name,
@@ -262,12 +294,41 @@ expressions. Each name has one binding, no shadowing; destructuring is the only
 linear eliminator. No calls, loops, branching, assignment, heap, references, raw
 operations, strings, traits, generics, `defer`, externs, explicit abort or I/O.
 This is a proposed admission restriction, not a language-wide prohibition.
-Options are this typed entry-function harness or an executable-only `main` wrapper
-with target grants; recommend the harness plus an explicitly bound native launcher,
-so arguments can supply a runtime overflow witness without adding language I/O.
-The wrapper/grant schema requires Q7 approval. Empty structs are already allowed
-(`docs/spec/decisions.md:173`); the subset/interface remains Q9. Q4 static text and
-Q5 inference alternatives need no answer for this subset because neither occurs.
+OD31's decided expected-type rule applies: `return` supplies `u8`, and a
+`u8` expectation on addition propagates to its operands; a typed operand can
+constrain its peer. A bare literal initializer with no expected type is refused,
+with no default integer type. OD62 requires every named local and parameter to be
+used; an intentionally unused binding is `_`, which cannot discard a linear
+obligation. These decided restrictions are not Q6 choices.
+Empty structs and struct-destructuring `let` are decided (OD65 and OD84,
+`docs/spec/decisions.md:173,192`); the component subset/interface remains Q9.
+Q4 static text and Q5 inference alternatives need no answer for this subset
+because neither occurs. Sources for static restrictions:
+`docs/spec/decisions.md:139,170,458–459`.
+
+**Component versus executable (Q7/Q9, unapproved integration options).** `entry`
+is an open component, not a complete language executable or a replacement for
+`main`. Q9 options are component compilation with an explicitly bound native test
+launcher, or extending the admitted subset to a language wrapper; recommend the
+component first (Q9). A complete executable must have a root `main` returning only
+`u8`, declaring grants within the target's offered parameters and `with(...)`,
+and explicitly consuming every declared grant before normal return (abort excepted).
+Undeclared grants are never minted. These are decided rules, not options here.
+Sources: `docs/spec/decisions.md:298–300,355–360,431–432`.
+
+For either executable integration, Q7/Q9 must specify the target grant schema,
+startup/launcher ABI, input injection, entry call/result mapping and explicit grant
+consumption. Q7/Q9 options for input injection are a language wrapper obtaining
+input through a declared grant/contracted operation, or a bound native test launcher
+calling the component through its ABI; recommend the latter for component tests
+(Q7/Q9). The language-wrapper option adds calls, grant types/operations, effects
+and consumption forms beyond this manifest, all requiring admission and proofs.
+The native-launcher option alone establishes no complete decided-language executable:
+that claim additionally needs the root `main` and its grant checks and semantics.
+Bind wrapper/launcher, startup, target table, input bytes, grants, object/link inputs
+and image in the receipt and prove their initialization/observation correspondence.
+Neither Q7 nor Q9 may add a scalar input parameter to `main` or revise its decided
+return/grant rules.
 
 **Exact proposed Core subset (Q9, unapproved).** Types are exactly `u8` and nominal
 empty `S`; function parameters contain exactly one `u8`. Atoms are `litU8`,
@@ -276,13 +337,13 @@ empty `S`; function parameters contain exactly one `u8`. Atoms are `litU8`,
 `bind LocalId (checkedAddU8 a b)`, `destructureS (move LocalId)`, and
 `return a` at `u8`. Expression nesting lowers to fresh sequenced binders; overflow
 in `checkedAddU8` produces a defined runtime trap. No other constructor is admitted.
-Alternative: explicit success/trap control edges in Core; recommend retaining the
-checked primitive and expanding edges below Core. This is not approval of Core's
-whole constructor set. The integer choice options are `u8` or `i64`; recommend `u8`
+Q9 alternative: explicit success/trap control edges in Core; recommend retaining the
+checked primitive and expanding edges below Core (Q9). This is not approval of Core's
+whole constructor set. The Q9 integer choice options are `u8` or `i64`; recommend `u8`
 for the smallest subset and consistency with the decided `main` return type
-(`docs/spec/decisions.md:39`; `ROADMAP.md:218,257–259`). Addition is the proposed
+(`docs/spec/decisions.md:298–300`; `ROADMAP.md:218,257–259`). Under Q9, addition is the proposed
 single checked operation; subtraction or multiplication are alternatives, with
-addition recommended. Q2 destruction-bound choices are deferred by using only
+addition recommended (Q9). Q2 destruction-bound choices are deferred by using only
 empty-struct destructuring, never `destroy`.
 
 **Static refusal and accepted trap (Q6, undecided).** Options are mandatory literal
@@ -299,12 +360,18 @@ No unconditional accepted fixture is asserted before Q6 is answered. Sources:
 `ROADMAP.md:252–253`; `research/process/design-review-2026-11-03.md:24`;
 `docs/spec/arithmetic.md:607–627`.
 
-**Observations.** Proposed slice observations are `returnU8 n` and unqualified
-`abort`, with an empty external trace. The launcher relates return values to the
-recorded target result; no abort signal number, diagnostic text or ghost trap kind
-is promised. Options (Q7/Q8) are entry-function result observations or whole-process
-exit observations; recommend entry results with a separate launcher contract.
-Sources: `docs/compiler/VERIFIED_PIPELINE.md:108–116`;
+**Observations (Q7/Q8/Q9).** Proposed component endpoints are `returnU8 n` and
+unqualified `abort`, with traces containing the terminal events required by the
+target authority table, including diagnostics and flushing when applicable.
+No empty trace is inferred from the absence of source I/O. The launcher contract
+must relate component results and terminal events to recorded target observations;
+ghost trap kinds are erased, but diagnostic payloads remain observable under the
+selected profile. Q7/Q9 options are retaining these terminal events or an explicit
+approved projection with a proved realization/transport contract; recommend retaining
+them (Q7/Q9). Q7/Q8 options are entry-function result observations or whole-process
+exit observations; recommend entry results with a separate launcher contract
+(Q7/Q8). Sources: `docs/spec/decisions.md:355–360,428–430`;
+`docs/compiler/VERIFIED_PIPELINE.md:108–116`;
 `research/process/design-review-2026-11-03.md:27`.
 
 **Required programs and checks, conditional on manifest approval.** The accepted
@@ -312,7 +379,10 @@ linear witness is `let a = S {}; let b = a; let S {} = b; return x;` inside the
 entry function. Refuse reuse after this move; refuse two destructures of `b`;
 refuse `let a = S {}; return x;` for an unconsumed normal exit. Retain separate
 controls for duplicate consumption and post-move reuse even if one diagnostic
-class covers both. Run the checked-operation witness at 0 and 255 for success and
+class covers both. Add OD31 refusal `let n = 1; return n;` (no expected
+literal type) and OD62 refusal `let n = x; return x;` (unused Copy local), plus
+`fn entry(x: u8) -> u8 { return 0; }` (unused named parameter). Keep these separate
+from linear-exit and Q6 overflow refusals. Run the checked-operation witness at 0 and 255 for success and
 trap under the chosen Q6 criterion; retain the chosen criterion's statically
 refused overflow case separately. Check each completed result at sufficient fuel
 and greater fuel for equality; check low-fuel budget prefixes extend to the same
