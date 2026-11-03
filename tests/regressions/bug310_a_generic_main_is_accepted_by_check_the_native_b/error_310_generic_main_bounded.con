@@ -1,0 +1,5 @@
+// Archived legacy reproducer: intended expectation only; not registered as a required pass.
+// Bug 310 (STMT-7): a bounded type parameter on `main` is refused too (E0310).
+fn main<T: Copy>() -> Int {
+    return 42;
+}

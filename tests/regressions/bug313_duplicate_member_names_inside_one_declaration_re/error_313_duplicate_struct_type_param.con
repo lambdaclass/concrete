@@ -1,0 +1,7 @@
+// Archived legacy reproducer: an observational probe of the archived MOD-5 proposal, which never
+// landed. It decides no rejection and expects no diagnostic; see bug 313's owner-question note.
+// Bug 313 (MOD-5): two type parameters of one name on a struct were accepted (E0324).
+struct W<T, T> { a: T }
+fn main() -> Int {
+    return 42;
+}

@@ -1,0 +1,12 @@
+// Archived legacy reproducer: intended expectation only; not registered as a required pass.
+// Archived legacy reproducer: intended expectation only; not registered as a required pass.
+// Bug 312 (SYN-3): an enum destructuring `let` is a `let` too; its binder may not take the
+// compiler's `__destr_` prefix (E0283).
+enum E { A { v: Int }, B }
+fn main() -> Int {
+    let e: E = E::A { v: 42 };
+    let E::A { v: __destr_v } = e else {
+        return 1;
+    };
+    return __destr_v;
+}

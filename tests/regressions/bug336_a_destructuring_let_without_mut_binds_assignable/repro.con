@@ -1,0 +1,10 @@
+// Bug 336 (OWN-10): only a `mut` binding is assigned, so the assignment below must be refused with E0217.
+// Observed on main cc876322: accepted; the binary exits 42 and --interp prints 42.
+struct Copy P { a: i64, b: i64 }
+
+fn main() -> i64 {
+    let p: P = P { a: 40, b: 1 };
+    let P { a, b } = p;
+    a = a + 1;
+    return a + b;
+}

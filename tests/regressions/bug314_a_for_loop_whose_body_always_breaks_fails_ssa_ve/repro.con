@@ -1,0 +1,9 @@
+// Bug 314: a `for` loop whose body always ends in `break` (with or without a value) has a step
+// block no edge reaches. Before the fix the native build failed SSA verification (E0703, "use of
+// %phi.0 defined in non-dominating block") while --interp printed 42. Expected: exit 42 on both.
+fn main() -> Int {
+    for (let mut i: Int = 0; i < 3; i = i + 1) {
+        break true;
+    }
+    return 42;
+}
