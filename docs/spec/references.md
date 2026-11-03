@@ -813,6 +813,10 @@ fn main() -> u8 {
 ```
 
 ```con reject name=erased-generic-at-ref-decided code=E0302 stage=check pair=constant-and-erased-value pending=R-0555 now=reject:E0101:resolve
+fn same<T: Copy>(x: T) -> bool {
+    return true;
+}
+
 fn example_value() -> i64 {
     let v: i64 = 42;
     assert same::<&i64>(&v);
