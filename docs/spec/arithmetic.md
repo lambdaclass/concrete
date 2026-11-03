@@ -542,7 +542,7 @@ fn main() -> u8 {
 }
 ```
 
-```con accept name=checked-conversion-result exit=42 pending=R-0500 now=reject:E0101:resolve
+```con accept name=checked-conversion-result exit=42 pending=R-0500 now=reject:E0108:resolve
 fn convert(x: i64) -> Result<u8, OutOfRange> {
     return try_convert::<u8>(x);
 }
@@ -567,7 +567,7 @@ fn main() -> u8 { return 42; }
 and is the identity in `--interp` (bug 128), and a float-to-integer `as` truncates toward zero and
 aborts on NaN, an infinity or a value out of range. OD107 instead requires an error as `try_convert`; OD99 fixes the builtin spellings `trunc`, `round`, `floor`, `ceil`. Implementation remains pending R-0500.
 
-```con accept name=round-result exit=42 pending=R-0500 now=reject:E0101:resolve
+```con accept name=round-result exit=42 pending=R-0500 now=reject:E0108:resolve
 fn convert(x: f64) -> Result<u8, OutOfRange> {
     return trunc::<u8>(x);
 }
