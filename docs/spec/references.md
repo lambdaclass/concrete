@@ -685,7 +685,7 @@ fn main() -> u8 {
 - Kind: refusal
 - Uses: none
 - Codes: E0302 (check, post-mono), E0303 (check, post-mono), E0234 (check), E0238 (check)
-- Status: partial R-0555
+- Status: enforced
 - Enforced by: Concrete.checkStmt, Concrete.verifyNoRefBindingsPostMono
 - Semantics: none
 - Obligation: INV-REF (R-0500): a reference binding's source is fixed at its introduction
@@ -812,7 +812,7 @@ fn main() -> u8 {
 }
 ```
 
-```con reject name=erased-generic-at-ref-decided code=E0302 stage=check pair=constant-and-erased-value pending=R-0555 now=reject:E0101:resolve
+```con reject name=erased-generic-at-ref code=E0302 stage=check pair=constant-and-erased-value
 fn same<T: Copy>(x: T) -> bool {
     return true;
 }

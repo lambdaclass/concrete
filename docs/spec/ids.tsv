@@ -607,7 +607,7 @@ REF-5/borrow-reference-binding	live	-
 REF-5/branch-value-base	retired:2026-11-03-decided-language	-
 REF-5/bind-branch-first	live	-
 REF-6/constant-borrows	live	-
-REF-6/erased-generic-at-ref	retired:2026-11-03-frozen-compiler-conformance	-
+REF-6/erased-generic-at-ref	live	-
 REF-6/constant-and-erased-value	live	-
 REF-8/read-owner-in-borrow-block	retired:2026-11-03-decided-language	-
 TRUST-11@1	superseded	a40f5b568fa77f7dfec54870fe968cd6
@@ -1043,4 +1043,3 @@ TRAIT-9/missing-method-decided	pending	-
 TRAIT-9/return-type-differs-decided	pending	-
 TRAIT-9/receiver-differs-decided	pending	-
 TRAIT-9/capabilities-exceed-trait-decided	pending	-
-REF-6/erased-generic-at-ref-decided	pending	-
