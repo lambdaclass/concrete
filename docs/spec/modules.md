@@ -10,8 +10,7 @@ generated interfaces (MOD-7, pending), calls the compiler generates (MOD-8) and 
 ([MAINTAINERS.md](MAINTAINERS.md) §2.1). Representation privacy (which fields and constructors another module
 may use) is TYPE-11, and trait coherence is the traits chapter.
 
-One question is recorded without an entry yet: SCOPE-4, whether a local may reuse the name of a
-top-level function, an import alias or an intrinsic, is still open; today it may. TIGHTENING_DECISIONS
+OD67 refuses locals that reuse a visible top-level function, import alias, constant or intrinsic name (SCOPE-1 and SCOPE-2). TIGHTENING_DECISIONS
 D9 (one source file per module with `pub` as its interface, and interface artifacts the compiler
 generates and checks) is decided and scheduled late; it is MOD-7, pending R-0556. The design record is
 [VISIBILITY_AND_MODULE_HYGIENE.md](../archive/design-records/VISIBILITY_AND_MODULE_HYGIENE.md).
@@ -37,8 +36,7 @@ work only with what a name denotes: Elab and CoreCheck still look some names up 
 R-0492 moves them to identities. Bugs 039 to 045 were names resolved more than once, differently; binders
 are now keyed by identity (SCOPE-1, SCOPE-3), and declarations get the same treatment under R-0492.
 The checker repeats some lookups (E0200 to E0202, E0263, E0267) as defense in depth.
-The builtins include the enums `Option` and `Result`, which a module uses without an import; how
-a user type of the same name resolves is OPEN-43. The types chapter's
+The builtins include the enums `Option` and `Result`, which a module uses without an import; OD43 refuses user declarations that collide with these builtin type names. The types chapter's
 [builtin catalog](types.md#builtin-functions) records the current compiler's builtin functions,
 their signatures, the capabilities it checks and how it handles their names.
 
@@ -220,12 +218,12 @@ pub fn shown() -> i64 {
 <a id="MOD-3"></a>
 ### MOD-3. A module binds each name once
 
-**MOD-3@2.** A module binds each name to at most one declaration, whether by a declaration or an import, an import alias does not name a compiler intrinsic, and no function definition takes a name the compiler reserves.
+**MOD-3@3.** A module binds each name to at most one declaration, whether by a declaration or an import, an import alias does not name a compiler intrinsic, and no function definition takes a builtin name or another name the compiler reserves, while an impl method does not bind a free-function name `Type_method`.
 
 - Kind: refusal
 - Uses: none
 - Codes: E0299 (check), E0120 (resolve), E0578 (check, core-check)
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.checkModule
 - Semantics: none
 - Obligation: none
@@ -237,15 +235,9 @@ the same declaration twice binds the name to one declaration and is accepted. Th
 are the `__` prefix, `user_main` and the builtins a program may call but not redefine; they are
 reserved for functions only, and a `let` spelling the compiler reserves is SYN-3. The
 [builtin catalog](types.md#builtin-functions) records which builtin names the current compiler
-reserves. A probe of a program function with a builtin's name is recorded there only for
-`string_length`. Whether a program may declare a function named `print`, `println` or `append` is
-OPEN-133; whether it may declare one whose name is another builtin's, other than the names MOD-3
-reserves, and which function the program's calls of that name reach, is OPEN-153.
-The current compiler also counts an impl method under its definition name `Type_method`, so a free function
-`P_get` beside `impl P { fn get(&self) ... }` in one module is refused with E0299; whether a method
-should occupy that name is OPEN-135.
+reserves. OD133 reserves `print`, `println` and `append`; OD153 refuses program functions named like other builtins. OD135 stops entering methods under `Type_method`, so a method does not occupy that free-function name.
 
-```con reject name=method-mangled-name code=E0299 stage=check pair=method-beside-free-function
+```con accept name=method-name-independent-decided exit=7 pending=R-0555 now=reject:E0299:check
 struct Copy P { x: i64 }
 impl P {
     fn get(&self) -> i64 {
@@ -260,8 +252,8 @@ fn example_value() -> i64 {
     return (&p).get() + P_get(4);
 }
 fn main() -> u8 {
-    if example_value() == 0 {
-        return 0;
+    if example_value() == 7 {
+        return 7;
     }
     return 1;
 }
@@ -485,20 +477,11 @@ R-0497; separate compilation (V6) reads the same artifacts. `mod X;` loads one m
 - Evidence: tested
 
 **Rationale.** MOD-1 resolves the names a program writes; a generated call has no written name to resolve, so
-its target is fixed when it is generated. A module that defined its own `print_int` once had every
-`println` in it call that function (bug 165); in the example below that function divides by zero, so
-binding `println` to it would abort.
+its target is fixed when it is generated. The example uses checked integer addition, whose generated overflow-check calls retain their compiler identities.
 
-```con accept name=generated-call-ignores-same-name exit=42
-fn print_int(x: i64) -> i64 {
-    let z: i64 = x - x;
-    return 42 / z;
-}
-
-fn main() with(Fs) -> u8 {
-    println(7);
-    return 42;
-}
+```con accept name=generated-arithmetic-call exit=42
+fn add(a: u8, b: u8) -> u8 { return a + b; }
+fn main() -> u8 { return add(40, 2); }
 ```
 
 <a id="MOD-9"></a>

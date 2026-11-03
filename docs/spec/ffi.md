@@ -165,8 +165,7 @@ fn main() -> u8 {
 - Evidence: tested
 
 **Rationale.** `repr(C)` promises C's layout, which a generic or a non-C field cannot have.
-Over-alignment is refused because code generation does not support it yet (E0585). Whether
-`repr(packed)` refuses a field whose alignment exceeds its offset is OPEN-111.
+Over-alignment is refused because code generation does not support it yet (E0585). OD111 accepts misaligned packed fields and refuses references to them.
 
 ```con reject name=align-not-power-of-two code=E0577 stage=core-check pair=repr-c
 #[repr(C, align(3))]
@@ -286,8 +285,7 @@ an unannotated layout and a program cannot come to depend on it. Safe code has n
 it cannot turn a pointer into an integer (TRUST-1) or read through a raw pointer without `Unsafe`
 (TRUST-4's `raw-deref-needs-unsafe`). Trusted
 code that walks a buffer may also rely on the stride of an array of `T` being `sizeof::<T>()`
-(FFI-12). An enum takes no `repr`; whether an
-enum may cross the foreign boundary is OPEN-110 (the current compiler refuses it, E0574).
+(FFI-12). An enum takes no `repr`; OD110 refuses enums at the foreign boundary (E0574).
 
 ```con accept name=observed-through-sizeof exit=42
 
@@ -306,12 +304,12 @@ pub fn main() -> u8 {
 <a id="FFI-8"></a>
 ### FFI-8. What `repr(C)` and `repr(packed)` promise
 
-**FFI-8@1.** `#[repr(C)]` lays a struct out as C does, each field in declaration order at the next offset aligned for its type and the size rounded up to the struct's alignment, and `#[repr(packed)]` places the fields in declaration order with no padding and gives the struct alignment 1.
+**FFI-8@2.** `#[repr(C)]` lays a struct out as C does, each field in declaration order at the next offset aligned for its type and the size rounded up to the struct's alignment, and `#[repr(packed)]` places the fields in declaration order with no padding and gives the struct alignment 1, accepts misaligned fields but refuses references to them (also when combined with `repr(C)`).
 
 - Kind: guarantee
 - Uses: none
 - Codes: none
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.Layout.tySize, Concrete.Layout.tyAlign, Concrete.Layout.fieldOffset
 - Semantics: none
 - Obligation: layout comes from the one `Layout` authority (FFI-2, R-0502)
@@ -319,10 +317,7 @@ pub fn main() -> u8 {
 
 **Rationale.** `repr(C)` is what a struct needs to cross `extern fn` (FFI-3), and `repr(packed)`
 describes wire formats. `#[repr(align(N))]` promises only a minimum alignment, and today only where
-it changes nothing (FFI-4, E0585). Which combinations are well formed is FFI-4. Whether a packed
-struct may hold a field whose alignment exceeds its offset, and whether such a field may be
-borrowed, is OPEN-111; the current compiler accepts both, and the examples here place every field at an offset
-aligned for its type.
+it changes nothing (FFI-4, E0585). Which combinations are well formed is FFI-4. OD111 accepts packed fields at misaligned offsets and refuses references to them; the current compiler still accepts such references.
 
 ```con accept name=c-and-packed exit=42
 
@@ -345,6 +340,16 @@ pub fn main() -> u8 {
 ```
 
 
+
+```con accept name=misaligned-packed-field-value exit=42
+#[repr(packed)]
+struct Copy P { tag: u8, value: u32 }
+fn main() -> u8 {
+    let p: P = P { tag: 0, value: 42 };
+    if p.value == 42 { return 42; }
+    return 0;
+}
+```
 
 <a id="FFI-9"></a>
 ### FFI-9. What `trusted extern fn` asserts
@@ -405,7 +410,7 @@ the layout of its field and that calls pass it as the field, and the project has
 needs either ([LAYOUT_CONTRACT.md](../archive/design-records/LAYOUT_CONTRACT.md) §4). The parser
 refuses the other forms today with the syntax diagnostic E0001, tagged SYN-1 (`unknown repr option
 'transparent'`, and `#[repr(...)] can only be applied to struct definitions` for an enum), so this
-entry carries no code of its own. Whether an enum may cross the foreign boundary at all is OPEN-110.
+entry carries no code of its own. OD110 refuses enums at the foreign boundary.
 
 ```con accept name=four-forms exit=42
 #[repr(C)]
@@ -440,7 +445,7 @@ fn main() -> u8 {
 <a id="FFI-11"></a>
 ### FFI-11. A `repr(C)` struct crosses an extern call by value
 
-**FFI-11@1.** A `#[repr(C)]` struct given as an argument to an `extern fn` is passed by value, as the platform's C calling convention passes a C struct of the same layout.
+**FFI-11@2.** A `#[repr(C)]` struct passed to or returned from an `extern fn` crosses by value at every size according to the platform's C calling convention, classified by the `Layout` authority.
 
 - Kind: guarantee
 - Uses: none
@@ -452,8 +457,7 @@ fn main() -> u8 {
 
 **Rationale.** A C function that takes or returns a struct by value can be bound directly, with no
 pointer wrapper. Internal Concrete calls pass aggregates by pointer, and that set is not promised.
-Whether a returned struct is promised the same is OPEN-122: the design record promised it only up to
-8 bytes. The current compiler (EmitSSA's extern-call path, not the `Layout` authority) classifies by size alone, as
+OD122 promises returned structs at every size according to the platform C ABI via `Layout`. The current compiler (EmitSSA's extern-call path, not the `Layout` authority) classifies by size alone, as
 AAPCS64 does for structs of integer fields: a struct of at most 8 bytes is passed as one 64-bit
 integer, of 9 to 16 bytes as two, and a larger one by pointer, and a returned struct of at most 8
 bytes comes back as one 64-bit integer while a larger one is returned as an LLVM aggregate. Structs

@@ -335,8 +335,8 @@ it; where an entry defines the term, that entry is the definition and this table
 | Mono | monomorphization: the stage that specializes every generic at its type arguments | PASS-1, PASS-2, PASS-7 |
 | Lower, Emit | the stages that turn Core into verified SSA and SSA into LLVM IR | PASS-9, PASS-10, PASS-11 |
 | builtin | a function, type or enum the compiler provides with no declaration in the program | functions: the [builtin catalog](#builtin-functions), TYPE-10; primitive types: TYPE-19, TYPE-20; `Option` and `Result`: TYPE-23; names: MOD-1 |
-| intrinsic | an operation the compiler implements, named by a builtin or by `#[intrinsic = "n"]` | FFI-6, the builtin catalog |
-| place | a root binding followed by field, index or newtype projections | REF-5 |
+| intrinsic | an operation the compiler implements, identified by compiler identity with fixed effects; source annotations do not grant intrinsic identity | FFI-6, the builtin catalog |
+| place | a root binding followed by field or index projections | REF-5 |
 | owned value | a value a local binding holds by value rather than through a reference; MEM-D1 names its states | MEM-D1 |
 | Copy | a type whose values may be duplicated | OWN-D1, TYPE-14, OWN-14 |
 | linear | a type that is not Copy (OWN-D1); OWN-1 and OWN-2 govern how its values are used | OWN-D1, OWN-1, OWN-2 |
@@ -418,7 +418,7 @@ chapters; an entry not listed here can still bear on a construct.
 | float literal | ARITH-7, OPEN-63 |
 | string and char literals | SYN-5, SYN-6, TYPE-20, OPEN-137 |
 | `wrapping_*`, `saturating_*` | ARITH-4 |
-| `alloc`, `free`, `Heap<T>` | MEM-5, MEM-7 |
+| `alloc`, consuming `*h`, `Heap<T, A>` | MEM-5, MEM-7 |
 | `destroy`, `Destroy` | OWN-13, TRAIT-8, TRAIT-11 |
 | `discard(e)` | OWN-5, OWN-7 |
 | `abort()` | STMT-13, STMT-2 |
@@ -861,7 +861,7 @@ fn main() -> u8 {
 <a id="SYN-5"></a>
 #### SYN-5. Source text and string literals are UTF-8
 
-**SYN-5@2.** A source file is UTF-8 text, a string literal denotes the UTF-8 encoding of its characters, and its only escapes are `\n`, `\t`, `\r`, `\\`, `\"` and `\0`, so a file that is not valid UTF-8 and any other `\` sequence in a literal are not accepted.
+**SYN-5@3.** A source file is UTF-8 text, a string literal denotes the UTF-8 encoding of its characters, and its only escapes are `\n`, `\t`, `\r`, `\\`, `\"` and `\0`, so a file that is not valid UTF-8 and any other `\` sequence in a literal are not accepted, and every `String<A>` reachable by safe code holds valid UTF-8.
 
 - Kind: guarantee
 - Uses: none
@@ -877,7 +877,7 @@ knowing the editor or the platform. Unknown escapes were once read as the charac
 lexer now refuses them, with E0001 tagged SYN-1 (`unknown string escape '\q'`). A file that is not
 valid UTF-8 is refused when it is read, before lexing, but today by an uncaught exception
 (`Tried to read file ... containing non UTF-8 data`) rather than a diagnostic. There is no `\xHH`
-or `\u{...}` escape. Whether every `String` holds valid UTF-8 at run time is OPEN-127.
+or `\u{...}` escape. OD127 guarantees valid UTF-8 in every `String<A>` reachable by safe code; safe constructors validate, and unchecked construction requires a trusted validity premise.
 
 
 
@@ -1118,8 +1118,7 @@ generated interfaces (MOD-7, pending), calls the compiler generates (MOD-8) and 
 ([MAINTAINERS.md](MAINTAINERS.md) §2.1). Representation privacy (which fields and constructors another module
 may use) is TYPE-11, and trait coherence is the traits chapter.
 
-One question is recorded without an entry yet: SCOPE-4, whether a local may reuse the name of a
-top-level function, an import alias or an intrinsic, is still open; today it may. TIGHTENING_DECISIONS
+OD67 refuses locals that reuse a visible top-level function, import alias, constant or intrinsic name (SCOPE-1 and SCOPE-2). TIGHTENING_DECISIONS
 D9 (one source file per module with `pub` as its interface, and interface artifacts the compiler
 generates and checks) is decided and scheduled late; it is MOD-7, pending R-0556. The design record is
 [VISIBILITY_AND_MODULE_HYGIENE.md](../archive/design-records/VISIBILITY_AND_MODULE_HYGIENE.md).
@@ -1145,8 +1144,7 @@ work only with what a name denotes: Elab and CoreCheck still look some names up 
 R-0492 moves them to identities. Bugs 039 to 045 were names resolved more than once, differently; binders
 are now keyed by identity (SCOPE-1, SCOPE-3), and declarations get the same treatment under R-0492.
 The checker repeats some lookups (E0200 to E0202, E0263, E0267) as defense in depth.
-The builtins include the enums `Option` and `Result`, which a module uses without an import; how
-a user type of the same name resolves is OPEN-43. The types chapter's
+The builtins include the enums `Option` and `Result`, which a module uses without an import; OD43 refuses user declarations that collide with these builtin type names. The types chapter's
 [builtin catalog](#builtin-functions) records the current compiler's builtin functions,
 their signatures, the capabilities it checks and how it handles their names.
 
@@ -1328,12 +1326,12 @@ pub fn shown() -> i64 {
 <a id="MOD-3"></a>
 #### MOD-3. A module binds each name once
 
-**MOD-3@2.** A module binds each name to at most one declaration, whether by a declaration or an import, an import alias does not name a compiler intrinsic, and no function definition takes a name the compiler reserves.
+**MOD-3@3.** A module binds each name to at most one declaration, whether by a declaration or an import, an import alias does not name a compiler intrinsic, and no function definition takes a builtin name or another name the compiler reserves, while an impl method does not bind a free-function name `Type_method`.
 
 - Kind: refusal
 - Uses: none
 - Codes: E0299 (check), E0120 (resolve), E0578 (check, core-check)
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.checkModule
 - Semantics: none
 - Obligation: none
@@ -1345,15 +1343,9 @@ the same declaration twice binds the name to one declaration and is accepted. Th
 are the `__` prefix, `user_main` and the builtins a program may call but not redefine; they are
 reserved for functions only, and a `let` spelling the compiler reserves is SYN-3. The
 [builtin catalog](#builtin-functions) records which builtin names the current compiler
-reserves. A probe of a program function with a builtin's name is recorded there only for
-`string_length`. Whether a program may declare a function named `print`, `println` or `append` is
-OPEN-133; whether it may declare one whose name is another builtin's, other than the names MOD-3
-reserves, and which function the program's calls of that name reach, is OPEN-153.
-The current compiler also counts an impl method under its definition name `Type_method`, so a free function
-`P_get` beside `impl P { fn get(&self) ... }` in one module is refused with E0299; whether a method
-should occupy that name is OPEN-135.
+reserves. OD133 reserves `print`, `println` and `append`; OD153 refuses program functions named like other builtins. OD135 stops entering methods under `Type_method`, so a method does not occupy that free-function name.
 
-```con reject name=method-mangled-name code=E0299 stage=check pair=method-beside-free-function
+```con accept name=method-name-independent-decided exit=7 pending=R-0555 now=reject:E0299:check
 struct Copy P { x: i64 }
 impl P {
     fn get(&self) -> i64 {
@@ -1368,8 +1360,8 @@ fn example_value() -> i64 {
     return (&p).get() + P_get(4);
 }
 fn main() -> u8 {
-    if example_value() == 0 {
-        return 0;
+    if example_value() == 7 {
+        return 7;
     }
     return 1;
 }
@@ -1593,20 +1585,11 @@ R-0497; separate compilation (V6) reads the same artifacts. `mod X;` loads one m
 - Evidence: tested
 
 **Rationale.** MOD-1 resolves the names a program writes; a generated call has no written name to resolve, so
-its target is fixed when it is generated. A module that defined its own `print_int` once had every
-`println` in it call that function (bug 165); in the example below that function divides by zero, so
-binding `println` to it would abort.
+its target is fixed when it is generated. The example uses checked integer addition, whose generated overflow-check calls retain their compiler identities.
 
-```con accept name=generated-call-ignores-same-name exit=42
-fn print_int(x: i64) -> i64 {
-    let z: i64 = x - x;
-    return 42 / z;
-}
-
-fn main() with(Fs) -> u8 {
-    println(7);
-    return 42;
-}
+```con accept name=generated-arithmetic-call exit=42
+fn add(a: u8, b: u8) -> u8 { return a + b; }
+fn main() -> u8 { return add(40, 2); }
 ```
 
 <a id="MOD-9"></a>
@@ -1672,7 +1655,7 @@ OD67 refuses a local that reuses a top-level declaration or import name; field l
 <a id="SCOPE-D1"></a>
 #### SCOPE-D1. Visible
 
-**SCOPE-D1@2.** A local binding is visible from its declaration to the end of its declaring block, nested blocks included regardless of ownership state, with parameters visible throughout the body, pattern binders in their arm, a counted loop index only in its body and a borrow-block binder only in its block, without a named region.
+**SCOPE-D1@3.** A local binding is visible from its declaration to the end of its declaring block, nested blocks included regardless of ownership state, with parameters visible throughout the body, pattern binders in their arm, a counted loop index only in its body and a borrow-block binder only in its block, without a named region.
 
 - Kind: definition
 - Uses: REF-D3
@@ -1690,7 +1673,7 @@ OD67 refuses a local that reuses a top-level declaration or import name; field l
 <a id="SCOPE-1"></a>
 #### SCOPE-1. One lexical name, one binding
 
-**SCOPE-1@2.** No binder reuses the spelling of a visible local binding, top-level declaration or import, and a contract expression binds no name at all.
+**SCOPE-1@3.** No binder reuses the spelling of a visible local binding, top-level declaration or import, and a contract expression binds no name at all.
 
 - Kind: refusal
 - Uses: SCOPE-D1
@@ -1741,78 +1724,78 @@ fn main() -> u8 {
 
 | fixture | expected | pair | modes |
 |---|---|---|---|
-| `tests/programs/error_2i_scope1_const_initializer.con` | `reject:E0301:SCOPE-1@2` | `const-init` | `-` |
+| `tests/programs/error_2i_scope1_const_initializer.con` | `reject:E0301:SCOPE-1@3` | `const-init` | `-` |
 | `tests/programs/regress_2i_const_initializer_block.con` | `run:42` | `const-init` | `binary,interp-exempt:bug-117-the-interpreter-has-no-module-constants` |
-| `tests/programs/error_2i_ref6_contract_ref_binding.con` | `reject:E0305:SCOPE-1@2` | `contract` | `-` |
-| `tests/programs/error_2i_scope1_contract_let.con` | `reject:E0305:SCOPE-1@2` | `contract` | `-` |
-| `tests/programs/error_2i_contract_invariant_binds.con` | `reject:E0305:SCOPE-1@2` | `contract` | `-` |
-| `tests/programs/error_2i_contract_variant_binds_ref.con` | `reject:E0305:SCOPE-1@2` | `contract` | `-` |
-| `tests/programs/error_2i_contract_inferred_ref_alias.con` | `reject:E0305:SCOPE-1@2` | `contract` | `-` |
-| `tests/programs/error_2i_contract_wrapped_binder.con` | `reject:E0305:SCOPE-1@2` | `contract` | `-` |
-| `tests/programs/error_2i_contract_trait_impl_invariant.con` | `reject:E0305:SCOPE-1@2` | `contract` | `-` |
-| `tests/programs/error_2i_contract_place_assignment.con` | `reject:E0305:SCOPE-1@2` | `contract` | `-` |
-| `tests/programs/error_2i_contract_borrow_to_generic.con` | `reject:E0305:SCOPE-1@2` | `contract` | `-` |
-| `tests/programs/error_2i_contract_generic_call.con` | `reject:E0305:SCOPE-1@2` | `contract` | `-` |
-| `tests/programs/error_2i_contract_imported_generic.con` | `reject:E0305:SCOPE-1@2` | `contract` | `-` |
-| `tests/programs/error_2i_scope1_extern_duplicate_params.con` | `reject:E0301:SCOPE-1@2` | `scope1-duplicate_params` | `-` |
-| `tests/programs/error_2i_scope1_trait_decl_duplicate_params.con` | `reject:E0301:SCOPE-1@2` | `scope1-duplicate_params` | `-` |
+| `tests/programs/error_2i_ref6_contract_ref_binding.con` | `reject:E0305:SCOPE-1@3` | `contract` | `-` |
+| `tests/programs/error_2i_scope1_contract_let.con` | `reject:E0305:SCOPE-1@3` | `contract` | `-` |
+| `tests/programs/error_2i_contract_invariant_binds.con` | `reject:E0305:SCOPE-1@3` | `contract` | `-` |
+| `tests/programs/error_2i_contract_variant_binds_ref.con` | `reject:E0305:SCOPE-1@3` | `contract` | `-` |
+| `tests/programs/error_2i_contract_inferred_ref_alias.con` | `reject:E0305:SCOPE-1@3` | `contract` | `-` |
+| `tests/programs/error_2i_contract_wrapped_binder.con` | `reject:E0305:SCOPE-1@3` | `contract` | `-` |
+| `tests/programs/error_2i_contract_trait_impl_invariant.con` | `reject:E0305:SCOPE-1@3` | `contract` | `-` |
+| `tests/programs/error_2i_contract_place_assignment.con` | `reject:E0305:SCOPE-1@3` | `contract` | `-` |
+| `tests/programs/error_2i_contract_borrow_to_generic.con` | `reject:E0305:SCOPE-1@3` | `contract` | `-` |
+| `tests/programs/error_2i_contract_generic_call.con` | `reject:E0305:SCOPE-1@3` | `contract` | `-` |
+| `tests/programs/error_2i_contract_imported_generic.con` | `reject:E0305:SCOPE-1@3` | `contract` | `-` |
+| `tests/programs/error_2i_scope1_extern_duplicate_params.con` | `reject:E0301:SCOPE-1@3` | `scope1-duplicate_params` | `-` |
+| `tests/programs/error_2i_scope1_trait_decl_duplicate_params.con` | `reject:E0301:SCOPE-1@3` | `scope1-duplicate_params` | `-` |
 | `tests/programs/regress_2i_contract_aliased_ref_param.con` | `run:42` | `contract` | `binary,interp` |
 | `tests/programs/regress_2i_contract_ref_receiver.con` | `run:42` | `contract` | `binary,interp` |
 | `tests/programs/regress_2i_contract_static_nongeneric_method.con` | `run:42` | `contract` | `binary,interp` |
-| `tests/programs/error_2i_spec_body_hidden_binder.con` | `reject:E0305:SCOPE-1@2` | `contract` | `-` |
-| `tests/programs/error_2i_spec_body_generic_call.con` | `reject:E0305:SCOPE-1@2` | `contract` | `-` |
+| `tests/programs/error_2i_spec_body_hidden_binder.con` | `reject:E0305:SCOPE-1@3` | `contract` | `-` |
+| `tests/programs/error_2i_spec_body_generic_call.con` | `reject:E0305:SCOPE-1@3` | `contract` | `-` |
 | `tests/programs/regress_2i_contract_nongeneric_call_beside_generic_method.con` | `run:42` | `contract` | `binary,interp` |
-| `tests/programs/error_2i_contract_generic_method_mangled.con` | `reject:E0305:SCOPE-1@2` | `contract` | `-` |
-| `tests/programs/error_2i_contract_generic_method_static.con` | `reject:E0305:SCOPE-1@2` | `contract` | `-` |
+| `tests/programs/error_2i_contract_generic_method_mangled.con` | `reject:E0305:SCOPE-1@3` | `contract` | `-` |
+| `tests/programs/error_2i_contract_generic_method_static.con` | `reject:E0305:SCOPE-1@3` | `contract` | `-` |
 | `tests/programs/regress_2i_contract_paren_ref_arg.con` | `run:42` | `contract` | `binary,interp` |
-| `tests/programs/error_2i_scope1_contracted_fn_shadow.con` | `reject:E0301:SCOPE-1@2` | `scope1-param_in_block` | `-` |
-| `tests/programs/error_2i_scope1_spec_fn_duplicate_params.con` | `reject:E0301:SCOPE-1@2` | `contract` | `-` |
+| `tests/programs/error_2i_scope1_contracted_fn_shadow.con` | `reject:E0301:SCOPE-1@3` | `scope1-param_in_block` | `-` |
+| `tests/programs/error_2i_scope1_spec_fn_duplicate_params.con` | `reject:E0301:SCOPE-1@3` | `contract` | `-` |
 | `tests/programs/regress_2i_contract_and_spec_params.con` | `run:42` | `contract` | `binary,interp` |
-| `tests/programs/error_2i_scope1_same_block_let.con` | `reject:E0301:SCOPE-1@2` | `scope1-same_block_let` | `-` |
+| `tests/programs/error_2i_scope1_same_block_let.con` | `reject:E0301:SCOPE-1@3` | `scope1-same_block_let` | `-` |
 | `tests/programs/regress_2i_scope1_same_block_let_renamed.con` | `run:42` | `scope1-same_block_let` | `binary,interp` |
-| `tests/programs/error_2i_scope1_block_let.con` | `reject:E0301:SCOPE-1@2` | `scope1-block_let` | `-` |
+| `tests/programs/error_2i_scope1_block_let.con` | `reject:E0301:SCOPE-1@3` | `scope1-block_let` | `-` |
 | `tests/programs/regress_2i_scope1_block_let_renamed.con` | `run:42` | `scope1-block_let` | `binary,interp` |
-| `tests/programs/error_2i_scope1_param_in_block.con` | `reject:E0301:SCOPE-1@2` | `scope1-param_in_block` | `-` |
+| `tests/programs/error_2i_scope1_param_in_block.con` | `reject:E0301:SCOPE-1@3` | `scope1-param_in_block` | `-` |
 | `tests/programs/regress_2i_scope1_param_in_block_renamed.con` | `run:42` | `scope1-param_in_block` | `binary,interp` |
-| `tests/programs/error_2i_scope1_consuming_rebind.con` | `reject:E0301:SCOPE-1@2` | `scope1-consuming_rebind` | `-` |
+| `tests/programs/error_2i_scope1_consuming_rebind.con` | `reject:E0301:SCOPE-1@3` | `scope1-consuming_rebind` | `-` |
 | `tests/programs/regress_2i_scope1_consuming_rebind_renamed.con` | `run:42` | `scope1-consuming_rebind` | `binary,interp` |
-| `tests/programs/error_2i_scope1_for_header.con` | `reject:E0301:SCOPE-1@2` | `scope1-for_header` | `-` |
+| `tests/programs/error_2i_scope1_for_header.con` | `reject:E0301:SCOPE-1@3` | `scope1-for_header` | `-` |
 | `tests/programs/regress_2i_scope1_for_header_renamed.con` | `run:42` | `scope1-for_header` | `binary,interp` |
-| `tests/programs/error_2i_scope1_arm_binder.con` | `reject:E0301:SCOPE-1@2` | `scope1-arm_binder` | `-` |
+| `tests/programs/error_2i_scope1_arm_binder.con` | `reject:E0301:SCOPE-1@3` | `scope1-arm_binder` | `-` |
 | `tests/programs/regress_2i_scope1_arm_binder_renamed.con` | `run:42` | `scope1-arm_binder` | `binary,interp` |
-| `tests/programs/error_2i_scope1_if_let.con` | `reject:E0301:SCOPE-1@2` | `scope1-if_let` | `-` |
+| `tests/programs/error_2i_scope1_if_let.con` | `reject:E0301:SCOPE-1@3` | `scope1-if_let` | `-` |
 | `tests/programs/regress_2i_scope1_if_let_renamed.con` | `run:42` | `scope1-if_let` | `binary,interp` |
-| `tests/programs/error_2i_scope1_while_let.con` | `reject:E0301:SCOPE-1@2` | `scope1-while_let` | `-` |
+| `tests/programs/error_2i_scope1_while_let.con` | `reject:E0301:SCOPE-1@3` | `scope1-while_let` | `-` |
 | `tests/programs/regress_2i_scope1_while_let_renamed.con` | `run:42` | `scope1-while_let` | `binary,interp` |
-| `tests/programs/error_2i_scope1_destructure.con` | `reject:E0301:SCOPE-1@2` | `scope1-destructure` | `-` |
+| `tests/programs/error_2i_scope1_destructure.con` | `reject:E0301:SCOPE-1@3` | `scope1-destructure` | `-` |
 | `tests/programs/regress_2i_scope1_destructure_renamed.con` | `run:42` | `scope1-destructure` | `binary,interp` |
-| `tests/programs/error_2i_scope1_duplicate_params.con` | `reject:E0301:SCOPE-1@2` | `scope1-duplicate_params` | `-` |
+| `tests/programs/error_2i_scope1_duplicate_params.con` | `reject:E0301:SCOPE-1@3` | `scope1-duplicate_params` | `-` |
 | `tests/programs/regress_2i_scope1_duplicate_params_renamed.con` | `run:42` | `scope1-duplicate_params` | `binary,interp` |
-| `tests/programs/error_2i_scope1_borrow_ref.con` | `reject:E0301:SCOPE-1@2` | `scope1-borrow_ref` | `-` |
+| `tests/programs/error_2i_scope1_borrow_ref.con` | `reject:E0301:SCOPE-1@3` | `scope1-borrow_ref` | `-` |
 | `tests/programs/regress_2i_scope1_borrow_ref_renamed.con` | `run:42` | `scope1-borrow_ref` | `binary,interp` |
-| `tests/programs/error_2i_scope1_region_name.con` | `reject:E0301:SCOPE-1@2` | `scope1-region_name` | `-` |
+| `tests/programs/error_2i_scope1_region_name.con` | `reject:E0301:SCOPE-1@3` | `scope1-region_name` | `-` |
 | `tests/programs/regress_2i_scope1_region_name_renamed.con` | `run:42` | `scope1-region_name` | `binary,interp` |
-| `tests/programs/error_borrow_shadow.con` | `reject:E0301:SCOPE-1@2` | `scope1-borrow_ref` | `-` |
-| `tests/programs/error_093_shadowing_block_local_leak.con` | `reject:E0301:SCOPE-1@2` | `scope1-block_let` | `-` |
-| `tests/programs/error_093_shadowing_match_binder_leak.con` | `reject:E0301:SCOPE-1@2` | `scope1-arm_binder` | `-` |
-| `tests/programs/error_094_arm_binder_shadows_live.con` | `reject:E0301:SCOPE-1@2` | `scope1-arm_binder` | `-` |
-| `tests/programs/error_094_destructure_shadows_live.con` | `reject:E0301:SCOPE-1@2` | `scope1-destructure` | `-` |
-| `tests/programs/error_094_value_binder_shadows_live.con` | `reject:E0301:SCOPE-1@2` | `scope1-arm_binder` | `-` |
-| `tests/programs/error_094_borrow_block_shadow_leak.con` | `reject:E0301:SCOPE-1@2` | `scope1-block_let` | `-` |
-| `tests/programs/error_094_mut_ref_param_shadow_leak.con` | `reject:E0301:SCOPE-1@2` | `scope1-param_in_block` | `-` |
-| `tests/programs/error_107_shadow_under_live_ref.con` | `reject:E0301:SCOPE-1@2` | `scope1-same_block_let` | `-` |
-| `tests/programs/error_107_shadow_in_block_under_live_ref.con` | `reject:E0301:SCOPE-1@2` | `scope1-block_let` | `-` |
-| `tests/programs/regress_093_shadowing_locals_consumed.con` | `reject:E0301:SCOPE-1@2` | `scope1-block_let` | `-` |
-| `tests/programs/regress_094_shadowing_binders.con` | `reject:E0301:SCOPE-1@2` | `scope1-arm_binder` | `-` |
-| `tests/programs/regress_094_shadow_state_by_identity.con` | `reject:E0301:SCOPE-1@2` | `scope1-same_block_let` | `-` |
+| `tests/programs/error_borrow_shadow.con` | `reject:E0301:SCOPE-1@3` | `scope1-borrow_ref` | `-` |
+| `tests/programs/error_093_shadowing_block_local_leak.con` | `reject:E0301:SCOPE-1@3` | `scope1-block_let` | `-` |
+| `tests/programs/error_093_shadowing_match_binder_leak.con` | `reject:E0301:SCOPE-1@3` | `scope1-arm_binder` | `-` |
+| `tests/programs/error_094_arm_binder_shadows_live.con` | `reject:E0301:SCOPE-1@3` | `scope1-arm_binder` | `-` |
+| `tests/programs/error_094_destructure_shadows_live.con` | `reject:E0301:SCOPE-1@3` | `scope1-destructure` | `-` |
+| `tests/programs/error_094_value_binder_shadows_live.con` | `reject:E0301:SCOPE-1@3` | `scope1-arm_binder` | `-` |
+| `tests/programs/error_094_borrow_block_shadow_leak.con` | `reject:E0301:SCOPE-1@3` | `scope1-block_let` | `-` |
+| `tests/programs/error_094_mut_ref_param_shadow_leak.con` | `reject:E0301:SCOPE-1@3` | `scope1-param_in_block` | `-` |
+| `tests/programs/error_107_shadow_under_live_ref.con` | `reject:E0301:SCOPE-1@3` | `scope1-same_block_let` | `-` |
+| `tests/programs/error_107_shadow_in_block_under_live_ref.con` | `reject:E0301:SCOPE-1@3` | `scope1-block_let` | `-` |
+| `tests/programs/regress_093_shadowing_locals_consumed.con` | `reject:E0301:SCOPE-1@3` | `scope1-block_let` | `-` |
+| `tests/programs/regress_094_shadowing_binders.con` | `reject:E0301:SCOPE-1@3` | `scope1-arm_binder` | `-` |
+| `tests/programs/regress_094_shadow_state_by_identity.con` | `reject:E0301:SCOPE-1@3` | `scope1-same_block_let` | `-` |
 | `tests/programs/regress_045_match_binder_shadow.con` | `run:42` | `-` | `binary,interp` |
-| `tests/programs/regress_087_let_block_shadow.con` | `reject:E0301:SCOPE-1@2` | `scope3-087` | `-` |
-| `tests/programs/regress_087_borrow_shadow_uaf/` | `reject:E0301:SCOPE-1@2` | `scope3-087-borrow` | `-` |
+| `tests/programs/regress_087_let_block_shadow.con` | `reject:E0301:SCOPE-1@3` | `scope3-087` | `-` |
+| `tests/programs/regress_087_borrow_shadow_uaf/` | `reject:E0301:SCOPE-1@3` | `scope3-087-borrow` | `-` |
 
 <a id="SCOPE-2"></a>
 #### SCOPE-2. What is not a collision
 
-**SCOPE-2@2.** Bindings in sibling scopes, one declaration in a loop body executed many times, an assignment and a field label are not collisions under SCOPE-1, while a local may not reuse a visible top-level declaration or import name and types and values share one module namespace.
+**SCOPE-2@3.** Bindings in sibling scopes, one declaration in a loop body executed many times, an assignment and a field label are not collisions under SCOPE-1, while a local may not reuse a visible top-level declaration or import name and types and values share one module namespace.
 
 - Kind: guarantee
 - Uses: SCOPE-D1
@@ -1890,7 +1873,7 @@ fn main() -> u8 {
 <a id="SCOPE-3"></a>
 #### SCOPE-3. Blocks are lexical on every consumer
 
-**SCOPE-3@2.** A binding declared in a block is not visible after the block, and every consumer (the checker, elaboration, the interpreter, lowering, extraction and evidence frames) resolves a name to the innermost visible binding.
+**SCOPE-3@3.** A binding declared in a block is not visible after the block, and every consumer (the checker, elaboration, the interpreter, lowering, extraction and evidence frames) resolves a name to the innermost visible binding.
 
 - Kind: guarantee
 - Uses: SCOPE-D1
@@ -2643,30 +2626,21 @@ fn main() -> u8 {
 
 **Rationale.** Signatures and primitive effects are fixed by identity, not by declarations. MEM-5 and MEM-7 govern conserving allocation; OD59 removes `free` and OD155 removes `unwrap`. Complete failure payload contracts are [undecided: see the target Core proposal](#core-allocation-contracts).
 
-```con reject name=append-unsupported-argument-decided code=E0421 stage=check pair=free-heap pending=R-0555 now=reject:E0421:check
-fn main() with(Alloc) -> u8 {
-    let mut out: String = "";
-    append(&mut out, 1.5);
-    drop_string(out);
-    return 0;
+```con reject name=wrapping-wrong-arity code=E0268 stage=check pair=wrapping-valid-arguments
+fn main() -> u8 {
+    return wrapping_add(42);
 }
 ```
 
-```con reject name=println-unsupported-argument-decided code=E0421 stage=check pair=println-supported-arguments pending=R-0555 now=reject:E0421:check
-struct Copy S { x: i64 }
-
-fn main() with(Fs) -> u8 {
-    let s: S = S { x: 1 };
-    println(s);
-    return 42;
+```con reject name=wrapping-wrong-type code=E0314 stage=check pair=wrapping-valid-arguments
+fn main() -> u8 {
+    return wrapping_add(true, false);
 }
 ```
 
-```con accept name=println-supported-arguments exit=42
-fn main() with(Fs) -> u8 {
-    let n: u8 = 7;
-    println("n = ", n, ' ', true);
-    return 42;
+```con accept name=wrapping-valid-arguments exit=42
+fn main() -> u8 {
+    return wrapping_add(40, 2);
 }
 ```
 
@@ -3249,7 +3223,7 @@ fn main() with(Fs, Network) -> u8 {
 <a id="TYPE-18"></a>
 #### TYPE-18. Capabilities have no run-time representation
 
-**TYPE-18@2.** A capability set or capability argument has no run-time representation, so types that differ only in their capability sets or capability arguments have the same size and layout.
+**TYPE-18@3.** A capability set or capability argument has no run-time representation, so types that differ only in their capability sets or capability arguments have the same size and layout, but generic instantiations differing in a function-type argument’s capability set have distinct specialization symbols.
 
 - Kind: guarantee
 - Uses: TYPE-D1
@@ -3263,8 +3237,7 @@ fn main() with(Fs, Network) -> u8 {
 **Rationale.** A capability is a compile-time permission, checked and then erased; it matters for
 handle types (TYPE-15) and for the C layout of a struct passed across FFI. Whether two capability
 instantiations of one generic function share generated code is an implementation choice, not a
-language rule; whether two instantiations that differ only in a function type's capability set are
-distinct specializations with distinct symbols is OPEN-109 (the current compiler makes them one).
+language rule; OD109 requires distinct specialization symbols when function-type arguments differ only in their capability sets.
 
 ```con accept name=same-layout exit=42
 
@@ -3516,9 +3489,7 @@ fn main() -> u8 {
 
 **Rationale.** Builtins that can fail, such as `vec_pop`, and std's error conventions return these
 two types, so their shape is part of the language rather than of a library module. Both are declared `Copy`, so an instantiation is Copy exactly when its type
-arguments are (TYPE-14). How a user declaration named `Option` or `Result` resolves against them is
-OPEN-43: the current compiler withholds the builtin `Result` from a module that declares or imports its own, and
-never withholds `Option`. Their layout is that of any enum (FFI-7).
+arguments are (TYPE-14). OD43 refuses declarations that collide with builtin type names.
 
 ```con accept name=option-and-result exit=42
 fn example_value() -> i64 {
@@ -3796,8 +3767,8 @@ fn main() -> u8 {
 **Rationale.** Silent wrapping is a correctness bug in almost all code, and signed overflow is
 the case C leaves undefined. Concrete never emits LLVM's `nsw` or `nuw`: checked operations use
 the overflow intrinsics and branch to an abort helper. This holds in every profile; a profile
-changes reports, never code generation (whether a profile may omit a check is OPEN-97). The
-fill of a right shift that does not abort is ARITH-8; how a division rounds and a remainder's sign are OPEN-114. ARITH-13 refuses an operation the compiler proves always overflows (E0902), but in the current
+changes reports, never code generation (OD97 keeps every runtime check and permits profiles to refuse undischarged operations). The
+fill of a right shift that does not abort is ARITH-8; OD114 makes integer division truncate toward zero and the remainder take the dividend’s sign. ARITH-13 refuses an operation the compiler proves always overflows (E0902), but in the current
 compiler no operation reaches that proof (bug 350), so E0902 currently provides no compile-time
 refusal; the run-time overflow check is the guarantee. Array bounds are
 checked the same way, an index out of bounds aborting.
@@ -3925,9 +3896,8 @@ obligation-free, and each lossy conversion names what it does. Today `as` refuse
 and sign changes are still accepted and truncate or reinterpret, and float to integer truncates
 toward zero and aborts on NaN, an infinity or a value outside the target's range (a checked
 conversion), until the named operations land and the corpus migrates (about 500 to 700 sites). Pointer and reference casts are not
-numeric conversions (TRUST-1 owns the pointer–integer case; which pointer and reference
-conversions `as` writes is OPEN-98). The named operations' results are ARITH-10, and their
-spellings are OPEN-99.
+numeric conversions (TRUST-1 owns the pointer–integer case; OD98 requires trusted/Unsafe code for reference-to-pointer conversion). The named operations' results are ARITH-10, and their
+spellings are fixed by OD99.
 
 Until then, in the current compiler, narrowing truncates silently (`300 as u8` is 44, `-1 as u32` is
 4294967295, `3.9 as i32` is 3). Even a widening needs `as`: `want_u64(my_u8)` is E0220 (TYPE-4),
@@ -4075,9 +4045,7 @@ fn main() -> u8 {
 
 **Rationale.** These are LLVM's `ashr` and `lshr` (the archived ARITHMETIC_POLICY §6). When a shift
 aborts instead (a count outside the width) is ARITH-3. The interpreter and the constant folder
-compute it in `IntArith`, and the binary through the abort helpers. How an integer division rounds
-and which sign a remainder takes is OPEN-114: the current compiler truncates toward zero, as C99 does, which the
-archived record did not state as a rule.
+compute it in `IntArith`, and the binary through the abort helpers. OD114 requires integer division to truncate toward zero and the remainder to take the dividend’s sign.
 
 ```con accept name=shift-fill exit=42
 fn example_value() -> i64 {
@@ -4113,8 +4081,7 @@ fn main() -> u8 {
 wraps (ARITH-4) without looking for an enclosing `#[wrapping]` attribute or module switch; none
 exists. `#[overflow_checked]` asks the proof pipeline for a no-overflow obligation at each
 fixed-width `+`, `-` and `*` of the function, which is evidence, not meaning: the operations still
-abort on overflow. Whether a build profile may omit a check or refuse an unproved operation is
-OPEN-97.
+abort on overflow. OD97 keeps every runtime check and permits a profile to refuse undischarged operations.
 
 ```con accept name=overflow-checked-in-range exit=42
 #[overflow_checked]
@@ -4190,7 +4157,7 @@ fn main() -> u8 {
 <a id="ARITH-10"></a>
 #### ARITH-10. The named conversions' results
 
-**ARITH-10@1.** `truncate::<T>(x)` keeps the low-order bits of `x`'s two's-complement representation, as many as `T`'s width, `reinterpret::<T>(x)` changes the signedness of the integer `x` at the same width and keeps its bit pattern, and `try_convert::<T>(x)` gives the value of `T` that means the same number as `x` when there is one and otherwise reports that there is none (an integer out of range, a float that is not integral, out of range, NaN or infinite, or a value a target float does not represent exactly).
+**ARITH-10@2.** `truncate::<T>(x)` keeps the low-order bits of `x`'s two's-complement representation, as many as `T`'s width, `reinterpret::<T>(x)` changes the signedness of the integer `x` at the same width and keeps its bit pattern, and `try_convert::<T>(x)` returns `Result<T, OutOfRange>`, with success containing the value of `T` that means the same number as `x` when there is one and failure otherwise (an integer out of range, a float that is not integral, out of range, NaN or infinite, or a value a target float does not represent exactly).
 
 - Kind: guarantee
 - Uses: none
@@ -4203,9 +4170,7 @@ fn main() -> u8 {
 **Rationale.** These are the conversions ARITH-5 sends every lossy `as` to, each with one stated
 result, so that no consumer has to guess what a lossy conversion means (bugs 080 and 128).
 `truncate::<u8>(300)` is 44 and `reinterpret::<u32>(-1)` is 4294967295, what a narrowing or
-sign-changing `as` gives today. Whether `try_convert` reports a failure as `Option::None` or as a
-`Result` error with a reason is OPEN-106; the archived record allowed either. The float conversions
-are ARITH-11. None of these exists in the current compiler yet (R-0500), and their spellings are OPEN-99.
+sign-changing `as` gives today. OD106 fixes `try_convert` as `Result<T, OutOfRange>`; OD99 fixes these builtin spellings and the float-rounding spellings `trunc`, `round`, `floor`, `ceil`. The float conversions are ARITH-11; implementation remains pending R-0500.
 
 ```con accept name=truncate-and-reinterpret exit=42 pending=R-0500 now=reject:E0101:resolve
 fn example_value() -> i64 {
@@ -4226,10 +4191,17 @@ fn main() -> u8 {
 }
 ```
 
+```con accept name=checked-conversion-result exit=42 pending=R-0500 now=reject:E0101:resolve
+fn convert(x: i64) -> Result<u8, OutOfRange> {
+    return try_convert::<u8>(x);
+}
+fn main() -> u8 { return 42; }
+```
+
 <a id="ARITH-11"></a>
 #### ARITH-11. The named float conversions round as stated
 
-**ARITH-11@1.** A named conversion from an integer to a float, or from `f64` to `f32`, rounds to the nearest representable value with ties to even, and each float-to-integer rounding operation (`trunc`, `round`, `floor`, `ceil`) has a stated result for every input, NaN and the infinities included.
+**ARITH-11@2.** A named conversion from an integer to a float, or from `f64` to `f32`, rounds to the nearest representable value with ties to even, and each float-to-integer rounding operation (`trunc`, `round`, `floor`, `ceil`) rounds as named and returns the resulting integer when representable, or an error as `try_convert` for NaN, infinities and results outside the target integer range.
 
 - Kind: guarantee
 - Uses: none
@@ -4242,9 +4214,14 @@ fn main() -> u8 {
 **Rationale.** These are the conversions ARITH-5 sends a rounding `as` to (`i32` to `f32`, `i64` to
 `f64`, `f64` to `f32`, every float to an integer). Today `as` rounds an integer to a float natively
 and is the identity in `--interp` (bug 128), and a float-to-integer `as` truncates toward zero and
-aborts on NaN, an infinity or a value out of range. Whether a rounding operation gives a value or an
-error for those inputs, and which value, is OPEN-107. None of these exists in the current compiler yet (R-0500).
-The conversion functions are not named yet (OPEN-99), so this entry has no example until they are.
+aborts on NaN, an infinity or a value out of range. OD107 instead requires an error as `try_convert`; OD99 fixes the builtin spellings `trunc`, `round`, `floor`, `ceil`. Implementation remains pending R-0500.
+
+```con accept name=round-result exit=42 pending=R-0500 now=reject:E0101:resolve
+fn convert(x: f64) -> Result<u8, OutOfRange> {
+    return trunc::<u8>(x);
+}
+fn main() -> u8 { return 42; }
+```
 
 <a id="ARITH-12"></a>
 #### ARITH-12. Float remainder
@@ -5161,7 +5138,7 @@ fn main() -> u8 {
 <a id="STMT-12"></a>
 #### STMT-12. A counted loop carries its own measure
 
-**STMT-12@1.** In Core a counted loop is the one `while` form, carrying the termination measure `b - i` that the loop gives itself.
+**STMT-12@2.** In Core a counted loop is the one `while` form, carrying the proof-only mathematical-integer termination measure `b - i` that the loop gives itself, refusing an explicit `#[variant]` and checking its invariant before the loop and after each iteration.
 
 - Kind: guarantee
 - Uses: none
@@ -5174,12 +5151,7 @@ fn main() -> u8 {
 **Rationale.** Decided with OD47 on 2026-10-29: proofs keep a single loop construct. The measure
 proves only that the number of iterations is finite; the loop terminates when its bounds, its body
 and its cleanup do, and the counted loop's proof rule (zero iterations, `break`, a labelled
-`continue`) is stated over this desugared loop. Whether a `#[variant]` written on a counted loop is
-refused, checked or ignored is OPEN-104, and where its `#[invariant]` is checked is OPEN-105 (CON-2
-checks a loop invariant before the loop and after every iteration). Removing a bounds check over
-the index is an optimization, not a rule of the language: it needs an in-range certificate at the
-access (the bounds against the array's length), not only a length that cannot change. How the
-measure is represented when `b - a` does not fit the bounds' type is OPEN-49.
+`continue`) is stated over this desugared loop. OD104 refuses an explicit variant; OD105 checks invariants before the loop and after every iteration. Removing a bounds check needs an in-range certificate at the access (the bounds against the array's length), not only a length that cannot change. OD49 makes the measure a mathematical integer in the proof only, never computed at runtime.
 
 ```con accept name=counted-loop-own-measure exit=42 pending=bug-331 now=reject:E0001:parse
 fn example_value() -> i64 {
@@ -7134,9 +7106,7 @@ EVALUATION2 D7): defer the function the method desugars to, or a named cleanup f
 { ... }` is a parse error. A deferred call's arguments are typed by its parameters as in an ordinary
 call (`defer f(1);` passes an `i32` to an `i32` parameter), but a string literal is not a deferred
 argument (E0279), so `defer println("x")` is refused where `println("x")` compiles: defer a cleanup
-function instead (an earlier design note blamed a missing argument coercion). What a deferred call that fails or diverges does on a return or error path
-is open (an abort runs no deferred call: OD10, decided 2026-10-29; STMT-2 is pending), and today
-a deferred call is an ordinary call with no recovery rule. There is no implicit scope-end drop to order
+function instead (an earlier design note blamed a missing argument coercion). OD68 stops cleanup if a deferred call traps or diverges; a trap runs no remaining deferred calls, and divergence never reaches them. An abort runs no deferred calls (OD10; STMT-2). There is no implicit scope-end drop to order
 against `defer` (OWN-13): `destroy(x)`, `x.drop()` or a deferred explicit call consumes a value.
 The surface is pinned by `scripts/tests/check_defer.sh` and `examples/defer/cleanup_order/`
 (ROADMAP old Phase 6 #7, 2026-06-23).
@@ -7335,7 +7305,7 @@ fn main() -> u8 {
 <a id="OWN-15"></a>
 #### OWN-15. Every surface form has one value-flow behaviour
 
-**OWN-15@4.** Every surface expression, match-arm and statement constructor creates, moves, borrows, copies, overwrites or refuses its operands as its row in this entry's value-flow tables states, and no method call borrows its receiver implicitly.
+**OWN-15@5.** Every surface expression, match-arm and statement constructor creates, moves, borrows, copies, overwrites or refuses its operands as its row in this entry's value-flow tables states, and no method call borrows its receiver implicitly.
 
 - Kind: guarantee
 - Uses: OWN-D1
@@ -7439,7 +7409,7 @@ fn main() -> u8 {
 
 | constructor | value flow | gate / errors |
 |---|---|---|
-| `letDecl` | **moves** an ident right-hand side (H9); reusing the name of any visible binding is **refused** (**E0301**, SCOPE-1); `let _` is removed (**E0289**) | conservation + discard |
+| `letDecl` | **moves** an ident right-hand side (H9); reusing the name of any visible binding is **refused** (**E0301**, SCOPE-1); `_` is an unused binding only for eligible Copy values, never linear values, `Result` or `Option` (OD62) | conservation + discard |
 | `assign` | the old value must already be consumed (otherwise **E0219**, OWN-9); an ident right-hand side **moves** (H13) | conservation (H13 rows) |
 | `return_` | an ident value **moves**; every return path must leave no unconsumed linear value (OWN-2) | conservation + scope |
 | `expr` | `e;` (not a value) **discards**: a fallible result is **refused** (**E0286**, whether or not it is Copy), a non-Copy value is **refused** (**E0287**); a trailing `e` (a value) is the block's value, never a discard; `free` is refused (OD59); eligible Copy results require explicit discard | discard |
@@ -7476,7 +7446,7 @@ The checker decides consumption by the position an expression is checked in (`Us
 | `borrow` `borrowMut` | the inner expression is checked as a place; the result `&T` is Copy and `&mut T` exclusive | same | n/a |
 | `deref` | the inner expression is checked as a place (reading through a reference or pointer never consumes the binding); `*heap_ident` explicitly consumes | same | inner as place |
 | `fnRef` | creates a Copy function pointer | same | n/a |
-| `allocCall` | the inner call or allocator is checked; an owned `Heap` result | n/a | n/a |
+| `allocCall` | allocator and input evaluated; returns `Result<Heap<T, A>, AllocFailure<T>>`, preserving input on failure (MEM-5) | n/a | n/a |
 
 <a id="OWN-16"></a>
 #### OWN-16. A borrow given to a deferred call lives until the call runs
@@ -7678,7 +7648,7 @@ because REF-3 forbids reference fields. For a binding, the outer reference is lo
 <a id="REF-D3"></a>
 #### REF-D3. Borrow block
 
-**REF-D3@2.** A borrow block `borrow x as r { B }` binds `r` to a reference of type `&T` (with `borrow mut`, `&mut T`) to the local binding `x: T` for the block `B`, `x` is frozen (MEM-D1) while `B` runs, so that every access to `x` in `B` conflicts with `r` (REF-8), and when `B` ends, `r` and the locals of `B` go out of scope and `x` returns to the state it had before the block.
+**REF-D3@3.** A borrow block `borrow x as r { B }` freezes the local `x` for `B` and lends an ordinary `x: T` as `&T` (`borrow mut` as `&mut T`), but opens exactly one layer of `Heap<U, A>` (also through a shell reference) to its payload preserving the root and block lifetime and never upgrading shared access, while the exact heap-array view remains undecided (see [the target Core proposal](#core-heap-array-view)), and the block ends its local loans and restores the owner state.
 
 - Kind: definition
 - Uses: MEM-D1
@@ -8616,7 +8586,7 @@ fn main() -> u8 {
 <a id="REF-8"></a>
 #### REF-8. A reference's root stays the same live binding
 
-**REF-8@2.** While a reference exists (a borrow-block binder for its block, an arm binder for its arm, a borrow argument for its call), its root binding is not moved, consumed, freed or shadowed and is not accessed in a mode that conflicts with the reference, and the borrows a single call makes do not conflict.
+**REF-8@3.** While a reference exists (a borrow-block binder for its block, an arm binder for its arm, a borrow argument for its call), its root binding is not moved, consumed, freed or shadowed and is not accessed in a mode that conflicts with the reference, and the borrows a single call makes do not conflict.
 
 - Kind: refusal
 - Uses: REF-D3
@@ -8769,19 +8739,19 @@ fn main() -> u8 {
 
 | fixture | expected | pair | modes |
 |---|---|---|---|
-| `tests/programs/error_borrow_frozen.con` | `reject:E0203:REF-8@2` | `ref8-block` | `-` |
-| `tests/programs/error_2i_ref8_free_in_borrow_block.con` | `reject:E0203:REF-8@2` | `ref8-block` | `-` |
+| `tests/programs/error_borrow_frozen.con` | `reject:E0203:REF-8@3` | `ref8-block` | `-` |
+| `tests/programs/error_2i_ref8_free_in_borrow_block.con` | `reject:E0203:REF-8@3` | `ref8-block` | `-` |
 | `tests/programs/regress_2i_ref8_free_after_ref_block.con` | `run:42` | `ref8-block` | `binary,interp-exempt:no-heap-allocation-in-the-interpreter` |
-| `tests/programs/error_2i_ref8_call_overlap.con` | `reject:E0293:REF-8@2` | `ref8-call` | `-` |
-| `tests/programs/error_091_norm_cast_arg_overlap.con` | `reject:E0293:REF-8@2` | `ref8-call` | `-` |
-| `tests/programs/error_od2_call_overlapping_path.con` | `reject:E0293:REF-8@2` | `ref8-call` | `-` |
+| `tests/programs/error_2i_ref8_call_overlap.con` | `reject:E0293:REF-8@3` | `ref8-call` | `-` |
+| `tests/programs/error_091_norm_cast_arg_overlap.con` | `reject:E0293:REF-8@3` | `ref8-call` | `-` |
+| `tests/programs/error_od2_call_overlapping_path.con` | `reject:E0293:REF-8@3` | `ref8-call` | `-` |
 | `tests/programs/regress_2i_ref8_call_disjoint.con` | `run:42` | `ref8-call` | `binary,interp` |
 | `tests/programs/regress_2i_ref8_match_borrow_scrutinee.con` | `run:42` | `-` | `binary,interp` |
-| `tests/programs/error_181_root_reassigned_match.con` | `reject:E0232:REF-8@2` | `ref8-arm` | `-` |
-| `tests/programs/error_181_root_reassigned_guard.con` | `reject:E0232:REF-8@2` | `ref8-arm` | `-` |
-| `tests/programs/error_181_root_reassigned_nested.con` | `reject:E0232:REF-8@2` | `ref8-arm` | `-` |
-| `tests/programs/error_181_root_reassigned_while_let.con` | `reject:E0232:REF-8@2` | `ref8-arm` | `-` |
-| `tests/programs/error_181_root_reassigned_whole_binder.con` | `reject:E0232:REF-8@2` | `ref8-arm` | `-` |
+| `tests/programs/error_181_root_reassigned_match.con` | `reject:E0232:REF-8@3` | `ref8-arm` | `-` |
+| `tests/programs/error_181_root_reassigned_guard.con` | `reject:E0232:REF-8@3` | `ref8-arm` | `-` |
+| `tests/programs/error_181_root_reassigned_nested.con` | `reject:E0232:REF-8@3` | `ref8-arm` | `-` |
+| `tests/programs/error_181_root_reassigned_while_let.con` | `reject:E0232:REF-8@3` | `ref8-arm` | `-` |
+| `tests/programs/error_181_root_reassigned_whole_binder.con` | `reject:E0232:REF-8@3` | `ref8-arm` | `-` |
 | `tests/programs/regress_181_borrowed_binders.con` | `run:42` | `ref8-arm` | `binary,interp` |
 
 <a id="REF-9"></a>
@@ -9939,12 +9909,12 @@ fn main() -> u8 {
 <a id="TRAIT-9"></a>
 #### TRAIT-9. An impl conforms to its trait
 
-**TRAIT-9@1.** A trait impl defines every method of its trait with the trait method's receiver, parameter types and return type (reading `Self` as the impl's type), declares no type or capability parameters the trait method does not, and requires no capability the trait method does not declare.
+**TRAIT-9@2.** A trait impl defines every method of its trait with the trait method's receiver, parameter types and return type (reading `Self` as the impl's type), declares no type or capability parameters the trait method does not, and requires no capability the trait method does not declare, with `Destroy::destroy` requiring the one consuming receiver form `fn destroy(self)`.
 
 - Kind: refusal
 - Uses: TRAIT-D1
 - Codes: E0581 (core-check), E0582 (core-check), E0586 (core-check), E0587 (core-check)
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.ccCheckModuleDecls
 - Semantics: none
 - Obligation: a call through a bound is checked against the trait's signature and runs the impl's body (R-0499)
@@ -9954,8 +9924,7 @@ fn main() -> u8 {
 signature and then specialized to the impl's body without a second check, so any way an impl's
 signature exceeds its trait's would pass something the generic caller never agreed to (bug 091).
 Capabilities are the load-bearing case: a trait method with no `with(...)` admits only impls with
-none (TRUST-4). The builtin `Destroy::destroy` takes `&self` or `self` in the current compiler; whether one consuming receiver form only
-remains is OPEN-60. Its capability bound is OWN-13's (E0584).
+none (TRUST-4). OD60 requires the one consuming receiver form `fn destroy(self)`. Its capability bound is OWN-13's (E0584).
 
 ```con reject name=missing-method code=E0581 stage=core-check pair=conforming-impl
 trait Tr { fn m(&self) -> i64; fn n(&self) -> i64; }
@@ -10113,7 +10082,7 @@ drop glue, none of which has a place to put an error, so an error there would be
 (OWN-6). An impl whose `destroy` returns anything else is refused by TRAIT-9 (E0582, `expected
 return type ()`). Fallible cleanup, such as closing a file whose final flush can fail, is an
 ordinary consuming method (`close(self) -> Result<Unit, E>`) that the caller matches. The receiver
-form of `destroy` is OPEN-60, and the capabilities it may require are OWN-13's.
+form of `destroy` is the consuming `fn destroy(self)` (OD60), and the capabilities it may require are OWN-13's.
 
 ```con accept name=destroy-returns-unit-decided exit=42 pending=R-0555 now=reject:E0108:resolve
 struct R { v: i64 }
@@ -10439,12 +10408,12 @@ fn main() -> u8 {
 <a id="CON-5"></a>
 #### CON-5. A specification function is erased
 
-**CON-5@1.** A `spec fn` is erased: no code is generated for it, and it is named only by contract expressions and the bodies of other `spec fn` declarations, never by runtime code.
+**CON-5@2.** A `spec fn` requires a total body and is erased: no code is generated for it, and it is named only by contract expressions and the bodies of other `spec fn` declarations, never by runtime code.
 
 - Kind: guarantee
 - Uses: none
 - Codes: none
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.elabModule, Concrete.checkModule
 - Semantics: none
 - Obligation: ghost erasure preserves runtime behaviour (R-0496)
@@ -10453,8 +10422,7 @@ fn main() -> u8 {
 **Rationale.** A specification function is a mathematical description that a claim names, as
 `rotr_spec` names the function `rotr` must compute. Runtime code that names one is refused as an
 unknown name (E0101, MOD-1), since only the contract tables resolve it; a `spec fn` body that calls
-runtime code is E0321 (CON-3). Whether a `spec fn` may be declared without a body, and whether it
-must be total, is OPEN-115: the current compiler accepts both a body-less declaration and a recursive body.
+runtime code is E0321 (CON-3). OD115 requires a body and totality; the current compiler still accepts bodyless declarations and unchecked recursive bodies.
 Absorbed from [CONTRACTS_GUIDE.md](../verification/CONTRACTS_GUIDE.md) and
 [CONTRACTS_AND_VCS.md](../verification/CONTRACTS_AND_VCS.md).
 
@@ -10501,7 +10469,7 @@ fn main() -> u8 {
 on an assumption, never as a clean proof, and a project policy may forbid it. An `assert` that is
 never discharged stays `unproven`, and one whose condition is constant-false is reported as a
 violation; neither stops the program, since both are erased (OWN-11 keeps them from changing
-ownership). Whether the grammar has the two statements is OPEN-79 and OPEN-80. Absorbed from
+ownership). OD79 and OD80 include both statements in the grammar. Absorbed from
 [CONTRACTS_AND_VCS.md](../verification/CONTRACTS_AND_VCS.md).
 
 ```con accept name=assert-and-assume-are-erased exit=42
@@ -11419,8 +11387,7 @@ fn main() -> u8 {
 - Evidence: tested
 
 **Rationale.** `repr(C)` promises C's layout, which a generic or a non-C field cannot have.
-Over-alignment is refused because code generation does not support it yet (E0585). Whether
-`repr(packed)` refuses a field whose alignment exceeds its offset is OPEN-111.
+Over-alignment is refused because code generation does not support it yet (E0585). OD111 accepts misaligned packed fields and refuses references to them.
 
 ```con reject name=align-not-power-of-two code=E0577 stage=core-check pair=repr-c
 #[repr(C, align(3))]
@@ -11540,8 +11507,7 @@ an unannotated layout and a program cannot come to depend on it. Safe code has n
 it cannot turn a pointer into an integer (TRUST-1) or read through a raw pointer without `Unsafe`
 (TRUST-4's `raw-deref-needs-unsafe`). Trusted
 code that walks a buffer may also rely on the stride of an array of `T` being `sizeof::<T>()`
-(FFI-12). An enum takes no `repr`; whether an
-enum may cross the foreign boundary is OPEN-110 (the current compiler refuses it, E0574).
+(FFI-12). An enum takes no `repr`; OD110 refuses enums at the foreign boundary (E0574).
 
 ```con accept name=observed-through-sizeof exit=42
 
@@ -11560,12 +11526,12 @@ pub fn main() -> u8 {
 <a id="FFI-8"></a>
 #### FFI-8. What `repr(C)` and `repr(packed)` promise
 
-**FFI-8@1.** `#[repr(C)]` lays a struct out as C does, each field in declaration order at the next offset aligned for its type and the size rounded up to the struct's alignment, and `#[repr(packed)]` places the fields in declaration order with no padding and gives the struct alignment 1.
+**FFI-8@2.** `#[repr(C)]` lays a struct out as C does, each field in declaration order at the next offset aligned for its type and the size rounded up to the struct's alignment, and `#[repr(packed)]` places the fields in declaration order with no padding and gives the struct alignment 1, accepts misaligned fields but refuses references to them (also when combined with `repr(C)`).
 
 - Kind: guarantee
 - Uses: none
 - Codes: none
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.Layout.tySize, Concrete.Layout.tyAlign, Concrete.Layout.fieldOffset
 - Semantics: none
 - Obligation: layout comes from the one `Layout` authority (FFI-2, R-0502)
@@ -11573,10 +11539,7 @@ pub fn main() -> u8 {
 
 **Rationale.** `repr(C)` is what a struct needs to cross `extern fn` (FFI-3), and `repr(packed)`
 describes wire formats. `#[repr(align(N))]` promises only a minimum alignment, and today only where
-it changes nothing (FFI-4, E0585). Which combinations are well formed is FFI-4. Whether a packed
-struct may hold a field whose alignment exceeds its offset, and whether such a field may be
-borrowed, is OPEN-111; the current compiler accepts both, and the examples here place every field at an offset
-aligned for its type.
+it changes nothing (FFI-4, E0585). Which combinations are well formed is FFI-4. OD111 accepts packed fields at misaligned offsets and refuses references to them; the current compiler still accepts such references.
 
 ```con accept name=c-and-packed exit=42
 
@@ -11599,6 +11562,16 @@ pub fn main() -> u8 {
 ```
 
 
+
+```con accept name=misaligned-packed-field-value exit=42
+#[repr(packed)]
+struct Copy P { tag: u8, value: u32 }
+fn main() -> u8 {
+    let p: P = P { tag: 0, value: 42 };
+    if p.value == 42 { return 42; }
+    return 0;
+}
+```
 
 <a id="FFI-9"></a>
 #### FFI-9. What `trusted extern fn` asserts
@@ -11659,7 +11632,7 @@ the layout of its field and that calls pass it as the field, and the project has
 needs either ([LAYOUT_CONTRACT.md](../archive/design-records/LAYOUT_CONTRACT.md) §4). The parser
 refuses the other forms today with the syntax diagnostic E0001, tagged SYN-1 (`unknown repr option
 'transparent'`, and `#[repr(...)] can only be applied to struct definitions` for an enum), so this
-entry carries no code of its own. Whether an enum may cross the foreign boundary at all is OPEN-110.
+entry carries no code of its own. OD110 refuses enums at the foreign boundary.
 
 ```con accept name=four-forms exit=42
 #[repr(C)]
@@ -11694,7 +11667,7 @@ fn main() -> u8 {
 <a id="FFI-11"></a>
 #### FFI-11. A `repr(C)` struct crosses an extern call by value
 
-**FFI-11@1.** A `#[repr(C)]` struct given as an argument to an `extern fn` is passed by value, as the platform's C calling convention passes a C struct of the same layout.
+**FFI-11@2.** A `#[repr(C)]` struct passed to or returned from an `extern fn` crosses by value at every size according to the platform's C calling convention, classified by the `Layout` authority.
 
 - Kind: guarantee
 - Uses: none
@@ -11706,8 +11679,7 @@ fn main() -> u8 {
 
 **Rationale.** A C function that takes or returns a struct by value can be bound directly, with no
 pointer wrapper. Internal Concrete calls pass aggregates by pointer, and that set is not promised.
-Whether a returned struct is promised the same is OPEN-122: the design record promised it only up to
-8 bytes. The current compiler (EmitSSA's extern-call path, not the `Layout` authority) classifies by size alone, as
+OD122 promises returned structs at every size according to the platform C ABI via `Layout`. The current compiler (EmitSSA's extern-call path, not the `Layout` authority) classifies by size alone, as
 AAPCS64 does for structs of integer fields: a struct of at most 8 bytes is passed as one 64-bit
 integer, of 9 to 16 bytes as two, and a larger one by pointer, and a returned struct of at most 8
 bytes comes back as one 64-bit integer while a larger one is returned as an LLVM aggregate. Structs
@@ -12033,12 +12005,12 @@ fn main() -> u8 {
 <a id="PASS-7"></a>
 #### PASS-7. After Mono: no type variable survives
 
-**PASS-7@1.** After monomorphization no type variable and no unresolved generic declaration remains in the Core that later stages compile, and every Copy type's fields are Copy in each specialization.
+**PASS-7@2.** After monomorphization no type variable and no unresolved generic declaration remains in the Core that later stages compile, and every Copy type's fields are Copy in each specialization, with growing polymorphic call cycles refused before Mono.
 
 - Kind: preservation
 - Uses: none
 - Codes: none
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.Pipeline.monomorphize, Concrete.verifyPostMono
 - Semantics: none
 - Obligation: specialization validated by S8a's total validator (R-0510)
@@ -12243,7 +12215,7 @@ The boundary is useful even while LLVM is the only emitter.
 
 **Rationale.** The front end is where a program is judged; the later stages only translate it. A
 generic function that calls itself at a growing type argument does not finish monomorphizing in the current compiler;
-whether Check refuses it, and how, is OPEN-132. A refusal,
+OD132 refuses growing call cycles before Mono. A refusal,
 a crash or invalid IR after Check means the program met no rule and still did not compile, so the
 user gets no diagnostic that names a rule. Bugs 005, 009, 014, 016, 029, 032, 035, 044, 055, 077,
 108 and 116 were such failures. A refusal that a later stage needs (such as E0809, when a generated
@@ -12420,29 +12392,29 @@ undecided dependency remains explicitly linked to the target Core proposal rathe
 
 These items are undesigned, not new answers approved by this cleanup. Where a chapter depends on
 one, it says **undecided: see the target Core proposal**. The proposal is owned by
-[ROADMAP](../../ROADMAP.md#concrete-roadmap).
+[ROADMAP: Questions for the Core session](../../ROADMAP.md#questions-for-the-core-session).
 
-- <a id="core-allocator-identities"></a>**Allocator identities and dependencies:** introduction, kind,
+- <a id="core-allocator-identities"></a>[Core-session question 1](../../ROADMAP.md#questions-for-the-core-session). **Allocator identities and dependencies:** introduction, kind,
   scope, equality, packaging and repeated reset, dependency tracking across calls, containers and
   callbacks, and lifetime-safe release metadata; the allocation decision's conservation and no-live-
   allocation requirements stand, but the discipline expressing them is undecided.
-- <a id="core-allocation-contracts"></a>**Allocation contracts:** failure payload shapes and complete
+- <a id="core-allocation-contracts"></a>[Core-session question 1–2](../../ROADMAP.md#questions-for-the-core-session). **Allocation contracts:** failure payload shapes and complete
   growth, reserve and multi-allocation transition contracts; applicability of container `Destroy`
   when payload cleanup needs effects beyond `Alloc` is undecided.
-- <a id="core-heap-array-view"></a>**Heap-array view:** exact bounded view type, operations, lifetime,
+- <a id="core-heap-array-view"></a>[Core-session question 3](../../ROADMAP.md#questions-for-the-core-session). **Heap-array view:** exact bounded view type, operations, lifetime,
   mutability and permitted positions are undecided; opening never yields an element reference.
-- <a id="core-static-text"></a>**Static text:** literal type, ownership and conversion into
+- <a id="core-static-text"></a>[Core-session question 4](../../ROADMAP.md#questions-for-the-core-session). **Static text:** literal type, ownership and conversion into
   allocator-branded strings are undecided; static text requires no allocation.
-- <a id="core-grants"></a>**Target grants:** exhaustive schemas, multiplicity, lifecycle and narrowing
+- <a id="core-grants"></a>[Core-session question 7](../../ROADMAP.md#questions-for-the-core-session). **Target grants:** exhaustive schemas, multiplicity, lifecycle and narrowing
   APIs, including the resource backing process services, are undecided.
-- <a id="core-capability-inference"></a>**Capability inference:** choosing among multiple consistent
+- <a id="core-capability-inference"></a>[Core-session question 5](../../ROADMAP.md#questions-for-the-core-session). **Capability inference:** choosing among multiple consistent
   set-variable solutions is undecided; exact sets and refusal of inconsistent bindings stand.
-- <a id="core-unsafe-premises"></a>**Unsafe contracts:** the complete validity, provenance, aliasing
+- <a id="core-unsafe-premises"></a>[Core-session question 3, 9](../../ROADMAP.md#questions-for-the-core-session). **Unsafe contracts:** the complete validity, provenance, aliasing
   and foreign-mutation taxonomy and call-only annotation syntax are undecided; OD64's confinement
   requirement stands.
-- <a id="core-static-refusal"></a>**Static refusal:** the mandatory proof criterion and its relation
+- <a id="core-static-refusal"></a>[Core-session question 6](../../ROADMAP.md#questions-for-the-core-session). **Static refusal:** the mandatory proof criterion and its relation
   to Core acceptance are undecided; recorded proven-violation refusals apply in trusted code too.
-- <a id="core-semantic-contract"></a>**Semantic objects:** exact events, admissible allocation oracles,
+- <a id="core-semantic-contract"></a>[Core-session question 8–9](../../ROADMAP.md#questions-for-the-core-session). **Semantic objects:** exact events, admissible allocation oracles,
   observations, resource relations and theorem endpoint are undecided; technical adequacy and
   refinement obligations remain binding.
 

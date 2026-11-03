@@ -12,7 +12,7 @@ OD67 refuses a local that reuses a top-level declaration or import name; field l
 <a id="SCOPE-D1"></a>
 ### SCOPE-D1. Visible
 
-**SCOPE-D1@2.** A local binding is visible from its declaration to the end of its declaring block, nested blocks included regardless of ownership state, with parameters visible throughout the body, pattern binders in their arm, a counted loop index only in its body and a borrow-block binder only in its block, without a named region.
+**SCOPE-D1@3.** A local binding is visible from its declaration to the end of its declaring block, nested blocks included regardless of ownership state, with parameters visible throughout the body, pattern binders in their arm, a counted loop index only in its body and a borrow-block binder only in its block, without a named region.
 
 - Kind: definition
 - Uses: REF-D3
@@ -30,7 +30,7 @@ OD67 refuses a local that reuses a top-level declaration or import name; field l
 <a id="SCOPE-1"></a>
 ### SCOPE-1. One lexical name, one binding
 
-**SCOPE-1@2.** No binder reuses the spelling of a visible local binding, top-level declaration or import, and a contract expression binds no name at all.
+**SCOPE-1@3.** No binder reuses the spelling of a visible local binding, top-level declaration or import, and a contract expression binds no name at all.
 
 - Kind: refusal
 - Uses: SCOPE-D1
@@ -81,78 +81,78 @@ fn main() -> u8 {
 
 | fixture | expected | pair | modes |
 |---|---|---|---|
-| `tests/programs/error_2i_scope1_const_initializer.con` | `reject:E0301:SCOPE-1@2` | `const-init` | `-` |
+| `tests/programs/error_2i_scope1_const_initializer.con` | `reject:E0301:SCOPE-1@3` | `const-init` | `-` |
 | `tests/programs/regress_2i_const_initializer_block.con` | `run:42` | `const-init` | `binary,interp-exempt:bug-117-the-interpreter-has-no-module-constants` |
-| `tests/programs/error_2i_ref6_contract_ref_binding.con` | `reject:E0305:SCOPE-1@2` | `contract` | `-` |
-| `tests/programs/error_2i_scope1_contract_let.con` | `reject:E0305:SCOPE-1@2` | `contract` | `-` |
-| `tests/programs/error_2i_contract_invariant_binds.con` | `reject:E0305:SCOPE-1@2` | `contract` | `-` |
-| `tests/programs/error_2i_contract_variant_binds_ref.con` | `reject:E0305:SCOPE-1@2` | `contract` | `-` |
-| `tests/programs/error_2i_contract_inferred_ref_alias.con` | `reject:E0305:SCOPE-1@2` | `contract` | `-` |
-| `tests/programs/error_2i_contract_wrapped_binder.con` | `reject:E0305:SCOPE-1@2` | `contract` | `-` |
-| `tests/programs/error_2i_contract_trait_impl_invariant.con` | `reject:E0305:SCOPE-1@2` | `contract` | `-` |
-| `tests/programs/error_2i_contract_place_assignment.con` | `reject:E0305:SCOPE-1@2` | `contract` | `-` |
-| `tests/programs/error_2i_contract_borrow_to_generic.con` | `reject:E0305:SCOPE-1@2` | `contract` | `-` |
-| `tests/programs/error_2i_contract_generic_call.con` | `reject:E0305:SCOPE-1@2` | `contract` | `-` |
-| `tests/programs/error_2i_contract_imported_generic.con` | `reject:E0305:SCOPE-1@2` | `contract` | `-` |
-| `tests/programs/error_2i_scope1_extern_duplicate_params.con` | `reject:E0301:SCOPE-1@2` | `scope1-duplicate_params` | `-` |
-| `tests/programs/error_2i_scope1_trait_decl_duplicate_params.con` | `reject:E0301:SCOPE-1@2` | `scope1-duplicate_params` | `-` |
+| `tests/programs/error_2i_ref6_contract_ref_binding.con` | `reject:E0305:SCOPE-1@3` | `contract` | `-` |
+| `tests/programs/error_2i_scope1_contract_let.con` | `reject:E0305:SCOPE-1@3` | `contract` | `-` |
+| `tests/programs/error_2i_contract_invariant_binds.con` | `reject:E0305:SCOPE-1@3` | `contract` | `-` |
+| `tests/programs/error_2i_contract_variant_binds_ref.con` | `reject:E0305:SCOPE-1@3` | `contract` | `-` |
+| `tests/programs/error_2i_contract_inferred_ref_alias.con` | `reject:E0305:SCOPE-1@3` | `contract` | `-` |
+| `tests/programs/error_2i_contract_wrapped_binder.con` | `reject:E0305:SCOPE-1@3` | `contract` | `-` |
+| `tests/programs/error_2i_contract_trait_impl_invariant.con` | `reject:E0305:SCOPE-1@3` | `contract` | `-` |
+| `tests/programs/error_2i_contract_place_assignment.con` | `reject:E0305:SCOPE-1@3` | `contract` | `-` |
+| `tests/programs/error_2i_contract_borrow_to_generic.con` | `reject:E0305:SCOPE-1@3` | `contract` | `-` |
+| `tests/programs/error_2i_contract_generic_call.con` | `reject:E0305:SCOPE-1@3` | `contract` | `-` |
+| `tests/programs/error_2i_contract_imported_generic.con` | `reject:E0305:SCOPE-1@3` | `contract` | `-` |
+| `tests/programs/error_2i_scope1_extern_duplicate_params.con` | `reject:E0301:SCOPE-1@3` | `scope1-duplicate_params` | `-` |
+| `tests/programs/error_2i_scope1_trait_decl_duplicate_params.con` | `reject:E0301:SCOPE-1@3` | `scope1-duplicate_params` | `-` |
 | `tests/programs/regress_2i_contract_aliased_ref_param.con` | `run:42` | `contract` | `binary,interp` |
 | `tests/programs/regress_2i_contract_ref_receiver.con` | `run:42` | `contract` | `binary,interp` |
 | `tests/programs/regress_2i_contract_static_nongeneric_method.con` | `run:42` | `contract` | `binary,interp` |
-| `tests/programs/error_2i_spec_body_hidden_binder.con` | `reject:E0305:SCOPE-1@2` | `contract` | `-` |
-| `tests/programs/error_2i_spec_body_generic_call.con` | `reject:E0305:SCOPE-1@2` | `contract` | `-` |
+| `tests/programs/error_2i_spec_body_hidden_binder.con` | `reject:E0305:SCOPE-1@3` | `contract` | `-` |
+| `tests/programs/error_2i_spec_body_generic_call.con` | `reject:E0305:SCOPE-1@3` | `contract` | `-` |
 | `tests/programs/regress_2i_contract_nongeneric_call_beside_generic_method.con` | `run:42` | `contract` | `binary,interp` |
-| `tests/programs/error_2i_contract_generic_method_mangled.con` | `reject:E0305:SCOPE-1@2` | `contract` | `-` |
-| `tests/programs/error_2i_contract_generic_method_static.con` | `reject:E0305:SCOPE-1@2` | `contract` | `-` |
+| `tests/programs/error_2i_contract_generic_method_mangled.con` | `reject:E0305:SCOPE-1@3` | `contract` | `-` |
+| `tests/programs/error_2i_contract_generic_method_static.con` | `reject:E0305:SCOPE-1@3` | `contract` | `-` |
 | `tests/programs/regress_2i_contract_paren_ref_arg.con` | `run:42` | `contract` | `binary,interp` |
-| `tests/programs/error_2i_scope1_contracted_fn_shadow.con` | `reject:E0301:SCOPE-1@2` | `scope1-param_in_block` | `-` |
-| `tests/programs/error_2i_scope1_spec_fn_duplicate_params.con` | `reject:E0301:SCOPE-1@2` | `contract` | `-` |
+| `tests/programs/error_2i_scope1_contracted_fn_shadow.con` | `reject:E0301:SCOPE-1@3` | `scope1-param_in_block` | `-` |
+| `tests/programs/error_2i_scope1_spec_fn_duplicate_params.con` | `reject:E0301:SCOPE-1@3` | `contract` | `-` |
 | `tests/programs/regress_2i_contract_and_spec_params.con` | `run:42` | `contract` | `binary,interp` |
-| `tests/programs/error_2i_scope1_same_block_let.con` | `reject:E0301:SCOPE-1@2` | `scope1-same_block_let` | `-` |
+| `tests/programs/error_2i_scope1_same_block_let.con` | `reject:E0301:SCOPE-1@3` | `scope1-same_block_let` | `-` |
 | `tests/programs/regress_2i_scope1_same_block_let_renamed.con` | `run:42` | `scope1-same_block_let` | `binary,interp` |
-| `tests/programs/error_2i_scope1_block_let.con` | `reject:E0301:SCOPE-1@2` | `scope1-block_let` | `-` |
+| `tests/programs/error_2i_scope1_block_let.con` | `reject:E0301:SCOPE-1@3` | `scope1-block_let` | `-` |
 | `tests/programs/regress_2i_scope1_block_let_renamed.con` | `run:42` | `scope1-block_let` | `binary,interp` |
-| `tests/programs/error_2i_scope1_param_in_block.con` | `reject:E0301:SCOPE-1@2` | `scope1-param_in_block` | `-` |
+| `tests/programs/error_2i_scope1_param_in_block.con` | `reject:E0301:SCOPE-1@3` | `scope1-param_in_block` | `-` |
 | `tests/programs/regress_2i_scope1_param_in_block_renamed.con` | `run:42` | `scope1-param_in_block` | `binary,interp` |
-| `tests/programs/error_2i_scope1_consuming_rebind.con` | `reject:E0301:SCOPE-1@2` | `scope1-consuming_rebind` | `-` |
+| `tests/programs/error_2i_scope1_consuming_rebind.con` | `reject:E0301:SCOPE-1@3` | `scope1-consuming_rebind` | `-` |
 | `tests/programs/regress_2i_scope1_consuming_rebind_renamed.con` | `run:42` | `scope1-consuming_rebind` | `binary,interp` |
-| `tests/programs/error_2i_scope1_for_header.con` | `reject:E0301:SCOPE-1@2` | `scope1-for_header` | `-` |
+| `tests/programs/error_2i_scope1_for_header.con` | `reject:E0301:SCOPE-1@3` | `scope1-for_header` | `-` |
 | `tests/programs/regress_2i_scope1_for_header_renamed.con` | `run:42` | `scope1-for_header` | `binary,interp` |
-| `tests/programs/error_2i_scope1_arm_binder.con` | `reject:E0301:SCOPE-1@2` | `scope1-arm_binder` | `-` |
+| `tests/programs/error_2i_scope1_arm_binder.con` | `reject:E0301:SCOPE-1@3` | `scope1-arm_binder` | `-` |
 | `tests/programs/regress_2i_scope1_arm_binder_renamed.con` | `run:42` | `scope1-arm_binder` | `binary,interp` |
-| `tests/programs/error_2i_scope1_if_let.con` | `reject:E0301:SCOPE-1@2` | `scope1-if_let` | `-` |
+| `tests/programs/error_2i_scope1_if_let.con` | `reject:E0301:SCOPE-1@3` | `scope1-if_let` | `-` |
 | `tests/programs/regress_2i_scope1_if_let_renamed.con` | `run:42` | `scope1-if_let` | `binary,interp` |
-| `tests/programs/error_2i_scope1_while_let.con` | `reject:E0301:SCOPE-1@2` | `scope1-while_let` | `-` |
+| `tests/programs/error_2i_scope1_while_let.con` | `reject:E0301:SCOPE-1@3` | `scope1-while_let` | `-` |
 | `tests/programs/regress_2i_scope1_while_let_renamed.con` | `run:42` | `scope1-while_let` | `binary,interp` |
-| `tests/programs/error_2i_scope1_destructure.con` | `reject:E0301:SCOPE-1@2` | `scope1-destructure` | `-` |
+| `tests/programs/error_2i_scope1_destructure.con` | `reject:E0301:SCOPE-1@3` | `scope1-destructure` | `-` |
 | `tests/programs/regress_2i_scope1_destructure_renamed.con` | `run:42` | `scope1-destructure` | `binary,interp` |
-| `tests/programs/error_2i_scope1_duplicate_params.con` | `reject:E0301:SCOPE-1@2` | `scope1-duplicate_params` | `-` |
+| `tests/programs/error_2i_scope1_duplicate_params.con` | `reject:E0301:SCOPE-1@3` | `scope1-duplicate_params` | `-` |
 | `tests/programs/regress_2i_scope1_duplicate_params_renamed.con` | `run:42` | `scope1-duplicate_params` | `binary,interp` |
-| `tests/programs/error_2i_scope1_borrow_ref.con` | `reject:E0301:SCOPE-1@2` | `scope1-borrow_ref` | `-` |
+| `tests/programs/error_2i_scope1_borrow_ref.con` | `reject:E0301:SCOPE-1@3` | `scope1-borrow_ref` | `-` |
 | `tests/programs/regress_2i_scope1_borrow_ref_renamed.con` | `run:42` | `scope1-borrow_ref` | `binary,interp` |
-| `tests/programs/error_2i_scope1_region_name.con` | `reject:E0301:SCOPE-1@2` | `scope1-region_name` | `-` |
+| `tests/programs/error_2i_scope1_region_name.con` | `reject:E0301:SCOPE-1@3` | `scope1-region_name` | `-` |
 | `tests/programs/regress_2i_scope1_region_name_renamed.con` | `run:42` | `scope1-region_name` | `binary,interp` |
-| `tests/programs/error_borrow_shadow.con` | `reject:E0301:SCOPE-1@2` | `scope1-borrow_ref` | `-` |
-| `tests/programs/error_093_shadowing_block_local_leak.con` | `reject:E0301:SCOPE-1@2` | `scope1-block_let` | `-` |
-| `tests/programs/error_093_shadowing_match_binder_leak.con` | `reject:E0301:SCOPE-1@2` | `scope1-arm_binder` | `-` |
-| `tests/programs/error_094_arm_binder_shadows_live.con` | `reject:E0301:SCOPE-1@2` | `scope1-arm_binder` | `-` |
-| `tests/programs/error_094_destructure_shadows_live.con` | `reject:E0301:SCOPE-1@2` | `scope1-destructure` | `-` |
-| `tests/programs/error_094_value_binder_shadows_live.con` | `reject:E0301:SCOPE-1@2` | `scope1-arm_binder` | `-` |
-| `tests/programs/error_094_borrow_block_shadow_leak.con` | `reject:E0301:SCOPE-1@2` | `scope1-block_let` | `-` |
-| `tests/programs/error_094_mut_ref_param_shadow_leak.con` | `reject:E0301:SCOPE-1@2` | `scope1-param_in_block` | `-` |
-| `tests/programs/error_107_shadow_under_live_ref.con` | `reject:E0301:SCOPE-1@2` | `scope1-same_block_let` | `-` |
-| `tests/programs/error_107_shadow_in_block_under_live_ref.con` | `reject:E0301:SCOPE-1@2` | `scope1-block_let` | `-` |
-| `tests/programs/regress_093_shadowing_locals_consumed.con` | `reject:E0301:SCOPE-1@2` | `scope1-block_let` | `-` |
-| `tests/programs/regress_094_shadowing_binders.con` | `reject:E0301:SCOPE-1@2` | `scope1-arm_binder` | `-` |
-| `tests/programs/regress_094_shadow_state_by_identity.con` | `reject:E0301:SCOPE-1@2` | `scope1-same_block_let` | `-` |
+| `tests/programs/error_borrow_shadow.con` | `reject:E0301:SCOPE-1@3` | `scope1-borrow_ref` | `-` |
+| `tests/programs/error_093_shadowing_block_local_leak.con` | `reject:E0301:SCOPE-1@3` | `scope1-block_let` | `-` |
+| `tests/programs/error_093_shadowing_match_binder_leak.con` | `reject:E0301:SCOPE-1@3` | `scope1-arm_binder` | `-` |
+| `tests/programs/error_094_arm_binder_shadows_live.con` | `reject:E0301:SCOPE-1@3` | `scope1-arm_binder` | `-` |
+| `tests/programs/error_094_destructure_shadows_live.con` | `reject:E0301:SCOPE-1@3` | `scope1-destructure` | `-` |
+| `tests/programs/error_094_value_binder_shadows_live.con` | `reject:E0301:SCOPE-1@3` | `scope1-arm_binder` | `-` |
+| `tests/programs/error_094_borrow_block_shadow_leak.con` | `reject:E0301:SCOPE-1@3` | `scope1-block_let` | `-` |
+| `tests/programs/error_094_mut_ref_param_shadow_leak.con` | `reject:E0301:SCOPE-1@3` | `scope1-param_in_block` | `-` |
+| `tests/programs/error_107_shadow_under_live_ref.con` | `reject:E0301:SCOPE-1@3` | `scope1-same_block_let` | `-` |
+| `tests/programs/error_107_shadow_in_block_under_live_ref.con` | `reject:E0301:SCOPE-1@3` | `scope1-block_let` | `-` |
+| `tests/programs/regress_093_shadowing_locals_consumed.con` | `reject:E0301:SCOPE-1@3` | `scope1-block_let` | `-` |
+| `tests/programs/regress_094_shadowing_binders.con` | `reject:E0301:SCOPE-1@3` | `scope1-arm_binder` | `-` |
+| `tests/programs/regress_094_shadow_state_by_identity.con` | `reject:E0301:SCOPE-1@3` | `scope1-same_block_let` | `-` |
 | `tests/programs/regress_045_match_binder_shadow.con` | `run:42` | `-` | `binary,interp` |
-| `tests/programs/regress_087_let_block_shadow.con` | `reject:E0301:SCOPE-1@2` | `scope3-087` | `-` |
-| `tests/programs/regress_087_borrow_shadow_uaf/` | `reject:E0301:SCOPE-1@2` | `scope3-087-borrow` | `-` |
+| `tests/programs/regress_087_let_block_shadow.con` | `reject:E0301:SCOPE-1@3` | `scope3-087` | `-` |
+| `tests/programs/regress_087_borrow_shadow_uaf/` | `reject:E0301:SCOPE-1@3` | `scope3-087-borrow` | `-` |
 
 <a id="SCOPE-2"></a>
 ### SCOPE-2. What is not a collision
 
-**SCOPE-2@2.** Bindings in sibling scopes, one declaration in a loop body executed many times, an assignment and a field label are not collisions under SCOPE-1, while a local may not reuse a visible top-level declaration or import name and types and values share one module namespace.
+**SCOPE-2@3.** Bindings in sibling scopes, one declaration in a loop body executed many times, an assignment and a field label are not collisions under SCOPE-1, while a local may not reuse a visible top-level declaration or import name and types and values share one module namespace.
 
 - Kind: guarantee
 - Uses: SCOPE-D1
@@ -230,7 +230,7 @@ fn main() -> u8 {
 <a id="SCOPE-3"></a>
 ### SCOPE-3. Blocks are lexical on every consumer
 
-**SCOPE-3@2.** A binding declared in a block is not visible after the block, and every consumer (the checker, elaboration, the interpreter, lowering, extraction and evidence frames) resolves a name to the innermost visible binding.
+**SCOPE-3@3.** A binding declared in a block is not visible after the block, and every consumer (the checker, elaboration, the interpreter, lowering, extraction and evidence frames) resolves a name to the innermost visible binding.
 
 - Kind: guarantee
 - Uses: SCOPE-D1

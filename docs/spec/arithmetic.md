@@ -118,8 +118,8 @@ fn main() -> u8 {
 **Rationale.** Silent wrapping is a correctness bug in almost all code, and signed overflow is
 the case C leaves undefined. Concrete never emits LLVM's `nsw` or `nuw`: checked operations use
 the overflow intrinsics and branch to an abort helper. This holds in every profile; a profile
-changes reports, never code generation (whether a profile may omit a check is OPEN-97). The
-fill of a right shift that does not abort is ARITH-8; how a division rounds and a remainder's sign are OPEN-114. ARITH-13 refuses an operation the compiler proves always overflows (E0902), but in the current
+changes reports, never code generation (OD97 keeps every runtime check and permits profiles to refuse undischarged operations). The
+fill of a right shift that does not abort is ARITH-8; OD114 makes integer division truncate toward zero and the remainder take the dividend’s sign. ARITH-13 refuses an operation the compiler proves always overflows (E0902), but in the current
 compiler no operation reaches that proof (bug 350), so E0902 currently provides no compile-time
 refusal; the run-time overflow check is the guarantee. Array bounds are
 checked the same way, an index out of bounds aborting.
@@ -247,9 +247,8 @@ obligation-free, and each lossy conversion names what it does. Today `as` refuse
 and sign changes are still accepted and truncate or reinterpret, and float to integer truncates
 toward zero and aborts on NaN, an infinity or a value outside the target's range (a checked
 conversion), until the named operations land and the corpus migrates (about 500 to 700 sites). Pointer and reference casts are not
-numeric conversions (TRUST-1 owns the pointer–integer case; which pointer and reference
-conversions `as` writes is OPEN-98). The named operations' results are ARITH-10, and their
-spellings are OPEN-99.
+numeric conversions (TRUST-1 owns the pointer–integer case; OD98 requires trusted/Unsafe code for reference-to-pointer conversion). The named operations' results are ARITH-10, and their
+spellings are fixed by OD99.
 
 Until then, in the current compiler, narrowing truncates silently (`300 as u8` is 44, `-1 as u32` is
 4294967295, `3.9 as i32` is 3). Even a widening needs `as`: `want_u64(my_u8)` is E0220 (TYPE-4),
@@ -397,9 +396,7 @@ fn main() -> u8 {
 
 **Rationale.** These are LLVM's `ashr` and `lshr` (the archived ARITHMETIC_POLICY §6). When a shift
 aborts instead (a count outside the width) is ARITH-3. The interpreter and the constant folder
-compute it in `IntArith`, and the binary through the abort helpers. How an integer division rounds
-and which sign a remainder takes is OPEN-114: the current compiler truncates toward zero, as C99 does, which the
-archived record did not state as a rule.
+compute it in `IntArith`, and the binary through the abort helpers. OD114 requires integer division to truncate toward zero and the remainder to take the dividend’s sign.
 
 ```con accept name=shift-fill exit=42
 fn example_value() -> i64 {
@@ -435,8 +432,7 @@ fn main() -> u8 {
 wraps (ARITH-4) without looking for an enclosing `#[wrapping]` attribute or module switch; none
 exists. `#[overflow_checked]` asks the proof pipeline for a no-overflow obligation at each
 fixed-width `+`, `-` and `*` of the function, which is evidence, not meaning: the operations still
-abort on overflow. Whether a build profile may omit a check or refuse an unproved operation is
-OPEN-97.
+abort on overflow. OD97 keeps every runtime check and permits a profile to refuse undischarged operations.
 
 ```con accept name=overflow-checked-in-range exit=42
 #[overflow_checked]
@@ -512,7 +508,7 @@ fn main() -> u8 {
 <a id="ARITH-10"></a>
 ### ARITH-10. The named conversions' results
 
-**ARITH-10@1.** `truncate::<T>(x)` keeps the low-order bits of `x`'s two's-complement representation, as many as `T`'s width, `reinterpret::<T>(x)` changes the signedness of the integer `x` at the same width and keeps its bit pattern, and `try_convert::<T>(x)` gives the value of `T` that means the same number as `x` when there is one and otherwise reports that there is none (an integer out of range, a float that is not integral, out of range, NaN or infinite, or a value a target float does not represent exactly).
+**ARITH-10@2.** `truncate::<T>(x)` keeps the low-order bits of `x`'s two's-complement representation, as many as `T`'s width, `reinterpret::<T>(x)` changes the signedness of the integer `x` at the same width and keeps its bit pattern, and `try_convert::<T>(x)` returns `Result<T, OutOfRange>`, with success containing the value of `T` that means the same number as `x` when there is one and failure otherwise (an integer out of range, a float that is not integral, out of range, NaN or infinite, or a value a target float does not represent exactly).
 
 - Kind: guarantee
 - Uses: none
@@ -525,9 +521,7 @@ fn main() -> u8 {
 **Rationale.** These are the conversions ARITH-5 sends every lossy `as` to, each with one stated
 result, so that no consumer has to guess what a lossy conversion means (bugs 080 and 128).
 `truncate::<u8>(300)` is 44 and `reinterpret::<u32>(-1)` is 4294967295, what a narrowing or
-sign-changing `as` gives today. Whether `try_convert` reports a failure as `Option::None` or as a
-`Result` error with a reason is OPEN-106; the archived record allowed either. The float conversions
-are ARITH-11. None of these exists in the current compiler yet (R-0500), and their spellings are OPEN-99.
+sign-changing `as` gives today. OD106 fixes `try_convert` as `Result<T, OutOfRange>`; OD99 fixes these builtin spellings and the float-rounding spellings `trunc`, `round`, `floor`, `ceil`. The float conversions are ARITH-11; implementation remains pending R-0500.
 
 ```con accept name=truncate-and-reinterpret exit=42 pending=R-0500 now=reject:E0101:resolve
 fn example_value() -> i64 {
@@ -548,10 +542,17 @@ fn main() -> u8 {
 }
 ```
 
+```con accept name=checked-conversion-result exit=42 pending=R-0500 now=reject:E0101:resolve
+fn convert(x: i64) -> Result<u8, OutOfRange> {
+    return try_convert::<u8>(x);
+}
+fn main() -> u8 { return 42; }
+```
+
 <a id="ARITH-11"></a>
 ### ARITH-11. The named float conversions round as stated
 
-**ARITH-11@1.** A named conversion from an integer to a float, or from `f64` to `f32`, rounds to the nearest representable value with ties to even, and each float-to-integer rounding operation (`trunc`, `round`, `floor`, `ceil`) has a stated result for every input, NaN and the infinities included.
+**ARITH-11@2.** A named conversion from an integer to a float, or from `f64` to `f32`, rounds to the nearest representable value with ties to even, and each float-to-integer rounding operation (`trunc`, `round`, `floor`, `ceil`) rounds as named and returns the resulting integer when representable, or an error as `try_convert` for NaN, infinities and results outside the target integer range.
 
 - Kind: guarantee
 - Uses: none
@@ -564,9 +565,14 @@ fn main() -> u8 {
 **Rationale.** These are the conversions ARITH-5 sends a rounding `as` to (`i32` to `f32`, `i64` to
 `f64`, `f64` to `f32`, every float to an integer). Today `as` rounds an integer to a float natively
 and is the identity in `--interp` (bug 128), and a float-to-integer `as` truncates toward zero and
-aborts on NaN, an infinity or a value out of range. Whether a rounding operation gives a value or an
-error for those inputs, and which value, is OPEN-107. None of these exists in the current compiler yet (R-0500).
-The conversion functions are not named yet (OPEN-99), so this entry has no example until they are.
+aborts on NaN, an infinity or a value out of range. OD107 instead requires an error as `try_convert`; OD99 fixes the builtin spellings `trunc`, `round`, `floor`, `ceil`. Implementation remains pending R-0500.
+
+```con accept name=round-result exit=42 pending=R-0500 now=reject:E0101:resolve
+fn convert(x: f64) -> Result<u8, OutOfRange> {
+    return trunc::<u8>(x);
+}
+fn main() -> u8 { return 42; }
+```
 
 <a id="ARITH-12"></a>
 ### ARITH-12. Float remainder

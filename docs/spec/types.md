@@ -695,30 +695,21 @@ fn main() -> u8 {
 
 **Rationale.** Signatures and primitive effects are fixed by identity, not by declarations. MEM-5 and MEM-7 govern conserving allocation; OD59 removes `free` and OD155 removes `unwrap`. Complete failure payload contracts are [undecided: see the target Core proposal](decisions.md#core-allocation-contracts).
 
-```con reject name=append-unsupported-argument-decided code=E0421 stage=check pair=free-heap pending=R-0555 now=reject:E0421:check
-fn main() with(Alloc) -> u8 {
-    let mut out: String = "";
-    append(&mut out, 1.5);
-    drop_string(out);
-    return 0;
+```con reject name=wrapping-wrong-arity code=E0268 stage=check pair=wrapping-valid-arguments
+fn main() -> u8 {
+    return wrapping_add(42);
 }
 ```
 
-```con reject name=println-unsupported-argument-decided code=E0421 stage=check pair=println-supported-arguments pending=R-0555 now=reject:E0421:check
-struct Copy S { x: i64 }
-
-fn main() with(Fs) -> u8 {
-    let s: S = S { x: 1 };
-    println(s);
-    return 42;
+```con reject name=wrapping-wrong-type code=E0314 stage=check pair=wrapping-valid-arguments
+fn main() -> u8 {
+    return wrapping_add(true, false);
 }
 ```
 
-```con accept name=println-supported-arguments exit=42
-fn main() with(Fs) -> u8 {
-    let n: u8 = 7;
-    println("n = ", n, ' ', true);
-    return 42;
+```con accept name=wrapping-valid-arguments exit=42
+fn main() -> u8 {
+    return wrapping_add(40, 2);
 }
 ```
 
@@ -1301,7 +1292,7 @@ fn main() with(Fs, Network) -> u8 {
 <a id="TYPE-18"></a>
 ### TYPE-18. Capabilities have no run-time representation
 
-**TYPE-18@2.** A capability set or capability argument has no run-time representation, so types that differ only in their capability sets or capability arguments have the same size and layout.
+**TYPE-18@3.** A capability set or capability argument has no run-time representation, so types that differ only in their capability sets or capability arguments have the same size and layout, but generic instantiations differing in a function-type argument’s capability set have distinct specialization symbols.
 
 - Kind: guarantee
 - Uses: TYPE-D1
@@ -1315,8 +1306,7 @@ fn main() with(Fs, Network) -> u8 {
 **Rationale.** A capability is a compile-time permission, checked and then erased; it matters for
 handle types (TYPE-15) and for the C layout of a struct passed across FFI. Whether two capability
 instantiations of one generic function share generated code is an implementation choice, not a
-language rule; whether two instantiations that differ only in a function type's capability set are
-distinct specializations with distinct symbols is OPEN-109 (the current compiler makes them one).
+language rule; OD109 requires distinct specialization symbols when function-type arguments differ only in their capability sets.
 
 ```con accept name=same-layout exit=42
 
@@ -1568,9 +1558,7 @@ fn main() -> u8 {
 
 **Rationale.** Builtins that can fail, such as `vec_pop`, and std's error conventions return these
 two types, so their shape is part of the language rather than of a library module. Both are declared `Copy`, so an instantiation is Copy exactly when its type
-arguments are (TYPE-14). How a user declaration named `Option` or `Result` resolves against them is
-OPEN-43: the current compiler withholds the builtin `Result` from a module that declares or imports its own, and
-never withholds `Option`. Their layout is that of any enum (FFI-7).
+arguments are (TYPE-14). OD43 refuses declarations that collide with builtin type names.
 
 ```con accept name=option-and-result exit=42
 fn example_value() -> i64 {

@@ -288,12 +288,12 @@ fn main() -> u8 {
 <a id="CON-5"></a>
 ### CON-5. A specification function is erased
 
-**CON-5@1.** A `spec fn` is erased: no code is generated for it, and it is named only by contract expressions and the bodies of other `spec fn` declarations, never by runtime code.
+**CON-5@2.** A `spec fn` requires a total body and is erased: no code is generated for it, and it is named only by contract expressions and the bodies of other `spec fn` declarations, never by runtime code.
 
 - Kind: guarantee
 - Uses: none
 - Codes: none
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.elabModule, Concrete.checkModule
 - Semantics: none
 - Obligation: ghost erasure preserves runtime behaviour (R-0496)
@@ -302,8 +302,7 @@ fn main() -> u8 {
 **Rationale.** A specification function is a mathematical description that a claim names, as
 `rotr_spec` names the function `rotr` must compute. Runtime code that names one is refused as an
 unknown name (E0101, MOD-1), since only the contract tables resolve it; a `spec fn` body that calls
-runtime code is E0321 (CON-3). Whether a `spec fn` may be declared without a body, and whether it
-must be total, is OPEN-115: the current compiler accepts both a body-less declaration and a recursive body.
+runtime code is E0321 (CON-3). OD115 requires a body and totality; the current compiler still accepts bodyless declarations and unchecked recursive bodies.
 Absorbed from [CONTRACTS_GUIDE.md](../verification/CONTRACTS_GUIDE.md) and
 [CONTRACTS_AND_VCS.md](../verification/CONTRACTS_AND_VCS.md).
 
@@ -350,7 +349,7 @@ fn main() -> u8 {
 on an assumption, never as a clean proof, and a project policy may forbid it. An `assert` that is
 never discharged stays `unproven`, and one whose condition is constant-false is reported as a
 violation; neither stops the program, since both are erased (OWN-11 keeps them from changing
-ownership). Whether the grammar has the two statements is OPEN-79 and OPEN-80. Absorbed from
+ownership). OD79 and OD80 include both statements in the grammar. Absorbed from
 [CONTRACTS_AND_VCS.md](../verification/CONTRACTS_AND_VCS.md).
 
 ```con accept name=assert-and-assume-are-erased exit=42

@@ -117,7 +117,7 @@ Every bug counts once under each chapter its ruling names: the rules it violates
 | OWN-10@2 | ownership.md | 1 | 030 |
 | OWN-10@3 | ownership.md | 1 | **216** |
 | OWN-12@1 | ownership.md | 1 | 143 |
-| OWN-15@4 | ownership.md | 1 | **328** |
+| OWN-15@5 | ownership.md | 1 | **328** |
 | OWN-3@2 | ownership.md | 1 | 021 |
 | OWN-4@2 | ownership.md | 1 | 149 |
 | OWN-7@4 | ownership.md | 1 | **325** |

@@ -384,7 +384,7 @@ checker refusal is a Check bug here.
 | [325](325_a_call_statement_whose_result_is_not_unit_discar.md) | — | — | unfixed | — | violates OWN-7@4 |
 | [326](326_a_field_access_opens_a_heap_or_heaparray_implici.md) | Report | Diagnostic | shared | — | violates MEM-4@5 |
 | [327](327_an_integer_or_float_literal_with_no_expected_typ.md) | Report | Diagnostic | shared | — | violates ARITH-2@4 |
-| [328](328_a_method_taking_self_or_mut_self_is_called_on_an.md) | — | — | unfixed | — | violates OWN-15@4 |
+| [328](328_a_method_taking_self_or_mut_self_is_called_on_an.md) | — | — | unfixed | — | violates OWN-15@5 |
 | [329](329_the_ll_1_checkers_never_computed_follow_sets_a_f.md) | Tooling | check_ll1 | commits | — | violates SYN-1@1 |
 | [330](330_a_continue_inside_a_for_loop_s_step_the_binary_n.md) | Interp | Interp | commits | Check | spec gap (STMT) |
 | [331](331_c_style_for_loops_are_accepted_and_the_counted_l.md) | Report | Diagnostic | shared | — | violates STMT-6@4 |

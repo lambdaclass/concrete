@@ -425,7 +425,7 @@ fn main() -> u8 {
 <a id="SYN-5"></a>
 ### SYN-5. Source text and string literals are UTF-8
 
-**SYN-5@2.** A source file is UTF-8 text, a string literal denotes the UTF-8 encoding of its characters, and its only escapes are `\n`, `\t`, `\r`, `\\`, `\"` and `\0`, so a file that is not valid UTF-8 and any other `\` sequence in a literal are not accepted.
+**SYN-5@3.** A source file is UTF-8 text, a string literal denotes the UTF-8 encoding of its characters, and its only escapes are `\n`, `\t`, `\r`, `\\`, `\"` and `\0`, so a file that is not valid UTF-8 and any other `\` sequence in a literal are not accepted, and every `String<A>` reachable by safe code holds valid UTF-8.
 
 - Kind: guarantee
 - Uses: none
@@ -441,7 +441,7 @@ knowing the editor or the platform. Unknown escapes were once read as the charac
 lexer now refuses them, with E0001 tagged SYN-1 (`unknown string escape '\q'`). A file that is not
 valid UTF-8 is refused when it is read, before lexing, but today by an uncaught exception
 (`Tried to read file ... containing non UTF-8 data`) rather than a diagnostic. There is no `\xHH`
-or `\u{...}` escape. Whether every `String` holds valid UTF-8 at run time is OPEN-127.
+or `\u{...}` escape. OD127 guarantees valid UTF-8 in every `String<A>` reachable by safe code; safe constructors validate, and unchecked construction requires a trusted validity premise.
 
 
 

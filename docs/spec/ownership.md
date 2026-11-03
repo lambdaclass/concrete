@@ -1088,9 +1088,7 @@ EVALUATION2 D7): defer the function the method desugars to, or a named cleanup f
 { ... }` is a parse error. A deferred call's arguments are typed by its parameters as in an ordinary
 call (`defer f(1);` passes an `i32` to an `i32` parameter), but a string literal is not a deferred
 argument (E0279), so `defer println("x")` is refused where `println("x")` compiles: defer a cleanup
-function instead (an earlier design note blamed a missing argument coercion). What a deferred call that fails or diverges does on a return or error path
-is open (an abort runs no deferred call: OD10, decided 2026-10-29; STMT-2 is pending), and today
-a deferred call is an ordinary call with no recovery rule. There is no implicit scope-end drop to order
+function instead (an earlier design note blamed a missing argument coercion). OD68 stops cleanup if a deferred call traps or diverges; a trap runs no remaining deferred calls, and divergence never reaches them. An abort runs no deferred calls (OD10; STMT-2). There is no implicit scope-end drop to order
 against `defer` (OWN-13): `destroy(x)`, `x.drop()` or a deferred explicit call consumes a value.
 The surface is pinned by `scripts/tests/check_defer.sh` and `examples/defer/cleanup_order/`
 (ROADMAP old Phase 6 #7, 2026-06-23).
@@ -1289,7 +1287,7 @@ fn main() -> u8 {
 <a id="OWN-15"></a>
 ### OWN-15. Every surface form has one value-flow behaviour
 
-**OWN-15@4.** Every surface expression, match-arm and statement constructor creates, moves, borrows, copies, overwrites or refuses its operands as its row in this entry's value-flow tables states, and no method call borrows its receiver implicitly.
+**OWN-15@5.** Every surface expression, match-arm and statement constructor creates, moves, borrows, copies, overwrites or refuses its operands as its row in this entry's value-flow tables states, and no method call borrows its receiver implicitly.
 
 - Kind: guarantee
 - Uses: OWN-D1
@@ -1393,7 +1391,7 @@ fn main() -> u8 {
 
 | constructor | value flow | gate / errors |
 |---|---|---|
-| `letDecl` | **moves** an ident right-hand side (H9); reusing the name of any visible binding is **refused** (**E0301**, SCOPE-1); `let _` is removed (**E0289**) | conservation + discard |
+| `letDecl` | **moves** an ident right-hand side (H9); reusing the name of any visible binding is **refused** (**E0301**, SCOPE-1); `_` is an unused binding only for eligible Copy values, never linear values, `Result` or `Option` (OD62) | conservation + discard |
 | `assign` | the old value must already be consumed (otherwise **E0219**, OWN-9); an ident right-hand side **moves** (H13) | conservation (H13 rows) |
 | `return_` | an ident value **moves**; every return path must leave no unconsumed linear value (OWN-2) | conservation + scope |
 | `expr` | `e;` (not a value) **discards**: a fallible result is **refused** (**E0286**, whether or not it is Copy), a non-Copy value is **refused** (**E0287**); a trailing `e` (a value) is the block's value, never a discard; `free` is refused (OD59); eligible Copy results require explicit discard | discard |
@@ -1430,7 +1428,7 @@ The checker decides consumption by the position an expression is checked in (`Us
 | `borrow` `borrowMut` | the inner expression is checked as a place; the result `&T` is Copy and `&mut T` exclusive | same | n/a |
 | `deref` | the inner expression is checked as a place (reading through a reference or pointer never consumes the binding); `*heap_ident` explicitly consumes | same | inner as place |
 | `fnRef` | creates a Copy function pointer | same | n/a |
-| `allocCall` | the inner call or allocator is checked; an owned `Heap` result | n/a | n/a |
+| `allocCall` | allocator and input evaluated; returns `Result<Heap<T, A>, AllocFailure<T>>`, preserving input on failure (MEM-5) | n/a | n/a |
 
 <a id="OWN-16"></a>
 ### OWN-16. A borrow given to a deferred call lives until the call runs

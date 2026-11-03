@@ -41,7 +41,7 @@ Historical discovery signal for `legacy-compiler-final`; these defects are never
 | violates MEM-7@2 | 1 | 1 | 349 |
 | violates MEM-9@2 | 1 | 1 | 340 |
 | violates OWN-10@3 | 1 | 0 | 216 |
-| violates OWN-15@4 | 1 | 1 | 328 |
+| violates OWN-15@5 | 1 | 1 | 328 |
 | violates OWN-7@4 | 1 | 1 | 325 |
 | violates PASS-12@2 | 6 | 0 | 054, 077, 341, 345, 346, 347 |
 | violates PASS-13@1 | 2 | 0 | 344, 348 |

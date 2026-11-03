@@ -245,12 +245,12 @@ fn main() -> u8 {
 <a id="PASS-7"></a>
 ### PASS-7. After Mono: no type variable survives
 
-**PASS-7@1.** After monomorphization no type variable and no unresolved generic declaration remains in the Core that later stages compile, and every Copy type's fields are Copy in each specialization.
+**PASS-7@2.** After monomorphization no type variable and no unresolved generic declaration remains in the Core that later stages compile, and every Copy type's fields are Copy in each specialization, with growing polymorphic call cycles refused before Mono.
 
 - Kind: preservation
 - Uses: none
 - Codes: none
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.Pipeline.monomorphize, Concrete.verifyPostMono
 - Semantics: none
 - Obligation: specialization validated by S8a's total validator (R-0510)
@@ -455,7 +455,7 @@ The boundary is useful even while LLVM is the only emitter.
 
 **Rationale.** The front end is where a program is judged; the later stages only translate it. A
 generic function that calls itself at a growing type argument does not finish monomorphizing in the current compiler;
-whether Check refuses it, and how, is OPEN-132. A refusal,
+OD132 refuses growing call cycles before Mono. A refusal,
 a crash or invalid IR after Check means the program met no rule and still did not compile, so the
 user gets no diagnostic that names a rule. Bugs 005, 009, 014, 016, 029, 032, 035, 044, 055, 077,
 108 and 116 were such failures. A refusal that a later stage needs (such as E0809, when a generated

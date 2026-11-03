@@ -58,7 +58,7 @@ because REF-3 forbids reference fields. For a binding, the outer reference is lo
 <a id="REF-D3"></a>
 ### REF-D3. Borrow block
 
-**REF-D3@2.** A borrow block `borrow x as r { B }` binds `r` to a reference of type `&T` (with `borrow mut`, `&mut T`) to the local binding `x: T` for the block `B`, `x` is frozen (MEM-D1) while `B` runs, so that every access to `x` in `B` conflicts with `r` (REF-8), and when `B` ends, `r` and the locals of `B` go out of scope and `x` returns to the state it had before the block.
+**REF-D3@3.** A borrow block `borrow x as r { B }` freezes the local `x` for `B` and lends an ordinary `x: T` as `&T` (`borrow mut` as `&mut T`), but opens exactly one layer of `Heap<U, A>` (also through a shell reference) to its payload preserving the root and block lifetime and never upgrading shared access, while the exact heap-array view remains undecided (see [the target Core proposal](decisions.md#core-heap-array-view)), and the block ends its local loans and restores the owner state.
 
 - Kind: definition
 - Uses: MEM-D1
@@ -996,7 +996,7 @@ fn main() -> u8 {
 <a id="REF-8"></a>
 ### REF-8. A reference's root stays the same live binding
 
-**REF-8@2.** While a reference exists (a borrow-block binder for its block, an arm binder for its arm, a borrow argument for its call), its root binding is not moved, consumed, freed or shadowed and is not accessed in a mode that conflicts with the reference, and the borrows a single call makes do not conflict.
+**REF-8@3.** While a reference exists (a borrow-block binder for its block, an arm binder for its arm, a borrow argument for its call), its root binding is not moved, consumed, freed or shadowed and is not accessed in a mode that conflicts with the reference, and the borrows a single call makes do not conflict.
 
 - Kind: refusal
 - Uses: REF-D3
@@ -1149,19 +1149,19 @@ fn main() -> u8 {
 
 | fixture | expected | pair | modes |
 |---|---|---|---|
-| `tests/programs/error_borrow_frozen.con` | `reject:E0203:REF-8@2` | `ref8-block` | `-` |
-| `tests/programs/error_2i_ref8_free_in_borrow_block.con` | `reject:E0203:REF-8@2` | `ref8-block` | `-` |
+| `tests/programs/error_borrow_frozen.con` | `reject:E0203:REF-8@3` | `ref8-block` | `-` |
+| `tests/programs/error_2i_ref8_free_in_borrow_block.con` | `reject:E0203:REF-8@3` | `ref8-block` | `-` |
 | `tests/programs/regress_2i_ref8_free_after_ref_block.con` | `run:42` | `ref8-block` | `binary,interp-exempt:no-heap-allocation-in-the-interpreter` |
-| `tests/programs/error_2i_ref8_call_overlap.con` | `reject:E0293:REF-8@2` | `ref8-call` | `-` |
-| `tests/programs/error_091_norm_cast_arg_overlap.con` | `reject:E0293:REF-8@2` | `ref8-call` | `-` |
-| `tests/programs/error_od2_call_overlapping_path.con` | `reject:E0293:REF-8@2` | `ref8-call` | `-` |
+| `tests/programs/error_2i_ref8_call_overlap.con` | `reject:E0293:REF-8@3` | `ref8-call` | `-` |
+| `tests/programs/error_091_norm_cast_arg_overlap.con` | `reject:E0293:REF-8@3` | `ref8-call` | `-` |
+| `tests/programs/error_od2_call_overlapping_path.con` | `reject:E0293:REF-8@3` | `ref8-call` | `-` |
 | `tests/programs/regress_2i_ref8_call_disjoint.con` | `run:42` | `ref8-call` | `binary,interp` |
 | `tests/programs/regress_2i_ref8_match_borrow_scrutinee.con` | `run:42` | `-` | `binary,interp` |
-| `tests/programs/error_181_root_reassigned_match.con` | `reject:E0232:REF-8@2` | `ref8-arm` | `-` |
-| `tests/programs/error_181_root_reassigned_guard.con` | `reject:E0232:REF-8@2` | `ref8-arm` | `-` |
-| `tests/programs/error_181_root_reassigned_nested.con` | `reject:E0232:REF-8@2` | `ref8-arm` | `-` |
-| `tests/programs/error_181_root_reassigned_while_let.con` | `reject:E0232:REF-8@2` | `ref8-arm` | `-` |
-| `tests/programs/error_181_root_reassigned_whole_binder.con` | `reject:E0232:REF-8@2` | `ref8-arm` | `-` |
+| `tests/programs/error_181_root_reassigned_match.con` | `reject:E0232:REF-8@3` | `ref8-arm` | `-` |
+| `tests/programs/error_181_root_reassigned_guard.con` | `reject:E0232:REF-8@3` | `ref8-arm` | `-` |
+| `tests/programs/error_181_root_reassigned_nested.con` | `reject:E0232:REF-8@3` | `ref8-arm` | `-` |
+| `tests/programs/error_181_root_reassigned_while_let.con` | `reject:E0232:REF-8@3` | `ref8-arm` | `-` |
+| `tests/programs/error_181_root_reassigned_whole_binder.con` | `reject:E0232:REF-8@3` | `ref8-arm` | `-` |
 | `tests/programs/regress_181_borrowed_binders.con` | `run:42` | `ref8-arm` | `binary,interp` |
 
 <a id="REF-9"></a>

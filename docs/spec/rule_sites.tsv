@@ -33,9 +33,9 @@ MOD-2	enforced	E0323	check	Concrete.Pipeline.resolve, Concrete.importRefusal
 MOD-2	enforced	E0418	elab	Concrete.Pipeline.resolve, Concrete.importRefusal
 MOD-2	enforced	E0419	elab	Concrete.Pipeline.resolve, Concrete.importRefusal
 MOD-2	enforced	E0423	elab	Concrete.Pipeline.resolve, Concrete.importRefusal
-MOD-3	enforced	E0299	check	Concrete.checkModule
-MOD-3	enforced	E0120	resolve	Concrete.checkModule
-MOD-3	enforced	E0578	check,core-check	Concrete.checkModule
+MOD-3	pending R-0555	E0299	check	Concrete.checkModule
+MOD-3	pending R-0555	E0120	resolve	Concrete.checkModule
+MOD-3	pending R-0555	E0578	check,core-check	Concrete.checkModule
 MOD-4	pending R-0555	new	parse	Concrete.Pipeline.resolveFiles
 MOD-4	pending R-0555	E0122	resolve	Concrete.Pipeline.resolveFiles
 MOD-4	pending R-0555	E0123	resolve	Concrete.Pipeline.resolveFiles
@@ -199,10 +199,10 @@ TRAIT-5	enforced	E0594	check	Concrete.Coherence.pairwise
 TRAIT-6	pending R-0555	E0595	check	Concrete.boundMethodCandidates, Concrete.checkExprCore
 TRAIT-8	enforced	E0579	core-check	Concrete.ccCheckModuleDecls
 TRAIT-8	enforced	E0580	core-check	Concrete.ccCheckModuleDecls
-TRAIT-9	enforced	E0581	core-check	Concrete.ccCheckModuleDecls
-TRAIT-9	enforced	E0582	core-check	Concrete.ccCheckModuleDecls
-TRAIT-9	enforced	E0586	core-check	Concrete.ccCheckModuleDecls
-TRAIT-9	enforced	E0587	core-check	Concrete.ccCheckModuleDecls
+TRAIT-9	pending R-0555	E0581	core-check	Concrete.ccCheckModuleDecls
+TRAIT-9	pending R-0555	E0582	core-check	Concrete.ccCheckModuleDecls
+TRAIT-9	pending R-0555	E0586	core-check	Concrete.ccCheckModuleDecls
+TRAIT-9	pending R-0555	E0587	core-check	Concrete.ccCheckModuleDecls
 TRAIT-10	pending R-0555	E0241	check	Concrete.checkTraitBounds
 CON-3	pending R-0555	E0320	check	Concrete.checkModule
 CON-3	pending R-0555	E0321	check	Concrete.checkModule

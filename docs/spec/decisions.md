@@ -71,29 +71,29 @@ undecided dependency remains explicitly linked to the target Core proposal rathe
 
 These items are undesigned, not new answers approved by this cleanup. Where a chapter depends on
 one, it says **undecided: see the target Core proposal**. The proposal is owned by
-[ROADMAP](../../ROADMAP.md#concrete-roadmap).
+[ROADMAP: Questions for the Core session](../../ROADMAP.md#questions-for-the-core-session).
 
-- <a id="core-allocator-identities"></a>**Allocator identities and dependencies:** introduction, kind,
+- <a id="core-allocator-identities"></a>[Core-session question 1](../../ROADMAP.md#questions-for-the-core-session). **Allocator identities and dependencies:** introduction, kind,
   scope, equality, packaging and repeated reset, dependency tracking across calls, containers and
   callbacks, and lifetime-safe release metadata; the allocation decision's conservation and no-live-
   allocation requirements stand, but the discipline expressing them is undecided.
-- <a id="core-allocation-contracts"></a>**Allocation contracts:** failure payload shapes and complete
+- <a id="core-allocation-contracts"></a>[Core-session question 1–2](../../ROADMAP.md#questions-for-the-core-session). **Allocation contracts:** failure payload shapes and complete
   growth, reserve and multi-allocation transition contracts; applicability of container `Destroy`
   when payload cleanup needs effects beyond `Alloc` is undecided.
-- <a id="core-heap-array-view"></a>**Heap-array view:** exact bounded view type, operations, lifetime,
+- <a id="core-heap-array-view"></a>[Core-session question 3](../../ROADMAP.md#questions-for-the-core-session). **Heap-array view:** exact bounded view type, operations, lifetime,
   mutability and permitted positions are undecided; opening never yields an element reference.
-- <a id="core-static-text"></a>**Static text:** literal type, ownership and conversion into
+- <a id="core-static-text"></a>[Core-session question 4](../../ROADMAP.md#questions-for-the-core-session). **Static text:** literal type, ownership and conversion into
   allocator-branded strings are undecided; static text requires no allocation.
-- <a id="core-grants"></a>**Target grants:** exhaustive schemas, multiplicity, lifecycle and narrowing
+- <a id="core-grants"></a>[Core-session question 7](../../ROADMAP.md#questions-for-the-core-session). **Target grants:** exhaustive schemas, multiplicity, lifecycle and narrowing
   APIs, including the resource backing process services, are undecided.
-- <a id="core-capability-inference"></a>**Capability inference:** choosing among multiple consistent
+- <a id="core-capability-inference"></a>[Core-session question 5](../../ROADMAP.md#questions-for-the-core-session). **Capability inference:** choosing among multiple consistent
   set-variable solutions is undecided; exact sets and refusal of inconsistent bindings stand.
-- <a id="core-unsafe-premises"></a>**Unsafe contracts:** the complete validity, provenance, aliasing
+- <a id="core-unsafe-premises"></a>[Core-session question 3, 9](../../ROADMAP.md#questions-for-the-core-session). **Unsafe contracts:** the complete validity, provenance, aliasing
   and foreign-mutation taxonomy and call-only annotation syntax are undecided; OD64's confinement
   requirement stands.
-- <a id="core-static-refusal"></a>**Static refusal:** the mandatory proof criterion and its relation
+- <a id="core-static-refusal"></a>[Core-session question 6](../../ROADMAP.md#questions-for-the-core-session). **Static refusal:** the mandatory proof criterion and its relation
   to Core acceptance are undecided; recorded proven-violation refusals apply in trusted code too.
-- <a id="core-semantic-contract"></a>**Semantic objects:** exact events, admissible allocation oracles,
+- <a id="core-semantic-contract"></a>[Core-session question 8–9](../../ROADMAP.md#questions-for-the-core-session). **Semantic objects:** exact events, admissible allocation oracles,
   observations, resource relations and theorem endpoint are undecided; technical adequacy and
   refinement obligations remain binding.
 

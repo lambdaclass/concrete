@@ -459,12 +459,12 @@ fn main() -> u8 {
 <a id="TRAIT-9"></a>
 ### TRAIT-9. An impl conforms to its trait
 
-**TRAIT-9@1.** A trait impl defines every method of its trait with the trait method's receiver, parameter types and return type (reading `Self` as the impl's type), declares no type or capability parameters the trait method does not, and requires no capability the trait method does not declare.
+**TRAIT-9@2.** A trait impl defines every method of its trait with the trait method's receiver, parameter types and return type (reading `Self` as the impl's type), declares no type or capability parameters the trait method does not, and requires no capability the trait method does not declare, with `Destroy::destroy` requiring the one consuming receiver form `fn destroy(self)`.
 
 - Kind: refusal
 - Uses: TRAIT-D1
 - Codes: E0581 (core-check), E0582 (core-check), E0586 (core-check), E0587 (core-check)
-- Status: enforced
+- Status: pending R-0555
 - Enforced by: Concrete.ccCheckModuleDecls
 - Semantics: none
 - Obligation: a call through a bound is checked against the trait's signature and runs the impl's body (R-0499)
@@ -474,8 +474,7 @@ fn main() -> u8 {
 signature and then specialized to the impl's body without a second check, so any way an impl's
 signature exceeds its trait's would pass something the generic caller never agreed to (bug 091).
 Capabilities are the load-bearing case: a trait method with no `with(...)` admits only impls with
-none (TRUST-4). The builtin `Destroy::destroy` takes `&self` or `self` in the current compiler; whether one consuming receiver form only
-remains is OPEN-60. Its capability bound is OWN-13's (E0584).
+none (TRUST-4). OD60 requires the one consuming receiver form `fn destroy(self)`. Its capability bound is OWN-13's (E0584).
 
 ```con reject name=missing-method code=E0581 stage=core-check pair=conforming-impl
 trait Tr { fn m(&self) -> i64; fn n(&self) -> i64; }
@@ -633,7 +632,7 @@ drop glue, none of which has a place to put an error, so an error there would be
 (OWN-6). An impl whose `destroy` returns anything else is refused by TRAIT-9 (E0582, `expected
 return type ()`). Fallible cleanup, such as closing a file whose final flush can fail, is an
 ordinary consuming method (`close(self) -> Result<Unit, E>`) that the caller matches. The receiver
-form of `destroy` is OPEN-60, and the capabilities it may require are OWN-13's.
+form of `destroy` is the consuming `fn destroy(self)` (OD60), and the capabilities it may require are OWN-13's.
 
 ```con accept name=destroy-returns-unit-decided exit=42 pending=R-0555 now=reject:E0108:resolve
 struct R { v: i64 }

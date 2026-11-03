@@ -806,7 +806,7 @@ fn main() -> u8 {
 <a id="STMT-12"></a>
 ### STMT-12. A counted loop carries its own measure
 
-**STMT-12@1.** In Core a counted loop is the one `while` form, carrying the termination measure `b - i` that the loop gives itself.
+**STMT-12@2.** In Core a counted loop is the one `while` form, carrying the proof-only mathematical-integer termination measure `b - i` that the loop gives itself, refusing an explicit `#[variant]` and checking its invariant before the loop and after each iteration.
 
 - Kind: guarantee
 - Uses: none
@@ -819,12 +819,7 @@ fn main() -> u8 {
 **Rationale.** Decided with OD47 on 2026-10-29: proofs keep a single loop construct. The measure
 proves only that the number of iterations is finite; the loop terminates when its bounds, its body
 and its cleanup do, and the counted loop's proof rule (zero iterations, `break`, a labelled
-`continue`) is stated over this desugared loop. Whether a `#[variant]` written on a counted loop is
-refused, checked or ignored is OPEN-104, and where its `#[invariant]` is checked is OPEN-105 (CON-2
-checks a loop invariant before the loop and after every iteration). Removing a bounds check over
-the index is an optimization, not a rule of the language: it needs an in-range certificate at the
-access (the bounds against the array's length), not only a length that cannot change. How the
-measure is represented when `b - a` does not fit the bounds' type is OPEN-49.
+`continue`) is stated over this desugared loop. OD104 refuses an explicit variant; OD105 checks invariants before the loop and after every iteration. Removing a bounds check needs an in-range certificate at the access (the bounds against the array's length), not only a length that cannot change. OD49 makes the measure a mathematical integer in the proof only, never computed at runtime.
 
 ```con accept name=counted-loop-own-measure exit=42 pending=bug-331 now=reject:E0001:parse
 fn example_value() -> i64 {

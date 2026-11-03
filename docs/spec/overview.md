@@ -118,8 +118,8 @@ it; where an entry defines the term, that entry is the definition and this table
 | Mono | monomorphization: the stage that specializes every generic at its type arguments | PASS-1, PASS-2, PASS-7 |
 | Lower, Emit | the stages that turn Core into verified SSA and SSA into LLVM IR | PASS-9, PASS-10, PASS-11 |
 | builtin | a function, type or enum the compiler provides with no declaration in the program | functions: the [builtin catalog](types.md#builtin-functions), TYPE-10; primitive types: TYPE-19, TYPE-20; `Option` and `Result`: TYPE-23; names: MOD-1 |
-| intrinsic | an operation the compiler implements, named by a builtin or by `#[intrinsic = "n"]` | FFI-6, the builtin catalog |
-| place | a root binding followed by field, index or newtype projections | REF-5 |
+| intrinsic | an operation the compiler implements, identified by compiler identity with fixed effects; source annotations do not grant intrinsic identity | FFI-6, the builtin catalog |
+| place | a root binding followed by field or index projections | REF-5 |
 | owned value | a value a local binding holds by value rather than through a reference; MEM-D1 names its states | MEM-D1 |
 | Copy | a type whose values may be duplicated | OWN-D1, TYPE-14, OWN-14 |
 | linear | a type that is not Copy (OWN-D1); OWN-1 and OWN-2 govern how its values are used | OWN-D1, OWN-1, OWN-2 |
@@ -201,7 +201,7 @@ chapters; an entry not listed here can still bear on a construct.
 | float literal | ARITH-7, OPEN-63 |
 | string and char literals | SYN-5, SYN-6, TYPE-20, OPEN-137 |
 | `wrapping_*`, `saturating_*` | ARITH-4 |
-| `alloc`, `free`, `Heap<T>` | MEM-5, MEM-7 |
+| `alloc`, consuming `*h`, `Heap<T, A>` | MEM-5, MEM-7 |
 | `destroy`, `Destroy` | OWN-13, TRAIT-8, TRAIT-11 |
 | `discard(e)` | OWN-5, OWN-7 |
 | `abort()` | STMT-13, STMT-2 |
