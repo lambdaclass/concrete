@@ -29,11 +29,10 @@ reports and the Lean theorems, without trusting anything that is not named. Lean
 the semantics and proofs are written in and the language the compiler is built in; Concrete itself
 stays a systems language, not a proof assistant.
 
-Most Concrete code is expected to be written by language models, not typed by hand. The language
-is therefore optimized for checking and reading, never for writing: the cost that counts is the
-cost of a reviewer, an auditor or a checker understanding what code does and what it may touch,
-not the effort of producing it. Writing effort, annotation burden and learning curve are never
-arguments against a design; reading noise and ambiguity are.
+Most Concrete code is expected to be written by language models, not typed by hand. What matters
+is that everything is checkable and easy to understand: the cost that counts is the cost for a
+reviewer, an auditor or a checker to understand what code does and what it may touch. Rule 4
+draws the consequence for verbosity.
 
 ## The rules
 
