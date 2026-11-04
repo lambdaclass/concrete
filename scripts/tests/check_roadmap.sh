@@ -16,7 +16,7 @@
 #   5. every row has a known disposition and the columns that disposition requires: a transfer names
 #      a destination that is a task in ROADMAP.md (in that task's phase) or a completed task, and the
 #      obligations it carries; a deferral names its trigger; a retirement or a done row its reason;
-#   6. every queue row has a unique ID and names at least one task, each a task in ROADMAP.md of the
+#   6. every queue row has a unique ID (a phase letter, a number, an optional stage letter: T0, A2b) and names at least one task, each a task in ROADMAP.md of the
 #      row's phase; every "depends on" item is a task, a queue row, a phase, `owner: <decision>` or
 #      `—`;
 #   7. every structural owner named in docs/bugs/STRUCTURAL_CLASSES.md is still owned: a task in
@@ -101,7 +101,7 @@ if not m:
 else:
     for line in m.group(1).split("\n"):
         c = cells(line)
-        if len(c) == 4 and re.fullmatch(r"[A-GT][1-9][0-9]*", c[0]):
+        if len(c) == 4 and re.fullmatch(r"[A-GT](?:0|[1-9][0-9]*)[a-z]?", c[0]):
             if c[0] in qrows: bad.append(f"queue row {c[0]} appears twice")
             ids = re.findall(r"R-\d{4}", c[2])
             qrows[c[0]] = ids
@@ -119,7 +119,7 @@ for k, (n, cell) in deps.items():
         if re.fullmatch(r"R-\d{4}", item):
             if item not in tasks and item not in completed:
                 bad.append(f"{roadmap}:{n}: {k} depends on {item}, which is neither a task nor completed")
-        elif re.fullmatch(r"[A-GT][1-9][0-9]*", item):
+        elif re.fullmatch(r"[A-GT](?:0|[1-9][0-9]*)[a-z]?", item):
             if item not in qrows: bad.append(f"{roadmap}:{n}: {k} depends on queue row {item}, which does not exist")
         elif re.fullmatch(r"[A-GT]", item):
             if item not in tasks.values(): bad.append(f"{roadmap}:{n}: {k} depends on phase {item}, which has no task")
@@ -301,9 +301,9 @@ control row_deleted "import re; t=re.sub(r'^R-0012\t.*\n', '', t, count=1, flags
 control row_unexpected "t=t+'R-0457\tghost\tdeferred-with-trigger\t\t\tx\tsome trigger\tx\t\n'" "R-0457: a row in .* never declared"
 control queue_unknown "r=r.replace('| R-0553, R-0562,', '| R-0553, R-0999, R-0562,', 1)" "names R-0999"
 control queue_wrong_phase "r=r.replace('| A3 | State the contract', '| G3 | State the contract', 1)" "queue row G3 names R-0560, a phase A task"
-control queue_duplicate_row "r=r.replace('| A3 | State the contract', '| A2 | State the contract', 1)" "queue row A2 appears twice"
-control depends_unknown_syntax "r=r.replace('| owner: approval of the move inventory |', '| approval of the move inventory |', 1)" "not a task, queue row, phase"
-control depends_missing_row "import re; r=re.sub(r'(^\| R-0560 \|.*\| )A2( \|)$', r'\g<1>A9\2', r, count=1, flags=re.M)" "queue row A9, which does not exist"
+control queue_duplicate_row "r=r.replace('| A3 | State the contract', '| A2c | State the contract', 1)" "queue row A2c appears twice"
+control depends_unknown_syntax "r=r.replace(', owner: approval of the move inventory |', ', approval of the move inventory |', 1)" "not a task, queue row, phase"
+control depends_missing_row "import re; r=re.sub(r'(^\| R-0560 \|.*\| )A2c( \|)$', r'\g<1>A9\2', r, count=1, flags=re.M)" "queue row A9, which does not exist"
 control dangling_transfer "import re; t=re.sub(r'^(R-0010\t[^\t]*\ttransferred-with-obligations\t[^\t]*\t)R-0561', r'\g<1>R-0010', t, count=1, flags=re.M)" "R-0010: transferred to R-0010"
 control transfer_wrong_phase "import re; t=re.sub(r'^(R-0010\t[^\t]*\ttransferred-with-obligations\t)B', r'\g<1>C', t, count=1, flags=re.M)" "R-0010: transferred to R-0561 .phase B. but records phase C"
 control deferral_without_trigger "import re; t=re.sub(r'^(R-0012\t[^\t]*\tdeferred-with-trigger\t[^\t]*\t[^\t]*\t[^\t]*\t)[^\t]+', r'\1', t, count=1, flags=re.M)" "R-0012: deferred without a trigger"

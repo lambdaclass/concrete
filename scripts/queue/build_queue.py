@@ -214,7 +214,7 @@ def roadmap_tasks(root, mods):
     if sec:
         for line in sec.group(1).split("\n"):
             cells = [c.strip() for c in line.strip().strip("|").split("|")]
-            if len(cells) == 4 and re.fullmatch(r"[A-GT][1-9][0-9]*", cells[0]):
+            if len(cells) == 4 and re.fullmatch(r"[A-GT](?:0|[1-9][0-9]*)[a-z]?", cells[0]):
                 qrows[cells[0]] = RID.findall(cells[2])
     completed = completed_tasks(root)
     tasks, seen = [], set()

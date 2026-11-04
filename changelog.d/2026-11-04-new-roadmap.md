@@ -58,3 +58,20 @@ Gates:
   owner decision or on a live task that is not queued.
 - The spec's tracking-ID check (S8), the convergence inventory, the V2-freeze marker checks and the
   absorption inventory point at the new files.
+
+Integrated review (Codex, 2026-11-04):
+- The restart runs in three queue rows: T0 prepares the root infrastructure beside the old tree
+  (new task R-0568: new-root CI, `required-checks.txt` and an explicit old-to-new job mapping,
+  `ISSUES.tsv` and its validator, archive records), T1 rehearses the move on the exact candidate
+  root (R-0563) and T2 moves (R-0558). The oracle lock carries a release artifact and its digest,
+  and a missing artifact leaves the check incomplete.
+- Phase A follows decision row Q9.19 (pending): A2a provisional approval, A2b a proposed `Spec.lean`
+  with the four named design theorems, A2c the owner's freeze (new task R-0567). R-0560 depends on
+  the freeze.
+- New task R-0566 consolidates the still-binding decisions in one live home (decision row P20,
+  pending). Prose chapters retire only after a browsable rendering of the Lean rules and a
+  rule-by-rule coverage report.
+- Fuzzing restarts from the repository's surviving regressions and new programs: the ci-3 corpus,
+  findings and perf history were not copied (decision row P14).
+- Queue row IDs may carry `0` and a stage letter (T0, A2b); `check_roadmap.sh` and the work-queue
+  builder accept them.
