@@ -589,8 +589,8 @@ regression cases and controls of these tasks transfer here unless the reason ret
 For block scope/shadowing, match-binder positions/names, statement versus value position,
 sequential assignment in loop iterations, contextual literal types/ranges including signed minima,
 every cast-width pair, evaluation order, short-circuiting and second-class references, provide the
-Lean judgment/semantic clause, generated normative paragraph, accept/reject/trap examples and cited
-fixtures. Generator coverage meets pinned minima before dependent implementation advances; language
+Lean judgment/semantic clause with its plain-words doc comment, accept/reject/trap examples and cited
+fixtures. Example coverage meets pinned minima before dependent implementation advances; language
 rules link bidirectionally to semantic clauses as those clauses land.
 
 Use the recorded reference/scoping, evaluation/assignment and arithmetic policy decisions, including
@@ -1283,7 +1283,7 @@ weaken the complete task exit.
 
 **Phase:** A
 
-**Objective:** Complete audit disposition and maintain one Lean-generated normative specification with independent judgments, rule-indexed conformance, validated bug-rule references and chapter acceptance artifacts through the language slices.
+**Objective:** Complete audit disposition and maintain one normative specification in Lean with independent judgments, rule-indexed conformance, validated bug-rule references and chapter acceptance artifacts through the language slices.
 
 **Work:** Dispose of the audit and draft the whole Core interface for owner approval before implementation. State the approved semantic contract, theorem holes and trusted base in Lean; implementation and proofs grow with the supported slices.
 
@@ -1295,9 +1295,10 @@ integration and backfill. It is scheduled by its queue row under the
 becomes a predecessor for unrelated work.
 No workstream answers an owner question: unresolved behaviour becomes an `open` decision entry.
 
-Each chapter closes independently with absorbed prose/rationale, rule-ID accept/reject fixtures,
-its Lean definition and generated `Semantics:` link. Every chapter must have a required mechanized
-link to an independent formal definition; linked chapters cannot regress. Preserve arithmetic,
+Each chapter closes independently when its rules are Lean definitions with plain-words doc
+comments, absorbed rationale and rule-ID accept/reject examples; the prose chapter is then retired,
+not regenerated ([2026-11-04 decision](ROADMAP_DECISIONS.md#2026-11-04--lean-is-the-specification)).
+Closed chapters cannot regress. Preserve arithmetic,
 typing, reference well-formedness, pattern binding, capabilities and trust rule coverage in
 `ConcreteSpec`, rather than copying legacy implementation as semantics. Absorb all remaining
 `docs/language/*.md` and archived language-scope text before dependent migration; tracking moves to
