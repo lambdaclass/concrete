@@ -72,7 +72,7 @@ audit_log="$(mktemp)"
 bash scripts/tests/audit_bug_corpus.sh > "$audit_log" 2>&1 || { rc=1; tail -20 "$audit_log"; }
 rm -f "$audit_log"
 bash scripts/tests/check_bug_filing_complete.sh || rc=1
-bash scripts/tests/check_roadmap_linear.sh || rc=1
+bash scripts/tests/check_roadmap.sh || rc=1
 echo
 git status --short
 if [ "$rc" -eq 0 ]; then

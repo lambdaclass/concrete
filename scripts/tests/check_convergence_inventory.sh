@@ -275,13 +275,16 @@ else
 fi
 
 # 9. The post-R-0004 multi-prover list must stay recorded. Since 2026-10-19 it lives in the roadmap
-#    history archive, and its open items are owned by roadmap tasks (`solver_error` is R-0520).
+#    history archive, and its open items are owned by roadmap tasks (`solver_error` is R-0520, which
+#    the 2026-11 roadmap transferred, with its obligations, to a live task: its row in the archive's
+#    disposition table names it).
 HIST=docs/archive/ROADMAP_HISTORY.md
+DISP=docs/archive/roadmap-2026-11/task_disposition.tsv
 if grep -q "Multi-prover work that remains AFTER R-0004" ROADMAP.md "$HIST" 2>/dev/null \
-   && grep -q '^### Task R-0520$' docs/project/ROADMAP_TASKS.md docs/project/ROADMAP_BACKLOG.md; then
-  ok "GAP OPEN: the post-R-0004 multi-prover work is recorded (roadmap history) and owned (R-0520)"
+   && grep -qE $'^R-0520\t[^\t]*\t(retained|transferred-with-obligations)\t' "$DISP"; then
+  ok "GAP OPEN: the post-R-0004 multi-prover work is recorded (roadmap history) and owned (R-0520 or its destination)"
 else
-  no "the post-R-0004 multi-prover section is missing from ROADMAP.md and $HIST, or its owner R-0520 is gone"
+  no "the post-R-0004 multi-prover section is missing from ROADMAP.md and $HIST, or R-0520 is neither retained nor transferred in $DISP"
 fi
 
 # 10. The spike pin must be a fixed SHA, never a branch name.

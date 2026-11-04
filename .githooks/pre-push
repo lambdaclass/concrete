@@ -199,7 +199,7 @@ fi
 if [ "$docs_only" = "1" ]; then
   echo "pre-push: docs-only change — docs gates"
   SEL+=(--first "bash scripts/tests/check_docs_drift.sh"
-        --first "bash scripts/tests/check_roadmap_linear.sh")
+        --first "bash scripts/tests/check_roadmap.sh")
 else
   # The R-0022 fast surface checklist, first.
   SEL+=(--first "bash scripts/tests/run_fast_surface_gates.sh")

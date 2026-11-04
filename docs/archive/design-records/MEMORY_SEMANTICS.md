@@ -150,7 +150,7 @@ decisions of 2026-10-21 (below) states its status on main at `5b63cd87`; it was 
 `b9b3cca9`, and no checker, elaboration or lowering source those rules touch changed between the
 two (only `Concrete/Check/Layout.lean`, for bug 121).
 
-**Semantics decision of 2026-10-21 (adopted; ROADMAP [Decisions](../../../ROADMAP.md#decisions)).**
+**Semantics decision of 2026-10-21 (adopted; ROADMAP [Decisions](../roadmap-2026-11/ROADMAP.md#decisions)).**
 References exist only as **parameters**, as **call arguments** (`f(&w.p)`, scoped to the call), as
 **borrow-block binders** and as **arm-scoped pattern binders through a borrowed scrutinee**. No
 reference binding is introduced by `let`, and **no reference binding of any kind is ever the target

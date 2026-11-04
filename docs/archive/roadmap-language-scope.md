@@ -238,7 +238,7 @@ create ordering or an alternate queue.
 ## From the Architecture Decision Index (continued)
 
 The index's backend-separation and compiler-architecture decisions are in
-[ROADMAP_DIRECTION.md](../project/ROADMAP_DIRECTION.md#architecture-decision-index-backend-and-compiler-architecture).
+[ROADMAP_DIRECTION.md](roadmap-2026-11/ROADMAP_DIRECTION.md#architecture-decision-index-backend-and-compiler-architecture).
 
 ### Slice Decision
 - **Slices as the safe buffer interface:** `&Slice<u8>`/`&mut MutSlice<u8>` on

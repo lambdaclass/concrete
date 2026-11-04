@@ -3,7 +3,7 @@ research record, from archived branch wip/cleanup-docs-verification-plan; schedu
 # Consolidating docs/verification Into One Verification Specification
 
 Status: Research (proposal, 2026-10-29). Measured on `origin/main` at `71df9c25`. Normative owner
-once adopted: [R-0554](../../docs/project/ROADMAP_TASKS.md#task-r-0554) item 5. This note moves,
+once adopted: [R-0554](../../docs/archive/roadmap-2026-11/ROADMAP_TASKS.md#task-r-0554) item 5. This note moves,
 deletes and edits no document; every policy choice it needs is listed under "Decisions for the
 owner" and none is made here.
 
@@ -239,7 +239,7 @@ contract, and two of them claim to be the one public statement of current guaran
 - **C10. KNOWN_HOLES keeps a stale decision list.** KNOWN_HOLES.md:1186-1223, "Open design
   decisions that gate the old Phase 5/6/7 freeze", lists items it also marks DONE (callable
   values, ByteView) or deferred, with old phase numbers. Open decisions are now owned by the owner
-  decisions table of [ROADMAP.md](../../ROADMAP.md#owner-decisions) and by the OPEN entries of
+  decisions table of [ROADMAP.md](../../docs/archive/roadmap-2026-11/ROADMAP.md#owner-decisions) and by the OPEN entries of
   [docs/spec/decisions.md](../../docs/spec/decisions.md).
 - **C11. The proof status set.** This is the largest current-state conflict.
   CLAIM_TAXONOMY.md:270-285 declares "the seven canonical proof/obligation status terms" (proved,

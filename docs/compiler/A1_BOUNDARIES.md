@@ -26,7 +26,7 @@ are completeness of this classification, progress for checked safe states under
 contracts, preservation, and ownership conservation at normal/structured exits.
 Fatal aborts promise no reclamation; divergence promises no eventual release.
 Sources: `docs/compiler/VERIFIED_PIPELINE.md:94–123`;
-`docs/project/ROADMAP_TASKS.md:469–481`.
+`docs/archive/roadmap-2026-11/ROADMAP_TASKS.md:469–481`.
 
 **Events and payloads.** As provisional representations under Q7/Q9, propose `Event := request CallId OpId GrantId ResourceId
 Args | response CallId Result ExternalDelta | terminal TerminalPayload`.
@@ -38,7 +38,7 @@ grant provenance. Contracts relate prestate, arguments, response, poststate and
 transferred obligations; event well-formedness forbids invented grants and unmatched
 responses. Effect containment and confinement are separate obligations: an `Fs`
 label alone cannot justify a path outside the supplied directory.
-Sources: `docs/project/ROADMAP_TASKS.md:469–472`;
+Sources: `docs/archive/roadmap-2026-11/ROADMAP_TASKS.md:469–472`;
 `research/process/design-review-2026-11-03.md:18–20`.
 
 Event granularity is open under Q7/Q9: atomic completed calls versus split requests
@@ -115,7 +115,7 @@ resources. Q1 options are explicit capacity accounts or an abstract availability
 predicate with realization/progress laws; recommend the latter interface with a
 concrete witness. These are proposed adequacy premises, not a new infallible
 allocation rule. Sources: `docs/compiler/VERIFIED_PIPELINE.md:117–123`;
-`docs/project/ROADMAP_TASKS.md:866–871`;
+`docs/archive/roadmap-2026-11/ROADMAP_TASKS.md:866–871`;
 `research/process/design-review-2026-11-03.md:26`.
 
 **Observation equivalence and trap erasure.** For the observation profile approved
@@ -169,13 +169,13 @@ settling provenance policy. Q9 options are structured values plus a raw-memory
 component, or uniform byte memory; recommend the former with `Rep` as the named
 boundary. Before Core freezes, check one representative representation lemma, not
 just this signature. Sources: `docs/compiler/VERIFIED_PIPELINE.md:138–153`;
-`docs/project/ROADMAP_TASKS.md:473–478`; `ROADMAP.md:231`.
+`docs/archive/roadmap-2026-11/ROADMAP_TASKS.md:473–478`; `ROADMAP.md:231`.
 
 ## 2. End-to-end theorem signature
 
 These are separate obligations, not premises to hide behind a single “correct” flag.
 The intended theorem is conditional until every edge in its selected scope is
-proved. Sources: `docs/project/ROADMAP_TASKS.md:856–883,948–978`.
+proved. Sources: `docs/archive/roadmap-2026-11/ROADMAP_TASKS.md:856–883,948–978`.
 
 1. **Acceptance.** `compile profile bytes imports = ok artifact` yields a retained
    checked Core `c`, an independently derivable well-formedness judgment and the
@@ -190,7 +190,7 @@ proved. Sources: `docs/project/ROADMAP_TASKS.md:856–883,948–978`.
    implement independent judgments on the exact source bytes and import roots:
    `SourceJudgment bytes roots c`. Defining this as “the elaborator returned c” is
    disallowed. Parser execution remains a separate assurance edge.
-   Source: `docs/project/ROADMAP_TASKS.md:872–875`.
+   Source: `docs/archive/roadmap-2026-11/ROADMAP_TASKS.md:872–875`.
 4. **Initial relation.** `InitRel P c image envC envT sC sT` includes entry ABI,
    related arguments/grants, startup, imports, memory representation and resource
    relation. Define supported configurations/inputs independently of `InitRel` and
@@ -228,7 +228,7 @@ proved. Sources: `docs/project/ROADMAP_TASKS.md:856–883,948–978`.
    `(∀ bc ∈ MaxCore c sC, QC bc)` to conclude the target claim. Exact functional
    models require their own correspondence proof, with effects, failure and
    divergence represented. Sources: `ROADMAP.md:154–163`;
-   `docs/project/ROADMAP_TASKS.md:875–883`.
+   `docs/archive/roadmap-2026-11/ROADMAP_TASKS.md:875–883`.
 8. **Artifact binding.** The theorem/receipt identifies exact source and imports,
    subset and semantics versions, checked Core and each used IR, profile, compiler
    build, dependency/proof closure, runtime/startup, adapter and backend versions,
@@ -237,7 +237,7 @@ proved. Sources: `docs/project/ROADMAP_TASKS.md:856–883,948–978`.
    correspondence. Recheck proofs and assumptions independently; substitution of
    source, IR, runtime or image must invalidate the binding. Sources:
    `docs/compiler/VERIFIED_PIPELINE.md:825–842,870–886,962–968`;
-   `docs/project/ROADMAP_TASKS.md:970–978`.
+   `docs/archive/roadmap-2026-11/ROADMAP_TASKS.md:970–978`.
 
 Q8 offers source → BIR with native differential qualification, or a conditional
 source → linked-image theorem assuming every remaining LLVM/native edge. Recommend
@@ -253,7 +253,7 @@ removal evidence. Ordinary proved dependencies are not assumptions. Preserve a
 machine-readable audit-command view and distinguish proof scope, backend scope,
 dependencies and excluded side channels. Treat malformed inputs and artifact
 substitutions as adversarial; do not claim constant-time or arbitrary security
-hyperproperties. Sources: `docs/project/ROADMAP_TASKS.md:3365–3373,3457–3463,3593–3601`;
+hyperproperties. Sources: `docs/archive/roadmap-2026-11/ROADMAP_TASKS.md:3365–3373,3457–3463,3593–3601`;
 `docs/compiler/VERIFIED_PIPELINE.md:63–65,870–886`.
 
 | Item | Trusted for, where applicable | Later work that can remove or reduce it |
@@ -270,7 +270,7 @@ hyperproperties. Sources: `docs/project/ROADMAP_TASKS.md:3365–3373,3457–3463
 | Target | ISA/ABI model corresponds to hardware, memory/address bounds and target profile. | LCB domain proofs reduce code-generation trust; hardware differential tests test model fidelity but do not prove hardware. |
 
 Inventory sources: `docs/compiler/VERIFIED_PIPELINE.md:175–185,230–254,795–818,820–842,947–952`;
-`docs/project/ROADMAP_TASKS.md:889–942`. Research rationale: parser execution is
+`docs/archive/roadmap-2026-11/ROADMAP_TASKS.md:889–942`. Research rationale: parser execution is
 separate in `docs/project/INFLUENCES.md:628–635`; compiler execution and certificates
 in `docs/compiler/VERIFIED_PIPELINE.md:947–952`; compositional foreign contracts in
 `docs/project/INFLUENCES.md:582–589`. The current planned native profile is AArch64,
@@ -283,7 +283,7 @@ Phase B requires scalars, `let`, construction/move/destructuring of an empty non
 struct, one checked operation and return/trap, through native execution. Old V1a's
 loops, printing and larger scalar set are not silently imported into this smaller
 slice. Sources: `ROADMAP.md:218,110–120`;
-`docs/project/ROADMAP_TASKS.md:948–962`.
+`docs/archive/roadmap-2026-11/ROADMAP_TASKS.md:948–962`.
 
 **Exact proposed surface component subset (Q9, unapproved).** One source unit, no imports;
 one empty declaration `struct S {}` without Copy; one function

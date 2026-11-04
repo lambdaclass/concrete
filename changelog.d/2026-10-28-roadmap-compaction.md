@@ -3,9 +3,9 @@
 [ROADMAP.md](ROADMAP.md) now holds only the control plane: the active and next phases, the execution
 queue with its Phase 1 exits, the owner decisions OD1 – OD22 (unchanged, all unanswered), the feature
 prerequisites, the capacity allocation and the release map. Everything else moved verbatim: the task
-bodies to the [task register](docs/project/ROADMAP_TASKS.md), the dated decisions to the
-[decision log](docs/project/ROADMAP_DECISIONS.md), direction and standing rules to
-[ROADMAP_DIRECTION.md](docs/project/ROADMAP_DIRECTION.md), the promotion pipeline to
+bodies to the [task register](docs/archive/roadmap-2026-11/ROADMAP_TASKS.md), the dated decisions to the
+[decision log](docs/archive/roadmap-2026-11/ROADMAP_DECISIONS.md), direction and standing rules to
+[ROADMAP_DIRECTION.md](docs/archive/roadmap-2026-11/ROADMAP_DIRECTION.md), the promotion pipeline to
 [PROMOTION_PIPELINE.md](docs/project/PROMOTION_PIPELINE.md), the language rules to the
 [archived language scope](docs/archive/roadmap-language-scope.md) (pending absorption into the
 language specification) and completed records to the

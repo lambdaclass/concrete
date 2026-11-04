@@ -2,7 +2,7 @@
 # THE WORK QUEUE SCHEDULES BY PRIORITY, NEVER OVERLAPS AREAS, HONOURS ITS CAPS AND RELEASES WHAT STALLS.
 #
 # scripts/queue/ turns the open bugs, the ROADMAP (throughput track first), fuzz-farm findings and
-# tasks/*.md into queue.json and starts headless Claude agents on it (docs/project/WORK_QUEUE.md).
+# tasks/*.md into queue.json and starts headless Claude agents on it (docs/archive/roadmap-2026-11/WORK_QUEUE.md).
 # Every leg below drives the real scripts against a THROWAWAY repository (a bare remote, the queue's
 # own clone with its push guard) and stub `claude` and `cswap` binaries, so nothing here can reach
 # this repository, its remotes, a Claude account or CI.
@@ -99,51 +99,43 @@ EOF
 cat > "$SRC/ROADMAP.md" <<'EOF'
 # Roadmap
 
-## Development throughput
-
-| order | item | owner | exit criterion | depends on |
-|---|---|---|---|---|
-| 1 | Measurement: stage timestamps | R-0547 | recorded | — |
-| 2 | Landing trains: one CI per train | R-0539 | three trains | 1 |
-
 ## The queue
 
-| row | goal | owning tasks | done when |
-|---|---|---|
-| A1 | Soundness rules | R-0500 | close it with its acceptance controls |
+| row | goal | tasks | done when |
+|---|---|---|---|
+| A1 | Soundness rules | R-0500, R-0602 | close it with its acceptance controls |
 | B1 | Place MIR | R-0501, R-0600, R-0601 | shadow paths have acceptance controls |
+
+## Tasks
+
+Task rows (2026-11-04): R-0500's areas and R-0501's dependencies below are read from them.
+
+### A. Core
+
+| task | objective | done when | depends on |
+|---|---|---|---|
+| R-0500 | written rules in `Mono` | each rule lands | — |
+| R-0602 | the owner's call | recorded | owner: the name, R-0604 |
+| R-0604 | not in the queue | done | — |
+
+### B. Slice
+
+| task | objective | done when | depends on |
+|---|---|---|---|
+| R-0600 | the first half | done | R-0601 |
+| R-0601 | the second half | done | R-0600 |
+| R-0501 | place MIR | done | B |
+
+### T. Throughput
+
+| task | objective | done when | depends on |
+|---|---|---|---|
+| R-0547 | Measurement: stage timestamps | recorded | — |
+| R-0539 | Landing trains: one CI per train | three trains | R-0547 |
 
 ## Later phases
 
 Not a row: R-0999.
-EOF
-# Task bodies live in the task register, not in ROADMAP.md (2026-10-28): R-0500's areas and R-0501's
-# dependencies below are read from it.
-mkdir -p "$SRC/docs/project"
-cat > "$SRC/docs/project/ROADMAP_TASKS.md" <<'EOF'
-# Roadmap tasks
-
-## Area
-
-### Task R-0539
-
-**Objective:** trains.
-
-### Task R-0500
-
-**Objective:** written rules in `Mono`.
-
-### Task R-0600
-
-**Depends on:** R-0601 (the other half).
-
-### Task R-0601
-
-**Depends on:** R-0600. **Blocks:** nothing.
-
-### Task R-0501
-
-**Depends on:** nothing. **Blocks:** R-0600.
 EOF
 cat > "$SRC/tasks/R-0501.md" <<'EOF'
 ---
@@ -174,7 +166,7 @@ else
   no "build_queue.py failed: $(cat "$TMP/q.err")"
 fi
 order="$(python3 -c 'import json,sys; print(" ".join(t["id"] for t in json.load(open(sys.argv[1]))["tasks"]))' "$TMP/q.json" 2>/dev/null)"
-want="R-0547 R-0539 bug-201 bug-202 bug-206 fuzz-f1 bug-203 fuzz-f4 task-docs-sweep R-0500 R-0501 R-0600 R-0601 bug-204"
+want="R-0547 R-0539 bug-201 bug-202 bug-206 fuzz-f1 bug-203 fuzz-f4 task-docs-sweep R-0500 R-0602 R-0501 R-0600 R-0601 bug-204"
 [ "$order" = "$want" ] && ok "priority: throughput, silent (bugs then fuzz), crash, explicit, roadmap, loud" \
   || no "priority order: got '$order', want '$want'"
 qget() { python3 - "$TMP/q.json" "$@" <<'EOF'
@@ -191,8 +183,54 @@ case " $order " in *" bug-207 "*) no "frozen legacy bug was dispatched" ;;
   *) ok "a silent legacy defect is never dispatched" ;; esac
 case " $order " in *" bug-207 "*|*" bug-205 "*|*" fuzz-f2 "*|*" fuzz-f3 "*|*" R-0999 "*) no "a legacy/fixed bug, a refusal, a promoted finding or a non-row R-id was queued" ;;
   *) ok "fixed bugs, refusals, promoted findings and R-ids outside the rows are not tasks" ;; esac
-[ "$(qget R-0539 depends)" = R-0547 ] && ok "the throughput table's 'depends on' column" || no "R-0539 depends: $(qget R-0539 depends)"
-[ "$(qget R-0501 depends)" = "" ] && ok "'Depends on: nothing. **Blocks:** R-0600' adds no dependency" || no "R-0501 depends: $(qget R-0501 depends)"
+[ "$(qget R-0539 depends)" = R-0547 ] && ok "a throughput row's 'depends on' column" || no "R-0539 depends: $(qget R-0539 depends)"
+[ "$(qget R-0501 depends)" = "R-0600 R-0601" ] && ok "a 'depends on' cell naming a phase depends on that phase's other tasks" || no "R-0501 depends: $(qget R-0501 depends)"
+[ "$(qget R-0602 disposition)" = skip ] && [ "$(qget R-0602 blocked_on)" = "owner: the name unqueued R-0604" ] \
+  && ok "an owner decision or an unqueued live task blocks dispatch" || no "R-0602: $(qget R-0602 disposition) / $(qget R-0602 blocked_on)"
+mkdir -p "$TMP/owner-amend"; cp -R "$SRC/." "$TMP/owner-amend/"
+printf -- '---\nid: R-0602\ndisposition: in-flight\n---\n' > "$TMP/owner-amend/tasks/R-0602.md"
+if python3 "$QD/build_queue.py" --root "$TMP/owner-amend" > "$TMP/owner-amend.json" 2>&1 \
+   && [ "$(python3 -c 'import json,sys; print({t["id"]: t for t in json.load(open(sys.argv[1]))["tasks"]}["R-0602"]["disposition"])' "$TMP/owner-amend.json")" = skip ]; then
+  ok "a task file cannot lift an owner block (only done can)"
+else no "a task file lifted an owner block"; fi
+mkdir -p "$TMP/badsyntax"; cp -R "$SRC/." "$TMP/badsyntax/"
+# R-0604 is not queued: every row's cell is read, not only the queued ones.
+sed -i 's/| R-0604 | not in the queue | done | — |/| R-0604 | not in the queue | done | after the other half |/' "$TMP/badsyntax/ROADMAP.md"
+rc=0; python3 "$QD/build_queue.py" --root "$TMP/badsyntax" > /dev/null 2> "$TMP/badsyntax.err" || rc=$?
+[ "$rc" = 2 ] && grep -q "R-0604 depends on 'after the other half'" "$TMP/badsyntax.err" \
+  && ok "an unreadable 'depends on' item, even on an unqueued row, exits 2 instead of reading as no prerequisite" \
+  || no "unreadable depends item: exit $rc, $(cat "$TMP/badsyntax.err")"
+mkdir -p "$TMP/unknownid"; cp -R "$SRC/." "$TMP/unknownid/"
+sed -i 's/| R-0600 | the first half | done | R-0601 |/| R-0600 | the first half | done | R-0601, R-0999 |/' "$TMP/unknownid/ROADMAP.md"
+rc=0; python3 "$QD/build_queue.py" --root "$TMP/unknownid" > /dev/null 2> "$TMP/unknownid.err" || rc=$?
+[ "$rc" = 2 ] && grep -q "R-0600 depends on R-0999, which is neither a task" "$TMP/unknownid.err" \
+  && ok "a dependency on a task that is neither live nor completed exits 2 (the dispatcher would count it met)" \
+  || no "unknown dependency id: exit $rc, $(cat "$TMP/unknownid.err")"
+mkdir -p "$TMP/unknownrow"; cp -R "$SRC/." "$TMP/unknownrow/"
+sed -i 's/| A1 | Soundness rules | R-0500, R-0602 |/| A1 | Soundness rules | R-0500, R-0602, R-0997 |/; s/| R-0604 | not in the queue | done | — |/| R-0604 | not in the queue | done | A1 |/' "$TMP/unknownrow/ROADMAP.md"
+rc=0; python3 "$QD/build_queue.py" --root "$TMP/unknownrow" > /dev/null 2> "$TMP/unknownrow.err" || rc=$?
+[ "$rc" = 2 ] && grep -q "R-0604 depends on queue row A1, which names R-0997" "$TMP/unknownrow.err" \
+  && ok "a queue-row dependency naming a task that is neither live nor completed exits 2" \
+  || no "queue-row dependency on an unknown id: exit $rc, $(cat "$TMP/unknownrow.err")"
+mkdir -p "$TMP/dropdep"; cp -R "$SRC/." "$TMP/dropdep/"
+printf -- '---\nid: R-0602\ndepends:\n---\n' > "$TMP/dropdep/tasks/R-0602.md"
+if python3 "$QD/build_queue.py" --root "$TMP/dropdep" > "$TMP/dropdep.json" 2> "$TMP/dropdep.err" \
+   && [ "$(python3 -c 'import json,sys; t={t["id"]: t for t in json.load(open(sys.argv[1]))["tasks"]}["R-0602"]; print(" ".join(t["depends"]), "/", " ".join(t["blocked_on"]))' "$TMP/dropdep.json")" = "R-0604 / owner: the name unqueued R-0604" ]; then
+  ok "a task file cannot drop a roadmap dependency or its block"
+else no "a task file dropped a roadmap dependency: $(cat "$TMP/dropdep.err" "$TMP/dropdep.json" | head -5)"; fi
+mkdir -p "$TMP/completedid"; cp -R "$SRC/." "$TMP/completedid/"
+sed -i 's/| R-0600 | the first half | done | R-0601 |/| R-0600 | the first half | done | R-0601, R-0998 |/' "$TMP/completedid/ROADMAP.md"
+mkdir -p "$TMP/completedid/changelog.d"; printf '### Completed Task R-0998\n\ncontrol\n' > "$TMP/completedid/changelog.d/control.md"
+if python3 "$QD/build_queue.py" --root "$TMP/completedid" > "$TMP/completedid.json" 2> "$TMP/completedid.err" \
+   && [ "$(python3 -c 'import json,sys; print(" ".join({t["id"]: t for t in json.load(open(sys.argv[1]))["tasks"]}["R-0600"]["depends"]))' "$TMP/completedid.json")" = R-0601 ]; then
+  ok "a dependency on a completed task is met and dropped"
+else no "completed dependency: $(cat "$TMP/completedid.err")"; fi
+mkdir -p "$TMP/supplied"; cp -R "$SRC/." "$TMP/supplied/"
+printf -- '---\nid: R-0604\ntitle: supplied by a task file\n---\n/roadmap-item R-0604\n' > "$TMP/supplied/tasks/R-0604.md"
+if python3 "$QD/build_queue.py" --root "$TMP/supplied" > "$TMP/supplied.json" 2> "$TMP/supplied.err" \
+   && [ "$(python3 -c 'import json,sys; print(" ".join({t["id"]: t for t in json.load(open(sys.argv[1]))["tasks"]}["R-0602"]["blocked_on"]))' "$TMP/supplied.json")" = "owner: the name" ]; then
+  ok "a prerequisite supplied by a task file is no longer unqueued; the owner block stays"
+else no "supplied prerequisite: $(cat "$TMP/supplied.err" "$TMP/supplied.json" | head -5)"; fi
 [ "$(qget R-0600 cycle)" = True ] && [ "$(qget R-0601 cycle)" = True ] && ok "a dependency cycle is marked" || no "cycle not marked"
 [ "$(qget R-0501 disposition)" = in-flight ] && ok "tasks/R-0501.md marks the sourced task in flight" || no "disposition not applied"
 [ "$(qget bug-201 areas)" = "mod:Lower rule:R-0501" ] && ok "bug areas come from the structural owner" || no "bug-201 areas: $(qget bug-201 areas)"
@@ -215,11 +253,12 @@ for bad in missing unknown; do
     ok "a $bad compiler field refuses dispatch"
   else no "a $bad compiler field did not refuse dispatch (exit $rc)"; fi
 done
-mkdir -p "$TMP/noreg"; cp -R "$SRC/." "$TMP/noreg/"; rm "$TMP/noreg/docs/project/ROADMAP_TASKS.md"
+mkdir -p "$TMP/noreg"; cp -R "$SRC/." "$TMP/noreg/"
+python3 -c 'import sys; p=sys.argv[1]; s=open(p).read(); i=s.index("## Tasks"); j=s.index("## Later phases"); open(p,"w").write(s[:i]+s[j:])' "$TMP/noreg/ROADMAP.md"
 rc=0; python3 "$QD/build_queue.py" --root "$TMP/noreg" > /dev/null 2> "$TMP/noreg.err" || rc=$?
-[ "$rc" = 2 ] && grep -q 'ROADMAP_TASKS.md is missing' "$TMP/noreg.err" \
-  && ok "a missing task register exits 2 instead of queueing tasks without bodies" \
-  || no "missing task register: exit $rc, $(cat "$TMP/noreg.err")"
+[ "$rc" = 2 ] && grep -q "no task rows under '## Tasks'" "$TMP/noreg.err" \
+  && ok "a roadmap without task rows exits 2 instead of queueing tasks without bodies" \
+  || no "roadmap without task rows: exit $rc, $(cat "$TMP/noreg.err")"
 mkdir -p "$TMP/bad/tasks"; printf -- '---\nid: x\nsize: 3\n---\nbody\n' > "$TMP/bad/tasks/x.md"
 rc=0; python3 "$QD/build_queue.py" --root "$TMP/bad" > /dev/null 2>&1 || rc=$?
 [ "$rc" = 2 ] && ok "an unknown task-file key exits 2" || no "malformed task file exit $rc (want 2)"

@@ -1,163 +1,329 @@
 # Concrete Roadmap
 
-Concrete aims to be a systems language with linear ownership, second-class references and
-explicit capabilities, verified from source to native execution. Accepted programs preserve memory,
-ownership and authority guarantees; their evidence is compositional, transferable and independently
-replayable. The [product direction](docs/project/ROADMAP_DIRECTION.md#product-north-star-compositional-transferable-evidence)
-and [verified-compiler decisions](docs/project/ROADMAP_DECISIONS.md#decisions) define that aim.
+Concrete is a systems language with linear ownership, second-class references and explicit
+capabilities. Its specification is a Lean library, `ConcreteSpec`: readable definitions with
+plain-words doc comments and conformance examples. A new compiler is built from that library, proof
+first, one slice of the language at a time, and each slice states the exact scope of its theorem.
+Slice 1's theorem covers its exact source down to BIR. Its native output is qualified by tests and
+labelled unverified; any claim about the native image is conditional on the LLVM, linker and image
+assumptions it lists. A proof that reaches native code is later work (phase E), not the first
+milestone. The old compiler is frozen as `legacy-compiler-final`. A pinned build of that tag is the
+differential oracle, and the old pipeline is deleted at B3.
 
-**Lean is the only language source.** `ConcreteSpec` holds Core syntax, independent typing,
-ownership and effect judgments, execution semantics, surface desugaring and conformance examples.
-Those definitions are the specification: each rule is readable Lean with a plain-words doc comment
-and its conformance examples, and no prose chapter is generated from them. The rule registry and
-reference interpreter come from the same definitions; derived machine views have a staleness gate.
-See the [Lean-source decision](docs/project/ROADMAP_DECISIONS.md#2026-11-01--lean-as-the-only-source)
-and its [2026-11-04 revision](docs/project/ROADMAP_DECISIONS.md#2026-11-04--lean-is-the-specification).
+This file is the plan: the phases, the queue and one row per live task. It decides nothing. The
+rules below summarize decisions recorded elsewhere, and the linked record governs where they differ.
+The [2026-11 archive](docs/archive/roadmap-2026-11/README.md) holds the previous roadmap, its task
+register, its backlog and its decision log, all unchanged. Its
+[task disposition table](docs/archive/roadmap-2026-11/task_disposition.tsv) says what happened to
+each of the 555 old task IDs: retained here, transferred with its obligations to a task here,
+deferred until a trigger, retired with a reason, or done. Archived IDs are never reused.
+`scripts/tests/check_roadmap.sh` checks this file against that table.
 
-**The compiler is built from the spec.** The new compiler imports `ConcreteSpec`, calls its
-elaborator and builds a proved lowering chain below Core. Slice 1 supplies a simple, explicitly
-unverified BIR → LLVM printer; the Lean Compiler Backend follows. Once slice 1 is accepted, the old
-pipeline and its internal gates are deleted together. Programs, regressions, examples, std, CI,
-documentation and research are retained; legacy evidence remains replayable from the frozen tag,
-and the browser compiler runs from that tag until covered. The [new-compiler decision and retention
-contract](docs/project/ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
-define the full boundary.
+## Rules in force
 
-**Authority uses permissions and values.** `with(...)` is compile-time permission; linear values
-are resources. Operations require both, and `main` consumes the target's grant values. Allocation
-uses explicit allocator values and is fallible; filesystem lookup is confined through directory
-values. The [authority decision](docs/project/ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--authority-design)
-links the complete rules and language answers.
+Every task follows these rules. Each is a summary that links the dated record holding the rule and
+its reasons, or says which part still awaits the owner; this file holds no rule of its own. Language rules are not decided here: they are the owner decisions in [decisions.md](docs/spec/decisions.md#owner-decisions).
+The design rules (one form per situation, one owner per fact, the most transparent long-term option,
+verbosity that buys clarity) get one home in `PHILOSOPHY.md` when the `wip/philosophy` branch lands.
 
-**The specification comes first.** Open language questions remain undecided until the owner
-answers them. Audit and absorption assign every rule an owner; each slice supplies its Lean rules with
-doc comments, refusal coverage, conformance examples, matching implementation and outside-reader
-test, and retires the prose chapter text those rules replace. The [specification criteria](docs/project/ROADMAP_DECISIONS.md#2026-10-30--specification-first)
-remain binding through A–D. Other documentation cites the Lean rules and removes contradictions
-as slices land, under the [documentation rule](docs/project/ROADMAP_DECISIONS.md#2026-10-30--documentation-follows-the-spec).
+1. **The owner decides the language.** No agent, orchestrator or reviewer chooses, encodes or ships
+   any side of an open language question. That includes doing so inside a fix, a test or a document.
+   Agents bring options and a recommendation. An answer counts only when the owner gives it
+   explicitly, and whoever records it writes its date in [decisions.md](docs/spec/decisions.md)
+   ([recording rule](docs/archive/roadmap-2026-11/ROADMAP_DECISIONS.md#2026-11-02--owner-recording-rule),
+   [AGENTS.md](docs/project/AGENTS.md#rules)).
+2. **Lean is the specification.** Each rule is a Lean definition with its rule ID, a doc comment in
+   plain words and its conformance examples. The normative definitions live in one main file, and
+   proofs and tooling live in files that import it (R-0560). No prose is generated from Lean. Machine
+   views (the rule registry, IDs and manifests) are derived and have a staleness gate. The user guide
+   teaches and links the rules, and states none of its own. Prose chapters are retired as their rules
+   land in Lean, and a chapter is retired only after a browsable rendering of the Lean rules and a
+   rule-by-rule coverage report show that every rule it states has a Lean definition (R-0555)
+   ([2026-11-01](docs/archive/roadmap-2026-11/ROADMAP_DECISIONS.md#2026-11-01--lean-as-the-only-source),
+   [revised 2026-11-04](docs/archive/roadmap-2026-11/ROADMAP_DECISIONS.md#2026-11-04--lean-is-the-specification)).
+3. **The new compiler is built from the spec.** `ConcreteSpec` imports nothing from any compiler. It
+   holds:
+   - the grammar as data, with its LL(1) check;
+   - Core with identities from the start;
+   - the statics as inductive judgments, the only normative form, with a checker proved to
+     correspond;
+   - the one elaborator;
+   - the clock-indexed evaluator, which is the reference interpreter;
+   - the conformance examples.
 
-**Proofs grow along one path.** State the semantic contract and final theorem first, including
-outcomes, traces, authority, resources and the values-to-bytes boundary. Then build executable Core
-semantics and soundness, followed by a minimal end-to-end path whose passes preserve behaviour and
-re-establish invariants. Functional models, open-module correctness and C contracts, ghost permissions,
-SMT-checked lowering and proof-producing equality saturation follow in that order. Parsing, linking
-and native-image assumptions stay explicit; only kernel-checked proofs count. The [proof-order
-record](docs/project/ROADMAP_DECISIONS.md#2026-11-01--compiler-proof-order) states the obligations
-and owner-review boundaries.
+   The compiler imports it and builds a proved lowering chain below Core. Slice 1 gets a BIR → LLVM
+   printer, labelled unverified. The Lean Compiler Backend follows
+   ([decision](docs/archive/roadmap-2026-11/ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)).
+4. **The old tree is legacy.** The owner chose a `legacy/` folder on main on 2026-11-04; that
+   choice is recorded with this roadmap in the changelog. The details below are the restart
+   proposal (decision rows P5–P7 and P21), pending the owner's approval, and change if it changes.
+   In one train, everything old moves under `legacy/`: the compiler, its scripts, tests, examples, std, proofs, gates, docs, research, site
+   and bug ledger. `legacy/` is a byte-frozen snapshot of main's tree at the move commit. It is never
+   patched and never run. One root check refuses any modification or addition under it, and any
+   deletion except one its retention row (below) allows. Its gates are not
+   re-run: they were qualified at `legacy-compiler-final`, and its evidence stays replayable from that
+   tag. The differential oracle is built from the tag in its own isolated checkout, not from
+   `legacy/` (R-0564). The infrastructure for the new root is prepared beside the old tree (T0,
+   R-0568) and rehearsed on the exact candidate root (T1, R-0563), and the move comes after (T2,
+   R-0558). The root starts minimal. A file comes back from
+   `legacy/` only when a slice needs it, in that slice's change. Live tooling stays live: landing,
+   review, the hooks, CI and the changelog. At B3 only the old pipeline (the compiler, its gates and
+   their scripts) is deleted. Retained assets (corpora, regressions, examples, std, the bug ledger,
+   the site and docs) stay archived in `legacy/` until they migrate. Each one leaves only when its
+   row in the root retention manifest `RETENTION.tsv` (R-0562) is resolved. That manifest and the
+   [task disposition table](docs/archive/roadmap-2026-11/task_disposition.tsv) live outside `legacy/`
+   and survive B3.
+5. **Authority uses permissions and values.** `with(...)` is compile-time permission, and linear values
+   are the resources. An operation needs both. `main` consumes the target's grant values. Allocation
+   takes an allocator value and can fail. Filesystem access goes through directory values
+   ([decision](docs/archive/roadmap-2026-11/ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--authority-design)).
+6. **The proof grows in a fixed order.**
+   1. State the semantic contract and the final theorem first, with values-to-bytes as a named
+      boundary.
+   2. Executable Core semantics, where running out of fuel is distinct from divergence, with type,
+      ownership and effect soundness.
+   3. One minimal end-to-end path, each pass preserving behaviour and invariants.
+   4. Functional models for safe code.
+   5. Open-module correctness and C contracts.
+   6. Ghost permissions for trusted code.
+   7. SMT-checked lowering.
+   8. Proof-producing equality saturation.
 
-## Where we are
-
-The legacy compiler is frozen at `legacy-compiler-final` at commit 066c9d9b8. The language decisions
-are recorded; the shape of Core is open for the owner's target Core proposal decision.
-
-**Where things live.** The [task register](docs/project/ROADMAP_TASKS.md) holds A, B and T tasks;
-the [backlog](docs/project/ROADMAP_BACKLOG.md) holds later tasks and the pull rules.
-The [spec](docs/spec/README.md) owns language rules; the
-[verified-pipeline plan](docs/compiler/VERIFIED_PIPELINE.md) holds the target proof architecture.
-The [direction](docs/project/ROADMAP_DIRECTION.md) holds standing reference and product goals.
-
-## Phases
-
-| phase | goal | done when |
-|---|---|---|
-| A. Core and theorem | the spec audit of 2026-11-02 is disposed of (its gaps and duplications assigned to owners); the target Core proposal is decided by the owner, the whole shape at once and before implementation; the semantic contract with the named values-to-bytes boundary; the end-to-end theorem stated in Lean with its holes; the trusted base listed | Core approved; the theorem statement and trusted base on main |
-| B. Slice 1 | `ConcreteSpec` and the new compiler for slice 1: scalars, `let`, the move and use-after-move refusal of an empty struct without `Copy` consumed by a struct-destructuring `let`, one checked operation, return or a defined trap, from parsing through native execution | the slice's rules are judgments, independent of the checker and elaborator, whose correspondence is proved; fuel exhaustion is distinct from divergence; LLVM output is labelled unverified, and the lexer, model-translation and native-image obligations are explicit; its examples pass through the spec and the native build; its theorem is proved; its rules are readable Lean with doc comments and examples, and the prose they replace is retired; the outside-reader test, run on the Lean rules and examples, passes. Then the old pipeline is deleted from main under the retention contract of the new-compiler decision |
-| C. File-copy | slices ordered by the file-copy program's dependencies: directories, `File`, `with(Fs)`, fallible operations, explicit cleanup on every error path, `defer`; chapters retired as Lean replaces them; std, examples and tests migrate as their constructs land | the file-copy program, its failure paths included, builds natively from the new compiler with its theorems; **0.1 is cut here**, with the supported subset, the unsupported constructs and the LLVM assumptions stated |
-| D. Whole language | the remaining constructs as slices; every prose chapter replaced by readable Lean rules; the conformance suite complete; each paused workload (RocksDB slice 1, the ethlambda workloads, the usability track) resumes when the constructs it needs are supported | every construct of the decided language is a slice, and no prose chapter is left |
-| E. Verified growth | the proof order's later items: functional models, open modules and the C boundary, ghost permissions for trusted code, SMT-checked lowering, proof-producing equality saturation, the Lean Compiler Backend native path, the verified parser (lexer, semantic actions and parser execution included); richer verification: typed contracts, exact contract identity, two-state contracts and frames, checked totality, the specification library | each item's theorem with its residual assumptions stated |
-| F. Evidence as a product | provenance, the canonical verification task, receipts and the independent consumer, rebuilt on the new Core (minimal provenance and task identity already accompany the first authoritative proof claims) | receipt v1 frozen |
-| G. Release and ecosystem | external users, flagships, packages, 1.0 | external-user acceptance, package evidence, conformance, compatibility, distribution and maintenance commitments hold for the released subset |
-| T. Development throughput | R-0539 – R-0547 and R-0513, beside the compiler sequence | the targets and item exits in [Development throughput](#development-throughput) hold |
-
-## The queue
-
-| row | goal | owning tasks | done when |
-|---|---|---|---|
-| A1 | Dispose of the spec audit and draft the boundaries Core must satisfy | R-0555, R-0481, R-0010, R-0447, R-0554, R-0511, R-0211, R-0230 | Each changed rule, gap and duplication has an owner and acceptance artifact; defect views distinguish compilers; [boundary drafts](docs/compiler/A1_BOUNDARIES.md) exist. |
-| A2 | Decide the whole target Core shape before implementation | R-0312, R-0316 | The owner approves the target [Core proposal](docs/compiler/CORE_PROPOSAL.md), drafted against A1's artifacts, including identities, memory and interface boundaries; before Core is frozen, representative design proofs are checked in Lean for allocator dependencies with reset generativity, deferred cleanup with allocators and loans, heap opening and mutable lending, and one values-to-bytes lemma. If A3 exposes a substantive change, A2 is revisited. |
-| A3 | Formalize the approved semantic contract and theorem in Lean | R-0496, R-0500, R-0502, R-0506, R-0508, R-0509, R-0480, R-0223, R-0227, R-0242, R-0464, R-0266 | The theorem with its holes, named values-to-bytes boundary and trusted-base inventory is on main. |
-| B1 | Build ConcreteSpec and slice 1 with its theorem | R-0491, R-0492, R-0493, R-0497, R-0498, R-0499, R-0501, R-0503, R-0504, R-0507, R-0514, R-0552, R-0521, R-0528, R-0004, R-0435, R-0440, R-0058, R-0073, R-0074, R-0075, R-0076, R-0077, R-0079, R-0080, R-0082, R-0085, R-0090, R-0107, R-0114, R-0115, R-0116, R-0191, R-0203, R-0205, R-0207, R-0210, R-0217, R-0221, R-0222, R-0231, R-0260, R-0272, R-0273, R-0274, R-0278, R-0279, R-0280, R-0288, R-0290, R-0302, R-0421, R-0422, R-0446 | The phase B slice passes from parsing to native execution with independent judgments, correspondence proofs, explicit obligations and minimal proof provenance; every judgment, semantics and pass is total as it lands. |
-| B2 | Retire the slice's prose and qualify slice 1 | R-0479, R-0471, R-0009, R-0438, R-0092, R-0093, R-0094, R-0095, R-0105, R-0106, R-0118, R-0550, R-0551, R-0425, R-0355 | Conformance and native examples pass; refusal, differential and gate-integrity controls hold; the outside-reader test passes. |
-| B3 | Audit compiler totality and delete the old pipeline under the retention contract | R-0553 | The end-to-end slice is accepted, the totality audit finds no partial definition, the fuel-budget distinctions are established, and the old pipeline and its internal gates are deleted together; retained programs, regressions, examples, std, evidence replay and browser service follow the [retention contract](docs/project/ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract); CI builds `legacy-compiler-final` as the differential oracle and the site's browser compiler is built from that tag until the new compiler covers it. |
-
-<a id="questions-for-the-core-session"></a>
-**Questions for the Core session.** The
-[design review](research/process/design-review-2026-11-03.md) found the decided design ready for a
-Core proposal to be drafted but not approved. These are decided by the owner in the session of A2;
-the [proposal](docs/compiler/CORE_PROPOSAL.md) brings each with options and a recommendation, and no work encodes an answer first:
-
-1. allocator discipline: what a brand is, fresh identities and reset in a loop, how a dependency on
-   an allocator is tracked through nested containers, returned values and callbacks, where a heap
-   records how to release its storage, and what `AllocFailure<T>` holds and "unchanged" means;
-2. `destroy` bounds: storage release, payload destruction and resource cleanup told apart, and which
-   containers implement `Destroy`;
-3. the `HeapArray` element view's type and operations, and the raw-memory taxonomy (validity,
-   provenance, aliasing, ownership transfer);
-4. the type of static text now that `String<A>` carries an allocator;
-5. capability inference with several solutions, and when explicit arguments are required;
-6. which runtime violations are refused statically and how that relates to traps, including slice
-   1's trap witness;
-7. target grant schemas and narrowing rules;
-8. slice 1's assurance scope: proved source → BIR with native differential qualification, or a
-   native theorem conditional on the LLVM assumption;
-9. the whole Core interface: constructs, binders, places and operands, borrow and view operations,
-   allocation and release, exits, primitive calls, contracts and ghost state, and whether `defer`
-   survives in Core.
-
-**Active phases:** A
-
-**Next phases:** B
+   Parsing, linking and native-image assumptions stay explicit, and only kernel-checked proofs count.
+   Before items 4–7 are built, their supported subsets, representations and residual assumptions are
+   proposed to the owner
+   ([proof order](docs/archive/roadmap-2026-11/ROADMAP_DECISIONS.md#2026-11-01--compiler-proof-order)).
+7. **The specification criteria still bind.** These are owner decisions, audit, simplification,
+   refusal coverage, conformance, code matching the spec, Lean links and the outside-reader test. They
+   are read through rule 2
+   ([criteria](docs/archive/roadmap-2026-11/ROADMAP_DECISIONS.md#2026-10-30--specification-first)).
+   Other documentation cites the Lean rules and loses any statement they contradict
+   ([documentation rule](docs/archive/roadmap-2026-11/ROADMAP_DECISIONS.md#2026-10-30--documentation-follows-the-spec)).
+8. **Validation semantics do not change.** Every result is bound to an exact SHA. Every result is one
+   of passed, failed, skipped, cancelled or incomplete
+   ([promotion pipeline](docs/project/PROMOTION_PIPELINE.md#promotion-pipeline)). A faster path never
+   reports a check it did not run as passed.
 
 ### Scheduling rule
 
-There is one compiler sequence. Development throughput (T) and the landing of already-validated
-branches run beside it, with no capacity shares or slots. The [eight-item proof order](docs/project/ROADMAP_DECISIONS.md#2026-11-01--compiler-proof-order) is the
+There is one compiler sequence, A → G. Development throughput (T) runs beside it, together with
+the landing of already-validated branches, with no capacity shares. The proof order (rule 6) is the
 internal order of B–E. RocksDB slice 1, the ethlambda workloads and the usability track are paused
 until the new compiler supports their constructs.
 
 ### Defect disposition rule
 
-Frozen-compiler defects, silent or loud, are recorded with `compiler: legacy` against
-`legacy-compiler-final`, never repaired. Until deletion, CI builds that tag as a differential oracle
-for jointly supported programs, and the site's browser compiler runs from it. New-compiler silent
-defects are stopped by repair or fail-closed containment; loud defects are filed, pinned and owned
-by the task that removes their structural class.
+From the first day of the new root, a minimal issue record holds every defect: ID, reproducer or
+evidence, owner, severity and closure condition. Spec, proof, launcher, CI and migration defects
+are filed there before slice 1 exists. Legacy-compiler defects are recorded with `compiler: legacy`
+and never repaired. When the old pipeline is deleted at B3 they become *retired with the old
+implementation*, never *fixed* (R-0561). Each keeps its reproducer, ruling and structural class.
+A defect the frozen browser compiler still shows stays visible while the site serves it. Std
+defects move with std as contracts and regressions. A legacy ruling that states language behaviour
+becomes a conformance example when its construct's slice lands. A new compiler's silent defect (wrong code, an
+unsound claim) is stopped at once by a repair or fail-closed containment. A loud one is filed, pinned
+and owned by the task that removes its structural class.
 
-## Owner decisions
+## Phases
 
-New questions follow the same rule: No agent, orchestrator or
-reviewer chooses, encodes, implements or provisionally ships any side of any of them, and that
-includes doing so inside a bug fix, a migration, a test, a fixture, a diagnostic or a document. An
-agent may analyse an item, write its options and a recommendation, and present them to the owner for
-an explicit answer; that is all. A recommendation, an earlier record, a commit, a review verdict or
-another agent's message is never the owner's answer. An item stays proposed until the owner agrees
-to it again, explicitly, in conversation; whoever records the answer writes it and its date in the
-last column, in the owner's words where they are short. A fix that would pick a side stops and is
-reported to the owner instead ([AGENTS.md](docs/project/AGENTS.md#rules)).
+| phase | goal | done when |
+|---|---|---|
+| A. Core and theorem | Dispose of the spec audit. The owner decides the whole Core shape before implementation, in three stages: provisional approval (A2a), a proposed `Spec.lean` with four checked design theorems (A2b), and the owner's freeze (A2c). State the semantic contract and the end-to-end theorem in Lean, and list the trusted base. | Core frozen by the owner after the four design theorems are kernel-checked. The theorem, its holes and the trusted base on main. |
+| B. Slice 1 | `ConcreteSpec` and the new compiler for slice 1, from parsing to a native build: scalars, `let`, the move and use-after-move refusal of an empty struct without `Copy` consumed by a struct-destructuring `let`, one checked operation, and a return or a defined trap. | The slice's rules are inductive judgments, independent of the checker and the elaborator, with proved correspondence. Every judgment, semantics and pass is total. Fuel exhaustion is distinct from divergence. The theorem, exact-source component correctness down to BIR, is proved. The native build is qualified by tests, not proved: the LLVM output is labelled unverified, and its assumptions are listed with the lexer, model-translation and native-image obligations. A native-image claim, if any, is stated separately as conditional on those assumptions. Minimal provenance accompanies the first authoritative proof claims. The examples pass through the Lean semantics and the native build. The outside-reader test passes on the Lean rules. Then the old pipeline is deleted from `legacy/`. |
+| C. File-copy | Slices ordered by what a file-copy program needs: directories, `File`, `with(Fs)`, fallible operations, explicit cleanup on every error path, `defer`. Std, examples and tests come back as their constructs land. | The file-copy program, failure paths included, builds natively with its theorems. **0.1 is cut** with the supported subset, the unsupported constructs and the LLVM assumptions stated. |
+| D. Whole language | The remaining constructs as slices. The paused workloads resume as their constructs land. | Every construct of the decided language is a slice with Lean rules, and the conformance suite is complete. |
+| E. Verified growth | Proof-order items 4–8, the Lean Compiler Backend native path, the verified parser, typed contracts, frame reasoning, termination proofs and the proof library. Contracts have no source `old` and no snapshot construct (OD117): a postcondition reaches the entry state only through an explicit Lean theorem. Spec functions are total (OD115). An ordinary function can get its own termination proof, and there is no total-function category (OD116). | Each item's theorem holds, with its residual assumptions stated. |
+| F. Evidence as a product | Provenance, the canonical verification task, receipts and an independent consumer, all on the new Core. | Receipt v1 frozen. |
+| G. Release and ecosystem | External users, flagships, packages, editor, incremental builds, 1.0. | External-user acceptance, package evidence, conformance, compatibility and maintenance commitments hold for the released subset. |
+| T. Development throughput | Beside the sequence: the minimal root, then faster landing, review and CI. | The [targets](#development-throughput) hold. |
 
-The [owner recording rule](docs/project/ROADMAP_DECISIONS.md#2026-11-02--owner-recording-rule)
-and [language decision record](docs/spec/decisions.md#owner-decisions) govern recording answers.
+## The queue
 
-## Bug record
+**Active:** T0 and A1. **Next:** T1, T2 and A2a.
 
-The generated [dashboard](docs/bugs/DASHBOARD.md) and [bug records](docs/bugs/README.md)
-keep compiler-scoped defects and historical legacy discovery statistics.
+| row | goal | tasks | done when |
+|---|---|---|---|
+| T0 | Prepare the restart beside the old tree (decision row P7, pending) | R-0568, R-0564 | Checklist, each item on main before T1: (1) the new root's CI jobs; (2) `required-checks.txt`, enforced by `train.sh watch` and `train.sh land`; (3) the required-check transition mechanism, an explicit old-to-new job mapping that is validated and needs the replacement checks to pass at the exact candidate SHA, never marking a dropped legacy check passed; (4) `ISSUES.tsv` and its validator; (5) `RETENTION.tsv` and the task disposition table; (6) `scripts/oracle/ORACLE.lock` with the oracle release artifact and its digest; (7) the archive records of the stopped services. |
+| T1 | Rehearse the move on the candidate root | R-0563 | On a throwaway branch holding the exact proposed day-one root, a fresh clone builds the candidate, hooks, runs exact-SHA CI and passes a dry-run landing, and the negative controls are refused for the expected reason. |
+| T2 | Move the old tree to `legacy/` in one train, after T0 and the T1 rehearsal | R-0558 | The root holds only the day-one set. `legacy/` is byte-frozen and checked. The move itself lands on both remotes. |
+| A1 | Dispose of the spec audit and draft the boundaries Core must satisfy | R-0555, R-0312, R-0316 | Each audit finding, gap and duplication has an owner and an acceptance artifact. The [boundary drafts](docs/compiler/A1_BOUNDARIES.md) exist. |
+| A2a | Provisional approval of the target Core shape (decision row Q9.19, pending) | R-0559 | An outside reader has read the [Core proposal](docs/compiler/CORE_PROPOSAL.md) and their confusions are resolved. The owner approves the design provisionally: it binds the design without freezing it. |
+| A2b | Formalize the approved design in a proposed `Spec.lean` | R-0511 | `ConcreteSpec/Spec.lean` is headed "PROPOSED: not normative until Core freeze". The four design theorems (`reset_fresh`, `defer_cleanup_releases`, `open_mut_freezes_root`, `rep_roundtrip`) and their full obligations are kernel-checked without `native_decide`. Every row the formalization changes returns to the owner. This is separate from slice 1's soundness theorems. |
+| A2c | Core freeze | R-0567 | The owner approves the freeze after A2b's four theorems and an outside-reader pass. Only then is PROPOSED removed. A3 sends Core back if it exposes a substantive change. |
+| A3 | State the contract, the theorem and the trusted base in Lean | R-0560, R-0496, R-0502, R-0506, R-0508, R-0509, R-0500 | The one-main-file layout and its gate exist. The theorem, with its holes, the named values-to-bytes boundary and the trusted-base inventory, is on main. |
+| B1 | Build `ConcreteSpec` and slice 1 with its theorem | R-0425, R-0499, R-0492, R-0493, R-0514, R-0501, R-0503, R-0497, R-0504, R-0507, R-0521, R-0552, R-0528, R-0479, R-0118 | Slice 1 runs from parsing to native code. Its judgments are independent, its correspondence and soundness are proved, its obligations are explicit and its provenance is minimal. Its conformance examples pass on both implementations. |
+| B2 | Qualify slice 1 | R-0491, R-0498, R-0272, R-0550 | Differential (Lean semantics, native build, legacy oracle), refusal and gate-integrity controls hold. The fuzzers target the new compiler. The outside-reader test passes. |
+| B3 | Audit totality, then delete the old pipeline | R-0553, R-0562, R-0561, R-0565 | The totality audit finds no partial definition. Every `RETENTION.tsv` row for the old pipeline is resolved. Legacy defects are retired with the old implementation. The browser compiler is served from a tag-built bundle until the new compiler covers it. The old pipeline is gone from `legacy/`; retained assets stay there until their rows resolve. |
+
+<a id="questions-for-the-core-session"></a>
+### Questions for the Core session
+
+The owner decides these in the A2 stages (A2a approves, A2c freezes). The [Core proposal](docs/compiler/CORE_PROPOSAL.md) gives
+each one options and a recommendation, and no work encodes an answer first:
+
+1. allocator discipline;
+2. `destroy` bounds;
+3. the `HeapArray` element view and the raw-memory taxonomy;
+4. the type of static text;
+5. whether capability and type arguments are inferred or written (a proposed revision of OD45 and OD87);
+6. static refusal versus traps;
+7. target grant schemas and narrowing;
+8. slice 1's assurance scope;
+9. the whole Core interface.
+
+## Tasks
+
+One row per live task: what it delivers, when it is done, and what it waits for. "Depends on" names
+tasks (R-NNNN), queue rows (A2b: every task of that row), whole phases (C: every task of phase C) or
+an owner decision (`owner: <decision>`), comma-separated; `—` is nothing. A task transferred
+into one of these carries the obligations recorded in its row of the
+[disposition table](docs/archive/roadmap-2026-11/task_disposition.tsv). The full old body stays in the
+archive. Rows for C–G are summaries. Each is refined when its phase becomes next.
+
+### A. Core and theorem
+
+| task | objective | done when | depends on |
+|---|---|---|---|
+| R-0555 | Dispose of the 2026-11-02 spec audit, then keep one normative spec in Lean with independent judgments and rule-indexed conformance | every audit row has an owner; each slice's Lean rules replace the prose they cover, and bug-to-rule references resolve; a browsable rendering of the Lean rules and a rule-by-rule coverage report exist, and no prose chapter is retired before the report shows each of its rules in Lean | — |
+| R-0312 | The unsafe-surface and raw-memory taxonomy: validity, provenance, aliasing, ownership transfer | taxonomy decided in the Core session (question 3) and stated in Lean | R-0555 |
+| R-0316 | An unsafe-aliasing policy without hidden reference UB | the policy is part of the approved Core | R-0312 |
+| R-0559 | Outside-reader dry run on the Core proposal | a reader new to Concrete reads the proposal; each confusion is recorded and resolved before the owner's decision | R-0555 |
+| R-0511 | Representative design proofs before Core freezes, then cumulative slices with honest theorem scopes | the four A2b theorems are kernel-checked against the proposed `Spec.lean`, without `native_decide`, with their full obligations (decision row Q9.14): `reset_fresh` (a reset gives a brand distinct from every live brand, resets in a loop give pairwise-distinct brands, and the new allocator's operations refuse values of an old brand); `defer_cleanup_releases` (every structured exit runs the deferred calls in reverse registration order, releases each held loan after its call, and preserves the allocator-dependency check); `open_mut_freezes_root` (a mutable heap open excludes every other access to its root, and a shared open never grants a write); `rep_roundtrip` (encode then decode is the identity for `u8` to `u64`, `bool` and the empty struct); each later slice states its theorem scope | R-0559, owner: A2a approval |
+| R-0567 | Core freeze (A2c) | the owner approves the freeze after the four A2b theorems are kernel-checked and an outside reader has read the proposed `Spec.lean`; PROPOSED is removed from its header in the freeze change | R-0511 |
+| R-0566 | One live home for binding decisions (decision row P20, pending) | the still-binding architecture and process decisions of the archived roadmap log (new compiler and retention contract, authority, allocation, Lean as the specification, the owner-recording rule) are in `docs/decisions.md` with their dates and revision links; the owner-approved revisions (OD45/OD87, TYPE-22, TRAIT-1 and any other accepted row) are recorded there; ROADMAP.md, PHILOSOPHY.md and AGENTS.md cite it and restate nothing; a gate refuses a roadmap rule link into the archived log once the move lands | owner: P20 |
+| R-0560 | One-main-file spec layout: every normative definition in `ConcreteSpec/Spec.lean`; proofs, tooling and derived views in files that import it | the layout exists; a gate refuses a normative definition outside the main file, with a negative control | A2c |
+| R-0496 | The semantic contract (outcomes, traces, authority, resources, the error model) and the clock-indexed evaluator | the contract is stated in Lean; the evaluator runs; fuel exhaustion is distinct from divergence; trap location and message, the exit-code mapping and the target observations are part of the contract, and until they are, every claim about executable behaviour is qualified by the model's abstract observations | R-0560 |
+| R-0502 | One value/raw-memory boundary and one layout authority | the boundary is named in the theorem; layout has one owner with its proofs | R-0496 |
+| R-0506 | Every proof boundary and validator obligation stated with its premises and status | obligations have explicit premises; transitive axiom classification is enforced | R-0496 |
+| R-0508 | The end-to-end theorem: maximal-behaviour refinement, frontend correspondence, resource adequacy, image transport | stated in Lean with its holes; proved progressively per slice | R-0496, R-0502 |
+| R-0509 | The trusted-base inventory, evidence binding, assumption lifecycle and axiom replay | the inventory is on main; every claim's axioms are recorded and replayed from a clean checkout | R-0506 |
+| R-0500 | Each decided language rule gets its Lean judgment, semantic clause and accepted, refused or trapping examples | each rule lands with its slice; every rule of the decided language has one by the end of D | R-0560 |
+
+### B. Slice 1
+
+| task | objective | done when | depends on |
+|---|---|---|---|
+| R-0425 | The conformance format and suite: each example names its rule, source and outcome (result, refusal code or trap), and one runner per implementation runs it through the Lean semantics and through the compiler | slice 1's examples pass both runners; the suite is versioned and published at 0.1, and complete at D | R-0560 |
+| R-0499 | Independent Core judgments and an authoritative checker proved to correspond | correspondence proved for slice 1, with positive and rule-breaking mutation controls | R-0500 |
+| R-0492 | Scope-resolved identities throughout; lexical identity distinct from persistent evidence identity | alias, symbol, binding and forgery controls hold | R-0499 |
+| R-0493 | Typed arithmetic and casts from one semantics, with arithmetic-site facts | widths, signedness, modes and the defined trap match the Lean semantics | R-0496 |
+| R-0514 | The compiler consumes the exact identity-resolved Core payload checked against the judgments | substitution controls hold | R-0499 |
+| R-0501 | Proved lowering passes for sequencing, matching, cleanup and check expansion | each pass preserves behaviour and re-establishes invariants | R-0514 |
+| R-0503 | The unverified BIR → LLVM path, the native driver and the pinned LLVM toolchain | output labelled unverified; LLVM, linker and runtime assumptions listed; the driver bounds external tools | R-0501 |
+| R-0497 | Immutable pipeline artifacts bound to exact payloads | forgery, mutation and bypass compile-fail controls | R-0514 |
+| R-0504 | Validators with explicit soundness propositions | substitutions and wrong artifacts are rejected without inflating native assurance | R-0497 |
+| R-0507 | Type and ownership soundness over the executable semantics | proved for slice 1 | R-0496, R-0499 |
+| R-0521 | Minimal provenance and one canonical verification task for the first authoritative claims | a claim names its compiler, source, theorem and executable digest | R-0509 |
+| R-0552 | Per-compilation certificates (owner-approved 2026-10-25) | a build emits a certificate per output, and the kernel checks it | R-0504 |
+| R-0528 | Resource limits on input size, memory, time and import closure | each input class has a limit and a hostile fixture | R-0503 |
+| R-0479 | Failures and refusals are never turned into facts; diagnostics name the valid next action | refusals survive through results, text, JSON and exit codes | R-0499 |
+| R-0118 | Generated coverage of passes, consumers, constructs, operations and traps | a missing row or a synthetic constructor fails the gate | R-0501 |
+| R-0491 | The defect inventory and the classified differential (Lean semantics, native build, legacy oracle) | comparisons are classified and campaigns are non-vacuous | R-0425, R-0564 |
+| R-0498 | Every enforcement claim maps to its gate leg and a targeted mutation | an unmapped claim fails; shape checks are labelled unproved | R-0118 |
+| R-0272 | Restart fuzzing against the new compiler on concrete-ci-2, seeded from the regressions and examples that survive in the repository and from newly generated programs (the ci-3 corpus and findings were not copied before the handover, decision row P14, and are lost), with reduction and counterexample-to-regression persistence | the generators emit slice-supported programs, the oracle is Lean semantics against native code, and findings become regressions; legacy fuzzing stopped at the move | B1 |
+| R-0550 | Compiler scaling and speed baselines at exact SHAs | scaling gates hold for each stage, and a planted regression is caught | B1 |
+| R-0553 | Totality audit: every semantics, checker, validator and pass is total and runs as proved | no partial definition; opaque execution gaps controlled | B2 |
+| R-0562 | The retention manifest `RETENTION.tsv` at the root, written before the move and checked before any deletion under `legacy/` | every legacy asset (corpora, regressions, examples, std, the bug ledger, the site, docs and the archived services) has a row with a destination and a deletion condition; deleting a path under `legacy/` whose row is unresolved is refused (control); the manifest and the task disposition table stay at the root and survive B3 | — |
+| R-0561 | Bug ledger by compiler | legacy defects are marked retired with the old implementation, never fixed, each keeping its reproducer, ruling and structural class; those the browser compiler still shows stay visible while the site serves it; std defects move with std as contracts and regressions; every legacy ruling that states language behaviour becomes a conformance example or a recorded owner question; the minimal issue record of the day-one root becomes the new ledger with the first slice | R-0425 |
+| R-0565 | Website transition | before the site stops rebuilding, a browser bundle built and verified from `legacy-compiler-final` (parity with the native oracle, loader and UI checks) is deployed, labelled as the frozen compiler for the language before the 2026-10-29 to 2026-11-01 decisions, with a documented redeploy; links to main paths point at the tag; the site later builds from the new tree and switches when the new compiler covers it; no page describes the legacy compiler as current | R-0564 |
+
+### C. File-copy and 0.1
+
+| task | objective | done when | depends on |
+|---|---|---|---|
+| R-0052 | Handle-relative filesystem: directories and files carry authority | file-copy opens, reads, writes and closes through directory values | B |
+| R-0557 | Global state as capabilities: no duplicable linear constants; `main` receives explicit target grants | grants reach `main`; constant linearity is enforced | B |
+| R-0023 | The decided entry-point signatures and explicit exit and error behaviour | implemented and tested in the new compiler | R-0557 |
+| R-0071 | Std on the new compiler: modules return when their constructs land, against the completion contract | each returned module has its manifest, coverage and error conventions | R-0052 |
+| R-0556 | Generated module interfaces and the interface-diff gate | every public API change shows in the diff | R-0071 |
+| R-0510 | Checked specialization | specialization is validated against the generic definition | B |
+| R-0162 | Reusable lemmas for structs, enums, matching, `Result` and `Option` | file-copy's theorems use them | B |
+| R-0301 | Backend contracts: ABI, layout, sanitizer and FFI controls | the validation project passes for the 0.1 subset | R-0503 |
+| R-0334 | The first-user teaching path (the guide) | a checked tutorial covers install to file-copy | R-0071 |
+| R-0516 | Release automation for nightlies and trains | a nightly publishes from a qualified SHA | T |
+| R-0333 | Release criteria and candidate records, including claims, security and soundness disclosure, compatibility and operations | the 0.1 candidate record is complete | C |
+
+### D. Whole language
+
+| task | objective | done when | depends on |
+|---|---|---|---|
+| R-0137 | Workload validation: each workload records its attempts, diagnostics and measurements | the dashboard covers every supported workload | C |
+| R-0321 | The unsafe and trusted profile, with its VM pressure workload | the workload runs in the normal and checked profiles | C |
+| R-0285 | RocksDB slice 1 (paused) | open, read, write and close with linear handles and typed errors | C |
+| R-0490 | The ethlambda port (paused) | runs with its interop checkpoint | R-0285 |
+| R-0515 | The usability track (paused): non-author pilots and legibility measures | a non-author pilot builds a project | C |
+
+### E. Verified growth
+
+| task | objective | done when | depends on |
+|---|---|---|---|
+| R-0495 | Claims on Core: exact claims, coverage, solver errors and external-proof interfaces | wrong propositions and substitutions are rejected through independent replay | D |
+| R-0460 | Obligation sufficiency, with hypothesis provenance | each admitted obligation is proved to suffice | R-0495 |
+| R-0473 | One typed contract record with capture-safe substitution | all consumers read the one record | R-0495 |
+| R-0482 | Separate identities for model, implementation, proposition and contract | the relation and the substitution matrix are checked | R-0473 |
+| R-0524 | Frames and entry-state reasoning without `old` (OD117) | frames are proved on the model; a postcondition reaches the entry state only through an explicit Lean theorem; no source `old` or snapshot construct exists | R-0473 |
+| R-0526 | Total spec functions (OD115) and per-function termination proofs, with no total-function category (OD116) | every recursive edge of a contract-referenced spec function is well-founded or refused; an ordinary function's termination proof is a theorem about that function | R-0496 |
+| R-0172 | The proof library and formal std models | used by the flagship proofs | R-0162 |
+| R-0177 | Proof authoring: stubs, minimization, diagnostics, automation | the validation project passes | R-0172 |
+| R-0259 | Runtime-safety obligations: casts, loops, stack, panics, byte, text and path boundaries | the safety corpus is discharged or reported | R-0495 |
+| R-0299 | Translation validation of lowering and emitted LLVM, independently replayable | named relations are validated, with corruption controls | R-0503 |
+| R-0517 | The Lean Compiler Backend as the native backend | the native path holds its theorem with residual assumptions | R-0508 |
+| R-0505 | The native AArch64 profile: linking and image | the image theorem holds | R-0517 |
+| R-0424 | Performance evidence: corpus, codegen quality, fair comparisons, optimization ownership | the mixed corpus runs on LLVM and LCB-native | R-0517 |
+
+### F. Evidence as a product
+
+| task | objective | done when | depends on |
+|---|---|---|---|
+| R-0494 | One verdict authority for every rendered claim | every surface derives its verdict from one judgment | E |
+| R-0512 | Claims on compiler-generated Core statements; no authority from legacy evidence | identity, binding and provenance are rebuilt on new Core | R-0494 |
+| R-0178 | Stable machine-readable fact schemas and compatibility policy | the schemas are versioned and frozen | R-0494 |
+| R-0219 | Proof status: vacuity, spec adequacy, evidence mutation, toolchain migration | the validation project passes | R-0178 |
+| R-0201 | Audit commands: `audit`, `explain`, `why`, `diff` and trust-diff gates | the package-scale audit bundle passes | R-0178 |
+| R-0353 | The release-evidence graph and an offline independent bundle verifier | a hostile bundle is rejected; receipt v1 frozen | R-0201 |
+
+### G. Release and ecosystem
+
+| task | objective | done when | depends on |
+|---|---|---|---|
+| R-0119 | Exactly three public flagships with their evidence | graduated and maintained | F |
+| R-0383 | Packages: manifest, resolution, interfaces, provenance, trust policy | the multi-package workspace passes | F |
+| R-0149 | Incremental builds equivalent to clean builds | the edit, corruption and substitution matrix passes | R-0383 |
+| R-0398 | Editor service over the shared session | the editor validation passes | R-0149 |
+
+### T. Development throughput
+
+| task | objective | done when | depends on |
+|---|---|---|---|
+| R-0568 | Day-one root infrastructure (T0) | on main beside the old tree: the new root's CI jobs; `required-checks.txt` enforced by `train.sh watch` and `land`; a required-check transition mechanism (an explicit, validated old-to-new job mapping; replacement checks must pass at the exact candidate SHA; a control that dropping a requirement without a mapping is refused; no legacy check is ever marked passed); `ISSUES.tsv` (ID, evidence, owner, severity, closure condition) with its validator and controls; the archive records of the stopped services | R-0562, R-0564 |
+| R-0558 | Move the old tree to `legacy/` in one train and set up the minimal root. Day one, the root holds the README, this file, AGENTS.md, an empty CHANGELOG, LICENSE, the new build files, `ConcreteSpec/Spec.lean`, `docs/PHILOSOPHY.md`, `docs/decisions.md`, the landing, review and hook scripts, `scripts/oracle/`, `required-checks.txt` and its job mapping, `RETENTION.tsv`, the minimal issue record `ISSUES.tsv` with its validator, and the [2026-11 roadmap archive](docs/archive/roadmap-2026-11/README.md) with its task disposition table. Everything else comes back from `legacy/` when a slice needs it. The status page, the work-queue dispatcher, the fuzz farm, perf tracking and the nightly campaign stop, and each is listed in `RETENTION.tsv` as archived; each returns only with a roadmap task. The ci-3 fuzz corpus, perf history and leanprof data were not copied before the handover (decision row P14) and are not archived. | the root holds only that set; a root check refuses any modification or addition under `legacy/`, and any deletion its `RETENTION.tsv` row does not allow (controls for each); no legacy gate runs; the move lands on both remotes | T0, R-0563, R-0565, owner: approval of the move inventory |
+| R-0563 | Operational migration acceptance test (T1), before the move | T0 is on main; on a throwaway branch holding the exact proposed day-one root, a fresh clone builds the candidate (after `train.sh build`, so the candidate tree is what builds) with the candidate's own landing tooling, hooks, runs exact-SHA CI and passes a dry-run landing; negative controls (a broken build, a failing hook gate, a failed required CI job, a missing, skipped or cancelled required check, a SHA mismatch) are each refused for the expected reason at the expected SHA; a check that cannot run on a fallback runner is reported incomplete and blocks landing, never passed; the two-remote landing is proved by the move itself | R-0568, owner: approval of the move inventory |
+| R-0564 | A pinned, reproducible legacy oracle, independent of `legacy/` | `legacy-compiler-final` builds in an isolated checkout of the tag from a pinned toolchain (`scripts/oracle/ORACLE.lock`) into a recorded digest; the build is published as a release artifact whose identity and SHA-256 are in the lock, fetched and verified by digest on any runner, cached on concrete-ci-2 and rebuildable from the tag alone with a hash check; a missing or mismatched artifact makes the oracle check incomplete, which blocks landing; runner criteria (decision row P13, pending): the lock records the release tarball's SHA-256 with the toolchain and flake-lock hashes, landing and oracle runs use separate runner pools with per-pool CPU and memory limits and at most two heavy runs, and a GitHub-hosted x86_64-linux fallback supports the build, the spec, the gates and the oracle diff, while a heavy campaign it cannot run is recorded as skipped, never passed; a weekly from-scratch rebuild matches the digest; the differential harness invokes it by digest when the new compiler changes; an unexplained difference fails, and the oracle's agreement never overrides the Lean semantics | — |
+| R-0547 | Measurement: per-branch stage timestamps and the median time to land | every landing has its four timestamps, and the median shows here | — |
+| R-0544 | Review discipline: per slice, delta after the first pass | median ≤ 5 rounds; a slice past 5 is split | — |
+| R-0545 | Branch discipline: one bug or one rule per branch | a month of landings with no unrecorded bundling | — |
+| R-0543 | Load control: at most 2 heavy local runs per machine | a third heavy run waits (control) | — |
+| R-0542 | Generated ledgers with a single hand-edited source | two branches adding records rebase without conflicts | — |
+| R-0540 | CI tiers: a landing tier for merge, campaigns on schedule | landing tier median ≤ 40 min over 10 runs | — |
+| R-0539 | Landing trains through `scripts/land/train.sh` | three trains of two or more branches land, median under 2 h | R-0542, R-0540 |
+| R-0541 | Self-hosted runners never for `pull_request`; heavy runs on the servers | the workflow check and its negative control | R-0543, R-0540 |
+| R-0513 | Gates that are trustworthy and affordable: inventories over counts, impact-selected pre-push | pre-push median ≤ 10 min, and no gate failure first seen in CI over 20 landings | R-0547 |
+| R-0546 | Build and compile caches, after profiling the slowest gates | a second run takes at most half the first; changing an identity invalidates the cache (control) | R-0547 |
+
+## Development throughput
+
+| measure | target |
+|---|---|
+| Codex-clean to main | median under 2 h |
+| landing CI, dispatch to conclusion | median ≤ 40 min |
+| local pre-push | median ≤ 10 min, and no gate failure first seen in CI over 20 landings |
+| ledger conflicts on rebase | zero |
+| review rounds per slice | median ≤ 5 |
 
 ## Implemented, not yet accepted
 
-Work implemented on a branch (or landed without acceptance) but not yet accepted on main: bug fixes
-keyed by bug number, and feature deliverables. Each row is one candidate: its branch, its exact
-candidate SHA, its acceptance scope, its [promotion-pipeline](docs/project/PROMOTION_PIPELINE.md#promotion-pipeline)
-results (each at that SHA, or not run), what its acceptance unlocks and its remaining step. The table is
-generated from the candidate record [`docs/project/candidates.tsv`](docs/project/candidates.tsv) by
-`scripts/gen/candidate_table.py --write`; whoever lands, re-points or validates a candidate updates its
-row and regenerates in the same commit, and `check_docs_drift.sh` fails when the table differs from the
-record. Dated dispositions remain visible in the table with their original SHAs and validation history;
-they schedule no work. A row leaves when its work is accepted on main and, for bug fixes, the
-[bug ledger](docs/bugs/README.md) records it fixed; `scripts/tests/check_roadmap_coverage.sh` fails if a
-listed bug is already recorded fixed there, or if a row lacks a branch or a remaining step. A stage (c)
-pass is the [one qualification verdict](docs/project/PROMOTION_PIPELINE.md#promotion-pipeline) over every required job at the candidate
-SHA, never the mutation aggregate alone.
+Generated from [`docs/project/candidates.tsv`](docs/project/candidates.tsv) by
+`scripts/gen/candidate_table.py --write`; `check_docs_drift.sh` fails when they differ.
 
 <!-- BEGIN GENERATED: candidate record (scripts/gen/candidate_table.py; edit docs/project/candidates.tsv) -->
 | candidate | bugs | deliverable | branch | candidate SHA | exits | stage (a) | stage (b) | stage (c) | unlocks | remaining acceptance step |
@@ -166,164 +332,44 @@ SHA, never the mutation aggregate alone.
 | v1-design-examples | — | V1 design examples (R-0511, row 3) | `v1-design-examples` | `03d2edec1d21` | none (isolated proof development) | not run | not run | not run | V1a's Core interfaces freeze | 2026-11-02: research input for phase A, not an accepted compiler deliverable. landed on main at 03d2edec but not accepted: review of the design questions, then stages (b) and (c) |
 <!-- END GENERATED: candidate record -->
 
-## Development throughput
-
-The development feedback loop is a priority [track](docs/project/ROADMAP_DECISIONS.md#2026-10-22--development-throughput-priority).
-Its tasks are R-0539 – R-0547, with R-0513 for pre-push gate selection; their bodies are under
-[Area: Development Throughput](docs/project/ROADMAP_TASKS.md#area-development-throughput).
-It runs beside the compiler sequence under the [scheduling rule](#scheduling-rule).
-The validation semantics do not
-change. The [promotion pipeline](docs/project/PROMOTION_PIPELINE.md#promotion-pipeline)'s stages, its exact-SHA binding and its
-passed / failed / skipped / cancelled / incomplete vocabulary bind every item below. A faster path
-never reports a check it did not run as passed.
-
-The measurements behind the decision and the parts already in use on main are recorded in the
-[roadmap history](docs/archive/ROADMAP_HISTORY.md#moved-at-the-2026-10-28-roadmap-compaction).
-
-**Targets.**
-
-| measure | target |
-|---|---|
-| Codex-clean to main | median under 2 h |
-| landing CI, dispatch to conclusion, including queueing | median ≤ 40 min |
-| local pre-push | median ≤ 10 min, and no gate failure first seen in CI over 20 consecutive landings |
-| ledger conflicts on rebase | zero |
-| review rounds per slice | median ≤ 5, and a slice past 5 is split |
-
-**What remains.** Build and compile caches (R-0546: the slow-gate profile first, then the shared
-compiled-artifact and Lean build caches), and the measurement the targets are read from (R-0547:
-per-branch stage timestamps and the generated median time to land on this roadmap;
-`scripts/land/report.sh` computes the medians, but none is recorded here yet). Until R-0547's
-median exists, no item whose exit is a median (R-0539, R-0540, R-0513) can be shown to hold.
-
-**Items, in dependency order.** This is the track's internal order under the queue's
-[scheduling rule](#scheduling-rule). It is not a second queue for compiler
-or evidence work. Each item's owner holds its exit, and items with no dependency may start now. The
-two in-progress branches are referenced here, not restated.
-
-| order | item | owner | exit criterion | depends on |
-|---|---|---|---|---|
-| 1 | Measurement: per-branch stage timestamps (started, Codex-clean, CI started, landed) and median time to land shown on this roadmap | R-0547 | every branch landed after the recorder exists has all four timestamps, and the generated median covers them | — |
-| 2 | Review discipline: review per slice; after the first full pass, review only the delta since the previous round; neutral prompts and piecewise diffs for ownership work | R-0544 | median ≤ 5 review rounds per slice over a month of recorded slices, and every slice past 5 rounds was split | — |
-| 3 | Branch discipline: one bug or one rule per branch; rule-changing branches land first and small | R-0545 | over a month of landings, no branch carries more than one bug or rule without a recorded reason, and no rule change breaks another branch's fixture after that branch was ready | — |
-| 4 | Load control: at most 2 heavy local runs per machine (a machine-wide semaphore); agents run only fast and impact-selected gates; full sets run on servers or in CI | R-0543 | a third concurrent heavy run waits for a slot (control), and a recorded week has no timeout failure caused by load | — |
-| 5 | Generated ledgers: bug records are the single source, CHANGELOG entries are `changelog.d` fragments, drift gates (branch `ledgers`) | R-0542 | a scripted control lands one of two branches that each add a bug, a changelog entry and an example, rebases the other onto the result with zero textual conflicts, and finds both branches' records in the regenerated ledgers; a hand edit to a generated ledger fails its drift gate | — |
-| 6 | CI tiers: a landing tier required for merge; the mutation campaign on schedule or dispatch, gating campaign qualification and not merges; the language-surface job split; candidate CI on lambdaclass/concrete (branch `ci-tiering`) | R-0540 | median landing-tier wall clock ≤ 40 min over 10 consecutive runs; stage (c) still requires the campaign, and `check_qualification_record.sh` refuses a landing-only run | — |
-| 7 | Landing trains: merge every ready branch into one candidate, run one CI, bisect only on red; a landing script builds the train, regenerates generated files, runs the fast gates, pushes `ci/`, dispatches, watches and lands on both remotes | R-0539 | three consecutive trains of at least two branches land through the script, and median Codex-clean → main is under 2 h over them | 5, 6 |
-| 8 | Self-hosted or larger runners on the maintainers' servers, never for `pull_request` (the repository is public); heavy local gate runs execute remotely on the servers | R-0541 | a workflow check fails when a self-hosted job can run for `pull_request` (with its negative control); a full local gate set runs on a server and records its result against the SHA | 4, 6 |
-| 9 | Impact-based gate selection for pre-push: map source files and fixtures to the gates that exercise them, so a change runs every gate it can break | R-0513 | interim checkpoint for the pre-push budget: pre-push median ≤ 10 min, and over 20 consecutive landings no gate failure is first seen in CI | 1 |
-| 10 | Build and compile caches: profile the 20 slowest gates first; then a shared compiled-artifact cache keyed by compiler identity and source hash, and a shared Lean build cache across worktrees | R-0546 | the profile is recorded at a SHA; with the compiler unchanged, a second run of those gates takes at most half the first run's time; changing the compiler identity or a source invalidates the cache (control) | 1 |
-
 ## Releases
 
-This is the one place that describes how releases happen and what each milestone accepts; other
-sections link here. R-0333 owns this section's release map and each candidate checklist; the
-release-bar area retains the detailed release bars.
+Nightlies publish the newest fully qualified main commit with no support promise. After 0.1, release
+trains aim for one release every 4–6 weeks when the candidate passes. A security or soundness fix may
+ship out of band, and a skipped train records its reason. Milestones are acceptance scopes, not
+dates. A task is assigned to a release as a bounded increment, and completing that increment does
+not close the task.
 
-### Release rhythm
+R-0333 keeps one versioned record per candidate. The record holds:
 
-The release rhythm remains proposed:
+- the exact source commit and the compiler, toolchain and released-artifact identities;
+- the supported language and std subset, platforms, backends and runtime profile;
+- the required checks and their results at that SHA, with positive and rejecting controls,
+  applicable mutation qualification and a clean installation;
+- source, std API and ABI, and evidence-schema compatibility, each stated separately, with the
+  migration, invalidation and revalidation each change needs;
+- open blockers, accepted limitations and deferred increments, as three separate lists with owners;
+- the matching reference, claims matrix, tutorial and release notes, which distinguish enforced
+  properties, checked proofs, assumptions, tests and incomplete coverage;
+- the supported lifetime, the patch procedure, security reporting, rollback, and evidence
+  revocation and rechecking.
 
-- **Nightlies** publish the newest fully qualified main commit with its qualification record and no
-  support promise.
-- **Release trains** target a release every 4–6 weeks after the systems preview, when the applicable
-  candidate acceptance passes. Security and soundness fixes may ship out of band; a skipped train
-  records its reason. [Patch releases](#release-increments-and-candidate-records) repair an already
-  published scope.
-- **Milestones are acceptance scopes**, not dates or phase numbers. The release map below names
-  their producing phases; R-0333 records each candidate's actual supported scope.
-- Release automation (R-0516) is a prerequisite for automated trains and nightlies. R-0333 records
-  compatibility and numbering policy for each release.
+The following rules apply to every candidate:
 
-### Validation and promotion
-
-How a change is validated before it merges, how a candidate is qualified, the CI tiers, nightly
-qualification, triage and the result vocabulary (passed, failed, skipped, cancelled, incomplete) are
-in [Validation and promotion](docs/project/PROMOTION_PIPELINE.md#promotion-pipeline). Its stages (a),
-(b) and (c) are the ones the exits, the candidate table and the release checklists name.
+- A timeout, a skipped job or an incomplete report is never a passing result.
+- An accepted limitation never contradicts an advertised guarantee.
+- An unresolved soundness failure inside the claimed scope blocks the release.
+- A patch release has its own candidate and record, and repairs an already published scope.
+- Stabilization never silently widens the claimed subset.
+- Each later scope inherits the earlier acceptance checks that apply, rerun on its own candidate.
+  It never inherits the legacy compiler's release scope.
 
 ### Release map
 
 | release | phase | acceptance |
 |---|---|---|
-| 0.1 | C | The file-copy program and failure paths build natively from the new compiler with their theorems. Publish the supported subset, unsupported constructs and LLVM assumptions. |
-| Verified preview and verified growth | E | Each advertised theorem and its endpoint holds, with residual assumptions stated; native proof claims require the Lean Compiler Backend path. |
-| Verified-component alpha | E–F | A non-author repairs a bounded component and independently replays its evidence; applicable typed contracts, identity, qualification and receipt checks hold. |
-| Project beta | G | Multi-package use and dependency upgrades expose inherited assumptions, evidence, policy and compatibility. |
-| 1.0 stable supported subset | G | Whole-language slices, E–F acceptance, conformance, reference, compatibility, distribution and maintenance commitments hold for the named subset. |
-
-The 0.1 blocker list is re-derived when C becomes next. Each later scope inherits applicable earlier
-acceptance checks, rerun on its own candidate; it does not inherit the legacy compiler's release scope.
-
-### Release increments and candidate records
-
-Assign a **bounded increment** of a task to a release, not the whole task when its
-objective spans several releases. Each R-0333 checklist entry names its existing
-owner ID, delivered behavior, acceptance artifact and deferred remainder. For
-example, alpha needs the three-family R-0182/R-0183 change-and-repair diff; their
-broader reporting dimensions can remain open. Beta needs local package evidence,
-not the whole package ecosystem. Completing an increment does not close its owner.
-Research and workload-gated expansions remain in their existing sections until
-pulled. Historical execution logs belong in the archive, not candidate checklists.
-
-For each candidate, retain one versioned record under R-0333 containing:
-
-- Exact source commit, compiler/toolchain identity and released artifact identities;
-  supported language/std subset, platforms, backends and runtime profile.
-- Required checks and retained results for that exact candidate, including positive
-  and rejecting controls, applicable mutation qualification and clean installation.
-  A timeout, skipped job or incomplete report is never a passing result.
-- Source, std API/ABI and evidence-schema compatibility stated separately; migration,
-  invalidation and revalidation requirements for changes to any of them.
-- Open blockers, accepted limitations and deferred increments as separate lists,
-  with owners and rationale. An accepted limitation cannot contradict an advertised
-  guarantee; unresolved soundness failures inside the claimed scope block release.
-- Matching reference, claims matrix, tutorial/examples and release notes. Distinguish
-  enforced properties, checked proofs, assumptions, tests and incomplete coverage.
-- Supported lifetime and patch procedure, with security reporting, rollback and
-  evidence revocation/rechecking where affected (R-0343, R-0426–R-0429).
-
-Patch releases repair an already published scope without waiting for the next
-feature release. They have their own candidate commit and validation record;
-compatibility breaks or changed evidence identities require an explicit migration
-or invalidation notice. Stabilization must not silently expand the claimed subset.
-
-## Backlog and pull rules
-
-The [backlog](docs/project/ROADMAP_BACKLOG.md#pull-rules) is the one home of pull rules and phase-entry reviews.
-
-## Decisions
-
-The dated decisions that shape this queue (priority, semantics, tightening, owner-decision, delivery,
-soundness, verified-compiler, usability, vertical-slice and behavioural-contract decisions) are in the
-[decision log](docs/project/ROADMAP_DECISIONS.md#decisions). The language rules the project owner
-reserved are not decided there: they are the [owner decisions](docs/spec/decisions.md#owner-decisions).
-
-## Reconciliation record
-
-The [2026-10-19 reconciliation](docs/project/ROADMAP_RECONCILIATION.md) records historical task dispositions and the four prose inventories, including their source revision. The current queue and live task records own scheduling and acceptance. Transferred obligations remain binding unless explicitly retired with a recorded reason.
-
-Every `### Task R-NNNN` carries a **Phase:** line; a superseded, merged, delegated, retired or done task also carries a **Disposition:** line naming its owner, and its row in the record's task-disposition table. `scripts/tests/check_roadmap_coverage.sh` reads that table and checks that every task has a phase or a disposition, that every disposition row and queue row names an existing task, that every queue row names an owner, and that no task's phase contradicts its queue row.
-
-The record's [binding reconciliation dispositions](docs/project/ROADMAP_RECONCILIATION.md#binding-reconciliation-dispositions)
-replace conflicting implementation directions in the named tasks; existing regression cases and
-acceptance obligations survive unless explicitly retired with a reason.
-
-## Archived history
-
-The [legacy execution plan](docs/archive/ROADMAP_LEGACY_PLAN.md) preserves the old phases, queue,
-exits, estimates, capacity and release map; it schedules nothing.
-
-Historical execution records and completed snapshots live in [roadmap history](docs/archive/ROADMAP_HISTORY.md).
-Retired task bodies live in [retired tasks](docs/archive/ROADMAP_RETIRED_TASKS.md), with phase and
-disposition stubs in their areas. Neither archive schedules work.
-
-<a id="open-research-questions-bend-and-roc"></a>
-<a id="phase-9-proof-authoring-and-automation"></a>
-Historical research and proof-authoring references resolve through the [backlog](docs/project/ROADMAP_BACKLOG.md).
-
-<a id="bug-dashboard"></a>
-The [bug dashboard](docs/bugs/DASHBOARD.md) owns compiler-scoped defect views.
-
-<a id="the-current-execution-queue"></a>
-The current execution queue is [the queue above](#the-queue).
+| 0.1 | C | file-copy and its failure paths build natively with their theorems; subset, exclusions and LLVM assumptions published |
+| verified preview | E | each advertised theorem holds with its residual assumptions; native claims use the LCB path |
+| verified-component alpha | E–F | a non-author repairs a bounded component and replays its evidence independently |
+| project beta | G | multi-package use exposes inherited assumptions, evidence and compatibility |
+| 1.0 | G | whole-language slices, E–F acceptance, conformance, the reference, compatibility, distribution and maintenance commitments hold for the named subset |

@@ -705,7 +705,7 @@ the owner decided are in [decisions.md](../spec/decisions.md).
 #### Evidence is multidimensional, not a total ladder
 
 **Status:** Decided (2026-07-25); implementation pending
-[ROADMAP R-0440](ROADMAP_TASKS.md#task-r-0440).
+[ROADMAP R-0440](../archive/roadmap-2026-11/ROADMAP_TASKS.md#task-r-0440).
 
 Evidence is represented by orthogonal facts: subject, claim kind, semantic
 scope, method, status, assumptions, producer, validator, trusted dependencies,
@@ -722,7 +722,7 @@ proof.
 #### Source-level resource certificates land early; hardware time stays scoped
 
 **Status:** Decided (2026-07-25); implementation pending
-[ROADMAP R-0445](ROADMAP_BACKLOG.md#task-r-0445).
+[ROADMAP R-0445](../archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0445).
 
 Concrete will expose conservative per-function source-resource bounds before
 broad stdlib expansion. The first certificate covers symbolic source steps,
@@ -744,7 +744,7 @@ cannot silently preserve old evidence.
 #### Predictable generated-code performance is an affirmative project claim
 
 **Status:** Decided (2026-07-25); evidence machinery pending
-[ROADMAP R-0416–R-0419](ROADMAP_BACKLOG.md#task-r-0416).
+[ROADMAP R-0416–R-0419](../archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0416).
 
 Concrete intends to make workload-scoped, replayable claims about generated-code
 time, size, memory, and optimization stability. That commitment does not

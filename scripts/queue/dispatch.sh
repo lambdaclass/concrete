@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The work-queue dispatcher's entry point (docs/project/WORK_QUEUE.md). The systemd timer that
+# The work-queue dispatcher's entry point (docs/archive/roadmap-2026-11/WORK_QUEUE.md). The systemd timer that
 # install-queue.sh writes runs `dispatch.sh tick` every few minutes as user `agent`.
 #
 #   dispatch.sh tick | status | release <task>

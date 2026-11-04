@@ -71,8 +71,8 @@ Each rule states what holds and why. Its history is in the changelog and the dec
    and checked for staleness. A guide may teach and link the rules but states none of its own. Until
    a rule lands in Lean, its prose chapter states the decided rule, and the chapter retires once its
    rules are covered
-   ([Lean-source decision](ROADMAP_DECISIONS.md#2026-11-01--lean-as-the-only-source),
-   [revised 2026-11-04](ROADMAP_DECISIONS.md#2026-11-04--lean-is-the-specification)). *Why:* one
+   ([Lean-source decision](../archive/roadmap-2026-11/ROADMAP_DECISIONS.md#2026-11-01--lean-as-the-only-source),
+   [revised 2026-11-04](../archive/roadmap-2026-11/ROADMAP_DECISIONS.md#2026-11-04--lean-is-the-specification)). *Why:* one
    definition that machines check cannot silently disagree with itself, and a second prose
    rendering would be a second text to keep in step.
 
@@ -242,9 +242,9 @@ refusal that is a decided language rule is an owner decision, recorded in
 
 Some former "not yet" entries are planned work, not refusals, and live in the roadmap: freestanding
 targets (the [allocation decision](../spec/decisions.md#decided-2026-11-02-allocation) already
-covers their allocators; [R-0323](ROADMAP_BACKLOG.md#task-r-0323) and
-[R-0324](ROADMAP_BACKLOG.md#task-r-0324) split std and its capabilities), package management
-(decided 2026-10-17, in the [task register](ROADMAP_TASKS.md)), and the richer contract layer
+covers their allocators; [R-0323](../archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0323) and
+[R-0324](../archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0324) split std and its capabilities), package management
+(decided 2026-10-17, in the [task register](../archive/roadmap-2026-11/ROADMAP_TASKS.md)), and the richer contract layer
 (dependency-flow contracts, mature loop invariant and variant authoring, the specification
 library, and package and release evidence summaries, phase E of the
 [roadmap](../../ROADMAP.md#phases)). That layer's syntax is frozen only after a flagship or external
@@ -263,7 +263,7 @@ and per-function termination theorems for ordinary functions.
   reclaimed and whether a call allocates; linear ownership and explicit cleanup replace them.
 - **A hidden async runtime, executor or scheduler, and function colouring.** Permanent. They hide
   concurrency and scheduling behind calls that look ordinary.
-- **Explicit structured concurrency.** Reopens when [R-0399](ROADMAP_BACKLOG.md#task-r-0399)'s pull
+- **Explicit structured concurrency.** Reopens when [R-0399](../archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0399)'s pull
   trigger holds: a workload needs concurrency after the new compiler's v1 surface is frozen. Any
   design keeps authority in `with(...)` and handles as linear values; single-threaded execution
   until then.
@@ -327,7 +327,7 @@ and per-function termination theorems for ordinary functions.
 - **Foreign function values.** Refused ([OD4](../spec/decisions.md#od4)). Reopens when the owner
   admits typed `extern "C" fn` types, which OD4 leaves for later, with the permissions of foreign
   callbacks decided at that point ([authority rule 4](../spec/decisions.md#decided-2026-11-02-authority));
-  [R-0283](ROADMAP_BACKLOG.md#task-r-0283) reviews the C interop requirements when phase C becomes
+  [R-0283](../archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0283) reviews the C interop requirements when phase C becomes
   active or next.
 
 **Generation and metaprogramming**
@@ -345,7 +345,7 @@ and per-function termination theorems for ordinary functions.
   authority and target assumptions behind build configuration. Target-specific code is selected by
   module and file per target profile in `Concrete.toml`, and audit output names what was selected
   and excluded. Reopens when, with the project model, target profiles and the hosted/freestanding
-  std split ([R-0323](ROADMAP_BACKLOG.md#task-r-0323)) in place, a workload under the pull rules
+  std split ([R-0323](../archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0323)) in place, a workload under the pull rules
   shows that module and file selection is not enough; any form is narrow and appears in audit
   output.
 

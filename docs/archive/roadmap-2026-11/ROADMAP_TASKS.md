@@ -1,16 +1,16 @@
 # Concrete Roadmap Tasks
 
 This file holds the full text of every roadmap task that a queue row names or whose **Phase:** line
-includes an active or next phase, or T. [ROADMAP.md](../../ROADMAP.md) itself keeps only the control plane:
-the phases, [the queue](../../ROADMAP.md#the-queue), scheduling and defect rules,
+includes an active or next phase, or T. [ROADMAP.md](../../../ROADMAP.md) itself keeps only the control plane:
+the phases, [the queue](ROADMAP.md#the-queue), scheduling and defect rules,
 owner-decision pointers, candidate records and release acceptance. A
 task's position here is topical filing under its **area**; it schedules nothing. The queue and the
 active and next phases named in ROADMAP.md decide what happens next.
 
 Every other task lives in the [roadmap backlog](ROADMAP_BACKLOG.md) with its pull trigger. The bodies
 of done, superseded, merged, retired and delegated tasks are archived in
-[ROADMAP_RETIRED_TASKS.md](../archive/ROADMAP_RETIRED_TASKS.md); each keeps a stub here or in the
-backlog. Completed tasks are in [CHANGELOG.md](../../CHANGELOG.md) under `### Completed Task R-NNNN`.
+[ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md); each keeps a stub here or in the
+backlog. Completed tasks are in [CHANGELOG.md](../../../CHANGELOG.md) under `### Completed Task R-NNNN`.
 
 The tasks moved here verbatim from ROADMAP.md on 2026-10-28 (only heading-relative links were
 adjusted). The 2026-11-02 restructure applies the immutable classification record to phases,
@@ -21,7 +21,7 @@ and `scripts/tests/check_roadmap_linear.sh` read ROADMAP.md together with this f
 
 Areas are topical filing locations, never scheduling units. Until 2026-10-19 they had the
 historical phase numbers below. Each task's **Phase:** line and the queue own its current
-schedule; the [legacy catalog](../archive/ROADMAP_LEGACY_PLAN.md#area-scheduling-before-the-restructure)
+schedule; the [legacy catalog](../ROADMAP_LEGACY_PLAN.md#area-scheduling-before-the-restructure)
 preserves the former counts and scheduling map.
 
 | area | historical area phase |
@@ -50,11 +50,11 @@ preserves the former counts and scheduling map.
 
 ## Area: Development Throughput
 
-These tasks carry the [development throughput](../../ROADMAP.md#development-throughput) track, which was decided on
+These tasks carry the [development throughput](ROADMAP.md#development-throughput) track, which was decided on
 2026-10-22. The measurements behind them, the targets and the dependency order are in that section.
 Pre-push gate selection belongs to R-0513, so it is not restated here. None of these tasks
 changes what a validation result means. Every result stays bound to its exact SHA under the
-[promotion pipeline](PROMOTION_PIPELINE.md#promotion-pipeline).
+[promotion pipeline](../../project/PROMOTION_PIPELINE.md#promotion-pipeline).
 
 ### Task R-0539
 
@@ -91,7 +91,7 @@ landing tier).
 **Phase:** T
 
 **Objective:** CI tiers. A landing tier is required for merge, with a target of ≤ 40 min. The mutation
-campaign runs on schedule or dispatch and gates campaign qualification ([stage (c)](PROMOTION_PIPELINE.md#promotion-pipeline)),
+campaign runs on schedule or dispatch and gates campaign qualification ([stage (c)](../../project/PROMOTION_PIPELINE.md#promotion-pipeline)),
 not merges.
 
 **Work:** in progress on branch `ci-tiering`, which edits the workflow and the promotion-pipeline tier
@@ -228,14 +228,14 @@ landed) and show median time to land on this roadmap.
 - review rounds per slice and the place each gate failure was first seen (pre-push or CI) are recorded
   with the timestamps;
 - a generated median time to land next to the candidate table under
-  [Implemented, not yet accepted](../../ROADMAP.md#implemented-not-yet-accepted), regenerated like that table.
+  [Implemented, not yet accepted](ROADMAP.md#implemented-not-yet-accepted), regenerated like that table.
 
 **Exit:** every branch landed after the recorder exists has all four timestamps. The generated median
 covers them, and `check_docs_drift.sh` fails when the median is stale.
 
 ## Area: Verified-Compiler Pipeline, Stabilization And Usability
 
-These tasks carry the [verified-compiler pipeline](../compiler/VERIFIED_PIPELINE.md)
+These tasks carry the [verified-compiler pipeline](../../compiler/VERIFIED_PIPELINE.md)
 (R-0491 – R-0512), the gate and shared-front-end work it depends on (R-0513, R-0514), the usability
 and release-automation tracks (R-0515, R-0516), the Lean Compiler Backend dependency (R-0517) and the
 open work promoted from roadmap prose by the 2026-10-19 reconciliation. They were filed under the backend-contracts area
@@ -274,7 +274,7 @@ Historical comparison does not authorize a legacy repair.
 
 Every `@run` in `scripts/tests/example_manifest.txt` names an oracle: `interp` only with
 `interp=yes`, a recorded `spec:<path>[#anchor]` derivation/reference result in
-[GOLDEN_ORACLES.md](GOLDEN_ORACLES.md), or `unverified:<reason>` only if the interpreter cannot
+[GOLDEN_ORACLES.md](../../project/GOLDEN_ORACLES.md), or `unverified:<reason>` only if the interpreter cannot
 run it. `check_example_outputs.sh` enforces this with negative controls and prints/lists unverified
 goldens as tracked gaps. Retire each gap with supported interpreter coverage or a recorded derivation;
 a compiler-produced golden alone is insufficient. This rule covers every new/adversarial expected result.
@@ -324,14 +324,14 @@ weaken the complete task exit.
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
 
-- **R-0092** (superseded): superseded — the three-way differential is Core semantics / LLVM profile / LCB-native under R-0491. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0092)
-- **R-0093** (merged): duplicate of R-0092: merge; labels are hypotheses, not proof of faulty component. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0093)
+- **R-0092** (superseded): superseded — the three-way differential is Core semantics / LLVM profile / LCB-native under R-0491. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0092)
+- **R-0093** (merged): duplicate of R-0092: merge; labels are hypotheses, not proof of faulty component. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0093)
 - **R-0094** (superseded): superseded by R-0491: merge; retain hand/reference/metamorphic controls.
 - **R-0095** (superseded): superseded by R-0491/R-0118: merge manifests and minimum completed comparisons.
 - **R-0096** (superseded): superseded by R-0513/R-0491: merge; remove mandatory QBE availability.
-- **R-0105** (superseded): superseded by R-0491/R-0504: merge debug/release and sanitizer controls. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0105)
+- **R-0105** (superseded): superseded by R-0491/R-0504: merge debug/release and sanitizer controls. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0105)
 - **R-0106** (merged): duplicate of R-0009/R-0491: merge new backend predicates into shared reducer/harness.
-- **R-0273** (superseded): superseded by R-0491/R-0498: merge; map every listed family to a retained control. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0273)
+- **R-0273** (superseded): superseded by R-0491/R-0498: merge; map every listed family to a retained control. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0273)
 - **R-0290** (merged): Duplicate of R-0491: merge into R-0491, retaining backend/profile matrix.
 
 ### Task R-0492
@@ -374,13 +374,13 @@ weaken the complete task exit.
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
 
-- **R-0007** (superseded): superseded by R-0492/R-0510: merge, preserving function-symbol and metamorphic controls. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0007)
+- **R-0007** (superseded): superseded by R-0492/R-0510: merge, preserving function-symbol and metamorphic controls. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0007)
 - **R-0008** (superseded): superseded by R-0492: merge reproducer and alias permutations into identity migration.
 - **Aliased imported method (E0264)**, from the archived 2026-08 gate-health record: a method call on an
   aliased imported type is rejected today; the identity migration resolves it and adds an exact
   alias-method fixture (reconciliation prose item, merged through R-0008).
 - **R-0103** (superseded): superseded by R-0492/R-0505: merge; general separate compilation arrives in V6.
-- **R-0114** (superseded): superseded by R-0492: merge; distinguish compilation-local IDs from persistent evidence identity. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0114)
+- **R-0114** (superseded): superseded by R-0492: merge; distinguish compilation-local IDs from persistent evidence identity. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0114)
 
 ### Task R-0493
 
@@ -413,9 +413,9 @@ weaken the complete task exit.
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
 
-- **R-0079** (superseded): superseded by R-0493/R-0501/03: merge into typed operations and pass obligations. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0079)
-- **R-0221** (superseded): superseded by R-0493/S6: merge semantic ownership into R-0493. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0221)
-- **R-0464** (superseded): superseded by R-0493/R-0495/R-0460: merge; archive completed H24 fix and retire SSA-first prescription. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0464)
+- **R-0079** (superseded): superseded by R-0493/R-0501/03: merge into typed operations and pass obligations. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0079)
+- **R-0221** (superseded): superseded by R-0493/S6: merge semantic ownership into R-0493. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0221)
+- **R-0464** (superseded): superseded by R-0493/R-0495/R-0460: merge; archive completed H24 fix and retire SSA-first prescription. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0464)
 
 ### Task R-0496
 
@@ -453,14 +453,14 @@ weaken the complete task exit.
 regression cases and controls of these tasks transfer here unless the reason retires them.
 
 - **R-0223** (superseded): superseded by R-0496/S7: merge into R-0496’s semantic contract.
-- **R-0234** (superseded): superseded by R-0496/S7, V7: merge into V7 float-profile work. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0234)
-- **R-0235** (superseded): superseded by R-0496/R-0495: retire PVal/PBinOp expansion; implement Core float semantics. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0235)
+- **R-0234** (superseded): superseded by R-0496/S7, V7: merge into V7 float-profile work. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0234)
+- **R-0235** (superseded): superseded by R-0496/R-0495: retire PVal/PBinOp expansion; implement Core float semantics. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0235)
 - **R-0261** (merged): duplicate of R-0496/R-0460: merge; already explicitly reconciled.
 - **R-0268** (superseded): superseded by S5–S8: retire undecided architecture question; plan has chosen the chain.
-- **R-0276** (superseded): superseded by R-0506/R-0496: retire general legacy rewrite; retain migration-needed wrappers only. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0276)
+- **R-0276** (superseded): superseded by R-0506/R-0496: retire general legacy rewrite; retain migration-needed wrappers only. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0276)
 - **R-0408** (superseded): Superseded in core scope by R-0496/S7: merge required instrumentation into R-0496; separately specify any extra research.
 - **R-0409** (superseded): Superseded by R-0496/R-0512: retire legacy redesign; carry demonstrated proof debt into Core proof engineering.
-- **R-0456** (superseded): superseded by R-0496 for proposed PExpr port: retire PExpr-port design; reconsider only a measured Core-metatheory proposal. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0456)
+- **R-0456** (superseded): superseded by R-0496 for proposed PExpr port: retire PExpr-port design; reconsider only a measured Core-metatheory proposal. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0456)
 
 ### Task R-0497
 
@@ -494,8 +494,8 @@ weaken the complete task exit.
 regression cases and controls of these tasks transfer here unless the reason retires them.
 
 - **R-0073** (superseded): superseded by R-0497/R-0503: merge into payload-bound validated BIR artifacts.
-- **R-0082** (superseded): superseded by VP S5–S13: retire old SSA chain; use CheckedCore→CheckedMonoCore→MIR→BIR. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0082)
-- **R-0116** (superseded): superseded by R-0497/R-0510/R-0514: merge; use payload binding and new IR chain. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0116)
+- **R-0082** (superseded): superseded by VP S5–S13: retire old SSA chain; use CheckedCore→CheckedMonoCore→MIR→BIR. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0082)
+- **R-0116** (superseded): superseded by R-0497/R-0510/R-0514: merge; use payload binding and new IR chain. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0116)
 
 ### Task R-0498
 
@@ -525,7 +525,7 @@ weaken the complete task exit.
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
 
-- **R-0273** (superseded): superseded by R-0491/R-0498: merge; map every listed family to a retained control. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0273)
+- **R-0273** (superseded): superseded by R-0491/R-0498: merge; map every listed family to a retained control. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0273)
 
 ### Task R-0499
 
@@ -572,9 +572,9 @@ weaken the complete task exit.
 regression cases and controls of these tasks transfer here unless the reason retires them.
 
 - **R-0227** (superseded): superseded by R-0499/R-0507: merge into checker rules and soundness.
-- **R-0228** (superseded): superseded by R-0499/S8 and V6: merge enforcement into R-0499; raw-operation extensions into V6. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0228)
+- **R-0228** (superseded): superseded by R-0499/S8 and V6: merge enforcement into R-0499; raw-operation extensions into V6. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0228)
 - **R-0267** (superseded): superseded by R-0499/R-0507/R-0495: merge; capabilities and purity remain distinct.
-- **R-0274** (superseded): superseded by R-0499/R-0514: retire source-checker/CompilerDB authority prescription. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0274)
+- **R-0274** (superseded): superseded by R-0499/R-0514: retire source-checker/CompilerDB authority prescription. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0274)
 
 ### Task R-0500
 
@@ -608,7 +608,7 @@ weaken the complete task exit.
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
 
-- **R-0435** (superseded): superseded by R-0500: merge migration, renamed-pattern syntax and controls. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0435)
+- **R-0435** (superseded): superseded by R-0500: merge migration, renamed-pattern syntax and controls. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0435)
 
 ### Task R-0501
 
@@ -637,8 +637,8 @@ weaken the complete task exit.
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
 
-- **R-0079** (superseded): superseded by R-0493/R-0501/03: merge into typed operations and pass obligations. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0079)
-- **R-0082** (superseded): superseded by VP S5–S13: retire old SSA chain; use CheckedCore→CheckedMonoCore→MIR→BIR. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0082)
+- **R-0079** (superseded): superseded by R-0493/R-0501/03: merge into typed operations and pass obligations. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0079)
+- **R-0082** (superseded): superseded by VP S5–S13: retire old SSA chain; use CheckedCore→CheckedMonoCore→MIR→BIR. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0082)
 - **R-0295** (superseded): Superseded by R-0501/S10: retire workload gate; MIR is already an architectural decision.
 
 ### Task R-0502
@@ -656,7 +656,7 @@ memory, initialization, alignment, pointer fragments, allocation lifetime, addre
 foreign mutation. One `Layout` authority supplies all size, alignment, offset and enum-representation
 facts. Layout remains unspecified except for documented `repr` guarantees; programs rely only on
 `sizeof`, `alignof` and array stride = `sizeof`; generic `Option` and `Result` use per-instantiation
-layout as recorded in [LAYOUT_CONTRACT](../archive/design-records/LAYOUT_CONTRACT.md).
+layout as recorded in [LAYOUT_CONTRACT](../design-records/LAYOUT_CONTRACT.md).
 
 Acceptance: Memory CFG has executable semantics and a verifier; `Layout` emits checked representation
 certificates. Place MIR → Memory CFG comparisons cover related values and stores, traces, traps,
@@ -673,10 +673,10 @@ weaken the complete task exit.
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
 
-- **R-0076** (superseded): superseded by R-0502: merge into single proved Layout authority. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0076)
+- **R-0076** (superseded): superseded by R-0502: merge into single proved Layout authority. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0076)
 - **R-0085** (merged): duplicate of R-0076: merge through R-0076 into R-0502.
 - **R-0088** (superseded): superseded — aggregate/memory ABI realization moves to R-0502 (layout) and the adapter boundary (R-0505/R-0517) across V2–V6.
-- **R-0434** (superseded): superseded by R-0502: merge into layout certificates and Memory CFG verification. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0434)
+- **R-0434** (superseded): superseded by R-0502: merge into layout certificates and Memory CFG verification. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0434)
 
 ### Task R-0503
 
@@ -709,14 +709,14 @@ weaken the complete task exit.
 regression cases and controls of these tasks transfer here unless the reason retires them.
 
 - **R-0073** (superseded): superseded by R-0497/R-0503: merge into payload-bound validated BIR artifacts.
-- **R-0074** (superseded): superseded — merge into validated BIR (R-0503) and R-0517; the closed `llvm`/`qbe` backend set becomes the LLVM and LCB-native profiles. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0074)
+- **R-0074** (superseded): superseded — merge into validated BIR (R-0503) and R-0517; the closed `llvm`/`qbe` backend set becomes the LLVM and LCB-native profiles. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0074)
 - **R-0077** (superseded): superseded by R-0503/R-0509: merge with `rt` contracts, support inventory and trust accounting.
-- **R-0079** (superseded): superseded by R-0493/R-0501/03: merge into typed operations and pass obligations. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0079)
-- **R-0082** (superseded): superseded by VP S5–S13: retire old SSA chain; use CheckedCore→CheckedMonoCore→MIR→BIR. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0082)
+- **R-0079** (superseded): superseded by R-0493/R-0501/03: merge into typed operations and pass obligations. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0079)
+- **R-0082** (superseded): superseded by VP S5–S13: retire old SSA chain; use CheckedCore→CheckedMonoCore→MIR→BIR. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0082)
 - **R-0090** (superseded): superseded by R-0503: retire preferred-C-runtime prescription; implement Concrete `rt`, named libc FFI.
 - **R-0109** (superseded): superseded by R-0503/R-0146: merge; remove assumption helpers must be C.
 - **R-0278** (superseded): Superseded by R-0503/S11: merge into R-0503; BIR replaces this architecture.
-- **R-0288** (superseded): Superseded by R-0503/S11: merge inspection, verification and parity requirements into R-0503. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0288)
+- **R-0288** (superseded): Superseded by R-0503/S11: merge inspection, verification and parity requirements into R-0503. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0288)
 
 ### Task R-0504
 
@@ -751,7 +751,7 @@ weaken the complete task exit.
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
 
-- **R-0105** (superseded): superseded by R-0491/R-0504: merge debug/release and sanitizer controls. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0105)
+- **R-0105** (superseded): superseded by R-0491/R-0504: merge debug/release and sanitizer controls. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0105)
 
 ### Task R-0506
 
@@ -788,8 +788,8 @@ regression cases and controls of these tasks transfer here unless the reason ret
 
 - **R-0102** (superseded): superseded — the operation gap ledger becomes typed pass obligations (R-0506) and the adapter's obligations (R-0517).
 - **R-0236** (superseded): superseded by R-0506/R-0509: merge axiom classification and inventory.
-- **R-0260** (superseded): superseded by R-0506/S12a: merge into pass/validator obligation ledger; preserve legacy historical view. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0260)
-- **R-0276** (superseded): superseded by R-0506/R-0496: retire general legacy rewrite; retain migration-needed wrappers only. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0276)
+- **R-0260** (superseded): superseded by R-0506/S12a: merge into pass/validator obligation ledger; preserve legacy historical view. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0260)
+- **R-0276** (superseded): superseded by R-0506/R-0496: retire general legacy rewrite; retain migration-needed wrappers only. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0276)
 
 ### Task R-0507
 
@@ -797,7 +797,7 @@ regression cases and controls of these tasks transfer here unless the reason ret
 
 **Reconciliation (2026-10-19):** Keep; cumulative proofs, not a deferred final phase.
 
-**Objective:** Type and ownership soundness — stage S14 of the [verified-compiler pipeline](../compiler/VERIFIED_PIPELINE.md), which holds the full design.
+**Objective:** Type and ownership soundness — stage S14 of the [verified-compiler pipeline](../../compiler/VERIFIED_PIPELINE.md), which holds the full design.
 
 **Status (2026-10-18): planned (Part 2; starts when its prerequisites exist).**
 
@@ -941,12 +941,12 @@ weaken the complete task exit.
 regression cases and controls of these tasks transfer here unless the reason retires them.
 
 - **R-0077** (superseded): superseded by R-0503/R-0509: merge with `rt` contracts, support inventory and trust accounting.
-- **R-0211** (superseded): superseded by R-0509/S16: merge into R-0509; retain audit command acceptance. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0211)
+- **R-0211** (superseded): superseded by R-0509/S16: merge into R-0509; retain audit command acceptance. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0211)
 - **R-0230** (superseded): superseded by R-0509/S16: merge into R-0509 and slice profiles.
 - **R-0236** (superseded): superseded by R-0506/R-0509: merge axiom classification and inventory.
 - **R-0264** (superseded): superseded by R-0494/R-0509: merge implementation into R-0494, soundness proof into S16.
 - **R-0265** (superseded): superseded by R-0495/R-0509: merge into statement/binding/aggregation soundness.
-- **R-0266** (superseded): superseded by R-0509/S16: merge; distinguish trusted assumptions from ordinary proof dependencies. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0266)
+- **R-0266** (superseded): superseded by R-0509/S16: merge; distinguish trusted assumptions from ordinary proof dependencies. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0266)
 
 ### Task R-0511
 
@@ -1007,10 +1007,10 @@ weaken the complete task exit.
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
 
-- **R-0083** (retired): retired — there is no Concrete QBE backend to select; the no-silent-fallback rule moves to R-0511/R-0517. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0083)
-- **R-0086** (superseded): superseded — its semantic vectors become adapter test vectors for V1 (R-0511/R-0517); later widths, casts, memory and floats follow the V-slices. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0086)
-- **R-0097** (superseded): superseded by R-0511/R-0512: merge profile admission; retain no silent fallback. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0097)
-- **R-0111** (superseded): superseded by R-0511/R-0137: merge reusable exits; retire required QBE showcase. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0111)
+- **R-0083** (retired): retired — there is no Concrete QBE backend to select; the no-silent-fallback rule moves to R-0511/R-0517. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0083)
+- **R-0086** (superseded): superseded — its semantic vectors become adapter test vectors for V1 (R-0511/R-0517); later widths, casts, memory and floats follow the V-slices. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0086)
+- **R-0097** (superseded): superseded by R-0511/R-0512: merge profile admission; retain no silent fallback. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0097)
+- **R-0111** (superseded): superseded by R-0511/R-0137: merge reusable exits; retire required QBE showcase. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0111)
 - **R-0231** (superseded): superseded by R-0511/R-0512: merge into each slice’s admission controls.
 - **R-0238** (superseded): superseded by R-0511/R-0512: merge into cumulative slice matrices; retain orthogonal policies.
 - **R-0263** (superseded): superseded by R-0511/R-0512: merge into V1–V7 slice ordering.
@@ -1038,7 +1038,7 @@ nightly; semantic, checker, evidence and trusted-base changes run their complete
 regression closure; remote runners for the full tier with local reproduction kept; the Linux-only
 claim-inventory step in the local full tier.
 
-**Impact-based selection (2026-10-22, [development throughput](../../ROADMAP.md#development-throughput) item 9).** Today the
+**Impact-based selection (2026-10-22, [development throughput](ROADMAP.md#development-throughput) item 9).** Today the
 pre-push hook selects about 92 of 255 gates by area name, and stack-budget, trust-gate, float
 round-trip and linear-discard failures were first seen in CI. The fast tier is to select by an
 impact map from source files and fixtures to the gates that exercise them, so a change runs every
@@ -1091,9 +1091,9 @@ weaken the complete task exit.
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
 
-- **R-0116** (superseded): superseded by R-0497/R-0510/R-0514: merge; use payload binding and new IR chain. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0116)
-- **R-0274** (superseded): superseded by R-0499/R-0514: retire source-checker/CompilerDB authority prescription. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0274)
-- **R-0437** (superseded): superseded by R-0514/R-0510: merge declaration and specialization checks; preserve distinct diagnostics. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0437)
+- **R-0116** (superseded): superseded by R-0497/R-0510/R-0514: merge; use payload binding and new IR chain. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0116)
+- **R-0274** (superseded): superseded by R-0499/R-0514: retire source-checker/CompilerDB authority prescription. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0274)
+- **R-0437** (superseded): superseded by R-0514/R-0510: merge declaration and specialization checks; preserve distinct diagnostics. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0437)
 
 ### Task R-0552
 
@@ -1248,7 +1248,7 @@ weaken the complete task exit.
 **Deliverables and acceptance:**
 
 Owners: the cleanup agent (`wip/cleanup-*`) and spec agent (`wip/spec`). It is scheduled by its queue
-row under the [scheduling rule](../../ROADMAP.md#scheduling-rule), with no independent early-phase exit.
+row under the [scheduling rule](ROADMAP.md#scheduling-rule), with no independent early-phase exit.
 Each sub-item lands independently, never preempts defect work or weakens an exit, and chooses no owner
 language decision.
 
@@ -1291,7 +1291,7 @@ weaken the complete task exit.
 
 Owner: spec agent (`wip/spec`) for specification completion; a separate agent owns bug-rule
 integration and backfill. It is scheduled by its queue row under the
-[scheduling rule](../../ROADMAP.md#scheduling-rule). Work is paused for soundness repairs and never
+[scheduling rule](ROADMAP.md#scheduling-rule). Work is paused for soundness repairs and never
 becomes a predecessor for unrelated work.
 No workstream answers an owner question: unresolved behaviour becomes an `open` decision entry.
 
@@ -1404,7 +1404,7 @@ and migrated consumers. Do not build Command/Rng/SystemTime/digest abstractions,
 unify every handle, or redesign every error type merely for symmetry. Deferred
 notes become work only when their named workload or failing gate pulls them.
 
-> Moved to [ROADMAP_HISTORY.md](../archive/ROADMAP_HISTORY.md#global-task-sequence) (historical record; nothing in it schedules work).
+> Moved to [ROADMAP_HISTORY.md](../ROADMAP_HISTORY.md#global-task-sequence) (historical record; nothing in it schedules work).
 
 ### Task R-0004
 
@@ -1421,7 +1421,7 @@ its closure result and accepted limits follow.
 executed and passed, clean tree, `HEAD == origin/main`. `proved` now requires a current exact subject,
 a complete dependency root, explicit trust and assumptions, and a receipt only a successful kernel
 replay can mint. The closure record is archived in
-[ROADMAP_HISTORY.md](../archive/ROADMAP_HISTORY.md#r-0004--closed-2026-08-20).
+[ROADMAP_HISTORY.md](../ROADMAP_HISTORY.md#r-0004--closed-2026-08-20).
 
 **Accepted limits at closure (each now owned by a live task):**
 
@@ -1436,7 +1436,7 @@ replay can mint. The closure record is archived in
 
 The **Post-R-0004 milestones and longer-term research** subsection below remains current future work.
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../archive/ROADMAP_RETIRED_TASKS.md#r-0004).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0004).
 
 ### Post-R-0004 milestones and longer-term research
 
@@ -1583,7 +1583,7 @@ Postfix `?` joins this list: recoverable failure uses `Result`, exhaustive `matc
 `return Result::Err ...`. Concrete does not hide a function exit behind expression punctuation;
 there is no implicit conversion, cleanup, drop, or capability use during propagation.
 
-> Moved to [ROADMAP_HISTORY.md](../archive/ROADMAP_HISTORY.md#strict-post-r-0004-critical-path) (historical record; nothing in it schedules work).
+> Moved to [ROADMAP_HISTORY.md](../ROADMAP_HISTORY.md#strict-post-r-0004-critical-path) (historical record; nothing in it schedules work).
 
 No evidence-affecting language feature crosses the initial identity/task/verifier stabilization seam
 unless its change includes the corresponding identity version, atomic migration, replay behavior,
@@ -1591,11 +1591,11 @@ consumer update and adversarial controls. Why3 remains a comparative reference a
 chain as a backend. A second proof-producing kernel remains separately research-gated; it does not
 block this product path.
 
-> Moved to [ROADMAP_HISTORY.md](../archive/ROADMAP_HISTORY.md#historical-record-and-detailed-slice-traceability) (historical record; nothing in it schedules work).
+> Moved to [ROADMAP_HISTORY.md](../ROADMAP_HISTORY.md#historical-record-and-detailed-slice-traceability) (historical record; nothing in it schedules work).
 
-> Moved to [ROADMAP_HISTORY.md](../archive/ROADMAP_HISTORY.md#binder-frames-position-and-meaning-are-separate-obligations) (historical record; nothing in it schedules work).
+> Moved to [ROADMAP_HISTORY.md](../ROADMAP_HISTORY.md#binder-frames-position-and-meaning-are-separate-obligations) (historical record; nothing in it schedules work).
 
-> Moved to [ROADMAP_HISTORY.md](../archive/ROADMAP_HISTORY.md#multi-kernel-where-the-ladder-actually-stands-2026-08-08) (historical record; nothing in it schedules work).
+> Moved to [ROADMAP_HISTORY.md](../ROADMAP_HISTORY.md#multi-kernel-where-the-ladder-actually-stands-2026-08-08) (historical record; nothing in it schedules work).
 
 ### Test-harness principles (2026-08-08) — rules, not tasks
 
@@ -1687,7 +1687,7 @@ reorganization is meant to clarify. Move one topic family at a time, with link a
 green before and after.
 
 The physical migration of the stable documents into the `docs/` families landed 2026-08-14 (record
-archived in [ROADMAP_HISTORY.md](../archive/ROADMAP_HISTORY.md#r-0480-physical-documentation-migration-2026-08-14)). Phase A's full lifecycle-header inventory and Phase B's
+archived in [ROADMAP_HISTORY.md](../ROADMAP_HISTORY.md#r-0480-physical-documentation-migration-2026-08-14)). Phase A's full lifecycle-header inventory and Phase B's
 one-owner/duplicate-current-status controls remain open; physical neatness is not completion of the
 authority audit.
 
@@ -1951,8 +1951,8 @@ weaken the complete task exit.
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
 
-- **R-0447** (merged): duplicate of R-0481: merge unique operational controls; retire conflicting directory blueprint. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0447)
-- **R-0478** (merged): duplicate of R-0481 / R-0474: merge each half into its actual owner. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0478)
+- **R-0447** (merged): duplicate of R-0481: merge unique operational controls; retire conflicting directory blueprint. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0447)
+- **R-0478** (merged): duplicate of R-0481 / R-0474: merge each half into its actual owner. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0478)
 
 ### Task R-0479
 
@@ -2214,7 +2214,7 @@ dirty-state leg. Cheap to run — level 1 must not need a compiler build.
 **Objective:** Ban lexical value shadowing while preserving explicit assignment
 rebind.
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../archive/ROADMAP_RETIRED_TASKS.md#r-0435).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0435).
 
 ### Task R-0440
 
@@ -2278,7 +2278,7 @@ regression cases and controls of these tasks transfer here unless the reason ret
 **Objective:** Freeze repository ownership and layout before broad stdlib,
 test, proof, and documentation growth multiplies the current ambiguity.
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../archive/ROADMAP_RETIRED_TASKS.md#r-0447).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0447).
 
 ### Task R-0438
 
@@ -2501,7 +2501,7 @@ for the changed invariant. QBE progress cannot be used to waive LLVM evidence.
 
 **Objective:** Replace `Pipeline.emit : SSAProgram -> String` with a statically dispatched backend driver returning a structured `CodegenArtifact`:
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../archive/ROADMAP_RETIRED_TASKS.md#r-0074).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0074).
 
 ### Task R-0075
 
@@ -2533,8 +2533,8 @@ weaken the complete task exit.
 regression cases and controls of these tasks transfer here unless the reason retires them.
 
 - **R-0091** (merged): merged — native test-mode entry generation joins R-0075's driver and the LCB-native profile (R-0517).
-- **R-0107** (merged): duplicate of R-0075: merge bounded external-tool execution contract. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0107)
-- **R-0110** (merged): merged — profile naming and evidence attribution join R-0075/R-0333; the profiles are `llvm` and the LCB-native `verified` profile. — [archived body](../archive/ROADMAP_RETIRED_TASKS.md#r-0110)
+- **R-0107** (merged): duplicate of R-0075: merge bounded external-tool execution contract. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0107)
+- **R-0110** (merged): merged — profile naming and evidence attribution join R-0075/R-0333; the profiles are `llvm` and the LCB-native `verified` profile. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0110)
 
 ### Task R-0076
 
@@ -2546,7 +2546,7 @@ regression cases and controls of these tasks transfer here unless the reason ret
 
 **Objective:** Split target-neutral layout computation from LLVM rendering. Rename or move `tyToLLVM`, LLVM type-definition construction, target triple/data-layout text, and LLVM ABI spellings out of `Concrete/Check/Layout.lean`; retain one checked `LayoutFacts` source for size, alignment, field offsets, enum tag/payload placement, pass-by-pointer decisions, and canonical builtin aggregates. LLVM and QBE render those facts independently. No emitter may recompute layout from syntax or host assumptions.
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../archive/ROADMAP_RETIRED_TASKS.md#r-0076).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0076).
 
 ### Task R-0077
 
@@ -2568,7 +2568,7 @@ The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](
 
 **Objective:** Define a legalization responsibility table before QBE instruction coverage:
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../archive/ROADMAP_RETIRED_TASKS.md#r-0079).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0079).
 
 ### Task R-0080
 
@@ -2590,7 +2590,7 @@ The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](
 
 **Objective:** Preserve one frontend and one lowering spine:
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../archive/ROADMAP_RETIRED_TASKS.md#r-0082).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0082).
 
 ### Task R-0085
 
@@ -2624,7 +2624,7 @@ The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](
 
 **Objective:** Add `scripts/tests/check_qbe_backend.sh` and a reusable differential driver that runs each fixture through the source interpreter, LLVM, and QBE and compares a structured observation:
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../archive/ROADMAP_RETIRED_TASKS.md#r-0092).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0092).
 
 ### Task R-0093
 
@@ -2634,7 +2634,7 @@ The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](
 
 **Objective:** Classify every mismatch rather than printing a generic wrong-code failure:
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../archive/ROADMAP_RETIRED_TASKS.md#r-0093).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0093).
 
 ### Task R-0094
 
@@ -2692,7 +2692,7 @@ retain their artifacts.
 
 **Objective:** Add optimization-sensitive triangulation. For every eligible fixture, compare interpreter, LLVM at the supported debug/release optimization levels, and QBE followed by the supported assembler/linker configurations.
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../archive/ROADMAP_RETIRED_TASKS.md#r-0105).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0105).
 
 ### Task R-0106
 
@@ -2712,7 +2712,7 @@ The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](
 
 **Objective:** Separate compiler defects from toolchain defects operationally. The bundle and CI report must identify the first failing boundary:
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../archive/ROADMAP_RETIRED_TASKS.md#r-0107).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0107).
 
 ## Area: Flagship Depth And Examples
 
@@ -2769,7 +2769,7 @@ monomorphized names, and renamed-import callee identity. Alpha-renaming remains
 the completed local fix for bug 045; this task eliminates the recurring
 architectural precondition without relabeling narrow fixes as temporary.
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../archive/ROADMAP_RETIRED_TASKS.md#r-0114).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0114).
 
 ### Task R-0115
 
@@ -2808,7 +2808,7 @@ weaken the complete task exit.
 
 **Objective:** Make successful compiler pass boundaries type-safe Introduce thin opaque results such as `ParsedProgram`, `ResolvedProgram`, `CheckedProgram`, `ElaboratedCore`, `CanonicalCore`, `MonomorphizedCore`, `LoweredSSA`, `ValidatedSSA`, `CleanedSSA`, and `CodegenInput`. Constructors live with the pass that earns each invariant; reports, backends, tests, and projects cannot call a later consumer with an earlier-stage value.
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../archive/ROADMAP_RETIRED_TASKS.md#r-0116).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0116).
 
 ### Task R-0118
 
@@ -2979,7 +2979,7 @@ under a stronger badge.
 
 **Objective:** Add a trust-boundary inventory report: all `trusted`, `Unsafe`, extern, backend, runtime, and target assumptions in one machine-readable list.
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../archive/ROADMAP_RETIRED_TASKS.md#r-0211).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0211).
 
 ### Task R-0217
 
@@ -3024,7 +3024,7 @@ promises.
 
 **Objective:** Freeze arithmetic-site semantics for subset claims. This task is reconciled with historical phase 6 item 10 and `docs/archive/design-records/ARITHMETIC_POLICY.md`: build/profile names are policy bundles, not arithmetic modes, and the same source expression must not mean wrap in one profile and checked in another. Ordinary `+ - *` are checked in every profile; intentional modular arithmetic is written as `wrapping_*`; intentional clamping is written as `saturating_*`. Subset reports must classify arithmetic sites as `checked`, `proved`, `runtime- checked`, `explicit-wrapping`, or `explicit-saturating`; they must never infer an ambient arithmetic mode from `debug`, `release`, `predictable`, or `proof`.
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../archive/ROADMAP_RETIRED_TASKS.md#r-0221).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0221).
 
 ### Task R-0222
 
@@ -3128,7 +3128,7 @@ commands, and visible proof/enforcement status.
 interpretation, optimization, obligation generation and the backends — and, second,
 generate obligations from SSA rather than the surface AST.
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../archive/ROADMAP_RETIRED_TASKS.md#r-0464).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0464).
 
 ### Task R-0468
 
@@ -3209,7 +3209,7 @@ passes here.
 
 **Objective:** Add a compiler-soundness rule-status dashboard over R-01..R-21:
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../archive/ROADMAP_RETIRED_TASKS.md#r-0260).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0260).
 
 ### Task R-0266
 
@@ -3219,7 +3219,7 @@ The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](
 
 **Objective:** Record a machine-readable trusted computing base for proof/evidence claims:
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../archive/ROADMAP_RETIRED_TASKS.md#r-0266).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0266).
 
 ### Task R-0272
 
@@ -3275,7 +3275,7 @@ weaken the complete task exit.
 
 **Objective:** Add a semantic-darkness audit and red-team gate. The goal is to catch the checked-arithmetic class of bug before it repeats: a construct looks ordinary in source, but its real behavior depends on width, profile, target, allocation, authority, runtime checks, or an outdated proof/interpreter model. Add `docs/SEMANTIC_DARKNESS_AUDIT.md` and `scripts/tests/check_semantic_darkness.sh`; wire the gate into CI or the soundness-bridge area validation artifact. The audit must cover:
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../archive/ROADMAP_RETIRED_TASKS.md#r-0273).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0273).
 
 ### Task R-0274
 
@@ -3287,7 +3287,7 @@ The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](
 
 **Objective:** **Preserve the one source of typing truth through proofs.** Every 2026-07 front-end bug was two passes holding different opinions about the same program: Check typed literals from the hint while Elab typed them from the sibling operand;
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../archive/ROADMAP_RETIRED_TASKS.md#r-0274).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0274).
 
 ## Area: Backend, Target, And Stdlib Contracts
 
@@ -3335,7 +3335,7 @@ replayable; and every boundary after that slice remains explicitly trusted.
 
 **Objective:** Add `BackendIR` as a structured backend contract between `ValidatedSSA` and LLVM/native emission. This is useful even if Concrete never ships its own native backend: it gives the compiler a typed, inspectable place to preserve runtime checks, trap/source-span facts, layout/ABI decisions, target constants, trusted/runtime helper calls, and capability/trust labels before they disappear into LLVM text or target code. The intended ladder is `ValidatedSSA -> BackendIR -> ValidatedBackendIR -> EmitLLVM` first; later emitters (native, C, WASM, QBE-style) may consume the same `ValidatedBackendIR` only after the contract is stable.
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../archive/ROADMAP_RETIRED_TASKS.md#r-0288).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0288).
 
 ### Task R-0290
 
@@ -3595,7 +3595,7 @@ constructs land. Publish top hotspots and per-stage times, compare with the prev
 and open a tracked finding when a hotspot grows or appears above a recorded threshold.
 
 This complements rather than replaces instruction-count tracking and its approximately 1.5% alarm
-([PERF_TRACKING.md](PERF_TRACKING.md)). Keep server provisioning in the owner's private dotfiles;
+([PERF_TRACKING.md](../../project/PERF_TRACKING.md)). Keep server provisioning in the owner's private dotfiles;
 only portable scripts belong here. Acceptance: profiles and comparisons at exact SHAs for ten
 consecutive landed commits, and a deliberately introduced quadratic hotspot opens a finding.
 
@@ -3621,7 +3621,7 @@ after the source-contract/proof-link path is usable outside flagship hero work;
 it reaches **beta/release** only after ordinary project workflow and external
 validation are in place.
 
-The [release map](../../ROADMAP.md#release-map) separates the systems preview, verified-component
+The [release map](ROADMAP.md#release-map) separates the systems preview, verified-component
 alpha, project beta and stable supported subset. The preview makes no alpha
 claim; the alpha and beta bars below remain required for their respective scopes.
 Stable release additionally requires the named compatibility and maintenance bars.
@@ -3793,7 +3793,7 @@ package or runs dependency code; the frontend receives resolved driver inputs.
 Primary references are Cargo's project workflow, Go modules' explicit resolution
 discipline, Zig's integrated compiler/build/package experience and Nix's declared
 inputs and reproducibility. Decisions and upstream references live in
-[package-manager-design.md](../../research/packages-tooling/package-manager-design.md).
+[package-manager-design.md](../../../research/packages-tooling/package-manager-design.md).
 
 R-0285's queued interop checkpoint pulls forward the minimal local manifest,
 lockfile and native-build graph needed by its automatic application workflow;

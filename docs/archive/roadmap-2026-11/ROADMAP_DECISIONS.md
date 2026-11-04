@@ -1,10 +1,10 @@
 # Roadmap Decision Log
 
 Status: reference — the dated decisions that shape [the current execution
-queue](../../ROADMAP.md#the-queue). None creates another queue. Decisions on the
+queue](ROADMAP.md#the-queue). None creates another queue. Decisions on the
 language rules that the project owner reserved are listed under
-[owner decisions](../spec/decisions.md#owner-decisions) in ROADMAP.md and recorded in
-[decisions.md](../spec/decisions.md); nothing here answers one of them.
+[owner decisions](../../spec/decisions.md#owner-decisions) in ROADMAP.md and recorded in
+[decisions.md](../../spec/decisions.md); nothing here answers one of them.
 
 Moved verbatim from ROADMAP.md on 2026-10-28 (the roadmap compaction); only heading levels and relative links were adjusted.
 
@@ -16,7 +16,7 @@ queue.
 **Authority decision, 2026-11-01 (owner):** `with(...)` is the only permission mechanism, and linear values
 are the only resource mechanism. An operation needs both, and the permission-token concept is dropped. `Std`
 is removed as a capability. This follows a Codex and Grok review, which concluded "adopt with changes"; Kimi
-could not run. The resulting rules are listed at the top of [ROADMAP.md](../../ROADMAP.md). It supersedes the
+could not run. The resulting rules are listed at the top of [ROADMAP.md](../../../ROADMAP.md). It supersedes the
 Root-token readings of OD38 and OD156. OD8's singletons remain, as linear values that the runtime creates and
 hands to `main`.
 
@@ -25,7 +25,7 @@ phases A (Core and theorem), B (slice 1, then the old pipeline deleted), C (the 
 0.1 is cut here from the new compiler), D (the whole language; paused workloads resume as their
 constructs are supported), E (verified growth), F (evidence as a product) and G (release and
 ecosystem), with development throughput beside them. The old execution plan is archived verbatim; the
-owner-decision answers have one home, [decisions.md](../spec/decisions.md); the bug dashboard moves to
+owner-decision answers have one home, [decisions.md](../../spec/decisions.md); the bug dashboard moves to
 `docs/bugs/` and legacy defects are recorded, never dispatched for repair; the capacity shares are
 replaced by one compiler sequence. The tag `legacy-compiler-final` makes the freeze real. Codex reviewed
 the plan and its corrections are adopted. The plan: [ROADMAP_RESTRUCTURE.md](ROADMAP_RESTRUCTURE.md).
@@ -36,7 +36,7 @@ ethlambda workloads and the usability track until the new compiler can run them,
 new-compiler architecture is approved with three conditions, 0.1 is cut from the new compiler, slice
 1's move test uses an empty struct without `Copy`, a file-copy program orders the later slices, and the
 roadmap is restructured around the new compiler. The language answers of the same day are in
-[decisions.md](../spec/decisions.md#decided-2026-11-02).
+[decisions.md](../../spec/decisions.md#decided-2026-11-02).
 
 **New compiler decision, 2026-11-01 (owner):** the current compiler is not migrated to the decided
 language. A new compiler is written from the Lean definition, proof-first: a `ConcreteSpec` library
@@ -48,7 +48,7 @@ source decision still governs and no language question is settled by it. The arc
 library and the new compiler, a reviewed proposal at the time, was approved on 2026-11-02 (entry above). The first
 deliverable is the target Core proposal for the owner. The owner: "i don't care about the current
 pipeline, we could remove it and start from scratch". The plan is at the top of
-[ROADMAP.md](../../ROADMAP.md).
+[ROADMAP.md](../../../ROADMAP.md).
 
 **Lean-only source decision, 2026-11-01 (owner):** Lean is the only source of the language. Core, its
 typing, ownership and effect rules, its execution semantics and the desugaring of every surface feature are
@@ -58,14 +58,14 @@ cites the generated spec ([revised 2026-11-04](#2026-11-04--lean-is-the-specific
 The same day, a research review (Codex: adopt with changes) set the order of the compiler proof: semantic
 contract, executable Core semantics, one end-to-end path, functional models replacing ProofCore,
 open-module correctness, ghost permissions for trusted code, SMT-checked lowering. Both are at the top of
-[ROADMAP.md](../../ROADMAP.md).
+[ROADMAP.md](../../../ROADMAP.md).
 
 **Spec rewrite decision, 2026-11-01 (owner):** the owner chose to rewrite the specification around
 one formal source: a small Core whose surface features are defined by desugaring, and a single Lean
 definition from which the spec's formal parts, the reference interpreter, the conformance oracle and the
 proof definitions are generated (the WebAssembly SpecTec model) ([revised 2026-11-04](#2026-11-04--lean-is-the-specification): the Lean definitions are the spec, and no prose is generated from them). This is the most important work in row 0s.
 Steps 3, 4, 6 and 8 of the spec plan are carried out through it. The plan is at the top of
-[ROADMAP.md](../../ROADMAP.md).
+[ROADMAP.md](../../../ROADMAP.md).
 
 **Specification-first decision, 2026-10-30 (owner):** "the spec is the most important thing to do."
 Row 0s (R-0555) becomes the top priority. Until its steps 1 – 6 hold (owner decisions, absorption with a
@@ -75,21 +75,21 @@ no other row starts. For that period this overrides the 2026-10-21 priority deci
 capacity allocation and every concurrent-work permission in this log and in ROADMAP.md. After that, the
 verified-compiler track resumes under the capacity allocation and carries steps 7 – 9 (migration under
 exit 2q, Lean links with R-0496, the outside-reader test). The nine-step plan with its completion criteria
-is at the top of [ROADMAP.md](../../ROADMAP.md). The owner's standing preferences apply: strict by default,
+is at the top of [ROADMAP.md](../../../ROADMAP.md). The owner's standing preferences apply: strict by default,
 Austral by default with written deviations, verbose code is acceptable when it is clear and safer, the
 grammar stays LL(1), and every language design decision is the owner's.
 
 **Priority decision, 2026-10-21:** the verified compiler is the primary engineering track, protected
-by an explicit [capacity allocation](../archive/ROADMAP_LEGACY_PLAN.md#capacity-allocation) rather than by queue numbering. Two inputs
+by an explicit [capacity allocation](../ROADMAP_LEGACY_PLAN.md#capacity-allocation) rather than by queue numbering. Two inputs
 were weighed. An external review asked for exactly that, in the order: close known soundness defects
 and fix the semantics proofs rely on; make the Core checker authoritative with explicit identities and
 ownership/capability rules; V1a; V1b through the backend to the native image; then grow the subset
 from real programs, with one small executable workload alongside and evidence integrity as a second
 protected track. Separately, point repairs are not converging: probes found bugs 102 – 120 in about
-two days, nearly all of them new instances of [structural classes](../bugs/STRUCTURAL_CLASSES.md)
+two days, nearly all of them new instances of [structural classes](../../bugs/STRUCTURAL_CLASSES.md)
 whose owners are verified-pipeline Part 1 stages. Adopted: the capacity table (verified compiler at
 least 55%, evidence integrity at least 15%, adversarial validation at least 10%, features at most 20%
-in a single slot); the [defect disposition rule](../../ROADMAP.md#the-queue); Part 1's structure as
+in a single slot); the [defect disposition rule](ROADMAP.md#the-queue); Part 1's structure as
 row 4's migration track once row 0's in-flight candidates are accepted, extended from identities and
 the checker to one `Layout` (R-0502) and Place MIR (R-0501) in the existing profile, because classes 8
 and 12 produce wrong code in the profile users run today; V1c as a named deliverable, so that a
@@ -161,7 +161,7 @@ criterion is removed; exit 2i's acceptance and exits 2j and 2k's scopes are made
 **Tightening decisions, 2026-10-23:** the user approved selective tightening (a rule lands when it
 closes a soundness hole or removes a case from the semantics the verified pipeline must formalize;
 style-only rules wait for a workload) and answered the four open questions of
-[TIGHTENING_DECISIONS.md](TIGHTENING_DECISIONS.md) with "do the best long term
+[TIGHTENING_DECISIONS.md](../../project/TIGHTENING_DECISIONS.md) with "do the best long term
 solution for this problem and every problem". **Adopted:** every `&mut` argument is an implicit
 reborrow and an unused `&mut` may lapse, as an exclusive scoped loan that suspends its parent (D1,
 G9 / B1 / B2; R-0496 with exit 2i); the Austral model, "ok do the austral model with `&s.f`
@@ -172,27 +172,27 @@ closes bug 182; 2 std sites and 1 train3 fixture migrate); every binder through 
 reference type is a reference, Copy or not, carried explicitly through Core (D3; closes bug 181; 2
 fixtures migrate; G17's Copy case reopens under it); every foreign function value is refused now
 (bug 166), and function types will carry calling convention, capabilities and safety obligations
-when the first callback workload needs them (D4, [FFI.md](../platform/FFI.md)). G17's moving
+when the first callback workload needs them (D4, [FFI.md](../../platform/FFI.md)). G17's moving
 shapes are closed (refused on main, pinned by fixtures). The ordered implementation plan is TIGHTENING_DECISIONS §5; exit 2i owns D1 –
 D3's checker rules and exit 0b the bug repairs.
 
 **Owner decisions, 2026-10-25:** the project owner paused the 2026-10-23 tightening decisions for
 negotiation, together with further language questions raised since (eighteen in all, OD21 from bug 262 and OD22 from bug 189), the
 PROVABLE_V1 scope and bug 226's std visibility question. They are listed under
-[owner decisions](../spec/decisions.md#owner-decisions) and held by exit 2n. Only the owner decides them: agents analyse,
+[owner decisions](../../spec/decisions.md#owner-decisions) and held by exit 2n. Only the owner decides them: agents analyse,
 recommend and ask, and do not choose, encode or implement an answer. The entry above and
 TIGHTENING_DECISIONS.md stay as the record of what was proposed and landed; the owner's new answer
 governs. Rules already on main stay as they are until the owner answers, and the answer decides
 whether they stay.
 
-**Delivery decision, 2026-10-17** (amended 2026-10-19: interop runs alongside the verified-pipeline track after the immediate protections; see the vertical-slice decision below; amended 2026-10-20: RocksDB slice 1's work proceeds now and is accepted once its [prerequisite exits](../archive/ROADMAP_LEGACY_PLAN.md#feature-prerequisites) hold, not after all of rows 0 – 2)**:** comfortable C/Rust/Zig interop is the next delivery investment
+**Delivery decision, 2026-10-17** (amended 2026-10-19: interop runs alongside the verified-pipeline track after the immediate protections; see the vertical-slice decision below; amended 2026-10-20: RocksDB slice 1's work proceeds now and is accepted once its [prerequisite exits](../ROADMAP_LEGACY_PLAN.md#feature-prerequisites) hold, not after all of rows 0 – 2)**:** comfortable C/Rust/Zig interop is the next delivery investment
 after the active soundness/identity work. R-0285 owns the integration workflow; the existing ABI
 and export tasks supply the tested subset it needs. R-0490 then uses a complete ethlambda port
 to find language, library and tooling gaps through execution. Bound the interop checkpoint to
 its four acceptance adapters; further dependencies are integrated when a port slice needs them.
 The application contract is dependency -> ordinary Concrete import -> normal build/test.
 Reusable binding packages describe ownership, errors and authority once; generation and native
-builds are tooling responsibilities. The [interop design](../platform/FFI_GLUE.md) defines the
+builds are tooling responsibilities. The [interop design](../../platform/FFI_GLUE.md) defines the
 shared boundary description, language-specific front ends, cache/upgrade behavior and exit bars.
 Compiler safety, protocol conformance and regression testing remain continuous. Functional
 proofs of client components follow the working port, through the evidence and contract owners
@@ -207,7 +207,7 @@ remain are recorded here so the queue does not read as if rows 0–1 settle soun
 - **Core→VC soundness (H19, R-0460).** Each obligation-generation rule, including the soundness of
   its hypotheses, requires the named evidence recorded in `VC_BRIDGE_REGISTER.md`; proving claims
   on Core does not discharge these rows.
-- **Model and compiler correspondence ([verified-compiler pipeline](../compiler/VERIFIED_PIPELINE.md)).**
+- **Model and compiler correspondence ([verified-compiler pipeline](../../compiler/VERIFIED_PIPELINE.md)).**
   `PExpr` is retired in favour of claims on Core's semantics (R-0495, R-0496); the lower pipeline
   gets a semantics per IR (R-0501 – R-0503); translation validation of the LLVM profile is pulled
   forward (R-0504 with R-0299/R-0300); compiler correctness and proof transport to native binaries
@@ -231,7 +231,7 @@ transport to the native image through proved transport lemmas under recorded pre
 afternoon, and they trace to the pipeline's structure: the checker runs on the source tree and
 returns nothing the compiler uses, the language's meaning is implemented several times, names are
 strings after resolution, evidence is computed per surface, and SSA and the backend have no
-semantics. The [verified-compiler pipeline](../compiler/VERIFIED_PIPELINE.md) (R-0491 – R-0510)
+semantics. The [verified-compiler pipeline](../../compiler/VERIFIED_PIPELINE.md) (R-0491 – R-0510)
 reconciles two independent architecture designs and Codex's reviews into one target: Core as the
 language definition with an executable semantics, the authoritative checker on Core, `PExpr`
 retired in favour of claims on Core, a Place MIR → Memory CFG → BIR lower pipeline each with a
@@ -245,7 +245,7 @@ verdict authority and claims-on-Core land, and the fixes for 081 – 101 land fi
 **Usability decision, 2026-10-19:** a great language needs real users, good errors, tooling, a
 reliable `std` and published performance, not only a sound compiler. Usability moves from the end of
 the queue to a track beside the proofs (row 8, R-0515), in waves under the capacity rule (since 2026-10-21 the
-feature track of the [capacity allocation](../archive/ROADMAP_LEGACY_PLAN.md#capacity-allocation)); the external
+feature track of the [capacity allocation](../ROADMAP_LEGACY_PLAN.md#capacity-allocation)); the external
 user pilot that row 16 required at the end now starts after rows 0–2 qualify and the onboarding path is ready.
 
 **Vertical-slice decision, 2026-10-19:** deliver the verified compiler as cumulative proved subsets
@@ -257,16 +257,16 @@ admitted language. One converging compiler architecture carries distinct assuran
 and the existing one), and the LLVM profile stays supported for production use. The proof track, the
 shared front end (row 4), and the bounded interop and application-feedback tracks proceed alongside one
 another after the immediate protections (amended 2026-10-20: each first deliverable waits only for its
-[prerequisite exits](../archive/ROADMAP_LEGACY_PLAN.md#feature-prerequisites), not for all of rows 0 – 2), with explicit capacity for each
-(amended 2026-10-21: the [capacity allocation](../archive/ROADMAP_LEGACY_PLAN.md#capacity-allocation));
+[prerequisite exits](../ROADMAP_LEGACY_PLAN.md#feature-prerequisites), not for all of rows 0 – 2), with explicit capacity for each
+(amended 2026-10-21: the [capacity allocation](../ROADMAP_LEGACY_PLAN.md#capacity-allocation));
 new authority defects take priority. Legacy claims migrate when their Core semantics and evidence boundaries are ready, preserving
 supported replay and exact assurance labels. Property gates replace brittle corpus cardinalities while
 keeping independent coverage inventories and minimum completed comparisons. No multi-year proof
-milestone suspends supported releases or external-user feedback. The [plan](../compiler/VERIFIED_PIPELINE.md#delivery-verified-vertical-slices)
+milestone suspends supported releases or external-user feedback. The [plan](../../compiler/VERIFIED_PIPELINE.md#delivery-verified-vertical-slices)
 holds the milestones and the discipline (proof engineering, Lean scalability, compiler-execution trust,
 ownership and specialist review, specification validation, release strategy).
 
-**Implementation and feedback decision, 2026-10-17** (amended 2026-10-19 and 2026-10-20)**:** once RocksDB slice 1's prerequisite exits hold ([feature prerequisites](../archive/ROADMAP_LEGACY_PLAN.md#feature-prerequisites); the rest of rows 0 – 2 continues alongside), start R-0285 with a working RocksDB C-API consumer and the
+**Implementation and feedback decision, 2026-10-17** (amended 2026-10-19 and 2026-10-20)**:** once RocksDB slice 1's prerequisite exits hold ([feature prerequisites](../ROADMAP_LEGACY_PLAN.md#feature-prerequisites); the rest of rows 0 – 2 continues alongside), start R-0285 with a working RocksDB C-API consumer and the
 minimal integrated package/build code it needs. Prepare concrete manifest/lockfile
 examples and only the resolution decisions needed by that slice, then implement,
 run and measure it. Each later adapter repeats that feedback loop. Full registry,
@@ -290,7 +290,7 @@ increments do not expand rows 0–1's recorded exits; newly reproduced false
 guarantees still enter through the existing soundness-repair rule.
 
 **Emitted-code validation analysis, 2026-10-18 (planned):** the
-[Sparkle review](../../research/compiler/sparkle-emitted-code-validation.md) records
+[Sparkle review](../../../research/compiler/sparkle-emitted-code-validation.md) records
 the existing SSA/LLVM foundations and a bounded check of actual emitted LLVM,
 beyond optional `llvm-as` well-formedness checks. R-0299/R-0300 own that additional
 semantic edge and its independent replay; their existing BackendIR V1 relation
@@ -301,7 +301,7 @@ language alone supplies no correctness guarantee. Fresh-consumer checks join R-0
 reorder the queue or delay its first executable dependency slice.
 
 R-0484 (closed 2026-10-08 at `245cd51c`), R-0483 (closed 2026-10-09 at `4f005715`) and R-0208
-(closed 2026-10-13 at `2b570c5a`) moved to [CHANGELOG.md](../../CHANGELOG.md); their accepted limits stay recorded in their task sections.
+(closed 2026-10-13 at `2b570c5a`) moved to [CHANGELOG.md](../../../CHANGELOG.md); their accepted limits stay recorded in their task sections.
 
 `ProofCache` remains performance-pulled. A second proof-producing kernel remains research-gated and
 is not part of this strict queue. Why3 remains comparative prior art, never a backend.
@@ -579,7 +579,7 @@ holds all OD answers, dates, revision notes and rationale.
 
 The approved new-compiler and restructure decisions supersede in-place repairs, shadow
 cutovers and migration of frozen compiler internals. The A/B task bodies moved to
-[the legacy archive](../archive/ROADMAP_LEGACY_PLAN.md#task-directions-before-the-coherent-plan)
+[the legacy archive](../ROADMAP_LEGACY_PLAN.md#task-directions-before-the-coherent-plan)
 retain historical detail and regression obligations. Their approved surviving requirements
 remain live in the task register; the archive creates no legacy repair work. No language
 answer, regression duty or acceptance control is retired by this editorial change.

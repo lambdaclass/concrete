@@ -21,7 +21,8 @@
 # aggregated that way and are perfectly well covered.
 #
 # The first version of this gate walked ONE level and asserted in its own comment that one level was
-# enough for the aggregators this repository has. It was not: `check_roadmap_linear.sh` is reached as
+# enough for the aggregators this repository has. It was not: `check_roadmap_linear.sh` (since replaced
+# by `check_roadmap.sh`, reached the same way) was reached as
 # workflow -> run_fast_surface_gates.sh -> check_docs_drift.sh -> it, and the gate reported a covered
 # file as unreachable. A fixpoint costs a few lines and cannot be wrong about depth.
 set -uo pipefail

@@ -4,7 +4,7 @@ Status: operational procedure. How work is done in this repository: the agent pl
 rules they share, and [concurrent work](#concurrent-work-one-worktree-per-writer) (one worktree per
 writer, the server gate runs, publishing). It absorbed `CONCURRENT_WORK.md` on 2026-10-29. The
 tool manuals it points to stay separate: [LANDING.md](LANDING.md) (landing trains and the bot),
-[REVIEW.md](REVIEW.md) (`scripts/review/review.sh`), [WORK_QUEUE.md](WORK_QUEUE.md) (the agent work
+[REVIEW.md](REVIEW.md) (`scripts/review/review.sh`), [WORK_QUEUE.md](../archive/roadmap-2026-11/WORK_QUEUE.md) (the agent work
 queue), [STATUS_PAGE.md](STATUS_PAGE.md) and [PROMOTION_PIPELINE.md](PROMOTION_PIPELINE.md) (the
 validation stages, CI tiers and result vocabulary).
 

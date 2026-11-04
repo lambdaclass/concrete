@@ -385,9 +385,11 @@ def tracking_exists(t, root):
         p = os.path.join(root, "docs", "spec", "decisions.md")
         return os.path.exists(p) and re.search(r"^\| " + re.escape(t) + r" \|", open(p, encoding="utf-8").read(), re.M) is not None
     if t.startswith("R-"):
-        for f in ("ROADMAP.md", "docs/project/ROADMAP_TASKS.md", "docs/project/ROADMAP_BACKLOG.md"):
+        # A live task is a row of ROADMAP.md; an archived ID is tracked through its row in the 2026-11
+        # disposition table, which names where its obligations went (or why it was retired).
+        for f in ("ROADMAP.md", "docs/archive/roadmap-2026-11/task_disposition.tsv"):
             p = os.path.join(root, f)
-            if os.path.exists(p) and re.search(r"\b" + re.escape(t) + r"\b", open(p, encoding="utf-8").read()):
+            if os.path.exists(p) and re.search(r"^\|? ?" + re.escape(t) + r"\b", open(p, encoding="utf-8").read(), re.M):
                 return True
         return False
     return bool(glob.glob(os.path.join(root, "docs/bugs", t[4:] + "_*.md")))
