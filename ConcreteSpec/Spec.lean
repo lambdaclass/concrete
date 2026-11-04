@@ -1,8 +1,13 @@
 /-!
 # Concrete specification — slice 1
 
-This file is the specification of slice 1 of the new compiler (ROADMAP phase B). The Lean
-definitions are the rules. Each rule has a plain-words doc comment naming the decided rule it
+**Status: provisional model, not yet normative.** Core's shape is the owner's decision (ROADMAP
+A2, the Core session) and is not taken yet. This file models slice 1 ahead of that decision so the
+proof architecture can be exercised; it becomes the normative specification only once Core is
+approved, and every choice below that Core may change is listed under "Choices pending Core".
+
+This file covers slice 1 of the new compiler (ROADMAP phase B). The Lean definitions are the rules
+of the model. Each rule has a plain-words doc comment naming the decided rule it
 encodes (docs/spec/*.md rule IDs and the owner decisions ODnn in docs/spec/decisions.md), and
 conformance examples at the end of the file show accepted and refused programs.
 
@@ -29,7 +34,31 @@ What this file is not:
 The judgments (`HasType`, `Uses`, `StmtOk`, `BodyOk`, `Checked`) are inductive relations,
 independent of the executable checker (`check`); `check_iff` proves the two agree. The semantics is
 a total, fuel-indexed evaluator (`run`) whose outcome separates exit, trap, stuck and running out
-of fuel (STMT-1), plus a fuel-free relation `Exec` that it is proved adequate to.
+of fuel (STMT-1). `Exec` is the fuel-free form of the same statement-level evaluator: adequacy and
+determinism are about fuel, not an independent cross-check of expression evaluation.
+
+Choices pending Core (ROADMAP A2; not decided by this file):
+
+* names are strings, not Core identities (the approved architecture asks for Core with identities);
+* a read of a variable copies or moves according to its type, where the Core proposal (Q9.1)
+  recommends explicit moves and copies in Core;
+* integer literals carry their type in the syntax;
+* the body is a list of `let` statements followed by one `return`.
+
+Not modelled, because the decision is open:
+
+* ARITH-13, refusing an operation proved to overflow or divide by zero: its mandatory proof
+  criterion is undecided (docs/spec/decisions.md, core-static-refusal). `Checked` is the slice's
+  rules without ARITH-13, so it accepts programs that ARITH-13 may later refuse, and no example
+  claims that a constant overflow is accepted.
+
+Obligations not discharged here (ROADMAP phase B):
+
+* the elaboration relation from surface syntax: ARITH-2's expected-type rule for literals, OD138's
+  propagation positions, and unannotated `let`;
+* the lexer, model-translation and native-image obligations;
+* erasure of the instrumentation (`Slot.moved`, the `used` and `live` flags): stated as intent,
+  with no erasure definition or theorem yet.
 
 Only Lean core is imported. No proof here uses `native_decide` or `sorry`.
 -/
@@ -155,9 +184,10 @@ inductive Binder where
   | wild
   deriving DecidableEq, Repr
 
-/-- A statement: `let x: T = e;` or a destructuring `let S { f: b, ... } = e;` (PAT-5). -/
+/-- A statement: `let x: T = e;`, `let _: T = e;`, or a destructuring `let S { f: b, ... } = e;`
+(PAT-5). -/
 inductive Stmt where
-  | let_ (x : Name) (t : Ty) (e : Expr)
+  | let_ (b : Binder) (t : Ty) (e : Expr)
   | letStruct (s : Name) (pat : List (Name × Binder)) (e : Expr)
   deriving DecidableEq, Repr
 
@@ -253,9 +283,10 @@ inductive Uses (Δ : Decls) : Ctx → Expr → Ctx → Prop where
   | mk {Γ Γ' s fs} : UseAtoms Δ Γ (fs.map Prod.snd) Γ' → Uses Δ Γ (.mk s fs) Γ'
 
 /-- A new binder reuses no visible name: not a local binding (moved or not, SCOPE-D1), not a
-struct and not `main`, since types and values share one namespace (SCOPE-1, SCOPE-2). -/
+struct and not `main`, since types and values share one namespace (SCOPE-1, SCOPE-2). `_` is not a
+name: it is the wildcard `Binder.wild`. -/
 def Fresh (Δ : Decls) (Γ : Ctx) (x : Name) : Prop :=
-  ctxFind Γ x = none ∧ findDecl Δ x = none ∧ x ≠ "main"
+  ctxFind Γ x = none ∧ findDecl Δ x = none ∧ x ≠ "main" ∧ x ≠ "_"
 
 /-- A destructuring pattern names every field exactly once (PAT-5): no field twice, every named
 field declared, every declared field named (an ignored field written `_`). Every slice-1 field is
@@ -289,11 +320,16 @@ def PatFresh (Δ : Decls) (Γ : Ctx) (pat : List (Name × Binder)) : Prop :=
 
 * `let x: T = e;` — `e` has type `T` (TYPE-4), its reads are allowed (OWN-1), and `x` is fresh
   (SCOPE-1). `x` starts live and unused.
+* `let _: T = e;` — as above, but nothing is bound and the value is dropped, so `T` must be Copy:
+  `_` never discards a linear value (OWN-5; decisions.md, "`_` names an unused binding"). Slice 1
+  has no `Result` or `Option`, the other values `_` refuses.
 * `let S { f: b, ... } = e;` — `e` has type `S`, the pattern names every field (PAT-5), the
   scrutinee is consumed (PAT-5: reading a linear `e` moves it), and the binders are fresh. -/
 inductive StmtOk (Δ : Decls) : Ctx → Stmt → Ctx → Prop where
   | let_ {Γ Γ₁ x t e} : HasType Δ Γ.tys e t → Uses Δ Γ e Γ₁ → Fresh Δ Γ₁ x →
-      StmtOk Δ Γ (.let_ x t e) ({ name := x, ty := t, live := true, used := false } :: Γ₁)
+      StmtOk Δ Γ (.let_ (.name x) t e) ({ name := x, ty := t, live := true, used := false } :: Γ₁)
+  | letWild {Γ Γ₁ t e} : HasType Δ Γ.tys e t → t.isCopy Δ = true → Uses Δ Γ e Γ₁ →
+      StmtOk Δ Γ (.let_ .wild t e) Γ₁
   | letStruct {Γ Γ₁ s d pat e} : HasType Δ Γ.tys e (.struct s) → findDecl Δ s = some d →
       PatOk d pat → Uses Δ Γ e Γ₁ → PatFresh Δ Γ₁ pat →
       StmtOk Δ Γ (.letStruct s pat e) (bindPat d pat Γ₁)
@@ -315,7 +351,8 @@ struct's field names are distinct. -/
 def DeclsOk (Δ : Decls) : Prop :=
   (Δ.map StructDecl.name).Nodup ∧ (∀ d ∈ Δ, d.name ≠ "main" ∧ (d.fields.map Prod.fst).Nodup)
 
-/-- A program is accepted. -/
+/-- A program is accepted by the rules this file models. ARITH-13 is not among them (see the
+header), so this is not yet the full acceptance judgment. -/
 def Checked (p : Program) : Prop := DeclsOk p.decls ∧ BodyOk p.decls [] p.body p.ret
 
 /-! ## Semantics -/
@@ -457,8 +494,12 @@ def destructure : List (Name × Binder) → List (Name × Scalar) → Env → R 
 
 /-- Execute one statement. A destructuring `let` consumes its scrutinee and binds its fields. -/
 def execStmt (Δ : Decls) (env : Env) : Stmt → R Env
-  | .let_ x _ e => match evalExpr Δ env e with
+  | .let_ (.name x) _ e => match evalExpr Δ env e with
     | .ok (v, env₁) => .ok ((x, .val v) :: env₁)
+    | .trap k => .trap k
+    | .stuck w => .stuck w
+  | .let_ .wild _ e => match evalExpr Δ env e with
+    | .ok (_, env₁) => .ok env₁
     | .trap k => .trap k
     | .stuck w => .stuck w
   | .letStruct s pat e => match evalExpr Δ env e with
@@ -594,8 +635,8 @@ inductive VTy (Δ : Decls) : Val → Ty → Prop where
       VTy Δ (.struct s vs) (.struct s)
 
 /-- The ownership context describes the environment: the same names in the same order, and every
-live binding holds a value of its type. A binding the context records as moved may hold anything;
-the instrumented environment marks it `moved`. -/
+live binding holds a value of its type. A binding the context records as moved is unconstrained
+here; the evaluator marks such a slot `moved` when it moves the value out. -/
 inductive Corr (Δ : Decls) : Ctx → Env → Prop where
   | nil : Corr Δ [] []
   | cons {e sl Γ env} : (e.live = true → ∃ v, sl = .val v ∧ VTy Δ v e.ty) → Corr Δ Γ env →
@@ -843,6 +884,10 @@ theorem execStmt_safe {Δ : Decls} {Γ Γ' : Ctx} {env : Env} {s : Stmt}
     rcases evalExpr_safe hc ht hu with ⟨k, hk⟩ | ⟨v, env₁, he, hv, hc₁⟩
     · exact .inl ⟨k, by simp [execStmt, hk]⟩
     · exact .inr ⟨_, by simp [execStmt, he], .cons (fun _ => ⟨v, rfl, hv⟩) hc₁⟩
+  | letWild ht _ hu =>
+    rcases evalExpr_safe hc ht hu with ⟨k, hk⟩ | ⟨v, env₁, he, _, hc₁⟩
+    · exact .inl ⟨k, by simp [execStmt, hk]⟩
+    · exact .inr ⟨_, by simp [execStmt, he], hc₁⟩
   | letStruct ht hd hp hu _ =>
     rcases evalExpr_safe hc ht hu with ⟨k, hk⟩ | ⟨v, env₁, he, hv, hc₁⟩
     · exact .inl ⟨k, by simp [execStmt, hk]⟩
@@ -1158,13 +1203,15 @@ theorem patOkB_iff {d : StructDecl} {pat : List (Name × Binder)} : patOkB d pat
 
 /-- The context after a statement, if the statement is accepted. -/
 def stmtOut (Δ : Decls) (Γ : Ctx) : Stmt → Option Ctx
-  | .let_ x t e =>
+  | .let_ (.name x) t e =>
     if tyOf Δ Γ.tys e = some t then
       match uses Δ Γ e with
       | some Γ₁ => if Fresh Δ Γ₁ x then
           some ({ name := x, ty := t, live := true, used := false } :: Γ₁) else none
       | none => none
     else none
+  | .let_ .wild t e =>
+    if tyOf Δ Γ.tys e = some t ∧ t.isCopy Δ = true then uses Δ Γ e else none
   | .letStruct s pat e =>
     if tyOf Δ Γ.tys e = some (.struct s) then
       match findDecl Δ s with
@@ -1181,17 +1228,25 @@ theorem stmtOut_iff {Δ : Decls} {Γ Γ' : Ctx} {s : Stmt} :
   constructor
   · intro h
     cases s with
-    | let_ x t e =>
-      simp only [stmtOut] at h
-      split at h
-      · rename_i ht
+    | let_ b t e =>
+      cases b with
+      | wild =>
+        simp only [stmtOut] at h
         split at h
-        · rename_i Γ₁ hu
-          split at h
-          · cases h; exact .let_ (tyOf_iff.mp ht) (uses_iff.mp hu) (by assumption)
-          · cases h
+        · rename_i hc
+          exact .letWild (tyOf_iff.mp hc.1) hc.2 (uses_iff.mp h)
         · cases h
-      · cases h
+      | name x =>
+          simp only [stmtOut] at h
+          split at h
+          · rename_i ht
+            split at h
+            · rename_i Γ₁ hu
+              split at h
+              · cases h; exact .let_ (tyOf_iff.mp ht) (uses_iff.mp hu) (by assumption)
+              · cases h
+            · cases h
+          · cases h
     | letStruct s pat e =>
       simp only [stmtOut] at h
       split at h
@@ -1214,6 +1269,7 @@ theorem stmtOut_iff {Δ : Decls} {Γ Γ' : Ctx} {s : Stmt} :
   · intro h
     cases h with
     | let_ ht hu hf => simp [stmtOut, tyOf_iff.mpr ht, uses_iff.mpr hu, hf]
+    | letWild ht hcopy hu => simp [stmtOut, tyOf_iff.mpr ht, hcopy, uses_iff.mpr hu]
     | letStruct ht hd hp hu hf =>
       simp [stmtOut, tyOf_iff.mpr ht, hd, patOkB_iff.mpr hp, uses_iff.mpr hu, hf]
 
@@ -1295,8 +1351,8 @@ fn main() -> u8 {
 }
 ``` -/
 def moveThenConsume : Program :=
-  { decls, body := [.let_ "t" (.struct "Token") (.mk "Token" []),
-                    .let_ "u" (.struct "Token") (v "t"),
+  { decls, body := [.let_ (.name "t") (.struct "Token") (.mk "Token" []),
+                    .let_ (.name "u") (.struct "Token") (v "t"),
                     .letStruct "Token" [] (v "u")],
     ret := lit 42 }
 
@@ -1314,8 +1370,8 @@ fn main() -> u8 {
 }
 ``` -/
 def useAfterMove : Program :=
-  { decls, body := [.let_ "t" (.struct "Token") (.mk "Token" []),
-                    .let_ "u" (.struct "Token") (v "t"),
+  { decls, body := [.let_ (.name "t") (.struct "Token") (.mk "Token" []),
+                    .let_ (.name "u") (.struct "Token") (v "t"),
                     .letStruct "Token" [] (v "t"),
                     .letStruct "Token" [] (v "u")],
     ret := lit 42 }
@@ -1334,7 +1390,7 @@ fn main() -> u8 {
 }
 ``` -/
 def notConsumed : Program :=
-  { decls, body := [.let_ "t" (.struct "Token") (.mk "Token" [])], ret := lit 42 }
+  { decls, body := [.let_ (.name "t") (.struct "Token") (.mk "Token" [])], ret := lit 42 }
 
 example : ¬ Checked notConsumed := fun h => absurd ((check_iff _).mpr h) (by decide)
 
@@ -1349,8 +1405,8 @@ fn main() -> u8 {
 }
 ``` -/
 def copyTwice : Program :=
-  { decls, body := [.let_ "p" (.struct "Unit0") (.mk "Unit0" []),
-                    .let_ "q" (.struct "Unit0") (v "p"),
+  { decls, body := [.let_ (.name "p") (.struct "Unit0") (.mk "Unit0" []),
+                    .let_ (.name "q") (.struct "Unit0") (v "p"),
                     .letStruct "Unit0" [] (v "p"),
                     .letStruct "Unit0" [] (v "q")],
     ret := lit 0 }
@@ -1366,7 +1422,7 @@ fn main() -> u8 {
 }
 ``` -/
 def unusedBinding : Program :=
-  { decls, body := [.let_ "x" (.scalar (.int .u8)) (lit 1)], ret := lit 42 }
+  { decls, body := [.let_ (.name "x") (.scalar (.int .u8)) (lit 1)], ret := lit 42 }
 
 example : ¬ Checked unusedBinding := fun h => absurd ((check_iff _).mpr h) (by decide)
 
@@ -1380,7 +1436,7 @@ fn main() -> u8 {
 }
 ``` -/
 def destructureAdd : Program :=
-  { decls, body := [.let_ "p" (.struct "Pair") (.mk "Pair" [("a", .int .u8 40), ("b", .int .u8 2)]),
+  { decls, body := [.let_ (.name "p") (.struct "Pair") (.mk "Pair" [("a", .int .u8 40), ("b", .int .u8 2)]),
                     .letStruct "Pair" [("a", .name "x"), ("b", .name "y")] (v "p")],
     ret := .add (v "x") (v "y") }
 
@@ -1396,7 +1452,7 @@ fn main() -> u8 {
 }
 ``` -/
 def missingField : Program :=
-  { decls, body := [.let_ "p" (.struct "Pair") (.mk "Pair" [("a", .int .u8 40), ("b", .int .u8 2)]),
+  { decls, body := [.let_ (.name "p") (.struct "Pair") (.mk "Pair" [("a", .int .u8 40), ("b", .int .u8 2)]),
                     .letStruct "Pair" [("a", .name "x")] (v "p")],
     ret := v "x" }
 
@@ -1411,15 +1467,16 @@ fn main() -> u8 {
 }
 ``` -/
 def wildcardField : Program :=
-  { decls, body := [.let_ "p" (.struct "Pair") (.mk "Pair" [("a", .int .u8 42), ("b", .int .u8 0)]),
+  { decls, body := [.let_ (.name "p") (.struct "Pair") (.mk "Pair" [("a", .int .u8 42), ("b", .int .u8 0)]),
                     .letStruct "Pair" [("a", .name "x"), ("b", .wild)] (v "p")],
     ret := v "x" }
 
 example : Checked wildcardField := (check_iff _).mp (by decide)
 example : run wildcardField 10 = .exit 42 := by decide
 
-/-- Accepted, and traps: `200 + 100` does not fit `u8`, so the checked addition aborts with the
-overflow trap (ARITH-3, STMT-2).
+/-- Traps when run: `200 + 100` does not fit `u8`, so the checked addition aborts with the
+overflow trap (ARITH-3, STMT-2). Whether the program is accepted is not claimed: ARITH-13 may
+refuse an operation proved to overflow, and its proof criterion is open (see the header).
 ```
 fn main() -> u8 {
     let a: u8 = 200;
@@ -1428,16 +1485,15 @@ fn main() -> u8 {
 }
 ``` -/
 def overflowTrap : Program :=
-  { decls, body := [.let_ "a" (.scalar (.int .u8)) (lit 200),
-                    .let_ "b" (.scalar (.int .u8)) (lit 100)],
+  { decls, body := [.let_ (.name "a") (.scalar (.int .u8)) (lit 200),
+                    .let_ (.name "b") (.scalar (.int .u8)) (lit 100)],
     ret := .add (v "a") (v "b") }
 
-example : Checked overflowTrap := (check_iff _).mp (by decide)
 example : run overflowTrap 10 = .trap .arithmeticOverflow := by decide
 
 /-- Refused: `300` does not fit `u8` (ARITH-2). -/
 def literalTooBig : Program :=
-  { decls, body := [.let_ "a" (.scalar (.int .u8)) (lit 300)], ret := v "a" }
+  { decls, body := [.let_ (.name "a") (.scalar (.int .u8)) (lit 300)], ret := v "a" }
 
 example : ¬ Checked literalTooBig := fun h => absurd ((check_iff _).mpr h) (by decide)
 
@@ -1450,8 +1506,8 @@ fn main() -> u8 {
 }
 ``` -/
 def mixedAdd : Program :=
-  { decls, body := [.let_ "a" (.scalar (.int .u8)) (lit 1),
-                    .let_ "b" (.scalar (.int .i64)) (.atom (.int .i64 2))],
+  { decls, body := [.let_ (.name "a") (.scalar (.int .u8)) (lit 1),
+                    .let_ (.name "b") (.scalar (.int .i64)) (.atom (.int .i64 2))],
     ret := .add (v "a") (v "b") }
 
 example : ¬ Checked mixedAdd := fun h => absurd ((check_iff _).mpr h) (by decide)
@@ -1465,8 +1521,8 @@ fn main() -> u8 {
 }
 ``` -/
 def rebind : Program :=
-  { decls, body := [.let_ "x" (.scalar (.int .u8)) (lit 1),
-                    .let_ "x" (.scalar (.int .u8)) (lit 41)],
+  { decls, body := [.let_ (.name "x") (.scalar (.int .u8)) (lit 1),
+                    .let_ (.name "x") (.scalar (.int .u8)) (lit 41)],
     ret := v "x" }
 
 example : ¬ Checked rebind := fun h => absurd ((check_iff _).mpr h) (by decide)
@@ -1474,9 +1530,34 @@ example : ¬ Checked rebind := fun h => absurd ((check_iff _).mpr h) (by decide)
 /-- Refused: a local may not reuse a struct's name; types and values share one namespace
 (SCOPE-2). -/
 def bindStructName : Program :=
-  { decls, body := [.let_ "Pair" (.scalar (.int .u8)) (lit 42)], ret := v "Pair" }
+  { decls, body := [.let_ (.name "Pair") (.scalar (.int .u8)) (lit 42)], ret := v "Pair" }
 
 example : ¬ Checked bindStructName := fun h => absurd ((check_iff _).mpr h) (by decide)
+
+/-- Accepted: `_` drops a Copy value (OWN-5).
+```
+fn main() -> u8 {
+    let _: u8 = 1;
+    return 42;
+}
+``` -/
+def wildCopy : Program :=
+  { decls, body := [.let_ .wild (.scalar (.int .u8)) (lit 1)], ret := lit 42 }
+
+example : Checked wildCopy := (check_iff _).mp (by decide)
+example : run wildCopy 10 = .exit 42 := by decide
+
+/-- Refused: `_` never discards a linear value (OWN-5).
+```
+fn main() -> u8 {
+    let _: Token = Token {};   // error: a linear value is discarded
+    return 42;
+}
+``` -/
+def wildLinear : Program :=
+  { decls, body := [.let_ .wild (.struct "Token") (.mk "Token" [])], ret := lit 42 }
+
+example : ¬ Checked wildLinear := fun h => absurd ((check_iff _).mpr h) (by decide)
 
 /-- Refused: `main` returns `u8` (STMT-7). -/
 def wrongReturnType : Program :=
