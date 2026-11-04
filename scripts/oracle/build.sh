@@ -8,27 +8,33 @@
 # locked ones, and the committed build identity is fresh. The binary's sha256 is then compared with
 # the lock. A mismatch is a failure: either the build is not reproducible or something changed.
 #
-#   build.sh            rebuild, verify every locked value, install into $ORACLE_HOME/<commit>/
+#   build.sh            rebuild, verify every locked value, pack the artifact (scripts/oracle/lib.sh),
+#                       verify its sha256 too, and install it into $ORACLE_HOME/<commit>/
 #   build.sh --record   rebuild and print the measured values in lock syntax (no verification of
-#                       binary_sha256); used once to write the lock, then never again for that tag
+#                       binary_sha256 or artifact_sha256); used once to write the lock
+#
+# The rebuild is the VERIFICATION of the published artifact (fetch.sh is how runners get it): both
+# hashes reproduced from a fresh clone of the tag mean the release asset is what the tag builds.
 #
 # ORACLE_SOURCE   clone source (default: the lock's url, then mirror_url); a path or bundle also works
-# ORACLE_HOME     install root (default ~/oracle); the install is <commit>/src (the checkout, with
-#                 .lake) and <commit>/BUILD_INFO
+# ORACLE_HOME     install root (default ~/oracle); the install is <commit>/ (the unpacked artifact)
+#                 and <commit>.BUILD_INFO beside it
 # ORACLE_KEEP=1   keep a failed build's directory for inspection
+# ORACLE_ARTIFACT_OUT=PATH  also copy the packed artifact there (for publish.sh)
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LOCK="$HERE/ORACLE.lock"
+# shellcheck source=scripts/oracle/lib.sh
+. "$HERE/lib.sh"
+LOCK="$ORACLE_LOCK"
 RECORD=0
 [ "${1:-}" = "--record" ] && { RECORD=1; shift; }
 [ $# -eq 0 ] || { echo "usage: build.sh [--record]" >&2; exit 2; }
 [ -f "$LOCK" ] || { echo "oracle: $LOCK missing" >&2; exit 2; }
-lock() { sed -n "s/^$1=//p" "$LOCK" | head -1; }
 die() { echo "oracle: $*" >&2; exit 1; }
 
 TAG="$(lock tag)"; COMMIT="$(lock commit)"
 [ -n "$TAG" ] && [ ${#COMMIT} = 40 ] || die "lock has no tag or a short commit"
-HOME_DIR="${ORACLE_HOME:-$HOME/oracle}"
+HOME_DIR="$(oracle_home)"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/oracle-build.XXXXXX")"
 cleanup() { if [ "${ORACLE_KEEP:-0}" = 1 ]; then echo "oracle: kept $WORK" >&2; else rm -rf "$WORK"; fi; }
 trap cleanup EXIT
@@ -76,16 +82,29 @@ LEANV="$(toolver 'lean --version')"; CLANGV="$(toolver 'clang --version')"
 check lean_version "$LEANV"
 check clang_version "$CLANGV"
 SHA="$(sha256sum "$BIN" | cut -d' ' -f1)"
-if [ "$RECORD" = 1 ]; then echo "binary_sha256=$SHA"; echo "# build seconds: $(( $(date +%s) - t0 ))"; exit 0; fi
-check binary_sha256 "$SHA"
+[ "$RECORD" = 1 ] || check binary_sha256 "$SHA"
 
-# 5. Install. An existing install of the same commit is replaced only after this build verified.
-DEST="$HOME_DIR/$COMMIT"
-mkdir -p "$HOME_DIR"
-rm -rf "$DEST.new"; mkdir -p "$DEST.new"
-mv "$SRC" "$DEST.new/src"
-printf 'tag=%s\ncommit=%s\nbinary_sha256=%s\nbuilt_utc=%s\nhost=%s\nbuild_seconds=%s\n' \
-  "$TAG" "$COMMIT" "$SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(hostname)" "$(( $(date +%s) - t0 ))" > "$DEST.new/BUILD_INFO"
-rm -rf "$DEST.old"; [ ! -e "$DEST" ] || mv "$DEST" "$DEST.old"
-mv "$DEST.new" "$DEST"; rm -rf "$DEST.old"
-echo "oracle: verified $SHA, installed at $DEST"
+# 5. Pack the artifact from the verified checkout: the binary, std/ exactly as committed (git
+#    archive, so nothing untracked rides along) and the dev shell's flake files.
+STAGE="$WORK/stage"; mkdir -p "$STAGE/bin"
+cp "$BIN" "$STAGE/bin/concrete"
+git -C "$SRC" archive "$COMMIT" std | tar -x -C "$STAGE"
+mkdir -p "$STAGE/shell"
+git -C "$SRC" archive "$COMMIT" flake.nix flake.lock lean-toolchain | tar -x -C "$STAGE/shell"
+TB="$WORK/$(oracle_artifact_name)"
+oracle_pack "$STAGE" "$TB"
+ASHA="$(sha256sum "$TB" | cut -d' ' -f1)"
+if [ "$RECORD" = 1 ]; then
+  echo "binary_sha256=$SHA"; echo "artifact_sha256=$ASHA"; echo "# build seconds: $(( $(date +%s) - t0 ))"
+  [ -z "${ORACLE_ARTIFACT_OUT:-}" ] || cp "$TB" "$ORACLE_ARTIFACT_OUT"
+  exit 0
+fi
+check artifact_sha256 "$ASHA"
+[ -z "${ORACLE_ARTIFACT_OUT:-}" ] || cp "$TB" "$ORACLE_ARTIFACT_OUT"
+
+# 6. Install through the same path a fetched artifact takes.
+DEST="$HOME_DIR/$COMMIT"; mkdir -p "$HOME_DIR"
+why="$(oracle_install "$TB" "$DEST")" || die "install: $why"
+printf 'tag=%s\ncommit=%s\nbinary_sha256=%s\nartifact_sha256=%s\nsource=rebuilt from the tag\nbuilt_utc=%s\nhost=%s\nbuild_seconds=%s\n' \
+  "$TAG" "$COMMIT" "$SHA" "$ASHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(hostname)" "$(( $(date +%s) - t0 ))" > "$HOME_DIR/$COMMIT.BUILD_INFO"
+echo "oracle: verified binary $SHA and artifact $ASHA, installed at $DEST"

@@ -23,8 +23,9 @@
 #   bisect      halving finds a seeded red member
 #   report      the median time to land is computed from the log
 #   required    (2026-11-04) a required job (required-checks.txt) that is missing, skipped or
-#               cancelled refuses watch and land; a candidate cannot drop a requirement main imposes;
-#               the file names exactly the workflow's landing-tier jobs
+#               cancelled refuses watch and land; a candidate drops a requirement main imposes only
+#               through a transition row (replaced by jobs it requires and that pass, or retired with
+#               a reason and reported as retired); the file names the workflow's landing-tier jobs
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -452,25 +453,47 @@ req_leg(){ # label jobs-json expected-text
 req_leg "a run missing a required job" '[{"name":"Other","conclusion":"success","databaseId":21}]' "missing: Build"
 req_leg "a skipped required job" '[{"name":"Build","conclusion":"skipped","databaseId":21},{"name":"Other","conclusion":"success","databaseId":22}]' "skipped: Build"
 req_leg "a cancelled required job" '[{"name":"Build","conclusion":"cancelled","databaseId":21},{"name":"Other","conclusion":"success","databaseId":22}]' "cancelled: Build"
-req_leg "a required job matched by the campaign pattern" '[{"name":"Other","conclusion":"success","databaseId":22},{"name":"Gate mutation shard 3","conclusion":"success","databaseId":23}]' "missing: Build"
-# Dropping: a candidate whose own file no longer lists Build is still held to the base's list.
-git checkout -q -b req-drop "$HEADR"
-printf 'Other\n' > required-checks.txt; git add required-checks.txt; git commit -qm "drop Build"
-HD="$(git rev-parse HEAD)"
-got="$(bash -c 'set -euo pipefail; cd "$1"; REQUIRED_FILE=required-checks.txt
-  eval "$(sed -n "/^required_checks() {/,/^}/p" "$2")"; required_checks "$3" "$4" | tr "\n" " "' _ "$W" "$TRAIN" "$BASE" "$HD")"
-[ "$got" = "Build Other " ] && ok "a candidate cannot drop a requirement the base imposes (base + candidate united)" || no "required set at a dropping candidate is '$got'"
-git rm -q required-checks.txt; git commit -qm "no file"
-got="$(bash -c 'set -euo pipefail; cd "$1"; REQUIRED_FILE=required-checks.txt
-  eval "$(sed -n "/^required_checks() {/,/^}/p; /^unmet_required() {/,/^}/p" "$2")"; unmet_required "$3" "$3" ""' _ "$W" "$TRAIN" "$(git rev-parse HEAD)")"
-has "$got" "neither the base nor the candidate" && ok "no required-checks file anywhere is refused, not read as nothing required" || no "a missing file read as '$got'"
-# Newline-free files: the base's last name and the candidate's first name must not fuse.
-git checkout -q -b req-nonl "$HEADR"
-printf 'Build' > required-checks.txt; git add required-checks.txt; git commit -qm "no final newline"; NB="$(git rev-parse HEAD)"
-printf 'Other' > required-checks.txt; git add required-checks.txt; git commit -qm "candidate, no final newline"; NC="$(git rev-parse HEAD)"
-got="$(bash -c 'set -euo pipefail; cd "$1"; REQUIRED_FILE=required-checks.txt
-  eval "$(sed -n "/^required_checks() {/,/^}/p" "$2")"; required_checks "$3" "$4" | tr "\n" " "' _ "$W" "$TRAIN" "$NB" "$NC")"
-[ "$got" = "Build Other " ] && ok "files without a final newline do not fuse names" || no "newline-free union read as '$got'"
+req_leg "a run whose only other job is a campaign-tier one" '[{"name":"Other","conclusion":"success","databaseId":22},{"name":"Gate mutation shard 4","conclusion":"success","databaseId":23}]' "missing: Build"
+# The rule itself (scripts/land/required_checks.py) on file contents: dropping, transitions, fusing.
+RC="$ROOT_DIR/scripts/land/required_checks.py"
+RD="$TMP/rc"; mkdir -p "$RD"
+rc_run(){ # base cand trans jobs(lines "landing\tconclusion\tid\tname") -> findings, space-joined
+  printf '%b' "$1" > "$RD/b"; printf '%b' "$2" > "$RD/c"; printf '%b' "$3" > "$RD/t"; printf '%b' "$4" > "$RD/j"
+  python3 -I "$RC" "$RD/b" "$RD/c" "$RD/t" "$RD/j" | tr '\n' '|'
+}
+OK_BUILD='landing\tsuccess\t1\tBuild\n'; OK_BOTH='landing\tsuccess\t1\tBuild\nlanding\tsuccess\t2\tOther\n'
+OK_NEW='landing\tsuccess\t1\tOther\nlanding\tsuccess\t2\tNew\n'
+got="$(rc_run 'Build\n' 'Other\n' '' "$OK_NEW")"
+has "$got" "missing: Build" && ok "a candidate that drops a base requirement without a transition row is still held to it" || no "silent drop: '$got'"
+got="$(rc_run 'Build\n' 'Other\nNew\n' 'Build\tNew\tBuild moved\n' "$OK_NEW")"
+[ "$got" = "replaced: Build by New|" ] && ok "a transition row replacing a base job by a required, green job passes and says so" || no "replacement: '$got'"
+got="$(rc_run 'Build\n' 'Other\nNew\n' 'Build\tNew\tBuild moved\n' 'landing\tsuccess\t1\tOther\nlanding\tfailure\t2\tNew\n')"
+has "$got" "failure: New" && ok "a replacement job that failed at this SHA refuses" || no "red replacement: '$got'"
+got="$(rc_run 'Build\n' 'Other\n' 'Build\tNew\tBuild moved\n' "$OK_NEW")"
+has "$got" "invalid: replacement New for Build is not in the candidate" && has "$got" "missing: Build" \
+  && ok "a replacement the candidate does not itself require is refused, and the old job stays required" || no "unlisted replacement: '$got'"
+got="$(rc_run 'Build\nLegacy\n' 'Build\n' 'Legacy\t-\tlegacy pipeline frozen (P5)\n' "$OK_BUILD")"
+has "$got" "retired: Legacy (legacy pipeline frozen (P5)); not run, not passed" && ! has "$got" "missing" \
+  && ok "a retired base job is reported as retired, not run, never as passed" || no "retirement: '$got'"
+got="$(rc_run 'Build\nLegacy\n' 'Build\n' 'Legacy\t-\t\n' "$OK_BUILD")"
+has "$got" "invalid: transition row 1 needs" && ok "a retirement without a reason is refused" || no "reasonless retirement: '$got'"
+got="$(rc_run 'Build\n' 'Build\n' 'Build\t-\tno\n' "$OK_BUILD")"
+has "$got" "invalid: transition row for Build, which the candidate still requires" && ok "a transition row for a job still required is refused" || no "contradictory row: '$got'"
+got="$(rc_run '' '' '' "$OK_BUILD")"
+has "$got" "invalid: required-checks.txt (neither" && ok "no required-checks file anywhere is refused, not read as nothing required" || no "no file: '$got'"
+got="$(rc_run 'Build' 'Other' '' "$OK_BOTH")"
+[ "$got" = "" ] && ok "files without a final newline do not fuse names (Build and Other both required, both green)" || no "newline-free: '$got'"
+got="$(rc_run 'Build' 'Other' '' 'landing\tsuccess\t1\tBuildOther\n')"
+has "$got" "missing: Build" && has "$got" "missing: Other" && ok "a job named BuildOther satisfies neither Build nor Other" || no "fused names: '$got'"
+# The same rule through train.sh: a transition row on the candidate replaces the base's Build.
+git checkout -q -b req-trans "$HEADR"
+printf 'Other\nNew\n' > required-checks.txt
+printf 'old_job\treplacements\treason\nBuild\tNew\tthe new root builds differently\n' > required-checks-transition.tsv
+git add required-checks.txt required-checks-transition.tsv; git commit -qm "transition Build -> New"
+HT="$(git rev-parse HEAD)"
+o="$(cd "$W" && REQUIRED_FILE=x bash -c 'set -uo pipefail; SELF_DIR="$1"; REQUIRED_FILE=required-checks.txt; TRANSITION_FILE=required-checks-transition.tsv
+  eval "$(sed -n "/^required_report() {/,/^}/p; /^unmet_required() {/,/^}/p" "$2")"; unmet_required "$3" "$4" "$5"' _ "$ROOT_DIR/scripts/land" "$TRAIN" "$BASE" "$HT" "$(printf 'landing\tsuccess\t1\tOther\nlanding\tsuccess\t2\tNew')")"
+[ -z "$o" ] && ok "train.sh reads the candidate's transition file at the head commit" || no "train.sh transition: '$o'"
 git checkout -q train/t1
 
 echo "=== required-checks.txt names exactly the workflow's landing-tier jobs ==="

@@ -6,11 +6,12 @@
 # lands. It drives the real scripts/land/train.sh from a FRESH clone, so nothing in this checkout,
 # its state directory or its hooks configuration can make it pass.
 #
-# IT NEVER LANDS, and that does not rest on the script under test honouring --dry-run: the clone's
-# hooks path is a guard whose pre-push refuses any update of refs/heads/main on any remote before it
-# hands the push to the real hook; the landing scripts are refused if they contain --no-verify (the
-# one way past a hook); and both remotes' main is read before and after, a move to the train head
-# being a failure. It refuses to start with any LAND_* or CONCRETE_SKIP_* variable set, since those
+# IT NEVER LANDS, and that does not rest on the script under test honouring --dry-run. Three
+# independent guards: a `git` shim first on PATH for every leg refuses any push whose destination is
+# main (or --all, --mirror, a bare HEAD), whatever flags the candidate's scripts pass, --no-verify
+# included; the clone's hooks path is a pre-push guard that refuses the same before it runs the real
+# hook; and both remotes' main is read before and after, a move to the train head being a failure.
+# The train head's publishing scripts are also refused if they run `git push ... --no-verify`. It refuses to start with any LAND_* or CONCRETE_SKIP_* variable set, since those
 # redirect remotes, swap the hook or skip the gates.
 #
 #   acceptance.sh --ref REF [--name NAME] [--skip LEG]... [--run-id ID] [--keep]
@@ -30,11 +31,17 @@
 #   ci       train.sh ci <name>: push ci/<name>, dispatch CI, record the run of the exact head
 #   watch    train.sh watch <name>: the run's head SHA, landing tier and required-checks.txt
 #   dryland  train.sh --dry-run land <name>: every land check, nothing pushed
-#   negative the same watch and dry-run land against the same run with its verdict tampered (a gh
-#            wrapper edits the JSON): a required job removed, a required job skipped, a required
-#            job cancelled, the run's head SHA changed. Each must be refused by BOTH commands, with
-#            that mode's own diagnostic, and the wrapper must record that it changed the verdict; a
-#            refusal for any other reason (gh failing, a moved main) is a failed control, not a pass.
+#   negative controls, each of which must FAIL, for its own reason:
+#     neg:build  a commit on the train head that breaks the build (ACCEPT_BREAK_BUILD, a shell
+#                snippet run in a scratch worktree): ACCEPT_BUILD_CMD must fail, naming the file
+#     neg:hook   a commit on the train head that adds a job name to required-checks.txt that no
+#                workflow has: the candidate's own pre-push hook, fed that range, must fail
+#     neg:<m>    the same watch and dry-run land against the same run with its verdict tampered (a
+#                gh wrapper edits the JSON): a required job removed (drop), skipped, cancelled or
+#                failed, and the run's head SHA changed (sha). Each must be refused by BOTH commands
+#                with that mode's own diagnostic, and the wrapper must record that it changed the
+#                verdict; a refusal for any other reason (gh failing, a moved main) fails the control.
+#   Before the tampered controls, the real run is read once more: its head SHA must be the train head.
 #
 # Output: one line per leg (passed | failed | skipped) and a verdict: accepted (every leg passed),
 # incomplete (none failed, some skipped), or failed. Results are bound to the train's head SHA and
@@ -101,6 +108,25 @@ finish() {
 
 TRAIN() { ( cd "$C" && bash scripts/land/train.sh "$@" ); }
 
+# The git shim: every leg runs with it first on PATH. It refuses a push that could move main, and
+# passes everything else to the real git.
+make_git_shim() {
+  local real; real="$(command -v git)"
+  mkdir -p "$WORK/bin"
+  cat > "$WORK/bin/git" <<SHIM
+#!/usr/bin/env bash
+seen=0
+for a in "\$@"; do
+  if [ "\$seen" = 0 ]; then [ "\$a" = push ] && seen=1; continue; fi
+  case "\$a" in
+    --all|--mirror|HEAD|main|refs/heads/main|*:main|*:refs/heads/main|+*:main|+*:refs/heads/main)
+      echo "acceptance git shim: refusing push argument '\$a' (could move main)" >&2; exit 1 ;;
+  esac
+done
+exec "$real" "\$@"
+SHIM
+  chmod +x "$WORK/bin/git"
+}
 # The guard hooks path: pre-push refuses any main update, then runs the real hook on the same input.
 make_guard() {
   mkdir -p "$WORK/guard-hooks"
@@ -124,14 +150,20 @@ do_clone() {
   git fetch --quiet origin '+refs/heads/wip/*:refs/remotes/origin/wip/*' || true
   git rev-parse --verify --quiet "$REF^{commit}" >/dev/null || { echo "no ref $REF in the fresh clone"; return 1; }
   [ -f scripts/land/train.sh ] || { echo "no scripts/land/train.sh"; return 1; }
-  if grep -rn -- '--no-verify' scripts/land scripts/push-both.sh 2>/dev/null; then echo "the landing scripts can bypass the hook (--no-verify); the guard cannot hold"; return 1; fi
   echo "cloned $ORIGIN_URL; $REF = $(git rev-parse "$REF")"
 }
 do_build() { # at the train head: the build result belongs to the SHA every other leg tests
   [ "$(git -C "$C" rev-parse HEAD)" = "$HEAD" ] || { echo "the clone is not at the train head"; return 1; }
   cd "$C" && bash -c "${ACCEPT_BUILD_CMD:-make build}" && echo "built $HEAD"
 }
-do_train() { TRAIN build "$NAME" "$REF" && HEAD="$(git -C "$C" rev-parse HEAD)" && echo "train head $HEAD"; }
+do_train() {
+  TRAIN build "$NAME" "$REF" && HEAD="$(git -C "$C" rev-parse HEAD)" || return 1
+  # The candidate's own publishing scripts, at the train head, may not skip hooks on a push.
+  local hits; hits="$(cd "$C" && grep -rnE -- 'git[^#]*push[^#]*--no-verify|--no-verify[^#]*push' scripts/land scripts/push-both.sh 2>/dev/null \
+    | grep -v '^scripts/land/acceptance.sh:' | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#' || true)"
+  [ -z "$hits" ] || { echo "the train head's landing scripts push with --no-verify:"; echo "$hits"; return 1; }
+  echo "train head $HEAD"
+}
 do_check() { TRAIN check "$NAME" --no-review --no-remote; }
 do_ci() {
   if [ -n "$RUN_ID" ]; then
@@ -163,7 +195,7 @@ if jobs is not None:
     if mode == "drop":
         d["jobs"] = [j for j in jobs if j.get("name") != req]
         if len(d["jobs"]) != len(jobs): done.append("dropped " + req)
-    elif mode in ("skipped", "cancelled"):
+    elif mode in ("skipped", "cancelled", "failure"):
         for j in jobs:
             if j.get("name") == req and j.get("conclusion") != mode: j["conclusion"] = mode; done.append(mode + " " + req)
 if done:
@@ -172,19 +204,58 @@ json.dump(d, sys.stdout)'
 GH
   chmod +x "$WORK/tamper-gh"
 }
+# A scratch worktree at the train head with one breaking commit; prints its path, or nothing.
+neg_tree() { # name snippet
+  local d="$WORK/neg-$1"
+  git -C "$C" worktree add -q --detach "$d" "$HEAD" >/dev/null 2>&1 || return 1
+  ( cd "$d" && bash -c "$2" && git add -A && git -c user.name=acceptance -c user.email=acceptance@invalid commit -qm "acceptance: broken on purpose ($1)" ) >/dev/null 2>&1 || return 1
+  echo "$d"
+}
+do_neg_build() {
+  if [ -n "${SKIP[build]:-}" ]; then row neg:build skipped "the build leg is skipped"; SKIPPED=1; return 0; fi
+  local snip="${ACCEPT_BREAK_BUILD:-f=ConcreteSpec.lean; [ -f \$f ] || f=Main.lean; printf '\ntheorem acceptance_broken : False := rfl\n' >> \$f; echo \$f > .acceptance-broken-file}"
+  local d out f
+  d="$(neg_tree build "$snip")" || { row neg:build failed "could not make the broken commit"; FAILED=1; return 0; }
+  f="$(git -C "$d" show HEAD:.acceptance-broken-file 2>/dev/null)"
+  out="$(cd "$d" && bash -c "${ACCEPT_BUILD_CMD:-make build}" 2>&1)"
+  if [ $? = 0 ]; then row neg:build failed "a broken build passed"; FAILED=1
+  elif [ -n "$f" ] && ! printf '%s\n' "$out" | awk -v w="$f" 'index($0, w) {x=1} END {exit !x}'; then
+    row neg:build failed "the build failed, but not on the broken file $f"; FAILED=1
+  else row neg:build passed "build refused the broken commit${f:+ ($f)}"; fi
+  git -C "$C" worktree remove --force "$d" >/dev/null 2>&1 || true
+}
+do_neg_hook() {
+  local d out base
+  d="$(neg_tree hook "printf 'Acceptance: no such job\n' >> required-checks.txt")" || { row neg:hook failed "could not make the broken commit"; FAILED=1; return 0; }
+  [ -f "$d/.githooks/pre-push" ] || { row neg:hook failed "the candidate has no .githooks/pre-push"; FAILED=1; return 0; }
+  base="$(git -C "$C" rev-parse "$HEAD")"
+  out="$(cd "$d" && printf 'refs/heads/acceptance-neg %s refs/heads/ci/acceptance-neg %s\n' "$(git rev-parse HEAD)" "$base" \
+         | bash .githooks/pre-push origin "$ORIGIN_URL" 2>&1)"
+  if [ $? = 0 ]; then row neg:hook failed "the hook passed a required-checks.txt naming a job no workflow has"; FAILED=1
+  elif ! printf '%s\n' "$out" | awk 'index($0, "landing_script") {x=1} END {exit !x}'; then
+    row neg:hook failed "the hook failed, but not in the landing-script check: $(printf '%s\n' "$out" | tail -n 1 | cut -c1-80)"; FAILED=1
+  else row neg:hook passed "the hook refused (landing-script check)"; fi
+  git -C "$C" worktree remove --force "$d" >/dev/null 2>&1 || true
+}
 do_negative() {
   if [ -n "${SKIP[negative]:-}" ]; then row negative skipped "--skip"; SKIPPED=1; return 0; fi
+  local rid rsha
+  rid="$(cd "$C" && sed -n 's/^run_id=//p' "$(git rev-parse --git-common-dir)/concrete-landing/$NAME/train.env" | tail -1)"
+  rsha="$(gh run view "$rid" -R "${ACCEPT_REPO:-unbalancedparentheses/concrete2}" --json headSha 2>/dev/null | python3 -I -c 'import json,sys; print(json.load(sys.stdin).get("headSha",""))' 2>/dev/null)"
+  if [ "$rsha" != "$HEAD" ]; then row neg:run failed "run ${rid:-?} is at ${rsha:-?}, not the train head $HEAD: the controls would test another SHA"; FAILED=1; return 0; fi
+  row neg:run passed "run $rid is at the train head ${HEAD:0:10}"
   make_tamper_gh
   local req; req="$(sed 's/#.*//; s/^[[:space:]]*//; s/[[:space:]]*$//' "$C/required-checks.txt" 2>/dev/null | sed '/^$/d' | head -1)"
   if [ -z "$req" ]; then row negative failed "no required-checks.txt in the candidate"; FAILED=1; return 0; fi
   local mode cmd out rc want tlog
-  for mode in drop skipped cancelled sha; do
+  for mode in drop skipped cancelled failure sha; do
     for cmd in watch land; do
       tlog="$WORK/tamper-$mode-$cmd.log"; : > "$tlog"
       case "$mode:$cmd" in
         drop:*) want="missing: $req" ;;
         skipped:*) want="skipped: $req" ;;
         cancelled:*) want="cancelled: $req" ;;
+        failure:*) want="failure: $req" ;;
         sha:watch) want="says nothing about this train" ;;
         sha:land) want="not the train HEAD" ;;
       esac
@@ -206,6 +277,8 @@ do_negative() {
   done
 }
 
+make_git_shim
+export PATH="$WORK/bin:$PATH"
 echo "acceptance: $REF from $ORIGIN_URL"
 leg clone do_clone
 NAME="${NAME:-accept-$(git -C "$C" rev-parse --short=10 "$REF")}"
@@ -215,5 +288,7 @@ leg check do_check
 leg ci do_ci
 leg watch do_watch
 leg dryland do_dryland
+do_neg_build
+do_neg_hook
 do_negative
 finish

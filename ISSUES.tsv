@@ -1,0 +1,8 @@
+# Minimal issue record (P12): spec, proof, launcher, CI and migration defects until the bug ledger returns with slice 1.
+# One row per issue, tab-separated. area: spec|proof|compiler|launcher|ci|migration. severity: high|medium|low.
+# status: open|closed. A closed row stays; its closure condition says what closed it. Checked by check_issues.sh.
+id	date	area	evidence	owner	severity	closure_condition	status
+ISS-0001	2026-11-04	ci	scripts/oracle/ORACLE.lock artifact_url is empty; scripts/oracle/fetch.sh exits 3 (INCOMPLETE)	R-0564	medium	the artifact is published with scripts/oracle/publish.sh after the owner approves P13, artifact_url is set, and fetch.sh installs and verifies it on a GitHub-hosted runner	open
+ISS-0002	2026-11-04	migration	required-checks.txt lists the old CI's landing tier; the new root has only the Root checks job	R-0558	high	the move commit carries the new root's required-checks.txt and a required-checks-transition.tsv row for every old job (replaced or retired with a reason), and the acceptance test passes on the moved tree	open
+ISS-0003	2026-11-04	migration	the fuzz farm corpus and findings, perf history and leanprof data on concrete-ci-3 were not copied before the handover (P14)	R-0272	low	fuzzing restarts against the new compiler from tests/regressions, tests/wrong-code and generated programs (R-0272) and perf baselines are re-measured (R-0550)	open
+ISS-0004	2026-11-04	migration	docs/archive/site-frozen.md has placeholder values; legacy_move.sh prerequisite P4 refuses the move	R-0565	high	a tag-built browser bundle is hashed, passes parity with the native oracle and the loader and UI checks, is deployed with the frozen-compiler label after the owner approves, and every value in docs/archive/site-frozen.md is real	open

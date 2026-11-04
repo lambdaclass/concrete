@@ -133,6 +133,7 @@ bash scripts/tests/check_incremental_shadow.sh
 bash scripts/tests/check_indirect_call_identity.sh
 bash scripts/tests/check_int_arith_semantics.sh
 bash scripts/tests/check_io_writer.sh
+bash scripts/tests/check_issues.sh
 bash scripts/tests/check_iteration_protocol.sh
 bash scripts/tests/check_landing_bot.sh
 bash scripts/tests/check_landing_script.sh
