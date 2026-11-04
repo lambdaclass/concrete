@@ -8,10 +8,12 @@ on a named roadmap condition. It absorbs PROJECT.md's principles and design poli
 list of `ANTI_FEATURES.md` and the "no" and "not yet" entries of PROJECT.md's language decisions,
 and writes down the owner's working rules (best long-term structural solution, one form per
 situation, the most transparent option, verbosity never argues against clarity or safety, Lean as
-the only normative source, linear ownership, second-class references).
+the specification with no generated prose, linear ownership, second-class references).
 
 The refusals were checked against [the owner decisions](docs/spec/decisions.md): generic type and
-capability arguments are inferred from argument types only (OD45, OD46, OD129); `as` converts only
+capability arguments are inferred from argument types only (OD45, OD46, OD129), and making capability
+arguments explicit on every polymorphic call is recorded as a proposed revision pending the owner,
+on which the philosophy takes no side; `as` converts only
 losslessly (OD11); running out of memory is an ordinary error; capability aliases and `Std` are
 gone; operators take primitive operands only (OD26); ghost bindings and specification functions are
 admitted (OD81, OD115), with their Core form left to the Core session; capability hiding is

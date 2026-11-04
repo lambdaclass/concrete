@@ -60,17 +60,22 @@ Each rule states what holds and why. Its history is in the changelog and the dec
 
 5. **Every fact once.** Every fact that affects behavior or authority has exactly one authoritative
    definition, at a place the reader can find from the use site. Views checked against that
-   definition (a signature, a compiler report, a generated chapter or table) and explanatory
+   definition (a signature, a compiler report, a derived table or registry) and explanatory
    examples are not second definitions. A restated fact that nothing checks (a size copied into a
    constant, a rule copied into a second document, a capability implied rather than declared) is a
    defect waiting to drift. This document is itself an instance: other documents link here.
 
-6. **Lean is the only normative source.** The language's syntax, typing, ownership, effects and
-   semantics are defined in Lean; the specification chapters, the rule registry and the reference
-   interpreter are generated from those definitions, never the reverse. Until a rule lands in Lean
-   its chapter states the decided rule
-   ([Lean-source decision](ROADMAP_DECISIONS.md#2026-11-01--lean-as-the-only-source)). *Why:* one
-   definition that machines check cannot silently disagree with itself.
+6. **Lean is the specification.** The language's syntax, typing, ownership, effects and semantics
+   are defined in Lean. Each rule is a readable definition with a plain-words doc comment and its
+   conformance examples, and the reference interpreter is built from those definitions. No prose is
+   generated from them. Machine views (the rule registry, rule IDs, manifests) are derived from them
+   and checked for staleness. A guide may teach and link the rules but states none of its own. Until
+   a rule lands in Lean, its prose chapter states the decided rule, and the chapter retires once its
+   rules are covered
+   ([Lean-source decision](ROADMAP_DECISIONS.md#2026-11-01--lean-as-the-only-source),
+   [revised 2026-11-04](ROADMAP_DECISIONS.md#2026-11-04--lean-is-the-specification)). *Why:* one
+   definition that machines check cannot silently disagree with itself, and a second prose
+   rendering would be a second text to keep in step.
 
 7. **Systems first, not theorem-prover first.** Source code reads as systems programming. Proofs
    attach to real Concrete functions through the semantics, not to a parallel reimplementation.
@@ -156,10 +161,14 @@ the whole program fails both.
 
 **This order guides choices that are still open. It never reopens a decided rule.** The owner's
 answers in [decisions.md](../spec/decisions.md) stand as recorded, whatever this order would
-suggest; changing one is a new owner decision. For example, "explicitness at the use site" is no
-argument against the decided inference of type and capability arguments from argument types
-([OD45](../spec/decisions.md#od45), [OD46](../spec/decisions.md#od46),
-[OD87](../spec/decisions.md#od87)).
+suggest; changing one is a new owner decision. When the order argues for changing a decided rule,
+the change goes to the owner as a proposed revision and the decided rule stands meanwhile. For
+example, type arguments are inferred from the checked argument types
+([OD46](../spec/decisions.md#od46)), and that stands. Capability arguments are inferred the same
+way today ([OD45](../spec/decisions.md#od45), [OD87](../spec/decisions.md#od87)). The Core
+proposal recommends writing them on every capability-polymorphic call, checked against the
+argument types, because a call's authority should be read rather than solved for. That
+recommendation is a proposed revision of OD45 and OD87, pending the owner's answer.
 
 ## Admission test
 
@@ -276,12 +285,13 @@ together is not decided here.
   accept a closed list of types, expand to typed calls and keep their authority visible.
 - **Global (Hindley–Milner) inference and inference from the expected result type.** Permanent.
   Signatures are written in full. A generic call's type arguments are inferred only from the checked
-  types of its arguments ([OD46](../spec/decisions.md#od46), [OD129](../spec/decisions.md#od129)) and
-  capability variables the same way ([OD45](../spec/decisions.md#od45)); what no argument determines
-  is written explicitly, as is any capability argument in a turbofish
-  ([OD87](../spec/decisions.md#od87)). Choosing among several consistent capability solutions is
-  [undecided](../spec/decisions.md#core-capability-inference) and belongs to the target Core
-  proposal.
+  types of its arguments ([OD46](../spec/decisions.md#od46), [OD129](../spec/decisions.md#od129));
+  what no argument determines is written explicitly. Capability arguments are decided the same way
+  for now ([OD45](../spec/decisions.md#od45), [OD87](../spec/decisions.md#od87)), with no inference
+  from the result context. Whether they become explicit on every capability-polymorphic call is a
+  proposed revision before the owner
+  ([Core question 5](../spec/decisions.md#core-capability-inference)); this document takes no side
+  on it.
 
 **Dispatch and abstraction**
 
