@@ -13,9 +13,9 @@ Every one of the 555 old task IDs has a row in
 | disposition | rows |
 |---|---|
 | retained | 79 |
-| transferred-with-obligations | 342 |
+| transferred-with-obligations | 345 |
 | deferred-with-trigger | 109 |
-| retired | 10 |
+| retired | 7 |
 | done | 15 |
 
 Each transferred row names the obligations it carries to its destination. Archived IDs are never
@@ -38,8 +38,12 @@ Folded into existing tasks:
 
 Gates:
 - `check_roadmap.sh` replaces `check_roadmap_linear.sh` and `check_roadmap_coverage.sh`. It
-  checks task IDs, archived-ID reuse, dispositions and their destinations, the queue, the owners of
-  the bug classes, links and candidate bugs, with negative controls.
-- The work-queue builder reads the new task rows.
+  checks that the disposition table has exactly one row per archived ID, task rows and their IDs,
+  archived-ID reuse, dispositions with their destinations and obligations, the queue and its phases,
+  the "depends on" items, the owners of the bug classes, links and candidate bugs, with negative
+  controls.
+- The work-queue builder reads the new task rows. It resolves a phase or queue-row dependency to
+  its tasks, and refuses a "depends on" item it cannot read. It holds back a task that waits on an
+  owner decision or on a live task that is not queued.
 - The spec's tracking-ID check (S8), the convergence inventory, the V2-freeze marker checks and the
   absorption inventory point at the new files.

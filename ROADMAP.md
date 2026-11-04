@@ -73,7 +73,9 @@ verbosity that buys clarity) get one home in `PHILOSOPHY.md` when the `wip/philo
    7. SMT-checked lowering.
    8. Proof-producing equality saturation.
 
-   Parsing, linking and native-image assumptions stay explicit, and only kernel-checked proofs count
+   Parsing, linking and native-image assumptions stay explicit, and only kernel-checked proofs count.
+   Before items 4–7 are built, their supported subsets, representations and residual assumptions are
+   proposed to the owner
    ([proof order](docs/archive/roadmap-2026-11/ROADMAP_DECISIONS.md#2026-11-01--compiler-proof-order)).
 7. **The specification criteria still bind.** These are owner decisions, audit, simplification,
    refusal coverage, conformance, code matching the spec, Lean links and the outside-reader test. They
@@ -146,7 +148,9 @@ each one options and a recommendation, and no work encodes an answer first:
 
 ## Tasks
 
-One row per live task: what it delivers, when it is done, and what it waits for. A task transferred
+One row per live task: what it delivers, when it is done, and what it waits for. "Depends on" names
+tasks (R-NNNN), queue rows (A2: every task of that row), whole phases (C: every task of phase C) or
+an owner decision (`owner: <decision>`), comma-separated; `—` is nothing. A task transferred
 into one of these carries the obligations recorded in its row of the
 [disposition table](docs/archive/roadmap-2026-11/task_disposition.tsv). The full old body stays in the
 archive. Rows for C–G are summaries. Each is refined when its phase becomes next.
@@ -210,7 +214,7 @@ archive. Rows for C–G are summaries. Each is refined when its phase becomes ne
 | R-0301 | Backend contracts: ABI, layout, sanitizer and FFI controls | the validation project passes for the 0.1 subset | R-0503 |
 | R-0334 | The first-user teaching path (the guide) | a checked tutorial covers install to file-copy | R-0071 |
 | R-0516 | Release automation for nightlies and trains | a nightly publishes from a qualified SHA | T |
-| R-0333 | Release criteria and candidate records, including claims, security and soundness disclosure, compatibility and operations | the 0.1 candidate record is complete | all of C |
+| R-0333 | Release criteria and candidate records, including claims, security and soundness disclosure, compatibility and operations | the 0.1 candidate record is complete | C |
 
 ### D. Whole language
 
@@ -264,7 +268,7 @@ archive. Rows for C–G are summaries. Each is refined when its phase becomes ne
 
 | task | objective | done when | depends on |
 |---|---|---|---|
-| R-0558 | Move the old tree to `legacy/` and set up the minimal root. Day one, the root holds the README, this file, AGENTS.md, an empty CHANGELOG, LICENSE, the new build files, `ConcreteSpec/Spec.lean`, `docs/PHILOSOPHY.md`, `docs/decisions.md` and the landing, review and hook scripts. Everything else comes back from `legacy/` when a slice needs it. Legacy gates run only when `legacy/` changes. | the root holds only that set; a change outside `legacy/` reports the legacy gates as skipped, never as passed, and a change inside runs them (both cases controlled) | owner approval of the move inventory |
+| R-0558 | Move the old tree to `legacy/` and set up the minimal root. Day one, the root holds the README, this file, AGENTS.md, an empty CHANGELOG, LICENSE, the new build files, `ConcreteSpec/Spec.lean`, `docs/PHILOSOPHY.md`, `docs/decisions.md` and the landing, review and hook scripts. Everything else comes back from `legacy/` when a slice needs it. Legacy gates run only when `legacy/` changes. | the root holds only that set; a change outside `legacy/` reports the legacy gates as skipped, never as passed, and a change inside runs them (both cases controlled) | owner: approval of the move inventory |
 | R-0563 | Operational migration acceptance test | from a fresh clone of the new root: build, hook, exact-SHA CI and landing on both remotes all succeed; negative controls (a broken build, a failing hook gate, a red CI) each stop the landing | R-0558 |
 | R-0564 | A pinned, reproducible legacy oracle | `legacy-compiler-final` builds reproducibly from a pinned toolchain into a recorded digest, and the differential harness invokes it by that digest | R-0558 |
 | R-0547 | Measurement: per-branch stage timestamps and the median time to land | every landing has its four timestamps, and the median shows here | — |
@@ -303,17 +307,34 @@ Generated from [`docs/project/candidates.tsv`](docs/project/candidates.tsv) by
 ## Releases
 
 Nightlies publish the newest fully qualified main commit with no support promise. After 0.1, release
-trains aim for one release every 4–6 weeks when the candidate passes. Milestones are acceptance
-scopes, not dates. R-0333 keeps one versioned record per candidate. The record holds:
+trains aim for one release every 4–6 weeks when the candidate passes. A security or soundness fix may
+ship out of band, and a skipped train records its reason. Milestones are acceptance scopes, not
+dates. A task is assigned to a release as a bounded increment, and completing that increment does
+not close the task.
 
-- the exact SHA;
-- the supported subset;
-- the required checks and their results at that SHA;
-- compatibility;
-- blockers and limitations;
-- the patch procedure.
+R-0333 keeps one versioned record per candidate. The record holds:
 
-A timeout, a skipped job or an incomplete report is never a passing result.
+- the exact source commit and the compiler, toolchain and released-artifact identities;
+- the supported language and std subset, platforms, backends and runtime profile;
+- the required checks and their results at that SHA, with positive and rejecting controls,
+  applicable mutation qualification and a clean installation;
+- source, std API and ABI, and evidence-schema compatibility, each stated separately, with the
+  migration, invalidation and revalidation each change needs;
+- open blockers, accepted limitations and deferred increments, as three separate lists with owners;
+- the matching reference, claims matrix, tutorial and release notes, which distinguish enforced
+  properties, checked proofs, assumptions, tests and incomplete coverage;
+- the supported lifetime, the patch procedure, security reporting, rollback, and evidence
+  revocation and rechecking.
+
+The following rules apply to every candidate:
+
+- A timeout, a skipped job or an incomplete report is never a passing result.
+- An accepted limitation never contradicts an advertised guarantee.
+- An unresolved soundness failure inside the claimed scope blocks the release.
+- A patch release has its own candidate and record, and repairs an already published scope.
+- Stabilization never silently widens the claimed subset.
+- Each later scope inherits the earlier acceptance checks that apply, rerun on its own candidate.
+  It never inherits the legacy compiler's release scope.
 
 ### Release map
 
@@ -323,4 +344,4 @@ A timeout, a skipped job or an incomplete report is never a passing result.
 | verified preview | E | each advertised theorem holds with its residual assumptions; native claims use the LCB path |
 | verified-component alpha | E–F | a non-author repairs a bounded component and replays its evidence independently |
 | project beta | G | multi-package use exposes inherited assumptions, evidence and compatibility |
-| 1.0 | G | whole-language slices, conformance, compatibility and maintenance commitments hold for the named subset |
+| 1.0 | G | whole-language slices, E–F acceptance, conformance, the reference, compatibility, distribution and maintenance commitments hold for the named subset |
