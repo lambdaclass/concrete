@@ -1,5 +1,15 @@
 # Core proposal (draft for A2)
 
+**Precedence.** This draft is background. The governing proposal is the set of 82 Core
+decision rows (Q1.1–Q9.18) that Claude and Codex settled over three debate rounds on
+2026-11-04 and put before the owner on the decision page. Where this draft and a row
+differ, the row governs, and the draft's recommendation is superseded. Neither is
+decided until the owner answers. Rows that revise a decided rule say so (Q5.1 and Q5.4
+revise OD45 and OD87). The resolution round after Codex's final review replaces
+several rows with concrete rules, and those replace both the old rows and this draft.
+The rows are committed beside this draft when the owner answers them; until then they
+live on the decision page, and each section below names its governing rows.
+
 Status: draft for the owner's Core session. Nothing here is decided. The owner
 answers each question in the session of roadmap row A2; until then no work encodes
 an answer. The questions are the nine in
@@ -30,6 +40,8 @@ Fixed constraints:
 Code below is schematic: the spellings are the owner's to choose.
 
 ## Q1. Allocator discipline
+
+*Governing rows: Q1.1–Q1.13. Where this section differs from them, it is superseded.*
 
 **Decided.** Allocation and reset decisions (decisions.md, allocation section): an
 allocator is an explicit value, a reset invalidates every allocation, and giving up an
@@ -103,6 +115,8 @@ release-validity lemma follows from the dependency judgment.
 
 ## Q2. `destroy` bounds
 
+*Governing rows: Q2.1–Q2.7. Where this section differs from them, it is superseded.*
+
 **Decided.**
 - OD59: the only ways to consume a heap are `*h` (move the payload out and release the
   storage) and `destroy(h)`; `free` is removed.
@@ -148,6 +162,8 @@ container without a check.
 **Proof impact.** A2 gate proof: allocator cleanup across deferred destroy calls.
 
 ## Q3. `HeapArray` element view and raw memory
+
+*Governing rows: Q3.1–Q3.11. Where this section differs from them, it is superseded.*
 
 **Decided.**
 - Opening goes one layer deep.
@@ -205,6 +221,8 @@ values-to-bytes lemma (A1 §1).
 
 ## Q4. Static text
 
+*Governing rows: Q4.1–Q4.6. Where this section differs from them, it is superseded.*
+
 **Decided.** `String<A>` carries an allocator; literals must not allocate.
 
 **Options.**
@@ -237,6 +255,8 @@ values-to-bytes lemma (A1 §1).
 
 ## Q5. Capability inference with several solutions
 
+*Governing rows: Q5.1–Q5.4. Where this section differs from them, it is superseded.*
+
 **Decided.**
 - OD45 (owner, 2026-11-01): a capability variable is bound from the checked type of
   every argument, whatever the argument's form. Unresolved or inconsistent bindings
@@ -263,7 +283,15 @@ values-to-bytes lemma (A1 §1).
     own signature, and writing it again at every call states the same fact twice.
   - Capabilities would also no longer bind the way type arguments do (OD46).
 
-**Recommendation: (b).** Keep OD45. Infer exactly when the equations from all checked
+> **Superseded** by rows Q5.1 and Q5.4. Those rows recommend option (d): explicit
+> capability arguments on every capability-polymorphic call, checked against the
+> argument types with no inference solver, and `{}` written for an empty set. This
+> revises OD45 and OD87 and is pending the owner. A written capability argument is
+> a checked restatement, not a second authority. Type arguments stay inferred
+> (OD46). The text below is the draft's original recommendation, kept for its
+> reasoning.
+
+**Recommendation (superseded): (b).** Keep OD45. Infer exactly when the equations from all checked
 argument types, together with any explicit arguments, have one solution. With no
 solution the call is inconsistent; with several, explicit arguments are required. For
 example, `C + {Fs} = {}` is inconsistent and `C + {Fs} = {Fs}` is ambiguous. This is
@@ -278,6 +306,8 @@ is visible where that function is declared. The call adds no authority of its ow
 - the normal form of capability sets, so that `C` and `C + {}` compare equal.
 
 ## Q6. Static refusal and traps
+
+*Governing rows: Q6.1–Q6.7. Where this section differs from them, it is superseded.*
 
 **Decided.**
 - OD118: a proven violation is refused everywhere, trusted code included.
@@ -313,6 +343,8 @@ witness `fn entry(x: u8) -> u8 { return x + 1; }` is accepted and traps at 255.
 - errors during constant evaluation.
 
 ## Q7. Target grant schemas and narrowing
+
+*Governing rows: Q7.1–Q7.9. Where this section differs from them, it is superseded.*
 
 **Decided.**
 - Authority rules 11–12.
@@ -353,6 +385,8 @@ witness `fn entry(x: u8) -> u8 { return x + 1; }` is accepted and traps at 255.
 
 ## Q8. Slice 1's assurance scope
 
+*Governing rows: Q8.1–Q8.7. Where this section differs from them, it is superseded.*
+
 **Recommendation** (Codex agrees).
 - Prove source → BIR.
 - Qualify the native binary by differential testing against the Lean semantics.
@@ -376,6 +410,8 @@ Acceptance, coverage and nonvacuity obligations are required (A1 §2), not refin
 of successful compilations alone.
 
 ## Q9. The whole Core interface
+
+*Governing rows: Q9.1–Q9.18. Where this section differs from them, it is superseded.*
 
 **Decided.**
 - OD59: no `free`.
