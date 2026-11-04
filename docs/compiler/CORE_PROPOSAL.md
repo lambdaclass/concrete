@@ -23,8 +23,9 @@ answers in the stages of roadmap rows A2a–A2c (provisional approval, a propose
 encodes an answer. The questions are the nine in
 [ROADMAP.md](../../ROADMAP.md#questions-for-the-core-session). The proposal is drafted
 against the [A1 boundary artifacts](A1_BOUNDARIES.md), and its sections 1–4 are cited
-as "A1 §n". Lean stays the only normative source. An approved answer becomes Lean in
-A3, not prose here.
+as "A1 §n". Lean stays the only normative source. An approved answer is formalized
+in a proposed `Spec.lean` during A2b, becomes normative at the A2c freeze, and then
+receives A3's one-main-file layout gate; it never becomes prose here.
 
 Each question gives the decided rules it must respect, a recommendation and what the
 recommendation leaves open. Where alternatives were weighed, it also gives the options
