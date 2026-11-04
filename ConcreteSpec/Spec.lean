@@ -1,15 +1,21 @@
 /-!
 # Concrete specification — slice 1
 
-**Status: provisional model, not yet normative.** Core's shape is the owner's decision (ROADMAP
-A2, the Core session) and is not taken yet. This file models slice 1 ahead of that decision so the
-proof architecture can be exercised; it becomes the normative specification only once Core is
-approved, and every choice below that Core may change is listed under "Choices pending Core".
+**PROPOSED: not normative until Core freeze.** This is an experimental model. Core's shape is the
+owner's decision, taken in three stages (ROADMAP rows A2a provisional approval, A2b a proposed
+`Spec.lean` with four checked design theorems, A2c the owner's freeze; decision row Q9.19, pending).
+Approving Core alone does not make this file normative: only the freeze in A2c removes this
+heading, after the file has been reconciled with the approved rows. Until then it is an opt-in Lake
+target (`lake build ConcreteSpec`), not a default target and not the authoritative specification,
+and its examples are not conformance claims for any compiler. It models slice 1 ahead of the
+decision so the proof architecture can be exercised; every choice below that Core may change is
+listed under "Choices pending Core".
 
 This file covers slice 1 of the new compiler (ROADMAP phase B). The Lean definitions are the rules
 of the model. Each rule has a plain-words doc comment naming the decided rule it
 encodes (docs/spec/*.md rule IDs and the owner decisions ODnn in docs/spec/decisions.md), and
-conformance examples at the end of the file show accepted and refused programs.
+examples at the end of the file show accepted and refused programs in this model (they become
+conformance examples only at the freeze).
 
 What slice 1 contains:
 
@@ -37,20 +43,27 @@ a total, fuel-indexed evaluator (`run`) whose outcome separates exit, trap, stuc
 of fuel (STMT-1). `Exec` is the fuel-free form of the same statement-level evaluator: adequacy and
 determinism are about fuel, not an independent cross-check of expression evaluation.
 
-Choices pending Core (ROADMAP A2; not decided by this file):
+Choices pending Core (ROADMAP A2a–A2c; not decided by this file). Each must be reconciled with the
+approved rows during A2b, before the freeze:
 
-* names are strings, not Core identities (the approved architecture asks for Core with identities);
-* a read of a variable copies or moves according to its type, where the Core proposal (Q9.1)
-  recommends explicit moves and copies in Core;
+* names are strings, not Core identities: decision row Q9.1 recommends fresh identities;
+* expressions nest, where Q9.1 recommends A-normal form (atomic operands);
+* a read of a variable copies or moves according to its type, where Q9.1 recommends explicit
+  `copy x` and `move x` operands in Core;
 * integer literals carry their type in the syntax;
 * the body is a list of `let` statements followed by one `return`.
 
 Not modelled, because the decision is open:
 
-* ARITH-13, refusing an operation proved to overflow or divide by zero: its mandatory proof
-  criterion is undecided (docs/spec/decisions.md, core-static-refusal). `Checked` is the slice's
-  rules without ARITH-13, so it accepts programs that ARITH-13 may later refuse, and no example
-  claims that a constant overflow is accepted.
+* ARITH-13 and OD118, refusing an operation proved to overflow or divide by zero: the criterion is
+  decision rows Q6.1–Q6.7, pending the owner. `Checked` is the slice's rules without that static
+  refusal, so it accepts programs the rows would refuse, and no example claims that a constant
+  overflow is accepted. If the rows are approved, `Checked` gains the fixed known-value judgment
+  (literals, immutable `let`s, module constants, checked operations; row Q6.2) with mandatory
+  refusal and its correspondence proof, and `overflowTrap` becomes a refused example. Every
+  `let` in this slice is immutable and every operand is then known, so an accepted program that
+  traps on overflow needs an input the checker cannot know (a parameter of `main` or an input
+  read at run time); the slice has none, and choosing that input boundary is the owner's.
 
 Obligations not discharged here (ROADMAP phase B):
 
@@ -58,7 +71,13 @@ Obligations not discharged here (ROADMAP phase B):
   propagation positions, and unannotated `let`;
 * the lexer, model-translation and native-image obligations;
 * erasure of the instrumentation (`Slot.moved`, the `used` and `live` flags): stated as intent,
-  with no erasure definition or theorem yet.
+  with no erasure definition or theorem yet;
+* the observable contract of a trap: its source location and message, and the mapping of exit
+  values and traps to the process exit code (decision row Q7.10 proposes trap exit 134); `Trap`
+  here is an abstract outcome with neither;
+* the target observations (the launcher contract): every result proved here is about the model's
+  abstract outcomes, and a claim about an executable needs a transport to the approved launcher
+  contract first.
 
 Only Lean core is imported. No proof here uses `native_decide` or `sorry`.
 -/
@@ -1476,7 +1495,9 @@ example : run wildcardField 10 = .exit 42 := by decide
 
 /-- Traps when run: `200 + 100` does not fit `u8`, so the checked addition aborts with the
 overflow trap (ARITH-3, STMT-2). Whether the program is accepted is not claimed: ARITH-13 may
-refuse an operation proved to overflow, and its proof criterion is open (see the header).
+refuse an operation proved to overflow, and its proof criterion is open (see the header). If
+decision rows Q6.1–Q6.7 are approved, `a` and `b` are known values and this becomes a refused
+example.
 ```
 fn main() -> u8 {
     let a: u8 = 200;

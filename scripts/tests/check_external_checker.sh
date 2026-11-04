@@ -76,6 +76,9 @@ ELAN_BIN="${ELAN_HOME:-$HOME/.elan}/bin"
 LAKE="$ELAN_BIN/lake"
 [ -x "$LAKE" ] || { echo "error: elan's lake not found at $LAKE (the tools need elan toolchains)" >&2; exit 2; }
 [ -x .lake/build/bin/concrete ] || { echo "error: build first (lake build)" >&2; exit 2; }
+# ConcreteSpec is an opt-in target (experimental, PROPOSED until the Core freeze), so `lake build`
+# does not build it; build it here so its theorems stay in the re-checked population.
+"$LAKE" build ConcreteSpec >&2 || { echo "error: lake build ConcreteSpec failed" >&2; exit 2; }
 TOOLS="${CONCRETE_EXT_TOOLS:-$HOME/.cache/concrete-ext}"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 TOOLCHAIN="$(cat lean-toolchain)"

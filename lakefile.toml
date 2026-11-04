@@ -1,6 +1,6 @@
 name = "concrete"
 version = "0.1.0"
-defaultTargets = ["concrete", "Examples", "DesignExamples", "pipeline-test", "concrete-browser-native", "ConcreteSpec"]
+defaultTargets = ["concrete", "Examples", "DesignExamples", "pipeline-test", "concrete-browser-native"]
 
 [leanOptions]
 warningAsError = true
@@ -25,9 +25,10 @@ srcDir = "proofs"
 name = "DesignExamples"
 srcDir = "proofs"
 
-# The specification of the new compiler (ROADMAP phase B, slice 1): root ConcreteSpec.lean, rules in
-# ConcreteSpec/Spec.lean, the one main file. It imports only Lean core and nothing from the old compiler, so the rules cannot
-# depend on today's implementation. A default target so `lake build` kernel-checks it.
+# EXPERIMENTAL, PROPOSED: a slice-1 model of the new compiler's specification (root ConcreteSpec.lean,
+# rules in ConcreteSpec/Spec.lean). It is not normative until the owner freezes Core (ROADMAP A2c), so
+# it is an opt-in target, not a default one: `lake build ConcreteSpec`. The external checker builds it
+# explicitly and re-checks its theorems. It imports only Lean core and nothing from the old compiler.
 [[lean_lib]]
 name = "ConcreteSpec"
 

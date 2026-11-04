@@ -169,6 +169,8 @@ for f in $OWNER_FILES; do
   CNF_CAPTURE_DIR="$PROJ_DIR" lake env lean -Dsat.solver="$SHIM" "$f" > "$WORK/proj.out" 2>&1 \
     || { no "re-elaborating $f under the shim failed"; head -5 "$WORK/proj.out" >&2; }
 done
+# proof_layer_theorems.lean imports ConcreteSpec, an opt-in target that `lake build` skips.
+lake build ConcreteSpec > "$WORK/spec-build.out" 2>&1 || no "lake build ConcreteSpec failed"
 EXPECTED=$(lake env lean scripts/tools/proof_layer_theorems.lean 2>/dev/null \
   | awk -F'\t' '{n=split($2,a," "); for(i=1;i<=n;i++) print a[i]}' | sort -u \
   | grep -cE '\._native\.bv_decide\.ax_[0-9_]+$' || true)
