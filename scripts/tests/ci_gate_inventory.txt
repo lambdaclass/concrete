@@ -133,6 +133,7 @@ bash scripts/tests/check_incremental_shadow.sh
 bash scripts/tests/check_indirect_call_identity.sh
 bash scripts/tests/check_int_arith_semantics.sh
 bash scripts/tests/check_io_writer.sh
+bash scripts/tests/check_issues.sh
 bash scripts/tests/check_iteration_protocol.sh
 bash scripts/tests/check_landing_bot.sh
 bash scripts/tests/check_landing_script.sh
@@ -207,6 +208,7 @@ bash scripts/tests/check_receipt_consumption.sh
 bash scripts/tests/check_receipt_issuance.sh
 bash scripts/tests/check_replay_producer.sh
 bash scripts/tests/check_report_arithmetic.sh
+bash scripts/tests/check_retention_manifest.sh
 bash scripts/tests/check_returned_ref_provenance.sh
 bash scripts/tests/check_review_tool.sh
 bash scripts/tests/check_rich_diagnostics.sh

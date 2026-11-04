@@ -44,6 +44,33 @@ defaults:
     shell: "nix develop .#gates --command bash --noprofile --norc -eo pipefail {0}"
 
 jobs:
+  # THE NEW ROOT'S CI, run beside the old jobs until the legacy/ move (P7, T0). Everything here reads
+  # only what the day-one root keeps (RETENTION.tsv "retained" rows): the landing tooling, the
+  # retention manifest, the issue record and the required-check transition rule. At the move this
+  # job is what remains of the workflow, joined by the slice jobs; every old job is then dropped
+  # through a required-checks-transition.tsv row (replaced or retired), never silently.
+  root-checks:
+    name: Root checks (new root)
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: "Retention manifest (every tracked file has one governing row; negative controls)"
+        run: bash scripts/tests/check_retention_manifest.sh
+
+      - name: "Issue record (ISSUES.tsv well-formed; negative controls)"
+        run: bash scripts/tests/check_issues.sh
+
+      - name: "Landing script (required checks and their transitions; refusals hold)"
+        run: bash scripts/tests/check_landing_script.sh
+
   grammar:
     name: LL(1) grammar check
     runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}

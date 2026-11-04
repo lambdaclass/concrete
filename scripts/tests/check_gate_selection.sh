@@ -103,8 +103,11 @@ if [ -f "$TMPD/stackleg.sel" ]; then
 fi
 if select_fixture docs "$FIX/docs_only_92861f4e.paths"; then
   n="$(count docs)"
-  if [ "$n" -le 6 ]; then ok "the docs-only diff selects $n gate command(s)"
-  else no "the docs-only diff selects $n gate commands (> 6)"; fi
+  # 7 since 2026-11-04: check_retention_manifest.sh reads RETENTION.tsv, whose rows name docs/
+  # entries, so a docs change selects it (rightly: a new docs/ entry without a row fails it). It
+  # takes seconds; the corpus-runner control below is the one that guards against a heavy selection.
+  if [ "$n" -le 7 ]; then ok "the docs-only diff selects $n gate command(s)"
+  else no "the docs-only diff selects $n gate commands (> 7)"; fi
   heavy="$(grep -E 'run_tests\.sh|check_examples\.sh|test_ssa\.sh|check_example_outputs\.sh' "$TMPD/docs.sel" || true)"
   if [ -z "$heavy" ]; then ok "the docs-only diff selects no corpus runner"
   else no "the docs-only diff selects a corpus runner: $heavy"; fi

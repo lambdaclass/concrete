@@ -124,6 +124,7 @@ mkdir -p Concrete/Check Concrete/Elab src
 printf 'def e := "E0001 existing"\n' > Concrete/Check/Check.lean
 printf 'def x := 1\n' > Concrete/Elab/Elab.lean
 printf 'x\n' > conflict.txt
+printf 'Build\n' > required-checks.txt  # train.sh refuses a landing with no required-checks.txt
 git add -A && git commit -qm base
 for r in origin lambdaclass fork; do git push -q "$r" main; done
 BASE="$(git rev-parse HEAD)"
