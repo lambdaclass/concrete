@@ -206,6 +206,18 @@ rc=0; python3 "$QD/build_queue.py" --root "$TMP/unknownid" > /dev/null 2> "$TMP/
 [ "$rc" = 2 ] && grep -q "R-0600 depends on R-0999, which is neither a task" "$TMP/unknownid.err" \
   && ok "a dependency on a task that is neither live nor completed exits 2 (the dispatcher would count it met)" \
   || no "unknown dependency id: exit $rc, $(cat "$TMP/unknownid.err")"
+mkdir -p "$TMP/unknownrow"; cp -R "$SRC/." "$TMP/unknownrow/"
+sed -i 's/| A1 | Soundness rules | R-0500, R-0602 |/| A1 | Soundness rules | R-0500, R-0602, R-0997 |/; s/| R-0604 | not in the queue | done | — |/| R-0604 | not in the queue | done | A1 |/' "$TMP/unknownrow/ROADMAP.md"
+rc=0; python3 "$QD/build_queue.py" --root "$TMP/unknownrow" > /dev/null 2> "$TMP/unknownrow.err" || rc=$?
+[ "$rc" = 2 ] && grep -q "R-0604 depends on queue row A1, which names R-0997" "$TMP/unknownrow.err" \
+  && ok "a queue-row dependency naming a task that is neither live nor completed exits 2" \
+  || no "queue-row dependency on an unknown id: exit $rc, $(cat "$TMP/unknownrow.err")"
+mkdir -p "$TMP/dropdep"; cp -R "$SRC/." "$TMP/dropdep/"
+printf -- '---\nid: R-0602\ndepends:\n---\n' > "$TMP/dropdep/tasks/R-0602.md"
+if python3 "$QD/build_queue.py" --root "$TMP/dropdep" > "$TMP/dropdep.json" 2> "$TMP/dropdep.err" \
+   && [ "$(python3 -c 'import json,sys; t={t["id"]: t for t in json.load(open(sys.argv[1]))["tasks"]}["R-0602"]; print(" ".join(t["depends"]), "/", " ".join(t["blocked_on"]))' "$TMP/dropdep.json")" = "R-0604 / owner: the name unqueued R-0604" ]; then
+  ok "a task file cannot drop a roadmap dependency or its block"
+else no "a task file dropped a roadmap dependency: $(cat "$TMP/dropdep.err" "$TMP/dropdep.json" | head -5)"; fi
 mkdir -p "$TMP/completedid"; cp -R "$SRC/." "$TMP/completedid/"
 sed -i 's/| R-0600 | the first half | done | R-0601 |/| R-0600 | the first half | done | R-0601, R-0998 |/' "$TMP/completedid/ROADMAP.md"
 mkdir -p "$TMP/completedid/changelog.d"; printf '### Completed Task R-0998\n\ncontrol\n' > "$TMP/completedid/changelog.d/control.md"

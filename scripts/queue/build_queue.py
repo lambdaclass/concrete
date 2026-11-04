@@ -235,7 +235,11 @@ def roadmap_tasks(root, mods):
                 if item in rows:
                     deps.append(item)
             elif item in qrows:
-                deps += qrows[item]
+                for q in qrows[item]:
+                    if q not in rows and q not in completed:
+                        die(f"{path}: {rid} depends on queue row {item}, which names {q}: neither a "
+                            f"task in ROADMAP.md nor completed in the changelog")
+                deps += [q for q in qrows[item] if q in rows]
             elif re.fullmatch(r"[A-GT]", item) and any(r[0] == item for r in rows.values()):
                 deps += [k for k, r in rows.items() if r[0] == item]
             else:
@@ -259,7 +263,7 @@ def roadmap_tasks(root, mods):
             "id": rid, "kind": "roadmap", "tier": tier,
             "title": obj.strip()[:160] or rid,
             "areas": sorted(areas), "depends": sorted(set(deps)),
-            "prompt": f"/roadmap-item {rid}", "source": "ROADMAP.md",
+            "prompt": f"/roadmap-item {rid}", "source": "ROADMAP.md", "roadmap_depends": deps,
             **({"blocked_on": ["owner: " + o for o in owner]} if owner else {}),
         })
 
@@ -391,6 +395,8 @@ def build(root, fuzz_dir):
     present = {t["id"] for t in sourced + explicit}
     for t in sourced:
         if t["kind"] == "roadmap":
+            # A task file may add dependencies, never drop the roadmap's.
+            t["depends"] = sorted(set(t["depends"]) | set(t.pop("roadmap_depends")))
             t["blocked_on"] = [b for b in t.get("blocked_on", []) if b.startswith("owner: ")] + \
                 ["unqueued " + d for d in t["depends"] if d in live and d not in present]
             if not t["blocked_on"]:
