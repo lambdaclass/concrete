@@ -8,8 +8,11 @@ and [verified-compiler decisions](docs/project/ROADMAP_DECISIONS.md#decisions) d
 
 **Lean is the only language source.** `ConcreteSpec` holds Core syntax, independent typing,
 ownership and effect judgments, execution semantics, surface desugaring and conformance examples.
-The specification, rule registry and reference interpreter come from those definitions; generated
-output has a staleness gate. See the [Lean-source decision](docs/project/ROADMAP_DECISIONS.md#2026-11-01--lean-as-the-only-source).
+Those definitions are the specification: each rule is readable Lean with a plain-words doc comment
+and its conformance examples, and no prose chapter is generated from them. The rule registry and
+reference interpreter come from the same definitions; derived machine views have a staleness gate.
+See the [Lean-source decision](docs/project/ROADMAP_DECISIONS.md#2026-11-01--lean-as-the-only-source)
+and its [2026-11-04 revision](docs/project/ROADMAP_DECISIONS.md#2026-11-04--lean-is-the-specification).
 
 **The compiler is built from the spec.** The new compiler imports `ConcreteSpec`, calls its
 elaborator and builds a proved lowering chain below Core. Slice 1 supplies a simple, explicitly
@@ -27,11 +30,11 @@ values. The [authority decision](docs/project/ROADMAP_DECISIONS.md#2026-11-01-an
 links the complete rules and language answers.
 
 **The specification comes first.** Open language questions remain undecided until the owner
-answers them. Audit and absorption assign every rule an owner; each slice supplies its Lean rules,
-generated chapter, refusal coverage, conformance examples, matching implementation and outside-reader
-test. The [specification criteria](docs/project/ROADMAP_DECISIONS.md#2026-10-30--specification-first)
-remain binding through A–D. Other documentation cites the generated spec and removes contradictions
-as chapters land, under the [documentation rule](docs/project/ROADMAP_DECISIONS.md#2026-10-30--documentation-follows-the-spec).
+answers them. Audit and absorption assign every rule an owner; each slice supplies its Lean rules with
+doc comments, refusal coverage, conformance examples, matching implementation and outside-reader
+test, and retires the prose chapter text those rules replace. The [specification criteria](docs/project/ROADMAP_DECISIONS.md#2026-10-30--specification-first)
+remain binding through A–D. Other documentation cites the Lean rules and removes contradictions
+as slices land, under the [documentation rule](docs/project/ROADMAP_DECISIONS.md#2026-10-30--documentation-follows-the-spec).
 
 **Proofs grow along one path.** State the semantic contract and final theorem first, including
 outcomes, traces, authority, resources and the values-to-bytes boundary. Then build executable Core
@@ -58,9 +61,9 @@ The [direction](docs/project/ROADMAP_DIRECTION.md) holds standing reference and 
 | phase | goal | done when |
 |---|---|---|
 | A. Core and theorem | the spec audit of 2026-11-02 is disposed of (its gaps and duplications assigned to owners); the target Core proposal is decided by the owner, the whole shape at once and before implementation; the semantic contract with the named values-to-bytes boundary; the end-to-end theorem stated in Lean with its holes; the trusted base listed | Core approved; the theorem statement and trusted base on main |
-| B. Slice 1 | `ConcreteSpec` and the new compiler for slice 1: scalars, `let`, the move and use-after-move refusal of an empty struct without `Copy` consumed by a struct-destructuring `let`, one checked operation, return or a defined trap, from parsing through native execution | the slice's rules are judgments, independent of the checker and elaborator, whose correspondence is proved; fuel exhaustion is distinct from divergence; LLVM output is labelled unverified, and the lexer, model-translation and native-image obligations are explicit; its examples pass through the spec and the native build; its theorem is proved; its chapter is generated; the outside-reader test passes. Then the old pipeline is deleted from main under the retention contract of the new-compiler decision |
+| B. Slice 1 | `ConcreteSpec` and the new compiler for slice 1: scalars, `let`, the move and use-after-move refusal of an empty struct without `Copy` consumed by a struct-destructuring `let`, one checked operation, return or a defined trap, from parsing through native execution | the slice's rules are judgments, independent of the checker and elaborator, whose correspondence is proved; fuel exhaustion is distinct from divergence; LLVM output is labelled unverified, and the lexer, model-translation and native-image obligations are explicit; its examples pass through the spec and the native build; its theorem is proved; its rules are readable Lean with doc comments and examples, and the prose they replace is retired; the outside-reader test, run on the Lean rules and examples, passes. Then the old pipeline is deleted from main under the retention contract of the new-compiler decision |
 | C. File-copy | slices ordered by the file-copy program's dependencies: directories, `File`, `with(Fs)`, fallible operations, explicit cleanup on every error path, `defer`; chapters retired as Lean replaces them; std, examples and tests migrate as their constructs land | the file-copy program, its failure paths included, builds natively from the new compiler with its theorems; **0.1 is cut here**, with the supported subset, the unsupported constructs and the LLVM assumptions stated |
-| D. Whole language | the remaining constructs as slices; every chapter generated; the conformance suite complete; each paused workload (RocksDB slice 1, the ethlambda workloads, the usability track) resumes when the constructs it needs are supported | every construct of the decided language is a slice, and no prose chapter is left |
+| D. Whole language | the remaining constructs as slices; every prose chapter replaced by readable Lean rules; the conformance suite complete; each paused workload (RocksDB slice 1, the ethlambda workloads, the usability track) resumes when the constructs it needs are supported | every construct of the decided language is a slice, and no prose chapter is left |
 | E. Verified growth | the proof order's later items: functional models, open modules and the C boundary, ghost permissions for trusted code, SMT-checked lowering, proof-producing equality saturation, the Lean Compiler Backend native path, the verified parser (lexer, semantic actions and parser execution included); richer verification: typed contracts, exact contract identity, two-state contracts and frames, checked totality, the specification library | each item's theorem with its residual assumptions stated |
 | F. Evidence as a product | provenance, the canonical verification task, receipts and the independent consumer, rebuilt on the new Core (minimal provenance and task identity already accompany the first authoritative proof claims) | receipt v1 frozen |
 | G. Release and ecosystem | external users, flagships, packages, 1.0 | external-user acceptance, package evidence, conformance, compatibility, distribution and maintenance commitments hold for the released subset |
@@ -74,7 +77,7 @@ The [direction](docs/project/ROADMAP_DIRECTION.md) holds standing reference and 
 | A2 | Decide the whole target Core shape before implementation | R-0312, R-0316 | The owner approves the target Core proposal, drafted against A1's artifacts, including identities, memory and interface boundaries; before Core is frozen, representative design proofs are checked in Lean for allocator dependencies with reset generativity, deferred cleanup with allocators and loans, heap opening and mutable lending, and one values-to-bytes lemma. If A3 exposes a substantive change, A2 is revisited. |
 | A3 | Formalize the approved semantic contract and theorem in Lean | R-0496, R-0500, R-0502, R-0506, R-0508, R-0509, R-0480, R-0223, R-0227, R-0242, R-0464, R-0266 | The theorem with its holes, named values-to-bytes boundary and trusted-base inventory is on main. |
 | B1 | Build ConcreteSpec and slice 1 with its theorem | R-0491, R-0492, R-0493, R-0497, R-0498, R-0499, R-0501, R-0503, R-0504, R-0507, R-0514, R-0552, R-0521, R-0528, R-0004, R-0435, R-0440, R-0058, R-0073, R-0074, R-0075, R-0076, R-0077, R-0079, R-0080, R-0082, R-0085, R-0090, R-0107, R-0114, R-0115, R-0116, R-0191, R-0203, R-0205, R-0207, R-0210, R-0217, R-0221, R-0222, R-0231, R-0260, R-0272, R-0273, R-0274, R-0278, R-0279, R-0280, R-0288, R-0290, R-0302, R-0421, R-0422, R-0446 | The phase B slice passes from parsing to native execution with independent judgments, correspondence proofs, explicit obligations and minimal proof provenance; every judgment, semantics and pass is total as it lands. |
-| B2 | Generate the chapter and qualify slice 1 | R-0479, R-0471, R-0009, R-0438, R-0092, R-0093, R-0094, R-0095, R-0105, R-0106, R-0118, R-0550, R-0551, R-0425, R-0355 | Conformance and native examples pass; refusal, differential and gate-integrity controls hold; the outside-reader test passes. |
+| B2 | Retire the slice's prose and qualify slice 1 | R-0479, R-0471, R-0009, R-0438, R-0092, R-0093, R-0094, R-0095, R-0105, R-0106, R-0118, R-0550, R-0551, R-0425, R-0355 | Conformance and native examples pass; refusal, differential and gate-integrity controls hold; the outside-reader test passes. |
 | B3 | Audit compiler totality and delete the old pipeline under the retention contract | R-0553 | The end-to-end slice is accepted, the totality audit finds no partial definition, the fuel-budget distinctions are established, and the old pipeline and its internal gates are deleted together; retained programs, regressions, examples, std, evidence replay and browser service follow the [retention contract](docs/project/ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract); CI builds `legacy-compiler-final` as the differential oracle and the site's browser compiler is built from that tag until the new compiler covers it. |
 
 <a id="questions-for-the-core-session"></a>
