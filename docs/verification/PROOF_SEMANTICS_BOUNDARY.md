@@ -176,7 +176,8 @@ Two identity limitations are explicit:
   R-0442.
 
 Names are display material and lookup keys in parts of the current proof
-model; they are not a substitute for binding identity. Principle 12 requires
+model; they are not a substitute for binding identity. The identity rule
+([PHILOSOPHY.md](../project/PHILOSOPHY.md#the-rules), rule 13) requires
 the bridge to preserve semantic identity even when source names collide or
 are alpha-renamed.
 

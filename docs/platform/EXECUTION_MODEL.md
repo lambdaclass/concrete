@@ -458,7 +458,7 @@ The `high_integrity` profile would closely align with `ProofCore` eligibility. C
 
 Concrete does not yet have performance benchmarks or regression tracking. This section documents the intended approach so it can be implemented incrementally.
 
-### Principles
+### Performance-validation principles
 
 1. **Representative workloads, not microbenchmarks.** Performance should be measured on programs that resemble real use, not isolated operations. The integration test corpus (12 programs) is a starting point.
 2. **Compilation time matters.** The compiler itself is a performance-sensitive artifact. `lake build` time and per-file compilation time should be tracked.
@@ -554,7 +554,7 @@ Structural boundedness means the compiler can statically determine resource usag
 
 Concrete does not yet implement concurrency. This section documents the intended direction so that runtime, capability, and ownership decisions made now remain compatible with the concurrency model. The more specific async/evidence research direction lives in [../research/stdlib/async-concurrency-evidence.md](../../research/stdlib/async-concurrency-evidence.md).
 
-### Design principles
+### Concurrency design principles
 
 1. **Explicit over ambient.** Thread creation, blocking, and synchronization should require explicit capabilities, not be available by default.
 2. **Structured over detached.** Concurrent work should belong to explicit scopes with defined lifetimes. Fire-and-forget spawning should be rare and marked.

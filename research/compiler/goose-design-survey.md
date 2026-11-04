@@ -12,7 +12,7 @@ schedule implementation, select syntax, or reopen standing language decisions.
 The source snapshot is [aardappel/goose at 94cc64d](https://github.com/aardappel/goose/tree/94cc64daeabcae6f072dc1fe2b864acda5a001bc).
 The observations below come from source and documentation review; benchmark
 results have not been independently reproduced. Concrete's
-[design policy](../../docs/project/PROJECT.md#design-policy),
+[design policy](../../docs/project/PHILOSOPHY.md#admission-test),
 [recorded decisions](../../docs/project/PROJECT.md#language-decisions), and
 FFI chapter of the specification (FFI-7 to FFI-12, [ffi.md](../../docs/spec/ffi.md)) remain authoritative; the
 [layout contract](../../docs/archive/design-records/LAYOUT_CONTRACT.md) is its design record.

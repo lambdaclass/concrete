@@ -26,9 +26,9 @@ policy and workload evidence.
 
 The governing references are [Identity](../../docs/project/PROJECT.md#identity),
 [Why Concrete](../../docs/project/PROJECT.md#why-concrete),
-[Design Policy](../../docs/project/PROJECT.md#design-policy),
+[Design Policy](../../docs/project/PHILOSOPHY.md#admission-test),
 [Decisions](../../docs/project/PROJECT.md#language-decisions),
-[Anti-Features](../../docs/project/ANTI_FEATURES.md),
+[Anti-Features](../../docs/project/PHILOSOPHY.md#what-concrete-refuses),
 [Value Model](../../docs/archive/design-records/VALUE_MODEL.md), and
 [Evidence Architecture](../../docs/verification/EVIDENCE_ARCHITECTURE.md).
 

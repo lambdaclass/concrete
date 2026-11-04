@@ -23,8 +23,8 @@ The open questions are tracked under
 
 ## 1. Admission Filter
 
-Concrete's [design policy](../../docs/project/PROJECT.md#design-policy),
-[anti-features](../../docs/project/ANTI_FEATURES.md),
+Concrete's [design policy](../../docs/project/PHILOSOPHY.md#admission-test),
+[anti-features](../../docs/project/PHILOSOPHY.md#what-concrete-refuses),
 [language specification](../../docs/spec/README.md) (which absorbed the value model),
 [evidence architecture](../../docs/verification/EVIDENCE_ARCHITECTURE.md), and the
 owner's recorded language decisions are authoritative. A candidate idea is
