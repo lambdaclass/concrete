@@ -1,17 +1,26 @@
 # Core proposal (draft for A2)
 
-**Precedence.** This draft is background. The governing proposal is the set of 82 Core
-decision rows (Q1.1–Q9.18) that Claude and Codex settled over three debate rounds on
-2026-11-04 and put before the owner on the decision page. Where this draft and a row
-differ, the row governs, and the draft's recommendation is superseded. Neither is
-decided until the owner answers. Rows that revise a decided rule say so (Q5.1 and Q5.4
-revise OD45 and OD87). The rows are committed beside this draft when the owner
+**Precedence.** This draft is background. The governing proposal is the set of 88 Core
+decision rows (Q1.1–Q9.19) that Claude and Codex settled on 2026-11-04 (three debate
+rounds, then a resolution round that gave each open point a concrete rule) and put
+before the owner on the decision page. Six of them were added by the resolution round:
+Q2.8 (separate Copy and Destroy impls per container), Q3.12 (the `kept` extern marker
+and its `Kept<H>` receipt), Q4.7 (the `slice … else` spelling), Q7.10 (the hosted grant
+table), Q7.11 (`Device` or `Console` for the standard streams) and Q9.19 (approval,
+formalization, freeze). Where this draft and a row differ, the row governs, and the
+draft's recommendation is superseded; the passages below that a row overrides are marked
+*Superseded* where they stand. Neither is decided until the owner answers. Rows that
+revise a recorded rule say so: Q5.1 and Q5.4 revise OD45 and OD87; Q6.4 revises
+TYPE-22's two examples; Q2.8 revises TRAIT-1's coherence rule; Q9.15 replaces the
+generated-chapter requirement; Q7.11 revises authority rule 13 only if `Console` is
+chosen. The rows are committed beside this draft when the owner
 answers them. Until then they live on the decision page, and each section below names
 its governing rows.
 
 Status: draft for the owner's Core session. Nothing here is decided. The owner
-answers each question in the session of roadmap row A2; until then no work encodes
-an answer. The questions are the nine in
+answers in the stages of roadmap rows A2a–A2c (provisional approval, a proposed
+`Spec.lean` with four checked design theorems, freeze; row Q9.19); until then no work
+encodes an answer. The questions are the nine in
 [ROADMAP.md](../../ROADMAP.md#questions-for-the-core-session). The proposal is drafted
 against the [A1 boundary artifacts](A1_BOUNDARIES.md), and its sections 1–4 are cited
 as "A1 §n". Lean stays the only normative source. An approved answer becomes Lean in
@@ -19,7 +28,7 @@ A3, not prose here.
 
 Each question gives the decided rules it must respect, a recommendation and what the
 recommendation leaves open. Where alternatives were weighed, it also gives the options
-and the counterexamples that ruled them out. Where a question carries an A2 design
+and the counterexamples that ruled them out. Where a question carries an A2b design
 proof, it states which.
 
 The recommendations come from a Claude draft that Codex reviewed against the
@@ -99,7 +108,10 @@ allocator requires no live allocation from it.
    capacity, ownership obligations) is as before, and the allocator holds no allocation
    from the failed operation. Hiding allocator statistics is not enough: an
    **allocation-oracle and progress contract** fixes whether a failure may change later
-   allocation success ([VERIFIED_PIPELINE.md](VERIFIED_PIPELINE.md)).
+   allocation success ([VERIFIED_PIPELINE.md](VERIFIED_PIPELINE.md)). *Superseded* by row
+   Q1.11: an availability predicate per allocator kind and four laws (availability gives
+   success, a failure leaves the state unchanged, a release never reduces availability, a
+   concrete success witness), with a failure-then-retry example.
 
 **Still open:**
 - how packages are formed and opened, and the legal unpacking order;
@@ -109,7 +121,9 @@ allocator requires no live allocation from it.
 - whether capacity and addresses are observable;
 - rollback around callbacks.
 
-**Proof impact.** A2 gate proof: reset generativity plus allocator cleanup. The
+*Superseded:* rows Q1.3–Q1.12 answer each of these.
+
+**Proof impact.** A2b design proof: reset generativity plus allocator cleanup. The
 release-validity lemma follows from the dependency judgment.
 
 ## Q2. `destroy` bounds
@@ -141,7 +155,9 @@ release-validity lemma follows from the dependency judgment.
 - **Destroy:** an explicit `Destroy` impl. Its body is ordinary checked code whose
   capabilities are at most `Alloc`. Built-in containers have specified conditional
   impls (`Heap<T, A>: Destroy` when `T: Destroy`, and so on), written in the Lean
-  prelude. A container of Copy elements is handled by those impls without making Copy
+  prelude. *Superseded* by rows Q2.2 and Q2.8: exactly sixteen named impls, with a
+  separate impl for each admitted Copy or Destroy payload combination, and `HashMap`
+  excluded until it has a stated order. A container of Copy elements is handled by those impls without making Copy
   satisfy `Destroy`.
 - **Resource cleanup:** `close(f)` and similar. It is fallible and effectful, and it
   returns what survives.
@@ -158,7 +174,10 @@ container without a check.
 - whether `destroy` must terminate and must not trap. Returning Unit alone guarantees
   neither.
 
-**Proof impact.** A2 gate proof: allocator cleanup across deferred destroy calls.
+*Superseded:* rows Q2.2–Q2.6 and Q2.8 answer each of these (destruction order is Q2.3;
+the drain's result fields are Q2.4 and Q2.5).
+
+**Proof impact.** A2b design proof: allocator cleanup across deferred destroy calls.
 
 ## Q3. `HeapArray` element view and raw memory
 
@@ -203,7 +222,9 @@ Every unsafe primitive's contract fills in one fixed list of premises:
 out, which needs a substitute value; if building one needs an allocation that fails,
 there is no route. This limits what can be expressed; it is not a safety hole. If a
 workload needs traversal, add a consuming traversal or a scoped transformation of the
-owned element, with conservation on every exit.
+owned element, with conservation on every exit. *Superseded* by row Q3.6: `drain` and
+`map_into` are part of the proposal, not deferred to a workload, and `swap_at` replaces an
+element in place.
 
 **Still open:**
 - passing and lending views;
@@ -215,7 +236,10 @@ owned element, with conservation on every exit.
 - running out of address space;
 - the typed and raw representations.
 
-**Proof impact.** A2 gate proofs: heap opening and mutable lending, plus one
+*Superseded:* rows Q3.2–Q3.11 answer each of these, and row Q3.12 adds the `kept` extern
+marker.
+
+**Proof impact.** A2b design proofs: heap opening and mutable lending, plus one
 values-to-bytes lemma (A1 §1).
 
 ## Q4. Static text
@@ -251,6 +275,9 @@ values-to-bytes lemma (A1 §1).
   storage;
 - the FFI representation;
 - the type and operations of dynamic string views.
+
+*Superseded:* rows Q4.2–Q4.7 answer each of these (byte offsets, scalar-boundary
+subviews, `byte_at` traps).
 
 ## Q5. Capability inference with several solutions
 
@@ -334,12 +361,21 @@ A failed unsafe premise is not a trap; it stays distinct stuckness
 ([VERIFIED_PIPELINE.md](VERIFIED_PIPELINE.md)). Core has only defined traps. Slice 1's
 witness `fn entry(x: u8) -> u8 { return x + 1; }` is accepted and traps at 255.
 
+*Superseded* by rows Q6.1–Q6.7. The known facts are a fixed table, not only all-constant
+operands: literals, immutable `let`s, module constants, checked operations, six named
+wrapping and saturating operations and lossless `as` (Q6.2). Every written body is
+checked, unreachable branches, generic bodies and every module-constant initializer
+included, used or not (Q6.4, which revises TYPE-22's two examples). The witness above is
+unaffected: a parameter is not a known value.
+
 **Still open:**
 - local constant propagation;
 - substitution of generics;
 - unreachable code, keeping the existing policy;
 - short-circuit operators;
 - errors during constant evaluation.
+
+*Superseded:* rows Q6.2–Q6.7 answer each of these.
 
 ## Q7. Target grant schemas and narrowing
 
@@ -363,7 +399,9 @@ witness `fn entry(x: u8) -> u8 { return x + 1; }` is accepted and traps at 255.
   - `Clock`;
   - the standard streams;
   - network grants from the launch configuration;
-  - a grant to spawn processes.
+  - a grant to spawn processes. *Superseded* by rows Q7.4 and Q7.10: the hosted target
+    (`linux-x86_64-hosted`) offers no process spawning, and an absent service is absent
+    from the table. The standard streams use `Device` (row Q7.11, pending).
 - **One policy order over rights and scope.** Every acquisition (opening a child
   directory), split, narrowing and process inheritance must stay within the source's
   provenance and below it in that order. A read-only directory therefore cannot open a
@@ -381,6 +419,10 @@ witness `fn entry(x: u8) -> u8 { return x + 1; }` is accepted and traps at 255.
 - clock precision;
 - network scopes;
 - whether policy is checked at run time or compile time.
+
+*Superseded:* row Q7.10 gives one complete table for `linux-x86_64-hosted` (grant types,
+launch syntax, rights, narrowing and splitting, ending contracts, the resolver grant,
+startup exit 125 and trap exit 134); rows Q7.1–Q7.9 answer the rest.
 
 ## Q8. Slice 1's assurance scope
 
@@ -405,12 +447,14 @@ BIR theorem to the image.
 - the launcher ABI and observations;
 - exact artifact binding.
 
+*Superseded:* rows Q8.1–Q8.7 answer each of these.
+
 Acceptance, coverage and nonvacuity obligations are required (A1 §2), not refinement
 of successful compilations alone.
 
 ## Q9. The whole Core interface
 
-*Governing rows: Q9.1–Q9.18. Where this section differs from them, it is superseded.*
+*Governing rows: Q9.1–Q9.19. Where this section differs from them, it is superseded.*
 
 **Decided.**
 - OD59: no `free`.
@@ -441,8 +485,11 @@ of successful compilations alone.
   `if` are elaborated to it); store to a place.
 - **Control.** `return`, `abort`, and checked primitive operations whose failure is a
   defined trap. *Superseded:* this draft's labelled `loop` is replaced by row Q9.3,
-  which proposes OD47's `while` as the single Core loop, with resolved loop-exit
-  targets for `break` and `continue`. That proposal is pending the owner.
+  which proposes OD47's `while` as the single Core loop, written
+  `while L { C } do { B }`: the condition region `C` runs again on every iteration, and
+  `break L` and `continue L` have resolved targets. In a counted loop a hidden counter
+  advances before the body, the body sees the value before the advance, and `continue`
+  advances it exactly once. That proposal is pending the owner.
 - **Borrowing.** A scoped `borrow` of a place (shared or exclusive) and a scoped
   heap or array `open`, each binding a second-class reference or view for its block.
 - **Allocation.** Allocator operations and `*h` are typed primitives with contracts,
@@ -477,9 +524,12 @@ of successful compilations alone.
 - declaration and interface evidence;
 - elaboration judgments independent of the checker.
 
+*Superseded:* rows Q9.9–Q9.13 answer each of these, and Q9.19 orders approval,
+formalization and freeze.
+
 A count of constructors is a size goal, never evidence of completeness.
 
-**Proof impact.** A2 gate proof: deferred cleanup with allocators and loans.
+**Proof impact.** A2b design proof: deferred cleanup with allocators and loans.
 
 ## Decision order
 
@@ -489,11 +539,12 @@ A count of constructors is a size goal, never evidence of completeness.
 3. **Q3, Q4, Q5 and the rest of Q7.**
 4. **Q9 last,** combining the other answers.
 
-Draft the semantic objects and theorem assumptions alongside each answer. Approving
-Core requires the Lean design proofs of roadmap row A2:
-- reset generativity with allocator dependencies;
-- deferred cleanup with allocators and loans;
-- heap opening and mutable lending;
-- one values-to-bytes lemma.
+Draft the semantic objects and theorem assumptions alongside each answer. Freezing
+Core (row A2c) requires the four Lean design theorems of row A2b (row Q9.14), proved
+against a `Spec.lean` headed PROPOSED:
+- `reset_fresh`: reset generativity with allocator dependencies;
+- `defer_cleanup_releases`: deferred cleanup with allocators and loans;
+- `open_mut_freezes_root`: heap opening and mutable lending;
+- `rep_roundtrip`: one values-to-bytes lemma.
 
 A prose inventory alone cannot freeze Core.
