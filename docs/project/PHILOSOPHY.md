@@ -17,6 +17,7 @@ Contents:
 3. [When rules conflict](#when-rules-conflict)
 4. [Admission test](#admission-test)
 5. [What Concrete refuses](#what-concrete-refuses)
+6. [Where the earlier rules went](#where-the-earlier-rules-went)
 
 ## What Concrete is for
 
@@ -51,10 +52,12 @@ Each rule states what holds and why. Its history is in the changelog and the dec
    design; "it hides something" is. *Why:* most code is now written by tools, where writing explicit
    forms is cheap and reviewing them is the expensive part.
 
-5. **Every fact once.** Every fact that affects behavior or authority is written exactly once, at a
-   place the reader can find from the use site. A restated fact (a size copied into a constant, a
-   rule copied into a second document, a capability implied rather than declared) is a defect
-   waiting to drift. This document is itself an instance: other documents link here.
+5. **Every fact once.** Every fact that affects behavior or authority has exactly one authoritative
+   definition, at a place the reader can find from the use site. Views checked against that
+   definition (a signature, a compiler report, a generated chapter or table) and explanatory
+   examples are not second definitions. A restated fact that nothing checks (a size copied into a
+   constant, a rule copied into a second document, a capability implied rather than declared) is a
+   defect waiting to drift. This document is itself an instance: other documents link here.
 
 6. **Lean is the only normative source.** The language's syntax, typing, ownership, effects and
    semantics are defined in Lean; the specification chapters, the rule registry and the reference
@@ -130,16 +133,27 @@ Each rule states what holds and why. Its history is in the changelog and the dec
 **Proposed, pending owner approval.** When two rules pull in different directions, the earlier
 item in this order wins:
 
-1. soundness and provability;
-2. transparency: nothing hidden;
-3. a single source of truth: every fact once;
+1. soundness and provability, which includes honest trust boundaries (rule 12) and compiler-owned
+   semantic identity (rule 13): a claim that overstates its evidence, or an entity known only by
+   its spelling, is unsound;
+2. transparency: nothing hidden, and every claim backed by an artifact a reader can inspect and
+   replay (rules 3, 8, 11, 14);
+3. a single source of truth: one authoritative definition per fact (rule 5);
 4. explicitness at the use site;
 5. brevity.
 
-The third item is read with rule 5's definition: every fact that affects behavior or authority is
-written exactly once, at a place the reader can find from the use site. So "write it once" and
-"show it at the use site" agree whenever the use site can reach the one place the fact is written;
-a fact that can be found only by searching the whole program fails both.
+The third item is read with rule 5's definition: every fact that affects behavior or authority has
+one authoritative definition, at a place the reader can find from the use site. So "write it once"
+and "show it at the use site" agree whenever the use site can reach that definition, directly or
+through a checked view such as a signature or a report; a fact that can be found only by searching
+the whole program fails both.
+
+**This order guides choices that are still open. It never reopens a decided rule.** The owner's
+answers in [decisions.md](../spec/decisions.md) stand as recorded, whatever this order would
+suggest; changing one is a new owner decision. For example, "explicitness at the use site" is no
+argument against the decided inference of type and capability arguments from argument types
+([OD45](../spec/decisions.md#od45), [OD46](../spec/decisions.md#od46),
+[OD87](../spec/decisions.md#od87)).
 
 ## Admission test
 
@@ -342,3 +356,45 @@ together is not decided here.
   is represented in Core and erased is not decided: the owner decides it with the
   [target Core proposal](../spec/decisions.md#target-core-proposal) (Core-session question 9 in
   the [roadmap](../../ROADMAP.md#questions-for-the-core-session)).
+
+## Where the earlier rules went
+
+Nothing from the documents this one absorbed was dropped silently. The former principles of
+PROJECT.md (numbered as they were) and its fifteen admission criteria map as follows; "AT" is the
+[admission test](#admission-test).
+
+| former rule | here |
+|---|---|
+| principle 1, systems first | rule 7 |
+| principle 2, no hidden runtime | rule 8 |
+| principle 3, linearity and ownership | rule 9 |
+| principle 4, second-class references | rule 10 |
+| principle 5, visible capabilities and trust | rule 11 |
+| principle 6, predictable execution | rule 16 |
+| principle 7, core/shell separation | rule 16 |
+| principle 8, artifact-first auditability | rule 14; conflict order item 2 |
+| principle 9, proofs attach to real code | rule 7 |
+| principle 10, small analyzable core | rule 15 |
+| principle 11, honest trust boundaries | rule 12; conflict order item 1 |
+| principle 12, compiler-owned identity | rule 13; conflict order item 1 |
+| criterion 1, a simple invariant | AT 4 |
+| criterion 2, more visible | AT 2 |
+| criterion 3, less phase coupling | AT 5 |
+| criterion 4, declaration-level dependencies | AT 5 |
+| criterion 5, static or explicit dispatch | AT 6 |
+| criterion 6, predictable code generation | AT 7 |
+| criterion 7, clear diagnostics | AT 8 |
+| criterion 8, one owning pass | AT 8 |
+| criterion 9, the proof story | AT 4 |
+| criterion 10, real benefit for audited code | AT 14 |
+| criterion 11, crosses a contract boundary | AT 10 |
+| criterion 12, fails visibly | AT 11 |
+| criterion 13, evidence as precise as its claim | AT 12 |
+| criterion 14, honest under hostile input | AT 13 |
+| criterion 15, independent semantic identities | AT 12 |
+| admission principle, quick decision rule, one-line test | AT, "In one line" |
+| main rule for borrowed ideas | AT, "Borrowed ideas" |
+| ordering principle | AT, "Ordering" |
+| shape principles (features earn admission, removals improve, constraints compound, real programs test shape, record refusals) | rules 15, 17; AT, "Recording a refusal" |
+| high-leverage priorities | not a design rule: the [roadmap](../../ROADMAP.md) owns priority |
+| ANTI_FEATURES.md entries and PROJECT.md's "no" and "not yet" decisions | [What Concrete refuses](#what-concrete-refuses); comparisons in [INFLUENCES.md](INFLUENCES.md#how-other-languages-answer-concretes-refusals) |
