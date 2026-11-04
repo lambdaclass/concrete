@@ -22,7 +22,7 @@ deferred until a trigger, retired with a reason, or done. Archived IDs are never
 ## Rules in force
 
 Every task follows these rules. Each is a summary that links the dated record holding the rule and
-its reasons; this file holds no rule of its own. Language rules are not decided here: they are the owner decisions in [decisions.md](docs/spec/decisions.md#owner-decisions).
+its reasons, or says which part still awaits the owner; this file holds no rule of its own. Language rules are not decided here: they are the owner decisions in [decisions.md](docs/spec/decisions.md#owner-decisions).
 The design rules (one form per situation, one owner per fact, the most transparent long-term option,
 verbosity that buys clarity) get one home in `PHILOSOPHY.md` when the `wip/philosophy` branch lands.
 
@@ -53,10 +53,13 @@ verbosity that buys clarity) get one home in `PHILOSOPHY.md` when the `wip/philo
    The compiler imports it and builds a proved lowering chain below Core. Slice 1 gets a BIR → LLVM
    printer, labelled unverified. The Lean Compiler Backend follows
    ([decision](docs/archive/roadmap-2026-11/ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)).
-4. **The old tree is legacy (owner, 2026-11-04).** In one train, everything old moves under
-   `legacy/`: the compiler, its scripts, tests, examples, std, proofs, gates, docs, research, site
+4. **The old tree is legacy.** The owner chose a `legacy/` folder on main on 2026-11-04; that
+   choice is recorded with this roadmap in the changelog. The details below are the restart
+   proposal (decision rows P5–P7 and P21), pending the owner's approval, and change if it changes.
+   In one train, everything old moves under `legacy/`: the compiler, its scripts, tests, examples, std, proofs, gates, docs, research, site
    and bug ledger. `legacy/` is a byte-frozen snapshot of main's tree at the move commit. It is never
-   patched and never run, and one root check fails if any byte under it changes. Its gates are not
+   patched and never run. One root check refuses any modification or addition under it, and any
+   deletion except one its retention row (below) allows. Its gates are not
    re-run: they were qualified at `legacy-compiler-final`, and its evidence stays replayable from that
    tag. The differential oracle is built from the tag in its own isolated checkout, not from
    `legacy/` (R-0564). The infrastructure for the new root is prepared and rehearsed before the move
@@ -285,7 +288,7 @@ archive. Rows for C–G are summaries. Each is refined when its phase becomes ne
 
 | task | objective | done when | depends on |
 |---|---|---|---|
-| R-0558 | Move the old tree to `legacy/` in one train and set up the minimal root. Day one, the root holds the README, this file, AGENTS.md, an empty CHANGELOG, LICENSE, the new build files, `ConcreteSpec/Spec.lean`, `docs/PHILOSOPHY.md`, `docs/decisions.md`, the landing, review and hook scripts, `required-checks.txt`, `RETENTION.tsv`, the minimal issue record and the [2026-11 roadmap archive](docs/archive/roadmap-2026-11/README.md) with its task disposition table. Everything else comes back from `legacy/` when a slice needs it. The status page, the work-queue dispatcher, the fuzz farm, perf tracking and the nightly campaign stop, and each is listed in `RETENTION.tsv` as archived; each returns only with a roadmap task. | the root holds only that set; a root check fails if any byte under `legacy/` changes (control); no legacy gate runs; the move lands on both remotes | R-0563, R-0562, R-0565, owner: approval of the move inventory |
+| R-0558 | Move the old tree to `legacy/` in one train and set up the minimal root. Day one, the root holds the README, this file, AGENTS.md, an empty CHANGELOG, LICENSE, the new build files, `ConcreteSpec/Spec.lean`, `docs/PHILOSOPHY.md`, `docs/decisions.md`, the landing, review and hook scripts, `required-checks.txt`, `RETENTION.tsv`, the minimal issue record and the [2026-11 roadmap archive](docs/archive/roadmap-2026-11/README.md) with its task disposition table. Everything else comes back from `legacy/` when a slice needs it. The status page, the work-queue dispatcher, the fuzz farm, perf tracking and the nightly campaign stop, and each is listed in `RETENTION.tsv` as archived; each returns only with a roadmap task. | the root holds only that set; a root check refuses any modification or addition under `legacy/`, and any deletion its `RETENTION.tsv` row does not allow (controls for each); no legacy gate runs; the move lands on both remotes | R-0563, R-0562, R-0565, owner: approval of the move inventory |
 | R-0563 | Operational migration acceptance test, before the move | the new root's CI and `required-checks.txt` land first, and both `train.sh watch` and `train.sh land` refuse a run that lacks a named check; on a throwaway branch holding the day-one root, a fresh clone builds, hooks, runs exact-SHA CI and passes a dry-run landing; negative controls (a broken build, a failing hook gate, a red CI, a missing or skipped required check) are each refused; a check that cannot run on a fallback runner is reported incomplete and blocks landing, never passed; the two-remote landing is proved by the move itself | owner: approval of the move inventory |
 | R-0564 | A pinned, reproducible legacy oracle, independent of `legacy/` | `legacy-compiler-final` builds in an isolated checkout of the tag from a pinned toolchain (`scripts/oracle/ORACLE.lock`) into a recorded digest; the build is cached on concrete-ci-2 and rebuildable from the tag alone with a hash check, independently of ci-2; a weekly from-scratch rebuild matches the digest; the differential harness invokes it by digest when the new compiler changes; an unexplained difference fails, and the oracle's agreement never overrides the Lean semantics | — |
 | R-0547 | Measurement: per-branch stage timestamps and the median time to land | every landing has its four timestamps, and the median shows here | — |

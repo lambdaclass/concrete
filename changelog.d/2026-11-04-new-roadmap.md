@@ -22,9 +22,14 @@ Every one of the 555 old task IDs has a row in
 Each transferred row names the obligations it carries to its destination. Archived IDs are never
 reused.
 
+The owner chose, on 2026-11-04, to move the old tree into a `legacy/` folder on main and start the
+new layout from scratch beside it. The roadmap's details of that move (byte-frozen snapshot,
+rehearsal first, retention manifest) are the restart proposal P5–P7/P21, pending the owner.
+
 New tasks:
 - R-0558: move the old tree to `legacy/` in one train and set up the minimal root. `legacy/` is a
-  byte-frozen snapshot, never patched or run; a root check fails if it changes.
+  byte-frozen snapshot, never patched or run; a root check refuses changes to it other than
+  deletions its retention row allows.
 - R-0559: an outside-reader dry run on the Core proposal.
 - R-0560: the one-main-file Lean spec layout.
 - R-0561: the bug ledger by compiler.
