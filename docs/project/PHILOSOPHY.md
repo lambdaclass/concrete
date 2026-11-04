@@ -80,8 +80,10 @@ Each rule states what holds and why. Its history is in the changelog and the dec
 
 10. **References are second-class.** A reference may be passed down into a call or held inside a
     borrow block; no function, trusted or not, returns one and no value stores one
-    ([REF-1](../spec/references.md#REF-1), [REF-3](../spec/references.md#REF-3)). Raw pointers in
-    trusted code are the only escape, and they carry stated validity premises. *Why:* scoped access
+    ([REF-1](../spec/references.md#REF-1), [REF-3](../spec/references.md#REF-3)). Raw pointers, used
+    in `trusted` code or under `with(Unsafe)`, are the only escape, and every use carries stated
+    validity premises; the full raw-memory taxonomy is still
+    [undecided](../spec/decisions.md#core-unsafe-premises). *Why:* scoped access
     needs no lifetime language, and the checker and the proofs stay local.
 
 11. **Authority and trust are visible.** A function's permissions are declared in `with(...)`; a
@@ -204,18 +206,22 @@ one. A refusal that is a language rule is an owner decision first ([decisions.md
 
 ## What Concrete refuses
 
-Each refusal is either **Permanent**, with the reason, or **Reopens when** a named roadmap condition
-holds. "Pull rules" means the [backlog pull rules](ROADMAP_BACKLOG.md#pull-rules): a workload, bug,
-pilot or user need hits it. Reopening a refusal that is a decided language rule is an owner decision.
+Each refusal is either **Permanent**, with the reason, or **Reopens when** a named condition holds.
+"Under the pull rules" means that a real workload, bug report, pilot or user need runs into the
+refusal and measures its cost; a hypothetical convenience never counts (rule 17). Reopening a
+refusal that is a decided language rule is an owner decision, recorded in
+[decisions.md](../spec/decisions.md).
 
 Some former "not yet" entries are planned work, not refusals, and live in the roadmap: freestanding
 targets (the [allocation decision](../spec/decisions.md#decided-2026-11-02-allocation) already
 covers their allocators; [R-0323](ROADMAP_BACKLOG.md#task-r-0323) and
 [R-0324](ROADMAP_BACKLOG.md#task-r-0324) split std and its capabilities), package management
 (decided 2026-10-17, in the [task register](ROADMAP_TASKS.md)), and the richer contract layer
-(frames, two-state contracts, checked totality and the specification library, phase E of the
-[roadmap](../../ROADMAP.md#phases)), which reports through the one evidence ledger (rule 12). Phase
-E's two-state contracts and checked totality meet [OD117](../spec/decisions.md#od117) (no `old` in
+(frame and dependency-flow contracts, two-state contracts, mature loop invariant and variant
+authoring, checked totality, the specification library, and package and release evidence summaries,
+phase E of the [roadmap](../../ROADMAP.md#phases)). That layer's syntax is frozen only after a
+flagship or external workload needs its facts, and its facts are reported through the one evidence
+ledger (rule 12). Phase E's two-state contracts and checked totality meet [OD117](../spec/decisions.md#od117) (no `old` in
 contracts) and [OD116](../spec/decisions.md#od116) (no total-function category); how they fit
 together is not decided here.
 
@@ -254,7 +260,8 @@ together is not decided here.
   capability variables the same way ([OD45](../spec/decisions.md#od45)); what no argument determines
   is written explicitly, as is any capability argument in a turbofish
   ([OD87](../spec/decisions.md#od87)). Choosing among several consistent capability solutions is
-  undecided: [Core-session question 5](../../ROADMAP.md#questions-for-the-core-session).
+  [undecided](../spec/decisions.md#core-capability-inference) and belongs to the target Core
+  proposal.
 
 **Dispatch and abstraction**
 
@@ -332,6 +339,6 @@ together is not decided here.
 - **Ghost code that affects execution.** Permanent. Ghost code itself is admitted as decided:
   `ghost let` with `ghost` reserved ([OD81](../spec/decisions.md#od81)) and specification
   functions whose body is required and total ([OD115](../spec/decisions.md#od115)). How ghost state
-  is represented in Core and erased is not decided: it is
-  [Core-session question 9](../../ROADMAP.md#questions-for-the-core-session), and the
-  owner decides it with the target Core proposal.
+  is represented in Core and erased is not decided: the owner decides it with the
+  [target Core proposal](../spec/decisions.md#target-core-proposal) (Core-session question 9 in
+  the [roadmap](../../ROADMAP.md#questions-for-the-core-session)).

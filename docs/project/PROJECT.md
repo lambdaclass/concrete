@@ -414,7 +414,7 @@ Most systems languages have one escape hatch. Rust has `unsafe`. C has... everyt
 | **`trusted`** | Pointer-level and foreign-call implementation unsafety behind safe APIs | At declaration site only |
 | **`with(Unsafe)`** | A caller safety obligation the language cannot establish (raw and foreign validity) | In function signatures; a `trusted` body absorbs it |
 
-**Why this matters:** In Rust, `unsafe` covers raw pointer arithmetic, FFI calls, and transmute with identical syntax. You can't distinguish "contained implementation unsafety behind a safe interface" from "this function crosses a foreign boundary." Concrete makes these syntactically and semantically different, and the compiler reports on them separately.
+**Why this matters:** In Rust, `unsafe` marks both "this body uses techniques safe code cannot" and "the caller must uphold an invariant" with the same keyword. Concrete separates them: `trusted` contains the unsafety inside a body behind a safe interface, while `with(Unsafe)` states an obligation the caller must meet, and neither carries operational authority.
 
 **What `trusted` permits** is [TRUST-5](../spec/trusted.md#TRUST-5): raw-pointer operations and
 foreign calls without declaring `Unsafe`. It absorbs `Unsafe` and nothing else: every operational
