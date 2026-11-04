@@ -93,8 +93,10 @@ Each rule states what holds and why. Its history is in the changelog and the dec
 12. **Trust boundaries are honest.** Every claim says which of these it is: enforced by the compiler,
     reported by analysis, proved in Lean, or assumed at a named source, backend, toolchain or target
     boundary. Being listed in the trusted base proves nothing; an unknown is never reported as a
-    reassuring default ([ABSENCE_IS_NOT_A_FACT.md](ABSENCE_IS_NOT_A_FACT.md)). *Why:* evidence that
-    overstates itself is worse than none.
+    reassuring default ([ABSENCE_IS_NOT_A_FACT.md](ABSENCE_IS_NOT_A_FACT.md)). New kinds of fact
+    (frames, dependencies, ghost state, resource bounds) are reported through the one obligation and
+    evidence ledger, never a parallel system. *Why:* evidence that overstates itself is worse than
+    none.
 
 13. **The compiler owns semantic identity.** A name, a link symbol or a restated constant is a
     representation of an entity, never the entity. Every pass preserves an entity's identity or
@@ -167,11 +169,19 @@ grounds for rejection.
 11. **Fails visibly?** Does an unsupported use produce a precise diagnostic or a named hole, never
     silence? (rule 12)
 12. **Identity kept?** Does every entity, claim and piece of evidence it introduces have a typed
-    identity of its own, never a string, a display name or one status standing for several claims?
-    (rule 13)
-13. **Honest under hostile input?** For an evidence or tooling feature: does it define limits,
-    malformed and duplicate input behaviour, negative controls, and how a revoked assumption
-    degrades only the claims that depend on it? (rule 12)
+    identity of its own (subject, claim, dependencies, artifacts, checker rule, freshness), never a
+    string, a display name, a first-match lookup or one status standing for several independently
+    degradable claims? Does it keep apart identities that change independently (implementation,
+    model, exported contract, proposition, policy, claim scope) and say which one moves under each
+    change? An exact digest prevents substitution but says nothing about whether a model is
+    faithful; an identity key holds the subject of a fact, never alternative answers, so
+    contradictory rows (trusted and proved, refinement and equivalence) cannot coexist under
+    different keys. (rule 13)
+13. **Honest under hostile input?** For an evidence or tooling feature: does it treat proof
+    modules, generated artifacts, receipts and checker output as adversarial, define limits,
+    malformed, duplicate and surplus input behaviour, negative controls and mutation tests, and say
+    how a revoked checker or assumption degrades only the claims that depend on it? Silence creates
+    a missing obligation, never an assumption. (rule 12)
 14. **A real benefit for audited code?** Is the gain more than writing speed? Convenience alone is
     not enough, and brevity alone never outweighs a visibility loss. (rules 4, 17)
 
@@ -197,6 +207,17 @@ one. A refusal that is a language rule is an owner decision first ([decisions.md
 Each refusal is either **Permanent**, with the reason, or **Reopens when** a named roadmap condition
 holds. "Pull rules" means the [backlog pull rules](ROADMAP_BACKLOG.md#pull-rules): a workload, bug,
 pilot or user need hits it. Reopening a refusal that is a decided language rule is an owner decision.
+
+Some former "not yet" entries are planned work, not refusals, and live in the roadmap: freestanding
+targets (the [allocation decision](../spec/decisions.md#decided-2026-11-02-allocation) already
+covers their allocators; [R-0323](ROADMAP_BACKLOG.md#task-r-0323) and
+[R-0324](ROADMAP_BACKLOG.md#task-r-0324) split std and its capabilities), package management
+(decided 2026-10-17, in the [task register](ROADMAP_TASKS.md)), and the richer contract layer
+(frames, two-state contracts, checked totality and the specification library, phase E of the
+[roadmap](../../ROADMAP.md#phases)), which reports through the one evidence ledger (rule 12). Phase
+E's two-state contracts and checked totality meet [OD117](../spec/decisions.md#od117) (no `old` in
+contracts) and [OD116](../spec/decisions.md#od116) (no total-function category); how they fit
+together is not decided here.
 
 **Hidden runtime and hidden work**
 
@@ -280,10 +301,13 @@ pilot or user need hits it. Reopening a refusal that is a decided language rule 
 - **General compile-time evaluation** (`comptime`, `constexpr`-style). Reopens when a workload under
   the pull rules needs compile-time values beyond constant declarations; any design stays
   constants-only and states its interaction with the semantics.
-- **Broad in-source conditional compilation** (`#[cfg]` throughout files). Reopens when a workload
-  under the pull rules shows that selecting modules and files by target profile in `Concrete.toml` is
-  not enough; any form is narrow and appears in audit output. It hides control flow, authority and
-  target assumptions behind build configuration.
+- **Broad in-source conditional compilation** (`#[cfg]` throughout files). It hides control flow,
+  authority and target assumptions behind build configuration. Target-specific code is selected by
+  module and file per target profile in `Concrete.toml`, and audit output names what was selected
+  and excluded. Reopens when, with the project model, target profiles and the hosted/freestanding
+  std split ([R-0323](ROADMAP_BACKLOG.md#task-r-0323)) in place, a workload under the pull rules
+  shows that module and file selection is not enough; any form is narrow and appears in audit
+  output.
 
 **Calls and declarations**
 

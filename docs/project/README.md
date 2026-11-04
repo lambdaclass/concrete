@@ -11,8 +11,8 @@ decisions.
 
 Policy and process:
 
-- [PHILOSOPHY.md](PHILOSOPHY.md): what Concrete is for, the design rules, the order that settles
-  conflicts between them, the admission test and what Concrete refuses
+- [PHILOSOPHY.md](PHILOSOPHY.md): what Concrete is for, the design rules, the proposed order for
+  settling conflicts between them, the admission test and what Concrete refuses
 - [PROJECT.md](PROJECT.md): why Concrete, identity, language shape and language decisions
 - [AGENTS.md](AGENTS.md): the agent and contributor workflow (playbooks, shared rules, concurrent
   work)

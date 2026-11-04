@@ -410,20 +410,19 @@ Most systems languages have one escape hatch. Rust has `unsafe`. C has... everyt
 
 | Mechanism | What it covers | Visibility |
 |-----------|---------------|------------|
-| **Capabilities** (`with(File, Network)`) | Semantic effects visible to callers | In function signatures |
-| **`trusted`** | Pointer-level implementation unsafety behind safe APIs | At declaration site only |
-| **`with(Unsafe)`** | Authority to cross foreign boundaries (FFI, transmute) | In function signatures, even inside trusted code |
+| **Capabilities** (`with(Fs, Network)`) | Operational permissions visible to callers | In function signatures |
+| **`trusted`** | Pointer-level and foreign-call implementation unsafety behind safe APIs | At declaration site only |
+| **`with(Unsafe)`** | A caller safety obligation the language cannot establish (raw and foreign validity) | In function signatures; a `trusted` body absorbs it |
 
 **Why this matters:** In Rust, `unsafe` covers raw pointer arithmetic, FFI calls, and transmute with identical syntax. You can't distinguish "contained implementation unsafety behind a safe interface" from "this function crosses a foreign boundary." Concrete makes these syntactically and semantically different, and the compiler reports on them separately.
 
-**What `trusted` specifically permits:** pointer arithmetic, raw pointer dereference, raw pointer assignment, pointer-involving casts. Nothing else. It does NOT suppress capabilities, does NOT permit FFI without `with(Unsafe)`, does NOT relax linearity.
+**What `trusted` permits** is [TRUST-5](../spec/trusted.md#TRUST-5): raw-pointer operations and
+foreign calls without declaring `Unsafe`. It absorbs `Unsafe` and nothing else: every operational
+capability it uses still appears in its signature, and it does not relax linearity.
 
-**Nine capabilities:** `File`, `Network`, `Time`, `Env`, `Random`, `Process`,
-`Console`, `Alloc`, `Unsafe`. `Std` is not a tenth capability; it is source
-shorthand for the eight standard capabilities other than `Unsafe`. Current
-profiles accept that alias, while its high-integrity policy remains pending
-under ROADMAP R-0441. A function can only call functions whose capabilities are
-a subset of its own.
+**Capabilities** are the reserved names of
+[authority rule 13](../spec/decisions.md#decided-2026-11-02-authority), with no umbrella `Std`
+and no aliases. A function can only call functions whose capabilities are a subset of its own.
 
 ### The Compiler as Audit Machine
 
@@ -616,8 +615,8 @@ The intended relationship is:
 
 ## Philosophy
 
-The design rules, the order that settles conflicts between them, the admission test every proposed
-feature passes and the list of what Concrete refuses are in [PHILOSOPHY.md](PHILOSOPHY.md). They
+The design rules, the proposed order for settling conflicts between them, the admission test every
+proposed feature passes and the list of what Concrete refuses are in [PHILOSOPHY.md](PHILOSOPHY.md). They
 were this document's "Principles" and "Design policy" sections until 2026-11-04.
 
 ## Language shape
@@ -660,11 +659,13 @@ Semantic effects (file, network, allocation, etc.) are declared in function sign
 
 #### Trust model: three-way split
 
-- `with(Cap)` — semantic effects visible to callers
-- `trusted` — audited pointer-level containment behind safe APIs
-- `with(Unsafe)` — foreign boundary authority
+- `with(Cap)` — operational permissions visible to callers
+- `trusted` — audited pointer-level and foreign-call containment behind safe APIs
+- `with(Unsafe)` — a caller safety obligation (raw and foreign validity), absorbed by a `trusted`
+  body ([TRUST-5](../spec/trusted.md#TRUST-5))
 
-Each concept does one thing. They do not overlap. See [SAFETY.md](../verification/SAFETY.md).
+Each concept does one thing: `trusted` never discharges an operational capability. See
+[SAFETY.md](../verification/SAFETY.md).
 
 #### Ownership model: linear by default
 

@@ -13,9 +13,11 @@
 # other than PHILOSOPHY.md. A domain document that needs one qualifies the heading with its domain
 # ("Pipeline principles", "Contract design principles"); a generic heading is the start of a second
 # copy. docs/archive/ is history and is not scanned; the moved stubs (PRINCIPLES.md,
-# DESIGN_POLICY.md, ANTI_FEATURES.md) keep their old titles so outside links still land.
+# DESIGN_POLICY.md, ANTI_FEATURES.md) keep their old titles so outside links still land, and the gate
+# checks that each holds nothing but that title and its "Moved ..." line.
 #
-# Headings inside fenced code blocks are not headings and are skipped. The negative controls run the
+# Both ATX ("## X") and setext ("X" over "---") headings count; headings inside fenced code blocks
+# are not headings and are skipped (a fence closes only on its own character, at least as long). The negative controls run the
 # same scan on a throwaway copy of docs/ with an offending heading added, and the gate fails if the
 # scan does not catch it.
 set -uo pipefail
@@ -33,14 +35,48 @@ HOME_DOC="docs/project/PHILOSOPHY.md"
 # The moved stubs, relative to the docs root.
 STUBS="project/PRINCIPLES.md project/DESIGN_POLICY.md project/ANTI_FEATURES.md"
 
-# scan DOCS_ROOT: print "path:line: heading" for every forbidden heading; exit 0 when the scan ran.
+# scan DOCS_ROOT: print "path:line: heading" for every forbidden heading, and for every moved stub
+# that holds more than its title and its "Moved ..." line; exit 0 when the scan ran.
 scan() {
   python3 -I - "$1" "$STUBS" <<'PY'
 import os, re, sys
 root, stubs = sys.argv[1], set(sys.argv[2].split())
 FORBIDDEN = re.compile(r"(?:core |concrete |design )?principles|design polic(?:y|ies)|anti[- ]?features?(?:\b.*)?")
-heading = re.compile(r"^ {0,3}(#{1,6})\s+(.*?)\s*#*\s*$")
-fence = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+atx = re.compile(r"^ {0,3}(#{1,6})(?:\s+(.*?))?\s*$")
+setext = re.compile(r"^ {0,3}(=+|-+)\s*$")
+fence_open = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
+
+def norm(t):
+    t = re.sub(r"\s+#+\s*$", "", t)                # closing hashes of an ATX heading
+    t = re.sub(r"[*_`]", "", t).strip().lower().rstrip(":.")
+    return re.sub(r"^\d+(\.\d+)*\.?\s+", "", t)    # a numbered heading "3. Principles"
+
+def headings(path):
+    """(line, text) of every ATX and setext heading outside fenced code blocks."""
+    fence, prev = None, None                        # fence = (char, length) while inside one
+    for n, line in enumerate(open(path, encoding="utf-8"), 1):
+        line = line.rstrip("\n")
+        if fence:
+            m = re.match(r"^ {0,3}(`{3,}|~{3,})\s*$", line)
+            if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= fence[1]:
+                fence = None
+            prev = None
+            continue
+        m = fence_open.match(line)
+        if m and not (m.group(1)[0] == "`" and "`" in m.group(2)):
+            fence, prev = (m.group(1)[0], len(m.group(1))), None
+            continue
+        h = atx.match(line)
+        if h:
+            yield n, h.group(2) or ""
+            prev = None
+            continue
+        if setext.match(line) and prev and prev[1].strip() and not prev[1].startswith(("    ", "\t")):
+            yield prev[0], prev[1].strip()
+            prev = None
+            continue
+        prev = (n, line) if line.strip() else None
+
 for d, dirs, files in os.walk(root):
     rel_d = os.path.relpath(d, root)
     if rel_d == "archive" or rel_d.startswith("archive" + os.sep):
@@ -51,27 +87,20 @@ for d, dirs, files in os.walk(root):
         if not f.endswith(".md"):
             continue
         rel = os.path.normpath(os.path.join(rel_d, f))
-        if rel == "project/PHILOSOPHY.md" or rel in stubs:
+        path = os.path.join(d, f)
+        if rel == "project/PHILOSOPHY.md":
             continue
-        in_fence = None
-        for n, line in enumerate(open(os.path.join(d, f), encoding="utf-8"), 1):
-            m = fence.match(line)
-            if m:
-                tok = m.group(1)[0]
-                if in_fence is None:
-                    in_fence = tok
-                elif in_fence == tok:
-                    in_fence = None
-                continue
-            if in_fence:
-                continue
-            h = heading.match(line)
-            if not h:
-                continue
-            text = re.sub(r"[*_`]", "", h.group(2)).strip().lower().rstrip(":.")
-            text = re.sub(r"^\d+(\.\d+)*\.?\s+", "", text)  # a numbered heading "3. Principles"
-            if FORBIDDEN.fullmatch(text):
-                print(f"docs/{rel}:{n}: {h.group(2)}")
+        if rel in stubs:
+            # A moved stub keeps its old title and one "Moved ..." paragraph, nothing else, so it
+            # cannot grow back into a second copy under the exemption.
+            body = [l.strip() for l in open(path, encoding="utf-8") if l.strip()]
+            if len(body) != 2 or not body[0].startswith("# ") or not body[0].endswith("(moved)") \
+                    or not body[1].startswith("Moved "):
+                print(f"docs/{rel}: a moved stub holds more than its title and its 'Moved ...' line")
+            continue
+        for n, text in headings(path):
+            if FORBIDDEN.fullmatch(norm(text)):
+                print(f"docs/{rel}:{n}: {text}")
 PY
 }
 
@@ -85,7 +114,7 @@ fi
 echo "=== 2. no other docs/ file opens a principles, design-policy or anti-features section ==="
 if out="$(scan docs)"; then
   if [ -z "$out" ]; then
-    ok "no generic philosophy heading outside $HOME_DOC (docs/archive/ and the moved stubs excluded)"
+    ok "no generic philosophy heading outside $HOME_DOC (docs/archive/ excluded), and each moved stub is only its pointer"
   else
     printf '%s\n' "$out" | sed 's/^/    /'
     no "a docs/ file restates the project philosophy; link $HOME_DOC instead, or qualify a domain heading"
@@ -112,6 +141,12 @@ control "a numbered '## 4. Core Principles' heading" platform/FFI.md '\n## 4. Co
 control "a domain-qualified '## Pipeline principles' heading" compiler/NEW_DOC.md '# New\n\n## Pipeline principles\n' clean
 control "a '## Principles' line inside a fenced block" compiler/NEW_DOC.md '# New\n\n```md\n## Principles\n```\n' clean
 control "a '## Principles' section under docs/archive/" archive/OLD.md '# Old\n\n## Principles\n' clean
+control "a setext 'Principles' heading" compiler/NEW_DOC.md '# New\n\nPrinciples\n----------\n' hit
+control "a setext 'Design policy' heading" compiler/NEW_DOC.md '# New\n\nDesign policy\n=============\n' hit
+control "content restored to the ANTI_FEATURES.md stub" project/ANTI_FEATURES.md '\n## Hidden Runtime Models\n\nNo GC.\n' hit
+control "a '## Principles' line after a short fence inside a longer one" compiler/NEW_DOC.md '# New\n\n````md\n```\n## Principles\n````\n' clean
+control "a '## Principles' line after a fence-like line with an info string" compiler/NEW_DOC.md '# New\n\n```md\n```not-a-close\n## Principles\n```\n' clean
+control "a thematic break after a paragraph that is not a heading" compiler/NEW_DOC.md '# New\n\nSome text.\n\n---\n' clean
 
 if [ "$FAIL" -ne 0 ]; then
   echo "SINGLE-PHILOSOPHY: FAIL=$FAIL PASS=$PASS"

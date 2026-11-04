@@ -40,7 +40,7 @@ This table is an ownership map, not another summary of each document's contents.
 
 Use these files as the primary reference once a design has moved out of exploration:
 
-- [PHILOSOPHY.md](project/PHILOSOPHY.md) — the one home of the design rules: what Concrete is for, the rules, the order that settles conflicts between them, the admission test for new features and what Concrete refuses
+- [PHILOSOPHY.md](project/PHILOSOPHY.md) — the one home of the design rules: what Concrete is for, the rules, the proposed order for settling conflicts between them, the admission test for new features and what Concrete refuses
 - [PROJECT.md](project/PROJECT.md) — the project in one document: [why Concrete](project/PROJECT.md#why-concrete) (a direct overview for C and Rust developers), [identity](project/PROJECT.md#identity) (what Concrete is optimizing for, where it intends to differentiate, and what it is not trying to be), [language shape](project/PROJECT.md#language-shape) (long-term structural commitments) and [language decisions](project/PROJECT.md#language-decisions) (recorded project commitments)
 - [INFLUENCES.md](project/INFLUENCES.md) — which external language ideas Concrete copies, adapts, or rejects
 - [SAFETY.md](verification/SAFETY.md) — capabilities, `trusted`, `Unsafe`, proof boundary, and high-integrity direction

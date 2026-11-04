@@ -1,8 +1,8 @@
 ### One home for the project philosophy
 
 [docs/project/PHILOSOPHY.md](docs/project/PHILOSOPHY.md) is now the only document that states
-Concrete's design rules: what the language is for, the rules with their reasons, the order that
-settles conflicts between them (proposed, pending owner approval), the admission test for new
+Concrete's design rules: what the language is for, the rules with their reasons, a proposed order
+for settling conflicts between them (pending owner approval), the admission test for new
 features and the list of what Concrete refuses, each refusal Permanent with its reason or reopening
 on a named roadmap condition. It absorbs PROJECT.md's principles and design policy, the refusal
 list of `ANTI_FEATURES.md` and the "no" and "not yet" entries of PROJECT.md's language decisions,
