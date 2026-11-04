@@ -698,15 +698,9 @@ Concrete rejects:
 
 ## What Concrete Is Not Copying
 
-Concrete should continue to reject:
-
-- trait/typeclass scale as a default language-expansion path
-- macros as the main extensibility story
-- hidden dynamic dispatch
-- proof-heavy source code as the ordinary programming style
-- adding verification features before the artifact/workflow path is usable
-- hidden runtime models that undermine systems-level auditability
-- turning the language into a theorem prover instead of a systems language
+The refusals themselves, with their reasons and reopening conditions, are in
+[PHILOSOPHY.md](PHILOSOPHY.md#what-concrete-refuses). The table at the end of this document shows
+how other languages answer the same questions.
 
 ## Current Priority From These Influences
 
@@ -716,7 +710,9 @@ The highest-value still-missing ideas are:
 2. loop invariants for real bounded examples
 3. proof UX and proof diagnostics
 4. stronger assurance workflow polish
-5. ghost code only if a real proof-backed example forces it
+5. ghost bindings and specification functions as decided ([OD81](../spec/decisions.md#od81),
+   [OD115](../spec/decisions.md#od115)), with their Core form
+   decided in the Core session
 
 Those fit Concrete's philosophy best because they strengthen:
 
@@ -725,3 +721,29 @@ Those fit Concrete's philosophy best because they strengthen:
 - explicit evidence
 - explicit trust boundaries
 - an artifact-first review and CI workflow
+
+## How other languages answer Concrete's refusals
+
+Moved from `ANTI_FEATURES.md` on 2026-11-04; the refusals and their reasons are in
+[PHILOSOPHY.md](PHILOSOPHY.md#what-concrete-refuses). C, C++, Python and Java appear only where
+they mark the opposite pole.
+
+| question | Rust | Zig | Go | others |
+|---|---|---|---|---|
+| garbage collection | none; ownership and RAII | none; allocator parameters | tracing GC, chosen for simplicity over predictability | |
+| async runtime | `async`/`await` with an external runtime; function colouring and runtime fragmentation | no hidden scheduler | goroutines on a hidden runtime scheduler | |
+| implicit numeric conversion | none; `as` or `From`/`Into` | none; `@intCast`, `@truncate` | none; `int64(x)` | C/C++: pervasive, a classic bug source |
+| implicit string conversion | `Display` behind `format!`, allocation hidden in the macro | explicit `std.fmt` | `fmt.Sprint` and `Stringer`, allocation hidden | |
+| truthiness | none | none | none | C, Python, JavaScript: fundamental |
+| type inference | local; signatures annotated; trait inference can confuse errors | `const`/`var` initializers only | local `:=`; signatures annotated | Haskell/OCaml: full HM, errors far from causes |
+| exceptions | none; `Result` with `?` (early return, implicit `From`); `panic!` | error unions with prefix `try` | multiple returns and `error`; `panic`/`recover` discouraged | C++/Java/Python: hidden control flow is the norm |
+| effect system | none beyond `unsafe` | none | none | Koka: full algebraic effects |
+| contracts | none built in; Kani, Prusti outside | none | none | SPARK/Ada: full static contracts; Eiffel: run-time checked |
+| dynamic dispatch | `dyn Trait`, opaque to optimizer and verifier | none; `anytype` and function pointers | interfaces, every method call indirect | |
+| closures | capture modes `Fn`/`FnMut`/`FnOnce`, captures invisible at the call site | none; function pointer plus context | implicit capture by reference (loop-variable bugs) | |
+| macros and metaprogramming | declarative and procedural macros, `derive` | `comptime` evaluation in the same language | none; `go generate` outside | C preprocessor, Lisp macros |
+| compile-time evaluation | growing `const fn` | `comptime` is fundamental | constants only | C++: `constexpr`/`consteval` |
+| operator overloading | through traits (`Add`, `Mul`); `+` may allocate or panic | none | none | |
+| variadics | none; `println!`, `vec!` macros | `anytype` and `comptime` | homogeneous `...T` | C: unchecked `printf` |
+| default arguments | none; builders or separate functions | none; struct of options | none; options pattern | Python, C++, Kotlin: fundamental |
+| inheritance | none; traits and composition | none | none; interfaces and embedding | |

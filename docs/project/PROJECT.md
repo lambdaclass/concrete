@@ -1,26 +1,24 @@
 # The Concrete Project
 
-Status: standing reference and policy. This one document states why Concrete exists, what it is
-and is not, the principles behind its shape, the admission policy every proposed feature passes,
-the long-term language shape, and the recorded "no" and "not yet" decisions. The normative
-language rules are in the [language specification](../spec/README.md); where this document
-restates one, the specification is authoritative.
+Status: standing reference. This document states why Concrete exists, what it is and is not, the
+long-term language shape and the recorded project decisions. The design rules, the admission test
+for new features and the list of what Concrete refuses are in [PHILOSOPHY.md](PHILOSOPHY.md); the
+normative language rules are in the [language specification](../spec/README.md). Where this
+document restates either, those are authoritative.
 
-It replaces, as of 2026-10-29, the separate `IDENTITY.md`, `WHY_CONCRETE.md`, `PRINCIPLES.md`,
-`DESIGN_POLICY.md`, `LANGUAGE_SHAPE.md` and `DECISIONS.md` in this directory. Principle numbers
-(for example "principle 12") are unchanged.
+It replaces, as of 2026-10-29, the separate `IDENTITY.md`, `WHY_CONCRETE.md`, `LANGUAGE_SHAPE.md`
+and `DECISIONS.md` in this directory. Its former principles and design policy sections moved to
+PHILOSOPHY.md on 2026-11-04.
 
 Contents:
 
 1. [Short positioning](#short-positioning)
 2. [Why Concrete](#why-concrete): the overview for C, Rust and Zig developers
 3. [Identity](#identity): what Concrete is, what it optimizes for, and what it is not
-4. [Principles](#principles): the stable design principles behind the language shape
-5. [Design policy](#design-policy): the admission criteria for language features, compiler
-   features and borrowed ideas
-6. [Language shape](#language-shape): the long-term structural commitments
-7. [Language decisions](#language-decisions): permanent "no" and deferred "not yet" decisions
-8. [Related documents](#related-documents)
+4. [Philosophy](#philosophy): where the design rules live
+5. [Language shape](#language-shape): the long-term structural commitments
+6. [Language decisions](#language-decisions): recorded project commitments
+7. [Related documents](#related-documents)
 
 ## Short positioning
 
@@ -616,282 +614,17 @@ The intended relationship is:
 - large convenience surfaces inside the compiler
 - treating ecosystem size as more important than semantic clarity
 
-## Principles
-
-This section states the stable design principles behind Concrete's language
-shape.
-
-Concrete is trying to be a minimalist systems programming language with explicit
-authority, explicit operational boundaries, and a path to real Lean 4-backed
-proofs.
-
-### Core Principles
-
-1. **Systems-first, not theorem-prover-first**
-   Concrete is a systems language implemented in Lean 4, not Lean 4 with a
-   different runtime. The source language should feel like systems programming,
-   not like writing proof scripts.
-
-2. **No hidden runtime model**
-   Concrete has no GC and no hidden reference counting. Memory/resource behavior
-   should be visible enough to audit and reason about.
-
-3. **Linearity and ownership are part of the model**
-   Resource-sensitive values should have explicit ownership rules. The language
-   prefers linear/resource-aware rules over implicit lifetime or runtime
-   machinery.
-
-4. **References are scoped access, not ordinary values**
-   Safe references are second-class. They may flow down into calls, callbacks,
-   and borrow blocks, but safe APIs do not return or store `&T` / `&mut T`.
-   Accessors use scoped callbacks, value returns, owned views, or trusted/raw
-   pointer boundaries instead of lifetime-bearing reference APIs.
-
-5. **Capabilities and trust boundaries must be visible**
-   Effects belong in signatures. `trusted` code, `with(Unsafe)`, FFI crossings,
-   allocation, and blocking authority should be syntactically and semantically
-   visible.
-
-6. **Predictable execution matters**
-   The compiler should make recursion, loop boundedness, allocation, blocking,
-   FFI, and other execution-shape risks visible. A pure or bounded core should
-   be distinguishable from an effectful shell.
-
-7. **Core/shell separation is a feature, not a workaround**
-   The language should make it natural to write a bounded, analyzable core and
-   keep I/O, host calls, and other effectful operations at the edge.
-
-8. **Artifact-first auditability**
-   The compiler should emit facts and evidence artifacts that humans, CI, and AI
-   tools can consume directly. Concrete should not rely on "read the compiler
-   source" as the audit workflow. The primary audience is still humans, but the
-   same machine-readable explicitness is intentionally useful for LLM-assisted
-   coding and review.
-
-9. **Lean 4 proofs should attach to real Concrete code**
-   The goal is not merely to reimplement functions in Lean. The language should
-   expose a well-defined proof target so real Concrete functions can carry Lean
-   4-backed evidence where the proof subset permits it.
-
-10. **Small analyzable core over feature growth**
-   Concrete should prefer a smaller language with stronger boundaries over a
-   larger feature surface with weaker analysis. If a feature reduces clarity, it
-   must clear a high bar.
-
-11. **Honest trust boundaries**
-    Concrete must distinguish what is:
-    - enforced by the compiler
-    - reported by analysis
-    - proved through Lean-backed artifacts
-    - trusted at the source, backend, toolchain, or target boundary
-
-12. **Semantic entities have compiler-owned identity**
-    Source names and link symbols are *representations* of an entity, never the
-    entity itself. Every transformation either preserves an entity's identity or
-    creates a checked derivation from it. This covers type, function, module,
-    builtin, specialization, layout, and source-origin identity.
-
-    This principle is written from failures, not from theory. Bugs 039, 044, 045,
-    050, 051, 054, 055, and — found after this principle was written, by looking
-    for the class it names — 056, 057 and 061 have one shared cause: a
-    representation used as identity and re-interpreted by a later pass — an import alias resolved twice, a match
-    binder sharing a slot with its outer namesake, a local callable rewritten
-    into a direct call because its text matched a global, one enum declaration
-    serving instantiations of different sizes, a specialization name a user
-    program can spell. The later three extend the class beyond source names: a
-    function reference carried as a REGISTER NAME (`@fnref.f`) that a phi cannot
-    hold (056), a struct size restated as a CONSTANT that drifted from the
-    declaration until by-value copies truncated and segfaulted (057), and a proof
-    model that spells a parameter application exactly like a call of a global
-    (061). Identity-as-representation is not only a string problem; any restated
-    fact drifts. Each was found separately and fixed separately; the principle is
-    what makes the class visible in advance.
-
-    Corollary for evidence: a value-level test cannot establish an identity or
-    layout property. R-0001 showed why — under a mutation that removed
-    specialization, programs whose wider instantiation was emitted first still
-    returned correct results. Identity claims need structural assertions
-    (distinct declarations, distinct footprints, distinct symbols), and each
-    phase should earn its invariants through a validated artifact rather than by
-    convention.
-
-    The live identity seams are indexed below so the principle is not applied
-    only after another defect. This is an ownership index, not a second task
-    queue; execution order remains the roadmap's file order.
-
-    | Entity / invariant | Representation that must not become identity | Owner |
-    |---|---|---|
-    | Direct call vs callable value | callee spelling | R-0002 (landed), R-0436 |
-    | Module/import target | alias or basename | R-0008 |
-    | Generic specialization | forgeable display/link symbol | R-0007 |
-    | Aggregate declaration and payload footprint | type name or restated size constant | R-0434 |
-    | Structural destruction | `tyName` lookup / empty fallback | R-0006 (empty fallback retired for non-Copy types by the bug 052 fix; named lookup remains) |
-    | ProofCore global call vs local application | one `PExpr.call` string | R-0442 |
-
-## Design policy
-
-This section defines the admission criteria for language features, compiler features, and borrowed ideas. It is the gate that every proposed change must pass through. The original research note is [../research/meta/design-filters.md](../../research/meta/design-filters.md).
-
-### Admission Principle
-
-Concrete is not trying to maximize shorthand or track trends. The standard for admission is:
-
-- preserves simplicity
-- improves reliability
-- fits the verification story
-- keeps semantics explicit
-
-If an idea improves ergonomics while making the compiler harder to explain, it is a bad fit.
-
-### Feature Admission Checklist
-
-Every proposed feature must pass all fifteen checks. Failing any one is grounds for rejection.
-
-#### 1. Can it be explained as a simple invariant?
-
-If the rule needs many exceptions, fallback cases, or "except when..." clauses, reject it.
-
-#### 2. Does it make behavior more visible or less visible?
-
-Prefer features that expose effects, ownership, dispatch, layout, or control flow. Reject features that hide work behind familiar syntax.
-
-#### 3. Does it reduce compiler phase coupling?
-
-Prefer ideas that keep parse, resolve, check, and elab boundaries clean. Reject ideas that make early phases depend on later semantic information.
-
-#### 4. Are cross-file dependencies declaration-level only?
-
-Prefer summaries, signatures, layouts, and explicit imports. Reject anything that makes one file depend on another file's bodies.
-
-#### 5. Is dispatch still statically known or explicitly indirect?
-
-Prefer monomorphization, named functions, and explicit function pointers. Reject hidden dynamic dispatch, hidden captures, or broad implicit lookup.
-
-#### 6. Does it preserve predictable code generation?
-
-The user should be able to form a rough mental model of runtime behavior from the source. If the compiler may insert surprising work, be very skeptical.
-
-#### 7. Does it improve diagnostics or make them murkier?
-
-A good feature should have obvious ownership for error reporting. If failures become "somewhere in inference/magic," reject it.
-
-#### 8. Can the compiler own it with one clear pass?
-
-Each rule should have an obvious home. If multiple passes must partially own it, that is a warning sign.
-
-#### 9. Does it help or hurt the proof story?
-
-Prefer rules that elaborate into simpler core forms. Reject rules that require semantic duplication, hidden state, or many meta-level exceptions.
-
-#### 10. Is the benefit real for audited low-level code?
-
-Concrete is not trying to maximize shorthand. If the gain is mainly convenience for writing code faster, that is not enough.
-
-#### 11. Can its meaningful behavior cross a contract boundary?
-
-A feature must say how its safety, functional behavior, effects, failure modes,
-and resource consequences appear in summaries and obligations. A feature that
-works operationally but disappears from public contracts creates an
-unverifiable island.
-
-#### 12. Can unsupported coverage fail visibly?
-
-Every new construct must define its verification lowering, a conservative
-abstraction, or a precise unsupported-fragment diagnostic. Silence is not an
-admissible fallback. Policy may permit named holes, but it may not erase them.
-
-#### 13. Is its evidence represented as precisely as its claim?
-
-A feature must define distinct typed identities for its subject, claim,
-dependencies, artifacts, checker rules, and freshness where those concepts can
-change independently. Interchangeable strings, optional authoritative fields,
-first-match lookup, and display-derived status are rejection signals. Reports
-project validated facts; they do not manufacture them.
-
-#### 14. Does it remain honest under hostile input and later revocation?
-
-Proof modules, generated artifacts, dependency tables, receipts, package
-bundles, and checker output are adversarial inputs. A feature must define
-resource limits, malformed/duplicate/surplus behavior, negative controls,
-mutation tests, and how a checker or assumption advisory degrades existing
-claims without collapsing unaffected evidence dimensions.
-
-#### 15. Does it preserve independently changing semantic identities?
-
-A verification feature must not collapse implementation, mathematical model,
-exported contract, proposition, policy, relation kind, or claim scope merely
-because two are currently derived together. It must state which identity moves
-under each semantic change and which dependency consumers become stale.
-
-Exact identity is not correspondence: a digest may prevent substitution while
-saying nothing about whether a model faithfully represents the implementation.
-Raw digest strings, display-name attachment, implicit equivalence, unlabelled
-trust, and one status standing in for several independently degradable claims
-are grounds for rejection.
-
-Identity keys contain the subject of a fact, not alternative answers for that
-fact. Relation strength and evidence mode are coherent payload: placing them in
-the key so contradictory trusted/proved or refinement/equivalence rows can
-coexist recreates first-match ambiguity. Silence creates a missing obligation,
-never an assumption.
-
-### Quick Decision Rule
-
-**Adopt** ideas that are: explicit, local, phase-separated, summary-friendly, easy to lower away.
-
-**Reject** ideas that are: implicit, global, inference-heavy, body-dependent, hard to model formally.
-
-### One-Line Test
-
-A feature is promising if it makes the compiler and the language easier to explain at the same time.
-
-### Main Rule for Borrowed Ideas
-
-**Copy constraints before copying features.**
-
-Zig, Austral, SPARK, and Odin are often most useful because they say "no" in structurally helpful places. Concrete should borrow their disciplined constraints, not their convenience features.
-
-### High-Leverage Priorities
-
-The highest-leverage improvements for Concrete are:
-
-1. Typed, compositional contracts
-2. Exhaustive and fail-visible verification-coverage accounting
-3. Core and the verification IR as semantic authorities
-4. Independently replayable evidence artifacts and proof-aware interfaces
-5. Typed evidence identities and separately degradable claim dimensions
-6. Total contract-callable functions and source-level specification power
-7. Declaration-isolated checking and non-vacuous assurance infrastructure
-8. Summary-based frontend (declaration-level cross-file info)
-9. ABI/layout subsystem clarity
-10. Audit-focused tooling, explainability, and compiler outputs
-11. Small but excellent standard library
-12. Explicit project/build model
-13. Proof-driven narrowing
-
-These are high leverage because they improve compiler structure, user trust, auditability, proof tractability, and future tooling options simultaneously.
-
-### Ordering Principle
-
-- Architecture before ornament
-- Tooling visibility before convenience syntax
-- ABI/layout credibility before feature expansion
-- Proof-friendly boundaries before richer abstractions
-- Faithfulness and artifact replay alongside each graduated contract family
-
-The [verification charter](../verification/VERIFICATION_CHARTER.md) defines the product-level
-direction these admission rules protect.
-The [evidence architecture](../verification/EVIDENCE_ARCHITECTURE.md) and
-[Verification IR](../verification/VERIFICATION_IR.md) define the representation and semantic
-boundaries these checks require.
-
-Concrete gets stronger by becoming sharper, not merely bigger.
+## Philosophy
+
+The design rules, the order that settles conflicts between them, the admission test every proposed
+feature passes and the list of what Concrete refuses are in [PHILOSOPHY.md](PHILOSOPHY.md). They
+were this document's "Principles" and "Design policy" sections until 2026-11-04.
 
 ## Language shape
 
 This section makes Concrete's long-term language shape decisions explicit instead of letting them
-emerge from local convenience. It draws the commitments of the sections above, the
-[language decisions](#language-decisions) below and [SAFETY.md](../verification/SAFETY.md) into a
+emerge from local convenience. It draws the commitments of the sections above,
+[PHILOSOPHY.md](PHILOSOPHY.md) and [SAFETY.md](../verification/SAFETY.md) into a
 single picture of what Concrete is becoming. The rules it commits to are stated in the language
 specification, [docs/spec](../spec/README.md).
 
@@ -956,158 +689,17 @@ Each pass has a clear input type, output type, and set of invariants. Early pass
 
 ### What Concrete Will Not Become
 
-These are standing constraints, not temporary limitations.
-
-- **Not a convenience-first language.** Verbosity is acceptable when it buys visibility.
-- **Not an inference-heavy language.** Types are written where they matter. No HM-style global inference.
-- **Not a metaprogramming language.** No source-generating macros, no derive
-  helpers, no local source generation. No comptime evaluation beyond a possible
-  future constants-only profile.
-- **Not an ecosystem-first language.** Language clarity comes before ecosystem breadth.
-- **Not a runtime-dependent language.** No GC, no async runtime, no thread pool. The runtime is minimal (startup, abort, optional allocator).
-
-### What May Change (With Evidence)
-
-These are areas where the current design may evolve, but only under explicit criteria.
-
-| Area | Current state | What would trigger change |
-|------|--------------|--------------------------|
-| Concurrency | Single-threaded | Real-program pressure showing structured concurrency is needed |
-| Freestanding mode | Hosted only | Stable stdlib boundary, clear core/hosted split |
-| Capability hiding | Caps always visible | Sustained ergonomic pain in real programs |
-| Source contracts | Basic `#[requires]` / `#[ensures]` admitted and obligation-backed | SPARK-class frame/dependency/ghost layer pulled by a flagship or external workload |
-| Derived equality | Manual only | Not planned as language machinery; external generators must emit reviewable source |
-| Package model | Single-file/lakefile | Real multi-package projects written |
-
-### Shape Principles
-
-1. **Features must earn admission.** The default answer to "should we add X?" is "not yet." See [Design policy](#design-policy).
-2. **Removals are improvements.** Making the language smaller (removing `main!()`, narrowing `trusted`) makes it more coherent.
-3. **Constraints compound.** Each "no" decision makes the remaining language easier to verify, teach, and audit.
-4. **Real programs test shape.** The language shape should be validated by writing serious programs (Phase H), not by thought experiments alone.
-5. **Document "no" decisions.** A rejected feature with a recorded rationale is more valuable than a feature added without one. See [Language decisions](#language-decisions).
+The standing refusals, each with its reason and the roadmap condition under which it reopens, are
+in [PHILOSOPHY.md, What Concrete refuses](PHILOSOPHY.md#what-concrete-refuses).
 
 ## Language decisions
 
-This section records first-class "no" and "not yet" decisions for Concrete. These are not gaps or missing features. They are deliberate choices that shape the language.
+This section records project commitments that shape the language and its evidence. The refusals
+("no" and "not yet") that used to be listed here are in
+[PHILOSOPHY.md, What Concrete refuses](PHILOSOPHY.md#what-concrete-refuses); the language rules
+the owner decided are in [decisions.md](../spec/decisions.md).
 
-Every entry records what was decided, why, and what Concrete does instead. Permanent decisions are load-bearing constraints the verification and auditability stories depend on. Deferred decisions are not rejected, just sequenced.
-
-### Permanent Decisions
-
-These are structural constraints. Reversing any of them would require rethinking the verification story.
-
-#### No closures
-
-**Status:** Decided (2026-03-08)
-**Detail:** [../research/language/no-closures.md](../../research/language/no-closures.md)
-
-Closures bundle code and hidden captured data into a single opaque value. This violates three invariants: all code paths known at compile time, no hidden control flow, no hidden data flow.
-
-**What Concrete does instead:**
-- Function pointers (no capture, C-style) for callbacks
-- Monomorphized generics for map/filter/fold patterns
-- Struct of function pointers for multi-method pluggable interfaces
-- Enums for closed dispatch
-
-**What you lose:** Inline anonymous logic. You must define a named function.
-
-#### No trait objects
-
-**Status:** Decided (2026-03-08)
-**Detail:** [../research/language/no-trait-objects.md](../../research/language/no-trait-objects.md)
-
-Trait objects (`dyn Trait`) hide dispatch behind an opaque vtable at runtime. This violates: all code paths known at compile time, no hidden control flow.
-
-**What Concrete does instead:**
-- Enums for closed dispatch (exhaustiveness checked)
-- Monomorphized generics for compile-time dispatch
-- Function pointers for explicit indirect dispatch
-- Struct of function pointers for manual vtable (C pattern)
-
-**What you lose:** Open extension by downstream code. Users cannot add new variants to your enum without modifying the definition.
-
-#### No source-generating macros
-
-**Status:** Permanent
-**Detail:** [../research/meta/candidate-ideas.md](../../research/meta/candidate-ideas.md) (rejected candidates section)
-
-Source-generating macros destroy file-local parsing, couple early phases to late semantic information, and make audit output unreliable. They violate phase separation and locality.
-
-**What Concrete does instead:** Monomorphized generics, ordinary functions,
-explicit stdlib APIs, and external code generation as a build step whose output
-is audited as ordinary source. There are no derive helpers, proc macros,
-syntax macros, or compile-time source generation inside the language.
-
-#### No hidden dynamic dispatch
-
-**Status:** Decided (2026-03-09)
-
-All dispatch in Concrete is either statically resolved (monomorphization) or explicitly indirect (typed function pointers). There is no mechanism where `x.method()` can silently become a runtime vtable lookup.
-
-#### No postfix error-propagation operator
-
-**Status:** Decided (2026-09-08)
-
-Concrete has `Result<T, E>` but no postfix `?` operator. Recoverable failure is propagated with an
-exhaustive `match`: the success arm yields the payload and the error arm explicitly returns
-`Result::Err`. Cross-type propagation performs its conversion in that visible error arm.
-
-The syntax was previously implemented, then removed. Its one-character spelling hid a function
-exit at an expression site and made cleanup and authority review depend on remembering a
-desugaring. That trade is especially weak for model-authored code, where generating explicit arms
-is cheap and reviewing them is the expensive part. Concrete keeps `Result` and its ordinary library
-combinators; it rejects implicit propagation, implicit error conversion, implicit drop, and hidden
-capability use.
-
-The lexer may continue recognizing `?` solely to issue a targeted rejection diagnostic. Recognition
-for diagnostics does not make it part of the grammar.
-
-#### No inference-heavy abstraction layers
-
-**Status:** Decided (2026-03-09)
-
-Concrete does not have type inference beyond local let-binding inference. No HM-style global inference, no implicit conversions, no implicit trait resolution beyond monomorphization. The cost: more type annotations. The benefit: every type is visible where it matters, diagnostics have clear ownership, and the compiler frontend stays phase-separated.
-
-#### No lexical value shadowing
-
-**Status:** Decided (2026-07-25); enforced by exit 2i (R-0500, superseding
-[ROADMAP R-0435](ROADMAP_TASKS.md#task-r-0435)): SCOPE-1@1, E0301, MEMORY_SEMANTICS §15.4.
-
-A new local value binding may not reuse the spelling of another local value
-binding visible along its lexical scope chain. The rule covers parameters,
-`let` declarations, pattern and loop binders, and borrow-block value/region
-binders. It rejects `let s = transform(s)` as a second binding even when the RHS
-consumes the old value.
-
-Assignment is different: it evolves one existing place rather than introducing
-a binding. A `mut` linear place may be rebound after its old value is consumed,
-so `acc = f(acc, x)` remains the ordinary fold/accumulate form. Assigning while
-the old value is live remains E0219. The invariant is:
-
-> One lexical name, one binding; at most one live resource in a linear place.
-
-Sibling match arms may use the same binder spelling because neither is visible
-from the other. A declaration executed repeatedly by a loop remains one lexical
-binding. Field labels, type names, traits, and modules are separate namespaces;
-top-level functions, imports, and intrinsics require a separate namespace
-decision rather than an accidental expansion of this one.
-
-**Why:** the ban is an auditability and human-identity choice, not a claim that
-shadowing is inherently memory-unsafe. Bug 045 was a compiler identity defect
-and remains fixed at the root by Elab alpha-renaming. That defense stays
-mandatory under [principle 12](#principles); rejecting the source spelling
-does not authorize later passes to recover identity from strings.
-
-Pattern-binder renaming must land before enforcement because `Option` and
-`Result` both use a payload field named `value`; nested patterns need an explicit
-spelling such as `Variant { value: inner }`.
-
-**Superseded history:** an earlier same-day decision said “shadowing stays
-legal” and retired R-0435. That decision answered whether shadowing caused bug
-045, not whether it belongs in an audit-first source language. It was superseded
-after the intended language preference was clarified. The changelog retains the
-record; R-0435 is reopened, not reused.
+### Recorded commitments
 
 #### Evidence is multidimensional, not a total ladder
 
@@ -1168,117 +760,21 @@ informational benchmark scripts cannot substantiate it.
 
 #### Trusted means pointer containment only
 
-**Status:** Decided (2026-03-15)
+**Status:** Decided (2026-03-15); the current rule is [TRUST-5](../spec/trusted.md#TRUST-5), with
+the [authority rules](../spec/decisions.md#decided-2026-11-02-authority).
 
-`trusted` permits exactly four pointer-level operations (arithmetic, deref, assign, cast) without `with(Unsafe)`. It does not suppress capabilities, does not permit extern calls, does not relax linearity. See [SAFETY.md](../verification/SAFETY.md).
-
-### Deferred Decisions
-
-These are not rejected. They are explicitly sequenced as "not yet" to avoid premature complexity.
-
-#### `with(Std)` in high-integrity profiles — pending
-
-**Status:** Pending; owned by [ROADMAP R-0441](ROADMAP_BACKLOG.md#task-r-0441).
-
-Current profiles accept `with(Std)`. Rejecting the broad alias in a
-high-integrity profile is the preferred proposal, but it is not yet a language
-or profile guarantee. R-0441 must ratify either that restriction or an exact
-transitive-use budget before changing accepted programs.
-
-#### Freestanding / no-std mode — not yet
-
-**Status:** Deferred
-**Detail:** [../research/stdlib/no-std-freestanding.md](../../research/stdlib/no-std-freestanding.md)
-
-A freestanding mode (no libc, no hosted stdlib, explicit allocator) would be valuable for embedded, kernel, and audit-critical targets. Deferred because the hosted stdlib boundary is not yet stable enough. The capability system and explicit allocation model make this easier to add later.
-
-**Prerequisite:** Stable hosted stdlib/runtime boundary, clear core-vs-hosted module split.
-
-#### Capability hiding in trusted wrappers — not yet
-
-**Status:** Deferred
-
-A mechanism where a trusted wrapper could absorb `with(Unsafe)` and expose only `with(Alloc)` to callers. Currently, capabilities are always visible in signatures. This would reduce signature noise for stdlib consumers but adds semantic complexity (callers cannot see what authority the wrapper actually uses).
-
-**Prerequisite:** Sustained real-program pressure testing to determine if the ergonomic cost is real.
-
-#### Concurrency — not yet
-
-**Status:** Deferred
-**Detail:** [../research/stdlib/concurrency.md](../../research/stdlib/concurrency.md)
-
-Concrete should only broaden concurrency once it can do so without importing async fragmentation and hidden runtime culture. The current implementation is single-threaded; the planned direction is explicit, threads-first concurrency with structured long-term evolution. No async/await, no goroutines, no thread pool runtime.
-
-**Prerequisite:** Language surface and safety model stable enough that concurrency does not distort them.
-
-#### Source contracts — admitted; SPARK-class contract depth not yet
-
-**Status:** Basic source contracts admitted; deeper assurance layer deferred
-**Detail:** [../research/language/pre-post-conditions.md](../../research/language/pre-post-conditions.md)
-
-Basic source contracts (`#[requires]` / `#[ensures]`) are now part of Concrete's
-language surface. They are allowed because they lower into obligations and
-evidence classes; they are not decorative comments. The anti-feature remains
-unchecked contracts that look like guarantees without producing a ledger fact,
-policy result, report entry, or replay command.
-
-The deferred part is the SPARK-class assurance layer: loop
-invariants/variants as a mature authoring UX, frame/read/write contracts,
-dependency-flow contracts, ghost/spec erasure discipline, and package/release
-evidence summaries. See [SPARK_CLASS_ASSURANCE.md](../verification/SPARK_CLASS_ASSURANCE.md)
-and ROADMAP old Phase 12 #19 / old Phase 13 #16a.
-
-**Prerequisite for the deferred layer:** a workload or flagship that needs
-frame/dependency/ghost facts, plus gates proving those facts are reported
-through the existing obligation/evidence ledger rather than a parallel system.
-
-#### Derived structural equality — not planned
-
-**Status:** Not planned as a language feature
-**Detail:** [../research/language/derived-equality-design.md](../../research/language/derived-equality-design.md)
-
-Concrete has no derive mechanism. Equality for structs is written explicitly or
-provided by ordinary library functions. External generators may produce source
-files, but their output is reviewed and gated like any other source.
-
-#### Package/dependency model — not yet
-
-**Status:** Deferred
-**Detail:** [../research/packages-tooling/package-model.md](../../research/packages-tooling/package-model.md)
-
-A real package manager and dependency system. Deferred until the language surface is stable and real programs have been written to validate the model.
-
-#### Broad in-source conditional compilation — not yet
-
-**Status:** Deferred
-
-Concrete needs target-specific code for hosted/freestanding builds, OS-specific
-FFI, and stdlib splitting. The default design should be module/file selection
-through `Concrete.toml` target profiles, not a broad `#[cfg]` language embedded
-throughout source files.
-
-**Why not broad cfg now:** in-source conditional compilation can hide control
-flow, authority, target assumptions, and proof/audit differences behind build
-configuration. That is macro-adjacent complexity and works against Concrete's
-locality and auditability goals.
-
-**What Concrete should do first:**
-- select source roots/modules by target profile and platform in `Concrete.toml`;
-- report selected and excluded modules in audit output;
-- make hosted/freestanding stdlib splits visible in the project model;
-- add only narrow, audit-visible `cfg` attributes later if module/file
-  selection proves insufficient.
-
-**Prerequisite:** stable project model, target profiles, hosted/freestanding
-stdlib split, and audit output that can explain which target-specific code was
-selected.
+`trusted` is an audited containment boundary for pointer-level operations and foreign calls behind
+a safe API. It absorbs `Unsafe` and nothing else: it never hides an operational capability and never
+relaxes linearity. See [SAFETY.md](../verification/SAFETY.md).
 
 ### How to add a new decision
 
 1. Write a research note in `research/` with the full analysis (what, why, alternatives, precedent).
-2. Add an entry to this section with status, rationale summary, and link to the research note.
-3. If permanent: explain what invariant it preserves and what Concrete does instead.
-4. If deferred: explain why "not yet" and what the prerequisite is.
+2. A language rule is an owner decision: it is recorded in [decisions.md](../spec/decisions.md).
+3. A refusal is added to [PHILOSOPHY.md](PHILOSOPHY.md#what-concrete-refuses), Permanent with its
+   reason or with the roadmap condition under which it reopens.
+4. Any other project commitment is added to this section with its status, rationale summary and
+   research link.
 
 ## Related documents
 
