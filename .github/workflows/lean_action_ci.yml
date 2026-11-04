@@ -75,6 +75,10 @@ jobs:
       - name: "Landing script (trains resolve only generated views and ledgers; refusals hold)"
         run: bash scripts/tests/check_landing_script.sh
 
+      # Build-free: RETENTION.tsv names every asset with a disposition and a deletion criterion (R-0562).
+      - name: "Retention manifest (every asset has a row; negative controls)"
+        run: bash scripts/tests/check_retention_manifest.sh
+
       # Build-free: drives the landing bot (and the train script under it) against a throwaway repository.
       - name: "Landing bot (ready = clean review + passing gates at the head; rule-first order; red member ejected)"
         run: bash scripts/tests/check_landing_bot.sh

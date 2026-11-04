@@ -1,0 +1,47 @@
+# Root retention manifest (ROADMAP R-0562). One row per asset group of the tree before the legacy/ move.
+# disposition: retained = stays live at the root; migrate = moves to legacy/ and returns as slices need it;
+# archived = moves to legacy/ and stays readable, not run; retire = the old pipeline, deleted at B3.
+# Deleting a path under legacy/ is allowed only when its row's deletion criterion holds. FIRST DRAFT, 2026-11-04,
+# from the tree at b78fff1a5; the owner approves the inventory with the move (R-0558).
+path	kind	disposition	destination	owner	deletion_criterion
+README.md	doc	retained	README.md (rewritten for the new root)	R-0558	never; rewritten at the move
+ROADMAP.md	plan	retained	ROADMAP.md	R-0558	never
+docs/project/AGENTS.md	process	retained	AGENTS.md (root; CLAUDE.md points to it)	R-0558	never
+CLAUDE.md	process	retained	CLAUDE.md (pointer to AGENTS.md)	R-0558	never
+LICENSE	legal	retained	LICENSE	R-0558	never
+CHANGELOG.md	history	archived	legacy/CHANGELOG.md; the root starts a new empty CHANGELOG.md with a transition entry naming the tag	R-0558	never deleted; stays readable in legacy/ after B3
+changelog.d	history	archived	legacy/changelog.d; the root starts an empty changelog.d	R-0558	never deleted with the pipeline; folded into legacy/CHANGELOG.md history
+required-checks.txt	landing	retained	required-checks.txt	R-0563	never; rewritten when the new root's CI replaces the old jobs
+RETENTION.tsv	landing	retained	RETENTION.tsv	R-0562	never; survives B3
+.github	ci	retained	rewritten for the new root; the old workflows move to legacy/.github and are not run	R-0563	old workflows: retire at B3
+.githooks	landing	retained	.githooks (pre-push, re-pointed at the new gate set)	R-0563	never
+.claude	.claude skills	retained	.claude (skills re-pointed at moved paths)	R-0558	never
+.gitignore .gitattributes .envrc	repo	retained	root	R-0558	never
+scripts/land	landing	retained	scripts/land	R-0563	never
+scripts/review	landing	retained	scripts/review	R-0563	never
+scripts/push-both.sh scripts/worktree-new.sh	landing	retained	scripts/	R-0563	never
+scripts/oracle	oracle	retained	scripts/oracle (ORACLE.lock, build.sh, run.sh)	R-0564	when the differential no longer uses the legacy oracle (after D)
+docs/project/LANDING.md docs/project/SELF_HOSTED_RUNNERS.md	process	retained	docs/	R-0563	never
+docs/project/PHILOSOPHY.md	vision	retained	docs/PHILOSOPHY.md	R-0558	never
+docs/spec/decisions.md	decisions	retained	docs/decisions.md	R-0558	never
+docs/archive/roadmap-2026-11	plan history	retained	docs/archive/roadmap-2026-11 (with task_disposition.tsv)	R-0558	never
+docs/bugs	bug ledger	migrate	legacy/docs/bugs; the root starts the minimal issue record, then the ledger by compiler	R-0561	each record retired with the old implementation keeps reproducer, ruling and structural class in the new ledger; deletion only after R-0561 closes
+Concrete Main.lean Concrete.lean Browser.lean	old compiler	retire	legacy/ (the oracle builds from the tag, not from here)	R-0558	B3: after the totality audit (R-0553) and slice-1 qualification (B2)
+lakefile.toml lake-manifest.json lean-toolchain flake.nix flake.lock Makefile	build	retire	legacy/; the root gets new build files for ConcreteSpec and the new compiler	R-0558	B3, with the old pipeline
+scripts/tests	old gates	retire	legacy/scripts/tests (frozen, never run)	R-0498	B3; any gate idea a new slice needs is rewritten against the new tree, with its mutation (R-0498)
+scripts/gen scripts/ci scripts/spec scripts/tools scripts/dev scripts/reduce scripts/README.md scripts/check_ll1.* scripts/bv_capture_solver.sh	old tooling	retire	legacy/scripts	R-0558	B3, unless a slice task pulls a tool back first
+scripts/browser	website tooling	migrate	legacy/scripts/browser; the frozen browser bundle is built from the tag	R-0565	after the site is built from the new tree and switched
+scripts/fuzz	service	archived	legacy/scripts/fuzz; the fuzz farm stops	R-0272	after R-0272 restarts fuzzing against the new compiler, seeded from the archived ci-3 corpus
+scripts/perf	service	archived	legacy/scripts/perf; perf tracking stops (history archived on concrete-ci-2)	R-0550	after R-0550 sets new baselines
+scripts/queue scripts/status	service	archived	legacy/scripts; the work-queue dispatcher and status page stop	R-0558	returns only with a roadmap task; deleted at B3 otherwise
+tests/programs tests/regressions tests/golden tests/wrong-code tests/codegen tests/invalid_programs	corpus	migrate	legacy/tests; each slice brings back the programs its rules cover as conformance examples	R-0425	after every program is migrated, recorded as covered by a rule, or recorded as retired with a reason (R-0491)
+tests/fixtures tests/oracle tests/perf tests/rules tests/showcase tests/README.md	old test support	retire	legacy/tests	R-0558	B3
+examples	corpus	migrate	legacy/examples; examples return as the language they use is specified	R-0425	after each example is ported, or retired with a reason
+std	library	migrate	legacy/std; std returns module by module with its contracts and regressions	R-0561	after each module is ported or retired; std defects move with it
+proofs	proofs	migrate	legacy/proofs; DesignExamples inform ConcreteSpec, flagship proofs return with their slice	R-0555	after the matching Lean rules and theorems exist in ConcreteSpec
+docs/spec	prose spec	archived	legacy/docs/spec (non-normative once the Lean rules exist)	R-0555	never deleted with the pipeline; each chapter is retired as its Lean rules land
+docs/.gitkeep docs/book docs/compiler docs/platform docs/stdlib docs/verification docs/project docs/archive docs/README.md	docs	archived	legacy/docs; a page returns when a task needs it	R-0558	never deleted with the pipeline
+site	website	migrate	legacy/site; the last deployment stays live, labelled as the frozen compiler	R-0565	after the new site builds from the new tree and switches
+grammar	grammar	migrate	legacy/grammar; the new grammar is derived from ConcreteSpec	R-0500	after the slice grammar in ConcreteSpec covers it
+editor	tooling	archived	legacy/editor	R-0558	returns with an editor task (phase G)
+research paper bench tasks logo.png	research	archived	legacy/	R-0558	never deleted with the pipeline
