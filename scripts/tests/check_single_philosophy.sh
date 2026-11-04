@@ -44,11 +44,11 @@ root, stubs = sys.argv[1], set(sys.argv[2].split())
 FORBIDDEN = re.compile(r"(?:core |concrete |design )?principles|design polic(?:y|ies)|anti[- ]?features?(?:\b.*)?")
 atx = re.compile(r"^ {0,3}(#{1,6})(?:\s+(.*?))?\s*$")
 setext = re.compile(r"^ {0,3}(=+|-+)\s*$")
-fence_open = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
+fence_open = re.compile(r"^ {0,3}(\x60{3,}|~{3,})(.*)$")
 
 def norm(t):
     t = re.sub(r"\s+#+\s*$", "", t)                # closing hashes of an ATX heading
-    t = re.sub(r"[*_`]", "", t).strip().lower().rstrip(":.")
+    t = re.sub(r"[*_\x60]", "", t).strip().lower().rstrip(":.")
     return re.sub(r"^\d+(\.\d+)*\.?\s+", "", t)    # a numbered heading "3. Principles"
 
 def headings(path):
@@ -57,13 +57,13 @@ def headings(path):
     for n, line in enumerate(open(path, encoding="utf-8"), 1):
         line = line.rstrip("\n")
         if fence:
-            m = re.match(r"^ {0,3}(`{3,}|~{3,})\s*$", line)
+            m = re.match(r"^ {0,3}(\x60{3,}|~{3,})\s*$", line)
             if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= fence[1]:
                 fence = None
             prev = None
             continue
         m = fence_open.match(line)
-        if m and not (m.group(1)[0] == "`" and "`" in m.group(2)):
+        if m and not (m.group(1)[0] == "\x60" and "\x60" in m.group(2)):
             fence, prev = (m.group(1)[0], len(m.group(1))), None
             continue
         h = atx.match(line)
@@ -139,13 +139,13 @@ control "a '### Design policy' section in a new doc" compiler/NEW_DOC.md '# New\
 control "an '## Anti-Features: what we refuse' heading" stdlib/STDLIB.md '\n## Anti-Features: what we refuse\n' hit
 control "a numbered '## 4. Core Principles' heading" platform/FFI.md '\n## 4. Core Principles\n' hit
 control "a domain-qualified '## Pipeline principles' heading" compiler/NEW_DOC.md '# New\n\n## Pipeline principles\n' clean
-control "a '## Principles' line inside a fenced block" compiler/NEW_DOC.md '# New\n\n```md\n## Principles\n```\n' clean
+control "a '## Principles' line inside a fenced block" compiler/NEW_DOC.md '# New\n\n\x60\x60\x60md\n## Principles\n\x60\x60\x60\n' clean
 control "a '## Principles' section under docs/archive/" archive/OLD.md '# Old\n\n## Principles\n' clean
 control "a setext 'Principles' heading" compiler/NEW_DOC.md '# New\n\nPrinciples\n----------\n' hit
 control "a setext 'Design policy' heading" compiler/NEW_DOC.md '# New\n\nDesign policy\n=============\n' hit
 control "content restored to the ANTI_FEATURES.md stub" project/ANTI_FEATURES.md '\n## Hidden Runtime Models\n\nNo GC.\n' hit
-control "a '## Principles' line after a short fence inside a longer one" compiler/NEW_DOC.md '# New\n\n````md\n```\n## Principles\n````\n' clean
-control "a '## Principles' line after a fence-like line with an info string" compiler/NEW_DOC.md '# New\n\n```md\n```not-a-close\n## Principles\n```\n' clean
+control "a '## Principles' line after a short fence inside a longer one" compiler/NEW_DOC.md '# New\n\n\x60\x60\x60\x60md\n\x60\x60\x60\n## Principles\n\x60\x60\x60\x60\n' clean
+control "a '## Principles' line after a fence-like line with an info string" compiler/NEW_DOC.md '# New\n\n\x60\x60\x60md\n\x60\x60\x60not-a-close\n## Principles\n\x60\x60\x60\n' clean
 control "a thematic break after a paragraph that is not a heading" compiler/NEW_DOC.md '# New\n\nSome text.\n\n---\n' clean
 
 if [ "$FAIL" -ne 0 ]; then

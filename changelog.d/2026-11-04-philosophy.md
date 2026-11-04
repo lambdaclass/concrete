@@ -28,3 +28,8 @@ CLAUDE.md say design questions are decided by it. Domain documents that used a g
 `scripts/tests/check_single_philosophy.sh`, run by `check_docs_drift.sh`, refuses a generic
 principles, design-policy or anti-features heading in any docs/ file other than PHILOSOPHY.md
 (docs/archive/ and the moved stubs excepted), with negative controls on a copy of docs/.
+
+Integrated review (Codex, 2026-11-04): the phase E passage no longer lists two-state contracts or
+checked totality. It states the decided rules (OD115–OD117) and labels the frame, entry-state and
+termination wording as decision row P18, pending. The default-arguments refusal keeps its current
+reopening rule and labels the proposed Permanent status as row P17a, pending.
