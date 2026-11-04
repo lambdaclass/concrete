@@ -194,11 +194,31 @@ if python3 "$QD/build_queue.py" --root "$TMP/owner-amend" > "$TMP/owner-amend.js
   ok "a task file cannot lift an owner block (only done can)"
 else no "a task file lifted an owner block"; fi
 mkdir -p "$TMP/badsyntax"; cp -R "$SRC/." "$TMP/badsyntax/"
-sed -i 's/| R-0600 | the first half | done | R-0601 |/| R-0600 | the first half | done | after the other half |/' "$TMP/badsyntax/ROADMAP.md"
+# R-0604 is not queued: every row's cell is read, not only the queued ones.
+sed -i 's/| R-0604 | not in the queue | done | — |/| R-0604 | not in the queue | done | after the other half |/' "$TMP/badsyntax/ROADMAP.md"
 rc=0; python3 "$QD/build_queue.py" --root "$TMP/badsyntax" > /dev/null 2> "$TMP/badsyntax.err" || rc=$?
-[ "$rc" = 2 ] && grep -q "depends on 'after the other half'" "$TMP/badsyntax.err" \
-  && ok "an unreadable 'depends on' item exits 2 instead of reading as no prerequisite" \
+[ "$rc" = 2 ] && grep -q "R-0604 depends on 'after the other half'" "$TMP/badsyntax.err" \
+  && ok "an unreadable 'depends on' item, even on an unqueued row, exits 2 instead of reading as no prerequisite" \
   || no "unreadable depends item: exit $rc, $(cat "$TMP/badsyntax.err")"
+mkdir -p "$TMP/unknownid"; cp -R "$SRC/." "$TMP/unknownid/"
+sed -i 's/| R-0600 | the first half | done | R-0601 |/| R-0600 | the first half | done | R-0601, R-0999 |/' "$TMP/unknownid/ROADMAP.md"
+rc=0; python3 "$QD/build_queue.py" --root "$TMP/unknownid" > /dev/null 2> "$TMP/unknownid.err" || rc=$?
+[ "$rc" = 2 ] && grep -q "R-0600 depends on R-0999, which is neither a task" "$TMP/unknownid.err" \
+  && ok "a dependency on a task that is neither live nor completed exits 2 (the dispatcher would count it met)" \
+  || no "unknown dependency id: exit $rc, $(cat "$TMP/unknownid.err")"
+mkdir -p "$TMP/completedid"; cp -R "$SRC/." "$TMP/completedid/"
+sed -i 's/| R-0600 | the first half | done | R-0601 |/| R-0600 | the first half | done | R-0601, R-0998 |/' "$TMP/completedid/ROADMAP.md"
+mkdir -p "$TMP/completedid/changelog.d"; printf '### Completed Task R-0998\n\ncontrol\n' > "$TMP/completedid/changelog.d/control.md"
+if python3 "$QD/build_queue.py" --root "$TMP/completedid" > "$TMP/completedid.json" 2> "$TMP/completedid.err" \
+   && [ "$(python3 -c 'import json,sys; print(" ".join({t["id"]: t for t in json.load(open(sys.argv[1]))["tasks"]}["R-0600"]["depends"]))' "$TMP/completedid.json")" = R-0601 ]; then
+  ok "a dependency on a completed task is met and dropped"
+else no "completed dependency: $(cat "$TMP/completedid.err")"; fi
+mkdir -p "$TMP/supplied"; cp -R "$SRC/." "$TMP/supplied/"
+printf -- '---\nid: R-0604\ntitle: supplied by a task file\n---\n/roadmap-item R-0604\n' > "$TMP/supplied/tasks/R-0604.md"
+if python3 "$QD/build_queue.py" --root "$TMP/supplied" > "$TMP/supplied.json" 2> "$TMP/supplied.err" \
+   && [ "$(python3 -c 'import json,sys; print(" ".join({t["id"]: t for t in json.load(open(sys.argv[1]))["tasks"]}["R-0602"]["blocked_on"]))' "$TMP/supplied.json")" = "owner: the name" ]; then
+  ok "a prerequisite supplied by a task file is no longer unqueued; the owner block stays"
+else no "supplied prerequisite: $(cat "$TMP/supplied.err" "$TMP/supplied.json" | head -5)"; fi
 [ "$(qget R-0600 cycle)" = True ] && [ "$(qget R-0601 cycle)" = True ] && ok "a dependency cycle is marked" || no "cycle not marked"
 [ "$(qget R-0501 disposition)" = in-flight ] && ok "tasks/R-0501.md marks the sourced task in flight" || no "disposition not applied"
 [ "$(qget bug-201 areas)" = "mod:Lower rule:R-0501" ] && ok "bug areas come from the structural owner" || no "bug-201 areas: $(qget bug-201 areas)"

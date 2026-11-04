@@ -15,9 +15,10 @@ edits it. Each source owns its facts; this script only reads them.
             owner" sections (the whole record when it has neither).
   roadmap   ROADMAP.md: the task rows of phase T (development throughput) in their order, then every
             R-NNNN named in the queue's rows, in row order. A task row's "depends on" column gives
-            its dependencies, item by item: a task; a queue row (its tasks); a phase letter (that
-            phase's tasks, the task itself excluded); `owner: <decision>`; or `—`. Any other item
-            exits 2. A task that waits on an owner decision, or on a live task that is not queued
+            its dependencies, item by item: a live task or a completed one (a `### Completed Task`
+            heading in CHANGELOG.md or changelog.d/); a queue row (its tasks); a phase letter (that
+            phase's tasks, the task itself excluded); `owner: <decision>`; or `—`. Every row's cell
+            is read, queued or not, and any other item exits 2. A task that waits on an owner decision, or on a live task that is not queued
             (the dispatcher counts an unqueued dependency as met), gets `disposition: skip` and
             `blocked_on` naming why; a task file cannot dispatch it, only dispose it `done`. A task
             named in a queue row but without a task row is not queued.
@@ -187,10 +188,20 @@ def task_rows(roadmap):
     return rows
 
 
+def completed_tasks(root):
+    """Task ids the changelog records completed, pending fragments included."""
+    done = set()
+    for f in [os.path.join(root, "CHANGELOG.md")] + sorted(glob.glob(os.path.join(root, "changelog.d", "*.md"))):
+        if os.path.exists(f):
+            done |= set(re.findall(r"^### Completed Task (R-\d{4})\s*$", read(f), re.M))
+    return done
+
+
 def roadmap_tasks(root, mods):
+    """(tasks, live): the queued roadmap tasks, and every live task id in ROADMAP.md."""
     path = os.path.join(root, "ROADMAP.md")
     if not os.path.exists(path):
-        return []
+        return [], set()
     rm = read(path)
     # Since 2026-11-04 ROADMAP.md holds one row per live task under "## Tasks" (objective, done when,
     # depends on); the old task register is archived. Without those rows every queued task would be
@@ -205,6 +216,7 @@ def roadmap_tasks(root, mods):
             cells = [c.strip() for c in line.strip().strip("|").split("|")]
             if len(cells) == 4 and re.fullmatch(r"[A-GT][1-9][0-9]*", cells[0]):
                 qrows[cells[0]] = RID.findall(cells[2])
+    completed = completed_tasks(root)
     tasks, seen = [], set()
 
     def resolve(rid, cell):
@@ -217,7 +229,11 @@ def roadmap_tasks(root, mods):
             if re.fullmatch(r"owner: \S.*", item):
                 owner.append(item[len("owner: "):])
             elif re.fullmatch(r"R-\d{4}", item):
-                deps.append(item)
+                if item not in rows and item not in completed:
+                    die(f"{path}: {rid} depends on {item}, which is neither a task in ROADMAP.md "
+                        f"nor completed in the changelog")
+                if item in rows:
+                    deps.append(item)
             elif item in qrows:
                 deps += qrows[item]
             elif re.fullmatch(r"[A-GT]", item) and any(r[0] == item for r in rows.values()):
@@ -227,12 +243,14 @@ def roadmap_tasks(root, mods):
                     f"with tasks, 'owner: <decision>' or '—'")
         return sorted(set(deps) - {rid}), owner
 
+    resolved = {rid: resolve(rid, row[3]) for rid, row in rows.items()}
+
     def add(rid, tier):
         if rid in seen or rid not in rows:
             return
         seen.add(rid)
         _, obj, done, deps_cell = rows[rid]
-        deps, owner = resolve(rid, deps_cell)
+        deps, owner = resolved[rid]
         # A row cites other tasks and documents; it touches its own rule and the compiler, script
         # and library files it names. Cited R-ids and docs are references, not areas.
         areas = {a for a in areas_of(obj + "\n" + done, mods)
@@ -253,13 +271,7 @@ def roadmap_tasks(root, mods):
     for ids in qrows.values():
         for rid in ids:
             add(rid, "roadmap")
-    # A dependency on a live task that is not queued is unmet, but the dispatcher would count it as
-    # met: block the dependent instead.
-    for t in tasks:
-        missing = [d for d in t["depends"] if d in rows and d not in seen]
-        if missing:
-            t.setdefault("blocked_on", []).extend("unqueued " + d for d in missing)
-    return tasks
+    return tasks, set(rows)
 
 
 # ---------------------------------------------------------------- fuzz-farm findings
@@ -330,7 +342,8 @@ def parse_task_file(path, root):
 
 def build(root, fuzz_dir):
     mods = modules(root)
-    sourced = roadmap_tasks(root, mods) + bug_tasks(root, mods) + fuzz_tasks(fuzz_dir, mods)
+    rtasks, live = roadmap_tasks(root, mods)
+    sourced = rtasks + bug_tasks(root, mods) + fuzz_tasks(fuzz_dir, mods)
     by_id = {}
     for t in sourced:
         by_id.setdefault(t["id"], t)
@@ -371,8 +384,17 @@ def build(root, fuzz_dir):
                 **({"branch": meta["branch"]} if "branch" in meta else {}),
             })
             by_id[meta["id"]] = explicit[-1]
+    # A dependency on a live roadmap task that is in no source (neither queued nor a task file) is
+    # unmet, and the dispatcher would count it as met: block the dependent. This is computed on the
+    # merged sources, so a prerequisite supplied by a task file (done or not) is a dependency again.
     # A block outlives a task file's amendment: only `done` (the work landed elsewhere) lifts it.
+    present = {t["id"] for t in sourced + explicit}
     for t in sourced:
+        if t["kind"] == "roadmap":
+            t["blocked_on"] = [b for b in t.get("blocked_on", []) if b.startswith("owner: ")] + \
+                ["unqueued " + d for d in t["depends"] if d in live and d not in present]
+            if not t["blocked_on"]:
+                del t["blocked_on"]
         if t.get("blocked_on") and t.get("disposition") != "done":
             t["disposition"] = "skip"
     seen, tasks = set(), []
