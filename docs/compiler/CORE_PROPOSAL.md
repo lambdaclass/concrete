@@ -5,10 +5,9 @@ decision rows (Q1.1–Q9.18) that Claude and Codex settled over three debate rou
 2026-11-04 and put before the owner on the decision page. Where this draft and a row
 differ, the row governs, and the draft's recommendation is superseded. Neither is
 decided until the owner answers. Rows that revise a decided rule say so (Q5.1 and Q5.4
-revise OD45 and OD87). The resolution round after Codex's final review replaces
-several rows with concrete rules, and those replace both the old rows and this draft.
-The rows are committed beside this draft when the owner answers them; until then they
-live on the decision page, and each section below names its governing rows.
+revise OD45 and OD87). The rows are committed beside this draft when the owner
+answers them. Until then they live on the decision page, and each section below names
+its governing rows.
 
 Status: draft for the owner's Core session. Nothing here is decided. The owner
 answers each question in the session of roadmap row A2; until then no work encodes
@@ -272,7 +271,7 @@ values-to-bytes lemma (A1 §1).
 - **(a) Syntactic:** infer a variable only where it stands alone as a whole set.
   Rejected: `{}` against `C + D` has the single solution `C = D = {}` but is refused,
   and `C` and `C + {}` would be treated differently.
-- **(b) Unique solution, else explicit (recommended).**
+- **(b) Unique solution, else explicit (the draft's original recommendation; superseded).**
 - **(c) Pick the least solution.** Rejected: the compiler would choose among answers.
 - **(d) Never infer.** Every call writes its capability arguments. This is the owner's
   stated leaning on 2026-11-04, and it **revises OD45 and OD87**, so it needs the
@@ -440,12 +439,17 @@ of successful compilations alone.
   binders. Each name is bound once; there is no shadowing in Core.
 - **Data.** Construct; flat destructure; flat `match` on an enum (nested patterns and
   `if` are elaborated to it); store to a place.
-- **Control.** `loop` with labelled `break`/`continue`, `return`, `abort`, and checked
-  primitive operations whose failure is a defined trap.
+- **Control.** `return`, `abort`, and checked primitive operations whose failure is a
+  defined trap. *Superseded:* this draft's labelled `loop` is replaced by row Q9.3,
+  which proposes OD47's `while` as the single Core loop, with resolved loop-exit
+  targets for `break` and `continue`. That proposal is pending the owner.
 - **Borrowing.** A scoped `borrow` of a place (shared or exclusive) and a scoped
   heap or array `open`, each binding a second-class reference or view for its block.
-- **Allocation.** Allocator operations, `*h` and `destroy` are typed primitives with
-  contracts, not syntax.
+- **Allocation.** Allocator operations and `*h` are typed primitives with contracts,
+  not syntax. *Superseded:* this draft also listed `destroy` as a primitive. Row Q9.6
+  proposes primitives only at irreducible boundaries (`*h`, raw allocation and
+  release, I/O). Under it, `destroy` resolves to the type's impl and runs that checked
+  body. That proposal is pending the owner.
 - **Calls.** Direct calls, function-pointer calls and primitive calls. Primitive calls
   come from one table covering externs, intrinsics and generated operations. Every call
   is checked against its capability set.
