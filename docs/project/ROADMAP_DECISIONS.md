@@ -40,7 +40,7 @@ roadmap is restructured around the new compiler. The language answers of the sam
 
 **New compiler decision, 2026-11-01 (owner):** the current compiler is not migrated to the decided
 language. A new compiler is written from the Lean definition, proof-first: a `ConcreteSpec` library
-(grammar, Core, semantic contract, judgments, elaborator, reference evaluator, examples, generator) and
+(grammar, Core, semantic contract, judgments, elaborator, reference evaluator, examples, generator ([revised 2026-11-04](#2026-11-04--lean-is-the-specification): the Lean definitions are the spec, and no prose is generated from them)) and
 a new lowering chain below Core. The current compiler is to be frozen and tagged `legacy-compiler-final`,
 used as a differential oracle (and, until replaced, by the site's browser compiler), and deleted from
 main when slice 1 works end to end. This changes the implementation strategy only; the Lean-only
@@ -54,7 +54,7 @@ pipeline, we could remove it and start from scratch". The plan is at the top of
 typing, ownership and effect rules, its execution semantics and the desugaring of every surface feature are
 Lean definitions, written in Lean from the start. The spec, its rule registry and the conformance oracle are
 generated from them, the reference interpreter is the Lean semantics itself (replacing `--interp`), and every other document
-cites the generated spec. This supersedes the prose-plus-Lean reading of the spec rewrite decision below.
+cites the generated spec ([revised 2026-11-04](#2026-11-04--lean-is-the-specification): the Lean definitions are the spec, and no prose is generated from them). This supersedes the prose-plus-Lean reading of the spec rewrite decision below.
 The same day, a research review (Codex: adopt with changes) set the order of the compiler proof: semantic
 contract, executable Core semantics, one end-to-end path, functional models replacing ProofCore,
 open-module correctness, ghost permissions for trusted code, SMT-checked lowering. Both are at the top of
@@ -63,7 +63,7 @@ open-module correctness, ghost permissions for trusted code, SMT-checked lowerin
 **Spec rewrite decision, 2026-11-01 (owner):** the owner chose to rewrite the specification around
 one formal source: a small Core whose surface features are defined by desugaring, and a single Lean
 definition from which the spec's formal parts, the reference interpreter, the conformance oracle and the
-proof definitions are generated (the WebAssembly SpecTec model). This is the most important work in row 0s.
+proof definitions are generated (the WebAssembly SpecTec model) ([revised 2026-11-04](#2026-11-04--lean-is-the-specification): the Lean definitions are the spec, and no prose is generated from them). This is the most important work in row 0s.
 Steps 3, 4, 6 and 8 of the spec plan are carried out through it. The plan is at the top of
 [ROADMAP.md](../../ROADMAP.md).
 
@@ -381,8 +381,6 @@ absorption inventory and the doc-links and docs-drift gates track this: no docum
 the spec owns, or describe a removed feature as current.
 ```
 
-<a id="2026-11-01--lean-as-the-only-source"></a>
-
 ### 2026-11-04 — Lean is the specification
 
 ```markdown
@@ -392,17 +390,19 @@ awkward, maybe we don't even need the text".
 
 - The Lean definitions are the normative text. Each rule is a readable Lean definition with its rule
   ID, a doc comment stating in plain words what it means, and its conformance examples.
-- No program generates `SPEC.md` or the chapters. This supersedes "Everything else is generated from
+- Nothing generates `SPEC.md` or the chapters from Lean. This supersedes "Everything else is generated from
   Lean" and steps 4–5 of the 2026-11-01 sequence: there is no prose generator and no generator
   correctness obligation. The prose chapters in `docs/spec` are retired slice by slice as their rules
   land in Lean, not regenerated. Where a criterion or acceptance artifact of earlier decisions names
   "generated chapters", read it as "the slice's Lean rules with doc comments and examples".
 - Derived machine views stay: the rule registry, IDs and manifests are generated from the Lean
   definitions and keep a staleness gate.
-- The book (`docs/book`) is the non-normative user guide; it teaches and links to the Lean rules,
-  and states no rule of its own.
+- The user guide (`site/content/guide`, which the website publishes) is non-normative; it teaches
+  and links to the Lean rules, and states no rule of its own.
 - The outside-reader test reads the Lean rules and their examples.
 ```
+
+<a id="2026-11-01--lean-as-the-only-source"></a>
 
 ### 2026-11-01 — Lean as the only source
 

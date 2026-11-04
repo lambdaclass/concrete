@@ -589,8 +589,8 @@ regression cases and controls of these tasks transfer here unless the reason ret
 For block scope/shadowing, match-binder positions/names, statement versus value position,
 sequential assignment in loop iterations, contextual literal types/ranges including signed minima,
 every cast-width pair, evaluation order, short-circuiting and second-class references, provide the
-Lean judgment/semantic clause, generated normative paragraph, accept/reject/trap examples and cited
-fixtures. Generator coverage meets pinned minima before dependent implementation advances; language
+Lean judgment/semantic clause with its plain-words doc comment, accept/reject/trap examples and cited
+fixtures. Example coverage meets pinned minima before dependent implementation advances; language
 rules link bidirectionally to semantic clauses as those clauses land.
 
 Use the recorded reference/scoping, evaluation/assignment and arithmetic policy decisions, including
