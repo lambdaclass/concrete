@@ -8,11 +8,11 @@ Roadmap task: $ARGUMENTS
 Rules: [docs/project/AGENTS.md](../../docs/project/AGENTS.md).
 
 1. **Read the task**: its row under `ROADMAP.md`'s "Tasks" (objective, done when, depends on), its
-   queue row, the binding rules at the top of `ROADMAP.md`, and the owner decisions in
+   queue row, the rules in force at the top of `ROADMAP.md` (and the records they link), and the owner decisions in
    `docs/spec/decisions.md`. Read the obligations it carries: the rows of
    `docs/archive/roadmap-2026-11/task_disposition.tsv` whose `destination` is `$ARGUMENTS`, and
    its own row there. The full old body, if any, is in that archive's `ROADMAP_TASKS.md` or
-   `ROADMAP_BACKLOG.md`; the roadmap row and the binding rules override it. If its prerequisites
+   `ROADMAP_BACKLOG.md`; the roadmap row and the rules in force override it. If its prerequisites
    have not landed, stop and report which.
 2. **Check nobody has it**: `git branch -r | grep -i <id or topic>`, and the "Implemented, not yet
    accepted" table. Continue an existing `wip/*` branch rather than starting a second one.

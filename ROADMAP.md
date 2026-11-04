@@ -1,14 +1,17 @@
 # Concrete Roadmap
 
 Concrete is a systems language with linear ownership, second-class references and explicit
-capabilities, verified from source to native code. Its specification is a Lean library,
-`ConcreteSpec`: readable definitions with plain-words doc comments and conformance examples. A new
-compiler is built from that library, proof first, one slice of the language at a time. Each slice
-runs natively, and its theorem is checked by the Lean kernel. The old compiler is frozen as
-`legacy-compiler-final`. It serves as a differential oracle until slice 1 is accepted, and is then
-deleted.
+capabilities. Its specification is a Lean library, `ConcreteSpec`: readable definitions with
+plain-words doc comments and conformance examples. A new compiler is built from that library, proof
+first, one slice of the language at a time, and each slice states the exact scope of its theorem.
+Slice 1's theorem covers its exact source down to BIR. Its native output is qualified by tests and
+labelled unverified; any claim about the native image is conditional on the LLVM, linker and image
+assumptions it lists. A proof that reaches native code is later work (phase E), not the first
+milestone. The old compiler is frozen as `legacy-compiler-final`. A pinned build of that tag is the
+differential oracle, and the old pipeline is deleted at B3.
 
-This file is the plan. It holds the binding rules, the phases, the queue and one row per live task.
+This file is the plan: the phases, the queue and one row per live task. It decides nothing. The
+rules below summarize decisions recorded elsewhere, and the linked record governs where they differ.
 The [2026-11 archive](docs/archive/roadmap-2026-11/README.md) holds the previous roadmap, its task
 register, its backlog and its decision log, all unchanged. Its
 [task disposition table](docs/archive/roadmap-2026-11/task_disposition.tsv) says what happened to
@@ -16,10 +19,10 @@ each of the 555 old task IDs: retained here, transferred with its obligations to
 deferred until a trigger, retired with a reason, or done. Archived IDs are never reused.
 `scripts/tests/check_roadmap.sh` checks this file against that table.
 
-## Binding rules
+## Rules in force
 
-These rules bind every task. Each links the dated record that holds its reasons. Language rules are
-not decided here: they are the owner decisions in [decisions.md](docs/spec/decisions.md#owner-decisions).
+Every task follows these rules. Each is a summary that links the dated record holding the rule and
+its reasons; this file holds no rule of its own. Language rules are not decided here: they are the owner decisions in [decisions.md](docs/spec/decisions.md#owner-decisions).
 The design rules (one form per situation, one owner per fact, the most transparent long-term option,
 verbosity that buys clarity) get one home in `PHILOSOPHY.md` when the `wip/philosophy` branch lands.
 
@@ -50,13 +53,21 @@ verbosity that buys clarity) get one home in `PHILOSOPHY.md` when the `wip/philo
    The compiler imports it and builds a proved lowering chain below Core. Slice 1 gets a BIR → LLVM
    printer, labelled unverified. The Lean Compiler Backend follows
    ([decision](docs/archive/roadmap-2026-11/ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)).
-4. **The old tree is legacy (owner, 2026-11-04).** Everything old moves under `legacy/` and stays
-   frozen at `legacy-compiler-final`. That covers the compiler, its scripts, tests, examples, std,
-   proofs, gates, docs, research, site and bug ledger. The root starts minimal (R-0558). A file comes
-   back from `legacy/` only when a slice needs it, in that slice's change. Legacy gates run only when
-   a change touches `legacy/`; otherwise they are reported as skipped, never as passed. Live tooling
-   stays live: landing, review, the hooks, CI and the changelog. `legacy/` is deleted at B3, after
-   the retention manifest (R-0562) is checked. Legacy evidence stays replayable from the tag.
+4. **The old tree is legacy (owner, 2026-11-04).** In one train, everything old moves under
+   `legacy/`: the compiler, its scripts, tests, examples, std, proofs, gates, docs, research, site
+   and bug ledger. `legacy/` is a byte-frozen snapshot of main's tree at the move commit. It is never
+   patched and never run, and one root check fails if any byte under it changes. Its gates are not
+   re-run: they were qualified at `legacy-compiler-final`, and its evidence stays replayable from that
+   tag. The differential oracle is built from the tag in its own isolated checkout, not from
+   `legacy/` (R-0564). The infrastructure for the new root is prepared and rehearsed before the move
+   (R-0563), and the move comes after (R-0558). The root starts minimal. A file comes back from
+   `legacy/` only when a slice needs it, in that slice's change. Live tooling stays live: landing,
+   review, the hooks, CI and the changelog. At B3 only the old pipeline (the compiler, its gates and
+   their scripts) is deleted. Retained assets (corpora, regressions, examples, std, the bug ledger,
+   the site and docs) stay archived in `legacy/` until they migrate. Each one leaves only when its
+   row in the root retention manifest `RETENTION.tsv` (R-0562) is resolved. That manifest and the
+   [task disposition table](docs/archive/roadmap-2026-11/task_disposition.tsv) live outside `legacy/`
+   and survive B3.
 5. **Authority uses permissions and values.** `with(...)` is compile-time permission, and linear values
    are the resources. An operation needs both. `main` consumes the target's grant values. Allocation
    takes an allocator value and can fail. Filesystem access goes through directory values
@@ -97,9 +108,14 @@ until the new compiler supports their constructs.
 
 ### Defect disposition rule
 
-Legacy-compiler defects are recorded with `compiler: legacy` and never repaired. They close when
-`legacy/` is deleted at B3 (R-0561). A legacy ruling that states language behaviour becomes a
-conformance example when its construct's slice lands. A new compiler's silent defect (wrong code, an
+From the first day of the new root, a minimal issue record holds every defect: ID, reproducer or
+evidence, owner, severity and closure condition. Spec, proof, launcher, CI and migration defects
+are filed there before slice 1 exists. Legacy-compiler defects are recorded with `compiler: legacy`
+and never repaired. When the old pipeline is deleted at B3 they become *retired with the old
+implementation*, never *fixed* (R-0561). Each keeps its reproducer, ruling and structural class.
+A defect the frozen browser compiler still shows stays visible while the site serves it. Std
+defects move with std as contracts and regressions. A legacy ruling that states language behaviour
+becomes a conformance example when its construct's slice lands. A new compiler's silent defect (wrong code, an
 unsound claim) is stopped at once by a repair or fail-closed containment. A loud one is filed, pinned
 and owned by the task that removes its structural class.
 
@@ -108,27 +124,28 @@ and owned by the task that removes its structural class.
 | phase | goal | done when |
 |---|---|---|
 | A. Core and theorem | Dispose of the spec audit. The owner decides the whole Core shape before implementation. State the semantic contract and the end-to-end theorem in Lean, and list the trusted base. | Core approved. Representative design proofs checked in Lean before Core freezes. The theorem, its holes and the trusted base on main. |
-| B. Slice 1 | `ConcreteSpec` and the new compiler for slice 1, from parsing to native code: scalars, `let`, the move and use-after-move refusal of an empty struct without `Copy` consumed by a struct-destructuring `let`, one checked operation, and a return or a defined trap. | The slice's rules are inductive judgments, independent of the checker and the elaborator, with proved correspondence. Every judgment, semantics and pass is total. Fuel exhaustion is distinct from divergence. The LLVM output is labelled unverified, and its assumptions are listed with the lexer, model-translation and native-image obligations. Minimal provenance accompanies the first authoritative proof claims. The examples pass through the Lean semantics and the native build. The theorem is proved. The outside-reader test passes on the Lean rules. Then `legacy/` is deleted. |
+| B. Slice 1 | `ConcreteSpec` and the new compiler for slice 1, from parsing to a native build: scalars, `let`, the move and use-after-move refusal of an empty struct without `Copy` consumed by a struct-destructuring `let`, one checked operation, and a return or a defined trap. | The slice's rules are inductive judgments, independent of the checker and the elaborator, with proved correspondence. Every judgment, semantics and pass is total. Fuel exhaustion is distinct from divergence. The theorem, exact-source component correctness down to BIR, is proved. The native build is qualified by tests, not proved: the LLVM output is labelled unverified, and its assumptions are listed with the lexer, model-translation and native-image obligations. A native-image claim, if any, is stated separately as conditional on those assumptions. Minimal provenance accompanies the first authoritative proof claims. The examples pass through the Lean semantics and the native build. The outside-reader test passes on the Lean rules. Then the old pipeline is deleted from `legacy/`. |
 | C. File-copy | Slices ordered by what a file-copy program needs: directories, `File`, `with(Fs)`, fallible operations, explicit cleanup on every error path, `defer`. Std, examples and tests come back as their constructs land. | The file-copy program, failure paths included, builds natively with its theorems. **0.1 is cut** with the supported subset, the unsupported constructs and the LLVM assumptions stated. |
 | D. Whole language | The remaining constructs as slices. The paused workloads resume as their constructs land. | Every construct of the decided language is a slice with Lean rules, and the conformance suite is complete. |
-| E. Verified growth | Proof-order items 4–8, the Lean Compiler Backend native path, the verified parser, typed and two-state contracts, totality and the proof library. | Each item's theorem holds, with its residual assumptions stated. |
+| E. Verified growth | Proof-order items 4–8, the Lean Compiler Backend native path, the verified parser, typed contracts, frame reasoning, termination proofs and the proof library. Contracts have no source `old` and no snapshot construct (OD117): a postcondition reaches the entry state only through an explicit Lean theorem. Spec functions are total (OD115). An ordinary function can get its own termination proof, and there is no total-function category (OD116). | Each item's theorem holds, with its residual assumptions stated. |
 | F. Evidence as a product | Provenance, the canonical verification task, receipts and an independent consumer, all on the new Core. | Receipt v1 frozen. |
 | G. Release and ecosystem | External users, flagships, packages, editor, incremental builds, 1.0. | External-user acceptance, package evidence, conformance, compatibility and maintenance commitments hold for the released subset. |
 | T. Development throughput | Beside the sequence: the minimal root, then faster landing, review and CI. | The [targets](#development-throughput) hold. |
 
 ## The queue
 
-**Active:** T1 and A1. **Next:** A2.
+**Active:** T1 and A1. **Next:** T2 and A2.
 
 | row | goal | tasks | done when |
 |---|---|---|---|
-| T1 | Move the old tree to `legacy/`, set up the minimal root and prove the workflow still works on it | R-0558, R-0563, R-0564 | The root holds only the day-one set. A fresh clone builds, hooks, CI and lands on both remotes, with negative controls. The legacy oracle is pinned. |
+| T1 | Prepare and rehearse the restart before anything moves | R-0563, R-0564 | The new root's CI and `required-checks.txt` are on main. On a throwaway branch holding the day-one root, a fresh clone builds, hooks, runs exact-SHA CI and passes a dry-run landing, and the negative controls are refused. The legacy oracle is pinned and reproducible from the tag. |
+| T2 | Move the old tree to `legacy/` in one train | R-0558 | The root holds only the day-one set. `legacy/` is byte-frozen and checked. The move itself lands on both remotes. |
 | A1 | Dispose of the spec audit and draft the boundaries Core must satisfy | R-0555, R-0312, R-0316 | Each audit finding, gap and duplication has an owner and an acceptance artifact. The [boundary drafts](docs/compiler/A1_BOUNDARIES.md) exist. |
 | A2 | Decide the whole target Core shape | R-0511, R-0559 | An outside reader has read the [Core proposal](docs/compiler/CORE_PROPOSAL.md) and their confusions are resolved. The design proofs are checked in Lean. The owner approves the proposal. A3 sends it back if it exposes a substantive change. |
 | A3 | State the contract, the theorem and the trusted base in Lean | R-0560, R-0496, R-0502, R-0506, R-0508, R-0509, R-0500 | The one-main-file layout and its gate exist. The theorem, with its holes, the named values-to-bytes boundary and the trusted-base inventory, is on main. |
 | B1 | Build `ConcreteSpec` and slice 1 with its theorem | R-0425, R-0499, R-0492, R-0493, R-0514, R-0501, R-0503, R-0497, R-0504, R-0507, R-0521, R-0552, R-0528, R-0479, R-0118 | Slice 1 runs from parsing to native code. Its judgments are independent, its correspondence and soundness are proved, its obligations are explicit and its provenance is minimal. Its conformance examples pass on both implementations. |
 | B2 | Qualify slice 1 | R-0491, R-0498, R-0272, R-0550 | Differential (Lean semantics, native build, legacy oracle), refusal and gate-integrity controls hold. The fuzzers target the new compiler. The outside-reader test passes. |
-| B3 | Audit totality, then delete `legacy/` | R-0553, R-0562, R-0561, R-0565 | The totality audit finds no partial definition. The retention manifest is satisfied. Legacy defects are closed by deletion. The browser compiler is served from the tag until the new compiler covers it. `legacy/` is gone from main. |
+| B3 | Audit totality, then delete the old pipeline | R-0553, R-0562, R-0561, R-0565 | The totality audit finds no partial definition. Every `RETENTION.tsv` row for the old pipeline is resolved. Legacy defects are retired with the old implementation. The browser compiler is served from a tag-built bundle until the new compiler covers it. The old pipeline is gone from `legacy/`; retained assets stay there until their rows resolve. |
 
 <a id="questions-for-the-core-session"></a>
 ### Questions for the Core session
@@ -140,7 +157,7 @@ each one options and a recommendation, and no work encodes an answer first:
 2. `destroy` bounds;
 3. the `HeapArray` element view and the raw-memory taxonomy;
 4. the type of static text;
-5. capability inference with several solutions;
+5. whether capability and type arguments are inferred or written (a proposed revision of OD45 and OD87);
 6. static refusal versus traps;
 7. target grant schemas and narrowing;
 8. slice 1's assurance scope;
@@ -193,12 +210,12 @@ archive. Rows for C–G are summaries. Each is refined when its phase becomes ne
 | R-0118 | Generated coverage of passes, consumers, constructs, operations and traps | a missing row or a synthetic constructor fails the gate | R-0501 |
 | R-0491 | The defect inventory and the classified differential (Lean semantics, native build, legacy oracle) | comparisons are classified and campaigns are non-vacuous | R-0425, R-0564 |
 | R-0498 | Every enforcement claim maps to its gate leg and a targeted mutation | an unmapped claim fails; shape checks are labelled unproved | R-0118 |
-| R-0272 | Retarget the fuzzers (the ci-3 fuzz farm and nightly CI fuzzing) at the new compiler, with reduction and counterexample-to-regression persistence | the generators emit slice-supported programs, the oracle is Lean semantics against native code, and findings become regressions; legacy fuzzing stops at B3 | B1 |
+| R-0272 | Restart fuzzing against the new compiler on concrete-ci-2, seeded from the archived ci-3 corpus, with reduction and counterexample-to-regression persistence | the generators emit slice-supported programs, the oracle is Lean semantics against native code, and findings become regressions; legacy fuzzing stopped at the move | B1 |
 | R-0550 | Compiler scaling and speed baselines at exact SHAs | scaling gates hold for each stage, and a planted regression is caught | B1 |
 | R-0553 | Totality audit: every semantics, checker, validator and pass is total and runs as proved | no partial definition; opaque execution gaps controlled | B2 |
-| R-0562 | Retention and disposition manifest, checked before B3 | every retained corpus, regression, example, std module and the browser service has a row naming where it survives B3 (pulled back, kept in history or the tag, or dropped with an owner decision); a gate checks it | B2 |
-| R-0561 | Bug ledger by compiler | every legacy defect is closed by deletion at B3, and every legacy ruling that states language behaviour becomes a conformance example or a recorded owner question; new records start in the new ledger | R-0425 |
-| R-0565 | Website transition | the site builds from the new tree; the browser compiler runs from `legacy-compiler-final` until the new compiler covers it, then switches; no page describes the legacy compiler as current | R-0562 |
+| R-0562 | The retention manifest `RETENTION.tsv` at the root, written before the move and checked before any deletion under `legacy/` | every legacy asset (corpora, regressions, examples, std, the bug ledger, the site, docs and the archived services) has a row with a destination and a deletion condition; deleting a path under `legacy/` whose row is unresolved is refused (control); the manifest and the task disposition table stay at the root and survive B3 | — |
+| R-0561 | Bug ledger by compiler | legacy defects are marked retired with the old implementation, never fixed, each keeping its reproducer, ruling and structural class; those the browser compiler still shows stay visible while the site serves it; std defects move with std as contracts and regressions; every legacy ruling that states language behaviour becomes a conformance example or a recorded owner question; the minimal issue record of the day-one root becomes the new ledger with the first slice | R-0425 |
+| R-0565 | Website transition | before the site stops rebuilding, a browser bundle built and verified from `legacy-compiler-final` (parity with the native oracle, loader and UI checks) is deployed, labelled as the frozen compiler for the language before the 2026-10-29 to 2026-11-01 decisions, with a documented redeploy; links to main paths point at the tag; the site later builds from the new tree and switches when the new compiler covers it; no page describes the legacy compiler as current | R-0564 |
 
 ### C. File-copy and 0.1
 
@@ -234,8 +251,8 @@ archive. Rows for C–G are summaries. Each is refined when its phase becomes ne
 | R-0460 | Obligation sufficiency, with hypothesis provenance | each admitted obligation is proved to suffice | R-0495 |
 | R-0473 | One typed contract record with capture-safe substitution | all consumers read the one record | R-0495 |
 | R-0482 | Separate identities for model, implementation, proposition and contract | the relation and the substitution matrix are checked | R-0473 |
-| R-0524 | Two-state contracts and frames | `old` and frames proved on the model | R-0473 |
-| R-0526 | Checked recursion and totality of spec functions | totality is proved or refused | R-0496 |
+| R-0524 | Frames and entry-state reasoning without `old` (OD117) | frames are proved on the model; a postcondition reaches the entry state only through an explicit Lean theorem; no source `old` or snapshot construct exists | R-0473 |
+| R-0526 | Total spec functions (OD115) and per-function termination proofs, with no total-function category (OD116) | every recursive edge of a contract-referenced spec function is well-founded or refused; an ordinary function's termination proof is a theorem about that function | R-0496 |
 | R-0172 | The proof library and formal std models | used by the flagship proofs | R-0162 |
 | R-0177 | Proof authoring: stubs, minimization, diagnostics, automation | the validation project passes | R-0172 |
 | R-0259 | Runtime-safety obligations: casts, loops, stack, panics, byte, text and path boundaries | the safety corpus is discharged or reported | R-0495 |
@@ -268,9 +285,9 @@ archive. Rows for C–G are summaries. Each is refined when its phase becomes ne
 
 | task | objective | done when | depends on |
 |---|---|---|---|
-| R-0558 | Move the old tree to `legacy/` and set up the minimal root. Day one, the root holds the README, this file, AGENTS.md, an empty CHANGELOG, LICENSE, the new build files, `ConcreteSpec/Spec.lean`, `docs/PHILOSOPHY.md`, `docs/decisions.md` and the landing, review and hook scripts. Everything else comes back from `legacy/` when a slice needs it. Legacy gates run only when `legacy/` changes. | the root holds only that set; a change outside `legacy/` reports the legacy gates as skipped, never as passed, and a change inside runs them (both cases controlled) | owner: approval of the move inventory |
-| R-0563 | Operational migration acceptance test | from a fresh clone of the new root: build, hook, exact-SHA CI and landing on both remotes all succeed; negative controls (a broken build, a failing hook gate, a red CI) each stop the landing | R-0558 |
-| R-0564 | A pinned, reproducible legacy oracle | `legacy-compiler-final` builds reproducibly from a pinned toolchain into a recorded digest, and the differential harness invokes it by that digest | R-0558 |
+| R-0558 | Move the old tree to `legacy/` in one train and set up the minimal root. Day one, the root holds the README, this file, AGENTS.md, an empty CHANGELOG, LICENSE, the new build files, `ConcreteSpec/Spec.lean`, `docs/PHILOSOPHY.md`, `docs/decisions.md`, the landing, review and hook scripts, `required-checks.txt`, `RETENTION.tsv`, the minimal issue record and the [2026-11 roadmap archive](docs/archive/roadmap-2026-11/README.md) with its task disposition table. Everything else comes back from `legacy/` when a slice needs it. The status page, the work-queue dispatcher, the fuzz farm, perf tracking and the nightly campaign stop, and each is listed in `RETENTION.tsv` as archived; each returns only with a roadmap task. | the root holds only that set; a root check fails if any byte under `legacy/` changes (control); no legacy gate runs; the move lands on both remotes | R-0563, R-0562, R-0565, owner: approval of the move inventory |
+| R-0563 | Operational migration acceptance test, before the move | the new root's CI and `required-checks.txt` land first, and both `train.sh watch` and `train.sh land` refuse a run that lacks a named check; on a throwaway branch holding the day-one root, a fresh clone builds, hooks, runs exact-SHA CI and passes a dry-run landing; negative controls (a broken build, a failing hook gate, a red CI, a missing or skipped required check) are each refused; a check that cannot run on a fallback runner is reported incomplete and blocks landing, never passed; the two-remote landing is proved by the move itself | owner: approval of the move inventory |
+| R-0564 | A pinned, reproducible legacy oracle, independent of `legacy/` | `legacy-compiler-final` builds in an isolated checkout of the tag from a pinned toolchain (`scripts/oracle/ORACLE.lock`) into a recorded digest; the build is cached on concrete-ci-2 and rebuildable from the tag alone with a hash check, independently of ci-2; a weekly from-scratch rebuild matches the digest; the differential harness invokes it by digest when the new compiler changes; an unexplained difference fails, and the oracle's agreement never overrides the Lean semantics | — |
 | R-0547 | Measurement: per-branch stage timestamps and the median time to land | every landing has its four timestamps, and the median shows here | — |
 | R-0544 | Review discipline: per slice, delta after the first pass | median ≤ 5 rounds; a slice past 5 is split | — |
 | R-0545 | Branch discipline: one bug or one rule per branch | a month of landings with no unrecorded bundling | — |

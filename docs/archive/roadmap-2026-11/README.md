@@ -46,8 +46,8 @@ When it was unclear whether work was committed, it was deferred.
 - **Archived IDs are never reused.** New tasks take numbers after the highest one ever allocated
   (R-0557). `scripts/tests/check_roadmap.sh` refuses a roadmap task whose ID has a disposition here
   other than `retained`, or a new ID at or below R-0557.
-- **The decision log is history; the roadmap carries what binds.** The still-binding decisions are
-  restated, short, under the new roadmap's
-  [binding rules](../../../ROADMAP.md#binding-rules), each linking its dated entry here for the
-  reasons. A new plan decision is added there, not here. Language decisions stay in
+- **The decision log is history; the roadmap only summarizes.** The still-binding decisions are
+  summarized, short, under the new roadmap's
+  [rules in force](../../../ROADMAP.md#rules-in-force), each linking its dated entry here, which
+  governs. A new plan decision is recorded with its date, not in the roadmap. Language decisions stay in
   [decisions.md](../../spec/decisions.md).
