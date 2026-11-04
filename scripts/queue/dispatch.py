@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The work-queue dispatcher. docs/project/WORK_QUEUE.md is the manual; dispatch.sh is the entry.
+"""The work-queue dispatcher. docs/archive/roadmap-2026-11/WORK_QUEUE.md is the manual; dispatch.sh is the entry.
 
   dispatch.py tick              one pass: rebuild queue.json, watch running agents, start new ones
   dispatch.py status            print status.json
@@ -590,7 +590,7 @@ class Q:
                       indent=1)
         context = (
             f"You are an autonomous agent started by the Concrete work queue (scripts/queue/, "
-            f"docs/project/WORK_QUEUE.md). Task {tid}: {task.get('title', '')}. Your worktree is {wt} on "
+            f"docs/archive/roadmap-2026-11/WORK_QUEUE.md). Task {tid}: {task.get('title', '')}. Your worktree is {wt} on "
             f"branch {branch}; work only there. Publish work in progress with `git push {self.cfg['remote']} "
             f"HEAD:refs/heads/{wip_ref}` at least every 5 minutes of work: the queue reads those pushes as "
             f"your heartbeat and releases the task after {self.cfg['stuck_minutes']:g} minutes without one. "

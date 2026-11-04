@@ -2,7 +2,7 @@
 # THE WORK QUEUE SCHEDULES BY PRIORITY, NEVER OVERLAPS AREAS, HONOURS ITS CAPS AND RELEASES WHAT STALLS.
 #
 # scripts/queue/ turns the open bugs, the ROADMAP (throughput track first), fuzz-farm findings and
-# tasks/*.md into queue.json and starts headless Claude agents on it (docs/project/WORK_QUEUE.md).
+# tasks/*.md into queue.json and starts headless Claude agents on it (docs/archive/roadmap-2026-11/WORK_QUEUE.md).
 # Every leg below drives the real scripts against a THROWAWAY repository (a bare remote, the queue's
 # own clone with its push guard) and stub `claude` and `cswap` binaries, so nothing here can reach
 # this repository, its remotes, a Claude account or CI.
@@ -99,51 +99,41 @@ EOF
 cat > "$SRC/ROADMAP.md" <<'EOF'
 # Roadmap
 
-## Development throughput
-
-| order | item | owner | exit criterion | depends on |
-|---|---|---|---|---|
-| 1 | Measurement: stage timestamps | R-0547 | recorded | — |
-| 2 | Landing trains: one CI per train | R-0539 | three trains | 1 |
-
 ## The queue
 
-| row | goal | owning tasks | done when |
-|---|---|---|
+| row | goal | tasks | done when |
+|---|---|---|---|
 | A1 | Soundness rules | R-0500 | close it with its acceptance controls |
 | B1 | Place MIR | R-0501, R-0600, R-0601 | shadow paths have acceptance controls |
+
+## Tasks
+
+Task rows (2026-11-04): R-0500's areas and R-0501's dependencies below are read from them.
+
+### A. Core
+
+| task | objective | done when | depends on |
+|---|---|---|---|
+| R-0500 | written rules in `Mono` | each rule lands | — |
+
+### B. Slice
+
+| task | objective | done when | depends on |
+|---|---|---|---|
+| R-0600 | the first half | done | R-0601 (the other half) |
+| R-0601 | the second half | done | R-0600 |
+| R-0501 | place MIR | done | B |
+
+### T. Throughput
+
+| task | objective | done when | depends on |
+|---|---|---|---|
+| R-0547 | Measurement: stage timestamps | recorded | — |
+| R-0539 | Landing trains: one CI per train | three trains | R-0547 |
 
 ## Later phases
 
 Not a row: R-0999.
-EOF
-# Task bodies live in the task register, not in ROADMAP.md (2026-10-28): R-0500's areas and R-0501's
-# dependencies below are read from it.
-mkdir -p "$SRC/docs/project"
-cat > "$SRC/docs/project/ROADMAP_TASKS.md" <<'EOF'
-# Roadmap tasks
-
-## Area
-
-### Task R-0539
-
-**Objective:** trains.
-
-### Task R-0500
-
-**Objective:** written rules in `Mono`.
-
-### Task R-0600
-
-**Depends on:** R-0601 (the other half).
-
-### Task R-0601
-
-**Depends on:** R-0600. **Blocks:** nothing.
-
-### Task R-0501
-
-**Depends on:** nothing. **Blocks:** R-0600.
 EOF
 cat > "$SRC/tasks/R-0501.md" <<'EOF'
 ---
@@ -191,8 +181,8 @@ case " $order " in *" bug-207 "*) no "frozen legacy bug was dispatched" ;;
   *) ok "a silent legacy defect is never dispatched" ;; esac
 case " $order " in *" bug-207 "*|*" bug-205 "*|*" fuzz-f2 "*|*" fuzz-f3 "*|*" R-0999 "*) no "a legacy/fixed bug, a refusal, a promoted finding or a non-row R-id was queued" ;;
   *) ok "fixed bugs, refusals, promoted findings and R-ids outside the rows are not tasks" ;; esac
-[ "$(qget R-0539 depends)" = R-0547 ] && ok "the throughput table's 'depends on' column" || no "R-0539 depends: $(qget R-0539 depends)"
-[ "$(qget R-0501 depends)" = "" ] && ok "'Depends on: nothing. **Blocks:** R-0600' adds no dependency" || no "R-0501 depends: $(qget R-0501 depends)"
+[ "$(qget R-0539 depends)" = R-0547 ] && ok "a throughput row's 'depends on' column" || no "R-0539 depends: $(qget R-0539 depends)"
+[ "$(qget R-0501 depends)" = "" ] && ok "a 'depends on' cell naming a phase, not a task, adds no dependency" || no "R-0501 depends: $(qget R-0501 depends)"
 [ "$(qget R-0600 cycle)" = True ] && [ "$(qget R-0601 cycle)" = True ] && ok "a dependency cycle is marked" || no "cycle not marked"
 [ "$(qget R-0501 disposition)" = in-flight ] && ok "tasks/R-0501.md marks the sourced task in flight" || no "disposition not applied"
 [ "$(qget bug-201 areas)" = "mod:Lower rule:R-0501" ] && ok "bug areas come from the structural owner" || no "bug-201 areas: $(qget bug-201 areas)"
@@ -215,11 +205,12 @@ for bad in missing unknown; do
     ok "a $bad compiler field refuses dispatch"
   else no "a $bad compiler field did not refuse dispatch (exit $rc)"; fi
 done
-mkdir -p "$TMP/noreg"; cp -R "$SRC/." "$TMP/noreg/"; rm "$TMP/noreg/docs/project/ROADMAP_TASKS.md"
+mkdir -p "$TMP/noreg"; cp -R "$SRC/." "$TMP/noreg/"
+python3 -c 'import sys; p=sys.argv[1]; s=open(p).read(); i=s.index("## Tasks"); j=s.index("## Later phases"); open(p,"w").write(s[:i]+s[j:])' "$TMP/noreg/ROADMAP.md"
 rc=0; python3 "$QD/build_queue.py" --root "$TMP/noreg" > /dev/null 2> "$TMP/noreg.err" || rc=$?
-[ "$rc" = 2 ] && grep -q 'ROADMAP_TASKS.md is missing' "$TMP/noreg.err" \
-  && ok "a missing task register exits 2 instead of queueing tasks without bodies" \
-  || no "missing task register: exit $rc, $(cat "$TMP/noreg.err")"
+[ "$rc" = 2 ] && grep -q "no task rows under '## Tasks'" "$TMP/noreg.err" \
+  && ok "a roadmap without task rows exits 2 instead of queueing tasks without bodies" \
+  || no "roadmap without task rows: exit $rc, $(cat "$TMP/noreg.err")"
 mkdir -p "$TMP/bad/tasks"; printf -- '---\nid: x\nsize: 3\n---\nbody\n' > "$TMP/bad/tasks/x.md"
 rc=0; python3 "$QD/build_queue.py" --root "$TMP/bad" > /dev/null 2>&1 || rc=$?
 [ "$rc" = 2 ] && ok "an unknown task-file key exits 2" || no "malformed task file exit $rc (want 2)"

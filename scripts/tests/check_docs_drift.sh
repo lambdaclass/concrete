@@ -15,14 +15,10 @@
 #      Phase 3 audit made.)
 #   2. Every `--report <kind>` names a real report kind (extracted from the CLI
 #      dispatch in Main.lean, so the check tracks the source of truth).
-#   3. ROADMAP (with its backlog, docs/project/ROADMAP_BACKLOG.md) has one
-#      stable-ID Task sequence, no dangling/duplicate IDs, and
-#      no parallel queue/task headings.
-#   4. Every ROADMAP task has a phase or a recorded disposition, the
-#      reconciliation ledger and queue rows name real tasks in consistent phases,
-#      and every archived task body has its roadmap stub; every queue row has an owning task
-#      and a done-when, and no bug listed as implemented-but-not-accepted is already
-#      recorded fixed in docs/bugs (check_roadmap_coverage.sh, with its own
+#   3. ROADMAP.md's task IDs are unique and none reuses an archived ID; every archived task ID
+#      has a disposition in docs/archive/roadmap-2026-11/task_disposition.tsv whose destination is
+#      live; every queue row names tasks in the file; bug-class owners are still owned; links
+#      resolve; and no candidate bug is already recorded fixed (check_roadmap.sh, with its own
 #      negative controls).
 #   4b. One owner per fact: the bug lists in docs/bugs/README.md, the bugs column of
 #      STRUCTURAL_CLASSES.md's table equal the ones generated from the
@@ -121,18 +117,11 @@ for f in "${REPORT_DOCS[@]}"; do
 done
 [ "$bad" -eq 0 ] && ok "every --report kind in present-tense docs is a real CLI report"
 
-echo "=== 3. roadmap has one stable-ID task sequence ==="
-if bash scripts/tests/check_roadmap_linear.sh; then
-  ok "ROADMAP task IDs are stable, unique, reference-safe, and queue-free"
+echo "=== 3. the roadmap names real tasks, and no archived task is lost ==="
+if bash scripts/tests/check_roadmap.sh; then
+  ok "ROADMAP.md agrees with the archived task dispositions, the queue and the bug-class owners"
 else
-  no "ROADMAP linear-task structure"
-fi
-
-echo "=== 4. every roadmap task has a phase or disposition, and the queue agrees ==="
-if bash scripts/tests/check_roadmap_coverage.sh; then
-  ok "ROADMAP tasks are phased or dispositioned; ledger and queue rows name real tasks"
-else
-  no "ROADMAP task coverage (check_roadmap_coverage.sh)"
+  no "ROADMAP.md (check_roadmap.sh)"
 fi
 
 echo "=== 4b. the bug ledger and the changelog are generated from records each owner edits alone ==="

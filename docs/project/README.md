@@ -30,9 +30,9 @@ Tool manuals and contracts: [LANDING.md](LANDING.md), [REVIEW.md](REVIEW.md),
 [STANDALONE_VS_PROJECT.md](STANDALONE_VS_PROJECT.md),
 [AUTHORING_WALKTHROUGH.md](AUTHORING_WALKTHROUGH.md).
 
-Roadmap companions and records: [ROADMAP_TASKS.md](../archive/roadmap-2026-11/ROADMAP_TASKS.md),
-[ROADMAP_BACKLOG.md](../archive/roadmap-2026-11/ROADMAP_BACKLOG.md), [ROADMAP_DIRECTION.md](../archive/roadmap-2026-11/ROADMAP_DIRECTION.md),
-[ROADMAP_DECISIONS.md](../archive/roadmap-2026-11/ROADMAP_DECISIONS.md), [ROADMAP_RECONCILIATION.md](../archive/roadmap-2026-11/ROADMAP_RECONCILIATION.md),
+The roadmap is one file, [ROADMAP.md](../../ROADMAP.md); its former companions (task register,
+backlog, direction, decision log, reconciliation record, work-queue manual) are in the
+[2026-11 roadmap archive](../archive/roadmap-2026-11/README.md). Records:
 [PROMOTION_PIPELINE.md](PROMOTION_PIPELINE.md), [GATE_PROFILE.md](GATE_PROFILE.md),
 [DETERMINISTIC_SIMULATION.md](DETERMINISTIC_SIMULATION.md),
 [REGISTRY_FIXTURE_INVENTORY.md](REGISTRY_FIXTURE_INVENTORY.md). Tables read by tools:

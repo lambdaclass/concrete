@@ -9,7 +9,7 @@ It is intentionally milestone-oriented rather than release-oriented. The project
 For current priorities and remaining work, see [ROADMAP.md](ROADMAP.md).
 
 ## Major Milestones
-<!-- changelog stamp: 4ecb1fc021d31df57015875b872ad148 (scripts/gen/changelog.py; add a changelog.d/ fragment, never edit this file by hand) -->
+<!-- changelog stamp: 1c59828cd1072700043529dcce56b582 (scripts/gen/changelog.py; add a changelog.d/ fragment, never edit this file by hand) -->
 
 ### Large Arrays No Longer Make Compilation or `--interp` Quadratic (bugs 027, 248, 249, 250, 2026-10-25)
 

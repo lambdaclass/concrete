@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Install the work-queue dispatcher for the current user (run as `agent` on concrete-ci-1).
-# docs/project/WORK_QUEUE.md is the manual.
+# docs/archive/roadmap-2026-11/WORK_QUEUE.md is the manual.
 #
 #   install-queue.sh [<clone-url>]
 #

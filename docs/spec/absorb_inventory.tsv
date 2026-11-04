@@ -272,21 +272,21 @@ docs/project/README.md	*	no language rules: index	rule	none	-	keep	-
 docs/project/REGISTRY_FIXTURE_INVENTORY.md	*	no language rules: test inventory	rule	none	-	keep	-
 docs/project/RELEASE_BUNDLE.md	*	no language rules: release tooling	rule	none	-	keep	-
 docs/project/REVIEW.md	*	no language rules: review procedure	rule	none	-	keep	-
-docs/project/ROADMAP_BACKLOG.md	*	no language rules found by grep (backlog task text)	rule	none	-	keep	-
-docs/project/ROADMAP_DECISIONS.md	*	dated decision log; 2026-10-21/23 semantics entries restate rules, several superseded by OD answers	rule	dup	-	design-record	add superseded-by notes (OD2, OD24, OD30)
-docs/project/ROADMAP_DECISIONS.md	Semantics decisions 2026-10-21	references only as params/args/borrow-block and arm binders; no let-bound or assigned ref; constants are values; SCOPE-1; left-to-right evaluation, RHS-first assignment	rule	dup:REF-6,REF-3,SCOPE-1,STMT-4	references	cite	-
-docs/project/ROADMAP_DECISIONS.md	Semantics decisions 2026-10-21	heap one-hop field rule: field access opens one Heap layer	rule	stale:MEM-4	memory	cite	MEM-4@3 (OD30): e.f needs struct or reference; heap opened by explicit place form
-docs/project/ROADMAP_DECISIONS.md	Semantics decisions 2026-10-21	layout unspecified unless a repr guarantees it, observable only via sizeof/alignof; one Layout authority	rule	new	ffi	absorb	FFI-2 states one Layout authority; "layout unspecified unless #[repr]" has no spec sentence
-docs/project/ROADMAP_DECISIONS.md	Semantics decisions 2026-10-21	every Concrete function in a mangled namespace disjoint from C; #[link_name] imports, export attribute for reverse	rule	dup:FFI-5	ffi	cite	-
-docs/project/ROADMAP_DECISIONS.md	Semantics decisions 2026-10-21	lossy `as` becomes compile error via named operations	rule	dup:ARITH-5	arithmetic	cite	-
-docs/project/ROADMAP_DECISIONS.md	Semantics decisions 2026-10-21	fn main() -> Int stays; parameters on main banned; narrowing to u8 open	rule	stale:STMT-7	statements	cite	OD24 decided u8 or Unit (STMT-7@3)
-docs/project/ROADMAP_DECISIONS.md	Semantics decisions 2026-10-21	nothing destroyed implicitly; reference restrictions not relaxed	rule	dup:OWN-13,REF-3	ownership	cite	-
-docs/project/ROADMAP_DECISIONS.md	Tightening decisions 2026-10-23	every &mut argument is an implicit reborrow suspending its parent; Austral model; &T binders; foreign fn values refused	rule	stale:REF-10	references	cite	D1 superseded by OD2(1); D2-D4 dup REF-5/REF-9/FFI-1
-docs/project/ROADMAP_DIRECTION.md	*	no language rules: direction/vocabulary; language rules moved to archive/roadmap-language-scope.md	rule	none	-	keep	archive/roadmap-language-scope.md is "pending absorption" - outside this inventory's files
-docs/project/ROADMAP_RECONCILIATION.md	*	no language rules: historical reconciliation record	rule	none	-	keep	-
-docs/project/ROADMAP_TASKS.md	*	task register; language rules appear only as task objectives citing spec IDs (R-0500, R-0556, R-0557)	rule	dup	-	keep	R-0509 text still says "whether a module marker or a block can confer trust is an open owner decision (OD7, OD22)" - stale, both decided
-docs/project/ROADMAP_TASKS.md	R-0557	a constant may not hold a capability, token or handle; main receives root resource; singletons only through trusted fn tokens	rule	dup:TRUST-8,TRUST-9	trusted	cite	notes today's behaviour: linear-typed constant accepted, each use yields a fresh copy (bug to file when enforced)
-docs/project/ROADMAP_TASKS.md	R-0556	compiler generates each module's interface from pub declarations; gate diffs interfaces	rule	dup:MOD-7	modules	cite	-
+docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md	*	no language rules found by grep (backlog task text)	rule	none	-	keep	-
+docs/archive/roadmap-2026-11/ROADMAP_DECISIONS.md	*	dated decision log; 2026-10-21/23 semantics entries restate rules, several superseded by OD answers	rule	dup	-	design-record	add superseded-by notes (OD2, OD24, OD30)
+docs/archive/roadmap-2026-11/ROADMAP_DECISIONS.md	Semantics decisions 2026-10-21	references only as params/args/borrow-block and arm binders; no let-bound or assigned ref; constants are values; SCOPE-1; left-to-right evaluation, RHS-first assignment	rule	dup:REF-6,REF-3,SCOPE-1,STMT-4	references	cite	-
+docs/archive/roadmap-2026-11/ROADMAP_DECISIONS.md	Semantics decisions 2026-10-21	heap one-hop field rule: field access opens one Heap layer	rule	stale:MEM-4	memory	cite	MEM-4@3 (OD30): e.f needs struct or reference; heap opened by explicit place form
+docs/archive/roadmap-2026-11/ROADMAP_DECISIONS.md	Semantics decisions 2026-10-21	layout unspecified unless a repr guarantees it, observable only via sizeof/alignof; one Layout authority	rule	new	ffi	absorb	FFI-2 states one Layout authority; "layout unspecified unless #[repr]" has no spec sentence
+docs/archive/roadmap-2026-11/ROADMAP_DECISIONS.md	Semantics decisions 2026-10-21	every Concrete function in a mangled namespace disjoint from C; #[link_name] imports, export attribute for reverse	rule	dup:FFI-5	ffi	cite	-
+docs/archive/roadmap-2026-11/ROADMAP_DECISIONS.md	Semantics decisions 2026-10-21	lossy `as` becomes compile error via named operations	rule	dup:ARITH-5	arithmetic	cite	-
+docs/archive/roadmap-2026-11/ROADMAP_DECISIONS.md	Semantics decisions 2026-10-21	fn main() -> Int stays; parameters on main banned; narrowing to u8 open	rule	stale:STMT-7	statements	cite	OD24 decided u8 or Unit (STMT-7@3)
+docs/archive/roadmap-2026-11/ROADMAP_DECISIONS.md	Semantics decisions 2026-10-21	nothing destroyed implicitly; reference restrictions not relaxed	rule	dup:OWN-13,REF-3	ownership	cite	-
+docs/archive/roadmap-2026-11/ROADMAP_DECISIONS.md	Tightening decisions 2026-10-23	every &mut argument is an implicit reborrow suspending its parent; Austral model; &T binders; foreign fn values refused	rule	stale:REF-10	references	cite	D1 superseded by OD2(1); D2-D4 dup REF-5/REF-9/FFI-1
+docs/archive/roadmap-2026-11/ROADMAP_DIRECTION.md	*	no language rules: direction/vocabulary; language rules moved to archive/roadmap-language-scope.md	rule	none	-	keep	archive/roadmap-language-scope.md is "pending absorption" - outside this inventory's files
+docs/archive/roadmap-2026-11/ROADMAP_RECONCILIATION.md	*	no language rules: historical reconciliation record	rule	none	-	keep	-
+docs/archive/roadmap-2026-11/ROADMAP_TASKS.md	*	task register; language rules appear only as task objectives citing spec IDs (R-0500, R-0556, R-0557)	rule	dup	-	keep	R-0509 text still says "whether a module marker or a block can confer trust is an open owner decision (OD7, OD22)" - stale, both decided
+docs/archive/roadmap-2026-11/ROADMAP_TASKS.md	R-0557	a constant may not hold a capability, token or handle; main receives root resource; singletons only through trusted fn tokens	rule	dup:TRUST-8,TRUST-9	trusted	cite	notes today's behaviour: linear-typed constant accepted, each use yields a fresh copy (bug to file when enforced)
+docs/archive/roadmap-2026-11/ROADMAP_TASKS.md	R-0556	compiler generates each module's interface from pub declarations; gate diffs interfaces	rule	dup:MOD-7	modules	cite	-
 docs/project/SELF_HOSTED_RUNNERS.md	*	no language rules: CI infra	rule	none	-	keep	-
 docs/project/STANDALONE_VS_PROJECT.md	*	tooling/modes doc; a few language-adjacent claims	rule	dup	-	cite-only	-
 docs/project/STANDALONE_VS_PROJECT.md	Stdlib Access	std is available (import std.*) only when a Concrete.toml exists; standalone files cannot import std	rule	new	modules	absorb	module resolution of std depends on project mode; no MOD entry states it
@@ -334,7 +334,7 @@ docs/project/TIGHTENING_DECISIONS.md	§4.5 T-RAWDUP	read_owned leaves the slot l
 docs/project/TIGHTENING_DECISIONS.md	§4.5 T-ARITH	a trap is abort: process ends, no deferred call, destructor or loan end runs; "exactly once cleanup" holds only on non-abort paths	semantics	dup:STMT-2	statements	cite	-
 docs/project/TIGHTENING_DECISIONS.md	§4.5 T-CAST	losslessness defined by value domains (i32->i64 yes, i64->f64 no); named conversions specify NaN, infinities, rounding	rule	dup:ARITH-5	arithmetic	cite	-
 docs/project/TIGHTENING_DECISIONS.md	§4.5 T-G19	no pass reorders, caches or eliminates loads/stores assuming &mut non-aliasing until aliasing model covering raw pointers exists	rule	stale:REF-14	pipeline	cite	OD15(b) condition is Lean proof of checker guarantee
-docs/project/WORK_QUEUE.md	*	no language rules: agent queue ops	rule	none	-	keep	-
+docs/archive/roadmap-2026-11/WORK_QUEUE.md	*	no language rules: agent queue ops	rule	none	-	keep	-
 docs/spec/codes.tsv	*	259 codes: rule 198, internal 39, tooling 14, retired 8, unmigrated 0; every rule code is cited by some chapter	rule	-	-	keep	Q2: no unmigrated: rows remain, so no per-code absorb rows; internal includes E0401-E0415 resolve backstops and E0700-E0715 SSA verifier codes
 docs/stdlib/BYTE_CURSOR_API.md	*	No language rules: std API design (signatures superseded)	-	-	-	keep	-
 docs/stdlib/BYTE_VIEW.md	*	Std API; language content only restated (no stored/returned refs; raw pointers held safely, deref needs Unsafe)	-	-	-	keep	cite REF-1, REF-3, TRUST-4
