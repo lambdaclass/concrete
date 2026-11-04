@@ -8,19 +8,17 @@ against the [A1 boundary artifacts](A1_BOUNDARIES.md), and its sections 1–4 ar
 as "A1 §n". Lean stays the only normative source. An approved answer becomes Lean in
 A3, not prose here.
 
-Each question gives:
-- the decided rules it must respect;
-- the options;
-- a recommendation;
-- the counterexamples that ruled out other answers;
-- what the recommendation leaves open;
-- its proof impact.
+Each question gives the decided rules it must respect, a recommendation and what the
+recommendation leaves open. Where alternatives were weighed, it also gives the options
+and the counterexamples that ruled them out. Where a question carries an A2 design
+proof, it states which.
 
 The recommendations come from a Claude draft that Codex reviewed against the
 decision record on 2026-11-04. Codex agreed with Q8 and asked for changes everywhere
 else. Its corrections are adopted below; where they reversed the draft (Q2, Q5, Q6),
-the draft's answer is listed as a rejected option with the reason. On Q5 the owner then
-preferred no inference over Codex's unique-solution rule; the recommendation follows that.
+the draft's answer is listed as a rejected option with the reason. On Q5 the owner
+then leaned towards never inferring; that option revises the decided OD45, so it is
+set out next to the recommendation for the owner to choose.
 
 Fixed constraints:
 - the decided rules in [decisions.md](../spec/decisions.md);
@@ -141,7 +139,8 @@ container without a check.
 
 **Still open:**
 - the exact container impl conditions;
-- the order in which elements are destroyed;
+- the order in which container elements are destroyed (fixed arrays are already
+  decided: index order, OD35);
 - the contracts of the drain when it fails and of its callbacks;
 - whether `destroy` must terminate and must not trap. Returning Unit alone guarantees
   neither.
@@ -212,9 +211,11 @@ values-to-bytes lemma (A1 §1).
 - **(a) A separate static text type (recommended).**
 - **(b) Literals as `String<Sys>` allocated at startup.** Rejected: it allocates and
   ties every literal to one allocator.
-- **(c) One string-view type for literals and borrowed dynamic strings.** Rejected:
-  `borrow s as v { return v; }` would return "static" text that dangles once `s` is
-  destroyed.
+- **(c) One string-view type for literals and borrowed dynamic strings.** Rejected.
+  If the type were returnable, `borrow s as v { return v; }` would return "static"
+  text that dangles once `s` is destroyed. To be safe, the shared type must be
+  second-class, and then a literal could not be stored in a struct or returned. The
+  static/dynamic distinction keeps literals first-class and views second-class.
 
 **Recommendation.**
 - Add a built-in Copy type for immutable static text, preferably spelled `StaticStr`
@@ -237,36 +238,41 @@ values-to-bytes lemma (A1 §1).
 ## Q5. Capability inference with several solutions
 
 **Decided.**
+- OD45 (owner, 2026-11-01): a capability variable is bound from the checked type of
+  every argument, whatever the argument's form. Unresolved or inconsistent bindings
+  are refused, and there is no inference from the result context.
 - Capability sets are exact.
-- Argument types are checked.
-- Capability constraints must be consistent.
-- No inference from the result context.
+- OD46 binds generic type arguments the same way, from checked argument types only.
+- Open: only choosing among several consistent solutions ([decisions.md](../spec/decisions.md#core-capability-inference)).
 
 **Options.**
 - **(a) Syntactic:** infer a variable only where it stands alone as a whole set.
   Rejected: `{}` against `C + D` has the single solution `C = D = {}` but is refused,
   and `C` and `C + {}` would be treated differently.
-- **(b) Unique solution:** infer when the equations from all checked argument types
-  have exactly one solution. Rejected: the same call could then be written with or
-  without capability arguments, so there would be two forms. The capabilities granted
-  would also be computed by a rule the reader must run in their head, and the checker
-  would need a solver whose uniqueness criterion must be specified and proved.
+- **(b) Unique solution, else explicit (recommended).**
 - **(c) Pick the least solution.** Rejected: the compiler would choose among answers.
-- **(d) Never infer (recommended).**
+- **(d) Never infer.** Every call writes its capability arguments. This is the owner's
+  stated leaning on 2026-11-04, and it **revises OD45**, so it needs the owner's
+  explicit approval as a change to a decided rule.
+  - For it: the call site shows the capability instantiation without the reader
+    solving anything, and the checker needs no solver.
+  - Against it: the argument function's capability set is already written once, in its
+    own signature, and writing it again at every call states the same fact twice.
+  - Capabilities would also no longer bind the way type arguments do (OD46).
 
-**Recommendation.** A call to a function with capability variables always writes them
-explicitly. The checker only verifies the written arguments against the checked
-argument types, which must be exact and consistent. For example:
-- `C + {Fs} = {}` is inconsistent;
-- an argument whose exact set differs from the instantiated parameter is refused.
+**Recommendation: (b).** Keep OD45. Infer exactly when the equations from all checked
+argument types, together with any explicit arguments, have one solution. With no
+solution the call is inconsistent; with several, explicit arguments are required. For
+example, `C + {Fs} = {}` is inconsistent and `C + {Fs} = {Fs}` is ambiguous. This is
+decidable because the set of capabilities is finite. The specification is the
+brute-force definition, and any optimized solver is proved equivalent to it.
 
-There is one form per call, and the authority a higher-order call grants is visible
-where it is granted. The compiler may compute a unique solution, but only to suggest
-it in the diagnostic, never to fill it in. Owner preference stated on 2026-11-04;
-verbosity is accepted.
+The authority a higher-order call passes on is the argument's own declared set, which
+is visible where that function is declared. The call adds no authority of its own.
 
 **Still open:**
-- the call syntax for capability arguments;
+- the call syntax for capability arguments, and whether writing them where inference
+  succeeds is allowed (one form per call argues for refusing it, as for types);
 - passing the caller's own capability variables;
 - the normal form of capability sets, so that `C` and `C + {}` compare equal.
 
