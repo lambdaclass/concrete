@@ -70,9 +70,13 @@ awk 'BEGIN{FS=OFS="\t"} !/^#/ && $1!="path" && !done {$6=""; done=1} {print}' RE
 out="$(printf '%s\n' "$inv" | problems "$TMP/bad-crit.tsv")"
 case "$out" in *"six non-empty"*) ok "an empty deletion criterion is refused" ;; *) no "an empty deletion criterion passed" ;; esac
 # A dropped row uncovers its path.
-grep -v '^std	' RETENTION.tsv > "$TMP/no-std.tsv"
+awk -F'\t' '$1 != "std"' RETENTION.tsv > "$TMP/no-std.tsv"
 out="$(printf '%s\n' "$inv" | problems "$TMP/no-std.tsv")"
-case "$out" in *"no row names std"*) ok "removing the std row uncovers std" ;; *) no "removing the std row went unnoticed" ;; esac
+if [ "$(wc -l < "$TMP/no-std.tsv")" -lt "$(wc -l < RETENTION.tsv)" ]; then
+  case "$out" in *"no row names std"*) ok "removing the std row uncovers std" ;; *) no "removing the std row went unnoticed" ;; esac
+else
+  no "the control did not remove the std row (the mutation itself failed)"
+fi
 
 echo
 echo "check_retention_manifest: PASS=$PASS FAIL=$FAIL"

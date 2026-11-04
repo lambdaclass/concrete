@@ -464,6 +464,13 @@ git rm -q required-checks.txt; git commit -qm "no file"
 got="$(bash -c 'set -euo pipefail; cd "$1"; REQUIRED_FILE=required-checks.txt
   eval "$(sed -n "/^required_checks() {/,/^}/p; /^unmet_required() {/,/^}/p" "$2")"; unmet_required "$3" "$3" ""' _ "$W" "$TRAIN" "$(git rev-parse HEAD)")"
 has "$got" "neither the base nor the candidate" && ok "no required-checks file anywhere is refused, not read as nothing required" || no "a missing file read as '$got'"
+# Newline-free files: the base's last name and the candidate's first name must not fuse.
+git checkout -q -b req-nonl "$HEADR"
+printf 'Build' > required-checks.txt; git add required-checks.txt; git commit -qm "no final newline"; NB="$(git rev-parse HEAD)"
+printf 'Other' > required-checks.txt; git add required-checks.txt; git commit -qm "candidate, no final newline"; NC="$(git rev-parse HEAD)"
+got="$(bash -c 'set -euo pipefail; cd "$1"; REQUIRED_FILE=required-checks.txt
+  eval "$(sed -n "/^required_checks() {/,/^}/p" "$2")"; required_checks "$3" "$4" | tr "\n" " "' _ "$W" "$TRAIN" "$NB" "$NC")"
+[ "$got" = "Build Other " ] && ok "files without a final newline do not fuse names" || no "newline-free union read as '$got'"
 git checkout -q train/t1
 
 echo "=== required-checks.txt names exactly the workflow's landing-tier jobs ==="

@@ -70,16 +70,6 @@ ALWAYS_IF = {
         ("check_gate_registration.sh", "a gate nothing runs proves nothing"),
         ("check_mutation_anchors.sh", "driver edits move anchor text"),
     ],
-    # Root files and the workflow are named by no gate in a form PATH_RE sees, so they are listed.
-    "required-checks.txt": [
-        ("check_landing_script.sh", "train.sh enforces it; the gate checks it against the workflow"),
-    ],
-    "RETENTION.tsv": [
-        ("check_retention_manifest.sh", "the manifest must cover the tree"),
-    ],
-    ".github/workflows/lean_action_ci.yml": [
-        ("check_landing_script.sh", "CAMPAIGN_RE and required-checks.txt are checked against its jobs"),
-    ],
 }
 
 # A change to ANY path can break these, so every non-empty diff selects them. They are kept

@@ -35,7 +35,10 @@ scripts/fuzz	service	archived	legacy/scripts/fuzz; the fuzz farm stops	R-0272	af
 scripts/perf	service	archived	legacy/scripts/perf; perf tracking stops (history archived on concrete-ci-2)	R-0550	after R-0550 sets new baselines
 scripts/queue scripts/status	service	archived	legacy/scripts; the work-queue dispatcher and status page stop	R-0558	returns only with a roadmap task; deleted at B3 otherwise
 tests/programs tests/regressions tests/golden tests/wrong-code tests/codegen tests/invalid_programs	corpus	migrate	legacy/tests; each slice brings back the programs its rules cover as conformance examples	R-0425	after every program is migrated, recorded as covered by a rule, or recorded as retired with a reason (R-0491)
-tests/fixtures tests/oracle tests/perf tests/rules tests/showcase tests/README.md	old test support	retire	legacy/tests	R-0558	B3
+tests/fixtures tests/perf tests/README.md	old test support	retire	legacy/tests	R-0558	B3
+tests/oracle	corpus	migrate	legacy/tests/oracle; vectors.txt is the differential corpus	R-0491	after its vectors are ported to the new differential or each is recorded as retired with a reason
+tests/rules	rule record	migrate	legacy/tests/rules; rule-to-fixture expectations (exit_2i.tsv)	R-0500	after each rule's expectation is carried by a Lean rule's examples or recorded as retired
+tests/showcase	evidence record	archived	legacy/tests/showcase; graduation and evidence history (manifest.toml)	R-0558	never deleted with the pipeline
 examples	corpus	migrate	legacy/examples; examples return as the language they use is specified	R-0425	after each example is ported, or retired with a reason
 std	library	migrate	legacy/std; std returns module by module with its contracts and regressions	R-0561	after each module is ported or retired; std defects move with it
 proofs	proofs	migrate	legacy/proofs; DesignExamples inform ConcreteSpec, flagship proofs return with their slice	R-0555	after the matching Lean rules and theorems exist in ConcreteSpec

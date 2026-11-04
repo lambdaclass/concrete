@@ -593,7 +593,9 @@ for j in json.load(sys.stdin).get("jobs", []):
 # Branch protection on GitHub is not configured, so this file is the only record of what is required.
 REQUIRED_FILE="${LAND_REQUIRED_CHECKS_FILE:-required-checks.txt}"
 required_checks() { # base head — prints the required job names, one per line, sorted and unique
-  { git show "$1:$REQUIRED_FILE" 2>/dev/null || true; git show "$2:$REQUIRED_FILE" 2>/dev/null || true; } \
+  # Each file is read on its own and newline-terminated, so a base file without a final newline
+  # cannot fuse its last name with the candidate's first one.
+  { git show "$1:$REQUIRED_FILE" 2>/dev/null || true; echo; git show "$2:$REQUIRED_FILE" 2>/dev/null || true; echo; } \
     | sed 's/#.*//; s/^[[:space:]]*//; s/[[:space:]]*$//' | sed '/^$/d' | LC_ALL=C sort -u
 }
 # Prints one line per unmet requirement ("missing: <name>" or "<conclusion>: <name>"); empty when met.
