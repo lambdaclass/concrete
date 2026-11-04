@@ -1,0 +1,41 @@
+[piece 1 of 21: tests] blocked: the reviewer refused or gave no verdict, also after one neutral retry. Files: scripts/tests/check_convergence_inventory.sh,scripts/tests/check_docs_drift.sh,scripts/tests/check_gate_registration.sh,scripts/tests/check_proof_freshness.sh,scripts/tests/check_roadmap.sh,scripts/tests/check_roadmap_coverage.sh
+
+[piece 2 of 21: tests] blocked: the reviewer refused or gave no verdict, also after one neutral retry. Files: scripts/tests/check_roadmap_linear.sh,scripts/tests/check_single_philosophy.sh,scripts/tests/check_spec.sh,scripts/tests/check_subject_facts.sh,scripts/tests/check_work_queue.sh
+
+[piece 3 of 21: scripts] blocked: the reviewer refused or gave no verdict, also after one neutral retry. Files: .githooks/pre-push,scripts/gen/migrate_ledgers.sh,scripts/gen/site_reference.py,scripts/queue/build_queue.py,scripts/queue/dispatch.py,scripts/queue/dispatch.sh,scripts/queue/install-queue.sh,scripts/spec/spec.py
+
+[piece 4 of 21: docs] blocked: the reviewer refused or gave no verdict, also after one neutral retry. Files: .claude/codex-review-prompt.md,.claude/commands/roadmap-item.md,CHANGELOG.md,CLAUDE.md,ROADMAP.md
+
+[piece 5 of 21: docs] blocked: the reviewer refused or gave no verdict, also after one neutral retry. Files: ROADMAP.md,changelog.d/2026-10-25-bend-roc-review-followup.md,changelog.d/2026-10-28-roadmap-compaction.md,changelog.d/2026-11-02-roadmap-restructure.md,changelog.d/2026-11-04-core-proposal.md,changelog.d/2026-11-04-lean-is-the-spec.md,changelog.d/2026-11-04-new-roadmap.md,changelog.d/2026-11-04-philosophy.md,docs/README.md,docs/archive/ROADMAP_HISTORY.md
+
+[piece 6 of 21: docs] blocked: the reviewer refused or gave no verdict, also after one neutral retry. Files: docs/archive/ROADMAP_LEGACY_PLAN.md
+
+[piece 7 of 21: docs] blocked: the reviewer refused or gave no verdict, also after one neutral retry. Files: docs/archive/ROADMAP_RETIRED_TASKS.md,docs/archive/design-records/MEMORY_SEMANTICS.md,docs/archive/design-records/STATEMENT_EXPRESSION_MODEL.md,docs/archive/roadmap-2026-11/README.md
+
+[piece 8 of 21: docs] blocked: the reviewer refused or gave no verdict, also after one neutral retry. Files: docs/archive/roadmap-2026-11/ROADMAP.md
+
+[piece 9 of 21: docs] blocked: the reviewer refused or gave no verdict, also after one neutral retry. Files: docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md
+
+[piece 10 of 21: docs] blocked: the reviewer refused or gave no verdict, also after one neutral retry. Files: docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md,docs/archive/roadmap-2026-11/ROADMAP_DECISIONS.md
+
+[piece 11 of 21: docs] blocked: the reviewer refused or gave no verdict, also after one neutral retry. Files: docs/archive/roadmap-2026-11/ROADMAP_DIRECTION.md,docs/archive/roadmap-2026-11/ROADMAP_RECONCILIATION.md,docs/archive/roadmap-2026-11/ROADMAP_RESTRUCTURE.md
+
+[piece 12 of 21: docs] blocked: the reviewer refused or gave no verdict, also after one neutral retry. Files: docs/archive/roadmap-2026-11/ROADMAP_TASKS.md,docs/archive/roadmap-2026-11/WORK_QUEUE.md,docs/archive/roadmap-2026-11/roadmap_restructure_2026-11-02.tsv
+
+[piece 13 of 21: docs] blocked: the reviewer refused or gave no verdict, also after one neutral retry. Files: docs/archive/roadmap-2026-11/task_disposition.tsv
+
+[piece 14 of 21: docs] blocked: the reviewer refused or gave no verdict, also after one neutral retry. Files: docs/archive/roadmap-2026-11/task_disposition.tsv
+
+[piece 15 of 21: docs] blocked: the reviewer refused or gave no verdict, also after one neutral retry. Files: docs/archive/roadmap-2026-11/task_disposition.tsv
+
+[piece 16 of 21: docs] blocked: the reviewer refused or gave no verdict, also after one neutral retry. Files: docs/archive/roadmap-2026-11/task_disposition.tsv,docs/archive/roadmap-language-scope.md,docs/bugs/334_compiler_ledger_emitted_files_is_never_written_r.md,docs/bugs/335_the_layout_and_stack_depth_reports_panic_on_a_pr.md,docs/bugs/344_the_interpreter_refuses_the_abort_intrinsic_as_a.md,docs/compiler/A1_BOUNDARIES.md,docs/compiler/ARCHITECTURE.md
+
+[piece 17 of 21: docs] blocked: the reviewer refused or gave no verdict, also after one neutral retry. Files: docs/compiler/CORE_PROPOSAL.md,docs/compiler/VERIFIED_PIPELINE.md,docs/platform/EXECUTION_MODEL.md,docs/platform/FFI.md,docs/platform/FFI_GLUE.md,docs/platform/ROCKSDB_SLICE1.md,docs/project/AGENTS.md
+
+[piece 18 of 21: docs] blocked: the reviewer refused or gave no verdict, also after one neutral retry. Files: docs/project/ANTI_FEATURES.md,docs/project/DESIGN_POLICY.md,docs/project/INFLUENCES.md
+
+[piece 19 of 21: docs] blocked: the reviewer refused or gave no verdict, also after one neutral retry. Files: docs/project/PHILOSOPHY.md,docs/project/PRINCIPLES.md
+
+[piece 20 of 21: docs] blocked: the reviewer refused or gave no verdict, also after one neutral retry. Files: docs/project/PROJECT.md,docs/project/PROMOTION_PIPELINE.md,docs/project/README.md,docs/project/TIGHTENING_DECISIONS.md,docs/spec/MAINTAINERS.md,docs/spec/SPEC.md
+
+[piece 21 of 21: docs] blocked: the reviewer refused or gave no verdict, also after one neutral retry. Files: docs/spec/absorb_inventory.tsv,docs/spec/overview.md,docs/stdlib/STDLIB_DESIGN_PRINCIPLES.md,docs/stdlib/STDLIB_SURFACE_FREEZE.md,docs/verification/CONTRACTS_AND_VCS.md,docs/verification/EVIDENCE_CLASSES.md,docs/verification/PROOF_SEMANTICS_BOUNDARY.md,research/compiler/goose-design-survey.md,research/meta/bend-roc-lessons.md,research/meta/recent-languages-2026.md,research/process/verification-docs-consolidation-2026-10.md,research/workloads/port-candidates.md
