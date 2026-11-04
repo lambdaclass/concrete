@@ -17,7 +17,7 @@ The recommendations come from a Claude draft that Codex reviewed against the
 decision record on 2026-11-04. Codex agreed with Q8 and asked for changes everywhere
 else. Its corrections are adopted below; where they reversed the draft (Q2, Q5, Q6),
 the draft's answer is listed as a rejected option with the reason. On Q5 the owner
-then leaned towards never inferring; that option revises the decided OD45, so it is
+then leaned towards never inferring; that option revises the decided OD45 and OD87, so it is
 set out next to the recommendation for the owner to choose.
 
 Fixed constraints:
