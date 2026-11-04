@@ -245,13 +245,17 @@ targets (the [allocation decision](../spec/decisions.md#decided-2026-11-02-alloc
 covers their allocators; [R-0323](ROADMAP_BACKLOG.md#task-r-0323) and
 [R-0324](ROADMAP_BACKLOG.md#task-r-0324) split std and its capabilities), package management
 (decided 2026-10-17, in the [task register](ROADMAP_TASKS.md)), and the richer contract layer
-(frame and dependency-flow contracts, two-state contracts, mature loop invariant and variant
-authoring, checked totality, the specification library, and package and release evidence summaries,
-phase E of the [roadmap](../../ROADMAP.md#phases)). That layer's syntax is frozen only after a
-flagship or external workload needs its facts, and its facts are reported through the one evidence
-ledger (rule 12). Phase E's two-state contracts and checked totality meet [OD117](../spec/decisions.md#od117) (no `old` in
-contracts) and [OD116](../spec/decisions.md#od116) (no total-function category); how they fit
-together is not decided here.
+(dependency-flow contracts, mature loop invariant and variant authoring, the specification
+library, and package and release evidence summaries, phase E of the
+[roadmap](../../ROADMAP.md#phases)). That layer's syntax is frozen only after a flagship or external
+workload needs its facts, and its facts are reported through the one evidence ledger (rule 12).
+Within that layer the decided rules hold: no `old`, quantifier or implication in contracts
+([OD117](../spec/decisions.md#od117)), specification functions with a required, total body
+([OD115](../spec/decisions.md#od115)) and no total-function category
+([OD116](../spec/decisions.md#od116)). How frames, entry-state facts and termination are stated
+inside those rules is proposed in decision row P18, pending the owner: no snapshot construct, frame
+and entry/exit properties as Lean theorems (a source frame clause would be a new owner decision),
+and per-function termination theorems for ordinary functions.
 
 **Hidden runtime and hidden work**
 
@@ -350,9 +354,13 @@ together is not decided here.
 - **User-defined and C-style variadic functions.** Permanent. They are unchecked or complicate
   every signature. The reserved output and append forms are the only multi-argument forms, and they
   are not a function type and cannot be passed as values.
-- **Default arguments.** Reopens when a workload under the pull rules shows the cost of writing
-  every argument, and any design shows defaults in signatures and reports. A call shows every
-  argument it passes.
+- **Default arguments.** A call shows every argument it passes. The current status is "reopens
+  when a workload under the pull rules shows the cost of writing every argument, and any design
+  shows defaults in signatures and reports". Decision row P17a, pending the owner, proposes making
+  this a Permanent refusal, reopened only by a new owner decision, because defaults conflict with
+  visible arguments and with one form per situation. General compile-time evaluation and broad
+  conditional compilation (above) keep their evidence-based reopening under the proposal (row
+  P17b).
 - **Lexical shadowing of a visible local, parameter or top-level name.** Permanent
   ([SCOPE-1](../spec/scope.md#SCOPE-1), [OD67](../spec/decisions.md#od67)). One name, one binding
   in a scope; the compiler still never recovers identity from spellings (rule 13).
