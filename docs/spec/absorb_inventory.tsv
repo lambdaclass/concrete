@@ -193,31 +193,13 @@ docs/platform/TARGET_CONSTANTS.md	Decision	No source-level target constants (CON
 docs/project/ABSENCE_IS_NOT_A_FACT.md	*	compiler/evidence discipline; one restatement: with(...) is required authority, not an effect summary	rule	dup:TRUST-4	-	keep	-
 docs/project/AGENTS.md	*	no language rules: agent procedure (points at owner-decision rule)	rule	none	-	keep	-
 docs/project/AGENTS.md	CONCURRENT_WORK.md (Concurrent work)	no language rules: process doc	rule	none	-	keep	-
-docs/project/ANTI_FEATURES.md	*	refusal list (~20 excluded features); mostly dup spec invariants; two stale claims (as casts, generic type args) and one conflict (ghost code)	rule	dup	-	cite-only	keep as positioning; cite spec IDs; fix stale entries
-docs/project/ANTI_FEATURES.md	No garbage collection	linear ownership; every struct/enum consumed exactly once unless Copy; defer for deterministic cleanup; allocation visible via with(Alloc)	rule	dup:OWN-2,OWN-13,OWN-12	ownership	cite	-
-docs/project/ANTI_FEATURES.md	No hidden async runtime	execution is single-threaded today	rule	dup:STMT-3	statements	cite	-
-docs/project/ANTI_FEATURES.md	No implicit numeric conversions	all numeric conversions use explicit `as` casts (x as i64, n as u32)	rule	stale:ARITH-5	arithmetic	cite	under ARITH-5/OD11 only lossless conversions use `as`; lossy ones are named operations (n as u32 from Int refused)
-docs/project/ANTI_FEATURES.md	No implicit string conversions	print/println/append are compiler-known forms accepting a closed list of scalar/String types, expanded to typed print_*/string_append_* calls; other types refused	builtin	new	types	absorb	MOD-8 covers binding identity only; the accepted argument-type list and desugaring of print/println/append are not a spec rule (TYPE-10 nearest)
-docs/project/ANTI_FEATURES.md	No implicit bool conversions	if and while conditions must be Bool; no truthiness	rule	dup:TYPE-5	types	cite	-
-docs/project/ANTI_FEATURES.md	No HM inference	local let inference only; params and returns annotated; generic type arguments must be supplied at instantiation	rule	conflict:TYPE-9	types	open	the current compiler infers type args from arguments (OD46/OPEN-46 open); TYPE-9 allows omitting the type-argument list; local-inference itself is a spec gap
-docs/project/ANTI_FEATURES.md	No exceptions	Result for recoverable errors; abort-only, no unwinding	semantics	dup:STMT-2	statements	cite	-
-docs/project/ANTI_FEATURES.md	No postfix ?	? is tokenized only to issue a rejection diagnostic; not an expression form	grammar	dup:SYN-1	syntax	cite	-
-docs/project/ANTI_FEATURES.md	No effect system	nine named capabilities File Network Time Env Random Process Console Alloc Unsafe; compile-time subset checking; capability aliases	rule	dup:TRUST-4	trusted	cite	capability list only in TRUST-4 rationale - consider normative definition
-docs/project/ANTI_FEATURES.md	No ghost code	no ghost variables or specification-only types; there is no ghost state	rule	conflict:CON-4	contracts	cite	CON-4@1 defines `ghost let` erased before codegen; doc is stale
-docs/project/ANTI_FEATURES.md	No trait objects	no dyn Trait; enums, monomorphized generics, function pointers instead	rule	dup:TYPE-2	types	cite	-
-docs/project/ANTI_FEATURES.md	No closures	no anonymous functions with capture; named functions and capture-free function pointers	rule	dup:TYPE-1	types	cite	-
-docs/project/ANTI_FEATURES.md	No macros	no source-generating macros or derive; attributes classify but never generate source	grammar	dup:SYN-1	syntax	cite	-
-docs/project/ANTI_FEATURES.md	No comptime	no compile-time evaluation; sizeof/alignof are intrinsics	builtin	dup:FFI-6	ffi	cite	sizeof/alignof as #[intrinsic] in FFI-6 example
-docs/project/ANTI_FEATURES.md	No operator overloading	operators have fixed semantics on primitive types; user types use named methods	rule	dup:TYPE-6	types	cite	-
-docs/project/ANTI_FEATURES.md	No variadics	user functions have fixed parameter lists; print/println/append multi-arg forms are compiler-desugared, not variadic types, not passable as values	rule	dup:TYPE-9	types	cite	types.md rationale: no default args, no variadics; the print exception is the new builtin row above
-docs/project/ANTI_FEATURES.md	No default arguments	all arguments explicit	rule	dup:TYPE-9	types	cite	-
-docs/project/ANTI_FEATURES.md	No inheritance	no classes or inheritance	rule	dup:SYN-1	types	none	implied by absence from grammar (SYN-1); no entry needed
-docs/project/ANTI_FEATURES.md	No implicit trait resolution	the concrete type and impl are always known at the instantiation site; resolution explicit	rule	dup:TRAIT-6,TRAIT-7,TYPE-2	traits	cite	-
+docs/project/ANTI_FEATURES.md	*	stub: moved to PHILOSOPHY.md, What Concrete refuses (2026-11-04)	-	-	-	keep	-
+docs/project/PHILOSOPHY.md	*	the project design rules, admission test and refusal list (absorbed ANTI_FEATURES.md and PROJECT.md Principles/Design policy on 2026-11-04); each language statement cites its OD or rule ID; the stale claims (as casts, generic type arguments, ghost code, capability list, capability aliases, OOM as abort) were corrected against decisions.md	rule	dup	-	cite-only	cites decisions.md and rule IDs; restates no normative sentence
 docs/project/AUTHORING_WALKTHROUGH.md	*	no language rules: proof tutorial	rule	none	-	keep	-
 docs/project/BUG_BUNDLE.md	*	no language rules: process doc	rule	none	-	keep	-
 docs/project/CONSTRUCTOR_COVERAGE.md	*	no language rules: compiler walker checklist	rule	none	-	keep	-
 docs/project/DECISIONS.md	*	stub: moved to PROJECT.md, Language decisions	-	-	-	keep	-
-docs/project/DESIGN_POLICY.md	*	stub: moved to PROJECT.md, Design policy	-	-	-	keep	-
+docs/project/DESIGN_POLICY.md	*	stub: moved to PHILOSOPHY.md, Admission test	-	-	-	keep	-
 docs/project/DETERMINISTIC_SIMULATION.md	*	no language rules: pull-gated design record for a simulation backend	rule	none	-	keep	-
 docs/project/EXAMPLES.md	*	sections merged from other docs; see the section rows	-	-	-	cite-only	-
 docs/project/EXAMPLES.md	EXAMPLE_INVENTORY.md (Inventory)	no language rules: example index	rule	none	-	keep	-
@@ -231,7 +213,7 @@ docs/project/LANDING.md	*	no language rules: landing procedure	rule	none	-	keep	
 docs/project/LANGUAGE_SHAPE.md	*	stub: moved to PROJECT.md, Language shape	-	-	-	keep	-
 docs/project/PERF_TRACKING.md	*	no language rules: perf tooling	rule	none	-	keep	-
 docs/project/POLICY_FILES.md	*	no language rules: policy budgets (project config)	rule	none	-	keep	-
-docs/project/PRINCIPLES.md	*	stub: moved to PROJECT.md, Principles	-	-	-	keep	-
+docs/project/PRINCIPLES.md	*	stub: moved to PHILOSOPHY.md, The rules	-	-	-	keep	-
 docs/project/PROJECT.md	*	sections merged from other docs; see the section rows	-	-	-	cite-only	-
 docs/project/PROJECT.md	DECISIONS.md (Language decisions)	record of permanent "no" and deferred decisions; ~12 language statements, most dup spec; one conflict (trusted scope)	rule	dup	-	design-record	keep as decision rationale; replace rule restatements with IDs; fix "Trusted means pointer containment only"
 docs/project/PROJECT.md	DECISIONS.md (Language decisions) > No closures	no closures; callbacks are capture-free function pointers	rule	dup:TYPE-1	types	cite	-
@@ -254,10 +236,6 @@ docs/project/PROJECT.md	LANGUAGE_SHAPE.md (Language shape) > Trust model	three-w
 docs/project/PROJECT.md	LANGUAGE_SHAPE.md (Language shape) > Ownership model	structs/enums linear unless Copy; live linear never overwritten (E0219) but consumed one may be reassigned; branches agree; loops don't consume outer; no implicit drop; drop glue only in explicit consuming op	rule	dup:OWN-D1,OWN-9,OWN-3,OWN-4,OWN-13	ownership	cite	-
 docs/project/PROJECT.md	LANGUAGE_SHAPE.md (Language shape) > Compilation model	generics resolved by whole-program monomorphization; no runtime type information	semantics	dup:PASS-1,PASS-7,TYPE-2	pipeline	cite	-
 docs/project/PROJECT.md	LANGUAGE_SHAPE.md (Language shape) > Will not become	no HM inference, no macros/derive, no comptime beyond possible constants profile, no GC/async runtime	rule	dup:SYN-1,STMT-3	types	cite	local-inference gap noted under DECISIONS row
-docs/project/PROJECT.md	PRINCIPLES.md (Principles)	design principles; one language restatement (second-class references)	rule	dup	-	cite-only	#12 identity is compiler discipline (MOD-8/MOD-9 for its language face)
-docs/project/PROJECT.md	PRINCIPLES.md (Principles) > 4. References	safe references are second-class: flow down into calls, callbacks and borrow blocks; safe APIs never return or store &T/&mut T	rule	dup:REF-1,REF-3	references	cite	"safe APIs" weaker than REF-1 (trusted too)
-docs/project/PROJECT.md	PRINCIPLES.md (Principles) > 2. No hidden runtime	no GC, no hidden reference counting	rule	dup:OWN-13	ownership	rationale	-
-docs/project/PROJECT.md	DESIGN_POLICY.md (Design policy)	no language rules: feature-admission policy	rule	none	-	keep	-
 docs/project/PROJECT.md	WHY_CONCRETE.md (Why Concrete)	explanatory positioning; restates a few rules; loop example uses old `set` pseudocode	rule	dup	-	cite-only	-
 docs/project/PROJECT.md	WHY_CONCRETE.md (Why Concrete) > Authority Is Visible	a function without with(...) has no ambient authority: no console, file, Alloc or network	rule	dup:TRUST-4	trusted	cite	-
 docs/project/PROJECT.md	WHY_CONCRETE.md (Why Concrete) > Visible Is Step One	callable values come from a closed set of named functions; indirect call targets statically enumerable	guarantee	dup:TYPE-1	types	cite	-

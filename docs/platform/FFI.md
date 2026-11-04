@@ -18,7 +18,7 @@ names the C library its `extern fn`s resolve against in `Concrete.toml` `[native
 build links it into every program that depends on the package: see
 [NATIVE_LIBRARIES.md](NATIVE_LIBRARIES.md).
 
-## Core Principles
+## The foreign boundary is explicit
 
 Concrete keeps the foreign boundary explicit:
 

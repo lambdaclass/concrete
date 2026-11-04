@@ -2,16 +2,18 @@
 
 Status: stable reference index
 
-Project identity, design policy, principles, decisions, workflow, examples, release bundles, and
-repository-wide conventions.
+Project philosophy, identity, decisions, workflow, examples, release bundles, and repository-wide
+conventions.
 
-Start with [PROJECT.md](PROJECT.md): why Concrete exists, its identity, principles, design policy,
-language shape and recorded language decisions, in one document.
+Start with [PHILOSOPHY.md](PHILOSOPHY.md), the one home of the design rules, then
+[PROJECT.md](PROJECT.md): why Concrete exists, its identity, language shape and recorded
+decisions.
 
 Policy and process:
 
-- [PROJECT.md](PROJECT.md): why Concrete, identity, principles, design policy, language shape and
-  language decisions
+- [PHILOSOPHY.md](PHILOSOPHY.md): what Concrete is for, the design rules, the proposed order for
+  settling conflicts between them, the admission test and what Concrete refuses
+- [PROJECT.md](PROJECT.md): why Concrete, identity, language shape and language decisions
 - [AGENTS.md](AGENTS.md): the agent and contributor workflow (playbooks, shared rules, concurrent
   work)
 - [STYLE.md](STYLE.md): naming, structure and idioms for Concrete code, including the iteration
@@ -39,5 +41,6 @@ Roadmap companions and records: [ROADMAP_TASKS.md](ROADMAP_TASKS.md),
 `candidates.tsv` (the candidate records ROADMAP's generated span is built from) and
 `flaky_gates.tsv` (the CI triage list).
 
-`IDENTITY.md`, `PRINCIPLES.md`, `DESIGN_POLICY.md`, `LANGUAGE_SHAPE.md` and `DECISIONS.md` are
-one-line pointers into PROJECT.md, kept because documents outside this directory still link them.
+`IDENTITY.md`, `LANGUAGE_SHAPE.md` and `DECISIONS.md` are one-line pointers into PROJECT.md, and
+`PRINCIPLES.md`, `DESIGN_POLICY.md` and `ANTI_FEATURES.md` into PHILOSOPHY.md, kept because
+documents outside this directory still link them.

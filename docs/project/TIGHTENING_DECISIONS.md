@@ -36,7 +36,7 @@ one of two things:
   ([VERIFIED_PIPELINE.md](../compiler/VERIFIED_PIPELINE.md), R-0491 – R-0509) must formalize.
 
 A rule that is only stricter style waits for a workload, under the workload-driven rule
-([DESIGN_POLICY.md](DESIGN_POLICY.md)). Each candidate gets one class:
+([PHILOSOPHY.md](PHILOSOPHY.md), rule 17). Each candidate gets one class:
 
 | class | meaning |
 |---|---|

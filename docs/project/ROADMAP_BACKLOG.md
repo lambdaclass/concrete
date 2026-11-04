@@ -10907,7 +10907,7 @@ offload, managed shared heap or general recursive device runtime follows from th
 questions. Context: [execution model](../platform/EXECUTION_MODEL.md), research C24–C26.
 
 Any later adoption needs a forcing workload, bounded evidence and an explicit
-owner decision under the [design policy](PROJECT.md#design-policy) and
+owner decision under the [admission test](PHILOSOPHY.md#admission-test) and
 [evidence architecture](../verification/EVIDENCE_ARCHITECTURE.md).
 
 
@@ -10932,7 +10932,7 @@ pinned sources, compatibility concerns, and possible experiments.
   differential fuzzer guard any pass that removes safety checks, and would an
   analysis inventory of Check, Elab and Lower locate structural bug owners?
 - What evidence would support or rule out each idea under Concrete's
-  [design policy](PROJECT.md#design-policy)?
+  [admission test](PHILOSOPHY.md#admission-test)?
 
 A residual-check inventory and a bounded validated-index graph are possible
 experiments, not selected work. Record counterexamples, costs, contract/report
@@ -11007,7 +11007,7 @@ at the pinned commit that confirms or corrects the claim.
   the admission filter.
 
 Any adoption needs a forcing workload, bounded evidence and an explicit owner
-decision under the [design policy](PROJECT.md#design-policy) and
+decision under the [admission test](PHILOSOPHY.md#admission-test) and
 [evidence architecture](../verification/EVIDENCE_ARCHITECTURE.md).
 
 ### Task R-0399
@@ -11026,7 +11026,7 @@ includes the memory-model question Concrete must not answer accidentally:
 atomics, synchronization, shared mutable state, data-race freedom,
 capability-gated thread authority, and proof/evidence classes for concurrent
 code all remain research-gated until a formal model and pressure tests exist.
-Async syntax remains rejected for v1 per `docs/project/ANTI_FEATURES.md`; the
+Async syntax remains rejected for v1 per [PHILOSOPHY.md](PHILOSOPHY.md#what-concrete-refuses); the
 positive research direction lives here and in `docs/platform/EXECUTION_MODEL.md`:
 explicit concurrency primitives, visible effects, linear handles, and
 bounded scheduling/failure evidence rather than hidden async lowering or a

@@ -40,6 +40,9 @@
 #      --check), with negative controls for a hand edit, stale inputs, a malformed or incomplete
 #      discovery record and a bad class tag, and controls that the per-class discovery signal
 #      (exit 2m) moves only the classes a batch counts toward.
+#   10. The project's design rules have one home, docs/project/PHILOSOPHY.md: no other docs/ file
+#      opens a generic principles, design-policy or anti-features section
+#      (check_single_philosophy.sh, with its own negative controls).
 #
 # DELIBERATELY NOT attempted (these are not mechanically robust and would make the
 # gate a false-positive generator — verified during design):
@@ -375,6 +378,13 @@ else
   no "S9 control: a hand edit to the single-page specification was not refused"
 fi
 rm -f "$ctl"
+echo ""
+echo "=== 10. the project's design rules have one home (docs/project/PHILOSOPHY.md) ==="
+if bash scripts/tests/check_single_philosophy.sh; then
+  ok "no docs/ file other than PHILOSOPHY.md opens a principles, design-policy or anti-features section"
+else
+  no "a second home for the project's design rules (check_single_philosophy.sh)"
+fi
 echo ""
 echo "DOCS-DRIFT: PASS=$PASS  FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
