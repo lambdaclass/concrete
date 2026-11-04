@@ -12,7 +12,7 @@ Method: source/documentation review and analysis of downloaded video captions.
 No comparative compiler, runtime, or GPU benchmarks were independently reproduced.
 
 This note preserves the full Bend/Roc discussion, including corrections to initial
-interpretations. The [roadmap](../../docs/archive/roadmap-2026-11/ROADMAP.md#the-queue) remains
+interpretations. The [roadmap](../../ROADMAP.md#the-queue) remains
 the only execution queue. Its final [open research questions](../../docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md#open-research-questions-bend-and-roc)
 record uncertainties while the owner is deciding, not planned features or tasks.
 The 2026-10-25 review led to narrow amendments under [R-0215](../../docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0215),
@@ -477,7 +477,7 @@ amendments are identified at the top of this note; all broader questions remain 
 | C01 | Version-matched installed guide and agent onboarding | A non-author completes an existing example using installed guidance | [R-0397](../../docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0397), [developer tooling](../packages-tooling/developer-tooling.md) |
 | C02 | Required-claim inventory and one project verification entry | Missing/stale/deleted/weakened/unsupported claims stay visible; policy remains separate | [Evidence Architecture](../../docs/verification/EVIDENCE_ARCHITECTURE.md) |
 | C03 | Fixed-spec agent repair workflow | Unauthorized specification/assumption changes are rejected | [Proof Synthesis](../../docs/verification/PROOF_SYNTHESIS.md) |
-| C04 | Rejected-bug demo | Planned R-0486 component shows failure, repair and scoped replay after prerequisites | [current queue](../../docs/archive/roadmap-2026-11/ROADMAP.md#the-queue) |
+| C04 | Rejected-bug demo | Planned R-0486 component shows failure, repair and scoped replay after prerequisites | [current queue](../../ROADMAP.md#the-queue) |
 | C05 | Graded proof and repair corpus | Hidden solutions, refusal tasks, conservation/undo/protocol cases | [Proof Patterns](../../examples/proof_patterns/README.md) |
 | C06 | Bounded synthesis/repair harness | Attempts, costs, failures, exact tasks, independent replay | [Proof Authoring And Automation](../../docs/archive/roadmap-2026-11/ROADMAP_TASKS.md#area-proof-authoring-and-automation) |
 | C07 | Complete independent-check accounting | Every claim classified, including timeout and infrastructure failure | [R-0353](../../docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0353) |

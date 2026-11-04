@@ -1,7 +1,7 @@
 # Verified-compiler pipeline
 
 **Superseded in part (2026-11-01).** The current compiler is not migrated: a new compiler is written
-from the Lean spec ([ROADMAP.md](../archive/roadmap-2026-11/ROADMAP.md#concrete-roadmap)). The goal, target architecture,
+from the Lean spec ([ROADMAP.md](../../ROADMAP.md#concrete-roadmap)). The goal, target architecture,
 semantic contract and proof obligations below apply to the new compiler; the instructions for
 migrating the current compiler stage by stage do not. In particular, the current compiler's evidence
 is not migrated: R-0512's maintenance, inventory and claim migration and S9's legacy issuance and
@@ -926,7 +926,7 @@ prevented it; if none would, the plan gains one.
   recorded remote runner, including the claim-inventory step; local reproduction remains supported.
   Qualified slices receive review and are published to both remotes before dependent releases rely on
   them. New boundaries arrive as shadow paths with disagreement gates.
-- **Scheduling and review.** [ROADMAP's scheduling rule](../archive/roadmap-2026-11/ROADMAP.md#scheduling-rule)
+- **Scheduling and review.** [ROADMAP's scheduling rule](../../ROADMAP.md#scheduling-rule)
   governs: one compiler sequence, superseding the historical capacity shares and integration slots
   (2026-11-03). Known authority and memory-safety defects follow its defect-disposition rule.
   Each checkpoint still records its accountable maintainer and required reviewer before it starts;
@@ -967,7 +967,7 @@ prevented it; if none would, the plan gains one.
   development track, migration guidance and rollback procedures. Real application acceptance,
   diagnostics, compile time and runtime performance are tracked alongside proof coverage. Breaking
   language changes are versioned with migration support. The release rhythm (nightlies, release trains)
-  and the milestone scopes are defined once, in the roadmap's [Releases](../archive/roadmap-2026-11/ROADMAP.md#releases).
+  and the milestone scopes are defined once, in the roadmap's [Releases](../../ROADMAP.md#releases).
 - **Review.** Every slice is reviewed by Codex (`codex exec -s read-only` on the commit, with the
   stage's section as specification); findings are fixed or answered in the commit message before
   publication. Review complements the gates.

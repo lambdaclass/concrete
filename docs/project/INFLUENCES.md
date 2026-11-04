@@ -527,7 +527,7 @@ to avoid memory reasoning. It models how borrows end across calls with "backward
 carry updated values back to the lender. Concrete takes the functional-translation idea; its
 second-class references (never returned or stored) simplify it: a `&mut` argument goes in and comes
 back out, and the supported subset may need no backward functions. The plan that builds on it is
-item 4 of the proof order in [ROADMAP.md](../archive/roadmap-2026-11/ROADMAP.md#concrete-roadmap).
+item 4 of the proof order in [ROADMAP.md](../../ROADMAP.md#concrete-roadmap).
 
 **References:** [Ho and Protzenko, Aeneas: Rust Verification by Functional Translation (ICFP 2022)](https://arxiv.org/abs/2206.07185).
 
@@ -564,7 +564,7 @@ function values are admitted, for callbacks that carry capabilities.
 
 Linear Core shows that optimising transformations can break syntactic linearity while preserving
 semantic linearity, and gives an IR type system that accepts them. How Concrete uses the lesson is item 3 of the proof order in
-[ROADMAP.md](../archive/roadmap-2026-11/ROADMAP.md#concrete-roadmap).
+[ROADMAP.md](../../ROADMAP.md#concrete-roadmap).
 
 **References:** [Mesquita and Toninho, Lazy Linearity for a Core Functional Language (POPL 2026)](https://arxiv.org/abs/2511.10361).
 
@@ -575,7 +575,7 @@ semantic linearity, and gives an IR type system that accepts them. How Concrete 
 Owlang is a Rust-inspired ownership language compiled through CompCertO, in Rocq. Its ownership
 checker is proved to rule out temporal memory errors (partial safety), and the verified compiler
 carries that safety to assembly. How Concrete uses the
-split is item 3 of the proof order in [ROADMAP.md](../archive/roadmap-2026-11/ROADMAP.md#concrete-roadmap).
+split is item 3 of the proof order in [ROADMAP.md](../../ROADMAP.md#concrete-roadmap).
 
 **References:** [End-to-end Compositional Verification of Program Safety through Verified and Verifying Compilation](https://arxiv.org/abs/2510.10015).
 

@@ -3,7 +3,7 @@
 Status: draft for the owner's Core session. Nothing here is decided. The owner
 answers each question in the session of roadmap row A2; until then no work encodes
 an answer. The questions are the nine in
-[ROADMAP.md](../archive/roadmap-2026-11/ROADMAP.md#questions-for-the-core-session). The proposal is drafted
+[ROADMAP.md](../../ROADMAP.md#questions-for-the-core-session). The proposal is drafted
 against the [A1 boundary artifacts](A1_BOUNDARIES.md), and its sections 1–4 are cited
 as "A1 §n". Lean stays the only normative source. An approved answer becomes Lean in
 A3, not prose here.
