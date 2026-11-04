@@ -243,6 +243,9 @@ values-to-bytes lemma (A1 §1).
   are refused, and there is no inference from the result context.
 - Capability sets are exact.
 - OD46 binds generic type arguments the same way, from checked argument types only.
+- OD87 (owner, 2026-11-01): capability arguments may be written explicitly in a
+  turbofish, and inference fills the omitted ones. Option (d) below would also make
+  them mandatory, revising OD87 as well.
 - Open: only choosing among several consistent solutions ([decisions.md](../spec/decisions.md#core-capability-inference)).
 
 **Options.**
@@ -252,8 +255,8 @@ values-to-bytes lemma (A1 §1).
 - **(b) Unique solution, else explicit (recommended).**
 - **(c) Pick the least solution.** Rejected: the compiler would choose among answers.
 - **(d) Never infer.** Every call writes its capability arguments. This is the owner's
-  stated leaning on 2026-11-04, and it **revises OD45**, so it needs the owner's
-  explicit approval as a change to a decided rule.
+  stated leaning on 2026-11-04, and it **revises OD45 and OD87**, so it needs the
+  owner's explicit approval as a change to decided rules.
   - For it: the call site shows the capability instantiation without the reader
     solving anything, and the checker needs no solver.
   - Against it: the argument function's capability set is already written once, in its
@@ -271,8 +274,6 @@ The authority a higher-order call passes on is the argument's own declared set, 
 is visible where that function is declared. The call adds no authority of its own.
 
 **Still open:**
-- the call syntax for capability arguments, and whether writing them where inference
-  succeeds is allowed (one form per call argues for refusing it, as for types);
 - passing the caller's own capability variables;
 - the normal form of capability sets, so that `C` and `C + {}` compare equal.
 
