@@ -71,7 +71,7 @@ The [direction](docs/project/ROADMAP_DIRECTION.md) holds standing reference and 
 | row | goal | owning tasks | done when |
 |---|---|---|---|
 | A1 | Dispose of the spec audit and draft the boundaries Core must satisfy | R-0555, R-0481, R-0010, R-0447, R-0554, R-0511, R-0211, R-0230 | Each changed rule, gap and duplication has an owner and acceptance artifact; defect views distinguish compilers; [boundary drafts](docs/compiler/A1_BOUNDARIES.md) exist. |
-| A2 | Decide the whole target Core shape before implementation | R-0312, R-0316 | The owner approves the target Core proposal, drafted against A1's artifacts, including identities, memory and interface boundaries; before Core is frozen, representative design proofs are checked in Lean for allocator dependencies with reset generativity, deferred cleanup with allocators and loans, heap opening and mutable lending, and one values-to-bytes lemma. If A3 exposes a substantive change, A2 is revisited. |
+| A2 | Decide the whole target Core shape before implementation | R-0312, R-0316 | The owner approves the target [Core proposal](docs/compiler/CORE_PROPOSAL.md), drafted against A1's artifacts, including identities, memory and interface boundaries; before Core is frozen, representative design proofs are checked in Lean for allocator dependencies with reset generativity, deferred cleanup with allocators and loans, heap opening and mutable lending, and one values-to-bytes lemma. If A3 exposes a substantive change, A2 is revisited. |
 | A3 | Formalize the approved semantic contract and theorem in Lean | R-0496, R-0500, R-0502, R-0506, R-0508, R-0509, R-0480, R-0223, R-0227, R-0242, R-0464, R-0266 | The theorem with its holes, named values-to-bytes boundary and trusted-base inventory is on main. |
 | B1 | Build ConcreteSpec and slice 1 with its theorem | R-0491, R-0492, R-0493, R-0497, R-0498, R-0499, R-0501, R-0503, R-0504, R-0507, R-0514, R-0552, R-0521, R-0528, R-0004, R-0435, R-0440, R-0058, R-0073, R-0074, R-0075, R-0076, R-0077, R-0079, R-0080, R-0082, R-0085, R-0090, R-0107, R-0114, R-0115, R-0116, R-0191, R-0203, R-0205, R-0207, R-0210, R-0217, R-0221, R-0222, R-0231, R-0260, R-0272, R-0273, R-0274, R-0278, R-0279, R-0280, R-0288, R-0290, R-0302, R-0421, R-0422, R-0446 | The phase B slice passes from parsing to native execution with independent judgments, correspondence proofs, explicit obligations and minimal proof provenance; every judgment, semantics and pass is total as it lands. |
 | B2 | Generate the chapter and qualify slice 1 | R-0479, R-0471, R-0009, R-0438, R-0092, R-0093, R-0094, R-0095, R-0105, R-0106, R-0118, R-0550, R-0551, R-0425, R-0355 | Conformance and native examples pass; refusal, differential and gate-integrity controls hold; the outside-reader test passes. |
@@ -81,7 +81,7 @@ The [direction](docs/project/ROADMAP_DIRECTION.md) holds standing reference and 
 **Questions for the Core session.** The
 [design review](research/process/design-review-2026-11-03.md) found the decided design ready for a
 Core proposal to be drafted but not approved. These are decided by the owner in the session of A2;
-the proposal brings each with options and a recommendation, and no work encodes an answer first:
+the [proposal](docs/compiler/CORE_PROPOSAL.md) brings each with options and a recommendation, and no work encodes an answer first:
 
 1. allocator discipline: what a brand is, fresh identities and reset in a loop, how a dependency on
    an allocator is tracked through nested containers, returned values and callbacks, where a heap
