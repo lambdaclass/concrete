@@ -103,7 +103,7 @@ cat > "$SRC/ROADMAP.md" <<'EOF'
 
 | row | goal | tasks | done when |
 |---|---|---|---|
-| A1 | Soundness rules | R-0500 | close it with its acceptance controls |
+| A1 | Soundness rules | R-0500, R-0602 | close it with its acceptance controls |
 | B1 | Place MIR | R-0501, R-0600, R-0601 | shadow paths have acceptance controls |
 
 ## Tasks
@@ -115,12 +115,14 @@ Task rows (2026-11-04): R-0500's areas and R-0501's dependencies below are read 
 | task | objective | done when | depends on |
 |---|---|---|---|
 | R-0500 | written rules in `Mono` | each rule lands | — |
+| R-0602 | the owner's call | recorded | owner: the name, R-0604 |
+| R-0604 | not in the queue | done | — |
 
 ### B. Slice
 
 | task | objective | done when | depends on |
 |---|---|---|---|
-| R-0600 | the first half | done | R-0601 (the other half) |
+| R-0600 | the first half | done | R-0601 |
 | R-0601 | the second half | done | R-0600 |
 | R-0501 | place MIR | done | B |
 
@@ -164,7 +166,7 @@ else
   no "build_queue.py failed: $(cat "$TMP/q.err")"
 fi
 order="$(python3 -c 'import json,sys; print(" ".join(t["id"] for t in json.load(open(sys.argv[1]))["tasks"]))' "$TMP/q.json" 2>/dev/null)"
-want="R-0547 R-0539 bug-201 bug-202 bug-206 fuzz-f1 bug-203 fuzz-f4 task-docs-sweep R-0500 R-0501 R-0600 R-0601 bug-204"
+want="R-0547 R-0539 bug-201 bug-202 bug-206 fuzz-f1 bug-203 fuzz-f4 task-docs-sweep R-0500 R-0602 R-0501 R-0600 R-0601 bug-204"
 [ "$order" = "$want" ] && ok "priority: throughput, silent (bugs then fuzz), crash, explicit, roadmap, loud" \
   || no "priority order: got '$order', want '$want'"
 qget() { python3 - "$TMP/q.json" "$@" <<'EOF'
@@ -182,7 +184,21 @@ case " $order " in *" bug-207 "*) no "frozen legacy bug was dispatched" ;;
 case " $order " in *" bug-207 "*|*" bug-205 "*|*" fuzz-f2 "*|*" fuzz-f3 "*|*" R-0999 "*) no "a legacy/fixed bug, a refusal, a promoted finding or a non-row R-id was queued" ;;
   *) ok "fixed bugs, refusals, promoted findings and R-ids outside the rows are not tasks" ;; esac
 [ "$(qget R-0539 depends)" = R-0547 ] && ok "a throughput row's 'depends on' column" || no "R-0539 depends: $(qget R-0539 depends)"
-[ "$(qget R-0501 depends)" = "" ] && ok "a 'depends on' cell naming a phase, not a task, adds no dependency" || no "R-0501 depends: $(qget R-0501 depends)"
+[ "$(qget R-0501 depends)" = "R-0600 R-0601" ] && ok "a 'depends on' cell naming a phase depends on that phase's other tasks" || no "R-0501 depends: $(qget R-0501 depends)"
+[ "$(qget R-0602 disposition)" = skip ] && [ "$(qget R-0602 blocked_on)" = "owner: the name unqueued R-0604" ] \
+  && ok "an owner decision or an unqueued live task blocks dispatch" || no "R-0602: $(qget R-0602 disposition) / $(qget R-0602 blocked_on)"
+mkdir -p "$TMP/owner-amend"; cp -R "$SRC/." "$TMP/owner-amend/"
+printf -- '---\nid: R-0602\ndisposition: in-flight\n---\n' > "$TMP/owner-amend/tasks/R-0602.md"
+if python3 "$QD/build_queue.py" --root "$TMP/owner-amend" > "$TMP/owner-amend.json" 2>&1 \
+   && [ "$(python3 -c 'import json,sys; print({t["id"]: t for t in json.load(open(sys.argv[1]))["tasks"]}["R-0602"]["disposition"])' "$TMP/owner-amend.json")" = skip ]; then
+  ok "a task file cannot lift an owner block (only done can)"
+else no "a task file lifted an owner block"; fi
+mkdir -p "$TMP/badsyntax"; cp -R "$SRC/." "$TMP/badsyntax/"
+sed -i 's/| R-0600 | the first half | done | R-0601 |/| R-0600 | the first half | done | after the other half |/' "$TMP/badsyntax/ROADMAP.md"
+rc=0; python3 "$QD/build_queue.py" --root "$TMP/badsyntax" > /dev/null 2> "$TMP/badsyntax.err" || rc=$?
+[ "$rc" = 2 ] && grep -q "depends on 'after the other half'" "$TMP/badsyntax.err" \
+  && ok "an unreadable 'depends on' item exits 2 instead of reading as no prerequisite" \
+  || no "unreadable depends item: exit $rc, $(cat "$TMP/badsyntax.err")"
 [ "$(qget R-0600 cycle)" = True ] && [ "$(qget R-0601 cycle)" = True ] && ok "a dependency cycle is marked" || no "cycle not marked"
 [ "$(qget R-0501 disposition)" = in-flight ] && ok "tasks/R-0501.md marks the sourced task in flight" || no "disposition not applied"
 [ "$(qget bug-201 areas)" = "mod:Lower rule:R-0501" ] && ok "bug areas come from the structural owner" || no "bug-201 areas: $(qget bug-201 areas)"

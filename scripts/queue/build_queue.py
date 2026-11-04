@@ -15,7 +15,12 @@ edits it. Each source owns its facts; this script only reads them.
             owner" sections (the whole record when it has neither).
   roadmap   ROADMAP.md: the task rows of phase T (development throughput) in their order, then every
             R-NNNN named in the queue's rows, in row order. A task row's "depends on" column gives
-            its dependencies; a task named in a queue row but without a task row is not queued.
+            its dependencies, item by item: a task; a queue row (its tasks); a phase letter (that
+            phase's tasks, the task itself excluded); `owner: <decision>`; or `—`. Any other item
+            exits 2. A task that waits on an owner decision, or on a live task that is not queued
+            (the dispatcher counts an unqueued dependency as met), gets `disposition: skip` and
+            `blocked_on` naming why; a task file cannot dispatch it, only dispose it `done`. A task
+            named in a queue row but without a task row is not queued.
   fuzz      <fuzz-dir>/*.json findings of class silent, crash or unsoundness. Refusals and other
             classes are not tasks; a finding already promoted to a bug (`bug` set) is that bug's.
   explicit  tasks/*.md (format in WORK_QUEUE.md). A file whose `id` names a sourced task instead
@@ -193,14 +198,41 @@ def roadmap_tasks(root, mods):
     rows = task_rows(rm)
     if not rows:
         die(f"{path} has no task rows under '## Tasks': the queue's tasks cannot be read")
+    qrows = {}
+    sec = re.search(r"^## The queue\s*\n(.*?)(?=^## |\Z)", rm, re.M | re.S)
+    if sec:
+        for line in sec.group(1).split("\n"):
+            cells = [c.strip() for c in line.strip().strip("|").split("|")]
+            if len(cells) == 4 and re.fullmatch(r"[A-GT][1-9][0-9]*", cells[0]):
+                qrows[cells[0]] = RID.findall(cells[2])
     tasks, seen = [], set()
+
+    def resolve(rid, cell):
+        """The "depends on" cell as (task ids, owner decisions). Unknown syntax exits 2: a
+        prerequisite this script cannot read would otherwise read as no prerequisite."""
+        deps, owner = [], []
+        for item in (x.strip() for x in cell.split(",")):
+            if item == "—":
+                continue
+            if re.fullmatch(r"owner: \S.*", item):
+                owner.append(item[len("owner: "):])
+            elif re.fullmatch(r"R-\d{4}", item):
+                deps.append(item)
+            elif item in qrows:
+                deps += qrows[item]
+            elif re.fullmatch(r"[A-GT]", item) and any(r[0] == item for r in rows.values()):
+                deps += [k for k, r in rows.items() if r[0] == item]
+            else:
+                die(f"{path}: {rid} depends on {item!r}, which is not a task, a queue row, a phase "
+                    f"with tasks, 'owner: <decision>' or '—'")
+        return sorted(set(deps) - {rid}), owner
 
     def add(rid, tier):
         if rid in seen or rid not in rows:
             return
         seen.add(rid)
         _, obj, done, deps_cell = rows[rid]
-        deps = [x for x in RID.findall(deps_cell) if x != rid]
+        deps, owner = resolve(rid, deps_cell)
         # A row cites other tasks and documents; it touches its own rule and the compiler, script
         # and library files it names. Cited R-ids and docs are references, not areas.
         areas = {a for a in areas_of(obj + "\n" + done, mods)
@@ -210,6 +242,7 @@ def roadmap_tasks(root, mods):
             "title": obj.strip()[:160] or rid,
             "areas": sorted(areas), "depends": sorted(set(deps)),
             "prompt": f"/roadmap-item {rid}", "source": "ROADMAP.md",
+            **({"blocked_on": ["owner: " + o for o in owner]} if owner else {}),
         })
 
     # The development-throughput track: phase T's rows, in their order (user priority).
@@ -217,13 +250,15 @@ def roadmap_tasks(root, mods):
         if row[0] == "T":
             add(rid, "throughput")
     # Then every task named in the queue's rows, in row order.
-    sec = re.search(r"^## The queue\s*\n(.*?)(?=^## |\Z)", rm, re.M | re.S)
-    if sec:
-        for line in sec.group(1).split("\n"):
-            cells = [c.strip() for c in line.strip().strip("|").split("|")]
-            if len(cells) == 4 and re.fullmatch(r"[A-GT][1-9][0-9]*", cells[0]):
-                for rid in RID.findall(cells[2]):
-                    add(rid, "roadmap")
+    for ids in qrows.values():
+        for rid in ids:
+            add(rid, "roadmap")
+    # A dependency on a live task that is not queued is unmet, but the dispatcher would count it as
+    # met: block the dependent instead.
+    for t in tasks:
+        missing = [d for d in t["depends"] if d in rows and d not in seen]
+        if missing:
+            t.setdefault("blocked_on", []).extend("unqueued " + d for d in missing)
     return tasks
 
 
@@ -336,6 +371,10 @@ def build(root, fuzz_dir):
                 **({"branch": meta["branch"]} if "branch" in meta else {}),
             })
             by_id[meta["id"]] = explicit[-1]
+    # A block outlives a task file's amendment: only `done` (the work landed elsewhere) lifts it.
+    for t in sourced:
+        if t.get("blocked_on") and t.get("disposition") != "done":
+            t["disposition"] = "skip"
     seen, tasks = set(), []
     for t in sourced + explicit:
         if t["id"] in seen:
