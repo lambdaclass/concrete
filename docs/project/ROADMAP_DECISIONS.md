@@ -383,6 +383,27 @@ the spec owns, or describe a removed feature as current.
 
 <a id="2026-11-01--lean-as-the-only-source"></a>
 
+### 2026-11-04 — Lean is the specification
+
+```markdown
+**Lean is the specification; no prose is generated from it (owner decision, 2026-11-04).** It revises
+the 2026-11-01 Lean-source decision below. The owner: "i don't care if generating text from lean is
+awkward, maybe we don't even need the text".
+
+- The Lean definitions are the normative text. Each rule is a readable Lean definition with its rule
+  ID, a doc comment stating in plain words what it means, and its conformance examples.
+- No program generates `SPEC.md` or the chapters. This supersedes "Everything else is generated from
+  Lean" and steps 4–5 of the 2026-11-01 sequence: there is no prose generator and no generator
+  correctness obligation. The prose chapters in `docs/spec` are retired slice by slice as their rules
+  land in Lean, not regenerated. Where a criterion or acceptance artifact of earlier decisions names
+  "generated chapters", read it as "the slice's Lean rules with doc comments and examples".
+- Derived machine views stay: the rule registry, IDs and manifests are generated from the Lean
+  definitions and keep a staleness gate.
+- The book (`docs/book`) is the non-normative user guide; it teaches and links to the Lean rules,
+  and states no rule of its own.
+- The outside-reader test reads the Lean rules and their examples.
+```
+
 ### 2026-11-01 — Lean as the only source
 
 ```markdown

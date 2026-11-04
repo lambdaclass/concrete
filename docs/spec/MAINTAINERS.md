@@ -4,7 +4,7 @@ This document is for those who change the specification: the entry format, the r
 and the migration plan. It states no language rules. Readers start with the [overview](overview.md);
 the landing page is [README.md](README.md).
 
-`docs/spec/` is the readable statement of the decided Concrete language rules until Lean generates it. It has one chapter per
+`docs/spec/` is the readable statement of the decided Concrete language rules until their Lean definitions replace it. It has one chapter per
 area, and every rule and every definition in it has a stable, versioned ID. Other documents, the
 website and the compiler cite a rule by its ID and do not restate it. The compiler, the
 interpreter and the test corpus are checked against this directory by
@@ -14,7 +14,8 @@ This follows Austral's discipline: the language should fit in one document that 
 audit.
 
 **Authority.** Lean is the only normative source as it lands: executable semantics and independent
-checker judgments, with readable chapters generated from Lean, not a second definition. Until then,
+checker judgments, each with a plain-words doc comment and its examples. No prose is generated from
+Lean: a chapter is retired as its rules land there ([2026-11-04 decision](../project/ROADMAP_DECISIONS.md#2026-11-04--lean-is-the-specification)). Until then,
 the chapters state the decided rules and [decisions.md](decisions.md) governs wherever a chapter
 still disagrees. The owner's 2026-11-03 cleanup decision authorizes correcting these prose chapters
 now, superseding for this cleanup the earlier instruction to wait for the Lean rewrite. Old prose
