@@ -44,7 +44,7 @@ reserving; if it still fails after the reservation it removes what it wrote and 
 placeholder, so a draft can be backed up on `wip/*` but cannot land.
 
 The scaffold defaults to `--compiler new`; use `--compiler legacy` to record a defect against
-`legacy-compiler-final` under the [defect disposition rule](../../ROADMAP.md#defect-disposition-rule).
+`legacy-compiler-final` under the [defect disposition rule](../archive/roadmap-2026-11/ROADMAP.md#defect-disposition-rule).
 
 A bug record is `docs/bugs/NNN_short_name.md`. Every time a bug is found,
 ask whether an underlying problem in the compiler's design produced it, and record the answer: a
@@ -112,7 +112,7 @@ batch that found it, and in that row's `silent` column when it is silent; the re
 line must agree. Every batch has a `compiler` column, including quiet batches. A batch can contain bugs from only
 that compiler; the dashboard never combines their statistics. `new_bug.sh` defaults to
 `--compiler new`; use `--compiler legacy` for defects recorded against `legacy-compiler-final`.
-Frozen-compiler defects are never repaired or dispatched ([defect rule](../../ROADMAP.md#defect-disposition-rule)).
+Frozen-compiler defects are never repaired or dispatched ([defect rule](../archive/roadmap-2026-11/ROADMAP.md#defect-disposition-rule)).
 `new_bug.sh` writes both from `--batch`/`--new-batch` and `--silent`; when a fact
 changes later (the bug turns out silent, or belongs to another batch), edit both and regenerate the
 [bug dashboard](DASHBOARD.md#bug-dashboard) (`python3 scripts/gen/bug_dashboard.py --write`;
@@ -130,7 +130,7 @@ real conflict and is resolved by hand.
 their owners, are in [STRUCTURAL_CLASSES.md](STRUCTURAL_CLASSES.md); a new bug either joins a class
 there (a `class:` line) or adds one (a new table row and section). Whether a new bug is repaired now
 or contained until its owner lands follows the roadmap's defect disposition rule
-([execution queue](../../ROADMAP.md#the-queue)).
+([execution queue](../archive/roadmap-2026-11/ROADMAP.md#the-queue)).
 
 ## Spec rulings
 

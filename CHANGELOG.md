@@ -145,7 +145,7 @@ reviewed sources, benchmark scripts, code, and Concrete design references.
 
 The note filters every possible adaptation through Concrete's explicit ownership,
 authority, execution, and evidence philosophy. Its 27 considerations remain research
-while the owner is deciding. The roadmap ends with [open research questions](docs/project/ROADMAP_BACKLOG.md#open-research-questions-bend-and-roc),
+while the owner is deciding. The roadmap ends with [open research questions](docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md#open-research-questions-bend-and-roc),
 not planned features or implementation tasks. This records completed research,
 not adopted work. The current queue and existing task requirements are unchanged;
 upstream performance measurements were not independently reproduced.
@@ -800,7 +800,7 @@ execution queue, fuzz-farm findings, and explicit `tasks/*.md` files), watches t
 and starts headless agents on the next ready tasks, with priority tiers, area conflicts, budgets, a
 heartbeat and a kill switch. A finished agent leaves a branch with review and gate notes for the
 landing bot. The dispatcher never pushes to main or `ci/*`: its clone's pre-push hook
-(`push_guard.sh`) admits only `wip/*` branches and the readiness notes. [WORK_QUEUE.md](docs/project/WORK_QUEUE.md) describes it.
+(`push_guard.sh`) admits only `wip/*` branches and the readiness notes. [WORK_QUEUE.md](docs/archive/roadmap-2026-11/WORK_QUEUE.md) describes it.
 
 `scripts/status/status.py` generates `status.json` and a self-contained, phone-width `status.html`:
 whether both mains agree and their CI is green, trains in flight against the 40-minute target, the
@@ -1428,7 +1428,7 @@ the result (9 wordfreq specializations). The bug is pinned by
 
 ### Development Throughput Becomes A Priority Track (2026-10-22)
 
-The roadmap has a [development throughput](ROADMAP.md#development-throughput) track, ordered
+The roadmap has a [development throughput](docs/archive/roadmap-2026-11/ROADMAP.md#development-throughput) track, ordered
 ahead of the next feature wave. A finished, Codex-clean branch took 6 – 10 h of wall clock to
 reach main for about 1 h of work. Several causes added to that time:
 
@@ -1930,7 +1930,7 @@ obligations were dropped; row 2's obligations moved into its exits.
 
 ROADMAP.md now keeps the phases, the execution queue and the tasks a queue row names or an active or
 next phase schedules; the other 154 of its 527 tasks moved unchanged to
-[docs/project/ROADMAP_BACKLOG.md](docs/project/ROADMAP_BACKLOG.md), each with a task-specific
+[docs/project/ROADMAP_BACKLOG.md](docs/archive/roadmap-2026-11/ROADMAP_BACKLOG.md), each with a task-specific
 **Pull trigger:** line. The backlog defines when a task is pulled (its trigger fires, a phase needs it,
 or a release checkpoint does), a review of every backlog task at each phase entry and release, and a
 review log. ROADMAP.md opens with one entry point (aim, current state, **Active phases:** /

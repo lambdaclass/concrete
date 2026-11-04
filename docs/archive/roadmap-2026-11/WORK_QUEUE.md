@@ -5,7 +5,7 @@ The work queue lets agents run without a human orchestrator. Once installed on a
 tick every 5 minutes as user `agent`. Each tick rebuilds the queue from its
 sources, watches the running agents, and starts headless Claude Code agents on the next ready tasks.
 A finished agent leaves a branch with clean review and gate notes, and the landing bot
-([LANDING.md](LANDING.md)) picks it up. The dispatcher never pushes to `main` or `ci/*`.
+([LANDING.md](../../project/LANDING.md)) picks it up. The dispatcher never pushes to `main` or `ci/*`.
 
 | file | role |
 |---|---|

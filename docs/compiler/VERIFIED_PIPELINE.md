@@ -1,7 +1,7 @@
 # Verified-compiler pipeline
 
 **Superseded in part (2026-11-01).** The current compiler is not migrated: a new compiler is written
-from the Lean spec ([ROADMAP.md](../../ROADMAP.md#concrete-roadmap)). The goal, target architecture,
+from the Lean spec ([ROADMAP.md](../archive/roadmap-2026-11/ROADMAP.md#concrete-roadmap)). The goal, target architecture,
 semantic contract and proof obligations below apply to the new compiler; the instructions for
 migrating the current compiler stage by stage do not. In particular, the current compiler's evidence
 is not migrated: R-0512's maintenance, inventory and claim migration and S9's legacy issuance and
@@ -314,7 +314,7 @@ contracts are fixed at this boundary (S7 with R-0502).
   comparisons, checked addition/subtraction/multiplication, and one capability-authorized `print_int`
   event, including terminating, trapping and divergent behaviours. Other widths, casts, division, shifts,
   recursion and further surface loop forms are explicit subsequent V1 increments. Its named target
-  programs and regression set are listed under R-0511 in the [roadmap](../project/ROADMAP_TASKS.md#task-r-0511);
+  programs and regression set are listed under R-0511 in the [roadmap](../archive/roadmap-2026-11/ROADMAP_TASKS.md#task-r-0511);
   they do not widen the subset. A Core → BIR theorem
   is an intermediate result, not the native guarantee; no throwaway VM is built.
 - **V1b** carries the subset to native AArch64 through Concrete's BIR → LCB-IR adapter and the Lean
@@ -424,7 +424,7 @@ exhaustion, crash), never skipped. model-diff for zero-argument, `bool` and aggr
 plus a binary leg, with a pinned claimed-function inventory. The four 2026-10-18 hunts and the
 checker hunt run before every release candidate. A hand-written adversarial suite of eight named examples,
 each with its own gate leg, and scaled interpreter/native/model campaigns are scheduled under R-0491 in
-the [roadmap](../project/ROADMAP_TASKS.md#task-r-0491).
+the [roadmap](../archive/roadmap-2026-11/ROADMAP_TASKS.md#task-r-0491).
 **Exit:** each of 080 – 095 has a checked-in bug record, reproducer, expected outcome and
 pre-fix/fixed SHA pair. The deterministic differential suite detects 080 and 084 – 088;
 name-binding controls detect 081 – 082; evidence and cross-surface controls detect 083 and 089;
@@ -926,7 +926,7 @@ prevented it; if none would, the plan gains one.
   recorded remote runner, including the claim-inventory step; local reproduction remains supported.
   Qualified slices receive review and are published to both remotes before dependent releases rely on
   them. New boundaries arrive as shadow paths with disagreement gates.
-- **Scheduling and review.** [ROADMAP's scheduling rule](../../ROADMAP.md#scheduling-rule)
+- **Scheduling and review.** [ROADMAP's scheduling rule](../archive/roadmap-2026-11/ROADMAP.md#scheduling-rule)
   governs: one compiler sequence, superseding the historical capacity shares and integration slots
   (2026-11-03). Known authority and memory-safety defects follow its defect-disposition rule.
   Each checkpoint still records its accountable maintainer and required reviewer before it starts;
@@ -967,7 +967,7 @@ prevented it; if none would, the plan gains one.
   development track, migration guidance and rollback procedures. Real application acceptance,
   diagnostics, compile time and runtime performance are tracked alongside proof coverage. Breaking
   language changes are versioned with migration support. The release rhythm (nightlies, release trains)
-  and the milestone scopes are defined once, in the roadmap's [Releases](../../ROADMAP.md#releases).
+  and the milestone scopes are defined once, in the roadmap's [Releases](../archive/roadmap-2026-11/ROADMAP.md#releases).
 - **Review.** Every slice is reviewed by Codex (`codex exec -s read-only` on the commit, with the
   stage's section as specification); findings are fixed or answered in the commit message before
   publication. Review complements the gates.

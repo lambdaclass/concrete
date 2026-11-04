@@ -4,7 +4,7 @@ Status: operational procedure. How work is done in this repository: the agent pl
 rules they share, and [concurrent work](#concurrent-work-one-worktree-per-writer) (one worktree per
 writer, the server gate runs, publishing). It absorbed `CONCURRENT_WORK.md` on 2026-10-29. The
 tool manuals it points to stay separate: [LANDING.md](LANDING.md) (landing trains and the bot),
-[REVIEW.md](REVIEW.md) (`scripts/review/review.sh`), [WORK_QUEUE.md](WORK_QUEUE.md) (the agent work
+[REVIEW.md](REVIEW.md) (`scripts/review/review.sh`), [WORK_QUEUE.md](../archive/roadmap-2026-11/WORK_QUEUE.md) (the agent work
 queue), [STATUS_PAGE.md](STATUS_PAGE.md) and [PROMOTION_PIPELINE.md](PROMOTION_PIPELINE.md) (the
 validation stages, CI tiers and result vocabulary).
 
@@ -61,7 +61,7 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
 - For `compiler: new`, a silent defect (wrong code, unsound claim) is stopped at once by repair
   or fail-closed containment; a loud one is filed, pinned and owned. Legacy-compiler defects
   are recorded against `legacy-compiler-final`, never repaired, under
-  [ROADMAP's defect disposition and frozen-compiler rule](../../ROADMAP.md#defect-disposition-rule).
+  [ROADMAP's defect disposition and frozen-compiler rule](../archive/roadmap-2026-11/ROADMAP.md#defect-disposition-rule).
 
 **Branches.**
 - One bug or one rule per branch, in its own worktree (`scripts/worktree-new.sh`,
@@ -229,7 +229,7 @@ the hook phase as safe is the error that costs a run.
 ### Landing, review and load (development throughput)
 
 On 2026-10-22 a finished branch took 6 – 10 h to reach main for about 1 h of work.
-The [development throughput](../../ROADMAP.md#development-throughput) track in the
+The [development throughput](../archive/roadmap-2026-11/ROADMAP.md#development-throughput) track in the
 roadmap owns the repair. These rules apply to every writer now:
 
 - **One bug or one rule per branch** (R-0545). A branch that changes a language or

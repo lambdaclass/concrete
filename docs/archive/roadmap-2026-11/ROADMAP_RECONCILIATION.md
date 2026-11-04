@@ -15,13 +15,13 @@ Date: 2026-10-19
 > The record below is kept as written.
 
 The 2026-10-19 reconciliation mapped every task heading and every open-work prose item in
-[ROADMAP.md](../../ROADMAP.md) onto the seven stages, the
-[verified-compiler plan](../compiler/VERIFIED_PIPELINE.md) and the Lean Compiler Backend decision
+[ROADMAP.md](../../../ROADMAP.md) onto the seven stages, the
+[verified-compiler plan](../../compiler/VERIFIED_PIPELINE.md) and the Lean Compiler Backend decision
 (R-0517). It was produced from four slice audits of ROADMAP.md at commit `7b134645`; the line numbers
 below refer to that revision. Nothing was deleted. The historical sections it inventoried were later
-moved verbatim to [ROADMAP_HISTORY.md](../archive/ROADMAP_HISTORY.md), and the bodies of done,
+moved verbatim to [ROADMAP_HISTORY.md](../ROADMAP_HISTORY.md), and the bodies of done,
 superseded, merged, retired and delegated tasks to
-[ROADMAP_RETIRED_TASKS.md](../archive/ROADMAP_RETIRED_TASKS.md). Each such task keeps a stub in the
+[ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md). Each such task keeps a stub in the
 roadmap with its **Disposition:** line and a link to its body; each live owner lists what it
 inherited under **Inherited obligations**. The acceptance obligations,
 regression cases and controls of a superseded task survive under its named owner unless its row

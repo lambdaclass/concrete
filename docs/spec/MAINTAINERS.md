@@ -15,7 +15,7 @@ audit.
 
 **Authority.** Lean is the only normative source as it lands: executable semantics and independent
 checker judgments, each with a plain-words doc comment and its examples. No prose is generated from
-Lean: a chapter is retired as its rules land there ([2026-11-04 decision](../project/ROADMAP_DECISIONS.md#2026-11-04--lean-is-the-specification)). Until then,
+Lean: a chapter is retired as its rules land there ([2026-11-04 decision](../archive/roadmap-2026-11/ROADMAP_DECISIONS.md#2026-11-04--lean-is-the-specification)). Until then,
 the chapters state the decided rules and [decisions.md](decisions.md) governs wherever a chapter
 still disagrees. The owner's 2026-11-03 cleanup decision authorizes correcting these prose chapters
 now, superseding for this cleanup the earlier instruction to wait for the Lean rewrite. Old prose
@@ -220,7 +220,7 @@ example states, never only with the other legs.
 
 ## Path to the complete spec
 
-[R-0555](../project/ROADMAP_TASKS.md#task-r-0555) ("Language spec: the WebAssembly model") tracks
+[R-0555](../archive/roadmap-2026-11/ROADMAP_TASKS.md#task-r-0555) ("Language spec: the WebAssembly model") tracks
 the target. Its four workstreams:
 
 - **(a) Mechanized.** Every entry names the Lean definition of its rule (`Semantics:`), and the link

@@ -50,6 +50,6 @@ intrinsics, `abort_basic.con` among them (native aborts, `--interp` reports the 
 
 `check_example_outputs.sh` (open-bug reproducers leg, `interp-fails`) pins the refusal. The defect
 is loud (no program is accepted with a wrong result), so no containment is required by the
-[defect disposition rule](../../ROADMAP.md#the-queue). Meanwhile a user runs a
+[defect disposition rule](../archive/roadmap-2026-11/ROADMAP.md#the-queue). Meanwhile a user runs a
 program that aborts on purpose natively, or reads the interpreter's "undefined function 'abort'" as
 the abort.

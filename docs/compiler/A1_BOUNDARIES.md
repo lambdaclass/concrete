@@ -1,7 +1,7 @@
 # A1 boundary artifacts
 
 Status: draft for the owner's Core session. This document schedules nothing; the
-[roadmap](../../ROADMAP.md#the-queue) tracks it. It proposes interfaces, not language
+[roadmap](../archive/roadmap-2026-11/ROADMAP.md#the-queue) tracks it. It proposes interfaces, not language
 rules or an approved Core. A2 decides the whole shape; A3 formalizes the approved
 result and returns substantive changes to A2. Sources: `ROADMAP.md:217–259`;
 `research/process/design-review-2026-11-03.md:9`.

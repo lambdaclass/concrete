@@ -7,7 +7,7 @@ links were adjusted for this location.
 Nothing here schedules work, states current status or overrides the
 [current execution queue](ROADMAP_LEGACY_PLAN.md#the-current-execution-queue). `ACTIVE`, `OPEN`,
 `PENDING`, "remaining" and "next" describe the date each record was written. The 2026-10-19
-[reconciliation](../project/ROADMAP_RECONCILIATION.md) mapped every live item in these sections to an
+[reconciliation](roadmap-2026-11/ROADMAP_RECONCILIATION.md) mapped every live item in these sections to an
 owning task in the roadmap (its prose inventory cites these sections by their line numbers at
 `7b134645`); an item it recorded as done or historical is closed here.
 
@@ -269,7 +269,7 @@ preserved historical artifact is not rewritten to use the schema shipped later a
 ### R-0004 evidence producer — landed state (2026-08-05)
 
 > **[historical] Reconciled 2026-10-19:** R-0004 closed 2026-08-20; this is its implementation record. Its live remainders are mapped to owning tasks in the
-> [reconciliation record](../project/ROADMAP_RECONCILIATION.md); nothing in it schedules work.
+> [reconciliation record](roadmap-2026-11/ROADMAP_RECONCILIATION.md); nothing in it schedules work.
 
 Canonical inventory of what exists, so the next session does not re-derive it. The
 constructor-by-constructor classification lives in `docs/verification/EVIDENCE_PRODUCER_MATRIX.md`
@@ -597,7 +597,7 @@ something into versioned bytes or leaves a construct undescribable.
 ### R-0004 state as of 2026-08-07 (`d156a7f6`, CI green)
 
 > **[historical] Reconciled 2026-10-19:** a dated R-0004 snapshot superseded by its closure. Its live remainders are mapped to owning tasks in the
-> [reconciliation record](../project/ROADMAP_RECONCILIATION.md); nothing in it schedules work.
+> [reconciliation record](roadmap-2026-11/ROADMAP_RECONCILIATION.md); nothing in it schedules work.
 
 Written for someone picking this up cold. `d156a7f6` is the first complete CI verdict since
 `b133b04c`; everything between was cancelled by superseding pushes, so this is the point to
@@ -891,7 +891,7 @@ beside prose would add no guarantee.
 ### Multi-prover merge: what it took, and what it left open (2026-08-05)
 
 > **[historical] Reconciled 2026-10-19:** a dated merge record. Its live remainders are mapped to owning tasks in the
-> [reconciliation record](../project/ROADMAP_RECONCILIATION.md); nothing in it schedules work.
+> [reconciliation record](roadmap-2026-11/ROADMAP_RECONCILIATION.md); nothing in it schedules work.
 
 Merged the spike pinned at `80be5368` into main after the quarantine review. The merge
 itself was textually CLEAN — zero conflicts across a 105-commit divergence — but five
@@ -924,7 +924,7 @@ machine-checked tracking this merge was conditioned on.
 ### Merge blocker RESOLVED: the spike fixed a fail-open, the test asserted the defect
 
 > **[historical] Reconciled 2026-10-19:** a resolved merge blocker. Its live remainders are mapped to owning tasks in the
-> [reconciliation record](../project/ROADMAP_RECONCILIATION.md); nothing in it schedules work.
+> [reconciliation record](roadmap-2026-11/ROADMAP_RECONCILIATION.md); nothing in it schedules work.
 
 The pin `80be5368` failed one trust-gate case on its own (1500/1), identically on the
 quarantine merge:
@@ -947,7 +947,7 @@ spike fixes that.
 ### Multi-prover work that remains AFTER R-0004
 
 > **[historical] Reconciled 2026-10-19:** a dated list; `solver_error` is R-0520, kernel-set binding is R-0440, proposition identity is R-0454. Its live remainders are mapped to owning tasks in the
-> [reconciliation record](../project/ROADMAP_RECONCILIATION.md); nothing in it schedules work.
+> [reconciliation record](roadmap-2026-11/ROADMAP_RECONCILIATION.md); nothing in it schedules work.
 
 Recorded so the dependency is explicit rather than discovered later. The spike's own comment
 in `ObligationCore.lean` states that `proved_by_two_kernels` / `proved_by_multi_kernel`
@@ -1315,7 +1315,7 @@ Every hole listed here would have been caught at the moment it was opened.
 ## Branch `spike/non-arithmetic-multi-kernel` (depends on `spike/multi-prover-evidence`)
 
 > **[historical] Reconciled 2026-10-19:** a merged spike's record. Its live remainders are mapped to owning tasks in the
-> [reconciliation record](../project/ROADMAP_RECONCILIATION.md); nothing in it schedules work.
+> [reconciliation record](roadmap-2026-11/ROADMAP_RECONCILIATION.md); nothing in it schedules work.
 
 ### Landed: rung 2 — boolean postconditions in all three kernels
 
@@ -1676,7 +1676,7 @@ figure becomes conditional — worth care, since a false byte count was removed 
 ## PRE-MERGE STATE of `spike/multi-prover-evidence` (recorded 2026-08-05)
 
 > **[historical] Reconciled 2026-10-19:** a pre-merge snapshot. Its live remainders are mapped to owning tasks in the
-> [reconciliation record](../project/ROADMAP_RECONCILIATION.md); nothing in it schedules work.
+> [reconciliation record](roadmap-2026-11/ROADMAP_RECONCILIATION.md); nothing in it schedules work.
 
 Written for a merge performed on a different machine. Everything below is either a
 **behaviour change a reviewer should expect**, or **work not done**.
@@ -1830,7 +1830,7 @@ is consistent enough to be a rule rather than an anecdote.
 ## Outstanding work recorded 2026-08-04
 
 > **[historical] Reconciled 2026-10-19:** a dated backlog whose items were completed, merged into owners, or promoted to tasks. Its live remainders are mapped to owning tasks in the
-> [reconciliation record](../project/ROADMAP_RECONCILIATION.md); nothing in it schedules work.
+> [reconciliation record](roadmap-2026-11/ROADMAP_RECONCILIATION.md); nothing in it schedules work.
 
 Everything below was found or deferred during the R-0460..R-0465 arc and is filed here so it
 is not carried in someone's head. Each entry says what is *measured* rather than what is
@@ -2066,7 +2066,7 @@ a numeric rather than a label claim, IS transitive as of this change.
 ## Compiler Pipeline Spine
 
 > **[historical] Reconciled 2026-10-19:** its QBE-first ordering is superseded by the current queue, R-0511/R-0514/R-0515 and R-0517 (the Lean Compiler Backend is the QBE path). Its live remainders are mapped to owning tasks in the
-> [reconciliation record](../project/ROADMAP_RECONCILIATION.md); nothing in it schedules work.
+> [reconciliation record](roadmap-2026-11/ROADMAP_RECONCILIATION.md); nothing in it schedules work.
 
 Phase 6B established semantic truth and validation records; Phase 6C made the
 pipeline observable/replayable; Phase 7.5 adds a real user-selectable QBE
@@ -2085,7 +2085,7 @@ performance claims only after backend contracts and measurements exist; Phase
 ## External-Validation Gate
 
 > **[historical] Reconciled 2026-10-19:** as a global blocker this is superseded by R-0515's continuing pilots; measured product decisions remain. Its live remainders are mapped to owning tasks in the
-> [reconciliation record](../project/ROADMAP_RECONCILIATION.md); nothing in it schedules work.
+> [reconciliation record](roadmap-2026-11/ROADMAP_RECONCILIATION.md); nothing in it schedules work.
 
 The back half of the roadmap depends on the bet that evidence-carrying source is
 worth the discipline. Phase 8 supplies the first serious external-facing
@@ -2096,7 +2096,7 @@ bet, or redesigns the discipline.
 ## Native Debug Info
 
 > **[historical] Reconciled 2026-10-19:** the "Phase 15+ only" delay is superseded by R-0515's V1b checkpoint and R-0281. Its live remainders are mapped to owning tasks in the
-> [reconciliation record](../project/ROADMAP_RECONCILIATION.md); nothing in it schedules work.
+> [reconciliation record](roadmap-2026-11/ROADMAP_RECONCILIATION.md); nothing in it schedules work.
 
 DWARF/source-mapped crash traces matter once Concrete emits real binaries. This
 is backend/tooling work owned by Phase 15+, not Phase 7 stdlib work.
@@ -2104,7 +2104,7 @@ is backend/tooling work owned by Phase 15+, not Phase 7 stdlib work.
 ## Global Task Sequence
 
 > **[historical] Reconciled 2026-10-19:** this competing R-0004-first sequence is superseded by the current execution queue; its task obligations remain with their owners. Its live remainders are mapped to owning tasks in the
-> [reconciliation record](../project/ROADMAP_RECONCILIATION.md); nothing in it schedules work.
+> [reconciliation record](roadmap-2026-11/ROADMAP_RECONCILIATION.md); nothing in it schedules work.
 
 Three implementation audits on 2026-07-18 reproduced nine numbered defects in
 previously dark stdlib trusted bodies, Mono/Elab/SSACleanup boundaries, and the
@@ -2139,7 +2139,7 @@ Proof automation remains behind honest semantics and the external-user trial.
 ## Strict post-R-0004 critical path
 
 > **[historical] Reconciled 2026-10-19:** this older sequence is superseded by the current execution queue. Its live remainders are mapped to owning tasks in the
-> [reconciliation record](../project/ROADMAP_RECONCILIATION.md); nothing in it schedules work.
+> [reconciliation record](roadmap-2026-11/ROADMAP_RECONCILIATION.md); nothing in it schedules work.
 
 
 post-closure mutation qualification
@@ -3539,7 +3539,7 @@ not promote automated verdicts into authoritative claims before this gate.
 ## Multi-kernel: where the ladder actually stands (2026-08-08)
 
 > **[historical] Reconciled 2026-10-19:** a dated snapshot; the ladder is an evidence vector, not a schedule (R-0440/R-0448). Its live remainders are mapped to owning tasks in the
-> [reconciliation record](../project/ROADMAP_RECONCILIATION.md); nothing in it schedules work.
+> [reconciliation record](roadmap-2026-11/ROADMAP_RECONCILIATION.md); nothing in it schedules work.
 
 Consolidated because the answer was previously spread across six places in this file, and
 "what can the multi-kernel path prove today?" could not be answered without reading all of them.
@@ -3595,7 +3595,7 @@ is, and grouping the three as equally-open understates what has been paid for.
 
 ## R-0480: physical documentation migration (2026-08-14)
 
-_Moved from the body of [R-0480](../project/ROADMAP_TASKS.md#task-r-0480); the task keeps its objective, current status, exit and a summary of this record._
+_Moved from the body of [R-0480](roadmap-2026-11/ROADMAP_TASKS.md#task-r-0480); the task keeps its objective, current status, exit and a summary of this record._
 
 **Physical migration landed 2026-08-14.** The worktree reached a clean integration boundary, so
 the stable documents moved into `language`, `compiler`, `verification`, `platform`, and `project`
@@ -3607,7 +3607,7 @@ physical neatness is not completion of the authority audit.
 
 ## R-0473: the embedded R-0004 Slice-6 record (2026-08-07 – 2026-09-02)
 
-_Moved from the body of [R-0473](../project/ROADMAP_BACKLOG.md#task-r-0473); the task keeps its objective, current status, exit and a summary of this record._
+_Moved from the body of [R-0473](roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0473); the task keeps its objective, current status, exit and a summary of this record._
 
 **STEP 1 CLOSED (2026-08-09).** `check_migration_manifest.sh` reports **44/44 links accounted,
 0 unowned, 0 non-deterministic, 0 without a subject** — the closure gate is CLOSED and
@@ -4025,7 +4025,7 @@ before the freeze.
 
 ## R-0475: exposure audit and shipped snapshot fix (2026-08-07)
 
-_Moved from the body of [R-0475](../project/ROADMAP_BACKLOG.md#task-r-0475); the task keeps its objective, current status, exit and a summary of this record._
+_Moved from the body of [R-0475](roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0475); the task keeps its objective, current status, exit and a summary of this record._
 
 **Exposure audited 2026-08-07, and it is exactly one snapshot.** The audit is recorded because
 "the other project-mode fixtures probably have this too" was the natural assumption and it was

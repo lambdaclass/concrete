@@ -3,16 +3,16 @@
 Concrete aims to be a systems language with linear ownership, second-class references and
 explicit capabilities, verified from source to native execution. Accepted programs preserve memory,
 ownership and authority guarantees; their evidence is compositional, transferable and independently
-replayable. The [product direction](docs/project/ROADMAP_DIRECTION.md#product-north-star-compositional-transferable-evidence)
-and [verified-compiler decisions](docs/project/ROADMAP_DECISIONS.md#decisions) define that aim.
+replayable. The [product direction](ROADMAP_DIRECTION.md#product-north-star-compositional-transferable-evidence)
+and [verified-compiler decisions](ROADMAP_DECISIONS.md#decisions) define that aim.
 
 **Lean is the only language source.** `ConcreteSpec` holds Core syntax, independent typing,
 ownership and effect judgments, execution semantics, surface desugaring and conformance examples.
 Those definitions are the specification: each rule is readable Lean with a plain-words doc comment
 and its conformance examples, and no prose chapter is generated from them. The rule registry and
 reference interpreter come from the same definitions; derived machine views have a staleness gate.
-See the [Lean-source decision](docs/project/ROADMAP_DECISIONS.md#2026-11-01--lean-as-the-only-source)
-and its [2026-11-04 revision](docs/project/ROADMAP_DECISIONS.md#2026-11-04--lean-is-the-specification).
+See the [Lean-source decision](ROADMAP_DECISIONS.md#2026-11-01--lean-as-the-only-source)
+and its [2026-11-04 revision](ROADMAP_DECISIONS.md#2026-11-04--lean-is-the-specification).
 
 **The compiler is built from the spec.** The new compiler imports `ConcreteSpec`, calls its
 elaborator and builds a proved lowering chain below Core. Slice 1 supplies a simple, explicitly
@@ -20,21 +20,21 @@ unverified BIR → LLVM printer; the Lean Compiler Backend follows. Once slice 1
 pipeline and its internal gates are deleted together. Programs, regressions, examples, std, CI,
 documentation and research are retained; legacy evidence remains replayable from the frozen tag,
 and the browser compiler runs from that tag until covered. The [new-compiler decision and retention
-contract](docs/project/ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
+contract](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)
 define the full boundary.
 
 **Authority uses permissions and values.** `with(...)` is compile-time permission; linear values
 are resources. Operations require both, and `main` consumes the target's grant values. Allocation
 uses explicit allocator values and is fallible; filesystem lookup is confined through directory
-values. The [authority decision](docs/project/ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--authority-design)
+values. The [authority decision](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--authority-design)
 links the complete rules and language answers.
 
 **The specification comes first.** Open language questions remain undecided until the owner
 answers them. Audit and absorption assign every rule an owner; each slice supplies its Lean rules with
 doc comments, refusal coverage, conformance examples, matching implementation and outside-reader
-test, and retires the prose chapter text those rules replace. The [specification criteria](docs/project/ROADMAP_DECISIONS.md#2026-10-30--specification-first)
+test, and retires the prose chapter text those rules replace. The [specification criteria](ROADMAP_DECISIONS.md#2026-10-30--specification-first)
 remain binding through A–D. Other documentation cites the Lean rules and removes contradictions
-as slices land, under the [documentation rule](docs/project/ROADMAP_DECISIONS.md#2026-10-30--documentation-follows-the-spec).
+as slices land, under the [documentation rule](ROADMAP_DECISIONS.md#2026-10-30--documentation-follows-the-spec).
 
 **Proofs grow along one path.** State the semantic contract and final theorem first, including
 outcomes, traces, authority, resources and the values-to-bytes boundary. Then build executable Core
@@ -42,7 +42,7 @@ semantics and soundness, followed by a minimal end-to-end path whose passes pres
 re-establish invariants. Functional models, open-module correctness and C contracts, ghost permissions,
 SMT-checked lowering and proof-producing equality saturation follow in that order. Parsing, linking
 and native-image assumptions stay explicit; only kernel-checked proofs count. The [proof-order
-record](docs/project/ROADMAP_DECISIONS.md#2026-11-01--compiler-proof-order) states the obligations
+record](ROADMAP_DECISIONS.md#2026-11-01--compiler-proof-order) states the obligations
 and owner-review boundaries.
 
 ## Where we are
@@ -50,11 +50,11 @@ and owner-review boundaries.
 The legacy compiler is frozen at `legacy-compiler-final` at commit 066c9d9b8. The language decisions
 are recorded; the shape of Core is open for the owner's target Core proposal decision.
 
-**Where things live.** The [task register](docs/project/ROADMAP_TASKS.md) holds A, B and T tasks;
-the [backlog](docs/project/ROADMAP_BACKLOG.md) holds later tasks and the pull rules.
-The [spec](docs/spec/README.md) owns language rules; the
-[verified-pipeline plan](docs/compiler/VERIFIED_PIPELINE.md) holds the target proof architecture.
-The [direction](docs/project/ROADMAP_DIRECTION.md) holds standing reference and product goals.
+**Where things live.** The [task register](ROADMAP_TASKS.md) holds A, B and T tasks;
+the [backlog](ROADMAP_BACKLOG.md) holds later tasks and the pull rules.
+The [spec](../../spec/README.md) owns language rules; the
+[verified-pipeline plan](../../compiler/VERIFIED_PIPELINE.md) holds the target proof architecture.
+The [direction](ROADMAP_DIRECTION.md) holds standing reference and product goals.
 
 ## Phases
 
@@ -73,18 +73,18 @@ The [direction](docs/project/ROADMAP_DIRECTION.md) holds standing reference and 
 
 | row | goal | owning tasks | done when |
 |---|---|---|---|
-| A1 | Dispose of the spec audit and draft the boundaries Core must satisfy | R-0555, R-0481, R-0010, R-0447, R-0554, R-0511, R-0211, R-0230 | Each changed rule, gap and duplication has an owner and acceptance artifact; defect views distinguish compilers; [boundary drafts](docs/compiler/A1_BOUNDARIES.md) exist. |
-| A2 | Decide the whole target Core shape before implementation | R-0312, R-0316 | The owner approves the target [Core proposal](docs/compiler/CORE_PROPOSAL.md), drafted against A1's artifacts, including identities, memory and interface boundaries; before Core is frozen, representative design proofs are checked in Lean for allocator dependencies with reset generativity, deferred cleanup with allocators and loans, heap opening and mutable lending, and one values-to-bytes lemma. If A3 exposes a substantive change, A2 is revisited. |
+| A1 | Dispose of the spec audit and draft the boundaries Core must satisfy | R-0555, R-0481, R-0010, R-0447, R-0554, R-0511, R-0211, R-0230 | Each changed rule, gap and duplication has an owner and acceptance artifact; defect views distinguish compilers; [boundary drafts](../../compiler/A1_BOUNDARIES.md) exist. |
+| A2 | Decide the whole target Core shape before implementation | R-0312, R-0316 | The owner approves the target [Core proposal](../../compiler/CORE_PROPOSAL.md), drafted against A1's artifacts, including identities, memory and interface boundaries; before Core is frozen, representative design proofs are checked in Lean for allocator dependencies with reset generativity, deferred cleanup with allocators and loans, heap opening and mutable lending, and one values-to-bytes lemma. If A3 exposes a substantive change, A2 is revisited. |
 | A3 | Formalize the approved semantic contract and theorem in Lean | R-0496, R-0500, R-0502, R-0506, R-0508, R-0509, R-0480, R-0223, R-0227, R-0242, R-0464, R-0266 | The theorem with its holes, named values-to-bytes boundary and trusted-base inventory is on main. |
 | B1 | Build ConcreteSpec and slice 1 with its theorem | R-0491, R-0492, R-0493, R-0497, R-0498, R-0499, R-0501, R-0503, R-0504, R-0507, R-0514, R-0552, R-0521, R-0528, R-0004, R-0435, R-0440, R-0058, R-0073, R-0074, R-0075, R-0076, R-0077, R-0079, R-0080, R-0082, R-0085, R-0090, R-0107, R-0114, R-0115, R-0116, R-0191, R-0203, R-0205, R-0207, R-0210, R-0217, R-0221, R-0222, R-0231, R-0260, R-0272, R-0273, R-0274, R-0278, R-0279, R-0280, R-0288, R-0290, R-0302, R-0421, R-0422, R-0446 | The phase B slice passes from parsing to native execution with independent judgments, correspondence proofs, explicit obligations and minimal proof provenance; every judgment, semantics and pass is total as it lands. |
 | B2 | Retire the slice's prose and qualify slice 1 | R-0479, R-0471, R-0009, R-0438, R-0092, R-0093, R-0094, R-0095, R-0105, R-0106, R-0118, R-0550, R-0551, R-0425, R-0355 | Conformance and native examples pass; refusal, differential and gate-integrity controls hold; the outside-reader test passes. |
-| B3 | Audit compiler totality and delete the old pipeline under the retention contract | R-0553 | The end-to-end slice is accepted, the totality audit finds no partial definition, the fuel-budget distinctions are established, and the old pipeline and its internal gates are deleted together; retained programs, regressions, examples, std, evidence replay and browser service follow the [retention contract](docs/project/ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract); CI builds `legacy-compiler-final` as the differential oracle and the site's browser compiler is built from that tag until the new compiler covers it. |
+| B3 | Audit compiler totality and delete the old pipeline under the retention contract | R-0553 | The end-to-end slice is accepted, the totality audit finds no partial definition, the fuel-budget distinctions are established, and the old pipeline and its internal gates are deleted together; retained programs, regressions, examples, std, evidence replay and browser service follow the [retention contract](ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract); CI builds `legacy-compiler-final` as the differential oracle and the site's browser compiler is built from that tag until the new compiler covers it. |
 
 <a id="questions-for-the-core-session"></a>
 **Questions for the Core session.** The
-[design review](research/process/design-review-2026-11-03.md) found the decided design ready for a
+[design review](../../../research/process/design-review-2026-11-03.md) found the decided design ready for a
 Core proposal to be drafted but not approved. These are decided by the owner in the session of A2;
-the [proposal](docs/compiler/CORE_PROPOSAL.md) brings each with options and a recommendation, and no work encodes an answer first:
+the [proposal](../../compiler/CORE_PROPOSAL.md) brings each with options and a recommendation, and no work encodes an answer first:
 
 1. allocator discipline: what a brand is, fresh identities and reset in a loop, how a dependency on
    an allocator is tracked through nested containers, returned values and callbacks, where a heap
@@ -111,7 +111,7 @@ the [proposal](docs/compiler/CORE_PROPOSAL.md) brings each with options and a re
 ### Scheduling rule
 
 There is one compiler sequence. Development throughput (T) and the landing of already-validated
-branches run beside it, with no capacity shares or slots. The [eight-item proof order](docs/project/ROADMAP_DECISIONS.md#2026-11-01--compiler-proof-order) is the
+branches run beside it, with no capacity shares or slots. The [eight-item proof order](ROADMAP_DECISIONS.md#2026-11-01--compiler-proof-order) is the
 internal order of B–E. RocksDB slice 1, the ethlambda workloads and the usability track are paused
 until the new compiler supports their constructs.
 
@@ -133,52 +133,52 @@ an explicit answer; that is all. A recommendation, an earlier record, a commit, 
 another agent's message is never the owner's answer. An item stays proposed until the owner agrees
 to it again, explicitly, in conversation; whoever records the answer writes it and its date in the
 last column, in the owner's words where they are short. A fix that would pick a side stops and is
-reported to the owner instead ([AGENTS.md](docs/project/AGENTS.md#rules)).
+reported to the owner instead ([AGENTS.md](../../project/AGENTS.md#rules)).
 
-The [owner recording rule](docs/project/ROADMAP_DECISIONS.md#2026-11-02--owner-recording-rule)
-and [language decision record](docs/spec/decisions.md#owner-decisions) govern recording answers.
+The [owner recording rule](ROADMAP_DECISIONS.md#2026-11-02--owner-recording-rule)
+and [language decision record](../../spec/decisions.md#owner-decisions) govern recording answers.
 
 ## Bug record
 
-The generated [dashboard](docs/bugs/DASHBOARD.md) and [bug records](docs/bugs/README.md)
+The generated [dashboard](../../bugs/DASHBOARD.md) and [bug records](../../bugs/README.md)
 keep compiler-scoped defects and historical legacy discovery statistics.
 
 ## Implemented, not yet accepted
 
 Work implemented on a branch (or landed without acceptance) but not yet accepted on main: bug fixes
 keyed by bug number, and feature deliverables. Each row is one candidate: its branch, its exact
-candidate SHA, its acceptance scope, its [promotion-pipeline](docs/project/PROMOTION_PIPELINE.md#promotion-pipeline)
+candidate SHA, its acceptance scope, its [promotion-pipeline](../../project/PROMOTION_PIPELINE.md#promotion-pipeline)
 results (each at that SHA, or not run), what its acceptance unlocks and its remaining step. The table is
-generated from the candidate record [`docs/project/candidates.tsv`](docs/project/candidates.tsv) by
+generated from the candidate record [`docs/project/candidates.tsv`](../../project/candidates.tsv) by
 `scripts/gen/candidate_table.py --write`; whoever lands, re-points or validates a candidate updates its
 row and regenerates in the same commit, and `check_docs_drift.sh` fails when the table differs from the
 record. Dated dispositions remain visible in the table with their original SHAs and validation history;
 they schedule no work. A row leaves when its work is accepted on main and, for bug fixes, the
-[bug ledger](docs/bugs/README.md) records it fixed; `scripts/tests/check_roadmap_coverage.sh` fails if a
+[bug ledger](../../bugs/README.md) records it fixed; `scripts/tests/check_roadmap_coverage.sh` fails if a
 listed bug is already recorded fixed there, or if a row lacks a branch or a remaining step. A stage (c)
-pass is the [one qualification verdict](docs/project/PROMOTION_PIPELINE.md#promotion-pipeline) over every required job at the candidate
+pass is the [one qualification verdict](../../project/PROMOTION_PIPELINE.md#promotion-pipeline) over every required job at the candidate
 SHA, never the mutation aggregate alone.
 
 <!-- BEGIN GENERATED: candidate record (scripts/gen/candidate_table.py; edit docs/project/candidates.tsv) -->
 | candidate | bugs | deliverable | branch | candidate SHA | exits | stage (a) | stage (b) | stage (c) | unlocks | remaining acceptance step |
 |---|---|---|---|---|---|---|---|---|---|---|
-| rocksdb-slice1 | — | RocksDB slice 1 groundwork (R-0285) | `rocksdb-slice1` | `094e51bf3258` | blocked by 0b (incl. bug 102), 2i, 2q | not run | not run | not run | RocksDB slice 1 acceptance, then the four-adapter checkpoint | 2026-11-02: paused until its constructs are supported by the new compiler. landed on main at 094e51bf but not accepted: exits 0b (bug 102), 2i and 2q; G1 (declaring the native library, so it builds with no manual flags) closed by `[native]` ([NATIVE_LIBRARIES.md](docs/platform/NATIVE_LIBRARIES.md)); G3 closed (bug 103 fixed on main by `0c507fb9`, verified 2026-10-21) |
+| rocksdb-slice1 | — | RocksDB slice 1 groundwork (R-0285) | `rocksdb-slice1` | `094e51bf3258` | blocked by 0b (incl. bug 102), 2i, 2q | not run | not run | not run | RocksDB slice 1 acceptance, then the four-adapter checkpoint | 2026-11-02: paused until its constructs are supported by the new compiler. landed on main at 094e51bf but not accepted: exits 0b (bug 102), 2i and 2q; G1 (declaring the native library, so it builds with no manual flags) closed by `[native]` ([NATIVE_LIBRARIES.md](../../platform/NATIVE_LIBRARIES.md)); G3 closed (bug 103 fixed on main by `0c507fb9`, verified 2026-10-21) |
 | v1-design-examples | — | V1 design examples (R-0511, row 3) | `v1-design-examples` | `03d2edec1d21` | none (isolated proof development) | not run | not run | not run | V1a's Core interfaces freeze | 2026-11-02: research input for phase A, not an accepted compiler deliverable. landed on main at 03d2edec but not accepted: review of the design questions, then stages (b) and (c) |
 <!-- END GENERATED: candidate record -->
 
 ## Development throughput
 
-The development feedback loop is a priority [track](docs/project/ROADMAP_DECISIONS.md#2026-10-22--development-throughput-priority).
+The development feedback loop is a priority [track](ROADMAP_DECISIONS.md#2026-10-22--development-throughput-priority).
 Its tasks are R-0539 – R-0547, with R-0513 for pre-push gate selection; their bodies are under
-[Area: Development Throughput](docs/project/ROADMAP_TASKS.md#area-development-throughput).
+[Area: Development Throughput](ROADMAP_TASKS.md#area-development-throughput).
 It runs beside the compiler sequence under the [scheduling rule](#scheduling-rule).
 The validation semantics do not
-change. The [promotion pipeline](docs/project/PROMOTION_PIPELINE.md#promotion-pipeline)'s stages, its exact-SHA binding and its
+change. The [promotion pipeline](../../project/PROMOTION_PIPELINE.md#promotion-pipeline)'s stages, its exact-SHA binding and its
 passed / failed / skipped / cancelled / incomplete vocabulary bind every item below. A faster path
 never reports a check it did not run as passed.
 
 The measurements behind the decision and the parts already in use on main are recorded in the
-[roadmap history](docs/archive/ROADMAP_HISTORY.md#moved-at-the-2026-10-28-roadmap-compaction).
+[roadmap history](../ROADMAP_HISTORY.md#moved-at-the-2026-10-28-roadmap-compaction).
 
 **Targets.**
 
@@ -239,7 +239,7 @@ The release rhythm remains proposed:
 
 How a change is validated before it merges, how a candidate is qualified, the CI tiers, nightly
 qualification, triage and the result vocabulary (passed, failed, skipped, cancelled, incomplete) are
-in [Validation and promotion](docs/project/PROMOTION_PIPELINE.md#promotion-pipeline). Its stages (a),
+in [Validation and promotion](../../project/PROMOTION_PIPELINE.md#promotion-pipeline). Its stages (a),
 (b) and (c) are the ones the exits, the candidate table and the release checklists name.
 
 ### Release map
@@ -290,40 +290,40 @@ or invalidation notice. Stabilization must not silently expand the claimed subse
 
 ## Backlog and pull rules
 
-The [backlog](docs/project/ROADMAP_BACKLOG.md#pull-rules) is the one home of pull rules and phase-entry reviews.
+The [backlog](ROADMAP_BACKLOG.md#pull-rules) is the one home of pull rules and phase-entry reviews.
 
 ## Decisions
 
 The dated decisions that shape this queue (priority, semantics, tightening, owner-decision, delivery,
 soundness, verified-compiler, usability, vertical-slice and behavioural-contract decisions) are in the
-[decision log](docs/project/ROADMAP_DECISIONS.md#decisions). The language rules the project owner
-reserved are not decided there: they are the [owner decisions](docs/spec/decisions.md#owner-decisions).
+[decision log](ROADMAP_DECISIONS.md#decisions). The language rules the project owner
+reserved are not decided there: they are the [owner decisions](../../spec/decisions.md#owner-decisions).
 
 ## Reconciliation record
 
-The [2026-10-19 reconciliation](docs/project/ROADMAP_RECONCILIATION.md) records historical task dispositions and the four prose inventories, including their source revision. The current queue and live task records own scheduling and acceptance. Transferred obligations remain binding unless explicitly retired with a recorded reason.
+The [2026-10-19 reconciliation](ROADMAP_RECONCILIATION.md) records historical task dispositions and the four prose inventories, including their source revision. The current queue and live task records own scheduling and acceptance. Transferred obligations remain binding unless explicitly retired with a recorded reason.
 
 Every `### Task R-NNNN` carries a **Phase:** line; a superseded, merged, delegated, retired or done task also carries a **Disposition:** line naming its owner, and its row in the record's task-disposition table. `scripts/tests/check_roadmap_coverage.sh` reads that table and checks that every task has a phase or a disposition, that every disposition row and queue row names an existing task, that every queue row names an owner, and that no task's phase contradicts its queue row.
 
-The record's [binding reconciliation dispositions](docs/project/ROADMAP_RECONCILIATION.md#binding-reconciliation-dispositions)
+The record's [binding reconciliation dispositions](ROADMAP_RECONCILIATION.md#binding-reconciliation-dispositions)
 replace conflicting implementation directions in the named tasks; existing regression cases and
 acceptance obligations survive unless explicitly retired with a reason.
 
 ## Archived history
 
-The [legacy execution plan](docs/archive/ROADMAP_LEGACY_PLAN.md) preserves the old phases, queue,
+The [legacy execution plan](../ROADMAP_LEGACY_PLAN.md) preserves the old phases, queue,
 exits, estimates, capacity and release map; it schedules nothing.
 
-Historical execution records and completed snapshots live in [roadmap history](docs/archive/ROADMAP_HISTORY.md).
-Retired task bodies live in [retired tasks](docs/archive/ROADMAP_RETIRED_TASKS.md), with phase and
+Historical execution records and completed snapshots live in [roadmap history](../ROADMAP_HISTORY.md).
+Retired task bodies live in [retired tasks](../ROADMAP_RETIRED_TASKS.md), with phase and
 disposition stubs in their areas. Neither archive schedules work.
 
 <a id="open-research-questions-bend-and-roc"></a>
 <a id="phase-9-proof-authoring-and-automation"></a>
-Historical research and proof-authoring references resolve through the [backlog](docs/project/ROADMAP_BACKLOG.md).
+Historical research and proof-authoring references resolve through the [backlog](ROADMAP_BACKLOG.md).
 
 <a id="bug-dashboard"></a>
-The [bug dashboard](docs/bugs/DASHBOARD.md) owns compiler-scoped defect views.
+The [bug dashboard](../../bugs/DASHBOARD.md) owns compiler-scoped defect views.
 
 <a id="the-current-execution-queue"></a>
 The current execution queue is [the queue above](#the-queue).

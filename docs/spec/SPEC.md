@@ -12333,11 +12333,11 @@ reused; their anchors stay, so links to them land on the answer.
 
 The answers of 2026-10-31, 2026-11-01 and 2026-11-02 are recorded here before the rules that carry them are written.
 The chapters state these decided rules now (owner revision, 2026-11-03), before being rewritten as Lean, the only normative source of the language
-([ROADMAP.md](../../ROADMAP.md#phases), phases B–D); until then, where a chapter still describes
+([ROADMAP.md](../archive/roadmap-2026-11/ROADMAP.md#phases), phases B–D); until then, where a chapter still describes
 the earlier behaviour, the answer below governs, and the code follows as its new-compiler slice lands.
 
 Still open with the owner: the shape of Core, which the owner decides in one session on the
-target Core proposal ([ROADMAP.md](../../ROADMAP.md#concrete-roadmap)).
+target Core proposal ([ROADMAP.md](../archive/roadmap-2026-11/ROADMAP.md#concrete-roadmap)).
 
 <a id="rules-a-decision-changed"></a>
 ### Rules a decision has changed
@@ -12395,29 +12395,29 @@ undecided dependency remains explicitly linked to the target Core proposal rathe
 
 These items are undesigned, not new answers approved by this cleanup. Where a chapter depends on
 one, it says **undecided: see the target Core proposal**. The proposal is owned by
-[ROADMAP: Questions for the Core session](../../ROADMAP.md#questions-for-the-core-session).
+[ROADMAP: Questions for the Core session](../archive/roadmap-2026-11/ROADMAP.md#questions-for-the-core-session).
 
-- <a id="core-allocator-identities"></a>[Core-session question 1](../../ROADMAP.md#questions-for-the-core-session). **Allocator identities and dependencies:** introduction, kind,
+- <a id="core-allocator-identities"></a>[Core-session question 1](../archive/roadmap-2026-11/ROADMAP.md#questions-for-the-core-session). **Allocator identities and dependencies:** introduction, kind,
   scope, equality, packaging and repeated reset, dependency tracking across calls, containers and
   callbacks, and lifetime-safe release metadata; the allocation decision's conservation and no-live-
   allocation requirements stand, but the discipline expressing them is undecided.
-- <a id="core-allocation-contracts"></a>[Core-session question 1–2](../../ROADMAP.md#questions-for-the-core-session). **Allocation contracts:** failure payload shapes and complete
+- <a id="core-allocation-contracts"></a>[Core-session question 1–2](../archive/roadmap-2026-11/ROADMAP.md#questions-for-the-core-session). **Allocation contracts:** failure payload shapes and complete
   growth, reserve and multi-allocation transition contracts; applicability of container `Destroy`
   when payload cleanup needs effects beyond `Alloc` is undecided.
-- <a id="core-heap-array-view"></a>[Core-session question 3](../../ROADMAP.md#questions-for-the-core-session). **Heap-array view:** exact bounded view type, operations, lifetime,
+- <a id="core-heap-array-view"></a>[Core-session question 3](../archive/roadmap-2026-11/ROADMAP.md#questions-for-the-core-session). **Heap-array view:** exact bounded view type, operations, lifetime,
   mutability and permitted positions are undecided; opening never yields an element reference.
-- <a id="core-static-text"></a>[Core-session question 4](../../ROADMAP.md#questions-for-the-core-session). **Static text:** literal type, ownership and conversion into
+- <a id="core-static-text"></a>[Core-session question 4](../archive/roadmap-2026-11/ROADMAP.md#questions-for-the-core-session). **Static text:** literal type, ownership and conversion into
   allocator-branded strings are undecided; static text requires no allocation.
-- <a id="core-grants"></a>[Core-session question 7](../../ROADMAP.md#questions-for-the-core-session). **Target grants:** exhaustive schemas, multiplicity, lifecycle and narrowing
+- <a id="core-grants"></a>[Core-session question 7](../archive/roadmap-2026-11/ROADMAP.md#questions-for-the-core-session). **Target grants:** exhaustive schemas, multiplicity, lifecycle and narrowing
   APIs, including the resource backing process services, are undecided.
-- <a id="core-capability-inference"></a>[Core-session question 5](../../ROADMAP.md#questions-for-the-core-session). **Capability inference:** choosing among multiple consistent
+- <a id="core-capability-inference"></a>[Core-session question 5](../archive/roadmap-2026-11/ROADMAP.md#questions-for-the-core-session). **Capability inference:** choosing among multiple consistent
   set-variable solutions is undecided; exact sets and refusal of inconsistent bindings stand.
-- <a id="core-unsafe-premises"></a>[Core-session question 3, 9](../../ROADMAP.md#questions-for-the-core-session). **Unsafe contracts:** the complete validity, provenance, aliasing
+- <a id="core-unsafe-premises"></a>[Core-session question 3, 9](../archive/roadmap-2026-11/ROADMAP.md#questions-for-the-core-session). **Unsafe contracts:** the complete validity, provenance, aliasing
   and foreign-mutation taxonomy and call-only annotation syntax are undecided; OD64's confinement
   requirement stands.
-- <a id="core-static-refusal"></a>[Core-session question 6](../../ROADMAP.md#questions-for-the-core-session). **Static refusal:** the mandatory proof criterion and its relation
+- <a id="core-static-refusal"></a>[Core-session question 6](../archive/roadmap-2026-11/ROADMAP.md#questions-for-the-core-session). **Static refusal:** the mandatory proof criterion and its relation
   to Core acceptance are undecided; recorded proven-violation refusals apply in trusted code too.
-- <a id="core-semantic-contract"></a>[Core-session question 8–9](../../ROADMAP.md#questions-for-the-core-session). **Semantic objects:** exact events, admissible allocation oracles,
+- <a id="core-semantic-contract"></a>[Core-session question 8–9](../archive/roadmap-2026-11/ROADMAP.md#questions-for-the-core-session). **Semantic objects:** exact events, admissible allocation oracles,
   observations, resource relations and theorem endpoint are undecided; technical adequacy and
   refinement obligations remain binding.
 

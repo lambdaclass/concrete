@@ -28,7 +28,7 @@ saying you own the CI result.
 The hook selects by area name today, and that selection misses gates. On 2026-10-22
 it ran about 92 of 255 gates, and the stack-budget, trust-gate, float round-trip and
 linear-discard failures were first seen in CI. The
-[development throughput](../../ROADMAP.md#development-throughput) track plans to
+[development throughput](../archive/roadmap-2026-11/ROADMAP.md#development-throughput) track plans to
 replace area selection with an impact map from source files and fixtures to the gates
 that exercise them. Under that plan a change runs every gate it can break, and an
 unmapped path runs the full set (R-0513). The targets are a median pre-push of at most

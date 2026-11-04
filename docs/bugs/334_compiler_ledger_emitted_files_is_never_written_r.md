@@ -64,7 +64,7 @@ pattern: a surface renders an observed absence and an unobserved field different
 No gate pins it yet; the record's open status is the rationale. The dead-code ratchet
 (`wip/cleanup-dead-code`) keeps `recordEmitted` in its baseline with a `keep:` reason naming this
 defect, so the writer is not removed before the fix. Meanwhile a user reads the build's own output
-path, not `emitted_files`. The current [frozen-compiler rule](../../ROADMAP.md#defect-disposition-rule) records this legacy defect without scheduling repair.
+path, not `emitted_files`. The current [frozen-compiler rule](../archive/roadmap-2026-11/ROADMAP.md#defect-disposition-rule) records this legacy defect without scheduling repair.
 
 ## Archive disposition
 

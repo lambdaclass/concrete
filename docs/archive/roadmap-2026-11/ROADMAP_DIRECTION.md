@@ -1,19 +1,19 @@
 # Roadmap Direction and Standing Reference
 
 Status: reference — direction, standing rules and vocabulary that frame the roadmap. It schedules
-nothing: [ROADMAP.md](../../ROADMAP.md) owns what happens next and in what order, through
-[the current execution queue](../../ROADMAP.md#the-queue). Where this file and the
+nothing: [ROADMAP.md](../../../ROADMAP.md) owns what happens next and in what order, through
+[the current execution queue](ROADMAP.md#the-queue). Where this file and the
 queue disagree, the queue decides *when*.
 
 Moved verbatim from ROADMAP.md on 2026-10-28 (the roadmap compaction); only heading levels and relative links were adjusted. Language rules that stood in the same
-sections are in [roadmap-language-scope.md](../archive/roadmap-language-scope.md), pending absorption
+sections are in [roadmap-language-scope.md](../roadmap-language-scope.md), pending absorption
 into the language specification; completed records went to
-[ROADMAP_HISTORY.md](../archive/ROADMAP_HISTORY.md#moved-at-the-2026-10-28-roadmap-compaction).
+[ROADMAP_HISTORY.md](../ROADMAP_HISTORY.md#moved-at-the-2026-10-28-roadmap-compaction).
 
 ## Verifier for the browser explorer
 
 From the browser compiler and explorer entry (delivered 2026-10-22; its record is in
-[ROADMAP_HISTORY.md](../archive/ROADMAP_HISTORY.md#browser-compiler-and-explorer--bounded-website-delivery)):
+[ROADMAP_HISTORY.md](../ROADMAP_HISTORY.md#browser-compiler-and-explorer--bounded-website-delivery)):
 
 **Verifier: separate planned project.** Reuse R-0275 (independent Core-certificate
 checker) and R-0353 (independent evidence consumer/schema conformance); do not
@@ -31,9 +31,9 @@ Each term is defined once, here; the linked documents hold the full definitions.
   schedules work. An *area* (`## Area: …`) is a topical filing heading for tasks and schedules nothing.
   A *milestone* is an acceptance scope (systems preview, verified preview, verified-subset milestones,
   component alpha, project beta, 1.0 stable). A *release* is a published candidate (nightly, train or
-  milestone) that passes its scope's acceptance. See [Releases](../../ROADMAP.md#releases).
+  milestone) that passes its scope's acceptance. See [Releases](ROADMAP.md#releases).
 - **Active / next phases; backlog.** The phases in progress and those that start next, named at the top
-  of [ROADMAP.md](../../ROADMAP.md). Tasks neither scheduled in an active or next phase nor named by a queue row live in the
+  of [ROADMAP.md](../../../ROADMAP.md). Tasks neither scheduled in an active or next phase nor named by a queue row live in the
   [backlog](ROADMAP_BACKLOG.md) until pulled.
 - **Core.** The language definition: the typed IR elaboration produces, with an executable semantics.
   Claims and the authoritative checker work on it.
@@ -334,7 +334,7 @@ and use it from the host without inspecting private Concrete bodies.
 - **Active roadmap:** future work and pull-gated deferred work that can still
   affect the stdlib area+ execution.
 - **Historical record:** completed phases 1-6 item bodies, implementation notes,
-  and detailed gate transcripts live in [CHANGELOG.md](../../CHANGELOG.md) and the
+  and detailed gate transcripts live in [CHANGELOG.md](../../../CHANGELOG.md) and the
   linked design docs.
 - **Done items:** do not remain here as task text. Keep only a dependency or
   invariant that still constrains future work; put the completion record in
@@ -412,7 +412,7 @@ both pass their gates.** There is one instance so far, and it now has a specific
 not generalize until a second one bites.
 
 The instance: three files said "H23 closed as a compile-time fact" while <!-- HOLE-STATUS-OK: quoting the wrong claim -->
-[docs/verification/KNOWN_HOLES.md](../verification/KNOWN_HOLES.md) said OPEN and
+[docs/verification/KNOWN_HOLES.md](../../verification/KNOWN_HOLES.md) said OPEN and
 `check_known_wrong_corpus.sh` asserted it still reproduces. All green. `check_docs_drift.sh`
 verifies that referenced artifacts *exist*, not that statements *agree* — a limitation its
 own commit named (`5a0c4e3e`) before the contradiction recurred. Closed for hole status by
@@ -448,7 +448,7 @@ changelog, not a failure.
 ## Product north star: compositional, transferable evidence
 
 The canonical product direction is
-[docs/verification/VERIFICATION_CHARTER.md](../verification/VERIFICATION_CHARTER.md): important behavior
+[docs/verification/VERIFICATION_CHARTER.md](../../verification/VERIFICATION_CHARTER.md): important behavior
 is specified at boundaries, composed across calls and packages, carried in
 independently re-checkable artifacts, and assigned explicit evidence. Anything
 outside the supported verification surface is named rather than silently
@@ -528,7 +528,7 @@ behavioral regression.
 
 ### Verification-document convergence required by every graduation
 
-[docs/verification/VERIFICATION_STATUS.md](../verification/VERIFICATION_STATUS.md) is the canonical
+[docs/verification/VERIFICATION_STATUS.md](../../verification/VERIFICATION_STATUS.md) is the canonical
 cross-axis capability map. `CLAIMS_TODAY` owns exact public guarantees,
 `KNOWN_HOLES` owns defect status, the verification charter owns direction, and
 this ROADMAP owns ordering and acceptance criteria. A feature is not graduated
@@ -576,7 +576,7 @@ looking. A skip whose reason is wrong is a defect with a lid on it.
 |---|---|---|---|
 | **H24** obligation generation restates trap rules, weaker | **R-0464** | `examples/trap_semantics_gap/` — div reports proved and aborts on `MIN / -1`; shift generates no obligation | div obligation covers signed `MIN / -1`, a shift family exists, both derived from `IntArith` |
 | **H19** the Core→obligation bridge is unproven | **R-0460** | — (structural; 0 of 5 register rows fully discharged, 4 of 5 half — the *semantics* half of each is proved, the *lowering* half IS H19) | rows in `VC_BRIDGE_REGISTER.md` discharged, named individually |
-| **H20** `bv_decide`'s certificate check runs as native code | unowned; see [docs/verification/AXIOMS.md](../verification/AXIOMS.md) | `make test-bv-certificates` | a verified checker, or decomposition until kernel-reduction LRAT is practical |
+| **H20** `bv_decide`'s certificate check runs as native code | unowned; see [docs/verification/AXIOMS.md](../../verification/AXIOMS.md) | `make test-bv-certificates` | a verified checker, or decomposition until kernel-reduction LRAT is practical |
 | **H21** nonlinear SMT results cannot be certificate-replayed | **R-0451** (upstream-blocked) | gate assertion in `check_multi_kernel.sh` | upstream reconstruction support, or a certified nonlinear checker |
 
 **No reproduced unsoundness remains** (2026-08-03). H23 and H24 are both closed and both
@@ -661,7 +661,7 @@ Its 2026-08-01 findings landed in `0281890d` and `037e9616`; two structural ones
 under R-0465, and one reported divergence was a false positive (it compared different
 inputs) and is recorded as such rather than left to be re-found.
 
-> Moved to [ROADMAP_HISTORY.md](../archive/ROADMAP_HISTORY.md#rationale-notes-the-prover-neutral-arc-r-0004-r-0450-r-0448-r-0454r-0456-r-0458r-0464-r-0467-r-0468) (historical record; nothing in it schedules work).
+> Moved to [ROADMAP_HISTORY.md](../ROADMAP_HISTORY.md#rationale-notes-the-prover-neutral-arc-r-0004-r-0450-r-0448-r-0454r-0456-r-0458r-0464-r-0467-r-0468) (historical record; nothing in it schedules work).
 
 ## Standing reference: open holes, register status, and how to write a gate
 
@@ -793,7 +793,7 @@ weakest-precondition generator makes most of those **impossible by construction*
 forget a case when you are not enumerating cases. Four walkers were patched to fix symptoms whose
 common cause is the absence of a calculus.
 
-**The design is written: [docs/verification/VC_GENERATOR_DESIGN.md](../verification/VC_GENERATOR_DESIGN.md).** One
+**The design is written: [docs/verification/VC_GENERATOR_DESIGN.md](../../verification/VC_GENERATOR_DESIGN.md).** One
 traversal plus a per-constructor rule table replaces four walkers; the `if`/`while` rules subsume
 `scopedWalk`'s hand-threaded guards, and the transformer's environment is the `ScopeDecls` work
 already done. It recommends running over **Core rather than the surface AST**, which is the one
@@ -1007,7 +1007,7 @@ The charter means:
 4. unsupported constructs, observations and proof fragments remain named rather than silently
    disappearing.
 
-This section does not own execution order. The [current execution queue](../../ROADMAP.md#the-queue)
+This section does not own execution order. The [current execution queue](ROADMAP.md#the-queue)
 does; the [capability unlock map](#capability-unlocks--the-stable-product-map) states the durable
 dependency chain and exit artifacts. The rung material below remains a feasibility record for
 multi-kernel theory coverage, not a second priority list.
@@ -1043,13 +1043,13 @@ changelog does not erase a still-relevant condition:
 The current execution queue is the sole scheduling authority. Task IDs identify
 obligations; file order and area headings do not schedule them. Phases summarize
 dependencies and permitted overlap, not additional integration capacity. The
-[capacity allocation](../archive/ROADMAP_LEGACY_PLAN.md#capacity-allocation) divides effort and integration slots between
+[capacity allocation](../ROADMAP_LEGACY_PLAN.md#capacity-allocation) divides effort and integration slots between
 the tracks: the verified compiler holds the majority and two slots, evidence integrity and
 adversarial validation have protected minimums, and usability, interop, application,
 incremental-driver and release work share one capped feature slot.
 Every activated checkpoint records its accountable maintainer, required reviewer and exit.
 
-Completed work moves to [CHANGELOG.md](../../CHANGELOG.md) under a `### Completed Task R-NNNN`
+Completed work moves to [CHANGELOG.md](../../../CHANGELOG.md) under a `### Completed Task R-NNNN`
 heading so the gate reserves that identity permanently.
 
 Every user-facing claim should have a replay command, checked report, gate, or
@@ -1513,7 +1513,7 @@ extends the statement only through supported backend-translation slices. Parser,
 resolver, unproved source-to-Core correspondence, LLVM, linking, runtime, OS,
 and hardware remain trusted until separately checked.
 
-> Moved to [ROADMAP_HISTORY.md](../archive/ROADMAP_HISTORY.md#external-validation-gate) (historical record; nothing in it schedules work).
+> Moved to [ROADMAP_HISTORY.md](../ROADMAP_HISTORY.md#external-validation-gate) (historical record; nothing in it schedules work).
 
 ### Early Risk Probes
 
@@ -1529,7 +1529,7 @@ Four verdict-deciding risks get narrow early probes:
 
 ## Architecture Decision Index: backend and compiler architecture
 
-The [Architecture Decision Index](../archive/roadmap-language-scope.md#architecture-decision-index-non-executable-context)'s
+The [Architecture Decision Index](../roadmap-language-scope.md#architecture-decision-index-non-executable-context)'s
 introduction (the `pub`-only visibility rule) and its stdlib, linearity and slice decisions are language
 scope and moved to the archived language scope; its backend and compiler-architecture decisions stay here.
 

@@ -89,7 +89,7 @@ stack-depth report sizes); a non-empty answer prints `error: --report layout can
 across the identity sweep's 14389 report outputs, only `examples/cli_tool`'s layout and
 stack-depth runs reached the panic. `check_stack_budget.sh` leg 6 pins the refusal on the project
 reproducer. The repair (one layout context over the whole program, see the structural owner)
-replaces the refusal with correct figures. The current [frozen-compiler rule](../../ROADMAP.md#defect-disposition-rule) records this legacy defect without scheduling repair.
+replaces the refusal with correct figures. The current [frozen-compiler rule](../archive/roadmap-2026-11/ROADMAP.md#defect-disposition-rule) records this legacy defect without scheduling repair.
 
 ## Archive disposition
 

@@ -1072,7 +1072,7 @@ Concrete does not have type inference beyond local let-binding inference. No HM-
 #### No lexical value shadowing
 
 **Status:** Decided (2026-07-25); enforced by exit 2i (R-0500, superseding
-[ROADMAP R-0435](ROADMAP_TASKS.md#task-r-0435)): SCOPE-1@1, E0301, MEMORY_SEMANTICS §15.4.
+[ROADMAP R-0435](../archive/roadmap-2026-11/ROADMAP_TASKS.md#task-r-0435)): SCOPE-1@1, E0301, MEMORY_SEMANTICS §15.4.
 
 A new local value binding may not reuse the spelling of another local value
 binding visible along its lexical scope chain. The rule covers parameters,
@@ -1112,7 +1112,7 @@ record; R-0435 is reopened, not reused.
 #### Evidence is multidimensional, not a total ladder
 
 **Status:** Decided (2026-07-25); implementation pending
-[ROADMAP R-0440](ROADMAP_TASKS.md#task-r-0440).
+[ROADMAP R-0440](../archive/roadmap-2026-11/ROADMAP_TASKS.md#task-r-0440).
 
 Evidence is represented by orthogonal facts: subject, claim kind, semantic
 scope, method, status, assumptions, producer, validator, trusted dependencies,
@@ -1129,7 +1129,7 @@ proof.
 #### Source-level resource certificates land early; hardware time stays scoped
 
 **Status:** Decided (2026-07-25); implementation pending
-[ROADMAP R-0445](ROADMAP_BACKLOG.md#task-r-0445).
+[ROADMAP R-0445](../archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0445).
 
 Concrete will expose conservative per-function source-resource bounds before
 broad stdlib expansion. The first certificate covers symbolic source steps,
@@ -1151,7 +1151,7 @@ cannot silently preserve old evidence.
 #### Predictable generated-code performance is an affirmative project claim
 
 **Status:** Decided (2026-07-25); evidence machinery pending
-[ROADMAP R-0416–R-0419](ROADMAP_BACKLOG.md#task-r-0416).
+[ROADMAP R-0416–R-0419](../archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0416).
 
 Concrete intends to make workload-scoped, replayable claims about generated-code
 time, size, memory, and optimization stability. That commitment does not
@@ -1178,7 +1178,7 @@ These are not rejected. They are explicitly sequenced as "not yet" to avoid prem
 
 #### `with(Std)` in high-integrity profiles — pending
 
-**Status:** Pending; owned by [ROADMAP R-0441](ROADMAP_BACKLOG.md#task-r-0441).
+**Status:** Pending; owned by [ROADMAP R-0441](../archive/roadmap-2026-11/ROADMAP_BACKLOG.md#task-r-0441).
 
 Current profiles accept `with(Std)`. Rejecting the broad alias in a
 high-integrity profile is the preferred proposal, but it is not yet a language
