@@ -22,6 +22,9 @@
 #               after it moved is accepted from ls-remote; exhausted retries fail and move nothing
 #   bisect      halving finds a seeded red member
 #   report      the median time to land is computed from the log
+#   required    (2026-11-04) a required job (required-checks.txt) that is missing, skipped or
+#               cancelled refuses watch and land; a candidate cannot drop a requirement main imposes;
+#               the file names exactly the workflow's landing-tier jobs
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -116,6 +119,7 @@ set -euo pipefail
 printf 'def digest := "%s"\n' "$(cat src/*.txt | git hash-object --stdin)" > Concrete/BuildIdentity.lean
 EOF
 printf 'one\n' > src/one.txt; printf 'two\n' > src/two.txt
+printf '# required\nBuild\n' > required-checks.txt
 regen(){ python3 -I scripts/gen/candidate_table.py && bash scripts/gen/build_identity.sh; }
 regen
 git add -A && git commit -qm base
@@ -430,6 +434,50 @@ PY
 [ "$rc" = 0 ] && [ -n "$re_default" ] && [ -z "$out" ] \
   && ok "CAMPAIGN_RE names exactly the workflow's campaign jobs" \
   || { no "CAMPAIGN_RE disagrees with the workflow (rc=$rc, regex '${re_default}')"; echo "$out" | sed 's/^/      /'; }
+
+echo "=== required checks: missing, skipped, cancelled, dropped ==="
+git checkout -q train/t1 2>/dev/null
+HEADR="$(git rev-parse HEAD)"
+reqjson(){ # sha jobs-json
+  printf '{"status":"completed","conclusion":"success","headSha":"%s","jobs":%s}' "$1" "$2" > "$FAKE_GH_DIR/run.json"
+}
+req_leg(){ # label jobs-json expected-text
+  reqjson "$HEADR" "$2"
+  local o r
+  o="$(bash "$TRAIN" watch t1 --interval 1 2>&1)"; r=$?
+  [ "$r" = 1 ] && has "$o" "$3" && ok "watch refuses $1" || { no "watch accepted $1 (exit $r)"; echo "$o" | sed 's/^/      /'; }
+  o="$(bash "$TRAIN" --dry-run land t1 2>&1)"; r=$?
+  [ "$r" != 0 ] && has "$o" "$3" && ok "land refuses $1" || { no "land accepted $1 (exit $r)"; echo "$o" | sed 's/^/      /'; }
+}
+req_leg "a run missing a required job" '[{"name":"Other","conclusion":"success","databaseId":21}]' "missing: Build"
+req_leg "a skipped required job" '[{"name":"Build","conclusion":"skipped","databaseId":21},{"name":"Other","conclusion":"success","databaseId":22}]' "skipped: Build"
+req_leg "a cancelled required job" '[{"name":"Build","conclusion":"cancelled","databaseId":21},{"name":"Other","conclusion":"success","databaseId":22}]' "cancelled: Build"
+req_leg "a required job matched by the campaign pattern" '[{"name":"Other","conclusion":"success","databaseId":22},{"name":"Gate mutation shard 3","conclusion":"success","databaseId":23}]' "missing: Build"
+# Dropping: a candidate whose own file no longer lists Build is still held to the base's list.
+git checkout -q -b req-drop "$HEADR"
+printf 'Other\n' > required-checks.txt; git add required-checks.txt; git commit -qm "drop Build"
+HD="$(git rev-parse HEAD)"
+got="$(bash -c 'set -euo pipefail; cd "$1"; REQUIRED_FILE=required-checks.txt
+  eval "$(sed -n "/^required_checks() {/,/^}/p" "$2")"; required_checks "$3" "$4" | tr "\n" " "' _ "$W" "$TRAIN" "$BASE" "$HD")"
+[ "$got" = "Build Other " ] && ok "a candidate cannot drop a requirement the base imposes (base + candidate united)" || no "required set at a dropping candidate is '$got'"
+git rm -q required-checks.txt; git commit -qm "no file"
+got="$(bash -c 'set -euo pipefail; cd "$1"; REQUIRED_FILE=required-checks.txt
+  eval "$(sed -n "/^required_checks() {/,/^}/p; /^unmet_required() {/,/^}/p" "$2")"; unmet_required "$3" "$3" ""' _ "$W" "$TRAIN" "$(git rev-parse HEAD)")"
+has "$got" "neither the base nor the candidate" && ok "no required-checks file anywhere is refused, not read as nothing required" || no "a missing file read as '$got'"
+git checkout -q train/t1
+
+echo "=== required-checks.txt names exactly the workflow's landing-tier jobs ==="
+out="$(python3 -I - "$ROOT_DIR/.github/workflows/lean_action_ci.yml" "$re_default" "$ROOT_DIR/required-checks.txt" <<'PY'
+import re, sys, yaml
+jobs = yaml.safe_load(open(sys.argv[1]))["jobs"]
+rx = re.compile(sys.argv[2])
+landing = {str(j.get("name", k)) for k, j in jobs.items() if not rx.search(str(j.get("name", k)))}
+req = {l.split("#")[0].strip() for l in open(sys.argv[3])} - {""}
+for n in sorted(req - landing): print("required but not a landing-tier job: " + n)
+for n in sorted(landing - req): print("landing-tier job not required: " + n)
+PY
+)"; rc=$?
+[ "$rc" = 0 ] && [ -z "$out" ] && ok "required-checks.txt = the workflow's landing tier" || { no "required-checks.txt disagrees with the workflow (rc=$rc)"; echo "$out" | sed 's/^/      /'; }
 
 echo
 echo "check_landing_script: PASS=$PASS FAIL=$FAIL"

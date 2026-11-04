@@ -18,7 +18,8 @@
 #   * only generated views and append-only ledgers are resolved mechanically
 #     (scripts/land/resolve_conflicts.py); any other conflict aborts the merge and names the files.
 #   * a train lands only when the CI run's head SHA is the local HEAD, every landing-tier job
-#     succeeded, and origin/main is still the train's base. A moved main means rebuild and re-run:
+#     succeeded, every job named in required-checks.txt (base's and candidate's, united) is present
+#     and succeeded, and origin/main is still the train's base. A moved main means rebuild and re-run:
 #     a result is bound to the exact candidate that ran.
 #   * pushes name the exact SHA, never `HEAD` (push-both.sh: HEAD can move during a wait), and a
 #     remote named `fork` is refused outright.
@@ -34,7 +35,7 @@
 # $LAND_STATE_DIR/log), LAND_NO_NIX=1 (never re-enter `nix develop`), LAND_CAMPAIGN_JOBS (regex of
 # campaign-tier job names), LAND_HOOK (pre-push hook path, default .githooks/pre-push),
 # LAND_PUSH_ATTEMPTS (default 3) and LAND_PUSH_RETRY_SLEEP (seconds, default 15) for verified pushes,
-# LAND_KEEP_MAIN_CI=1 (same as land --keep-main-ci), LAND_DUP_POLL (default 6) and
+# LAND_KEEP_MAIN_CI=1 (same as land --keep-main-ci), LAND_REQUIRED_CHECKS_FILE (default required-checks.txt), LAND_DUP_POLL (default 6) and
 # LAND_DUP_POLL_SLEEP (seconds, default 5) for finding main's duplicate run.
 set -euo pipefail
 
@@ -585,6 +586,35 @@ for j in json.load(sys.stdin).get("jobs", []):
     print("\t".join([tier, j.get("conclusion") or "pending", str(j.get("databaseId", "")), name]))' "$CAMPAIGN_RE"
 }
 
+# Required checks (required-checks.txt at the root, one exact CI job name per line, `#` comments).
+# The set is the union of the base's file and the candidate's file: a candidate can add a requirement
+# for itself, but it cannot drop one that main already imposes. A required job that is absent from
+# the run, or whose conclusion is not success (skipped, cancelled, pending, failure), is no verdict.
+# Branch protection on GitHub is not configured, so this file is the only record of what is required.
+REQUIRED_FILE="${LAND_REQUIRED_CHECKS_FILE:-required-checks.txt}"
+required_checks() { # base head — prints the required job names, one per line, sorted and unique
+  { git show "$1:$REQUIRED_FILE" 2>/dev/null || true; git show "$2:$REQUIRED_FILE" 2>/dev/null || true; } \
+    | sed 's/#.*//; s/^[[:space:]]*//; s/[[:space:]]*$//' | sed '/^$/d' | LC_ALL=C sort -u
+}
+# Prints one line per unmet requirement ("missing: <name>" or "<conclusion>: <name>"); empty when met.
+# Refuses outright (exit 1) when neither commit carries the file: no list means nothing is checked.
+unmet_required() { # base head jobs
+  local req; req="$(required_checks "$1" "$2")"
+  if [ -z "$req" ]; then echo "missing: $REQUIRED_FILE (neither the base nor the candidate has one)"; return 0; fi
+  printf '%s\n' "$3" | python3 -I -c '
+import sys
+req = [l for l in sys.argv[1].splitlines() if l]
+seen = {}
+for line in sys.stdin:
+    f = line.rstrip("\n").split("\t")
+    if len(f) < 4: continue
+    seen.setdefault(f[3], []).append(f[1])
+for name in req:
+    c = seen.get(name)
+    if not c: print("missing: " + name)
+    elif any(x != "success" for x in c): print(",".join(sorted(set(c))) + ": " + name)' "$req"
+}
+
 cmd_watch() {
   local name="" interval=60 timeout=$((4*3600))
   while [ $# -gt 0 ]; do
@@ -626,6 +656,14 @@ cmd_watch() {
     log_row "$name" watch refused "no landing-tier jobs"
     echo "train: run $id has no landing-tier jobs; an empty set is not green" >&2
     return 1
+  fi
+  local base unmet; base="$(state_get_soft "$name" base)"
+  unmet="$(unmet_required "$base" "$head" "$jobs")"
+  if [ -n "$unmet" ]; then
+    log_row "$name" watch incomplete "required checks unmet"
+    echo "train: run $id does not satisfy $REQUIRED_FILE; a missing, skipped or cancelled required job is no verdict:" >&2
+    printf '    %s\n' "$unmet" >&2
+    [ -z "$bad_landing" ] && return 1
   fi
   if [ -n "$bad_landing$bad_campaign" ]; then
     note "jobs that did not succeed:"
@@ -700,6 +738,13 @@ cmd_land() {
     log_row "$name" land refused "landing tier not green"
     printf '    %s\n' "$bad" >&2
     die "land: landing-tier jobs above did not succeed in run $id"
+  fi
+
+  local unmet; unmet="$(unmet_required "$base" "$head" "$jobs")"
+  if [ -n "$unmet" ]; then
+    log_row "$name" land refused "required checks unmet"
+    printf '    %s\n' "$unmet" >&2
+    die "land: run $id does not satisfy $REQUIRED_FILE"
   fi
 
   local now_main; now_main="$(remote_main)"
