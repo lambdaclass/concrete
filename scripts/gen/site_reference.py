@@ -24,6 +24,7 @@ PAGES = {
     "EXECUTION_MODEL.md": ("Execution Model", "docs/platform/EXECUTION_MODEL.md"),
     "FFI.md": ("FFI", "docs/platform/FFI.md"),
     "PASSES.md": ("Compiler Pass Contracts", "docs/compiler/PASSES.md"),
+    "PHILOSOPHY.md": ("Philosophy", "docs/project/PHILOSOPHY.md"),
     "PROJECT.md": ("Project", "docs/project/PROJECT.md"),
     "PROVABLE_SUBSET.md": ("Provable Subset", "docs/verification/PROVABLE_SUBSET.md"),
     "SAFETY.md": ("Safety", "docs/verification/SAFETY.md"),
@@ -32,12 +33,13 @@ PAGES = {
 }
 # Old page URLs kept alive as Zola redirects to the page that absorbed them (page -> URL paths).
 # docs/project's IDENTITY, DESIGN_POLICY, LANGUAGE_SHAPE and DECISIONS became PROJECT.md on
-# 2026-10-29; their published reference pages redirect there so outside links do not break.
+# 2026-10-29; their published reference pages redirect there so outside links do not break. The
+# design policy moved on to PHILOSOPHY.md on 2026-11-04, and its old URL follows it.
 # VALUE_MODEL.md was absorbed into the specification on 2026-10-30; its old URL redirects to the
 # types chapter (spec.py's SITE_ALIASES), since a redirect lives on the page it points to.
 ALIASES = {
-    "PROJECT.md": ["/reference/identity/", "/reference/design-policy/",
-                   "/reference/language-shape/", "/reference/decisions/"],
+    "PROJECT.md": ["/reference/identity/", "/reference/language-shape/", "/reference/decisions/"],
+    "PHILOSOPHY.md": ["/reference/design-policy/"],
 }
 INDEX = '''+++
 title = "Index"

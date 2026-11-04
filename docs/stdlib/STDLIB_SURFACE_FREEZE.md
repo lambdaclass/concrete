@@ -630,7 +630,7 @@ Rules:
 - Core-layer functions have `caps: (pure)` -- no capabilities.
 - No new capabilities may be added without an unfreeze.
 
-Source: [HOSTED_STDLIB_SPLIT.md](HOSTED_STDLIB_SPLIT.md), [ANTI_FEATURES.md](../project/ANTI_FEATURES.md)
+Source: [HOSTED_STDLIB_SPLIT.md](HOSTED_STDLIB_SPLIT.md), [PHILOSOPHY.md](../project/PHILOSOPHY.md#what-concrete-refuses)
 
 ---
 
@@ -709,7 +709,7 @@ These cannot be added without rethinking fundamental language invariants.
 | String interpolation | Requires macros (permanently excluded) or special form |
 | `pub(pkg)` visibility | Package management lands |
 
-Full rationale for each: [ANTI_FEATURES.md](../project/ANTI_FEATURES.md), [STDLIB_TARGET.md](STDLIB_TARGET.md) (out-of-scope section).
+Full rationale for each: [PHILOSOPHY.md](../project/PHILOSOPHY.md#what-concrete-refuses), [STDLIB_TARGET.md](STDLIB_TARGET.md) (out-of-scope section).
 
 ---
 
