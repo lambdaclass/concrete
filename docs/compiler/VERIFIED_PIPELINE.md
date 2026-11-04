@@ -259,7 +259,7 @@ are proved, and their compiled execution is in the trusted list. Evidence that d
 native-evaluation or float axioms (`docs/verification/AXIOMS.md`) is labelled separately and never
 supports an unqualified kernel-only verdict.
 
-## Principles
+## Pipeline principles
 
 1. **One normative specification per meaning, implementations proved against it.** Until proved,
    implementations are differentially tested against it.

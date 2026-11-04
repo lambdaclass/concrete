@@ -17,7 +17,7 @@ rules, proof registries, assumptions, and trusted boundaries are also claim
 sources. The compiler lowers all of them into obligations and evidence facts
 that `concrete audit`, CI, and release bundles can inspect.
 
-## Design Principles
+## Contract design principles
 
 Contract-callable functions require a semantic category, not a purity-shaped
 heuristic. The target language distinguishes `spec fn`, checked `total fn`,
