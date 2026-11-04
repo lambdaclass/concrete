@@ -1,6 +1,6 @@
 name = "concrete"
 version = "0.1.0"
-defaultTargets = ["concrete", "Examples", "DesignExamples", "pipeline-test", "concrete-browser-native"]
+defaultTargets = ["concrete", "Examples", "DesignExamples", "pipeline-test", "concrete-browser-native", "ConcreteSpec"]
 
 [leanOptions]
 warningAsError = true
@@ -24,6 +24,12 @@ srcDir = "proofs"
 [[lean_lib]]
 name = "DesignExamples"
 srcDir = "proofs"
+
+# The specification of the new compiler (ROADMAP phase B, slice 1): root ConcreteSpec.lean, rules in
+# ConcreteSpec/Spec.lean, the one main file. It imports only Lean core and nothing from the old compiler, so the rules cannot
+# depend on today's implementation. A default target so `lake build` kernel-checks it.
+[[lean_lib]]
+name = "ConcreteSpec"
 
 [[lean_exe]]
 name = "concrete"

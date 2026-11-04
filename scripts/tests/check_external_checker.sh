@@ -2,7 +2,7 @@
 # EXTERNAL CHECKER — every theorem in Concrete's Lean sources re-checked outside the Lean kernel that
 # produced it.
 #
-# The population is every theorem the `Concrete`, `Examples` and `DesignExamples` libraries declare, read from the
+# The population is every theorem the `Concrete`, `Examples`, `DesignExamples` and `ConcreteSpec` libraries declare, read from the
 # elaborated environment by scripts/tools/proof_layer_theorems.lean (the #[proof_by] evidence
 # theorems are a subset). It is exported with lean4export and re-checked by two checkers that share
 # no code with the Lean kernel or with each other:
@@ -156,7 +156,7 @@ NLINKED=$(cut -f1 "$TMP/layer.tsv" | sort | comm -12 - "$TMP/linked.txt" | grep 
 # declares a theorem must contribute one, so dropping a library or a module from the enumeration
 # fails here rather than silently shrinking what the checkers are handed.
 PROOF_LAYER_MODE=modules "$LAKE" env lean scripts/tools/proof_layer_theorems.lean > "$TMP/env-modules.txt" 2>/dev/null
-grep -rlE '^\s*(@\[[^]]*\]\s*)?(private |protected )*theorem ' Concrete proofs --include='*.lean' 2>/dev/null \
+grep -rlE '^\s*(@\[[^]]*\]\s*)?(private |protected )*theorem ' Concrete ConcreteSpec proofs --include='*.lean' 2>/dev/null \
   | sed -E 's#^proofs/##; s#\.lean$##; s#/#.#g' | sort -u > "$TMP/src-modules.txt"
 UNSEEN=$(sort -u "$TMP/env-modules.txt" | comm -13 - "$TMP/src-modules.txt")
 [ -s "$TMP/src-modules.txt" ] && [ -z "$UNSEEN" ] \
@@ -165,9 +165,9 @@ UNSEEN=$(sort -u "$TMP/env-modules.txt" | comm -13 - "$TMP/src-modules.txt")
 # Every Lean library the lakefile declares is in the population. The enumerator, its module filter
 # and the exporter name the libraries explicitly; a library added to lakefile.toml without them would
 # otherwise be built and never re-checked (DesignExamples reached CI that way at 03d2edec). The
-# source-module leg above only scans Concrete/ and proofs/, so this leg is what catches a library
+# source-module leg above only scans Concrete/, ConcreteSpec/ and proofs/, so this leg is what catches a library
 # whose srcDir is anywhere else.
-POP_LIBS="Concrete Examples DesignExamples"
+POP_LIBS="Concrete Examples DesignExamples ConcreteSpec"
 LAKE_LIBS=$(python3 -c '
 import tomllib
 with open("lakefile.toml", "rb") as f:
@@ -208,7 +208,7 @@ cmp -s "$TMP/native-evidence.txt" "$TMP/native-listed.txt" \
 echo "=== A: export ==="
 EXPORT="$TMP/standard.ndjson"; NATIVE_EXPORT="$TMP/native.ndjson"
 # shellcheck disable=SC2046
-"$LAKE" env "$EXPORTER" Concrete Examples DesignExamples -- $(cat "$TMP/standard.txt") > "$EXPORT" 2> "$TMP/export.err" \
+"$LAKE" env "$EXPORTER" Concrete Examples DesignExamples ConcreteSpec -- $(cat "$TMP/standard.txt") > "$EXPORT" 2> "$TMP/export.err" \
   || { no "lean4export failed on the standard set: $(head -3 "$TMP/export.err" | tr '\n' ' ')"; finish; }
 read -r EXP_LEAN EXP_TOOL EXP_FORMAT < <(python3 "$INV" meta "$EXPORT")
 [ "leanprover/lean4:v$EXP_LEAN" = "$TOOLCHAIN" ] && [ "$EXP_FORMAT" = "$EXPECT_FORMAT" ] \
@@ -224,7 +224,7 @@ EXTRA=$(comm -23 "$TMP/axioms.txt" <(printf '%s\n' $STANDARD_AXIOMS))
   || no "the standard export declares non-standard axioms: $(echo $EXTRA)"
 if [ "$NNAT" -gt 0 ]; then
   # shellcheck disable=SC2046
-  "$LAKE" env "$EXPORTER" Concrete Examples DesignExamples -- $(cat "$TMP/native.txt") > "$NATIVE_EXPORT" 2> "$TMP/export.err" \
+  "$LAKE" env "$EXPORTER" Concrete Examples DesignExamples ConcreteSpec -- $(cat "$TMP/native.txt") > "$NATIVE_EXPORT" 2> "$TMP/export.err" \
     || { no "lean4export failed on the native set: $(head -3 "$TMP/export.err" | tr '\n' ' ')"; finish; }
 fi
 

@@ -280,6 +280,8 @@ else
       # A lakefile change can add or drop a Lean library, which moves the external
       # checker's population.
       lakefile.toml)                                add hygiene; addjob "External proof re-check (con-leche)" ;;
+      # The specification's theorems are in the external checker's population too.
+      ConcreteSpec.lean|ConcreteSpec/*)             addjob "External proof re-check (con-leche)" ;;
       Makefile|.githooks/*|flake.nix)               add hygiene ;;
       Concrete/*)                                   add hygiene ;;
     esac
