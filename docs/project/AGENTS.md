@@ -31,6 +31,9 @@ rule changes in one place.
 
 ## Rules
 
+**Design questions** are decided by [PHILOSOPHY.md](PHILOSOPHY.md). Any important design decision is
+put to the owner by Claude or Codex, with a recommendation reasoned from docs/project/PHILOSOPHY.md.
+
 **Owner decisions: never decide one.** The language decisions OD1 – OD157
 ([decisions.md](../spec/decisions.md#owner-decisions)) are decided only by the project owner. No
 agent, orchestrator or reviewer chooses, encodes, implements or provisionally ships any side of any
