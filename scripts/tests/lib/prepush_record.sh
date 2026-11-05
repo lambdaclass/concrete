@@ -106,7 +106,14 @@ _ppr_env_digest() { # -> digest of the CONCRETE_* environment that can change wh
   # Excluded: the bypass itself, and CONCRETE_PREPUSH_REENTERED, the hook's own bookkeeping of
   # having re-entered `nix develop` (set when `git push` was typed outside the gate shell). Neither
   # reaches a gate, and the second would make a push from outside the gate shell never match.
-  env | grep '^CONCRETE_' | grep -Ev '^CONCRETE_(SKIP_GATES|PREPUSH_REENTERED)=' | LC_ALL=C sort | ts_digest
+  # Whole NUL-delimited entries, selected by NAME: a value's continuation lines are part of it.
+  local kv k
+  while IFS= read -r -d '' kv; do
+    k="${kv%%=*}"
+    [[ "$k" =~ ^CONCRETE_[A-Za-z0-9_]+$ ]] || continue
+    case "$k" in CONCRETE_SKIP_GATES|CONCRETE_PREPUSH_REENTERED) continue ;; esac
+    printf '%s\0' "$kv"
+  done < <(env -0 | LC_ALL=C sort -z) | ts_digest
 }
 
 # ppr_components ROOT PUSHED_SHAS CHANGED_FILE PLAN_FILE OUT_FILE

@@ -441,6 +441,8 @@ mklog "$R2" 0 status=pass; lib ppr_remote_attest "$R" "$TMP/rlog" gatehost "$R1"
 mklog "$R2" 0 status=pass-deferred "deferred_gate=bash scripts/g.sh" && lib ppr_remote_attest "$R" "$TMP/rlog" gatehost "$R2" \
   && [ "$(reuse "$R2")" = REUSE ] && [ "$(lib ppr_remote_deferred "$R")" = "bash scripts/g.sh" ] \
   && ok "a pass-deferred remote run is reused and its deferrals reported" || no "pass-deferred"
+d1="$(lib _ppr_env_digest)"; d2="$( export CONCRETE_ML=$'one\ntwo'; lib _ppr_env_digest )"; d3="$( export CONCRETE_ML=$'one\nthree'; lib _ppr_env_digest )"
+[ -n "$d1" ] && [ "$d1" != "$d2" ] && [ "$d2" != "$d3" ] && ok "the environment digest binds whole values (a changed continuation line differs)" || no "multiline env digest: $d1 $d2 $d3"
 has "$( ( export CONCRETE_PREPUSH_REENTERED=1; reuse "$R2" ) )" "REUSE" \
   && ok "the hook's nix re-entry bookkeeping does not break reuse (push from outside the gate shell)" || no "REENTERED breaks reuse"
 
