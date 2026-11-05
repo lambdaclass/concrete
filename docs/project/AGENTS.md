@@ -121,7 +121,9 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
 - Have Codex confirm each bug is real (a reproducer and a verdict line in the record) before
   filing it.
 
-**Review.** Every slice gets a Codex review before it lands, through `scripts/review/review.sh`:
+**Review.** Codex reviews everything before it is published or brought to the owner, and a second
+independent reviewer reviews too when one is available; its absence is recorded, never assumed
+([decision](../spec/decisions.md#decided-project-review)). Every slice gets a Codex review before it lands, through `scripts/review/review.sh`:
 at most 5 rounds, the first over the whole diff and each later round over the delta since the
 previous one. Answer each finding with a fix or a stated reason. Run Codex by hand only with
 `GIT_OPTIONAL_LOCKS=0` (and `</dev/null`): its sandboxed `git status` otherwise takes the

@@ -140,7 +140,7 @@ Each rule states what holds and why. Its history is in the changelog and the dec
 
 ## When rules conflict
 
-**Proposed, pending owner approval.** When two rules pull in different directions, the earlier
+**Decided by the owner on 2026-11-05** (row P2, [record](../spec/decisions.md#decided-project-priority)). When two rules pull in different directions, the earlier
 item in this order wins:
 
 1. soundness and provability, which includes honest trust boundaries (rule 12) and compiler-owned
@@ -163,11 +163,11 @@ answers in [decisions.md](../spec/decisions.md) stand as recorded, whatever this
 suggest; changing one is a new owner decision. When the order argues for changing a decided rule,
 the change goes to the owner as a proposed revision and the decided rule stands meanwhile. For
 example, type arguments are inferred from the checked argument types
-([OD46](../spec/decisions.md#od46)), and that stands. Capability arguments are inferred the same
-way today ([OD45](../spec/decisions.md#od45), [OD87](../spec/decisions.md#od87)). The Core
-proposal recommends writing them on every capability-polymorphic call, checked against the
-argument types, because a call's authority should be read rather than solved for. That
-recommendation is a proposed revision of OD45 and OD87, pending the owner's answer.
+([OD46](../spec/decisions.md#od46)), and that stands. Capability arguments were inferred the same
+way ([OD45](../spec/decisions.md#od45), [OD87](../spec/decisions.md#od87)) until the owner
+approved, on 2026-11-05, the revision that writes them on every capability-polymorphic call,
+checked against the callee, because a call's authority should be read rather than solved for
+([revision](../spec/decisions.md#decided-2026-11-05-revisions)).
 
 ## Admission test
 
@@ -253,7 +253,7 @@ Within that layer the decided rules hold: no `old`, quantifier or implication in
 ([OD117](../spec/decisions.md#od117)), specification functions with a required, total body
 ([OD115](../spec/decisions.md#od115)) and no total-function category
 ([OD116](../spec/decisions.md#od116)). How frames, entry-state facts and termination are stated
-inside those rules is proposed in decision row P18, pending the owner: no snapshot construct, frame
+inside those rules was decided on 2026-11-05 (row P18, [record](../spec/decisions.md#decided-project-contracts)): no snapshot construct, frame
 and entry/exit properties as Lean theorems (a source frame clause would be a new owner decision),
 and per-function termination theorems for ordinary functions.
 
@@ -289,12 +289,10 @@ and per-function termination theorems for ordinary functions.
 - **Global (Hindley–Milner) inference and inference from the expected result type.** Permanent.
   Signatures are written in full. A generic call's type arguments are inferred only from the checked
   types of its arguments ([OD46](../spec/decisions.md#od46), [OD129](../spec/decisions.md#od129));
-  what no argument determines is written explicitly. Capability arguments are decided the same way
-  for now ([OD45](../spec/decisions.md#od45), [OD87](../spec/decisions.md#od87)), with no inference
-  from the result context. Whether they become explicit on every capability-polymorphic call is a
-  proposed revision before the owner
-  ([Core question 5](../spec/decisions.md#core-capability-inference)); this document takes no side
-  on it.
+  what no argument determines is written explicitly. Capability arguments are not inferred at all: they
+  are written on every capability-polymorphic call and checked (owner revision of
+  [OD45](../spec/decisions.md#od45) and [OD87](../spec/decisions.md#od87), 2026-11-05,
+  [record](../spec/decisions.md#decided-2026-11-05-revisions)).
 
 **Dispatch and abstraction**
 
@@ -354,13 +352,11 @@ and per-function termination theorems for ordinary functions.
 - **User-defined and C-style variadic functions.** Permanent. They are unchecked or complicate
   every signature. The reserved output and append forms are the only multi-argument forms, and they
   are not a function type and cannot be passed as values.
-- **Default arguments.** A call shows every argument it passes. The current status is "reopens
-  when a workload under the pull rules shows the cost of writing every argument, and any design
-  shows defaults in signatures and reports". Decision row P17a, pending the owner, proposes making
-  this a Permanent refusal, reopened only by a new owner decision, because defaults conflict with
-  visible arguments and with one form per situation. General compile-time evaluation and broad
-  conditional compilation (above) keep their evidence-based reopening under the proposal (row
-  P17b).
+- **Default arguments.** Permanent (owner, 2026-11-05, row P17a,
+  [record](../spec/decisions.md#decided-project-refusals)), reopened only by a new owner decision. A
+  call shows every argument it passes; defaults conflict with visible arguments and with one form per
+  situation. General compile-time evaluation and broad conditional compilation (above) keep their
+  evidence-based reopening (row P17b).
 - **Lexical shadowing of a visible local, parameter or top-level name.** Permanent
   ([SCOPE-1](../spec/scope.md#SCOPE-1), [OD67](../spec/decisions.md#od67)). One name, one binding
   in a scope; the compiler still never recovers identity from spellings (rule 13).

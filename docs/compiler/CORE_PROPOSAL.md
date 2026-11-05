@@ -1,5 +1,13 @@
 # Core proposal (draft for A2)
 
+**Decided 2026-11-05.** The owner answered every row: the Core rows are the provisional approval
+of stage A2a, recorded with the revisions they approve in
+[decisions.md](../spec/decisions.md#decided-2026-11-05) and archived in full in
+[docs/archive/decisions-2026-11-05](../archive/decisions-2026-11-05/README.md). Where this draft
+differs from a decided row, the row governs. In particular, Q4.7 replaced the `slice … else`
+spelling by one scoped `borrow` form for every view, and Q7.11 chose `Console` for the standard
+streams. The text below is kept as the background that was reviewed.
+
 **Precedence.** This draft is background. The governing proposal is the set of 88 Core
 decision rows (Q1.1–Q9.19) that Claude and Codex settled on 2026-11-04 (three debate
 rounds, then a resolution round that gave each open point a concrete rule) and put

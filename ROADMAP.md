@@ -22,7 +22,7 @@ deferred until a trigger, retired with a reason, or done. Archived IDs are never
 ## Rules in force
 
 Every task follows these rules. Each is a summary that links the dated record holding the rule and
-its reasons, or says which part still awaits the owner; this file holds no rule of its own. Language rules are not decided here: they are the owner decisions in [decisions.md](docs/spec/decisions.md#owner-decisions).
+its reasons, or says which part still awaits the owner; this file holds no rule of its own. Language rules are not decided here: they are the owner decisions in [decisions.md](docs/spec/decisions.md#owner-decisions), and the project and architecture decisions are [there too](docs/spec/decisions.md#decided-project) (decision row P20, 2026-11-05).
 The design rules (one form per situation, one owner per fact, the most transparent long-term option,
 verbosity that buys clarity) get one home in `PHILOSOPHY.md` when the `wip/philosophy` branch lands.
 
@@ -54,9 +54,9 @@ verbosity that buys clarity) get one home in `PHILOSOPHY.md` when the `wip/philo
    The compiler imports it and builds a proved lowering chain below Core. Slice 1 gets a BIR → LLVM
    printer, labelled unverified. The Lean Compiler Backend follows
    ([decision](docs/archive/roadmap-2026-11/ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)).
-4. **The old tree is legacy.** The owner chose a `legacy/` folder on main on 2026-11-04; that
-   choice is recorded with this roadmap in the changelog. The details below are the restart
-   proposal (decision rows P5–P7 and P21), pending the owner's approval, and change if it changes.
+4. **The old tree is legacy.** The owner chose a `legacy/` folder on main on 2026-11-04 and approved
+   the restart details below on 2026-11-05 (decision rows P5–P8, P21, P22;
+   [record](docs/spec/decisions.md#decided-project-restart)).
    In one train, everything old moves under `legacy/`: the compiler, its scripts, tests, examples, std, proofs, gates, docs, research, site
    and bug ledger. `legacy/` is a byte-frozen snapshot of main's tree at the move commit. It is never
    patched and never run. One root check refuses any modification or addition under it, and any
@@ -103,6 +103,11 @@ verbosity that buys clarity) get one home in `PHILOSOPHY.md` when the `wip/philo
    of passed, failed, skipped, cancelled or incomplete
    ([promotion pipeline](docs/project/PROMOTION_PIPELINE.md#promotion-pipeline)). A faster path never
    reports a check it did not run as passed.
+9. **Codex reviews everything.** Every change, plan, specification, decision row and piece of
+   infrastructure is reviewed by Codex before it is published or brought to the owner. A second,
+   independent reviewer (Kimi, Grok or agy/Gemini) reviews as well when one is available; when none
+   is, its absence is recorded with the review, never assumed
+   ([record](docs/spec/decisions.md#decided-project-review)).
 
 ### Scheduling rule
 
@@ -139,37 +144,72 @@ and owned by the task that removes its structural class.
 
 ## The queue
 
-**Active:** T0 and A1. **Next:** T1, T2 and A2a.
+**Active:** T0, A1 and A2b. **Next:** T1, T2 and A2c. A2a (provisional approval of the Core shape, decision row Q9.19) is done: the owner approved every Core row on 2026-11-05 ([record](docs/spec/decisions.md#decided-2026-11-05)); the approval binds the design without freezing it.
 
 | row | goal | tasks | done when |
 |---|---|---|---|
-| T0 | Prepare the restart beside the old tree (decision row P7, pending) | R-0568, R-0564 | Checklist, each item on main before T1: (1) the new root's CI jobs; (2) `required-checks.txt`, enforced by `train.sh watch` and `train.sh land`; (3) the required-check transition mechanism, an explicit old-to-new job mapping that is validated and needs the replacement checks to pass at the exact candidate SHA, never marking a dropped legacy check passed; (4) `ISSUES.tsv` and its validator; (5) `RETENTION.tsv` and the task disposition table; (6) `scripts/oracle/ORACLE.lock` with the oracle release artifact and its digest; (7) the archive records of the stopped services. |
+| T0 | Prepare the restart beside the old tree (decision row P7, approved 2026-11-05) | R-0568, R-0564 | Checklist, each item on main before T1: (1) the new root's CI jobs; (2) `required-checks.txt`, enforced by `train.sh watch` and `train.sh land`; (3) the required-check transition mechanism, an explicit old-to-new job mapping that is validated and needs the replacement checks to pass at the exact candidate SHA, never marking a dropped legacy check passed; (4) `ISSUES.tsv` and its validator; (5) `RETENTION.tsv` and the task disposition table; (6) `scripts/oracle/ORACLE.lock` with the oracle release artifact and its digest; (7) the archive records of the stopped services. |
 | T1 | Rehearse the move on the candidate root | R-0563 | On a throwaway branch holding the exact proposed day-one root, a fresh clone builds the candidate, hooks, runs exact-SHA CI and passes a dry-run landing, and the negative controls are refused for the expected reason. |
-| T2 | Move the old tree to `legacy/` in one train, after T0 and the T1 rehearsal | R-0558 | The root holds only the day-one set. `legacy/` is byte-frozen and checked. The move itself lands on both remotes. |
+| T2 | Move the old tree to `legacy/` in one train, after T0 and the T1 rehearsal | R-0558, R-0565 | The root holds only the day-one set. `legacy/` is byte-frozen and checked. The move itself lands on both remotes. The website is down. |
 | A1 | Dispose of the spec audit and draft the boundaries Core must satisfy | R-0555, R-0312, R-0316 | Each audit finding, gap and duplication has an owner and an acceptance artifact. The [boundary drafts](docs/compiler/A1_BOUNDARIES.md) exist. |
-| A2a | Provisional approval of the target Core shape (decision row Q9.19, pending) | R-0559 | An outside reader has read the [Core proposal](docs/compiler/CORE_PROPOSAL.md) and their confusions are resolved. The owner approves the design provisionally: it binds the design without freezing it. |
-| A2b | Formalize the approved design in a proposed `Spec.lean` | R-0511 | `ConcreteSpec/Spec.lean` is headed "PROPOSED: not normative until Core freeze". The four design theorems (`reset_fresh`, `defer_cleanup_releases`, `open_mut_freezes_root`, `rep_roundtrip`) and their full obligations are kernel-checked without `native_decide`. Every row the formalization changes returns to the owner. This is separate from slice 1's soundness theorems. |
+| A2b | Formalize the approved design in a proposed `Spec.lean` (current work) | R-0511, R-0559 | Exit to A2c: `ConcreteSpec/Spec.lean`, aligned with the decided rows, is headed "PROPOSED: not normative until Core freeze"; the four design theorems are kernel-checked; an outside reader has read it and their confusions are resolved. The four design theorems (`reset_fresh`, `defer_cleanup_releases`, `open_mut_freezes_root`, `rep_roundtrip`) and their full obligations are kernel-checked without `native_decide`. Every row the formalization changes returns to the owner. This is separate from slice 1's soundness theorems. |
 | A2c | Core freeze | R-0567 | The owner approves the freeze after A2b's four theorems and an outside-reader pass. Only then is PROPOSED removed. A3 sends Core back if it exposes a substantive change. |
 | A3 | State the contract, the theorem and the trusted base in Lean | R-0560, R-0496, R-0502, R-0506, R-0508, R-0509, R-0500 | The one-main-file layout and its gate exist. The theorem, with its holes, the named values-to-bytes boundary and the trusted-base inventory, is on main. |
 | B1 | Build `ConcreteSpec` and slice 1 with its theorem | R-0425, R-0499, R-0492, R-0493, R-0514, R-0501, R-0503, R-0497, R-0504, R-0507, R-0521, R-0552, R-0528, R-0479, R-0118 | Slice 1 runs from parsing to native code. Its judgments are independent, its correspondence and soundness are proved, its obligations are explicit and its provenance is minimal. Its conformance examples pass on both implementations. |
 | B2 | Qualify slice 1 | R-0491, R-0498, R-0272, R-0550 | Differential (Lean semantics, native build, legacy oracle), refusal and gate-integrity controls hold. The fuzzers target the new compiler. The outside-reader test passes. |
-| B3 | Audit totality, then delete the old pipeline | R-0553, R-0562, R-0561, R-0565 | The totality audit finds no partial definition. Every `RETENTION.tsv` row for the old pipeline is resolved. Legacy defects are retired with the old implementation. The browser compiler is served from a tag-built bundle until the new compiler covers it. The old pipeline is gone from `legacy/`; retained assets stay there until their rows resolve. |
+| B3 | Audit totality, then delete the old pipeline | R-0553, R-0562, R-0561 | The totality audit finds no partial definition. Every `RETENTION.tsv` row for the old pipeline is resolved. Legacy defects are retired with the old implementation. The old pipeline is gone from `legacy/`; retained assets stay there until their rows resolve. |
 
 <a id="questions-for-the-core-session"></a>
 ### Questions for the Core session
 
-The owner decides these in the A2 stages (A2a approves, A2c freezes). The [Core proposal](docs/compiler/CORE_PROPOSAL.md) gives
-each one options and a recommendation, and no work encodes an answer first:
+The owner answered these provisionally on 2026-11-05 (A2a; [the decided rows](docs/spec/decisions.md#decided-2026-11-05-core)) and freezes them at A2c. The [Core proposal](docs/compiler/CORE_PROPOSAL.md) is the background; where it and a decided row differ, the row governs:
 
 1. allocator discipline;
 2. `destroy` bounds;
 3. the `HeapArray` element view and the raw-memory taxonomy;
 4. the type of static text;
-5. whether capability and type arguments are inferred or written (a proposed revision of OD45 and OD87);
+5. whether capability and type arguments are inferred or written (decided: capability arguments are written, a revision of OD45 and OD87);
 6. static refusal versus traps;
 7. target grant schemas and narrowing;
 8. slice 1's assurance scope;
 9. the whole Core interface.
+
+<a id="targets"></a>
+### Targets
+
+The hosted grant table decided in row Q7.10 is for `linux-x86_64-hosted`. The first native **proof**
+profile is AArch64 on macOS through the Lean Compiler Backend
+([VERIFIED_PIPELINE.md](docs/compiler/VERIFIED_PIPELINE.md)). These are separate: a target's grant
+table states what a program may be given there; a proof profile states which native path carries
+the theorem. The plan is Linux x86-64 and macOS AArch64 first, then FreeBSD and OpenBSD as
+additional target tables, each added when a workload needs it and each a decision for the owner.
+FreeBSD's Capsicum and OpenBSD's `pledge` and `unveil` fit the capability model: the operating
+system can enforce what a program's declared capabilities and grants already promise. A target
+without a primitive that confines path lookup refuses filesystem access.
+
+<a id="target-theorem-shape"></a>
+### The shape of target behaviour theorems
+
+Ideas taken from the silmaril-lean development (no dependency, no vendored code; reviewed
+2026-11-05). Every theorem about a program's behaviour on a target (R-0496, R-0508, A3) is stated in
+this shape:
+
+- **Observable events.** Behaviour is a trace of events an outside observer sees (reads and writes on
+  grants, the exit code with the final state of the granted filesystem, a trap with its location),
+  plus errors and an "unmodelled" flag; the theorem requires the program never to step outside the
+  model (fail closed).
+- **Three parts.** Safety: every trace is a prefix of the ideal trace. Termination: every run exits,
+  or traps at a stated point. Completeness: the full ideal trace occurs. Each part closes a loophole
+  the others leave open.
+- **A hostile environment.** The claim holds for every input, every spurious refusal or short
+  transfer by the operating system, every launch layout and every resource budget.
+- **Non-vacuity.** Each theorem comes with a witness that its premises can hold.
+- **Exact artifacts.** A claim is about the exact source and the exact bytes produced, never about a
+  name.
+- **An explicit trusted base.** The machine, loader and operating-system models the claim relies on
+  are listed as assumptions.
+- **Authority** (Concrete's own clause). Every event in every trace uses a grant the program holds,
+  through an operation its declared capabilities allow.
 
 ## Tasks
 
@@ -187,15 +227,15 @@ archive. Rows for C–G are summaries. Each is refined when its phase becomes ne
 | R-0555 | Dispose of the 2026-11-02 spec audit, then keep one normative spec in Lean with independent judgments and rule-indexed conformance | every audit row has an owner; each slice's Lean rules replace the prose they cover, and bug-to-rule references resolve; a browsable rendering of the Lean rules and a rule-by-rule coverage report exist, and no prose chapter is retired before the report shows each of its rules in Lean | — |
 | R-0312 | The unsafe-surface and raw-memory taxonomy: validity, provenance, aliasing, ownership transfer | taxonomy decided in the Core session (question 3) and stated in Lean | R-0555 |
 | R-0316 | An unsafe-aliasing policy without hidden reference UB | the policy is part of the approved Core | R-0312 |
-| R-0559 | Outside-reader dry run on the Core proposal | a reader new to Concrete reads the proposal; each confusion is recorded and resolved before the owner's decision | R-0555 |
-| R-0511 | Representative design proofs before Core freezes, then cumulative slices with honest theorem scopes | the four A2b theorems are kernel-checked against the proposed `Spec.lean`, without `native_decide`, with their full obligations (decision row Q9.14): `reset_fresh` (a reset gives a brand distinct from every live brand, resets in a loop give pairwise-distinct brands, and the new allocator's operations refuse values of an old brand); `defer_cleanup_releases` (every structured exit runs the deferred calls in reverse registration order, releases each held loan after its call, and preserves the allocator-dependency check); `open_mut_freezes_root` (a mutable heap open excludes every other access to its root, and a shared open never grants a write); `rep_roundtrip` (encode then decode is the identity for `u8` to `u64`, `bool` and the empty struct); each later slice states its theorem scope | R-0559, owner: A2a approval |
-| R-0567 | Core freeze (A2c) | the owner approves the freeze after the four A2b theorems are kernel-checked and an outside reader has read the proposed `Spec.lean`; PROPOSED is removed from its header in the freeze change | R-0511 |
-| R-0566 | One live home for binding decisions (decision row P20, pending) | the still-binding architecture and process decisions of the archived roadmap log (new compiler and retention contract, authority, allocation, Lean as the specification, the owner-recording rule) are in `docs/decisions.md` with their dates and revision links; the owner-approved revisions (OD45/OD87, TYPE-22, TRAIT-1 and any other accepted row) are recorded there; ROADMAP.md, PHILOSOPHY.md and AGENTS.md cite it and restate nothing; a gate refuses a roadmap rule link into the archived log once the move lands | owner: P20 |
+| R-0559 | Outside-reader pass on the approved Core design | a reader new to Concrete reads the decided rows and the proposed `Spec.lean`; each confusion is recorded and resolved before the freeze (A2c) | R-0555 |
+| R-0511 | Representative design proofs before Core freezes, then cumulative slices with honest theorem scopes | the four A2b theorems are kernel-checked against the proposed `Spec.lean`, without `native_decide`, with their full obligations (decision row Q9.14): `reset_fresh` (a reset gives a brand distinct from every live brand, resets in a loop give pairwise-distinct brands, and the new allocator's operations refuse values of an old brand); `defer_cleanup_releases` (every structured exit runs the deferred calls in reverse registration order, releases each held loan after its call, and preserves the allocator-dependency check); `open_mut_freezes_root` (a mutable heap open excludes every other access to its root, and a shared open never grants a write); `rep_roundtrip` (encode then decode is the identity for `u8` to `u64`, `bool` and the empty struct); each later slice states its theorem scope (A2a was approved 2026-11-05) | — |
+| R-0567 | Core freeze (A2c) | the owner approves the freeze after the four A2b theorems are kernel-checked and an outside reader has read the proposed `Spec.lean`; PROPOSED is removed from its header in the freeze change | R-0511, R-0559 |
+| R-0566 | One live home for binding decisions (decision row P20, approved 2026-11-05; the decisions are [recorded](docs/spec/decisions.md#decided-project) in `docs/spec/decisions.md`, which the move places at `docs/decisions.md`) | the still-binding architecture and process decisions of the archived roadmap log (new compiler and retention contract, authority, allocation, Lean as the specification, the owner-recording rule) are in `docs/decisions.md` with their dates and revision links; the owner-approved revisions (OD45/OD87, TYPE-22, TRAIT-1 and any other accepted row) are recorded there; ROADMAP.md, PHILOSOPHY.md and AGENTS.md cite it and restate nothing; a gate refuses a roadmap rule link into the archived log once the move lands | — |
 | R-0560 | One-main-file spec layout: every normative definition in `ConcreteSpec/Spec.lean`; proofs, tooling and derived views in files that import it | the layout exists; a gate refuses a normative definition outside the main file, with a negative control | A2c |
 | R-0496 | The semantic contract (outcomes, traces, authority, resources, the error model) and the clock-indexed evaluator | the contract is stated in Lean; the evaluator runs; fuel exhaustion is distinct from divergence; trap location and message, the exit-code mapping and the target observations are part of the contract, and until they are, every claim about executable behaviour is qualified by the model's abstract observations | R-0560 |
 | R-0502 | One value/raw-memory boundary and one layout authority | the boundary is named in the theorem; layout has one owner with its proofs | R-0496 |
 | R-0506 | Every proof boundary and validator obligation stated with its premises and status | obligations have explicit premises; transitive axiom classification is enforced | R-0496 |
-| R-0508 | The end-to-end theorem: maximal-behaviour refinement, frontend correspondence, resource adequacy, image transport | stated in Lean with its holes; proved progressively per slice | R-0496, R-0502 |
+| R-0508 | The end-to-end theorem: maximal-behaviour refinement, frontend correspondence, resource adequacy, image transport | stated in Lean with its holes; proved progressively per slice; every target behaviour theorem has the [target-theorem shape](#target-theorem-shape) | R-0496, R-0502 |
 | R-0509 | The trusted-base inventory, evidence binding, assumption lifecycle and axiom replay | the inventory is on main; every claim's axioms are recorded and replayed from a clean checkout | R-0506 |
 | R-0500 | Each decided language rule gets its Lean judgment, semantic clause and accepted, refused or trapping examples | each rule lands with its slice; every rule of the decided language has one by the end of D | R-0560 |
 
@@ -224,8 +264,8 @@ archive. Rows for C–G are summaries. Each is refined when its phase becomes ne
 | R-0550 | Compiler scaling and speed baselines at exact SHAs | scaling gates hold for each stage, and a planted regression is caught | B1 |
 | R-0553 | Totality audit: every semantics, checker, validator and pass is total and runs as proved | no partial definition; opaque execution gaps controlled | B2 |
 | R-0562 | The retention manifest `RETENTION.tsv` at the root, written before the move and checked before any deletion under `legacy/` | every legacy asset (corpora, regressions, examples, std, the bug ledger, the site, docs and the archived services) has a row with a destination and a deletion condition; deleting a path under `legacy/` whose row is unresolved is refused (control); the manifest and the task disposition table stay at the root and survive B3 | — |
-| R-0561 | Bug ledger by compiler | legacy defects are marked retired with the old implementation, never fixed, each keeping its reproducer, ruling and structural class; those the browser compiler still shows stay visible while the site serves it; std defects move with std as contracts and regressions; every legacy ruling that states language behaviour becomes a conformance example or a recorded owner question; the minimal issue record of the day-one root becomes the new ledger with the first slice | R-0425 |
-| R-0565 | Website transition | before the site stops rebuilding, a browser bundle built and verified from `legacy-compiler-final` (parity with the native oracle, loader and UI checks) is deployed, labelled as the frozen compiler for the language before the 2026-10-29 to 2026-11-01 decisions, with a documented redeploy; links to main paths point at the tag; the site later builds from the new tree and switches when the new compiler covers it; no page describes the legacy compiler as current | R-0564 |
+| R-0561 | Bug ledger by compiler | legacy defects are marked retired with the old implementation, never fixed, each keeping its reproducer, ruling and structural class; std defects move with std as contracts and regressions; every legacy ruling that states language behaviour becomes a conformance example or a recorded owner question; the minimal issue record of the day-one root becomes the new ledger with the first slice | R-0425 |
+| R-0569 | A new website, built from scratch with the new compiler (decision row P9) | the site is designed anew around the decided language; its playground runs the new compiler; it teaches and links the Lean rules and states no rule of its own; no page describes the legacy compiler or the language before the 2026-11 decisions as current | B1 |
 
 ### C. File-copy and 0.1
 
@@ -297,8 +337,10 @@ archive. Rows for C–G are summaries. Each is refined when its phase becomes ne
 |---|---|---|---|
 | R-0568 | Day-one root infrastructure (T0) | on main beside the old tree: the new root's CI jobs; `required-checks.txt` enforced by `train.sh watch` and `land`; a required-check transition mechanism (an explicit, validated old-to-new job mapping; replacement checks must pass at the exact candidate SHA; a control that dropping a requirement without a mapping is refused; no legacy check is ever marked passed); `ISSUES.tsv` (ID, evidence, owner, severity, closure condition) with its validator and controls; the archive records of the stopped services | R-0562, R-0564 |
 | R-0558 | Move the old tree to `legacy/` in one train and set up the minimal root. Day one, the root holds the README, this file, AGENTS.md, an empty CHANGELOG, LICENSE, the new build files, `ConcreteSpec/Spec.lean`, `docs/PHILOSOPHY.md`, `docs/decisions.md`, the landing, review and hook scripts, `scripts/oracle/`, `required-checks.txt` and its job mapping, `RETENTION.tsv`, the minimal issue record `ISSUES.tsv` with its validator, and the [2026-11 roadmap archive](docs/archive/roadmap-2026-11/README.md) with its task disposition table. Everything else comes back from `legacy/` when a slice needs it. The status page, the work-queue dispatcher, the fuzz farm, perf tracking and the nightly campaign stop, and each is listed in `RETENTION.tsv` as archived; each returns only with a roadmap task. The ci-3 fuzz corpus, perf history and leanprof data were not copied before the handover (decision row P14) and are not archived. | the root holds only that set; a root check refuses any modification or addition under `legacy/`, and any deletion its `RETENTION.tsv` row does not allow (controls for each); no legacy gate runs; the move lands on both remotes | T0, R-0563, R-0565, owner: approval of the move inventory |
+| R-0565 | Take the website down at the move (decision row P9, 2026-11-05) | the site's build and Pages deployment stop in the move's change; the published site is unpublished as a documented manual step whose moment the owner confirms (an outward action, never automatic); no frozen playground is served; the old site's sources stay archived under `legacy/` with a `RETENTION.tsv` row | R-0564 |
 | R-0563 | Operational migration acceptance test (T1), before the move | T0 is on main; on a throwaway branch holding the exact proposed day-one root, a fresh clone builds the candidate (after `train.sh build`, so the candidate tree is what builds) with the candidate's own landing tooling, hooks, runs exact-SHA CI and passes a dry-run landing; negative controls (a broken build, a failing hook gate, a failed required CI job, a missing, skipped or cancelled required check, a SHA mismatch) are each refused for the expected reason at the expected SHA; a check that cannot run on a fallback runner is reported incomplete and blocks landing, never passed; the two-remote landing is proved by the move itself | R-0568, owner: approval of the move inventory |
-| R-0564 | A pinned, reproducible legacy oracle, independent of `legacy/` | `legacy-compiler-final` builds in an isolated checkout of the tag from a pinned toolchain (`scripts/oracle/ORACLE.lock`) into a recorded digest; the build is published as a release artifact whose identity and SHA-256 are in the lock, fetched and verified by digest on any runner, cached on concrete-ci-2 and rebuildable from the tag alone with a hash check; a missing or mismatched artifact makes the oracle check incomplete, which blocks landing; runner criteria (decision row P13, pending): the lock records the release tarball's SHA-256 with the toolchain and flake-lock hashes, landing and oracle runs use separate runner pools with per-pool CPU and memory limits and at most two heavy runs, and a GitHub-hosted x86_64-linux fallback supports the build, the spec, the gates and the oracle diff, while a heavy campaign it cannot run is recorded as skipped, never passed; a weekly from-scratch rebuild matches the digest; the differential harness invokes it by digest when the new compiler changes; an unexplained difference fails, and the oracle's agreement never overrides the Lean semantics | — |
+| R-0564 | A pinned, reproducible legacy oracle, independent of `legacy/` | `legacy-compiler-final` builds in an isolated checkout of the tag from a pinned toolchain (`scripts/oracle/ORACLE.lock`) into a recorded digest; the build is published as a release artifact whose identity and SHA-256 are in the lock, fetched and verified by digest on any runner, cached on concrete-ci-2 and rebuildable from the tag alone with a hash check; a missing or mismatched artifact makes the oracle check incomplete, which blocks landing; runner criteria (decision row P13, owner 2026-11-05: concrete-ci-2 and GitHub-hosted runners as a regular second pool): the lock records the release tarball's SHA-256 with the toolchain and flake-lock hashes; landing and oracle runs use separate pools with per-pool CPU and memory limits and at most two heavy runs per machine; jobs that need ci-2's caches run there, and the build, the spec, the gates and the oracle diff also run on the GitHub-hosted x86_64-linux pool, which takes them over when ci-2 is down; a check neither pool can run is incomplete and blocks landing, and a heavy campaign the GitHub pool cannot run is recorded as skipped, never passed; self-hosted runners never run pull-request jobs; a weekly from-scratch rebuild matches the digest; the differential harness invokes it by digest when the new compiler changes; an unexplained difference fails, and the oracle's agreement never overrides the Lean semantics | — |
+| R-0570 | Main shows the qualifying CI run honestly | after a train lands, main's own push run is cancelled as a duplicate, so main's CI list shows "cancelled" although the exact SHA passed on `ci/<train>`; the train records the qualifying run on main's SHA (a commit status linking the `ci/<train>` run), only when that run tested exactly that SHA and passed; never green without the exact-SHA run (control: a status for a different SHA or a non-passing run is refused) | R-0539 |
 | R-0547 | Measurement: per-branch stage timestamps and the median time to land | every landing has its four timestamps, and the median shows here | — |
 | R-0544 | Review discipline: per slice, delta after the first pass | median ≤ 5 rounds; a slice past 5 is split | — |
 | R-0545 | Branch discipline: one bug or one rule per branch | a month of landings with no unrecorded bundling | — |
