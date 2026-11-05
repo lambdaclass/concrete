@@ -97,10 +97,12 @@ These items were undesigned when the chapters were cleaned up on 2026-11-03. **T
   refinement obligations remain binding.
 
 
-### Rules retaining an undecided dependency (2026-11-03)
+### Rules awaiting Lean formalization (listed 2026-11-03)
 
-These entries remain pending for the linked design dependency; this does not reopen the decisions
-already recorded in their sentences.
+These rules depended on a design that was undecided on 2026-11-03. Their designs were provisionally
+decided on 2026-11-05 ([decided rows](#decided-2026-11-05-core)); formalizing them in Lean remains
+pending through A2b, and freezing them through A2c. This does not reopen the decisions already
+recorded in their sentences.
 
 | rules | reason |
 |---|---|
@@ -376,7 +378,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
 
 ## Owner decisions
 
-**Only the project owner decides these items, OD1 – OD157.** All are answered. OD1 – OD32 (exit 2n, closed) and OD47 were decided on 2026-10-29 (OD23 – OD32 by the strictness pass of that day). OD33 – OD157 were decided on 2026-10-31, by the owner's rule that an answer every reviewer agreed on and as strict as Austral or stricter is taken, and on 2026-11-01, when the owner approved the final set for the rest; the authority decision of the same day supersedes OD38's and OD156's `Root` readings (OD94 was withdrawn: MOD-1 already refuses its case, bug 337). The answers are recorded in [docs/spec/decisions.md](decisions.md), state the decided rules in chapters now (owner revision, 2026-11-03), then become Lean in phases B–D, and are enforced as each new-compiler slice lands. The questions raised while recording them were answered on 2026-11-02, the owner deciding the first four and, by the owner's rule of that day, Claude and Codex agreeing on the best long-term answer for the rest ([decisions](decisions.md#decided-2026-11-02)); they revise OD24, OD38, OD43, OD83, OD102, OD146 and OD156 and the authority rules. The spec audit's questions were answered the same day ([decisions](decisions.md#decided-2026-11-02-audit)), revising OD140 and STMT-13. Traits are exported and imported like any other declaration (owner, 2026-11-02). Still open with the owner: the shape of Core (the target Core proposal). New questions follow the same rule: No agent, orchestrator or
+**Only the project owner decides these items, OD1 – OD157.** All are answered. OD1 – OD32 (exit 2n, closed) and OD47 were decided on 2026-10-29 (OD23 – OD32 by the strictness pass of that day). OD33 – OD157 were decided on 2026-10-31, by the owner's rule that an answer every reviewer agreed on and as strict as Austral or stricter is taken, and on 2026-11-01, when the owner approved the final set for the rest; the authority decision of the same day supersedes OD38's and OD156's `Root` readings (OD94 was withdrawn: MOD-1 already refuses its case, bug 337). The answers are recorded in [docs/spec/decisions.md](decisions.md), state the decided rules in chapters now (owner revision, 2026-11-03), then become Lean in phases B–D, and are enforced as each new-compiler slice lands. The questions raised while recording them were answered on 2026-11-02, the owner deciding the first four and, by the owner's rule of that day, Claude and Codex agreeing on the best long-term answer for the rest ([decisions](decisions.md#decided-2026-11-02)); they revise OD24, OD38, OD43, OD83, OD102, OD146 and OD156 and the authority rules. The spec audit's questions were answered the same day ([decisions](decisions.md#decided-2026-11-02-audit)), revising OD140 and STMT-13. Traits are exported and imported like any other declaration (owner, 2026-11-02). Core was provisionally approved on 2026-11-05 ([record](#decided-2026-11-05-core)); A2b formalization is current, and the A2c freeze awaits the four design theorems and an outside-reader pass. New questions follow the same rule: No agent, orchestrator or
 reviewer chooses, encodes, implements or provisionally ships any side of any of them, and that
 includes doing so inside a bug fix, a migration, a test, a fixture, a diagnostic or a document. An
 agent may analyse an item, write its options and a recommendation, and present them to the owner for
