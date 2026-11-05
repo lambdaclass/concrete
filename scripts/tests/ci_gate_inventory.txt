@@ -175,6 +175,7 @@ bash scripts/tests/check_obligation_report_views.sh
 bash scripts/tests/check_obligation_single_truth_source.sh
 bash scripts/tests/check_one_producer.sh
 bash scripts/tests/check_operational_vc_auto_discharge.sh
+bash scripts/tests/check_oracle_publish.sh
 bash scripts/tests/check_overflow_migration.sh
 bash scripts/tests/check_ownership_judgment.sh
 bash scripts/tests/check_partial_facts.sh

@@ -512,6 +512,55 @@ PY
 )"; rc=$?
 [ "$rc" = 0 ] && [ -z "$out" ] && ok "required-checks.txt = the workflow's landing tier" || { no "required-checks.txt disagrees with the workflow (rc=$rc)"; echo "$out" | sed 's/^/      /'; }
 
+echo "=== the move gate: legacy/ lands only with an accepted rehearsal of that exact candidate ==="
+cd "$W" || exit 2
+git checkout -q main && git fetch -q origin && git reset -q --hard origin/main
+MB="$(git rev-parse HEAD)"
+git checkout -q -b bmove "$MB"; mkdir -p legacy; printf 'old tree\n' > legacy/old.txt; commit_all bmove
+out="$(bash "$TRAIN" build tm bmove 2>&1)" || { no "move train build"; echo "$out" | sed 's/^/      /'; }
+git checkout -q train/tm
+HM="$(git rev-parse HEAD)"; TM="$(git rev-parse 'HEAD^{tree}')"
+bash "$TRAIN" check tm --no-remote >/dev/null 2>&1 || no "move train check"
+printf '[{"databaseId": 5151, "headSha": "%s", "createdAt": "9999-01-01T00:00:00Z"}]' "$HM" > "$FAKE_GH_DIR/list.json"
+bash "$TRAIN" ci tm >/dev/null 2>&1 || no "move train ci"
+runjson "$HM" success success
+REH="$TMP/state/rehearsals.tsv"
+move_leg(){ # label expected-text: both land and dry-run land refuse, main stays put, the dry run exits 5
+  local o r
+  o="$(bash "$TRAIN" land tm 2>&1)"; r=$?
+  [ "$r" = 1 ] && has "$o" "moves the old tree into legacy/" && has "$o" "$2" && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$MB" ] \
+    && ok "land refuses the move with $1" || { no "land with $1 (exit $r)"; echo "$o" | sed 's/^/      /'; }
+  o="$(bash "$TRAIN" --dry-run land tm 2>&1)"; r=$?
+  [ "$r" = 5 ] && has "$o" "every other land check passed; refused only by the move gate" && has "$o" "$2" \
+    && ok "dry-run land refuses the move with $1 (exit 5, every other check passed)" || { no "dry-run land with $1 (exit $r)"; echo "$o" | sed 's/^/      /'; }
+}
+rm -f "$REH"
+move_leg "no rehearsal record" "no rehearsal record"
+printf '# header\n2026-11-05T00:00:00Z\taccepted\t%s\t%s\t%s\twip/other\tother\n' "$(git rev-parse b1)" "$(git rev-parse 'b1^{tree}')" "$MB" > "$REH"
+move_leg "an accepted rehearsal of another candidate (another tree)" "the record holds other candidates only"
+printf '2026-11-05T00:00:01Z\taccepted\t%s\t%s\t%s\tbmove\tbase-moved\n' "$HM" "$TM" "$BASE" >> "$REH"
+move_leg "an accepted rehearsal of the same tree on another base" "the record holds other candidates only"
+printf '2026-11-05T00:00:02Z\tfailed\t%s\t%s\t%s\tbmove\taccept-x\n' "$HM" "$TM" "$MB" >> "$REH"
+move_leg "a failed rehearsal of this candidate" "was failed, not accepted"
+printf '2026-11-05T00:00:03Z\tincomplete\t%s\t%s\t%s\tbmove\taccept-y\n' "$HM" "$TM" "$MB" >> "$REH"
+move_leg "an incomplete rehearsal of this candidate" "was incomplete, not accepted"
+printf '2026-11-05T00:00:04Z\taccepted\t%s\t%s\t%s\tbmove\taccept-z\n' "$(git rev-parse bmove)" "$TM" "$MB" >> "$REH"
+out="$(bash "$TRAIN" --dry-run land tm 2>&1)"; rc=$?
+[ "$rc" = 0 ] && has "$out" "acceptance accepted tree ${TM:0:10}" && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$MB" ] \
+  && ok "an accepted rehearsal of the same tree and base (another train's merge commit) satisfies the gate" || { no "accepted rehearsal: dry-run land exit $rc"; echo "$out" | sed 's/^/      /'; }
+# The gate keys on what the candidate adds, not on a name: a non-move train needs no record (t1 landed
+# above with none), and the new root's inventory alone also makes a move.
+rm -f "$REH"
+git checkout -q -b bmove2 "$MB"; mkdir -p scripts/checks; printf 'README.md\n' > scripts/checks/root_inventory.txt; commit_all bmove2
+bash "$TRAIN" build tm2 bmove2 >/dev/null 2>&1 || no "inventory train build"
+git checkout -q train/tm2; HM2="$(git rev-parse HEAD)"
+bash "$TRAIN" check tm2 --no-remote >/dev/null 2>&1 || no "inventory train check"
+printf '[{"databaseId": 5252, "headSha": "%s", "createdAt": "9999-01-01T00:00:00Z"}]' "$HM2" > "$FAKE_GH_DIR/list.json"
+bash "$TRAIN" ci tm2 >/dev/null 2>&1 || no "inventory train ci"
+runjson "$HM2" success success
+out="$(bash "$TRAIN" --dry-run land tm2 2>&1)"; rc=$?
+[ "$rc" = 5 ] && has "$out" "no rehearsal record" && ok "a candidate adding scripts/checks/root_inventory.txt is a move too" || { no "inventory move: dry-run land exit $rc"; echo "$out" | sed 's/^/      /'; }
+
 echo
 echo "check_landing_script: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
