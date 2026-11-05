@@ -21,7 +21,7 @@ Main test suite
 Multi-kernel evidence (Rocq + Isabelle)
 Proof evidence gate
 Receipt-path gates (R-0004 replay, receipts, attestation)
-Root checks (new root)
+Root checks
 SSA test suite
 Thesis evidence smoke test
 Trust gate (correctness contracts)

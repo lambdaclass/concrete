@@ -50,7 +50,7 @@ jobs:
   # job is what remains of the workflow, joined by the slice jobs; every old job is then dropped
   # through a required-checks-transition.tsv row (replaced or retired), never silently.
   root-checks:
-    name: Root checks (new root)
+    name: Root checks
     runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4

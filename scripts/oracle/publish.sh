@@ -18,7 +18,7 @@ WANT="$(lock artifact_sha256)"; GOT="$(sha256sum "$1" | cut -d' ' -f1)"
 REPO="$(lock release_repo)"; RTAG="$(lock release_tag)"; NAME="$(oracle_artifact_name)"
 [ "$(basename "$1")" = "$NAME" ] || { echo "publish: the asset must be named $NAME" >&2; exit 1; }
 gh release view "$RTAG" -R "$REPO" >/dev/null 2>&1 \
-  || gh release create "$RTAG" -R "$REPO" --title "Legacy oracle $(lock tag)" \
+  || gh release create "$RTAG" -R "$REPO" --target "$(lock commit)" --title "Legacy oracle $(lock tag)" \
        --notes "The frozen legacy compiler (tag $(lock tag), commit $(lock commit)) as the differential oracle. sha256 $WANT. Rebuild and verify: scripts/oracle/build.sh."
 gh release upload "$RTAG" "$1" -R "$REPO"
 URL="https://github.com/$REPO/releases/download/$RTAG/$NAME"

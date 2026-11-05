@@ -10,7 +10,7 @@
   refused. GitHub branch protection is not configured, so these files are the record.
   `check_landing_script.sh` covers each case, and checks the list against the workflow's landing
   tier.
-- **New-root CI.** A `Root checks (new root)` job runs, beside the old jobs, only what the day-one
+- **New-root CI.** A `Root checks` job (the name the moved root keeps) runs, beside the old jobs, only what the day-one
   root keeps: the retention manifest, the issue record and the landing tooling.
 - **Legacy oracle** (`scripts/oracle/`).
   - `ORACLE.lock` pins the following: the tag `legacy-compiler-final` and its commit; the Lean
@@ -60,3 +60,8 @@ duplicates, including the old workflows, without the manifest ever authorizing d
 root file. A transition row retires a job only through a literal `-`; a malformed replacement list
 is refused. ISS-0005 tracks the unrehearsed GitHub-hosted fallback for the oracle check.
 acceptance.sh reports a dry-run land refused because main moved as `incomplete`.
+
+The CI job is named `Root checks`, the name the moved root keeps, so one job has one name. ISS-0001
+records that P13 is approved (concrete-ci-2 plus GitHub-hosted runners as one pool, oracle as a
+release asset); `publish.sh` creates the release tag at the locked commit. ISS-0006 records that bug
+282's wall-clock budget fails under host load (owner R-0543); the budget is unchanged.
