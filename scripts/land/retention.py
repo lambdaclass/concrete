@@ -6,7 +6,8 @@ Usage: retention.py check MANIFEST < paths     problems, one per line (empty: va
 
 The rule (also the manifest's header): a row's first field is a space-separated list of paths; a
 path is governed by the row that lists its longest prefix (a listed path equal to it, or a listed
-directory containing it); legacy/P is governed as P. Rows carry a status (open | resolved). No path may be listed twice, so the governing row is unique. A path with
+directory containing it); legacy/P is governed as P. Rows carry a status (open | resolved)
+about the legacy/ copy only (a retained row's root file is never deleted through the manifest). No path may be listed twice, so the governing row is unique. A path with
 no listed prefix is uncovered, which `check` reports. Lives in scripts/land because the deletion
 check of the legacy/ move will read deletion authority from `govern`, and the gate that holds the
 manifest to the tree (scripts/tests/check_retention_manifest.sh) uses the same code.
@@ -32,8 +33,9 @@ def parse(path):
             problems.append(f"row {n}: disposition {f[2]!r} is not one of {sorted(DISP)}")
         if f[6] not in STATUS:
             problems.append(f"row {n}: status {f[6]!r} is not one of {sorted(STATUS)}")
-        elif f[2] == "retained" and f[6] == "resolved":
-            problems.append(f"row {n}: a retained row never resolves (it is the live root)")
+        if f[2] == "retained" and not (f[5].startswith("root: ") and "; legacy/ copy" in f[5]):
+            # status releases only the legacy/ copy, so a retained row must say both halves
+            problems.append(f"row {n}: a retained row's criterion must read 'root: ...; legacy/ copy...: ...'")
         for p in f[0].split():
             p = p.rstrip("/")
             if p in listed:

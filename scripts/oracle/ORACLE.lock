@@ -20,6 +20,7 @@ corpus_std_tree=70303f918d3db1cdbf6748054b4112abb68a79e7
 lean_version=Lean (version 4.34.1, x86_64-unknown-linux-gnu, commit 5045d0056413266e57c625dcd7c365b10e377c52, Release)
 clang_version=clang version 21.1.8
 binary_sha256=fa25a30a585d63faa8e65abbc5bd74b668b22f3c0a33731f8d1316b9470aab74
+manifest_sha256=7d70da4d74de97e6c54833297b6811597612ee7821d97ecdea6b6afe83fa36fd
 artifact_sha256=74d8f1e3b5214d9c64c25736a24c19458736a2dacc7977ff784506839b9f26a2
 platform=x86_64-linux
 release_repo=unbalancedparentheses/concrete2

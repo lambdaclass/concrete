@@ -94,11 +94,13 @@ git -C "$SRC" archive "$COMMIT" flake.nix flake.lock lean-toolchain | tar -x -C 
 TB="$WORK/$(oracle_artifact_name)"
 oracle_pack "$STAGE" "$TB"
 ASHA="$(sha256sum "$TB" | cut -d' ' -f1)"
+MSHA="$(sha256sum "$STAGE/MANIFEST.sha256" | cut -d' ' -f1)"
 if [ "$RECORD" = 1 ]; then
-  echo "binary_sha256=$SHA"; echo "artifact_sha256=$ASHA"; echo "# build seconds: $(( $(date +%s) - t0 ))"
+  echo "binary_sha256=$SHA"; echo "manifest_sha256=$MSHA"; echo "artifact_sha256=$ASHA"; echo "# build seconds: $(( $(date +%s) - t0 ))"
   [ -z "${ORACLE_ARTIFACT_OUT:-}" ] || cp "$TB" "$ORACLE_ARTIFACT_OUT"
   exit 0
 fi
+check manifest_sha256 "$MSHA"
 check artifact_sha256 "$ASHA"
 [ -z "${ORACLE_ARTIFACT_OUT:-}" ] || cp "$TB" "$ORACLE_ARTIFACT_OUT"
 

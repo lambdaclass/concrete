@@ -53,9 +53,9 @@ fi
 out="$(problems "$TMP/dup.tsv")"
 case "$out" in *"docs/bugs is already listed"*) ok "a path listed twice is refused (no ambiguous deletion authority)" ;; *) no "a duplicate listing passed" ;; esac
 
-awk 'BEGIN{FS=OFS="\t"} !/^#/ && $1!="path" && $3=="retained" && !done {$7="resolved"; done=1} {print}' RETENTION.tsv > "$TMP/ret-res.tsv"
-out="$(problems "$TMP/ret-res.tsv")"
-case "$out" in *"a retained row never resolves"*) ok "a resolved retained row is refused" ;; *) no "a resolved retained row passed" ;; esac
+awk 'BEGIN{FS=OFS="\t"} !/^#/ && $1!="path" && $3=="retained" && !done {$6="never"; done=1} {print}' RETENTION.tsv > "$TMP/ret-crit.tsv"
+out="$(problems "$TMP/ret-crit.tsv")"
+case "$out" in *"a retained row's criterion must read"*) ok "a retained row that does not separate the root file from its legacy/ copy is refused" ;; *) no "a one-sided retained criterion passed" ;; esac
 awk 'BEGIN{FS=OFS="\t"} !/^#/ && $1!="path" && !done {$7="maybe"; done=1} {print}' RETENTION.tsv > "$TMP/bad-status.tsv"
 out="$(problems "$TMP/bad-status.tsv")"
 case "$out" in *"status 'maybe'"*) ok "an unknown status is refused" ;; *) no "an unknown status passed" ;; esac

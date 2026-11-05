@@ -7,8 +7,10 @@
 #                     the tag's dev shell, so the C toolchain that compiles programs is the locked one
 #                     (a directory of its own: `nix develop path:shell` copies only these to the store)
 #   MANIFEST.sha256   `sha256sum` lines for every other file in the artifact
-# Its own sha256 is the lock's artifact_sha256. An installed artifact is a directory with exactly
-# these files; oracle_verify_install checks the manifest, the binary hash and that nothing was added.
+# Its own sha256 is the lock's artifact_sha256, and MANIFEST.sha256's own sha256 is the lock's
+# manifest_sha256. An installed artifact is a directory with exactly these regular files (and their
+# directories, nothing else: no symlinks); oracle_verify_install anchors the manifest in the lock, so
+# every installed file (std/, shell/ as well as bin/concrete) is authenticated by the reviewed lock.
 ORACLE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ORACLE_LOCK="$ORACLE_DIR/ORACLE.lock"
 lock() { sed -n "s/^$1=//p" "$ORACLE_LOCK" | head -1; }
@@ -29,6 +31,12 @@ oracle_pack() {
 oracle_verify_install() {
   local d="$1" want got
   [ -f "$d/MANIFEST.sha256" ] && [ -x "$d/bin/concrete" ] || { echo "no installed artifact at $d"; return 1; }
+  [ ! -L "$d" ] || { echo "$d is a symlink"; return 1; }
+  want="$(lock manifest_sha256)"; got="$(sha256sum "$d/MANIFEST.sha256" | cut -d' ' -f1)"
+  [ -n "$want" ] && [ "$got" = "$want" ] || { echo "MANIFEST.sha256 is $got, the lock says ${want:-nothing}"; return 1; }
+  # Only regular files and directories: a symlink (or fifo, device...) would escape the inventory.
+  local odd; odd="$(cd "$d" && find . ! -type f ! -type d | head -1)"
+  [ -z "$odd" ] || { echo "$d holds a non-regular entry: $odd"; return 1; }
   ( cd "$d" && sha256sum --quiet --strict -c MANIFEST.sha256 ) >/dev/null 2>&1 || { echo "a file in $d differs from its manifest"; return 1; }
   # Nothing added: the files present are exactly the manifest's plus the manifest itself.
   local listed present

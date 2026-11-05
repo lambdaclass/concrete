@@ -51,3 +51,12 @@
   ci-3 data and the frozen-site record.
 - **`docs/archive/site-frozen.md`** is the frozen site deployment's record. Its values
   stay placeholders until a tag-built bundle has been checked and deployed.
+
+Review round 3. The oracle lock now pins `manifest_sha256`, so verifying an install authenticates
+`std/` and `shell/` as well as the binary, and an install holding a symlink or any other non-regular
+entry is refused. In RETENTION.tsv, `status` now applies to the legacy/ copy only. A retained row's
+criterion names both halves (`root: ...; legacy/ copy: ...`), so B3 can release the frozen
+duplicates, including the old workflows, without the manifest ever authorizing deletion of a live
+root file. A transition row retires a job only through a literal `-`; a malformed replacement list
+is refused. ISS-0005 tracks the unrehearsed GitHub-hosted fallback for the oracle check.
+acceptance.sh reports a dry-run land refused because main moved as `incomplete`.
