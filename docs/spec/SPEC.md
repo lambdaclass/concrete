@@ -12394,7 +12394,7 @@ undecided dependency remains explicitly linked to the target Core proposal rathe
 
 
 <a id="target-core-proposal"></a>
-### Target Core proposal: undecided dependencies
+### Target Core proposal: dependencies (provisionally decided 2026-11-05)
 
 These items were undesigned when the chapters were cleaned up on 2026-11-03. **The owner approved their design provisionally on 2026-11-05** ([the decided rows](#decided-2026-11-05-core): allocator identities Q1, allocation contracts Q1–Q2, the heap-array view Q3, static text Q4, capability inference Q5, unsafe contracts Q3.7–Q3.12, static refusal Q6, grants Q7, semantic objects Q8–Q9). Where a chapter still says **undecided: see the target Core proposal**, read the decided row; the rule is rewritten in Lean at stage A2b and frozen at A2c. The proposal is owned by
 [ROADMAP: Questions for the Core session](../../ROADMAP.md#questions-for-the-core-session).
@@ -12402,26 +12402,26 @@ These items were undesigned when the chapters were cleaned up on 2026-11-03. **T
 - <a id="core-allocator-identities"></a>[Core-session question 1](../../ROADMAP.md#questions-for-the-core-session). **Allocator identities and dependencies:** introduction, kind,
   scope, equality, packaging and repeated reset, dependency tracking across calls, containers and
   callbacks, and lifetime-safe release metadata; the allocation decision's conservation and no-live-
-  allocation requirements stand, but the discipline expressing them is undecided.
+  allocation requirements stand, but the discipline expressing them, undecided on 2026-11-03, is provisionally decided by rows Q1.1–Q1.13 ([rows](#decided-2026-11-05-core)).
 - <a id="core-allocation-contracts"></a>[Core-session question 1–2](../../ROADMAP.md#questions-for-the-core-session). **Allocation contracts:** failure payload shapes and complete
   growth, reserve and multi-allocation transition contracts; applicability of container `Destroy`
-  when payload cleanup needs effects beyond `Alloc` is undecided.
+  when payload cleanup needs effects beyond `Alloc`, undecided on 2026-11-03, are provisionally decided by rows Q1.8–Q1.12 and Q2.1–Q2.8 ([rows](#decided-2026-11-05-core)).
 - <a id="core-heap-array-view"></a>[Core-session question 3](../../ROADMAP.md#questions-for-the-core-session). **Heap-array view:** exact bounded view type, operations, lifetime,
-  mutability and permitted positions are undecided; opening never yields an element reference.
+  mutability and permitted positions, undecided on 2026-11-03, are provisionally decided by rows Q3.1–Q3.6 and Q4.7 ([rows](#decided-2026-11-05-core)); opening never yields an element reference.
 - <a id="core-static-text"></a>[Core-session question 4](../../ROADMAP.md#questions-for-the-core-session). **Static text:** literal type, ownership and conversion into
-  allocator-branded strings are undecided; static text requires no allocation.
+  allocator-branded strings, undecided on 2026-11-03, are provisionally decided by rows Q4.1–Q4.6 ([rows](#decided-2026-11-05-core)); static text requires no allocation.
 - <a id="core-grants"></a>[Core-session question 7](../../ROADMAP.md#questions-for-the-core-session). **Target grants:** exhaustive schemas, multiplicity, lifecycle and narrowing
-  APIs, including the resource backing process services, are undecided.
+  APIs, including the resource backing process services, undecided on 2026-11-03, are provisionally decided by rows Q7.1–Q7.11 ([rows](#decided-2026-11-05-core); process spawning is deferred).
 - <a id="core-capability-inference"></a>[Core-session question 5](../../ROADMAP.md#questions-for-the-core-session). **Capability inference:** decided 2026-11-05 (row Q5.1/Q5.4): there is
   none; capability arguments are written explicitly at every polymorphic call and checked, so no choice among
   solutions arises. Exact sets and refusal of inconsistent bindings stand.
 - <a id="core-unsafe-premises"></a>[Core-session question 3, 9](../../ROADMAP.md#questions-for-the-core-session). **Unsafe contracts:** the complete validity, provenance, aliasing
-  and foreign-mutation taxonomy and call-only annotation syntax are undecided; OD64's confinement
+  and foreign-mutation taxonomy and call-only annotation syntax, undecided on 2026-11-03, are provisionally decided by rows Q3.7–Q3.12 and Q9.7 ([rows](#decided-2026-11-05-core)); OD64's confinement
   requirement stands.
 - <a id="core-static-refusal"></a>[Core-session question 6](../../ROADMAP.md#questions-for-the-core-session). **Static refusal:** the mandatory proof criterion and its relation
-  to Core acceptance are undecided; recorded proven-violation refusals apply in trusted code too.
+  to Core acceptance, undecided on 2026-11-03, are provisionally decided by rows Q6.1–Q6.7 ([rows](#decided-2026-11-05-core)); recorded proven-violation refusals apply in trusted code too.
 - <a id="core-semantic-contract"></a>[Core-session question 8–9](../../ROADMAP.md#questions-for-the-core-session). **Semantic objects:** exact events, admissible allocation oracles,
-  observations, resource relations and theorem endpoint are undecided; technical adequacy and
+  observations, resource relations and theorem endpoint, undecided on 2026-11-03, are provisionally decided by rows Q8.1–Q8.7 and Q9.1–Q9.19 ([rows](#decided-2026-11-05-core)); technical adequacy and
   refinement obligations remain binding.
 
 
@@ -12958,7 +12958,7 @@ in summary on 2026-11-01):
    authority. Foreign function values stay refused (OD4); the permissions of foreign callbacks are
    decided when they are admitted.
 5. **`trusted` and `with(Unsafe)` never discharge an operational capability** (`Fs`, `Network`, `Env`,
-   `Time`, `Alloc`, `Device`, `Console`, `Process`; `Console` added 2026-11-05, row Q7.11). Effect checking applies inside trusted bodies and at foreign
+   `Time`, `Alloc`, `Device`, `Console`, `Process`; `Console` added by the [owner revision, 2026-11-05](#decided-2026-11-05-revisions), row Q7.11). Effect checking applies inside trusted bodies and at foreign
    calls; no capability can be hidden. What native code actually does is a named assumption of the
    theorem, never an exemption.
 6. **There are no umbrella capabilities** (`Std`, `Io`, `Block`). Behavioural classes such as "may
@@ -12970,7 +12970,7 @@ in summary on 2026-11-01):
    declaration may never understate the effects of what it calls. A body uses only its declared
    permissions, and a call requires the callee's set to be included in the caller's (TRUST-4), across
    trait dispatch, generic methods and generated cleanup alike; one Lean judgment states this. The table includes the `Console` operations on the standard-stream
-   grants (row Q7.11, 2026-11-05).
+   grants (row Q7.11, [owner revision, 2026-11-05](#decided-2026-11-05-revisions)).
 8. **Returned values never supply permissions.** A returned `File` or function value still carries its
    ownership and its effect requirements, but no permission.
 9. **Cleanup returns what survives it.** Cleanup with effects is explicit (`close(f) with(Fs)`), and
@@ -12997,7 +12997,7 @@ in summary on 2026-11-01):
 13. **Capability names are reserved and differ from resource type names**: `with(Fs)` against a
     `File` value. The reserved set is `Fs`, `Network`, `Env`, `Time`, `Alloc`, `Device`, `Console`, `Process` and
     `Unsafe` (meanings per OD95; `Console` is the permission for operations on the `StdIn`, `StdOut` and
-    `StdErr` grants, added by the owner 2026-11-05, row Q7.11; there is no `Net` spelling and no alias). They are reserved everywhere,
+    `StdErr` grants, added by the [owner revision, 2026-11-05](#decided-2026-11-05-revisions), row Q7.11; there is no `Net` spelling and no alias). They are reserved everywhere,
     including import aliases, capability parameters and other binders.
 14. **What the theorem claims.** Effect containment, resource safety and information-flow security are
     separate claims with separate assumptions; none implies another. The trusted base is an explicit

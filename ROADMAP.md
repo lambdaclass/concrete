@@ -191,18 +191,24 @@ without a primitive that confines path lookup refuses filesystem access.
 ### The shape of target behaviour theorems
 
 Ideas taken from the silmaril-lean development (no dependency, no vendored code; reviewed
-2026-11-05). Every theorem about a program's behaviour on a target (R-0496, R-0508, A3) is stated in
-this shape:
+2026-11-05). A theorem about a program's behaviour on a target (R-0496, R-0508, A3) is stated in
+this shape; which parts a given theorem proves, and under which premises, is stated with it:
 
-- **Observable events.** Behaviour is a trace of events an outside observer sees (reads and writes on
-  grants, the exit code with the final state of the granted filesystem, a trap with its location),
-  plus errors and an "unmodelled" flag; the theorem requires the program never to step outside the
-  model (fail closed).
-- **Three parts.** Safety: every trace is a prefix of the ideal trace. Termination: every run exits,
-  or traps at a stated point. Completeness: the full ideal trace occurs. Each part closes a loophole
-  the others leave open.
-- **A hostile environment.** The claim holds for every input, every spurious refusal or short
-  transfer by the operating system, every launch layout and every resource budget.
+- **Observable events.** Behaviour is a set of traces of events an outside observer sees (reads and
+  writes on grants, the exit code with the final state of the granted filesystem, a trap with its
+  location), plus errors and an "unmodelled" flag; a claim requires the program never to step
+  outside the model (fail closed).
+- **Safety in general.** Every trace is a prefix of an allowed trace. Where the environment is
+  nondeterministic, the allowed behaviour is a set of ideal traces, not one. Safety is partial
+  correctness: it needs no termination premise.
+- **Termination and completeness under stated premises.** That every run exits (or traps at a stated
+  point) and that an ideal trace occurs are proved only under explicit premises about the program,
+  its resources (for example enough memory and budget) and the environment (for example a bound on
+  spurious refusals), following the decided partial-correctness contracts and per-function
+  termination theorems (row P18).
+- **A hostile environment.** Within its premises, a claim holds for every input, every spurious
+  refusal or short transfer by the operating system and every launch layout; a premise that rules
+  out part of the environment is stated, never implicit.
 - **Non-vacuity.** Each theorem comes with a witness that its premises can hold.
 - **Exact artifacts.** A claim is about the exact source and the exact bytes produced, never about a
   name.

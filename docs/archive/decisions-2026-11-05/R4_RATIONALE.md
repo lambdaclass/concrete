@@ -152,6 +152,8 @@ Traps follow the fatal-exit rule (OD68, OD69).
 
 ## F3. The Destroy inventory (Q2.2, Q2.3, Q9.6) — high
 
+> **Superseded 2026-11-05 (owner, row Q2.8, [decisions.md](../../spec/decisions.md#decided-2026-11-05-revisions)):** the disjunctive bound of F3.1 is not adopted. Each container has separate disjoint impls (`T: Copy` and `T: Destroy`), sixteen named impls in all (row Q2.2); coherence uses Copy/Destroy disjointness only (F3.1b, revising TRAIT-1@1). The text below is kept as history.
+
 Grounding: OD28 (`decisions.md:184`: Destroy only by an impl, and Copy types are not Destroy), OD35 (`:191`), rule 9 (`:388`: Destroy requires at most `Alloc`), OD59 (`:215`: no `free`).
 
 **Rule F3.1: the bound "releasable".** A container may hold a Copy payload, which needs no destructor, or a `Destroy` payload. OD28 makes Copy types non-Destroy; taken here as disjointness: a type never has both. The condition is therefore a disjunction, `T: Copy | Destroy`. It is written only in container impls.
@@ -183,6 +185,8 @@ Recommendation: (a). Both (a) and (b) are checkable. (a) is one impl per contain
 - A trap during destruction stops all cleanup (OD68).
 
 ## F4. Text views (Q4.6) — high
+
+> **Superseded in part 2026-11-05 (owner, row Q4.7, [decisions.md](../../spec/decisions.md#decided-2026-11-05-revisions)):** F4.3's text-only `slice … else` form with a mandatory `else` is not adopted. One scoped form opens every view, `borrow [mut] source [from a until b] as view { … } [else { … }]`; without `else` an invalid range traps, and a proven invalid range without `else` is refused (OD118). The text below is kept as history.
 
 Grounding: OD127 (`decisions.md:283`: every String is UTF-8), Q4.3 (byte length), Q3.5 (`u64`), OD36 (`decisions.md:192`: scoped `borrow … as … { }` blocks), and `decisions.md:481–487`.
 
@@ -286,6 +290,8 @@ Spelling options:
 Recommendation: (a). The default is the safe case, and the exception is visible at the declaration.
 
 ## F6. The hosted target table (Q7.1–Q7.8) — high
+
+> **Superseded in part 2026-11-05 (owner, row Q7.11, [decisions.md](../../spec/decisions.md#decided-2026-11-05-revisions)):** the standard streams use the new `Console` capability, not `Device` (OPEN F6.1 is answered with option (c), revising authority rule 13). Every `with(Device)` on a `StdIn`, `StdOut` or `StdErr` operation in the table below reads `with(Console)`. The text below is kept as history.
 
 Grounding:
 - `decisions.md:356–380` (rules 1–6);

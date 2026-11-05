@@ -372,9 +372,10 @@ and per-function termination theorems for ordinary functions.
 - **Ghost code that affects execution.** Permanent. Ghost code itself is admitted as decided:
   `ghost let` with `ghost` reserved ([OD81](../spec/decisions.md#od81)) and specification
   functions whose body is required and total ([OD115](../spec/decisions.md#od115)). How ghost state
-  is represented in Core and erased is not decided: the owner decides it with the
-  [target Core proposal](../spec/decisions.md#target-core-proposal) (Core-session question 9 in
-  the [roadmap](../../ROADMAP.md#questions-for-the-core-session)).
+  is represented in Core and erased was approved provisionally by the owner on 2026-11-05 (row
+  Q9.10, [decided rows](../spec/decisions.md#decided-2026-11-05-core)): ghost ownership
+  instrumentation with proved erasure; Core freezes at stage A2c
+  ([roadmap](../../ROADMAP.md#questions-for-the-core-session)).
 
 ## Where the earlier rules went
 
