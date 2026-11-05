@@ -10,8 +10,10 @@
 # hardlinks the objects, so it costs about what a worktree costs.
 #
 # Env: RUN_AT_REF_REPO (gate clone, default ~/concrete2), RUN_AT_REF_RUNS (default ~/runs),
-#      RUN_AT_REF_SOURCE (what to fetch from: a remote name or a path to a clone, default origin;
-#      the bot passes its own clone so an unpublished train SHA can run), RUN_AT_REF_KEEP=1.
+#      RUN_AT_REF_SOURCE (what to fetch from: a remote name, a path to a clone or a git bundle,
+#      default origin; the bot passes its own clone and scripts/land/gates_remote.sh a bundle so an
+#      unpublished train SHA can run), RUN_AT_REF_KEEP=1, RUN_AT_REF_NO_NIX=1 (run the command
+#      without `nix develop`: the landing gate's sandbox only).
 set -euo pipefail
 if [ $# -lt 2 ]; then sed -n '2,14p' "$0"; exit 2; fi
 REF="$1"; shift
@@ -41,6 +43,7 @@ if [ -d "$REPO/.lake" ]; then cp -a "$REPO/.lake" "$WT/.lake"; fi
 cd "$WT"
 START=$(date +%s)
 RC=0
-nix develop -c bash -c "$CMD" || RC=$?
+if [ "${RUN_AT_REF_NO_NIX:-0}" = 1 ]; then bash -c "$CMD" || RC=$?
+else nix develop -c bash -c "$CMD" || RC=$?; fi
 echo "[concrete-remote] exit=$RC elapsed=$(( $(date +%s) - START ))s sha=$SHA"
 exit "$RC"

@@ -222,3 +222,193 @@ ppr_write() {
 
 # ppr_invalidate RECORD -> remove; a run that starts no longer vouches for the previous record.
 ppr_invalidate() { rm -f "$1" 2>/dev/null; [ ! -e "$1" ]; }
+
+# ---------------------------------------------------------------------------------------------------
+# REMOTE ATTESTATION — the impact gates ran on the gate host (concrete-ci-2), not on this machine.
+#
+# `train.sh check` can run the impact leg on the gate host (scripts/land/gates_remote.sh): the host
+# clones the exact train-head commit, runs scripts/land/impact_gates.sh there (the same hook, the same
+# selection), and its run-at-ref log ends with `[concrete-remote] exit=<rc> ... sha=<sha>`. When the
+# remote hook wrote its own validation record, the log carries it between two marker lines. This
+# machine keeps that LOG (ppr_remote_log_path) and a short ATTESTATION naming it (ppr_remote_path).
+#
+# The pushing hook may then skip re-running the gates ONLY when the remote run is provably about this
+# push: the attestation is complete and names this HEAD; the log is the one attested (its digest);
+# the log says the run at this SHA exited 0; the remote record inside it is complete and a pass; and
+# every component that does not depend on the host is EQUAL to this push's: the commit and every
+# pushed ref, the toolchain file, the gate definitions as committed, the resolved selection, the
+# changed-file list, the fuzz seed and the CONCRETE_* environment. The tracked tree here must be
+# clean, so HEAD names what the host measured. Host-specific components (compiler binary, lean, cc)
+# describe the host and are not compared. Anything else is not a match, and the hook runs the gates.
+#
+# A record and its log are files in this worktree's git directory, like the local record: they bind
+# a result to a candidate and catch mismatches, truncation and edits that break the digest; they are
+# not a signature against someone who can write the git directory.
+
+PPR_REMOTE_FORMAT="concrete-prepush-remote-v1"
+PPR_REMOTE_BEGIN="=== concrete-remote-record-begin"
+PPR_REMOTE_END="=== concrete-remote-record-end"
+
+ppr_remote_path() { # root -> attestation path in that worktree's git dir
+  local p; p="$(git -C "$1" rev-parse --git-path concrete-prepush-remote-record 2>/dev/null)" || return 1
+  [ -n "$p" ] || return 1
+  case "$p" in /*) ;; *) p="$1/$p" ;; esac
+  printf '%s\n' "$p"
+}
+ppr_remote_log_path() { # root -> the remote run's log, kept beside the attestation
+  local p; p="$(ppr_remote_path "$1")" || return 1
+  printf '%s.log\n' "$p"
+}
+
+_ppr_gate_defs_tracked() { # root -> digest of the COMMITTED gate definitions (tracked files only)
+  # The same paths and the same digest as _ppr_gate_defs, over tracked files only. A clean clone of
+  # the commit on the gate host has no untracked files there, so its _ppr_gate_defs equals this.
+  local root="$1" list hashes
+  list="$(mktemp)" || return 1
+  hashes="$(mktemp)" || { rm -f "$list"; return 1; }
+  if ! git -C "$root" ls-files -c -- scripts .githooks .github/workflows \
+         Makefile lean-toolchain lakefile.toml lakefile.lean lake-manifest.json flake.nix flake.lock \
+         2>/dev/null | LC_ALL=C sort -u > "$list"; then
+    rm -f "$list" "$hashes"; return 1
+  fi
+  [ -s "$list" ] || { rm -f "$list" "$hashes"; return 1; }
+  if ! (cd "$root" && git hash-object --stdin-paths < "$list" > "$hashes" 2>/dev/null); then
+    rm -f "$list" "$hashes"; return 1
+  fi
+  [ "$(wc -l < "$list")" = "$(wc -l < "$hashes")" ] || { rm -f "$list" "$hashes"; return 1; }
+  paste "$list" "$hashes" | ts_digest
+  rm -f "$list" "$hashes"
+}
+
+# ppr_remote_components ROOT PUSHED_SHAS CHANGED_FILE PLAN_FILE OUT_FILE
+# The host-independent components of this push, as key=value lines; 1 with PPR_REASON when this push
+# cannot use a remote attestation at all.
+ppr_remote_components() {
+  local root="$1" pushed="$2" changed_f="$3" plan_f="$4" out="$5"
+  PPR_REASON=""
+  command -v ts_require >/dev/null 2>&1 && ts_require 2>/dev/null \
+    || { PPR_REASON="treestate_library_unavailable"; return 1; }
+  [ -s "$plan_f" ] || { PPR_REASON="empty_selection"; return 1; }
+  [ -f "$changed_f" ] || { PPR_REASON="no_changed_list"; return 1; }
+  local head s sorted
+  head="$(ts_head "$root")"
+  case "$head" in ""|*TREESTATE-UNAVAILABLE*) PPR_REASON="head_unreadable"; return 1 ;; esac
+  sorted="$(printf '%s\n' $pushed | sed '/^$/d' | LC_ALL=C sort -u | tr '\n' ' ' | sed 's/ $//')"
+  [ -n "$sorted" ] || { PPR_REASON="no_pushed_sha"; return 1; }
+  for s in $sorted; do
+    [ "$s" = "$head" ] || { PPR_REASON="pushed_sha_not_head(${s:0:12})"; return 1; }
+  done
+  if ! git -C "$root" diff --quiet HEAD -- 2>/dev/null || ! git -C "$root" diff --cached --quiet 2>/dev/null; then
+    PPR_REASON="tracked_tree_dirty"; return 1
+  fi
+  local tcfile gates sel base seed envd
+  tcfile="$(tr '\n' ' ' < "$root/lean-toolchain" 2>/dev/null | sed 's/[[:space:]]*$//')"
+  [ -n "$tcfile" ] || { PPR_REASON="lean_toolchain_unreadable"; return 1; }
+  gates="$(_ppr_gate_defs_tracked "$root")" || { PPR_REASON="gate_defs_unreadable"; return 1; }
+  sel="$(ts_digest < "$plan_f")"
+  base="$(LC_ALL=C sort -u "$changed_f" | sed '/^$/d' | ts_digest)"
+  if grep -q 'SEED' "$plan_f"; then seed="${SEED:-$(date -u +%Y%m%d)}"; else seed="unused"; fi
+  envd="$(env | grep '^CONCRETE_' | grep -v '^CONCRETE_SKIP_GATES=' | LC_ALL=C sort | ts_digest)"
+  {
+    echo "head=$head"
+    echo "pushed=$sorted"
+    echo "toolchain_file=$tcfile"
+    echo "gate_defs=$gates"
+    echo "selection=$sel"
+    echo "selection_count=$(grep -c . "$plan_f")"
+    echo "base=$base"
+    echo "seed=$seed"
+    echo "env=$envd"
+  } > "$out" || { PPR_REASON="components_unwritable"; return 1; }
+}
+
+# ppr_remote_block LOG -> the remote record carried in the log (exactly one marked block), or 1.
+ppr_remote_block() {
+  local log="$1" n
+  n="$(grep -cx -- "$PPR_REMOTE_BEGIN" "$log" 2>/dev/null)" || n=0
+  [ "$n" = 1 ] || return 1
+  [ "$(grep -cx -- "$PPR_REMOTE_END" "$log" 2>/dev/null)" = 1 ] || return 1
+  sed -n "/^${PPR_REMOTE_BEGIN}\$/,/^${PPR_REMOTE_END}\$/p" "$log" | sed '1d;$d'
+}
+
+# ppr_remote_attest ROOT LOG HOST SHA -> keep LOG as this worktree's remote log and write the
+# attestation for SHA. Refuses (1, PPR_REASON) unless the log says the run at SHA exited 0 and carries
+# a complete passing remote record for SHA: an attestation is only ever written for a usable result.
+ppr_remote_attest() {
+  local root="$1" log="$2" host="$3" sha="$4" rec dlog tmp block
+  PPR_REASON=""
+  rec="$(ppr_remote_path "$root")" || { PPR_REASON="no_attestation_path"; return 1; }
+  dlog="$rec.log"
+  rm -f "$rec" "$dlog" 2>/dev/null
+  _ppr_remote_log_ok "$log" "$sha" || return 1
+  cp "$log" "$dlog" 2>/dev/null || { PPR_REASON="log_uncopyable"; return 1; }
+  tmp="$(mktemp "$rec.XXXXXX" 2>/dev/null)" || { PPR_REASON="attestation_unwritable"; return 1; }
+  { echo "attestation=$PPR_REMOTE_FORMAT"
+    echo "head=$sha"
+    echo "host=$host"
+    echo "log_digest=$(ts_digest < "$dlog")"
+    echo "written_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo "complete=1"; } > "$tmp" 2>/dev/null || { rm -f "$tmp"; PPR_REASON="attestation_unwritable"; return 1; }
+  mv -f "$tmp" "$rec" 2>/dev/null || { rm -f "$tmp"; PPR_REASON="attestation_unwritable"; return 1; }
+}
+
+_ppr_remote_log_ok() { # log sha -> 0 when the log is a passing run at sha carrying a passing record for sha
+  local log="$1" sha="$2" block
+  [ -s "$log" ] || { PPR_REASON="no_remote_log"; return 1; }
+  # Exactly one start and one exit line from run-at-ref.sh, both naming this SHA, and the exit is 0.
+  [ "$(grep -c '^\[concrete-remote\] ref=' "$log")" = 1 ] || { PPR_REASON="remote_log_start_not_unique"; return 1; }
+  grep -qE "^\[concrete-remote\] ref=[^ ]+ sha=$sha( |\$)" "$log" || { PPR_REASON="remote_log_other_sha"; return 1; }
+  [ "$(grep -c '^\[concrete-remote\] exit=' "$log")" = 1 ] || { PPR_REASON="remote_log_exit_not_unique"; return 1; }
+  grep -qE "^\[concrete-remote\] exit=0 .*sha=$sha\$" "$log" || { PPR_REASON="remote_run_not_a_pass_at_sha"; return 1; }
+  block="$(ppr_remote_block "$log")" || { PPR_REASON="remote_record_absent"; return 1; }
+  # The remote record: complete, passing, ours (the same rules as ppr_check), and about this SHA.
+  [ "$(printf '%s\n' "$block" | tail -n 1)" = "complete=1" ] || { PPR_REASON="remote_record_incomplete"; return 1; }
+  [ "$(printf '%s\n' "$block" | grep -c '^status=')" = 1 ] || { PPR_REASON="remote_record_status_not_unique"; return 1; }
+  printf '%s\n' "$block" | grep -qxE "status=(pass|pass-deferred)" || { PPR_REASON="remote_record_not_a_pass"; return 1; }
+  if printf '%s\n' "$block" | grep -qx "status=pass-deferred"; then
+    printf '%s\n' "$block" | grep -q '^deferred_gate=.' || { PPR_REASON="remote_record_deferral_unnamed"; return 1; }
+  elif printf '%s\n' "$block" | grep -q '^deferred_gate='; then
+    PPR_REASON="remote_record_pass_with_deferral"; return 1
+  fi
+  printf '%s\n' "$block" | grep -qx "format=$PPR_FORMAT" || { PPR_REASON="remote_record_format_mismatch"; return 1; }
+  [ "$(printf '%s\n' "$block" | grep -c '^head=')" = 1 ] && printf '%s\n' "$block" | grep -qx "head=$sha" \
+    || { PPR_REASON="remote_record_other_head"; return 1; }
+  return 0
+}
+
+# ppr_remote_check ROOT COMPONENTS_FILE -> 0 when this worktree's attestation and log prove that the
+# gate host ran exactly this push's selection on exactly this commit and passed. PPR_REASON otherwise.
+ppr_remote_check() {
+  local root="$1" comp="$2" rec dlog head line k v rv block diff=""
+  PPR_REASON=""
+  rec="$(ppr_remote_path "$root")" || { PPR_REASON="no_attestation_path"; return 1; }
+  dlog="$rec.log"
+  [ -f "$rec" ] || { PPR_REASON="no_attestation"; return 1; }
+  [ -s "$comp" ] || { PPR_REASON="no_components"; return 1; }
+  [ "$(tail -n 1 "$rec")" = "complete=1" ] || { PPR_REASON="attestation_incomplete"; return 1; }
+  grep -qx "attestation=$PPR_REMOTE_FORMAT" "$rec" || { PPR_REASON="attestation_format_mismatch"; return 1; }
+  for k in head log_digest; do
+    [ "$(grep -c "^$k=" "$rec")" = 1 ] || { PPR_REASON="attestation_${k}_not_unique"; return 1; }
+  done
+  head="$(sed -n 's/^head=//p' "$comp")"
+  grep -qx "head=$head" "$rec" || { PPR_REASON="attestation_other_head"; return 1; }
+  [ -f "$dlog" ] || { PPR_REASON="attested_log_missing"; return 1; }
+  grep -qx "log_digest=$(ts_digest < "$dlog")" "$rec" || { PPR_REASON="attested_log_changed"; return 1; }
+  _ppr_remote_log_ok "$dlog" "$head" || return 1
+  block="$(ppr_remote_block "$dlog")"
+  while IFS= read -r line; do
+    k="${line%%=*}"; v="${line#*=}"
+    [ -n "$k" ] || continue
+    [ "$(printf '%s\n' "$block" | grep -c "^$k=")" = 1 ] || { diff="$diff $k"; continue; }
+    rv="$(printf '%s\n' "$block" | grep "^$k=" | head -1)"; rv="${rv#*=}"
+    [ "$rv" = "$v" ] || diff="$diff $k"
+  done < "$comp"
+  if [ -n "$diff" ]; then PPR_REASON="changed:${diff# }"; return 1; fi
+  return 0
+}
+
+# ppr_remote_deferred ROOT -> the deferred_gate lines of the attested remote record (may be empty).
+ppr_remote_deferred() {
+  local rec; rec="$(ppr_remote_path "$1")" || return 1
+  ppr_remote_block "$rec.log" | sed -n 's/^deferred_gate=//p'
+}

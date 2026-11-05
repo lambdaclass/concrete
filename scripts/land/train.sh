@@ -4,7 +4,7 @@
 # is the manual; this header is the contract.
 #
 #   train.sh [--dry-run] build  <name> [--force] [--no-fetch] <ref>...
-#   train.sh [--dry-run] check  <name> [--no-remote]
+#   train.sh [--dry-run] check  <name> [--no-remote] [--no-review] [--local-gates]
 #   train.sh [--dry-run] ci     <name> [--skip-check]
 #   train.sh             watch  <name> [--interval S] [--timeout S]
 #   train.sh [--dry-run] land   <name> [--no-mirror] [--keep-main-ci]
@@ -38,7 +38,9 @@
 # LAND_PUSH_ATTEMPTS (default 3) and LAND_PUSH_RETRY_SLEEP (seconds, default 15) for verified pushes,
 # LAND_KEEP_MAIN_CI=1 (same as land --keep-main-ci), LAND_REQUIRED_CHECKS_FILE (default required-checks.txt), LAND_REQUIRED_TRANSITION_FILE (default
 # required-checks-transition.tsv), LAND_DUP_POLL (default 6) and
-# LAND_DUP_POLL_SLEEP (seconds, default 5) for finding main's duplicate run.
+# LAND_DUP_POLL_SLEEP (seconds, default 5) for finding main's duplicate run, LAND_GATES_HOST (the
+# gate host of `check`'s impact leg, else `git config land.gatesHost`; see gates_host below) and
+# LAND_GATES_TRANSPORT (scripts/land/gates_remote.sh's transport).
 set -euo pipefail
 
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -439,6 +441,17 @@ remote_leg() { # name head
   return "$rc"
 }
 
+# The gate host (heavy legs default to concrete-ci-2, docs/project/LANDING.md "Gate host"):
+# LAND_GATES_HOST if set (empty = none), else `git config land.gatesHost`. With a gate host the impact
+# leg runs there through scripts/land/gates_remote.sh, for the exact head SHA, and its pass is
+# attested so the `ci` push's hook reuses it. An unreachable host is INCOMPLETE and fails the check;
+# running the gates on this machine instead takes the explicit `check --local-gates`.
+gates_host() {
+  if [ -n "${LAND_GATES_HOST+x}" ]; then echo "$LAND_GATES_HOST"
+  else git config --get land.gatesHost 2>/dev/null || true; fi
+  return 0
+}
+
 # Codex review leg: LAND_REVIEW_CMD, else scripts/review/review.sh, called with --base --head. Its
 # exit status is the verdict (0 = clean); a published review note saying `findings` at head also fails.
 review_cmd() {
@@ -455,11 +468,12 @@ review_leg() { # base head
 }
 
 cmd_check() {
-  local name="" remote=1 review=1
+  local name="" remote=1 review=1 local_gates=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --no-remote) remote=0 ;;
       --no-review) review=0 ;;
+      --local-gates) local_gates=1 ;;
       -*) die "check: unknown option $1" ;;
       *) name="$1" ;;
     esac; shift
@@ -472,20 +486,26 @@ cmd_check() {
   [ "$DRY" = 1 ] || state_set "$name" checked ""
   if [ "$remote" = 1 ] && [ -z "$(remote_runner)" ]; then remote=0; fi
   if [ "$review" = 1 ] && [ -z "$(review_cmd)" ]; then review=0; fi
+  local ghost=""; [ "$local_gates" = 1 ] || ghost="$(gates_host)"
+  local impact_cmd=(bash "$SELF_DIR/impact_gates.sh") impact_where="here"
+  if [ -n "$ghost" ]; then impact_cmd=(bash "$SELF_DIR/gates_remote.sh" --host "$ghost"); impact_where="on $ghost"; fi
+  # The attestation describes one run; a new check withdraws the previous one before it starts.
+  [ "$DRY" = 1 ] || rm -f "$(git rev-parse --git-path concrete-prepush-remote-record)" \
+    "$(git rev-parse --git-path concrete-prepush-remote-record).log"
 
   # The legs are independent, so they run AT THE SAME TIME and are all collected (LANDING.md,
   # "Pipelining"): the impact selection over exactly the range the `ci` push will present
   # (base..head on ci/<name>, so that push reuses the hook's record), the remote full set, and the
   # Codex review. Any failing leg fails the check.
   if [ "$DRY" = 1 ]; then
-    note "(dry-run) would run in parallel: impact gates (hook line 'refs/heads/train/$name $head refs/heads/ci/$name $base')"
+    note "(dry-run) would run in parallel: impact gates $impact_where (hook line 'refs/heads/train/$name $head refs/heads/ci/$name $base')"
     if [ "$remote" = 1 ]; then note "(dry-run)   + remote full gates: $(remote_runner) <ref of ${head:0:10}> '${LAND_FULL_GATES_CMD:-lake build && bash scripts/tests/run_ci_gates_local.sh}'"; fi
     if [ "$review" = 1 ]; then note "(dry-run)   + review: $(review_cmd) --base $base --head $head"; fi
     return 0
   fi
   local dir="$STATE_ROOT/$name/check-${head:0:12}"; mkdir -p "$dir"
   local t0; t0="$(date +%s)"
-  legs_start impact "$dir/impact.log" bash "$SELF_DIR/impact_gates.sh" --base "$base" --head "$head" \
+  legs_start impact "$dir/impact.log" "${impact_cmd[@]}" --base "$base" --head "$head" \
     --src-ref "refs/heads/train/$name" --dst-ref "refs/heads/ci/$name"
   if [ "$remote" = 1 ]; then legs_start remote "$dir/remote.log" remote_leg "$name" "$head"; fi
   if [ "$review" = 1 ]; then legs_start review "$dir/review.log" review_leg "$base" "$head"; fi
@@ -497,11 +517,19 @@ cmd_check() {
     note "$leg leg FAILED at ${head:0:10}; tail of $dir/$leg.log:"; tail -n 40 "$dir/$leg.log" || true
   done
   note "legs: $LEGS_REPORT; wall ${wall}s, sequential ${LEGS_SUM}s"
-  log_row "$name" check-legs "$([ -z "$LEGS_FAILED" ] && echo passed || echo failed)" "$LEGS_REPORT wall=${wall}s sum=${LEGS_SUM}s"
+  # gates_remote.sh exit 3: no result about head (host unreachable, wrong SHA, lost log). It blocks
+  # like a failure and is recorded as INCOMPLETE, never as a pass or as a gate failure.
+  local impact_rc=0; [ -f "$dir/impact.log.rc" ] && read -r impact_rc _ < "$dir/impact.log.rc"
+  local verdict; verdict="$([ -z "$LEGS_FAILED" ] && echo passed || echo failed)"
+  if [ -n "$ghost" ] && [ "$impact_rc" = 3 ]; then verdict=incomplete; fi
+  log_row "$name" check-legs "$verdict" "$LEGS_REPORT wall=${wall}s sum=${LEGS_SUM}s"
   if [ -z "$LEGS_FAILED" ]; then
     state_set "$name" checked "$head"
-    log_row "$name" check passed "impact$([ "$remote" = 1 ] && echo ' + remote')$([ "$review" = 1 ] && echo ' + review')"
+    log_row "$name" check passed "impact $impact_where$([ "$remote" = 1 ] && echo ' + remote')$([ "$review" = 1 ] && echo ' + review')"
     note "check passed at ${head:0:10}; next: train.sh ci $name"
+  elif [ "$verdict" = incomplete ]; then
+    log_row "$name" check incomplete "impact gates on $ghost gave no result; legs failed: $LEGS_FAILED"
+    die "check INCOMPLETE at ${head:0:10}: the gate host $ghost gave no result about it (see $dir/impact.log). Re-run when it is reachable, or run the gates here with: train.sh check $name --local-gates"
   else
     log_row "$name" check failed "legs failed: $LEGS_FAILED"
     die "check FAILED at ${head:0:10} ($LEGS_FAILED); fix the member that broke it (bisect: train.sh bisect $name --test '<failing gate>')"
