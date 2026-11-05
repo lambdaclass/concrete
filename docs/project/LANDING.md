@@ -10,7 +10,7 @@ used to do by hand, and refuses the mistakes that hand-run trains made on 2026-1
 
 ```sh
 scripts/land/train.sh build  <name> <ref>...   # train/<name> = origin/main + each ref, --no-ff, in order
-scripts/land/train.sh check  <name>            # fast surface + impact-selected gates (+ remote full set)
+scripts/land/train.sh check  <name>            # fast surface + impact-selected gates on the gate host (+ remote full set)
 scripts/land/train.sh ci     <name>            # push ci/<name>, dispatch CI, record the run id
 scripts/land/train.sh watch  <name>            # poll to a verdict; failing jobs' log tails
 scripts/land/train.sh land   <name>            # verify, then push the exact SHA to origin and lambdaclass
@@ -58,7 +58,8 @@ verdict; any failing leg fails the check (see [Pipelining](#pipelining)).
 - **impact** (`scripts/land/impact_gates.sh`): runs the pre-push hook's own selection (the R-0022 fast surface gates plus the touched areas)
   over exactly the range the `ci` push will present: `train/<name>` at `base..head` on `ci/<name>`.
   The hook therefore writes its validation record for that range, and the `ci` push reuses it
-  instead of running the gates again.
+  instead of running the gates again. With a gate host configured, this leg runs **there**
+  (see [Gate host](#gate-host)).
 - If `scripts/tests/select_gates.sh` (R-0513) exists and the hook does not already call it, its
   output is run as well. The interface is `select_gates.sh --base <sha> --head <sha>`, printing one
   gate command per line, which runs through `run_ci_gates_local.sh --first`.
@@ -172,6 +173,68 @@ built from the members' recorded SHAs. Its result is logged against that train's
 is then built alone. If it is green alone, the failure is an interaction between members and the
 report says so. The command prints the rebuild without the culprit. A member removed by bisection
 keeps the failure attributed to it.
+
+### Gate host
+
+Heavy legs run on the CI server, not on the machine that pushes. The pushing machine keeps the
+credentials, and the gate host (concrete-ci-2) does the compute. The gate host is `LAND_GATES_HOST`
+when set (empty means none), else `git config land.gatesHost`. Set it once per clone, for example
+`git config land.gatesHost concrete-ci-2`, where `concrete-ci-2` is an ssh destination from
+`~/.ssh/config`.
+
+With a gate host, `check`'s impact leg is `scripts/land/gates_remote.sh`:
+
+1. It bundles `base..head` under a temporary ref.
+2. The transport (`scripts/land/gates_transport_ssh.sh`) copies one directory to the host: the
+   bundle, this checkout's `run-at-ref.sh`, and a script that quotes the command for bash. The
+   host's login shell sees only `bash land-remote-<id>/run.sh`. That script runs `git fetch origin`
+   in the host's gate clone (`~/concrete2`), runs `run-at-ref.sh` on the bundle, and removes the
+   directory. The host therefore needs no GitHub credentials and no copy of the landing scripts.
+3. In a fresh clone of exactly the head, the host runs `impact_gates.sh`: the same hook, with the
+   same input line the `ci` push will present. The command first unsets `CONCRETE_SKIP_GATES`
+   (whatever the host's environment holds) and the hook's re-entry marker. Then it exports this
+   checkout's `CONCRETE_*` variables, NUL-delimited, with validated names and `%q`-quoted values.
+
+The verdict comes from the log, bound to the SHA. The log must hold exactly one start line and one
+exit line from `run-at-ref.sh`, and both must name the head.
+
+| result | exit | effect |
+|---|---|---|
+| passed at the head | 0 | the leg passes |
+| gates failed at the head | 1 | the check fails |
+| run at another SHA, unreachable host, lost connection, log missing either line | 3 | **INCOMPLETE**: the check fails and the log records `check incomplete` |
+
+INCOMPLETE is never a pass. It does not fall back to running the gates here. With a gate host
+configured, running them on this machine takes the explicit `train.sh check <name> --local-gates`.
+A clone with no gate host (CI, the landing gate's sandbox, a bot that runs on the gate host itself)
+runs them here, says so, and logs `impact here`.
+
+**Reuse at the `ci` push.** When the host's hook wrote a validation record, the log carries it
+between `=== concrete-remote-record-begin` / `-end` markers. On a pass, the train worktree keeps two
+files in its git directory:
+
+- the log, at `concrete-prepush-remote-record.log`;
+- an attestation, at `concrete-prepush-remote-record`.
+
+The attestation records the head, the host, the log's digest and `complete=1`.
+
+The pre-push hook stays the enforcement point. It skips its own run **only** when all of these hold:
+
+- the attestation is complete and names this HEAD;
+- the log's digest matches the one attested;
+- the log shows exit 0 at this SHA;
+- the embedded record is complete and a pass;
+- every host-independent component equals this push's. These are the commit and every pushed
+  ref, `lean-toolchain`, the committed gate definitions, the resolved selection, the changed-file
+  list, the fuzz seed and the `CONCRETE_*` environment. The tracked tree must also be clean.
+
+Host-specific components (compiler binary, lean, cc) describe the host and are not compared. If any
+check fails, the hook names the reason and runs the gates here. If the host passed but wrote no
+record, the leg passes and says that the push will run the gates locally.
+
+Each run of `gates_remote.sh`, and each `check`, first removes the previous attestation. The attestation and its log are files in the git
+directory, like the local record. They catch mismatches, truncation and digest-breaking edits. They
+are not a signature against someone who can write the git directory.
 
 ## Where the record lives (R-0547)
 
@@ -406,6 +469,8 @@ publishing decision are in docs/project/STATUS_PAGE.md.
 | `LAND_STATE_DIR`, `LAND_LOG_DIR` | under the git common directory | state and log location |
 | `LAND_NO_NIX` | unset | `1` never re-enters `nix develop` |
 | `LAND_GH`, `LAND_HOOK` | `gh`, `.githooks/pre-push` | test seams |
+| `LAND_GATES_HOST` | `git config land.gatesHost` | gate host (ssh destination) for `check`'s impact leg; empty = none; `check --local-gates` runs here instead |
+| `LAND_GATES_TRANSPORT` | `scripts/land/gates_transport_ssh.sh` | `<transport> <host> <bundle> <ref> <command>`, printing `run-at-ref.sh`'s output; `LAND_GATES_SSH`/`LAND_GATES_SCP` override its ssh and scp |
 | `LAND_REMOTE_RUNNER` | `~/bin/concrete-remote` | `<runner> <ref> <command>` for the remote leg; empty disables it |
 | `LAND_REMOTE_PUSH` | `1` | `0`: the runner fetches the SHA from this clone, nothing is published |
 | `LAND_FULL_GATES_CMD` | `lake build && bash scripts/tests/run_ci_gates_local.sh` | the remote leg's command |
@@ -427,6 +492,12 @@ script against a throwaway repository with bare-repo remotes and a fake `gh`. It
 - cancelling main's duplicate push run but never the validating run, and `--keep-main-ci`;
 - verified pushes: a push dropped before the remote moved is retried, one dropped after it moved is
   accepted from `ls-remote`, and exhausted retries fail without moving main;
+- the gate host: a result bound to the train head's SHA. A run at another SHA, an unreachable
+  host and a lost log are each INCOMPLETE and block. A failure at the head fails. `--local-gates`
+  and `land.gatesHost` work as described. `run-at-ref.sh` runs a bundled head. The hook's library
+  reuses an attestation only for this exact push and refuses each of the following: another SHA,
+  changed files, selection or environment, a dirty tree, a tampered or re-digested log, a tampered
+  or truncated attestation, and a log that is not a pass;
 - bisection;
 - the report.
 

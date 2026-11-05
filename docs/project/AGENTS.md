@@ -90,6 +90,10 @@ as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
   selected by what the push touches). For the full set, dispatch CI on the branch
   (`gh workflow run CI --ref <branch>`) or use the server (`concrete-remote wip/<branch> 'lake build
   && bash scripts/tests/run_ci_gates_local.sh'`); never a full local run on the laptop.
+- Heavy legs default to the CI server (concrete-ci-2). Set `git config land.gatesHost concrete-ci-2`
+  in the clone you land from, and `train.sh check` then runs its impact gates there, bound to the
+  train head's SHA. The `ci` push reuses that result. An unreachable host is INCOMPLETE and blocks;
+  run locally only with `check --local-gates` (docs/project/LANDING.md, "Gate host").
 - At most 2 heavy runs (full suites, mutation campaigns, `lake build` of the whole tree) per machine.
   Queue behind a running one; continue light work meanwhile. Honour a user's explicit CPU limits.
 - Run gates inside `nix develop`. A gate that passes by hand but fails under the hook: suspect an

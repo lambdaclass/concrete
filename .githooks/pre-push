@@ -367,6 +367,28 @@ if source "scripts/tests/lib/prepush_record.sh" 2>/dev/null \
 else
   echo "pre-push: validation-record library unavailable — running the gates; no record will be written"
 fi
+# REMOTE ATTESTATION (scripts/tests/lib/prepush_record.sh, "REMOTE ATTESTATION"). `train.sh check`
+# may have run this exact selection on the gate host. Its result stands in for a local run only when
+# the attested log proves a pass at this commit and every host-independent component of this push
+# (commit, pushed refs, committed gate definitions, selection, changed files, seed, CONCRETE_* env)
+# equals the remote record's; the tracked tree must be clean. Any doubt is a local run.
+if [ "${CONCRETE_PREPUSH_NO_REUSE:-0}" != "1" ] && command -v ppr_remote_check >/dev/null 2>&1; then
+  RCOMP="$TMPD/components.remote"
+  if ppr_remote_components "$ROOT_DIR" "$pushed" "$CHANGED_F" "$PLAN_F" "$RCOMP" \
+     && ppr_remote_check "$ROOT_DIR" "$RCOMP"; then
+    echo "pre-push: REUSED the gate host's run (remote attestation $(ppr_remote_path "$ROOT_DIR"))"
+    echo "pre-push:   $(grep -E '^(head|host|written_at)=' "$(ppr_remote_path "$ROOT_DIR")" | tr '\n' ' ')"
+    echo "pre-push:   the log proves exit 0 at this commit; commit, pushed refs, committed gate definitions,"
+    echo "pre-push:   selection, changed-file list, seed and CONCRETE_* environment all match; no gate re-run here."
+    if [ -n "$(ppr_remote_deferred "$ROOT_DIR")" ]; then
+      echo "pre-push:   DEFERRED to CI in that run (not judged on the gate host; they did NOT pass there):"
+      ppr_remote_deferred "$ROOT_DIR" | sed 's/^/pre-push:     /'
+    fi
+    exit 0
+  elif [ -f "$(ppr_remote_path "$ROOT_DIR" 2>/dev/null)" ]; then
+    echo "pre-push: the gate host's attestation does not cover this push ($PPR_REASON) — running the gates here"
+  fi
+fi
 # A run is starting, so the previous record no longer describes anything this hook vouches for.
 if [ -n "$RECORD" ] && ! ppr_invalidate "$RECORD"; then
   echo "pre-push: could not remove the previous validation record $RECORD — refusing to push." >&2; exit 1
