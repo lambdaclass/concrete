@@ -2555,6 +2555,13 @@ example : RunCleanup (fun _ => true) [desC, desD, desV]
   ((defer_cleanup_releases (ok := fun _ => true) stack2_reg (e := .brk 1) (by decide)
     (fs := [⟨.block, [desC]⟩, ⟨.loopBody 2, [desD]⟩, ⟨.loopBody 1, [desV]⟩]) rfl).1
     (by decide) _ _).mpr ⟨rfl, rfl⟩
+/-- `continue L1` (the outer label) unwinds the same scopes as `break L1`, then tests `L1`'s
+condition again (F7). -/
+example : RunCleanup (fun _ => true) [desC, desD, desV]
+    [.call desC, .call desD, .call desV, .release ⟨7, 2⟩] .done :=
+  ((defer_cleanup_releases (ok := fun _ => true) stack2_reg (e := .cont 1) (by decide)
+    (fs := [⟨.block, [desC]⟩, ⟨.loopBody 2, [desD]⟩, ⟨.loopBody 1, [desV]⟩]) rfl).1
+    (by decide) _ _).mpr ⟨rfl, rfl⟩
 
 end ConcreteSpec.Cleanup
 
