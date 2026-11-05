@@ -1,0 +1,4 @@
+[piece 1 of 3: tests]
+- scripts/tests/check_oracle_fetch.sh:119: The tampered-install control checks only `run.sh`. It never invokes `ci_check.sh` on that install, despite claiming to verify that it reports INCOMPLETE. All subsequent `ci_check.sh` controls delete the install first, so a regression that misclassifies a tampered oracle can pass this gate.
+
+Repository reads failed because of a sandbox error, so I could not verify the owner-decision question against `docs/spec/decisions.md`.
