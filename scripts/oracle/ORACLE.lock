@@ -1,0 +1,32 @@
+# THE LEGACY ORACLE (ROADMAP R-0564): the old compiler, frozen at one tag.
+# Runners get it as a release artifact (fetch.sh: download, check artifact_sha256, verify the
+# install); build.sh rebuilds it from a fresh clone of the tag and must reproduce binary_sha256 and
+# artifact_sha256, which is what makes the artifact trustworthy. run.sh re-verifies the install
+# before each use. Change this file only to re-pin deliberately (a new tag is a new oracle).
+# artifact_url is empty until the artifact is published (publish.sh, owner approval: P13); until
+# then fetch.sh reports INCOMPLETE and only hosts that ran build.sh have the oracle.
+tag=legacy-compiler-final
+commit=066c9d9b8836a2b176aa37f6c8313195a4b4ee29
+url=https://github.com/unbalancedparentheses/concrete2.git
+mirror_url=https://github.com/lambdaclass/concrete.git
+build_command=nix develop <checkout> --command lake build concrete
+binary=.lake/build/bin/concrete (bin/concrete in the artifact)
+lean_toolchain=leanprover/lean4:v4.34.1
+flake_lock_sha256=d0a75387719c81fc35e16c0242b7b099f896235959d3936ec510cd2e9c0d9a3d
+nixpkgs_rev=aca4d95fce4914b3892661bcb80b8087293536c6
+corpus_tests_tree=758c4c89a1fe6f2f785de2264d8995916ec260d3
+corpus_examples_tree=b0c78ba592e354606b490721d35daed2d848ebcf
+corpus_std_tree=70303f918d3db1cdbf6748054b4112abb68a79e7
+lean_version=Lean (version 4.34.1, x86_64-unknown-linux-gnu, commit 5045d0056413266e57c625dcd7c365b10e377c52, Release)
+clang_version=clang version 21.1.8
+binary_sha256=fa25a30a585d63faa8e65abbc5bd74b668b22f3c0a33731f8d1316b9470aab74
+manifest_sha256=7d70da4d74de97e6c54833297b6811597612ee7821d97ecdea6b6afe83fa36fd
+artifact_sha256=74d8f1e3b5214d9c64c25736a24c19458736a2dacc7977ff784506839b9f26a2
+platform=x86_64-linux
+release_repo=unbalancedparentheses/concrete2
+release_tag=oracle-legacy-compiler-final
+artifact_url=
+# Reproducibility, 2026-11-04: fresh builds from the public clone reproduced binary_sha256 five times
+# (four on concrete-ci-2, Arch, in different directories; one on fede-256gb, Ubuntu) and
+# artifact_sha256 four times (three on concrete-ci-2, one on fede-256gb, with different gzip
+# versions). concrete-ci-2 caches the install at ~/oracle/<commit>/ (user dev); nothing depends on it.
