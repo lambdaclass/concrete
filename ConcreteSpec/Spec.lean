@@ -23,7 +23,8 @@ fragments into one Core is work for A3 (R-0560), after the freeze.
    checked `+`, `return`, with Core's binding form (Q9.1: A-normal form, fresh identities,
    explicit `copy`/`move`) and the mandatory static refusal of statically known violations
    (Q6.1–Q6.6). Theorems: safety (`checked_never_stuck`), behaviour (`checked_exits_or_traps`),
-   justified refusal (`knownViolation_traps`), checker correspondence (`check_iff`).
+   justified refusal (`knownViolation_traps`), checker correspondence (`check_iff`), and an
+   accepted runtime overflow from an input (`add100_safe`).
 2. **Representation** (Q3.11): `rep_roundtrip`.
 3. **Structured cleanup** (Q9.8, Q2.1, Q2.7, Q1.5): `defer_cleanup_releases`.
 4. **Scoped borrows** (Q3.3, Q3.4, Q9.5, REF-11): `open_mut_freezes_root`, with its shared
@@ -77,7 +78,8 @@ adequacy and determinism are about fuel, not an independent cross-check of expre
 Statically known values (Q6.2). A value is known when it comes from the fixed table: a literal,
 an immutable `let` of a known value, or a checked operation on known operands. In slice 1 every
 `let` is immutable. A struct literal is not in the table, so a field bound by destructuring a
-struct is not known; `fieldOverflowTrap` below is the resulting accepted program that traps. The
+struct is not known; `fieldOverflowTrap` below is the resulting accepted program that traps. An
+input is not known either: `add100` is the accepted body that traps for some input values. The
 table has more entries (module constants, the six named wrapping/saturating operations, lossless
 `as`) that slice 1 has no syntax for.
 
@@ -93,10 +95,13 @@ Obligations not discharged here:
 * the target observations (the launcher contract): every result proved here is about the model's
   abstract outcomes, and a claim about an executable needs a transport to the approved launcher
   contract first;
+* capabilities (Q5, Q2.7): the cleanup calls of part 3 and the allocator operations of part 5 need
+  capabilities, and no part models capability checking;
 * parts 3–5 model only the structure their theorems are about. Part 3 abstracts each deferred call
   to its identity, dependencies, loans and whether it traps, and does not model the statements
   between registrations or the evaluation of a `return` value before cleanup. Part 4 does not
-  model the range clause and `else` of Q4.7, element access, or the no-escape rules. Part 5 does
+  model the range clause and `else` of Q4.7, element access, or the no-escape rules. Part 5
+  abstracts the condition of `while` (either outcome at each test). Part 5 does
   not prove that a checked program passes every ghost brand check (the erasure correspondence of
   Q1.1).
 -/
@@ -1774,6 +1779,32 @@ def fieldOverflowTrap : Program :=
 example : Checked fieldOverflowTrap := (check_iff _).mp (by decide)
 example : run fieldOverflowTrap 10 = .trap .arithmeticOverflow := by decide
 
+/-- **An accepted overflow from an input** (Q6.2, Q6.4). The checker does not know an input's
+value. Slice 1 has no source of input: `main` takes no parameters (Q8.4), and an input reaches a
+program through a capability (Q5), which slice 1 does not model. The witness is therefore a body
+checked from one binding `x : u8` with no known value, as the body of a function with a `u8`
+parameter would be:
+```
+fn add100(x: u8) -> u8 {
+    return x + 100;        // accepted; traps when x > 155
+}
+```
+In Core the sum is bound to a temporary first (Q9.1). -/
+def inputCtx : Ctx := [{ name := x₀, ty := u8, live := true, used := false, known := none }]
+def inputEnv (n : Int) : Env := [(x₀, .val (.scalar (.int .u8 n)))]
+def add100 : List Stmt := [.let_ (.name s₂) u8 (.add (.copy x₀) (.int .u8 100))]
+
+theorem add100_ok : BodyOk decls inputCtx add100 (.copy s₂) := bodyOkB_iff.mp (by decide)
+
+/-- For every input value the accepted body never gets stuck. -/
+theorem add100_safe (n : Int) (h : IntTy.u8.inRange n = true) (fuel : Nat) (w : Stuck) :
+    runBody decls fuel (inputEnv n) add100 (.copy s₂) ≠ .stuck w :=
+  runBody_safe add100_ok (.cons (fun _ => ⟨_, rfl, .scalar (.int h)⟩) (fun _ hs => by cases hs) .nil)
+    fuel w
+
+example : runBody decls 10 (inputEnv 200) add100 (.copy s₂) = .trap .arithmeticOverflow := by decide
+example : runBody decls 10 (inputEnv 1) add100 (.copy s₂) = .exit 101 := by decide
+
 /-- Refused: `300` does not fit `u8` (ARITH-2). -/
 def literalTooBig : Program :=
   { decls, body := [.let_ (.name a₀) u8 (lit 300)], ret := .copy a₀ }
@@ -1996,6 +2027,25 @@ example : decodeScalar (.int .u16) [.byte 1] = none := by decide
 /-- Little-endian, two's complement (OD126): `-2 : i16` is the bytes `0xfe 0xff`. -/
 example : encodeScalar (.int .i16 (-2)) = [.byte 254, .byte 255] := by decide
 
+/-- Round trips at the ends of each unsigned range, for both `bool` values and for the empty
+struct `Token` (zero bytes, F13). -/
+example : decodeVal [] (.scalar (.int .u8)) (encodeVal (.scalar (.int .u8 255))) =
+    some (.scalar (.int .u8 255)) := by decide
+example : decodeVal [] (.scalar (.int .u16)) (encodeVal (.scalar (.int .u16 65535))) =
+    some (.scalar (.int .u16 65535)) := by decide
+example : decodeVal [] (.scalar (.int .u32)) (encodeVal (.scalar (.int .u32 4294967295))) =
+    some (.scalar (.int .u32 4294967295)) := by decide
+example : decodeVal [] (.scalar (.int .u64)) (encodeVal (.scalar (.int .u64 18446744073709551615))) =
+    some (.scalar (.int .u64 18446744073709551615)) := by decide
+example : decodeVal [] (.scalar (.int .u64)) (encodeVal (.scalar (.int .u64 0))) =
+    some (.scalar (.int .u64 0)) := by decide
+example : decodeVal [] (.scalar .bool) (encodeVal (.scalar (.bool true))) =
+    some (.scalar (.bool true)) := by decide
+example : decodeVal [] (.scalar .bool) (encodeVal (.scalar (.bool false))) =
+    some (.scalar (.bool false)) := by decide
+example : encodeVal (.struct "Token" []) = [] ∧
+    decodeVal Examples.decls (.struct "Token") [] = some (.struct "Token" []) := by decide
+
 end ConcreteSpec.Rep
 
 /-! ## Part 3. Structured cleanup (Q9.8): `defer_cleanup_releases`
@@ -2009,8 +2059,12 @@ that traps stops the run (Q9.8). A value's cleanup must run before the cleanup o
 depends on (Q1.5, Q1.3: resources are consumed before their allocator); registration checks this.
 
 The model is the cleanup stack itself: frames of registered calls and the exits that unwind them.
-What a deferred call does is abstracted to its identity, its dependencies, its loans and whether
-it traps (`ok`). Not modelled here: the statements between registrations, late reads of the
+What a deferred call does is abstracted to its identity, the resource it consumes, the resources
+it needs (allocator dependencies and the sources of its loans), its loans, and whether it traps
+(`ok`). Registration tracks which resources are still owned: a call may consume only an owned
+resource, each resource at most once, and may need only resources that are owned or consumed by
+an earlier-registered (so later-running) call. Capability checking of the calls (Q5, Q2.7) is not
+modelled here. Not modelled here: the statements between registrations, late reads of the
 deferred arguments, and evaluating a `return` value into an owned temporary before cleanup (Q9.8).
 -/
 
@@ -2019,8 +2073,11 @@ namespace ConcreteSpec.Cleanup
 /-- A resource in this part: a value to destroy or give up, or an allocator. -/
 abbrev Res := Nat
 
-/-- A loan held by a deferred call. -/
-abbrev Loan := Nat
+/-- A loan held by a deferred call, and the resource it borrows from. -/
+structure Loan where
+  id : Nat
+  src : Res
+  deriving DecidableEq, Repr
 
 /-- The kind of a deferred call (Q2.1): `destroy` consumes a destroyable value, `give_up` cleans up
 a resource (an allocator's release included). Both are Unit-only (Q9.8). -/
@@ -2037,6 +2094,10 @@ structure Deferred where
   deps : List Res
   loans : List Loan
   deriving DecidableEq, Repr
+
+/-- The resources a call needs to stay unconsumed until it and its loan releases have run: the
+allocators its resource depends on and the sources of its loans. -/
+def Deferred.needs (d : Deferred) : List Res := d.deps ++ d.loans.map Loan.src
 
 /-- What a scope is: a plain block, a loop body (with its loop identity, F7) or a function body. -/
 inductive FrameKind where
@@ -2108,23 +2169,33 @@ inductive RunCleanup (ok : Deferred → Bool) : List Deferred → List Event →
 def expected (ds : List Deferred) : List Event :=
   ds.flatMap (fun d => .call d :: d.loans.map .release)
 
-/-- The dependency order of a run list (Q1.5): no call releases a resource that a later call
-depends on, and no resource depends on itself. -/
+/-- The dependency order of a run list (Q1.5): no call consumes a resource that a later call
+needs, and no call needs its own resource. -/
 inductive DepOrder : List Deferred → Prop where
   | nil : DepOrder []
-  | cons {d ds} : d.target ∉ d.deps → (∀ d' ∈ ds, d.target ∉ d'.deps) → DepOrder ds →
+  | cons {d ds} : d.target ∉ d.needs → (∀ d' ∈ ds, d.target ∉ d'.needs) → DepOrder ds →
       DepOrder (d :: ds)
 
-/-- How a block builds its cleanup stack. Entering a scope pushes an empty frame; `defer` adds a
-call to the innermost frame, provided the call's resource does not depend on itself and no call
-already registered, in any enclosing scope, depends on it (Q1.5: a value is cleaned up before its
-allocator); leaving a scope removes its frame after its cleanup ran. -/
-inductive Reg : Stack → Prop where
-  | empty : Reg []
-  | enter {st k} : Reg st → Reg (⟨k, []⟩ :: st)
-  | push {k ds st d} : Reg (⟨k, ds⟩ :: st) → d.target ∉ d.deps →
-      (∀ d' ∈ pending (⟨k, ds⟩ :: st), d.target ∉ d'.deps) → Reg (⟨k, d :: ds⟩ :: st)
-  | leave {f st} : Reg (f :: st) → Reg st
+/-- The resources the calls consume. -/
+def targets (ds : List Deferred) : List Res := ds.map Deferred.target
+
+/-- How a block builds its cleanup stack, starting from the resources it owns (`live`). Entering
+a scope pushes an empty frame. `defer` adds a call to the innermost frame, provided: the call
+consumes a resource still owned and not yet scheduled (so no resource is consumed twice); it does
+not need its own resource; everything it needs is owned or consumed by an earlier-registered call
+(which runs later); and no call already registered, in any enclosing scope, needs the resource it
+consumes (Q1.5: a value is cleaned up before its allocator, and a loan's source outlives the
+loan). The resource is then no longer owned. Leaving a scope removes its frame after its cleanup
+ran. -/
+inductive Reg : (Res → Bool) → Stack → Prop where
+  | empty {live} : Reg live []
+  | enter {live st k} : Reg live st → Reg live (⟨k, []⟩ :: st)
+  | push {live k ds st d} : Reg live (⟨k, ds⟩ :: st) → live d.target = true →
+      d.target ∉ d.needs →
+      (∀ r ∈ d.needs, live r = true ∨ r ∈ targets (pending (⟨k, ds⟩ :: st))) →
+      (∀ d' ∈ pending (⟨k, ds⟩ :: st), d.target ∉ d'.needs) →
+      Reg (fun r => live r && r != d.target) (⟨k, d :: ds⟩ :: st)
+  | leave {live f st} : Reg live (f :: st) → Reg live st
 
 theorem depOrder_append_left : ∀ {l₁ l₂ : List Deferred}, DepOrder (l₁ ++ l₂) → DepOrder l₁
   | [], _, _ => .nil
@@ -2144,15 +2215,75 @@ theorem pending_cons (f : Frame) (st : Stack) : pending (f :: st) = f.defers ++ 
 theorem pending_append (fs st : List Frame) : pending (fs ++ st) = pending fs ++ pending st := by
   simp [pending]
 
-/-- Registration keeps the run order dependency-safe. -/
-theorem reg_depOrder {st : Stack} (h : Reg st) : DepOrder (pending st) := by
+theorem depOrder_cross : ∀ {l₁ l₂ : List Deferred}, DepOrder (l₁ ++ l₂) →
+    ∀ x ∈ l₁, ∀ y ∈ l₂, x.target ∉ y.needs
+  | [], _, _, x, hx, _, _ => by cases hx
+  | d :: l₁, l₂, h, x, hx, y, hy => by
+    cases h with
+    | cons _ hall hrest =>
+      rcases List.mem_cons.mp hx with rfl | hx
+      · exact hall y (List.mem_append_right _ hy)
+      · exact depOrder_cross hrest x hx y hy
+
+/-- What registration guarantees about the pending calls: they are dependency-ordered, each
+resource is consumed at most once and is no longer owned, and everything a call needs is owned or
+consumed by a later-running call. -/
+def RegInv (live : Res → Bool) (st : Stack) : Prop :=
+  DepOrder (pending st) ∧ (targets (pending st)).Nodup ∧
+  (∀ d ∈ pending st, live d.target = false) ∧
+  (∀ d ∈ pending st, ∀ r ∈ d.needs, live r = true ∨ r ∈ targets (pending st))
+
+theorem reg_inv {live : Res → Bool} {st : Stack} (h : Reg live st) : RegInv live st := by
   induction h with
-  | empty => exact .nil
-  | enter _ ih => simpa [pending_cons] using ih
-  | push _ hs hall ih =>
-    rw [pending_cons] at ih hall ⊢
-    exact .cons hs hall ih
-  | leave _ ih => rw [pending_cons] at ih; exact depOrder_append_right ih
+  | empty => exact ⟨.nil, .nil, by simp [pending], by simp [pending]⟩
+  | enter _ ih => simpa [RegInv, pending_cons] using ih
+  | @push live k ds st d _ hlive hself hneeds hall ih =>
+    obtain ⟨hdo, hnd, hdead, hav⟩ := ih
+    rw [pending_cons] at hdo hnd hdead hav hneeds hall
+    refine ⟨?_, ?_, ?_, ?_⟩
+    · rw [pending_cons]; exact .cons hself hall hdo
+    · rw [pending_cons]
+      simp only [targets, List.map_cons, List.cons_append] at hnd ⊢
+      refine List.nodup_cons.mpr ⟨?_, hnd⟩
+      intro hm
+      obtain ⟨d', hd', he⟩ := List.mem_map.mp hm
+      have := hdead d' hd'; rw [he, hlive] at this; cases this
+    · rw [pending_cons]
+      intro d' hd'
+      simp only [List.cons_append, List.mem_cons] at hd'
+      rcases hd' with rfl | hd'
+      · simp
+      · simp [hdead d' hd']
+    · rw [pending_cons]
+      intro d' hd' r hr
+      simp only [List.cons_append, List.mem_cons] at hd'
+      have step : ∀ r, (live r = true ∨ r ∈ targets (ds ++ pending st)) →
+          ((live r && r != d.target) = true ∨ r ∈ targets (d :: (ds ++ pending st))) := by
+        intro r hr
+        by_cases hrd : r = d.target
+        · right; subst hrd; simp [targets]
+        · rcases hr with hr | hr
+          · left; simp [hr, hrd]
+          · right; simp only [targets, List.map_cons, List.mem_cons]; right; exact hr
+      simp only [List.cons_append] at step ⊢
+      rcases hd' with rfl | hd'
+      · exact step r (hneeds r hr)
+      · exact step r (hav d' hd' r hr)
+  | @leave live f st _ ih =>
+    obtain ⟨hdo, hnd, hdead, hav⟩ := ih
+    rw [pending_cons] at hdo hnd hdead hav
+    refine ⟨depOrder_append_right hdo, ?_, fun d hd => hdead d (List.mem_append_right _ hd), ?_⟩
+    · simp only [targets, List.map_append] at hnd
+      exact hnd.sublist (List.sublist_append_right _ _)
+    · intro d hd r hr
+      rcases hav d (List.mem_append_right _ hd) r hr with h | h
+      · exact .inl h
+      · right
+        simp only [targets, List.map_append, List.mem_append] at h
+        rcases h with h | h
+        · obtain ⟨x, hx, rfl⟩ := List.mem_map.mp h
+          exact absurd hr (depOrder_cross hdo x hx d hd)
+        · exact h
 
 theorem unwindTo_prefix {p : FrameKind → Bool} :
     ∀ {st : Stack} {fs : List Frame}, unwindTo p st = some fs → ∃ rest, st = fs ++ rest
@@ -2233,7 +2364,7 @@ theorem runCleanup_trap {ok : Deferred → Bool} {d : Deferred} {post : List Def
 on. -/
 theorem depOrder_before :
     ∀ {ds : List Deferred}, DepOrder ds → ∀ {d da : Deferred}, d ∈ ds → da ∈ ds →
-      da.target ∈ d.deps → ∃ pre mid post, ds = pre ++ d :: mid ++ da :: post
+      da.target ∈ d.needs → ∃ pre mid post, ds = pre ++ d :: mid ++ da :: post
   | [], _, _, _, hd, _, _ => by cases hd
   | x :: ds, .cons hself hall hrest, d, da, hd, hda, hdep => by
     by_cases hxa : x = da
@@ -2260,61 +2391,125 @@ theorem depOrder_before :
         obtain ⟨pre, mid, post, hsplit⟩ := depOrder_before hrest hd' hda' hdep
         exact ⟨x :: pre, mid, post, by simp [hsplit]⟩
 
+/-- In a dependency-ordered run list, no call consumes what a later call needs. -/
+theorem depOrder_needs_unconsumed {pre post : List Deferred} {d : Deferred}
+    (h : DepOrder (pre ++ d :: post)) : ∀ r ∈ d.needs, ∀ x ∈ pre, x.target ≠ r := by
+  intro r hr x hx he
+  subst he
+  exact depOrder_cross h x hx d (List.mem_cons_self ..) hr
+
 /-- **`defer_cleanup_releases`** (Q9.14, Q9.8, Q1.5). For every cleanup stack a block can build
-and every structured exit (falling through, `break L`, `continue L`, `return`), the calls of the
-scopes the exit leaves:
+from the resources it owns, and every structured exit (falling through, `break L`, `continue L`,
+`return`), the calls of the scopes the exit leaves:
 
 1. when every call returns, run exactly in reverse registration order, innermost scope first,
    each call immediately followed by the release of each loan it held (`expected`);
-2. respect the allocator-dependency check: a call runs before the release of any allocator its
-   resource depends on;
+2. keep the allocator-dependency check: a call runs before the call that consumes anything it
+   needs (an allocator it depends on, or a loan's source);
 3. when a call traps, stop there: the earlier calls ran with their loan releases, the trapping
-   call is the last event, and no later cleanup runs. -/
-theorem defer_cleanup_releases {ok : Deferred → Bool} {st : Stack} (hreg : Reg st) {e : Exit}
-    (he : e ≠ .abort) {fs : List Frame} (hu : unwound e st = some fs) :
+   call is the last event, and no later cleanup runs;
+4. consume each resource at most once;
+5. find everything a call needs unconsumed when the call and its loan releases run: no earlier
+   call consumed it, and it was owned or is consumed by a later-running call. -/
+theorem defer_cleanup_releases {ok : Deferred → Bool} {live : Res → Bool} {st : Stack}
+    (hreg : Reg live st) {e : Exit} (he : e ≠ .abort) {fs : List Frame}
+    (hu : unwound e st = some fs) :
     ((∀ d ∈ pending fs, ok d = true) →
       ∀ tr r, RunCleanup ok (pending fs) tr r ↔ tr = expected (pending fs) ∧ r = .done) ∧
-    (∀ d da, d ∈ pending fs → da ∈ pending fs → da.target ∈ d.deps →
+    (∀ d da, d ∈ pending fs → da ∈ pending fs → da.target ∈ d.needs →
       ∃ t₁ t₂ t₃, expected (pending fs) = t₁ ++ .call d :: t₂ ++ .call da :: t₃) ∧
     (∀ pre d post, pending fs = pre ++ d :: post → (∀ x ∈ pre, ok x = true) → ok d = false →
-      ∀ tr r, RunCleanup ok (pending fs) tr r ↔ tr = expected pre ++ [.call d] ∧ r = .trapped) := by
+      ∀ tr r, RunCleanup ok (pending fs) tr r ↔ tr = expected pre ++ [.call d] ∧ r = .trapped) ∧
+    (targets (pending fs)).Nodup ∧
+    (∀ pre d post, pending fs = pre ++ d :: post → ∀ r ∈ d.needs,
+      (∀ x ∈ pre, x.target ≠ r) ∧ (live r = true ∨ r ∈ targets (pending st))) := by
   have _ := he
   obtain ⟨rest, hst⟩ := unwound_prefix hu
+  obtain ⟨hdo0, hnd0, _, hav⟩ := reg_inv hreg
   have hdo : DepOrder (pending fs) := by
-    have := reg_depOrder hreg
+    have := hdo0
     rw [hst, pending_append] at this
     exact depOrder_append_left this
-  refine ⟨fun hok => runCleanup_all_ok hok, ?_, ?_⟩
+  refine ⟨fun hok => runCleanup_all_ok hok, ?_, ?_, ?_, ?_⟩
   · intro d da hd hda hdep
     obtain ⟨pre, mid, post, hsplit⟩ := depOrder_before hdo hd hda hdep
-    refine ⟨expected pre, d.loans.map .release ++ expected mid, da.loans.map .release ++ expected post, ?_⟩
+    refine ⟨expected pre, d.loans.map .release ++ expected mid,
+      da.loans.map .release ++ expected post, ?_⟩
     rw [hsplit]
     simp [expected, List.flatMap_append]
   · intro pre d post hsplit hok hd tr r
     rw [hsplit]
     exact runCleanup_trap hok hd tr r
+  · have := hnd0
+    rw [hst, pending_append] at this
+    simp only [targets, List.map_append] at this ⊢
+    exact this.sublist (List.sublist_append_left _ _)
+  · intro pre d post hsplit r hr
+    refine ⟨depOrder_needs_unconsumed (hsplit ▸ hdo) r hr, hav d ?_ r hr⟩
+    rw [hst, pending_append, hsplit]
+    exact List.mem_append_left _ (List.mem_append_right _ (List.mem_cons_self ..))
 
 /-- An abort runs no cleanup (Q9.8). -/
 theorem abort_no_cleanup (st : Stack) : unwound .abort st = some [] ∧ pending [] = [] := ⟨rfl, rfl⟩
 
-/-! ### Examples -/
+/-! ### Examples
 
-/-- An allocator `a` (resource 0) and a value `v` (resource 1) allocated from it, which holds
-loan 7 while it is cleaned up. `defer give_up(a)` comes first and `defer destroy(v)` second. -/
+A function owns allocator `a` (resource 0), a value `v` (resource 1) allocated from `a`, and a
+buffer `b` (resource 2). The body registers `defer give_up(a)`; then, inside loop `L1`, `defer
+destroy(v)`, a call that holds loan 7 borrowed from `b`; then, in a block inside the loop,
+`defer destroy(b)`. -/
+
 def relA : Deferred := { kind := .giveUp, target := 0, deps := [], loans := [] }
-def desV : Deferred := { kind := .destroy, target := 1, deps := [0], loans := [7] }
+def desV : Deferred := { kind := .destroy, target := 1, deps := [0], loans := [⟨7, 2⟩] }
+def desB : Deferred := { kind := .destroy, target := 2, deps := [], loans := [] }
+def owned : Res → Bool := fun r => decide (r ∈ [0, 1, 2])
 
-/-- Registration in that order is accepted. -/
-example : Reg [⟨.fnBody, [desV, relA]⟩] :=
-  .push (.push (.enter .empty) (by decide) (by decide)) (by decide) (by decide)
+/-- `desB` in the inner block would consume `b` while `desV`'s loan from `b` is still held after
+`desV` runs: registration refuses it. -/
+example : ¬ (∀ d' ∈ pending [⟨.loopBody 1, [desV]⟩, ⟨.fnBody, [relA]⟩], desB.target ∉ d'.needs) := by
+  decide
 
-/-- `return` runs `destroy(v)`, releases loan 7, then runs `give_up(a)`. -/
-example : RunCleanup (fun _ => true) (pending [⟨.fnBody, [desV, relA]⟩])
-    [.call desV, .release 7, .call relA] .done := .step rfl (.step rfl .nil)
+/-- Registering `destroy(b)` in the function body before the loop is accepted instead. -/
+def stack : Stack := [⟨.block, []⟩, ⟨.loopBody 1, [desV]⟩, ⟨.fnBody, [desB, relA]⟩]
 
-/-- Registering them the other way round is refused: `give_up(a)` would run first while `v`
-still depends on `a`. -/
-example : ¬ (∀ d' ∈ pending [⟨.fnBody, [desV]⟩], relA.target ∉ d'.deps) := by decide
+/-- What the function still owns afterwards: nothing of the three. -/
+def ownedAfter : Res → Bool := fun r => ((owned r && r != 0) && r != 2) && r != 1
+
+theorem stack_reg : Reg ownedAfter stack :=
+  .enter (k := .block) <|
+    .push (k := .loopBody 1) (d := desV)
+      (.enter (k := .loopBody 1) <|
+        .push (k := .fnBody) (d := desB)
+          (.push (k := .fnBody) (d := relA) (.enter (k := .fnBody) .empty)
+            rfl (by decide) (by decide) (by decide))
+          rfl (by decide) (by decide) (by decide))
+      rfl (by decide) (by decide) (by decide)
+
+/-- Registering `give_up(a)` after `destroy(v)` is refused: `a` would be released first. -/
+example : ¬ (∀ d' ∈ pending [⟨.fnBody, [desV]⟩], relA.target ∉ d'.needs) := by decide
+
+/-- Falling off the inner block runs nothing; `break L1` and `continue L1` run `destroy(v)` and
+release loan 7; `return` then also runs `destroy(b)` and `give_up(a)`, in that order. -/
+example : (unwound .fallthrough stack).map pending = some [] := rfl
+example : (unwound (.brk 1) stack).map (expected ∘ pending) =
+    some [.call desV, .release ⟨7, 2⟩] := rfl
+example : (unwound (.cont 1) stack).map (expected ∘ pending) =
+    some [.call desV, .release ⟨7, 2⟩] := rfl
+example : (unwound .ret stack).map (expected ∘ pending) =
+    some [.call desV, .release ⟨7, 2⟩, .call desB, .call relA] := rfl
+
+/-- The theorem applied to `return`: with every call returning, that is the whole trace. -/
+example : RunCleanup (fun _ => true) (pending stack)
+    [.call desV, .release ⟨7, 2⟩, .call desB, .call relA] .done :=
+  ((defer_cleanup_releases (ok := fun _ => true) stack_reg (e := .ret) (by decide) rfl).1
+    (by decide) _ _).mpr ⟨rfl, rfl⟩
+
+/-- If `destroy(b)` traps on `return`, `destroy(v)` ran and released its loan first, and
+`give_up(a)` never runs. -/
+example : RunCleanup (fun d => d != desB) (pending stack)
+    [.call desV, .release ⟨7, 2⟩, .call desB] .trapped :=
+  ((defer_cleanup_releases (ok := fun d => d != desB) stack_reg (e := .ret) (by decide) rfl).2.2.1
+    [desV] desB [relA] rfl (by decide) (by decide) _ _).mpr ⟨rfl, rfl⟩
 
 end ConcreteSpec.Cleanup
 
@@ -2326,7 +2521,9 @@ Every place records the owner root it comes from (Q3.3: views keep the original 
 it may be written, whether it owns its value, and how the enclosing borrows lock it. A shared open
 locks every place of the root against writes and moves; a mutable open freezes every place of the
 root, the root included, for the whole block (REF-11). Two accesses conflict only when one of
-them is exclusive, so shared opens nest. The view binder is fresh and second-class.
+them is exclusive, so shared opens nest. The view binder is fresh and second-class. The check
+threads the places through the statements: a move inside a block stays a move after it, and the
+locks of the block end with it.
 -/
 
 namespace ConcreteSpec.Borrow
@@ -2383,20 +2580,26 @@ inductive Stmt where
   | move (p : Nat)
   | borrow (m : Bool) (src v : Nat) (body : List Stmt)
 
-/-- The access rules. Read: not frozen. Write: unlocked and writable. Move: unlocked and owner;
-the place is gone afterwards. Shared open: the source is not frozen. Mutable open: the source is
-unlocked and writable (a shared view never upgrades, Q3.3). The view name is fresh. After the
-block the outer places are as before. -/
-inductive Ok : Ctx → List Stmt → Prop where
-  | nil {Γ} : Ok Γ []
-  | read {Γ p q rest} : find Γ p = some q → q.lock ≠ .excl → Ok Γ rest → Ok Γ (.read p :: rest)
-  | write {Γ p q rest} : find Γ p = some q → q.lock = .free → q.mutable = true → Ok Γ rest →
-      Ok Γ (.write p :: rest)
-  | move {Γ p q rest} : find Γ p = some q → q.lock = .free → q.owner = true →
-      Ok (remove p Γ) rest → Ok Γ (.move p :: rest)
-  | borrow {Γ m s v q body rest} : find Γ s = some q → q.lock ≠ .excl →
+/-- The outer places after a borrow block: those the block did not move, with the locks they
+had before it. The view goes out of scope with the block. -/
+def restore (Γ Γb : Ctx) : Ctx := Γ.filter fun e => (find Γb e.1).isSome
+
+/-- The access rules, from the places before a statement list to the places after it. Read: not
+frozen. Write: unlocked and writable. Move: unlocked and owner; the place is gone afterwards.
+Shared open: the source is not frozen. Mutable open: the source is unlocked and writable (a shared
+view never upgrades, Q3.3). The view name is fresh. -/
+inductive Ok : Ctx → List Stmt → Ctx → Prop where
+  | nil {Γ} : Ok Γ [] Γ
+  | read {Γ p q rest Γ'} : find Γ p = some q → q.lock ≠ .excl → Ok Γ rest Γ' →
+      Ok Γ (.read p :: rest) Γ'
+  | write {Γ p q rest Γ'} : find Γ p = some q → q.lock = .free → q.mutable = true →
+      Ok Γ rest Γ' → Ok Γ (.write p :: rest) Γ'
+  | move {Γ p q rest Γ'} : find Γ p = some q → q.lock = .free → q.owner = true →
+      Ok (remove p Γ) rest Γ' → Ok Γ (.move p :: rest) Γ'
+  | borrow {Γ m s v q body rest Γb Γ'} : find Γ s = some q → q.lock ≠ .excl →
       (m = true → q.lock = .free ∧ q.mutable = true) → find Γ v = none →
-      Ok (bodyCtx m v q Γ) body → Ok Γ rest → Ok Γ (.borrow m s v body :: rest)
+      Ok (bodyCtx m v q Γ) body Γb → Ok (restore Γ Γb) rest Γ' →
+      Ok Γ (.borrow m s v body :: rest) Γ'
 
 /-- A statement list names place `p`, at any depth. -/
 inductive Touches (p : Nat) : List Stmt → Prop where
@@ -2407,11 +2610,6 @@ inductive Touches (p : Nat) : List Stmt → Prop where
   | body {m s v body rest} : Touches p body → Touches p (.borrow m s v body :: rest)
   | tail {s rest} : Touches p rest → Touches p (s :: rest)
 
-/-- The places after a statement. -/
-def next (Γ : Ctx) : Stmt → Ctx
-  | .move p => remove p Γ
-  | _ => Γ
-
 /-- A statement list writes root `r`, or grants a write to it, at any depth: a write or move of a
 place of `r`, or a mutable open of one, with places resolved as the checker resolves them. -/
 inductive WritesRoot (r : Nat) : Ctx → List Stmt → Prop where
@@ -2421,7 +2619,7 @@ inductive WritesRoot (r : Nat) : Ctx → List Stmt → Prop where
       WritesRoot r Γ (.borrow true s v body :: rest)
   | body {Γ m s q v body rest} : find Γ s = some q → WritesRoot r (bodyCtx m v q Γ) body →
       WritesRoot r Γ (.borrow m s v body :: rest)
-  | tail {Γ s rest} : WritesRoot r (next Γ s) rest → WritesRoot r Γ (s :: rest)
+  | tail {Γ Γ₁ s rest} : Ok Γ [s] Γ₁ → WritesRoot r Γ₁ rest → WritesRoot r Γ (s :: rest)
 
 theorem find_mapPlaces (f : Place → Place) : ∀ (Γ : Ctx) (p : Nat),
     find (mapPlaces f Γ) p = (find Γ p).map f
@@ -2452,8 +2650,61 @@ theorem lockFor_excl {m r q} (h : q.lock = .excl) : (lockFor m r q).lock = .excl
 theorem ne_of_find {Γ p v q} (hp : find Γ p = some q) (hv : find Γ v = none) : p ≠ v := by
   rintro rfl; rw [hp] at hv; cases hv
 
+theorem find_restore (Γb : Ctx) : ∀ (Γ : Ctx) (p : Nat),
+    find (restore Γ Γb) p = if (find Γb p).isSome then find Γ p else none
+  | [], _ => by simp [restore, find]
+  | (n, q) :: Γ, p => by
+    have ih := find_restore Γb Γ p
+    simp only [restore] at ih ⊢
+    by_cases hn : (find Γb n).isSome = true <;> by_cases hnp : n = p
+    · subst hnp; simp [List.filter, hn, find]
+    · simp [List.filter, hn, find, hnp, ih]
+    · subst hnp; simp [List.filter, hn, ih]
+    · simp [List.filter, hn, find, hnp, ih]
+
+theorem find_restore_some {Γ Γb p q} (h : find (restore Γ Γb) p = some q) : find Γ p = some q := by
+  rw [find_restore] at h
+  split at h
+  · exact h
+  · cases h
+
+theorem lockFor_nonfree {m r q} (h : q.lock ≠ .free) : (lockFor m r q).lock ≠ .free := by
+  unfold lockFor; split <;> (try split) <;> (try split) <;> simp_all
+
+/-- The check is deterministic: the places after a list are a function of the places before. -/
+theorem ok_det {Γ ss Γ₁} (h : Ok Γ ss Γ₁) : ∀ {Γ₂}, Ok Γ ss Γ₂ → Γ₁ = Γ₂ := by
+  induction h with
+  | nil => intro Γ₂ h2; cases h2; rfl
+  | read _ _ _ ih => intro Γ₂ h2; cases h2 with | read _ _ h2 => exact ih h2
+  | write _ _ _ _ ih => intro Γ₂ h2; cases h2 with | write _ _ _ h2 => exact ih h2
+  | move _ _ _ _ ih => intro Γ₂ h2; cases h2 with | move _ _ _ h2 => exact ih h2
+  | borrow hs _ _ _ _ _ ihb ih =>
+    intro Γ₂ h2
+    cases h2 with
+    | borrow hs2 _ _ _ hb2 hr2 =>
+      rw [hs] at hs2; cases hs2
+      cases ihb hb2
+      exact ih hr2
+
+/-- A place a statement list cannot touch (locked) keeps its entry. -/
+theorem ok_keeps_locked {Γ ss Γ'} (h : Ok Γ ss Γ') :
+    ∀ {p q}, find Γ p = some q → q.lock ≠ .free → find Γ' p = some q := by
+  induction h with
+  | nil => intro p q hp _; exact hp
+  | read _ _ _ ih => exact ih
+  | write _ _ _ _ ih => exact ih
+  | @move Γ p0 q0 rest Γ' hf hl _ _ ih =>
+    intro p q hp hq
+    have hne : p ≠ p0 := by rintro rfl; rw [hf] at hp; cases hp; exact hq hl
+    exact ih (by rw [find_remove]; simp only [hne, ↓reduceIte]; exact hp) hq
+  | @borrow Γ m s v q0 body rest Γb Γ' _ _ _ hv _ _ ihb ih =>
+    intro p q hp hq
+    have hb : find Γb p = some (lockFor m q0.root q) :=
+      ihb (by rw [find_bodyCtx (ne_of_find hp hv), hp]; rfl) (lockFor_nonfree hq)
+    exact ih (by rw [find_restore, hb]; exact hp) hq
+
 /-- A frozen place is never named, at any depth. -/
-theorem excl_untouched {Γ ss} (h : Ok Γ ss) :
+theorem excl_untouched {Γ ss Γ'} (h : Ok Γ ss Γ') :
     ∀ {p q}, find Γ p = some q → q.lock = .excl → ¬ Touches p ss := by
   induction h with
   | nil => intro p q _ _ ht; cases ht
@@ -2467,7 +2718,7 @@ theorem excl_untouched {Γ ss} (h : Ok Γ ss) :
     cases ht with
     | write => rw [hf] at hp; cases hp; rw [hl] at hq; cases hq
     | tail ht => exact ih hp hq ht
-  | @move Γ p0 q0 rest hf hl _ _ ih =>
+  | @move Γ p0 q0 rest Γ' hf hl _ _ ih =>
     intro p q hp hq ht
     have hne : p ≠ p0 := by
       rintro rfl; rw [hf] at hp; cases hp; rw [hl] at hq; cases hq
@@ -2476,20 +2727,22 @@ theorem excl_untouched {Γ ss} (h : Ok Γ ss) :
     | tail ht =>
       refine ih (q := q) ?_ hq ht
       rw [find_remove]; simp only [hne, ↓reduceIte]; exact hp
-  | @borrow Γ m s v q0 body rest hs hnex _ hv _ _ ihb ih =>
+  | @borrow Γ m s v q0 body rest Γb Γ' hs hnex _ hv hbody _ ihb ih =>
     intro p q hp hq ht
+    have hpb : find (bodyCtx m v q0 Γ) p = some (lockFor m q0.root q) := by
+      rw [find_bodyCtx (ne_of_find hp hv), hp]; rfl
     cases ht with
     | src => rw [hs] at hp; cases hp; exact hnex hq
-    | body ht =>
-      refine ihb (q := lockFor m q0.root q) ?_ (lockFor_excl hq) ht
-      rw [find_bodyCtx (ne_of_find hp hv), hp]; rfl
-    | tail ht => exact ih hp hq ht
+    | body ht => exact ihb hpb (lockFor_excl hq) ht
+    | tail ht =>
+      have hb := ok_keeps_locked hbody hpb (lockFor_nonfree (by rw [hq]; decide))
+      exact ih (by rw [find_restore, hb]; exact hp) hq ht
 
 /-- **`open_mut_freezes_root`** (Q9.14, Q3.3, Q3.4, REF-11). Inside an accepted
 `borrow mut src as v { body }`, no place of `src`'s root that existed before the open (the root
 itself and every view derived from it) is read, written, moved or opened again, at any depth.
 Only the new view `v` reaches the root. -/
-theorem open_mut_freezes_root {Γ s v body rest q} (h : Ok Γ (.borrow true s v body :: rest))
+theorem open_mut_freezes_root {Γ s v body rest q Γ'} (h : Ok Γ (.borrow true s v body :: rest) Γ')
     (hs : find Γ s = some q) :
     ∀ p q', find Γ p = some q' → q'.root = q.root → ¬ Touches p body := by
   intro p q' hp hr
@@ -2502,6 +2755,9 @@ theorem open_mut_freezes_root {Γ s v body rest q} (h : Ok Γ (.borrow true s v 
 /-- The places of root `r` grant no write: each is locked, or neither writable nor an owner. -/
 def NoWrite (r : Nat) (Γ : Ctx) : Prop :=
   ∀ p q, find Γ p = some q → q.root = r → q.lock = .free → q.mutable = false ∧ q.owner = false
+
+theorem noWrite_restore {r Γ Γb} (h : NoWrite r Γ) : NoWrite r (restore Γ Γb) :=
+  fun p q hp => h p q (find_restore_some hp)
 
 theorem noWrite_remove {r Γ p'} (h : NoWrite r Γ) : NoWrite r (remove p' Γ) := by
   intro p q hp
@@ -2534,21 +2790,24 @@ theorem noWrite_bodyCtx {r Γ m v q0} (h : NoWrite r Γ)
         exact h p q1 hq hr hl
 
 /-- An accepted list never writes a root whose places grant no write. -/
-theorem noWrite_sound {Γ ss} (h : Ok Γ ss) : ∀ {r}, NoWrite r Γ → ¬ WritesRoot r Γ ss := by
+theorem noWrite_sound {Γ ss Γ'} (h : Ok Γ ss Γ') : ∀ {r}, NoWrite r Γ → ¬ WritesRoot r Γ ss := by
   induction h with
   | nil => intro r _ hw; cases hw
-  | read _ _ _ ih => intro r hn hw; cases hw with | tail hw => exact ih hn hw
+  | read _ _ _ ih =>
+    intro r hn hw
+    cases hw with
+    | tail hs hw => cases hs with | read _ _ h0 => cases h0; exact ih hn hw
   | write hf hl hmut _ ih =>
     intro r hn hw
     cases hw with
     | write hf' hr => rw [hf] at hf'; cases hf'; rw [(hn _ _ hf hr hl).1] at hmut; cases hmut
-    | tail hw => exact ih hn hw
+    | tail hs hw => cases hs with | write _ _ _ h0 => cases h0; exact ih hn hw
   | move hf hl hown _ ih =>
     intro r hn hw
     cases hw with
     | move hf' hr => rw [hf] at hf'; cases hf'; rw [(hn _ _ hf hr hl).2] at hown; cases hown
-    | tail hw => exact ih (noWrite_remove hn) hw
-  | @borrow Γ m s v q0 body rest hs _ hm _ _ _ ihb ih =>
+    | tail hs hw => cases hs with | move _ _ _ h0 => cases h0; exact ih (noWrite_remove hn) hw
+  | @borrow Γ m s v q0 body rest Γb Γ' hs _ hm _ hb _ ihb ih =>
     intro r hn hw
     have hbad : q0.root = r → m = true → False := fun hr hmt => by
       obtain ⟨hl, hmut⟩ := hm hmt
@@ -2556,14 +2815,20 @@ theorem noWrite_sound {Γ ss} (h : Ok Γ ss) : ∀ {r}, NoWrite r Γ → ¬ Writ
     cases hw with
     | mutOpen hs' hr => rw [hs] at hs'; cases hs'; exact hbad hr rfl
     | body hs' hw => rw [hs] at hs'; cases hs'; exact ihb (noWrite_bodyCtx hn hm hbad) hw
-    | tail hw => exact ih hn hw
+    | tail hs1 hw =>
+      cases hs1 with
+      | borrow hs2 _ _ _ hb2 h0 =>
+        rw [hs] at hs2; cases hs2
+        cases ok_det hb hb2
+        cases h0
+        exact ih (noWrite_restore hn) hw
 
 /-- **`open_mut_freezes_root`, shared half** (Q9.14, Q3.3). A shared open never grants a write:
 inside an accepted `borrow src as v { body }`, nothing at any depth writes, moves or mutably
 opens a place of `src`'s root, whether through the root, through `v`, or through any view
 derived from either. -/
-theorem shared_open_grants_no_write {Γ s v body rest q}
-    (h : Ok Γ (.borrow false s v body :: rest)) (hs : find Γ s = some q) :
+theorem shared_open_grants_no_write {Γ s v body rest q Γ'}
+    (h : Ok Γ (.borrow false s v body :: rest) Γ') (hs : find Γ s = some q) :
     ¬ WritesRoot q.root (bodyCtx false v q Γ) body := by
   cases h with
   | borrow hs' _ hm _ hb _ =>
@@ -2587,21 +2852,41 @@ Place 0 is a mutable owned variable; views take fresh numbers. -/
 
 def x0 : Ctx := [(0, { root := 0, mutable := true, owner := true, lock := .free })]
 
+/-- `x0` and a second owned variable, place 5. -/
+def xy : Ctx := (5, { root := 5, mutable := true, owner := true, lock := .free }) :: x0
+
 /-- `borrow mut x as v { v = …; } x = …;` is accepted: the view writes, and the root is usable
 again after the block. -/
-example : Ok x0 [.borrow true 0 1 [.write 1], .write 0] :=
-  .borrow rfl (by decide) (fun _ => ⟨rfl, rfl⟩) rfl
-    (.write rfl rfl rfl .nil) (.write rfl rfl rfl .nil)
+example : ∃ Γ', Ok x0 [.borrow true 0 1 [.write 1], .write 0] Γ' :=
+  ⟨_, .borrow rfl (by decide) (fun _ => ⟨rfl, rfl⟩) rfl
+    (.write rfl rfl rfl .nil) (.write rfl rfl rfl .nil)⟩
 
 /-- Shared opens nest, and the root stays readable under them (REF-11). -/
-example : Ok x0 [.borrow false 0 1 [.borrow false 1 2 [.read 0, .read 2]]] :=
-  .borrow rfl (by decide) (by intro h; cases h) rfl
+example : ∃ Γ', Ok x0 [.borrow false 0 1 [.borrow false 1 2 [.read 0, .read 2]]] Γ' :=
+  ⟨_, .borrow rfl (by decide) (by intro h; cases h) rfl
     (.borrow rfl (by decide) (by intro h; cases h) rfl
-      (.read rfl (by decide) (.read rfl (by decide) .nil)) .nil) .nil
+      (.read rfl (by decide) (.read rfl (by decide) .nil)) .nil) .nil⟩
+
+/-- Moving another owner inside a block is accepted, and stays a move after the block:
+`borrow mut x as v { consume(y); } read(y)` is refused. -/
+example : ∃ Γ', Ok xy [.borrow true 0 1 [.move 5], .write 0] Γ' :=
+  ⟨_, .borrow rfl (by decide) (fun _ => ⟨rfl, rfl⟩) rfl
+    (.move rfl rfl rfl .nil) (.write rfl rfl rfl .nil)⟩
+
+example : ¬ ∃ Γ', Ok xy [.borrow true 0 1 [.move 5], .read 5] Γ' := by
+  rintro ⟨Γ', h⟩
+  cases h with
+  | borrow hs _ _ _ hb hr =>
+    simp [xy, x0, find] at hs; subst hs
+    cases hb with
+    | move _ _ _ h0 =>
+      cases h0
+      cases hr with
+      | read hf _ _ => simp [restore, remove, bodyCtx, mapPlaces, lockFor, view, find, xy, x0] at hf
 
 /-- Reading the root inside its mutable open is refused. -/
-example : ¬ Ok x0 [.borrow true 0 1 [.read 0]] := by
-  intro h
+example : ¬ ∃ Γ', Ok x0 [.borrow true 0 1 [.read 0]] Γ' := by
+  rintro ⟨Γ', h⟩
   cases h with
   | borrow hs _ _ _ hb _ =>
     simp only [x0, find, ↓reduceIte, Option.some.injEq] at hs; subst hs
@@ -2609,8 +2894,8 @@ example : ¬ Ok x0 [.borrow true 0 1 [.read 0]] := by
     | read hf hl _ => simp [bodyCtx, find, mapPlaces, lockFor, x0, view] at hf; subst hf; simp at hl
 
 /-- Writing the root inside a shared open is refused. -/
-example : ¬ Ok x0 [.borrow false 0 1 [.write 0]] := by
-  intro h
+example : ¬ ∃ Γ', Ok x0 [.borrow false 0 1 [.write 0]] Γ' := by
+  rintro ⟨Γ', h⟩
   cases h with
   | borrow hs _ _ _ hb _ =>
     simp only [x0, find, ↓reduceIte, Option.some.injEq] at hs; subst hs
@@ -2618,8 +2903,8 @@ example : ¬ Ok x0 [.borrow false 0 1 [.write 0]] := by
     | write hf hl _ _ => simp [bodyCtx, find, mapPlaces, lockFor, x0, view] at hf; subst hf; simp at hl
 
 /-- Writing through a shared view is refused. -/
-example : ¬ Ok x0 [.borrow false 0 1 [.write 1]] := by
-  intro h
+example : ¬ ∃ Γ', Ok x0 [.borrow false 0 1 [.write 1]] Γ' := by
+  rintro ⟨Γ', h⟩
   cases h with
   | borrow hs _ _ _ hb _ =>
     simp only [x0, find, ↓reduceIte, Option.some.injEq] at hs; subst hs
@@ -2627,8 +2912,8 @@ example : ¬ Ok x0 [.borrow false 0 1 [.write 1]] := by
     | write hf _ hm _ => simp [bodyCtx, find, view] at hf; subst hf; simp at hm
 
 /-- A shared view never upgrades to a mutable one. -/
-example : ¬ Ok x0 [.borrow false 0 1 [.borrow true 1 2 []]] := by
-  intro h
+example : ¬ ∃ Γ', Ok x0 [.borrow false 0 1 [.borrow true 1 2 []]] Γ' := by
+  rintro ⟨Γ', h⟩
   cases h with
   | borrow hs _ _ _ hb _ =>
     simp only [x0, find, ↓reduceIte, Option.some.injEq] at hs; subst hs
@@ -2636,8 +2921,8 @@ example : ¬ Ok x0 [.borrow false 0 1 [.borrow true 1 2 []]] := by
     | borrow hf _ hm _ _ _ => simp [bodyCtx, find, view] at hf; subst hf; have := (hm rfl).2; simp at this
 
 /-- Moving the root inside its shared open is refused. -/
-example : ¬ Ok x0 [.borrow false 0 1 [.move 0]] := by
-  intro h
+example : ¬ ∃ Γ', Ok x0 [.borrow false 0 1 [.move 0]] Γ' := by
+  rintro ⟨Γ', h⟩
   cases h with
   | borrow hs _ _ _ hb _ =>
     simp only [x0, find, ↓reduceIte, Option.some.injEq] at hs; subst hs
@@ -2653,8 +2938,11 @@ An allocator's brand is an erased kind (Q1.1) with no runtime representation. Ea
 brands are equal only when they have the same name (nominal, Q1.4). A heap value records the
 brand of the allocator it came from, and operations on it require that allocator's brand.
 Resources are consumed before their allocator (Q1.5): releasing or resetting an allocator
-requires that no value of its brand is live. A loop that carries an allocator carries
-`∃ β. alloc β` (Q1.3): each iteration, and the code after the loop, opens it with a fresh name.
+requires that no value of its brand is live. A `while` loop (Q9.3, Core's one loop) that carries
+an allocator carries `∃ β. alloc β` (Q1.3): each iteration, and the code after the loop, opens it
+with a fresh name. The loop's condition region is abstracted: the ghost run may stop or iterate
+at each test, so the results hold for every outcome of the conditions. Capability checking of the
+allocator operations (Q5, Q2.7) is not modelled here.
 
 Two views of the same programs: the static check (`Ok`), and a ghost run (`Run`) that gives
 every allocator a run-time brand from a counter, checks brand equality on each operation, and is
@@ -2729,9 +3017,9 @@ inductive Stmt where
   | release (a : Nat)
   /-- `a' = reset(a)`, with brand binder `β'` for `a'`. -/
   | reset (a' a β' : Nat)
-  /-- A loop of `k` iterations carrying allocator `a`; `β` names its brand inside one
-  iteration and `βx` after the loop. -/
-  | loop (k a β βx : Nat) (body : List Stmt)
+  /-- `while cond { body }` carrying allocator `a`; `β` names its brand inside one iteration and
+  `βx` after the loop. The condition is abstracted. -/
+  | while_ (a β βx : Nat) (body : List Stmt)
 
 /-- The static check, from the brand names in use `B` and the context `Γ` to the context at the
 end. A brand binder must be fresh in `B` (generative); brand equality is name equality
@@ -2751,19 +3039,41 @@ inductive Ok : List Nat → Ctx → List Stmt → Ctx → Prop where
   | reset {B Γ a' a β β' rest Γ'} : findL Γ a = some (.alloc β) → NoHeap Γ β →
       findL (removeL a Γ) a' = none → β' ∉ B →
       Ok (β' :: B) ((a', .alloc β') :: removeL a Γ) rest Γ' → Ok B Γ (.reset a' a β' :: rest) Γ'
-  | loop {B Γ k a β0 β βx β'' body rest Γ'} : findL Γ a = some (.alloc β0) → NoHeap Γ β0 →
+  | while_ {B Γ a β0 β βx β'' body rest Γ'} : findL Γ a = some (.alloc β0) → NoHeap Γ β0 →
       β ∉ B → βx ∉ B →
       Ok (β :: B) ((a, .alloc β) :: removeL a Γ) body ((a, .alloc β'') :: removeL a Γ) →
       Ok (βx :: B) ((a, .alloc βx) :: removeL a Γ) rest Γ' →
-      Ok B Γ (.loop k a β βx body :: rest) Γ'
+      Ok B Γ (.while_ a β βx body :: rest) Γ'
 
 /-- Every brand in the context is a brand name in use. -/
 def BrandsIn (B : List Nat) (Γ : Ctx) : Prop :=
   ∀ e ∈ Γ, ∀ β, (e.2 = .alloc β ∨ e.2 = .heap β) → β ∈ B
 
+/-- Brand equality is nominal (Q1.4): an operation that pairs a value of one brand with an
+allocator of another is refused. -/
+theorem brand_mismatch_refused {B Γ h a β1 β2 r Γ'} (hh : findL Γ h = some (.heap β1))
+    (ha : findL Γ a = some (.alloc β2)) (hne : β1 ≠ β2) :
+    ¬ Ok B Γ (.use h a :: r) Γ' ∧ ¬ Ok B Γ (.free h a :: r) Γ' := by
+  refine ⟨fun hok => ?_, fun hok => ?_⟩
+  · cases hok with
+    | use h1 h2 _ => rw [hh] at h1; rw [ha] at h2; cases h1; cases h2; exact hne rfl
+  · cases hok with
+    | free h1 h2 _ => rw [hh] at h1; rw [ha] at h2; cases h1; cases h2; exact hne rfl
+
+/-- A checked reset leaves no value of the old brand (Q1.5): none is live at the reset. -/
+theorem reset_requires_no_old {B Γ a' a β' rest Γ' β} (h : Ok B Γ (.reset a' a β' :: rest) Γ')
+    (ha : findL Γ a = some (.alloc β)) : ∀ hv, findL Γ hv ≠ some (.heap β) := by
+  intro hv hh
+  cases h with
+  | reset ha' hno _ _ _ =>
+    rw [ha] at ha'; cases ha'
+    exact hno _ (findL_mem hh) rfl
+
 /-- **`reset_fresh`, static part** (Q1.2, Q1.4). The brand of a reset allocator differs from the
 brand of every value live before the reset, so each operation of the new allocator on such a
-value (`use`, `free`) is refused. -/
+value (`use`, `free`) is refused. Values of the old brand cannot be live at a checked reset
+(`reset_requires_no_old`); one that reached the new allocator anyway would be refused by
+`brand_mismatch_refused`, and the ghost run refuses it too (`reset_fresh`, part 3). -/
 theorem reset_refuses_old {B Γ a' a β' rest Γ'} (hw : BrandsIn B Γ)
     (h : Ok B Γ (.reset a' a β' :: rest) Γ') {hv βh} (hh : findL Γ hv = some (.heap βh)) :
     βh ≠ β' ∧ ∀ r, rest = .use hv a' :: r ∨ rest = .free hv a' :: r → False := by
@@ -2826,9 +3136,9 @@ inductive Run : State → List Stmt → State → Prop where
       Run { s with env := removeL a s.env } rest s' → Run s (.release a :: rest) s'
   | reset {s a' a b β' rest s'} : findL s.env a = some (.allocV b) →
       Run (s.bind a' (removeL a s.env)) rest s' → Run s (.reset a' a β' :: rest) s'
-  | loopDone {s a β βx body rest s'} : Run s rest s' → Run s (.loop 0 a β βx body :: rest) s'
-  | loopStep {s k a β βx body rest s'} : Run s (body ++ .loop k a β βx body :: rest) s' →
-      Run s (.loop (k + 1) a β βx body :: rest) s'
+  | whileExit {s a β βx body rest s'} : Run s rest s' → Run s (.while_ a β βx body :: rest) s'
+  | whileIter {s a β βx body rest s'} : Run s (body ++ .while_ a β βx body :: rest) s' →
+      Run s (.while_ a β βx body :: rest) s'
 
 /-- Every live brand and every generated brand is below the counter, and the generated brands
 are pairwise distinct. -/
@@ -2877,8 +3187,8 @@ theorem run_inv {s ss s'} (h : Run s ss s') : Inv s → Inv s' := by
   | free _ _ _ ih => intro hi; exact ih ⟨fun e he => hi.1 e (mem_removeL _ he), hi.2.1, hi.2.2⟩
   | release _ _ ih => intro hi; exact ih ⟨fun e he => hi.1 e (mem_removeL _ he), hi.2.1, hi.2.2⟩
   | reset _ _ ih => intro hi; exact ih (inv_bind _ hi (fun e he => hi.1 e (mem_removeL _ he)))
-  | loopDone _ ih => exact ih
-  | loopStep _ ih => exact ih
+  | whileExit _ ih => exact ih
+  | whileIter _ ih => exact ih
 
 /-- The start of every run: nothing live, no brand generated. -/
 def State.init : State := { env := [], next := 0, gen := [] }
@@ -2889,11 +3199,12 @@ theorem inv_init : Inv State.init := ⟨by simp [State.init], by simp [State.ini
 
 1. The brand a reset gives the new allocator differs from the brand of every value live at the
    reset, in any reachable ghost state.
-2. Every brand a run generates (each `new` and each `reset`, in every loop iteration) differs
-   from every other: the generated brands are pairwise distinct.
-3. The new allocator's operations refuse the old brand: statically (`reset_refuses_old`), and
-   in the ghost run, where `use` or `free` of a value live before the reset through the new
-   allocator is stuck. -/
+2. Every brand a run generates (each `new` and each `reset`, in every iteration of every loop,
+   for every outcome of the loop conditions) differs from every other: the generated brands are
+   pairwise distinct.
+3. The new allocator's operations refuse the old brand: statically (`reset_refuses_old`,
+   `brand_mismatch_refused`), and in the ghost run, where `use` or `free` through the new
+   allocator of any value live before the reset, of the old brand or any other, is stuck. -/
 theorem reset_fresh :
     (∀ {s a' a β' rest s'}, Inv s → Run s (.reset a' a β' :: rest) s' →
       ∃ mid, mid.env = (a', .allocV s.next) :: removeL a s.env ∧ Run mid rest s' ∧
@@ -2953,21 +3264,25 @@ example : Ok [] [] [.newAlloc 0 10, .alloc 1 0, .free 1 0, .reset 0 0 11, .alloc
     .reset rfl (by decide) rfl (by decide) <| .alloc rfl rfl <| .free rfl rfl <|
     .release rfl (by decide) .nil
 
+/-- A value of brand 10 used through an allocator of brand 11 is refused. -/
+example : ¬ Ok [10, 11] [(1, .heap 10), (0, .alloc 11)] [.use 1 0] [(1, .heap 10), (0, .alloc 11)] :=
+  (brand_mismatch_refused rfl rfl (by decide)).1
+
 /-- A loop that resets its allocator each iteration is accepted (existential loop state, Q1.3). -/
-example : Ok [] [] [.newAlloc 0 10, .loop 3 0 20 30 [.alloc 1 0, .free 1 0, .reset 0 0 21],
+example : Ok [] [] [.newAlloc 0 10, .while_ 0 20 30 [.alloc 1 0, .free 1 0, .reset 0 0 21],
     .release 0] [] :=
   .newAlloc rfl (by decide) <|
-    .loop (β'' := 21) rfl (by decide) (by decide) (by decide)
+    .while_ (β'' := 21) rfl (by decide) (by decide) (by decide)
       (.alloc rfl rfl <| .free rfl rfl <| .reset rfl (by decide) rfl (by decide) .nil)
       (.release rfl (by decide) .nil)
 
 /-- Three iterations of that loop generate four pairwise distinct brands: 0 for `new`, then 1, 2
 and 3 for the resets. -/
-example : Run State.init [.newAlloc 0 10, .loop 3 0 20 30 [.alloc 1 0, .free 1 0, .reset 0 0 21],
+example : Run State.init [.newAlloc 0 10, .while_ 0 20 30 [.alloc 1 0, .free 1 0, .reset 0 0 21],
     .release 0] { env := [], next := 4, gen := [0, 1, 2, 3] } :=
-  .newAlloc <| .loopStep <| .alloc rfl <| .free rfl rfl <| .reset rfl <|
-    .loopStep <| .alloc rfl <| .free rfl rfl <| .reset rfl <|
-    .loopStep <| .alloc rfl <| .free rfl rfl <| .reset rfl <|
-    .loopDone <| .release rfl .nil
+  .newAlloc <| .whileIter <| .alloc rfl <| .free rfl rfl <| .reset rfl <|
+    .whileIter <| .alloc rfl <| .free rfl rfl <| .reset rfl <|
+    .whileIter <| .alloc rfl <| .free rfl rfl <| .reset rfl <|
+    .whileExit <| .release rfl .nil
 
 end ConcreteSpec.Brand
