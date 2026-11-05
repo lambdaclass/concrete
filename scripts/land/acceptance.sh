@@ -43,8 +43,9 @@
 #                verdict; a refusal for any other reason (gh failing, a moved main) fails the control.
 #   Before the tampered controls, the real run is read once more: its head SHA must be the train head.
 #
-# Output: one line per leg (passed | failed | skipped) and a verdict: accepted (every leg passed),
-# incomplete (none failed, some skipped), or failed. Results are bound to the train's head SHA and
+# Output: one line per leg (passed | failed | skipped | incomplete) and a verdict: accepted (every
+# leg passed), incomplete (none failed, some skipped, or main moved before the dry-run land so
+# train.sh refused the stale candidate; re-run), or failed. Results are bound to the train's head SHA and
 # appended to <state>/acceptance.tsv. Exit 0 only for `accepted`.
 set -uo pipefail
 
@@ -81,6 +82,11 @@ leg() { # name cmd... — runs unless skipped; a failure ends the run (the negat
   if [ -n "${SKIP[$n]:-}" ]; then row "$n" skipped "--skip"; SKIPPED=1; return 0; fi
   local log="$WORK/$n.log"
   if "$@" > "$log" 2>&1; then row "$n" passed "$(tail -n 1 "$log" | cut -c1-100)"; return 0; fi
+  if [ "$n" = dryland ] && grep -q "origin/main moved from" "$log"; then
+    # Another landing moved main under the run: train.sh refused correctly, but the run proves
+    # nothing about this candidate's dry-run land or the tamper controls. Incomplete, never passed.
+    row "$n" incomplete "main moved during the run; train.sh refused the stale candidate (see $log)"; SKIPPED=1; finish
+  fi
   row "$n" failed "see $log"; tail -n 30 "$log" | sed 's/^/      /'; FAILED=1; finish
 }
 main_heads() { local r; for r in origin lambdaclass; do git -C "$C" ls-remote "$r" refs/heads/main 2>/dev/null | cut -f1; done | tr '\n' ' '; }

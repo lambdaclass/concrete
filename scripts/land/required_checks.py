@@ -63,7 +63,15 @@ def transition(path):
         if old in rows:
             bad.append(f"transition row {n} repeats {old}")
             continue
-        rows[old] = ([] if repl == "-" else [r.strip() for r in repl.split(",") if r.strip()], why)
+        if repl == "-":
+            rows[old] = ([], why)
+            continue
+        parts = [r.strip() for r in repl.split(",")]
+        if not all(parts):
+            # "a,,b" or "," must not degrade into a retirement: only a literal "-" retires
+            bad.append(f"transition row {n} has an empty replacement name in {repl!r} (use '-' to retire)")
+            continue
+        rows[old] = (parts, why)
     return rows, bad
 
 
