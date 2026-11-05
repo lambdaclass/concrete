@@ -37,6 +37,7 @@ scripts/land scripts/checks	landing	retained	scripts/land	R-0563	root: never; le
 scripts/review	landing	retained	scripts/review	R-0563	root: never; legacy/ copy: at B3 (a frozen duplicate of the live root file)	open
 scripts/push-both.sh scripts/worktree-new.sh	landing	retained	scripts/	R-0563	root: never; legacy/ copy: at B3 (a frozen duplicate of the live root file)	open
 scripts/oracle	oracle	retained	scripts/oracle (ORACLE.lock, build, fetch, publish, run)	R-0564	root: when the differential no longer uses the legacy oracle (after D); legacy/ copy: at B3 (a frozen duplicate of the live root file)	open
+scripts/tests/check_oracle_fetch.sh	oracle	retained	scripts/checks/check_oracle_fetch.sh (the controls of the required job Oracle (GitHub-hosted fetch + smoke); at the move its guard line is repointed at the new root's gate guard and the job runs it there)	R-0564	root: with scripts/oracle; legacy/ copy: at B3 (a frozen duplicate of the live root file)	open
 docs/project/LANDING.md docs/project/SELF_HOSTED_RUNNERS.md docs/project/REVIEW.md docs/LANDING.md docs/SELF_HOSTED_RUNNERS.md docs/REVIEW.md	process	retained	docs/	R-0563	root: never; legacy/ copy: at B3 (a frozen duplicate of the live root file)	open
 docs/project/PHILOSOPHY.md docs/PHILOSOPHY.md	vision	retained	docs/PHILOSOPHY.md	R-0558	root: never; legacy/ copy: at B3 (a frozen duplicate of the live root file)	open
 docs/spec/decisions.md docs/decisions.md	decisions	retained	docs/decisions.md	R-0558	root: never; legacy/ copy: at B3 (a frozen duplicate of the live root file)	open

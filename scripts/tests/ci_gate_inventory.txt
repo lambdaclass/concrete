@@ -18,6 +18,7 @@ bash ./scripts/tests/test_release_bundle.sh
 bash ./scripts/tests/test_ssa.sh
 bash ./scripts/tests/test_wrong_code.sh
 bash scripts/ci/proof_gate.sh
+bash scripts/oracle/ci_check.sh
 bash scripts/tests/check_absence_not_fact.sh
 bash scripts/tests/check_arith_redteam.sh
 bash scripts/tests/check_array_bounds.sh

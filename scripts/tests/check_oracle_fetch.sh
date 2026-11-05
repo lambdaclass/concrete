@@ -10,7 +10,9 @@
 # verification (manifest not the locked one) each leave fetch.sh and ci_check.sh INCOMPLETE (exit 3),
 # never passed; an installed oracle whose files were altered is refused by run.sh (125) before
 # anything runs, and ci_check.sh reports that as INCOMPLETE; a verified oracle whose smoke run exits
-# other than 42 is FAILED (1). Each refusal is a negative control with its expected reason.
+# other than 42, a compile failure (whatever its status, 42 included) and a compile that writes no
+# program are FAILED (1), through the real run.sh with a fake `nix`. Each refusal is a negative
+# control with its expected reason.
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -119,17 +121,42 @@ printf 'mod tampered;\n' > "$H/$COMMIT/std/lib.con"
 out="$(PATH="$TMP/bin:$PATH" ORACLE_HOME="$H" bash "$TMP/oracle/run.sh" "$TMP/oracle/smoke.con" 2>&1)"; rc=$?
 [ "$rc" = 125 ] && has "$out" "differs from its manifest" && ok "run.sh refuses an altered install (125) before running anything" || no "tampered install: rc=$rc '$out'"
 
-# ci_check.sh maps run.sh's results; run.sh is replaced by a stub (the real one needs the locked dev shell).
-fetch "$TMP/art/good.tar.gz" >/dev/null || no "re-install for the mapping controls failed"
-cp "$TMP/oracle/run.sh" "$TMP/run.sh.real"
-for case in "125:3:INCOMPLETE: run.sh refused" "0:1:FAILED: smoke.con exited 0" "7:1:FAILED: smoke.con exited 7" "42:0:passed"; do
-  stub="${case%%:*}"; rest="${case#*:}"; want="${rest%%:*}"; msg="${rest#*:}"
-  printf '#!/usr/bin/env bash\nexit %s\n' "$stub" > "$TMP/oracle/run.sh"
-  out="$(cc "")"; rc=$?
-  [ "$rc" = "$want" ] && has "$out" "$msg" && ok "run.sh exit $stub -> ci_check exit $want ($msg)" || no "mapping $stub: rc=$rc '$out'"
+# The real run.sh end to end, with a fake `nix` standing in for the artifact's dev shell. FAKE_NIX
+# picks what the compile step does: ok writes a program that exits 42; wrong writes one that exits 7;
+# compile42 fails the compile with status 42 and writes nothing (a compiler status must never pass as
+# the program's); compile1 is an ordinary compile error; noout "succeeds" without writing the program.
+cat > "$TMP/bin/nix" <<'NIX'
+#!/usr/bin/env bash
+out=""; while [ $# -gt 0 ]; do [ "$1" = -o ] && { out="$2"; shift; }; shift; done
+[ -n "$out" ] || { echo "fake nix: no -o" >&2; exit 99; }
+case "${FAKE_NIX:-}" in
+  ok)        printf '#!/bin/sh\nexit 42\n' > "$out"; chmod +x "$out" ;;
+  wrong)     printf '#!/bin/sh\nexit 7\n' > "$out"; chmod +x "$out" ;;
+  compile42) echo "error: the compiler failed" >&2; exit 42 ;;
+  compile1)  echo "error: the compiler failed" >&2; exit 1 ;;
+  noout)     : ;;
+  *)         echo "fake nix: FAKE_NIX unset" >&2; exit 99 ;;
+esac
+NIX
+chmod +x "$TMP/bin/nix"
+ce() { rm -rf "$H"; PATH="$TMP/bin:$PATH" ORACLE_HOME="$H" FAKE_SERVE="$TMP/art/good.tar.gz" FAKE_NIX="$1" \
+         bash "$TMP/oracle/ci_check.sh" 2>&1; }
+write_lock "$URL" "$GOOD_SHA"
+out="$(ce ok)"; rc=$?
+[ "$rc" = 0 ] && has "$out" "oracle-check: passed" && ok "end to end: fetch, verify, compile, run to 42 passes (positive control)" || no "end to end ok: rc=$rc '$out'"
+for case in "wrong:FAILED: smoke.con exited 7" \
+            "compile42:FAILED: the verified oracle did not compile smoke.con (status 42)" \
+            "compile1:FAILED: the verified oracle did not compile smoke.con (status 1)" \
+            "noout:FAILED: smoke.con exited 127"; do
+  mode="${case%%:*}"; msg="${case#*:}"
+  out="$(ce "$mode")"; rc=$?
+  [ "$rc" = 1 ] && has "$out" "$msg" && ! has "$out" "passed" && ok "end to end, $mode: FAILED (1), never passed" || no "end to end $mode: rc=$rc '$out'"
 done
-cp "$TMP/run.sh.real" "$TMP/oracle/run.sh"
+rm -rf "$H"
+out="$(PATH="$TMP/bin:$PATH" ORACLE_HOME="$H" FAKE_SERVE="" FAKE_NIX=ok bash "$TMP/oracle/ci_check.sh" 2>&1)"; rc=$?
+[ "$rc" = 3 ] && has "$out" "oracle-check: INCOMPLETE: fetch.sh exited 3" && ! has "$out" "passed" \
+  && ok "a failed download: the oracle check is INCOMPLETE (3) even with a working toolchain" || no "ci_check download: rc=$rc '$out'"
 
 echo
 echo "check_oracle_fetch: $PASS passed, $FAIL failed"
-[ "$FAIL" = 0 ] && [ "$PASS" -ge 16 ] || exit 1
+[ "$FAIL" = 0 ] && [ "$PASS" -ge 18 ] || exit 1

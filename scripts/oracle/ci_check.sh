@@ -10,13 +10,21 @@
 # manifest mismatch, an install that fails verification: the oracle could not be trusted, so nothing
 # was checked); 1 FAILED (the verified oracle ran and the smoke program did not exit 42). Both 1 and 3
 # fail the CI job, so a required oracle check is never reported as passed without a verified oracle.
+# A compile failure is FAILED whatever its status: run.sh announces it with "oracle: compile failed"
+# on stderr, so a compiler (or nested nix) that happened to exit 42 is never taken for the program.
+# It needs only bash and nix and sources nothing outside scripts/oracle, which it is retained with
+# (RETENTION.tsv); CI runs it in the gate shell (check_gate_hygiene.sh GUARD_EXEMPT says why).
 set -uo pipefail
-source "$(dirname "${BASH_SOURCE[0]}")/../tests/lib/gate_env.sh" || exit 2
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 incomplete() { echo "oracle-check: INCOMPLETE: $*" >&2; exit 3; }
 bash "$HERE/fetch.sh"; rc=$?
 [ "$rc" = 0 ] || incomplete "fetch.sh exited $rc: the oracle is not installed and verified"
-bash "$HERE/run.sh" "$HERE/smoke.con"; rc=$?
+ERR="$(mktemp)" || exit 2; trap 'rm -f "$ERR"' EXIT
+bash "$HERE/run.sh" "$HERE/smoke.con" 2>"$ERR"; rc=$?
+cat "$ERR" >&2
 [ "$rc" = 125 ] && incomplete "run.sh refused the install (it failed verification)"
+if grep -q '^oracle: compile failed' "$ERR"; then
+  echo "oracle-check: FAILED: the verified oracle did not compile smoke.con (status $rc)" >&2; exit 1
+fi
 [ "$rc" = 42 ] || { echo "oracle-check: FAILED: smoke.con exited $rc through the oracle, expected 42" >&2; exit 1; }
 echo "oracle-check: passed: the published oracle fetched, verified, and ran smoke.con to exit 42"
