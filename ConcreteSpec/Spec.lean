@@ -33,6 +33,15 @@ fragments into one Core is work for A3 (R-0560), after the freeze.
 
 Only Lean core is imported (Q9.16). No proof uses `native_decide` or `sorry` (Q9.17).
 
+Axiom policy. The theorems depend only on Lean's standard axioms `propext`, `Quot.sound` and
+`Classical.choice`, and the last of these in one place: `rep_roundtrip` reaches it through the
+core lemma `Nat.mod_mul`, used by `decodeNat_encodeNat`. It is a proof-only dependency. The
+evaluator `run` and the checker `check` depend on `propext` alone, so both stay executable and the
+examples below are decided by running them. The slice-1 theorems (`checked_never_stuck`,
+`checked_exits_or_traps`, `knownViolation_traps`, `check_iff`) use `propext` and `Quot.sound`;
+`open_mut_freezes_root` uses `propext`; `defer_cleanup_releases` and `reset_fresh` use `propext`
+and `Quot.sound`.
+
 ## Slice 1
 
 What slice 1 contains:
@@ -57,7 +66,9 @@ Core's binding form (Q9.1):
   bound at most once. Surface names, shadowing and the namespace rules (SCOPE-1, SCOPE-2) are
   elaboration rules that map names to identities; Core only requires each identity to be fresh.
 * **Explicit moves and copies.** Reading a local is written `copy x` (its type is Copy) or
-  `move x` (its type is linear). There is no read whose effect depends on the type.
+  `move x` (its type is linear). There is no read whose effect depends on the type. One read form
+  per type (owner-confirmed 2026-11-05): `copy` is allowed only on a Copy type and `move` only on a
+  linear one; `move` of a Copy value and `copy` of a linear value are both refused.
 
 What slice 1 is not:
 
@@ -75,19 +86,31 @@ semantics is a total, fuel-indexed evaluator (`run`) whose outcome separates exi
 running out of fuel (STMT-1). `Exec` is the fuel-free form of the same statement-level evaluator:
 adequacy and determinism are about fuel, not an independent cross-check of expression evaluation.
 
-Statically known values (Q6.2). A value is known when it comes from the fixed table: a literal,
-an immutable `let` of a known value, or a checked operation on known operands. In slice 1 every
-`let` is immutable. A struct literal is not in the table, so a field bound by destructuring a
-struct is not known; `fieldOverflowTrap` below is the resulting accepted program that traps. An
-input is not known either: `add100` is the accepted body that traps for some input values. The
-table has more entries (module constants, the six named wrapping/saturating operations, lossless
-`as`) that slice 1 has no syntax for.
+Statically known values (Q6.2, as amended by the owner on 2026-11-05). The checker tracks an
+abstract value for each binding: unknown, a known scalar, or a struct whose fields each carry
+their own fact. A value is known when it comes from the fixed table: a literal, an immutable `let`
+of a known value, or a checked operation on known operands. Constructing a struct records each
+field's fact independently; an immutable binding keeps the facts; destructuring hands each field's
+fact to its binder; an unknown field stays unknown without discarding its known siblings; and an
+ownership transfer (`move`) keeps the facts for the receiving binding while still consuming the
+source. So `let Pair { a: x, b: y } = Pair { a: 200, b: 100 }; x + y` is refused exactly as
+`let a = 200; let b = 100; a + b` is (`fieldOverflowTrap`, `overflowTrap`). The exclusions stay:
+nothing is tracked through mutable state (slice 1 has none), along branches or paths, through
+user-function calls, or through calls the table does not name; and facts do not depend on the
+A-normal-form temporaries an elaborator introduces. In slice 1 struct fields are scalars, so the
+rule's recursive form (a struct field holding a struct, nested patterns, tuples) has only its
+one-level instance here. An input is not known: `add100` and `partialUnknownAccepted` are the
+accepted bodies that trap for some input values. The table has more entries (module constants, the
+six named wrapping/saturating operations, lossless `as`) that slice 1 has no syntax for. The
+refusal applies to all written code, including trusted and unreachable code (Q6.4); slice 1 has
+neither, so its examples show only reachable positions and a discarded one (`overflowDropped`).
 
 Obligations not discharged here:
 
 * the elaboration relation from surface syntax (see above);
 * the lexer, model-translation and native-image obligations;
-* erasure of the instrumentation (`Slot.moved`, the `used`, `live` and `known` fields of `Entry`):
+* erasure of the instrumentation (`Slot.moved`, the `used`, `live`, `known` and `kfields` fields
+  of `Entry`):
   stated as intent, with no erasure definition or theorem yet (Q9.10);
 * the observable contract of a trap: its source location and message, and the mapping of exit
   values and traps to the process exit code (row Q7.10: trap exit 134); `Trap` here is an
@@ -297,13 +320,17 @@ inductive HasType (Δ : Decls) (Γ : TyCtx) : Expr → Ty → Prop where
 /-! ### Ownership and known values -/
 
 /-- The checker's state for one binding: its type, whether it still holds its value (`live`),
-whether it has been read (`used`), and its statically known value, if it has one (`known`, Q6.2). -/
+whether it has been read (`used`), its statically known value, if it has one (`known`, Q6.2), and
+the known values of its fields when it is a struct (`kfields`). -/
 structure Entry where
   name : Var
   ty : Ty
   live : Bool
   used : Bool
   known : Option Scalar
+  /-- The statically known field values of a struct binding (Q6.2, as amended 2026-11-05): for
+  each field, its known scalar or `none`. Empty for a scalar binding. -/
+  kfields : List (Name × Option Scalar) := []
   deriving DecidableEq, Repr
 
 /-- The ownership context, newest binding first. -/
@@ -348,8 +375,8 @@ inductive Uses (Δ : Decls) : Ctx → Expr → Ctx → Prop where
   | mk {Γ Γ' s fs} : UseAtoms Δ Γ (fs.map Prod.snd) Γ' → Uses Δ Γ (.mk s fs) Γ'
 
 /-- The statically known value of an atom (Q6.2): a literal, or `copy x` of a local bound to a
-known value. `move x` is never known: only linear values are moved, and no linear value is in the
-table. -/
+known value. `move x` has no known scalar: only linear values are moved, and no scalar is linear.
+A moved struct's field facts travel with it (`knownFieldsAtom`). -/
 def knownAtom (Γ : Ctx) : Atom → Option Scalar
   | .int t n => some (.int t n)
   | .bool b => some (.bool b)
@@ -357,7 +384,8 @@ def knownAtom (Γ : Ctx) : Atom → Option Scalar
   | .move _ => none
 
 /-- The statically known value of an expression (Q6.2): a known atom, or a checked `+` of two
-known operands whose result fits. A struct literal is not in the table. -/
+known operands whose result fits. A struct literal has no scalar value; its field facts are
+`knownFields`. -/
 def knownExpr (Γ : Ctx) : Expr → Option Scalar
   | .atom a => knownAtom Γ a
   | .add l r => match knownAtom Γ l, knownAtom Γ r with
@@ -365,6 +393,36 @@ def knownExpr (Γ : Ctx) : Expr → Option Scalar
       if t = t' ∧ t.inRange (a + b) = true then some (.int t (a + b)) else none
     | _, _ => none
   | .mk _ _ => none
+
+/-- The known value of field `f` in a list of field facts: `none` when the field is unknown or
+absent. -/
+def fieldFact (K : List (Name × Option Scalar)) (f : Name) : Option Scalar := (lookupF f K).bind id
+
+/-- The known field values of the struct an atom reads (Q6.2): a local's recorded field facts. A
+read keeps them for the receiving binding, whether it copies or moves (an ownership transfer keeps
+the facts and still consumes the source). A literal is a scalar and has none. -/
+def knownFieldsAtom (Γ : Ctx) : Atom → List (Name × Option Scalar)
+  | .int _ _ => []
+  | .bool _ => []
+  | .copy x => match ctxFind Γ x with
+    | some e => e.kfields
+    | none => []
+  | .move x => match ctxFind Γ x with
+    | some e => e.kfields
+    | none => []
+
+/-- The known field values of an expression's struct value (Q6.2, as amended 2026-11-05).
+Constructing a struct records each field's fact independently: a field written with a known atom
+is known, any other field is unknown, and an unknown field does not discard its known siblings. A
+read of a local carries the local's field facts. `+` produces a scalar. -/
+def knownFields (Γ : Ctx) : Expr → List (Name × Option Scalar)
+  | .atom a => knownFieldsAtom Γ a
+  | .add _ _ => []
+  | .mk _ fs => fs.map (fun p => (p.1, knownAtom Γ p.2))
+
+/-- Field facts hold of a struct's field values: every known field has exactly its known value. -/
+def FieldsHold (K : List (Name × Option Scalar)) (vs : List (Name × Scalar)) : Prop :=
+  ∀ f s, fieldFact K f = some s → lookupF f vs = some s
 
 /-- A statically known violation (Q6.1): a checked `+` whose operands are known, of one type,
 and whose result does not fit. Such an operation is refused wherever it is written (Q6.4,
@@ -393,15 +451,17 @@ def patNames : List (Name × Binder) → List Var
   | (_, .wild) :: rest => patNames rest
 
 /-- The context after a destructuring `let`: each named field becomes a new live, unused binding
-of the field's type, in pattern order. A field of a struct value is not a known value (Q6.2). -/
-def bindPat (d : StructDecl) : List (Name × Binder) → Ctx → Ctx
+of the field's type, in pattern order. Destructuring distributes the scrutinee's field facts `K` to
+the binders (Q6.2, as amended 2026-11-05): a binder of a known field is known, a binder of an
+unknown field is not. -/
+def bindPat (d : StructDecl) (K : List (Name × Option Scalar)) : List (Name × Binder) → Ctx → Ctx
   | [], Γ => Γ
-  | (_, .wild) :: rest, Γ => bindPat d rest Γ
+  | (_, .wild) :: rest, Γ => bindPat d K rest Γ
   | (f, .name x) :: rest, Γ =>
     match lookupF f d.fields with
-    | some st => bindPat d rest
-        ({ name := x, ty := .scalar st, live := true, used := false, known := none } :: Γ)
-    | none => bindPat d rest Γ
+    | some st => bindPat d K rest
+        ({ name := x, ty := .scalar st, live := true, used := false, known := fieldFact K f } :: Γ)
+    | none => bindPat d K rest Γ
 
 /-- Every binder of a pattern is fresh, and no two binders share an identity. -/
 def PatFresh (Γ : Ctx) (pat : List (Name × Binder)) : Prop :=
@@ -410,22 +470,25 @@ def PatFresh (Γ : Ctx) (pat : List (Name × Binder)) : Prop :=
 /-- A statement is well typed, respects ownership and contains no statically known violation.
 
 * `let x: T = e;` — `e` has type `T` (TYPE-4), contains no known violation (Q6.1), its reads are
-  allowed (OWN-1), and `x` is fresh (Q9.1). `x` starts live and unused, with `e`'s known value.
+  allowed (OWN-1), and `x` is fresh (Q9.1). `x` starts live and unused, with `e`'s known value and,
+  for a struct, `e`'s known field values.
 * `let _: T = e;` — as above, but nothing is bound and the value is dropped, so `T` must be Copy:
   `_` never discards a linear value (OWN-5). Slice 1 has no `Result` or `Option`, the other
   values `_` refuses.
 * `let S { f: b, ... } = e;` — `e` has type `S`, the pattern names every field (PAT-5), the
-  scrutinee is consumed (PAT-5: a linear `e` is moved), and the binders are fresh. -/
+  scrutinee is consumed (PAT-5: a linear `e` is moved), and the binders are fresh. Each binder
+  receives the known value of its field, if the scrutinee has one. -/
 inductive StmtOk (Δ : Decls) : Ctx → Stmt → Ctx → Prop where
   | let_ {Γ Γ₁ x t e} : HasType Δ Γ.tys e t → knownViolates Γ e = false → Uses Δ Γ e Γ₁ →
       Fresh Γ₁ x →
       StmtOk Δ Γ (.let_ (.name x) t e)
-        ({ name := x, ty := t, live := true, used := false, known := knownExpr Γ e } :: Γ₁)
+        ({ name := x, ty := t, live := true, used := false, known := knownExpr Γ e,
+           kfields := knownFields Γ e } :: Γ₁)
   | letWild {Γ Γ₁ t e} : HasType Δ Γ.tys e t → knownViolates Γ e = false → t.isCopy Δ = true →
       Uses Δ Γ e Γ₁ → StmtOk Δ Γ (.let_ .wild t e) Γ₁
   | letStruct {Γ Γ₁ s d pat e} : HasType Δ Γ.tys e (.struct s) → knownViolates Γ e = false →
       findDecl Δ s = some d → PatOk d pat → Uses Δ Γ e Γ₁ → PatFresh Γ₁ pat →
-      StmtOk Δ Γ (.letStruct s pat e) (bindPat d pat Γ₁)
+      StmtOk Δ Γ (.letStruct s pat e) (bindPat d (knownFields Γ e) pat Γ₁)
 
 /-- At `return`, every linear binding has been consumed (OWN-2) and every binding has been used
 (OWN-5). -/
@@ -731,13 +794,15 @@ inductive VTy (Δ : Decls) : Val → Ty → Prop where
       VTy Δ (.struct s vs) (.struct s)
 
 /-- The context describes the environment: the same identities in the same order, every live
-binding holds a value of its type, and a binding with a known value holds exactly that scalar and
-has a Copy type. A binding the context records as moved is otherwise unconstrained here; the
-evaluator marks such a slot `moved` when it moves the value out. -/
+binding holds a value of its type, a binding with a known value holds exactly that scalar and has
+a Copy type, and a slot holding a struct value agrees with the binding's known field values. A
+binding the context records as moved is otherwise unconstrained here; the evaluator marks such a
+slot `moved` when it moves the value out. -/
 inductive Corr (Δ : Decls) : Ctx → Env → Prop where
   | nil : Corr Δ [] []
   | cons {e sl Γ env} : (e.live = true → ∃ v, sl = .val v ∧ VTy Δ v e.ty) →
       (∀ s, e.known = some s → sl = .val (.scalar s) ∧ e.ty.isCopy Δ = true) →
+      (∀ sn vs, sl = .val (.struct sn vs) → FieldsHold e.kfields vs) →
       Corr Δ Γ env → Corr Δ (e :: Γ) ((e.name, sl) :: env)
 
 theorem tys_lookup (x : Var) : ∀ Γ : Ctx, lookupF x Γ.tys = (ctxFind Γ x).map Entry.ty
@@ -784,21 +849,24 @@ theorem vty_isCopy {Δ : Decls} {v : Val} {t : Ty} (h : VTy Δ v t) : v.isCopy �
 theorem corr_find {Δ : Decls} {x : Var} {Γ : Ctx} {env : Env} (hc : Corr Δ Γ env) :
     ∀ {e : Entry}, ctxFind Γ x = some e →
       (e.live = true → ∃ v, envFind env x = some (.val v) ∧ VTy Δ v e.ty) ∧
-      (∀ s, e.known = some s → envFind env x = some (.val (.scalar s)) ∧ e.ty.isCopy Δ = true) := by
+      (∀ s, e.known = some s → envFind env x = some (.val (.scalar s)) ∧ e.ty.isCopy Δ = true) ∧
+      (∀ sn vs, envFind env x = some (.val (.struct sn vs)) → FieldsHold e.kfields vs) := by
   induction hc with
   | nil => intro e h; simp [ctxFind] at h
-  | cons hsl hk _ ih =>
+  | cons hsl hk hkf _ ih =>
     rename_i e' sl Γ env
     intro e h
     simp only [ctxFind, envFind] at h ⊢
     split at h
     · cases h
       rename_i heq
-      refine ⟨fun hl => ?_, fun s hs => ?_⟩
+      refine ⟨fun hl => ?_, fun s hs => ?_, fun sn vs hv => ?_⟩
       · obtain ⟨v, rfl, hv⟩ := hsl hl
         exact ⟨v, by simp [heq], hv⟩
       · obtain ⟨rfl, hcp⟩ := hk s hs
         exact ⟨by simp [heq], hcp⟩
+      · simp only [heq, ↓reduceIte, Option.some.injEq] at hv
+        exact hkf sn vs hv
     · rename_i hne
       simp only [hne, ↓reduceIte]
       exact ih h
@@ -807,11 +875,11 @@ theorem corr_mark_copy {Δ : Decls} {x : Var} {Γ : Ctx} {env : Env} (hc : Corr 
     Corr Δ (ctxMark Γ x false) env := by
   induction hc with
   | nil => exact .nil
-  | cons hsl hk hc ih =>
+  | cons hsl hk hkf hc ih =>
     simp only [ctxMark]
     split
-    · exact .cons (by simpa using hsl) hk hc
-    · exact .cons hsl hk ih
+    · exact .cons (by simpa using hsl) hk hkf hc
+    · exact .cons hsl hk hkf ih
 
 /-- Moving `x` out keeps the description, provided `x`'s binding has no known value (a known
 value is a Copy scalar, which is never moved). -/
@@ -820,16 +888,16 @@ theorem corr_mark_move {Δ : Decls} {x : Var} {Γ : Ctx} {env : Env} (hc : Corr 
     Corr Δ (ctxMark Γ x true) (envMove env x) := by
   induction hc with
   | nil => intro _; exact .nil
-  | cons hsl hk hc ih =>
+  | cons hsl hk hkf hc ih =>
     rename_i e sl Γ env
     intro hn
     simp only [ctxMark, envMove]
     split
     · rename_i heq
       have hkn : e.known = none := hn e (by simp [ctxFind, heq])
-      exact .cons (by simp) (by intro s hs; simp [hkn] at hs) hc
+      exact .cons (by simp) (by intro s hs; simp [hkn] at hs) (by intro sn vs h; cases h) hc
     · rename_i hne
-      exact .cons hsl hk (ih (fun e' h => hn e' (by simp [ctxFind, hne, h])))
+      exact .cons hsl hk hkf (ih (fun e' h => hn e' (by simp [ctxFind, hne, h])))
 
 /-- Reading a live local in the mode its type requires succeeds with a value of its type, and the
 context's record of the read matches what the evaluator did. -/
@@ -837,11 +905,13 @@ theorem readVar_safe {Δ : Decls} {Γ : Ctx} {env : Env} {x : Var} {e : Entry} {
     (hc : Corr Δ Γ env) (hf : ctxFind Γ x = some e) (hl : e.live = true)
     (hm : e.ty.isCopy Δ = !mv) :
     ∃ v env', readVar Δ env x mv = .ok (v, env') ∧ VTy Δ v e.ty ∧
+      (∀ sn vs, v = .struct sn vs → FieldsHold e.kfields vs) ∧
       Corr Δ (ctxMark Γ x mv) env' := by
-  obtain ⟨hlive, hknown⟩ := corr_find hc hf
+  obtain ⟨hlive, hknown, hkf⟩ := corr_find hc hf
   obtain ⟨v, hv, hty⟩ := hlive hl
   have hvc : v.isCopy Δ = !mv := by rw [vty_isCopy hty]; exact hm
-  refine ⟨v, _, by simp [readVar, hv, hvc]; rfl, hty, ?_⟩
+  refine ⟨v, _, by simp [readVar, hv, hvc]; rfl, hty,
+    fun sn vs h => hkf sn vs (by rw [hv, h]), ?_⟩
   cases mv
   · simpa using corr_mark_copy hc
   · simp only [↓reduceIte]
@@ -852,6 +922,42 @@ theorem readVar_safe {Δ : Decls} {Γ : Ctx} {env : Env} {x : Var} {e : Entry} {
     cases hk : e.known with
     | none => rfl
     | some s => have := (hknown s hk).2; rw [hm] at this; cases this
+
+/-- A known atom evaluates to its known value without changing the environment (Q6.2). -/
+theorem knownAtom_sound {Δ : Decls} {Γ : Ctx} {env : Env} {a : Atom} {s : Scalar}
+    (hc : Corr Δ Γ env) (hk : knownAtom Γ a = some s) : evalAtom Δ env a = .ok (s, env) := by
+  cases a with
+  | int t n => simp [knownAtom] at hk; subst hk; rfl
+  | bool b => simp [knownAtom] at hk; subst hk; rfl
+  | move x => simp [knownAtom] at hk
+  | copy x =>
+    simp only [knownAtom, Option.bind_eq_some_iff] at hk
+    obtain ⟨e, hf, hke⟩ := hk
+    obtain ⟨hv, _⟩ := (corr_find hc hf).2.1 s hke
+    simp [evalAtom, readVar, hv, Val.isCopy]
+
+/-- Recording a read changes no binding's known value or field facts. -/
+theorem knownAtom_mark (y : Var) (mv : Bool) (a : Atom) (Γ : Ctx) :
+    knownAtom (ctxMark Γ y mv) a = knownAtom Γ a := by
+  cases a with
+  | copy x =>
+    simp only [knownAtom]
+    induction Γ with
+    | nil => rfl
+    | cons e Γ ih =>
+      simp only [ctxMark]
+      split
+      · simp only [ctxFind]; split <;> simp_all
+      · simp only [ctxFind]; split <;> simp_all
+  | _ => rfl
+
+theorem useAtom_knownAtom {Δ : Decls} {Γ Γ' : Ctx} {a : Atom} (h : UseAtom Δ Γ a Γ') (b : Atom) :
+    knownAtom Γ' b = knownAtom Γ b := by
+  cases h with
+  | int => rfl
+  | bool => rfl
+  | copy => exact knownAtom_mark _ _ _ _
+  | move => exact knownAtom_mark _ _ _ _
 
 theorem evalAtom_safe {Δ : Decls} {Γ Γ' : Ctx} {env : Env} {a : Atom} {st : STy}
     (hc : Corr Δ Γ env) (ht : AtomTy Γ.tys a st) (hu : UseAtom Δ Γ a Γ') :
@@ -864,7 +970,7 @@ theorem evalAtom_safe {Δ : Decls} {Γ Γ' : Ctx} {env : Env} {a : Atom} {st : S
     | copy hx =>
       rw [tys_lookup, hf] at hx
       simp only [Option.map_some, Option.some.injEq] at hx
-      obtain ⟨v, env', hr, hv, hc'⟩ := readVar_safe (mv := false) hc hf hl (by simpa using hcp)
+      obtain ⟨v, env', hr, hv, _, hc'⟩ := readVar_safe (mv := false) hc hf hl (by simpa using hcp)
       rw [hx] at hv
       cases hv with
       | scalar hs => exact ⟨_, env', by simp [evalAtom, hr], hs, hc'⟩
@@ -873,7 +979,7 @@ theorem evalAtom_safe {Δ : Decls} {Γ Γ' : Ctx} {env : Env} {a : Atom} {st : S
     | move hx =>
       rw [tys_lookup, hf] at hx
       simp only [Option.map_some, Option.some.injEq] at hx
-      obtain ⟨v, env', hr, hv, hc'⟩ := readVar_safe (mv := true) hc hf hl (by simpa using hcp)
+      obtain ⟨v, env', hr, hv, _, hc'⟩ := readVar_safe (mv := true) hc hf hl (by simpa using hcp)
       rw [hx] at hv
       cases hv with
       | scalar hs => exact ⟨_, env', by simp [evalAtom, hr], hs, hc'⟩
@@ -882,11 +988,13 @@ theorem evalFields_safe {Δ : Decls} :
     ∀ {fs : List (Name × Atom)} {Γ Γ' : Ctx} {env : Env}, Corr Δ Γ env →
       (∀ p ∈ fs, ∃ st, AtomTy Γ.tys p.2 st) → UseAtoms Δ Γ (fs.map Prod.snd) Γ' →
       ∃ vs env', evalFields Δ env fs = .ok (vs, env') ∧ Corr Δ Γ' env' ∧
-        ∀ f a, lookupF f fs = some a → ∀ st, AtomTy Γ.tys a st →
-          ∃ v, lookupF f vs = some v ∧ SVTy v st
+        (∀ f a, lookupF f fs = some a → ∀ st, AtomTy Γ.tys a st →
+          ∃ v, lookupF f vs = some v ∧ SVTy v st) ∧
+        (∀ f a, lookupF f fs = some a → ∀ s, knownAtom Γ a = some s → lookupF f vs = some s)
   | [], Γ, Γ', env, hc, _, hu => by
     cases hu
-    exact ⟨[], env, rfl, hc, by intro f a h; simp [lookupF] at h⟩
+    exact ⟨[], env, rfl, hc, by intro f a h; simp [lookupF] at h,
+      by intro f a h; simp [lookupF] at h⟩
   | (g, a) :: rest, Γ, Γ', env, hc, ht, hu => by
     cases hu with
     | cons hu₁ hu₂ =>
@@ -896,30 +1004,56 @@ theorem evalFields_safe {Δ : Decls} :
       have htys : Γ₁.tys = Γ.tys := useAtom_tys hu₁
       have ht' : ∀ p ∈ rest, ∃ st, AtomTy Γ₁.tys p.2 st := by
         intro p hp; rw [htys]; exact ht p (List.Mem.tail _ hp)
-      obtain ⟨vs, env₂, hr, hc₂, hl⟩ := evalFields_safe hc₁ ht' hu₂
-      refine ⟨(g, v) :: vs, env₂, by simp [evalFields, he, hr], hc₂, ?_⟩
-      intro f a' hf st hst
-      simp only [lookupF] at hf ⊢
-      split at hf
-      next hgf =>
-        cases hf
-        obtain ⟨v', env', he', hv', _⟩ := evalAtom_safe hc hst hu₁
-        rw [he] at he'
-        cases he'
-        exact ⟨v, by simp [hgf], hv'⟩
-      next hne =>
-        simp only [hne, ↓reduceIte]
-        exact hl f a' hf st (by rw [htys]; exact hst)
+      obtain ⟨vs, env₂, hr, hc₂, hl, hk⟩ := evalFields_safe hc₁ ht' hu₂
+      refine ⟨(g, v) :: vs, env₂, by simp [evalFields, he, hr], hc₂, ?_, ?_⟩
+      · intro f a' hf st hst
+        simp only [lookupF] at hf ⊢
+        split at hf
+        next hgf =>
+          cases hf
+          obtain ⟨v', env', he', hv', _⟩ := evalAtom_safe hc hst hu₁
+          rw [he] at he'
+          cases he'
+          exact ⟨v, by simp [hgf], hv'⟩
+        next hne =>
+          simp only [hne, ↓reduceIte]
+          exact hl f a' hf st (by rw [htys]; exact hst)
+      · intro f a' hf s hks
+        simp only [lookupF] at hf ⊢
+        split at hf
+        next hgf =>
+          cases hf
+          have h := knownAtom_sound hc hks
+          rw [he] at h
+          cases h
+          simp [hgf]
+        next hne =>
+          simp only [hne, ↓reduceIte]
+          exact hk f a' hf s (by rw [useAtom_knownAtom hu₁]; exact hks)
+
+/-- `lookupF` through a map of the values. -/
+theorem lookupF_map {α β : Type} (g : α → β) (f : Name) :
+    ∀ l : List (Name × α), lookupF f (l.map (fun p => (p.1, g p.2))) = (lookupF f l).map g
+  | [] => rfl
+  | (y, a) :: rest => by
+    simp only [List.map_cons, lookupF]
+    split
+    · rfl
+    · exact lookupF_map g f rest
 
 /-- Expression safety: a well-typed expression whose reads are allowed evaluates to a value of its
-type, or traps. It never gets stuck, and in particular never reads a moved variable. -/
+type, or traps. It never gets stuck, and in particular never reads a moved variable. A struct
+value it produces agrees with the expression's known field values (Q6.2). -/
 theorem evalExpr_safe {Δ : Decls} {e : Expr} {Γ Γ' : Ctx} {env : Env} {t : Ty}
     (hc : Corr Δ Γ env) (ht : HasType Δ Γ.tys e t) (hu : Uses Δ Γ e Γ') :
     (∃ k, evalExpr Δ env e = .trap k) ∨
-    ∃ v env', evalExpr Δ env e = .ok (v, env') ∧ VTy Δ v t ∧ Corr Δ Γ' env' := by
+    ∃ v env', evalExpr Δ env e = .ok (v, env') ∧ VTy Δ v t ∧
+      (∀ sn vs, v = .struct sn vs → FieldsHold (knownFields Γ e) vs) ∧ Corr Δ Γ' env' := by
   cases ht with
-  | int h => cases hu with | atom hu => cases hu; exact .inr ⟨_, _, rfl, .scalar (.int h), hc⟩
-  | bool => cases hu with | atom hu => cases hu; exact .inr ⟨_, _, rfl, .scalar .bool, hc⟩
+  | int h => cases hu with
+    | atom hu => cases hu; exact .inr ⟨_, _, rfl, .scalar (.int h), (fun _ _ h => by cases h), hc⟩
+  | bool => cases hu with
+    | atom hu => cases hu; exact .inr ⟨_, _, rfl, .scalar .bool, (fun _ _ h => by cases h), hc⟩
   | copy hx =>
     cases hu with
     | atom hu =>
@@ -928,8 +1062,10 @@ theorem evalExpr_safe {Δ : Decls} {e : Expr} {Γ Γ' : Ctx} {env : Env} {t : Ty
         rw [tys_lookup, hf] at hx
         simp only [Option.map_some, Option.some.injEq] at hx
         subst hx
-        obtain ⟨v, env', hr, hv, hc'⟩ := readVar_safe (mv := false) hc hf hl (by simpa using hcp)
-        exact .inr ⟨v, env', by simpa [evalExpr] using hr, hv, hc'⟩
+        obtain ⟨v, env', hr, hv, hkf, hc'⟩ :=
+          readVar_safe (mv := false) hc hf hl (by simpa using hcp)
+        exact .inr ⟨v, env', by simpa [evalExpr] using hr, hv,
+          by simpa [knownFields, knownFieldsAtom, hf] using hkf, hc'⟩
   | move hx =>
     cases hu with
     | atom hu =>
@@ -938,8 +1074,10 @@ theorem evalExpr_safe {Δ : Decls} {e : Expr} {Γ Γ' : Ctx} {env : Env} {t : Ty
         rw [tys_lookup, hf] at hx
         simp only [Option.map_some, Option.some.injEq] at hx
         subst hx
-        obtain ⟨v, env', hr, hv, hc'⟩ := readVar_safe (mv := true) hc hf hl (by simpa using hcp)
-        exact .inr ⟨v, env', by simpa [evalExpr] using hr, hv, hc'⟩
+        obtain ⟨v, env', hr, hv, hkf, hc'⟩ :=
+          readVar_safe (mv := true) hc hf hl (by simpa using hcp)
+        exact .inr ⟨v, env', by simpa [evalExpr] using hr, hv,
+          by simpa [knownFields, knownFieldsAtom, hf] using hkf, hc'⟩
   | add hl hr =>
     rename_i l r t
     cases hu with
@@ -956,7 +1094,7 @@ theorem evalExpr_safe {Δ : Decls} {e : Expr} {Γ Γ' : Ctx} {env : Env} {t : Ty
           rename_i b
           by_cases hsum : t.inRange (a + b) = true
           · exact .inr ⟨_, env₂, by simp [evalExpr, he₁, he₂, checkedAdd, hsum],
-              .scalar (.int hsum), hc₂⟩
+              .scalar (.int hsum), (fun _ _ h => by cases h), hc₂⟩
           · exact .inl ⟨.arithmeticOverflow, by simp [evalExpr, he₁, he₂, checkedAdd, hsum]⟩
   | mk hd hf =>
     rename_i s d fs
@@ -966,27 +1104,22 @@ theorem evalExpr_safe {Δ : Decls} {e : Expr} {Γ Γ' : Ctx} {env : Env} {t : Ty
         intro p hp
         obtain ⟨st, _, h⟩ := hf.typed p hp
         exact ⟨st, h⟩
-      obtain ⟨vs, env', he, hc', hl⟩ := evalFields_safe hc htyped hu
-      refine .inr ⟨.struct s vs, env', by simp [evalExpr, he], .struct hd ?_, hc'⟩
-      intro f st hfs
-      obtain ⟨a, ha⟩ := hf.covers f st hfs
-      obtain ⟨st', hst', hat⟩ := hf.typed (f, a) (lookupF_mem ha)
-      rw [hfs] at hst'
-      cases hst'
-      exact hl f a ha st hat
-
-/-- A known atom evaluates to its known value without changing the environment (Q6.2). -/
-theorem knownAtom_sound {Δ : Decls} {Γ : Ctx} {env : Env} {a : Atom} {s : Scalar}
-    (hc : Corr Δ Γ env) (hk : knownAtom Γ a = some s) : evalAtom Δ env a = .ok (s, env) := by
-  cases a with
-  | int t n => simp [knownAtom] at hk; subst hk; rfl
-  | bool b => simp [knownAtom] at hk; subst hk; rfl
-  | move x => simp [knownAtom] at hk
-  | copy x =>
-    simp only [knownAtom, Option.bind_eq_some_iff] at hk
-    obtain ⟨e, hf, hke⟩ := hk
-    obtain ⟨hv, _⟩ := (corr_find hc hf).2 s hke
-    simp [evalAtom, readVar, hv, Val.isCopy]
+      obtain ⟨vs, env', he, hc', hl, hk⟩ := evalFields_safe hc htyped hu
+      refine .inr ⟨.struct s vs, env', by simp [evalExpr, he], .struct hd ?_, ?_, hc'⟩
+      · intro f st hfs
+        obtain ⟨a, ha⟩ := hf.covers f st hfs
+        obtain ⟨st', hst', hat⟩ := hf.typed (f, a) (lookupF_mem ha)
+        rw [hfs] at hst'
+        cases hst'
+        exact hl f a ha st hat
+      · intro sn vs' hv f sv hff
+        cases hv
+        simp only [knownFields, fieldFact, lookupF_map] at hff
+        cases hla : lookupF f fs with
+        | none => simp [hla] at hff
+        | some a =>
+          simp only [hla, Option.map_some, Option.bind_some, id] at hff
+          exact hk f a hla sv hff
 
 /-- A known expression evaluates to its known value (Q6.2): the static table agrees with the
 evaluator. -/
@@ -1038,21 +1171,31 @@ theorem knownViolation_traps {Δ : Decls} {Γ : Ctx} {env : Env} {e : Expr}
     · cases hv
 
 theorem destructure_safe {Δ : Decls} {d : StructDecl} {vs : List (Name × Scalar)}
-    (hvs : ∀ f st, lookupF f d.fields = some st → ∃ v, lookupF f vs = some v ∧ SVTy v st) :
+    {K : List (Name × Option Scalar)}
+    (hvs : ∀ f st, lookupF f d.fields = some st → ∃ v, lookupF f vs = some v ∧ SVTy v st)
+    (hK : FieldsHold K vs) :
     ∀ {pat : List (Name × Binder)} {Γ : Ctx} {env : Env}, Corr Δ Γ env →
       (∀ p ∈ pat, ∃ st, lookupF p.1 d.fields = some st) →
-      ∃ env', destructure pat vs env = .ok env' ∧ Corr Δ (bindPat d pat Γ) env'
+      ∃ env', destructure pat vs env = .ok env' ∧ Corr Δ (bindPat d K pat Γ) env'
   | [], Γ, env, hc, _ => ⟨env, rfl, hc⟩
   | (f, .wild) :: rest, Γ, env, hc, hp => by
     simp only [destructure, bindPat]
-    exact destructure_safe hvs hc (fun p h => hp p (List.Mem.tail _ h))
+    exact destructure_safe hvs hK hc (fun p h => hp p (List.Mem.tail _ h))
   | (f, .name x) :: rest, Γ, env, hc, hp => by
     obtain ⟨st, hst⟩ := hp (f, .name x) (List.Mem.head _)
     obtain ⟨v, hv, hsv⟩ := hvs f st hst
     simp only [destructure, bindPat, hst, hv]
-    exact destructure_safe hvs
-      (Corr.cons (e := { name := x, ty := .scalar st, live := true, used := false, known := none })
-        (fun _ => ⟨_, rfl, .scalar hsv⟩) (by intro s hs; cases hs) hc)
+    exact destructure_safe hvs hK
+      (Corr.cons
+        (e := { name := x, ty := .scalar st, live := true, used := false, known := fieldFact K f })
+        (fun _ => ⟨_, rfl, .scalar hsv⟩)
+        (by
+          intro s hs
+          have h := hK f s hs
+          rw [hv] at h
+          cases h
+          exact ⟨rfl, rfl⟩)
+        (by intro sn vs' h; cases h) hc)
       (fun p h => hp p (List.Mem.tail _ h))
 
 /-- Statement safety: a checked statement executes or traps; it never gets stuck. -/
@@ -1062,26 +1205,29 @@ theorem execStmt_safe {Δ : Decls} {Γ Γ' : Ctx} {env : Env} {s : Stmt}
   cases hs with
   | let_ ht _ hu _ =>
     rename_i x t e
-    rcases evalExpr_safe hc ht hu with ⟨k, hk⟩ | ⟨v, env₁, he, hv, hc₁⟩
+    rcases evalExpr_safe hc ht hu with ⟨k, hk⟩ | ⟨v, env₁, he, hv, hkf, hc₁⟩
     · exact .inl ⟨k, by simp [execStmt, hk]⟩
-    · refine .inr ⟨_, by simp [execStmt, he], .cons (fun _ => ⟨v, rfl, hv⟩) ?_ hc₁⟩
-      intro s hs
-      have hk := knownExpr_sound hc hs
-      rw [he] at hk
-      cases hk
-      cases hv with | scalar _ => exact ⟨rfl, rfl⟩
+    · refine .inr ⟨_, by simp [execStmt, he], .cons (fun _ => ⟨v, rfl, hv⟩) ?_ ?_ hc₁⟩
+      · intro s hs
+        have hk := knownExpr_sound hc hs
+        rw [he] at hk
+        cases hk
+        cases hv with | scalar _ => exact ⟨rfl, rfl⟩
+      · intro sn vs h
+        cases h
+        exact hkf sn vs rfl
   | letWild ht _ _ hu =>
-    rcases evalExpr_safe hc ht hu with ⟨k, hk⟩ | ⟨v, env₁, he, _, hc₁⟩
+    rcases evalExpr_safe hc ht hu with ⟨k, hk⟩ | ⟨v, env₁, he, _, _, hc₁⟩
     · exact .inl ⟨k, by simp [execStmt, hk]⟩
     · exact .inr ⟨_, by simp [execStmt, he], hc₁⟩
   | letStruct ht _ hd hp hu _ =>
-    rcases evalExpr_safe hc ht hu with ⟨k, hk⟩ | ⟨v, env₁, he, hv, hc₁⟩
+    rcases evalExpr_safe hc ht hu with ⟨k, hk⟩ | ⟨v, env₁, he, hv, hkf, hc₁⟩
     · exact .inl ⟨k, by simp [execStmt, hk]⟩
     · cases hv with
       | struct hd' hvs =>
         rw [hd] at hd'
         cases hd'
-        obtain ⟨env', hde, hc'⟩ := destructure_safe hvs hc₁ hp.declared
+        obtain ⟨env', hde, hc'⟩ := destructure_safe hvs (hkf _ _ rfl) hc₁ hp.declared
         exact .inr ⟨env', by simp [execStmt, he, hde], hc'⟩
 
 /-- An atom with a scalar type in `HasType` has that type in `AtomTy`. -/
@@ -1432,7 +1578,8 @@ def stmtOut (Δ : Decls) (Γ : Ctx) : Stmt → Option Ctx
     if tyOf Δ Γ.tys e = some t ∧ knownViolates Γ e = false then
       match uses Δ Γ e with
       | some Γ₁ => if Fresh Γ₁ x then
-          some ({ name := x, ty := t, live := true, used := false, known := knownExpr Γ e } :: Γ₁)
+          some ({ name := x, ty := t, live := true, used := false, known := knownExpr Γ e,
+                  kfields := knownFields Γ e } :: Γ₁)
           else none
       | none => none
     else none
@@ -1444,7 +1591,7 @@ def stmtOut (Δ : Decls) (Γ : Ctx) : Stmt → Option Ctx
       match findDecl Δ s with
       | some d => if patOkB d pat then
           match uses Δ Γ e with
-          | some Γ₁ => if PatFresh Γ₁ pat then some (bindPat d pat Γ₁) else none
+          | some Γ₁ => if PatFresh Γ₁ pat then some (bindPat d (knownFields Γ e) pat Γ₁) else none
           | none => none
         else none
       | none => none
@@ -1580,6 +1727,7 @@ def y₁ : Var := ⟨"y", 1⟩
 def a₀ : Var := ⟨"a", 0⟩
 def b₁ : Var := ⟨"b", 1⟩
 def s₂ : Var := ⟨"s", 2⟩
+def z₃ : Var := ⟨"z", 3⟩
 
 /-- The slice's central program: an empty linear struct is created, moved, and consumed by a
 destructuring `let` (OWN-1, OWN-2, PAT-5). It exits with 42.
@@ -1632,6 +1780,15 @@ def copyLinear : Program :=
 
 example : ¬ Checked copyLinear := fun h => absurd ((check_iff _).mpr h) (by decide)
 example : run copyLinear 10 = .stuck .wrongMode := by decide
+
+/-- Refused: a Copy value read with `move` (Q9.1, owner-confirmed 2026-11-05: `move` only for
+non-Copy types). Run anyway, the read is in the wrong mode. -/
+def moveCopy : Program :=
+  { decls, body := [.let_ (.name x₀) u8 (lit 7)],
+    ret := .move x₀ }
+
+example : ¬ Checked moveCopy := fun h => absurd ((check_iff _).mpr h) (by decide)
+example : run moveCopy 10 = .stuck .wrongMode := by decide
 
 /-- Refused: the linear `t` is never consumed before `return` (OWN-2).
 ```
@@ -1759,15 +1916,15 @@ def overflowDropped : Program :=
 
 example : ¬ Checked overflowDropped := fun h => absurd ((check_iff _).mpr h) (by decide)
 
-/-- Accepted, and traps at run time: the fields of a struct are not statically known values
-(Q6.2's table has no entry for a struct literal or a field bound by destructuring), so the
-checker cannot prove the addition overflows, and the checked operation traps when it runs
-(ARITH-3, STMT-2). This is slice 1's accepted program with a runtime overflow.
+/-- Refused (Q6.2 as amended 2026-11-05, Q6.4; OD118): known values flow through an immutable
+struct. Constructing `p` records that field `a` is `200` and field `b` is `100`; destructuring
+hands those facts to `x` and `y`, so `x + y` is known to overflow `u8`, exactly as for two plain
+`let`s (`overflowTrap`). The refusal is justified: run anyway, the addition traps.
 ```
 fn main() -> u8 {
     let p: Pair = Pair { a: 200, b: 100 };
     let Pair { a: x, b: y } = p;
-    return x + y;          // traps: arithmetic overflow
+    return x + y;          // error: 200 + 100 overflows u8
 }
 ``` -/
 def fieldOverflowTrap : Program :=
@@ -1776,8 +1933,39 @@ def fieldOverflowTrap : Program :=
                     .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₁))],
     ret := .copy s₂ }
 
-example : Checked fieldOverflowTrap := (check_iff _).mp (by decide)
+example : ¬ Checked fieldOverflowTrap := fun h => absurd ((check_iff _).mpr h) (by decide)
 example : run fieldOverflowTrap 10 = .trap .arithmeticOverflow := by decide
+
+/-- Refused: an ownership transfer keeps the facts for the receiving binding (Q6.2 as amended).
+`p` is moved into `q`, which may no longer read `p` (OWN-1), and `q` carries `p`'s field facts.
+```
+fn main() -> u8 {
+    let p: Pair = Pair { a: 200, b: 100 };
+    let q: Pair = p;
+    let Pair { a: x, b: y } = q;
+    return x + y;          // error: 200 + 100 overflows u8
+}
+``` -/
+def fieldOverflowMoved : Program :=
+  { decls, body := [.let_ (.name p₀) (.struct "Pair") (.mk "Pair" [("a", .int .u8 200), ("b", .int .u8 100)]),
+                    .let_ (.name q₁) (.struct "Pair") (mv p₀),
+                    .letStruct "Pair" [("a", .name x₁), ("b", .name y₁)] (mv q₁),
+                    .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₁))],
+    ret := .copy s₂ }
+
+example : ¬ Checked fieldOverflowMoved := fun h => absurd ((check_iff _).mpr h) (by decide)
+example : run fieldOverflowMoved 10 = .trap .arithmeticOverflow := by decide
+
+/-- Accepted with the facts in range: the known sum fits, and the program exits with it. The
+known field values make no program with a fitting sum fail to check. -/
+def fieldSumFits : Program :=
+  { decls, body := [.let_ (.name p₀) (.struct "Pair") (.mk "Pair" [("a", .int .u8 200), ("b", .int .u8 55)]),
+                    .letStruct "Pair" [("a", .name x₁), ("b", .name y₁)] (mv p₀),
+                    .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₁))],
+    ret := .copy s₂ }
+
+example : Checked fieldSumFits := (check_iff _).mp (by decide)
+example : run fieldSumFits 10 = .exit 255 := by decide
 
 /-- **An accepted overflow from an input** (Q6.2, Q6.4). The checker does not know an input's
 value. Slice 1 has no source of input: `main` takes no parameters (Q8.4), and an input reaches a
@@ -1799,11 +1987,53 @@ theorem add100_ok : BodyOk decls inputCtx add100 (.copy s₂) := bodyOkB_iff.mp 
 /-- For every input value the accepted body never gets stuck. -/
 theorem add100_safe (n : Int) (h : IntTy.u8.inRange n = true) (fuel : Nat) (w : Stuck) :
     runBody decls fuel (inputEnv n) add100 (.copy s₂) ≠ .stuck w :=
-  runBody_safe add100_ok (.cons (fun _ => ⟨_, rfl, .scalar (.int h)⟩) (fun _ hs => by cases hs) .nil)
+  runBody_safe add100_ok
+    (.cons (fun _ => ⟨_, rfl, .scalar (.int h)⟩) (fun _ hs => by cases hs) (fun _ _ h => by cases h) .nil)
     fuel w
 
 example : runBody decls 10 (inputEnv 200) add100 (.copy s₂) = .trap .arithmeticOverflow := by decide
 example : runBody decls 10 (inputEnv 1) add100 (.copy s₂) = .exit 101 := by decide
+
+/-- **Partial facts** (Q6.2 as amended): an unknown field does not discard a known sibling. `p`'s
+field `a` comes from the input `x` and is unknown; field `b` is `200` and is known. Adding `100` to
+the known field is refused; the body that adds the unknown field to the known one is accepted, and
+traps only for some inputs.
+```
+fn f(x: u8) -> u8 {
+    let p: Pair = Pair { a: x, b: 200 };
+    let Pair { a: c, b: d } = p;
+    let s: u8 = d + 100;     // error: 200 + 100 overflows u8
+    let z: u8 = c + s;
+    return z;
+}
+``` -/
+def partialKnownRefused : List Stmt :=
+  [.let_ (.name p₀) (.struct "Pair") (.mk "Pair" [("a", .copy x₀), ("b", .int .u8 200)]),
+   .letStruct "Pair" [("a", .name x₁), ("b", .name y₁)] (mv p₀),
+   .let_ (.name s₂) u8 (.add (.copy y₁) (.int .u8 100)),
+   .let_ (.name z₃) u8 (.add (.copy x₁) (.copy s₂))]
+
+example : ¬ BodyOk decls inputCtx partialKnownRefused (.copy z₃) :=
+  fun h => absurd (bodyOkB_iff.mpr h) (by decide)
+
+/-- Accepted: the sum of the unknown field and the known one is not known, so it is checked at run
+time (ARITH-3).
+```
+fn f(x: u8) -> u8 {
+    let p: Pair = Pair { a: x, b: 200 };
+    let Pair { a: c, b: d } = p;
+    return c + d;          // accepted; traps when x > 55
+}
+``` -/
+def partialUnknownAccepted : List Stmt :=
+  [.let_ (.name p₀) (.struct "Pair") (.mk "Pair" [("a", .copy x₀), ("b", .int .u8 200)]),
+   .letStruct "Pair" [("a", .name x₁), ("b", .name y₁)] (mv p₀),
+   .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₁))]
+
+example : BodyOk decls inputCtx partialUnknownAccepted (.copy s₂) := bodyOkB_iff.mp (by decide)
+example : runBody decls 10 (inputEnv 55) partialUnknownAccepted (.copy s₂) = .exit 255 := by decide
+example : runBody decls 10 (inputEnv 56) partialUnknownAccepted (.copy s₂) = .trap .arithmeticOverflow := by
+  decide
 
 /-- Refused: `300` does not fit `u8` (ARITH-2). -/
 def literalTooBig : Program :=
