@@ -16,3 +16,5 @@
 - **ISS-0004 closure reworded** to the approved takedown: both site URLs return 404. The remaining
   action is an organisation admin unpublishing lambdaclass/concrete Pages; `docs/archive/site-down.md`
   records the partial takedown.
+- **ISS-0001 and ISS-0005 closed** on the evidence of CI run 42061363497 (success) at
+  915483933: the oracle job fetched, verified and ran the published oracle on `ubuntu-latest`.
