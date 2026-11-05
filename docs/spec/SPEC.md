@@ -12638,7 +12638,9 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   (the only normative form) with a checker proved to correspond, the one elaborator, the
   clock-indexed evaluator (the reference interpreter) and the conformance examples. The new compiler
   imports it and builds a proved lowering chain below Core; slice 1 gets a BIR → LLVM printer
-  labelled unverified, and the Lean Compiler Backend follows. Std, examples and tests migrate to the
+  labelled unverified, and the Lean Compiler Backend follows. Revised 2026-11-05 by
+  [proof infrastructure](#decided-project-proof-infrastructure): slice 0 gets the first BIR → LLVM
+  printer and slice 1 extends the same path. Std, examples and tests migrate to the
   decided language; the old pipeline is deleted after slice 1
   ([record](../archive/roadmap-2026-11/ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)).
   The record's "the browser compiler keeps running from the tag" is revised by row P9 below.
@@ -12691,6 +12693,68 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   linking and native-image assumptions stay explicit; only kernel-checked proofs count; items 4–7
   are proposed to the owner before each is built
   ([record](../archive/roadmap-2026-11/ROADMAP_DECISIONS.md#2026-11-01--compiler-proof-order)).
+  Strengthened 2026-11-05 by [proof infrastructure](#decided-project-proof-infrastructure): the
+  minimal path is built in cumulative slices, each used lowering proved as it lands.
+- <a id="decided-project-proof-infrastructure"></a>**Proof infrastructure from the first commit and
+  cumulative compiler slices** (owner, 2026-11-05: "i want to be able to prove from one point to the
+  other things from the beginning, everything should be designed to be proven right"; "we could start
+  by simple additions and things but the infra should be there"; "yes first unverified printer to llvm
+  and to lean backend we created right"; "and then we can do end to end proof"; Claude and Codex agree).
+  - *Slice 0.* The first executable compiler slice is slice 0: one source unit, no imports or grants,
+    parameterless `main` returning `u8`, explicitly typed immutable `u8` bindings, representable decimal
+    literals, local reads, grouping, checked addition and final return; other forms are refused as
+    unsupported. It traverses the actual frontend and each used lowering IR to BIR and an explicitly
+    unverified LLVM native build. Its examples include exit 42 from `20 + 22`, exit 255 at the
+    representable boundary, static overflow refusal, out-of-range literal refusal, unused-binding
+    refusal and malformed-input rejection; checked addition is proved over arbitrary representable
+    operands at the IR boundary, overflow included. Slice 0 work may start as a provisional skeleton
+    before the Core freeze (A2c), but it makes no authoritative or normative claim before the freeze.
+    Slice 0 is an engineering milestone: it does not replace slice 1's ownership, component/launcher,
+    accepted-trap or legacy-retirement obligations, and it does not trigger legacy deletion.
+  - *Proofs as each piece lands.* Every used IR has total executable Lean semantics and
+    well-formedness conditions. Every implemented lowering lands with kernel-checked preservation and
+    output-invariant proofs, directly or through a proved validator; unused future passes are not
+    required to exist. Frontend correspondence is stated independently; every undischarged frontend
+    obligation is explicit. The shipped compiler is these Lean definitions.
+  - *The composed theorem from the first slice.* Slice 0 includes a kernel-checked composed theorem
+    with separately named undischarged semantic premises (the holes), exact artifact binding, minimal
+    provenance and an inventory distinguishing logical axioms, implementation assumptions, execution
+    trust and model/environment contracts. Authoritative proofs use no `sorry`, `native_decide` or
+    axioms outside `propext`, `Quot.sound` and `Classical.choice`. CI checks both transitive axioms
+    and the registered semantic-premise closure, and fails when a stage is covered by neither a
+    theorem nor a registered premise. Claims with undischarged compiler implementation obligations are
+    labelled conditional.
+  - *The holes only shrink.* For an unchanged supported subset and target profile, no undischarged
+    obligation may be added or strengthened without owner approval. Splitting, renaming or
+    discharging obligations preserves recorded lineage. Extending the subset, runtime, environment or
+    target profile publishes an explicit assumption diff; new or strengthened assumptions need owner
+    approval.
+  - *Example-driven growth.* Features extend this path cumulatively, each with rule-indexed accepted
+    and refusal examples, trapping examples where admitted, semantics, checker correspondence, the
+    applicable soundness and preservation proofs, a program-specific correctness theorem for its
+    motivating example and classified Lean/native differential tests. Programs grow from simple
+    examples to file-copy (phase C's acceptance workload) and small real programs, ordered by the
+    constructs they need, then to larger real software.
+  - *Two kinds of proof.* Compiler correctness (the composed theorem: the executable does what the
+    source means, under its named premises) and program correctness (Lean theorems about one program:
+    its functional behaviour, failure behaviour and authority) are proved separately; a program is
+    fully proven only with both. A postcondition does not establish termination or freedom from
+    traps; capability checking establishes allowed authority use, not application correctness.
+    Inspection comes from capabilities and proofs. The legacy oracle is a differential cross-check
+    only and never overrides the Lean semantics.
+  - *Backend order.* Unverified BIR → LLVM first, then BIR → LCB with its adapter proof, then native
+    proof closure for the supported profile. LLVM and LCB claims have separate assumption
+    inventories; proving the BIR → LCB adapter removes that adapter obligation only when composed with
+    the applicable LCB theorems, and the LLVM profile stays unverified.
+  - *What it revises.* It amends the new-compiler row (slice 0, not slice 1, gets the first
+    BIR → LLVM printer; slice 1 extends the same path) and strengthens the proof-order row's minimal
+    path (proofs as each used lowering lands). It adds an earlier subset before row Q8.2's slice-1
+    subset and an earlier conditional image theorem before row Q8.1's slice-1 endpoint, neither of
+    which upgrades native assurance; Q8.1's source-to-BIR endpoint for slice 1 stands. Rows Q8.3–Q8.7
+    (independent frontend judgments, component/launcher separation, exact artifact closure,
+    non-vacuity), the A2b → A2c freeze (Q9.14, Q9.19), P18 and OD115–OD117 are inherited unchanged;
+    early example-specific Lean proofs need no new source contract forms. The arithmetic decisions,
+    grant schema, target order and retention decisions are not reopened.
 - <a id="decided-project-contracts"></a>**Contracts and termination in verified growth** (row P18,
   2026-11-05). No source `old`, quantifier, implication or snapshot construct (OD117); entry, exit and
   frame properties are stated as Lean theorems (a source frame clause would be a new owner decision);

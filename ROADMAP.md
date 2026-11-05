@@ -4,9 +4,13 @@ Concrete is a systems language with linear ownership, second-class references an
 capabilities. Its specification is a Lean library, `ConcreteSpec`: readable definitions with
 plain-words doc comments and conformance examples. A new compiler is built from that library, proof
 first, one slice of the language at a time, and each slice states the exact scope of its theorem.
-Slice 1's theorem covers its exact source down to BIR. Its native output is qualified by tests and
-labelled unverified; any claim about the native image is conditional on the LLVM, linker and image
-assumptions it lists. A proof that reaches native code is later work (phase E), not the first
+The first executable milestone is slice 0, a closed `u8` arithmetic subset traversing the actual
+compiler to an unverified LLVM native build. Each used lowering is proved as it lands. A composed
+conditional image theorem and its explicit assumptions accompany it. Slice 1 extends this path with
+its approved linear component and launcher obligations
+([decision](docs/spec/decisions.md#decided-project-proof-infrastructure)). Slice 1's theorem covers
+its exact source down to BIR. Its native output is qualified by tests and labelled unverified; any
+claim about the native image is conditional on the LLVM, linker and image assumptions it lists. A proof that reaches native code is later work (phase E), not the first
 milestone. The old compiler is frozen as `legacy-compiler-final`. A pinned build of that tag is the
 differential oracle, and the old pipeline is deleted at B3.
 
@@ -51,9 +55,10 @@ verbosity that buys clarity) get one home in `PHILOSOPHY.md` when the `wip/philo
    - the clock-indexed evaluator, which is the reference interpreter;
    - the conformance examples.
 
-   The compiler imports it and builds a proved lowering chain below Core. Slice 1 gets a BIR → LLVM
-   printer, labelled unverified. The Lean Compiler Backend follows
-   ([decision](docs/archive/roadmap-2026-11/ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)).
+   The compiler imports it and builds a proved lowering chain below Core. Slice 0 gets a BIR → LLVM
+   printer, labelled unverified; slice 1 extends the same path. The Lean Compiler Backend follows
+   ([decision](docs/archive/roadmap-2026-11/ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract),
+   [revised 2026-11-05](docs/spec/decisions.md#decided-project-proof-infrastructure)).
 4. **The old tree is legacy.** The owner chose a `legacy/` folder on main on 2026-11-04 and approved
    the restart details below on 2026-11-05 (decision rows P5–P8, P21, P22;
    [record](docs/spec/decisions.md#decided-project-restart)).
@@ -82,7 +87,10 @@ verbosity that buys clarity) get one home in `PHILOSOPHY.md` when the `wip/philo
       boundary.
    2. Executable Core semantics, where running out of fuel is distinct from divergence, with type,
       ownership and effect soundness.
-   3. One minimal end-to-end path, each pass preserving behaviour and invariants.
+   3. One minimal end-to-end path, built in cumulative slices from slice 0: each used lowering lands
+      with its preservation and output-invariant proofs, and the composed theorem, with its named
+      premises, is checked from the first slice
+      ([decision](docs/spec/decisions.md#decided-project-proof-infrastructure)).
    4. Functional models for safe code.
    5. Open-module correctness and C contracts.
    6. Ghost permissions for trusted code.
@@ -134,10 +142,10 @@ and owned by the task that removes its structural class.
 | phase | goal | done when |
 |---|---|---|
 | A. Core and theorem | Dispose of the spec audit. The owner decides the whole Core shape before implementation, in three stages: provisional approval (A2a), a proposed `Spec.lean` with four checked design theorems (A2b), and the owner's freeze (A2c). State the semantic contract and the end-to-end theorem in Lean, and list the trusted base. | Core frozen by the owner after the four design theorems are kernel-checked. The theorem, its holes and the trusted base on main. |
-| B. Slice 1 | `ConcreteSpec` and the new compiler for slice 1, from parsing to a native build: scalars, `let`, the move and use-after-move refusal of an empty struct without `Copy` consumed by a struct-destructuring `let`, one checked operation, and a return or a defined trap. | The slice's rules are inductive judgments, independent of the checker and the elaborator, with proved correspondence. Every judgment, semantics and pass is total. Fuel exhaustion is distinct from divergence. The theorem, exact-source component correctness down to BIR, is proved. The native build is qualified by tests, not proved: the LLVM output is labelled unverified, and its assumptions are listed with the lexer, model-translation and native-image obligations. A native-image claim, if any, is stated separately as conditional on those assumptions. Minimal provenance accompanies the first authoritative proof claims. The examples pass through the Lean semantics and the native build. The outside-reader test passes on the Lean rules. Then the old pipeline is deleted from `legacy/`. |
-| C. File-copy | Slices ordered by what a file-copy program needs: directories, `File`, `with(Fs)`, fallible operations, explicit cleanup on every error path, `defer`. Std, examples and tests come back as their constructs land. | The file-copy program, failure paths included, builds natively with its theorems. **0.1 is cut** with the supported subset, the unsupported constructs and the LLVM assumptions stated. |
+| B. Cumulative slices 0 and 1 | Slice 0 establishes the running proof infrastructure: a closed `u8` arithmetic subset through every used IR to an unverified LLVM native build, with per-lowering proofs and the composed conditional theorem. Then `ConcreteSpec` and the new compiler for slice 1, extending the same path, from parsing to a native build: scalars, `let`, the move and use-after-move refusal of an empty struct without `Copy` consumed by a struct-destructuring `let`, one checked operation, and a return or a defined trap. | The slice's rules are inductive judgments, independent of the checker and the elaborator, with proved correspondence. Every judgment, semantics and pass is total. Fuel exhaustion is distinct from divergence. The theorem, exact-source component correctness down to BIR, is proved. The native build is qualified by tests, not proved: the LLVM output is labelled unverified, and its assumptions are listed with the lexer, model-translation and native-image obligations. A native-image claim, if any, is stated separately as conditional on those assumptions. Minimal provenance accompanies the first authoritative proof claims. The examples pass through the Lean semantics and the native build. The outside-reader test passes on the Lean rules. Phase B closes only after slice 1 and B2/B3 acceptance; then the old pipeline is deleted from `legacy/`. |
+| C. File-copy | Workloads grow from simple proved examples to file-copy and then supported real programs; each records program correctness, authority, failure behaviour and residual assumptions. Slices ordered by what a file-copy program needs: directories, `File`, `with(Fs)`, fallible operations, explicit cleanup on every error path, `defer`. Std, examples and tests come back as their constructs land. | The file-copy program, failure paths included, builds natively with its theorems. **0.1 is cut** with the supported subset, the unsupported constructs and the LLVM assumptions stated. |
 | D. Whole language | The remaining constructs as slices. The paused workloads resume as their constructs land. | Every construct of the decided language is a slice with Lean rules, and the conformance suite is complete. |
-| E. Verified growth | Proof-order items 4–8, the Lean Compiler Backend native path, the verified parser, typed contracts, frame reasoning, termination proofs and the proof library. Contracts have no source `old` and no snapshot construct (OD117): a postcondition reaches the entry state only through an explicit Lean theorem. Spec functions are total (OD115). An ordinary function can get its own termination proof, and there is no total-function category (OD116). | Each item's theorem holds, with its residual assumptions stated. |
+| E. Verified growth | Proof-order items 4–8, the Lean Compiler Backend native path, the verified parser, typed contracts, frame reasoning, termination proofs and the proof library. Earlier slices already contain example-specific program theorems; E expands reusable models and proof support. Contracts have no source `old` and no snapshot construct (OD117): a postcondition reaches the entry state only through an explicit Lean theorem. Spec functions are total (OD115). An ordinary function can get its own termination proof, and there is no total-function category (OD116). | Each item's theorem holds, with its residual assumptions stated. |
 | F. Evidence as a product | Provenance, the canonical verification task, receipts and an independent consumer, all on the new Core. | Receipt v1 frozen. |
 | G. Release and ecosystem | External users, flagships, packages, editor, incremental builds, 1.0. | External-user acceptance, package evidence, conformance, compatibility and maintenance commitments hold for the released subset. |
 | T. Development throughput | Beside the sequence: the minimal root, then faster landing, review and CI. | The [targets](#development-throughput) hold. |
@@ -154,7 +162,8 @@ and owned by the task that removes its structural class.
 | A1 | Dispose of the spec audit and draft the boundaries Core must satisfy | R-0555, R-0312, R-0316 | Each audit finding, gap and duplication has an owner and an acceptance artifact. The [boundary drafts](docs/compiler/A1_BOUNDARIES.md) exist. |
 | A2b | Formalize the approved design in a proposed `Spec.lean` (current work) | R-0511, R-0559 | Exit to A2c: `ConcreteSpec/Spec.lean`, aligned with the decided rows, is headed "PROPOSED: not normative until Core freeze"; the four design theorems are kernel-checked; an outside reader has read it and their confusions are resolved. The four design theorems (`reset_fresh`, `defer_cleanup_releases`, `open_mut_freezes_root`, `rep_roundtrip`) and their full obligations are kernel-checked without `native_decide`. Every row the formalization changes returns to the owner. This is separate from slice 1's soundness theorems. |
 | A2c | Core freeze | R-0567 | The owner approves the freeze after A2b's four theorems and an outside-reader pass. Only then is PROPOSED removed. A3 sends Core back if it exposes a substantive change. |
-| A3 | State the contract, the theorem and the trusted base in Lean | R-0560, R-0496, R-0502, R-0506, R-0508, R-0509, R-0500 | The one-main-file layout and its gate exist. The theorem, with its holes, the named values-to-bytes boundary and the trusted-base inventory, is on main. |
+| A3 | State the contract, the theorem and the trusted base in Lean | R-0560, R-0496, R-0502, R-0506, R-0508, R-0509, R-0500 | The one-main-file layout and its gate exist. The theorem, with its holes, the named values-to-bytes boundary and the trusted-base inventory, is on main. The theorem skeleton uses concrete slice interfaces; its semantic-premise inventory is separate from the axiom audit. Slice 0 starts after A2c and the applicable A3 foundations for its authoritative claims; a provisional skeleton may start earlier and claims nothing normative. |
+| B0 | Build and qualify slice 0, the proof spine ([decision](docs/spec/decisions.md#decided-project-proof-infrastructure)) | R-0501, R-0503, R-0425, R-0118, R-0498 | Slice 0 runs through every used IR to unverified LLVM native execution, with per-lowering proofs, independent supported-subset coverage, the composed conditional image theorem, artifact binding, example correctness and classified differential and refusal controls. This does not trigger legacy deletion. |
 | B1 | Build `ConcreteSpec` and slice 1 with its theorem | R-0425, R-0499, R-0492, R-0493, R-0514, R-0501, R-0503, R-0497, R-0504, R-0507, R-0521, R-0552, R-0528, R-0479, R-0118 | Slice 1 runs from parsing to native code. Its judgments are independent, its correspondence and soundness are proved, its obligations are explicit and its provenance is minimal. Its conformance examples pass on both implementations. |
 | B2 | Qualify slice 1 | R-0491, R-0498, R-0272, R-0550 | Differential (Lean semantics, native build, legacy oracle), refusal and gate-integrity controls hold. The fuzzers target the new compiler. The outside-reader test passes. |
 | B3 | Audit totality, then delete the old pipeline | R-0553, R-0562, R-0561 | The totality audit finds no partial definition. Every `RETENTION.tsv` row for the old pipeline is resolved. Legacy defects are retired with the old implementation. The old pipeline is gone from `legacy/`; retained assets stay there until their rows resolve. |
@@ -240,35 +249,35 @@ archive. Rows for C–G are summaries. Each is refined when its phase becomes ne
 | R-0560 | One-main-file spec layout: every normative definition in `ConcreteSpec/Spec.lean`; proofs, tooling and derived views in files that import it | the layout exists; a gate refuses a normative definition outside the main file, with a negative control | A2c |
 | R-0496 | The semantic contract (outcomes, traces, authority, resources, the error model) and the clock-indexed evaluator | the contract is stated in Lean; the evaluator runs; fuel exhaustion is distinct from divergence; trap location and message, the exit-code mapping and the target observations are part of the contract, and until they are, every claim about executable behaviour is qualified by the model's abstract observations | R-0560 |
 | R-0502 | One value/raw-memory boundary and one layout authority | the boundary is named in the theorem; layout has one owner with its proofs | R-0496 |
-| R-0506 | Every proof boundary and validator obligation stated with its premises and status | obligations have explicit premises; transitive axiom classification is enforced | R-0496 |
-| R-0508 | The end-to-end theorem: maximal-behaviour refinement, frontend correspondence, resource adequacy, image transport | stated in Lean with its holes; proved progressively per slice; every target behaviour theorem has the [target-theorem shape](#target-theorem-shape) | R-0496, R-0502 |
-| R-0509 | The trusted-base inventory, evidence binding, assumption lifecycle and axiom replay | the inventory is on main; every claim's axioms are recorded and replayed from a clean checkout | R-0506 |
+| R-0506 | Every proof boundary and validator obligation stated with its premises and status | obligations have explicit premises; transitive axiom classification is enforced; CI audits semantic-premise closure separately from logical axioms and rejects unapproved assumption additions or strengthening | R-0496 |
+| R-0508 | The end-to-end theorem: maximal-behaviour refinement, frontend correspondence, resource adequacy, image transport | stated in Lean with its holes; proved progressively per slice; every target behaviour theorem has the [target-theorem shape](#target-theorem-shape); the concrete slice-0 theorem is stated and composed before B0 closes, retaining the maximal-behaviour, resource, observation and image-transport obligations | R-0496, R-0502 |
+| R-0509 | The trusted-base inventory, evidence binding, assumption lifecycle and axiom replay | the inventory is on main; every claim's axioms are recorded and replayed from a clean checkout; CI audits semantic-premise closure separately from logical axioms and rejects unapproved assumption additions or strengthening | R-0506 |
 | R-0500 | Each decided language rule gets its Lean judgment, semantic clause and accepted, refused or trapping examples | each rule lands with its slice; every rule of the decided language has one by the end of D | R-0560 |
 
-### B. Slice 1
+### B. Cumulative slices 0 and 1
 
 | task | objective | done when | depends on |
 |---|---|---|---|
-| R-0425 | The conformance format and suite: each example names its rule, source and outcome (result, refusal code or trap), and one runner per implementation runs it through the Lean semantics and through the compiler | slice 1's examples pass both runners; the suite is versioned and published at 0.1, and complete at D | R-0560 |
-| R-0499 | Independent Core judgments and an authoritative checker proved to correspond | correspondence proved for slice 1, with positive and rule-breaking mutation controls | R-0500 |
+| R-0425 | The conformance format and suite: each example names its rule, source and outcome (result, refusal code or trap), and one runner per implementation runs it through the Lean semantics and through the compiler | slice 1's examples pass both runners; the suite is versioned and published at 0.1, and complete at D; first applicable increment at B0; the approved slice-1 obligations remain due at B1 | R-0560 |
+| R-0499 | Independent Core judgments and an authoritative checker proved to correspond | correspondence proved for slice 1, with positive and rule-breaking mutation controls; first applicable increment at B0; the approved slice-1 obligations remain due at B1 | R-0500 |
 | R-0492 | Scope-resolved identities throughout; lexical identity distinct from persistent evidence identity | alias, symbol, binding and forgery controls hold | R-0499 |
-| R-0493 | Typed arithmetic and casts from one semantics, with arithmetic-site facts | widths, signedness, modes and the defined trap match the Lean semantics | R-0496 |
+| R-0493 | Typed arithmetic and casts from one semantics, with arithmetic-site facts | widths, signedness, modes and the defined trap match the Lean semantics; first applicable increment at B0; the approved slice-1 obligations remain due at B1 | R-0496 |
 | R-0514 | The compiler consumes the exact identity-resolved Core payload checked against the judgments | substitution controls hold | R-0499 |
-| R-0501 | Proved lowering passes for sequencing, matching, cleanup and check expansion | each pass preserves behaviour and re-establishes invariants | R-0514 |
-| R-0503 | The unverified BIR → LLVM path, the native driver and the pinned LLVM toolchain | output labelled unverified; LLVM, linker and runtime assumptions listed; the driver bounds external tools | R-0501 |
+| R-0501 | Proved lowering passes for sequencing, matching, cleanup and check expansion | each pass preserves behaviour and re-establishes invariants; the slice-0 instances are delivered at B0 and extended cumulatively at B1; every used lowering has preservation and output-invariant proofs | R-0514 |
+| R-0503 | The unverified BIR → LLVM path, the native driver and the pinned LLVM toolchain | output labelled unverified; LLVM, linker and runtime assumptions listed; the driver bounds external tools; the slice-0 instance is delivered at B0 and extended cumulatively at B1, labelled unverified | R-0501 |
 | R-0497 | Immutable pipeline artifacts bound to exact payloads | forgery, mutation and bypass compile-fail controls | R-0514 |
 | R-0504 | Validators with explicit soundness propositions | substitutions and wrong artifacts are rejected without inflating native assurance | R-0497 |
-| R-0507 | Type and ownership soundness over the executable semantics | proved for slice 1 | R-0496, R-0499 |
-| R-0521 | Minimal provenance and one canonical verification task for the first authoritative claims | a claim names its compiler, source, theorem and executable digest | R-0509 |
-| R-0552 | Per-compilation certificates (owner-approved 2026-10-25) | a build emits a certificate per output, and the kernel checks it | R-0504 |
+| R-0507 | Type and ownership soundness over the executable semantics | proved for slice 1; first applicable increment at B0; the approved slice-1 obligations remain due at B1 | R-0496, R-0499 |
+| R-0521 | Minimal provenance and one canonical verification task for the first authoritative claims | a claim names its compiler, source, theorem and executable digest; minimal provenance and kernel-checked per-compilation evidence accompany the first authoritative slice-0 claim; compiler-execution assumptions remain explicit where not discharged | R-0509 |
+| R-0552 | Per-compilation certificates (owner-approved 2026-10-25) | a build emits a certificate per output, and the kernel checks it; minimal provenance and kernel-checked per-compilation evidence accompany the first authoritative slice-0 claim; compiler-execution assumptions remain explicit where not discharged | R-0504 |
 | R-0528 | Resource limits on input size, memory, time and import closure | each input class has a limit and a hostile fixture | R-0503 |
 | R-0479 | Failures and refusals are never turned into facts; diagnostics name the valid next action | refusals survive through results, text, JSON and exit codes | R-0499 |
-| R-0118 | Generated coverage of passes, consumers, constructs, operations and traps | a missing row or a synthetic constructor fails the gate | R-0501 |
+| R-0118 | Generated coverage of passes, consumers, constructs, operations and traps | a missing row or a synthetic constructor fails the gate; B0 includes pipeline-edge coverage and controls for missing proofs, unregistered premises, wrong artifact substitution and reject-all compilation | R-0501 |
 | R-0491 | The defect inventory and the classified differential (Lean semantics, native build, legacy oracle) | comparisons are classified and campaigns are non-vacuous | R-0425, R-0564 |
-| R-0498 | Every enforcement claim maps to its gate leg and a targeted mutation | an unmapped claim fails; shape checks are labelled unproved | R-0118 |
+| R-0498 | Every enforcement claim maps to its gate leg and a targeted mutation | an unmapped claim fails; shape checks are labelled unproved; B0 includes pipeline-edge coverage and controls for missing proofs, unregistered premises, wrong artifact substitution and reject-all compilation | R-0118 |
 | R-0272 | Restart fuzzing against the new compiler on concrete-ci-2, seeded from the regressions and examples that survive in the repository and from newly generated programs (the ci-3 corpus and findings were not copied before the handover, decision row P14, and are lost), with reduction and counterexample-to-regression persistence | the generators emit slice-supported programs, the oracle is Lean semantics against native code, and findings become regressions; legacy fuzzing stopped at the move | B1 |
 | R-0550 | Compiler scaling and speed baselines at exact SHAs | scaling gates hold for each stage, and a planted regression is caught | B1 |
-| R-0553 | Totality audit: every semantics, checker, validator and pass is total and runs as proved | no partial definition; opaque execution gaps controlled | B2 |
+| R-0553 | Totality audit: every semantics, checker, validator and pass is total and runs as proved | no partial definition; opaque execution gaps controlled; totality and execution-gap checks apply from B0; B3 performs the cumulative audit | B2 |
 | R-0562 | The retention manifest `RETENTION.tsv` at the root, written before the move and checked before any deletion under `legacy/` | every legacy asset (corpora, regressions, examples, std, the bug ledger, the site, docs and the archived services) has a row with a destination and a deletion condition; deleting a path under `legacy/` whose row is unresolved is refused (control); the manifest and the task disposition table stay at the root and survive B3 | — |
 | R-0561 | Bug ledger by compiler | legacy defects are marked retired with the old implementation, never fixed, each keeping its reproducer, ruling and structural class; std defects move with std as contracts and regressions; every legacy ruling that states language behaviour becomes a conformance example or a recorded owner question; the minimal issue record of the day-one root becomes the new ledger with the first slice | R-0425 |
 | R-0569 | A new website, built from scratch with the new compiler (decision row P9) | the site is designed anew around the decided language; its playground runs the new compiler; it teaches and links the Lean rules and states no rule of its own; no page describes the legacy compiler or the language before the 2026-11 decisions as current | B1 |
@@ -293,7 +302,7 @@ archive. Rows for C–G are summaries. Each is refined when its phase becomes ne
 
 | task | objective | done when | depends on |
 |---|---|---|---|
-| R-0137 | Workload validation: each workload records its attempts, diagnostics and measurements | the dashboard covers every supported workload | C |
+| R-0137 | Workload validation: each workload records its attempts, diagnostics and measurements | the dashboard covers every supported workload; workloads grow from simple proved examples to file-copy and then supported real programs, each recording program correctness, authority, failure behaviour and residual assumptions | C |
 | R-0321 | The unsafe and trusted profile, with its VM pressure workload | the workload runs in the normal and checked profiles | C |
 | R-0285 | RocksDB slice 1 (paused) | open, read, write and close with linear handles and typed errors | C |
 | R-0490 | The ethlambda port (paused) | runs with its interop checkpoint | R-0285 |
