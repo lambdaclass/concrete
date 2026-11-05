@@ -117,17 +117,24 @@ finish() {
   mkdir -p "$(dirname "$rec")"
   for r in "${ROWS[@]}"; do printf '%s\t%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${HEAD:-?}" "$NAME" "$r"; done >> "$rec"
   printf '%s\t%s\t%s\tverdict\t%s\t\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${HEAD:-?}" "$NAME" "$verdict" >> "$rec"
-  # The rehearsal record train.sh's move gate reads (require_rehearsal): one row per run, keyed by
-  # the train head's tree and base, so the landing train (a new merge commit of the same base and
-  # members) finds it. Written for every verdict; only `accepted` satisfies the gate.
-  local reh="${ACCEPT_REHEARSALS:-$state/rehearsals.tsv}" tree="?" base="?"
+  # The rehearsal record train.sh's move gate reads (require_rehearsal): one row per run that built a
+  # train, keyed by the train head's tree and base, so the landing train (a new merge commit of the
+  # same base and members) finds it. Written for every verdict; only `accepted` satisfies the gate. A
+  # run that failed before it had a train head, tree and base (a bad ref, a failed build) binds no
+  # candidate and writes no row there (acceptance.tsv above still records it): train.sh refuses a
+  # malformed row outright, so an unbound row would block every later land.
+  local reh="${ACCEPT_REHEARSALS:-$state/rehearsals.tsv}" tree="" base=""
   if [ -n "$HEAD" ]; then
-    tree="$(git -C "$C" rev-parse "$HEAD^{tree}" 2>/dev/null || echo "?")"
-    base="$(sed -n 's/^base=//p' "$(cd "$C" && cd "$(git rev-parse --git-common-dir)" && pwd)/concrete-landing/$NAME/train.env" 2>/dev/null | tail -1)"
+    tree="$(git -C "$C" rev-parse "$HEAD^{tree}" 2>/dev/null || true)"
+    base="$(sed -n 's/^base=//p' "$(cd "$C" && cd "$(git rev-parse --git-common-dir)" && pwd)/concrete-landing/$NAME/train.env" 2>/dev/null | tail -n 1)"
   fi
-  mkdir -p "$(dirname "$reh")"
-  [ -s "$reh" ] || printf '# utc\tverdict\ttrain_head\ttrain_head_tree\tbase\tref\tname (scripts/land/acceptance.sh; read by train.sh require_rehearsal)\n' > "$reh"
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$verdict" "${HEAD:-?}" "$tree" "${base:-?}" "$REF" "$NAME" >> "$reh"
+  if [[ "$HEAD" =~ ^[0-9a-f]{40}$ && "$tree" =~ ^[0-9a-f]{40}$ && "$base" =~ ^[0-9a-f]{40}$ ]]; then
+    mkdir -p "$(dirname "$reh")"
+    [ -s "$reh" ] || printf '# utc\tverdict\ttrain_head\ttrain_head_tree\tbase\tref\tname (scripts/land/acceptance.sh; read by train.sh require_rehearsal)\n' > "$reh"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$verdict" "$HEAD" "$tree" "$base" "$REF" "$NAME" >> "$reh"
+  else
+    echo "acceptance: no train head, tree and base, so no rehearsal row (this run binds no candidate)"
+  fi
   local kept=""; [ "$KEEP" = 1 ] && kept="; clone $C"
   echo "acceptance: $verdict at ${HEAD:-?} (train $NAME; record $rec$kept)"
   [ "$verdict" = accepted ]; exit $?

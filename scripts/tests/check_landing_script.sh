@@ -595,6 +595,12 @@ for bad in "--name x"$'\n'"y" "--ref wip/a"$'\t'"b"; do
   [ "$r" = 2 ] && has "$o" "${bad%% *} must" && [ ! -e "$TMP/reh.forged" ] && [ ! -e "$TMP/acc.forged" ] \
     && ok "acceptance refuses ${bad%% *} with a record delimiter and writes no row" || { no "acceptance ${bad%% *} delimiter: exit $r"; echo "$o" | sed 's/^/      /'; }
 done
+# A run that fails before it has a train (here, a ref that does not exist) records its failure in
+# acceptance.tsv and writes no rehearsal row, so it cannot block the next rehearsal or land.
+o="$(cd "$W" && for v in $(compgen -e); do case "$v" in LAND_*|CONCRETE_SKIP_*) unset "$v" ;; esac; done
+     ACCEPT_REHEARSALS="$TMP/reh.early" ACCEPT_RECORD="$TMP/acc.early" bash "$ROOT_DIR/scripts/land/acceptance.sh" --ref wip/no-such-ref 2>&1)"; r=$?
+[ "$r" != 0 ] && [ ! -e "$TMP/reh.early" ] && has "$(cat "$TMP/acc.early" 2>/dev/null)" $'verdict\tfailed' \
+  && has "$o" "binds no candidate" && ok "an acceptance run that fails before building a train writes no rehearsal row" || { no "early acceptance failure: exit $r"; echo "$o" | sed 's/^/      /'; }
 # The gate keys on what the candidate touches, not on a name: a non-move train needs no record (t1
 # landed above with none), and the new root's inventory alone also makes a move.
 rm -f "$REH"
