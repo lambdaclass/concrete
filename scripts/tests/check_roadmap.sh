@@ -314,8 +314,8 @@ control completed_but_listed "g=g+'\n### Completed Task R-0507\n\ncontrol\n'" "R
 # A candidate naming a bug the ledger records fixed (102 is FIXED).
 control candidate_bug_fixed "import re; k=re.sub(r'^(rocksdb-slice1\t)[^\t]*', r'\g<1>102', k, count=1, flags=re.M)" "bug 102 is recorded fixed"
 # A completed task leaves the roadmap and its queue row, and transfers into it stay valid: R-0493
-# receives R-0222's obligations.
-accepted completed_leaves "import re; r,n=re.subn(r'^\| R-0493 \|.*\n','',r,count=1,flags=re.M); assert n==1; assert r.count('R-0492, R-0493, ')==1; assert 'R-0493' not in r.replace('R-0492, R-0493, ',''); r=r.replace('R-0492, R-0493, ','R-0492, '); g=g+'\n### Completed Task R-0493\n\ncontrol\n'"
+# receives R-0222's obligations. R-0493 is named in the B0 and B1 queue rows.
+accepted completed_leaves "import re; r,n=re.subn(r'^\| R-0493 \|.*\n','',r,count=1,flags=re.M); assert n==1; assert r.count('R-0499, R-0493, ')==1; r=r.replace('R-0499, R-0493, ','R-0499, '); assert r.count('R-0492, R-0493, ')==1; assert 'R-0493' not in r.replace('R-0492, R-0493, ',''); r=r.replace('R-0492, R-0493, ','R-0492, '); g=g+'\n### Completed Task R-0493\n\ncontrol\n'"
 
 echo "=== the repository ==="
 rc=0; out="$(check "$ROADMAP" "$TABLE" "$CLASSES" "$ROOT_DIR" "$CANDIDATES" "$README" 2>&1)" || rc=$?

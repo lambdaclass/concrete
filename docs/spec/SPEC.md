@@ -12715,7 +12715,9 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     well-formedness conditions. Every implemented lowering lands with kernel-checked preservation and
     output-invariant proofs, directly or through a proved validator; unused future passes are not
     required to exist. Frontend correspondence is stated independently; every undischarged frontend
-    obligation is explicit. The shipped compiler is these Lean definitions.
+    obligation is explicit. The shipped compiler is these Lean definitions. Before slice 0's authoritative
+    claim, its actual Core fragment is connected to the frozen definitions and any instrumentation
+    erasure it uses is proved; later features require integration proofs into that same Core.
   - *The composed theorem from the first slice.* Slice 0 includes a kernel-checked composed theorem
     with separately named undischarged semantic premises (the holes), exact artifact binding, minimal
     provenance and an inventory distinguishing logical axioms, implementation assumptions, execution
@@ -12732,7 +12734,8 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   - *Example-driven growth.* Features extend this path cumulatively, each with rule-indexed accepted
     and refusal examples, trapping examples where admitted, semantics, checker correspondence, the
     applicable soundness and preservation proofs, a program-specific correctness theorem for its
-    motivating example and classified Lean/native differential tests. Programs grow from simple
+    motivating example, transport of that theorem to the exact compiled artifact through the composed
+    compiler theorem under its named premises, and classified Lean/native differential tests. Programs grow from simple
     examples to file-copy (phase C's acceptance workload) and small real programs, ordered by the
     constructs they need, then to larger real software.
   - *Two kinds of proof.* Compiler correctness (the composed theorem: the executable does what the
