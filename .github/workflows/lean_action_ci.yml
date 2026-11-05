@@ -74,6 +74,32 @@ jobs:
       - name: "Oracle publish (release tag at the locked commit; refusals hold)"
         run: bash scripts/tests/check_oracle_publish.sh
 
+  # THE ORACLE ON A GITHUB-HOSTED RUNNER (ISS-0001, ISS-0005; P13; ROADMAP R-0564). Always
+  # ubuntu-latest, never the self-hosted pool, whatever CONCRETE_SELF_HOSTED says: every run shows
+  # that a runner without concrete-ci-2's ~/oracle cache gets a verified oracle from the published
+  # release alone (scripts/oracle/fetch.sh), and that it runs (smoke.con exits 42). No published
+  # artifact, a failed download, a digest or manifest mismatch or an install that fails verification
+  # makes ci_check.sh exit 3 (INCOMPLETE) and the job fail: it is never reported as passed.
+  # It is a GitHub-hosted job, so a pull_request may run it (no self-hosted runner is involved).
+  oracle-hosted:
+    name: Oracle (GitHub-hosted fetch + smoke)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: "Oracle fetch (missing, corrupt or unverifiable artifact is INCOMPLETE; negative controls)"
+        run: bash scripts/tests/check_oracle_fetch.sh
+
+      - name: "Fetch the published oracle, verify it, run smoke.con through it (exit 42)"
+        run: bash scripts/oracle/ci_check.sh
+
   grammar:
     name: LL(1) grammar check
     runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
