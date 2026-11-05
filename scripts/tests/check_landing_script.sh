@@ -512,6 +512,108 @@ PY
 )"; rc=$?
 [ "$rc" = 0 ] && [ -z "$out" ] && ok "required-checks.txt = the workflow's landing tier" || { no "required-checks.txt disagrees with the workflow (rc=$rc)"; echo "$out" | sed 's/^/      /'; }
 
+echo "=== the move gate: legacy/ lands only with an accepted rehearsal of that exact candidate ==="
+cd "$W" || exit 2
+git checkout -q main && git fetch -q origin && git reset -q --hard origin/main
+MB="$(git rev-parse HEAD)"
+git checkout -q -b bmove "$MB"; mkdir -p legacy; printf 'old tree\n' > legacy/old.txt; commit_all bmove
+out="$(bash "$TRAIN" build tm bmove 2>&1)" || { no "move train build"; echo "$out" | sed 's/^/      /'; }
+git checkout -q train/tm
+HM="$(git rev-parse HEAD)"; TM="$(git rev-parse 'HEAD^{tree}')"
+bash "$TRAIN" check tm --no-remote >/dev/null 2>&1 || no "move train check"
+printf '[{"databaseId": 5151, "headSha": "%s", "createdAt": "9999-01-01T00:00:00Z"}]' "$HM" > "$FAKE_GH_DIR/list.json"
+bash "$TRAIN" ci tm >/dev/null 2>&1 || no "move train ci"
+runjson "$HM" success success
+REH="$TMP/state/rehearsals.tsv"
+move_leg(){ # label expected-text: both land and dry-run land refuse, main stays put, the dry run exits 5
+  local o r
+  o="$(bash "$TRAIN" land tm 2>&1)"; r=$?
+  [ "$r" = 1 ] && has "$o" "is a legacy/ move candidate" && has "$o" "$2" && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$MB" ] \
+    && ok "land refuses the move with $1" || { no "land with $1 (exit $r)"; echo "$o" | sed 's/^/      /'; }
+  o="$(bash "$TRAIN" --dry-run land tm 2>&1)"; r=$?
+  [ "$r" = 5 ] && has "$o" "every other land check passed; refused only by the move gate" && has "$o" "$2" \
+    && ok "dry-run land refuses the move with $1 (exit 5, every other check passed)" || { no "dry-run land with $1 (exit $r)"; echo "$o" | sed 's/^/      /'; }
+}
+rm -f "$REH"
+move_leg "no rehearsal record" "no rehearsal record"
+printf '# header\n2026-11-05T00:00:00Z\taccepted\t%s\t%s\t%s\twip/other\tother\n' "$(git rev-parse b1)" "$(git rev-parse 'b1^{tree}')" "$MB" > "$REH"
+move_leg "an accepted rehearsal of another candidate (another tree)" "the record holds other candidates only"
+printf '2026-11-05T00:00:01Z\taccepted\t%s\t%s\t%s\tbmove\tbase-moved\n' "$HM" "$TM" "$BASE" >> "$REH"
+move_leg "an accepted rehearsal of the same tree on another base" "the record holds other candidates only"
+printf '2026-11-05T00:00:02Z\tfailed\t%s\t%s\t%s\tbmove\taccept-x\n' "$HM" "$TM" "$MB" >> "$REH"
+move_leg "a failed rehearsal of this candidate" "was failed, not accepted"
+printf '2026-11-05T00:00:03Z\tincomplete\t%s\t%s\t%s\tbmove\taccept-y\n' "$HM" "$TM" "$MB" >> "$REH"
+move_leg "an incomplete rehearsal of this candidate" "was incomplete, not accepted"
+# A corrupt row (here, the shape a newline smuggled through a field would leave) refuses outright.
+cp "$REH" "$TMP/reh.good"
+printf 'accepted\t%s\t%s\n' "$TM" "$MB" >> "$REH"
+out="$(bash "$TRAIN" --dry-run land tm 2>&1)"; rc=$?
+[ "$rc" = 1 ] && has "$out" "is not a rehearsal row" && ok "a malformed rehearsal row refuses the land (not skipped, not exit 5)" || { no "malformed row: dry-run land exit $rc"; echo "$out" | sed 's/^/      /'; }
+cp "$TMP/reh.good" "$REH"
+# The acceptance run builds its own train: build the same member again under another name, check the
+# tree is the same, and let that train's record authorize this one.
+bash "$TRAIN" build tmb bmove >/dev/null 2>&1 || no "second move train build"
+HMB="$(git rev-parse train/tmb)"
+[ "$HMB" != "$HM" ] && [ "$(git rev-parse 'train/tmb^{tree}')" = "$TM" ] \
+  && ok "two trains of the same base and member: different merge commits, the same tree" || no "second train: head $HMB tree $(git rev-parse 'train/tmb^{tree}') vs $HM $TM"
+git checkout -q train/tm
+printf '2026-11-05T00:00:04Z\taccepted\t%s\t%s\t%s\tbmove\ttmb\n' "$HMB" "$TM" "$MB" >> "$REH"
+out="$(bash "$TRAIN" --dry-run land tm 2>&1)"; rc=$?
+[ "$rc" = 0 ] && has "$out" "acceptance accepted tree ${TM:0:10}" && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$MB" ] \
+  && ok "an accepted rehearsal by another train of the same tree and base satisfies the gate" || { no "accepted rehearsal: dry-run land exit $rc"; echo "$out" | sed 's/^/      /'; }
+out="$(bash "$TRAIN" land tm --keep-main-ci 2>&1)"; rc=$?
+[ "$rc" = 0 ] && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$HM" ] \
+  && ok "the rehearsed move lands" || { no "rehearsed move land: exit $rc"; echo "$out" | sed 's/^/      /'; }
+# A move staged over several candidates: legacy/ is already on main, and the next candidate moves more
+# into it. It adds no marker, and is still a move candidate needing its own rehearsal.
+git checkout -q -b bmove3 "$HM"; printf 'more of the old tree\n' > legacy/more.txt; commit_all bmove3
+bash "$TRAIN" build tm3 bmove3 >/dev/null 2>&1 || no "staged move train build"
+git checkout -q train/tm3; HM3="$(git rev-parse HEAD)"
+bash "$TRAIN" check tm3 --no-remote >/dev/null 2>&1 || no "staged move train check"
+printf '[{"databaseId": 5353, "headSha": "%s", "createdAt": "9999-01-01T00:00:00Z"}]' "$HM3" > "$FAKE_GH_DIR/list.json"
+bash "$TRAIN" ci tm3 >/dev/null 2>&1 || no "staged move train ci"
+runjson "$HM3" success success
+out="$(bash "$TRAIN" --dry-run land tm3 2>&1)"; rc=$?
+[ "$rc" = 5 ] && has "$out" "the record holds other candidates only" \
+  && ok "a staged move (legacy/ already on the base) still needs a rehearsal of its own" || { no "staged move: dry-run land exit $rc"; echo "$out" | sed 's/^/      /'; }
+MB="$HM"
+# acceptance.sh's dry-run leg passes a refusal only when it is exit 5 with the marker as a whole line.
+(
+  . "$ROOT_DIR/scripts/land/lib.sh"
+  dryland_only_move_gate 5 "x"$'\n'"$MOVE_GATE_MARKER"$'\n'"train: land: ..." && echo pass1
+  dryland_only_move_gate 5 "train: land: refused" || echo pass2
+  dryland_only_move_gate 1 "$MOVE_GATE_MARKER" || echo pass3
+  dryland_only_move_gate 4 "$MOVE_GATE_MARKER" || echo pass4
+  dryland_only_move_gate 5 "note: $MOVE_GATE_MARKER" || echo pass5
+  dryland_only_move_gate 5 "${MOVE_GATE_MARKER%.}" || echo pass6
+) > "$TMP/dl.out" 2>&1
+[ "$(tr '\n' ' ' < "$TMP/dl.out")" = "pass1 pass2 pass3 pass4 pass5 pass6 " ] \
+  && ok "acceptance's dry-run leg: exit 5 + whole marker line passes; no marker, another exit, a prefixed or altered marker fail" || { no "dryland classifier: $(cat "$TMP/dl.out")"; }
+# acceptance.sh refuses a --name or --ref that could forge a record row, before writing anything.
+for bad in "--name x"$'\n'"y" "--ref wip/a"$'\t'"b"; do
+  o="$(cd "$W" && ACCEPT_REHEARSALS="$TMP/reh.forged" ACCEPT_RECORD="$TMP/acc.forged" bash "$ROOT_DIR/scripts/land/acceptance.sh" --ref wip/x ${bad%% *} "${bad#* }" 2>&1)"; r=$?
+  [ "$r" = 2 ] && has "$o" "${bad%% *} must" && [ ! -e "$TMP/reh.forged" ] && [ ! -e "$TMP/acc.forged" ] \
+    && ok "acceptance refuses ${bad%% *} with a record delimiter and writes no row" || { no "acceptance ${bad%% *} delimiter: exit $r"; echo "$o" | sed 's/^/      /'; }
+done
+# A run that fails before it has a train (here, a ref that does not exist) records its failure in
+# acceptance.tsv and writes no rehearsal row, so it cannot block the next rehearsal or land.
+o="$(cd "$W" && for v in $(compgen -e); do case "$v" in LAND_*|CONCRETE_SKIP_*) unset "$v" ;; esac; done
+     ACCEPT_REHEARSALS="$TMP/reh.early" ACCEPT_RECORD="$TMP/acc.early" bash "$ROOT_DIR/scripts/land/acceptance.sh" --ref wip/no-such-ref 2>&1)"; r=$?
+[ "$r" != 0 ] && [ ! -e "$TMP/reh.early" ] && has "$(cat "$TMP/acc.early" 2>/dev/null)" $'verdict\tfailed' \
+  && has "$o" "binds no candidate" && ok "an acceptance run that fails before building a train writes no rehearsal row" || { no "early acceptance failure: exit $r"; echo "$o" | sed 's/^/      /'; }
+# The gate keys on what the candidate touches, not on a name: a non-move train needs no record (t1
+# landed above with none), and the new root's inventory alone also makes a move.
+rm -f "$REH"
+git checkout -q -b bmove2 "$MB"; mkdir -p scripts/checks; printf 'README.md\n' > scripts/checks/root_inventory.txt; commit_all bmove2
+bash "$TRAIN" build tm2 bmove2 >/dev/null 2>&1 || no "inventory train build"
+git checkout -q train/tm2; HM2="$(git rev-parse HEAD)"
+bash "$TRAIN" check tm2 --no-remote >/dev/null 2>&1 || no "inventory train check"
+printf '[{"databaseId": 5252, "headSha": "%s", "createdAt": "9999-01-01T00:00:00Z"}]' "$HM2" > "$FAKE_GH_DIR/list.json"
+bash "$TRAIN" ci tm2 >/dev/null 2>&1 || no "inventory train ci"
+runjson "$HM2" success success
+out="$(bash "$TRAIN" --dry-run land tm2 2>&1)"; rc=$?
+[ "$rc" = 5 ] && has "$out" "no rehearsal record" && ok "a candidate adding scripts/checks/root_inventory.txt is a move too" || { no "inventory move: dry-run land exit $rc"; echo "$out" | sed 's/^/      /'; }
+
 echo
 echo "check_landing_script: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

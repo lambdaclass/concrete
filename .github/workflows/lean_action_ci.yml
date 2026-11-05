@@ -71,6 +71,9 @@ jobs:
       - name: "Landing script (required checks and their transitions; refusals hold)"
         run: bash scripts/tests/check_landing_script.sh
 
+      - name: "Oracle publish (release tag at the locked commit; refusals hold)"
+        run: bash scripts/tests/check_oracle_publish.sh
+
   grammar:
     name: LL(1) grammar check
     runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}

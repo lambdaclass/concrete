@@ -46,10 +46,15 @@
 # Output: one line per leg (passed | failed | skipped | incomplete) and a verdict: accepted (every
 # leg passed), incomplete (none failed, some skipped, or main moved before the dry-run land so
 # train.sh refused the stale candidate; re-run), or failed. Results are bound to the train's head SHA and
-# appended to <state>/acceptance.tsv. Exit 0 only for `accepted`.
+# appended to <state>/acceptance.tsv; the verdict is also appended to <state>/rehearsals.tsv, keyed by
+# the train head's tree and base, which is the record train.sh's move gate requires before the legacy/
+# move lands (<state> = <git common dir>/concrete-landing of the clone this runs in: run it in the
+# clone that will land). Exit 0 only for `accepted`.
 set -uo pipefail
 
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/land/lib.sh
+. "$SELF_DIR/lib.sh"
 REF="" NAME="" RUN_ID="" KEEP=0
 declare -A SKIP=()
 while [ $# -gt 0 ]; do
@@ -64,6 +69,10 @@ while [ $# -gt 0 ]; do
   esac; shift
 done
 [ -n "$REF" ] || { echo "acceptance: --ref is required (a ref not yet on main)" >&2; exit 2; }
+# REF and NAME go into the tab-separated records (rehearsals.tsv is what train.sh's move gate trusts),
+# so they are checked before any leg runs or any row is written: a refused run writes nothing.
+case "$REF" in *[[:space:]]*|*[[:cntrl:]]*) echo "acceptance: --ref must not contain whitespace or control characters" >&2; exit 2 ;; esac
+case "$NAME" in *[!A-Za-z0-9._-]*|.*|*..*) echo "acceptance: --name must be [A-Za-z0-9._-]+ and not start with '.'" >&2; exit 2 ;; esac
 bad_env="$(compgen -e | grep -E '^(LAND_|CONCRETE_SKIP_)' || true)"
 [ -z "$bad_env" ] || { echo "acceptance: refusing to run with $(echo $bad_env) set (remote, hook or gate overrides)" >&2; exit 2; }
 
@@ -103,10 +112,29 @@ finish() {
   local verdict=accepted
   [ "$SKIPPED" = 1 ] && verdict=incomplete
   [ "$FAILED" = 1 ] && verdict=failed
-  local rec="${ACCEPT_RECORD:-$SRC_REPO/.git/concrete-landing/acceptance.tsv}"
+  local state; state="$(cd "$SRC_REPO" && cd "$(git rev-parse --git-common-dir)" && pwd)/concrete-landing"
+  local rec="${ACCEPT_RECORD:-$state/acceptance.tsv}"
   mkdir -p "$(dirname "$rec")"
   for r in "${ROWS[@]}"; do printf '%s\t%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${HEAD:-?}" "$NAME" "$r"; done >> "$rec"
   printf '%s\t%s\t%s\tverdict\t%s\t\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${HEAD:-?}" "$NAME" "$verdict" >> "$rec"
+  # The rehearsal record train.sh's move gate reads (require_rehearsal): one row per run that built a
+  # train, keyed by the train head's tree and base, so the landing train (a new merge commit of the
+  # same base and members) finds it. Written for every verdict; only `accepted` satisfies the gate. A
+  # run that failed before it had a train head, tree and base (a bad ref, a failed build) binds no
+  # candidate and writes no row there (acceptance.tsv above still records it): train.sh refuses a
+  # malformed row outright, so an unbound row would block every later land.
+  local reh="${ACCEPT_REHEARSALS:-$state/rehearsals.tsv}" tree="" base=""
+  if [ -n "$HEAD" ]; then
+    tree="$(git -C "$C" rev-parse "$HEAD^{tree}" 2>/dev/null || true)"
+    base="$(sed -n 's/^base=//p' "$(cd "$C" && cd "$(git rev-parse --git-common-dir)" && pwd)/concrete-landing/$NAME/train.env" 2>/dev/null | tail -n 1)"
+  fi
+  if [[ "$HEAD" =~ ^[0-9a-f]{40}$ && "$tree" =~ ^[0-9a-f]{40}$ && "$base" =~ ^[0-9a-f]{40}$ ]]; then
+    mkdir -p "$(dirname "$reh")"
+    [ -s "$reh" ] || printf '# utc\tverdict\ttrain_head\ttrain_head_tree\tbase\tref\tname (scripts/land/acceptance.sh; read by train.sh require_rehearsal)\n' > "$reh"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$verdict" "$HEAD" "$tree" "$base" "$REF" "$NAME" >> "$reh"
+  else
+    echo "acceptance: no train head, tree and base, so no rehearsal row (this run binds no candidate)"
+  fi
   local kept=""; [ "$KEEP" = 1 ] && kept="; clone $C"
   echo "acceptance: $verdict at ${HEAD:-?} (train $NAME; record $rec$kept)"
   [ "$verdict" = accepted ]; exit $?
@@ -181,7 +209,21 @@ do_ci() {
   fi
 }
 do_watch() { TRAIN watch "$NAME" --interval 60; }
-do_dryland() { TRAIN --dry-run land "$NAME"; }
+# A move candidate (R-0558) cannot pass the dry-run land outright: train.sh's move gate wants the
+# accepted rehearsal this very run is producing. train.sh puts that gate after every other land check
+# and exits 5 when it is the only refusal, so 5 with that diagnostic is this leg passing; any other
+# refusal, and a 5 without it, is not.
+do_dryland() {
+  local out rc
+  out="$(TRAIN --dry-run land "$NAME" 2>&1)"; rc=$?
+  printf '%s\n' "$out"
+  [ "$rc" = 0 ] && return 0
+  if dryland_only_move_gate "$rc" "$out"; then
+    echo "dry-run land: every land check passed except the move gate, which this run's record satisfies"
+    return 0
+  fi
+  return "$rc"
+}
 
 # The tampering gh: real `gh`, except that `run view --json ...` output is edited per $ACCEPT_TAMPER.
 # Each edit it actually makes is appended to $ACCEPT_TAMPER_LOG, so a control can prove its mutation.

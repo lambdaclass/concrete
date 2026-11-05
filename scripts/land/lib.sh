@@ -4,6 +4,8 @@
 #   land_assert_no_op what      die if a merge, rebase, cherry-pick or revert is in progress
 #   legs_start name log cmd...  run cmd in the background as a named leg, output to log
 #   legs_wait                   wait for every leg; sets LEGS_FAILED, LEGS_SUM, LEGS_REPORT
+#   MOVE_GATE_MARKER            the line train.sh's dry-run land prints when only the move gate refused
+#   dryland_only_move_gate rc out   0 iff a dry-run land exited 5 with MOVE_GATE_MARKER as a whole line
 #
 # A LEG is one independent validation (impact gates, remote full gates, Codex review). Legs of one
 # candidate run at the same time and are all collected: one failing leg fails the whole, and no
@@ -59,4 +61,14 @@ legs_wait() {
     [ "$rc" = 0 ] || LEGS_FAILED="${LEGS_FAILED:+$LEGS_FAILED }${LEG_NAMES[$i]}"
   done
   LEG_NAMES=(); LEG_PIDS=(); LEG_LOGS=()
+}
+
+# The move gate's dry-run diagnostic (train.sh require_rehearsal; acceptance.sh's dry-run land leg).
+# One definition, so the two cannot drift apart; matched as a whole line, never as a substring.
+MOVE_GATE_MARKER="train (dry-run): every other land check passed; refused only by the move gate."
+dryland_only_move_gate() { # rc out
+  [ "$1" = 5 ] || return 1
+  local l
+  while IFS= read -r l; do [ "$l" = "$MOVE_GATE_MARKER" ] && return 0; done <<< "$2"
+  return 1
 }
