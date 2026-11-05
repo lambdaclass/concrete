@@ -22,8 +22,8 @@
 #     base's unless an explicit transition row replaces or retires it) is present and succeeded, and
 #     origin/main is still the train's base. A moved main means rebuild and re-run:
 #     a result is bound to the exact candidate that ran.
-#   * (2026-11-05) a candidate that moves the old tree into legacy/ lands only with an accepted
-#     acceptance rehearsal of that exact candidate (same train-head tree, same base) in
+#   * (2026-11-05) a candidate that touches legacy/ or the root inventory (the legacy/ move) lands
+#     only with an accepted acceptance rehearsal of that exact candidate (same train-head tree, same base) in
 #     <state>/rehearsals.tsv; see require_rehearsal. A dry run refused only by that gate exits 5.
 #   * pushes name the exact SHA, never `HEAD` (push-both.sh: HEAD can move during a wait), and a
 #     remote named `fork` is refused outright.
@@ -702,24 +702,32 @@ cmd_watch() {
 
 # --- land ----------------------------------------------------------------------------------------
 
-# THE MOVE GATE (R-0558, R-0563). A candidate that moves the old tree into legacy/ (it has legacy/,
-# or the new root's scripts/checks/root_inventory.txt, and its base has neither) lands only when
+# THE MOVE GATE (R-0558, R-0563). A candidate that moves the old tree into legacy/ lands only when
 # $STATE_ROOT/rehearsals.tsv holds an `accepted` row for it, written by scripts/land/acceptance.sh.
+# Which candidates count as a move is decided conservatively, from base..head and not from names: one
+# that changes anything under legacy/ or scripts/checks/root_inventory.txt (the new root's
+# inventory), or whose head has a `legacy` entry that is not a directory. So a move staged across
+# several candidates (a scaffold first, the compiler later) needs a rehearsal at every step, and so
+# does any later edit under legacy/ (B3 deletes it), which is rare by design.
 # The candidate is identified by its train head's TREE and its base: the acceptance run builds its own
 # train, whose merge commit differs from this one's, but the same base and members give the same
 # tree, and a tree is exactly what lands. A different tree, a different base or any other verdict is
 # no rehearsal of this candidate. Columns (tab-separated, `#` lines are comments):
 #   utc  verdict  train_head  train_head_tree  base  ref  name
+# A row that is not exactly that (7 fields, verdict accepted|failed|incomplete, 40-hex ids) is a
+# corrupt record and refuses the land outright rather than being skipped.
 # A real land refuses (exit 1). A dry run that reaches this gate has passed every other land check;
 # without the record it refuses with exit 5 and says so, which is what acceptance.sh's own dry-run
 # land leg expects of a move candidate (it writes the record only after that leg).
+# TRUST BOUNDARY: the gate lives in this script, so it holds only while the train.sh that runs the
+# land has it. A candidate that edits train.sh changes the land path for every later land; review
+# must keep require_rehearsal on it. Nothing here defends against a reviewed change that removes it.
 REHEARSALS="$STATE_ROOT/rehearsals.tsv"
 is_move_candidate() { # base head
-  local p
-  for p in legacy scripts/checks/root_inventory.txt; do
-    if git cat-file -e "$2:$p" 2>/dev/null && ! git cat-file -e "$1:$p" 2>/dev/null; then return 0; fi
-  done
-  return 1
+  local t
+  t="$(git cat-file -t "$2:legacy" 2>/dev/null || true)"
+  [ -z "$t" ] || [ "$t" = tree ] || return 0
+  [ -n "$(git diff --name-only "$1" "$2" -- legacy scripts/checks/root_inventory.txt)" ]
 }
 require_rehearsal() { # name base head
   local name="$1" base="$2" head="$3" tree why=""
@@ -728,6 +736,8 @@ require_rehearsal() { # name base head
   if [ ! -s "$REHEARSALS" ]; then
     why="no rehearsal record ($REHEARSALS does not exist or is empty)"
   else
+    local bad; bad="$(awk -F'\t' '!/^#/ && !(NF==7 && $2 ~ /^(accepted|failed|incomplete)$/ && $3 ~ /^[0-9a-f]{40}$/ && $4 ~ /^[0-9a-f]{40}$/ && $5 ~ /^[0-9a-f]{40}$/) {print NR; exit}' "$REHEARSALS")"
+    [ -z "$bad" ] || die "land: $REHEARSALS line $bad is not a rehearsal row (utc verdict head tree base ref name); fix or remove the record"
     local mine; mine="$(awk -F'\t' -v t="$tree" -v b="$base" '!/^#/ && $4==t && $5==b' "$REHEARSALS")"
     if printf '%s\n' "$mine" | awk -F'\t' '$2=="accepted" {f=1} END {exit !f}'; then
       note "move candidate: acceptance accepted tree ${tree:0:10} on base ${base:0:10} ($(printf '%s\n' "$mine" | awk -F'\t' '$2=="accepted"' | tail -1 | cut -f1,3,6 | tr '\t' ' '))"
@@ -739,9 +749,9 @@ require_rehearsal() { # name base head
     fi
   fi
   log_row "$name" land refused "move without an accepted rehearsal"
-  local msg="land: ${head:0:10} moves the old tree into legacy/, and there is no accepted rehearsal for its tree ${tree:0:10} on base ${base:0:10}: $why. Run scripts/land/acceptance.sh --ref <member> in this clone first."
+  local msg="land: ${head:0:10} is a legacy/ move candidate (it touches legacy/ or the root inventory), and there is no accepted rehearsal for its tree ${tree:0:10} on base ${base:0:10}: $why. Run scripts/land/acceptance.sh --ref <member> in this clone first."
   if [ "$DRY" = 1 ]; then
-    echo "train (dry-run): every other land check passed; refused only by the move gate." >&2
+    echo "$MOVE_GATE_MARKER" >&2
     echo "train: $msg" >&2
     exit 5
   fi

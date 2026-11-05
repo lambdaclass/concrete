@@ -27,15 +27,17 @@ COMMIT="$(lock commit)"
 [ "$(basename "$1")" = "$NAME" ] || die "the asset must be named $NAME"
 if gh release view "$RTAG" -R "$REPO" >/dev/null 2>&1; then
   # The release exists: its tag must already name the locked commit.
-  AT="$(gh api "repos/$REPO/commits/$RTAG" --jq .sha 2>/dev/null)" || die "cannot resolve tag $RTAG on $REPO"
+  AT="$(gh api "repos/$REPO/commits/tags/$RTAG" --jq .sha 2>/dev/null)" || die "cannot resolve tag $RTAG on $REPO"
   [ "$AT" = "$COMMIT" ] || die "release $RTAG on $REPO is at commit $AT, the lock says $COMMIT"
 else
   gh release create "$RTAG" -R "$REPO" --target "$COMMIT" --title "Legacy oracle $(lock tag)" \
     --notes "The frozen legacy compiler (tag $(lock tag), commit $COMMIT) as the differential oracle. sha256 $WANT. Rebuild and verify: scripts/oracle/build.sh."
-  AT="$(gh api "repos/$REPO/commits/$RTAG" --jq .sha 2>/dev/null)" || die "cannot resolve the new tag $RTAG on $REPO"
+  AT="$(gh api "repos/$REPO/commits/tags/$RTAG" --jq .sha 2>/dev/null)" || die "cannot resolve the new tag $RTAG on $REPO"
   [ "$AT" = "$COMMIT" ] || die "the new release $RTAG on $REPO is at commit $AT, not $COMMIT"
 fi
-if gh release view "$RTAG" -R "$REPO" --json assets --jq '.assets[].name' 2>/dev/null | grep -qxF "$NAME"; then
+# The asset names, one per line; matched as a whole line (no pipe into a short-circuiting grep).
+ASSETS="$(gh release view "$RTAG" -R "$REPO" --json assets --jq '.assets[].name')" || die "cannot list the assets of $RTAG on $REPO"
+if case $'\n'"$ASSETS"$'\n' in *$'\n'"$NAME"$'\n'*) true ;; *) false ;; esac; then
   echo "publish: $RTAG already holds $NAME; verifying it"
 else
   gh release upload "$RTAG" "$1" -R "$REPO"

@@ -53,6 +53,8 @@
 set -uo pipefail
 
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/land/lib.sh
+. "$SELF_DIR/lib.sh"
 REF="" NAME="" RUN_ID="" KEEP=0
 declare -A SKIP=()
 while [ $# -gt 0 ]; do
@@ -67,6 +69,10 @@ while [ $# -gt 0 ]; do
   esac; shift
 done
 [ -n "$REF" ] || { echo "acceptance: --ref is required (a ref not yet on main)" >&2; exit 2; }
+# REF and NAME go into the tab-separated records (rehearsals.tsv is what train.sh's move gate trusts),
+# so they are checked before any leg runs or any row is written: a refused run writes nothing.
+case "$REF" in *[[:space:]]*|*[[:cntrl:]]*) echo "acceptance: --ref must not contain whitespace or control characters" >&2; exit 2 ;; esac
+case "$NAME" in *[!A-Za-z0-9._-]*|.*|*..*) echo "acceptance: --name must be [A-Za-z0-9._-]+ and not start with '.'" >&2; exit 2 ;; esac
 bad_env="$(compgen -e | grep -E '^(LAND_|CONCRETE_SKIP_)' || true)"
 [ -z "$bad_env" ] || { echo "acceptance: refusing to run with $(echo $bad_env) set (remote, hook or gate overrides)" >&2; exit 2; }
 
@@ -205,7 +211,7 @@ do_dryland() {
   out="$(TRAIN --dry-run land "$NAME" 2>&1)"; rc=$?
   printf '%s\n' "$out"
   [ "$rc" = 0 ] && return 0
-  if [ "$rc" = 5 ] && printf '%s\n' "$out" | grep -q "every other land check passed; refused only by the move gate"; then
+  if dryland_only_move_gate "$rc" "$out"; then
     echo "dry-run land: every land check passed except the move gate, which this run's record satisfies"
     return 0
   fi

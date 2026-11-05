@@ -63,7 +63,7 @@ case "$1 $2" in
   "release upload")
     cp "$4" "$S/asset"; basename "$4" > "$S/asset_name"
     echo $(( $(cat "$S/uploads" 2>/dev/null || echo 0) + 1 )) > "$S/uploads"; exit 0 ;;
-  "api repos/example/repo/commits/oracle-test-tag")
+  "api repos/example/repo/commits/tags/oracle-test-tag")
     [ -f "$S/tag_commit" ] && cat "$S/tag_commit" || exit 1; exit 0 ;;
 esac
 echo "fake gh: unexpected: $*" >&2; exit 9
