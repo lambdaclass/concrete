@@ -96,8 +96,12 @@ ownership transfer (`move`) keeps the facts for the receiving binding while stil
 source. So `let Pair { a: x, b: y } = Pair { a: 200, b: 100 }; x + y` is refused exactly as
 `let a = 200; let b = 100; a + b` is (`fieldOverflowTrap`, `overflowTrap`). The exclusions stay:
 nothing is tracked through mutable state (slice 1 has none), along branches or paths, through
-user-function calls, or through calls the table does not name; and facts do not depend on the
-A-normal-form temporaries an elaborator introduces. In slice 1 struct fields are scalars, so the
+user-function calls, or through calls the table does not name. Slice 1 judges Core, where every
+`let` is immutable and a binding's origin is not recorded, so a temporary the elaborator introduces
+gets the same fact as a source binding of the same expression. The remaining exclusion, that
+acceptance of a source program does not depend on how the elaborator names its subexpressions, is
+an obligation on the source-to-Core elaboration relation, which slice 1 does not define; it is not
+proved here. In slice 1 struct fields are scalars, so the
 rule's recursive form (a struct field holding a struct, nested patterns, tuples) has only its
 one-level instance here. An input is not known: `add100` and `partialUnknownAccepted` are the
 accepted bodies that trap for some input values. The table has more entries (module constants, the
