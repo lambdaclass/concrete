@@ -323,8 +323,9 @@ gh_check ok
 cmd_="$(cat "$FAKE_GH_DIR/transport.cmd" 2>/dev/null)"
 has "$cmd_" "impact_gates.sh --base $BASE --head $HEAD1 --src-ref refs/heads/train/t1 --dst-ref refs/heads/ci/t1" \
   && ok "the host runs the hook's selection over exactly base..head on ci/t1" || no "remote command: $cmd_"
-has "$cmd_" 'export CONCRETE_TEST_FWD=a\ b;' && ! has "$cmd_" CONCRETE_SKIP_GATES \
-  && ok "CONCRETE_* is forwarded quoted, CONCRETE_SKIP_GATES never" || no "forwarded env: $cmd_"
+has "$cmd_" 'export CONCRETE_TEST_FWD=a\ b;' && ! has "$cmd_" 'export CONCRETE_SKIP_GATES' \
+  && [ "${cmd_%%;*}" = "unset CONCRETE_SKIP_GATES CONCRETE_PREPUSH_REENTERED" ] \
+  && ok "CONCRETE_* is forwarded quoted; the bypass is never forwarded and is cleared first" || no "forwarded env: $cmd_"
 grep -qx "head=$HEAD1" "$ATT" 2>/dev/null && [ "$(tail -n 1 "$ATT")" = complete=1 ] && [ -f "$ATT.log" ] \
   && ok "the pass is attested for the train head, with the host's log kept" || no "no attestation for $HEAD1 at $ATT"
 rowis check passed && has "$(lastrow)" "impact on fakehost" && has "$(cat "$TMP/state/t1/train.env")" "checked=$HEAD1" \
@@ -440,6 +441,76 @@ mklog "$R2" 0 status=pass; lib ppr_remote_attest "$R" "$TMP/rlog" gatehost "$R1"
 mklog "$R2" 0 status=pass-deferred "deferred_gate=bash scripts/g.sh" && lib ppr_remote_attest "$R" "$TMP/rlog" gatehost "$R2" \
   && [ "$(reuse "$R2")" = REUSE ] && [ "$(lib ppr_remote_deferred "$R")" = "bash scripts/g.sh" ] \
   && ok "a pass-deferred remote run is reused and its deferrals reported" || no "pass-deferred"
+has "$( ( export CONCRETE_PREPUSH_REENTERED=1; reuse "$R2" ) )" "REUSE" \
+  && ok "the hook's nix re-entry bookkeeping does not break reuse (push from outside the gate shell)" || no "REENTERED breaks reuse"
+
+echo "=== gate host end to end: the real ssh transport, shimmed, carries the command intact ==="
+# The real gates_remote.sh -> gates_transport_ssh.sh -> run-at-ref.sh chain, with ssh and scp
+# replaced by local shims (the "host" is a directory) and a committed stub impact_gates.sh that
+# records its environment and writes the hook's record the way the real hook would, unless the
+# bypass is set (then it "skips", exit 0, no record: what the real hook does).
+RI="$TMP/ri"; HH="$TMP/gatehost"; mkdir -p "$HH"
+git init -q --bare "$TMP/ri-origin.git"; git init -q "$RI"
+( cd "$RI" && git remote add origin "$TMP/ri-origin.git" && mkdir -p scripts/land \
+  && echo 'leanprover/lean4:v0' > lean-toolchain && echo 'echo gate' > scripts/g.sh \
+  && cat > scripts/land/impact_gates.sh <<'EOF'
+#!/usr/bin/env bash
+# stub: --base B --head H --src-ref S --dst-ref D
+env -0 > "$CONCRETE_TEST_OUT/remote.env"
+printf '%s\n' "$@" > "$CONCRETE_TEST_OUT/remote.args"
+[ -z "${CONCRETE_SKIP_GATES:-}" ] || { echo "pre-push: gates SKIPPED"; exit 0; }
+source "$CONCRETE_TEST_LIB"
+t="$(mktemp -d)"
+git diff --name-only "$2" "$4" > "$t/changed"
+printf 'bash scripts/g.sh\n' > "$t/plan"
+ppr_remote_components "$PWD" "$4" "$t/changed" "$t/plan" "$t/comp" || { echo "stub: $PPR_REASON"; exit 1; }
+{ echo "format=concrete-prepush-record-v1"; cat "$t/comp"; echo status=pass; echo complete=1; } > "$(git rev-parse --git-path concrete-prepush-record)"
+rm -rf "$t"
+echo "impact: stub gates passed"
+EOF
+  git add -A && git commit -qm base && git push -q origin HEAD:main \
+  && echo 'echo gate2' > scripts/g2.sh && git add -A && git commit -qm head )
+RIB="$(git -C "$RI" rev-parse HEAD~1)" RIH="$(git -C "$RI" rev-parse HEAD)"
+git clone -q "$TMP/ri-origin.git" "$HH/concrete2"
+cat > "$TMP/scp-shim" <<'EOF'
+#!/usr/bin/env bash
+# scp -r <dir> host:<name>  ->  copy into the fake host's home
+src="${@: -2:1}" dst="${@: -1}"
+cp -r "$src" "$GATEHOST_HOME/${dst#*:}"
+EOF
+cat > "$TMP/ssh-shim" <<'EOF'
+#!/usr/bin/env bash
+# ssh <host> <command>: the command runs in the fake host's home, through a login shell that is not bash's
+# own quoting (sh -c), with the gate bypass exported on the host side.
+[ -f "$GATEHOST_HOME/unreachable" ] && { echo "ssh: connect to host $1 port 22: No route to host" >&2; exit 255; }
+cd "$GATEHOST_HOME" && HOME="$GATEHOST_HOME" RUN_AT_REF_NO_NIX=1 CONCRETE_SKIP_GATES=1 sh -c "$2"
+EOF
+chmod +x "$TMP/scp-shim" "$TMP/ssh-shim"
+INJ="$(printf 'one\nCONCRETE_Y; touch %s/PWNED; #=two $(touch %s/PWNED2) %s %s' "$TMP" "$TMP" "'q'" '"d"')"
+e2e(){ # -> runs gates_remote.sh in $RI for base..head; output in $out, status in $rc
+  out="$(cd "$RI" && GATEHOST_HOME="$HH" LAND_GATES_SSH="$TMP/ssh-shim" LAND_GATES_SCP="$TMP/scp-shim" \
+    CONCRETE_TEST_OUT="$TMP" CONCRETE_TEST_LIB="$ROOT_DIR/scripts/tests/lib/prepush_record.sh" CONCRETE_INJ="$INJ" \
+    bash "$ROOT_DIR/scripts/land/gates_remote.sh" --host fakehost --base "$RIB" --head "$RIH" 2>&1)"; rc=$?
+}
+e2e
+RIATT="$(cd "$RI" && git rev-parse --git-path concrete-prepush-remote-record)"; case "$RIATT" in /*) ;; *) RIATT="$RI/$RIATT" ;; esac
+[ "$rc" = 0 ] && has "$out" "sha=$RIH clone=" && has "$out" "stub gates passed" && grep -qx "head=$RIH" "$RIATT" 2>/dev/null \
+  && ok "the real transport runs the head on the host and the pass is attested" || { no "e2e transport: exit $rc"; echo "$out" | sed 's/^/      /'; }
+[ ! -e "$TMP/PWNED" ] && [ ! -e "$TMP/PWNED2" ] && ! grep -qz '^CONCRETE_Y' "$TMP/remote.env" && grep -qz '^CONCRETE_TEST_LIB=' "$TMP/remote.env" \
+  && ok "a forwarded value with newlines, \$( ) and quotes runs nothing on the host" || no "forwarded env executed on the host"
+python3 -I -c 'import sys; sys.exit(0 if ("CONCRETE_INJ=" + sys.argv[2]).encode() in open(sys.argv[1], "rb").read().split(b"\0") else 1)' "$TMP/remote.env" "$INJ" && ok "the forwarded value arrives byte for byte" || no "forwarded value altered"
+! grep -qz '^CONCRETE_SKIP_GATES=' "$TMP/remote.env" && ok "the host's own CONCRETE_SKIP_GATES is cleared before the hook" || no "host-side bypass reached the hook"
+[ -z "$(ls -A "$HH" | grep -v '^concrete2$\|^runs$')" ] && ok "the host keeps no bundle or script after the run" || no "host leftovers: $(ls -A "$HH")"
+printf 'scripts/g2.sh\n' > "$TMP/ri.changed"; printf 'bash scripts/g.sh\n' > "$TMP/ri.plan"
+dec="$( cd "$RI" && export CONCRETE_TEST_OUT="$TMP" CONCRETE_TEST_LIB="$ROOT_DIR/scripts/tests/lib/prepush_record.sh" CONCRETE_INJ="$INJ" \
+  && source "$ROOT_DIR/scripts/tests/lib/prepush_record.sh" && ppr_remote_components "$RI" "$RIH" "$TMP/ri.changed" "$TMP/ri.plan" "$TMP/ri.comp" \
+  && ppr_remote_check "$RI" "$TMP/ri.comp" && echo REUSE || echo "refused:$PPR_REASON" )"
+[ "$dec" = REUSE ] && ok "the push's hook reuses the record the host's run produced" || no "e2e reuse: $dec"
+dec="$( cd "$RI" && source "$ROOT_DIR/scripts/tests/lib/prepush_record.sh" && ppr_remote_components "$RI" "$RIH" "$TMP/ri.changed" "$TMP/ri.plan" "$TMP/ri.comp" \
+  && ppr_remote_check "$RI" "$TMP/ri.comp" && echo REUSE || echo "refused:$PPR_REASON" )"
+has "$dec" "refused:changed:env" && ok "a push in another CONCRETE_* environment than the host's run does not reuse it" || no "e2e env mismatch: $dec"
+touch "$HH/unreachable"; e2e; rm -f "$HH/unreachable"
+[ "$rc" = 3 ] && has "$out" "INCOMPLETE" && [ ! -f "$RIATT" ] && ok "the real transport to an unreachable host is INCOMPLETE (exit 3), attests nothing" || { no "e2e unreachable: exit $rc"; echo "$out" | sed 's/^/      /'; }
 hook="$ROOT_DIR/.githooks/pre-push"
 hb="$(grep -n 'ppr_remote_check "\$ROOT_DIR"' "$hook" | cut -d: -f1)"; hs="$(grep -n '^# A run is starting' "$hook" | cut -d: -f1)"
 [ -n "$hb" ] && [ -n "$hs" ] && [ "$hb" -lt "$hs" ] && [ "$(sed -n "$hb,$((hb+12))p" "$hook" | grep -cE '^ +exit 0$')" = 1 ] \

@@ -185,13 +185,15 @@ when set (empty means none), else `git config land.gatesHost`. Set it once per c
 With a gate host, `check`'s impact leg is `scripts/land/gates_remote.sh`:
 
 1. It bundles `base..head` under a temporary ref.
-2. The transport (`scripts/land/gates_transport_ssh.sh`) copies the bundle to the host, runs
-   `git fetch origin` in the host's gate clone (`~/concrete2`), and pipes this checkout's
-   `run-at-ref.sh` through ssh. The host therefore needs no GitHub credentials and no copy of the
-   landing scripts.
+2. The transport (`scripts/land/gates_transport_ssh.sh`) copies one directory to the host: the
+   bundle, this checkout's `run-at-ref.sh`, and a script that quotes the command for bash. The
+   host's login shell sees only `bash land-remote-<id>/run.sh`. That script runs `git fetch origin`
+   in the host's gate clone (`~/concrete2`), runs `run-at-ref.sh` on the bundle, and removes the
+   directory. The host therefore needs no GitHub credentials and no copy of the landing scripts.
 3. In a fresh clone of exactly the head, the host runs `impact_gates.sh`: the same hook, with the
-   same input line the `ci` push will present. This checkout's `CONCRETE_*` variables are forwarded
-   to it, except `CONCRETE_SKIP_GATES` and `CONCRETE_GATES_SHELL`.
+   same input line the `ci` push will present. The command first unsets `CONCRETE_SKIP_GATES`
+   (whatever the host's environment holds) and the hook's re-entry marker. Then it exports this
+   checkout's `CONCRETE_*` variables, NUL-delimited, with validated names and `%q`-quoted values.
 
 The verdict comes from the log, bound to the SHA. The log must hold exactly one start line and one
 exit line from `run-at-ref.sh`, and both must name the head.
@@ -202,8 +204,10 @@ exit line from `run-at-ref.sh`, and both must name the head.
 | gates failed at the head | 1 | the check fails |
 | run at another SHA, unreachable host, lost connection, log missing either line | 3 | **INCOMPLETE**: the check fails and the log records `check incomplete` |
 
-INCOMPLETE is never a pass. It does not fall back to running the gates here. Running them on this
-machine takes the explicit `train.sh check <name> --local-gates`.
+INCOMPLETE is never a pass. It does not fall back to running the gates here. With a gate host
+configured, running them on this machine takes the explicit `train.sh check <name> --local-gates`.
+A clone with no gate host (CI, the landing gate's sandbox, a bot that runs on the gate host itself)
+runs them here, says so, and logs `impact here`.
 
 **Reuse at the `ci` push.** When the host's hook wrote a validation record, the log carries it
 between `=== concrete-remote-record-begin` / `-end` markers. On a pass, the train worktree keeps two
@@ -228,7 +232,7 @@ Host-specific components (compiler binary, lean, cc) describe the host and are n
 check fails, the hook names the reason and runs the gates here. If the host passed but wrote no
 record, the leg passes and says that the push will run the gates locally.
 
-A new check removes the previous attestation. The attestation and its log are files in the git
+Each run of `gates_remote.sh`, and each `check`, first removes the previous attestation. The attestation and its log are files in the git
 directory, like the local record. They catch mismatches, truncation and digest-breaking edits. They
 are not a signature against someone who can write the git directory.
 

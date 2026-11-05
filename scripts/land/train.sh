@@ -488,7 +488,8 @@ cmd_check() {
   if [ "$review" = 1 ] && [ -z "$(review_cmd)" ]; then review=0; fi
   local ghost=""; [ "$local_gates" = 1 ] || ghost="$(gates_host)"
   local impact_cmd=(bash "$SELF_DIR/impact_gates.sh") impact_where="here"
-  if [ -n "$ghost" ]; then impact_cmd=(bash "$SELF_DIR/gates_remote.sh" --host "$ghost"); impact_where="on $ghost"; fi
+  if [ -n "$ghost" ]; then impact_cmd=(bash "$SELF_DIR/gates_remote.sh" --host "$ghost"); impact_where="on $ghost"
+  elif [ "$local_gates" = 0 ]; then note "no gate host configured (LAND_GATES_HOST / git config land.gatesHost): the impact gates run on this machine"; fi
   # The attestation describes one run; a new check withdraws the previous one before it starts.
   [ "$DRY" = 1 ] || rm -f "$(git rev-parse --git-path concrete-prepush-remote-record)" \
     "$(git rev-parse --git-path concrete-prepush-remote-record).log"

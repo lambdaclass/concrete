@@ -32,7 +32,8 @@
 #                    the selection would happen to coincide.
 #   seed             the fuzz seed, when a selected command reads $SEED (the runner derives it from
 #                    the UTC date).
-#   env              digest of every CONCRETE_* environment variable.
+#   env              digest of every CONCRETE_* environment variable but the bypass and the hook's
+#                    re-entry bookkeeping (_ppr_env_digest).
 #
 # A record is written only after a fully successful run, atomically, with `complete=1` as its LAST
 # line; a missing, truncated, failed or foreign record simply does not match. A run in which a gate's
@@ -101,6 +102,13 @@ _ppr_gate_defs() { # root -> digest
   rm -f "$list" "$hashes"
 }
 
+_ppr_env_digest() { # -> digest of the CONCRETE_* environment that can change what a gate does
+  # Excluded: the bypass itself, and CONCRETE_PREPUSH_REENTERED, the hook's own bookkeeping of
+  # having re-entered `nix develop` (set when `git push` was typed outside the gate shell). Neither
+  # reaches a gate, and the second would make a push from outside the gate shell never match.
+  env | grep '^CONCRETE_' | grep -Ev '^CONCRETE_(SKIP_GATES|PREPUSH_REENTERED)=' | LC_ALL=C sort | ts_digest
+}
+
 # ppr_components ROOT PUSHED_SHAS CHANGED_FILE PLAN_FILE OUT_FILE
 #   PUSHED_SHAS: whitespace-separated local SHAs of the refs being pushed.
 # Writes `key=value` lines to OUT_FILE. Returns 1 with PPR_REASON when this push cannot be recorded
@@ -140,7 +148,7 @@ ppr_components() {
   sel="$(ts_digest < "$plan_f")"
   base="$(LC_ALL=C sort -u "$changed_f" | sed '/^$/d' | ts_digest)"
   if grep -q 'SEED' "$plan_f"; then seed="${SEED:-$(date -u +%Y%m%d)}"; else seed="unused"; fi
-  envd="$(env | grep '^CONCRETE_' | grep -v '^CONCRETE_SKIP_GATES=' | LC_ALL=C sort | ts_digest)"
+  envd="$(_ppr_env_digest)"
   local kv k v
   for kv in "tracked=$tracked" "untracked=$untracked" "checker_build=$ckb" "binary=$bin" "gate_defs=$gates" \
             "selection=$sel" "base=$base" "env=$envd"; do
@@ -308,7 +316,7 @@ ppr_remote_components() {
   sel="$(ts_digest < "$plan_f")"
   base="$(LC_ALL=C sort -u "$changed_f" | sed '/^$/d' | ts_digest)"
   if grep -q 'SEED' "$plan_f"; then seed="${SEED:-$(date -u +%Y%m%d)}"; else seed="unused"; fi
-  envd="$(env | grep '^CONCRETE_' | grep -v '^CONCRETE_SKIP_GATES=' | LC_ALL=C sort | ts_digest)"
+  envd="$(_ppr_env_digest)"
   {
     echo "head=$head"
     echo "pushed=$sorted"
@@ -360,18 +368,26 @@ _ppr_remote_log_ok() { # log sha -> 0 when the log is a passing run at sha carry
   grep -qE "^\[concrete-remote\] ref=[^ ]+ sha=$sha( |\$)" "$log" || { PPR_REASON="remote_log_other_sha"; return 1; }
   [ "$(grep -c '^\[concrete-remote\] exit=' "$log")" = 1 ] || { PPR_REASON="remote_log_exit_not_unique"; return 1; }
   grep -qE "^\[concrete-remote\] exit=0 .*sha=$sha\$" "$log" || { PPR_REASON="remote_run_not_a_pass_at_sha"; return 1; }
-  block="$(ppr_remote_block "$log")" || { PPR_REASON="remote_record_absent"; return 1; }
-  # The remote record: complete, passing, ours (the same rules as ppr_check), and about this SHA.
-  [ "$(printf '%s\n' "$block" | tail -n 1)" = "complete=1" ] || { PPR_REASON="remote_record_incomplete"; return 1; }
-  [ "$(printf '%s\n' "$block" | grep -c '^status=')" = 1 ] || { PPR_REASON="remote_record_status_not_unique"; return 1; }
-  printf '%s\n' "$block" | grep -qxE "status=(pass|pass-deferred)" || { PPR_REASON="remote_record_not_a_pass"; return 1; }
-  if printf '%s\n' "$block" | grep -qx "status=pass-deferred"; then
-    printf '%s\n' "$block" | grep -q '^deferred_gate=.' || { PPR_REASON="remote_record_deferral_unnamed"; return 1; }
-  elif printf '%s\n' "$block" | grep -q '^deferred_gate='; then
+  # The block goes to a file and is grepped there: a pipe into `grep -q` lets SIGPIPE decide.
+  block="$(mktemp)" || { PPR_REASON="tmp_unavailable"; return 1; }
+  ppr_remote_block "$log" > "$block" || { rm -f "$block"; PPR_REASON="remote_record_absent"; return 1; }
+  _ppr_record_ok "$block" "$sha"; local rc=$?
+  rm -f "$block"; return "$rc"
+}
+
+_ppr_record_ok() { # file sha -> the remote record in FILE is complete, passing, ours and about SHA
+  local f="$1" sha="$2"
+  # The same rules as ppr_check.
+  [ "$(tail -n 1 "$f")" = "complete=1" ] || { PPR_REASON="remote_record_incomplete"; return 1; }
+  [ "$(grep -c '^status=' "$f")" = 1 ] || { PPR_REASON="remote_record_status_not_unique"; return 1; }
+  grep -qxE "status=(pass|pass-deferred)" "$f" || { PPR_REASON="remote_record_not_a_pass"; return 1; }
+  if grep -qx "status=pass-deferred" "$f"; then
+    grep -q '^deferred_gate=.' "$f" || { PPR_REASON="remote_record_deferral_unnamed"; return 1; }
+  elif grep -q '^deferred_gate=' "$f"; then
     PPR_REASON="remote_record_pass_with_deferral"; return 1
   fi
-  printf '%s\n' "$block" | grep -qx "format=$PPR_FORMAT" || { PPR_REASON="remote_record_format_mismatch"; return 1; }
-  [ "$(printf '%s\n' "$block" | grep -c '^head=')" = 1 ] && printf '%s\n' "$block" | grep -qx "head=$sha" \
+  grep -qx "format=$PPR_FORMAT" "$f" || { PPR_REASON="remote_record_format_mismatch"; return 1; }
+  [ "$(grep -c '^head=' "$f")" = 1 ] && grep -qx "head=$sha" "$f" \
     || { PPR_REASON="remote_record_other_head"; return 1; }
   return 0
 }
@@ -395,14 +411,16 @@ ppr_remote_check() {
   [ -f "$dlog" ] || { PPR_REASON="attested_log_missing"; return 1; }
   grep -qx "log_digest=$(ts_digest < "$dlog")" "$rec" || { PPR_REASON="attested_log_changed"; return 1; }
   _ppr_remote_log_ok "$dlog" "$head" || return 1
-  block="$(ppr_remote_block "$dlog")"
+  block="$(mktemp)" || { PPR_REASON="tmp_unavailable"; return 1; }
+  ppr_remote_block "$dlog" > "$block"
   while IFS= read -r line; do
     k="${line%%=*}"; v="${line#*=}"
     [ -n "$k" ] || continue
-    [ "$(printf '%s\n' "$block" | grep -c "^$k=")" = 1 ] || { diff="$diff $k"; continue; }
-    rv="$(printf '%s\n' "$block" | grep "^$k=" | head -1)"; rv="${rv#*=}"
+    [ "$(grep -c "^$k=" "$block")" = 1 ] || { diff="$diff $k"; continue; }
+    rv="$(grep "^$k=" "$block")"; rv="${rv#*=}"
     [ "$rv" = "$v" ] || diff="$diff $k"
   done < "$comp"
+  rm -f "$block"
   if [ -n "$diff" ]; then PPR_REASON="changed:${diff# }"; return 1; fi
   return 0
 }

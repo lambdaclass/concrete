@@ -55,6 +55,8 @@ id="$(date -u +%Y%m%dT%H%M%S)-$$-$RANDOM"
 ref="refs/land-remote/$id"
 cleanup() { git update-ref -d "$ref" 2>/dev/null || true; rm -rf "$TMPD"; }
 trap cleanup EXIT
+# This run replaces any earlier attestation: whatever it ends in, no older result stands beside it.
+rm -f "$(ppr_remote_path "$ROOT")" "$(ppr_remote_log_path "$ROOT")" 2>/dev/null || true
 git update-ref "$ref" "$head" || incomplete "cannot create $ref"
 # base..head only: the host's clone already has base (it is on main). A host that lacks it cannot
 # fetch the bundle, which is a transport failure (INCOMPLETE), never a pass.
@@ -62,14 +64,19 @@ if [ "$base" = "$head" ]; then range=("$ref"); else range=("$ref" "^$base"); fi
 git bundle create "$TMPD/candidate.bundle" "${range[@]}" >/dev/null 2>&1 \
   || incomplete "git bundle create failed"
 
-# The command run in the host's clone, with this environment's CONCRETE_* forwarded (quoted).
+# The command run in the host's clone. It first clears the gate bypass and the hook's re-entry
+# bookkeeping, whatever the host's environment holds: a hook that skips its gates exits 0, and a
+# skipped run must never read as a pass. Then this environment's CONCRETE_* variables are forwarded:
+# NUL-delimited (a value may hold newlines), names validated, values quoted with %q.
 fwd=""
-while IFS='=' read -r k v; do
-  case "$k" in CONCRETE_SKIP_GATES|CONCRETE_GATES_SHELL|"") continue ;; CONCRETE_*) ;; *) continue ;; esac
+while IFS= read -r -d '' kv; do
+  k="${kv%%=*}"; v="${kv#*=}"
+  [[ "$k" =~ ^CONCRETE_[A-Za-z0-9_]+$ ]] || continue
+  case "$k" in CONCRETE_SKIP_GATES|CONCRETE_GATES_SHELL|CONCRETE_PREPUSH_REENTERED) continue ;; esac
   fwd="$fwd export $k=$(printf '%q' "$v");"
-done < <(env | grep '^CONCRETE_' | LC_ALL=C sort)
+done < <(env -0 | LC_ALL=C sort -z)
 q() { printf '%q' "$1"; }
-cmd="$fwd bash scripts/land/impact_gates.sh --base $(q "$base") --head $(q "$head") --src-ref $(q "$src") --dst-ref $(q "$dst")"
+cmd="unset CONCRETE_SKIP_GATES CONCRETE_PREPUSH_REENTERED;$fwd bash scripts/land/impact_gates.sh --base $(q "$base") --head $(q "$head") --src-ref $(q "$src") --dst-ref $(q "$dst")"
 cmd="$cmd && { r=\"\$(git rev-parse --git-path concrete-prepush-record)\"; if [ -f \"\$r\" ]; then echo $(q "$PPR_REMOTE_BEGIN"); cat \"\$r\"; echo $(q "$PPR_REMOTE_END"); else echo '=== concrete-remote-record-none'; fi; }"
 
 LOG="$TMPD/remote.log"
