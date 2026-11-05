@@ -1508,6 +1508,8 @@ fn main() -> u8 { let n: N = N { v: 42 }; let N { v } = n; return v; }
 - Obligation: none
 - Evidence: tested
 
+**Revised by the owner 2026-11-05** ([row Q6.4](decisions.md#decided-2026-11-05-revisions)): a constant whose initializer provably fails is refused at compile time whether or not it is used (OD118). Both examples below, `unused-constant-never-runs` and `constant-traps-at-use`, become reject examples when this rule is written in Lean; until then the revision governs over them. When an initializer runs (at each use, never at start) is unchanged.
+
 **Rationale.** A constant has no storage: the binary inlines its initializer at each use and the
 interpreter evaluates it there, so a trap in an initializer (ARITH-3) happens at the use. A constant
 is immutable and holds no capability or token (TRUST-8). Absorbed from

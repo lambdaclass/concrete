@@ -55,6 +55,8 @@ An ambiguous bound call uses `Trait::method(&x, ...)` (completed OD6, TRAIT-6).
 - Obligation: none
 - Evidence: tested
 
+**Revised by the owner 2026-11-05** ([row Q2.8](decisions.md#decided-2026-11-05-revisions)): two impls with equal heads may coexist when Copy/Destroy disjointness (OD28) makes their domains disjoint, one bounded `T: Copy` and the other `T: Destroy`. No other coherence or orphan rule changes, and no disjunctive bound is added.
+
 **Rationale.** Both impls used to enter the method tables under one spelling (`Foo_m`). Native
 code then failed in `llvm-as` with a redefined function, and the interpreter refused only when
 the call ran. Neither is a language rule; the refusal now happens at the impl.

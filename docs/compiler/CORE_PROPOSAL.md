@@ -1,31 +1,21 @@
 # Core proposal (draft for A2)
 
-**Precedence.** This draft is background. The governing proposal is the set of 88 Core
-decision rows (Q1.1–Q9.19) that Claude and Codex settled on 2026-11-04 (three debate
-rounds, then a resolution round that gave each open point a concrete rule) and put
-before the owner on the decision page. Six of them were added by the resolution round:
-Q2.8 (separate Copy and Destroy impls per container), Q3.12 (the `kept` extern marker
-and its `Kept<H>` receipt), Q4.7 (the `slice … else` spelling), Q7.10 (the hosted grant
-table), Q7.11 (`Device` or `Console` for the standard streams) and Q9.19 (approval,
-formalization, freeze). Where this draft and a row differ, the row governs, and the
-draft's recommendation is superseded; the passages below that a row overrides are marked
-*Superseded* where they stand. Neither is decided until the owner answers. Rows that
-revise a recorded rule say so: Q5.1 and Q5.4 revise OD45 and OD87; Q6.4 revises
-TYPE-22's two examples; Q2.8 revises TRAIT-1's coherence rule; Q9.15 replaces the
-generated-chapter requirement; Q7.11 revises authority rule 13 only if `Console` is
-chosen. The rows are committed beside this draft when the owner
-answers them. Until then they live on the decision page, and each section below names
-its governing rows.
+**Decided 2026-11-05.** The owner answered every row: the Core rows are the provisional approval
+of stage A2a, recorded with the revisions they approve in
+[decisions.md](../spec/decisions.md#decided-2026-11-05) and archived in full in
+[docs/archive/decisions-2026-11-05](../archive/decisions-2026-11-05/README.md). Where this draft
+differs from a decided row, the row governs. In particular, Q4.7 replaced the `slice … else`
+spelling by one scoped `borrow` form for every view, and Q7.11 chose `Console` for the standard
+streams. The text below is kept as the background that was reviewed.
 
-Status: draft for the owner's Core session. Nothing here is decided. The owner
-answers in the stages of roadmap rows A2a–A2c (provisional approval, a proposed
-`Spec.lean` with four checked design theorems, freeze; row Q9.19); until then no work
-encodes an answer. The questions are the nine in
-[ROADMAP.md](../../ROADMAP.md#questions-for-the-core-session). The proposal is drafted
-against the [A1 boundary artifacts](A1_BOUNDARIES.md), and its sections 1–4 are cited
-as "A1 §n". Lean stays the only normative source. An approved answer is formalized
-in a proposed `Spec.lean` during A2b, becomes normative at the A2c freeze, and then
-receives A3's one-main-file layout gate; it never becomes prose here.
+**Historical background, superseded on 2026-11-05.** Everything below this banner is the draft as it was
+reviewed before the owner answered. Its statements that the proposal is undecided, that the owner has yet
+to answer, or that a row is pending (for example `Device` for the standard streams, the `slice … else`
+spelling, or inference of capability arguments) are no longer true: the owner approved every row
+([decisions.md](../spec/decisions.md#decided-2026-11-05)). The Core shape is provisionally approved
+(stage A2a, done); stage A2b, formalizing it in a proposed `Spec.lean` with the four design theorems,
+is current work; the freeze (A2c) waits for those theorems and an outside-reader pass. The decided
+rows govern every passage below.
 
 Each question gives the decided rules it must respect, a recommendation and what the
 recommendation leaves open. Where alternatives were weighed, it also gives the options
