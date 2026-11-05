@@ -18,6 +18,7 @@ bash ./scripts/tests/test_release_bundle.sh
 bash ./scripts/tests/test_ssa.sh
 bash ./scripts/tests/test_wrong_code.sh
 bash scripts/ci/proof_gate.sh
+bash scripts/oracle/ci_check.sh
 bash scripts/tests/check_absence_not_fact.sh
 bash scripts/tests/check_arith_redteam.sh
 bash scripts/tests/check_array_bounds.sh
@@ -175,6 +176,7 @@ bash scripts/tests/check_obligation_report_views.sh
 bash scripts/tests/check_obligation_single_truth_source.sh
 bash scripts/tests/check_one_producer.sh
 bash scripts/tests/check_operational_vc_auto_discharge.sh
+bash scripts/tests/check_oracle_fetch.sh
 bash scripts/tests/check_oracle_publish.sh
 bash scripts/tests/check_overflow_migration.sh
 bash scripts/tests/check_ownership_judgment.sh

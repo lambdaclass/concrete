@@ -18,6 +18,7 @@ Extra gates (dark-gate wiring, audit 2026-07-16)
 LL(1) grammar check
 Language-surface gates (Phase 5-6)
 Main test suite
+Oracle (GitHub-hosted fetch + smoke)
 Multi-kernel evidence (Rocq + Isabelle)
 Proof evidence gate
 Receipt-path gates (R-0004 replay, receipts, attestation)

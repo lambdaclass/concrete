@@ -924,6 +924,7 @@ echo "=== every gate refuses to run outside the gate shell (lib/gate_env.sh) ===
 # (and is not a gate). Keep both short.
 declare -A GUARD_EXEMPT=(
   ["scripts/dev/seed-lake.sh"]="build-cache seeding, not a gate: it checks its own toolchain/manifest key and only decides how long lake build takes, never a verdict"
+  ["scripts/oracle/ci_check.sh"]="the required oracle check (Oracle (GitHub-hosted fetch + smoke)): retained with scripts/oracle, so it sources nothing under scripts/tests (retired at the move); CI runs it in the gate shell, and check_oracle_fetch.sh, which is guarded, holds its verdicts"
   ["scripts/oracle/build.sh"]="the weekly oracle rebuild (oracle.yml): it runs inside the legacy tag's own dev shell, not the gate userland, and its verdict is the digests in ORACLE.lock"
   ["scripts/browser/build-site-compiler.sh"]="the site deployment's build of the browser compiler (book.yml, no gate shell there): a build step whose own parity tests fail it, not a gate verdict"
 )

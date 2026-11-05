@@ -33,6 +33,31 @@ those runs took 20-92 runner-minutes out of each train's window (measured 2026-1
 no priority, so the only way to keep a train from queueing behind them is to not share the pool.
 A `concrete-light` runner carries only that label, so CI never lands on it either.
 
+### Runner pools and their limits (P13, owner-approved 2026-11-05)
+
+CI runs on two regular pools: concrete-ci-2's self-hosted runners and GitHub-hosted runners. Neither
+is a fallback that weakens a check; each required check runs on a pool that can run it, or is
+INCOMPLETE and blocks the landing.
+
+| Pool | Where | Limits (measured 2026-11-05) | Runs |
+|---|---|---|---|
+| `concrete` | concrete-ci-2 (Hetzner AX102: 30 CPUs visible, 125 GB RAM) | 6 runners `gha1`..`gha6`, so at most 6 concurrent jobs; no per-runner systemd CPU or memory cap is set (each runner service has `CPUQuota` and `MemoryMax` = infinity, ISS-0007) | the landing tier when `CONCRETE_SELF_HOSTED=true`; never a `pull_request` |
+| `concrete-light` | concrete-ci-2 | 2 runners `gha7`, `gha8` (`LIGHT_RUNNERS` in the dotfiles host file), same machine, same absence of caps | branch health only |
+| GitHub-hosted | `ubuntu-latest`, `macos-latest` | GitHub's per-repository concurrency | every landing-tier job when the variable is off; always: `Oracle (GitHub-hosted fetch + smoke)` and `Build + main tests (macOS)`; every `pull_request` |
+
+Manual heavy work on concrete-ci-2 (train check legs through `land.gatesHost`, `run-at-ref.sh`
+runs, oracle rebuilds) follows the machine-wide rule: at most two full suites, mutation campaigns
+or other CPU-heavy checks at once (AGENTS.md, ROADMAP R-0543).
+
+**What runs where on the GitHub-hosted pool.** Every landing-tier job's `runs-on` falls back to
+`ubuntu-latest`, so the whole landing tier can run there; the only self-hosted-only steps are cache
+seeding (`Seed .lake from the server build cache`), whose absence means a cold build, never a
+skipped check. The oracle differential gets its oracle on a GitHub-hosted runner from the published
+release (`scripts/oracle/fetch.sh`: the lock's artifact sha256, install manifest and binary hash);
+`scripts/oracle/ci_check.sh` reports a missing, corrupted or unverifiable artifact as INCOMPLETE
+(exit 3), which fails the required job (`scripts/tests/check_oracle_fetch.sh` holds this). The
+oracle rebuild (`oracle.yml`, weekly) runs on either pool.
+
 A job routed to self-hosted waits until a runner with **all four** labels `self-hosted`, `linux`,
 `x64` and its pool label (`concrete`, or `concrete-light` for branch health) is idle. If no runner is online, it waits (up to 24 hours) rather than falling
 back to GitHub-hosted. So turn the variable off before taking the servers down.
