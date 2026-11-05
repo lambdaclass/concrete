@@ -12662,8 +12662,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   [oracle-legacy-compiler-final](https://github.com/unbalancedparentheses/concrete2/releases/tag/oracle-legacy-compiler-final):
   the frozen compiler at tag `legacy-compiler-final` (commit `066c9d9b8836a2b176aa37f6c8313195a4b4ee29`),
   asset `oracle-legacy-compiler-final-x86_64-linux.tar.gz` with SHA-256
-  `74d8f1e3b5214d9c64c25736a24c19458736a2dacc7977ff784506839b9f26a2`. `scripts/oracle/build.sh`
-  rebuilds and verifies it from the tag. It predates the decisions of 2026-10-29 to 2026-11-05 and is
+  `74d8f1e3b5214d9c64c25736a24c19458736a2dacc7977ff784506839b9f26a2`. It predates the decisions of 2026-10-29 to 2026-11-05 and is
   not the current language.
 - <a id="decided-project-site"></a>**The website** (owner, row P9, 2026-11-05). The website goes down
   at the move and is rebuilt from scratch with the new compiler. No frozen playground is served in
