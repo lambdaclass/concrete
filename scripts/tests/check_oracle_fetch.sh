@@ -9,7 +9,7 @@
 # artifact, a failed download, an artifact with other bytes, and an artifact whose install fails
 # verification (manifest not the locked one) each leave fetch.sh and ci_check.sh INCOMPLETE (exit 3),
 # never passed; an installed oracle whose files were altered is refused by run.sh (125) before
-# anything runs, and ci_check.sh reports that as INCOMPLETE; a verified oracle whose smoke run exits
+# anything runs, and ci_check.sh reports that as INCOMPLETE (an install altered after fetch.sh); a verified oracle whose smoke run exits
 # other than 42, a compile failure (whatever its status, 42 included) and a compile that writes no
 # program are FAILED (1), through the real run.sh with a fake `nix`. Each refusal is a negative
 # control with its expected reason.
@@ -157,6 +157,18 @@ out="$(PATH="$TMP/bin:$PATH" ORACLE_HOME="$H" FAKE_SERVE="" FAKE_NIX=ok bash "$T
 [ "$rc" = 3 ] && has "$out" "oracle-check: INCOMPLETE: fetch.sh exited 3" && ! has "$out" "passed" \
   && ok "a failed download: the oracle check is INCOMPLETE (3) even with a working toolchain" || no "ci_check download: rc=$rc '$out'"
 
+# An install altered between fetch.sh and run.sh: ci_check.sh gets run.sh's refusal (125) and reports
+# INCOMPLETE, not a program result. fetch.sh is replaced by a stub that alters the verified install
+# and succeeds, so the refusal can only come from run.sh's own verification.
+fetch "$TMP/art/good.tar.gz" >/dev/null || no "re-install for the tamper control failed"
+cp "$TMP/oracle/fetch.sh" "$TMP/fetch.sh.real"
+printf '#!/usr/bin/env bash\nprintf "mod tampered;\\n" > "$ORACLE_HOME/%s/std/lib.con"\n' "$COMMIT" > "$TMP/oracle/fetch.sh"
+out="$(PATH="$TMP/bin:$PATH" ORACLE_HOME="$H" FAKE_NIX=ok bash "$TMP/oracle/ci_check.sh" 2>&1)"; rc=$?
+cp "$TMP/fetch.sh.real" "$TMP/oracle/fetch.sh"
+[ "$rc" = 3 ] && has "$out" "oracle-check: INCOMPLETE: run.sh refused the install" && has "$out" "differs from its manifest" \
+  && ! has "$out" "passed" && ok "an install altered after fetch: the oracle check is INCOMPLETE (3) via run.sh's refusal" \
+  || no "ci_check tampered install: rc=$rc '$out'"
+
 echo
 echo "check_oracle_fetch: $PASS passed, $FAIL failed"
-[ "$FAIL" = 0 ] && [ "$PASS" -ge 18 ] || exit 1
+[ "$FAIL" = 0 ] && [ "$PASS" -ge 19 ] || exit 1
