@@ -2511,6 +2511,51 @@ example : RunCleanup (fun d => d != desB) (pending stack)
   ((defer_cleanup_releases (ok := fun d => d != desB) stack_reg (e := .ret) (by decide) rfl).2.2.1
     [desV] desB [relA] rfl (by decide) (by decide) _ _).mpr ⟨rfl, rfl⟩
 
+/-- If `destroy(v)` itself traps on `return` while holding loan 7, the trace stops at that call:
+loan 7 is not released by cleanup, and `destroy(b)` and `give_up(a)` never run. -/
+example : RunCleanup (fun d => d != desV) (pending stack) [.call desV] .trapped :=
+  ((defer_cleanup_releases (ok := fun d => d != desV) stack_reg (e := .ret) (by decide) rfl).2.2.1
+    [] desV [desB, relA] rfl (by decide) (by decide) _ _).mpr ⟨rfl, rfl⟩
+
+/-- Nested labelled loops: inside loop `L1`, loop `L2` registers `destroy(d)` (resource 4), and
+a block inside it registers `destroy(c)` (resource 3). -/
+def desC : Deferred := { kind := .destroy, target := 3, deps := [], loans := [] }
+def desD : Deferred := { kind := .destroy, target := 4, deps := [], loans := [] }
+def owned2 : Res → Bool := fun r => decide (r ∈ [0, 1, 2, 3, 4])
+def ownedAfter2 : Res → Bool :=
+  fun r => ((((owned2 r && r != 0) && r != 2) && r != 1) && r != 4) && r != 3
+def stack2 : Stack :=
+  [⟨.block, [desC]⟩, ⟨.loopBody 2, [desD]⟩, ⟨.loopBody 1, [desV]⟩, ⟨.fnBody, [desB, relA]⟩]
+
+theorem stack2_reg : Reg ownedAfter2 stack2 :=
+  .push (k := .block) (d := desC)
+    (.enter (k := .block) <|
+      .push (k := .loopBody 2) (d := desD)
+        (.enter (k := .loopBody 2) <|
+          .push (k := .loopBody 1) (d := desV)
+            (.enter (k := .loopBody 1) <|
+              .push (k := .fnBody) (d := desB)
+                (.push (k := .fnBody) (d := relA) (.enter (k := .fnBody) .empty)
+                  rfl (by decide) (by decide) (by decide))
+                rfl (by decide) (by decide) (by decide))
+            rfl (by decide) (by decide) (by decide))
+        rfl (by decide) (by decide) (by decide))
+    rfl (by decide) (by decide) (by decide)
+
+/-- Falling off the block runs `destroy(c)`; `continue L2` also runs `destroy(d)`; `break L1`
+(the outer label) also runs `destroy(v)` and releases its loan; each through the theorem. -/
+example : RunCleanup (fun _ => true) [desC] [.call desC] .done :=
+  ((defer_cleanup_releases (ok := fun _ => true) stack2_reg (e := .fallthrough) (by decide)
+    (fs := [⟨.block, [desC]⟩]) rfl).1 (by decide) _ _).mpr ⟨rfl, rfl⟩
+example : RunCleanup (fun _ => true) [desC, desD] [.call desC, .call desD] .done :=
+  ((defer_cleanup_releases (ok := fun _ => true) stack2_reg (e := .cont 2) (by decide)
+    (fs := [⟨.block, [desC]⟩, ⟨.loopBody 2, [desD]⟩]) rfl).1 (by decide) _ _).mpr ⟨rfl, rfl⟩
+example : RunCleanup (fun _ => true) [desC, desD, desV]
+    [.call desC, .call desD, .call desV, .release ⟨7, 2⟩] .done :=
+  ((defer_cleanup_releases (ok := fun _ => true) stack2_reg (e := .brk 1) (by decide)
+    (fs := [⟨.block, [desC]⟩, ⟨.loopBody 2, [desD]⟩, ⟨.loopBody 1, [desV]⟩]) rfl).1
+    (by decide) _ _).mpr ⟨rfl, rfl⟩
+
 end ConcreteSpec.Cleanup
 
 /-! ## Part 4. Scoped borrows (Q3.3, Q3.4, Q9.5, REF-11): `open_mut_freezes_root`
