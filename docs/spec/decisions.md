@@ -131,6 +131,8 @@ The owner answered every row of the 2026-11-05 decision page, in the terminal. T
 - **The generated-chapter requirement** (rows Q9.15, P3): Lean is the specification, in one main normative file with doc comments and examples; no prose is generated from it. This confirms the [2026-11-04 decision](#decided-project-lean-is-the-spec).
 - **Authority rules 13, 5 and 7** (row Q7.11): `Console` joins the reserved capability set, for operations on the `StdIn`, `StdOut` and `StdErr` grants; rule 5's operational list and rule 7's primitive table include it. `Device` stays for device grants.
 - **The text-only slice of R4 F4.3** (row Q4.7) is replaced before it was recorded: one scoped form opens every view, `borrow [mut] source [from a until b] as view { … } [else { … }]`. Without `else` an invalid range traps, like indexing; with `else` it is handled; a proven invalid range without `else` is refused (OD118). Arrays need `a ≤ b ≤ len`; text also needs UTF-8 scalar boundaries at both byte offsets.
+- <a id="decided-2026-11-05-q6-2-fields"></a>**Q6.2 and R4 F12, known values through structs** (owner-approved revision, 2026-11-05, made during A2b): known values propagate field by field through immutable struct construction and destructuring. The checker tracks an abstract value for each binding: unknown, a known scalar, or a constructor whose fields carry their own abstract values. Constructing a struct records each field's fact independently; an immutable binding keeps the fact; destructuring hands each field's fact, recursively, to the corresponding immutable binder; an unknown component stays unknown without discarding its known siblings; an ownership transfer keeps the facts for the receiving binding without permitting reuse of the consumed one. Q6.2's exclusions stay (mutable state, branches and paths, user-function calls, calls outside the table, elaborator temporaries). So `let S { a } = S { a: 200u8 }; a + 100` is refused, in trusted and unreachable code too (OD118 as revised by Q6.4). Before this revision a field bound by destructuring was not known and that program was accepted and trapped.
+- <a id="decided-2026-11-05-q9-1-reads"></a>**Q9.1, read forms** (owner-confirmed, 2026-11-05): `copy x` is allowed only when `x` has a Copy type and `move x` only when it has a non-Copy (linear) type. Each read has one form; `move` of a Copy value and `copy` of a linear value are both refused.
 
 <a id="decided-2026-11-05-new-rules"></a>**New rules** (P4): duplicate variant names in one enum and duplicate method names in one impl are refused, like duplicate fields (bug 313); the rule gets its ID and diagnostic when it is written in Lean.
 
@@ -181,7 +183,7 @@ The owner answered every row of the 2026-11-05 decision page, in the terminal. T
 - **Q5.3** What is capability-set equality and normal form? — Canonical semantic equality; refuse repeated names.
 - **Q5.4** Is a capability inference solver still normative? — Explicit substitution checking; no inference solver. *Revises or adds: OD45, OD87.*
 - **Q6.1** What determines mandatory static refusal? — Fixed Lean-defined local refusal rules.
-- **Q6.2** Is local constant propagation mandatory? — Fixed table of statically known values: literals, immutable lets, module constants, checked ops, six named wrapping/saturating ops, lossless `as`.
+- **Q6.2** Is local constant propagation mandatory? — Fixed table of statically known values: literals, immutable lets, module constants, checked ops, six named wrapping/saturating ops, lossless `as`. *Revised 2026-11-05: facts propagate field by field through immutable struct construction and destructuring ([revision](#decided-2026-11-05-q6-2-fields)).*
 - **Q6.3** Are violations rechecked after generic substitution? — Parametric checking plus substitution-time rechecking.
 - **Q6.4** Does unreachable code receive static refusal checks? — Check all written code, including generic bodies. *Revises or adds: REVISES TYPE-22@1 examples.*
 - **Q6.5** How do short-circuit operators interact with refusal? — Check both short-circuit operands; execute conditionally.
@@ -205,7 +207,7 @@ The owner answered every row of the 2026-11-05 decision page, in the terminal. T
 - **Q8.5** What launcher ABI and observations are fixed? — Pinned launcher ABI, inputs, startup and trap mapping.
 - **Q8.6** What artifacts does the claim bind? — Bind complete retained dependency and image closure.
 - **Q8.7** What prevents vacuous correctness? — Coverage, realizable witnesses and rejection controls; a spec where every allocation fails fails qualification.
-- **Q9.1** What is Core’s expression and binding form? — ANF; fresh identities; explicit moves/copies; separate places.
+- **Q9.1** What is Core’s expression and binding form? — ANF; fresh identities; explicit moves/copies; separate places. *Confirmed 2026-11-05: `copy` only for Copy types, `move` only for non-Copy types ([read forms](#decided-2026-11-05-q9-1-reads)).*
 - **Q9.2** What types and declaration identities must Core represent? — Kinded nominal inventory; ordinary owning container definitions.
 - **Q9.3** What is the single loop form? — Core `while L { C } do { B }`: C is a condition region re-run every iteration; the counted loop advances its counter before the body.
 - **Q9.4** How are data, matching and exits represented? — Flat data/matches; structured exits; checked stores.
@@ -327,9 +329,17 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   records live outside `legacy/` and survive its deletion (P21). The differential oracle is built from
   the tag in an isolated checkout, published as a release artifact verified by digest, and never
   overrides the Lean semantics.
+- <a id="decided-project-oracle-release"></a>**The oracle release** (owner-approved, 2026-11-05). The
+  oracle is published as the GitHub release
+  [oracle-legacy-compiler-final](https://github.com/unbalancedparentheses/concrete2/releases/tag/oracle-legacy-compiler-final):
+  the frozen compiler at tag `legacy-compiler-final` (commit `066c9d9b8836a2b176aa37f6c8313195a4b4ee29`),
+  asset `oracle-legacy-compiler-final-x86_64-linux.tar.gz` with SHA-256
+  `74d8f1e3b5214d9c64c25736a24c19458736a2dacc7977ff784506839b9f26a2`. It predates the decisions of 2026-10-29 to 2026-11-05 and is
+  not the current language.
 - <a id="decided-project-site"></a>**The website** (owner, row P9, 2026-11-05). The website goes down
   at the move and is rebuilt from scratch with the new compiler. No frozen playground is served in
-  between. Unpublishing the live site is an outward action; the owner confirms its moment.
+  between. Unpublishing the live site is an outward action; the owner confirms its moment. The owner
+  confirmed on 2026-11-05 that the site is taken down at the move (T2).
 - <a id="decided-project-ci"></a>**CI hosts** (owner, row P13, 2026-11-05). CI runs on concrete-ci-2
   (self-hosted) and on GitHub-hosted runners as a regular second pool. Landing and oracle runs use
   separate pools with per-pool CPU and memory limits and at most two heavy runs per machine. A check
