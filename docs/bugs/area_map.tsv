@@ -92,11 +92,13 @@ Concrete/Sha256Spec.lean	code	Proof	Sha256Spec
 Concrete/Shared.lean	code	Resolve	Shared
 Concrete/Token.lean	code	Parse	Token
 Concrete/Verify.lean	code	Check	Verify
+ISSUES.tsv	ignore	-	-
 LICENSE	ignore	-	-
 Main.lean	code	CLI	Main
 Makefile	code	Tooling	Makefile
 PipelineTest.lean	code	CLI	PipelineTest
 README.md	docs	Docs	readme
+RETENTION.tsv	ignore	-	-
 ROADMAP.md	ignore	-	-
 bench/	ignore	-	-
 changelog.d/	ignore	-	-
@@ -118,6 +120,8 @@ lean-toolchain	code	Tooling	lean-toolchain
 lean_tests/	ignore	-	-
 paper/	ignore	-	-
 proofs/	code	Proof	proofs
+required-checks-transition.tsv	gate	Gates	required-checks
+required-checks.txt	gate	Gates	required-checks
 research/	docs	Docs	research
 run_tests.sh	gate	Gates	run_tests
 scripts/	code	Tooling	*
