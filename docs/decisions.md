@@ -639,7 +639,9 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     safety), Q4.6 and Q4.7 (`byte_at` and the range form without `else` need evidence; the open
     question on refusing a provably out-of-range view index disappears), Q6.1 and Q6.2 (static refusal
     widens from proven violations to unproven safety; known values remain facts), [OD97](#od97) (the
-    profile option is subsumed), and ARITH-9: `#[overflow_checked]` is retired (owner, 2026-11-06). Qualified: CON-2, Q9.11 and [OD125](#od125) (a claim used for safety
+    profile option is subsumed), and ARITH-9: `#[overflow_checked]` is retired (owner, 2026-11-06, relayed by the orchestrator from
+    the owner session: "ok do everything", approving the unanimous recommendation of Claude, Codex,
+    agy and Kimi to retire it as obsolete under no hidden traps). Qualified: CON-2, Q9.11 and [OD125](#od125) (a claim used for safety
     admission needs closed evidence), CON-6 and [OD80](#od80) (`assume` cannot admit an operation in
     safe code), [OD120](#od120) (a vacuous precondition used for safety is refused), [OD82](#od82)
     (extended to functions), Q7.10 and Q8.5 (extended by the stack target-contract obligations of Q14, which are future target work, not current guarantees). Unchanged: STMT-1, STMT-2, OD101 (general trap semantics), Q6.3–Q6.6

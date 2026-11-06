@@ -83,13 +83,14 @@ Each old task in the disposition table is mapped to a new task in its `destinati
 - **Browser playground:** R-0394, deferred → R-0569 new site.
 - **Native-library linking and C/Rust/Zig interop:** R-0285 / R-0301.
 - **Diagnostics UX:** R-0075, R-0253.
+- **Error conventions:** R-0057 → R-0071 (item 12).
 
 **DEFERRED:**
 - Concurrency: R-0399–R-0401.
 - Constant-time: #7.
 - Step/time bounds: #8.
 - Freestanding: #11.
-- Error conventions: #13.
+- Error-signature normalization: R-0017 (error conventions themselves are PLANNED, item 12).
 - Development-only `expect`: R-0240.
 - Binary-format DSLs: R-0406.
 
