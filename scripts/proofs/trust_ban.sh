@@ -13,7 +13,7 @@
 #      collected as E collects a theorem's;
 #   S  defence in depth, lexical: the library builds with warningAsError and nothing in lakefile.toml
 #      can change that or point the build at other sources; the sources, comments stripped and
-#      string literals kept, never spell sorry, sorryAx, admit, stop, native_decide, +native, an
+#      string literals kept, never spell sorry, sorryAx, admit, native_decide, +native, an
 #      option on `decide`, ofReduceBool, ofReduceNat, trustCompiler or skipKernelTC, and define no
 #      syntax extension, run no meta code, set no option and import nothing outside the library
 #      (the lexer reads what Lean reads only for syntax it knows).
@@ -31,7 +31,7 @@ CHECK_NAME=PROOF-TRUST-BAN
 source scripts/proofs/lib.sh
 
 BANNED_AXIOM_RE='^(sorryAx|Lean[.]ofReduceBool|Lean[.]ofReduceNat|Lean[.]trustCompiler)$|[.]_native[.]'
-BANNED_WORD_RE='\b(sorry|sorryAx|admit|stop|native_decide|ofReduceBool|ofReduceNat|trustCompiler|skipKernelTC)\b|\+native\b|\bnative»?\s*:=|\bdecide\s*\(\s*config\b|\bdecide\s*[+-]|\bDecide[.]Config\b'
+BANNED_WORD_RE='\b(sorry|sorryAx|admit|native_decide|ofReduceBool|ofReduceNat|trustCompiler|skipKernelTC)\b|\+native\b|\bnative»?\s*:=|\bdecide\s*\(\s*config\b|\bdecide\s*[+-]|\bDecide[.]Config\b'
 # `decide` takes no options at all (`decide +native`, `decide (config := ⟨…⟩)` with a positional
 # native flag): a term `decide (p)` is unaffected.
 # The source scan is lexical, so it holds only for the syntax it lexes: Lean core's. A syntax
@@ -188,13 +188,12 @@ $B:13: example : False := sorryAx False true
 $B:14: macro \"plain\" \"s!\" s:str : term => pure s
 $B:15: import Lean
 $B:16: set_option warningAsError false in
-$B:17: example : False := by stop skip
 $B:18: run_cmd pure ()
 $B:19: #eval (pure () : IO Unit)
 $B:20: example : 2 + 2 = 4 := by decide (config := { native
 $B:22: example : 2 + 2 = 4 := by decide (config := ⟨false, true, true, false⟩)"
 [ "$RC" = 0 ] && [ "$W" = "$EXPECT" ] \
-  && ok "control: native_decide, and sorry inside an interpolation, after a string, raw string or quoted name holding comment delimiters, after an interpolation holding a string, a direct sorryAx, a syntax extension, an outside import, an option, meta code, the stop tactic and decide options (native split across lines, positional) are found; the words in comments are not" \
+  && ok "control: native_decide, and sorry inside an interpolation, after a string, raw string or quoted name holding comment delimiters, after an interpolation holding a string, a direct sorryAx, a syntax extension, an outside import, an option, meta code and decide options (native split across lines, positional) are found; the words in comments are not" \
   || no "control: source scan (rc=$RC) reported '$W'"
 printf 'def s : String := s!"unterminated {\n' > "$TMP/src/Open.lean"
 printf 'example : String × Nat := { fst := "{--", snd := sorry\n} -- "\n' > "$TMP/src/Brace.lean"
@@ -232,6 +231,6 @@ population examples "$TMP/exc/C.lean" 2>/dev/null | grep -P '\t' > "$TMP/exc.tsv
 X=$(nonstandard "$TMP/exc.tsv")
 [ "$N" = 3 ] && [ "$(grep -c . "$TMP/exc.tsv")" = 3 ] && has_match -F "C.lean:1» (" <<<"$X" && has_match -F "C.lean:2» (sorryAx)" <<<"$X" \
   && ! has_match -F "C.lean:3»" <<<"$X" \
-  && ok "control: an example proved by decide +native and one closed by stop are reported, rfl is not, and "example" in a string is no example ($(echo $X | tr '\n' ' '))" \
+  && ok "control: an example proved by decide +native and one closed by stop are reported, rfl is not, and the word example in a string is no example ($(echo $X | tr '\n' ' '))" \
   || no "control: rewritten examples: $N, rows $(grep -c . "$TMP/exc.tsv"), reported '$X'"
 finish

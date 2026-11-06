@@ -96,14 +96,16 @@ theorem reg_inv {live : Res → Bool} {st : Stack} (h : Reg live st) : RegInv li
           exact absurd hr (depOrder_cross hdo x hx d hd)
         · exact h
 
-theorem unwindTo_prefix {p : FrameKind → Bool} :
-    ∀ {st : Stack} {fs : List Frame}, unwindTo p st = some fs → ∃ rest, st = fs ++ rest
+theorem unwindTo_prefix {p stop : FrameKind → Bool} :
+    ∀ {st : Stack} {fs : List Frame}, unwindTo p stop st = some fs → ∃ rest, st = fs ++ rest
   | [], fs, h => by simp [unwindTo] at h
   | f :: st, fs, h => by
     simp only [unwindTo] at h
     split at h
     · cases h; exact ⟨st, rfl⟩
-    · cases hu : unwindTo p st with
+    split at h
+    · cases h
+    · cases hu : unwindTo p stop st with
       | none => rw [hu] at h; cases h
       | some fs' =>
         rw [hu] at h

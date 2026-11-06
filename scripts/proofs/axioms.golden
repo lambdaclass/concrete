@@ -284,12 +284,7 @@ ConcreteSpec.Borrow.isScalar_cont._proof_1_12	Quot.sound propext
 ConcreteSpec.Borrow.isScalar_cont._proof_1_13	Quot.sound propext
 ConcreteSpec.Borrow.isScalar_cont._proof_1_14	Quot.sound propext
 ConcreteSpec.Borrow.isScalar_cont._proof_1_15	Quot.sound propext
-ConcreteSpec.Borrow.knownInvalid._sparseCasesOn_1.else_eq	propext
-ConcreteSpec.Borrow.knownInvalid.eq_1	propext
-ConcreteSpec.Borrow.knownInvalid_iff	Classical.choice Quot.sound propext
-ConcreteSpec.Borrow.knownInvalid_iff._proof_1_6	Quot.sound propext
-ConcreteSpec.Borrow.knownInvalid_iff._simp_1_10	propext
-ConcreteSpec.Borrow.knownInvalid_traps	Classical.choice Quot.sound propext
+ConcreteSpec.Borrow.knownValid._sparseCasesOn_1.else_eq	propext
 ConcreteSpec.Borrow.lockFor.eq_1	
 ConcreteSpec.Borrow.lockFor_excl	propext
 ConcreteSpec.Borrow.lockFor_nonfree	propext
@@ -306,8 +301,7 @@ ConcreteSpec.Borrow.putN.eq_1
 ConcreteSpec.Borrow.putN.eq_2	
 ConcreteSpec.Borrow.putN.eq_def	
 ConcreteSpec.Borrow.range_block_frame	Classical.choice Quot.sound propext
-ConcreteSpec.Borrow.range_can_open	Classical.choice Quot.sound propext
-ConcreteSpec.Borrow.range_known_opens	Classical.choice Quot.sound propext
+ConcreteSpec.Borrow.range_never_traps	propext
 ConcreteSpec.Borrow.range_open_mut_freezes_root	propext
 ConcreteSpec.Borrow.remove.eq_1	
 ConcreteSpec.Borrow.remove.eq_2	
@@ -1219,12 +1213,8 @@ _private.ConcreteSpec.Proofs.Borrow.0.ConcreteSpec.Borrow.isScalar.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Borrow.0.ConcreteSpec.Borrow.isScalar.match_1.eq_3	propext
 _private.ConcreteSpec.Proofs.Borrow.0.ConcreteSpec.Borrow.isScalar.match_1.eq_4	propext
 _private.ConcreteSpec.Proofs.Borrow.0.ConcreteSpec.Borrow.isScalar.match_1.eq_5	propext
-_private.ConcreteSpec.Proofs.Borrow.0.ConcreteSpec.Borrow.knownInvalid.match_1.eq_1	propext
-_private.ConcreteSpec.Proofs.Borrow.0.ConcreteSpec.Borrow.knownInvalid.match_1.eq_2	propext
-_private.ConcreteSpec.Proofs.Borrow.0.ConcreteSpec.Borrow.knownInvalid.match_4.eq_1	propext
-_private.ConcreteSpec.Proofs.Borrow.0.ConcreteSpec.Borrow.knownInvalid.match_4.eq_2	propext
-_private.ConcreteSpec.Proofs.Borrow.0.ConcreteSpec.Borrow.knownInvalid_iff.match_1_7.eq_1	
-_private.ConcreteSpec.Proofs.Borrow.0.ConcreteSpec.Borrow.knownInvalid_iff.match_1_7.eq_2	
+_private.ConcreteSpec.Proofs.Borrow.0.ConcreteSpec.Borrow.knownValid.match_1.eq_1	propext
+_private.ConcreteSpec.Proofs.Borrow.0.ConcreteSpec.Borrow.knownValid.match_1.eq_2	propext
 _private.ConcreteSpec.Proofs.Borrow.0.ConcreteSpec.Borrow.putN.match_1.eq_1	
 _private.ConcreteSpec.Proofs.Borrow.0.ConcreteSpec.Borrow.putN.match_1.eq_2	
 _private.ConcreteSpec.Proofs.Borrow.0.ConcreteSpec.Borrow.remove.match_1.eq_1	

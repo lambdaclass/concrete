@@ -85,20 +85,24 @@ inductive Exit where
   | abort
   deriving DecidableEq, Repr
 
-/-- The frames up to and including the innermost one of the given kind. -/
-def unwindTo (p : FrameKind → Bool) : Stack → Option (List Frame)
+/-- The frames up to and including the innermost one of the given kind; `none` when a frame of
+kind `stop` comes first (an exit does not search past its function's body). -/
+def unwindTo (p stop : FrameKind → Bool) : Stack → Option (List Frame)
   | [] => none
-  | f :: st => if p f.kind then some [f] else (unwindTo p st).map (f :: ·)
+  | f :: st =>
+    if p f.kind then some [f] else if stop f.kind then none else (unwindTo p stop st).map (f :: ·)
 
 /-- The frames an exit leaves, innermost first: falling off a block leaves that block; `break L`
 and `continue L` leave every scope up to and including loop `L`'s body (`continue` then tests the
-condition again, F7); `return` leaves every scope of the function. An abort runs no cleanup. -/
+condition again, F7), and target only a loop of the same function: the search stops at the
+function's body, so a loop of a caller is never the target; `return` leaves every scope of the
+function. An abort runs no cleanup. -/
 def unwound : Exit → Stack → Option (List Frame)
   | .fallthrough, f :: _ => some [f]
   | .fallthrough, [] => none
-  | .brk l, st => unwindTo (fun k => k == .loopBody l) st
-  | .cont l, st => unwindTo (fun k => k == .loopBody l) st
-  | .ret, st => unwindTo (fun k => k == .fnBody) st
+  | .brk l, st => unwindTo (fun k => k == .loopBody l) (fun k => k == .fnBody) st
+  | .cont l, st => unwindTo (fun k => k == .loopBody l) (fun k => k == .fnBody) st
+  | .ret, st => unwindTo (fun k => k == .fnBody) (fun _ => false) st
   | .abort, _ => some []
 
 /-- An observable cleanup event: a call, or the release of a loan. -/
@@ -220,6 +224,10 @@ example : (unwound (.brk 1) stack).map (expected ∘ pending) =
 
 example : (unwound (.cont 1) stack).map (expected ∘ pending) =
     some [.call desV, .release ⟨7, 2⟩] := rfl
+
+/-- `break` and `continue` never cross a function's body: a loop of the caller is no target. -/
+example : unwound (.brk 1) [⟨.fnBody, []⟩, ⟨.loopBody 1, []⟩] = none := rfl
+example : unwound (.cont 1) [⟨.block, []⟩, ⟨.fnBody, []⟩, ⟨.loopBody 1, []⟩] = none := rfl
 
 example : (unwound .ret stack).map (expected ∘ pending) =
     some [.call desV, .release ⟨7, 2⟩, .call desB, .call relA] := rfl

@@ -41,7 +41,7 @@ stage A2c (row Q9.19). Before that, the owner approved the Core design provision
    | `Proofs/Slice0.lean` | `slice0_exits` (an accepted slice-0 program exits with a `u8` status), `slice0_never_traps`, `toCore_injective` |
    | `Proofs/Rep.lean` | `rep_roundtrip` (design theorem 1) |
    | `Proofs/Cleanup.lean` | `defer_cleanup_releases` (design theorem 2) |
-   | `Proofs/Borrow.lean` | `open_mut_freezes_root` (design theorem 3), `shared_open_grants_no_write`; ranges: `knownInvalid_iff` (a range is refused exactly when the known facts prove it invalid), `knownInvalid_traps`, `range_can_open`, `enter_in_bounds`, `range_open_mut_freezes_root`; no escape: `view_not_moved`, `view_not_used_after`, `root_restored`; element access: `view_in_source`, `view_get`, `view_set`, `viewsOk_enter`, `viewsOk_put`; mutation: `view_write_exact`, `range_block_frame`; text: `text_view_utf8`, `utf8_split` |
+   | `Proofs/Borrow.lean` | `open_mut_freezes_root` (design theorem 3), `shared_open_grants_no_write`; ranges: `range_never_traps` (a range accepted without `else` opens), `enter_in_bounds`, `range_open_mut_freezes_root`; no escape: `view_not_moved`, `view_not_used_after`, `root_restored`; element access: `view_in_source`, `view_get`, `view_set`, `viewsOk_enter`, `viewsOk_put`; mutation: `view_write_exact`, `range_block_frame`; text: `text_view_utf8`, `utf8_split` |
    | `Proofs/Brand.lean` | `reset_fresh` (design theorem 4), the brand refusals, `checked_passes_brand_checks` (a checked program never fails a ghost brand check), `brand_erasure` (Q1.1: its run with brands erased does exactly what its ghost run does), `ghost_run` |
    | `Proofs/Authority.lean` | `authority_contained` (every operation a run performs uses a grant `main` was launched with, of the right type, under a capability `main` declares, for every fuel), `sub_iff`, `equiv_iff` |
    | `Proofs/Observe.lean` | `checked_observation`, `checked_observable` (an accepted program's observation and status), `refused_start` |
@@ -88,8 +88,8 @@ Formalized at A2c, each with rules, examples and proofs:
 - **Brand erasure** (Q1.1, part 5): the erased run (no brands, no brand checks), and
   `brand_erasure`: for a checked program it does what the ghost run does, which never fails a
   brand check (`checked_passes_brand_checks`), for every outcome of the loop tests.
-- **Range subviews** (Q4.7, part 4): the range test for arrays and UTF-8 text, `else`, the trap
-  without `else`, and the refusal of a range proven invalid (OD118), complete for the known facts.
+- **Range subviews** (Q4.7, part 4): the range test for arrays and UTF-8 text, `else`, and the
+  evidence a range without `else` needs (no hidden traps: known valid, so it never traps).
   Element access `v[i]` reaches exactly source element `a + i`, inside `[a, b)` and the source, or
   traps (`view_in_source`, `view_get`, `view_set`); a write changes exactly that element
   (`view_write_exact`), and a block that accesses only its view changes nothing outside

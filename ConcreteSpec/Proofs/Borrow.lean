@@ -258,100 +258,18 @@ theorem edge_len (s : Source) : s.edge s.len = true := by
 theorem edge_le {s : Source} {i : Nat} (h : s.edge i = true) : i ≤ s.len := by
   cases s <;> simp_all [Source.edge, Source.len]
 
-/-- **Justified and complete range refusal** (Q4.7, Q6.1, OD118). The checker knows a range is
-invalid exactly when its facts prove it: every source and bounds that agree with what the checker
-knows fail the range test. So the checker never refuses a range that could open, and never accepts
-without `else` a range its facts prove invalid. -/
-theorem knownInvalid_iff (k : RangeFacts) :
-    knownInvalid k = true ↔ ∀ s a b, Agrees k s a b → validRange s a b = false := by
-  constructor
-  · intro hk s a b ⟨hs, ha, hb⟩
-    rw [validRange_iff]
-    simp only [knownInvalid, Bool.or_eq_true] at hk
-    rcases hk with (hk | hk) | hk
-    · split at hk
-      · rename_i a' b' h1 h2
-        rw [ha a' h1, hb b' h2] at hk
-        simp only [decide_eq_true_eq] at hk
-        have : ¬ a ≤ b := by omega
-        simp [this]
-      · cases hk
-    · split at hk
-      · rename_i s' a' h1 h2
-        rw [hs s' h1, ha a' h2] at hk
-        simp only [Bool.not_eq_true'] at hk
-        simp [hk]
-      · cases hk
-    · split at hk
-      · rename_i s' b' h1 h2
-        rw [hs s' h1, hb b' h2] at hk
-        simp only [Bool.not_eq_true'] at hk
-        simp [hk]
-      · cases hk
-  · intro h
-    -- The witness: the known values, start 0, end the source's length (or the start, over an
-    -- array of that length when the source is unknown).
-    let a₀ := k.a.getD 0
-    let b₀ := k.b.getD (match k.src with | some s => s.len | none => a₀)
-    let s₀ := k.src.getD (.array b₀)
-    have hag : Agrees k s₀ a₀ b₀ := by
-      refine ⟨fun s' h' => ?_, fun a' h' => ?_, fun b' h' => ?_⟩ <;> simp [s₀, a₀, b₀, h']
-    have hv := h s₀ a₀ b₀ hag
-    rw [validRange_iff] at hv
-    cases hk : knownInvalid k
-    · exfalso
-      simp only [knownInvalid, Bool.or_eq_false_iff] at hk
-      obtain ⟨⟨h1, h2⟩, h3⟩ := hk
-      cases hsrc : k.src with
-      | none =>
-        cases hka : k.a with
-        | none =>
-          cases hkb : k.b <;> simp_all [s₀, a₀, b₀, Source.edge]
-        | some a =>
-          cases hkb : k.b with
-          | none => simp_all [s₀, a₀, b₀, Source.edge]
-          | some b => simp_all [s₀, a₀, b₀, Source.edge]
-      | some s =>
-        cases hka : k.a with
-        | none =>
-          cases hkb : k.b with
-          | none => simp_all [s₀, a₀, b₀, edge_zero, edge_len]
-          | some b => simp_all [s₀, a₀, b₀, edge_zero]
-        | some a =>
-          cases hkb : k.b with
-          | none =>
-            have hl := edge_le (s := s) (i := a) (by simpa [hsrc, hka] using h2)
-            simp_all [s₀, a₀, b₀, edge_len]
-          | some b => simp_all [s₀, a₀, b₀]
-    · rfl
-
-/-- A refused known-invalid range would trap if it ran without `else`. -/
-theorem knownInvalid_traps {k : RangeFacts} (hk : knownInvalid k = true) {s : Source} {a b : Nat}
-    (hs : Agrees k s a b) : openRange s a b false = .trap := by
-  simp [openRange, (knownInvalid_iff k).1 hk s a b hs]
-
-/-- An accepted range without `else` can open: some source and bounds agreeing with what the
-checker knows pass the range test. A range accepted without `else` traps only on values the
-checker did not know. -/
-theorem range_can_open {Γ m src v k body rest Γ'} (h : RangeOk Γ m src v k body none rest Γ') :
-    ∃ s a b, Agrees k s a b ∧ openRange s a b false = .enter := by
-  have hk : knownInvalid k = false := h.2
-  apply Classical.byContradiction
-  intro hn
-  have : knownInvalid k = true := (knownInvalid_iff k).2 (fun s a b hs => by
-    cases hv : validRange s a b
-    · rfl
-    · exact absurd ⟨s, a, b, hs, by simp [openRange, hv]⟩ hn)
-  rw [hk] at this
-  cases this
-
-/-- When the checker knows everything about an accepted range without `else`, it opens. -/
-theorem range_known_opens {Γ m src v k body rest Γ'} (h : RangeOk Γ m src v k body none rest Γ')
-    {s : Source} {a b : Nat} (hs : k.src = some s) (ha : k.a = some a) (hb : k.b = some b) :
-    openRange s a b false = .enter := by
-  obtain ⟨s', a', b', ⟨h1, h2, h3⟩, ho⟩ := range_can_open h
-  rw [← h1 s hs, ← h2 a ha, ← h3 b hb] at ho
-  exact ho
+/-- **A range accepted without `else` never traps** (no hidden traps). Its evidence holds: every
+source and bounds that agree with what the checker knows pass the range test, so the range opens. -/
+theorem range_never_traps {Γ m src v k body rest Γ'} (h : RangeOk Γ m src v k body none rest Γ')
+    {s : Source} {a b : Nat} (hs : Agrees k s a b) : openRange s a b false = .enter := by
+  have hk : knownValid k = true := h.2
+  obtain ⟨h1, h2, h3⟩ := hs
+  unfold knownValid at hk
+  split at hk
+  · rename_i s' a' b' hsrc ha hb
+    rw [h1 s' hsrc, h2 a' ha, h3 b' hb] at hk
+    simp [openRange, hk]
+  · cases hk
 
 /-- **An opened view stays inside its source.** When the range opens, every index of the view
 is an index of the source, and for text both ends are scalar boundaries. -/

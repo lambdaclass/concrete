@@ -183,28 +183,45 @@ def main():
         for u in d['uses']:
             if u in decls:
                 used_by[u].add(n)
-    # unique short names, for linking identifiers inside code
-    short = defaultdict(set)
-    for n in decls:
-        parts = n.split('.')
-        for i in range(1, len(parts)):
-            short['.'.join(parts[i:])].add(n)
     by_line = defaultdict(dict)
     for n, d in decls.items():
         by_line[d['module']].setdefault(d['line'], []).append(n)
 
-    ident = re.compile(r"[A-Za-z_Ͱ-Ͽ][A-Za-z0-9_'!?Ͱ-Ͽ₀-₉.]*")
-    def link_code(text, here):
-        def rep(m):
-            t = m.group(0)
-            c = short.get(t)
-            if c and len(c) == 1:
-                (n,) = c
-                return f'<a href="{href(n)}">{esc(t)}</a>'
-            return esc(t)
+    def ilean_refs(mod):
+        """Where the module's source names a documented declaration, from the .ilean file Lean
+        writes when it builds the module: line (1-based) → [(start, end, name)], columns in UTF-16
+        code units as Lean records them. These are Lean's own name resolutions, so a local
+        variable that shadows a declaration's name is never linked."""
+        path = os.path.join(ROOT, '.lake/build/lib/lean', mod.replace('.', '/') + '.ilean')
+        try:
+            refs = json.load(open(path))['references']
+        except (OSError, KeyError, ValueError) as e:
+            sys.exit(f'error: no references for {mod} ({e}); build the library first')
+        out = defaultdict(list)
+        for key, r in refs.items():
+            name = json.loads(key).get('c', {}).get('n')
+            if name not in decls:
+                continue
+            for u in r.get('usages', []) + ([r['definition']] if r.get('definition') else []):
+                if u[0] == u[2]:
+                    out[u[0] + 1].append((u[1], u[3], name))
+        return out
+
+    def utf16_index(text, col):
+        units = 0
+        for i, ch in enumerate(text):
+            if units >= col:
+                return i
+            units += 2 if ord(ch) > 0xFFFF else 1
+        return len(text)
+
+    def link_code(ln, text, refs):
         out, last = [], 0
-        for m in ident.finditer(text):
-            out.append(esc(text[last:m.start()])); out.append(rep(m)); last = m.end()
+        for a, b, name in sorted(refs.get(ln, [])):
+            i, j = utf16_index(text, a), utf16_index(text, b)
+            if i < last or j > len(text):
+                continue
+            out.append(esc(text[last:i])); out.append(f'<a href="{href(name)}">{esc(text[i:j])}</a>'); last = j
         out.append(esc(text[last:]))
         return ''.join(out)
 
@@ -229,6 +246,7 @@ def main():
         path = os.path.join(ROOT, mod.replace('.', '/') + '.lean')
         src = source(mod)
         anchors = by_line.get(mod, {})
+        refs = ilean_refs(mod)
         body = []
         nex = nthm = ndef = 0
         for blk in blocks(src):
@@ -243,7 +261,7 @@ def main():
             if not code:
                 continue
             nex += sum(1 for _, t in code if t.lstrip().startswith('example'))
-            body.append('<pre class="src">' + '\n'.join(link_code(t, mod) for _, t in code) + '</pre>')
+            body.append('<pre class="src">' + '\n'.join(link_code(ln, t, refs) for ln, t in code) + '</pre>')
             for ln, _ in code:
                 for n in anchors.get(ln, []):
                     body.append(f'<div class="decl" id="{esc(n)}">' + meta(n) + '</div>')
