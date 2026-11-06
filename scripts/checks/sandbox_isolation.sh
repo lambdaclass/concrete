@@ -18,8 +18,11 @@
 #               unfixed review_tool.sh did) must report the change, so the live leg cannot pass by
 #               not looking.
 #
-# Every run is bounded: 120 s per attempt (bounded_run), and at most 512 tasks and 8G of memory (a
-# systemd user scope, else both `ulimit -u` and `ulimit -v`; with neither the probe does not run and
+# Every run is bounded: 120 s per attempt (bounded_run), and at most 512 tasks and 8G of memory in
+# all where a systemd user scope exists (fede-256gb, concrete-ci-2). Elsewhere (a GitHub-hosted
+# runner, macOS) the bound is `ulimit -u` (512 more processes) and `ulimit -v` (2G per process),
+# which caps the process count, the failure of the 2026-11-06 run, but not memory in aggregate; with
+# neither the probe does not run and
 # the check fails as incomplete). The
 # 2026-11-06 reproducer had no such bound, recursed through a test hook and exhausted the machine.
 set -uo pipefail
@@ -67,9 +70,10 @@ printf '[user]\n\tname = isolation gate\n\temail = isolation@example.invalid\n[i
 BOUNDED_PARENT="$TMP"
 source "$ROOT_DIR/scripts/checks/lib/bounded.sh" || exit 2
 # bounded <cmd...>: at most 120 s per attempt (the portable bounded_run: its own watchdog kills the
-# whole process group; one re-run), at most 512 tasks and 8G of memory. The task and memory bound is
-# a systemd user scope where one is available, else BOTH `ulimit -u` (this user's current process
-# count + 512) and `ulimit -v` (8G); when neither can be set the command does not run at all and
+# whole process group; one re-run). Tasks and memory: a systemd user scope (TasksMax=512, MemoryMax=8G
+# in aggregate) where one is available, else BOTH `ulimit -u` (this user's current process count +
+# 512) and `ulimit -v` (2G per process: ulimit has no aggregate memory limit, so this one bounds a
+# single runaway process and the count bounds a fork storm); when they cannot be set the command does not run at all and
 # the result is 125, never an unbounded run.
 SCOPE=0
 if command -v systemd-run >/dev/null 2>&1 \
@@ -79,7 +83,7 @@ bounded() {
     bounded_run -i /dev/null -r 120 120 -- systemd-run --user --scope -q -p TasksMax=512 -p MemoryMax=8G "$@"
   else
     local n; n="$(ps -o pid= -U "$(id -u)" 2>/dev/null | wc -l | tr -d ' ')"
-    ( ulimit -u $(( ${n:-0} + 512 )) 2>/dev/null && ulimit -v $(( 8 * 1024 * 1024 )) 2>/dev/null || {
+    ( ulimit -u $(( ${n:-0} + 512 )) 2>/dev/null && ulimit -v $(( 2 * 1024 * 1024 )) 2>/dev/null || {
         echo "sandbox_isolation: cannot bound tasks and memory here (no systemd user scope; ulimit -u/-v refused); not running $*"; exit 125; }
       bounded_run -i /dev/null -r 120 120 -- "$@" )
   fi
