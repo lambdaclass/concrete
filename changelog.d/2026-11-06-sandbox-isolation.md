@@ -5,3 +5,8 @@
   stages it beside `run-at-ref.sh`. New check `scripts/checks/sandbox_isolation.sh`: the structural
   rule, plus `review_tool.sh` and `legacy_frozen.sh` run from a linked worktree with `GIT_DIR`
   exported, bounded (timeout 120, 512 tasks, 8G), against a leaking control.
+- Trains run only from a full clone with the repository hook enabled (ISS-0015): `train.sh` refuses
+  a linked worktree and a clone whose pre-push hook is off or is not (a wrapper of)
+  `.githooks/pre-push`; the pre-push hook refuses a gated push from a linked worktree (the `wip/*`
+  and review-notes tiers still pass). The landing bot's rebase and `acceptance.sh`'s negative
+  controls use scratch clones instead of worktrees.

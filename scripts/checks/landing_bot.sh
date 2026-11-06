@@ -49,6 +49,14 @@ cat > "$GIT_CONFIG_GLOBAL" <<EOF
 	hooksPath = $TMP/nohooks
 EOF
 mkdir -p "$TMP/nohooks" "$TMP/gh"
+# train.sh runs only with the repository's pre-push hook enabled (ISS-0015). The sandbox's global
+# hooksPath holds this stand-in: it runs no gate and names .githooks/pre-push, which is how
+# train.sh recognises a wrapper of the repository hook.
+standin_hook() {
+  printf '#!/usr/bin/env bash\n# test stand-in for .githooks/pre-push: runs no gate\nexit 0\n' > "$TMP/nohooks/pre-push"
+  chmod +x "$TMP/nohooks/pre-push"
+}
+standin_hook
 export LAND_PUSH_RETRY_SLEEP=0
 export LAND_NO_NIX=1 LAND_STATE_DIR="$TMP/landstate" LAND_GH="$TMP/fake-gh" LAND_REPO=test/repo
 export LAND_HOOK="$TMP/hook" LAND_REMOTE_RUNNER="$TMP/fake-runner" FAKE_GH_DIR="$TMP/gh" ORIGIN_GIT="$TMP/origin.git"

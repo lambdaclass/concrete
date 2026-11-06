@@ -38,7 +38,7 @@
 #   dryland  train.sh --dry-run land <name>: every land check, nothing pushed
 #   negative controls, each of which must FAIL, for its own reason:
 #     neg:build  a commit on the train head that breaks the build (ACCEPT_BREAK_BUILD, a shell
-#                snippet run in a scratch worktree): the build leg's command must fail, naming the file
+#                snippet run in a scratch clone): the build leg's command must fail, naming the file
 #     neg:hook   a commit on the train head that adds a job name to required-checks.txt that no
 #                workflow has: the candidate's own pre-push hook, fed that range, must fail
 #     neg:<m>    the same watch and dry-run land against the same run with its verdict tampered (a
@@ -264,10 +264,12 @@ json.dump(d, sys.stdout)'
 GH
   chmod +x "$WORK/tamper-gh"
 }
-# A scratch worktree at the train head with one breaking commit; prints its path, or nothing.
+# A scratch clone at the train head with one breaking commit; prints its path, or nothing. A clone,
+# not a worktree: the pre-push hook refuses a gated push from a linked worktree (ISS-0015), so a
+# worktree would make neg:hook fail for that reason instead of the broken commit.
 neg_tree() { # name snippet
   local d="$WORK/neg-$1"
-  git -C "$C" worktree add -q --detach "$d" "$HEAD" >/dev/null 2>&1 || return 1
+  { git clone -q --local --no-checkout "$C" "$d" && git -C "$d" checkout -q --detach "$HEAD"; } >/dev/null 2>&1 || return 1
   ( cd "$d" && bash -c "$2" && git add -A && git -c user.name=acceptance -c user.email=acceptance@invalid commit -qm "acceptance: broken on purpose ($1)" ) >/dev/null 2>&1 || return 1
   echo "$d"
 }
@@ -282,7 +284,7 @@ do_neg_build() {
   elif [ -n "$f" ] && ! printf '%s\n' "$out" | awk -v w="$f" 'index($0, w) {x=1} END {exit !x}'; then
     row neg:build failed "the build failed, but not on the broken file $f"; FAILED=1
   else row neg:build passed "build refused the broken commit${f:+ ($f)}"; fi
-  git -C "$C" worktree remove --force "$d" >/dev/null 2>&1 || true
+  rm -rf "$d"
 }
 do_neg_hook() {
   local d out base
@@ -295,7 +297,7 @@ do_neg_hook() {
   elif ! printf '%s\n' "$out" | awk 'index($0, "landing_script") {x=1} END {exit !x}'; then
     row neg:hook failed "the hook failed, but not in the landing-script check: $(printf '%s\n' "$out" | tail -n 1 | cut -c1-80)"; FAILED=1
   else row neg:hook passed "the hook refused (landing-script check)"; fi
-  git -C "$C" worktree remove --force "$d" >/dev/null 2>&1 || true
+  rm -rf "$d"
 }
 do_negative() {
   if [ -n "${SKIP[negative]:-}" ]; then row negative skipped "--skip"; SKIPPED=1; return 0; fi

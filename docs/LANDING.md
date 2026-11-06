@@ -21,6 +21,16 @@ scripts/land/report.sh                         # median time to land, per-stage 
 them. `land --dry-run` still performs every verification, so it is the way to ask "would this land?".
 `train.sh status <name>` prints the train's state and log.
 
+**Where a train runs.** Only in a full clone (`git clone`) whose pre-push hook is the repository's
+(`git config core.hooksPath .githooks`, or a wrapper hook that runs `.githooks/pre-push`, like
+`acceptance.sh`'s guard). Every subcommand except `status` refuses a linked worktree and a clone
+with the hook off, and the hook itself refuses a gated push (anything beyond the `wip/*` and review-
+notes tiers) from a linked worktree. The reason is ISS-0015: git hands a worktree's hooks
+`GIT_DIR=<repo>/.git/worktrees/<name>`, and a check run under it once wrote its sandbox's branches
+and test notes into a real clone and onto GitHub. Scripts that make throwaway repositories clear
+git's repository variables through `scripts/checks/lib/git_sandbox.sh` (checked by
+`scripts/checks/sandbox_isolation.sh`), so the refusals are a second wall, not the only one.
+
 ### build
 
 - Creates `train/<name>` from `origin/main` (after a fetch) and merges each ref with `--no-ff`.
@@ -428,7 +438,8 @@ When main moves, every ready head that does not contain main is rebased onto it.
   - the notes' `utc`.
 
   A (head, main) pair is tried once. Branches outside `wip/` are never rewritten.
-- **Procedure.** The rebase runs in a scratch worktree and is never piped. After it, the bot
+- **Procedure.** The rebase runs in a scratch clone (`clone --local` of the bot's clone, with its
+  remotes and hook; not a worktree, because the pre-push hook refuses a linked worktree) and is never piped. After it, the bot
   checks that no rebase or merge is still in progress. Then:
   1. `scripts/gen/refresh_generated.sh` runs when the tree has it (branch `ledgers`), and its
      result is committed.

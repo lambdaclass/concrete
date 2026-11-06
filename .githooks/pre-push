@@ -11,7 +11,8 @@
 #     main. Conflict markers are refused; nothing else runs.
 #   - only the review-note refs (refs/notes/concrete-review, refs/notes/concrete-review-findings,
 #     written by scripts/review/review.sh): no source tree, nothing to check.
-#   - anything else, including a by-hand run with no stdin: the full root set.
+#   - anything else, including a by-hand run with no stdin: the full root set, and only from a full
+#     clone (a linked worktree is refused; ISS-0015).
 #
 # Deliberate bypass:  CONCRETE_SKIP_GATES=1 git push   (you then own the CI result)
 set -uo pipefail
@@ -62,6 +63,16 @@ fi
 if [ "$other_refs" -eq 0 ] && [ "$note_refs" -gt 0 ]; then
   echo "pre-push: review-notes push — no source tree, no gates"
   exit 0
+fi
+
+# The checks build sandbox repositories, and a linked worktree hands its hook
+# GIT_DIR=<repo>/.git/worktrees/<name>: on 2026-11-06 that turned a review-tool check into writes on a
+# real clone and on GitHub (ISS-0015). Every repository-making script now clears git's variables, and
+# as a second wall a push that runs the checks must come from a full clone. The wip and notes tiers
+# above run nothing, so a worktree may still back up its branch.
+if [ "$(cd "$(git rev-parse --git-dir)" && pwd -P)" != "$(cd "$(git rev-parse --git-common-dir)" && pwd -P)" ]; then
+  echo "pre-push: refusing: this push runs the root checks, and $ROOT_DIR is a linked worktree; push it from a full clone (git clone), never a worktree." >&2
+  exit 1
 fi
 
 # The checks run in the gate shell (scripts/checks/lib/gate_env.sh refuses anywhere else). From
