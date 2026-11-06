@@ -418,7 +418,7 @@ archive. Rows for C–G are summaries. Each is refined when its phase becomes ne
 
 | task | objective | done when | depends on |
 |---|---|---|---|
-| R-0590 | Delete `legacy/` (LD), timing pending ([decision](docs/decisions.md#decided-project-restart), revised 2026-11-06) | a final ideas sweep of `legacy/` dispositions every idea (carried, planned, deferred or dropped on purpose); every `RETENTION.tsv` row is resolved; the owner explicitly approves; `legacy/`, the old pipeline included, is then deleted in one change, and the retention records at the root survive it | R-0591, R-0597, R-0598, R-0562, R-0561, owner: legacy deletion timing |
+| R-0590 | Delete `legacy/` (LD), timing pending ([decision](docs/decisions.md#decided-project-restart), revised 2026-11-06) | every per-phase ideas sweep already due when LD is scheduled (R-0591, R-0597, R-0598) has run, and a final ideas sweep of `legacy/` dispositions every idea (carried, planned, deferred or dropped on purpose); every `RETENTION.tsv` row is resolved; the owner explicitly approves; `legacy/`, the old pipeline included, is then deleted in one change, and the retention records at the root survive it; which phase LD follows is pending, so it fixes no phase boundary | R-0591, R-0562, R-0561, owner: legacy deletion timing |
 
 ### E. Verified growth
 
