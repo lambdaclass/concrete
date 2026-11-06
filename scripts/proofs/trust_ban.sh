@@ -9,7 +9,8 @@
 #   D  the library declares no axiom of its own;
 #   S  the sources, comments stripped (string literals are scanned), never spell sorry, sorryAx,
 #      admit, native_decide, +native, ofReduceBool, ofReduceNat, trustCompiler or skipKernelTC. An `example` is checked by the kernel
-#      and then discarded, so E and D never see it; this leg does.
+#      and then discarded, so E and D never see it; this leg does. The scan is lexical, so the
+#      sources may also define no syntax extension and import nothing outside the library.
 #
 # NEGATIVE CONTROLS: a theorem proved by sorry, a definition whose body is sorry (no theorem about
 # it), a theorem proved by native_decide and a declared axiom each fail E or D naming the constant;
@@ -24,6 +25,11 @@ source scripts/proofs/lib.sh
 
 BANNED_AXIOM_RE='^(sorryAx|Lean[.]ofReduceBool|Lean[.]ofReduceNat|Lean[.]trustCompiler)$|[.]_native[.]'
 BANNED_WORD_RE='\b(sorry|sorryAx|admit|native_decide|ofReduceBool|ofReduceNat|trustCompiler|skipKernelTC)\b|\+native\b'
+# The source scan is lexical, so it holds only for the syntax it lexes: Lean core's. A syntax
+# extension could make Lean read a literal differently from the scan (a macro taking `s!` before a
+# plain string), so the sources may define none and import nothing outside the library (only Init,
+# implicitly, which is where s!, m! and f! live).
+EXTENSION_RE='\b(macro|macro_rules|syntax|notation|infix|infixl|infixr|prefix|postfix|elab|elab_rules|declare_syntax_cat|initialize|builtin_initialize)\b|^\s*import\s+(?!ConcreteSpec(\.|\s|$))'
 
 # banned FILE → `<constant> (<axiom>)` for every constant of a PROOF_MODE=constants listing with a banned axiom
 banned() {
@@ -32,7 +38,8 @@ banned() {
 }
 # declared FILE → the axioms a PROOF_MODE=constants listing declares
 declared() { awk -F'\t' '$2 == "axiom" { print $1 }' "$1"; }
-# scan FILE... → `file:line: text` for every banned word outside comments; exit 3 when a source
+# scan FILE... → `file:line: text` for every banned word, syntax extension or outside import outside
+# comments; exit 3 when a source
 # cannot be lexed. Comments (nested `/- -/`, `--`) are blanked; everything else is scanned, string
 # literals included, since an interpolation such as s!"{(sorry : Nat)}" runs code. The lexer follows
 # Lean's literal forms so that no comment delimiter inside a literal starts a comment: a string with
@@ -42,9 +49,9 @@ declared() { awk -F'\t' '$2 == "axiom" { print $1 }' "$1"; }
 # recursively) and refuses any other string holding `{`. An unterminated string, comment,
 # interpolation or name is an error too: the scan fails closed, never skips.
 scan() {
-  python3 - "$BANNED_WORD_RE" "$@" <<'EOF'
+  python3 - "$BANNED_WORD_RE|$EXTENSION_RE" "$@" <<'EOF'
 import re, sys
-word = re.compile(sys.argv[1])
+word = re.compile(sys.argv[1], re.M)
 
 class LexError(Exception):
     pass
@@ -170,6 +177,8 @@ def h' : Nat := 0 -- a prime in a name starts no character literal: sorry
 def r' : String := r#"raw "-- /-" text"# ++ toString (sorry : Nat)
 example : True := by have «--» : True := True.intro; sorry
 example : False := sorryAx False true
+macro "plain" "s!" s:str : term => `($s)
+import Lean
 EOF
 W=$(scan "$TMP/src/Bad.lean"); RC=$?
 B="$TMP/src/Bad.lean"
@@ -180,9 +189,11 @@ $B:7: example : String := s!\"{(\"--\")}{(sorry : Nat)}\"
 $B:8: example : String := s!\"{\"/-\"}\" ++ toString (sorry : Nat)
 $B:11: def r' : String := r#\"raw \"-- /-\" text\"# ++ toString (sorry : Nat)
 $B:12: example : True := by have «--» : True := True.intro; sorry
-$B:13: example : False := sorryAx False true"
+$B:13: example : False := sorryAx False true
+$B:14: macro \"plain\" \"s!\" s:str : term => \`(\$s)
+$B:15: import Lean"
 [ "$RC" = 0 ] && [ "$W" = "$EXPECT" ] \
-  && ok "control: native_decide, and sorry inside an interpolation, after a string, raw string or quoted name holding comment delimiters, after an interpolation holding a string, and a direct sorryAx are found; the words in comments are not" \
+  && ok "control: native_decide, and sorry inside an interpolation, after a string, raw string or quoted name holding comment delimiters, after an interpolation holding a string, a direct sorryAx, a syntax extension and an outside import are found; the words in comments are not" \
   || no "control: source scan (rc=$RC) reported '$W'"
 printf 'def s : String := s!"unterminated {\n' > "$TMP/src/Open.lean"
 printf 'example : String × Nat := { fst := "{--", snd := sorry\n} -- "\n' > "$TMP/src/Brace.lean"
