@@ -1,0 +1,2 @@
+[piece 5 of 6: docs]
+- docs/decisions.md:840: Requiring every slice to be fully proved through both backends before the next starts contradicts the backend-order decision: slice 0 runs two unverified backends, LCB proof closure follows B1, and LLVM remains unverified. As written, this acceptance rule blocks progression beyond slice 0. State the permitted named backend premises explicitly.
