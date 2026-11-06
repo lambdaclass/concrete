@@ -60,6 +60,10 @@ set -uo pipefail
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/land/lib.sh
 . "$SELF_DIR/lib.sh"
+# The clone and scratch repositories below are sandboxes: none of the caller's repository variables
+# may reach them (ISS-0015). The clone is found from the working directory from here on.
+. "$SELF_DIR/../checks/lib/git_sandbox.sh"
+git_sandbox || exit 2
 REF="" NAME="" RUN_ID="" KEEP=0
 declare -A SKIP=()
 while [ $# -gt 0 ]; do

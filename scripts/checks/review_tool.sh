@@ -34,9 +34,10 @@ check() { # check <label> <command...>: the command must succeed
 T="$(mktemp -d)"
 trap 'rm -rf "$T"' EXIT
 
-# Isolate git from the user's config (hooks, signing, identity).
-export GIT_CONFIG_NOSYSTEM=1
-export GIT_CONFIG_GLOBAL="$T/gitconfig"
+# Isolate git from the caller's repository (a hook exports GIT_DIR; ISS-0015) and from the user's
+# config (hooks, signing, identity).
+source "$ROOT_DIR/scripts/checks/lib/git_sandbox.sh" || exit 2
+git_sandbox "$T/gitconfig" || exit 2
 cat >"$GIT_CONFIG_GLOBAL" <<'EOF'
 [user]
 	name = Review Gate

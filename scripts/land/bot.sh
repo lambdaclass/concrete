@@ -34,6 +34,10 @@ set -euo pipefail
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/land/lib.sh
 . "$SELF_DIR/lib.sh"
+# The bot's scratch worktrees must belong to the clone it runs in, never to a repository named by an
+# inherited GIT_DIR (ISS-0015): the clone is found from the working directory.
+. "$SELF_DIR/../checks/lib/git_sandbox.sh"
+git_sandbox
 DRY=0
 if [ "${1:-}" = "--dry-run" ]; then DRY=1; shift; fi
 SUB="${1:-tick}"

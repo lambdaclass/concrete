@@ -57,8 +57,8 @@ no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 
 # Isolation: no inherited repository (the hook leaks GIT_DIR), no user or system git config (hooks
 # path, conflict style, signing), no toolchain re-entry.
-unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY
-export GIT_CONFIG_GLOBAL="$TMP/gitconfig" GIT_CONFIG_NOSYSTEM=1
+source "$ROOT_DIR/scripts/checks/lib/git_sandbox.sh" || exit 2
+git_sandbox "$TMP/gitconfig" || exit 2
 cat > "$GIT_CONFIG_GLOBAL" <<EOF
 [user]
 	name = landing gate
