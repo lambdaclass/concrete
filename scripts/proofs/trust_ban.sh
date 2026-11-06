@@ -7,8 +7,8 @@
 #      Lean.ofReduceBool or Lean.ofReduceNat (what native_decide and `decide +native` reduce through),
 #      on Lean.trustCompiler, or on a generated `._native.` axiom;
 #   D  the library declares no axiom of its own;
-#   S  the sources, comments stripped (string literals are scanned), never spell sorry, admit, native_decide, +native,
-#      ofReduceBool, ofReduceNat, trustCompiler or skipKernelTC. An `example` is checked by the kernel
+#   S  the sources, comments stripped (string literals are scanned), never spell sorry, sorryAx,
+#      admit, native_decide, +native, ofReduceBool, ofReduceNat, trustCompiler or skipKernelTC. An `example` is checked by the kernel
 #      and then discarded, so E and D never see it; this leg does.
 #
 # NEGATIVE CONTROLS: a theorem proved by sorry, a definition whose body is sorry (no theorem about
@@ -23,7 +23,7 @@ CHECK_NAME=PROOF-TRUST-BAN
 source scripts/proofs/lib.sh
 
 BANNED_AXIOM_RE='^(sorryAx|Lean[.]ofReduceBool|Lean[.]ofReduceNat|Lean[.]trustCompiler)$|[.]_native[.]'
-BANNED_WORD_RE='\b(sorry|admit|native_decide|ofReduceBool|ofReduceNat|trustCompiler|skipKernelTC)\b|\+native\b'
+BANNED_WORD_RE='\b(sorry|sorryAx|admit|native_decide|ofReduceBool|ofReduceNat|trustCompiler|skipKernelTC)\b|\+native\b'
 
 # banned FILE → `<constant> (<axiom>)` for every constant of a PROOF_MODE=constants listing with a banned axiom
 banned() {
@@ -37,7 +37,7 @@ declared() { awk -F'\t' '$2 == "axiom" { print $1 }' "$1"; }
 # literals included, since an interpolation such as s!"{(sorry : Nat)}" runs code. The lexer follows
 # Lean's literal forms so that no comment delimiter inside a literal starts a comment: a string with
 # its escapes, a `{ }` in a string as an interpolation in which code (with its own strings and
-# comments) is lexed recursively, raw strings r"…" and r#"…"#, and character literals. Every string
+# comments) is lexed recursively, raw strings r"…" and r#"…"#, character literals and quoted names «…». Every string
 # is lexed as if it interpolates: a `{` in a plain string must be balanced, and an unterminated
 # string, comment or interpolation is an error, never a silent skip.
 scan() {
@@ -85,6 +85,10 @@ def lex(src):
             elif src.startswith("--", i):
                 j = src.find("\n", i); j = n if j < 0 else j; out.append(" " * (j - i)); i = j
             elif c == '"': i = string(i)
+            elif c == "«":                            # a quoted name part: no comment inside it
+                k = src.find("»", i + 1)
+                if k < 0: raise LexError("unterminated «name»")
+                out.append(src[i:k + 1]); i = k + 1
             elif c == "r" and not ident(i - 1) and re.match(r'r#*"', src[i:]): i = raw(i)
             elif c == "'" and not ident(i - 1):
                 m = re.match(r"'(\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|.)|[^\\'\n])'", src[i:])
@@ -159,6 +163,8 @@ example : String := s!"{"/-"}" ++ toString (sorry : Nat)
 def chars : List Char := ['{', '}', '\'', '\\', '"', '\x41']
 def h' : Nat := 0 -- a prime in a name starts no character literal: sorry
 def r' : String := r#"raw "-- /-" text"# ++ toString (sorry : Nat)
+example : True := by have «--» : True := True.intro; sorry
+example : False := sorryAx False true
 EOF
 W=$(scan "$TMP/src/Bad.lean"); RC=$?
 B="$TMP/src/Bad.lean"
@@ -167,9 +173,11 @@ $B:5: def interp : String := s!\"{(sorry : Nat)}\"
 $B:6: def dashes : String := \"-- /- not a comment\" ++ toString (sorry : Nat)
 $B:7: example : String := s!\"{(\"--\")}{(sorry : Nat)}\"
 $B:8: example : String := s!\"{\"/-\"}\" ++ toString (sorry : Nat)
-$B:11: def r' : String := r#\"raw \"-- /-\" text\"# ++ toString (sorry : Nat)"
+$B:11: def r' : String := r#\"raw \"-- /-\" text\"# ++ toString (sorry : Nat)
+$B:12: example : True := by have «--» : True := True.intro; sorry
+$B:13: example : False := sorryAx False true"
 [ "$RC" = 0 ] && [ "$W" = "$EXPECT" ] \
-  && ok "control: native_decide, and sorry inside an interpolation, after a string or raw string holding comment delimiters, and after an interpolation holding a string are found; the words in comments are not" \
+  && ok "control: native_decide, and sorry inside an interpolation, after a string, raw string or quoted name holding comment delimiters, after an interpolation holding a string, and a direct sorryAx are found; the words in comments are not" \
   || no "control: source scan (rc=$RC) reported '$W'"
 printf 'def s : String := "unterminated {\n' > "$TMP/src/Open.lean"
 for f in missing Open; do
