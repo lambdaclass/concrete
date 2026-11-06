@@ -149,13 +149,22 @@ def scan(pattern, paths):
     return rc
 
 
+# `example` as a command token: not part of a longer identifier (`example'`, `my.example`, `examples`)
+EXAMPLE = re.compile(r"(?<![\w.'!?])example(?![\w'!?])")
+
+
+def count_examples(src):
+    """The number of `example` commands in a source (code tokens only, not literal contents)."""
+    return len(EXAMPLE.findall(lex(src, literals=False)))
+
+
 def examples(src_dir, dst_dir, paths):
     count = 0
     for rel in paths:
         src = open(os.path.join(src_dir, rel), encoding="utf-8").read()
         text = lex(src, literals=False)          # an `example` inside a literal is not a command
         out, last = [], 0
-        for m in re.finditer(r"(?<![\w.'!?])example\b", text):
+        for m in EXAMPLE.finditer(text):
             line = text.count("\n", 0, m.start()) + 1
             if m.start() > 0 and text[m.start() - 1] != "\n":
                 raise LexError(f"{rel}:{line}: an `example` that does not start its line")

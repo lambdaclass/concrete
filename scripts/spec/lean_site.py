@@ -9,7 +9,7 @@ prose, everything else as code), and for each declaration its statement, what it
 proofs use it. Nothing here is hand-written prose, so the view cannot drift from the sources. The
 script fails if a generated link has no target or a specification module is missing.
 """
-import bisect, html, json, os, re, sys
+import bisect, html, json, os, re, sys, urllib.parse
 from collections import defaultdict
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'proofs'))
@@ -23,42 +23,56 @@ def esc(s):
 
 
 def inline(s):
-    s = esc(s)
-    s = re.sub(r'`([^`]+)`', r'<code>\1</code>', s)
-    s = re.sub(r'\*\*([^*]+)\*\*', r'<strong>\1</strong>', s)
-    return s
+    """Inline Markdown: `code` spans first, then **bold** only outside them."""
+    out = []
+    for k, part in enumerate(re.split(r'(`[^`]+`)', s)):
+        if k % 2:
+            out.append('<code>' + esc(part[1:-1]) + '</code>')
+        else:
+            out.append(re.sub(r'\*\*([^*]+)\*\*', r'<strong>\1</strong>', esc(part)))
+    return ''.join(out)
+
+
+FENCE = re.compile(r'(`{3,})')
 
 
 def prose(text):
-    """Minimal Markdown for doc comments: headings, paragraphs, lists, fenced code."""
+    """Minimal Markdown for doc comments: headings, paragraphs, bulleted and numbered lists, and
+    fenced code (a fence closes only on a line of at least as many backticks and nothing else)."""
     out, para, lst, fence = [], [], [], None
+    kind = None                                       # 'ul' or 'ol' for the open list
     def flush():
-        nonlocal para, lst
+        nonlocal para, lst, kind
         if para:
             out.append('<p>' + inline(' '.join(para)) + '</p>')
             para = []
         if lst:
-            out.append('<ul>' + ''.join('<li>' + inline(i) + '</li>' for i in lst) + '</ul>')
+            out.append(f'<{kind}>' + ''.join('<li>' + inline(i) + '</li>' for i in lst) + f'</{kind}>')
             lst = []
     for line in text.split('\n'):
         st = line.strip()
         if fence is not None:
-            if st.startswith('```'):
-                out.append('<pre class="src">' + esc('\n'.join(fence)) + '</pre>')
+            n, body = fence
+            if re.fullmatch('`{%d,}' % n, st):
+                out.append('<pre class="src">' + esc('\n'.join(body)) + '</pre>')
                 fence = None
             else:
-                fence.append(line)
+                body.append(line)
             continue
-        if st.startswith('```'):
-            flush(); fence = []
+        m = FENCE.match(st)
+        if m:
+            flush(); fence = (len(m.group(1)), [])
             continue
         m = re.match(r'(#+)\s+(.*)', st)
+        bullet, number = re.match(r'[*-]\s+', st), re.match(r'\d+\.\s+', st)
         if m:
             flush(); n = min(len(m.group(1)) + 1, 6)
             out.append(f'<h{n}>{inline(m.group(2))}</h{n}>')
-        elif re.match(r'[*-]\s+', st) or re.match(r'\d+\.\s+', st):
-            if para:
+        elif bullet or number:
+            k = 'ol' if number else 'ul'
+            if para or (lst and kind != k):
                 flush()
+            kind = k
             lst.append(re.sub(r'^([*-]|\d+\.)\s+', '', st))
         elif not st:
             flush()
@@ -69,9 +83,27 @@ def prose(text):
                 flush()
             para.append(st)
     if fence is not None:
-        out.append('<pre class="src">' + esc('\n'.join(fence)) + '</pre>')
+        out.append('<pre class="src">' + esc('\n'.join(fence[1])) + '</pre>')
     flush()
     return '\n'.join(out)
+
+
+def headings(text):
+    """The Markdown headings of a doc, outside fenced code."""
+    out, fence = [], None
+    for line in text.split('\n'):
+        st = line.strip()
+        if fence is not None:
+            if re.fullmatch('`{%d,}' % fence, st):
+                fence = None
+            continue
+        m = FENCE.match(st)
+        if m:
+            fence = len(m.group(1)); continue
+        m = re.match(r'#+\s+(.*)', st)
+        if m:
+            out.append(m.group(1))
+    return out
 
 
 CSS = """
@@ -110,12 +142,31 @@ def source(mod):
 def written(d):
     """A declaration the source writes, as opposed to one Lean generates from it (recursors,
     `deriving` instances, equation lemmas, matchers): its name is the text at its selection range
-    (or it is an explicit `instance`). Generated ones carry their parent's range."""
-    if d['selEndLine'] != d['line']:
-        return False
-    t = source(d['module'])[d['line'] - 1][d['selCol']:d['selEndCol']]
-    last = d['name'].split('.')[-1]
+    (or it is an explicit `instance`). Generated ones carry their parent's range. The selection may
+    span lines (a quoted name «…» can hold a newline)."""
+    lines = source(d['module'])
+    if d['selEndLine'] == d['line']:
+        t = lines[d['line'] - 1][d['selCol']:d['selEndCol']]
+    else:
+        t = '\n'.join([lines[d['line'] - 1][d['selCol']:]] + lines[d['line']:d['selEndLine'] - 1]
+                      + [lines[d['selEndLine'] - 1][:d['selEndCol']]])
+    t = t.replace('«', '').replace('»', '')
+    last = d['last']
     return t == last or t.endswith('.' + last) or t == 'instance'
+
+
+def module_order(env_mods):
+    """The modules of the library: the root, the specification in `Spec.lean`'s import order, then
+    every other module sorted. Every source file under `ConcreteSpec/` must be in the root's import
+    closure, or the view would leave it out."""
+    on_disk = set(modules_under('ConcreteSpec')) | {'ConcreteSpec'}
+    missing = sorted(on_disk - set(env_mods))
+    if missing:
+        sys.exit(f'error: source modules outside the import closure of ConcreteSpec: {missing}')
+    spec_root = open(os.path.join(ROOT, 'ConcreteSpec/Spec.lean')).read()
+    first = ['ConcreteSpec', 'ConcreteSpec.Spec'] + re.findall(r'^import (ConcreteSpec\.Spec\.[\w.]+)', spec_root, re.M)
+    first = [m for m in first if m in env_mods]
+    return first + sorted(set(env_mods) - set(first))
 
 
 def blocks(lines):
@@ -165,7 +216,7 @@ def modules_under(rel):
 
 def main():
     decls_path, out_dir = sys.argv[1], sys.argv[2]
-    decls, mdocs = {}, defaultdict(list)
+    decls, mdocs, env_mods = {}, defaultdict(list), []
     for line in open(decls_path):
         line = line.strip()
         if not line.startswith('{'):
@@ -173,23 +224,16 @@ def main():
         d = json.loads(line)
         if d['kind'] == 'moduleDoc':
             mdocs[d['module']].append(d)
-        elif d['kind'] not in ('constructor', 'recursor') and written(d):
+        elif d['kind'] == 'module':
+            env_mods.append(d['module'])
+        elif d['kind'] != 'recursor' and written(d):
             decls[d['name']] = d
-    # module order: Spec.lean's imports, then the proofs
-    spec_root = open(os.path.join(ROOT, 'ConcreteSpec/Spec.lean')).read()
-    spec_mods = ['ConcreteSpec.Spec'] + re.findall(r'^import (ConcreteSpec\.Spec\.[\w.]+)', spec_root, re.M)
-    # every proof module on disk, not only those with named declarations: a module of examples or
-    # prose alone is part of the view too
-    proof_mods = modules_under('ConcreteSpec/Proofs')
-    on_disk = modules_under('ConcreteSpec/Spec')
-    missing = sorted(set(on_disk) - set(spec_mods))
-    if missing:
-        sys.exit(f'error: spec modules not imported by ConcreteSpec/Spec.lean: {missing}')
-    mods = spec_mods + proof_mods
+    mods = module_order(env_mods)
+    spec_mods = [m for m in mods if m == 'ConcreteSpec.Spec' or m.startswith('ConcreteSpec.Spec.')]
 
     def href(name, from_depth=1):
         d = decls[name]
-        return '../' * from_depth + 'm/' + d['module'] + '.html#' + name
+        return '../' * from_depth + 'm/' + d['module'] + '.html#' + urllib.parse.quote(name, safe='')
 
     used_by = defaultdict(set)
     for n, d in decls.items():
@@ -238,19 +282,23 @@ def main():
         out.append(esc(text[last:]))
         return ''.join(out)
 
+    def short(u):
+        return esc(decls[u]['last'] or decls[u]['display'])
+
     def meta(n):
         d = decls[n]
         uses = sorted(u for u in d['uses'] if u in decls)
         ub = sorted(used_by[n])
-        prf = [u for u in ub if decls[u]['module'].startswith('ConcreteSpec.Proofs.')]
+        prf = [u for u in ub if decls[u]['kind'] == 'theorem']
         oth = [u for u in ub if u not in prf]
-        parts = [f'<span>{esc(d["kind"])} <code>{esc(n)}</code></span>']
+        priv = 'private ' if d['private'] else ''
+        parts = [f'<span>{priv}{esc(d["kind"])} <code>{esc(d["display"])}</code></span>']
         if uses:
-            parts.append('uses: ' + ''.join(f'<a href="{href(u)}">{esc(u.split(".")[-1])}</a>' for u in uses))
+            parts.append('uses: ' + ''.join(f'<a href="{href(u)}">{short(u)}</a>' for u in uses))
         if prf:
-            parts.append('proofs about it: ' + ''.join(f'<a href="{href(u)}">{esc(u.split(".")[-1])}</a>' for u in prf))
+            parts.append('theorems using it: ' + ''.join(f'<a href="{href(u)}">{short(u)}</a>' for u in prf))
         if oth:
-            parts.append('used by: ' + ''.join(f'<a href="{href(u)}">{esc(u.split(".")[-1])}</a>' for u in oth[:40]))
+            parts.append('used by: ' + ''.join(f'<a href="{href(u)}">{short(u)}</a>' for u in oth))
         return '<div class="meta">' + '<br>'.join(parts) + '</div>'
 
     os.makedirs(os.path.join(out_dir, 'm'), exist_ok=True)
@@ -261,7 +309,8 @@ def main():
         anchors = by_line.get(mod, {})
         refs = ilean_refs(mod)
         body = []
-        nex = nthm = ndef = 0
+        nthm = ndef = 0
+        nex = lean_lex.count_examples('\n'.join(src))
         for blk in blocks(src):
             if blk[0] == 'doc':
                 body.append('<div class="prose">' + prose(blk[1]) + '</div>')
@@ -273,7 +322,6 @@ def main():
                 code.pop(0)
             if not code:
                 continue
-            nex += sum(1 for _, t in code if t.lstrip().startswith('example'))
             body.append('<pre class="src">' + '\n'.join(link_code(ln, t, refs) for ln, t in code) + '</pre>')
             for ln, _ in code:
                 for n in anchors.get(ln, []):
@@ -289,9 +337,9 @@ def main():
     # index: modules with their first module-doc heading
     def title(mod):
         for d in sorted(mdocs.get(mod, []), key=lambda d: d['line']):
-            m = re.search(r'^#+\s+(.*)$', d['doc'], re.M)
-            if m:
-                return m.group(1)
+            hs = headings(d['doc'])
+            if hs:
+                return hs[0]
         return ''
     rows = ''.join(f'<tr><td><a href="m/{esc(m)}.html">{esc(m)}</a></td><td>{inline(title(m))}</td>'
                    f'<td>{counts[m][0]}</td><td>{counts[m][1]}</td><td>{counts[m][2]}</td></tr>' for m in mods)
@@ -303,15 +351,16 @@ def main():
     open(os.path.join(out_dir, 'index.html'), 'w').write(page('Concrete specification', idx))
     # theorems page
     th = ['<h1>Theorems</h1>']
-    for mod in proof_mods + [m for m in spec_mods]:
-        ts = sorted((d for d in decls.values() if d['module'] == mod and d['kind'] == 'theorem'
-                     and d['doc']), key=lambda d: d['line'])
+    for mod in mods:
+        ts = sorted((d for d in decls.values() if d['module'] == mod and d['kind'] == 'theorem'),
+                    key=lambda d: d['line'])
         if not ts:
             continue
         th.append(f'<h2><a href="m/{esc(mod)}.html">{esc(mod)}</a></h2>')
         for d in ts:
-            th.append(f'<div class="decl"><a href="{href(d["name"], 0)}"><code>{esc(d["name"])}</code></a>'
-                      f'<div class="prose">{prose(d["doc"])}</div><pre class="src">{esc(d["type"])}</pre></div>')
+            doc = f'<div class="prose">{prose(d["doc"])}</div>' if d['doc'] else ''
+            th.append(f'<div class="decl"><a href="{href(d["name"], 0)}"><code>{esc(d["display"])}</code></a>'
+                      f'{doc}<pre class="src">{esc(d["type"])}</pre></div>')
     open(os.path.join(out_dir, 'theorems.html'), 'w').write(page('Theorems', '\n'.join(th)))
     # link check
     bad = []
@@ -325,7 +374,7 @@ def main():
                 fp = os.path.normpath(os.path.join(root, file)) if file else p
                 if not os.path.exists(fp):
                     bad.append((p, tgt)); continue
-                if frag and f'id="{frag}"' not in open(fp).read():
+                if frag and f'id="{esc(urllib.parse.unquote(frag))}"' not in open(fp).read():
                     bad.append((p, tgt))
     if bad:
         sys.exit('error: broken links: ' + '; '.join(f'{a} -> {b}' for a, b in bad[:20]))
