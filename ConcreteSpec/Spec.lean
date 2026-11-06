@@ -115,8 +115,9 @@ acceptance of a source program does not depend on how the elaborator names its s
 an obligation on the source-to-Core elaboration relation, which slice 1 does not define; it is not
 proved here. In slice 1 struct fields are scalars, so the
 rule's recursive form (a struct field holding a struct, nested patterns, tuples) has only its
-one-level instance here. An input is not known: `add100` and `partialUnknownAccepted` are the
-accepted bodies that trap for some input values. The table has more entries (module constants, the
+one-level instance here. An input is not known, only bounded by its type: `add100` and
+`partialUnknownRefused` trap for some input values and are refused (no hidden traps, decision of
+2026-11-06), and `add0`, whose sum fits for every input, is accepted. The table has more entries (module constants, the
 six named wrapping/saturating operations, lossless `as`) that slice 1 has no syntax for. The
 refusal applies to all written code, including trusted and unreachable code (Q6.4); slice 1 has
 neither, so its examples show only reachable positions and a discarded one (`overflowDropped`).

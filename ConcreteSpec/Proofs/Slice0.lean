@@ -43,8 +43,8 @@ theorem toCore_injective {q q' : Program} (h : toCore q = toCore q') : q = q' :=
   have hb' : body = body' := map_toCore_injective hb
   rw [hb', Atom.toCore_injective hr]
 
-/-- Every binding of the context has a known `u8` value. -/
-def Known (Γ : Ctx) : Prop := ∀ e ∈ Γ, ∃ n, e.known = some (.int .u8 n)
+/-- Every binding of the context is a `u8` with a known value. -/
+def Known (Γ : Ctx) : Prop := ∀ e ∈ Γ, e.ty = .scalar (.int .u8) ∧ ∃ n, e.known = some (.int .u8 n)
 
 theorem ctxFind_mem {x : Var} : ∀ {Γ : Ctx} {e : Entry}, ctxFind Γ x = some e → e ∈ Γ
   | [], _, h => by simp [ctxFind] at h
@@ -78,36 +78,39 @@ theorem known_useAtom {Δ : Decls} {Γ Γ' : Ctx} {a : ConcreteSpec.Atom} (hk : 
 
 /-- A slice-0 atom that can be read has a known `u8` value. -/
 theorem knownAtom_u8 {Δ : Decls} {Γ Γ' : Ctx} {a : Atom} (hk : Known Γ)
-    (hu : UseAtom Δ Γ a.toCore Γ') : ∃ n, knownAtom Γ a.toCore = some (.int .u8 n) := by
+    (hu : UseAtom Δ Γ a.toCore Γ') :
+    ∃ n, knownAtom Γ a.toCore = some (.int .u8 n) ∧ atomBounds Γ a.toCore = some (.u8, n, n) := by
   cases a with
-  | lit n => exact ⟨n, rfl⟩
+  | lit n => exact ⟨n, rfl, rfl⟩
   | var x =>
     cases hu with
     | copy hf _ _ =>
-      obtain ⟨n, hn⟩ := hk _ (ctxFind_mem hf)
-      exact ⟨n, by simp [Atom.toCore, knownAtom, hf, hn]⟩
+      obtain ⟨ht, n, hn⟩ := hk _ (ctxFind_mem hf)
+      exact ⟨n, by simp [Atom.toCore, knownAtom, hf, hn], by simp [Atom.toCore, atomBounds, hf, hn, ht]⟩
 
-/-- A checked slice-0 expression has a known `u8` value: its operands are known, and a sum that
-does not fit would be a known violation, which the checker refuses. -/
+/-- A checked slice-0 expression has a known `u8` value: its operands are known exactly, so the
+evidence that admits a sum (no hidden traps) says the sum fits. -/
 theorem knownExpr_u8 {Δ : Decls} {Γ Γ' : Ctx} {e : Expr} (hk : Known Γ)
-    (hu : Uses Δ Γ e.toCore Γ') (hv : knownViolates Γ e.toCore = false) :
+    (hu : Uses Δ Γ e.toCore Γ') (hv : admitted Γ e.toCore = true) :
     Known Γ' ∧ ∃ n, knownExpr Γ e.toCore = some (.int .u8 n) := by
   cases e with
   | atom a =>
     cases hu with
     | atom hu =>
-      exact ⟨known_useAtom hk hu, knownAtom_u8 hk hu⟩
+      obtain ⟨n, hn, _⟩ := knownAtom_u8 hk hu
+      exact ⟨known_useAtom hk hu, n, hn⟩
   | add l r =>
     cases hu with
     | add hl hr =>
       have hk₁ := known_useAtom hk hl
-      obtain ⟨a, ha⟩ := knownAtom_u8 hk hl
-      obtain ⟨b, hb⟩ := knownAtom_u8 hk₁ hr
+      obtain ⟨a, ha, ha'⟩ := knownAtom_u8 hk hl
+      obtain ⟨b, hb, hb'⟩ := knownAtom_u8 hk₁ hr
       rw [useAtom_knownAtom hl] at hb
+      rw [useAtom_atomBounds hl] at hb'
       refine ⟨known_useAtom hk₁ hr, a + b, ?_⟩
-      simp only [Expr.toCore, knownViolates, ha, hb] at hv
+      simp only [Expr.toCore, admitted, ha', hb'] at hv
       simp only [Expr.toCore, knownExpr, ha, hb]
-      simp_all
+      simp_all [IntTy.inRange]
 
 /-- A checked slice-0 body exits: from a described environment whose bindings all have known
 `u8` values, it reaches `return` without a trap. -/
@@ -119,7 +122,7 @@ theorem body_exits {Δ : Decls} {r : Atom} :
     | ret _ hu _ =>
       cases hu with
       | atom hu =>
-        obtain ⟨n, hn⟩ := knownAtom_u8 hk hu
+        obtain ⟨n, hn, _⟩ := knownAtom_u8 hk hu
         exact ⟨n.toNat, by simp [runBody, retOutcome, knownAtom_sound hc hn]⟩
   | s :: ss, Γ, env, hb, hc, hk => by
     cases hb with
@@ -135,7 +138,7 @@ theorem body_exits {Δ : Decls} {r : Atom} :
         · obtain ⟨c, h⟩ := body_exits hb hc' (by
             intro e' he'
             cases he' with
-            | head => exact ⟨n, hn⟩
+            | head => exact ⟨rfl, n, hn⟩
             | tail _ he' => exact hk₁ e' he')
           exact ⟨c, by simp only [List.length_cons, List.map_cons, runBody, hx]; exact h⟩
 
@@ -147,14 +150,10 @@ theorem slice0_exits {q : Program} (h : Checked (toCore q)) :
   refine ⟨c, runBody_exit_u8 h.2 .nil _ c hc, ?_⟩
   simpa [run, toCore] using hc
 
-/-- An accepted slice-0 program never traps, with any fuel. -/
+/-- An accepted slice-0 program never traps, with any fuel: the first instance of
+`checked_no_implicit_traps`. -/
 theorem slice0_never_traps {q : Program} (h : Checked (toCore q)) (n : Nat) (k : Trap) :
-    run (toCore q) n ≠ .trap k := by
-  intro ht
-  obtain ⟨c, _, hc⟩ := slice0_exits h
-  have h₁ := runBody_mono ht (by simp) (max n (q.body.length + 1)) (Nat.le_max_left _ _)
-  have h₂ := runBody_mono hc (by simp) (max n (q.body.length + 1)) (Nat.le_max_right _ _)
-  rw [h₁] at h₂
-  cases h₂
+    run (toCore q) n ≠ .trap k :=
+  checked_no_implicit_traps h n k
 
 end ConcreteSpec.Slice0

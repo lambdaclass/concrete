@@ -16,8 +16,8 @@ Each example gives the surface program in its doc comment, its Core syntax, and 
 specification says about it: accepted (`check p = true`) with an outcome (`run p 10 = …`), or
 refused (`check p = false`). By `check_iff` (`Proofs/Checker.lean`), `check p = true` is exactly
 the rule `Checked p`, and `bodyOkB … = true` is exactly `BodyOk …`. Locals are written with their
-source name and a number: `t₀` is `⟨"t", 0⟩`. That the runtime-overflow body `add100` is
-safe for every input is the theorem `add100_safe` in `Proofs/Examples.lean`. -/
+source name and a number: `t₀` is `⟨"t", 0⟩`. A refused program may still have a `run` example:
+it shows what the refused code would do if it ran anyway. -/
 
 /-- `struct Token {}` — empty, not `Copy`, so linear (OWN-D1). -/
 def token : StructDecl := { name := "Token", copy := false, fields := [] }
@@ -223,7 +223,7 @@ example : run wildcardField 10 = .exit 42 := by decide
 
 /-- Refused (Q6.1, Q6.2, Q6.4; ARITH-13, OD118): `a` and `b` are immutable `let`s of literals, so
 they are statically known, and `a + b` is known to overflow `u8`. The refusal is justified: run
-anyway, the addition traps (`knownViolation_traps`).
+anyway, the addition traps.
 ```
 fn main() -> u8 {
     let a: u8 = 200;
@@ -308,33 +308,47 @@ example : check fieldSumFits = true := by decide
 
 example : run fieldSumFits 10 = .exit 255 := by decide
 
-/-- **An accepted overflow from an input** (Q6.2, Q6.4). The checker does not know an input's
-value. Slice 1 has no source of input: `main` takes no parameters (Q8.4), and an input reaches a
+/-- **An overflow from an input is refused** (no hidden traps, decision of 2026-11-06, Q1). The
+checker does not know an input's value, so it bounds `x` by its type, `0 ≤ x ≤ 255`, and `x + 100`
+may not fit: the addition has no evidence and is refused. Run anyway, it traps for `x > 155`. Slice 1 has no source of input: `main` takes no parameters (Q8.4), and an input reaches a
 program through a capability (Q5), which slice 1 does not model. The witness is therefore a body
 checked from one binding `x : u8` with no known value, as the body of a function with a `u8`
 parameter would be:
 ```
 fn add100(x: u8) -> u8 {
-    return x + 100;        // accepted; traps when x > 155
+    return x + 100;        // error: x + 100 may overflow u8 (x ≤ 255)
 }
 ```
-In Core the sum is bound to a temporary first (Q9.1). -/
+In Core the sum is bound to a temporary first (Q9.1). The guarded forms that are accepted need
+conditions, which slice 1 does not have; they come with Core `if` (ROADMAP R-0574). -/
 def inputCtx : Ctx := [{ name := x₀, ty := u8, live := true, used := false, known := none }]
 
 def inputEnv (n : Int) : Env := [(x₀, .val (.scalar (.int .u8 n)))]
 
 def add100 : List Stmt := [.let_ (.name s₂) u8 (.add (.copy x₀) (.int .u8 100))]
 
-example : bodyOkB decls inputCtx add100 (.copy s₂) = true := by decide
+example : bodyOkB decls inputCtx add100 (.copy s₂) = false := by decide
 
 example : runBody decls 10 (inputEnv 200) add100 (.copy s₂) = .trap .arithmeticOverflow := by decide
 
 example : runBody decls 10 (inputEnv 1) add100 (.copy s₂) = .exit 101 := by decide
 
+/-- Accepted: the type bound of the input is evidence enough when the sum always fits.
+```
+fn add0(x: u8) -> u8 {
+    return x + 0;          // accepted: 0 ≤ x + 0 ≤ 255
+}
+``` -/
+def add0 : List Stmt := [.let_ (.name s₂) u8 (.add (.copy x₀) (.int .u8 0))]
+
+example : bodyOkB decls inputCtx add0 (.copy s₂) = true := by decide
+
+example : runBody decls 10 (inputEnv 255) add0 (.copy s₂) = .exit 255 := by decide
+
 /-- **Partial facts** (Q6.2 as amended): an unknown field does not discard a known sibling. `p`'s
 field `a` comes from the input `x` and is unknown; field `b` is `200` and is known. Adding `100` to
-the known field is refused; the body that adds the unknown field to the known one is accepted, and
-traps only for some inputs.
+the known field is refused; adding the unknown field to the known one is refused too, since the
+sum fits only for some inputs.
 ```
 fn f(x: u8) -> u8 {
     let p: Pair = Pair { a: x, b: 200 };
@@ -352,25 +366,26 @@ def partialKnownRefused : List Stmt :=
 
 example : bodyOkB decls inputCtx partialKnownRefused (.copy z₃) = false := by decide
 
-/-- Accepted: the sum of the unknown field and the known one is not known, so it is checked at run
-time (ARITH-3).
+/-- Refused (no hidden traps): the unknown field is bounded by its type, `0 ≤ c ≤ 255`, and the
+known one is `200`, so `c + d` may not fit. The known sibling is still used: it is the `200` in
+the bound. Run anyway, the sum traps when `x > 55`.
 ```
 fn f(x: u8) -> u8 {
     let p: Pair = Pair { a: x, b: 200 };
     let Pair { a: c, b: d } = p;
-    return c + d;          // accepted; traps when x > 55
+    return c + d;          // error: c + 200 may overflow u8 (c ≤ 255)
 }
 ``` -/
-def partialUnknownAccepted : List Stmt :=
+def partialUnknownRefused : List Stmt :=
   [.let_ (.name p₀) (.struct "Pair") (.mk "Pair" [("a", .copy x₀), ("b", .int .u8 200)]),
    .letStruct "Pair" [("a", .name x₁), ("b", .name y₁)] (mv p₀),
    .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₁))]
 
-example : bodyOkB decls inputCtx partialUnknownAccepted (.copy s₂) = true := by decide
+example : bodyOkB decls inputCtx partialUnknownRefused (.copy s₂) = false := by decide
 
-example : runBody decls 10 (inputEnv 55) partialUnknownAccepted (.copy s₂) = .exit 255 := by decide
+example : runBody decls 10 (inputEnv 55) partialUnknownRefused (.copy s₂) = .exit 255 := by decide
 
-example : runBody decls 10 (inputEnv 56) partialUnknownAccepted (.copy s₂) = .trap .arithmeticOverflow := by
+example : runBody decls 10 (inputEnv 56) partialUnknownRefused (.copy s₂) = .trap .arithmeticOverflow := by
   decide
 
 /-- Refused: `300` does not fit `u8` (ARITH-2). -/
