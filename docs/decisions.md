@@ -365,7 +365,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   destination and deletion condition (P6). Revised 2026-11-06 by the owner: `legacy/` is kept much
   longer, as the reference for ideas the new design may have forgotten. Nothing is deleted after
   slice 1 (B3 keeps only the totality audit and the retirement of legacy defects); each of phases C,
-  D and E starts with a short ideas sweep of `legacy/` for its area (R-0591); `legacy/`, the old
+  D and E starts with a short ideas sweep of `legacy/` for its area (R-0591, R-0597, R-0598); `legacy/`, the old
   pipeline included, is deleted only after phase D (LD, R-0590), when a final ideas sweep has
   dispositioned every idea (carried, planned, deferred or dropped on purpose), every
   `RETENTION.tsv` row is resolved and the owner explicitly approves. Until then it stays
