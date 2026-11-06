@@ -7,15 +7,22 @@
 #      Lean.ofReduceBool or Lean.ofReduceNat (what native_decide and `decide +native` reduce through),
 #      on Lean.trustCompiler, or on a generated `._native.` axiom;
 #   D  the library declares no axiom of its own;
-#   S  the sources, comments stripped (string literals are scanned), never spell sorry, sorryAx,
-#      admit, native_decide, +native, ofReduceBool, ofReduceNat, trustCompiler or skipKernelTC. An `example` is checked by the kernel
-#      and then discarded, so E and D never see it; this leg does. The scan is lexical, so the
-#      sources may also define no syntax extension and import nothing outside the library.
+#   X  every `example`, which the kernel checks and Lean then discards (so E and D never see it),
+#      depends only on the standard axioms: in a copy of the library each `example` becomes a
+#      named declaration (scripts/proofs/lean_lex.py), the copy is built, and its axioms are
+#      collected as E collects a theorem's;
+#   S  defence in depth, lexical: the library builds with warningAsError and nothing in lakefile.toml
+#      can change that or point the build at other sources; the sources, comments stripped and
+#      string literals kept, never spell sorry, sorryAx, admit, stop, native_decide, +native, an
+#      option on `decide`, ofReduceBool, ofReduceNat, trustCompiler or skipKernelTC, and define no
+#      syntax extension, run no meta code, set no option and import nothing outside the library
+#      (the lexer reads what Lean reads only for syntax it knows).
 #
 # NEGATIVE CONTROLS: a theorem proved by sorry, a definition whose body is sorry (no theorem about
 # it), a theorem proved by native_decide and a declared axiom each fail E or D naming the constant;
 # a source with an `example` proved by native_decide or a sorry hidden in an interpolation fails S,
-# the same words inside comments do not, and an unreadable or unlexable source fails S.
+# the same words inside comments do not, and an unreadable or unlexable source fails S; examples
+# proved by `decide +native` and by `stop` fail X, and one proved by rfl does not.
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/../checks/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -24,7 +31,9 @@ CHECK_NAME=PROOF-TRUST-BAN
 source scripts/proofs/lib.sh
 
 BANNED_AXIOM_RE='^(sorryAx|Lean[.]ofReduceBool|Lean[.]ofReduceNat|Lean[.]trustCompiler)$|[.]_native[.]'
-BANNED_WORD_RE='\b(sorry|sorryAx|admit|stop|native_decide|ofReduceBool|ofReduceNat|trustCompiler|skipKernelTC)\b|\+native\b|\bnative\s*:='
+BANNED_WORD_RE='\b(sorry|sorryAx|admit|stop|native_decide|ofReduceBool|ofReduceNat|trustCompiler|skipKernelTC)\b|\+native\b|\bnative»?\s*:=|\bdecide\s*\(\s*config\b|\bdecide\s*[+-]|\bDecide[.]Config\b'
+# `decide` takes no options at all (`decide +native`, `decide (config := ⟨…⟩)` with a positional
+# native flag): a term `decide (p)` is unaffected.
 # The source scan is lexical, so it holds only for the syntax it lexes: Lean core's. A syntax
 # extension could make Lean read a literal differently from the scan (a macro taking `s!` before a
 # plain string), so the sources may define none and import nothing outside the library (only Init,
@@ -41,105 +50,9 @@ banned() {
 }
 # declared FILE → the axioms a PROOF_MODE=constants listing declares
 declared() { awk -F'\t' '$2 == "axiom" { print $1 }' "$1"; }
-# scan FILE... → `file:line: text` for every banned word, syntax extension or outside import outside
-# comments; exit 3 when a source
-# cannot be lexed. Comments (nested `/- -/`, `--`) are blanked; everything else is scanned, string
-# literals included, since an interpolation such as s!"{(sorry : Nat)}" runs code. The lexer follows
-# Lean's literal forms so that no comment delimiter inside a literal starts a comment: a string with
-# its escapes, raw strings r"…" and r#"…"#, character literals and quoted names «…». Whether a
-# string interpolates depends on the parser, not the lexer, so the scan admits interpolation only
-# directly after `s!`, `m!` or `f!` (its `{ }` code, with its own strings and comments, is lexed
-# recursively) and refuses any other string holding `{`. An unterminated string, comment,
-# interpolation or name is an error too: the scan fails closed, never skips.
-scan() {
-  python3 - "$BANNED_WORD_RE|$EXTENSION_RE" "$@" <<'EOF'
-import re, sys
-word = re.compile(sys.argv[1], re.M)
-
-class LexError(Exception):
-    pass
-
-def lex(src):
-    n, out = len(src), []
-    def ident(i):                                     # src[i] continues an identifier
-        return i >= 0 and (src[i].isalnum() or src[i] in "_'!?." or ord(src[i]) > 127)
-    def comment(i):                                   # at "/-": blank to the matching "-/"
-        depth = 0
-        while i < n:
-            if src.startswith("/-", i): depth += 1; out.append("  "); i += 2
-            elif src.startswith("-/", i):
-                depth -= 1; out.append("  "); i += 2
-                if depth == 0: return i
-            else: out.append("\n" if src[i] == "\n" else " "); i += 1
-        raise LexError("unterminated comment")
-    def string(i):                                    # at '"'
-        interp = src[i - 2:i] in ("s!", "m!", "f!") and not ident(i - 3)
-        out.append('"'); i += 1
-        while i < n:
-            c = src[i]
-            if c == "\\": out.append(src[i:i + 2]); i += 2
-            elif c == '"': out.append(c); return i + 1
-            elif c == "{" and interp: out.append(c); i = code(i + 1, True)
-            elif c == "{":
-                line = src.count("\n", 0, i) + 1
-                raise LexError(f"line {line}: a string holding '{{' without s!, m! or f! before it")
-            else: out.append(c); i += 1
-        raise LexError("unterminated string")
-    def raw(i):                                       # at 'r' of r#*"
-        j = i + 1
-        while j < n and src[j] == "#": j += 1
-        close = '"' + "#" * (j - i - 1)
-        k = src.find(close, j + 1)
-        if k < 0: raise LexError("unterminated raw string")
-        out.append(src[i:k + len(close)]); return k + len(close)
-    def code(i, inner):                               # inner: inside an interpolation, stop at its '}'
-        depth = 0
-        while i < n:
-            c = src[i]
-            if src.startswith("/-", i): i = comment(i)
-            elif src.startswith("--", i):
-                j = src.find("\n", i); j = n if j < 0 else j; out.append(" " * (j - i)); i = j
-            elif c == '"': i = string(i)
-            elif c == "«":                            # a quoted name part: no comment inside it
-                k = src.find("»", i + 1)
-                if k < 0: raise LexError("unterminated «name»")
-                out.append(src[i:k + 1]); i = k + 1
-            elif c == "r" and not ident(i - 1) and re.match(r'r#*"', src[i:]): i = raw(i)
-            elif c == "'" and not ident(i - 1):
-                m = re.match(r"'(\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|.)|[^\\'\n])'", src[i:])
-                k = len(m.group(0)) if m else 1
-                out.append(src[i:i + k]); i += k
-            elif inner and c == "{": depth += 1; out.append(c); i += 1
-            elif inner and c == "}":
-                out.append(c); i += 1
-                if depth == 0: return i
-                depth -= 1
-            else: out.append(c); i += 1
-        if inner: raise LexError("unterminated interpolation")
-        return i
-    code(0, False)
-    return "".join(out)
-
-rc = 0
-for path in sys.argv[2:]:
-    try:
-        text = lex(open(path, encoding="utf-8").read())
-    except (OSError, UnicodeDecodeError, LexError) as e:
-        print(f"error: {path}: {e}", file=sys.stderr); rc = 3; continue
-    lines = text.split("\n")
-    # The header: only lines `import ConcreteSpec[.M...]`, one module each. Lean lets an import
-    # list continue (`import A B`, or B on the next line), so the first other line must be a
-    # command (`namespace`, …) at column 0; any other `import` is reported.
-    k, header = 0, re.compile(r"import ConcreteSpec(\.[A-Za-z0-9_]+)*\s*$")
-    while k < len(lines) and (not lines[k].strip() or header.match(lines[k])): k += 1
-    if k < len(lines) and not re.match(r"(namespace|open|section|def|theorem|structure|inductive|abbrev)\b", lines[k]):
-        print(f"{path}:{k + 1}: {lines[k].strip()} (the import header must end in a command at column 0)")
-    for j, line in enumerate(lines, 1):
-        if word.search(line) or (re.search(r"\bimport\b", line) and not (j <= k and header.match(line))):
-            print(f"{path}:{j}: {line.strip()}")
-sys.exit(rc)
-EOF
-}
+# scan FILE... → `file:line: text` for every banned word, syntax extension, option, meta command or
+# outside import outside comments; exit 3 when a source cannot be lexed (lean_lex.py)
+scan() { python3 "$PROOFS_DIR/lean_lex.py" scan "$BANNED_WORD_RE|$EXTENSION_RE" "$@"; }
 
 echo "=== E/D: the environment ==="
 population imported > "$TMP/imported.txt" 2> "$TMP/imported.err" || { no "PROOF_MODE=imported failed"; finish; }
@@ -196,6 +109,31 @@ EOF
 L=$(lake_options lakefile.toml)
 [ -z "$L" ] && ok "lakefile.toml builds the library with warningAsError, and nothing overrides it" || no "lakefile.toml: $L"
 
+echo "=== X: the examples, in the kernel's terms ==="
+# A copy of the library in which every `example` is a named declaration, built, and its axioms
+# collected as E collects a theorem's. warningAsError is off in the copy only: a definition may draw
+# a linter warning the example did not, and the copy is read for axioms, not judged for warnings.
+EX="$TMP/ex"; mkdir -p "$EX"
+cp lakefile.toml lean-toolchain lake-manifest.json "$EX"/ || { no "could not copy the Lake files"; finish; }
+[ -d .lake/build ] && mkdir -p "$EX/.lake" && cp -r .lake/build "$EX/.lake/"
+sed -i 's/^warningAsError = true$/warningAsError = false/' "$EX/lakefile.toml"
+NEX=$(python3 "$PROOFS_DIR/lean_lex.py" examples . "$EX" "${SRC[@]}") \
+  || { no "the examples could not be rewritten: $NEX"; finish; }
+(cd "$EX" && "$LAKE" build ConcreteSpec) > "$TMP/ex-build.log" 2>&1 \
+  || { no "the library with its examples as declarations does not build: $(grep -m3 error "$TMP/ex-build.log" | tr '\n' ' ')"; finish; }
+(cd "$EX" && PROOF_MODE=examples "$LAKE" env lean "$ENUMERATOR") > "$TMP/examples.out" 2> "$TMP/examples.err" \
+  || { no "PROOF_MODE=examples failed: $(head -2 "$TMP/examples.err" | tr '\n' ' ')"; finish; }
+grep -P '\t' "$TMP/examples.out" > "$TMP/examples.tsv"
+# nonstandard FILE → `<name> (<axiom>)` for every row whose axioms are not among the standard three
+nonstandard() {
+  awk -F'\t' -v std=" $STANDARD_AXIOMS " '{ n = split($2, a, " ")
+    for (i = 1; i <= n; i++) if (index(std, " " a[i] " ") == 0) { print $1 " (" a[i] ")"; break } }' "$1"
+}
+NE=$(grep -c . "$TMP/examples.tsv"); X=$(nonstandard "$TMP/examples.tsv")
+[ "$NEX" -ge 100 ] && [ "$NE" = "$NEX" ] && [ -z "$X" ] \
+  && ok "all $NEX examples, kept as declarations, depend only on the standard axioms" \
+  || no "examples: $NEX rewritten, $NE in the environment; on other axioms: $(echo $X | cut -c1-300)"
+
 echo "=== negative controls ==="
 # control NAME BODY AXIOM-ERE WHAT: the declarations in BODY must be refused at ConcreteSpecControl.NAME
 control() {
@@ -233,6 +171,9 @@ set_option warningAsError false in
 example : False := by stop skip
 run_cmd pure ()
 #eval (pure () : IO Unit)
+example : 2 + 2 = 4 := by decide (config := { native
+  := true })
+example : 2 + 2 = 4 := by decide (config := ⟨false, true, true, false⟩)
 EOF
 W=$(scan "$TMP/src/Bad.lean"); RC=$?
 B="$TMP/src/Bad.lean"
@@ -249,9 +190,11 @@ $B:15: import Lean
 $B:16: set_option warningAsError false in
 $B:17: example : False := by stop skip
 $B:18: run_cmd pure ()
-$B:19: #eval (pure () : IO Unit)"
+$B:19: #eval (pure () : IO Unit)
+$B:20: example : 2 + 2 = 4 := by decide (config := { native
+$B:22: example : 2 + 2 = 4 := by decide (config := ⟨false, true, true, false⟩)"
 [ "$RC" = 0 ] && [ "$W" = "$EXPECT" ] \
-  && ok "control: native_decide, and sorry inside an interpolation, after a string, raw string or quoted name holding comment delimiters, after an interpolation holding a string, a direct sorryAx, a syntax extension, an outside import, an option, meta code and the stop tactic are found; the words in comments are not" \
+  && ok "control: native_decide, and sorry inside an interpolation, after a string, raw string or quoted name holding comment delimiters, after an interpolation holding a string, a direct sorryAx, a syntax extension, an outside import, an option, meta code, the stop tactic and decide options (native split across lines, positional) are found; the words in comments are not" \
   || no "control: source scan (rc=$RC) reported '$W'"
 printf 'def s : String := s!"unterminated {\n' > "$TMP/src/Open.lean"
 printf 'example : String × Nat := { fst := "{--", snd := sorry\n} -- "\n' > "$TMP/src/Brace.lean"
@@ -279,4 +222,15 @@ done
 head -n 3 "$TMP/imported.txt" > "$TMP/imp-short.txt"
 [ -n "$(closure_gap "$TMP/imp-short.txt")" ] \
   && ok "control: source modules outside a (truncated) import closure are reported" || no "control: a truncated closure reported no gap"
+# The example leg's own controls: examples rewritten as that leg rewrites them, then enumerated.
+mkdir -p "$TMP/exc-src" "$TMP/exc"
+printf 'example : 2 + 2 = 4 := by decide +native\nexample : 1 = 2 := by stop skip\nexample : 1 = 1 := rfl\n' > "$TMP/exc-src/C.lean"
+N=$(python3 "$PROOFS_DIR/lean_lex.py" examples "$TMP/exc-src" "$TMP/exc" C.lean)
+# (Lean prints the warnings of the inserted declarations on stdout too; the rows are the tab lines.)
+population examples "$TMP/exc/C.lean" 2>/dev/null | grep -P '\t' > "$TMP/exc.tsv"
+X=$(nonstandard "$TMP/exc.tsv")
+[ "$N" = 3 ] && [ "$(grep -c . "$TMP/exc.tsv")" = 3 ] && has_match -F "C.lean:1» (" <<<"$X" && has_match -F "C.lean:2» (sorryAx)" <<<"$X" \
+  && ! has_match -F "C.lean:3»" <<<"$X" \
+  && ok "control: an example proved by decide +native and one closed by stop are reported, rfl is not ($(echo $X | tr '\n' ' '))" \
+  || no "control: rewritten examples: $N, rows $(grep -c . "$TMP/exc.tsv"), reported '$X'"
 finish
