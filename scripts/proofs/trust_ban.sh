@@ -32,7 +32,7 @@ BANNED_WORD_RE='\b(sorry|sorryAx|admit|stop|native_decide|ofReduceBool|ofReduceN
 # warningAsError (checked below in lakefile.toml), so a `sorry` that elaborates anywhere, whatever
 # tactic produced it (`stop` is `repeat sorry`), fails the build; `set_option warningAsError false`
 # would undo that. Nor do they run meta code (run_cmd, run_tac, #eval and the like).
-EXTENSION_RE='#eval\b|\b(run_cmd|run_tac|run_elab|run_meta|set_option|macro|macro_rules|syntax|notation|infix|infixl|infixr|prefix|postfix|elab|elab_rules|declare_syntax_cat|initialize|builtin_initialize)\b|^\s*import\s+(?!ConcreteSpec(\.|\s|$))'
+EXTENSION_RE='#eval\b|\b(run_cmd|run_tac|run_elab|run_meta|set_option|macro|macro_rules|syntax|notation|infix|infixl|infixr|prefix|postfix|elab|elab_rules|declare_syntax_cat|initialize|builtin_initialize)\b'
 
 # banned FILE → `<constant> (<axiom>)` for every constant of a PROOF_MODE=constants listing with a banned axiom
 banned() {
@@ -126,8 +126,17 @@ for path in sys.argv[2:]:
         text = lex(open(path, encoding="utf-8").read())
     except (OSError, UnicodeDecodeError, LexError) as e:
         print(f"error: {path}: {e}", file=sys.stderr); rc = 3; continue
-    for k, line in enumerate(text.split("\n"), 1):
-        if word.search(line): print(f"{path}:{k}: {line.strip()}")
+    lines = text.split("\n")
+    # The header: only lines `import ConcreteSpec[.M...]`, one module each. Lean lets an import
+    # list continue (`import A B`, or B on the next line), so the first other line must be a
+    # command (`namespace`, …) at column 0; any other `import` is reported.
+    k, header = 0, re.compile(r"import ConcreteSpec(\.[A-Za-z0-9_]+)*\s*$")
+    while k < len(lines) and (not lines[k].strip() or header.match(lines[k])): k += 1
+    if k < len(lines) and not re.match(r"(namespace|open|section|def|theorem|structure|inductive|abbrev)\b", lines[k]):
+        print(f"{path}:{k + 1}: {lines[k].strip()} (the import header must end in a command at column 0)")
+    for j, line in enumerate(lines, 1):
+        if word.search(line) or (re.search(r"\bimport\b", line) and not (j <= k and header.match(line))):
+            print(f"{path}:{j}: {line.strip()}")
 sys.exit(rc)
 EOF
 }
@@ -234,6 +243,14 @@ $B:19: #eval (pure () : IO Unit)"
   || no "control: source scan (rc=$RC) reported '$W'"
 printf 'def s : String := s!"unterminated {\n' > "$TMP/src/Open.lean"
 printf 'example : String × Nat := { fst := "{--", snd := sorry\n} -- "\n' > "$TMP/src/Brace.lean"
+for imp in 'import ConcreteSpec.Spec Lean' 'import ConcreteSpec.Spec
+  Lean' 'prelude
+import ConcreteSpec.Spec'; do
+  printf '%s\nnamespace X\nend X\n' "$imp" > "$TMP/src/Imp.lean"
+  W=$(scan "$TMP/src/Imp.lean")
+  [ -n "$W" ] && ok "control: the header $(printf '%s' "$imp" | tr '\n' ' ') is reported" \
+    || no "control: the header $(printf '%s' "$imp" | tr '\n' ' ') passed the scan"
+done
 printf '[leanOptions]\nwarningAsError = true\n\n[[lean_lib]]\nname = "ConcreteSpec"\nleanOptions = { autoImplicit = false, warningAsError = false }\n' > "$TMP/lake-off.toml"
 L=$(lake_options "$TMP/lake-off.toml")
 [ -n "$L" ] && ok "control: a library that turns warningAsError off is refused ($L)" \
