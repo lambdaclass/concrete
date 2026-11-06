@@ -165,7 +165,7 @@ def h' : Nat := 0 -- a prime in a name starts no character literal: sorry
 def r' : String := r#"raw "-- /-" text"# ++ toString (sorry : Nat)
 example : True := by have «--» : True := True.intro; sorry
 example : False := sorryAx False true
-macro "plain" "s!" s:str : term => `($s)
+macro "plain" "s!" s:str : term => pure s
 import Lean
 set_option warningAsError false in
 example : False := by stop skip
@@ -185,7 +185,7 @@ $B:8: example : String := s!\"{\"/-\"}\" ++ toString (sorry : Nat)
 $B:11: def r' : String := r#\"raw \"-- /-\" text\"# ++ toString (sorry : Nat)
 $B:12: example : True := by have «--» : True := True.intro; sorry
 $B:13: example : False := sorryAx False true
-$B:14: macro \"plain\" \"s!\" s:str : term => \`(\$s)
+$B:14: macro \"plain\" \"s!\" s:str : term => pure s
 $B:15: import Lean
 $B:16: set_option warningAsError false in
 $B:17: example : False := by stop skip
