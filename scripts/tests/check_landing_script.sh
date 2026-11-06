@@ -17,7 +17,13 @@
 #   watch       a campaign-only failure is reported as such; a landing failure fetches log tails
 #   land        refused on a head-SHA mismatch, a red landing job, a moved main, a remote named fork;
 #               dry-run pushes nothing; a real land puts both remotes at the train head and cancels
-#               main's duplicate push run (never the validating run)
+#               no run (main's own run records the train's, R-0570)
+#   record      (2026-11-06, R-0570) main's run names the run that qualified its exact SHA only when
+#               the newest completed push/dispatch run of the CI workflow at that SHA passed every
+#               landing-tier and required job and the head is ahead of the base; a missing run, a run
+#               at another SHA, of another workflow or event, unfinished or excluded, a skipped,
+#               cancelled or failed job, an older green run behind a newer red one, a diverged or
+#               absent base: no record. The workflow gates every job on it (structure check)
 #   dropped     (2026-10-25) a push that fails before the remote moved is retried; one that fails
 #               after it moved is accepted from ls-remote; exhausted retries fail and move nothing
 #   bisect      halving finds a seeded red member
@@ -60,7 +66,7 @@ cat > "$GIT_CONFIG_GLOBAL" <<EOF
 EOF
 mkdir -p "$TMP/nohooks"
 export LAND_NO_NIX=1 LAND_STATE_DIR="$TMP/state" LAND_GH="$TMP/fake-gh" LAND_REPO=test/repo
-export LAND_PUSH_RETRY_SLEEP=0 LAND_DUP_POLL=1 LAND_DUP_POLL_SLEEP=0
+export LAND_PUSH_RETRY_SLEEP=0
 unset LAND_GATES_HOST LAND_GATES_TRANSPORT CONCRETE_PREPUSH_NO_REUSE
 export FAKE_GH_DIR="$TMP/gh"; mkdir -p "$FAKE_GH_DIR"
 
@@ -70,12 +76,11 @@ cat > "$TMP/fake-gh" <<'GH'
 echo "$*" >> "$FAKE_GH_DIR/calls.log"
 case "$1 $2" in
   "workflow run") exit 0 ;;
-  "run list") case " $* " in
-                *" --event push "*) cat "$FAKE_GH_DIR/push_list.json" 2>/dev/null || echo '[]' ;;
-                *) cat "$FAKE_GH_DIR/list.json" ;;
-              esac ;;
+  "run list") cat "$FAKE_GH_DIR/list.json" ;;
   "run cancel") exit 0 ;;
-  "run view") cat "$FAKE_GH_DIR/run.json" ;;
+  "run view") if [ -f "$FAKE_GH_DIR/run.$3.json" ]; then cat "$FAKE_GH_DIR/run.$3.json"; else cat "$FAKE_GH_DIR/run.json"; fi ;;
+  "api repos/test/repo/compare/"*) cat "$FAKE_GH_DIR/compare.json" 2>/dev/null || exit 1 ;;
+  "api repos/test/repo/actions/runs?"*) cat "$FAKE_GH_DIR/runs.json" 2>/dev/null || exit 1 ;;
   "api "*) echo "fake log tail for $2" ;;
   *) echo "fake gh: unexpected $*" >&2; exit 1 ;;
 esac
@@ -550,9 +555,6 @@ runjson "$(git rev-parse b1)" success success
 out="$(bash "$TRAIN" land t1 2>&1)"; rc=$?
 [ "$rc" != 0 ] && has "$out" "not the train HEAD" && ok "land refuses a run at another SHA" || no "land accepted a head-SHA mismatch (exit $rc)"
 runjson "$HEAD1" success failure
-# main's push run at the landed head (888) is the duplicate; the validating run (4242) is listed too
-# and must never be cancelled.
-printf '[{"databaseId": 888, "headSha": "%s", "status": "in_progress"}, {"databaseId": 4242, "headSha": "%s", "status": "in_progress"}]' "$HEAD1" "$HEAD1" > "$FAKE_GH_DIR/push_list.json"
 out="$(LAND_REMOTE=fork bash "$TRAIN" land t1 2>&1)"; rc=$?
 [ "$rc" != 0 ] && has "$out" "named 'fork'" && ok "land refuses the remote named fork as primary" || no "fork accepted as primary (exit $rc)"
 out="$(LAND_MIRROR=fork bash "$TRAIN" land t1 2>&1)"; rc=$?
@@ -577,8 +579,8 @@ out="$(bash "$TRAIN" land t1 2>&1)"; rc=$?
 [ "$(git ls-remote fork refs/heads/main | cut -f1)" = "$BASE" ] && ok "fork still untouched after landing" || no "fork was pushed"
 [ ! -d "$(git rev-parse --git-common-dir)/concrete-push-both.lock" ] && ok "publish lock released" || no "publish lock left behind"
 calls="$(cat "$FAKE_GH_DIR/calls.log")"
-has "$calls" "run cancel 888 -R test/repo" && ! has "$calls" "run cancel 4242" && has "$out" "run 4242 validated that SHA" \
-  && ok "land cancels main's duplicate push run and never the validating run" || { no "duplicate-run cancel"; echo "$out" | sed 's/^/      /'; }
+! has "$calls" "run cancel" && has "$out" "records run 4242" \
+  && ok "land cancels no run; main's own run records the validating run" || { no "land touched main's run"; echo "$out" | sed 's/^/      /'; }
 
 echo "=== dropped: a push's result is read from the remote, and a failed push is retried ==="
 # The pre-push hook stands in for GitHub dropping the connection: drop.always fails every push
@@ -611,19 +613,17 @@ out="$(bash "$TRAIN" ci t8 2>&1)"; rc=$?
 [ "$rc" = 0 ] && has "$out" "retrying (1 of 3)" && [ "$(git ls-remote origin refs/heads/ci/t8 | cut -f1)" = "$HEAD8" ] \
   && ok "ci retries a push dropped before the remote moved" || { no "ci dropped push: exit $rc"; echo "$out" | sed 's/^/      /'; }
 runjson "$HEAD8" success success
-printf '[{"databaseId": 999, "headSha": "%s", "status": "queued"}]' "$HEAD8" > "$FAKE_GH_DIR/push_list.json"
 touch "$FAKE_GH_DIR/drop.always"
-out="$(bash "$TRAIN" land t8 --keep-main-ci 2>&1)"; rc=$?
+out="$(bash "$TRAIN" land t8 2>&1)"; rc=$?
 rm -f "$FAKE_GH_DIR/drop.always"
 [ "$rc" != 0 ] && has "$out" "failed 3 time(s)" && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$MAIN8" ] \
   && [ ! -d "$(git rev-parse --git-common-dir)/concrete-push-both.lock" ] \
   && ok "exhausted retries fail the landing, move nothing and release the lock" || { no "exhausted retries: exit $rc"; echo "$out" | sed 's/^/      /'; }
 touch "$FAKE_GH_DIR/drop.before" "$FAKE_GH_DIR/drop.after"
-out="$(bash "$TRAIN" land t8 --keep-main-ci 2>&1)"; rc=$?
+out="$(bash "$TRAIN" land t8 2>&1)"; rc=$?
 [ "$rc" = 0 ] && has "$out" "retrying (1 of 3)" && has "$out" "the connection dropped after the update" \
   && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$HEAD8" ] && [ "$(git ls-remote lambdaclass refs/heads/main | cut -f1)" = "$HEAD8" ] \
   && ok "land retries a push dropped before the update, accepts one dropped after it, and both remotes reach the head" || { no "dropped land: exit $rc"; echo "$out" | sed 's/^/      /'; }
-! has "$(cat "$FAKE_GH_DIR/calls.log")" "run cancel 999" && ok "--keep-main-ci leaves main's run alone" || no "--keep-main-ci cancelled a run"
 [ ! -f "$FAKE_GH_DIR/drop.before" ] && [ ! -f "$FAKE_GH_DIR/drop.after" ] && ok "both dropped-connection seams fired" || no "a dropped-connection seam never fired (vacuous leg)"
 rm -f "$TMP/nohooks/pre-push"
 
@@ -744,6 +744,137 @@ o="$(cd "$W" && REQUIRED_FILE=x bash -c 'set -uo pipefail; SELF_DIR="$1"; REQUIR
 [ -z "$o" ] && ok "train.sh reads the candidate's transition file at the head commit" || no "train.sh transition: '$o'"
 git checkout -q train/t1
 
+echo "=== record: main's run names the run that qualified its exact SHA, and nothing else (R-0570) ==="
+# train.sh record HEAD --base BASE: the toy main moved BASE -> HEADR; its required-checks.txt asks for
+# Build. Run 501 is the train's dispatch at HEADR. Each leg changes one thing and must be refused.
+RW="$FAKE_GH_DIR"
+rrun(){ # id head path event status -> one runs-API entry
+  printf '{"id": %s, "head_sha": "%s", "path": "%s", "event": "%s", "status": "%s"}' "$1" "$2" "$3" "$4" "$5"
+}
+WF=.github/workflows/lean_action_ci.yml
+rruns(){ printf '{"workflow_runs": [%s]}' "$(IFS=,; echo "$*")" > "$RW/runs.json"; }
+rjobs(){ # id sha jobs-json
+  printf '{"status":"completed","conclusion":"success","headSha":"%s","jobs":%s}' "$2" "$3" > "$RW/run.$1.json"
+}
+GREEN='[{"name":"Build","conclusion":"success","databaseId":31},{"name":"Other","conclusion":"success","databaseId":32},{"name":"Gate mutation shard 1","conclusion":"skipped","databaseId":33}]'
+rec(){ bash "$TRAIN" record "$@" 2>&1; }
+rec_refuses(){ # label expected-text args...
+  local label="$1" want="$2" o r; shift 2
+  o="$(rec "$@")"; r=$?
+  [ "$r" != 0 ] && has "$o" "$want" && ! has "$o" "qualifying_run=" && ok "record refuses $label" \
+    || { no "record accepted $label (exit $r)"; echo "$o" | sed 's/^/      /'; }
+}
+reset_record(){
+  echo '{"status": "ahead"}' > "$RW/compare.json"
+  rruns "$(rrun 501 "$HEADR" "$WF" workflow_dispatch completed)"
+  rjobs 501 "$HEADR" "$GREEN"
+}
+reset_record
+o="$(rec "$HEADR" --base "$BASE" --exclude-run 900)"; r=$?
+[ "$r" = 0 ] && has "$o" "qualifying_run=501" && ok "record: the newest green run at exactly the head qualifies it (a skipped campaign job is fine)" \
+  || { no "record refused a qualifying run (exit $r)"; echo "$o" | sed 's/^/      /'; }
+rruns ''
+rec_refuses "with no run at the head" "no completed CI run" "$HEADR" --base "$BASE"
+rruns "$(rrun 501 "$BASE" "$WF" workflow_dispatch completed)"
+rec_refuses "a run at another SHA" "no completed CI run" "$HEADR" --base "$BASE"
+rruns "$(rrun 501 "$HEADR" "$WF" workflow_dispatch completed)"; rjobs 501 "$BASE" "$GREEN"
+rec_refuses "a run the API lists at the head but whose own record names another SHA" "ran ${BASE:0:10}" "$HEADR" --base "$BASE"
+reset_record; rruns "$(rrun 501 "$HEADR" .github/workflows/other.yml workflow_dispatch completed)"
+rec_refuses "a run of another workflow" "no completed CI run" "$HEADR" --base "$BASE"
+rruns "$(rrun 501 "$HEADR" "$WF" pull_request completed)"
+rec_refuses "a pull_request run" "no completed CI run" "$HEADR" --base "$BASE"
+rruns "$(rrun 501 "$HEADR" "$WF" workflow_dispatch in_progress)"
+rec_refuses "an unfinished run" "no completed CI run" "$HEADR" --base "$BASE"
+rruns "$(rrun 501 "$HEADR" "$WF" push completed)"
+rec_refuses "the asking run itself" "no completed CI run" "$HEADR" --base "$BASE" --exclude-run 501
+reset_record
+rjobs 501 "$HEADR" '[{"name":"Build","conclusion":"skipped","databaseId":31},{"name":"Other","conclusion":"success","databaseId":32}]'
+rec_refuses "a skipped required job" "skipped: Build" "$HEADR" --base "$BASE"
+rjobs 501 "$HEADR" '[{"name":"Build","conclusion":"cancelled","databaseId":31},{"name":"Other","conclusion":"success","databaseId":32}]'
+rec_refuses "a cancelled required job" "cancelled: Build" "$HEADR" --base "$BASE"
+rjobs 501 "$HEADR" '[{"name":"Build","conclusion":"success","databaseId":31},{"name":"Other","conclusion":"failure","databaseId":32}]'
+rec_refuses "a failed landing-tier job" "failure: Other" "$HEADR" --base "$BASE"
+rjobs 501 "$HEADR" '[{"name":"Other","conclusion":"success","databaseId":32}]'
+rec_refuses "a run without a required job" "missing: Build" "$HEADR" --base "$BASE"
+rjobs 501 "$HEADR" '[{"name":"Gate mutation shard 1","conclusion":"success","databaseId":33}]'
+rec_refuses "a run with no landing-tier job" "no landing-tier jobs" "$HEADR" --base "$BASE"
+reset_record
+rruns "$(rrun 502 "$HEADR" "$WF" workflow_dispatch completed)" "$(rrun 501 "$HEADR" "$WF" workflow_dispatch completed)"
+rjobs 502 "$HEADR" '[{"name":"Build","conclusion":"failure","databaseId":41}]'
+rec_refuses "an older green run behind a newer red one at the same SHA" "run 502, the newest" "$HEADR" --base "$BASE"
+reset_record; echo '{"status": "diverged"}' > "$RW/compare.json"
+rec_refuses "a head not strictly ahead of the base" "compare: diverged" "$HEADR" --base "$BASE"
+rm -f "$RW/compare.json"
+rec_refuses "when the compare API cannot be read" "compare: -" "$HEADR" --base "$BASE"
+reset_record
+rec_refuses "a base this clone does not have" "not in this clone" "$HEADR" --base 0123456789abcdef0123456789abcdef01234567
+rec_refuses "an all-zero base (a new branch, not a landing)" "--base must be" "$HEADR" --base 0000000000000000000000000000000000000000
+rec_refuses "an abbreviated head" "full 40-hex SHA" "${HEADR:0:10}" --base "$BASE"
+rm -f "$RW/runs.json"
+rec_refuses "when the runs API cannot be read" "no completed CI run" "$HEADR" --base "$BASE"
+# A base requirement the head drops without a transition row is still owed (land's own rule).
+git checkout -q -b rec-drop "$HEADR"; printf 'Other\n' > required-checks.txt; git commit -qam "drop Build"
+HD="$(git rev-parse HEAD)"; git checkout -q train/t1
+reset_record; rruns "$(rrun 503 "$HD" "$WF" workflow_dispatch completed)"
+rjobs 503 "$HD" '[{"name":"Other","conclusion":"success","databaseId":51}]'
+rec_refuses "a head that drops a base requirement silently" "missing: Build" "$HD" --base "$BASE"
+reset_record
+
+echo "=== the workflow: Landing record gates every landing-tier job, and is the only ungated one ==="
+cat > "$TMP/record_gate.py" <<'PY2'
+import re, sys, yaml
+jobs = yaml.safe_load(open(sys.argv[1]))["jobs"]
+rx = re.compile(sys.argv[2])
+GATE = "needs.landing-record.outputs.recorded != 'true'"
+rec = jobs.get("landing-record")
+if not rec or rec.get("name") != "Landing record":
+    print("no job landing-record named 'Landing record'")
+else:
+    if rec.get("needs") or rec.get("if"):
+        print("landing-record must run on every event, first")
+    if "steps.record.outputs.recorded" not in str(rec.get("outputs", {}).get("recorded", "")):
+        print("landing-record does not export the record step's verdict")
+def needs(j):
+    n = j.get("needs", [])
+    return [n] if isinstance(n, str) else list(n)
+gated = {}
+def is_gated(k, seen=()):
+    if k in gated: return gated[k]
+    j = jobs[k]; n = needs(j); cond = str(j.get("if", ""))
+    if "landing-record" in n:
+        r = GATE in cond and "!cancelled()" in cond
+    elif n:
+        # a job that needs others runs only when they ran; if: always()/!cancelled() would undo that
+        r = all(m in jobs and m not in seen and is_gated(m, seen + (k,)) for m in n) \
+            and not re.search(r"always\(\)|cancelled\(\)|failure\(\)", cond)
+    else:
+        r = False
+    gated[k] = r; return r
+for k, j in jobs.items():
+    if k == "landing-record" or rx.search(str(j.get("name", k))):
+        continue
+    if not is_gated(k):
+        print("landing-tier job not gated on the landing record: " + str(j.get("name", k)))
+PY2
+out="$(python3 -I "$TMP/record_gate.py" "$ROOT_DIR/.github/workflows/lean_action_ci.yml" "$re_default")"; rc=$?
+[ "$rc" = 0 ] && [ -z "$out" ] && ok "every landing-tier job is skipped exactly when main's run holds a record" \
+  || { no "the workflow's record gate is incomplete (rc=$rc)"; echo "$out" | sed 's/^/      /'; }
+# Controls: an ungated root job, a dependent that re-runs on always(), and a gate without
+# !cancelled() (a failed record job would then skip every job) are each found.
+python3 -I - "$ROOT_DIR/.github/workflows/lean_action_ci.yml" "$TMP/rg" <<'PY3'
+import sys, yaml, copy, os
+w = yaml.safe_load(open(sys.argv[1])); os.makedirs(sys.argv[2], exist_ok=True)
+a = copy.deepcopy(w); a["jobs"]["macos"].pop("needs"); a["jobs"]["macos"].pop("if")
+b = copy.deepcopy(w); b["jobs"]["main-tests"]["if"] = "always()"
+c = copy.deepcopy(w); c["jobs"]["build"]["if"] = "needs.landing-record.outputs.recorded != 'true'"
+for n, x in (("ungated", a), ("always", b), ("nocancel", c)):
+    yaml.safe_dump(x, open(os.path.join(sys.argv[2], n + ".yml"), "w"))
+PY3
+for v in ungated always nocancel; do
+  o="$(python3 -I "$TMP/record_gate.py" "$TMP/rg/$v.yml" "$re_default")"
+  has "$o" "not gated" && ok "CONTROL: the record-gate check finds the $v job" || no "CONTROL: the record-gate check missed the $v job: '$o'"
+done
+
 echo "=== required-checks.txt names exactly the workflow's landing-tier jobs ==="
 out="$(python3 -I - "$ROOT_DIR/.github/workflows/lean_action_ci.yml" "$re_default" "$ROOT_DIR/required-checks.txt" <<'PY'
 import re, sys, yaml
@@ -806,7 +937,7 @@ printf '2026-11-05T00:00:04Z\taccepted\t%s\t%s\t%s\tbmove\ttmb\n' "$HMB" "$TM" "
 out="$(bash "$TRAIN" --dry-run land tm 2>&1)"; rc=$?
 [ "$rc" = 0 ] && has "$out" "acceptance accepted tree ${TM:0:10}" && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$MB" ] \
   && ok "an accepted rehearsal by another train of the same tree and base satisfies the gate" || { no "accepted rehearsal: dry-run land exit $rc"; echo "$out" | sed 's/^/      /'; }
-out="$(bash "$TRAIN" land tm --keep-main-ci 2>&1)"; rc=$?
+out="$(bash "$TRAIN" land tm 2>&1)"; rc=$?
 [ "$rc" = 0 ] && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$HM" ] \
   && ok "the rehearsed move lands" || { no "rehearsed move land: exit $rc"; echo "$out" | sed 's/^/      /'; }
 # A move staged over several candidates: legacy/ is already on main, and the next candidate moves more

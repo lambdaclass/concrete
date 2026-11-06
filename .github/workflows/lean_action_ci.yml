@@ -44,6 +44,66 @@ defaults:
     shell: "nix develop .#gates --command bash --noprofile --norc -eo pipefail {0}"
 
 jobs:
+  # MAIN'S RUN NAMES THE RUN THAT QUALIFIED ITS EXACT SHA (ROADMAP R-0570). A landing pushes main to a
+  # SHA that the train's run on ci/<name> already passed. On that push this job looks the run up with
+  # the landing script's record command: a completed run of THIS workflow at exactly this SHA, every
+  # landing-tier and every required job succeeded, the required set computed from the SHA main had
+  # before the push. When it is found, the jobs that run already passed are skipped here and main's
+  # run concludes success, its summary linking the qualifying run. When it is not (a push not made
+  # by a train, a run at another SHA, a skipped, cancelled or failed job, an unreadable API),
+  # nothing is skipped and every job runs here. On any other event the job runs no step and every
+  # job runs. Every job without a `needs` carries the gate below and the rest follow `build`;
+  # check_landing_script.sh holds both. The mirror's runs read the record from the train's
+  # repository (unbalancedparentheses/concrete2; both are public and a SHA names the same tree in
+  # both).
+  landing-record:
+    name: Landing record
+    runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      recorded: ${{ steps.record.outputs.recorded }}
+    steps:
+      - uses: actions/checkout@v4
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+      - name: Install Nix (GitHub-hosted only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: "Look up the run that qualified this exact SHA (none found: every job runs here)"
+        id: record
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BEFORE: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+          LAND_REPO: unbalancedparentheses/concrete2
+          LAND_NO_NIX: "1"
+        run: |
+          recorded=false run=""
+          if out="$(git fetch -q --depth=1 origin "$BEFORE" 2>&1 \
+                    && bash scripts/land/train.sh record "$HEAD_SHA" --base "$BEFORE" --exclude-run "$GITHUB_RUN_ID" 2>&1)"; then
+            run="$(printf '%s\n' "$out" | sed -n 's/^qualifying_run=\([0-9][0-9]*\)$/\1/p' | tail -1)"
+          fi
+          printf '%s\n' "$out"
+          if [ -n "$run" ]; then
+            recorded=true
+            { echo "### Landing record"
+              echo "Run [$run](https://github.com/$LAND_REPO/actions/runs/$run) passed every landing-tier and required job at exactly \`$HEAD_SHA\`."
+              echo "This run skips those jobs: that run is the result for this SHA."; } >> "$GITHUB_STEP_SUMMARY"
+          else
+            { echo "### No landing record"
+              echo "No run qualifies \`$HEAD_SHA\`, so every job runs here:"
+              printf '\n```\n%s\n```\n' "$out"; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "recorded=$recorded" >> "$GITHUB_OUTPUT"
+
   # THE NEW ROOT'S CI, run beside the old jobs until the legacy/ move (P7, T0). Everything here reads
   # only what the day-one root keeps (RETENTION.tsv "retained" rows): the landing tooling, the
   # retention manifest, the issue record and the required-check transition rule. At the move this
@@ -51,6 +111,8 @@ jobs:
   # through a required-checks-transition.tsv row (replaced or retired), never silently.
   root-checks:
     name: Root checks
+    needs: landing-record
+    if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
     runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
@@ -83,6 +145,8 @@ jobs:
   # It is a GitHub-hosted job, so a pull_request may run it (no self-hosted runner is involved).
   oracle-hosted:
     name: Oracle (GitHub-hosted fetch + smoke)
+    needs: landing-record
+    if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -102,6 +166,8 @@ jobs:
 
   grammar:
     name: LL(1) grammar check
+    needs: landing-record
+    if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
     runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     steps:
       # Full history: check_grammar_ll1.sh compares the known-conflict list with the base revision
@@ -200,6 +266,8 @@ jobs:
 
   build:
     name: Build
+    needs: landing-record
+    if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
     runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
@@ -345,6 +413,8 @@ jobs:
 
   macos:
     name: Build + main tests (macOS)
+    needs: landing-record
+    if: ${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -2567,11 +2637,14 @@ jobs:
     #
     # `push` here means post-merge on main (see the `on:` block). PRs still need the label,
     # which keeps a 90-minute Rocq+Isabelle job off every unrelated pull request while
-    # guaranteeing main is never left unverified.
+    # guaranteeing main is never left unverified: a train's dispatch runs it at the exact SHA that
+    # lands, and main's push run skips it only on that record (landing-record above).
+    needs: landing-record
     if: >-
+      !cancelled() && needs.landing-record.outputs.recorded != 'true' && (
       github.event_name == 'push' ||
       github.event_name == 'workflow_dispatch' ||
-      contains(github.event.pull_request.labels.*.name, 'multi-kernel')
+      contains(github.event.pull_request.labels.*.name, 'multi-kernel'))
     runs-on: ${{ (github.event_name != 'pull_request' && vars.CONCRETE_SELF_HOSTED == 'true') && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
     timeout-minutes: 90
     # Every step here enters `.#provers` itself (a superset of the gate userland), so the job runs

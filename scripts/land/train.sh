@@ -7,9 +7,10 @@
 #   train.sh [--dry-run] check  <name> [--no-remote] [--no-review] [--local-gates]
 #   train.sh [--dry-run] ci     <name> [--skip-check]
 #   train.sh             watch  <name> [--interval S] [--timeout S]
-#   train.sh [--dry-run] land   <name> [--no-mirror] [--keep-main-ci]
+#   train.sh [--dry-run] land   <name> [--no-mirror]
 #   train.sh             bisect <name> (--test '<cmd>' | --ci)
 #   train.sh             status <name>
+#   train.sh             record <head> --base <sha> [--exclude-run <id>]   (main's CI, R-0570)
 #
 # SAFETY RULES, each written after a mistake made by hand on 2026-10-22:
 #   * after EVERY git operation the script checks that no merge, rebase, cherry-pick or revert is in
@@ -39,9 +40,8 @@
 # $LAND_STATE_DIR/log), LAND_NO_NIX=1 (never re-enter `nix develop`), LAND_CAMPAIGN_JOBS (regex of
 # campaign-tier job names), LAND_HOOK (pre-push hook path, default .githooks/pre-push),
 # LAND_PUSH_ATTEMPTS (default 3) and LAND_PUSH_RETRY_SLEEP (seconds, default 15) for verified pushes,
-# LAND_KEEP_MAIN_CI=1 (same as land --keep-main-ci), LAND_REQUIRED_CHECKS_FILE (default required-checks.txt), LAND_REQUIRED_TRANSITION_FILE (default
-# required-checks-transition.tsv), LAND_DUP_POLL (default 6) and
-# LAND_DUP_POLL_SLEEP (seconds, default 5) for finding main's duplicate run, LAND_GATES_HOST (the
+# LAND_REQUIRED_CHECKS_FILE (default required-checks.txt), LAND_REQUIRED_TRANSITION_FILE (default
+# required-checks-transition.tsv), LAND_GATES_HOST (the
 # gate host of `check`'s impact leg, else `git config land.gatesHost`; see gates_host below) and
 # LAND_GATES_TRANSPORT (scripts/land/gates_remote.sh's transport).
 set -euo pipefail
@@ -182,41 +182,6 @@ push_verified() { # remote sha ref [env assignments...]
     note "push to $remote $ref exited $rc and the ref did not move; retrying ($attempt of $max)"
     attempt=$((attempt + 1)); sleep "${LAND_PUSH_RETRY_SLEEP:-15}"
   done
-}
-
-# After a landing, the push to main starts a CI run at the same SHA that the train's dispatched run
-# already validated (same workflow, same commit; the push event runs no job the dispatch skips).
-# It is cancelled so a landing costs one CI run, not two; the train's run stays main's record for
-# that SHA. Only an unfinished push-event run whose headSha is exactly the landed head is touched.
-# Not finding one, or failing to cancel it, is a note: the landing is already complete.
-cancel_duplicate_main_run() { # head validating-run-id
-  local head="$1" vid="$2" ids="" i
-  for i in $(seq 1 "${LAND_DUP_POLL:-6}"); do
-    ids="$("$GH" run list -R "$REPO" --workflow CI --branch main --event push -L 20 \
-             --json databaseId,headSha,status 2>/dev/null | python3 -I -c '
-import json, sys
-try:
-    runs = json.load(sys.stdin)
-except ValueError:
-    runs = []
-print(" ".join(str(r["databaseId"]) for r in runs
-               if r.get("headSha") == sys.argv[1] and r.get("status") != "completed"
-               and str(r.get("databaseId")) != sys.argv[2]))' "$head" "$vid")" || ids=""
-    [ -n "$ids" ] && break
-    sleep "${LAND_DUP_POLL_SLEEP:-5}"
-  done
-  if [ -z "$ids" ]; then
-    note "no unfinished push run of CI on main at ${head:0:10} found; nothing to cancel"
-    return 0
-  fi
-  local id done_ids=""
-  for id in $ids; do
-    if "$GH" run cancel "$id" -R "$REPO" >/dev/null 2>&1; then done_ids="${done_ids:+$done_ids }$id"
-    else note "could not cancel main's run $id (left running)"; fi
-  done
-  [ -n "$done_ids" ] && note "cancelled main's duplicate CI run(s) $done_ids at ${head:0:10}; run $vid validated that SHA"
-  log_row "$LAND_NAME" land-dedupe "$([ -n "$done_ids" ] && echo passed || echo failed)" "cancelled: ${done_ids:-none}; validated by run $vid"
-  return 0
 }
 
 # The train's state must describe the checkout: same branch, same HEAD, clean.
@@ -729,6 +694,75 @@ cmd_watch() {
   return 1
 }
 
+# --- record: main's CI run names the run that qualified its exact SHA (R-0570) ---------------------
+# A landing pushes main to a SHA that the train's CI run (on ci/<name>) already validated. The push
+# starts CI on main at that SHA; its first job, "Landing record", runs this. When the record holds,
+# every other landing-tier job of main's run is skipped, so main's run concludes success with a
+# summary naming the qualifying run, instead of running everything twice or showing "cancelled".
+# When it does not hold, nothing is skipped: main's run runs every job itself. So main is green
+# only on a result obtained AT ITS EXACT SHA, by this workflow, under land's own rule:
+#   * the NEWEST completed run of .github/workflows/lean_action_ci.yml in $REPO (the train's
+#     repository, read by the mirror's CI too: both are public and a SHA names the same tree in both)
+#     whose head SHA is exactly <head>, from a push or workflow_dispatch event, other than the asking
+#     run (an older green run never outvotes a later one at the same SHA);
+#   * its landing tier is non-empty and every landing-tier job succeeded;
+#   * every required job (required_checks.py on <base> and <head>, transition rows included) is
+#     present and succeeded; <base> (the value main had before the push) must be in this clone and
+#     <head> must be strictly ahead of it on GitHub (compare status "ahead").
+# Any other finding, an unreadable API included, is no record (exit 1), never a pass. A record is
+# never carried from one SHA to another. Prints `qualifying_run=<id>` on success.
+cmd_record() {
+  local head="" base="" exclude=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --base) base="${2:-}"; shift ;;
+      --exclude-run) exclude="${2:-}"; shift ;;
+      -*) die "record: unknown option $1" ;;
+      *) head="$1" ;;
+    esac; shift
+  done
+  [[ "$head" =~ ^[0-9a-f]{40}$ ]] || die "record: <head> must be a full 40-hex SHA, not '$head'"
+  [[ "$base" =~ ^[0-9a-f]{40}$ ]] && [ "$base" != 0000000000000000000000000000000000000000 ] \
+    || die "record: --base must be the full SHA main had before the push, not '$base'"
+  case "$exclude" in ""|*[!0-9]*) [ -z "$exclude" ] || die "record: --exclude-run must be a run id" ;; esac
+  git cat-file -e "$base^{commit}" 2>/dev/null || die "record: base ${base:0:10} is not in this clone (fetch it); its required-checks.txt binds the record"
+  git cat-file -e "$head^{commit}" 2>/dev/null || die "record: head ${head:0:10} is not in this clone"
+  local cmp
+  cmp="$("$GH" api "repos/$REPO/compare/$base...$head" 2>/dev/null | python3 -I -c '
+import json, sys
+try: print(json.load(sys.stdin).get("status", "-"))
+except ValueError: print("-")')" || cmp="-"
+  [ "$cmp" = ahead ] || die "record: ${head:0:10} is not strictly ahead of ${base:0:10} on $REPO (compare: $cmp); no record"
+  local runs
+  runs="$("$GH" api "repos/$REPO/actions/runs?head_sha=$head&per_page=100" 2>/dev/null | python3 -I -c '
+import json, sys
+head, exclude = sys.argv[1], sys.argv[2]
+try: runs = json.load(sys.stdin).get("workflow_runs", [])
+except ValueError: sys.exit(0)
+ok = [r for r in runs
+      if r.get("head_sha") == head and r.get("path") == ".github/workflows/lean_action_ci.yml"
+      and r.get("event") in ("push", "workflow_dispatch") and r.get("status") == "completed"
+      and str(r.get("id")) != exclude]
+for r in sorted(ok, key=lambda r: r.get("id", 0), reverse=True): print(r["id"])' "$head" "$exclude")" || runs=""
+  [ -n "$runs" ] || die "record: no completed CI run of $REPO at ${head:0:10} (push or dispatch); no record"
+  # The newest such run decides: an older green run never outvotes a later one at the same SHA.
+  local id sha jobs n bad unmet
+  id="${runs%%$'\n'*}"
+  read -r sha <<< "$(run_field "$id" headSha)" || die "record: cannot read run $id"
+  [ "$sha" = "$head" ] || die "record: run $id ran ${sha:0:10}, not ${head:0:10}; no record"
+  jobs="$(run_jobs "$id")" || die "record: cannot read the jobs of run $id"
+  n="$(printf '%s\n' "$jobs" | awk -F'\t' '$1=="landing"{n++} END{print n+0}')"
+  [ "$n" -gt 0 ] || die "record: run $id has no landing-tier jobs; an empty set is not green"
+  bad="$(printf '%s\n' "$jobs" | awk -F'\t' '$1=="landing" && $2!="success" {print "    "$2": "$4}')"
+  [ -z "$bad" ] || die "record: run $id, the newest at ${head:0:10}, has landing-tier jobs that did not succeed:
+$bad"
+  unmet="$(unmet_required "$base" "$head" "$jobs")"
+  [ -z "$unmet" ] || die "record: run $id does not satisfy $REQUIRED_FILE on ${base:0:10}..${head:0:10}:
+$(printf '%s\n' "$unmet" | sed 's/^/    /')"
+  note "record: run $id passed every landing-tier and required job at exactly ${head:0:10} (base ${base:0:10})"
+  echo "qualifying_run=$id"
+}
+
 # --- land ----------------------------------------------------------------------------------------
 
 # THE MOVE GATE (R-0558, R-0563). A candidate that moves the old tree into legacy/ lands only when
@@ -788,11 +822,10 @@ require_rehearsal() { # name base head
 }
 
 cmd_land() {
-  local name="" mirror_on=1 keep_ci="${LAND_KEEP_MAIN_CI:-0}"
+  local name="" mirror_on=1
   while [ $# -gt 0 ]; do
     case "$1" in
       --no-mirror) mirror_on=0 ;;
-      --keep-main-ci) keep_ci=1 ;;
       -*) die "land: unknown option $1" ;;
       *) name="$1" ;;
     esac; shift
@@ -881,10 +914,7 @@ cmd_land() {
       die "land: $REMOTE landed, but $mirror/main is not at ${head:0:10}"
     }
   fi
-  if [ "$DRY" = 1 ]; then
-    [ "$keep_ci" = 1 ] || note "(dry-run) would cancel main's duplicate push run of CI at ${head:0:10} (run $id validated it)"
-    return 0
-  fi
+  [ "$DRY" = 1 ] && return 0
   # Both remotes, read back once more: the landing is complete only when each is at the head.
   [ "$(remote_main)" = "$head" ] || die "land: $REMOTE/main is not at ${head:0:10}"
   if [ -n "$mirror" ] && [ "$(git ls-remote "$mirror" refs/heads/main | cut -f1)" != "$head" ]; then
@@ -894,7 +924,8 @@ cmd_land() {
   log_row "$name" land passed "$REMOTE${mirror:+ + $mirror}"
   note "landed ${head:0:10} on $REMOTE/main${mirror:+ and $mirror/main}. Members (result: CI run $id at ${head:0:10}):"
   state_get "$name" members | tr ',' '\n' | sed 's/^/    /'
-  if [ "$keep_ci" = 0 ]; then LAND_NAME="$name" cancel_duplicate_main_run "$head" "$id"; fi
+  note "main's own CI run at ${head:0:10} records run $id in its Landing record job (train.sh record) and"
+  note "skips the jobs that run already passed; confirm: gh run list --workflow CI --branch main -R $REPO"
 }
 
 # --- bisect --------------------------------------------------------------------------------------
@@ -1002,7 +1033,7 @@ cmd_status() {
   [ -f "$LOG_DIR/$name.tsv" ] && column -t -s $'\t' "$LOG_DIR/$name.tsv" 2>/dev/null || true
 }
 
-usage() { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
 sub="${1:-}"; [ $# -gt 0 ] && shift
 case "$sub" in
@@ -1013,5 +1044,6 @@ case "$sub" in
   land) cmd_land "$@" ;;
   bisect) cmd_bisect "$@" ;;
   status) cmd_status "$@" ;;
+  record) cmd_record "$@" ;;
   *) usage ;;
 esac
