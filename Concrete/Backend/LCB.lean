@@ -17,6 +17,7 @@ Representation: an integer of type `t` is the 32-bit word `BitVec.ofInt 32 v`; a
   (`wrap t (a op b)`, two's complement for a signed type);
 * `binOvf` also sets `l := x <u 2^bits` and `f := (l = 0)`: out of range exactly when
   `(a op b) - min` is not below `2^bits`;
+* `trunc from to d a`: `x := a - to.min`, `m := x & (2^to.bits - 1)`, `d := m + to.min`;
 * a block parameter is a phi over its predecessors' arguments, ordered by predecessor;
 * `ret a` returns `a`; `trap s` returns `256 + s`.
 
@@ -41,17 +42,19 @@ def word (n : Int) : Source.Value := .word (BitVec.ofInt 32 n)
 def Inst.width : Inst → Nat
   | .bin .. => 4
   | .binOvf .. => 6
+  | .trunc .. => 3
 
 /-- The LCB value id of every BIR register, numbered in block order: each block's parameters,
 then each instruction's values (its result is the last but one for `binOvf`'s `d`, the last for
-`f`). -/
+`f`, the last for `bin` and `trunc`). -/
 def numbering (p : Program) : List (Reg × Nat) :=
   let step := fun (acc : List (Reg × Nat) × Nat) (b : Block) =>
     let (m, n) := acc
     let (m, n) := b.params.foldl (fun (m, n) (r, _) => ((r, n) :: m, n + 1)) (m, n)
     b.insts.foldl (fun (m, n) i => match i with
       | .bin _ _ d _ _ => ((d, n + 3) :: m, n + 4)
-      | .binOvf _ _ d f _ _ => ((f, n + 5) :: (d, n + 3) :: m, n + 6)) (m, n)
+      | .binOvf _ _ d f _ _ => ((f, n + 5) :: (d, n + 3) :: m, n + 6)
+      | .trunc _ _ d _ => ((d, n + 2) :: m, n + 3)) (m, n)
   (p.blocks.foldl step ([], 0)).1
 
 /-- The number of LCB values the body defines. -/
@@ -96,6 +99,12 @@ def inst (m : List (Reg × Nat)) (n : Nat) : Inst → Except String (List Source
       ins (n + 3) (.binary .add (.local (n + 2)) (.literal (word t.min))),
       ins (n + 4) (.compare .unsignedLT .word (.local (n + 1)) (.literal (word (2 ^ t.bits)))),
       ins (n + 5) (.compare .eq .word (.local (n + 4)) (.literal (word 0)))]
+  | .trunc fr to _ a => do
+    unless inProfile fr && inProfile to do throw s!"{repr fr} → {repr to} is outside LCB's slice-0 profile"
+    let a ← operand m a
+    return [ins n (.binary .sub a (.literal (word to.min))),
+      ins (n + 1) (.binary .andBits (.local n) (.literal (word (2 ^ to.bits - 1)))),
+      ins (n + 2) (.binary .add (.local (n + 1)) (.literal (word to.min)))]
 
 /-- The edges into block `j`: (predecessor, arguments), by predecessor. -/
 def incoming (p : Program) (j : Nat) : List (Nat × List Operand) :=

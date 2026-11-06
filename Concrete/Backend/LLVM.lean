@@ -10,6 +10,7 @@ body as `define i32 @concrete_body()` returning the result word; the runtime ent
 
 * an integer of type `t` is an `i{bits}` holding its two's-complement bit pattern; a flag is `i1`;
 * `binOvf` is `@llvm.{s,u}{add,sub,mul}.with.overflow.i{bits}`;
+* `trunc` is `trunc`, `sext`/`zext` by the source's signedness, or a copy at equal width;
 * block parameters become `phi` nodes over the predecessors' arguments;
 * `ret a` returns `zext a`; `trap s` returns `256 + s`.
 -/
@@ -47,6 +48,10 @@ def inst : Inst → String
     s!"  %o{d} = call {pair} @{intrinsic op t}({intTy t} {operand a}, {intTy t} {operand b})\n" ++
     s!"  %r{d} = extractvalue {pair} %o{d}, 0\n" ++
     s!"  %r{f} = extractvalue {pair} %o{d}, 1\n"
+  | .trunc fr to d a =>
+    let conv := if to.bits < fr.bits then "trunc" else if fr.signed then "sext" else "zext"
+    if fr.bits = to.bits then s!"  %r{d} = add {intTy to} {operand a}, 0\n"
+    else s!"  %r{d} = {conv} {intTy fr} {operand a} to {intTy to}\n"
 
 /-- The edges into each block: (target, predecessor, arguments). -/
 def edges (p : Program) : List (Nat × Nat × List Operand) :=
@@ -73,7 +78,7 @@ def term (j : Nat) : Term → String
 def declarations (p : Program) : String :=
   let used := (p.blocks.flatMap (·.insts)).filterMap fun
     | .binOvf op t _ _ _ _ => some (op, t)
-    | .bin .. => none
+    | _ => none
   let distinct := used.eraseDups
   String.join (distinct.map fun (op, t) =>
     s!"declare \{{intTy t}, i1} @{intrinsic op t}({intTy t}, {intTy t})\n")

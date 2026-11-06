@@ -9,7 +9,8 @@ word (`Concrete.BIR.encode`). The runtime entry is fixed: it calls the body and 
 * exits with the word if it is below 256;
 * otherwise writes the trap line of site `word - 256` to descriptor 2 (looping on partial writes,
   ignoring write errors) and exits 134 (`ConcreteSpec.Observe.Observation.status`);
-* aborts on a word that encodes nothing (no well-formed body returns one, `emit_encodes`).
+* on a word that encodes nothing (no well-formed body returns one, `emit_encodes`), writes
+  `invalidLine` and aborts.
 
 Its correctness is premise `P_rt`, and the site it reports is premise `P_trap_site`
 (`Concrete/README.md`). This file emits it as LLVM text and as QBE text for LCB.
@@ -29,6 +30,9 @@ def trapName : Trap → String
 /-- The trap line for one site (PROVISIONAL form), without the final newline. -/
 def trapLine (e : SiteEntry) : String :=
   s!"concrete: trap: {trapName e.kind} at site {e.site.id} (bytes {e.span.start}..{e.span.stop})"
+
+/-- What the runtime writes before aborting on a result word that encodes nothing. -/
+def invalidLine : String := "concrete: runtime: invalid result word"
 
 /-- Pair every element with its index. -/
 def indexed {α : Type} (l : List α) : List (Nat × α) := (List.range l.length).zip l
@@ -53,6 +57,7 @@ def llvm (tbl : SiteTable) : String :=
     s!"t{i}:\n  call void @concrete_rt_write_all(ptr @.site{i}, i64 {(trapLine e ++ "\n").utf8ByteSize})\n" ++
     "  call void @_exit(i32 134)\n  unreachable\n"
   String.join globals ++
+  s!"@.bad = private constant [{(invalidLine ++ "\n").utf8ByteSize} x i8] c\"{llvmEscape (invalidLine ++ "\n")}\"\n" ++
   "declare i64 @write(i32, ptr, i64)\n" ++
   "declare void @_exit(i32)\n" ++
   "declare void @abort()\n\n" ++
@@ -72,7 +77,9 @@ def llvm (tbl : SiteTable) : String :=
   "trap:\n  %i = sub i32 %w, 256\n" ++
   s!"  switch i32 %i, label %bad [{cases} ]\n" ++
   String.join traps ++
-  "bad:\n  call void @abort()\n  unreachable\n}\n"
+  "bad:\n" ++
+  s!"  call void @concrete_rt_write_all(ptr @.bad, i64 {(invalidLine ++ "\n").utf8ByteSize})\n" ++
+  "  call void @abort()\n  unreachable\n}\n"
 
 /-- The runtime entry as QBE text for LCB, for the site table `tbl`. The line contains no `"` or
 `\` (see `trapLine`), so it is passed as a plain QBE string; its newline is a separate byte. -/
@@ -84,6 +91,7 @@ def qbe (tbl : SiteTable) : String :=
     s!"@t{i}\n    call $concrete_rt_write_all(l $site{i}, l {(trapLine e ++ "\n").utf8ByteSize})\n" ++
     "    call $_exit(w 134)\n    ret 0\n"
   String.join datas ++
+  s!"data $bad = \{ b \"{invalidLine}\", b 10 }\n" ++
   "function $concrete_rt_write_all(l %p, l %n) {\n" ++
   "@start\n    jmp @loop\n" ++
   "@loop\n    %done =w ceql %n, 0\n    jnz %done, @out, @wr\n" ++
@@ -95,7 +103,8 @@ def qbe (tbl : SiteTable) : String :=
   "@exit\n    ret %w\n" ++
   "@trap\n    %i =w sub %w, 256\n    jmp @c0\n" ++
   String.join dispatch ++
-  s!"@c{tbl.length}\n    call $abort()\n    ret 0\n" ++
+  s!"@c{tbl.length}\n    call $concrete_rt_write_all(l $bad, l {(invalidLine ++ "\n").utf8ByteSize})\n" ++
+  "    call $abort()\n    ret 0\n" ++
   "}\n"
 
 end Concrete.Backend.Runtime

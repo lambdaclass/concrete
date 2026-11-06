@@ -74,6 +74,9 @@ inductive Inst where
   | bin (op : BinOp) (t : IntTy) (d : Reg) (a b : Operand)
   /-- `d := wrap_t (a op b)` and `f := (a op b) ∉ t`. -/
   | binOvf (op : BinOp) (t : IntTy) (d f : Reg) (a b : Operand)
+  /-- `d := wrap_to a` for `a` of type `from`: the decided bit-discarding `truncate`, and the
+  widening conversions, which keep the value. -/
+  | trunc («from» to : IntTy) (d : Reg) (a : Operand)
   deriving DecidableEq, Repr
 
 inductive Term where
@@ -138,6 +141,9 @@ def execInst (env : Env) : Inst → Option Env
     let (x, y) ← intArgs env t a b
     let r := op.exact x y
     pure ((f, .bool (!t.inRange r)) :: (d, .int t (wrap t r)) :: env)
+  | .trunc fr to d a => match evalOp env a with
+    | some (.int t x) => if t = fr then some ((d, .int to (wrap to x)) :: env) else none
+    | _ => none
 
 def execInsts (env : Env) : List Inst → Option Env
   | [] => some env
@@ -366,9 +372,12 @@ theorem wrap_inRange (t : IntTy) (n : Int) : t.inRange (wrap t n) = true := by
 
 /-! ## Well-formedness
 
-A decidable check of the program's shape: types, arities, targets, sites and single definition of
-every register. It does not yet check that every use is dominated by its definition (a follow-up),
-so a well-formed program can still get stuck; the backends then get stuck too. -/
+A decidable check of the program's shape. Values cross blocks only as block arguments: an operand
+must be defined EARLIER IN ITS OWN BLOCK (a block parameter or an earlier instruction's result), so
+every use is dominated by its definition by construction (what LLVM's verifier demands), and a
+well-formed program never reads an undefined register (a lemma still to prove; see the README's
+follow-ups). Beyond that: types, arities, targets (never the entry), every non-entry block
+has a predecessor, trap sites exist, and every register is defined once. -/
 
 def lookupTy (types : List (Reg × Ty)) (r : Reg) : Option Ty :=
   match types with
@@ -378,6 +387,7 @@ def lookupTy (types : List (Reg × Ty)) (r : Reg) : Option Ty :=
 def Inst.defs : Inst → List (Reg × Ty)
   | .bin _ t d _ _ => [(d, .int t)]
   | .binOvf _ t d f _ _ => [(d, .int t), (f, .bool)]
+  | .trunc _ to d _ => [(d, .int to)]
 
 def Block.defs (b : Block) : List (Reg × Ty) := b.params ++ b.insts.flatMap Inst.defs
 
@@ -388,37 +398,52 @@ def Program.defs (p : Program) : List (Reg × Ty) := p.blocks.flatMap Block.defs
 come from this number (they come from the final artifact and the launcher's reservation). -/
 def Program.frameSlots (p : Program) : Nat := p.defs.length
 
-def operandHas (types : List (Reg × Ty)) (ty : Ty) : Operand → Bool
-  | .reg r => lookupTy types r == some ty
+/-- `a` has type `ty` in `scope` (the registers defined so far in the block). -/
+def operandHas (scope : List (Reg × Ty)) (ty : Ty) : Operand → Bool
+  | .reg r => lookupTy scope r == some ty
   | .imm t v => ty == .int t && t.inRange v
 
-def Inst.wf (types : List (Reg × Ty)) : Inst → Bool
-  | .bin _ t _ a b => operandHas types (.int t) a && operandHas types (.int t) b
-  | .binOvf _ t _ _ a b => operandHas types (.int t) a && operandHas types (.int t) b
+def Inst.wf (scope : List (Reg × Ty)) : Inst → Bool
+  | .bin _ t _ a b => operandHas scope (.int t) a && operandHas scope (.int t) b
+  | .binOvf _ t _ _ a b => operandHas scope (.int t) a && operandHas scope (.int t) b
+  | .trunc fr _ _ a => operandHas scope (.int fr) a
 
 /-- A branch to `target` with `args`: the block exists, is not the entry, and the arguments
 match its parameters' types. -/
-def edgeWf (p : Program) (types : List (Reg × Ty)) (target : Nat) (args : List Operand) : Bool :=
+def edgeWf (p : Program) (scope : List (Reg × Ty)) (target : Nat) (args : List Operand) : Bool :=
   target != 0 &&
   match p.blocks[target]? with
   | none => false
   | some blk => blk.params.length == args.length &&
-      (blk.params.zip args).all (fun (pr, a) => operandHas types pr.2 a)
+      (blk.params.zip args).all (fun (pr, a) => operandHas scope pr.2 a)
 
-def Term.wf (p : Program) (types : List (Reg × Ty)) : Term → Bool
-  | .ret a => operandHas types (.int .u8) a
-  | .br t args => edgeWf p types t args
+def Term.wf (p : Program) (scope : List (Reg × Ty)) : Term → Bool
+  | .ret a => operandHas scope (.int .u8) a
+  | .br t args => edgeWf p scope t args
   | .condbr c t ta e ea =>
-    lookupTy types c == some .bool && t != e && edgeWf p types t ta && edgeWf p types e ea
+    lookupTy scope c == some .bool && t != e && edgeWf p scope t ta && edgeWf p scope e ea
   | .trap s => s < p.sites.length
 
+/-- A block: each instruction's operands are defined earlier in the block. -/
+def Block.wf (p : Program) (b : Block) : Bool :=
+  let (ok, scope) := b.insts.foldl
+    (fun (acc : Bool × List (Reg × Ty)) i => (acc.1 && Inst.wf acc.2 i, i.defs.reverse ++ acc.2))
+    (true, b.params.reverse)
+  ok && b.term.wf p scope
+
+def Term.targets : Term → List Nat
+  | .br t _ => [t]
+  | .condbr _ t _ e _ => [t, e]
+  | _ => []
+
 def wf (p : Program) : Bool :=
-  let types := p.defs
-  let regs := types.map Prod.fst
+  let regs := p.defs.map Prod.fst
   (match p.blocks[0]? with | some b => b.params.isEmpty | none => false) &&
   regs.eraseDups.length == regs.length &&
   p.sites.length ≤ maxSites &&
-  p.blocks.all (fun b => b.insts.all (Inst.wf types) && b.term.wf p types)
+  (List.range p.blocks.length).all
+    (fun j => j == 0 || p.blocks.any (fun b => b.term.targets.contains j)) &&
+  p.blocks.all (Block.wf p)
 
 /-- A well-formed BIR program. -/
 def WF (p : Program) : Prop := wf p = true
@@ -483,6 +508,76 @@ def checkedOp (op : BinOp) (t : IntTy) (a b : Int) : Program :=
 example : run (checkedOp .add .i8 (-100) (-28)) 3 = .exited 0 := by decide
 example : run (checkedOp .add .i8 (-100) (-29)) 3 = .trapped 0 := by decide
 
+/-- Observe a wrapped result: run `pre`, then `a op b` at `t` with the overflow flag, truncate the
+wrapped result to `u8`, and exit with it, plus 128 when the flag is set. A wrong mask, rebias,
+result register, flag or conversion selects a different exit code. `pre` uses registers below 10. -/
+def observe (pre : List Inst) (op : BinOp) (t : IntTy) (a b : Operand) : Program :=
+  { blocks := [
+      { params := [], insts := pre ++ [.binOvf op t 10 11 a b, .trunc t .u8 12 (.reg 10)],
+        term := .condbr 11 1 [.reg 12] 2 [.reg 12] },
+      { params := [(13, .int .u8)], insts := [.bin .add .u8 14 (.reg 13) (.imm .u8 128)],
+        term := .ret (.reg 14) },
+      { params := [(15, .int .u8)], insts := [], term := .ret (.reg 15) }],
+    sites := [] }
+
+def wrapped (op : BinOp) (t : IntTy) (a b : Int) : Program := observe [] op t (.imm t a) (.imm t b)
+
+example : WF (wrapped .mul .u16 65535 65535) := by decide
+example : run (wrapped .mul .u16 65535 65535) 2 = .exited 129 := by decide
+example : run (wrapped .sub .i8 (-100) 100) 2 = .exited 184 := by decide
+
+/-- Widening keeps the value: `u8 200` zero-extends to `i16 200` (overflowing `+ 32600`), and
+`i8 -56` sign-extends to `i16 -56` (overflowing `+ -32750`); the other extension would not. -/
+def widenU : Program := observe [.trunc .u8 .i16 0 (.imm .u8 200)] .add .i16 (.reg 0) (.imm .i16 32600)
+def widenS : Program :=
+  observe [.trunc .i8 .i16 0 (.imm .i8 (-56))] .add .i16 (.reg 0) (.imm .i16 (-32750))
+
+example : run widenU 2 = .exited 160 := by decide
+example : run widenS 2 = .exited 90 := by decide
+
+/-- Two sites with ids and spans unlike their indices; `a + b` is checked at site 0, then the sum
+times `c` at site 1. -/
+def twoSites (a b c : Int) : Program :=
+  { blocks := [
+      { params := [], insts := [.binOvf .add .u8 0 1 (.imm .u8 a) (.imm .u8 b)],
+        term := .condbr 1 1 [] 2 [.reg 0] },
+      { params := [], insts := [], term := .trap 0 },
+      { params := [(4, .int .u8)], insts := [.binOvf .mul .u8 2 3 (.reg 4) (.imm .u8 c)],
+        term := .condbr 3 3 [] 4 [.reg 2] },
+      { params := [], insts := [], term := .trap 1 },
+      { params := [(5, .int .u8)], insts := [], term := .ret (.reg 5) }],
+    sites := [⟨.arithmeticOverflow, ⟨3⟩, ⟨10, 15⟩⟩, ⟨.arithmeticOverflow, ⟨9⟩, ⟨40, 47⟩⟩] }
+
+example : WF (twoSites 100 100 2) := by decide
+example : run (twoSites 100 100 2) 5 = .trapped 1 := by decide
+example : run (twoSites 200 100 2) 5 = .trapped 0 := by decide
+example : run (twoSites 20 1 2) 5 = .exited 42 := by decide
+
+/-! Shapes `wf` refuses: a parameter block nothing branches to (it would print a phi with no
+arms), and a value used outside the block that defines it (or before its definition). -/
+def unreachableParam : Program :=
+  { blocks := [
+      { params := [], insts := [], term := .ret (.imm .u8 0) },
+      { params := [(0, .int .u8)], insts := [], term := .ret (.reg 0) }],
+    sites := [] }
+
+def crossBlockUse : Program :=
+  { blocks := [
+      { params := [], insts := [.bin .add .u8 0 (.imm .u8 1) (.imm .u8 2)], term := .br 1 [] },
+      { params := [], insts := [], term := .ret (.reg 0) }],
+    sites := [] }
+
+def useBeforeDef : Program :=
+  { blocks := [
+      { params := [],
+        insts := [.bin .add .u8 0 (.reg 1) (.imm .u8 2), .bin .add .u8 1 (.imm .u8 1) (.imm .u8 2)],
+        term := .ret (.reg 0) }],
+    sites := [] }
+
+example : ¬ WF unreachableParam := by decide
+example : ¬ WF crossBlockUse := by decide
+example : ¬ WF useBeforeDef := by decide
+
 /-- The examples, by name, with the outcome each must show (`scripts/checks/slice0_backends.sh`). -/
 def all : List (String × Program × Outcome) :=
   [("answer", answer, .exited 42), ("boundary", boundary, .exited 255),
@@ -495,7 +590,26 @@ def all : List (String × Program × Outcome) :=
    ("i16_sub_ovf", checkedOp .sub .i16 (-32768) 1, .trapped 0),
    ("u8_sub_ovf", checkedOp .sub .u8 0 1, .trapped 0),
    ("i8_mul_ok", checkedOp .mul .i8 (-16) 8, .exited 0),
-   ("i8_mul_ovf", checkedOp .mul .i8 (-16) (-8), .trapped 0)]
+   ("i8_mul_ovf", checkedOp .mul .i8 (-16) (-8), .trapped 0),
+   ("w_i8_add", wrapped .add .i8 100 100, .exited 72),
+   ("w_i8_add_ok", wrapped .add .i8 (-100) 50, .exited 206),
+   ("w_i8_sub", wrapped .sub .i8 (-100) 100, .exited 184),
+   ("w_i8_mul", wrapped .mul .i8 (-16) 9, .exited 240),
+   ("w_u8_add", wrapped .add .u8 200 100, .exited 172),
+   ("w_u8_sub", wrapped .sub .u8 3 5, .exited 126),
+   ("w_u8_mul", wrapped .mul .u8 20 20, .exited 16),
+   ("w_i16_add", wrapped .add .i16 32767 1, .exited 128),
+   ("w_i16_sub", wrapped .sub .i16 (-32768) 1, .exited 127),
+   ("w_i16_sub_ok", wrapped .sub .i16 (-1000) 24000, .exited 88),
+   ("w_i16_mul", wrapped .mul .i16 300 301, .exited 60),
+   ("w_u16_sub", wrapped .sub .u16 1 3, .exited 126),
+   ("w_u16_mul", wrapped .mul .u16 65535 65535, .exited 129),
+   ("w_u16_mul_ok", wrapped .mul .u16 255 257, .exited 255),
+   ("widen_u", widenU, .exited 160), ("widen_s", widenS, .exited 90),
+   ("site1", twoSites 100 100 2, .trapped 1), ("site0", twoSites 200 100 2, .trapped 0),
+   ("two_sites_ok", twoSites 20 1 2, .exited 42)]
+
+example : all.all (fun (_, p, o) => wf p && run p 5 == o) := by decide
 
 end Examples
 

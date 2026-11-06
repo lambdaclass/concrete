@@ -625,7 +625,7 @@ These are internal. None blocks slice 0's correctness.
   - **Slice 2** turns console output into an observation beyond the exit code. `Behaviour` gains an event trace, and BIR gains an effect instruction naming its capability. The runtime entry gains the grant table and the startup refusal (status 125).
   - **The result word** keeps encoding only how the run ends.
   - **LCB's verified profile has no calls**, so slice 2 needs LCB calls in that profile, or an event protocol through the result. That needs agreeing with LCB.
-- **BIR well-formedness** does not yet check that every use is dominated by its definition. Add the check, with its proof, before `ssa_correct` relies on it.
+- **BIR well-formedness** makes dominance hold by construction: values cross blocks only as block arguments, every operand is defined earlier in its own block, and every non-entry block has a predecessor. Prove that a well-formed program never reads an undefined register (progress) before `ssa_correct` relies on it.
 
 ## Not in slice 0
 
