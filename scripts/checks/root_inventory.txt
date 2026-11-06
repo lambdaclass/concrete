@@ -40,4 +40,5 @@ scripts/land
 scripts/oracle
 scripts/push-both.sh
 scripts/review
+scripts/spec
 scripts/worktree-new.sh
