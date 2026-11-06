@@ -510,9 +510,11 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     by the owner: the LCB joins slice 0 as a second unverified backend, and its adapter is the first
     backend proof target (*Backend order* above). This revises the new-compiler row's single
     slice-0 BIR → LLVM printer in the same way.
-- <a id="decided-project-long-term-2026-11-06"></a>**Long-term changes to the plan** (owner, 2026-11-06,
-  option 1: accept all five of Codex's BEST-WITH-CHANGES recommendations on the question "is this the
-  best long term design"; Claude and Codex agree).
+- <a id="decided-project-long-term-2026-11-06"></a>**Long-term changes to the plan** (owner, 2026-11-06:
+  after asking "is this the best long term design", the owner was asked whether to accept all five
+  changes below (A2i before the freeze, the LP0 LCB pilot, certificates, the modular specification
+  with an owner view, adversarial workloads) and answered "1", option 1: accept all five of Codex's
+  BEST-WITH-CHANGES recommendations; Claude and Codex agree).
   - *Integrate before freezing.* A new stage A2i comes between A2b and the A2c freeze. It connects the
     separately proved parts of the proposed spec through shared Core interfaces and one integrated
     semantics, and proves their representative interactions: a borrow across deferred cleanup, an

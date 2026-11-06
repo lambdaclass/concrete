@@ -1,0 +1,7 @@
+utc	train	stage	base	head	members	run_id	result	duration_s	note
+2026-11-06T03:28:29Z	docs-2026-11-06	build	28889fbd3ab461624a6b8bdc61c7cd4fddfc747c	ac8e50404be13f71363aa13cbd01ba254c9e6cd8	origin/wip/long-term-2026-11-06-r2@9d786edc6d6ee1ad8c41a077dd1d4b89f2fb1689	-	passed	0	1 member(s)
+2026-11-06T03:29:26Z	docs-2026-11-06	check-legs	28889fbd3ab461624a6b8bdc61c7cd4fddfc747c	ac8e50404be13f71363aa13cbd01ba254c9e6cd8	origin/wip/long-term-2026-11-06-r2@9d786edc6d6ee1ad8c41a077dd1d4b89f2fb1689	-	passed	47	impact=pass/47s wall=47s sum=47s
+2026-11-06T03:29:26Z	docs-2026-11-06	check	28889fbd3ab461624a6b8bdc61c7cd4fddfc747c	ac8e50404be13f71363aa13cbd01ba254c9e6cd8	origin/wip/long-term-2026-11-06-r2@9d786edc6d6ee1ad8c41a077dd1d4b89f2fb1689	-	passed	47	impact on concrete-ci-2
+2026-11-06T03:30:07Z	docs-2026-11-06	ci	28889fbd3ab461624a6b8bdc61c7cd4fddfc747c	ac8e50404be13f71363aa13cbd01ba254c9e6cd8	origin/wip/long-term-2026-11-06-r2@9d786edc6d6ee1ad8c41a077dd1d4b89f2fb1689	42156910326	dispatched	37	ci/docs-2026-11-06
+2026-11-06T03:32:13Z	docs-2026-11-06	watch	28889fbd3ab461624a6b8bdc61c7cd4fddfc747c	ac8e50404be13f71363aa13cbd01ba254c9e6cd8	origin/wip/long-term-2026-11-06-r2@9d786edc6d6ee1ad8c41a077dd1d4b89f2fb1689	42156910326	passed	123	run conclusion success
+2026-11-06T03:33:06Z	docs-2026-11-06	land	28889fbd3ab461624a6b8bdc61c7cd4fddfc747c	ac8e50404be13f71363aa13cbd01ba254c9e6cd8	origin/wip/long-term-2026-11-06-r2@9d786edc6d6ee1ad8c41a077dd1d4b89f2fb1689	42156910326	passed	35	origin + lambdaclass

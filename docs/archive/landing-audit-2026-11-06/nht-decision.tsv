@@ -1,0 +1,7 @@
+utc	train	stage	base	head	members	run_id	result	duration_s	note
+2026-11-06T05:07:43Z	nht-decision	build	ac8e50404be13f71363aa13cbd01ba254c9e6cd8	d20e3ab333da7edc0964caa933f85d96782e1b97	origin/wip/no-hidden-traps-decision@9ca7b0a140a7c633a5f71bd6ea3ffe55f0298463	-	passed	0	1 member(s)
+2026-11-06T05:08:42Z	nht-decision	check-legs	ac8e50404be13f71363aa13cbd01ba254c9e6cd8	d20e3ab333da7edc0964caa933f85d96782e1b97	origin/wip/no-hidden-traps-decision@9ca7b0a140a7c633a5f71bd6ea3ffe55f0298463	-	passed	50	impact=pass/50s wall=50s sum=50s
+2026-11-06T05:08:42Z	nht-decision	check	ac8e50404be13f71363aa13cbd01ba254c9e6cd8	d20e3ab333da7edc0964caa933f85d96782e1b97	origin/wip/no-hidden-traps-decision@9ca7b0a140a7c633a5f71bd6ea3ffe55f0298463	-	passed	50	impact on concrete-ci-2
+2026-11-06T05:09:25Z	nht-decision	ci	ac8e50404be13f71363aa13cbd01ba254c9e6cd8	d20e3ab333da7edc0964caa933f85d96782e1b97	origin/wip/no-hidden-traps-decision@9ca7b0a140a7c633a5f71bd6ea3ffe55f0298463	42166696652	dispatched	39	ci/nht-decision
+2026-11-06T05:11:30Z	nht-decision	watch	ac8e50404be13f71363aa13cbd01ba254c9e6cd8	d20e3ab333da7edc0964caa933f85d96782e1b97	origin/wip/no-hidden-traps-decision@9ca7b0a140a7c633a5f71bd6ea3ffe55f0298463	42166696652	passed	123	run conclusion success
+2026-11-06T05:12:18Z	nht-decision	land	ac8e50404be13f71363aa13cbd01ba254c9e6cd8	d20e3ab333da7edc0964caa933f85d96782e1b97	origin/wip/no-hidden-traps-decision@9ca7b0a140a7c633a5f71bd6ea3ffe55f0298463	42166696652	passed	42	origin + lambdaclass
