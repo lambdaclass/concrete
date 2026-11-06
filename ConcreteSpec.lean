@@ -1,2 +1,4 @@
--- The specification of the new compiler. The rules are in ConcreteSpec/Spec.lean.
+-- The specification of the new compiler. Start with ConcreteSpec/README.md.
+-- The rules and their examples: ConcreteSpec/Spec.lean. The proofs: ConcreteSpec/Proofs/.
 import ConcreteSpec.Spec
+import ConcreteSpec.Proofs.Examples

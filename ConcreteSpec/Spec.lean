@@ -1,46 +1,38 @@
 /-!
-# Concrete specification — Core design formalization (A2b)
+# The Concrete specification
 
-**PROPOSED: not normative until Core freeze (A2c).** The owner provisionally approved the Core
-design on 2026-11-05 (ROADMAP A2a; the decision rows Q1.1–Q9.19). This file is stage A2b: a
-proposed `Spec.lean` that formalizes the approved rows far enough to check the four design
-theorems the freeze requires (row Q9.14). It becomes normative only when the owner freezes Core
-(A2c, row Q9.19), after the four theorems are checked and the outside-reader test passes. Until
-then it is an opt-in Lake target (`lake build ConcreteSpec`), and its examples are not
-conformance claims for any compiler. Any finding here that would change an approved row goes back
-to the owner before the freeze.
+**PROPOSED: not normative until the owner freezes Core (ROADMAP A2c).** The owner provisionally
+approved the Core design on 2026-11-05 (ROADMAP A2a; decision rows Q1.1–Q9.19 in
+docs/spec/decisions.md). This file is the one main normative file (row Q9.15): every rule is here,
+as Lean definitions with plain-English doc comments, each followed by example programs that it
+accepts or refuses and what they do. It becomes normative when the owner freezes Core (A2c, row
+Q9.19). Until then its examples are not conformance claims for any compiler, and any finding that
+would change an approved row goes back to the owner.
 
-The decisions are cited by their row ids (Q1.1 … Q9.19, P1 … P23) and by the recorded rule ids
-of docs/spec (ODnn, TYPE-n, OWN-n, …). Recording the 2026-11-05 answers in docs/spec/decisions.md
-is a separate branch (wip/record-decisions); until it lands, the row ids refer to the decision
-rows the owner approved.
+How to read it. Read this file top to bottom; you never need the proofs to know what a rule says.
+The proofs are in `ConcreteSpec/Proofs/`, one file per part, and say why the rules hang together
+(an accepted program never gets stuck, the checker agrees with the rules, and the design theorems).
+`ConcreteSpec/README.md` is the reading guide and lists what is not yet formalized.
 
-The file has five parts. Each part is a small Core fragment with its own judgments, defined only
-as far as its theorem needs (R4 F8: "defines only what the four theorems need"). Unifying the
-fragments into one Core is work for A3 (R-0560), after the freeze.
+The examples are decided by running the definitions: `check p = true` means the checker accepts
+`p`, and `check_iff` (Proofs/Checker.lean) proves that this is exactly the rule `Checked p`;
+`run p 10 = .exit 42` means `p` exits with 42.
 
-1. **Slice 1** (ROADMAP phase B): scalars, `let`, structs, the move and use-after-move refusal,
-   checked `+`, `return`, with Core's binding form (Q9.1: A-normal form, fresh identities,
-   explicit `copy`/`move`) and the mandatory static refusal of statically known violations
-   (Q6.1–Q6.6). Theorems: safety (`checked_never_stuck`), behaviour (`checked_exits_or_traps`),
-   justified refusal (`knownViolation_traps`), checker correspondence (`check_iff`), and an
-   accepted runtime overflow from an input (`add100_safe`).
-2. **Representation** (Q3.11): `rep_roundtrip`.
-3. **Structured cleanup** (Q9.8, Q2.1, Q2.7, Q1.5): `defer_cleanup_releases`.
-4. **Scoped borrows** (Q3.3, Q3.4, Q9.5, REF-11): `open_mut_freezes_root`, with its shared
-   half `shared_open_grants_no_write`.
-5. **Allocator brands** (Q1.1–Q1.5, Q1.13): `reset_fresh`.
+The decisions are cited by their row ids (Q1.1 … Q9.19, P1 … P23) and by the recorded rule ids of
+docs/spec (ODnn, TYPE-n, OWN-n, …).
+
+The file has five parts. Each is a small Core fragment with its own judgments, defined only as far
+as its design theorem needs (R4 F8). Unifying them into one Core is work for A3 (R-0560).
+
+1. **Slice 1** (ROADMAP phase B): scalars, `let`, structs, moves and the use-after-move refusal,
+   checked `+`, `return`, in Core's binding form (Q9.1), with the static refusal of statically
+   known violations (Q6.1–Q6.6).
+2. **Representation** (Q3.11): the layout and byte encoding of the slice-1 types.
+3. **Structured cleanup** (Q9.8, Q2.1, Q2.7, Q1.5): `defer`, frames and exits.
+4. **Scoped borrows** (Q3.3, Q3.4, Q9.5, REF-11).
+5. **Allocator brands** (Q1.1–Q1.5, Q1.13).
 
 Only Lean core is imported (Q9.16). No proof uses `native_decide` or `sorry` (Q9.17).
-
-Axiom policy. The theorems depend only on Lean's standard axioms `propext`, `Quot.sound` and
-`Classical.choice`, and the last of these in one place: `rep_roundtrip` reaches it through the
-core lemma `Nat.mod_mul`, used by `decodeNat_encodeNat`. It is a proof-only dependency. The
-evaluator `run` and the checker `check` depend on `propext` alone, so both stay executable and the
-examples below are decided by running them. The slice-1 theorems (`checked_never_stuck`,
-`checked_exits_or_traps`, `knownViolation_traps`, `check_iff`) use `propext` and `Quot.sound`;
-`open_mut_freezes_root` uses `propext`; `defer_cleanup_releases` and `reset_fresh` use `propext`
-and `Quot.sound`.
 
 ## Slice 1
 
@@ -108,29 +100,6 @@ accepted bodies that trap for some input values. The table has more entries (mod
 six named wrapping/saturating operations, lossless `as`) that slice 1 has no syntax for. The
 refusal applies to all written code, including trusted and unreachable code (Q6.4); slice 1 has
 neither, so its examples show only reachable positions and a discarded one (`overflowDropped`).
-
-Obligations not discharged here:
-
-* the elaboration relation from surface syntax (see above);
-* the lexer, model-translation and native-image obligations;
-* erasure of the instrumentation (`Slot.moved`, the `used`, `live`, `known` and `kfields` fields
-  of `Entry`):
-  stated as intent, with no erasure definition or theorem yet (Q9.10);
-* the observable contract of a trap: its source location and message, and the mapping of exit
-  values and traps to the process exit code (row Q7.10: trap exit 134); `Trap` here is an
-  abstract outcome with neither;
-* the target observations (the launcher contract): every result proved here is about the model's
-  abstract outcomes, and a claim about an executable needs a transport to the approved launcher
-  contract first;
-* capabilities (Q5, Q2.7): the cleanup calls of part 3 and the allocator operations of part 5 need
-  capabilities, and no part models capability checking;
-* parts 3–5 model only the structure their theorems are about. Part 3 abstracts each deferred call
-  to its identity, dependencies, loans and whether it traps, and does not model the statements
-  between registrations or the evaluation of a `return` value before cleanup. Part 4 does not
-  model the range clause and `else` of Q4.7, element access, or the no-escape rules. Part 5
-  abstracts the condition of `while` (either outcome at each test). Part 5 does
-  not prove that a checked program passes every ghost brand check (the erasure correspondence of
-  Q1.1).
 -/
 
 namespace ConcreteSpec
@@ -152,26 +121,6 @@ def lookupF {κ α : Type} [DecidableEq κ] (x : κ) : List (κ × α) → Optio
   | [] => none
   | (y, a) :: rest => if y = x then some a else lookupF x rest
 
-theorem lookupF_mem {κ α : Type} [DecidableEq κ] {x : κ} {a : α} :
-    ∀ {l : List (κ × α)}, lookupF x l = some a → (x, a) ∈ l
-  | [], h => by simp [lookupF] at h
-  | (y, b) :: rest, h => by
-    unfold lookupF at h
-    split at h
-    · cases h; subst_vars; exact List.Mem.head _
-    · exact List.Mem.tail _ (lookupF_mem h)
-
-theorem lookupF_of_mem {κ α : Type} [DecidableEq κ] {x : κ} {a : α} :
-    ∀ {l : List (κ × α)}, (x, a) ∈ l → ∃ b, lookupF x l = some b
-  | [], h => by cases h
-  | (y, b) :: rest, h => by
-    unfold lookupF
-    split
-    · exact ⟨b, rfl⟩
-    · cases h with
-      | head => contradiction
-      | tail _ h => exact lookupF_of_mem h
-
 /-! ### Types -/
 
 /-- The integer types (TYPE-19): signed `i8`…`i64` and unsigned `u8`…`u64`, each as many bits wide
@@ -180,7 +129,9 @@ inductive IntTy where
   | i8 | i16 | i32 | i64 | u8 | u16 | u32 | u64
   deriving DecidableEq, Repr
 
-namespace IntTy
+end ConcreteSpec
+
+namespace ConcreteSpec.IntTy
 
 /-- The width in bits (TYPE-19). -/
 def bits : IntTy → Nat
@@ -202,7 +153,9 @@ def max (t : IntTy) : Int := if t.signed then (2 : Int) ^ (t.bits - 1) - 1 else 
 traps when its mathematical result does not fit (ARITH-3). -/
 def inRange (t : IntTy) (n : Int) : Bool := decide (t.min ≤ n ∧ n ≤ t.max)
 
-end IntTy
+end ConcreteSpec.IntTy
+
+namespace ConcreteSpec
 
 /-- A scalar type: an integer type or `bool`. -/
 inductive STy where
@@ -244,7 +197,12 @@ inductive Scalar where
   | bool (b : Bool)
   deriving DecidableEq, Repr
 
-/-! ### Syntax -/
+/-! ## Part 1. Slice 1
+
+The slice-1 rules: the syntax, the typing and ownership judgments, the evaluator, value typing and
+the checker. The examples follow in `ConcreteSpec.Examples`.
+
+### Syntax -/
 
 /-- An atom (Q9.1): a typed integer literal, a `bool` literal, `copy x` (read a Copy local and
 keep it) or `move x` (move a linear local out). -/
@@ -699,90 +657,10 @@ inductive Exec (Δ : Decls) : Env → List Stmt → Atom → Outcome → Prop wh
   | trap {env s ss r k} : execStmt Δ env s = .trap k → Exec Δ env (s :: ss) r (.trap k)
   | stuck {env s ss r w} : execStmt Δ env s = .stuck w → Exec Δ env (s :: ss) r (.stuck w)
 
-/-! ### Properties of the semantics -/
+/-! ### Value typing
 
-/-- Fuel monotonicity: a run that finishes with some fuel finishes the same way with more. -/
-theorem runBody_mono {Δ : Decls} {r : Atom} :
-    ∀ {n : Nat} {env : Env} {ss : List Stmt} {o : Outcome}, runBody Δ n env ss r = o →
-      o ≠ .outOfFuel → ∀ m, n ≤ m → runBody Δ m env ss r = o := by
-  intro n
-  induction n with
-  | zero => intro env ss o h hne; simp [runBody] at h; exact absurd h.symm hne
-  | succ n ih =>
-    intro env ss o h hne m hm
-    obtain ⟨m, rfl⟩ : ∃ m', m = m' + 1 := ⟨m - 1, by omega⟩
-    cases ss with
-    | nil => simpa [runBody] using h
-    | cons s ss =>
-      simp only [runBody] at h ⊢
-      split at h
-      · exact ih h hne m (by omega)
-      · exact h
-      · exact h
-
-/-- The `return` step never runs out of fuel. -/
-theorem retOutcome_ne_outOfFuel (Δ : Decls) (env : Env) (r : Atom) :
-    retOutcome Δ env r ≠ .outOfFuel := by
-  unfold retOutcome; split <;> simp
-
-/-- A body of `k` statements finishes with `k + 1` units of fuel. -/
-theorem runBody_enough {Δ : Decls} {r : Atom} :
-    ∀ (ss : List Stmt) (env : Env), runBody Δ (ss.length + 1) env ss r ≠ .outOfFuel
-  | [], env => by simpa [runBody] using retOutcome_ne_outOfFuel Δ env r
-  | s :: ss, env => by
-    simp only [List.length_cons, runBody]
-    split
-    · exact runBody_enough ss _
-    · simp
-    · simp
-
-/-- The evaluator is sound for `Exec`: an outcome reached with some fuel is an `Exec` outcome. -/
-theorem runBody_sound {Δ : Decls} {r : Atom} :
-    ∀ {n : Nat} {env : Env} {ss : List Stmt} {o : Outcome}, runBody Δ n env ss r = o →
-      o ≠ .outOfFuel → Exec Δ env ss r o := by
-  intro n
-  induction n with
-  | zero => intro env ss o h hne; simp [runBody] at h; exact absurd h.symm hne
-  | succ n ih =>
-    intro env ss o h hne
-    cases ss with
-    | nil => simp only [runBody] at h; subst h; exact .ret
-    | cons s ss =>
-      simp only [runBody] at h
-      split at h
-      · rename_i env' he; exact .step he (ih h hne)
-      · rename_i k he; subst h; exact .trap he
-      · rename_i w he; subst h; exact .stuck he
-
-/-- The evaluator is complete for `Exec`: every `Exec` outcome is reached with enough fuel. -/
-theorem exec_complete {Δ : Decls} {r : Atom} {env : Env} {ss : List Stmt} {o : Outcome}
-    (h : Exec Δ env ss r o) : runBody Δ (ss.length + 1) env ss r = o := by
-  induction h with
-  | ret => simp [runBody]
-  | step he _ ih => simp only [List.length_cons, runBody, he]; exact ih
-  | trap he => simp [runBody, he]
-  | stuck he => simp [runBody, he]
-
-/-- `Exec` never ends in `outOfFuel`. -/
-theorem exec_ne_outOfFuel {Δ : Decls} {r : Atom} {env : Env} {ss : List Stmt} {o : Outcome}
-    (h : Exec Δ env ss r o) : o ≠ .outOfFuel := by
-  induction h with
-  | ret => exact retOutcome_ne_outOfFuel _ _ _
-  | step _ _ ih => exact ih
-  | trap => simp
-  | stuck => simp
-
-/-- Determinism: a body has at most one outcome. -/
-theorem exec_deterministic {Δ : Decls} {r : Atom} {env : Env} {ss : List Stmt} {o₁ o₂ : Outcome}
-    (h₁ : Exec Δ env ss r o₁) (h₂ : Exec Δ env ss r o₂) : o₁ = o₂ := by
-  rw [← exec_complete h₁, ← exec_complete h₂]
-
-/-- Totality: every body has exactly one outcome (slice 1 has no loops or calls). -/
-theorem exec_total (Δ : Decls) (env : Env) (ss : List Stmt) (r : Atom) :
-    ∃ o, Exec Δ env ss r o :=
-  ⟨_, runBody_sound rfl (runBody_enough ss env)⟩
-
-/-! ### Safety: accepted programs never get stuck -/
+What it means for a run-time value to have a type. The safety theorems (`checked_never_stuck`,
+`checked_exits_or_traps`, in `Proofs/Slice1.lean`) are stated with it. -/
 
 /-- A scalar value has a scalar type: an integer of its type and in its range, or a `bool`. -/
 inductive SVTy : Scalar → STy → Prop where
@@ -797,509 +675,11 @@ inductive VTy (Δ : Decls) : Val → Ty → Prop where
       (∀ f st, lookupF f d.fields = some st → ∃ v, lookupF f vs = some v ∧ SVTy v st) →
       VTy Δ (.struct s vs) (.struct s)
 
-/-- The context describes the environment: the same identities in the same order, every live
-binding holds a value of its type, a binding with a known value holds exactly that scalar and has
-a Copy type, and a slot holding a struct value agrees with the binding's known field values. A
-binding the context records as moved is otherwise unconstrained here; the evaluator marks such a
-slot `moved` when it moves the value out. -/
-inductive Corr (Δ : Decls) : Ctx → Env → Prop where
-  | nil : Corr Δ [] []
-  | cons {e sl Γ env} : (e.live = true → ∃ v, sl = .val v ∧ VTy Δ v e.ty) →
-      (∀ s, e.known = some s → sl = .val (.scalar s) ∧ e.ty.isCopy Δ = true) →
-      (∀ sn vs, sl = .val (.struct sn vs) → FieldsHold e.kfields vs) →
-      Corr Δ Γ env → Corr Δ (e :: Γ) ((e.name, sl) :: env)
-
-theorem tys_lookup (x : Var) : ∀ Γ : Ctx, lookupF x Γ.tys = (ctxFind Γ x).map Entry.ty
-  | [] => rfl
-  | e :: Γ => by
-    simp only [Ctx.tys, List.map_cons, lookupF, ctxFind] at *
-    split
-    · rfl
-    · exact tys_lookup x Γ
-
-theorem ctxMark_tys (x : Var) (mv : Bool) : ∀ Γ : Ctx, (ctxMark Γ x mv).tys = Γ.tys
-  | [] => rfl
-  | e :: Γ => by
-    simp only [ctxMark]
-    split
-    · rfl
-    · simp only [Ctx.tys, List.map_cons] at *
-      rw [show (ctxMark Γ x mv).map (fun e => (e.name, e.ty)) = (ctxMark Γ x mv).tys from rfl,
-        ctxMark_tys x mv Γ]
-      rfl
-
-theorem useAtom_tys {Δ : Decls} {Γ Γ' : Ctx} {a : Atom} (h : UseAtom Δ Γ a Γ') : Γ'.tys = Γ.tys := by
-  cases h with
-  | int => rfl
-  | bool => rfl
-  | copy => exact ctxMark_tys _ _ _
-  | move => exact ctxMark_tys _ _ _
-
-theorem useAtoms_tys {Δ : Decls} {Γ Γ' : Ctx} {as : List Atom} (h : UseAtoms Δ Γ as Γ') :
-    Γ'.tys = Γ.tys := by
-  induction h with
-  | nil => rfl
-  | cons h₁ _ ih => rw [ih, useAtom_tys h₁]
-
-theorem uses_tys {Δ : Decls} {Γ Γ' : Ctx} {e : Expr} (h : Uses Δ Γ e Γ') : Γ'.tys = Γ.tys := by
-  cases h with
-  | atom h => exact useAtom_tys h
-  | add h₁ h₂ => rw [useAtom_tys h₂, useAtom_tys h₁]
-  | mk h => exact useAtoms_tys h
-
-theorem vty_isCopy {Δ : Decls} {v : Val} {t : Ty} (h : VTy Δ v t) : v.isCopy Δ = t.isCopy Δ := by
-  cases h <;> rfl
-
-theorem corr_find {Δ : Decls} {x : Var} {Γ : Ctx} {env : Env} (hc : Corr Δ Γ env) :
-    ∀ {e : Entry}, ctxFind Γ x = some e →
-      (e.live = true → ∃ v, envFind env x = some (.val v) ∧ VTy Δ v e.ty) ∧
-      (∀ s, e.known = some s → envFind env x = some (.val (.scalar s)) ∧ e.ty.isCopy Δ = true) ∧
-      (∀ sn vs, envFind env x = some (.val (.struct sn vs)) → FieldsHold e.kfields vs) := by
-  induction hc with
-  | nil => intro e h; simp [ctxFind] at h
-  | cons hsl hk hkf _ ih =>
-    rename_i e' sl Γ env
-    intro e h
-    simp only [ctxFind, envFind] at h ⊢
-    split at h
-    · cases h
-      rename_i heq
-      refine ⟨fun hl => ?_, fun s hs => ?_, fun sn vs hv => ?_⟩
-      · obtain ⟨v, rfl, hv⟩ := hsl hl
-        exact ⟨v, by simp [heq], hv⟩
-      · obtain ⟨rfl, hcp⟩ := hk s hs
-        exact ⟨by simp [heq], hcp⟩
-      · simp only [heq, ↓reduceIte, Option.some.injEq] at hv
-        exact hkf sn vs hv
-    · rename_i hne
-      simp only [hne, ↓reduceIte]
-      exact ih h
-
-theorem corr_mark_copy {Δ : Decls} {x : Var} {Γ : Ctx} {env : Env} (hc : Corr Δ Γ env) :
-    Corr Δ (ctxMark Γ x false) env := by
-  induction hc with
-  | nil => exact .nil
-  | cons hsl hk hkf hc ih =>
-    simp only [ctxMark]
-    split
-    · exact .cons (by simpa using hsl) hk hkf hc
-    · exact .cons hsl hk hkf ih
-
-/-- Moving `x` out keeps the description, provided `x`'s binding has no known value (a known
-value is a Copy scalar, which is never moved). -/
-theorem corr_mark_move {Δ : Decls} {x : Var} {Γ : Ctx} {env : Env} (hc : Corr Δ Γ env) :
-    (∀ e, ctxFind Γ x = some e → e.known = none) →
-    Corr Δ (ctxMark Γ x true) (envMove env x) := by
-  induction hc with
-  | nil => intro _; exact .nil
-  | cons hsl hk hkf hc ih =>
-    rename_i e sl Γ env
-    intro hn
-    simp only [ctxMark, envMove]
-    split
-    · rename_i heq
-      have hkn : e.known = none := hn e (by simp [ctxFind, heq])
-      exact .cons (by simp) (by intro s hs; simp [hkn] at hs) (by intro sn vs h; cases h) hc
-    · rename_i hne
-      exact .cons hsl hk hkf (ih (fun e' h => hn e' (by simp [ctxFind, hne, h])))
-
-/-- Reading a live local in the mode its type requires succeeds with a value of its type, and the
-context's record of the read matches what the evaluator did. -/
-theorem readVar_safe {Δ : Decls} {Γ : Ctx} {env : Env} {x : Var} {e : Entry} {mv : Bool}
-    (hc : Corr Δ Γ env) (hf : ctxFind Γ x = some e) (hl : e.live = true)
-    (hm : e.ty.isCopy Δ = !mv) :
-    ∃ v env', readVar Δ env x mv = .ok (v, env') ∧ VTy Δ v e.ty ∧
-      (∀ sn vs, v = .struct sn vs → FieldsHold e.kfields vs) ∧
-      Corr Δ (ctxMark Γ x mv) env' := by
-  obtain ⟨hlive, hknown, hkf⟩ := corr_find hc hf
-  obtain ⟨v, hv, hty⟩ := hlive hl
-  have hvc : v.isCopy Δ = !mv := by rw [vty_isCopy hty]; exact hm
-  refine ⟨v, _, by simp [readVar, hv, hvc]; rfl, hty,
-    fun sn vs h => hkf sn vs (by rw [hv, h]), ?_⟩
-  cases mv
-  · simpa using corr_mark_copy hc
-  · simp only [↓reduceIte]
-    refine corr_mark_move hc ?_
-    intro e' he'
-    rw [hf] at he'
-    cases he'
-    cases hk : e.known with
-    | none => rfl
-    | some s => have := (hknown s hk).2; rw [hm] at this; cases this
-
-/-- A known atom evaluates to its known value without changing the environment (Q6.2). -/
-theorem knownAtom_sound {Δ : Decls} {Γ : Ctx} {env : Env} {a : Atom} {s : Scalar}
-    (hc : Corr Δ Γ env) (hk : knownAtom Γ a = some s) : evalAtom Δ env a = .ok (s, env) := by
-  cases a with
-  | int t n => simp [knownAtom] at hk; subst hk; rfl
-  | bool b => simp [knownAtom] at hk; subst hk; rfl
-  | move x => simp [knownAtom] at hk
-  | copy x =>
-    simp only [knownAtom, Option.bind_eq_some_iff] at hk
-    obtain ⟨e, hf, hke⟩ := hk
-    obtain ⟨hv, _⟩ := (corr_find hc hf).2.1 s hke
-    simp [evalAtom, readVar, hv, Val.isCopy]
-
-/-- Recording a read changes no binding's known value or field facts. -/
-theorem knownAtom_mark (y : Var) (mv : Bool) (a : Atom) (Γ : Ctx) :
-    knownAtom (ctxMark Γ y mv) a = knownAtom Γ a := by
-  cases a with
-  | copy x =>
-    simp only [knownAtom]
-    induction Γ with
-    | nil => rfl
-    | cons e Γ ih =>
-      simp only [ctxMark]
-      split
-      · simp only [ctxFind]; split <;> simp_all
-      · simp only [ctxFind]; split <;> simp_all
-  | _ => rfl
-
-theorem useAtom_knownAtom {Δ : Decls} {Γ Γ' : Ctx} {a : Atom} (h : UseAtom Δ Γ a Γ') (b : Atom) :
-    knownAtom Γ' b = knownAtom Γ b := by
-  cases h with
-  | int => rfl
-  | bool => rfl
-  | copy => exact knownAtom_mark _ _ _ _
-  | move => exact knownAtom_mark _ _ _ _
-
-theorem evalAtom_safe {Δ : Decls} {Γ Γ' : Ctx} {env : Env} {a : Atom} {st : STy}
-    (hc : Corr Δ Γ env) (ht : AtomTy Γ.tys a st) (hu : UseAtom Δ Γ a Γ') :
-    ∃ v env', evalAtom Δ env a = .ok (v, env') ∧ SVTy v st ∧ Corr Δ Γ' env' := by
-  cases hu with
-  | int => cases ht with | int h => exact ⟨_, _, rfl, .int h, hc⟩
-  | bool => cases ht with | bool => exact ⟨_, _, rfl, .bool, hc⟩
-  | copy hf hl hcp =>
-    cases ht with
-    | copy hx =>
-      rw [tys_lookup, hf] at hx
-      simp only [Option.map_some, Option.some.injEq] at hx
-      obtain ⟨v, env', hr, hv, _, hc'⟩ := readVar_safe (mv := false) hc hf hl (by simpa using hcp)
-      rw [hx] at hv
-      cases hv with
-      | scalar hs => exact ⟨_, env', by simp [evalAtom, hr], hs, hc'⟩
-  | move hf hl hcp =>
-    cases ht with
-    | move hx =>
-      rw [tys_lookup, hf] at hx
-      simp only [Option.map_some, Option.some.injEq] at hx
-      obtain ⟨v, env', hr, hv, _, hc'⟩ := readVar_safe (mv := true) hc hf hl (by simpa using hcp)
-      rw [hx] at hv
-      cases hv with
-      | scalar hs => exact ⟨_, env', by simp [evalAtom, hr], hs, hc'⟩
-
-theorem evalFields_safe {Δ : Decls} :
-    ∀ {fs : List (Name × Atom)} {Γ Γ' : Ctx} {env : Env}, Corr Δ Γ env →
-      (∀ p ∈ fs, ∃ st, AtomTy Γ.tys p.2 st) → UseAtoms Δ Γ (fs.map Prod.snd) Γ' →
-      ∃ vs env', evalFields Δ env fs = .ok (vs, env') ∧ Corr Δ Γ' env' ∧
-        (∀ f a, lookupF f fs = some a → ∀ st, AtomTy Γ.tys a st →
-          ∃ v, lookupF f vs = some v ∧ SVTy v st) ∧
-        (∀ f a, lookupF f fs = some a → ∀ s, knownAtom Γ a = some s → lookupF f vs = some s)
-  | [], Γ, Γ', env, hc, _, hu => by
-    cases hu
-    exact ⟨[], env, rfl, hc, by intro f a h; simp [lookupF] at h,
-      by intro f a h; simp [lookupF] at h⟩
-  | (g, a) :: rest, Γ, Γ', env, hc, ht, hu => by
-    cases hu with
-    | cons hu₁ hu₂ =>
-      rename_i Γ₁
-      obtain ⟨st₀, ha⟩ := ht (g, a) (List.Mem.head _)
-      obtain ⟨v, env₁, he, _, hc₁⟩ := evalAtom_safe hc ha hu₁
-      have htys : Γ₁.tys = Γ.tys := useAtom_tys hu₁
-      have ht' : ∀ p ∈ rest, ∃ st, AtomTy Γ₁.tys p.2 st := by
-        intro p hp; rw [htys]; exact ht p (List.Mem.tail _ hp)
-      obtain ⟨vs, env₂, hr, hc₂, hl, hk⟩ := evalFields_safe hc₁ ht' hu₂
-      refine ⟨(g, v) :: vs, env₂, by simp [evalFields, he, hr], hc₂, ?_, ?_⟩
-      · intro f a' hf st hst
-        simp only [lookupF] at hf ⊢
-        split at hf
-        next hgf =>
-          cases hf
-          obtain ⟨v', env', he', hv', _⟩ := evalAtom_safe hc hst hu₁
-          rw [he] at he'
-          cases he'
-          exact ⟨v, by simp [hgf], hv'⟩
-        next hne =>
-          simp only [hne, ↓reduceIte]
-          exact hl f a' hf st (by rw [htys]; exact hst)
-      · intro f a' hf s hks
-        simp only [lookupF] at hf ⊢
-        split at hf
-        next hgf =>
-          cases hf
-          have h := knownAtom_sound hc hks
-          rw [he] at h
-          cases h
-          simp [hgf]
-        next hne =>
-          simp only [hne, ↓reduceIte]
-          exact hk f a' hf s (by rw [useAtom_knownAtom hu₁]; exact hks)
-
-/-- `lookupF` through a map of the values. -/
-theorem lookupF_map {α β : Type} (g : α → β) (f : Name) :
-    ∀ l : List (Name × α), lookupF f (l.map (fun p => (p.1, g p.2))) = (lookupF f l).map g
-  | [] => rfl
-  | (y, a) :: rest => by
-    simp only [List.map_cons, lookupF]
-    split
-    · rfl
-    · exact lookupF_map g f rest
-
-/-- Expression safety: a well-typed expression whose reads are allowed evaluates to a value of its
-type, or traps. It never gets stuck, and in particular never reads a moved variable. A struct
-value it produces agrees with the expression's known field values (Q6.2). -/
-theorem evalExpr_safe {Δ : Decls} {e : Expr} {Γ Γ' : Ctx} {env : Env} {t : Ty}
-    (hc : Corr Δ Γ env) (ht : HasType Δ Γ.tys e t) (hu : Uses Δ Γ e Γ') :
-    (∃ k, evalExpr Δ env e = .trap k) ∨
-    ∃ v env', evalExpr Δ env e = .ok (v, env') ∧ VTy Δ v t ∧
-      (∀ sn vs, v = .struct sn vs → FieldsHold (knownFields Γ e) vs) ∧ Corr Δ Γ' env' := by
-  cases ht with
-  | int h => cases hu with
-    | atom hu => cases hu; exact .inr ⟨_, _, rfl, .scalar (.int h), (fun _ _ h => by cases h), hc⟩
-  | bool => cases hu with
-    | atom hu => cases hu; exact .inr ⟨_, _, rfl, .scalar .bool, (fun _ _ h => by cases h), hc⟩
-  | copy hx =>
-    cases hu with
-    | atom hu =>
-      cases hu with
-      | copy hf hl hcp =>
-        rw [tys_lookup, hf] at hx
-        simp only [Option.map_some, Option.some.injEq] at hx
-        subst hx
-        obtain ⟨v, env', hr, hv, hkf, hc'⟩ :=
-          readVar_safe (mv := false) hc hf hl (by simpa using hcp)
-        exact .inr ⟨v, env', by simpa [evalExpr] using hr, hv,
-          by simpa [knownFields, knownFieldsAtom, hf] using hkf, hc'⟩
-  | move hx =>
-    cases hu with
-    | atom hu =>
-      cases hu with
-      | move hf hl hcp =>
-        rw [tys_lookup, hf] at hx
-        simp only [Option.map_some, Option.some.injEq] at hx
-        subst hx
-        obtain ⟨v, env', hr, hv, hkf, hc'⟩ :=
-          readVar_safe (mv := true) hc hf hl (by simpa using hcp)
-        exact .inr ⟨v, env', by simpa [evalExpr] using hr, hv,
-          by simpa [knownFields, knownFieldsAtom, hf] using hkf, hc'⟩
-  | add hl hr =>
-    rename_i l r t
-    cases hu with
-    | add hul hur =>
-      rename_i Γ₁
-      obtain ⟨v₁, env₁, he₁, hs₁, hc₁⟩ := evalAtom_safe hc hl hul
-      rw [← useAtom_tys hul] at hr
-      obtain ⟨v₂, env₂, he₂, hs₂, hc₂⟩ := evalAtom_safe hc₁ hr hur
-      cases hs₁ with
-      | int hin₁ =>
-        rename_i a
-        cases hs₂ with
-        | int hin₂ =>
-          rename_i b
-          by_cases hsum : t.inRange (a + b) = true
-          · exact .inr ⟨_, env₂, by simp [evalExpr, he₁, he₂, checkedAdd, hsum],
-              .scalar (.int hsum), (fun _ _ h => by cases h), hc₂⟩
-          · exact .inl ⟨.arithmeticOverflow, by simp [evalExpr, he₁, he₂, checkedAdd, hsum]⟩
-  | mk hd hf =>
-    rename_i s d fs
-    cases hu with
-    | mk hu =>
-      have htyped : ∀ p ∈ fs, ∃ st, AtomTy Γ.tys p.2 st := by
-        intro p hp
-        obtain ⟨st, _, h⟩ := hf.typed p hp
-        exact ⟨st, h⟩
-      obtain ⟨vs, env', he, hc', hl, hk⟩ := evalFields_safe hc htyped hu
-      refine .inr ⟨.struct s vs, env', by simp [evalExpr, he], .struct hd ?_, ?_, hc'⟩
-      · intro f st hfs
-        obtain ⟨a, ha⟩ := hf.covers f st hfs
-        obtain ⟨st', hst', hat⟩ := hf.typed (f, a) (lookupF_mem ha)
-        rw [hfs] at hst'
-        cases hst'
-        exact hl f a ha st hat
-      · intro sn vs' hv f sv hff
-        cases hv
-        simp only [knownFields, fieldFact, lookupF_map] at hff
-        cases hla : lookupF f fs with
-        | none => simp [hla] at hff
-        | some a =>
-          simp only [hla, Option.map_some, Option.bind_some, id] at hff
-          exact hk f a hla sv hff
-
-/-- A known expression evaluates to its known value (Q6.2): the static table agrees with the
-evaluator. -/
-theorem knownExpr_sound {Δ : Decls} {Γ : Ctx} {env : Env} {e : Expr} {s : Scalar}
-    (hc : Corr Δ Γ env) (hk : knownExpr Γ e = some s) : evalExpr Δ env e = .ok (.scalar s, env) := by
-  cases e with
-  | atom a =>
-    have hk' : knownAtom Γ a = some s := hk
-    have h := knownAtom_sound hc hk'
-    cases a with
-    | int t n => simp [knownAtom] at hk'; subst hk'; rfl
-    | bool b => simp [knownAtom] at hk'; subst hk'; rfl
-    | move x => simp [knownAtom] at hk'
-    | copy x =>
-      simp only [evalAtom] at h
-      simp only [evalExpr]
-      split at h <;> simp_all
-  | add l r =>
-    simp only [knownExpr] at hk
-    split at hk
-    · rename_i t a t' b hl hr
-      split at hk
-      · rename_i hcond
-        cases hk
-        obtain ⟨rfl, hin⟩ := hcond
-        simp [evalExpr, knownAtom_sound hc hl, knownAtom_sound hc hr, checkedAdd, hin]
-      · cases hk
-    · cases hk
-  | mk s fs => simp [knownExpr] at hk
-
-/-- **Justified refusal** (Q6.1, OD118). An operation refused as a known violation would trap if
-it ran: in any environment the checker's context describes, evaluating it ends in the overflow
-trap. The checker refuses only operations that are proven to fail, never a correct one. Every
-environment reached by running an accepted prefix is described by its context (`execStmt_safe`
-below), so this covers every statement position. -/
-theorem knownViolation_traps {Δ : Decls} {Γ : Ctx} {env : Env} {e : Expr}
-    (hc : Corr Δ Γ env) (hv : knownViolates Γ e = true) :
-    evalExpr Δ env e = .trap .arithmeticOverflow := by
-  cases e with
-  | atom a => simp [knownViolates] at hv
-  | mk s fs => simp [knownViolates] at hv
-  | add l r =>
-    simp only [knownViolates] at hv
-    split at hv
-    · rename_i t a t' b hl hr
-      simp only [Bool.and_eq_true, decide_eq_true_eq, Bool.not_eq_true'] at hv
-      obtain ⟨rfl, hout⟩ := hv
-      simp [evalExpr, knownAtom_sound hc hl, knownAtom_sound hc hr, checkedAdd, hout]
-    · cases hv
-
-theorem destructure_safe {Δ : Decls} {d : StructDecl} {vs : List (Name × Scalar)}
-    {K : List (Name × Option Scalar)}
-    (hvs : ∀ f st, lookupF f d.fields = some st → ∃ v, lookupF f vs = some v ∧ SVTy v st)
-    (hK : FieldsHold K vs) :
-    ∀ {pat : List (Name × Binder)} {Γ : Ctx} {env : Env}, Corr Δ Γ env →
-      (∀ p ∈ pat, ∃ st, lookupF p.1 d.fields = some st) →
-      ∃ env', destructure pat vs env = .ok env' ∧ Corr Δ (bindPat d K pat Γ) env'
-  | [], Γ, env, hc, _ => ⟨env, rfl, hc⟩
-  | (f, .wild) :: rest, Γ, env, hc, hp => by
-    simp only [destructure, bindPat]
-    exact destructure_safe hvs hK hc (fun p h => hp p (List.Mem.tail _ h))
-  | (f, .name x) :: rest, Γ, env, hc, hp => by
-    obtain ⟨st, hst⟩ := hp (f, .name x) (List.Mem.head _)
-    obtain ⟨v, hv, hsv⟩ := hvs f st hst
-    simp only [destructure, bindPat, hst, hv]
-    exact destructure_safe hvs hK
-      (Corr.cons
-        (e := { name := x, ty := .scalar st, live := true, used := false, known := fieldFact K f })
-        (fun _ => ⟨_, rfl, .scalar hsv⟩)
-        (by
-          intro s hs
-          have h := hK f s hs
-          rw [hv] at h
-          cases h
-          exact ⟨rfl, rfl⟩)
-        (by intro sn vs' h; cases h) hc)
-      (fun p h => hp p (List.Mem.tail _ h))
-
-/-- Statement safety: a checked statement executes or traps; it never gets stuck. -/
-theorem execStmt_safe {Δ : Decls} {Γ Γ' : Ctx} {env : Env} {s : Stmt}
-    (hc : Corr Δ Γ env) (hs : StmtOk Δ Γ s Γ') :
-    (∃ k, execStmt Δ env s = .trap k) ∨ ∃ env', execStmt Δ env s = .ok env' ∧ Corr Δ Γ' env' := by
-  cases hs with
-  | let_ ht _ hu _ =>
-    rename_i x t e
-    rcases evalExpr_safe hc ht hu with ⟨k, hk⟩ | ⟨v, env₁, he, hv, hkf, hc₁⟩
-    · exact .inl ⟨k, by simp [execStmt, hk]⟩
-    · refine .inr ⟨_, by simp [execStmt, he], .cons (fun _ => ⟨v, rfl, hv⟩) ?_ ?_ hc₁⟩
-      · intro s hs
-        have hk := knownExpr_sound hc hs
-        rw [he] at hk
-        cases hk
-        cases hv with | scalar _ => exact ⟨rfl, rfl⟩
-      · intro sn vs h
-        cases h
-        exact hkf sn vs rfl
-  | letWild ht _ _ hu =>
-    rcases evalExpr_safe hc ht hu with ⟨k, hk⟩ | ⟨v, env₁, he, _, _, hc₁⟩
-    · exact .inl ⟨k, by simp [execStmt, hk]⟩
-    · exact .inr ⟨_, by simp [execStmt, he], hc₁⟩
-  | letStruct ht _ hd hp hu _ =>
-    rcases evalExpr_safe hc ht hu with ⟨k, hk⟩ | ⟨v, env₁, he, hv, hkf, hc₁⟩
-    · exact .inl ⟨k, by simp [execStmt, hk]⟩
-    · cases hv with
-      | struct hd' hvs =>
-        rw [hd] at hd'
-        cases hd'
-        obtain ⟨env', hde, hc'⟩ := destructure_safe hvs (hkf _ _ rfl) hc₁ hp.declared
-        exact .inr ⟨env', by simp [execStmt, he, hde], hc'⟩
-
-/-- An atom with a scalar type in `HasType` has that type in `AtomTy`. -/
-theorem hasType_atom_scalar {Δ : Decls} {Γ : TyCtx} {a : Atom} {st : STy}
-    (h : HasType Δ Γ (.atom a) (.scalar st)) : AtomTy Γ a st := by
-  cases h with
-  | int h => exact .int h
-  | bool => exact .bool
-  | copy h => exact .copy h
-  | move h => exact .move h
-
-/-- Body safety: from a described environment, a checked body never gets stuck, for any fuel. -/
-theorem runBody_safe {Δ : Decls} {Γ : Ctx} {ss : List Stmt} {r : Atom} (hb : BodyOk Δ Γ ss r) :
-    ∀ {env : Env}, Corr Δ Γ env → ∀ n w, runBody Δ n env ss r ≠ .stuck w := by
-  induction hb with
-  | ret ht hu _ =>
-    intro env hc n w
-    cases n with
-    | zero => simp [runBody]
-    | succ n =>
-      simp only [runBody, retOutcome]
-      cases hu with
-      | atom hu =>
-        obtain ⟨v, env', he, hv, _⟩ := evalAtom_safe hc (hasType_atom_scalar ht) hu
-        cases hv with | int _ => simp [he]
-  | cons hs _ ih =>
-    intro env hc n w
-    cases n with
-    | zero => simp [runBody]
-    | succ n =>
-      simp only [runBody]
-      rcases execStmt_safe hc hs with ⟨k, hk⟩ | ⟨env', he, hc'⟩
-      · simp [hk]
-      · simp only [he]; exact ih hc' n w
-
-/-- **Slice-1 safety.** An accepted program never gets stuck, with any amount of fuel: it never
-reads a moved variable, never reads an unbound one, never reads in the wrong mode and never meets
-a value of the wrong type (STMT-1: safe code never reaches a stuck state; OWN-1). -/
-theorem checked_never_stuck {p : Program} (h : Checked p) : ∀ n w, run p n ≠ .stuck w :=
-  runBody_safe h.2 .nil
-
-/-- In particular an accepted program never reads a moved variable (OWN-1). -/
-theorem checked_no_use_after_move {p : Program} (h : Checked p) (n : Nat) :
-    run p n ≠ .stuck .movedRead :=
-  checked_never_stuck h n _
-
-/-- **Slice-1 behaviour.** An accepted program has exactly one outcome, and it is an exit or a
-defined trap (STMT-1, ARITH-3). -/
-theorem checked_exits_or_traps {p : Program} (h : Checked p) :
-    ∃ o, Exec p.decls [] p.body p.ret o ∧ ((∃ c, o = .exit c) ∨ ∃ k, o = .trap k) := by
-  obtain ⟨o, ho⟩ := exec_total p.decls [] p.body p.ret
-  refine ⟨o, ho, ?_⟩
-  have hfuel := exec_complete ho
-  have hns := checked_never_stuck h (p.body.length + 1)
-  have hnf := exec_ne_outOfFuel ho
-  unfold run at hns
-  rw [hfuel] at hns
-  cases o with
-  | exit c => exact .inl ⟨c, rfl⟩
-  | trap k => exact .inr ⟨k, rfl⟩
-  | stuck w => exact absurd rfl (hns w)
-  | outOfFuel => exact absurd rfl hnf
-
-/-! ### The checker and its correspondence with the judgments
+/-! ### The checker
 
 `check` is an executable checker. It is not the specification: the judgments above are.
-`check_iff` proves the two agree, which is also what lets the conformance examples below be
-decided by evaluation. -/
+`check_iff` (`Proofs/Checker.lean`) proves the two agree, which is what lets the examples below be
+decided by running `check`. -/
 
 instance (Γ : Ctx) (x : Var) : Decidable (Fresh Γ x) := by
   unfold Fresh; infer_instance
@@ -1324,33 +704,6 @@ def atomTy (Γ : TyCtx) : Atom → Option STy
     | some (.scalar st) => some st
     | _ => none
 
-theorem atomTy_iff {Γ : TyCtx} {a : Atom} {st : STy} : atomTy Γ a = some st ↔ AtomTy Γ a st := by
-  constructor
-  · intro h
-    cases a with
-    | int t n =>
-      simp only [atomTy] at h
-      split at h
-      · cases h; exact .int (by assumption)
-      · cases h
-    | bool b => simp only [atomTy, Option.some.injEq] at h; subst h; exact .bool
-    | copy x =>
-      simp only [atomTy] at h
-      split at h
-      · cases h; exact .copy (by assumption)
-      · cases h
-    | move x =>
-      simp only [atomTy] at h
-      split at h
-      · cases h; exact .move (by assumption)
-      · cases h
-  · intro h
-    cases h with
-    | int h => simp [atomTy, h]
-    | bool => rfl
-    | copy h => simp [atomTy, h]
-    | move h => simp [atomTy, h]
-
 /-- The executable form of `FieldsTy`. -/
 def fieldsOkB (Γ : TyCtx) (d : StructDecl) (fs : List (Name × Atom)) : Bool :=
   decide ((fs.map Prod.fst).Nodup) &&
@@ -1358,38 +711,6 @@ def fieldsOkB (Γ : TyCtx) (d : StructDecl) (fs : List (Name × Atom)) : Bool :=
     | some st => atomTy Γ p.2 == some st
     | none => false) &&
   d.fields.all (fun q => (lookupF q.1 fs).isSome)
-
-theorem covers_iff {α β : Type} {l : List (Name × α)} {m : List (Name × β)} :
-    (∀ f a, lookupF f l = some a → ∃ b, lookupF f m = some b) ↔
-      l.all (fun q => (lookupF q.1 m).isSome) = true := by
-  rw [List.all_eq_true]
-  constructor
-  · intro h q hq
-    obtain ⟨a, ha⟩ := lookupF_of_mem hq
-    obtain ⟨b, hb⟩ := h q.1 a ha
-    simp [hb]
-  · intro h f a ha
-    have := h (f, a) (lookupF_mem ha)
-    simp only [Option.isSome_iff_exists] at this
-    exact this
-
-theorem fieldsOkB_iff {Γ : TyCtx} {d : StructDecl} {fs : List (Name × Atom)} :
-    fieldsOkB Γ d fs = true ↔ FieldsTy Γ d fs := by
-  simp only [fieldsOkB, Bool.and_eq_true, decide_eq_true_eq, ← covers_iff]
-  constructor
-  · rintro ⟨⟨hn, ht⟩, hc⟩
-    refine ⟨hn, ?_, hc⟩
-    intro p hp
-    have := (List.all_eq_true.mp ht) p hp
-    split at this
-    · rename_i st hst
-      exact ⟨st, hst, atomTy_iff.mp (by simpa using this)⟩
-    · cases this
-  · rintro ⟨hn, ht, hc⟩
-    refine ⟨⟨hn, List.all_eq_true.mpr ?_⟩, hc⟩
-    intro p hp
-    obtain ⟨st, hst, ha⟩ := ht p hp
-    simp [hst, atomTy_iff.mpr ha]
 
 /-- The type of an expression, if it has one. -/
 def tyOf (Δ : Decls) (Γ : TyCtx) : Expr → Option Ty
@@ -1403,61 +724,6 @@ def tyOf (Δ : Decls) (Γ : TyCtx) : Expr → Option Ty
   | .mk s fs => match findDecl Δ s with
     | some d => if fieldsOkB Γ d fs then some (.struct s) else none
     | none => none
-
-theorem tyOf_iff {Δ : Decls} {Γ : TyCtx} {e : Expr} {ty : Ty} :
-    tyOf Δ Γ e = some ty ↔ HasType Δ Γ e ty := by
-  cases e with
-  | atom a =>
-    cases a with
-    | int t n =>
-      simp only [tyOf]
-      constructor
-      · intro h; split at h
-        · cases h; exact .int (by assumption)
-        · cases h
-      · intro h; cases h with | int h => simp [h]
-    | bool b =>
-      simp only [tyOf, Option.some.injEq]
-      constructor
-      · intro h; subst h; exact .bool
-      · intro h; cases h; rfl
-    | copy x =>
-      simp only [tyOf]
-      constructor
-      · exact .copy
-      · intro h; cases h with | copy h => exact h
-    | move x =>
-      simp only [tyOf]
-      constructor
-      · exact .move
-      · intro h; cases h with | move h => exact h
-  | add l r =>
-    constructor
-    · intro h
-      simp only [tyOf] at h
-      split at h
-      · rename_i t t' hl hr
-        split at h
-        · cases h; subst_vars
-          exact .add (atomTy_iff.mp hl) (atomTy_iff.mp hr)
-        · cases h
-      · cases h
-    · intro h
-      cases h with
-      | add hl hr => simp [tyOf, atomTy_iff.mpr hl, atomTy_iff.mpr hr]
-  | mk s fs =>
-    constructor
-    · intro h
-      simp only [tyOf] at h
-      split at h
-      · rename_i d hd
-        split at h
-        · cases h; exact .mk hd (fieldsOkB_iff.mp (by assumption))
-        · cases h
-      · cases h
-    · intro h
-      cases h with
-      | mk hd hf => simp [tyOf, hd, fieldsOkB_iff.mpr hf]
 
 /-- The context after reading an atom, if the read is allowed. -/
 def useAtom (Δ : Decls) (Γ : Ctx) : Atom → Option Ctx
@@ -1485,96 +751,11 @@ def uses (Δ : Decls) (Γ : Ctx) : Expr → Option Ctx
     | none => none
   | .mk _ fs => useAtoms Δ Γ (fs.map Prod.snd)
 
-theorem useAtom_iff {Δ : Decls} {Γ Γ' : Ctx} {a : Atom} :
-    useAtom Δ Γ a = some Γ' ↔ UseAtom Δ Γ a Γ' := by
-  constructor
-  · intro h
-    cases a with
-    | int => cases h; exact .int
-    | bool => cases h; exact .bool
-    | copy x =>
-      simp only [useAtom] at h
-      split at h
-      · rename_i e he
-        split at h
-        · rename_i hc; cases h; exact .copy he hc.1 hc.2
-        · cases h
-      · cases h
-    | move x =>
-      simp only [useAtom] at h
-      split at h
-      · rename_i e he
-        split at h
-        · rename_i hc; cases h; exact .move he hc.1 hc.2
-        · cases h
-      · cases h
-  · intro h
-    cases h with
-    | int => rfl
-    | bool => rfl
-    | copy hf hl hcp => simp [useAtom, hf, hl, hcp]
-    | move hf hl hcp => simp [useAtom, hf, hl, hcp]
-
-theorem useAtoms_iff {Δ : Decls} :
-    ∀ {Γ Γ' : Ctx} {as : List Atom}, useAtoms Δ Γ as = some Γ' ↔ UseAtoms Δ Γ as Γ'
-  | Γ, Γ', [] => by
-    simp only [useAtoms, Option.some.injEq]
-    constructor
-    · intro h; subst h; exact .nil
-    · intro h; cases h; rfl
-  | Γ, Γ', a :: as => by
-    simp only [useAtoms]
-    constructor
-    · intro h
-      split at h
-      · rename_i Γ₁ h₁; exact .cons (useAtom_iff.mp h₁) (useAtoms_iff.mp h)
-      · cases h
-    · intro h
-      cases h with
-      | cons h₁ h₂ => rw [useAtom_iff.mpr h₁]; exact useAtoms_iff.mpr h₂
-
-theorem uses_iff {Δ : Decls} {Γ Γ' : Ctx} {e : Expr} : uses Δ Γ e = some Γ' ↔ Uses Δ Γ e Γ' := by
-  cases e with
-  | atom a =>
-    simp only [uses]
-    constructor
-    · intro h; exact .atom (useAtom_iff.mp h)
-    · intro h; cases h with | atom h => exact useAtom_iff.mpr h
-  | add l r =>
-    simp only [uses]
-    constructor
-    · intro h
-      split at h
-      · rename_i Γ₁ h₁; exact .add (useAtom_iff.mp h₁) (useAtom_iff.mp h)
-      · cases h
-    · intro h
-      cases h with
-      | add h₁ h₂ => rw [useAtom_iff.mpr h₁]; exact useAtom_iff.mpr h₂
-  | mk s fs =>
-    simp only [uses]
-    constructor
-    · intro h; exact .mk (useAtoms_iff.mp h)
-    · intro h; cases h with | mk h => exact useAtoms_iff.mpr h
-
 /-- The executable form of `PatOk`. -/
 def patOkB (d : StructDecl) (pat : List (Name × Binder)) : Bool :=
   decide ((pat.map Prod.fst).Nodup) &&
   pat.all (fun p => (lookupF p.1 d.fields).isSome) &&
   d.fields.all (fun q => (lookupF q.1 pat).isSome)
-
-theorem patOkB_iff {d : StructDecl} {pat : List (Name × Binder)} : patOkB d pat = true ↔ PatOk d pat := by
-  simp only [patOkB, Bool.and_eq_true, decide_eq_true_eq]
-  constructor
-  · rintro ⟨⟨hn, hd⟩, hc⟩
-    refine ⟨hn, ?_, covers_iff.mpr hc⟩
-    intro p hp
-    have := (List.all_eq_true.mp hd) p hp
-    simpa [Option.isSome_iff_exists] using this
-  · rintro ⟨hn, hd, hc⟩
-    refine ⟨⟨hn, List.all_eq_true.mpr ?_⟩, covers_iff.mp hc⟩
-    intro p hp
-    obtain ⟨st, hst⟩ := hd p hp
-    simp [hst]
 
 /-- The context after a statement, if the statement is accepted. -/
 def stmtOut (Δ : Decls) (Γ : Ctx) : Stmt → Option Ctx
@@ -1601,56 +782,6 @@ def stmtOut (Δ : Decls) (Γ : Ctx) : Stmt → Option Ctx
       | none => none
     else none
 
-theorem stmtOut_iff {Δ : Decls} {Γ Γ' : Ctx} {s : Stmt} :
-    stmtOut Δ Γ s = some Γ' ↔ StmtOk Δ Γ s Γ' := by
-  constructor
-  · intro h
-    cases s with
-    | let_ b t e =>
-      cases b with
-      | wild =>
-        simp only [stmtOut] at h
-        split at h
-        · rename_i hc
-          exact .letWild (tyOf_iff.mp hc.1) hc.2.1 hc.2.2 (uses_iff.mp h)
-        · cases h
-      | name x =>
-          simp only [stmtOut] at h
-          split at h
-          · rename_i ht
-            split at h
-            · rename_i Γ₁ hu
-              split at h
-              · cases h; exact .let_ (tyOf_iff.mp ht.1) ht.2 (uses_iff.mp hu) (by assumption)
-              · cases h
-            · cases h
-          · cases h
-    | letStruct s pat e =>
-      simp only [stmtOut] at h
-      split at h
-      · rename_i ht
-        split at h
-        · rename_i d hd
-          split at h
-          · rename_i hp
-            split at h
-            · rename_i Γ₁ hu
-              split at h
-              · cases h
-                exact .letStruct (tyOf_iff.mp ht.1) ht.2 hd (patOkB_iff.mp hp) (uses_iff.mp hu)
-                  (by assumption)
-              · cases h
-            · cases h
-          · cases h
-        · cases h
-      · cases h
-  · intro h
-    cases h with
-    | let_ ht hk hu hf => simp [stmtOut, tyOf_iff.mpr ht, hk, uses_iff.mpr hu, hf]
-    | letWild ht hk hcopy hu => simp [stmtOut, tyOf_iff.mpr ht, hk, hcopy, uses_iff.mpr hu]
-    | letStruct ht hk hd hp hu hf =>
-      simp [stmtOut, tyOf_iff.mpr ht, hk, hd, patOkB_iff.mpr hp, uses_iff.mpr hu, hf]
-
 /-- The executable form of `BodyOk`. -/
 def bodyOkB (Δ : Decls) (Γ : Ctx) : List Stmt → Atom → Bool
   | [], r => tyOf Δ Γ.tys (.atom r) == some (.scalar (.int .u8)) &&
@@ -1661,49 +792,22 @@ def bodyOkB (Δ : Decls) (Γ : Ctx) : List Stmt → Atom → Bool
     | some Γ₁ => bodyOkB Δ Γ₁ ss r
     | none => false
 
-theorem bodyOkB_iff {Δ : Decls} :
-    ∀ {Γ : Ctx} {ss : List Stmt} {r : Atom}, bodyOkB Δ Γ ss r = true ↔ BodyOk Δ Γ ss r
-  | Γ, [], r => by
-    simp only [bodyOkB, Bool.and_eq_true, beq_iff_eq]
-    constructor
-    · rintro ⟨ht, hu⟩
-      split at hu
-      · rename_i Γ₁ hu'
-        exact .ret (tyOf_iff.mp ht) (uses_iff.mp hu') (by simpa using hu)
-      · cases hu
-    · intro h
-      cases h with
-      | ret ht hu hd => simp [tyOf_iff.mpr ht, uses_iff.mpr hu, hd]
-  | Γ, s :: ss, r => by
-    simp only [bodyOkB]
-    constructor
-    · intro h
-      split at h
-      · rename_i Γ₁ hs; exact .cons (stmtOut_iff.mp hs) (bodyOkB_iff.mp h)
-      · cases h
-    · intro h
-      cases h with
-      | cons hs hb => rw [stmtOut_iff.mpr hs]; exact bodyOkB_iff.mpr hb
-
 /-- The executable checker. -/
 def check (p : Program) : Bool := decide (DeclsOk p.decls) && bodyOkB p.decls [] p.body p.ret
 
-/-- **Checker correspondence.** The checker accepts a program exactly when the judgments do. -/
-theorem check_iff (p : Program) : check p = true ↔ Checked p := by
-  simp only [check, Bool.and_eq_true, decide_eq_true_eq, bodyOkB_iff, Checked]
-
 end ConcreteSpec
+
+namespace ConcreteSpec.Examples
+open ConcreteSpec
 
 /-! ### Slice-1 conformance examples
 
 Each example gives the surface program in its doc comment, its Core syntax, and what the
-specification says about it: accepted with an outcome, or refused. Accepted examples are proved
-with `check_iff` and run with the evaluator; refused ones are proved not `Checked`. Locals are
-written with their source name and a number: `t₀` is `⟨"t", 0⟩`. -/
-
-namespace ConcreteSpec.Examples
-
-open ConcreteSpec
+specification says about it: accepted (`check p = true`) with an outcome (`run p 10 = …`), or
+refused (`check p = false`). By `check_iff` (`Proofs/Checker.lean`), `check p = true` is exactly
+the rule `Checked p`, and `bodyOkB … = true` is exactly `BodyOk …`. Locals are written with their
+source name and a number: `t₀` is `⟨"t", 0⟩`. The examples that need a theorem (`add100_safe`, the
+accepted runtime overflow from an input) are in `Proofs/Examples.lean`. -/
 
 /-- `struct Token {}` — empty, not `Copy`, so linear (OWN-D1). -/
 def token : StructDecl := { name := "Token", copy := false, fields := [] }
@@ -1717,20 +821,33 @@ def pair : StructDecl := { name := "Pair", copy := false, fields := [("a", .int 
 def decls : Decls := [token, unit0, pair]
 
 def u8 : Ty := .scalar (.int .u8)
+
 def lit (n : Int) : Expr := .atom (.int .u8 n)
+
 def mv (x : Var) : Expr := .atom (.move x)
+
 def cp (x : Var) : Expr := .atom (.copy x)
 
 def t₀ : Var := ⟨"t", 0⟩
+
 def u₁ : Var := ⟨"u", 1⟩
+
 def p₀ : Var := ⟨"p", 0⟩
+
 def q₁ : Var := ⟨"q", 1⟩
+
 def x₀ : Var := ⟨"x", 0⟩
+
 def x₁ : Var := ⟨"x", 1⟩
+
 def y₁ : Var := ⟨"y", 1⟩
+
 def a₀ : Var := ⟨"a", 0⟩
+
 def b₁ : Var := ⟨"b", 1⟩
+
 def s₂ : Var := ⟨"s", 2⟩
+
 def z₃ : Var := ⟨"z", 3⟩
 
 /-- The slice's central program: an empty linear struct is created, moved, and consumed by a
@@ -1749,7 +866,8 @@ def moveThenConsume : Program :=
                     .letStruct "Token" [] (mv u₁)],
     ret := .int .u8 42 }
 
-example : Checked moveThenConsume := (check_iff _).mp (by decide)
+example : check moveThenConsume = true := by decide
+
 example : run moveThenConsume 10 = .exit 42 := by decide
 
 /-- Refused: `t` is used after it was moved into `u` (OWN-1).
@@ -1769,7 +887,7 @@ def useAfterMove : Program :=
                     .letStruct "Token" [] (mv u₁)],
     ret := .int .u8 42 }
 
-example : ¬ Checked useAfterMove := fun h => absurd ((check_iff _).mpr h) (by decide)
+example : check useAfterMove = false := by decide
 
 /-- The refusal is what keeps the program from getting stuck: run anyway, the model reads a moved
 slot. This is the behaviour `checked_no_use_after_move` rules out for accepted programs. -/
@@ -1782,7 +900,8 @@ def copyLinear : Program :=
                     .letStruct "Token" [] (cp t₀)],
     ret := .int .u8 42 }
 
-example : ¬ Checked copyLinear := fun h => absurd ((check_iff _).mpr h) (by decide)
+example : check copyLinear = false := by decide
+
 example : run copyLinear 10 = .stuck .wrongMode := by decide
 
 /-- Refused: a Copy value read with `move` (Q9.1, owner-confirmed 2026-11-05: `move` only for
@@ -1791,7 +910,8 @@ def moveCopy : Program :=
   { decls, body := [.let_ (.name x₀) u8 (lit 7)],
     ret := .move x₀ }
 
-example : ¬ Checked moveCopy := fun h => absurd ((check_iff _).mpr h) (by decide)
+example : check moveCopy = false := by decide
+
 example : run moveCopy 10 = .stuck .wrongMode := by decide
 
 /-- Refused: the linear `t` is never consumed before `return` (OWN-2).
@@ -1804,7 +924,7 @@ fn main() -> u8 {
 def notConsumed : Program :=
   { decls, body := [.let_ (.name t₀) (.struct "Token") (.mk "Token" [])], ret := .int .u8 42 }
 
-example : ¬ Checked notConsumed := fun h => absurd ((check_iff _).mpr h) (by decide)
+example : check notConsumed = false := by decide
 
 /-- Accepted: a `Copy` struct is copied, not moved, so it can be read twice (OWN-D1, TYPE-14).
 ```
@@ -1823,7 +943,8 @@ def copyTwice : Program :=
                     .letStruct "Unit0" [] (cp q₁)],
     ret := .int .u8 0 }
 
-example : Checked copyTwice := (check_iff _).mp (by decide)
+example : check copyTwice = true := by decide
+
 example : run copyTwice 10 = .exit 0 := by decide
 
 /-- Refused: `x` is bound and never used (OWN-5).
@@ -1836,7 +957,7 @@ fn main() -> u8 {
 def unusedBinding : Program :=
   { decls, body := [.let_ (.name x₀) u8 (lit 1)], ret := .int .u8 42 }
 
-example : ¬ Checked unusedBinding := fun h => absurd ((check_iff _).mpr h) (by decide)
+example : check unusedBinding = false := by decide
 
 /-- Accepted: destructuring binds every field, here under new names (PAT-1, PAT-5), and checked
 addition in range (ARITH-3). In A-normal form `return x + y` binds the sum to a temporary first.
@@ -1854,7 +975,8 @@ def destructureAdd : Program :=
                     .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₁))],
     ret := .copy s₂ }
 
-example : Checked destructureAdd := (check_iff _).mp (by decide)
+example : check destructureAdd = true := by decide
+
 example : run destructureAdd 10 = .exit 42 := by decide
 
 /-- Refused: the pattern does not name field `b` (PAT-5).
@@ -1870,7 +992,7 @@ def missingField : Program :=
                     .letStruct "Pair" [("a", .name x₁)] (mv p₀)],
     ret := .copy x₁ }
 
-example : ¬ Checked missingField := fun h => absurd ((check_iff _).mpr h) (by decide)
+example : check missingField = false := by decide
 
 /-- Accepted with `_` for an ignored field (PAT-5; a scalar field is an eligible wildcard, OWN-5).
 ```
@@ -1885,7 +1007,8 @@ def wildcardField : Program :=
                     .letStruct "Pair" [("a", .name x₁), ("b", .wild)] (mv p₀)],
     ret := .copy x₁ }
 
-example : Checked wildcardField := (check_iff _).mp (by decide)
+example : check wildcardField = true := by decide
+
 example : run wildcardField 10 = .exit 42 := by decide
 
 /-- Refused (Q6.1, Q6.2, Q6.4; ARITH-13, OD118): `a` and `b` are immutable `let`s of literals, so
@@ -1904,7 +1027,8 @@ def overflowTrap : Program :=
                     .let_ (.name s₂) u8 (.add (.copy a₀) (.copy b₁))],
     ret := .copy s₂ }
 
-example : ¬ Checked overflowTrap := fun h => absurd ((check_iff _).mpr h) (by decide)
+example : check overflowTrap = false := by decide
+
 example : run overflowTrap 10 = .trap .arithmeticOverflow := by decide
 
 /-- Refused for the same reason in a position whose value is never used (Q6.4: all written code
@@ -1918,7 +1042,7 @@ fn main() -> u8 {
 def overflowDropped : Program :=
   { decls, body := [.let_ .wild u8 (.add (.int .u8 200) (.int .u8 100))], ret := .int .u8 42 }
 
-example : ¬ Checked overflowDropped := fun h => absurd ((check_iff _).mpr h) (by decide)
+example : check overflowDropped = false := by decide
 
 /-- Refused (Q6.2 as amended 2026-11-05, Q6.4; OD118): known values flow through an immutable
 struct. Constructing `p` records that field `a` is `200` and field `b` is `100`; destructuring
@@ -1937,7 +1061,8 @@ def fieldOverflowTrap : Program :=
                     .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₁))],
     ret := .copy s₂ }
 
-example : ¬ Checked fieldOverflowTrap := fun h => absurd ((check_iff _).mpr h) (by decide)
+example : check fieldOverflowTrap = false := by decide
+
 example : run fieldOverflowTrap 10 = .trap .arithmeticOverflow := by decide
 
 /-- Refused: an ownership transfer keeps the facts for the receiving binding (Q6.2 as amended).
@@ -1957,7 +1082,8 @@ def fieldOverflowMoved : Program :=
                     .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₁))],
     ret := .copy s₂ }
 
-example : ¬ Checked fieldOverflowMoved := fun h => absurd ((check_iff _).mpr h) (by decide)
+example : check fieldOverflowMoved = false := by decide
+
 example : run fieldOverflowMoved 10 = .trap .arithmeticOverflow := by decide
 
 /-- Accepted with the facts in range: the known sum fits, and the program exits with it. The
@@ -1968,7 +1094,8 @@ def fieldSumFits : Program :=
                     .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₁))],
     ret := .copy s₂ }
 
-example : Checked fieldSumFits := (check_iff _).mp (by decide)
+example : check fieldSumFits = true := by decide
+
 example : run fieldSumFits 10 = .exit 255 := by decide
 
 /-- **An accepted overflow from an input** (Q6.2, Q6.4). The checker does not know an input's
@@ -1983,19 +1110,13 @@ fn add100(x: u8) -> u8 {
 ```
 In Core the sum is bound to a temporary first (Q9.1). -/
 def inputCtx : Ctx := [{ name := x₀, ty := u8, live := true, used := false, known := none }]
+
 def inputEnv (n : Int) : Env := [(x₀, .val (.scalar (.int .u8 n)))]
+
 def add100 : List Stmt := [.let_ (.name s₂) u8 (.add (.copy x₀) (.int .u8 100))]
 
-theorem add100_ok : BodyOk decls inputCtx add100 (.copy s₂) := bodyOkB_iff.mp (by decide)
-
-/-- For every input value the accepted body never gets stuck. -/
-theorem add100_safe (n : Int) (h : IntTy.u8.inRange n = true) (fuel : Nat) (w : Stuck) :
-    runBody decls fuel (inputEnv n) add100 (.copy s₂) ≠ .stuck w :=
-  runBody_safe add100_ok
-    (.cons (fun _ => ⟨_, rfl, .scalar (.int h)⟩) (fun _ hs => by cases hs) (fun _ _ h => by cases h) .nil)
-    fuel w
-
 example : runBody decls 10 (inputEnv 200) add100 (.copy s₂) = .trap .arithmeticOverflow := by decide
+
 example : runBody decls 10 (inputEnv 1) add100 (.copy s₂) = .exit 101 := by decide
 
 /-- **Partial facts** (Q6.2 as amended): an unknown field does not discard a known sibling. `p`'s
@@ -2017,8 +1138,7 @@ def partialKnownRefused : List Stmt :=
    .let_ (.name s₂) u8 (.add (.copy y₁) (.int .u8 100)),
    .let_ (.name z₃) u8 (.add (.copy x₁) (.copy s₂))]
 
-example : ¬ BodyOk decls inputCtx partialKnownRefused (.copy z₃) :=
-  fun h => absurd (bodyOkB_iff.mpr h) (by decide)
+example : bodyOkB decls inputCtx partialKnownRefused (.copy z₃) = false := by decide
 
 /-- Accepted: the sum of the unknown field and the known one is not known, so it is checked at run
 time (ARITH-3).
@@ -2034,8 +1154,10 @@ def partialUnknownAccepted : List Stmt :=
    .letStruct "Pair" [("a", .name x₁), ("b", .name y₁)] (mv p₀),
    .let_ (.name s₂) u8 (.add (.copy x₁) (.copy y₁))]
 
-example : BodyOk decls inputCtx partialUnknownAccepted (.copy s₂) := bodyOkB_iff.mp (by decide)
+example : bodyOkB decls inputCtx partialUnknownAccepted (.copy s₂) = true := by decide
+
 example : runBody decls 10 (inputEnv 55) partialUnknownAccepted (.copy s₂) = .exit 255 := by decide
+
 example : runBody decls 10 (inputEnv 56) partialUnknownAccepted (.copy s₂) = .trap .arithmeticOverflow := by
   decide
 
@@ -2043,7 +1165,7 @@ example : runBody decls 10 (inputEnv 56) partialUnknownAccepted (.copy s₂) = .
 def literalTooBig : Program :=
   { decls, body := [.let_ (.name a₀) u8 (lit 300)], ret := .copy a₀ }
 
-example : ¬ Checked literalTooBig := fun h => absurd ((check_iff _).mpr h) (by decide)
+example : check literalTooBig = false := by decide
 
 /-- Refused: `+` takes two operands of one integer type (TYPE-6).
 ```
@@ -2059,7 +1181,7 @@ def mixedAdd : Program :=
                     .let_ (.name s₂) u8 (.add (.copy a₀) (.copy b₁))],
     ret := .copy s₂ }
 
-example : ¬ Checked mixedAdd := fun h => absurd ((check_iff _).mpr h) (by decide)
+example : check mixedAdd = false := by decide
 
 /-- Refused: one identity bound twice (Q9.1: every Core binder is fresh). Elaboration gives two
 surface bindings of one name different identities, so this arises only from a faulty elaborator;
@@ -2069,7 +1191,7 @@ def rebind : Program :=
                     .let_ (.name x₀) u8 (lit 41)],
     ret := .copy x₀ }
 
-example : ¬ Checked rebind := fun h => absurd ((check_iff _).mpr h) (by decide)
+example : check rebind = false := by decide
 
 /-- Accepted: `_` drops a Copy value (OWN-5).
 ```
@@ -2081,7 +1203,8 @@ fn main() -> u8 {
 def wildCopy : Program :=
   { decls, body := [.let_ .wild u8 (lit 1)], ret := .int .u8 42 }
 
-example : Checked wildCopy := (check_iff _).mp (by decide)
+example : check wildCopy = true := by decide
+
 example : run wildCopy 10 = .exit 42 := by decide
 
 /-- Refused: `_` never discards a linear value (OWN-5).
@@ -2094,16 +1217,18 @@ fn main() -> u8 {
 def wildLinear : Program :=
   { decls, body := [.let_ .wild (.struct "Token") (.mk "Token" [])], ret := .int .u8 42 }
 
-example : ¬ Checked wildLinear := fun h => absurd ((check_iff _).mpr h) (by decide)
+example : check wildLinear = false := by decide
 
 /-- Refused: `main` returns `u8` (STMT-7). -/
 def wrongReturnType : Program :=
   { decls, body := [], ret := .int .i64 42 }
 
-example : ¬ Checked wrongReturnType := fun h => absurd ((check_iff _).mpr h) (by decide)
+example : check wrongReturnType = false := by decide
 
 end ConcreteSpec.Examples
 
+namespace ConcreteSpec.Rep
+open ConcreteSpec
 
 /-! ## Part 2. Representation (Q3.11): `rep_roundtrip`
 
@@ -2118,10 +1243,6 @@ uninitialized byte, is not a valid `bool`.
 Not modelled here, because slice 1 does not need them: pointer fragments, permissions and
 external frames (Q3.11), struct fields and their padding, and load/store against a block memory.
 -/
-
-namespace ConcreteSpec.Rep
-
-open ConcreteSpec
 
 /-- A memory byte: uninitialized, or initialized with a value below 256. -/
 inductive MByte where
@@ -2192,70 +1313,12 @@ inductive RepVal (Δ : Decls) : Val → Ty → Prop where
   | scalar {v st} : SVTy v st → RepVal Δ (.scalar v) (.scalar st)
   | empty {s d} : findDecl Δ s = some d → d.fields = [] → RepVal Δ (.struct s []) (.struct s)
 
-theorem encodeNat_length : ∀ (w n : Nat), (encodeNat w n).length = w
-  | 0, _ => rfl
-  | w + 1, n => by simp [encodeNat, encodeNat_length w (n / 256)]
-
-theorem decodeNat_encodeNat : ∀ (w n : Nat), decodeNat (encodeNat w n) = some (n % 256 ^ w)
-  | 0, n => by simp [encodeNat, decodeNat, Nat.mod_one]
-  | w + 1, n => by
-    simp only [encodeNat, decodeNat, decodeNat_encodeNat w (n / 256), Option.map_some,
-      Option.some.injEq]
-    rw [Nat.pow_succ, Nat.mul_comm (256 ^ w) 256, Nat.mod_mul]
-
-/-- The integer round trip, for every integer type: the bit pattern of an in-range value decodes
-to the value. -/
-theorem int_roundtrip (t : IntTy) (n : Int) (h : t.inRange n = true) :
-    ofBits t ((n % (2 : Int) ^ t.bits).toNat % 256 ^ (t.bits / 8)) = n := by
-  have hpos : (0 : Int) < (2 : Int) ^ t.bits := by
-    cases t <;> decide
-  have hnn : 0 ≤ n % (2 : Int) ^ t.bits := Int.emod_nonneg _ (by omega)
-  have hlt : n % (2 : Int) ^ t.bits < (2 : Int) ^ t.bits := Int.emod_lt_of_pos _ hpos
-  have hpow : ((256 ^ (t.bits / 8) : Nat) : Int) = (2 : Int) ^ t.bits := by
-    cases t <;> decide
-  have hsmall : (n % (2 : Int) ^ t.bits).toNat < 256 ^ (t.bits / 8) := by
-    have : (((n % (2 : Int) ^ t.bits).toNat : Nat) : Int) < ((256 ^ (t.bits / 8) : Nat) : Int) := by
-      rw [Int.toNat_of_nonneg hnn, hpow]; exact hlt
-    exact Int.ofNat_lt.mp this
-  rw [Nat.mod_eq_of_lt hsmall]
-  unfold ofBits
-  have hm := Int.toNat_of_nonneg hnn
-  generalize (n % (2 : Int) ^ t.bits).toNat = M at hm ⊢
-  simp only [IntTy.inRange, decide_eq_true_eq] at h
-  split
-  · rename_i hc
-    cases t <;>
-      simp only [IntTy.signed, IntTy.min, IntTy.max, IntTy.bits, Nat.reducePow, Int.reducePow,
-        Nat.reduceSub, ↓reduceIte, Bool.false_eq_true, false_and, true_and] at hc h hm ⊢ <;>
-      omega
-  · rename_i hc
-    cases t <;>
-      simp only [IntTy.signed, IntTy.min, IntTy.max, IntTy.bits, Nat.reducePow, Int.reducePow,
-        Nat.reduceSub, ↓reduceIte, Bool.false_eq_true, false_and, true_and, Nat.not_le] at hc h hm ⊢ <;>
-      omega
-
-/-- **`rep_roundtrip`** (Q9.14, Q3.11). For every slice-1 type this part covers (`u8`…`u64`,
-`i8`…`i64`, `bool` and a struct with no fields), encoding a well-typed value gives exactly the
-type's size in bytes, and decoding those bytes gives the value back. -/
-theorem rep_roundtrip {Δ : Decls} {v : Val} {t : Ty} (h : RepVal Δ v t) :
-    Ty.size Δ t = some (encodeVal v).length ∧ decodeVal Δ t (encodeVal v) = some v := by
-  cases h with
-  | empty hd hf => simp [Ty.size, encodeVal, decodeVal, hd, hf]
-  | scalar hs =>
-    cases hs with
-    | bool =>
-      rename_i b
-      cases b <;> simp [Ty.size, scalarSize, encodeVal, encodeScalar, decodeVal, decodeScalar]
-    | int hin =>
-      rename_i t n
-      refine ⟨by simp [Ty.size, scalarSize, encodeVal, encodeScalar, encodeNat_length], ?_⟩
-      simp only [decodeVal, encodeVal, encodeScalar, decodeScalar, encodeNat_length,
-        ↓reduceIte, decodeNat_encodeNat, Option.map_some, int_roundtrip t n hin]
-
 /-- Non-vacuity: decoding is not total. An uninitialized byte is no `u8`, byte `2` is no `bool`,
 and a byte count other than the size is no value. -/
 example : decodeScalar (.int .u8) [.undef] = none := by decide
+
 example : decodeScalar .bool [.byte 2] = none := by decide
+
 example : decodeScalar (.int .u16) [.byte 1] = none := by decide
 
 /-- Little-endian, two's complement (OD126): `-2 : i16` is the bytes `0xfe 0xff`. -/
@@ -2265,22 +1328,31 @@ example : encodeScalar (.int .i16 (-2)) = [.byte 254, .byte 255] := by decide
 struct `Token` (zero bytes, F13). -/
 example : decodeVal [] (.scalar (.int .u8)) (encodeVal (.scalar (.int .u8 255))) =
     some (.scalar (.int .u8 255)) := by decide
+
 example : decodeVal [] (.scalar (.int .u16)) (encodeVal (.scalar (.int .u16 65535))) =
     some (.scalar (.int .u16 65535)) := by decide
+
 example : decodeVal [] (.scalar (.int .u32)) (encodeVal (.scalar (.int .u32 4294967295))) =
     some (.scalar (.int .u32 4294967295)) := by decide
+
 example : decodeVal [] (.scalar (.int .u64)) (encodeVal (.scalar (.int .u64 18446744073709551615))) =
     some (.scalar (.int .u64 18446744073709551615)) := by decide
+
 example : decodeVal [] (.scalar (.int .u64)) (encodeVal (.scalar (.int .u64 0))) =
     some (.scalar (.int .u64 0)) := by decide
+
 example : decodeVal [] (.scalar .bool) (encodeVal (.scalar (.bool true))) =
     some (.scalar (.bool true)) := by decide
+
 example : decodeVal [] (.scalar .bool) (encodeVal (.scalar (.bool false))) =
     some (.scalar (.bool false)) := by decide
+
 example : encodeVal (.struct "Token" []) = [] ∧
     decodeVal Examples.decls (.struct "Token") [] = some (.struct "Token" []) := by decide
 
 end ConcreteSpec.Rep
+
+namespace ConcreteSpec.Cleanup
 
 /-! ## Part 3. Structured cleanup (Q9.8): `defer_cleanup_releases`
 
@@ -2301,8 +1373,6 @@ an earlier-registered (so later-running) call. Capability checking of the calls 
 modelled here. Not modelled here: the statements between registrations, late reads of the
 deferred arguments, and evaluating a `return` value into an owned temporary before cleanup (Q9.8).
 -/
-
-namespace ConcreteSpec.Cleanup
 
 /-- A resource in this part: a value to destroy or give up, or an allocator. -/
 abbrev Res := Nat
@@ -2431,261 +1501,6 @@ inductive Reg : (Res → Bool) → Stack → Prop where
       Reg (fun r => live r && r != d.target) (⟨k, d :: ds⟩ :: st)
   | leave {live f st} : Reg live (f :: st) → Reg live st
 
-theorem depOrder_append_left : ∀ {l₁ l₂ : List Deferred}, DepOrder (l₁ ++ l₂) → DepOrder l₁
-  | [], _, _ => .nil
-  | d :: l₁, l₂, h => by
-    cases h with
-    | cons hs hall hrest =>
-      exact .cons hs (fun d' hd' => hall d' (List.mem_append_left _ hd'))
-        (depOrder_append_left hrest)
-
-theorem depOrder_append_right : ∀ {l₁ l₂ : List Deferred}, DepOrder (l₁ ++ l₂) → DepOrder l₂
-  | [], _, h => h
-  | _ :: l₁, _, h => by cases h with | cons _ _ hrest => exact depOrder_append_right hrest
-
-theorem pending_cons (f : Frame) (st : Stack) : pending (f :: st) = f.defers ++ pending st := by
-  simp [pending]
-
-theorem pending_append (fs st : List Frame) : pending (fs ++ st) = pending fs ++ pending st := by
-  simp [pending]
-
-theorem depOrder_cross : ∀ {l₁ l₂ : List Deferred}, DepOrder (l₁ ++ l₂) →
-    ∀ x ∈ l₁, ∀ y ∈ l₂, x.target ∉ y.needs
-  | [], _, _, x, hx, _, _ => by cases hx
-  | d :: l₁, l₂, h, x, hx, y, hy => by
-    cases h with
-    | cons _ hall hrest =>
-      rcases List.mem_cons.mp hx with rfl | hx
-      · exact hall y (List.mem_append_right _ hy)
-      · exact depOrder_cross hrest x hx y hy
-
-/-- What registration guarantees about the pending calls: they are dependency-ordered, each
-resource is consumed at most once and is no longer owned, and everything a call needs is owned or
-consumed by a later-running call. -/
-def RegInv (live : Res → Bool) (st : Stack) : Prop :=
-  DepOrder (pending st) ∧ (targets (pending st)).Nodup ∧
-  (∀ d ∈ pending st, live d.target = false) ∧
-  (∀ d ∈ pending st, ∀ r ∈ d.needs, live r = true ∨ r ∈ targets (pending st))
-
-theorem reg_inv {live : Res → Bool} {st : Stack} (h : Reg live st) : RegInv live st := by
-  induction h with
-  | empty => exact ⟨.nil, .nil, by simp [pending], by simp [pending]⟩
-  | enter _ ih => simpa [RegInv, pending_cons] using ih
-  | @push live k ds st d _ hlive hself hneeds hall ih =>
-    obtain ⟨hdo, hnd, hdead, hav⟩ := ih
-    rw [pending_cons] at hdo hnd hdead hav hneeds hall
-    refine ⟨?_, ?_, ?_, ?_⟩
-    · rw [pending_cons]; exact .cons hself hall hdo
-    · rw [pending_cons]
-      simp only [targets, List.map_cons, List.cons_append] at hnd ⊢
-      refine List.nodup_cons.mpr ⟨?_, hnd⟩
-      intro hm
-      obtain ⟨d', hd', he⟩ := List.mem_map.mp hm
-      have := hdead d' hd'; rw [he, hlive] at this; cases this
-    · rw [pending_cons]
-      intro d' hd'
-      simp only [List.cons_append, List.mem_cons] at hd'
-      rcases hd' with rfl | hd'
-      · simp
-      · simp [hdead d' hd']
-    · rw [pending_cons]
-      intro d' hd' r hr
-      simp only [List.cons_append, List.mem_cons] at hd'
-      have step : ∀ r, (live r = true ∨ r ∈ targets (ds ++ pending st)) →
-          ((live r && r != d.target) = true ∨ r ∈ targets (d :: (ds ++ pending st))) := by
-        intro r hr
-        by_cases hrd : r = d.target
-        · right; subst hrd; simp [targets]
-        · rcases hr with hr | hr
-          · left; simp [hr, hrd]
-          · right; simp only [targets, List.map_cons, List.mem_cons]; right; exact hr
-      simp only [List.cons_append] at step ⊢
-      rcases hd' with rfl | hd'
-      · exact step r (hneeds r hr)
-      · exact step r (hav d' hd' r hr)
-  | @leave live f st _ ih =>
-    obtain ⟨hdo, hnd, hdead, hav⟩ := ih
-    rw [pending_cons] at hdo hnd hdead hav
-    refine ⟨depOrder_append_right hdo, ?_, fun d hd => hdead d (List.mem_append_right _ hd), ?_⟩
-    · simp only [targets, List.map_append] at hnd
-      exact hnd.sublist (List.sublist_append_right _ _)
-    · intro d hd r hr
-      rcases hav d (List.mem_append_right _ hd) r hr with h | h
-      · exact .inl h
-      · right
-        simp only [targets, List.map_append, List.mem_append] at h
-        rcases h with h | h
-        · obtain ⟨x, hx, rfl⟩ := List.mem_map.mp h
-          exact absurd hr (depOrder_cross hdo x hx d hd)
-        · exact h
-
-theorem unwindTo_prefix {p : FrameKind → Bool} :
-    ∀ {st : Stack} {fs : List Frame}, unwindTo p st = some fs → ∃ rest, st = fs ++ rest
-  | [], fs, h => by simp [unwindTo] at h
-  | f :: st, fs, h => by
-    simp only [unwindTo] at h
-    split at h
-    · cases h; exact ⟨st, rfl⟩
-    · cases hu : unwindTo p st with
-      | none => rw [hu] at h; cases h
-      | some fs' =>
-        rw [hu] at h
-        cases h
-        obtain ⟨rest, rfl⟩ := unwindTo_prefix hu
-        exact ⟨rest, rfl⟩
-
-/-- An exit leaves a prefix of the scopes: the innermost ones. -/
-theorem unwound_prefix {e : Exit} {st : Stack} {fs : List Frame} (h : unwound e st = some fs) :
-    ∃ rest, st = fs ++ rest := by
-  cases e with
-  | fallthrough =>
-    cases st with
-    | nil => simp [unwound] at h
-    | cons f st => simp [unwound] at h; subst h; exact ⟨st, rfl⟩
-  | brk l => exact unwindTo_prefix h
-  | cont l => exact unwindTo_prefix h
-  | ret => exact unwindTo_prefix h
-  | abort => simp [unwound] at h; subst h; exact ⟨st, rfl⟩
-
-theorem runCleanup_all_ok {ok : Deferred → Bool} :
-    ∀ {ds : List Deferred}, (∀ d ∈ ds, ok d = true) →
-      ∀ tr r, RunCleanup ok ds tr r ↔ tr = expected ds ∧ r = .done
-  | [], _, tr, r => by
-    constructor
-    · intro h; cases h; exact ⟨rfl, rfl⟩
-    · rintro ⟨rfl, rfl⟩; exact .nil
-  | d :: ds, hok, tr, r => by
-    have hd : ok d = true := hok d (List.Mem.head _)
-    have ih := runCleanup_all_ok (ds := ds) (fun x hx => hok x (List.Mem.tail _ hx))
-    constructor
-    · intro h
-      cases h with
-      | step _ h' =>
-        obtain ⟨rfl, rfl⟩ := (ih _ _).mp h'
-        exact ⟨by simp [expected], rfl⟩
-      | trap hf => rw [hd] at hf; cases hf
-    · rintro ⟨rfl, rfl⟩
-      have := RunCleanup.step (ok := ok) hd ((ih (expected ds) .done).mpr ⟨rfl, rfl⟩)
-      simpa [expected] using this
-
-theorem runCleanup_trap {ok : Deferred → Bool} {d : Deferred} {post : List Deferred} :
-    ∀ {pre : List Deferred}, (∀ x ∈ pre, ok x = true) → ok d = false →
-      ∀ tr r, RunCleanup ok (pre ++ d :: post) tr r ↔ tr = expected pre ++ [.call d] ∧ r = .trapped
-  | [], _, hd, tr, r => by
-    simp only [List.nil_append, expected, List.flatMap_nil]
-    constructor
-    · intro h
-      cases h with
-      | step h' _ => rw [hd] at h'; cases h'
-      | trap _ => exact ⟨rfl, rfl⟩
-    · rintro ⟨rfl, rfl⟩; exact .trap hd
-  | x :: pre, hok, hd, tr, r => by
-    have hx : ok x = true := hok x (List.Mem.head _)
-    have ih := runCleanup_trap (post := post) (pre := pre) (fun y hy => hok y (List.Mem.tail _ hy)) hd
-    simp only [List.cons_append]
-    constructor
-    · intro h
-      cases h with
-      | step _ h' =>
-        obtain ⟨rfl, rfl⟩ := (ih _ _).mp h'
-        exact ⟨by simp [expected], rfl⟩
-      | trap hf => rw [hx] at hf; cases hf
-    · rintro ⟨rfl, rfl⟩
-      have := RunCleanup.step (ok := ok) hx ((ih (expected pre ++ [.call d]) .trapped).mpr ⟨rfl, rfl⟩)
-      simpa [expected] using this
-
-/-- In a dependency-ordered run list, a call runs before the release of an allocator it depends
-on. -/
-theorem depOrder_before :
-    ∀ {ds : List Deferred}, DepOrder ds → ∀ {d da : Deferred}, d ∈ ds → da ∈ ds →
-      da.target ∈ d.needs → ∃ pre mid post, ds = pre ++ d :: mid ++ da :: post
-  | [], _, _, _, hd, _, _ => by cases hd
-  | x :: ds, .cons hself hall hrest, d, da, hd, hda, hdep => by
-    by_cases hxa : x = da
-    · subst hxa
-      by_cases hxd : x = d
-      · subst hxd; exact absurd hdep hself
-      · have hd' : d ∈ ds := by
-          cases hd with
-          | head => exact absurd rfl hxd
-          | tail _ h => exact h
-        exact absurd hdep (hall d hd')
-    · have hda' : da ∈ ds := by
-        cases hda with
-        | head => exact absurd rfl hxa
-        | tail _ h => exact h
-      by_cases hxd : x = d
-      · subst hxd
-        obtain ⟨mid, post, hsplit⟩ := List.append_of_mem hda'
-        exact ⟨[], mid, post, by simp [hsplit]⟩
-      · have hd' : d ∈ ds := by
-          cases hd with
-          | head => exact absurd rfl hxd
-          | tail _ h => exact h
-        obtain ⟨pre, mid, post, hsplit⟩ := depOrder_before hrest hd' hda' hdep
-        exact ⟨x :: pre, mid, post, by simp [hsplit]⟩
-
-/-- In a dependency-ordered run list, no call consumes what a later call needs. -/
-theorem depOrder_needs_unconsumed {pre post : List Deferred} {d : Deferred}
-    (h : DepOrder (pre ++ d :: post)) : ∀ r ∈ d.needs, ∀ x ∈ pre, x.target ≠ r := by
-  intro r hr x hx he
-  subst he
-  exact depOrder_cross h x hx d (List.mem_cons_self ..) hr
-
-/-- **`defer_cleanup_releases`** (Q9.14, Q9.8, Q1.5). For every cleanup stack a block can build
-from the resources it owns, and every structured exit (falling through, `break L`, `continue L`,
-`return`), the calls of the scopes the exit leaves:
-
-1. when every call returns, run exactly in reverse registration order, innermost scope first,
-   each call immediately followed by the release of each loan it held (`expected`);
-2. keep the allocator-dependency check: a call runs before the call that consumes anything it
-   needs (an allocator it depends on, or a loan's source);
-3. when a call traps, stop there: the earlier calls ran with their loan releases, the trapping
-   call is the last event, and no later cleanup runs;
-4. consume each resource at most once;
-5. find everything a call needs unconsumed when the call and its loan releases run: no earlier
-   call consumed it, and it was owned or is consumed by a later-running call. -/
-theorem defer_cleanup_releases {ok : Deferred → Bool} {live : Res → Bool} {st : Stack}
-    (hreg : Reg live st) {e : Exit} (he : e ≠ .abort) {fs : List Frame}
-    (hu : unwound e st = some fs) :
-    ((∀ d ∈ pending fs, ok d = true) →
-      ∀ tr r, RunCleanup ok (pending fs) tr r ↔ tr = expected (pending fs) ∧ r = .done) ∧
-    (∀ d da, d ∈ pending fs → da ∈ pending fs → da.target ∈ d.needs →
-      ∃ t₁ t₂ t₃, expected (pending fs) = t₁ ++ .call d :: t₂ ++ .call da :: t₃) ∧
-    (∀ pre d post, pending fs = pre ++ d :: post → (∀ x ∈ pre, ok x = true) → ok d = false →
-      ∀ tr r, RunCleanup ok (pending fs) tr r ↔ tr = expected pre ++ [.call d] ∧ r = .trapped) ∧
-    (targets (pending fs)).Nodup ∧
-    (∀ pre d post, pending fs = pre ++ d :: post → ∀ r ∈ d.needs,
-      (∀ x ∈ pre, x.target ≠ r) ∧ (live r = true ∨ r ∈ targets (pending st))) := by
-  have _ := he
-  obtain ⟨rest, hst⟩ := unwound_prefix hu
-  obtain ⟨hdo0, hnd0, _, hav⟩ := reg_inv hreg
-  have hdo : DepOrder (pending fs) := by
-    have := hdo0
-    rw [hst, pending_append] at this
-    exact depOrder_append_left this
-  refine ⟨fun hok => runCleanup_all_ok hok, ?_, ?_, ?_, ?_⟩
-  · intro d da hd hda hdep
-    obtain ⟨pre, mid, post, hsplit⟩ := depOrder_before hdo hd hda hdep
-    refine ⟨expected pre, d.loans.map .release ++ expected mid,
-      da.loans.map .release ++ expected post, ?_⟩
-    rw [hsplit]
-    simp [expected, List.flatMap_append]
-  · intro pre d post hsplit hok hd tr r
-    rw [hsplit]
-    exact runCleanup_trap hok hd tr r
-  · have := hnd0
-    rw [hst, pending_append] at this
-    simp only [targets, List.map_append] at this ⊢
-    exact this.sublist (List.sublist_append_left _ _)
-  · intro pre d post hsplit r hr
-    refine ⟨depOrder_needs_unconsumed (hsplit ▸ hdo) r hr, hav d ?_ r hr⟩
-    rw [hst, pending_append, hsplit]
-    exact List.mem_append_left _ (List.mem_append_right _ (List.mem_cons_self ..))
-
-/-- An abort runs no cleanup (Q9.8). -/
-theorem abort_no_cleanup (st : Stack) : unwound .abort st = some [] ∧ pending [] = [] := ⟨rfl, rfl⟩
-
 /-! ### Examples
 
 A function owns allocator `a` (resource 0), a value `v` (resource 1) allocated from `a`, and a
@@ -2694,8 +1509,11 @@ destroy(v)`, a call that holds loan 7 borrowed from `b`; then, in a block inside
 `defer destroy(b)`. -/
 
 def relA : Deferred := { kind := .giveUp, target := 0, deps := [], loans := [] }
+
 def desV : Deferred := { kind := .destroy, target := 1, deps := [0], loans := [⟨7, 2⟩] }
+
 def desB : Deferred := { kind := .destroy, target := 2, deps := [], loans := [] }
+
 def owned : Res → Bool := fun r => decide (r ∈ [0, 1, 2])
 
 /-- `desB` in the inner block would consume `b` while `desV`'s loan from `b` is still held after
@@ -2709,95 +1527,39 @@ def stack : Stack := [⟨.block, []⟩, ⟨.loopBody 1, [desV]⟩, ⟨.fnBody, [
 /-- What the function still owns afterwards: nothing of the three. -/
 def ownedAfter : Res → Bool := fun r => ((owned r && r != 0) && r != 2) && r != 1
 
-theorem stack_reg : Reg ownedAfter stack :=
-  .enter (k := .block) <|
-    .push (k := .loopBody 1) (d := desV)
-      (.enter (k := .loopBody 1) <|
-        .push (k := .fnBody) (d := desB)
-          (.push (k := .fnBody) (d := relA) (.enter (k := .fnBody) .empty)
-            rfl (by decide) (by decide) (by decide))
-          rfl (by decide) (by decide) (by decide))
-      rfl (by decide) (by decide) (by decide)
-
 /-- Registering `give_up(a)` after `destroy(v)` is refused: `a` would be released first. -/
 example : ¬ (∀ d' ∈ pending [⟨.fnBody, [desV]⟩], relA.target ∉ d'.needs) := by decide
 
 /-- Falling off the inner block runs nothing; `break L1` and `continue L1` run `destroy(v)` and
 release loan 7; `return` then also runs `destroy(b)` and `give_up(a)`, in that order. -/
 example : (unwound .fallthrough stack).map pending = some [] := rfl
+
 example : (unwound (.brk 1) stack).map (expected ∘ pending) =
     some [.call desV, .release ⟨7, 2⟩] := rfl
+
 example : (unwound (.cont 1) stack).map (expected ∘ pending) =
     some [.call desV, .release ⟨7, 2⟩] := rfl
+
 example : (unwound .ret stack).map (expected ∘ pending) =
     some [.call desV, .release ⟨7, 2⟩, .call desB, .call relA] := rfl
-
-/-- The theorem applied to `return`: with every call returning, that is the whole trace. -/
-example : RunCleanup (fun _ => true) (pending stack)
-    [.call desV, .release ⟨7, 2⟩, .call desB, .call relA] .done :=
-  ((defer_cleanup_releases (ok := fun _ => true) stack_reg (e := .ret) (by decide) rfl).1
-    (by decide) _ _).mpr ⟨rfl, rfl⟩
-
-/-- If `destroy(b)` traps on `return`, `destroy(v)` ran and released its loan first, and
-`give_up(a)` never runs. -/
-example : RunCleanup (fun d => d != desB) (pending stack)
-    [.call desV, .release ⟨7, 2⟩, .call desB] .trapped :=
-  ((defer_cleanup_releases (ok := fun d => d != desB) stack_reg (e := .ret) (by decide) rfl).2.2.1
-    [desV] desB [relA] rfl (by decide) (by decide) _ _).mpr ⟨rfl, rfl⟩
-
-/-- If `destroy(v)` itself traps on `return` while holding loan 7, the trace stops at that call:
-loan 7 is not released by cleanup, and `destroy(b)` and `give_up(a)` never run. -/
-example : RunCleanup (fun d => d != desV) (pending stack) [.call desV] .trapped :=
-  ((defer_cleanup_releases (ok := fun d => d != desV) stack_reg (e := .ret) (by decide) rfl).2.2.1
-    [] desV [desB, relA] rfl (by decide) (by decide) _ _).mpr ⟨rfl, rfl⟩
 
 /-- Nested labelled loops: inside loop `L1`, loop `L2` registers `destroy(d)` (resource 4), and
 a block inside it registers `destroy(c)` (resource 3). -/
 def desC : Deferred := { kind := .destroy, target := 3, deps := [], loans := [] }
+
 def desD : Deferred := { kind := .destroy, target := 4, deps := [], loans := [] }
+
 def owned2 : Res → Bool := fun r => decide (r ∈ [0, 1, 2, 3, 4])
+
 def ownedAfter2 : Res → Bool :=
   fun r => ((((owned2 r && r != 0) && r != 2) && r != 1) && r != 4) && r != 3
+
 def stack2 : Stack :=
   [⟨.block, [desC]⟩, ⟨.loopBody 2, [desD]⟩, ⟨.loopBody 1, [desV]⟩, ⟨.fnBody, [desB, relA]⟩]
 
-theorem stack2_reg : Reg ownedAfter2 stack2 :=
-  .push (k := .block) (d := desC)
-    (.enter (k := .block) <|
-      .push (k := .loopBody 2) (d := desD)
-        (.enter (k := .loopBody 2) <|
-          .push (k := .loopBody 1) (d := desV)
-            (.enter (k := .loopBody 1) <|
-              .push (k := .fnBody) (d := desB)
-                (.push (k := .fnBody) (d := relA) (.enter (k := .fnBody) .empty)
-                  rfl (by decide) (by decide) (by decide))
-                rfl (by decide) (by decide) (by decide))
-            rfl (by decide) (by decide) (by decide))
-        rfl (by decide) (by decide) (by decide))
-    rfl (by decide) (by decide) (by decide)
-
-/-- Falling off the block runs `destroy(c)`; `continue L2` also runs `destroy(d)`; `break L1`
-(the outer label) also runs `destroy(v)` and releases its loan; each through the theorem. -/
-example : RunCleanup (fun _ => true) [desC] [.call desC] .done :=
-  ((defer_cleanup_releases (ok := fun _ => true) stack2_reg (e := .fallthrough) (by decide)
-    (fs := [⟨.block, [desC]⟩]) rfl).1 (by decide) _ _).mpr ⟨rfl, rfl⟩
-example : RunCleanup (fun _ => true) [desC, desD] [.call desC, .call desD] .done :=
-  ((defer_cleanup_releases (ok := fun _ => true) stack2_reg (e := .cont 2) (by decide)
-    (fs := [⟨.block, [desC]⟩, ⟨.loopBody 2, [desD]⟩]) rfl).1 (by decide) _ _).mpr ⟨rfl, rfl⟩
-example : RunCleanup (fun _ => true) [desC, desD, desV]
-    [.call desC, .call desD, .call desV, .release ⟨7, 2⟩] .done :=
-  ((defer_cleanup_releases (ok := fun _ => true) stack2_reg (e := .brk 1) (by decide)
-    (fs := [⟨.block, [desC]⟩, ⟨.loopBody 2, [desD]⟩, ⟨.loopBody 1, [desV]⟩]) rfl).1
-    (by decide) _ _).mpr ⟨rfl, rfl⟩
-/-- `continue L1` (the outer label) unwinds the same scopes as `break L1`, then tests `L1`'s
-condition again (F7). -/
-example : RunCleanup (fun _ => true) [desC, desD, desV]
-    [.call desC, .call desD, .call desV, .release ⟨7, 2⟩] .done :=
-  ((defer_cleanup_releases (ok := fun _ => true) stack2_reg (e := .cont 1) (by decide)
-    (fs := [⟨.block, [desC]⟩, ⟨.loopBody 2, [desD]⟩, ⟨.loopBody 1, [desV]⟩]) rfl).1
-    (by decide) _ _).mpr ⟨rfl, rfl⟩
-
 end ConcreteSpec.Cleanup
+
+namespace ConcreteSpec.Borrow
 
 /-! ## Part 4. Scoped borrows (Q3.3, Q3.4, Q9.5, REF-11): `open_mut_freezes_root`
 
@@ -2811,8 +1573,6 @@ them is exclusive, so shared opens nest. The view binder is fresh and second-cla
 threads the places through the statements: a move inside a block stays a move after it, and the
 locks of the block end with it.
 -/
-
-namespace ConcreteSpec.Borrow
 
 /-- How the enclosing borrows lock a place. -/
 inductive Lock where
@@ -2907,231 +1667,6 @@ inductive WritesRoot (r : Nat) : Ctx → List Stmt → Prop where
       WritesRoot r Γ (.borrow m s v body :: rest)
   | tail {Γ Γ₁ s rest} : Ok Γ [s] Γ₁ → WritesRoot r Γ₁ rest → WritesRoot r Γ (s :: rest)
 
-theorem find_mapPlaces (f : Place → Place) : ∀ (Γ : Ctx) (p : Nat),
-    find (mapPlaces f Γ) p = (find Γ p).map f
-  | [], _ => rfl
-  | (n, q) :: Γ, p => by
-    show find ((n, f q) :: mapPlaces f Γ) p = _
-    simp only [find]
-    split
-    · rfl
-    · exact find_mapPlaces f Γ p
-
-theorem find_remove (p' : Nat) : ∀ (Γ : Ctx) (p : Nat),
-    find (remove p' Γ) p = if p = p' then none else find Γ p
-  | [], _ => by simp [remove, find]
-  | (n, q) :: Γ, p => by
-    have ih := find_remove p' Γ p
-    by_cases hn : n = p' <;> by_cases hp : p = p' <;> by_cases hnp : n = p <;>
-      simp_all [remove, find] <;> omega
-
-theorem find_bodyCtx {m v src Γ p} (hv : p ≠ v) :
-    find (bodyCtx m v src Γ) p = (find Γ p).map (lockFor m src.root) := by
-  simp only [bodyCtx, find, show ¬ v = p from fun h => hv h.symm, ↓reduceIte]
-  exact find_mapPlaces _ Γ p
-
-theorem lockFor_excl {m r q} (h : q.lock = .excl) : (lockFor m r q).lock = .excl := by
-  unfold lockFor; split <;> (try split) <;> (try split) <;> simp_all
-
-theorem ne_of_find {Γ p v q} (hp : find Γ p = some q) (hv : find Γ v = none) : p ≠ v := by
-  rintro rfl; rw [hp] at hv; cases hv
-
-theorem find_restore (Γb : Ctx) : ∀ (Γ : Ctx) (p : Nat),
-    find (restore Γ Γb) p = if (find Γb p).isSome then find Γ p else none
-  | [], _ => by simp [restore, find]
-  | (n, q) :: Γ, p => by
-    have ih := find_restore Γb Γ p
-    simp only [restore] at ih ⊢
-    by_cases hn : (find Γb n).isSome = true <;> by_cases hnp : n = p
-    · subst hnp; simp [List.filter, hn, find]
-    · simp [List.filter, hn, find, hnp, ih]
-    · subst hnp; simp [List.filter, hn, ih]
-    · simp [List.filter, hn, find, hnp, ih]
-
-theorem find_restore_some {Γ Γb p q} (h : find (restore Γ Γb) p = some q) : find Γ p = some q := by
-  rw [find_restore] at h
-  split at h
-  · exact h
-  · cases h
-
-theorem lockFor_nonfree {m r q} (h : q.lock ≠ .free) : (lockFor m r q).lock ≠ .free := by
-  unfold lockFor; split <;> (try split) <;> (try split) <;> simp_all
-
-/-- The check is deterministic: the places after a list are a function of the places before. -/
-theorem ok_det {Γ ss Γ₁} (h : Ok Γ ss Γ₁) : ∀ {Γ₂}, Ok Γ ss Γ₂ → Γ₁ = Γ₂ := by
-  induction h with
-  | nil => intro Γ₂ h2; cases h2; rfl
-  | read _ _ _ ih => intro Γ₂ h2; cases h2 with | read _ _ h2 => exact ih h2
-  | write _ _ _ _ ih => intro Γ₂ h2; cases h2 with | write _ _ _ h2 => exact ih h2
-  | move _ _ _ _ ih => intro Γ₂ h2; cases h2 with | move _ _ _ h2 => exact ih h2
-  | borrow hs _ _ _ _ _ ihb ih =>
-    intro Γ₂ h2
-    cases h2 with
-    | borrow hs2 _ _ _ hb2 hr2 =>
-      rw [hs] at hs2; cases hs2
-      cases ihb hb2
-      exact ih hr2
-
-/-- A place a statement list cannot touch (locked) keeps its entry. -/
-theorem ok_keeps_locked {Γ ss Γ'} (h : Ok Γ ss Γ') :
-    ∀ {p q}, find Γ p = some q → q.lock ≠ .free → find Γ' p = some q := by
-  induction h with
-  | nil => intro p q hp _; exact hp
-  | read _ _ _ ih => exact ih
-  | write _ _ _ _ ih => exact ih
-  | @move Γ p0 q0 rest Γ' hf hl _ _ ih =>
-    intro p q hp hq
-    have hne : p ≠ p0 := by rintro rfl; rw [hf] at hp; cases hp; exact hq hl
-    exact ih (by rw [find_remove]; simp only [hne, ↓reduceIte]; exact hp) hq
-  | @borrow Γ m s v q0 body rest Γb Γ' _ _ _ hv _ _ ihb ih =>
-    intro p q hp hq
-    have hb : find Γb p = some (lockFor m q0.root q) :=
-      ihb (by rw [find_bodyCtx (ne_of_find hp hv), hp]; rfl) (lockFor_nonfree hq)
-    exact ih (by rw [find_restore, hb]; exact hp) hq
-
-/-- A frozen place is never named, at any depth. -/
-theorem excl_untouched {Γ ss Γ'} (h : Ok Γ ss Γ') :
-    ∀ {p q}, find Γ p = some q → q.lock = .excl → ¬ Touches p ss := by
-  induction h with
-  | nil => intro p q _ _ ht; cases ht
-  | read hf hl _ ih =>
-    intro p q hp hq ht
-    cases ht with
-    | read => rw [hf] at hp; cases hp; exact hl hq
-    | tail ht => exact ih hp hq ht
-  | write hf hl _ _ ih =>
-    intro p q hp hq ht
-    cases ht with
-    | write => rw [hf] at hp; cases hp; rw [hl] at hq; cases hq
-    | tail ht => exact ih hp hq ht
-  | @move Γ p0 q0 rest Γ' hf hl _ _ ih =>
-    intro p q hp hq ht
-    have hne : p ≠ p0 := by
-      rintro rfl; rw [hf] at hp; cases hp; rw [hl] at hq; cases hq
-    cases ht with
-    | move => exact hne rfl
-    | tail ht =>
-      refine ih (q := q) ?_ hq ht
-      rw [find_remove]; simp only [hne, ↓reduceIte]; exact hp
-  | @borrow Γ m s v q0 body rest Γb Γ' hs hnex _ hv hbody _ ihb ih =>
-    intro p q hp hq ht
-    have hpb : find (bodyCtx m v q0 Γ) p = some (lockFor m q0.root q) := by
-      rw [find_bodyCtx (ne_of_find hp hv), hp]; rfl
-    cases ht with
-    | src => rw [hs] at hp; cases hp; exact hnex hq
-    | body ht => exact ihb hpb (lockFor_excl hq) ht
-    | tail ht =>
-      have hb := ok_keeps_locked hbody hpb (lockFor_nonfree (by rw [hq]; decide))
-      exact ih (by rw [find_restore, hb]; exact hp) hq ht
-
-/-- **`open_mut_freezes_root`** (Q9.14, Q3.3, Q3.4, REF-11). Inside an accepted
-`borrow mut src as v { body }`, no place of `src`'s root that existed before the open (the root
-itself and every view derived from it) is read, written, moved or opened again, at any depth.
-Only the new view `v` reaches the root. -/
-theorem open_mut_freezes_root {Γ s v body rest q Γ'} (h : Ok Γ (.borrow true s v body :: rest) Γ')
-    (hs : find Γ s = some q) :
-    ∀ p q', find Γ p = some q' → q'.root = q.root → ¬ Touches p body := by
-  intro p q' hp hr
-  cases h with
-  | borrow hs' _ _ hv hb _ =>
-    rw [hs] at hs'; cases hs'
-    refine excl_untouched hb (q := lockFor true q.root q') ?_ (by simp [lockFor, hr]) 
-    rw [find_bodyCtx (ne_of_find hp hv), hp]; rfl
-
-/-- The places of root `r` grant no write: each is locked, or neither writable nor an owner. -/
-def NoWrite (r : Nat) (Γ : Ctx) : Prop :=
-  ∀ p q, find Γ p = some q → q.root = r → q.lock = .free → q.mutable = false ∧ q.owner = false
-
-theorem noWrite_restore {r Γ Γb} (h : NoWrite r Γ) : NoWrite r (restore Γ Γb) :=
-  fun p q hp => h p q (find_restore_some hp)
-
-theorem noWrite_remove {r Γ p'} (h : NoWrite r Γ) : NoWrite r (remove p' Γ) := by
-  intro p q hp
-  rw [find_remove] at hp
-  split at hp
-  · cases hp
-  · exact h p q hp
-
-theorem noWrite_bodyCtx {r Γ m v q0} (h : NoWrite r Γ)
-    (hm : m = true → q0.lock = .free ∧ q0.mutable = true)
-    (hsrc : q0.root = r → m = true → False) : NoWrite r (bodyCtx m v q0 Γ) := by
-  intro p q hp hr hl
-  by_cases hpv : p = v
-  · subst hpv
-    simp only [bodyCtx, find, ↓reduceIte] at hp
-    cases hp
-    simp only [view] at hr ⊢
-    cases m with
-    | false => simp
-    | true => exact (hsrc hr rfl).elim
-  · rw [find_bodyCtx hpv] at hp
-    cases hq : find Γ p with
-    | none => rw [hq] at hp; cases hp
-    | some q1 =>
-      rw [hq] at hp; cases hp
-      have _ := hm
-      by_cases h1 : q1.root = q0.root
-      · by_cases h2 : q1.lock = .free <;> cases m <;> simp [lockFor, h1, h2] at hl
-      · simp only [lockFor, h1, ↓reduceIte] at hr hl ⊢
-        exact h p q1 hq hr hl
-
-/-- An accepted list never writes a root whose places grant no write. -/
-theorem noWrite_sound {Γ ss Γ'} (h : Ok Γ ss Γ') : ∀ {r}, NoWrite r Γ → ¬ WritesRoot r Γ ss := by
-  induction h with
-  | nil => intro r _ hw; cases hw
-  | read _ _ _ ih =>
-    intro r hn hw
-    cases hw with
-    | tail hs hw => cases hs with | read _ _ h0 => cases h0; exact ih hn hw
-  | write hf hl hmut _ ih =>
-    intro r hn hw
-    cases hw with
-    | write hf' hr => rw [hf] at hf'; cases hf'; rw [(hn _ _ hf hr hl).1] at hmut; cases hmut
-    | tail hs hw => cases hs with | write _ _ _ h0 => cases h0; exact ih hn hw
-  | move hf hl hown _ ih =>
-    intro r hn hw
-    cases hw with
-    | move hf' hr => rw [hf] at hf'; cases hf'; rw [(hn _ _ hf hr hl).2] at hown; cases hown
-    | tail hs hw => cases hs with | move _ _ _ h0 => cases h0; exact ih (noWrite_remove hn) hw
-  | @borrow Γ m s v q0 body rest Γb Γ' hs _ hm _ hb _ ihb ih =>
-    intro r hn hw
-    have hbad : q0.root = r → m = true → False := fun hr hmt => by
-      obtain ⟨hl, hmut⟩ := hm hmt
-      rw [(hn _ _ hs hr hl).1] at hmut; cases hmut
-    cases hw with
-    | mutOpen hs' hr => rw [hs] at hs'; cases hs'; exact hbad hr rfl
-    | body hs' hw => rw [hs] at hs'; cases hs'; exact ihb (noWrite_bodyCtx hn hm hbad) hw
-    | tail hs1 hw =>
-      cases hs1 with
-      | borrow hs2 _ _ _ hb2 h0 =>
-        rw [hs] at hs2; cases hs2
-        cases ok_det hb hb2
-        cases h0
-        exact ih (noWrite_restore hn) hw
-
-/-- **`open_mut_freezes_root`, shared half** (Q9.14, Q3.3). A shared open never grants a write:
-inside an accepted `borrow src as v { body }`, nothing at any depth writes, moves or mutably
-opens a place of `src`'s root, whether through the root, through `v`, or through any view
-derived from either. -/
-theorem shared_open_grants_no_write {Γ s v body rest q Γ'}
-    (h : Ok Γ (.borrow false s v body :: rest) Γ') (hs : find Γ s = some q) :
-    ¬ WritesRoot q.root (bodyCtx false v q Γ) body := by
-  cases h with
-  | borrow hs' _ hm _ hb _ =>
-    rw [hs] at hs'; cases hs'
-    refine noWrite_sound hb ?_
-    intro p q' hp hr hl
-    by_cases hpv : p = v
-    · subst hpv; simp only [bodyCtx, find, ↓reduceIte] at hp; cases hp; exact ⟨rfl, rfl⟩
-    · rw [find_bodyCtx hpv] at hp
-      cases hq : find Γ p with
-      | none => rw [hq] at hp; cases hp
-      | some q1 =>
-        rw [hq] at hp; cases hp
-        by_cases h1 : q1.root = q.root
-        · by_cases h2 : q1.lock = .free <;> simp [lockFor, h1, h2] at hl
-        · simp [lockFor, h1] at hr
-
 /-! ### Examples
 
 Place 0 is a mutable owned variable; views take fresh numbers. -/
@@ -3217,6 +1752,8 @@ example : ¬ ∃ Γ', Ok x0 [.borrow false 0 1 [.move 0]] Γ' := by
 
 end ConcreteSpec.Borrow
 
+namespace ConcreteSpec.Brand
+
 /-! ## Part 5. Allocator brands (Q1.1–Q1.5, Q1.13): `reset_fresh`
 
 An allocator's brand is an erased kind (Q1.1) with no runtime representation. Each `new` and
@@ -3236,8 +1773,6 @@ erased by Q1.1. The proof that a checked program passes every ghost check (the e
 correspondence) is not discharged here.
 -/
 
-namespace ConcreteSpec.Brand
-
 def findL {α : Type} : List (Nat × α) → Nat → Option α
   | [], _ => none
   | (n, v) :: l, p => if n = p then some v else findL l p
@@ -3245,34 +1780,6 @@ def findL {α : Type} : List (Nat × α) → Nat → Option α
 def removeL {α : Type} (p : Nat) : List (Nat × α) → List (Nat × α)
   | [] => []
   | (n, v) :: l => if n = p then removeL p l else (n, v) :: removeL p l
-
-theorem findL_mem {α : Type} : ∀ {l : List (Nat × α)} {p : Nat} {v : α},
-    findL l p = some v → (p, v) ∈ l
-  | [], _, _, h => by simp [findL] at h
-  | (n, w) :: l, p, v, h => by
-    simp only [findL] at h
-    split at h
-    · next hn => cases h; subst hn; exact List.mem_cons_self ..
-    · exact List.mem_cons_of_mem _ (findL_mem h)
-
-theorem mem_removeL {α : Type} (p : Nat) : ∀ {l : List (Nat × α)} {e : Nat × α},
-    e ∈ removeL p l → e ∈ l
-  | [], _, h => by simp [removeL] at h
-  | (n, w) :: l, e, h => by
-    simp only [removeL] at h
-    split at h
-    · exact List.mem_cons_of_mem _ (mem_removeL p h)
-    · rcases List.mem_cons.mp h with rfl | h
-      · exact List.mem_cons_self ..
-      · exact List.mem_cons_of_mem _ (mem_removeL p h)
-
-theorem findL_removeL {α : Type} (p' : Nat) : ∀ (l : List (Nat × α)) (p : Nat),
-    findL (removeL p' l) p = if p = p' then none else findL l p
-  | [], _ => by simp [removeL, findL]
-  | (n, q) :: l, p => by
-    have ih := findL_removeL p' l p
-    by_cases hn : n = p' <;> by_cases hp : p = p' <;> by_cases hnp : n = p <;>
-      simp_all [removeL, findL] <;> omega
 
 /-! ### The static check -/
 
@@ -3335,55 +1842,6 @@ inductive Ok : List Nat → Ctx → List Stmt → Ctx → Prop where
 def BrandsIn (B : List Nat) (Γ : Ctx) : Prop :=
   ∀ e ∈ Γ, ∀ β, (e.2 = .alloc β ∨ e.2 = .heap β) → β ∈ B
 
-/-- Brand equality is nominal (Q1.4): an operation that pairs a value of one brand with an
-allocator of another is refused. -/
-theorem brand_mismatch_refused {B Γ h a β1 β2 r Γ'} (hh : findL Γ h = some (.heap β1))
-    (ha : findL Γ a = some (.alloc β2)) (hne : β1 ≠ β2) :
-    ¬ Ok B Γ (.use h a :: r) Γ' ∧ ¬ Ok B Γ (.free h a :: r) Γ' := by
-  refine ⟨fun hok => ?_, fun hok => ?_⟩
-  · cases hok with
-    | use h1 h2 _ => rw [hh] at h1; rw [ha] at h2; cases h1; cases h2; exact hne rfl
-  · cases hok with
-    | free h1 h2 _ => rw [hh] at h1; rw [ha] at h2; cases h1; cases h2; exact hne rfl
-
-/-- A checked reset leaves no value of the old brand (Q1.5): none is live at the reset. -/
-theorem reset_requires_no_old {B Γ a' a β' rest Γ' β} (h : Ok B Γ (.reset a' a β' :: rest) Γ')
-    (ha : findL Γ a = some (.alloc β)) : ∀ hv, findL Γ hv ≠ some (.heap β) := by
-  intro hv hh
-  cases h with
-  | reset ha' hno _ _ _ =>
-    rw [ha] at ha'; cases ha'
-    exact hno _ (findL_mem hh) rfl
-
-/-- **`reset_fresh`, static part** (Q1.2, Q1.4). The brand of a reset allocator differs from the
-brand of every value live before the reset, so each operation of the new allocator on such a
-value (`use`, `free`) is refused. Values of the old brand cannot be live at a checked reset
-(`reset_requires_no_old`); one that reached the new allocator anyway would be refused by
-`brand_mismatch_refused`, and the ghost run refuses it too (`reset_fresh`, part 3). -/
-theorem reset_refuses_old {B Γ a' a β' rest Γ'} (hw : BrandsIn B Γ)
-    (h : Ok B Γ (.reset a' a β' :: rest) Γ') {hv βh} (hh : findL Γ hv = some (.heap βh)) :
-    βh ≠ β' ∧ ∀ r, rest = .use hv a' :: r ∨ rest = .free hv a' :: r → False := by
-  cases h with
-  | @reset _ _ _ _ β _ _ _ ha hno hfresh hb hrest =>
-    have hβh : βh ∈ B := hw _ (findL_mem hh) βh (Or.inr rfl)
-    have hne : βh ≠ β' := fun e => hb (e ▸ hβh)
-    have hva : hv ≠ a := by
-      intro e; subst e; rw [ha] at hh; cases hh
-    have hold : findL (removeL a Γ) hv = some (.heap βh) := by
-      rw [findL_removeL]; simp only [hva, ↓reduceIte]; exact hh
-    have hva' : hv ≠ a' := by
-      intro e; subst e; rw [hold] at hfresh; cases hfresh
-    have hfind : findL ((a', STy.alloc β') :: removeL a Γ) hv = some (.heap βh) := by
-      simp only [findL, show ¬ a' = hv from fun e => hva' e.symm, ↓reduceIte]; exact hold
-    have hnew : findL ((a', STy.alloc β') :: removeL a Γ) a' = some (.alloc β') := by
-      simp [findL]
-    refine ⟨hne, fun r hr => ?_⟩
-    rcases hr with rfl | rfl
-    · cases hrest with
-      | use h1 h2 _ => rw [hfind] at h1; rw [hnew] at h2; cases h1; cases h2; exact hne rfl
-    · cases hrest with
-      | free h1 h2 _ => rw [hfind] at h1; rw [hnew] at h2; cases h1; cases h2; exact hne rfl
-
 /-! ### The ghost run -/
 
 inductive Val where
@@ -3426,108 +1884,8 @@ inductive Run : State → List Stmt → State → Prop where
   | whileIter {s a β βx body rest s'} : Run s (body ++ .while_ a β βx body :: rest) s' →
       Run s (.while_ a β βx body :: rest) s'
 
-/-- Every live brand and every generated brand is below the counter, and the generated brands
-are pairwise distinct. -/
-def Inv (s : State) : Prop :=
-  (∀ e ∈ s.env, brandOf e.2 < s.next) ∧ (∀ b ∈ s.gen, b < s.next) ∧ s.gen.Nodup
-
-theorem nodup_snoc : ∀ {l : List Nat} {x : Nat}, l.Nodup → x ∉ l → (l ++ [x]).Nodup
-  | [], _, _, _ => by simp
-  | y :: l, x, h, hx => by
-    rw [List.nodup_cons] at h
-    simp only [List.cons_append]
-    rw [List.nodup_cons]
-    refine ⟨?_, nodup_snoc h.2 (fun hm => hx (List.mem_cons_of_mem _ hm))⟩
-    simp only [List.mem_append, List.mem_singleton, not_or]
-    exact ⟨h.1, fun e => hx (by simp [e])⟩
-
-theorem inv_bind {s : State} (a : Nat) {env : List (Nat × Val)} (hi : Inv s)
-    (henv : ∀ e ∈ env, brandOf e.2 < s.next) : Inv (s.bind a env) := by
-  obtain ⟨_, hg, hn⟩ := hi
-  refine ⟨?_, ?_, ?_⟩
-  · intro e he
-    simp only [State.bind, List.mem_cons] at he ⊢
-    rcases he with rfl | he
-    · simp [brandOf]
-    · have := henv e he; omega
-  · intro b hb
-    simp only [State.bind, List.mem_append, List.mem_singleton] at hb ⊢
-    rcases hb with hb | rfl
-    · have := hg b hb; omega
-    · omega
-  · exact nodup_snoc hn (fun hm => by have := hg _ hm; omega)
-
-/-- The ghost run keeps the invariant. -/
-theorem run_inv {s ss s'} (h : Run s ss s') : Inv s → Inv s' := by
-  induction h with
-  | nil => exact id
-  | newAlloc _ ih => intro hi; exact ih (inv_bind _ hi hi.1)
-  | alloc ha _ ih =>
-    intro hi
-    refine ih ⟨?_, hi.2.1, hi.2.2⟩
-    intro e he
-    rcases List.mem_cons.mp he with rfl | he
-    · have := hi.1 _ (findL_mem ha); simpa [brandOf] using this
-    · exact hi.1 e he
-  | use _ _ _ ih => exact ih
-  | free _ _ _ ih => intro hi; exact ih ⟨fun e he => hi.1 e (mem_removeL _ he), hi.2.1, hi.2.2⟩
-  | release _ _ ih => intro hi; exact ih ⟨fun e he => hi.1 e (mem_removeL _ he), hi.2.1, hi.2.2⟩
-  | reset _ _ ih => intro hi; exact ih (inv_bind _ hi (fun e he => hi.1 e (mem_removeL _ he)))
-  | whileExit _ ih => exact ih
-  | whileIter _ ih => exact ih
-
 /-- The start of every run: nothing live, no brand generated. -/
 def State.init : State := { env := [], next := 0, gen := [] }
-
-theorem inv_init : Inv State.init := ⟨by simp [State.init], by simp [State.init], by simp [State.init]⟩
-
-/-- **`reset_fresh`** (Q9.14, Q1.2, Q1.4, Q1.5).
-
-1. The brand a reset gives the new allocator differs from the brand of every value live at the
-   reset, in any reachable ghost state.
-2. Every brand a run generates (each `new` and each `reset`, in every iteration of every loop,
-   for every outcome of the loop conditions) differs from every other: the generated brands are
-   pairwise distinct.
-3. The new allocator's operations refuse the old brand: statically (`reset_refuses_old`,
-   `brand_mismatch_refused`), and in the ghost run, where `use` or `free` through the new
-   allocator of any value live before the reset, of the old brand or any other, is stuck. -/
-theorem reset_fresh :
-    (∀ {s a' a β' rest s'}, Inv s → Run s (.reset a' a β' :: rest) s' →
-      ∃ mid, mid.env = (a', .allocV s.next) :: removeL a s.env ∧ Run mid rest s' ∧
-        ∀ e ∈ s.env, brandOf e.2 ≠ s.next) ∧
-    (∀ {prog s'}, Run State.init prog s' → s'.gen.Nodup) ∧
-    (∀ {s a' a β' h r s'}, Inv s → (∃ v, findL s.env h = some v) → h ≠ a' →
-      ¬ Run s (.reset a' a β' :: .use h a' :: r) s' ∧
-      ¬ Run s (.reset a' a β' :: .free h a' :: r) s') := by
-  refine ⟨?_, ?_, ?_⟩
-  · intro s a' a β' rest s' hi h
-    cases h with
-    | reset _ hr =>
-      exact ⟨_, rfl, hr, fun e he => Nat.ne_of_lt (hi.1 e he)⟩
-  · intro prog s' h
-    exact (run_inv h inv_init).2.2
-  · intro s a' a β' h r s' hi ⟨v, hv⟩ hne
-    have key : ∀ b, findL ((a', Val.allocV s.next) :: removeL a s.env) h = some (.heapV b) →
-        b ≠ s.next := by
-      intro b hb
-      simp only [findL, show ¬ a' = h from fun e => hne e.symm, ↓reduceIte] at hb
-      exact Nat.ne_of_lt (hi.1 _ (findL_mem (α := Val) (l := removeL a s.env) hb |> mem_removeL a))
-    have hnew : findL ((a', Val.allocV s.next) :: removeL a s.env) a' = some (.allocV s.next) := by
-      simp [findL]
-    have _ := hv
-    refine ⟨fun hrun => ?_, fun hrun => ?_⟩
-    · cases hrun with
-      | reset _ hr =>
-        cases hr with
-        | use h1 h2 _ =>
-          simp only [State.bind] at h1 h2
-          rw [hnew] at h2; cases h2; exact key _ h1 rfl
-    · cases hrun with
-      | reset _ hr =>
-        cases hr with
-        | free h1 h2 _ =>
-          simp only [State.bind] at h1 h2
-          rw [hnew] at h2; cases h2; exact key _ h1 rfl
 
 /-! ### Examples -/
 
@@ -3549,10 +1907,6 @@ example : Ok [] [] [.newAlloc 0 10, .alloc 1 0, .free 1 0, .reset 0 0 11, .alloc
   .newAlloc rfl (by decide) <| .alloc rfl rfl <| .free rfl rfl <|
     .reset rfl (by decide) rfl (by decide) <| .alloc rfl rfl <| .free rfl rfl <|
     .release rfl (by decide) .nil
-
-/-- A value of brand 10 used through an allocator of brand 11 is refused. -/
-example : ¬ Ok [10, 11] [(1, .heap 10), (0, .alloc 11)] [.use 1 0] [(1, .heap 10), (0, .alloc 11)] :=
-  (brand_mismatch_refused rfl rfl (by decide)).1
 
 /-- A loop that resets its allocator each iteration is accepted (existential loop state, Q1.3). -/
 example : Ok [] [] [.newAlloc 0 10, .while_ 0 20 30 [.alloc 1 0, .free 1 0, .reset 0 0 21],

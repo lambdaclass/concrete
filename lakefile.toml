@@ -25,12 +25,15 @@ srcDir = "proofs"
 name = "DesignExamples"
 srcDir = "proofs"
 
-# EXPERIMENTAL, PROPOSED: a slice-1 model of the new compiler's specification (root ConcreteSpec.lean,
-# rules in ConcreteSpec/Spec.lean). It is not normative until the owner freezes Core (ROADMAP A2c), so
+# EXPERIMENTAL, PROPOSED: the new compiler's specification (root ConcreteSpec.lean; the rules and their
+# examples in ConcreteSpec/Spec.lean, the proofs in ConcreteSpec/Proofs/, the reading guide in
+# ConcreteSpec/README.md). It is not normative until the owner freezes Core (ROADMAP A2c), so
 # it is an opt-in target, not a default one: `lake build ConcreteSpec`. The external checker builds it
 # explicitly and re-checks its theorems. It imports only Lean core and nothing from the old compiler.
 [[lean_lib]]
 name = "ConcreteSpec"
+# A misspelled name must be an error, never a silently bound variable.
+leanOptions = { autoImplicit = false }
 
 [[lean_exe]]
 name = "concrete"
