@@ -188,12 +188,13 @@ def execInsts (env : Env) : List Inst → Option Env
     | some env' => execInsts env' is
     | none => none
 
-/-- Enter block `target` with arguments evaluated in `env` (all read before any is bound). -/
-def enter (p : Program) (target : Nat) (args : List Operand) (env : Env) : Option (Block × Env) := do
+/-- Enter block `target` with arguments evaluated in `env` (all read before any is bound): the block
+exists, the arity matches, and its parameters are bound in front of `env`. -/
+def enter (p : Program) (target : Nat) (args : List Operand) (env : Env) : Option Env := do
   let blk ← p.blocks[target]?
   if blk.params.length ≠ args.length then none
   let vals ← args.mapM (evalOp env)
-  pure (blk, (blk.params.map Prod.fst).zip vals ++ env)
+  pure ((blk.params.map Prod.fst).zip vals ++ env)
 
 /-! ## Semantics -/
 
@@ -209,10 +210,14 @@ def Outcome.final : Outcome → Bool
   | .outOfFuel => false
   | _ => true
 
-/-- Run block `blk` and what follows, with `fuel` block executions. -/
-def runBlock (p : Program) : Nat → Block → Env → Outcome
+/-- Run block `j` and what follows, with `fuel` block executions. Blocks are named by index, as
+in LCB's state. -/
+def runBlock (p : Program) : Nat → Nat → Env → Outcome
   | 0, _, _ => .outOfFuel
-  | fuel + 1, blk, env =>
+  | fuel + 1, j, env =>
+    match p.blocks[j]? with
+    | none => .stuck
+    | some blk =>
     match execInsts env blk.insts with
     | none => .stuck
     | some env' =>
@@ -222,64 +227,71 @@ def runBlock (p : Program) : Nat → Block → Env → Outcome
         | _ => .stuck
       | .trap s => if s < p.sites.length then .trapped s else .stuck
       | .br t args => match enter p t args env' with
-        | some (blk', env'') => runBlock p fuel blk' env''
+        | some env'' => runBlock p fuel t env''
         | none => .stuck
       | .condbr c t ta e ea => match lookup env' c with
         | some (.bool true) => match enter p t ta env' with
-          | some (blk', env'') => runBlock p fuel blk' env''
+          | some env'' => runBlock p fuel t env''
           | none => .stuck
         | some (.bool false) => match enter p e ea env' with
-          | some (blk', env'') => runBlock p fuel blk' env''
+          | some env'' => runBlock p fuel e env''
           | none => .stuck
         | _ => .stuck
 
-/-- Run `main`'s body with `fuel` block executions. -/
-def run (p : Program) (fuel : Nat) : Outcome :=
-  match p.blocks[0]? with
-  | some blk => runBlock p fuel blk []
-  | none => .stuck
+/-- Run `main`'s body (block 0, empty environment) with `fuel` block executions. -/
+def run (p : Program) (fuel : Nat) : Outcome := runBlock p fuel 0 []
 
 /-- More fuel never changes a final outcome. -/
 theorem runBlock_mono (p : Program) :
-    ∀ (n k : Nat) (blk : Block) (env : Env), (runBlock p n blk env).final = true →
-      runBlock p (n + k) blk env = runBlock p n blk env := by
+    ∀ (n k j : Nat) (env : Env), (runBlock p n j env).final = true →
+      runBlock p (n + k) j env = runBlock p n j env := by
   intro n
   induction n with
-  | zero => intro k blk env h; simp [runBlock, Outcome.final] at h
+  | zero => intro k j env h; simp [runBlock, Outcome.final] at h
   | succ n ih =>
-    intro k blk env h
+    intro k j env h
     rw [show n + 1 + k = (n + k) + 1 by omega]
     simp only [runBlock] at h ⊢
-    split
-    · rfl
-    · rename_i env' _
-      split
-      · rfl
-      · rfl
-      · split
-        · rename_i blk' env'' _
-          simp_all only []
-        · rfl
-      · split
-        · split
-          · rename_i blk' env'' _
-            simp_all only []
-          · rfl
-        · split
-          · rename_i blk' env'' _
-            simp_all only []
-          · rfl
-        · rfl
+    cases hb : p.blocks[j]? with
+    | none => rfl
+    | some blk =>
+    simp only [hb] at h ⊢
+    cases he : execInsts env blk.insts with
+    | none => rfl
+    | some env' =>
+    simp only [he] at h ⊢
+    cases ht : blk.term with
+    | ret a => rfl
+    | trap s => rfl
+    | br t args =>
+      simp only [ht] at h ⊢
+      cases hn : enter p t args env' with
+      | none => rfl
+      | some env'' => simp only [hn] at h ⊢; exact ih k t env'' h
+    | condbr c t ta e ea =>
+      simp only [ht] at h ⊢
+      cases hc : lookup env' c with
+      | none => rfl
+      | some v =>
+        cases v with
+        | int _ _ => rfl
+        | bool b =>
+          cases b with
+          | true =>
+            simp only [hc] at h ⊢
+            cases hn : enter p t ta env' with
+            | none => rfl
+            | some env'' => simp only [hn] at h ⊢; exact ih k t env'' h
+          | false =>
+            simp only [hc] at h ⊢
+            cases hn : enter p e ea env' with
+            | none => rfl
+            | some env'' => simp only [hn] at h ⊢; exact ih k e env'' h
 
 theorem run_mono {p : Program} {n m : Nat} (h : (run p n).final = true) (hm : n ≤ m) :
     run p m = run p n := by
   obtain ⟨k, rfl⟩ := Nat.exists_eq_add_of_le hm
-  unfold run at h ⊢
-  split
-  · rename_i blk _
-    simp_all only []
-    exact runBlock_mono p n k blk [] h
-  · rfl
+  exact runBlock_mono p n k 0 [] h
 
 /-- Two final outcomes of the same program agree. -/
 theorem run_final_unique {p : Program} {n m : Nat}
