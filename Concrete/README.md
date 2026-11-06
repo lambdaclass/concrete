@@ -27,7 +27,7 @@ The required examples:
 
 ## The pipeline
 
-Each arrow is a total Lean function of the compiler. **Proved** means a kernel-checked theorem. **Premise** means a field of the one premise structure in `Concrete/Premises.lean`.
+Each arrow is a total Lean function of the compiler. **Proved** means a kernel-checked theorem. **Premise** means a field of one of the two premise structures (frontend, native) in the one file `Concrete/Premises.lean`.
 
 ```
 source bytes (ByteArray)
@@ -286,7 +286,11 @@ structure Backend where
   Means : Text → BodyResult → Prop
 
 def llvm (M : String → BodyResult → Prop) : Backend := ⟨String, LLVM.print, M⟩
-def lcb : Backend := ⟨LCB.Source.Function, LCB.adapt, LCB.bodyResult⟩
+/-- The emitted LCB text is the adapted body PAIRED with its site table, so the table that
+    decodes the result is part of the emitted artifact. (The LLVM text already contains its
+    table, and printer injectivity covers it.) -/
+def lcb : Backend := ⟨LCB.Source.Function × SiteTable, fun b => (LCB.adapt b, b.sites),
+  fun (f, _) r => LCB.bodyResult f r⟩
 /-- From LCB's own source semantics (`LeanCompilerBackend.Verified.Source`, imported, never
     restated), with no arguments: `returns w` iff `Source.HasBehavior f #[] (.returned (.word w))`,
     `diverges` iff `Source.HasBehavior f #[] .diverges`, and `stuck` otherwise. "Otherwise" covers
@@ -422,10 +426,12 @@ theorem answer_correct (F : FrontendPremises) (P : NativePremises B N T₀)
    The `rt` field follows from `decode_encode`. The `emit` field needs **printer injectivity**, which is proved: `LLVM.unprint (LLVM.print b) = some b` for every WF `b`. That also makes the `.ll` text determine its BIR, which the certificate uses.
 
    For LCB, `Means` is fixed by LCB's semantics. The witness `NativePremises lcb refNativeLCB T₀` uses:
-   - `Image := LCB.Source.Function × SiteTable`;
-   - `Built T f (g, tbl) := g = f ∧ tbl` is the site table of the BIR that `f` was adapted from;
+   - `Image := LCB.Source.Function × SiteTable`, which is the emitted text itself;
+   - `Built T t img := img = t ∧ frame bound`;
    - `BodyRuns T (g, _) := LCB.bodyResult g`;
    - `Runs T (g, tbl) β := ∃ r, LCB.bodyResult g r ∧ β = r.behaviour tbl`.
+
+   Because `emit b = (adapt b, b.sites)`, a built image carries exactly `b.sites`, so `rt` holds by definition and no adapter injectivity is needed. `emit` is `adapter_correct`.
 
    `live` holds because LCB's step relation is deterministic, so a run returns, faults or diverges. The witness follows from `adapter_correct` and lands with it.
 3. **Frontend premises:** these are claims about fixed code, not something a model can satisfy, so no model witness applies. They are discharged per compilation (next section), and universally once `lex_correct` and `parse_correct` land.
@@ -599,9 +605,38 @@ Heavy runs (native builds, differentials, certificates) run on concrete-ci-2 or 
 
 ## Open questions for the owner (none blocks the skeleton)
 
-1. The CLI spellings: the compiler command and the facts query.
+1. The CLI spellings: the compiler command and the facts query. The placeholders are `concrete build` and `concrete facts`.
 2. Whether a decided form that slice 0 doesn't support (`0x2A`, `let mut`, `if`) gets a dedicated "unsupported in slice 0" refusal, distinct from a syntax error. That is proposed.
-3. Decimal literals with leading zeros, such as `007`: SYN-6 is silent. Slice 0 will refuse them as unsupported until the owner decides.
+3. Decimal literals with leading zeros, such as `007`: SYN-6 is silent. Slice 0 refuses them as unsupported until the owner decides.
+4. Whether to add a native observation-site premise, so that the trap **site** reported by the executable becomes a claim rather than a tested property. It would be a new premise, and holes only shrink.
+5. Recording that both backends are in slice 0. On main, ROADMAP LP0/R-0572 and the decision rows still place the LCB pilot after B1, so this needs recording under the recording rule.
+6. Information flow and constant time: the observer, the secret/public labels and any surface marker (pipeline review, item 6).
+7. Whether the launcher enforces `main`'s grants through OS mechanisms (seccomp/landlock, pledge/unveil). This is defense in depth, and it touches the target contract Q7.10/Q8.5.
+
+## Follow-ups (recorded after the final review round, round 8)
+
+These are internal. None blocks slice 0's correctness.
+
+- **Retire premises:**
+  - `lex_correct` (P_lex);
+  - the generic table-parser theorem (P_parse);
+  - `adapter_correct` (P_adapter, a slice-0 milestone);
+  - a proof of the decoding entry against a libc model (P_rt).
+- **P_toolchain[lcb]** is retired by LCB's own C01–C03 work. LCB's verified profile names Apple AArch64 as its intended target. The Linux `x86_64` and `aarch64` executables go through LCB's compatibility pipeline, inside P_toolchain[lcb], until LCB certifies those targets.
+- **Encoded result.** It works while LCB's verified profile has no calls, memory or traps. When it gains them, revisit the encoding: an external trap call, or a multi-function encoding.
+- **SSA:** replace the direct `ssa_correct` with a proved validator. BIR's shape must not depend on the direct proof.
+- **Certificates:** move from per-edge `decide` to per-edge witnesses checked by proved validators (R-0552/R-0521), with con-leche/nanoda replay.
+- **Artifact facts:**
+  - a link-map and symbol inventory, for trusted/FFI/opaque code;
+  - structural trap-code inspection;
+  - stack bytes from the final artifact plus the launcher's reservation (R-0505 final-image checks);
+  - final-image validation against LCB's ISA model.
+- **Trusted base:** a minimal direct-syscall launcher written in Concrete and compiled through the verified path.
+- **Mono:** when it lands, admission re-runs after it (Q6.3), and the tokens are re-validated for each instance.
+- **Integrated Core:** retarget `toCore` to the integrated Core when A2i/R-0560 lands.
+- **The spec's pre-decision admission rule** (`knownViolates`-only refusal, `RangeOk`, R-0574). It does not bite slice 0, where every value is known. It must be closed before the language grows unknown values.
+- **Generated views:** the stage, premise and fact tables here become views of the Lean registries, gated against drift.
+- **Rebase:** rebase onto main, under a new branch name, when `wip/spec-root` lands.
 
 ## Not in slice 0
 
