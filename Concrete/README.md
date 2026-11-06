@@ -651,7 +651,7 @@ These are internal. None blocks slice 0's correctness.
 
 ## What LCB must provide
 
-LCB is our own project; these are tasks for it, not premises to keep. Checked against the pinned rev `4bea4b3` (LCB main after PR #1, wire format v2: `ssa-int-v2` / `a64-leaf-v2`; v1 jobs are refused).
+LCB is our own project; these are tasks for it, not premises to keep. Checked against the pinned rev `4bea4b3` (LCB main after PR #1: wire packets at header v2 with semantics `ssa-int-v2` / `a64-leaf-v2`; packets with the old header or old semantics identifiers are refused; `CodeInput.version` stays 1).
 
 **For the trusted base (now):**
 1. A public entry `compileSource : Target → Symbol → Source.Function → Except Error Artifact`. Today the compiler builds LCB's `FunctionJob` itself (`Concrete/Backend/LCB.lean`, `assemble`).
@@ -659,7 +659,9 @@ LCB is our own project; these are tasks for it, not premises to keep. Checked ag
 3. Larger resource limits on the first path: 64 blocks, 488 values and 480 definitions per function (`Verified/Canonical.lean`). Slice programs will exceed them.
 4. Object emission (LCB V04), so assembly text and the system assembler leave the path.
 
-**For slice 2, integers complete (all widths u8–u64, i8–i64): provided.** LCB's verified profile now has `word` (32-bit) and `long` (64-bit) values, `add sub mul and or xor`, the shifts `shiftLeft logicalRight arithmeticRight` (count modulo the width), `mulHighUnsigned mulHighSigned` (accepted only at `long`), division and remainder (`unsignedDiv unsignedRem signedDiv signedRem`; a zero divisor or signed minimum by −1 is stuck, so the adapter must branch to a trap before them), and the comparisons `eq unsignedLT unsignedLE signedLT signedLE` (word result). The adapter will carry every integer as a `long`: exact for types up to 32 bits; 64-bit overflow uses the high multiply and, for add/sub, `xor`/`and`/compare. Still absent and optional while every integer is a `long`: width conversion (`word`↔`long` extension and truncation).
+**For slice 2, integers complete (all widths u8–u64, i8–i64): provided on LCB's verified path (Apple AArch64).** LCB's verified profile now has `word` (32-bit) and `long` (64-bit) values, `add sub mul and or xor`, the shifts `shiftLeft logicalRight arithmeticRight` (count modulo the width), `mulHighUnsigned mulHighSigned` (accepted only at `long`), division and remainder (`unsignedDiv unsignedRem signedDiv signedRem`; a zero divisor or signed minimum by −1 is stuck, so the adapter must branch to a trap before them), and the comparisons `eq unsignedLT unsignedLE signedLT signedLE` (word result). The adapter will carry every integer as a `long`: exact for types up to 32 bits; 64-bit overflow uses the high multiply and, for add/sub, `xor`/`and`/compare. Still absent and optional while every integer is a `long`: width conversion (`word`↔`long` extension and truncation).
+
+**Still needed for the Linux targets:** the compatibility path is reached with `Verified.reify`, which maps both high multiplies to an ordinary `mul` (LCB `Verified/Canonical.lean`), because the compatibility IR has no high multiply. Slice 2's 64-bit multiply overflow would compute the wrong flag there. LCB must add high multiply to its compatibility IR and backends (or the x86-64 verified path) before slice 2; until then the adapter must refuse high multiply on Linux targets. Slice 0 emits none.
 
 ## Not in slice 0
 
