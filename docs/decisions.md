@@ -638,7 +638,10 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   never blocks and calls no foreign code, and, where the policy demands it, has termination evidence
   and a stack bound. Where the policy is on, a violation is refused at compile time, naming the
   function, the fact and its source; the facts query reports which policy covers each function. It
-  is scheduled with the facts query (R-0576, slice 1), not deferred. It takes up the idea of the
+  follows the slice-0 facts report and query and is required from slice 1 (R-0576), not deferred.
+  Admission requires established evidence of no allocation, no blocking and no foreign calls; an
+  unknown or incomplete fact is refused. The policy explicitly states whether named trusted
+  assumptions are acceptable, as required by Q13. It takes up the idea of the
   legacy predictable profile and of R-0220 (PredictableV1, deferred with a trigger), replacing that
   trigger by this decision; unlike R-0220's draft it admits no allocation at all, bounded or not.
   It is a policy over reported facts, not a function category (OD116) and not a build profile that
