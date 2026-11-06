@@ -15,21 +15,32 @@ stage A2c (row Q9.19). Before that, the owner approved the Core design provision
    - The header says what the file covers and how slice 1's Core is shaped (A-normal form, fresh
      identities, explicit `copy`/`move`, statically known values).
    - **Part 1, slice 1**: syntax, typing, ownership and known values, the evaluator, the checker,
-     then the conformance examples (`ConcreteSpec.Examples`).
+     then the conformance examples (`ConcreteSpec.Examples`), and the **slice-0 fragment**
+     (`ConcreteSpec.Slice0`): the first subset the compiler accepts (`u8` literals, immutable
+     `let`, checked `+`, `main -> u8`), as its own Core syntax embedded into slice 1 by `toCore`.
+     A compiler imports `ConcreteSpec.Spec` and targets `Slice0.Program`.
    - **Part 2, representation** (Q3.11): byte layout and encoding.
    - **Part 3, structured cleanup** (Q9.8): `defer`, frames, exits.
-   - **Part 4, scoped borrows** (Q3.3, Q3.4, Q9.5, REF-11).
-   - **Part 5, allocator brands** (Q1.1–Q1.5, Q1.13).
+   - **Part 4, scoped borrows** (Q3.3, Q3.4, Q9.5, REF-11), with range subviews (Q4.7):
+     `borrow [mut] v from a until b as s { … } [else { … }]`.
+   - **Part 5, allocator brands** (Q1.1–Q1.5, Q1.13), with the executable ghost run.
+   - **Part 6, authority** (the authority rules, Q5.1–Q5.4, Q7.11): capabilities, grants,
+     Console, and a run that records which grant each operation used.
+   - **Part 7, observations** (Q7.10, Q8.5): what the parent process sees: startup refusal 125,
+     the returned code, or a trap with status 134.
 2. **[`Proofs/`](Proofs/)** says why the rules hang together. Read it only to check a claim.
 
    | File | Main results |
    |---|---|
    | `Proofs/Slice1.lean` | `checked_never_stuck` (an accepted program never gets stuck), `checked_exits_or_traps`, `knownViolation_traps` (a refused known violation really would trap), fuel properties of `run` |
    | `Proofs/Checker.lean` | `check_iff`: the executable checker accepts exactly the programs the rules accept |
+   | `Proofs/Slice0.lean` | `slice0_exits` (an accepted slice-0 program exits with a `u8` status), `slice0_never_traps`, `toCore_injective` |
    | `Proofs/Rep.lean` | `rep_roundtrip` (design theorem 1) |
    | `Proofs/Cleanup.lean` | `defer_cleanup_releases` (design theorem 2) |
-   | `Proofs/Borrow.lean` | `open_mut_freezes_root` (design theorem 3), `shared_open_grants_no_write` |
-   | `Proofs/Brand.lean` | `reset_fresh` (design theorem 4), the brand refusals |
+   | `Proofs/Borrow.lean` | `open_mut_freezes_root` (design theorem 3), `shared_open_grants_no_write`; ranges: `knownInvalid_iff` (a range is refused exactly when the known facts prove it invalid), `knownInvalid_traps`, `range_can_open`, `enter_in_bounds`, `range_open_mut_freezes_root` |
+   | `Proofs/Brand.lean` | `reset_fresh` (design theorem 4), the brand refusals, `checked_passes_brand_checks` (brand erasure, Q1.1: a checked program never fails a ghost brand check), `ghost_run` |
+   | `Proofs/Authority.lean` | `authority_contained` (every operation a run performs uses a grant `main` was launched with, of the right type, under a capability `main` declares, for every fuel), `sub_iff`, `equiv_iff` |
+   | `Proofs/Observe.lean` | `checked_observation`, `checked_observable` (an accepted program's observation and status), `refused_start` |
    | `Proofs/Examples.lean` | `add100_safe` (an accepted program that traps only for some inputs is safe for every input), and the cleanup traces and brand refusal of `Spec.lean` derived again from the general theorems (they apply, non-vacuously) |
    | `Proofs/Basics.lean` | list lemmas |
 
@@ -40,37 +51,54 @@ The decisions are cited by row id (Q1.1 … Q9.19, P1 … P23, in
 
 - Only Lean core is imported, no Mathlib (Q9.16). No `sorry`, no `native_decide` (Q9.17), and
   `autoImplicit` is off, so a misspelled name is an error, never a silently bound variable.
-- Axioms: only Lean's standard `propext`, `Quot.sound` and `Classical.choice`, the last in one
-  place: `rep_roundtrip` reaches it through the core lemma `Nat.mod_mul`. The evaluator `run` and
-  the checker `check` use `propext` alone, so both stay executable and the examples are decided by
-  running them.
+- Axioms: only Lean's standard `propext`, `Quot.sound` and `Classical.choice`. The evaluator
+  `run`, the checker `check` and the other executable definitions use `propext` alone, so they
+  stay executable and the examples are decided by running them; `Classical.choice` appears only
+  in proofs (`rep_roundtrip` through the core lemma `Nat.mod_mul`, and the range proofs).
 - The judgments (inductive relations) are the normative form; the checker is proved to agree with
   them (`check_iff`).
 - Build: `lake build ConcreteSpec`. The external checker re-checks every theorem.
 
-## Not yet formalized
+## Done at A2c, and what remains open
 
-The five parts are separate Core fragments, each defined only as far as its design theorem needs
-(R4 F8); unifying them into one Core is A3 work (R-0560). What the specification does not yet
-state, as named open obligations:
+The seven parts are separate Core fragments, each defined only as far as its theorems need
+(R4 F8); unifying them into one Core is A3 work (R-0560).
 
-- **Elaboration** from surface syntax to Core: how literals get a type, how names become
-  identities, how nested expressions become A-normal form, and that acceptance of a source
-  program does not depend on how the elaborator names temporaries.
-- **The lexer, model-translation and native-image obligations.**
-- **Instrumentation erasure** (Q9.10): the ownership instrumentation (`Slot.moved`, the `used`,
-  `live`, `known` and `kfields` fields of `Entry`) is stated as intent, with no erasure definition
-  or theorem yet.
-- **Trap observations** (Q7.10, Q8.5): a trap's source location and message, and the mapping of
-  exit values and traps to the process exit code (trap exit 134); `Trap` is an abstract outcome.
-- **Target observations** (the launcher contract): every result here is about the model's abstract
+Formalized at A2c, each with rules, examples and proofs:
+
+- **Capability checking** (part 6): capability sets and their semantic equality (Q5.3),
+  substitution of capability parameters at a call, grant parameters, Console for the standard
+  streams (Q7.11), the refusals (missing capability, missing grant, `Unsafe` outside trusted code,
+  `Device`), and `authority_contained`.
+- **Brand erasure** (Q1.1, part 5): `checked_passes_brand_checks`.
+- **Range subviews** (Q4.7, part 4): the range test for arrays and UTF-8 text, `else`, the trap
+  without `else`, and the refusal of a range proven invalid (OD118), complete for the known facts.
+- **Trap and exit observations** (Q7.10, Q8.5, part 7): startup refusal 125, the returned code,
+  trap 134, and what each observation records.
+- **The slice-0 fragment** (part 1): a Core syntax the compiler can target, embedded into slice 1.
+
+Open obligations, by name:
+
+- **O1 Elaboration** from surface syntax to Core: how literals get a type, how names become
+  identities, how nested expressions and grouping become A-normal form, source positions, and that
+  acceptance of a source program does not depend on how the elaborator names temporaries.
+- **O2 The lexer, model-translation and native-image obligations.**
+- **O3 Instrumentation erasure** (Q9.10): the ownership instrumentation (`Slot.moved`, the
+  `used`, `live`, `known` and `kfields` fields of `Entry`) is stated as intent, with no erasure
+  definition or theorem yet. (Brand erasure, part 5, is done.)
+- **O4 Trap diagnostics** (Q7.10, OD101): the bytes of the trap line, including the trap's source
+  location (needs O1's positions), and of the startup refusal.
+- **O5 Target observations** (the launcher contract): every result here is about the model's
   outcomes; a claim about an executable needs a transport to the approved launcher contract.
-- **Capabilities** (Q5, Q2.7, the authority rules): the cleanup calls of part 3 and the allocator
-  operations of part 5 need capabilities, and no part models capability checking.
-- **Part 3** abstracts each deferred call to its identity, dependencies, loans and whether it
+- **O6 Launch validation** (part 6): `ProgOk` assumes a valid launch: instance limits, the target
+  offering each parameter type, and the launcher's grant minting are not modelled; nor are
+  authority rule 11, foreign calls, trait dispatch, generic methods and generated cleanup.
+- **O7 Capabilities in the other parts**: the cleanup calls of part 3 and the allocator
+  operations of part 5 need capabilities; part 6 checks capabilities in its own fragment only
+  (unification, A3).
+- **O8 Part 3** abstracts each deferred call to its identity, dependencies, loans and whether it
   traps; it does not model the statements between registrations or evaluating a `return` value
   before cleanup.
-- **Part 4** does not model the range clause and `else` of Q4.7, element access, or the no-escape
-  rules.
-- **Part 5** abstracts the condition of `while`, and does not prove that a checked program passes
-  every ghost brand check (the erasure correspondence of Q1.1).
+- **O9 Part 4** does not model element access, the no-escape rules, or text whose length is known
+  while its bytes are not (such a range is treated as unknown).
+- **O10 Part 5** abstracts the condition of `while` (every outcome is covered).

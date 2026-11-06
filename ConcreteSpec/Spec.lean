@@ -26,7 +26,8 @@ far as its theorems need (R4 F8). Unifying them into one Core is work for A3 (R-
 
 1. **Slice 1** (ROADMAP phase B): scalars, `let`, structs, moves and the use-after-move refusal,
    checked `+`, `return`, in Core's binding form (Q9.1), with the static refusal of statically
-   known violations (Q6.1–Q6.6).
+   known violations (Q6.1–Q6.6). It ends with the slice-0 fragment, the first subset the compiler
+   accepts (`ConcreteSpec.Slice0`).
 2. **Representation** (Q3.11): the layout and byte encoding of the slice-1 types.
 3. **Structured cleanup** (Q9.8, Q2.1, Q2.7, Q1.5): `defer`, frames and exits.
 4. **Scoped borrows** (Q3.3, Q3.4, Q9.5, REF-11), with range subviews (Q4.7).
@@ -71,8 +72,8 @@ What slice 1 is not:
   become identities and how nested expressions become A-normal form are elaboration rules for a
   later file, which must be proved to produce this syntax.
 * Nothing outside slice 1 is modelled in this part: no calls, no branches, no loops, no
-  references, no heap, no capabilities, no `defer`. Struct fields are scalars only. Parts 3–5
-  model the pieces of those that the design theorems need.
+  references, no heap, no capabilities, no `defer`. Struct fields are scalars only. Parts 3–7
+  model the pieces of those that their theorems need.
 
 The judgments (`HasType`, `UseAtom`, `Uses`, `StmtOk`, `BodyOk`, `Checked`) are inductive
 relations, independent of the executable checker (`check`); `check_iff` proves the two agree. The
@@ -1231,6 +1232,132 @@ example : check wrongReturnType = false := by decide
 
 end ConcreteSpec.Examples
 
+namespace ConcreteSpec.Slice0
+open ConcreteSpec
+
+/-! ### The slice-0 fragment
+
+Slice 0 is the first subset the new compiler accepts (ROADMAP B0, proposed): `u8` literals,
+immutable `let` of a `u8`, reads of `u8` locals, checked `+`, and `fn main() -> u8` ending in
+`return`. It is a fragment of slice 1, not a second language: the types below are its Core syntax,
+and `toCore` embeds it into slice 1's Core, whose rules, evaluator and checker apply unchanged. A
+compiler imports `ConcreteSpec.Spec`, produces a `Slice0.Program` for a slice-0 source program,
+and checks and runs it as `toCore q`.
+
+What slice 0 leaves out of slice 1: structs and destructuring, `bool`, the integer types other than
+`u8`, `move` (every slice-0 value is Copy), and `let _`. Grouping and nested expressions such as
+`a + b + c` are surface forms that elaboration turns into A-normal form; elaboration is an open
+obligation (README).
+
+Every slice-0 value is statically known (Q6.2): a literal is known, and a local is bound to a known
+literal or a known sum. So a checked `+` that could overflow is a known violation, refused (Q6.1),
+and an accepted slice-0 program always exits, never traps (`slice0_exits`, `Proofs/Slice0.lean`).
+-/
+
+/-- A slice-0 atom: a decimal `u8` literal (a natural number; whether it fits `u8` is checked,
+ARITH-2) or a read of a local. -/
+inductive Atom where
+  | lit (n : Nat)
+  | var (x : Var)
+  deriving DecidableEq, Repr
+
+/-- A slice-0 expression: an atom, or checked `l + r` of two atoms (ARITH-3). -/
+inductive Expr where
+  | atom (a : Atom)
+  | add (l r : Atom)
+  deriving DecidableEq, Repr
+
+/-- `let x: u8 = e;` — the only slice-0 statement. -/
+structure Stmt where
+  x : Var
+  e : Expr
+  deriving DecidableEq, Repr
+
+/-- `fn main() -> u8 { body; return ret; }` with no structs. -/
+structure Program where
+  body : List Stmt
+  ret : Atom
+  deriving Repr
+
+/-- An atom in Core: a literal is `u8`, a local is read with `copy` (`u8` is Copy). -/
+def Atom.toCore : Atom → ConcreteSpec.Atom
+  | .lit n => .int .u8 n
+  | .var x => .copy x
+
+def Expr.toCore : Expr → ConcreteSpec.Expr
+  | .atom a => .atom a.toCore
+  | .add l r => .add l.toCore r.toCore
+
+def Stmt.toCore (s : Stmt) : ConcreteSpec.Stmt := .let_ (.name s.x) (.scalar (.int .u8)) s.e.toCore
+
+/-- The slice-1 program a slice-0 program is: no declarations, the same body and return. -/
+def toCore (q : Program) : ConcreteSpec.Program :=
+  { decls := [], body := q.body.map Stmt.toCore, ret := q.ret.toCore }
+
+/-- A slice-1 program is in slice 0 when it is the Core form of a slice-0 program: no
+declarations, every statement a `let` of a `u8` local from a slice-0 expression, and a slice-0
+return atom. The slice-0 program is unique (`toCore_injective`, `Proofs/Slice0.lean`). -/
+def InSlice0 (p : ConcreteSpec.Program) : Prop := ∃ q, toCore q = p
+
+/-! ### Slice-0 examples
+
+The required slice-0 behaviours: normal exit 42, exit 255 at the boundary, static refusal of a
+known overflow and of an out-of-range literal, refusal of an unused binding, and the use of an
+undeclared local. -/
+
+private def a₀ : Var := ⟨"a", 0⟩
+private def b₁ : Var := ⟨"b", 1⟩
+
+/-- ```
+fn main() -> u8 {
+    let a: u8 = 20;
+    let b: u8 = 22;
+    return a + b;
+}
+```
+In A-normal form the returned sum gets its own binding `s`. It exits with 42. -/
+def answer : Program :=
+  { body := [⟨a₀, .atom (.lit 20)⟩, ⟨b₁, .atom (.lit 22)⟩, ⟨⟨"s", 2⟩, .add (.var a₀) (.var b₁)⟩],
+    ret := .var ⟨"s", 2⟩ }
+
+example : check (toCore answer) = true := by decide
+example : run (toCore answer) 10 = .exit 42 := by decide
+
+/-- `let a: u8 = 200; let b: u8 = 55; return a + b;` exits with 255, the largest `u8`. -/
+def boundary : Program :=
+  { body := [⟨a₀, .atom (.lit 200)⟩, ⟨b₁, .atom (.lit 55)⟩, ⟨⟨"s", 2⟩, .add (.var a₀) (.var b₁)⟩],
+    ret := .var ⟨"s", 2⟩ }
+
+example : check (toCore boundary) = true := by decide
+example : run (toCore boundary) 10 = .exit 255 := by decide
+
+/-- `let a: u8 = 200; let b: u8 = 56; return a + b;` is refused: `a + b` is known to overflow
+(Q6.1), so it is never run. -/
+def overflow : Program :=
+  { body := [⟨a₀, .atom (.lit 200)⟩, ⟨b₁, .atom (.lit 56)⟩, ⟨⟨"s", 2⟩, .add (.var a₀) (.var b₁)⟩],
+    ret := .var ⟨"s", 2⟩ }
+
+example : check (toCore overflow) = false := by decide
+
+/-- `return 256;` is refused: the literal does not fit `u8` (ARITH-2). -/
+example : check (toCore { body := [], ret := .lit 256 }) = false := by decide
+
+/-- `let a: u8 = 1; return 0;` is refused: `a` is never used (OWN-5). -/
+example : check (toCore { body := [⟨a₀, .atom (.lit 1)⟩], ret := .lit 0 }) = false := by decide
+
+/-- `return a;` with no `a` in scope is refused. -/
+example : check (toCore { body := [], ret := .var a₀ }) = false := by decide
+
+/-- A local may be read many times (`u8` is Copy): `let a: u8 = 7; let b: u8 = a + a; return b;`
+exits with 14. -/
+def double : Program :=
+  { body := [⟨a₀, .atom (.lit 7)⟩, ⟨b₁, .add (.var a₀) (.var a₀)⟩], ret := .var b₁ }
+
+example : check (toCore double) = true := by decide
+example : run (toCore double) 10 = .exit 14 := by decide
+
+end ConcreteSpec.Slice0
+
 namespace ConcreteSpec.Rep
 open ConcreteSpec
 
@@ -1795,12 +1922,28 @@ structure RangeFacts where
   b : Option Nat
   deriving DecidableEq, Repr
 
-/-- The range is statically known to be invalid: everything is known, and the range is not
-valid. -/
+/-- `i` can be an end of a range of the source: at most its length, and for text a UTF-8 scalar
+boundary. A range `[a, b)` is valid exactly when `a ≤ b` and both are ends (`validRange_iff`,
+`Proofs/Borrow.lean`). -/
+def Source.edge : Source → Nat → Bool
+  | .array n, i => decide (i ≤ n)
+  | .text bs, i => decide (i ≤ bs.length) && boundary bs i
+
+/-- The range is proven invalid from what the checker knows (Q4.7, Q6.1): the known bounds are
+reversed (`b < a`), or a known bound cannot be an end of the known source. These are all the
+cases: the range is known invalid exactly when every source and bounds agreeing with the facts
+fail the range test (`knownInvalid_iff`, `Proofs/Borrow.lean`), so a partial fact such as
+`from 5 until 2` over an unknown source is enough. -/
 def knownInvalid (k : RangeFacts) : Bool :=
-  match k.src, k.a, k.b with
-  | some s, some a, some b => !validRange s a b
-  | _, _, _ => false
+  (match k.a, k.b with
+   | some a, some b => decide (b < a)
+   | _, _ => false) ||
+  (match k.src, k.a with
+   | some s, some a => !s.edge a
+   | _, _ => false) ||
+  (match k.src, k.b with
+   | some s, some b => !s.edge b
+   | _, _ => false)
 
 /-- A run-time source and bounds agree with what the checker knows. -/
 def Agrees (k : RangeFacts) (s : Source) (a b : Nat) : Prop :=
@@ -1928,8 +2071,16 @@ example : ∃ Γ', RangeOk x0 false 0 1 ⟨some (.array 4), some 2, some 9⟩ [.
   ⟨_, .borrow rfl (by decide) (by intro h; cases h) rfl (.read rfl (by decide) .nil) .nil,
     .read rfl (by decide) .nil⟩
 
-/-- With an unknown bound, the range is accepted without `else`, and traps if it is invalid at
-run time. -/
+/-- Partial facts can prove a range invalid: `from 5 until 2` over any source, and
+`until 9` over an array of 4 whatever the start. -/
+example : knownInvalid ⟨none, some 5, some 2⟩ = true := by decide
+example : knownInvalid ⟨some (.array 4), none, some 9⟩ = true := by decide
+
+/-- A known end inside a UTF-8 scalar is invalid whatever the other bound: `from 1` in `"é!"`. -/
+example : knownInvalid ⟨some (.text [0xC3, 0xA9, 0x21]), some 1, none⟩ = true := by decide
+
+/-- With an unknown bound that could make the range valid, the range is accepted without `else`,
+and traps if it is invalid at run time. -/
 example : ∃ Γ', RangeOk x0 false 0 1 ⟨some (.array 4), some 2, none⟩ [.read 1] none [] Γ' :=
   ⟨_, .borrow rfl (by decide) (by intro h; cases h) rfl (.read rfl (by decide) .nil) .nil, rfl⟩
 
@@ -1948,12 +2099,13 @@ requires that no value of its brand is live. A `while` loop (Q9.3, Core's one lo
 an allocator carries `∃ β. alloc β` (Q1.3): each iteration, and the code after the loop, opens it
 with a fresh name. The loop's condition region is abstracted: the ghost run may stop or iterate
 at each test, so the results hold for every outcome of the conditions. Capability checking of the
-allocator operations (Q5, Q2.7) is not modelled here.
+allocator operations (Q5, Q2.7) is not modelled here (part 6 models capabilities in its own
+fragment).
 
-Two views of the same programs: the static check (`Ok`), and a ghost run (`Run`) that gives
-every allocator a run-time brand from a counter, checks brand equality on each operation, and is
-erased by Q1.1. The proof that a checked program passes every ghost check (the erasure
-correspondence) is not discharged here.
+Two views of the same programs: the static check (`Ok`), and a ghost run (`Run`, executable as
+`ghost`) that gives every allocator a run-time brand from a counter, checks brand equality on each
+operation, and is erased by Q1.1. A checked program passes every ghost check
+(`checked_passes_brand_checks`), so erasing the brands removes only checks that cannot fail.
 -/
 
 def findL {α : Type} : List (Nat × α) → Nat → Option α
@@ -2042,7 +2194,7 @@ structure State where
   env : List (Nat × Val)
   next : Nat
   gen : List Nat
-  deriving Repr
+  deriving DecidableEq, Repr
 
 /-- Generate a brand for allocator `a`. -/
 def State.bind (s : State) (a : Nat) (env : List (Nat × Val)) : State :=
@@ -2069,6 +2221,48 @@ inductive Run : State → List Stmt → State → Prop where
 
 /-- The start of every run: nothing live, no brand generated. -/
 def State.init : State := { env := [], next := 0, gen := [] }
+
+/-- The result of the executable ghost run. -/
+inductive GR where
+  /-- The run finished in this state. -/
+  | done (s : State)
+  /-- A brand check failed, or a value was missing: no rule of `Run` applies. -/
+  | stuck
+  /-- The fuel ran out; inconclusive. -/
+  | outOfFuel
+  deriving DecidableEq, Repr
+
+/-- The ghost run as an executable function (`ghost_run`, `Proofs/Brand.lean`: every finished
+ghost run is a `Run`). `σ` decides each loop test from the remaining fuel, standing for the
+abstracted conditions: fuel decreases at every test, so every sequence of test outcomes is some
+`σ`. Each statement costs one unit of fuel, and the body of an iteration runs with the fuel left
+at its test. -/
+def ghost (σ : Nat → Bool) : Nat → State → List Stmt → GR
+  | 0, _, _ => .outOfFuel
+  | _ + 1, s, [] => .done s
+  | n + 1, s, .newAlloc a _ :: rest => ghost σ n (s.bind a s.env) rest
+  | n + 1, s, .alloc h a :: rest => match findL s.env a with
+    | some (.allocV b) => ghost σ n { s with env := (h, .heapV b) :: s.env } rest
+    | _ => .stuck
+  | n + 1, s, .use h a :: rest => match findL s.env h, findL s.env a with
+    | some (.heapV b), some (.allocV b') => if b = b' then ghost σ n s rest else .stuck
+    | _, _ => .stuck
+  | n + 1, s, .free h a :: rest => match findL s.env h, findL s.env a with
+    | some (.heapV b), some (.allocV b') =>
+      if b = b' then ghost σ n { s with env := removeL h s.env } rest else .stuck
+    | _, _ => .stuck
+  | n + 1, s, .release a :: rest => match findL s.env a with
+    | some (.allocV _) => ghost σ n { s with env := removeL a s.env } rest
+    | _ => .stuck
+  | n + 1, s, .reset a' a _ :: rest => match findL s.env a with
+    | some (.allocV _) => ghost σ n (s.bind a' (removeL a s.env)) rest
+    | _ => .stuck
+  | n + 1, s, .while_ a β βx body :: rest =>
+    if σ n then
+      match ghost σ n s body with
+      | .done s₁ => ghost σ n s₁ (.while_ a β βx body :: rest)
+      | r => r
+    else ghost σ n s rest
 
 /-! ### Examples -/
 
@@ -2105,6 +2299,18 @@ example : Ok [] [] [.newAlloc 0 10, .while_ 0 20 30 [.alloc 1 0, .free 1 0, .res
     .while_ (β'' := 21) rfl (by decide) (by decide) (by decide)
       (.alloc rfl rfl <| .free rfl rfl <| .reset rfl (by decide) rfl (by decide) .nil)
       (.release rfl (by decide) .nil)
+
+/-- The ghost run of that loop, with loop tests that iterate three times, finishes without a
+failed brand check, in the state of the `Run` below. By `checked_passes_brand_checks` (`Proofs/Brand.lean`) every checked
+program does so, for every outcome of its loop tests. -/
+example : ghost (fun n => decide (5 < n)) 10 State.init [.newAlloc 0 10,
+    .while_ 0 20 30 [.alloc 1 0, .free 1 0, .reset 0 0 21], .release 0] = .done { env := [], next := 4, gen := [0, 1, 2, 3] } := by
+  decide
+
+/-- The refused brand mismatch fails its ghost check: brand 0's value through brand 1's
+allocator. -/
+example : ghost (fun _ => false) 10 State.init [.newAlloc 0 10, .newAlloc 2 11,
+    .alloc 1 0, .use 1 2] = .stuck := by decide
 
 /-- Three iterations of that loop generate four pairwise distinct brands: 0 for `new`, then 1, 2
 and 3 for the resets. -/
@@ -2342,8 +2548,9 @@ structure Trace where
   complete : Bool
   deriving DecidableEq, Repr
 
-/-- Run a body whose grant parameters are bound, by position, to the launch grants `env`. Each
-statement costs one unit of fuel. Capabilities have no run-time representation: the run never
+/-- Run a body whose grant parameters are bound, by position, to the launch grants `env`. Fuel
+bounds the depth of the run, not its length: each step takes one unit, and a call runs its callee
+and then the rest of the body each with the remaining fuel. Capabilities have no run-time representation: the run never
 consults them. -/
 def exec (P : Prog) : Nat → List Nat → List Stmt → Trace
   | 0, _, _ => ⟨[], false⟩
@@ -2463,15 +2670,17 @@ process observes (row Q7.10, R4 F6 "Startup and shutdown"):
 * if a grant `main` asks for is not configured at launch, the launcher refuses to start, before
   `main` runs, with exit status 125;
 * if `main` returns `code : u8`, the exit status is `code`;
-* if the run traps, the runtime writes the trap's fixed message to descriptor 2 and the exit
-  status is 134.
+* if the run traps, the runtime writes one line naming the trap and its source location to
+  descriptor 2 (OD101's content) and the exit status is 134.
 
 These effects belong to the target, not to source code: no function gains a permission from them
 (authority rule 12). A status of 134 alone does not tell a trap from `return 134`; the trap
 message does, and the observation records which trap occurred.
 
-Not decided, and not modelled here: the bytes of the trap message and of the startup refusal,
-and the trap's source location (the elaborator, which would supply it, is not yet defined). A run
+Not modelled here: the bytes of the trap line (OD101's content) and of the startup refusal, and
+the trap's source location, which the decision requires in that line but which needs the
+elaborator's source positions (not yet defined, README); the observation records only which trap
+occurred. A run
 that does not end (here: one that runs out of fuel) has no observation, and neither has a stuck
 run, which a checked program never reaches (`checked_never_stuck`).
 -/

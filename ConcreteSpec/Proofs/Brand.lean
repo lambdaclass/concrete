@@ -185,4 +185,251 @@ theorem reset_fresh :
           simp only [State.bind] at h1 h2
           rw [hnew] at h2; cases h2; exact key _ h1 rfl
 
+
+/-! ### Erasure (Q1.1): a checked program passes every ghost brand check -/
+
+/-- A static type's run-time value under the brand assignment `φ`. -/
+def emb (φ : Nat → Nat) : STy → Val
+  | .alloc β => .allocV (φ β)
+  | .heap β => .heapV (φ β)
+
+/-- The run-time values match the static context under the brand assignment `φ`: the same
+names, and an allocator or value of brand `β` carries the run-time brand `φ β`. -/
+def Rel (φ : Nat → Nat) (Γ : Ctx) (env : List (Nat × Val)) : Prop :=
+  ∀ x, findL env x = (findL Γ x).map (emb φ)
+
+/-- `φ` with brand `β` assigned `v`. -/
+def upd (φ : Nat → Nat) (β v : Nat) : Nat → Nat := fun γ => if γ = β then v else φ γ
+
+theorem rel_cons {φ Γ env} (x : Nat) (t : STy) (h : Rel φ Γ env) :
+    Rel φ ((x, t) :: Γ) ((x, emb φ t) :: env) := by
+  intro y; by_cases hx : x = y <;> simp [findL, hx, h y]
+
+theorem rel_removeL {φ Γ env} (p : Nat) (h : Rel φ Γ env) : Rel φ (removeL p Γ) (removeL p env) := by
+  intro y; rw [findL_removeL, findL_removeL]; by_cases hy : y = p <;> simp [hy, h y]
+
+/-- Reassigning a brand no binding has changes no binding's run-time value. -/
+theorem emb_upd {B Γ} {φ : Nat → Nat} {β v x : Nat} {t : STy} (hb : BrandsIn B Γ) (hβ : β ∉ B)
+    (hf : findL Γ x = some t) : emb (upd φ β v) t = emb φ t := by
+  have hm := findL_mem hf
+  cases t with
+  | alloc γ =>
+    have : γ ≠ β := fun e => hβ (e ▸ hb _ hm γ (.inl rfl))
+    simp [emb, upd, this]
+  | heap γ =>
+    have : γ ≠ β := fun e => hβ (e ▸ hb _ hm γ (.inr rfl))
+    simp [emb, upd, this]
+
+theorem rel_upd {φ Γ env} {B : List Nat} {β : Nat} (v : Nat) (h : Rel φ Γ env) (hb : BrandsIn B Γ)
+    (hβ : β ∉ B) : Rel (upd φ β v) Γ env := by
+  intro y
+  rw [h y]
+  cases hf : findL Γ y with
+  | none => rfl
+  | some t => simp [emb_upd hb hβ hf]
+
+theorem brandsIn_removeL {B Γ} (p : Nat) (h : BrandsIn B Γ) : BrandsIn B (removeL p Γ) :=
+  fun e he => h e (mem_removeL p he)
+
+theorem brandsIn_mono {B Γ} (β : Nat) (h : BrandsIn B Γ) : BrandsIn (β :: B) Γ :=
+  fun e he γ hγ => List.mem_cons_of_mem _ (h e he γ hγ)
+
+theorem brandsIn_cons {B Γ} {x : Nat} {t : STy} (h : BrandsIn B Γ)
+    (ht : ∀ β, (t = .alloc β ∨ t = .heap β) → β ∈ B) : BrandsIn B ((x, t) :: Γ) := by
+  intro e he β hβ
+  rcases List.mem_cons.mp he with rfl | he
+  · exact ht β hβ
+  · exact h e he β hβ
+
+/-- A fresh allocator binding keeps the brands in use. -/
+theorem brandsIn_new {B Γ} (x β : Nat) (h : BrandsIn B Γ) : BrandsIn (β :: B) ((x, .alloc β) :: Γ) :=
+  brandsIn_cons (brandsIn_mono β h) (fun γ hγ => by
+    rcases hγ with hγ | hγ <;> cases hγ; exact List.mem_cons_self ..)
+
+/-- Opening allocator `a`, now of brand `γ`, under the new name `β`: what each loop iteration,
+and the code after the loop, starts from (Q1.3). -/
+theorem rel_reopen {φ Γ env} {B : List Nat} {a γ β : Nat}
+    (h : Rel φ ((a, .alloc γ) :: removeL a Γ) env) (hb : BrandsIn B Γ) (hβ : β ∉ B) :
+    Rel (upd φ β (φ γ)) ((a, .alloc β) :: removeL a Γ) env := by
+  intro y
+  rw [h y]
+  by_cases hy : a = y
+  · simp [findL, hy, emb, upd]
+  · simp only [findL, hy, ↓reduceIte]
+    cases hf : findL (removeL a Γ) y with
+    | none => rfl
+    | some t => simp [emb_upd (brandsIn_removeL a hb) hβ hf]
+
+/-- Entering a loop: the allocator's current binding becomes the loop's. -/
+theorem rel_split {φ Γ env} {a γ : Nat} (h : Rel φ Γ env) (ha : findL Γ a = some (.alloc γ)) :
+    Rel φ ((a, .alloc γ) :: removeL a Γ) env := by
+  intro y
+  rw [h y]
+  by_cases hy : a = y
+  · subst hy; simp [findL, ha]
+  · simp only [findL, hy, ↓reduceIte, findL_removeL, show ¬ y = a from fun e => hy e.symm]
+
+/-- What a checked statement list does in the ghost run: it runs out of fuel, or finishes in a
+state that matches its final context. It never gets stuck. -/
+theorem ghost_ok {σ : Nat → Bool} {B Γ ss Γ'} (h : Ok B Γ ss Γ') :
+    ∀ (n : Nat) (φ : Nat → Nat) (s : State), Rel φ Γ s.env → BrandsIn B Γ →
+      ghost σ n s ss = .outOfFuel ∨ ∃ s' φ', ghost σ n s ss = .done s' ∧ Rel φ' Γ' s'.env := by
+  induction h with
+  | nil =>
+    intro n φ s hr _
+    cases n with
+    | zero => exact .inl rfl
+    | succ n => exact .inr ⟨s, φ, rfl, hr⟩
+  | @newAlloc B Γ a β rest Γ' _ hβ _ ih =>
+    intro n φ s hr hb
+    cases n with
+    | zero => exact .inl rfl
+    | succ n =>
+      simp only [ghost]
+      exact ih n (upd φ β s.next) _
+        (by
+          have := rel_cons a (.alloc β) (rel_upd s.next hr hb hβ)
+          simpa [State.bind, emb, upd] using this)
+        (brandsIn_new a β hb)
+  | @alloc B Γ h a β rest Γ' ha _ _ ih =>
+    intro n φ s hr hb
+    cases n with
+    | zero => exact .inl rfl
+    | succ n =>
+      have hea : findL s.env a = some (.allocV (φ β)) := by rw [hr a, ha]; rfl
+      simp only [ghost, hea]
+      refine ih n φ _ (rel_cons h (.heap β) hr) (brandsIn_cons hb (fun γ hγ => ?_))
+      rcases hγ with hγ | hγ <;> cases hγ
+      exact hb _ (findL_mem ha) β (.inl rfl)
+  | @use B Γ h a β rest Γ' hh ha _ ih =>
+    intro n φ s hr hb
+    cases n with
+    | zero => exact .inl rfl
+    | succ n =>
+      have heh : findL s.env h = some (.heapV (φ β)) := by rw [hr h, hh]; rfl
+      have hea : findL s.env a = some (.allocV (φ β)) := by rw [hr a, ha]; rfl
+      simp only [ghost, heh, hea, ↓reduceIte]
+      exact ih n φ s hr hb
+  | @free B Γ h a β rest Γ' hh ha _ ih =>
+    intro n φ s hr hb
+    cases n with
+    | zero => exact .inl rfl
+    | succ n =>
+      have heh : findL s.env h = some (.heapV (φ β)) := by rw [hr h, hh]; rfl
+      have hea : findL s.env a = some (.allocV (φ β)) := by rw [hr a, ha]; rfl
+      simp only [ghost, heh, hea, ↓reduceIte]
+      exact ih n φ _ (rel_removeL h hr) (brandsIn_removeL h hb)
+  | @release B Γ a β rest Γ' ha _ _ ih =>
+    intro n φ s hr hb
+    cases n with
+    | zero => exact .inl rfl
+    | succ n =>
+      have hea : findL s.env a = some (.allocV (φ β)) := by rw [hr a, ha]; rfl
+      simp only [ghost, hea]
+      exact ih n φ _ (rel_removeL a hr) (brandsIn_removeL a hb)
+  | @reset B Γ a' a β β' rest Γ' ha _ _ hβ' _ ih =>
+    intro n φ s hr hb
+    cases n with
+    | zero => exact .inl rfl
+    | succ n =>
+      have hea : findL s.env a = some (.allocV (φ β)) := by rw [hr a, ha]; rfl
+      simp only [ghost, hea]
+      refine ih n (upd φ β' s.next) _ ?_ (brandsIn_new a' β' (brandsIn_removeL a hb))
+      have := rel_cons a' (.alloc β')
+        (rel_upd s.next (rel_removeL a hr) (brandsIn_removeL a hb) hβ')
+      simpa [State.bind, emb, upd] using this
+  | @while_ B Γ a β0 β βx β'' body rest Γ' ha _ hβ hβx _ _ ihb ihr =>
+    intro n₀ φ₀ s₀ hr₀ hb
+    -- The loop invariant: the allocator `a` has some brand `γ`, the rest of the context is
+    -- unchanged.
+    have loop : ∀ (n : Nat) (φ : Nat → Nat) (γ : Nat) (s : State),
+        Rel φ ((a, .alloc γ) :: removeL a Γ) s.env →
+        ghost σ n s (.while_ a β βx body :: rest) = .outOfFuel ∨
+          ∃ s' φ', ghost σ n s (.while_ a β βx body :: rest) = .done s' ∧ Rel φ' Γ' s'.env := by
+      intro n
+      induction n with
+      | zero => intro _ _ _ _; exact .inl rfl
+      | succ n ihn =>
+        intro φ γ s hr
+        simp only [ghost]
+        split
+        · rcases ihb n _ s (rel_reopen hr hb hβ)
+              (brandsIn_new a β (brandsIn_removeL a hb)) with h | ⟨s₁, φ₁, h, hr₁⟩
+          · rw [h]; exact .inl rfl
+          · rw [h]; exact ihn φ₁ β'' s₁ hr₁
+        · exact ihr n _ s (rel_reopen hr hb hβx) (brandsIn_new a βx (brandsIn_removeL a hb))
+    exact loop n₀ φ₀ β0 s₀ (rel_split hr₀ ha)
+
+/-- **Brand erasure** (Q1.1). A checked program passes every brand check of the ghost run, for
+every outcome of its loop tests and any fuel: the ghost run never gets stuck. Erasing the brands
+therefore removes only checks that cannot fail. -/
+theorem checked_passes_brand_checks {ss Γ'} (h : Ok [] [] ss Γ') (σ : Nat → Bool) (n : Nat) :
+    ghost σ n State.init ss ≠ .stuck := by
+  rcases ghost_ok (σ := σ) h n id State.init (fun _ => rfl) (fun _ he => nomatch he) with
+    h | ⟨s', _, h, _⟩ <;> rw [h] <;> simp
+
+/-- A run of `l₁` and then `l₂` is a run of `l₁ ++ l₂`. -/
+theorem run_append {s l₁ s₁} (h : Run s l₁ s₁) : ∀ {l₂ s₂}, Run s₁ l₂ s₂ → Run s (l₁ ++ l₂) s₂ := by
+  induction h with
+  | nil => intro _ _ h; exact h
+  | newAlloc _ ih => intro _ _ h; exact .newAlloc (ih h)
+  | alloc ha _ ih => intro _ _ h; exact .alloc ha (ih h)
+  | use hh ha _ ih => intro _ _ h; exact .use hh ha (ih h)
+  | free hh ha _ ih => intro _ _ h; exact .free hh ha (ih h)
+  | release ha _ ih => intro _ _ h; exact .release ha (ih h)
+  | reset ha _ ih => intro _ _ h; exact .reset ha (ih h)
+  | whileExit _ ih => intro _ _ h; exact .whileExit (ih h)
+  | whileIter _ ih => intro _ _ h; exact .whileIter (by simpa using ih h)
+
+/-- The executable ghost run agrees with `Run`: a finished ghost run is a `Run`. -/
+theorem ghost_run {σ : Nat → Bool} : ∀ {n : Nat} {s : State} {ss : List Stmt} {s' : State},
+    ghost σ n s ss = .done s' → Run s ss s' := by
+  intro n
+  induction n with
+  | zero => intro _ _ _ h; simp [ghost] at h
+  | succ n ih =>
+    intro s ss s' h
+    match ss with
+    | [] => simp only [ghost, GR.done.injEq] at h; subst h; exact .nil
+    | .newAlloc a β :: rest => simp only [ghost] at h; exact .newAlloc (ih h)
+    | .alloc h' a :: rest =>
+      simp only [ghost] at h
+      split at h
+      · rename_i b hb; exact .alloc hb (ih h)
+      · cases h
+    | .use h' a :: rest =>
+      simp only [ghost] at h
+      split at h
+      · rename_i b b' hh ha
+        split at h
+        · subst_vars; exact .use hh ha (ih h)
+        · cases h
+      · cases h
+    | .free h' a :: rest =>
+      simp only [ghost] at h
+      split at h
+      · rename_i b b' hh ha
+        split at h
+        · subst_vars; exact .free hh ha (ih h)
+        · cases h
+      · cases h
+    | .release a :: rest =>
+      simp only [ghost] at h
+      split at h
+      · rename_i b hb; exact .release hb (ih h)
+      · cases h
+    | .reset a' a β' :: rest =>
+      simp only [ghost] at h
+      split at h
+      · rename_i b hb; exact .reset hb (ih h)
+      · cases h
+    | .while_ a β βx body :: rest =>
+      simp only [ghost] at h
+      split at h
+      · split at h
+        · rename_i s₁ hb
+          exact .whileIter (run_append (ih hb) (ih h))
+        · rename_i hr; exact (hr s' h).elim
+      · exact .whileExit (ih h)
+
 end ConcreteSpec.Brand
