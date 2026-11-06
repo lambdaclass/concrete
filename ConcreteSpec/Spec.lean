@@ -1869,7 +1869,7 @@ mutable open freezes it. If the range is invalid, `else` runs; without `else` th
 like indexing out of range. A range statically known to be invalid is refused when there is no
 `else` (OD118, everywhere, including trusted code) and accepted when there is one, whose `else`
 then runs as ordinary branching (Q4.7). Without a range there is no `else` (the whole view always
-opens). Element access and the no-escape rules are not modelled here.
+opens). Element access, the no-escape rules and text validity follow the examples below.
 -/
 
 /-- A source's value at run time: an array of `len` elements, or text with its bytes. -/
@@ -2083,6 +2083,228 @@ example : knownInvalid ⟨some (.text [0xC3, 0xA9, 0x21]), some 1, none⟩ = tru
 and traps if it is invalid at run time. -/
 example : ∃ Γ', RangeOk x0 false 0 1 ⟨some (.array 4), some 2, none⟩ [.read 1] none [] Γ' :=
   ⟨_, .borrow rfl (by decide) (by intro h; cases h) rfl (.read rfl (by decide) .nil) .nil, rfl⟩
+
+
+/-! ### No escape (Q3.3, Q4.7)
+
+A view is second-class: `view` makes it a non-owner, and only owners move (`Ok.move`). In Core,
+returning a value, storing it in another binding or field, passing it by value and capturing it
+are all moves, so a view does none of them (`view_not_moved`, `Proofs/Borrow.lean`). The view's
+name is fresh and goes out of scope with the block (`restore` keeps only the outer places), so no
+statement after the block names it (`view_not_used_after`), and every place of the source's root
+is back after the block with exactly the entry it had before the open, its lock included: the
+freeze of a mutable open ends with the block (`root_restored`). -/
+
+/-- `p` is named in `ss` where it refers to the outer place `p`: not inside a block whose view
+is also called `p`. -/
+inductive FreeUse (p : Nat) : List Stmt → Prop where
+  | read {rest} : FreeUse p (.read p :: rest)
+  | write {rest} : FreeUse p (.write p :: rest)
+  | move {rest} : FreeUse p (.move p :: rest)
+  | src {m v body rest} : FreeUse p (.borrow m p v body :: rest)
+  | body {m s v body rest} : v ≠ p → FreeUse p body → FreeUse p (.borrow m s v body :: rest)
+  | tail {s rest} : FreeUse p rest → FreeUse p (s :: rest)
+
+/-- Returning, storing or passing the view is a move of it, and is refused. -/
+example : ¬ ∃ Γ', Ok x0 [.borrow true 0 1 [.move 1]] Γ' := by
+  rintro ⟨Γ', h⟩
+  cases h with
+  | borrow hs _ _ _ hb _ =>
+    simp only [x0, find, ↓reduceIte, Option.some.injEq] at hs; subst hs
+    cases hb with
+    | move hf _ ho _ => simp [bodyCtx, find, view] at hf; subst hf; simp at ho
+
+/-- Naming the view after its block is refused: `borrow mut x as v { } read(v)`. -/
+example : ¬ ∃ Γ', Ok x0 [.borrow true 0 1 [], .read 1] Γ' := by
+  rintro ⟨Γ', h⟩
+  cases h with
+  | borrow hs _ _ _ hb hr =>
+    cases hb
+    cases hr with
+    | read hf _ _ => simp [restore, find, bodyCtx, mapPlaces, x0] at hf
+
+/-! ### Range views at run time (Q4.7)
+
+The run of array sources and range views. Memory maps each owner place to its elements; a view
+is its source place, its range `[a, b)` and whether it is mutable. `v[i]` reads or writes the
+source's element `a + i` when `i < b - a`, and traps otherwise, like indexing (Q4.7). Opening a
+range runs the range test of `openRange`; the view exists only inside its block. The results
+(`Proofs/Borrow.lean`): an access through a view reaches exactly the source element `a + i`,
+which lies in `[a, b)` and inside the source, or traps (`view_get`, `view_set`, `view_in_source`);
+a write through a view changes exactly that element (`view_write_exact`); and a block that
+accesses only its view changes nothing outside `[a, b)` of its source (`range_block_frame`).
+
+This run covers array sources; a text view reads bytes with the same index arithmetic, and text
+validity is below. Views of views (opening a range of a view) are not modelled, and the run is
+not yet joined to the access rules `Ok` in one theorem (they are separate fragments, joined by A3).
+-/
+
+/-- The entry of `p` in a list keyed by place. -/
+def getN {α : Type} : List (Nat × α) → Nat → Option α
+  | [], _ => none
+  | (n, x) :: l, p => if n = p then some x else getN l p
+
+/-- Replace the entry of `p`. -/
+def putN {α : Type} (p : Nat) (x : α) : List (Nat × α) → List (Nat × α)
+  | [] => []
+  | (n, y) :: l => if n = p then (n, x) :: l else (n, y) :: putN p x l
+
+/-- Memory: each owner array place and its elements. -/
+abbrev Mem := List (Nat × List Nat)
+
+/-- The element `j` of place `p`. -/
+def elem (μ : Mem) (p j : Nat) : Option Nat := (getN μ p).bind (·[j]?)
+
+/-- A view at run time: its source place, its range `[a, b)`, and whether it is mutable. -/
+structure VInfo where
+  src : Nat
+  a : Nat
+  b : Nat
+  mutable : Bool
+  deriving DecidableEq, Repr
+
+abbrev Views := List (Nat × VInfo)
+
+/-- The source index of the view's index `i`: `a + i` when `i < b - a` (Q4.7: indexed relative
+to the start), else none (the access traps). -/
+def elemIdx (w : VInfo) (i : Nat) : Option Nat := if i < w.b - w.a then some (w.a + i) else none
+
+inductive VStmt where
+  /-- Read `v[i]` and output it. -/
+  | get (v i : Nat)
+  /-- `v[i] = x`. -/
+  | set (v i x : Nat)
+  /-- Read `p[i]` of an owner array, and output it. -/
+  | getS (p i : Nat)
+  /-- `p[i] = x` on an owner array. -/
+  | setS (p i x : Nat)
+  /-- `borrow [mut] p from a until b as v { body } [else { els }]`. -/
+  | range (m : Bool) (p v a b : Nat) (body : List VStmt) (els : Option (List VStmt))
+
+/-- The outcome of a run: the memory and the values output, a trap, stuck (an unbound name or a
+write through a shared view, which the access rules refuse), or out of fuel. -/
+inductive VR where
+  | ok (μ : Mem) (out : List Nat)
+  | trap
+  | stuck
+  | outOfFuel
+  deriving DecidableEq, Repr
+
+/-- The run. Each statement costs one unit of fuel; a block runs with the fuel left at its
+open. The view is bound inside its block only. -/
+def vrun : Nat → Mem → Views → List Nat → List VStmt → VR
+  | 0, _, _, _, _ => .outOfFuel
+  | _ + 1, μ, _, out, [] => .ok μ out
+  | n + 1, μ, V, out, .get v i :: rest => match getN V v with
+    | none => .stuck
+    | some w => match elemIdx w i with
+      | none => .trap
+      | some j => match elem μ w.src j with
+        | some x => vrun n μ V (out ++ [x]) rest
+        | none => .stuck
+  | n + 1, μ, V, out, .set v i x :: rest => match getN V v with
+    | none => .stuck
+    | some w =>
+      if w.mutable then
+        match elemIdx w i with
+        | none => .trap
+        | some j => match getN μ w.src with
+          | some xs => if j < xs.length then vrun n (putN w.src (xs.set j x) μ) V out rest
+            else .stuck
+          | none => .stuck
+      else .stuck
+  | n + 1, μ, V, out, .getS p i :: rest => match getN μ p with
+    | none => .stuck
+    | some xs => match xs[i]? with
+      | some x => vrun n μ V (out ++ [x]) rest
+      | none => .trap
+  | n + 1, μ, V, out, .setS p i x :: rest => match getN μ p with
+    | none => .stuck
+    | some xs => if i < xs.length then vrun n (putN p (xs.set i x) μ) V out rest else .trap
+  | n + 1, μ, V, out, .range m p v a b body els :: rest => match getN μ p with
+    | none => .stuck
+    | some xs => match openRange (.array xs.length) a b els.isSome with
+      | .enter => match vrun n μ ((v, ⟨p, a, b, m⟩) :: V) out body with
+        | .ok μ' out' => vrun n μ' V out' rest
+        | r => r
+      | .orElse => match els with
+        | some e => match vrun n μ V out e with
+          | .ok μ' out' => vrun n μ' V out' rest
+          | r => r
+        | none => .stuck
+      | .trap => .trap
+
+/-- `xs = [10, 20, 30, 40, 50]`; `borrow mut xs from 1 until 4 as s { s[0] = 7; s[2] = 9;
+print(s[1]); }`: the writes land on `xs[1]` and `xs[3]`, the read is `xs[2]`. -/
+example : vrun 10 [(0, [10, 20, 30, 40, 50])] [] []
+    [.range true 0 1 1 4 [.set 1 0 7, .set 1 2 9, .get 1 1] none] =
+    .ok [(0, [10, 7, 30, 9, 50])] [30] := by decide
+
+/-- `s[3]` in a view of length 3 traps, even though `xs[4]` exists. -/
+example : vrun 10 [(0, [10, 20, 30, 40, 50])] [] [] [.range true 0 1 1 4 [.set 1 3 7] none] =
+    .trap := by decide
+
+/-- An invalid range runs `else` when there is one, and traps when there is none. -/
+example : vrun 10 [(0, [10, 20])] [] [] [.range false 0 1 1 5 [.get 1 0] (some [.getS 0 0])] =
+    .ok [(0, [10, 20])] [10] := by decide
+example : vrun 10 [(0, [10, 20])] [] [] [.range false 0 1 1 5 [.get 1 0] none] = .trap := by
+  decide
+
+/-- After the block the view is gone: naming it is stuck (and the access rules refuse it). -/
+example : vrun 10 [(0, [10, 20])] [] [] [.range false 0 1 0 2 [] none, .get 1 0] = .stuck := by
+  decide
+
+/-- A write through a shared view is stuck (the access rules refuse it). -/
+example : vrun 10 [(0, [10, 20])] [] [] [.range false 0 1 0 2 [.set 1 0 5] none] = .stuck := by
+  decide
+
+/-- A block whose statements all access its view `v`. -/
+inductive ViewOnly (v : Nat) : List VStmt → Prop where
+  | nil : ViewOnly v []
+  | get {i rest} : ViewOnly v rest → ViewOnly v (.get v i :: rest)
+  | set {i x rest} : ViewOnly v rest → ViewOnly v (.set v i x :: rest)
+
+/-! ### Text views (Q4.6, Q4.7)
+
+Well-formed UTF-8 (RFC 3629, Unicode table 3-7): a byte list split into scalars, each one to four
+bytes: a lead byte and continuation bytes `0x80`–`0xBF`, with the second byte restricted after
+`0xE0`, `0xED`, `0xF0` and `0xF4` so that no overlong form, surrogate or value above `U+10FFFF` is
+well formed. A text range on scalar boundaries of well-formed text is itself well formed
+(`text_view_utf8`, `Proofs/Borrow.lean`). -/
+
+/-- A continuation byte. -/
+def cont (c : Nat) : Bool := 0x80 ≤ c && c ≤ 0xBF
+
+/-- One well-formed UTF-8 encoded scalar. -/
+def isScalar : List Nat → Bool
+  | [x] => x < 0x80
+  | [x, c] => 0xC2 ≤ x && x ≤ 0xDF && cont c
+  | [x, c, d] =>
+    ((x == 0xE0 && 0xA0 ≤ c && c ≤ 0xBF) ||
+      (((0xE1 ≤ x && x ≤ 0xEC) || (0xEE ≤ x && x ≤ 0xEF)) && cont c) ||
+      (x == 0xED && 0x80 ≤ c && c ≤ 0x9F)) && cont d
+  | [x, c, d, e] =>
+    ((x == 0xF0 && 0x90 ≤ c && c ≤ 0xBF) || (0xF1 ≤ x && x ≤ 0xF3 && cont c) ||
+      (x == 0xF4 && 0x80 ≤ c && c ≤ 0x8F)) && cont d && cont e
+  | _ => false
+
+/-- Well-formed UTF-8: a sequence of well-formed scalars. -/
+inductive Utf8 : List Nat → Prop where
+  | nil : Utf8 []
+  | cons {s rest} : isScalar s = true → Utf8 rest → Utf8 (s ++ rest)
+
+/-- The bytes of the text range `[a, b)`. -/
+def textSlice (bs : List Nat) (a b : Nat) : List Nat := (bs.drop a).take (b - a)
+
+/-- `"é!"` is well formed, and so is its range `[0, 2)`, `"é"`. -/
+example : Utf8 [0xC3, 0xA9, 0x21] := .cons (s := [0xC3, 0xA9]) rfl (.cons (s := [0x21]) rfl .nil)
+example : textSlice [0xC3, 0xA9, 0x21] 0 2 = [0xC3, 0xA9] := rfl
+
+/-- A lone continuation byte, an overlong `/` (`0xC0 0xAF`) and a surrogate (`0xED 0xA0 0x80`) are
+not scalars. -/
+example : isScalar [0xA9] = false := rfl
+example : isScalar [0xC0, 0xAF] = false := rfl
+example : isScalar [0xED, 0xA0, 0x80] = false := rfl
 
 end ConcreteSpec.Borrow
 

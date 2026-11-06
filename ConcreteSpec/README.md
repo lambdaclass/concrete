@@ -22,7 +22,8 @@ stage A2c (row Q9.19). Before that, the owner approved the Core design provision
    - **Part 2, representation** (Q3.11): byte layout and encoding.
    - **Part 3, structured cleanup** (Q9.8): `defer`, frames, exits.
    - **Part 4, scoped borrows** (Q3.3, Q3.4, Q9.5, REF-11), with range subviews (Q4.7):
-     `borrow [mut] v from a until b as s { … } [else { … }]`.
+     `borrow [mut] v from a until b as s { … } [else { … }]`, the no-escape rules, element access
+     through a view at run time (`vrun`), and well-formed UTF-8 for text views.
    - **Part 5, allocator brands** (Q1.1–Q1.5, Q1.13), with the executable ghost run and the
      erased run.
    - **Part 6, authority** (the authority rules, Q5.1–Q5.4, Q7.11): capabilities, grants,
@@ -38,7 +39,7 @@ stage A2c (row Q9.19). Before that, the owner approved the Core design provision
    | `Proofs/Slice0.lean` | `slice0_exits` (an accepted slice-0 program exits with a `u8` status), `slice0_never_traps`, `toCore_injective` |
    | `Proofs/Rep.lean` | `rep_roundtrip` (design theorem 1) |
    | `Proofs/Cleanup.lean` | `defer_cleanup_releases` (design theorem 2) |
-   | `Proofs/Borrow.lean` | `open_mut_freezes_root` (design theorem 3), `shared_open_grants_no_write`; ranges: `knownInvalid_iff` (a range is refused exactly when the known facts prove it invalid), `knownInvalid_traps`, `range_can_open`, `enter_in_bounds`, `range_open_mut_freezes_root` |
+   | `Proofs/Borrow.lean` | `open_mut_freezes_root` (design theorem 3), `shared_open_grants_no_write`; ranges: `knownInvalid_iff` (a range is refused exactly when the known facts prove it invalid), `knownInvalid_traps`, `range_can_open`, `enter_in_bounds`, `range_open_mut_freezes_root`; no escape: `view_not_moved`, `view_not_used_after`, `root_restored`; element access: `view_in_source`, `view_get`, `view_set`, `viewsOk_enter`, `viewsOk_put`; mutation: `view_write_exact`, `range_block_frame`; text: `text_view_utf8`, `utf8_split` |
    | `Proofs/Brand.lean` | `reset_fresh` (design theorem 4), the brand refusals, `checked_passes_brand_checks` (a checked program never fails a ghost brand check), `brand_erasure` (Q1.1: its run with brands erased does exactly what its ghost run does), `ghost_run` |
    | `Proofs/Authority.lean` | `authority_contained` (every operation a run performs uses a grant `main` was launched with, of the right type, under a capability `main` declares, for every fuel), `sub_iff`, `equiv_iff` |
    | `Proofs/Observe.lean` | `checked_observation`, `checked_observable` (an accepted program's observation and status), `refused_start` |
@@ -76,6 +77,13 @@ Formalized at A2c, each with rules, examples and proofs:
   brand check (`checked_passes_brand_checks`), for every outcome of the loop tests.
 - **Range subviews** (Q4.7, part 4): the range test for arrays and UTF-8 text, `else`, the trap
   without `else`, and the refusal of a range proven invalid (OD118), complete for the known facts.
+  Element access `v[i]` reaches exactly source element `a + i`, inside `[a, b)` and the source, or
+  traps (`view_in_source`, `view_get`, `view_set`); a write changes exactly that element
+  (`view_write_exact`), and a block that accesses only its view changes nothing outside
+  `[a, b)` (`range_block_frame`). No escape: a view never moves (so is never returned, stored,
+  passed or captured), is never named after its block, and the source's root is back with
+  exactly its earlier entries, freeze released (`view_not_moved`, `view_not_used_after`,
+  `root_restored`). A valid text range of well-formed UTF-8 is well formed (`text_view_utf8`).
 - **Trap and exit observations** (Q7.10, Q8.5, part 7): startup refusal 125, the returned code,
   trap 134, and what each observation records.
 - **The slice-0 fragment** (part 1): a Core syntax the compiler can target, embedded into slice 1.
@@ -102,7 +110,11 @@ Open obligations, by name:
 - **O8 Part 3** abstracts each deferred call to its identity, dependencies, loans and whether it
   traps; it does not model the statements between registrations or evaluating a `return` value
   before cleanup.
-- **O9 Part 4** does not model element access, the no-escape rules, or text whose length is known
-  while its bytes are not (such a range is treated as unknown).
+- **O9 Part 4**: the run-time fragment (`vrun`) and the access rules (`Ok`) are separate
+  fragments, not yet joined in one soundness theorem (A3); the run covers array sources (text
+  views share the index arithmetic, and their validity is `text_view_utf8`); views of views,
+  writes through text views, and text whose length is known while its bytes are not (treated as
+  unknown) are not modelled; the frame theorem covers bodies that access only their view. That
+  compiled code performs the same range check is a compiler-slice obligation (O5).
 - **O10 Part 5** abstracts the condition of `while`: loop test number `k` takes the outcome
   `σ k`, and the results hold for every `σ`.
