@@ -41,7 +41,7 @@ Each row records a decision and its reason. A language rule itself is its Lean d
 - The predictable policy ([row](#decided-project-predictable-policy)).
 - Reproducible builds from B1 ([row](#decided-project-reproducible-builds)).
 - The spec layout: one library in modules ([row](#decided-project-long-term-2026-11-06)).
-- Lean is the specification ([row](#decided-project-lean-is-the-spec)).
+- A minimal root ([row](#decided-project-lean-root)).
 - The LCB joins slice 0 ([row](#decided-project-proof-infrastructure)).
 - Policies and declared assumptions in `Concrete.toml` ([row](#decided-project-concrete-toml)).
 - `legacy/` kept until after phase D ([row](#decided-project-restart)).
@@ -845,6 +845,13 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   and agy, for the owner). The common acceptance shape is in the
   [roadmap](../ROADMAP.md#vertical-slices). This splits the former slice 1: its linear component
   and launcher obligations arrive with the ownership slice (revising [Q8.2](#q8-2-revision)).
+- <a id="decided-project-lean-root"></a>**A minimal root** (owner, 2026-11-06: "keep the folders and
+  root of the new compiler simple and lean"). The root and the new compiler's folders stay small:
+  the root holds only the entries listed in
+  [scripts/checks/root_inventory.txt](../scripts/checks/root_inventory.txt), which a root check
+  enforces, and a new folder or file comes in only with the change that needs it, adding its line
+  there. This keeps the [restart](#decided-project-restart)'s minimal day-one root (R-0558) as the
+  rule after the move.
 - <a id="decided-project-outside-readers"></a>**The outside readers** (owner, 2026-11-06: "me but also
   agy and codex and kimi if it's available"). The outside-reader pass (R-0559) is done by the owner and
   independent models: agy (Gemini), Codex, and Kimi when available (its absence is recorded, not
