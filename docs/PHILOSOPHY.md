@@ -25,7 +25,8 @@ Contents:
 know everything a program does: what it does, what it may touch, whether it can fail or stop, and
 what is proved about it.** "Fully proven" means compiler correctness proved end to end, with every
 unproven step named as an explicit assumption and never silently trusted, and a program's own
-correctness proved by Lean theorems about it
+correctness proved by Lean theorems about it. This states the project's goal: each guarantee holds
+only as its evidence lands, and native claims remain conditional on their named assumptions
 ([decision](decisions.md#decided-project-core-statement)).
 
 Concrete is a small systems language for code that must be reviewed, audited, bounded and proved:

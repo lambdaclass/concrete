@@ -580,7 +580,9 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   proof model ([proof infrastructure](#decided-project-proof-infrastructure)): compiler correctness
   is proved end to end, with every unproven step named as an explicit assumption and never silently
   trusted, and a program's own correctness is proved by Lean theorems about it. The statement says
-  what the language is for; each guarantee holds as its evidence lands.
+  what the language is for, not what is proved today: each guarantee holds only as its evidence
+  lands, compiler correctness and program correctness need separate proofs, and native claims remain
+  conditional on their named assumptions (the unverified LLVM path among them).
 - <a id="decided-project-facts-report"></a>**The per-function facts report from slice 0** (owner,
   2026-11-06: "we need to know from the start if a function is doing what etc"). The report that
   answers "what may this function do" is a slice-0 deliverable (B0, R-0575), not a phase-F addition.
@@ -588,17 +590,25 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   establish: the capabilities used and the grants and resources actually reachable; allocation and
   the allocator; trusted, foreign and opaque boundaries and the assumptions they carry; every
   operation that could fail and how it is handled (proven safe, a written branch, a checked
-  operation); termination (proved, or the termination permission and its source line); the recursion
+  operation); termination (termination evidence with its named premises, or the responsible source
+  permission and the call path to it); the recursion
   depth and stack bound, or why none is established; proof status (each obligation and the theorem
   that discharges it); and whether the report is complete. Its schema is versioned and readable by
-  people, CI and language models. Slice 0's report is small, but the machinery exists from the first
-  commit and grows with each feature; R-0178 freezes the schema and R-0201 builds the audit commands
-  on it. It continues the legacy compiler's `--report` family (effects, caps, alloc, recursion,
+  people, CI and language models. From slice 0 the compiler also answers queries over the same facts
+  (owner, 2026-11-06: "i want to have since the get go the ability to ask the compiler what a function
+  can do, allocate, etc"): asked about one function or module, it returns that function's facts,
+  each with its reason and evidence, both as readable text and in the versioned machine format. The
+  report and the query are one fact source, not two implementations. Slice 0's facts are small, but
+  the machinery exists from the first commit and grows with each feature; R-0178 freezes the
+  versioned schema R-0575 introduces, R-0494 grows this fact source into the single verdict authority,
+  and R-0201 builds the audit commands (`audit`, `explain`, `why`, `diff`) on the query. The query's
+  command-line spelling is an owner question, pending. It continues the legacy compiler's `--report` family (effects, caps, alloc, recursion,
   stack-depth), re-derived from the new rules.
 - <a id="decided-project-outside-readers"></a>**The outside readers** (owner, 2026-11-06: "me but also
   agy and codex and kimi if it's available"). The outside-reader pass (R-0559) is done by the owner and
-  three independent models: agy (Gemini), Codex and Kimi. They read the browsable owner view of the
-  integrated spec. The models read first; every point one of them finds unclear is recorded and
+  independent models: agy (Gemini), Codex, and Kimi when available (its absence is recorded, not
+  waited on). They read the browsable owner view of the
+  integrated spec. The participating models read first; every point one of them finds unclear is recorded and
   resolved before the owner reads. The pass runs before the freeze (A2c) and again for each feature.
 - <a id="decided-project-contracts"></a>**Contracts and termination in verified growth** (row P18,
   2026-11-05). No source `old`, quantifier, implication or snapshot construct (OD117); entry, exit and
