@@ -840,18 +840,20 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   (owner, 2026-11-06). The language grows in thin vertical slices, each fully proven end to end
   (source, every stage, BIR, both backends, facts and diagnostics, conformance examples) before
   the next starts, so every construct is proven on the whole path as soon as it lands and no stage
-  runs ahead of its proofs. Integers come first and capabilities early; LP0 lands before the
+  runs ahead of its proofs. "Fully proven" means proven under the named premises the
+  [backend order](#decided-project-proof-infrastructure) permits: the source-to-BIR stages are
+  proved; the LLVM build stays unverified and qualified by tests; the LCB path carries named premises
+  until its proof lands (the adapter first, then LP0), the two backends' premises kept separate. Integers come first and capabilities early; LP0 lands before the
   language grows large. The order is to be filled from the agreed slice plan (Claude, Codex, Kimi
   and agy, for the owner). The common acceptance shape is in the
   [roadmap](../ROADMAP.md#vertical-slices). This splits the former slice 1: its linear component
   and launcher obligations arrive with the ownership slice (revising [Q8.2](#q8-2-revision)).
 - <a id="decided-project-lean-root"></a>**A minimal root** (owner, 2026-11-06: "keep the folders and
   root of the new compiler simple and lean"). The root and the new compiler's folders stay small:
-  the root holds only the entries listed in
+  the top-level entries and the immediate entries under `docs/` and `scripts/` are those listed in
   [scripts/checks/root_inventory.txt](../scripts/checks/root_inventory.txt), which a root check
-  enforces, and a new folder or file comes in only with the change that needs it, adding its line
-  there. This keeps the [restart](#decided-project-restart)'s minimal day-one root (R-0558) as the
-  rule after the move.
+  enforces, and something comes back from `legacy/` only in the change that needs it. This keeps the
+  [restart](#decided-project-restart)'s minimal day-one root (R-0558) after the move.
 - <a id="decided-project-outside-readers"></a>**The outside readers** (owner, 2026-11-06: "me but also
   agy and codex and kimi if it's available"). The outside-reader pass (R-0559) is done by the owner and
   independent models: agy (Gemini), Codex, and Kimi when available (its absence is recorded, not
