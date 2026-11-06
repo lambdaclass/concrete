@@ -631,7 +631,37 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   versioned schema R-0575 introduces, R-0494 grows this fact source into the single verdict authority,
   and R-0201 builds the audit commands (`audit`, `explain`, `why`, `diff`) on the query. The query's
   command-line spelling is an owner question, pending. It continues the legacy compiler's `--report` family (effects, caps, alloc, recursion,
-  stack-depth), re-derived from the new rules.
+  stack-depth), re-derived from the new rules. The design, checked by Codex, agy and Kimi (each
+  ACCEPT-WITH-CHANGES, converging on the points below, recorded under the owner's rule that what
+  Claude and Codex agree on is recorded):
+  - *One derivation.* Every fact is a typed judgment defined in Lean, with a derivation-soundness
+    theorem, and an obligation-discovery completeness theorem wherever it claims an absence. One
+    derivation feeds the readable view, the machine format and every policy; the legacy compiler
+    drifted with three independent producers.
+  - *Closed status per fact:* established; conditional (on named assumptions, transitive debt from
+    `assume`, unproved invariants, trusted or foreign contracts); refuted (with a witness path); not
+    established (with the blocker and its site); not applicable. Coverage is stated per fact, not as
+    one global flag, and an unknown fact never satisfies a policy.
+  - *Separate vocabulary.* Empty capabilities do not mean "touches nothing": authority (`with(...)`),
+    resources (handles, allocators, `Kept<H>`) and memory reads and writes through `&mut` and borrows
+    are separate facts. "Can fail" is split into discharged implicit-trap sites, `Result` errors,
+    explicit `abort`, allocation failure, stack exhaustion and foreign behaviour. Determinism,
+    information flow, constant time and concurrency are separate future judgments; termination and
+    a stack bound imply none of them.
+  - *Honest numbers.* A stack number comes only from final-artifact and target evidence, never from a
+    source estimate; an opaque, indirect, foreign or recursive path gives "not established", never a
+    finite guess. "Bounded" never implies a wall-clock deadline.
+  - *Composition.* Local and transitive summaries, module rollups and drill-down to the call site and
+    obligation; transitive through indirect and opaque calls, cleanup and callbacks; fail-closed.
+  - *Policies consume the same facts.* A policy such as the
+    [predictable policy](#decided-project-predictable-policy) is a named, versioned bundle over these
+    facts, never a second analysis or semantics mode ([OD124](#od124)); its result is satisfied,
+    violated or incomplete, and only satisfied passes. Requiring termination rejects permitted
+    divergence.
+  - *Identities and versions.* Typed identities (module, function, instance; no bare-name
+    collisions); versioned schema and semantics; units; deterministic order; machine-readable
+    reasons; replay commands; every answer bound to the compiler, spec, dependency, target and
+    artifact digests. An unknown version never satisfies CI.
 - <a id="decided-project-predictable-policy"></a>**The predictable policy** (owner, 2026-11-06: "yes
   this is critical"). An optional policy a module or project turns on, built on the per-function facts
   ([facts report](#decided-project-facts-report)): every function in its scope allocates nothing,
