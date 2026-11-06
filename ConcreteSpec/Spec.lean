@@ -1726,6 +1726,95 @@ inductive WritesRoot (r : Nat) : Ctx → List Stmt → Prop where
       WritesRoot r Γ (.borrow m s v body :: rest)
   | tail {Γ Γ₁ s rest} : Ok Γ [s] Γ₁ → WritesRoot r Γ₁ rest → WritesRoot r Γ (s :: rest)
 
+/-! ### Range subviews (Q4.7)
+
+`borrow [mut] src from a until b as v { body } else { els }` opens the half-open range `[a, b)`
+of `src` as the view `v` (Q4.7: one scoped form for every view; there is no separate slice
+construct). The source and then both `u64` bounds are evaluated once, left to right; in Core all
+three are atoms, so their evaluation cannot trap. The range is valid when `a ≤ b ≤ len(src)`,
+counted in elements for an array and in bytes for text; text also needs both offsets on UTF-8
+scalar boundaries (R4 F4.2: `0`, the length, or an offset whose byte is not a continuation byte
+`0b10xxxxxx`). If the range is valid, the body runs with `v`, indexed relative to `a`, under the
+access rules of `borrow [mut] src as v { body }` (`Ok`): the view keeps the source's root, and a
+mutable open freezes it. If the range is invalid, `else` runs; without `else` the program traps,
+like indexing out of range. A range statically known to be invalid is refused when there is no
+`else` (OD118, everywhere, including trusted code) and accepted when there is one, whose `else`
+then runs as ordinary branching (Q4.7). Without a range there is no `else` (the whole view always
+opens). Element access and the no-escape rules are not modelled here.
+-/
+
+/-- A source's value at run time: an array of `len` elements, or text with its bytes. -/
+inductive Source where
+  | array (len : Nat)
+  | text (bytes : List Nat)
+  deriving DecidableEq, Repr
+
+/-- The length of a source: elements for an array, bytes for text. -/
+def Source.len : Source → Nat
+  | .array n => n
+  | .text bs => bs.length
+
+/-- `i` is a UTF-8 scalar boundary of the text `bs` (R4 F4.2): `0`, the length, or an offset
+whose byte is not a continuation byte (`x / 64 = 2` is `0b10xxxxxx`). -/
+def boundary (bs : List Nat) (i : Nat) : Bool :=
+  i == 0 || i == bs.length ||
+    (match bs[i]? with
+     | some x => x / 64 != 2
+     | none => false)
+
+/-- The range `[a, b)` is valid for the source (Q4.7). -/
+def validRange : Source → Nat → Nat → Bool
+  | .array n, a, b => decide (a ≤ b ∧ b ≤ n)
+  | .text bs, a, b => decide (a ≤ b ∧ b ≤ bs.length) && boundary bs a && boundary bs b
+
+/-- What opening a range does at run time. -/
+inductive RangeStep where
+  /-- Run the body with the view `[a, b)`. -/
+  | enter
+  /-- Run `else`. -/
+  | orElse
+  /-- There is no `else`: trap. -/
+  | trap
+  deriving DecidableEq, Repr
+
+/-- Open the range `[a, b)` of `src`, with or without an `else`. -/
+def openRange (src : Source) (a b : Nat) (hasElse : Bool) : RangeStep :=
+  if validRange src a b then .enter else if hasElse then .orElse else .trap
+
+/-- The view's index `i` is the source's index `a + i` (Q4.7: indexed relative to its start). -/
+def viewIndex (a i : Nat) : Nat := a + i
+
+/-- What the checker knows statically about the source and the bounds, from the fixed table of
+statically known values (Q6.2: literals, immutable bindings of known values; an array's length
+from its type). `none` is unknown. -/
+structure RangeFacts where
+  src : Option Source
+  a : Option Nat
+  b : Option Nat
+  deriving DecidableEq, Repr
+
+/-- The range is statically known to be invalid: everything is known, and the range is not
+valid. -/
+def knownInvalid (k : RangeFacts) : Bool :=
+  match k.src, k.a, k.b with
+  | some s, some a, some b => !validRange s a b
+  | _, _, _ => false
+
+/-- A run-time source and bounds agree with what the checker knows. -/
+def Agrees (k : RangeFacts) (s : Source) (a b : Nat) : Prop :=
+  (∀ s', k.src = some s' → s' = s) ∧ (∀ a', k.a = some a' → a' = a) ∧ (∀ b', k.b = some b' → b' = b)
+
+/-- The range form is accepted, from the places `Γ` to `Γ'` with the statements `rest` after it.
+Its success path is checked as the plain borrow (`Ok`, the same access rules); its failure path is
+`else` followed by `rest`, and both paths reach the same places. Without `else`, a range known to
+be invalid is refused (OD118). -/
+def RangeOk (Γ : Ctx) (m : Bool) (src v : Nat) (k : RangeFacts) (body : List Stmt)
+    (els : Option (List Stmt)) (rest : List Stmt) (Γ' : Ctx) : Prop :=
+  Ok Γ (.borrow m src v body :: rest) Γ' ∧
+    match els with
+    | none => knownInvalid k = false
+    | some e => Ok Γ (e ++ rest) Γ'
+
 /-! ### Examples
 
 Place 0 is a mutable owned variable; views take fresh numbers. -/
@@ -1808,6 +1897,39 @@ example : ¬ ∃ Γ', Ok x0 [.borrow false 0 1 [.move 0]] Γ' := by
     simp only [x0, find, ↓reduceIte, Option.some.injEq] at hs; subst hs
     cases hb with
     | move hf hl _ _ => simp [bodyCtx, find, mapPlaces, lockFor, x0, view] at hf; subst hf; simp at hl
+
+/-! ### Range examples (Q4.7) -/
+
+/-- An array of 10 elements: `from 2 until 5` opens; `from 5 until 2` and `from 3 until 11` do
+not, and run `else` if there is one, or trap. -/
+example : openRange (.array 10) 2 5 false = .enter := by decide
+example : openRange (.array 10) 5 2 true = .orElse := by decide
+example : openRange (.array 10) 3 11 false = .trap := by decide
+
+/-- The text `"é!"` is the bytes `0xC3 0xA9 0x21`. `from 0 until 2` is `"é"`; `from 1 until 3`
+starts inside `é` and is invalid. -/
+example : openRange (.text [0xC3, 0xA9, 0x21]) 0 2 false = .enter := by decide
+example : openRange (.text [0xC3, 0xA9, 0x21]) 1 3 false = .trap := by decide
+example : openRange (.text [0xC3, 0xA9, 0x21]) 3 3 false = .enter := by decide
+
+/-- `borrow xs from 2 until 9 as s { … }` over an array of 4 is known invalid: refused without
+`else`. -/
+example : knownInvalid ⟨some (.array 4), some 2, some 9⟩ = true := by decide
+
+example : ¬ ∃ Γ', RangeOk x0 false 0 1 ⟨some (.array 4), some 2, some 9⟩ [.read 1] none [] Γ' := by
+  rintro ⟨_, _, h⟩
+  exact absurd (show knownInvalid ⟨some (.array 4), some 2, some 9⟩ = false from h) (by decide)
+
+/-- With `else` the same range is accepted, and the `else` runs (ordinary branching). -/
+example : ∃ Γ', RangeOk x0 false 0 1 ⟨some (.array 4), some 2, some 9⟩ [.read 1] (some [.read 0])
+    [] Γ' :=
+  ⟨_, .borrow rfl (by decide) (by intro h; cases h) rfl (.read rfl (by decide) .nil) .nil,
+    .read rfl (by decide) .nil⟩
+
+/-- With an unknown bound, the range is accepted without `else`, and traps if it is invalid at
+run time. -/
+example : ∃ Γ', RangeOk x0 false 0 1 ⟨some (.array 4), some 2, none⟩ [.read 1] none [] Γ' :=
+  ⟨_, .borrow rfl (by decide) (by intro h; cases h) rfl (.read rfl (by decide) .nil) .nil, rfl⟩
 
 end ConcreteSpec.Borrow
 

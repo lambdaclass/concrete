@@ -233,4 +233,66 @@ theorem shared_open_grants_no_write {Γ s v body rest q Γ'}
         · by_cases h2 : q1.lock = .free <;> simp [lockFor, h1, h2] at hl
         · simp [lockFor, h1] at hr
 
+/-- **A refused range would trap.** If the checker knows a range is invalid, every run whose
+source and bounds agree with what it knows fails the range test: without `else` it would trap
+(OD118, Q4.7). -/
+theorem knownInvalid_traps {k : RangeFacts} (hk : knownInvalid k = true) {s : Source} {a b : Nat}
+    (hs : Agrees k s a b) : openRange s a b false = .trap := by
+  unfold knownInvalid at hk
+  split at hk
+  · rename_i s' a' b' h1 h2 h3
+    rw [hs.1 s' h1, hs.2.1 a' h2, hs.2.2 b' h3] at hk
+    simp only [openRange, Bool.not_eq_true'] at hk ⊢
+    simp [hk]
+  · cases hk
+
+/-- An accepted range without `else` traps only when the checker did not know everything about
+it. -/
+theorem range_trap_unknown {Γ m src v k body rest Γ'}
+    (h : RangeOk Γ m src v k body none rest Γ') {s : Source} {a b : Nat} (hs : Agrees k s a b)
+    (ht : openRange s a b false = .trap) : k.src = none ∨ k.a = none ∨ k.b = none := by
+  have hk : knownInvalid k = false := h.2
+  cases h1 : k.src with
+  | none => exact .inl rfl
+  | some s' =>
+    cases h2 : k.a with
+    | none => exact .inr (.inl rfl)
+    | some a' =>
+      cases h3 : k.b with
+      | none => exact .inr (.inr rfl)
+      | some b' =>
+        exfalso
+        simp only [knownInvalid, h1, h2, h3, Bool.not_eq_false'] at hk
+        rw [hs.1 s' h1, hs.2.1 a' h2, hs.2.2 b' h3] at hk
+        simp [openRange, hk] at ht
+
+/-- **An opened view stays inside its source.** When the range opens, every index of the view
+is an index of the source, and for text both ends are scalar boundaries. -/
+theorem enter_in_bounds {s : Source} {a b : Nat} {e : Bool} (h : openRange s a b e = .enter) :
+    a ≤ b ∧ b ≤ s.len ∧ (∀ i, i < b - a → viewIndex a i < s.len) ∧
+      ∀ bs, s = .text bs → boundary bs a = true ∧ boundary bs b = true := by
+  have hv : validRange s a b = true := by
+    unfold openRange at h; split at h
+    · assumption
+    · split at h <;> cases h
+  cases s with
+  | array n =>
+    simp only [validRange, decide_eq_true_eq] at hv
+    refine ⟨hv.1, hv.2, fun i hi => ?_, fun bs h => by cases h⟩
+    simp only [viewIndex, Source.len]; omega
+  | text bs =>
+    simp only [validRange, Bool.and_eq_true, decide_eq_true_eq] at hv
+    obtain ⟨⟨⟨hab, hb⟩, ha'⟩, hb'⟩ := hv
+    refine ⟨hab, hb, fun i hi => ?_, fun bs' h => ?_⟩
+    · simp only [viewIndex, Source.len]; omega
+    · cases h; exact ⟨ha', hb'⟩
+
+/-- **`open_mut_freezes_root` for range opens.** Inside an accepted
+`borrow mut src from a until b as v { body } [else { … }]`, no place of `src`'s root that existed
+before the open is touched in the body: the range clause changes nothing about access (Q4.7). -/
+theorem range_open_mut_freezes_root {Γ src v k body els rest Γ' q}
+    (h : RangeOk Γ true src v k body els rest Γ') (hs : find Γ src = some q) :
+    ∀ p q', find Γ p = some q' → q'.root = q.root → ¬ Touches p body :=
+  open_mut_freezes_root h.1 hs
+
 end ConcreteSpec.Borrow
