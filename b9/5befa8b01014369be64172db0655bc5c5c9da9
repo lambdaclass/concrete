@@ -1,0 +1,6 @@
+[piece 5 of 6: docs]
+- docs/decisions.md:642: The retirement of `#[overflow_checked]` is recorded as an owner decision with only “owner, 2026-11-06”; it supplies neither the quoted owner answer nor a quoted owner rule authorizing this retirement. Add that provenance before treating ARITH-9 as revised, as required by the recording rule.
+[piece 6 of 6: docs]
+- docs/proposals/IDEAS.md:92: Error conventions are classified as DEFERRED, contradicting ranked item 12 and the PLANNED section. Item 12 says error conventions are planned through R-0057 → R-0071; only signature normalization is deferred. This incorrectly presents planned work as having no live task.
+
+Owner-decision verification remains incomplete because repository reads failed.
