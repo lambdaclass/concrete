@@ -19,10 +19,11 @@ source scripts/checks/lib/bounded.sh
 [ "$BOUNDED_HAVE_WATCHDOG" = 1 ] || { echo "slice0_backends: python3 is required for bounded runs" >&2; exit 2; }
 lake build Concrete lean-compiler-backend/lcb >/dev/null
 lcb="$root/.lake/packages/lean-compiler-backend/.lake/build/bin/lcb"
-case "$(uname -m)" in
-  x86_64) target=amd64_sysv ;;
-  aarch64|arm64) target=arm64 ;;
-  *) echo "slice0_backends: unsupported host $(uname -m)" >&2; exit 2 ;;
+case "$(uname -s)-$(uname -m)" in
+  Linux-x86_64) target=amd64_sysv ;;
+  Linux-aarch64) target=arm64 ;;
+  Darwin-arm64) target=arm64_apple ;;
+  *) echo "slice0_backends: unsupported host $(uname -s)-$(uname -m)" >&2; exit 2 ;;
 esac
 emitter=(lake env lean --run scripts/checks/slice0_bir.lean)
 
@@ -45,6 +46,7 @@ build() { # build NAME LOG CMD...
 
 fail=0
 count=0
+examples=0
 # check NAME DIR SECS RETRY: build both backends in DIR, run them and judge them.
 check() {
   local name=$1 d=$2 backend
@@ -65,10 +67,13 @@ check() {
   done
 }
 
-for name in $("${emitter[@]}" list); do
+names=$("${emitter[@]}" list) || { echo "slice0_backends: listing the examples failed" >&2; exit 1; }
+[ -n "$names" ] || { echo "slice0_backends: no examples listed" >&2; exit 1; }
+for name in $names; do
   d="$work/ex/$name"
   "${emitter[@]}" emit "$name" "$d"
   check "$name" "$d" 10 20
+  examples=$((examples + 1))
 done
 "${emitter[@]}" loop "$work/ctl/loop"
 check control-loop "$work/ctl/loop" 1 1
@@ -95,6 +100,6 @@ for c in "no-newline|134|concrete: trap: x|" "extra-newline|134|concrete: trap: 
   fi
 done
 
-[ "$count" -gt 0 ] || { echo "slice0_backends: no examples ran" >&2; exit 1; }
-echo "slice0_backends: $count backend runs"
+[ "$examples" -gt 0 ] || { echo "slice0_backends: no examples ran" >&2; exit 1; }
+echo "slice0_backends: $examples examples, $count backend runs (controls included)"
 exit "$fail"

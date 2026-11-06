@@ -48,7 +48,7 @@ BIR  (`out.bir`)  ── designed for both backends from the start
   │ clang/llc, link                          LCB-IR  (`out.lcb`)
   │ (premise P_toolchain[llvm])                │ LCB lowering + assembler + link
   ▼                                            ▼ (premise P_toolchain[lcb]: LCB's named trust boundaries)
-executable (x86-64)                          executable (x86-64 and AArch64)
+executable (x86-64)                          executable (x86-64, AArch64 macOS)
   │ run: premises P_launch, P_live (environment), under the target profile
   ▼
 observed behaviour  →  observation (exit status 0–255 / 125 startup refusal / 134 trap + fd-2 line)
@@ -310,7 +310,7 @@ Every premise is used in the composition:
 - `emit` takes the meaning to the BIR behaviour;
 - `live` makes all of this non-vacuous for the image.
 
-There are two target profiles: `x86_64-linux` and `aarch64-linux`. The LLVM backend runs on `x86_64-linux` (on concrete-ci-2) and as a cross-check on `aarch64-linux`. The LCB backend runs on both.
+There are two target profiles: `x86_64-linux` and `aarch64-macos` (LCB's first native proof profile). The LLVM backend runs on `x86_64-linux` (on concrete-ci-2) and as a cross-check on `aarch64-macos`. The LCB backend runs on both.
 
 **The open premises for slice 0:**
 
@@ -551,7 +551,7 @@ The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2
    A second leg compares generated BIR directly with both backends, to cover BIR shapes that lowering does not produce.
 
    An in-process leg also compares `BIR.behaviour b` with LCB's own evaluator on `adapt b`. That is the executable shadow of `adapter_correct` until it is proved.
-6a. **AArch64:** a GitHub-hosted `ubuntu-24.04-arm` job builds the LCB output for `aarch64-linux`, runs gates 4 and 6 there natively, and compares against Lean. LLVM-native also runs there, as a third cross-check. Gates 4 and 6 for x86-64 run on concrete-ci-2.
+6a. **AArch64:** a GitHub-hosted AArch64 macOS job (`macos-15`) builds the LCB output for `aarch64-macos`, runs gates 4 and 6 there natively, and compares against Lean. LLVM-native also runs there, as a third cross-check. Gates 4 and 6 for x86-64 run on concrete-ci-2.
 7. **Certificates:** the kernel checks every acceptance and refusal certificate, with measured budgets.
 
 **Negative controls**, each a mutation the matching gate must refuse:
@@ -594,7 +594,7 @@ These are internal. None blocks slice 0's correctness.
   - the generic table-parser theorem (P_parse);
   - `adapter_correct` (P_adapter, a slice-0 milestone);
   - a proof of the decoding entry against a libc model (P_rt).
-- **P_toolchain[lcb]** is retired by LCB's own C01–C03 work. LCB's verified profile names Apple AArch64 as its intended target. The Linux `x86_64` and `aarch64` executables go through LCB's compatibility pipeline, inside P_toolchain[lcb], until LCB certifies those targets.
+- **P_toolchain[lcb]** is retired by LCB's own C01–C03 work. LCB's verified profile names Apple AArch64 as its intended target. The `x86_64-linux` executable goes through LCB's compatibility pipeline, inside P_toolchain[lcb], until LCB certifies that target.
 - **Encoded result.** It works while LCB's verified profile has no calls, memory or traps. When it gains them, revisit the encoding: an external trap call, or a multi-function encoding.
 - **SSA:** replace the direct `ssa_correct` with a proved validator. BIR's shape must not depend on the direct proof.
 - **Certificates:** move from per-edge `decide` to per-edge witnesses checked by proved validators (R-0552/R-0521), with con-leche/nanoda replay.
@@ -631,6 +631,6 @@ These are internal. None blocks slice 0's correctness.
 
 - Mono Core.
 - Grants, the launcher's startup refusal (125) and events.
-- LP0 beyond slice 0: the slice-1 subset through LCB, and LCB's preservation theorem replacing `P_toolchain[lcb]`.
+- The LP0 proven path: LCB's own theorems composed with `adapter_correct`, replacing `P_toolchain[lcb]`. It comes right after slice 4. In slice 0 LCB already runs, unverified, with the adapter proof first.
 - An LLVM-IR semantics. The LLVM meaning `M` stays a premise parameter until one exists, and then `P_print` becomes a theorem.
 - The information-flow and constant-time analysis. The surface and the observer are decided; slice 0 has only the fact fields.
