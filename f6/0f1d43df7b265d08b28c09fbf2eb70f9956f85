@@ -1,0 +1,2 @@
+[piece 10 of 11: scripts]
+- scripts/spec/lean_site.py:169: Proof modules are discovered only from retained named declarations. An imported proof module containing only `example` commands or module documentation is silently omitted from the site, including its proofs and prose. Enumerate proof modules from the import closure or source files; the current missing-module check covers only `ConcreteSpec.Spec.*`.
