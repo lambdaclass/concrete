@@ -4,8 +4,9 @@
   export_inventory.py meta FILE            lean version, exporter version, format version
   export_inventory.py theorems FILE        every exported theorem's full name, one per line
   export_inventory.py axioms FILE          every exported axiom's full name, one per line
-  export_inventory.py statements FILE      every exported theorem as `<name>\t<universe params>\t<type>`,
-                                           in the canonical form theorems.lean renders
+  export_inventory.py names FILE           every exported declaration's full name, one per line
+  export_inventory.py decls FILE           every exported declaration in the canonical declaration
+                                           form theorems.lean renders (PROOF_MODE=decls)
   export_inventory.py swap FILE A B OUT    copy FILE to OUT with the later of A/B given the earlier's
                                            proof; prints "RECEIVER DONOR"
 
@@ -40,13 +41,15 @@ def lstr(s):
     return f"{len(s.encode('utf-8'))}:{s}"
 
 
-def statements(path):
-    """Canonical rendering of every exported theorem's statement, in the form theorems.lean
-    renders from the kernel's own Expr (change both or neither). It is the kernel's view: binder
-    names, binder annotations and the let `nondep` flag are erased, because the kernel ignores them
-    and lean4export does not preserve them — it shares one index among expressions equal under
-    Lean's `Expr` BEq, which ignores exactly those, so the first spelling written wins."""
-    names, lvrec, exrec, thms = {0: ""}, {0: None}, {}, []
+def decls(path):
+    """Every declaration of the stream in the canonical declaration form theorems.lean renders from
+    Lean's own environment (PROOF_MODE=decls; change both or neither): declarations in name order,
+    each field's expression before the next field and an expression's children left to right; each
+    distinct node numbered when first met and written as `<number>\t<node>` naming its children by
+    number; then the line `D\t<name>\t<kind>\t<fields>`. Binder names, binder annotations, the let
+    `nondep` flag and metadata are erased: the kernel ignores them, and lean4export shares one index
+    among expressions equal under Lean's `Expr` BEq, which ignores exactly those."""
+    names, lvrec, exrec, consts = {0: ""}, {0: None}, {}, {}
     for r in records(path):
         if "in" in r:
             k = "str" if "str" in r else "num"
@@ -57,8 +60,15 @@ def statements(path):
             lvrec[r["il"]] = r
         elif "ie" in r:
             exrec[r["ie"]] = r
-        elif "thm" in r:
-            thms.append(r["thm"])
+        elif "inductive" in r:
+            ind = r["inductive"]
+            for t in ind["types"]: consts.setdefault(names[t["name"]], []).append(("inductive", t))
+            for c in ind["ctors"]: consts.setdefault(names[c["name"]], []).append(("ctor", c))
+            for c in ind["recs"]: consts.setdefault(names[c["name"]], []).append(("rec", c))
+        else:
+            for k in ("axiom", "def", "thm", "opaque", "quot"):
+                if k in r:
+                    consts.setdefault(names[r[k]["name"]], []).append((k, r[k]))
     lv = {0: "0"}
 
     def level(i):
@@ -82,46 +92,101 @@ def statements(path):
         if "proj" in r: return [r["proj"]["struct"]]
         return []
 
-    ex = {}
+    ids, num, out = {}, {}, []
 
-    def expr(root):
-        # iterative post-order: statements nest far deeper than Python's recursion limit
-        stack = [root]
+    def node(text):
+        if text not in ids:
+            ids[text] = len(ids)
+            out.append(f"{ids[text]}\t{text}")
+        return ids[text]
+
+    def dag(root):
+        # iterative post-order, children left to right: terms nest far deeper than Python's recursion
+        stack = [(root, False)]
         while stack:
-            i = stack[-1]
-            if i in ex:
-                stack.pop()
+            i, expanded = stack.pop()
+            if i in num:
                 continue
             r = exrec[i]
-            pending = [c for c in children(r) if c not in ex]
-            if pending:
-                stack.extend(pending)
+            if not expanded:
+                stack.append((i, True))
+                stack.extend((c, False) for c in reversed(children(r)))
                 continue
-            stack.pop()
-            if "bvar" in r: out = f"(b {r['bvar']})"
-            elif "sort" in r: out = f"(S {level(r['sort'])})"
+            c = [num[j] for j in children(r)]
+            if "bvar" in r: num[i] = node(f"(b {r['bvar']})")
+            elif "sort" in r: num[i] = node(f"(S {level(r['sort'])})")
             elif "const" in r:
-                c = r["const"]
-                out = f"(c {lstr(names[c['name']])} [{' '.join(level(u) for u in c['us'])}])"
-            elif "app" in r: out = f"(a {ex[r['app']['fn']]} {ex[r['app']['arg']]})"
-            elif "lam" in r: out = f"(l {ex[r['lam']['type']]} {ex[r['lam']['body']]})"
-            elif "forallE" in r: out = f"(f {ex[r['forallE']['type']]} {ex[r['forallE']['body']]})"
-            elif "letE" in r:
-                b = r["letE"]
-                out = f"(let {ex[b['type']]} {ex[b['value']]} {ex[b['body']]})"
-            elif "natVal" in r: out = f"(n {r['natVal']})"
-            elif "strVal" in r: out = f"(str {lstr(r['strVal'])})"
-            elif "mdata" in r: out = ex[r["mdata"]["expr"]]
+                k = r["const"]
+                num[i] = node(f"(c {lstr(names[k['name']])} [{' '.join(level(u) for u in k['us'])}])")
+            elif "app" in r: num[i] = node(f"(a {c[0]} {c[1]})")
+            elif "lam" in r: num[i] = node(f"(l {c[0]} {c[1]})")
+            elif "forallE" in r: num[i] = node(f"(f {c[0]} {c[1]})")
+            elif "letE" in r: num[i] = node(f"(let {c[0]} {c[1]} {c[2]})")
+            elif "natVal" in r: num[i] = node(f"(n {r['natVal']})")
+            elif "strVal" in r: num[i] = node(f"(str {lstr(r['strVal'])})")
+            elif "mdata" in r: num[i] = c[0]
             elif "proj" in r:
-                b = r["proj"]
-                out = f"(j {lstr(names[b['typeName']])} {b['idx']} {ex[b['struct']]})"
+                k = r["proj"]
+                num[i] = node(f"(j {lstr(names[k['typeName']])} {k['idx']} {c[0]})")
             else: raise ValueError(f"unknown expr record {r}")
-            ex[i] = out
-        return ex[root]
+        return num[root]
 
-    rows = [f"{names[t['name']]}\t{' '.join(lstr(names[u]) for u in t['levelParams'])}\t{expr(t['type'])}"
-            for t in thms]
-    return sorted(rows)
+    def nms(xs):
+        return " ".join(lstr(names[x]) for x in xs)
+
+    def flag(b):
+        return "1" if b else "0"
+
+    for n in sorted(consts):
+        if len(consts[n]) != 1:
+            raise ValueError(f"the stream declares {n} {len(consts[n])} times")
+        kind, d = consts[n][0]
+        lp = nms(d["levelParams"])
+        t = dag(d["type"])
+        head = f"D\t{lstr(n)}\t{{}}\t[{lp}]\tT={t}"
+        if kind == "axiom":
+            line = head.format("axiom") + f" unsafe={flag(d['isUnsafe'])}"
+        elif kind == "def":
+            v = dag(d["value"])
+            h = d["hints"]
+            hints = h if isinstance(h, str) else f"regular {h['regular']}"
+            line = head.format("def") + f" V={v} hints={hints} safety={d['safety']} all=[{nms(d['all'])}]"
+        elif kind == "thm":
+            line = head.format("thm") + f" V={dag(d['value'])} all=[{nms(d['all'])}]"
+        elif kind == "opaque":
+            v = dag(d["value"])
+            line = head.format("opaque") + f" V={v} unsafe={flag(d['isUnsafe'])} all=[{nms(d['all'])}]"
+        elif kind == "quot":
+            line = head.format("quot") + f" kind={d['kind']}"
+        elif kind == "inductive":
+            line = head.format("inductive") + (
+                f" params={d['numParams']} indices={d['numIndices']} all=[{nms(d['all'])}]"
+                f" ctors=[{nms(d['ctors'])}] rec={flag(d['isRec'])} unsafe={flag(d['isUnsafe'])}"
+                f" reflexive={flag(d['isReflexive'])} nested={d['numNested']}")
+        elif kind == "ctor":
+            line = head.format("ctor") + (
+                f" induct={lstr(names[d['induct']])} cidx={d['cidx']} params={d['numParams']}"
+                f" fields={d['numFields']} unsafe={flag(d['isUnsafe'])}")
+        else:
+            rules = "; ".join(f"{lstr(names[x['ctor']])} {x['nfields']} {dag(x['rhs'])}" for x in d["rules"])
+            line = head.format("rec") + (
+                f" all=[{nms(d['all'])}] params={d['numParams']} indices={d['numIndices']}"
+                f" motives={d['numMotives']} minors={d['numMinors']} k={flag(d['k'])}"
+                f" unsafe={flag(d['isUnsafe'])} rules=[{rules}]")
+        out.append(line)
+    return out
+
+
+def decl_names_all(path):
+    names = name_table(path)
+    out = []
+    for r in records(path):
+        if "inductive" in r:
+            for k in ("types", "ctors", "recs"):
+                out.extend(names[x["name"]] for x in r["inductive"][k])
+        else:
+            out.extend(names[r[k]["name"]] for k in ("axiom", "def", "thm", "opaque", "quot") if k in r)
+    return sorted(out)
 
 
 def decl_names(path, kind):
@@ -139,8 +204,10 @@ def main(argv):
         print(m["lean"]["version"], m["exporter"]["version"], m["format"]["version"])
     elif cmd == "theorems":
         print("\n".join(decl_names(path, "thm")))
-    elif cmd == "statements":
-        print("\n".join(statements(path)))
+    elif cmd == "decls":
+        print("\n".join(decls(path)))
+    elif cmd == "names":
+        print("\n".join(decl_names_all(path)))
     elif cmd == "axioms":
         print("\n".join(decl_names(path, "axiom")))
     elif cmd == "swap" and len(argv) == 6:

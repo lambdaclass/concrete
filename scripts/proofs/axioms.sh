@@ -12,7 +12,8 @@
 #      commit, where review sees it. `--update` rewrites it from the build.
 #
 # NEGATIVE CONTROLS run the same code on bad inputs and require the failure: an axiom declared and
-# used by a control theorem fails A naming it; a golden missing a theorem, carrying an extra one, or
+# used by a control theorem fails A naming it; new theorems, a private one included, differ from the
+# golden; a golden missing a theorem, carrying an extra one, or
 # recording other axioms fails G; a control module outside the import closure fails P.
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/../checks/lib/gate_env.sh" || exit 2
@@ -78,11 +79,15 @@ CB=$(nonstandard "$TMP/c-axiom.tsv")
   || no "control: the extra-axiom theorem was not refused alone: '$CB' $(head -2 "$TMP/c-axiom.err")"
 cat > "$TMP/c-clean.lean" <<'EOF'
 theorem ConcreteSpecControl.clean : 1 = 1 := rfl
+private theorem ConcreteSpecControl.hidden : 2 = 2 := rfl
 EOF
 population theorems "$TMP/c-clean.lean" > "$TMP/c-clean.tsv" 2>/dev/null
-D=$(golden_diff "$TMP/c-clean.tsv" "$GOLDEN")
-[ "$D" = "> ConcreteSpecControl.clean	" ] \
-  && ok "control: a new theorem, even axiom-free, is a golden difference" || no "control: new theorem diff was '$D'"
+# A private name carries the file it was declared in (`_private.<file>.0.…`); the temporary copy's
+# name is random, so it is normalized before the comparison.
+D=$(golden_diff "$TMP/c-clean.tsv" "$GOLDEN" | sed -E 's/^> _private\..*\.0\.ConcreteSpecControl\./> _private.0.ConcreteSpecControl./')
+[ "$D" = "$(printf '> ConcreteSpecControl.clean\t\n> _private.0.ConcreteSpecControl.hidden\t')" ] \
+  && ok "control: a new theorem, even axiom-free and even private, is a golden difference" \
+  || no "control: new public and private theorems gave the diff '$D'"
 FIRST=$(head -1 "$TMP/inv.tsv" | cut -f1)
 grep -vF -- "$FIRST	" "$GOLDEN" > "$TMP/g-missing"
 [ -n "$(golden_diff "$TMP/inv.tsv" "$TMP/g-missing")" ] \

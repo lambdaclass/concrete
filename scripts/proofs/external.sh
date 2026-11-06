@@ -14,16 +14,17 @@
 #      axioms (a theorem on any other is refused here, not left out of the export);
 #   A  the export is from this toolchain, holds every theorem of the population, and declares only
 #      the three standard axioms;
-#   S  statement fidelity: every exported statement equals the statement in Lean's own environment,
-#      in the kernel's view (lean4export is unverified, and con-leche's theorem is about what it was
-#      handed, so this is what ties the re-check to what Lean checked);
+#   S  declaration fidelity: every declaration of the stream (theorem statements and proofs, the
+#      definitions and inductive types they name, Lean core's included) equals Lean's own, in the
+#      kernel's view (lean4export is unverified, and con-leche's theorem is about what it was handed,
+#      so this is what ties the re-check to what Lean checked);
 #   C  con-leche --verified accepts the export;   K  so does nanoda, the standard axioms permitted.
 #
 # NEGATIVE CONTROLS, each on a corrupted copy of the real export:
 #   X  one theorem handed another's proof: con-leche rejects it as a type mismatch AT that theorem,
 #      nanoda at its definitional-equality check (the reason is checked, never the exit code alone);
 #   T  the export cut inside a record, and D  the export missing one expression record: both refuse;
-#   F  a statement rewritten in the comparison input: the fidelity comparison reports exactly it.
+#   F  a definition's body replaced while every statement stays the same: S reports exactly it.
 #
 # Tools are built once per pinned SHA into $CONCRETE_EXT_TOOLS (default ~/.cache/concrete-ext):
 # lean4export with THIS toolchain (it reads our .olean files), con-leche with its own (elan installs
@@ -46,6 +47,16 @@ INV="python3 scripts/proofs/export_inventory.py"
 TOOLS="${CONCRETE_EXT_TOOLS:-$HOME/.cache/concrete-ext}"
 TOOLCHAIN="$(cat lean-toolchain)"
 
+# The cache is shared by every run of this user on the machine (a self-hosted runner's HOME persists,
+# and worktrees share it): building holds an exclusive lock on it, builds in a private directory and
+# publishes the finished one with a rename, so no run sees, or removes, another's half-built tool.
+mkdir -p "$TOOLS" && exec 9> "$TOOLS/.lock" && flock 9 \
+  || { echo "error: cannot lock the tool cache $TOOLS" >&2; exit 2; }
+# publish DIR BUILD-COMMAND… → runs the command in DIR.partial.$$ (already cloned) and renames it to DIR
+publish() {
+  local dir=$1 work="$1.partial.$$"; shift
+  (cd "$work" && "$@" >&2) && touch "$work/.built" && rm -rf "$dir" && mv "$work" "$dir"
+}
 # build_lake_tool NAME URL REV TOOLCHAIN-OVERRIDE TARGET → prints the source dir; builds once per SHA
 build_lake_tool() {
   local name=$1 url=$2 rev=$3 tc=$4 target=$5
@@ -53,11 +64,10 @@ build_lake_tool() {
   # cannot read this build's .olean files), so it names the directory alongside the SHA.
   local dir="$TOOLS/$name-$rev${tc:+-$(printf '%s' "$tc" | tr -c 'A-Za-z0-9._-' '_')}"
   if [ ! -f "$dir/.built" ]; then
-    rm -rf "$dir"; mkdir -p "$TOOLS"
-    git clone -q "$url" "$dir" >&2 && git -C "$dir" checkout -q "$rev" >&2 || return 1
-    [ -n "$tc" ] && echo "$tc" > "$dir/lean-toolchain"
-    (cd "$dir" && "$LAKE" build "$target" >&2) || return 1
-    touch "$dir/.built"
+    local work="$dir.partial.$$"; rm -rf "$work"
+    git clone -q "$url" "$work" >&2 && git -C "$work" checkout -q "$rev" >&2 || return 1
+    [ -n "$tc" ] && echo "$tc" > "$work/lean-toolchain"
+    publish "$dir" "$LAKE" build "$target" || { rm -rf "$work"; return 1; }
   fi
   [ "$(git -C "$dir" rev-parse HEAD)" = "$rev" ] || return 1
   echo "$dir"
@@ -82,17 +92,18 @@ DIRECT=$(grep -nE '^[^#]*"\$CONLECHE"' "$0" | grep -v 'CONLECHE_FLAGS\[@\]')
 NANODA_DIR="$TOOLS/nanoda-$NANODA_REV"
 if [ ! -f "$NANODA_DIR/.built" ]; then
   command -v cargo >/dev/null || { echo "error: building nanoda needs cargo (nix develop .#extcheck)" >&2; exit 2; }
-  rm -rf "$NANODA_DIR"
+  W="$NANODA_DIR.partial.$$"; rm -rf "$W"
   # The thread stack is raised from 16 MiB to 256 MiB exactly as the Lean Kernel Arena patches it.
-  { git clone -q "$NANODA_URL" "$NANODA_DIR" && git -C "$NANODA_DIR" checkout -q "$NANODA_REV" \
-    && grep -q 'STACK_SIZE: usize = 16_777_216;' "$NANODA_DIR/src/lib.rs" \
-    && sed -i.orig 's/STACK_SIZE: usize = 16_777_216;/STACK_SIZE: usize = 268_435_456;/' "$NANODA_DIR/src/lib.rs" \
-    && (cd "$NANODA_DIR" && cargo build --release -q) && touch "$NANODA_DIR/.built"; } >&2
+  { git clone -q "$NANODA_URL" "$W" && git -C "$W" checkout -q "$NANODA_REV" \
+    && has_match -F 'STACK_SIZE: usize = 16_777_216;' < "$W/src/lib.rs" \
+    && sed -i.orig 's/STACK_SIZE: usize = 16_777_216;/STACK_SIZE: usize = 268_435_456;/' "$W/src/lib.rs" \
+    && publish "$NANODA_DIR" cargo build --release -q; } >&2 || rm -rf "$W"
 fi
 NANODA="$NANODA_DIR/target/release/nanoda_bin"
 [ -x "$NANODA" ] && [ "$(git -C "$NANODA_DIR" rev-parse HEAD)" = "$NANODA_REV" ] \
   && ok "nanoda at $NANODA_REV (thread stack patched as the Arena does)" \
   || { no "could not build nanoda at $NANODA_REV"; finish; }
+flock -u 9   # every tool is built and verified; the rest only reads them
 # nanoda FILE → runs nanoda on FILE permitting exactly the standard axioms
 nanoda() {
   python3 -c 'import json,sys; print(json.dumps({"export_file_path": sys.argv[1],
@@ -108,21 +119,26 @@ population theorems > "$TMP/inv.tsv" 2> "$TMP/inv.err" \
 NALL=$(grep -c . "$TMP/inv.tsv")
 NONSTD=$(awk -F'\t' -v std=" $STANDARD_AXIOMS " '{ n = split($2, a, " ")
   for (i = 1; i <= n; i++) if (index(std, " " a[i] " ") == 0) { print $1; break } }' "$TMP/inv.tsv")
+# The enumerator prints names as Lean writes them (`«unsafe»` escaped), which is what lean4export
+# reads; the stream's own names are the bare components joined by `.`.
 cut -f1 "$TMP/inv.tsv" > "$TMP/population.txt"
+sed 's/[«»]//g' "$TMP/population.txt" | sort -u > "$TMP/population-bare.txt"
 [ "$NALL" -ge 100 ] && [ -z "$NONSTD" ] && ok "$NALL theorems, all on the standard axioms" \
   || no "population: $NALL theorems; on a non-standard axiom: $(echo $NONSTD | cut -c1-300)"
 
 echo "=== A: export ==="
 EXPORT="$TMP/spec.ndjson"
+# lean4export can panic on a name it cannot resolve and still exit 0, so its stderr must be empty.
 # shellcheck disable=SC2046
-"$LAKE" env "$EXPORTER" ConcreteSpec -- $(cat "$TMP/population.txt") > "$EXPORT" 2> "$TMP/export.err" \
-  || { no "lean4export failed: $(head -3 "$TMP/export.err" | tr '\n' ' ')"; finish; }
+"$LAKE" env "$EXPORTER" ConcreteSpec -- $(cat "$TMP/population.txt") > "$EXPORT" 2> "$TMP/export.err"; rc=$?
+[ "$rc" = 0 ] && [ ! -s "$TMP/export.err" ] && ok "lean4export exported the population (no diagnostics)" \
+  || { no "lean4export rc=$rc: $(head -3 "$TMP/export.err" | tr '\n' ' ')"; finish; }
 read -r EXP_LEAN EXP_TOOL EXP_FORMAT < <($INV meta "$EXPORT")
 [ "leanprover/lean4:v$EXP_LEAN" = "$TOOLCHAIN" ] && [ "$EXP_FORMAT" = "$EXPECT_FORMAT" ] \
   && ok "export from Lean $EXP_LEAN (lean4export $EXP_TOOL, format $EXP_FORMAT)" \
   || no "export metadata: Lean $EXP_LEAN format $EXP_FORMAT, expected $TOOLCHAIN format $EXPECT_FORMAT"
 $INV theorems "$EXPORT" > "$TMP/exported.txt"
-MISSING=$(sort "$TMP/population.txt" | comm -23 - "$TMP/exported.txt")
+MISSING=$(comm -23 "$TMP/population-bare.txt" "$TMP/exported.txt")
 [ -z "$MISSING" ] && ok "every theorem of the population is in the export ($(grep -c . "$TMP/exported.txt") theorems with dependencies)" \
   || no "theorems missing from the export: $(echo $MISSING | cut -c1-300)"
 $INV axioms "$EXPORT" > "$TMP/axioms.txt"
@@ -130,20 +146,29 @@ EXTRA=$(comm -23 "$TMP/axioms.txt" <(printf '%s\n' $STANDARD_AXIOMS))
 [ -z "$EXTRA" ] && ok "the export declares only $(echo $(cat "$TMP/axioms.txt"))" \
   || no "the export declares non-standard axioms: $(echo $EXTRA)"
 
-echo "=== S: statement fidelity ==="
-population statements > "$TMP/st-lean.tsv" 2> "$TMP/st.err" \
-  || { no "statement rendering failed: $(head -3 "$TMP/st.err" | tr '\n' ' ')"; finish; }
-$INV statements "$EXPORT" | sort -u > "$TMP/st-export.tsv"
-# fidelity LEAN EXPORT → `<compared>\t<differing names>`; only the population is compared (the
-# export also carries Lean core's theorems as dependencies)
+echo "=== S: declaration fidelity ==="
+# Every declaration in the stream (the population and everything it depends on, Lean core included:
+# types, definition bodies, proofs, inductive types, constructors, recursors) against Lean's own
+# environment. A statement can only be trusted together with the definitions it names: a stream that
+# kept a theorem's type but changed a definition it mentions would prove another proposition.
+$INV names "$EXPORT" > "$TMP/names.txt"
+PROOF_NAMES="$TMP/names.txt" PROOF_OUT="$TMP/decls-lean.txt" population decls > "$TMP/decls.err" 2>&1 \
+  || { no "declaration rendering failed: $(head -3 "$TMP/decls.err" | tr '\n' ' ')"; finish; }
+$INV decls "$EXPORT" > "$TMP/decls-export.txt" \
+  || { no "the stream's declarations could not be rendered"; finish; }
+# fidelity LEAN EXPORT → empty when equal, else the first declaration whose rendering differs
 fidelity() {
-  join -t$'\t' <(sort "$1") "$2" > "$TMP/st-joined.tsv"
-  printf '%s\t%s\n' "$(grep -c . "$TMP/st-joined.tsv")" "$(awk -F'\t' '$2!=$4 || $3!=$5 {print $1}' "$TMP/st-joined.tsv" | tr '\n' ' ')"
+  cmp -s "$1" "$2" && return 0
+  local line; line=$(cmp "$1" "$2" 2>/dev/null | sed -nE 's/.* line ([0-9]+).*/\1/p')
+  [ -n "$line" ] || line=$(( $(grep -c '' "$1") + 1 ))     # one is a prefix of the other
+  tail -n +"$line" "$2" | grep -m1 '^D' | cut -f2 | sed -E 's/^[0-9]+://'
+  [ -n "$(tail -n +"$line" "$2" | grep -m1 '^D')" ] || echo "(end of stream)"
 }
-IFS=$'\t' read -r NCMP SDIFF < <(fidelity "$TMP/st-lean.tsv" "$TMP/st-export.tsv")
-[ "$NCMP" = "$NALL" ] && [ -z "${SDIFF// }" ] \
-  && ok "all $NCMP exported statements equal Lean's own, in the kernel's view" \
-  || no "statement fidelity: $NCMP of $NALL compared, differing: $(echo $SDIFF | cut -c1-300)"
+NDECL=$(grep -c '^D' "$TMP/decls-export.txt")
+FD=$(fidelity "$TMP/decls-lean.txt" "$TMP/decls-export.txt")
+[ "$NDECL" = "$(grep -c . "$TMP/names.txt")" ] && [ -z "$FD" ] \
+  && ok "all $NDECL exported declarations equal Lean's own, in the kernel's view ($(grep -vc '^D' "$TMP/decls-export.txt") shared nodes)" \
+  || no "declaration fidelity: $NDECL rendered of $(grep -c . "$TMP/names.txt"); first differing: ${FD:-none}"
 
 echo "=== C/K: re-check ==="
 t0=$SECONDS; conleche "$EXPORT" > "$TMP/c.out" 2>&1; rc=$?
@@ -157,8 +182,10 @@ nanoda "$EXPORT" > "$TMP/k.out" 2>&1; rc=$?
 
 echo "=== X: corrupted export, a theorem handed another's proof ==="
 # The pair: the first two universe-monomorphic theorems of the population with different statements.
-read -r SWAP_A SWAP_B < <(awk -F'\t' '$2 == "" { if (!a) { a = $1; s = $3 } else if ($3 != s) { print a, $1; exit } }' \
-  <(sort "$TMP/st-lean.tsv"))
+read -r SWAP_A SWAP_B < <(awk -F'\t' 'NR == FNR { pop[$1] = 1; next }
+  $1 == "D" && $3 == "thm" && $4 == "[]" { n = $2; sub(/^[0-9]+:/, "", n); t = $5
+    if (!(n in pop)) next
+    if (!a) { a = n; s = t } else if (t != s) { print a, n; exit } }' "$TMP/population-bare.txt" "$TMP/decls-export.txt")
 read -r RECEIVER DONOR < <($INV swap "$EXPORT" "$SWAP_A" "$SWAP_B" "$TMP/swapped.ndjson")
 conleche "$TMP/swapped.ndjson" > "$TMP/cx.out" 2>&1; rc=$?
 [ -n "${RECEIVER:-}" ] && [ "$rc" = 1 ] && has_match -F "type mismatch in theorem $RECEIVER " < "$TMP/cx.out" \
@@ -196,10 +223,25 @@ for c in cut dropped; do
     || no "nanoda on the $c export: rc=$rc: $(tail -2 "$TMP/k-$c.out" | tr '\n' ' ')"
 done
 
-echo "=== F: statement fidelity control ==="
-awk -F'\t' -v n="$SWAP_A" 'BEGIN{OFS="\t"} $1 == n { $3 = "(c 4:True [])" } { print }' "$TMP/st-export.tsv" > "$TMP/st-forged.tsv"
-IFS=$'\t' read -r _ FDIFF < <(fidelity "$TMP/st-lean.tsv" "$TMP/st-forged.tsv")
-[ "${FDIFF% }" = "$SWAP_A" ] \
-  && ok "a rewritten exported statement ($SWAP_A) is reported, and only it" \
-  || no "the fidelity comparison on a rewritten statement reported '$FDIFF'"
+echo "=== F: declaration fidelity control, a definition changed under an unchanged statement ==="
+# The first definition of the population's own library in the stream gets its type as its body: every
+# theorem's statement is untouched, and the comparison must name exactly that definition.
+FORGED=$(python3 - "$EXPORT" "$TMP/forged.ndjson" <<'PY'
+import json, sys
+sys.path.insert(0, "scripts/proofs")
+from export_inventory import name_table, records
+names = name_table(sys.argv[1]); done = None
+with open(sys.argv[2], "w", encoding="utf-8") as o:
+    for r in records(sys.argv[1]):
+        if done is None and "def" in r and names[r["def"]["name"]].startswith("ConcreteSpec."):
+            r["def"]["value"] = r["def"]["type"]; done = names[r["def"]["name"]]
+        o.write(json.dumps(r, separators=(",", ":")) + "\n")
+print(done or "")
+PY
+)
+$INV decls "$TMP/forged.ndjson" > "$TMP/decls-forged.txt"
+FF=$(fidelity "$TMP/decls-lean.txt" "$TMP/decls-forged.txt")
+[ -n "$FORGED" ] && [ "$FF" = "$FORGED" ] \
+  && ok "a definition whose body was replaced ($FORGED) is reported, though no statement changed" \
+  || no "the fidelity comparison on a forged definition (${FORGED:-none}) reported '${FF:-nothing}'"
 finish
