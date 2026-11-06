@@ -1,0 +1,8 @@
+[piece 5 of 11: scripts]
+- ConcreteSpec/Spec/Brand.lean:181: The loop gives both its body and its continuation the same remaining fuel `n`, discarding the body’s consumption. Consequently, execution can finish after more statements than its fuel permits, contradicting the documented one-unit-per-statement cost. `erased` and `Borrow.vrun` repeat this accounting error; either thread the remaining fuel through block results or document fuel as a recursion-depth bound.
+[piece 9 of 11: scripts]
+- scripts/proofs/external.sh:195: The swap control compares `$5`, which contains `T=… V=… all=…`, rather than just the theorem’s type. Two theorems with identical statements but different proofs therefore qualify as “different statements.” Swapping those proofs is valid, so correct checkers can accept the control and cause this gate to fail.
+
+Repository reads failed, preventing the owner-decision cross-check.
+[piece 10 of 11: scripts]
+- scripts/proofs/trust_ban.sh:77: The source scan’s exit status is ignored. If Python fails before emitting matches—for example, on an unreadable source file—`W` is empty and the next check reports success when at least ten files were listed. Check the scan’s exit status and fail the gate on errors; otherwise the claimed source trust ban can pass without scanning all sources.
