@@ -12,9 +12,8 @@ deployment: https://unbalancedparentheses.github.io/concrete2/ and https://lambd
 unpublish: gh api -X DELETE repos/unbalancedparentheses/concrete2/pages; gh api -X DELETE repos/lambdaclass/concrete/pages
 confirmation: the owner confirmed the moment on 2026-11-05 (P9: taken down with no frozen browser bundle)
 unbalancedparentheses: unpublished 2026-11-05 (Pages DELETE; the URL answers 404); the site workflow is disabled
-lambdaclass: the Pages DELETE was refused 2026-11-05 (HTTP 422, organisation policy); the site workflow is disabled, but the URL still serves the last deploy
-remaining: a lambdaclass organisation admin unpublishes lambdaclass/concrete in Settings > Pages (ISS-0004)
-status: partial
+lambdaclass: the Pages DELETE was refused 2026-11-05 (HTTP 422, organisation policy) and the site workflow was disabled; by 2026-11-06 the URL answers 404. The Pages API object still exists (build_type workflow, GET repos/lambdaclass/concrete/pages), but the only workflow that deployed to it, `site` (book.yml), is disabled_manually and is archived by the move, so nothing deploys to it
+verified: 2026-11-06 01:54 UTC, curl with and without a cache-busting query: https://lambdaclass.github.io/concrete/ 404, https://unbalancedparentheses.github.io/concrete2/ 404; `gh workflow list --all` shows `site` disabled_manually on lambdaclass/concrete and unbalancedparentheses/concrete2; GET repos/unbalancedparentheses/concrete2/pages answers 404
+status: done 2026-11-06
 
-After the unpublish step, check that both URLs answer 404, then set `status: done YYYY-MM-DD`. The
-old site's sources stay archived under `legacy/site/` with their `RETENTION.tsv` row.
+Both URLs answered 404 on 2026-11-06, so the record reads `status: done`. The old site's sources stay archived under `legacy/site/` with their `RETENTION.tsv` row.
