@@ -251,14 +251,14 @@ This is $2 (file group: $3; files: $4).
 
 Report correctness findings only: wrong behaviour, logic errors, regressions, unhandled cases, tests that do not check what they claim, and documentation that contradicts the code. Do not report style preferences.
 
-Also answer one question, as a finding when the answer is yes: does this patch pick a side on any owner decision in docs/decisions.md (OD1 - OD157 under "Owner decisions"), that is, choose, encode, implement, extend or revert behaviour one of them covers? Only the project owner decides those; a patch that does so must not land.
+Also answer one question, as a finding when the answer is yes: does this patch pick a side on any owner decision in docs/decisions.md (OD1 - OD157 under "Owner decisions", or an undecided project question), that is, choose, revise, encode, implement, extend or revert what one of them covers without the owner's explicit answer? Only the project owner decides those; a patch that does so must not land. Recording a decision the owner explicitly approved (the recording rule in docs/decisions.md) is permitted and is not picking a side. For such a patch, report as a finding: a recorded answer without its provenance (the owner's answer quoted with its date, or the quoted owner rule that decides it under the recording rule); wording that does not faithfully transcribe that answer; any change beyond its scope; and anything recorded as decided that the owner did not approve.
 EOF
   else
     cat <<EOF
 Please do a routine code review of the source-code patch below. It belongs to a compiler, a program that translates source code into machine code, and to that compiler's tests and documentation. Treat it as ordinary software engineering: look for logic errors and for behaviour that differs from what the code and its comments say. You may read files in the working directory for context.
 
 This is $2 (files: $4). $scope
-Also report as a finding any change that picks a side on an owner decision listed in docs/decisions.md (OD1 - OD157).
+Also report as a finding any change that picks a side on an owner decision listed in docs/decisions.md (OD1 - OD157) or an undecided project question without the owner's explicit answer. Writing down a decision the owner explicitly approved is allowed; report it only when it lacks the owner's quoted, dated answer, changes that answer's meaning, goes beyond it, or adds something the owner did not approve.
 EOF
   fi
   if [ -n "$PREV_FINDINGS" ]; then

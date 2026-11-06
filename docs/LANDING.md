@@ -85,7 +85,9 @@ verdict; any failing leg fails the check (see [Pipelining](#pipelining)).
   requires provenance: a non-zero exit fails, and so does a zero exit that leaves no clean note at the
   head. With no review command at all, `check` fails; it never disables the leg silently.
   `--no-review` skips the leg explicitly (the landing bot does, its members being reviewed), and
-  `land` still requires review provenance.
+  `land` still requires review provenance. A review that refuses a patch recording an owner
+  decision is answered in the review ([REVIEW.md](REVIEW.md#owner-decisions-choosing-versus-recording)),
+  never by `--no-review`.
 - The per-leg durations, the wall time and their sum go to the log as a `check-legs` row.
 - Runs inside `nix develop` unless already in the dev shell. `LAND_NO_NIX=1` disables this.
 
