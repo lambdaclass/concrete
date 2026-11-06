@@ -647,9 +647,9 @@ LCB is our own project; these are tasks for it, not premises to keep. Checked ag
 4. Object emission (LCB V04), so assembly text and the system assembler leave the path.
 
 **For slice 1 (all widths u8–u64, i8–i64).** LCB's verified profile has `word` (32-bit) and `long` (64-bit) values, `add sub mul and or xor`, the comparisons `eq` and `unsignedLT` (word result), and no width conversion, shift, division or high multiply. The adapter will carry every integer as a `long`: exact for types up to 32 bits, and for 64-bit add/sub the overflow test is expressible with `xor`, `and` and `unsignedLT`. Slice 1 needs:
-1. **Shifts** `shl`, `lshr`, `ashr`, at both widths. Required: a variable shift amount has no reasonable expansion.
+1. **Shifts** `shl`, `lshr`, `ashr` at `long` (at `word` too, for completeness of LCB's API). Required: expanding a variable shift amount (a loop or a 64-way branch) costs more code and proof than LCB adding the operation.
 2. **High multiply** `mulHighUnsigned` and `mulHighSigned` at `long` (AArch64 `umulh`/`smulh`, x86-64 `mul`/`imul`). Required for 64-bit checked, saturating and overflow-flag multiplication; the alternative is a long 32-bit-halves expansion with its own proof.
-3. **Division and remainder** (`udiv sdiv urem srem`), if slice 1's integer operations include `/` and `%`. Required then: there is no reasonable expansion.
+3. **Division and remainder** (`udiv sdiv urem srem`), if slice 1's integer operations include `/` and `%`. Required then: an expansion would cost far more code and proof than the native operation.
 4. **Signed and non-strict comparisons** (`signedLT`, `unsignedLE`, `signedLE`). Optional: they are expressible (`a <s b` is `(a xor 2^63) <u (b xor 2^63)`), but native ones keep the adapter and its proof small.
 5. **Width conversion** (`word`↔`long` extension and truncation). Optional while every integer is a `long`; needed if the adapter ever uses `word` for narrow types.
 
