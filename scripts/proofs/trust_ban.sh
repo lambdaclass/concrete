@@ -162,7 +162,8 @@ W=$(scan "${SRC[@]}"); RC=$?
 [ "$RC" = 0 ] && [ "${#SRC[@]}" -ge 10 ] && [ -z "$W" ] && ok "none of the ${#SRC[@]} source files spells a banned word outside comments" \
   || no "the source scan (rc=$RC) of ${#SRC[@]} files: $(printf '%s\n' "$W" | head -5 | tr '\n' '|')"
 
-# lakefile → empty when the library builds with warningAsError and nothing can turn it off
+# lake_options LAKEFILE → empty when the one library builds from ConcreteSpec.lean and ConcreteSpec/
+# (Lake's defaults: no srcDir, roots or globs) with warningAsError, and nothing can turn it off
 lake_options() {
   python3 - "$1" <<'EOF'
 import sys, tomllib
@@ -171,14 +172,21 @@ try:
 except Exception as e:
     print(f"unreadable: {e}"); sys.exit(0)
 bad = []
+import os
+if os.path.exists(os.path.join(os.path.dirname(sys.argv[1]) or ".", "lakefile.lean")):
+    bad.append("a lakefile.lean, which Lake reads instead of lakefile.toml")
 if cfg.get("leanOptions", {}).get("warningAsError") is not True:
     bad.append("[leanOptions] warningAsError is not true")
-for k in ("moreLeanArgs", "weakLeanArgs", "moreServerArgs", "moreServerOptions"):
-    if k in cfg: bad.append(f"package sets {k}")
-libs = [l for l in cfg.get("lean_lib", []) if l.get("name") == "ConcreteSpec"]
-if len(libs) != 1: bad.append(f"{len(libs)} ConcreteSpec libraries")
+# Allow-lists, not deny-lists: a key not named here (srcDir, roots, globs, moreLeanArgs, …) could
+# point the build at other sources or pass options, so it is refused.
+extra = set(cfg) - {"name", "version", "defaultTargets", "leanOptions", "lean_lib"}
+if extra: bad.append(f"the package sets {sorted(extra)}")
+if set(cfg.get("leanOptions", {})) != {"warningAsError"}:
+    bad.append(f"[leanOptions] sets {sorted(set(cfg.get('leanOptions', {})) - {'warningAsError'})}")
+libs = cfg.get("lean_lib", [])
+if [l.get("name") for l in libs] != ["ConcreteSpec"]: bad.append(f"libraries {[l.get('name') for l in libs]}")
 for l in libs:
-    extra = set(l) - {"name", "leanOptions", "roots", "globs", "srcDir"}
+    extra = set(l) - {"name", "leanOptions"}
     if extra: bad.append(f"the library sets {sorted(extra)}")
     opts = set(l.get("leanOptions", {})) - {"autoImplicit"}
     if opts: bad.append(f"the library sets options {sorted(opts)}")
@@ -259,6 +267,10 @@ printf '[leanOptions]\nwarningAsError = true\n\n[[lean_lib]]\nname = "ConcreteSp
 L=$(lake_options "$TMP/lake-off.toml")
 [ -n "$L" ] && ok "control: a library that turns warningAsError off is refused ($L)" \
   || no "control: a lakefile turning warningAsError off was accepted"
+printf '[leanOptions]\nwarningAsError = true\n\n[[lean_lib]]\nname = "ConcreteSpec"\nsrcDir = "shadow"\n' > "$TMP/lake-src.toml"
+L=$(lake_options "$TMP/lake-src.toml")
+[ -n "$L" ] && ok "control: a library built from another source directory is refused ($L)" \
+  || no "control: a lakefile with srcDir was accepted"
 for f in missing Open Brace; do
   scan "$TMP/src/$f.lean" > /dev/null 2>&1; RC=$?
   [ "$RC" != 0 ] && ok "control: a source the scan cannot read or lex ($f) fails it (rc=$RC)" \
