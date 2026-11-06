@@ -39,11 +39,20 @@ CI runs on two regular pools: concrete-ci-2's self-hosted runners and GitHub-hos
 is a fallback that weakens a check; each required check runs on a pool that can run it, or is
 INCOMPLETE and blocks the landing.
 
-| Pool | Where | Limits (measured 2026-11-05) | Runs |
+| Pool | Where | Limits (set 2026-11-06) | Runs |
 |---|---|---|---|
-| `concrete` | concrete-ci-2 (Hetzner AX102: 30 CPUs visible, 125 GB RAM) | 6 runners `gha1`..`gha6`, so at most 6 concurrent jobs; no per-runner systemd CPU or memory cap is set (each runner service has `CPUQuota` and `MemoryMax` = infinity, ISS-0007) | the landing tier when `CONCRETE_SELF_HOSTED=true`; never a `pull_request` |
-| `concrete-light` | concrete-ci-2 | 2 runners `gha7`, `gha8` (`LIGHT_RUNNERS` in the dotfiles host file), same machine, same absence of caps | branch health only |
+| `concrete` | concrete-ci-2 (Hetzner AX102: 32 threads, 125 GB RAM) | 6 runners `gha1`..`gha6`, so at most 6 concurrent jobs; each has `MemoryMax=28G` and no swap, and no per-runner CPU cap | the landing tier when `CONCRETE_SELF_HOSTED=true`; never a `pull_request` |
+| `concrete-light` | concrete-ci-2 | 2 runners `gha7`, `gha8` (`LIGHT_RUNNERS` in the dotfiles host file), each `CPUQuota=400%` and `MemoryMax=8G` | branch health only |
 | GitHub-hosted | `ubuntu-latest`, `macos-latest` | GitHub's per-repository concurrency | every landing-tier job when the variable is off; always: `Oracle (GitHub-hosted fetch + smoke)` and `Build + main tests (macOS)`; every `pull_request` |
+
+Both pools on concrete-ci-2 run inside `concrete-runners.slice`, capped together at `CPUQuota=2400%`
+(24 of 32 threads), `MemoryMax=96G`, no swap and `TasksMax=16384` (ISS-0007, applied 2026-11-06).
+Gate runs in `user.slice` therefore keep at least 8 threads and about 25 GB, and sshd and tailscaled
+keep `system.slice`'s 4 GB reserve. The slice keeps the default CPU weight (100) against
+`user.slice`'s 25, so CI still wins under contention. There is no `MemoryHigh`: a job past its
+`MemoryMax` is killed inside the slice rather than throttled. The values live in the dotfiles host
+file (`servers/hosts/concrete-ci-2.env`, `CONCRETE_RUNNERS_*` and `CONCRETE_*RUNNER_*`), and
+`servers/runners.sh` writes them, so a rebuilt host gets the same caps.
 
 Manual heavy work on concrete-ci-2 (train check legs through `land.gatesHost`, `run-at-ref.sh`
 runs, oracle rebuilds) follows the machine-wide rule: at most two full suites, mutation campaigns
