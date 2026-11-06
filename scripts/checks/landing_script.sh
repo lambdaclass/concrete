@@ -1021,6 +1021,39 @@ bash "$TRAIN" ci tm2 >/dev/null 2>&1 || no "inventory train ci"
 runjson "$HM2" success success
 out="$(bash "$TRAIN" --dry-run land tm2 2>&1)"; rc=$?
 [ "$rc" = 5 ] && has "$out" "no rehearsal record" && ok "a candidate adding scripts/checks/root_inventory.txt is a move too" || { no "inventory move: dry-run land exit $rc"; echo "$out" | sed 's/^/      /'; }
+# Only the inventory's TOP-LEVEL entry set counts. main gets an inventory first (a direct push, as
+# the moved-main leg above does); then a candidate that edits only nested entries, comments and the
+# order needs no rehearsal, while one that adds a top-level entry, and one that changes legacy/, does.
+( cd "$TMP/other" && git fetch -q origin && git reset -q --hard origin/main && mkdir -p scripts/checks \
+  && printf '# day one\nREADME.md\nlegacy\ndocs\ndocs/LANDING.md\n' > scripts/checks/root_inventory.txt \
+  && git add -A && git commit -qm inventory && CONCRETE_SKIP_GATES=1 git push -q origin main )
+git checkout -q main && git fetch -q origin && git reset -q --hard origin/main
+MI="$(git rev-parse HEAD)"
+inv_leg(){ # train branch run-id -> builds, checks and runs CI for the train; dry-run land in $out/$rc
+  bash "$TRAIN" build "$1" "$2" >/dev/null 2>&1 || no "$1 build"
+  git checkout -q "train/$1"; local h; h="$(git rev-parse HEAD)"
+  bash "$TRAIN" check "$1" --no-remote >/dev/null 2>&1 || no "$1 check"
+  printf '[{"databaseId": %s, "headSha": "%s", "createdAt": "9999-01-01T00:00:00Z"}]' "$3" "$h" > "$FAKE_GH_DIR/list.json"
+  bash "$TRAIN" ci "$1" >/dev/null 2>&1 || no "$1 ci"
+  runjson "$h" success success
+  out="$(bash "$TRAIN" --dry-run land "$1" 2>&1)"; rc=$?
+}
+git checkout -q -b binv-nested "$MI"
+printf '# the day-one root, reordered\ndocs/proposals\ndocs/LANDING.md\ndocs\nlegacy\nREADME.md\n' > scripts/checks/root_inventory.txt
+commit_all binv-nested
+inv_leg tin1 binv-nested 5454
+[ "$rc" = 0 ] && ! has "$out" "move candidate" \
+  && ok "an inventory change of nested entries, comments and order only (docs/proposals) needs no rehearsal" || { no "nested inventory change: dry-run land exit $rc"; echo "$out" | sed 's/^/      /'; }
+git checkout -q -b binv-root "$MI"
+printf '# day one\nREADME.md\nNEWS.md\nlegacy\ndocs\ndocs/LANDING.md\n' > scripts/checks/root_inventory.txt
+commit_all binv-root
+inv_leg tin2 binv-root 5455
+[ "$rc" = 5 ] && has "$out" "no rehearsal record" \
+  && ok "an inventory change that adds a top-level entry still needs a rehearsal" || { no "top-level inventory change: dry-run land exit $rc"; echo "$out" | sed 's/^/      /'; }
+git checkout -q -b binv-legacy "$MI"; printf 'edited old tree\n' > legacy/old.txt; commit_all binv-legacy
+inv_leg tin3 binv-legacy 5456
+[ "$rc" = 5 ] && has "$out" "no rehearsal record" \
+  && ok "a change under legacy/ (inventory untouched) still needs a rehearsal" || { no "legacy change: dry-run land exit $rc"; echo "$out" | sed 's/^/      /'; }
 
 echo
 echo "check_landing_script: PASS=$PASS FAIL=$FAIL"

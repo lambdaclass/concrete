@@ -23,9 +23,10 @@
 #     base's unless an explicit transition row replaces or retires it) is present and succeeded, and
 #     origin/main is still the train's base. A moved main means rebuild and re-run:
 #     a result is bound to the exact candidate that ran.
-#   * (2026-11-05) a candidate that touches legacy/ or the root inventory (the legacy/ move) lands
-#     only with an accepted acceptance rehearsal of that exact candidate (same train-head tree, same base) in
-#     <state>/rehearsals.tsv; see require_rehearsal. A dry run refused only by that gate exits 5.
+#   * (2026-11-05) a candidate that changes legacy/ or the root's top-level entries (the legacy/ move)
+#     lands only with an accepted acceptance rehearsal of that exact candidate (same train-head tree,
+#     same base) in <state>/rehearsals.tsv; see is_move_candidate and require_rehearsal. A dry run
+#     refused only by that gate exits 5.
 #   * pushes name the exact SHA, never `HEAD` (push-both.sh: HEAD can move during a wait), and a
 #     remote named `fork` is refused outright.
 #   * (2026-10-25) a push's exit status is not its result: GitHub drops the connection during a long
@@ -774,11 +775,14 @@ $(printf '%s\n' "$unmet" | sed 's/^/    /')"
 
 # THE MOVE GATE (R-0558, R-0563). A candidate that moves the old tree into legacy/ lands only when
 # $STATE_ROOT/rehearsals.tsv holds an `accepted` row for it, written by scripts/land/acceptance.sh.
-# Which candidates count as a move is decided conservatively, from base..head and not from names: one
-# that changes anything under legacy/ or scripts/checks/root_inventory.txt (the new root's
-# inventory), or whose head has a `legacy` entry that is not a directory. So a move staged across
-# several candidates (a scaffold first, the compiler later) needs a rehearsal at every step, and so
-# does any later edit under legacy/ (B3 deletes it), which is rare by design.
+# Which candidates count as a move is decided from base..head, not from names: one that changes
+# anything under legacy/, whose head has a `legacy` entry that is not a directory, or that changes the
+# SET OF TOP-LEVEL ENTRIES scripts/checks/root_inventory.txt lists (an entry added or removed, or the
+# file itself added or removed). The inventory's comments, its order and its nested docs/... and
+# scripts/... entries do not count: adding a folder under docs/ is upkeep of the root, which
+# scripts/checks/root_inventory.sh enforces on every push, not a move. So a move staged across several
+# candidates (a scaffold first, the compiler later) needs a rehearsal at every step, and so does any
+# later edit under legacy/ (B3 deletes it), which is rare by design.
 # The candidate is identified by its train head's TREE and its base: the acceptance run builds its own
 # train, whose merge commit differs from this one's, but the same base and members give the same
 # tree, and a tree is exactly what lands. A different tree, a different base or any other verdict is
@@ -793,11 +797,21 @@ $(printf '%s\n' "$unmet" | sed 's/^/    /')"
 # land has it. A candidate that edits train.sh changes the land path for every later land; review
 # must keep require_rehearsal on it. Nothing here defends against a reviewed change that removes it.
 REHEARSALS="$STATE_ROOT/rehearsals.tsv"
+# The top-level entries <commit>'s root inventory lists, sorted; nothing when it has none. Parsed as
+# scripts/checks/root_inventory.sh parses it: a line starting with `#` is a comment, the rest is
+# stripped and a blank line skipped. An entry with a `/` is nested (docs/..., scripts/...).
+root_entries() { # commit
+  git show "$1:scripts/checks/root_inventory.txt" 2>/dev/null \
+    | awk '/^#/ { next } { gsub(/^[[:space:]]+|[[:space:]]+$/, "") } $0 != "" && !/\// { print }' \
+    | LC_ALL=C sort -u
+  return 0
+}
 is_move_candidate() { # base head
   local t
   t="$(git cat-file -t "$2:legacy" 2>/dev/null || true)"
   [ -z "$t" ] || [ "$t" = tree ] || return 0
-  [ -n "$(git diff --name-only "$1" "$2" -- legacy scripts/checks/root_inventory.txt)" ]
+  [ -z "$(git diff --name-only "$1" "$2" -- legacy)" ] || return 0
+  [ "$(root_entries "$1")" != "$(root_entries "$2")" ]
 }
 require_rehearsal() { # name base head
   local name="$1" base="$2" head="$3" tree why=""
@@ -819,7 +833,7 @@ require_rehearsal() { # name base head
     fi
   fi
   log_row "$name" land refused "move without an accepted rehearsal"
-  local msg="land: ${head:0:10} is a legacy/ move candidate (it touches legacy/ or the root inventory), and there is no accepted rehearsal for its tree ${tree:0:10} on base ${base:0:10}: $why. Run scripts/land/acceptance.sh --ref <member> in this clone first."
+  local msg="land: ${head:0:10} is a legacy/ move candidate (it changes legacy/ or the root's top-level entries), and there is no accepted rehearsal for its tree ${tree:0:10} on base ${base:0:10}: $why. Run scripts/land/acceptance.sh --ref <member> in this clone first."
   if [ "$DRY" = 1 ]; then
     echo "$MOVE_GATE_MARKER" >&2
     echo "train: $msg" >&2
