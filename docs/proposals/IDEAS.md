@@ -87,36 +87,33 @@ Each old task in the disposition table is mapped to a new task in its `destinati
 
 **DEFERRED:**
 - Concurrency: R-0399–R-0401.
-- Constant-time: #7.
-- Step/time bounds: #8.
-- Freestanding: #11.
+- Constant-time: #11.
+- Step/time bounds: #4(b).
+- Freestanding: #15.
+- Multi-kernel replay: R-0448, deferred with a trigger (R-0522 only retired the duplicate Isabelle builder paths; correction from agy).
 - Error-signature normalization: R-0017 (error conventions themselves are PLANNED, item 12).
 - Development-only `expect`: R-0240.
 - Binary-format DSLs: R-0406.
 
 **RETAINED-ONLY:**
-- Fixed-capacity std: #9.
+- Fixed-capacity std: #8.
 - The research and paper directories.
 - `tests/showcase`.
 - The 60 examples (migrated as a corpus; real-program ports follow phase C/D).
 
 **DROPPED-ON-PURPOSE:**
-- (Moved to DEFERRED: multi-kernel replay is R-0448, deferred with a trigger. R-0522 only retired the duplicate Isabelle builder paths. Correction from agy.)
 - An SMT-based contract checker for admission: no SMT for admission (no-hidden-traps decision). SMT-checked *lowering* stays as proof-order item 7.
 - Profiles as separate admission modes: OD124, profiles kept as a refusal chapter; replaced by policies over facts.
 - The transformation-soundness register: legacy ProofCore, retired (R-0262/R-0276).
 - Broad `#[cfg]`: P17b.
 
-## Counts (v2, about 52 ideas)
+## Summary
 
-| Status | Count |
-|---|---|
-| CARRIED | 16 |
-| PLANNED | 22, including frames, sufficiency/vacuity, replay vs acceptance, golden rule and error conventions; 4 of them sit too late (facts query, policy, frames schema, vacuity) |
-| DEFERRED | 7 |
-| RETAINED-ONLY | 4 (fixed-capacity std, research/papers, showcase, examples; migration still open) |
-| FORGOTTEN | 0 as ideas. **2 at risk with no home:** a policy file format, and preservation across indirect calls, mono and packages |
-| DROPPED-ON-PURPOSE | 5 |
+Counts are omitted (corrected 2026-11-06): the ranked table and the status lists above are the
+record. No idea is known to be FORGOTTEN, but ranked #16 (the declared-assumptions file) and #17
+(contract-strength labels) are probably forgotten (no row found by grep). Two ideas had no home: a
+policy file format, and preservation across indirect calls, specialization and packages. Four
+PLANNED ideas sat too late: the facts query, policy, the frames schema and vacuity.
 
 ## Bug structural classes not yet structurally prevented
 
