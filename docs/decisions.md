@@ -514,8 +514,9 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     A2a → A2b → A2c to A2a → A2b → A2i → A2c.
   - *Bound the LLVM hole* (revised 2026-11-06 by the owner: the LCB joins slice 0). The LCB runs
     unverified beside LLVM from slice 0, and its BIR → LCB-IR adapter is the first backend proof
-    target ([backend order](#decided-project-proof-infrastructure)). After slices 0 and 1 (B0, B1)
-    and before substantial feature growth (C, D), the LP0 pilot composes that adapter proof with the
+    target ([backend order](#decided-project-proof-infrastructure)). After B0 and B1 (the slices
+    before LP0; [vertical slices](#decided-project-vertical-slices-2026-11-06)) and before the
+    language grows large, the LP0 pilot composes that adapter proof with the
     LCB's theorems for the supported subset and with the slice theorem under named premises, kept
     separate from the LLVM premises. Every remaining backend obligation has its own task and
     milestone. "The holes only shrink" prevents regression; this rule requires progress. The LLVM

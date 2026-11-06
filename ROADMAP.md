@@ -63,8 +63,8 @@ verbosity that buys clarity) get one home in `PHILOSOPHY.md` when the `wip/philo
    The compiler imports it and builds a proved lowering chain below Core. Slice 0 gets two native
    builds, a BIR → LLVM printer and BIR → LCB-IR → the Lean Compiler Backend, both labelled
    unverified, and CI compares their observations; later slices extend the same paths. The BIR → LCB-IR
-   adapter is the first backend proof, and a bounded BIR → LCB → native proof pilot follows right
-   after slices 0 and 1 (LP0, [2026-11-06](docs/decisions.md#decided-project-long-term-2026-11-06))
+   adapter is the first backend proof, and a bounded BIR → LCB → native proof pilot follows
+   before the language grows large (LP0, [2026-11-06](docs/decisions.md#decided-project-long-term-2026-11-06))
    ([decision](docs/archive/roadmap-2026-11/ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract),
    [revised 2026-11-05 and 2026-11-06](docs/decisions.md#decided-project-proof-infrastructure)).
 4. **The old tree is legacy.** The owner chose a `legacy/` folder on main on 2026-11-04 and approved
@@ -201,9 +201,10 @@ backends, and CI compares their full observations.
 **The order** is to be filled from the agreed slice plan (Claude, Codex, Kimi and agy, for the
 owner). Slice 0 is fixed: `u8` literals, `let`, checked `+`, `main` returning `u8`. Integers come
 first, capabilities early, and LP0 (the proven LCB path) lands before the language grows large. A
-task row that says "slice 1" or B1 means the obligation is due with the slice that introduces its
-feature; the linear component and launcher obligations arrive with the ownership slice. Where that
-slice falls relative to LP0 is fixed when the slice plan is agreed.
+B1 is the milestone of the slices before LP0. An obligation a task row assigns to "slice 1" is due at
+B1 when its feature is in a slice before LP0, and otherwise with the later slice that introduces its
+feature; the agreed slice plan fixes which. The linear component and launcher obligations arrive
+with the ownership slice.
 
 <a id="questions-for-the-core-session"></a>
 ### Questions for the Core session
@@ -295,7 +296,7 @@ archive. Rows for C–G are summaries. Each is refined when its phase becomes ne
 | R-0509 | The trusted-base inventory, evidence binding, assumption lifecycle and axiom replay | the inventory is on main; every claim's axioms are recorded and replayed from a clean checkout; CI audits semantic-premise closure separately from logical axioms and rejects unapproved assumption additions or strengthening | R-0506 |
 | R-0500 | Each decided language rule gets its Lean judgment, semantic clause and accepted, refused or trapping examples | each rule lands with its slice; every rule of the decided language has one by the end of D | R-0560 |
 
-### B. Cumulative slices 0 and 1
+### B. Cumulative slices up to LP0
 
 | task | objective | done when | depends on |
 |---|---|---|---|
@@ -379,7 +380,7 @@ archive. Rows for C–G are summaries. Each is refined when its phase becomes ne
 
 | task | objective | done when | depends on |
 |---|---|---|---|
-| R-0590 | Delete `legacy/` (LD), after D ([decision](docs/decisions.md#decided-project-restart), revised 2026-11-06) | a final ideas sweep of `legacy/` dispositions every idea (carried, planned, deferred or dropped on purpose); every `RETENTION.tsv` row is resolved; the owner explicitly approves; `legacy/`, the old pipeline included, is then deleted in one change, and the retention records at the root survive it | D, R-0591, R-0597, R-0562, R-0561, owner: legacy deletion |
+| R-0590 | Delete `legacy/` (LD), after D ([decision](docs/decisions.md#decided-project-restart), revised 2026-11-06) | a final ideas sweep of `legacy/` dispositions every idea (carried, planned, deferred or dropped on purpose); every `RETENTION.tsv` row is resolved; the owner explicitly approves; `legacy/`, the old pipeline included, is then deleted in one change, and the retention records at the root survive it | D, R-0591, R-0597, R-0598, R-0562, R-0561, owner: legacy deletion |
 
 ### E. Verified growth
 
