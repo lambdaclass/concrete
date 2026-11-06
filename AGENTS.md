@@ -49,7 +49,9 @@ and wait for an explicit answer. Behaviour already on main that took a side stay
 as a conflict, until the owner answers; nobody extends or reverts it meanwhile.
 - The Codex review of every fix (`scripts/review/review.sh` asks it) also answers: "does this fix
   pick a side on any OD in docs/decisions.md?" If yes, or if the fix cannot be made without picking
-  one, stop and report to the owner; do not land it.
+  one, stop and report to the owner; do not land it. Recording an answer the owner explicitly gave
+  is not picking a side; what the review checks then is in
+  [REVIEW.md](docs/REVIEW.md#owner-decisions-choosing-versus-recording).
 
 **Bugs.**
 - Every bug gets a structural cause and a structural owner: the design fact that let it exist, and

@@ -102,6 +102,27 @@ fails again, the piece is `blocked` and the script moves on. It does not loop.
 Refusal text is matched only when the reply has no verdict line, so a real
 review that discusses content filters still parses.
 
+## Owner decisions: choosing versus recording
+
+Both prompts ask whether the patch picks a side on an owner decision: choosing, revising,
+encoding, implementing, extending or reverting what an undecided question covers, whether one of
+the language decisions OD1 – OD157 ([decisions.md](decisions.md#owner-decisions)) or an important
+project question. That is a finding, and the patch does not land: only the owner decides.
+
+Recording a decision the owner explicitly approved, under the
+[recording rule](decisions.md#decided-project-recording), is not picking a side, and the review
+permits it. For such a patch the reviewer checks four things, and a failure of any is a finding:
+
+- **provenance**: each recorded answer carries the owner's answer, quoted with its date, or the
+  quoted owner rule that decides the question under the recording rule;
+- **faithful transcription**: the recorded text says what that answer says, no more and no less;
+- **scope**: the patch changes only what that answer covers;
+- **nothing unapproved**: nothing else is marked decided, and no undecided question is chosen or
+  revised.
+
+A review that refuses such a patch is answered in the next round (a quoted answer, a narrower
+change), never by skipping the review.
+
 ## The note
 
 After each round the script writes this note on `HEAD` under

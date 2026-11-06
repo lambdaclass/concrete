@@ -2,9 +2,10 @@
 # THE LANDING WORKFLOW ACCEPTANCE TEST (ROADMAP R-0563 on the new roadmap): does a fresh clone still build, hook, run CI
 # at the exact SHA and get as far as a landing, and do the refusals still refuse?
 #
-# Run it before the legacy/ move (on the current tree) and again on the moved tree, before that move
-# lands. It drives the real scripts/land/train.sh from a FRESH clone, so nothing in this checkout,
-# its state directory or its hooks configuration can make it pass.
+# Run it, in the clone that will land, for every candidate train.sh's move gate selects (a change
+# under legacy/, or to the root inventory's top-level entries; see is_move_candidate). It drives the
+# real scripts/land/train.sh from a FRESH clone, so nothing in this checkout, its state directory or
+# its hooks configuration can make it pass.
 #
 # IT NEVER LANDS, and that does not rest on the script under test honouring --dry-run. Three
 # independent guards: a `git` shim first on PATH for every leg refuses any push whose destination is
@@ -26,14 +27,18 @@
 # Legs, in order (each stops the run when it fails, except the negative controls, which all run):
 #   clone    git clone of origin, both remotes configured, the guarded hooks path installed
 #   train    train.sh build <name> <ref>; the train head is the SHA every later result is bound to
-#   build    ACCEPT_BUILD_CMD in the clone, at the train head (default: make build)
-#   check    train.sh check <name> --no-review (the hook's impact selection over base..head)
+#   build    ACCEPT_BUILD_CMD in the clone, at the train head (default: nix develop --command lake
+#            build, the root's build)
+#   check    train.sh check <name> --no-remote: the impact selection over base..head, and the review
+#            leg, which skips nothing: it passes on verified clean review notes (the train head's, or
+#            every member's at its exact SHA), else runs the reviewer, and fails closed. The remote
+#            full set is left to the ci and watch legs, which run every required job at the exact SHA
 #   ci       train.sh ci <name>: push ci/<name>, dispatch CI, record the run of the exact head
 #   watch    train.sh watch <name>: the run's head SHA, landing tier and required-checks.txt
 #   dryland  train.sh --dry-run land <name>: every land check, nothing pushed
 #   negative controls, each of which must FAIL, for its own reason:
 #     neg:build  a commit on the train head that breaks the build (ACCEPT_BREAK_BUILD, a shell
-#                snippet run in a scratch worktree): ACCEPT_BUILD_CMD must fail, naming the file
+#                snippet run in a scratch worktree): the build leg's command must fail, naming the file
 #     neg:hook   a commit on the train head that adds a job name to required-checks.txt that no
 #                workflow has: the candidate's own pre-push hook, fed that range, must fail
 #     neg:<m>    the same watch and dry-run land against the same run with its verdict tampered (a
@@ -64,7 +69,7 @@ while [ $# -gt 0 ]; do
     --skip) SKIP["$2"]=1; shift ;;
     --run-id) RUN_ID="$2"; shift ;;
     --keep) KEEP=1 ;;
-    -h|--help) sed -n '2,34p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) awk 'NR > 1 { if (!/^#/) exit; sub(/^# ?/, ""); print }' "$0"; exit 0 ;;
     *) echo "acceptance: unknown argument $1" >&2; exit 2 ;;
   esac; shift
 done
@@ -75,6 +80,9 @@ case "$REF" in *[[:space:]]*|*[[:cntrl:]]*) echo "acceptance: --ref must not con
 case "$NAME" in *[!A-Za-z0-9._-]*|.*|*..*) echo "acceptance: --name must be [A-Za-z0-9._-]+ and not start with '.'" >&2; exit 2 ;; esac
 bad_env="$(compgen -e | grep -E '^(LAND_|CONCRETE_SKIP_)' || true)"
 [ -z "$bad_env" ] || { echo "acceptance: refusing to run with $(echo $bad_env) set (remote, hook or gate overrides)" >&2; exit 2; }
+
+# The one build command of the build leg and of the broken-build control (neg:build).
+BUILD_CMD="${ACCEPT_BUILD_CMD:-nix develop --command lake build}"
 
 SRC_REPO="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "acceptance: run inside a clone" >&2; exit 2; }
 ORIGIN_URL="$(git -C "$SRC_REPO" remote get-url origin)"
@@ -188,7 +196,7 @@ do_clone() {
 }
 do_build() { # at the train head: the build result belongs to the SHA every other leg tests
   [ "$(git -C "$C" rev-parse HEAD)" = "$HEAD" ] || { echo "the clone is not at the train head"; return 1; }
-  cd "$C" && bash -c "${ACCEPT_BUILD_CMD:-make build}" && echo "built $HEAD"
+  cd "$C" && bash -c "$BUILD_CMD" && echo "built $HEAD"
 }
 do_train() {
   TRAIN build "$NAME" "$REF" && HEAD="$(git -C "$C" rev-parse HEAD)" || return 1
@@ -198,7 +206,7 @@ do_train() {
   [ -z "$hits" ] || { echo "the train head's landing scripts push with --no-verify:"; echo "$hits"; return 1; }
   echo "train head $HEAD"
 }
-do_check() { TRAIN check "$NAME" --no-review --no-remote; }
+do_check() { TRAIN check "$NAME" --no-remote; }
 do_ci() {
   if [ -n "$RUN_ID" ]; then
     local f; f="$(cd "$C" && cd "$(git rev-parse --git-common-dir)" && pwd)/concrete-landing/$NAME/train.env"
@@ -265,7 +273,7 @@ do_neg_build() {
   local d out f
   d="$(neg_tree build "$snip")" || { row neg:build failed "could not make the broken commit"; FAILED=1; return 0; }
   f="$(git -C "$d" show HEAD:.acceptance-broken-file 2>/dev/null)"
-  out="$(cd "$d" && bash -c "${ACCEPT_BUILD_CMD:-make build}" 2>&1)"
+  out="$(cd "$d" && bash -c "$BUILD_CMD" 2>&1)"
   if [ $? = 0 ]; then row neg:build failed "a broken build passed"; FAILED=1
   elif [ -n "$f" ] && ! printf '%s\n' "$out" | awk -v w="$f" 'index($0, w) {x=1} END {exit !x}'; then
     row neg:build failed "the build failed, but not on the broken file $f"; FAILED=1
