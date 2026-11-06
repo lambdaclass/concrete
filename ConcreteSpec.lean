@@ -2,3 +2,4 @@
 -- The rules and their examples: ConcreteSpec/Spec.lean. The proofs: ConcreteSpec/Proofs/.
 import ConcreteSpec.Spec
 import ConcreteSpec.Proofs.Examples
+import ConcreteSpec.Proofs.Authority
