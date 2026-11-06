@@ -8,7 +8,8 @@ Every finite map in the specification (a context, an environment, a memory, a fi
 association list: a list of key–value pairs, read from the front. This module is the one
 definition of the four operations on them; their lemmas are in `Proofs/Basics.lean`. No other
 module defines its own lookup; a table of declarations, each carrying its own name (`findDecl`,
-`Authority.Prog.find`), is searched with `List.find?`. Each operation takes the map first. Call them qualified
+`Authority.Prog.find`), is searched with `List.find?`. `lookup`, `update` and `erase` take the
+map first; `map` takes the function first, as `List.map` does. Call them qualified
 (`AList.lookup Γ x`): on a plain `List` the dotted form would reach `List.erase` or `List.map`.
 -/
 

@@ -387,7 +387,7 @@ accesses only its view changes nothing outside `[a, b)` of its source (`range_bl
 
 This run covers array sources; a text view reads bytes with the same index arithmetic, and text
 validity is below. Views of views (opening a range of a view) are not modelled, and the run is
-not yet joined to the access rules `Ok` in one theorem (they are separate fragments, joined by A3).
+not yet joined to the access rules `Ok` in one theorem (they are separate fragments, joined in A2i).
 -/
 
 /-- Memory: each owner array place and its elements. -/
