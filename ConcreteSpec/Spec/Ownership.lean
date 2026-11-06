@@ -116,14 +116,42 @@ def knownFields (Γ : Ctx) : Expr → List (Name × Option Scalar)
 def FieldsHold (K : List (Name × Option Scalar)) (vs : List (Name × Scalar)) : Prop :=
   ∀ f s, fieldFact K f = some s → lookupF f vs = some s
 
-/-- A statically known violation (Q6.1): a checked `+` whose operands are known, of one type,
-and whose result does not fit. Such an operation is refused wherever it is written (Q6.4,
-OD118), whether or not it would run. -/
-def knownViolates (Γ : Ctx) : Expr → Bool
-  | .add l r => match knownAtom Γ l, knownAtom Γ r with
-    | some (.int t a), some (.int t' b) => decide (t = t') && !t.inRange (a + b)
+/-! ### No hidden traps: evidence for each operation
+
+Accepted safe code has no reachable implicit trap (decision "No hidden traps and bounded
+execution", 2026-11-06, in `docs/decisions.md`, its Q1): every operation that could
+fail at run time carries checked evidence that it cannot. Slice 1 has one such operation, checked
+`+`. Its evidence is a bound on each operand, read from the facts the checker keeps: a known value
+(Q6.2) is exact, and any other integer is bounded by its type. The sum is admitted only when the
+operands' bounds put it inside the result type; otherwise it is refused, whether or not it would
+fail (refusal of unproven safety subsumes OD118's refusal of proven violations). This is interval
+admission only, a sound part of the decided checker, not the checker itself: the decision's checker
+decides integer octagons (`±x ± y ≤ c`), and even slice 1 has relational facts it would use (an
+immutable copy gives `y = x`). The octagon fact language, its transfers, conditions, joins and the
+loop rule are open R-0574 work that lands before the freeze. -/
+
+/-- The integer type of an atom and a bound `lo ≤ v ≤ hi` on its value, from the checker's facts:
+a literal or a known local is exact (Q6.2); another integer local is bounded by its type. `none` for
+a `bool` and for `move` (no scalar is moved). -/
+def atomBounds (Γ : Ctx) : Atom → Option (IntTy × Int × Int)
+  | .int t n => some (t, n, n)
+  | .bool _ => none
+  | .copy x => match ctxFind Γ x with
+    | some e => match e.ty, e.known with
+      | .scalar (.int t), some (.int _ n) => some (t, n, n)
+      | .scalar (.int t), _ => some (t, t.min, t.max)
+      | _, _ => none
+    | none => none
+  | .move _ => none
+
+/-- The operation's evidence holds: an expression is admitted when every operation in it is proved
+not to fail (no hidden traps, Q1). A checked `l + r` is admitted when the operands' bounds put
+every possible sum inside the result type; an atom and a struct literal contain no operation. -/
+def admitted (Γ : Ctx) : Expr → Bool
+  | .add l r => match atomBounds Γ l, atomBounds Γ r with
+    | some (t, a, b), some (t', c, d) => decide (t = t' ∧ t.min ≤ a + c ∧ b + d ≤ t.max)
     | _, _ => false
-  | _ => false
+  | _ => true
 
 /-- A new binder is a fresh identity (Q9.1): no binding of the context has it, moved or not. -/
 def Fresh (Γ : Ctx) (x : Var) : Prop := ctxFind Γ x = none
@@ -159,9 +187,9 @@ def bindPat (d : StructDecl) (K : List (Name × Option Scalar)) : List (Name × 
 def PatFresh (Γ : Ctx) (pat : List (Name × Binder)) : Prop :=
   (patNames pat).Nodup ∧ ∀ x ∈ patNames pat, Fresh Γ x
 
-/-- A statement is well typed, respects ownership and contains no statically known violation.
+/-- A statement is well typed, respects ownership and every operation in it is admitted.
 
-* `let x: T = e;` — `e` has type `T` (TYPE-4), contains no known violation (Q6.1), its reads are
+* `let x: T = e;` — `e` has type `T` (TYPE-4), its operation is admitted (no hidden traps), its reads are
   allowed (OWN-1), and `x` is fresh (Q9.1). `x` starts live and unused, with `e`'s known value and,
   for a struct, `e`'s known field values.
 * `let _: T = e;` — as above, but nothing is bound and the value is dropped, so `T` must be Copy:
@@ -171,14 +199,14 @@ def PatFresh (Γ : Ctx) (pat : List (Name × Binder)) : Prop :=
   scrutinee is consumed (PAT-5: a linear `e` is moved), and the binders are fresh. Each binder
   receives the known value of its field, if the scrutinee has one. -/
 inductive StmtOk (Δ : Decls) : Ctx → Stmt → Ctx → Prop where
-  | let_ {Γ Γ₁ x t e} : HasType Δ Γ.tys e t → knownViolates Γ e = false → Uses Δ Γ e Γ₁ →
+  | let_ {Γ Γ₁ x t e} : HasType Δ Γ.tys e t → admitted Γ e = true → Uses Δ Γ e Γ₁ →
       Fresh Γ₁ x →
       StmtOk Δ Γ (.let_ (.name x) t e)
         ({ name := x, ty := t, live := true, used := false, known := knownExpr Γ e,
            kfields := knownFields Γ e } :: Γ₁)
-  | letWild {Γ Γ₁ t e} : HasType Δ Γ.tys e t → knownViolates Γ e = false → t.isCopy Δ = true →
+  | letWild {Γ Γ₁ t e} : HasType Δ Γ.tys e t → admitted Γ e = true → t.isCopy Δ = true →
       Uses Δ Γ e Γ₁ → StmtOk Δ Γ (.let_ .wild t e) Γ₁
-  | letStruct {Γ Γ₁ s d pat e} : HasType Δ Γ.tys e (.struct s) → knownViolates Γ e = false →
+  | letStruct {Γ Γ₁ s d pat e} : HasType Δ Γ.tys e (.struct s) → admitted Γ e = true →
       findDecl Δ s = some d → PatOk d pat → Uses Δ Γ e Γ₁ → PatFresh Γ₁ pat →
       StmtOk Δ Γ (.letStruct s pat e) (bindPat d (knownFields Γ e) pat Γ₁)
 
@@ -189,7 +217,7 @@ def Discharged (Δ : Decls) (Γ : Ctx) : Prop :=
 
 /-- A body is accepted: each statement in order, then `return a` with `a : u8` (STMT-7), after
 which nothing linear is left and every binding was used. An atom contains no operation, so the
-`return` has no known violation to check. -/
+`return` has no operation to admit. -/
 inductive BodyOk (Δ : Decls) : Ctx → List Stmt → Atom → Prop where
   | ret {Γ Γ₁ r} : HasType Δ Γ.tys (.atom r) (.scalar (.int .u8)) → Uses Δ Γ (.atom r) Γ₁ →
       Discharged Δ Γ₁ → BodyOk Δ Γ [] r
@@ -201,7 +229,8 @@ def DeclsOk (Δ : Decls) : Prop :=
   (Δ.map StructDecl.name).Nodup ∧ (∀ d ∈ Δ, d.name ≠ "main" ∧ (d.fields.map Prod.fst).Nodup)
 
 /-- A slice-1 program is accepted: its declarations are well formed and its body is accepted,
-including the mandatory static refusal of known violations (Q6.1–Q6.6). -/
+including the mandatory static refusal of every operation without evidence (no hidden traps, which
+subsumes the refusal of known violations of Q6.1–Q6.6). -/
 def Checked (p : Program) : Prop := DeclsOk p.decls ∧ BodyOk p.decls [] p.body p.ret
 
 end ConcreteSpec

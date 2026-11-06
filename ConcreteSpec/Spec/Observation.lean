@@ -66,8 +66,8 @@ def observe (configured : Bool) (o : Outcome) : Option Observation :=
 example : (observe true (run Examples.moveThenConsume 10)).map Observation.status = some 42 := by
   decide
 
-/-- The accepted body `add100` traps on input 200 (it is not statically known): the trap message
-goes to descriptor 2 and the status is 134. -/
+/-- The refused body `add100`, run anyway on input 200, traps: the trap message goes to descriptor
+2 and the status is 134. -/
 example : observe true (runBody Examples.decls 10 (Examples.inputEnv 200) Examples.add100
     (.copy Examples.s₂)) = some (.trapped .arithmeticOverflow) := by decide
 

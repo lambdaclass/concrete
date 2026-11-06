@@ -94,7 +94,7 @@ def patOkB (d : StructDecl) (pat : List (Name × Binder)) : Bool :=
 /-- The context after a statement, if the statement is accepted. -/
 def stmtOut (Δ : Decls) (Γ : Ctx) : Stmt → Option Ctx
   | .let_ (.name x) t e =>
-    if tyOf Δ Γ.tys e = some t ∧ knownViolates Γ e = false then
+    if tyOf Δ Γ.tys e = some t ∧ admitted Γ e = true then
       match uses Δ Γ e with
       | some Γ₁ => if Fresh Γ₁ x then
           some ({ name := x, ty := t, live := true, used := false, known := knownExpr Γ e,
@@ -103,10 +103,10 @@ def stmtOut (Δ : Decls) (Γ : Ctx) : Stmt → Option Ctx
       | none => none
     else none
   | .let_ .wild t e =>
-    if tyOf Δ Γ.tys e = some t ∧ knownViolates Γ e = false ∧ t.isCopy Δ = true then uses Δ Γ e
+    if tyOf Δ Γ.tys e = some t ∧ admitted Γ e = true ∧ t.isCopy Δ = true then uses Δ Γ e
     else none
   | .letStruct s pat e =>
-    if tyOf Δ Γ.tys e = some (.struct s) ∧ knownViolates Γ e = false then
+    if tyOf Δ Γ.tys e = some (.struct s) ∧ admitted Γ e = true then
       match findDecl Δ s with
       | some d => if patOkB d pat then
           match uses Δ Γ e with

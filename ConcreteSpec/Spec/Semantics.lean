@@ -195,7 +195,7 @@ inductive Exec (Δ : Decls) : Env → List Stmt → Atom → Outcome → Prop wh
 /-! ### Value typing
 
 What it means for a run-time value to have a type. The safety theorems (`checked_never_stuck`,
-`checked_exits_or_traps`, in `Proofs/Slice1.lean`) are stated with it. -/
+`checked_exits`, in `Proofs/Slice1.lean`) are stated with it. -/
 
 /-- A scalar value has a scalar type: an integer of its type and in its range, or a `bool`. -/
 inductive SVTy : Scalar → STy → Prop where

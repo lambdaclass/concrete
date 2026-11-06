@@ -1,7 +1,7 @@
 import ConcreteSpec.Proofs.Basics
 
 /-!
-# Slice-1 proofs: fuel properties of the evaluator, and safety (`checked_never_stuck`, `checked_exits_or_traps`, `knownViolation_traps`).
+# Slice-1 proofs: fuel properties of the evaluator, and safety (`checked_never_stuck`, `checked_no_implicit_traps`, `checked_exits`).
 
 PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). See `ConcreteSpec/README.md`.
 -/
@@ -448,25 +448,167 @@ theorem knownExpr_sound {Δ : Decls} {Γ : Ctx} {env : Env} {e : Expr} {s : Scal
     · cases hk
   | mk s fs => simp [knownExpr] at hk
 
-/-- **Justified refusal** (Q6.1, OD118). An operation refused as a known violation would trap if
-it ran: in any environment the checker's context describes, evaluating it ends in the overflow
-trap. The checker refuses only operations that are proven to fail, never a correct one. Every
-environment reached by running an accepted prefix is described by its context (`execStmt_safe`
-below), so this covers every statement position. -/
-theorem knownViolation_traps {Δ : Decls} {Γ : Ctx} {env : Env} {e : Expr}
-    (hc : Corr Δ Γ env) (hv : knownViolates Γ e = true) :
-    evalExpr Δ env e = .trap .arithmeticOverflow := by
+/-! ### No hidden traps -/
+
+/-- Reading a local never traps. -/
+theorem readVar_ne_trap (Δ : Decls) (env : Env) (x : Var) (mv : Bool) (k : Trap) :
+    readVar Δ env x mv ≠ .trap k := by
+  unfold readVar; split <;> (try split) <;> simp
+
+/-- Reading an atom never traps. -/
+theorem evalAtom_ne_trap (Δ : Decls) (env : Env) (a : Atom) (k : Trap) : evalAtom Δ env a ≠ .trap k := by
+  cases a with
+  | int => simp [evalAtom]
+  | bool => simp [evalAtom]
+  | copy x =>
+    simp only [evalAtom]
+    have := readVar_ne_trap Δ env x false k
+    split <;> simp_all
+  | move x =>
+    simp only [evalAtom]
+    have := readVar_ne_trap Δ env x true k
+    split <;> simp_all
+
+/-- Struct-literal fields never trap: they are atoms. -/
+theorem evalFields_ne_trap (Δ : Decls) (k : Trap) :
+    ∀ (env : Env) (fs : List (Name × Atom)), evalFields Δ env fs ≠ .trap k
+  | env, [] => by simp [evalFields]
+  | env, (f, a) :: rest => by
+    simp only [evalFields]
+    have h₁ := evalAtom_ne_trap Δ env a k
+    split
+    · rename_i v env₁ _
+      have h₂ := evalFields_ne_trap Δ k env₁ rest
+      split <;> simp_all
+    · simp_all
+    · simp
+
+/-- Recording a read changes no binding's bounds. -/
+theorem atomBounds_mark (y : Var) (mv : Bool) (a : Atom) (Γ : Ctx) :
+    atomBounds (ctxMark Γ y mv) a = atomBounds Γ a := by
+  cases a with
+  | copy x =>
+    simp only [atomBounds]
+    suffices h : ∀ Γ : Ctx, (ctxFind (ctxMark Γ y mv) x).map (fun e => (e.ty, e.known)) =
+        (ctxFind Γ x).map (fun e => (e.ty, e.known)) by
+      have h' := h Γ
+      cases h₁ : ctxFind (ctxMark Γ y mv) x <;> cases h₂ : ctxFind Γ x <;> simp_all
+    intro Γ
+    induction Γ with
+    | nil => rfl
+    | cons e Γ ih =>
+      simp only [ctxMark]
+      split
+      · simp only [ctxFind]; split <;> simp_all
+      · simp only [ctxFind]; split <;> simp_all
+  | _ => rfl
+
+theorem useAtom_atomBounds {Δ : Decls} {Γ Γ' : Ctx} {a : Atom} (h : UseAtom Δ Γ a Γ') (b : Atom) :
+    atomBounds Γ' b = atomBounds Γ b := by
+  cases h with
+  | int => rfl
+  | bool => rfl
+  | copy => exact atomBounds_mark _ _ _ _
+  | move => exact atomBounds_mark _ _ _ _
+
+/-- **The bounds are sound.** An atom the checker bounds evaluates to an integer of the bounded
+type within the bounds: a known value exactly, any other local within its type (it holds a value of
+its type, `Corr`). -/
+theorem atomBounds_sound {Δ : Decls} {Γ Γ' : Ctx} {env : Env} {a : Atom} {t : IntTy} {lo hi : Int}
+    (hc : Corr Δ Γ env) (hu : UseAtom Δ Γ a Γ') (hb : atomBounds Γ a = some (t, lo, hi)) :
+    ∃ n env', evalAtom Δ env a = .ok (.int t n, env') ∧ lo ≤ n ∧ n ≤ hi ∧ Corr Δ Γ' env' := by
+  cases hu with
+  | int =>
+    simp only [atomBounds, Option.some.injEq, Prod.mk.injEq] at hb
+    obtain ⟨rfl, rfl, rfl⟩ := hb
+    exact ⟨_, _, rfl, Int.le_refl _, Int.le_refl _, hc⟩
+  | bool => simp [atomBounds] at hb
+  | move => simp [atomBounds] at hb
+  | copy hf hl hcp =>
+    rename_i x e
+    obtain ⟨v, env', hr, hv, _, hc'⟩ := readVar_safe (mv := false) hc hf hl (by simpa using hcp)
+    simp only [atomBounds, hf] at hb
+    split at hb
+    · rename_i t₀ t₁ n hty hkn
+      simp only [Option.some.injEq, Prod.mk.injEq] at hb
+      obtain ⟨rfl, rfl, rfl⟩ := hb
+      obtain ⟨hsl, _⟩ := (corr_find hc hf).2.1 _ hkn
+      have hr' : readVar Δ env x false = .ok (.scalar (.int t₁ n), env) := by
+        simp [readVar, hsl, Val.isCopy]
+      rw [hr] at hr'
+      cases hr'
+      rw [hty] at hv
+      cases hv with
+      | scalar hs => cases hs with
+        | int _ => exact ⟨n, env, by simp [evalAtom, hr], Int.le_refl _, Int.le_refl _, hc'⟩
+    · rename_i t₀ kn hty _
+      simp only [Option.some.injEq, Prod.mk.injEq] at hb
+      obtain ⟨rfl, rfl, rfl⟩ := hb
+      rw [hty] at hv
+      cases hv with
+      | scalar hs => cases hs with
+        | int hin =>
+          rename_i n _
+          simp only [IntTy.inRange, decide_eq_true_eq] at hin
+          exact ⟨n, env', by simp [evalAtom, hr], hin.1, hin.2, hc'⟩
+    · simp at hb
+
+/-- **Admitted operations do not trap.** In any environment the checker's context describes, an
+expression whose operation is admitted evaluates without a trap: its evidence holds. -/
+theorem evalExpr_ne_trap {Δ : Decls} {e : Expr} {Γ Γ' : Ctx} {env : Env}
+    (hc : Corr Δ Γ env) (hu : Uses Δ Γ e Γ') (ha : admitted Γ e = true) (k : Trap) :
+    evalExpr Δ env e ≠ .trap k := by
   cases e with
-  | atom a => simp [knownViolates] at hv
-  | mk s fs => simp [knownViolates] at hv
+  | atom a =>
+    cases a with
+    | int => simp [evalExpr]
+    | bool => simp [evalExpr]
+    | copy x => exact readVar_ne_trap Δ env x false k
+    | move x => exact readVar_ne_trap Δ env x true k
+  | mk s fs =>
+    simp only [evalExpr]
+    have := evalFields_ne_trap Δ k env fs
+    split <;> simp_all
   | add l r =>
-    simp only [knownViolates] at hv
-    split at hv
-    · rename_i t a t' b hl hr
-      simp only [Bool.and_eq_true, decide_eq_true_eq, Bool.not_eq_true'] at hv
-      obtain ⟨rfl, hout⟩ := hv
-      simp [evalExpr, knownAtom_sound hc hl, knownAtom_sound hc hr, checkedAdd, hout]
-    · cases hv
+    cases hu with
+    | add hl hr =>
+      simp only [admitted] at ha
+      split at ha
+      · rename_i t a b t' c d hbl hbr
+        simp only [decide_eq_true_eq] at ha
+        obtain ⟨rfl, hlo, hhi⟩ := ha
+        obtain ⟨n₁, env₁, he₁, hl₁, hh₁, hc₁⟩ := atomBounds_sound hc hl hbl
+        rw [← useAtom_atomBounds hl r] at hbr
+        obtain ⟨n₂, env₂, he₂, hl₂, hh₂, _⟩ := atomBounds_sound hc₁ hr hbr
+        have hin : t.inRange (n₁ + n₂) = true := by
+          simp only [IntTy.inRange, decide_eq_true_eq]; constructor <;> omega
+        simp [evalExpr, he₁, he₂, checkedAdd, hin]
+      · cases ha
+
+/-- Binding the fields of a struct never traps. -/
+theorem destructure_ne_trap (k : Trap) :
+    ∀ (pat : List (Name × Binder)) (vs : List (Name × Scalar)) (env : Env), destructure pat vs env ≠ .trap k
+  | [], _, _ => by simp [destructure]
+  | (_, .wild) :: rest, vs, env => by simpa [destructure] using destructure_ne_trap k rest vs env
+  | (f, .name x) :: rest, vs, env => by
+    simp only [destructure]
+    split
+    · exact destructure_ne_trap k rest vs _
+    · simp
+
+/-- A statement whose operation is admitted executes without a trap. -/
+theorem execStmt_ne_trap {Δ : Decls} {Γ Γ' : Ctx} {env : Env} {s : Stmt}
+    (hc : Corr Δ Γ env) (hs : StmtOk Δ Γ s Γ') (k : Trap) : execStmt Δ env s ≠ .trap k := by
+  cases hs with
+  | let_ _ ha hu _ =>
+    have := evalExpr_ne_trap hc hu ha k
+    simp only [execStmt]; split <;> simp_all
+  | letWild _ ha _ hu =>
+    have := evalExpr_ne_trap hc hu ha k
+    simp only [execStmt]; split <;> simp_all
+  | letStruct _ ha _ _ hu _ =>
+    have := evalExpr_ne_trap hc hu ha k
+    simp only [execStmt]; split <;> (try split) <;> simp_all [destructure_ne_trap]
 
 theorem destructure_safe {Δ : Decls} {d : StructDecl} {vs : List (Name × Scalar)}
     {K : List (Name × Option Scalar)}
@@ -572,20 +714,55 @@ theorem checked_no_use_after_move {p : Program} (h : Checked p) (n : Nat) :
     run p n ≠ .stuck .movedRead :=
   checked_never_stuck h n _
 
-/-- **Slice-1 behaviour.** An accepted program has exactly one outcome, and it is an exit or a
-defined trap (STMT-1, ARITH-3). -/
-theorem checked_exits_or_traps {p : Program} (h : Checked p) :
-    ∃ o, Exec p.decls [] p.body p.ret o ∧ ((∃ c, o = .exit c) ∨ ∃ k, o = .trap k) := by
+/-- Body trap-freedom: from a described environment, a checked body never ends in a trap, for any
+fuel. -/
+theorem runBody_ne_trap {Δ : Decls} {Γ : Ctx} {ss : List Stmt} {r : Atom} (hb : BodyOk Δ Γ ss r) :
+    ∀ {env : Env}, Corr Δ Γ env → ∀ n k, runBody Δ n env ss r ≠ .trap k := by
+  induction hb with
+  | ret =>
+    rename_i r _ _ _
+    intro env _ n k
+    cases n with
+    | zero => simp [runBody]
+    | succ n =>
+      have := evalAtom_ne_trap Δ env r k
+      simp only [runBody, retOutcome]
+      split <;> simp_all
+  | cons hs _ ih =>
+    intro env hc n k
+    cases n with
+    | zero => simp [runBody]
+    | succ n =>
+      simp only [runBody]
+      have hnt := execStmt_ne_trap hc hs k
+      rcases execStmt_safe hc hs with ⟨k', hk'⟩ | ⟨env', he, hc'⟩
+      · exact absurd hk' (execStmt_ne_trap hc hs k')
+      · simp only [he]; exact ih hc' n k
+
+/-- **No hidden traps** (decision of 2026-11-06, Q1). An accepted program's run never ends in an
+implicit trap, with any amount of fuel. Every trap of slice 1 is implicit: the only one is the
+overflow of checked `+` (ARITH-3), and slice 1 has no explicit `abort()`. The Core semantics keeps
+the trap outcome (`runBody` of an unchecked body can trap, `Examples.add100`); admission rules it
+out. -/
+theorem checked_no_implicit_traps {p : Program} (h : Checked p) : ∀ n k, run p n ≠ .trap k :=
+  runBody_ne_trap h.2 .nil
+
+/-- **Slice-1 behaviour.** An accepted program has exactly one outcome, and it is an exit
+(STMT-1): it never gets stuck (`checked_never_stuck`) and never traps
+(`checked_no_implicit_traps`). -/
+theorem checked_exits {p : Program} (h : Checked p) :
+    ∃ o, Exec p.decls [] p.body p.ret o ∧ ∃ c, o = .exit c := by
   obtain ⟨o, ho⟩ := exec_total p.decls [] p.body p.ret
   refine ⟨o, ho, ?_⟩
   have hfuel := exec_complete ho
   have hns := checked_never_stuck h (p.body.length + 1)
+  have hnt := checked_no_implicit_traps h (p.body.length + 1)
   have hnf := exec_ne_outOfFuel ho
-  unfold run at hns
-  rw [hfuel] at hns
+  unfold run at hns hnt
+  rw [hfuel] at hns hnt
   cases o with
-  | exit c => exact .inl ⟨c, rfl⟩
-  | trap k => exact .inr ⟨k, rfl⟩
+  | exit c => exact ⟨c, rfl⟩
+  | trap k => exact absurd rfl (hnt k)
   | stuck w => exact absurd rfl (hns w)
   | outOfFuel => exact absurd rfl hnf
 

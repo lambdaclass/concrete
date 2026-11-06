@@ -36,7 +36,7 @@ stage A2c (row Q9.19). Before that, the owner approved the Core design provision
 
    | File | Main results |
    |---|---|
-   | `Proofs/Slice1.lean` | `checked_never_stuck` (an accepted program never gets stuck), `checked_exits_or_traps`, `knownViolation_traps` (a refused known violation really would trap), fuel properties of `run` |
+   | `Proofs/Slice1.lean` | `checked_never_stuck` (an accepted program never gets stuck), `checked_no_implicit_traps` (an accepted program never traps), `checked_exits`, fuel properties of `run` |
    | `Proofs/Checker.lean` | `check_iff`: the executable checker accepts exactly the programs the rules accept |
    | `Proofs/Slice0.lean` | `slice0_exits` (an accepted slice-0 program exits with a `u8` status), `slice0_never_traps`, `toCore_injective` |
    | `Proofs/Rep.lean` | `rep_roundtrip` (design theorem 1) |
@@ -45,7 +45,7 @@ stage A2c (row Q9.19). Before that, the owner approved the Core design provision
    | `Proofs/Brand.lean` | `reset_fresh` (design theorem 4), the brand refusals, `checked_passes_brand_checks` (a checked program never fails a ghost brand check), `brand_erasure` (Q1.1: its run with brands erased does exactly what its ghost run does), `ghost_run` |
    | `Proofs/Authority.lean` | `authority_contained` (every operation a run performs uses a grant `main` was launched with, of the right type, under a capability `main` declares, for every fuel), `sub_iff`, `equiv_iff` |
    | `Proofs/Observe.lean` | `checked_observation`, `checked_observable` (an accepted program's observation and status), `refused_start` |
-   | `Proofs/Examples.lean` | `add100_safe` (an accepted program that traps only for some inputs is safe for every input), and the cleanup traces and brand refusal of the specification derived again from the general theorems (they apply, non-vacuously) |
+   | `Proofs/Examples.lean` | the cleanup traces and brand refusal of the specification derived again from the general theorems (they apply, non-vacuously) |
    | `Proofs/Basics.lean` | list lemmas |
 
 **The owner view.** `scripts/spec/lean_site.sh [OUT]` (after `lake build ConcreteSpec`) generates
