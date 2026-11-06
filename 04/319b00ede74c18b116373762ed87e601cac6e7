@@ -1,0 +1,2 @@
+[piece 1 of 2: scripts]
+- scripts/checks/sandbox_isolation.sh:82: The fallback still does not enforce the advertised 8 GiB memory bound for the probe: `ulimit -v` limits each process independently. Recursive children can each consume up to 8 GiB, exhausting the host well before the process limit is reached. The previous containment finding remains open; use an aggregate memory limit or fail as incomplete when one is unavailable.
