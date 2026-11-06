@@ -8,9 +8,9 @@ stage A2c (row Q9.19). Before that, the owner approved the Core design provision
 ## What to read, in order
 
 1. **[`Spec.lean`](Spec.lean)** is the specification library (row Q9.15; split into modules by
-   owner decision 2026-11-06). Its header says what the specification covers and how slice 1's
-   Core is shaped (A-normal form, fresh identities, explicit `copy`/`move`, statically known
-   values), and it imports the modules below. Every rule is a Lean definition with a plain-English
+   owner decision 2026-11-06). Its header says what the specification covers, and it imports the
+   modules below; `Spec/Slice1Syntax.lean`'s header says how slice 1's Core is shaped (A-normal
+   form, fresh identities, explicit `copy`/`move`, statically known values). Every rule is a Lean definition with a plain-English
    doc comment, followed by example programs: the surface program in a doc comment, its Core form,
    and what the rules say about it: accepted (`check p = true`) with its outcome
    (`run p 10 = .exit 42`), or refused (`check p = false`). You can read it without reading any
@@ -74,12 +74,12 @@ archived prose specification [legacy/docs/spec](../legacy/docs/spec)).
   them (`check_iff`).
 - Build: `lake build ConcreteSpec`. The external checker re-checks every theorem.
 
-## Done at A2c, and what remains open
+## Done at A2b, and what remains open
 
 The seven parts are separate Core fragments, each defined only as far as its theorems need
-(R4 F8); unifying them into one Core is A3 work (R-0560).
+(R4 F8); unifying them into one Core is A2i work (R-0571).
 
-Formalized at A2c, each with rules, examples and proofs:
+Formalized at A2b, each with rules, examples and proofs:
 
 - **Capability checking** (part 6): capability sets and their semantic equality (Q5.3),
   substitution of capability parameters at a call, grant parameters, Console for the standard
@@ -119,12 +119,12 @@ Open obligations, by name:
   authority rule 11, foreign calls, trait dispatch, generic methods and generated cleanup.
 - **O7 Capabilities in the other parts**: the cleanup calls of part 3 and the allocator
   operations of part 5 need capabilities; part 6 checks capabilities in its own fragment only
-  (unification, A3).
+  (unification, A2i).
 - **O8 Part 3** abstracts each deferred call to its identity, dependencies, loans and whether it
   traps; it does not model the statements between registrations or evaluating a `return` value
   before cleanup.
 - **O9 Part 4**: the run-time fragment (`vrun`) and the access rules (`Ok`) are separate
-  fragments, not yet joined in one soundness theorem (A3); the run covers array sources (text
+  fragments, not yet joined in one soundness theorem (A2i); the run covers array sources (text
   views share the index arithmetic, and their validity is `text_view_utf8`); views of views,
   writes through text views, and text whose length is known while its bytes are not (treated as
   unknown) are not modelled; the frame theorem covers bodies that access only their view. That

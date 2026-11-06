@@ -39,7 +39,7 @@ The decisions are cited by their row ids (Q1.1 … Q9.19, P1 … P23, in docs/de
 recorded rule ids of the archived prose specification, legacy/docs/spec (ODnn, TYPE-n, OWN-n, …).
 
 The file has seven parts. Each is a small Core fragment with its own judgments, defined only as
-far as its theorems need (R4 F8). Unifying them into one Core is work for A3 (R-0560).
+far as its theorems need (R4 F8). Unifying them into one Core is A2i work (R-0571).
 
 1. **Slice 1** (ROADMAP phase B): scalars, `let`, structs, moves and the use-after-move refusal,
    checked `+`, `return`, in Core's binding form (Q9.1), with evidence-required admission (no
@@ -55,73 +55,6 @@ far as its theorems need (R4 F8). Unifying them into one Core is work for A3 (R-
 
 Only Lean core is imported (Q9.16). No proof uses `native_decide` or `sorry` (Q9.17).
 
-## Slice 1
-
-What slice 1 contains:
-
-* the scalar types: the eight integer types (TYPE-19) and `bool`;
-* `let` with a type, a struct literal, and a struct-destructuring `let` (PAT-5);
-* struct declarations, `Copy` or not (TYPE-14), with scalar fields; the slice's central case is
-  an empty struct without `Copy`, moved and then consumed by a destructuring `let`;
-* the use-after-move refusal (OWN-1), consumption before exit (OWN-2) and used bindings (OWN-5);
-* one checked operation, integer `+` (ARITH-3), which traps on overflow;
-* evidence-required admission (no hidden traps, decision of 2026-11-06, Q1): `+` is accepted only
-  when the facts the checker keeps (known values, Q6.2, and type bounds) prove the sum fits; every
-  other `+` is refused, so an accepted program never traps (`checked_no_implicit_traps`). This
-  subsumes the refusal of proven violations (Q6.1, Q6.4; ARITH-13, OD118);
-* one function, `main`, with no parameters, whose body is a list of `let` statements followed by
-  `return a` with `a : u8` (STMT-7, STMT-9).
-
-Core's binding form (Q9.1):
-
-* **A-normal form.** Every operand is an atom: a literal, `copy x` or `move x`. `x + y` is an
-  expression whose operands are atoms; a nested surface expression becomes a sequence of `let`s
-  of temporaries, and `return` takes an atom.
-* **Fresh identities.** A local is a `Var`, an identity (a source-name hint and a number) that is
-  bound at most once. Surface names, shadowing and the namespace rules (SCOPE-1, SCOPE-2) are
-  elaboration rules that map names to identities; Core only requires each identity to be fresh.
-* **Explicit moves and copies.** Reading a local is written `copy x` (its type is Copy) or
-  `move x` (its type is linear). There is no read whose effect depends on the type. One read form
-  per type (owner-confirmed 2026-11-05): `copy` is allowed only on a Copy type and `move` only on a
-  linear one; `move` of a Copy value and `copy` of a linear value are both refused.
-
-What slice 1 is not:
-
-* It is not a parser or an elaborator. Programs are given as Core abstract syntax. How surface
-  literals receive a type (ARITH-2, TYPE-4), how an unannotated `let` gets its type, how names
-  become identities and how nested expressions become A-normal form are elaboration rules for a
-  later file, which must be proved to produce this syntax.
-* Nothing outside slice 1 is modelled in this part: no calls, no branches, no loops, no
-  references, no heap, no capabilities, no `defer`. Struct fields are scalars only. Parts 3–7
-  model the pieces of those that their theorems need.
-
-The judgments (`HasType`, `UseAtom`, `Uses`, `StmtOk`, `BodyOk`, `Checked`) are inductive
-relations, independent of the executable checker (`check`); `check_iff` proves the two agree. The
-semantics is a total, fuel-indexed evaluator (`run`) whose outcome separates exit, trap, stuck and
-running out of fuel (STMT-1). `Exec` is the fuel-free form of the same statement-level evaluator:
-adequacy and determinism are about fuel, not an independent cross-check of expression evaluation.
-
-Statically known values (Q6.2, as amended by the owner on 2026-11-05). The checker tracks an
-abstract value for each binding: unknown, a known scalar, or a struct whose fields each carry
-their own fact. A value is known when it comes from the fixed table: a literal, an immutable `let`
-of a known value, or a checked operation on known operands. Constructing a struct records each
-field's fact independently; an immutable binding keeps the facts; destructuring hands each field's
-fact to its binder; an unknown field stays unknown without discarding its known siblings; and an
-ownership transfer (`move`) keeps the facts for the receiving binding while still consuming the
-source. So `let Pair { a: x, b: y } = Pair { a: 200, b: 100 }; x + y` is refused exactly as
-`let a = 200; let b = 100; a + b` is (`fieldOverflowTrap`, `overflowTrap`). The exclusions stay:
-nothing is tracked through mutable state (slice 1 has none), along branches or paths, through
-user-function calls, or through calls the table does not name. Slice 1 judges Core, where every
-`let` is immutable and a binding's origin is not recorded, so a temporary the elaborator introduces
-gets the same fact as a source binding of the same expression. The remaining exclusion, that
-acceptance of a source program does not depend on how the elaborator names its subexpressions, is
-an obligation on the source-to-Core elaboration relation, which slice 1 does not define; it is not
-proved here. In slice 1 struct fields are scalars, so the
-rule's recursive form (a struct field holding a struct, nested patterns, tuples) has only its
-one-level instance here. An input is not known, only bounded by its type: `add100` and
-`partialUnknownRefused` trap for some input values and are refused (no hidden traps, decision of
-2026-11-06), and `add0`, whose sum fits for every input, is accepted. The table has more entries (module constants, the
-six named wrapping/saturating operations, lossless `as`) that slice 1 has no syntax for. The
-refusal applies to all written code, including trusted and unreachable code (Q6.4); slice 1 has
-neither, so its examples show only reachable positions and a discarded one (`overflowDropped`).
+What slice 1 contains and how its Core is shaped (A-normal form, fresh identities, explicit
+`copy`/`move`, statically known values) is in the header of `Spec/Slice1Syntax.lean`.
 -/
