@@ -198,13 +198,13 @@ The owner answered every row of the 2026-11-05 decision page, in the terminal. T
 - **Q7.7** What are network scopes? — Connect and listen grants with numeric scopes; a separate Resolver grant with explicit server, transport, suffixes and record types.
 - **Q7.8** Is grant policy enforced statically or dynamically? — Static authority checks plus atomic dynamic scope checks.
 - **Q7.9** How are blocking, terminal actions and delivery observed? — Split request/response events; logical terminal observations.
-- **Q7.10** Do you approve the linux-x86_64-hosted grant table? — Approve R4 F6's complete grant table below as part of this row: every launch configuration, operation signature, permission, narrowing rule and ending contract. Standard-stream operations require Console (Q7.11), not Device; where the R4 F6 table says with(Device) for StdIn/StdOut/StdErr, read with(Console). A missing configured grant refuses startup with exit 125; a trap exits 134. *Revises or adds: New target contract: owner decision.*
+- **Q7.10** Do you approve the linux-x86_64-hosted grant table? — Approve R4 F6's complete grant table below as part of this row: every launch configuration, operation signature, permission, narrowing rule and ending contract. Standard-stream operations require Console (Q7.11), not Device; where the R4 F6 table says with(Device) for StdIn/StdOut/StdErr, read with(Console). A missing configured grant refuses startup with exit 125; a trap exits 134. *Revises or adds: New target contract: owner decision.* *Extended 2026-11-06 by [no hidden traps](#decided-project-no-hidden-traps): the stack target contract (adequate stack excludes exhaustion, launch refusal 125 when the reservation is smaller than the bound; then a defined outcome for inadequate stack) is a future target-contract obligation, not a current guarantee.*
 - **Q7.11** Which permission do the standard streams use? — Add a Console capability for StdIn/StdOut/StdErr operations; keep Device for device grants. *Revises or adds: Authority rule 13 (adds Console); rules 5 and 7 lists include it.*
 - **Q8.1** What is the first proof endpoint? — Proved source→BIR; qualified native; conditional image claim.
 - **Q8.2** What exact source subset is admitted? — A1 minimal `u8`/linear-struct component subset.
 - **Q8.3** What establishes frontend correspondence? — Independent byte-to-Core correspondence judgments.
 - **Q8.4** Does the first artifact qualify as a complete executable? — Component plus bound launcher first.
-- **Q8.5** What launcher ABI and observations are fixed? — Pinned launcher ABI, inputs, startup and trap mapping.
+- **Q8.5** What launcher ABI and observations are fixed? — Pinned launcher ABI, inputs, startup and trap mapping. *Extended 2026-11-06 by [no hidden traps](#decided-project-no-hidden-traps): the stack target contract (adequate stack excludes exhaustion, launch refusal 125 when the reservation is smaller than the bound; then a defined outcome for inadequate stack) is a future target-contract obligation, not a current guarantee.*
 - **Q8.6** What artifacts does the claim bind? — Bind complete retained dependency and image closure.
 - **Q8.7** What prevents vacuous correctness? — Coverage, realizable witnesses and rejection controls; a spec where every allocation fails fails qualification.
 - **Q9.1** What is Core’s expression and binding form? — ANF; fresh identities; explicit moves/copies; separate places. *Confirmed 2026-11-05: `copy` only for Copy types, `move` only for non-Copy types ([read forms](#decided-2026-11-05-q9-1-reads)).*
@@ -550,11 +550,14 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     exhaustion (if the reserved stack is at least the artifact's bound, no run exhausts it, and the
     launcher refuses to start with status 125 when it is smaller); second, a defined outcome for
     inadequate stack, which needs probes, failure handling and a target status of its own.
-  - *Order (Q10).* The Core rules and `checked_no_implicit_traps` are formalized in the A2i
-    integration before the freeze; the checker's implementation and its Lean soundness proof follow
-    with the slices (phase B). Slice 0 is unchanged (its values are all known; `slice0_never_traps`
-    is the first instance). The spec example `add100`, accepted today with an input-dependent trap,
-    becomes a refused example with accepted guarded variants.
+  - *Order (Q10).* Within the A2i integration, before the freeze, the spec gains the Core admission
+    rules, the checker as an executable Lean definition with its correspondence and soundness proofs
+    (the specification's checker is the checker the compiler runs, as for every other rule), and
+    `checked_no_implicit_traps`. With the slices (phase B) follow the compiler's use of it at each
+    stage, the per-function facts report and the per-compilation evidence. Slice 0 is unchanged (its
+    values are all known; `slice0_never_traps` is the first instance). The spec example `add100`,
+    accepted today with an input-dependent trap, becomes a refused example with accepted guarded
+    variants.
   - *Rows revised.* [OD10](#od10) and ARITH-3 (checked by default with an abort becomes: evidence
     required, named forms for the rest), MEM-6 (abort out of range becomes: evidence required), MEM-9,
     ARITH-13 and [OD118](#od118) (refusal of proven violations is subsumed by refusal of unproven
@@ -564,7 +567,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     profile option is subsumed). Qualified: CON-2, Q9.11 and [OD125](#od125) (a claim used for safety
     admission needs closed evidence), CON-6 and [OD80](#od80) (`assume` cannot admit an operation in
     safe code), [OD120](#od120) (a vacuous precondition used for safety is refused), [OD82](#od82)
-    (extended to functions). Unchanged: STMT-1, STMT-2, OD101 (general trap semantics), Q6.3–Q6.6
+    (extended to functions), Q7.10 and Q8.5 (extended by the stack target-contract obligations of Q14, which are future target work, not current guarantees). Unchanged: STMT-1, STMT-2, OD101 (general trap semantics), Q6.3–Q6.6
     (with the interactions stated in the proposal), CON-1 and P18.
   - *Spellings for the owner (pending).* (1) the checked operations and their error type, in
     [OD99](#od99)'s family; (2) how a function names its Lean discharge theorem; (3) the termination
