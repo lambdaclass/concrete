@@ -649,8 +649,10 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     information flow, constant time and concurrency are separate future judgments; termination and
     a stack bound imply none of them.
   - *Honest numbers.* A stack number comes only from final-artifact and target evidence, never from a
-    source estimate; an opaque, indirect, foreign or recursive path gives "not established", never a
-    finite guess. "Bounded" never implies a wall-clock deadline.
+    source estimate. An opaque, indirect, foreign or recursive path without sufficient evidence gives
+    "not established", never a finite guess; proved depth and evidence covering every possible target
+    may establish a bound using final-artifact frame sizes, while a bound relying on named trusted
+    contracts stays conditional. "Bounded" never implies a wall-clock deadline.
   - *Composition.* Local and transitive summaries, module rollups and drill-down to the call site and
     obligation; transitive through indirect and opaque calls, cleanup and callbacks; fail-closed.
   - *Policies consume the same facts.* A policy such as the
