@@ -142,6 +142,10 @@ EOF
 }
 
 echo "=== E/D: the environment ==="
+population imported > "$TMP/imported.txt" 2> "$TMP/imported.err" || { no "PROOF_MODE=imported failed"; finish; }
+GAP=$(closure_gap "$TMP/imported.txt")
+[ -z "$GAP" ] && ok "all $(spec_modules | grep -c .) ConcreteSpec source modules are in the environment E and D read" \
+  || no "source modules outside the root's import closure, unseen by E and D: $(echo $GAP)"
 population constants > "$TMP/consts.tsv" 2> "$TMP/consts.err" \
   || { cat "$TMP/consts.err" >&2; echo "error: the enumerator failed" >&2; exit 2; }
 NC=$(grep -c . "$TMP/consts.tsv")
@@ -260,4 +264,7 @@ for f in missing Open Brace; do
   [ "$RC" != 0 ] && ok "control: a source the scan cannot read or lex ($f) fails it (rc=$RC)" \
     || no "control: the scan of $f exited 0"
 done
+head -n 3 "$TMP/imported.txt" > "$TMP/imp-short.txt"
+[ -n "$(closure_gap "$TMP/imp-short.txt")" ] \
+  && ok "control: source modules outside a (truncated) import closure are reported" || no "control: a truncated closure reported no gap"
 finish

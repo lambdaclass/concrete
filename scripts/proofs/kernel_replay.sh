@@ -29,7 +29,7 @@ source scripts/proofs/lib.sh
 
 echo "=== P: population ==="
 population imported > "$TMP/imported.txt" || { no "PROOF_MODE=imported failed"; finish; }
-GAP=$(spec_modules | comm -23 - <(sort -u "$TMP/imported.txt"))
+GAP=$(closure_gap "$TMP/imported.txt")
 [ -z "$GAP" ] && ok "all $(spec_modules | grep -c .) ConcreteSpec source modules are in the closure the replay reads" \
   || no "source modules outside the import closure of ConcreteSpec: $(echo $GAP)"
 
