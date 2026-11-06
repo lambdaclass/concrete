@@ -36,6 +36,10 @@ def trapLine (e : SiteEntry) : String :=
 /-- What the runtime writes before aborting on a result word that encodes nothing. -/
 def invalidLine : String := "concrete: runtime: invalid result word"
 
+/-- The decided form, checked against a literal (not against `trapLine` itself). -/
+example : trapLine ⟨.arithmeticOverflow, ⟨9⟩, ⟨40, 47⟩, ⟨"src/main.con", 4, 12⟩⟩ =
+    "concrete: trap: overflow at src/main.con:4:12 (site 9)" := by decide +kernel
+
 /-- Pair every element with its index. -/
 def indexed {α : Type} (l : List α) : List (Nat × α) := (List.range l.length).zip l
 

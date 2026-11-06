@@ -45,11 +45,32 @@ structure Loc where
   col : Nat
   deriving DecidableEq, Repr
 
-/-- A location the trap line can carry: a nonempty relative path (no leading `/`, no `\`, no
-control character, so the line stays one line) and a 1-based line and column. -/
+/-- A character that may appear in the trap line's path: not a C0 or C1 control, DEL, or a
+Unicode line or paragraph separator, so the line stays one line; and not `\`. -/
+def pathChar (c : Char) : Bool :=
+  let n := c.toNat
+  n ≥ 32 && n != 127 && !(0x80 ≤ n && n ≤ 0x9F) && n != 0x2028 && n != 0x2029 && c != '\\'
+
+/-- The `/`-separated segments of a path. -/
+def segments : List Char → List (List Char)
+  | [] => [[]]
+  | c :: cs =>
+    let rest := segments cs
+    if c = '/' then [] :: rest
+    else match rest with
+      | seg :: more => (c :: seg) :: more
+      | [] => [[c]]
+
+/-- A location the trap line can carry: a canonical project-relative path (segments separated by
+`/`, none empty, `.` or `..`, no drive prefix like `C:`) of allowed characters, and a 1-based line
+and column. Resolving the project root and symlinks is the frontend's job. -/
 def Loc.wf (l : Loc) : Bool :=
-  !l.path.isEmpty && !l.path.startsWith "/" &&
-  l.path.toList.all (fun c => c != '\\' && c.toNat ≥ 32 && c.toNat != 127) &&
+  let cs := l.path.toList
+  let drive := match cs with
+    | c :: ':' :: _ => c.isAlpha
+    | _ => false
+  cs.all pathChar && !drive &&
+  (segments cs).all (fun seg => !seg.isEmpty && seg != ['.'] && seg != ['.', '.']) &&
   l.line ≥ 1 && l.col ≥ 1
 
 /-- One trap site: what traps there, where it came from. -/
@@ -596,6 +617,15 @@ example : Loc.wf ⟨"src\\main.con", 1, 1⟩ = false := by decide +kernel
 example : Loc.wf ⟨"src/main.con\n", 1, 1⟩ = false := by decide +kernel
 example : Loc.wf ⟨"src/main.con", 0, 1⟩ = false := by decide +kernel
 example : Loc.wf ⟨"src/main.con", 1, 0⟩ = false := by decide +kernel
+example : Loc.wf ⟨"src/\u0085main.con", 1, 1⟩ = false := by decide +kernel
+example : Loc.wf ⟨"src/\u2028main.con", 1, 1⟩ = false := by decide +kernel
+example : Loc.wf ⟨"../outside.con", 1, 1⟩ = false := by decide +kernel
+example : Loc.wf ⟨"src/../main.con", 1, 1⟩ = false := by decide +kernel
+example : Loc.wf ⟨"./main.con", 1, 1⟩ = false := by decide +kernel
+example : Loc.wf ⟨"src//main.con", 1, 1⟩ = false := by decide +kernel
+example : Loc.wf ⟨"src/", 1, 1⟩ = false := by decide +kernel
+example : Loc.wf ⟨"C:/outside.con", 1, 1⟩ = false := by decide +kernel
+example : Loc.wf ⟨"src/ñandú \"x\"/lib.con", 17, 5⟩ = true := by decide +kernel
 example : ¬ WF unreachableParam := by decide
 example : ¬ WF crossBlockUse := by decide
 example : ¬ WF useBeforeDef := by decide
