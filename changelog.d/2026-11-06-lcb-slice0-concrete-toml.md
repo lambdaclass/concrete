@@ -30,7 +30,7 @@ More owner decisions of 2026-11-06, in the same change:
 
   The three proposals behind these decisions are archived in `docs/archive/crucial-2026-11-06/`.
 - **The new compiler pipeline** is recorded as a decision row. It supersedes the legacy VERIFIED_PIPELINE.md.
-- **`legacy/` is kept until after phase D.** B3 deletes nothing. LD (R-0590) deletes `legacy/` after a final ideas sweep, once every RETENTION row is resolved and with the owner's approval. Phases C, D and E each start with a legacy ideas sweep (R-0591).
+- **`legacy/` is kept way later.** B3 deletes nothing. LD (R-0590) deletes `legacy/` only after the ideas sweeps, once every RETENTION row is resolved and with the owner's approval. The phase is not yet chosen. Phases C, D and E each start with a legacy ideas sweep (R-0591, R-0597, R-0598).
 - **OS-level sandboxing** is outside the compiler's scope.
 
 The documents now point readers to the decisions and the open work:

@@ -15,7 +15,7 @@ its exact source down to BIR. Its native output is qualified by tests and labell
 claim about the native image is conditional on the LLVM, linker and image assumptions it lists. A proof that reaches native code is later work (phase E), not the first
 milestone. The old compiler is frozen as `legacy-compiler-final`. A pinned build of that tag is the
 differential oracle. `legacy/` stays, byte-frozen, as the reference for ideas the new design may have
-forgotten; it is deleted only after phase D, with the owner's approval (LD, R-0590).
+forgotten; it is deleted way later, with the owner's approval (LD, R-0590; the phase is not yet chosen).
 
 This file is the plan: the phases, the queue and one row per live task. It decides nothing. The
 rules below summarize decisions recorded elsewhere, and the linked record governs where they differ.
@@ -83,8 +83,8 @@ verbosity that buys clarity) get one home in `PHILOSOPHY.md` when the `wip/philo
    review, the hooks, CI and the changelog. `legacy/` is kept much longer than first planned, as the
    reference for ideas the new design may have forgotten (owner, 2026-11-06): nothing is deleted at
    B3. Each of phases C, D and E starts with a short ideas sweep of `legacy/` for that phase's area
-   (R-0591, R-0597, R-0598). `legacy/`, the old pipeline included, is deleted in one change after phase D (LD,
-   R-0590), and only when a final ideas sweep has dispositioned every idea (carried, planned,
+   (R-0591, R-0597, R-0598). `legacy/`, the old pipeline included, is deleted in one change way
+   later (LD, R-0590; the phase is not yet chosen), and only when a final ideas sweep has dispositioned every idea (carried, planned,
    deferred or dropped on purpose), every row of the root retention manifest `RETENTION.tsv`
    (R-0562) is resolved, and the owner explicitly approves. Retained assets (corpora, regressions,
    examples, std, the bug ledger, the site and docs) migrate as slices need them. That manifest and
@@ -181,7 +181,7 @@ and owned by the task that removes its structural class.
 | LP0 | The LCB pilot: bound the LLVM hole ([decision](docs/decisions.md#decided-project-long-term-2026-11-06)) | R-0572 | The LCB already runs unverified from slice 0 (R-0578) and its adapter is proved first (R-0579). After slice 1 (B1) and before any growth: the slice-0 and slice-1 subset compiles through BIR → LCB → native code with the adapter proof composed with the LCB's theorems and the slice theorem under named premises, kept separate from the LLVM premises. Every remaining backend obligation is a task with a milestone. |
 | B2 | Qualify slices 0 and 1 | R-0491, R-0498, R-0272, R-0550 | Differential (Lean semantics, native build, legacy oracle), refusal and gate-integrity controls hold. The fuzzers target the new compiler. The outside-reader test passes. |
 | B3 | Audit totality and retire legacy defects (revised 2026-11-06: nothing is deleted here) | R-0553, R-0561 | The totality audit finds no partial definition. Legacy defects are retired with the old implementation. `legacy/` stays byte-frozen; its deletion is LD. |
-| LD | Delete `legacy/`, after D ([decision](docs/decisions.md#decided-project-restart), revised 2026-11-06) | R-0590 | A final ideas sweep of `legacy/` dispositions every idea (carried, planned, deferred or dropped on purpose), every `RETENTION.tsv` row is resolved, and the owner explicitly approves; then `legacy/`, the old pipeline included, is deleted in one change. |
+| LD | Delete `legacy/`, timing pending ([decision](docs/decisions.md#decided-project-restart), revised 2026-11-06) | R-0590 | A final ideas sweep of `legacy/` dispositions every idea (carried, planned, deferred or dropped on purpose), every `RETENTION.tsv` row is resolved, and the owner explicitly approves; then `legacy/`, the old pipeline included, is deleted in one change. |
 
 Tasks shared by B0 and later rows deliver their slice-0 increment at B0; their remaining acceptance obligations stay with the later row. Dependencies between cumulative tasks apply to the corresponding increment.
 
@@ -414,11 +414,11 @@ archive. Rows for C–G are summaries. Each is refined when its phase becomes ne
 | R-0601 | Function-type contracts, including trait methods (owner, 2026-11-06) | a binding design lets a function whose `#[requires]` is a safety precondition become a function value only under a matching function-type contract; until then such functions are refused as function values, including through wrappers and specialization; it never broadens to non-safety contracts; a prerequisite for accepting slice 20, or earlier if a workload pulls it | R-0571 |
 | R-0604 | Audit the RocksDB and ethlambda acceptance programs before accepting them (owner, 2026-11-06) | each program's needs are listed against the decided language; concurrency (R-0399) and foreign function values (OD4) stay refused, and any real need goes to the owner before acceptance | — |
 
-### LD. Delete `legacy/`, after D
+### LD. Delete `legacy/` (timing pending)
 
 | task | objective | done when | depends on |
 |---|---|---|---|
-| R-0590 | Delete `legacy/` (LD), after D ([decision](docs/decisions.md#decided-project-restart), revised 2026-11-06) | a final ideas sweep of `legacy/` dispositions every idea (carried, planned, deferred or dropped on purpose); every `RETENTION.tsv` row is resolved; the owner explicitly approves; `legacy/`, the old pipeline included, is then deleted in one change, and the retention records at the root survive it | D, R-0591, R-0597, R-0598, R-0562, R-0561, owner: legacy deletion |
+| R-0590 | Delete `legacy/` (LD), timing pending ([decision](docs/decisions.md#decided-project-restart), revised 2026-11-06) | a final ideas sweep of `legacy/` dispositions every idea (carried, planned, deferred or dropped on purpose); every `RETENTION.tsv` row is resolved; the owner explicitly approves; `legacy/`, the old pipeline included, is then deleted in one change, and the retention records at the root survive it | R-0591, R-0597, R-0598, R-0562, R-0561, owner: legacy deletion timing |
 
 ### E. Verified growth
 

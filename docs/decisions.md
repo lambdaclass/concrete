@@ -43,7 +43,7 @@ Each row records a decision and its reason. A language rule itself is its Lean d
 - A minimal root ([row](#decided-project-lean-root)).
 - The LCB joins slice 0 ([row](#decided-project-proof-infrastructure)).
 - Policies and declared assumptions in `Concrete.toml` ([row](#decided-project-concrete-toml)).
-- `legacy/` kept until after phase D ([row](#decided-project-restart)).
+- `legacy/` kept way later, deletion timing pending ([row](#decided-project-restart)).
 - OS-level sandboxing is outside the compiler's scope ([row](#decided-project-os-sandboxing)).
 - Diagnostics are checker outputs ([row](#decided-project-diagnostics-2026-11-06)).
 - Heap facts and memory policies ([row](#decided-project-memory-2026-11-06)).
@@ -274,7 +274,7 @@ The owner answered every row of the 2026-11-05 decision page, in the terminal. T
 - **P3** Lean is the spec: confirm the amendment — Lean is the specification: confirmed together with Q9.15 (revision below).
 - **P4** Duplicate enum variants or methods (bug 313) — Refuse duplicate variant names in one enum and duplicate method names in one impl, with a new rule and diagnostic, the same as duplicate fields.
 - **P5** legacy/ is a byte-frozen snapshot, never patched or run — legacy/ is main's tree at the move commit, byte-frozen. A root check compares its tree hash, allowing only deletions a satisfied RETENTION.tsv entry authorizes. No legacy gate ever runs. The oracle is the tag-built artifact (P13), not the legacy/ copy.
-- **P6** Retention manifest gates deleting legacy/ — RETENTION.tsv at the root gives every legacy asset (corpus, regressions, examples, std, bug ledger, site, docs, research) a destination and deletion criterion. Revised 2026-11-06 ([restart row](#decided-project-restart)): nothing is deleted at B3; legacy/, the old pipeline included, is deleted only after phase D (LD), when RETENTION.tsv has no live entry, a final ideas sweep has dispositioned every idea and the owner explicitly approves.
+- **P6** Retention manifest gates deleting legacy/ — RETENTION.tsv at the root gives every legacy asset (corpus, regressions, examples, std, bug ledger, site, docs, research) a destination and deletion criterion. Revised 2026-11-06 ([restart row](#decided-project-restart)): nothing is deleted at B3; legacy/, the old pipeline included, is deleted way later (LD, phase not yet chosen), when RETENTION.tsv has no live entry, a final ideas sweep has dispositioned every idea and the owner explicitly approves.
 - **P7** Prove the new landing path before moving — T0: land beside the old tree the new root CI, required-checks.txt (enforced by train watch and land), RETENTION.tsv, the task disposition table, ORACLE.lock with the oracle artifact, and ISSUES.tsv. T1: rehearse the move on a throwaway branch: fresh clone, build, hook, exact-SHA CI, train --dry-run land; a broken build, a failing gate and a missing required check must each be refused. T2: the move in one train.
 - **P8** Server services under scripts/ — Keep only landing services: train, review, hook, landing bot. The status page, work queue, fuzz farm, perf tracking and nightly campaign all stop and are recorded as archived in RETENTION.tsv; each returns only with a roadmap task.
 - **P9** Website during the transition — The website goes down at the move and is redone from scratch with the new compiler; no frozen playground is served. Unpublishing the live site is an outward action whose moment the owner confirms.
@@ -364,14 +364,14 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   train. `legacy/` is a byte-frozen snapshot of main's tree at the move commit, never patched and
   never run; one root check refuses any change under it except a deletion its retention row allows,
   and no legacy gate runs (P5). Every legacy asset has a row in the root `RETENTION.tsv` with a
-  destination and deletion condition (P6). Revised 2026-11-06 by the owner ("i would delete legacy way later, we want to check it to see if we forgot any idea"): `legacy/` is kept much
-  longer, as the reference for ideas the new design may have forgotten. Nothing is deleted after
-  slice 1 (B3 keeps only the totality audit and the retirement of legacy defects); each of phases C,
-  D and E starts with a short ideas sweep of `legacy/` for its area (R-0591, R-0597, R-0598); `legacy/`, the old
-  pipeline included, is deleted only after phase D (LD, R-0590), when a final ideas sweep has
-  dispositioned every idea (carried, planned, deferred or dropped on purpose), every
-  `RETENTION.tsv` row is resolved and the owner explicitly approves. Until then it stays
-  byte-frozen. The new root's
+  destination and deletion condition (P6). Revised 2026-11-06 by the owner ("i would delete legacy way later, we want to check it to see if
+  we fogot any idea right?"): `legacy/` is kept much longer, as the reference for ideas the new
+  design may have forgotten, and nothing is deleted after slice 1 (B3 keeps only the totality audit
+  and the retirement of legacy defects). `legacy/`, the old pipeline included, is deleted way later,
+  only after the ideas sweeps of `legacy/` (R-0591, R-0597, R-0598 and a final sweep that
+  dispositions every idea as carried, planned, deferred or dropped on purpose), once every
+  `RETENTION.tsv` row is resolved and with the owner's explicit approval (LD, R-0590). The phase is
+  not yet chosen. Until then `legacy/` stays byte-frozen. The new root's
   infrastructure lands first beside the old tree (T0: new CI, `required-checks.txt` enforced by the
   train with an explicit old-to-new transition mapping, `RETENTION.tsv`, the oracle lock, `ISSUES.tsv`),
   the move is rehearsed on the exact candidate root (T1), and only then does it land (T2) (P7). Only
