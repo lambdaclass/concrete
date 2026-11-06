@@ -67,7 +67,7 @@ executable (x86-64)                          executable (x86-64 and AArch64)
 observed behaviour  →  observation (exit status 0–255 / 125 startup refusal / 134 trap + fd-2 line)
 ```
 
-**`compile` is defined as the composition of the stage functions listed in `Stages.lean`**, so a pass that isn't registered can't be in the pipeline. `Output` is pure data with `DecidableEq`: `{ q, sites, tokens, mir, mem, bir, ll, lcb }`. There are no proofs inside it, and every theorem is stated *about* `compile`.
+**`compile` is defined as the composition of the stage functions listed in `Stages.lean`**, so a pass that isn't registered can't be in the pipeline. `Output` is pure data with `DecidableEq`: `{ toks, ast, q, sites, tokens, mir, mem, bir, ll, lcb }`. There are no proofs inside it, and every theorem is stated *about* `compile`.
 
 There's no Mono Core, since slice 0 has no generics. When Mono exists, the admission check runs again on its output: substitution can expose new constants and cycles (row Q6.3).
 
@@ -367,6 +367,7 @@ The **execution-trust inventory** is in the same file, as documented non-Prop en
 ```lean
 /-- What `compile` returns: pure data, every intermediate recorded. -/
 structure Output where
+  toks : List Token; ast : Surface.Program
   q : Slice0.Program; sites : SiteMap; tokens : Tokens; mir : MIR.Program; mem : Mem.Program
   bir : BIR.Program; ll : String; lcb : LCB.Source.Function
 
@@ -433,7 +434,7 @@ The driver emits `Cert_<digest>.lean`, which the kernel checks (`lake env lean`,
 
 ```lean
 def srcBytes : ByteArray := ...      -- the exact input
-def expected : Output := ...         -- the exact q, sites, tokens, mir, mem, bir, ll, lcb
+def expected : Output := ...         -- the exact toks, ast, q, sites, tokens, mir, mem, bir, ll, lcb
 -- one entry per edge, each checked by `decide` on that ONE stage function:
 theorem e_lex   : Lex.lex srcBytes = .ok expected.toks := by decide
 theorem e_parse : Parse.parse expected.toks = .ok expected.ast := by decide
