@@ -1,4 +1,6 @@
 import ConcreteSpec.Spec.Checker
+import ConcreteSpec.Spec.Rep
+import ConcreteSpec.Spec.Observation
 
 /-!
 # Slice-1 conformance examples
@@ -451,5 +453,24 @@ def wrongReturnType : Program :=
   { decls, body := [], ret := .int .i64 42 }
 
 example : check wrongReturnType = false := by decide
+
+/-! ### Representation and observations of the examples -/
+
+/-- `Token` has no bytes, and decoding no bytes at type `Token` gives the empty struct (Part 2). -/
+example : Rep.encodeVal (.struct "Token" []) = [] ∧
+    Rep.decodeVal decls (.struct "Token") [] = some (.struct "Token" []) := by decide
+
+/-- `moveThenConsume` exits with status 42 (Part 7). -/
+example : (Observe.observe true (run moveThenConsume 10)).map Observe.Observation.status = some 42 := by
+  decide
+
+/-- The refused body `add100`, run anyway on input 200, traps: the trap message goes to descriptor
+2 and the status is 134. -/
+example : Observe.observe true (runBody decls 10 (inputEnv 200) add100 (.copy s₂)) =
+    some (.trapped .arithmeticOverflow) := by decide
+
+/-- A missing configured grant: status 125, and `main` does not run. -/
+example : (Observe.observe false (run moveThenConsume 10)).map Observe.Observation.status =
+    some 125 := by decide
 
 end ConcreteSpec.Examples

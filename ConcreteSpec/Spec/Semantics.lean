@@ -1,4 +1,4 @@
-import ConcreteSpec.Spec.Ownership
+import ConcreteSpec.Spec.Syntax
 
 /-!
 # Slice-1 values, evaluator and value typing

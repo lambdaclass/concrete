@@ -1,4 +1,4 @@
-import ConcreteSpec.Spec.Examples
+import ConcreteSpec.Spec.Checker
 
 /-!
 # The slice-0 fragment

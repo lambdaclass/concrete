@@ -1,4 +1,5 @@
 import ConcreteSpec.Spec.Semantics
+import ConcreteSpec.Spec.Ownership
 
 /-!
 # The executable slice-1 checker
