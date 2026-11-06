@@ -25,6 +25,9 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=scripts/oracle/lib.sh
 . "$HERE/lib.sh"
+# The source clone below is a sandbox: no repository variable of the caller may reach it (ISS-0015).
+. "$HERE/../checks/lib/git_sandbox.sh"
+git_sandbox || exit 2
 LOCK="$ORACLE_LOCK"
 RECORD=0
 [ "${1:-}" = "--record" ] && { RECORD=1; shift; }

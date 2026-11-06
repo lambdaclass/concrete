@@ -7,7 +7,7 @@
 # git_sandbox.sh, which unsets every variable `git rev-parse --local-env-vars` names.
 #
 # Legs:
-#   structural  every script under scripts/checks and scripts/land that makes a repository
+#   structural  every script under scripts/ that makes a repository
 #               (git init, git clone, git worktree add) sources the helper and calls git_sandbox.
 #   live        a throwaway CALLER (bare upstream, full clone, linked worktree; no hook installed
 #               anywhere) runs review_tool.sh and legacy_frozen.sh, at this checkout's version, from
@@ -33,11 +33,12 @@ ok(){ echo "  ok   $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL $1"; FAIL=$((FAIL+1)); }
 
 echo "=== structural: every repository-making script sources the sandbox helper ==="
-# install-bot.sh is the one exception: it runs on the gate host as `bash -s < install-bot.sh` (no
-# sibling files to source) and makes the bot's persistent clone, not a sandbox.
-EXEMPT=" scripts/land/install-bot.sh "
+# Two exceptions, neither a sandbox: install-bot.sh runs on the gate host as `bash -s <
+# install-bot.sh` (no sibling files to source) and makes the bot's persistent clone, and
+# worktree-new.sh makes a worktree OF the caller's repository by design.
+EXEMPT=" scripts/land/install-bot.sh scripts/worktree-new.sh "
 makers=0
-for f in scripts/checks/*.sh scripts/land/*.sh; do
+for f in scripts/*.sh scripts/*/*.sh; do
   [ "$f" = scripts/checks/sandbox_isolation.sh ] && continue
   grep -qE 'git( -C [^ ]+)? (init|clone)\b|worktree add' "$f" || continue
   case "$EXEMPT" in *" $f "*) continue ;; esac
@@ -48,7 +49,7 @@ for f in scripts/checks/*.sh scripts/land/*.sh; do
     no "$f makes a repository but does not source git_sandbox.sh and call git_sandbox"
   fi
 done
-[ "$makers" -ge 7 ] && ok "found $makers repository-making scripts (at least the 7 known)" \
+[ "$makers" -ge 9 ] && ok "found $makers repository-making scripts (at least the 9 known)" \
   || no "found only $makers repository-making scripts; the scan is not seeing them"
 
 # The harness itself is a sandbox: it must not be steered by whatever environment started it.
