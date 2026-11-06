@@ -159,6 +159,16 @@ def kind : ConstantInfo → String
   | .ctorInfo _ => "ctor"
   | .recInfo _ => "recursor"
 
+/-- Whether a name can be written into a row. Every output of this file is line-based and most are
+tab-separated, and a quoted Lean name (`«a	b»`) may hold a tab or a line break, which would shift
+or split a row and hide a constant from the checks that parse it. -/
+def ctrlFree (s : String) : Bool := s.all fun (c : Char) => 32 ≤ c.toNat && c.toNat != 127
+
+def rowSafe : Name → Bool
+  | .anonymous => true
+  | .str p s => rowSafe p && ctrlFree s
+  | .num p _ => rowSafe p
+
 -- CONTROL DECLARATIONS (negative controls are inserted here, in a temporary copy only)
 
 #eval show CoreM Unit from do
@@ -166,6 +176,15 @@ def kind : ConstantInfo → String
   let mode := (← IO.getEnv "PROOF_MODE").getD "theorems"
   unless ["theorems", "encoded", "constants", "modules", "imported", "decls", "heads", "examples"].contains mode do
     throwError s!"unknown PROOF_MODE '{mode}'"
+  -- Fail closed, once, before any mode writes a row: every constant and module name of the
+  -- environment (the population, the axioms its constants depend on, the inductive heads of
+  -- `heads`, the modules) must be writable. One check covers every mode.
+  for (n, _) in env.constants.map₁.toList ++ env.constants.map₂.toList do
+    unless rowSafe n do
+      throwError s!"theorems.lean: a constant name holds a control character, so no row can carry it: {repr (toString n)}"
+  for m in env.header.moduleNames do
+    unless rowSafe m do
+      throwError s!"theorems.lean: a module name holds a control character: {repr (toString m)}"
   if mode == "decls" then
     let some path ← IO.getEnv "PROOF_NAMES" | throwError "PROOF_MODE=decls needs PROOF_NAMES"
     let some out ← IO.getEnv "PROOF_OUT" | throwError "PROOF_MODE=decls needs PROOF_OUT"

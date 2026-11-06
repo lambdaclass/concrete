@@ -150,6 +150,16 @@ printf 'axiom ConcreteSpecControl.ax : 1 = 2\n' > "$TMP/c-ax.lean"
 population constants "$TMP/c-ax.lean" > "$TMP/c-ax.tsv" 2>/dev/null
 [ "$(declared "$TMP/c-ax.tsv")" = ConcreteSpecControl.ax ] \
   && ok "control: a declared axiom is reported" || no "control: a declared axiom was not reported: '$(declared "$TMP/c-ax.tsv")'"
+# A quoted name holding a tab would shift its row's columns (the axiom kind out of column 2) and
+# hide the axiom from `declared`; theorems.lean refuses every such name before writing a row.
+printf 'axiom ConcreteSpecControl.«a\tb» : 1 = 2\n' > "$TMP/c-tab.lean"
+if population constants "$TMP/c-tab.lean" > "$TMP/c-tab.tsv" 2> "$TMP/c-tab.err"; then
+  no "control: an axiom whose name holds a tab did not fail the run: '$(declared "$TMP/c-tab.tsv")'"
+else
+  grep -q 'control character' "$TMP/c-tab.err" "$TMP/c-tab.tsv" \
+    && ok "control: an axiom whose name holds a tab fails the run (no row can carry it)" \
+    || no "control: the tab-name run failed for another reason: $(head -2 "$TMP/c-tab.err" "$TMP/c-tab.tsv" | tr '\n' ' ')"
+fi
 mkdir -p "$TMP/src"
 cat > "$TMP/src/Bad.lean" <<'EOF'
 /- a comment may say sorry and native_decide, /- nested -/ and still sorry -/

@@ -142,11 +142,13 @@ read -r EXP_LEAN EXP_TOOL EXP_FORMAT < <($INV meta "$EXPORT")
 [ "leanprover/lean4:v$EXP_LEAN" = "$TOOLCHAIN" ] && [ "$EXP_FORMAT" = "$EXPECT_FORMAT" ] \
   && ok "export from Lean $EXP_LEAN (lean4export $EXP_TOOL, format $EXP_FORMAT)" \
   || no "export metadata: Lean $EXP_LEAN format $EXP_FORMAT, expected $TOOLCHAIN format $EXPECT_FORMAT"
-$INV theorems "$EXPORT" > "$TMP/exported.txt"
+$INV theorems "$EXPORT" > "$TMP/exported.txt" \
+  || { no "the stream's theorems could not be listed"; finish; }
 MISSING=$(comm -23 "$TMP/population-enc.txt" <(sort -u "$TMP/exported.txt"))
 [ "$(grep -c . "$TMP/population-enc.txt")" = "$NALL" ] && [ -z "$MISSING" ] && ok "every theorem of the population is in the export ($(grep -c . "$TMP/exported.txt") theorems with dependencies)" \
   || no "theorems missing from the export: $(echo $MISSING | cut -c1-300)"
-$INV axioms "$EXPORT" > "$TMP/axioms.txt"
+$INV axioms "$EXPORT" > "$TMP/axioms.txt" \
+  || { no "the stream's axioms could not be listed"; finish; }
 EXTRA=$(comm -23 "$TMP/axioms.txt" <(printf '%s\n' $STANDARD_AXIOMS))
 [ -z "$EXTRA" ] && ok "the export declares only $(echo $(cat "$TMP/axioms.txt"))" \
   || no "the export declares non-standard axioms: $(echo $EXTRA)"
@@ -156,7 +158,8 @@ echo "=== S: declaration fidelity ==="
 # types, definition bodies, proofs, inductive types, constructors, recursors) against Lean's own
 # environment. A statement can only be trusted together with the definitions it names: a stream that
 # kept a theorem's type but changed a definition it mentions would prove another proposition.
-$INV names "$EXPORT" > "$TMP/names.txt"
+$INV names "$EXPORT" > "$TMP/names.txt" \
+  || { no "the stream's declaration names could not be listed"; finish; }
 PROOF_NAMES="$TMP/names.txt" PROOF_OUT="$TMP/decls-lean.txt" population decls > "$TMP/decls.err" 2>&1 \
   || { no "declaration rendering failed: $(head -3 "$TMP/decls.err" | tr '\n' ' ')"; finish; }
 $INV decls "$EXPORT" > "$TMP/decls-export.txt" \
@@ -274,4 +277,14 @@ $INV encode "$TMP/names.ndjson" | sed -n '2p;4p;5p' | sort > "$TMP/enc-py.txt"
 [ "$(sort -u "$TMP/enc-lean.txt" | grep -c .)" = 3 ] && cmp -s "$TMP/enc-lean.txt" "$TMP/enc-py.txt" \
   && ok "«a.b», a.b and «λ» get three distinct encodings, the same in Lean and in the stream reader" \
   || no "name encodings: Lean [$(echo $(cat "$TMP/enc-lean.txt"))] stream [$(echo $(cat "$TMP/enc-py.txt"))]"
+# Every output of both readers is line-based (most tab-separated), so a name holding a tab or a line
+# break could shift or split a row (an axiom list gaining an allowlisted line). Both refuse it.
+printf 'theorem ConcreteSpecControl.«a\tb» : True := trivial\n' > "$TMP/c-tab.lean"
+population heads "$TMP/c-tab.lean" > "$TMP/c-tab.out" 2>&1 && LRC=0 || LRC=$?
+printf '%s\n' '{"in":1,"str":{"pre":0,"str":"ConcreteSpecControl"}}' \
+  '{"in":2,"str":{"pre":1,"str":"Classical.choice\nQuot.sound"}}' > "$TMP/c-nl.ndjson"
+$INV encode "$TMP/c-nl.ndjson" > "$TMP/c-nl.out" 2>&1 && PRC=0 || PRC=$?
+[ "$LRC" != 0 ] && grep -q 'control character' "$TMP/c-tab.out" && [ "$PRC" != 0 ] && grep -q 'control character' "$TMP/c-nl.out" \
+  && ok "a name holding a tab (Lean, heads mode) or a line break (stream reader) fails the run" \
+  || no "control-character names: Lean rc=$LRC '$(head -c 200 "$TMP/c-tab.out")', stream rc=$PRC '$(head -c 200 "$TMP/c-nl.out")'"
 finish

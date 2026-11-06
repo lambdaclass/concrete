@@ -21,6 +21,14 @@ Contents:
 
 ## What Concrete is for
 
+**Concrete is a fully proven systems programming language with no garbage collector, where you can
+know everything a program does: what it does, what it may touch, whether it can fail or stop, and
+what is proved about it.** "Fully proven" means compiler correctness proved end to end, with every
+unproven step named as an explicit assumption and never silently trusted, and a program's own
+correctness proved by Lean theorems about it. This states the project's goal: each guarantee holds
+only as its evidence lands, and native claims remain conditional on their named assumptions
+([decision](decisions.md#decided-project-core-statement)).
+
 Concrete is a small systems language for code that must be reviewed, audited, bounded and proved:
 no garbage collector and no hidden runtime, linear ownership, second-class references, and
 authority that is visible in every signature. Its aim is that a reader can answer "what does this
@@ -131,21 +139,28 @@ Each rule states what holds and why. Its history is in the changelog and the dec
 
 16. **Predictable execution and a separable core.** Recursion, loop bounds, allocation, blocking and
     foreign calls stay visible, so a bounded, analyzable core can be told apart from an effectful
-    shell, and writing code that way is natural. The compiler reports, for each function, whether it
-    is bounded (it terminates and has a static stack bound) and why; boundedness is a reported fact,
-    not a function category ([direction](decisions.md#decided-project-no-hidden-traps), 2026-11-06;
-    details pending R-0574). *Why:* resource bounds and proofs need a core they can reach.
+    shell, and writing code that way is natural. Termination is known before a program runs: every
+    loop, recursive cycle, indirect call and blocking or foreign boundary either has termination
+    evidence or carries a written permission at that source, which every report traces to its
+    callers. Recursion depth, stack use, allocation, blocking, foreign calls and possible aborts are
+    reported per function with their evidence, and a module or project policy may require them;
+    these are reported facts, not function categories
+    ([decision](decisions.md#decided-project-no-hidden-traps), 2026-11-06). *Why:* resource bounds
+    and proofs need a core they can reach, and an unexplained infinite loop is a hidden behaviour.
 
 17. **Real programs test the shape.** A design is validated by serious workloads, not by thought
     experiments alone, and a refused or deferred feature reopens only on such evidence. *Why:*
     hypothetical convenience is not a cost; measured pain is.
 
-18. **No hidden traps.** Every possible run-time failure of an accepted program is either proven
-    impossible at compile time or handled by a branch written in the code. Facts come from a
-    predictable checker proved sound in Lean, simple contracts and Lean theorems, never from an
-    unpredictable solver ([direction](decisions.md#decided-project-no-hidden-traps), 2026-11-06; the
-    detailed rules are pending R-0574, and the recorded trap rules stand until then). *Why:* a trap
-    is an exit the reader cannot see in the code, which rule 3 refuses for every other exit.
+18. **No hidden traps.** Accepted safe code has no reachable implicit language trap: every operation
+    that could fail at run time carries checked evidence that it cannot, or its failure is handled by
+    a branch written in the source. An explicit `abort()` remains terminal behaviour and is reported
+    transitively; resource exhaustion and foreign behaviour are named target and trust premises.
+    Evidence comes from a small decidable checker proved correct in Lean, contracts whose evidence is
+    closed, and Lean theorems, never from an unpredictable solver
+    ([decision](decisions.md#decided-project-no-hidden-traps), 2026-11-06). *Why:* an inserted trap
+    is an exit the reader of the operation cannot see, which rule 3 refuses for the same reason
+    exceptions are refused.
 
 ## When rules conflict
 
