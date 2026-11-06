@@ -1,0 +1,2 @@
+[piece 10 of 12: scripts]
+- scripts/proofs/theorems.lean:208: Constant names are printed unescaped into TSV, but Lean quoted identifiers can contain tabs. An axiom named `«a<TAB>b»` shifts the `axiom` kind out of column 2, so `declared()` in `trust_ban.sh` misses it. An otherwise unused axiom can therefore pass the “declares no axiom” check. Encode names or use structured serialization before parsing these rows.
