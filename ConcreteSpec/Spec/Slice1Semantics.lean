@@ -8,6 +8,7 @@ see `ConcreteSpec/README.md`.
 -/
 
 namespace ConcreteSpec
+open Core (AList)
 
 /-! ### Semantics -/
 
@@ -26,7 +27,7 @@ inductive Slot where
   deriving DecidableEq, Repr
 
 /-- The environment, newest binding first. -/
-abbrev Env := List (Var × Slot)
+abbrev Env := AList Var Slot
 
 /-- The defined traps of slice 1 (ARITH-3). -/
 inductive Trap where
@@ -58,16 +59,6 @@ inductive Outcome where
   | outOfFuel
   deriving DecidableEq, Repr
 
-/-- The slot of `x`. -/
-def envFind : Env → Var → Option Slot
-  | [], _ => none
-  | (y, s) :: env, x => if y = x then some s else envFind env x
-
-/-- Mark `x` moved. -/
-def envMove : Env → Var → Env
-  | [], _ => []
-  | (y, s) :: env, x => if y = x then (y, .moved) :: env else (y, s) :: envMove env x
-
 /-- Whether a value is Copy (OWN-D1, TYPE-14). -/
 def Val.isCopy (Δ : Decls) : Val → Bool
   | .scalar _ => true
@@ -78,11 +69,12 @@ def Val.isCopy (Δ : Decls) : Val → Bool
 /-- Read a local: `copy` (`mv = false`) keeps a Copy value, `move` (`mv = true`) moves a linear
 value out (Q9.1). A moved slot is stuck, and so is a read in the wrong mode. -/
 def readVar (Δ : Decls) (env : Env) (x : Var) (mv : Bool) : R (Val × Env) :=
-  match envFind env x with
+  match AList.lookup env x with
   | none => .stuck .unbound
   | some .moved => .stuck .movedRead
   | some (.val v) =>
-    if v.isCopy Δ = !mv then .ok (v, if mv then envMove env x else env) else .stuck .wrongMode
+    if v.isCopy Δ = !mv then .ok (v, if mv then AList.update env x (fun _ => .moved) else env)
+    else .stuck .wrongMode
 
 /-- Evaluate an atom that must be a scalar. -/
 def evalAtom (Δ : Decls) (env : Env) : Atom → R (Scalar × Env)
@@ -144,7 +136,7 @@ def evalExpr (Δ : Decls) : Env → Expr → R (Val × Env)
 def destructure : List (Name × Binder) → List (Name × Scalar) → Env → R Env
   | [], _, env => .ok env
   | (_, .wild) :: rest, vs, env => destructure rest vs env
-  | (f, .name x) :: rest, vs, env => match lookupF f vs with
+  | (f, .name x) :: rest, vs, env => match AList.lookup vs f with
     | some v => destructure rest vs ((x, .val (.scalar v)) :: env)
     | none => .stuck .typeError
 
@@ -207,7 +199,7 @@ a well-typed value for every declared field. -/
 inductive VTy (Δ : Decls) : Val → Ty → Prop where
   | scalar {v st} : SVTy v st → VTy Δ (.scalar v) (.scalar st)
   | struct {s d vs} : findDecl Δ s = some d →
-      (∀ f st, lookupF f d.fields = some st → ∃ v, lookupF f vs = some v ∧ SVTy v st) →
+      (∀ f st, AList.lookup d.fields f = some st → ∃ v, AList.lookup vs f = some v ∧ SVTy v st) →
       VTy Δ (.struct s vs) (.struct s)
 
 end ConcreteSpec

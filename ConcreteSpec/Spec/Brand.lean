@@ -1,3 +1,5 @@
+import ConcreteSpec.Spec.Basics
+
 /-!
 # Part 5: allocator brands
 
@@ -6,6 +8,7 @@ see `ConcreteSpec/README.md`.
 -/
 
 namespace ConcreteSpec.Brand
+open Core (AList)
 
 /-! ## Part 5. Allocator brands (Q1.1–Q1.5, Q1.13): `reset_fresh`
 
@@ -29,14 +32,6 @@ exactly what its ghost run does, brands removed (`brand_erasure`), for every out
 tests and any fuel.
 -/
 
-def findL {α : Type} : List (Nat × α) → Nat → Option α
-  | [], _ => none
-  | (n, v) :: l, p => if n = p then some v else findL l p
-
-def removeL {α : Type} (p : Nat) : List (Nat × α) → List (Nat × α)
-  | [] => []
-  | (n, v) :: l => if n = p then removeL p l else (n, v) :: removeL p l
-
 /-! ### The static check -/
 
 /-- Static types: an allocator of brand `β`, or a heap value allocated from brand `β`. Both are
@@ -46,7 +41,7 @@ inductive STy where
   | heap (β : Nat)
   deriving DecidableEq, Repr
 
-abbrev Ctx := List (Nat × STy)
+abbrev Ctx := AList Nat STy
 
 /-- No value of brand `β` is live. -/
 def NoHeap (Γ : Ctx) (β : Nat) : Prop := ∀ e ∈ Γ, e.2 ≠ .heap β
@@ -75,23 +70,25 @@ end. A brand binder must be fresh in `B` (generative); brand equality is name eq
 (nominal). -/
 inductive Ok : List Nat → Ctx → List Stmt → Ctx → Prop where
   | nil {B Γ} : Ok B Γ [] Γ
-  | newAlloc {B Γ a β rest Γ'} : findL Γ a = none → β ∉ B →
+  | newAlloc {B Γ a β rest Γ'} : AList.lookup Γ a = none → β ∉ B →
       Ok (β :: B) ((a, .alloc β) :: Γ) rest Γ' → Ok B Γ (.newAlloc a β :: rest) Γ'
-  | alloc {B Γ h a β rest Γ'} : findL Γ a = some (.alloc β) → findL Γ h = none →
+  | alloc {B Γ h a β rest Γ'} : AList.lookup Γ a = some (.alloc β) → AList.lookup Γ h = none →
       Ok B ((h, .heap β) :: Γ) rest Γ' → Ok B Γ (.alloc h a :: rest) Γ'
-  | use {B Γ h a β rest Γ'} : findL Γ h = some (.heap β) → findL Γ a = some (.alloc β) →
+  | use {B Γ h a β rest Γ'} : AList.lookup Γ h = some (.heap β) →
+      AList.lookup Γ a = some (.alloc β) →
       Ok B Γ rest Γ' → Ok B Γ (.use h a :: rest) Γ'
-  | free {B Γ h a β rest Γ'} : findL Γ h = some (.heap β) → findL Γ a = some (.alloc β) →
-      Ok B (removeL h Γ) rest Γ' → Ok B Γ (.free h a :: rest) Γ'
-  | release {B Γ a β rest Γ'} : findL Γ a = some (.alloc β) → NoHeap Γ β →
-      Ok B (removeL a Γ) rest Γ' → Ok B Γ (.release a :: rest) Γ'
-  | reset {B Γ a' a β β' rest Γ'} : findL Γ a = some (.alloc β) → NoHeap Γ β →
-      findL (removeL a Γ) a' = none → β' ∉ B →
-      Ok (β' :: B) ((a', .alloc β') :: removeL a Γ) rest Γ' → Ok B Γ (.reset a' a β' :: rest) Γ'
-  | while_ {B Γ a β0 β βx β'' body rest Γ'} : findL Γ a = some (.alloc β0) → NoHeap Γ β0 →
+  | free {B Γ h a β rest Γ'} : AList.lookup Γ h = some (.heap β) →
+      AList.lookup Γ a = some (.alloc β) →
+      Ok B (AList.erase Γ h) rest Γ' → Ok B Γ (.free h a :: rest) Γ'
+  | release {B Γ a β rest Γ'} : AList.lookup Γ a = some (.alloc β) → NoHeap Γ β →
+      Ok B (AList.erase Γ a) rest Γ' → Ok B Γ (.release a :: rest) Γ'
+  | reset {B Γ a' a β β' rest Γ'} : AList.lookup Γ a = some (.alloc β) → NoHeap Γ β →
+      AList.lookup (AList.erase Γ a) a' = none → β' ∉ B →
+      Ok (β' :: B) ((a', .alloc β') :: AList.erase Γ a) rest Γ' → Ok B Γ (.reset a' a β' :: rest) Γ'
+  | while_ {B Γ a β0 β βx β'' body rest Γ'} : AList.lookup Γ a = some (.alloc β0) → NoHeap Γ β0 →
       β ∉ B → βx ∉ B →
-      Ok (β :: B) ((a, .alloc β) :: removeL a Γ) body ((a, .alloc β'') :: removeL a Γ) →
-      Ok (βx :: B) ((a, .alloc βx) :: removeL a Γ) rest Γ' →
+      Ok (β :: B) ((a, .alloc β) :: AList.erase Γ a) body ((a, .alloc β'') :: AList.erase Γ a) →
+      Ok (βx :: B) ((a, .alloc βx) :: AList.erase Γ a) rest Γ' →
       Ok B Γ (.while_ a β βx body :: rest) Γ'
 
 /-- Every brand in the context is a brand name in use. -/
@@ -112,13 +109,13 @@ def brandOf : Val → Nat
 /-- The ghost state: the live values, the next unused brand, and every brand generated so far in
 order. -/
 structure State where
-  env : List (Nat × Val)
+  env : AList Nat Val
   next : Nat
   gen : List Nat
   deriving DecidableEq, Repr
 
 /-- Generate a brand for allocator `a`. -/
-def State.bind (s : State) (a : Nat) (env : List (Nat × Val)) : State :=
+def State.bind (s : State) (a : Nat) (env : AList Nat Val) : State :=
   { env := (a, .allocV s.next) :: env, next := s.next + 1, gen := s.gen ++ [s.next] }
 
 /-- The ghost run. Each operation on a heap value checks that the allocator has the value's
@@ -126,16 +123,18 @@ brand; without a matching rule the run is stuck. -/
 inductive Run : State → List Stmt → State → Prop where
   | nil {s} : Run s [] s
   | newAlloc {s a β rest s'} : Run (s.bind a s.env) rest s' → Run s (.newAlloc a β :: rest) s'
-  | alloc {s h a b rest s'} : findL s.env a = some (.allocV b) →
+  | alloc {s h a b rest s'} : AList.lookup s.env a = some (.allocV b) →
       Run { s with env := (h, .heapV b) :: s.env } rest s' → Run s (.alloc h a :: rest) s'
-  | use {s h a b rest s'} : findL s.env h = some (.heapV b) → findL s.env a = some (.allocV b) →
+  | use {s h a b rest s'} : AList.lookup s.env h = some (.heapV b) →
+      AList.lookup s.env a = some (.allocV b) →
       Run s rest s' → Run s (.use h a :: rest) s'
-  | free {s h a b rest s'} : findL s.env h = some (.heapV b) → findL s.env a = some (.allocV b) →
-      Run { s with env := removeL h s.env } rest s' → Run s (.free h a :: rest) s'
-  | release {s a b rest s'} : findL s.env a = some (.allocV b) →
-      Run { s with env := removeL a s.env } rest s' → Run s (.release a :: rest) s'
-  | reset {s a' a b β' rest s'} : findL s.env a = some (.allocV b) →
-      Run (s.bind a' (removeL a s.env)) rest s' → Run s (.reset a' a β' :: rest) s'
+  | free {s h a b rest s'} : AList.lookup s.env h = some (.heapV b) →
+      AList.lookup s.env a = some (.allocV b) →
+      Run { s with env := AList.erase s.env h } rest s' → Run s (.free h a :: rest) s'
+  | release {s a b rest s'} : AList.lookup s.env a = some (.allocV b) →
+      Run { s with env := AList.erase s.env a } rest s' → Run s (.release a :: rest) s'
+  | reset {s a' a b β' rest s'} : AList.lookup s.env a = some (.allocV b) →
+      Run (s.bind a' (AList.erase s.env a)) rest s' → Run s (.reset a' a β' :: rest) s'
   | whileExit {s a β βx body rest s'} : Run s rest s' → Run s (.while_ a β βx body :: rest) s'
   | whileIter {s a β βx body rest s'} : Run s (body ++ .while_ a β βx body :: rest) s' →
       Run s (.while_ a β βx body :: rest) s'
@@ -164,21 +163,21 @@ def ghost (σ : Nat → Bool) : Nat → Nat → State → List Stmt → GR
   | 0, _, _, _ => .outOfFuel
   | _ + 1, k, s, [] => .done s k
   | n + 1, k, s, .newAlloc a _ :: rest => ghost σ n k (s.bind a s.env) rest
-  | n + 1, k, s, .alloc h a :: rest => match findL s.env a with
+  | n + 1, k, s, .alloc h a :: rest => match AList.lookup s.env a with
     | some (.allocV b) => ghost σ n k { s with env := (h, .heapV b) :: s.env } rest
     | _ => .stuck
-  | n + 1, k, s, .use h a :: rest => match findL s.env h, findL s.env a with
+  | n + 1, k, s, .use h a :: rest => match AList.lookup s.env h, AList.lookup s.env a with
     | some (.heapV b), some (.allocV b') => if b = b' then ghost σ n k s rest else .stuck
     | _, _ => .stuck
-  | n + 1, k, s, .free h a :: rest => match findL s.env h, findL s.env a with
+  | n + 1, k, s, .free h a :: rest => match AList.lookup s.env h, AList.lookup s.env a with
     | some (.heapV b), some (.allocV b') =>
-      if b = b' then ghost σ n k { s with env := removeL h s.env } rest else .stuck
+      if b = b' then ghost σ n k { s with env := AList.erase s.env h } rest else .stuck
     | _, _ => .stuck
-  | n + 1, k, s, .release a :: rest => match findL s.env a with
-    | some (.allocV _) => ghost σ n k { s with env := removeL a s.env } rest
+  | n + 1, k, s, .release a :: rest => match AList.lookup s.env a with
+    | some (.allocV _) => ghost σ n k { s with env := AList.erase s.env a } rest
     | _ => .stuck
-  | n + 1, k, s, .reset a' a _ :: rest => match findL s.env a with
-    | some (.allocV _) => ghost σ n k (s.bind a' (removeL a s.env)) rest
+  | n + 1, k, s, .reset a' a _ :: rest => match AList.lookup s.env a with
+    | some (.allocV _) => ghost σ n k (s.bind a' (AList.erase s.env a)) rest
     | _ => .stuck
   | n + 1, k, s, .while_ a β βx body :: rest =>
     if σ k then
@@ -203,35 +202,32 @@ def Val.erase : Val → EVal
   | .allocV _ => .alloc
   | .heapV _ => .heap
 
-/-- Erase every brand of an environment. -/
-def eraseEnv (env : List (Nat × Val)) : List (Nat × EVal) := env.map (fun p => (p.1, p.2.erase))
-
 /-- The result of the erased run. -/
 inductive ER where
-  | done (env : List (Nat × EVal)) (k : Nat)
+  | done (env : AList Nat EVal) (k : Nat)
   | stuck
   | outOfFuel
   deriving DecidableEq, Repr
 
 /-- The erased run, with the same fuel and loop tests as `ghost`. -/
-def erased (σ : Nat → Bool) : Nat → Nat → List (Nat × EVal) → List Stmt → ER
+def erased (σ : Nat → Bool) : Nat → Nat → AList Nat EVal → List Stmt → ER
   | 0, _, _, _ => .outOfFuel
   | _ + 1, k, env, [] => .done env k
   | n + 1, k, env, .newAlloc a _ :: rest => erased σ n k ((a, .alloc) :: env) rest
-  | n + 1, k, env, .alloc h a :: rest => match findL env a with
+  | n + 1, k, env, .alloc h a :: rest => match AList.lookup env a with
     | some .alloc => erased σ n k ((h, .heap) :: env) rest
     | _ => .stuck
-  | n + 1, k, env, .use h a :: rest => match findL env h, findL env a with
+  | n + 1, k, env, .use h a :: rest => match AList.lookup env h, AList.lookup env a with
     | some .heap, some .alloc => erased σ n k env rest
     | _, _ => .stuck
-  | n + 1, k, env, .free h a :: rest => match findL env h, findL env a with
-    | some .heap, some .alloc => erased σ n k (removeL h env) rest
+  | n + 1, k, env, .free h a :: rest => match AList.lookup env h, AList.lookup env a with
+    | some .heap, some .alloc => erased σ n k (AList.erase env h) rest
     | _, _ => .stuck
-  | n + 1, k, env, .release a :: rest => match findL env a with
-    | some .alloc => erased σ n k (removeL a env) rest
+  | n + 1, k, env, .release a :: rest => match AList.lookup env a with
+    | some .alloc => erased σ n k (AList.erase env a) rest
     | _ => .stuck
-  | n + 1, k, env, .reset a' a _ :: rest => match findL env a with
-    | some .alloc => erased σ n k ((a', .alloc) :: removeL a env) rest
+  | n + 1, k, env, .reset a' a _ :: rest => match AList.lookup env a with
+    | some .alloc => erased σ n k ((a', .alloc) :: AList.erase env a) rest
     | _ => .stuck
   | n + 1, k, env, .while_ a β βx body :: rest =>
     if σ k then
@@ -242,7 +238,7 @@ def erased (σ : Nat → Bool) : Nat → Nat → List (Nat × EVal) → List Stm
 
 /-- Erase the brands of a ghost result. -/
 def GR.erase : GR → ER
-  | .done s k => .done (eraseEnv s.env) k
+  | .done s k => .done (AList.map Val.erase s.env) k
   | .stuck => .stuck
   | .outOfFuel => .outOfFuel
 
@@ -255,10 +251,10 @@ example : ¬ Ok [] [] [.newAlloc 0 10, .alloc 1 0, .reset 0 0 11, .free 1 0, .re
   | newAlloc _ _ h1 =>
     cases h1 with
     | alloc ha' _ h2 =>
-      simp [findL] at ha'; subst ha'
+      simp [AList.lookup] at ha'; subst ha'
       cases h2 with
       | reset ha hno _ _ _ =>
-        simp [findL] at ha; subst ha; exact hno (1, .heap 10) (by simp) rfl
+        simp [AList.lookup] at ha; subst ha; exact hno (1, .heap 10) (by simp) rfl
 
 /-- `new a; h = alloc(a); free(h); a = reset(a); h2 = alloc(a); free(h2); release(a)` is accepted. -/
 example : Ok [] [] [.newAlloc 0 10, .alloc 1 0, .free 1 0, .reset 0 0 11, .alloc 2 0, .free 2 0,
@@ -272,7 +268,7 @@ Q1.4). -/
 example : ¬ Ok [10, 11] [(1, .heap 10), (0, .alloc 11)] [.use 1 0] [(1, .heap 10), (0, .alloc 11)] := by
   intro hok
   cases hok with
-  | use h1 h2 _ => simp [findL] at h1 h2; subst h1; cases h2
+  | use h1 h2 _ => simp [AList.lookup] at h1 h2; subst h1; cases h2
 
 /-- A loop that resets its allocator each iteration is accepted (existential loop state, Q1.3). -/
 example : Ok [] [] [.newAlloc 0 10, .while_ 0 20 30 [.alloc 1 0, .free 1 0, .reset 0 0 21],

@@ -1,3 +1,4 @@
+import ConcreteSpec.Spec.Basics
 import ConcreteSpec.Spec.Slice1Syntax
 import ConcreteSpec.Spec.Statics
 import ConcreteSpec.Spec.Slice1Ownership
@@ -25,7 +26,7 @@ Q9.19). Until then its examples are not conformance claims for any compiler, and
 would change an approved row goes back to the owner.
 
 How to read it. Read this header, then the modules in the order the README gives
-(Slice1Syntax, Statics, Slice1Ownership, Slice1Semantics, Slice1Checker, Examples, Slice0, Rep,
+(Basics, Slice1Syntax, Statics, Slice1Ownership, Slice1Semantics, Slice1Checker, Examples, Slice0, Rep,
 Cleanup, Borrow, Brand, Authority, Observation); you never need the proofs to know what a rule says.
 The proofs are in `ConcreteSpec/Proofs/` and say why the rules hang together
 (an accepted program never gets stuck, the checker agrees with the rules, and the design theorems).

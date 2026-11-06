@@ -18,6 +18,7 @@ stage A2c (row Q9.19). Before that, the owner approved the Core design provision
 
    | Module | Contents |
    |---|---|
+   | [`Spec/Basics.lean`](Spec/Basics.lean) | association lists: `lookup`, `update`, `erase`, `map`, the one definition of a finite map |
    | [`Spec/Slice1Syntax.lean`](Spec/Slice1Syntax.lean) | Part 1, slice 1: types, integer ranges, Core syntax |
    | [`Spec/Statics.lean`](Spec/Statics.lean) | slice-1 typing |
    | [`Spec/Slice1Ownership.lean`](Spec/Slice1Ownership.lean) | ownership, known values (Q6.2), static refusal, acceptance (`Checked`) |
@@ -46,7 +47,7 @@ stage A2c (row Q9.19). Before that, the owner approved the Core design provision
    | `Proofs/Authority.lean` | `authority_contained` (every operation a run performs uses a grant `main` was launched with, of the right type, under a capability `main` declares, for every fuel), `sub_iff`, `equiv_iff` |
    | `Proofs/Observe.lean` | `checked_observation`, `checked_observable` (an accepted program's observation and status), `refused_start` |
    | `Proofs/Examples.lean` | the cleanup traces and brand refusal of the specification derived again from the general theorems (they apply, non-vacuously) |
-   | `Proofs/Basics.lean` | list lemmas |
+   | `Proofs/Basics.lean` | the association-list lemmas |
 
 **The owner view.** `scripts/spec/lean_site.sh [OUT]` (after `lake build ConcreteSpec`) generates
 a static HTML view into `_build/spec-site/`: every module rendered from its source (doc comments as

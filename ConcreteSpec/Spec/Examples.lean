@@ -323,7 +323,7 @@ fn add100(x: u8) -> u8 {
 ```
 In Core the sum is bound to a temporary first (Q9.1). The guarded forms that are accepted need
 conditions, which slice 1 does not have; they come with Core `if` (ROADMAP R-0574). -/
-def inputCtx : Ctx := [{ name := x₀, ty := u8, live := true, used := false, known := none }]
+def inputCtx : Ctx := [(x₀, { ty := u8, live := true, used := false, known := none })]
 
 def inputEnv (n : Int) : Env := [(x₀, .val (.scalar (.int .u8 n)))]
 

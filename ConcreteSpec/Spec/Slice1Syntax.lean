@@ -1,3 +1,5 @@
+import ConcreteSpec.Spec.Basics
+
 /-!
 # Types and slice-1 syntax
 
@@ -86,13 +88,6 @@ structure Var where
   hint : String
   id : Nat
   deriving DecidableEq, Repr
-
-/-! ### Lists keyed by name -/
-
-/-- The first value bound to `x` in a list of keyed pairs. -/
-def lookupF {κ α : Type} [DecidableEq κ] (x : κ) : List (κ × α) → Option α
-  | [] => none
-  | (y, a) :: rest => if y = x then some a else lookupF x rest
 
 /-! ### Types -/
 

@@ -7,6 +7,7 @@ PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). See `Concret
 -/
 
 namespace ConcreteSpec
+open Core (AList)
 
 /-! ### Properties of the semantics -/
 
@@ -98,29 +99,16 @@ binding the context records as moved is otherwise unconstrained here; the evalua
 slot `moved` when it moves the value out. -/
 inductive Corr (Δ : Decls) : Ctx → Env → Prop where
   | nil : Corr Δ [] []
-  | cons {e sl Γ env} : (e.live = true → ∃ v, sl = .val v ∧ VTy Δ v e.ty) →
+  | cons {x e sl Γ env} : (e.live = true → ∃ v, sl = .val v ∧ VTy Δ v e.ty) →
       (∀ s, e.known = some s → sl = .val (.scalar s) ∧ e.ty.isCopy Δ = true) →
       (∀ sn vs, sl = .val (.struct sn vs) → FieldsHold e.kfields vs) →
-      Corr Δ Γ env → Corr Δ (e :: Γ) ((e.name, sl) :: env)
+      Corr Δ Γ env → Corr Δ ((x, e) :: Γ) ((x, sl) :: env)
 
-theorem tys_lookup (x : Var) : ∀ Γ : Ctx, lookupF x Γ.tys = (ctxFind Γ x).map Entry.ty
-  | [] => rfl
-  | e :: Γ => by
-    simp only [Ctx.tys, List.map_cons, lookupF, ctxFind] at *
-    split
-    · rfl
-    · exact tys_lookup x Γ
+theorem tys_lookup (x : Var) (Γ : Ctx) : AList.lookup Γ.tys x = (AList.lookup Γ x).map Entry.ty :=
+  AList.lookup_map Entry.ty Γ x
 
-theorem ctxMark_tys (x : Var) (mv : Bool) : ∀ Γ : Ctx, (ctxMark Γ x mv).tys = Γ.tys
-  | [] => rfl
-  | e :: Γ => by
-    simp only [ctxMark]
-    split
-    · rfl
-    · simp only [Ctx.tys, List.map_cons] at *
-      rw [show (ctxMark Γ x mv).map (fun e => (e.name, e.ty)) = (ctxMark Γ x mv).tys from rfl,
-        ctxMark_tys x mv Γ]
-      rfl
+theorem ctxMark_tys (x : Var) (mv : Bool) (Γ : Ctx) : (ctxMark Γ x mv).tys = Γ.tys :=
+  AList.map_update Entry.ty (Entry.read mv) (fun _ => rfl) Γ x
 
 theorem useAtom_tys {Δ : Decls} {Γ Γ' : Ctx} {a : Atom} (h : UseAtom Δ Γ a Γ') : Γ'.tys = Γ.tys := by
   cases h with
@@ -145,16 +133,16 @@ theorem vty_isCopy {Δ : Decls} {v : Val} {t : Ty} (h : VTy Δ v t) : v.isCopy �
   cases h <;> rfl
 
 theorem corr_find {Δ : Decls} {x : Var} {Γ : Ctx} {env : Env} (hc : Corr Δ Γ env) :
-    ∀ {e : Entry}, ctxFind Γ x = some e →
-      (e.live = true → ∃ v, envFind env x = some (.val v) ∧ VTy Δ v e.ty) ∧
-      (∀ s, e.known = some s → envFind env x = some (.val (.scalar s)) ∧ e.ty.isCopy Δ = true) ∧
-      (∀ sn vs, envFind env x = some (.val (.struct sn vs)) → FieldsHold e.kfields vs) := by
+    ∀ {e : Entry}, AList.lookup Γ x = some e →
+      (e.live = true → ∃ v, AList.lookup env x = some (.val v) ∧ VTy Δ v e.ty) ∧
+      (∀ s, e.known = some s → AList.lookup env x = some (.val (.scalar s)) ∧ e.ty.isCopy Δ = true) ∧
+      (∀ sn vs, AList.lookup env x = some (.val (.struct sn vs)) → FieldsHold e.kfields vs) := by
   induction hc with
-  | nil => intro e h; simp [ctxFind] at h
+  | nil => intro e h; simp [AList.lookup] at h
   | cons hsl hk hkf _ ih =>
-    rename_i e' sl Γ env
+    rename_i x' e' sl Γ env
     intro e h
-    simp only [ctxFind, envFind] at h ⊢
+    simp only [AList.lookup, AList.lookup] at h ⊢
     split at h
     · cases h
       rename_i heq
@@ -174,33 +162,36 @@ theorem corr_mark_copy {Δ : Decls} {x : Var} {Γ : Ctx} {env : Env} (hc : Corr 
   induction hc with
   | nil => exact .nil
   | cons hsl hk hkf hc ih =>
-    simp only [ctxMark]
-    split
-    · exact .cons (by simpa using hsl) hk hkf hc
-    · exact .cons hsl hk hkf ih
+    rename_i x' e sl Γ env
+    rw [ctxMark, AList.update_cons]
+    by_cases h : x' = x
+    · rw [ite_eq_left h]
+      exact .cons (fun hl => hsl (by rw [← hl]; exact (Bool.and_true e.live).symm)) hk hkf hc
+    · rw [ite_eq_right h]; exact .cons hsl hk hkf ih
 
 /-- Moving `x` out keeps the description, provided `x`'s binding has no known value (a known
 value is a Copy scalar, which is never moved). -/
 theorem corr_mark_move {Δ : Decls} {x : Var} {Γ : Ctx} {env : Env} (hc : Corr Δ Γ env) :
-    (∀ e, ctxFind Γ x = some e → e.known = none) →
-    Corr Δ (ctxMark Γ x true) (envMove env x) := by
+    (∀ e, AList.lookup Γ x = some e → e.known = none) →
+    Corr Δ (ctxMark Γ x true) (AList.update env x (fun _ => .moved)) := by
   induction hc with
   | nil => intro _; exact .nil
   | cons hsl hk hkf hc ih =>
-    rename_i e sl Γ env
+    rename_i x' e sl Γ env
     intro hn
-    simp only [ctxMark, envMove]
+    simp only [ctxMark, AList.update]
     split
     · rename_i heq
-      have hkn : e.known = none := hn e (by simp [ctxFind, heq])
-      exact .cons (by simp) (by intro s hs; simp [hkn] at hs) (by intro sn vs h; cases h) hc
+      have hkn : e.known = none := hn e (by simp [AList.lookup, heq])
+      exact .cons (by simp [Entry.read]) (by intro s hs; simp [Entry.read, hkn] at hs)
+        (by intro sn vs h; cases h) hc
     · rename_i hne
-      exact .cons hsl hk hkf (ih (fun e' h => hn e' (by simp [ctxFind, hne, h])))
+      exact .cons hsl hk hkf (ih (fun e' h => hn e' (by simp [AList.lookup, hne, h])))
 
 /-- Reading a live local in the mode its type requires succeeds with a value of its type, and the
 context's record of the read matches what the evaluator did. -/
 theorem readVar_safe {Δ : Decls} {Γ : Ctx} {env : Env} {x : Var} {e : Entry} {mv : Bool}
-    (hc : Corr Δ Γ env) (hf : ctxFind Γ x = some e) (hl : e.live = true)
+    (hc : Corr Δ Γ env) (hf : AList.lookup Γ x = some e) (hl : e.live = true)
     (hm : e.ty.isCopy Δ = !mv) :
     ∃ v env', readVar Δ env x mv = .ok (v, env') ∧ VTy Δ v e.ty ∧
       (∀ sn vs, v = .struct sn vs → FieldsHold e.kfields vs) ∧
@@ -239,14 +230,11 @@ theorem knownAtom_mark (y : Var) (mv : Bool) (a : Atom) (Γ : Ctx) :
     knownAtom (ctxMark Γ y mv) a = knownAtom Γ a := by
   cases a with
   | copy x =>
-    simp only [knownAtom]
-    induction Γ with
-    | nil => rfl
-    | cons e Γ ih =>
-      simp only [ctxMark]
-      split
-      · simp only [ctxFind]; split <;> simp_all
-      · simp only [ctxFind]; split <;> simp_all
+    show (AList.lookup (ctxMark Γ y mv) x).bind Entry.known = (AList.lookup Γ x).bind Entry.known
+    rw [ctxMark, AList.lookup_update]
+    by_cases h : x = y
+    · subst h; rw [ite_eq_left rfl]; cases AList.lookup Γ x <;> rfl
+    · rw [ite_eq_right h]
   | _ => rfl
 
 theorem useAtom_knownAtom {Δ : Decls} {Γ Γ' : Ctx} {a : Atom} (h : UseAtom Δ Γ a Γ') (b : Atom) :
@@ -286,13 +274,13 @@ theorem evalFields_safe {Δ : Decls} :
     ∀ {fs : List (Name × Atom)} {Γ Γ' : Ctx} {env : Env}, Corr Δ Γ env →
       (∀ p ∈ fs, ∃ st, AtomTy Γ.tys p.2 st) → UseAtoms Δ Γ (fs.map Prod.snd) Γ' →
       ∃ vs env', evalFields Δ env fs = .ok (vs, env') ∧ Corr Δ Γ' env' ∧
-        (∀ f a, lookupF f fs = some a → ∀ st, AtomTy Γ.tys a st →
-          ∃ v, lookupF f vs = some v ∧ SVTy v st) ∧
-        (∀ f a, lookupF f fs = some a → ∀ s, knownAtom Γ a = some s → lookupF f vs = some s)
+        (∀ f a, AList.lookup fs f = some a → ∀ st, AtomTy Γ.tys a st →
+          ∃ v, AList.lookup vs f = some v ∧ SVTy v st) ∧
+        (∀ f a, AList.lookup fs f = some a → ∀ s, knownAtom Γ a = some s → AList.lookup vs f = some s)
   | [], Γ, Γ', env, hc, _, hu => by
     cases hu
-    exact ⟨[], env, rfl, hc, by intro f a h; simp [lookupF] at h,
-      by intro f a h; simp [lookupF] at h⟩
+    exact ⟨[], env, rfl, hc, by intro f a h; simp [AList.lookup] at h,
+      by intro f a h; simp [AList.lookup] at h⟩
   | (g, a) :: rest, Γ, Γ', env, hc, ht, hu => by
     cases hu with
     | cons hu₁ hu₂ =>
@@ -305,7 +293,7 @@ theorem evalFields_safe {Δ : Decls} :
       obtain ⟨vs, env₂, hr, hc₂, hl, hk⟩ := evalFields_safe hc₁ ht' hu₂
       refine ⟨(g, v) :: vs, env₂, by simp [evalFields, he, hr], hc₂, ?_, ?_⟩
       · intro f a' hf st hst
-        simp only [lookupF] at hf ⊢
+        simp only [AList.lookup] at hf ⊢
         split at hf
         next hgf =>
           cases hf
@@ -317,7 +305,7 @@ theorem evalFields_safe {Δ : Decls} :
           simp only [hne, ↓reduceIte]
           exact hl f a' hf st (by rw [htys]; exact hst)
       · intro f a' hf s hks
-        simp only [lookupF] at hf ⊢
+        simp only [AList.lookup] at hf ⊢
         split at hf
         next hgf =>
           cases hf
@@ -328,16 +316,6 @@ theorem evalFields_safe {Δ : Decls} :
         next hne =>
           simp only [hne, ↓reduceIte]
           exact hk f a' hf s (by rw [useAtom_knownAtom hu₁]; exact hks)
-
-/-- `lookupF` through a map of the values. -/
-theorem lookupF_map {α β : Type} (g : α → β) (f : Name) :
-    ∀ l : List (Name × α), lookupF f (l.map (fun p => (p.1, g p.2))) = (lookupF f l).map g
-  | [] => rfl
-  | (y, a) :: rest => by
-    simp only [List.map_cons, lookupF]
-    split
-    · rfl
-    · exact lookupF_map g f rest
 
 /-- Expression safety: a well-typed expression whose reads are allowed evaluates to a value of its
 type, or traps. It never gets stuck, and in particular never reads a moved variable. A struct
@@ -406,14 +384,14 @@ theorem evalExpr_safe {Δ : Decls} {e : Expr} {Γ Γ' : Ctx} {env : Env} {t : Ty
       refine .inr ⟨.struct s vs, env', by simp [evalExpr, he], .struct hd ?_, ?_, hc'⟩
       · intro f st hfs
         obtain ⟨a, ha⟩ := hf.covers f st hfs
-        obtain ⟨st', hst', hat⟩ := hf.typed (f, a) (lookupF_mem ha)
+        obtain ⟨st', hst', hat⟩ := hf.typed (f, a) (AList.lookup_mem ha)
         rw [hfs] at hst'
         cases hst'
         exact hl f a ha st hat
       · intro sn vs' hv f sv hff
         cases hv
-        simp only [knownFields, fieldFact, lookupF_map] at hff
-        cases hla : lookupF f fs with
+        simp only [knownFields, fieldFact, AList.lookup_map] at hff
+        cases hla : AList.lookup fs f with
         | none => simp [hla] at hff
         | some a =>
           simp only [hla, Option.map_some, Option.bind_some, id] at hff
@@ -489,18 +467,10 @@ theorem atomBounds_mark (y : Var) (mv : Bool) (a : Atom) (Γ : Ctx) :
   cases a with
   | copy x =>
     simp only [atomBounds]
-    suffices h : ∀ Γ : Ctx, (ctxFind (ctxMark Γ y mv) x).map (fun e => (e.ty, e.known)) =
-        (ctxFind Γ x).map (fun e => (e.ty, e.known)) by
-      have h' := h Γ
-      cases h₁ : ctxFind (ctxMark Γ y mv) x <;> cases h₂ : ctxFind Γ x <;> simp_all
-    intro Γ
-    induction Γ with
-    | nil => rfl
-    | cons e Γ ih =>
-      simp only [ctxMark]
-      split
-      · simp only [ctxFind]; split <;> simp_all
-      · simp only [ctxFind]; split <;> simp_all
+    rw [ctxMark, AList.lookup_update]
+    by_cases h : x = y
+    · subst h; rw [ite_eq_left rfl]; cases AList.lookup Γ x <;> rfl
+    · rw [ite_eq_right h]
   | _ => rfl
 
 theorem useAtom_atomBounds {Δ : Decls} {Γ Γ' : Ctx} {a : Atom} (h : UseAtom Δ Γ a Γ') (b : Atom) :
@@ -612,10 +582,10 @@ theorem execStmt_ne_trap {Δ : Decls} {Γ Γ' : Ctx} {env : Env} {s : Stmt}
 
 theorem destructure_safe {Δ : Decls} {d : StructDecl} {vs : List (Name × Scalar)}
     {K : List (Name × Option Scalar)}
-    (hvs : ∀ f st, lookupF f d.fields = some st → ∃ v, lookupF f vs = some v ∧ SVTy v st)
+    (hvs : ∀ f st, AList.lookup d.fields f = some st → ∃ v, AList.lookup vs f = some v ∧ SVTy v st)
     (hK : FieldsHold K vs) :
     ∀ {pat : List (Name × Binder)} {Γ : Ctx} {env : Env}, Corr Δ Γ env →
-      (∀ p ∈ pat, ∃ st, lookupF p.1 d.fields = some st) →
+      (∀ p ∈ pat, ∃ st, AList.lookup d.fields p.1 = some st) →
       ∃ env', destructure pat vs env = .ok env' ∧ Corr Δ (bindPat d K pat Γ) env'
   | [], Γ, env, hc, _ => ⟨env, rfl, hc⟩
   | (f, .wild) :: rest, Γ, env, hc, hp => by
@@ -627,7 +597,7 @@ theorem destructure_safe {Δ : Decls} {d : StructDecl} {vs : List (Name × Scala
     simp only [destructure, bindPat, hst, hv]
     exact destructure_safe hvs hK
       (Corr.cons
-        (e := { name := x, ty := .scalar st, live := true, used := false, known := fieldFact K f })
+        (x := x) (e := { ty := .scalar st, live := true, used := false, known := fieldFact K f })
         (fun _ => ⟨_, rfl, .scalar hsv⟩)
         (by
           intro s hs

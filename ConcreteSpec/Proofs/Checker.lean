@@ -7,6 +7,7 @@ PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). See `Concret
 -/
 
 namespace ConcreteSpec
+open Core (AList)
 
 theorem atomTy_iff {Γ : TyCtx} {a : Atom} {st : STy} : atomTy Γ a = some st ↔ AtomTy Γ a st := by
   constructor
@@ -36,16 +37,16 @@ theorem atomTy_iff {Γ : TyCtx} {a : Atom} {st : STy} : atomTy Γ a = some st �
     | move h => simp [atomTy, h]
 
 theorem covers_iff {α β : Type} {l : List (Name × α)} {m : List (Name × β)} :
-    (∀ f a, lookupF f l = some a → ∃ b, lookupF f m = some b) ↔
-      l.all (fun q => (lookupF q.1 m).isSome) = true := by
+    (∀ f a, AList.lookup l f = some a → ∃ b, AList.lookup m f = some b) ↔
+      l.all (fun q => (AList.lookup m q.1).isSome) = true := by
   rw [List.all_eq_true]
   constructor
   · intro h q hq
-    obtain ⟨a, ha⟩ := lookupF_of_mem hq
+    obtain ⟨a, ha⟩ := AList.lookup_isSome_of_mem hq
     obtain ⟨b, hb⟩ := h q.1 a ha
     simp [hb]
   · intro h f a ha
-    have := h (f, a) (lookupF_mem ha)
+    have := h (f, a) (AList.lookup_mem ha)
     simp only [Option.isSome_iff_exists] at this
     exact this
 
