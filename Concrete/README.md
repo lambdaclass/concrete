@@ -1,6 +1,6 @@
 # The Concrete compiler: slice 0 design (provisional)
 
-PROVISIONAL. This is a design sketch, revision 2, written after the first Codex and agy review round, and there is no code yet. Slice 0 is the first compiler slice. It is built before the owner freezes Core (A2c) and makes no normative claim before that freeze ([decision](../docs/decisions.md#decided-project-proof-infrastructure)). Branch `wip/slice0` depends on `wip/spec-root`, which puts `ConcreteSpec` on the new root, and is rebased onto main (under a new branch name) once that lands.
+PROVISIONAL. This is a design sketch, revision 4, written after three Codex and agy review rounds, and there is no code yet. Slice 0 is the first compiler slice. It is built before the owner freezes Core (A2c) and makes no normative claim before that freeze ([decision](../docs/decisions.md#decided-project-proof-infrastructure)). Branch `wip/slice0` depends on `wip/spec-root`, which puts `ConcreteSpec` on the new root, and is rebased onto main (under a new branch name) once that lands.
 
 ## What slice 0 accepts
 
@@ -85,7 +85,21 @@ LCB's own lowering, assembler and linker are LCB's named trust boundaries, carri
 
 LCB is a pinned lake dependency (`require` with an exact rev, LCB's upstream lock recorded). It uses the same Lean toolchain (v4.34.1) and no Mathlib.
 
-**The runtime.** A trap calls the runtime symbol `concrete_rt_trap(k)`. It writes the trap line to fd 2 and exits 134, and returning from `main` exits with the `u8`. `Backend/Runtime.lean` emits this stub per backend, as LLVM text and as LCB-IR (over libc `write`/`_exit`). So the runtime is part of each backend's emitted, covered text, and isn't a separate C file.
+**The encoded result, with one decoding runtime.** Neither backend's input contains a call or a trap.
+
+Each backend emits `main`'s body as a function `concrete_body() -> w`, a 32-bit word, whose return value **encodes** the behaviour:
+- `exited c` returns `c` (0–255);
+- `trapped k` returns `256 + idx k`.
+
+This fits LCB's verified source profile (`ssa-int-v1`, `LeanCompilerBackend/Verified/Source.lean`), which has integer operations, compares, branches, phis, a return or divergence, and no calls, traps or memory. It is also what lets the adapter be proved against LCB's semantics as it stands.
+
+It also separates `return 134` from a trap: they return the words 134 and 256.
+
+A fixed runtime entry, `Backend/Runtime.lean`, is emitted per backend as LLVM text and as LCB-IR text. It calls `concrete_body`, and then:
+- for a word below 256, it exits with that status;
+- otherwise, it writes the trap line for `k` to fd 2 and exits 134.
+
+The decoding lives in this one place for both backends. Its correctness is premise `P_rt` (implementation, over libc `write`/`_exit`): an image whose `concrete_body` returns word `w` has the behaviour `decode w`, and a body that diverges gives a run that diverges.
 
 Each IR has a total, fuel-indexed evaluator returning the spec's `Outcome` and a decidable well-formedness predicate.
 
@@ -121,7 +135,7 @@ Concrete/
   Backend/             the backend stage: everything after BIR, one file per backend
     LLVM.lean          BIR → LLVM text printer (unverified; P_print)
     LCB.lean           BIR → LCB-IR adapter + adapter_correct against LCB's semantics
-    Runtime.lean       the trap/exit runtime stub, emitted per backend
+    Runtime.lean       the fixed entry that decodes the result word into exit status / trap line, per backend
   Stages.lean          typed stage contracts; `compile` is the fold of the stage list
   Premises.lean        THE one file of premises, plus the execution-trust inventory
   Theorem.lean         compile_correct, the non-vacuity witnesses, answer_correct
@@ -202,7 +216,9 @@ structure FrontendPremises : Prop where
 
 /-- The target profile: the pinned triple, the toolchain store paths, the stack budget, and
     `maxSlots`, the largest BIR frame the profile vouches for under that budget. `compile` refuses
-    a program whose frame exceeds `maxSlots` ("unsupported: exceeds the profile's frame bound"). -/
+    a program whose frame exceeds `maxSlots` ("unsupported: exceeds the profile's frame bound").
+    `compile` also refuses a body that LCB's admission profile would reject (at most 64 blocks, 480
+    definitions and a 4080-byte frame), so every accepted program has an admitted LCB form. -/
 structure TargetProfile where
   triple : String; toolchain : String; stackBytes : Nat; maxSlots : Nat
 
@@ -215,7 +231,11 @@ structure Backend where
   Means : Text → Behaviour → Prop
 
 def llvm (LLMeans : String → Behaviour → Prop) : Backend := ⟨String, LLVM.print, LLMeans⟩
-def lcb : Backend := ⟨LCB.Module, LCB.adapt, fun m β => LCB.behaviour m = β⟩  -- LCB.Semantics, mapped
+def lcb : Backend := ⟨LCB.Source.Function, LCB.adapt, fun f β => LCB.behaviour f = β⟩
+/-- From LCB's own source semantics (imported, never restated):
+    `decode w` if `LCB.Source.run` returns `w`, `diverges` if `LCB.Source.Diverges`, otherwise `stuck`.
+    It is noncomputable (classical), and used only in statements. Its definition is in the digest gate. -/
+noncomputable def LCB.behaviour (f : LCB.Source.Function) : Behaviour := ...
 
 /-- The native world for one backend, a parameter so its consistency is witnessable. -/
 structure Native (B : Backend) where
@@ -231,8 +251,11 @@ structure NativePremises (B : Backend) (N : Native B) (T : TargetProfile) : Prop
       which this field is filled by the theorem and the premise is deleted. -/
   emit : ∀ b, b.WF → ∀ β, B.Means (B.emit b) β → β = BIR.behaviour b
   /-- P_toolchain[B] (toolchain): every non-killed behaviour of the image is one the text means.
-      LCB: LCB's own lowering, assembler and linker, i.e. LCB's named trust boundaries. -/
-  toolchain : ∀ t img β, N.Built T t img → N.Runs T img β → β ≠ .killed → B.Means t β
+      Both backends include `P_rt`, the decoding entry linked with the body (see Runtime).
+      LCB also includes LCB's own importer, lowering, assembler and linker: LCB's named trust
+      boundaries (`docs/SEMANTICS.md`, "Target and environment assumptions"). -/
+  toolchain : ∀ b img β, b.WF → N.Built T (B.emit b) img → N.Runs T img β → β ≠ .killed →
+    B.Means (B.emit b) β
   /-- P_launch (environment, resources): an admitted launch of an image built from a WF BIR
       within the profile's frame bound is never killed. Here "admitted" excludes signals, ptrace
       and rlimits below `stackBytes`. -/
@@ -240,7 +263,7 @@ structure NativePremises (B : Backend) (N : Native B) (T : TargetProfile) : Prop
     N.Built T (B.emit b) img → N.Runs T img β → β ≠ .killed
   /-- P_live (environment): an admitted launch happens and has a behaviour (maximal: a run that
       never ends has behaviour `diverges`). -/
-  live : ∀ t img, N.Built T t img → ∃ β, N.Runs T img β
+  live : ∀ b img, b.WF → N.Built T (B.emit b) img → ∃ β, N.Runs T img β
 ```
 
 Every premise is used in the composition. `emit`, `toolchain` and `launch` give "every run is the BIR behaviour", and `live` makes that non-vacuous for the image.
@@ -256,7 +279,8 @@ There are two target profiles: `x86_64-linux` and `aarch64-linux`. The LLVM back
 | P_print | implementation | an LLVM-IR semantics; not planned for slice 0 |
 | P_adapter | implementation | `adapter_correct`, the first backend proof target |
 | P_toolchain[llvm] | toolchain | not planned |
-| P_toolchain[lcb] | toolchain | LCB's own proofs |
+| P_toolchain[lcb] | toolchain | LCB's own proofs (C01–C03 and beyond) |
+| P_rt | implementation | a proof of the decoding entry against a libc model; not planned for slice 0 |
 | P_launch | environment | not planned |
 | P_live | environment | not planned |
 
@@ -272,7 +296,7 @@ The **execution-trust inventory** is in the same file, as documented non-Prop en
 ```lean
 /-- What `compile` returns: pure data, every intermediate recorded. -/
 structure Output where
-  q : Slice0.Program; mir : MIR.Program; bir : BIR.Program; ll : String; lcb : LCB.Module
+  q : Slice0.Program; mir : MIR.Program; bir : BIR.Program; ll : String; lcb : LCB.Source.Function
 
 /-- One theorem for both backends: `B` is `llvm _` or `lcb`. -/
 theorem compile_correct (F : FrontendPremises) {B N T} (P : NativePremises B N T)
@@ -319,7 +343,7 @@ theorem answer_correct (F : FrontendPremises) (P : NativePremises B N T₀)
    - `refMeans ll β := ∃ b, b.WF ∧ LLVM.print b = ll ∧ β = BIR.behaviour b`.
 
    The `print` field needs **printer injectivity**, which is proved: `LLVM.unprint (LLVM.print b) = some b` for every WF `b`, so `print_injective` follows. This also makes the `.ll` text determine its BIR, which the certificate uses.
-   For LCB, `Means` is fixed by LCB's semantics. The witness `NativePremises lcb refNativeLCB T₀`, where `Image := LCB.Module` and `Runs := LCB.behaviour`, follows from `adapter_correct`, so it lands with that proof.
+   For LCB, `Means` is fixed by LCB's semantics. The witness `NativePremises lcb refNativeLCB T₀`, where `Image := LCB.Source.Function` and `Runs := LCB.behaviour`, follows from `adapter_correct`, so it lands with that proof.
 3. **Frontend premises:** these are claims about fixed code, not something a model can satisfy, so no model witness applies. They are discharged per compilation (next section), and universally once `lex_correct` and `parse_correct` land.
 4. **Native-build existence:** this is attested, not proved. The conformance job records toolchain provenance and the image digest for each example.
 
@@ -331,10 +355,13 @@ The driver emits `Cert_<digest>.lean`, which the kernel checks (`lake env lean`,
 def srcBytes : ByteArray := ...      -- the exact input
 def expected : Output := ...         -- the exact q, mir, bir, ll, lcb
 theorem cert_compile : compile T₀ srcBytes = .ok expected := by decide
-theorem cert_denotes : Surface0.denotesB srcBytes expected.q = true := by decide
+def toks : List Token := ...         -- witnesses emitted by the driver
+def ast : Surface.Program := ...
+theorem cert_denotes : Surface0.lexesB srcBytes toks && Surface0.derivesB toks ast &&
+    Surface0.elabB ast expected.q = true := by decide
 ```
 
-`Lexes`, `Derives` and `Elab` are defined with Boolean checkers and reflection lemmas (`denotesB_iff`). So `cert_denotes` discharges the frontend premises **for this compilation**, and `compile_correct_cert` needs only `NativePremises`.
+`Lexes`, `Derives` and `Elab` each have a Boolean checker over explicit witnesses, with a one-way soundness lemma (`lexesB_sound` and so on, giving `Denotes src q`). So `cert_denotes` discharges the frontend premises **for this compilation**, and `compile_correct_cert` needs only `NativePremises`.
 
 A **refusal certificate** proves `compile T₀ src = .error r` for each refused example.
 
@@ -350,13 +377,22 @@ A **refusal certificate** proves `compile T₀ src = .error r` for each refused 
 `compile` is written as an explicit sequence of named stage calls that records every intermediate in `Output`. Each stage is declared with a **fixed contract proposition** and evidence for **exactly that contract**:
 
 ```lean
-structure Stage (A B : Type) where
+/-- The contracts are fixed per stage in ONE table and stated about the stage function itself. -/
+def lowerContract (f : Slice0.Program → Except Refusal MIR.Program) : Prop :=
+  ∀ q m, WellScoped q → f q = .ok m → m.WF ∧ MIR.behaviour m = Core.behaviour (toCore q)
+-- … one per stage: lex, parse, elab, check, lower, ssa, and the two backend emits
+
+inductive Evidence (C : Prop) where
+  | proof (h : C)
+  | frontend (h : FrontendPremises → C)                      -- P_lex, P_parse
+  | native (h : ∀ B N T, NativePremises B N T → C)          -- emit fields: P_print, P_adapter
+
+structure Stage (A B : Type) (Contract : (A → Except Refusal B) → Prop) where
   run : A → Except Refusal B
-  Contract : Prop                                    -- e.g. ∀ m, m.WF → behaviour (ssa m) = behaviour m
-  evidence : Contract ⊕' (FrontendPremises → Contract)   -- a proof, or a typed use of a premise
+  evidence : Evidence (Contract run)
 ```
 
-A premise can only be used to produce that stage's own contract, and an unrelated theorem doesn't typecheck. The glue between stages is stated as theorems:
+The contract is an index, not a field, and it is applied to `run`. So `Contract := True` is impossible unless the golden table says so, and an unrelated theorem doesn't typecheck. The contract table's definitions are covered by the digest gate. The backend emits are stages too, with `native` evidence until `adapter_correct` turns LCB's into `proof`. The glue between stages is stated as theorems:
 - `pre₀`: any bytes are an admissible input;
 - `postᵢ → preᵢ₊₁`;
 - `compile_spec`.
@@ -396,7 +432,7 @@ Human output, JSON and future policies all render the same `Report`.
 | Trusted / FFI / opaque (source) | `established`: none. |
 | Trusted / FFI / opaque (artifact) | `notEstablished`: no link-map or symbol-inventory evidence yet. Behavioural premises can't establish this, because an observationally equal image may still contain foreign code. |
 | Termination (source) | `established` (`slice0_exits`). |
-| Termination (artifact) | `conditional(P_print, P_toolchain, P_launch, P_live)`. |
+| Termination (artifact) | `conditional`, on the backend's own premises: LLVM `P_print, P_toolchain[llvm], P_rt, P_launch, P_live`; LCB `P_adapter` (until `adapter_correct`), `P_toolchain[lcb], P_rt, P_launch, P_live`. |
 | Recursion depth bound | `established`: 0, since there are no calls. |
 | May block | `established`: no. |
 | BIR frame slots (IR) | `established`: *n*. Reported as slots, never as bytes. |
@@ -406,7 +442,7 @@ Human output, JSON and future policies all render the same `Report`.
 **Identity and replay.** Every report carries:
 - typed function and site identities;
 - the schema version `concrete-facts/0` and the semantics version;
-- the digests of the compiler, spec, target, backend (LLVM or LCB, with the pinned LCB rev) and artifact. Artifact facts are per backend artifact;
+- the digests of the compiler, spec, target, backend (LLVM or LCB, with the pinned LCB rev) and artifact. Artifact facts are per backend artifact, and their premise identities are per backend;
 - the replay command.
 
 The **CLI spellings are placeholders** (`concrete facts FILE [FN]`, `concrete build FILE -o OUT`), pending the owner.
@@ -425,9 +461,17 @@ The **CLI spellings are placeholders** (`concrete facts FILE [FN]`, `concrete bu
    - the LLVM-native executable;
    - the LCB-native executable.
 
-   All three must give the same observation (exit status, plus the trap line's identity on fd 2), and each must match the `.expect` (an exit status, or a refusal with its rule).
+   All three must give the same observation, and each must match the `.expect`.
 
-   The comparator maps statuses through the spec's `Observation.status`: 125 is a startup refusal, 134 a trap, and anything else an exit. No accepted slice-0 program can produce 125, because slice 0 has no grants. That leg is therefore exercised by a comparator self-test (stub images that exit 125 and 134, where a mismatch must fail) until a slice with grants produces it. A separate supported-subset coverage report lists every grammar production and Core form that the corpus exercises. A reject-all compiler fails, because every accepted example must exit with its status.
+   **Classification uses the status and the runtime evidence, never the status alone.** `Observation.status` is many-to-one.
+   - Status 134 **with** the runtime's trap line on fd 2 is `trapped k`.
+   - Status 134 **without** it is `exited 134`.
+   - Status 125 **with** the launcher's refusal line is `startupRefused`.
+   - Status 125 **without** it is `exited 125`.
+
+   Accepted examples `return 125;` and `return 134;` are in the corpus and must classify as exits. Slice 0 can't produce a real startup refusal, because it has no grants. The refusal and trap classifications are also exercised by comparator self-tests: stub images, and the trap via gate 6.
+
+   **Refused examples have their own leg.** The Lean `check` result, the compiler's refusal (with its rule) and the refusal certificate must agree with `.expect`. No executable exists for a refused example. A separate supported-subset coverage report lists every grammar production and Core form that the corpus exercises. A reject-all compiler fails, because every accepted example must exit with its status.
 5. **Differential at the source:** generated accepted programs, with replayable seeds; native exit = Lean `run`.
 6. **Differential at BIR → native, both backends:** this covers overflow. Generated BIR programs over **arbitrary** `u8` operands, including `200 + 56`, go through `BIR.behaviour`, through the LLVM path and through the LCB path. Overflow must give exit 134 and the trap line on fd 2 for both.
 
