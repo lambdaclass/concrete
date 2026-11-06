@@ -82,7 +82,7 @@ verbosity that buys clarity) get one home in `PHILOSOPHY.md` when the `wip/philo
    `legacy/` only when a slice needs it, in that slice's change. Live tooling stays live: landing,
    review, the hooks, CI and the changelog. `legacy/` is kept much longer than first planned, as the
    reference for ideas the new design may have forgotten (owner, 2026-11-06): nothing is deleted at
-   B3. Each of phases C, D and E starts with a short ideas sweep of `legacy/` for that phase's area
+   B3. A short ideas sweep of `legacy/` covers each of phases C, D and E's areas, at the latest at that phase's start
    (R-0591, R-0597, R-0598). `legacy/`, the old pipeline included, is deleted in one change way
    later (LD, R-0590; the phase is not yet chosen), and only when a final ideas sweep has dispositioned every idea (carried, planned,
    deferred or dropped on purpose), every row of the root retention manifest `RETENTION.tsv`
@@ -397,7 +397,7 @@ archive. Rows for C–G are summaries. Each is refined when its phase becomes ne
 | R-0334 | The first-user teaching path (the guide) | a checked tutorial covers install to file-copy | R-0071 |
 | R-0516 | Release automation for nightlies and trains | a nightly publishes from a qualified SHA | T |
 | R-0333 | Release criteria and candidate records, including claims, security and soundness disclosure, compatibility and operations | the 0.1 candidate record is complete | C |
-| R-0591 | A short ideas sweep of `legacy/` for phase C's area, at its start (owner, 2026-11-06) | before C's first slice lands, the ideas of `legacy/` in C's area are listed and each is dispositioned (carried, planned, deferred or dropped on purpose) in a recorded sweep | R-0562 |
+| R-0591 | A short ideas sweep of `legacy/` for phase C's area, at the latest at C's start (owner, 2026-11-06) | at the latest before C's first slice lands (it may run earlier), the ideas of `legacy/` in C's area are listed and each is dispositioned (carried, planned, deferred or dropped on purpose) in a recorded sweep | R-0562 |
 | R-0596 | `Secret<T>` with its noninterference and constant-time proofs, from slice 7 ([decision](docs/decisions.md#decided-project-infoflow-2026-11-06)) | at slice 7, scalar `Secret<T>`, `classify` (of a value passed in), `declassify(x, "reason")`, `ct_select` and secret comparisons land; secret control flow, secret indices and secret lengths are refused; scalar secrets are `Copy`; later increments add `ct_eq` on arrays and views and linear, wiped secret arrays at slice 15, wiped heap secrets at slice 19, and grant-backed sources at slices 16, 18 and 27; noninterference and constant time are proved for the type system under the baseline observer model; each `declassify` is traced in the facts; the legacy `constant_time_tag` is rewritten with `ct_eq`; the LCB plan gains constant-time and wipe preservation, and CI checks the binary constant-time premise | R-0592, R-0575 |
 
 ### D. Whole language
@@ -409,7 +409,7 @@ archive. Rows for C–G are summaries. Each is refined when its phase becomes ne
 | R-0285 | RocksDB slice 1 (paused) | open, read, write and close with linear handles and typed errors; accepted only after slice 25 (FFI) and the audit of its program (R-0604) | C, R-0604 |
 | R-0490 | The ethlambda port (paused) | runs with its interop checkpoint; accepted only after slice 27 and the audit of its program (R-0604) | R-0285, R-0604 |
 | R-0515 | The usability track (paused): non-author pilots and legibility measures | a non-author pilot builds a project | C |
-| R-0597 | A short ideas sweep of `legacy/` for phase D's area, at its start (owner, 2026-11-06) | as R-0591, for D's area, before D's first slice lands | R-0591 |
+| R-0597 | A short ideas sweep of `legacy/` for phase D's area, at the latest at D's start (owner, 2026-11-06) | as R-0591, for D's area, at the latest before D's first slice lands (it may run earlier) | R-0591 |
 | R-0595 | Heap bounds with the allocation slice (slice 19) ([decision](docs/decisions.md#decided-project-memory-2026-11-06)) | when allocation lands, each function reports requested, net and peak logical bytes and footprint per allocator lineage as polynomial bounds with `max`, or "not established"; std containers state per-operation growth bounds; budgets in `Concrete.toml` policies are enforced; "allocation cannot fail" is established only from an allocator success theorem; acceptance examples: a counted push loop into a reserved `Vec` with an exact bound, an arena parser proved infallible, an unbounded `while` giving "not established", branching recursion with only a depth bound giving "not established" for requested bytes, a reset loop accounted by lineage | R-0594, R-0589 |
 | R-0601 | Function-type contracts, including trait methods (owner, 2026-11-06) | a binding design lets a function whose `#[requires]` is a safety precondition become a function value only under a matching function-type contract; until then such functions are refused as function values, including through wrappers and specialization; it never broadens to non-safety contracts; a prerequisite for accepting slice 20, or earlier if a workload pulls it | R-0571 |
 | R-0604 | Audit the RocksDB and ethlambda acceptance programs before accepting them (owner, 2026-11-06) | each program's needs are listed against the decided language; concurrency (R-0399) and foreign function values (OD4) stay refused, and any real need goes to the owner before acceptance | — |
@@ -418,7 +418,7 @@ archive. Rows for C–G are summaries. Each is refined when its phase becomes ne
 
 | task | objective | done when | depends on |
 |---|---|---|---|
-| R-0590 | Delete `legacy/` (LD), timing pending ([decision](docs/decisions.md#decided-project-restart), revised 2026-11-06) | every per-phase ideas sweep already due when LD is scheduled (R-0591, R-0597, R-0598) has run, and a final ideas sweep of `legacy/` dispositions every idea (carried, planned, deferred or dropped on purpose); every `RETENTION.tsv` row is resolved; the owner explicitly approves; `legacy/`, the old pipeline included, is then deleted in one change, and the retention records at the root survive it; which phase LD follows is pending, so it fixes no phase boundary | R-0591, R-0562, R-0561, owner: legacy deletion timing |
+| R-0590 | Delete `legacy/` (LD), timing pending ([decision](docs/decisions.md#decided-project-restart), revised 2026-11-06) | the sweeps for the areas of C, D and E (R-0591, R-0597, R-0598) have all run, each possibly earlier than its phase, and a final ideas sweep of `legacy/` dispositions every idea (carried, planned, deferred or dropped on purpose); every `RETENTION.tsv` row is resolved; the owner explicitly approves; `legacy/`, the old pipeline included, is then deleted in one change, and the retention records at the root survive it; which phase LD follows is pending, so it fixes no phase boundary | R-0591, R-0597, R-0598, R-0562, R-0561, owner: legacy deletion timing |
 
 ### E. Verified growth
 
@@ -438,7 +438,7 @@ archive. Rows for C–G are summaries. Each is refined when its phase becomes ne
 | R-0505 | The native AArch64 profile: linking and final-image validation | the image theorem holds; the final image's bytes, relocations, entry state and startup are validated against LCB's ISA model and the recorded adapter output, so assembler, linker and loader behaviour leaves the trusted base except where named in the profile | R-0517 |
 | R-0584 | A minimal direct-syscall launcher written in Concrete | the launcher that mints `main`'s grants is a small Concrete program compiled through the verified path and making system calls directly, so no C runtime or libc start-up stays in the trusted base; OS-level sandboxing (seccomp/landlock, Capsicum, pledge/unveil) is outside the compiler's scope; users may apply it themselves. | R-0505 |
 | R-0424 | Performance evidence: corpus, codegen quality, fair comparisons, optimization ownership | the mixed corpus runs on LLVM and LCB-native | R-0517 |
-| R-0598 | A short ideas sweep of `legacy/` for phase E's area, at its start (owner, 2026-11-06) | as R-0591, for E's area, before E's first item lands | R-0591 |
+| R-0598 | A short ideas sweep of `legacy/` for phase E's area, at the latest at E's start (owner, 2026-11-06) | as R-0591, for E's area, at the latest before E's first item lands (it may run earlier) | R-0591 |
 | R-0605 | Lexicographic measures for `#[variant]` | added when a workload needs one, with its proofs | workload |
 
 ### F. Evidence as a product

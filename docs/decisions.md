@@ -368,7 +368,8 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   we fogot any idea right?"): `legacy/` is kept much longer, as the reference for ideas the new
   design may have forgotten, and nothing is deleted after slice 1 (B3 keeps only the totality audit
   and the retirement of legacy defects). `legacy/`, the old pipeline included, is deleted way later,
-  only after the ideas sweeps of `legacy/` (R-0591, R-0597, R-0598 and a final sweep that
+  only after the ideas sweeps of `legacy/` (for the areas of phases C, D and E, each at the latest
+  at that phase's start and possibly earlier, R-0591, R-0597, R-0598, and a final sweep that
   dispositions every idea as carried, planned, deferred or dropped on purpose), once every
   `RETENTION.tsv` row is resolved and with the owner's explicit approval (LD, R-0590). The phase is
   not yet chosen. Until then `legacy/` stays byte-frozen. The new root's
