@@ -1,0 +1,6 @@
+[piece 9 of 11: scripts]
+- scripts/proofs/external.sh:196: Different `T=` node IDs do not guarantee incompatible theorem statements: syntactically different types can be definitionally equal (for example, `True` and `id True`). Selecting such a pair makes the swapped proof valid, so both correct checkers accept it and the gate incorrectly fails. Select a pair whose types are demonstrably not definitionally equal.
+[piece 10 of 11: scripts]
+- scripts/proofs/trust_ban.sh:70: Treating every string’s `{` as interpolation lets valid plain strings hide forbidden proofs. For example, `def a := "{/-"`, followed by `example : False := by sorry`, followed by `def b := "-/}"`, makes the scanner blank the example as a comment. E/D also miss the discarded example, so the trust ban passes a source containing `sorry`.
+
+The owner-decision check remains unverified: sandbox startup failed, preventing access to `docs/decisions.md`.
