@@ -167,7 +167,10 @@ def main():
     # module order: Spec.lean's imports, then the proofs
     spec_root = open(os.path.join(ROOT, 'ConcreteSpec/Spec.lean')).read()
     spec_mods = ['ConcreteSpec.Spec'] + re.findall(r'^import (ConcreteSpec\.Spec\.\w+)', spec_root, re.M)
-    proof_mods = sorted({d['module'] for d in decls.values() if d['module'].startswith('ConcreteSpec.Proofs.')})
+    # every proof module on disk, not only those with named declarations: a module of examples or
+    # prose alone is part of the view too
+    proof_mods = sorted('ConcreteSpec.Proofs.' + f[:-5] for f in os.listdir(os.path.join(ROOT, 'ConcreteSpec/Proofs'))
+                        if f.endswith('.lean'))
     on_disk = sorted('ConcreteSpec.Spec.' + f[:-5] for f in os.listdir(os.path.join(ROOT, 'ConcreteSpec/Spec')) if f.endswith('.lean'))
     missing = sorted(set(on_disk) - set(spec_mods))
     if missing:
