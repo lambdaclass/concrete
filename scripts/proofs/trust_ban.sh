@@ -31,8 +31,8 @@ BANNED_WORD_RE='\b(sorry|sorryAx|admit|stop|native_decide|ofReduceBool|ofReduceN
 # implicitly, which is where s!, m! and f! live). They set no option either: the library builds with
 # warningAsError (checked below in lakefile.toml), so a `sorry` that elaborates anywhere, whatever
 # tactic produced it (`stop` is `repeat sorry`), fails the build; `set_option warningAsError false`
-# would undo that.
-EXTENSION_RE='\b(set_option|macro|macro_rules|syntax|notation|infix|infixl|infixr|prefix|postfix|elab|elab_rules|declare_syntax_cat|initialize|builtin_initialize)\b|^\s*import\s+(?!ConcreteSpec(\.|\s|$))'
+# would undo that. Nor do they run meta code (run_cmd, run_tac, #eval and the like).
+EXTENSION_RE='#eval\b|\b(run_cmd|run_tac|run_elab|run_meta|set_option|macro|macro_rules|syntax|notation|infix|infixl|infixr|prefix|postfix|elab|elab_rules|declare_syntax_cat|initialize|builtin_initialize)\b|^\s*import\s+(?!ConcreteSpec(\.|\s|$))'
 
 # banned FILE → `<constant> (<axiom>)` for every constant of a PROOF_MODE=constants listing with a banned axiom
 banned() {
@@ -210,6 +210,8 @@ macro "plain" "s!" s:str : term => `($s)
 import Lean
 set_option warningAsError false in
 example : False := by stop skip
+run_cmd pure ()
+#eval (pure () : IO Unit)
 EOF
 W=$(scan "$TMP/src/Bad.lean"); RC=$?
 B="$TMP/src/Bad.lean"
@@ -224,9 +226,11 @@ $B:13: example : False := sorryAx False true
 $B:14: macro \"plain\" \"s!\" s:str : term => \`(\$s)
 $B:15: import Lean
 $B:16: set_option warningAsError false in
-$B:17: example : False := by stop skip"
+$B:17: example : False := by stop skip
+$B:18: run_cmd pure ()
+$B:19: #eval (pure () : IO Unit)"
 [ "$RC" = 0 ] && [ "$W" = "$EXPECT" ] \
-  && ok "control: native_decide, and sorry inside an interpolation, after a string, raw string or quoted name holding comment delimiters, after an interpolation holding a string, a direct sorryAx, a syntax extension, an outside import, an option and the stop tactic are found; the words in comments are not" \
+  && ok "control: native_decide, and sorry inside an interpolation, after a string, raw string or quoted name holding comment delimiters, after an interpolation holding a string, a direct sorryAx, a syntax extension, an outside import, an option, meta code and the stop tactic are found; the words in comments are not" \
   || no "control: source scan (rc=$RC) reported '$W'"
 printf 'def s : String := s!"unterminated {\n' > "$TMP/src/Open.lean"
 printf 'example : String × Nat := { fst := "{--", snd := sorry\n} -- "\n' > "$TMP/src/Brace.lean"
