@@ -53,7 +53,11 @@ export LAND_PUSH_RETRY_SLEEP=0
 export LAND_NO_NIX=1 LAND_STATE_DIR="$TMP/landstate" LAND_GH="$TMP/fake-gh" LAND_REPO=test/repo
 export LAND_HOOK="$TMP/hook" LAND_REMOTE_RUNNER="$TMP/fake-runner" FAKE_GH_DIR="$TMP/gh" ORIGIN_GIT="$TMP/origin.git"
 export BOT_PAUSE_FILE="$TMP/paused" BOT_NOTIFY="$TMP/notify.sh" BOT_WATCH_INTERVAL=1 BOT_NO_REBASE=1
-unset BOT_NOW BOT_STATE_DIR BOT_CHECK_ARGS LAND_REVIEW_CMD
+unset BOT_NOW BOT_STATE_DIR BOT_CHECK_ARGS
+# train.sh check never skips the review leg silently, and a bisection probe runs it. Every member here
+# is marked reviewed clean (mark), so the leg passes on the members' provenance without calling the
+# reviewer; a reviewer this fails stands for one that is never needed.
+export LAND_REVIEW_CMD=false
 
 cat > "$TMP/fake-gh" <<'GH'
 #!/usr/bin/env bash
@@ -138,7 +142,7 @@ sha_of(){ git --git-dir="$TMP/origin.git" rev-parse "refs/heads/$1"; }
 mark(){ # branch [review-verdict] [gates] [extra review key=value]
   local s; s="$(sha_of "$1")"
   ( cd "$A" && git fetch -q origin \
-    && bash "$NOTES" put review "$s" verdict="${2:-clean}" rounds=1 reviewer=codex ${4:+"$4"} >/dev/null \
+    && bash "$NOTES" put review "$s" verdict="${2:-clean}" rounds=1 reviewer=codex base="$s" pieces=1 ${4:+"$4"} >/dev/null \
     && bash "$NOTES" put gates "$s" gates="${3:-pass}" selected=3 >/dev/null ) || no "mark $1"
 }
 bot(){ ( cd "$W" && bash "$BOT" "$@" ) 2>&1; }

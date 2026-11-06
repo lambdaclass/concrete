@@ -33,6 +33,11 @@
 #               run at another SHA, an unreachable host or a lost log is INCOMPLETE and blocks; only
 #               --local-gates runs here); the hook reuses the attestation only for this exact push, and
 #               a tampered log or attestation is refused
+#   review      (2026-11-06) review fails closed: check with no review command fails; a reviewer that
+#               exits 0 but leaves no note, a malformed, blocked or findings note fails the leg; check
+#               skips the reviewer when every member is reviewed clean; land requires a clean head
+#               note, or (head unreviewed) a clean note on every member, and refuses an absent,
+#               malformed, blocked or findings note in either place
 #   required    (2026-11-04) a required job (required-checks.txt) that is missing, skipped or
 #               cancelled refuses watch and land; a candidate drops a requirement main imposes only
 #               through a transition row (replaced by jobs it requires and that pass, or retired with
@@ -87,6 +92,38 @@ case "$1 $2" in
 esac
 GH
 chmod +x "$TMP/fake-gh"
+
+# A review note as scripts/review/review.sh writes it (scripts/review/verify.sh's six keys), published
+# to origin. put-review <sha> <clean|findings|blocked|malformed|none>; none removes the note.
+cat > "$TMP/put-review" <<'EOF'
+#!/usr/bin/env bash
+set -e
+sha="$(git rev-parse "$1")"; R=refs/notes/concrete-review
+git fetch -q origin "+$R:$R" 2>/dev/null || true
+case "$2" in
+  none) git notes --ref=$R remove --ignore-missing "$sha" 2>/dev/null ;;
+  malformed) git notes --ref=$R add -f -m "verdict: clean" "$sha" ;;
+  *) git notes --ref=$R add -f -m "verdict: $2
+rounds: 1
+reviewer: codex
+utc: 2026-11-06T00:00:00Z
+base: $sha
+pieces: 1" "$sha" ;;
+esac
+git show-ref -q --verify $R || exit 0
+CONCRETE_SKIP_GATES=1 git push -q origin $R
+EOF
+# The review command of every check (LAND_REVIEW_CMD): called with --base B --head H, it logs the
+# call and answers per $FAKE_GH_DIR/review.mode: a note of that kind on H (default clean), none (exit
+# 0, writes nothing) or fail (exit 1, writes nothing).
+cat > "$TMP/fake-review" <<'EOF'
+#!/usr/bin/env bash
+mode="$(cat "$FAKE_GH_DIR/review.mode" 2>/dev/null || echo clean)"
+echo "$4 $mode" >> "$FAKE_GH_DIR/review.log"
+case "$mode" in none) exit 0 ;; fail) exit 1 ;; esac
+bash "$(dirname "$0")/put-review" "$4" "$mode"
+EOF
+export LAND_REVIEW_CMD="bash $TMP/fake-review"
 
 W="$TMP/work"
 for r in origin lambdaclass fork; do git init -q --bare "$TMP/$r.git"; done
@@ -1003,6 +1040,13 @@ for bad in "--name x"$'\n'"y" "--ref wip/a"$'\t'"b"; do
   [ "$r" = 2 ] && has "$o" "${bad%% *} must" && [ ! -e "$TMP/reh.forged" ] && [ ! -e "$TMP/acc.forged" ] \
     && ok "acceptance refuses ${bad%% *} with a record delimiter and writes no row" || { no "acceptance ${bad%% *} delimiter: exit $r"; echo "$o" | sed 's/^/      /'; }
 done
+# acceptance.sh's check leg keeps the review leg (it never passes --no-review), and its build leg and
+# broken-build control run the one build command, the root's.
+ACC="$ROOT_DIR/scripts/land/acceptance.sh"
+grep -qxF 'do_check() { TRAIN check "$NAME" --no-remote; }' "$ACC" && ! grep -qE '^[^#]*--no-review' "$ACC" \
+  && grep -qxF 'BUILD_CMD="${ACCEPT_BUILD_CMD:-nix develop --command lake build}"' "$ACC" \
+  && [ "$(grep -cF 'bash -c "$BUILD_CMD"' "$ACC")" = 2 ] && ! grep -qF 'make build' "$ACC" \
+  && ok "acceptance: check keeps the review leg; both build legs run nix develop --command lake build" || no "acceptance check or build wiring"
 # A run that fails before it has a train (here, a ref that does not exist) records its failure in
 # acceptance.tsv and writes no rehearsal row, so it cannot block the next rehearsal or land.
 o="$(cd "$W" && for v in $(compgen -e); do case "$v" in LAND_*|CONCRETE_SKIP_*) unset "$v" ;; esac; done
@@ -1021,6 +1065,89 @@ bash "$TRAIN" ci tm2 >/dev/null 2>&1 || no "inventory train ci"
 runjson "$HM2" success success
 out="$(bash "$TRAIN" --dry-run land tm2 2>&1)"; rc=$?
 [ "$rc" = 5 ] && has "$out" "no rehearsal record" && ok "a candidate adding scripts/checks/root_inventory.txt is a move too" || { no "inventory move: dry-run land exit $rc"; echo "$out" | sed 's/^/      /'; }
+# Only the inventory's TOP-LEVEL entry set counts. main gets an inventory first (a direct push, as
+# the moved-main leg above does); then a candidate that edits only nested entries, comments and the
+# order needs no rehearsal, while one that adds a top-level entry, and one that changes legacy/, does.
+( cd "$TMP/other" && git fetch -q origin && git reset -q --hard origin/main && mkdir -p scripts/checks \
+  && printf '# day one\nREADME.md\nlegacy\ndocs\ndocs/LANDING.md\n' > scripts/checks/root_inventory.txt \
+  && git add -A && git commit -qm inventory && CONCRETE_SKIP_GATES=1 git push -q origin main )
+git checkout -q main && git fetch -q origin && git reset -q --hard origin/main
+MI="$(git rev-parse HEAD)"
+inv_leg(){ # train branch run-id -> builds, checks and runs CI for the train; dry-run land in $out/$rc
+  bash "$TRAIN" build "$1" "$2" >/dev/null 2>&1 || no "$1 build"
+  git checkout -q "train/$1"; local h; h="$(git rev-parse HEAD)"
+  bash "$TRAIN" check "$1" --no-remote >/dev/null 2>&1 || no "$1 check"
+  printf '[{"databaseId": %s, "headSha": "%s", "createdAt": "9999-01-01T00:00:00Z"}]' "$3" "$h" > "$FAKE_GH_DIR/list.json"
+  bash "$TRAIN" ci "$1" >/dev/null 2>&1 || no "$1 ci"
+  runjson "$h" success success
+  out="$(bash "$TRAIN" --dry-run land "$1" 2>&1)"; rc=$?
+}
+git checkout -q -b binv-nested "$MI"
+printf '# the day-one root, reordered\ndocs/proposals\ndocs/LANDING.md\ndocs\nlegacy\nREADME.md\n' > scripts/checks/root_inventory.txt
+commit_all binv-nested
+inv_leg tin1 binv-nested 5454
+[ "$rc" = 0 ] && ! has "$out" "move candidate" \
+  && ok "an inventory change of nested entries, comments and order only (docs/proposals) needs no rehearsal" || { no "nested inventory change: dry-run land exit $rc"; echo "$out" | sed 's/^/      /'; }
+git checkout -q -b binv-root "$MI"
+printf '# day one\nREADME.md\nNEWS.md\nlegacy\ndocs\ndocs/LANDING.md\n' > scripts/checks/root_inventory.txt
+commit_all binv-root
+inv_leg tin2 binv-root 5455
+[ "$rc" = 5 ] && has "$out" "no rehearsal record" \
+  && ok "an inventory change that adds a top-level entry still needs a rehearsal" || { no "top-level inventory change: dry-run land exit $rc"; echo "$out" | sed 's/^/      /'; }
+git checkout -q -b binv-legacy "$MI"; printf 'edited old tree\n' > legacy/old.txt; commit_all binv-legacy
+inv_leg tin3 binv-legacy 5456
+[ "$rc" = 5 ] && has "$out" "no rehearsal record" \
+  && ok "a change under legacy/ (inventory untouched) still needs a rehearsal" || { no "legacy change: dry-run land exit $rc"; echo "$out" | sed 's/^/      /'; }
+
+echo "=== review: check fails closed, land requires review provenance ==="
+git checkout -q main && git fetch -q origin && git reset -q --hard origin/main
+MR="$(git rev-parse HEAD)"
+git checkout -q -b brv1 "$MR"; printf 'rv1\n' > rv1.txt; commit_all brv1
+git checkout -q -b brv2 "$MR"; printf 'rv2\n' > rv2.txt; commit_all brv2
+bash "$TRAIN" build trv brv1 brv2 >/dev/null 2>&1 || no "review train build"
+git checkout -q train/trv; HR="$(git rev-parse HEAD)"; R1="$(git rev-parse brv1)"; R2="$(git rev-parse brv2)"
+out="$(LAND_REVIEW_CMD= bash "$TRAIN" check trv --no-remote 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "no review command" && has "$out" "never skipped silently" \
+  && ok "check with no review command fails instead of skipping the leg" || { no "missing reviewer: check exit $rc"; echo "$out" | sed 's/^/      /'; }
+for m in none malformed blocked findings; do
+  echo "$m" > "$FAKE_GH_DIR/review.mode"
+  out="$(bash "$TRAIN" check trv --no-remote 2>&1)"; rc=$?
+  [ "$rc" != 0 ] && has "$out" "review leg FAILED" \
+    && ok "a reviewer that exits 0 leaving $( [ "$m" = none ] && echo 'no note' || echo "a $m note") fails check" || { no "reviewer $m: check exit $rc"; echo "$out" | sed 's/^/      /'; }
+done
+rm -f "$FAKE_GH_DIR/review.mode"
+out="$(bash "$TRAIN" ci trv 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "no passing check" && ok "a failed review leg leaves no pass for ci" || no "ci after a failed review leg: exit $rc"
+# land: check --no-review passes the gates alone; land then judges the notes itself.
+bash "$TMP/put-review" "$HR" none
+bash "$TRAIN" check trv --no-remote --no-review >/dev/null 2>&1 || no "check --no-review"
+printf '[{"databaseId": 6161, "headSha": "%s", "createdAt": "9999-01-01T00:00:00Z"}]' "$HR" > "$FAKE_GH_DIR/list.json"
+bash "$TRAIN" ci trv >/dev/null 2>&1 || no "review train ci"
+runjson "$HR" success success
+prov_leg(){ # label head-mode m1-mode m2-mode expect(refuse|pass) [expected text]
+  bash "$TMP/put-review" "$HR" "$2"; bash "$TMP/put-review" "$R1" "$3"; bash "$TMP/put-review" "$R2" "$4"
+  local o r; o="$(bash "$TRAIN" --dry-run land trv 2>&1)"; r=$?
+  if [ "$5" = refuse ]; then
+    [ "$r" = 1 ] && has "$o" "has no review provenance" && has "$o" "${6:-}" && [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$MR" ] \
+      && ok "land refuses $1" || { no "land with $1 (exit $r)"; echo "$o" | sed 's/^/      /'; }
+  else
+    [ "$r" = 0 ] && has "$o" "${6:-}" && ok "land accepts $1" || { no "land with $1 (exit $r)"; echo "$o" | sed 's/^/      /'; }
+  fi
+}
+prov_leg "no review note anywhere" none none none refuse "member brv1:"
+for m in malformed blocked findings; do
+  prov_leg "an unreviewed head over a $m member note" none clean "$m" refuse "member brv2:"
+  prov_leg "a $m head note, whatever the members" "$m" clean clean refuse "the head's review note does not qualify"
+done
+prov_leg "an unreviewed head with one member unreviewed" none clean none refuse "member brv2:"
+prov_leg "an unreviewed head whose every member is clean at its exact SHA" none clean clean pass "every member (2) carries a clean one"
+prov_leg "a clean head note" clean none none pass "the head ${HR:0:10} carries a clean review note"
+# check over reviewed members takes the members' provenance and does not run the reviewer again.
+bash "$TMP/put-review" "$HR" none; bash "$TMP/put-review" "$R1" clean; bash "$TMP/put-review" "$R2" clean
+: > "$FAKE_GH_DIR/review.log"
+out="$(bash "$TRAIN" check trv --no-remote 2>&1)"; rc=$?
+[ "$rc" = 0 ] && [ ! -s "$FAKE_GH_DIR/review.log" ] \
+  && ok "check over members reviewed clean passes the review leg without running the reviewer" || { no "check over reviewed members: exit $rc, reviewer calls '$(cat "$FAKE_GH_DIR/review.log")'"; echo "$out" | sed 's/^/      /'; }
 
 echo
 echo "check_landing_script: PASS=$PASS FAIL=$FAIL"
