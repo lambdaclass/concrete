@@ -222,43 +222,65 @@ structure FrontendPremises : Prop where
 structure TargetProfile where
   triple : String; toolchain : String; stackBytes : Nat; maxSlots : Nat
 
-/-- A backend: the total Lean function from BIR to the text a native toolchain consumes, and
-    what that text means. For LCB, `Means` is DEFINED from LCB's imported semantics, so the
-    emit obligation is a theorem target. For LLVM it is a parameter, so it stays a premise. -/
+/-- What the body function produces: a 32-bit result word, or divergence. -/
+inductive BodyResult | returns (w : BitVec 32) | diverges | stuck
+
+/-- The encoding (one definition, shared by both backends and the runtime):
+    `exited c` (c < 256) ↦ c,  `trapped k` ↦ 256 + k.idx  (`Trap.idx` injective, < 2^31 − 256).
+    `decode` maps a word below 256 to `exited`, a word 256 + i with i a trap index to `trapped`, and
+    every other word to `stuck` (invalid). Proved: `decode_encode` for every encodable behaviour, and
+    `emit_encodes`: the body of a WF BIR returns only valid words. -/
+def encode : Behaviour → Option (BitVec 32) := ...
+def decode : BitVec 32 → Behaviour := ...
+def BodyResult.behaviour : BodyResult → Behaviour
+  | .returns w => decode w | .diverges => .diverges | .stuck => .stuck
+
+/-- A backend: the total Lean function from BIR to the body text a native toolchain consumes, and
+    what that text means as a `BodyResult`. For LCB, `Means` is DEFINED from LCB's imported
+    semantics, so the emit obligation is a theorem target. For LLVM it is a parameter (a premise). -/
 structure Backend where
   Text : Type
   emit : BIR.Program → Text
-  Means : Text → Behaviour → Prop
+  Means : Text → BodyResult → Prop
 
-def llvm (LLMeans : String → Behaviour → Prop) : Backend := ⟨String, LLVM.print, LLMeans⟩
-def lcb : Backend := ⟨LCB.Source.Function, LCB.adapt, fun f β => LCB.behaviour f = β⟩
-/-- From LCB's own source semantics (imported, never restated):
-    `decode w` if `LCB.Source.run` returns `w`, `diverges` if `LCB.Source.Diverges`, otherwise `stuck`.
-    It is noncomputable (classical), and used only in statements. Its definition is in the digest gate. -/
-noncomputable def LCB.behaviour (f : LCB.Source.Function) : Behaviour := ...
+def llvm (M : String → BodyResult → Prop) : Backend := ⟨String, LLVM.print, M⟩
+def lcb : Backend := ⟨LCB.Source.Function, LCB.adapt, LCB.bodyResult⟩
+/-- From LCB's own source semantics (imported, never restated), starting from
+    `LCB.Source.initial f #[]` (no parameters): `returns w` if a run reaches a return of `w`,
+    `diverges` if `LCB.Source.Diverges f (initial f #[])`, otherwise `stuck` (a fault). It is
+    noncomputable (classical), used only in statements, and covered by the digest gate. -/
+def LCB.bodyResult (f : LCB.Source.Function) (r : BodyResult) : Prop := ...
 
 /-- The native world for one backend, a parameter so its consistency is witnessable. -/
 structure Native (B : Backend) where
   Image : Type
-  Built : TargetProfile → B.Text → Image → Prop      -- image from text by the pinned toolchain
-  Runs : TargetProfile → Image → Behaviour → Prop    -- a behaviour of a launch the profile admits
+  Built : TargetProfile → B.Text → Image → Prop        -- image: body + runtime entry, pinned toolchain
+  BodyRuns : TargetProfile → Image → BodyResult → Prop -- what the linked body returns in a launch
+  Runs : TargetProfile → Image → Behaviour → Prop      -- the whole launch's behaviour
 
 /-- `Behaviour` gains the native-only `refused` (startup refusal, status 125) and `killed`.
-    No model program has either: slice 0 has no grants. -/
+    No model program has either: slice 0 has no grants. An ADMITTED launch (`T`) excludes
+    signals, ptrace and rlimits below `stackBytes`, and requires fd 2 to be open, writable and
+    not to block forever. -/
 structure NativePremises (B : Backend) (N : Native B) (T : TargetProfile) : Prop where
-  /-- emit (implementation): the emitted text means at most the BIR behaviour.
+  /-- emit (implementation): the body text means at most the BIR behaviour, encoded.
       LLVM: premise P_print. LCB: premise P_adapter until `adapter_correct` is proved, after
       which this field is filled by the theorem and the premise is deleted. -/
-  emit : ∀ b, b.WF → ∀ β, B.Means (B.emit b) β → β = BIR.behaviour b
-  /-- P_toolchain[B] (toolchain): every non-killed behaviour of the image is one the text means.
-      Both backends include `P_rt`, the decoding entry linked with the body (see Runtime).
-      LCB also includes LCB's own importer, lowering, assembler and linker: LCB's named trust
-      boundaries (`docs/SEMANTICS.md`, "Target and environment assumptions"). -/
-  toolchain : ∀ b img β, b.WF → N.Built T (B.emit b) img → N.Runs T img β → β ≠ .killed →
-    B.Means (B.emit b) β
+  emit : ∀ b, b.WF → ∀ r, B.Means (B.emit b) r → r.behaviour = BIR.behaviour b
+  /-- P_toolchain[B] (toolchain): every result the linked body produces is one its text means.
+      LCB: LCB's own importer, lowering, assembler and linker, i.e. its named trust boundaries
+      (`docs/SEMANTICS.md`, "Target and environment assumptions"). -/
+  toolchain : ∀ b img r, b.WF → N.Built T (B.emit b) img → N.BodyRuns T img r → B.Means (B.emit b) r
+  /-- P_rt (implementation): the runtime entry decodes. A launch whose body returns `w` has the
+      behaviour `decode w`: it exits with w below 256; otherwise it writes the whole trap line to
+      fd 2 (looping on partial writes, ignoring write errors) and then exits 134 unconditionally.
+      A body that diverges gives a launch that diverges. The trap line's presence also relies on
+      the admitted-launch fd-2 condition, which belongs to P_launch, not here. -/
+  rt : ∀ b img β, b.WF → N.Built T (B.emit b) img → N.Runs T img β → β ≠ .killed →
+    ∃ r, N.BodyRuns T img r ∧ β = r.behaviour
   /-- P_launch (environment, resources): an admitted launch of an image built from a WF BIR
-      within the profile's frame bound is never killed. Here "admitted" excludes signals, ptrace
-      and rlimits below `stackBytes`. -/
+      within the profile's frame bound is never killed (stack, signals), and fd 2 accepts the
+      trap line. -/
   launch : ∀ b img β, b.WF → b.frameSlots ≤ T.maxSlots →
     N.Built T (B.emit b) img → N.Runs T img β → β ≠ .killed
   /-- P_live (environment): an admitted launch happens and has a behaviour (maximal: a run that
@@ -266,7 +288,12 @@ structure NativePremises (B : Backend) (N : Native B) (T : TargetProfile) : Prop
   live : ∀ b img, b.WF → N.Built T (B.emit b) img → ∃ β, N.Runs T img β
 ```
 
-Every premise is used in the composition. `emit`, `toolchain` and `launch` give "every run is the BIR behaviour", and `live` makes that non-vacuous for the image.
+Every premise is used in the composition:
+- `launch` excludes `killed`;
+- `rt` reduces the launch to the body's result;
+- `toolchain` takes that result to the text's meaning;
+- `emit` takes the meaning to the BIR behaviour;
+- `live` makes all of this non-vacuous for the image.
 
 There are two target profiles: `x86_64-linux` and `aarch64-linux`. The LLVM backend runs on `x86_64-linux` (on concrete-ci-2) and as a cross-check on `aarch64-linux`. The LCB backend runs on both.
 
@@ -281,6 +308,8 @@ There are two target profiles: `x86_64-linux` and `aarch64-linux`. The LLVM back
 | P_toolchain[llvm] | toolchain | not planned |
 | P_toolchain[lcb] | toolchain | LCB's own proofs (C01–C03 and beyond) |
 | P_rt | implementation | a proof of the decoding entry against a libc model; not planned for slice 0 |
+
+The fd-2 condition is part of the admitted launch, so it is inside P_launch (environment).
 | P_launch | environment | not planned |
 | P_live | environment | not planned |
 
@@ -319,11 +348,12 @@ theorem compile_correct (F : FrontendPremises) {B N T} (P : NativePremises B N T
 5. `lower_wf : WellScoped q → (lower q).WF`.
 6. `lower_correct : WellScoped q → MIR.behaviour (lower q) = Core.behaviour (toCore q)`. This holds for every well-scoped program, checked or not, so `200 + 56` preserves `trapped .arithmeticOverflow`. The trap path is real.
 7. `ssa_wf : m.WF → (ssa m).WF`, and `ssa_correct : m.WF → BIR.behaviour (ssa m) = MIR.behaviour m`.
-8. `P.launch` excludes `killed`. `P.toolchain` then gives `B.Means (B.emit out.bir) β`, and `P.emit` gives `β = BIR.behaviour out.bir = .exited c`. `P.live` gives existence.
+8. `P.launch` excludes `killed`. `P.rt` gives a body result `r` with `β = r.behaviour`. `P.toolchain` gives `B.Means (B.emit out.bir) r`, and `P.emit` gives `r.behaviour = BIR.behaviour out.bir = .exited c`. `P.live` gives existence.
 
 **Supporting theorems:**
 - `addOvf_correct`: for arbitrary `u8` operands, the result is `(a+b) % 256` and the flag is `a+b ≥ 256`.
-- `adapter_correct : b.WF → LCB.behaviour (LCB.adapt b) = BIR.behaviour b`. It is proved over all WF BIR, overflow included. LCB's semantics is imported from `LeanCompilerBackend.Semantics` and never restated. It fills `NativePremises lcb`'s `emit` field.
+- `adapter_correct : b.WF → LCB.bodyResult (LCB.adapt b) r → r.behaviour = BIR.behaviour b`. It is proved over all WF BIR, overflow included, against LCB's **raw** `Source.Function` semantics (`LeanCompilerBackend/Verified/Source.lean`, imported, never restated). It fills `NativePremises lcb`'s `emit` field.
+- `adapt_admitted : compile T src = .ok out → LCB.admit (LCB.adapt out.bir) = .ok _`. It is separate from semantic preservation and uses LCB's own admission function, so it covers every profile check: SSA and dominance validation, reachability of all blocks, exact widths, supported operations only, at most 64 blocks, 480 definitions and the frame bound. It is proved, or, until then, checked for each compilation by `decide` in the certificate.
 - `lower_emits_check`: every MIR add is followed by a branch on its flag to `trap .arithmeticOverflow`.
 - `denotes_behaviour_det`: two denotations of the same `src` have the same `Core.behaviour`. This is stated over behaviour, not at a fixed fuel.
 
@@ -339,11 +369,18 @@ theorem answer_correct (F : FrontendPremises) (P : NativePremises B N T₀)
 2. **Native model consistency, per backend.** For LLVM, `NativePremises (llvm refMeans) refNative T₀` is proved for a reference model:
    - `Image := BIR.Program`;
    - `Built T ll b := b.WF ∧ b.frameSlots ≤ T.maxSlots ∧ LLVM.print b = ll`;
+   - `BodyRuns T b r := r = BIR.bodyResult b`, where `bodyResult` returns `encode (behaviour b)` or diverges;
    - `Runs T b β := β = BIR.behaviour b`;
-   - `refMeans ll β := ∃ b, b.WF ∧ LLVM.print b = ll ∧ β = BIR.behaviour b`.
+   - `refMeans ll r := ∃ b, b.WF ∧ LLVM.print b = ll ∧ r = BIR.bodyResult b`.
 
-   The `print` field needs **printer injectivity**, which is proved: `LLVM.unprint (LLVM.print b) = some b` for every WF `b`, so `print_injective` follows. This also makes the `.ll` text determine its BIR, which the certificate uses.
-   For LCB, `Means` is fixed by LCB's semantics. The witness `NativePremises lcb refNativeLCB T₀`, where `Image := LCB.Source.Function` and `Runs := LCB.behaviour`, follows from `adapter_correct`, so it lands with that proof.
+   The `rt` field follows from `decode_encode`. The `emit` field needs **printer injectivity**, which is proved: `LLVM.unprint (LLVM.print b) = some b` for every WF `b`. That also makes the `.ll` text determine its BIR, which the certificate uses.
+
+   For LCB, `Means` is fixed by LCB's semantics. The witness `NativePremises lcb refNativeLCB T₀` uses:
+   - `Image := LCB.Source.Function`;
+   - `BodyRuns := LCB.bodyResult`;
+   - `Runs f β := ∃ r, LCB.bodyResult f r ∧ β = r.behaviour`.
+
+   `live` holds because LCB's step relation is deterministic, so a run returns, faults or diverges. The witness follows from `adapter_correct` and lands with it.
 3. **Frontend premises:** these are claims about fixed code, not something a model can satisfy, so no model witness applies. They are discharged per compilation (next section), and universally once `lex_correct` and `parse_correct` land.
 4. **Native-build existence:** this is attested, not proved. The conformance job records toolchain provenance and the image digest for each example.
 
@@ -385,14 +422,14 @@ def lowerContract (f : Slice0.Program → Except Refusal MIR.Program) : Prop :=
 inductive Evidence (C : Prop) where
   | proof (h : C)
   | frontend (h : FrontendPremises → C)                      -- P_lex, P_parse
-  | native (h : ∀ B N T, NativePremises B N T → C)          -- emit fields: P_print, P_adapter
+  | native (B : Backend) (h : ∀ N T, NativePremises B N T → C) -- the stage's OWN backend
 
 structure Stage (A B : Type) (Contract : (A → Except Refusal B) → Prop) where
   run : A → Except Refusal B
   evidence : Evidence (Contract run)
 ```
 
-The contract is an index, not a field, and it is applied to `run`. So `Contract := True` is impossible unless the golden table says so, and an unrelated theorem doesn't typecheck. The contract table's definitions are covered by the digest gate. The backend emits are stages too, with `native` evidence until `adapter_correct` turns LCB's into `proof`. The glue between stages is stated as theorems:
+The contract is an index, not a field, and it is applied to `run`. So `Contract := True` is impossible unless the golden table says so, and an unrelated theorem doesn't typecheck. The contract table's definitions are covered by the digest gate. The backend emits are stages too. Each has `native` evidence for its own backend, as the golden table fixes: `lcb` for the adapter, and for the printer `llvm M` with the contract quantified over the meaning parameter `M`. `adapter_correct` turns LCB's evidence into `proof`. The glue between stages is stated as theorems:
 - `pre₀`: any bytes are an admissible input;
 - `postᵢ → preᵢ₊₁`;
 - `compile_spec`.
