@@ -181,6 +181,95 @@ def assemble (target : Target) (f : Source.Function) : Except String String :=
     | .x86_64Linux => LeanCompilerBackend.AMD64.emitModuleValidated m false false
     | _ => LeanCompilerBackend.AArch64.emitModuleValidated m false false
 
+/-! ## `adapter_correct`, value level
+
+The first layer of the adapter proof: each BIR instruction's expansion computes, in LCB's 32-bit
+words, the encoding of the BIR result. `enc` is the value representation; `wrap_word` and
+`flag_word` are the two facts the instruction expansions rest on. -/
+
+namespace Proof
+
+/-- How a BIR value is represented in LCB: an integer as its 32-bit word, a flag as 0 or 1. -/
+def enc : Val → Source.Value
+  | .int _ v => word v
+  | .bool b => word (if b then 1 else 0)
+
+theorem ofInt_sub (x y : Int) :
+    BitVec.ofInt 32 (x - y) = BitVec.ofInt 32 x - BitVec.ofInt 32 y := by
+  have h : BitVec.ofInt 32 x = BitVec.ofInt 32 (x - y) + BitVec.ofInt 32 y := by
+    rw [← BitVec.ofInt_add]; congr 1; omega
+  rw [h, BitVec.add_sub_cancel]
+
+theorem binaryBits_exact (op : BinOp) (x y : Int) :
+    Source.binaryBits (opBinary op) (BitVec.ofInt 32 x) (BitVec.ofInt 32 y) =
+      BitVec.ofInt 32 (op.exact x y) := by
+  cases op <;> simp [Source.binaryBits, opBinary, BinOp.exact, BitVec.ofInt_add, BitVec.ofInt_mul,
+    ofInt_sub]
+
+/-- The profile's types, by cases. -/
+theorem inProfile_cases {t : IntTy} (ht : inProfile t = true) :
+    t = .u8 ∨ t = .i8 ∨ t = .u16 ∨ t = .i16 := by
+  cases t <;> simp_all [inProfile, IntTy.bits]
+
+/-- Masking with `2^b - 1` is reduction modulo `2^b`, for the profile's widths. -/
+theorem mask_lit (b : Nat) (hb : b = 8 ∨ b = 16) (z : Int) :
+    BitVec.ofInt 32 z &&& BitVec.ofInt 32 (2 ^ b - 1) = BitVec.ofInt 32 (z % 2 ^ b) := by
+  apply BitVec.eq_of_toNat_eq
+  have hc : (BitVec.ofInt 32 (2 ^ b - 1)).toNat = 2 ^ b - 1 := by
+    rcases hb with rfl | rfl <;> decide
+  rw [BitVec.toNat_and, hc, Nat.and_two_pow_sub_one_eq_mod, BitVec.toNat_ofInt, BitVec.toNat_ofInt]
+  rcases hb with rfl | rfl <;>
+  · simp only [Nat.reducePow, Int.reducePow]
+    omega
+
+theorem mask_ofInt {t : IntTy} (ht : inProfile t = true) (z : Int) :
+    BitVec.ofInt 32 z &&& BitVec.ofInt 32 (2 ^ t.bits - 1) = BitVec.ofInt 32 (z % 2 ^ t.bits) := by
+  rcases inProfile_cases ht with rfl | rfl | rfl | rfl <;>
+    exact mask_lit _ (by simp [IntTy.bits]) z
+
+/-- The `bin`/`binOvf`/`trunc` expansion's result word is the word of `wrap t z`. -/
+theorem wrap_word {t : IntTy} (ht : inProfile t = true) (z : Int) :
+    ((BitVec.ofInt 32 z - BitVec.ofInt 32 t.min) &&& BitVec.ofInt 32 (2 ^ t.bits - 1)) +
+      BitVec.ofInt 32 t.min = BitVec.ofInt 32 (wrap t z) := by
+  rw [← ofInt_sub, mask_ofInt ht, ← BitVec.ofInt_add, wrap]
+
+/-- In range for a profile type: magnitude at most `2^16 - 1`. -/
+theorem natAbs_le_of_inRange {t : IntTy} (ht : inProfile t = true) {x : Int}
+    (hx : t.inRange x = true) : x.natAbs ≤ 65535 := by
+  rcases inProfile_cases ht with rfl | rfl | rfl | rfl <;>
+  · simp [IntTy.inRange, IntTy.min, IntTy.max, IntTy.bits, IntTy.signed] at hx
+    omega
+
+/-- Every exact result over a profile type fits well inside a 32-bit word. -/
+theorem exact_natAbs_le {t : IntTy} (ht : inProfile t = true) (op : BinOp) {x y : Int}
+    (hx : t.inRange x = true) (hy : t.inRange y = true) :
+    (op.exact x y).natAbs ≤ 4294836225 := by
+  have bx := natAbs_le_of_inRange ht hx
+  have by' := natAbs_le_of_inRange ht hy
+  cases op with
+  | add => simp only [BinOp.exact]; omega
+  | sub => simp only [BinOp.exact]; omega
+  | mul =>
+    simp only [BinOp.exact]
+    rw [Int.natAbs_mul]
+    exact Nat.le_trans (Nat.mul_le_mul bx by') (by decide)
+
+/-- The `binOvf` flag: `(a op b) - min` is below `2^bits` as an unsigned word exactly when the
+result is in range. -/
+theorem flag_word {t : IntTy} (ht : inProfile t = true) (op : BinOp) {x y : Int}
+    (hx : t.inRange x = true) (hy : t.inRange y = true) :
+    decide ((BitVec.ofInt 32 (op.exact x y) - BitVec.ofInt 32 t.min).toNat < 2 ^ t.bits) =
+      t.inRange (op.exact x y) := by
+  have hb := exact_natAbs_le ht op hx hy
+  rw [← ofInt_sub, BitVec.toNat_ofInt]
+  generalize op.exact x y = r at hb ⊢
+  rcases inProfile_cases ht with rfl | rfl | rfl | rfl <;>
+  · simp only [IntTy.inRange, IntTy.min, IntTy.max, IntTy.bits, IntTy.signed, Bool.false_eq_true, ↓reduceIte,
+      Nat.reduceSub, Nat.reducePow, Int.reducePow, decide_eq_decide]
+    omega
+
+end Proof
+
 /-! ## The QBE debug dump (not on the build path) -/
 
 def renderWidth : Width → String

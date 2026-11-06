@@ -110,6 +110,14 @@ The **BIR → LCB-IR adapter** is the first backend proof target. `adapter_corre
 
 The adapter's output is handed to LCB **in process**, as the value: on `aarch64-macos` through LCB's verified first path (`Verified.compileFunction`), on the Linux targets through LCB's compatibility backends (`Verified.reify`, then `AMD64`/`AArch64.emitModuleValidated`). No printer or importer sits between the adapter and LCB. The QBE text of the body is a debug dump only. The gate also runs the first path's admission on every example on every host.
 
+**The `adapter_correct` proof, in layers** (in `Backend/LCB.lean`, namespace `Proof`):
+1. *Values* (proved): `enc` represents an integer as its 32-bit word and a flag as 0/1; `binaryBits_exact`, `wrap_word` (the mask-and-rebias expansion computes `wrap t`) and `flag_word` (the unsigned compare is exactly `inRange`), over the profile's types.
+2. *Instructions*: from an LCB state at the instruction's first position, with the LCB environment holding `enc` of every BIR register at its id, the expansion's steps reach the next position with the environment extended by the result (and flag). Needs: register ids injective, intermediate ids disjoint from register ids, every id below `valueCount`, all widths `word`.
+3. *Blocks*: `execInsts` against those steps; `ret` and `trap` against LCB's `returned`; `br`/`condbr` against `transfer` (one incoming arm per predecessor, from WF's `t ≠ e`; distinct phi destinations, from distinct registers).
+4. *Runs*: `run p fuel = exited c` or `trapped s` gives `Returns f s₀ (word (encode o))`; BIR running out of fuel at every fuel gives `Diverges`. The divergence direction also needs BIR progress (a WF program never gets stuck), a BIR follow-up.
+
+Two refactors make layers 2–4 tractable and come first: `runBlock` carries the block index (LCB's state names blocks by index), and the numbering is a closed function of block and instruction position rather than a fold.
+
 LCB's own lowering, assembler and linker are LCB's named trust boundaries, carried as `P_toolchain[lcb]` until LCB's preservation theorem covers the slice-0 domain.
 
 LCB is a pinned lake dependency (`require` with an exact rev, LCB's upstream lock recorded). It uses the same Lean toolchain (v4.34.1) and no Mathlib.
