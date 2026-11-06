@@ -66,6 +66,10 @@ archived prose specification [legacy/docs/spec](../legacy/docs/spec)).
   `run`, the checker `check` and the other executable definitions use `propext` alone, so they
   stay executable and the examples are decided by running them; `Classical.choice` appears only
   in proofs (`rep_roundtrip` through the core lemma `Nat.mod_mul`, and the range proofs).
+- These rules are checked in CI by [scripts/proofs](../scripts/proofs): the per-theorem axiom
+  inventory against its golden list, the transitive ban on `sorry` and `native_decide`, a fresh
+  kernel replay with `leanchecker`, and an independent re-check of the exported theorems by
+  con-leche and nanoda.
 - The judgments (inductive relations) are the normative form; the checker is proved to agree with
   them (`check_iff`).
 - Build: `lake build ConcreteSpec`. The external checker re-checks every theorem.

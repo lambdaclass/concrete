@@ -1,0 +1,22 @@
+### Proof-integrity checks for the specification
+
+Four required CI jobs now check ConcreteSpec's proofs, each a script under `scripts/proofs/` with its
+own negative controls:
+
+- **Proof axioms** (`axioms.sh`): every theorem's transitive axioms are among propext, Quot.sound
+  and Classical.choice, and the per-theorem inventory equals the golden list
+  `scripts/proofs/axioms.golden` (regenerated with `--update` in the commit that changes it).
+- **Proof trust ban** (`trust_ban.sh`): no constant of any kind depends on `sorryAx`,
+  `Lean.ofReduceBool`/`ofReduceNat`, `Lean.trustCompiler` or a generated native axiom; the library
+  declares no axiom; and the sources never spell `sorry` or `native_decide` outside comments, which
+  also covers `example`s the environment does not keep.
+- **Kernel replay** (`kernel_replay.sh`): `leanchecker --fresh ConcreteSpec` replays the whole
+  closure into an empty kernel environment, and `leanchecker ConcreteSpec` module by module; a
+  declaration forged with `debug.skipKernelTC` is the control.
+- **External re-check** (`external.sh`): the theorems exported with lean4export and re-checked by
+  con-leche (`--verified --jobs=1`) and nanoda at pinned revisions, with statement fidelity against
+  Lean's own environment and corrupted exports (a swapped proof, a cut stream, a missing record) as
+  controls. It runs in the new `nix develop .#extcheck` shell, which adds cargo for nanoda.
+
+The 19 retired-job rows of `required-checks-transition.tsv` are removed: main no longer requires
+those jobs, so `train.sh` reported each as stale.
