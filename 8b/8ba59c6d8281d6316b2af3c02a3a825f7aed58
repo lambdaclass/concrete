@@ -1,0 +1,6 @@
+[piece 1 of 2: scripts]
+- scripts/review/review.sh:261: The neutral prompt requires a quoted, dated owner answer but omits the alternative accepted by the standard prompt: a quoted owner rule that decides the question under the recording rule. A recording supported by that permitted provenance can therefore receive findings and block landing solely because neutral review was selected.
+[piece 2 of 2: docs]
+- docs/LANDING.md:136: The claim that a check using `--no-review` lands “only when every member is reviewed clean” contradicts the documented provenance rule, which also accepts a clean train-head note without clean member notes. Describe both accepted paths here.
+
+Repository inspection was blocked by a sandbox startup error; this review is limited to the supplied diff. No owner-decision choice is apparent in it.
