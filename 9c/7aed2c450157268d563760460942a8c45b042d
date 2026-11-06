@@ -1,0 +1,2 @@
+[piece 10 of 11: scripts]
+- scripts/proofs/trust_ban.sh:54: The string scanner treats a quote inside an interpolation as the outer string’s closing quote. For example, `example : String := s!"{("--")}{(sorry : Nat)}"` causes the scanner to interpret `--` as a comment and hide the `sorry`. Because `example` declarations are discarded from the environment, E/D cannot catch this either, allowing the trust ban to pass forbidden code.
