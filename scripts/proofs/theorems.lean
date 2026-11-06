@@ -8,6 +8,9 @@ source): every constant the `ConcreteSpec` library declares. The proof-integrity
       one line per theorem: `<name>\t<axiom> <axiom> …` (transitive axioms, sorted; empty when none).
       EVERY theorem constant is listed: private ones (`_private.…`) and generated ones (`proof_N`,
       `match_N.eq_N`, `eq_N`) included, so none can be dropped from the inventory or the export.
+  PROOF_MODE=encoded …
+      one line per theorem: `<name as Lean writes it>\t<encoded name>` (encoding below). The first is
+      what lean4export reads on its command line; the second is what the stream is compared by.
   PROOF_MODE=constants …
       one line per constant of ANY kind: `<name>\t<kind>\t<axioms>`. A definition, instance or
       generated helper can carry `sorryAx` or a native axiom without any theorem being about it, so
@@ -28,7 +31,7 @@ are visited in order of their names; each field's expression is visited before t
 an expression's children left to right. Every distinct expression node gets the next number the
 first time it is met, and a line `<number>\t<node>` where the node names its children by number, so
 the text stays linear in the size of the shared term graph. After its expressions, each declaration
-is the line `D\t<name>\t<kind>\t<fields>`. Names are their components joined by `.`, strings are
+is the line `D\t<name>\t<kind>\t<fields>`. Names are encoded injectively (`enc`), strings are
 `<utf-8 byte length>:<bytes>`, and what the kernel ignores is erased: metadata, binder names, binder
 annotations and the let `nondep` flag (lean4export shares one index among expressions equal under
 `Expr` BEq, which ignores exactly those, so the export legitimately carries whichever spelling it
@@ -56,12 +59,20 @@ def nm : Name → String
 
 def lstr (s : String) : String := s!"{s.utf8ByteSize}:{s}"
 
+/-- A name, injectively: each component in order, a string as `s<utf-8 length>:<bytes>` and a number
+as `n<digits>:`. Joining components with `.` is not injective (`u.v` the one-component name and
+`u`,`v` the two-component one print alike), and the canonical form must not let two names agree. -/
+def enc : Name → String
+  | .anonymous => ""
+  | .str p s => enc p ++ "s" ++ lstr s
+  | .num p n => enc p ++ s!"n{n}:"
+
 def lvl : Level → String
   | .zero => "0"
   | .succ l => s!"(s {lvl l})"
   | .max a b => s!"(max {lvl a} {lvl b})"
   | .imax a b => s!"(imax {lvl a} {lvl b})"
-  | .param n => s!"(p {lstr (nm n)})"
+  | .param n => s!"(p {enc n})"
   | .mvar _ => "(mvar)"
 
 structure Dag where
@@ -89,7 +100,7 @@ partial def dag (e : Expr) : DagM Nat := do
   let i ← match e with
     | .bvar i => node s!"(b {i})"
     | .sort l => node s!"(S {lvl l})"
-    | .const n us => node s!"(c {lstr (nm n)} [{" ".intercalate (us.map lvl)}])"
+    | .const n us => node s!"(c {enc n} [{" ".intercalate (us.map lvl)}])"
     | .app f a => do let f ← dag f; let a ← dag a; node s!"(a {f} {a})"
     | .lam _ t b _ => do let t ← dag t; let b ← dag b; node s!"(l {t} {b})"
     | .forallE _ t b _ => do let t ← dag t; let b ← dag b; node s!"(f {t} {b})"
@@ -97,20 +108,20 @@ partial def dag (e : Expr) : DagM Nat := do
     | .lit (.natVal v) => node s!"(n {v})"
     | .lit (.strVal s) => node s!"(str {lstr s})"
     | .mdata _ e => dag e
-    | .proj s i e => do let e ← dag e; node s!"(j {lstr (nm s)} {i} {e})"
+    | .proj s i e => do let e ← dag e; node s!"(j {enc s} {i} {e})"
     | .fvar _ => node "(fvar)"
     | .mvar _ => node "(mvar)"
   modify fun st => { st with memo := st.memo.insert e i }
   return i
 
-def names (ns : List Name) : String := " ".intercalate (ns.map (lstr ∘ nm))
+def names (ns : List Name) : String := " ".intercalate (ns.map enc)
 def flag (b : Bool) : String := if b then "1" else "0"
 
 /-- The declaration line of a constant, after its expressions (canonical form, above). -/
 def declLine (n : Name) (ci : ConstantInfo) : DagM String := do
   let lp := names ci.levelParams
   let t ← dag ci.type
-  let row := fun (k : String) (rest : String) => s!"D\t{lstr (nm n)}\t{k}\t[{lp}]\tT={t}{rest}"
+  let row := fun (k : String) (rest : String) => s!"D\t{enc n}\t{k}\t[{lp}]\tT={t}{rest}"
   match ci with
   | .axiomInfo v => return row "axiom" s!" unsafe={flag v.isUnsafe}"
   | .defnInfo v =>
@@ -127,11 +138,11 @@ def declLine (n : Name) (ci : ConstantInfo) : DagM String := do
   | .inductInfo v => return row "inductive" s!" params={v.numParams} indices={v.numIndices} \
       all=[{names v.all}] ctors=[{names v.ctors}] rec={flag v.isRec} unsafe={flag v.isUnsafe} \
       reflexive={flag v.isReflexive} nested={v.numNested}"
-  | .ctorInfo v => return row "ctor" s!" induct={lstr (nm v.induct)} cidx={v.cidx} \
+  | .ctorInfo v => return row "ctor" s!" induct={enc v.induct} cidx={v.cidx} \
       params={v.numParams} fields={v.numFields} unsafe={flag v.isUnsafe}"
   | .recInfo v =>
     let mut rules : Array String := #[]
-    for r in v.rules do rules := rules.push s!"{lstr (nm r.ctor)} {r.nfields} {← dag r.rhs}"
+    for r in v.rules do rules := rules.push s!"{enc r.ctor} {r.nfields} {← dag r.rhs}"
     return row "rec" s!" all=[{names v.all}] params={v.numParams} indices={v.numIndices} \
       motives={v.numMotives} minors={v.numMinors} k={flag v.k} unsafe={flag v.isUnsafe} \
       rules=[{"; ".intercalate rules.toList}]"
@@ -151,7 +162,7 @@ def kind : ConstantInfo → String
 #eval show CoreM Unit from do
   let env ← getEnv
   let mode := (← IO.getEnv "PROOF_MODE").getD "theorems"
-  unless ["theorems", "constants", "modules", "imported", "decls"].contains mode do
+  unless ["theorems", "encoded", "constants", "modules", "imported", "decls"].contains mode do
     throwError s!"unknown PROOF_MODE '{mode}'"
   if mode == "decls" then
     let some path ← IO.getEnv "PROOF_NAMES" | throwError "PROOF_MODE=decls needs PROOF_NAMES"
@@ -160,9 +171,9 @@ def kind : ConstantInfo → String
       ((← IO.FS.lines path).toList.filter (· != ""))
     let mut found : Std.HashMap String (Name × ConstantInfo) := {}
     for (n, ci) in env.constants.map₁.toList ++ env.constants.map₂.toList do
-      let s := nm n
+      let s := enc n
       if wanted.contains s then
-        if found.contains s then throwError s!"two constants render as the name {s}"
+        if found.contains s then throwError s!"two constants encode as {s}"
         found := found.insert s (n, ci)
     let order := (found.toArray.map (·.1)).qsort (· < ·)
     let run : DagM Unit := do
@@ -191,6 +202,8 @@ def kind : ConstantInfo → String
         if mode == "modules" then
           if let some i := env.getModuleIdxFor? n then
             if let some m := env.header.moduleNames[i.toNat]? then rows := rows.push (nm m)
+        else if mode == "encoded" then
+          rows := rows.push s!"{n}\t{enc n}"
         else
           rows := rows.push s!"{n}\t{← axs ()}"
   for r in (rows.qsort (· < ·)).toList.eraseDups do IO.println r

@@ -24,7 +24,9 @@
 #   X  one theorem handed another's proof: con-leche rejects it as a type mismatch AT that theorem,
 #      nanoda at its definitional-equality check (the reason is checked, never the exit code alone);
 #   T  the export cut inside a record, and D  the export missing one expression record: both refuse;
-#   F  a definition's body replaced while every statement stays the same: S reports exactly it.
+#   F  a definition's body replaced while every statement stays the same: S reports exactly it;
+#   N  names whose dotted spellings collide, and a non-ASCII one, are encoded apart and alike by both
+#      renderers (every comparison is by that injective encoding).
 #
 # Tools are built once per pinned SHA into $CONCRETE_EXT_TOOLS (default ~/.cache/concrete-ext):
 # lean4export with THIS toolchain (it reads our .olean files), con-leche with its own (elan installs
@@ -119,10 +121,11 @@ population theorems > "$TMP/inv.tsv" 2> "$TMP/inv.err" \
 NALL=$(grep -c . "$TMP/inv.tsv")
 NONSTD=$(awk -F'\t' -v std=" $STANDARD_AXIOMS " '{ n = split($2, a, " ")
   for (i = 1; i <= n; i++) if (index(std, " " a[i] " ") == 0) { print $1; break } }' "$TMP/inv.tsv")
-# The enumerator prints names as Lean writes them (`«unsafe»` escaped), which is what lean4export
-# reads; the stream's own names are the bare components joined by `.`.
-cut -f1 "$TMP/inv.tsv" > "$TMP/population.txt"
-sed 's/[«»]//g' "$TMP/population.txt" | sort -u > "$TMP/population-bare.txt"
+# Names: lean4export reads them as Lean writes them (`«…»` where needed); everything is compared by
+# the injective encoding both theorems.lean and export_inventory.py produce (PROOF_MODE=encoded).
+population encoded > "$TMP/encoded.tsv" 2>> "$TMP/inv.err" || { no "PROOF_MODE=encoded failed"; finish; }
+cut -f1 "$TMP/encoded.tsv" > "$TMP/population.txt"
+cut -f2 "$TMP/encoded.tsv" | sort -u > "$TMP/population-enc.txt"
 [ "$NALL" -ge 100 ] && [ -z "$NONSTD" ] && ok "$NALL theorems, all on the standard axioms" \
   || no "population: $NALL theorems; on a non-standard axiom: $(echo $NONSTD | cut -c1-300)"
 
@@ -138,8 +141,8 @@ read -r EXP_LEAN EXP_TOOL EXP_FORMAT < <($INV meta "$EXPORT")
   && ok "export from Lean $EXP_LEAN (lean4export $EXP_TOOL, format $EXP_FORMAT)" \
   || no "export metadata: Lean $EXP_LEAN format $EXP_FORMAT, expected $TOOLCHAIN format $EXPECT_FORMAT"
 $INV theorems "$EXPORT" > "$TMP/exported.txt"
-MISSING=$(comm -23 "$TMP/population-bare.txt" "$TMP/exported.txt")
-[ -z "$MISSING" ] && ok "every theorem of the population is in the export ($(grep -c . "$TMP/exported.txt") theorems with dependencies)" \
+MISSING=$(comm -23 "$TMP/population-enc.txt" <(sort -u "$TMP/exported.txt"))
+[ "$(grep -c . "$TMP/population-enc.txt")" = "$NALL" ] && [ -z "$MISSING" ] && ok "every theorem of the population is in the export ($(grep -c . "$TMP/exported.txt") theorems with dependencies)" \
   || no "theorems missing from the export: $(echo $MISSING | cut -c1-300)"
 $INV axioms "$EXPORT" > "$TMP/axioms.txt"
 EXTRA=$(comm -23 "$TMP/axioms.txt" <(printf '%s\n' $STANDARD_AXIOMS))
@@ -161,7 +164,7 @@ fidelity() {
   cmp -s "$1" "$2" && return 0
   local line; line=$(cmp "$1" "$2" 2>/dev/null | sed -nE 's/.* line ([0-9]+).*/\1/p')
   [ -n "$line" ] || line=$(( $(grep -c '' "$1") + 1 ))     # one is a prefix of the other
-  tail -n +"$line" "$2" | grep -m1 '^D' | cut -f2 | sed -E 's/^[0-9]+://'
+  tail -n +"$line" "$2" | grep -m1 '^D' | cut -f2
   [ -n "$(tail -n +"$line" "$2" | grep -m1 '^D')" ] || echo "(end of stream)"
 }
 NDECL=$(grep -c '^D' "$TMP/decls-export.txt")
@@ -183,10 +186,9 @@ nanoda "$EXPORT" > "$TMP/k.out" 2>&1; rc=$?
 echo "=== X: corrupted export, a theorem handed another's proof ==="
 # The pair: the first two universe-monomorphic theorems of the population with different statements.
 read -r SWAP_A SWAP_B < <(awk -F'\t' 'NR == FNR { pop[$1] = 1; next }
-  $1 == "D" && $3 == "thm" && $4 == "[]" { n = $2; sub(/^[0-9]+:/, "", n); t = $5
-    if (!(n in pop)) next
-    if (!a) { a = n; s = t } else if (t != s) { print a, n; exit } }' "$TMP/population-bare.txt" "$TMP/decls-export.txt")
-read -r RECEIVER DONOR < <($INV swap "$EXPORT" "$SWAP_A" "$SWAP_B" "$TMP/swapped.ndjson")
+  $1 == "D" && $3 == "thm" && $4 == "[]" && ($2 in pop) {
+    if (!a) { a = $2; s = $5 } else if ($5 != s) { print a, $2; exit } }' "$TMP/population-enc.txt" "$TMP/decls-export.txt")
+read -r RECEIVER DONOR _ _ < <($INV swap "$EXPORT" "$SWAP_A" "$SWAP_B" "$TMP/swapped.ndjson")
 conleche "$TMP/swapped.ndjson" > "$TMP/cx.out" 2>&1; rc=$?
 [ -n "${RECEIVER:-}" ] && [ "$rc" = 1 ] && has_match -F "type mismatch in theorem $RECEIVER " < "$TMP/cx.out" \
   && ok "con-leche rejects a proof of $DONOR handed in as $RECEIVER, as a type mismatch there" \
@@ -230,10 +232,10 @@ FORGED=$(python3 - "$EXPORT" "$TMP/forged.ndjson" <<'PY'
 import json, sys
 sys.path.insert(0, "scripts/proofs")
 from export_inventory import name_table, records
-names = name_table(sys.argv[1]); done = None
+names = name_table(sys.argv[1], encoded=True); done = None
 with open(sys.argv[2], "w", encoding="utf-8") as o:
     for r in records(sys.argv[1]):
-        if done is None and "def" in r and names[r["def"]["name"]].startswith("ConcreteSpec."):
+        if done is None and "def" in r and names[r["def"]["name"]].startswith("s12:ConcreteSpec"):
             r["def"]["value"] = r["def"]["type"]; done = names[r["def"]["name"]]
         o.write(json.dumps(r, separators=(",", ":")) + "\n")
 print(done or "")
@@ -244,4 +246,17 @@ FF=$(fidelity "$TMP/decls-lean.txt" "$TMP/decls-forged.txt")
 [ -n "$FORGED" ] && [ "$FF" = "$FORGED" ] \
   && ok "a definition whose body was replaced ($FORGED) is reported, though no statement changed" \
   || no "the fidelity comparison on a forged definition (${FORGED:-none}) reported '${FF:-nothing}'"
+echo "=== N: name encoding control ==="
+# Dotted names are not injective (`a.b` as one component and as two print alike), and stripping `«»`
+# is not safe on UTF-8 under LC_ALL=C. Both encoders must give these three names three different
+# encodings, and the same ones.
+printf '%s\n' 'theorem ConcreteSpecControl.«a.b» : True := trivial' \
+  'theorem ConcreteSpecControl.a.b : True := trivial' 'theorem ConcreteSpecControl.«λ» : True := trivial' > "$TMP/c-names.lean"
+population encoded "$TMP/c-names.lean" 2>/dev/null | grep -F 'ConcreteSpecControl' | cut -f2 | sort > "$TMP/enc-lean.txt"
+printf '%s\n' '{"in":1,"str":{"pre":0,"str":"ConcreteSpecControl"}}' '{"in":2,"str":{"pre":1,"str":"a.b"}}' \
+  '{"in":3,"str":{"pre":1,"str":"a"}}' '{"in":4,"str":{"pre":3,"str":"b"}}' '{"in":5,"str":{"pre":1,"str":"λ"}}' > "$TMP/names.ndjson"
+$INV encode "$TMP/names.ndjson" | sed -n '2p;4p;5p' | sort > "$TMP/enc-py.txt"
+[ "$(sort -u "$TMP/enc-lean.txt" | grep -c .)" = 3 ] && cmp -s "$TMP/enc-lean.txt" "$TMP/enc-py.txt" \
+  && ok "«a.b», a.b and «λ» get three distinct encodings, the same in Lean and in the stream reader" \
+  || no "name encodings: Lean [$(echo $(cat "$TMP/enc-lean.txt"))] stream [$(echo $(cat "$TMP/enc-py.txt"))]"
 finish

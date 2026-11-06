@@ -2,13 +2,15 @@
 """Read a lean4export NDJSON stream (format 3.1.0) for scripts/proofs/external.sh.
 
   export_inventory.py meta FILE            lean version, exporter version, format version
-  export_inventory.py theorems FILE        every exported theorem's full name, one per line
-  export_inventory.py axioms FILE          every exported axiom's full name, one per line
-  export_inventory.py names FILE           every exported declaration's full name, one per line
+  export_inventory.py theorems FILE        every exported theorem's name (encoded), one per line
+  export_inventory.py axioms FILE          every exported axiom's name (dotted), one per line
+  export_inventory.py names FILE           every exported declaration's name (encoded), one per line
+  export_inventory.py encode FILE          every name of the stream's name table (encoded), one per line
   export_inventory.py decls FILE           every exported declaration in the canonical declaration
                                            form theorems.lean renders (PROOF_MODE=decls)
-  export_inventory.py swap FILE A B OUT    copy FILE to OUT with the later of A/B given the earlier's
-                                           proof; prints "RECEIVER DONOR"
+  export_inventory.py swap FILE A B OUT    copy FILE to OUT with the later of theorems A/B (encoded)
+                                           given the earlier's proof; prints "RECEIVER DONOR" dotted,
+                                           then both encoded
 
 `swap` is the hostile control: the receiver keeps its statement, the proof it is given proves the
 donor's. A checker that accepts the result is not checking the proofs it is handed.
@@ -25,15 +27,20 @@ def records(path):
                 yield json.loads(line)
 
 
-def name_table(path):
+def name_table(path, encoded=False):
+    """Every name of the stream, by index: dotted for display (`a.b.0`), or with encoded=True in the
+    injective encoding theorems.lean's `enc` uses (each component as `s<utf-8 length>:<bytes>` or
+    `n<digits>:`), which is what every comparison uses: dotted names of different structure can agree."""
     names = {0: ""}
     for r in records(path):
         if "str" in r and "in" in r:
             pre, s = r["str"]["pre"], r["str"]["str"]
-            names[r["in"]] = s if names.get(pre, "") == "" else names[pre] + "." + s
+            if encoded: names[r["in"]] = names[pre] + "s" + lstr(s)
+            else: names[r["in"]] = s if names.get(pre, "") == "" else names[pre] + "." + s
         elif "num" in r and "in" in r:
             pre, i = r["num"]["pre"], r["num"]["i"]
-            names[r["in"]] = str(i) if names.get(pre, "") == "" else f"{names[pre]}.{i}"
+            if encoded: names[r["in"]] = names[pre] + f"n{i}:"
+            else: names[r["in"]] = str(i) if names.get(pre, "") == "" else f"{names[pre]}.{i}"
     return names
 
 
@@ -49,13 +56,10 @@ def decls(path):
     number; then the line `D\t<name>\t<kind>\t<fields>`. Binder names, binder annotations, the let
     `nondep` flag and metadata are erased: the kernel ignores them, and lean4export shares one index
     among expressions equal under Lean's `Expr` BEq, which ignores exactly those."""
-    names, lvrec, exrec, consts = {0: ""}, {0: None}, {}, {}
+    names, lvrec, exrec, consts = name_table(path, encoded=True), {0: None}, {}, {}
     for r in records(path):
         if "in" in r:
-            k = "str" if "str" in r else "num"
-            pre = names.get(r[k]["pre"], "")
-            part = r[k]["str"] if k == "str" else str(r[k]["i"])
-            names[r["in"]] = part if pre == "" else pre + "." + part
+            continue                    # names: name_table above
         elif "il" in r:
             lvrec[r["il"]] = r
         elif "ie" in r:
@@ -78,7 +82,7 @@ def decls(path):
         if "succ" in r: out = f"(s {level(r['succ'])})"
         elif "max" in r: out = f"(max {level(r['max'][0])} {level(r['max'][1])})"
         elif "imax" in r: out = f"(imax {level(r['imax'][0])} {level(r['imax'][1])})"
-        elif "param" in r: out = f"(p {lstr(names[r['param']])})"
+        elif "param" in r: out = f"(p {names[r['param']]})"
         else: raise ValueError(f"unknown level record {r}")
         lv[i] = out
         return out
@@ -117,7 +121,7 @@ def decls(path):
             elif "sort" in r: num[i] = node(f"(S {level(r['sort'])})")
             elif "const" in r:
                 k = r["const"]
-                num[i] = node(f"(c {lstr(names[k['name']])} [{' '.join(level(u) for u in k['us'])}])")
+                num[i] = node(f"(c {names[k['name']]} [{' '.join(level(u) for u in k['us'])}])")
             elif "app" in r: num[i] = node(f"(a {c[0]} {c[1]})")
             elif "lam" in r: num[i] = node(f"(l {c[0]} {c[1]})")
             elif "forallE" in r: num[i] = node(f"(f {c[0]} {c[1]})")
@@ -127,12 +131,12 @@ def decls(path):
             elif "mdata" in r: num[i] = c[0]
             elif "proj" in r:
                 k = r["proj"]
-                num[i] = node(f"(j {lstr(names[k['typeName']])} {k['idx']} {c[0]})")
+                num[i] = node(f"(j {names[k['typeName']]} {k['idx']} {c[0]})")
             else: raise ValueError(f"unknown expr record {r}")
         return num[root]
 
     def nms(xs):
-        return " ".join(lstr(names[x]) for x in xs)
+        return " ".join(names[x] for x in xs)
 
     def flag(b):
         return "1" if b else "0"
@@ -143,7 +147,7 @@ def decls(path):
         kind, d = consts[n][0]
         lp = nms(d["levelParams"])
         t = dag(d["type"])
-        head = f"D\t{lstr(n)}\t{{}}\t[{lp}]\tT={t}"
+        head = f"D\t{n}\t{{}}\t[{lp}]\tT={t}"
         if kind == "axiom":
             line = head.format("axiom") + f" unsafe={flag(d['isUnsafe'])}"
         elif kind == "def":
@@ -165,10 +169,10 @@ def decls(path):
                 f" reflexive={flag(d['isReflexive'])} nested={d['numNested']}")
         elif kind == "ctor":
             line = head.format("ctor") + (
-                f" induct={lstr(names[d['induct']])} cidx={d['cidx']} params={d['numParams']}"
+                f" induct={names[d['induct']]} cidx={d['cidx']} params={d['numParams']}"
                 f" fields={d['numFields']} unsafe={flag(d['isUnsafe'])}")
         else:
-            rules = "; ".join(f"{lstr(names[x['ctor']])} {x['nfields']} {dag(x['rhs'])}" for x in d["rules"])
+            rules = "; ".join(f"{names[x['ctor']]} {x['nfields']} {dag(x['rhs'])}" for x in d["rules"])
             line = head.format("rec") + (
                 f" all=[{nms(d['all'])}] params={d['numParams']} indices={d['numIndices']}"
                 f" motives={d['numMotives']} minors={d['numMinors']} k={flag(d['k'])}"
@@ -178,7 +182,7 @@ def decls(path):
 
 
 def decl_names_all(path):
-    names = name_table(path)
+    names = name_table(path, encoded=True)
     out = []
     for r in records(path):
         if "inductive" in r:
@@ -189,8 +193,8 @@ def decl_names_all(path):
     return sorted(out)
 
 
-def decl_names(path, kind):
-    names = name_table(path)
+def decl_names(path, kind, encoded=False):
+    names = name_table(path, encoded)
     return sorted(names[r[kind]["name"]] for r in records(path) if kind in r)
 
 
@@ -203,21 +207,23 @@ def main(argv):
         m = next(records(path))["meta"]
         print(m["lean"]["version"], m["exporter"]["version"], m["format"]["version"])
     elif cmd == "theorems":
-        print("\n".join(decl_names(path, "thm")))
+        print("\n".join(decl_names(path, "thm", encoded=True)))
     elif cmd == "decls":
         print("\n".join(decls(path)))
+    elif cmd == "encode":
+        print("\n".join(v for k, v in sorted(name_table(path, encoded=True).items()) if k))
     elif cmd == "names":
         print("\n".join(decl_names_all(path)))
     elif cmd == "axioms":
         print("\n".join(decl_names(path, "axiom")))
     elif cmd == "swap" and len(argv) == 6:
         a, b, out = argv[3], argv[4], argv[5]
-        names = name_table(path)
-        value, line = {}, {}
+        names, shown = name_table(path, encoded=True), name_table(path)
+        value, line, show = {}, {}, {}
         for i, r in enumerate(records(path)):
             if "thm" in r:
                 n = names[r["thm"]["name"]]
-                value[n], line[n] = r["thm"]["value"], i
+                value[n], line[n], show[n] = r["thm"]["value"], i, shown[r["thm"]["name"]]
         if a not in value or b not in value:
             print(f"swap: theorem not exported: {a if a not in value else b}", file=sys.stderr)
             return 2
@@ -231,7 +237,7 @@ def main(argv):
                 if "thm" in r and names[r["thm"]["name"]] == receiver:
                     r["thm"]["value"] = value[donor]
                 o.write(json.dumps(r, separators=(",", ":")) + "\n")
-        print(receiver, donor)
+        print(show[receiver], show[donor], receiver, donor)
     else:
         print(__doc__, file=sys.stderr)
         return 2
