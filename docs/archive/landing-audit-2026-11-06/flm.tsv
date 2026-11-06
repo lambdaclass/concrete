@@ -1,0 +1,7 @@
+utc	train	stage	base	head	members	run_id	result	duration_s	note
+2026-11-06T16:47:20Z	flm	build	ab537833d7615b43cb8616741b7bd5a4df0ac08b	4de277fed79cf9c59fd7abaeac831ac4f300c1be	origin/wip/fix-landing-machinery@4232fbcea6b5b0f1efc18e64cd8dafcb5d7a397b	-	passed	0	1 member(s)
+2026-11-06T16:48:17Z	flm	check-legs	ab537833d7615b43cb8616741b7bd5a4df0ac08b	4de277fed79cf9c59fd7abaeac831ac4f300c1be	origin/wip/fix-landing-machinery@4232fbcea6b5b0f1efc18e64cd8dafcb5d7a397b	-	passed	52	impact=pass/52s review=pass/1s wall=52s sum=53s
+2026-11-06T16:48:17Z	flm	check	ab537833d7615b43cb8616741b7bd5a4df0ac08b	4de277fed79cf9c59fd7abaeac831ac4f300c1be	origin/wip/fix-landing-machinery@4232fbcea6b5b0f1efc18e64cd8dafcb5d7a397b	-	passed	52	impact on concrete-ci-2 + review
+2026-11-06T16:49:24Z	flm	ci	ab537833d7615b43cb8616741b7bd5a4df0ac08b	4de277fed79cf9c59fd7abaeac831ac4f300c1be	origin/wip/fix-landing-machinery@4232fbcea6b5b0f1efc18e64cd8dafcb5d7a397b	42255918182	dispatched	63	ci/flm
+2026-11-06T16:51:02Z	flm	watch	ab537833d7615b43cb8616741b7bd5a4df0ac08b	4de277fed79cf9c59fd7abaeac831ac4f300c1be	origin/wip/fix-landing-machinery@4232fbcea6b5b0f1efc18e64cd8dafcb5d7a397b	42255918182	passed	94	run conclusion success
+2026-11-06T16:52:09Z	flm	land	ab537833d7615b43cb8616741b7bd5a4df0ac08b	4de277fed79cf9c59fd7abaeac831ac4f300c1be	origin/wip/fix-landing-machinery@4232fbcea6b5b0f1efc18e64cd8dafcb5d7a397b	42255918182	passed	47	origin + lambdaclass
