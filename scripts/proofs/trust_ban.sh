@@ -75,9 +75,9 @@ A=$(declared "$TMP/consts.tsv")
 
 echo "=== S: the sources ==="
 mapfile -t SRC < <({ echo ConcreteSpec.lean; find ConcreteSpec -name '*.lean'; } | sort)
-W=$(scan "${SRC[@]}")
-[ "${#SRC[@]}" -ge 10 ] && [ -z "$W" ] && ok "none of the ${#SRC[@]} source files spells a banned word outside comments" \
-  || no "banned words in the sources (${#SRC[@]} files): $(printf '%s\n' "$W" | head -5 | tr '\n' '|')"
+W=$(scan "${SRC[@]}"); RC=$?
+[ "$RC" = 0 ] && [ "${#SRC[@]}" -ge 10 ] && [ -z "$W" ] && ok "none of the ${#SRC[@]} source files spells a banned word outside comments" \
+  || no "the source scan (rc=$RC) of ${#SRC[@]} files: $(printf '%s\n' "$W" | head -5 | tr '\n' '|')"
 
 echo "=== negative controls ==="
 # control NAME BODY AXIOM-ERE WHAT: the declarations in BODY must be refused at ConcreteSpecControl.NAME
@@ -104,11 +104,14 @@ example : 2 + 2 = 4 := by native_decide
 def interp : String := s!"{(sorry : Nat)}"
 def dashes : String := "-- /- not a comment" ++ toString (sorry : Nat)
 EOF
-W=$(scan "$TMP/src/Bad.lean")
+W=$(scan "$TMP/src/Bad.lean"); RC=$?
 EXPECT="$TMP/src/Bad.lean:4: example : 2 + 2 = 4 := by native_decide
 $TMP/src/Bad.lean:5: def interp : String := s!\"{(sorry : Nat)}\"
 $TMP/src/Bad.lean:6: def dashes : String := \"-- /- not a comment\" ++ toString (sorry : Nat)"
-[ "$W" = "$EXPECT" ] \
+[ "$RC" = 0 ] && [ "$W" = "$EXPECT" ] \
   && ok "control: native_decide, a sorry inside a string interpolation and a sorry after a string holding comment delimiters are found; the words in comments are not" \
   || no "control: source scan reported '$W'"
+scan "$TMP/src/Bad.lean" "$TMP/src/missing.lean" > /dev/null 2>&1; RC=$?
+[ "$RC" != 0 ] && ok "control: a source the scan cannot read fails it (rc=$RC)" \
+  || no "control: the scan of an unreadable source exited 0"
 finish

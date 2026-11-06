@@ -451,8 +451,9 @@ inductive VR where
   | outOfFuel
   deriving DecidableEq, Repr
 
-/-- The run. Each statement costs one unit of fuel; a block runs with the fuel left at its
-open. The view is bound inside its block only. -/
+/-- The run. The fuel bounds the depth of the run's recursion, not the number of statements it
+executes: each statement passes one unit less to what follows it, and a block and the statements
+after it each start with the fuel left at its open. The view is bound inside its block only. -/
 def vrun : Nat → Mem → Views → List Nat → List VStmt → VR
   | 0, _, _, _, _ => .outOfFuel
   | _ + 1, μ, _, out, [] => .ok μ out
