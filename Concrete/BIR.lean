@@ -37,11 +37,27 @@ structure Span where
   stop : Nat
   deriving DecidableEq, Repr
 
+/-- A source location as the trap line reports it: the path relative to the project root with
+forward slashes, and a 1-based line and column. -/
+structure Loc where
+  path : String
+  line : Nat
+  col : Nat
+  deriving DecidableEq, Repr
+
+/-- A location the trap line can carry: a nonempty relative path (no leading `/`, no `\`, no
+control character, so the line stays one line) and a 1-based line and column. -/
+def Loc.wf (l : Loc) : Bool :=
+  !l.path.isEmpty && !l.path.startsWith "/" &&
+  l.path.toList.all (fun c => c != '\\' && c.toNat ≥ 32 && c.toNat != 127) &&
+  l.line ≥ 1 && l.col ≥ 1
+
 /-- One trap site: what traps there, where it came from. -/
 structure SiteEntry where
   kind : Trap
   site : SiteId
   span : Span
+  loc : Loc
   deriving DecidableEq, Repr
 
 abbrev SiteTable := List SiteEntry
@@ -440,7 +456,7 @@ def wf (p : Program) : Bool :=
   let regs := p.defs.map Prod.fst
   (match p.blocks[0]? with | some b => b.params.isEmpty | none => false) &&
   regs.eraseDups.length == regs.length &&
-  p.sites.length ≤ maxSites &&
+  p.sites.length ≤ maxSites && p.sites.all (·.loc.wf) &&
   (List.range p.blocks.length).all
     (fun j => j == 0 || p.blocks.any (fun b => b.term.targets.contains j)) &&
   p.blocks.all (Block.wf p)
@@ -455,7 +471,7 @@ instance (p : Program) : Decidable (WF p) := inferInstanceAs (Decidable (wf p = 
 namespace Examples
 
 /-- The one trap site of the examples: the checked `+`. -/
-def plusSite : SiteEntry := ⟨.arithmeticOverflow, ⟨0⟩, ⟨59, 64⟩⟩
+def plusSite : SiteEntry := ⟨.arithmeticOverflow, ⟨0⟩, ⟨59, 64⟩, ⟨"tests/slice0/sum.con", 3, 12⟩⟩
 
 /-- `a + b` with the overflow check: `binOvf`, then branch to the trap site or return. -/
 def checkedSum (a b : Int) : Program :=
@@ -484,8 +500,8 @@ def answerDischarged : Program :=
 def return134 : Program :=
   { blocks := [{ params := [], insts := [], term := .ret (.imm .u8 134) }], sites := [] }
 
-example : WF answer := by decide
-example : WF overflow := by decide
+example : WF answer := by decide +kernel
+example : WF overflow := by decide +kernel
 example : WF answerDischarged := by decide
 example : WF return134 := by decide
 example : run answer 3 = .exited 42 := by decide
@@ -546,9 +562,10 @@ def twoSites (a b c : Int) : Program :=
         term := .condbr 3 3 [] 4 [.reg 2] },
       { params := [], insts := [], term := .trap 1 },
       { params := [(5, .int .u8)], insts := [], term := .ret (.reg 5) }],
-    sites := [⟨.arithmeticOverflow, ⟨3⟩, ⟨10, 15⟩⟩, ⟨.arithmeticOverflow, ⟨9⟩, ⟨40, 47⟩⟩] }
+    sites := [⟨.arithmeticOverflow, ⟨3⟩, ⟨10, 15⟩, ⟨"src/main.con", 1, 11⟩⟩,
+              ⟨.arithmeticOverflow, ⟨9⟩, ⟨40, 47⟩, ⟨"src/ñandú \"x\"/lib.con", 17, 5⟩⟩] }
 
-example : WF (twoSites 100 100 2) := by decide
+example : WF (twoSites 100 100 2) := by decide +kernel
 example : run (twoSites 100 100 2) 5 = .trapped 1 := by decide
 example : run (twoSites 200 100 2) 5 = .trapped 0 := by decide
 example : run (twoSites 20 1 2) 5 = .exited 42 := by decide
@@ -574,6 +591,11 @@ def useBeforeDef : Program :=
         term := .ret (.reg 0) }],
     sites := [] }
 
+example : Loc.wf ⟨"/abs/main.con", 1, 1⟩ = false := by decide +kernel
+example : Loc.wf ⟨"src\\main.con", 1, 1⟩ = false := by decide +kernel
+example : Loc.wf ⟨"src/main.con\n", 1, 1⟩ = false := by decide +kernel
+example : Loc.wf ⟨"src/main.con", 0, 1⟩ = false := by decide +kernel
+example : Loc.wf ⟨"src/main.con", 1, 0⟩ = false := by decide +kernel
 example : ¬ WF unreachableParam := by decide
 example : ¬ WF crossBlockUse := by decide
 example : ¬ WF useBeforeDef := by decide
@@ -609,7 +631,7 @@ def all : List (String × Program × Outcome) :=
    ("site1", twoSites 100 100 2, .trapped 1), ("site0", twoSites 200 100 2, .trapped 0),
    ("two_sites_ok", twoSites 20 1 2, .exited 42)]
 
-example : all.all (fun (_, p, o) => wf p && run p 5 == o) := by decide
+example : all.all (fun (_, p, o) => wf p && run p 5 == o) := by decide +kernel
 
 end Examples
 

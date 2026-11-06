@@ -338,7 +338,7 @@ There are two target profiles: `x86_64-linux` and `aarch64-macos` (LCB's first n
 
 The fd-2 condition is part of the admitted launch, so it is inside P_launch (environment).
 
-**The trap site the executable reports is covered by premise `P_trap_site`** (owner, 2026-11-06). `trap_site_correct` proves the site at IR level. The executable's report is assumed: `Native` gains `ReportsSite : TargetProfile → Image → SiteId → Prop`, and a field states that a launch whose body returns `256 + i` reports `tbl[i].site` on fd 2. Gates 4 and 6 test it. A proof of the runtime entry retires it, together with `P_rt`.
+**The trap site the executable reports is covered by premise `P_trap_site`** (owner, 2026-11-06). `trap_site_correct` proves the site at IR level. The executable's report is assumed: `Native` gains `ReportsSite : TargetProfile → Image → SiteId → Prop`, and a field states that a launch whose body returns `256 + i` writes exactly `Runtime.trapLine tbl[i]` and a newline on fd 2 (the kind, the `Loc` and the site id of entry `i`). Gates 4 and 6 test it. A proof of the runtime entry retires it, together with `P_rt`.
 
 P_lex and P_parse are also discharged for each compilation by the certificate.
 
@@ -592,7 +592,8 @@ Heavy runs (native builds, differentials, certificates) run on concrete-ci-2 or 
 6. Information flow and constant time are decided: `Secret<T>`, `classify`/`declassify(x, "reason")`, `ct_select`/`ct_eq`, and the baseline observer (branches, addresses and variable-time operations; speculation not covered). Slice 0 carries only the fact fields.
 7. OS sandboxing of the launcher is out of scope for the compiler.
 
-Open: the exact bytes of the trap line. Its content is decided by OD101 (one line naming the trap and its location), but its form is not; the spec does not model the bytes. Until the owner fixes them, the runtime prints the provisional placeholder `concrete: trap: <kind> at <site>`.
+8. The trap line is `concrete: trap: <kind> at <path>:<line>:<col> (site <id>)`: the path relative to the project root with forward slashes, line and column 1-based (owner, 2026-11-06). The compiler implements it in `Backend/Runtime.lean` (`trapLine`), from the site table's `Loc`; `P_trap_site` covers the executable writing it.
+9. Rule IDs are the Lean rule name plus a per-rule revision; each output header carries one `spec_version` (owner, 2026-11-06). The facts query and refusal output use them.
 
 ## Follow-ups (recorded after the final review round, round 8)
 
@@ -618,22 +619,24 @@ These are internal. None blocks slice 0's correctness.
 - **The spec's pre-decision admission rule** (`knownViolates`-only refusal, `RangeOk`, R-0574). It does not bite slice 0, where every value is known. It must be closed before the language grows unknown values.
 - **Generated views:** the stage, premise and fact tables here become views of the Lean registries, gated against drift.
 - **Rebase:** rebase onto main, under a new branch name, when `wip/spec-root` lands.
-- **Slice order after slice 0** (owner, 2026-11-06). Each slice is a thin vertical slice, proven end to end:
-  1. integers complete: all widths, wrapping/saturating, comparisons, bitwise, shifts;
-  2. capabilities: `main` grants, `with(Console)`, writing an integer, with output compared across both backends and the Lean interpreter;
-  3. `bool`/`if`/`while` and `#[variant]`;
-  4. functions, calls, recursion, capabilities through calls, contracts;
-  5. the trap checker;
-  6. `Secret<T>` on scalars;
-  7. enums, `match`, `Result` and `checked_*`;
-  8. structs and ownership;
-  9. borrows;
-  10. allocation, arrays and memory bounds.
+- **Slice order after slice 0** (owner, 2026-11-06, updated with the approved decision set). Each slice is a thin vertical slice, proven end to end:
+  1. Q8.2's linear empty struct, explicit `abort()`, and the refused `200 + 56` control;
+  2. integers complete: all widths, wrapping/saturating, comparisons, bitwise, shifts;
+  3. capabilities: `main` grants, `with(Console)`, writing an integer, with output compared across both backends and the Lean interpreter;
+  4. `bool`/`if`/`while` and `#[variant]`;
+  5. functions, calls, recursion, capabilities through calls, contracts;
+  6. the trap checker;
+  7. `Secret<T>` on scalars;
+  8. enums, `match`, `Result` and `checked_*`;
+  9. structs and ownership;
+  10. borrows;
+  11. allocation, arrays and memory bounds.
 - **Extension without reshaping.** BIR's integer types are the spec's `IntTy`: all eight widths and both signednesses, with values as in-range mathematical integers. `BinOp` grows the bitwise operations, shifts and comparisons. Saturating and checked operations lower to `binOvf` plus branches or selects.
-  - **The LCB adapter** covers types up to 16 bits today, where exact results fit a word. Slice 1 needs from LCB the items in "What LCB must provide" below.
-  - **Slice 2** turns console output into an observation beyond the exit code. `Behaviour` gains an event trace, and BIR gains an effect instruction naming its capability. The runtime entry gains the grant table and the startup refusal (status 125).
+  - **The LCB adapter** covers types up to 16 bits today, where exact results fit a word. Slice 2 (integers complete) needs from LCB the items in "What LCB must provide" below.
+  - **Slice 3** turns console output into an observation beyond the exit code. `Behaviour` gains an event trace, and BIR gains an effect instruction naming its capability. The runtime entry gains the grant table and the startup refusal (status 125).
+  - **Explicit `abort()`** (slice 1) ends the run with whatever observation the spec gives it. If the spec makes it a trap kind, it is BIR's `trap` terminator at a site of that kind, and the encoding, runtime and trap line are unchanged; if it is a distinct observation, the result word gains one more range above the trap sites.
   - **The result word** keeps encoding only how the run ends.
-  - **LCB's verified profile has no calls**, so slice 2 needs LCB calls in that profile, or an event protocol through the result. That needs agreeing with LCB.
+  - **LCB's verified profile has no calls**, so slice 3 needs LCB calls in that profile, or an event protocol through the result. That needs agreeing with LCB.
 - **BIR well-formedness** makes dominance hold by construction: values cross blocks only as block arguments, every operand is defined earlier in its own block, and every non-entry block has a predecessor. Prove that a well-formed program never reads an undefined register (progress) before `ssa_correct` relies on it.
 
 ## What LCB must provide
@@ -646,10 +649,10 @@ LCB is our own project; these are tasks for it, not premises to keep. Checked ag
 3. Larger resource limits on the first path: 64 blocks, 488 values and 480 definitions per function (`Verified/Canonical.lean`). Slice programs will exceed them.
 4. Object emission (LCB V04), so assembly text and the system assembler leave the path.
 
-**For slice 1 (all widths u8–u64, i8–i64).** LCB's verified profile has `word` (32-bit) and `long` (64-bit) values, `add sub mul and or xor`, the comparisons `eq` and `unsignedLT` (word result), and no width conversion, shift, division or high multiply. The adapter will carry every integer as a `long`: exact for types up to 32 bits, and for 64-bit add/sub the overflow test is expressible with `xor`, `and` and `unsignedLT`. Slice 1 needs:
+**For slice 2, integers complete (all widths u8–u64, i8–i64).** LCB's verified profile has `word` (32-bit) and `long` (64-bit) values, `add sub mul and or xor`, the comparisons `eq` and `unsignedLT` (word result), and no width conversion, shift, division or high multiply. The adapter will carry every integer as a `long`: exact for types up to 32 bits, and for 64-bit add/sub the overflow test is expressible with `xor`, `and` and `unsignedLT`. Slice 2 needs:
 1. **Shifts** `shl`, `lshr`, `ashr` at `long` (at `word` too, for completeness of LCB's API). Required: expanding a variable shift amount (a loop or a 64-way branch) costs more code and proof than LCB adding the operation.
 2. **High multiply** `mulHighUnsigned` and `mulHighSigned` at `long` (AArch64 `umulh`/`smulh`, x86-64 `mul`/`imul`). Required for 64-bit checked, saturating and overflow-flag multiplication; the alternative is a long 32-bit-halves expansion with its own proof.
-3. **Division and remainder** (`udiv sdiv urem srem`), if slice 1's integer operations include `/` and `%`. Required then: an expansion would cost far more code and proof than the native operation.
+3. **Division and remainder** (`udiv sdiv urem srem`), if slice 2's integer operations include `/` and `%`. Required then: an expansion would cost far more code and proof than the native operation.
 4. **Signed and non-strict comparisons** (`signedLT`, `unsignedLE`, `signedLE`). Optional: they are expressible (`a <s b` is `(a xor 2^63) <u (b xor 2^63)`), but native ones keep the adapter and its proof small.
 5. **Width conversion** (`word`↔`long` extension and truncation). Optional while every integer is a `long`; needed if the adapter ever uses `word` for narrow types.
 
@@ -657,6 +660,6 @@ LCB is our own project; these are tasks for it, not premises to keep. Checked ag
 
 - Mono Core.
 - Grants, the launcher's startup refusal (125) and events.
-- The LP0 proven path: LCB's own theorems composed with `adapter_correct`, replacing `P_toolchain[lcb]`. It comes right after slice 4. In slice 0 LCB already runs, unverified, with the adapter proof first.
+- The LP0 proven path: LCB's own theorems composed with `adapter_correct`, replacing `P_toolchain[lcb]`. It comes right after the functions-and-calls slice (slice 4 in the earlier numbering, slice 5 now). In slice 0 LCB already runs, unverified, with the adapter proof first.
 - An LLVM-IR semantics. The LLVM meaning `M` stays a premise parameter until one exists, and then `P_print` becomes a theorem.
 - The information-flow and constant-time analysis. The surface and the observer are decided; slice 0 has only the fact fields.

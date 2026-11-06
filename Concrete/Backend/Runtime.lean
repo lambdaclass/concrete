@@ -15,8 +15,10 @@ word (`Concrete.BIR.encode`). The runtime entry is fixed: it calls the body and 
 Its correctness is premise `P_rt`, and the site it reports is premise `P_trap_site`
 (`Concrete/README.md`). This file emits it as LLVM text and as QBE text for LCB.
 
-The trap line's bytes are PROVISIONAL: OD101 decides its content (one line naming the trap and its
-location) but not its form, which is open with the owner.
+The trap line is the owner's decided form (2026-11-06):
+`concrete: trap: <kind> at <path>:<line>:<col> (site <id>)`, the path relative to the project
+root with forward slashes, line and column 1-based. That the executable writes exactly this line
+for the site it trapped at is premise `P_trap_site`.
 -/
 
 namespace Concrete.Backend.Runtime
@@ -25,11 +27,11 @@ open ConcreteSpec (IntTy Trap)
 
 /-- The trap's name in the trap line. -/
 def trapName : Trap → String
-  | .arithmeticOverflow => "arithmetic overflow"
+  | .arithmeticOverflow => "overflow"
 
-/-- The trap line for one site (PROVISIONAL form), without the final newline. -/
+/-- The trap line for one site, without the final newline. -/
 def trapLine (e : SiteEntry) : String :=
-  s!"concrete: trap: {trapName e.kind} at site {e.site.id} (bytes {e.span.start}..{e.span.stop})"
+  s!"concrete: trap: {trapName e.kind} at {e.loc.path}:{e.loc.line}:{e.loc.col} (site {e.site.id})"
 
 /-- What the runtime writes before aborting on a result word that encodes nothing. -/
 def invalidLine : String := "concrete: runtime: invalid result word"
@@ -37,11 +39,12 @@ def invalidLine : String := "concrete: runtime: invalid result word"
 /-- Pair every element with its index. -/
 def indexed {α : Type} (l : List α) : List (Nat × α) := (List.range l.length).zip l
 
-/-- An LLVM `c"..."` string body: printable ASCII except `"` and `\` verbatim, everything else hex. -/
+/-- An LLVM `c"..."` string body over the UTF-8 bytes: printable ASCII except `"` and `\` verbatim,
+every other byte as `\XX`. -/
 def llvmEscape (s : String) : String :=
-  String.join (s.toList.map fun c =>
-    let n := c.toNat
-    if 32 ≤ n ∧ n < 127 ∧ c ≠ '"' ∧ c ≠ '\\' then c.toString
+  String.join (s.toUTF8.toList.map fun b =>
+    let n := b.toNat
+    if 32 ≤ n ∧ n < 127 ∧ n ≠ 34 ∧ n ≠ 92 then (Char.ofNat n).toString
     else
       let hex := Nat.toDigits 16 n
       "\\" ++ String.ofList ((if hex.length < 2 then ['0'] else []) ++ hex.map Char.toUpper))
@@ -81,17 +84,19 @@ def llvm (tbl : SiteTable) : String :=
   s!"  call void @concrete_rt_write_all(ptr @.bad, i64 {(invalidLine ++ "\n").utf8ByteSize})\n" ++
   "  call void @abort()\n  unreachable\n}\n"
 
-/-- The runtime entry as QBE text for LCB, for the site table `tbl`. The line contains no `"` or
-`\` (see `trapLine`), so it is passed as a plain QBE string; its newline is a separate byte. -/
+/-- QBE data bytes for a string: one `b N` per UTF-8 byte, so no character needs escaping. -/
+def qbeBytes (s : String) : String := ", ".intercalate (s.toUTF8.toList.map fun b => s!"b {b}")
+
+/-- The runtime entry as QBE text for LCB, for the site table `tbl`. -/
 def qbe (tbl : SiteTable) : String :=
   let sites := indexed tbl
-  let datas := sites.map fun (i, e) => s!"data $site{i} = \{ b \"{trapLine e}\", b 10 }\n"
+  let datas := sites.map fun (i, e) => s!"data $site{i} = \{ {qbeBytes (trapLine e ++ "\n")} }\n"
   let dispatch := sites.map fun (i, e) =>
     s!"@c{i}\n    %c{i} =w ceqw %i, {i}\n    jnz %c{i}, @t{i}, @c{i + 1}\n" ++
     s!"@t{i}\n    call $concrete_rt_write_all(l $site{i}, l {(trapLine e ++ "\n").utf8ByteSize})\n" ++
     "    call $_exit(w 134)\n    ret 0\n"
   String.join datas ++
-  s!"data $bad = \{ b \"{invalidLine}\", b 10 }\n" ++
+  s!"data $bad = \{ {qbeBytes (invalidLine ++ "\n")} }\n" ++
   "function $concrete_rt_write_all(l %p, l %n) {\n" ++
   "@start\n    jmp @loop\n" ++
   "@loop\n    %done =w ceql %n, 0\n    jnz %done, @out, @wr\n" ++
