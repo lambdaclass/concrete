@@ -7,14 +7,14 @@
 #      Lean.ofReduceBool or Lean.ofReduceNat (what native_decide and `decide +native` reduce through),
 #      on Lean.trustCompiler, or on a generated `._native.` axiom;
 #   D  the library declares no axiom of its own;
-#   S  the sources, comments and strings stripped, never spell sorry, admit, native_decide, +native,
+#   S  the sources, comments stripped (string literals are scanned), never spell sorry, admit, native_decide, +native,
 #      ofReduceBool, ofReduceNat, trustCompiler or skipKernelTC. An `example` is checked by the kernel
 #      and then discarded, so E and D never see it; this leg does.
 #
 # NEGATIVE CONTROLS: a theorem proved by sorry, a definition whose body is sorry (no theorem about
 # it), a theorem proved by native_decide and a declared axiom each fail E or D naming the constant;
-# a source with an `example` proved by native_decide fails S, and the same words inside comments and
-# strings do not.
+# a source with an `example` proved by native_decide or a sorry hidden in an interpolation fails S,
+# the same words inside comments do not, and an unreadable or unlexable source fails S.
 set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/../checks/lib/gate_env.sh" || exit 2
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -32,33 +32,84 @@ banned() {
 }
 # declared FILE → the axioms a PROOF_MODE=constants listing declares
 declared() { awk -F'\t' '$2 == "axiom" { print $1 }' "$1"; }
-# scan FILE... → `file:line: text` for every banned word outside comments. String literals are
-# scanned too: an interpolation such as s!"{(sorry : Nat)}" runs code. They are still parsed, so a
-# comment delimiter inside a string does not start a comment.
+# scan FILE... → `file:line: text` for every banned word outside comments; exit 3 when a source
+# cannot be lexed. Comments (nested `/- -/`, `--`) are blanked; everything else is scanned, string
+# literals included, since an interpolation such as s!"{(sorry : Nat)}" runs code. The lexer follows
+# Lean's literal forms so that no comment delimiter inside a literal starts a comment: a string with
+# its escapes, a `{ }` in a string as an interpolation in which code (with its own strings and
+# comments) is lexed recursively, raw strings r"…" and r#"…"#, and character literals. Every string
+# is lexed as if it interpolates: a `{` in a plain string must be balanced, and an unterminated
+# string, comment or interpolation is an error, never a silent skip.
 scan() {
   python3 - "$BANNED_WORD_RE" "$@" <<'EOF'
 import re, sys
 word = re.compile(sys.argv[1])
-for path in sys.argv[2:]:
-    src = open(path, encoding="utf-8").read()
-    out, i, depth, n = [], 0, 0, len(src)
-    while i < n:                      # blank out comments (nested /- -/, --); keep string literals
-        if depth:
+
+class LexError(Exception):
+    pass
+
+def lex(src):
+    n, out = len(src), []
+    def ident(i):                                     # src[i] continues an identifier
+        return i >= 0 and (src[i].isalnum() or src[i] in "_'!?." or ord(src[i]) > 127)
+    def comment(i):                                   # at "/-": blank to the matching "-/"
+        depth = 0
+        while i < n:
             if src.startswith("/-", i): depth += 1; out.append("  "); i += 2
-            elif src.startswith("-/", i): depth -= 1; out.append("  "); i += 2
+            elif src.startswith("-/", i):
+                depth -= 1; out.append("  "); i += 2
+                if depth == 0: return i
             else: out.append("\n" if src[i] == "\n" else " "); i += 1
-        elif src.startswith("/-", i): depth = 1; out.append("  "); i += 2
-        elif src.startswith("--", i):
-            j = src.find("\n", i); j = n if j < 0 else j; out.append(" " * (j - i)); i = j
-        elif src[i] == '"':
-            j = i + 1
-            while j < n and src[j] != '"': j += 2 if src[j] == "\\" else 1
-            out.append(src[i:j + 1]); i = j + 1
-        elif src[i] == "'" and i + 2 < n and src[i + 2] == "'":   # a character literal like '"'
-            out.append(src[i:i + 3]); i += 3
-        else: out.append(src[i]); i += 1
-    for k, line in enumerate("".join(out).split("\n"), 1):
+        raise LexError("unterminated comment")
+    def string(i):                                    # at '"'
+        out.append('"'); i += 1
+        while i < n:
+            c = src[i]
+            if c == "\\": out.append(src[i:i + 2]); i += 2
+            elif c == '"': out.append(c); return i + 1
+            elif c == "{": out.append(c); i = code(i + 1, True)
+            else: out.append(c); i += 1
+        raise LexError("unterminated string")
+    def raw(i):                                       # at 'r' of r#*"
+        j = i + 1
+        while j < n and src[j] == "#": j += 1
+        close = '"' + "#" * (j - i - 1)
+        k = src.find(close, j + 1)
+        if k < 0: raise LexError("unterminated raw string")
+        out.append(src[i:k + len(close)]); return k + len(close)
+    def code(i, inner):                               # inner: inside an interpolation, stop at its '}'
+        depth = 0
+        while i < n:
+            c = src[i]
+            if src.startswith("/-", i): i = comment(i)
+            elif src.startswith("--", i):
+                j = src.find("\n", i); j = n if j < 0 else j; out.append(" " * (j - i)); i = j
+            elif c == '"': i = string(i)
+            elif c == "r" and not ident(i - 1) and re.match(r'r#*"', src[i:]): i = raw(i)
+            elif c == "'" and not ident(i - 1):
+                m = re.match(r"'(\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|.)|[^\\'\n])'", src[i:])
+                k = len(m.group(0)) if m else 1
+                out.append(src[i:i + k]); i += k
+            elif inner and c == "{": depth += 1; out.append(c); i += 1
+            elif inner and c == "}":
+                out.append(c); i += 1
+                if depth == 0: return i
+                depth -= 1
+            else: out.append(c); i += 1
+        if inner: raise LexError("unterminated interpolation")
+        return i
+    code(0, False)
+    return "".join(out)
+
+rc = 0
+for path in sys.argv[2:]:
+    try:
+        text = lex(open(path, encoding="utf-8").read())
+    except (OSError, UnicodeDecodeError, LexError) as e:
+        print(f"error: {path}: {e}", file=sys.stderr); rc = 3; continue
+    for k, line in enumerate(text.split("\n"), 1):
         if word.search(line): print(f"{path}:{k}: {line.strip()}")
+sys.exit(rc)
 EOF
 }
 
@@ -103,15 +154,27 @@ def quote : Char := '"'
 example : 2 + 2 = 4 := by native_decide
 def interp : String := s!"{(sorry : Nat)}"
 def dashes : String := "-- /- not a comment" ++ toString (sorry : Nat)
+example : String := s!"{("--")}{(sorry : Nat)}"
+example : String := s!"{"/-"}" ++ toString (sorry : Nat)
+def chars : List Char := ['{', '}', '\'', '\\', '"', '\x41']
+def h' : Nat := 0 -- a prime in a name starts no character literal: sorry
+def r' : String := r#"raw "-- /-" text"# ++ toString (sorry : Nat)
 EOF
 W=$(scan "$TMP/src/Bad.lean"); RC=$?
-EXPECT="$TMP/src/Bad.lean:4: example : 2 + 2 = 4 := by native_decide
-$TMP/src/Bad.lean:5: def interp : String := s!\"{(sorry : Nat)}\"
-$TMP/src/Bad.lean:6: def dashes : String := \"-- /- not a comment\" ++ toString (sorry : Nat)"
+B="$TMP/src/Bad.lean"
+EXPECT="$B:4: example : 2 + 2 = 4 := by native_decide
+$B:5: def interp : String := s!\"{(sorry : Nat)}\"
+$B:6: def dashes : String := \"-- /- not a comment\" ++ toString (sorry : Nat)
+$B:7: example : String := s!\"{(\"--\")}{(sorry : Nat)}\"
+$B:8: example : String := s!\"{\"/-\"}\" ++ toString (sorry : Nat)
+$B:11: def r' : String := r#\"raw \"-- /-\" text\"# ++ toString (sorry : Nat)"
 [ "$RC" = 0 ] && [ "$W" = "$EXPECT" ] \
-  && ok "control: native_decide, a sorry inside a string interpolation and a sorry after a string holding comment delimiters are found; the words in comments are not" \
-  || no "control: source scan reported '$W'"
-scan "$TMP/src/Bad.lean" "$TMP/src/missing.lean" > /dev/null 2>&1; RC=$?
-[ "$RC" != 0 ] && ok "control: a source the scan cannot read fails it (rc=$RC)" \
-  || no "control: the scan of an unreadable source exited 0"
+  && ok "control: native_decide, and sorry inside an interpolation, after a string or raw string holding comment delimiters, and after an interpolation holding a string are found; the words in comments are not" \
+  || no "control: source scan (rc=$RC) reported '$W'"
+printf 'def s : String := "unterminated {\n' > "$TMP/src/Open.lean"
+for f in missing Open; do
+  scan "$TMP/src/$f.lean" > /dev/null 2>&1; RC=$?
+  [ "$RC" != 0 ] && ok "control: a source the scan cannot read or lex ($f) fails it (rc=$RC)" \
+    || no "control: the scan of $f exited 0"
+done
 finish
