@@ -1,0 +1,2 @@
+[piece 5 of 6: docs]
+- docs/decisions.md:371: The recorded requirement to retain all of `legacy/` until after phase D goes beyond the quoted owner answer (“i would delete legacy way later, we want to check it to see if we forgot any idea”). That answer approves postponement and checking for forgotten ideas, but does not select phase D as the deletion boundary. Because this revises the owner’s P6 retention decision, record explicit approval of that boundary or leave its timing pending.
