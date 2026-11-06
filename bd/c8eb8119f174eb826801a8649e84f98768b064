@@ -1,0 +1,2 @@
+[piece 5 of 6: docs]
+- docs/decisions.md:470: The revised backend order records an owner decision without quoting the owner’s dated answer or the owner rule authorizing its recording. “Revised … by the owner” alone does not meet the required provenance standard. The retention revision and new pipeline and slice-0 surface decisions have the same omission. These establish binding changes, so their approving answers must be recorded to verify authorization and scope before landing.
