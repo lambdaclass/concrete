@@ -152,6 +152,17 @@ def blocks(lines):
     return out
 
 
+def modules_under(rel):
+    """Every module whose source is under ROOT/rel, at any depth, sorted."""
+    out = []
+    for d, _, files in os.walk(os.path.join(ROOT, rel)):
+        for f in files:
+            if f.endswith('.lean'):
+                path = os.path.relpath(os.path.join(d, f), ROOT)[:-5]
+                out.append(path.replace(os.sep, '.'))
+    return sorted(out)
+
+
 def main():
     decls_path, out_dir = sys.argv[1], sys.argv[2]
     decls, mdocs = {}, defaultdict(list)
@@ -166,12 +177,11 @@ def main():
             decls[d['name']] = d
     # module order: Spec.lean's imports, then the proofs
     spec_root = open(os.path.join(ROOT, 'ConcreteSpec/Spec.lean')).read()
-    spec_mods = ['ConcreteSpec.Spec'] + re.findall(r'^import (ConcreteSpec\.Spec\.\w+)', spec_root, re.M)
+    spec_mods = ['ConcreteSpec.Spec'] + re.findall(r'^import (ConcreteSpec\.Spec\.[\w.]+)', spec_root, re.M)
     # every proof module on disk, not only those with named declarations: a module of examples or
     # prose alone is part of the view too
-    proof_mods = sorted('ConcreteSpec.Proofs.' + f[:-5] for f in os.listdir(os.path.join(ROOT, 'ConcreteSpec/Proofs'))
-                        if f.endswith('.lean'))
-    on_disk = sorted('ConcreteSpec.Spec.' + f[:-5] for f in os.listdir(os.path.join(ROOT, 'ConcreteSpec/Spec')) if f.endswith('.lean'))
+    proof_mods = modules_under('ConcreteSpec/Proofs')
+    on_disk = modules_under('ConcreteSpec/Spec')
     missing = sorted(set(on_disk) - set(spec_mods))
     if missing:
         sys.exit(f'error: spec modules not imported by ConcreteSpec/Spec.lean: {missing}')
