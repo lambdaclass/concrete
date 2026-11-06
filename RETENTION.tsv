@@ -14,7 +14,7 @@
 # STATUS: open | resolved, and it is about the legacy/ copy only. A row is resolved when its
 # deletion criterion for the legacy/ copy holds, recorded by the change that resolves it. Deleting a
 # path under legacy/ needs EVERY row covering the path (its own and each ancestor's) resolved
-# (scripts/checks/legacy_frozen.sh after the move). legacy/ is deleted only at LD (R-0590), way later (the phase is not yet chosen),
+# (scripts/checks/legacy_frozen.sh after the move). legacy/ is deleted only at LD (R-0590), once the new compiler implements a full real program (such as RocksDB, ethrex or similar),
 # when no row is open, a final ideas sweep has dispositioned every idea and the owner approves (P6, revised 2026-11-06). This manifest never authorizes deleting a live root file: a retained row's criterion
 # reads "root: <when the root file goes, normally never>; legacy/ copy: <when its frozen duplicate
 # may go>", and resolving it releases only the legacy/ copy.
@@ -45,7 +45,7 @@ docs/spec/decisions.md docs/decisions.md	decisions	retained	docs/decisions.md	R-
 docs/archive/roadmap-2026-11 docs/archive/site-down.md docs/archive/decisions-2026-11-05 docs/archive/bugs-2026-11	plan and decision history	retained	docs/archive/ (the roadmap task_disposition.tsv, the site takedown record, the 2026-11-05 decision rows, the old bug ledger's disposition)	R-0558	root: never; legacy/ copy: at LD (R-0590) (a frozen duplicate of the live root file)	open
 CHANGELOG.md	history	archived	legacy/CHANGELOG.md; the root starts a new empty CHANGELOG.md whose first entry names the tag	R-0558	never deleted with the pipeline	open
 changelog.d	history	archived	legacy/changelog.d (pending fragments folded first); the root starts an empty changelog.d	R-0558	never deleted with the pipeline	open
-Concrete Main.lean Concrete.lean Browser.lean	old compiler	retire	legacy/ (the oracle is the tag-built artifact, not this copy)	R-0558	LD (R-0590): way later, after the final ideas sweep and with the owner's approval	open
+Concrete Main.lean Concrete.lean Browser.lean	old compiler	retire	legacy/ (the oracle is the tag-built artifact, not this copy)	R-0558	LD (R-0590): once the new compiler implements a full real program, after the final ideas sweep and with the owner's approval	open
 lakefile.toml lake-manifest.json lean-toolchain flake.nix flake.lock Makefile	build	retire	legacy/; the root gets new build files for ConcreteSpec and the new compiler	R-0558	LD (R-0590), with the old pipeline	open
 scripts/tests	old gates	retire	legacy/scripts/tests (frozen, never run)	R-0498	LD (R-0590); a gate a new slice needs is rewritten against the new tree, with its mutation (R-0498)	open
 scripts/gen scripts/ci scripts/spec scripts/tools scripts/dev scripts/reduce scripts/README.md scripts/check_ll1.c scripts/check_ll1.py scripts/check_ll1.rs scripts/bv_capture_solver.sh	old tooling	retire	legacy/scripts	R-0558	LD (R-0590), unless a slice task pulls a tool back first	open
