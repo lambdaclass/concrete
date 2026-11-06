@@ -1,0 +1,29 @@
+# Required CI jobs: a train lands only when every job named here ran at the candidate's exact SHA and
+# succeeded (scripts/land/train.sh watch and land). One exact job name per line, as GitHub shows it.
+# GitHub branch protection is not configured for main, so this file is the record. The landing tier
+# of .github/workflows/lean_action_ci.yml is listed in full; campaign-tier jobs are never required
+# here (they gate qualification, not merges). scripts/tests/check_landing_script.sh fails when a
+# name below is not a landing-tier job of the workflow or a landing-tier job is missing from here.
+# Taken from run 41687764833 (ci/batch1, b78fff1a5), 2026-11-04.
+Build
+Build + main tests (macOS)
+Campaign gates (mint-batch accounting)
+Campaign gates (missing-result refusal, summary golden)
+Checker-identity gates (R-0208)
+Compiler-infra gates (ledger, diagnostics, codegen, CLI, known holes)
+Evidence-identity gates (R-0004 / R-0482)
+Examples (manifest coverage)
+External proof re-check (con-leche)
+Extra gates (dark-gate wiring, audit 2026-07-16)
+LL(1) grammar check
+Language-surface gates (Phase 5-6)
+Main test suite
+Oracle (GitHub-hosted fetch + smoke)
+Multi-kernel evidence (Rocq + Isabelle)
+Proof evidence gate
+Receipt-path gates (R-0004 replay, receipts, attestation)
+Root checks
+SSA test suite
+Thesis evidence smoke test
+Trust gate (correctness contracts)
+Landing record

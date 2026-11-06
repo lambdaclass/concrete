@@ -1,0 +1,12 @@
+# Starts a landing-bot tick 10 minutes after the previous one finished (and 5 minutes after boot).
+[Unit]
+Description=Concrete landing bot timer
+
+[Timer]
+OnBootSec=5min
+OnActiveSec=2min
+OnUnitInactiveSec=10min
+Unit=concrete-landing-bot.service
+
+[Install]
+WantedBy=timers.target

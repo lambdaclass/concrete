@@ -2,7 +2,7 @@
 
 The owner decided on 2026-11-05 that the website goes down at the move and is rebuilt from scratch
 with the new compiler (R-0569); no frozen playground is served in between
-([decision](../spec/decisions.md#decided-project-site)). The move stops the site build. Unpublishing
+([decision](../decisions.md#decided-project-site)). The move stops the site build. Unpublishing
 the live sites is a separate manual step, because it is visible outside the repository: it runs only
 after the owner confirms the moment, and this record is then updated to `status: done` with the date.
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Readiness notes (docs/project/LANDING.md, "Readiness"). A branch is ready to land when its head
+# Readiness notes (docs/LANDING.md, "Readiness"). A branch is ready to land when its head
 # commit carries BOTH notes, published on the primary remote:
 #
 #   refs/notes/concrete-review   verdict: clean|findings|blocked   rounds: N   reviewer: codex   utc: ...

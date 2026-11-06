@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Landing trains (ROADMAP R-0539): integrate every ready branch into ONE candidate, validate it once,
-# and land it on both remotes. Stage timestamps go to the landing log (R-0547). docs/project/LANDING.md
+# and land it on both remotes. Stage timestamps go to the landing log (R-0547). docs/LANDING.md
 # is the manual; this header is the contract.
 #
 #   train.sh [--dry-run] build  <name> [--force] [--no-fetch] <ref>...
@@ -68,7 +68,8 @@ MIRROR="${LAND_MIRROR-lambdaclass}"
 HOOK="${LAND_HOOK:-.githooks/pre-push}"
 # Must name exactly the workflow's campaign jobs (an `if:` on `inputs.campaign`, and the jobs that `needs:`
 # one): check_landing_script.sh derives that set from lean_action_ci.yml and fails on any difference.
-CAMPAIGN_RE="${LAND_CAMPAIGN_JOBS:-^(Gate mutation|Weekly clean-checkout proof replay|Nightly differential fuzz|Checker pin freshness \(campaign finding\))}"
+# The root has no campaign tier yet; a campaign job, when one returns, is named "Campaign: ...".
+CAMPAIGN_RE="${LAND_CAMPAIGN_JOBS:-^Campaign: }"
 
 # --- invariants ----------------------------------------------------------------------------------
 
@@ -390,7 +391,7 @@ remote_leg() { # name head
     trap 'CONCRETE_SKIP_GATES=1 git push -q --force-with-lease="refs/heads/'"$ref"':'"$head"'" "'"$REMOTE"'" ":refs/heads/'"$ref"'" 2>/dev/null || true' EXIT
   fi
   local rc=0 out
-  out="$("$runner" "$ref" "${LAND_FULL_GATES_CMD:-lake build && bash scripts/tests/run_ci_gates_local.sh}" 2>&1)" || rc=$?
+  out="$("$runner" "$ref" "${LAND_FULL_GATES_CMD:-lake build && bash scripts/checks/run.sh}" 2>&1)" || rc=$?
   printf '%s\n' "$out"
   if [ "${LAND_REMOTE_PUSH:-1}" = 1 ]; then
     # The normal-path deletion, logged; the EXIT trap above stays as the backstop for interruptions.
@@ -409,7 +410,7 @@ remote_leg() { # name head
   return "$rc"
 }
 
-# The gate host (heavy legs default to concrete-ci-2, docs/project/LANDING.md "Gate host"):
+# The gate host (heavy legs default to concrete-ci-2, docs/LANDING.md "Gate host"):
 # LAND_GATES_HOST if set (empty = none), else `git config land.gatesHost`. With a gate host the impact
 # leg runs there through scripts/land/gates_remote.sh, for the exact head SHA, and its pass is
 # attested so the `ci` push's hook reuses it. An unreachable host is INCOMPLETE and fails the check;
@@ -468,7 +469,7 @@ cmd_check() {
   # Codex review. Any failing leg fails the check.
   if [ "$DRY" = 1 ]; then
     note "(dry-run) would run in parallel: impact gates $impact_where (hook line 'refs/heads/train/$name $head refs/heads/ci/$name $base')"
-    if [ "$remote" = 1 ]; then note "(dry-run)   + remote full gates: $(remote_runner) <ref of ${head:0:10}> '${LAND_FULL_GATES_CMD:-lake build && bash scripts/tests/run_ci_gates_local.sh}'"; fi
+    if [ "$remote" = 1 ]; then note "(dry-run)   + remote full gates: $(remote_runner) <ref of ${head:0:10}> '${LAND_FULL_GATES_CMD:-lake build && bash scripts/checks/run.sh}'"; fi
     if [ "$review" = 1 ]; then note "(dry-run)   + review: $(review_cmd) --base $base --head $head"; fi
     return 0
   fi

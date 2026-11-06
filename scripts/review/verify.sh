@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# R-0544 — does a commit carry a clean review verdict? See docs/project/REVIEW.md.
+# R-0544 — does a commit carry a clean review verdict? See docs/REVIEW.md.
 #
 #   scripts/review/verify.sh [--fetch] <commit>
 #
@@ -33,7 +33,7 @@ NOTE="$(git notes --ref="$NOTES_REF" show "$SHA" 2>/dev/null)" || {
 }
 
 # The note must carry each of the six fields review.sh writes exactly once, each well formed. Two
-# optional keys are the landing pipeline's (scripts/land/notes.sh, docs/project/LANDING.md):
+# optional keys are the landing pipeline's (scripts/land/notes.sh, docs/LANDING.md):
 # `carried-from: <sha>`, written by the landing bot when it carries a clean verdict across a
 # conflict-free rebase, and `order: N`. Any other key, a repeated key, or a line that is not
 # `key: value` makes the note malformed. Keys are matched by name, not position, because notes.sh

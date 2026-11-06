@@ -7,14 +7,12 @@ YOU ARE A REVIEWER. Do not modify any file. Report findings only.
 FULL REPO ACCESS: read anything; do not confine yourself to the diff. The defect is often
 the diff's relationship to a file it does not touch. Worth opening:
 
-  Concrete/Semantics/IntArith.lean          the single definition of when an operation traps
-  docs/verification/KNOWN_HOLES.md                       the ONLY authority on hole status
-  docs/verification/VC_BRIDGE_REGISTER.md                which lowering rules are discharged
-  docs/archive/roadmap-2026-11/ROADMAP_DIRECTION.md "Open holes, owners, acceptance tests"  holes -> owner -> reproduce -> done-when
-  Concrete/Proof/ObligationCore.lean        isCurrentForDependents — the reference shape
-                                            for composing a status with its inputs
-  examples/unsound_hypothesis/              H23 fixture (open hole)
-  examples/trap_semantics_gap/              H24 fixture (open hole)
+  docs/decisions.md                         the owner's decisions; a patch never picks a side on one
+  docs/PHILOSOPHY.md                        the rules a design is judged by
+  ConcreteSpec/                             the specification (readable Lean); one definition per rule
+  ROADMAP.md                                what each task must deliver (its done-when)
+  RETENTION.tsv, scripts/checks/            legacy/ is frozen; what may leave it and when
+  legacy/                                   the old compiler: history and evidence, never run or edited
 
 CHECK EACH — every one corresponds to a defect this codebase actually shipped:
 
@@ -28,8 +26,8 @@ CHECK EACH — every one corresponds to a defect this codebase actually shipped:
    (e.g. "not refused" read as "validated").
 5. GATE PLACED WHERE IT CANNOT RUN. Does a new gate need the built compiler? Then it must
    be in a CI job that builds. Check the job, not just the script.
-6. DOCS CONTRADICTING BEHAVIOUR. Run scripts/tests/check_hole_status_consistency.sh. Does
-   any comment or doc claim something the code does not do?
+6. DOCS CONTRADICTING BEHAVIOUR. Does any comment, doc comment or doc claim something the
+   code or the Lean definition does not do?
 7. VERIFIED vs ASSERTED. Mark each claim in the change: verified by running / verified by
    reading / unverified. Anything unverified that reads as verified is a finding.
 

@@ -10,7 +10,7 @@ directory containing it); legacy/P is governed as P. Rows carry a status (open |
 about the legacy/ copy only (a retained row's root file is never deleted through the manifest). No path may be listed twice, so the governing row is unique. A path with
 no listed prefix is uncovered, which `check` reports. Lives in scripts/land because the deletion
 check of the legacy/ move will read deletion authority from `govern`, and the gate that holds the
-manifest to the tree (scripts/tests/check_retention_manifest.sh) uses the same code.
+manifest to the tree (scripts/checks/retention_manifest.sh) uses the same code.
 """
 import sys
 

@@ -1,0 +1,38 @@
+# THE LEGACY ORACLE STILL REPRODUCES (ROADMAP R-0564; P13).
+#
+# Weekly, and on demand: rebuild the legacy compiler from a fresh clone of the tag in
+# scripts/oracle/ORACLE.lock and check that the binary and the packed artifact reproduce the locked
+# sha256 digests byte for byte (scripts/oracle/build.sh). A failure means the pinned inputs no longer
+# reproduce the oracle (a vanished download, a moved tag, a nondeterministic build), which must be
+# investigated before the next differential run relies on the published artifact. It never runs on
+# a push or in a train: the oracle is frozen, so nothing a candidate changes can affect this result.
+# Kept at the root by the legacy/ move (scripts/land/legacy_move.sh, prerequisite P2), whose check
+# reads exactly one unconditional step `bash scripts/oracle/build.sh`; keep that step's form.
+name: oracle
+
+on:
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: oracle-rebuild
+  cancel-in-progress: false
+
+jobs:
+  rebuild:
+    name: Oracle rebuild (reproduces ORACLE.lock)
+    runs-on: ${{ vars.CONCRETE_SELF_HOSTED == 'true' && fromJSON('["self-hosted","linux","x64","concrete"]') || 'ubuntu-latest' }}
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix (GitHub-hosted only)
+        if: runner.environment != 'self-hosted'
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Rebuild the oracle from its tag and verify both digests
+        run: bash scripts/oracle/build.sh

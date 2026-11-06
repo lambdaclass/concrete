@@ -50,4 +50,4 @@ When it was unclear whether work was committed, it was deferred.
   summarized, short, under the new roadmap's
   [rules in force](../../../ROADMAP.md#rules-in-force), each linking its dated entry here, which
   governs. A new plan decision is recorded with its date, not in the roadmap. Language decisions stay in
-  [decisions.md](../../spec/decisions.md).
+  [decisions.md](../../decisions.md).

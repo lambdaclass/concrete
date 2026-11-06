@@ -1,197 +1,21 @@
-# Lean 4
+# Lean
 /.lake
-/lake-packages
 
-# Build artifacts
-build/
-# Failed-obligation artifacts (concrete prove --emit-artifacts default dir)
-.build/
-*.so
-*.a
-*.mlir
-*.ast
-*.ll
-*.ir
-*.facts.json
+# Nix and direnv
+.direnv/
+.cache/
 
 # Editor
 .vscode/
 .env
-.direnv/
-.cache/
 
-# Compiled example binaries (extensionless, built by `concrete build`)
-examples/grep/cgrep
-# Generated benchmark input (examples/grep/gen_bench_testdata.py, run by bench.sh)
-examples/grep/bench_testdata.txt
-examples/grep/.bench_testdata.*.tmp
-examples/verify/conhash
-examples/project/project
-examples/base64_cli/base64_cli
-examples/json/main
-examples/toml/toml_parser
-examples/integrity/fcheck
-examples/kvstore/kvstore
-examples/kvstore/kvstore.log
-examples/conlog/conlog
-examples/http/http_server
-examples/lox/lox
-examples/vm/vm
-examples/mal/mal
-examples/policy_engine/policy_engine
-examples/elf_header/elf_header
-examples/packet/packet
-examples/fixed_capacity/fixed_capacity
-examples/crypto_verify/crypto_verify
-examples/parse_validate/parse_validate
-examples/proof_pressure/proof_pressure
-examples/service_errors/service_errors
-examples/byte_view/http_header_view/http_header_view
-examples/byte_view/tlv_packet_view/tlv_packet_view
-examples/byte_view/utf8_text_slice/utf8_text_slice
-examples/byte_view/wrong_buffer/wrong_buffer
-
-# C benchmark binaries (compiled from bench_c.c)
-examples/grep/cgrep_c
-examples/json/bench_c
-examples/verify/conhash_c
-examples/vm/bench_c
-examples/mal/bench_c
-examples/policy_engine/bench_c
-
-# Compiled test binaries (keep .con sources, ignore extensionless binaries)
-tests/programs/builtin_method_no_import/builtin_method_no_import
-tests/programs/adversarial_module_newtype_across
-tests/programs/adversarial_newtype_consume
-tests/programs/bug_field_assign_narrow_field
-tests/programs/newtype_basic
-tests/programs/newtype_copy
-tests/programs/newtype_enum_payload
-tests/programs/newtype_generic
-tests/programs/newtype_linear
-tests/programs/newtype_method_dispatch
-tests/programs/newtype_struct_copy_field
-tests/programs/newtype_validated
-tests/programs/summary_import_pub_newtype
-# Compiled adversarial test binaries (one per .con under each area folder)
-tests/programs/adversarial/*/[!.]*
-!tests/programs/adversarial/*/*.con
-
-lean_tests/trait_numeric_abs
-lean_tests/cap_alias_basic
-lean_tests/cap_alias_pub
-lean_tests/union_basic
-*.con.test
-
-# Compiled checker binaries
-scripts/check_ll1
-scripts/check_ll1_rs
-
-# Test failure artifacts
-.test-failures/
-
-# Second-kernel (Rocq/Isabelle) scratch artifacts, if a checker runs in-tree
-.concrete-cache/
-.lia.cache
-*.vo
-*.vok
-*.vos
-*.glob
-
-# Performance baselines (machine-specific)
-.perf-baseline
-
-# Temporary
-/tmp/
-
-# Release bundles (regenerable via scripts/tests/capture_release_bundle.sh)
-out/release/
-
-# Generated paper artifacts
-paper/*.pdf
-site/public/
-# generated from docs/spec by scripts/spec/spec.py site (docs/spec/MAINTAINERS.md §4)
-site/content/spec/
-tmp/
-.claude/scheduled_tasks.lock
-
-# `concrete build` outputs left in example project dirs by policy/build gates
-examples/constant_time_tag/constant_time_tag
-examples/hmac_sha256/hmac_sha256
-examples/smt/policy_allow/smt_policy_allow
-examples/crypto_verify/crypto_verify
-examples/parse_validate/parse_validate
-examples/fixed_capacity/fixed_capacity
-examples/service_errors/service_errors
-examples/obligation_core_probe/obligation_core_probe
-examples/contract_negatives/obligation_redteam/obligation_redteam
-examples/smt/policy_forbid/smt_policy_forbid
-examples/patterns/byte_ranges/byte_ranges
-examples/defer/cleanup_order/cleanup_order
-
-# Python bytecode cache (compiled test/tooling scripts)
+# Python bytecode (tooling scripts)
 __pycache__/
 *.pyc
-examples/png_chunks/png_chunks
-examples/hexdump/hexdump
-examples/tar_list/tar_list
-examples/envcfg/envcfg
-examples/wordfreq/wordfreq
-examples/httpget/httpget
-examples/tcpserve/tcpserve
-examples/lzpack/lzpack
-examples/stackvm/stackvm
-examples/smt/policy_allow/src/main
-examples/cli_tool/cli_tool
-tests/programs/adversarial_policy_deny_pass/adversarial_policy_deny_pass
-tests/programs/adversarial_policy_empty/adversarial_policy_empty
-.mutation.lock/
-.mutbak
 
-# Machine-readable result of the last `run_tests.sh`. Written only on normal completion, so its
-# ABSENCE means the run died mid-way — which is why consumers read this file rather than parsing
-# output that stdout/stderr interleaving can corrupt.
-.test-summary
-.gate.lock/
-.gate.lock.reclaim/
-.ci-gates-summary
-.ci-gate-failures/
-.ci-gate-timings.tsv
-.mutation-campaign-summary
-.mutation-campaign-summary.partial
-.mutation-failures/
-.mutation-campaign-summary.partial.*
-.mutation-campaign-summary.??????
-.mutation-evidence/
-.mutation-campaign-summary.candidate
-
-# Transient artifact of check_receipt_consumption.sh: it creates this UNTRACKED file to
-# prove receipts survive worktree noise, then removes it. An interrupted run leaves it
-# behind, and it was once swept into a commit — which would have inverted the very
-# premise the gate is testing. Ignored so that cannot happen again.
-.receipt-worktree-noise/
-
-# Compiled fixtures under tests/regressions/. `concrete build` emits a binary named after
-# the project beside its sources; the gates build out of tree with `-o`, but a manual run
-# leaves one behind and it was once staged. The sources are matched explicitly below so a
-# new fixture is never silently ignored.
-tests/regressions/*/*/*
-!tests/regressions/*/*/
-!tests/regressions/*/*/Concrete.toml
-!tests/regressions/*/*/assumptions.toml
-!tests/regressions/*/*/src/
-!tests/regressions/*/src/*.con
-!tests/regressions/*/*/src/*.con
-!tests/regressions/*/README.md
-
-# Raw review output of scripts/review/review.sh (R-0544): .review/<sha>-<round>.md
+# Raw review output of scripts/review/review.sh: .review/<sha>-<round>.md
 .review/
 
-# CI triage reports (scripts/ci/triage.sh writes .triage/<run>.md and rerun markers)
-/.triage/
-site/content/reference/
-
-# Browser compiler build outputs (scripts/browser/build-site-compiler.sh; the site deployment builds them)
-site/static/compiler/concrete.mjs
-site/static/compiler/concrete.wasm
-site/static/compiler/manifest.json
+# Scratch
+/tmp/
+.claude/scheduled_tasks.lock

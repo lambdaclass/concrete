@@ -12,7 +12,7 @@
 # 2. Reads the log. The run counts only when run-at-ref printed exactly one start and one exit line
 #    and both name HEAD's SHA. A run at any other SHA, a lost connection, an unreachable host or a log
 #    without the exit line is NO RESULT.
-# 3. On a pass, keeps the log and writes the remote attestation (scripts/tests/lib/prepush_record.sh)
+# 3. On a pass, keeps the log and writes the remote attestation (scripts/checks/lib/prepush_record.sh)
 #    so the `ci` push's hook can reuse this run instead of running the gates on this machine. A pass
 #    whose host wrote no record still passes the leg, and says that the push will run the gates here.
 #
@@ -44,9 +44,9 @@ head="$(git rev-parse --verify "$head^{commit}" 2>/dev/null)" || incomplete "--h
 base="$(git rev-parse --verify "$base^{commit}" 2>/dev/null)" || incomplete "--base is not a commit"
 [ "$(git rev-parse HEAD)" = "$head" ] || incomplete "the checkout is not at --head ${head:0:10}"
 # The record library of the checkout this script belongs to (the train checkout, in practice).
-# shellcheck source=scripts/tests/lib/prepush_record.sh
-source "$SELF_DIR/../tests/lib/prepush_record.sh" 2>/dev/null && ts_require 2>/dev/null \
-  || incomplete "scripts/tests/lib/prepush_record.sh did not load"
+# shellcheck source=scripts/checks/lib/prepush_record.sh
+source "$SELF_DIR/../checks/lib/prepush_record.sh" 2>/dev/null && ts_require 2>/dev/null \
+  || incomplete "scripts/checks/lib/prepush_record.sh did not load"
 TRANSPORT="${LAND_GATES_TRANSPORT:-$SELF_DIR/gates_transport_ssh.sh}"
 [ -x "$TRANSPORT" ] || [ -f "$TRANSPORT" ] || incomplete "no transport at $TRANSPORT"
 

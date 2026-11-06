@@ -1,7 +1,7 @@
 # Owner decisions of 2026-11-05: the decided rows
 
 These files are the record of the decision page the owner answered on 2026-11-05. The summary and
-the revisions they approve are in [decisions.md](../../spec/decisions.md#decided-2026-11-05), which
+the revisions they approve are in [decisions.md](../../decisions.md#decided-2026-11-05), which
 governs.
 
 - `core_rows.json`: the 88 Core rows (Q1.1 – Q9.19). Each has the question, options, reason,
