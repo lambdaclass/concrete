@@ -1,5 +1,16 @@
-{"version": "1.1.0",
+{"version": "1.2.0",
  "packagesDir": ".lake/packages",
- "packages": [],
+ "packages":
+ [{"url": "https://github.com/unbalancedparentheses/lean-compiler-backend",
+   "type": "git",
+   "subDir": null,
+   "scope": "",
+   "rev": "d828ff30e2d29552cdc1ea053ac22b827c564bfd",
+   "name": "«lean-compiler-backend»",
+   "manifestFile": "lake-manifest.json",
+   "inputRev": "d828ff30e2d29552cdc1ea053ac22b827c564bfd",
+   "inherited": false,
+   "configFile": "lakefile.toml"}],
  "name": "concrete",
- "lakeDir": ".lake"}
+ "lakeDir": ".lake",
+ "fixedToolchain": false}

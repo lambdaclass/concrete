@@ -1,0 +1,101 @@
+import Concrete.BIR
+
+/-!
+# The runtime entry (both backends)
+
+PROVISIONAL (slice 0). Every backend emits `main`'s body as `concrete_body`, returning the result
+word (`Concrete.BIR.encode`). The runtime entry is fixed: it calls the body and then
+
+* exits with the word if it is below 256;
+* otherwise writes the trap line of site `word - 256` to descriptor 2 (looping on partial writes,
+  ignoring write errors) and exits 134 (`ConcreteSpec.Observe.Observation.status`);
+* aborts on a word that encodes nothing (no well-formed body returns one, `emit_encodes`).
+
+Its correctness is premise `P_rt`, and the site it reports is premise `P_trap_site`
+(`Concrete/README.md`). This file emits it as LLVM text and as QBE text for LCB.
+
+The trap line's bytes are PROVISIONAL: OD101 decides its content (one line naming the trap and its
+location) but not its form, which is open with the owner.
+-/
+
+namespace Concrete.Backend.Runtime
+open Concrete.BIR
+open ConcreteSpec (IntTy Trap)
+
+/-- The trap's name in the trap line. -/
+def trapName : Trap → String
+  | .arithmeticOverflow => "arithmetic overflow"
+
+/-- The trap line for one site (PROVISIONAL form), without the final newline. -/
+def trapLine (e : SiteEntry) : String :=
+  s!"concrete: trap: {trapName e.kind} at site {e.site.id} (bytes {e.span.start}..{e.span.stop})"
+
+/-- Pair every element with its index. -/
+def indexed {α : Type} (l : List α) : List (Nat × α) := (List.range l.length).zip l
+
+/-- An LLVM `c"..."` string body: printable ASCII except `"` and `\` verbatim, everything else hex. -/
+def llvmEscape (s : String) : String :=
+  String.join (s.toList.map fun c =>
+    let n := c.toNat
+    if 32 ≤ n ∧ n < 127 ∧ c ≠ '"' ∧ c ≠ '\\' then c.toString
+    else
+      let hex := Nat.toDigits 16 n
+      "\\" ++ String.ofList ((if hex.length < 2 then ['0'] else []) ++ hex.map Char.toUpper))
+
+/-- The runtime entry as LLVM text, for the site table `tbl`. -/
+def llvm (tbl : SiteTable) : String :=
+  let sites := indexed tbl
+  let globals := sites.map fun (i, e) =>
+    let line := trapLine e ++ "\n"
+    s!"@.site{i} = private constant [{line.utf8ByteSize} x i8] c\"{llvmEscape line}\"\n"
+  let cases := String.join (sites.map fun (i, _) => s!" i32 {i}, label %t{i}")
+  let traps := sites.map fun (i, e) =>
+    s!"t{i}:\n  call void @concrete_rt_write_all(ptr @.site{i}, i64 {(trapLine e ++ "\n").utf8ByteSize})\n" ++
+    "  call void @_exit(i32 134)\n  unreachable\n"
+  String.join globals ++
+  "declare i64 @write(i32, ptr, i64)\n" ++
+  "declare void @_exit(i32)\n" ++
+  "declare void @abort()\n\n" ++
+  "define internal void @concrete_rt_write_all(ptr %p, i64 %n) {\n" ++
+  "entry:\n  br label %loop\n" ++
+  "loop:\n  %pp = phi ptr [ %p, %entry ], [ %np, %more ]\n" ++
+  "  %nn = phi i64 [ %n, %entry ], [ %rest, %more ]\n" ++
+  "  %done = icmp eq i64 %nn, 0\n  br i1 %done, label %out, label %wr\n" ++
+  "wr:\n  %k = call i64 @write(i32 2, ptr %pp, i64 %nn)\n" ++
+  "  %bad = icmp sle i64 %k, 0\n  br i1 %bad, label %out, label %more\n" ++
+  "more:\n  %np = getelementptr i8, ptr %pp, i64 %k\n  %rest = sub i64 %nn, %k\n  br label %loop\n" ++
+  "out:\n  ret void\n}\n\n" ++
+  "define i32 @main() {\n" ++
+  "entry:\n  %w = call i32 @concrete_body()\n  %ok = icmp ult i32 %w, 256\n" ++
+  "  br i1 %ok, label %exit, label %trap\n" ++
+  "exit:\n  ret i32 %w\n" ++
+  "trap:\n  %i = sub i32 %w, 256\n" ++
+  s!"  switch i32 %i, label %bad [{cases} ]\n" ++
+  String.join traps ++
+  "bad:\n  call void @abort()\n  unreachable\n}\n"
+
+/-- The runtime entry as QBE text for LCB, for the site table `tbl`. The line contains no `"` or
+`\` (see `trapLine`), so it is passed as a plain QBE string; its newline is a separate byte. -/
+def qbe (tbl : SiteTable) : String :=
+  let sites := indexed tbl
+  let datas := sites.map fun (i, e) => s!"data $site{i} = \{ b \"{trapLine e}\", b 10 }\n"
+  let dispatch := sites.map fun (i, e) =>
+    s!"@c{i}\n    %c{i} =w ceqw %i, {i}\n    jnz %c{i}, @t{i}, @c{i + 1}\n" ++
+    s!"@t{i}\n    call $concrete_rt_write_all(l $site{i}, l {(trapLine e ++ "\n").utf8ByteSize})\n" ++
+    "    call $_exit(w 134)\n    ret 0\n"
+  String.join datas ++
+  "function $concrete_rt_write_all(l %p, l %n) {\n" ++
+  "@start\n    jmp @loop\n" ++
+  "@loop\n    %done =w ceql %n, 0\n    jnz %done, @out, @wr\n" ++
+  "@wr\n    %k =l call $write(w 2, l %p, l %n)\n    %bad =w cslel %k, 0\n    jnz %bad, @out, @more\n" ++
+  "@more\n    %p =l add %p, %k\n    %n =l sub %n, %k\n    jmp @loop\n" ++
+  "@out\n    ret\n}\n\n" ++
+  "export function w $main() {\n" ++
+  "@start\n    %w =w call $concrete_body()\n    %ok =w cultw %w, 256\n    jnz %ok, @exit, @trap\n" ++
+  "@exit\n    ret %w\n" ++
+  "@trap\n    %i =w sub %w, 256\n    jmp @c0\n" ++
+  String.join dispatch ++
+  s!"@c{tbl.length}\n    call $abort()\n    ret 0\n" ++
+  "}\n"
+
+end Concrete.Backend.Runtime

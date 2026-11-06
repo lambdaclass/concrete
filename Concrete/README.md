@@ -1,29 +1,16 @@
 # The Concrete compiler: slice 0 design (provisional)
 
-PROVISIONAL. This is a design sketch, revision 8. It was written after seven Codex and agy review rounds, and folds in the Codex/agy/Kimi pipeline review (2026-11-06), and there is no code yet. Slice 0 is the first compiler slice. It is built before the owner freezes Core (A2c) and makes no normative claim before that freeze ([decision](../docs/decisions.md#decided-project-proof-infrastructure)). Branch `wip/slice0` depends on `wip/spec-root`, which puts `ConcreteSpec` on the new root, and is rebased onto main (under a new branch name) once that lands.
+PROVISIONAL. This is a design sketch, revision 8, written after eight Codex and agy review rounds. It folds in the Codex/agy/Kimi pipeline review and the owner's answers (2026-11-06). Build step 1 (BIR as the shared backend contract) is implemented: `Concrete/BIR.lean` and `Concrete/Backend/`, gate `scripts/checks/slice0_backends.sh`. Slice 0 is the first compiler slice. It is built before the owner freezes Core (A2c) and makes no normative claim before that freeze ([decision](../docs/decisions.md#decided-project-proof-infrastructure)). Branch `wip/slice0` depends on `wip/spec-root`, which puts `ConcreteSpec` on the new root, and is rebased onto main (under a new branch name) once that lands.
 
-## What slice 0 accepts
+## Scope
 
-Slice 0 has one source file and no imports or grants. Its forms:
-- a parameterless `fn main() -> u8`;
-- immutable `let` bindings of explicitly typed `u8` values;
-- decimal `u8` literals;
-- reads of locals;
-- grouping with parentheses;
-- checked `+`;
-- a final `return`.
+This document describes **the compiler**: its stages, IRs, proof strategy, premises and gates. Language rules are not restated here. They live in `ConcreteSpec`, and this document links to them:
+- the slice-0 fragment and its examples: [`ConcreteSpec/Spec/Slice0.lean`](../ConcreteSpec/Spec/Slice0.lean);
+- its behaviour theorems: [`ConcreteSpec/Proofs/Slice0.lean`](../ConcreteSpec/Proofs/Slice0.lean);
+- what the parent process observes, including the trap status and the trap line: [`ConcreteSpec/Spec/Observation.lean`](../ConcreteSpec/Spec/Observation.lean);
+- the slice-0 surface (token rules, grammar, elaboration): the new `ConcreteSpec/Spec/Surface0.lean` described below.
 
-Every other form is refused as unsupported.
-
-The required examples:
-- exit 42 (`20 + 22`);
-- exit 255, the boundary;
-- refusals:
-  - a known overflow;
-  - an out-of-range literal;
-  - an unused binding;
-  - an undeclared local;
-  - malformed input.
+The conformance corpus (`tests/slice0/`) instantiates those spec examples as source files.
 
 ## The pipeline
 
@@ -193,36 +180,18 @@ The root inventory (`scripts/checks/root_inventory.txt`) lists each new root ent
 
 ## Frontend specifications (new spec file `ConcreteSpec/Spec/Surface0.lean`)
 
-These are new files only. No existing spec file changes, so there is no conflict with the spec worker. This is spec open item O1, for slice 0 only.
+This file is spec work (open item O1, slice 0 only). It is a new file, and no existing spec file changes. The language content lives in the Lean file, not here: the token rules (SYN-5/SYN-6, plus the owner's decision that leading-zero literals are refused), the grammar and the elaboration relation. What the compiler needs from it:
 
-- **Bytes.** Non-UTF-8 input is refused before lexing (SYN-5).
-- **Lexical spec `Lexes : Bytes → List Token → Prop`.** It is defined independently of the lexer:
-  - maximal munch;
-  - trivia: spaces, newlines and `//` comments, all consumed;
-  - EOF must be consumed;
-  - every byte is covered exactly once by a token or by trivia;
-  - payloads: identifier strings and decimal values.
+- **`Lexes : Bytes → List Token → Prop`**, an independent byte-level judgment. The lexer is proved sound and complete against it, which rules out splitting a token.
+- **The grammar as data**, which must be LL(1), plus **`ll1 : Grammar → Bool`**, which computes nullable, FIRST and FOLLOW sets. It comes with `ll1_sound : ll1 g = true → ∀ n t, at most one production of n is predicted on t`. The fact `ll1 grammar0 = true` is proved by `decide`. The generic table parser is proved against `Derives`.
+- **`Derives : List Token → Surface.Program → Prop`**, which binds token payloads, not only token kinds.
+- **`Elab : Surface.Program → Slice0.Program → Prop`**, with the compiler's theorems `elab_fresh` (temporaries never collide with user names) and `elab_rename_invariant` (renaming temporaries changes neither acceptance nor outcome).
+- **Refusal classes**, as the spec defines them:
+  - a syntax error;
+  - "not supported in slice 0", for a decided form outside the fragment (owner, 2026-11-06);
+  - a checker refusal.
 
-  The lexer's theorem is soundness plus completeness against `Lexes`, which rules out splitting `ab` into `a b` or `256` into `25 6`. Literals with a leading zero are open owner question 3.
-- **The grammar as data:**
-  ```
-  program  = 'fn' IDENT '(' ')' '->' IDENT block ;
-  block    = '{' let_list 'return' expr ';' '}' ;
-  let_list = 'let' IDENT ':' IDENT '=' expr ';' let_list | ε ;
-  expr     = term expr_tail ;
-  expr_tail= '+' term expr_tail | ε ;
-  term     = INT | IDENT | '(' expr ')' ;
-  ```
-  It is right-factored, so it is LL(1). The nullable nonterminals are `let_list` and `expr_tail`.
-- **The LL(1) checker `ll1 : Grammar → Bool`.** It computes nullable, FIRST and FOLLOW sets and checks for conflicts. It comes with `ll1_sound : ll1 g = true → ∀ n t, at most one production of n is predicted on t`. The fact `ll1 grammar0 = true` is proved by `decide`.
-- **`Derives : List Token → Surface.Program → Prop`.** It binds token payloads, not only token kinds.
-- **`Elab : Surface.Program → Slice0.Program → Prop`.** It:
-  - left-associates `+` chains, preserving the decided left-to-right order (STMT-4);
-  - introduces ANF temporaries;
-  - refuses duplicate names (no shadowing) and undeclared names;
-  - refuses a function name other than `main`, or a type other than `u8`, as "unsupported in slice 0".
-
-  Two theorems come with it: `elab_fresh` (temporaries never collide with user names) and `elab_rename_invariant` (renaming temporaries changes neither acceptance nor outcome).
+  The compiler reports exactly the class that the spec judgment gives.
 - **`Denotes src q := ∃ toks ast, Lexes src toks ∧ Derives toks ast ∧ Elab ast q`.** Its theorem is `denotes_behaviour_det` (see the theorem section).
 
 ## Behaviours: the fuel-free semantic interface
@@ -354,12 +323,13 @@ There are two target profiles: `x86_64-linux` and `aarch64-linux`. The LLVM back
 | P_toolchain[llvm] | toolchain | not planned |
 | P_toolchain[lcb] | toolchain | LCB's own proofs (C01–C03 and beyond) |
 | P_rt | implementation | a proof of the decoding entry against a libc model; not planned for slice 0 |
+| P_trap_site | implementation | the same runtime-entry proof (owner, 2026-11-06: a premise now) |
 | P_launch | environment | not planned |
 | P_live | environment | not planned |
 
 The fd-2 condition is part of the admitted launch, so it is inside P_launch (environment).
 
-**Trap-site identity in the executable is not part of the theorem.** The theorem covers the trap kind. The theorem `trap_site_correct` covers the site at IR level. The site that the executable reports on fd 2 is **tested** (gates 4 and 6 compare it), not proved. It becomes a claim only with a native observation-site obligation. That obligation would be a new premise and needs owner approval.
+**The trap site the executable reports is covered by premise `P_trap_site`** (owner, 2026-11-06). `trap_site_correct` proves the site at IR level. The executable's report is assumed: `Native` gains `ReportsSite : TargetProfile → Image → SiteId → Prop`, and a field states that a launch whose body returns `256 + i` reports `tbl[i].site` on fd 2. Gates 4 and 6 test it. A proof of the runtime entry retires it, together with `P_rt`.
 
 P_lex and P_parse are also discharged for each compilation by the certificate.
 
@@ -549,7 +519,7 @@ Human output, JSON and future policies all render the same `Report`.
 - the digests of the compiler, spec, target, backend (LLVM or LCB, with the pinned LCB rev) and artifact. Artifact facts are per backend artifact, and their premise identities are per backend;
 - the replay command.
 
-The **CLI spellings are placeholders** (`concrete facts FILE [FN]`, `concrete build FILE -o OUT`), pending the owner.
+The CLI is `concrete facts FILE [FN]` and `concrete build FILE -o OUT` (owner, 2026-11-06).
 
 ## Gates (CI jobs, added to `required-checks.txt`)
 
@@ -603,17 +573,17 @@ The **CLI spellings are placeholders** (`concrete facts FILE [FN]`, `concrete bu
 
 Heavy runs (native builds, differentials, certificates) run on concrete-ci-2 or GitHub runners, never as full local runs.
 
-## Open questions for the owner (none blocks the skeleton)
+## Owner decisions (2026-11-06)
 
-1. The CLI spellings: the compiler command and the facts query. The placeholders are `concrete build` and `concrete facts`.
-2. Whether a decided form that slice 0 doesn't support (`0x2A`, `let mut`, `if`) gets a dedicated "unsupported in slice 0" refusal, distinct from a syntax error. That is proposed.
-3. Decimal literals with leading zeros, such as `007`: SYN-6 is silent. Slice 0 refuses them as unsupported until the owner decides.
-4. Whether to add a native observation-site premise, so that the trap **site** reported by the executable becomes a claim rather than a tested property. It would be a new premise, and holes only shrink.
+1. The CLI is `concrete build FILE -o OUT` and `concrete facts FILE [FN]`.
+2. A decided form outside slice 0 (`0x2A`, `let mut`, `if`) gets a distinct "not supported in slice 0" refusal, separate from a syntax error.
+3. Leading-zero literals such as `007` are refused: one form per number. This is recorded in `Surface0.lean`.
+4. The trap site that the executable reports is a named premise now, `P_trap_site`, which a proof retires later.
+5. Both backends are in slice 0. This is being recorded on `wip/decisions-followup`.
+6. Information flow and constant time are decided: `Secret<T>`, `classify`/`declassify(x, "reason")`, `ct_select`/`ct_eq`, and the baseline observer (branches, addresses and variable-time operations; speculation not covered). Slice 0 carries only the fact fields.
+7. OS sandboxing of the launcher is out of scope for the compiler.
 
-Resolved:
-- Both backends in slice 0: being recorded on `wip/decisions-followup`.
-- Information flow and constant time are decided by the owner: `Secret<T>`, `classify`/`declassify(x, "reason")`, `ct_select`/`ct_eq`, and a baseline observer (branches, addresses and variable-time operations; speculation not covered). Slice 0 carries only the corresponding fact fields; the analysis comes with the slices that need it.
-- OS sandboxing of the launcher is out of scope for the compiler (owner).
+Open: the exact bytes of the trap line. Its content is decided by OD101 (one line naming the trap and its location), but its form is not; the spec does not model the bytes. Until the owner fixes them, the runtime prints the provisional placeholder `concrete: trap: <kind> at <site>`.
 
 ## Follow-ups (recorded after the final review round, round 8)
 
@@ -639,6 +609,23 @@ These are internal. None blocks slice 0's correctness.
 - **The spec's pre-decision admission rule** (`knownViolates`-only refusal, `RangeOk`, R-0574). It does not bite slice 0, where every value is known. It must be closed before the language grows unknown values.
 - **Generated views:** the stage, premise and fact tables here become views of the Lean registries, gated against drift.
 - **Rebase:** rebase onto main, under a new branch name, when `wip/spec-root` lands.
+- **Slice order after slice 0** (owner, 2026-11-06). Each slice is a thin vertical slice, proven end to end:
+  1. integers complete: all widths, wrapping/saturating, comparisons, bitwise, shifts;
+  2. capabilities: `main` grants, `with(Console)`, writing an integer, with output compared across both backends and the Lean interpreter;
+  3. `bool`/`if`/`while` and `#[variant]`;
+  4. functions, calls, recursion, capabilities through calls, contracts;
+  5. the trap checker;
+  6. `Secret<T>` on scalars;
+  7. enums, `match`, `Result` and `checked_*`;
+  8. structs and ownership;
+  9. borrows;
+  10. allocation, arrays and memory bounds.
+- **Extension without reshaping.** BIR's integer types are the spec's `IntTy`: all eight widths and both signednesses, with values as in-range mathematical integers. `BinOp` grows the bitwise operations, shifts and comparisons. Saturating and checked operations lower to `binOvf` plus branches or selects.
+  - **The LCB adapter** covers types up to 16 bits today, where exact results fit a word. For 32 and 64 bits it needs `long` intermediates and a different overflow test, because LCB's verified profile has no extension operations.
+  - **Slice 2** turns console output into an observation beyond the exit code. `Behaviour` gains an event trace, and BIR gains an effect instruction naming its capability. The runtime entry gains the grant table and the startup refusal (status 125).
+  - **The result word** keeps encoding only how the run ends.
+  - **LCB's verified profile has no calls**, so slice 2 needs LCB calls in that profile, or an event protocol through the result. That needs agreeing with LCB.
+- **BIR well-formedness** does not yet check that every use is dominated by its definition. Add the check, with its proof, before `ssa_correct` relies on it.
 
 ## Not in slice 0
 

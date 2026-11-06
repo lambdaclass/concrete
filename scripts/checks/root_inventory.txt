@@ -12,6 +12,7 @@ AGENTS.md
 CHANGELOG.md
 CLAUDE.md
 Concrete
+Concrete.lean
 ConcreteSpec
 ConcreteSpec.lean
 ISSUES.tsv
