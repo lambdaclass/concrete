@@ -39,8 +39,6 @@ nonstandard() {
 }
 # golden_diff INVENTORY GOLDEN → the differing lines, empty when equal
 golden_diff() { diff <(grep -v '^#' "$2") "$1" | grep '^[<>]'; }
-# closure_gap IMPORTED → source modules missing from the import closure
-closure_gap() { spec_modules | comm -23 - <(sort -u "$1"); }
 
 echo "=== P: population ==="
 population imported > "$TMP/imported.txt" || { no "PROOF_MODE=imported failed"; finish; }

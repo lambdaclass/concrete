@@ -3,7 +3,9 @@
 #
 # These checks need Lean, which the gate shell does not carry: CI takes it from elan (lean-action),
 # and a check started without `lake` on PATH refuses (exit 2), never passes. Each check reads the
-# specification's built environment, so `lake build` must have run first.
+# specification's built environment, so each first runs `lake build ConcreteSpec` (a no-op when the
+# build is current): `lake env lean` would otherwise read whatever .olean files are there, stale
+# ones included, and judge a library other than the sources.
 #
 #   population MODE [CONTROL-FILE]  prints scripts/proofs/theorems.lean's view in MODE. With a
 #                                   CONTROL-FILE, the enumerator runs on a temporary copy with that
@@ -23,7 +25,8 @@ export LC_ALL=C
 
 command -v lake >/dev/null || { echo "error: $CHECK_NAME needs Lean's lake on PATH (elan)" >&2; exit 2; }
 LAKE="$(command -v lake)"
-[ -d .lake/build/lib/lean/ConcreteSpec ] || { echo "error: build the specification first (lake build)" >&2; exit 2; }
+"$LAKE" build ConcreteSpec > "$TMP/lake-build.log" 2>&1 \
+  || { tail -20 "$TMP/lake-build.log" >&2; echo "error: $CHECK_NAME: lake build ConcreteSpec failed" >&2; exit 2; }
 
 MARKER='-- CONTROL DECLARATIONS (negative controls are inserted here, in a temporary copy only)'
 [ "$(grep -cxF -- "$MARKER" "$ENUMERATOR")" = 1 ] \
@@ -42,3 +45,6 @@ population() {
 spec_modules() {
   { echo ConcreteSpec.lean; find ConcreteSpec -name '*.lean'; } | sed -E 's#\.lean$##; s#/#.#g' | sort -u
 }
+# closure_gap IMPORTED → the source modules missing from an import closure (PROOF_MODE=imported):
+# a module the root does not import is invisible to every environment check
+closure_gap() { spec_modules | comm -23 - <(sort -u "$1"); }

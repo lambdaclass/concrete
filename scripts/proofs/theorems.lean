@@ -164,7 +164,7 @@ def kind : ConstantInfo → String
 #eval show CoreM Unit from do
   let env ← getEnv
   let mode := (← IO.getEnv "PROOF_MODE").getD "theorems"
-  unless ["theorems", "encoded", "constants", "modules", "imported", "decls"].contains mode do
+  unless ["theorems", "encoded", "constants", "modules", "imported", "decls", "heads", "examples"].contains mode do
     throwError s!"unknown PROOF_MODE '{mode}'"
   if mode == "decls" then
     let some path ← IO.getEnv "PROOF_NAMES" | throwError "PROOF_MODE=decls needs PROOF_NAMES"
@@ -189,7 +189,13 @@ def kind : ConstantInfo → String
     IO.FS.writeFile out ("\n".intercalate st.out.toList ++ "\n")
     return
   let mut rows : Array String := #[]
-  if mode == "imported" then
+  if mode == "examples" then
+    -- The declarations scripts/proofs/lean_lex.py made from `example`s (scripts/proofs/trust_ban.sh).
+    for (n, _) in env.constants.map₁.toList ++ env.constants.map₂.toList do
+      if let .str _ s := n then
+        if s.startsWith "⟪example⟫" then
+          rows := rows.push s!"{n}\t{" ".intercalate (((← collectAxioms n).map toString).qsort (· < ·)).toList}"
+  else if mode == "imported" then
     for m in env.header.moduleNames do
       if m.getRoot == `ConcreteSpec then rows := rows.push (nm m)
   else
@@ -206,6 +212,14 @@ def kind : ConstantInfo → String
             if let some m := env.header.moduleNames[i.toNat]? then rows := rows.push (nm m)
         else if mode == "encoded" then
           rows := rows.push s!"{n}\t{enc n}"
+        else if mode == "heads" then
+          -- A universe-monomorphic theorem whose statement is, as written, an inductive type
+          -- applied to arguments (no binder). Such a statement is in weak head normal form, so two
+          -- statements with different inductive heads are never definitionally equal.
+          if ci.levelParams.isEmpty then
+            if let .const h _ := ci.type.getAppFn then
+              if let some (.inductInfo _) := env.find? h then
+                rows := rows.push s!"{enc n}\t{enc h}"
         else
           rows := rows.push s!"{n}\t{← axs ()}"
   for r in (rows.qsort (· < ·)).toList.eraseDups do IO.println r

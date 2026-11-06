@@ -13,9 +13,10 @@ def inSpec (env : Environment) (n : Name) : Option Name := do
 
 #eval show CommandElabM Unit from do
   let env ← getEnv
-  -- module docs
+  -- the modules of the library's import closure, and their docs
   for m in env.header.moduleNames do
     if m.getRoot == `ConcreteSpec then
+      IO.println (Json.compress (Json.mkObj [("kind", "module"), ("module", toString m)]))
       let docs := (getModuleDoc? env m).getD #[]
       for d in docs do
         IO.println (Json.compress (Json.mkObj [("kind", "moduleDoc"), ("module", toString m),
@@ -24,7 +25,9 @@ def inSpec (env : Environment) (n : Name) : Option Name := do
   -- declarations
   let mut names : Std.HashSet Name := {}
   for (n, _) in env.constants.map₁.toList do
-    if (inSpec env n).isSome && !n.isInternal then
+    -- a private declaration is written source too (its name is internal only by encoding)
+    let written := !n.isInternal || (isPrivateName n && !(privateToUserName n).isInternal)
+    if (inSpec env n).isSome && written then
       if (← liftCoreM (findDeclarationRanges? n)).isSome then names := names.insert n
   for n in names.toList do
     let some ci := env.find? n | continue
@@ -37,7 +40,10 @@ def inSpec (env : Environment) (n : Name) : Option Name := do
     let doc := (← findDocString? env n).getD ""
     let ty := (← liftTermElabM (Meta.ppExpr ci.type)).pretty 100
     let used := (ci.getUsedConstantsAsSet.toList.filter (fun c => names.contains c && c != n)).map toString
+    let user := privateToUserName n
+    let last := match user with | .str _ s => s | _ => ""
     IO.println (Json.compress (Json.mkObj [("kind", kind), ("name", toString n),
+      ("display", toString user), ("last", last), ("private", toJson (isPrivateName n)),
       ("module", toString m), ("line", r.selectionRange.pos.line), ("endLine", r.range.endPos.line),
       ("selCol", r.selectionRange.pos.column), ("selEndLine", r.selectionRange.endPos.line),
       ("selEndCol", r.selectionRange.endPos.column),

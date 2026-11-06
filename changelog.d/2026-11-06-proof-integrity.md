@@ -8,8 +8,12 @@ own negative controls:
   equals the golden list `scripts/proofs/axioms.golden` (regenerated with `--update` in the commit that changes it).
 - **Proof trust ban** (`trust_ban.sh`): no constant of any kind depends on `sorryAx`,
   `Lean.ofReduceBool`/`ofReduceNat`, `Lean.trustCompiler` or a generated native axiom; the library
-  declares no axiom; and the sources never spell `sorry` or `native_decide` outside comments, which
-  also covers `example`s the environment does not keep.
+  declares no axiom; every `example` (which Lean checks and then discards) depends only on the
+  standard axioms, checked by building a copy of the library in which each example is a named
+  declaration; and, as defence in depth, the library builds with warnings as errors and the sources
+  (lexed by `scripts/proofs/lean_lex.py`, the one Lean lexer, also used by the owner view) never
+  spell `sorry`, `native_decide` or the like outside comments, set no option, run no meta code,
+  define no syntax and import nothing outside the library.
 - **Kernel replay** (`kernel_replay.sh`): `leanchecker --fresh ConcreteSpec` replays the whole
   closure into an empty kernel environment, and `leanchecker ConcreteSpec` module by module; a
   declaration forged with `debug.skipKernelTC` is the control.

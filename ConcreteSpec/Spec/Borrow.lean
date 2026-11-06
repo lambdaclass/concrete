@@ -123,14 +123,11 @@ counted in elements for an array and in bytes for text; text also needs both off
 scalar boundaries (R4 F4.2: `0`, the length, or an offset whose byte is not a continuation byte
 `0b10xxxxxx`). If the range is valid, the body runs with `v`, indexed relative to `a`, under the
 access rules of `borrow [mut] src as v { body }` (`Ok`): the view keeps the source's root, and a
-mutable open freezes it. If the range is invalid, `else` runs; without `else` the program traps,
-like indexing out of range. A range statically known to be invalid is refused when there is no
-`else` (OD118, everywhere, including trusted code) and accepted when there is one, whose `else`
-then runs as ordinary branching (Q4.7). This is the rule of Q4.7 as decided on 2026-11-05. The
-no-hidden-traps decision of 2026-11-06 revises it: the form without `else` needs evidence of a
-valid range, not only the absence of a proven invalid one. That migration is open A2i work
-(R-0574); until it lands, this fragment admits a range without `else` whose bounds are unknown.
-Without a range there is no `else` (the whole view always opens). Element access, the no-escape rules and text validity follow the examples below.
+mutable open freezes it. If the range is invalid, `else` runs. Without `else` the range needs
+checked evidence that it is valid (no hidden traps, decision of 2026-11-06, revising Q4.7), so the
+form without `else` never reaches the run-time trap the semantics keeps for unchecked Core
+(`openRange`); with `else` any range is accepted, and an invalid one runs `else` as ordinary
+branching. Without a range there is no `else` (the whole view always opens). Element access, the no-escape rules and text validity follow the examples below.
 -/
 
 /-- A source's value at run time: an array of `len` elements, or text with its bytes. -/
@@ -190,21 +187,14 @@ def Source.edge : Source → Nat → Bool
   | .array n, i => decide (i ≤ n)
   | .text bs, i => decide (i ≤ bs.length) && boundary bs i
 
-/-- The range is proven invalid from what the checker knows (Q4.7, Q6.1): the known bounds are
-reversed (`b < a`), or a known bound cannot be an end of the known source. These are all the
-cases: the range is known invalid exactly when every source and bounds agreeing with the facts
-fail the range test (`knownInvalid_iff`, `Proofs/Borrow.lean`), so a partial fact such as
-`from 5 until 2` over an unknown source is enough. -/
-def knownInvalid (k : RangeFacts) : Bool :=
-  (match k.a, k.b with
-   | some a, some b => decide (b < a)
-   | _, _ => false) ||
-  (match k.src, k.a with
-   | some s, some a => !s.edge a
-   | _, _ => false) ||
-  (match k.src, k.b with
-   | some s, some b => !s.edge b
-   | _, _ => false)
+/-- The range is proven valid from what the checker knows (no hidden traps, decision of 2026-11-06,
+revising Q4.7): the source and both bounds are known and pass the range test. This fragment's
+facts are known values (Q6.2); bounds the checker relates without knowing them (an octagon fact
+such as `b ≤ len(src)` from a guard) are part of the checker of R-0574, not stated here. -/
+def knownValid (k : RangeFacts) : Bool :=
+  match k.src, k.a, k.b with
+  | some s, some a, some b => validRange s a b
+  | _, _, _ => false
 
 /-- A run-time source and bounds agree with what the checker knows. -/
 def Agrees (k : RangeFacts) (s : Source) (a b : Nat) : Prop :=
@@ -212,16 +202,17 @@ def Agrees (k : RangeFacts) (s : Source) (a b : Nat) : Prop :=
 
 /-- The range form is accepted, from the places `Γ` to `Γ'` with the statements `rest` after it.
 Its success path is checked as the plain borrow (`Ok`, the same access rules); its failure path is
-`else` followed by `rest`, and both paths reach the same places. Without `else`, a range known to
-be invalid is refused (OD118). This is decided row Q4.7 (owner, 2026-11-05: "no else = trap (like
-indexing); proven invalid range without else refused (OD118)"). The no-hidden-traps decision of
-2026-11-06 revises it to "the form without `else` needs evidence of a valid range"; that revision
-is part of the A2i integration (R-0574) and is not yet stated here. -/
+`else` followed by `rest`, and both paths reach the same places. Without `else` the range needs
+evidence that it is valid (`knownValid`), so the form without `else` never traps
+(`range_never_traps`, `Proofs/Borrow.lean`): decided row Q4.7 as revised by the no-hidden-traps
+decision of 2026-11-06 ("the form without `else` needs evidence of a valid range; a provably
+out-of-range view index is covered by the same rule"), which subsumes OD118's refusal of a range
+proven invalid. -/
 def RangeOk (Γ : Ctx) (m : Bool) (src v : Nat) (k : RangeFacts) (body : List Stmt)
     (els : Option (List Stmt)) (rest : List Stmt) (Γ' : Ctx) : Prop :=
   Ok Γ (.borrow m src v body :: rest) Γ' ∧
     match els with
-    | none => knownInvalid k = false
+    | none => knownValid k = true
     | some e => Ok Γ (e ++ rest) Γ'
 
 /-! ### Examples
@@ -321,13 +312,17 @@ example : openRange (.text [0xC3, 0xA9, 0x21]) 0 2 false = .enter := by decide
 example : openRange (.text [0xC3, 0xA9, 0x21]) 1 3 false = .trap := by decide
 example : openRange (.text [0xC3, 0xA9, 0x21]) 3 3 false = .enter := by decide
 
-/-- `borrow xs from 2 until 9 as s { … }` over an array of 4 is known invalid: refused without
-`else`. -/
-example : knownInvalid ⟨some (.array 4), some 2, some 9⟩ = true := by decide
+/-- `borrow xs from 1 until 3 as s { … }` over an array of 4, all known: valid, so accepted
+without `else`. -/
+example : knownValid ⟨some (.array 4), some 1, some 3⟩ = true := by decide
 
+example : ∃ Γ', RangeOk x0 false 0 1 ⟨some (.array 4), some 1, some 3⟩ [.read 1] none [] Γ' :=
+  ⟨_, .borrow rfl (by decide) (by intro h; cases h) rfl (.read rfl (by decide) .nil) .nil, rfl⟩
+
+/-- `borrow xs from 2 until 9 as s { … }` over an array of 4 is invalid: refused without `else`. -/
 example : ¬ ∃ Γ', RangeOk x0 false 0 1 ⟨some (.array 4), some 2, some 9⟩ [.read 1] none [] Γ' := by
   rintro ⟨_, _, h⟩
-  exact absurd (show knownInvalid ⟨some (.array 4), some 2, some 9⟩ = false from h) (by decide)
+  exact absurd (show knownValid ⟨some (.array 4), some 2, some 9⟩ = true from h) (by decide)
 
 /-- With `else` the same range is accepted, and the `else` runs (ordinary branching). -/
 example : ∃ Γ', RangeOk x0 false 0 1 ⟨some (.array 4), some 2, some 9⟩ [.read 1] (some [.read 0])
@@ -335,19 +330,15 @@ example : ∃ Γ', RangeOk x0 false 0 1 ⟨some (.array 4), some 2, some 9⟩ [.
   ⟨_, .borrow rfl (by decide) (by intro h; cases h) rfl (.read rfl (by decide) .nil) .nil,
     .read rfl (by decide) .nil⟩
 
-/-- Partial facts can prove a range invalid: `from 5 until 2` over any source, and
-`until 9` over an array of 4 whatever the start. -/
-example : knownInvalid ⟨none, some 5, some 2⟩ = true := by decide
-example : knownInvalid ⟨some (.array 4), none, some 9⟩ = true := by decide
+/-- An unknown bound is no evidence: `from 2` with an unknown end over an array of 4 could trap,
+so without `else` it is refused. -/
+example : ¬ ∃ Γ', RangeOk x0 false 0 1 ⟨some (.array 4), some 2, none⟩ [.read 1] none [] Γ' := by
+  rintro ⟨_, _, h⟩
+  exact absurd (show knownValid ⟨some (.array 4), some 2, none⟩ = true from h) (by decide)
 
-/-- A known end inside a UTF-8 scalar is invalid whatever the other bound: `from 1` in `"é!"`. -/
-example : knownInvalid ⟨some (.text [0xC3, 0xA9, 0x21]), some 1, none⟩ = true := by decide
-
-/-- With an unknown bound that could make the range valid, the range is accepted without `else`,
-and traps if it is invalid at run time. -/
-example : ∃ Γ', RangeOk x0 false 0 1 ⟨some (.array 4), some 2, none⟩ [.read 1] none [] Γ' :=
-  ⟨_, .borrow rfl (by decide) (by intro h; cases h) rfl (.read rfl (by decide) .nil) .nil, rfl⟩
-
+/-- A known start inside a UTF-8 scalar is invalid: `from 1 until 3` in `"é!"` is refused without
+`else`. -/
+example : knownValid ⟨some (.text [0xC3, 0xA9, 0x21]), some 1, some 3⟩ = false := by decide
 
 /-! ### No escape (Q3.3, Q4.7)
 
@@ -391,7 +382,10 @@ example : ¬ ∃ Γ', Ok x0 [.borrow true 0 1 [], .read 1] Γ' := by
 
 The run of array sources and range views. Memory maps each owner place to its elements; a view
 is its source place, its range `[a, b)` and whether it is mutable. `v[i]` reads or writes the
-source's element `a + i` when `i < b - a`, and traps otherwise, like indexing (Q4.7). Opening a
+source's element `a + i` when `i < b - a`, and traps otherwise, like indexing (Q4.7). This is
+the run-time semantics, which keeps the trap for unchecked Core; this fragment has no admission
+rule for element access. Under the no-hidden-traps decision (2026-11-06) an accepted `v[i]` needs
+evidence that `i < b - a`; that rule comes with the A2i checker (R-0574). Opening a
 range runs the range test of `openRange`; the view exists only inside its block. The results
 (`Proofs/Borrow.lean`): an access through a view reaches exactly the source element `a + i`,
 which lies in `[a, b)` and inside the source, or traps (`view_get`, `view_set`, `view_in_source`);

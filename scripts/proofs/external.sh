@@ -186,12 +186,13 @@ nanoda "$EXPORT" > "$TMP/k.out" 2>&1; rc=$?
   || no "nanoda rc=$rc on the export: $(tail -3 "$TMP/k.out" | tr '\n' ' ')"
 
 echo "=== X: corrupted export, a theorem handed another's proof ==="
-# The pair: the first two universe-monomorphic theorems of the population with different statements.
-# The statement is the `T=` node alone (the field also holds the proof `V=`): two proofs of one
-# statement are interchangeable, and a correct checker would accept that swap.
-read -r SWAP_A SWAP_B < <(awk -F'\t' 'NR == FNR { pop[$1] = 1; next }
-  $1 == "D" && $3 == "thm" && $4 == "[]" && ($2 in pop) { t = $5; sub(/ .*/, "", t)
-    if (!a) { a = $2; s = t } else if (t != s) { print a, $2; exit } }' "$TMP/population-enc.txt" "$TMP/decls-export.txt")
+# The pair must have statements that are not definitionally equal, or a correct checker would
+# accept the swap: different statements as written are not enough (`True` and `id True` are
+# equal). So the pair is the first two universe-monomorphic theorems of the population whose
+# statements are applications of DIFFERENT inductive types (PROOF_MODE=heads): such statements are
+# in weak head normal form, and no reduction makes them equal.
+population heads > "$TMP/heads.tsv" 2> "$TMP/heads.err" || no "PROOF_MODE=heads failed: $(head -2 "$TMP/heads.err" | tr '\n' ' ')"
+read -r SWAP_A SWAP_B < <(sort "$TMP/heads.tsv" | awk -F'\t' '!a { a = $1; h = $2; next } $2 != h { print a, $1; exit }')
 read -r RECEIVER DONOR _ _ < <($INV swap "$EXPORT" "$SWAP_A" "$SWAP_B" "$TMP/swapped.ndjson")
 conleche "$TMP/swapped.ndjson" > "$TMP/cx.out" 2>&1; rc=$?
 [ -n "${RECEIVER:-}" ] && [ "$rc" = 1 ] && has_match -F "type mismatch in theorem $RECEIVER " < "$TMP/cx.out" \
