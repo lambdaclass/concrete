@@ -1,0 +1,2 @@
+[piece 1 of 1: docs]
+- docs/decisions.md:835: The patch extends OD82 by allowing `#[may_not_terminate("reason")]` on indirect-call expressions and prescribing its grammar and attachment semantics. This answers the owner-decision question **yes**: despite recording owner approval, it extends behavior covered by OD82 and therefore meets your stated must-not-land criterion.
