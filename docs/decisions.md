@@ -472,6 +472,24 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   - *Diversify examples early.* Small adversarial workloads that combine features in difficult ways
     run alongside file-copy from the first slices on, so no single application dictates the
     architecture.
+- <a id="decided-project-no-hidden-traps"></a>**No hidden traps and bounded execution** (owner direction,
+  2026-11-06: "ok to the no hidden traps", "we also should be able to know that a function is bounded
+  and doesn't have an infinite loop or recursion", "ok add all this"). This records a direction; the
+  detailed rules (each trap source, loops, the fact language the checker decides, any irreducible
+  residue) follow from a proposal reviewed by Claude and Codex and a separate owner decision (R-0574).
+  Until that decision, the recorded trap rules (indexing, arithmetic, range views, [OD118](#od118))
+  stand unchanged.
+  - *No hidden traps.* Every possible run-time failure of an accepted program is either proven
+    impossible at compile time or handled by a branch written in the code. Facts are established by a
+    decidable, predictable checker whose soundness is proved in Lean, carried across calls by the
+    simple logical contracts already decided (row Q9.11), and discharged by a Lean theorem where the
+    checker cannot see them. No SMT solver is part of acceptance, and [OD117](#od117) stands: no `old`,
+    quantifier or implication in contracts.
+  - *Bounded execution.* The compiler reports, for each function, whether it is bounded (it terminates
+    and has a static stack bound) and why. Counted loops (`for i from a until b`, [OD47](#od47)) and
+    recursion with a checker-visible decreasing measure are bounded by construction; a `while` loop or
+    other recursion is bounded through an attached Lean termination theorem (row P18). Boundedness is
+    a reported fact, not a function category: [OD116](#od116) stands.
 - <a id="decided-project-contracts"></a>**Contracts and termination in verified growth** (row P18,
   2026-11-05). No source `old`, quantifier, implication or snapshot construct (OD117); entry, exit and
   frame properties are stated as Lean theorems (a source frame clause would be a new owner decision);

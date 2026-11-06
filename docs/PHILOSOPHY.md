@@ -131,12 +131,21 @@ Each rule states what holds and why. Its history is in the changelog and the dec
 
 16. **Predictable execution and a separable core.** Recursion, loop bounds, allocation, blocking and
     foreign calls stay visible, so a bounded, analyzable core can be told apart from an effectful
-    shell, and writing code that way is natural. *Why:* resource bounds and proofs need a core they
-    can reach.
+    shell, and writing code that way is natural. The compiler reports, for each function, whether it
+    is bounded (it terminates and has a static stack bound) and why; boundedness is a reported fact,
+    not a function category ([direction](decisions.md#decided-project-no-hidden-traps), 2026-11-06;
+    details pending R-0574). *Why:* resource bounds and proofs need a core they can reach.
 
 17. **Real programs test the shape.** A design is validated by serious workloads, not by thought
     experiments alone, and a refused or deferred feature reopens only on such evidence. *Why:*
     hypothetical convenience is not a cost; measured pain is.
+
+18. **No hidden traps.** Every possible run-time failure of an accepted program is either proven
+    impossible at compile time or handled by a branch written in the code. Facts come from a
+    predictable checker proved sound in Lean, simple contracts and Lean theorems, never from an
+    unpredictable solver ([direction](decisions.md#decided-project-no-hidden-traps), 2026-11-06; the
+    detailed rules are pending R-0574, and the recorded trap rules stand until then). *Why:* a trap
+    is an exit the reader cannot see in the code, which rule 3 refuses for every other exit.
 
 ## When rules conflict
 
