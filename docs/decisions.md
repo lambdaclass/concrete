@@ -604,6 +604,22 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   and R-0201 builds the audit commands (`audit`, `explain`, `why`, `diff`) on the query. The query's
   command-line spelling is an owner question, pending. It continues the legacy compiler's `--report` family (effects, caps, alloc, recursion,
   stack-depth), re-derived from the new rules.
+- <a id="decided-project-predictable-policy"></a>**The predictable policy** (owner, 2026-11-06: "yes
+  this is critical"). An optional policy a module or project turns on, built on the per-function facts
+  ([facts report](#decided-project-facts-report)): every function in its scope allocates nothing,
+  never blocks and calls no foreign code, and, where the policy demands it, has termination evidence
+  and a stack bound. Where the policy is on, a violation is refused at compile time, naming the
+  function, the fact and its source; the facts query reports which policy covers each function. It
+  is scheduled with the facts query (R-0576, slice 1), not deferred. It takes up the idea of the
+  legacy predictable profile and of R-0220 (PredictableV1, deferred with a trigger), replacing that
+  trigger by this decision; unlike R-0220's draft it admits no allocation at all, bounded or not.
+  It is a policy over reported facts, not a function category (OD116) and not a build profile that
+  changes behaviour (OD124).
+- <a id="decided-project-reproducible-builds"></a>**Reproducible builds from slice 1** (owner,
+  2026-11-06: "yes to this too"). From slice 1, CI checks that the same source built by the same
+  pinned compiler and toolchain gives the same executable bytes (R-0577), so anyone can rebuild and
+  confirm the exact bytes a claim is about. This moves the reproducibility half of R-0104 (merged
+  into R-0149 in phase G) to B1; R-0149 keeps incremental-build equivalence.
 - <a id="decided-project-outside-readers"></a>**The outside readers** (owner, 2026-11-06: "me but also
   agy and codex and kimi if it's available"). The outside-reader pass (R-0559) is done by the owner and
   independent models: agy (Gemini), Codex, and Kimi when available (its absence is recorded, not
