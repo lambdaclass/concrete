@@ -19,7 +19,7 @@
 #   bisect     a red check or a red CI ejects exactly the culprit, publishes `gates: fail` at its
 #              SHA, notifies, and lands the rest
 #   resume     a restart while a train is in CI watches it instead of dispatching again
-#   rebase     heads with recent activity are skipped; a quiet head is rebased in a scratch worktree,
+#   rebase     heads with recent activity are skipped; a quiet head is rebased in a scratch clone,
 #              re-gated, pushed with refreshed notes; a conflict is notified with its files and
 #              leaves the branch and the clone untouched; a tried pair is not retried
 #   main       no script under scripts/land force-pushes main
@@ -360,7 +360,7 @@ after="$(grep -c 'workflow run' "$TMP/gh/calls.log")"
 has "$out" "before the restart; watching it" && in_main "$(sha_of wip/d1)" && [ "$after" = "$before" ] \
   && ok "the run was found by its head SHA and landed with no second dispatch" || { no "reconcile: dispatches $((after-before))"; echo "$out" | sed 's/^/      /'; }
 
-echo "=== auto-rebase: skip rules, scratch worktree, refreshed notes, conflicts ==="
+echo "=== auto-rebase: skip rules, scratch clone, refreshed notes, conflicts ==="
 mk wip/r1 r1 src/r1.txt r1; mark wip/r1
 mk wip/rc rc conflict.txt rc; mark wip/rc
 R1="$(sha_of wip/r1)"; RC="$(sha_of wip/rc)"
@@ -376,7 +376,8 @@ out="$(bot rebase)"; rc=$?
 N1="$(sha_of wip/r1)"
 [ "$N1" != "$R1" ] && git --git-dir="$TMP/origin.git" merge-base --is-ancestor "$NEWMAIN" "$N1" && has "$out" "[rebased] wip/r1" \
   && ok "a quiet ready head is rebased onto the new main and pushed" || { no "rebase r1"; echo "$out" | sed 's/^/      /'; }
-rv="$(cd "$W" && bash "$NOTES" get review "$N1")"
+# The scratch is a clone, so its notes reach this clone through the remote, as they reach anyone.
+rv="$(cd "$W" && bash "$NOTES" fetch >/dev/null && bash "$NOTES" get review "$N1")"
 has "$rv" "verdict: clean" && has "$rv" "carried-from: $R1" && [ "$(cd "$W" && bash "$NOTES" get gates "$N1" gates)" = pass ] \
   && ok "the rebased head carries the review verdict (naming the reviewed SHA) and a fresh gates note" || no "notes on rebased head: $rv"
 has "$out" "[rebase-conflict] wip/rc" && has "$out" "conflicts in: conflict.txt" && [ "$(sha_of wip/rc)" = "$RC" ] \
@@ -384,7 +385,7 @@ has "$out" "[rebase-conflict] wip/rc" && has "$out" "conflicts in: conflict.txt"
 has "$(cat "$TMP/gh/notify.log")" "rebase-conflict|wip/rc" && ok "the conflict was notified" || no "no conflict notification"
 inprog=0; for p in rebase-merge rebase-apply MERGE_HEAD; do [ -e "$W/.git/$p" ] && inprog=1; done
 [ "$inprog" = 0 ] && [ "$(cd "$W" && git worktree list | wc -l | tr -d ' ')" = 1 ] && [ -z "$(cd "$W" && git status --porcelain --untracked-files=no)" ] \
-  && ok "no rebase left in progress, scratch worktrees removed, clone clean" || no "rebase left state behind"
+  && ok "no rebase left in progress, no worktree, scratch clones removed, clone clean" || no "rebase left state behind"
 out="$(bot rebase)"
 has "$out" "rebase-conflict" && no "the same conflict was retried" || ok "a tried (head, main) pair is not retried"
 unset BOT_NOW

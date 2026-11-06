@@ -80,7 +80,7 @@ where_ok() {
   local gd hook real
   gd="$(cd "$(git rev-parse --git-dir)" && pwd -P)"
   [ "$gd" = "$(cd "$COMMON" && pwd -P)" ] \
-    || die "refusing to run in a linked worktree ($ROOT; its git dir is $gd): run train.sh from a full clone (git clone), never a worktree"
+    || die "refusing to run in a linked worktree ($ROOT; its git dir is $gd): run train.sh from a full clone, never a worktree"
   hook="$(git rev-parse --git-path hooks/pre-push)"
   case "$hook" in /*) ;; *) hook="$ROOT/$hook" ;; esac
   [ -f "$hook" ] && [ -x "$hook" ] \
