@@ -71,11 +71,13 @@ cat > "$GIT_CONFIG_GLOBAL" <<EOF
 	conflictStyle = diff3
 EOF
 mkdir -p "$TMP/nohooks"
-# train.sh runs only with the repository's pre-push hook enabled (ISS-0015). The sandbox's global
-# hooksPath holds this stand-in: it runs no gate and names .githooks/pre-push, which is how
-# train.sh recognises a wrapper of the repository hook.
+# train.sh runs only with the repository's pre-push hook enabled (ISS-0015): it asks the hook git
+# would run who it is (CONCRETE_PREPUSH_IDENTIFY=1). The sandbox's global hooksPath holds this
+# stand-in, which runs no gate and answers as the repository's .githooks/pre-push would: a test
+# fixture impersonating the hook on purpose.
+IDENTIFY='[ "${CONCRETE_PREPUSH_IDENTIFY:-0}" = 1 ] && { echo "concrete-pre-push $(cd "$(git rev-parse --show-toplevel)" && pwd -P)/.githooks/pre-push"; exit 0; }'
 standin_hook() {
-  printf '#!/usr/bin/env bash\n# test stand-in for .githooks/pre-push: runs no gate\nexit 0\n' > "$TMP/nohooks/pre-push"
+  printf '#!/usr/bin/env bash\n%s\nexit 0\n' "$IDENTIFY" > "$TMP/nohooks/pre-push"
   chmod +x "$TMP/nohooks/pre-push"
 }
 standin_hook
@@ -634,9 +636,9 @@ echo "=== dropped: a push's result is read from the remote, and a failed push is
 # The pre-push hook stands in for GitHub dropping the connection: drop.always fails every push
 # before the remote moves; drop.before fails one push before it moves; drop.after updates the
 # remote itself and then fails, as a push does whose connection drops after the update.
-cat > "$TMP/nohooks/pre-push" <<'EOF'
-#!/usr/bin/env bash
-# Test stand-in for .githooks/pre-push. Like the real hook, a push that skips the gates (the ci base reset, the mirror) runs nothing.
+{ echo '#!/usr/bin/env bash'; echo "$IDENTIFY"; } > "$TMP/nohooks/pre-push"
+cat >> "$TMP/nohooks/pre-push" <<'EOF'
+# Like the real hook, a push that skips the gates (the ci base reset, the mirror) runs nothing.
 [ "${CONCRETE_SKIP_GATES:-0}" = 1 ] && exit 0
 [ -f "$FAKE_GH_DIR/drop.always" ] && exit 1
 if [ -f "$FAKE_GH_DIR/drop.before" ]; then rm -f "$FAKE_GH_DIR/drop.before"; exit 1; fi
@@ -1185,6 +1187,12 @@ out="$(GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0="$T
 printf '#!/usr/bin/env bash\nexit 0\n' > "$TMP/nohooks/pre-push"; chmod +x "$TMP/nohooks/pre-push"
 out="$(bash "$TRAIN" build tnh --no-fetch b1 2>&1)"; rc=$?
 [ "$rc" != 0 ] && has "$out" "is not the repository's .githooks/pre-push" && ok "train.sh refuses a pre-push hook that does not run the repository's" || { no "train with a foreign hook: exit $rc"; echo "$out" | sed 's/^/      /'; }
+printf '#!/usr/bin/env bash\n# runs .githooks/pre-push (it does not)\nexit 0\n' > "$TMP/nohooks/pre-push"
+out="$(bash "$TRAIN" build tnh --no-fetch b1 2>&1)"; rc=$?
+[ "$rc" != 0 ] && has "$out" "is not the repository's .githooks/pre-push" && ok "train.sh refuses a hook that only mentions .githooks/pre-push" || { no "train with a hook naming the file: exit $rc"; echo "$out" | sed 's/^/      /'; }
+out="$(cd "$W" && CONCRETE_PREPUSH_IDENTIFY=1 bash "$ROOT_DIR/.githooks/pre-push" origin x < /dev/null 2>&1)"; rc=$?
+[ "$rc" = 0 ] && [ "$out" = "concrete-pre-push $(cd "$ROOT_DIR" && pwd -P)/.githooks/pre-push" ] \
+  && ok "the repository hook answers who it is with its real path and runs nothing" || { no "hook identify: exit $rc, '$out'"; }
 standin_hook
 [ ! -e "$TMP/state/tnh" ] && ok "no refused run left train state behind" || no "a refused run left state"
 

@@ -73,11 +73,13 @@ COMMON="$(cd "$(git rev-parse --git-common-dir)" && pwd)"
 # real clone and onto GitHub; a long hook in a worktree also drops the push. And only with the
 # repository's pre-push hook enabled: train.sh pushes ci/* and main, and with the hook off (no
 # core.hooksPath, or one pointing elsewhere) those pushes would run no gate. The hook git runs is
-# `git rev-parse --git-path hooks/pre-push` (core.hooksPath honoured); it qualifies when it is the
-# clone's .githooks/pre-push or an executable wrapper that runs it (acceptance.sh's guard hook).
-# `status` only reads, so it runs anywhere.
+# `git rev-parse --git-path hooks/pre-push` (core.hooksPath honoured). It is asked who it is: run
+# with CONCRETE_PREPUSH_IDENTIFY=1 and no input, the repository's .githooks/pre-push prints
+# `concrete-pre-push <its real path>` and runs nothing, and so does a wrapper that runs it
+# (acceptance.sh's guard hook). Any other answer, or none, is refused; a hook that merely mentions
+# the file is not enough. `status` only reads, so it runs anywhere.
 where_ok() {
-  local gd hook real
+  local gd hook want got
   gd="$(cd "$(git rev-parse --git-dir)" && pwd -P)"
   [ "$gd" = "$(cd "$COMMON" && pwd -P)" ] \
     || die "refusing to run in a linked worktree ($ROOT; its git dir is $gd): run train.sh from a full clone, never a worktree"
@@ -85,9 +87,10 @@ where_ok() {
   case "$hook" in /*) ;; *) hook="$ROOT/$hook" ;; esac
   [ -f "$hook" ] && [ -x "$hook" ] \
     || die "refusing to run: this clone has no enabled pre-push hook ($hook is missing or not executable); enable the repository's: git config core.hooksPath .githooks"
-  real="$(cd "$(dirname "$hook")" && pwd -P)/$(basename "$hook")"
-  [ "$real" = "$(cd "$ROOT" && pwd -P)/.githooks/pre-push" ] || grep -q '\.githooks/pre-push' "$hook" \
-    || die "refusing to run: the enabled pre-push hook $hook is not the repository's .githooks/pre-push and does not run it; enable it: git config core.hooksPath .githooks"
+  want="concrete-pre-push $(cd "$ROOT" && pwd -P)/.githooks/pre-push"
+  got="$(CONCRETE_PREPUSH_IDENTIFY=1 "$hook" "$REMOTE" "$(git remote get-url "$REMOTE" 2>/dev/null || echo "$REMOTE")" < /dev/null 2>/dev/null | tail -n 1)"
+  [ "$got" = "$want" ] \
+    || die "refusing to run: the enabled pre-push hook $hook is not the repository's .githooks/pre-push and does not run it (asked who it is, it answered '${got}'); enable it: git config core.hooksPath .githooks"
 }
 STATE_ROOT="${LAND_STATE_DIR:-$COMMON/concrete-landing}"
 LOG_DIR="${LAND_LOG_DIR:-$STATE_ROOT/log}"
