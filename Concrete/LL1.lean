@@ -56,7 +56,10 @@ def FirstSeq (α : List (Sym T N)) (a : T) : Prop :=
   ∃ pre post, NullableSeq g pre ∧
     (α = pre ++ Sym.t a :: post ∨ ∃ y, α = pre ++ Sym.n y :: post ∧ First g y a)
 
-/-- `b` can follow `x` in a sentential form (`none` is the end of input). -/
+/-- `b` can follow `x` (`none` is the end of input). This is the standard grammar-wide closure, not
+reachability from the start symbol: unreachable productions contribute too, and FIRST does not ask
+the rest of a form to be productive. Both over-approximate, so they can only refuse more grammars,
+never hide a conflict. -/
 inductive Follow : N → Option T → Prop
   | start : Follow g.start none
   | first {y x : N} {pre post : List (Sym T N)} {a : T} :
@@ -307,7 +310,11 @@ theorem check_sound (h : check g nu fi fo = true) {i j : Nat} {x : N} {b : Optio
     simp [bj] at this
 
 /-- **LL(1) soundness.** If `ll1 g = true`, no lookahead predicts two different productions of one
-nonterminal. -/
+nonterminal. This is the conflict-freedom part of a parser proof. The parser's own proof adds: the
+lemmas linking nullable/FIRST/FOLLOW to the valid next production, that its table is built from
+`predictB` (whose disjointness `check` gives directly), and its stack, matching, end-of-input and
+termination invariants. Acceptance does not certify that every nonterminal is defined or
+productive. -/
 theorem ll1_sound (h : ll1 g = true) {i j : Nat} {x : N} {b : Option T}
     (hi : (g.prods[i]?.map Prod.fst) = some x) (hj : (g.prods[j]?.map Prod.fst) = some x)
     (pi : Predicts g i b) (pj : Predicts g j b) : i = j :=
