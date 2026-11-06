@@ -1040,6 +1040,13 @@ for bad in "--name x"$'\n'"y" "--ref wip/a"$'\t'"b"; do
   [ "$r" = 2 ] && has "$o" "${bad%% *} must" && [ ! -e "$TMP/reh.forged" ] && [ ! -e "$TMP/acc.forged" ] \
     && ok "acceptance refuses ${bad%% *} with a record delimiter and writes no row" || { no "acceptance ${bad%% *} delimiter: exit $r"; echo "$o" | sed 's/^/      /'; }
 done
+# acceptance.sh's check leg keeps the review leg (it never passes --no-review), and its build leg and
+# broken-build control run the one build command, the root's.
+ACC="$ROOT_DIR/scripts/land/acceptance.sh"
+grep -qxF 'do_check() { TRAIN check "$NAME" --no-remote; }' "$ACC" && ! grep -qE '^[^#]*--no-review' "$ACC" \
+  && grep -qxF 'BUILD_CMD="${ACCEPT_BUILD_CMD:-nix develop --command lake build}"' "$ACC" \
+  && [ "$(grep -cF 'bash -c "$BUILD_CMD"' "$ACC")" = 2 ] && ! grep -qF 'make build' "$ACC" \
+  && ok "acceptance: check keeps the review leg; both build legs run nix develop --command lake build" || no "acceptance check or build wiring"
 # A run that fails before it has a train (here, a ref that does not exist) records its failure in
 # acceptance.tsv and writes no rehearsal row, so it cannot block the next rehearsal or land.
 o="$(cd "$W" && for v in $(compgen -e); do case "$v" in LAND_*|CONCRETE_SKIP_*) unset "$v" ;; esac; done
