@@ -1,0 +1,2 @@
+[piece 10 of 11: scripts]
+- scripts/spec/lean_site.py:274: Example counts include commented-out code and string contents. `blocks()` leaves ordinary comments and multiline strings in code blocks, so a line beginning with `example` inside either increments the displayed count despite declaring no example. Count executable tokens using the shared lexer instead.
