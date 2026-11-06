@@ -1,0 +1,5 @@
+[piece 1 of 2: scripts]
+Repository reads failed with a sandbox error, so I could not verify owner-decision provenance or changes in the other piece. This supplied patch leaves both previous findings unresolved:
+
+- ConcreteSpec/README.md:79: Defers fragment integration and O7/O9 to A3, although ROADMAP.md requires them in A2i before the A2c freeze.
+- README.md:32: Labels ConcreteSpec “normative,” although its README says it remains PROPOSED until owner approval at A2c.
