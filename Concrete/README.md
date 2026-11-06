@@ -165,18 +165,55 @@ Heavy runs (native builds, differential) run on concrete-ci-2 or on GitHub-hoste
 
 ## The facts query (from day one)
 
-`Facts.lean` derives, for each function from `CheckedCore`, a record with version `concrete-facts/0`:
-- **capabilities and reachable grants:** none in slice 0;
-- **allocation:** none;
-- **trusted, FFI and opaque code:** none;
-- **failure sites:** each checked `+`, with its source span and handling. In slice 0 the handling is
-  always "proven not to overflow (known values)", since an unproven one is refused;
-- **termination:** terminates, straight-line code with no loops, recursion or calls;
-- **stack:** the BIR frame is *n* slots, with native stack usage under premise `native`;
-- **proofs:** the theorems and premises the claims depend on;
-- **completeness:** complete for slice 0's fact kinds.
+The query follows the facts-query design that Codex, agy and Kimi reviewed (2026-11-06). Slice 0's facts are simple, but they use the full shape from the start, so later slices add fact kinds without changing the format.
 
-Each fact kind has a soundness theorem against the spec. For example, failure-site handling "proven" implies that the run never traps there (from `slice0_never_traps`), and "terminates" implies `slice0_exits`. The output is human-readable plus JSON. The **CLI spelling is a placeholder** (`concrete facts FILE [FN]`, `concrete build FILE -o OUT`), pending the owner.
+**One derivation.** Each fact is a typed Lean judgment, `Fact.Holds : CheckedCore → FnId → Fact → Prop`, computed by `Facts.derive : CheckedCore → FnId → Report`. A derivation-soundness theorem `derive_sound : derive c f = r → ∀ fact ∈ r.established, Fact.Holds c f fact` holds for each fact kind. Human output, JSON and any future policy check all render the same `Report`; none of them re-derives anything.
+
+**A status for each fact, and coverage for each fact:**
+- `established`;
+- `conditional(assumptions)`, naming the premises from `Premises.lean`;
+- `refuted(witness)`;
+- `notEstablished(blocker, site)`;
+- `notApplicable`.
+
+Coverage is reported for each fact: the sites examined out of the sites that exist.
+
+**The vocabulary is split, and nothing is printed as a vacuous summary.** Empty capabilities are never printed as "touches nothing". Each axis is reported separately:
+- **authority:** capabilities, and the grants they reach;
+- **resources:** allocation;
+- **memory:** reads, and separately writes;
+- **failure:** each kind is its own fact:
+  - implicit trap sites;
+  - `Result` errors;
+  - abort;
+  - allocation failure;
+  - stack exhaustion;
+  - foreign failure.
+- **trusted / FFI / opaque code;**
+- **termination;**
+- **stack;**
+- **proofs:** the theorems and premises each claim depends on.
+
+**Slice 0's values:**
+
+| Fact | Slice-0 status |
+|---|---|
+| Authority | `established`: no capabilities and no grants. It is printed as "requires no capabilities", which is a statement about authority only. |
+| Allocation | `established`: none. |
+| Memory | `established`: reads and writes only its own frame slots. |
+| Implicit trap sites | Each checked `+`, with its typed site identity and source span. Each is `established` as "cannot trap": its operands are known, so `slice0_never_traps` applies. |
+| `Result` errors, abort, allocation failure, foreign failure | `notApplicable`. |
+| Stack exhaustion, and stack bytes | `notEstablished`, with blocker "no final-artifact/target stack evidence" at the function. Stack bytes come only from final-artifact or target evidence. The BIR slot count is reported as an IR fact, never as bytes. |
+| Termination | `established` (`slice0_exits`). |
+| Trusted / FFI | `established`: none. |
+
+**Identity and replay.** Every report carries:
+- typed identities: function and site identities, never spellings;
+- the schema version `concrete-facts/0` and the semantics version;
+- the digests of the compiler, the spec, the target and the artifact;
+- the replay command that regenerates the report.
+
+The **CLI spelling is a placeholder** (`concrete facts FILE [FN]`, `concrete build FILE -o OUT`), pending the owner.
 
 ## Open questions for the owner (none blocks the skeleton)
 
