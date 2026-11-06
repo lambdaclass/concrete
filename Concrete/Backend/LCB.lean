@@ -76,6 +76,26 @@ def ids (p : Program) : List (Reg × Nat) :=
     (indexed b.insts).flatMap fun (i, ins) =>
       (instDefs ins).map fun (r, off) => (r, blockBase p j + instBase b i + off)
 
+/-- The offsets of an instruction's intermediate values (those no register names). -/
+def interOffsets : Inst → List Nat
+  | .bin .. => [0, 1, 2]
+  | .binOvf .. => [0, 1, 2, 4]
+  | .trunc .. => [0, 1]
+
+/-- Every intermediate value's id. -/
+def intermediates (p : Program) : List Nat :=
+  (indexed p.blocks).flatMap fun (j, b) => (indexed b.insts).flatMap fun (i, ins) =>
+    (interOffsets ins).map (blockBase p j + instBase b i + ·)
+
+/-- The numbering invariants the simulation proof uses, checked on every program `adapt`
+accepts (translation validation): registers and their ids are both duplicate-free, every id is
+below `valueCount`, and no intermediate value shares an id with a register. -/
+def numberingOk (p : Program) : Bool :=
+  let slots := (ids p).map Prod.snd
+  decide ((ids p).map Prod.fst).Nodup && decide slots.Nodup &&
+  slots.all (· < valueCount p) && (intermediates p).all (· < valueCount p) &&
+  (intermediates p).all (fun m => !slots.contains m)
+
 /-- The LCB value id of a register. `adapt` refuses a program where a register has two
 definitions, so this is a function of the register. -/
 def regId (p : Program) (r : Reg) : Option Nat := (ids p).lookup r
@@ -140,7 +160,7 @@ def term (p : Program) : Term → Except String Source.Terminator
 
 /-- `main`'s body as a function of LCB's verified source profile. -/
 def adapt (p : Program) : Except String Source.Function := do
-  unless decide ((ids p).map Prod.fst).Nodup do throw "a register is defined twice"
+  unless numberingOk p do throw "the numbering is not injective (a register defined twice?)"
   let blocks ← (indexed p.blocks).mapM fun (j, b) => do
     let phis ← (indexed b.params).mapM fun (k, (_, _)) => do
       let arms ← (incoming p j).mapM fun (pred, args) => do
@@ -351,6 +371,96 @@ theorem regId_inst {p : Program} (hn : ((ids p).map Prod.fst).Nodup) {j i : Nat}
   simp only [ids, List.mem_flatMap, List.mem_append, List.mem_map]
   exact ⟨(j, b), Runtime.mem_indexed hb,
     Or.inr ⟨(i, ins), Runtime.mem_indexed hi, ⟨(r, off), hd, rfl⟩⟩⟩
+
+/-! ## `adapter_correct`, environments -/
+
+theorem enc_width (v : Val) : (enc v).width = .word := by cases v <;> rfl
+
+theorem word_bne : (Width.word != Width.word) = false := by decide
+
+theorem mem_of_lookup {l : List (Reg × Nat)} {r : Reg} {n : Nat} (h : l.lookup r = some n) :
+    (r, n) ∈ l := by
+  obtain ⟨l₁, l₂, rfl, _⟩ := List.lookup_eq_some_iff.mp h
+  simp
+
+theorem eq_of_snd {l : List (Reg × Nat)} (hn : (l.map Prod.snd).Nodup) {a b : Reg} {n : Nat}
+    (ha : (a, n) ∈ l) (hb : (b, n) ∈ l) : a = b := by
+  induction l with
+  | nil => simp at ha
+  | cons x l ih =>
+    simp only [List.map_cons, List.nodup_cons, List.mem_map] at hn
+    simp only [List.mem_cons] at ha hb
+    rcases ha with rfl | ha <;> rcases hb with hb | hb
+    · cases hb; rfl
+    · exact absurd ⟨(b, n), hb, rfl⟩ hn.1
+    · subst hb; exact absurd ⟨(a, n), ha, rfl⟩ hn.1
+    · exact ih hn.2 ha hb
+
+/-- Agreement: every BIR register's newest value sits, encoded, at its LCB id. -/
+def Agrees (p : Program) (benv : Env) (lenv : Source.Environment) : Prop :=
+  ∀ r v, lookup benv r = some v → ∃ n, regId p r = some n ∧ lenv[n]? = some (some (enc v))
+
+theorem regId_injective {p : Program} (hok : numberingOk p = true) {a b : Reg} {n : Nat}
+    (ha : regId p a = some n) (hb : regId p b = some n) : a = b := by
+  simp only [numberingOk, Bool.and_eq_true, decide_eq_true_eq] at hok
+  exact eq_of_snd hok.1.1.1.2 (mem_of_lookup ha) (mem_of_lookup hb)
+
+/-- Reading a translated operand gives the encoded BIR value. -/
+theorem read_operand {p : Program} {benv : Env} {lenv : Source.Environment}
+    (hag : Agrees p benv lenv) {a : Operand} {a' : Source.Operand} {v : Val}
+    (ha : operand p a = .ok a') (hv : evalOp benv a = some v) :
+    Source.read lenv .word a' = .ok (enc v) := by
+  cases a with
+  | reg r =>
+    obtain ⟨n, hn, hl⟩ := hag r v hv
+    simp [operand, idOf, hn, bind, Except.bind, pure, Except.pure] at ha
+    subst ha
+    simp [Source.read, hl, enc_width, word_bne, bind, Except.bind, pure, Except.pure]
+  | imm t x =>
+    simp only [operand, pure, Except.pure] at ha
+    cases ha
+    simp only [evalOp] at hv
+    split at hv
+    · cases hv; simp [Source.read, enc, word, Source.Value.width, word_bne, bind, Except.bind, pure, Except.pure]
+    · cases hv
+
+/-- A write at a word slot inside the environment succeeds. -/
+theorem write_ok {f : Source.Function} {env : Source.Environment} {n : Nat} {val : Source.Value}
+    (hw : f.valueWidths[n]? = some .word) (hs : n < env.size) (hv : val.width = .word) :
+    Source.write f env n val = .ok (env.set! n (some val)) := by
+  have : ¬ n ≥ env.size := by omega
+  simp [Source.write, hw, this, hv, word_bne, pure, Except.pure, Array.set!_eq_setIfInBounds]
+
+/-- Writing a slot no register owns keeps agreement. -/
+theorem agrees_set_other {p : Program} {benv : Env} {lenv : Source.Environment} {m : Nat}
+    {x : Option Source.Value} (hag : Agrees p benv lenv) (hm : ∀ r n, regId p r = some n → n ≠ m) :
+    Agrees p benv (lenv.set! m x) := by
+  intro r v hv
+  obtain ⟨n, hn, hl⟩ := hag r v hv
+  refine ⟨n, hn, ?_⟩
+  rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_ne (hm r n hn).symm]
+  exact hl
+
+/-- Defining register `d` with `v` at its own slot extends agreement. -/
+theorem agrees_define {p : Program} (hok : numberingOk p = true) {benv : Env}
+    {lenv : Source.Environment} {d : Reg} {nd : Nat} {v : Val} (hag : Agrees p benv lenv)
+    (hd : regId p d = some nd) (hs : nd < lenv.size) :
+    Agrees p ((d, v) :: benv) (lenv.set! nd (some (enc v))) := by
+  intro r w hw
+  simp only [lookup] at hw
+  by_cases hdr : d = r
+  · subst hdr
+    simp at hw
+    subst hw
+    refine ⟨nd, hd, ?_⟩
+    simp [Array.set!_eq_setIfInBounds, hs]
+  · simp [hdr] at hw
+    obtain ⟨n, hn, hl⟩ := hag r w hw
+    refine ⟨n, hn, ?_⟩
+    have hne : nd ≠ n := by
+      rintro rfl; exact hdr (regId_injective hok hd hn)
+    rw [Array.set!_eq_setIfInBounds, Array.getElem?_setIfInBounds_ne hne]
+    exact hl
 
 end Proof
 
