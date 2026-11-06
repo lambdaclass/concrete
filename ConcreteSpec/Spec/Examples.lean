@@ -1,4 +1,4 @@
-import ConcreteSpec.Spec.Checker
+import ConcreteSpec.Spec.Slice1Checker
 import ConcreteSpec.Spec.Rep
 import ConcreteSpec.Spec.Observation
 

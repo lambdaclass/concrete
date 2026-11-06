@@ -1,4 +1,4 @@
-import ConcreteSpec.Spec.Syntax
+import ConcreteSpec.Spec.Slice1Syntax
 
 /-!
 # Slice-1 values, evaluator and value typing

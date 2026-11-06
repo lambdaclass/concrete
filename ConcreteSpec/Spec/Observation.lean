@@ -1,4 +1,4 @@
-import ConcreteSpec.Spec.Semantics
+import ConcreteSpec.Spec.Slice1Semantics
 
 /-!
 # Part 7: observations

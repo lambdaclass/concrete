@@ -18,11 +18,11 @@ stage A2c (row Q9.19). Before that, the owner approved the Core design provision
 
    | Module | Contents |
    |---|---|
-   | [`Spec/Syntax.lean`](Spec/Syntax.lean) | Part 1, slice 1: types, integer ranges, Core syntax |
+   | [`Spec/Slice1Syntax.lean`](Spec/Slice1Syntax.lean) | Part 1, slice 1: types, integer ranges, Core syntax |
    | [`Spec/Statics.lean`](Spec/Statics.lean) | slice-1 typing |
-   | [`Spec/Ownership.lean`](Spec/Ownership.lean) | ownership, known values (Q6.2), static refusal, acceptance (`Checked`) |
-   | [`Spec/Semantics.lean`](Spec/Semantics.lean) | values, the evaluator `run`, `Exec`, value typing |
-   | [`Spec/Checker.lean`](Spec/Checker.lean) | the executable checker `check` |
+   | [`Spec/Slice1Ownership.lean`](Spec/Slice1Ownership.lean) | ownership, known values (Q6.2), static refusal, acceptance (`Checked`) |
+   | [`Spec/Slice1Semantics.lean`](Spec/Slice1Semantics.lean) | values, the evaluator `run`, `Exec`, value typing |
+   | [`Spec/Slice1Checker.lean`](Spec/Slice1Checker.lean) | the executable checker `check` |
    | [`Spec/Examples.lean`](Spec/Examples.lean) | slice-1 conformance examples |
    | [`Spec/Slice0.lean`](Spec/Slice0.lean) | the slice-0 fragment the compiler targets first (`u8` literals, immutable `let`, checked `+`, `main -> u8`), embedded into slice 1 by `toCore` |
    | [`Spec/Rep.lean`](Spec/Rep.lean) | Part 2, representation (Q3.11): byte layout and encoding |
