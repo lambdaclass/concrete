@@ -314,7 +314,8 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   imports it and builds a proved lowering chain below Core; slice 1 gets a BIR → LLVM printer
   labelled unverified, and the Lean Compiler Backend follows. Revised 2026-11-05 by
   [proof infrastructure](#decided-project-proof-infrastructure): slice 0 gets the first BIR → LLVM
-  printer and slice 1 extends the same path. Std, examples and tests migrate to the
+  printer and slice 1 extends the same path. Revised again 2026-11-06 (same row, *Backend order*):
+  the Lean Compiler Backend joins slice 0 as a second unverified backend. Std, examples and tests migrate to the
   decided language; the old pipeline is deleted after slice 1
   ([record](archive/roadmap-2026-11/ROADMAP_DECISIONS.md#2026-11-01-and-2026-11-02--new-compiler-and-retention-contract)).
   The record's "the browser compiler keeps running from the tag" is revised by row P9 below.
