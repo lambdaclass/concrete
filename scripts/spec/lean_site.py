@@ -195,7 +195,10 @@ def blocks(lines):
         col = e - starts[le]
         rest = lines[le][col:]
         if rest.strip():
-            code.append((le + 1, ' ' * col + rest))
+            # pad by the removed text's UTF-16 width: the .ilean columns of `rest` count UTF-16
+            # units, and a non-BMP character in the doc comment is two of them
+            width = sum(2 if ord(c) > 0xFFFF else 1 for c in lines[le][:col])
+            code.append((le + 1, ' ' * width + rest))
         i = le + 1
     code.extend((k + 1, lines[k]) for k in range(i, len(lines)))
     if code:
