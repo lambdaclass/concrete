@@ -467,7 +467,11 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     traps; capability checking establishes allowed authority use, not application correctness.
     Inspection comes from capabilities and proofs. The legacy oracle is a differential cross-check
     only and never overrides the Lean semantics.
-  - *Backend order* (revised 2026-11-06 by the owner: the LCB joins slice 0). From slice 0, every
+  - *Backend order* (revised 2026-11-06 by the owner: the LCB joins slice 0; relayed by the orchestrator from the owner session: asked
+    whether the LCB should join slice 0, unverified, with its adapter proven early and an ARM CI job,
+    the owner answered "yeah the lean compiler backend should be added i think right?", after stating
+    "the objective is to have a first slice of the compiler fully proven with the full best pipeline
+    in llvm and lean compiler backend where we prove lean compiler backend in the futgure right"). From slice 0, every
     supported example is built through two unverified backends, BIR → LLVM and BIR → LCB-IR → the
     Lean Compiler Backend, each labelled unverified. BIR is a complete backend contract designed for
     both from its first definition: no BIR construct, invariant or lowering choice depends on one
@@ -514,7 +518,8 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     freezes integrated scopes, not an untested whole-language architecture; sending Core back after
     the freeze remains a recovery mechanism, not the planned sequence. This revises row Q9.19's
     A2a → A2b → A2c to A2a → A2b → A2i → A2c.
-  - *Bound the LLVM hole* (revised 2026-11-06 by the owner: the LCB joins slice 0). The LCB runs
+  - *Bound the LLVM hole* (revised 2026-11-06 by the owner: the LCB joins slice 0, quoted in the
+    [backend order](#decided-project-proof-infrastructure)). The LCB runs
     unverified beside LLVM from slice 0, and its BIR → LCB-IR adapter is the first backend proof
     target ([backend order](#decided-project-proof-infrastructure)). After B0 and B1 (the slices
     before LP0; [vertical slices](#decided-project-vertical-slices-2026-11-06)) and before the
@@ -812,8 +817,12 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   interface is fixed in A2i (R-0592); `Secret<T>` lands as its own slice with its proofs (R-0596).
   Its first secret source is the pure `classify` of a value passed in; grant-backed sources come
   with the console, files and network ([vertical slices](#decided-project-vertical-slices-2026-11-06)).
-- <a id="decided-project-pipeline-2026-11-06"></a>**The new compiler pipeline** (owner-approved,
-  2026-11-06; reviewed by Claude, Codex, agy and Kimi, [review](proposals/MERGED.md)). It
+- <a id="decided-project-pipeline-2026-11-06"></a>**The new compiler pipeline** (owner, 2026-11-06,
+  relayed by the orchestrator from the owner session: the owner asked "is there any way to improve the full compiler design or pipeline?"; after
+  the Codex, agy and Kimi pipeline review was reported, "did we also log that we will have the new
+  compiler pipeline that we designed in this session?" and "ok decisions is fine"; the open set was
+  then approved with "ok do everything"; reviewed by Claude, Codex, agy and Kimi,
+  [review](proposals/MERGED.md)). It
   supersedes the pipeline of [VERIFIED_PIPELINE.md](../legacy/docs/compiler/VERIFIED_PIPELINE.md).
   The slice-0 design (`Concrete/README.md`, on branch `wip/slice0`) becomes the detailed
   description once it lands.
@@ -836,7 +845,9 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     separate; the holes only shrink.
   - *One evidence graph.* Facts, diagnostics and source sites come from one evidence graph with
     typed site identities.
-- <a id="decided-slice0-surface-2026-11-06"></a>**The slice-0 surface** (owner-approved, 2026-11-06).
+- <a id="decided-slice0-surface-2026-11-06"></a>**The slice-0 surface** (owner, 2026-11-06, relayed by the orchestrator from the owner session:
+  presented as four questions with option (a) recommended, the owner answered "for the decisions a
+  is okay").
   The commands are `concrete build` and `concrete facts` (the [facts query](#decided-project-facts-report)).
   A form the language decides but the current slice does not yet support gets its own refusal,
   "not supported in this slice", distinct from a refusal of an invalid program, so the two are never
@@ -844,7 +855,10 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   octal. The trap site an executable reports is a named premise of the theorem until it is proved
   (spec obligation O4).
 - <a id="decided-project-vertical-slices-2026-11-06"></a>**Thin vertical slices**
-  (owner, 2026-11-06). The language grows in thin vertical slices, each fully proven end to end
+  (owner, 2026-11-06, relayed by the orchestrator from the owner session: "and let's have vertical slices where everything is proven and work
+  first with integers right?", then "reorder based on what you believe is more important" and "have
+  the full slices thought and ranked in order by you, codex, kimi and agy, they should decide it
+  together"; the agreed order was approved with "ok do everything"). The language grows in thin vertical slices, each fully proven end to end
   (source, every stage, BIR, both backends, facts and diagnostics, conformance examples) before
   the next starts, so every construct is proven on the whole path as soon as it lands and no stage
   runs ahead of its proofs. "Fully proven" means proven under the named premises the
