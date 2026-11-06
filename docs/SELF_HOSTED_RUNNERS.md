@@ -47,8 +47,10 @@ INCOMPLETE and blocks the landing.
 
 Both pools on concrete-ci-2 run inside `concrete-runners.slice`, capped together at `CPUQuota=2400%`
 (24 of 32 threads), `MemoryMax=96G`, no swap and `TasksMax=16384` (ISS-0007, applied 2026-11-06).
-Gate runs in `user.slice` therefore keep at least 8 threads and about 25 GB, and sshd and tailscaled
-keep `system.slice`'s 4 GB reserve. The slice keeps the default CPU weight (100) against
+The runners together can therefore never use more than 24 CPU-equivalents or 96 GB, which leaves
+8 CPU-equivalents and about 25 GB of headroom for gate runs, agents and logins in `user.slice`. This is
+headroom, not a reservation: those processes share it, and only `system.slice`'s 4 GB `MemoryMin` (sshd,
+tailscaled) is reserved. The slice keeps the default CPU weight (100) against
 `user.slice`'s 25, so CI still wins under contention. There is no `MemoryHigh`: a job past its
 `MemoryMax` is killed inside the slice rather than throttled. The values live in the dotfiles host
 file (`servers/hosts/concrete-ci-2.env`, `CONCRETE_RUNNERS_*` and `CONCRETE_*RUNNER_*`), and
