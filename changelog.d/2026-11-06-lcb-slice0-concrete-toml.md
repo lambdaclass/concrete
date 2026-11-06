@@ -40,3 +40,25 @@ The documents now point readers to the decisions and the open work:
 - The slice-0 surface: `concrete build` and `concrete facts`; a distinct "not supported in this slice" refusal; leading-zero integer literals refused; the reported trap site is a named premise until proved.
 - **Thin vertical slices, integers first, capabilities early:** each slice is fully proven before the next, and LP0 lands before the language grows large. The slice order will come from the agreed slice plan. The former slice 1's ownership obligations arrive with the ownership slice.
 - **From the SPARK review** (internal): R-0575 derives writes and output dependencies when `&mut` lands; R-0599 adds replayed counterexamples without SMT; R-0585 marks discharges in infeasible contexts as vacuous; R-0600 adds a derived "always aborts" fact. The review itself is in `docs/proposals/SPARK.md`, and its owner items are pending.
+- **Owner approval of 2026-11-06 ("ok do everything").** These follow the unanimous choice of Claude, Codex, agy and Kimi.
+  - **SPARK items 1, 2, 3, 6, 7, 9 and 10:**
+    - functions with safety preconditions are refused as function values until function-type contracts exist (R-0601);
+    - struct invariants;
+    - `assert(e) by thm(...)`;
+    - an observable-event kind (R-0602);
+    - unused permissions as facts;
+    - lexicographic measures on demand (R-0605);
+    - named assurance properties (R-0606).
+  - **Runtime and spec:**
+    - the trap line;
+    - the default struct layout;
+    - rule revisions in place of the spec version in rule IDs;
+    - one `spec_version` per output (R-0603).
+  - **The slice order** is filled in ROADMAP:
+    - slice 1 stays Q8.2, with an explicit `abort()`;
+    - LP0 comes after slice 1;
+    - integers are complete at slice 2;
+    - file-copy and 0.1 come at slice 18, with R-0595 moved to slice 19;
+    - RocksDB and ethlambda come at 25 and 27, after an audit (R-0604).
+  - **`Concrete.toml`** uses `[policy]` and `[assumptions]` tables.
+  - **`#[overflow_checked]` (ARITH-9)** is retired.

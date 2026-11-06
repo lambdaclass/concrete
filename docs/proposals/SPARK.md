@@ -1,4 +1,4 @@
-**PROPOSED, awaiting owner decision (2026-11-06); reviewed by Codex, agy, Kimi.** Internal items 4(a), 5, 8 and 11 are taken into the roadmap (R-0575, R-0599, R-0585, R-0600); items 1, 2, 3, 4(b), 4(c), 6, 7, 9 and 10 wait for the owner.
+**PROPOSED in part (2026-11-06); reviewed by Codex, agy, Kimi.** Internal items 4(a), 5, 8 and 11 are in the roadmap (R-0575, R-0599, R-0585, R-0600); items 1, 2, 3, 6, 7, 9 and 10 are decided ([decision](../decisions.md#decided-project-spark-2026-11-06)); items 4(b) and 4(c) wait for the owner.
 
 # What Concrete should take from SPARK (v2, 2026-11-06, after the Codex, agy and Kimi reviews)
 
