@@ -133,8 +133,8 @@ before anything is pushed:
 - `origin/main`, read with `ls-remote`, is still the train's base;
 - the mirror's main is an ancestor of the train, so no half-landing happens;
 - the train has review provenance (as in `check`'s review leg), read again from origin's notes
-  rather than trusted from `check`: a check run with `--no-review` lands only when every member is
-  reviewed clean;
+  rather than trusted from `check`: a check run with `--no-review` lands only on a clean note at the
+  train head or, when the head has none, clean notes on every member;
 - a legacy/ move candidate (a change under `legacy/`, a `legacy` that is not a directory, or a change
   to the set of top-level entries `scripts/checks/root_inventory.txt` lists; comments, order and
   nested `docs/...` or `scripts/...` entries do not count) has an accepted rehearsal of its exact

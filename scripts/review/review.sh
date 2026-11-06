@@ -258,7 +258,7 @@ EOF
 Please do a routine code review of the source-code patch below. It belongs to a compiler, a program that translates source code into machine code, and to that compiler's tests and documentation. Treat it as ordinary software engineering: look for logic errors and for behaviour that differs from what the code and its comments say. You may read files in the working directory for context.
 
 This is $2 (files: $4). $scope
-Also report as a finding any change that picks a side on an owner decision listed in docs/decisions.md (OD1 - OD157) or an undecided project question without the owner's explicit answer. Writing down a decision the owner explicitly approved is allowed; report it only when it lacks the owner's quoted, dated answer, changes that answer's meaning, goes beyond it, or adds something the owner did not approve.
+Also report as a finding any change that picks a side on an owner decision listed in docs/decisions.md (OD1 - OD157) or an undecided project question without the owner's explicit answer. Writing down a decision the owner explicitly approved is allowed; report it only when it lacks the owner's quoted, dated answer (or the quoted owner rule that decides it under the recording rule in docs/decisions.md), changes that answer's meaning, goes beyond it, or adds something the owner did not approve.
 EOF
   fi
   if [ -n "$PREV_FINDINGS" ]; then
