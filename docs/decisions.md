@@ -23,6 +23,8 @@ Links only; each item's text lives where it is linked.
 2. The items the reviews leave open until they are fully dispositioned: quantitative step and time
    bounds ([legacy ideas sweep](proposals/IDEAS.md), [pipeline review](proposals/MERGED.md)), and
    SPARK review items 4(b) and 4(c) ([SPARK review](proposals/SPARK.md)).
+3. The outside readers' ordering: models first, unclear points resolved before the owner reads
+   ([proposal](#outside-readers-ordering)).
 
 A decided proposal moves to `docs/archive/<topic>-<date>/`.
 
@@ -914,10 +916,13 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   [restart](#decided-project-restart)'s minimal day-one root (R-0558) after the move.
 - <a id="decided-project-outside-readers"></a>**The outside readers** (owner, 2026-11-06: "me but also
   agy and codex and kimi if it's available"). The outside-reader pass (R-0559) is done by the owner and
-  independent models: agy (Gemini), Codex, and Kimi when available (its absence is recorded, not
-  waited on). They read the browsable owner view of the
-  integrated spec. The participating models read first; every point one of them finds unclear is recorded and
-  resolved before the owner reads. The pass runs before the freeze (A2c) and again for each feature.
+  independent models: agy (Gemini), Codex, and Kimi when available. They read the browsable owner view of the
+  integrated spec. The pass runs before the freeze (A2c) and again for each feature
+  ([long-term changes](#decided-project-long-term-2026-11-06)). <a id="outside-readers-ordering"></a>*Proposed, waiting for the
+  owner:* the participating models read first, and every point one of them finds unclear is
+  recorded and resolved before the owner reads; each confusion is resolved before the freeze; and
+  Kimi's absence, when it is unavailable, is recorded rather than waited on. The owner's answer
+  names who reads, not these.
 - <a id="decided-project-contracts"></a>**Contracts and termination in verified growth** (row P18,
   2026-11-05). No source `old`, quantifier, implication or snapshot construct (OD117); entry, exit and
   frame properties are stated as Lean theorems (a source frame clause would be a new owner decision);
