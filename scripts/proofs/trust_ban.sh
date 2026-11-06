@@ -198,6 +198,7 @@ $B:22: example : 2 + 2 = 4 := by decide (config := ⟨false, true, true, false�
   || no "control: source scan (rc=$RC) reported '$W'"
 printf 'def s : String := s!"unterminated {\n' > "$TMP/src/Open.lean"
 printf 'example : String × Nat := { fst := "{--", snd := sorry\n} -- "\n' > "$TMP/src/Brace.lean"
+printf 'def q := `(command|\n/-! hidden -/\n)\n' > "$TMP/src/Quote.lean"
 for imp in 'import ConcreteSpec.Spec Lean' 'import ConcreteSpec.Spec
   Lean' 'prelude
 import ConcreteSpec.Spec'; do
@@ -214,7 +215,7 @@ printf '[leanOptions]\nwarningAsError = true\n\n[[lean_lib]]\nname = "ConcreteSp
 L=$(lake_options "$TMP/lake-src.toml")
 [ -n "$L" ] && ok "control: a library built from another source directory is refused ($L)" \
   || no "control: a lakefile with srcDir was accepted"
-for f in missing Open Brace; do
+for f in missing Open Brace Quote; do
   scan "$TMP/src/$f.lean" > /dev/null 2>&1; RC=$?
   [ "$RC" != 0 ] && ok "control: a source the scan cannot read or lex ($f) fails it (rc=$RC)" \
     || no "control: the scan of $f exited 0"

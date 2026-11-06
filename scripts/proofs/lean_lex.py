@@ -8,7 +8,8 @@ string with its escapes, raw strings r"…" and r#"…"#, character literals and
 Whether a string interpolates depends on the parser, not the lexer, so interpolation is admitted
 only directly after `s!`, `m!` or `f!` (its `{ }` code, with its own strings and comments, is
 lexed recursively), and any other string holding `{` is an error. An unterminated string,
-comment, interpolation or name is an error too: the lexer fails closed, never skips.
+comment, interpolation or name is an error too, and so is a syntax quotation `(…) (whose comments are
+syntax data; the library runs no meta code): the lexer fails closed, never skips.
 `comment_spans(src)` gives the top-level comments (the owner view, scripts/spec/lean_site.py, takes
 its doc blocks from them, so a doc comment inside an ordinary comment or a string is not one).
 
@@ -87,6 +88,10 @@ def lex(src, spans=None):
                 k = src.find("»", i + 1)
                 if k < 0: raise LexError("unterminated «name»")
                 out.append(src[i:k + 1]); i = k + 1
+            elif src.startswith("`(", i) or src.startswith("``(", i):
+                # A syntax quotation: its comments are syntax data, not comments of the source,
+                # and the library runs no meta code, so the lexer refuses it.
+                raise LexError(f"line {src.count(chr(10), 0, i) + 1}: a syntax quotation")
             elif c == "r" and not ident(i - 1) and re.match(r'r#*"', src[i:]): i = raw(i)
             elif c == "'" and not ident(i - 1):
                 m = re.match(r"'(\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|.)|[^\\'\n])'", src[i:])
