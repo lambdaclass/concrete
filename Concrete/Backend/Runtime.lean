@@ -47,6 +47,21 @@ def indexedFrom {α : Type} (n : Nat) : List α → List (Nat × α)
 
 def indexed {α : Type} (l : List α) : List (Nat × α) := indexedFrom 0 l
 
+theorem getElem?_indexedFrom {α : Type} (l : List α) (n k : Nat) :
+    (indexedFrom n l)[k]? = l[k]?.map (n + k, ·) := by
+  induction l generalizing n k with
+  | nil => simp [indexedFrom]
+  | cons a l ih =>
+    cases k with
+    | zero => simp [indexedFrom]
+    | succ k =>
+      simp only [indexedFrom, List.getElem?_cons_succ, ih]
+      congr 1; funext x; congr 1; omega
+
+theorem getElem?_indexed {α : Type} (l : List α) (k : Nat) :
+    (indexed l)[k]? = l[k]?.map (k, ·) := by
+  simpa [indexed] using getElem?_indexedFrom l 0 k
+
 theorem mem_indexedFrom {α : Type} {l : List α} {n k : Nat} {x : α} (h : l[k]? = some x) :
     (n + k, x) ∈ indexedFrom n l := by
   induction l generalizing n k with

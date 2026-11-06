@@ -275,6 +275,47 @@ theorem flag_word {t : IntTy} (ht : inProfile t = true) (op : BinOp) {x y : Int}
       Nat.reduceSub, Nat.reducePow, Int.reducePow, decide_eq_decide]
     omega
 
+/-! ## `adapter_correct`, the adapter's output shape -/
+
+theorem mapM_ok {α β ε : Type} {g : α → Except ε β} :
+    ∀ {l : List α} {l' : List β}, l.mapM g = .ok l' →
+      l'.length = l.length ∧ ∀ (i : Nat) (x : α), l[i]? = some x → ∃ y, g x = .ok y ∧ l'[i]? = some y
+  | [], l', h => by
+    simp only [List.mapM_nil] at h
+    cases h; exact ⟨rfl, fun i x hx => by simp at hx⟩
+  | a :: l, l', h => by
+    simp only [List.mapM_cons] at h
+    cases ha : g a with
+    | error e => simp [ha] at h; cases h
+    | ok b =>
+      cases hl : l.mapM g with
+      | error e => simp [ha, hl] at h; cases h
+      | ok bs =>
+        simp [ha, hl] at h
+        cases h
+        obtain ⟨hlen, hel⟩ := mapM_ok hl
+        refine ⟨by simp [hlen], fun i x hx => ?_⟩
+        cases i with
+        | zero => simp at hx; subst hx; exact ⟨b, ha, rfl⟩
+        | succ i => simpa using hel i x (by simpa using hx)
+
+/-- An instruction's expansion has `Inst.width` instructions. -/
+theorem inst_length {p : Program} {n : Nat} {ins : Inst} {xs : List Source.Instruction}
+    (h : inst p n ins = .ok xs) : xs.length = Inst.width ins := by
+  cases ins with
+  | bin op t d a b =>
+    unfold inst at h
+    cases hp : inProfile t <;> cases ha : operand p a <;> cases hb : operand p b <;>
+      simp_all [Inst.width, bind, Except.bind, pure, Except.pure] <;> (subst h; rfl)
+  | binOvf op t d f a b =>
+    unfold inst at h
+    cases hp : inProfile t <;> cases ha : operand p a <;> cases hb : operand p b <;>
+      simp_all [Inst.width, bind, Except.bind, pure, Except.pure] <;> (subst h; rfl)
+  | trunc fr to d a =>
+    unfold inst at h
+    cases hp : inProfile fr <;> cases hq : inProfile to <;> cases ha : operand p a <;>
+      simp_all [Inst.width, bind, Except.bind, pure, Except.pure] <;> (subst h; rfl)
+
 /-! ## `adapter_correct`, numbering -/
 
 theorem lookup_of_mem {l : List (Reg × Nat)} (hn : (l.map Prod.fst).Nodup) {r : Reg} {n : Nat}
