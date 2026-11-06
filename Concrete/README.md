@@ -37,7 +37,7 @@ tokens (kind + payload + span)
   │ parse (LL(1))       Parse.lean    generic table-driven parser over Surface0.grammar;
   ▼                                   premise P_parse (implementation) until the generic theorem lands
 surface AST
-  │ resolve + elab      Resolve.lean, Elab.lean   one composite stage edge: proved to satisfy
+  │ resolve + elab      Elab.lean     resolve + elab: one stage edge: proved to satisfy
   ▼                                   Surface0.Elab, with freshness and naming-independence
 Slice0.Program  (data, `out.q`)
   │ check               the spec's own `ConcreteSpec.check`; `check_iff` gives `Checked (toCore q)`
@@ -68,6 +68,54 @@ There's no Mono Core, since slice 0 has no generics.
 **BIR** is the boundary that the printer, and later the LCB adapter, read. It uses block-argument SSA, and `add.ovf` returns `(value, flag)`. It has `br`/`condbr` and a `trap k` terminator.
 
 Each IR has a total, fuel-indexed evaluator returning the spec's `Outcome` and a decidable well-formedness predicate.
+
+## Layout (lean root, few cohesive folders)
+
+**New root entries.** There are only three, each with a stated reason:
+
+| Entry | Purpose |
+|---|---|
+| `Concrete.lean` | The library root that lake requires; it imports every stage. It is the same pattern as `ConcreteSpec.lean`. |
+| `Concrete/` | The compiler: one flat folder, one file per pipeline stage or concern. |
+| `tests/` | The executable test corpus. Each slice gets one subfolder, which holds `.con` sources and their `.expect` outcomes. |
+
+**Changes to existing entries.** No new entry is created for any of these:
+- `lakefile.toml` gains the `Concrete` lib and the `concrete` exe.
+- `ConcreteSpec/Spec/Surface0.lean` and `ConcreteSpec/Proofs/Surface0.lean` go into the spec's existing folders.
+- The gates and runners (conformance, the two differentials, certificates, the premise registry, negative controls) are files in the existing `scripts/checks/`. No `scripts/compiler/` is added.
+- `required-checks.txt` and the CI workflow gain entries.
+
+Generated outputs are never committed and get no new root entry. That covers certificates, `.ll` files, images and facts JSON, which all go under the git-ignored `.lake/concrete/`.
+
+**The folder tree:**
+
+```
+Concrete.lean          library root (imports only)
+Concrete/
+  README.md            this design
+  Lex.lean             UTF-8 decode + lexer, and its theorem against Surface0.Lexes
+  Parse.lean           generic LL(1) table parser over Surface0.grammar
+  Elab.lean            resolve + elaborate to Slice0.Program (one stage edge), and its theorems
+  MIR.lean             Place MIR: syntax, semantics, WF, lowering, lower_correct
+  BIR.lean             BIR: syntax, semantics, behaviour, WF, ssa, ssa_correct, addOvf_correct
+  LLVM.lean            BIR → LLVM text printer (unverified; covered by P_print)
+  Stages.lean          typed stage contracts; `compile` is the fold of the stage list
+  Premises.lean        THE one file of premises, plus the execution-trust inventory
+  Theorem.lean         compile_correct, the non-vacuity witnesses, answer_correct
+  Facts.lean           per-function facts: judgments, derive, derive_sound, rendering (text/JSON)
+  Cert.lean            per-compilation certificate emitter
+  Main.lean            CLI driver (IO, toolchain invocation); placeholder spellings
+tests/
+  slice0/              *.con sources and *.expect outcomes (exit status, or refusal + rule)
+```
+
+**Rules:**
+- There are no subfolders inside `Concrete/` until a stage outgrows one file. A split then creates one folder for that stage, never a one-file folder.
+- Each stage's definitions and theorems live in the same file, so each fact has one home.
+- `Resolve` merges into `Elab`, because it is one stage edge with one contract.
+- Every entry has exactly one home: tests are in `tests/`, gates in `scripts/checks/`, the spec in `ConcreteSpec/`.
+
+The root inventory (`scripts/checks/root_inventory.txt`) lists each new root entry in the same change that creates it. An unlisted entry fails the check, and so does a listed entry that is missing.
 
 ## Frontend specifications (new spec file `ConcreteSpec/Spec/Surface0.lean`)
 
@@ -268,7 +316,7 @@ The **CLI spellings are placeholders** (`concrete facts FILE [FN]`, `concrete bu
    - a **totality ban**: no `partial`, `unsafe`, `@[implemented_by]`, `@[extern]` or `opaque` in `Concrete/` outside `Premises.lean`;
    - an external-checker replay (con-leche/nanoda, R-0553) of the compiler's theorems.
 3. **Premise registry and stage coverage:** the checks described in the stage registry section above.
-4. **Conformance:** each `conformance/slice0/*.con` example runs through the Lean `run` and through the native runner, and both must match its `.expect` (an exit status, or a refusal with its rule). A separate supported-subset coverage report lists every grammar production and Core form that the corpus exercises. A reject-all compiler fails, because every accepted example must exit with its status.
+4. **Conformance:** each `tests/slice0/*.con` example runs through the Lean `run` and through the native runner, and both must match its `.expect` (an exit status, or a refusal with its rule). A separate supported-subset coverage report lists every grammar production and Core form that the corpus exercises. A reject-all compiler fails, because every accepted example must exit with its status.
 5. **Differential at the source:** generated accepted programs, with replayable seeds; native exit = Lean `run`.
 6. **Differential at BIR → native:** this covers overflow. Generated BIR programs over **arbitrary** `u8` operands, including `200 + 56`, go through `BIR.behaviour` and through print plus clang plus execution. Overflow must give exit 134 and the trap line on fd 2.
 7. **Certificates:** the kernel checks every acceptance and refusal certificate, with measured budgets.
