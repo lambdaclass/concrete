@@ -1,0 +1,7 @@
+[piece 5 of 11: scripts]
+- ConcreteSpec/Spec/Borrow.lean:222: `RangeOk` encodes the OD118 choice to reject statically invalid ranges without `else` while accepting them with `else`. This implements owner-decision behavior despite the “PROPOSED” label and requires explicit owner authorization before landing. I could not verify that authorization because sandbox initialization failed when reading `docs/decisions.md`.
+[piece 9 of 11: scripts]
+- scripts/proofs/export_inventory.py:150: `head.format(...)` interprets braces inside the encoded declaration name as format placeholders. A valid Lean name such as `ConcreteSpec.«{foo}»` therefore raises `KeyError` during declaration rendering. Insert the kind without treating the name as a format string.
+- scripts/proofs/external.sh:139: Unquoted `$(cat "$TMP/population.txt")` splits theorem names on whitespace and expands shell globs. Lean’s `«…»` quoting does not prevent shell expansion, so a valid theorem such as `ConcreteSpec.«foo bar»` becomes multiple exporter arguments and fails the gate. Load names into an array and pass its quoted elements.
+[piece 10 of 11: scripts]
+- scripts/proofs/trust_ban.sh:51: The scanner skips executable interpolation expressions inside Lean strings. For example, `example : String := s!"{(sorry : Nat)}"` contains a banned `sorry`, but this scanner removes it along with the string. Because discarded examples are also absent from the environment inventory, the trust ban can pass despite prohibited source code.
