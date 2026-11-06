@@ -24,7 +24,8 @@
 #   X  one theorem handed another's proof: con-leche rejects it as a type mismatch AT that theorem,
 #      nanoda at its definitional-equality check (the reason is checked, never the exit code alone);
 #   T  the export cut inside a record, and D  the export missing one expression record: both refuse;
-#   F  a definition's body replaced while every statement stays the same: S reports exactly it;
+#   F  a definition's body replaced, or an (anonymous) universe parameter added to one, while every
+#      statement stays the same: S reports exactly that definition;
 #   N  names whose dotted spellings collide, and a non-ASCII one, are encoded apart and alike by both
 #      renderers (every comparison is by that injective encoding).
 #
@@ -225,27 +226,37 @@ for c in cut dropped; do
     || no "nanoda on the $c export: rc=$rc: $(tail -2 "$TMP/k-$c.out" | tr '\n' ' ')"
 done
 
-echo "=== F: declaration fidelity control, a definition changed under an unchanged statement ==="
-# The first definition of the population's own library in the stream gets its type as its body: every
-# theorem's statement is untouched, and the comparison must name exactly that definition.
-FORGED=$(python3 - "$EXPORT" "$TMP/forged.ndjson" <<'PY'
+echo "=== F: declaration fidelity controls, a declaration changed under unchanged statements ==="
+# forge MODE OUT → copies the export to OUT with the first definition of the population's own library
+# changed, and prints its encoded name. body: its body becomes its type. arity: a definition with no
+# universe parameter gets one, the anonymous name (encoded as the empty string, so a list that did
+# not delimit its names would render [] and [anonymous] alike). No theorem's statement changes.
+forge() {
+  python3 - "$EXPORT" "$2" "$1" <<'PY'
 import json, sys
 sys.path.insert(0, "scripts/proofs")
 from export_inventory import name_table, records
-names = name_table(sys.argv[1], encoded=True); done = None
+names = name_table(sys.argv[1], encoded=True); done = None; mode = sys.argv[3]
 with open(sys.argv[2], "w", encoding="utf-8") as o:
     for r in records(sys.argv[1]):
-        if done is None and "def" in r and names[r["def"]["name"]].startswith("s12:ConcreteSpec"):
-            r["def"]["value"] = r["def"]["type"]; done = names[r["def"]["name"]]
+        d = r.get("def")
+        if done is None and d and names[d["name"]].startswith("s12:ConcreteSpec") \
+                and (mode == "body" or d["levelParams"] == []):
+            if mode == "body": d["value"] = d["type"]
+            else: d["levelParams"] = [0]
+            done = names[d["name"]]
         o.write(json.dumps(r, separators=(",", ":")) + "\n")
 print(done or "")
 PY
-)
-$INV decls "$TMP/forged.ndjson" > "$TMP/decls-forged.txt"
-FF=$(fidelity "$TMP/decls-lean.txt" "$TMP/decls-forged.txt")
-[ -n "$FORGED" ] && [ "$FF" = "$FORGED" ] \
-  && ok "a definition whose body was replaced ($FORGED) is reported, though no statement changed" \
-  || no "the fidelity comparison on a forged definition (${FORGED:-none}) reported '${FF:-nothing}'"
+}
+for mode in body arity; do
+  FORGED=$(forge $mode "$TMP/forged-$mode.ndjson")
+  $INV decls "$TMP/forged-$mode.ndjson" > "$TMP/decls-forged-$mode.txt"
+  FF=$(fidelity "$TMP/decls-lean.txt" "$TMP/decls-forged-$mode.txt")
+  [ -n "$FORGED" ] && [ "$FF" = "$FORGED" ] \
+    && ok "a definition with a forged $mode ($FORGED) is reported, though no statement changed" \
+    || no "the fidelity comparison on a forged $mode (${FORGED:-none}) reported '${FF:-nothing}'"
+done
 echo "=== N: name encoding control ==="
 # Dotted names are not injective (`a.b` as one component and as two print alike), and stripping `«»`
 # is not safe on UTF-8 under LC_ALL=C. Both encoders must give these three names three different

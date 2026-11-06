@@ -136,7 +136,7 @@ def decls(path):
         return num[root]
 
     def nms(xs):
-        return " ".join(names[x] for x in xs)
+        return "".join(names[x] + ";" for x in xs)      # `;`-terminated: [] and [anonymous] differ
 
     def flag(b):
         return "1" if b else "0"

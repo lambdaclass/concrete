@@ -114,7 +114,9 @@ partial def dag (e : Expr) : DagM Nat := do
   modify fun st => { st with memo := st.memo.insert e i }
   return i
 
-def names (ns : List Name) : String := " ".intercalate (ns.map enc)
+/-- A list of names: each encoded and terminated by `;`, so `[]` and `[anonymous]` (`enc` of the
+anonymous name is empty) differ, and so do lists of different lengths. -/
+def names (ns : List Name) : String := String.join (ns.map (enc · ++ ";"))
 def flag (b : Bool) : String := if b then "1" else "0"
 
 /-- The declaration line of a constant, after its expressions (canonical form, above). -/
