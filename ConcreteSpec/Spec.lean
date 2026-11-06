@@ -21,16 +21,18 @@ The examples are decided by running the definitions: `check p = true` means the 
 The decisions are cited by their row ids (Q1.1 … Q9.19, P1 … P23) and by the recorded rule ids of
 docs/spec (ODnn, TYPE-n, OWN-n, …).
 
-The file has five parts. Each is a small Core fragment with its own judgments, defined only as far
-as its design theorem needs (R4 F8). Unifying them into one Core is work for A3 (R-0560).
+The file has seven parts. Each is a small Core fragment with its own judgments, defined only as
+far as its theorems need (R4 F8). Unifying them into one Core is work for A3 (R-0560).
 
 1. **Slice 1** (ROADMAP phase B): scalars, `let`, structs, moves and the use-after-move refusal,
    checked `+`, `return`, in Core's binding form (Q9.1), with the static refusal of statically
    known violations (Q6.1–Q6.6).
 2. **Representation** (Q3.11): the layout and byte encoding of the slice-1 types.
 3. **Structured cleanup** (Q9.8, Q2.1, Q2.7, Q1.5): `defer`, frames and exits.
-4. **Scoped borrows** (Q3.3, Q3.4, Q9.5, REF-11).
+4. **Scoped borrows** (Q3.3, Q3.4, Q9.5, REF-11), with range subviews (Q4.7).
 5. **Allocator brands** (Q1.1–Q1.5, Q1.13).
+6. **Authority**: capabilities and grants (the authority rules, Q5.1–Q5.4, Q7.11).
+7. **Observations**: what the parent process sees, the exit status and traps (Q7.10, Q8.5).
 
 Only Lean core is imported (Q9.16). No proof uses `native_decide` or `sorry` (Q9.17).
 
@@ -2129,13 +2131,22 @@ function is checked the same way, and `Unsafe` never stands in for an operationa
 (rule 5). A function's permissions are checked once, for every value of its capability variables
 (rule 3), and `sub_iff` (`Proofs/Authority.lean`) proves that the check is exactly inclusion for
 every value. `authority_contained` proves what the rules buy: every event a run of `main`
-produces is an operation on a grant `main` received, through capabilities `main` declares.
+produces, whether or not the run finishes, is an operation on a grant `main` received, through
+capabilities `main` declares.
+
+`ProgOk` checks authority under an assumed valid launch: it does not check `main`'s grant
+parameters against the target (the hosted table's instance limits, such as at most one `StdOut`,
+and the grants and permissions the target offers; row Q7.10). `observe` (part 7) refuses a start
+whose configured grants are missing.
 
 Not modelled here: the ownership of grants (that `main` consumes each grant before it returns,
-rule 12, and narrowing), the target's own effects (startup, shutdown, the trap message), the
-"may block" table (rule 6), returned values (rule 8), function-pointer values (rule 4), and
-reserving the capability names against other uses (rule 13). The operations are a representative
-part of the hosted table (row Q7.10), one per grant type used here.
+rule 12, and narrowing), checked acquisition, minting and unforgeability of grants and the
+identity of trusted wrappers (rule 11), the target's own effects (startup, shutdown, the trap
+message), the "may block" table (rule 6), returned values (rule 8), function-pointer values and
+their exact capability sets (rule 4), foreign calls, trait dispatch, generic methods and generated
+cleanup (rules 5 and 7; this part has direct calls only), and reserving the capability names
+against other uses (rule 13). The operations are a representative part of the hosted table (row
+Q7.10), one per grant type used here.
 -/
 
 /-- The reserved capability names (authority rule 13). `Console` is the permission for operations
@@ -2179,6 +2190,13 @@ def CapExpr.Sub (e f : CapExpr) : Prop :=
   (∀ c ∈ e.caps, c ∈ f.caps) ∧ (∀ v ∈ e.vars, v ∈ f.vars ∨ ∀ c ∈ Cap.all, c ∈ f.caps)
 
 instance (e f : CapExpr) : Decidable (e.Sub f) := by unfold CapExpr.Sub; infer_instance
+
+/-- Two set expressions are the same set when each is included in the other (Q5.3: canonical
+semantic equality). By `sub_iff` this is "equal for every value of the variables": the order and
+grouping of the names do not matter. `CapExpr`'s derived `=` compares the written form only. -/
+def CapExpr.Equiv (e f : CapExpr) : Prop := e.Sub f ∧ f.Sub e
+
+instance (e f : CapExpr) : Decidable (e.Equiv f) := by unfold CapExpr.Equiv; infer_instance
 
 /-- The callee's set `e` at a call whose explicit capability arguments are `σ`: each variable `v`
 is replaced by the argument `σ[v]` (Q5.4, substitution checking). -/
@@ -2315,28 +2333,42 @@ structure Event where
   grant : Nat
   deriving DecidableEq, Repr
 
+/-- What a run has produced so far: the events in order, and whether the run is complete. A run
+that is not complete stopped early: it ran out of fuel, or met a missing grant or callee (which a
+permitted program never meets). Its events are still observable, so the containment theorem
+covers them too: it needs no termination premise. -/
+structure Trace where
+  events : List Event
+  complete : Bool
+  deriving DecidableEq, Repr
+
 /-- Run a body whose grant parameters are bound, by position, to the launch grants `env`. Each
 statement costs one unit of fuel. Capabilities have no run-time representation: the run never
-consults them. `none` when the fuel runs out, or when a grant or a callee is missing (which a
-permitted program never meets). -/
-def exec (P : Prog) : Nat → List Nat → List Stmt → Option (List Event)
-  | 0, _, _ => none
-  | _ + 1, _, [] => some []
-  | n + 1, env, .prim op g :: rest => do
-    let id ← env[g]?
-    let tr ← exec P n env rest
-    pure (⟨op, id⟩ :: tr)
-  | n + 1, env, .call h _ gs :: rest => do
-    let callee ← P.find h
-    let env' ← gs.mapM (fun i => env[i]?)
-    let t₁ ← exec P n env' callee.body
-    let t₂ ← exec P n env rest
-    pure (t₁ ++ t₂)
+consults them. -/
+def exec (P : Prog) : Nat → List Nat → List Stmt → Trace
+  | 0, _, _ => ⟨[], false⟩
+  | _ + 1, _, [] => ⟨[], true⟩
+  | n + 1, env, .prim op g :: rest =>
+    match env[g]? with
+    | none => ⟨[], false⟩
+    | some id =>
+      let t := exec P n env rest
+      ⟨⟨op, id⟩ :: t.events, t.complete⟩
+  | n + 1, env, .call h _ gs :: rest =>
+    match P.find h, gs.mapM (fun i => env[i]?) with
+    | some callee, some env' =>
+      let t₁ := exec P n env' callee.body
+      if t₁.complete then
+        let t₂ := exec P n env rest
+        ⟨t₁.events ++ t₂.events, t₂.complete⟩
+      else t₁
+    | _, _ => ⟨[], false⟩
 
 /-- Run `main` on the grants `launch` the launcher minted for its parameters. -/
-def runMain (P : Prog) (fuel : Nat) (launch : List Nat) : Option (List Event) := do
-  let m ← P.find "main"
-  exec P fuel launch m.body
+def runMain (P : Prog) (fuel : Nat) (launch : List Nat) : Trace :=
+  match P.find "main" with
+  | some m => exec P fuel launch m.body
+  | none => ⟨[], false⟩
 
 /-! ### Examples -/
 
@@ -2407,7 +2439,16 @@ example : FnOk [emitFn, relayFn] relayFn := by decide
 example : ¬ FnOk [emitFn, relayFn] { relayFn with perms := console } := by decide
 
 /-- A run of `prog` on launch grant `7`: `emit` writes, then `log` writes, both to grant `7`. -/
-example : runMain prog 10 [7] = some [⟨.writeStdout, 7⟩, ⟨.writeStdout, 7⟩] := by decide
+example : runMain prog 10 [7] = ⟨[⟨.writeStdout, 7⟩, ⟨.writeStdout, 7⟩], true⟩ := by decide
+
+/-- With too little fuel the run stops early, and the events so far are kept: `emit`'s write. -/
+example : runMain prog 2 [7] = ⟨[⟨.writeStdout, 7⟩], false⟩ := by decide
+
+/-- Set equality is semantic (Q5.3): the order of the names does not matter. -/
+example : CapExpr.Equiv ⟨[.console, .fs], []⟩ ⟨[.fs, .console], []⟩ := by decide
+
+/-- A variable is a set like any other: `with(C)` is not `with(C, Console)`. -/
+example : ¬ CapExpr.Equiv ⟨[], [0]⟩ ⟨[.console], [0]⟩ := by decide
 
 end ConcreteSpec.Authority
 

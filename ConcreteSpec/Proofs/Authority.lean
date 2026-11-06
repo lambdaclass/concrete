@@ -98,92 +98,89 @@ theorem mapM_args {env : List Nat} : ∀ {gs : List Nat} {env' : List Nat},
             simp only [List.map_cons, List.cons.injEq]
             exact ⟨Option.some.inj hg.1, iht gty cs hg.2⟩
 
-/-- Every event of a run of permitted statements of `f` is an operation on one of the grants
-bound to `f`'s parameters, of the operation's grant type, and each capability it needs is in
-`f`'s permissions, for every value of `f`'s capability variables. -/
+/-- Set equality is exactly equality for every value of the variables (Q5.3). -/
+theorem equiv_iff (e f : CapExpr) : e.Equiv f ↔ ∀ ρ c, e.Mem ρ c ↔ f.Mem ρ c := by
+  constructor
+  · rintro ⟨h1, h2⟩ ρ c; exact ⟨sub_sound h1 ρ c, sub_sound h2 ρ c⟩
+  · intro h
+    exact ⟨(sub_iff e f).mpr fun ρ c => (h ρ c).mp, (sub_iff f e).mpr fun ρ c => (h ρ c).mpr⟩
+
+/-- Every event of a run of permitted statements of `f`, finished or not, is an operation on one
+of the grants bound to `f`'s parameters, of the operation's grant type, and each capability it
+needs is in `f`'s permissions, for every value of `f`'s capability variables. -/
 theorem exec_contained {P : Prog} (hP : ∀ f ∈ P, FnOk P f) :
     ∀ (n : Nat) (f : Fn) (ss : List Stmt), (∀ s ∈ ss, StmtOk P f s) →
     ∀ (ρ : Nat → List Cap) (env : List Nat) (gty : Nat → GrantTy),
-      env.map gty = f.grants → ∀ tr, exec P n env ss = some tr →
-      ∀ e ∈ tr, e.grant ∈ env ∧ gty e.grant = e.op.grant ∧ ∀ c ∈ e.op.caps, f.perms.Mem ρ c := by
+      env.map gty = f.grants → ∀ e ∈ (exec P n env ss).events,
+      e.grant ∈ env ∧ gty e.grant = e.op.grant ∧ ∀ c ∈ e.op.caps, f.perms.Mem ρ c := by
   intro n
   induction n with
-  | zero => intro f ss _ ρ env gty _ tr h; simp [exec] at h
+  | zero => intro f ss _ ρ env gty _ e he; simp [exec] at he
   | succ n ih =>
-    intro f ss hss ρ env gty henv tr h
-    match ss, hss, h with
-    | [], _, h =>
-      simp [exec] at h; subst h; intro e he; cases he
-    | .prim op g :: rest, hss, h =>
-      simp only [exec, Option.bind_eq_bind] at h
+    intro f ss hss ρ env gty henv e he
+    match ss, hss, he with
+    | [], _, he => simp [exec] at he
+    | .prim op g :: rest, hss, he =>
+      have hs := hss _ (List.mem_cons_self ..)
+      simp only [StmtOk, PrimOk] at hs
+      simp only [exec] at he
       cases hid : env[g]? with
-      | none => simp [hid] at h
+      | none => simp [hid] at he
       | some id =>
-        cases hrest : exec P n env rest with
-        | none => simp [hid, hrest] at h
-        | some tr' =>
-          simp [hid, hrest] at h
-          subst h
-          have hs := hss _ (List.mem_cons_self ..)
-          simp only [StmtOk, PrimOk] at hs
-          intro e he
-          rcases List.mem_cons.mp he with rfl | he
-          · refine ⟨List.mem_of_getElem? hid, ?_, ?_⟩
-            · have : (env.map gty)[g]? = some (gty id) := by simp [hid]
-              rw [henv, hs.1] at this
-              exact (Option.some.inj this).symm
-            · intro c hc
-              exact sub_sound hs.2 ρ c (.inl hc)
-          · exact ih f rest (fun s hs' => hss s (List.mem_cons_of_mem _ hs')) ρ env gty henv tr'
-              hrest e he
-    | .call h' caps gs :: rest, hss, h =>
-      simp only [exec, Option.bind_eq_bind] at h
+        simp only [hid, List.mem_cons] at he
+        rcases he with rfl | he
+        · refine ⟨List.mem_of_getElem? hid, ?_, ?_⟩
+          · have : (env.map gty)[g]? = some (gty id) := by simp [hid]
+            rw [henv, hs.1] at this
+            exact (Option.some.inj this).symm
+          · intro c hc
+            exact sub_sound hs.2 ρ c (.inl hc)
+        · exact ih f rest (fun s hs' => hss s (List.mem_cons_of_mem _ hs')) ρ env gty henv e he
+    | .call h' caps gs :: rest, hss, he =>
       have hs := hss _ (List.mem_cons_self ..)
       simp only [StmtOk, CallOk] at hs
+      simp only [exec] at he
       cases hfind : P.find h' with
-      | none => simp [hfind] at h
+      | none => simp [hfind] at he
       | some callee =>
         obtain ⟨callee', hf', _, _, hgs, hsub⟩ := hs
         rw [hfind] at hf'
         cases hf'
         cases henv' : gs.mapM (fun i => env[i]?) with
-        | none => simp [hfind, henv'] at h
+        | none => simp [hfind, henv'] at he
         | some env' =>
-          cases h1 : exec P n env' callee.body with
-          | none => simp [hfind, henv', h1] at h
-          | some t₁ =>
-            cases h2 : exec P n env rest with
-            | none => simp [hfind, henv', h2] at h
-            | some t₂ =>
-              simp [hfind, henv', h1, h2] at h
-              subst h
-              have hcallee := hP callee (find_mem hfind)
-              obtain ⟨hmem, htyp⟩ := mapM_args henv'
-              have henv'ty : env'.map gty = callee.grants := by
-                apply htyp gty callee.grants
-                rw [henv]; exact hgs
-              have hsub' := sub_sound hsub
-              intro e he
-              rcases List.mem_append.mp he with he | he
-              · obtain ⟨hg, hty, hc⟩ := ih callee callee.body hcallee.2 (inst caps ρ) env' gty
-                  henv'ty t₁ h1 e he
-                exact ⟨hmem _ hg, hty, fun c hcin => hsub' ρ c (mem_subst (hc c hcin))⟩
-              · exact ih f rest (fun s hs' => hss s (List.mem_cons_of_mem _ hs')) ρ env gty henv t₂
-                  h2 e he
+          simp only [hfind, henv'] at he
+          obtain ⟨hmem, htyp⟩ := mapM_args henv'
+          have henv'ty : env'.map gty = callee.grants := by
+            apply htyp gty callee.grants
+            rw [henv]; exact hgs
+          have hcallee := hP callee (find_mem hfind)
+          have hcall : ∀ e ∈ (exec P n env' callee.body).events,
+              e.grant ∈ env ∧ gty e.grant = e.op.grant ∧ ∀ c ∈ e.op.caps, f.perms.Mem ρ c := by
+            intro e he
+            obtain ⟨hg, hty, hc⟩ := ih callee callee.body hcallee.2 (inst caps ρ) env' gty
+              henv'ty e he
+            exact ⟨hmem _ hg, hty, fun c hcin => sub_sound hsub ρ c (mem_subst (hc c hcin))⟩
+          split at he
+          · rcases List.mem_append.mp he with he | he
+            · exact hcall e he
+            · exact ih f rest (fun s hs' => hss s (List.mem_cons_of_mem _ hs')) ρ env gty henv e he
+          · exact hcall e he
 
-/-- **Authority containment.** In a permitted program, every event of a run of `main` is an
-operation on one of the grants the launcher minted for `main`'s parameters, of the operation's
-grant type, and every capability the operation needs is one that `main` declares. -/
+/-- **Authority containment.** In a permitted program, every event of a run of `main`, whether
+or not the run finishes, is an operation on one of the grants the launcher minted for `main`'s
+parameters, of the operation's grant type, and every capability the operation needs is one that
+`main` declares. -/
 theorem authority_contained {P : Prog} (hP : ProgOk P) {m : Fn} (hm : P.find "main" = some m)
-    {gty : Nat → GrantTy} {launch : List Nat} (hl : launch.map gty = m.grants) {fuel : Nat}
-    {tr : List Event} (hr : runMain P fuel launch = some tr) :
-    ∀ e ∈ tr, e.grant ∈ launch ∧ gty e.grant = e.op.grant ∧ ∀ c ∈ e.op.caps, c ∈ m.perms.caps := by
+    {gty : Nat → GrantTy} {launch : List Nat} (hl : launch.map gty = m.grants) (fuel : Nat) :
+    ∀ e ∈ (runMain P fuel launch).events,
+      e.grant ∈ launch ∧ gty e.grant = e.op.grant ∧ ∀ c ∈ e.op.caps, c ∈ m.perms.caps := by
   obtain ⟨_, hall, m', hm', h0⟩ := hP
   rw [hm] at hm'; cases hm'
   have hok := hall m (find_mem hm)
-  simp only [runMain, hm, Option.bind_eq_bind, Option.bind_some] at hr
   intro e he
-  obtain ⟨hg, hty, hc⟩ := exec_contained hall fuel m m.body hok.2 (fun _ => []) launch gty hl tr hr e he
+  simp only [runMain, hm] at he
+  obtain ⟨hg, hty, hc⟩ := exec_contained hall fuel m m.body hok.2 (fun _ => []) launch gty hl e he
   refine ⟨hg, hty, fun c hcin => mem_of_no_vars ?_ (hc c hcin)⟩
   rw [← h0]; exact hok.1
 
