@@ -569,9 +569,126 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     safe code), [OD120](#od120) (a vacuous precondition used for safety is refused), [OD82](#od82)
     (extended to functions), Q7.10 and Q8.5 (extended by the stack target-contract obligations of Q14, which are future target work, not current guarantees). Unchanged: STMT-1, STMT-2, OD101 (general trap semantics), Q6.3–Q6.6
     (with the interactions stated in the proposal), CON-1 and P18.
-  - *Spellings for the owner (pending).* (1) the checked operations and their error type, in
-    [OD99](#od99)'s family; (2) how a function names its Lean discharge theorem; (3) the termination
-    permission marker. Until the owner picks, none is written in the spec or in examples.
+  - *Spellings* (owner, 2026-11-06: "ok agreed with the 3 decisions"; checked by Codex, agy and Kimi,
+    whose shared refinements are recorded here under the owner's rule that what Claude and Codex agree
+    on is recorded).
+    1. *Checked operations*, in [OD99](#od99)'s family: `checked_add`, `checked_sub`, `checked_mul`,
+       `checked_div`, `checked_rem`, `checked_shl`, `checked_shr` and `checked_neg`, each returning
+       `Result<T, ArithmeticError>` with `ArithmeticError { Overflow, DivisionByZero, InvalidShift }`.
+       Signed `MIN / -1` and `MIN % -1` give `Overflow`. `checked_shl` and `checked_shr` fail only on an
+       invalid shift count (`InvalidShift`); a valid shift keeps the decided bit-discarding semantics.
+       `ArithmeticError` is separate from `try_convert`'s `OutOfRange` ([OD106](#od106)).
+    2. *Naming a Lean theorem*: `#[proof(path::to::theorem)]`, repeatable, on the function
+       declaration. The path resolves to a typed theorem identity, never a string (rule 13), and the
+       axiom and dependency checks stay mandatory. The theorem's role follows from its statement:
+       (a) a statement of obligation form for this function that exactly equals a current generated
+       obligation discharges it, and every discharge edge is recorded, each obligation identity with
+       its own edge even when several obligations are identical, never by first match; (b) a statement
+       of obligation form that matches no current obligation (stale or mistyped) is refused with a
+       diagnostic, never reclassified; (c) any other statement must refer to the annotated function's
+       current semantic identity or its generated semantic contract, and is recorded in the facts as a
+       proven property; (d) a theorem unrelated to the function (for example one proving `True`) is
+       refused.
+    3. *The termination permission*: `#[may_not_terminate("reason")]`, with a mandatory, non-empty
+       reason. It attaches before a `while` loop; on one designated function per recursive component,
+       waiving only that component's cycle obligation (a second marker for the same component is
+       refused); on an extern or blocking declaration; or as a prefix to an expression, where the
+       checker requires the target to be an indirect call. It never relaxes [OD115](#od115):
+       specification functions stay total. Grammar, which must stay LL(1) and is checked mechanically:
+       a statement factors one leading attribute-prefix production before branching on loop or
+       expression statement; an expression attribute attaches to the immediately following postfix
+       expression (so `#[may_not_terminate("r")] fp(x) + g()` attaches to `fp(x)`); the checker
+       classifies the targets. This extends [OD82](#od82). The grammar data in ConcreteSpec is updated
+       in the spec work (A2i).
+- <a id="decided-project-core-statement"></a>**The core statement** (owner, 2026-11-06: "concrete core
+  idea is to be fully proven system programming language with no gc where i can know everything").
+  README.md and PHILOSOPHY.md open with it: Concrete is a fully proven systems programming language
+  with no garbage collector, where you can know everything a program does: what it does, what it may
+  touch, whether it can fail or stop, and what is proved about it. "Fully proven" means the decided
+  proof model ([proof infrastructure](#decided-project-proof-infrastructure)): compiler correctness
+  is proved end to end, with every unproven step named as an explicit assumption and never silently
+  trusted, and a program's own correctness is proved by Lean theorems about it. The statement says
+  what the language is for, not what is proved today: each guarantee holds only as its evidence
+  lands, compiler correctness and program correctness need separate proofs, and native claims remain
+  conditional on their named assumptions (the unverified LLVM path among them).
+- <a id="decided-project-facts-report"></a>**The per-function facts report from slice 0** (owner,
+  2026-11-06: "we need to know from the start if a function is doing what etc"). The report that
+  answers "what may this function do" is a slice-0 deliverable (B0, R-0575), not a phase-F addition.
+  For each function it states, derived from the Lean rules and never claiming what they do not
+  establish: the capabilities used and the grants and resources actually reachable; allocation and
+  the allocator; trusted, foreign and opaque boundaries and the assumptions they carry; every
+  operation that could fail and how it is handled (proven safe, a written branch, a checked
+  operation); termination (termination evidence with its named premises, or the responsible source
+  permission and the call path to it); the recursion
+  depth and stack bound, or why none is established; proof status (each obligation and the theorem
+  that discharges it); and whether the report is complete. Its schema is versioned and readable by
+  people, CI and language models. From slice 0 the compiler also answers queries over the same facts
+  (owner, 2026-11-06: "i want to have since the get go the ability to ask the compiler what a function
+  can do, allocate, etc"): asked about one function or module, it returns that function's facts,
+  each with its reason and evidence, both as readable text and in the versioned machine format. The
+  report and the query are one fact source, not two implementations. Slice 0's facts are small, but
+  the machinery exists from the first commit and grows with each feature; R-0178 freezes the
+  versioned schema R-0575 introduces, R-0494 grows this fact source into the single verdict authority,
+  and R-0201 builds the audit commands (`audit`, `explain`, `why`, `diff`) on the query. The query's
+  command-line spelling is an owner question, pending. It continues the legacy compiler's `--report` family (effects, caps, alloc, recursion,
+  stack-depth), re-derived from the new rules. The design, checked by Codex, agy and Kimi (each
+  ACCEPT-WITH-CHANGES, converging on the points below, recorded under the owner's rule that what
+  Claude and Codex agree on is recorded):
+  - *One derivation.* Every fact is a typed judgment defined in Lean, with a derivation-soundness
+    theorem, and an obligation-discovery completeness theorem wherever it claims an absence. One
+    derivation feeds the readable view, the machine format and every policy; the legacy compiler
+    drifted with three independent producers.
+  - *Closed status per fact:* established; conditional (on named assumptions, transitive debt from
+    `assume`, unproved invariants, trusted or foreign contracts); refuted (with a witness path); not
+    established (with the blocker and its site); not applicable. Coverage is stated per fact, not as
+    one global flag, and an unknown fact never satisfies a policy.
+  - *Separate vocabulary.* Empty capabilities do not mean "touches nothing": authority (`with(...)`),
+    resources (handles, allocators, `Kept<H>`) and memory reads and writes through `&mut` and borrows
+    are separate facts. "Can fail" is split into discharged implicit-trap sites, `Result` errors,
+    explicit `abort`, allocation failure, stack exhaustion and foreign behaviour. Determinism,
+    information flow, constant time and concurrency are separate future judgments; termination and
+    a stack bound imply none of them.
+  - *Honest numbers.* A stack number comes only from final-artifact and target evidence, never from a
+    source estimate. An opaque, indirect, foreign or recursive path without sufficient evidence gives
+    "not established", never a finite guess; proved depth and evidence covering every possible target
+    may establish a bound using final-artifact frame sizes, while a bound relying on named trusted
+    contracts stays conditional. "Bounded" never implies a wall-clock deadline.
+  - *Composition.* Local and transitive summaries, module rollups and drill-down to the call site and
+    obligation; transitive through indirect and opaque calls, cleanup and callbacks; fail-closed.
+  - *Policies consume the same facts.* A policy such as the
+    [predictable policy](#decided-project-predictable-policy) is a named, versioned bundle over these
+    facts, never a second analysis or semantics mode ([OD124](#od124)); its result is satisfied,
+    violated or incomplete, and only satisfied passes. Requiring termination rejects permitted
+    divergence.
+  - *Identities and versions.* Typed identities (module, function, instance; no bare-name
+    collisions); versioned schema and semantics; units; deterministic order; machine-readable
+    reasons; replay commands; every answer bound to the compiler, spec, dependency, target and
+    artifact digests. An unknown version never satisfies CI.
+- <a id="decided-project-predictable-policy"></a>**The predictable policy** (owner, 2026-11-06: "yes
+  this is critical"). An optional policy a module or project turns on, built on the per-function facts
+  ([facts report](#decided-project-facts-report)): every function in its scope allocates nothing,
+  never blocks and calls no foreign code, and, where the policy demands it, has termination evidence
+  and a stack bound. Where the policy is on, a violation is refused at compile time, naming the
+  function, the fact and its source; the facts query reports which policy covers each function. It
+  follows the slice-0 facts report and query and is required from slice 1 (R-0576), not deferred.
+  Admission requires established evidence of no allocation, no blocking and no foreign calls; an
+  unknown or incomplete fact is refused. The policy explicitly states whether named trusted
+  assumptions are acceptable, as required by Q13. It takes up the idea of the
+  legacy predictable profile and of R-0220 (PredictableV1, deferred with a trigger), replacing that
+  trigger by this decision; unlike R-0220's draft it admits no allocation at all, bounded or not.
+  It is a policy over reported facts, not a function category (OD116) and not a build profile that
+  changes behaviour (OD124).
+- <a id="decided-project-reproducible-builds"></a>**Reproducible builds from slice 1** (owner,
+  2026-11-06: "yes to this too"). From slice 1, CI checks that the same source built by the same
+  pinned compiler and toolchain gives the same executable bytes (R-0577), so anyone can rebuild and
+  confirm the exact bytes a claim is about. This moves the reproducibility half of R-0104 (merged
+  into R-0149 in phase G) to B1; R-0149 keeps incremental-build equivalence.
+- <a id="decided-project-outside-readers"></a>**The outside readers** (owner, 2026-11-06: "me but also
+  agy and codex and kimi if it's available"). The outside-reader pass (R-0559) is done by the owner and
+  independent models: agy (Gemini), Codex, and Kimi when available (its absence is recorded, not
+  waited on). They read the browsable owner view of the
+  integrated spec. The participating models read first; every point one of them finds unclear is recorded and
+  resolved before the owner reads. The pass runs before the freeze (A2c) and again for each feature.
 - <a id="decided-project-contracts"></a>**Contracts and termination in verified growth** (row P18,
   2026-11-05). No source `old`, quantifier, implication or snapshot construct (OD117); entry, exit and
   frame properties are stated as Lean theorems (a source frame clause would be a new owner decision);
@@ -715,7 +832,7 @@ V1a, V1b and V1c.
 | OD79 | <a id="od79"></a>`assert` in the grammar (added 2026-10-30, item C2 of the owner picks of that day). Question: Whether the grammar gains the proof-annotation statement `assert expr;`. Options: (a) add it to the grammar; (b) remove it from the parser, so the language loses the form; (c) keep the recorded divergence for now. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): individual review required; no pick recorded. Austral: not checked | the parser accepts it | CON-2, CON-3, SYN-1 | decided 2026-11-01 by the owner (final set): Add `assert` |
 | OD80 | <a id="od80"></a>`assume` in the grammar (added 2026-10-30, item C3 of the owner picks of that day). Question: Whether the grammar gains the proof-annotation statement `assume expr;`. Options: (a) add it to the grammar; (b) remove it from the parser, so the language loses the form; (c) keep the recorded divergence for now. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): individual review required; no pick recorded. Austral: not checked | the parser accepts it | CON-2, CON-3, SYN-1 | decided 2026-11-01 by the owner (final set): Keep `assume`, tracked: every claim depending on it is marked assumed **Qualified 2026-11-06 by [no hidden traps](#decided-project-no-hidden-traps): `assume` cannot admit an operation in safe code.** |
 | OD81 | <a id="od81"></a>`ghost let` in the grammar (added 2026-10-30, item C4 of the owner picks of that day). Question: Whether the grammar gains the proof-only binding `ghost let` (with `ghost` a contextual keyword). Options: (a) add it to the grammar; (b) remove it from the parser, so the language loses the form; (c) keep the recorded divergence for now. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): individual review required; no pick recorded. Austral: not applicable | the parser accepts it | CON-4, SYN-1 | decided 2026-11-01 by the owner (final set): Add, with `ghost` reserved |
-| OD82 | <a id="od82"></a>Loop contract attributes and where attributes attach (added 2026-10-30, item C5 (R7) of the owner picks of that day). Question: Whether the grammar gains `#[invariant(e)]` and `#[variant(e)]` before a loop, and whether attributes attach by kind (declaration attributes to the next declaration, loop attributes to the next loop). Options: (a) add them to the grammar and attach attributes by kind; (b) remove them from the parser; (c) keep the recorded divergence for now. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a): attach by kind, declaration attributes to the next declaration, `#[invariant]` and `#[variant]` to the next loop. Austral: not checked | the parser accepts them | CON-2, STMT-12, SYN-1 | decided 2026-11-01 by the owner (final set): Add; attributes attach by kind **Extended 2026-11-06 by [no hidden traps](#decided-project-no-hidden-traps): `#[variant]` also attaches to a function, one measure per recursive cycle.** |
+| OD82 | <a id="od82"></a>Loop contract attributes and where attributes attach (added 2026-10-30, item C5 (R7) of the owner picks of that day). Question: Whether the grammar gains `#[invariant(e)]` and `#[variant(e)]` before a loop, and whether attributes attach by kind (declaration attributes to the next declaration, loop attributes to the next loop). Options: (a) add them to the grammar and attach attributes by kind; (b) remove them from the parser; (c) keep the recorded divergence for now. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): (a): attach by kind, declaration attributes to the next declaration, `#[invariant]` and `#[variant]` to the next loop. Austral: not checked | the parser accepts them | CON-2, STMT-12, SYN-1 | decided 2026-11-01 by the owner (final set): Add; attributes attach by kind **Extended 2026-11-06 by [no hidden traps](#decided-project-no-hidden-traps): `#[variant]` also attaches to a function, one measure per recursive cycle; `#[may_not_terminate("reason")]` also attaches as a prefix to an expression (an indirect call), through one attribute-prefix production in statements.** |
 | OD83 | <a id="od83"></a>The call-site allocator binding in the grammar (added 2026-10-30, item C6 of the owner picks of that day). Question: Whether the grammar gains the call-site allocator binding `f(...) with(Alloc = e)`. Options: (a) add it to the grammar; (b) remove it from the parser, so the language loses the form; (c) keep the recorded divergence for now. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): individual review required; no pick recorded. Austral: not checked | the parser accepts it | TRUST-4, MEM-5, SYN-1 | decided 2026-11-01 by the owner (final set): No call-site binding `f(...) with(Alloc = e)`. Under the authority decision, one allocator form per target: hosted, `with(Alloc)` and no allocator value; freestanding, an `Arena` parameter plus `with(Alloc)`. Revised 2026-11-02 by the owner's rule: one form on every target, an `Allocator<A>` value plus `with(Alloc)` ([decisions](decisions.md#decided-2026-11-02-allocation)) |
 | OD84 | <a id="od84"></a>Struct destructuring `let` in the grammar (added 2026-10-30, item C7 of the owner picks of that day). Question: Whether the grammar gains struct destructuring `let S { a } = e;`. Options: (a) add it to the grammar; (b) remove it from the parser, so the language loses the form; (c) keep the recorded divergence for now. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): individual review required; no pick recorded. Austral: destructuring `let` of records exists (not checked) | the parser accepts it (PAT-5) | PAT-5, SYN-1 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Add struct-destructuring `let` |
 | OD85 | <a id="od85"></a>Variant destructuring with `else` in the grammar (added 2026-10-30, item C8 of the owner picks of that day). Question: Whether the grammar gains `let E::V { a } = e else { ... };`, which OD52's pick would remove. Options: (a) add it to the grammar; (b) remove it from the parser, so the language loses the form; (c) keep the recorded divergence for now. Pick (the coordinator's pick after the Kimi, Codex and Grok review of 2026-10-30, a recommendation and not a decision): follows OD52 (removed under its pick). Austral: no `let ... else` | the parser accepts it (PAT-8) | PAT-8, OPEN-52, SYN-1 | decided 2026-10-31 by the owner's rule (every reviewer agreed, as strict as Austral or stricter): Remove (follows OD52) |

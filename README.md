@@ -3,9 +3,18 @@
 [![CI](https://github.com/unbalancedparentheses/concrete2/actions/workflows/lean_action_ci.yml/badge.svg)](https://github.com/unbalancedparentheses/concrete2/actions/workflows/lean_action_ci.yml)
 [![license](https://img.shields.io/github/license/lambdaclass/concrete)](LICENSE)
 
-Concrete is a systems programming language without garbage collection. It checks resource
-ownership, makes external authority explicit at every use, and is specified in Lean so that its
-rules can be proved about.
+**Concrete is a fully proven systems programming language with no garbage collector, where you can
+know everything a program does: what it does, what it may touch, whether it can fail or stop, and
+what is proved about it.** Every unproven step is named as an explicit assumption, never silently
+trusted. This states the project's goal: each guarantee holds only as its evidence lands, compiler
+correctness and program correctness need separate proofs, and native claims remain conditional on
+their named assumptions ([decision](docs/decisions.md#decided-project-core-statement)).
+
+It checks resource ownership, makes external authority explicit at every use, and is specified in
+Lean so that its rules can be proved about. From the first compiler slice, you can ask the compiler
+what any function may do: its capabilities and reachable resources, allocation, trusted and foreign
+boundaries, how each possible failure is handled, termination and proof status, each with its reason
+and evidence ([decision](docs/decisions.md#decided-project-facts-report)).
 
 An accepted program has no hidden traps: an index, a division, a shift or an arithmetic operation
 is either proven safe when the program is compiled or has its failure handled in the code. Before a
