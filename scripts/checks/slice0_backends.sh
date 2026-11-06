@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Slice-0 backend gate (PROVISIONAL, Concrete/README.md gates 4 and 6, hand-written BIR leg):
-# every hand-written BIR example goes through the LLVM path (clang) and the LCB path (lcb + cc).
+# every hand-written BIR example goes through the LLVM path (clang) and the LCB path: the adapted
+# body assembled by LCB in process (no text on the proved path), linked with the runtime entry,
+# which LCB's command line assembles from QBE text.
 # Each executable runs under bounded_run; its observation is its exit status (or "incomplete"),
 # the exact bytes on descriptor 2, and descriptor 1, which must be empty. All three must equal what
 # the BIR semantics gives (the emitter writes the expected status and stderr bytes).
@@ -20,9 +22,9 @@ source scripts/checks/lib/bounded.sh
 lake build Concrete lean-compiler-backend/lcb >/dev/null
 lcb="$root/.lake/packages/lean-compiler-backend/.lake/build/bin/lcb"
 case "$(uname -s)-$(uname -m)" in
-  Linux-x86_64) target=amd64_sysv ;;
-  Linux-aarch64) target=arm64 ;;
-  Darwin-arm64) target=arm64_apple ;;
+  Linux-x86_64) target=x86_64-linux ;;
+  Linux-aarch64) target=aarch64-linux ;;
+  Darwin-arm64) target=aarch64-macos ;;
   *) echo "slice0_backends: unsupported host $(uname -s)-$(uname -m)" >&2; exit 2 ;;
 esac
 emitter=(lake env lean --run scripts/checks/slice0_bir.lean)
@@ -51,8 +53,8 @@ examples=0
 check() {
   local name=$1 d=$2 backend
   build "$name" "$d/build.log" clang -O0 -w "$d/llvm.ll" -o "$d/llvm.exe"
-  build "$name" "$d/build.log" "$lcb" -t "$target" "$d/lcb.ssa" -o "$d/lcb.s"
-  build "$name" "$d/build.log" cc "$d/lcb.s" -o "$d/lcb.exe"
+  build "$name" "$d/build.log" "$lcb" -t "$target" "$d/lcb_rt.ssa" -o "$d/lcb_rt.s"
+  build "$name" "$d/build.log" cc "$d/lcb_body.s" "$d/lcb_rt.s" -o "$d/lcb.exe"
   for backend in llvm lcb; do
     observe "$d/$backend.exe" "$d/$backend" "$3" "$4"
     count=$((count + 1))
@@ -71,13 +73,13 @@ names=$("${emitter[@]}" list) || { echo "slice0_backends: listing the examples f
 [ -n "$names" ] || { echo "slice0_backends: no examples listed" >&2; exit 1; }
 for name in $names; do
   d="$work/ex/$name"
-  "${emitter[@]}" emit "$name" "$d"
+  "${emitter[@]}" emit "$name" "$d" "$target"
   check "$name" "$d" 10 20
   examples=$((examples + 1))
 done
-"${emitter[@]}" loop "$work/ctl/loop"
+"${emitter[@]}" loop "$work/ctl/loop" "$target"
 check control-loop "$work/ctl/loop" 1 1
-"${emitter[@]}" invalid "$work/ctl/invalid"
+"${emitter[@]}" invalid "$work/ctl/invalid" "$target"
 check control-invalid-word "$work/ctl/invalid" 10 20
 
 # The comparison's own negative controls: each forged observation must be rejected.

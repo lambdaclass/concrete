@@ -5,7 +5,7 @@ PROVISIONAL. This is a design sketch, revision 8, written after eight Codex and 
 ## Scope
 
 This document describes **the compiler**: its stages, IRs, proof strategy, premises and gates. Language rules are not restated here. They live in `ConcreteSpec`, and this document links to them:
-- the slice-0 fragment and its examples: [`ConcreteSpec/Spec/Slice0.lean`](../ConcreteSpec/Spec/Slice0.lean);
+- the one Core (syntax and semantics) and the slice fragments, each a pair of decidable predicates `Fragment.surface` and `Fragment.core` (planned `ConcreteSpec/Spec/Fragments.lean`, A2i item I3); until those land, the current slice-0 file [`ConcreteSpec/Spec/Slice0.lean`](../ConcreteSpec/Spec/Slice0.lean);
 - its behaviour theorems: [`ConcreteSpec/Proofs/Slice0.lean`](../ConcreteSpec/Proofs/Slice0.lean);
 - what the parent process observes, including the trap status and the trap line: [`ConcreteSpec/Spec/Observation.lean`](../ConcreteSpec/Spec/Observation.lean);
 - the slice-0 surface (token rules, grammar, elaboration): the new `ConcreteSpec/Spec/Surface0.lean` described below.
@@ -24,11 +24,13 @@ tokens (kind + payload + span)
   │ parse (LL(1))       Parse.lean    generic table-driven parser over Surface0.grammar;
   ▼                                   premise P_parse (implementation) until the generic theorem lands
 surface AST
-  │ resolve + elab      Elab.lean     resolve + elab: one stage edge: proved to satisfy
-  ▼                                   Surface0.Elab, with freshness and naming-independence
-Slice0.Program + site map  (data, `out.q`, `out.sites`)
-  │ check = ADMIT       the spec's own `ConcreteSpec.check`; `check_iff` gives `Checked (toCore q)`;
-  ▼                     the ONE admission point; emits discharged-evidence tokens (`out.tokens`)
+  │ resolve + elab      Elab.lean     resolve + elab: one stage edge, straight to the SPEC's Core
+  ▼                                   (no slice-0 Core syntax); proved to satisfy Surface0.Elab,
+                                      with freshness and naming-independence; a form outside
+                                      `Fragment.surface s0` is "not supported in slice 0"
+Core program + site map  (the spec's Core value, `out.p`, `out.sites`)
+  │ check = ADMIT       `Fragment.core s0 p` and the spec's own `check`; `check_iff` gives
+  ▼                     `Checked p`; the ONE admission point; emits discharged-evidence tokens
 CheckedCore
   │ (mono: absent in slice 0; when it exists, admission re-runs after it, row Q6.3)
   │ lower               MIR.lean      Place MIR: expands RESIDUAL checks only, never admits;
@@ -45,8 +47,9 @@ BIR  (`out.bir`)  ── designed for both backends from the start
   │ print   Backend/LLVM.lean                  │ adapt   Backend/LCB.lean
   ▼ (unverified: premise P_print)              ▼ (first backend proof target: adapter_correct
 .ll text  (`out.ll`)                           │  against LCB's imported semantics; P_adapter until proved)
-  │ clang/llc, link                          LCB-IR  (`out.lcb`)
-  │ (premise P_toolchain[llvm])                │ LCB lowering + assembler + link
+  │ clang/llc, link                          LCB `Source.Function` value (`out.lcb`), handed
+  │ (premise P_toolchain[llvm])                │ to LCB IN PROCESS (no text on this path);
+  │                                            │ LCB lowering + assembler + link
   ▼                                            ▼ (premise P_toolchain[lcb]: LCB's named trust boundaries)
 executable (x86-64)                          executable (x86-64, AArch64 macOS)
   │ run: premises P_launch, P_live (environment), under the target profile
@@ -54,7 +57,7 @@ executable (x86-64)                          executable (x86-64, AArch64 macOS)
 observed behaviour  →  observation (exit status 0–255 / 125 startup refusal / 134 trap + fd-2 line)
 ```
 
-**`compile` is defined as the composition of the stage functions listed in `Stages.lean`**, so a pass that isn't registered can't be in the pipeline. `Output` is pure data with `DecidableEq`: `{ toks, ast, q, sites, tokens, mir, mem, bir, ll, lcb }`. There are no proofs inside it, and every theorem is stated *about* `compile`.
+**`compile` is defined as the composition of the stage functions listed in `Stages.lean`**, so a pass that isn't registered can't be in the pipeline. `Output` is pure data with `DecidableEq`: `{ toks, ast, p, sites, tokens, mir, mem, bir, ll, lcb }`. There are no proofs inside it, and every theorem is stated *about* `compile`.
 
 There's no Mono Core, since slice 0 has no generics. When Mono exists, the admission check runs again on its output: substitution can expose new constants and cycles (row Q6.3).
 
@@ -64,7 +67,7 @@ There's no Mono Core, since slice 0 has no generics. When Mono exists, the admis
 
 **Memory CFG** is the one layout authority. It consumes the spec's byte encoding (`ConcreteSpec/Spec/Rep.lean`) and turns places into loads and stores over block-offset memory with provenance. In slice 0 every local is a `u8` slot (size 1, alignment 1), so the pass is identity-shaped. It exists from day one so that layout never leaks into SSA construction or the printers.
 
-**Typed source identity, end to end.** The lexer and parser mint typed `SiteId`s and spans. Elaboration records an origin edge for every generated temporary in `out.sites`. Every MIR, Memory CFG and BIR instruction carries its origin, and so does every trap site. Diagnostics, facts, JSON and certificates all read this one evidence graph. Core itself has no positions yet (spec open items O1/O4), so the site map sits beside `out.q` without changing the spec's Core.
+**Typed source identity, end to end.** The lexer and parser mint typed `SiteId`s and spans. Elaboration records an origin edge for every generated temporary in `out.sites`. Every MIR, Memory CFG and BIR instruction carries its origin, and so does every trap site. Diagnostics, facts, JSON and certificates all read this one evidence graph. Core itself has no positions yet (spec open items O1/O4), so the site map sits beside `out.p` without changing the spec's Core.
 
 **Proof strategy per pass** (pipeline review, item 7):
 
@@ -79,7 +82,9 @@ There's no Mono Core, since slice 0 has no generics. When Mono exists, the admis
 | BIR → LCB-IR adapter | direct proof |
 | Mono, optimizations, register allocation, linking (later) | proved validators |
 
-**The authoritative target.** `Slice0.toCore` currently targets the slice-1 Core fragment. Slice 0's authoritative claim targets the **integrated Core** once A2i/R-0560 lands. `toCore` is the only coupling point, so retargeting changes one function and its theorems.
+**One Core, no slice-0 syntax.** The spec has one Core syntax; a slice is two decidable predicates, `Fragment.surface` (the grammar productions it supports) and `Fragment.core` (the Core constructors it supports) (A2i plan, item I3). Elaboration produces the spec's Core directly. Admission checks `Fragment.core s0 p` together with the spec's `check`, and the slice theorems (`slice0_exits`, `slice0_never_traps`) are stated over `Fragment.core s0 p ∧ Checked p`. The "not supported in slice 0" refusal comes from `Fragment.surface s0`. The compiler keeps no Core syntax of its own and no `toCore`.
+
+**Dependency.** If the integrated Core (A2i, R-0571) is not on main when elaboration is built, the compiler targets the current spec Core behind one thin interface file, `Concrete/Core.lean`: it re-exports the spec's Core type, `check`, `check_iff`, `run`, and the slice-0 fragment predicates, and defines nothing of its own. It is the only file that changes when the integrated Core lands.
 
 **BIR is a complete backend contract.** Each item below is fixed in `BIR.lean`. Its slice-0 instance is in parentheses.
 - **integer semantics** (`u8`/`w32`, wrapping arithmetic plus `add.ovf`);
@@ -103,6 +108,8 @@ The **LLVM printer** is unverified and stays a premise (`P_print`) until an LLVM
 
 The **BIR → LCB-IR adapter** is the first backend proof target. `adapter_correct` states that the adapter's output, under **LCB's own semantics** (`LeanCompilerBackend.Verified.Source`, the `ssa-int-v1` profile, imported and never restated), has the BIR behaviour. Until it is proved, it is premise `P_adapter`, and closing it is a slice-0 milestone.
 
+The adapter's output is handed to LCB **in process**, as the value: on `aarch64-macos` through LCB's verified first path (`Verified.compileFunction`), on the Linux targets through LCB's compatibility backends (`Verified.reify`, then `AMD64`/`AArch64.emitModuleValidated`). No printer or importer sits between the adapter and LCB. The QBE text of the body is a debug dump only. The gate also runs the first path's admission on every example on every host.
+
 LCB's own lowering, assembler and linker are LCB's named trust boundaries, carried as `P_toolchain[lcb]` until LCB's preservation theorem covers the slice-0 domain.
 
 LCB is a pinned lake dependency (`require` with an exact rev, LCB's upstream lock recorded). It uses the same Lean toolchain (v4.34.1) and no Mathlib.
@@ -117,7 +124,7 @@ This fits LCB's verified source profile (`ssa-int-v1`, `LeanCompilerBackend/Veri
 
 It also separates `return 134` from a trap: they return the words 134 and 256.
 
-A fixed runtime entry, `Backend/Runtime.lean`, is emitted per backend as LLVM text and as LCB-IR text. It calls `concrete_body`, and then:
+A fixed runtime entry, `Backend/Runtime.lean`, is emitted per backend as LLVM text and as QBE text for LCB's command line (the runtime is not on the adapter's proof path; it is premise `P_rt`). It calls `concrete_body`, and then:
 - for a word below 256, it exits with that status;
 - otherwise, it writes the trap line for `k` to fd 2 and exits 134.
 
@@ -151,13 +158,15 @@ Concrete/
   README.md            this design
   Lex.lean             UTF-8 decode + lexer, and its theorem against Surface0.Lexes
   Parse.lean           generic LL(1) table parser over Surface0.grammar
-  Elab.lean            resolve + elaborate to Slice0.Program (one stage edge), and its theorems
+  Core.lean            thin interface to the spec's Core and the slice fragment predicates (until
+                       the integrated Core lands; defines no Core of its own)
+  Elab.lean            resolve + elaborate to the spec's Core (one stage edge), and its theorems
   MIR.lean             Place MIR: syntax, semantics, WF, lowering (residual checks only), lower_correct
   Memory.lean          Memory CFG: the Layout authority, block-offset memory, memory_correct
   BIR.lean             BIR: syntax, semantics, behaviour, WF, ssa, ssa_correct, addOvf_correct
   Backend/             the backend stage: everything after BIR, one file per backend
     LLVM.lean          BIR → LLVM text printer (unverified; P_print)
-    LCB.lean           BIR → LCB-IR adapter + adapter_correct against LCB's semantics
+    LCB.lean           BIR → LCB `Source.Function` adapter + adapter_correct; in-process assembly
     Runtime.lean       the fixed entry that decodes the result word into exit status / trap line, per backend
   Stages.lean          typed stage contracts; `compile` is the fold of the stage list
   Premises.lean        THE one file of premises, plus the execution-trust inventory
@@ -185,14 +194,14 @@ This file is spec work (open item O1, slice 0 only). It is a new file, and no ex
 - **`Lexes : Bytes → List Token → Prop`**, an independent byte-level judgment. The lexer is proved sound and complete against it, which rules out splitting a token.
 - **The grammar as data**, which must be LL(1), plus **`ll1 : Grammar → Bool`**, which computes nullable, FIRST and FOLLOW sets. It comes with `ll1_sound : ll1 g = true → ∀ n t, at most one production of n is predicted on t`. The fact `ll1 grammar0 = true` is proved by `decide`. The generic table parser is proved against `Derives`.
 - **`Derives : List Token → Surface.Program → Prop`**, which binds token payloads, not only token kinds.
-- **`Elab : Surface.Program → Slice0.Program → Prop`**, with the compiler's theorems `elab_fresh` (temporaries never collide with user names) and `elab_rename_invariant` (renaming temporaries changes neither acceptance nor outcome).
+- **`Elab : Surface.Program → Core.Program → Prop`**, with the compiler's theorems `elab_fresh` (temporaries never collide with user names) and `elab_rename_invariant` (renaming temporaries changes neither acceptance nor outcome).
 - **Refusal classes**, as the spec defines them:
   - a syntax error;
-  - "not supported in slice 0", for a decided form outside the fragment (owner, 2026-11-06);
+  - "not supported in slice 0", for a decided form outside `Fragment.surface s0` (owner, 2026-11-06);
   - a checker refusal.
 
   The compiler reports exactly the class that the spec judgment gives.
-- **`Denotes src q := ∃ toks ast, Lexes src toks ∧ Derives toks ast ∧ Elab ast q`.** Its theorem is `denotes_behaviour_det` (see the theorem section).
+- **`Denotes src p := ∃ toks ast, Lexes src toks ∧ Derives toks ast ∧ Elab ast p`.** Its theorem is `denotes_behaviour_det` (see the theorem section).
 
 ## Behaviours: the fuel-free semantic interface
 
@@ -335,8 +344,8 @@ P_lex and P_parse are also discharged for each compilation by the certificate.
 
 The **execution-trust inventory** is in the same file, as documented non-Prop entries:
 - the Lean compiler and runtime executing `compile`. The certificate closes this for each output.
-- the driver's IO: the byte-for-byte comparison of the emitted `.ll` or LCB-IR file, and the toolchain invocation and its provenance record. These are attested, not proved (see the certificate section).
-- LCB's own native execution: it lowers LCB-IR to assembly as a Lean-compiled program. This is inside `P_toolchain[lcb]`.
+- the driver's IO: the byte-for-byte comparison of the emitted `.ll` file, the in-process hand-off of the LCB `Source.Function` value, and the toolchain invocation and its provenance record. These are attested, not proved (see the certificate section).
+- LCB's own native execution: it lowers the `Source.Function` value to assembly in the compiler's process, as Lean-compiled code. This is inside `P_toolchain[lcb]`.
 
 ## The end-to-end theorem (`Concrete/Theorem.lean`)
 
@@ -344,29 +353,29 @@ The **execution-trust inventory** is in the same file, as documented non-Prop en
 /-- What `compile` returns: pure data, every intermediate recorded. -/
 structure Output where
   toks : List Token; ast : Surface.Program
-  q : Slice0.Program; sites : SiteMap; tokens : Tokens; mir : MIR.Program; mem : Mem.Program
+  p : Core.Program; sites : SiteMap; tokens : Tokens; mir : MIR.Program; mem : Mem.Program
   bir : BIR.Program; ll : String; lcb : LCB.Source.Function
 
 /-- One theorem for both backends: `B` is `llvm _` or `lcb`. -/
 theorem compile_correct (F : FrontendPremises) {B N T} (P : NativePremises B N T)
     {src : ByteArray} {out : Output} {img : N.Image}
     (hc : compile T src = .ok out) (hb : N.Built T (B.emit out.bir) img) :
-    Surface0.Denotes src out.q ∧ Checked (Slice0.toCore out.q) ∧
-    ∃ c, c < 256 ∧ run (Slice0.toCore out.q) (out.q.body.length + 1) = .exit c ∧
+    Surface0.Denotes src out.p ∧ Fragment.core s0 out.p ∧ Checked out.p ∧
+    ∃ c, c < 256 ∧ run out.p (Core.fuel out.p) = .exit c ∧
       (∃ β, N.Runs T img β) ∧ ∀ β, N.Runs T img β → β = .exited c
 ```
 
 **Composition, each step a stated theorem:**
 1. `compile_spec`: `compile T src = .ok out` implies:
-   - `Lex.lex`, `Parse.parse` and `Elab.elab` succeed and produce `out.q`;
-   - `check (toCore out.q) = true`;
-   - `out.tokens = admit out.q`, `out.mir = lower out.q out.tokens`, `out.mem = memory out.mir`, `out.bir = ssa out.mem`, `out.ll = LLVM.print out.bir` and `out.lcb = LCB.adapt out.bir`;
+   - `Lex.lex`, `Parse.parse` and `Elab.elab` succeed and produce `out.p`;
+   - `Fragment.core s0 out.p` and `check out.p = true`;
+   - `out.tokens = admit out.p`, `out.mir = lower out.p out.tokens`, `out.mem = memory out.mir`, `out.bir = ssa out.mem`, `out.ll = LLVM.print out.bir` and `out.lcb = LCB.adapt out.bir`;
    - `out.bir.frameSlots ≤ T.maxSlots`.
-2. `F.lex`, `F.parse` and `elab_sound` give `Denotes src out.q`. `check_iff` gives `Checked`.
+2. `F.lex`, `F.parse` and `elab_sound` give `Denotes src out.p`. `check_iff` gives `Checked`.
 3. `slice0_exits` gives `run … = .exit c` with `c < 256`; `run_exit_behaviour` then gives `Core.behaviour = .exited c`.
-4. `checked_wellScoped : Checked (toCore q) → WellScoped q`. `WellScoped` includes in-range literals, because Core's `run` does not range-check literals.
-5. `admit_tokens_valid : Checked (toCore q) → TokensValid q (admit q)`. The empty token set is valid for any well-scoped program.
-6. `lower_wf`, and `lower_correct : WellScoped q → TokensValid q t → MIR.behaviour (lower q t) = Core.behaviour (toCore q)`. This holds for every well-scoped program with valid tokens, checked or not, so `200 + 56` with no tokens preserves `trapped .arithmeticOverflow`. The trap path is real.
+4. `checked_wellScoped : Checked p → WellScoped p`. `WellScoped` includes in-range literals, because Core's `run` does not range-check literals.
+5. `admit_tokens_valid : Checked p → TokensValid p (admit p)`. The empty token set is valid for any well-scoped program.
+6. `lower_wf`, and `lower_correct : WellScoped p → TokensValid p t → MIR.behaviour (lower p t) = Core.behaviour p`. This holds for every well-scoped program with valid tokens, checked or not, so `200 + 56` with no tokens preserves `trapped .arithmeticOverflow`. The trap path is real.
 7. `memory_wf` and `memory_correct : m.WF → Mem.behaviour (memory m) = MIR.behaviour m`. Then `ssa_wf` and `ssa_correct : g.WF → BIR.behaviour (ssa g) = Mem.behaviour g`.
 8. `P.launch` excludes `killed`. `P.rt` gives a body result `r` with `β = r.behaviour`. `P.toolchain` gives `B.Means (B.emit out.bir) r`, and `P.emit` gives `r.behaviour = BIR.behaviour out.bir = .exited c`. `P.live` gives existence.
 
@@ -425,16 +434,16 @@ theorem cert_compile : compile T₀ srcBytes = .ok expected :=
 --   g_frame    : expected.bir.frameSlots ≤ T₀.maxSlots := by decide
 --   g_lcbAdmit : LCB.admit expected.lcb = .ok _ := by decide
 theorem cert_denotes : Surface0.lexesB srcBytes expected.toks && Surface0.derivesB expected.toks expected.ast &&
-    Surface0.elabB expected.ast expected.q = true := by decide
+    Surface0.elabB expected.ast expected.p = true := by decide
 ```
 
-`Lexes`, `Derives` and `Elab` each have a Boolean checker over explicit witnesses, with a one-way soundness lemma (`lexesB_sound` and so on, giving `Denotes src q`). So `cert_denotes` discharges the frontend premises **for this compilation**, and `compile_correct_cert` needs only `NativePremises`.
+`Lexes`, `Derives` and `Elab` each have a Boolean checker over explicit witnesses, with a one-way soundness lemma (`lexesB_sound` and so on, giving `Denotes src p`). So `cert_denotes` discharges the frontend premises **for this compilation**, and `compile_correct_cert` needs only `NativePremises`.
 
 A **refusal certificate** proves `compile T₀ src = .error r` for each refused example.
 
 **What is proved and what is attested:**
-- The kernel proves the proposition: the exact source maps to the exact output, including both backend inputs (the `.ll` text and the LCB-IR module).
-- The driver **compares the bytes** of the backend input it handed on (the `.ll` file to clang, the LCB-IR text to LCB, rendered with LCB's own printer) with the rendering of `expected`. This is a literal comparison, not a digest comparison. The driver also records the toolchain store paths that were used, and the image digest.
+- The kernel proves the proposition: the exact source maps to the exact output, including both backend inputs (the `.ll` text and the LCB `Source.Function` value).
+- The driver **compares the bytes** of the `.ll` file it handed to clang with the rendering of `expected`, and hands LCB the value `expected.lcb` itself (compared by `DecidableEq`, no text). This is a literal comparison, not a digest comparison. The driver also records the toolchain store paths that were used, and the image digest.
 - The association between the source, the text, the toolchain and the image, and therefore `Built`, is **attested** by the driver plus the nix store, and listed in the trust inventory. A digest is identity, not correspondence.
 
 **Budget, and the per-pass design.** The time and size of each certificate are measured and gated. The LL(1) table is a precomputed constant.
@@ -447,9 +456,9 @@ The certificate format is a **list of per-edge entries**, composed by the proved
 
 ```lean
 /-- The contracts are fixed per stage in ONE table and stated about the stage function itself. -/
-def lowerContract (f : Slice0.Program × Tokens → Except Refusal MIR.Program) : Prop :=
-  ∀ q t m, WellScoped q → TokensValid q t → f (q, t) = .ok m →
-    m.WF ∧ MIR.behaviour m = Core.behaviour (toCore q)
+def lowerContract (f : Core.Program × Tokens → Except Refusal MIR.Program) : Prop :=
+  ∀ p t m, WellScoped p → TokensValid p t → f (p, t) = .ok m →
+    m.WF ∧ MIR.behaviour m = Core.behaviour p
 -- … one per stage: lex, parse, elab, admit (check + tokens), lower, memory, ssa,
 --   and the two backend emits
 
@@ -605,7 +614,7 @@ These are internal. None blocks slice 0's correctness.
   - final-image validation against LCB's ISA model.
 - **Trusted base:** a minimal direct-syscall launcher written in Concrete and compiled through the verified path. It does no OS sandboxing (out of scope).
 - **Mono:** when it lands, admission re-runs after it (Q6.3), and the tokens are re-validated for each instance.
-- **Integrated Core:** retarget `toCore` to the integrated Core when A2i/R-0560 lands.
+- **Integrated Core:** when A2i/R-0571 lands, point `Concrete/Core.lean` at it (or delete it and import the spec directly).
 - **The spec's pre-decision admission rule** (`knownViolates`-only refusal, `RangeOk`, R-0574). It does not bite slice 0, where every value is known. It must be closed before the language grows unknown values.
 - **Generated views:** the stage, premise and fact tables here become views of the Lean registries, gated against drift.
 - **Rebase:** rebase onto main, under a new branch name, when `wip/spec-root` lands.
@@ -621,11 +630,28 @@ These are internal. None blocks slice 0's correctness.
   9. borrows;
   10. allocation, arrays and memory bounds.
 - **Extension without reshaping.** BIR's integer types are the spec's `IntTy`: all eight widths and both signednesses, with values as in-range mathematical integers. `BinOp` grows the bitwise operations, shifts and comparisons. Saturating and checked operations lower to `binOvf` plus branches or selects.
-  - **The LCB adapter** covers types up to 16 bits today, where exact results fit a word. For 32 and 64 bits it needs `long` intermediates and a different overflow test, because LCB's verified profile has no extension operations.
+  - **The LCB adapter** covers types up to 16 bits today, where exact results fit a word. Slice 1 needs from LCB the items in "What LCB must provide" below.
   - **Slice 2** turns console output into an observation beyond the exit code. `Behaviour` gains an event trace, and BIR gains an effect instruction naming its capability. The runtime entry gains the grant table and the startup refusal (status 125).
   - **The result word** keeps encoding only how the run ends.
   - **LCB's verified profile has no calls**, so slice 2 needs LCB calls in that profile, or an event protocol through the result. That needs agreeing with LCB.
 - **BIR well-formedness** makes dominance hold by construction: values cross blocks only as block arguments, every operand is defined earlier in its own block, and every non-entry block has a predecessor. Prove that a well-formed program never reads an undefined register (progress) before `ssa_correct` relies on it.
+
+## What LCB must provide
+
+LCB is our own project; these are tasks for it, not premises to keep. Checked against the pinned rev `d828ff30`.
+
+**For the trusted base (now):**
+1. A public entry `compileSource : Target → Symbol → Source.Function → Except Error Artifact`. Today the compiler builds LCB's `FunctionJob` itself (`Concrete/Backend/LCB.lean`, `assemble`).
+2. The verified first path for `x86_64-linux`. It exists only for `aarch64-apple-darwin` leaf functions; x86-64 goes through the compatibility backend, a larger unverified base.
+3. Larger resource limits on the first path: 64 blocks, 488 values and 480 definitions per function (`Verified/Canonical.lean`). Slice programs will exceed them.
+4. Object emission (LCB V04), so assembly text and the system assembler leave the path.
+
+**For slice 1 (all widths u8–u64, i8–i64).** LCB's verified profile has `word` (32-bit) and `long` (64-bit) values, `add sub mul and or xor`, the comparisons `eq` and `unsignedLT` (word result), and no width conversion, shift, division or high multiply. The adapter will carry every integer as a `long`: exact for types up to 32 bits, and for 64-bit add/sub the overflow test is expressible with `xor`, `and` and `unsignedLT`. Slice 1 needs:
+1. **Shifts** `shl`, `lshr`, `ashr`, at both widths. Required: a variable shift amount has no reasonable expansion.
+2. **High multiply** `mulHighUnsigned` and `mulHighSigned` at `long` (AArch64 `umulh`/`smulh`, x86-64 `mul`/`imul`). Required for 64-bit checked, saturating and overflow-flag multiplication; the alternative is a long 32-bit-halves expansion with its own proof.
+3. **Division and remainder** (`udiv sdiv urem srem`), if slice 1's integer operations include `/` and `%`. Required then: there is no reasonable expansion.
+4. **Signed and non-strict comparisons** (`signedLT`, `unsignedLE`, `signedLE`). Optional: they are expressible (`a <s b` is `(a xor 2^63) <u (b xor 2^63)`), but native ones keep the adapter and its proof small.
+5. **Width conversion** (`word`↔`long` extension and truncation). Optional while every integer is a `long`; needed if the adapter ever uses `word` for narrow types.
 
 ## Not in slice 0
 

@@ -1,5 +1,7 @@
 import Concrete.Backend.Runtime
-import LeanCompilerBackend.Verified.Source
+import LeanCompilerBackend.Verified.Job
+import LeanCompilerBackend.AMD64
+import LeanCompilerBackend.AArch64
 
 /-!
 # BIR → LCB-IR: the adapter (the first backend proof target)
@@ -21,8 +23,12 @@ Representation: an integer of type `t` is the 32-bit word `BitVec.ofInt 32 v`; a
 * a block parameter is a phi over its predecessors' arguments, ordered by predecessor;
 * `ret a` returns `a`; `trap s` returns `256 + s`.
 
-`render` prints the function as QBE text for LCB's command line. That printing, LCB's importer,
-lowering, assembler and linker are inside `P_toolchain[lcb]`.
+`assemble` hands the `Source.Function` value to LCB IN PROCESS: no text is printed or parsed on the
+path the adapter proof covers. On `aarch64-macos` it goes through LCB's verified first path
+(`Verified.compileFunction`: source validation, stack MIR, typed A64, rendering); on the other
+targets through LCB's compatibility backends, reached with LCB's own `Verified.reify`. LCB's
+lowering, assembly rendering, the assembler and the linker are inside `P_toolchain[lcb]`. `render`
+prints the function as QBE text only as a debug dump.
 -/
 
 namespace Concrete.Backend.LCB
@@ -142,7 +148,40 @@ def adapt (p : Program) : Except String Source.Function := do
   return { resultWidth := .word, parameters := #[],
            valueWidths := Array.replicate (valueCount p) .word, blocks := blocks.1 }
 
-/-! ## Printing for LCB's command line (inside `P_toolchain[lcb]`) -/
+/-! ## Assembly, in process (inside `P_toolchain[lcb]`) -/
+
+/-- The targets the gate runs LCB's output on. -/
+inductive Target where
+  | x86_64Linux | aarch64Linux | aarch64Macos
+  deriving DecidableEq, Repr
+
+def Target.ofName : String → Option Target
+  | "x86_64-linux" => some .x86_64Linux
+  | "aarch64-linux" => some .aarch64Linux
+  | "aarch64-macos" => some .aarch64Macos
+  | _ => none
+
+/-- The body's symbol: the runtime entry calls `concrete_body`. -/
+def bodySymbol : LeanCompilerBackend.Verified.Symbol := { namespaceName := "concrete", name := "concrete_body", exported := true }
+
+/-- The adapted body as assembly text for `target`, computed in process from the value. -/
+def assemble (target : Target) (f : Source.Function) : Except String String :=
+  match target with
+  | .aarch64Macos => do
+    let job : LeanCompilerBackend.Verified.FunctionJob :=
+      { code := { symbol := bodySymbol, body := f, abi := LeanCompilerBackend.Verified.planAbi f,
+                  layout := LeanCompilerBackend.Verified.planFrame f } }
+    let artifact ← (LeanCompilerBackend.Verified.compileFunction job).mapError (fun e => s!"LCB first path: {repr e}")
+    return ".text\n" ++ artifact.code.fragment ++ ".subsections_via_symbols\n"
+  | .x86_64Linux | .aarch64Linux => do
+    let m : LeanCompilerBackend.Module :=
+      { functions := #[LeanCompilerBackend.Verified.reify f bodySymbol.name bodySymbol.exported] }
+    LeanCompilerBackend.validateModule m
+    match target with
+    | .x86_64Linux => LeanCompilerBackend.AMD64.emitModuleValidated m false false
+    | _ => LeanCompilerBackend.AArch64.emitModuleValidated m false false
+
+/-! ## The QBE debug dump (not on the build path) -/
 
 def renderWidth : Width → String
   | .word => "w"
@@ -182,10 +221,6 @@ def render (f : Source.Function) : String :=
       s!"    %v{i.destination} ={renderWidth i.width} {renderOperation i.operation}\n") ++
     renderTerminator b.terminator
   "export function w $concrete_body() {\n" ++ String.join blocks ++ "}\n"
-
-/-- The whole QBE module for `lcb`: the body and the runtime entry. -/
-def module (p : Program) : Except String String := do
-  return render (← adapt p) ++ "\n" ++ Runtime.qbe p.sites
 
 /-! ## The in-process leg: LCB's own evaluator against BIR -/
 
