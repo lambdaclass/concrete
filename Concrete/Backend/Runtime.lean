@@ -41,7 +41,28 @@ example : trapLine ⟨.arithmeticOverflow, ⟨9⟩, ⟨40, 47⟩, ⟨"src/main.c
     "concrete: trap: overflow at src/main.con:4:12 (site 9)" := by decide +kernel
 
 /-- Pair every element with its index. -/
-def indexed {α : Type} (l : List α) : List (Nat × α) := (List.range l.length).zip l
+def indexedFrom {α : Type} (n : Nat) : List α → List (Nat × α)
+  | [] => []
+  | a :: l => (n, a) :: indexedFrom (n + 1) l
+
+def indexed {α : Type} (l : List α) : List (Nat × α) := indexedFrom 0 l
+
+theorem mem_indexedFrom {α : Type} {l : List α} {n k : Nat} {x : α} (h : l[k]? = some x) :
+    (n + k, x) ∈ indexedFrom n l := by
+  induction l generalizing n k with
+  | nil => simp at h
+  | cons a l ih =>
+    cases k with
+    | zero => simp at h; subst h; simp [indexedFrom]
+    | succ k =>
+      simp only [List.getElem?_cons_succ] at h
+      have := ih (n := n + 1) h
+      simp only [indexedFrom, List.mem_cons]
+      exact Or.inr (by rwa [show n + (k + 1) = n + 1 + k by omega])
+
+theorem mem_indexed {α : Type} {l : List α} {k : Nat} {x : α} (h : l[k]? = some x) :
+    (k, x) ∈ indexed l := by
+  simpa [indexed] using mem_indexedFrom (n := 0) h
 
 /-- An LLVM `c"..."` string body over the UTF-8 bytes: printable ASCII except `"` and `\` verbatim,
 every other byte as `\XX`. -/

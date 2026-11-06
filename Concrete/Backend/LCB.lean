@@ -63,19 +63,22 @@ def instBase (b : Block) (i : Nat) : Nat := b.params.length + ((b.insts.take i).
 /-- The number of LCB values the body defines. -/
 def valueCount (p : Program) : Nat := (p.blocks.map blockSize).sum
 
-/-- Where in an instruction's values a register it defines sits. -/
-def resultOffset : Inst → Reg → Option Nat
-  | .bin _ _ d _ _, r => if d = r then some 3 else none
-  | .binOvf _ _ d f _ _, r => if d = r then some 3 else if f = r then some 5 else none
-  | .trunc _ _ d _, r => if d = r then some 2 else none
+/-- The registers an instruction defines, with their offset among its values. -/
+def instDefs : Inst → List (Reg × Nat)
+  | .bin _ _ d _ _ => [(d, 3)]
+  | .binOvf _ _ d f _ _ => [(d, 3), (f, 5)]
+  | .trunc _ _ d _ => [(d, 2)]
 
-/-- The LCB value id of a register: the position of its (first) definition. -/
-def regId (p : Program) (r : Reg) : Option Nat :=
-  (indexed p.blocks).findSome? fun (j, b) =>
-    ((indexed b.params).findSome? fun (k, (r', _)) =>
-      if r' = r then some (blockBase p j + k) else none) <|>
-    ((indexed b.insts).findSome? fun (i, ins) =>
-      (resultOffset ins r).map (blockBase p j + instBase b i + ·))
+/-- Every register definition with its LCB value id, in definition order. -/
+def ids (p : Program) : List (Reg × Nat) :=
+  (indexed p.blocks).flatMap fun (j, b) =>
+    (indexed b.params).map (fun (k, (r, _)) => (r, blockBase p j + k)) ++
+    (indexed b.insts).flatMap fun (i, ins) =>
+      (instDefs ins).map fun (r, off) => (r, blockBase p j + instBase b i + off)
+
+/-- The LCB value id of a register. `adapt` refuses a program where a register has two
+definitions, so this is a function of the register. -/
+def regId (p : Program) (r : Reg) : Option Nat := (ids p).lookup r
 
 def idOf (p : Program) (r : Reg) : Except String Nat :=
   match regId p r with
@@ -137,6 +140,7 @@ def term (p : Program) : Term → Except String Source.Terminator
 
 /-- `main`'s body as a function of LCB's verified source profile. -/
 def adapt (p : Program) : Except String Source.Function := do
+  unless decide ((ids p).map Prod.fst).Nodup do throw "a register is defined twice"
   let blocks ← (indexed p.blocks).mapM fun (j, b) => do
     let phis ← (indexed b.params).mapM fun (k, (_, _)) => do
       let arms ← (incoming p j).mapM fun (pred, args) => do
@@ -270,6 +274,42 @@ theorem flag_word {t : IntTy} (ht : inProfile t = true) (op : BinOp) {x y : Int}
   · simp only [IntTy.inRange, IntTy.min, IntTy.max, IntTy.bits, IntTy.signed, Bool.false_eq_true, ↓reduceIte,
       Nat.reduceSub, Nat.reducePow, Int.reducePow, decide_eq_decide]
     omega
+
+/-! ## `adapter_correct`, numbering -/
+
+theorem lookup_of_mem {l : List (Reg × Nat)} (hn : (l.map Prod.fst).Nodup) {r : Reg} {n : Nat}
+    (hm : (r, n) ∈ l) : l.lookup r = some n := by
+  induction l with
+  | nil => simp at hm
+  | cons a l ih =>
+    obtain ⟨r', n'⟩ := a
+    simp only [List.map_cons, List.nodup_cons, List.mem_map] at hn
+    simp only [List.mem_cons, Prod.mk.injEq] at hm
+    rcases hm with ⟨rfl, rfl⟩ | hm
+    · simp [List.lookup]
+    · have hne : r ≠ r' := by
+        rintro rfl; exact hn.1 ⟨(r, n), hm, rfl⟩
+      have hb : (r == r') = false := by simpa using hne
+      simp only [List.lookup, hb]
+      exact ih hn.2 hm
+
+/-- A block parameter's id is its position. -/
+theorem regId_param {p : Program} (hn : ((ids p).map Prod.fst).Nodup) {j k : Nat} {b : Block}
+    {r : Reg} {ty : Ty} (hb : p.blocks[j]? = some b) (hk : b.params[k]? = some (r, ty)) :
+    regId p r = some (blockBase p j + k) := by
+  apply lookup_of_mem hn
+  simp only [ids, List.mem_flatMap, List.mem_append, List.mem_map]
+  exact ⟨(j, b), Runtime.mem_indexed hb, Or.inl ⟨(k, (r, ty)), Runtime.mem_indexed hk, rfl⟩⟩
+
+/-- A register an instruction defines has the id of its slot among the instruction's values. -/
+theorem regId_inst {p : Program} (hn : ((ids p).map Prod.fst).Nodup) {j i : Nat} {b : Block}
+    {ins : Inst} {r : Reg} {off : Nat} (hb : p.blocks[j]? = some b) (hi : b.insts[i]? = some ins)
+    (hd : (r, off) ∈ instDefs ins) :
+    regId p r = some (blockBase p j + instBase b i + off) := by
+  apply lookup_of_mem hn
+  simp only [ids, List.mem_flatMap, List.mem_append, List.mem_map]
+  exact ⟨(j, b), Runtime.mem_indexed hb,
+    Or.inr ⟨(i, ins), Runtime.mem_indexed hi, ⟨(r, off), hd, rfl⟩⟩⟩
 
 end Proof
 
