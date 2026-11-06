@@ -1,0 +1,21 @@
+[piece 1 of 11: compiler] blocked: the reviewer refused or gave no verdict, also after one neutral retry. Files: lakefile.toml
+
+[piece 2 of 11: scripts] blocked: the reviewer refused or gave no verdict, also after one neutral retry. Files: .github/workflows/lean_action_ci.yml,.gitignore,ConcreteSpec.lean,ConcreteSpec/Proofs/Authority.lean,ConcreteSpec/Proofs/Basics.lean,ConcreteSpec/Proofs/Borrow.lean
+
+[piece 3 of 11: scripts] blocked: the reviewer refused or gave no verdict, also after one neutral retry. Files: ConcreteSpec/Proofs/Brand.lean,ConcreteSpec/Proofs/Checker.lean,ConcreteSpec/Proofs/Cleanup.lean,ConcreteSpec/Proofs/Examples.lean,ConcreteSpec/Proofs/Observe.lean,ConcreteSpec/Proofs/Rep.lean
+
+[piece 4 of 11: scripts] blocked: the reviewer refused or gave no verdict, also after one neutral retry. Files: ConcreteSpec/Proofs/Slice0.lean,ConcreteSpec/Proofs/Slice1.lean,ConcreteSpec/Spec.lean,ConcreteSpec/Spec/Authority.lean
+
+[piece 5 of 11: scripts] blocked: the reviewer refused or gave no verdict, also after one neutral retry. Files: ConcreteSpec/Spec/Borrow.lean,ConcreteSpec/Spec/Brand.lean,ConcreteSpec/Spec/Checker.lean
+
+[piece 6 of 11: scripts] blocked: the reviewer refused or gave no verdict, also after one neutral retry. Files: ConcreteSpec/Spec/Cleanup.lean,ConcreteSpec/Spec/Examples.lean,ConcreteSpec/Spec/Observation.lean,ConcreteSpec/Spec/Ownership.lean,ConcreteSpec/Spec/Rep.lean,ConcreteSpec/Spec/Semantics.lean
+
+[piece 7 of 11: scripts] blocked: the reviewer refused or gave no verdict, also after one neutral retry. Files: ConcreteSpec/Spec/Slice0.lean,ConcreteSpec/Spec/Statics.lean,ConcreteSpec/Spec/Syntax.lean,RETENTION.tsv,flake.nix,required-checks-transition.tsv,required-checks.txt,scripts/checks/root_inventory.txt
+
+[piece 8 of 11: scripts] blocked: the reviewer refused or gave no verdict, also after one neutral retry. Files: scripts/proofs/axioms.golden
+
+[piece 9 of 11: scripts] blocked: the reviewer refused or gave no verdict, also after one neutral retry. Files: scripts/proofs/axioms.golden,scripts/proofs/axioms.sh,scripts/proofs/export_inventory.py,scripts/proofs/external.pins,scripts/proofs/external.sh
+
+[piece 10 of 11: scripts] blocked: the reviewer refused or gave no verdict, also after one neutral retry. Files: scripts/proofs/kernel_replay.sh,scripts/proofs/lib.sh,scripts/proofs/theorems.lean,scripts/proofs/trust_ban.sh,scripts/spec/lean_site.lean,scripts/spec/lean_site.py,scripts/spec/lean_site.sh
+
+[piece 11 of 11: docs] blocked: the reviewer refused or gave no verdict, also after one neutral retry. Files: ConcreteSpec/README.md,changelog.d/2026-11-06-proof-integrity.md,changelog.d/2026-11-06-spec-on-root.md
