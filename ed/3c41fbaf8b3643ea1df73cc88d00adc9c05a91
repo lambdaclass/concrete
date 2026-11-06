@@ -1,0 +1,2 @@
+[piece 10 of 11: scripts]
+- scripts/proofs/trust_ban.sh:34: The outside-import check validates only the first module on each import line. `import ConcreteSpec.Spec Lean` passes despite importing Lean; a continuation line containing another module also escapes detection. This invalidates the lexical scan’s assumption that external syntax extensions cannot be loaded. An imported tactic can introduce native proofs into discarded `example` declarations without spelling any banned word in the scanned sources, escaping both the source scan and environment inventory.
