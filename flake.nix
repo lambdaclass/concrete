@@ -127,6 +127,12 @@
           # toolchain come from the runner, exactly as before.
           gates = pkgs.mkShellNoCC ({ packages = gatesUserland; } // gatesMarker);
 
+          # `nix develop .#extcheck` — the gate userland plus cargo and rustc, for
+          # scripts/proofs/external.sh, which builds the pinned nanoda checker (a Rust program) once
+          # per revision. mkShell, not NoCC: rustc links through the C compiler. Lean still comes
+          # from elan, as in the gates shell.
+          extcheck = pkgs.mkShell ({ packages = gatesUserland ++ [ pkgs.cargo pkgs.rustc ]; } // gatesMarker);
+
           # `nix develop .#provers` — adds the independent second kernels.
         });
     };

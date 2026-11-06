@@ -39,6 +39,8 @@ docs/proposals
 scripts/checks
 scripts/land
 scripts/oracle
+scripts/proofs
 scripts/push-both.sh
 scripts/review
+scripts/spec
 scripts/worktree-new.sh
