@@ -95,7 +95,9 @@ verdict; any failing leg fails the check (see [Pipelining](#pipelining)).
 
   Without the first step, a new branch has no remote base and the hook would select gates by
   diffing the whole tree.
-- Dispatches `gh workflow run CI -R unbalancedparentheses/concrete2 --ref ci/<name>`. It finds the
+- Dispatches `gh workflow run CI -R unbalancedparentheses/concrete2 --ref ci/<name> -f
+  base=<base>`. The base-sensitive checks compare with the train's base, and the run's title records
+  it (`ci/<name> at base <sha>`), which main's Landing record requires (see `land`). It finds the
   run whose head SHA is the train's, records the run id and prints the run URL.
 
 ### watch
@@ -142,10 +144,13 @@ The push sequence:
    the head.
 4. Cancels nothing. The push to main starts CI on main at the landed SHA, and that run's first job,
    **Landing record**, runs `train.sh record <head> --base <before>` (R-0570). It finds the newest
-   completed `push` or `workflow_dispatch` run of CI at exactly that SHA (the train's run) and
-   checks it under `land`'s own rule: every landing-tier job and every required job succeeded,
-   with the required set computed from the SHA main had before the push, and the head strictly
-   ahead of it. When the record holds, main's run skips every other job and concludes success, and
+   completed `workflow_dispatch` run of CI at exactly that SHA whose title says it ran at base
+   `<before>`: `ci` dispatches with `-f base=<train base>`, the workflow's `run-name` writes
+   `<ref> at base <sha>`, and the base-sensitive checks (`LL1_BASE`, `TOTALITY_BASE`,
+   `CONFORMANCE_BASE`, `SPEC_BASE`) compare with that base as a push to main compares with the
+   previous main. It checks that run under `land`'s own rule: every landing-tier job and every
+   required job succeeded, with the required set computed from the SHA main had before the push,
+   and the head strictly ahead of it. When the record holds, main's run skips every other job and concludes success, and
    its summary links the qualifying run. When it does not (a hand push, a run at another SHA, a
    skipped, cancelled or failed job, an unreadable API), nothing is skipped and main's run runs
    every job itself. So main shows green only on a result at its exact SHA, and a landing still
@@ -492,13 +497,15 @@ script against a throwaway repository with bare-repo remotes and a fake `gh`. It
   or rebase already in progress, a dirty tree, an existing train, a head-SHA mismatch, a red
   landing job, a moved main and a remote named `fork`;
 - the check → ci → watch → land pipeline, with both dry-runs;
-- `land` cancels no run; `record` names the qualifying run only for the newest completed push or
-  dispatch run of CI at exactly the head with every landing-tier and required job green, and refuses
-  each of: no run, a run at another SHA, of another workflow or event, unfinished or the asking run
+- `ci` dispatches with the train's base; `land` cancels no run; `record` names the qualifying run
+  only for the newest completed dispatch of CI at exactly the head and the base with every
+  landing-tier and required job green, and refuses each of: no run, a run at another SHA or base, a
+  push, pull-request or base-less dispatch, another workflow, an unfinished run or the asking run
   itself, a skipped, cancelled or failed job, an older green run behind a newer red one, a head not
   strictly ahead of the base, an absent or all-zero base and unreadable APIs; and the workflow gates
-  every landing-tier job on the record (with controls for an ungated job, a dependent forced by
-  `always()` and a gate without `!cancelled()`);
+  every landing-tier job on the record and every base-sensitive check on the dispatch's base (with
+  controls for an ungated job, a dependent forced by `always()`, a gate without `!cancelled()` and
+  a check that ignores the base);
 - verified pushes: a push dropped before the remote moved is retried, one dropped after it moved is
   accepted from `ls-remote`, and exhausted retries fail without moving main;
 - the gate host: a result bound to the train head's SHA. A run at another SHA, an unreachable

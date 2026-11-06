@@ -2,9 +2,13 @@
 
 - **Main's CI run records the run that qualified its exact SHA.** `train.sh land` no longer cancels
   main's push run. That run's new first job, `Landing record`, runs `train.sh record <head> --base
-  <before>`: the newest completed push or dispatch run of CI at exactly the landed SHA must have
+  <before>`: the newest completed dispatch of CI at exactly the landed SHA and at that base must have
   every landing-tier job and every required job (`required-checks.txt`, transition rows, base
-  included) succeeded, with the head strictly ahead of the base. Then the other jobs are skipped and
+  included) succeeded, with the head strictly ahead of the base. `train.sh ci` now dispatches with
+  `-f base=<train base>`: the new `base` input feeds `LL1_BASE`, `TOTALITY_BASE`,
+  `CONFORMANCE_BASE` and `SPEC_BASE` (as `github.event.before` does on a push; `SPEC_BASE` is now
+  also set on a push to main, where it used to fall back to `HEAD~1`), and the run's title records
+  it (`<ref> at base <sha>`), so a record is bound to the base its checks used. Then the other jobs are skipped and
   main's run concludes success, its summary linking the qualifying run; otherwise every job runs on
   main. Nothing is carried across SHAs. The mirror's CI reads the record from the train's
   repository. `land --keep-main-ci`, `LAND_KEEP_MAIN_CI` and `LAND_DUP_POLL*` are removed.

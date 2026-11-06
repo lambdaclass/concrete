@@ -536,14 +536,16 @@ cmd_ci() {
   run_or_print env CONCRETE_SKIP_GATES=1 git push -q --force "$REMOTE" "$base:refs/heads/$branch"
   push_verified "$REMOTE" "$head" "$branch"
   if [ "$DRY" = 1 ]; then
-    note "(dry-run) would dispatch: $GH workflow run CI -R $REPO --ref $branch"
+    note "(dry-run) would dispatch: $GH workflow run CI -R $REPO --ref $branch -f base=$base"
     return 0
   fi
   assert_no_op "push"
   [ "$(git ls-remote "$REMOTE" "refs/heads/$branch" | cut -f1)" = "$head" ] \
     || die "ci: $REMOTE/$branch is not at ${head:0:10} after the push"
   local t0; t0="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  "$GH" workflow run CI -R "$REPO" --ref "$branch"
+  # base: the run's base-sensitive checks compare with the train's base, and its title records it
+  # (main's Landing record accepts only a run of the base main had before the landing, R-0570).
+  "$GH" workflow run CI -R "$REPO" --ref "$branch" -f base="$base"
   local id="" i
   for i in $(seq 1 30); do
     id="$("$GH" run list -R "$REPO" --workflow CI --branch "$branch" --event workflow_dispatch -L 10 \
@@ -701,10 +703,13 @@ cmd_watch() {
 # summary naming the qualifying run, instead of running everything twice or showing "cancelled".
 # When it does not hold, nothing is skipped: main's run runs every job itself. So main is green
 # only on a result obtained AT ITS EXACT SHA, by this workflow, under land's own rule:
-#   * the NEWEST completed run of .github/workflows/lean_action_ci.yml in $REPO (the train's
-#     repository, read by the mirror's CI too: both are public and a SHA names the same tree in both)
-#     whose head SHA is exactly <head>, from a push or workflow_dispatch event, other than the asking
-#     run (an older green run never outvotes a later one at the same SHA);
+#   * the NEWEST completed workflow_dispatch run of .github/workflows/lean_action_ci.yml in $REPO
+#     (the train's repository, read by the mirror's CI too: both are public and a SHA names the same
+#     tree in both) whose head SHA is exactly <head> and whose title says it ran at base <base>
+#     (`<ref> at base <sha>`, written by the workflow's run-name from the `base` input `train.sh ci`
+#     passes), other than the asking run. The base binds the base-sensitive checks (LL1_BASE,
+#     TOTALITY_BASE, CONFORMANCE_BASE, SPEC_BASE) to the very base main had before the push, as a
+#     push run of main would; an older green run never outvotes a later one of the same SHA and base;
 #   * its landing tier is non-empty and every landing-tier job succeeded;
 #   * every required job (required_checks.py on <base> and <head>, transition rows included) is
 #     present and succeeded; <base> (the value main had before the push) must be in this clone and
@@ -736,16 +741,17 @@ except ValueError: print("-")')" || cmp="-"
   local runs
   runs="$("$GH" api "repos/$REPO/actions/runs?head_sha=$head&per_page=100" 2>/dev/null | python3 -I -c '
 import json, sys
-head, exclude = sys.argv[1], sys.argv[2]
+head, base, exclude = sys.argv[1], sys.argv[2], sys.argv[3]
 try: runs = json.load(sys.stdin).get("workflow_runs", [])
 except ValueError: sys.exit(0)
 ok = [r for r in runs
       if r.get("head_sha") == head and r.get("path") == ".github/workflows/lean_action_ci.yml"
-      and r.get("event") in ("push", "workflow_dispatch") and r.get("status") == "completed"
+      and r.get("event") == "workflow_dispatch" and r.get("status") == "completed"
+      and str(r.get("display_title", "")).endswith(" at base " + base)
       and str(r.get("id")) != exclude]
-for r in sorted(ok, key=lambda r: r.get("id", 0), reverse=True): print(r["id"])' "$head" "$exclude")" || runs=""
-  [ -n "$runs" ] || die "record: no completed CI run of $REPO at ${head:0:10} (push or dispatch); no record"
-  # The newest such run decides: an older green run never outvotes a later one at the same SHA.
+for r in sorted(ok, key=lambda r: r.get("id", 0), reverse=True): print(r["id"])' "$head" "$base" "$exclude")" || runs=""
+  [ -n "$runs" ] || die "record: no completed CI dispatch of $REPO at ${head:0:10} at base ${base:0:10}; no record"
+  # The newest such run decides: an older green run never outvotes a later one.
   local id sha jobs n bad unmet
   id="${runs%%$'\n'*}"
   read -r sha <<< "$(run_field "$id" headSha)" || die "record: cannot read run $id"

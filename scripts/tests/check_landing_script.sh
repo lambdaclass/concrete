@@ -19,9 +19,10 @@
 #               dry-run pushes nothing; a real land puts both remotes at the train head and cancels
 #               no run (main's own run records the train's, R-0570)
 #   record      (2026-11-06, R-0570) main's run names the run that qualified its exact SHA only when
-#               the newest completed push/dispatch run of the CI workflow at that SHA passed every
-#               landing-tier and required job and the head is ahead of the base; a missing run, a run
-#               at another SHA, of another workflow or event, unfinished or excluded, a skipped,
+#               the newest completed dispatch of the CI workflow at that SHA AND at that base (its
+#               title, from the base input train.sh ci passes) passed every landing-tier and required
+#               job and the head is ahead of the base; a missing run, a run at another SHA or base, of
+#               another workflow or event, unfinished or excluded, a skipped,
 #               cancelled or failed job, an older green run behind a newer red one, a diverged or
 #               absent base: no record. The workflow gates every job on it (structure check)
 #   dropped     (2026-10-25) a push that fails before the remote moved is retried; one that fails
@@ -530,8 +531,8 @@ out="$(bash "$TRAIN" --dry-run ci t1 2>&1)"; rc=$?
 printf '[{"databaseId": 4242, "headSha": "%s", "createdAt": "9999-01-01T00:00:00Z"}]' "$HEAD1" > "$FAKE_GH_DIR/list.json"
 out="$(bash "$TRAIN" ci t1 2>&1)"; rc=$?
 [ "$rc" = 0 ] && [ "$(git ls-remote origin refs/heads/ci/t1 | cut -f1)" = "$HEAD1" ] && has "$(cat "$TMP/state/t1/train.env")" "run_id=4242" \
-  && has "$(cat "$FAKE_GH_DIR/calls.log")" "workflow run CI -R test/repo --ref ci/t1" \
-  && ok "ci pushes ci/t1 at the head, dispatches, records run 4242" || { no "ci: exit $rc"; echo "$out" | sed 's/^/      /'; }
+  && has "$(cat "$FAKE_GH_DIR/calls.log")" "workflow run CI -R test/repo --ref ci/t1 -f base=$BASE" \
+  && ok "ci pushes ci/t1 at the head, dispatches it with the train's base, records run 4242" || { no "ci: exit $rc"; echo "$out" | sed 's/^/      /'; }
 
 runjson(){ # sha landing-conclusion campaign-conclusion
   printf '{"status":"completed","conclusion":"%s","headSha":"%s","jobs":[{"name":"Build","conclusion":"%s","databaseId":11},{"name":"Gate mutation shard 3","conclusion":"%s","databaseId":12}]}' \
@@ -748,8 +749,9 @@ echo "=== record: main's run names the run that qualified its exact SHA, and not
 # train.sh record HEAD --base BASE: the toy main moved BASE -> HEADR; its required-checks.txt asks for
 # Build. Run 501 is the train's dispatch at HEADR. Each leg changes one thing and must be refused.
 RW="$FAKE_GH_DIR"
-rrun(){ # id head path event status -> one runs-API entry
-  printf '{"id": %s, "head_sha": "%s", "path": "%s", "event": "%s", "status": "%s"}' "$1" "$2" "$3" "$4" "$5"
+rrun(){ # id head path event status [title] -> one runs-API entry; the title defaults to a train's
+  printf '{"id": %s, "head_sha": "%s", "path": "%s", "event": "%s", "status": "%s", "display_title": "%s"}' \
+    "$1" "$2" "$3" "$4" "$5" "${6:-ci/t1 at base $BASE}"
 }
 WF=.github/workflows/lean_action_ci.yml
 rruns(){ printf '{"workflow_runs": [%s]}' "$(IFS=,; echo "$*")" > "$RW/runs.json"; }
@@ -774,19 +776,25 @@ o="$(rec "$HEADR" --base "$BASE" --exclude-run 900)"; r=$?
 [ "$r" = 0 ] && has "$o" "qualifying_run=501" && ok "record: the newest green run at exactly the head qualifies it (a skipped campaign job is fine)" \
   || { no "record refused a qualifying run (exit $r)"; echo "$o" | sed 's/^/      /'; }
 rruns ''
-rec_refuses "with no run at the head" "no completed CI run" "$HEADR" --base "$BASE"
+rec_refuses "with no run at the head" "no completed CI dispatch" "$HEADR" --base "$BASE"
 rruns "$(rrun 501 "$BASE" "$WF" workflow_dispatch completed)"
-rec_refuses "a run at another SHA" "no completed CI run" "$HEADR" --base "$BASE"
+rec_refuses "a run at another SHA" "no completed CI dispatch" "$HEADR" --base "$BASE"
 rruns "$(rrun 501 "$HEADR" "$WF" workflow_dispatch completed)"; rjobs 501 "$BASE" "$GREEN"
 rec_refuses "a run the API lists at the head but whose own record names another SHA" "ran ${BASE:0:10}" "$HEADR" --base "$BASE"
 reset_record; rruns "$(rrun 501 "$HEADR" .github/workflows/other.yml workflow_dispatch completed)"
-rec_refuses "a run of another workflow" "no completed CI run" "$HEADR" --base "$BASE"
+rec_refuses "a run of another workflow" "no completed CI dispatch" "$HEADR" --base "$BASE"
 rruns "$(rrun 501 "$HEADR" "$WF" pull_request completed)"
-rec_refuses "a pull_request run" "no completed CI run" "$HEADR" --base "$BASE"
-rruns "$(rrun 501 "$HEADR" "$WF" workflow_dispatch in_progress)"
-rec_refuses "an unfinished run" "no completed CI run" "$HEADR" --base "$BASE"
+rec_refuses "a pull_request run" "no completed CI dispatch" "$HEADR" --base "$BASE"
 rruns "$(rrun 501 "$HEADR" "$WF" push completed)"
-rec_refuses "the asking run itself" "no completed CI run" "$HEADR" --base "$BASE" --exclude-run 501
+rec_refuses "a push run (its checks' base is not the declared one)" "no completed CI dispatch" "$HEADR" --base "$BASE"
+rruns "$(rrun 501 "$HEADR" "$WF" workflow_dispatch completed "ci/t1 at base $HEADR")"
+rec_refuses "a dispatch whose checks ran at another base" "no completed CI dispatch" "$HEADR" --base "$BASE"
+rruns "$(rrun 501 "$HEADR" "$WF" workflow_dispatch completed "CI")"
+rec_refuses "a dispatch that names no base (a campaign or hand dispatch)" "no completed CI dispatch" "$HEADR" --base "$BASE"
+rruns "$(rrun 501 "$HEADR" "$WF" workflow_dispatch in_progress)"
+rec_refuses "an unfinished run" "no completed CI dispatch" "$HEADR" --base "$BASE"
+rruns "$(rrun 501 "$HEADR" "$WF" workflow_dispatch completed)"
+rec_refuses "the asking run itself" "no completed CI dispatch" "$HEADR" --base "$BASE" --exclude-run 501
 reset_record
 rjobs 501 "$HEADR" '[{"name":"Build","conclusion":"skipped","databaseId":31},{"name":"Other","conclusion":"success","databaseId":32}]'
 rec_refuses "a skipped required job" "skipped: Build" "$HEADR" --base "$BASE"
@@ -811,7 +819,7 @@ rec_refuses "a base this clone does not have" "not in this clone" "$HEADR" --bas
 rec_refuses "an all-zero base (a new branch, not a landing)" "--base must be" "$HEADR" --base 0000000000000000000000000000000000000000
 rec_refuses "an abbreviated head" "full 40-hex SHA" "${HEADR:0:10}" --base "$BASE"
 rm -f "$RW/runs.json"
-rec_refuses "when the runs API cannot be read" "no completed CI run" "$HEADR" --base "$BASE"
+rec_refuses "when the runs API cannot be read" "no completed CI dispatch" "$HEADR" --base "$BASE"
 # A base requirement the head drops without a transition row is still owed (land's own rule).
 git checkout -q -b rec-drop "$HEADR"; printf 'Other\n' > required-checks.txt; git commit -qam "drop Build"
 HD="$(git rev-parse HEAD)"; git checkout -q train/t1
@@ -820,11 +828,26 @@ rjobs 503 "$HD" '[{"name":"Other","conclusion":"success","databaseId":51}]'
 rec_refuses "a head that drops a base requirement silently" "missing: Build" "$HD" --base "$BASE"
 reset_record
 
-echo "=== the workflow: Landing record gates every landing-tier job, and is the only ungated one ==="
+echo "=== the workflow: Landing record gates every landing-tier job; a dispatch's base binds its checks ==="
 cat > "$TMP/record_gate.py" <<'PY2'
 import re, sys, yaml
-jobs = yaml.safe_load(open(sys.argv[1]))["jobs"]
+doc = yaml.safe_load(open(sys.argv[1]))
+jobs = doc["jobs"]
 rx = re.compile(sys.argv[2])
+# The record trusts a dispatch's title for its base: the title must come from the base input, and
+# every base-sensitive check must compare with that input as a push compares with event.before.
+if "format('{0} at base {1}', github.ref_name, inputs.base)" not in str(doc.get("run-name", "")):
+    print("run-name does not record a dispatch's base as '<ref> at base <sha>'")
+bases = 0
+for k, j in jobs.items():
+    for st in j.get("steps", []):
+        for var, val in (st.get("env") or {}).items():
+            if var in ("LL1_BASE", "TOTALITY_BASE", "CONFORMANCE_BASE", "SPEC_BASE"):
+                bases += 1
+                if "github.event.before" not in str(val) or "inputs.base" not in str(val):
+                    print(f"{var} in {k} does not take a push's event.before and a dispatch's inputs.base")
+if bases < 4:
+    print(f"only {bases} base-sensitive checks found (LL1, TOTALITY, CONFORMANCE, SPEC)")
 GATE = "needs.landing-record.outputs.recorded != 'true'"
 rec = jobs.get("landing-record")
 if not rec or rec.get("name") != "Landing record":
@@ -867,9 +890,17 @@ w = yaml.safe_load(open(sys.argv[1])); os.makedirs(sys.argv[2], exist_ok=True)
 a = copy.deepcopy(w); a["jobs"]["macos"].pop("needs"); a["jobs"]["macos"].pop("if")
 b = copy.deepcopy(w); b["jobs"]["main-tests"]["if"] = "always()"
 c = copy.deepcopy(w); c["jobs"]["build"]["if"] = "needs.landing-record.outputs.recorded != 'true'"
-for n, x in (("ungated", a), ("always", b), ("nocancel", c)):
+d = copy.deepcopy(w)
+for j in d["jobs"].values():
+    for st in j.get("steps", []):
+        if "TOTALITY_BASE" in (st.get("env") or {}):
+            st["env"]["TOTALITY_BASE"] = "${{ github.event_name == 'push' && github.event.before || '' }}"
+for n, x in (("ungated", a), ("always", b), ("nocancel", c), ("unbased", d)):
     yaml.safe_dump(x, open(os.path.join(sys.argv[2], n + ".yml"), "w"))
 PY3
+o="$(python3 -I "$TMP/record_gate.py" "$TMP/rg/unbased.yml" "$re_default")"
+has "$o" "TOTALITY_BASE in" && ok "CONTROL: the record-gate check finds a base-sensitive check that ignores the dispatch's base" \
+  || no "CONTROL: the record-gate check missed an unbased check: '$o'"
 for v in ungated always nocancel; do
   o="$(python3 -I "$TMP/record_gate.py" "$TMP/rg/$v.yml" "$re_default")"
   has "$o" "not gated" && ok "CONTROL: the record-gate check finds the $v job" || no "CONTROL: the record-gate check missed the $v job: '$o'"
