@@ -1,0 +1,2 @@
+[piece 11 of 12: scripts]
+- scripts/spec/lean_site.py:195: Replacing a same-line doc comment with `' ' * col` loses its UTF-16 width when it contains a non-BMP character such as an emoji. The remaining code’s `.ilean` references still use original UTF-16 offsets, so `link_code` links incorrect character ranges. Preserve the removed prefix’s UTF-16 width when padding.
