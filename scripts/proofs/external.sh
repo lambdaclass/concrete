@@ -133,8 +133,9 @@ cut -f2 "$TMP/encoded.tsv" | sort -u > "$TMP/population-enc.txt"
 echo "=== A: export ==="
 EXPORT="$TMP/spec.ndjson"
 # lean4export can panic on a name it cannot resolve and still exit 0, so its stderr must be empty.
-# shellcheck disable=SC2046
-"$LAKE" env "$EXPORTER" ConcreteSpec -- $(cat "$TMP/population.txt") > "$EXPORT" 2> "$TMP/export.err"; rc=$?
+# One argument per name, quoted: a name such as `«foo bar»` holds a space and `«*»` a glob.
+mapfile -t POP < "$TMP/population.txt"
+"$LAKE" env "$EXPORTER" ConcreteSpec -- "${POP[@]}" > "$EXPORT" 2> "$TMP/export.err"; rc=$?
 [ "$rc" = 0 ] && [ ! -s "$TMP/export.err" ] && ok "lean4export exported the population (no diagnostics)" \
   || { no "lean4export rc=$rc: $(head -3 "$TMP/export.err" | tr '\n' ' ')"; finish; }
 read -r EXP_LEAN EXP_TOOL EXP_FORMAT < <($INV meta "$EXPORT")

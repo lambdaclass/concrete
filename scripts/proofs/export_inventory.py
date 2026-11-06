@@ -147,33 +147,34 @@ def decls(path):
         kind, d = consts[n][0]
         lp = nms(d["levelParams"])
         t = dag(d["type"])
-        head = f"D\t{n}\t{{}}\t[{lp}]\tT={t}"
+        # the kind goes in by concatenation: an encoded name may contain braces
+        def head(k): return "D\t" + n + "\t" + k + f"\t[{lp}]\tT={t}"
         if kind == "axiom":
-            line = head.format("axiom") + f" unsafe={flag(d['isUnsafe'])}"
+            line = head("axiom") + f" unsafe={flag(d['isUnsafe'])}"
         elif kind == "def":
             v = dag(d["value"])
             h = d["hints"]
             hints = h if isinstance(h, str) else f"regular {h['regular']}"
-            line = head.format("def") + f" V={v} hints={hints} safety={d['safety']} all=[{nms(d['all'])}]"
+            line = head("def") + f" V={v} hints={hints} safety={d['safety']} all=[{nms(d['all'])}]"
         elif kind == "thm":
-            line = head.format("thm") + f" V={dag(d['value'])} all=[{nms(d['all'])}]"
+            line = head("thm") + f" V={dag(d['value'])} all=[{nms(d['all'])}]"
         elif kind == "opaque":
             v = dag(d["value"])
-            line = head.format("opaque") + f" V={v} unsafe={flag(d['isUnsafe'])} all=[{nms(d['all'])}]"
+            line = head("opaque") + f" V={v} unsafe={flag(d['isUnsafe'])} all=[{nms(d['all'])}]"
         elif kind == "quot":
-            line = head.format("quot") + f" kind={d['kind']}"
+            line = head("quot") + f" kind={d['kind']}"
         elif kind == "inductive":
-            line = head.format("inductive") + (
+            line = head("inductive") + (
                 f" params={d['numParams']} indices={d['numIndices']} all=[{nms(d['all'])}]"
                 f" ctors=[{nms(d['ctors'])}] rec={flag(d['isRec'])} unsafe={flag(d['isUnsafe'])}"
                 f" reflexive={flag(d['isReflexive'])} nested={d['numNested']}")
         elif kind == "ctor":
-            line = head.format("ctor") + (
+            line = head("ctor") + (
                 f" induct={names[d['induct']]} cidx={d['cidx']} params={d['numParams']}"
                 f" fields={d['numFields']} unsafe={flag(d['isUnsafe'])}")
         else:
             rules = "; ".join(f"{names[x['ctor']]} {x['nfields']} {dag(x['rhs'])}" for x in d["rules"])
-            line = head.format("rec") + (
+            line = head("rec") + (
                 f" all=[{nms(d['all'])}] params={d['numParams']} indices={d['numIndices']}"
                 f" motives={d['numMotives']} minors={d['numMinors']} k={flag(d['k'])}"
                 f" unsafe={flag(d['isUnsafe'])} rules=[{rules}]")
