@@ -36,10 +36,11 @@ declared() { awk -F'\t' '$2 == "axiom" { print $1 }' "$1"; }
 # cannot be lexed. Comments (nested `/- -/`, `--`) are blanked; everything else is scanned, string
 # literals included, since an interpolation such as s!"{(sorry : Nat)}" runs code. The lexer follows
 # Lean's literal forms so that no comment delimiter inside a literal starts a comment: a string with
-# its escapes, a `{ }` in a string as an interpolation in which code (with its own strings and
-# comments) is lexed recursively, raw strings r"…" and r#"…"#, character literals and quoted names «…». Every string
-# is lexed as if it interpolates: a `{` in a plain string must be balanced, and an unterminated
-# string, comment or interpolation is an error, never a silent skip.
+# its escapes, raw strings r"…" and r#"…"#, character literals and quoted names «…». Whether a
+# string interpolates depends on the parser, not the lexer, so the scan admits interpolation only
+# directly after `s!`, `m!` or `f!` (its `{ }` code, with its own strings and comments, is lexed
+# recursively) and refuses any other string holding `{`. An unterminated string, comment,
+# interpolation or name is an error too: the scan fails closed, never skips.
 scan() {
   python3 - "$BANNED_WORD_RE" "$@" <<'EOF'
 import re, sys
@@ -62,12 +63,16 @@ def lex(src):
             else: out.append("\n" if src[i] == "\n" else " "); i += 1
         raise LexError("unterminated comment")
     def string(i):                                    # at '"'
+        interp = src[i - 2:i] in ("s!", "m!", "f!") and not ident(i - 3)
         out.append('"'); i += 1
         while i < n:
             c = src[i]
             if c == "\\": out.append(src[i:i + 2]); i += 2
             elif c == '"': out.append(c); return i + 1
-            elif c == "{": out.append(c); i = code(i + 1, True)
+            elif c == "{" and interp: out.append(c); i = code(i + 1, True)
+            elif c == "{":
+                line = src.count("\n", 0, i) + 1
+                raise LexError(f"line {line}: a string holding '{{' without s!, m! or f! before it")
             else: out.append(c); i += 1
         raise LexError("unterminated string")
     def raw(i):                                       # at 'r' of r#*"
@@ -179,8 +184,9 @@ $B:13: example : False := sorryAx False true"
 [ "$RC" = 0 ] && [ "$W" = "$EXPECT" ] \
   && ok "control: native_decide, and sorry inside an interpolation, after a string, raw string or quoted name holding comment delimiters, after an interpolation holding a string, and a direct sorryAx are found; the words in comments are not" \
   || no "control: source scan (rc=$RC) reported '$W'"
-printf 'def s : String := "unterminated {\n' > "$TMP/src/Open.lean"
-for f in missing Open; do
+printf 'def s : String := s!"unterminated {\n' > "$TMP/src/Open.lean"
+printf 'example : String × Nat := { fst := "{--", snd := sorry\n} -- "\n' > "$TMP/src/Brace.lean"
+for f in missing Open Brace; do
   scan "$TMP/src/$f.lean" > /dev/null 2>&1; RC=$?
   [ "$RC" != 0 ] && ok "control: a source the scan cannot read or lex ($f) fails it (rc=$RC)" \
     || no "control: the scan of $f exited 0"
