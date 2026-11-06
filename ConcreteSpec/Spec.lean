@@ -42,8 +42,9 @@ The file has seven parts. Each is a small Core fragment with its own judgments, 
 far as its theorems need (R4 F8). Unifying them into one Core is work for A3 (R-0560).
 
 1. **Slice 1** (ROADMAP phase B): scalars, `let`, structs, moves and the use-after-move refusal,
-   checked `+`, `return`, in Core's binding form (Q9.1), with the static refusal of statically
-   known violations (Q6.1–Q6.6). It ends with the slice-0 fragment, the first subset the compiler
+   checked `+`, `return`, in Core's binding form (Q9.1), with evidence-required admission (no
+   hidden traps, decision of 2026-11-06: an operation is accepted only with checked evidence that
+   it cannot fail; Q6.1–Q6.6 as revised). It ends with the slice-0 fragment, the first subset the compiler
    accepts (`ConcreteSpec.Slice0`).
 2. **Representation** (Q3.11): the layout and byte encoding of the slice-1 types.
 3. **Structured cleanup** (Q9.8, Q2.1, Q2.7, Q1.5): `defer`, frames and exits.
@@ -64,8 +65,10 @@ What slice 1 contains:
   an empty struct without `Copy`, moved and then consumed by a destructuring `let`;
 * the use-after-move refusal (OWN-1), consumption before exit (OWN-2) and used bindings (OWN-5);
 * one checked operation, integer `+` (ARITH-3), which traps on overflow;
-* the static refusal of an operation whose operands are statically known and whose result
-  violates its contract (Q6.1, Q6.2, Q6.4; ARITH-13, OD118);
+* evidence-required admission (no hidden traps, decision of 2026-11-06, Q1): `+` is accepted only
+  when the facts the checker keeps (known values, Q6.2, and type bounds) prove the sum fits; every
+  other `+` is refused, so an accepted program never traps (`checked_no_implicit_traps`). This
+  subsumes the refusal of proven violations (Q6.1, Q6.4; ARITH-13, OD118);
 * one function, `main`, with no parameters, whose body is a list of `let` statements followed by
   `return a` with `a : u8` (STMT-7, STMT-9).
 

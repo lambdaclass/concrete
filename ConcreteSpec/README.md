@@ -90,6 +90,8 @@ Formalized at A2c, each with rules, examples and proofs:
   brand check (`checked_passes_brand_checks`), for every outcome of the loop tests.
 - **Range subviews** (Q4.7, part 4): the range test for arrays and UTF-8 text, `else`, the trap
   without `else`, and the refusal of a range proven invalid (OD118), complete for the known facts.
+  Still the rule of 2026-11-05: the no-hidden-traps revision (a range without `else` needs evidence
+  of validity) is open A2i work (R-0574).
   Element access `v[i]` reaches exactly source element `a + i`, inside `[a, b)` and the source, or
   traps (`view_in_source`, `view_get`, `view_set`); a write changes exactly that element
   (`view_write_exact`), and a block that accesses only its view changes nothing outside

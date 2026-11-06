@@ -126,8 +126,11 @@ access rules of `borrow [mut] src as v { body }` (`Ok`): the view keeps the sour
 mutable open freezes it. If the range is invalid, `else` runs; without `else` the program traps,
 like indexing out of range. A range statically known to be invalid is refused when there is no
 `else` (OD118, everywhere, including trusted code) and accepted when there is one, whose `else`
-then runs as ordinary branching (Q4.7). Without a range there is no `else` (the whole view always
-opens). Element access, the no-escape rules and text validity follow the examples below.
+then runs as ordinary branching (Q4.7). This is the rule of Q4.7 as decided on 2026-11-05. The
+no-hidden-traps decision of 2026-11-06 revises it: the form without `else` needs evidence of a
+valid range, not only the absence of a proven invalid one. That migration is open A2i work
+(R-0574); until it lands, this fragment admits a range without `else` whose bounds are unknown.
+Without a range there is no `else` (the whole view always opens). Element access, the no-escape rules and text validity follow the examples below.
 -/
 
 /-- A source's value at run time: an array of `len` elements, or text with its bytes. -/

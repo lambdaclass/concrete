@@ -124,10 +124,11 @@ fail at run time carries checked evidence that it cannot. Slice 1 has one such o
 `+`. Its evidence is a bound on each operand, read from the facts the checker keeps: a known value
 (Q6.2) is exact, and any other integer is bounded by its type. The sum is admitted only when the
 operands' bounds put it inside the result type; otherwise it is refused, whether or not it would
-fail (refusal of unproven safety subsumes OD118's refusal of proven violations). Slice 1 has no
-conditions, loops or calls, so these interval facts are all the octagon checker of the decision
-can know here; the relational facts, the conditions that produce them, and the loop rule come with
-the Core statements that need them. -/
+fail (refusal of unproven safety subsumes OD118's refusal of proven violations). This is interval
+admission only, a sound part of the decided checker, not the checker itself: the decision's checker
+decides integer octagons (`±x ± y ≤ c`), and even slice 1 has relational facts it would use (an
+immutable copy gives `y = x`). The octagon fact language, its transfers, conditions, joins and the
+loop rule are open R-0574 work that lands before the freeze. -/
 
 /-- The integer type of an atom and a bound `lo ≤ v ≤ hi` on its value, from the checker's facts:
 a literal or a known local is exact (Q6.2); another integer local is bounded by its type. `none` for
