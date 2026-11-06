@@ -43,7 +43,7 @@ if [ -f scripts/tests/select_gates.sh ] && ! grep -q select_gates "$HOOK" 2>/dev
   args=() c=""
   while IFS= read -r c; do [ -n "$c" ] && args+=(--first "$c"); done <<< "$sel"
   selected="$(( ${#args[@]} / 2 ))"
-  if [ "${#args[@]}" -gt 0 ]; then land_in_nix bash scripts/tests/run_ci_gates_local.sh "${args[@]}"; fi
+  if [ "${#args[@]}" -gt 0 ]; then land_in_nix bash scripts/checks/run.sh "${args[@]}"; fi
 fi
 [ -z "$report" ] || echo "selected: $selected" > "$report"
 echo "impact: gates passed for ${base:0:10}..${head:0:10} (selected: $selected)"

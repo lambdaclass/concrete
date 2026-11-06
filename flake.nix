@@ -114,19 +114,6 @@
             # failed in this shell while passing on CI, whose elan puts no clang on PATH.
             clang
             leanRelease
-            llvmPackages.llvm  # provides lli for fast test execution
-            z3                 # external SMT solver for the pre-existing solver_trusted path
-            rustc
-            # cargo so check_external_checker.sh can build lean4export/con-leche in this shell; CI's
-            # runners have it preinstalled, so the gate failed only here.
-            cargo
-            typst
-            zola
-            # RocksDB slice 1 (R-0285): the C library examples/rocksdb_kv binds, at the
-            # revision flake.lock pins, found through pkg-config. check_rocksdb_slice1.sh
-            # fails closed when pkg-config cannot find it; it never skips.
-            rocksdb
-            pkg-config
           ] ++ gatesUserland;
         in {
           # Default shell stays light: the pre-existing toolchain only. The
@@ -141,36 +128,6 @@
           gates = pkgs.mkShellNoCC ({ packages = gatesUserland; } // gatesMarker);
 
           # `nix develop .#provers` — adds the independent second kernels.
-          provers = pkgs.mkShell (gatesMarker // {
-            packages = base ++ (with pkgs; [
-              coq                # independent CIC kernel (coqc/lia)
-              coqPackages.stdlib # Rocq 9.0 stdlib (ZArith, Lia) — split out of coq-core
-              isabelle           # independent HOL kernel (presburger) — foundational independence
-              # Certificate-replay toolchain (see docs/verification/SMT_SOUNDNESS.md). Makes a
-              # solver's PROOF checkable rather than its verdict merely corroborated.
-              drat-trim          # DRAT/LRAT checker for bit-blasted (SAT) certificates
-              # cvc5 is here because check_multi_kernel.sh CONSUMES it: it locks the
-              # measured ceiling that SMT datatype reasoning is provable but not
-              # Alethe-certifiable, which is the reason the non-arithmetic tier stays
-              # kernel-proved. It was previously dropped as unused — correct then, wrong
-              # now. Isabelle's own CVC5_SOLVER is internal to its settings and is NOT
-              # exported to the shell, so relying on that left the check silently
-              # skipping with no change in the assertion count.
-              cvc5
-            ]);
-            # No veriT here on purpose (cvc5 IS listed above — see its comment).
-            # Isabelle's nix package already bundles `contrib/verit-2021.06.2-rmx-3`,
-            # registers it in etc/components, and sets ISABELLE_VERIT — verified by
-            # running `smt (verit)` under plain `nix shell nixpkgs#isabelle`, where it
-            # closes a linear goal oracle-free. (`VERIT_SOLVER` is empty there, which is
-            # misleading: the component variable Isabelle actually reads is
-            # ISABELLE_VERIT, visible only via `isabelle getenv`.)
-            #
-            # Isabelle's bundled CVC5_SOLVER is a DIFFERENT build from the cvc5 above
-            # (measured 2026-07-31: contrib 1.2.0 vs shell 1.3.2). Anything asserting a
-            # version-scoped fact about cvc5 must therefore report which one it ran;
-            # check_multi_kernel.sh prints it for exactly this reason.
-          });
         });
     };
 }

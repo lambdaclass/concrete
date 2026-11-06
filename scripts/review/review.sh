@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# R-0544 — one review procedure for every agent. See docs/project/REVIEW.md.
+# R-0544 — one review procedure for every agent. See docs/REVIEW.md.
 #
 #   scripts/review/review.sh [--base <ref>] [--head <ref>] [--max-rounds 5]
 #                            [--pieces auto|N] [--prompt-extra "..."]
@@ -30,7 +30,7 @@
 #   5  verdict blocked (a piece could not be reviewed; see .review/)
 #   6  result recorded locally but the notes ref could not be pushed
 #
-# Environment (mostly for the test gate, scripts/tests/check_review_tool.sh):
+# Environment (mostly for the test gate, scripts/checks/review_tool.sh):
 #   REVIEW_CODEX_BIN    reviewer binary (default: codex)
 #   REVIEW_REMOTE       remote for notes and the default base (default: origin)
 #   REVIEW_MAIN_REF     ref the default base is computed against (default: $REVIEW_REMOTE/main)
@@ -40,7 +40,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/../tests/lib/has_match.sh" || exit 2  # bug 283: never a pipe into grep -q
+source "$SCRIPT_DIR/../checks/lib/has_match.sh" || exit 2  # bug 283: never a pipe into grep -q
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
 
@@ -251,14 +251,14 @@ This is $2 (file group: $3; files: $4).
 
 Report correctness findings only: wrong behaviour, logic errors, regressions, unhandled cases, tests that do not check what they claim, and documentation that contradicts the code. Do not report style preferences.
 
-Also answer one question, as a finding when the answer is yes: does this patch pick a side on any owner decision in docs/spec/decisions.md (OD1 - OD157 under "Owner decisions"), that is, choose, encode, implement, extend or revert behaviour one of them covers? Only the project owner decides those; a patch that does so must not land.
+Also answer one question, as a finding when the answer is yes: does this patch pick a side on any owner decision in docs/decisions.md (OD1 - OD157 under "Owner decisions"), that is, choose, encode, implement, extend or revert behaviour one of them covers? Only the project owner decides those; a patch that does so must not land.
 EOF
   else
     cat <<EOF
 Please do a routine code review of the source-code patch below. It belongs to a compiler, a program that translates source code into machine code, and to that compiler's tests and documentation. Treat it as ordinary software engineering: look for logic errors and for behaviour that differs from what the code and its comments say. You may read files in the working directory for context.
 
 This is $2 (files: $4). $scope
-Also report as a finding any change that picks a side on an owner decision listed in docs/spec/decisions.md (OD1 - OD157).
+Also report as a finding any change that picks a side on an owner decision listed in docs/decisions.md (OD1 - OD157).
 EOF
   fi
   if [ -n "$PREV_FINDINGS" ]; then

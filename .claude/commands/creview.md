@@ -5,7 +5,7 @@ argument-hint: "[base ref, default origin/main]"
 
 Review this branch against: $ARGUMENTS (`origin/main` when empty; written `<base>` below).
 
-Rules: [docs/project/AGENTS.md](../../docs/project/AGENTS.md) ("Review").
+Rules: [AGENTS.md](../../AGENTS.md) ("Review").
 
 **Dependency.** `scripts/review/review.sh` is being built on its own branch. Read its usage header
 before the first call and follow it; it owns the prompt, the round count and the delta between

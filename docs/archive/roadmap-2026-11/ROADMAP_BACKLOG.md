@@ -13,7 +13,7 @@ The tasks were split out of ROADMAP.md on 2026-10-19. They are filed under the s
 no scheduled task, such as WebAssembly or the freestanding target, moved here whole). Stubs of
 superseded, merged, duplicate, retired and delegated tasks whose **Phase:** line names no active or
 next phase are here too; their archived bodies stay in
-[ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md) and their dispositions in the
+[ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md) and their dispositions in the
 [reconciliation record](ROADMAP_RECONCILIATION.md).
 
 ## Pull rules
@@ -58,7 +58,7 @@ obligations.
 
 ## Area: Verified-Compiler Pipeline, Stabilization And Usability
 
-These tasks carry the [verified-compiler pipeline](../../compiler/VERIFIED_PIPELINE.md)
+These tasks carry the [verified-compiler pipeline](../../../legacy/docs/compiler/VERIFIED_PIPELINE.md)
 (R-0491 – R-0512), the gate and shared-front-end work it depends on (R-0513, R-0514), the usability
 and release-automation tracks (R-0515, R-0516), the Lean Compiler Backend dependency (R-0517) and the
 open work promoted from roadmap prose by the 2026-10-19 reconciliation. They were filed under the backend-contracts area
@@ -74,7 +74,7 @@ until 2026-10-19; their queue rows, not this position, schedule them.
 
 **Reconciliation (2026-10-19):** Keep; row 6 extends it per slice. Hypothesis dependencies: cycles (O1 needs O2 needs O1), self-support and missing references are rejected or handled by a stated well-founded/SCC rule, with hostile cycle fixtures (with R-0460). The structured subject-facts schema replaces the scraped human report here (with R-0481).
 
-**Objective:** One verdict authority — stage S2 of the [verified-compiler pipeline](../../compiler/VERIFIED_PIPELINE.md), which holds the full design.
+**Objective:** One verdict authority — stage S2 of the [verified-compiler pipeline](../../../legacy/docs/compiler/VERIFIED_PIPELINE.md), which holds the full design.
 
 **Status (2026-10-18): planned; starts now.**
 
@@ -92,14 +92,14 @@ and clause.
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
 
-- **R-0171** (superseded): superseded by R-0494: merge into R-0494; preserve route-specific attacks. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0171)
+- **R-0171** (superseded): superseded by R-0494: merge into R-0494; preserve route-specific attacks. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0171)
 - **R-0194** (merged): duplicate of R-0209: merge into R-0209.
 - **R-0204** (superseded): superseded by R-0494: merge into R-0494.
 - **R-0205** (superseded): superseded by R-0494: merge into R-0494’s evidence-class controls.
 - **R-0209** (superseded): superseded by R-0494: merge into R-0494; retain audit/diff tests.
 - **R-0218** (superseded): superseded by R-0494: merge into R-0494.
 - **R-0264** (superseded): superseded by R-0494/R-0509: merge implementation into R-0494, soundness proof into S16.
-- **R-0465** (done): done for its enumerated wiring; the remaining universal-verdict-authority requirement merges into R-0494. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0465)
+- **R-0465** (done): done for its enumerated wiring; the remaining universal-verdict-authority requirement merges into R-0494. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0465)
 
 ### Task R-0495
 
@@ -111,7 +111,7 @@ regression cases and controls of these tasks transfer here unless the reason ret
 
 **Reconciliation (2026-10-19):** Keep; coverage and loop binding are essential exits.
 
-**Objective:** Claims on Core — stage S9 of the [verified-compiler pipeline](../../compiler/VERIFIED_PIPELINE.md), which holds the full design.
+**Objective:** Claims on Core — stage S9 of the [verified-compiler pipeline](../../../legacy/docs/compiler/VERIFIED_PIPELINE.md), which holds the full design.
 
 **Status (2026-10-18): planned.**
 
@@ -134,15 +134,15 @@ final retirement conditions; historical replay remains available.
 regression cases and controls of these tasks transfer here unless the reason retires them.
 
 - **R-0123** (superseded): superseded by R-0495/R-0512: retire new legacy-model semantics; add admitted Core features/proof lemmas instead.
-- **R-0176** (superseded): superseded by R-0495/R-0512: retire proposed legacy architecture; retain ownership goals in R-0151. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0176)
+- **R-0176** (superseded): superseded by R-0495/R-0512: retire proposed legacy architecture; retain ownership goals in R-0151. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0176)
 - **R-0202** (superseded): superseded by R-0495/R-0512: merge dependency-closure requirement into Core migration; maintain legacy checks until retirement.
 - **R-0229** (superseded): superseded by R-0495 and V2–V4: merge into slice admission/claim coverage.
-- **R-0235** (superseded): superseded by R-0496/R-0495: retire PVal/PBinOp expansion; implement Core float semantics. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0235)
-- **R-0262** (superseded): superseded by R-0495/R-0512: retire blanket legacy bridge; retain only migration-pulled bridges. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0262)
+- **R-0235** (superseded): superseded by R-0496/R-0495: retire PVal/PBinOp expansion; implement Core float semantics. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0235)
+- **R-0262** (superseded): superseded by R-0495/R-0512: retire blanket legacy bridge; retain only migration-pulled bridges. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0262)
 - **R-0265** (superseded): superseded by R-0495/R-0509: merge into statement/binding/aggregation soundness.
 - **R-0267** (superseded): superseded by R-0499/R-0507/R-0495: merge; capabilities and purity remain distinct.
 - **R-0269** (superseded): superseded by R-0495: merge composition needs into R-0164; retire PExpr table architecture.
-- **R-0464** (superseded): superseded by R-0493/R-0495/R-0460: merge; archive completed H24 fix and retire SSA-first prescription. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0464)
+- **R-0464** (superseded): superseded by R-0493/R-0495/R-0460: merge; archive completed H24 fix and retire SSA-first prescription. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0464)
 
 ### Task R-0505
 
@@ -152,7 +152,7 @@ regression cases and controls of these tasks transfer here unless the reason ret
 
 **Reconciliation (2026-10-19):** Re-pointed 2026-10-19: integrate the Lean Compiler Backend (R-0517); no Concrete machine backend. Absorbs R-0297's scheduling.
 
-**Objective:** Native AArch64 profile: LCB integration, linking and image — stage S13 of the [verified-compiler pipeline](../../compiler/VERIFIED_PIPELINE.md), which holds the full design. Concrete integrates the Lean Compiler Backend (R-0517) and builds no machine backend of its own.
+**Objective:** Native AArch64 profile: LCB integration, linking and image — stage S13 of the [verified-compiler pipeline](../../../legacy/docs/compiler/VERIFIED_PIPELINE.md), which holds the full design. Concrete integrates the Lean Compiler Backend (R-0517) and builds no machine backend of its own.
 
 **Status (2026-10-19): planned; re-pointed from an owned Concrete machine backend to LCB integration.**
 
@@ -179,11 +179,11 @@ regression cases and controls of these tasks transfer here unless the reason ret
 
 - **R-0081** (merged): merged — emitter independence between the LLVM adapter and the LCB adapter, and shared-helper disclosure, move to R-0505/R-0517.
 - **R-0088** (superseded): superseded — aggregate/memory ABI realization moves to R-0502 (layout) and the adapter boundary (R-0505/R-0517) across V2–V6.
-- **R-0089** (superseded): superseded — call/FFI/ABI matrices apply at the LCB adapter boundary (R-0505/R-0517); LCB's own ABI coverage (its P07) is an external dependency. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0089)
-- **R-0099** (retired): retired — graduation of the native path is R-0517/R-0505's LCB-native profile; no QBE graduation exists. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0099)
+- **R-0089** (superseded): superseded — call/FFI/ABI matrices apply at the LCB adapter boundary (R-0505/R-0517); LCB's own ABI coverage (its P07) is an external dependency. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0089)
+- **R-0099** (retired): retired — graduation of the native path is R-0517/R-0505's LCB-native profile; no QBE graduation exists. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0099)
 - **R-0103** (superseded): superseded by R-0492/R-0505: merge; general separate compilation arrives in V6.
-- **R-0296** (retired): retired — see the disposition in the task body. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0296)
-- **R-0297** (delegated): delegated — see the disposition in the task body. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0297)
+- **R-0296** (retired): retired — see the disposition in the task body. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0296)
+- **R-0297** (delegated): delegated — see the disposition in the task body. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0297)
 
 ### Task R-0510
 
@@ -193,7 +193,7 @@ regression cases and controls of these tasks transfer here unless the reason ret
 
 **Reconciliation (2026-10-19):** Keep whole-language implementation in R-0514’s checkpoint.
 
-**Objective:** Checked specialization — stage S8a of the [verified-compiler pipeline](../../compiler/VERIFIED_PIPELINE.md), which holds the full design.
+**Objective:** Checked specialization — stage S8a of the [verified-compiler pipeline](../../../legacy/docs/compiler/VERIFIED_PIPELINE.md), which holds the full design.
 
 **Status (2026-10-18): planned.**
 
@@ -212,10 +212,10 @@ differential tests and a proved substitution/dispatch example.
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
 
-- **R-0007** (superseded): superseded by R-0492/R-0510: merge, preserving function-symbol and metamorphic controls. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0007)
-- **R-0116** (superseded): superseded by R-0497/R-0510/R-0514: merge; use payload binding and new IR chain. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0116)
-- **R-0271** (superseded): superseded by R-0510/S8a, V5: merge into R-0510, retaining explicit law-evidence acceptance. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0271)
-- **R-0437** (superseded): superseded by R-0514/R-0510: merge declaration and specialization checks; preserve distinct diagnostics. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0437)
+- **R-0007** (superseded): superseded by R-0492/R-0510: merge, preserving function-symbol and metamorphic controls. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0007)
+- **R-0116** (superseded): superseded by R-0497/R-0510/R-0514: merge; use payload binding and new IR chain. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0116)
+- **R-0271** (superseded): superseded by R-0510/S8a, V5: merge into R-0510, retaining explicit law-evidence acceptance. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0271)
+- **R-0437** (superseded): superseded by R-0514/R-0510: merge declaration and specialization checks; preserve distinct diagnostics. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0437)
 
 ### Task R-0512
 
@@ -251,15 +251,15 @@ historical replay remains available; no name-keyed lookup grants current authori
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
 
-- **R-0087** (superseded): superseded by VP V7/R-0512: merge with total float model and profile-specific trust labels. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0087)
-- **R-0097** (superseded): superseded by R-0511/R-0512: merge profile admission; retain no silent fallback. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0097)
-- **R-0112** (superseded): superseded by R-0512: merge; retirement requires compatibility and rollback, not parity alone. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0112)
+- **R-0087** (superseded): superseded by VP V7/R-0512: merge with total float model and profile-specific trust labels. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0087)
+- **R-0097** (superseded): superseded by R-0511/R-0512: merge profile admission; retain no silent fallback. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0097)
+- **R-0112** (superseded): superseded by R-0512: merge; retirement requires compatibility and rollback, not parity alone. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0112)
 - **R-0123** (superseded): superseded by R-0495/R-0512: retire new legacy-model semantics; add admitted Core features/proof lemmas instead.
-- **R-0176** (superseded): superseded by R-0495/R-0512: retire proposed legacy architecture; retain ownership goals in R-0151. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0176)
+- **R-0176** (superseded): superseded by R-0495/R-0512: retire proposed legacy architecture; retain ownership goals in R-0151. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0176)
 - **R-0202** (superseded): superseded by R-0495/R-0512: merge dependency-closure requirement into Core migration; maintain legacy checks until retirement.
 - **R-0231** (superseded): superseded by R-0511/R-0512: merge into each slice’s admission controls.
 - **R-0238** (superseded): superseded by R-0511/R-0512: merge into cumulative slice matrices; retain orthogonal policies.
-- **R-0262** (superseded): superseded by R-0495/R-0512: retire blanket legacy bridge; retain only migration-pulled bridges. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0262)
+- **R-0262** (superseded): superseded by R-0495/R-0512: retire blanket legacy bridge; retain only migration-pulled bridges. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0262)
 - **R-0263** (superseded): superseded by R-0511/R-0512: merge into V1–V7 slice ordering.
 - **R-0277** (superseded): superseded by R-0511/R-0512: merge into each slice’s cumulative acceptance.
 - **R-0409** (superseded): Superseded by R-0496/R-0512: retire legacy redesign; carry demonstrated proof debt into Core proof engineering.
@@ -276,7 +276,7 @@ regression cases and controls of these tasks transfer here unless the reason ret
 track rather than after it, by advancing bounded checkpoints of the tasks that already own each concern.
 
 **Status (2026-10-19; amended 2026-10-21): planned; queue row 8, delivered through bounded checkpoints
-within the feature track of the [capacity allocation](../ROADMAP_LEGACY_PLAN.md#capacity-allocation).** After rows 0 – 2 qualify,
+within the feature track of the [capacity allocation](../../../legacy/docs/archive/ROADMAP_LEGACY_PLAN.md#capacity-allocation).** After rows 0 – 2 qualify,
 each checkpoint records its scope, accountable maintainer, reviewer, acceptance evidence and integration
 slot before starting. Usability, interop and application work share the feature track's single slot and
 capped share; the verified compiler's share and slots are reserved. Quarterly pilots are a
@@ -309,7 +309,7 @@ Work, in bounded checkpoints:
   action or explicit unsupported boundary. Reuse R-0137/R-0466 and R-0488's structured-path criteria.
   Test representative failing programs and repaired positive controls; suggested repairs must preserve
   the intended ownership and authority policy. Snapshots supplement these checks
-  ([DIAGNOSTIC_UX](../../compiler/DIAGNOSTIC_UX.md)).
+  ([DIAGNOSTIC_UX](../../../legacy/docs/compiler/DIAGNOSTIC_UX.md)).
 - **Practical debugging (2026-10-21; before workloads expand beyond RocksDB slice 1).** A non-author
   diagnoses two injected failures in a program built on RocksDB slice 1 (a runtime trap, and a
   foreign call that fails) with source locations, stack traces through Concrete, runtime and foreign
@@ -360,7 +360,7 @@ published.
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
 
-- **R-0108** (merged): duplicate of R-0416/R-0515: merge profile-labelled budgets and measurements. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0108)
+- **R-0108** (merged): duplicate of R-0416/R-0515: merge profile-labelled budgets and measurements. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0108)
 
 ### Task R-0516
 
@@ -473,21 +473,21 @@ differential suite; and the release record states which LCB milestones the shipp
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
 
-- **R-0072** (retired): retired — LCB pins QBE 1.3 in its own upstream lock; Concrete pins the LCB version under R-0517. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0072)
-- **R-0074** (superseded): superseded — merge into validated BIR (R-0503) and R-0517; the closed `llvm`/`qbe` backend set becomes the LLVM and LCB-native profiles. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0074)
+- **R-0072** (retired): retired — LCB pins QBE 1.3 in its own upstream lock; Concrete pins the LCB version under R-0517. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0072)
+- **R-0074** (superseded): superseded — merge into validated BIR (R-0503) and R-0517; the closed `llvm`/`qbe` backend set becomes the LLVM and LCB-native profiles. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0074)
 - **R-0081** (merged): merged — emitter independence between the LLVM adapter and the LCB adapter, and shared-helper disclosure, move to R-0505/R-0517.
-- **R-0083** (retired): retired — there is no Concrete QBE backend to select; the no-silent-fallback rule moves to R-0511/R-0517. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0083)
+- **R-0083** (retired): retired — there is no Concrete QBE backend to select; the no-silent-fallback rule moves to R-0511/R-0517. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0083)
 - **R-0084** (delegated): delegated — a typed QBE-style IR and printer are LCB's input layer; Concrete's adapter constructs LCB-IR under R-0517.
-- **R-0086** (superseded): superseded — its semantic vectors become adapter test vectors for V1 (R-0511/R-0517); later widths, casts, memory and floats follow the V-slices. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0086)
+- **R-0086** (superseded): superseded — its semantic vectors become adapter test vectors for V1 (R-0511/R-0517); later widths, casts, memory and floats follow the V-slices. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0086)
 - **R-0088** (superseded): superseded — aggregate/memory ABI realization moves to R-0502 (layout) and the adapter boundary (R-0505/R-0517) across V2–V6.
-- **R-0089** (superseded): superseded — call/FFI/ABI matrices apply at the LCB adapter boundary (R-0505/R-0517); LCB's own ABI coverage (its P07) is an external dependency. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0089)
+- **R-0089** (superseded): superseded — call/FFI/ABI matrices apply at the LCB adapter boundary (R-0505/R-0517); LCB's own ABI coverage (its P07) is an external dependency. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0089)
 - **R-0091** (merged): merged — native test-mode entry generation joins R-0075's driver and the LCB-native profile (R-0517).
-- **R-0099** (retired): retired — graduation of the native path is R-0517/R-0505's LCB-native profile; no QBE graduation exists. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0099)
-- **R-0101** (delegated): delegated — legality verification of the QBE-style IR is LCB's (its F04/V02); Concrete validates adapter output under R-0517. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0101)
+- **R-0099** (retired): retired — graduation of the native path is R-0517/R-0505's LCB-native profile; no QBE graduation exists. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0099)
+- **R-0101** (delegated): delegated — legality verification of the QBE-style IR is LCB's (its F04/V02); Concrete validates adapter output under R-0517. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0101)
 - **R-0102** (superseded): superseded — the operation gap ledger becomes typed pass obligations (R-0506) and the adapter's obligations (R-0517).
 - **R-0104** (merged): merged — deterministic emission and toolchain identity join R-0146; the LCB version and upstream lock are pinned by R-0517.
-- **R-0296** (retired): retired — see the disposition in the task body. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0296)
-- **R-0297** (delegated): delegated — see the disposition in the task body. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0297)
+- **R-0296** (retired): retired — see the disposition in the task body. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0296)
+- **R-0297** (delegated): delegated — see the disposition in the task body. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0297)
 
 ### Task R-0520
 
@@ -605,7 +605,7 @@ use-after-close of an alias are rejected or trap with a regression fixture.
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
 
-- **R-0484** (done): done — closed 2026-10-08 at `245cd51c`; the body is retained for its accepted limits; the typed-descriptor second step is R-0530. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0484)
+- **R-0484** (done): done — closed 2026-10-08 at `245cd51c`; the body is retained for its accepted limits; the typed-descriptor second step is R-0530. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0484)
 
 ### Task R-0536
 
@@ -702,7 +702,7 @@ and under `--interp`; an unqualified ambiguous call stays E0595.
 
 **Objective:** Collapse the Isabelle builder's duplicated batch and single-goal paths into one
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0522).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0522).
 
 ### Task R-0527
 
@@ -786,7 +786,7 @@ model and owner.
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
 
-- **R-0208** (done): done — closed 2026-10-13 at `2b570c5a`; the body is retained for its accepted limits, now owned by R-0532. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0208)
+- **R-0208** (done): done — closed 2026-10-13 at `2b570c5a`; the body is retained for its accepted limits, now owned by R-0532. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0208)
 
 ### Task R-0533
 
@@ -934,7 +934,7 @@ and migrated consumers. Do not build Command/Rng/SystemTime/digest abstractions,
 unify every handle, or redesign every error type merely for symmetry. Deferred
 notes become work only when their named workload or failing gate pulls them.
 
-> Moved to [ROADMAP_HISTORY.md](../ROADMAP_HISTORY.md#global-task-sequence) (historical record; nothing in it schedules work).
+> Moved to [ROADMAP_HISTORY.md](../../../legacy/docs/archive/ROADMAP_HISTORY.md#global-task-sequence) (historical record; nothing in it schedules work).
 
 ### Task R-0482
 
@@ -1335,7 +1335,7 @@ production path without collapsing evidence into one status.
 are not done — recorded together because both are "the same thing exists in N places and nothing
 holds them together".
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0478).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0478).
 
 ### Task R-0477
 
@@ -1440,7 +1440,7 @@ question that already has an authoritative one.
 
 The R-0004 Slice-6 record that accumulated here — migration-manifest closure (44/44), dependency-root
 integration steps 1–8, the Slice-6 acceptance boundary and the three-digest boundary — closed with R-0004
-and is archived in [ROADMAP_HISTORY.md](../ROADMAP_HISTORY.md#r-0473-the-embedded-r-0004-slice-6-record-2026-08-07--2026-09-02). Its one live remainder is this task's and R-0474's:
+and is archived in [ROADMAP_HISTORY.md](../../../legacy/docs/archive/ROADMAP_HISTORY.md#r-0473-the-embedded-r-0004-slice-6-record-2026-08-07--2026-09-02). Its one live remainder is this task's and R-0474's:
 contract dependency edges are witnessed conservatively today; exact contract witnesses replace them
 (queue row 12).
 
@@ -1543,7 +1543,7 @@ reasoning, call-site contract instantiation, and quantified predicates with bind
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
 
-- **R-0478** (merged): duplicate of R-0481 / R-0474: merge each half into its actual owner. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0478)
+- **R-0478** (merged): duplicate of R-0481 / R-0474: merge each half into its actual owner. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0478)
 
 ### Task R-0475
 
@@ -1577,7 +1577,7 @@ The second is cheaper and keeps stdlib coverage visible.
 
 The 2026-08-07 exposure audit (exactly one project-mode snapshot was coupled) and the shipped fix
 (`31710d4e`: the contracts comparison is scoped to modules the fixture defines, and that invariant is
-asserted on every run) are archived in [ROADMAP_HISTORY.md](../ROADMAP_HISTORY.md#r-0475-exposure-audit-and-shipped-snapshot-fix-2026-08-07).
+asserted on every run) are archived in [ROADMAP_HISTORY.md](../../../legacy/docs/archive/ROADMAP_HISTORY.md#r-0475-exposure-audit-and-shipped-snapshot-fix-2026-08-07).
 
 **What remains, and why it was not done here.** The *compiler-side* improvement is to label the
 report's sections by origin — "Source Contracts (this project)" versus "(dependencies)" — so the
@@ -1802,7 +1802,7 @@ is `"?"` today, so prefer an explicit `"unbounded"`. A mutation restoring the
 
 The summary and its consumers are fixed (bug 065, 2026-10-18): `Max stack bound:` reads
 `unbounded` whenever any listed function has no bound, the policy gate, the assumptions gate and
-the release bundle read it through `scripts/tests/lib/stack_bound.sh` (an unbounded stack refuses
+the release bundle read it through `scripts/checks/lib/stack_bound.sh` (an unbounded stack refuses
 every budget; the bundle publishes `"unbounded"`), and `check_stack_budget.sh` gates that with a
 recursive budgeted fixture and a bounded positive control. What remains of this task is the
 class-level reachability assertion cross-checked against `--report recursion`, and a gate for
@@ -1938,7 +1938,7 @@ evidence; if it is not ready, R-0006 proceeds rather than waiting for it.
 
 **Objective:** Fix bug 054 — non-injective monomorphized names First fail closed on every generated/user symbol or type-name collision. Then separate semantic `TypeId`/`FunctionId` from link/display symbols and use an injective, versioned mangling encoding that user identifiers cannot forge. Layout lookup is by identity and missing fields diagnose instead of returning a past-end offset. Gate ambiguous type-argument boundaries, user names resembling specializations, module/basename pressure, deterministic symbols, and collision mutations.
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0007).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0007).
 
 ### Task R-0008
 
@@ -1964,7 +1964,7 @@ The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](
 
 **Objective:** Verify that every aggregate payload write fits its emitted declaration Bug 051's defect was a payload written through a declaration too small to hold it. R-0001 fixed the cause (one declaration per enum instantiation) and closed the forged-name variant fail-closed (E0809), so no known program reaches the shape today. What is still missing is the general invariant: nothing checks, for an arbitrary program, that a store through an aggregate actually lands inside the aggregate that was declared.
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0434).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0434).
 
 ### Task R-0437
 
@@ -1979,7 +1979,7 @@ The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](
 **Objective:** Give generic bounds a closed, validated vocabulary — an unknown
 bound name is currently a silent no-op.
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0437).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0437).
 
 ### Task R-0444
 
@@ -2321,7 +2321,7 @@ current set/map capability mismatch according to public authority.
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
 
-- **R-0051** (merged): duplicate of R-0014: merge wrappers, documentation and boundary fixtures. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0051)
+- **R-0051** (merged): duplicate of R-0014: merge wrappers, documentation and boundary fixtures. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0051)
 
 ### Task R-0015
 
@@ -2537,7 +2537,7 @@ its fallibility or an unchecked operation loses the suffix.
 
 **Objective:** Add collection ergonomics as recorded workloads pull them Preserve the strong existing decisions: scoped callback access instead of escaping references, `Destroy` for live non-Copy contents, capability- polymorphic traversal, and ascending traversal only for ordered containers.
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0019).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0019).
 
 ### Task R-0020
 
@@ -2626,7 +2626,7 @@ first two workloads need: RocksDB slice 1 with its companions, and the first R-0
 boundary behaviour together, in one composed program fixture per workload rather than one fixture per
 API. This subset and its fixtures are a graduation criterion for this inventory and for R-0488's
 library-usability checkpoint; `std` work beyond it before V1b follows recorded workload asks
-([capacity allocation](../ROADMAP_LEGACY_PLAN.md#capacity-allocation)).
+([capacity allocation](../../../legacy/docs/archive/ROADMAP_LEGACY_PLAN.md#capacity-allocation)).
 
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
@@ -2761,7 +2761,7 @@ regression cases and controls of these tasks transfer here unless the reason ret
   bug appears; run against `base64_cli`/`png_chunks`/workload 3, starting at the
   `Writer`/`File` seam and expanding only as each capability (`Alloc`, `Time`)
   gains an injectable backend. Design record:
-  [`docs/project/DETERMINISTIC_SIMULATION.md`](../../project/DETERMINISTIC_SIMULATION.md), which
+  [`docs/project/DETERMINISTIC_SIMULATION.md`](../../../legacy/docs/project/DETERMINISTIC_SIMULATION.md), which
   refines the tier-J+ "deterministic simulation backend" earmark in
   `docs/platform/EXECUTION_MODEL.md`. Gate: `scripts/tests/check_effect_simulation.sh`
   replays a fixed fault schedule and asserts each effect-boundary property.
@@ -2795,11 +2795,11 @@ it requires `with(Alloc)`, whether it can fail, and which runtime
 obligations it creates.
 
 **Scope until V1b (2026-10-21):** new collection APIs are added for a recorded workload ask or R-0021's
-usable `std` subset, not for completeness ([capacity allocation](../ROADMAP_LEGACY_PLAN.md#capacity-allocation)); the list above
+usable `std` subset, not for completeness ([capacity allocation](../../../legacy/docs/archive/ROADMAP_LEGACY_PLAN.md#capacity-allocation)); the list above
 stays this task's eventual scope.
 
 Every new collection API must preserve the H18 ownership contract documented
-in [CHANGELOG.md](../../../CHANGELOG.md) and `docs/stdlib/RUNTIME_COLLECTIONS.md`: a
+in [CHANGELOG.md](../../../legacy/CHANGELOG.md) and `docs/stdlib/RUNTIME_COLLECTIONS.md`: a
 collection owns its live elements until they are explicitly moved out.
 `clear`, `drop`, overwrite,
 set/replacement, and compaction paths destroy displaced live elements;
@@ -2920,7 +2920,7 @@ tracking to the hash collections.
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
 
-- **R-0019** (merged): duplicate of R-0031: merge with explicit pull counts and safety requirements. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0019)
+- **R-0019** (merged): duplicate of R-0031: merge with explicit pull counts and safety requirements. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0019)
 
 ### Task R-0032
 
@@ -3161,7 +3161,7 @@ regression cases and controls of these tasks transfer here unless the reason ret
 
 **Objective:** Build capability-scoped console, file, network, process, and time APIs in `std.io`, `std.fs`, `std.env`, `std.args`, `std.process`, `std.net`, and `std.time`. Authority must be visible in function types and audit reports; no API may smuggle ambient authority through a convenience wrapper. New output/input APIs target the `std.io.Reader` / `std.io.Writer` spine; a separate public `std.writer` sink surface must not reappear.
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0051).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0051).
 
 ### Task R-0052
 
@@ -3467,7 +3467,7 @@ stdlib wrapper, not only through syntactic `&T` references.
 [37917463687](https://github.com/unbalancedparentheses/concrete2/actions/runs/37917463687)
 passed; `check_view_lifetime.sh` 28/0 there). Owner-bound results landed as
 `std.numeric.BoundView`, which owns the `Bytes` it describes; design, fixtures and measured
-cost are in [tests/regressions/owner_bound/README.md](../../../tests/regressions/owner_bound/README.md).
+cost are in [tests/regressions/owner_bound/README.md](../../../legacy/tests/regressions/owner_bound/README.md).
 Wrong-buffer substitution is rejected statically: `BoundView::byte` takes no buffer
 argument (`bound_no_buffer_argument`, E0262). The owner is a private field, so it cannot be
 mutated while bound (`bound_no_owner_mutation`, E0298), and the view is linear, so it must
@@ -3481,7 +3481,7 @@ their provenance — coordinates computed from a different buffer of sufficient 
 bind. The guarantee is that reads go to the owner held. `ByteView` deliberately stays
 reusable coordinates, and the survey rows asserting that remain in the gate.
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0483).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0483).
 
 ### Task R-0484
 
@@ -3504,7 +3504,7 @@ coverage complete over std (audit F6 carried out, `_exit` audited, inventory dri
 gated), cross-dependency capability explanations, `std.mem.sizeof` classified as a
 compiler intrinsic, and the docs/authority audit. Per-surface status (checked, human
 assumption, incomplete coverage, unsupported) is in
-[HANDLE_CAPABILITIES.md](../design-records/HANDLE_CAPABILITIES.md#implementation-status-2026-10-07).
+[HANDLE_CAPABILITIES.md](../../../legacy/docs/archive/design-records/HANDLE_CAPABILITIES.md#implementation-status-2026-10-07).
 
 **Accepted limits, each gated rather than hidden:**
 
@@ -3527,7 +3527,7 @@ under the checkpoint exception, which does not certify the campaign or carry ove
 release; the campaign qualified on `670ec85a` (2026-10-11, run 38104755470). F7/F8 stay with R-0013, F9's runtime contract
 with spawn's stated assumptions, typed descriptors with the second step.
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0484).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0484).
 
 ### Task R-0485
 
@@ -3718,7 +3718,7 @@ and Isabelle close the probed nonlinear goals, but Lean has no general nonlinear
 Mathlib is not a dependency, so a nonlinear tier can attest at most two kernels. Build it only when a
 workload needs nonlinear claims, label it as two-of-three rather than "multi-kernel", and keep H21's
 trusted SMT label; adding Mathlib is a separate dependency decision. See
-[the archived probe](../ROADMAP_HISTORY.md#rung-3--nonlinear-arithmetic-2-of-3-kernels-and-that-is-a-ceiling).
+[the archived probe](../../../legacy/docs/archive/ROADMAP_HISTORY.md#rung-3--nonlinear-arithmetic-2-of-3-kernels-and-that-is-a-ceiling).
 
 **Objective:** Graduate multi-kernel evidence from `spike/multi-prover-evidence` to a supported feature, per `research/proof-evidence/multi-kernel-evidence-graduation.md`. The product is portable evidence — "replay our claims with the kernel you trust" — not agreement for its own sake. Status is DERIVED by composing per-kernel receipts on one obligation digest (R-0004's receipt mechanism), never emitted by a coordinator code path. The claim record carries structured per-kernel `validated_by` entries plus the independence field (`independent_of`: spec / kernel implementation / foundations / bridge); the composite badge string is display only (R-0440's no-erased-dimensions rule). The spike branch may continue as an experiment, but supported-feature graduation follows R-0004, R-0450, R-0440, and the pulled-forward correctness queue; active ownership is not permission to displace known semantic defects.
 
@@ -3787,7 +3787,7 @@ trusted SMT label; adding Mathlib is a separate dependency decision. See
 
 **Objective:** Broad compression/crypto/networking/threading only after workload demand.
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0029).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0029).
 
 ### Task R-0061
 
@@ -3839,7 +3839,7 @@ regression cases and controls of these tasks transfer here unless the reason ret
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
 
-- **R-0029** (merged): duplicate of R-0065: merge deferral policy; retain narrow Phase 3 module owners. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0029)
+- **R-0029** (merged): duplicate of R-0065: merge deferral policy; retain narrow Phase 3 module owners. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0029)
 
 ## Area: Usable QBE Backend And Independent Validation
 
@@ -3997,7 +3997,7 @@ for the changed invariant. QBE progress cannot be used to waive LLVM evidence.
 
 **Objective:** Land a scalar smoke slice first: integer and boolean constants, arithmetic, comparisons, casts, direct calls, returns, blocks, branches, phi/copy lowering, stack slots, loads/stores, globals, string data, and the Phase 2 main wrapper. Map Concrete `i8`/`i16`/`i32`/`bool` temporaries deliberately onto QBE word operations with explicit truncation and signed/unsigned extension; map `i64`/native pointers to long and `f32`/`f64` to single/double.
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0086).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0086).
 
 ### Task R-0091
 
@@ -4023,7 +4023,7 @@ The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](
 
 **Objective:** the QBE backend-validation area may close with a declared subset, but that subset must be honest:
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0097).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0097).
 
 ### Task R-0098
 
@@ -4037,7 +4037,7 @@ The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](
 
 **Objective:** Exercise the completed subset immediately in the flagships area: every new flagship workload that stays inside it runs interpreter/LLVM/QBE differential checks;
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0098).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0098).
 
 ### Task R-0102
 
@@ -4085,7 +4085,7 @@ The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](
 
 **Objective:** Establish performance guardrails without making QBE win benchmarks. Track compiler wall time, peak memory where available, emitted IL/assembly/object size, final binary size, and runtime for a small stable corpus against LLVM.
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0108).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0108).
 
 ### Task R-0109
 
@@ -4109,7 +4109,7 @@ The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](
 
 **Objective:** Add release-surface and compatibility discipline even while experimental:
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0110).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0110).
 
 ### Task R-0111
 
@@ -4123,7 +4123,7 @@ The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](
 
 **Objective:** Add a QBE backend-validation-area capstone artifact:
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0111).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0111).
 
 ### Task R-0112
 
@@ -4135,7 +4135,7 @@ The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](
 
 **Objective:** Add a refactor-retirement gate. Once LLVM runs through `CodegenInput`, the structured backend driver, and the extracted layout/runtime facts with byte/behavior parity, delete the old direct `Pipeline.emit -> String` path, duplicated CLI compile/link branches, and emitter-local program-wide fact discovery. Do not carry two LLVM pipelines through the QBE implementation;
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0112).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0112).
 
 ### Task R-0113
 
@@ -4174,7 +4174,7 @@ reopening, which requires measured evidence that a separate QBE path finds bugs 
 
 **Objective:** Provision QBE as an explicit toolchain dependency. Pin a supported release and checksum in Nix/CI, verify the installed binary rather than accepting an arbitrary `PATH` match, document source/bootstrap and system-package paths, and make local discovery available through `concrete doctor` / agent feature JSON. Tool download is never an implicit compilation side effect.
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0072).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0072).
 
 ### Task R-0083
 
@@ -4188,7 +4188,7 @@ The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](
 
 **Objective:** Add an explicit backend selection surface:
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0083).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0083).
 
 ### Task R-0084
 
@@ -4212,7 +4212,7 @@ The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](
 
 **Objective:** Give floating point its own executable slice rather than treating the `f32`/`f64` type mapping as coverage. Add arithmetic; ordered/unordered comparisons; NaN, infinity, signed-zero, subnormal, and precision-change vectors; int-to-float conversions; and checked float-to-int conversions.
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0087).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0087).
 
 ### Task R-0088
 
@@ -4238,7 +4238,7 @@ The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](
 
 **Objective:** Add calls and platform boundaries: indirect calls, externs, variadics used by the runtime, argc/argv accessors, symbol visibility, linker aliases, C ABI scalar/aggregate classification, and Linux/macOS target selection for the architectures QBE and Concrete both declare supported. Unsupported target, calling convention, TLS, or ABI shapes must fail before emission with a stable diagnostic.
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0089).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0089).
 
 ### Task R-0099
 
@@ -4252,7 +4252,7 @@ The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](
 
 **Objective:** Graduation to a supported release backend occurs only in the backend-contracts area: migrate QBE from the direct validation path onto `ValidatedBackendIR`, pass the full target/toolchain and C ABI matrices, integrate debug/source maps and incremental artifacts, attach translation-validation status, define optimization/tool-version policy, and pass release/platform soak gates.
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0099).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0099).
 
 ### Task R-0100
 
@@ -4264,7 +4264,7 @@ The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](
 
 **Objective:** After the QBE backend is stable, evaluate a complementary target rather than starting one in parallel. WebAssembly is the provisional next backend, governed by the WebAssembly area's entrance criteria and narrow Wasm32/WASI scope.
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0100).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0100).
 
 ### Task R-0101
 
@@ -4278,7 +4278,7 @@ The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](
 
 **Objective:** Define and gate QBE-IL legality independently of execution. Add a pure verifier for Concrete's typed QBE AST (definition-before-use where QBE requires it, unique temporaries/blocks/symbols, legal base/extended type positions, phi predecessor agreement, terminator completeness, entry-block restrictions, call/return ABI agreement, aggregate definitions before use, alignment validity, and escaped identifier/string syntax), then run the pinned `qbe` parser as a second validation layer. An emitter failure must be a structured Concrete diagnostic with the `.qbe` artifact retained; raw QBE/assembler/linker errors must not be the first user-facing diagnosis for a compiler-owned invalid artifact.
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0101).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0101).
 
 ## Area: Flagship Depth And Examples
 
@@ -4631,7 +4631,7 @@ the comparison detects, and no gating threshold derived from a single sample.
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
 
-- **R-0108** (merged): duplicate of R-0416/R-0515: merge profile-labelled budgets and measurements. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0108)
+- **R-0108** (merged): duplicate of R-0416/R-0515: merge profile-labelled budgets and measurements. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0108)
 
 **Explicit reuse comparison (2026-10-25; planned):** only when a real workload
 in this corpus exposes allocation/copy costs, compare the allocating operation
@@ -4783,8 +4783,8 @@ lifecycle/owner record.
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
 
-- **R-0098** (merged): duplicate of R-0137: merge profile-aware workload matrix and owned exclusions. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0098)
-- **R-0111** (superseded): superseded by R-0511/R-0137: merge reusable exits; retire required QBE showcase. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0111)
+- **R-0098** (merged): duplicate of R-0137: merge profile-aware workload matrix and owned exclusions. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0098)
+- **R-0111** (superseded): superseded by R-0511/R-0137: merge reusable exits; retire required QBE showcase. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0111)
 
 ### Task R-0120
 
@@ -5611,7 +5611,7 @@ regression cases and controls of these tasks transfer here unless the reason ret
 
 **Objective:** Add an automation trust-upgrade firewall for every proof automation path.
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0171).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0171).
 
 ### Task R-0177
 
@@ -5802,7 +5802,7 @@ artifact runs eagerly and does not create a private proof cache.
 
 
  The completed forcing probe and 4/6 result are recorded in
- [CHANGELOG.md](../../../CHANGELOG.md). The active V1 gaps are generated
+ [CHANGELOG.md](../../../legacy/CHANGELOG.md). The active V1 gaps are generated
  `Int`/`Nat`/`BitVec` shift-amount normalization before `bv_decide` and
  automatic guard splitting; keep one positive fixture and one expected
  boundary failure until the implementation lands.
@@ -5959,7 +5959,7 @@ model gets framing for free.
 
 **Objective:** Deferred architecture refactor: split the current `Concrete.Proof` layering so registered example specs can move without a cycle, but do not let this block the active frontier unless spec ownership or proof authoring starts depending on it. Target shape: `Concrete.ProofCore` owns `PExpr`, `PVal`, evaluation, `FnTable`, and source-independent semantics; `Concrete.SpecRegistry` owns the spec-drift table and imports whichever example spec modules it registers;
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0176).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0176).
 
 ## Area: Audit Commands And Review Artifacts
 
@@ -6248,7 +6248,7 @@ detected failure or incomplete coverage, never an unchanged/clean verdict. Keep 
 later allocation, runtime and stdlib dimensions behind their existing fact producers.
 
 **Selected-function equivalence follow-on (planned 2026-10-18):** use the
-[Sparkle analysis](../../../research/compiler/sparkle-emitted-code-validation.md) as a
+[Sparkle analysis](../../../legacy/research/compiler/sparkle-emitted-code-validation.md) as a
 reference for refactor checks. State the exact old/new relation, domain, failures
 and assumptions, retaining each revision's own dependency and target context.
 Re-elaborating an old body against current imports cannot establish equivalence
@@ -6506,7 +6506,7 @@ Fragment-scoped narrowing is tested only after the broad fail-closed path. Surfa
 affected construct is not sufficient because attached metaprograms can add unrelated hostile
 declarations; an accepted narrowing needs an independently checked retained-environment footprint.
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0208).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0208).
 
 ### Task R-0209
 
@@ -6661,7 +6661,7 @@ CDCL SAT solver to Concrete, emit and consume DRAT, and gate that a corrupted
 certificate is rejected. Staged — microsat (251 lines, upstream `26985d9b`) as
 the probe that the port shape works, then MiniSat (5,296 lines, `37dc6c67`) as
 the real solver. Fit analysis is in
-[research/workloads/port-candidates.md](../../../research/workloads/port-candidates.md).
+[research/workloads/port-candidates.md](../../../legacy/research/workloads/port-candidates.md).
 
 Why it belongs in this phase rather than the port ladder: its value is a change
 to the trust model, not a workload lesson. R-0214 defines `solver_trusted` and
@@ -6727,7 +6727,7 @@ Alethe) a third party re-checks independently of our toolchain; where none exist
 (`omega`, `lia`, `presburger`) the claim is `trusted_modulo_toolchain`, because `lia` has
 no certificate export and a `.vo` is re-checkable only by the same Rocq version.
 
-Normative shape in [docs/verification/PROVER_NEUTRAL_OBLIGATIONS.md](../../verification/PROVER_NEUTRAL_OBLIGATIONS.md).
+Normative shape in [docs/verification/PROVER_NEUTRAL_OBLIGATIONS.md](../../../legacy/docs/verification/PROVER_NEUTRAL_OBLIGATIONS.md).
 
 ## Area: Provable And Predictable Subsets
 
@@ -6763,7 +6763,7 @@ source estimate as target stack bytes.
 
 **Objective:** Define the **Unsafe island** rule for unchecked operations. Any operation that bypasses a safe runtime check, borrow/linearity rule, raw-pointer restriction, layout proof, or FFI ownership boundary must be exposed through a deliberately small surface requiring `with(Unsafe)` or an explicitly named `trusted` boundary. Examples include future `get_unchecked`, raw pointer place writes, unchecked casts/conversions, inline asm, and unchecked FFI wrappers. There is no global unsafe mode and no silent trusted wrapper that hides authority: audit output must show the safe wrapper, the underlying trusted/Unsafe operation, and the assumption being accepted.
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0228).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0228).
 
 ### Task R-0232
 
@@ -6877,7 +6877,7 @@ bounds, explicit backend timing assumptions.
 
 **Objective:** Define `ProvableFloatV1` as a separate, narrow proof profile:
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0234).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0234).
 
 ### Task R-0235
 
@@ -6891,7 +6891,7 @@ The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](
 
 **Objective:** Add ProofCore support for profiled floats only after Task R-0233 is closed:
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0235).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0235).
 
 ### Task R-0237
 
@@ -7152,7 +7152,7 @@ is why the fix is a record change plus a fold, not new proof machinery.
 the EXISTING `assumed`, plus a structured `conditions : [{ref, status}]` naming what is
 outstanding. Not a new conditional badge, and specifically **no status string containing
 `proved` may be emitted for a claim with an undischarged condition** — that rule is the
-gate. Rationale in [docs/verification/PROVER_NEUTRAL_OBLIGATIONS.md](../../verification/PROVER_NEUTRAL_OBLIGATIONS.md):
+gate. Rationale in [docs/verification/PROVER_NEUTRAL_OBLIGATIONS.md](../../../legacy/docs/verification/PROVER_NEUTRAL_OBLIGATIONS.md):
 a conditional badge still containing `proved` reproduces H23 for every consumer that
 pattern-matches the status, which is how H23 fooled the policy gate and the report reader
 alike. The precedent exists twice already (`assumed` for `#[assume]`, `assumed_at_entry`
@@ -7214,7 +7214,7 @@ outranks agreement between checkers of a model.
 **Objective:** Extend the discharge-adapter firewall to the assumption axis, and bring the
 multi-kernel path inside it.
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0465).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0465).
 
 ### Task R-0460
 
@@ -7229,7 +7229,7 @@ The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](
 **Objective:** Discharge the obligation-sufficiency register — *if the flat goal holds,
 the runtime property holds* — rule by rule.
 
-[docs/verification/VC_BRIDGE_REGISTER.md](../../verification/VC_BRIDGE_REGISTER.md) enumerates the `Core ->
+[docs/verification/VC_BRIDGE_REGISTER.md](../../../legacy/docs/verification/VC_BRIDGE_REGISTER.md) enumerates the `Core ->
 obligation` lowering as four rows with the theorem each owes. Zero are discharged. This
 is the ceiling on every runtime-safety claim and every multi-kernel badge: adding kernels
 cannot detect a fault here, because all of them check the *same* lowered proposition, so
@@ -7268,7 +7268,7 @@ regression cases and controls of these tasks transfer here unless the reason ret
 
 - **R-0255** (merged): duplicate of R-0460: merge into R-0460.
 - **R-0261** (merged): duplicate of R-0496/R-0460: merge; already explicitly reconciled.
-- **R-0464** (superseded): superseded by R-0493/R-0495/R-0460: merge; archive completed H24 fix and retire SSA-first prescription. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0464)
+- **R-0464** (superseded): superseded by R-0493/R-0495/R-0460: merge; archive completed H24 fix and retire SSA-first prescription. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0464)
 
 ### Task R-0244
 
@@ -7444,7 +7444,7 @@ code that was written for speed, by porting zlib's inflate path (2,365 lines:
 `inflate.c`, `inftrees.c`, `inffast.c` plus headers, upstream `e3dc0a85`).
 Deflate (3,687 lines) is a second stage, admitted only if inflate's obligation
 story lands. Measurements and fit analysis are in
-[research/workloads/port-candidates.md](../../../research/workloads/port-candidates.md).
+[research/workloads/port-candidates.md](../../../legacy/research/workloads/port-candidates.md).
 
 Why this phase and this program: a bit reader plus a 32 KB sliding window is
 almost nothing but bounds, shift, and cast obligations, over the historically
@@ -7617,7 +7617,7 @@ passes here.
 
 **Objective:** Decide whether deeper source-semantics proofs require a normalized Core layer. Add the layer only if the direct rule proofs show repeated semantic duplication across at least two forcing examples.
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0268).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0268).
 
 ### Task R-0269
 
@@ -7735,7 +7735,7 @@ The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](
 
 **Objective:** Reduce ProofCore partial-def opacity only where proof preservation needs it.
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0276).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0276).
 
 ### Task R-0277
 
@@ -7795,7 +7795,7 @@ is expensive.
 Do not widen R-0004 to absorb this. That task is mid-flight; this is its successor.
 
 Normative rule and record shapes in
-[docs/verification/PROVER_NEUTRAL_OBLIGATIONS.md](../../verification/PROVER_NEUTRAL_OBLIGATIONS.md).
+[docs/verification/PROVER_NEUTRAL_OBLIGATIONS.md](../../../legacy/docs/verification/PROVER_NEUTRAL_OBLIGATIONS.md).
 
 ### Task R-0455
 
@@ -7875,7 +7875,7 @@ remove different things from the trusted path — a verified printer feeding a t
 still trusts the solver; a replayed certificate from a mis-rendered goal still proves the
 wrong thing. The best position is both, not one ranked above the other. See the corrected
 boundary model in
-[docs/verification/PROVER_NEUTRAL_OBLIGATIONS.md](../../verification/PROVER_NEUTRAL_OBLIGATIONS.md).
+[docs/verification/PROVER_NEUTRAL_OBLIGATIONS.md](../../../legacy/docs/verification/PROVER_NEUTRAL_OBLIGATIONS.md).
 
 What this task should therefore deliver, in order of value:
 
@@ -7912,7 +7912,7 @@ when it is a driver plus a validator plus a prover run per obligation.
 
 **Objective:** Upgrade extraction-only rules to three-view preservation where practical:
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0262).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0262).
 
 ### Task R-0271
 
@@ -7926,7 +7926,7 @@ The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](
 
 **Objective:** Define proof preservation across monomorphization and capability-polymorphic instantiation. The compiler must report whether a theorem proves a specific generated instance (`proved_for_instance`) or a generic body (`proved_generic`), and it must prevent one instance proof from being presented as proof for every future instantiation.
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0271).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0271).
 
 ### Task R-0443
 
@@ -7996,7 +7996,7 @@ compiler’s authority-report implementation.
 **Objective:** Port `eval` to a second host and relate the two semantics by an
 adversarial conformance vector suite.
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0456).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0456).
 
 ## Area: Backend, Target, And Stdlib Contracts
 
@@ -8067,9 +8067,9 @@ Execute native/Concrete round trips on every advertised target; type layout calc
 do not qualify a target or an aggregate calling shape.
 
 **Semantics decisions (2026-10-21):** with R-0285, this task owns the foreign-name rule of
-[FFI.md, "Symbol Names"](../../platform/FFI.md) (every Concrete-defined function mangled into a
+[FFI.md, "Symbol Names"](../../../legacy/docs/platform/FFI.md) (every Concrete-defined function mangled into a
 namespace disjoint from C; `#[link_name]` on `extern fn`) and the ownership-on-failure
-classification for foreign-boundary APIs ([ERROR_CONVENTIONS](../../stdlib/ERROR_CONVENTIONS.md)).
+classification for foreign-boundary APIs ([ERROR_CONVENTIONS](../../../legacy/docs/stdlib/ERROR_CONVENTIONS.md)).
 
 ### Task R-0285
 
@@ -8084,13 +8084,13 @@ bindings and one build command, before the bulk ethlambda port.
 
 **Semantics decisions (2026-10-21):** every RocksDB slice-1 handle API states what happens to the
 handle when it fails (returned, consumed or retained;
-[ERROR_CONVENTIONS](../../stdlib/ERROR_CONVENTIONS.md)), and slice 1 binds C symbols through
+[ERROR_CONVENTIONS](../../../legacy/docs/stdlib/ERROR_CONVENTIONS.md)), and slice 1 binds C symbols through
 `extern fn` (with `#[link_name]` where the C name is not a Concrete identifier) under the
-foreign-name rule of [FFI.md](../../platform/FFI.md), owned with R-0283.
+foreign-name rule of [FFI.md](../../../legacy/docs/platform/FFI.md), owned with R-0283.
 
 **Scheduling (2026-10-17; amended 2026-10-20):** promoted into the current execution queue after the
 active soundness and R-0482 work. Its first deliverable is **RocksDB slice 1**, defined with its
-acceptance and its prerequisite checklist under [feature prerequisites](../ROADMAP_LEGACY_PLAN.md#feature-prerequisites): its
+acceptance and its prerequisite checklist under [feature prerequisites](../../../legacy/docs/archive/ROADMAP_LEGACY_PLAN.md#feature-prerequisites): its
 implementation and experiments proceed now, and it is accepted, and its safety advertised, when Phase 1
 exits 0b, 2i and 2q hold, not when all of row 2 closes. This task owns the user workflow. R-0279 owns target/runtime facts;
 R-0283/R-0287 own ABI checks, R-0286 owns exports/library artifacts and R-0289 owns sanitizer
@@ -8221,7 +8221,7 @@ scope-end destruction or general exception machinery is introduced.
 
 Implement the metadata subset needed by the first RocksDB slice, then expand it
 using that slice's feedback. A complete foreign-annotation vocabulary is not an
-entrance gate. [FFI_GLUE.md](../../platform/FFI_GLUE.md) records the Swift/D importer,
+entrance gate. [FFI_GLUE.md](../../../legacy/docs/platform/FFI_GLUE.md) records the Swift/D importer,
 CXX/UniFFI generation and bindgen API-selection precedents and acceptance controls.
 
 **Ease-of-use acceptance:** the application workflow is dependency -> ordinary import -> build.
@@ -8292,7 +8292,7 @@ an API/ABI change produces an actionable source-located error before it becomes 
   and Concrete callers. Check ABI size/alignment/offsets and observable calls on each claimed
   target. Keep generated output deterministic and source-linked, with its reviewed inputs and
   native dependencies visible in build/audit metadata. Reference decision:
-  [FFI glue](../../platform/FFI_GLUE.md).
+  [FFI glue](../../../legacy/docs/platform/FFI_GLUE.md).
 - Integrate transitive libraries and runtime/deployment requirements into the normal build graph.
   Cache the dependency/header closure, toolchains/sysroot, target/CPU, features, build mode,
   generator version, reviewed description and declared build inputs. Unchanged warm builds do
@@ -8356,7 +8356,7 @@ and tested, and use concrete blockers to improve the language before proving cli
 
 **Status (2026-10-17; amended 2026-10-21): planned; follows the bounded R-0285 interop checkpoint.**
 Until V1b's composed native exit holds, this task runs bounded component workloads inside the feature
-track's single slot ([capacity allocation](../ROADMAP_LEGACY_PLAN.md#capacity-allocation)); the bulk port starts after V1b, or
+track's single slot ([capacity allocation](../../../legacy/docs/archive/ROADMAP_LEGACY_PLAN.md#capacity-allocation)); the bulk port starts after V1b, or
 earlier only by a dated decision recorded when V1b is blocked on LCB's external milestones. The exit
 below is unchanged. The initial
 reference is [ethlambda at afc491b2](https://github.com/lambdaclass/ethlambda/tree/afc491b28d12de8c161fb5cd140b160ebf6d965d).
@@ -8412,7 +8412,7 @@ architecture does not expand this task's exit.
 **Objective:** Add outbound FFI / embeddability as a first-class backend/ABI contract.
 
 **Semantics decisions (2026-10-21):** the export attribute is the only way a Concrete-defined
-function gets an unmangled C name ([FFI.md, "Symbol Names"](../../platform/FFI.md)); every other
+function gets an unmangled C name ([FFI.md, "Symbol Names"](../../../legacy/docs/platform/FFI.md)); every other
 Concrete function is mangled.
 
  Concrete's most likely early adoption path is not replacing a whole
@@ -8525,7 +8525,7 @@ package interop subset. Keep target-specific positive and unsupported-shape cont
 
 **Objective:** Evaluate a normalized mid-level IR only when traceability/backend-contract reports expose a concrete gap.
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0295).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0295).
 
 ### Task R-0298
 
@@ -8547,7 +8547,7 @@ The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](
 
 **Reconciliation (2026-10-19):** Keep; retarget old SSA/BackendIR language to S12.
 
-**Pulled forward 2026-10-18:** this task joins R-0504 in stage S12 of the [verified-compiler pipeline](../../compiler/VERIFIED_PIPELINE.md), validating the LLVM profile; its ordering there takes precedence over the backend-contracts area placement below.
+**Pulled forward 2026-10-18:** this task joins R-0504 in stage S12 of the [verified-compiler pipeline](../../../legacy/docs/compiler/VERIFIED_PIPELINE.md), validating the LLVM profile; its ordering there takes precedence over the backend-contracts area placement below.
 
 **Objective:** Add translation validation for codegen as the path out of a fully trusted backend. V1 should validate a narrow `ValidatedSSA -> BackendIR -> ValidatedBackendIR` subset per compile:
 
@@ -8577,7 +8577,7 @@ The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](
 **Actual emitted LLVM increment (planned 2026-10-18):** extend validation beyond
 the existing `ValidatedBackendIR` boundary with a separate, explicitly scoped
 relation to the emitted `.ll` bytes. Follow the
-[analysis and acceptance experiment](../../../research/compiler/sparkle-emitted-code-validation.md#bounded-emitted-llvm-experiment):
+[analysis and acceptance experiment](../../../legacy/research/compiler/sparkle-emitted-code-validation.md#bounded-emitted-llvm-experiment):
 retain checked SSA, generate LLVM normally, parse the actual output with a
 separate reader and compare independent source/LLVM semantics for every input
 in the admitted domain. The first case is checked `u8` increment: `10 -> 11`,
@@ -8606,7 +8606,7 @@ LLVM optimization and LLVM-to-machine-code correctness are separate edges.
 
 **Reconciliation (2026-10-19):** Keep distinct relation versions and call-closure accounting.
 
-**Pulled forward 2026-10-18:** this task joins R-0504 in stage S12 of the [verified-compiler pipeline](../../compiler/VERIFIED_PIPELINE.md), validating the LLVM profile; its ordering there takes precedence over the backend-contracts area placement below.
+**Pulled forward 2026-10-18:** this task joins R-0504 in stage S12 of the [verified-compiler pipeline](../../../legacy/docs/compiler/VERIFIED_PIPELINE.md), validating the LLVM profile; its ordering there takes precedence over the backend-contracts area placement below.
 
 **Objective:** Make the backend-contracts area translation-validation slice independently replayable.
 
@@ -8741,7 +8741,7 @@ to the LCB-native profile under R-0517/R-0505. Wasm, Cranelift and further backe
 
 **Objective (historical):** Graduate the QBE backend-validation area QBE backend from experimental to release-supported only after evidence attachment, optimization policy, backend-IR verification, and backend trust boundaries are trustworthy. The QBE backend-validation area deliberately emits directly from validated/cleaned SSA to maximize independence and find bugs early; that is the initial usable backend architecture, not yet the release architecture.
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0296).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0296).
 
 ### Task R-0297
 
@@ -8760,7 +8760,7 @@ The Concrete-hosted comparison stays with R-0413. The text below is retained as 
 
 **Objective (historical):** Supply target-specific Machine IR for R-0505's native AArch64 profile. QBE is independent and is not a prerequisite; R-0505 owns scheduling and native proof/validation exits. The staged shape is `ValidatedBackendIR -> <target> MIR -> encoded object fragment`, with MIR owning instruction selection, physical-register constraints, calling- convention realization, relocations, and debug locations. The archived continuation records the historical reuse requirements.
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0297).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0297).
 
 ### Task R-0303
 
@@ -9179,7 +9179,7 @@ The systems preview does not satisfy or replace the verification alpha bar.
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
 
-- **R-0110** (merged): merged — profile naming and evidence attribution join R-0075/R-0333; the profiles are `llvm` and the LCB-native `verified` profile. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0110)
+- **R-0110** (merged): merged — profile naming and evidence attribution join R-0075/R-0333; the profiles are `llvm` and the LCB-native `verified` profile. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0110)
 
 ### Task R-0334
 
@@ -9387,7 +9387,7 @@ flagships.
 
 **Objective:** Resolve string interpolation / formatting as an explicit release-facing decision, not an orphaned gap. V1 rejects string interpolation syntax, format macros, and trait-object-style `Display` because they hide allocation, dispatch, and formatting authority. The supported path is `std.fmt` over `std.io.Writer`, with any string-returning helper carrying `with(Alloc)` and any future convenience helper pulled by workloads.
 
-The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../ROADMAP_RETIRED_TASKS.md#r-0348).
+The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0348).
 
 ### Task R-0349
 
@@ -9400,7 +9400,7 @@ The rest of this task's original body is archived in [ROADMAP_RETIRED_TASKS.md](
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
 
-- **R-0348** (merged): merged — the formatting decision is settled; residual documentation cleanup moves to R-0349. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0348)
+- **R-0348** (merged): merged — the formatting decision is settled; residual documentation cleanup moves to R-0349. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0348)
 
 ### Task R-0351
 
@@ -9428,7 +9428,7 @@ regression cases and controls of these tasks transfer here unless the reason ret
 
 **Reconciliation (2026-10-19):** Keep; fix freeze ordering and profile-specific native edges.
 
-**Linked 2026-10-18:** this task is part of stage S16 of the [verified-compiler pipeline](../../compiler/VERIFIED_PIPELINE.md): it consumes R-0494's `ClaimJudgment` encoding and R-0495's generated statements without trusting stored verdicts, does not by itself establish source-to-model or native-code correspondence, and pins every 079 – 095 fixture's expected result vector. Codec and hostile-input prototypes may proceed beside queue rows 3 – 8. R-0353's complete cross-profile consumer remains at row 10, after row 9 and R-0004's prerequisites; a minimal independently checked retained-artifact consumer is required for every publicly authoritative V1 claim.
+**Linked 2026-10-18:** this task is part of stage S16 of the [verified-compiler pipeline](../../../legacy/docs/compiler/VERIFIED_PIPELINE.md): it consumes R-0494's `ClaimJudgment` encoding and R-0495's generated statements without trusting stored verdicts, does not by itself establish source-to-model or native-code correspondence, and pins every 079 – 095 fixture's expected result vector. Codec and hostile-input prototypes may proceed beside queue rows 3 – 8. R-0353's complete cross-profile consumer remains at row 10, after row 9 and R-0004's prerequisites; a minimal independently checked retained-artifact consumer is required for every publicly authoritative V1 claim.
 
 **Objective:** Define the canonical release-evidence DAG and offline independent bundle verifier before packaging or benchmarking it.
 
@@ -10030,7 +10030,7 @@ package or runs dependency code; the frontend receives resolved driver inputs.
 Primary references are Cargo's project workflow, Go modules' explicit resolution
 discipline, Zig's integrated compiler/build/package experience and Nix's declared
 inputs and reproducibility. Decisions and upstream references live in
-[package-manager-design.md](../../../research/packages-tooling/package-manager-design.md).
+[package-manager-design.md](../../../legacy/research/packages-tooling/package-manager-design.md).
 
 R-0285's queued interop checkpoint pulls forward the minimal local manifest,
 lockfile and native-build graph needed by its automatic application workflow;
@@ -10096,7 +10096,7 @@ Imports resolve only declared dependencies against this same graph.
 
 **Proof-authoring edges (planned 2026-10-18):** record heavy proof/tactic
 dependencies separately from runtime, host build-tool and test edges within this
-same model, following the [Sparkle sidecar lesson](../../../research/compiler/sparkle-emitted-code-validation.md#additional-workflow-lessons).
+same model, following the [Sparkle sidecar lesson](../../../legacy/research/compiler/sparkle-emitted-code-validation.md#additional-workflow-lessons).
 Ordinary builds need not fetch or build unused proof-authoring packages. A build
 requiring evidence must still validate its retained bundle or replay with the
 required dependencies; absence cannot excuse missing/stale proof evidence.
@@ -10755,7 +10755,7 @@ forcing example, explicitly deferred, or rejected.
 
 **Disposition (2026-10-19):** Superseded by R-0496/R-0512: retire legacy redesign; carry demonstrated proof debt into Core proof engineering.
 
-**Objective:** Investigate a sized/indexed ProofCore evaluator only if the current fuel-indexed evaluator remains repeated proof debt after HMAC and at least one other substantial loop/composition proof. This is ProofCore v2 research, not a migration commitment; see [research/proof-evidence/SIZED_EVALUATOR_INVESTIGATION.md](../../../research/proof-evidence/SIZED_EVALUATOR_INVESTIGATION.md).
+**Objective:** Investigate a sized/indexed ProofCore evaluator only if the current fuel-indexed evaluator remains repeated proof debt after HMAC and at least one other substantial loop/composition proof. This is ProofCore v2 research, not a migration commitment; see [research/proof-evidence/SIZED_EVALUATOR_INVESTIGATION.md](../../../legacy/research/proof-evidence/SIZED_EVALUATOR_INVESTIGATION.md).
 
 ### Task R-0487
 
@@ -10819,8 +10819,8 @@ positive control where a `Writer<{}>` helper may use no external authority.
 These questions remain undecided: they add no implementation tasks, priorities,
 release gates or adoption decisions. The narrow agreed clarifications belong to
 R-0215, R-0285, R-0150, R-0486 and R-0416 above. The
-[research record](../../../research/meta/bend-roc-lessons.md) retains the source links,
-video discussion, evidence limits and [complete consideration register](../../../research/meta/bend-roc-lessons.md#11-complete-consideration-register).
+[research record](../../../legacy/research/meta/bend-roc-lessons.md) retains the source links,
+video discussion, evidence limits and [complete consideration register](../../../legacy/research/meta/bend-roc-lessons.md#11-complete-consideration-register).
 The current execution queue is unchanged.
 
 ### Requirements, repair and developer guidance
@@ -10834,7 +10834,7 @@ The current execution queue is unchanged.
   demonstration improve the existing workflow without duplicating its machinery?
 
 Context: [R-0215](#task-r-0215), [R-0486](#task-r-0486),
-[proof synthesis](../../verification/PROOF_SYNTHESIS.md), research C01–C07/C10.
+[proof synthesis](../../../legacy/docs/verification/PROOF_SYNTHESIS.md), research C01–C07/C10.
 
 ### Checking and replay costs
 
@@ -10844,7 +10844,7 @@ Context: [R-0215](#task-r-0215), [R-0486](#task-r-0486),
 - What complexity discipline and missed-optimization diagnostics would keep the
   compiler and its guidance understandable without arbitrary token or size caps?
 
-Context: [R-0150](#task-r-0150), [pipeline telemetry](../../../scripts/tests/check_pipeline_telemetry.sh), research C08–C10.
+Context: [R-0150](#task-r-0150), [pipeline telemetry](../../../legacy/scripts/tests/check_pipeline_telemetry.sh), research C08–C10.
 
 ### Dependency and build-time authority
 
@@ -10856,7 +10856,7 @@ Context: [R-0150](#task-r-0150), [pipeline telemetry](../../../scripts/tests/che
   termination/resource bounds and correctness without inferring one from another?
 
 Context: [R-0285](#task-r-0285), [R-0440](ROADMAP_TASKS.md#task-r-0440),
-[FFI integration](../../platform/FFI_GLUE.md), research C11–C13.
+[FFI integration](../../../legacy/docs/platform/FFI_GLUE.md), research C11–C13.
 
 ### Ownership and allocation
 
@@ -10867,7 +10867,7 @@ Context: [R-0285](#task-r-0285), [R-0440](ROADMAP_TASKS.md#task-r-0440),
 - What allocation, copying, growth and peak-memory regressions should workload
   evidence expose, including cleanup cascades and arena lifetime tradeoffs?
 
-Context: [R-0416](#task-r-0416), [value model](../design-records/VALUE_MODEL.md),
+Context: [R-0416](#task-r-0416), [value model](../../../legacy/docs/archive/design-records/VALUE_MODEL.md),
 [allocator research owner](#task-r-0404), research C14–C16/C23.
 
 ### Representation and optimization
@@ -10878,7 +10878,7 @@ Context: [R-0416](#task-r-0416), [value model](../design-records/VALUE_MODEL.md)
 - Would compact indexed representations or direct-load caches improve measured hot
   paths while preserving owner/bounds checks, schema/target validation and invalidation?
 
-Context: [R-0416](#task-r-0416), [compiler research](../../../research/compiler/COMPILER_PIPELINE_RESEARCH.md), research C17–C19/C22.
+Context: [R-0416](#task-r-0416), [compiler research](../../../legacy/research/compiler/COMPILER_PIPELINE_RESEARCH.md), research C17–C19/C22.
 
 ### Proof-guided optimization and artifacts
 
@@ -10890,7 +10890,7 @@ Context: [R-0416](#task-r-0416), [compiler research](../../../research/compiler/
   with reproducible target/toolchain/artifact identities and honest adverse-case comparisons?
 
 Context: [R-0416](#task-r-0416), [R-0299](#task-r-0299), [R-0300](#task-r-0300),
-[emitted-code research](../../../research/compiler/sparkle-emitted-code-validation.md), research C20–C22/C26–C27.
+[emitted-code research](../../../legacy/research/compiler/sparkle-emitted-code-validation.md), research C20–C22/C26–C27.
 
 ### GPU feasibility, behind concurrency prerequisites
 
@@ -10904,18 +10904,18 @@ Context: [R-0416](#task-r-0416), [R-0299](#task-r-0299), [R-0300](#task-r-0300),
 
 Synchronous host completion does not remove device-side concurrency. No automatic
 offload, managed shared heap or general recursive device runtime follows from these
-questions. Context: [execution model](../../platform/EXECUTION_MODEL.md), research C24–C26.
+questions. Context: [execution model](../../../legacy/docs/platform/EXECUTION_MODEL.md), research C24–C26.
 
 Any later adoption needs a forcing workload, bounded evidence and an explicit
-owner decision under the [admission test](../../project/PHILOSOPHY.md#admission-test) and
-[evidence architecture](../../verification/EVIDENCE_ARCHITECTURE.md).
+owner decision under the [admission test](../../PHILOSOPHY.md#admission-test) and
+[evidence architecture](../../../legacy/docs/verification/EVIDENCE_ARCHITECTURE.md).
 
 
 ## Open Research Questions: Goose
 
 These questions remain undecided. They are not planned features, implementation
 tasks, priorities, release requirements, or changes to the current execution queue.
-The [Goose research survey](../../../research/compiler/goose-design-survey.md) records the
+The [Goose research survey](../../../legacy/research/compiler/goose-design-survey.md) records the
 pinned sources, compatibility concerns, and possible experiments.
 
 - Could residual bounds-check reports and optional enforcement fit explicit
@@ -10932,7 +10932,7 @@ pinned sources, compatibility concerns, and possible experiments.
   differential fuzzer guard any pass that removes safety checks, and would an
   analysis inventory of Check, Elab and Lower locate structural bug owners?
 - What evidence would support or rule out each idea under Concrete's
-  [admission test](../../project/PHILOSOPHY.md#admission-test)?
+  [admission test](../../PHILOSOPHY.md#admission-test)?
 
 A residual-check inventory and a bounded validated-index graph are possible
 experiments, not selected work. Record counterexamples, costs, contract/report
@@ -10947,7 +10947,7 @@ standing language decisions. Any adoption requires a separate decision.
 
 These questions remain undecided. They are not planned features, implementation
 tasks, priorities, release requirements, or changes to the current execution queue.
-The [recent-languages survey](../../../research/meta/recent-languages-2026.md) records
+The [recent-languages survey](../../../legacy/research/meta/recent-languages-2026.md) records
 the 16 projects reviewed (repositories created 2026-04-24 to 2026-10-24), their
 pinned commits, the admission filter, and what is not imported. Every entry was
 reviewed at README level only; each question below starts with a source review
@@ -10957,12 +10957,12 @@ at the pinned commit that confirms or corrects the claim.
 
 - Solidus: how does a single end-to-end `compile_correct` statement, with target
   semantics kept in a separate pinned repository, compare with the S15 refinement
-  and transport theorems in [VERIFIED_PIPELINE.md](../../compiler/VERIFIED_PIPELINE.md)?
+  and transport theorems in [VERIFIED_PIPELINE.md](../../../legacy/docs/compiler/VERIFIED_PIPELINE.md)?
 - LeanCIL: do receipts require that regeneration from the recorded identity
   reproduce the same bytes, and is its trusted-computing-base presentation clearer?
 - qedsvm: could `Concrete.Semantics.TermIR` join the interpreter and compiled
   binary in differential fuzzing, so proof-model/emitted-code disagreement is
-  found automatically? Owner: [emitted-code research](../../../research/compiler/sparkle-emitted-code-validation.md).
+  found automatically? Owner: [emitted-code research](../../../legacy/research/compiler/sparkle-emitted-code-validation.md).
 - Phil: does its source-verification/artifact-certification split name a
   distinction our evidence classes lack?
 
@@ -10986,7 +10986,7 @@ at the pinned commit that confirms or corrects the claim.
   must match, with text remaining the source?
 - Dawn: what cross-backend equality gate should exist once a second backend does?
 - machin and bendc: is byte-identical emitted output across hosts and runs
-  already gated by the [determinism](../../compiler/DETERMINISM.md) checks?
+  already gated by the [determinism](../../../legacy/docs/compiler/DETERMINISM.md) checks?
 - Rux and Ink: what can bounded explicit optimization passes and proved rewrite
   laws contribute to the optimization-policy and proof-guided optimization questions?
 - Hale: does channel-only communication between single-owner components inform
@@ -11007,8 +11007,8 @@ at the pinned commit that confirms or corrects the claim.
   the admission filter.
 
 Any adoption needs a forcing workload, bounded evidence and an explicit owner
-decision under the [admission test](../../project/PHILOSOPHY.md#admission-test) and
-[evidence architecture](../../verification/EVIDENCE_ARCHITECTURE.md).
+decision under the [admission test](../../PHILOSOPHY.md#admission-test) and
+[evidence architecture](../../../legacy/docs/verification/EVIDENCE_ARCHITECTURE.md).
 
 ### Task R-0399
 
@@ -11026,7 +11026,7 @@ includes the memory-model question Concrete must not answer accidentally:
 atomics, synchronization, shared mutable state, data-race freedom,
 capability-gated thread authority, and proof/evidence classes for concurrent
 code all remain research-gated until a formal model and pressure tests exist.
-Async syntax remains rejected for v1 per [PHILOSOPHY.md](../../project/PHILOSOPHY.md#what-concrete-refuses); the
+Async syntax remains rejected for v1 per [PHILOSOPHY.md](../../PHILOSOPHY.md#what-concrete-refuses); the
 positive research direction lives here and in `docs/platform/EXECUTION_MODEL.md`:
 explicit concurrency primitives, visible effects, linear handles, and
 bounded scheduling/failure evidence rather than hidden async lowering or a
@@ -11217,7 +11217,7 @@ host-runtime and target-runtime trust distinct. The compiler's Lean runtime and
 reference counting are not automatically linked into programs whose machine code
 it emits. Compare maintained code, proof/annotation burden, independent bug
 detection, reproducibility and actual TCB reduction. See
-[QBE/native-backend research](../../../research/compiler/qbe-in-concrete.md#lean-4-alternative-and-generated-runtime-2026-10-18).
+[QBE/native-backend research](../../../legacy/research/compiler/qbe-in-concrete.md#lean-4-alternative-and-generated-runtime-2026-10-18).
 
 ### Task R-0414
 
@@ -11302,7 +11302,7 @@ Initial scope:
 **Inherited obligations (2026-10-19 reconciliation; binding):** the acceptance criteria,
 regression cases and controls of these tasks transfer here unless the reason retires them.
 
-- **R-0100** (superseded): superseded — Wasm/Cranelift no longer wait for QBE; the WebAssembly area entrance criteria (R-0305) consume validated BIR. — [archived body](../ROADMAP_RETIRED_TASKS.md#r-0100)
+- **R-0100** (superseded): superseded — Wasm/Cranelift no longer wait for QBE; the WebAssembly area entrance criteria (R-0305) consume validated BIR. — [archived body](../../../legacy/docs/archive/ROADMAP_RETIRED_TASKS.md#r-0100)
 
 ### Task R-0306
 
@@ -11506,7 +11506,7 @@ device and a crash model" by porting littlefs, the power-loss-resilient flash
 filesystem: 7,633 lines (`lfs.c` 6,558 plus headers, upstream `6cb4e865`), zero
 dynamic allocation, fixed buffers, and an explicit `lfs_t` context over a
 block-device interface. Fit analysis is in
-[research/workloads/port-candidates.md](../../../research/workloads/port-candidates.md).
+[research/workloads/port-candidates.md](../../../legacy/research/workloads/port-candidates.md).
 
 Why it belongs after R-0448 rather than beside it: MM0's verifier discharges this
 phase's trigger with a syscall surface and a single-bit output, which is the

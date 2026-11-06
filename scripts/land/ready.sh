@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Mark a pushed branch ready to land (docs/project/LANDING.md, "Readiness").
+# Mark a pushed branch ready to land (docs/LANDING.md, "Readiness").
 #
 #   ready.sh [--dry-run] [--no-review] [--no-remote] [--base <ref>] <branch>
 #
@@ -44,7 +44,7 @@ if [ -z "$rcmd" ] && [ -f scripts/review/review.sh ]; then rcmd="bash scripts/re
 [ -n "$rcmd" ] || review=0
 runner="${LAND_REMOTE_RUNNER-$HOME/bin/concrete-remote}"
 { [ -n "$runner" ] && [ -x "$runner" ]; } || remote=0
-full="${LAND_FULL_GATES_CMD:-lake build && bash scripts/tests/run_ci_gates_local.sh}"
+full="${LAND_FULL_GATES_CMD:-lake build && bash scripts/checks/run.sh}"
 
 if [ "$DRY" = 1 ]; then
   echo "ready (dry-run): ${base:0:10}..${head:0:10} of $branch, in parallel:"

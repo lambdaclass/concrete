@@ -1,0 +1,43 @@
+# The day-one root (ROADMAP R-0558): every top-level entry, and every first-level entry under docs/
+# and scripts/, that may exist outside legacy/. scripts/checks/root_inventory.sh refuses any other
+# entry and any listed entry that is missing. Something comes back from legacy/ only in the change
+# that needs it, and that change adds its line here.
+.claude
+.envrc
+.gitattributes
+.githooks
+.github
+.gitignore
+AGENTS.md
+CHANGELOG.md
+CLAUDE.md
+ConcreteSpec
+ConcreteSpec.lean
+ISSUES.tsv
+LICENSE
+README.md
+RETENTION.tsv
+ROADMAP.md
+changelog.d
+docs
+flake.lock
+flake.nix
+lake-manifest.json
+lakefile.toml
+lean-toolchain
+legacy
+required-checks-transition.tsv
+required-checks.txt
+scripts
+docs/LANDING.md
+docs/PHILOSOPHY.md
+docs/REVIEW.md
+docs/SELF_HOSTED_RUNNERS.md
+docs/archive
+docs/decisions.md
+scripts/checks
+scripts/land
+scripts/oracle
+scripts/push-both.sh
+scripts/review
+scripts/worktree-new.sh
