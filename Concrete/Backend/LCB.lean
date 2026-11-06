@@ -7,7 +7,7 @@ import LeanCompilerBackend.AArch64
 # BIR → LCB-IR: the adapter (the first backend proof target)
 
 PROVISIONAL (slice 0). The adapter turns `main`'s body into a function of LCB's verified source
-profile (`LeanCompilerBackend.Verified.Source`, `ssa-int-v1`: integer operations, comparisons,
+profile (`LeanCompilerBackend.Verified.Source`, `ssa-int-v2`: integer operations, comparisons,
 branches and phis, no calls, memory or traps), returning the result word. Its correctness against
 LCB's own semantics, `adapter_correct`, is the first backend proof target; until it is proved it is
 premise `P_adapter` (`Concrete/README.md`).
@@ -284,6 +284,12 @@ def renderOperand : Source.Operand → String
 def renderBinary : Source.Binary → String
   | .add => "add" | .sub => "sub" | .mul => "mul"
   | .andBits => "and" | .orBits => "or" | .xorBits => "xor"
+  | .shiftLeft => "shl" | .logicalRight => "shr" | .arithmeticRight => "sar"
+  -- no QBE spelling (LCB admits them only from a job); debug names
+  | .mulHighUnsigned => "umulh" | .mulHighSigned => "smulh"
+
+def renderDivision : Source.Division → String
+  | .unsignedDiv => "udiv" | .unsignedRem => "urem" | .signedDiv => "div" | .signedRem => "rem"
 
 def renderOperation : Source.Operation → String
   | .copy a => s!"copy {renderOperand a}"
@@ -292,7 +298,11 @@ def renderOperation : Source.Operation → String
     let c := match op with
       | .eq => "ceq"
       | .unsignedLT => "cult"
+      | .unsignedLE => "cule"
+      | .signedLT => "cslt"
+      | .signedLE => "csle"
     s!"{c}{renderWidth w} {renderOperand a}, {renderOperand b}"
+  | .divide op a b => s!"{renderDivision op} {renderOperand a}, {renderOperand b}"
 
 def renderTerminator : Source.Terminator → String
   | .ret a => s!"    ret {renderOperand a}\n"

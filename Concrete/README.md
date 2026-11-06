@@ -106,7 +106,7 @@ Every BIR construct has a direct LLVM spelling (`@llvm.uadd.with.overflow.i8`) a
 
 The **LLVM printer** is unverified and stays a premise (`P_print`) until an LLVM-IR semantics exists.
 
-The **BIR → LCB-IR adapter** is the first backend proof target. `adapter_correct` states that the adapter's output, under **LCB's own semantics** (`LeanCompilerBackend.Verified.Source`, the `ssa-int-v1` profile, imported and never restated), has the BIR behaviour. Until it is proved, it is premise `P_adapter`, and closing it is a slice-0 milestone.
+The **BIR → LCB-IR adapter** is the first backend proof target. `adapter_correct` states that the adapter's output, under **LCB's own semantics** (`LeanCompilerBackend.Verified.Source`, the `ssa-int-v2` profile, imported and never restated), has the BIR behaviour. Until it is proved, it is premise `P_adapter`, and closing it is a slice-0 milestone.
 
 The adapter's output is handed to LCB **in process**, as the value: on `aarch64-macos` through LCB's verified first path (`Verified.compileFunction`), on the Linux targets through LCB's compatibility backends (`Verified.reify`, then `AMD64`/`AArch64.emitModuleValidated`). No printer or importer sits between the adapter and LCB. The QBE text of the body is a debug dump only. The gate also runs the first path's admission on every example on every host.
 
@@ -128,7 +128,7 @@ Each backend emits `main`'s body as a function `concrete_body() -> w`, a 32-bit 
 - `exited c` returns `c` (0–255);
 - a trap at site `s` returns `256 + s.idx`. The runtime's site table maps the index to the trap's kind, typed `SiteId` and span.
 
-This fits LCB's verified source profile (`ssa-int-v1`, `LeanCompilerBackend/Verified/Source.lean`), which has integer operations, compares, branches, phis, a return or divergence, and no calls, traps or memory. It is also what lets the adapter be proved against LCB's semantics as it stands.
+This fits LCB's verified source profile (`ssa-int-v2`, `LeanCompilerBackend/Verified/Source.lean`), which has integer operations, compares, branches, phis, a return or divergence, and no calls, traps or memory. It is also what lets the adapter be proved against LCB's semantics as it stands.
 
 It also separates `return 134` from a trap: they return the words 134 and 256.
 
@@ -651,7 +651,7 @@ These are internal. None blocks slice 0's correctness.
 
 ## What LCB must provide
 
-LCB is our own project; these are tasks for it, not premises to keep. Checked against the pinned rev `d828ff30`.
+LCB is our own project; these are tasks for it, not premises to keep. Checked against the pinned rev `4bea4b3` (LCB main after PR #1, wire format v2: `ssa-int-v2` / `a64-leaf-v2`; v1 jobs are refused).
 
 **For the trusted base (now):**
 1. A public entry `compileSource : Target → Symbol → Source.Function → Except Error Artifact`. Today the compiler builds LCB's `FunctionJob` itself (`Concrete/Backend/LCB.lean`, `assemble`).
@@ -659,12 +659,7 @@ LCB is our own project; these are tasks for it, not premises to keep. Checked ag
 3. Larger resource limits on the first path: 64 blocks, 488 values and 480 definitions per function (`Verified/Canonical.lean`). Slice programs will exceed them.
 4. Object emission (LCB V04), so assembly text and the system assembler leave the path.
 
-**For slice 2, integers complete (all widths u8–u64, i8–i64).** LCB's verified profile has `word` (32-bit) and `long` (64-bit) values, `add sub mul and or xor`, the comparisons `eq` and `unsignedLT` (word result), and no width conversion, shift, division or high multiply. The adapter will carry every integer as a `long`: exact for types up to 32 bits, and for 64-bit add/sub the overflow test is expressible with `xor`, `and` and `unsignedLT`. Slice 2 needs:
-1. **Shifts** `shl`, `lshr`, `ashr` at `long` (at `word` too, for completeness of LCB's API). Required: expanding a variable shift amount (a loop or a 64-way branch) costs more code and proof than LCB adding the operation.
-2. **High multiply** `mulHighUnsigned` and `mulHighSigned` at `long` (AArch64 `umulh`/`smulh`, x86-64 `mul`/`imul`). Required for 64-bit checked, saturating and overflow-flag multiplication; the alternative is a long 32-bit-halves expansion with its own proof.
-3. **Division and remainder** (`udiv sdiv urem srem`), if slice 2's integer operations include `/` and `%`. Required then: an expansion would cost far more code and proof than the native operation.
-4. **Signed and non-strict comparisons** (`signedLT`, `unsignedLE`, `signedLE`). Optional: they are expressible (`a <s b` is `(a xor 2^63) <u (b xor 2^63)`), but native ones keep the adapter and its proof small.
-5. **Width conversion** (`word`↔`long` extension and truncation). Optional while every integer is a `long`; needed if the adapter ever uses `word` for narrow types.
+**For slice 2, integers complete (all widths u8–u64, i8–i64): provided.** LCB's verified profile now has `word` (32-bit) and `long` (64-bit) values, `add sub mul and or xor`, the shifts `shiftLeft logicalRight arithmeticRight` (count modulo the width), `mulHighUnsigned mulHighSigned` (accepted only at `long`), division and remainder (`unsignedDiv unsignedRem signedDiv signedRem`; a zero divisor or signed minimum by −1 is stuck, so the adapter must branch to a trap before them), and the comparisons `eq unsignedLT unsignedLE signedLT signedLE` (word result). The adapter will carry every integer as a `long`: exact for types up to 32 bits; 64-bit overflow uses the high multiply and, for add/sub, `xor`/`and`/compare. Still absent and optional while every integer is a `long`: width conversion (`word`↔`long` extension and truncation).
 
 ## Not in slice 0
 
