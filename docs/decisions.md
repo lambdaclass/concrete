@@ -377,8 +377,9 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   - *Slice 0.* The first executable compiler slice is slice 0: one source unit, no imports or grants,
     parameterless `main` returning `u8`, explicitly typed immutable `u8` bindings, representable decimal
     literals, local reads, grouping, checked addition and final return; other forms are refused as
-    unsupported. It traverses the actual frontend and each used lowering IR to BIR and an explicitly
-    unverified LLVM native build. Its examples include exit 42 from `20 + 22`, exit 255 at the
+    unsupported. It traverses the actual frontend and each used lowering IR to BIR and two explicitly
+    unverified native builds, LLVM and the Lean Compiler Backend (revised 2026-11-06; see *Backend
+    order*). Its examples include exit 42 from `20 + 22`, exit 255 at the
     representable boundary, static overflow refusal, out-of-range literal refusal, unused-binding
     refusal and malformed-input rejection; checked addition is proved over arbitrary representable
     operands at the IR boundary, overflow included. Slice 0 work may start as a provisional skeleton
@@ -419,10 +420,25 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     traps; capability checking establishes allowed authority use, not application correctness.
     Inspection comes from capabilities and proofs. The legacy oracle is a differential cross-check
     only and never overrides the Lean semantics.
-  - *Backend order.* Unverified BIR → LLVM first, then BIR → LCB with its adapter proof, then native
-    proof closure for the supported profile. LLVM and LCB claims have separate assumption
-    inventories; proving the BIR → LCB adapter removes that adapter obligation only when composed with
-    the applicable LCB theorems, and the LLVM profile stays unverified.
+  - *Backend order* (revised 2026-11-06 by the owner: the LCB joins slice 0). From slice 0, every
+    supported example is built through two unverified backends, BIR → LLVM and BIR → LCB-IR → the
+    Lean Compiler Backend, each labelled unverified. BIR is a complete backend contract designed for
+    both from its first definition: no BIR construct, invariant or lowering choice depends on one
+    backend. CI builds and runs each example through both and compares their full observations
+    (exit status, the trap line, startup refusal, later the event traces), never exit codes alone,
+    with each other and with the expected outcome; any mismatch fails. The LCB output runs natively
+    on a GitHub-hosted AArch64 macOS runner, the platform of the first native proof profile
+    ([targets](../ROADMAP.md#targets)), free for this public repository. Rejected: qemu-user on
+    concrete-ci-2, which would add an unmodelled emulator to the execution trust and runs only Linux
+    binaries; a hosted Linux AArch64 runner, which is not the proof profile's platform; and a
+    self-hosted ARM machine, which does not exist (and self-hosted runners never run pull requests).
+    Proofs then come in this order: the BIR → LCB-IR adapter's refinement proof is the first backend
+    proof target, right after the front-end and lowering proofs; the LP0 pilot composes it with the
+    LCB's theorems for the supported subset; native proof closure through the LCB for the profile
+    follows the pilot. LLVM and LCB claims have separate assumption inventories, and the end-to-end
+    theorem names their premises separately; proving the BIR → LCB adapter removes that adapter
+    obligation only when composed with the applicable LCB theorems, and the LLVM profile stays
+    unverified.
   - *What it revises.* It amends the new-compiler row (slice 0, not slice 1, gets the first
     BIR → LLVM printer; slice 1 extends the same path) and strengthens the proof-order row's minimal
     path (proofs as each used lowering lands). It adds an earlier subset before row Q8.2's slice-1
@@ -435,7 +451,10 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     grant schema, target order and retention decisions are not reopened.
   - *Revised 2026-11-06* by the [long-term changes](#decided-project-long-term-2026-11-06): the backend
     order gains a bounded BIR → LCB → native pilot after slices 0 and 1, and per-compilation
-    certificates are strengthened to discharge compiler-execution trust.
+    certificates are strengthened to discharge compiler-execution trust. Revised again on 2026-11-06
+    by the owner: the LCB joins slice 0 as a second unverified backend, and its adapter is the first
+    backend proof target (*Backend order* above). This revises the new-compiler row's single
+    slice-0 BIR → LLVM printer in the same way.
 - <a id="decided-project-long-term-2026-11-06"></a>**Long-term changes to the plan** (owner, 2026-11-06,
   option 1: accept all five of Codex's BEST-WITH-CHANGES recommendations on the question "is this the
   best long term design"; Claude and Codex agree).
@@ -448,11 +467,14 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     freezes integrated scopes, not an untested whole-language architecture; sending Core back after
     the freeze remains a recovery mechanism, not the planned sequence. This revises row Q9.19's
     A2a → A2b → A2c to A2a → A2b → A2i → A2c.
-  - *Bound the LLVM hole.* After slices 0 and 1 (B0, B1) and before substantial feature growth (C, D), a
-    tiny BIR → LCB → native proof pilot runs on the supported subset, composed with the slice theorem
-    under named premises. Every remaining backend obligation has its own task and milestone. "The holes
-    only shrink" prevents regression; this rule requires progress. The LLVM path stays first and
-    unverified, as the owner ordered.
+  - *Bound the LLVM hole* (revised 2026-11-06 by the owner: the LCB joins slice 0). The LCB runs
+    unverified beside LLVM from slice 0, and its BIR → LCB-IR adapter is the first backend proof
+    target ([backend order](#decided-project-proof-infrastructure)). After slices 0 and 1 (B0, B1)
+    and before substantial feature growth (C, D), the LP0 pilot composes that adapter proof with the
+    LCB's theorems for the supported subset and with the slice theorem under named premises, kept
+    separate from the LLVM premises. Every remaining backend obligation has its own task and
+    milestone. "The holes only shrink" prevents regression; this rule requires progress. The LLVM
+    path stays unverified, as the owner ordered.
   - *Compiler-execution trust.* Proving the compiler's Lean definitions does not prove that their
     natively compiled executable computes them. Each compilation emits a certificate that the Lean
     kernel checks, connecting the exact input to the exact emitted BIR through proved judgments or
@@ -683,6 +705,20 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   pinned compiler and toolchain gives the same executable bytes (R-0577), so anyone can rebuild and
   confirm the exact bytes a claim is about. This moves the reproducibility half of R-0104 (merged
   into R-0149 in phase G) to B1; R-0149 keeps incremental-build equivalence.
+- <a id="decided-project-concrete-toml"></a>**Policies and declared assumptions live in
+  `Concrete.toml`** (owner, 2026-11-06). A project's policies, such as the
+  [predictable policy](#decided-project-predictable-policy), and its declared assumptions (target,
+  heap, stack, foreign functions and the trusted surface) are written in the project's
+  `Concrete.toml`. There is no separate policy or assumptions file.
+  - *Typed, versioned data.* Policy and assumption sections are typed and versioned; an unknown
+    section, key or version is refused, never ignored.
+  - *Only tightening.* A module may tighten a project policy, never relax it.
+  - *Dependencies.* A dependency's `Concrete.toml` never relaxes the consumer's policy: dependencies
+    are checked against the consumer's policy, transitively and fail-closed.
+  - *Assumptions.* Assumptions are declared only where the facts cannot derive them. The facts query
+    reports each one with the facts that rely on it, and any change to the declared set is reported
+    as an assumption diff that fails CI until it is recorded with the change (R-0589).
+  - *Not decided.* The section and key spellings go to the owner.
 - <a id="decided-project-outside-readers"></a>**The outside readers** (owner, 2026-11-06: "me but also
   agy and codex and kimi if it's available"). The outside-reader pass (R-0559) is done by the owner and
   independent models: agy (Gemini), Codex, and Kimi when available (its absence is recorded, not
