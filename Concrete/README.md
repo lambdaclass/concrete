@@ -1,228 +1,304 @@
 # The Concrete compiler: slice 0 design (provisional)
 
-PROVISIONAL (status: design sketch, under review; no code yet). Slice 0 is the first compiler slice. It is built before the owner freezes Core (A2c)
-and makes no authoritative or normative claim before that freeze ([decision](../docs/decisions.md#decided-project-proof-infrastructure)).
-Branch `wip/slice0` depends on `wip/spec-root`, which puts `ConcreteSpec` on the new root, and is
-rebased onto main once that lands.
+PROVISIONAL. This is a design sketch, revision 2, written after the first Codex and agy review round, and there is no code yet. Slice 0 is the first compiler slice. It is built before the owner freezes Core (A2c) and makes no normative claim before that freeze ([decision](../docs/decisions.md#decided-project-proof-infrastructure)). Branch `wip/slice0` depends on `wip/spec-root`, which puts `ConcreteSpec` on the new root, and is rebased onto main (under a new branch name) once that lands.
 
-Slice 0 has one source file and no imports or grants: a parameterless `fn main() -> u8`,
-immutable `let` bindings of explicitly typed `u8` values, decimal `u8` literals, reads of locals,
-grouping with parentheses, checked `+`, and a final `return`. Every other form is refused as
-unsupported. The required examples exit 42 (`20 + 22`) and 255 (the boundary), and refuse a known
-overflow, an out-of-range literal, an unused binding, an undeclared local and malformed input.
+## What slice 0 accepts
+
+Slice 0 has one source file and no imports or grants. Its forms:
+- a parameterless `fn main() -> u8`;
+- immutable `let` bindings of explicitly typed `u8` values;
+- decimal `u8` literals;
+- reads of locals;
+- grouping with parentheses;
+- checked `+`;
+- a final `return`.
+
+Every other form is refused as unsupported.
+
+The required examples:
+- exit 42 (`20 + 22`);
+- exit 255, the boundary;
+- refusals:
+  - a known overflow;
+  - an out-of-range literal;
+  - an unused binding;
+  - an undeclared local;
+  - malformed input.
 
 ## The pipeline
 
-Each arrow is a function of the compiler, written in Lean and run as Lean. **Proved** means a
-kernel-checked theorem; **premise** means a named, registered assumption in `Concrete/Premises.lean`.
+Each arrow is a total Lean function of the compiler. **Proved** means a kernel-checked theorem. **Premise** means a field of the one premise structure in `Concrete/Premises.lean`.
 
 ```
-source bytes (List UInt8)
-  │ utf8 + lex          Concrete/Lex.lean       proved: lex is total; tokens re-print to the bytes they cover
-  ▼
-tokens (with byte spans)
-  │ parse (LL(1))       Concrete/Parse.lean     table-driven from the grammar data in ConcreteSpec;
-  ▼                                             premise P_parse (parse agrees with the grammar's derivations), discharged later
+source bytes (ByteArray)
+  │ decode + lex        Lex.lean      proved against Surface0.Lexes (independent byte-level spec);
+  ▼                                   until done: premise P_lex (implementation)
+tokens (kind + payload + span)
+  │ parse (LL(1))       Parse.lean    generic table-driven parser over Surface0.grammar;
+  ▼                                   premise P_parse (implementation) until the generic theorem lands
 surface AST
-  │ resolve             Concrete/Resolve.lean   names → fresh `Var` identities; undeclared and duplicate names refused
+  │ resolve + elab      Resolve.lean, Elab.lean   one composite stage edge: proved to satisfy
+  ▼                                   Surface0.Elab, with freshness and naming-independence
+Slice0.Program  (data, `out.q`)
+  │ check               the spec's own `ConcreteSpec.check`; `check_iff` gives `Checked (toCore q)`
   ▼
-HIR
-  │ elaborate           Concrete/Elab.lean      ANF with fresh temporaries, left-to-right; proved sound against
-  ▼                                             the elaboration relation `Surface0.Elab` (ConcreteSpec, new)
-Slice0.Program  ──toCore──►  Core (ConcreteSpec, unchanged)
-  │ check               the spec's own `ConcreteSpec.check`; `check_iff` gives `Checked`
+  │ lower               MIR.lean      Place MIR; proved over ALL well-scoped programs, not only checked ones
   ▼
-CheckedCore             { src, q, h : Checked (toCore q), hfront : FrontOk src q }
-  │ lower               Concrete/MIR.lean       Place MIR: numbered slots, explicit `add.ovf` + check → trap;
-  ▼                                             proved: preservation + output well-formedness
-Place MIR
-  │ ssa                 Concrete/BIR.lean       BIR: block-argument SSA, `add.ovf` returns (value, flag), `trap`
-  ▼                                             terminator; proved: preservation + SSA well-formedness
-BIR
-  │ print (UNVERIFIED)  Concrete/LLVM.lean      LLVM IR text: `@llvm.uadd.with.overflow.i8`, a trap block
-  ▼                                             that writes the trap line to fd 2 and exits 134
+Place MIR  (`out.mir`)
+  │ ssa                 BIR.lean      BIR; proved over all well-formed MIR
+  ▼
+BIR  (`out.bir`)
+  │ print               LLVM.lean     LLVM text (`out.ll`); premise P_print (implementation)
+  ▼
 .ll text
-  │ clang (pinned by the flake), link
+  │ clang/llc, link     premise P_toolchain (toolchain); pinned by the flake
   ▼
-executable              premises P_print, P_llvm, P_link, P_load (see below)
+executable
+  │ run                 premise P_launch (environment), under the target profile
+  ▼
+observed behaviour
 ```
 
-There's no Mono Core in slice 0, because there are no generics; the pass gets added when a slice needs it.
-**Place MIR** is where later slices put evaluation order, cleanup edges and explicit checks. In
-slice 0 it already makes the overflow check explicit. **BIR** is the boundary the LLVM printer reads
-and the future LCB adapter will read. Each IR has a total, fuel-indexed evaluator that returns the
-spec's `Outcome`, plus a decidable well-formedness predicate.
+**`compile` is defined as the composition of the stage functions listed in `Stages.lean`**, so a pass that isn't registered can't be in the pipeline. `Output` is pure data with `DecidableEq`: `{ q, mir, bir, ll }`. There are no proofs inside it, and every theorem is stated *about* `compile`.
 
-## Files (new root entries)
+There's no Mono Core, since slice 0 has no generics.
 
-| Path | Content |
-|---|---|
-| `ConcreteSpec/Spec/Surface0.lean` | **Spec, new file:** the slice-0 surface grammar **as data** (productions over token kinds), its mechanical LL(1) check (`decide`), the surface AST, and the elaboration relation `Elab : Surface.Program → Slice0.Program → Prop`. It changes no existing spec file. |
-| `Concrete.lean`, `Concrete/` | The compiler library and the `concrete` executable. |
-| `Concrete/Lex.lean`, `Parse.lean`, `Resolve.lean`, `Elab.lean` | The frontend. |
-| `Concrete/MIR.lean`, `BIR.lean` | The IRs, with their semantics, well-formedness, lowering and preservation proofs. |
-| `Concrete/LLVM.lean` | The BIR → LLVM text printer, labelled unverified. |
-| `Concrete/Premises.lean` | **The one file of named premises** (the holes), each with its trust class: implementation, toolchain, environment. |
-| `Concrete/Stages.lean` | The stage registry: every pipeline edge maps to a theorem or a premise. |
-| `Concrete/Theorem.lean` | The composed end-to-end theorem and its non-vacuity witness. |
-| `Concrete/Facts.lean` | The per-function facts, and a theorem for each fact kind that it is sound. |
-| `Concrete/Cert.lean` | The per-compilation evidence emitter. |
-| `Concrete/Main.lean` | The CLI (placeholder spellings, see below). |
-| `conformance/slice0/*.con`, `*.expect` | The examples, each naming its rule, source and expected outcome. |
-| `scripts/compiler/*.sh` | The runners and gates: conformance (Lean runner + native runner), differential, premise registry, certificates, negative controls. |
+**Place MIR** is where later slices put evaluation order, cleanup edges and explicit checks. In slice 0 it makes the overflow check explicit.
 
-The root inventory (`scripts/checks/root_inventory.txt`) gains `Concrete`, `Concrete.lean`,
-`conformance` and `scripts/compiler`. `lakefile.toml` gains a `Concrete` library and a `concrete`
-executable.
+**BIR** is the boundary that the printer, and later the LCB adapter, read. It uses block-argument SSA, and `add.ovf` returns `(value, flag)`. It has `br`/`condbr` and a `trap k` terminator.
 
-## The end-to-end theorem (sketch)
+Each IR has a total, fuel-indexed evaluator returning the spec's `Outcome` and a decidable well-formedness predicate.
+
+## Frontend specifications (new spec file `ConcreteSpec/Spec/Surface0.lean`)
+
+These are new files only. No existing spec file changes, so there is no conflict with the spec worker. This is spec open item O1, for slice 0 only.
+
+- **Bytes.** Non-UTF-8 input is refused before lexing (SYN-5).
+- **Lexical spec `Lexes : Bytes → List Token → Prop`.** It is defined independently of the lexer:
+  - maximal munch;
+  - trivia: spaces, newlines and `//` comments, all consumed;
+  - EOF must be consumed;
+  - every byte is covered exactly once by a token or by trivia;
+  - payloads: identifier strings and decimal values.
+
+  The lexer's theorem is soundness plus completeness against `Lexes`, which rules out splitting `ab` into `a b` or `256` into `25 6`. Literals with a leading zero are open owner question 3.
+- **The grammar as data:**
+  ```
+  program  = 'fn' IDENT '(' ')' '->' IDENT block ;
+  block    = '{' let_list 'return' expr ';' '}' ;
+  let_list = 'let' IDENT ':' IDENT '=' expr ';' let_list | ε ;
+  expr     = term expr_tail ;
+  expr_tail= '+' term expr_tail | ε ;
+  term     = INT | IDENT | '(' expr ')' ;
+  ```
+  It is right-factored, so it is LL(1). The nullable nonterminals are `let_list` and `expr_tail`.
+- **The LL(1) checker `ll1 : Grammar → Bool`.** It computes nullable, FIRST and FOLLOW sets and checks for conflicts. It comes with `ll1_sound : ll1 g = true → ∀ n t, at most one production of n is predicted on t`. The fact `ll1 grammar0 = true` is proved by `decide`.
+- **`Derives : List Token → Surface.Program → Prop`.** It binds token payloads, not only token kinds.
+- **`Elab : Surface.Program → Slice0.Program → Prop`.** It:
+  - left-associates `+` chains, preserving the decided left-to-right order (STMT-4);
+  - introduces ANF temporaries;
+  - refuses duplicate names (no shadowing) and undeclared names;
+  - refuses a function name other than `main`, or a type other than `u8`, as "unsupported in slice 0".
+
+  Two theorems come with it: `elab_fresh` (temporaries never collide with user names) and `elab_rename_invariant` (renaming temporaries changes neither acceptance nor outcome).
+- **`Denotes src q := ∃ toks ast, Lexes src toks ∧ Derives toks ast ∧ Elab ast q`.** Its theorem is `denotes_outcome_det`: two denotations of the same `src` have the same `run` outcome.
+
+## Premises and target profile (`Concrete/Premises.lean`: the one file)
 
 ```lean
--- Premises.lean: every unproved step, named; nothing else may appear as a hypothesis.
-/-- What the parent process observes when the image runs (the target's observation, Q7.10). -/
-opaque Image : Type
-/-- `img` was produced by the pinned toolchain (clang, LLVM, linker, crt) from the LLVM text `ll`. -/
-opaque Built : String → Image → Prop
-/-- What the parent process observes when it runs `img` with no arguments and no grants. -/
-opaque ExeObs : Image → Observe.Observation → Prop
+/-- Behaviour of a whole run, maximal: a run that does not terminate is `diverges`, not absent. -/
+inductive Behaviour | exited (c : Nat) | trapped (k : Trap) | diverges | killed
 
-structure Premises : Prop where
-  /-- P_parse (frontend, implementation): the table-driven parser agrees with the grammar's derivations. -/
+/-- The target profile: pinned triple, toolchain store paths, frame stack budget, launch rules. -/
+structure TargetProfile where triple : String; toolchain : String; stackBytes : Nat
+
+/-- The native world, a parameter, not an opaque constant, so consistency is witnessable. -/
+structure Native where
+  Image : Type
+  LLMeans : String → Behaviour → Prop          -- what the pinned LLVM takes `.ll` text to mean
+  Built : TargetProfile → String → Image → Prop -- image produced from `.ll` by the pinned toolchain
+  Runs : TargetProfile → Image → Behaviour → Prop -- a behaviour of a launch admitted by the profile
+
+structure Premises (N : Native) (T : TargetProfile) : Prop where
+  /-- P_lex (implementation), until `lex_correct` lands. -/
+  lex   : ∀ src toks, Lex.lex src = .ok toks → Surface0.Lexes src toks
+  /-- P_parse (implementation), until the generic table-parser theorem lands. -/
   parse : ∀ toks ast, Parse.parse toks = .ok ast → Surface0.Derives toks ast
-  /-- P_native (toolchain + environment): printing, LLVM, linking, loading and exit. It is one
-      premise for now, split into P_print / P_llvm / P_link / P_load as soon as an intermediate
-      model (an LLVM IR semantics) exists. A split never strengthens it. -/
-  native : ∀ (b : BIR.Program) (img : Image), b.WF → Built (LLVM.print b) img →
-    ∀ o, ExeObs img o ↔ BIR.observe b = some o
-
--- Theorem.lean
-/-- Slice-0 compiler correctness. If the compiler accepts `src`, emitting BIR `b`, and `img` is
-built from `b`'s LLVM text, then the only thing the parent process can observe is the
-observation the source program's Core semantics gives: an exit with the source's status
-(slice 0 never traps, `slice0_never_traps`). -/
-theorem compile_correct (P : Premises) {src : List UInt8} {out : Output} {img : Image}
-    (hc : compile src = .ok out) (hb : Built (LLVM.print out.bir) img) :
-    ∃ q, Surface0.Denotes src q ∧ Checked (Slice0.toCore q) ∧
-      ∃ c, c < 256 ∧ run (Slice0.toCore q) (q.body.length + 1) = .exit c ∧
-      ∀ o, ExeObs img o ↔ o = .exited c
+  /-- P_print (implementation): the printer's text means exactly the BIR behaviour. -/
+  print : ∀ b, b.WF → ∀ β, N.LLMeans (LLVM.print b) β ↔ β = BIR.behaviour b
+  /-- P_toolchain (toolchain): every behaviour of the built image is one the text means. -/
+  toolchain : ∀ ll img β, N.Built T ll img → N.Runs T img β → N.LLMeans ll β
+  /-- P_launch (environment): an admitted launch with stack ≥ the frame bound is never `killed`
+      for resource reasons; the profile names what "admitted" excludes (signals, ptrace, rlimits). -/
+  launch : ∀ ll img, N.Built T ll img → ∀ β, N.Runs T img β → β ≠ .killed
 ```
 
-This is the target-theorem shape (ROADMAP) reduced to slice 0:
-- **Observable events:** slice 0 has none except the final observation.
-- **Safety:** every observation of the image is the source's.
-- **Termination:** proved for slice 0. Every accepted program exits (`slice0_exits`), so no fuel premise is needed.
-- **Exact artifacts:** `src` is the exact byte list. `out.bir` is the exact BIR. `img` is tied to it only through `Built`, which the per-compilation certificate records by digest. A digest is identity, not correspondence; the correspondence is premise `native`.
-- **Trusted base:** `Premises` plus the Lean kernel, plus Lean's compiler and runtime executing `compile`. The last is an execution assumption, listed in `Premises.lean` as a documented non-Prop entry. It's closed for each output by the certificate (below).
-- **Authority:** vacuous. Slice 0 has no grants and no events.
-- **Non-vacuity:** `compile_correct_witness` shows that `compile answerSrc = .ok _` holds by kernel `decide`, so the premises of the theorem are satisfiable for the 42 example.
+`BIR.behaviour` is maximal: `exited`, `trapped` or `diverges`, defined from the fuel-indexed evaluator by "some fuel exits or traps, otherwise diverges". It is noncomputable, which is fine because it is used only in statements.
 
-**Per-pass theorems composed:**
-- `lex_correct`;
-- `resolve_correct` and `elab_sound` (→ `Surface0.Elab`);
-- `check_iff` (spec);
-- `lowerMIR_correct` (∀ q, Checked → MIR outcome = Core outcome, any fuel ≥ bound);
-- `ssa_correct` (MIR → BIR, outcome-preserving, output `WF`);
-- `addOvf_correct`: BIR's `add.ovf` on **arbitrary** `u8` operands gives `(a+b) mod 256` and the flag `a+b ≥ 256`, and the check branch traps exactly on overflow. This is the decision's "checked addition proved over arbitrary representable operands at the IR boundary, overflow included".
+The **execution-trust inventory** is listed in the same file as documented non-Prop entries:
+- the Lean compiler and runtime executing `compile`. The per-compilation certificate closes this for each output.
+- the IO driver, which writes `out.ll` byte-for-byte; the certificate's digest check covers it.
 
-**Program correctness, first instance.** `answer_correct : ∀ img, Premises → Built (print (compile answerSrc).bir) img → ∀ o, ExeObs img o ↔ o = .exited 42`. It's derived from `compile_correct` plus the Lean fact `run (toCore answer) _ = .exit 42`.
-
-**Per-compilation evidence (R-0552, first increment).** For each compiled file, the driver writes
-a Lean file:
+## The end-to-end theorem (`Concrete/Theorem.lean`)
 
 ```lean
-theorem cert : compile ⟨bytes⟩ = .ok ⟨bir⟩ := by decide
+theorem compile_correct {N : Native} {T : TargetProfile} (P : Premises N T)
+    {src : ByteArray} {out : Output} {img : N.Image}
+    (hc : compile src = .ok out) (hb : N.Built T out.ll img) :
+    Surface0.Denotes src out.q ∧ Checked (Slice0.toCore out.q) ∧
+    ∃ c, c < 256 ∧ run (Slice0.toCore out.q) (out.q.body.length + 1) = .exit c ∧
+      ∀ β, N.Runs T img β → β = .exited c
 ```
 
-The kernel checks it (`lake env lean`; no `native_decide`). That connects the exact input to the exact BIR without trusting the natively executed compiler. The certificate also records the SHA-256 of the source, the `.ll` text, the executable and the toolchain identity.
+The theorem is stated about **`out.q`** itself, so program theorems transport directly:
+
+```lean
+theorem answer_correct (P : Premises N T) (hb : N.Built T (compile answerSrc).ll img) :
+  ∀ β, N.Runs T img β → β = .exited 42
+```
+
+**The composition:**
+- `lex`/`parse` (as premises) and `elab_sound` give `Denotes`;
+- `check_iff` gives `Checked`;
+- `slice0_exits` gives the exit;
+- `lower_correct` and `ssa_correct` (below) take the BIR behaviour to the Core outcome;
+- `P.print`, `P.toolchain` and `P.launch` take that behaviour to the image.
+
+Termination is proved at the source level. Native termination comes only through the three named native premises, and `P.launch` carries the resource side (the stack bound).
+
+**Preservation over all programs, so the trap path isn't dead code:**
+- `lower_correct : ∀ q, WellScoped q → MIR.run (lower q) = run (toCore q)`. This holds for *every* well-scoped `u8` program, checked or not, so `200 + 56` preserves `.trap .arithmeticOverflow`.
+- `ssa_correct : ∀ m, m.WF → BIR.run (ssa m) = MIR.run m`, plus `(ssa m).WF`.
+- `addOvf_correct`: for arbitrary `u8` operands, the result is `(a+b) % 256` and the flag is `a+b ≥ 256`.
+- `lower_emits_check`, a syntactic output invariant: every MIR add is followed by a conditional branch on its flag to `trap .arithmeticOverflow`.
+
+**Non-vacuity, one witness per layer:**
+1. **Acceptance:** `compile answerSrc = .ok answerOut`, by kernel `decide`.
+2. **Model consistency:** `Premises refNative refProfile` is proved for a reference model, where `Image := BIR.Program`, `Built` means "image is the BIR the text prints from" and `Runs := BIR.behaviour`. This shows that the premises together are satisfiable, not contradictory.
+3. **Native-build existence:** this is evidence, not a theorem. The conformance job records a real `Built` instance per example: toolchain provenance and image digest. It is reported as attested.
+
+## Per-compilation certificate (`Concrete/Cert.lean`), R-0552 first increment
+
+The driver emits `Cert_<digest>.lean`, and the kernel checks it (`lake env lean`, no `native_decide`):
+
+```lean
+def srcBytes : ByteArray := ...      -- the exact input
+def expected : Output := ...         -- the exact q, mir, bir, ll
+theorem cert : compile srcBytes = .ok expected := by decide
+```
+
+`ll` is a field of `Output`, so the certificate covers the printer's output too. The driver then checks:
+- that the `.ll` file on disk is byte-equal to `expected.ll`, by digest;
+- that the build used the profile's toolchain store paths;
+- the SHA-256 digests of the image, compiler, spec and target.
+
+A **refusal certificate** proves `compile src = .error r` for each refused example, so the refusal and its rule are kernel-checked too.
+
+**Budget.** Kernel `decide` over the whole slice-0 compiler is feasible for small inputs. The LL(1) table is a precomputed constant. The time and size per certificate are measured and gated. For later slices, the long-term plan is per-pass translation validators with kernel-checked validator soundness, not whole-compiler normalization; it's recorded under R-0552.
+
+## Stage registry (`Concrete/Stages.lean`)
+
+Each stage is a value of a **typed** contract:
+
+```lean
+structure Stage (A B : Type) where
+  run : A → Except Refusal B
+  pre : A → Prop
+  post : A → B → Prop
+  evidence : (∀ a b, pre a → run a = .ok b → post a b) ⊕ PremiseField
+```
+
+So an unrelated theorem doesn't typecheck as a stage's evidence. `compile` is the fold of the stage list. `pipeline_correct` is proved by composing the `post` contracts, and `compile_correct` is derived from it.
+
+The gate:
+- enumerates the stage list from the elaborated `compile` term, independently;
+- compares the `Premises` fields with a golden list;
+- compares digests of the semantic definitions those premises mention (`BIR.behaviour`, `WF`, `observe`, `TargetProfile`) with a golden file.
+
+Changing a premise's meaning therefore fails CI as surely as adding a field does, and needs owner approval: holes only shrink.
+
+## Facts query (`Concrete/Facts.lean`)
+
+The query follows the reviewed facts-query design (Codex, agy and Kimi, 2026-11-06). Slice 0's facts are simple, but they use the full shape.
+
+**One derivation.** `derive : Output → FnId → Report` runs over the whole lowered bundle, so BIR slot counts are visible to it. Each fact is a typed judgment `Fact.Holds`. `derive_sound` covers **every** status:
+- `established` → `Holds`;
+- `conditional(as)` → `Premises`-fields `as` imply `Holds`;
+- `refuted(w)` → `w` is a checked counter-witness;
+- `notEstablished(blocker, site)` → the site exists and `blocker` names a missing evidence kind;
+- `notApplicable` → the fact's subject is absent;
+- coverage counts → examined sites = enumerated sites.
+
+Human output, JSON and future policies all render the same `Report`.
+
+**The scope is explicit.** Each fact is a **source/Core fact** or an **artifact fact**. Artifact facts are about the executable, which includes the C runtime, startup and the linker. They are never unconditional in slice 0: at best they are `conditional` on the native premises, and otherwise `notEstablished`.
+
+| Fact (scope) | Slice-0 status |
+|---|---|
+| Authority: capabilities and grants (source) | `established`: requires no capabilities. This is about authority only, and never printed as "touches nothing". |
+| Allocation (source) | `established`: none. |
+| Allocation (artifact) | `notEstablished`: crt/startup are not modeled. |
+| Memory reads/writes (source) | `established`: own locals only. |
+| Implicit trap sites (source) | One per `+`, with a typed site id and a span; each is `established` as "cannot trap" (`slice0_never_traps`). |
+| `Result` errors, abort, allocation failure, foreign failure | `notApplicable`. |
+| Trusted / FFI / opaque (source) | `established`: none. |
+| Trusted / FFI / opaque (artifact) | `conditional(P_toolchain, P_launch)`. |
+| Termination (source) | `established` (`slice0_exits`). |
+| Termination (artifact) | `conditional(P_print, P_toolchain, P_launch)`. |
+| Recursion depth bound | `established`: 0, since there are no calls. |
+| May block | `established`: no. |
+| BIR frame slots (IR) | `established`: *n*. Reported as slots, never as bytes. |
+| Stack bytes, stack exhaustion (artifact) | `notEstablished`: no final-artifact/target stack evidence. |
+| Bounded (derived: terminates ∧ stack bound ∧ no blocking) | `notEstablished`, blocked on the stack bytes. |
+
+**Identity and replay.** Every report carries:
+- typed function and site identities;
+- the schema version `concrete-facts/0` and the semantics version;
+- the digests of the compiler, spec, target and artifact;
+- the replay command.
+
+The **CLI spellings are placeholders** (`concrete facts FILE [FN]`, `concrete build FILE -o OUT`), pending the owner.
 
 ## Gates (CI jobs, added to `required-checks.txt`)
 
 1. **Compiler build:** `lake build Concrete`, with warnings as errors and `autoImplicit` off.
-2. **Proof axioms and trust ban, extended to `Concrete`:** the same scripts as spec-root. Every
-   theorem's axioms must be within `propext`, `Quot.sound` and `Classical.choice`; no `sorryAx` and no
-   `ofReduceBool`. `opaque` constants are allowed only in `Premises.lean`, and are listed.
-3. **Premise registry:** the type of `compile_correct` mentions no hypothesis except `Premises`
-   and the stated arguments, compared against a golden statement. Every edge in `Stages.lean`
-   names an existing theorem or a field of `Premises`. A field with no edge, or an edge with neither,
-   fails. The premise list is golden, so adding or strengthening a premise fails CI until the owner
-   approves (the rule that holes only shrink).
-4. **Conformance (slice 0):** each example runs through the Lean semantics runner and the native
-   runner (compile, then clang, then execute), and both must match `.expect`. That's an exit status, or a
-   refusal with its rule. The suite's coverage is listed separately from compiler success: a
-   compiler that rejects everything fails, because every accepted example must exit with its status.
-5. **Differential:** generated slice-0 programs (random literals and sums) go through the Lean `run`
-   and through the native executable, which must agree, with replayable seeds.
-6. **Certificates:** the kernel checks the certificate of every conformance example.
+2. **Axioms and trust:** extended to `Concrete/`:
+   - only the three axioms;
+   - no `sorry` and no `native_decide`/`ofReduceBool`;
+   - a **totality ban**: no `partial`, `unsafe`, `@[implemented_by]`, `@[extern]` or `opaque` in `Concrete/` outside `Premises.lean`;
+   - an external-checker replay (con-leche/nanoda, R-0553) of the compiler's theorems.
+3. **Premise registry and stage coverage:** the checks described in the stage registry section above.
+4. **Conformance:** each `conformance/slice0/*.con` example runs through the Lean `run` and through the native runner, and both must match its `.expect` (an exit status, or a refusal with its rule). A separate supported-subset coverage report lists every grammar production and Core form that the corpus exercises. A reject-all compiler fails, because every accepted example must exit with its status.
+5. **Differential at the source:** generated accepted programs, with replayable seeds; native exit = Lean `run`.
+6. **Differential at BIR → native:** this covers overflow. Generated BIR programs over **arbitrary** `u8` operands, including `200 + 56`, go through `BIR.behaviour` and through print plus clang plus execution. Overflow must give exit 134 and the trap line on fd 2.
+7. **Certificates:** the kernel checks every acceptance and refusal certificate, with measured budgets.
 
 **Negative controls**, each a mutation the matching gate must refuse:
 - a deleted pass theorem;
-- an extra unregistered hypothesis;
-- a certificate for the wrong source or the wrong BIR;
-- a compiler that rejects everything;
-- a printer that emits `add` without the overflow check, which the differential must catch on 200 + 56 at the BIR boundary.
+- an unrelated theorem substituted as a stage's evidence;
+- a silently omitted stage;
+- an extra or strengthened premise;
+- a changed premise-definition digest;
+- a certificate for the wrong source, BIR or `.ll`;
+- a swapped executable or toolchain;
+- a reject-all compiler;
+- a printer that drops the overflow check (gate 6);
+- a grammar edit that creates an LL(1) conflict;
+- a lexer that splits a token;
+- a facts derivation that reports a false status;
+- `partial` added to a stage.
 
-Heavy runs (native builds, differential) run on concrete-ci-2 or on GitHub-hosted runners, never as full local runs.
-
-## The facts query (from day one)
-
-The query follows the facts-query design that Codex, agy and Kimi reviewed (2026-11-06). Slice 0's facts are simple, but they use the full shape from the start, so later slices add fact kinds without changing the format.
-
-**One derivation.** Each fact is a typed Lean judgment, `Fact.Holds : CheckedCore → FnId → Fact → Prop`, computed by `Facts.derive : CheckedCore → FnId → Report`. A derivation-soundness theorem `derive_sound : derive c f = r → ∀ fact ∈ r.established, Fact.Holds c f fact` holds for each fact kind. Human output, JSON and any future policy check all render the same `Report`; none of them re-derives anything.
-
-**A status for each fact, and coverage for each fact:**
-- `established`;
-- `conditional(assumptions)`, naming the premises from `Premises.lean`;
-- `refuted(witness)`;
-- `notEstablished(blocker, site)`;
-- `notApplicable`.
-
-Coverage is reported for each fact: the sites examined out of the sites that exist.
-
-**The vocabulary is split, and nothing is printed as a vacuous summary.** Empty capabilities are never printed as "touches nothing". Each axis is reported separately:
-- **authority:** capabilities, and the grants they reach;
-- **resources:** allocation;
-- **memory:** reads, and separately writes;
-- **failure:** each kind is its own fact:
-  - implicit trap sites;
-  - `Result` errors;
-  - abort;
-  - allocation failure;
-  - stack exhaustion;
-  - foreign failure.
-- **trusted / FFI / opaque code;**
-- **termination;**
-- **stack;**
-- **proofs:** the theorems and premises each claim depends on.
-
-**Slice 0's values:**
-
-| Fact | Slice-0 status |
-|---|---|
-| Authority | `established`: no capabilities and no grants. It is printed as "requires no capabilities", which is a statement about authority only. |
-| Allocation | `established`: none. |
-| Memory | `established`: reads and writes only its own frame slots. |
-| Implicit trap sites | Each checked `+`, with its typed site identity and source span. Each is `established` as "cannot trap": its operands are known, so `slice0_never_traps` applies. |
-| `Result` errors, abort, allocation failure, foreign failure | `notApplicable`. |
-| Stack exhaustion, and stack bytes | `notEstablished`, with blocker "no final-artifact/target stack evidence" at the function. Stack bytes come only from final-artifact or target evidence. The BIR slot count is reported as an IR fact, never as bytes. |
-| Termination | `established` (`slice0_exits`). |
-| Trusted / FFI | `established`: none. |
-
-**Identity and replay.** Every report carries:
-- typed identities: function and site identities, never spellings;
-- the schema version `concrete-facts/0` and the semantics version;
-- the digests of the compiler, the spec, the target and the artifact;
-- the replay command that regenerates the report.
-
-The **CLI spelling is a placeholder** (`concrete facts FILE [FN]`, `concrete build FILE -o OUT`), pending the owner.
+Heavy runs (native builds, differentials, certificates) run on concrete-ci-2 or GitHub runners, never as full local runs.
 
 ## Open questions for the owner (none blocks the skeleton)
 
 1. The CLI spellings: the compiler command and the facts query.
-2. How a decided but slice-0-unsupported form is reported: a dedicated "unsupported in slice 0" refusal is proposed, distinct from a syntax error, for `0x2A`, `let mut`, `if` and the like.
+2. Whether a decided form that slice 0 doesn't support (`0x2A`, `let mut`, `if`) gets a dedicated "unsupported in slice 0" refusal, distinct from a syntax error. That is proposed.
+3. Decimal literals with leading zeros, such as `007`: SYN-6 is silent. Slice 0 will refuse them as unsupported until the owner decides.
 
 ## Not in slice 0
 
 - Mono Core.
-- Grants, the launcher's startup refusal (exit 125) and the trap bytes. Slice 0 has no reachable trap: the BIR trap path exists and is proved, but no accepted program reaches it.
+- Grants, the launcher's startup refusal (125) and events.
 - The LCB path (LP0).
-- Parser correspondence as a proof. It's a premise until discharged; the table-driven design makes it one generic theorem.
+- An LLVM-IR semantics. `LLMeans` stays a premise parameter until one exists, and then `P_print` becomes a theorem.
