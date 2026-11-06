@@ -76,9 +76,16 @@ verdict; any failing leg fails the check (see [Pipelining](#pipelining)).
   that attempt. As a result,
   concurrent checks never share or delete each other's refs. The run counts only if the runner reports
   `sha=<head>`. `--no-remote` skips this leg.
-- **review**: `LAND_REVIEW_CMD`, else `scripts/review/review.sh`, called with `--base --head`.
-  Exit 0 means clean, and a published `findings` note at the head fails the leg. `--no-review`
-  skips it. The landing bot skips it on trains, because every member was reviewed at its own head.
+- **review** (fails closed): the leg passes at once when the train already has **review
+  provenance**: a clean review note at its head or, when the head has no note, a clean note on every
+  member at its exact recorded SHA (each member was reviewed at its own head). Each note is judged by
+  `scripts/review/verify.sh` on origin's notes; an absent, malformed, blocked or findings note
+  qualifies nothing, and a head note that is not clean is not overridden by the members. Otherwise
+  the leg runs `LAND_REVIEW_CMD`, else `scripts/review/review.sh`, with `--base --head`, and then
+  requires provenance: a non-zero exit fails, and so does a zero exit that leaves no clean note at the
+  head. With no review command at all, `check` fails; it never disables the leg silently.
+  `--no-review` skips the leg explicitly (the landing bot does, its members being reviewed), and
+  `land` still requires review provenance.
 - The per-leg durations, the wall time and their sum go to the log as a `check-legs` row.
 - Runs inside `nix develop` unless already in the dev shell. `LAND_NO_NIX=1` disables this.
 
@@ -122,7 +129,14 @@ before anything is pushed:
 - the CI run's `headSha` is the local HEAD, and the run is completed;
 - every landing-tier job concluded `success`, and a run with no landing-tier jobs is refused;
 - `origin/main`, read with `ls-remote`, is still the train's base;
-- the mirror's main is an ancestor of the train, so no half-landing happens.
+- the mirror's main is an ancestor of the train, so no half-landing happens;
+- the train has review provenance (as in `check`'s review leg), read again from origin's notes
+  rather than trusted from `check`: a check run with `--no-review` lands only when every member is
+  reviewed clean;
+- a legacy/ move candidate (a change under `legacy/`, a `legacy` that is not a directory, or a change
+  to the set of top-level entries `scripts/checks/root_inventory.txt` lists; comments, order and
+  nested `docs/...` or `scripts/...` entries do not count) has an accepted rehearsal of its exact
+  tree on its base (`scripts/land/acceptance.sh`; the move gate in `train.sh`).
 
 If main moved, the command exits 4 and prints the rebuild command. The result described a
 candidate that no longer integrates main, so the train is rebuilt, checked and run again.
@@ -486,7 +500,7 @@ publishing decision are in docs/project/STATUS_PAGE.md.
 | `LAND_REMOTE_RUNNER` | `~/bin/concrete-remote` | `<runner> <ref> <command>` for the remote leg; empty disables it |
 | `LAND_REMOTE_PUSH` | `1` | `0`: the runner fetches the SHA from this clone, nothing is published |
 | `LAND_FULL_GATES_CMD` | `lake build && bash scripts/checks/run.sh` | the remote leg's command |
-| `LAND_REVIEW_CMD` | `scripts/review/review.sh` when present | the review leg's command (`--base --head` appended) |
+| `LAND_REVIEW_CMD` | `scripts/review/review.sh` when present | the review leg's command (`--base --head` appended); with neither, `check` fails |
 | `LAND_PUSH_ATTEMPTS`, `LAND_PUSH_RETRY_SLEEP` | `3`, `15` | attempts and pause for a verified push |
 | `BOT_*` | see the header of `scripts/land/bot.sh` | the landing bot's state, pause file, prefix, intervals and limits |
 ## Tests

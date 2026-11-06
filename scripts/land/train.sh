@@ -18,6 +18,9 @@
 #     operation is a stop, never a warning.
 #   * only generated views and append-only ledgers are resolved mechanically
 #     (scripts/land/resolve_conflicts.py); any other conflict aborts the merge and names the files.
+#   * (2026-11-06) review fails closed: `check` with no review command fails rather than skipping the
+#     leg, and a train lands only with review provenance (review_provenance: a verified clean review
+#     note at its head, or, when the head has none, on every member at its exact SHA).
 #   * a train lands only when the CI run's head SHA is the local HEAD, every landing-tier job
 #     succeeded, every required job (scripts/land/required_checks.py: the candidate's list, plus the
 #     base's unless an explicit transition row replaces or retires it) is present and succeeded, and
@@ -422,19 +425,50 @@ gates_host() {
   return 0
 }
 
-# Codex review leg: LAND_REVIEW_CMD, else scripts/review/review.sh, called with --base --head. Its
-# exit status is the verdict (0 = clean); a published review note saying `findings` at head also fails.
+# The review command: LAND_REVIEW_CMD, else scripts/review/review.sh, called with --base --head.
+# Empty when there is neither, which `check` refuses (it never skips the leg silently).
 review_cmd() {
   if [ -n "${LAND_REVIEW_CMD:-}" ]; then echo "$LAND_REVIEW_CMD"
   elif [ -f scripts/review/review.sh ]; then echo "bash scripts/review/review.sh"; fi
   return 0
 }
 
-review_leg() { # base head
-  local cmd; cmd="$(review_cmd)"
-  bash -c "$cmd --base $1 --head $2" || return $?
-  bash "$SELF_DIR/notes.sh" fetch >/dev/null 2>&1 || true
-  [ "$(bash "$SELF_DIR/notes.sh" get review "$2" verdict 2>/dev/null)" != findings ]
+# REVIEW PROVENANCE (fail closed; docs/LANDING.md, "check" and "land"). A train is reviewed when its
+# head carries a clean review note, or when its head carries no review note and every member carries
+# one at its exact recorded SHA (each member was reviewed at its own head: the landing bot's trains,
+# and a train rebuilt from reviewed branches). Every note is judged by scripts/review/verify.sh, on
+# $REMOTE's notes (fetched first, replacing the local copy, as verify.sh --fetch does): an absent,
+# malformed, blocked or findings note qualifies nothing, and a head note that is not clean is not
+# overridden by its members. Prints what qualified; on failure prints why and returns 1.
+VERIFY="$SELF_DIR/../review/verify.sh"
+review_provenance() { # name head
+  local name="$1" head="$2" out m n=0 bad=""
+  [ -f "$VERIFY" ] || { echo "no review verifier ($VERIFY is missing)"; return 1; }
+  git fetch -q "$REMOTE" "+refs/notes/concrete-review:refs/notes/concrete-review" 2>/dev/null \
+    || { echo "could not fetch refs/notes/concrete-review from $REMOTE"; return 1; }
+  if out="$(bash "$VERIFY" "$head" 2>&1)"; then echo "the head ${head:0:10} carries a clean review note"; return 0; fi
+  if git notes --ref=refs/notes/concrete-review show "$head" >/dev/null 2>&1; then
+    echo "the head's review note does not qualify: ${out//$'\n'/ }"; return 1
+  fi
+  for m in $(state_get_soft "$name" members | tr ',' ' '); do
+    n=$((n + 1))
+    out="$(bash "$VERIFY" "${m##*@}" 2>&1)" || bad="$bad; member ${m%@*}: ${out//$'\n'/ }"
+  done
+  [ "$n" -gt 0 ] || { echo "the head ${head:0:10} has no review note and the train records no members"; return 1; }
+  [ -z "$bad" ] || { echo "the head ${head:0:10} has no review note, and not every member has a clean one$bad"; return 1; }
+  echo "the head has no review note; every member ($n) carries a clean one at its exact SHA"
+}
+
+# Codex review leg. It passes without running the reviewer when the train already has review
+# provenance. Otherwise it runs the review command; a non-zero exit fails, and so does a zero exit
+# that leaves no provenance (no note, or a malformed, blocked or findings note at the head).
+review_leg() { # name base head
+  local why
+  if why="$(review_provenance "$1" "$3")"; then echo "review: $why; not reviewed again"; return 0; fi
+  echo "review: $why; running the reviewer"
+  bash -c "$(review_cmd) --base $2 --head $3" || return $?
+  why="$(review_provenance "$1" "$3")" || { echo "review: the reviewer exited 0, but $why"; return 1; }
+  echo "review: $why"
 }
 
 cmd_check() {
@@ -455,7 +489,10 @@ cmd_check() {
   # A new check withdraws the previous one: a failing re-run must not leave an old pass standing.
   [ "$DRY" = 1 ] || state_set "$name" checked ""
   if [ "$remote" = 1 ] && [ -z "$(remote_runner)" ]; then remote=0; fi
-  if [ "$review" = 1 ] && [ -z "$(review_cmd)" ]; then review=0; fi
+  if [ "$review" = 1 ] && [ -z "$(review_cmd)" ]; then
+    log_row "$name" check failed "no review command"
+    die "check: no review command (LAND_REVIEW_CMD is unset and scripts/review/review.sh is missing); the review leg is required and is never skipped silently. Restore the reviewer, or pass --no-review explicitly (land still requires review provenance)"
+  fi
   local ghost=""; [ "$local_gates" = 1 ] || ghost="$(gates_host)"
   local impact_cmd=(bash "$SELF_DIR/impact_gates.sh") impact_where="here"
   if [ -n "$ghost" ]; then impact_cmd=(bash "$SELF_DIR/gates_remote.sh" --host "$ghost"); impact_where="on $ghost"
@@ -471,7 +508,7 @@ cmd_check() {
   if [ "$DRY" = 1 ]; then
     note "(dry-run) would run in parallel: impact gates $impact_where (hook line 'refs/heads/train/$name $head refs/heads/ci/$name $base')"
     if [ "$remote" = 1 ]; then note "(dry-run)   + remote full gates: $(remote_runner) <ref of ${head:0:10}> '${LAND_FULL_GATES_CMD:-lake build && bash scripts/checks/run.sh}'"; fi
-    if [ "$review" = 1 ]; then note "(dry-run)   + review: $(review_cmd) --base $base --head $head"; fi
+    if [ "$review" = 1 ]; then note "(dry-run)   + review: the train's review provenance, else $(review_cmd) --base $base --head $head"; fi
     return 0
   fi
   local dir="$STATE_ROOT/$name/check-${head:0:12}"; mkdir -p "$dir"
@@ -479,7 +516,7 @@ cmd_check() {
   legs_start impact "$dir/impact.log" "${impact_cmd[@]}" --base "$base" --head "$head" \
     --src-ref "refs/heads/train/$name" --dst-ref "refs/heads/ci/$name"
   if [ "$remote" = 1 ]; then legs_start remote "$dir/remote.log" remote_leg "$name" "$head"; fi
-  if [ "$review" = 1 ]; then legs_start review "$dir/review.log" review_leg "$base" "$head"; fi
+  if [ "$review" = 1 ]; then legs_start review "$dir/review.log" review_leg "$name" "$base" "$head"; fi
   legs_wait
   local wall=$(( $(date +%s) - t0 )) leg
   cat "$dir/impact.log"
@@ -915,6 +952,15 @@ cmd_land() {
       die "land: $mirror/main (${mmain:0:10}) is not an ancestor of the train; reconcile the mirror first (nothing pushed)"
     fi
   fi
+
+  # Review provenance, read now and not trusted from `check`: a check run with --no-review, or a
+  # reviewer that wrote no clean note, leaves none, and nothing lands without it.
+  local prov
+  if ! prov="$(review_provenance "$name" "$head")"; then
+    log_row "$name" land refused "no review provenance"
+    die "land: ${head:0:10} has no review provenance: $prov. Review the train head (scripts/review/review.sh --head ${head:0:10}) or its members, then land."
+  fi
+  note "review provenance: $prov"
 
   # The legacy/ move (R-0558) lands only after the acceptance test accepted this exact candidate:
   # last of all, so a dry run that reaches it has passed every other land check.
