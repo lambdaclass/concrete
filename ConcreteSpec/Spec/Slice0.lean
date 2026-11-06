@@ -80,8 +80,8 @@ The required slice-0 behaviours: normal exit 42, exit 255 at the boundary, stati
 known overflow and of an out-of-range literal, refusal of an unused binding, and the use of an
 undeclared local. -/
 
-private def a₀ : Var := ⟨"a", 0⟩
-private def b₁ : Var := ⟨"b", 1⟩
+def a₀ : Var := ⟨"a", 0⟩
+def b₁ : Var := ⟨"b", 1⟩
 
 /-- ```
 fn main() -> u8 {

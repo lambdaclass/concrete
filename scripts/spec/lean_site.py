@@ -71,12 +71,6 @@ def prose(text):
     return '\n'.join(out)
 
 
-# Declarations Lean generates from a user declaration (they share its source range).
-AUTO = re.compile(r'\.(casesOn|recOn|rec|noConfusion|noConfusionType|below|brecOn|binductionOn|ctorIdx|'
-                  r'sizeOf_spec|_sizeOf_\w+|injEq|inj|elim|decEq|eq_\d+|eq_def|match_\d+|proof_\d+|'
-                  r'induct|induct_unfolding|fun_cases|mk\.\w+|ctorElim\w*|ctorElimType|toCtorIdx|'
-                  r'inst\w*|_\w+)$|\.inst\w*\.|\._')
-
 CSS = """
 :root{--bg:#fff;--fg:#1d1d1f;--mute:#666;--code:#f5f5f4;--line:#ddd;--link:#0b5cad}
 @media (prefers-color-scheme:dark){:root{--bg:#161616;--fg:#e8e8e8;--mute:#9a9a9a;--code:#222;--line:#333;--link:#7fb4ff}}
@@ -101,6 +95,70 @@ def page(title, body, depth=0):
             f'<a href="{up}theorems.html">Theorems</a></nav>{body}</main></body></html>\n')
 
 
+_src_cache = {}
+
+
+def source(mod):
+    if mod not in _src_cache:
+        _src_cache[mod] = open(os.path.join(ROOT, mod.replace('.', '/') + '.lean')).read().split('\n')
+    return _src_cache[mod]
+
+
+def written(d):
+    """A declaration the source writes, as opposed to one Lean generates from it (recursors,
+    `deriving` instances, equation lemmas, matchers): its name is the text at its selection range
+    (or it is an explicit `instance`). Generated ones carry their parent's range."""
+    if d['selEndLine'] != d['line']:
+        return False
+    t = source(d['module'])[d['line'] - 1][d['selCol']:d['selEndCol']]
+    last = d['name'].split('.')[-1]
+    return t == last or t.endswith('.' + last) or t == 'instance'
+
+
+def blocks(lines):
+    """Split a Lean source into ('doc', text, line) and ('code', [(line, text)]) blocks. A doc
+    block is a `/--` or `/-!` comment, with nested `/- -/` comments respected; text after its
+    closing `-/` on the same line stays code."""
+    out, code = [], []
+    i = 0
+    while i < len(lines):
+        line = lines[i]; st = line.lstrip()
+        if st.startswith('/--') or st.startswith('/-!'):
+            if code:
+                out.append(('code', code)); code = []
+            col = len(line) - len(st) + 3
+            depth, buf, j, k = 1, [], i, col
+            while True:
+                text = lines[j]
+                while k < len(text):
+                    if text.startswith('/-', k):
+                        depth += 1; k += 2; continue
+                    if text.startswith('-/', k):
+                        depth -= 1
+                        if depth == 0:
+                            break
+                        k += 2; continue
+                    k += 1
+                if depth == 0:
+                    buf.append(text[(col if j == i else 0):k])
+                    break
+                buf.append(text[(col if j == i else 0):])
+                j += 1; k = 0
+                if j >= len(lines):
+                    sys.exit(f'error: unterminated doc comment at line {i + 1}')
+            out.append(('doc', '\n'.join(buf).strip(' '), i + 1))
+            rest = lines[j][k + 2:]
+            if rest.strip():
+                code.append((j + 1, ' ' * (k + 2) + rest))
+            i = j + 1
+            continue
+        code.append((i + 1, line))
+        i += 1
+    if code:
+        out.append(('code', code))
+    return out
+
+
 def main():
     decls_path, out_dir = sys.argv[1], sys.argv[2]
     decls, mdocs = {}, defaultdict(list)
@@ -111,7 +169,7 @@ def main():
         d = json.loads(line)
         if d['kind'] == 'moduleDoc':
             mdocs[d['module']].append(d)
-        elif d['kind'] not in ('constructor', 'recursor') and not AUTO.search(d['name']):
+        elif d['kind'] not in ('constructor', 'recursor') and written(d):
             decls[d['name']] = d
     # module order: Spec.lean's imports, then the proofs
     spec_root = open(os.path.join(ROOT, 'ConcreteSpec/Spec.lean')).read()
@@ -176,40 +234,26 @@ def main():
     counts = {}
     for mod in mods:
         path = os.path.join(ROOT, mod.replace('.', '/') + '.lean')
-        src = open(path).read().split('\n')
+        src = source(mod)
         anchors = by_line.get(mod, {})
-        body, code, i = [], [], 0
-        def flush_code():
-            nonlocal code
+        body = []
+        nex = nthm = ndef = 0
+        for blk in blocks(src):
+            if blk[0] == 'doc':
+                body.append('<div class="prose">' + prose(blk[1]) + '</div>')
+                continue
+            code = blk[1]
             while code and not code[-1][1].strip():
                 code.pop()
             while code and not code[0][1].strip():
                 code.pop(0)
-            if code:
-                body.append('<pre class="src">' + '\n'.join(link_code(t, mod) for _, t in code) + '</pre>')
-                for ln, _ in code:
-                    for n in anchors.get(ln, []):
-                        body.append(f'<div class="decl" id="{esc(n)}">' + meta(n) + '</div>')
-            code = []
-        nex = nthm = ndef = 0
-        while i < len(src):
-            line = src[i]; st = line.lstrip()
-            if st.startswith('/-!') or st.startswith('/--'):
-                flush_code()
-                j = i
-                while '-/' not in src[j][(src[j].find('/-') + 2) if j == i else 0:]:
-                    j += 1
-                txt = '\n'.join(src[i:j + 1])
-                txt = re.sub(r'^\s*/-[-!]\s?', '', txt, count=1)
-                txt = re.sub(r'\s*-/\s*$', '', txt)
-                body.append('<div class="prose">' + prose(txt) + '</div>')
-                i = j + 1
+            if not code:
                 continue
-            if st.startswith('example'):
-                nex += 1
-            code.append((i + 1, line))
-            i += 1
-        flush_code()
+            nex += sum(1 for _, t in code if t.lstrip().startswith('example'))
+            body.append('<pre class="src">' + '\n'.join(link_code(t, mod) for _, t in code) + '</pre>')
+            for ln, _ in code:
+                for n in anchors.get(ln, []):
+                    body.append(f'<div class="decl" id="{esc(n)}">' + meta(n) + '</div>')
         for n, d in decls.items():
             if d['module'] == mod:
                 nthm += d['kind'] == 'theorem'; ndef += d['kind'] != 'theorem'

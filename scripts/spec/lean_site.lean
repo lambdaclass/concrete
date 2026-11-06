@@ -39,4 +39,6 @@ def inSpec (env : Environment) (n : Name) : Option Name := do
     let used := (ci.getUsedConstantsAsSet.toList.filter (fun c => names.contains c && c != n)).map toString
     IO.println (Json.compress (Json.mkObj [("kind", kind), ("name", toString n),
       ("module", toString m), ("line", r.selectionRange.pos.line), ("endLine", r.range.endPos.line),
+      ("selCol", r.selectionRange.pos.column), ("selEndLine", r.selectionRange.endPos.line),
+      ("selEndCol", r.selectionRange.endPos.column),
       ("doc", doc), ("type", ty), ("uses", toJson used)]))
