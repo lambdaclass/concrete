@@ -225,13 +225,13 @@ head -n 3 "$TMP/imported.txt" > "$TMP/imp-short.txt"
   && ok "control: source modules outside a (truncated) import closure are reported" || no "control: a truncated closure reported no gap"
 # The example leg's own controls: examples rewritten as that leg rewrites them, then enumerated.
 mkdir -p "$TMP/exc-src" "$TMP/exc"
-printf 'example : 2 + 2 = 4 := by decide +native\nexample : 1 = 2 := by stop skip\nexample : 1 = 1 := rfl\n' > "$TMP/exc-src/C.lean"
+printf 'example : 2 + 2 = 4 := by decide +native\nexample : 1 = 2 := by stop skip\nexample : 1 = 1 := rfl\ndef w : String := "example"\n' > "$TMP/exc-src/C.lean"
 N=$(python3 "$PROOFS_DIR/lean_lex.py" examples "$TMP/exc-src" "$TMP/exc" C.lean)
 # (Lean prints the warnings of the inserted declarations on stdout too; the rows are the tab lines.)
 population examples "$TMP/exc/C.lean" 2>/dev/null | grep -P '\t' > "$TMP/exc.tsv"
 X=$(nonstandard "$TMP/exc.tsv")
 [ "$N" = 3 ] && [ "$(grep -c . "$TMP/exc.tsv")" = 3 ] && has_match -F "C.lean:1» (" <<<"$X" && has_match -F "C.lean:2» (sorryAx)" <<<"$X" \
   && ! has_match -F "C.lean:3»" <<<"$X" \
-  && ok "control: an example proved by decide +native and one closed by stop are reported, rfl is not ($(echo $X | tr '\n' ' '))" \
+  && ok "control: an example proved by decide +native and one closed by stop are reported, rfl is not, and "example" in a string is no example ($(echo $X | tr '\n' ' '))" \
   || no "control: rewritten examples: $N, rows $(grep -c . "$TMP/exc.tsv"), reported '$X'"
 finish

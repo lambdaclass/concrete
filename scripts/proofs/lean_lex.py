@@ -34,10 +34,16 @@ class LexError(Exception):
     pass
 
 
-def lex(src, spans=None):
+def lex(src, spans=None, literals=True):
     """`src` with its comments blanked; when `spans` is a list, each top-level comment's
-    (start, end) offsets are appended to it (a comment nested in another is part of that one)."""
+    (start, end) offsets are appended to it (a comment nested in another is part of that one).
+    With `literals=False`, string, character and name literals are blanked too (code tokens only)."""
     n, out = len(src), []
+
+    def emit(text, literal=False):
+        if literal and not literals:
+            text = "".join("\n" if ch == "\n" else " " for ch in text)
+        out.append(text)
 
     def ident(i):                                     # src[i] continues an identifier
         return i >= 0 and (src[i].isalnum() or src[i] in "_'!?." or ord(src[i]) > 127)
@@ -56,16 +62,16 @@ def lex(src, spans=None):
 
     def string(i):                                    # at '"'
         interp = src[i - 2:i] in ("s!", "m!", "f!") and not ident(i - 3)
-        out.append('"'); i += 1
+        emit('"', True); i += 1
         while i < n:
             c = src[i]
-            if c == "\\": out.append(src[i:i + 2]); i += 2
-            elif c == '"': out.append(c); return i + 1
-            elif c == "{" and interp: out.append(c); i = code(i + 1, True)
+            if c == "\\": emit(src[i:i + 2], True); i += 2
+            elif c == '"': emit(c, True); return i + 1
+            elif c == "{" and interp: emit(c, True); i = code(i + 1, True)
             elif c == "{":
                 line = src.count("\n", 0, i) + 1
                 raise LexError(f"line {line}: a string holding '{{' without s!, m! or f! before it")
-            else: out.append(c); i += 1
+            else: emit(c, True); i += 1
         raise LexError("unterminated string")
 
     def raw(i):                                       # at 'r' of r#*"
@@ -74,7 +80,7 @@ def lex(src, spans=None):
         close = '"' + "#" * (j - i - 1)
         k = src.find(close, j + 1)
         if k < 0: raise LexError("unterminated raw string")
-        out.append(src[i:k + len(close)]); return k + len(close)
+        emit(src[i:k + len(close)], True); return k + len(close)
 
     def code(i, inner):                               # inner: inside an interpolation, stop at its '}'
         depth = 0
@@ -87,7 +93,7 @@ def lex(src, spans=None):
             elif c == "«":                            # a quoted name part: no comment inside it
                 k = src.find("»", i + 1)
                 if k < 0: raise LexError("unterminated «name»")
-                out.append(src[i:k + 1]); i = k + 1
+                emit(src[i:k + 1], True); i = k + 1
             elif src.startswith("`(", i) or src.startswith("``(", i):
                 # A syntax quotation: its comments are syntax data, not comments of the source,
                 # and the library runs no meta code, so the lexer refuses it.
@@ -96,7 +102,7 @@ def lex(src, spans=None):
             elif c == "'" and not ident(i - 1):
                 m = re.match(r"'(\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|.)|[^\\'\n])'", src[i:])
                 k = len(m.group(0)) if m else 1
-                out.append(src[i:i + k]); i += k
+                emit(src[i:i + k], m is not None); i += k
             elif inner and c == "{": depth += 1; out.append(c); i += 1
             elif inner and c == "}":
                 out.append(c); i += 1
@@ -147,7 +153,7 @@ def examples(src_dir, dst_dir, paths):
     count = 0
     for rel in paths:
         src = open(os.path.join(src_dir, rel), encoding="utf-8").read()
-        text = lex(src)
+        text = lex(src, literals=False)          # an `example` inside a literal is not a command
         out, last = [], 0
         for m in re.finditer(r"(?<![\w.'!?])example\b", text):
             line = text.count("\n", 0, m.start()) + 1
