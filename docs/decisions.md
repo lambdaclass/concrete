@@ -486,10 +486,13 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     checker cannot see them. No SMT solver is part of acceptance, and [OD117](#od117) stands: no `old`,
     quantifier or implication in contracts.
   - *Bounded execution.* The compiler reports, for each function, whether it is bounded (it terminates
-    and has a static stack bound) and why. Counted loops (`for i from a until b`, [OD47](#od47)) and
-    recursion with a checker-visible decreasing measure are bounded by construction; a `while` loop or
-    other recursion is bounded through an attached Lean termination theorem (row P18). Boundedness is
-    a reported fact, not a function category: [OD116](#od116) stands.
+    and has a static stack bound) and why. A counted loop (`for i from a until b`, [OD47](#od47))
+    bounds its iteration count, and recursion with a checker-visible decreasing measure bounds its
+    call depth; the function is bounded only when its loop bodies and every callee are bounded too.
+    A `while` loop or other recursion can be shown to terminate through an attached Lean termination
+    theorem (row P18); a static stack bound needs its own evidence, which the proposal must define.
+    The checking rules are left to R-0574. Boundedness is a reported fact, not a function category:
+    [OD116](#od116) stands.
 - <a id="decided-project-contracts"></a>**Contracts and termination in verified growth** (row P18,
   2026-11-05). No source `old`, quantifier, implication or snapshot construct (OD117); entry, exit and
   frame properties are stated as Lean theorems (a source frame clause would be a new owner decision);
