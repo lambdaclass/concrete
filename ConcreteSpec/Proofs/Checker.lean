@@ -1,0 +1,288 @@
+import ConcreteSpec.Proofs.Slice1
+
+/-!
+# The checker agrees with the judgments (`check_iff`), so every `check p = true` example in the specification is a statement about the judgment `Checked p`.
+
+PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). See `ConcreteSpec/README.md`.
+-/
+
+namespace ConcreteSpec
+
+theorem atomTy_iff {Γ : TyCtx} {a : Atom} {st : STy} : atomTy Γ a = some st ↔ AtomTy Γ a st := by
+  constructor
+  · intro h
+    cases a with
+    | int t n =>
+      simp only [atomTy] at h
+      split at h
+      · cases h; exact .int (by assumption)
+      · cases h
+    | bool b => simp only [atomTy, Option.some.injEq] at h; subst h; exact .bool
+    | copy x =>
+      simp only [atomTy] at h
+      split at h
+      · cases h; exact .copy (by assumption)
+      · cases h
+    | move x =>
+      simp only [atomTy] at h
+      split at h
+      · cases h; exact .move (by assumption)
+      · cases h
+  · intro h
+    cases h with
+    | int h => simp [atomTy, h]
+    | bool => rfl
+    | copy h => simp [atomTy, h]
+    | move h => simp [atomTy, h]
+
+theorem covers_iff {α β : Type} {l : List (Name × α)} {m : List (Name × β)} :
+    (∀ f a, lookupF f l = some a → ∃ b, lookupF f m = some b) ↔
+      l.all (fun q => (lookupF q.1 m).isSome) = true := by
+  rw [List.all_eq_true]
+  constructor
+  · intro h q hq
+    obtain ⟨a, ha⟩ := lookupF_of_mem hq
+    obtain ⟨b, hb⟩ := h q.1 a ha
+    simp [hb]
+  · intro h f a ha
+    have := h (f, a) (lookupF_mem ha)
+    simp only [Option.isSome_iff_exists] at this
+    exact this
+
+theorem fieldsOkB_iff {Γ : TyCtx} {d : StructDecl} {fs : List (Name × Atom)} :
+    fieldsOkB Γ d fs = true ↔ FieldsTy Γ d fs := by
+  simp only [fieldsOkB, Bool.and_eq_true, decide_eq_true_eq, ← covers_iff]
+  constructor
+  · rintro ⟨⟨hn, ht⟩, hc⟩
+    refine ⟨hn, ?_, hc⟩
+    intro p hp
+    have := (List.all_eq_true.mp ht) p hp
+    split at this
+    · rename_i st hst
+      exact ⟨st, hst, atomTy_iff.mp (by simpa using this)⟩
+    · cases this
+  · rintro ⟨hn, ht, hc⟩
+    refine ⟨⟨hn, List.all_eq_true.mpr ?_⟩, hc⟩
+    intro p hp
+    obtain ⟨st, hst, ha⟩ := ht p hp
+    simp [hst, atomTy_iff.mpr ha]
+
+theorem tyOf_iff {Δ : Decls} {Γ : TyCtx} {e : Expr} {ty : Ty} :
+    tyOf Δ Γ e = some ty ↔ HasType Δ Γ e ty := by
+  cases e with
+  | atom a =>
+    cases a with
+    | int t n =>
+      simp only [tyOf]
+      constructor
+      · intro h; split at h
+        · cases h; exact .int (by assumption)
+        · cases h
+      · intro h; cases h with | int h => simp [h]
+    | bool b =>
+      simp only [tyOf, Option.some.injEq]
+      constructor
+      · intro h; subst h; exact .bool
+      · intro h; cases h; rfl
+    | copy x =>
+      simp only [tyOf]
+      constructor
+      · exact .copy
+      · intro h; cases h with | copy h => exact h
+    | move x =>
+      simp only [tyOf]
+      constructor
+      · exact .move
+      · intro h; cases h with | move h => exact h
+  | add l r =>
+    constructor
+    · intro h
+      simp only [tyOf] at h
+      split at h
+      · rename_i t t' hl hr
+        split at h
+        · cases h; subst_vars
+          exact .add (atomTy_iff.mp hl) (atomTy_iff.mp hr)
+        · cases h
+      · cases h
+    · intro h
+      cases h with
+      | add hl hr => simp [tyOf, atomTy_iff.mpr hl, atomTy_iff.mpr hr]
+  | mk s fs =>
+    constructor
+    · intro h
+      simp only [tyOf] at h
+      split at h
+      · rename_i d hd
+        split at h
+        · cases h; exact .mk hd (fieldsOkB_iff.mp (by assumption))
+        · cases h
+      · cases h
+    · intro h
+      cases h with
+      | mk hd hf => simp [tyOf, hd, fieldsOkB_iff.mpr hf]
+
+theorem useAtom_iff {Δ : Decls} {Γ Γ' : Ctx} {a : Atom} :
+    useAtom Δ Γ a = some Γ' ↔ UseAtom Δ Γ a Γ' := by
+  constructor
+  · intro h
+    cases a with
+    | int => cases h; exact .int
+    | bool => cases h; exact .bool
+    | copy x =>
+      simp only [useAtom] at h
+      split at h
+      · rename_i e he
+        split at h
+        · rename_i hc; cases h; exact .copy he hc.1 hc.2
+        · cases h
+      · cases h
+    | move x =>
+      simp only [useAtom] at h
+      split at h
+      · rename_i e he
+        split at h
+        · rename_i hc; cases h; exact .move he hc.1 hc.2
+        · cases h
+      · cases h
+  · intro h
+    cases h with
+    | int => rfl
+    | bool => rfl
+    | copy hf hl hcp => simp [useAtom, hf, hl, hcp]
+    | move hf hl hcp => simp [useAtom, hf, hl, hcp]
+
+theorem useAtoms_iff {Δ : Decls} :
+    ∀ {Γ Γ' : Ctx} {as : List Atom}, useAtoms Δ Γ as = some Γ' ↔ UseAtoms Δ Γ as Γ'
+  | Γ, Γ', [] => by
+    simp only [useAtoms, Option.some.injEq]
+    constructor
+    · intro h; subst h; exact .nil
+    · intro h; cases h; rfl
+  | Γ, Γ', a :: as => by
+    simp only [useAtoms]
+    constructor
+    · intro h
+      split at h
+      · rename_i Γ₁ h₁; exact .cons (useAtom_iff.mp h₁) (useAtoms_iff.mp h)
+      · cases h
+    · intro h
+      cases h with
+      | cons h₁ h₂ => rw [useAtom_iff.mpr h₁]; exact useAtoms_iff.mpr h₂
+
+theorem uses_iff {Δ : Decls} {Γ Γ' : Ctx} {e : Expr} : uses Δ Γ e = some Γ' ↔ Uses Δ Γ e Γ' := by
+  cases e with
+  | atom a =>
+    simp only [uses]
+    constructor
+    · intro h; exact .atom (useAtom_iff.mp h)
+    · intro h; cases h with | atom h => exact useAtom_iff.mpr h
+  | add l r =>
+    simp only [uses]
+    constructor
+    · intro h
+      split at h
+      · rename_i Γ₁ h₁; exact .add (useAtom_iff.mp h₁) (useAtom_iff.mp h)
+      · cases h
+    · intro h
+      cases h with
+      | add h₁ h₂ => rw [useAtom_iff.mpr h₁]; exact useAtom_iff.mpr h₂
+  | mk s fs =>
+    simp only [uses]
+    constructor
+    · intro h; exact .mk (useAtoms_iff.mp h)
+    · intro h; cases h with | mk h => exact useAtoms_iff.mpr h
+
+theorem patOkB_iff {d : StructDecl} {pat : List (Name × Binder)} : patOkB d pat = true ↔ PatOk d pat := by
+  simp only [patOkB, Bool.and_eq_true, decide_eq_true_eq]
+  constructor
+  · rintro ⟨⟨hn, hd⟩, hc⟩
+    refine ⟨hn, ?_, covers_iff.mpr hc⟩
+    intro p hp
+    have := (List.all_eq_true.mp hd) p hp
+    simpa [Option.isSome_iff_exists] using this
+  · rintro ⟨hn, hd, hc⟩
+    refine ⟨⟨hn, List.all_eq_true.mpr ?_⟩, covers_iff.mp hc⟩
+    intro p hp
+    obtain ⟨st, hst⟩ := hd p hp
+    simp [hst]
+
+theorem stmtOut_iff {Δ : Decls} {Γ Γ' : Ctx} {s : Stmt} :
+    stmtOut Δ Γ s = some Γ' ↔ StmtOk Δ Γ s Γ' := by
+  constructor
+  · intro h
+    cases s with
+    | let_ b t e =>
+      cases b with
+      | wild =>
+        simp only [stmtOut] at h
+        split at h
+        · rename_i hc
+          exact .letWild (tyOf_iff.mp hc.1) hc.2.1 hc.2.2 (uses_iff.mp h)
+        · cases h
+      | name x =>
+          simp only [stmtOut] at h
+          split at h
+          · rename_i ht
+            split at h
+            · rename_i Γ₁ hu
+              split at h
+              · cases h; exact .let_ (tyOf_iff.mp ht.1) ht.2 (uses_iff.mp hu) (by assumption)
+              · cases h
+            · cases h
+          · cases h
+    | letStruct s pat e =>
+      simp only [stmtOut] at h
+      split at h
+      · rename_i ht
+        split at h
+        · rename_i d hd
+          split at h
+          · rename_i hp
+            split at h
+            · rename_i Γ₁ hu
+              split at h
+              · cases h
+                exact .letStruct (tyOf_iff.mp ht.1) ht.2 hd (patOkB_iff.mp hp) (uses_iff.mp hu)
+                  (by assumption)
+              · cases h
+            · cases h
+          · cases h
+        · cases h
+      · cases h
+  · intro h
+    cases h with
+    | let_ ht hk hu hf => simp [stmtOut, tyOf_iff.mpr ht, hk, uses_iff.mpr hu, hf]
+    | letWild ht hk hcopy hu => simp [stmtOut, tyOf_iff.mpr ht, hk, hcopy, uses_iff.mpr hu]
+    | letStruct ht hk hd hp hu hf =>
+      simp [stmtOut, tyOf_iff.mpr ht, hk, hd, patOkB_iff.mpr hp, uses_iff.mpr hu, hf]
+
+theorem bodyOkB_iff {Δ : Decls} :
+    ∀ {Γ : Ctx} {ss : List Stmt} {r : Atom}, bodyOkB Δ Γ ss r = true ↔ BodyOk Δ Γ ss r
+  | Γ, [], r => by
+    simp only [bodyOkB, Bool.and_eq_true, beq_iff_eq]
+    constructor
+    · rintro ⟨ht, hu⟩
+      split at hu
+      · rename_i Γ₁ hu'
+        exact .ret (tyOf_iff.mp ht) (uses_iff.mp hu') (by simpa using hu)
+      · cases hu
+    · intro h
+      cases h with
+      | ret ht hu hd => simp [tyOf_iff.mpr ht, uses_iff.mpr hu, hd]
+  | Γ, s :: ss, r => by
+    simp only [bodyOkB]
+    constructor
+    · intro h
+      split at h
+      · rename_i Γ₁ hs; exact .cons (stmtOut_iff.mp hs) (bodyOkB_iff.mp h)
+      · cases h
+    · intro h
+      cases h with
+      | cons hs hb => rw [stmtOut_iff.mpr hs]; exact bodyOkB_iff.mpr hb
+
+/-- **Checker correspondence.** The checker accepts a program exactly when the judgments do. -/
+theorem check_iff (p : Program) : check p = true ↔ Checked p := by
+  simp only [check, Bool.and_eq_true, decide_eq_true_eq, bodyOkB_iff, Checked]
+
+end ConcreteSpec

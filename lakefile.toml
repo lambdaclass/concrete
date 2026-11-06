@@ -9,3 +9,4 @@ warningAsError = true
 # Core Lean only; root ConcreteSpec.lean.
 [[lean_lib]]
 name = "ConcreteSpec"
+leanOptions = { autoImplicit = false }
