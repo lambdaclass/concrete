@@ -48,6 +48,12 @@ stage A2c (row Q9.19). Before that, the owner approved the Core design provision
    | `Proofs/Examples.lean` | `add100_safe` (an accepted program that traps only for some inputs is safe for every input), and the cleanup traces and brand refusal of the specification derived again from the general theorems (they apply, non-vacuously) |
    | `Proofs/Basics.lean` | list lemmas |
 
+**The owner view.** `scripts/spec/lean_site.sh [OUT]` (after `lake build ConcreteSpec`) generates
+a static HTML view into `_build/spec-site/`: every module rendered from its source (doc comments as
+prose, rules and examples as code with linked names), each declaration with what it uses and which
+proofs are about it, and a page of all theorems with their statements. It is generated from the
+sources and the elaborated environment only, and fails on a broken link.
+
 The decisions are cited by row id (Q1.1 … Q9.19, P1 … P23, in
 [docs/spec/decisions.md](../docs/spec/decisions.md)) and by rule id (ODnn, TYPE-n, OWN-n, …).
 
