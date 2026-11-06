@@ -43,10 +43,15 @@ for f in scripts/*.sh scripts/*/*.sh; do
   grep -qE 'git( -C [^ ]+)? (init|clone)\b|worktree add' "$f" || continue
   case "$EXEMPT" in *" $f "*) continue ;; esac
   makers=$((makers+1))
-  if grep -q 'checks/lib/git_sandbox\.sh' "$f" && grep -qE '^[[:space:]]*git_sandbox( |$)' "$f"; then
-    ok "$f sources git_sandbox.sh and calls git_sandbox"
+  # The helper must be sourced and called, as statements, before the first repository is made.
+  first_make="$(grep -nE 'git( -C [^ ]+)? (init|clone)\b|worktree add' "$f" | grep -vE '^[0-9]+:[[:space:]]*#' | head -n 1 | cut -d: -f1)"
+  src_line="$(grep -nE '^[[:space:]]*(source|\.) .*checks/lib/git_sandbox\.sh' "$f" | head -n 1 | cut -d: -f1)"
+  call_line="$(grep -nE '^[[:space:]]*git_sandbox( |$)' "$f" | head -n 1 | cut -d: -f1)"
+  if [ -n "$src_line" ] && [ -n "$call_line" ] && [ -n "$first_make" ] \
+     && [ "$src_line" -lt "$call_line" ] && [ "$call_line" -lt "$first_make" ]; then
+    ok "$f sources git_sandbox.sh (line $src_line) and calls it (line $call_line) before its first repository (line $first_make)"
   else
-    no "$f makes a repository but does not source git_sandbox.sh and call git_sandbox"
+    no "$f makes a repository (line ${first_make:-?}) without sourcing (line ${src_line:-none}) and calling git_sandbox (line ${call_line:-none}) before it"
   fi
 done
 [ "$makers" -ge 9 ] && ok "found $makers repository-making scripts (at least the 9 known)" \
@@ -109,8 +114,8 @@ run_as_hook() {
   ( cd "$d/linked" && GIT_DIR="$gd" && export GIT_DIR && bounded bash "$s" ) > "$d/run.log" 2>&1
   echo $?
 }
-probe() { # label script [expect-change]
-  local label="$1" s="$2" want="${3:-0}" d rc
+probe() { # label script expect-change [completion-marker]
+  local label="$1" s="$2" want="$3" marker="${4:-}" d rc
   d="$(mktemp -d "$TMP/caller.XXXXXX")"
   mk_caller "$d" || { no "$label: could not build the caller"; return; }
   [ -z "$(ls "$d/nohooks")" ] || { no "$label: a hook is installed"; return; }
@@ -121,6 +126,7 @@ probe() { # label script [expect-change]
     [ "$rc" = 125 ] && { no "$label: INCOMPLETE: no task and memory bound available, so it was not run"; return; }
     bounded_is_incomplete "$rc" && { no "$label: INCOMPLETE: timed out twice (120 s each)"; tail -n 5 "$d/run.log" | sed 's/^/      /'; return; }
     [ "$rc" = 0 ] || { no "$label: exit $rc (an early failure would make 'unchanged' vacuous)"; tail -n 8 "$d/run.log" | sed 's/^/      /'; }
+    grep -q "$marker" "$d/run.log" || { no "$label: its final tally ('$marker') is missing: it stopped early, so 'unchanged' proves nothing"; return; }
     if cmp -s "$d/before" "$d/after"; then ok "$label: the caller's refs, notes, config and upstream are unchanged"
     else no "$label: the caller changed"; diff "$d/before" "$d/after" | sed 's/^/      /' | head -20; fi
   else
@@ -142,8 +148,8 @@ EOF
 probe "control (leaky script)" "$TMP/ctl/leaky.sh" 1
 
 echo "=== live: sandbox checks run from a linked worktree as its hook would run them ==="
-probe "review_tool.sh" scripts/checks/review_tool.sh
-probe "legacy_frozen.sh" scripts/checks/legacy_frozen.sh
+probe "review_tool.sh" scripts/checks/review_tool.sh 0 "^check_review_tool: PASS=[0-9]* FAIL=0$"
+probe "legacy_frozen.sh" scripts/checks/legacy_frozen.sh 0 "^legacy_frozen: PASS=[0-9]* FAIL=0$"
 
 echo
 bounded_summary

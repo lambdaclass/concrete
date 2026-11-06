@@ -298,8 +298,9 @@ Results use the promotion pipeline's vocabulary:
   would land a SHA that CI never validated. The `land` row cannot exist before the land happens.
 - **One shared TSV conflicts.** Every train would append to the same file, which recreates the
   ledger conflicts R-0542 removes. One file per train cannot conflict.
-- **The common directory is shared by every worktree.** Any worktree can watch or land a train
-  built in another, and `report.sh` sees all of them.
+- **The common directory is shared by every worktree.** `report.sh` and `train.sh status` see every
+  train of the clone from any of its worktrees; building, checking and landing run only in the full
+  clone itself ("Where a train runs").
 
 To publish the record, `report.sh --export docs/project/landing_log/` copies the per-train files
 into the tree for a documentation-only commit. Per-train files never conflict on rebase. That

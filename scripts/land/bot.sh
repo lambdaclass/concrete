@@ -268,7 +268,10 @@ scratch_clone() { # dir sha: a local clone of this clone, detached at sha, with 
     if v="$(git config --local "$k")"; then git -C "$d" config "$k" "$v"; fi
   done
   for r in $(git remote); do
-    if v="$(git config --local "remote.$r.pushurl")"; then git -C "$d" config "remote.$r.pushurl" "$v"; fi
+    git -C "$d" config --unset-all "remote.$r.pushurl" 2>/dev/null || true
+    git config --local --get-all "remote.$r.pushurl" 2>/dev/null | while IFS= read -r v; do
+      git -C "$d" config --add "remote.$r.pushurl" "$v"
+    done
   done
   git -C "$d" checkout -q --detach "$sha"
   if [ -d "$ROOT/.lake" ] && [ ! -e "$d/.lake" ]; then cp -a "$ROOT/.lake" "$d/.lake"; fi
