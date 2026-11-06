@@ -1,6 +1,6 @@
 # The Concrete compiler: slice 0 design (provisional)
 
-PROVISIONAL. This is a design sketch, revision 6. It was written after five Codex and agy review rounds, and folds in the Codex/agy/Kimi pipeline review (2026-11-06), and there is no code yet. Slice 0 is the first compiler slice. It is built before the owner freezes Core (A2c) and makes no normative claim before that freeze ([decision](../docs/decisions.md#decided-project-proof-infrastructure)). Branch `wip/slice0` depends on `wip/spec-root`, which puts `ConcreteSpec` on the new root, and is rebased onto main (under a new branch name) once that lands.
+PROVISIONAL. This is a design sketch, revision 8. It was written after seven Codex and agy review rounds, and folds in the Codex/agy/Kimi pipeline review (2026-11-06), and there is no code yet. Slice 0 is the first compiler slice. It is built before the owner freezes Core (A2c) and makes no normative claim before that freeze ([decision](../docs/decisions.md#decided-project-proof-infrastructure)). Branch `wip/slice0` depends on `wip/spec-root`, which puts `ConcreteSpec` on the new root, and is rebased onto main (under a new branch name) once that lands.
 
 ## What slice 0 accepts
 
@@ -71,9 +71,9 @@ observed behaviour  →  observation (exit status 0–255 / 125 startup refusal 
 
 There's no Mono Core, since slice 0 has no generics. When Mono exists, the admission check runs again on its output: substitution can expose new constants and cycles (row Q6.3).
 
-**CheckedCore is the single admission point.** Trap admission, termination and fact derivation run there, and nowhere else. The checker also emits one **discharged-evidence token** per operation it proved safe; in slice 0 that is `known (v)` for a `+` whose value is statically known. Tokens are carried through MIR, Memory CFG and BIR. A token is validated (`token_valid`). Its soundness connects the checker's known value to the run-time operands through `knownExpr_sound`, because `knownExpr_u8` alone establishes only static knowledge., and only a validated token lets a pass omit a check. No pass removes a check without evidence (PASS-9).
+**CheckedCore is the single admission point.** Trap admission, termination and fact derivation run there, and nowhere else. The checker also emits one **discharged-evidence token** per operation it proved safe; in slice 0 that is `known (v)` for a `+` whose value is statically known. Tokens are carried through MIR, Memory CFG and BIR. A token is validated (`token_valid`). Its soundness connects the checker's known value to the run-time operands through `knownExpr_sound`, because `knownExpr_u8` alone establishes only static knowledge. Only a validated token lets a pass omit a check. No pass removes a check without evidence (PASS-9).
 
-**Place MIR** is where later slices put evaluation order, cleanup edges and the expansion of residual checks. In slice 0, an add with no valid token becomes an explicit `add.ovf` plus a branch to a trap site, and an add with a valid token becomes a plain add. Every accepted slice-0 program has tokens on all its adds, so its executables contain no trap path. Unchecked well-scoped programs, such as `200 + 56` in gate 6, have no tokens, so the check-and-trap path is still proved and tested.
+**Place MIR** is where later slices put evaluation order, cleanup edges and the expansion of residual checks. In slice 0, an add with no valid token becomes an explicit `add.ovf` plus a branch to a trap site, and an add with a valid token becomes a plain add. Every accepted slice-0 program has tokens on all its adds, so its generated IR (MIR through BIR and both backend inputs) contains no trap path. Whether the executable contains trap code is an artifact fact, not established yet. Unchecked well-scoped programs, such as `200 + 56` in gate 6, have no tokens, so the check-and-trap path is still proved and tested.
 
 **Memory CFG** is the one layout authority. It consumes the spec's byte encoding (`ConcreteSpec/Spec/Rep.lean`) and turns places into loads and stores over block-offset memory with provenance. In slice 0 every local is a `u8` slot (size 1, alignment 1), so the pass is identity-shaped. It exists from day one so that layout never leaks into SSA construction or the printers.
 
@@ -350,10 +350,12 @@ There are two target profiles: `x86_64-linux` and `aarch64-linux`. The LLVM back
 | P_toolchain[llvm] | toolchain | not planned |
 | P_toolchain[lcb] | toolchain | LCB's own proofs (C01–C03 and beyond) |
 | P_rt | implementation | a proof of the decoding entry against a libc model; not planned for slice 0 |
-
-The fd-2 condition is part of the admitted launch, so it is inside P_launch (environment).
 | P_launch | environment | not planned |
 | P_live | environment | not planned |
+
+The fd-2 condition is part of the admitted launch, so it is inside P_launch (environment).
+
+**Trap-site identity in the executable is not part of the theorem.** The theorem covers the trap kind. The theorem `trap_site_correct` covers the site at IR level. The site that the executable reports on fd 2 is **tested** (gates 4 and 6 compare it), not proved. It becomes a claim only with a native observation-site obligation. That obligation would be a new premise and needs owner approval.
 
 P_lex and P_parse are also discharged for each compilation by the certificate.
 
@@ -420,9 +422,10 @@ theorem answer_correct (F : FrontendPremises) (P : NativePremises B N T₀)
    The `rt` field follows from `decode_encode`. The `emit` field needs **printer injectivity**, which is proved: `LLVM.unprint (LLVM.print b) = some b` for every WF `b`. That also makes the `.ll` text determine its BIR, which the certificate uses.
 
    For LCB, `Means` is fixed by LCB's semantics. The witness `NativePremises lcb refNativeLCB T₀` uses:
-   - `Image := LCB.Source.Function`, `Built T f img := img = f`;
-   - `BodyRuns := LCB.bodyResult`;
-   - `Runs f β := ∃ r, LCB.bodyResult f r ∧ β = r.behaviour`.
+   - `Image := LCB.Source.Function × SiteTable`;
+   - `Built T f (g, tbl) := g = f ∧ tbl` is the site table of the BIR that `f` was adapted from;
+   - `BodyRuns T (g, _) := LCB.bodyResult g`;
+   - `Runs T (g, tbl) β := ∃ r, LCB.bodyResult g r ∧ β = r.behaviour tbl`.
 
    `live` holds because LCB's step relation is deterministic, so a run returns, faults or diverges. The witness follows from `adapter_correct` and lands with it.
 3. **Frontend premises:** these are claims about fixed code, not something a model can satisfy, so no model witness applies. They are discharged per compilation (next section), and universally once `lex_correct` and `parse_correct` land.
@@ -441,8 +444,12 @@ theorem e_parse : Parse.parse expected.toks = .ok expected.ast := by decide
 -- … e_elab, e_admit, e_lower, e_memory, e_ssa, e_llvm, e_lcb
 theorem cert_compile : compile T₀ srcBytes = .ok expected :=
   compile_of_edges e_lex e_parse e_elab e_admit e_lower e_memory e_ssa e_llvm e_lcb
+    g_frame g_lcbAdmit
+-- the guards compile also checks, as explicit witnesses:
+--   g_frame    : expected.bir.frameSlots ≤ T₀.maxSlots := by decide
+--   g_lcbAdmit : LCB.admit expected.lcb = .ok _ := by decide
 theorem cert_denotes : Surface0.lexesB srcBytes expected.toks && Surface0.derivesB expected.toks expected.ast &&
-    Surface0.elabB ast expected.q = true := by decide
+    Surface0.elabB expected.ast expected.q = true := by decide
 ```
 
 `Lexes`, `Derives` and `Elab` each have a Boolean checker over explicit witnesses, with a one-way soundness lemma (`lexesB_sound` and so on, giving `Denotes src q`). So `cert_denotes` discharges the frontend premises **for this compilation**, and `compile_correct_cert` needs only `NativePremises`.
