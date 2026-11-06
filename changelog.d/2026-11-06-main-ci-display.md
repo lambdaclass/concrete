@@ -16,3 +16,7 @@
   checks that every landing-tier job is gated on it (with controls); `run_ci_gates_local.sh` does
   not treat the record command as a gate; `check_gate_hygiene.sh` lists `train.sh` among the
   workflow-run scripts that are not gates.
+- The landing-record steps are optional for a qualification dispatch (`qualification_record.py`:
+  they run only on a push to main), and the skip-owner rule (`example_skip_owner.py`) accepts the
+  record gate, exactly as spelled with exactly `needs: landing-record`, as a job CI still runs on
+  every dispatch and pull request (controls for a near miss and for other needs).

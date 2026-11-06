@@ -80,6 +80,11 @@ STEP_CONDITIONS = {
     # home keeps its toolchains (restoring them cost 2-4 min per job). A cache accelerator: lean-action
     # installs whatever is missing either way, so a run that skips it still qualifies.
     "runner.environment != 'self-hosted'": "optional",
+    # The Landing record's steps (R-0570) run only on a push to main, where they look up the train's
+    # run of the same SHA and base. A dispatched run never looks a record up (it runs every job), so
+    # it skips them and still qualifies; the job itself is required and succeeds either way.
+    "github.event_name == 'push' && github.ref == 'refs/heads/main'": "optional",
+    "github.event_name == 'push' && github.ref == 'refs/heads/main' && runner.environment != 'self-hosted'": "optional",
 }
 
 
