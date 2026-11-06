@@ -21,6 +21,13 @@ Contents:
 
 ## What Concrete is for
 
+**Concrete is a fully proven systems programming language with no garbage collector, where you can
+know everything a program does: what it does, what it may touch, whether it can fail or stop, and
+what is proved about it.** "Fully proven" means compiler correctness proved end to end, with every
+unproven step named as an explicit assumption and never silently trusted, and a program's own
+correctness proved by Lean theorems about it
+([decision](decisions.md#decided-project-core-statement)).
+
 Concrete is a small systems language for code that must be reviewed, audited, bounded and proved:
 no garbage collector and no hidden runtime, linear ownership, second-class references, and
 authority that is visible in every signature. Its aim is that a reader can answer "what does this

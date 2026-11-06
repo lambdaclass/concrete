@@ -572,6 +572,34 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   - *Spellings for the owner (pending).* (1) the checked operations and their error type, in
     [OD99](#od99)'s family; (2) how a function names its Lean discharge theorem; (3) the termination
     permission marker. Until the owner picks, none is written in the spec or in examples.
+- <a id="decided-project-core-statement"></a>**The core statement** (owner, 2026-11-06: "concrete core
+  idea is to be fully proven system programming language with no gc where i can know everything").
+  README.md and PHILOSOPHY.md open with it: Concrete is a fully proven systems programming language
+  with no garbage collector, where you can know everything a program does: what it does, what it may
+  touch, whether it can fail or stop, and what is proved about it. "Fully proven" means the decided
+  proof model ([proof infrastructure](#decided-project-proof-infrastructure)): compiler correctness
+  is proved end to end, with every unproven step named as an explicit assumption and never silently
+  trusted, and a program's own correctness is proved by Lean theorems about it. The statement says
+  what the language is for; each guarantee holds as its evidence lands.
+- <a id="decided-project-facts-report"></a>**The per-function facts report from slice 0** (owner,
+  2026-11-06: "we need to know from the start if a function is doing what etc"). The report that
+  answers "what may this function do" is a slice-0 deliverable (B0, R-0575), not a phase-F addition.
+  For each function it states, derived from the Lean rules and never claiming what they do not
+  establish: the capabilities used and the grants and resources actually reachable; allocation and
+  the allocator; trusted, foreign and opaque boundaries and the assumptions they carry; every
+  operation that could fail and how it is handled (proven safe, a written branch, a checked
+  operation); termination (proved, or the termination permission and its source line); the recursion
+  depth and stack bound, or why none is established; proof status (each obligation and the theorem
+  that discharges it); and whether the report is complete. Its schema is versioned and readable by
+  people, CI and language models. Slice 0's report is small, but the machinery exists from the first
+  commit and grows with each feature; R-0178 freezes the schema and R-0201 builds the audit commands
+  on it. It continues the legacy compiler's `--report` family (effects, caps, alloc, recursion,
+  stack-depth), re-derived from the new rules.
+- <a id="decided-project-outside-readers"></a>**The outside readers** (owner, 2026-11-06: "me but also
+  agy and codex and kimi if it's available"). The outside-reader pass (R-0559) is done by the owner and
+  three independent models: agy (Gemini), Codex and Kimi. They read the browsable owner view of the
+  integrated spec. The models read first; every point one of them finds unclear is recorded and
+  resolved before the owner reads. The pass runs before the freeze (A2c) and again for each feature.
 - <a id="decided-project-contracts"></a>**Contracts and termination in verified growth** (row P18,
   2026-11-05). No source `old`, quantifier, implication or snapshot construct (OD117); entry, exit and
   frame properties are stated as Lean theorems (a source frame clause would be a new owner decision);
