@@ -23,7 +23,8 @@ stage A2c (row Q9.19). Before that, the owner approved the Core design provision
    - **Part 3, structured cleanup** (Q9.8): `defer`, frames, exits.
    - **Part 4, scoped borrows** (Q3.3, Q3.4, Q9.5, REF-11), with range subviews (Q4.7):
      `borrow [mut] v from a until b as s { … } [else { … }]`.
-   - **Part 5, allocator brands** (Q1.1–Q1.5, Q1.13), with the executable ghost run.
+   - **Part 5, allocator brands** (Q1.1–Q1.5, Q1.13), with the executable ghost run and the
+     erased run.
    - **Part 6, authority** (the authority rules, Q5.1–Q5.4, Q7.11): capabilities, grants,
      Console, and a run that records which grant each operation used.
    - **Part 7, observations** (Q7.10, Q8.5): what the parent process sees: startup refusal 125,
@@ -38,7 +39,7 @@ stage A2c (row Q9.19). Before that, the owner approved the Core design provision
    | `Proofs/Rep.lean` | `rep_roundtrip` (design theorem 1) |
    | `Proofs/Cleanup.lean` | `defer_cleanup_releases` (design theorem 2) |
    | `Proofs/Borrow.lean` | `open_mut_freezes_root` (design theorem 3), `shared_open_grants_no_write`; ranges: `knownInvalid_iff` (a range is refused exactly when the known facts prove it invalid), `knownInvalid_traps`, `range_can_open`, `enter_in_bounds`, `range_open_mut_freezes_root` |
-   | `Proofs/Brand.lean` | `reset_fresh` (design theorem 4), the brand refusals, `checked_passes_brand_checks` (brand erasure, Q1.1: a checked program never fails a ghost brand check), `ghost_run` |
+   | `Proofs/Brand.lean` | `reset_fresh` (design theorem 4), the brand refusals, `checked_passes_brand_checks` (a checked program never fails a ghost brand check), `brand_erasure` (Q1.1: its run with brands erased does exactly what its ghost run does), `ghost_run` |
    | `Proofs/Authority.lean` | `authority_contained` (every operation a run performs uses a grant `main` was launched with, of the right type, under a capability `main` declares, for every fuel), `sub_iff`, `equiv_iff` |
    | `Proofs/Observe.lean` | `checked_observation`, `checked_observable` (an accepted program's observation and status), `refused_start` |
    | `Proofs/Examples.lean` | `add100_safe` (an accepted program that traps only for some inputs is safe for every input), and the cleanup traces and brand refusal of `Spec.lean` derived again from the general theorems (they apply, non-vacuously) |
@@ -70,7 +71,9 @@ Formalized at A2c, each with rules, examples and proofs:
   substitution of capability parameters at a call, grant parameters, Console for the standard
   streams (Q7.11), the refusals (missing capability, missing grant, `Unsafe` outside trusted code,
   `Device`), and `authority_contained`.
-- **Brand erasure** (Q1.1, part 5): `checked_passes_brand_checks`.
+- **Brand erasure** (Q1.1, part 5): the erased run (no brands, no brand checks), and
+  `brand_erasure`: for a checked program it does what the ghost run does, which never fails a
+  brand check (`checked_passes_brand_checks`), for every outcome of the loop tests.
 - **Range subviews** (Q4.7, part 4): the range test for arrays and UTF-8 text, `else`, the trap
   without `else`, and the refusal of a range proven invalid (OD118), complete for the known facts.
 - **Trap and exit observations** (Q7.10, Q8.5, part 7): startup refusal 125, the returned code,
@@ -101,4 +104,5 @@ Open obligations, by name:
   before cleanup.
 - **O9 Part 4** does not model element access, the no-escape rules, or text whose length is known
   while its bytes are not (such a range is treated as unknown).
-- **O10 Part 5** abstracts the condition of `while` (every outcome is covered).
+- **O10 Part 5** abstracts the condition of `while`: loop test number `k` takes the outcome
+  `σ k`, and the results hold for every `σ`.

@@ -2102,10 +2102,12 @@ at each test, so the results hold for every outcome of the conditions. Capabilit
 allocator operations (Q5, Q2.7) is not modelled here (part 6 models capabilities in its own
 fragment).
 
-Two views of the same programs: the static check (`Ok`), and a ghost run (`Run`, executable as
-`ghost`) that gives every allocator a run-time brand from a counter, checks brand equality on each
-operation, and is erased by Q1.1. A checked program passes every ghost check
-(`checked_passes_brand_checks`), so erasing the brands removes only checks that cannot fail.
+Three views of the same programs: the static check (`Ok`); a ghost run (`Run`, executable as
+`ghost`) that gives every allocator a run-time brand from a counter and checks brand equality on
+each operation; and the erased run (`erased`), the program as it runs with no brands (Q1.1). A
+checked program passes every ghost check (`checked_passes_brand_checks`), and its erased run does
+exactly what its ghost run does, brands removed (`brand_erasure`), for every outcome of its loop
+tests and any fuel.
 -/
 
 def findL {α : Type} : List (Nat × α) → Nat → Option α
@@ -2224,8 +2226,8 @@ def State.init : State := { env := [], next := 0, gen := [] }
 
 /-- The result of the executable ghost run. -/
 inductive GR where
-  /-- The run finished in this state. -/
-  | done (s : State)
+  /-- The run finished in state `s`, having made its loop tests up to number `k`. -/
+  | done (s : State) (k : Nat)
   /-- A brand check failed, or a value was missing: no rule of `Run` applies. -/
   | stuck
   /-- The fuel ran out; inconclusive. -/
@@ -2233,36 +2235,95 @@ inductive GR where
   deriving DecidableEq, Repr
 
 /-- The ghost run as an executable function (`ghost_run`, `Proofs/Brand.lean`: every finished
-ghost run is a `Run`). `σ` decides each loop test from the remaining fuel, standing for the
-abstracted conditions: fuel decreases at every test, so every sequence of test outcomes is some
-`σ`. Each statement costs one unit of fuel, and the body of an iteration runs with the fuel left
-at its test. -/
-def ghost (σ : Nat → Bool) : Nat → State → List Stmt → GR
-  | 0, _, _ => .outOfFuel
-  | _ + 1, s, [] => .done s
-  | n + 1, s, .newAlloc a _ :: rest => ghost σ n (s.bind a s.env) rest
-  | n + 1, s, .alloc h a :: rest => match findL s.env a with
-    | some (.allocV b) => ghost σ n { s with env := (h, .heapV b) :: s.env } rest
+ghost run is a `Run`). The loop conditions are abstracted: loop test number `k` of the run takes
+the outcome `σ k`, and the next test is number `k + 1`, so every sequence of test outcomes is
+some `σ`. Each statement costs one unit of fuel, and the body of an iteration runs with the fuel
+left at its test. -/
+def ghost (σ : Nat → Bool) : Nat → Nat → State → List Stmt → GR
+  | 0, _, _, _ => .outOfFuel
+  | _ + 1, k, s, [] => .done s k
+  | n + 1, k, s, .newAlloc a _ :: rest => ghost σ n k (s.bind a s.env) rest
+  | n + 1, k, s, .alloc h a :: rest => match findL s.env a with
+    | some (.allocV b) => ghost σ n k { s with env := (h, .heapV b) :: s.env } rest
     | _ => .stuck
-  | n + 1, s, .use h a :: rest => match findL s.env h, findL s.env a with
-    | some (.heapV b), some (.allocV b') => if b = b' then ghost σ n s rest else .stuck
+  | n + 1, k, s, .use h a :: rest => match findL s.env h, findL s.env a with
+    | some (.heapV b), some (.allocV b') => if b = b' then ghost σ n k s rest else .stuck
     | _, _ => .stuck
-  | n + 1, s, .free h a :: rest => match findL s.env h, findL s.env a with
+  | n + 1, k, s, .free h a :: rest => match findL s.env h, findL s.env a with
     | some (.heapV b), some (.allocV b') =>
-      if b = b' then ghost σ n { s with env := removeL h s.env } rest else .stuck
+      if b = b' then ghost σ n k { s with env := removeL h s.env } rest else .stuck
     | _, _ => .stuck
-  | n + 1, s, .release a :: rest => match findL s.env a with
-    | some (.allocV _) => ghost σ n { s with env := removeL a s.env } rest
+  | n + 1, k, s, .release a :: rest => match findL s.env a with
+    | some (.allocV _) => ghost σ n k { s with env := removeL a s.env } rest
     | _ => .stuck
-  | n + 1, s, .reset a' a _ :: rest => match findL s.env a with
-    | some (.allocV _) => ghost σ n (s.bind a' (removeL a s.env)) rest
+  | n + 1, k, s, .reset a' a _ :: rest => match findL s.env a with
+    | some (.allocV _) => ghost σ n k (s.bind a' (removeL a s.env)) rest
     | _ => .stuck
-  | n + 1, s, .while_ a β βx body :: rest =>
-    if σ n then
-      match ghost σ n s body with
-      | .done s₁ => ghost σ n s₁ (.while_ a β βx body :: rest)
+  | n + 1, k, s, .while_ a β βx body :: rest =>
+    if σ k then
+      match ghost σ n (k + 1) s body with
+      | .done s₁ k₁ => ghost σ n k₁ s₁ (.while_ a β βx body :: rest)
       | r => r
-    else ghost σ n s rest
+    else ghost σ n (k + 1) s rest
+
+/-! ### The erased run (Q1.1)
+
+The program as it runs with brands erased: an allocator and a heap value carry no brand, and no
+operation compares brands. Only the presence and kind of each value is checked. -/
+
+/-- A run-time value without its brand. -/
+inductive EVal where
+  | alloc
+  | heap
+  deriving DecidableEq, Repr
+
+/-- Erase a value's brand. -/
+def Val.erase : Val → EVal
+  | .allocV _ => .alloc
+  | .heapV _ => .heap
+
+/-- Erase every brand of an environment. -/
+def eraseEnv (env : List (Nat × Val)) : List (Nat × EVal) := env.map (fun p => (p.1, p.2.erase))
+
+/-- The result of the erased run. -/
+inductive ER where
+  | done (env : List (Nat × EVal)) (k : Nat)
+  | stuck
+  | outOfFuel
+  deriving DecidableEq, Repr
+
+/-- The erased run, with the same fuel and loop tests as `ghost`. -/
+def erased (σ : Nat → Bool) : Nat → Nat → List (Nat × EVal) → List Stmt → ER
+  | 0, _, _, _ => .outOfFuel
+  | _ + 1, k, env, [] => .done env k
+  | n + 1, k, env, .newAlloc a _ :: rest => erased σ n k ((a, .alloc) :: env) rest
+  | n + 1, k, env, .alloc h a :: rest => match findL env a with
+    | some .alloc => erased σ n k ((h, .heap) :: env) rest
+    | _ => .stuck
+  | n + 1, k, env, .use h a :: rest => match findL env h, findL env a with
+    | some .heap, some .alloc => erased σ n k env rest
+    | _, _ => .stuck
+  | n + 1, k, env, .free h a :: rest => match findL env h, findL env a with
+    | some .heap, some .alloc => erased σ n k (removeL h env) rest
+    | _, _ => .stuck
+  | n + 1, k, env, .release a :: rest => match findL env a with
+    | some .alloc => erased σ n k (removeL a env) rest
+    | _ => .stuck
+  | n + 1, k, env, .reset a' a _ :: rest => match findL env a with
+    | some .alloc => erased σ n k ((a', .alloc) :: removeL a env) rest
+    | _ => .stuck
+  | n + 1, k, env, .while_ a β βx body :: rest =>
+    if σ k then
+      match erased σ n (k + 1) env body with
+      | .done env₁ k₁ => erased σ n k₁ env₁ (.while_ a β βx body :: rest)
+      | r => r
+    else erased σ n (k + 1) env rest
+
+/-- Erase the brands of a ghost result. -/
+def GR.erase : GR → ER
+  | .done s k => .done (eraseEnv s.env) k
+  | .stuck => .stuck
+  | .outOfFuel => .outOfFuel
 
 /-! ### Examples -/
 
@@ -2300,17 +2361,28 @@ example : Ok [] [] [.newAlloc 0 10, .while_ 0 20 30 [.alloc 1 0, .free 1 0, .res
       (.alloc rfl rfl <| .free rfl rfl <| .reset rfl (by decide) rfl (by decide) .nil)
       (.release rfl (by decide) .nil)
 
-/-- The ghost run of that loop, with loop tests that iterate three times, finishes without a
-failed brand check, in the state of the `Run` below. By `checked_passes_brand_checks` (`Proofs/Brand.lean`) every checked
+/-- The ghost run of that loop, with loop tests that iterate three times (tests 0–2 iterate,
+test 3 exits), finishes without a failed brand check, in the state of the `Run` below. By `checked_passes_brand_checks` (`Proofs/Brand.lean`) every checked
 program does so, for every outcome of its loop tests. -/
-example : ghost (fun n => decide (5 < n)) 10 State.init [.newAlloc 0 10,
-    .while_ 0 20 30 [.alloc 1 0, .free 1 0, .reset 0 0 21], .release 0] = .done { env := [], next := 4, gen := [0, 1, 2, 3] } := by
+example : ghost (fun k => decide (k < 3)) 20 0 State.init [.newAlloc 0 10,
+    .while_ 0 20 30 [.alloc 1 0, .free 1 0, .reset 0 0 21], .release 0] =
+    .done { env := [], next := 4, gen := [0, 1, 2, 3] } 4 := by
+  decide
+
+/-- Its erased run does the same, without brands. -/
+example : erased (fun k => decide (k < 3)) 20 0 [] [.newAlloc 0 10,
+    .while_ 0 20 30 [.alloc 1 0, .free 1 0, .reset 0 0 21], .release 0] = .done [] 4 := by
   decide
 
 /-- The refused brand mismatch fails its ghost check: brand 0's value through brand 1's
 allocator. -/
-example : ghost (fun _ => false) 10 State.init [.newAlloc 0 10, .newAlloc 2 11,
+example : ghost (fun _ => false) 10 0 State.init [.newAlloc 0 10, .newAlloc 2 11,
     .alloc 1 0, .use 1 2] = .stuck := by decide
+
+/-- Erasure removes that check: the erased run of the refused program does not notice the
+mismatch. Brand checking is static only. -/
+example : erased (fun _ => false) 10 0 [] [.newAlloc 0 10, .newAlloc 2 11, .alloc 1 0, .use 1 2] =
+    .done [(1, .heap), (2, .alloc), (0, .alloc)] 0 := by decide
 
 /-- Three iterations of that loop generate four pairwise distinct brands: 0 for `new`, then 1, 2
 and 3 for the resets. -/
