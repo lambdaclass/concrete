@@ -7,29 +7,31 @@ stage A2c (row Q9.19). Before that, the owner approved the Core design provision
 
 ## What to read, in order
 
-1. **[`Spec.lean`](Spec.lean)** is the specification: one file (row Q9.15) with every rule as a
-   Lean definition, each with a plain-English doc comment, followed by example programs. The
-   examples give the surface program in a doc comment, its Core form, and what the rules say about
-   it: accepted (`check p = true`) with its outcome (`run p 10 = .exit 42`), or refused
-   (`check p = false`). You can read it without reading any proof.
-   - The header says what the file covers and how slice 1's Core is shaped (A-normal form, fresh
-     identities, explicit `copy`/`move`, statically known values).
-   - **Part 1, slice 1**: syntax, typing, ownership and known values, the evaluator, the checker,
-     then the conformance examples (`ConcreteSpec.Examples`), and the **slice-0 fragment**
-     (`ConcreteSpec.Slice0`): the first subset the compiler accepts (`u8` literals, immutable
-     `let`, checked `+`, `main -> u8`), as its own Core syntax embedded into slice 1 by `toCore`.
-     A compiler imports `ConcreteSpec.Spec` and targets `Slice0.Program`.
-   - **Part 2, representation** (Q3.11): byte layout and encoding.
-   - **Part 3, structured cleanup** (Q9.8): `defer`, frames, exits.
-   - **Part 4, scoped borrows** (Q3.3, Q3.4, Q9.5, REF-11), with range subviews (Q4.7):
-     `borrow [mut] v from a until b as s { … } [else { … }]`, the no-escape rules, element access
-     through a view at run time (`vrun`), and well-formed UTF-8 for text views.
-   - **Part 5, allocator brands** (Q1.1–Q1.5, Q1.13), with the executable ghost run and the
-     erased run.
-   - **Part 6, authority** (the authority rules, Q5.1–Q5.4, Q7.11): capabilities, grants,
-     Console, and a run that records which grant each operation used.
-   - **Part 7, observations** (Q7.10, Q8.5): what the parent process sees: startup refusal 125,
-     the returned code, or a trap with status 134.
+1. **[`Spec.lean`](Spec.lean)** is the specification library (row Q9.15; split into modules by
+   owner decision 2026-11-06). Its header says what the specification covers and how slice 1's
+   Core is shaped (A-normal form, fresh identities, explicit `copy`/`move`, statically known
+   values), and it imports the modules below. Every rule is a Lean definition with a plain-English
+   doc comment, followed by example programs: the surface program in a doc comment, its Core form,
+   and what the rules say about it: accepted (`check p = true`) with its outcome
+   (`run p 10 = .exit 42`), or refused (`check p = false`). You can read it without reading any
+   proof. Read the modules in this order:
+
+   | Module | Contents |
+   |---|---|
+   | [`Spec/Syntax.lean`](Spec/Syntax.lean) | Part 1, slice 1: types, integer ranges, Core syntax |
+   | [`Spec/Statics.lean`](Spec/Statics.lean) | slice-1 typing |
+   | [`Spec/Ownership.lean`](Spec/Ownership.lean) | ownership, known values (Q6.2), static refusal, acceptance (`Checked`) |
+   | [`Spec/Semantics.lean`](Spec/Semantics.lean) | values, the evaluator `run`, `Exec`, value typing |
+   | [`Spec/Checker.lean`](Spec/Checker.lean) | the executable checker `check` |
+   | [`Spec/Examples.lean`](Spec/Examples.lean) | slice-1 conformance examples |
+   | [`Spec/Slice0.lean`](Spec/Slice0.lean) | the slice-0 fragment the compiler targets first (`u8` literals, immutable `let`, checked `+`, `main -> u8`), embedded into slice 1 by `toCore` |
+   | [`Spec/Rep.lean`](Spec/Rep.lean) | Part 2, representation (Q3.11): byte layout and encoding |
+   | [`Spec/Cleanup.lean`](Spec/Cleanup.lean) | Part 3, structured cleanup (Q9.8): `defer`, frames, exits |
+   | [`Spec/Borrow.lean`](Spec/Borrow.lean) | Part 4, scoped borrows (Q3.3, Q3.4, Q9.5, REF-11) and range subviews (Q4.7): `borrow [mut] v from a until b as s { … } [else { … }]`, no escape, element access at run time (`vrun`), UTF-8 text views |
+   | [`Spec/Brand.lean`](Spec/Brand.lean) | Part 5, allocator brands (Q1.1–Q1.5, Q1.13), the ghost run and the erased run |
+   | [`Spec/Authority.lean`](Spec/Authority.lean) | Part 6, authority (Q5.1–Q5.4, Q7.11): capabilities, grants, Console |
+   | [`Spec/Observation.lean`](Spec/Observation.lean) | Part 7, observations (Q7.10, Q8.5): startup refusal 125, the returned code, trap 134 |
+
 2. **[`Proofs/`](Proofs/)** says why the rules hang together. Read it only to check a claim.
 
    | File | Main results |
@@ -43,7 +45,7 @@ stage A2c (row Q9.19). Before that, the owner approved the Core design provision
    | `Proofs/Brand.lean` | `reset_fresh` (design theorem 4), the brand refusals, `checked_passes_brand_checks` (a checked program never fails a ghost brand check), `brand_erasure` (Q1.1: its run with brands erased does exactly what its ghost run does), `ghost_run` |
    | `Proofs/Authority.lean` | `authority_contained` (every operation a run performs uses a grant `main` was launched with, of the right type, under a capability `main` declares, for every fuel), `sub_iff`, `equiv_iff` |
    | `Proofs/Observe.lean` | `checked_observation`, `checked_observable` (an accepted program's observation and status), `refused_start` |
-   | `Proofs/Examples.lean` | `add100_safe` (an accepted program that traps only for some inputs is safe for every input), and the cleanup traces and brand refusal of `Spec.lean` derived again from the general theorems (they apply, non-vacuously) |
+   | `Proofs/Examples.lean` | `add100_safe` (an accepted program that traps only for some inputs is safe for every input), and the cleanup traces and brand refusal of the specification derived again from the general theorems (they apply, non-vacuously) |
    | `Proofs/Basics.lean` | list lemmas |
 
 The decisions are cited by row id (Q1.1 … Q9.19, P1 … P23, in

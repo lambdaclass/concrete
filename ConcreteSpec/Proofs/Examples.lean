@@ -5,10 +5,10 @@ import ConcreteSpec.Proofs.Borrow
 import ConcreteSpec.Proofs.Brand
 
 /-!
-# The examples of `Spec.lean` derived from the general theorems (non-vacuity witnesses)
+# The examples of the specification derived from the general theorems (non-vacuity witnesses)
 
 `add100_safe` proves the accepted runtime-overflow body safe for every input. The cleanup traces and
-the brand refusal that `Spec.lean` states directly are derived here again from
+the brand refusal that the specification states directly are derived here again from
 `defer_cleanup_releases` and `brand_mismatch_refused`, which shows that those theorems apply to
 them.
 
@@ -78,7 +78,7 @@ end ConcreteSpec.Cleanup
 
 namespace ConcreteSpec.Brand
 
-/-- The brand-mismatch example of `Spec.lean`, derived from `brand_mismatch_refused`. -/
+/-- The brand-mismatch example of `Spec/Brand.lean`, derived from `brand_mismatch_refused`. -/
 example : ¬ Ok [10, 11] [(1, .heap 10), (0, .alloc 11)] [.use 1 0] [(1, .heap 10), (0, .alloc 11)] :=
   (brand_mismatch_refused rfl rfl (by decide)).1
 

@@ -1,7 +1,7 @@
 import ConcreteSpec.Proofs.Slice1
 
 /-!
-# The checker agrees with the judgments (`check_iff`), so every `check p = true` example in `Spec.lean` is a statement about the judgment `Checked p`.
+# The checker agrees with the judgments (`check_iff`), so every `check p = true` example in the specification is a statement about the judgment `Checked p`.
 
 PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). See `ConcreteSpec/README.md`.
 -/

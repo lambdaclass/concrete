@@ -26,7 +26,7 @@ name = "DesignExamples"
 srcDir = "proofs"
 
 # EXPERIMENTAL, PROPOSED: the new compiler's specification (root ConcreteSpec.lean; the rules and their
-# examples in ConcreteSpec/Spec.lean, the proofs in ConcreteSpec/Proofs/, the reading guide in
+# examples in the modules of ConcreteSpec/Spec/ imported by ConcreteSpec/Spec.lean, the proofs in ConcreteSpec/Proofs/, the reading guide in
 # ConcreteSpec/README.md). It is not normative until the owner freezes Core (ROADMAP A2c), so
 # it is an opt-in target, not a default one: `lake build ConcreteSpec`. The external checker builds it
 # explicitly and re-checks its theorems. It imports only Lean core and nothing from the old compiler.
