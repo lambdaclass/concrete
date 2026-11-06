@@ -1,0 +1,2 @@
+[piece 10 of 11: scripts]
+- scripts/spec/lean_site.py:172: Proof-module discovery only lists immediate files in `ConcreteSpec/Proofs`. A nested module such as `ConcreteSpec/Proofs/Ownership/Move.lean` is silently omitted when nothing links to it, despite being built and imported. The site can therefore report success while excluding that module’s prose, examples and theorems; discovery and completeness checking need to recurse.
