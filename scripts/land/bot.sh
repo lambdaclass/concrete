@@ -254,8 +254,9 @@ rebase_in_scratch() { # branch sha main log — runs inside the scratch clone
   event rebased "$b ${sha:0:10} -> ${new:0:10} onto main ${main:0:10}"
 }
 
-scratch_clone() { # dir sha: a local clone of this clone, detached at sha, with its remotes and hook
-  local d="$1" r
+scratch_clone() { # dir sha: a local clone of this clone, detached at sha, with its remotes, hook
+  # and commit identity (what a worktree shared with it through the common config)
+  local d="$1" r k v
   git clone -q --local --no-checkout "$ROOT" "$d"
   git -C "$d" fetch -q "$ROOT" "+refs/remotes/*:refs/remotes/*" "+refs/notes/*:refs/notes/*"
   for r in $(git remote); do
@@ -263,6 +264,12 @@ scratch_clone() { # dir sha: a local clone of this clone, detached at sha, with 
     else git -C "$d" remote add "$r" "$(git remote get-url "$r")"; fi
   done
   git -C "$d" config core.hooksPath "$(git config core.hooksPath || echo .githooks)"
+  for k in user.name user.email user.useConfigOnly; do
+    if v="$(git config --local "$k")"; then git -C "$d" config "$k" "$v"; fi
+  done
+  for r in $(git remote); do
+    if v="$(git config --local "remote.$r.pushurl")"; then git -C "$d" config "remote.$r.pushurl" "$v"; fi
+  done
   git -C "$d" checkout -q --detach "$sha"
   if [ -d "$ROOT/.lake" ] && [ ! -e "$d/.lake" ]; then cp -a "$ROOT/.lake" "$d/.lake"; fi
 }

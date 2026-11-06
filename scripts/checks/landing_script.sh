@@ -1179,6 +1179,8 @@ out="$(cd "$TMP/linked-wt" && printf 'refs/heads/x %s refs/heads/wip/twt %s\n' "
 git worktree remove --force "$TMP/linked-wt"
 # hook off: not executable, missing, or some other hook that does not run the repository's.
 chmod -x "$TMP/nohooks/pre-push"
+out="$(bash "$TRAIN" record "$(git rev-parse main)" --base "$(git rev-parse main)" 2>&1)"
+! has "$out" "refusing to run" && ok "train.sh record (CI's Landing record job: no hook there) is not refused for the hook" || { no "record refused without a hook"; echo "$out" | sed 's/^/      /'; }
 out="$(bash "$TRAIN" build tnh --no-fetch b1 2>&1)"; rc=$?
 [ "$rc" != 0 ] && has "$out" "no enabled pre-push hook" && ok "train.sh refuses when the pre-push hook is not executable" || { no "train with a disabled hook: exit $rc"; echo "$out" | sed 's/^/      /'; }
 mkdir -p "$TMP/empty-hooks"

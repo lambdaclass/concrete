@@ -23,7 +23,7 @@ them. `land --dry-run` still performs every verification, so it is the way to as
 
 **Where a train runs.** Only in a full clone (`git clone`) whose pre-push hook is the repository's
 (`git config core.hooksPath .githooks`, or a wrapper hook that runs `.githooks/pre-push`, like
-`acceptance.sh`'s guard). Every subcommand except `status` refuses a linked worktree and a clone
+`acceptance.sh`'s guard). Every subcommand except `status` and `record` (which push nothing) refuses a linked worktree and a clone
 with the hook off, and the hook itself refuses a gated push (anything beyond the `wip/*` and review-
 notes tiers) from a linked worktree. The reason is ISS-0015: git hands a worktree's hooks
 `GIT_DIR=<repo>/.git/worktrees/<name>`, and a check run under it once wrote its sandbox's branches

@@ -77,7 +77,8 @@ COMMON="$(cd "$(git rev-parse --git-common-dir)" && pwd)"
 # with CONCRETE_PREPUSH_IDENTIFY=1 and no input, the repository's .githooks/pre-push prints
 # `concrete-pre-push <its real path>` and runs nothing, and so does a wrapper that runs it
 # (acceptance.sh's guard hook). Any other answer, or none, is refused; a hook that merely mentions
-# the file is not enough. `status` only reads, so it runs anywhere.
+# the file is not enough. `status` and `record` push nothing (record runs in CI's Landing record
+# job, in a checkout with no hook enabled), so they run anywhere.
 where_ok() {
   local gd hook want got
   gd="$(cd "$(git rev-parse --git-dir)" && pwd -P)"
@@ -1132,7 +1133,7 @@ cmd_status() {
 usage() { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
 sub="${1:-}"; [ $# -gt 0 ] && shift
-case "$sub" in status|""|-h|--help) ;; *) where_ok ;; esac
+case "$sub" in status|record|""|-h|--help) ;; *) where_ok ;; esac
 case "$sub" in
   build) cmd_build "$@" ;;
   check) cmd_check "$@" ;;
