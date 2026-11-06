@@ -1,0 +1,2 @@
+[piece 1 of 1: docs]
+- docs/decisions.md:440: The five long-term changes are recorded as owner-approved, but the entry paraphrases approval as “option 1: accept all five” without quoting the owner’s answer or an applicable owner rule. The quoted question is not an approval. These changes revise binding decisions about Core freeze, specification layout and backend sequencing; the recording rule requires dated approval provenance before they can be recorded as decided.
