@@ -12,7 +12,7 @@ The chapters state these decided rules now (owner revision, 2026-11-03), before 
 ([ROADMAP.md](../ROADMAP.md#phases), phases B–D); until then, where a chapter still describes
 the earlier behaviour, the answer below governs, and the code follows as its new-compiler slice lands.
 
-The shape of Core was approved provisionally on 2026-11-05 ([stage A2a](#decided-2026-11-05)): it binds the design, and the owner freezes Core at stage A2c, after the four design theorems are proved against the proposed `Spec.lean`. The project and architecture decisions are recorded here too, [below](#decided-project).
+The shape of Core was approved provisionally on 2026-11-05 ([stage A2a](#decided-2026-11-05)): it binds the design, and the owner freezes Core at stage A2c, after the four design theorems are proved against the proposed `Spec.lean` and the integration stage A2i (2026-11-06) is accepted. The project and architecture decisions are recorded here too, [below](#decided-project).
 
 <a id="rules-a-decision-changed"></a>
 ## Rules a decision has changed
@@ -121,14 +121,14 @@ recorded in their sentences.
 
 The owner answered every row of the 2026-11-05 decision page, in the terminal. The rows that revise a recorded rule were answered one by one: Q5.1/Q5.4, Q6.4, Q2.8, Q9.15 with P3, Q7.11 and Q4.7. Q3.12, Q9.19, Q7.10, Q1.6, P2, P4, P9, P13, P16 and P17a/b were also answered directly. The remaining Core rows were accepted as recommended, and the remaining project rows were approved on the owner's condition that Claude and Codex agree and that each is the best long-term design (both confirmed; every row carries Codex agreement). The full rows (question, options, reason, recommendation, agreement, revision and notes) are in [core_rows.json](archive/decisions-2026-11-05/core_rows.json) and [other_rows.json](archive/decisions-2026-11-05/other_rows.json); the concrete rules behind them are in [R4_RATIONALE.md](archive/decisions-2026-11-05/R4_RATIONALE.md), and where R4 and a row differ, the row governs.
 
-**The Core rows are a provisional approval (stage A2a).** They bind the design without freezing it. Stage A2b formalizes them in a proposed `ConcreteSpec/Spec.lean` and proves the four design theorems; any row the formalization changes returns to the owner; the owner freezes Core at A2c (row Q9.19). Until a rule is written in Lean, the answer below governs over any chapter text that differs.
+**The Core rows are a provisional approval (stage A2a).** They bind the design without freezing it. Stage A2b formalizes them in a proposed `ConcreteSpec/Spec.lean` and proves the four design theorems; any row the formalization changes returns to the owner; stage A2i integrates the parts (2026-11-06); the owner freezes Core at A2c (row Q9.19 as revised). Until a rule is written in Lean, the answer below governs over any chapter text that differs.
 
 <a id="decided-2026-11-05-revisions"></a>**Owner-approved revisions of recorded rules** (each also noted at the rule it revises):
 
 - **OD45 and OD87** (rows Q5.1, Q5.4): capability arguments are written explicitly at every polymorphic call and checked against the callee; there is no capability inference and no inference solver. OD46 (type arguments from checked argument types) is unchanged.
 - **TYPE-22@1's examples** (row Q6.4): a constant whose initializer provably fails is refused at compile time whether or not it is used (OD118); both examples, `unused-constant-never-runs` and `constant-traps-at-use`, become reject examples. When a constant is evaluated (at each use, never at start) is unchanged.
 - **TRAIT-1@1** (row Q2.8): two impls with equal heads may coexist only when Copy/Destroy disjointness (OD28) makes their domains disjoint, as in `impl<T: Copy> Destroy for Vec<T, A>` beside `impl<T: Destroy> Destroy for Vec<T, A>`. No other coherence or orphan rule changes, and no disjunctive bound syntax is added.
-- **The generated-chapter requirement** (rows Q9.15, P3): Lean is the specification, in one main normative file with doc comments and examples; no prose is generated from it. This confirms the [2026-11-04 decision](#decided-project-lean-is-the-spec).
+- **The generated-chapter requirement** (rows Q9.15, P3): Lean is the specification, in one main normative file with doc comments and examples; no prose is generated from it. This confirms the [2026-11-04 decision](#decided-project-lean-is-the-spec). The "one main normative file" wording is revised 2026-11-06 by the [long-term changes](#decided-project-long-term-2026-11-06): one authoritative specification library in cohesive modules, with `ConcreteSpec/Spec.lean` as its public import.
 - **Authority rules 13, 5 and 7** (row Q7.11): `Console` joins the reserved capability set, for operations on the `StdIn`, `StdOut` and `StdErr` grants; rule 5's operational list and rule 7's primitive table include it. `Device` stays for device grants.
 - **The text-only slice of R4 F4.3** (row Q4.7) is replaced before it was recorded: one scoped form opens every view, `borrow [mut] source [from a until b] as view { … } [else { … }]`. Without `else` an invalid range traps, like indexing; with `else` it is handled; a proven invalid range without `else` is refused (OD118). Arrays need `a ≤ b ≤ len`; text also needs UTF-8 scalar boundaries at both byte offsets.
 - <a id="decided-2026-11-05-q6-2-fields"></a>**Q6.2 and R4 F12, known values through structs** (owner-approved revision, 2026-11-05, made during A2b): known values propagate field by field through immutable struct construction and destructuring. The checker tracks an abstract value for each binding: unknown, a known scalar, or a constructor whose fields carry their own abstract values. Constructing a struct records each field's fact independently; an immutable binding keeps the fact; destructuring hands each field's fact, recursively, to the corresponding immutable binder; an unknown component stays unknown without discarding its known siblings; an ownership transfer keeps the facts for the receiving binding without permitting reuse of the consumed one. Q6.2's exclusions stay (mutable state, branches and paths, user-function calls, calls outside the table, elaborator temporaries). So `let S { a } = S { a: 200u8 }; a + 100` is refused, in trusted and unreachable code too (OD118 as revised by Q6.4). Before this revision a field bound by destructuring was not known and that program was accepted and trapped.
@@ -220,12 +220,12 @@ The owner answered every row of the 2026-11-05 decision page, in the terminal. T
 - **Q9.11** What do contracts mean and when are they checked? — Erased logical contracts; ensures sees result and surviving parameters after cleanup; no snapshot construct.
 - **Q9.12** What evidence crosses declaration/module interfaces? — Checked semantic interfaces with reviewable declarations.
 - **Q9.13** Are judgments independent of the checker and elaborator? — Independent judgments; checker/elaborator correspondence.
-- **Q9.14** What must pass before Core freezes? — Provisional approval, then four kernel-checked theorems against a proposed Spec.lean, then freeze.
+- **Q9.14** What must pass before Core freezes? — Provisional approval, then four kernel-checked theorems against a proposed Spec.lean, then freeze. Revised 2026-11-06 by the [long-term changes](#decided-project-long-term-2026-11-06): the integration stage A2i (interaction proofs, semantic contract, modular layout, owner view, outside-reader pass) also passes before the freeze.
 - **Q9.15** Where do normative definitions and documentation live? — One main normative Lean file with doc comments. *Revises or adds: Generated-chapter requirement (philosophy rule 6 / earlier roadmap commitment): replaced by one normative Lean file with doc comments and examples, a browsable rendering of that Lean, and coverage-gated retirement of prose chapters; your decision of 2026-11-04.*
 - **Q9.16** What Lean dependencies may the specification use? — Core Lean; supporting Batteries; owner exceptions for Mathlib.
 - **Q9.17** May spec proofs use `native_decide`? — Kernel-only authoritative spec/A2 proofs.
 - **Q9.18** How is the old compiler retained? — Frozen isolated `legacy/`; no normative fallback.
-- **Q9.19** How do approval, formalization and Core freeze relate? — A2a → A2b → A2c; Spec.lean headed PROPOSED until freeze; R-0560 depends on the freeze. *Revises or adds: Process: owner decision.*
+- **Q9.19** How do approval, formalization and Core freeze relate? — A2a → A2b → A2c; Spec.lean headed PROPOSED until freeze; R-0560 depends on the freeze. *Revises or adds: Process: owner decision.* Revised 2026-11-06 by the [long-term changes](#decided-project-long-term-2026-11-06): integration (A2i) comes between A2b and the A2c freeze, and the modular layout (R-0560) precedes the freeze.
 
 <a id="decided-2026-11-05-project"></a>**Project rows:**
 
@@ -295,7 +295,9 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
 - <a id="decided-project-lean-is-the-spec"></a>**Lean is the specification** (owner, 2026-11-01,
   revised 2026-11-04, confirmed 2026-11-05 by rows Q9.15 and P3). The normative language is Lean:
   each rule is a readable definition with its rule ID, a plain-words doc comment and its conformance
-  examples, in one main normative file (`ConcreteSpec/Spec.lean`); proofs and tooling import it. No
+  examples, in one main normative file (`ConcreteSpec/Spec.lean`; revised 2026-11-06 by the
+  [long-term changes](#decided-project-long-term-2026-11-06) to one authoritative library in cohesive
+  modules with `Spec.lean` as its public import); proofs and tooling import it. No
   prose is generated from Lean; the 2026-11-01 requirement to generate `SPEC.md` and the chapters is
   superseded. Derived machine views (rule registry, IDs, manifests) keep a staleness gate. Prose
   chapters retire slice by slice, each only after a browsable rendering of the Lean rules and a
@@ -427,9 +429,70 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     subset and an earlier conditional image theorem before row Q8.1's slice-1 endpoint, neither of
     which upgrades native assurance; Q8.1's source-to-BIR endpoint for slice 1 stands. Rows Q8.3–Q8.7
     (independent frontend judgments, component/launcher separation, exact artifact closure,
-    non-vacuity), the A2b → A2c freeze (Q9.14, Q9.19), P18 and OD115–OD117 are inherited unchanged;
+    non-vacuity), the freeze sequence (Q9.14, Q9.19; revised 2026-11-06 to A2b → A2i → A2c by the
+    [long-term changes](#decided-project-long-term-2026-11-06)), P18 and OD115–OD117 are inherited;
     early example-specific Lean proofs need no new source contract forms. The arithmetic decisions,
     grant schema, target order and retention decisions are not reopened.
+  - *Revised 2026-11-06* by the [long-term changes](#decided-project-long-term-2026-11-06): the backend
+    order gains a bounded BIR → LCB → native pilot after slices 0 and 1, and per-compilation
+    certificates are strengthened to discharge compiler-execution trust.
+- <a id="decided-project-long-term-2026-11-06"></a>**Long-term changes to the plan** (owner, 2026-11-06,
+  option 1: accept all five of Codex's BEST-WITH-CHANGES recommendations on the question "is this the
+  best long term design"; Claude and Codex agree).
+  - *Integrate before freezing.* A new stage A2i comes between A2b and the A2c freeze. It connects the
+    separately proved parts of the proposed spec through shared Core interfaces and one integrated
+    semantics, and proves their representative interactions: a borrow across deferred cleanup, an
+    allocator reset with outstanding loans, and cleanup that needs authority, together with the
+    README obligations O7 (capabilities in the cleanup and brand parts) and O9 (the range-view run
+    joined to the static access rules). The semantic contract (R-0496) is part of A2i. The owner then
+    freezes integrated scopes, not an untested whole-language architecture; sending Core back after
+    the freeze remains a recovery mechanism, not the planned sequence. This revises row Q9.19's
+    A2a → A2b → A2c to A2a → A2b → A2i → A2c.
+  - *Bound the LLVM hole.* After slices 0 and 1 (B0, B1) and before substantial feature growth (C, D), a
+    tiny BIR → LCB → native proof pilot runs on the supported subset, composed with the slice theorem
+    under named premises. Every remaining backend obligation has its own task and milestone. "The holes
+    only shrink" prevents regression; this rule requires progress. The LLVM path stays first and
+    unverified, as the owner ordered.
+  - *Compiler-execution trust.* Proving the compiler's Lean definitions does not prove that their
+    natively compiled executable computes them. Each compilation emits a certificate that the Lean
+    kernel checks, connecting the exact input to the exact emitted BIR through proved judgments or
+    validators, without trusting native evaluation; the backend input is bound to that BIR (a digest
+    gives identity, not semantic correspondence). Wherever a certificate does not close the gap, the
+    Lean compiler, runtime and toolchain are listed as explicit execution assumptions. Verifying
+    programs compiled through the LCB does not by itself verify execution of the compiler. This
+    strengthens R-0552 and R-0521, required from slice 0's first authoritative claim.
+  - *One authoritative specification library.* The normative definitions form one library split into
+    cohesive modules (for example syntax, ownership, borrows, capabilities, observations), with
+    `ConcreteSpec/Spec.lean` kept as the public import; proofs stay in separate files. A browsable
+    owner view, generated from the same sources, shows each rule's English doc comment, its examples,
+    its dependencies and links to the proofs that cover it; it states no rule of its own. The view
+    (R-0555) and the modular layout (R-0560) are delivered before the freeze. The outside-reader check
+    (R-0559) runs before the freeze and again for each feature. This revises the
+    [Lean-is-the-specification](#decided-project-lean-is-the-spec) row's "one main normative file".
+  - *Diversify examples early.* Small adversarial workloads that combine features in difficult ways
+    run alongside file-copy from the first slices on, so no single application dictates the
+    architecture.
+- <a id="decided-project-no-hidden-traps"></a>**No hidden traps and bounded execution** (owner direction,
+  2026-11-06: "ok to the no hidden traps", "we also should be able to know that a function is bounded
+  and doesn't have an infinite loop or recursion", "ok add all this"). This records a direction; the
+  detailed rules (each trap source, loops, the fact language the checker decides, any irreducible
+  residue) follow from a proposal reviewed by Claude and Codex and a separate owner decision (R-0574).
+  Until that decision, the recorded trap rules (indexing, arithmetic, range views, [OD118](#od118))
+  stand unchanged.
+  - *No hidden traps.* Every possible run-time failure of an accepted program is either proven
+    impossible at compile time or handled by a branch written in the code. Facts are established by a
+    decidable, predictable checker whose soundness is proved in Lean, carried across calls by the
+    simple logical contracts already decided (row Q9.11), and discharged by a Lean theorem where the
+    checker cannot see them. No SMT solver is part of acceptance, and [OD117](#od117) stands: no `old`,
+    quantifier or implication in contracts.
+  - *Bounded execution.* The compiler reports, for each function, whether it is bounded (it terminates
+    and has a static stack bound) and why. A counted loop (`for i from a until b`, [OD47](#od47))
+    bounds its iteration count, and recursion with a checker-visible decreasing measure bounds its
+    call depth; the function is bounded only when its loop bodies and every callee are bounded too.
+    A `while` loop or other recursion can be shown to terminate through an attached Lean termination
+    theorem (row P18); a static stack bound needs its own evidence, which the proposal must define.
+    The checking rules are left to R-0574. Boundedness is a reported fact, not a function category:
+    [OD116](#od116) stands.
 - <a id="decided-project-contracts"></a>**Contracts and termination in verified growth** (row P18,
   2026-11-05). No source `old`, quantifier, implication or snapshot construct (OD117); entry, exit and
   frame properties are stated as Lean theorems (a source frame clause would be a new owner decision);
@@ -455,7 +518,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
 
 ## Owner decisions
 
-**Only the project owner decides these items, OD1 – OD157.** All are answered. OD1 – OD32 (exit 2n, closed) and OD47 were decided on 2026-10-29 (OD23 – OD32 by the strictness pass of that day). OD33 – OD157 were decided on 2026-10-31, by the owner's rule that an answer every reviewer agreed on and as strict as Austral or stricter is taken, and on 2026-11-01, when the owner approved the final set for the rest; the authority decision of the same day supersedes OD38's and OD156's `Root` readings (OD94 was withdrawn: MOD-1 already refuses its case, bug 337). The answers are recorded in [docs/decisions.md](decisions.md), state the decided rules in chapters now (owner revision, 2026-11-03), then become Lean in phases B–D, and are enforced as each new-compiler slice lands. The questions raised while recording them were answered on 2026-11-02, the owner deciding the first four and, by the owner's rule of that day, Claude and Codex agreeing on the best long-term answer for the rest ([decisions](decisions.md#decided-2026-11-02)); they revise OD24, OD38, OD43, OD83, OD102, OD146 and OD156 and the authority rules. The spec audit's questions were answered the same day ([decisions](decisions.md#decided-2026-11-02-audit)), revising OD140 and STMT-13. Traits are exported and imported like any other declaration (owner, 2026-11-02). Core was provisionally approved on 2026-11-05 ([record](#decided-2026-11-05-core)); A2b formalization is current, and the A2c freeze awaits the four design theorems and an outside-reader pass. New questions follow the same rule: No agent, orchestrator or
+**Only the project owner decides these items, OD1 – OD157.** All are answered. OD1 – OD32 (exit 2n, closed) and OD47 were decided on 2026-10-29 (OD23 – OD32 by the strictness pass of that day). OD33 – OD157 were decided on 2026-10-31, by the owner's rule that an answer every reviewer agreed on and as strict as Austral or stricter is taken, and on 2026-11-01, when the owner approved the final set for the rest; the authority decision of the same day supersedes OD38's and OD156's `Root` readings (OD94 was withdrawn: MOD-1 already refuses its case, bug 337). The answers are recorded in [docs/decisions.md](decisions.md), state the decided rules in chapters now (owner revision, 2026-11-03), then become Lean in phases B–D, and are enforced as each new-compiler slice lands. The questions raised while recording them were answered on 2026-11-02, the owner deciding the first four and, by the owner's rule of that day, Claude and Codex agreeing on the best long-term answer for the rest ([decisions](decisions.md#decided-2026-11-02)); they revise OD24, OD38, OD43, OD83, OD102, OD146 and OD156 and the authority rules. The spec audit's questions were answered the same day ([decisions](decisions.md#decided-2026-11-02-audit)), revising OD140 and STMT-13. Traits are exported and imported like any other declaration (owner, 2026-11-02). Core was provisionally approved on 2026-11-05 ([record](#decided-2026-11-05-core)); A2b formalization is current, and the A2c freeze awaits the four design theorems, the A2i integration stage (2026-11-06) and an outside-reader pass. New questions follow the same rule: No agent, orchestrator or
 reviewer chooses, encodes, implements or provisionally ships any side of any of them, and that
 includes doing so inside a bug fix, a migration, a test, a fixture, a diagnostic or a document. An
 agent may analyse an item, write its options and a recommendation, and present them to the owner for
