@@ -1,0 +1,2 @@
+[piece 10 of 11: scripts]
+- scripts/spec/lean_site.py:125: `blocks()` recognizes doc comments without tracking surrounding ordinary comments or string literals. Valid source such as `/-\n/-- hidden documentation -/\n-/` therefore renders commented-out text as documentation. Track lexical context before treating `/--` or `/-!` as a documentation block.
