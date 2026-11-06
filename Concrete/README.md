@@ -609,9 +609,11 @@ Heavy runs (native builds, differentials, certificates) run on concrete-ci-2 or 
 2. Whether a decided form that slice 0 doesn't support (`0x2A`, `let mut`, `if`) gets a dedicated "unsupported in slice 0" refusal, distinct from a syntax error. That is proposed.
 3. Decimal literals with leading zeros, such as `007`: SYN-6 is silent. Slice 0 refuses them as unsupported until the owner decides.
 4. Whether to add a native observation-site premise, so that the trap **site** reported by the executable becomes a claim rather than a tested property. It would be a new premise, and holes only shrink.
-5. Recording that both backends are in slice 0. On main, ROADMAP LP0/R-0572 and the decision rows still place the LCB pilot after B1, so this needs recording under the recording rule.
-6. Information flow and constant time: the observer, the secret/public labels and any surface marker (pipeline review, item 6).
-7. Whether the launcher enforces `main`'s grants through OS mechanisms (seccomp/landlock, pledge/unveil). This is defense in depth, and it touches the target contract Q7.10/Q8.5.
+
+Resolved:
+- Both backends in slice 0: being recorded on `wip/decisions-followup`.
+- Information flow and constant time are decided by the owner: `Secret<T>`, `classify`/`declassify(x, "reason")`, `ct_select`/`ct_eq`, and a baseline observer (branches, addresses and variable-time operations; speculation not covered). Slice 0 carries only the corresponding fact fields; the analysis comes with the slices that need it.
+- OS sandboxing of the launcher is out of scope for the compiler (owner).
 
 ## Follow-ups (recorded after the final review round, round 8)
 
@@ -631,7 +633,7 @@ These are internal. None blocks slice 0's correctness.
   - structural trap-code inspection;
   - stack bytes from the final artifact plus the launcher's reservation (R-0505 final-image checks);
   - final-image validation against LCB's ISA model.
-- **Trusted base:** a minimal direct-syscall launcher written in Concrete and compiled through the verified path.
+- **Trusted base:** a minimal direct-syscall launcher written in Concrete and compiled through the verified path. It does no OS sandboxing (out of scope).
 - **Mono:** when it lands, admission re-runs after it (Q6.3), and the tokens are re-validated for each instance.
 - **Integrated Core:** retarget `toCore` to the integrated Core when A2i/R-0560 lands.
 - **The spec's pre-decision admission rule** (`knownViolates`-only refusal, `RangeOk`, R-0574). It does not bite slice 0, where every value is known. It must be closed before the language grows unknown values.
@@ -644,4 +646,4 @@ These are internal. None blocks slice 0's correctness.
 - Grants, the launcher's startup refusal (125) and events.
 - LP0 beyond slice 0: the slice-1 subset through LCB, and LCB's preservation theorem replacing `P_toolchain[lcb]`.
 - An LLVM-IR semantics. The LLVM meaning `M` stays a premise parameter until one exists, and then `P_print` becomes a theorem.
-- Information flow and constant time: a separate obligation (decisions item 14). The observer and the labels are owner decisions.
+- The information-flow and constant-time analysis. The surface and the observer are decided; slice 0 has only the fact fields.
