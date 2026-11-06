@@ -9,8 +9,11 @@ prose, everything else as code), and for each declaration its statement, what it
 proofs use it. Nothing here is hand-written prose, so the view cannot drift from the sources. The
 script fails if a generated link has no target or a specification module is missing.
 """
-import html, json, os, re, sys
+import bisect, html, json, os, re, sys
 from collections import defaultdict
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'proofs'))
+import lean_lex  # noqa: E402  (the one Lean lexer, scripts/proofs/lean_lex.py)
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -117,43 +120,33 @@ def written(d):
 
 def blocks(lines):
     """Split a Lean source into ('doc', text, line) and ('code', [(line, text)]) blocks. A doc
-    block is a `/--` or `/-!` comment, with nested `/- -/` comments respected; text after its
-    closing `-/` on the same line stays code."""
-    out, code = [], []
-    i = 0
-    while i < len(lines):
-        line = lines[i]; st = line.lstrip()
-        if st.startswith('/--') or st.startswith('/-!'):
-            if code:
-                out.append(('code', code)); code = []
-            col = len(line) - len(st) + 3
-            depth, buf, j, k = 1, [], i, col
-            while True:
-                text = lines[j]
-                while k < len(text):
-                    if text.startswith('/-', k):
-                        depth += 1; k += 2; continue
-                    if text.startswith('-/', k):
-                        depth -= 1
-                        if depth == 0:
-                            break
-                        k += 2; continue
-                    k += 1
-                if depth == 0:
-                    buf.append(text[(col if j == i else 0):k])
-                    break
-                buf.append(text[(col if j == i else 0):])
-                j += 1; k = 0
-                if j >= len(lines):
-                    sys.exit(f'error: unterminated doc comment at line {i + 1}')
-            out.append(('doc', '\n'.join(buf).strip(' '), i + 1))
-            rest = lines[j][k + 2:]
-            if rest.strip():
-                code.append((j + 1, ' ' * (k + 2) + rest))
-            i = j + 1
+    block is a top-level `/--` or `/-!` comment (scripts/proofs/lean_lex.py finds the comments, so
+    one inside another comment or in a string is not a doc block) that is the first text on its
+    line; text after its closing `-/` on the same line stays code."""
+    src = '\n'.join(lines)
+    try:
+        spans = lean_lex.comment_spans(src)
+    except lean_lex.LexError as e:
+        sys.exit(f'error: {e}')
+    starts = [0]
+    for line in lines[:-1]:
+        starts.append(starts[-1] + len(line) + 1)
+    line_of = lambda off: bisect.bisect_right(starts, off) - 1
+    out, code, i = [], [], 0
+    for s, e in spans:
+        ls, le = line_of(s), line_of(e - 1)
+        if not src.startswith(('/--', '/-!'), s) or src[starts[ls]:s].strip() or ls < i:
             continue
-        code.append((i + 1, line))
-        i += 1
+        code.extend((k + 1, lines[k]) for k in range(i, ls))
+        if code:
+            out.append(('code', code)); code = []
+        out.append(('doc', src[s + 3:e - 2].strip(' '), ls + 1))
+        col = e - starts[le]
+        rest = lines[le][col:]
+        if rest.strip():
+            code.append((le + 1, ' ' * col + rest))
+        i = le + 1
+    code.extend((k + 1, lines[k]) for k in range(i, len(lines)))
     if code:
         out.append(('code', code))
     return out

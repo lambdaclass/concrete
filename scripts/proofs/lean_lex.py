@@ -9,6 +9,8 @@ Whether a string interpolates depends on the parser, not the lexer, so interpola
 only directly after `s!`, `m!` or `f!` (its `{ }` code, with its own strings and comments, is
 lexed recursively), and any other string holding `{` is an error. An unterminated string,
 comment, interpolation or name is an error too: the lexer fails closed, never skips.
+`comment_spans(src)` gives the top-level comments (the owner view, scripts/spec/lean_site.py, takes
+its doc blocks from them, so a doc comment inside an ordinary comment or a string is not one).
 
 Commands (exit 3 when a source cannot be read or lexed):
 
@@ -31,19 +33,23 @@ class LexError(Exception):
     pass
 
 
-def lex(src):
+def lex(src, spans=None):
+    """`src` with its comments blanked; when `spans` is a list, each top-level comment's
+    (start, end) offsets are appended to it (a comment nested in another is part of that one)."""
     n, out = len(src), []
 
     def ident(i):                                     # src[i] continues an identifier
         return i >= 0 and (src[i].isalnum() or src[i] in "_'!?." or ord(src[i]) > 127)
 
     def comment(i):                                   # at "/-": blank to the matching "-/"
-        depth = 0
+        start, depth = i, 0
         while i < n:
             if src.startswith("/-", i): depth += 1; out.append("  "); i += 2
             elif src.startswith("-/", i):
                 depth -= 1; out.append("  "); i += 2
-                if depth == 0: return i
+                if depth == 0:
+                    if spans is not None: spans.append((start, i))
+                    return i
             else: out.append("\n" if src[i] == "\n" else " "); i += 1
         raise LexError("unterminated comment")
 
@@ -97,6 +103,13 @@ def lex(src):
 
     code(0, False)
     return "".join(out)
+
+
+def comment_spans(src):
+    """The (start, end) offsets of every top-level comment of `src`, in order."""
+    spans = []
+    lex(src, spans)
+    return spans
 
 
 HEADER = re.compile(r"import ConcreteSpec(\.[A-Za-z0-9_]+)*\s*$")
