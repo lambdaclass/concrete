@@ -210,7 +210,10 @@ def Agrees (k : RangeFacts) (s : Source) (a b : Nat) : Prop :=
 /-- The range form is accepted, from the places `Γ` to `Γ'` with the statements `rest` after it.
 Its success path is checked as the plain borrow (`Ok`, the same access rules); its failure path is
 `else` followed by `rest`, and both paths reach the same places. Without `else`, a range known to
-be invalid is refused (OD118). -/
+be invalid is refused (OD118). This is decided row Q4.7 (owner, 2026-11-05: "no else = trap (like
+indexing); proven invalid range without else refused (OD118)"). The no-hidden-traps decision of
+2026-11-06 revises it to "the form without `else` needs evidence of a valid range"; that revision
+is part of the A2i integration (R-0574) and is not yet stated here. -/
 def RangeOk (Γ : Ctx) (m : Bool) (src v : Nat) (k : RangeFacts) (body : List Stmt)
     (els : Option (List Stmt)) (rest : List Stmt) (Γ' : Ctx) : Prop :=
   Ok Γ (.borrow m src v body :: rest) Γ' ∧
@@ -448,8 +451,9 @@ inductive VR where
   | outOfFuel
   deriving DecidableEq, Repr
 
-/-- The run. Each statement costs one unit of fuel; a block runs with the fuel left at its
-open. The view is bound inside its block only. -/
+/-- The run. The fuel bounds the depth of the run's recursion, not the number of statements it
+executes: each statement passes one unit less to what follows it, and a block and the statements
+after it each start with the fuel left at its open. The view is bound inside its block only. -/
 def vrun : Nat → Mem → Views → List Nat → List VStmt → VR
   | 0, _, _, _, _ => .outOfFuel
   | _ + 1, μ, _, out, [] => .ok μ out

@@ -133,8 +133,9 @@ cut -f2 "$TMP/encoded.tsv" | sort -u > "$TMP/population-enc.txt"
 echo "=== A: export ==="
 EXPORT="$TMP/spec.ndjson"
 # lean4export can panic on a name it cannot resolve and still exit 0, so its stderr must be empty.
-# shellcheck disable=SC2046
-"$LAKE" env "$EXPORTER" ConcreteSpec -- $(cat "$TMP/population.txt") > "$EXPORT" 2> "$TMP/export.err"; rc=$?
+# One argument per name, quoted: a name such as `«foo bar»` holds a space and `«*»` a glob.
+mapfile -t POP < "$TMP/population.txt"
+"$LAKE" env "$EXPORTER" ConcreteSpec -- "${POP[@]}" > "$EXPORT" 2> "$TMP/export.err"; rc=$?
 [ "$rc" = 0 ] && [ ! -s "$TMP/export.err" ] && ok "lean4export exported the population (no diagnostics)" \
   || { no "lean4export rc=$rc: $(head -3 "$TMP/export.err" | tr '\n' ' ')"; finish; }
 read -r EXP_LEAN EXP_TOOL EXP_FORMAT < <($INV meta "$EXPORT")
@@ -186,9 +187,11 @@ nanoda "$EXPORT" > "$TMP/k.out" 2>&1; rc=$?
 
 echo "=== X: corrupted export, a theorem handed another's proof ==="
 # The pair: the first two universe-monomorphic theorems of the population with different statements.
+# The statement is the `T=` node alone (the field also holds the proof `V=`): two proofs of one
+# statement are interchangeable, and a correct checker would accept that swap.
 read -r SWAP_A SWAP_B < <(awk -F'\t' 'NR == FNR { pop[$1] = 1; next }
-  $1 == "D" && $3 == "thm" && $4 == "[]" && ($2 in pop) {
-    if (!a) { a = $2; s = $5 } else if ($5 != s) { print a, $2; exit } }' "$TMP/population-enc.txt" "$TMP/decls-export.txt")
+  $1 == "D" && $3 == "thm" && $4 == "[]" && ($2 in pop) { t = $5; sub(/ .*/, "", t)
+    if (!a) { a = $2; s = t } else if (t != s) { print a, $2; exit } }' "$TMP/population-enc.txt" "$TMP/decls-export.txt")
 read -r RECEIVER DONOR _ _ < <($INV swap "$EXPORT" "$SWAP_A" "$SWAP_B" "$TMP/swapped.ndjson")
 conleche "$TMP/swapped.ndjson" > "$TMP/cx.out" 2>&1; rc=$?
 [ -n "${RECEIVER:-}" ] && [ "$rc" = 1 ] && has_match -F "type mismatch in theorem $RECEIVER " < "$TMP/cx.out" \

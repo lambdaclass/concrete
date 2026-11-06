@@ -32,7 +32,9 @@ banned() {
 }
 # declared FILE → the axioms a PROOF_MODE=constants listing declares
 declared() { awk -F'\t' '$2 == "axiom" { print $1 }' "$1"; }
-# scan FILE... → `file:line: text` for every banned word outside comments and strings
+# scan FILE... → `file:line: text` for every banned word outside comments. String literals are
+# scanned too: an interpolation such as s!"{(sorry : Nat)}" runs code. They are still parsed, so a
+# comment delimiter inside a string does not start a comment.
 scan() {
   python3 - "$BANNED_WORD_RE" "$@" <<'EOF'
 import re, sys
@@ -40,7 +42,7 @@ word = re.compile(sys.argv[1])
 for path in sys.argv[2:]:
     src = open(path, encoding="utf-8").read()
     out, i, depth, n = [], 0, 0, len(src)
-    while i < n:                      # blank out comments (nested /- -/, --) and string literals
+    while i < n:                      # blank out comments (nested /- -/, --); keep string literals
         if depth:
             if src.startswith("/-", i): depth += 1; out.append("  "); i += 2
             elif src.startswith("-/", i): depth -= 1; out.append("  "); i += 2
@@ -51,9 +53,9 @@ for path in sys.argv[2:]:
         elif src[i] == '"':
             j = i + 1
             while j < n and src[j] != '"': j += 2 if src[j] == "\\" else 1
-            out.append(" " * (min(j + 1, n) - i)); i = j + 1
+            out.append(src[i:j + 1]); i = j + 1
         elif src[i] == "'" and i + 2 < n and src[i + 2] == "'":   # a character literal like '"'
-            out.append("   "); i += 3
+            out.append(src[i:i + 3]); i += 3
         else: out.append(src[i]); i += 1
     for k, line in enumerate("".join(out).split("\n"), 1):
         if word.search(line): print(f"{path}:{k}: {line.strip()}")
@@ -73,9 +75,9 @@ A=$(declared "$TMP/consts.tsv")
 
 echo "=== S: the sources ==="
 mapfile -t SRC < <({ echo ConcreteSpec.lean; find ConcreteSpec -name '*.lean'; } | sort)
-W=$(scan "${SRC[@]}")
-[ "${#SRC[@]}" -ge 10 ] && [ -z "$W" ] && ok "none of the ${#SRC[@]} source files spells a banned word outside comments and strings" \
-  || no "banned words in the sources (${#SRC[@]} files): $(printf '%s\n' "$W" | head -5 | tr '\n' '|')"
+W=$(scan "${SRC[@]}"); RC=$?
+[ "$RC" = 0 ] && [ "${#SRC[@]}" -ge 10 ] && [ -z "$W" ] && ok "none of the ${#SRC[@]} source files spells a banned word outside comments" \
+  || no "the source scan (rc=$RC) of ${#SRC[@]} files: $(printf '%s\n' "$W" | head -5 | tr '\n' '|')"
 
 echo "=== negative controls ==="
 # control NAME BODY AXIOM-ERE WHAT: the declarations in BODY must be refused at ConcreteSpecControl.NAME
@@ -97,12 +99,19 @@ mkdir -p "$TMP/src"
 cat > "$TMP/src/Bad.lean" <<'EOF'
 /- a comment may say sorry and native_decide, /- nested -/ and still sorry -/
 -- and so may a line comment: sorry
-def msg : String := "a string may say \"sorry\" too"
 def quote : Char := '"'
 example : 2 + 2 = 4 := by native_decide
+def interp : String := s!"{(sorry : Nat)}"
+def dashes : String := "-- /- not a comment" ++ toString (sorry : Nat)
 EOF
-W=$(scan "$TMP/src/Bad.lean")
-[ "$W" = "$TMP/src/Bad.lean:5: example : 2 + 2 = 4 := by native_decide" ] \
-  && ok "control: an example proved by native_decide is found, and the words in comments and strings are not" \
+W=$(scan "$TMP/src/Bad.lean"); RC=$?
+EXPECT="$TMP/src/Bad.lean:4: example : 2 + 2 = 4 := by native_decide
+$TMP/src/Bad.lean:5: def interp : String := s!\"{(sorry : Nat)}\"
+$TMP/src/Bad.lean:6: def dashes : String := \"-- /- not a comment\" ++ toString (sorry : Nat)"
+[ "$RC" = 0 ] && [ "$W" = "$EXPECT" ] \
+  && ok "control: native_decide, a sorry inside a string interpolation and a sorry after a string holding comment delimiters are found; the words in comments are not" \
   || no "control: source scan reported '$W'"
+scan "$TMP/src/Bad.lean" "$TMP/src/missing.lean" > /dev/null 2>&1; RC=$?
+[ "$RC" != 0 ] && ok "control: a source the scan cannot read fails it (rc=$RC)" \
+  || no "control: the scan of an unreadable source exited 0"
 finish

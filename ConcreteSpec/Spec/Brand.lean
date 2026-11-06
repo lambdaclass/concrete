@@ -156,8 +156,10 @@ inductive GR where
 /-- The ghost run as an executable function (`ghost_run`, `Proofs/Brand.lean`: every finished
 ghost run is a `Run`). The loop conditions are abstracted: loop test number `k` of the run takes
 the outcome `σ k`, and the next test is number `k + 1`, so every sequence of test outcomes is
-some `σ`. Each statement costs one unit of fuel, and the body of an iteration runs with the fuel
-left at its test. -/
+some `σ`. The fuel bounds the depth of the run's recursion, not the number of statements it
+executes: each statement passes one unit less to what follows it, and the body of an iteration and
+the iterations after it each start with the fuel left at the test. Running out is inconclusive
+(`outOfFuel`); no theorem reads the fuel as a count of steps. -/
 def ghost (σ : Nat → Bool) : Nat → Nat → State → List Stmt → GR
   | 0, _, _, _ => .outOfFuel
   | _ + 1, k, s, [] => .done s k
