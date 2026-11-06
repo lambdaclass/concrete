@@ -24,12 +24,15 @@ CHECK_NAME=PROOF-TRUST-BAN
 source scripts/proofs/lib.sh
 
 BANNED_AXIOM_RE='^(sorryAx|Lean[.]ofReduceBool|Lean[.]ofReduceNat|Lean[.]trustCompiler)$|[.]_native[.]'
-BANNED_WORD_RE='\b(sorry|sorryAx|admit|native_decide|ofReduceBool|ofReduceNat|trustCompiler|skipKernelTC)\b|\+native\b'
+BANNED_WORD_RE='\b(sorry|sorryAx|admit|stop|native_decide|ofReduceBool|ofReduceNat|trustCompiler|skipKernelTC)\b|\+native\b|\bnative\s*:='
 # The source scan is lexical, so it holds only for the syntax it lexes: Lean core's. A syntax
 # extension could make Lean read a literal differently from the scan (a macro taking `s!` before a
 # plain string), so the sources may define none and import nothing outside the library (only Init,
-# implicitly, which is where s!, m! and f! live).
-EXTENSION_RE='\b(macro|macro_rules|syntax|notation|infix|infixl|infixr|prefix|postfix|elab|elab_rules|declare_syntax_cat|initialize|builtin_initialize)\b|^\s*import\s+(?!ConcreteSpec(\.|\s|$))'
+# implicitly, which is where s!, m! and f! live). They set no option either: the library builds with
+# warningAsError (checked below in lakefile.toml), so a `sorry` that elaborates anywhere, whatever
+# tactic produced it (`stop` is `repeat sorry`), fails the build; `set_option warningAsError false`
+# would undo that.
+EXTENSION_RE='\b(set_option|macro|macro_rules|syntax|notation|infix|infixl|infixr|prefix|postfix|elab|elab_rules|declare_syntax_cat|initialize|builtin_initialize)\b|^\s*import\s+(?!ConcreteSpec(\.|\s|$))'
 
 # banned FILE → `<constant> (<axiom>)` for every constant of a PROOF_MODE=constants listing with a banned axiom
 banned() {
@@ -146,6 +149,32 @@ W=$(scan "${SRC[@]}"); RC=$?
 [ "$RC" = 0 ] && [ "${#SRC[@]}" -ge 10 ] && [ -z "$W" ] && ok "none of the ${#SRC[@]} source files spells a banned word outside comments" \
   || no "the source scan (rc=$RC) of ${#SRC[@]} files: $(printf '%s\n' "$W" | head -5 | tr '\n' '|')"
 
+# lakefile → empty when the library builds with warningAsError and nothing can turn it off
+lake_options() {
+  python3 - "$1" <<'EOF'
+import sys, tomllib
+try:
+    cfg = tomllib.load(open(sys.argv[1], "rb"))
+except Exception as e:
+    print(f"unreadable: {e}"); sys.exit(0)
+bad = []
+if cfg.get("leanOptions", {}).get("warningAsError") is not True:
+    bad.append("[leanOptions] warningAsError is not true")
+for k in ("moreLeanArgs", "weakLeanArgs", "moreServerArgs", "moreServerOptions"):
+    if k in cfg: bad.append(f"package sets {k}")
+libs = [l for l in cfg.get("lean_lib", []) if l.get("name") == "ConcreteSpec"]
+if len(libs) != 1: bad.append(f"{len(libs)} ConcreteSpec libraries")
+for l in libs:
+    extra = set(l) - {"name", "leanOptions", "roots", "globs", "srcDir"}
+    if extra: bad.append(f"the library sets {sorted(extra)}")
+    opts = set(l.get("leanOptions", {})) - {"autoImplicit"}
+    if opts: bad.append(f"the library sets options {sorted(opts)}")
+print("; ".join(bad))
+EOF
+}
+L=$(lake_options lakefile.toml)
+[ -z "$L" ] && ok "lakefile.toml builds the library with warningAsError, and nothing overrides it" || no "lakefile.toml: $L"
+
 echo "=== negative controls ==="
 # control NAME BODY AXIOM-ERE WHAT: the declarations in BODY must be refused at ConcreteSpecControl.NAME
 control() {
@@ -179,6 +208,8 @@ example : True := by have «--» : True := True.intro; sorry
 example : False := sorryAx False true
 macro "plain" "s!" s:str : term => `($s)
 import Lean
+set_option warningAsError false in
+example : False := by stop skip
 EOF
 W=$(scan "$TMP/src/Bad.lean"); RC=$?
 B="$TMP/src/Bad.lean"
@@ -191,12 +222,18 @@ $B:11: def r' : String := r#\"raw \"-- /-\" text\"# ++ toString (sorry : Nat)
 $B:12: example : True := by have «--» : True := True.intro; sorry
 $B:13: example : False := sorryAx False true
 $B:14: macro \"plain\" \"s!\" s:str : term => \`(\$s)
-$B:15: import Lean"
+$B:15: import Lean
+$B:16: set_option warningAsError false in
+$B:17: example : False := by stop skip"
 [ "$RC" = 0 ] && [ "$W" = "$EXPECT" ] \
-  && ok "control: native_decide, and sorry inside an interpolation, after a string, raw string or quoted name holding comment delimiters, after an interpolation holding a string, a direct sorryAx, a syntax extension and an outside import are found; the words in comments are not" \
+  && ok "control: native_decide, and sorry inside an interpolation, after a string, raw string or quoted name holding comment delimiters, after an interpolation holding a string, a direct sorryAx, a syntax extension, an outside import, an option and the stop tactic are found; the words in comments are not" \
   || no "control: source scan (rc=$RC) reported '$W'"
 printf 'def s : String := s!"unterminated {\n' > "$TMP/src/Open.lean"
 printf 'example : String × Nat := { fst := "{--", snd := sorry\n} -- "\n' > "$TMP/src/Brace.lean"
+printf '[leanOptions]\nwarningAsError = true\n\n[[lean_lib]]\nname = "ConcreteSpec"\nleanOptions = { autoImplicit = false, warningAsError = false }\n' > "$TMP/lake-off.toml"
+L=$(lake_options "$TMP/lake-off.toml")
+[ -n "$L" ] && ok "control: a library that turns warningAsError off is refused ($L)" \
+  || no "control: a lakefile turning warningAsError off was accepted"
 for f in missing Open Brace; do
   scan "$TMP/src/$f.lean" > /dev/null 2>&1; RC=$?
   [ "$RC" != 0 ] && ok "control: a source the scan cannot read or lex ($f) fails it (rc=$RC)" \
