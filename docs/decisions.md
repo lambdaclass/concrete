@@ -506,7 +506,8 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     grant schema, target order and retention decisions are not reopened.
   - *Revised 2026-11-06* by the [long-term changes](#decided-project-long-term-2026-11-06): the backend
     order gains a bounded BIR → LCB → native pilot after slices 0 and 1, and per-compilation
-    certificates are strengthened to discharge compiler-execution trust. Revised again on 2026-11-06
+    certificates are strengthened to discharge compiler-execution trust where they cover it, any gap they
+    leave staying an explicit execution assumption. Revised again on 2026-11-06
     by the owner: the LCB joins slice 0 as a second unverified backend, and its adapter is the first
     backend proof target (*Backend order* above). This revises the new-compiler row's single
     slice-0 BIR → LLVM printer in the same way.
@@ -519,7 +520,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     separately proved parts of the proposed spec through shared Core interfaces and one integrated
     semantics, and proves their representative interactions: a borrow across deferred cleanup, an
     allocator reset with outstanding loans, and cleanup that needs authority, together with the
-    README obligations O7 (capabilities in the cleanup and brand parts) and O9 (the range-view run
+    [README obligations](../ConcreteSpec/README.md) O7 (capabilities in the cleanup and brand parts) and O9 (the range-view run
     joined to the static access rules). The semantic contract (R-0496) is part of A2i. The owner then
     freezes integrated scopes, not an untested whole-language architecture; sending Core back after
     the freeze remains a recovery mechanism, not the planned sequence. This revises row Q9.19's

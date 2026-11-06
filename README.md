@@ -16,7 +16,7 @@ what any function may do: its capabilities and reachable resources, allocation, 
 boundaries, how each possible failure is handled, termination and proof status, each with its reason
 and evidence ([decision](docs/decisions.md#decided-project-facts-report)).
 
-An accepted program has no hidden traps: an index, a division, a shift or an arithmetic operation
+Accepted safe code has no hidden traps: an index, a division, a shift or an arithmetic operation
 is either proven safe when the program is compiled or has its failure handled in the code. Before a
 program runs, every function's termination is known: proved, or traced to a written permission at the
 loop or boundary responsible, and the compiler reports recursion depth, stack use, allocation,
