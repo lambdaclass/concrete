@@ -239,7 +239,10 @@ def runBlock (p : Program) : Nat → Nat → Env → Outcome
         | _ => .stuck
 
 /-- Run `main`'s body (block 0, empty environment) with `fuel` block executions. -/
-def run (p : Program) (fuel : Nat) : Outcome := runBlock p fuel 0 []
+def run (p : Program) (fuel : Nat) : Outcome :=
+  match p.blocks[0]? with
+  | some _ => runBlock p fuel 0 []
+  | none => .stuck
 
 /-- More fuel never changes a final outcome. -/
 theorem runBlock_mono (p : Program) :
@@ -291,7 +294,10 @@ theorem runBlock_mono (p : Program) :
 theorem run_mono {p : Program} {n m : Nat} (h : (run p n).final = true) (hm : n ≤ m) :
     run p m = run p n := by
   obtain ⟨k, rfl⟩ := Nat.exists_eq_add_of_le hm
-  exact runBlock_mono p n k 0 [] h
+  unfold run at h ⊢
+  split
+  · rename_i hb; simp only [hb] at h; exact runBlock_mono p n k 0 [] h
+  · rfl
 
 /-- Two final outcomes of the same program agree. -/
 theorem run_final_unique {p : Program} {n m : Nat}
