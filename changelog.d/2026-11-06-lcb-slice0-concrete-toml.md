@@ -22,3 +22,19 @@ It also gains these from the ideas sweep:
 - R-0353: separates historical validity from current acceptance.
 - R-0491: refuses expectations recorded from the compiler.
 - R-0137: ships paired rejected-violation examples.
+
+More owner decisions of 2026-11-06, in the same change:
+- **Diagnostics are checker outputs** (R-0592, R-0593, R-0479).
+- **Heap facts and memory policies** (R-0592, R-0594, R-0595).
+- **Secrets, noninterference and constant time** (R-0592, R-0596). This revises Q2.2: `Secret<T>` is `Copy` only for scalar `T`.
+
+  The three proposals behind these decisions are archived in `docs/archive/crucial-2026-11-06/`.
+- **The new compiler pipeline** is recorded as a decision row. It supersedes the legacy VERIFIED_PIPELINE.md.
+- **`legacy/` is kept until after phase D.** B3 deletes nothing. LD (R-0590) deletes `legacy/` after a final ideas sweep, once every RETENTION row is resolved and with the owner's approval. Phases C, D and E each start with a legacy ideas sweep (R-0591).
+- **OS-level sandboxing** is outside the compiler's scope.
+
+The documents now point readers to the decisions and the open work:
+- `docs/decisions.md` opens with "Waiting for the owner" and "Recent decisions".
+- `docs/proposals/` holds the legacy ideas sweep and the pipeline review.
+- README gains a "Where to read" section.
+- The slice-0 surface: `concrete build` and `concrete facts`; a distinct "not supported in this slice" refusal; leading-zero integer literals refused; the reported trap site is a named premise until proved.

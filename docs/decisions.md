@@ -14,6 +14,43 @@ the earlier behaviour, the answer below governs, and the code follows as its new
 
 The shape of Core was approved provisionally on 2026-11-05 ([stage A2a](#decided-2026-11-05)): it binds the design, and the owner freezes Core at stage A2c, after the four design theorems are proved against the proposed `Spec.lean` and the integration stage A2i (2026-11-06) is accepted. The project and architecture decisions are recorded here too, [below](#decided-project).
 
+<a id="waiting-for-the-owner"></a>
+## Waiting for the owner
+
+Links only; each item's text lives where it is linked.
+
+1. The policy section and key names in `Concrete.toml` ([row](#decided-project-concrete-toml)).
+2. The spec read and the Core freeze, A2c ([queue](../ROADMAP.md#the-queue)).
+3. The items the reviews leave open until they are fully dispositioned: quantitative step and time
+   bounds ([legacy ideas sweep](proposals/IDEAS.md), [pipeline review](proposals/MERGED.md)).
+
+A decided proposal moves to `docs/archive/<topic>-<date>/`.
+
+<a id="recent-decisions"></a>
+## Recent decisions
+
+Each row records a decision and its reason. A language rule itself is its Lean definition in
+[ConcreteSpec/](../ConcreteSpec/), which governs once it lands.
+
+- The core statement ([row](#decided-project-core-statement)).
+- Proof infrastructure from the first commit ([row](#decided-project-proof-infrastructure)).
+- No hidden traps, and termination known beforehand ([row](#decided-project-no-hidden-traps)).
+- The `checked_*`, `#[proof]` and `#[may_not_terminate]` spellings ([row](#decided-project-no-hidden-traps)).
+- The per-function facts report and query ([row](#decided-project-facts-report)).
+- The predictable policy ([row](#decided-project-predictable-policy)).
+- Reproducible builds from B1 ([row](#decided-project-reproducible-builds)).
+- The spec layout: one library in modules ([row](#decided-project-long-term-2026-11-06)).
+- Lean is the specification ([row](#decided-project-lean-is-the-spec)).
+- The LCB joins slice 0 ([row](#decided-project-proof-infrastructure)).
+- Policies and declared assumptions in `Concrete.toml` ([row](#decided-project-concrete-toml)).
+- `legacy/` kept until after phase D ([row](#decided-project-restart)).
+- OS-level sandboxing is outside the compiler's scope ([row](#decided-project-os-sandboxing)).
+- Diagnostics are checker outputs ([row](#decided-project-diagnostics-2026-11-06)).
+- Heap facts and memory policies ([row](#decided-project-memory-2026-11-06)).
+- Secrets, noninterference and constant time ([row](#decided-project-infoflow-2026-11-06)).
+- The new compiler pipeline ([row](#decided-project-pipeline-2026-11-06)).
+- The slice-0 surface: `concrete build`, `concrete facts`, unsupported-form refusals, leading zeros ([row](#decided-slice0-surface-2026-11-06)).
+
 <a id="rules-a-decision-changed"></a>
 ## Rules a decision has changed
 
@@ -152,7 +189,7 @@ The owner answered every row of the 2026-11-05 decision page, in the terminal. T
 - **Q1.12** What rolls back around callbacks? — No rollback of callback effects; every element accounted for in a typed result.
 - **Q1.13** Can resetting the system allocator return `Allocator<Sys>` again? — Fresh brand after any supported system reset.
 - **Q2.1** Are storage release, destruction and resource cleanup separate? — Separate storage release, destruction and resource cleanup.
-- **Q2.2** Which containers implement `Destroy`? — Exactly sixteen named Destroy impls: Array (T: Destroy); Heap, HeapArray and Vec (two each: T: Copy; T: Destroy); String (unconditional); Option (T: Destroy); Result (three: T: Destroy/E: Copy, T: Destroy/E: Destroy, T: Copy/E: Destroy); OrderedMap (four: each of K and V Copy or Destroy). HashMap excluded.
+- **Q2.2** Which containers implement `Destroy`? — Exactly sixteen named Destroy impls: Array (T: Destroy); Heap, HeapArray and Vec (two each: T: Copy; T: Destroy); String (unconditional); Option (T: Destroy); Result (three: T: Destroy/E: Copy, T: Destroy/E: Destroy, T: Copy/E: Destroy); OrderedMap (four: each of K and V Copy or Destroy). HashMap excluded. <a id="q2-2-revision"></a>Revised 2026-11-06 by [information flow](#decided-project-infoflow-2026-11-06): `Secret<T>` is `Copy` only for scalar `T`; secret arrays and heap secrets are linear and their destruction wipes them.
 - **Q2.3** In what order are contents destroyed? — Index order 0..len−1, then the backing; OrderedMap in ascending key order, key then value, then the nodes.
 - **Q2.4** How does a container of non-`Destroy` resources release its storage? — `drain(v, ctx, f)` with `f: fn(&mut C, T) with(K) -> Step<T, E>`; the only way to empty a container of non-Destroy elements.
 - **Q2.5** What happens when drain processing fails? — On Stop, `Drained { at, survivor, rest, err }`; `map_into` returns `Stopped { done, survivor, rest, err }`.
@@ -234,7 +271,7 @@ The owner answered every row of the 2026-11-05 decision page, in the terminal. T
 - **P3** Lean is the spec: confirm the amendment — Lean is the specification: confirmed together with Q9.15 (revision below).
 - **P4** Duplicate enum variants or methods (bug 313) — Refuse duplicate variant names in one enum and duplicate method names in one impl, with a new rule and diagnostic, the same as duplicate fields.
 - **P5** legacy/ is a byte-frozen snapshot, never patched or run — legacy/ is main's tree at the move commit, byte-frozen. A root check compares its tree hash, allowing only deletions a satisfied RETENTION.tsv entry authorizes. No legacy gate ever runs. The oracle is the tag-built artifact (P13), not the legacy/ copy.
-- **P6** Retention manifest gates deleting legacy/ — RETENTION.tsv at the root gives every legacy asset (corpus, regressions, examples, std, bug ledger, site, docs, research) a destination and deletion criterion. B3 deletes only the old pipeline (compiler sources, their scripts, gates, build files). legacy/ disappears when RETENTION.tsv has no live entry, not at B3.
+- **P6** Retention manifest gates deleting legacy/ — RETENTION.tsv at the root gives every legacy asset (corpus, regressions, examples, std, bug ledger, site, docs, research) a destination and deletion criterion. Revised 2026-11-06 ([restart row](#decided-project-restart)): nothing is deleted at B3; legacy/, the old pipeline included, is deleted only after phase D (LD), when RETENTION.tsv has no live entry, a final ideas sweep has dispositioned every idea and the owner explicitly approves.
 - **P7** Prove the new landing path before moving — T0: land beside the old tree the new root CI, required-checks.txt (enforced by train watch and land), RETENTION.tsv, the task disposition table, ORACLE.lock with the oracle artifact, and ISSUES.tsv. T1: rehearse the move on a throwaway branch: fresh clone, build, hook, exact-SHA CI, train --dry-run land; a broken build, a failing gate and a missing required check must each be refused. T2: the move in one train.
 - **P8** Server services under scripts/ — Keep only landing services: train, review, hook, landing bot. The status page, work queue, fuzz farm, perf tracking and nightly campaign all stop and are recorded as archived in RETENTION.tsv; each returns only with a roadmap task.
 - **P9** Website during the transition — The website goes down at the move and is redone from scratch with the new compiler; no frozen playground is served. Unpublishing the live site is an outward action whose moment the owner confirms.
@@ -324,8 +361,14 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   train. `legacy/` is a byte-frozen snapshot of main's tree at the move commit, never patched and
   never run; one root check refuses any change under it except a deletion its retention row allows,
   and no legacy gate runs (P5). Every legacy asset has a row in the root `RETENTION.tsv` with a
-  destination and deletion condition; only the old pipeline (compiler, its gates and their scripts)
-  is deleted after slice 1, and retained assets stay until their rows resolve (P6). The new root's
+  destination and deletion condition (P6). Revised 2026-11-06 by the owner: `legacy/` is kept much
+  longer, as the reference for ideas the new design may have forgotten. Nothing is deleted after
+  slice 1 (B3 keeps only the totality audit and the retirement of legacy defects); each of phases C,
+  D and E starts with a short ideas sweep of `legacy/` for its area (R-0591); `legacy/`, the old
+  pipeline included, is deleted only after phase D (LD, R-0590), when a final ideas sweep has
+  dispositioned every idea (carried, planned, deferred or dropped on purpose), every
+  `RETENTION.tsv` row is resolved and the owner explicitly approves. Until then it stays
+  byte-frozen. The new root's
   infrastructure lands first beside the old tree (T0: new CI, `required-checks.txt` enforced by the
   train with an explicit old-to-new transition mapping, `RETENTION.tsv`, the oracle lock, `ISSUES.tsv`),
   the move is rehearsed on the exact candidate root (T1), and only then does it land (T2) (P7). Only
@@ -653,7 +696,7 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
   the machinery exists from the first commit and grows with each feature; R-0178 freezes the
   versioned schema R-0575 introduces, R-0494 grows this fact source into the single verdict authority,
   and R-0201 builds the audit commands (`audit`, `explain`, `why`, `diff`) on the query. The query's
-  command-line spelling is an owner question, pending. It continues the legacy compiler's `--report` family (effects, caps, alloc, recursion,
+  command is `concrete facts` ([slice-0 surface](#decided-slice0-surface-2026-11-06)). It continues the legacy compiler's `--report` family (effects, caps, alloc, recursion,
   stack-depth), re-derived from the new rules. The design, checked by Codex, agy and Kimi (each
   ACCEPT-WITH-CHANGES, converging on the points below, recorded under the owner's rule that what
   Claude and Codex agree on is recorded):
@@ -720,6 +763,76 @@ the philosophy and AGENTS.md cite these entries and restate none of them.
     reports each one with the facts that rely on it, and any change to the declared set is reported
     as an assumption diff that fails CI until it is recorded with the change (R-0589).
   - *Not decided.* The section and key spellings go to the owner.
+- <a id="decided-project-os-sandboxing"></a>**OS-level sandboxing is outside the compiler's scope**
+  (owner, 2026-11-06: "that's something the user can decide"). OS-level sandboxing
+  (seccomp/landlock, Capsicum, pledge/unveil) is outside the compiler's scope; users may apply it
+  themselves. No task or option covers it.
+- <a id="decided-project-diagnostics-2026-11-06"></a>**Diagnostics are checker outputs** (owner,
+  2026-11-06: "a", option (a) on every question of the [proposal](archive/crucial-2026-11-06/DIAGNOSTICS.md), reviewed by
+  Codex, agy and Kimi). The checker returns a typed result, never a Bool, and every diagnostic is
+  one record rendered several ways. Rule IDs are the Lean rule's constructor and premise name plus
+  the spec version; there are no numeric codes. Fixes are offered only after being rechecked and
+  labelled with their status; only a fix proved meaning-preserving by a lemma may be applied
+  automatically. There are no warnings: weaker findings are facts, and policies may refuse them.
+  Output is human text on a terminal and JSON lines otherwise, both from the one record, forced by
+  `--format=human|json`. The checker result type is fixed in A2i, before the freeze (R-0592); the
+  record, its JSON schema, goldens and the parser's diagnostics land in B0 (R-0593). It refines
+  R-0479.
+- <a id="decided-project-memory-2026-11-06"></a>**Heap facts and memory policies** (owner,
+  2026-11-06: "a", option (a) on every question of the [proposal](archive/crucial-2026-11-06/MEMORY.md), reviewed by Codex,
+  agy and Kimi). Each function reports, per allocator lineage, requested bytes, net change and peak
+  in logical bytes, and the allocator footprint where its contract defines one; each is a sound
+  bound with a status, or "not established". Bounds are polynomials with `max` over counts, lengths
+  and depths. Std states a growth upper bound for each container operation. Policies may guarantee
+  both logical bytes and footprint. Budgets are written only in `Concrete.toml` policies
+  ([row](#decided-project-concrete-toml)). "Allocation cannot fail" is a derived fact, established
+  only from an allocator success theorem. Stack stays a separate fact from target artifacts. The
+  byte-accounting instrumentation is fixed in A2i (R-0592); slice 0 proves its zero-heap facts
+  (R-0594); the analysis, its theorems and the policy entries come with the allocation slice
+  (R-0595), not in phase E.
+- <a id="decided-project-infoflow-2026-11-06"></a>**Secrets, noninterference and constant time**
+  (owner, 2026-11-06: "a", option (a) on every question of the [proposal](archive/crucial-2026-11-06/INFOFLOW.md), reviewed
+  by Codex, agy and Kimi). Noninterference and constant time are two separate claims (authority
+  rule 14), each a theorem about the source semantics of every accepted program, holding at the
+  binary only under named backend premises. The surface is the type `Secret<T>`, with `classify`,
+  `declassify(x, "reason")`, `ct_select` and `ct_eq`; a `declassify` is traced in the facts like a
+  `#[may_not_terminate]` permission. Control flow on a secret is refused (write `ct_select`);
+  container lengths are public, and a secret length is refused. `Secret<T>` is `Copy` only for
+  scalar `T`; secret arrays and heap secrets are linear and wiped on destroy, which revises
+  [Q2.2](#q2-2-revision). The observer model is the baseline constant-time model (branches, exact
+  addresses, variable-time operations); speculative leakage is not covered. The leakage-trace
+  interface is fixed in A2i (R-0592); `Secret<T>` lands as its own slice with its proofs (R-0596).
+- <a id="decided-project-pipeline-2026-11-06"></a>**The new compiler pipeline** (owner-approved,
+  2026-11-06; reviewed by Claude, Codex, agy and Kimi, [review](proposals/MERGED.md)). It
+  supersedes the pipeline of [VERIFIED_PIPELINE.md](../legacy/docs/compiler/VERIFIED_PIPELINE.md).
+  The slice-0 design (`Concrete/README.md`, on branch `wip/slice0`) becomes the detailed
+  description once it lands.
+  - *Stages.* Bytes → lexer → LL(1) parser (the grammar is data, with a mechanical LL(1) check) →
+    AST → resolve → HIR (the resolved surface only) → elaboration → Core → checker → CheckedCore
+    (the single admission point, with its certificate and discharged-evidence tokens; admission
+    is re-checked after Mono) → Mono Core → Place MIR (which only expands residual checks) →
+    Memory CFG (layout, ABI, byte and provenance memory) → SSA → BIR. BIR is a complete backend
+    contract: layout, endianness, calling convention, trap kind and site, and the frame-accounting
+    handoff.
+  - *Backends.* From BIR, an unverified LLVM printer, and the BIR → LCB-IR adapter (the first
+    backend proof) feeding the Lean Compiler Backend on AArch64, proved later. Both run from slice
+    0, and CI compares their full observations ([backend order](#decided-project-proof-infrastructure)).
+  - *Proof per stage.* Direct proofs for the lexer and parser (a correspondence theorem), resolve
+    and elaboration, sequencing, cleanup, representation lowering and BIR → LCB-IR. Proved
+    validators for Mono, SSA (a direct proof is allowed in slice 0), optimizations, register
+    allocation and linking. After slice 0, per-edge certificates replace the whole-compiler
+    `decide` certificate (R-0582, R-0583).
+  - *The theorem.* The end-to-end theorem has named premises, with the LLVM and LCB premises
+    separate; the holes only shrink.
+  - *One evidence graph.* Facts, diagnostics and source sites come from one evidence graph with
+    typed site identities.
+- <a id="decided-slice0-surface-2026-11-06"></a>**The slice-0 surface** (owner-approved, 2026-11-06).
+  The commands are `concrete build` and `concrete facts` (the [facts query](#decided-project-facts-report)).
+  A form the language decides but the current slice does not yet support gets its own refusal,
+  "not supported in this slice", distinct from a refusal of an invalid program, so the two are never
+  confused. An integer literal with a leading zero (such as `007`) is refused, so no literal reads as
+  octal. The trap site an executable reports is a named premise of the theorem until it is proved
+  (spec obligation O4).
 - <a id="decided-project-outside-readers"></a>**The outside readers** (owner, 2026-11-06: "me but also
   agy and codex and kimi if it's available"). The outside-reader pass (R-0559) is done by the owner and
   independent models: agy (Gemini), Codex, and Kimi when available (its absence is recorded, not
