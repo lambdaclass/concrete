@@ -35,6 +35,10 @@ def name_table(path, encoded=False):
     for r in records(path):
         if "str" in r and "in" in r:
             pre, s = r["str"]["pre"], r["str"]["str"]
+            if any(ord(c) < 32 or ord(c) == 127 for c in s):
+                # every output is line-based: such a name could split one line into two (an axiom
+                # list gaining an allowlisted line); fail closed, as theorems.lean does
+                sys.exit(f"export_inventory.py: a name component holds a control character: {s!r}")
             if encoded: names[r["in"]] = names[pre] + "s" + lstr(s)
             else: names[r["in"]] = s if names.get(pre, "") == "" else names[pre] + "." + s
         elif "num" in r and "in" in r:
