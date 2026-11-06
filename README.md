@@ -7,10 +7,12 @@ Concrete is a systems programming language without garbage collection. It checks
 ownership, makes external authority explicit at every use, and is specified in Lean so that its
 rules can be proved about.
 
-The direction is that an accepted program has no hidden traps: every run-time failure is either
-proven impossible at compile time or handled in the code, and the compiler reports which functions
-are bounded (they terminate, with a static stack bound). The detailed rules are pending an owner
-decision ([direction](docs/decisions.md#decided-project-no-hidden-traps)).
+An accepted program has no hidden traps: an index, a division, a shift or an arithmetic operation
+is either proven safe when the program is compiled or has its failure handled in the code. Before a
+program runs, every function's termination is known: proved, or traced to a written permission at the
+loop or boundary responsible, and the compiler reports recursion depth, stack use, allocation,
+blocking and foreign calls per function, SPARK-style. Each guarantee holds as its evidence lands
+([decision](docs/decisions.md#decided-project-no-hidden-traps)).
 
 **Status: restarting.** A new compiler is being built from a Lean specification. Nothing at this
 root compiles Concrete programs yet.
