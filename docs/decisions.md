@@ -22,7 +22,8 @@ Links only; each item's text lives where it is linked.
 1. The policy section and key names in `Concrete.toml` ([row](#decided-project-concrete-toml)).
 2. The spec read and the Core freeze, A2c ([queue](../ROADMAP.md#the-queue)).
 3. The items the reviews leave open until they are fully dispositioned: quantitative step and time
-   bounds ([legacy ideas sweep](proposals/IDEAS.md), [pipeline review](proposals/MERGED.md)).
+   bounds ([legacy ideas sweep](proposals/IDEAS.md), [pipeline review](proposals/MERGED.md)), and
+   SPARK review items 1, 2, 3, 6, 7, 9 and 10 ([SPARK review](proposals/SPARK.md)).
 
 A decided proposal moves to `docs/archive/<topic>-<date>/`.
 

@@ -39,3 +39,4 @@ The documents now point readers to the decisions and the open work:
 - README gains a "Where to read" section.
 - The slice-0 surface: `concrete build` and `concrete facts`; a distinct "not supported in this slice" refusal; leading-zero integer literals refused; the reported trap site is a named premise until proved.
 - **Thin vertical slices, integers first, capabilities early:** each slice is fully proven before the next, and LP0 lands before the language grows large. The slice order will come from the agreed slice plan. The former slice 1's ownership obligations arrive with the ownership slice.
+- **From the SPARK review** (internal): R-0575 derives writes and output dependencies when `&mut` lands; R-0599 adds replayed counterexamples without SMT; R-0585 marks discharges in infeasible contexts as vacuous; R-0600 adds a derived "always aborts" fact. The review itself is in `docs/proposals/SPARK.md`, and its owner items are pending.
