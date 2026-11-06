@@ -149,7 +149,7 @@ SELECTING=0
 # Output is discarded by the runner anyway, so redirections are noise here.
 _extract_cmds() { # workflow text file -> gate commands, raw spelling, sorted unique
   grep -oE '([A-Z_][A-Z0-9_]*=[^ ;|&]+[[:space:]]+)*((bash|python3|sh)[[:space:]]+)?(\./)?scripts/[^ ;|&]*\.(sh|py)[^;|&]*' "$1" \
-    | grep -v -E 'check_gate_mutation_coverage\.sh|aggregate_mutation_shards\.py|scripts/dev/seed-lake\.sh|check_checker_pin_freshness\.sh --tier campaign' \
+    | grep -v -E 'check_gate_mutation_coverage\.sh|aggregate_mutation_shards\.py|scripts/dev/seed-lake\.sh|scripts/land/train\.sh record|check_checker_pin_freshness\.sh --tier campaign' \
     | sed 's/[[:space:]][0-9]*[<>].*$//' \
     | sed 's/[[:space:]]*$//' \
     | sort -u

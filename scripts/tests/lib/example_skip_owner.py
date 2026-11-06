@@ -15,9 +15,11 @@ A manifest `skip owner=<gate>` is accepted only when both hold:
                            transitively `needs`, and the step itself use only
                            allowlisted keys (no if:, env:, shell:,
                            working-directory:, defaults:, ... -- anything that can
-                           skip the step or change how it runs). The one exception
-                           is the workflow default that runs every step in the
-                           gate shell (gates_shell.py), exactly that value.
+                           skip the step or change how it runs). The exceptions are
+                           the workflow default that runs every step in the gate
+                           shell (gates_shell.py), exactly that value, and the
+                           landing-record gate (RECORD_GATE, R-0570), exactly that
+                           job condition with exactly that one `needs`.
 
 The workflow is read with a real YAML parser (PyYAML), so quoting, spacing,
 comments, block and multi-line scalars, flow mappings and indentation are the
@@ -38,7 +40,13 @@ TOK = re.compile(r"[A-Za-z0-9_./-]+")
 # ALLOWLISTS, not denylists: every key outside these can skip a step or job or
 # change how it runs, so its presence disqualifies (contents are not vetted).
 # PyYAML (YAML 1.1) reads the bare key `on` as the boolean True.
-WORKFLOW_KEYS = {"name", "on", True, "concurrency", "jobs", "permissions"}
+WORKFLOW_KEYS = {"name", "run-name", "on", True, "concurrency", "jobs", "permissions"}
+# THE ONE JOB CONDITION ACCEPTED (R-0570), exactly this text with `needs: landing-record` and nothing
+# else. It skips the job only on a push to main whose exact SHA and base a train's dispatch already
+# ran, this job included, with every landing-tier and required job green (scripts/land/train.sh
+# record); every dispatch and pull-request run executes it. The record job is not followed as a
+# dependency: under !cancelled() the job runs whatever the record job concluded.
+RECORD_GATE = "${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}"
 JOB_KEYS = {"name", "runs-on", "needs", "steps", "timeout-minutes", "permissions"}
 STEP_KEYS = {"name", "run", "timeout-minutes"}
 JOB_ID = re.compile(r"[A-Za-z0-9_-]+")
@@ -96,6 +104,9 @@ def runs_for_certain(job_id, jobs, seen=()):
     if job_id in seen or job_id not in jobs:
         return False
     job = jobs[job_id]
+    if isinstance(job, dict) and "if" in job:
+        return job["if"] == RECORD_GATE and job.get("needs") == "landing-record" \
+            and set(job) <= JOB_KEYS | {"if"}
     if not isinstance(job, dict) or not set(job) <= JOB_KEYS:
         return False
     needs = needs_of(job)

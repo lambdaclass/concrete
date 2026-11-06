@@ -467,6 +467,17 @@ PY
   unit_control runs_conditional_job 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
   printf 'jobs:\n  a:\n    if: false\n    steps:\n      - run: echo a\n  b:\n    steps:\n      - name: x\n        run: bash %s\n' "$real_owner" > "$fwf"
   unit_control runs_unconditional_sibling_job 0 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
+  # The landing-record gate (R-0570) is the one job condition accepted, exactly as spelled, with
+  # exactly that one need; a near miss, another need or an extra need is still conditional.
+  gate="\${{ !cancelled() && needs.landing-record.outputs.recorded != 'true' }}"
+  printf 'jobs:\n  r:\n    if: false\n    outputs: { recorded: x }\n    steps:\n      - run: echo r\n  a:\n    needs: landing-record\n    if: %s\n    steps:\n      - name: x\n        run: bash %s\n' "$gate" "$real_owner" > "$fwf"
+  unit_control runs_record_gated_job 0 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
+  printf 'jobs:\n  a:\n    needs: landing-record\n    if: %s\n    steps:\n      - name: x\n        run: bash %s\n' "\${{ needs.landing-record.outputs.recorded != 'true' }}" "$real_owner" > "$fwf"
+  unit_control runs_record_gate_without_not_cancelled 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
+  printf 'jobs:\n  a:\n    needs: other\n    if: %s\n    steps:\n      - name: x\n        run: bash %s\n' "$gate" "$real_owner" > "$fwf"
+  unit_control runs_record_gate_other_need 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
+  printf 'jobs:\n  a:\n    needs: [landing-record, other]\n    if: %s\n    steps:\n      - name: x\n        run: bash %s\n' "$gate" "$real_owner" > "$fwf"
+  unit_control runs_record_gate_extra_need 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
   printf 'jobs:\n  a:\n    steps:\n      - run: bash %s\n        shell: bash --noprofile --norc -n {0}\n' "$real_owner" > "$fwf"
   unit_control runs_step_custom_shell 1 python3 "$OWNER_PY_FILE" runs "$real_owner" "$fwf"
   printf 'jobs:\n  a:\n    defaults:\n      run:\n        shell: bash -n {0}\n    steps:\n      - run: bash %s\n' "$real_owner" > "$fwf"
