@@ -10,7 +10,7 @@ Q9.19). Until then its examples are not conformance claims for any compiler, and
 would change an approved row goes back to the owner.
 
 How to read it. Read this file top to bottom; you never need the proofs to know what a rule says.
-The proofs are in `ConcreteSpec/Proofs/`, one file per part, and say why the rules hang together
+The proofs are in `ConcreteSpec/Proofs/` and say why the rules hang together
 (an accepted program never gets stuck, the checker agrees with the rules, and the design theorems).
 `ConcreteSpec/README.md` is the reading guide and lists what is not yet formalized.
 
@@ -806,8 +806,8 @@ Each example gives the surface program in its doc comment, its Core syntax, and 
 specification says about it: accepted (`check p = true`) with an outcome (`run p 10 = …`), or
 refused (`check p = false`). By `check_iff` (`Proofs/Checker.lean`), `check p = true` is exactly
 the rule `Checked p`, and `bodyOkB … = true` is exactly `BodyOk …`. Locals are written with their
-source name and a number: `t₀` is `⟨"t", 0⟩`. The examples that need a theorem (`add100_safe`, the
-accepted runtime overflow from an input) are in `Proofs/Examples.lean`. -/
+source name and a number: `t₀` is `⟨"t", 0⟩`. That the runtime-overflow body `add100` is
+safe for every input is the theorem `add100_safe` in `Proofs/Examples.lean`. -/
 
 /-- `struct Token {}` — empty, not `Copy`, so linear (OWN-D1). -/
 def token : StructDecl := { name := "Token", copy := false, fields := [] }
@@ -1114,6 +1114,8 @@ def inputCtx : Ctx := [{ name := x₀, ty := u8, live := true, used := false, kn
 def inputEnv (n : Int) : Env := [(x₀, .val (.scalar (.int .u8 n)))]
 
 def add100 : List Stmt := [.let_ (.name s₂) u8 (.add (.copy x₀) (.int .u8 100))]
+
+example : bodyOkB decls inputCtx add100 (.copy s₂) = true := by decide
 
 example : runBody decls 10 (inputEnv 200) add100 (.copy s₂) = .trap .arithmeticOverflow := by decide
 
@@ -1527,6 +1529,34 @@ def stack : Stack := [⟨.block, []⟩, ⟨.loopBody 1, [desV]⟩, ⟨.fnBody, [
 /-- What the function still owns afterwards: nothing of the three. -/
 def ownedAfter : Res → Bool := fun r => ((owned r && r != 0) && r != 2) && r != 1
 
+/-- The registration is accepted (`Reg`). -/
+theorem stack_reg : Reg ownedAfter stack :=
+  .enter (k := .block) <|
+    .push (k := .loopBody 1) (d := desV)
+      (.enter (k := .loopBody 1) <|
+        .push (k := .fnBody) (d := desB)
+          (.push (k := .fnBody) (d := relA) (.enter (k := .fnBody) .empty)
+            rfl (by decide) (by decide) (by decide))
+          rfl (by decide) (by decide) (by decide))
+      rfl (by decide) (by decide) (by decide)
+
+/-- On `return` with every call returning, the cleanup run is `destroy(v)`, the release of its loan
+7, `destroy(b)` and `give_up(a)`, in that order. -/
+example : RunCleanup (fun _ => true) (pending stack)
+    [.call desV, .release ⟨7, 2⟩, .call desB, .call relA] .done :=
+  .step rfl (.step rfl (.step rfl .nil))
+
+/-- If `destroy(b)` traps on `return`, `destroy(v)` ran and released its loan first, and
+`give_up(a)` never runs. -/
+example : RunCleanup (fun d => d != desB) (pending stack)
+    [.call desV, .release ⟨7, 2⟩, .call desB] .trapped :=
+  .step rfl (.trap rfl)
+
+/-- If `destroy(v)` itself traps while holding loan 7, the trace stops at that call: loan 7 is not
+released by cleanup, and `destroy(b)` and `give_up(a)` never run. -/
+example : RunCleanup (fun d => d != desV) (pending stack) [.call desV] .trapped :=
+  .trap rfl
+
 /-- Registering `give_up(a)` after `destroy(v)` is refused: `a` would be released first. -/
 example : ¬ (∀ d' ∈ pending [⟨.fnBody, [desV]⟩], relA.target ∉ d'.needs) := by decide
 
@@ -1556,6 +1586,35 @@ def ownedAfter2 : Res → Bool :=
 
 def stack2 : Stack :=
   [⟨.block, [desC]⟩, ⟨.loopBody 2, [desD]⟩, ⟨.loopBody 1, [desV]⟩, ⟨.fnBody, [desB, relA]⟩]
+
+/-- The registration is accepted (`Reg`). -/
+theorem stack2_reg : Reg ownedAfter2 stack2 :=
+  .push (k := .block) (d := desC)
+    (.enter (k := .block) <|
+      .push (k := .loopBody 2) (d := desD)
+        (.enter (k := .loopBody 2) <|
+          .push (k := .loopBody 1) (d := desV)
+            (.enter (k := .loopBody 1) <|
+              .push (k := .fnBody) (d := desB)
+                (.push (k := .fnBody) (d := relA) (.enter (k := .fnBody) .empty)
+                  rfl (by decide) (by decide) (by decide))
+                rfl (by decide) (by decide) (by decide))
+            rfl (by decide) (by decide) (by decide))
+        rfl (by decide) (by decide) (by decide))
+    rfl (by decide) (by decide) (by decide)
+
+/-- Falling off the block runs `destroy(c)`; `continue L2` also runs `destroy(d)`; `break L1` and
+`continue L1` (the outer label) also run `destroy(v)` and release its loan. `continue L1` then
+tests `L1`'s condition again (F7). -/
+example : (unwound .fallthrough stack2).map (expected ∘ pending) = some [.call desC] := rfl
+
+example : (unwound (.cont 2) stack2).map (expected ∘ pending) = some [.call desC, .call desD] := rfl
+
+example : (unwound (.brk 1) stack2).map (expected ∘ pending) =
+    some [.call desC, .call desD, .call desV, .release ⟨7, 2⟩] := rfl
+
+example : (unwound (.cont 1) stack2).map (expected ∘ pending) =
+    some [.call desC, .call desD, .call desV, .release ⟨7, 2⟩] := rfl
 
 end ConcreteSpec.Cleanup
 
@@ -1907,6 +1966,13 @@ example : Ok [] [] [.newAlloc 0 10, .alloc 1 0, .free 1 0, .reset 0 0 11, .alloc
   .newAlloc rfl (by decide) <| .alloc rfl rfl <| .free rfl rfl <|
     .reset rfl (by decide) rfl (by decide) <| .alloc rfl rfl <| .free rfl rfl <|
     .release rfl (by decide) .nil
+
+/-- A value of brand 10 used through an allocator of brand 11 is refused (nominal brand equality,
+Q1.4). -/
+example : ¬ Ok [10, 11] [(1, .heap 10), (0, .alloc 11)] [.use 1 0] [(1, .heap 10), (0, .alloc 11)] := by
+  intro hok
+  cases hok with
+  | use h1 h2 _ => simp [findL] at h1 h2; subst h1; cases h2
 
 /-- A loop that resets its allocator each iteration is accepted (existential loop state, Q1.3). -/
 example : Ok [] [] [.newAlloc 0 10, .while_ 0 20 30 [.alloc 1 0, .free 1 0, .reset 0 0 21],

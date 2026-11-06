@@ -5,7 +5,12 @@ import ConcreteSpec.Proofs.Borrow
 import ConcreteSpec.Proofs.Brand
 
 /-!
-# Examples that apply the theorems: the accepted runtime overflow from an input (`add100_safe`), cleanup traces derived from `defer_cleanup_releases`, and a brand refusal derived from `brand_mismatch_refused`.
+# The examples of `Spec.lean` derived from the general theorems (non-vacuity witnesses)
+
+`add100_safe` proves the accepted runtime-overflow body safe for every input. The cleanup traces and
+the brand refusal that `Spec.lean` states directly are derived here again from
+`defer_cleanup_releases` and `brand_mismatch_refused`, which shows that those theorems apply to
+them.
 
 PROPOSED: not normative until the owner freezes Core (ROADMAP A2c). See `ConcreteSpec/README.md`.
 -/
@@ -26,16 +31,6 @@ end ConcreteSpec.Examples
 
 namespace ConcreteSpec.Cleanup
 
-theorem stack_reg : Reg ownedAfter stack :=
-  .enter (k := .block) <|
-    .push (k := .loopBody 1) (d := desV)
-      (.enter (k := .loopBody 1) <|
-        .push (k := .fnBody) (d := desB)
-          (.push (k := .fnBody) (d := relA) (.enter (k := .fnBody) .empty)
-            rfl (by decide) (by decide) (by decide))
-          rfl (by decide) (by decide) (by decide))
-      rfl (by decide) (by decide) (by decide)
-
 /-- The theorem applied to `return`: with every call returning, that is the whole trace. -/
 example : RunCleanup (fun _ => true) (pending stack)
     [.call desV, .release ⟨7, 2⟩, .call desB, .call relA] .done :=
@@ -54,21 +49,6 @@ loan 7 is not released by cleanup, and `destroy(b)` and `give_up(a)` never run. 
 example : RunCleanup (fun d => d != desV) (pending stack) [.call desV] .trapped :=
   ((defer_cleanup_releases (ok := fun d => d != desV) stack_reg (e := .ret) (by decide) rfl).2.2.1
     [] desV [desB, relA] rfl (by decide) (by decide) _ _).mpr ⟨rfl, rfl⟩
-
-theorem stack2_reg : Reg ownedAfter2 stack2 :=
-  .push (k := .block) (d := desC)
-    (.enter (k := .block) <|
-      .push (k := .loopBody 2) (d := desD)
-        (.enter (k := .loopBody 2) <|
-          .push (k := .loopBody 1) (d := desV)
-            (.enter (k := .loopBody 1) <|
-              .push (k := .fnBody) (d := desB)
-                (.push (k := .fnBody) (d := relA) (.enter (k := .fnBody) .empty)
-                  rfl (by decide) (by decide) (by decide))
-                rfl (by decide) (by decide) (by decide))
-            rfl (by decide) (by decide) (by decide))
-        rfl (by decide) (by decide) (by decide))
-    rfl (by decide) (by decide) (by decide)
 
 /-- Falling off the block runs `destroy(c)`; `continue L2` also runs `destroy(d)`; `break L1`
 (the outer label) also runs `destroy(v)` and releases its loan; each through the theorem. -/
@@ -98,7 +78,7 @@ end ConcreteSpec.Cleanup
 
 namespace ConcreteSpec.Brand
 
-/-- A value of brand 10 used through an allocator of brand 11 is refused. -/
+/-- The brand-mismatch example of `Spec.lean`, derived from `brand_mismatch_refused`. -/
 example : ¬ Ok [10, 11] [(1, .heap 10), (0, .alloc 11)] [.use 1 0] [(1, .heap 10), (0, .alloc 11)] :=
   (brand_mismatch_refused rfl rfl (by decide)).1
 

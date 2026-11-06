@@ -30,7 +30,7 @@ stage A2c (row Q9.19). Before that, the owner approved the Core design provision
    | `Proofs/Cleanup.lean` | `defer_cleanup_releases` (design theorem 2) |
    | `Proofs/Borrow.lean` | `open_mut_freezes_root` (design theorem 3), `shared_open_grants_no_write` |
    | `Proofs/Brand.lean` | `reset_fresh` (design theorem 4), the brand refusals |
-   | `Proofs/Examples.lean` | examples that need a theorem: `add100_safe` (an accepted program that traps only for some inputs), cleanup traces, a brand refusal |
+   | `Proofs/Examples.lean` | `add100_safe` (an accepted program that traps only for some inputs is safe for every input), and the cleanup traces and brand refusal of `Spec.lean` derived again from the general theorems (they apply, non-vacuously) |
    | `Proofs/Basics.lean` | list lemmas |
 
 The decisions are cited by row id (Q1.1 … Q9.19, P1 … P23, in
