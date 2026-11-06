@@ -1,0 +1,3 @@
+[piece 12 of 16: docs]
+- ConcreteSpec/README.md:79: Defers unifying the seven fragments to A3, and repeats that timing for O7/O9. ROADMAP.md requires one integrated semantics and discharge of O7/O9 in A2i, before A2c freezes Core. The reading guide therefore places required freeze prerequisites after the freeze.
+- README.md:32: Labels ConcreteSpec “normative,” although its new README explicitly says it remains PROPOSED until owner approval at A2c. This incorrectly presents the unfrozen specification as binding.
